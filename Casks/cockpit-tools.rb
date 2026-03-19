@@ -1,6 +1,6 @@
 cask "cockpit-tools" do
-  version "0.16.2"
-  sha256 "490482674879d380a0b237952abd92c9ae56339791cfb65ef9b81750ae152013"
+  version "0.16.3"
+  sha256 "3b716088af2eb5a324521c33c1d858a452fc7cb814a99596dab7606f45e5f5dc"
 
   url "https://github.com/jlcodes99/cockpit-tools/releases/download/v#{version}/Cockpit.Tools_#{version}_universal.dmg",
       verified: "github.com/jlcodes99/cockpit-tools/"
