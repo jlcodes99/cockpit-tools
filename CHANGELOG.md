@@ -7,6 +7,18 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [0.20.15] - 2026-03-30
+
+### Added
+- **A dedicated 2FA Manager page is now available in Classic sidebar navigation**: users can query Base32 secrets, view rolling OTP codes, save favorites, review recent history, and import/export saved records as JSON from one workspace.
+
+### Changed
+- **Codex multi-account local storage is now unified under `~/.antigravity_cockpit` with one-time migration from legacy paths**: existing `codex_accounts.json` and account detail files are copied to the new directory without overwriting newer files.
+- **Grid-view batch selection is now consistent across account pages**: `Select All` is now shown in grid mode for platform account pages and shared suite views, including grouped-by-tag rendering.
+- **2FA page labels and actions are now fully wired to i18n keys across locales**: navigation labels, confirmations, table headers, and action text no longer rely on hard-coded UI strings.
+- **The log viewer modal footer now includes an explicit close action**: users can dismiss the dialog directly from the footer without relying on header controls.
+
+---
 ## [0.20.14] - 2026-03-28
 
 ### Added

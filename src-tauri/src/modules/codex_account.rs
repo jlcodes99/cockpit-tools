@@ -2,7 +2,7 @@ use crate::models::codex::{
     CodexAccount, CodexAccountIndex, CodexAccountSummary, CodexAuthFile, CodexAuthMode,
     CodexAuthTokens, CodexJwtPayload, CodexTokens,
 };
-use crate::modules::{codex_oauth, logger};
+use crate::modules::{account, codex_oauth, logger};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION};
 #[cfg(target_os = "macos")]
@@ -421,23 +421,101 @@ fn write_api_base_url_to_config_toml(
     fs::write(&config_path, doc.to_string()).map_err(|e| format!("写入 config.toml 失败: {}", e))
 }
 
-/// 获取我们的多账号存储路径
-fn get_accounts_storage_path() -> PathBuf {
-    let data_dir = dirs::data_local_dir()
+/// 旧版数据目录（~/Library/Application Support/com.antigravity.cockpit-tools/）
+fn get_old_codex_data_dir() -> PathBuf {
+    dirs::data_local_dir()
         .unwrap_or_else(|| dirs::home_dir().expect("无法获取用户目录"))
-        .join("com.antigravity.cockpit-tools");
+        .join("com.antigravity.cockpit-tools")
+}
+
+/// 将旧目录中的 codex 数据迁移到新目录（一次性，迁移成功后删除旧文件）
+fn migrate_codex_data_if_needed(new_data_dir: &PathBuf) {
+    let old_dir = get_old_codex_data_dir();
+    if !old_dir.exists() {
+        return;
+    }
+
+    // 迁移 codex_accounts.json
+    let old_index = old_dir.join("codex_accounts.json");
+    let new_index = new_data_dir.join("codex_accounts.json");
+    if old_index.exists() && !new_index.exists() {
+        match fs::copy(&old_index, &new_index) {
+            Ok(_) => {
+                logger::log_info("[Codex Migration] codex_accounts.json 迁移成功，清理旧文件");
+                let _ = fs::remove_file(&old_index);
+            }
+            Err(e) => {
+                logger::log_warn(&format!("[Codex Migration] codex_accounts.json 迁移失败: {}", e));
+            }
+        }
+    }
+
+    // 迁移 codex_accounts/ 目录
+    let old_accounts_dir = old_dir.join("codex_accounts");
+    let new_accounts_dir = new_data_dir.join("codex_accounts");
+    if old_accounts_dir.exists() && old_accounts_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&old_accounts_dir) {
+            for entry in entries.flatten() {
+                let old_path = entry.path();
+                if !old_path.is_file() {
+                    continue;
+                }
+                if let Some(fname) = old_path.file_name() {
+                    let new_path = new_accounts_dir.join(fname);
+                    if new_path.exists() {
+                        // 新目录已有同名文件，跳过（不覆盖）
+                        continue;
+                    }
+                    match fs::copy(&old_path, &new_path) {
+                        Ok(_) => {
+                            logger::log_info(&format!(
+                                "[Codex Migration] 账号文件迁移成功: {:?}",
+                                fname
+                            ));
+                            let _ = fs::remove_file(&old_path);
+                        }
+                        Err(e) => {
+                            logger::log_warn(&format!(
+                                "[Codex Migration] 账号文件迁移失败: {:?}, error={}",
+                                fname, e
+                            ));
+                        }
+                    }
+                }
+            }
+            // 如果旧目录已空，尝试删除它
+            if fs::read_dir(&old_accounts_dir)
+                .map(|mut d| d.next().is_none())
+                .unwrap_or(false)
+            {
+                let _ = fs::remove_dir(&old_accounts_dir);
+            }
+        }
+    }
+}
+
+/// 获取我们的多账号存储路径（统一使用 ~/.antigravity_cockpit/）
+fn get_accounts_storage_path() -> PathBuf {
+    let data_dir = account::get_data_dir().unwrap_or_else(|_| {
+        dirs::home_dir()
+            .expect("无法获取用户目录")
+            .join(".antigravity_cockpit")
+    });
     fs::create_dir_all(&data_dir).ok();
+    migrate_codex_data_if_needed(&data_dir);
     data_dir.join("codex_accounts.json")
 }
 
-/// 获取账号详情存储目录
+/// 获取账号详情存储目录（统一使用 ~/.antigravity_cockpit/codex_accounts/）
 fn get_accounts_dir() -> PathBuf {
-    let data_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| dirs::home_dir().expect("无法获取用户目录"))
-        .join("com.antigravity.cockpit-tools")
-        .join("codex_accounts");
-    fs::create_dir_all(&data_dir).ok();
-    data_dir
+    let data_dir = account::get_data_dir().unwrap_or_else(|_| {
+        dirs::home_dir()
+            .expect("无法获取用户目录")
+            .join(".antigravity_cockpit")
+    });
+    let accounts_dir = data_dir.join("codex_accounts");
+    fs::create_dir_all(&accounts_dir).ok();
+    accounts_dir
 }
 
 /// 解析 JWT Token 的 payload

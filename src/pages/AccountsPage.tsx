@@ -2055,25 +2055,42 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
 
   // 渲染卡片视图
   const renderGridView = () => {
-    if (!groupByTag) {
-      return <div className="accounts-grid">{renderInlineFolderCards()}{renderGridCards(filteredAccounts)}</div>
-    }
-
     return (
-      <div className="tag-group-list">
-        {groupedAccounts.map(([groupKey, groupAccounts]) => (
-          <div key={groupKey} className="tag-group-section">
-            <div className="tag-group-header">
-              <span className="tag-group-title">
-                {resolveGroupLabel(groupKey)}
-              </span>
-              <span className="tag-group-count">{groupAccounts.length}</span>
-            </div>
-            <div className="tag-group-grid accounts-grid">
-              {renderGridCards(groupAccounts, groupKey)}
-            </div>
+      <div className="grid-view-container">
+        {filteredAccounts.length > 0 && (
+          <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
+              <input
+                type="checkbox"
+                checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0}
+                onChange={toggleSelectAll}
+              />
+              {t('common.selectAll', '全选')}
+            </label>
           </div>
-        ))}
+        )}
+        {!groupByTag ? (
+          <div className="accounts-grid">
+            {renderInlineFolderCards()}
+            {renderGridCards(filteredAccounts)}
+          </div>
+        ) : (
+          <div className="tag-group-list">
+            {groupedAccounts.map(([groupKey, groupAccounts]) => (
+              <div key={groupKey} className="tag-group-section">
+                <div className="tag-group-header">
+                  <span className="tag-group-title">
+                    {resolveGroupLabel(groupKey)}
+                  </span>
+                  <span className="tag-group-count">{groupAccounts.length}</span>
+                </div>
+                <div className="tag-group-grid accounts-grid">
+                  {renderGridCards(groupAccounts, groupKey)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     )
   }

@@ -906,7 +906,16 @@ export function GitHubCopilotAccountsPage() {
           <p>{t('common.shared.noMatch.desc', '请尝试调整搜索或筛选条件')}</p>
         </div>
       ) : viewMode === 'grid' ? (
-        groupByTag ? (
+        <div className="grid-view-container">
+          {filteredAccounts.length > 0 && (
+            <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
+                <input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} />
+                {t('common.selectAll', '全选')}
+              </label>
+            </div>
+          )}
+          {groupByTag ? (
           <div className="tag-group-list">
             {groupedAccounts.map(([groupKey, groupAccounts]) => (
               <div key={groupKey} className="tag-group-section">
@@ -924,7 +933,8 @@ export function GitHubCopilotAccountsPage() {
           <div className="ghcp-accounts-grid">
             {renderGridCards(filteredAccounts)}
           </div>
-        )
+        )}
+        </div>
       ) : groupByTag ? (
         <div className="account-table-container grouped">
           <table className="account-table">

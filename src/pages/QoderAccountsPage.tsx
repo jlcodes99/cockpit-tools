@@ -1468,10 +1468,39 @@ export function QoderAccountsPage() {
   );
 
   const renderGroupedAccounts = () => {
+    if (viewMode === 'grid') {
+      return (
+        <div className="grid-view-container">
+          {filteredAccounts.length > 0 && (
+            <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
+                <input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={toggleSelectAll} />
+                {t('common.selectAll', '全选')}
+              </label>
+            </div>
+          )}
+          {!groupByTag ? (
+            <div className="ghcp-accounts-grid">{renderGridCards(filteredAccounts)}</div>
+          ) : (
+            <div className="tag-group-list">
+              {groupedAccounts.map(([groupKey, items]) => (
+                <div key={groupKey} className="tag-group-section">
+                  <div className="tag-group-header">
+                    <span className="tag-group-title">
+                      {groupKey === UNTAGGED_KEY ? t('accounts.defaultGroup', '默认分组') : groupKey}
+                    </span>
+                    <span className="tag-group-count">{items.length}</span>
+                  </div>
+                  <div className="tag-group-grid ghcp-accounts-grid">{renderGridCards(items, groupKey)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     if (!groupByTag) {
-      if (viewMode === 'grid') {
-        return <div className="ghcp-accounts-grid">{renderGridCards(filteredAccounts)}</div>;
-      }
       return (
         <div className="account-table-container">
           <table className="account-table">
@@ -1504,28 +1533,24 @@ export function QoderAccountsPage() {
               </span>
               <span className="tag-group-count">{items.length}</span>
             </div>
-            {viewMode === 'grid' ? (
-              <div className="tag-group-grid ghcp-accounts-grid">{renderGridCards(items, groupKey)}</div>
-            ) : (
-              <div className="account-table-container grouped">
-                <table className="account-table">
-                  <thead>
-                    <tr>
-                      <th>
-                        <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
-                      </th>
-                      <th>{t('common.shared.columns.account')}</th>
-                      <th>{t('common.shared.columns.userId', '用户 ID')}</th>
-                      <th>{t('common.shared.columns.plan', '套餐')}</th>
-                      <th>{t('instances.labels.quota', '配额')}</th>
-                      <th>{t('common.shared.columns.createdAt')}</th>
-                      <th>{t('common.shared.columns.actions')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>{renderListRows(items, groupKey)}</tbody>
-                </table>
-              </div>
-            )}
+            <div className="account-table-container grouped">
+              <table className="account-table">
+                <thead>
+                  <tr>
+                    <th>
+                      <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
+                    </th>
+                    <th>{t('common.shared.columns.account')}</th>
+                    <th>{t('common.shared.columns.userId', '用户 ID')}</th>
+                    <th>{t('common.shared.columns.plan', '套餐')}</th>
+                    <th>{t('instances.labels.quota', '配额')}</th>
+                    <th>{t('common.shared.columns.createdAt')}</th>
+                    <th>{t('common.shared.columns.actions')}</th>
+                  </tr>
+                </thead>
+                <tbody>{renderListRows(items, groupKey)}</tbody>
+              </table>
+            </div>
           </div>
         ))}
       </div>

@@ -195,7 +195,8 @@
     "switchClassicLayoutTitle": "切換到經典側邊欄佈局",
     "switchClassicLayoutDesc": "經典佈局會完整顯示平台導覽，並支援側邊欄收合。你可以隨時在「設定 > 一般 > 側邊欄佈局」切回。",
     "switchClassicLayoutDontAskAgain": "不再顯示此提示",
-    "switchClassicLayoutConfirm": "立即切換"
+    "switchClassicLayoutConfirm": "立即切換",
+    "2faManager": "2FA管理"
   },
   "platformLayout": {
     "title": "平台佈局",
@@ -2798,5 +2799,45 @@
       "dontAskAgain": "不再提示"
     },
     "lockedPlatform": "實例已鎖定平台"
+  },
+  "twoFactorAuth": {
+    "pageTitle": "2FA 查询器",
+    "pageDescNew": "输入或粘贴 2FA Base32 秘钥即可即时生成验证码，查询系统会自动矫正并去除非标准字符。",
+    "panelQuery": "功能区 (查询面板)",
+    "inputSecretPlaceholder": "在此粘贴 2FA 秘钥 (如: JBSWY3DPEHPK3PXP)",
+    "inputRemarkPlaceholder": "[选填] 给这个秘钥设置一个备注名称",
+    "btnQuery": "查 询",
+    "btnSaveToFavorites": "保存到列表",
+    "refreshInSeconds": "{{time}} 秒后刷新",
+    "emptyQueryData": "暂未查询数据",
+    "invalidSecretFormat": "检测到无效秘钥格式",
+    "tabSaved": "★ 已保存",
+    "tabHistory": "近期查询",
+    "btnImport": "导入",
+    "btnExport": "导出",
+    "btnClear": "清空",
+    "tableRemark": "备注",
+    "tableSecret": "秘钥",
+    "tableCode": "动态码",
+    "tableAddedTime": "添加时间",
+    "tableQueryTime": "查询时间",
+    "tableActions": "操作",
+    "emptyHistory": "暂无查询历史",
+    "emptySaved": "您尚未保存任何 2FA 认证",
+    "invalidSecretVal": "无效秘钥",
+    "actionCopy": "复制验证码",
+    "actionReload": "重新加载到查询器",
+    "actionDelete": "删除",
+    "confirmDeleteSavedTitle": "删除确认",
+    "confirmDeleteSavedMsg": "确定要永久删除 \n{{secret}}\n 这条认证记录吗？",
+    "confirmDeleteSavedFallback": "确定要永久删除这条认证记录吗？",
+    "confirmDeleteHistoryTitle": "删除历史",
+    "confirmDeleteHistoryMsg": "确定要删除 \n{{secret}}\n 的查询历史吗？",
+    "confirmDeleteHistoryFallback": "确定要删除这条查询历史吗？",
+    "confirmClearAllTitle": "清空确认",
+    "confirmClearAllMsg": "确定要清空全部近期查询历史吗？",
+    "importErrorMsg": "导入失败，请检查文件格式是否为您之前导出的格式 (JSON Array)。",
+    "btnImportTitle": "导入本地的 JSON 文件",
+    "btnExportTitle": "导出已保存为 JSON"
   }
 }

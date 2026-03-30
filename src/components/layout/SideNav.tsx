@@ -1,4 +1,4 @@
-import { Settings, Rocket, GaugeCircle, LayoutGrid, SlidersHorizontal, FileText, ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Settings, Rocket, GaugeCircle, LayoutGrid, SlidersHorizontal, FileText, ChevronDown, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
@@ -872,6 +872,17 @@ export function SideNav({
 
       {isClassicLayout && (
         <div className="nav-bottom-actions" ref={bottomActionsRef}>
+          <button
+            className={`nav-item ${page === '2fa' && !shouldLockActiveOnMore ? 'active' : ''}`}
+            onClick={() => setPage('2fa')}
+            title={t('nav.2faManager', '2FA管理')}
+          >
+            <ShieldCheck size={isClassicLayout ? classicMainIconSize : 20} />
+            {showClassicLabels ? (
+              <span className="nav-item-text">{t('nav.2faManager', '2FA管理')}</span>
+            ) : null}
+          </button>
+
           <button
             className="nav-item"
             onClick={onOpenLogViewer}

@@ -20,4 +20,5 @@ export type Page =
   | 'fingerprints'
   | 'wakeup'
   | 'verification'
+  | '2fa'
   | 'settings';

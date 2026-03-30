@@ -851,12 +851,22 @@ export function WindsurfAccountsPage() {
       ) : filteredAccounts.length === 0 ? (
         <div className="empty-state"><h3>{t('common.shared.noMatch.title', '没有匹配的账号')}</h3><p>{t('common.shared.noMatch.desc', '请尝试调整搜索或筛选条件')}</p></div>
       ) : viewMode === 'grid' ? (
-        groupByTag ? (
+        <div className="grid-view-container">
+          {filteredAccounts.length > 0 && (
+            <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
+                <input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} />
+                {t('common.selectAll', '全选')}
+              </label>
+            </div>
+          )}
+          {groupByTag ? (
           <div className="tag-group-list">{groupedAccounts.map(([groupKey, groupAccounts]) => (
             <div key={groupKey} className="tag-group-section"><div className="tag-group-header"><span className="tag-group-title">{resolveGroupLabel(groupKey)}</span><span className="tag-group-count">{groupAccounts.length}</span></div>
               <div className="tag-group-grid ghcp-accounts-grid">{renderGridCards(groupAccounts, groupKey)}</div></div>
           ))}</div>
-        ) : (<div className="ghcp-accounts-grid">{renderGridCards(filteredAccounts)}</div>)
+        ) : (<div className="ghcp-accounts-grid">{renderGridCards(filteredAccounts)}</div>)}
+        </div>
       ) : groupByTag ? (
         <div className="account-table-container grouped"><table className="account-table"><thead><tr>
           <th style={{ width: 40 }}><input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} /></th>

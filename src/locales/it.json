@@ -195,7 +195,8 @@
     "switchClassicLayoutTitle": "Passa al layout classico della barra laterale",
     "switchClassicLayoutDesc": "Il layout classico mostra l'intera navigazione delle piattaforme e supporta la chiusura della barra laterale. Puoi tornare indietro in qualsiasi momento da Impostazioni > Generale > Layout barra laterale.",
     "switchClassicLayoutDontAskAgain": "Non mostrare più questo avviso",
-    "switchClassicLayoutConfirm": "Passa ora"
+    "switchClassicLayoutConfirm": "Passa ora",
+    "2faManager": "2FA Management [it]"
   },
   "platformLayout": {
     "title": "Layout piattaforme",
@@ -2798,5 +2799,45 @@
       "dontAskAgain": "Non chiedere più"
     },
     "lockedPlatform": "Piattaforma bloccata dall'istanza"
+  },
+  "twoFactorAuth": {
+    "pageTitle": "2FA Query [it]",
+    "pageDescNew": "Enter or paste a 2FA Base32 secret to instantly generate a token. The system automatically corrects and removes non-standard characters. [it]",
+    "panelQuery": "Workspace (Query Panel) [it]",
+    "inputSecretPlaceholder": "Paste 2FA Secret here (e.g. JBSWY3DPEHPK3PXP) [it]",
+    "inputRemarkPlaceholder": "[Optional] Set a remark name for this secret [it]",
+    "btnQuery": "Query [it]",
+    "btnSaveToFavorites": "Save to List [it]",
+    "refreshInSeconds": "Refresh in {{time}}s [it]",
+    "emptyQueryData": "No query data yet [it]",
+    "invalidSecretFormat": "Invalid secret format detected [it]",
+    "tabSaved": "★ Saved [it]",
+    "tabHistory": "Recent Queries [it]",
+    "btnImport": "Import [it]",
+    "btnExport": "Export [it]",
+    "btnClear": "Clear [it]",
+    "tableRemark": "Remark [it]",
+    "tableSecret": "Secret [it]",
+    "tableCode": "Code [it]",
+    "tableAddedTime": "Added Time [it]",
+    "tableQueryTime": "Query Time [it]",
+    "tableActions": "Actions [it]",
+    "emptyHistory": "No query history [it]",
+    "emptySaved": "No saved 2FA records yet [it]",
+    "invalidSecretVal": "Invalid Secret [it]",
+    "actionCopy": "Copy Code [it]",
+    "actionReload": "Reload into Query Data [it]",
+    "actionDelete": "Delete [it]",
+    "confirmDeleteSavedTitle": "Delete Confirmation [it]",
+    "confirmDeleteSavedMsg": "Are you sure you want to permanently delete \n{{secret}}\n? [it]",
+    "confirmDeleteSavedFallback": "Are you sure you want to permanently delete this secret? [it]",
+    "confirmDeleteHistoryTitle": "Delete History [it]",
+    "confirmDeleteHistoryMsg": "Are you sure you want to delete the query history for \n{{secret}}\n? [it]",
+    "confirmDeleteHistoryFallback": "Are you sure you want to delete this query history? [it]",
+    "confirmClearAllTitle": "Clear History [it]",
+    "confirmClearAllMsg": "Are you sure you want to clear all recent query history? [it]",
+    "importErrorMsg": "Import failed. Please ensure the file format is a valid exported JSON array. [it]",
+    "btnImportTitle": "Import Local JSON Backup [it]",
+    "btnExportTitle": "Export Saved as JSON [it]"
   }
 }

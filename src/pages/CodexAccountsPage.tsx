@@ -1701,16 +1701,8 @@ export function CodexAccountsPage() {
             <button className="btn btn-primary icon-only" onClick={() => openAddModal('oauth')} title={t('common.shared.addAccount', '添加账号')}><Plus size={14} /></button>
             <button className="btn btn-secondary icon-only" onClick={handleRefreshAll} disabled={refreshingAll || accounts.length === 0} title={t('common.shared.refreshAll', '刷新全部')}>
               <RefreshCw size={14} className={refreshingAll ? 'loading-spinner' : ''} /></button>
-            <button
-              className="btn btn-secondary icon-only"
-              onClick={() => void handleOpenCodexUsage()}
-              title={t('codex.usage.open', '查看 OpenAI 用量')}
-            >
-              <ExternalLink size={14} />
-            </button>
             <button className="btn btn-secondary icon-only" onClick={togglePrivacyMode} title={privacyModeEnabled ? t('privacy.showSensitive', '显示邮箱') : t('privacy.hideSensitive', '隐藏邮箱')}>
               {privacyModeEnabled ? <EyeOff size={14} /> : <Eye size={14} />}</button>
-            <button className="btn btn-secondary icon-only" onClick={() => openAddModal('token')} disabled={importing} title={t('common.shared.import.label', '导入')}><Download size={14} /></button>
             <button className="btn btn-secondary export-btn icon-only" onClick={() => void handleExport(filteredIds)} disabled={exporting || filteredIds.length === 0}
               title={exportSelectionCount > 0 ? `${t('common.shared.export', '导出')} (${exportSelectionCount})` : t('common.shared.export', '导出')}><Upload size={14} /></button>
             {selected.size > 0 && (<>
@@ -1750,10 +1742,20 @@ export function CodexAccountsPage() {
             <div className="codex-compact-list">{renderCompactRows(filteredAccounts)}</div>
           )
         ) : viewMode === 'grid' ? (
-          groupByTag ? (<div className="tag-group-list">{groupedAccounts.map(([gk, ga]) => (<div key={gk} className="tag-group-section"><div className="tag-group-header"><span className="tag-group-title">{resolveGroupLabel(gk)}</span><span className="tag-group-count">{ga.length}</span></div>
+        <div className="grid-view-container">
+          {filteredAccounts.length > 0 && (
+            <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
+                <input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} />
+                {t('common.selectAll', '全选')}
+              </label>
+            </div>
+          )}
+          {groupByTag ? (<div className="tag-group-list">{groupedAccounts.map(([gk, ga]) => (<div key={gk} className="tag-group-section"><div className="tag-group-header"><span className="tag-group-title">{resolveGroupLabel(gk)}</span><span className="tag-group-count">{ga.length}</span></div>
             <div className="tag-group-grid codex-accounts-grid">{renderGridCards(ga, gk)}</div></div>))}</div>
-          ) : (<div className="codex-accounts-grid">{renderGridCards(filteredAccounts)}</div>)
-        ) : groupByTag ? (
+          ) : (<div className="codex-accounts-grid">{renderGridCards(filteredAccounts)}</div>)}
+        </div>
+      ) : groupByTag ? (
           <div className="account-table-container grouped"><table className="account-table"><thead><tr>
             <th style={{ width: 40 }}><input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} /></th>
             <th style={{ width: 260 }}>{t('common.shared.columns.email', '账号')}</th><th style={{ width: 140 }}>{t('common.shared.columns.plan', '订阅')}</th>

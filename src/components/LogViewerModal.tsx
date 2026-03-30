@@ -246,6 +246,9 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
         </div>
 
         <div className="modal-footer log-viewer-footer">
+          <button className="btn btn-ghost" onClick={onClose}>
+            {t('common.close', '关闭')}
+          </button>
           <button className="btn btn-secondary" onClick={() => void loadSnapshot(true)}>
             {t('common.refresh', '刷新')}
           </button>

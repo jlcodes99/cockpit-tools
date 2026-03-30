@@ -104,6 +104,9 @@ const WakeupVerificationPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })),
 );
+const TwoFactorAuthPage = lazy(() =>
+  import('./pages/TwoFactorAuthPage').then((module) => ({ default: module.TwoFactorAuthPage })),
+);
 const ManualPage = lazy(() =>
   import('./pages/ManualPage').then((module) => ({ default: module.ManualPage })),
 );
@@ -130,6 +133,7 @@ const BreakoutModal = lazy(() =>
 const LogViewerModal = lazy(() =>
   import('./components/LogViewerModal').then((module) => ({ default: module.LogViewerModal })),
 );
+
 
 interface GeneralConfigTheme {
   theme: string;
@@ -2778,6 +2782,7 @@ function MainApp() {
           {page === 'fingerprints' && <FingerprintsPage onNavigate={setPage} />}
           {page === 'wakeup' && <WakeupTasksPage onNavigate={setPage} />}
           {page === 'verification' && <WakeupVerificationPage onNavigate={setPage} />}
+          {page === '2fa' && <TwoFactorAuthPage />}
           {page === 'manual' && (
             <ManualPage
               onNavigate={setPage}
