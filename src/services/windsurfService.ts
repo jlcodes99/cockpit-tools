@@ -11,6 +11,23 @@ export interface WindsurfOAuthLoginStartResponse {
   callbackUrl?: string | null;
 }
 
+export interface WindsurfPasswordCredentialInput {
+  email: string;
+  password: string;
+}
+
+export interface WindsurfPasswordCredentialFailure {
+  email: string;
+  error: string;
+}
+
+export interface WindsurfPasswordBatchResult {
+  accounts: WindsurfAccount[];
+  success_count: number;
+  failed_count: number;
+  failures: WindsurfPasswordCredentialFailure[];
+}
+
 /** 列出所有 Windsurf 账号 */
 export async function listWindsurfAccounts(): Promise<WindsurfAccount[]> {
   return await invoke('list_windsurf_accounts');
@@ -82,6 +99,13 @@ export async function addWindsurfAccountWithToken(githubAccessToken: string): Pr
 /** 通过邮箱密码添加 Windsurf 账号 */
 export async function addWindsurfAccountWithPassword(email: string, password: string): Promise<WindsurfAccount> {
   return await invoke('add_windsurf_account_with_password', { email, password });
+}
+
+/** 批量通过邮箱密码添加 Windsurf 账号 */
+export async function addWindsurfAccountsWithPassword(
+  credentials: WindsurfPasswordCredentialInput[],
+): Promise<WindsurfPasswordBatchResult> {
+  return await invoke('add_windsurf_accounts_with_password', { credentials });
 }
 
 export async function updateWindsurfAccountTags(accountId: string, tags: string[]): Promise<WindsurfAccount> {

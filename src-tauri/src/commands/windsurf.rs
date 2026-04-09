@@ -1,8 +1,29 @@
 use std::time::Instant;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
 use crate::models::windsurf::{WindsurfAccount, WindsurfOAuthStartResponse};
 use crate::modules::{logger, windsurf_account, windsurf_oauth};
+
+#[derive(Debug, Deserialize)]
+pub struct WindsurfPasswordCredentialInput {
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WindsurfPasswordCredentialFailure {
+    pub email: String,
+    pub error: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WindsurfPasswordBatchResult {
+    pub accounts: Vec<WindsurfAccount>,
+    pub success_count: usize,
+    pub failed_count: usize,
+    pub failures: Vec<WindsurfPasswordCredentialFailure>,
+}
 
 async fn refresh_windsurf_account_after_login(account: WindsurfAccount) -> WindsurfAccount {
     let account_id = account.id.clone();
@@ -16,6 +37,14 @@ async fn refresh_windsurf_account_after_login(account: WindsurfAccount) -> Winds
             account
         }
     }
+}
+
+async fn add_windsurf_account_from_password(
+    email: &str,
+    password: &str,
+) -> Result<WindsurfAccount, String> {
+    let payload = windsurf_oauth::build_payload_from_password(email, password).await?;
+    windsurf_account::upsert_account(payload)
 }
 
 #[tauri::command]
@@ -193,14 +222,89 @@ pub async fn add_windsurf_account_with_password(
     password: String,
 ) -> Result<WindsurfAccount, String> {
     logger::log_info("[Windsurf Command] 邮箱密码登录开始");
-    let payload = windsurf_oauth::build_payload_from_password(&email, &password).await?;
-    let account = windsurf_account::upsert_account(payload)?;
+    let account = add_windsurf_account_from_password(&email, &password).await?;
     logger::log_info(&format!(
         "[Windsurf Command] 邮箱密码登录成功: account_id={}, login={}",
         account.id, account.github_login
     ));
     let _ = crate::modules::tray::update_tray_menu(&app);
     Ok(account)
+}
+
+#[tauri::command]
+pub async fn add_windsurf_accounts_with_password(
+    app: AppHandle,
+    credentials: Vec<WindsurfPasswordCredentialInput>,
+) -> Result<WindsurfPasswordBatchResult, String> {
+    if credentials.is_empty() {
+        return Err("请先提供至少一组邮箱和密码".to_string());
+    }
+
+    let started_at = Instant::now();
+    logger::log_info(&format!(
+        "[Windsurf Command] 批量邮箱密码登录开始: count={}",
+        credentials.len()
+    ));
+
+    let mut accounts = Vec::new();
+    let mut failures = Vec::new();
+
+    for item in credentials {
+        let email = item.email.trim().to_string();
+        let password = item.password;
+        if email.is_empty() || password.is_empty() {
+            failures.push(WindsurfPasswordCredentialFailure {
+                email,
+                error: "邮箱和密码不能为空".to_string(),
+            });
+            continue;
+        }
+
+        match add_windsurf_account_from_password(&email, &password).await {
+            Ok(account) => {
+                logger::log_info(&format!(
+                    "[Windsurf Command] 批量邮箱密码登录成功: account_id={}, login={}",
+                    account.id, account.github_login
+                ));
+                accounts.push(account);
+            }
+            Err(error) => {
+                logger::log_warn(&format!(
+                    "[Windsurf Command] 批量邮箱密码登录失败: email={}, error={}",
+                    email, error
+                ));
+                failures.push(WindsurfPasswordCredentialFailure { email, error });
+            }
+        }
+    }
+
+    if !accounts.is_empty() {
+        let _ = crate::modules::tray::update_tray_menu(&app);
+    }
+
+    let success_count = accounts.len();
+    let failed_count = failures.len();
+    if failed_count == 0 {
+        logger::log_info(&format!(
+            "[Windsurf Command] 批量邮箱密码登录完成: success={}, elapsed={}ms",
+            success_count,
+            started_at.elapsed().as_millis()
+        ));
+    } else {
+        logger::log_warn(&format!(
+            "[Windsurf Command] 批量邮箱密码登录完成(部分失败): success={}, failed={}, elapsed={}ms",
+            success_count,
+            failed_count,
+            started_at.elapsed().as_millis()
+        ));
+    }
+
+    Ok(WindsurfPasswordBatchResult {
+        accounts,
+        success_count,
+        failed_count,
+        failures,
+    })
 }
 
 #[tauri::command]

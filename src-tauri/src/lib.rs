@@ -411,6 +411,7 @@ pub fn run() {
             commands::windsurf::windsurf_oauth_login_cancel,
             commands::windsurf::add_windsurf_account_with_token,
             commands::windsurf::add_windsurf_account_with_password,
+            commands::windsurf::add_windsurf_accounts_with_password,
             commands::windsurf::update_windsurf_account_tags,
             commands::windsurf::get_windsurf_accounts_index_path,
             commands::windsurf::inject_windsurf_to_vscode,

@@ -63,6 +63,20 @@ const WINDSURF_TOKEN_BATCH_EXAMPLE = `[
     "last_used": 1730000000
   }
 ]`;
+const WINDSURF_PASSWORD_BATCH_EXAMPLE = `user1@example.com password123
+user2@example.com password456
+user3@example.com password789`;
+const WINDSURF_PASSWORD_BATCH_JSON_EXAMPLE = `[
+  {
+    "email": "user1@example.com",
+    "password": "password123"
+  },
+  {
+    "email": "user2@example.com",
+    "password": "password456"
+  }
+]`;
+const WINDSURF_PASSWORD_BATCH_DELIMITERS = ['\t', '----', ',', '|'];
 
 const WINDSURF_PLAN_FILTERS: WindsurfPlanBadge[] = [
   'FREE',
@@ -94,6 +108,115 @@ type WindsurfOfficialUsagePanel = {
   items: WindsurfOfficialUsagePanelItem[];
   title: string;
 };
+
+type WindsurfPasswordBatchCredential = {
+  email: string;
+  password: string;
+};
+
+function normalizeWindsurfPasswordBatchItem(
+  item: unknown,
+): WindsurfPasswordBatchCredential | null {
+  if (Array.isArray(item)) {
+    const [email, password] = item;
+    if (typeof email === 'string' && typeof password === 'string') {
+      const normalizedEmail = email.trim();
+      const normalizedPassword = password.trim();
+      if (normalizedEmail && normalizedPassword) {
+        return { email: normalizedEmail, password: normalizedPassword };
+      }
+    }
+    return null;
+  }
+
+  if (!item || typeof item !== 'object') return null;
+
+  const candidate = item as Record<string, unknown>;
+  const email = candidate.email ?? candidate.account ?? candidate.username ?? candidate.login;
+  const password = candidate.password ?? candidate.pass ?? candidate.pwd;
+  if (typeof email !== 'string' || typeof password !== 'string') return null;
+
+  const normalizedEmail = email.trim();
+  const normalizedPassword = password.trim();
+  if (!normalizedEmail || !normalizedPassword) return null;
+
+  return { email: normalizedEmail, password: normalizedPassword };
+}
+
+function parseWindsurfPasswordBatchJsonInput(
+  rawInput: string,
+): {
+  credentials: WindsurfPasswordBatchCredential[];
+  invalidLines: number[];
+} | null {
+  const trimmed = rawInput.trim();
+  if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    const rawItems = Array.isArray(parsed) ? parsed : [parsed];
+    const credentials = rawItems
+      .map((item) => normalizeWindsurfPasswordBatchItem(item))
+      .filter((item): item is WindsurfPasswordBatchCredential => item !== null);
+
+    return {
+      credentials,
+      invalidLines: credentials.length === rawItems.length ? [] : [1],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseWindsurfPasswordBatchInput(rawInput: string): {
+  credentials: WindsurfPasswordBatchCredential[];
+  invalidLines: number[];
+} {
+  const jsonResult = parseWindsurfPasswordBatchJsonInput(rawInput);
+  if (jsonResult) return jsonResult;
+
+  const credentials: WindsurfPasswordBatchCredential[] = [];
+  const invalidLines: number[] = [];
+
+  rawInput.split(/\r?\n/).forEach((rawLine, index) => {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) return;
+
+    let matched: WindsurfPasswordBatchCredential | null = null;
+    for (const delimiter of WINDSURF_PASSWORD_BATCH_DELIMITERS) {
+      const delimiterIndex = line.indexOf(delimiter);
+      if (delimiterIndex <= 0) continue;
+
+      const email = line.slice(0, delimiterIndex).trim();
+      const password = line.slice(delimiterIndex + delimiter.length).trim();
+      if (email && password) {
+        matched = { email, password };
+      }
+      break;
+    }
+
+    if (!matched) {
+      const whitespaceMatched = line.match(/^(\S+)\s+(.+)$/);
+      if (whitespaceMatched) {
+        const email = whitespaceMatched[1]?.trim() ?? '';
+        const password = whitespaceMatched[2]?.trim() ?? '';
+        if (email && password) {
+          matched = { email, password };
+        }
+      }
+    }
+
+    if (matched) {
+      credentials.push(matched);
+    } else {
+      invalidLines.push(index + 1);
+    }
+  });
+
+  return { credentials, invalidLines };
+}
 
 export function WindsurfAccountsPage() {
   const [activeTab, setActiveTab] = useState<WindsurfTab>('overview');
@@ -191,6 +314,8 @@ export function WindsurfAccountsPage() {
   const [passwordEmail, setPasswordEmail] = useState('');
   const [passwordPassword, setPasswordPassword] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordBatchInput, setPasswordBatchInput] = useState('');
+  const [passwordBatchLoading, setPasswordBatchLoading] = useState(false);
 
   const handlePasswordLogin = useCallback(async () => {
     const email = passwordEmail.trim();
@@ -227,6 +352,105 @@ export function WindsurfAccountsPage() {
     }
     setPasswordLoading(false);
   }, [passwordEmail, passwordPassword, store, t, setAddStatus, setAddMessage, closeAddModal]);
+
+  const handleBatchPasswordImport = useCallback(async () => {
+    const { credentials, invalidLines } = parseWindsurfPasswordBatchInput(passwordBatchInput);
+    if (credentials.length === 0) {
+      setAddStatus('error');
+      setAddMessage(
+        t(
+          'windsurf.password.batchEmpty',
+          '请填写 JSON 或每行一组账号密码，例如：email@example.com password123',
+        ),
+      );
+      return;
+    }
+    if (invalidLines.length > 0) {
+      setAddStatus('error');
+      setAddMessage(
+        t('windsurf.password.batchInvalidLines', {
+          lines: invalidLines.join(', '),
+          defaultValue:
+            '格式无效，请使用 JSON，或每行一组 email password：{{lines}}',
+        }),
+      );
+      return;
+    }
+
+    setPasswordBatchLoading(true);
+    setAddStatus('loading');
+    setAddMessage(
+      t('windsurf.password.batchLogging', {
+        count: credentials.length,
+        defaultValue: '正在批量登录 {{count}} 个账号...',
+      }),
+    );
+
+    try {
+      const result = await windsurfService.addWindsurfAccountsWithPassword(credentials);
+      if (result.success_count > 0) {
+        await store.fetchAccounts();
+      }
+
+      const failurePreview = result.failures
+        .slice(0, 3)
+        .map((item) => `${item.email}: ${item.error}`)
+        .join('；');
+      const failureSuffix =
+        result.failures.length > 3
+          ? t('windsurf.password.batchFailureMore', {
+              count: result.failures.length - 3,
+              defaultValue: ' 等另外 {{count}} 条',
+            })
+          : '';
+
+      if (result.failed_count === 0) {
+        setAddStatus('success');
+        setAddMessage(
+          t('windsurf.password.batchSuccess', {
+            count: result.success_count,
+            defaultValue: '批量导入成功，共 {{count}} 个账号',
+          }),
+        );
+        setTimeout(() => {
+          closeAddModal();
+          setPasswordBatchInput('');
+          setPasswordEmail('');
+          setPasswordPassword('');
+        }, 1200);
+      } else if (result.success_count > 0) {
+        setAddStatus('success');
+        setAddMessage(
+          t('windsurf.password.batchPartial', {
+            success: result.success_count,
+            failed: result.failed_count,
+            details: failurePreview ? `失败示例：${failurePreview}${failureSuffix}` : '',
+            defaultValue:
+              '批量导入完成：成功 {{success}} 条，失败 {{failed}} 条。{{details}}',
+          }),
+        );
+      } else {
+        setAddStatus('error');
+        setAddMessage(
+          t('windsurf.password.batchFailed', {
+            failed: result.failed_count,
+            details: failurePreview ? `失败示例：${failurePreview}${failureSuffix}` : '',
+            defaultValue: '批量导入失败，共 {{failed}} 条。{{details}}',
+          }),
+        );
+      }
+    } catch (e) {
+      setAddStatus('error');
+      const errorMsg = String(e).replace(/^Error:\s*/, '');
+      setAddMessage(
+        t('windsurf.password.batchInvokeFailed', {
+          error: errorMsg,
+          defaultValue: '批量导入失败: {{error}}',
+        }),
+      );
+    }
+    setPasswordBatchLoading(false);
+  }, [passwordBatchInput, store, t, setAddStatus, setAddMessage, closeAddModal]);
 
   // ─── Platform-specific: Presentation & Credits ──────────────────────
 
@@ -987,6 +1211,73 @@ export function WindsurfAccountsPage() {
                   disabled={passwordLoading || !passwordEmail.trim() || passwordPassword.length === 0}>
                   {passwordLoading ? <RefreshCw size={16} className="loading-spinner" /> : <Mail size={16} />}
                   {passwordLoading ? t('windsurf.password.logging', '正在登录...') : t('windsurf.password.login', '登录')}
+                </button>
+                <div className="oauth-hint" style={{ margin: '14px 0 6px' }}>
+                  {t('windsurf.password.batchHint', '批量导入支持 JSON，或每行一组账号密码；文本格式支持空格、Tab、逗号、`----`、`|` 分隔')}
+                </div>
+                <div className="token-format" style={{ marginBottom: 8 }}>
+                  <p className="token-format-required">
+                    {t('windsurf.password.batchFormatsTitle', '当前支持的导入格式')}
+                  </p>
+                  <div className="token-format-group">
+                    <div className="token-format-label">
+                      {t('windsurf.password.batchFormatsText', '文本格式')}
+                    </div>
+                    <pre className="token-format-code">{`1. 每行一组：email password
+2. 每行一组：email<TAB>password
+3. 每行一组：email,password
+4. 每行一组：email----password
+5. 每行一组：email|password`}</pre>
+                  </div>
+                  <div className="token-format-group">
+                    <div className="token-format-label">
+                      {t('windsurf.password.batchFormatsJson', 'JSON 格式')}
+                    </div>
+                    <pre className="token-format-code">{`1. [{"email":"xxx","password":"yyy"}]
+2. [["xxx","yyy"]]
+3. 兼容字段名：email/account/username/login + password/pass/pwd`}</pre>
+                  </div>
+                </div>
+                <textarea
+                  className="token-input"
+                  style={{ minHeight: 120 }}
+                  value={passwordBatchInput}
+                  onChange={(e) => setPasswordBatchInput(e.target.value)}
+                  placeholder={t(
+                    'windsurf.password.batchPlaceholder',
+                    '支持 JSON，或每行一组账号密码，例如：\nuser1@example.com password123\nuser2@example.com password456',
+                  )}
+                  disabled={passwordBatchLoading}
+                />
+                <details className="token-format-collapse" style={{ marginTop: 8 }}>
+                  <summary className="token-format-collapse-summary">
+                    {t('windsurf.password.batchExampleTitle', '批量格式示例')}
+                  </summary>
+                  <div className="token-format">
+                    <div className="token-format-group">
+                      <div className="token-format-label">
+                        {t('windsurf.password.batchExampleLabel', '文本示例')}
+                      </div>
+                      <pre className="token-format-code">{WINDSURF_PASSWORD_BATCH_EXAMPLE}</pre>
+                    </div>
+                    <div className="token-format-group">
+                      <div className="token-format-label">
+                        {t('windsurf.password.batchJsonExampleLabel', 'JSON 示例')}
+                      </div>
+                      <pre className="token-format-code">{WINDSURF_PASSWORD_BATCH_JSON_EXAMPLE}</pre>
+                    </div>
+                  </div>
+                </details>
+                <button
+                  className="btn btn-secondary btn-full"
+                  style={{ marginTop: 12 }}
+                  onClick={handleBatchPasswordImport}
+                  disabled={passwordBatchLoading || !passwordBatchInput.trim()}
+                >
+                  {passwordBatchLoading ? <RefreshCw size={16} className="loading-spinner" /> : <Upload size={16} />}
+                  {passwordBatchLoading
+                    ? t('windsurf.password.batchLoggingShort', '批量登录中...')
+                    : t('windsurf.password.batchImport', '批量导入')}
                 </button>
               </div>
             )}
