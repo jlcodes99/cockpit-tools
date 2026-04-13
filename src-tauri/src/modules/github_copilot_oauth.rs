@@ -180,8 +180,9 @@ async fn request_device_code() -> Result<DeviceCodeResponse, String> {
             .await
             .unwrap_or_else(|_| "<no-body>".to_string());
         return Err(format!(
-            "请求 GitHub 设备码失败: status={}, body={}",
-            status, body
+            "请求 GitHub 设备码失败: status={}, body_len={}",
+            status,
+            body.len()
         ));
     }
 
@@ -249,8 +250,9 @@ async fn exchange_device_token(
             .await
             .unwrap_or_else(|_| "<no-body>".to_string());
         return Err(format!(
-            "请求 GitHub access token 失败: status={}, body={}",
-            status, body
+            "请求 GitHub access token 失败: status={}, body_len={}",
+            status,
+            body.len()
         ));
     }
 
@@ -280,8 +282,9 @@ async fn fetch_github_user(
             .await
             .unwrap_or_else(|_| "<no-body>".to_string());
         return Err(format!(
-            "请求 GitHub 用户信息失败: status={}, body={}",
-            status, body
+            "请求 GitHub 用户信息失败: status={}, body_len={}",
+            status,
+            body.len()
         ));
     }
 
@@ -311,8 +314,9 @@ async fn fetch_github_email(
             .await
             .unwrap_or_else(|_| "<no-body>".to_string());
         return Err(format!(
-            "请求 GitHub 邮箱列表失败: status={}, body={}",
-            status, body
+            "请求 GitHub 邮箱列表失败: status={}, body_len={}",
+            status,
+            body.len()
         ));
     }
 
@@ -355,8 +359,9 @@ async fn fetch_copilot_token(
             .await
             .unwrap_or_else(|_| "<no-body>".to_string());
         return Err(format!(
-            "请求 Copilot token 失败: status={}, body={}",
-            status, body
+            "请求 Copilot token 失败: status={}, body_len={}",
+            status,
+            body.len()
         ));
     }
 
@@ -416,8 +421,9 @@ async fn fetch_copilot_user_info(
             .await
             .unwrap_or_else(|_| "<no-body>".to_string());
         return Err(format!(
-            "请求 Copilot user 信息失败: status={}, body={}",
-            status, body
+            "请求 Copilot user 信息失败: status={}, body_len={}",
+            status,
+            body.len()
         ));
     }
 

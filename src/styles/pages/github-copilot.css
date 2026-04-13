@@ -166,7 +166,11 @@
 
 .ghcp-flow-notice {
   border: 1px solid rgba(59, 130, 246, 0.28);
-  background: linear-gradient(135deg, rgba(191, 219, 254, 0.28), rgba(153, 246, 228, 0.18));
+  background: linear-gradient(
+    135deg,
+    rgba(191, 219, 254, 0.28),
+    rgba(153, 246, 228, 0.18)
+  );
   border-radius: 14px;
   padding: 8px 10px;
   display: flex;
@@ -259,7 +263,9 @@
 
 .ghcp-account-card.current {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px var(--primary-light), var(--shadow-md);
+  box-shadow:
+    0 0 0 2px var(--primary-light),
+    var(--shadow-md);
 }
 
 .ghcp-account-card.disabled {
@@ -659,6 +665,14 @@
   padding: 12px;
   background: var(--bg-tertiary);
   border-radius: var(--radius-sm);
+}
+
+.gemini-accounts-page .ghcp-account-card {
+  min-height: 260px;
+}
+
+.gemini-accounts-page .gemini-quota-table-cell {
+  min-width: 0;
 }
 
 .trae-accounts-page .ghcp-account-card {
@@ -1255,7 +1269,11 @@
 
 .ghcp-accounts-page .tag-filter-btn.active {
   border-color: rgba(59, 130, 246, 0.4);
-  background: linear-gradient(135deg, rgba(191, 219, 254, 0.45), rgba(153, 246, 228, 0.4));
+  background: linear-gradient(
+    135deg,
+    rgba(191, 219, 254, 0.45),
+    rgba(153, 246, 228, 0.4)
+  );
   color: #0f172a;
 }
 
@@ -1494,7 +1512,11 @@
   background: rgba(15, 23, 42, 0.86);
 }
 
-[data-theme="dark"] .ghcp-accounts-page .account-table tbody tr:nth-child(even) {
+[data-theme="dark"]
+  .ghcp-accounts-page
+  .account-table
+  tbody
+  tr:nth-child(even) {
   background: rgba(15, 23, 42, 0.92);
 }
 
@@ -1502,7 +1524,6 @@
   border-bottom-color: rgba(148, 163, 184, 0.1);
   color: rgba(226, 232, 240, 0.92);
 }
-
 
 .ghcp-accounts-page .account-table th {
   background: rgba(15, 23, 42, 0.06);
@@ -1598,7 +1619,7 @@
 }
 
 .ghcp-accounts-page .filter-select::after {
-  content: '';
+  content: "";
   position: absolute;
   right: 10px;
   top: 50%;
@@ -1641,7 +1662,7 @@
 }
 
 .ghcp-accounts-page .sort-select::after {
-  content: '';
+  content: "";
   position: absolute;
   right: 10px;
   top: 50%;
@@ -1983,7 +2004,11 @@
 
 /* Dark mode */
 [data-theme="dark"] .ghcp-account-card {
-  background: linear-gradient(170deg, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.8));
+  background: linear-gradient(
+    170deg,
+    rgba(15, 23, 42, 0.95),
+    rgba(15, 23, 42, 0.8)
+  );
 }
 
 [data-theme="dark"] .ghcp-accounts-page .message-bar.success {
@@ -2006,7 +2031,11 @@
 
 [data-theme="dark"] .ghcp-flow-notice {
   border-color: rgba(96, 165, 250, 0.35);
-  background: linear-gradient(135deg, rgba(30, 64, 175, 0.25), rgba(15, 118, 110, 0.2));
+  background: linear-gradient(
+    135deg,
+    rgba(30, 64, 175, 0.25),
+    rgba(15, 118, 110, 0.2)
+  );
 }
 
 [data-theme="dark"] .ghcp-flow-notice-arrow {

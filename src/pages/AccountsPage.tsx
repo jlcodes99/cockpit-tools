@@ -55,6 +55,8 @@ import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { TagEditModal } from '../components/TagEditModal'
 import { ExportJsonModal } from '../components/ExportJsonModal'
+import { PaginationControls } from '../components/PaginationControls'
+import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown'
 import { AccountGroupModal, AddToGroupModal } from '../components/AccountGroupModal'
 import { GroupAccountPickerModal } from '../components/GroupAccountPickerModal'
 import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorMessage'
@@ -99,6 +101,12 @@ import { useExportJsonModal } from '../hooks/useExportJsonModal'
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown'
 import { AccountTagFilterDropdown } from '../components/AccountTagFilterDropdown'
 import {
+  buildPaginatedGroups,
+  buildPaginationPageSizeStorageKey,
+  isEveryIdSelected,
+  usePagination,
+} from '../hooks/usePagination'
+import {
   accountMatchesTagFilters,
   accountMatchesTypeFilters,
   buildAccountTierCounts,
@@ -107,6 +115,11 @@ import {
   normalizeAccountTag,
   type AccountFilterType,
 } from '../utils/accountFilters'
+import {
+  buildValidAccountsFilterOption,
+  splitValidityFilterValues,
+  VALID_ACCOUNTS_FILTER_VALUE,
+} from '../utils/accountValidityFilter'
 import {
   FEATURE_UNLOCK_CHANGED_EVENT,
   type FeatureUnlockChangedDetail,
@@ -122,6 +135,7 @@ interface AccountsPageProps {
 }
 
 type AntigravitySwitchHistoryItem = accountService.AntigravitySwitchHistoryItem
+type AccountsFilterType = AccountFilterType | typeof VALID_ACCOUNTS_FILTER_VALUE
 
 type ViewMode = 'grid' | 'list' | 'compact'
 
@@ -285,11 +299,11 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
 
   // 筛选
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterTypes, setFilterTypes] = useState<AccountFilterType[]>([])
+  const [filterTypes, setFilterTypes] = useState<AccountsFilterType[]>([])
   const [tagFilter, setTagFilter] = useState<string[]>([])
   const [groupByTag, setGroupByTag] = useState(false)
 
-  const toggleFilterTypeValue = useCallback((value: AccountFilterType) => {
+  const toggleFilterTypeValue = useCallback((value: AccountsFilterType) => {
     setFilterTypes((prev) => {
       if (prev.includes(value)) {
         return prev.filter((item) => item !== value)
@@ -597,6 +611,24 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
 
   const availableTags = useMemo(() => collectAvailableAccountTags(accounts), [accounts])
 
+  const isAbnormalAccount = useCallback(
+    (account: Account): boolean => {
+      const isDisabled = account.disabled
+      const isForbidden = Boolean(account.quota?.is_forbidden)
+      const hasWarning = Boolean(refreshWarnings[account.email])
+      const verificationReason = account.disabled_reason || verificationStatusMap[account.id]
+      const hasVerificationIssue =
+        verificationReason === 'verification_required' || verificationReason === 'tos_violation'
+      return isDisabled || isForbidden || hasWarning || hasVerificationIssue
+    },
+    [refreshWarnings, verificationStatusMap]
+  )
+
+  const validAccountCount = useMemo(
+    () => accounts.reduce((count, account) => (isAbnormalAccount(account) ? count : count + 1), 0),
+    [accounts, isAbnormalAccount]
+  )
+
   // 筛选后的账号
   const filteredAccounts = useMemo(() => {
     let result = [...accounts]
@@ -626,10 +658,19 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
 
     // 类型过滤（多选）
     if (filterTypes.length > 0) {
-      const selectedTypes = new Set(filterTypes)
-      result = result.filter((acc) =>
-        accountMatchesTypeFilters(acc, selectedTypes, verificationStatusMap)
-      )
+      const { requireValidAccounts, selectedTypes } = splitValidityFilterValues(filterTypes)
+      if (requireValidAccounts) {
+        result = result.filter((acc) => !isAbnormalAccount(acc))
+      }
+      if (selectedTypes.size > 0) {
+        result = result.filter((acc) =>
+          accountMatchesTypeFilters(
+            acc,
+            selectedTypes as Set<AccountFilterType>,
+            verificationStatusMap
+          )
+        )
+      }
     }
 
     // 标签过滤
@@ -646,6 +687,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     tagFilter,
     accountSortComparator,
     verificationStatusMap,
+    isAbnormalAccount,
     activeGroup,
     accountGroups,
   ])
@@ -681,6 +723,24 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     })
   }, [filteredAccounts, groupByTag, tagFilter, untaggedKey])
 
+  const pagination = usePagination({
+    items: filteredAccounts,
+    storageKey: buildPaginationPageSizeStorageKey('accounts'),
+  })
+  const paginatedAccounts = pagination.pageItems
+  const paginatedIds = useMemo(
+    () => paginatedAccounts.map((account) => account.id),
+    [paginatedAccounts]
+  )
+  const paginatedGroupedAccounts = useMemo(
+    () => buildPaginatedGroups(groupedAccounts, paginatedAccounts),
+    [groupedAccounts, paginatedAccounts]
+  )
+  const allPaginatedSelected = useMemo(
+    () => isEveryIdSelected(selected, paginatedIds),
+    [paginatedIds, selected]
+  )
+
   const hasVisibleAccountGroups = useMemo(
     () => !activeGroupId && !groupByTag && accountGroups.length > 0,
     [activeGroupId, groupByTag, accountGroups]
@@ -693,8 +753,20 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
   )
 
   const tierFilterOptions = useMemo<MultiSelectFilterOption[]>(
-    () => buildAccountTierFilterOptions(t, tierCounts),
-    [t, tierCounts.FREE, tierCounts.PRO, tierCounts.TOS_VIOLATION, tierCounts.ULTRA, tierCounts.UNKNOWN, tierCounts.VERIFICATION_REQUIRED]
+    () => [
+      ...buildAccountTierFilterOptions(t, tierCounts),
+      buildValidAccountsFilterOption(t, validAccountCount),
+    ],
+    [
+      t,
+      tierCounts.FREE,
+      tierCounts.PRO,
+      tierCounts.TOS_VIOLATION,
+      tierCounts.ULTRA,
+      tierCounts.UNKNOWN,
+      tierCounts.VERIFICATION_REQUIRED,
+      validAccountCount,
+    ]
   )
 
   const loadFingerprints = async () => {
@@ -1610,8 +1682,17 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
   }
 
   const toggleSelectAll = () => {
-    if (selected.size === filteredAccounts.length) setSelected(new Set())
-    else setSelected(new Set(filteredAccounts.map((a) => a.id)))
+    if (paginatedIds.length === 0) return
+    setSelected((prev) => {
+      const next = new Set(prev)
+      const pageFullySelected = paginatedIds.every((id) => next.has(id))
+      if (pageFullySelected) {
+        paginatedIds.forEach((id) => next.delete(id))
+      } else {
+        paginatedIds.forEach((id) => next.add(id))
+      }
+      return next
+    })
   }
 
   // 从当前分组中移除选中账号
@@ -1964,9 +2045,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
           email: account.email,
           isCurrent,
           hasQuota: !!account.quota,
-          quotaModels: account.quota?.models,
-          quotaModelsLength: account.quota?.models?.length,
-          rawQuota: account.quota
+          quotaModelCount: account.quota?.models?.length ?? 0
         })
       }
 
@@ -2036,6 +2115,11 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
               </div>
             ) : (
               <>
+                {hasQuotaError && (
+                  <div className="quota-empty" title={quotaError?.message}>
+                    {t('common.shared.quota.queryFailed', '配额查询失败')}
+                  </div>
+                )}
                 {quotaDisplayItems.map((item) => {
                   const resetLabel = formatResetTimeDisplay(item.resetTime, t)
                   return (
@@ -2252,12 +2336,12 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
   const renderGridView = () => {
     return (
       <div className="grid-view-container">
-        {filteredAccounts.length > 0 && (
+        {paginatedAccounts.length > 0 && (
           <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
               <input
                 type="checkbox"
-                checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0}
+                checked={allPaginatedSelected}
                 onChange={toggleSelectAll}
               />
               {t('common.selectAll', '全选')}
@@ -2267,20 +2351,20 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
         {!groupByTag ? (
           <div className="accounts-grid">
             {renderInlineFolderCards()}
-            {renderGridCards(filteredAccounts)}
+            {renderGridCards(paginatedAccounts)}
           </div>
         ) : (
           <div className="tag-group-list">
-            {groupedAccounts.map(([groupKey, groupAccounts]) => (
+            {paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
               <div key={groupKey} className="tag-group-section">
                 <div className="tag-group-header">
                   <span className="tag-group-title">
                     {resolveGroupLabel(groupKey)}
                   </span>
-                  <span className="tag-group-count">{groupAccounts.length}</span>
+                  <span className="tag-group-count">{totalCount}</span>
                 </div>
                 <div className="tag-group-grid accounts-grid">
-                  {renderGridCards(groupAccounts, groupKey)}
+                  {renderGridCards(items, groupKey)}
                 </div>
               </div>
             ))}
@@ -2519,18 +2603,18 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
 	          {/* 账号列表 */}
 	          {groupByTag ? (
 	            <div className="tag-group-list">
-	              {groupedAccounts.map(([groupKey, groupAccounts]) => (
+	              {paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
                 <div key={groupKey} className="tag-group-section">
                   <div className="tag-group-header">
                     <span className="tag-group-title">
                       {resolveGroupLabel(groupKey)}
                     </span>
                     <span className="tag-group-count">
-                      {groupAccounts.length}
+                      {totalCount}
                     </span>
                   </div>
                   <div className={`tag-group-grid ${styles.grid}`}>
-                    {renderCompactCards(groupAccounts)}
+                    {renderCompactCards(items)}
                   </div>
                 </div>
               ))}
@@ -2540,7 +2624,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
 	              {hasVisibleAccountGroups && (
 	                <div className="accounts-grid">{renderInlineFolderCards()}</div>
 	              )}
-	              <div className={styles.grid}>{renderCompactCards(filteredAccounts)}</div>
+	              <div className={styles.grid}>{renderCompactCards(paginatedAccounts)}</div>
 	            </>
 	          )}
 	        </div>
@@ -2685,6 +2769,11 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                 </div>
               ) : (
                 <>
+                  {hasQuotaError && (
+                    <div className="quota-empty" title={quotaError?.message}>
+                      {t('common.shared.quota.queryFailed', '配额查询失败')}
+                    </div>
+                  )}
                   {quotaDisplayItems.map((item) => (
                     <div className="quota-item" key={item.key}>
                       <div className="quota-header">
@@ -2812,10 +2901,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
             <th style={{ width: 40 }}>
               <input
                 type="checkbox"
-                checked={
-                  selected.size === filteredAccounts.length &&
-                  filteredAccounts.length > 0
-                }
+                checked={allPaginatedSelected}
                 onChange={toggleSelectAll}
               />
             </th>
@@ -2878,7 +2964,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
             )
           })}
           {groupByTag
-            ? groupedAccounts.map(([groupKey, groupAccounts]) => (
+            ? paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
               <Fragment key={groupKey}>
                 <tr className="tag-group-row">
                   <td colSpan={5}>
@@ -2886,14 +2972,14 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                       <span className="tag-group-title">
                         {resolveGroupLabel(groupKey)}
                       </span>
-                      <span className="tag-group-count">{groupAccounts.length}</span>
+                      <span className="tag-group-count">{totalCount}</span>
                     </div>
                   </td>
                 </tr>
-                {renderListRows(groupAccounts, groupKey)}
+                {renderListRows(items, groupKey)}
               </Fragment>
             ))
-            : renderListRows(filteredAccounts)}
+            : renderListRows(paginatedAccounts)}
         </tbody>
       </table>
     </div>
@@ -2997,7 +3083,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
               clearLabel={t('accounts.clearFilter', '清空筛选')}
               emptyLabel={t('common.none', '暂无')}
               ariaLabel={t('accounts.filterLabel', '筛选')}
-              onToggleValue={(value) => toggleFilterTypeValue(value as AccountFilterType)}
+              onToggleValue={(value) => toggleFilterTypeValue(value as AccountsFilterType)}
               onClear={clearFilterTypes}
             />
 
@@ -3011,34 +3097,36 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
               onToggleGroupByTag={setGroupByTag}
             />
             {/* 排序下拉菜单 */}
-            <div className="sort-select">
-              <ArrowDownWideNarrow size={14} className="sort-icon" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                aria-label={t('accounts.sortLabel', '排序')}
-              >
-                <option value="overall">
-                  {t('accounts.sort.overall', '按综合配额')}
-                </option>
-                <option value="created_at">
-                  {t('accounts.sort.createdAt', '按创建时间')}
-                </option>
-                {displayGroups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {t('accounts.sort.byGroup', {
-                      group: group.name,
-                      defaultValue: `按 ${group.name} 配额`
-                    })}
-                  </option>
-                ))}
-                {displayGroups.map(group => (
-                  <option key={`${group.id}-reset`} value={`${ANTIGRAVITY_RESET_SORT_PREFIX}${group.id}`}>
-                    {t('accounts.sort.byGroupReset', { group: group.name, defaultValue: `按 ${group.name} 重置时间` })}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <SingleSelectFilterDropdown
+              value={sortBy}
+              options={[
+                {
+                  value: 'overall',
+                  label: t('accounts.sort.overall', '按综合配额'),
+                },
+                {
+                  value: 'created_at',
+                  label: t('accounts.sort.createdAt', '按创建时间'),
+                },
+                ...displayGroups.map((group) => ({
+                  value: group.id,
+                  label: t('accounts.sort.byGroup', {
+                    group: group.name,
+                    defaultValue: `按 ${group.name} 配额`,
+                  }),
+                })),
+                ...displayGroups.map((group) => ({
+                  value: `${ANTIGRAVITY_RESET_SORT_PREFIX}${group.id}`,
+                  label: t('accounts.sort.byGroupReset', {
+                    group: group.name,
+                    defaultValue: `按 ${group.name} 重置时间`,
+                  }),
+                })),
+              ]}
+              ariaLabel={t('accounts.sortLabel', '排序')}
+              icon={<ArrowDownWideNarrow size={14} />}
+              onChange={setSortBy}
+            />
 
             {/* 排序方向切换按钮 */}
             <button
@@ -3214,6 +3302,21 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
         ) : (
           renderCompactView()
         )}
+
+        <PaginationControls
+          totalItems={pagination.totalItems}
+          currentPage={pagination.currentPage}
+          totalPages={pagination.totalPages}
+          pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions}
+          rangeStart={pagination.rangeStart}
+          rangeEnd={pagination.rangeEnd}
+          canGoPrevious={pagination.canGoPrevious}
+          canGoNext={pagination.canGoNext}
+          onPageSizeChange={pagination.setPageSize}
+          onPreviousPage={pagination.goToPreviousPage}
+          onNextPage={pagination.goToNextPage}
+        />
       </main>
 
       {/* Add Account Modal */}

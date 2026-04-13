@@ -33,19 +33,24 @@
         "creditPackage": "추가 Credits",
         "sharedCreditPackage": "공유 Credits 패키지",
         "account": "계정",
-        "createdAt": "생성 시간"
+        "createdAt": "생성 시간",
+        "userId": "사용자 ID"
       },
       "empty": {
         "title": "계정 없음"
       },
-      "export": "내보내기",
+      "export": {
+        "title": "내보내기",
+        "copyFailed": "복사에 실패했습니다. 수동으로 복사해 주세요"
+      },
       "filter": {
         "all": "전체 ({{count}})",
         "enterprise": "기업({{count}})",
         "free": "무료({{count}})",
         "pro": "프로({{count}})",
         "business": "비즈니스({{count}})",
-        "individual": "개인({{count}})"
+        "individual": "개인({{count}})",
+        "validAccounts": "유효한 계정 ({{count}})"
       },
       "filterLabel": "필터",
       "import": {
@@ -127,9 +132,11 @@
       },
       "quota": {
         "noData": "쿼터 데이터 없음",
+        "queryFailed": "할당량 조회 실패",
         "resetDone": "재설정됨",
         "hourly": "5시간 쿼터",
-        "weekly": "주간 쿼터"
+        "weekly": "주간 쿼터",
+        "resetAt": "초기화: {{time}}"
       },
       "subtitle": "GitHub Copilot 계정을 관리합니다",
       "time": {
@@ -161,7 +168,10 @@
       },
       "updated": {
         "label": "{{relative}} 전에 업데이트"
-      }
+      },
+      "clear": "지우기",
+      "loginSuccess": "로그인 성공",
+      "switchAccount": "계정 전환"
     },
     "topRightAd": {
       "ariaLabel": "전역 우측 상단 광고 영역",
@@ -169,7 +179,15 @@
       "title": "우측 상단 광고 영역",
       "desc": "이 영역은 모든 페이지의 우측 상단에 고정되어 캠페인 또는 브랜드 광고 노출에 적합합니다.",
       "action": "자세히 보기"
-    }
+    },
+    "appName": "Cockpit Tools",
+    "collapse": "접기",
+    "confirmDelete": "삭제 확인",
+    "confirmDeleteTag": "태그 삭제 확인",
+    "deleteTagWarning": "모든 계정에서 이 태그를 삭제하시겠습니까?",
+    "expand": "펼치기",
+    "processing": "처리 중...",
+    "selectAll": "전체 선택"
   },
   "nav": {
     "overview": "Antigravity",
@@ -292,7 +310,8 @@
       "running": "실행 중",
       "stopped": "정지됨",
       "restarting": "재시작 중",
-      "starting": "시작"
+      "starting": "시작",
+      "ready": "준비 완료"
     },
     "labels": {
       "path": "디렉토리",
@@ -302,7 +321,8 @@
       "unbound": "연결되지 않음",
       "pendingInit": "초기화 대기 중(먼저 한 번 실행하세요)",
       "quota": "쿼터",
-      "lastLaunched": "마지막 실행"
+      "lastLaunched": "마지막 실행",
+      "argsPresent": "인자 있음"
     },
     "columns": {
       "instance": "인스턴스",
@@ -352,7 +372,14 @@
       "extraArgsDesc": "인자는 공백으로 구분하며 따옴표를 지원합니다",
       "nameRequired": "인스턴스 이름을 입력해 주세요",
       "pathRequired": "인스턴스 디렉토리를 선택해 주세요",
-      "bindRequired": "연결할 계정을 선택해 주세요"
+      "bindRequired": "연결할 계정을 선택해 주세요",
+      "optional": "선택",
+      "launchMode": "실행 방식",
+      "launchModeApp": "데스크톱",
+      "launchModeCli": "CLI 모드",
+      "workingDir": "작업 디렉터리",
+      "workingDirPlaceholder": "기본값은 현재 경로",
+      "workingDirDesc": "시작 시 먼저 이 디렉터리로 이동합니다"
     },
     "quota": {
       "unbound": "연결된 계정 없음",
@@ -372,7 +399,8 @@
       "closedAll": "모든 인스턴스를 닫았습니다",
       "allAlreadyRunning": "모든 인스턴스가 이미 실행 중입니다",
       "noneRunning": "실행 중인 인스턴스를 찾을 수 없습니다",
-      "syncThreadsNeedTwo": "스레드를 동기화하려면 인스턴스가 두 개 이상 필요합니다"
+      "syncThreadsNeedTwo": "스레드를 동기화하려면 인스턴스가 두 개 이상 필요합니다",
+      "launchPrepared": "실행 명령이 준비되었습니다"
     },
     "runningDialog": {
       "title": "인스턴스가 이미 실행 중입니다",
@@ -435,6 +463,13 @@
       "bindHint": "인스턴스 목록에서 나중에 바인딩할 수 있습니다",
       "pathRequired": "먼저 디렉터리를 선택하세요",
       "submit": "가져오기"
+    },
+    "launchDialog": {
+      "title": "인스턴스 실행",
+      "terminal": "터미널",
+      "command": "실행 명령",
+      "hint": "명령을 복사해 수동으로 실행하거나, 아래 버튼으로 터미널에서 바로 실행할 수 있습니다.",
+      "runInTerminal": "터미널에서 실행"
     }
   },
   "settings": {
@@ -456,6 +491,9 @@
       "themeSystem": "시스템 설정",
       "uiScale": "UI 배율",
       "uiScaleDesc": "인터페이스 배율 조정",
+      "defaultTerminal": "기본 터미널",
+      "defaultTerminalDesc": "Gemini CLI를 열 때 사용되는 터미널",
+      "terminalSystem": "시스템 기본값",
       "accountManagement": "계정 관리",
       "autoRefresh": "Antigravity 자동 새로고침 할당량",
       "codexAutoRefresh": "Codex 자동 새로고침 할당량",
@@ -611,7 +649,24 @@
       "autoSwitchAccountScopeDialogTitle": "자동 전환 계정 범위 선택",
       "autoSwitchAccountScopeAllHint": "현재 범위는 모든 계정입니다. {{total}}개 계정이 자동 전환에 참여합니다.",
       "codexAutoSwitchAccountScope": "Codex 자동 전환 계정 범위",
-      "codexAutoSwitchAccountScopeDesc": "현재 Codex 자동 전환 상태: {{status}}. 이 범위의 계정만 고려됩니다."
+      "codexAutoSwitchAccountScopeDesc": "현재 Codex 자동 전환 상태: {{status}}. 이 범위의 계정만 고려됩니다.",
+      "currentAccountRefreshRequiresAutoRefresh": "현재 계정 새로 고침을 설정하려면 먼저 \"할당량 자동 새로 고침\"을 활성화하세요.",
+      "codebuddyCnAppPath": "CodeBuddy CN 앱 경로",
+      "codebuddyCnAppPathDesc": "비워두면 기본 경로를 사용합니다",
+      "codebuddyCnAppPathPlaceholder": "기본 경로",
+      "codebuddyCnAutoRefresh": "CodeBuddy CN 자동 할당량 갱신",
+      "codebuddyCnAutoRefreshDesc": "백그라운드 자동 갱신 빈도",
+      "codebuddyCnPathReset": "기본값으로 초기화",
+      "codebuddyCnPathSelect": "선택",
+      "codebuddyCnSettingsTitle": "CodeBuddy CN 설정",
+      "qoderAppPath": "Qoder 앱 경로",
+      "qoderAppPathDesc": "비워두면 기본 경로를 사용합니다",
+      "qoderAppPathPlaceholder": "기본 경로",
+      "qoderAutoRefresh": "Qoder 자동 할당량 갱신",
+      "qoderAutoRefreshDesc": "백그라운드 자동 갱신 빈도",
+      "qoderPathSelect": "선택",
+      "workbuddyAutoRefresh": "WorkBuddy 자동 할당량 갱신",
+      "workbuddyAutoRefreshDesc": "백그라운드 자동 갱신 빈도"
     },
     "network": {
       "apiTitle": "반중력 조종석 API",
@@ -672,7 +727,93 @@
       "download": "다운로드",
       "checkFailed": "업데이트 확인에 실패했습니다. 나중에 다시 시도해 주세요."
     },
-    "saveSettings": "설정 저장"
+    "saveSettings": "설정 저장",
+    "transfer": {
+      "backup": {
+        "title": "백업 관리",
+        "desc": "예약 백업, 백업 폴더, 백업 파일 목록을 한곳에서 관리합니다.",
+        "modalDesc": "자동 백업을 설정하고 프로젝트 백업 폴더의 파일을 확인한 뒤 여기서 복원하거나 정리할 수 있습니다.",
+        "statusEnabled": "자동 백업이 켜져 있습니다",
+        "statusDisabled": "자동 백업이 꺼져 있습니다",
+        "lastRunLabel": "최근 백업: {{time}}",
+        "lastRunNever": "아직 백업이 없습니다",
+        "autoTitle": "예약 백업",
+        "autoDesc": "활성화하면 하루에 한 번 백업을 내보내며 현재 가져오기 흐름으로 복원할 수 있습니다.",
+        "runNow": "지금 백업",
+        "running": "백업 중...",
+        "typeTitle": "백업 유형",
+        "typeDesc": "자동 백업할 데이터 범위를 선택하세요.",
+        "typeFull": "전체 데이터",
+        "typeAccounts": "계정만",
+        "typeConfig": "설정만",
+        "retentionTitle": "보관 기간",
+        "retentionDesc": "이 기간보다 오래된 백업은 다음 검사 때 삭제됩니다.",
+        "retentionUnit": "일",
+        "directoryTitle": "백업 폴더",
+        "directoryDesc": "백업은 항상 프로젝트의 backups 폴더에 저장됩니다.",
+        "openFolder": "폴더 열기",
+        "listTitle": "백업 목록",
+        "listDesc": "백업을 바로 가져오거나 오래된 파일을 삭제할 수 있습니다.",
+        "openList": "목록 열기",
+        "emptyTitle": "백업이 아직 없습니다",
+        "emptyDesc": "자동 백업을 켜거나 \"지금 백업\"을 눌러 여기에서 복원 가능한 JSON 백업을 만드세요.",
+        "sourceAuto": "자동",
+        "sourceManual": "수동",
+        "fileTime": "시간: {{time}}",
+        "fileSize": "크기: {{size}}",
+        "importAction": "가져오기",
+        "deleteAction": "삭제",
+        "deleteConfirm": "백업 {{name}} 을(를) 삭제할까요?",
+        "feedback": {
+          "running": "백업을 만드는 중...",
+          "runSuccess": "백업이 {{path}} 에 저장되었습니다",
+          "runSuccessWithCleanup": "백업이 {{path}} 에 저장되었고 만료된 백업 {{count}}개를 정리했습니다",
+          "runFailed": "백업 실패: {{error}}",
+          "deleteSuccess": "백업이 삭제되었습니다",
+          "deleteFailed": "백업 삭제 실패: {{error}}",
+          "loadFailed": "백업 목록을 불러오지 못했습니다: {{error}}",
+          "saveSettingsFailed": "백업 설정을 저장하지 못했습니다: {{error}}",
+          "cleanupDone": "만료된 백업 {{count}}개를 정리했습니다",
+          "cleanupFailed": "만료된 백업 정리에 실패했습니다: {{error}}",
+          "openFolderFailed": "백업 폴더를 열지 못했습니다: {{error}}"
+        },
+        "errors": {
+          "invalidRetention": "보관 기간은 1일에서 365일 사이여야 합니다"
+        }
+      },
+      "exportTitle": "데이터 내보내기",
+      "exportDesc": "필요에 따라 계정 데이터, 설정 데이터 또는 전체 마이그레이션 묶음을 내보낼 수 있습니다.",
+      "importTitle": "데이터 가져오기",
+      "importDesc": "계정 백업, 설정 백업 또는 통합 데이터 묶음을 가져옵니다.",
+      "exportModalDesc": "내보낼 항목을 선택하세요. 계정과 설정을 모두 선택하면 전체 마이그레이션 묶음이 생성됩니다.",
+      "importModalDesc": "가져올 항목을 선택하세요. 구버전 계정 백업은 계정 데이터만 가져오는 방식으로 처리됩니다.",
+      "selectionTitle": "데이터 범위",
+      "accountsOptionTitle": "계정 데이터",
+      "accountsOptionDesc": "플랫폼 계정 백업을 포함하며 기존 계정 JSON과의 호환성도 유지합니다.",
+      "configOptionTitle": "설정 데이터",
+      "configOptionDesc": "앱 설정, 그룹, 인스턴스, 깨우기 작업, 모델 제공자 구성을 포함합니다.",
+      "exportConfirm": "데이터 내보내기",
+      "fromFileTitle": "파일에서 가져오기",
+      "fromFileDesc": "가져올 JSON 파일을 선택하세요. 구버전 계정 백업도 여기서 지원합니다.",
+      "jsonPlaceholder": "데이터 묶음 또는 구버전 계정 JSON 붙여넣기",
+      "feedback": {
+        "accountsImported": "계정 {{count}}개를 가져왔습니다",
+        "configImported": "설정 데이터를 복원했습니다",
+        "accountsSectionMissing": "이 백업에는 계정 데이터가 없습니다",
+        "configSectionMissing": "이 백업에는 설정 데이터가 없어 계정 데이터만 복원했습니다",
+        "unresolvedRefs": "계정 연결 {{count}}개를 매칭하지 못해 건너뛰었습니다",
+        "disabledTasks": "매칭되는 계정이 없어 작업 {{count}}개를 비활성화했습니다",
+        "restartRequired": "네트워크 서비스 설정을 복원했습니다. 일부 변경 사항은 재시작 후 적용됩니다",
+        "partialAccountFailure": "일부 계정 가져오기에 실패했습니다: {{error}}"
+      },
+      "errors": {
+        "selectionRequired": "데이터 유형을 하나 이상 선택하세요",
+        "accountsOnlyFile": "이 백업에는 계정 데이터만 들어 있습니다. 가져오려면 \"계정 데이터\"를 선택하세요",
+        "selectedSectionsMissing": "선택한 데이터 유형이 이 백업에 없습니다",
+        "unsupportedLegacyFile": "이 구버전 계정 백업 형식은 인식할 수 없습니다",
+        "unsupportedVersion": "현재 앱 버전은 해당 묶음 버전을 지원하지 않습니다"
+      }
+    }
   },
   "appPath": {
     "missing": {
@@ -680,6 +821,9 @@
       "desc": "{{app}} 애플리케이션 경로를 찾을 수 없습니다. 계속하려면 지금 설정해 주세요.",
       "action": "지금 설정",
       "codexLaunchHint": "끄면 계정 전환과 로그인 덮어쓰기는 계속 실행되지만, Codex 앱은 더 이상 실행되지 않으며 이 실행 경로 안내도 다시 표시되지 않습니다."
+    },
+    "modal": {
+      "desc": "{{app}} 앱 경로를 찾을 수 없습니다. 계속하려면 지금 설정하세요."
     }
   },
   "accounts": {
@@ -789,7 +933,11 @@
       "fingerprint": "지문",
       "switch": "계정 전환",
       "switchTo": "이 계정으로 전환",
-      "selectFingerprint": "지문 선택"
+      "selectFingerprint": "지문 선택",
+      "delete": "삭제",
+      "deleteSelected": "선택 항목 삭제",
+      "export": "내보내기",
+      "refreshAll": "전체 새로고침"
     },
     "tabs": {
       "oauth": "OAuth 인증",
@@ -886,7 +1034,40 @@
       "clearConfirm": "전환 기록을 모두 삭제하시겠습니까?",
       "loadFailed": "전환 기록을 불러오지 못했습니다: {{error}}",
       "clearFailed": "전환 기록을 삭제하지 못했습니다: {{error}}"
-    }
+    },
+    "clearTagFilter": "태그 필터 지우기",
+    "compact": {
+      "hide": "숨기기",
+      "show": "보기"
+    },
+    "deleteConfirm": {
+      "multi": "선택한 {{count}}개의 계정을 삭제하시겠습니까?",
+      "single": "이 계정을 삭제하시겠습니까?"
+    },
+    "deleteFailed": "삭제 실패: {{error}}",
+    "deleteSuccess": "삭제 성공",
+    "deleteTagFailed": "태그 삭제 실패: {{error}}",
+    "exportError": "내보내기 실패: {{error}}",
+    "exportModal": {
+      "title": "JSON 내보내기"
+    },
+    "importJsonFailed": "JSON 가져오기 실패: {{error}}",
+    "importJsonHint": "이 도구에서 내보낸 Qoder JSON 파일을 가져옵니다.",
+    "importJsonSuccess": "JSON 가져오기 성공",
+    "noTags": "태그 없음",
+    "privacy": {
+      "disable": "개인정보 보호 모드 끄기",
+      "enable": "개인정보 보호 모드 켜기"
+    },
+    "refreshAllFailed": "전체 새로고침 실패: {{error}}",
+    "refreshAllSuccess": "모든 계정을 새로고침했습니다",
+    "refreshFailed": "새로고침 실패: {{error}}",
+    "refreshSuccess": "새로고침 성공",
+    "switchFailed": "전환 실패: {{error}}",
+    "switchSuccess": "전환 성공",
+    "switched": "{{email}}으로 전환했습니다",
+    "tagButton": "태그 수정",
+    "tagUpdated": "태그가 업데이트되었습니다"
   },
   "overview": {
     "title": "계정 개요",
@@ -1098,7 +1279,10 @@
       "actions": {
         "selectAllAccounts": "전체 선택",
         "clearSelectedAccounts": "선택 해제",
-        "runCheckNow": "인증 완료"
+        "runCheckNow": "인증 완료",
+        "retryFiltered": "현재 필터 다시 시도 ({{count}})",
+        "retryMissingModel": "이 배치에는 모델 정보가 없어 다시 시도할 수 없습니다.",
+        "retryMissingAccount": "현재 필터에는 다시 시도할 수 있는 계정이 없습니다."
       },
       "runHint": {
         "title": "검증 안내",
@@ -1383,7 +1567,9 @@
       "portInUseConfirm": "포트 {{port}}가 사용 중입니다. 이 포트를 사용하는 프로세스를 종료할까요?",
       "portCloseFailed": "포트 종료 실패: {{error}}",
       "portStillInUse": "포트 {{port}}가 여전히 사용 중입니다.",
-      "portInUseAction": "포트 종료 후 다시 시도"
+      "portInUseAction": "포트 종료 후 다시 시도",
+      "timeout": "인증이 시간 초과되었습니다. 클릭하세요",
+      "timeoutRetry": "인증 링크 새로고침"
     },
     "token": {
       "desc": "auth.json 내용 또는 계정 JSON 데이터를 붙여넣으세요",
@@ -1455,7 +1641,10 @@
     "usage": {
       "open": "OpenAI 사용량 열기",
       "hint": "API Key 크레딧은 OpenAI Usage 페이지에서 확인하세요.",
-      "openFailed": "사용량 페이지를 열지 못했습니다: {{error}}"
+      "openFailed": "사용량 페이지를 열지 못했습니다: {{error}}",
+      "search": {
+        "placeholder": "계정 검색..."
+      }
     },
     "wakeup": {
       "tab": "깨우기 작업",
@@ -1641,12 +1830,15 @@
         "moveToTrash": "휴지통으로 이동",
         "syncSessions": "세션 동기화",
         "expand": "펼치기",
-        "collapse": "접기"
+        "collapse": "접기",
+        "repairVisibility": "표시 정보 복구",
+        "restoreSessions": "세션 복원"
       },
       "confirm": {
         "title": "휴지통으로 이동",
         "message": "선택한 세션은 각 인스턴스에서 휴지통으로 이동되어 나중에 복원할 수 있습니다. 실행 중인 인스턴스는 변경 사항이 보이기 전에 재시작이 필요할 수 있습니다. 계속하시겠습니까?",
-        "syncMessage": "누락된 스레드와 해당 세션 데이터가 모든 인스턴스로 동기화됩니다. 기존 내용은 다시 기록되지 않으며, 쓰기 전에 대상 인스턴스 파일을 백업합니다. 계속하시겠습니까?"
+        "syncMessage": "누락된 스레드와 해당 세션 데이터가 모든 인스턴스로 동기화됩니다. 기존 내용은 다시 기록되지 않으며, 쓰기 전에 대상 인스턴스 파일을 백업합니다. 계속하시겠습니까?",
+        "repairVisibilityMessage": "각 인스턴스의 루트 config.toml에 있는 model_provider 값을 사용해 rollout 파일과 state_5.sqlite의 공급자 메타데이터를 복구합니다(없으면 openai를 기본값으로 사용). 변경될 파일은 쓰기 전에 백업됩니다. 변경 사항이 반영되기 전에 실행 중인 인스턴스를 다시 시작해야 할 수 있습니다. 계속할까요?"
       },
       "empty": {
         "title": "관리할 세션이 없습니다",
@@ -1654,12 +1846,20 @@
       },
       "messages": {
         "pickOne": "세션을 하나 이상 선택해 주세요",
-        "syncNeedTwo": "세션을 동기화하려면 인스턴스가 두 개 이상 필요합니다"
+        "syncNeedTwo": "세션을 동기화하려면 인스턴스가 두 개 이상 필요합니다",
+        "pickRestoreOne": "복원할 세션을 하나 이상 선택하세요"
       },
       "groupCount": "{{count}}개 세션",
       "updatedAt": "업데이트됨",
       "locationRunning": " (실행 중)",
-      "untitled": "제목 없는 세션"
+      "untitled": "제목 없는 세션",
+      "restoreModal": {
+        "title": "세션 복원",
+        "hint": "복원하면 rollout 파일, SQLite 스레드 행, session_index 항목이 함께 원래 인스턴스로 돌아갑니다.",
+        "emptyTitle": "휴지통이 비어 있습니다",
+        "emptyDesc": "휴지통으로 이동한 세션이 여기에 표시됩니다.",
+        "restoreAction": "선택한 세션 복원"
+      }
     },
     "api": {
       "baseUrl": "기본 URL",
@@ -1668,7 +1868,178 @@
         "apiKeyCannotBeUrl": "API 키는 URL일 수 없습니다. 입력 필드가 서로 바뀌지 않았는지 확인하세요.",
         "baseUrlInvalid": "기본 URL 형식이 올바르지 않습니다. http:// 또는 https:// 를 포함한 전체 URL을 입력하세요.",
         "apiKeyEqualsBaseUrl": "API 키는 기본 URL과 동일할 수 없습니다."
+      },
+      "addAndSwitchSuccess": "추가 후 전환됨: {{email}}",
+      "actions": {
+        "addAndSwitch": "추가 후 전환"
+      },
+      "provider": {
+        "label": "공급자",
+        "custom": "사용자 지정",
+        "endpoint": "공급자 엔드포인트",
+        "hint": "호환되는 Base URL이 자동으로 입력되었습니다. 필요하면 수동으로 수정할 수 있습니다.",
+        "website": "웹사이트",
+        "apiKeyPage": "API 키 페이지"
+      },
+      "providers": {
+        "openai_official": {
+          "name": "OpenAI Official"
+        },
+        "azure_openai": {
+          "name": "Azure OpenAI"
+        },
+        "packycode": {
+          "name": "PackyCode"
+        },
+        "cubence": {
+          "name": "Cubence"
+        },
+        "aigocode": {
+          "name": "AIGoCode"
+        },
+        "rightcode": {
+          "name": "RightCode"
+        },
+        "sssaicode": {
+          "name": "SSSAiCode"
+        },
+        "micu": {
+          "name": "Micu"
+        },
+        "x_code_api": {
+          "name": "X-Code API"
+        },
+        "ctok_ai": {
+          "name": "CTok.ai"
+        },
+        "aihubmix": {
+          "name": "AiHubMix"
+        },
+        "dmxapi": {
+          "name": "DMXAPI"
+        },
+        "compshare": {
+          "name": "Compshare"
+        },
+        "openrouter": {
+          "name": "OpenRouter"
+        },
+        "aicodemirror": {
+          "name": "AICodeMirror"
+        },
+        "aicoding": {
+          "name": "AICoding"
+        },
+        "crazyrouter": {
+          "name": "CrazyRouter"
+        },
+        "deepseek": {
+          "name": "DeepSeek"
+        },
+        "moonshot": {
+          "name": "Moonshot"
+        },
+        "siliconflow": {
+          "name": "SiliconFlow"
+        }
       }
+    },
+    "modelProviders": {
+      "tab": "모델 공급자",
+      "desc": "모델 공급자와 여러 API 키를 한곳에서 관리하고, Codex API 키 계정을 추가할 때 바로 재사용하세요.",
+      "add": "공급자 추가",
+      "loadFailed": "모델 공급자를 불러오지 못했습니다: {{error}}",
+      "emptyTitle": "아직 모델 공급자가 없습니다",
+      "emptyDesc": "시작하려면 오른쪽 상단의 \"공급자 추가\"를 클릭하세요.",
+      "baseUrl": "기본 URL",
+      "website": "웹사이트",
+      "apiKeyPage": "API 키 페이지",
+      "apiKeysCount": "API 키 {{count}}개",
+      "referencesCount": "연결된 계정 {{count}}개",
+      "unnamedKey": "이름 없는 키",
+      "createTitle": "모델 공급자 추가",
+      "editTitle": "모델 공급자 편집",
+      "existingApiKeys": "기존 API 키",
+      "fields": {
+        "name": "공급자 이름",
+        "baseUrl": "기본 URL",
+        "website": "웹사이트 (선택 사항)",
+        "apiKeyUrl": "API 키 페이지 (선택 사항)",
+        "newApiKeyName": "새 키 이름 (선택 사항)",
+        "newApiKey": "새 API 키"
+      },
+      "validation": {
+        "nameRequired": "공급자 이름은 필수입니다.",
+        "baseUrlInvalid": "Base URL이 올바르지 않습니다.",
+        "baseUrlExists": "이 Base URL은 이미 존재합니다.",
+        "providerNotFound": "공급자를 찾을 수 없습니다.",
+        "apiKeyRequiredOnCreate": "공급자를 만들 때는 최소 하나의 API 키가 필요합니다.",
+        "apiKeyRequiredWhenEmpty": "이 공급자에는 아직 API 키가 없습니다. 먼저 하나를 추가하세요."
+      },
+      "saveSuccess": "모델 공급자가 저장되었습니다.",
+      "deleteBlocked": "이 공급자는 {{count}}개 계정에 연결되어 있어 삭제할 수 없습니다.",
+      "confirmDelete": "공급자 \"{{name}}\"을(를) 삭제할까요?",
+      "deleteFailed": "공급자 삭제 실패: {{error}}",
+      "deleteApiKeyFailed": "API 키 삭제 실패: {{error}}",
+      "selectSavedProvider": "저장된 공급자",
+      "selectSavedApiKey": "저장된 API 키",
+      "noSavedProviders": "아직 저장된 공급자가 없습니다. 필드를 바로 입력하면 자동으로 저장됩니다.",
+      "newProviderName": "공급자 이름 (선택 사항, 자동 저장에 사용)",
+      "newProviderNamePlaceholder": "비워 두면 호스트 이름이 자동으로 사용됩니다",
+      "preview": {
+        "title": "저장 미리보기",
+        "desc": "제공자를 저장하면 먼저 제공자 저장소가 업데이트됩니다. 현재 공식 Codex 설정은 즉시 전환되지 않습니다.",
+        "writeNow": "작성됨",
+        "noImmediateChange": "즉시 변경 없음",
+        "providerStoreTitle": "제공자 저장소",
+        "providerStoreDesc": "이 창에서 추가한 제공자 이름, Base URL, 사이트/API Key 페이지 링크, 새 API Key를 저장합니다.",
+        "codexConfigTitle": "현재 Codex 설정",
+        "codexConfigDesc": "현재 provider 또는 Base URL은 바로 바뀌지 않습니다. 이 파일은 Codex API key 계정을 저장하거나 전환할 때만 업데이트됩니다.",
+        "authFileTitle": "현재 Codex 자격 증명",
+        "authFileDesc": "제공자를 저장해도 auth.json의 현재 OPENAI_API_KEY는 덮어쓰지 않습니다."
+      },
+      "quickConfig": {
+        "title": "현재 Codex 설정",
+        "desc": "이 빠른 설정은 현재 활성화된 ~/.codex/config.toml에 직접 기록하며, 모델 제공자 저장소는 변경하지 않습니다.",
+        "configPath": "설정 파일",
+        "openConfig": "파일 열기",
+        "loadFailed": "현재 Codex 설정을 불러오지 못했습니다: {{error}}",
+        "openFailed": "config.toml을 열지 못했습니다: {{error}}",
+        "saveSuccess": "현재 Codex 설정을 저장했습니다.",
+        "saveFailed": "현재 Codex 설정을 저장하지 못했습니다: {{error}}",
+        "contextWindow1m": "1M 컨텍스트 창",
+        "contextWindow1mHint": "활성화하면 model_context_window = 1000000을 기록하고 자동 압축 한도도 함께 관리합니다.",
+        "autoCompactLimit": "자동 압축 한도",
+        "autoCompactLimitHint": "model_auto_compact_token_limit를 기록합니다. 1M 스위치를 끄면 이 항목도 함께 제거됩니다.",
+        "preview": "기록 미리보기",
+        "previewApply": "작성됨",
+        "previewRemove": "제거됨",
+        "customDetected": "config.toml에서 사용자 지정 model_context_window = {{context}}가 감지되었습니다. 저장하면 아래 빠른 설정 값으로 다시 기록됩니다.",
+        "compactMissingDetected": "1M 컨텍스트는 이미 활성화되어 있지만 자동 압축 한도가 없습니다. 저장하면 기본값 {{limit}}를 기록합니다.",
+        "validation": {
+          "autoCompactInvalid": "자동 압축 한도는 0보다 큰 정수여야 합니다."
+        }
+      }
+    },
+    "quickSwitch": {
+      "action": "공급자 빠른 전환",
+      "inlineAction": "전환",
+      "title": "공급자 빠른 전환",
+      "desc": "이 API 키 계정을 저장된 공급자와 API 키로 빠르게 전환합니다.",
+      "currentAccount": "현재 계정: {{name}}",
+      "noProviders": "아직 저장된 공급자가 없습니다. 먼저 모델 공급자에서 추가하세요.",
+      "providerHasNoKeys": "이 공급자에는 아직 사용할 수 있는 API 키가 없습니다. 먼저 모델 공급자에서 추가하세요.",
+      "gotoProviders": "공급자 관리",
+      "apply": "지금 전환",
+      "success": "다음 공급자로 전환됨: {{provider}}",
+      "failed": "공급자 전환 실패: {{error}}",
+      "validation": {
+        "providerRequired": "공급자를 선택하세요.",
+        "apiKeyRequired": "API 키를 선택하세요."
+      }
+    },
+    "groups": {
+      "addToGroup": "그룹에 추가"
     }
   },
   "githubCopilot": {
@@ -1788,7 +2159,10 @@
     },
     "codex": {
       "title": "Codex 설정",
-      "appPath": "앱 경로"
+      "appPath": "앱 경로",
+      "configToml": "Codex 구성 파일",
+      "openConfigToml": "파일 열기",
+      "openConfigHint": "현재 활성화된 Codex config.toml 파일을 빠르게 엽니다."
     },
     "githubCopilot": {
       "title": "GitHub Copilot 설정",
@@ -1848,7 +2222,8 @@
       "loadFailed": "설정 불러오기 실패: {{error}}",
       "saveFailed": "설정 저장 실패: {{error}}",
       "pickPathFailed": "경로 선택 실패: {{error}}",
-      "resetPathFailed": "경로 초기화 실패: {{error}}"
+      "resetPathFailed": "경로 초기화 실패: {{error}}",
+      "openCodexConfigFailed": "Codex config.toml을 열지 못했습니다: {{error}}"
     },
     "qoder": {
       "title": "Qoder 설정",
@@ -1904,8 +2279,7 @@
       "description": "\"계정 추가\"를 눌러 Windsurf 계정을 관리하세요"
     },
     "addModal": {
-      "title": "Windsurf 계정 추가",
-      "password": "이메일/비밀번호"
+      "title": "Windsurf 계정 추가"
     },
     "oauth": {
       "desc": "아래 버튼을 클릭해 브라우저에서 Windsurf 인증을 완료하세요."
@@ -1948,16 +2322,6 @@
       "inject": "원클릭 전환: 이 도구는 로컬 Windsurf 암호화 자료(DPAPI/Keychain/Secret Service)를 읽어 state.vscdb의 인증 세션을 복호화한 뒤 Windsurf 토큰을 교체하고 다시 암호화합니다. 모든 처리는 로컬 장치에서만 수행됩니다.",
       "reason": "권한 범위: Windsurf 인증 데이터베이스(state.vscdb)를 읽고 시스템 암호화 기능(Windows DPAPI / macOS Keychain / Linux Secret Service)을 호출해 복호화 및 재기록을 수행합니다.",
       "storage": "읽기 범위: Windsurf 로그인 세션 관련 데이터만 처리하며, 모든 과정은 로컬에서 실행됩니다."
-    },
-    "password": {
-      "desc": "Windsurf 계정의 이메일과 비밀번호로 로그인하여 API 키와 계정 정보를 자동으로 가져옵니다.",
-      "emailPlaceholder": "이메일 주소",
-      "passwordPlaceholder": "비밀번호",
-      "login": "로그인",
-      "logging": "로그인 중...",
-      "empty": "이메일과 비밀번호를 입력하세요",
-      "success": "로그인 성공: {{login}}",
-      "failed": "로그인 실패: {{error}}"
     }
   },
   "kiro": {
@@ -2400,7 +2764,11 @@
       "unsupportedDescPlatform": "Gemini Cli 다중 인스턴스는 macOS, Windows, Linux에서만 지원됩니다.",
       "launchDialogTitle": "인스턴스 실행",
       "launchHint": "명령을 복사해 수동으로 실행하거나 터미널에서 바로 실행하세요.",
-      "runInTerminal": "터미널에서 실행"
+      "runInTerminal": "터미널에서 실행",
+      "workingDir": "작업 디렉토리",
+      "workingDirPlaceholder": "현재 경로 기본값",
+      "workingDirDesc": "시작 시 먼저 이 디렉토리로 전환합니다",
+      "pickWorkingDir": "작업 디렉토리 선택"
     },
     "switch": {
       "success": "계정 전환에 성공했습니다"
@@ -2443,6 +2811,26 @@
       "saved": "프로젝트 저장됨: {{projectId}}",
       "cleared": "자동 프로젝트 확인으로 되돌렸습니다",
       "savedWithRefreshError": "프로젝트는 저장되었지만 할당량 새로고침에 실패했습니다: {{error}}"
+    },
+    "identity": {
+      "authMethod": "인증 방식",
+      "tier": "요금제",
+      "signedInWithGoogle": "Google로 로그인됨",
+      "signedInWithGoogleEmail": "Google로 로그인됨 ({{email}})"
+    },
+    "quotaTable": {
+      "model": "모델",
+      "leftOfTotal": "남은 양 / 전체",
+      "usage": "사용량",
+      "usageResets": "사용량 재설정",
+      "usedPercent": "{{value}}%",
+      "remainingOfTotal": "{{remaining}} / {{total}}",
+      "resetAtWithRelative": "{{absolute}} ({{relative}})"
+    },
+    "tierText": {
+      "pro": "Google One AI Pro의 Gemini Code Assist",
+      "ultra": "Google AI Ultra의 Gemini Code Assist",
+      "free": "Gemini Code Assist 무료"
     }
   },
   "codebuddy": {
@@ -2510,7 +2898,8 @@
       "expireUnknown": "만료 시간: 없음",
       "packageTitle": {
         "base": "기본 체험 패키지",
-        "activity": "활동 증정 패키지"
+        "activity": "활동 증정 패키지",
+        "pro": "Pro 구독"
       }
     },
     "extraCredit": {
@@ -2578,7 +2967,12 @@
       "title": "Qoder 계정 추가"
     },
     "import": {
-      "localDesc": "로컬 Qoder 클라이언트에서 현재 로그인 상태를 읽어옵니다. 사용자 정보, 플랜, 크레딧 사용량이 포함됩니다."
+      "localDesc": "로컬 Qoder 클라이언트에서 현재 로그인 상태를 읽어옵니다. 사용자 정보, 플랜, 크레딧 사용량이 포함됩니다.",
+      "localFailed": "로컬 가져오기 실패: {{error}}",
+      "localSuccess": "로컬 Qoder에서 계정을 가져왔습니다."
+    },
+    "empty": {
+      "desc": "\"계정 추가\"를 클릭하여 인증 로그인, 로컬 가져오기 또는 JSON 가져오기를 사용하세요."
     }
   },
   "trae": {
@@ -2675,7 +3069,10 @@
         "other": "기타",
         "empty": "쿼터 데이터 없음"
       }
-    }
+    },
+    "syncFailed": "동기화 실패: {{error}}",
+    "syncSuccess": "{{count}}개의 계정이 WorkBuddy에 동기화되었습니다",
+    "syncToWorkbuddy": "WorkBuddy에 동기화"
   },
   "workbuddy": {
     "title": "WorkBuddy 계정 관리",
@@ -2810,7 +3207,8 @@
       "unknownStatus": "알 수 없는 상태",
       "overdueField": "연체 여부",
       "overdueYes": "예",
-      "overdueNo": "아니요"
+      "overdueNo": "아니요",
+      "usageUpdatedAt": "업데이트: {{time}}"
     },
     "runtime": {
       "title": "현재 Zed 세션",
@@ -2830,7 +3228,8 @@
       "complete": "로그인 완료",
       "startFailed": "Zed 로그인 시작에 실패했습니다",
       "completeSuccess": "Zed 로그인 완료: {{account}}",
-      "importOnlySuccess": "인증이 완료되었습니다. 계정은 가져오기까지 완료되었습니다. 공식 Zed에서 이 계정을 사용하려면 \"적용 후 재시작\"을 클릭하세요."
+      "importOnlySuccess": "인증이 완료되었습니다. 계정은 가져오기까지 완료되었습니다. 공식 Zed에서 이 계정을 사용하려면 \"적용 후 재시작\"을 클릭하세요.",
+      "desc": "아래 버튼을 클릭하여 브라우저에서 Zed 공식 로그인 인증을 완료하세요."
     },
     "actions": {
       "addAccount": "Zed 로그인",
@@ -2846,6 +3245,9 @@
       "applyAndRestart": "적용 후 재시작",
       "reapply": "다시 적용",
       "exportTitle": "Zed 계정 JSON 내보내기"
+    },
+    "sort": {
+      "tokenSpend": "Token 소비 기준 정렬"
     }
   },
   "floatingCard": {

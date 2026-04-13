@@ -31,6 +31,7 @@ import * as githubCopilotService from '../services/githubCopilotService';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
+import { PaginationControls } from '../components/PaginationControls';
 import { buildGitHubCopilotAccountPresentation } from '../presentation/platformAccountPresentation';
 
 import { GitHubCopilotOverviewTabsHeader, GitHubCopilotTab } from '../components/GitHubCopilotOverviewTabsHeader';
@@ -38,8 +39,20 @@ import { GitHubCopilotInstancesContent } from './GitHubCopilotInstancesPage';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
+import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
 import type { GitHubCopilotAccount } from '../types/githubCopilot';
+import { hasGitHubCopilotQuotaData } from '../types/githubCopilot';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
+import {
+  buildValidAccountsFilterOption,
+  splitValidityFilterValues,
+} from '../utils/accountValidityFilter';
+import {
+  buildPaginatedGroups,
+  buildPaginationPageSizeStorageKey,
+  isEveryIdSelected,
+  usePagination,
+} from '../hooks/usePagination';
 
 const GHCP_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.github_copilot.flow_notice_collapsed';
 const GHCP_CURRENT_ACCOUNT_ID_KEY = 'agtools.github_copilot.current_account_id';
@@ -183,6 +196,11 @@ export function GitHubCopilotAccountsPage() {
     [resolvePresentation],
   );
 
+  const resolveQuotaError = useCallback(
+    (account: GitHubCopilotAccount) => account.quota_query_last_error?.trim() || null,
+    [],
+  );
+
   const parseResetAt = useCallback((value: string | number | null | undefined) => {
     if (typeof value === 'number' && Number.isFinite(value)) {
       return value;
@@ -196,9 +214,12 @@ export function GitHubCopilotAccountsPage() {
     return null;
   }, []);
 
+  const isAbnormalAccount = useCallback((_account: GitHubCopilotAccount) => false, []);
+
   const tierCounts = useMemo(() => {
     const counts = {
       all: accounts.length,
+      VALID: 0,
       FREE: 0,
       PRO: 0,
       BUSINESS: 0,
@@ -206,19 +227,23 @@ export function GitHubCopilotAccountsPage() {
     };
     accounts.forEach((account) => {
       const tier = resolvePlanKey(account);
+      if (!isAbnormalAccount(account)) {
+        counts.VALID += 1;
+      }
       if (tier in counts) {
         counts[tier as keyof typeof counts] += 1;
       }
     });
     return counts;
-  }, [accounts, resolvePlanKey]);
+  }, [accounts, isAbnormalAccount, resolvePlanKey]);
 
   const tierFilterOptions = useMemo<MultiSelectFilterOption[]>(() => [
     { value: 'FREE', label: `FREE (${tierCounts.FREE})` },
     { value: 'PRO', label: `PRO (${tierCounts.PRO})` },
     { value: 'BUSINESS', label: `BUSINESS (${tierCounts.BUSINESS})` },
     { value: 'ENTERPRISE', label: `ENTERPRISE (${tierCounts.ENTERPRISE})` },
-  ], [tierCounts]);
+    buildValidAccountsFilterOption(t, tierCounts.VALID),
+  ], [t, tierCounts]);
 
   const normalizeTag = (tag: string) => tag.trim().toLowerCase();
 
@@ -277,8 +302,13 @@ export function GitHubCopilotAccountsPage() {
     }
 
     if (filterTypes.length > 0) {
-      const selectedTypes = new Set(filterTypes);
-      result = result.filter((account) => selectedTypes.has(resolvePlanKey(account)));
+      const { requireValidAccounts, selectedTypes } = splitValidityFilterValues(filterTypes);
+      if (requireValidAccounts) {
+        result = result.filter((account) => !isAbnormalAccount(account));
+      }
+      if (selectedTypes.size > 0) {
+        result = result.filter((account) => selectedTypes.has(resolvePlanKey(account)));
+      }
     }
 
     if (tagFilter.length > 0) {
@@ -292,10 +322,20 @@ export function GitHubCopilotAccountsPage() {
     result.sort(compareAccountsBySort);
 
     return result;
-  }, [accounts, compareAccountsBySort, filterTypes, normalizeTag, resolvePlanKey, resolvePresentation, searchQuery, tagFilter]);
+  }, [accounts, compareAccountsBySort, filterTypes, isAbnormalAccount, normalizeTag, resolvePlanKey, resolvePresentation, searchQuery, tagFilter]);
 
   const filteredIds = useMemo(() => filteredAccounts.map((account) => account.id), [filteredAccounts]);
   const exportSelectionCount = getScopedSelectedCount(filteredIds);
+  const pagination = usePagination({
+    items: filteredAccounts,
+    storageKey: buildPaginationPageSizeStorageKey('GitHubCopilot'),
+  });
+  const paginatedAccounts = pagination.pageItems;
+  const paginatedIds = useMemo(() => paginatedAccounts.map((account) => account.id), [paginatedAccounts]);
+  const isAllPaginatedSelected = useMemo(
+    () => isEveryIdSelected(selected, paginatedIds),
+    [paginatedIds, selected],
+  );
 
   const groupedAccounts = useMemo(() => {
     if (!groupByTag) return [] as Array<[string, typeof filteredAccounts]>;
@@ -327,6 +367,11 @@ export function GitHubCopilotAccountsPage() {
     });
   }, [filteredAccounts, groupByTag, tagFilter, untaggedKey]);
 
+  const paginatedGroupedAccounts = useMemo(
+    () => buildPaginatedGroups(groupedAccounts, paginatedAccounts),
+    [groupedAccounts, paginatedAccounts],
+  );
+
   const resolveGroupLabel = (groupKey: string) =>
     groupKey === untaggedKey ? t('accounts.defaultGroup', '默认分组') : groupKey;
 
@@ -344,6 +389,8 @@ export function GitHubCopilotAccountsPage() {
       const inlineUsage = presentation.quotaItems.find((item) => item.key === 'inline');
       const chatUsage = presentation.quotaItems.find((item) => item.key === 'chat');
       const premiumUsage = presentation.quotaItems.find((item) => item.key === 'premium');
+      const quotaError = resolveQuotaError(account);
+      const hasQuotaData = hasGitHubCopilotQuotaData(account);
 
       return (
         <div
@@ -366,6 +413,12 @@ export function GitHubCopilotAccountsPage() {
                 {t('accounts.status.current')}
               </span>
             )}
+            {quotaError && (
+              <span className="status-pill warning" title={quotaError}>
+                <CircleAlert size={12} />
+                {t('common.shared.quota.queryFailed', '配额查询失败')}
+              </span>
+            )}
             <span className={`tier-badge ${presentation.planClass}`}>{presentation.planLabel}</span>
           </div>
 
@@ -381,65 +434,67 @@ export function GitHubCopilotAccountsPage() {
           )}
 
           <div className="ghcp-quota-section">
-            <div className="quota-item">
-              <div className="quota-header">
-                <Clock size={14} />
-                <span className="quota-label">{inlineUsage?.label ?? t('common.shared.quota.hourly', 'Inline Suggestions')}</span>
-                <span className={`quota-pct ${inlineUsage?.quotaClass ?? 'high'}`}>
-                  {inlineUsage?.valueText ?? '-'}
-                </span>
-              </div>
-              <div className="quota-bar-track">
-                <div
-                  className={`quota-bar ${inlineUsage?.quotaClass ?? 'high'}`}
-                  style={{ width: `${inlineUsage?.percentage ?? 0}%` }}
-                />
-              </div>
-              {inlineUsage?.resetText && (
-                <span className="quota-reset">
-                  {inlineUsage.resetText}
-                </span>
-              )}
-            </div>
+            {hasQuotaData ? (
+              <>
+                <div className="quota-item">
+                  <div className="quota-header">
+                    <Clock size={14} />
+                    <span className="quota-label">{inlineUsage?.label ?? t('common.shared.quota.hourly', 'Inline Suggestions')}</span>
+                    <span className={`quota-pct ${inlineUsage?.quotaClass ?? 'high'}`}>
+                      {inlineUsage?.valueText ?? '-'}
+                    </span>
+                  </div>
+                  <div className="quota-bar-track">
+                    <div
+                      className={`quota-bar ${inlineUsage?.quotaClass ?? 'high'}`}
+                      style={{ width: `${inlineUsage?.percentage ?? 0}%` }}
+                    />
+                  </div>
+                  {inlineUsage?.resetText && (
+                    <span className="quota-reset">
+                      {inlineUsage.resetText}
+                    </span>
+                  )}
+                </div>
 
-            <div className="quota-item">
-              <div className="quota-header">
-                <Calendar size={14} />
-                <span className="quota-label">{chatUsage?.label ?? t('common.shared.quota.weekly', 'Chat messages')}</span>
-                <span className={`quota-pct ${chatUsage?.quotaClass ?? 'high'}`}>
-                  {chatUsage?.valueText ?? '-'}
-                </span>
-              </div>
-              <div className="quota-bar-track">
-                <div
-                  className={`quota-bar ${chatUsage?.quotaClass ?? 'high'}`}
-                  style={{ width: `${chatUsage?.percentage ?? 0}%` }}
-                />
-              </div>
-              {chatUsage?.resetText && (
-                <span className="quota-reset">
-                  {chatUsage.resetText}
-                </span>
-              )}
-            </div>
+                <div className="quota-item">
+                  <div className="quota-header">
+                    <Calendar size={14} />
+                    <span className="quota-label">{chatUsage?.label ?? t('common.shared.quota.weekly', 'Chat messages')}</span>
+                    <span className={`quota-pct ${chatUsage?.quotaClass ?? 'high'}`}>
+                      {chatUsage?.valueText ?? '-'}
+                    </span>
+                  </div>
+                  <div className="quota-bar-track">
+                    <div
+                      className={`quota-bar ${chatUsage?.quotaClass ?? 'high'}`}
+                      style={{ width: `${chatUsage?.percentage ?? 0}%` }}
+                    />
+                  </div>
+                  {chatUsage?.resetText && (
+                    <span className="quota-reset">
+                      {chatUsage.resetText}
+                    </span>
+                  )}
+                </div>
 
-            <div className="quota-item">
-              <div className="quota-header">
-                <CircleAlert size={14} />
-                <span className="quota-label">{premiumUsage?.label ?? t('githubCopilot.columns.premium', 'Premium requests')}</span>
-                <span className={`quota-pct ${premiumUsage?.quotaClass ?? 'high'}`}>
-                  {premiumUsage?.valueText ?? '-'}
-                </span>
-              </div>
-              <div className="quota-bar-track">
-                <div
-                  className={`quota-bar ${premiumUsage?.quotaClass ?? 'high'}`}
-                  style={{ width: `${premiumUsage?.percentage ?? 0}%` }}
-                />
-              </div>
-            </div>
-
-            {presentation.quotaItems.length === 0 && (
+                <div className="quota-item">
+                  <div className="quota-header">
+                    <CircleAlert size={14} />
+                    <span className="quota-label">{premiumUsage?.label ?? t('githubCopilot.columns.premium', 'Premium requests')}</span>
+                    <span className={`quota-pct ${premiumUsage?.quotaClass ?? 'high'}`}>
+                      {premiumUsage?.valueText ?? '-'}
+                    </span>
+                  </div>
+                  <div className="quota-bar-track">
+                    <div
+                      className={`quota-bar ${premiumUsage?.quotaClass ?? 'high'}`}
+                      style={{ width: `${premiumUsage?.percentage ?? 0}%` }}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
               <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
             )}
           </div>
@@ -480,7 +535,7 @@ export function GitHubCopilotAccountsPage() {
               <button
                 className="card-action-btn export-btn"
                 onClick={() => handleExportByIds([account.id], resolveSingleExportBaseName(account))}
-                title={t('common.shared.export', '导出')}
+                title={t('common.shared.export.title', '导出')}
               >
                 <Upload size={14} />
               </button>
@@ -505,6 +560,8 @@ export function GitHubCopilotAccountsPage() {
       const inlineUsage = presentation.quotaItems.find((item) => item.key === 'inline');
       const chatUsage = presentation.quotaItems.find((item) => item.key === 'chat');
       const premiumUsage = presentation.quotaItems.find((item) => item.key === 'premium');
+      const quotaError = resolveQuotaError(account);
+      const hasQuotaData = hasGitHubCopilotQuotaData(account);
       return (
         <tr key={groupKey ? `${groupKey}-${account.id}` : account.id} className={isCurrent ? 'current' : ''}>
           <td>
@@ -522,72 +579,92 @@ export function GitHubCopilotAccountsPage() {
                 </span>
                 {isCurrent && <span className="mini-tag current">{t('accounts.status.current')}</span>}
               </div>
+              {quotaError && (
+                <div className="account-sub-line">
+                  <span className="status-pill warning" title={quotaError}>
+                    <CircleAlert size={12} />
+                    {t('common.shared.quota.queryFailed', '配额查询失败')}
+                  </span>
+                </div>
+              )}
             </div>
           </td>
           <td>
             <span className={`tier-badge ${presentation.planClass}`}>{presentation.planLabel}</span>
           </td>
           <td>
-            <div className="quota-item">
-              <div className="quota-header">
-                <span className="quota-name">{inlineUsage?.label ?? t('common.shared.quota.hourly', 'Inline Suggestions')}</span>
-                <span className={`quota-value ${inlineUsage?.quotaClass ?? 'high'}`}>
-                  {inlineUsage?.valueText ?? '-'}
-                </span>
-              </div>
-              <div className="quota-progress-track">
-                <div
-                  className={`quota-progress-bar ${inlineUsage?.quotaClass ?? 'high'}`}
-                  style={{ width: `${inlineUsage?.percentage ?? 0}%` }}
-                />
-              </div>
-              {inlineUsage?.resetText && (
-                <div className="quota-footer">
-                  <span className="quota-reset">
-                    {inlineUsage.resetText}
+            {hasQuotaData ? (
+              <div className="quota-item">
+                <div className="quota-header">
+                  <span className="quota-name">{inlineUsage?.label ?? t('common.shared.quota.hourly', 'Inline Suggestions')}</span>
+                  <span className={`quota-value ${inlineUsage?.quotaClass ?? 'high'}`}>
+                    {inlineUsage?.valueText ?? '-'}
                   </span>
                 </div>
-              )}
-            </div>
+                <div className="quota-progress-track">
+                  <div
+                    className={`quota-progress-bar ${inlineUsage?.quotaClass ?? 'high'}`}
+                    style={{ width: `${inlineUsage?.percentage ?? 0}%` }}
+                  />
+                </div>
+                {inlineUsage?.resetText && (
+                  <div className="quota-footer">
+                    <span className="quota-reset">
+                      {inlineUsage.resetText}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
+            )}
           </td>
           <td>
-            <div className="quota-item">
-              <div className="quota-header">
-                <span className="quota-name">{chatUsage?.label ?? t('common.shared.quota.weekly', 'Chat messages')}</span>
-                <span className={`quota-value ${chatUsage?.quotaClass ?? 'high'}`}>
-                  {chatUsage?.valueText ?? '-'}
-                </span>
-              </div>
-              <div className="quota-progress-track">
-                <div
-                  className={`quota-progress-bar ${chatUsage?.quotaClass ?? 'high'}`}
-                  style={{ width: `${chatUsage?.percentage ?? 0}%` }}
-                />
-              </div>
-              {chatUsage?.resetText && (
-                <div className="quota-footer">
-                  <span className="quota-reset">
-                    {chatUsage.resetText}
+            {hasQuotaData ? (
+              <div className="quota-item">
+                <div className="quota-header">
+                  <span className="quota-name">{chatUsage?.label ?? t('common.shared.quota.weekly', 'Chat messages')}</span>
+                  <span className={`quota-value ${chatUsage?.quotaClass ?? 'high'}`}>
+                    {chatUsage?.valueText ?? '-'}
                   </span>
                 </div>
-              )}
-            </div>
+                <div className="quota-progress-track">
+                  <div
+                    className={`quota-progress-bar ${chatUsage?.quotaClass ?? 'high'}`}
+                    style={{ width: `${chatUsage?.percentage ?? 0}%` }}
+                  />
+                </div>
+                {chatUsage?.resetText && (
+                  <div className="quota-footer">
+                    <span className="quota-reset">
+                      {chatUsage.resetText}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
+            )}
           </td>
           <td>
-            <div className="quota-item">
-              <div className="quota-header">
-                <span className="quota-name">{premiumUsage?.label ?? t('githubCopilot.columns.premium', 'Premium requests')}</span>
-                <span className={`quota-value ${premiumUsage?.quotaClass ?? 'high'}`}>
-                  {premiumUsage?.valueText ?? '-'}
-                </span>
+            {hasQuotaData ? (
+              <div className="quota-item">
+                <div className="quota-header">
+                  <span className="quota-name">{premiumUsage?.label ?? t('githubCopilot.columns.premium', 'Premium requests')}</span>
+                  <span className={`quota-value ${premiumUsage?.quotaClass ?? 'high'}`}>
+                    {premiumUsage?.valueText ?? '-'}
+                  </span>
+                </div>
+                <div className="quota-progress-track">
+                  <div
+                    className={`quota-progress-bar ${premiumUsage?.quotaClass ?? 'high'}`}
+                    style={{ width: `${premiumUsage?.percentage ?? 0}%` }}
+                  />
+                </div>
               </div>
-              <div className="quota-progress-track">
-                <div
-                  className={`quota-progress-bar ${premiumUsage?.quotaClass ?? 'high'}`}
-                  style={{ width: `${premiumUsage?.percentage ?? 0}%` }}
-                />
-              </div>
-            </div>
+            ) : (
+              <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
+            )}
           </td>
           <td className="sticky-action-cell table-action-cell">
             <div className="action-buttons">
@@ -617,7 +694,7 @@ export function GitHubCopilotAccountsPage() {
               <button
                 className="action-btn"
                 onClick={() => handleExportByIds([account.id], resolveSingleExportBaseName(account))}
-                title={t('common.shared.export', '导出')}
+                title={t('common.shared.export.title', '导出')}
               >
                 <Upload size={14} />
               </button>
@@ -740,11 +817,14 @@ export function GitHubCopilotAccountsPage() {
               {tagFilter.length > 0 ? `${t('accounts.filterTagsCount', '标签')}(${tagFilter.length})` : t('accounts.filterTags', '标签筛选')}
             </button>
             {showTagFilter && (
-              <div className="tag-filter-panel">
+              <div
+                ref={page.tagFilterPanelRef}
+                className={`tag-filter-panel ${page.tagFilterPanelPlacement === 'top' ? 'open-top' : ''}`}
+              >
                 {availableTags.length === 0 ? (
                   <div className="tag-filter-empty">{t('accounts.noAvailableTags', '暂无可用标签')}</div>
                 ) : (
-                  <div className="tag-filter-options">
+                  <div className="tag-filter-options" style={page.tagFilterScrollContainerStyle}>
                     {availableTags.map((tag) => (
                       <label key={tag} className={`tag-filter-option ${tagFilter.includes(tag) ? 'selected' : ''}`}>
                         <input
@@ -790,21 +870,20 @@ export function GitHubCopilotAccountsPage() {
             )}
           </div>
 
-          <div className="sort-select">
-            <ArrowDownWideNarrow size={14} className="sort-icon" />
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              aria-label={t('common.shared.sortLabel', '排序')}
-            >
-              <option value="created_at">{t('common.shared.sort.createdAt', '按创建时间')}</option>
-              <option value="weekly">{t('githubCopilot.sort.weekly', '按 Chat messages 使用量')}</option>
-              <option value="hourly">{t('githubCopilot.sort.hourly', '按 Inline Suggestions 使用量')}</option>
-              <option value="premium">{t('githubCopilot.sort.premium', '按 Premium requests 使用量')}</option>
-              <option value="weekly_reset">{t('githubCopilot.sort.weeklyReset', '按 Chat messages 重置时间')}</option>
-              <option value="hourly_reset">{t('githubCopilot.sort.hourlyReset', '按 Inline Suggestions 重置时间')}</option>
-            </select>
-          </div>
+          <SingleSelectFilterDropdown
+            value={sortBy}
+            options={[
+              { value: 'created_at', label: t('common.shared.sort.createdAt', '按创建时间') },
+              { value: 'weekly', label: t('githubCopilot.sort.weekly', '按 Chat messages 使用量') },
+              { value: 'hourly', label: t('githubCopilot.sort.hourly', '按 Inline Suggestions 使用量') },
+              { value: 'premium', label: t('githubCopilot.sort.premium', '按 Premium requests 使用量') },
+              { value: 'weekly_reset', label: t('githubCopilot.sort.weeklyReset', '按 Chat messages 重置时间') },
+              { value: 'hourly_reset', label: t('githubCopilot.sort.hourlyReset', '按 Inline Suggestions 重置时间') },
+            ]}
+            ariaLabel={t('common.shared.sortLabel', '排序')}
+            icon={<ArrowDownWideNarrow size={14} />}
+            onChange={setSortBy}
+          />
 
           <button
             className="sort-direction-btn"
@@ -866,8 +945,8 @@ export function GitHubCopilotAccountsPage() {
             className="btn btn-secondary export-btn icon-only"
             onClick={() => void handleExport(filteredIds)}
             disabled={exporting || filteredIds.length === 0}
-            title={exportSelectionCount > 0 ? `${t('common.shared.export', '导出')} (${exportSelectionCount})` : t('common.shared.export', '导出')}
-            aria-label={exportSelectionCount > 0 ? `${t('common.shared.export', '导出')} (${exportSelectionCount})` : t('common.shared.export', '导出')}
+            title={exportSelectionCount > 0 ? `${t('common.shared.export.title', '导出')} (${exportSelectionCount})` : t('common.shared.export.title', '导出')}
+            aria-label={exportSelectionCount > 0 ? `${t('common.shared.export.title', '导出')} (${exportSelectionCount})` : t('common.shared.export.title', '导出')}
           >
             <Upload size={14} />
           </button>
@@ -913,31 +992,31 @@ export function GitHubCopilotAccountsPage() {
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid-view-container">
-          {filteredAccounts.length > 0 && (
+          {paginatedAccounts.length > 0 && (
             <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
-                <input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} />
+                <input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} />
                 {t('common.selectAll', '全选')}
               </label>
             </div>
           )}
           {groupByTag ? (
           <div className="tag-group-list">
-            {groupedAccounts.map(([groupKey, groupAccounts]) => (
+            {paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
               <div key={groupKey} className="tag-group-section">
                 <div className="tag-group-header">
                   <span className="tag-group-title">{resolveGroupLabel(groupKey)}</span>
-                  <span className="tag-group-count">{groupAccounts.length}</span>
+                  <span className="tag-group-count">{totalCount}</span>
                 </div>
                 <div className="tag-group-grid ghcp-accounts-grid">
-                  {renderGridCards(groupAccounts, groupKey)}
+                  {renderGridCards(items, groupKey)}
                 </div>
               </div>
             ))}
           </div>
         ) : (
           <div className="ghcp-accounts-grid">
-            {renderGridCards(filteredAccounts)}
+            {renderGridCards(paginatedAccounts)}
           </div>
         )}
         </div>
@@ -949,8 +1028,8 @@ export function GitHubCopilotAccountsPage() {
                 <th style={{ width: 40 }}>
                   <input
                     type="checkbox"
-                    checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0}
-                    onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))}
+                    checked={isAllPaginatedSelected}
+                    onChange={() => toggleSelectAll(paginatedIds)}
                   />
                 </th>
                 <th style={{ width: 260 }}>{t('common.shared.columns.email', '账号')}</th>
@@ -962,17 +1041,17 @@ export function GitHubCopilotAccountsPage() {
               </tr>
             </thead>
             <tbody>
-              {groupedAccounts.map(([groupKey, groupAccounts]) => (
+              {paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
                 <Fragment key={groupKey}>
                   <tr className="tag-group-row">
                     <td colSpan={7}>
                       <div className="tag-group-header">
                         <span className="tag-group-title">{resolveGroupLabel(groupKey)}</span>
-                        <span className="tag-group-count">{groupAccounts.length}</span>
+                        <span className="tag-group-count">{totalCount}</span>
                       </div>
                     </td>
                   </tr>
-                  {renderTableRows(groupAccounts, groupKey)}
+                  {renderTableRows(items, groupKey)}
                 </Fragment>
               ))}
             </tbody>
@@ -986,8 +1065,8 @@ export function GitHubCopilotAccountsPage() {
                 <th style={{ width: 40 }}>
                   <input
                     type="checkbox"
-                    checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0}
-                    onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))}
+                    checked={isAllPaginatedSelected}
+                    onChange={() => toggleSelectAll(paginatedIds)}
                   />
                 </th>
                 <th style={{ width: 260 }}>{t('common.shared.columns.email', '账号')}</th>
@@ -999,11 +1078,26 @@ export function GitHubCopilotAccountsPage() {
               </tr>
             </thead>
             <tbody>
-              {renderTableRows(filteredAccounts)}
+              {renderTableRows(paginatedAccounts)}
             </tbody>
           </table>
         </div>
       )}
+
+      <PaginationControls
+        totalItems={pagination.totalItems}
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        pageSize={pagination.pageSize}
+        pageSizeOptions={pagination.pageSizeOptions}
+        rangeStart={pagination.rangeStart}
+        rangeEnd={pagination.rangeEnd}
+        canGoPrevious={pagination.canGoPrevious}
+        canGoNext={pagination.canGoNext}
+        onPageSizeChange={pagination.setPageSize}
+        onPreviousPage={pagination.goToPreviousPage}
+        onNextPage={pagination.goToNextPage}
+      />
 
       {showAddModal && (
         <div className="modal-overlay" onClick={closeAddModal}>
@@ -1191,7 +1285,7 @@ export function GitHubCopilotAccountsPage() {
 
       <ExportJsonModal
         isOpen={showExportModal}
-        title={`${t('common.shared.export', '导出')} JSON`}
+        title={`${t('common.shared.export.title', '导出')} JSON`}
         jsonContent={exportJsonContent}
         hidden={exportJsonHidden}
         copied={exportJsonCopied}

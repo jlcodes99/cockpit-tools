@@ -4,7 +4,7 @@
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, oneshot, Mutex, RwLock};
@@ -239,6 +239,85 @@ static WS_SERVER: std::sync::OnceLock<Arc<WsServer>> = std::sync::OnceLock::new(
 static PLUGIN_SWITCH_PENDING: std::sync::LazyLock<
     Mutex<HashMap<String, oneshot::Sender<PluginSwitchAccountResponsePayload>>>,
 > = std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+#[cfg(target_os = "windows")]
+static WSL_PREFIXES16: std::sync::LazyLock<Vec<(u8, u8)>> =
+    std::sync::LazyLock::new(resolve_wsl_network_prefixes16);
+
+#[cfg(target_os = "windows")]
+fn push_prefix16(prefixes: &mut Vec<(u8, u8)>, ip_str: &str) {
+    if let Ok(IpAddr::V4(v4)) = ip_str.parse::<IpAddr>() {
+        let octets = v4.octets();
+        let prefix = (octets[0], octets[1]);
+        if !prefixes.contains(&prefix) {
+            prefixes.push(prefix);
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_wsl_network_prefixes16() -> Vec<(u8, u8)> {
+    let mut prefixes = Vec::new();
+
+    let resolv_output = std::process::Command::new("wsl.exe")
+        .args(["-e", "sh", "-c", "cat /etc/resolv.conf"])
+        .output();
+    if let Ok(output) = resolv_output {
+        if output.status.success() {
+            let content = String::from_utf8_lossy(&output.stdout);
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if !trimmed.starts_with("nameserver") {
+                    continue;
+                }
+                if let Some(ip_str) = trimmed.split_whitespace().nth(1) {
+                    push_prefix16(&mut prefixes, ip_str);
+                }
+            }
+        }
+    }
+
+    let route_output = std::process::Command::new("wsl.exe")
+        .args(["-e", "sh", "-c", "ip route show default"])
+        .output();
+    if let Ok(output) = route_output {
+        if output.status.success() {
+            let content = String::from_utf8_lossy(&output.stdout);
+            for line in content.lines() {
+                let mut parts = line.split_whitespace();
+                while let Some(part) = parts.next() {
+                    if part == "via" {
+                        if let Some(ip_str) = parts.next() {
+                            push_prefix16(&mut prefixes, ip_str);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    prefixes
+}
+
+fn is_allowed_remote_client(addr: &SocketAddr) -> bool {
+    let ip = addr.ip();
+    if ip.is_loopback() {
+        return true;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let IpAddr::V4(peer_v4) = ip {
+            let octets = peer_v4.octets();
+            let peer_prefix = (octets[0], octets[1]);
+            if WSL_PREFIXES16.iter().any(|prefix| *prefix == peer_prefix) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
 
 /// 获取全局 WebSocket 服务实例
 pub fn get_server() -> &'static Arc<WsServer> {
@@ -379,7 +458,7 @@ pub async fn start_server() {
     let mut listener = None;
 
     for attempt in 0..PORT_RANGE {
-        let addr = format!("127.0.0.1:{}", port);
+        let addr = format!("0.0.0.0:{}", port);
         match TcpListener::bind(&addr).await {
             Ok(l) => {
                 listener = Some(l);
@@ -425,6 +504,10 @@ pub async fn start_server() {
     let server = get_server();
 
     while let Ok((stream, addr)) = listener.accept().await {
+        if !is_allowed_remote_client(&addr) {
+            crate::modules::logger::log_warn(&format!("[WS] 鎷掔粷闈炵櫧鍚嶅崟鏉ユ簮: {}", addr));
+            continue;
+        }
         let server_clone = Arc::clone(server);
         tokio::spawn(handle_connection(server_clone, stream, addr));
     }

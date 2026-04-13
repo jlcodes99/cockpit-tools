@@ -46,6 +46,10 @@ pub struct WindsurfAccount {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub windsurf_auth_status_raw: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_query_last_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_query_last_error_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage_updated_at: Option<i64>,
     pub created_at: i64,
     pub last_used: i64,

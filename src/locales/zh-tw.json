@@ -33,19 +33,24 @@
         "creditPackage": "附加 Credits",
         "sharedCreditPackage": "共享資源包",
         "account": "帳號",
-        "createdAt": "建立時間"
+        "createdAt": "建立時間",
+        "userId": "使用者 ID"
       },
       "empty": {
         "title": "暫無帳號"
       },
-      "export": "匯出",
+      "export": {
+        "title": "匯出",
+        "copyFailed": "複製失敗，請手動複製"
+      },
       "filter": {
         "all": "全部 ({{count}})",
         "enterprise": "企業 ({{count}})",
         "free": "免費（{{count}}）",
         "pro": "專業版 ({{count}})",
         "business": "商業 ({{count}})",
-        "individual": "個人 ({{count}})"
+        "individual": "個人 ({{count}})",
+        "validAccounts": "有效帳號（{{count}}）"
       },
       "filterLabel": "篩選",
       "import": {
@@ -127,9 +132,11 @@
       },
       "quota": {
         "noData": "暫無配額資料",
+        "queryFailed": "配額查詢失敗",
         "resetDone": "已重置",
         "hourly": "5 小時配額",
-        "weekly": "週配額"
+        "weekly": "週配額",
+        "resetAt": "重置: {{time}}"
       },
       "subtitle": "管理您的 GitHub Copilot 帳號",
       "time": {
@@ -161,7 +168,10 @@
       },
       "updated": {
         "label": "更新於 {{relative}}前"
-      }
+      },
+      "clear": "清除",
+      "loginSuccess": "登入成功",
+      "switchAccount": "切換帳號"
     },
     "topRightAd": {
       "ariaLabel": "全域右上角廣告位",
@@ -169,7 +179,15 @@
       "title": "右上角廣告位",
       "desc": "此區域會固定顯示於所有頁面的右上角，適合投放活動資訊或品牌廣告。",
       "action": "查看詳情"
-    }
+    },
+    "appName": "Cockpit Tools",
+    "collapse": "收合",
+    "confirmDelete": "確認刪除",
+    "confirmDeleteTag": "確認刪除標籤",
+    "deleteTagWarning": "確定要從所有帳號刪除此標籤嗎？",
+    "expand": "展開",
+    "processing": "處理中...",
+    "selectAll": "全選"
   },
   "nav": {
     "overview": "Antigravity",
@@ -292,7 +310,8 @@
       "running": "運行中",
       "stopped": "已停止",
       "restarting": "正在重啟",
-      "starting": "啟動中"
+      "starting": "啟動中",
+      "ready": "已準備"
     },
     "labels": {
       "path": "數據目錄",
@@ -302,7 +321,8 @@
       "unbound": "未綁定",
       "pendingInit": "待初始化（請先啟動一次）",
       "quota": "額度狀態",
-      "lastLaunched": "最近啟動"
+      "lastLaunched": "最近啟動",
+      "argsPresent": "有參數"
     },
     "columns": {
       "instance": "實例",
@@ -352,7 +372,14 @@
       "extraArgsDesc": "多個參數請用空格分隔，支持引號",
       "nameRequired": "請輸入實例名稱",
       "pathRequired": "請選擇實例目錄",
-      "bindRequired": "請選擇要綁定的帳號"
+      "bindRequired": "請選擇要綁定的帳號",
+      "optional": "可選",
+      "launchMode": "啟動方式",
+      "launchModeApp": "桌面版",
+      "launchModeCli": "命令列 CLI",
+      "workingDir": "工作目錄",
+      "workingDirPlaceholder": "預設為目前路徑",
+      "workingDirDesc": "啟動時會先切換到此目錄"
     },
     "quota": {
       "unbound": "未綁定帳號",
@@ -372,7 +399,8 @@
       "closedAll": "已停止所有實例",
       "allAlreadyRunning": "所有實例均已在運行中",
       "noneRunning": "未找到正在運行的實例",
-      "syncThreadsNeedTwo": "至少需要兩個實例才能同步執行緒"
+      "syncThreadsNeedTwo": "至少需要兩個實例才能同步執行緒",
+      "launchPrepared": "啟動指令已準備"
     },
     "runningDialog": {
       "title": "實例已在運行",
@@ -435,6 +463,13 @@
       "bindHint": "可稍後在實例列表中綁定",
       "pathRequired": "請先選擇目錄",
       "submit": "匯入"
+    },
+    "launchDialog": {
+      "title": "啟動實例",
+      "terminal": "終端機",
+      "command": "啟動指令",
+      "hint": "可複製指令手動執行，或點擊下方按鈕直接在終端機執行。",
+      "runInTerminal": "在終端機執行"
     }
   },
   "settings": {
@@ -611,7 +646,27 @@
       "autoSwitchAccountScopeDialogTitle": "選擇自動切號帳號範圍",
       "autoSwitchAccountScopeAllHint": "當前範圍為全部帳號，共 {{total}} 個帳號將參與自動切號。",
       "codexAutoSwitchAccountScope": "Codex 自動切號帳號範圍",
-      "codexAutoSwitchAccountScopeDesc": "當前 Codex 自動切號狀態：{{status}}。僅在該範圍內參與切號。"
+      "codexAutoSwitchAccountScopeDesc": "當前 Codex 自動切號狀態：{{status}}。僅在該範圍內參與切號。",
+      "defaultTerminal": "預設終端機",
+      "defaultTerminalDesc": "啟動 Gemini CLI 時使用的終端機",
+      "terminalSystem": "跟隨系統",
+      "currentAccountRefreshRequiresAutoRefresh": "請先啟用「配額自動刷新」，才能設定目前帳號刷新。",
+      "codebuddyCnAppPath": "CodeBuddy CN 應用程式路徑",
+      "codebuddyCnAppPathDesc": "留白則使用預設路徑",
+      "codebuddyCnAppPathPlaceholder": "預設路徑",
+      "codebuddyCnAutoRefresh": "CodeBuddy CN 自動刷新配額",
+      "codebuddyCnAutoRefreshDesc": "背景自動更新頻率",
+      "codebuddyCnPathReset": "重設為預設",
+      "codebuddyCnPathSelect": "選擇",
+      "codebuddyCnSettingsTitle": "CodeBuddy CN 設定",
+      "qoderAppPath": "Qoder 應用程式路徑",
+      "qoderAppPathDesc": "留白則使用預設路徑",
+      "qoderAppPathPlaceholder": "預設路徑",
+      "qoderAutoRefresh": "Qoder 自動刷新配額",
+      "qoderAutoRefreshDesc": "背景自動更新頻率",
+      "qoderPathSelect": "選擇",
+      "workbuddyAutoRefresh": "WorkBuddy 自動刷新配額",
+      "workbuddyAutoRefreshDesc": "背景自動更新頻率"
     },
     "network": {
       "apiTitle": "反重力駕駛艙 API",
@@ -672,7 +727,93 @@
       "download": "下載",
       "checkFailed": "檢查更新失敗，請稍後重試"
     },
-    "saveSettings": "儲存設定"
+    "saveSettings": "儲存設定",
+    "transfer": {
+      "backup": {
+        "title": "備份管理",
+        "desc": "集中管理定期備份、備份資料夾與備份清單。",
+        "modalDesc": "在這裡設定自動備份、查看專案備份資料夾中的檔案，並執行還原或清理。",
+        "statusEnabled": "自動備份已開啟",
+        "statusDisabled": "自動備份已關閉",
+        "lastRunLabel": "最近備份：{{time}}",
+        "lastRunNever": "尚未產生備份",
+        "autoTitle": "定期備份",
+        "autoDesc": "啟用後每天會自動匯出一份備份，並可直接透過目前的匯入流程還原。",
+        "runNow": "立即備份",
+        "running": "備份中...",
+        "typeTitle": "備份類型",
+        "typeDesc": "選擇自動備份的資料範圍。",
+        "typeFull": "完整資料",
+        "typeAccounts": "僅帳號",
+        "typeConfig": "僅設定",
+        "retentionTitle": "保留天數",
+        "retentionDesc": "超過此天數的備份會在下次檢查時自動清理。",
+        "retentionUnit": "天",
+        "directoryTitle": "備份資料夾",
+        "directoryDesc": "備份一律儲存在專案的 backups 資料夾中。",
+        "openFolder": "開啟資料夾",
+        "listTitle": "備份清單",
+        "listDesc": "可直接匯入備份，或刪除舊檔案。",
+        "openList": "開啟清單",
+        "emptyTitle": "目前沒有備份",
+        "emptyDesc": "開啟自動備份或按下「立即備份」，即可在這裡建立可還原的 JSON 備份。",
+        "sourceAuto": "自動",
+        "sourceManual": "手動",
+        "fileTime": "時間：{{time}}",
+        "fileSize": "大小：{{size}}",
+        "importAction": "匯入",
+        "deleteAction": "刪除",
+        "deleteConfirm": "確定要刪除備份 {{name}} 嗎？",
+        "feedback": {
+          "running": "正在建立備份...",
+          "runSuccess": "備份已儲存到 {{path}}",
+          "runSuccessWithCleanup": "備份已儲存到 {{path}}，並清理了 {{count}} 個過期備份",
+          "runFailed": "備份失敗：{{error}}",
+          "deleteSuccess": "備份已刪除",
+          "deleteFailed": "刪除備份失敗：{{error}}",
+          "loadFailed": "載入備份清單失敗：{{error}}",
+          "saveSettingsFailed": "儲存備份設定失敗：{{error}}",
+          "cleanupDone": "已清理 {{count}} 個過期備份",
+          "cleanupFailed": "清理過期備份失敗：{{error}}",
+          "openFolderFailed": "開啟備份資料夾失敗：{{error}}"
+        },
+        "errors": {
+          "invalidRetention": "保留天數必須介於 1 到 365 天之間"
+        }
+      },
+      "exportTitle": "資料匯出",
+      "exportDesc": "可依需求匯出帳號資料、設定資料，或一次匯出完整遷移包。",
+      "importTitle": "資料匯入",
+      "importDesc": "匯入帳號備份、設定備份或統一資料包。",
+      "exportModalDesc": "選擇要匯出的資料類型。勾選帳號與設定即可產生完整遷移包。",
+      "importModalDesc": "選擇要匯入的資料類型。舊版帳號備份會自動按「僅帳號資料」處理。",
+      "selectionTitle": "資料範圍",
+      "accountsOptionTitle": "帳號資料",
+      "accountsOptionDesc": "包含各平台帳號備份，並持續相容舊版帳號 JSON。",
+      "configOptionTitle": "設定資料",
+      "configOptionDesc": "包含應用設定、群組、實例、喚醒任務與模型 Provider 設定。",
+      "exportConfirm": "匯出資料",
+      "fromFileTitle": "從本機檔案匯入",
+      "fromFileDesc": "選擇 JSON 檔案匯入資料包；舊版帳號備份也可直接匯入。",
+      "jsonPlaceholder": "貼上資料包或舊版帳號 JSON 內容",
+      "feedback": {
+        "accountsImported": "已匯入 {{count}} 個帳號",
+        "configImported": "設定資料已還原",
+        "accountsSectionMissing": "備份不包含帳號資料",
+        "configSectionMissing": "備份不包含設定資料，因此僅還原帳號資料",
+        "unresolvedRefs": "{{count}} 個帳號綁定未匹配，已略過",
+        "disabledTasks": "{{count}} 個任務因缺少帳號已自動停用",
+        "restartRequired": "網路服務設定已還原，部分變更需重新啟動後生效",
+        "partialAccountFailure": "部分帳號匯入失敗：{{error}}"
+      },
+      "errors": {
+        "selectionRequired": "請至少選擇一項資料類型",
+        "accountsOnlyFile": "此備份僅包含帳號資料，請勾選「帳號資料」後再匯入",
+        "selectedSectionsMissing": "所選資料類型不在目前備份中",
+        "unsupportedLegacyFile": "無法識別此舊版帳號備份格式",
+        "unsupportedVersion": "目前版本暫不支援此資料包版本"
+      }
+    }
   },
   "appPath": {
     "missing": {
@@ -680,6 +821,9 @@
       "desc": "找不到 {{app}} 的應用程式路徑。請立即設定以繼續。",
       "codexLaunchHint": "關閉後僅執行切號與登入覆蓋，不再嘗試啟動 Codex App，也不會再次要求設定啟動路徑。",
       "action": "立即設定"
+    },
+    "modal": {
+      "desc": "找不到 {{app}} 的應用程式路徑，請立即設定以繼續。"
     }
   },
   "accounts": {
@@ -789,7 +933,11 @@
       "fingerprint": "指紋",
       "switch": "切換帳號",
       "switchTo": "切換到此帳號",
-      "selectFingerprint": "點擊選擇指紋"
+      "selectFingerprint": "點擊選擇指紋",
+      "delete": "刪除",
+      "deleteSelected": "刪除所選",
+      "export": "匯出",
+      "refreshAll": "全部重新整理"
     },
     "tabs": {
       "oauth": "OAuth 授權",
@@ -886,7 +1034,40 @@
       "clearConfirm": "確定清空全部切換記錄嗎？",
       "loadFailed": "載入切換記錄失敗：{{error}}",
       "clearFailed": "清空切換記錄失敗：{{error}}"
-    }
+    },
+    "clearTagFilter": "清除標籤篩選",
+    "compact": {
+      "hide": "隱藏",
+      "show": "顯示"
+    },
+    "deleteConfirm": {
+      "multi": "刪除已選取的 {{count}} 個帳號？",
+      "single": "刪除此帳號？"
+    },
+    "deleteFailed": "刪除失敗：{{error}}",
+    "deleteSuccess": "刪除成功",
+    "deleteTagFailed": "刪除標籤失敗：{{error}}",
+    "exportError": "匯出失敗：{{error}}",
+    "exportModal": {
+      "title": "匯出 JSON"
+    },
+    "importJsonFailed": "JSON 匯入失敗：{{error}}",
+    "importJsonHint": "匯入從此工具匯出的 Qoder JSON 檔案。",
+    "importJsonSuccess": "JSON 匯入成功",
+    "noTags": "無標籤",
+    "privacy": {
+      "disable": "關閉隱私模式",
+      "enable": "開啟隱私模式"
+    },
+    "refreshAllFailed": "批次重新整理失敗：{{error}}",
+    "refreshAllSuccess": "已重新整理所有帳號",
+    "refreshFailed": "重新整理失敗：{{error}}",
+    "refreshSuccess": "重新整理成功",
+    "switchFailed": "切換失敗：{{error}}",
+    "switchSuccess": "切換成功",
+    "switched": "已切換至 {{email}}",
+    "tagButton": "編輯標籤",
+    "tagUpdated": "標籤已更新"
   },
   "overview": {
     "title": "帳號總覽",
@@ -1098,7 +1279,10 @@
       "actions": {
         "selectAllAccounts": "全選",
         "clearSelectedAccounts": "取消全選",
-        "runCheckNow": "立即檢測"
+        "runCheckNow": "立即檢測",
+        "retryFiltered": "重試目前篩選（{{count}}）",
+        "retryMissingModel": "這一批缺少模型資訊，無法重試。",
+        "retryMissingAccount": "目前篩選中沒有可重試的帳號。"
       },
       "runHint": {
         "title": "驗證說明",
@@ -1383,7 +1567,9 @@
       "portInUseConfirm": "連接埠 {{port}} 已被佔用，是否關閉佔用該連接埠的程式？",
       "portCloseFailed": "關閉連接埠失敗: {{error}}",
       "portStillInUse": "連接埠 {{port}} 仍被佔用。",
-      "portInUseAction": "關閉佔用連接埠並重試"
+      "portInUseAction": "關閉佔用連接埠並重試",
+      "timeout": "驗證逾時，請點擊",
+      "timeoutRetry": "更新驗證連結"
     },
     "token": {
       "desc": "貼上 auth.json 內容或帳號 JSON 資料",
@@ -1396,6 +1582,80 @@
         "apiKeyCannotBeUrl": "API Key 不能是 URL，請檢查是否填反",
         "baseUrlInvalid": "Base URL 格式無效，請輸入完整的 http:// 或 https:// 位址",
         "apiKeyEqualsBaseUrl": "API Key 不能與 Base URL 相同"
+      },
+      "addAndSwitchSuccess": "已新增並切換：{{email}}",
+      "actions": {
+        "addAndSwitch": "新增並切換"
+      },
+      "provider": {
+        "label": "供應商",
+        "custom": "自訂",
+        "endpoint": "供應商端點",
+        "hint": "已自動填入相容的 Base URL，你仍可手動編輯。",
+        "website": "網站",
+        "apiKeyPage": "API Key 頁面"
+      },
+      "providers": {
+        "openai_official": {
+          "name": "OpenAI Official"
+        },
+        "azure_openai": {
+          "name": "Azure OpenAI"
+        },
+        "packycode": {
+          "name": "PackyCode"
+        },
+        "cubence": {
+          "name": "Cubence"
+        },
+        "aigocode": {
+          "name": "AIGoCode"
+        },
+        "rightcode": {
+          "name": "RightCode"
+        },
+        "sssaicode": {
+          "name": "SSSAiCode"
+        },
+        "micu": {
+          "name": "Micu"
+        },
+        "x_code_api": {
+          "name": "X-Code API"
+        },
+        "ctok_ai": {
+          "name": "CTok.ai"
+        },
+        "aihubmix": {
+          "name": "AiHubMix"
+        },
+        "dmxapi": {
+          "name": "DMXAPI"
+        },
+        "compshare": {
+          "name": "Compshare"
+        },
+        "openrouter": {
+          "name": "OpenRouter"
+        },
+        "aicodemirror": {
+          "name": "AICodeMirror"
+        },
+        "aicoding": {
+          "name": "AICoding"
+        },
+        "crazyrouter": {
+          "name": "CrazyRouter"
+        },
+        "deepseek": {
+          "name": "DeepSeek"
+        },
+        "moonshot": {
+          "name": "Moonshot"
+        },
+        "siliconflow": {
+          "name": "SiliconFlow"
+        }
       }
     },
     "local": {
@@ -1464,7 +1724,10 @@
     "usage": {
       "open": "查看 OpenAI 用量",
       "hint": "API Key 額度請到 OpenAI Usage 頁面查看。",
-      "openFailed": "開啟用量頁面失敗：{{error}}"
+      "openFailed": "開啟用量頁面失敗：{{error}}",
+      "search": {
+        "placeholder": "搜尋帳號..."
+      }
     },
     "wakeup": {
       "tab": "喚醒任務",
@@ -1650,12 +1913,15 @@
         "moveToTrash": "移到垃圾桶",
         "syncSessions": "同步會話",
         "expand": "展開",
-        "collapse": "收起"
+        "collapse": "收起",
+        "repairVisibility": "修復可見性",
+        "restoreSessions": "還原工作階段"
       },
       "confirm": {
         "title": "移到垃圾桶",
         "message": "會將所選會話從對應實例中移到垃圾桶，方便後續恢復；執行中的實例可能需要重新啟動後才會反映。確認繼續？",
-        "syncMessage": "會將缺失的執行緒與對應會話同步到所有實例中，已有內容不會重複寫入，寫入前會先備份目標實例關鍵檔案。確認繼續？"
+        "syncMessage": "會將缺失的執行緒與對應會話同步到所有實例中，已有內容不會重複寫入，寫入前會先備份目標實例關鍵檔案。確認繼續？",
+        "repairVisibilityMessage": "這將依照每個實例根目錄 config.toml 中的 model_provider（缺失時預設使用 openai），修復 rollout 檔案與 state_5.sqlite 內的供應商中繼資料。所有即將寫入變更的檔案都會先建立備份。正在執行的實例可能需要重新啟動，變更才會顯示。是否繼續？"
       },
       "empty": {
         "title": "還沒有可管理的會話",
@@ -1663,12 +1929,117 @@
       },
       "messages": {
         "pickOne": "請至少選擇一條會話",
-        "syncNeedTwo": "至少需要兩個實例才能同步會話"
+        "syncNeedTwo": "至少需要兩個實例才能同步會話",
+        "pickRestoreOne": "請至少選擇一個要還原的工作階段"
       },
       "groupCount": "{{count}} 條會話",
       "updatedAt": "最近更新",
       "locationRunning": "（執行中）",
-      "untitled": "未命名會話"
+      "untitled": "未命名會話",
+      "restoreModal": {
+        "title": "還原工作階段",
+        "hint": "還原時會將 rollout 檔、SQLite 執行緒列與 session_index 項目一起放回原始實例。",
+        "emptyTitle": "回收桶是空的",
+        "emptyDesc": "移到回收桶的工作階段會顯示在這裡。",
+        "restoreAction": "還原所選工作階段"
+      }
+    },
+    "modelProviders": {
+      "tab": "模型供應商",
+      "desc": "集中管理模型供應商與多個 API Key，新增 Codex API Key 帳號時可直接重複使用。",
+      "add": "新增供應商",
+      "loadFailed": "載入模型供應商失敗：{{error}}",
+      "emptyTitle": "尚無模型供應商",
+      "emptyDesc": "點擊右上角「新增供應商」開始設定。",
+      "baseUrl": "基礎 URL",
+      "website": "網站",
+      "apiKeyPage": "API Key 頁面",
+      "apiKeysCount": "API Key {{count}} 個",
+      "referencesCount": "關聯帳號 {{count}} 個",
+      "unnamedKey": "未命名 Key",
+      "createTitle": "新增模型供應商",
+      "editTitle": "編輯模型供應商",
+      "existingApiKeys": "現有 API Keys",
+      "fields": {
+        "name": "供應商名稱",
+        "baseUrl": "基礎 URL",
+        "website": "網站（可選）",
+        "apiKeyUrl": "API Key 頁面（可選）",
+        "newApiKeyName": "新 Key 名稱（可選）",
+        "newApiKey": "新 API Key"
+      },
+      "validation": {
+        "nameRequired": "供應商名稱不能為空",
+        "baseUrlInvalid": "Base URL 格式無效",
+        "baseUrlExists": "此 Base URL 已存在",
+        "providerNotFound": "找不到供應商",
+        "apiKeyRequiredOnCreate": "建立供應商時至少需要一個 API Key",
+        "apiKeyRequiredWhenEmpty": "目前供應商尚無 API Key，請先新增一個"
+      },
+      "saveSuccess": "模型供應商已儲存",
+      "deleteBlocked": "此供應商已連結 {{count}} 個帳號，無法刪除。",
+      "confirmDelete": "確定刪除供應商「{{name}}」嗎？",
+      "deleteFailed": "刪除供應商失敗：{{error}}",
+      "deleteApiKeyFailed": "刪除 API Key 失敗：{{error}}",
+      "selectSavedProvider": "已儲存供應商",
+      "selectSavedApiKey": "已儲存 API Key",
+      "noSavedProviders": "尚無已儲存的供應商，可直接填寫欄位並自動儲存。",
+      "newProviderName": "供應商名稱（可選，用於自動儲存）",
+      "newProviderNamePlaceholder": "留空時會自動使用主機名稱",
+      "preview": {
+        "title": "儲存預覽",
+        "desc": "儲存供應商時會先更新供應商倉庫；不會因這次操作立刻切換官方 Codex 的目前設定。",
+        "writeNow": "會寫入",
+        "noImmediateChange": "不會立即修改",
+        "providerStoreTitle": "模型供應商倉庫",
+        "providerStoreDesc": "儲存供應商名稱、Base URL、官網/API Key 頁面連結，以及本彈窗新增的 API Key。",
+        "codexConfigTitle": "目前 Codex 設定",
+        "codexConfigDesc": "不會立即改動目前 provider 或 Base URL；只有在儲存或切換 Codex API Key 帳號時才會更新。",
+        "authFileTitle": "目前 Codex 登入憑證",
+        "authFileDesc": "不會因為儲存供應商而覆寫目前 auth.json 中的 OPENAI_API_KEY。"
+      },
+      "quickConfig": {
+        "title": "目前 Codex 設定",
+        "desc": "這裡的快捷項直接寫入目前生效的 ~/.codex/config.toml，不會改動模型供應商倉庫。",
+        "configPath": "設定檔",
+        "openConfig": "開啟檔案",
+        "loadFailed": "載入目前 Codex 設定失敗：{{error}}",
+        "openFailed": "開啟 config.toml 失敗：{{error}}",
+        "saveSuccess": "目前 Codex 設定已儲存",
+        "saveFailed": "儲存目前 Codex 設定失敗：{{error}}",
+        "contextWindow1m": "1M 上下文視窗",
+        "contextWindow1mHint": "啟用後寫入 model_context_window = 1000000，並一併管理自動壓縮門檻。",
+        "autoCompactLimit": "自動壓縮門檻",
+        "autoCompactLimitHint": "寫入 model_auto_compact_token_limit。關閉 1M 開關後，這個欄位也會一起移除。",
+        "preview": "寫入預覽",
+        "previewApply": "將寫入",
+        "previewRemove": "將移除",
+        "customDetected": "偵測到目前 config.toml 存在自訂 model_context_window = {{context}}。儲存後會依下方快捷項改寫。",
+        "compactMissingDetected": "偵測到目前已啟用 1M 上下文，但缺少自動壓縮門檻。儲存後會補寫預設值 {{limit}}。",
+        "validation": {
+          "autoCompactInvalid": "自動壓縮門檻必須是大於 0 的整數"
+        }
+      }
+    },
+    "quickSwitch": {
+      "action": "快速切換供應商",
+      "inlineAction": "切換",
+      "title": "快速切換供應商",
+      "desc": "快速將此 API Key 帳號切換到已儲存的供應商與 API Key。",
+      "currentAccount": "目前帳號：{{name}}",
+      "noProviders": "尚無已儲存的供應商，請先到「模型供應商」新增。",
+      "providerHasNoKeys": "此供應商尚無可用的 API Key，請先到「模型供應商」新增。",
+      "gotoProviders": "管理供應商",
+      "apply": "立即切換",
+      "success": "已切換到供應商：{{provider}}",
+      "failed": "切換供應商失敗：{{error}}",
+      "validation": {
+        "providerRequired": "請選擇供應商",
+        "apiKeyRequired": "請選擇 API Key"
+      }
+    },
+    "groups": {
+      "addToGroup": "加入群組"
     }
   },
   "githubCopilot": {
@@ -1788,7 +2159,10 @@
     },
     "codex": {
       "title": "Codex 設定",
-      "appPath": "啟動路徑"
+      "appPath": "啟動路徑",
+      "configToml": "Codex 設定檔",
+      "openConfigToml": "開啟檔案",
+      "openConfigHint": "快速開啟目前使用的 Codex config.toml 檔案。"
     },
     "githubCopilot": {
       "title": "GitHub Copilot 設定",
@@ -1848,7 +2222,8 @@
       "loadFailed": "載入設定失敗：{{error}}",
       "saveFailed": "儲存設定失敗：{{error}}",
       "pickPathFailed": "選擇路徑失敗：{{error}}",
-      "resetPathFailed": "重設路徑失敗：{{error}}"
+      "resetPathFailed": "重設路徑失敗：{{error}}",
+      "openCodexConfigFailed": "開啟 Codex config.toml 失敗：{{error}}"
     },
     "qoder": {
       "title": "Qoder 設定",
@@ -1904,8 +2279,7 @@
       "description": "點擊「新增帳號」開始管理您的 Windsurf 帳號"
     },
     "addModal": {
-      "title": "新增 Windsurf 帳號",
-      "password": "電子郵件密碼"
+      "title": "新增 Windsurf 帳號"
     },
     "oauth": {
       "desc": "點擊下方按鈕，在瀏覽器中完成 Windsurf 授權。"
@@ -1948,16 +2322,6 @@
       "inject": "一鍵切換：本工具會讀取本機 Windsurf 加密材料（DPAPI/Keychain/Secret Service），解密 state.vscdb 中的驗證工作階段，替換 Windsurf 權杖後再加密，全部流程都在本機完成。",
       "reason": "權限需求：讀取 Windsurf 認證資料庫（state.vscdb），並呼叫系統加密能力（Windows DPAPI / macOS Keychain / Linux Secret Service）進行解密與寫回。",
       "storage": "讀取範圍：僅處理 Windsurf 登入工作階段相關資料，所有流程均在本機執行。"
-    },
-    "password": {
-      "desc": "使用 Windsurf 帳號的電子郵件與密碼登入，自動取得 API Key 與帳號資訊。",
-      "emailPlaceholder": "電子郵件地址",
-      "passwordPlaceholder": "密碼",
-      "login": "登入",
-      "logging": "登入中...",
-      "empty": "請輸入電子郵件和密碼",
-      "success": "登入成功: {{login}}",
-      "failed": "登入失敗: {{error}}"
     }
   },
   "kiro": {
@@ -2426,7 +2790,11 @@
       "unsupportedDescPlatform": "Gemini Cli 多執行個體僅在 macOS、Windows 和 Linux 上支援。",
       "launchDialogTitle": "啟動實例",
       "launchHint": "複製命令並手動運行，或直接在終端機中執行。",
-      "runInTerminal": "在終端機中運行"
+      "runInTerminal": "在終端機中運行",
+      "workingDir": "工作目錄",
+      "workingDirPlaceholder": "預設目前路徑",
+      "workingDirDesc": "啟動時將首先切換到此目錄",
+      "pickWorkingDir": "選擇工作目錄"
     },
     "switch": {
       "success": "帳號切換成功"
@@ -2443,6 +2811,26 @@
       "saved": "專案已儲存：{{projectId}}",
       "cleared": "已恢復為自動專案識別",
       "savedWithRefreshError": "專案已儲存，但配額刷新失敗：{{error}}"
+    },
+    "identity": {
+      "authMethod": "驗證方式",
+      "tier": "方案",
+      "signedInWithGoogle": "使用 Google 登入",
+      "signedInWithGoogleEmail": "使用 Google 登入（{{email}}）"
+    },
+    "quotaTable": {
+      "model": "模型",
+      "leftOfTotal": "剩餘 / 總量",
+      "usage": "已用",
+      "usageResets": "重設時間",
+      "usedPercent": "{{value}}%",
+      "remainingOfTotal": "{{remaining}} / {{total}}",
+      "resetAtWithRelative": "{{absolute}}（{{relative}}）"
+    },
+    "tierText": {
+      "pro": "Google One AI Pro 的 Gemini Code Assist",
+      "ultra": "Google AI Ultra 的 Gemini Code Assist",
+      "free": "Gemini Code Assist（免費版）"
     }
   },
   "codebuddy": {
@@ -2510,7 +2898,8 @@
       "expireUnknown": "到期時間：暫無",
       "packageTitle": {
         "base": "基礎體驗包",
-        "activity": "活動贈送包"
+        "activity": "活動贈送包",
+        "pro": "Pro 版訂閱"
       }
     },
     "extraCredit": {
@@ -2578,7 +2967,12 @@
       "title": "新增 Qoder 帳號"
     },
     "import": {
-      "localDesc": "從本機 Qoder 用戶端讀取目前登入狀態（包含使用者資訊、方案與 Credits 使用情況）。"
+      "localDesc": "從本機 Qoder 用戶端讀取目前登入狀態（包含使用者資訊、方案與 Credits 使用情況）。",
+      "localFailed": "本機匯入失敗：{{error}}",
+      "localSuccess": "已從本機 Qoder 匯入帳號。"
+    },
+    "empty": {
+      "desc": "點擊「新增帳號」以使用驗證登入、本機匯入或 JSON 匯入。"
     }
   },
   "trae": {
@@ -2675,7 +3069,10 @@
         "other": "其他",
         "empty": "暫無配額資料"
       }
-    }
+    },
+    "syncFailed": "同步失敗：{{error}}",
+    "syncSuccess": "已將 {{count}} 個帳號同步至 WorkBuddy",
+    "syncToWorkbuddy": "同步至 WorkBuddy"
   },
   "workbuddy": {
     "title": "WorkBuddy 帳號管理",
@@ -2810,7 +3207,8 @@
       "unknownStatus": "未知狀態",
       "overdueField": "是否欠費",
       "overdueYes": "是",
-      "overdueNo": "否"
+      "overdueNo": "否",
+      "usageUpdatedAt": "更新：{{time}}"
     },
     "runtime": {
       "title": "目前的 Zed 工作階段",
@@ -2830,7 +3228,8 @@
       "complete": "完成登入",
       "startFailed": "啟動 Zed 登入失敗",
       "completeSuccess": "Zed 登入完成：{{account}}",
-      "importOnlySuccess": "授權成功，帳號已匯入；如需讓官方 Zed 使用此帳號，請點擊「套用並重新啟動」。"
+      "importOnlySuccess": "授權成功，帳號已匯入；如需讓官方 Zed 使用此帳號，請點擊「套用並重新啟動」。",
+      "desc": "點擊下方按鈕，在瀏覽器中完成 Zed 官方登入驗證。"
     },
     "actions": {
       "addAccount": "登入 Zed",
@@ -2846,6 +3245,9 @@
       "applyAndRestart": "套用並重新啟動",
       "reapply": "重新套用",
       "exportTitle": "匯出 Zed 帳號 JSON"
+    },
+    "sort": {
+      "tokenSpend": "依 Token 消耗排序"
     }
   },
   "floatingCard": {

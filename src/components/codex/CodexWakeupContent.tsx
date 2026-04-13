@@ -24,6 +24,7 @@ import {
   Power,
   RefreshCw,
   Search,
+  Settings,
   Trash2,
   X,
 } from 'lucide-react';
@@ -993,15 +994,13 @@ export function CodexWakeupContent({ accounts, onRefreshAccounts }: CodexWakeupC
   );
   const [runtimeConfigDirty, setRuntimeConfigDirty] = useState(false);
   const [runtimeGuideConfigError, setRuntimeGuideConfigError] = useState<string | null>(null);
-  const runtimeRequiredPaths = runtime?.required_runtime_paths ?? [];
-  const hasExplicitRuntimeRequirements = runtimeRequiredPaths.length > 0;
-  const showCodexCliInput = hasExplicitRuntimeRequirements
-    ? runtimeRequiredPaths.includes('codex_cli_path')
-    : true;
-  const showNodeInput = hasExplicitRuntimeRequirements
-    ? runtimeRequiredPaths.includes('node_path')
-    : true;
-  const showRuntimeConfigCard = showCodexCliInput || showNodeInput;
+  const showCodexCliInput = true;
+  const showNodeInput = true;
+  const showRuntimeConfigCard = true;
+  const runtimeGuideNeedInstall = Boolean(runtime && !runtime.available);
+  const runtimeGuideTitle = runtimeGuideNeedInstall
+    ? t('codex.wakeup.installTitle')
+    : t('codex.wakeup.runtimeConfigTitle');
   const rememberModelSelection = useCallback((selection: WakeupModelSelectionMemory) => {
     setModelSelectionMemory(selection);
     persistWakeupModelSelectionMemory(selection);
@@ -1076,7 +1075,6 @@ export function CodexWakeupContent({ accounts, onRefreshAccounts }: CodexWakeupC
       return;
     }
     if (runtime.available) {
-      setShowRuntimeGuideModal(false);
       setRuntimeGuideAutoShown(false);
       return;
     }
@@ -1424,7 +1422,11 @@ export function CodexWakeupContent({ accounts, onRefreshAccounts }: CodexWakeupC
     let unlisten: UnlistenFn | undefined;
 
     void listen<Record<string, unknown>>('codex://wakeup-progress', (event) => {
-      applyProgressPayload(fromRawWakeupProgressPayload(event.payload as never));
+      const payload = fromRawWakeupProgressPayload(event.payload as never);
+      applyProgressPayload(payload);
+      if (payload.phase === 'batch_completed') {
+        void loadAll();
+      }
     }).then((fn) => {
       unlisten = fn;
     });
@@ -1434,7 +1436,7 @@ export function CodexWakeupContent({ accounts, onRefreshAccounts }: CodexWakeupC
         unlisten();
       }
     };
-  }, [applyProgressPayload]);
+  }, [applyProgressPayload, loadAll]);
 
   const previewRuns = useMemo(() => calculatePreviewRuns(taskDraft), [taskDraft]);
   const executionCounts = useMemo(() => {
@@ -2433,6 +2435,14 @@ export function CodexWakeupContent({ accounts, onRefreshAccounts }: CodexWakeupC
           <button className="btn btn-secondary" onClick={() => void refreshRuntime().catch(() => undefined)}>
             <RefreshCw size={16} /> {t('codex.wakeup.refreshRuntime')}
           </button>
+          <button
+            className="btn btn-secondary icon-only"
+            onClick={openRuntimeGuideModal}
+            title={t('codex.wakeup.runtimeConfigTitle')}
+            aria-label={t('codex.wakeup.runtimeConfigTitle')}
+          >
+            <Settings size={14} />
+          </button>
         </div>
       </div>
 
@@ -2554,14 +2564,14 @@ export function CodexWakeupContent({ accounts, onRefreshAccounts }: CodexWakeupC
         </div>
       )}
 
-      {showRuntimeGuideModal && runtime && !runtime.available && (
+      {showRuntimeGuideModal && (
         <div className="modal-overlay" onClick={closeRuntimeGuideModal}>
           <div
             className="modal wakeup-modal codex-wakeup-runtime-guide-modal"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
-              <h2>{t('codex.wakeup.installTitle')}</h2>
+              <h2>{runtimeGuideTitle}</h2>
               <button className="modal-close" onClick={closeRuntimeGuideModal} disabled={runtimeGuideRefreshing}>
                 <X />
               </button>
@@ -2569,14 +2579,18 @@ export function CodexWakeupContent({ accounts, onRefreshAccounts }: CodexWakeupC
             <div className="modal-body codex-wakeup-runtime-guide-body">
               <div className="codex-wakeup-runtime-guide-hero">
                 <div className="codex-wakeup-runtime-guide-icon">
-                  <CircleAlert size={20} />
+                  {runtimeGuideNeedInstall ? <CircleAlert size={20} /> : <Check size={20} />}
                 </div>
                 <div className="codex-wakeup-runtime-guide-copy">
                   <span className="codex-wakeup-runtime-guide-kicker">
-                    {t('codex.wakeup.runtimeMissing')}
+                    {runtimeGuideNeedInstall ? t('codex.wakeup.runtimeMissing') : t('codex.wakeup.runtimeReady')}
                   </span>
-                  <h3>{t('codex.wakeup.installTitle')}</h3>
-                  <p>{runtime.message || t('codex.wakeup.installSubtitle')}</p>
+                  <h3>{runtimeGuideTitle}</h3>
+                  <p>
+                    {runtimeGuideNeedInstall
+                      ? runtime?.message || t('codex.wakeup.installSubtitle')
+                      : runtime?.binary_path || runtime?.message || t('codex.wakeup.runtimeConfigHint')}
+                  </p>
                 </div>
               </div>
               {showRuntimeConfigCard && (
@@ -2629,8 +2643,10 @@ export function CodexWakeupContent({ accounts, onRefreshAccounts }: CodexWakeupC
                   )}
                 </section>
               )}
-              {renderInstallCommands(runtime.install_hints || [])}
-              <p className="codex-wakeup-install-footnote">{t('codex.wakeup.installFootnote')}</p>
+              {runtimeGuideNeedInstall && renderInstallCommands(runtime?.install_hints || [])}
+              {runtimeGuideNeedInstall && (
+                <p className="codex-wakeup-install-footnote">{t('codex.wakeup.installFootnote')}</p>
+              )}
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={closeRuntimeGuideModal} disabled={runtimeGuideRefreshing}>

@@ -703,12 +703,14 @@ pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, 
         id: Uuid::new_v4().to_string(),
         name,
         user_data_dir,
+        working_dir: params.working_dir,
         extra_args: params.extra_args.trim().to_string(),
         bind_account_id: if create_empty {
             None
         } else {
             params.bind_account_id
         },
+        launch_mode: crate::models::InstanceLaunchMode::App,
         created_at: Utc::now().timestamp_millis(),
         last_launched_at: None,
         last_pid: None,
@@ -1043,11 +1045,12 @@ fn format_command_preview(command: &Command) -> String {
         .get_args()
         .map(|arg| quote_command_part(arg.to_string_lossy().as_ref()))
         .collect::<Vec<String>>();
-    if args.is_empty() {
+    let preview = if args.is_empty() {
         program
     } else {
         format!("{} {}", program, args.join(" "))
-    }
+    };
+    modules::process::summarize_text_for_process_log(&preview, 600)
 }
 
 fn spawn_command_with_trace(cmd: &mut Command) -> std::io::Result<std::process::Child> {
@@ -1337,8 +1340,10 @@ pub fn resolve_windsurf_pid_from_entries(
         }
         if modules::process::is_pid_running(pid) {
             modules::logger::log_warn(&format!(
-                "[Windsurf Resolve] 忽略不匹配的 last_pid={}，target={}，matched_pids={:?}",
-                pid, target, matches
+                "[Windsurf Resolve] 忽略不匹配的 last_pid={}，target={}，matched_pids={}",
+                pid,
+                modules::process::summarize_text_for_process_log(&target, 96),
+                modules::process::summarize_pid_list_for_log(&matches)
             ));
         }
     }
@@ -1814,8 +1819,8 @@ pub fn close_windsurf(user_data_dirs: &[String], timeout_secs: u64) -> Result<()
         .collect();
     if !still_running.is_empty() {
         return Err(format!(
-            "无法关闭 Windsurf 实例进程，请手动关闭后重试: {:?}",
-            still_running
+            "无法关闭 Windsurf 实例进程，请手动关闭后重试: {}",
+            modules::process::summarize_pid_list_for_log(&still_running)
         ));
     }
 

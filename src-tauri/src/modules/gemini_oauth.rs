@@ -395,8 +395,9 @@ async fn exchange_code_for_tokens(
             .await
             .unwrap_or_else(|_| "<empty-body>".to_string());
         return Err(format!(
-            "Google OAuth token 交换失败: status={}, body={}",
-            status, body
+            "Google OAuth token 交换失败: status={}, body_len={}",
+            status,
+            body.len()
         ));
     }
 

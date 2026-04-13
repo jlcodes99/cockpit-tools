@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   CodexAccount,
+  CodexApiProviderMode,
   CodexQuota,
   hasCodexAccountStructure,
   hasCodexAccountName,
@@ -82,6 +83,9 @@ interface CodexAccountState {
     accountId: string,
     apiKey: string,
     apiBaseUrl?: string,
+    apiProviderMode?: CodexApiProviderMode,
+    apiProviderId?: string,
+    apiProviderName?: string,
   ) => Promise<CodexAccount>;
   updateAccountTags: (accountId: string, tags: string[]) => Promise<CodexAccount>;
 }
@@ -247,11 +251,21 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     return account;
   },
 
-  updateApiKeyCredentials: async (accountId: string, apiKey: string, apiBaseUrl?: string) => {
+  updateApiKeyCredentials: async (
+    accountId: string,
+    apiKey: string,
+    apiBaseUrl?: string,
+    apiProviderMode?: CodexApiProviderMode,
+    apiProviderId?: string,
+    apiProviderName?: string,
+  ) => {
     const account = await codexService.updateCodexApiKeyCredentials(
       accountId,
       apiKey,
       apiBaseUrl,
+      apiProviderMode,
+      apiProviderId,
+      apiProviderName,
     );
     await get().fetchAccounts();
     await get().fetchCurrentAccount();

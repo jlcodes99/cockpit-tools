@@ -8,6 +8,7 @@ use tokio::time::sleep;
 
 static STARTED: OnceLock<Mutex<bool>> = OnceLock::new();
 static RUNNING_TASKS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+static STARTUP_TRIGGERED: OnceLock<Mutex<bool>> = OnceLock::new();
 
 fn started_flag() -> &'static Mutex<bool> {
     STARTED.get_or_init(|| Mutex::new(false))
@@ -15,6 +16,23 @@ fn started_flag() -> &'static Mutex<bool> {
 
 fn running_tasks() -> &'static Mutex<HashSet<String>> {
     RUNNING_TASKS.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn startup_triggered_flag() -> &'static Mutex<bool> {
+    STARTUP_TRIGGERED.get_or_init(|| Mutex::new(false))
+}
+
+fn lock_or_recover<'a, T>(mutex: &'a Mutex<T>, label: &str) -> std::sync::MutexGuard<'a, T> {
+    match mutex.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            logger::log_warn(&format!(
+                "[CodexWakeup] 检测到锁中毒，继续使用恢复数据: {}",
+                label
+            ));
+            err.into_inner()
+        }
+    }
 }
 
 fn parse_time_to_minutes(value: &str) -> Option<i32> {
@@ -169,16 +187,12 @@ pub fn calculate_next_run_at(task: &codex_wakeup::CodexWakeupTask) -> Option<i64
 }
 
 fn mark_running(task_id: &str) -> bool {
-    let mut guard = running_tasks()
-        .lock()
-        .expect("codex wakeup running tasks lock");
+    let mut guard = lock_or_recover(running_tasks(), "codex wakeup running tasks lock");
     guard.insert(task_id.to_string())
 }
 
 fn unmark_running(task_id: &str) {
-    let mut guard = running_tasks()
-        .lock()
-        .expect("codex wakeup running tasks lock");
+    let mut guard = lock_or_recover(running_tasks(), "codex wakeup running tasks lock");
     guard.remove(task_id);
 }
 
@@ -248,7 +262,12 @@ pub async fn run_enabled_tasks_now(
             .tasks
             .into_iter()
             .filter(|task| task.enabled && task.schedule.kind == "startup")
-            .map(|task| (task.id, task.schedule.startup_delay_minutes.unwrap_or(0).max(0)))
+            .map(|task| {
+                (
+                    task.id,
+                    task.schedule.startup_delay_minutes.unwrap_or(0).max(0),
+                )
+            })
             .collect();
 
         for (task_id, delay_minutes) in &startup_tasks {
@@ -278,7 +297,8 @@ pub async fn run_enabled_tasks_now(
                     return;
                 }
 
-                if let Err(err) = run_task_now(app_handle.as_ref(), &task_id, "startup", None).await {
+                if let Err(err) = run_task_now(app_handle.as_ref(), &task_id, "startup", None).await
+                {
                     logger::log_warn(&format!(
                         "[CodexWakeup] 启动后执行任务失败: task_id={}, error={}",
                         task_id, err
@@ -309,6 +329,55 @@ pub async fn run_enabled_tasks_now(
     }
 
     Ok(started_count)
+}
+
+pub fn trigger_startup_tasks_if_needed(app: AppHandle) {
+    let state = match codex_wakeup::load_state_for_scheduler() {
+        Ok(state) => state,
+        Err(err) => {
+            logger::log_warn(&format!("[CodexWakeup] 读取启动任务状态失败: {}", err));
+            return;
+        }
+    };
+    let has_startup_tasks = state
+        .tasks
+        .iter()
+        .any(|task| task.enabled && task.schedule.kind == "startup");
+    if !state.enabled || !has_startup_tasks {
+        return;
+    }
+
+    let should_trigger = {
+        let mut startup_triggered = lock_or_recover(
+            startup_triggered_flag(),
+            "codex wakeup startup trigger lock",
+        );
+        if *startup_triggered {
+            false
+        } else {
+            *startup_triggered = true;
+            true
+        }
+    };
+    if !should_trigger {
+        return;
+    }
+
+    tauri::async_runtime::spawn(async move {
+        match run_enabled_tasks_now(Some(&app), "startup").await {
+            Ok(started) => {
+                if started > 0 {
+                    logger::log_info(&format!(
+                        "[CodexWakeup] 应用启动触发自启任务: started={}",
+                        started
+                    ));
+                }
+            }
+            Err(err) => {
+                logger::log_warn(&format!("[CodexWakeup] 应用启动触发自启任务失败: {}", err));
+            }
+        }
+    });
 }
 
 async fn run_scheduler_once(app: &AppHandle) {
@@ -354,9 +423,7 @@ async fn run_scheduler_once(app: &AppHandle) {
 }
 
 pub fn ensure_started(app: AppHandle) {
-    let mut started = started_flag()
-        .lock()
-        .expect("codex wakeup scheduler started lock");
+    let mut started = lock_or_recover(started_flag(), "codex wakeup scheduler started lock");
     if *started {
         return;
     }

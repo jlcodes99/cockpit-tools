@@ -62,6 +62,7 @@ import {
 import {
   formatCursorUsageDollars,
   getCursorAccountDisplayEmail,
+  getCursorOnDemandSummary,
   getCursorPlanDisplayName,
   getCursorPlanBadgeClass,
   getCursorUsage,
@@ -92,7 +93,7 @@ import {
   shouldShowQoderSubscriptionReset,
 } from '../types/qoder';
 import {
-  getTraeAccountDisplayEmail,
+  getTraeAccountDisplayName,
   getTraePlanBadge,
   getTraePlanBadgeClass,
   getTraeUsage,
@@ -1033,7 +1034,7 @@ export function buildTraeAccountPresentation(
 
   return {
     id: account.id,
-    displayName: getTraeAccountDisplayEmail(account),
+    displayName: getTraeAccountDisplayName(account),
     planLabel,
     planClass: getTraePlanBadgeClass(planLabel),
     quotaItems,
@@ -1211,17 +1212,10 @@ export function buildCursorAccountPresentation(
     });
   }
 
-  const limitType = (usage.onDemandLimitType || '').toLowerCase();
-  const isTeamLimit = limitType === 'team';
-  const onDemandLimit = usage.onDemandLimitCents;
-  const individualUsed = usage.onDemandUsedCents ?? 0;
-  const teamUsed = usage.teamOnDemandUsedCents ?? 0;
-  const onDemandUsed = individualUsed > 0 ? individualUsed : (isTeamLimit ? teamUsed : individualUsed);
-  const hasFixedOnDemandLimit = onDemandLimit != null && onDemandLimit > 0;
-  const onDemandUnlimited = !hasFixedOnDemandLimit && usage.onDemandEnabled === true && !isTeamLimit;
+  const onDemand = getCursorOnDemandSummary(usage);
 
-  if (hasFixedOnDemandLimit) {
-    const rawPercent = (onDemandUsed / onDemandLimit) * 100;
+  if (onDemand.hasFixedLimit && onDemand.limitCents != null) {
+    const rawPercent = (onDemand.usedCents / onDemand.limitCents) * 100;
     const fixedPercent = normalizeCursorUsagePercent(rawPercent) ?? 0;
     quotaItems.push({
       key: 'on_demand',
@@ -1229,16 +1223,16 @@ export function buildCursorAccountPresentation(
       percentage: fixedPercent,
       quotaClass: getCursorUsageQuotaClass(fixedPercent),
       valueText: `${fixedPercent}%`,
-      resetText: `${formatCursorUsageDollars(onDemandUsed)} / ${formatCursorUsageDollars(onDemandLimit)}`,
+      resetText: `${formatCursorUsageDollars(onDemand.usedCents)} / ${formatCursorUsageDollars(onDemand.limitCents)}`,
     });
-  } else if (onDemandUnlimited) {
+  } else if (onDemand.isUnlimited) {
     quotaItems.push({
       key: 'on_demand',
       label: t('cursor.quota.onDemand', 'On-Demand'),
       percentage: 0,
       quotaClass: 'high',
       valueText: 'Unlimited',
-      resetText: formatCursorUsageDollars(onDemandUsed),
+      resetText: formatCursorUsageDollars(onDemand.usedCents),
     });
   } else if (usage.onDemandEnabled != null || usage.onDemandLimitType != null) {
     quotaItems.push({

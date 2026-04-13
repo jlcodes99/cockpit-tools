@@ -75,11 +75,9 @@ pub fn run() {
             {
                 return;
             }
-            let _ = app.get_webview_window("main").map(|window| {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            });
+            if let Err(err) = modules::floating_card_window::show_main_window(app) {
+                logger::log_warn(&format!("[Window] 单实例唤起恢复主窗口失败: {}", err));
+            }
         }))
         .setup(|app| {
             info!("Cockpit Tools 启动...");
@@ -144,7 +142,10 @@ pub fn run() {
                 });
             }
 
+            modules::wakeup_scheduler::restore_state_from_disk();
+            modules::wakeup_scheduler::ensure_started(app.handle().clone());
             modules::codex_wakeup_scheduler::ensure_started(app.handle().clone());
+            modules::codex_wakeup_scheduler::trigger_startup_tasks_if_needed(app.handle().clone());
 
             #[cfg(target_os = "macos")]
             apply_macos_activation_policy(&app.handle());
@@ -261,14 +262,28 @@ pub fn run() {
             commands::import::import_from_json,
             commands::import::import_from_files,
             commands::import::export_accounts,
+            commands::data_transfer::data_transfer_get_user_config,
+            commands::data_transfer::data_transfer_apply_user_config,
+            commands::data_transfer::data_transfer_get_instance_store,
+            commands::data_transfer::data_transfer_replace_instance_store,
             commands::provider_current::get_provider_current_account_id,
             // System Commands
             commands::system::open_data_folder,
             commands::system::save_text_file,
             commands::system::get_downloads_dir,
+            commands::system::get_auto_backup_settings,
+            commands::system::save_auto_backup_settings,
+            commands::system::update_auto_backup_last_run,
+            commands::system::write_auto_backup_file,
+            commands::system::read_auto_backup_file,
+            commands::system::list_auto_backup_files,
+            commands::system::delete_auto_backup_file,
+            commands::system::cleanup_auto_backup_files,
+            commands::system::open_auto_backup_dir,
             commands::system::get_network_config,
             commands::system::save_network_config,
             commands::system::get_general_config,
+            commands::system::get_available_terminals,
             commands::system::save_general_config,
             commands::system::save_tray_platform_layout,
             commands::system::set_app_path,
@@ -335,6 +350,9 @@ pub fn run() {
             // Codex Commands
             commands::codex::list_codex_accounts,
             commands::codex::get_current_codex_account,
+            commands::codex::get_codex_config_toml_path,
+            commands::codex::get_codex_quick_config,
+            commands::codex::save_codex_quick_config,
             commands::codex::refresh_codex_account_profile,
             commands::codex::switch_codex_account,
             commands::codex::delete_codex_account,
@@ -371,6 +389,8 @@ pub fn run() {
             commands::codex::codex_wakeup_run_enabled_tasks,
             commands::codex::load_codex_account_groups,
             commands::codex::save_codex_account_groups,
+            commands::codex::load_codex_model_providers,
+            commands::codex::save_codex_model_providers,
             // GitHub Copilot Commands
             commands::github_copilot::list_github_copilot_accounts,
             commands::github_copilot::delete_github_copilot_account,
@@ -670,8 +690,11 @@ pub fn run() {
             commands::codex_instance::codex_get_instance_defaults,
             commands::codex_instance::codex_list_instances,
             commands::codex_instance::codex_sync_threads_across_instances,
+            commands::codex_instance::codex_repair_session_visibility_across_instances,
             commands::codex_instance::codex_list_sessions_across_instances,
             commands::codex_instance::codex_move_sessions_to_trash_across_instances,
+            commands::codex_instance::codex_list_trashed_sessions_across_instances,
+            commands::codex_instance::codex_restore_sessions_from_trash_across_instances,
             commands::codex_instance::codex_create_instance,
             commands::codex_instance::codex_update_instance,
             commands::codex_instance::codex_delete_instance,
@@ -679,6 +702,8 @@ pub fn run() {
             commands::codex_instance::codex_stop_instance,
             commands::codex_instance::codex_open_instance_window,
             commands::codex_instance::codex_close_all_instances,
+            commands::codex_instance::codex_get_instance_launch_command,
+            commands::codex_instance::codex_execute_instance_launch_command,
             // Instance Commands
             commands::instance::get_instance_defaults,
             commands::instance::list_instances,

@@ -116,15 +116,16 @@ pub fn load_stored_account(account_id: &str) -> Option<ZedStoredAccount> {
     if !account_path.exists() {
         return None;
     }
-    let content = fs::read_to_string(account_path).ok()?;
-    serde_json::from_str(&content).ok()
+    let content = fs::read_to_string(&account_path).ok()?;
+    crate::modules::atomic_write::parse_json_with_auto_restore(&account_path, &content).ok()
 }
 
 fn save_stored_account_file(account: &ZedStoredAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.public_account.id.as_str())?;
     let content =
         serde_json::to_string_pretty(account).map_err(|e| format!("序列化账号失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("保存账号失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("保存账号失败: {}", e))
 }
 
 fn delete_account_file(account_id: &str) -> Result<(), String> {
@@ -148,7 +149,10 @@ fn load_account_index() -> ZedAccountIndex {
         Ok(content) if content.trim().is_empty() => {
             repair_account_index_from_details("索引文件为空").unwrap_or_else(ZedAccountIndex::new)
         }
-        Ok(content) => match serde_json::from_str::<ZedAccountIndex>(&content) {
+        Ok(content) => match crate::modules::atomic_write::parse_json_with_auto_restore::<
+            ZedAccountIndex,
+        >(&path, &content)
+        {
             Ok(index) if !index.accounts.is_empty() => index,
             Ok(_) => repair_account_index_from_details("索引账号列表为空")
                 .unwrap_or_else(ZedAccountIndex::new),
@@ -192,7 +196,9 @@ fn load_account_index_checked() -> Result<ZedAccountIndex, String> {
         return Ok(ZedAccountIndex::new());
     }
 
-    match serde_json::from_str::<ZedAccountIndex>(&content) {
+    match crate::modules::atomic_write::parse_json_with_auto_restore::<ZedAccountIndex>(
+        &path, &content,
+    ) {
         Ok(index) if !index.accounts.is_empty() => Ok(index),
         Ok(index) => {
             if let Some(repaired) = repair_account_index_from_details("索引账号列表为空") {
@@ -217,7 +223,8 @@ fn save_account_index(index: &ZedAccountIndex) -> Result<(), String> {
     let path = get_accounts_index_path()?;
     let content =
         serde_json::to_string_pretty(index).map_err(|e| format!("序列化账号索引失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("写入账号索引失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("写入账号索引失败: {}", e))
 }
 
 fn repair_account_index_from_details(reason: &str) -> Option<ZedAccountIndex> {
@@ -416,6 +423,23 @@ fn upsert_account_record(
     Ok(account.to_public())
 }
 
+fn update_quota_query_error(
+    account_id: &str,
+    message: Option<String>,
+) -> Result<Option<ZedAccount>, String> {
+    let Some(mut stored) = load_stored_account(account_id) else {
+        return Ok(None);
+    };
+    stored.public_account.quota_query_last_error = message;
+    stored.public_account.quota_query_last_error_at = stored
+        .public_account
+        .quota_query_last_error
+        .as_ref()
+        .map(|_| chrono::Utc::now().timestamp_millis());
+    let updated = upsert_account_record(stored, false, false)?;
+    Ok(Some(updated))
+}
+
 pub fn remove_account(account_id: &str) -> Result<(), String> {
     let _lock = ZED_ACCOUNT_INDEX_LOCK
         .lock()
@@ -572,14 +596,10 @@ async fn fetch_json(
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
         return Err(format!(
-            "请求 Zed 接口失败 ({}): status={}, body={}",
+            "请求 Zed 接口失败 ({}): status={}, body_len={}",
             path,
             status,
-            if body.trim().is_empty() {
-                "<empty>".to_string()
-            } else {
-                body
-            }
+            body.len()
         ));
     }
 
@@ -765,6 +785,8 @@ fn build_stored_account_from_bundle(
                 .and_then(value_to_string)
             }),
             edit_predictions_remaining_raw,
+            quota_query_last_error: None,
+            quota_query_last_error_at: None,
             usage_updated_at: pick_first_i64(&[
                 json_nested_timestamp(&bundle.usage_tokens_raw, &["usage_cache_updated_at"]),
                 json_nested_timestamp(&bundle.usage_raw, &["usage_cache_updated_at"]),
@@ -810,14 +832,23 @@ pub async fn upsert_account_from_credentials(
 pub async fn refresh_account(account_id: &str) -> Result<ZedAccount, String> {
     let stored =
         load_stored_account(account_id).ok_or_else(|| format!("Zed 账号不存在: {}", account_id))?;
-    let bundle = fetch_remote_bundle(&stored.public_account.user_id, &stored.access_token).await?;
+    let bundle =
+        match fetch_remote_bundle(&stored.public_account.user_id, &stored.access_token).await {
+            Ok(bundle) => bundle,
+            Err(err) => {
+                let _ = update_quota_query_error(account_id, Some(err.clone()));
+                return Err(err);
+            }
+        };
     let refreshed = build_stored_account_from_bundle(
         &stored.public_account.user_id,
         &stored.access_token,
         bundle,
         Some(&stored),
     )?;
-    upsert_account_record(refreshed, false, false)
+    let updated = upsert_account_record(refreshed, false, false)?;
+    let _ = update_quota_query_error(account_id, None)?;
+    Ok(updated)
 }
 
 pub async fn refresh_all_accounts() -> Result<Vec<ZedAccount>, String> {

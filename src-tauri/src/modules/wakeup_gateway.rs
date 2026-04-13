@@ -28,6 +28,9 @@ const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_HTTP_REQUEST_BYTES: usize = 512 * 1024;
 // 对齐官方扩展 waitForLanguageServerStart 的 60s 等待窗口，降低冷启动慢时误判失败。
 const OFFICIAL_LS_START_TIMEOUT: Duration = Duration::from_secs(60);
+const OFFICIAL_LS_EXTENSION_BIND_TIMEOUT: Duration = Duration::from_secs(8);
+const LOCAL_GATEWAY_BIND_TIMEOUT: Duration = Duration::from_secs(8);
+const LOCAL_GATEWAY_TLS_SETUP_TIMEOUT: Duration = Duration::from_secs(8);
 const OFFICIAL_LS_CLOUD_CODE_DAILY: &str = "https://daily-cloudcode-pa.googleapis.com";
 const OFFICIAL_LS_CLOUD_CODE_PROD: &str = "https://cloudcode-pa.googleapis.com";
 const OFFICIAL_LS_DEFAULT_APP_DATA_DIR: &str = "antigravity";
@@ -35,6 +38,15 @@ const OFFICIAL_LS_DEFAULT_APP_DATA_DIR: &str = "antigravity";
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 static LOCAL_GATEWAY_BASE_URL: OnceLock<TokioMutex<Option<String>>> = OnceLock::new();
+static LOCAL_GATEWAY_START_LOCK: OnceLock<TokioMutex<()>> = OnceLock::new();
+
+fn local_gateway_store() -> &'static TokioMutex<Option<String>> {
+    LOCAL_GATEWAY_BASE_URL.get_or_init(|| TokioMutex::new(None))
+}
+
+fn local_gateway_start_lock() -> &'static TokioMutex<()> {
+    LOCAL_GATEWAY_START_LOCK.get_or_init(|| TokioMutex::new(()))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum OfficialLsVersionMode {
@@ -1268,9 +1280,18 @@ async fn run_official_ls_extension_server(
 async fn start_official_ls_extension_server(
     token: &crate::models::token::TokenData,
 ) -> Result<OfficialLsExtensionServerHandle, String> {
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .map_err(|e| format!("启动官方 LS 扩展服务失败（绑定端口）: {}", e))?;
+    let listener = timeout(
+        OFFICIAL_LS_EXTENSION_BIND_TIMEOUT,
+        TcpListener::bind("127.0.0.1:0"),
+    )
+    .await
+    .map_err(|_| {
+        format!(
+            "启动官方 LS 扩展服务失败（绑定端口超时，>{}s）",
+            OFFICIAL_LS_EXTENSION_BIND_TIMEOUT.as_secs()
+        )
+    })?
+    .map_err(|e| format!("启动官方 LS 扩展服务失败（绑定端口）: {}", e))?;
     let port = listener
         .local_addr()
         .map_err(|e| format!("读取官方 LS 扩展服务端口失败: {}", e))?
@@ -1661,7 +1682,7 @@ async fn run_gateway_server(listener: TcpListener, tls_acceptor: TlsAcceptor) {
 }
 
 pub async fn ensure_local_gateway_started() -> Result<String, String> {
-    let store = LOCAL_GATEWAY_BASE_URL.get_or_init(|| TokioMutex::new(None));
+    let store = local_gateway_store();
     {
         let guard = store.lock().await;
         if let Some(base_url) = guard.as_ref() {
@@ -1669,10 +1690,37 @@ pub async fn ensure_local_gateway_started() -> Result<String, String> {
         }
     }
 
-    let listener = TcpListener::bind("127.0.0.1:0")
+    let _start_guard = local_gateway_start_lock().lock().await;
+    {
+        let guard = store.lock().await;
+        if let Some(base_url) = guard.as_ref() {
+            return Ok(base_url.clone());
+        }
+    }
+
+    let listener = timeout(LOCAL_GATEWAY_BIND_TIMEOUT, TcpListener::bind("127.0.0.1:0"))
         .await
+        .map_err(|_| {
+            format!(
+                "启动本地唤醒网关失败（绑定端口超时，>{}s）",
+                LOCAL_GATEWAY_BIND_TIMEOUT.as_secs()
+            )
+        })?
         .map_err(|e| format!("启动本地唤醒网关失败（绑定端口）: {}", e))?;
-    let tls_acceptor = build_tls_acceptor()?;
+
+    let tls_acceptor = timeout(
+        LOCAL_GATEWAY_TLS_SETUP_TIMEOUT,
+        tokio::task::spawn_blocking(build_tls_acceptor),
+    )
+    .await
+    .map_err(|_| {
+        format!(
+            "启动本地唤醒网关失败（TLS 初始化超时，>{}s）",
+            LOCAL_GATEWAY_TLS_SETUP_TIMEOUT.as_secs()
+        )
+    })?
+    .map_err(|e| format!("启动本地唤醒网关失败（TLS 初始化任务异常）: {}", e))??;
+
     let port = listener
         .local_addr()
         .map_err(|e| format!("读取本地唤醒网关端口失败: {}", e))?
@@ -1690,7 +1738,7 @@ pub async fn ensure_local_gateway_started() -> Result<String, String> {
 }
 
 pub async fn clear_local_gateway_base_url_cache() {
-    let store = LOCAL_GATEWAY_BASE_URL.get_or_init(|| TokioMutex::new(None));
+    let store = local_gateway_store();
     let mut guard = store.lock().await;
     if let Some(current) = guard.take() {
         crate::modules::logger::log_warn(&format!(

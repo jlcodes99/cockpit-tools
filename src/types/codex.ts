@@ -1,3 +1,12 @@
+export type CodexApiProviderMode = 'openai_builtin' | 'custom';
+
+export interface CodexQuickConfig {
+  context_window_1m: boolean;
+  auto_compact_token_limit: number;
+  detected_model_context_window?: number;
+  detected_auto_compact_token_limit?: number;
+}
+
 /** Codex 账号数据 */
 export interface CodexAccount {
   id: string;
@@ -5,6 +14,9 @@ export interface CodexAccount {
   auth_mode?: string;
   openai_api_key?: string;
   api_base_url?: string;
+  api_provider_mode?: CodexApiProviderMode;
+  api_provider_id?: string;
+  api_provider_name?: string;
   user_id?: string;
   plan_type?: string;
   account_id?: string;
@@ -91,6 +103,26 @@ export interface CodexInstanceThreadSyncSummary {
   message: string;
 }
 
+export interface CodexSessionVisibilityRepairItem {
+  instanceId: string;
+  instanceName: string;
+  targetProvider: string;
+  changedRolloutFileCount: number;
+  updatedSqliteRowCount: number;
+  backupDir?: string | null;
+  running: boolean;
+}
+
+export interface CodexSessionVisibilityRepairSummary {
+  instanceCount: number;
+  mutatedInstanceCount: number;
+  changedRolloutFileCount: number;
+  updatedSqliteRowCount: number;
+  items: CodexSessionVisibilityRepairItem[];
+  backupDirs: string[];
+  message: string;
+}
+
 export interface CodexSessionLocation {
   instanceId: string;
   instanceName: string;
@@ -111,6 +143,27 @@ export interface CodexSessionTrashSummary {
   trashedSessionCount: number;
   trashedInstanceCount: number;
   trashDirs: string[];
+  message: string;
+}
+
+export interface CodexTrashedSessionLocation {
+  instanceId: string;
+  instanceName: string;
+}
+
+export interface CodexTrashedSessionRecord {
+  sessionId: string;
+  title: string;
+  cwd: string;
+  deletedAt?: number | null;
+  locationCount: number;
+  locations: CodexTrashedSessionLocation[];
+}
+
+export interface CodexSessionRestoreSummary {
+  requestedSessionCount: number;
+  restoredSessionCount: number;
+  restoredInstanceCount: number;
   message: string;
 }
 

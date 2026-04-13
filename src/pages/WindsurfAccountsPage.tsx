@@ -30,6 +30,7 @@ import * as windsurfService from '../services/windsurfService';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
+import { PaginationControls } from '../components/PaginationControls';
 import {
   getWindsurfCreditsSummary,
   getWindsurfOfficialUsageMode,
@@ -38,6 +39,7 @@ import {
   getWindsurfQuotaClass,
   getWindsurfQuotaUsageSummary,
   formatWindsurfResetTime,
+  hasWindsurfQuotaData,
 } from '../types/windsurf';
 import { buildWindsurfAccountPresentation } from '../presentation/platformAccountPresentation';
 
@@ -46,8 +48,19 @@ import { WindsurfInstancesContent } from './WindsurfInstancesPage';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
+import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
 import type { WindsurfAccount, WindsurfPlanBadge } from '../types/windsurf';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
+import {
+  buildValidAccountsFilterOption,
+  splitValidityFilterValues,
+} from '../utils/accountValidityFilter';
+import {
+  buildPaginatedGroups,
+  buildPaginationPageSizeStorageKey,
+  isEveryIdSelected,
+  usePagination,
+} from '../hooks/usePagination';
 
 const WINDSURF_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.windsurf.flow_notice_collapsed';
 const WINDSURF_CURRENT_ACCOUNT_ID_KEY = 'agtools.windsurf.current_account_id';
@@ -451,7 +464,6 @@ export function WindsurfAccountsPage() {
     }
     setPasswordBatchLoading(false);
   }, [passwordBatchInput, store, t, setAddStatus, setAddMessage, closeAddModal]);
-
   // ─── Platform-specific: Presentation & Credits ──────────────────────
 
   const creditsSummaryById = useMemo(() => {
@@ -511,6 +523,8 @@ export function WindsurfAccountsPage() {
     (account: WindsurfAccount) => getWindsurfPlanDisplayName(resolvePresentation(account).planLabel || account.plan_type || null),
     [resolvePresentation],
   );
+
+  const isAbnormalAccount = useCallback((_account: WindsurfAccount) => false, []);
 
   const formatCreditValue = useCallback(
     (value: number | null | undefined) => {
@@ -683,6 +697,17 @@ export function WindsurfAccountsPage() {
 
   const buildOfficialUsagePanel = useCallback(
     (account: WindsurfAccount): WindsurfOfficialUsagePanel => {
+      if (!hasWindsurfQuotaData(account)) {
+        const note = t('common.shared.quota.noData', '暂无配额数据');
+        return {
+          mode: resolveUsageMode(account),
+          headline: '',
+          note,
+          items: [],
+          title: note,
+        };
+      }
+
       const mode = resolveUsageMode(account);
       if (mode === 'quota') {
         const items = buildQuotaDisplayItems(account);
@@ -715,24 +740,29 @@ export function WindsurfAccountsPage() {
 
   // ─── Tier filter ────────────────────────────────────────────────────
   const tierCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: accounts.length };
+    const counts: Record<string, number> = { all: accounts.length, VALID: 0 };
     WINDSURF_PLAN_FILTERS.forEach((planKey) => {
       counts[planKey] = 0;
     });
     accounts.forEach((account) => {
+      if (!isAbnormalAccount(account)) {
+        counts.VALID += 1;
+      }
       const tier = resolvePlanKey(account);
       if (tier in counts) counts[tier as keyof typeof counts] += 1;
     });
     return counts;
-  }, [accounts, resolvePlanKey]);
+  }, [accounts, isAbnormalAccount, resolvePlanKey]);
 
   const tierFilterOptions = useMemo<MultiSelectFilterOption[]>(
-    () =>
-      WINDSURF_PLAN_FILTERS.map((planKey) => ({
+    () => [
+      ...WINDSURF_PLAN_FILTERS.map((planKey) => ({
         value: planKey,
         label: `${getWindsurfPlanLabel(planKey)} (${tierCounts[planKey] ?? 0})`,
       })),
-    [tierCounts],
+      buildValidAccountsFilterOption(t, tierCounts.VALID ?? 0),
+    ],
+    [t, tierCounts],
   );
 
   // ─── Filtering & Sorting ────────────────────────────────────────────
@@ -772,8 +802,13 @@ export function WindsurfAccountsPage() {
       result = result.filter((account) => resolvePresentation(account).displayName.toLowerCase().includes(query));
     }
     if (filterTypes.length > 0) {
-      const selectedTypes = new Set(filterTypes);
-      result = result.filter((account) => selectedTypes.has(resolvePlanKey(account)));
+      const { requireValidAccounts, selectedTypes } = splitValidityFilterValues(filterTypes);
+      if (requireValidAccounts) {
+        result = result.filter((account) => !isAbnormalAccount(account));
+      }
+      if (selectedTypes.size > 0) {
+        result = result.filter((account) => selectedTypes.has(resolvePlanKey(account)));
+      }
     }
     if (tagFilter.length > 0) {
       const selectedTags = new Set(tagFilter.map(normalizeTag));
@@ -781,10 +816,20 @@ export function WindsurfAccountsPage() {
     }
     result.sort(compareAccountsBySort);
     return result;
-  }, [accounts, compareAccountsBySort, filterTypes, normalizeTag, resolvePlanKey, resolvePresentation, searchQuery, tagFilter]);
+  }, [accounts, compareAccountsBySort, filterTypes, isAbnormalAccount, normalizeTag, resolvePlanKey, resolvePresentation, searchQuery, tagFilter]);
 
   const filteredIds = useMemo(() => filteredAccounts.map((account) => account.id), [filteredAccounts]);
   const exportSelectionCount = getScopedSelectedCount(filteredIds);
+  const pagination = usePagination({
+    items: filteredAccounts,
+    storageKey: buildPaginationPageSizeStorageKey('Windsurf'),
+  });
+  const paginatedAccounts = pagination.pageItems;
+  const paginatedIds = useMemo(() => paginatedAccounts.map((account) => account.id), [paginatedAccounts]);
+  const isAllPaginatedSelected = useMemo(
+    () => isEveryIdSelected(selected, paginatedIds),
+    [paginatedIds, selected],
+  );
 
   const groupedAccounts = useMemo(() => {
     if (!groupByTag) return [] as Array<[string, typeof filteredAccounts]>;
@@ -798,6 +843,11 @@ export function WindsurfAccountsPage() {
     });
     return Array.from(groups.entries()).sort(([aKey], [bKey]) => { if (aKey === untaggedKey) return 1; if (bKey === untaggedKey) return -1; return aKey.localeCompare(bKey); });
   }, [filteredAccounts, groupByTag, normalizeTag, tagFilter, untaggedKey]);
+
+  const paginatedGroupedAccounts = useMemo(
+    () => buildPaginatedGroups(groupedAccounts, paginatedAccounts),
+    [groupedAccounts, paginatedAccounts],
+  );
 
   const resolveGroupLabel = (groupKey: string) => groupKey === untaggedKey ? t('accounts.defaultGroup', '默认分组') : groupKey;
 
@@ -858,6 +908,7 @@ export function WindsurfAccountsPage() {
       const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
       const isSelected = selected.has(account.id);
       const isCurrent = currentAccountId === account.id;
+      const quotaError = account.quota_query_last_error?.trim();
 
       return (
         <div key={groupKey ? `${groupKey}-${account.id}` : account.id} className={`ghcp-account-card ${isCurrent ? 'current' : ''} ${isSelected ? 'selected' : ''}`}>
@@ -865,6 +916,12 @@ export function WindsurfAccountsPage() {
             <div className="card-select"><input type="checkbox" checked={isSelected} onChange={() => toggleSelect(account.id)} /></div>
             <span className="account-email" title={maskAccountText(emailText)}>{maskAccountText(emailText)}</span>
             {isCurrent && <span className="current-tag">{t('accounts.status.current')}</span>}
+            {quotaError && (
+              <span className="status-pill warning" title={quotaError}>
+                <CircleAlert size={12} />
+                {t('common.shared.quota.queryFailed', '配额查询失败')}
+              </span>
+            )}
             <span className={`tier-badge ${presentation.planClass}`}>{presentation.planLabel}</span>
           </div>
           {accountTags.length > 0 && (
@@ -888,7 +945,7 @@ export function WindsurfAccountsPage() {
               <button
                 className="card-action-btn export-btn"
                 onClick={() => handleExportByIds([account.id], resolveSingleExportBaseName(account))}
-                title={t('common.shared.export', '导出')}
+                title={t('common.shared.export.title', '导出')}
               >
                 <Upload size={14} />
               </button>
@@ -910,6 +967,7 @@ export function WindsurfAccountsPage() {
       const visibleTags = accountTags.slice(0, 3);
       const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
       const isCurrent = currentAccountId === account.id;
+      const quotaError = account.quota_query_last_error?.trim();
       return (
         <tr key={groupKey ? `${groupKey}-${account.id}` : account.id} className={isCurrent ? 'current' : ''}>
           <td><input type="checkbox" checked={selected.has(account.id)} onChange={() => toggleSelect(account.id)} /></td>
@@ -919,6 +977,14 @@ export function WindsurfAccountsPage() {
                 <span className="account-email-text" title={maskAccountText(emailText)}>{maskAccountText(emailText)}</span>
                 {isCurrent && <span className="mini-tag current">{t('accounts.status.current')}</span>}
               </div>
+              {quotaError && (
+                <div className="account-sub-line">
+                  <span className="status-pill warning" title={quotaError}>
+                    <CircleAlert size={12} />
+                    {t('common.shared.quota.queryFailed', '配额查询失败')}
+                  </span>
+                </div>
+              )}
               {accountTags.length > 0 && (
                 <div className="account-tags-inline">
                   {visibleTags.map((tag, idx) => (<span key={`${account.id}-inline-${tag}-${idx}`} className="tag-pill">{tag}</span>))}
@@ -946,7 +1012,7 @@ export function WindsurfAccountsPage() {
               <button
                 className="action-btn"
                 onClick={() => handleExportByIds([account.id], resolveSingleExportBaseName(account))}
-                title={t('common.shared.export', '导出')}
+                title={t('common.shared.export.title', '导出')}
               >
                 <Upload size={14} />
               </button>
@@ -1008,11 +1074,14 @@ export function WindsurfAccountsPage() {
               <Tag size={14} />{tagFilter.length > 0 ? `${t('accounts.filterTagsCount', '标签')}(${tagFilter.length})` : t('accounts.filterTags', '标签筛选')}
             </button>
             {showTagFilter && (
-              <div className="tag-filter-panel">
+              <div
+                ref={page.tagFilterPanelRef}
+                className={`tag-filter-panel ${page.tagFilterPanelPlacement === 'top' ? 'open-top' : ''}`}
+              >
                 {availableTags.length === 0 ? (
                   <div className="tag-filter-empty">{t('accounts.noAvailableTags', '暂无可用标签')}</div>
                 ) : (
-                  <div className="tag-filter-options">
+                  <div className="tag-filter-options" style={page.tagFilterScrollContainerStyle}>
                     {availableTags.map((tag) => (
                       <label key={tag} className={`tag-filter-option ${tagFilter.includes(tag) ? 'selected' : ''}`}>
                         <input type="checkbox" checked={tagFilter.includes(tag)} onChange={() => toggleTagFilterValue(tag)} />
@@ -1029,14 +1098,17 @@ export function WindsurfAccountsPage() {
               </div>
             )}
           </div>
-          <div className="sort-select">
-            <ArrowDownWideNarrow size={14} className="sort-icon" />
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label={t('common.shared.sortLabel', '排序')}>
-              <option value="created_at">{t('common.shared.sort.createdAt', '按创建时间')}</option>
-              <option value="credits">{t('common.shared.sort.credits', '按剩余 Credits')}</option>
-              <option value="plan_end">{t('common.shared.sort.planEnd', '按配额周期结束时间')}</option>
-            </select>
-          </div>
+          <SingleSelectFilterDropdown
+            value={sortBy}
+            options={[
+              { value: 'created_at', label: t('common.shared.sort.createdAt', '按创建时间') },
+              { value: 'credits', label: t('common.shared.sort.credits', '按剩余 Credits') },
+              { value: 'plan_end', label: t('common.shared.sort.planEnd', '按配额周期结束时间') },
+            ]}
+            ariaLabel={t('common.shared.sortLabel', '排序')}
+            icon={<ArrowDownWideNarrow size={14} />}
+            onChange={setSortBy}
+          />
           <button className="sort-direction-btn" onClick={() => setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
             title={sortDirection === 'desc' ? t('common.shared.sort.descTooltip', '当前：降序，点击切换为升序') : t('common.shared.sort.ascTooltip', '当前：升序，点击切换为降序')}
             aria-label={t('common.shared.sort.toggleDirection', '切换排序方向')}>{sortDirection === 'desc' ? '⬇' : '⬆'}</button>
@@ -1052,7 +1124,7 @@ export function WindsurfAccountsPage() {
           </button>
           <button className="btn btn-secondary icon-only" onClick={() => openAddModal('token')} disabled={importing} title={t('common.shared.import.label', '导入')}><Download size={14} /></button>
           <button className="btn btn-secondary export-btn icon-only" onClick={() => void handleExport(filteredIds)} disabled={exporting || filteredIds.length === 0}
-            title={exportSelectionCount > 0 ? `${t('common.shared.export', '导出')} (${exportSelectionCount})` : t('common.shared.export', '导出')}><Upload size={14} /></button>
+            title={exportSelectionCount > 0 ? `${t('common.shared.export.title', '导出')} (${exportSelectionCount})` : t('common.shared.export.title', '导出')}><Upload size={14} /></button>
           {selected.size > 0 && (
             <button className="btn btn-danger icon-only" onClick={handleBatchDelete} title={`${t('common.delete', '删除')} (${selected.size})`}><Trash2 size={14} /></button>
           )}
@@ -1082,39 +1154,54 @@ export function WindsurfAccountsPage() {
         <div className="empty-state"><h3>{t('common.shared.noMatch.title', '没有匹配的账号')}</h3><p>{t('common.shared.noMatch.desc', '请尝试调整搜索或筛选条件')}</p></div>
       ) : viewMode === 'grid' ? (
         <div className="grid-view-container">
-          {filteredAccounts.length > 0 && (
+          {paginatedAccounts.length > 0 && (
             <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
-                <input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} />
+                <input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} />
                 {t('common.selectAll', '全选')}
               </label>
             </div>
           )}
           {groupByTag ? (
-          <div className="tag-group-list">{groupedAccounts.map(([groupKey, groupAccounts]) => (
-            <div key={groupKey} className="tag-group-section"><div className="tag-group-header"><span className="tag-group-title">{resolveGroupLabel(groupKey)}</span><span className="tag-group-count">{groupAccounts.length}</span></div>
-              <div className="tag-group-grid ghcp-accounts-grid">{renderGridCards(groupAccounts, groupKey)}</div></div>
+          <div className="tag-group-list">{paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
+            <div key={groupKey} className="tag-group-section"><div className="tag-group-header"><span className="tag-group-title">{resolveGroupLabel(groupKey)}</span><span className="tag-group-count">{totalCount}</span></div>
+              <div className="tag-group-grid ghcp-accounts-grid">{renderGridCards(items, groupKey)}</div></div>
           ))}</div>
-        ) : (<div className="ghcp-accounts-grid">{renderGridCards(filteredAccounts)}</div>)}
+        ) : (<div className="ghcp-accounts-grid">{renderGridCards(paginatedAccounts)}</div>)}
         </div>
       ) : groupByTag ? (
         <div className="account-table-container grouped"><table className="account-table"><thead><tr>
-          <th style={{ width: 40 }}><input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} /></th>
+          <th style={{ width: 40 }}><input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} /></th>
           <th style={{ width: 240 }}>{t('common.shared.columns.email', '邮箱')}</th><th style={{ width: 120 }}>{t('common.shared.columns.plan', '计划')}</th>
           <th>{t('common.shared.columns.credits', 'Credits')}</th><th>{t('common.detail', '详情')}</th>
           <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', '操作')}</th></tr></thead>
-          <tbody>{groupedAccounts.map(([groupKey, groupAccounts]) => (
-            <Fragment key={groupKey}><tr className="tag-group-row"><td colSpan={6}><div className="tag-group-header"><span className="tag-group-title">{resolveGroupLabel(groupKey)}</span><span className="tag-group-count">{groupAccounts.length}</span></div></td></tr>
-              {renderTableRows(groupAccounts, groupKey)}</Fragment>
+          <tbody>{paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
+            <Fragment key={groupKey}><tr className="tag-group-row"><td colSpan={6}><div className="tag-group-header"><span className="tag-group-title">{resolveGroupLabel(groupKey)}</span><span className="tag-group-count">{totalCount}</span></div></td></tr>
+              {renderTableRows(items, groupKey)}</Fragment>
           ))}</tbody></table></div>
       ) : (
         <div className="account-table-container"><table className="account-table"><thead><tr>
-          <th style={{ width: 40 }}><input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} /></th>
+          <th style={{ width: 40 }}><input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} /></th>
           <th style={{ width: 240 }}>{t('common.shared.columns.email', '邮箱')}</th><th style={{ width: 120 }}>{t('common.shared.columns.plan', '计划')}</th>
           <th>{t('common.shared.columns.credits', 'Credits')}</th><th>{t('common.detail', '详情')}</th>
           <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', '操作')}</th></tr></thead>
-          <tbody>{renderTableRows(filteredAccounts)}</tbody></table></div>
+          <tbody>{renderTableRows(paginatedAccounts)}</tbody></table></div>
       )}
+
+      <PaginationControls
+        totalItems={pagination.totalItems}
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        pageSize={pagination.pageSize}
+        pageSizeOptions={pagination.pageSizeOptions}
+        rangeStart={pagination.rangeStart}
+        rangeEnd={pagination.rangeEnd}
+        canGoPrevious={pagination.canGoPrevious}
+        canGoNext={pagination.canGoNext}
+        onPageSizeChange={pagination.setPageSize}
+        onPreviousPage={pagination.goToPreviousPage}
+        onNextPage={pagination.goToNextPage}
+      />
 
       {showAddModal && (
         <div className="modal-overlay" onClick={closeAddModal}><div className="modal-content ghcp-add-modal windsurf-add-modal" onClick={(e) => e.stopPropagation()}>
@@ -1123,7 +1210,6 @@ export function WindsurfAccountsPage() {
             <button className={`modal-tab ${addTab === 'oauth' ? 'active' : ''}`} onClick={() => openAddModal('oauth')}><Globe size={14} />{t('common.shared.addModal.oauth', 'OAuth Authorization')}</button>
             <button className={`modal-tab ${addTab === 'token' ? 'active' : ''}`} onClick={() => openAddModal('token')}><KeyRound size={14} />Token / JSON</button>
             <button className={`modal-tab ${addTab === 'import' ? 'active' : ''}`} onClick={() => openAddModal('import')}><Database size={14} />{t('common.shared.addModal.import', '本地导入')}</button>
-            <button className={`modal-tab ${addTab === 'password' ? 'active' : ''}`} onClick={() => openAddModal('password')}><Mail size={14} />{t('windsurf.addModal.password', '邮箱密码')}</button>
           </div>
           <div className="modal-body">
             {addTab === 'oauth' && (
@@ -1290,7 +1376,7 @@ export function WindsurfAccountsPage() {
 
       <ExportJsonModal
         isOpen={showExportModal}
-        title={`${t('common.shared.export', '导出')} JSON`}
+        title={`${t('common.shared.export.title', '导出')} JSON`}
         jsonContent={exportJsonContent}
         hidden={exportJsonHidden}
         copied={exportJsonCopied}

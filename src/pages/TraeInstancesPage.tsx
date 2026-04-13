@@ -5,6 +5,7 @@ import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import type { TraeAccount } from '../types/trae';
 import {
   getTraeAccountDisplayEmail,
+  getTraeAccountDisplayName,
   getTraePlanBadgeClass,
   getTraePlanDisplayName,
   getTraeUsage,
@@ -69,7 +70,7 @@ export function TraeInstancesContent({
         </span>
       )}
       getAccountSearchText={(account) =>
-        `${getTraeAccountDisplayEmail(account)} ${getTraePlanDisplayName(account)}`
+        `${getTraeAccountDisplayName(account)} ${getTraeAccountDisplayEmail(account)} ${getTraePlanDisplayName(account)}`
       }
       appType="trae"
       isSupported={isSupportedPlatform}

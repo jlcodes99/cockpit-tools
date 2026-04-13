@@ -30,8 +30,10 @@ import * as kiroService from '../services/kiroService';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
+import { PaginationControls } from '../components/PaginationControls';
 import {
   getKiroCreditsSummary,
+  hasKiroQuotaData,
 } from '../types/kiro';
 import { buildKiroAccountPresentation } from '../presentation/platformAccountPresentation';
 
@@ -40,8 +42,20 @@ import { KiroInstancesContent } from './KiroInstancesPage';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
+import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
 import type { KiroAccount } from '../types/kiro';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
+import {
+  buildValidAccountsFilterOption,
+  splitValidityFilterValues,
+  VALID_ACCOUNTS_FILTER_VALUE,
+} from '../utils/accountValidityFilter';
+import {
+  buildPaginatedGroups,
+  buildPaginationPageSizeStorageKey,
+  isEveryIdSelected,
+  usePagination,
+} from '../hooks/usePagination';
 
 const KIRO_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.kiro.flow_notice_collapsed';
 const KIRO_CURRENT_ACCOUNT_ID_KEY = 'agtools.kiro.current_account_id';
@@ -194,6 +208,14 @@ export function KiroAccountsPage() {
     [resolvePresentation],
   );
 
+  const isAbnormalAccount = useCallback(
+    (account: KiroAccount) => {
+      const presentation = resolvePresentation(account);
+      return presentation.isBanned || presentation.hasStatusError;
+    },
+    [resolvePresentation],
+  );
+
   const resolvePlanBadgeClass = useCallback(
     (account: KiroAccount) => resolvePresentation(account).planClass,
     [resolvePresentation],
@@ -341,17 +363,23 @@ export function KiroAccountsPage() {
         displayLabels.set(tier, resolvePlanLabel(account, tier));
       }
     });
+    const validCount = accounts.reduce(
+      (count, account) => (isAbnormalAccount(account) ? count : count + 1),
+      0,
+    );
 
     const extraKeys = Array.from(dynamicCounts.keys())
       .filter((tier) => !(KIRO_KNOWN_PLAN_FILTERS as readonly string[]).includes(tier))
       .sort((a, b) => a.localeCompare(b));
 
-    return { all: accounts.length, knownCounts, dynamicCounts, extraKeys, displayLabels };
-  }, [accounts, resolvePlanKey, resolvePlanLabel]);
+    return { all: accounts.length, validCount, knownCounts, dynamicCounts, extraKeys, displayLabels };
+  }, [accounts, isAbnormalAccount, resolvePlanKey, resolvePlanLabel]);
 
   useEffect(() => {
     setFilterTypes((prev) => {
-      const next = prev.filter((value) => tierSummary.dynamicCounts.has(value));
+      const next = prev.filter(
+        (value) => value === VALID_ACCOUNTS_FILTER_VALUE || tierSummary.dynamicCounts.has(value),
+      );
       return next.length === prev.length ? prev : next;
     });
   }, [tierSummary.dynamicCounts]);
@@ -378,8 +406,9 @@ export function KiroAccountsPage() {
         label: resolveFilterLabel(planKey, tierSummary.dynamicCounts.get(planKey) ?? 0),
       });
     });
+    options.push(buildValidAccountsFilterOption(t, tierSummary.validCount));
     return options;
-  }, [resolveFilterLabel, tierSummary.dynamicCounts, tierSummary.extraKeys, tierSummary.knownCounts.BUSINESS, tierSummary.knownCounts.ENTERPRISE, tierSummary.knownCounts.FREE, tierSummary.knownCounts.INDIVIDUAL, tierSummary.knownCounts.PRO]);
+  }, [resolveFilterLabel, t, tierSummary.dynamicCounts, tierSummary.extraKeys, tierSummary.knownCounts.BUSINESS, tierSummary.knownCounts.ENTERPRISE, tierSummary.knownCounts.FREE, tierSummary.knownCounts.INDIVIDUAL, tierSummary.knownCounts.PRO, tierSummary.validCount]);
 
   // ─── Filtering & Sorting ────────────────────────────────────────────
   const compareAccountsBySort = useCallback((a: KiroAccount, b: KiroAccount) => {
@@ -428,8 +457,13 @@ export function KiroAccountsPage() {
     }
 
     if (filterTypes.length > 0) {
-      const selectedTypes = new Set(filterTypes);
-      result = result.filter((account) => selectedTypes.has(resolvePlanKey(account)));
+      const { requireValidAccounts, selectedTypes } = splitValidityFilterValues(filterTypes);
+      if (requireValidAccounts) {
+        result = result.filter((account) => !isAbnormalAccount(account));
+      }
+      if (selectedTypes.size > 0) {
+        result = result.filter((account) => selectedTypes.has(resolvePlanKey(account)));
+      }
     }
 
     if (tagFilter.length > 0) {
@@ -443,10 +477,20 @@ export function KiroAccountsPage() {
     result.sort(compareAccountsBySort);
 
     return result;
-  }, [accounts, compareAccountsBySort, filterTypes, normalizeTag, resolvePlanKey, resolvePresentation, searchQuery, tagFilter]);
+  }, [accounts, compareAccountsBySort, filterTypes, isAbnormalAccount, normalizeTag, resolvePlanKey, resolvePresentation, searchQuery, tagFilter]);
 
   const filteredIds = useMemo(() => filteredAccounts.map((account) => account.id), [filteredAccounts]);
   const exportSelectionCount = getScopedSelectedCount(filteredIds);
+  const pagination = usePagination({
+    items: filteredAccounts,
+    storageKey: buildPaginationPageSizeStorageKey('Kiro'),
+  });
+  const paginatedAccounts = pagination.pageItems;
+  const paginatedIds = useMemo(() => paginatedAccounts.map((account) => account.id), [paginatedAccounts]);
+  const isAllPaginatedSelected = useMemo(
+    () => isEveryIdSelected(selected, paginatedIds),
+    [paginatedIds, selected],
+  );
 
   const groupedAccounts = useMemo(() => {
     if (!groupByTag) return [] as Array<[string, typeof filteredAccounts]>;
@@ -476,6 +520,11 @@ export function KiroAccountsPage() {
     });
   }, [filteredAccounts, groupByTag, normalizeTag, tagFilter, untaggedKey]);
 
+  const paginatedGroupedAccounts = useMemo(
+    () => buildPaginatedGroups(groupedAccounts, paginatedAccounts),
+    [groupedAccounts, paginatedAccounts],
+  );
+
   const resolveGroupLabel = (groupKey: string) =>
     groupKey === untaggedKey ? t('accounts.defaultGroup', '默认分组') : groupKey;
 
@@ -502,6 +551,8 @@ export function KiroAccountsPage() {
       const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
       const isSelected = selected.has(account.id);
       const isCurrent = currentAccountId === account.id;
+      const quotaError = account.quota_query_last_error?.trim();
+      const hasQuotaData = hasKiroQuotaData(account);
       const statusReason = presentation.accountStatusReason;
       const isBanned = presentation.isBanned;
       const hasStatusError = presentation.hasStatusError;
@@ -525,6 +576,12 @@ export function KiroAccountsPage() {
               <span className="status-pill warning" title={errorTitle}>
                 <CircleAlert size={12} />
                 {t('accounts.status.refreshFailed')}
+              </span>
+            )}
+            {quotaError && (
+              <span className="status-pill warning" title={quotaError}>
+                <CircleAlert size={12} />
+                {t('common.shared.quota.queryFailed', '配额查询失败')}
               </span>
             )}
             {isBanned && (
@@ -552,37 +609,43 @@ export function KiroAccountsPage() {
           )}
 
           <div className="ghcp-quota-section">
-            <div className="quota-item windsurf-credit-item">
-              <div className="quota-header">
-                <span className="quota-label">{promptMetrics?.label ?? t('common.shared.columns.promptCredits', 'User Prompt credits')}</span>
-                <span className={`quota-pct ${promptMetrics?.quotaClass ?? 'high'}`}>{promptMetrics?.valueText ?? '0%'}</span>
-              </div>
-              <div className="windsurf-credit-meta-row">
-                <span className="windsurf-credit-used">{formatUsedLine(promptMetrics?.used, promptMetrics?.total)}</span>
-                <span className="windsurf-credit-left">{formatLeftLine(promptMetrics?.left)}</span>
-              </div>
-              <div className="quota-bar-track">
-                <div className={`quota-bar ${promptMetrics?.quotaClass ?? 'high'}`} style={{ width: `${promptMetrics?.percentage ?? 0}%` }} />
-              </div>
-            </div>
+            {hasQuotaData ? (
+              <>
+                <div className="quota-item windsurf-credit-item">
+                  <div className="quota-header">
+                    <span className="quota-label">{promptMetrics?.label ?? t('common.shared.columns.promptCredits', 'User Prompt credits')}</span>
+                    <span className={`quota-pct ${promptMetrics?.quotaClass ?? 'high'}`}>{promptMetrics?.valueText ?? '0%'}</span>
+                  </div>
+                  <div className="windsurf-credit-meta-row">
+                    <span className="windsurf-credit-used">{formatUsedLine(promptMetrics?.used, promptMetrics?.total)}</span>
+                    <span className="windsurf-credit-left">{formatLeftLine(promptMetrics?.left)}</span>
+                  </div>
+                  <div className="quota-bar-track">
+                    <div className={`quota-bar ${promptMetrics?.quotaClass ?? 'high'}`} style={{ width: `${promptMetrics?.percentage ?? 0}%` }} />
+                  </div>
+                </div>
 
-            {showAddOnCredits && (
-              <div className="quota-item windsurf-credit-item">
-                <div className="quota-header">
-                  <span className="quota-label">{addOnMetrics?.label ?? t('common.shared.columns.addOnPromptCredits', 'Add-on prompt credits')}</span>
-                  <span className={`quota-pct ${addOnMetrics?.quotaClass ?? 'high'}`}>{addOnMetrics?.valueText ?? '0%'}</span>
-                </div>
-                <div className="windsurf-credit-meta-row">
-                  <span className="windsurf-credit-used">{formatUsedLine(addOnMetrics?.used, addOnMetrics?.total)}</span>
-                  <span className="windsurf-credit-left">{formatLeftLine(addOnMetrics?.left)}</span>
-                </div>
-                <div className="windsurf-credit-meta-row expiry">
-                  <span className="windsurf-credit-expiry">{t('kiro.columns.expiry', 'Expiry')}: {bonusExpiryValue}</span>
-                </div>
-                <div className="quota-bar-track">
-                  <div className={`quota-bar ${addOnMetrics?.quotaClass ?? 'high'}`} style={{ width: `${addOnMetrics?.percentage ?? 0}%` }} />
-                </div>
-              </div>
+                {showAddOnCredits ? (
+                  <div className="quota-item windsurf-credit-item">
+                    <div className="quota-header">
+                      <span className="quota-label">{addOnMetrics?.label ?? t('common.shared.columns.addOnPromptCredits', 'Add-on prompt credits')}</span>
+                      <span className={`quota-pct ${addOnMetrics?.quotaClass ?? 'high'}`}>{addOnMetrics?.valueText ?? '0%'}</span>
+                    </div>
+                    <div className="windsurf-credit-meta-row">
+                      <span className="windsurf-credit-used">{formatUsedLine(addOnMetrics?.used, addOnMetrics?.total)}</span>
+                      <span className="windsurf-credit-left">{formatLeftLine(addOnMetrics?.left)}</span>
+                    </div>
+                    <div className="windsurf-credit-meta-row expiry">
+                      <span className="windsurf-credit-expiry">{t('kiro.columns.expiry', 'Expiry')}: {bonusExpiryValue}</span>
+                    </div>
+                    <div className="quota-bar-track">
+                      <div className={`quota-bar ${addOnMetrics?.quotaClass ?? 'high'}`} style={{ width: `${addOnMetrics?.percentage ?? 0}%` }} />
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
             )}
           </div>
 
@@ -607,7 +670,7 @@ export function KiroAccountsPage() {
               <button
                 className="card-action-btn export-btn"
                 onClick={() => handleExportByIds([account.id], resolveSingleExportBaseName(account))}
-                title={t('common.shared.export', '导出')}
+                title={t('common.shared.export.title', '导出')}
               >
                 <Upload size={14} />
               </button>
@@ -640,6 +703,8 @@ export function KiroAccountsPage() {
       const visibleTags = accountTags.slice(0, 3);
       const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
       const isCurrent = currentAccountId === account.id;
+      const quotaError = account.quota_query_last_error?.trim();
+      const hasQuotaData = hasKiroQuotaData(account);
       const statusReason = presentation.accountStatusReason;
       const isBanned = presentation.isBanned;
       const hasStatusError = presentation.hasStatusError;
@@ -660,6 +725,14 @@ export function KiroAccountsPage() {
                   {isBanned && (<span className="status-pill forbidden" title={bannedTitle}><Lock size={12} />{t('accounts.status.forbidden')}</span>)}
                 </div>
               )}
+              {quotaError && (
+                <div className="account-sub-line">
+                  <span className="status-pill warning" title={quotaError}>
+                    <CircleAlert size={12} />
+                    {t('common.shared.quota.queryFailed', '配额查询失败')}
+                  </span>
+                </div>
+              )}
               <div className="account-sub-line">
                 <span className="kiro-table-subline">{signedInWithText} | {t('kiro.account.userId', 'User ID')}: {maskAccountText(userIdText)}</span>
               </div>
@@ -676,22 +749,26 @@ export function KiroAccountsPage() {
           </td>
           <td><span className={`tier-badge ${resolvePlanBadgeClass(account)}`}>{planLabel}</span></td>
           <td>
-            <div className="quota-item windsurf-table-credit-item">
-              <div className="quota-header">
-                <span className="quota-name">{promptMetrics?.label ?? t('common.shared.columns.promptCredits', 'User Prompt credits')}</span>
-                <span className={`quota-value ${promptMetrics?.quotaClass ?? 'high'}`}>{promptMetrics?.valueText ?? '0%'}</span>
+            {hasQuotaData ? (
+              <div className="quota-item windsurf-table-credit-item">
+                <div className="quota-header">
+                  <span className="quota-name">{promptMetrics?.label ?? t('common.shared.columns.promptCredits', 'User Prompt credits')}</span>
+                  <span className={`quota-value ${promptMetrics?.quotaClass ?? 'high'}`}>{promptMetrics?.valueText ?? '0%'}</span>
+                </div>
+                <div className="windsurf-credit-meta-row table">
+                  <span className="windsurf-credit-used">{formatUsedLine(promptMetrics?.used, promptMetrics?.total)}</span>
+                  <span className="windsurf-credit-left">{formatLeftLine(promptMetrics?.left)}</span>
+                </div>
+                <div className="quota-progress-track">
+                  <div className={`quota-progress-bar ${promptMetrics?.quotaClass ?? 'high'}`} style={{ width: `${promptMetrics?.percentage ?? 0}%` }} />
+                </div>
               </div>
-              <div className="windsurf-credit-meta-row table">
-                <span className="windsurf-credit-used">{formatUsedLine(promptMetrics?.used, promptMetrics?.total)}</span>
-                <span className="windsurf-credit-left">{formatLeftLine(promptMetrics?.left)}</span>
-              </div>
-              <div className="quota-progress-track">
-                <div className={`quota-progress-bar ${promptMetrics?.quotaClass ?? 'high'}`} style={{ width: `${promptMetrics?.percentage ?? 0}%` }} />
-              </div>
-            </div>
+            ) : (
+              <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
+            )}
           </td>
           <td>
-            {showAddOnCredits ? (
+            {hasQuotaData && showAddOnCredits ? (
               <div className="quota-item windsurf-table-credit-item">
                 <div className="quota-header">
                   <span className="quota-name">{addOnMetrics?.label ?? t('common.shared.columns.addOnPromptCredits', 'Add-on prompt credits')}</span>
@@ -709,7 +786,7 @@ export function KiroAccountsPage() {
                 </div>
               </div>
             ) : (
-              <div className="quota-empty">{t('kiro.credits.expiryUnknown', '—')}</div>
+              <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
             )}
           </td>
           <td className="sticky-action-cell table-action-cell">
@@ -727,7 +804,7 @@ export function KiroAccountsPage() {
               <button
                 className="action-btn"
                 onClick={() => handleExportByIds([account.id], resolveSingleExportBaseName(account))}
-                title={t('common.shared.export', '导出')}
+                title={t('common.shared.export.title', '导出')}
               >
                 <Upload size={14} />
               </button>
@@ -804,11 +881,14 @@ export function KiroAccountsPage() {
               {tagFilter.length > 0 ? `${t('accounts.filterTagsCount', '标签')}(${tagFilter.length})` : t('accounts.filterTags', '标签筛选')}
             </button>
             {showTagFilter && (
-              <div className="tag-filter-panel">
+              <div
+                ref={page.tagFilterPanelRef}
+                className={`tag-filter-panel ${page.tagFilterPanelPlacement === 'top' ? 'open-top' : ''}`}
+              >
                 {availableTags.length === 0 ? (
                   <div className="tag-filter-empty">{t('accounts.noAvailableTags', '暂无可用标签')}</div>
                 ) : (
-                  <div className="tag-filter-options">
+                  <div className="tag-filter-options" style={page.tagFilterScrollContainerStyle}>
                     {availableTags.map((tag) => (
                       <label key={tag} className={`tag-filter-option ${tagFilter.includes(tag) ? 'selected' : ''}`}>
                         <input type="checkbox" checked={tagFilter.includes(tag)} onChange={() => toggleTagFilterValue(tag)} />
@@ -833,14 +913,17 @@ export function KiroAccountsPage() {
             )}
           </div>
 
-          <div className="sort-select">
-            <ArrowDownWideNarrow size={14} className="sort-icon" />
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label={t('common.shared.sortLabel', '排序')}>
-              <option value="created_at">{t('common.shared.sort.createdAt', '按创建时间')}</option>
-              <option value="credits">{t('common.shared.sort.credits', '按剩余 Credits')}</option>
-              <option value="plan_end">{t('common.shared.sort.planEnd', '按配额周期结束时间')}</option>
-            </select>
-          </div>
+          <SingleSelectFilterDropdown
+            value={sortBy}
+            options={[
+              { value: 'created_at', label: t('common.shared.sort.createdAt', '按创建时间') },
+              { value: 'credits', label: t('common.shared.sort.credits', '按剩余 Credits') },
+              { value: 'plan_end', label: t('common.shared.sort.planEnd', '按配额周期结束时间') },
+            ]}
+            ariaLabel={t('common.shared.sortLabel', '排序')}
+            icon={<ArrowDownWideNarrow size={14} />}
+            onChange={setSortBy}
+          />
 
           <button className="sort-direction-btn" onClick={() => setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
             title={sortDirection === 'desc' ? t('common.shared.sort.descTooltip', '当前：降序，点击切换为升序') : t('common.shared.sort.ascTooltip', '当前：升序，点击切换为降序')}
@@ -860,8 +943,8 @@ export function KiroAccountsPage() {
           </button>
           <button className="btn btn-secondary icon-only" onClick={() => openAddModal('token')} disabled={importing} title={t('common.shared.import.label', '导入')} aria-label={t('common.shared.import.label', '导入')}><Download size={14} /></button>
           <button className="btn btn-secondary export-btn icon-only" onClick={() => void handleExport(filteredIds)} disabled={exporting || filteredIds.length === 0}
-            title={exportSelectionCount > 0 ? `${t('common.shared.export', '导出')} (${exportSelectionCount})` : t('common.shared.export', '导出')}
-            aria-label={exportSelectionCount > 0 ? `${t('common.shared.export', '导出')} (${exportSelectionCount})` : t('common.shared.export', '导出')}>
+            title={exportSelectionCount > 0 ? `${t('common.shared.export.title', '导出')} (${exportSelectionCount})` : t('common.shared.export.title', '导出')}
+            aria-label={exportSelectionCount > 0 ? `${t('common.shared.export.title', '导出')} (${exportSelectionCount})` : t('common.shared.export.title', '导出')}>
             <Upload size={14} />
           </button>
           {selected.size > 0 && (
@@ -898,28 +981,28 @@ export function KiroAccountsPage() {
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid-view-container">
-          {filteredAccounts.length > 0 && (
+          {paginatedAccounts.length > 0 && (
             <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
-                <input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} />
+                <input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} />
                 {t('common.selectAll', '全选')}
               </label>
             </div>
           )}
           {groupByTag ? (
           <div className="tag-group-list">
-            {groupedAccounts.map(([groupKey, groupAccounts]) => (
+            {paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
               <div key={groupKey} className="tag-group-section">
                 <div className="tag-group-header">
                   <span className="tag-group-title">{resolveGroupLabel(groupKey)}</span>
-                  <span className="tag-group-count">{groupAccounts.length}</span>
+                  <span className="tag-group-count">{totalCount}</span>
                 </div>
-                <div className="tag-group-grid ghcp-accounts-grid">{renderGridCards(groupAccounts, groupKey)}</div>
+                <div className="tag-group-grid ghcp-accounts-grid">{renderGridCards(items, groupKey)}</div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="ghcp-accounts-grid">{renderGridCards(filteredAccounts)}</div>
+          <div className="ghcp-accounts-grid">{renderGridCards(paginatedAccounts)}</div>
         )}
         </div>
       ) : groupByTag ? (
@@ -928,7 +1011,7 @@ export function KiroAccountsPage() {
             <thead>
               <tr>
                 <th style={{ width: 40 }}>
-                  <input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} />
+                  <input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} />
                 </th>
                 <th style={{ width: 240 }}>{t('common.shared.columns.email', '邮箱')}</th>
                 <th style={{ width: 120 }}>{t('common.shared.columns.plan', '计划')}</th>
@@ -938,17 +1021,17 @@ export function KiroAccountsPage() {
               </tr>
             </thead>
             <tbody>
-              {groupedAccounts.map(([groupKey, groupAccounts]) => (
+              {paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
                 <Fragment key={groupKey}>
                   <tr className="tag-group-row">
                     <td colSpan={6}>
                       <div className="tag-group-header">
                         <span className="tag-group-title">{resolveGroupLabel(groupKey)}</span>
-                        <span className="tag-group-count">{groupAccounts.length}</span>
+                        <span className="tag-group-count">{totalCount}</span>
                       </div>
                     </td>
                   </tr>
-                  {renderTableRows(groupAccounts, groupKey)}
+                  {renderTableRows(items, groupKey)}
                 </Fragment>
               ))}
             </tbody>
@@ -960,7 +1043,7 @@ export function KiroAccountsPage() {
             <thead>
               <tr>
                 <th style={{ width: 40 }}>
-                  <input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} />
+                  <input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} />
                 </th>
                 <th style={{ width: 240 }}>{t('common.shared.columns.email', '邮箱')}</th>
                 <th style={{ width: 120 }}>{t('common.shared.columns.plan', '计划')}</th>
@@ -969,10 +1052,25 @@ export function KiroAccountsPage() {
                 <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', '操作')}</th>
               </tr>
             </thead>
-            <tbody>{renderTableRows(filteredAccounts)}</tbody>
+            <tbody>{renderTableRows(paginatedAccounts)}</tbody>
           </table>
         </div>
       )}
+
+      <PaginationControls
+        totalItems={pagination.totalItems}
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        pageSize={pagination.pageSize}
+        pageSizeOptions={pagination.pageSizeOptions}
+        rangeStart={pagination.rangeStart}
+        rangeEnd={pagination.rangeEnd}
+        canGoPrevious={pagination.canGoPrevious}
+        canGoNext={pagination.canGoNext}
+        onPageSizeChange={pagination.setPageSize}
+        onPreviousPage={pagination.goToPreviousPage}
+        onNextPage={pagination.goToNextPage}
+      />
 
       {showAddModal && (
         <div className="modal-overlay" onClick={closeAddModal}>
@@ -1113,7 +1211,7 @@ export function KiroAccountsPage() {
 
       <ExportJsonModal
         isOpen={showExportModal}
-        title={`${t('common.shared.export', '导出')} JSON`}
+        title={`${t('common.shared.export.title', '导出')} JSON`}
         jsonContent={exportJsonContent}
         hidden={exportJsonHidden}
         copied={exportJsonCopied}

@@ -1,4 +1,6 @@
-use crate::models::codex::{CodexAccount, CodexQuota, CodexTokens};
+use crate::models::codex::{
+    CodexAccount, CodexApiProviderMode, CodexQuickConfig, CodexQuota, CodexTokens,
+};
 use crate::modules::{
     codex_account, codex_oauth, codex_quota, codex_wakeup, codex_wakeup_scheduler, config, logger,
     openclaw_auth, opencode_auth, process,
@@ -21,6 +23,25 @@ pub fn get_current_codex_account() -> Result<Option<CodexAccount>, String> {
     Ok(codex_account::get_current_account())
 }
 
+#[tauri::command]
+pub fn get_codex_config_toml_path() -> Result<String, String> {
+    let path = codex_account::get_codex_home().join("config.toml");
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn get_codex_quick_config() -> Result<CodexQuickConfig, String> {
+    codex_account::load_current_quick_config()
+}
+
+#[tauri::command]
+pub fn save_codex_quick_config(
+    context_window_1m: bool,
+    auto_compact_token_limit: Option<i64>,
+) -> Result<CodexQuickConfig, String> {
+    codex_account::save_current_quick_config(context_window_1m, auto_compact_token_limit)
+}
+
 /// 刷新账号资料（团队名/结构）
 #[tauri::command]
 pub async fn refresh_codex_account_profile(account_id: String) -> Result<CodexAccount, String> {
@@ -34,6 +55,19 @@ pub async fn switch_codex_account(
     account_id: String,
 ) -> Result<CodexAccount, String> {
     let _ = codex_account::prepare_account_for_injection(&account_id).await?;
+    let codex_home = codex_account::get_codex_home();
+    let provider_before =
+        crate::modules::codex_session_visibility::read_history_visibility_provider_for_dir(
+            &codex_home,
+        )
+        .map(Some)
+        .unwrap_or_else(|error| {
+            logger::log_warn(&format!(
+                "切号前读取 Codex provider 失败，跳过自动修复预判: {}",
+                error
+            ));
+            None
+        });
 
     // 切换账号（写入 auth.json）
     let account = codex_account::switch_account(&account_id)?;
@@ -43,6 +77,7 @@ pub async fn switch_codex_account(
         Some(Some(account_id.clone())),
         None,
         Some(false),
+        None,
     ) {
         logger::log_warn(&format!("更新 Codex 默认实例绑定账号失败: {}", e));
     } else {
@@ -50,6 +85,41 @@ pub async fn switch_codex_account(
             "已同步更新 Codex 默认实例绑定账号: {}",
             account_id
         ));
+    }
+
+    let provider_after =
+        crate::modules::codex_session_visibility::read_history_visibility_provider_for_dir(
+            &codex_home,
+        )
+        .map(Some)
+        .unwrap_or_else(|error| {
+            logger::log_warn(&format!(
+                "切号后读取 Codex provider 失败，跳过自动修复可见性: {}",
+                error
+            ));
+            None
+        });
+    let should_repair_visibility = match (provider_before.as_deref(), provider_after.as_deref()) {
+        (Some(before), Some(after)) => before != after,
+        (None, Some(_)) => true,
+        _ => false,
+    };
+    if should_repair_visibility {
+        match crate::modules::codex_session_visibility::repair_session_visibility_across_instances()
+        {
+            Ok(summary) => {
+                logger::log_info(&format!(
+                    "Codex 切号后已自动执行历史会话可见性修复: {}",
+                    summary.message
+                ));
+            }
+            Err(error) => {
+                logger::log_warn(&format!(
+                    "Codex 切号成功，但自动修复历史会话可见性失败，请稍后在会话管理中手动补跑: {}",
+                    error
+                ));
+            }
+        }
     }
 
     let user_config = config::get_user_config();
@@ -370,8 +440,17 @@ pub async fn add_codex_account_with_token(
 pub fn add_codex_account_with_api_key(
     api_key: String,
     api_base_url: Option<String>,
+    api_provider_mode: Option<CodexApiProviderMode>,
+    api_provider_id: Option<String>,
+    api_provider_name: Option<String>,
 ) -> Result<CodexAccount, String> {
-    let account = codex_account::upsert_api_key_account(api_key, api_base_url)?;
+    let account = codex_account::upsert_api_key_account(
+        api_key,
+        api_base_url,
+        api_provider_mode,
+        api_provider_id,
+        api_provider_name,
+    )?;
     codex_account::load_account(&account.id).ok_or_else(|| "账号保存后无法读取".to_string())
 }
 
@@ -385,8 +464,18 @@ pub fn update_codex_api_key_credentials(
     account_id: String,
     api_key: String,
     api_base_url: Option<String>,
+    api_provider_mode: Option<CodexApiProviderMode>,
+    api_provider_id: Option<String>,
+    api_provider_name: Option<String>,
 ) -> Result<CodexAccount, String> {
-    codex_account::update_api_key_credentials(&account_id, api_key, api_base_url)
+    codex_account::update_api_key_credentials(
+        &account_id,
+        api_key,
+        api_base_url,
+        api_provider_mode,
+        api_provider_id,
+        api_provider_name,
+    )
 }
 
 #[tauri::command]
@@ -524,6 +613,7 @@ pub async fn codex_wakeup_run_enabled_tasks(
 // ─── Codex 账号分组持久化 ────────────────────────────────────────────
 
 const CODEX_GROUPS_FILE: &str = "codex_account_groups.json";
+const CODEX_MODEL_PROVIDERS_FILE: &str = "codex_model_providers.json";
 
 #[tauri::command]
 pub async fn load_codex_account_groups() -> Result<String, String> {
@@ -544,4 +634,28 @@ pub async fn save_codex_account_groups(data: String) -> Result<(), String> {
     }
     let path = dir.join(CODEX_GROUPS_FILE);
     std::fs::write(&path, data).map_err(|e| format!("Failed to write codex groups: {}", e))
+}
+
+#[tauri::command]
+pub async fn load_codex_model_providers() -> Result<String, String> {
+    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
+    let path = home
+        .join(".antigravity_cockpit")
+        .join(CODEX_MODEL_PROVIDERS_FILE);
+    if !path.exists() {
+        return Ok("[]".to_string());
+    }
+    std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read codex model providers: {}", e))
+}
+
+#[tauri::command]
+pub async fn save_codex_model_providers(data: String) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
+    let dir = home.join(".antigravity_cockpit");
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
+    }
+    let path = dir.join(CODEX_MODEL_PROVIDERS_FILE);
+    std::fs::write(&path, data).map_err(|e| format!("Failed to write codex model providers: {}", e))
 }

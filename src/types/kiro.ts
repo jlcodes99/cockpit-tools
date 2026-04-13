@@ -44,6 +44,8 @@ export interface KiroAccount {
   kiro_usage_raw?: unknown;
   status?: string | null;
   status_reason?: string | null;
+  quota_query_last_error?: string | null;
+  quota_query_last_error_at?: number | null;
 
   created_at: number;
   last_used: number;
@@ -643,6 +645,10 @@ export function getKiroAccountStatusReason(account: KiroAccount): string | null 
   const fromField = account.status_reason?.trim();
   if (fromField) return fromField;
   return null;
+}
+
+export function hasKiroQuotaData(account: KiroAccount): boolean {
+  return account.kiro_usage_raw != null;
 }
 
 export function isKiroAccountBanned(account: KiroAccount): boolean {

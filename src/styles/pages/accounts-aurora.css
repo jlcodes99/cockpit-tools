@@ -972,8 +972,44 @@
 
 
 [data-theme="dark"] .accounts-page .pagination-container {
-  background: rgba(8, 11, 19, 0.92);
-  border-top-color: rgba(148, 163, 184, 0.18);
+  background: transparent;
+}
+
+[data-theme="dark"] .accounts-page .pagination-container::before {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(148, 163, 184, 0.14) 10%,
+    rgba(148, 163, 184, 0.14) 90%,
+    transparent 100%
+  );
+}
+
+[data-theme="dark"] .accounts-page .pagination-container .tag-filter-btn.single-filter-btn {
+  background: rgba(15, 23, 42, 0.42);
+  border-color: rgba(148, 163, 184, 0.14);
+  color: rgba(226, 232, 240, 0.78);
+}
+
+[data-theme="dark"] .accounts-page .pagination-container .tag-filter-btn.single-filter-btn:hover:not(:disabled),
+[data-theme="dark"] .accounts-page .pagination-container .tag-filter-btn.single-filter-btn.active {
+  background: rgba(15, 23, 42, 0.58);
+  border-color: rgba(96, 165, 250, 0.24);
+  color: rgba(241, 245, 249, 0.96);
+}
+
+[data-theme="dark"] .accounts-page .pagination-container .single-filter-icon {
+  color: rgba(148, 163, 184, 0.78);
+}
+
+[data-theme="dark"] .accounts-page .pagination-btn:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.5);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+[data-theme="dark"] .accounts-page .pagination-page,
+[data-theme="dark"] .accounts-page .pagination-info {
+  color: rgba(226, 232, 240, 0.72);
 }
 
 [data-theme="dark"] .accounts-page .quota-progress-track {

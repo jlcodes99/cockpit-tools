@@ -449,9 +449,20 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
         return Err("main_window_not_found".to_string());
     };
 
+    logger::log_info("[Window] 尝试恢复主窗口");
     window.show().map_err(|err| err.to_string())?;
     window.unminimize().map_err(|err| err.to_string())?;
-    window.set_focus().map_err(|err| err.to_string())
+
+    if let Err(err) = window.set_focus() {
+        logger::log_warn(&format!("[Window] WebView 主窗口聚焦失败: {}", err));
+    }
+
+    #[cfg(target_os = "windows")]
+    if let Err(err) = crate::modules::process::focus_current_process_main_window() {
+        logger::log_warn(&format!("[Window] Windows 原生前置主窗口失败: {}", err));
+    }
+
+    Ok(())
 }
 
 #[cfg(not(target_os = "macos"))]

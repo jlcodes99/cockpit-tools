@@ -8,6 +8,8 @@ export interface QoderAccount {
   credits_total?: number | null;
   credits_remaining?: number | null;
   credits_usage_percent?: number | null;
+  quota_query_last_error?: string | null;
+  quota_query_last_error_at?: number | null;
   usage_updated_at?: number | null;
   tags?: string[] | null;
   auth_user_info_raw?: unknown;
@@ -405,4 +407,8 @@ export function getQoderUsageOverview(account: QoderAccount): QoderUsageOverview
       toBoolean(getNestedValue(account.auth_credit_usage_raw, ['isQuotaExceeded'])) ||
       toBoolean(getNestedValue(account.auth_user_info_raw, ['isQuotaExceeded'])),
   };
+}
+
+export function hasQoderQuotaData(account: QoderAccount): boolean {
+  return account.auth_credit_usage_raw != null;
 }

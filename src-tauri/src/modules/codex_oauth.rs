@@ -21,6 +21,7 @@ const OAUTH_CALLBACK_PORT: u16 = 1455;
 const OAUTH_PORT_IN_USE_CODE: &str = "CODEX_OAUTH_PORT_IN_USE";
 const OAUTH_STATE_FILE: &str = "codex_oauth_pending.json";
 const OAUTH_TIMEOUT_SECONDS: i64 = 300;
+const TOKEN_REFRESH_SKEW_SECONDS: i64 = 300;
 
 pub fn get_callback_port() -> u16 {
     OAUTH_CALLBACK_PORT
@@ -428,11 +429,11 @@ async fn start_callback_server(
                 }
 
                 if code.is_empty() {
+                    let mut param_keys = params.keys().cloned().collect::<Vec<_>>();
+                    param_keys.sort();
                     logger::log_warn(&format!(
-                        "Codex OAuth 回调缺少 code: login_id={}, params={}",
-                        expected_login_id,
-                        serde_json::to_string(&params)
-                            .unwrap_or_else(|_| "<serialize_failed>".to_string())
+                        "Codex OAuth 回调缺少 code: login_id={}, param_keys={:?}",
+                        expected_login_id, param_keys
                     ));
                     let response = Response::from_string("Missing code").with_status_code(400);
                     let _ = request.respond(response);
@@ -588,8 +589,16 @@ async fn exchange_code_for_token_internal(
         .map_err(|e| format!("读取响应失败: {}", e))?;
 
     if !status.is_success() {
-        logger::log_error(&format!("Token 交换失败: {} - {}", status, body));
-        return Err(format!("Token 交换失败: {}", body));
+        logger::log_error(&format!(
+            "Token 交换失败: status={}, body_len={}",
+            status,
+            body.len()
+        ));
+        return Err(format!(
+            "Token 交换失败: status={}, body_len={}",
+            status,
+            body.len()
+        ));
     }
 
     logger::log_info("Codex OAuth Token 交换成功");
@@ -809,10 +818,17 @@ pub fn is_token_expired(access_token: &str) -> bool {
     };
 
     let now = chrono::Utc::now().timestamp();
-    exp < now + 60
+    exp < now + TOKEN_REFRESH_SKEW_SECONDS
 }
 
 pub async fn refresh_access_token(refresh_token: &str) -> Result<CodexTokens, String> {
+    refresh_access_token_with_fallback(refresh_token, None).await
+}
+
+pub async fn refresh_access_token_with_fallback(
+    refresh_token: &str,
+    current_id_token: Option<&str>,
+) -> Result<CodexTokens, String> {
     let client = reqwest::Client::new();
 
     let params = [
@@ -838,11 +854,15 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<CodexTokens, St
 
     if !status.is_success() {
         logger::log_error(&format!(
-            "Token 刷新失败: {} - {}",
+            "Token 刷新失败: status={}, body_len={}",
             status,
-            &body[..body.len().min(200)]
+            body.len()
         ));
-        return Err(format!("Token 刷新失败: {}", status));
+        return Err(format!(
+            "Token 刷新失败: status={}, body_len={}",
+            status,
+            body.len()
+        ));
     }
 
     logger::log_info("Codex Token 刷新成功");
@@ -853,8 +873,14 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<CodexTokens, St
     let id_token = token_response
         .get("id_token")
         .and_then(|v| v.as_str())
-        .ok_or("响应中缺少 id_token")?
-        .to_string();
+        .map(|value| value.to_string())
+        .or_else(|| {
+            current_id_token
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(|value| value.to_string())
+        })
+        .ok_or("响应中缺少 id_token，且本地没有可复用的旧值")?;
 
     let access_token = token_response
         .get("access_token")

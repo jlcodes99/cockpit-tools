@@ -17,6 +17,8 @@ export interface CursorAccount {
 
   status?: string | null;
   status_reason?: string | null;
+  quota_query_last_error?: string | null;
+  quota_query_last_error_at?: number | null;
 
   created_at: number;
   last_used: number;
@@ -232,6 +234,15 @@ export type CursorUsage = {
   isUnlimited?: boolean;
 };
 
+export type CursorOnDemandSummary = {
+  isTeamLimit: boolean;
+  usedCents: number;
+  limitCents: number | null;
+  hasFixedLimit: boolean;
+  isUnlimited: boolean;
+  isDisabled: boolean;
+};
+
 function getPath(obj: unknown, ...keys: string[]): unknown {
   let cur: unknown = obj;
   for (const k of keys) {
@@ -313,8 +324,24 @@ export function getCursorUsage(account: CursorAccount): CursorUsage {
     'pooledLimit',
     'pooled_limit',
   );
-  const teamOdUsed = pickNumber(teamOnDemand, 'used');
-  const teamOdLimit = pickNumber(teamOnDemand, 'limit');
+  const teamOdUsed =
+    pickNumber(teamOnDemand, 'used') ??
+    pickNumber(
+      spendLimitUsage,
+      'pooledUsed',
+      'pooled_used',
+      'overallUsed',
+      'overall_used',
+    );
+  const teamOdLimit =
+    pickNumber(teamOnDemand, 'limit') ??
+    pickNumber(
+      spendLimitUsage,
+      'pooledLimit',
+      'pooled_limit',
+      'overallLimit',
+      'overall_limit',
+    );
   const odEnabled = pickBoolean(individualOnDemand, 'enabled');
   const rawObj = raw as Record<string, unknown>;
   const isUnlimited =
@@ -369,6 +396,31 @@ export function getCursorUsage(account: CursorAccount): CursorUsage {
   };
 }
 
+export function getCursorOnDemandSummary(usage: CursorUsage): CursorOnDemandSummary {
+  const limitType = (usage.onDemandLimitType || '').toLowerCase();
+  const isTeamLimit = limitType === 'team';
+  // Team accounts must stay on one quota scope. Prefer team metrics and only
+  // fall back to the normalized shared fields when the team-specific field is absent.
+  const usedCents = isTeamLimit
+    ? (usage.teamOnDemandUsedCents ?? usage.onDemandUsedCents ?? 0)
+    : (usage.onDemandUsedCents ?? 0);
+  const limitCents = isTeamLimit
+    ? (usage.teamOnDemandLimitCents ?? usage.onDemandLimitCents ?? null)
+    : (usage.onDemandLimitCents ?? null);
+  const hasFixedLimit = limitCents != null && limitCents > 0;
+  const isUnlimited = !hasFixedLimit && usage.onDemandEnabled === true && !isTeamLimit;
+  const isDisabled = !hasFixedLimit && !isUnlimited;
+
+  return {
+    isTeamLimit,
+    usedCents,
+    limitCents,
+    hasFixedLimit,
+    isUnlimited,
+    isDisabled,
+  };
+}
+
 export function formatCursorUsageDollars(cents: number | null | undefined): string {
   if (cents == null) return '—';
   return `$${(cents / 100).toFixed(2)}`;
@@ -379,4 +431,8 @@ export function isCursorAccountBanned(account: CursorAccount): boolean {
   const reason = (account.status_reason || '').toLowerCase();
   return status === 'banned' || status === 'forbidden' ||
     reason.includes('banned') || reason.includes('suspended') || reason.includes('disabled');
+}
+
+export function hasCursorQuotaData(account: CursorAccount): boolean {
+  return account.cursor_usage_raw != null;
 }

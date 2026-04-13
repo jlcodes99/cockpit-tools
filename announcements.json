@@ -23,6 +23,47 @@
   },
   "announcements": [
     {
+      "id": "ann-2026-04-author-shop-support",
+      "type": "info",
+      "priority": 999,
+      "title": "🛒 作者自营账号与兑换码渠道上线",
+      "summary": "提供 Gemini Pro 成品号与 Codex Plus 兑换码，购买账号赠送 Antigravity 无感切号方案。",
+      "content": "感谢大家一直以来对项目的支持！\n\n我这边开通了自营购买地址，提供：\n• Gemini Pro 成品号\n• Codex Plus 兑换码\n• 购买账号赠送 Antigravity 无感切号方案\n\n如果你刚好有这方面需求，欢迎前往选购支持。",
+      "action": {
+        "type": "url",
+        "target": "https://xiangzili.xyz",
+        "label": "前往选购"
+      },
+      "targetVersions": "*",
+      "targetLanguages": [
+        "*"
+      ],
+      "showOnce": true,
+      "popup": true,
+      "createdAt": "2026-04-07T15:28:30Z",
+      "expiresAt": null,
+      "locales": {
+        "zh-CN": {
+          "title": "🛒 作者自营账号与兑换码渠道上线",
+          "summary": "提供 Gemini Pro 成品号与 Codex Plus 兑换码，购买账号赠送 Antigravity 无感切号方案。",
+          "content": "感谢大家一直以来对项目的支持！\n\n我这边开通了自营购买地址，提供：\n• Gemini Pro 成品号\n• Codex Plus 兑换码\n• 购买账号赠送 Antigravity 无感切号方案\n\n如果你刚好有这方面需求，欢迎前往选购支持。",
+          "actionLabel": "前往选购"
+        },
+        "en-US": {
+          "title": "🛒 作者自营账号与兑换码渠道上线",
+          "summary": "提供 Gemini Pro 成品号与 Codex Plus 兑换码，购买账号赠送 Antigravity 无感切号方案。",
+          "content": "感谢大家一直以来对项目的支持！\n\n我这边开通了自营购买地址，提供：\n• Gemini Pro 成品号\n• Codex Plus 兑换码\n• 购买账号赠送 Antigravity 无感切号方案\n\n如果你刚好有这方面需求，欢迎前往选购支持。",
+          "actionLabel": "前往选购"
+        },
+        "en": {
+          "title": "🛒 作者自营账号与兑换码渠道上线",
+          "summary": "提供 Gemini Pro 成品号与 Codex Plus 兑换码，购买账号赠送 Antigravity 无感切号方案。",
+          "content": "感谢大家一直以来对项目的支持！\n\n我这边开通了自营购买地址，提供：\n• Gemini Pro 成品号\n• Codex Plus 兑换码\n• 购买账号赠送 Antigravity 无感切号方案\n\n如果你刚好有这方面需求，欢迎前往选购支持。",
+          "actionLabel": "前往选购"
+        }
+      }
+    },
+    {
       "id": "ann-2026-02-welcome-cockpit-tools",
       "type": "info",
       "priority": 300,

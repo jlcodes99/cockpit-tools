@@ -301,7 +301,10 @@ pub fn load_account_index() -> Result<AccountIndex, String> {
         return Ok(AccountIndex::new());
     }
 
-    match serde_json::from_str::<AccountIndex>(&content) {
+    match crate::modules::atomic_write::parse_json_with_auto_restore::<AccountIndex>(
+        &index_path,
+        &content,
+    ) {
         Ok(index) => {
             if index.accounts.is_empty() {
                 if let Some(repaired) = repair_account_index_from_details("索引账号列表为空")?
@@ -328,14 +331,12 @@ pub fn load_account_index() -> Result<AccountIndex, String> {
 pub fn save_account_index(index: &AccountIndex) -> Result<(), String> {
     let data_dir = get_data_dir()?;
     let index_path = data_dir.join(ACCOUNTS_INDEX);
-    let temp_path = data_dir.join(format!("{}.tmp", ACCOUNTS_INDEX));
 
     let content =
         serde_json::to_string_pretty(index).map_err(|e| format!("序列化账号索引失败: {}", e))?;
 
-    fs::write(&temp_path, content).map_err(|e| format!("写入临时索引文件失败: {}", e))?;
-
-    fs::rename(temp_path, index_path).map_err(|e| format!("替换索引文件失败: {}", e))?;
+    crate::modules::atomic_write::write_string_atomic(&index_path, &content)
+        .map_err(|e| format!("写入账号索引失败: {}", e))?;
     invalidate_list_accounts_cache();
     Ok(())
 }
@@ -352,7 +353,8 @@ pub fn load_account(account_id: &str) -> Result<Account, String> {
     let content =
         fs::read_to_string(&account_path).map_err(|e| format!("读取账号数据失败: {}", e))?;
 
-    serde_json::from_str(&content).map_err(|e| format!("解析账号数据失败: {}", e))
+    crate::modules::atomic_write::parse_json_with_auto_restore::<Account>(&account_path, &content)
+        .map_err(|e| format!("解析账号数据失败: {}", e))
 }
 
 /// 保存账号数据
@@ -363,7 +365,8 @@ pub fn save_account(account: &Account) -> Result<(), String> {
     let content =
         serde_json::to_string_pretty(account).map_err(|e| format!("序列化账号数据失败: {}", e))?;
 
-    fs::write(&account_path, content).map_err(|e| format!("保存账号数据失败: {}", e))?;
+    crate::modules::atomic_write::write_string_atomic(&account_path, &content)
+        .map_err(|e| format!("保存账号数据失败: {}", e))?;
     invalidate_list_accounts_cache();
     Ok(())
 }

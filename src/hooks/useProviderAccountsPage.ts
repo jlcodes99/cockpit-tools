@@ -13,6 +13,7 @@ import {
   useRef,
   useMemo,
   useCallback,
+  type CSSProperties,
   type RefObject,
   type Dispatch,
   type SetStateAction,
@@ -36,6 +37,7 @@ import {
   consumeQueuedExternalProviderImportForPlatform,
   EXTERNAL_PROVIDER_IMPORT_EVENT,
 } from '../utils/externalProviderImport';
+import { useDropdownPanelPlacement } from './useDropdownPanelPlacement';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -198,6 +200,9 @@ export interface UseProviderAccountsPageReturn {
   showTagModal: string | null;
   setShowTagModal: (id: string | null) => void;
   tagFilterRef: RefObject<HTMLDivElement | null>;
+  tagFilterPanelRef: RefObject<HTMLDivElement | null>;
+  tagFilterPanelPlacement: 'top' | 'bottom';
+  tagFilterScrollContainerStyle: CSSProperties | undefined;
   availableTags: string[];
   toggleTagFilterValue: (tag: string) => void;
   clearTagFilter: () => void;
@@ -431,10 +436,22 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
 
   const toggleSelectAll = useCallback(
     (filteredIds: string[]) => {
-      const allSelected = selected.size === filteredIds.length && filteredIds.length > 0;
-      setSelected(allSelected ? new Set() : new Set(filteredIds));
+      const scopedIds = Array.from(new Set(filteredIds.filter(Boolean)));
+      if (scopedIds.length === 0) {
+        return;
+      }
+      const allSelected = scopedIds.every((id) => selected.has(id));
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (allSelected) {
+          scopedIds.forEach((id) => next.delete(id));
+        } else {
+          scopedIds.forEach((id) => next.add(id));
+        }
+        return next;
+      });
     },
-    [selected.size],
+    [selected],
   );
 
   // ─── Tags ─────────────────────────────────────────────────────────────
@@ -470,6 +487,11 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [accounts, normalizeTag]);
+  const {
+    panelRef: tagFilterPanelRef,
+    panelPlacement: tagFilterPanelPlacement,
+    scrollContainerStyle: tagFilterScrollContainerStyle,
+  } = useDropdownPanelPlacement(tagFilterRef, showTagFilter, availableTags.length);
 
   const toggleTagFilterValue = useCallback((tag: string) => {
     setTagFilter((prev) => {
@@ -1544,6 +1566,9 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     showTagModal,
     setShowTagModal,
     tagFilterRef,
+    tagFilterPanelRef,
+    tagFilterPanelPlacement,
+    tagFilterScrollContainerStyle,
     availableTags,
     toggleTagFilterValue,
     clearTagFilter,

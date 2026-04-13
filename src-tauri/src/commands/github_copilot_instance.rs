@@ -96,6 +96,7 @@ pub async fn github_copilot_list_instances() -> Result<Vec<InstanceProfileView>,
         id: DEFAULT_INSTANCE_ID.to_string(),
         name: String::new(),
         user_data_dir: default_dir_str,
+        working_dir: None,
         extra_args: default_settings.extra_args.clone(),
         bind_account_id: default_settings.bind_account_id.clone(),
         created_at: 0,
@@ -121,6 +122,7 @@ pub async fn github_copilot_create_instance(
 ) -> Result<InstanceProfileView, String> {
     let instance = modules::github_copilot_instance::create_instance(
         modules::github_copilot_instance::CreateInstanceParams {
+            working_dir: None,
             name,
             user_data_dir,
             extra_args: extra_args.unwrap_or_default(),
@@ -162,6 +164,7 @@ pub async fn github_copilot_update_instance(
             id: DEFAULT_INSTANCE_ID.to_string(),
             name: String::new(),
             user_data_dir: default_dir_str,
+            working_dir: None,
             extra_args: updated.extra_args,
             bind_account_id: updated.bind_account_id,
             created_at: 0,
@@ -192,6 +195,7 @@ pub async fn github_copilot_update_instance(
 
     let instance = modules::github_copilot_instance::update_instance(
         modules::github_copilot_instance::UpdateInstanceParams {
+            working_dir: None,
             instance_id,
             name,
             extra_args,
@@ -249,6 +253,7 @@ pub async fn github_copilot_start_instance(
             id: DEFAULT_INSTANCE_ID.to_string(),
             name: String::new(),
             user_data_dir: default_dir_str,
+            working_dir: None,
             extra_args: default_settings.extra_args,
             bind_account_id: default_settings.bind_account_id,
             created_at: 0,
@@ -320,6 +325,7 @@ pub async fn github_copilot_stop_instance(
             id: DEFAULT_INSTANCE_ID.to_string(),
             name: String::new(),
             user_data_dir: default_dir_str,
+            working_dir: None,
             extra_args: default_settings.extra_args,
             bind_account_id: default_settings.bind_account_id,
             created_at: 0,

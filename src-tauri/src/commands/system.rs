@@ -1,4 +1,6 @@
-use std::time::Instant;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
@@ -11,6 +13,10 @@ use crate::modules::config::{
 };
 use crate::modules::web_report;
 use crate::modules::websocket;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+const AUTO_BACKUP_DIR_NAME: &str = "backups";
 
 /// 网络服务配置（前端使用）
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +52,8 @@ pub struct NetworkConfig {
 pub struct GeneralConfig {
     /// 界面语言
     pub language: String,
+    /// 默认终端
+    pub default_terminal: String,
     /// 应用主题: "light", "dark", "system"
     pub theme: String,
     /// 界面缩放比例（WebView Zoom）
@@ -220,6 +228,36 @@ pub struct GeneralConfig {
     pub workbuddy_quota_alert_threshold: i32,
 }
 
+/// 自动备份设置（前端使用）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoBackupSettings {
+    /// 是否启用自动备份
+    pub enabled: bool,
+    /// 是否包含账号数据
+    pub include_accounts: bool,
+    /// 是否包含配置数据
+    pub include_config: bool,
+    /// 备份保留天数
+    pub retention_days: i32,
+    /// 最近一次备份时间（ISO 8601）
+    pub last_backup_at: Option<String>,
+    /// 备份目录绝对路径
+    pub directory_path: String,
+}
+
+/// 自动备份文件条目（前端使用）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoBackupFileEntry {
+    /// 文件名
+    pub file_name: String,
+    /// 文件绝对路径
+    pub path: String,
+    /// 文件大小（字节）
+    pub size_bytes: u64,
+    /// 最后修改时间（毫秒时间戳）
+    pub modified_at_ms: Option<i64>,
+}
+
 const DEFAULT_UI_SCALE: f64 = 1.0;
 const MIN_UI_SCALE: f64 = 0.8;
 const MAX_UI_SCALE: f64 = 2.0;
@@ -277,16 +315,78 @@ fn sanitize_ui_scale(raw: f64) -> f64 {
     raw.clamp(MIN_UI_SCALE, MAX_UI_SCALE)
 }
 
-#[tauri::command]
-pub async fn open_data_folder() -> Result<(), String> {
-    let path = modules::account::get_data_dir()?;
+fn resolve_downloads_dir() -> Result<PathBuf, String> {
+    if let Some(dir) = dirs::download_dir() {
+        return Ok(dir);
+    }
+    if let Some(home) = dirs::home_dir() {
+        return Ok(home.join("Downloads"));
+    }
+    Err("无法获取下载目录".to_string())
+}
 
+fn get_auto_backup_dir_path() -> Result<PathBuf, String> {
+    Ok(modules::account::get_data_dir()?.join(AUTO_BACKUP_DIR_NAME))
+}
+
+fn ensure_auto_backup_dir_path() -> Result<PathBuf, String> {
+    let dir = get_auto_backup_dir_path()?;
+    if !dir.exists() {
+        fs::create_dir_all(&dir).map_err(|err| format!("创建自动备份目录失败: {}", err))?;
+    }
+    Ok(dir)
+}
+
+fn build_auto_backup_settings(config: &UserConfig) -> Result<AutoBackupSettings, String> {
+    let (include_accounts, include_config) = config::normalize_auto_backup_selection(
+        config.auto_backup_include_accounts,
+        config.auto_backup_include_config,
+    );
+    Ok(AutoBackupSettings {
+        enabled: config.auto_backup_enabled,
+        include_accounts,
+        include_config,
+        retention_days: config::sanitize_auto_backup_retention_days(
+            config.auto_backup_retention_days,
+        ),
+        last_backup_at: config.auto_backup_last_backup_at.clone(),
+        directory_path: get_auto_backup_dir_path()?.to_string_lossy().to_string(),
+    })
+}
+
+fn sanitize_auto_backup_file_name(file_name: &str) -> Result<String, String> {
+    let trimmed = file_name.trim();
+    if trimmed.is_empty() {
+        return Err("备份文件名不能为空".to_string());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') {
+        return Err("备份文件名不合法".to_string());
+    }
+    if !trimmed.ends_with(".json") {
+        return Err("自动备份文件必须为 JSON".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
+fn resolve_auto_backup_file_path(file_name: &str) -> Result<PathBuf, String> {
+    let safe_name = sanitize_auto_backup_file_name(file_name)?;
+    Ok(get_auto_backup_dir_path()?.join(safe_name))
+}
+
+fn system_time_to_unix_ms(value: SystemTime) -> Option<i64> {
+    value
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| i64::try_from(duration.as_millis()).ok())
+}
+
+fn open_path_in_system(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
             .arg(path)
             .spawn()
-            .map_err(|e| format!("打开文件夹失败: {}", e))?;
+            .map_err(|e| format!("打开目录失败: {}", e))?;
     }
 
     #[cfg(target_os = "windows")]
@@ -294,7 +394,7 @@ pub async fn open_data_folder() -> Result<(), String> {
         std::process::Command::new("explorer")
             .arg(path)
             .spawn()
-            .map_err(|e| format!("打开文件夹失败: {}", e))?;
+            .map_err(|e| format!("打开目录失败: {}", e))?;
     }
 
     #[cfg(target_os = "linux")]
@@ -302,10 +402,16 @@ pub async fn open_data_folder() -> Result<(), String> {
         std::process::Command::new("xdg-open")
             .arg(path)
             .spawn()
-            .map_err(|e| format!("打开文件夹失败: {}", e))?;
+            .map_err(|e| format!("打开目录失败: {}", e))?;
     }
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn open_data_folder() -> Result<(), String> {
+    let path = modules::account::get_data_dir()?;
+    open_path_in_system(path.as_path())
 }
 
 /// 保存文本文件
@@ -317,13 +423,165 @@ pub async fn save_text_file(path: String, content: String) -> Result<(), String>
 /// 获取下载目录
 #[tauri::command]
 pub fn get_downloads_dir() -> Result<String, String> {
-    if let Some(dir) = dirs::download_dir() {
-        return Ok(dir.to_string_lossy().to_string());
+    Ok(resolve_downloads_dir()?.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn get_auto_backup_settings() -> Result<AutoBackupSettings, String> {
+    let config = config::get_user_config();
+    build_auto_backup_settings(&config)
+}
+
+#[tauri::command]
+pub fn save_auto_backup_settings(
+    enabled: bool,
+    include_accounts: bool,
+    include_config: bool,
+    retention_days: i32,
+) -> Result<AutoBackupSettings, String> {
+    let current = config::get_user_config();
+    let (next_include_accounts, next_include_config) =
+        config::normalize_auto_backup_selection(include_accounts, include_config);
+    let next_retention_days = config::sanitize_auto_backup_retention_days(retention_days);
+    let new_config = UserConfig {
+        auto_backup_enabled: enabled,
+        auto_backup_include_accounts: next_include_accounts,
+        auto_backup_include_config: next_include_config,
+        auto_backup_retention_days: next_retention_days,
+        ..current
+    };
+    config::save_user_config(&new_config)?;
+    build_auto_backup_settings(&new_config)
+}
+
+#[tauri::command]
+pub fn update_auto_backup_last_run(last_backup_at: Option<String>) -> Result<AutoBackupSettings, String> {
+    let current = config::get_user_config();
+    let normalized_last_backup_at = last_backup_at.and_then(|value| {
+        let trimmed = value.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    });
+    let new_config = UserConfig {
+        auto_backup_last_backup_at: normalized_last_backup_at,
+        ..current
+    };
+    config::save_user_config(&new_config)?;
+    build_auto_backup_settings(&new_config)
+}
+
+#[tauri::command]
+pub fn write_auto_backup_file(file_name: String, content: String) -> Result<String, String> {
+    let safe_name = sanitize_auto_backup_file_name(&file_name)?;
+    let dir = ensure_auto_backup_dir_path()?;
+    let path = dir.join(safe_name);
+    fs::write(&path, content).map_err(|err| format!("写入自动备份文件失败: {}", err))?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn read_auto_backup_file(file_name: String) -> Result<String, String> {
+    let path = resolve_auto_backup_file_path(&file_name)?;
+    fs::read_to_string(&path).map_err(|err| format!("读取自动备份文件失败: {}", err))
+}
+
+#[tauri::command]
+pub fn list_auto_backup_files() -> Result<Vec<AutoBackupFileEntry>, String> {
+    let dir = get_auto_backup_dir_path()?;
+    if !dir.exists() {
+        return Ok(Vec::new());
     }
-    if let Some(home) = dirs::home_dir() {
-        return Ok(home.join("Downloads").to_string_lossy().to_string());
+
+    let mut files = Vec::new();
+    let entries = fs::read_dir(&dir).map_err(|err| format!("读取自动备份目录失败: {}", err))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|err| format!("读取自动备份文件失败: {}", err))?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let file_name = match path.file_name().and_then(|name| name.to_str()) {
+            Some(name) if name.ends_with(".json") => name.to_string(),
+            _ => continue,
+        };
+        let metadata = fs::metadata(&path).map_err(|err| format!("读取备份文件信息失败: {}", err))?;
+        files.push(AutoBackupFileEntry {
+            file_name,
+            path: path.to_string_lossy().to_string(),
+            size_bytes: metadata.len(),
+            modified_at_ms: metadata.modified().ok().and_then(system_time_to_unix_ms),
+        });
     }
-    Err("无法获取下载目录".to_string())
+
+    files.sort_by(|left, right| {
+        right
+            .modified_at_ms
+            .unwrap_or_default()
+            .cmp(&left.modified_at_ms.unwrap_or_default())
+            .then_with(|| right.file_name.cmp(&left.file_name))
+    });
+
+    Ok(files)
+}
+
+#[tauri::command]
+pub fn delete_auto_backup_file(file_name: String) -> Result<(), String> {
+    let path = resolve_auto_backup_file_path(&file_name)?;
+    if !path.exists() {
+        return Ok(());
+    }
+    fs::remove_file(&path).map_err(|err| format!("删除自动备份文件失败: {}", err))
+}
+
+#[tauri::command]
+pub fn cleanup_auto_backup_files(retention_days: i32) -> Result<Vec<String>, String> {
+    let dir = get_auto_backup_dir_path()?;
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let normalized_retention_days = config::sanitize_auto_backup_retention_days(retention_days);
+    let now = SystemTime::now();
+    let cutoff = now
+        .checked_sub(Duration::from_secs(normalized_retention_days as u64 * 24 * 60 * 60))
+        .unwrap_or(now);
+
+    let mut deleted = Vec::new();
+    let entries = fs::read_dir(&dir).map_err(|err| format!("读取自动备份目录失败: {}", err))?;
+    for entry in entries {
+        let entry = entry.map_err(|err| format!("读取自动备份文件失败: {}", err))?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let file_name = match path.file_name().and_then(|name| name.to_str()) {
+            Some(name) if name.ends_with(".json") => name.to_string(),
+            _ => continue,
+        };
+        let metadata = fs::metadata(&path).map_err(|err| format!("读取备份文件信息失败: {}", err))?;
+        let modified = match metadata.modified() {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        if modified >= cutoff {
+            continue;
+        }
+        fs::remove_file(&path).map_err(|err| format!("清理过期备份失败: {}", err))?;
+        deleted.push(file_name);
+    }
+
+    deleted.sort();
+    Ok(deleted)
+}
+
+#[tauri::command]
+pub fn open_auto_backup_dir() -> Result<(), String> {
+    let path = ensure_auto_backup_dir_path()?;
+    open_path_in_system(path.as_path())
 }
 
 /// 获取网络服务配置
@@ -402,6 +660,7 @@ pub fn save_network_config(
         global_proxy_no_proxy: next_global_proxy_no_proxy,
         // 保留其他设置不变
         language: current.language,
+        default_terminal: current.default_terminal,
         theme: current.theme,
         ui_scale: current.ui_scale,
         auto_refresh_minutes: current.auto_refresh_minutes,
@@ -428,6 +687,11 @@ pub fn save_network_config(
         codex_startup_wakeup_enabled: current.codex_startup_wakeup_enabled,
         codex_startup_wakeup_delay_seconds: current.codex_startup_wakeup_delay_seconds,
         floating_card_confirm_on_close: current.floating_card_confirm_on_close,
+        auto_backup_enabled: current.auto_backup_enabled,
+        auto_backup_include_accounts: current.auto_backup_include_accounts,
+        auto_backup_include_config: current.auto_backup_include_config,
+        auto_backup_retention_days: current.auto_backup_retention_days,
+        auto_backup_last_backup_at: current.auto_backup_last_backup_at,
         floating_card_position_x: current.floating_card_position_x,
         floating_card_position_y: current.floating_card_position_y,
         opencode_app_path: current.opencode_app_path,
@@ -498,6 +762,133 @@ pub fn save_network_config(
     Ok(needs_restart)
 }
 
+/// 获取系统可用的终端列表
+#[tauri::command]
+pub async fn get_available_terminals() -> Result<Vec<String>, String> {
+    let mut available = Vec::new();
+    available.push("system".to_string());
+
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var("HOME").unwrap_or_default();
+        let terminals = [
+            (
+                "Terminal",
+                vec![
+                    "/System/Applications/Utilities/Terminal.app".to_string(),
+                    "/Applications/Utilities/Terminal.app".to_string(),
+                ],
+            ),
+            (
+                "iTerm2",
+                vec![
+                    "/Applications/iTerm.app".to_string(),
+                    "/Applications/iTerm 2.app".to_string(),
+                    format!("{}/Applications/iTerm.app", home),
+                ],
+            ),
+            (
+                "Warp",
+                vec![
+                    "/Applications/Warp.app".to_string(),
+                    format!("{}/Applications/Warp.app", home),
+                ],
+            ),
+            (
+                "Ghostty",
+                vec![
+                    "/Applications/Ghostty.app".to_string(),
+                    format!("{}/Applications/Ghostty.app", home),
+                ],
+            ),
+            (
+                "WezTerm",
+                vec![
+                    "/Applications/WezTerm.app".to_string(),
+                    format!("{}/Applications/WezTerm.app", home),
+                ],
+            ),
+            (
+                "Kitty",
+                vec![
+                    "/Applications/Kitty.app".to_string(),
+                    format!("{}/Applications/Kitty.app", home),
+                ],
+            ),
+            (
+                "Alacritty",
+                vec![
+                    "/Applications/Alacritty.app".to_string(),
+                    format!("{}/Applications/Alacritty.app", home),
+                ],
+            ),
+        ];
+        for (name, paths) in terminals {
+            for path in paths {
+                if !path.is_empty() && std::path::Path::new(&path).exists() {
+                    available.push(name.to_string());
+                    break;
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Windows 下检查可执行文件是否在 PATH 中
+        let terminals = ["cmd", "powershell", "pwsh", "wt"];
+        for name in terminals {
+            if is_command_available(name) {
+                available.push(name.to_string());
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let terminals = [
+            "x-terminal-emulator",
+            "gnome-terminal",
+            "konsole",
+            "xfce4-terminal",
+            "xterm",
+            "alacritty",
+            "kitty",
+        ];
+        for name in terminals {
+            if is_command_available(name) {
+                available.push(name.to_string());
+            }
+        }
+    }
+
+    Ok(available)
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+fn is_command_available(cmd: &str) -> bool {
+    #[cfg(target_os = "windows")]
+    let check_cmd = "where";
+    #[cfg(target_os = "linux")]
+    let check_cmd = "which";
+
+    let mut command = std::process::Command::new(check_cmd);
+    command
+        .arg(cmd)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    command.status().map(|s| s.success()).unwrap_or(false)
+}
+
 /// 获取通用设置配置
 #[tauri::command]
 pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String> {
@@ -527,6 +918,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
 
     let result = GeneralConfig {
         language: user_config.language,
+        default_terminal: user_config.default_terminal,
         theme: user_config.theme,
         ui_scale: user_config.ui_scale,
         auto_refresh_minutes: user_config.auto_refresh_minutes,
@@ -647,6 +1039,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
 pub fn save_general_config(
     app: tauri::AppHandle,
     language: String,
+    default_terminal: Option<String>,
     theme: String,
     ui_scale: Option<f64>,
     auto_refresh_minutes: i32,
@@ -790,8 +1183,8 @@ pub fn save_general_config(
         floating_card_always_on_top.unwrap_or(current.floating_card_always_on_top);
     let app_auto_launch_enabled_value =
         app_auto_launch_enabled.unwrap_or(current.app_auto_launch_enabled);
-    let antigravity_startup_wakeup_enabled_value = antigravity_startup_wakeup_enabled
-        .unwrap_or(current.antigravity_startup_wakeup_enabled);
+    let antigravity_startup_wakeup_enabled_value =
+        antigravity_startup_wakeup_enabled.unwrap_or(current.antigravity_startup_wakeup_enabled);
     let antigravity_startup_wakeup_delay_seconds_value = sanitize_startup_wakeup_delay_seconds(
         antigravity_startup_wakeup_delay_seconds
             .unwrap_or(current.antigravity_startup_wakeup_delay_seconds),
@@ -835,6 +1228,7 @@ pub fn save_general_config(
         global_proxy_no_proxy: current.global_proxy_no_proxy,
         // 更新通用设置
         language: normalized_language.clone(),
+        default_terminal: default_terminal.unwrap_or(current.default_terminal),
         theme,
         ui_scale: normalized_ui_scale,
         auto_refresh_minutes,
@@ -983,6 +1377,11 @@ pub fn save_general_config(
             .unwrap_or(current.workbuddy_quota_alert_enabled),
         workbuddy_quota_alert_threshold: workbuddy_quota_alert_threshold
             .unwrap_or(current.workbuddy_quota_alert_threshold),
+        auto_backup_enabled: current.auto_backup_enabled,
+        auto_backup_include_accounts: current.auto_backup_include_accounts,
+        auto_backup_include_config: current.auto_backup_include_config,
+        auto_backup_retention_days: current.auto_backup_retention_days,
+        auto_backup_last_backup_at: current.auto_backup_last_backup_at,
     };
 
     config::save_user_config(&new_config)?;

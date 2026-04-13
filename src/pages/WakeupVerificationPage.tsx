@@ -202,6 +202,12 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
     report: reportConfigModalError,
     clear: clearConfigModalError,
   } = useModalErrorState('');
+  const {
+    message: detailModalError,
+    scrollKey: detailModalErrorScrollKey,
+    report: reportDetailModalError,
+    clear: clearDetailModalError,
+  } = useModalErrorState('');
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState('');
   const [batchAccountIds, setBatchAccountIds] = useState<string[]>([]);
@@ -720,7 +726,18 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
     setShowConfigModal(true);
   };
 
+  const closeDetailModal = () => {
+    clearDetailModalError();
+    setShowDetailModal(false);
+  };
+
+  const handleDetailFilterChange = (filter: DetailFilter) => {
+    clearDetailModalError();
+    setDetailFilter(filter);
+  };
+
   const openDetailModal = (batch: WakeupVerificationBatchHistoryItem) => {
+    clearDetailModalError();
     setDetailFilter('all');
     setDetailMode('history');
     setDetailBatchId(batch.batchId);
@@ -919,7 +936,12 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
     }
   };
 
-  const ensureWakeupRuntimeReady = useCallback(async (options?: { reportToConfigModal?: boolean }): Promise<boolean> => {
+  const ensureWakeupRuntimeReady = useCallback(async (options?: {
+    reportError?: (message: string) => void;
+  }): Promise<boolean> => {
+    const reportError = options?.reportError ?? ((message: string) => {
+      setNotice({ text: message, tone: 'error' });
+    });
     try {
       await invoke('wakeup_ensure_runtime_ready', { officialLsVersionMode });
       return true;
@@ -932,41 +954,26 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
           }),
         );
         const pathErrorText = t('appPath.modal.desc', { app: 'Antigravity' });
-        if (options?.reportToConfigModal) {
-          reportConfigModalError(pathErrorText);
-        } else {
-          setNotice({ text: pathErrorText, tone: 'warning' });
-        }
+        reportError(pathErrorText);
         return false;
       }
-      if (options?.reportToConfigModal) {
-        reportConfigModalError(message);
-      } else {
-        setNotice({ text: message, tone: 'error' });
-      }
+      reportError(message);
       return false;
     }
-  }, [officialLsVersionMode, reportConfigModalError, t]);
+  }, [officialLsVersionMode, t]);
 
-  const startBatchVerification = async () => {
-    if (running) return;
-    clearConfigModalError();
-    if (!selectedModel) {
-      reportConfigModalError(t('wakeup.notice.testMissingModel'));
-      return;
-    }
-    if (selectedAccounts.length === 0) {
-      reportConfigModalError(t('wakeup.notice.testMissingAccount'));
-      return;
-    }
-    const runtimeReady = await ensureWakeupRuntimeReady({ reportToConfigModal: true });
-    if (!runtimeReady) {
-      return;
-    }
-
+  const runBatchVerification = async (options: {
+    accountIds: string[];
+    model: string;
+    prompt: string;
+    source: 'config' | 'detail';
+    reportError: (message: string) => void;
+    fallbackDetailBatchId?: string | null;
+  }) => {
+    const { accountIds: targetAccountIds, model, prompt, source, reportError, fallbackDetailBatchId } = options;
     const now = Date.now();
     const pendingStates: Record<string, WakeupVerificationStateItem> = {};
-    selectedAccounts.forEach((accountId) => {
+    targetAccountIds.forEach((accountId) => {
       const account = accountById.get(accountId);
       if (!account) return;
       pendingStates[accountId] = {
@@ -974,7 +981,7 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
         accountEmail: account.email,
         status: STATUS_RUNNING,
         lastVerifyAt: now,
-        lastModel: selectedModel,
+        lastModel: model,
         lastErrorCode: null,
         lastMessage: null,
         validationUrl: null,
@@ -985,10 +992,10 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
 
     const localBatchId = `pending_${now}`;
     setLiveStates(pendingStates);
-    setBatchAccountIds([...selectedAccounts]);
+    setBatchAccountIds([...targetAccountIds]);
     setProgress({
       batchId: localBatchId,
-      total: selectedAccounts.length,
+      total: targetAccountIds.length,
       completed: 0,
       successCount: 0,
       verificationRequiredCount: 0,
@@ -998,9 +1005,11 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
       item: null,
     });
     setRunningStartedAt(now);
-    setRunningModel(selectedModel);
-    setRunningPrompt(DEFAULT_PROMPT);
-    setShowConfigModal(false);
+    setRunningModel(model);
+    setRunningPrompt(prompt);
+    if (source === 'config') {
+      setShowConfigModal(false);
+    }
     setShowDetailModal(true);
     setDetailMode('running');
     setDetailBatchId(localBatchId);
@@ -1010,9 +1019,9 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
 
     try {
       const result = await invoke<WakeupVerificationBatchResult>('wakeup_verification_run_batch', {
-        accountIds: selectedAccounts,
-        model: selectedModel,
-        prompt: DEFAULT_PROMPT,
+        accountIds: targetAccountIds,
+        model,
+        prompt,
         maxOutputTokens: 0,
         officialLsVersionMode,
       });
@@ -1067,11 +1076,77 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
       setLiveStates({});
       setBatchAccountIds([]);
       setRunningStartedAt(null);
-      setShowDetailModal(false);
-      setDetailBatchId(null);
-      setShowConfigModal(true);
-      reportConfigModalError(String(error));
+      if (source === 'config') {
+        setShowDetailModal(false);
+        setDetailBatchId(null);
+        setShowConfigModal(true);
+      } else {
+        setShowDetailModal(true);
+        setDetailMode('history');
+        setDetailBatchId(fallbackDetailBatchId || null);
+      }
+      reportError(formatErrorMessage(error));
     }
+  };
+
+  const startBatchVerification = async () => {
+    if (running) return;
+    clearConfigModalError();
+    if (!selectedModel) {
+      reportConfigModalError(t('wakeup.notice.testMissingModel'));
+      return;
+    }
+    if (selectedAccounts.length === 0) {
+      reportConfigModalError(t('wakeup.notice.testMissingAccount'));
+      return;
+    }
+    const runtimeReady = await ensureWakeupRuntimeReady({ reportError: reportConfigModalError });
+    if (!runtimeReady) {
+      return;
+    }
+    await runBatchVerification({
+      accountIds: selectedAccounts,
+      model: selectedModel,
+      prompt: DEFAULT_PROMPT,
+      source: 'config',
+      reportError: reportConfigModalError,
+    });
+  };
+
+  const retryFilteredVerification = async () => {
+    if (running || detailMode !== 'history' || !activeDetail) return;
+    clearDetailModalError();
+
+    if (!activeDetail.model) {
+      reportDetailModalError(t('wakeup.verification.actions.retryMissingModel'));
+      return;
+    }
+
+    const retryAccountIds = Array.from(
+      new Set(
+        filteredDetailRows
+          .map((item) => item.accountId)
+          .filter((accountId) => accountById.has(accountId)),
+      ),
+    );
+    if (retryAccountIds.length === 0) {
+      reportDetailModalError(t('wakeup.verification.actions.retryMissingAccount'));
+      return;
+    }
+
+    const runtimeReady = await ensureWakeupRuntimeReady({ reportError: reportDetailModalError });
+    if (!runtimeReady) {
+      return;
+    }
+
+    await runBatchVerification({
+      accountIds: retryAccountIds,
+      model: activeDetail.model,
+      prompt: activeDetail.prompt || DEFAULT_PROMPT,
+      source: 'detail',
+      reportError: reportDetailModalError,
+      fallbackDetailBatchId: activeDetail.batchId,
+    });
   };
 
   const renderValidationActions = (item: WakeupVerificationStateItem) => {
@@ -1413,15 +1488,16 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
       )}
 
       {showDetailModal && (
-        <div className="modal-overlay" onClick={() => setShowDetailModal(false)}>
+        <div className="modal-overlay" onClick={closeDetailModal}>
           <div className="modal wakeup-modal verification-progress-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{t('accounts.actions.viewDetails')}</h2>
-              <button className="modal-close" onClick={() => setShowDetailModal(false)}>
+              <button className="modal-close" onClick={closeDetailModal}>
                 <X />
               </button>
             </div>
             <div className="modal-body verification-modal-body">
+              <ModalErrorMessage message={detailModalError} scrollKey={detailModalErrorScrollKey} />
               <div className="verification-detail-meta">
                 <span>
                   {t('accounts.columns.lastUsed')}: {formatTime(activeDetail?.verifiedAt)}
@@ -1434,35 +1510,35 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
                 <button
                   type="button"
                   className={`pill pill-secondary verification-filter-pill ${detailFilter === 'all' ? 'active' : ''}`}
-                  onClick={() => setDetailFilter('all')}
+                  onClick={() => handleDetailFilterChange('all')}
                 >
                   {t('common.shared.filter.all', { count: detailCounts.all })}
                 </button>
                 <button
                   type="button"
                   className={`pill pill-success verification-filter-pill ${detailFilter === 'success' ? 'active' : ''}`}
-                  onClick={() => setDetailFilter('success')}
+                  onClick={() => handleDetailFilterChange('success')}
                 >
                   {t('common.success')} {detailCounts.success}
                 </button>
                 <button
                   type="button"
                   className={`pill pill-emphasis verification-filter-pill ${detailFilter === 'verification_required' ? 'active' : ''}`}
-                  onClick={() => setDetailFilter('verification_required')}
+                  onClick={() => handleDetailFilterChange('verification_required')}
                 >
                   {t('wakeup.errorUi.verificationRequiredTitle')} {detailCounts.verificationRequired}
                 </button>
                 <button
                   type="button"
                   className={`pill pill-warning verification-filter-pill ${detailFilter === 'tos_violation' ? 'active' : ''}`}
-                  onClick={() => setDetailFilter('tos_violation')}
+                  onClick={() => handleDetailFilterChange('tos_violation')}
                 >
                   {t('wakeup.errorUi.tosViolationTitle')} {detailCounts.tosViolation}
                 </button>
                 <button
                   type="button"
                   className={`pill pill-danger verification-filter-pill ${detailFilter === 'failed' ? 'active' : ''}`}
-                  onClick={() => setDetailFilter('failed')}
+                  onClick={() => handleDetailFilterChange('failed')}
                 >
                   {t('common.failed')} {detailCounts.failed}
                 </button>
@@ -1524,7 +1600,14 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
               </ul>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowDetailModal(false)}>
+              <button
+                className="btn btn-primary"
+                onClick={retryFilteredVerification}
+                disabled={running || detailMode !== 'history' || !activeDetail || filteredDetailRows.length === 0}
+              >
+                {t('wakeup.verification.actions.retryFiltered', { count: filteredDetailRows.length })}
+              </button>
+              <button className="btn btn-secondary" onClick={closeDetailModal}>
                 {t('common.close')}
               </button>
             </div>

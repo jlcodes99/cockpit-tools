@@ -47,10 +47,14 @@ pub async fn wakeup_sync_state(
     enabled: bool,
     tasks: Vec<modules::wakeup_scheduler::WakeupTaskInput>,
     official_ls_version_mode: Option<String>,
+    run_startup_tasks: Option<bool>,
 ) -> Result<(), String> {
     modules::wakeup::set_official_ls_version_mode(official_ls_version_mode.as_deref())?;
     modules::wakeup_scheduler::sync_state(enabled, tasks);
-    modules::wakeup_scheduler::ensure_started(app);
+    modules::wakeup_scheduler::ensure_started(app.clone());
+    if run_startup_tasks.unwrap_or(false) {
+        modules::wakeup_scheduler::trigger_startup_tasks_if_needed(app);
+    }
     Ok(())
 }
 

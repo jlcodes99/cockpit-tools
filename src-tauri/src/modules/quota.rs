@@ -807,9 +807,9 @@ pub async fn fetch_project_id_with_context(
                                         email, err, header_info
                                     ));
                                     crate::modules::logger::log_error(&format!(
-                                        "❌ [{}] loadCodeAssist 原始响应: {}",
+                                        "❌ [{}] loadCodeAssist 原始响应长度: {}",
                                         email,
-                                        truncate_log_text(&text, 2000)
+                                        text.len()
                                     ));
                                 }
                             }
@@ -832,22 +832,22 @@ pub async fn fetch_project_id_with_context(
                 } else if status == reqwest::StatusCode::UNAUTHORIZED {
                     let text = res.text().await.unwrap_or_default();
                     let reason = format!(
-                        "loadCodeAssist 返回 401 Unauthorized, base={}, attempt={}/{}, body={}",
+                        "loadCodeAssist 返回 401 Unauthorized, base={}, attempt={}/{}, body_len={}",
                         base_url,
                         attempt,
                         DEFAULT_ATTEMPTS,
-                        truncate_log_text(&text, 1000)
+                        text.len()
                     );
                     log_subscription_tier_result(email, subscription_tier.as_ref(), &reason);
                     return (None, subscription_tier, credits);
                 } else if status == reqwest::StatusCode::FORBIDDEN {
                     let text = res.text().await.unwrap_or_default();
                     let reason = format!(
-                        "loadCodeAssist 返回 403 Forbidden, base={}, attempt={}/{}, body={}",
+                        "loadCodeAssist 返回 403 Forbidden, base={}, attempt={}/{}, body_len={}",
                         base_url,
                         attempt,
                         DEFAULT_ATTEMPTS,
-                        truncate_log_text(&text, 1000)
+                        text.len()
                     );
                     log_subscription_tier_result(email, subscription_tier.as_ref(), &reason);
                     return (None, subscription_tier, credits);
@@ -856,12 +856,12 @@ pub async fn fetch_project_id_with_context(
                     let retryable =
                         status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.as_u16() >= 500;
                     last_error = Some(format!(
-                        "loadCodeAssist 失败: status={}, base={}, attempt={}/{}, body={}",
+                        "loadCodeAssist 失败: status={}, base={}, attempt={}/{}, body_len={}",
                         status,
                         base_url,
                         attempt,
                         DEFAULT_ATTEMPTS,
-                        truncate_log_text(&text, 1000)
+                        text.len()
                     ));
                     if retryable && attempt < DEFAULT_ATTEMPTS {
                         let delay = get_backoff_delay_ms(attempt + 1);

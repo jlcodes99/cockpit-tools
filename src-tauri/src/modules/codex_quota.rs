@@ -143,9 +143,12 @@ async fn refresh_account_tokens(account: &mut CodexAccount, reason: &str) -> Res
         account.email, reason
     ));
 
-    let new_tokens = crate::modules::codex_oauth::refresh_access_token(&refresh_token)
-        .await
-        .map_err(|e| format!("{}，刷新 Token 失败: {}", reason, e))?;
+    let new_tokens = crate::modules::codex_oauth::refresh_access_token_with_fallback(
+        &refresh_token,
+        Some(account.tokens.id_token.as_str()),
+    )
+    .await
+    .map_err(|e| format!("{}，刷新 Token 失败: {}", reason, e))?;
 
     account.tokens = new_tokens;
     Ok(())
@@ -211,20 +214,21 @@ pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, Str
         let detail_code = extract_detail_code_from_body(&body);
 
         logger::log_error(&format!(
-            "Codex 配额接口返回非成功状态: url={}, status={}, request-id={}, x-request-id={}, cf-ray={}, detail_code={:?}, body={}",
-            USAGE_URL, status, request_id, x_request_id, cf_ray, detail_code, body
+            "Codex 配额接口返回非成功状态: url={}, status={}, request-id={}, x-request-id={}, cf-ray={}, detail_code={:?}, body_len={}",
+            USAGE_URL,
+            status,
+            request_id,
+            x_request_id,
+            cf_ray,
+            detail_code,
+            body_len
         ));
 
-        let body_preview = if body.len() > 200 {
-            &body[..200]
-        } else {
-            &body
-        };
         let mut error_message = format!("API 返回错误 {}", status);
         if let Some(code) = detail_code {
             error_message.push_str(&format!(" [error_code:{}]", code));
         }
-        error_message.push_str(&format!(" - {}", body_preview));
+        error_message.push_str(&format!(" [body_len:{}]", body_len));
         return Err(error_message);
     }
 

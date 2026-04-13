@@ -73,6 +73,7 @@ interface NetworkConfig {
 /** 通用配置类型 */
 interface GeneralConfig {
   language: string;
+  default_terminal: string;
   theme: string;
   ui_scale: number;
   auto_refresh_minutes: number;
@@ -230,9 +231,50 @@ const buildDefaultCurrentAccountRefreshCustomModeMap = (): Record<
 export function SettingsPage() {
   const { t } = useTranslation();
   const isMacOS = usePlatformRuntimeSupport('macos-only');
+  const isWindows = usePlatformRuntimeSupport('windows-only');
+  const isLinux = usePlatformRuntimeSupport('linux-only');
   const sideNavLayoutMode = useSideNavLayoutStore((state) => state.mode);
   const setSideNavLayoutMode = useSideNavLayoutStore((state) => state.setMode);
   const [activeTab, setActiveTab] = useState<'general' | 'network' | 'about'>('general');
+  const [availableTerminals, setAvailableTerminals] = useState<string[]>(['system']);
+
+  useEffect(() => {
+    invoke<string[]>('get_available_terminals')
+      .then(setAvailableTerminals)
+      .catch(err => console.error('获取可用终端失败:', err));
+  }, []);
+
+  const terminalOptions = useMemo(() => {
+    const common = [{ value: 'system', label: t('settings.general.terminalSystem', '系统默认') }];
+    const allOptions = isMacOS ? [
+      { value: 'Terminal', label: 'Terminal.app' },
+      { value: 'iTerm2', label: 'iTerm2' },
+      { value: 'Warp', label: 'Warp' },
+      { value: 'Ghostty', label: 'Ghostty' },
+      { value: 'WezTerm', label: 'WezTerm' },
+      { value: 'Kitty', label: 'Kitty' },
+      { value: 'Alacritty', label: 'Alacritty' },
+    ] : isWindows ? [
+      { value: 'cmd', label: 'Command Prompt (cmd)' },
+      { value: 'PowerShell', label: 'PowerShell' },
+      { value: 'pwsh', label: 'PowerShell Core (pwsh)' },
+      { value: 'wt', label: 'Windows Terminal (wt)' },
+    ] : isLinux ? [
+      { value: 'x-terminal-emulator', label: 'x-terminal-emulator' },
+      { value: 'gnome-terminal', label: 'gnome-terminal' },
+      { value: 'konsole', label: 'konsole' },
+      { value: 'xfce4-terminal', label: 'xfce4-terminal' },
+      { value: 'xterm', label: 'xterm' },
+      { value: 'alacritty', label: 'Alacritty' },
+      { value: 'kitty', label: 'Kitty' },
+    ] : [];
+
+    return [
+      ...common,
+      ...allOptions.filter(opt => availableTerminals.includes(opt.value))
+    ];
+  }, [isMacOS, isWindows, isLinux, availableTerminals, t]);
+
   const orderedPlatformIds = usePlatformLayoutStore((state) => state.orderedPlatformIds);
   const platformSettingsOrder = useMemo<Record<PlatformId, number>>(() => {
     const next: Record<PlatformId, number> = { ...FALLBACK_PLATFORM_SETTINGS_ORDER };
@@ -262,10 +304,12 @@ export function SettingsPage() {
     { value: 'cs', label: 'Čeština' },
     { value: 'vi', label: 'Tiếng Việt' },
     { value: 'ar', label: 'العربية' },
+    { value: 'id', label: 'Bahasa Indonesia' },
   ];
   
   // General Settings States
   const [language, setLanguage] = useState(getCurrentLanguage());
+  const [defaultTerminal, setDefaultTerminal] = useState('system');
   const [theme, setTheme] = useState('system');
   const [uiScale, setUiScale] = useState('1');
   const [autoRefresh, setAutoRefresh] = useState('5');
@@ -683,6 +727,7 @@ export function SettingsPage() {
       try {
         await invoke('save_general_config', {
           language,
+          defaultTerminal,
           theme,
           uiScale: normalizedUiScale,
           autoRefreshMinutes: autoRefreshNum,
@@ -811,6 +856,7 @@ export function SettingsPage() {
     appAutoLaunchEnabled,
     generalLoaded,
     language,
+    defaultTerminal,
     theme,
     uiScale,
     opencodeAppPath,
@@ -1075,6 +1121,7 @@ export function SettingsPage() {
     try {
       const config = await invoke<GeneralConfig>('get_general_config');
       setLanguage(normalizeLanguage(config.language));
+      setDefaultTerminal(config.default_terminal || 'system');
       setTheme(config.theme);
       setUiScale(String(config.ui_scale ?? 1));
       setAutoRefresh(String(config.auto_refresh_minutes));
@@ -1400,16 +1447,59 @@ export function SettingsPage() {
     }));
   };
 
+  const isCurrentAccountRefreshAvailable = (
+    platform: CurrentAccountRefreshPlatform,
+  ): boolean => {
+    const parseRefresh = (value: string): number => Number.parseInt(value, 10) || -1;
+    switch (platform) {
+      case 'antigravity':
+        return parseRefresh(autoRefresh) > 0;
+      case 'codex':
+        return parseRefresh(codexAutoRefresh) > 0;
+      case 'ghcp':
+        return parseRefresh(ghcpAutoRefresh) > 0;
+      case 'windsurf':
+        return parseRefresh(windsurfAutoRefresh) > 0;
+      case 'kiro':
+        return parseRefresh(kiroAutoRefresh) > 0;
+      case 'cursor':
+        return parseRefresh(cursorAutoRefresh) > 0;
+      case 'gemini':
+        return parseRefresh(geminiAutoRefresh) > 0;
+      case 'codebuddy':
+        return parseRefresh(codebuddyAutoRefresh) > 0;
+      case 'codebuddy_cn':
+        return parseRefresh(codebuddyCnAutoRefresh) > 0;
+      case 'workbuddy':
+        return parseRefresh(workbuddyAutoRefresh) > 0;
+      case 'qoder':
+        return parseRefresh(qoderAutoRefresh) > 0;
+      case 'trae':
+        return parseRefresh(traeAutoRefresh) > 0;
+      case 'zed':
+        return parseRefresh(zedAutoRefresh) > 0;
+    }
+  };
+
   const renderCurrentAccountRefreshRow = (platform: CurrentAccountRefreshPlatform) => {
     const value = currentAccountRefreshMinutes[platform];
-    const customMode = currentAccountRefreshCustomMode[platform];
+    const currentRefreshAvailable = isCurrentAccountRefreshAvailable(platform);
+    const customMode = currentAccountRefreshCustomMode[platform] && currentRefreshAvailable;
     const isPreset = CURRENT_ACCOUNT_REFRESH_PRESET_VALUES.includes(value);
+    const displayValue = currentRefreshAvailable ? value : '-1';
 
     return (
       <div className="settings-row">
         <div className="row-label">
           <div className="row-title">{t('settings.general.currentAccountRefreshTitle')}</div>
-          <div className="row-desc">{t('settings.general.currentAccountRefreshItemDesc')}</div>
+          <div className="row-desc">
+            {currentRefreshAvailable
+              ? t('settings.general.currentAccountRefreshItemDesc')
+              : t(
+                'settings.general.currentAccountRefreshRequiresAutoRefresh',
+                '需先开启“配额自动刷新”后，才能设置当前账号刷新。',
+              )}
+          </div>
         </div>
         <div className="row-control">
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -1438,6 +1528,7 @@ export function SettingsPage() {
                       setCurrentAccountRefreshCustomModeValue(platform, false);
                     }
                   }}
+                  disabled={!currentRefreshAvailable}
                 />
                 <span className="settings-input-unit">{t('settings.general.minutes')}</span>
               </div>
@@ -1445,8 +1536,11 @@ export function SettingsPage() {
               <select
                 className="settings-select"
                 style={{ minWidth: '120px', width: 'auto' }}
-                value={value}
+                value={displayValue}
                 onChange={(event) => {
+                  if (!currentRefreshAvailable) {
+                    return;
+                  }
                   const nextValue = event.target.value;
                   if (nextValue === 'custom') {
                     setCurrentAccountRefreshCustomModeValue(platform, true);
@@ -1459,7 +1553,11 @@ export function SettingsPage() {
                   setCurrentAccountRefreshCustomModeValue(platform, false);
                   setCurrentAccountRefreshValue(platform, nextValue);
                 }}
+                disabled={!currentRefreshAvailable}
               >
+                {!currentRefreshAvailable && (
+                  <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
+                )}
                 {!isPreset && (
                   <option value={value}>
                     {value} {t('settings.general.minutes')}
@@ -1611,6 +1709,24 @@ export function SettingsPage() {
                     <option value="light">{t('settings.general.themeLight')}</option>
                     <option value="dark">{t('settings.general.themeDark')}</option>
                     <option value="system">{t('settings.general.themeSystem')}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="row-label">
+                  <div className="row-title">{t('settings.general.defaultTerminal', '默认终端')}</div>
+                  <div className="row-desc">{t('settings.general.defaultTerminalDesc', 'Gemini CLI 打开时使用的终端')}</div>
+                </div>
+                <div className="row-control">
+                  <select 
+                    className="settings-select" 
+                    value={defaultTerminal} 
+                    onChange={(e) => setDefaultTerminal(e.target.value)}
+                  >
+                    {terminalOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>

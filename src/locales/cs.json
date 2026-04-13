@@ -33,19 +33,24 @@
         "creditPackage": "Balíček kreditů",
         "sharedCreditPackage": "Sdílený balíček kreditů",
         "account": "Účet",
-        "createdAt": "Čas vytvoření"
+        "createdAt": "Čas vytvoření",
+        "userId": "ID uživatele"
       },
       "empty": {
         "title": "Žádné účty"
       },
-      "export": "Exportovat",
+      "export": {
+        "title": "Exportovat",
+        "copyFailed": "Kopírování se nezdařilo, zkopírujte prosím ručně"
+      },
       "filter": {
         "all": "Vše ({{count}})",
         "enterprise": "ENTERPRISE ({{count}})",
         "free": "ZDARMA ({{count}})",
         "pro": "PRO ({{count}})",
         "business": "OBCHOD ({{count}})",
-        "individual": "JEDNOTLIVCE ({{count}})"
+        "individual": "JEDNOTLIVCE ({{count}})",
+        "validAccounts": "Platné účty ({{count}})"
       },
       "filterLabel": "Filtr",
       "import": {
@@ -127,9 +132,11 @@
       },
       "quota": {
         "noData": "Žádná data kvóty",
+        "queryFailed": "Dotaz na kvótu selhal",
         "resetDone": "Resetováno",
         "hourly": "Kvóta 5 hodin",
-        "weekly": "Týdenní kvóta"
+        "weekly": "Týdenní kvóta",
+        "resetAt": "Obnovení: {{time}}"
       },
       "subtitle": "Spravujte své účty GitHub Copilot",
       "time": {
@@ -161,7 +168,10 @@
       },
       "updated": {
         "label": "Aktualizováno před {{relative}}"
-      }
+      },
+      "clear": "Vymazat",
+      "loginSuccess": "Přihlášení úspěšné",
+      "switchAccount": "Přepnout účet"
     },
     "topRightAd": {
       "ariaLabel": "Globální reklamní slot vpravo nahoře",
@@ -169,7 +179,15 @@
       "title": "Reklamní slot vpravo nahoře",
       "desc": "Tato oblast je pevně umístěná vpravo nahoře na všech stránkách pro kampaně nebo brandové reklamy.",
       "action": "Zobrazit podrobnosti"
-    }
+    },
+    "appName": "Cockpit Tools",
+    "collapse": "Sbalit",
+    "confirmDelete": "Potvrdit smazání",
+    "confirmDeleteTag": "Potvrdit smazání štítku",
+    "deleteTagWarning": "Opravdu chcete odstranit tento štítek ze všech účtů?",
+    "expand": "Rozbalit",
+    "processing": "Zpracovávám...",
+    "selectAll": "Vybrat vše"
   },
   "nav": {
     "overview": "Antigravity",
@@ -292,7 +310,8 @@
       "running": "Běží",
       "stopped": "Zastaveno",
       "restarting": "Restartování",
-      "starting": "Spuštění"
+      "starting": "Spuštění",
+      "ready": "Připraveno"
     },
     "labels": {
       "path": "Adresář",
@@ -302,7 +321,8 @@
       "unbound": "Nepropojeno",
       "pendingInit": "Čeká na inicializaci (nejprve jednou spusťte)",
       "quota": "Kvóta",
-      "lastLaunched": "Poslední spuštění"
+      "lastLaunched": "Poslední spuštění",
+      "argsPresent": "Nastaveno"
     },
     "columns": {
       "instance": "Instance",
@@ -352,7 +372,14 @@
       "extraArgsDesc": "Argumenty oddělujte mezerami, uvozovky jsou podporovány",
       "nameRequired": "Zadejte prosím název instance",
       "pathRequired": "Vyberte prosím adresář instance",
-      "bindRequired": "Vyberte prosím účet k propojení"
+      "bindRequired": "Vyberte prosím účet k propojení",
+      "optional": "Volitelné",
+      "launchMode": "Způsob spuštění",
+      "launchModeApp": "Aplikace",
+      "launchModeCli": "Režim CLI",
+      "workingDir": "Pracovní adresář",
+      "workingDirPlaceholder": "Výchozí je aktuální cesta",
+      "workingDirDesc": "Při spuštění se nejdřív přepne do tohoto adresáře"
     },
     "quota": {
       "unbound": "Účet není propojen",
@@ -372,7 +399,8 @@
       "closedAll": "Všechny instance byly zastaveny",
       "allAlreadyRunning": "Všechny instance již běží",
       "noneRunning": "Nebyly nalezeny žádné běžící instance",
-      "syncThreadsNeedTwo": "Pro synchronizaci vláken jsou potřeba alespoň dvě instance"
+      "syncThreadsNeedTwo": "Pro synchronizaci vláken jsou potřeba alespoň dvě instance",
+      "launchPrepared": "Příkaz ke spuštění je připraven"
     },
     "runningDialog": {
       "title": "Instance již běží",
@@ -435,6 +463,13 @@
       "bindHint": "Účet můžete svázat později ze seznamu instancí",
       "pathRequired": "Nejprve vyberte adresář",
       "submit": "Importovat"
+    },
+    "launchDialog": {
+      "title": "Spustit instanci",
+      "terminal": "Terminál",
+      "command": "Příkaz ke spuštění",
+      "hint": "Zkopírujte příkaz a spusťte ho ručně, nebo ho spusťte přímo v terminálu.",
+      "runInTerminal": "Spustit v terminálu"
     }
   },
   "settings": {
@@ -611,7 +646,27 @@
       "autoSwitchAccountScopeDialogTitle": "Vyberte rozsah účtů pro automatické přepínání",
       "autoSwitchAccountScopeAllHint": "Aktuální rozsah jsou všechny účty. Do automatického přepínání bude zahrnuto {{total}} účtů.",
       "codexAutoSwitchAccountScope": "Rozsah automatického přepínání účtů Codex",
-      "codexAutoSwitchAccountScopeDesc": "Aktuální stav automatického přepínání Codex: {{status}}. Zohledněny budou pouze účty v tomto rozsahu."
+      "codexAutoSwitchAccountScopeDesc": "Aktuální stav automatického přepínání Codex: {{status}}. Zohledněny budou pouze účty v tomto rozsahu.",
+      "defaultTerminal": "Výchozí terminál",
+      "defaultTerminalDesc": "Terminál použitý při otevírání Gemini CLI",
+      "terminalSystem": "Systémový výchozí",
+      "currentAccountRefreshRequiresAutoRefresh": "Pro nastavení obnovení aktuálního účtu nejprve zapněte „Automatické obnovení kvóty“.",
+      "codebuddyCnAppPath": "Cesta k aplikaci CodeBuddy CN",
+      "codebuddyCnAppPathDesc": "Pokud je prázdné, použije se výchozí cesta",
+      "codebuddyCnAppPathPlaceholder": "Výchozí cesta",
+      "codebuddyCnAutoRefresh": "Automatické obnovení kvóty CodeBuddy CN",
+      "codebuddyCnAutoRefreshDesc": "Frekvence automatického obnovení na pozadí",
+      "codebuddyCnPathReset": "Obnovit výchozí",
+      "codebuddyCnPathSelect": "Vybrat",
+      "codebuddyCnSettingsTitle": "Nastavení CodeBuddy CN",
+      "qoderAppPath": "Cesta k aplikaci Qoder",
+      "qoderAppPathDesc": "Pokud je prázdné, použije se výchozí cesta",
+      "qoderAppPathPlaceholder": "Výchozí cesta",
+      "qoderAutoRefresh": "Automatické obnovení kvóty Qoder",
+      "qoderAutoRefreshDesc": "Frekvence automatického obnovení na pozadí",
+      "qoderPathSelect": "Vybrat",
+      "workbuddyAutoRefresh": "Automatické obnovení kvóty WorkBuddy",
+      "workbuddyAutoRefreshDesc": "Frekvence automatického obnovení na pozadí"
     },
     "network": {
       "apiTitle": "Antigravity Cockpit API",
@@ -672,7 +727,93 @@
       "download": "Stáhnout",
       "checkFailed": "Kontrola aktualizací selhala"
     },
-    "saveSettings": "Uložit nastavení"
+    "saveSettings": "Uložit nastavení",
+    "transfer": {
+      "backup": {
+        "title": "Správa záloh",
+        "desc": "Spravujte plánované zálohy, složku se zálohami i seznam souborů na jednom místě.",
+        "modalDesc": "Nastavte automatické zálohování, procházejte soubory uložené ve složce záloh projektu a obnovujte nebo čistěte je zde.",
+        "statusEnabled": "Automatické zálohování je zapnuté",
+        "statusDisabled": "Automatické zálohování je vypnuté",
+        "lastRunLabel": "Poslední záloha: {{time}}",
+        "lastRunNever": "Zatím nebyla vytvořena žádná záloha",
+        "autoTitle": "Plánovaná záloha",
+        "autoDesc": "Po zapnutí se každý den exportuje jedna záloha a lze ji obnovit přes aktuální import.",
+        "runNow": "Zálohovat teď",
+        "running": "Zálohování...",
+        "typeTitle": "Typ zálohy",
+        "typeDesc": "Vyberte rozsah dat pro automatické zálohování.",
+        "typeFull": "Kompletní data",
+        "typeAccounts": "Pouze účty",
+        "typeConfig": "Pouze nastavení",
+        "retentionTitle": "Doba uchování",
+        "retentionDesc": "Zálohy starší než tato hodnota se při další kontrole odstraní.",
+        "retentionUnit": "dní",
+        "directoryTitle": "Složka záloh",
+        "directoryDesc": "Zálohy se vždy ukládají do složky backups projektu.",
+        "openFolder": "Otevřít složku",
+        "listTitle": "Seznam záloh",
+        "listDesc": "Zálohu můžete přímo importovat nebo odstranit staré soubory.",
+        "openList": "Otevřít seznam",
+        "emptyTitle": "Zatím žádné zálohy",
+        "emptyDesc": "Zapněte automatické zálohování nebo klikněte na „Zálohovat teď“ a vytvořte zde obnovitelné JSON zálohy.",
+        "sourceAuto": "Automaticky",
+        "sourceManual": "Ručně",
+        "fileTime": "Čas: {{time}}",
+        "fileSize": "Velikost: {{size}}",
+        "importAction": "Importovat",
+        "deleteAction": "Smazat",
+        "deleteConfirm": "Smazat zálohu {{name}}?",
+        "feedback": {
+          "running": "Vytváří se záloha...",
+          "runSuccess": "Záloha byla uložena do {{path}}",
+          "runSuccessWithCleanup": "Záloha byla uložena do {{path}} a bylo vyčištěno {{count}} starých záloh",
+          "runFailed": "Zálohování selhalo: {{error}}",
+          "deleteSuccess": "Záloha byla smazána",
+          "deleteFailed": "Smazání zálohy selhalo: {{error}}",
+          "loadFailed": "Načtení seznamu záloh selhalo: {{error}}",
+          "saveSettingsFailed": "Uložení nastavení záloh selhalo: {{error}}",
+          "cleanupDone": "Bylo vyčištěno {{count}} starých záloh",
+          "cleanupFailed": "Vyčištění starých záloh selhalo: {{error}}",
+          "openFolderFailed": "Otevření složky se zálohami selhalo: {{error}}"
+        },
+        "errors": {
+          "invalidRetention": "Doba uchování musí být mezi 1 a 365 dny"
+        }
+      },
+      "exportTitle": "Export dat",
+      "exportDesc": "Podle potřeby exportujte data účtů, konfigurační data nebo celý migrační balíček.",
+      "importTitle": "Import dat",
+      "importDesc": "Importujte zálohy účtů, zálohy konfigurace nebo jednotný datový balíček.",
+      "exportModalDesc": "Vyberte, co chcete exportovat. Pro úplný migrační balíček zvolte účty i konfiguraci.",
+      "importModalDesc": "Vyberte, co chcete importovat. Starší zálohy účtů se zpracují jako import pouze účtů.",
+      "selectionTitle": "Rozsah dat",
+      "accountsOptionTitle": "Data účtů",
+      "accountsOptionDesc": "Obsahuje zálohy účtů jednotlivých platforem a zachovává kompatibilitu se starším JSON účtů.",
+      "configOptionTitle": "Konfigurační data",
+      "configOptionDesc": "Obsahuje nastavení aplikace, skupiny, instance, úlohy probuzení a konfiguraci poskytovatelů modelů.",
+      "exportConfirm": "Exportovat data",
+      "fromFileTitle": "Import ze souboru",
+      "fromFileDesc": "Vyberte soubor JSON k importu. Podporují se i starší zálohy účtů.",
+      "jsonPlaceholder": "Vložte datový balíček nebo starší JSON účtů",
+      "feedback": {
+        "accountsImported": "Importováno {{count}} účtů",
+        "configImported": "Konfigurační data byla obnovena",
+        "accountsSectionMissing": "Záloha neobsahuje data účtů",
+        "configSectionMissing": "Záloha neobsahuje konfigurační data, proto byla obnovena jen data účtů",
+        "unresolvedRefs": "{{count}} vazeb účtů se nepodařilo spárovat a byly přeskočeny",
+        "disabledTasks": "{{count}} úloh bylo zakázáno, protože nebylo možné spárovat účet",
+        "restartRequired": "Nastavení síťové služby byla obnovena. Některé změny se projeví až po restartu",
+        "partialAccountFailure": "Import některých účtů selhal: {{error}}"
+      },
+      "errors": {
+        "selectionRequired": "Vyberte alespoň jeden typ dat",
+        "accountsOnlyFile": "Tato záloha obsahuje jen data účtů. Pro import vyberte „Data účtů“",
+        "selectedSectionsMissing": "Vybraný typ dat v této záloze chybí",
+        "unsupportedLegacyFile": "Tento starší formát zálohy účtů nebyl rozpoznán",
+        "unsupportedVersion": "Tato verze aplikace tuto verzi balíčku nepodporuje"
+      }
+    }
   },
   "appPath": {
     "missing": {
@@ -680,6 +821,9 @@
       "desc": "Nepodařilo se najít cestu k aplikaci {{app}}. Pro pokračování ji nyní nastavte.",
       "action": "Nastavit nyní",
       "codexLaunchHint": "Po vypnutí se přepnutí účtu a přepsání přihlášení stále provede, ale aplikace Codex se už nespustí a tato výzva k cestě se znovu nezobrazí."
+    },
+    "modal": {
+      "desc": "Cesta k aplikaci {{app}} nebyla nalezena. Nastavte ji nyní pro pokračování."
     }
   },
   "accounts": {
@@ -789,7 +933,11 @@
       "fingerprint": "Otisk",
       "switch": "Přepnout účet",
       "switchTo": "Přepnout na tento účet",
-      "selectFingerprint": "Vybrat otisk"
+      "selectFingerprint": "Vybrat otisk",
+      "delete": "Smazat",
+      "deleteSelected": "Smazat vybrané",
+      "export": "Exportovat",
+      "refreshAll": "Obnovit vše"
     },
     "tabs": {
       "oauth": "OAuth autorizace",
@@ -886,7 +1034,40 @@
       "clearConfirm": "Vymazat celou historii přepnutí?",
       "loadFailed": "Nepodařilo se načíst historii přepnutí: {{error}}",
       "clearFailed": "Nepodařilo se vymazat historii přepnutí: {{error}}"
-    }
+    },
+    "clearTagFilter": "Vymazat filtr štítku",
+    "compact": {
+      "hide": "Skrýt",
+      "show": "Zobrazit"
+    },
+    "deleteConfirm": {
+      "multi": "Opravdu chcete smazat {{count}} vybraných účtů?",
+      "single": "Opravdu chcete smazat tento účet?"
+    },
+    "deleteFailed": "Smazání selhalo: {{error}}",
+    "deleteSuccess": "Smazáno úspěšně",
+    "deleteTagFailed": "Smazání štítku selhalo: {{error}}",
+    "exportError": "Export selhal: {{error}}",
+    "exportModal": {
+      "title": "Exportovat JSON"
+    },
+    "importJsonFailed": "Import JSON selhal: {{error}}",
+    "importJsonHint": "Importujte soubor Qoder JSON exportovaný z tohoto nástroje.",
+    "importJsonSuccess": "Import JSON byl úspěšný",
+    "noTags": "Žádné štítky",
+    "privacy": {
+      "disable": "Vypnout režim soukromí",
+      "enable": "Zapnout režim soukromí"
+    },
+    "refreshAllFailed": "Hromadná aktualizace selhala: {{error}}",
+    "refreshAllSuccess": "Všechny účty byly obnoveny",
+    "refreshFailed": "Aktualizace selhala: {{error}}",
+    "refreshSuccess": "Aktualizováno úspěšně",
+    "switchFailed": "Přepnutí selhalo: {{error}}",
+    "switchSuccess": "Přepnuto úspěšně",
+    "switched": "Přepnuto na {{email}}",
+    "tagButton": "Upravit štítky",
+    "tagUpdated": "Štítek byl aktualizován"
   },
   "overview": {
     "title": "Přehled účtů",
@@ -1098,7 +1279,10 @@
       "actions": {
         "selectAllAccounts": "Vybrat vše",
         "clearSelectedAccounts": "Zrušit výběr",
-        "runCheckNow": "Dokončit ověření"
+        "runCheckNow": "Dokončit ověření",
+        "retryFiltered": "Zkusit znovu aktuální filtr ({{count}})",
+        "retryMissingModel": "V této dávce chybí informace o modelu, proto ji nelze zopakovat.",
+        "retryMissingAccount": "V aktuálním filtru nejsou žádné účty, které by bylo možné zopakovat."
       },
       "runHint": {
         "title": "Poznámky k ověření",
@@ -1383,7 +1567,9 @@
       "portInUseConfirm": "Port {{port}} je obsazen. Zavřít proces, který jej používá?",
       "portCloseFailed": "Nepodařilo se zavřít port: {{error}}",
       "portStillInUse": "Port {{port}} je stále obsazen.",
-      "portInUseAction": "Zavřít port a zkusit znovu"
+      "portInUseAction": "Zavřít port a zkusit znovu",
+      "timeout": "Autentizace vypršela. Klikněte prosím",
+      "timeoutRetry": "Aktualizovat odkaz pro ověření"
     },
     "token": {
       "desc": "Vložte obsah auth.json nebo JSON dat účtu",
@@ -1455,7 +1641,10 @@
     "usage": {
       "open": "Otevřít využití OpenAI",
       "hint": "Kredit API Key zkontrolujte na stránce OpenAI Usage.",
-      "openFailed": "Nepodařilo se otevřít stránku využití: {{error}}"
+      "openFailed": "Nepodařilo se otevřít stránku využití: {{error}}",
+      "search": {
+        "placeholder": "Hledat účty..."
+      }
     },
     "wakeup": {
       "tab": "Úlohy probuzení",
@@ -1509,7 +1698,7 @@
       "schedule": {
         "daily": "Denně",
         "weekly": "Týdně",
-        "interval": "Interval",
+        "interval": "Časový interval",
         "quota_reset": "Po resetu kvóty"
       },
       "dailyTimeLabel": "Denní čas spuštění",
@@ -1641,12 +1830,15 @@
         "moveToTrash": "Přesunout do koše",
         "syncSessions": "Synchronizovat relace",
         "expand": "Rozbalit",
-        "collapse": "Sbalit"
+        "collapse": "Sbalit",
+        "repairVisibility": "Opravit viditelnost",
+        "restoreSessions": "Obnovit relace"
       },
       "confirm": {
         "title": "Přesunout do koše",
         "message": "Vybrané relace budou přesunuty do koše z odpovídajících instancí, aby je bylo možné později obnovit; běžící instance mohou vyžadovat restart, než se změna projeví. Pokračovat?",
-        "syncMessage": "Chybějící vlákna a jejich data relací budou synchronizována do všech instancí. Existující obsah se nebude zapisovat znovu a soubory cílové instance budou před zápisem zazálohovány. Pokračovat?"
+        "syncMessage": "Chybějící vlákna a jejich data relací budou synchronizována do všech instancí. Existující obsah se nebude zapisovat znovu a soubory cílové instance budou před zápisem zazálohovány. Pokračovat?",
+        "repairVisibilityMessage": "Tato akce opraví metadata poskytovatele v rollout souborech a v databázi state_5.sqlite podle hodnoty model_provider z kořenového souboru config.toml každé instance (pokud chybí, použije se openai). Soubory, které budou změněny, se před zápisem zálohují. Běžící instance mohou vyžadovat restart, než se změna projeví. Pokračovat?"
       },
       "empty": {
         "title": "Žádné relace ke správě",
@@ -1654,12 +1846,20 @@
       },
       "messages": {
         "pickOne": "Vyberte prosím alespoň jednu relaci",
-        "syncNeedTwo": "Pro synchronizaci relací jsou potřeba alespoň dvě instance"
+        "syncNeedTwo": "Pro synchronizaci relací jsou potřeba alespoň dvě instance",
+        "pickRestoreOne": "Vyberte prosím alespoň jednu relaci k obnovení"
       },
       "groupCount": "{{count}} relací",
       "updatedAt": "Aktualizováno",
       "locationRunning": " (spuštěno)",
-      "untitled": "Nepojmenovaná relace"
+      "untitled": "Nepojmenovaná relace",
+      "restoreModal": {
+        "title": "Obnovit relace",
+        "hint": "Při obnovení se soubor rollout, řádek vlákna v SQLite a záznam session_index vrátí společně do původní instance.",
+        "emptyTitle": "Koš je prázdný",
+        "emptyDesc": "Relace přesunuté do koše se zobrazí zde.",
+        "restoreAction": "Obnovit vybrané relace"
+      }
     },
     "api": {
       "baseUrl": "Základní URL",
@@ -1668,7 +1868,178 @@
         "apiKeyCannotBeUrl": "Klíč API nemůže být URL. Zkontrolujte, zda nejsou pole prohozená.",
         "baseUrlInvalid": "Neplatná základní adresa URL. Zadejte prosím úplnou URL s http:// nebo https://.",
         "apiKeyEqualsBaseUrl": "Klíč API nemůže být stejný jako základní URL."
+      },
+      "addAndSwitchSuccess": "Přidáno a přepnuto: {{email}}",
+      "actions": {
+        "addAndSwitch": "Přidat a přepnout"
+      },
+      "provider": {
+        "label": "Poskytovatel",
+        "custom": "Vlastní",
+        "endpoint": "Koncový bod poskytovatele",
+        "hint": "Kompatibilní Base URL byla vyplněna automaticky. Stále ji můžete upravit ručně.",
+        "website": "Web",
+        "apiKeyPage": "Stránka API klíče"
+      },
+      "providers": {
+        "openai_official": {
+          "name": "OpenAI Official"
+        },
+        "azure_openai": {
+          "name": "Azure OpenAI"
+        },
+        "packycode": {
+          "name": "PackyCode"
+        },
+        "cubence": {
+          "name": "Cubence"
+        },
+        "aigocode": {
+          "name": "AIGoCode"
+        },
+        "rightcode": {
+          "name": "RightCode"
+        },
+        "sssaicode": {
+          "name": "SSSAiCode"
+        },
+        "micu": {
+          "name": "Micu"
+        },
+        "x_code_api": {
+          "name": "X-Code API"
+        },
+        "ctok_ai": {
+          "name": "CTok.ai"
+        },
+        "aihubmix": {
+          "name": "AiHubMix"
+        },
+        "dmxapi": {
+          "name": "DMXAPI"
+        },
+        "compshare": {
+          "name": "Compshare"
+        },
+        "openrouter": {
+          "name": "OpenRouter"
+        },
+        "aicodemirror": {
+          "name": "AICodeMirror"
+        },
+        "aicoding": {
+          "name": "AICoding"
+        },
+        "crazyrouter": {
+          "name": "CrazyRouter"
+        },
+        "deepseek": {
+          "name": "DeepSeek"
+        },
+        "moonshot": {
+          "name": "Moonshot"
+        },
+        "siliconflow": {
+          "name": "SiliconFlow"
+        }
       }
+    },
+    "modelProviders": {
+      "tab": "Poskytovatelé modelů",
+      "desc": "Spravujte poskytovatele modelů a více API klíčů na jednom místě a pak je přímo znovu používejte při přidávání účtů Codex s API klíčem.",
+      "add": "Přidat poskytovatele",
+      "loadFailed": "Nepodařilo se načíst poskytovatele modelů: {{error}}",
+      "emptyTitle": "Zatím žádní poskytovatelé modelů",
+      "emptyDesc": "Začněte kliknutím na „Přidat poskytovatele“ vpravo nahoře.",
+      "baseUrl": "Základní URL",
+      "website": "Web",
+      "apiKeyPage": "Stránka API klíče",
+      "apiKeysCount": "{{count}} API klíčů",
+      "referencesCount": "{{count}} propojených účtů",
+      "unnamedKey": "Nepojmenovaný klíč",
+      "createTitle": "Přidat poskytovatele modelu",
+      "editTitle": "Upravit poskytovatele modelu",
+      "existingApiKeys": "Stávající API klíče",
+      "fields": {
+        "name": "Název poskytovatele",
+        "baseUrl": "Základní URL",
+        "website": "Web (volitelné)",
+        "apiKeyUrl": "Stránka API klíče (volitelné)",
+        "newApiKeyName": "Název nového klíče (volitelné)",
+        "newApiKey": "Nový API klíč"
+      },
+      "validation": {
+        "nameRequired": "Název poskytovatele je povinný.",
+        "baseUrlInvalid": "Neplatná Base URL.",
+        "baseUrlExists": "Tato Base URL už existuje.",
+        "providerNotFound": "Poskytovatel nebyl nalezen.",
+        "apiKeyRequiredOnCreate": "Při vytváření poskytovatele je vyžadován alespoň jeden API klíč.",
+        "apiKeyRequiredWhenEmpty": "Tento poskytovatel zatím nemá žádný API klíč. Nejprve jej přidejte."
+      },
+      "saveSuccess": "Poskytovatel modelu byl uložen.",
+      "deleteBlocked": "Tento poskytovatel je propojen s {{count}} účty a nelze jej smazat.",
+      "confirmDelete": "Smazat poskytovatele „{{name}}“?",
+      "deleteFailed": "Nepodařilo se smazat poskytovatele: {{error}}",
+      "deleteApiKeyFailed": "Nepodařilo se smazat API klíč: {{error}}",
+      "selectSavedProvider": "Uložení poskytovatelé",
+      "selectSavedApiKey": "Uložené API klíče",
+      "noSavedProviders": "Zatím nejsou uloženi žádní poskytovatelé. Pole můžete vyplnit přímo a vše se uloží automaticky.",
+      "newProviderName": "Název poskytovatele (volitelné, používá se pro automatické uložení)",
+      "newProviderNamePlaceholder": "Pokud zůstane prázdné, automaticky se použije hostname",
+      "preview": {
+        "title": "Náhled uložení",
+        "desc": "Při uložení poskytovatele se nejdřív aktualizuje úložiště poskytovatelů. Aktuální oficiální konfigurace Codexu se hned nepřepne.",
+        "writeNow": "Zapíše se",
+        "noImmediateChange": "Bez okamžité změny",
+        "providerStoreTitle": "Úložiště poskytovatelů",
+        "providerStoreDesc": "Uloží název poskytovatele, Base URL, odkazy na web/API Key a nový API klíč přidaný v tomto dialogu.",
+        "codexConfigTitle": "Aktuální konfigurace Codexu",
+        "codexConfigDesc": "Aktuální provider ani Base URL se hned nezmění. Tento soubor se aktualizuje až při uložení nebo přepnutí účtu Codex API Key.",
+        "authFileTitle": "Aktuální přihlašovací údaje Codexu",
+        "authFileDesc": "Uložení poskytovatele nepřepíše aktuální OPENAI_API_KEY v auth.json."
+      },
+      "quickConfig": {
+        "title": "Aktuální konfigurace Codexu",
+        "desc": "Tato rychlá nastavení zapisují přímo do aktivního ~/.codex/config.toml a nemění úložiště poskytovatelů modelů.",
+        "configPath": "Konfigurační soubor",
+        "openConfig": "Otevřít soubor",
+        "loadFailed": "Nepodařilo se načíst aktuální konfiguraci Codexu: {{error}}",
+        "openFailed": "Nepodařilo se otevřít config.toml: {{error}}",
+        "saveSuccess": "Aktuální konfigurace Codexu byla uložena.",
+        "saveFailed": "Nepodařilo se uložit aktuální konfiguraci Codexu: {{error}}",
+        "contextWindow1m": "1M kontextové okno",
+        "contextWindow1mHint": "Při zapnutí zapíše model_context_window = 1000000 a společně spravuje limit automatického zkracování.",
+        "autoCompactLimit": "Limit auto-compact",
+        "autoCompactLimitHint": "Zapíše model_auto_compact_token_limit. Při vypnutí přepínače 1M se toto pole také odstraní.",
+        "preview": "Náhled zápisu",
+        "previewApply": "Zapíše se",
+        "previewRemove": "Odstraní se",
+        "customDetected": "V config.toml byl zjištěn vlastní model_context_window = {{context}}. Po uložení se přepíše podle rychlého nastavení níže.",
+        "compactMissingDetected": "1M kontext je už zapnutý, ale chybí limit auto-compact. Po uložení se doplní výchozí hodnota {{limit}}.",
+        "validation": {
+          "autoCompactInvalid": "Limit auto-compact musí být celé číslo větší než 0."
+        }
+      }
+    },
+    "quickSwitch": {
+      "action": "Rychle přepnout poskytovatele",
+      "inlineAction": "Přepnout",
+      "title": "Rychle přepnout poskytovatele",
+      "desc": "Rychle přepněte tento účet s API klíčem na uloženého poskytovatele a API klíč.",
+      "currentAccount": "Aktuální účet: {{name}}",
+      "noProviders": "Zatím nejsou uloženi žádní poskytovatelé. Nejprve jednoho přidejte v sekci Poskytovatelé modelů.",
+      "providerHasNoKeys": "Tento poskytovatel zatím nemá k dispozici žádný API klíč. Nejprve jej přidejte v sekci Poskytovatelé modelů.",
+      "gotoProviders": "Spravovat poskytovatele",
+      "apply": "Přepnout nyní",
+      "success": "Přepnuto na poskytovatele: {{provider}}",
+      "failed": "Nepodařilo se přepnout poskytovatele: {{error}}",
+      "validation": {
+        "providerRequired": "Vyberte poskytovatele.",
+        "apiKeyRequired": "Vyberte API klíč."
+      }
+    },
+    "groups": {
+      "addToGroup": "Přidat do skupiny"
     }
   },
   "githubCopilot": {
@@ -1788,7 +2159,10 @@
     },
     "codex": {
       "title": "Nastavení Codex",
-      "appPath": "Cesta k aplikaci"
+      "appPath": "Cesta k aplikaci",
+      "configToml": "Konfigurační soubor Codex",
+      "openConfigToml": "Otevřít soubor",
+      "openConfigHint": "Rychle otevře aktivní soubor Codex config.toml."
     },
     "githubCopilot": {
       "title": "Nastavení GitHub Copilot",
@@ -1848,7 +2222,8 @@
       "loadFailed": "Nepodařilo se načíst konfiguraci: {{error}}",
       "saveFailed": "Nepodařilo se uložit konfiguraci: {{error}}",
       "pickPathFailed": "Nepodařilo se vybrat cestu: {{error}}",
-      "resetPathFailed": "Nepodařilo se resetovat cestu: {{error}}"
+      "resetPathFailed": "Nepodařilo se resetovat cestu: {{error}}",
+      "openCodexConfigFailed": "Nepodařilo se otevřít Codex config.toml: {{error}}"
     },
     "qoder": {
       "title": "Nastavení Qoder",
@@ -1904,8 +2279,7 @@
       "description": "Klikněte na „Přidat účet“"
     },
     "addModal": {
-      "title": "Přidat účet Windsurf",
-      "password": "E-mail a heslo"
+      "title": "Přidat účet Windsurf"
     },
     "oauth": {
       "desc": "Klikněte níže a dokončete autorizaci Windsurf v prohlížeči."
@@ -1948,16 +2322,6 @@
       "inject": "Přepnutí jedním kliknutím: Tento nástroj načte lokální šifrovací materiál Windsurf (DPAPI/Keychain/Secret Service), dešifruje autentizační relaci ve state.vscdb, nahradí token Windsurf a znovu ji zašifruje — vše lokálně na vašem zařízení.",
       "reason": "Rozsah oprávnění: čtení databáze ověření Windsurf (state.vscdb) a volání systémového šifrování (Windows DPAPI / macOS Keychain / Linux Secret Service) pro dešifrování a zpětný zápis.",
       "storage": "Rozsah čtení: zpracovávají se pouze položky související s relací přihlášení Windsurf a veškeré procesy probíhají lokálně."
-    },
-    "password": {
-      "desc": "Přihlaste se e-mailem a heslem účtu Windsurf, automaticky se získá API klíč a informace o účtu.",
-      "emailPlaceholder": "E-mailová adresa",
-      "passwordPlaceholder": "Heslo",
-      "login": "Přihlásit se",
-      "logging": "Přihlašování...",
-      "empty": "Zadejte e-mail a heslo",
-      "success": "Přihlášení úspěšné: {{login}}",
-      "failed": "Přihlášení se nezdařilo: {{error}}"
     }
   },
   "kiro": {
@@ -2400,7 +2764,11 @@
       "unsupportedDescPlatform": "Více instancí Gemini Cli je podporováno pouze na macOS, Windows a Linuxu.",
       "launchDialogTitle": "Spustit instanci",
       "launchHint": "Zkopírujte příkaz a spusťte jej ručně, nebo jej spusťte přímo v terminálu.",
-      "runInTerminal": "Spustit v terminálu"
+      "runInTerminal": "Spustit v terminálu",
+      "workingDir": "Pracovní adresář",
+      "workingDirPlaceholder": "Výchozí aktuální cesta",
+      "workingDirDesc": "Při spuštění se nejprve přepne do tohoto adresáře",
+      "pickWorkingDir": "Vybrat pracovní adresář"
     },
     "switch": {
       "success": "Účet byl úspěšně přepnut"
@@ -2443,6 +2811,26 @@
       "saved": "Projekt uložen: {{projectId}}",
       "cleared": "Obnoveno automatické zjišťování projektu",
       "savedWithRefreshError": "Projekt byl uložen, ale obnovení kvóty selhalo: {{error}}"
+    },
+    "identity": {
+      "authMethod": "Způsob přihlášení",
+      "tier": "Tarif",
+      "signedInWithGoogle": "Přihlášeno přes Google",
+      "signedInWithGoogleEmail": "Přihlášeno přes Google ({{email}})"
+    },
+    "quotaTable": {
+      "model": "Název modelu",
+      "leftOfTotal": "Zbývá / Celkem",
+      "usage": "Využito",
+      "usageResets": "Reset využití",
+      "usedPercent": "{{value}}%",
+      "remainingOfTotal": "{{remaining}} / {{total}}",
+      "resetAtWithRelative": "{{absolute}} ({{relative}})"
+    },
+    "tierText": {
+      "pro": "Gemini Code Assist v Google One AI Pro",
+      "ultra": "Gemini Code Assist v Google AI Ultra",
+      "free": "Gemini Code Assist zdarma"
     }
   },
   "codebuddy": {
@@ -2510,7 +2898,8 @@
       "expireUnknown": "Vyprší: N/A",
       "packageTitle": {
         "base": "Základní balíček zkušeností",
-        "activity": "Balíček dárků z akcí"
+        "activity": "Balíček dárků z akcí",
+        "pro": "Pro předplatné"
       }
     },
     "extraCredit": {
@@ -2578,7 +2967,12 @@
       "title": "Přidat účet Qoder"
     },
     "import": {
-      "localDesc": "Načte aktuální stav přihlášení z místního klienta Qoder, včetně informací o uživateli, plánu a využití kreditů."
+      "localDesc": "Načte aktuální stav přihlášení z místního klienta Qoder, včetně informací o uživateli, plánu a využití kreditů.",
+      "localFailed": "Lokální import selhal: {{error}}",
+      "localSuccess": "Účet byl importován z lokálního Qoderu."
+    },
+    "empty": {
+      "desc": "Klikněte na Přidat účet a použijte přihlášení, lokální import nebo import JSON."
     }
   },
   "trae": {
@@ -2675,7 +3069,10 @@
         "other": "Ostatní",
         "empty": "Žádná data kvóty"
       }
-    }
+    },
+    "syncFailed": "Synchronizace selhala: {{error}}",
+    "syncSuccess": "{{count}} účtů bylo synchronizováno s WorkBuddy",
+    "syncToWorkbuddy": "Synchronizovat s WorkBuddy"
   },
   "workbuddy": {
     "title": "Správa účtů WorkBuddy",
@@ -2810,7 +3207,8 @@
       "unknownStatus": "Neznámý stav",
       "overdueField": "Po splatnosti",
       "overdueYes": "Ano",
-      "overdueNo": "Ne"
+      "overdueNo": "Ne",
+      "usageUpdatedAt": "Aktualizováno: {{time}}"
     },
     "runtime": {
       "title": "Aktuální relace Zed",
@@ -2830,7 +3228,8 @@
       "complete": "Dokončit přihlášení",
       "startFailed": "Nepodařilo se spustit přihlášení do Zed",
       "completeSuccess": "Přihlášení do Zed dokončeno: {{account}}",
-      "importOnlySuccess": "Autorizace byla úspěšná. Účet byl importován. Chcete-li, aby jej oficiální Zed používal, klikněte na „Použít a restartovat“."
+      "importOnlySuccess": "Autorizace byla úspěšná. Účet byl importován. Chcete-li, aby jej oficiální Zed používal, klikněte na „Použít a restartovat“.",
+      "desc": "Klikněte na tlačítko níže a dokončete přihlášení do officiálního Zedu v prohlížeči."
     },
     "actions": {
       "addAccount": "Přihlásit se do Zed",
@@ -2846,6 +3245,9 @@
       "applyAndRestart": "Použít a restartovat",
       "reapply": "Použít znovu",
       "exportTitle": "Exportovat JSON účtů Zed"
+    },
+    "sort": {
+      "tokenSpend": "Seřadit podle spotřeby tokenů"
     }
   },
   "floatingCard": {

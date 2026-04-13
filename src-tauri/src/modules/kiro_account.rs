@@ -111,15 +111,16 @@ pub fn load_account(account_id: &str) -> Option<KiroAccount> {
     if !account_path.exists() {
         return None;
     }
-    let content = fs::read_to_string(account_path).ok()?;
-    serde_json::from_str(&content).ok()
+    let content = fs::read_to_string(&account_path).ok()?;
+    crate::modules::atomic_write::parse_json_with_auto_restore(&account_path, &content).ok()
 }
 
 fn save_account_file(account: &KiroAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
     let content =
         serde_json::to_string_pretty(account).map_err(|e| format!("序列化账号失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("保存账号失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("保存账号失败: {}", e))
 }
 
 fn delete_account_file(account_id: &str) -> Result<(), String> {
@@ -145,7 +146,10 @@ fn load_account_index() -> KiroAccountIndex {
         Ok(content) if content.trim().is_empty() => {
             repair_account_index_from_details("索引文件为空").unwrap_or_else(KiroAccountIndex::new)
         }
-        Ok(content) => match serde_json::from_str::<KiroAccountIndex>(&content) {
+        Ok(content) => match crate::modules::atomic_write::parse_json_with_auto_restore::<
+            KiroAccountIndex,
+        >(&path, &content)
+        {
             Ok(index) if !index.accounts.is_empty() => index,
             Ok(_) => repair_account_index_from_details("索引账号列表为空")
                 .unwrap_or_else(KiroAccountIndex::new),
@@ -189,7 +193,9 @@ fn load_account_index_checked() -> Result<KiroAccountIndex, String> {
         return Ok(KiroAccountIndex::new());
     }
 
-    match serde_json::from_str::<KiroAccountIndex>(&content) {
+    match crate::modules::atomic_write::parse_json_with_auto_restore::<KiroAccountIndex>(
+        &path, &content,
+    ) {
         Ok(index) if !index.accounts.is_empty() => Ok(index),
         Ok(index) => {
             if let Some(repaired) = repair_account_index_from_details("索引账号列表为空") {
@@ -214,7 +220,8 @@ fn save_account_index(index: &KiroAccountIndex) -> Result<(), String> {
     let path = get_accounts_index_path()?;
     let content =
         serde_json::to_string_pretty(index).map_err(|e| format!("序列化账号索引失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("写入账号索引失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("写入账号索引失败: {}", e))
 }
 
 fn repair_account_index_from_details(reason: &str) -> Option<KiroAccountIndex> {
@@ -289,6 +296,15 @@ fn upsert_account_record(account: KiroAccount) -> Result<KiroAccount, String> {
     refresh_summary(&mut index, &account);
     save_account_index(&index)?;
     Ok(account)
+}
+
+fn persist_quota_query_error(account_id: &str, message: &str) {
+    let Some(mut account) = load_account(account_id) else {
+        return;
+    };
+    account.quota_query_last_error = Some(message.to_string());
+    account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
+    let _ = upsert_account_record(account);
 }
 
 fn normalize_non_empty(value: Option<&str>) -> Option<String> {
@@ -827,6 +843,8 @@ pub fn upsert_account(payload: KiroOAuthCompletePayload) -> Result<KiroAccount, 
         kiro_usage_raw: payload.kiro_usage_raw.clone(),
         status: payload.status.clone(),
         status_reason: payload.status_reason.clone(),
+        quota_query_last_error: None,
+        quota_query_last_error_at: None,
         usage_updated_at: None,
         created_at,
         last_used: now,
@@ -835,6 +853,8 @@ pub fn upsert_account(payload: KiroOAuthCompletePayload) -> Result<KiroAccount, 
     apply_payload(&mut account, payload);
     account.id = account_id;
     account.created_at = created_at;
+    account.quota_query_last_error = None;
+    account.quota_query_last_error_at = None;
     account.last_used = now;
 
     save_account_file(&account)?;
@@ -865,7 +885,12 @@ async fn refresh_account_token_once(account_id: &str) -> Result<KiroAccount, Str
     account.created_at = created_at;
     let refreshed_at = now_ts();
     if usage_refreshed {
+        account.quota_query_last_error = None;
+        account.quota_query_last_error_at = None;
         account.usage_updated_at = Some(refreshed_at);
+    } else {
+        account.quota_query_last_error = Some("未获取到有效配额数据".to_string());
+        account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
     }
     account.last_used = refreshed_at;
 
@@ -881,10 +906,14 @@ async fn refresh_account_token_once(account_id: &str) -> Result<KiroAccount, Str
 }
 
 pub async fn refresh_account_token(account_id: &str) -> Result<KiroAccount, String> {
-    crate::modules::refresh_retry::retry_once_with_delay("Kiro Refresh", account_id, || async {
+    let result = crate::modules::refresh_retry::retry_once_with_delay("Kiro Refresh", account_id, || async {
         refresh_account_token_once(account_id).await
     })
-    .await
+    .await;
+    if let Err(err) = &result {
+        persist_quota_query_error(account_id, err);
+    }
+    result
 }
 
 pub async fn refresh_all_tokens() -> Result<Vec<(String, Result<KiroAccount, String>)>, String> {

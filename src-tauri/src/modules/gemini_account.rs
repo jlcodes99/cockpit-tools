@@ -25,6 +25,8 @@ const GOOGLE_TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_ENDPOINT: &str = "https://www.googleapis.com/oauth2/v2/userinfo";
 const CODE_ASSIST_LOAD_ENDPOINT: &str =
     "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist";
+const CODE_ASSIST_RETRIEVE_QUOTA_ENDPOINT: &str =
+    "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota";
 const CODE_ASSIST_REQUEST_RETRY_COUNT: usize = 3;
 const CODE_ASSIST_REQUEST_RETRY_DELAY_MS: u64 = 100;
 
@@ -245,8 +247,8 @@ fn load_account_file(account_id: &str) -> Option<GeminiAccount> {
     if !path.exists() {
         return None;
     }
-    let content = fs::read_to_string(path).ok()?;
-    serde_json::from_str(&content).ok()
+    let content = fs::read_to_string(&path).ok()?;
+    crate::modules::atomic_write::parse_json_with_auto_restore(&path, &content).ok()
 }
 
 pub fn load_account(account_id: &str) -> Option<GeminiAccount> {
@@ -257,7 +259,8 @@ fn save_account_file(account: &GeminiAccount) -> Result<(), String> {
     let path = resolve_account_file_path(&account.id)?;
     let content = serde_json::to_string_pretty(account)
         .map_err(|e| format!("序列化 Gemini 账号失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("保存 Gemini 账号失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("保存 Gemini 账号失败: {}", e))
 }
 
 fn delete_account_file(account_id: &str) -> Result<(), String> {
@@ -284,7 +287,10 @@ fn load_account_index() -> GeminiAccountIndex {
             repair_account_index_from_details("索引文件为空")
                 .unwrap_or_else(GeminiAccountIndex::new)
         }
-        Ok(content) => match serde_json::from_str::<GeminiAccountIndex>(&content) {
+        Ok(content) => match crate::modules::atomic_write::parse_json_with_auto_restore::<
+            GeminiAccountIndex,
+        >(&path, &content)
+        {
             Ok(index) if !index.accounts.is_empty() => index,
             Ok(_) => repair_account_index_from_details("索引账号列表为空")
                 .unwrap_or_else(GeminiAccountIndex::new),
@@ -328,7 +334,9 @@ fn load_account_index_checked() -> Result<GeminiAccountIndex, String> {
         return Ok(GeminiAccountIndex::new());
     }
 
-    match serde_json::from_str::<GeminiAccountIndex>(&content) {
+    match crate::modules::atomic_write::parse_json_with_auto_restore::<GeminiAccountIndex>(
+        &path, &content,
+    ) {
         Ok(index) if !index.accounts.is_empty() => Ok(index),
         Ok(index) => {
             if let Some(repaired) = repair_account_index_from_details("索引账号列表为空") {
@@ -353,7 +361,8 @@ fn save_account_index(index: &GeminiAccountIndex) -> Result<(), String> {
     let path = get_accounts_index_path()?;
     let content = serde_json::to_string_pretty(index)
         .map_err(|e| format!("序列化 Gemini 账号索引失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("写入 Gemini 账号索引失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("写入 Gemini 账号索引失败: {}", e))
 }
 
 fn repair_account_index_from_details(reason: &str) -> Option<GeminiAccountIndex> {
@@ -430,6 +439,15 @@ fn upsert_account_record(account: GeminiAccount) -> Result<GeminiAccount, String
     Ok(account)
 }
 
+fn persist_quota_query_error(account_id: &str, message: &str) {
+    let Some(mut account) = load_account_file(account_id) else {
+        return;
+    };
+    account.quota_query_last_error = Some(message.to_string());
+    account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
+    let _ = upsert_account_record(account);
+}
+
 fn build_account_id(email: &str, auth_id: Option<&str>) -> String {
     let mut seed = email.trim().to_lowercase();
     if let Some(auth_id) = normalize_non_empty(auth_id) {
@@ -503,6 +521,8 @@ pub fn upsert_account(payload: GeminiOAuthCompletePayload) -> Result<GeminiAccou
         gemini_usage_raw: payload.gemini_usage_raw,
         status: payload.status,
         status_reason: payload.status_reason,
+        quota_query_last_error: None,
+        quota_query_last_error_at: None,
         usage_updated_at: existing.as_ref().and_then(|item| item.usage_updated_at),
         created_at,
         last_used: now,
@@ -555,8 +575,8 @@ pub fn set_account_status(
 ) -> Result<(), String> {
     let mut account =
         load_account_file(account_id).ok_or_else(|| "Gemini 账号不存在".to_string())?;
-    account.status = status.map(|s| s.to_string());
-    account.status_reason = reason.map(|r| r.to_string());
+    account.status = resolve_account_status(status, reason);
+    account.status_reason = reason.and_then(|r| normalize_non_empty(Some(r)));
     upsert_account_record(account)?;
     Ok(())
 }
@@ -1154,6 +1174,25 @@ fn is_unauthorized_error(error: &str) -> bool {
     error.contains("UNAUTHORIZED") || error.contains("401")
 }
 
+fn is_forbidden_error(error: &str) -> bool {
+    let lower = error.to_ascii_lowercase();
+    lower.contains("status=403")
+        || lower.contains("403 forbidden")
+        || lower.contains("\"code\":403")
+        || lower.contains("\"code\": 403")
+        || lower.contains("permission_denied")
+        || lower.contains("caller does not have permission")
+        || lower.contains("forbidden")
+}
+
+fn resolve_account_status(status: Option<&str>, reason: Option<&str>) -> Option<String> {
+    if reason.map(is_forbidden_error).unwrap_or(false) {
+        return Some("forbidden".to_string());
+    }
+
+    normalize_non_empty(status).map(|value| value.to_ascii_lowercase())
+}
+
 fn should_retry_code_assist_status(status: reqwest::StatusCode) -> bool {
     let code = status.as_u16();
     code == 429 || code == 499 || code >= 500
@@ -1217,8 +1256,10 @@ async fn post_code_assist_json_with_retry(
                     .await
                     .unwrap_or_else(|_| "<empty-body>".to_string());
                 return Err(format!(
-                    "请求 Gemini {} 失败: status={}, body={}",
-                    action_name, status, body
+                    "请求 Gemini {} 失败: status={}, body_len={}",
+                    action_name,
+                    status,
+                    body.len()
                 ));
             }
             Err(err) => {
@@ -1268,8 +1309,9 @@ async fn refresh_access_token(refresh_token: &str) -> Result<GoogleTokenRefreshR
             .await
             .unwrap_or_else(|_| "<empty-body>".to_string());
         return Err(format!(
-            "刷新 Gemini access_token 失败: status={}, body={}",
-            status, body
+            "刷新 Gemini access_token 失败: status={}, body_len={}",
+            status,
+            body.len()
         ));
     }
 
@@ -1457,6 +1499,19 @@ async fn load_code_assist_status(access_token: &str) -> Result<LoadCodeAssistSta
     })
 }
 
+async fn retrieve_user_quota(access_token: &str, project_id: &str) -> Result<Value, String> {
+    let payload = serde_json::json!({
+        "project": project_id
+    });
+    post_code_assist_json_with_retry(
+        access_token,
+        CODE_ASSIST_RETRIEVE_QUOTA_ENDPOINT,
+        &payload,
+        "retrieveUserQuota",
+    )
+    .await
+}
+
 async fn ensure_access_token_valid(account: &mut GeminiAccount) -> Result<(), String> {
     let should_refresh = account
         .expiry_date
@@ -1555,8 +1610,41 @@ async fn refresh_account_token_once(account_id: &str) -> Result<GeminiAccount, S
         .or_else(|| Some("oauth-personal".to_string()));
     let refreshed_at = now_ts();
     account.last_used = refreshed_at;
-    account.status = None;
-    account.status_reason = None;
+
+    let mut status: Option<String> = None;
+    let mut status_reason: Option<String> = None;
+    if let Some(project_id) = account.project_id.as_deref() {
+        match retrieve_user_quota(&account.access_token, project_id).await {
+            Ok(quota) => {
+                account.gemini_usage_raw = Some(quota);
+                account.quota_query_last_error = None;
+                account.quota_query_last_error_at = None;
+                account.usage_updated_at = Some(refreshed_at);
+            }
+            Err(err) => {
+                logger::log_warn(&format!(
+                    "[Gemini retrieveUserQuota] 刷新配额失败: account_id={}, project_id={}, error={}",
+                    account.id, project_id, err
+                ));
+                account.quota_query_last_error = Some(err.clone());
+                account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
+                if is_forbidden_error(&err) {
+                    account.gemini_usage_raw = None;
+                    account.usage_updated_at = None;
+                    status = Some("forbidden".to_string());
+                    status_reason = Some(err);
+                }
+            }
+        }
+    } else {
+        account.gemini_usage_raw = None;
+        account.quota_query_last_error = None;
+        account.quota_query_last_error_at = None;
+        account.usage_updated_at = None;
+    }
+
+    account.status = status;
+    account.status_reason = status_reason;
 
     let updated = account.clone();
     upsert_account_record(account)?;
@@ -1564,10 +1652,16 @@ async fn refresh_account_token_once(account_id: &str) -> Result<GeminiAccount, S
 }
 
 pub async fn refresh_account_token(account_id: &str) -> Result<GeminiAccount, String> {
-    crate::modules::refresh_retry::retry_once_with_delay("Gemini Refresh", account_id, || async {
-        refresh_account_token_once(account_id).await
-    })
-    .await
+    let result = crate::modules::refresh_retry::retry_once_with_delay(
+        "Gemini Refresh",
+        account_id,
+        || async { refresh_account_token_once(account_id).await },
+    )
+    .await;
+    if let Err(err) = &result {
+        persist_quota_query_error(account_id, err);
+    }
+    result
 }
 
 pub async fn refresh_all_tokens() -> Result<Vec<(String, Result<GeminiAccount, String>)>, String> {

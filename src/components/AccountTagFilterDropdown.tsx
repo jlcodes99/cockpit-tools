@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Tag, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useDropdownPanelPlacement } from '../hooks/useDropdownPanelPlacement'
 import './AccountFilterDropdown.css'
 
 interface AccountTagFilterDropdownProps {
@@ -25,6 +26,11 @@ export function AccountTagFilterDropdown({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const { panelPlacement, panelRef, scrollContainerStyle } = useDropdownPanelPlacement(
+    rootRef,
+    open,
+    availableTags.length,
+  )
 
   useEffect(() => {
     if (!open) return
@@ -52,13 +58,16 @@ export function AccountTagFilterDropdown({
           : t('accounts.filterTags', '标签筛选')}
       </button>
       {open && (
-        <div className="tag-filter-panel">
+        <div
+          ref={panelRef}
+          className={`tag-filter-panel ${panelPlacement === 'top' ? 'open-top' : ''}`}
+        >
           {availableTags.length === 0 ? (
             <div className="tag-filter-empty">
               {t('accounts.noAvailableTags', '暂无可用标签')}
             </div>
           ) : (
-            <div className="tag-filter-options">
+            <div className="tag-filter-options" style={scrollContainerStyle}>
               {availableTags.map((tag) => (
                 <label
                   key={tag}

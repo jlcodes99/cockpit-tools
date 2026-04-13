@@ -8,6 +8,7 @@ import { useMemo, useCallback } from 'react';
 import type { CodebuddySuiteAccountBase } from '../types/codebuddy-suite';
 import { KNOWN_PLAN_FILTERS } from '../components/codebuddy-suite/CodebuddySuiteConfig';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
+import { splitValidityFilterValues } from '../utils/accountValidityFilter';
 
 const QUOTA_NUMBER_FORMATTER = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 2,
@@ -39,6 +40,7 @@ export interface UseCodebuddySuitePageOptions<TAccount extends CodebuddySuiteAcc
   tagFilter: string[];
   sortDirection: 'asc' | 'desc';
   getPlanBadge: (account: TAccount) => string;
+  isAbnormalAccount: (account: TAccount) => boolean;
   normalizeTag: (tag: string) => string;
   groupByTag: boolean;
 }
@@ -46,6 +48,7 @@ export interface UseCodebuddySuitePageOptions<TAccount extends CodebuddySuiteAcc
 export interface UseCodebuddySuitePageReturn<TAccount extends CodebuddySuiteAccountBase> {
   tierSummary: {
     all: number;
+    validCount: number;
     dynamicCounts: Map<string, number>;
     extraKeys: string[];
   };
@@ -68,6 +71,7 @@ export function useCodebuddySuitePage<TAccount extends CodebuddySuiteAccountBase
     tagFilter,
     sortDirection,
     getPlanBadge,
+    isAbnormalAccount,
     normalizeTag,
     groupByTag,
   } = options;
@@ -103,8 +107,12 @@ export function useCodebuddySuitePage<TAccount extends CodebuddySuiteAccountBase
     const extraKeys = Array.from(dynamicCounts.keys())
       .filter((tier) => !(KNOWN_PLAN_FILTERS as readonly string[]).includes(tier))
       .sort((a, b) => a.localeCompare(b));
-    return { all: accounts.length, dynamicCounts, extraKeys };
-  }, [accounts, resolvePlanKey]);
+    const validCount = accounts.reduce(
+      (count, account) => (isAbnormalAccount(account) ? count : count + 1),
+      0,
+    );
+    return { all: accounts.length, validCount, dynamicCounts, extraKeys };
+  }, [accounts, isAbnormalAccount, resolvePlanKey]);
 
   const filteredAccounts = useMemo(() => {
     let result = [...accounts];
@@ -116,8 +124,13 @@ export function useCodebuddySuitePage<TAccount extends CodebuddySuiteAccountBase
       );
     }
     if (filterTypes.length > 0) {
-      const selectedTypes = new Set(filterTypes);
-      result = result.filter((account) => selectedTypes.has(resolvePlanKey(account)));
+      const { requireValidAccounts, selectedTypes } = splitValidityFilterValues(filterTypes);
+      if (requireValidAccounts) {
+        result = result.filter((account) => !isAbnormalAccount(account));
+      }
+      if (selectedTypes.size > 0) {
+        result = result.filter((account) => selectedTypes.has(resolvePlanKey(account)));
+      }
     }
     if (tagFilter.length > 0) {
       const selectedTags = new Set(tagFilter.map(normalizeTag));
@@ -135,7 +148,7 @@ export function useCodebuddySuitePage<TAccount extends CodebuddySuiteAccountBase
       return sortDirection === 'desc' ? diff : -diff;
     });
     return result;
-  }, [accounts, currentAccountId, searchQuery, filterTypes, resolvePlanKey, tagFilter, normalizeTag, sortDirection]);
+  }, [accounts, currentAccountId, searchQuery, filterTypes, isAbnormalAccount, resolvePlanKey, tagFilter, normalizeTag, sortDirection]);
 
   const filteredIds = useMemo(
     () => filteredAccounts.map((account) => account.id),

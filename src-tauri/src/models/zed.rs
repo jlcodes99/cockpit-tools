@@ -36,6 +36,10 @@ pub struct ZedAccount {
     pub edit_predictions_limit_raw: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub edit_predictions_remaining_raw: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_query_last_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_query_last_error_at: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage_updated_at: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]

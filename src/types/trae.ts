@@ -22,6 +22,8 @@ export interface TraeAccount {
 
   status?: string | null;
   status_reason?: string | null;
+  quota_query_last_error?: string | null;
+  quota_query_last_error_at?: number | null;
 
   created_at: number;
   last_used: number;
@@ -423,6 +425,11 @@ function getTraeProfileRoot(account: TraeAccount): Record<string, unknown> | nul
   return toRecord(profileRaw.Result);
 }
 
+function getTraeAuthAccountRoot(account: TraeAccount): Record<string, unknown> | null {
+  const authRaw = toRecord(account.trae_auth_raw);
+  return pickNestedObject(authRaw, ['account']);
+}
+
 function normalizeTraeLoginProvider(rawProvider: string | null): string | null {
   if (!rawProvider) return null;
   const normalized = rawProvider.trim().toLowerCase();
@@ -447,7 +454,25 @@ function normalizeTraeLoginProvider(rawProvider: string | null): string | null {
 
 export function getTraeAccountDisplayEmail(account: TraeAccount): string {
   const profileRoot = getTraeProfileRoot(account);
-  return pickFirstString(profileRoot, ['NonPlainTextEmail']) ?? 'unknown';
+  const authAccountRoot = getTraeAuthAccountRoot(account);
+  return (
+    pickFirstString(profileRoot, ['NonPlainTextEmail', 'Email', 'email']) ??
+    pickFirstString(authAccountRoot, ['email']) ??
+    pickFirstString(toRecord(account.trae_auth_raw), ['email']) ??
+    toNonEmptyString(account.email) ??
+    'unknown'
+  );
+}
+
+export function getTraeAccountDisplayName(account: TraeAccount): string {
+  const profileRoot = getTraeProfileRoot(account);
+  const authAccountRoot = getTraeAuthAccountRoot(account);
+  return (
+    toNonEmptyString(account.nickname) ??
+    pickFirstString(profileRoot, ['ScreenName', 'Nickname', 'nickname', 'Name', 'name', 'displayName']) ??
+    pickFirstString(authAccountRoot, ['username', 'nickname', 'name', 'displayName']) ??
+    getTraeAccountDisplayEmail(account)
+  );
 }
 
 export function getTraeLoginProvider(account: TraeAccount): string | null {
@@ -513,4 +538,8 @@ export function getTraeUsage(account: TraeAccount): TraeUsage {
     payAsYouGoUsd: null,
     usageExhausted: false,
   };
+}
+
+export function hasTraeQuotaData(account: TraeAccount): boolean {
+  return account.trae_usage_raw != null;
 }

@@ -73,6 +73,88 @@ fn command_trace_enabled() -> bool {
     false
 }
 
+pub fn summarize_text_for_process_log(text: &str, max_chars: usize) -> String {
+    let mut iter = text.chars();
+    let mut current = String::new();
+    for _ in 0..max_chars {
+        let Some(ch) = iter.next() else {
+            return text.to_string();
+        };
+        current.push(ch);
+    }
+    if iter.next().is_none() {
+        text.to_string()
+    } else {
+        format!("{}...", current)
+    }
+}
+
+pub fn summarize_pid_list_for_log(pids: &[u32]) -> String {
+    let sample_limit = 8usize;
+    let sample = pids
+        .iter()
+        .take(sample_limit)
+        .map(u32::to_string)
+        .collect::<Vec<_>>();
+    format!(
+        "count={}, sample=[{}{}]",
+        pids.len(),
+        sample.join(", "),
+        if pids.len() > sample_limit {
+            ", ..."
+        } else {
+            ""
+        }
+    )
+}
+
+fn summarize_target_dirs_for_log(target_dirs: &HashSet<String>) -> String {
+    let mut items = target_dirs
+        .iter()
+        .map(|value| summarize_text_for_process_log(value, 96))
+        .collect::<Vec<_>>();
+    items.sort();
+    let sample_limit = 4usize;
+    let sample = items.iter().take(sample_limit).cloned().collect::<Vec<_>>();
+    format!(
+        "count={}, sample={:?}{}",
+        items.len(),
+        sample,
+        if items.len() > sample_limit {
+            "..."
+        } else {
+            ""
+        }
+    )
+}
+
+fn summarize_process_entries_for_log(entries: &[(u32, Option<String>)]) -> String {
+    let sample_limit = 4usize;
+    let sample = entries
+        .iter()
+        .take(sample_limit)
+        .map(|(pid, path)| {
+            format!(
+                "{}|{}",
+                pid,
+                path.as_deref()
+                    .map(|value| summarize_text_for_process_log(value, 96))
+                    .unwrap_or_else(|| "-".to_string())
+            )
+        })
+        .collect::<Vec<_>>();
+    format!(
+        "count={}, sample={:?}{}",
+        entries.len(),
+        sample,
+        if entries.len() > sample_limit {
+            "..."
+        } else {
+            ""
+        }
+    )
+}
+
 fn quote_command_part(part: &str) -> String {
     if part.is_empty() {
         return "\"\"".to_string();
@@ -92,11 +174,12 @@ fn format_command_preview(command: &Command) -> String {
         .get_args()
         .map(|arg| quote_command_part(arg.to_string_lossy().as_ref()))
         .collect::<Vec<String>>();
-    if args.is_empty() {
+    let preview = if args.is_empty() {
         program
     } else {
         format!("{} {}", program, args.join(" "))
-    }
+    };
+    summarize_text_for_process_log(&preview, 600)
 }
 
 #[cfg(target_os = "windows")]
@@ -181,7 +264,7 @@ fn output_bytes_for_trace(bytes: &[u8]) -> String {
     if trimmed.is_empty() {
         "<empty>".to_string()
     } else {
-        truncate_for_trace(trimmed, 4000)
+        truncate_for_trace(trimmed, 400)
     }
 }
 
@@ -3896,8 +3979,10 @@ fn resolve_pid_from_entries_by_user_data_dir(
         }
         if is_pid_running(pid) {
             crate::modules::logger::log_warn(&format!(
-                "[PID Resolve] 忽略不匹配的 last_pid={}，target={}，matched_pids={:?}",
-                pid, target_dir, matches
+                "[PID Resolve] 忽略不匹配的 last_pid={}，target={}，matched_pids={}",
+                pid,
+                summarize_text_for_process_log(target_dir, 96),
+                summarize_pid_list_for_log(&matches)
             ));
         }
     }
@@ -4060,8 +4145,10 @@ pub fn resolve_antigravity_pid_from_entries(
         }
         if is_pid_running(pid) {
             crate::modules::logger::log_warn(&format!(
-                "[AG Resolve] 忽略不匹配的 last_pid={}，target={}，matched_pids={:?}",
-                pid, target, matches
+                "[AG Resolve] 忽略不匹配的 last_pid={}，target={}，matched_pids={}",
+                pid,
+                summarize_text_for_process_log(&target, 96),
+                summarize_pid_list_for_log(&matches)
             ));
         }
     }
@@ -4120,6 +4207,11 @@ public class Win32 {{
     }
     let stderr = String::from_utf8_lossy(&output.stderr);
     Err(format!("窗口聚焦失败: {}", stderr.trim()))
+}
+
+#[cfg(target_os = "windows")]
+pub fn focus_current_process_main_window() -> Result<(), String> {
+    focus_window_by_pid(std::process::id())
 }
 
 #[cfg(target_os = "linux")]
@@ -4226,8 +4318,13 @@ pub fn resolve_codex_pid_from_entries(
         }
         if is_pid_running(pid) {
             crate::modules::logger::log_warn(&format!(
-                "[Codex Resolve] 忽略不匹配的 last_pid={}，target={:?}，matched_pids={:?}",
-                pid, target, matches
+                "[Codex Resolve] 忽略不匹配的 last_pid={}，target={}，matched_pids={}",
+                pid,
+                target
+                    .as_deref()
+                    .map(|value| summarize_text_for_process_log(value, 96))
+                    .unwrap_or_else(|| "-".to_string()),
+                summarize_pid_list_for_log(&matches)
             ));
         }
     }
@@ -4251,8 +4348,9 @@ pub fn resolve_codex_pid_from_entries(
         }
         if is_pid_running(pid) && !pids.is_empty() {
             crate::modules::logger::log_warn(&format!(
-                "[Codex Resolve] 忽略不匹配的 last_pid={}，matched_pids={:?}",
-                pid, pids
+                "[Codex Resolve] 忽略不匹配的 last_pid={}，matched_pids={}",
+                pid,
+                summarize_pid_list_for_log(&pids)
             ));
         }
     }
@@ -5576,12 +5674,18 @@ where
         return Ok(());
     }
     crate::modules::logger::log_info(&format!(
-        "[{}] target_dirs={:?}, timeout_secs={}",
-        log_prefix, target_dirs, timeout_secs
+        "[{}] target_dirs={}, timeout_secs={}",
+        log_prefix,
+        summarize_target_dirs_for_log(&target_dirs),
+        timeout_secs
     ));
 
     let entries = collect_entries();
-    crate::modules::logger::log_info(&format!("[{}] collected_entries={:?}", log_prefix, entries));
+    crate::modules::logger::log_info(&format!(
+        "[{}] collected_entries={}",
+        log_prefix,
+        summarize_process_entries_for_log(&entries)
+    ));
 
     let mut pids = select_main_pids(&entries, &target_dirs);
     pids.sort();
@@ -5590,7 +5694,11 @@ where
         crate::modules::logger::log_info(not_running_message);
         return Ok(());
     }
-    crate::modules::logger::log_info(&format!("[{}] matched_main_pids={:?}", log_prefix, pids));
+    crate::modules::logger::log_info(&format!(
+        "[{}] matched_main_pids={}",
+        log_prefix,
+        summarize_pid_list_for_log(&pids)
+    ));
 
     crate::modules::logger::log_info(&format!(
         "准备关闭 {} 个{}主进程...",
@@ -5605,8 +5713,9 @@ where
         if let Some(wait_secs) = graceful_wait_secs {
             if wait_pids_exit(&pids, wait_secs) {
                 crate::modules::logger::log_info(&format!(
-                    "[{}] graceful close finished, targets={:?}",
-                    log_prefix, pids
+                    "[{}] graceful close finished, targets={}",
+                    log_prefix,
+                    summarize_pid_list_for_log(&pids)
                 ));
                 return Ok(());
             }
@@ -5624,16 +5733,18 @@ where
     if !remaining_entries.is_empty() {
         let remaining_pids = collect_remaining_pids(&remaining_entries);
         crate::modules::logger::log_warn(&format!(
-            "[{}] first remaining pids after close={:?}",
-            log_prefix, remaining_pids
+            "[{}] first remaining pids after close={}",
+            log_prefix,
+            summarize_pid_list_for_log(&remaining_pids)
         ));
         if let Some(detail_logger_fn) = detail_logger {
             detail_logger_fn(&remaining_pids);
         }
         if !remaining_pids.is_empty() {
             crate::modules::logger::log_warn(&format!(
-                "[{}] retry force close for remaining pids={:?}",
-                log_prefix, remaining_pids
+                "[{}] retry force close for remaining pids={}",
+                log_prefix,
+                summarize_pid_list_for_log(&remaining_pids)
             ));
             if let Err(err) = close_pids(&remaining_pids, 6) {
                 crate::modules::logger::log_warn(&format!(
@@ -5651,12 +5762,14 @@ where
             detail_logger_fn(&remaining_pids);
         }
         crate::modules::logger::log_error(&format!(
-            "[{}] still_running_entries={:?}",
-            log_prefix, remaining_entries
+            "[{}] still_running_entries={}",
+            log_prefix,
+            summarize_process_entries_for_log(&remaining_entries)
         ));
         return Err(format!(
-            "{} (remaining_pids={:?})",
-            failure_message, remaining_pids
+            "{} ({})",
+            failure_message,
+            summarize_pid_list_for_log(&remaining_pids)
         ));
     }
 
@@ -5674,7 +5787,13 @@ pub fn close_antigravity_instances(
         .ok()
         .map(|value| normalize_path_for_compare(&value.to_string_lossy()))
         .filter(|value| !value.is_empty());
-    crate::modules::logger::log_info(&format!("[AG Close] default_dir={:?}", default_dir));
+    crate::modules::logger::log_info(&format!(
+        "[AG Close] default_dir={}",
+        default_dir
+            .as_deref()
+            .map(|value| summarize_text_for_process_log(value, 96))
+            .unwrap_or_else(|| "-".to_string())
+    ));
     close_managed_instances_common(
         "AG Close",
         "正在关闭受管 Antigravity 实例...",
@@ -5745,7 +5864,10 @@ tell application \"System Events\" to keystroke \"q\" using command down",
     {
         use std::os::windows::process::CommandExt;
 
-        crate::modules::logger::log_info(&format!("[AG Close] graceful taskkill start pid={}", pid));
+        crate::modules::logger::log_info(&format!(
+            "[AG Close] graceful taskkill start pid={}",
+            pid
+        ));
         let output = Command::new("taskkill")
             .args(["/PID", &pid.to_string(), "/T"])
             .creation_flags(CREATE_NO_WINDOW)
@@ -5873,14 +5995,14 @@ fn log_antigravity_process_details_for_pids(pids: &[u32]) {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if stdout.trim().is_empty() {
                 crate::modules::logger::log_warn(&format!(
-                    "[AG Close] remaining pid details not found for {:?}",
-                    unique
+                    "[AG Close] remaining pid details not found for {}",
+                    summarize_pid_list_for_log(&unique)
                 ));
             } else {
                 for line in stdout.lines().filter(|line| !line.trim().is_empty()) {
                     crate::modules::logger::log_warn(&format!(
                         "[AG Close] remaining_pid_detail {}",
-                        line.trim()
+                        summarize_text_for_process_log(line.trim(), 240)
                     ));
                 }
             }
@@ -5916,14 +6038,14 @@ fn log_vscode_process_details_for_pids(pids: &[u32]) {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if stdout.trim().is_empty() {
                 crate::modules::logger::log_warn(&format!(
-                    "[VSCode Close] remaining pid details not found for {:?}",
-                    unique
+                    "[VSCode Close] remaining pid details not found for {}",
+                    summarize_pid_list_for_log(&unique)
                 ));
             } else {
                 for line in stdout.lines().filter(|line| !line.trim().is_empty()) {
                     crate::modules::logger::log_warn(&format!(
                         "[VSCode Close] remaining_pid_detail {}",
-                        line.trim()
+                        summarize_text_for_process_log(line.trim(), 240)
                     ));
                 }
             }
@@ -5975,8 +6097,9 @@ fn close_pids(pids: &[u32], timeout_secs: u64) -> Result<(), String> {
         return Ok(());
     }
     crate::modules::logger::log_info(&format!(
-        "[ClosePids] targets={:?}, timeout_secs={}",
-        targets, timeout_secs
+        "[ClosePids] targets={}, timeout_secs={}",
+        summarize_pid_list_for_log(&targets),
+        timeout_secs
     ));
 
     for pid in &targets {
@@ -5984,7 +6107,10 @@ fn close_pids(pids: &[u32], timeout_secs: u64) -> Result<(), String> {
     }
 
     if wait_pids_exit(&targets, timeout_secs) {
-        crate::modules::logger::log_info(&format!("[ClosePids] all exited, targets={:?}", targets));
+        crate::modules::logger::log_info(&format!(
+            "[ClosePids] all exited, targets={}",
+            summarize_pid_list_for_log(&targets)
+        ));
         Ok(())
     } else {
         let remaining: Vec<u32> = targets
@@ -5993,8 +6119,8 @@ fn close_pids(pids: &[u32], timeout_secs: u64) -> Result<(), String> {
             .filter(|pid| is_pid_running(*pid))
             .collect();
         crate::modules::logger::log_error(&format!(
-            "[ClosePids] timeout, remaining={:?}",
-            remaining
+            "[ClosePids] timeout, remaining={}",
+            summarize_pid_list_for_log(&remaining)
         ));
         Err("无法关闭实例进程，请手动关闭后重试".to_string())
     }
@@ -6766,7 +6892,11 @@ fn get_trae_pids() -> Vec<u32> {
     }
 
     if !pids.is_empty() {
-        crate::modules::logger::log_info(&format!("找到 {} 个 Trae 进程: {:?}", pids.len(), pids));
+        crate::modules::logger::log_info(&format!(
+            "找到 {} 个 Trae 进程: {}",
+            pids.len(),
+            summarize_pid_list_for_log(&pids)
+        ));
     }
 
     pids
@@ -6987,9 +7117,9 @@ fn get_opencode_pids() -> Vec<u32> {
 
     if !pids.is_empty() {
         crate::modules::logger::log_info(&format!(
-            "找到 {} 个 OpenCode 进程: {:?}",
+            "找到 {} 个 OpenCode 进程: {}",
             pids.len(),
-            pids
+            summarize_pid_list_for_log(&pids)
         ));
     }
 
@@ -8676,7 +8806,13 @@ pub fn close_vscode(user_data_dirs: &[String], timeout_secs: u64) -> Result<(), 
     let default_dir = get_default_vscode_user_data_dir_for_os()
         .map(|value| normalize_path_for_compare(&value))
         .filter(|value| !value.is_empty());
-    crate::modules::logger::log_info(&format!("[VSCode Close] default_dir={:?}", default_dir));
+    crate::modules::logger::log_info(&format!(
+        "[VSCode Close] default_dir={}",
+        default_dir
+            .as_deref()
+            .map(|value| summarize_text_for_process_log(value, 96))
+            .unwrap_or_else(|| "-".to_string())
+    ));
     close_managed_instances_common(
         "VSCode Close",
         "正在关闭 VS Code...",

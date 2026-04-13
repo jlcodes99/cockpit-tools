@@ -33,19 +33,24 @@
         "creditPackage": "Pack de crédits",
         "sharedCreditPackage": "Pack de crédits partagé",
         "account": "Compte",
-        "createdAt": "Date de création"
+        "createdAt": "Date de création",
+        "userId": "ID utilisateur"
       },
       "empty": {
         "title": "Aucun compte"
       },
-      "export": "Exporter",
+      "export": {
+        "title": "Exporter",
+        "copyFailed": "Échec de la copie, veuillez copier manuellement"
+      },
       "filter": {
         "all": "Tous ({{count}})",
         "enterprise": "ENTREPRISE ({{count}})",
         "free": "GRATUIT ({{count}})",
         "pro": "PRO ({{count}})",
         "business": "ENTREPRISE ({{count}})",
-        "individual": "INDIVIDUEL ({{count}})"
+        "individual": "INDIVIDUEL ({{count}})",
+        "validAccounts": "Comptes valides ({{count}})"
       },
       "filterLabel": "Filtrer",
       "import": {
@@ -127,9 +132,11 @@
       },
       "quota": {
         "noData": "Aucune donnée de quota",
+        "queryFailed": "Échec de la requête de quota",
         "resetDone": "Réinitialisé",
         "hourly": "Quota de 5 heures",
-        "weekly": "Quota hebdomadaire"
+        "weekly": "Quota hebdomadaire",
+        "resetAt": "Réinitialisation: {{time}}"
       },
       "subtitle": "Gérez vos comptes GitHub Copilot",
       "time": {
@@ -161,7 +168,10 @@
       },
       "updated": {
         "label": "Mis à jour il y a {{relative}}"
-      }
+      },
+      "clear": "Effacer",
+      "loginSuccess": "Connexion réussie",
+      "switchAccount": "Changer de compte"
     },
     "topRightAd": {
       "ariaLabel": "Emplacement publicitaire global en haut à droite",
@@ -169,7 +179,15 @@
       "title": "Emplacement publicitaire en haut à droite",
       "desc": "Cette zone est fixée en haut à droite sur toutes les pages pour les campagnes ou publicités de marque.",
       "action": "Voir les détails"
-    }
+    },
+    "appName": "Cockpit Tools",
+    "collapse": "Réduire",
+    "confirmDelete": "Confirmer la suppression",
+    "confirmDeleteTag": "Confirmer la suppression du tag",
+    "deleteTagWarning": "Voulez-vous vraiment supprimer ce tag de tous les comptes ?",
+    "expand": "Développer",
+    "processing": "Traitement en cours...",
+    "selectAll": "Tout sélectionner"
   },
   "nav": {
     "overview": "Antigravity",
@@ -292,7 +310,8 @@
       "running": "En cours",
       "stopped": "Arrêté",
       "restarting": "Redémarrage",
-      "starting": "Départ"
+      "starting": "Départ",
+      "ready": "Prête"
     },
     "labels": {
       "path": "Répertoire",
@@ -302,7 +321,8 @@
       "unbound": "Non lié",
       "pendingInit": "En attente d'initialisation (démarrez une fois d'abord)",
       "quota": "Quota",
-      "lastLaunched": "Dernier lancement"
+      "lastLaunched": "Dernier lancement",
+      "argsPresent": "Args définis"
     },
     "columns": {
       "instance": "Exemple",
@@ -352,7 +372,14 @@
       "extraArgsDesc": "Séparer les arguments par des espaces, les guillemets sont pris en charge",
       "nameRequired": "Veuillez saisir un nom d'instance",
       "pathRequired": "Veuillez choisir un répertoire d'instance",
-      "bindRequired": "Veuillez choisir un compte à lier"
+      "bindRequired": "Veuillez choisir un compte à lier",
+      "optional": "Facultatif",
+      "launchMode": "Mode de lancement",
+      "launchModeApp": "Bureau",
+      "launchModeCli": "Mode CLI",
+      "workingDir": "Répertoire de travail",
+      "workingDirPlaceholder": "Utilise le chemin actuel par défaut",
+      "workingDirDesc": "Basculera d'abord vers ce répertoire au démarrage"
     },
     "quota": {
       "unbound": "Compte non lié",
@@ -372,7 +399,8 @@
       "closedAll": "Toutes les instances ont été arrêtées",
       "allAlreadyRunning": "Toutes les instances sont déjà en cours d'exécution",
       "noneRunning": "Aucune instance en cours d'exécution trouvée",
-      "syncThreadsNeedTwo": "Au moins deux instances sont nécessaires pour synchroniser les threads"
+      "syncThreadsNeedTwo": "Au moins deux instances sont nécessaires pour synchroniser les threads",
+      "launchPrepared": "La commande de lancement est prête"
     },
     "runningDialog": {
       "title": "L'instance est déjà en cours d'exécution",
@@ -435,6 +463,13 @@
       "bindHint": "Vous pouvez lier un compte plus tard depuis la liste des instances",
       "pathRequired": "Veuillez d'abord sélectionner un répertoire",
       "submit": "Importer"
+    },
+    "launchDialog": {
+      "title": "Lancer l'instance",
+      "terminal": "Console",
+      "command": "Commande de lancement",
+      "hint": "Copiez la commande et exécutez-la manuellement, ou lancez-la directement dans le terminal.",
+      "runInTerminal": "Exécuter dans le terminal"
     }
   },
   "settings": {
@@ -611,7 +646,27 @@
       "autoSwitchAccountScopeDialogTitle": "Choisir la portée des comptes pour la bascule automatique",
       "autoSwitchAccountScopeAllHint": "La portée actuelle inclut tous les comptes. {{total}} compte(s) participeront à la bascule automatique.",
       "codexAutoSwitchAccountScope": "Portée de bascule automatique des comptes Codex",
-      "codexAutoSwitchAccountScopeDesc": "État actuel de la bascule automatique Codex : {{status}}. Seuls les comptes de cette portée seront pris en compte."
+      "codexAutoSwitchAccountScopeDesc": "État actuel de la bascule automatique Codex : {{status}}. Seuls les comptes de cette portée seront pris en compte.",
+      "defaultTerminal": "Terminal par défaut",
+      "defaultTerminalDesc": "Le terminal utilisé lors de l'ouverture de Gemini CLI",
+      "terminalSystem": "Système par défaut",
+      "currentAccountRefreshRequiresAutoRefresh": "Activez d'abord « Actualisation automatique du quota » pour configurer l'actualisation du compte actuel.",
+      "codebuddyCnAppPath": "Chemin de l'application CodeBuddy CN",
+      "codebuddyCnAppPathDesc": "Laisser vide pour utiliser le chemin par défaut",
+      "codebuddyCnAppPathPlaceholder": "Chemin par défaut",
+      "codebuddyCnAutoRefresh": "Actualisation automatique du quota CodeBuddy CN",
+      "codebuddyCnAutoRefreshDesc": "Fréquence de l'actualisation automatique en arrière-plan",
+      "codebuddyCnPathReset": "Réinitialiser par défaut",
+      "codebuddyCnPathSelect": "Sélectionner",
+      "codebuddyCnSettingsTitle": "Paramètres CodeBuddy CN",
+      "qoderAppPath": "Chemin de l'application Qoder",
+      "qoderAppPathDesc": "Laisser vide pour utiliser le chemin par défaut",
+      "qoderAppPathPlaceholder": "Chemin par défaut",
+      "qoderAutoRefresh": "Actualisation automatique du quota Qoder",
+      "qoderAutoRefreshDesc": "Fréquence de l'actualisation automatique en arrière-plan",
+      "qoderPathSelect": "Sélectionner",
+      "workbuddyAutoRefresh": "Actualisation automatique du quota WorkBuddy",
+      "workbuddyAutoRefreshDesc": "Fréquence de l'actualisation automatique en arrière-plan"
     },
     "network": {
       "apiTitle": "API du cockpit antigravité",
@@ -672,7 +727,93 @@
       "download": "Télécharger",
       "checkFailed": "Échec de la vérification"
     },
-    "saveSettings": "Enregistrer les paramètres"
+    "saveSettings": "Enregistrer les paramètres",
+    "transfer": {
+      "backup": {
+        "title": "Gestion des sauvegardes",
+        "desc": "Gérez les sauvegardes planifiées, le dossier de sauvegarde et la liste des fichiers au même endroit.",
+        "modalDesc": "Configurez les sauvegardes automatiques, parcourez les fichiers du dossier de sauvegarde du projet et restaurez-les ou nettoyez-les ici.",
+        "statusEnabled": "La sauvegarde automatique est activée",
+        "statusDisabled": "La sauvegarde automatique est désactivée",
+        "lastRunLabel": "Dernière sauvegarde : {{time}}",
+        "lastRunNever": "Aucune sauvegarde pour le moment",
+        "autoTitle": "Sauvegarde planifiée",
+        "autoDesc": "Une sauvegarde est exportée chaque jour lorsqu’elle est activée et reste restaurable via l’import actuel.",
+        "runNow": "Sauvegarder maintenant",
+        "running": "Sauvegarde en cours...",
+        "typeTitle": "Type de sauvegarde",
+        "typeDesc": "Choisissez la portée des données à sauvegarder automatiquement.",
+        "typeFull": "Données complètes",
+        "typeAccounts": "Comptes uniquement",
+        "typeConfig": "Configuration uniquement",
+        "retentionTitle": "Conservation",
+        "retentionDesc": "Les sauvegardes plus anciennes seront supprimées lors du prochain contrôle.",
+        "retentionUnit": "jours",
+        "directoryTitle": "Dossier de sauvegarde",
+        "directoryDesc": "Les sauvegardes sont toujours enregistrées dans le dossier backups du projet.",
+        "openFolder": "Ouvrir le dossier",
+        "listTitle": "Liste des sauvegardes",
+        "listDesc": "Importez directement une sauvegarde ou supprimez les anciens fichiers.",
+        "openList": "Ouvrir la liste",
+        "emptyTitle": "Aucune sauvegarde pour l’instant",
+        "emptyDesc": "Activez la sauvegarde automatique ou cliquez sur « Sauvegarder maintenant » pour créer ici des sauvegardes JSON restaurables.",
+        "sourceAuto": "Automatique",
+        "sourceManual": "Manuel",
+        "fileTime": "Heure : {{time}}",
+        "fileSize": "Taille : {{size}}",
+        "importAction": "Importer",
+        "deleteAction": "Supprimer",
+        "deleteConfirm": "Supprimer la sauvegarde {{name}} ?",
+        "feedback": {
+          "running": "Création de la sauvegarde...",
+          "runSuccess": "Sauvegarde enregistrée dans {{path}}",
+          "runSuccessWithCleanup": "Sauvegarde enregistrée dans {{path}} et {{count}} sauvegarde(s) expirée(s) nettoyée(s)",
+          "runFailed": "Échec de la sauvegarde : {{error}}",
+          "deleteSuccess": "Sauvegarde supprimée",
+          "deleteFailed": "Échec de la suppression de la sauvegarde : {{error}}",
+          "loadFailed": "Échec du chargement de la liste des sauvegardes : {{error}}",
+          "saveSettingsFailed": "Échec de l’enregistrement des réglages de sauvegarde : {{error}}",
+          "cleanupDone": "{{count}} sauvegarde(s) expirée(s) nettoyée(s)",
+          "cleanupFailed": "Échec du nettoyage des sauvegardes expirées : {{error}}",
+          "openFolderFailed": "Échec de l’ouverture du dossier de sauvegarde : {{error}}"
+        },
+        "errors": {
+          "invalidRetention": "La durée de conservation doit être comprise entre 1 et 365 jours"
+        }
+      },
+      "exportTitle": "Export des données",
+      "exportDesc": "Exportez selon vos besoins les données des comptes, les données de configuration ou un package complet de migration.",
+      "importTitle": "Import des données",
+      "importDesc": "Importez des sauvegardes de comptes, des sauvegardes de configuration ou le package de données unifié.",
+      "exportModalDesc": "Choisissez ce que vous souhaitez exporter. Sélectionnez comptes et configuration pour créer un package complet de migration.",
+      "importModalDesc": "Choisissez ce que vous souhaitez importer. Les anciennes sauvegardes de comptes sont traitées comme un import comptes uniquement.",
+      "selectionTitle": "Périmètre des données",
+      "accountsOptionTitle": "Données des comptes",
+      "accountsOptionDesc": "Inclut les sauvegardes des comptes de chaque plateforme et conserve la compatibilité avec l'ancien JSON des comptes.",
+      "configOptionTitle": "Données de configuration",
+      "configOptionDesc": "Inclut les réglages de l'application, les groupes, les instances, les tâches de réveil et la configuration des fournisseurs de modèles.",
+      "exportConfirm": "Exporter les données",
+      "fromFileTitle": "Importer depuis un fichier",
+      "fromFileDesc": "Choisissez un fichier JSON à importer. Les anciennes sauvegardes de comptes sont aussi prises en charge ici.",
+      "jsonPlaceholder": "Collez un package de données ou l'ancien JSON des comptes",
+      "feedback": {
+        "accountsImported": "{{count}} comptes importés",
+        "configImported": "Données de configuration restaurées",
+        "accountsSectionMissing": "Cette sauvegarde ne contient pas de données de comptes",
+        "configSectionMissing": "Cette sauvegarde ne contient pas de données de configuration ; seules les données de comptes ont été restaurées",
+        "unresolvedRefs": "{{count}} liaisons de comptes n'ont pas pu être associées et ont été ignorées",
+        "disabledTasks": "{{count}} tâches ont été désactivées car aucun compte n'a pu être associé",
+        "restartRequired": "Les paramètres du service réseau ont été restaurés. Certains changements prendront effet après redémarrage",
+        "partialAccountFailure": "L'import de certains comptes a échoué : {{error}}"
+      },
+      "errors": {
+        "selectionRequired": "Sélectionnez au moins un type de données",
+        "accountsOnlyFile": "Cette sauvegarde contient uniquement des données de comptes. Sélectionnez \"Données des comptes\" pour l'importer",
+        "selectedSectionsMissing": "Le type de données sélectionné n'est pas présent dans cette sauvegarde",
+        "unsupportedLegacyFile": "Ce format d'ancienne sauvegarde de comptes n'est pas reconnu",
+        "unsupportedVersion": "Cette version de l'application ne prend pas en charge cette version du bundle"
+      }
+    }
   },
   "appPath": {
     "missing": {
@@ -680,6 +821,9 @@
       "desc": "Impossible de trouver le chemin de l’application {{app}}. Veuillez le définir maintenant pour continuer.",
       "action": "Définir maintenant",
       "codexLaunchHint": "Une fois désactivé, le changement de compte et l'écrasement de connexion continuent de s'exécuter, mais l'application Codex ne sera plus lancée et cette invite de chemin ne réapparaîtra pas."
+    },
+    "modal": {
+      "desc": "Le chemin de l'application {{app}} est introuvable. Veuillez le configurer maintenant pour continuer."
     }
   },
   "accounts": {
@@ -789,7 +933,11 @@
       "fingerprint": "Empreinte",
       "switch": "Changer de compte",
       "switchTo": "Basculer vers ce compte",
-      "selectFingerprint": "Sélectionner l'empreinte"
+      "selectFingerprint": "Sélectionner l'empreinte",
+      "delete": "Supprimer",
+      "deleteSelected": "Supprimer la sélection",
+      "export": "Exporter",
+      "refreshAll": "Tout actualiser"
     },
     "tabs": {
       "oauth": "Autorisation OAuth",
@@ -886,7 +1034,40 @@
       "clearConfirm": "Effacer tout l’historique des bascules ?",
       "loadFailed": "Échec du chargement de l’historique des bascules : {{error}}",
       "clearFailed": "Échec de l’effacement de l’historique des bascules : {{error}}"
-    }
+    },
+    "clearTagFilter": "Effacer le filtre de tag",
+    "compact": {
+      "hide": "Masquer",
+      "show": "Afficher"
+    },
+    "deleteConfirm": {
+      "multi": "Supprimer {{count}} compte(s) sélectionné(s) ?",
+      "single": "Supprimer ce compte ?"
+    },
+    "deleteFailed": "Échec de la suppression: {{error}}",
+    "deleteSuccess": "Suppression réussie",
+    "deleteTagFailed": "Échec de la suppression du tag: {{error}}",
+    "exportError": "Échec de l'export: {{error}}",
+    "exportModal": {
+      "title": "Exporter en JSON"
+    },
+    "importJsonFailed": "Échec de l'import JSON: {{error}}",
+    "importJsonHint": "Importez un fichier Qoder JSON exporté depuis cet outil.",
+    "importJsonSuccess": "Import JSON réussi",
+    "noTags": "Aucun tag",
+    "privacy": {
+      "disable": "Désactiver le mode confidentialité",
+      "enable": "Activer le mode confidentialité"
+    },
+    "refreshAllFailed": "Échec de la mise à jour globale: {{error}}",
+    "refreshAllSuccess": "Tous les comptes mis à jour",
+    "refreshFailed": "Échec de l'actualisation: {{error}}",
+    "refreshSuccess": "Actualisation réussie",
+    "switchFailed": "Échec du changement: {{error}}",
+    "switchSuccess": "Changement réussi",
+    "switched": "Basculé vers {{email}}",
+    "tagButton": "Modifier les tags",
+    "tagUpdated": "Tag mis à jour"
   },
   "overview": {
     "title": "Aperçu des comptes",
@@ -1098,7 +1279,10 @@
       "actions": {
         "selectAllAccounts": "Tout sélectionner",
         "clearSelectedAccounts": "Effacer la sélection",
-        "runCheckNow": "Terminer la vérification"
+        "runCheckNow": "Terminer la vérification",
+        "retryFiltered": "Réessayer le filtre actuel ({{count}})",
+        "retryMissingModel": "Ce lot ne contient pas d'informations sur le modèle et ne peut pas être relancé.",
+        "retryMissingAccount": "Aucun compte ne peut être relancé dans le filtre actuel."
       },
       "runHint": {
         "title": "Notes de vérification",
@@ -1383,7 +1567,9 @@
       "portInUseConfirm": "Le port {{port}} est utilisé. Fermer le processus qui l'utilise ?",
       "portCloseFailed": "Échec de fermeture du port : {{error}}",
       "portStillInUse": "Le port {{port}} est toujours utilisé.",
-      "portInUseAction": "Fermer le port et réessayer"
+      "portInUseAction": "Fermer le port et réessayer",
+      "timeout": "L'authentification a expiré. Cliquez",
+      "timeoutRetry": "Actualiser le lien d'authentification"
     },
     "token": {
       "desc": "Collez le contenu auth.json ou les données JSON du compte",
@@ -1455,7 +1641,10 @@
     "usage": {
       "open": "Ouvrir l'utilisation OpenAI",
       "hint": "Pour les crédits API Key, consultez la page d'utilisation OpenAI.",
-      "openFailed": "Impossible d'ouvrir la page d'utilisation : {{error}}"
+      "openFailed": "Impossible d'ouvrir la page d'utilisation : {{error}}",
+      "search": {
+        "placeholder": "Rechercher des comptes..."
+      }
     },
     "wakeup": {
       "tab": "Tâches de réveil",
@@ -1641,12 +1830,15 @@
         "moveToTrash": "Déplacer vers la corbeille",
         "syncSessions": "Synchroniser les sessions",
         "expand": "Développer",
-        "collapse": "Réduire"
+        "collapse": "Réduire",
+        "repairVisibility": "Réparer la visibilité",
+        "restoreSessions": "Restaurer les sessions"
       },
       "confirm": {
         "title": "Déplacer vers la corbeille",
         "message": "Les sessions sélectionnées seront déplacées vers la corbeille depuis leurs instances afin de pouvoir être restaurées plus tard. Les instances en cours d’exécution peuvent nécessiter un redémarrage avant que la modification apparaisse. Continuer ?",
-        "syncMessage": "Les threads manquants et leurs données de session seront synchronisés vers toutes les instances. Le contenu existant ne sera pas réécrit et les fichiers de l’instance cible seront sauvegardés avant toute écriture. Continuer ?"
+        "syncMessage": "Les threads manquants et leurs données de session seront synchronisés vers toutes les instances. Le contenu existant ne sera pas réécrit et les fichiers de l’instance cible seront sauvegardés avant toute écriture. Continuer ?",
+        "repairVisibilityMessage": "Cette action réparera les métadonnées du fournisseur dans les fichiers de rollout et dans state_5.sqlite en utilisant la valeur model_provider du config.toml racine de chaque instance (avec openai par défaut si elle est absente). Les fichiers à modifier sont sauvegardés avant l'écriture. Les instances en cours d'exécution peuvent nécessiter un redémarrage avant que le changement n'apparaisse. Continuer ?"
       },
       "empty": {
         "title": "Aucune session à gérer",
@@ -1654,12 +1846,20 @@
       },
       "messages": {
         "pickOne": "Veuillez sélectionner au moins une session",
-        "syncNeedTwo": "Au moins deux instances sont nécessaires pour synchroniser les sessions"
+        "syncNeedTwo": "Au moins deux instances sont nécessaires pour synchroniser les sessions",
+        "pickRestoreOne": "Veuillez sélectionner au moins une session à restaurer"
       },
       "groupCount": "{{count}} sessions",
       "updatedAt": "Mis à jour",
       "locationRunning": " (en cours d’exécution)",
-      "untitled": "Session sans titre"
+      "untitled": "Session sans titre",
+      "restoreModal": {
+        "title": "Restaurer les sessions",
+        "hint": "La restauration remet ensemble le fichier rollout, la ligne de thread SQLite et l'entrée session_index dans l'instance d'origine.",
+        "emptyTitle": "La corbeille est vide",
+        "emptyDesc": "Les sessions déplacées dans la corbeille apparaîtront ici.",
+        "restoreAction": "Restaurer les sessions sélectionnées"
+      }
     },
     "api": {
       "baseUrl": "URL de base",
@@ -1668,7 +1868,178 @@
         "apiKeyCannotBeUrl": "La clé API ne peut pas être une URL. Vérifiez si les champs sont inversés.",
         "baseUrlInvalid": "URL de base invalide. Veuillez saisir une URL complète commençant par http:// ou https://.",
         "apiKeyEqualsBaseUrl": "La clé API ne peut pas être identique à l'URL de base."
+      },
+      "addAndSwitchSuccess": "Ajouté et basculé : {{email}}",
+      "actions": {
+        "addAndSwitch": "Ajouter et basculer"
+      },
+      "provider": {
+        "label": "Fournisseur",
+        "custom": "Personnalisé",
+        "endpoint": "Point de terminaison du fournisseur",
+        "hint": "Une Base URL compatible a été renseignée automatiquement. Vous pouvez toujours la modifier manuellement.",
+        "website": "Site web",
+        "apiKeyPage": "Page de clé API"
+      },
+      "providers": {
+        "openai_official": {
+          "name": "OpenAI Official"
+        },
+        "azure_openai": {
+          "name": "Azure OpenAI"
+        },
+        "packycode": {
+          "name": "PackyCode"
+        },
+        "cubence": {
+          "name": "Cubence"
+        },
+        "aigocode": {
+          "name": "AIGoCode"
+        },
+        "rightcode": {
+          "name": "RightCode"
+        },
+        "sssaicode": {
+          "name": "SSSAiCode"
+        },
+        "micu": {
+          "name": "Micu"
+        },
+        "x_code_api": {
+          "name": "X-Code API"
+        },
+        "ctok_ai": {
+          "name": "CTok.ai"
+        },
+        "aihubmix": {
+          "name": "AiHubMix"
+        },
+        "dmxapi": {
+          "name": "DMXAPI"
+        },
+        "compshare": {
+          "name": "Compshare"
+        },
+        "openrouter": {
+          "name": "OpenRouter"
+        },
+        "aicodemirror": {
+          "name": "AICodeMirror"
+        },
+        "aicoding": {
+          "name": "AICoding"
+        },
+        "crazyrouter": {
+          "name": "CrazyRouter"
+        },
+        "deepseek": {
+          "name": "DeepSeek"
+        },
+        "moonshot": {
+          "name": "Moonshot"
+        },
+        "siliconflow": {
+          "name": "SiliconFlow"
+        }
       }
+    },
+    "modelProviders": {
+      "tab": "Fournisseurs de modèles",
+      "desc": "Gérez les fournisseurs de modèles et plusieurs clés API au même endroit, puis réutilisez-les directement lors de l'ajout de comptes Codex à clé API.",
+      "add": "Ajouter un fournisseur",
+      "loadFailed": "Échec du chargement des fournisseurs de modèles : {{error}}",
+      "emptyTitle": "Aucun fournisseur de modèles pour le moment",
+      "emptyDesc": "Cliquez sur « Ajouter un fournisseur » en haut à droite pour commencer.",
+      "baseUrl": "URL de base",
+      "website": "Site web",
+      "apiKeyPage": "Page de clé API",
+      "apiKeysCount": "{{count}} clés API",
+      "referencesCount": "{{count}} comptes liés",
+      "unnamedKey": "Clé sans nom",
+      "createTitle": "Ajouter un fournisseur de modèles",
+      "editTitle": "Modifier le fournisseur de modèles",
+      "existingApiKeys": "Clés API existantes",
+      "fields": {
+        "name": "Nom du fournisseur",
+        "baseUrl": "URL de base",
+        "website": "Site web (facultatif)",
+        "apiKeyUrl": "Page de clé API (facultatif)",
+        "newApiKeyName": "Nom de la nouvelle clé (facultatif)",
+        "newApiKey": "Nouvelle clé API"
+      },
+      "validation": {
+        "nameRequired": "Le nom du fournisseur est obligatoire.",
+        "baseUrlInvalid": "Base URL invalide.",
+        "baseUrlExists": "Cette Base URL existe déjà.",
+        "providerNotFound": "Fournisseur introuvable.",
+        "apiKeyRequiredOnCreate": "Au moins une clé API est requise lors de la création d'un fournisseur.",
+        "apiKeyRequiredWhenEmpty": "Ce fournisseur n'a pas encore de clé API. Ajoutez-en d'abord une."
+      },
+      "saveSuccess": "Fournisseur de modèles enregistré.",
+      "deleteBlocked": "Ce fournisseur est lié à {{count}} compte(s) et ne peut pas être supprimé.",
+      "confirmDelete": "Supprimer le fournisseur « {{name}} » ?",
+      "deleteFailed": "Échec de la suppression du fournisseur : {{error}}",
+      "deleteApiKeyFailed": "Échec de la suppression de la clé API : {{error}}",
+      "selectSavedProvider": "Fournisseurs enregistrés",
+      "selectSavedApiKey": "Clés API enregistrées",
+      "noSavedProviders": "Aucun fournisseur enregistré pour le moment. Vous pouvez remplir les champs directement et l'entrée sera enregistrée automatiquement.",
+      "newProviderName": "Nom du fournisseur (facultatif, utilisé pour l'enregistrement automatique)",
+      "newProviderNamePlaceholder": "S'il est vide, le nom d'hôte sera utilisé automatiquement",
+      "preview": {
+        "title": "Aperçu de l'enregistrement",
+        "desc": "L'enregistrement d'un fournisseur met d'abord à jour le store des fournisseurs. La configuration officielle actuelle de Codex n'est pas basculée immédiatement.",
+        "writeNow": "Sera écrit",
+        "noImmediateChange": "Aucun changement immédiat",
+        "providerStoreTitle": "Store des fournisseurs",
+        "providerStoreDesc": "Enregistre le nom du fournisseur, la Base URL, les liens du site/de la page API Key et toute nouvelle API Key ajoutée dans cette fenêtre.",
+        "codexConfigTitle": "Configuration actuelle de Codex",
+        "codexConfigDesc": "Le fournisseur actuel ou la Base URL ne changent pas tout de suite. Ce fichier n'est mis à jour que lors de l'enregistrement ou du basculement d'un compte Codex à API Key.",
+        "authFileTitle": "Identifiants actuels de Codex",
+        "authFileDesc": "Enregistrer un fournisseur n'écrase pas l'OPENAI_API_KEY actuel dans auth.json."
+      },
+      "quickConfig": {
+        "title": "Configuration actuelle de Codex",
+        "desc": "Ces réglages rapides écrivent directement dans le ~/.codex/config.toml actif et ne modifient pas le store des fournisseurs de modèles.",
+        "configPath": "Fichier de configuration",
+        "openConfig": "Ouvrir le fichier",
+        "loadFailed": "Échec du chargement de la configuration actuelle de Codex : {{error}}",
+        "openFailed": "Échec de l'ouverture de config.toml : {{error}}",
+        "saveSuccess": "Configuration actuelle de Codex enregistrée.",
+        "saveFailed": "Échec de l'enregistrement de la configuration actuelle de Codex : {{error}}",
+        "contextWindow1m": "Fenêtre de contexte 1M",
+        "contextWindow1mHint": "Quand activé, écrit model_context_window = 1000000 et gère aussi la limite d'auto-compactage.",
+        "autoCompactLimit": "Limite d'auto-compactage",
+        "autoCompactLimitHint": "Écrit model_auto_compact_token_limit. Désactiver l'interrupteur 1M supprime aussi ce champ.",
+        "preview": "Aperçu d'écriture",
+        "previewApply": "Sera écrit",
+        "previewRemove": "Sera supprimé",
+        "customDetected": "Un model_context_window = {{context}} personnalisé a été détecté dans config.toml. L'enregistrement le réécrira avec le réglage rapide ci-dessous.",
+        "compactMissingDetected": "Le contexte 1M est déjà activé, mais la limite d'auto-compactage est absente. L'enregistrement écrira la valeur par défaut {{limit}}.",
+        "validation": {
+          "autoCompactInvalid": "La limite d'auto-compactage doit être un entier supérieur à 0."
+        }
+      }
+    },
+    "quickSwitch": {
+      "action": "Changer rapidement de fournisseur",
+      "inlineAction": "Basculer",
+      "title": "Changer rapidement de fournisseur",
+      "desc": "Basculez rapidement ce compte à clé API vers un fournisseur et une clé API enregistrés.",
+      "currentAccount": "Compte actuel : {{name}}",
+      "noProviders": "Aucun fournisseur enregistré pour le moment. Ajoutez-en d'abord un dans Fournisseurs de modèles.",
+      "providerHasNoKeys": "Ce fournisseur n'a pas encore de clé API disponible. Ajoutez-en d'abord une dans Fournisseurs de modèles.",
+      "gotoProviders": "Gérer les fournisseurs",
+      "apply": "Basculer maintenant",
+      "success": "Basculé vers le fournisseur : {{provider}}",
+      "failed": "Échec du changement de fournisseur : {{error}}",
+      "validation": {
+        "providerRequired": "Veuillez sélectionner un fournisseur.",
+        "apiKeyRequired": "Veuillez sélectionner une clé API."
+      }
+    },
+    "groups": {
+      "addToGroup": "Ajouter au groupe"
     }
   },
   "githubCopilot": {
@@ -1788,7 +2159,10 @@
     },
     "codex": {
       "title": "Paramètres Codex",
-      "appPath": "Chemin de l'application"
+      "appPath": "Chemin de l'application",
+      "configToml": "Fichier de configuration Codex",
+      "openConfigToml": "Ouvrir le fichier",
+      "openConfigHint": "Ouvrez rapidement le fichier config.toml actif de Codex."
     },
     "githubCopilot": {
       "title": "Paramètres GitHub Copilot",
@@ -1848,7 +2222,8 @@
       "loadFailed": "Échec du chargement de la configuration : {{error}}",
       "saveFailed": "Échec de la sauvegarde de la configuration : {{error}}",
       "pickPathFailed": "Échec de la sélection du chemin : {{error}}",
-      "resetPathFailed": "Échec de la réinitialisation du chemin : {{error}}"
+      "resetPathFailed": "Échec de la réinitialisation du chemin : {{error}}",
+      "openCodexConfigFailed": "Échec de l'ouverture du fichier config.toml de Codex : {{error}}"
     },
     "qoder": {
       "title": "Parametres Qoder",
@@ -1904,8 +2279,7 @@
       "description": "Cliquez sur « Ajouter un compte » pour commencer"
     },
     "addModal": {
-      "title": "Ajouter un compte Windsurf",
-      "password": "E-mail et mot de passe"
+      "title": "Ajouter un compte Windsurf"
     },
     "oauth": {
       "desc": "Cliquez ci-dessous et terminez l'autorisation Windsurf dans le navigateur."
@@ -1948,16 +2322,6 @@
       "inject": "Changement en un clic : cet outil lit le matériel de chiffrement local de Windsurf (DPAPI/Keychain/Secret Service), déchiffre la session d’authentification dans state.vscdb, remplace le jeton Windsurf puis rechiffre le tout — entièrement en local sur votre machine.",
       "reason": "Portée des autorisations : lire la base d’authentification Windsurf (state.vscdb) et appeler le chiffrement système (Windows DPAPI / macOS Keychain / Linux Secret Service) pour déchiffrer et réécrire.",
       "storage": "Portée de lecture : seules les données liées aux sessions de connexion Windsurf sont traitées ; tous les processus sont exécutés localement."
-    },
-    "password": {
-      "desc": "Connectez-vous avec l’e-mail et le mot de passe de votre compte Windsurf pour récupérer automatiquement la clé API et les infos du compte.",
-      "emailPlaceholder": "Adresse e-mail",
-      "passwordPlaceholder": "Mot de passe",
-      "login": "Se connecter",
-      "logging": "Connexion en cours...",
-      "empty": "Veuillez saisir l’e-mail et le mot de passe",
-      "success": "Connexion réussie : {{login}}",
-      "failed": "Échec de la connexion : {{error}}"
     }
   },
   "kiro": {
@@ -2400,7 +2764,11 @@
       "unsupportedDescPlatform": "Le mode multi-instances Gemini Cli est pris en charge uniquement sur macOS, Windows et Linux.",
       "launchDialogTitle": "Lancer l’instance",
       "launchHint": "Copiez la commande et exécutez-la manuellement, ou lancez-la directement dans le terminal.",
-      "runInTerminal": "Exécuter dans le terminal"
+      "runInTerminal": "Exécuter dans le terminal",
+      "workingDir": "Répertoire de travail",
+      "workingDirPlaceholder": "Par défaut le chemin actuel",
+      "workingDirDesc": "Bascule d'abord vers ce répertoire au démarrage",
+      "pickWorkingDir": "Sélectionner le répertoire de travail"
     },
     "switch": {
       "success": "Compte changé avec succès"
@@ -2443,6 +2811,26 @@
       "saved": "Projet enregistré : {{projectId}}",
       "cleared": "Retour à la résolution automatique du projet",
       "savedWithRefreshError": "Projet enregistré, mais l’actualisation du quota a échoué : {{error}}"
+    },
+    "identity": {
+      "authMethod": "Méthode d'authentification",
+      "tier": "Forfait",
+      "signedInWithGoogle": "Connecté avec Google",
+      "signedInWithGoogleEmail": "Connecté avec Google ({{email}})"
+    },
+    "quotaTable": {
+      "model": "Modèle",
+      "leftOfTotal": "Restant / Total",
+      "usage": "Utilisé",
+      "usageResets": "Réinitialisation de l'usage",
+      "usedPercent": "{{value}}%",
+      "remainingOfTotal": "{{remaining}} / {{total}}",
+      "resetAtWithRelative": "{{absolute}} ({{relative}})"
+    },
+    "tierText": {
+      "pro": "Gemini Code Assist dans Google One AI Pro",
+      "ultra": "Gemini Code Assist dans Google AI Ultra",
+      "free": "Gemini Code Assist gratuit"
     }
   },
   "codebuddy": {
@@ -2510,7 +2898,8 @@
       "expireUnknown": "Expiration : N/A",
       "packageTitle": {
         "base": "Pack d’expérience de base",
-        "activity": "Pack cadeau d’activité"
+        "activity": "Pack cadeau d’activité",
+        "pro": "Abonnement Pro"
       }
     },
     "extraCredit": {
@@ -2578,7 +2967,12 @@
       "title": "Ajouter un compte Qoder"
     },
     "import": {
-      "localDesc": "Lit l’état de connexion actuel depuis le client Qoder local, y compris les informations utilisateur, le forfait et l’utilisation des crédits."
+      "localDesc": "Lit l’état de connexion actuel depuis le client Qoder local, y compris les informations utilisateur, le forfait et l’utilisation des crédits.",
+      "localFailed": "Échec de l'import local: {{error}}",
+      "localSuccess": "Compte importé depuis Qoder local."
+    },
+    "empty": {
+      "desc": "Cliquez sur Ajouter un compte pour utiliser la connexion, l'import local ou l'import JSON."
     }
   },
   "trae": {
@@ -2675,7 +3069,10 @@
         "other": "Autre",
         "empty": "Aucune donnée de quota"
       }
-    }
+    },
+    "syncFailed": "Échec de la synchronisation: {{error}}",
+    "syncSuccess": "{{count}} compte(s) synchronisé(s) avec WorkBuddy",
+    "syncToWorkbuddy": "Synchroniser avec WorkBuddy"
   },
   "workbuddy": {
     "title": "Gestion des comptes WorkBuddy",
@@ -2810,7 +3207,8 @@
       "unknownStatus": "Statut inconnu",
       "overdueField": "Factures en retard",
       "overdueYes": "Oui",
-      "overdueNo": "Non"
+      "overdueNo": "Non",
+      "usageUpdatedAt": "Mise à jour: {{time}}"
     },
     "runtime": {
       "title": "Session Zed actuelle",
@@ -2830,7 +3228,8 @@
       "complete": "Terminer la connexion",
       "startFailed": "Impossible de démarrer la connexion Zed",
       "completeSuccess": "Connexion Zed terminée : {{account}}",
-      "importOnlySuccess": "L'autorisation a réussi. Le compte a été importé. Pour que Zed officiel utilise ce compte, cliquez sur « Appliquer et redémarrer »."
+      "importOnlySuccess": "L'autorisation a réussi. Le compte a été importé. Pour que Zed officiel utilise ce compte, cliquez sur « Appliquer et redémarrer ».",
+      "desc": "Cliquez sur le bouton ci-dessous pour finaliser l'authentification de connexion Zed officielle dans votre navigateur."
     },
     "actions": {
       "addAccount": "Se connecter à Zed",
@@ -2846,6 +3245,9 @@
       "applyAndRestart": "Appliquer et redémarrer",
       "reapply": "Réappliquer",
       "exportTitle": "Exporter les comptes Zed en JSON"
+    },
+    "sort": {
+      "tokenSpend": "Trier par dépense de tokens"
     }
   },
   "floatingCard": {

@@ -40,19 +40,24 @@
         "creditPackage": "Credit Package",
         "sharedCreditPackage": "Shared Credit Package",
         "account": "Account",
-        "createdAt": "Created Time"
+        "createdAt": "Created Time",
+        "userId": "User ID"
       },
       "empty": {
         "title": "No Accounts"
       },
-      "export": "Export",
+      "export": {
+        "title": "Export",
+        "copyFailed": "Copy failed, please copy manually"
+      },
       "filter": {
         "all": "All ({{count}})",
         "enterprise": "ENTERPRISE ({{count}})",
         "free": "FREE ({{count}})",
         "pro": "PRO ({{count}})",
         "business": "BUSINESS ({{count}})",
-        "individual": "INDIVIDUAL ({{count}})"
+        "individual": "INDIVIDUAL ({{count}})",
+        "validAccounts": "Valid accounts ({{count}})"
       },
       "filterLabel": "Filter",
       "import": {
@@ -134,9 +139,11 @@
       },
       "quota": {
         "noData": "No quota data",
+        "queryFailed": "Quota query failed",
         "resetDone": "Reset",
         "hourly": "Inline Suggestions",
-        "weekly": "Chat messages"
+        "weekly": "Chat messages",
+        "resetAt": "Reset: {{time}}"
       },
       "subtitle": "Monitor quota status for all accounts in real time.",
       "time": {
@@ -168,8 +175,19 @@
       },
       "updated": {
         "label": "Updated {{relative}} ago"
-      }
-    }
+      },
+      "clear": "Clear",
+      "loginSuccess": "Login successful",
+      "switchAccount": "Switch Account"
+    },
+    "appName": "Cockpit Tools",
+    "collapse": "Collapse",
+    "confirmDelete": "Confirm Delete",
+    "confirmDeleteTag": "Confirm Tag Deletion",
+    "deleteTagWarning": "Are you sure you want to delete this tag from all accounts?",
+    "expand": "Expand",
+    "processing": "Processing...",
+    "selectAll": "Select All"
   },
   "floatingCard": {
     "selectPlatform": "Switch platform",
@@ -349,12 +367,14 @@
     "status": {
       "running": "Running",
       "stopped": "Stopped",
+      "ready": "Ready",
       "restarting": "Restarting",
       "starting": "Starting"
     },
     "labels": {
       "path": "Directory",
       "args": "Launch Args",
+      "argsPresent": "Args Set",
       "argsEmpty": "None",
       "bindAccount": "Bound Account",
       "unbound": "Unbound",
@@ -405,6 +425,13 @@
       "selectAccount": "Select account",
       "bindAccount": "Bind account",
       "unbound": "Unbound",
+      "optional": "Optional",
+      "launchMode": "Launch Mode",
+      "launchModeApp": "Desktop",
+      "launchModeCli": "CLI",
+      "workingDir": "Working Directory",
+      "workingDirPlaceholder": "Default to current path",
+      "workingDirDesc": "Will switch to this directory first upon startup",
       "extraArgs": "Custom launch args",
       "extraArgsPlaceholder": "e.g. --disable-gpu --log-level=2",
       "extraArgsDesc": "Separate args with spaces, quotes supported",
@@ -424,6 +451,7 @@
       "updated": "Instance updated",
       "deleted": "Instance deleted",
       "started": "Instance started",
+      "launchPrepared": "Launch command is ready",
       "stopped": "Instance stopped",
       "startedAll": "Started all stopped instances",
       "restartedAll": "Restarted running instances",
@@ -439,6 +467,13 @@
       "pathLabel": "Instance directory",
       "go": "Go now",
       "restart": "Close & restart"
+    },
+    "launchDialog": {
+      "title": "Launch Instance",
+      "terminal": "Terminal",
+      "command": "Launch Command",
+      "hint": "Copy the command and run it manually, or execute it directly in the terminal.",
+      "runInTerminal": "Run in Terminal"
     },
     "initGuide": {
       "title": "Instance not initialized",
@@ -491,12 +526,101 @@
       "network": "Network",
       "about": "About"
     },
+    "transfer": {
+      "backup": {
+        "title": "Backup Manager",
+        "desc": "Manage scheduled backups, the backup folder, and backup files in one place.",
+        "modalDesc": "Configure automatic backups, browse files stored in the project backup folder, and restore or clean them up here.",
+        "statusEnabled": "Auto backup is on",
+        "statusDisabled": "Auto backup is off",
+        "lastRunLabel": "Last backup: {{time}}",
+        "lastRunNever": "Not backed up yet",
+        "autoTitle": "Scheduled Backup",
+        "autoDesc": "When enabled, one backup is exported per day and stays restorable with the current import flow.",
+        "runNow": "Back Up Now",
+        "running": "Backing up...",
+        "typeTitle": "Backup Type",
+        "typeDesc": "Choose which data scope to back up automatically.",
+        "typeFull": "Full Data",
+        "typeAccounts": "Accounts Only",
+        "typeConfig": "Config Only",
+        "retentionTitle": "Retention",
+        "retentionDesc": "Backups older than this are removed during the next check.",
+        "retentionUnit": "days",
+        "directoryTitle": "Backup Folder",
+        "directoryDesc": "Backups are always saved in the project's backups folder.",
+        "openFolder": "Open Folder",
+        "listTitle": "Backup List",
+        "listDesc": "Import a backup directly or remove old files.",
+        "openList": "Open List",
+        "emptyTitle": "No backups yet",
+        "emptyDesc": "Turn on auto backup or click \"Back Up Now\" to create restorable JSON backups here.",
+        "sourceAuto": "Auto",
+        "sourceManual": "Manual",
+        "fileTime": "Time: {{time}}",
+        "fileSize": "Size: {{size}}",
+        "importAction": "Import",
+        "deleteAction": "Delete",
+        "deleteConfirm": "Delete backup {{name}}?",
+        "feedback": {
+          "running": "Creating backup...",
+          "runSuccess": "Backup saved to {{path}}",
+          "runSuccessWithCleanup": "Backup saved to {{path}} and cleaned up {{count}} expired backup(s)",
+          "runFailed": "Backup failed: {{error}}",
+          "deleteSuccess": "Backup deleted",
+          "deleteFailed": "Failed to delete backup: {{error}}",
+          "loadFailed": "Failed to load backup list: {{error}}",
+          "saveSettingsFailed": "Failed to save backup settings: {{error}}",
+          "cleanupDone": "Cleaned up {{count}} expired backup(s)",
+          "cleanupFailed": "Failed to clean up expired backups: {{error}}",
+          "openFolderFailed": "Failed to open backup folder: {{error}}"
+        },
+        "errors": {
+          "invalidRetention": "Retention must be between 1 and 365 days"
+        }
+      },
+      "exportTitle": "Data Export",
+      "exportDesc": "Export account data, config data, or a full migration bundle as needed.",
+      "importTitle": "Data Import",
+      "importDesc": "Import account backups, config backups, or the unified data bundle.",
+      "exportModalDesc": "Choose what to export. Select both accounts and config for a full migration bundle.",
+      "importModalDesc": "Choose what to import. Legacy account backups are handled as account-only imports.",
+      "selectionTitle": "Data Scope",
+      "accountsOptionTitle": "Account Data",
+      "accountsOptionDesc": "Includes platform account backups and keeps legacy account JSON compatible.",
+      "configOptionTitle": "Config Data",
+      "configOptionDesc": "Includes app settings, groups, instances, wakeup tasks, and model provider config.",
+      "exportConfirm": "Export Data",
+      "fromFileTitle": "Import From File",
+      "fromFileDesc": "Pick a JSON file to import. Legacy account backups are also supported here.",
+      "jsonPlaceholder": "Paste a data bundle or legacy account JSON",
+      "feedback": {
+        "accountsImported": "Imported {{count}} accounts",
+        "configImported": "Config data restored",
+        "accountsSectionMissing": "The backup does not include account data",
+        "configSectionMissing": "The backup does not include config data, so only account data was restored",
+        "unresolvedRefs": "{{count}} account bindings could not be matched and were skipped",
+        "disabledTasks": "{{count}} tasks were disabled because no account could be matched",
+        "restartRequired": "Network service settings were restored. Some changes take effect after restart",
+        "partialAccountFailure": "Some account imports failed: {{error}}"
+      },
+      "errors": {
+        "selectionRequired": "Select at least one data type",
+        "accountsOnlyFile": "This backup only contains account data. Select \"Account Data\" to import it",
+        "selectedSectionsMissing": "The selected data type is not present in this backup",
+        "unsupportedLegacyFile": "This legacy account backup format is not recognized",
+        "unsupportedVersion": "This app version does not support that bundle version"
+      }
+    },
     "general": {
       "appearance": "Appearance",
       "language": "Language",
       "languageDesc": "Select the interface language",
       "theme": "Theme",
       "themeDesc": "Switch between dark and light mode",
+      "defaultTerminal": "Default Terminal",
+      "defaultTerminalDesc": "The terminal used when opening Gemini CLI",
+      "terminalSystem": "System Default",
       "sideNavLayout": "Sidebar Layout",
       "sideNavLayoutDesc": "Switch between original and classic sidebar layouts",
       "sideNavLayoutOriginal": "Original Layout",
@@ -520,6 +644,7 @@
       "refreshIntervalLimited": "Quota reset wakeup enabled, minimum refresh interval is 2 minutes",
       "currentAccountRefreshTitle": "Current Account Refresh",
       "currentAccountRefreshItemDesc": "Refresh current account only. Default is 1 minute.",
+      "currentAccountRefreshRequiresAutoRefresh": "Enable \"Quota Auto Refresh\" first to configure current account refresh.",
       "closeBehavior": "Close behavior",
       "closeBehaviorDesc": "Choose the default action when closing the window",
       "closeBehaviorAsk": "Ask every time",
@@ -657,7 +782,23 @@
       "ghcpOpencodeRestart": "Restart OpenCode when switching GitHub Copilot",
       "ghcpLaunchOnSwitch": "Launch GitHub Copilot App when switching GitHub Copilot",
       "antigravityDualSwitchNoRestart": "Dual switch without restart",
-      "antigravityDualSwitchNoRestartDesc": "On switch, write local account data and call extension seamless switch in one flow, without restarting Antigravity."
+      "antigravityDualSwitchNoRestartDesc": "On switch, write local account data and call extension seamless switch in one flow, without restarting Antigravity.",
+      "codebuddyCnAppPath": "CodeBuddy CN App Path",
+      "codebuddyCnAppPathDesc": "Leave blank to use the default path",
+      "codebuddyCnAppPathPlaceholder": "Default path",
+      "codebuddyCnAutoRefresh": "CodeBuddy CN Auto Refresh",
+      "codebuddyCnAutoRefreshDesc": "Background auto-refresh frequency",
+      "codebuddyCnPathReset": "Reset to Default",
+      "codebuddyCnPathSelect": "Select",
+      "codebuddyCnSettingsTitle": "CodeBuddy CN Settings",
+      "qoderAppPath": "Qoder App Path",
+      "qoderAppPathDesc": "Leave blank to use the default path",
+      "qoderAppPathPlaceholder": "Default path",
+      "qoderAutoRefresh": "Qoder Auto Refresh",
+      "qoderAutoRefreshDesc": "Background auto-refresh frequency",
+      "qoderPathSelect": "Select",
+      "workbuddyAutoRefresh": "WorkBuddy Auto Refresh",
+      "workbuddyAutoRefreshDesc": "Background auto-refresh frequency"
     },
     "network": {
       "apiTitle": "Antigravity Cockpit API",
@@ -726,6 +867,9 @@
       "desc": "Could not find the {{app}} application path. Please set it now to continue.",
       "codexLaunchHint": "When turned off, account switching and login overwrite still run, but Codex App will no longer be launched and this path prompt will not appear again.",
       "action": "Set now"
+    },
+    "modal": {
+      "desc": "The app path for {{app}} was not found. Please configure it now to continue."
     }
   },
   "accounts": {
@@ -835,7 +979,11 @@
       "fingerprint": "Fingerprint",
       "switch": "Switch account",
       "switchTo": "Switch to this account",
-      "selectFingerprint": "Select fingerprint"
+      "selectFingerprint": "Select fingerprint",
+      "delete": "Delete",
+      "deleteSelected": "Delete Selected",
+      "export": "Export",
+      "refreshAll": "Refresh All"
     },
     "switchHistory": {
       "title": "Switch History",
@@ -932,7 +1080,40 @@
       "accountPickerEmpty": "No matching accounts",
       "filterHint": "{{count}} group(s) selected for filtering",
       "filterToggle": "Check to filter by this group"
-    }
+    },
+    "clearTagFilter": "Clear Tag Filter",
+    "compact": {
+      "hide": "Hide",
+      "show": "Show"
+    },
+    "deleteConfirm": {
+      "multi": "Delete {{count}} selected account(s)?",
+      "single": "Delete this account?"
+    },
+    "deleteFailed": "Delete failed: {{error}}",
+    "deleteSuccess": "Delete successful",
+    "deleteTagFailed": "Tag deletion failed: {{error}}",
+    "exportError": "Export failed: {{error}}",
+    "exportModal": {
+      "title": "Export JSON"
+    },
+    "importJsonFailed": "JSON import failed: {{error}}",
+    "importJsonHint": "Import a Qoder JSON file exported from this tool.",
+    "importJsonSuccess": "JSON import successful",
+    "noTags": "No tags",
+    "privacy": {
+      "disable": "Disable Privacy Mode",
+      "enable": "Enable Privacy Mode"
+    },
+    "refreshAllFailed": "Bulk refresh failed: {{error}}",
+    "refreshAllSuccess": "All accounts refreshed",
+    "refreshFailed": "Refresh failed: {{error}}",
+    "refreshSuccess": "Refresh successful",
+    "switchFailed": "Switch failed: {{error}}",
+    "switchSuccess": "Switch successful",
+    "switched": "Switched to {{email}}",
+    "tagButton": "Edit Tags",
+    "tagUpdated": "Tag updated"
   },
   "overview": {
     "title": "Overview",
@@ -1144,7 +1325,10 @@
       "actions": {
         "selectAllAccounts": "Select all",
         "clearSelectedAccounts": "Clear selection",
-        "runCheckNow": "Check now"
+        "runCheckNow": "Check now",
+        "retryFiltered": "Retry current filter ({{count}})",
+        "retryMissingModel": "This batch is missing model information and cannot be retried.",
+        "retryMissingAccount": "There are no retryable accounts in the current filter."
       },
       "runHint": {
         "title": "Verification notes",
@@ -1432,7 +1616,9 @@
       "portInUseConfirm": "Port {{port}} is in use. Close the process using this port?",
       "portCloseFailed": "Failed to close port: {{error}}",
       "portStillInUse": "Port {{port}} is still in use.",
-      "portInUseAction": "Close port and retry"
+      "portInUseAction": "Close port and retry",
+      "timeout": "Authentication timed out. Please click",
+      "timeoutRetry": "Refresh Auth Link"
     },
     "token": {
       "desc": "Paste auth.json content or account JSON data",
@@ -1441,10 +1627,178 @@
     "api": {
       "baseUrl": "Base URL",
       "baseUrlPlaceholder": "Leave blank to use official default",
+      "addAndSwitchSuccess": "Added and switched: {{email}}",
+      "actions": {
+        "addAndSwitch": "Add and Switch"
+      },
+      "provider": {
+        "label": "Provider",
+        "custom": "Custom",
+        "endpoint": "Provider Endpoint",
+        "hint": "A compatible Base URL has been filled in automatically. You can still edit it manually.",
+        "website": "Website",
+        "apiKeyPage": "API Key Page"
+      },
+      "providers": {
+        "openai_official": {
+          "name": "OpenAI Official"
+        },
+        "azure_openai": {
+          "name": "Azure OpenAI"
+        },
+        "packycode": {
+          "name": "PackyCode"
+        },
+        "cubence": {
+          "name": "Cubence"
+        },
+        "aigocode": {
+          "name": "AIGoCode"
+        },
+        "rightcode": {
+          "name": "RightCode"
+        },
+        "sssaicode": {
+          "name": "SSSAiCode"
+        },
+        "micu": {
+          "name": "Micu"
+        },
+        "x_code_api": {
+          "name": "X-Code API"
+        },
+        "ctok_ai": {
+          "name": "CTok.ai"
+        },
+        "aihubmix": {
+          "name": "AiHubMix"
+        },
+        "dmxapi": {
+          "name": "DMXAPI"
+        },
+        "compshare": {
+          "name": "Compshare"
+        },
+        "openrouter": {
+          "name": "OpenRouter"
+        },
+        "aicodemirror": {
+          "name": "AICodeMirror"
+        },
+        "aicoding": {
+          "name": "AICoding"
+        },
+        "crazyrouter": {
+          "name": "CrazyRouter"
+        },
+        "deepseek": {
+          "name": "DeepSeek"
+        },
+        "moonshot": {
+          "name": "Moonshot"
+        },
+        "siliconflow": {
+          "name": "SiliconFlow"
+        }
+      },
       "validation": {
         "apiKeyCannotBeUrl": "API key cannot be a URL. Please check if the fields are swapped.",
         "baseUrlInvalid": "Invalid Base URL. Please enter a full http:// or https:// URL.",
         "apiKeyEqualsBaseUrl": "API key cannot be the same as Base URL."
+      }
+    },
+    "modelProviders": {
+      "tab": "Model Providers",
+      "desc": "Manage model providers and multiple API keys in one place, then reuse them directly when adding Codex API-key accounts.",
+      "add": "Add Provider",
+      "loadFailed": "Failed to load model providers: {{error}}",
+      "emptyTitle": "No model providers yet",
+      "emptyDesc": "Click \"Add Provider\" in the top right to start.",
+      "baseUrl": "Base URL",
+      "website": "Website",
+      "apiKeyPage": "API Key Page",
+      "apiKeysCount": "{{count}} API Keys",
+      "referencesCount": "{{count}} Linked Accounts",
+      "unnamedKey": "Unnamed Key",
+      "createTitle": "Add Model Provider",
+      "editTitle": "Edit Model Provider",
+      "existingApiKeys": "Existing API Keys",
+      "fields": {
+        "name": "Provider Name",
+        "baseUrl": "Base URL",
+        "website": "Website (Optional)",
+        "apiKeyUrl": "API Key Page (Optional)",
+        "newApiKeyName": "New Key Name (Optional)",
+        "newApiKey": "New API Key"
+      },
+      "validation": {
+        "nameRequired": "Provider name is required.",
+        "baseUrlInvalid": "Invalid Base URL.",
+        "baseUrlExists": "This Base URL already exists.",
+        "providerNotFound": "Provider not found.",
+        "apiKeyRequiredOnCreate": "At least one API Key is required when creating a provider.",
+        "apiKeyRequiredWhenEmpty": "This provider has no API key yet. Please add one first."
+      },
+      "saveSuccess": "Model provider saved.",
+      "deleteBlocked": "This provider is linked to {{count}} account(s) and cannot be deleted.",
+      "confirmDelete": "Delete provider \"{{name}}\"?",
+      "deleteFailed": "Failed to delete provider: {{error}}",
+      "deleteApiKeyFailed": "Failed to delete API Key: {{error}}",
+      "selectSavedProvider": "Saved Providers",
+      "selectSavedApiKey": "Saved API Keys",
+      "noSavedProviders": "No saved providers yet. You can fill in fields directly and it will be saved automatically.",
+      "newProviderName": "Provider Name (Optional, used for auto-save)",
+      "newProviderNamePlaceholder": "If empty, hostname will be used automatically",
+      "preview": {
+        "title": "Save Preview",
+        "desc": "Saving a provider updates the provider store first. It does not switch the current official Codex config immediately.",
+        "writeNow": "Will Write",
+        "noImmediateChange": "No Immediate Change",
+        "providerStoreTitle": "Provider Store",
+        "providerStoreDesc": "Saves the provider name, Base URL, website/API Key page links, and any new API key added in this modal.",
+        "codexConfigTitle": "Current Codex Config",
+        "codexConfigDesc": "The current provider or Base URL will not change right away. That file updates only when a Codex API-key account is saved or switched.",
+        "authFileTitle": "Current Codex Credentials",
+        "authFileDesc": "Saving a provider does not overwrite the current OPENAI_API_KEY in auth.json."
+      },
+      "quickConfig": {
+        "title": "Current Codex Config",
+        "desc": "These quick settings write directly to the active ~/.codex/config.toml and do not change the model provider store.",
+        "configPath": "Config File",
+        "openConfig": "Open File",
+        "loadFailed": "Failed to load the current Codex config: {{error}}",
+        "openFailed": "Failed to open config.toml: {{error}}",
+        "saveSuccess": "Current Codex config saved.",
+        "saveFailed": "Failed to save the current Codex config: {{error}}",
+        "contextWindow1m": "1M Context Window",
+        "contextWindow1mHint": "When enabled, writes model_context_window = 1000000 and manages the auto-compact limit together.",
+        "autoCompactLimit": "Auto-Compact Limit",
+        "autoCompactLimitHint": "Writes model_auto_compact_token_limit. Turning off the 1M toggle removes this field together.",
+        "preview": "Write Preview",
+        "previewApply": "Will Write",
+        "previewRemove": "Will Remove",
+        "customDetected": "A custom model_context_window = {{context}} was detected in config.toml. Saving will rewrite it using the quick setting below.",
+        "compactMissingDetected": "1M context is already enabled, but the auto-compact limit is missing. Saving will write the default value {{limit}}.",
+        "validation": {
+          "autoCompactInvalid": "Auto-compact limit must be an integer greater than 0."
+        }
+      }
+    },
+    "quickSwitch": {
+      "action": "Quick Switch Provider",
+      "inlineAction": "Switch",
+      "title": "Quick Switch Provider",
+      "desc": "Quickly switch this API-key account to a saved provider and API key.",
+      "currentAccount": "Current account: {{name}}",
+      "noProviders": "No saved providers yet. Please add one in Model Providers first.",
+      "providerHasNoKeys": "This provider has no available API key yet. Add one in Model Providers first.",
+      "gotoProviders": "Manage Providers",
+      "apply": "Switch Now",
+      "success": "Switched to provider: {{provider}}",
+      "failed": "Failed to switch provider: {{error}}",
+      "validation": {
+        "providerRequired": "Please select a provider.",
+        "apiKeyRequired": "Please select an API key."
       }
     },
     "local": {
@@ -1464,7 +1818,10 @@
     "usage": {
       "open": "Open OpenAI usage",
       "hint": "For API key credits, use the OpenAI Usage page.",
-      "openFailed": "Failed to open usage page: {{error}}"
+      "openFailed": "Failed to open usage page: {{error}}",
+      "search": {
+        "placeholder": "Search accounts..."
+      }
     },
     "quotaError": {
       "badge": "Quota error",
@@ -1691,17 +2048,20 @@
     },
     "sessionManager": {
       "title": "Session Manager",
-      "desc": "Sync and cleanup live here together: use the top action to sync to all instances, then expand each project to review and trash sessions.",
+      "desc": "Sync, visibility repair, cleanup, and restore live here together: use the top actions to sync sessions, repair history visibility, or restore from Trash, then expand each project to review and trash sessions.",
       "actions": {
         "moveToTrash": "Move to Trash",
         "syncSessions": "Sync Sessions",
+        "repairVisibility": "Repair Visibility",
+        "restoreSessions": "Restore Sessions",
         "expand": "Expand",
         "collapse": "Collapse"
       },
       "confirm": {
         "title": "Move to Trash",
         "message": "Selected sessions will be moved to Trash from their instances so they can be restored later. Running instances may need a restart before the change appears. Continue?",
-        "syncMessage": "Missing threads and their session data will be synced to all instances. Existing content will not be written again, and target instance files will be backed up before any write occurs. Continue?"
+        "syncMessage": "Missing threads and their session data will be synced to all instances. Existing content will not be written again, and target instance files will be backed up before any write occurs. Continue?",
+        "repairVisibilityMessage": "This will repair provider metadata in rollout files and state_5.sqlite using each instance's root config.toml model_provider (defaulting to openai when missing). Files that will be changed are backed up before writing. Running instances may need a restart before the change appears. Continue?"
       },
       "empty": {
         "title": "No sessions to manage",
@@ -1709,12 +2069,23 @@
       },
       "messages": {
         "pickOne": "Please select at least one session",
+        "pickRestoreOne": "Please select at least one session to restore",
         "syncNeedTwo": "At least two instances are required to sync sessions"
       },
       "groupCount": "{{count}} sessions",
       "updatedAt": "Updated",
       "locationRunning": " (running)",
-      "untitled": "Untitled session"
+      "untitled": "Untitled session",
+      "restoreModal": {
+        "title": "Restore Sessions",
+        "hint": "Restoring puts the rollout file, SQLite thread row, and session_index entry back into the original instance together.",
+        "emptyTitle": "Trash is empty",
+        "emptyDesc": "Sessions moved to Trash will appear here.",
+        "restoreAction": "Restore Selected Sessions"
+      }
+    },
+    "groups": {
+      "addToGroup": "Add to Group"
     }
   },
   "codebuddy": {
@@ -1796,7 +2167,8 @@
       "expireUnknown": "Expires at: N/A",
       "packageTitle": {
         "base": "Base Experience Package",
-        "activity": "Activity Gift Package"
+        "activity": "Activity Gift Package",
+        "pro": "Pro Subscription"
       }
     },
     "extraCredit": {
@@ -1933,7 +2305,10 @@
     },
     "codex": {
       "title": "Codex Settings",
-      "appPath": "Launch Path"
+      "appPath": "Launch Path",
+      "configToml": "Codex Config File",
+      "openConfigToml": "Open File",
+      "openConfigHint": "Quickly open the active Codex config.toml file."
     },
     "githubCopilot": {
       "title": "GitHub Copilot Settings",
@@ -1993,7 +2368,8 @@
       "loadFailed": "Failed to load config: {{error}}",
       "saveFailed": "Failed to save config: {{error}}",
       "pickPathFailed": "Failed to pick path: {{error}}",
-      "resetPathFailed": "Failed to reset path: {{error}}"
+      "resetPathFailed": "Failed to reset path: {{error}}",
+      "openCodexConfigFailed": "Failed to open Codex config.toml: {{error}}"
     },
     "qoder": {
       "title": "Qoder Settings",
@@ -2049,8 +2425,7 @@
       "description": "Click \"Add Account\" to start managing your Windsurf accounts"
     },
     "addModal": {
-      "title": "Add Windsurf Account",
-      "password": "Email & Password"
+      "title": "Add Windsurf Account"
     },
     "oauth": {
       "desc": "Click the button below and complete Windsurf authorization in your browser."
@@ -2093,16 +2468,6 @@
       "inject": "One-click switching: This tool reads local Windsurf encryption material (DPAPI/Keychain/Secret Service), processes the auth session in state.vscdb, writes back the Windsurf token, and keeps everything local on your machine.",
       "reason": "Permission scope: read Windsurf auth database (state.vscdb) and use system encryption capabilities (Windows DPAPI / macOS Keychain / Linux Secret Service) to decrypt and write back auth-session data.",
       "storage": "Data scope: only Windsurf auth-session related entries are read/updated; all processes run locally."
-    },
-    "password": {
-      "desc": "Sign in with your Windsurf account email and password to automatically fetch API key and account info.",
-      "emailPlaceholder": "Email address",
-      "passwordPlaceholder": "Password",
-      "login": "Sign In",
-      "logging": "Signing in...",
-      "empty": "Please enter email and password",
-      "success": "Signed in: {{login}}",
-      "failed": "Sign-in failed: {{error}}"
     }
   },
   "kiro": {
@@ -2206,6 +2571,12 @@
   },
   "gemini": {
     "injectToGemini": "Switch to Gemini Cli",
+    "identity": {
+      "authMethod": "Auth Method",
+      "tier": "Tier",
+      "signedInWithGoogle": "Signed in with Google",
+      "signedInWithGoogleEmail": "Signed in with Google ({{email}})"
+    },
     "updated": {
       "label": "Updated {{relative}} ago"
     },
@@ -2218,13 +2589,31 @@
       "resetsUnknown": "Reset time unknown",
       "onDemand": "On-Demand"
     },
+    "quotaTable": {
+      "model": "Model",
+      "leftOfTotal": "Left / Total",
+      "usage": "Used",
+      "usageResets": "Usage resets",
+      "usedPercent": "{{value}}%",
+      "remainingOfTotal": "{{remaining}} / {{total}}",
+      "resetAtWithRelative": "{{absolute}} ({{relative}})"
+    },
+    "tierText": {
+      "pro": "Gemini Code Assist in Google One AI Pro",
+      "ultra": "Gemini Code Assist in Google AI Ultra",
+      "free": "Gemini Code Assist"
+    },
     "title": "Gemini Cli Account",
     "instances": {
       "unsupported": "Gemini Cli multi-instance management is not supported yet.",
       "unsupportedDescPlatform": "Gemini Cli multi-instance is supported on macOS, Windows, and Linux only.",
       "launchDialogTitle": "Launch Instance",
       "launchHint": "Copy the command and run manually, or execute it directly in terminal.",
-      "runInTerminal": "Run in Terminal"
+      "runInTerminal": "Run in Terminal",
+      "workingDir": "Working Directory",
+      "workingDirPlaceholder": "Default to current path",
+      "workingDirDesc": "Will switch to this directory first upon startup",
+      "pickWorkingDir": "Select Working Directory"
     },
     "switch": {
       "success": "Account switched successfully"
@@ -2624,7 +3013,12 @@
       "title": "Add Qoder Account"
     },
     "import": {
-      "localDesc": "Read the current sign-in state from the local Qoder client, including user info, plan, and credits usage."
+      "localDesc": "Read the current sign-in state from the local Qoder client, including user info, plan, and credits usage.",
+      "localFailed": "Local import failed: {{error}}",
+      "localSuccess": "Account imported from local Qoder."
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to use auth login, local import, or JSON import."
     }
   },
   "zed": {
@@ -2656,7 +3050,8 @@
       "unknownStatus": "Unknown status",
       "overdueField": "Overdue",
       "overdueYes": "Yes",
-      "overdueNo": "No"
+      "overdueNo": "No",
+      "usageUpdatedAt": "Updated: {{time}}"
     },
     "runtime": {
       "title": "Current Zed Session",
@@ -2676,7 +3071,8 @@
       "complete": "Complete Login",
       "startFailed": "Failed to start Zed login",
       "completeSuccess": "Zed login completed: {{account}}",
-      "importOnlySuccess": "Authorization succeeded. The account has been imported. To make the official Zed use it, click \"Apply and Restart\"."
+      "importOnlySuccess": "Authorization succeeded. The account has been imported. To make the official Zed use it, click \"Apply and Restart\".",
+      "desc": "Click the button below to complete the official Zed login authentication in your browser."
     },
     "actions": {
       "addAccount": "Login to Zed",
@@ -2692,6 +3088,9 @@
       "applyAndRestart": "Apply and Restart",
       "reapply": "Reapply",
       "exportTitle": "Export Zed Accounts JSON"
+    },
+    "sort": {
+      "tokenSpend": "Sort by Token Spend"
     }
   },
   "trae": {
@@ -2788,7 +3187,10 @@
         "other": "Other",
         "empty": "No quota data"
       }
-    }
+    },
+    "syncFailed": "Sync failed: {{error}}",
+    "syncSuccess": "{{count}} account(s) synced to WorkBuddy",
+    "syncToWorkbuddy": "Sync to WorkBuddy"
   },
   "workbuddy": {
     "title": "WorkBuddy Account",

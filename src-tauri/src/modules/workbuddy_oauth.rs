@@ -115,9 +115,14 @@ async fn start_login_with_platform(platform: &str) -> Result<WorkbuddyOAuthStart
         .await
         .map_err(|e| format!("解析 auth/state 响应失败:{}", e))?;
 
-    let data = body
-        .get("data")
-        .ok_or_else(|| format!("auth/state 响应缺少 data 字段:{}", body))?;
+    let data = body.get("data").ok_or_else(|| {
+        let mut keys = body
+            .as_object()
+            .map(|obj| obj.keys().cloned().collect::<Vec<_>>())
+            .unwrap_or_default();
+        keys.sort();
+        format!("auth/state 响应缺少 data 字段: body_keys={:?}", keys)
+    })?;
 
     let state = data
         .get("state")

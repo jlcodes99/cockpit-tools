@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
-use chrono::Utc;
-use rusqlite::{types::Value, Connection, OpenFlags};
-use serde::Serialize;
+use chrono::{DateTime, Utc};
+use rusqlite::{params_from_iter, types::Value, Connection, OpenFlags};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
 use url::Url;
 
@@ -42,6 +43,33 @@ pub struct CodexSessionTrashSummary {
     pub trashed_session_count: usize,
     pub trashed_instance_count: usize,
     pub trash_dirs: Vec<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexTrashedSessionLocation {
+    pub instance_id: String,
+    pub instance_name: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexTrashedSessionRecord {
+    pub session_id: String,
+    pub title: String,
+    pub cwd: String,
+    pub deleted_at: Option<i64>,
+    pub location_count: usize,
+    pub locations: Vec<CodexTrashedSessionLocation>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexSessionRestoreSummary {
+    pub requested_session_count: usize,
+    pub restored_session_count: usize,
+    pub restored_instance_count: usize,
     pub message: String,
 }
 
@@ -95,6 +123,29 @@ struct ThreadSnapshot {
     row_data: ThreadRowData,
     session_index_entry: JsonValue,
     source_root: PathBuf,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TrashedSessionManifest {
+    session_id: String,
+    title: String,
+    cwd: String,
+    instance_id: String,
+    instance_name: String,
+    instance_root: PathBuf,
+    original_rollout_path: PathBuf,
+    relative_rollout_path: String,
+    session_index_entry: JsonValue,
+    thread_row: JsonValue,
+    deleted_at: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct TrashedSessionEntry {
+    entry_dir: PathBuf,
+    manifest: TrashedSessionManifest,
+    trashed_rollout_path: PathBuf,
 }
 
 pub fn list_sessions_across_instances() -> Result<Vec<CodexSessionRecord>, String> {
@@ -211,6 +262,115 @@ pub fn move_sessions_to_trash_across_instances(
         trashed_session_count: trashed_session_ids.len(),
         trashed_instance_count,
         trash_dirs: vec![trash_root.to_string_lossy().to_string()],
+        message,
+    })
+}
+
+pub fn list_trashed_sessions_across_instances() -> Result<Vec<CodexTrashedSessionRecord>, String> {
+    let entries = load_trash_entries()?;
+    let mut session_map = HashMap::<String, CodexTrashedSessionRecord>::new();
+
+    for entry in entries {
+        let deleted_at = parse_deleted_at(entry.manifest.deleted_at.as_deref());
+        let record = session_map
+            .entry(entry.manifest.session_id.clone())
+            .or_insert_with(|| CodexTrashedSessionRecord {
+                session_id: entry.manifest.session_id.clone(),
+                title: entry.manifest.title.clone(),
+                cwd: entry.manifest.cwd.clone(),
+                deleted_at,
+                location_count: 0,
+                locations: Vec::new(),
+            });
+
+        if deleted_at.unwrap_or_default() > record.deleted_at.unwrap_or_default() {
+            record.deleted_at = deleted_at;
+        }
+        if record.title.trim().is_empty() {
+            record.title = entry.manifest.title.clone();
+        }
+        if record.cwd.trim().is_empty() {
+            record.cwd = entry.manifest.cwd.clone();
+        }
+
+        record.locations.push(CodexTrashedSessionLocation {
+            instance_id: entry.manifest.instance_id.clone(),
+            instance_name: entry.manifest.instance_name.clone(),
+        });
+        record.location_count = record.locations.len();
+    }
+
+    let mut sessions = session_map.into_values().collect::<Vec<_>>();
+    sessions.sort_by(|left, right| {
+        right
+            .deleted_at
+            .unwrap_or_default()
+            .cmp(&left.deleted_at.unwrap_or_default())
+            .then_with(|| left.cwd.cmp(&right.cwd))
+            .then_with(|| left.title.cmp(&right.title))
+    });
+    Ok(sessions)
+}
+
+pub fn restore_sessions_from_trash_across_instances(
+    session_ids: Vec<String>,
+) -> Result<CodexSessionRestoreSummary, String> {
+    let requested_ids = session_ids
+        .into_iter()
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
+        .collect::<HashSet<_>>();
+    if requested_ids.is_empty() {
+        return Err("请至少选择一条会话".to_string());
+    }
+
+    let entries = load_trash_entries()?
+        .into_iter()
+        .filter(|entry| requested_ids.contains(&entry.manifest.session_id))
+        .collect::<Vec<_>>();
+
+    if entries.is_empty() {
+        return Ok(CodexSessionRestoreSummary {
+            requested_session_count: requested_ids.len(),
+            restored_session_count: 0,
+            restored_instance_count: 0,
+            message: "所选会话在废纸篓中不存在，无需恢复".to_string(),
+        });
+    }
+
+    let instances = collect_instances()?;
+    let process_entries = modules::process::collect_codex_process_entries();
+    let running_instance_ids = instances
+        .iter()
+        .filter(|instance| is_instance_running(instance, &process_entries))
+        .map(|instance| instance.id.clone())
+        .collect::<HashSet<_>>();
+
+    let mut restored_session_ids = HashSet::new();
+    let mut restored_instance_ids = HashSet::new();
+
+    for entry in &entries {
+        restore_trashed_session_entry(entry)?;
+        restored_session_ids.insert(entry.manifest.session_id.clone());
+        restored_instance_ids.insert(entry.manifest.instance_id.clone());
+    }
+
+    let restored_running_instance = restored_instance_ids
+        .iter()
+        .any(|instance_id| running_instance_ids.contains(instance_id));
+    let message = if restored_running_instance {
+        format!(
+            "已恢复 {} 条会话，运行中的实例可能需要重启后显示",
+            restored_session_ids.len()
+        )
+    } else {
+        format!("已恢复 {} 条会话", restored_session_ids.len())
+    };
+
+    Ok(CodexSessionRestoreSummary {
+        requested_session_count: requested_ids.len(),
+        restored_session_count: restored_session_ids.len(),
+        restored_instance_count: restored_instance_ids.len(),
         message,
     })
 }
@@ -340,14 +500,15 @@ fn trash_snapshots_for_instance(
 }
 
 fn create_trash_root_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-    let root = home
-        .join(".Trash")
-        .join(SESSION_TRASH_ROOT_DIR)
-        .join(Utc::now().format("%Y%m%d-%H%M%S").to_string());
+    let root = get_session_trash_base_dir()?.join(Utc::now().format("%Y%m%d-%H%M%S").to_string());
     fs::create_dir_all(&root)
         .map_err(|error| format!("创建会话废纸篓目录失败 ({}): {}", root.display(), error))?;
     Ok(root)
+}
+
+fn get_session_trash_base_dir() -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
+    Ok(home.join(".Trash").join(SESSION_TRASH_ROOT_DIR))
 }
 
 fn move_snapshot_rollout_to_trash(
@@ -595,4 +756,393 @@ fn sanitize_for_file_name(value: &str) -> String {
             }
         })
         .collect::<String>()
+}
+
+fn parse_deleted_at(value: Option<&str>) -> Option<i64> {
+    let parsed = value.and_then(|raw| DateTime::parse_from_rfc3339(raw).ok())?;
+    Some(parsed.timestamp())
+}
+
+fn load_trash_entries() -> Result<Vec<TrashedSessionEntry>, String> {
+    let root = get_session_trash_base_dir()?;
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut entries = Vec::new();
+    let timestamp_dirs = fs::read_dir(&root)
+        .map_err(|error| format!("读取会话废纸篓目录失败 ({}): {}", root.display(), error))?;
+    for timestamp_dir in timestamp_dirs {
+        let timestamp_dir = timestamp_dir
+            .map_err(|error| format!("读取会话废纸篓目录项失败 ({}): {}", root.display(), error))?;
+        let timestamp_path = timestamp_dir.path();
+        let file_type = timestamp_dir.file_type().map_err(|error| {
+            format!(
+                "读取会话废纸篓目录类型失败 ({}): {}",
+                timestamp_path.display(),
+                error
+            )
+        })?;
+        if !file_type.is_dir() {
+            continue;
+        }
+
+        let entry_dirs = fs::read_dir(&timestamp_path).map_err(|error| {
+            format!(
+                "读取会话废纸篓批次目录失败 ({}): {}",
+                timestamp_path.display(),
+                error
+            )
+        })?;
+        for entry in entry_dirs {
+            let entry = entry.map_err(|error| {
+                format!(
+                    "读取会话废纸篓条目失败 ({}): {}",
+                    timestamp_path.display(),
+                    error
+                )
+            })?;
+            let entry_path = entry.path();
+            let entry_type = entry.file_type().map_err(|error| {
+                format!(
+                    "读取会话废纸篓条目类型失败 ({}): {}",
+                    entry_path.display(),
+                    error
+                )
+            })?;
+            if !entry_type.is_dir() {
+                continue;
+            }
+
+            let manifest_path = entry_path.join("manifest.json");
+            if !manifest_path.exists() {
+                continue;
+            }
+            let manifest_content = fs::read_to_string(&manifest_path).map_err(|error| {
+                format!(
+                    "读取会话废纸篓清单失败 ({}): {}",
+                    manifest_path.display(),
+                    error
+                )
+            })?;
+            let manifest = serde_json::from_str::<TrashedSessionManifest>(&manifest_content)
+                .map_err(|error| {
+                    format!(
+                        "解析会话废纸篓清单失败 ({}): {}",
+                        manifest_path.display(),
+                        error
+                    )
+                })?;
+            let trashed_rollout_path = entry_path
+                .join("files")
+                .join(PathBuf::from(&manifest.relative_rollout_path));
+            entries.push(TrashedSessionEntry {
+                entry_dir: entry_path,
+                manifest,
+                trashed_rollout_path,
+            });
+        }
+    }
+
+    entries.sort_by(|left, right| {
+        parse_deleted_at(right.manifest.deleted_at.as_deref())
+            .unwrap_or_default()
+            .cmp(&parse_deleted_at(left.manifest.deleted_at.as_deref()).unwrap_or_default())
+            .then_with(|| left.manifest.session_id.cmp(&right.manifest.session_id))
+            .then_with(|| left.manifest.instance_id.cmp(&right.manifest.instance_id))
+    });
+    Ok(entries)
+}
+
+fn restore_trashed_session_entry(entry: &TrashedSessionEntry) -> Result<(), String> {
+    if !entry.trashed_rollout_path.exists() {
+        return Err(format!(
+            "废纸篓中的会话文件不存在，无法恢复 ({}): {}",
+            entry.manifest.session_id,
+            entry.trashed_rollout_path.display()
+        ));
+    }
+
+    let row_data = deserialize_row_data(&entry.manifest.thread_row)?;
+    let session_id = row_data
+        .get_text("id")
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| entry.manifest.session_id.clone());
+    let target_rollout_path = entry.manifest.original_rollout_path.clone();
+    if target_rollout_path.exists() {
+        return Err(format!(
+            "目标实例中已存在同名会话文件，无法恢复 ({}): {}",
+            session_id,
+            target_rollout_path.display()
+        ));
+    }
+
+    let original_session_index_content = read_session_index_content(&entry.manifest.instance_root)?;
+    if session_index_contains_id(&original_session_index_content, &session_id)? {
+        return Err(format!(
+            "目标实例的 session_index.jsonl 中已存在该会话，无法恢复 ({})",
+            session_id
+        ));
+    }
+
+    if let Some(parent) = target_rollout_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("创建会话恢复目录失败 ({}): {}", parent.display(), error))?;
+    }
+    fs::copy(&entry.trashed_rollout_path, &target_rollout_path).map_err(|error| {
+        format!(
+            "恢复会话文件失败 ({} -> {}): {}",
+            entry.trashed_rollout_path.display(),
+            target_rollout_path.display(),
+            error
+        )
+    })?;
+
+    let restore_result = (|| {
+        write_session_index_with_entry(
+            &entry.manifest.instance_root,
+            &original_session_index_content,
+            &session_id,
+            &entry.manifest.session_index_entry,
+        )?;
+        insert_thread_row(&entry.manifest.instance_root, &row_data)?;
+        Ok::<(), String>(())
+    })();
+
+    if let Err(error) = restore_result {
+        let _ = fs::remove_file(&target_rollout_path);
+        let _ = restore_session_index_content(
+            &entry.manifest.instance_root,
+            original_session_index_content.as_deref(),
+        );
+        return Err(error);
+    }
+
+    if let Err(error) = fs::remove_dir_all(&entry.entry_dir) {
+        modules::logger::log_warn(&format!(
+            "会话已恢复，但清理废纸篓条目失败 ({}): {}",
+            entry.entry_dir.display(),
+            error
+        ));
+    } else {
+        cleanup_empty_trash_ancestors(&entry.entry_dir);
+    }
+
+    Ok(())
+}
+
+fn read_session_index_content(root_dir: &Path) -> Result<Option<String>, String> {
+    let path = root_dir.join(SESSION_INDEX_FILE);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = fs::read_to_string(&path).map_err(|error| {
+        format!(
+            "读取 session_index.jsonl 失败 ({}): {}",
+            path.display(),
+            error
+        )
+    })?;
+    Ok(Some(content))
+}
+
+fn session_index_contains_id(content: &Option<String>, session_id: &str) -> Result<bool, String> {
+    let Some(content) = content.as_deref() else {
+        return Ok(false);
+    };
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let parsed = serde_json::from_str::<JsonValue>(trimmed)
+            .map_err(|error| format!("解析 session_index.jsonl 条目失败: {}", error))?;
+        if parsed.get("id").and_then(JsonValue::as_str) == Some(session_id) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn write_session_index_with_entry(
+    root_dir: &Path,
+    original_content: &Option<String>,
+    session_id: &str,
+    entry: &JsonValue,
+) -> Result<(), String> {
+    let path = root_dir.join(SESSION_INDEX_FILE);
+    let serialized_entry = serde_json::to_string(entry)
+        .map_err(|error| format!("序列化 session_index 条目失败 ({}): {}", session_id, error))?;
+    let mut lines = original_content
+        .as_deref()
+        .unwrap_or_default()
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    lines.push(serialized_entry);
+    let next_content = if lines.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", lines.join("\n"))
+    };
+    fs::write(&path, next_content).map_err(|error| {
+        format!(
+            "写入 session_index.jsonl 失败 ({}): {}",
+            path.display(),
+            error
+        )
+    })?;
+    Ok(())
+}
+
+fn restore_session_index_content(root_dir: &Path, content: Option<&str>) -> Result<(), String> {
+    let path = root_dir.join(SESSION_INDEX_FILE);
+    match content {
+        Some(value) => fs::write(&path, value).map_err(|error| {
+            format!(
+                "恢复 session_index.jsonl 失败 ({}): {}",
+                path.display(),
+                error
+            )
+        })?,
+        None => {
+            if path.exists() {
+                fs::remove_file(&path).map_err(|error| {
+                    format!(
+                        "删除恢复失败的 session_index.jsonl 失败 ({}): {}",
+                        path.display(),
+                        error
+                    )
+                })?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn deserialize_row_data(value: &JsonValue) -> Result<ThreadRowData, String> {
+    let object = value
+        .as_object()
+        .ok_or("废纸篓中的线程数据格式无效，缺少对象结构".to_string())?;
+    let mut columns = object.keys().cloned().collect::<Vec<_>>();
+    columns.sort();
+    let values = columns
+        .iter()
+        .map(|column| json_to_sqlite_value(object.get(column).unwrap_or(&JsonValue::Null)))
+        .collect::<Vec<_>>();
+    Ok(ThreadRowData { columns, values })
+}
+
+fn json_to_sqlite_value(value: &JsonValue) -> Value {
+    match value {
+        JsonValue::Null => Value::Null,
+        JsonValue::Bool(flag) => Value::Integer(i64::from(*flag)),
+        JsonValue::Number(number) => number
+            .as_i64()
+            .map(Value::Integer)
+            .or_else(|| number.as_f64().map(Value::Real))
+            .unwrap_or_else(|| Value::Text(number.to_string())),
+        JsonValue::String(text) => Value::Text(text.clone()),
+        JsonValue::Array(_) | JsonValue::Object(_) => Value::Text(value.to_string()),
+    }
+}
+
+fn insert_thread_row(root_dir: &Path, row_data: &ThreadRowData) -> Result<(), String> {
+    let db_path = root_dir.join(STATE_DB_FILE);
+    if !db_path.exists() {
+        return Err(format!(
+            "目标实例缺少 state_5.sqlite，无法恢复会话 ({})",
+            db_path.display()
+        ));
+    }
+    let mut connection = Connection::open(&db_path)
+        .map_err(|error| format!("打开实例数据库失败 ({}): {}", db_path.display(), error))?;
+    connection
+        .busy_timeout(Duration::from_secs(3))
+        .map_err(|error| {
+            format!(
+                "设置数据库 busy_timeout 失败 ({}): {}",
+                db_path.display(),
+                error
+            )
+        })?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("开启会话恢复事务失败 ({}): {}", db_path.display(), error))?;
+    let session_id = row_data
+        .get_text("id")
+        .filter(|value| !value.trim().is_empty())
+        .ok_or("废纸篓中的线程数据缺少 id 字段".to_string())?;
+    let exists = transaction
+        .query_row(
+            "SELECT COUNT(*) FROM threads WHERE id = ?1",
+            [&session_id],
+            |row| row.get::<usize, i64>(0),
+        )
+        .map_err(|error| format!("检查会话是否已存在失败 ({}): {}", session_id, error))?;
+    if exists > 0 {
+        return Err(format!("目标实例中已存在该会话，无法恢复 ({})", session_id));
+    }
+
+    let db_columns = read_thread_columns(&transaction)?;
+    let db_column_set = db_columns.into_iter().collect::<HashSet<_>>();
+    let insert_columns = row_data
+        .columns
+        .iter()
+        .filter(|column| db_column_set.contains(*column))
+        .cloned()
+        .collect::<Vec<_>>();
+    if insert_columns.is_empty() {
+        return Err("threads 表没有可用于恢复的列".to_string());
+    }
+
+    let mut insert_values = Vec::with_capacity(insert_columns.len());
+    for column in &insert_columns {
+        let value = row_data
+            .get_value(column)
+            .cloned()
+            .ok_or_else(|| format!("废纸篓中的线程数据缺少列: {}", column))?;
+        insert_values.push(value);
+    }
+    let placeholders = vec!["?"; insert_columns.len()].join(", ");
+    let sql = format!(
+        "INSERT INTO threads ({}) VALUES ({})",
+        insert_columns
+            .iter()
+            .map(|column| quote_identifier(column))
+            .collect::<Vec<_>>()
+            .join(", "),
+        placeholders
+    );
+    transaction
+        .execute(&sql, params_from_iter(insert_values.iter()))
+        .map_err(|error| format!("恢复会话记录失败 ({}): {}", session_id, error))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("提交会话恢复事务失败 ({}): {}", db_path.display(), error))?;
+    Ok(())
+}
+
+fn cleanup_empty_trash_ancestors(entry_dir: &Path) {
+    let mut current = entry_dir.parent();
+    while let Some(dir) = current {
+        if dir.file_name().and_then(|value| value.to_str()) == Some(SESSION_TRASH_ROOT_DIR) {
+            break;
+        }
+        let is_empty = fs::read_dir(dir)
+            .ok()
+            .and_then(|mut iterator| iterator.next().transpose().ok())
+            .flatten()
+            .is_none();
+        if !is_empty {
+            break;
+        }
+        if fs::remove_dir(dir).is_err() {
+            break;
+        }
+        current = dir.parent();
+    }
 }

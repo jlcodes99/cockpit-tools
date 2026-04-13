@@ -117,7 +117,7 @@ pub async fn exchange_code(code: &str, redirect_uri: &str) -> Result<TokenRespon
         Ok(token_res)
     } else {
         let error_text = response.text().await.unwrap_or_default();
-        let msg = format!("Token 交换失败 ({}): {}", status, error_text);
+        let msg = format!("Token 交换失败 ({})，body_len={}", status, error_text.len());
         crate::modules::logger::log_error(&msg);
         Err(msg)
     }

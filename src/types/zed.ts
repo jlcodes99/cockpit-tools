@@ -17,6 +17,8 @@ export interface ZedAccount {
   edit_predictions_used?: number | null;
   edit_predictions_limit_raw?: string | null;
   edit_predictions_remaining_raw?: string | null;
+  quota_query_last_error?: string | null;
+  quota_query_last_error_at?: number | null;
   usage_updated_at?: number | null;
   spending_limit_cents?: number | null;
   billing_portal_url?: string | null;
@@ -151,4 +153,16 @@ export function getZedEditPredictionsMetrics(account: ZedAccount): ZedEditPredic
 export function getZedEditPredictionsLabel(account: ZedAccount): string {
   const metrics = getZedEditPredictionsMetrics(account);
   return `${metrics.used} / ${metrics.total}`;
+}
+
+export function hasZedQuotaData(account: ZedAccount): boolean {
+  return (
+    account.usage_raw != null ||
+    account.usage_tokens_raw != null ||
+    account.token_spend_used_cents != null ||
+    account.token_spend_limit_cents != null ||
+    account.token_spend_remaining_cents != null ||
+    account.edit_predictions_used != null ||
+    Boolean(account.edit_predictions_limit_raw?.trim())
+  );
 }

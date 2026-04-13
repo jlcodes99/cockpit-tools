@@ -48,7 +48,7 @@
 }
 
 .instances-page .sort-select::after {
-  content: '';
+  content: "";
   position: absolute;
   right: 10px;
   top: 50%;
@@ -123,19 +123,51 @@
 }
 
 /* 表头各列固定宽度 */
-.instances-list-header > div:nth-child(1) { display: none; } /* checkbox - 隐藏 */
-.instances-list-header > div:nth-child(2) { width: 160px; flex-shrink: 0; margin-left: 0; } /* 实例 - 去除间距 */
-.instances-list-header > div:nth-child(3) { width: 90px; flex-shrink: 0; margin-left: 0; } /* 状态 - 紧挨实例 */
-.instances-list-header > div:nth-child(4) { width: 320px; flex-shrink: 0; margin-left: auto; } /* 账号 */
-.instances-list-header > div:nth-child(5) { width: 80px; flex-shrink: 0; margin-left: auto; } /* PID */
-.instances-list-header > div:nth-child(6) { width: 204px; flex-shrink: 0; margin-left: auto; } /* 操作 */
+.instances-list-header > div:nth-child(1) {
+  display: none;
+} /* checkbox - 隐藏 */
+.instances-list-header > div:nth-child(2) {
+  width: 160px;
+  flex-shrink: 0;
+  margin-left: 0;
+} /* 实例 - 去除间距 */
+.instances-list-header > div:nth-child(3) {
+  width: 90px;
+  flex-shrink: 0;
+  margin-left: 0;
+} /* 状态 - 紧挨实例 */
+.instances-list-header > div:nth-child(4) {
+  width: 320px;
+  flex-shrink: 0;
+  margin-left: auto;
+} /* 账号 */
+.instances-list-header > div:nth-child(5) {
+  width: 80px;
+  flex-shrink: 0;
+  margin-left: auto;
+} /* PID */
+.instances-list-header > div:nth-child(6) {
+  width: 204px;
+  flex-shrink: 0;
+  margin-left: auto;
+} /* 操作 */
 
 /* 表头各列对齐 - 统一左对齐 */
-.instances-list-header > div:nth-child(2) { text-align: left; } /* 实例 */
-.instances-list-header > div:nth-child(3) { text-align: left; } /* 状态 */
-.instances-list-header > div:nth-child(4) { text-align: left; } /* 账号 */
-.instances-list-header > div:nth-child(5) { text-align: left; } /* PID */
-.instances-list-header > div:nth-child(6) { text-align: left; } /* 操作 */
+.instances-list-header > div:nth-child(2) {
+  text-align: left;
+} /* 实例 */
+.instances-list-header > div:nth-child(3) {
+  text-align: left;
+} /* 状态 */
+.instances-list-header > div:nth-child(4) {
+  text-align: left;
+} /* 账号 */
+.instances-list-header > div:nth-child(5) {
+  text-align: left;
+} /* PID */
+.instances-list-header > div:nth-child(6) {
+  text-align: left;
+} /* 操作 */
 
 /* 列分隔竖线 - 移除，改用间距分隔 */
 
@@ -154,12 +186,34 @@
 }
 
 /* 列表项各列固定宽度 */
-.instance-item > div:nth-child(1) { display: none; } /* checkbox - 隐藏 */
-.instance-item > div:nth-child(2) { width: 160px; flex-shrink: 0; margin-left: 0; } /* 实例 - 去除间距 */
-.instance-item > div:nth-child(3) { width: 90px; flex-shrink: 0; margin-left: 0; } /* 状态 - 紧挨实例 */
-.instance-item > div:nth-child(4) { width: 320px; flex-shrink: 0; margin-left: auto; } /* 账号 */
-.instance-item > div:nth-child(5) { width: 80px; flex-shrink: 0; margin-left: auto; } /* PID */
-.instance-item > div:nth-child(6) { width: 204px; flex-shrink: 0; margin-left: auto; } /* 操作 */
+.instance-item > div:nth-child(1) {
+  display: none;
+} /* checkbox - 隐藏 */
+.instance-item > div:nth-child(2) {
+  width: 160px;
+  flex-shrink: 0;
+  margin-left: 0;
+} /* 实例 - 去除间距 */
+.instance-item > div:nth-child(3) {
+  width: 90px;
+  flex-shrink: 0;
+  margin-left: 0;
+} /* 状态 - 紧挨实例 */
+.instance-item > div:nth-child(4) {
+  width: 320px;
+  flex-shrink: 0;
+  margin-left: auto;
+} /* 账号 */
+.instance-item > div:nth-child(5) {
+  width: 80px;
+  flex-shrink: 0;
+  margin-left: auto;
+} /* PID */
+.instance-item > div:nth-child(6) {
+  width: 204px;
+  flex-shrink: 0;
+  margin-left: auto;
+} /* 操作 */
 
 /* Sticky action column (match accounts page behavior) */
 .instances-list-header > div:nth-child(6) {
@@ -254,6 +308,31 @@
   letter-spacing: -0.3px;
 }
 
+.instances-page .instance-launch-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.instances-page .instance-launch-mode-badge.cli {
+  background: rgba(37, 99, 235, 0.1);
+  border-color: rgba(37, 99, 235, 0.2);
+  color: #1d4ed8;
+}
+
+.instances-page .instance-launch-mode-badge.app {
+  background: rgba(15, 23, 42, 0.04);
+}
+
 .instance-status {
   height: 20px;
   padding: 0 8px;
@@ -289,6 +368,12 @@
   background: rgba(59, 130, 246, 0.12);
   color: #2563eb;
   border-color: rgba(59, 130, 246, 0.25);
+}
+
+.instance-status.ready {
+  background: rgba(14, 165, 233, 0.12);
+  color: #0369a1;
+  border-color: rgba(14, 165, 233, 0.25);
 }
 
 .instance-status.stopped {
@@ -372,7 +457,7 @@
   color: var(--text-secondary);
   min-height: 22px;
   min-width: 50px;
-  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
 }
 
 /* Actions column */
@@ -646,7 +731,7 @@
 }
 
 .instances-page .restart-strategy-command code {
-  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
   font-size: 12px;
   padding: 6px 8px;
   border-radius: 8px;
@@ -779,8 +864,11 @@
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
   padding: 6px;
-  max-height: 280px;
+  max-height: min(320px, calc(100vh - 24px));
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scroll-behavior: smooth;
   z-index: 30;
 }
 
@@ -790,7 +878,12 @@
   left: auto;
   right: auto;
   width: 100%;
+  max-height: var(--account-select-max-height, 320px);
   z-index: auto;
+}
+
+.account-select-portal-root.placement-top {
+  transform: translateY(-100%);
 }
 
 .instances-page .account-select-item {

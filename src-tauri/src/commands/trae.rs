@@ -25,9 +25,18 @@ pub fn import_trae_from_json(json_content: String) -> Result<Vec<TraeAccount>, S
 }
 
 #[tauri::command]
-pub fn import_trae_from_local(app: AppHandle) -> Result<Vec<TraeAccount>, String> {
+pub async fn import_trae_from_local(app: AppHandle) -> Result<Vec<TraeAccount>, String> {
     match trae_account::import_from_local()? {
-        Some(account) => {
+        Some(mut account) => {
+            match trae_account::refresh_account_async(account.id.as_str()).await {
+                Ok(refreshed) => account = refreshed,
+                Err(err) => {
+                    logger::log_warn(&format!(
+                        "[Trae Import] 本地导入后自动刷新配额失败: {}",
+                        err
+                    ));
+                }
+            }
             let _ = crate::modules::tray::update_tray_menu(&app);
             Ok(vec![account])
         }

@@ -153,15 +153,16 @@ pub fn load_account(account_id: &str) -> Option<QoderAccount> {
     if !account_path.exists() {
         return None;
     }
-    let content = fs::read_to_string(account_path).ok()?;
-    serde_json::from_str(&content).ok()
+    let content = fs::read_to_string(&account_path).ok()?;
+    crate::modules::atomic_write::parse_json_with_auto_restore(&account_path, &content).ok()
 }
 
 fn save_account_file(account: &QoderAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
     let content =
         serde_json::to_string_pretty(account).map_err(|e| format!("序列化账号失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("保存账号失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("保存账号失败: {}", e))
 }
 
 fn delete_account_file(account_id: &str) -> Result<(), String> {
@@ -185,7 +186,10 @@ fn load_account_index() -> QoderAccountIndex {
         Ok(content) if content.trim().is_empty() => {
             repair_account_index_from_details("索引文件为空").unwrap_or_else(QoderAccountIndex::new)
         }
-        Ok(content) => match serde_json::from_str::<QoderAccountIndex>(&content) {
+        Ok(content) => match crate::modules::atomic_write::parse_json_with_auto_restore::<
+            QoderAccountIndex,
+        >(&path, &content)
+        {
             Ok(index) if !index.accounts.is_empty() => index,
             Ok(_) => repair_account_index_from_details("索引账号列表为空")
                 .unwrap_or_else(QoderAccountIndex::new),
@@ -229,7 +233,9 @@ fn load_account_index_checked() -> Result<QoderAccountIndex, String> {
         return Ok(QoderAccountIndex::new());
     }
 
-    match serde_json::from_str::<QoderAccountIndex>(&content) {
+    match crate::modules::atomic_write::parse_json_with_auto_restore::<QoderAccountIndex>(
+        &path, &content,
+    ) {
         Ok(index) if !index.accounts.is_empty() => Ok(index),
         Ok(index) => {
             if let Some(repaired) = repair_account_index_from_details("索引账号列表为空") {
@@ -254,7 +260,8 @@ fn save_account_index(index: &QoderAccountIndex) -> Result<(), String> {
     let path = get_accounts_index_path()?;
     let content =
         serde_json::to_string_pretty(index).map_err(|e| format!("序列化账号索引失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("写入账号索引失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("写入账号索引失败: {}", e))
 }
 
 fn repair_account_index_from_details(reason: &str) -> Option<QoderAccountIndex> {
@@ -329,6 +336,22 @@ fn upsert_account_record(account: QoderAccount) -> Result<QoderAccount, String> 
     refresh_summary(&mut index, &account);
     save_account_index(&index)?;
     Ok(account)
+}
+
+pub fn update_quota_query_error(
+    account_id: &str,
+    message: Option<String>,
+) -> Result<Option<QoderAccount>, String> {
+    let Some(mut account) = load_account(account_id) else {
+        return Ok(None);
+    };
+    account.quota_query_last_error = message;
+    account.quota_query_last_error_at = account
+        .quota_query_last_error
+        .as_ref()
+        .map(|_| chrono::Utc::now().timestamp_millis());
+    let updated = upsert_account_record(account)?;
+    Ok(Some(updated))
 }
 
 fn list_accounts_from_index(index: &QoderAccountIndex) -> Vec<QoderAccount> {
@@ -843,6 +866,16 @@ fn snapshot_to_account(snapshot: QoderSnapshot, existing: Option<&QoderAccount>)
             .or_else(|| existing.and_then(|item| item.credits_remaining)),
         credits_usage_percent: credits_usage_percent
             .or_else(|| existing.and_then(|item| item.credits_usage_percent)),
+        quota_query_last_error: if snapshot.credit_usage_raw.is_some() {
+            None
+        } else {
+            existing.and_then(|item| item.quota_query_last_error.clone())
+        },
+        quota_query_last_error_at: if snapshot.credit_usage_raw.is_some() {
+            None
+        } else {
+            existing.and_then(|item| item.quota_query_last_error_at)
+        },
         usage_updated_at: if snapshot.credit_usage_raw.is_some() {
             Some(now)
         } else {
@@ -1185,6 +1218,7 @@ fn normalize_imported_account(mut account: QoderAccount) -> QoderAccount {
     account.display_name = normalize_non_empty(account.display_name.as_deref());
     account.plan_type = normalize_non_empty(account.plan_type.as_deref());
     account.tags = normalize_tags(account.tags.unwrap_or_default());
+    account.quota_query_last_error = normalize_non_empty(account.quota_query_last_error.as_deref());
     if account.created_at <= 0 {
         account.created_at = now;
     }

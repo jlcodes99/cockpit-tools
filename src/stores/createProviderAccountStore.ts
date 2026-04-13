@@ -266,13 +266,29 @@ export function createProviderAccountStore<TAccount extends ProviderAccountAugme
     },
 
     refreshToken: async (accountId: string) => {
-      await service.refreshToken(accountId);
+      let error: unknown;
+      try {
+        await service.refreshToken(accountId);
+      } catch (err) {
+        error = err;
+      }
       await get().fetchAccounts();
+      if (error) {
+        throw error;
+      }
     },
 
     refreshAllTokens: async () => {
-      await service.refreshAllTokens();
+      let error: unknown;
+      try {
+        await service.refreshAllTokens();
+      } catch (err) {
+        error = err;
+      }
       await get().fetchAccounts();
+      if (error) {
+        throw error;
+      }
     },
 
     importFromJson: async (jsonContent: string) => {

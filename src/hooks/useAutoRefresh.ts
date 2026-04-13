@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAccountStore } from '../stores/useAccountStore';
 import { useCodexAccountStore } from '../stores/useCodexAccountStore';
@@ -14,9 +14,14 @@ import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
 import {
-  CURRENT_ACCOUNT_REFRESH_PLATFORMS,
   loadCurrentAccountRefreshMinutesMap,
+  type CurrentAccountRefreshPlatform,
 } from '../utils/currentAccountRefresh';
+import {
+  createAutoRefreshScheduler,
+  type AutoRefreshSchedulerHandle,
+  type AutoRefreshSchedulerTask,
+} from '../utils/autoRefreshScheduler';
 
 interface GeneralConfig {
   language: string;
@@ -59,7 +64,41 @@ interface GeneralConfig {
   gemini_quota_alert_threshold?: number;
 }
 
+interface PlatformRefreshDescriptor {
+  key: CurrentAccountRefreshPlatform;
+  label: string;
+  intervalMinutes: number;
+  currentMinutes: number;
+  fullRefreshingRef: MutableRefObject<boolean>;
+  currentRefreshingRef: MutableRefObject<boolean>;
+  runFullRefresh: () => Promise<void>;
+  runCurrentRefresh: () => Promise<void>;
+}
+
 const STARTUP_AUTO_REFRESH_SETUP_DELAY_MS = 2500;
+const AUTO_REFRESH_TICK_MS = 5_000;
+const AUTO_REFRESH_MAX_CONCURRENT = 1;
+
+function minutesToMs(minutes: number): number {
+  return minutes * 60 * 1000;
+}
+
+function buildEnabledPlatformsSummary(
+  descriptors: PlatformRefreshDescriptor[],
+): string {
+  const fullSummary = descriptors
+    .filter((descriptor) => descriptor.intervalMinutes > 0)
+    .map((descriptor) => `${descriptor.key}=${descriptor.intervalMinutes}`);
+  const currentSummary = descriptors
+    .filter((descriptor) => descriptor.intervalMinutes > 0)
+    .map((descriptor) => `${descriptor.key}:${descriptor.currentMinutes}`);
+
+  const parts = [...fullSummary];
+  if (currentSummary.length > 0) {
+    parts.push(`current=${currentSummary.join('|')}`);
+  }
+  return parts.join(', ');
+}
 
 export function useAutoRefresh() {
   const refreshAllQuotas = useAccountStore((state) => state.refreshAllQuotas);
@@ -104,33 +143,6 @@ export function useAutoRefresh() {
   const fetchCurrentZedAccountId = useZedAccountStore((state) => state.fetchCurrentAccountId);
   const refreshZedToken = useZedAccountStore((state) => state.refreshToken);
 
-  const agIntervalRef = useRef<number | null>(null);
-  const agCurrentIntervalRef = useRef<number | null>(null);
-  const codexIntervalRef = useRef<number | null>(null);
-  const codexCurrentRefreshIntervalRef = useRef<number | null>(null);
-  const ghcpIntervalRef = useRef<number | null>(null);
-  const ghcpCurrentIntervalRef = useRef<number | null>(null);
-  const windsurfIntervalRef = useRef<number | null>(null);
-  const windsurfCurrentIntervalRef = useRef<number | null>(null);
-  const kiroIntervalRef = useRef<number | null>(null);
-  const kiroCurrentIntervalRef = useRef<number | null>(null);
-  const cursorIntervalRef = useRef<number | null>(null);
-  const cursorCurrentIntervalRef = useRef<number | null>(null);
-  const geminiIntervalRef = useRef<number | null>(null);
-  const geminiCurrentIntervalRef = useRef<number | null>(null);
-  const codebuddyIntervalRef = useRef<number | null>(null);
-  const codebuddyCurrentIntervalRef = useRef<number | null>(null);
-  const codebuddyCnIntervalRef = useRef<number | null>(null);
-  const codebuddyCnCurrentIntervalRef = useRef<number | null>(null);
-  const workbuddyIntervalRef = useRef<number | null>(null);
-  const workbuddyCurrentIntervalRef = useRef<number | null>(null);
-  const qoderIntervalRef = useRef<number | null>(null);
-  const qoderCurrentIntervalRef = useRef<number | null>(null);
-  const traeIntervalRef = useRef<number | null>(null);
-  const traeCurrentIntervalRef = useRef<number | null>(null);
-  const zedIntervalRef = useRef<number | null>(null);
-  const zedCurrentIntervalRef = useRef<number | null>(null);
-
   const agRefreshingRef = useRef(false);
   const agCurrentRefreshingRef = useRef(false);
   const codexRefreshingRef = useRef(false);
@@ -158,116 +170,41 @@ export function useAutoRefresh() {
   const zedRefreshingRef = useRef(false);
   const zedCurrentRefreshingRef = useRef(false);
 
+  const schedulerRef = useRef<AutoRefreshSchedulerHandle | null>(null);
   const setupRunningRef = useRef(false);
   const setupPendingRef = useRef(false);
   const destroyedRef = useRef(false);
 
-  const clearAllIntervals = useCallback(() => {
-    if (agIntervalRef.current) {
-      window.clearInterval(agIntervalRef.current);
-      agIntervalRef.current = null;
-    }
-    if (agCurrentIntervalRef.current) {
-      window.clearInterval(agCurrentIntervalRef.current);
-      agCurrentIntervalRef.current = null;
-    }
-    if (codexIntervalRef.current) {
-      window.clearInterval(codexIntervalRef.current);
-      codexIntervalRef.current = null;
-    }
-    if (codexCurrentRefreshIntervalRef.current) {
-      window.clearInterval(codexCurrentRefreshIntervalRef.current);
-      codexCurrentRefreshIntervalRef.current = null;
-    }
-    if (ghcpIntervalRef.current) {
-      window.clearInterval(ghcpIntervalRef.current);
-      ghcpIntervalRef.current = null;
-    }
-    if (ghcpCurrentIntervalRef.current) {
-      window.clearInterval(ghcpCurrentIntervalRef.current);
-      ghcpCurrentIntervalRef.current = null;
-    }
-    if (windsurfIntervalRef.current) {
-      window.clearInterval(windsurfIntervalRef.current);
-      windsurfIntervalRef.current = null;
-    }
-    if (windsurfCurrentIntervalRef.current) {
-      window.clearInterval(windsurfCurrentIntervalRef.current);
-      windsurfCurrentIntervalRef.current = null;
-    }
-    if (kiroIntervalRef.current) {
-      window.clearInterval(kiroIntervalRef.current);
-      kiroIntervalRef.current = null;
-    }
-    if (kiroCurrentIntervalRef.current) {
-      window.clearInterval(kiroCurrentIntervalRef.current);
-      kiroCurrentIntervalRef.current = null;
-    }
-    if (cursorIntervalRef.current) {
-      window.clearInterval(cursorIntervalRef.current);
-      cursorIntervalRef.current = null;
-    }
-    if (cursorCurrentIntervalRef.current) {
-      window.clearInterval(cursorCurrentIntervalRef.current);
-      cursorCurrentIntervalRef.current = null;
-    }
-    if (geminiIntervalRef.current) {
-      window.clearInterval(geminiIntervalRef.current);
-      geminiIntervalRef.current = null;
-    }
-    if (geminiCurrentIntervalRef.current) {
-      window.clearInterval(geminiCurrentIntervalRef.current);
-      geminiCurrentIntervalRef.current = null;
-    }
-    if (codebuddyIntervalRef.current) {
-      window.clearInterval(codebuddyIntervalRef.current);
-      codebuddyIntervalRef.current = null;
-    }
-    if (codebuddyCurrentIntervalRef.current) {
-      window.clearInterval(codebuddyCurrentIntervalRef.current);
-      codebuddyCurrentIntervalRef.current = null;
-    }
-    if (codebuddyCnIntervalRef.current) {
-      window.clearInterval(codebuddyCnIntervalRef.current);
-      codebuddyCnIntervalRef.current = null;
-    }
-    if (codebuddyCnCurrentIntervalRef.current) {
-      window.clearInterval(codebuddyCnCurrentIntervalRef.current);
-      codebuddyCnCurrentIntervalRef.current = null;
-    }
-    if (workbuddyIntervalRef.current) {
-      window.clearInterval(workbuddyIntervalRef.current);
-      workbuddyIntervalRef.current = null;
-    }
-    if (workbuddyCurrentIntervalRef.current) {
-      window.clearInterval(workbuddyCurrentIntervalRef.current);
-      workbuddyCurrentIntervalRef.current = null;
-    }
-    if (qoderIntervalRef.current) {
-      window.clearInterval(qoderIntervalRef.current);
-      qoderIntervalRef.current = null;
-    }
-    if (qoderCurrentIntervalRef.current) {
-      window.clearInterval(qoderCurrentIntervalRef.current);
-      qoderCurrentIntervalRef.current = null;
-    }
-    if (traeIntervalRef.current) {
-      window.clearInterval(traeIntervalRef.current);
-      traeIntervalRef.current = null;
-    }
-    if (traeCurrentIntervalRef.current) {
-      window.clearInterval(traeCurrentIntervalRef.current);
-      traeCurrentIntervalRef.current = null;
-    }
-    if (zedIntervalRef.current) {
-      window.clearInterval(zedIntervalRef.current);
-      zedIntervalRef.current = null;
-    }
-    if (zedCurrentIntervalRef.current) {
-      window.clearInterval(zedCurrentIntervalRef.current);
-      zedCurrentIntervalRef.current = null;
-    }
+  const stopScheduler = useCallback(() => {
+    schedulerRef.current?.stop();
+    schedulerRef.current = null;
   }, []);
+
+  const executeWithGuard = useCallback(
+    async (
+      refreshingRef: MutableRefObject<boolean>,
+      task: () => Promise<void>,
+      startMessage: string | null,
+      errorMessage: string,
+    ) => {
+      if (refreshingRef.current) {
+        return;
+      }
+
+      refreshingRef.current = true;
+      try {
+        if (startMessage) {
+          console.log(startMessage);
+        }
+        await task();
+      } catch (error) {
+        console.error(errorMessage, error);
+      } finally {
+        refreshingRef.current = false;
+      }
+    },
+    [],
+  );
 
   const setupAutoRefresh = useCallback(async () => {
     const setupStartedAt = performance.now();
@@ -296,34 +233,37 @@ export function useAutoRefresh() {
           console.log(
             `[StartupPerf][AutoRefresh] get_general_config completed in ${(performance.now() - configInvokeStartedAt).toFixed(2)}ms`,
           );
+
           if (destroyedRef.current) {
             console.log('[StartupPerf][AutoRefresh] setupAutoRefresh aborted after config load: destroyed flag set');
             return;
           }
 
-          // 检测配额重置任务状态及唤醒总开关
           const wakeupEnabled = localStorage.getItem('agtools.wakeup.enabled') === 'true';
           if (wakeupEnabled) {
             const tasksJson = localStorage.getItem('agtools.wakeup.tasks');
             if (tasksJson) {
               try {
                 const tasks = JSON.parse(tasksJson);
-                const hasActiveResetTask = Array.isArray(tasks) && tasks.some(
-                  (task: unknown) => {
+                const hasActiveResetTask = Array.isArray(tasks)
+                  && tasks.some((task: unknown) => {
                     if (!task || typeof task !== 'object') {
                       return false;
                     }
-                    const taskObj = task as {
+                    const taskObject = task as {
                       enabled?: boolean;
                       schedule?: { wakeOnReset?: boolean };
                     };
-                    return Boolean(taskObj.enabled && taskObj.schedule?.wakeOnReset);
-                  },
-                );
+                    return Boolean(taskObject.enabled && taskObject.schedule?.wakeOnReset);
+                  });
 
-                // 如果有活跃的重置任务，且刷新间隔为禁用(-1)或大于2分钟，则强制修正为2分钟
-                if (hasActiveResetTask && (config.auto_refresh_minutes === -1 || config.auto_refresh_minutes > 2)) {
-                  console.log(`[AutoRefresh] 检测到活跃的配额重置任务，自动修正刷新间隔: ${config.auto_refresh_minutes} -> 2`);
+                if (
+                  hasActiveResetTask
+                  && (config.auto_refresh_minutes === -1 || config.auto_refresh_minutes > 2)
+                ) {
+                  console.log(
+                    `[AutoRefresh] 检测到活跃的配额重置任务，自动修正刷新间隔: ${config.auto_refresh_minutes} -> 2`,
+                  );
                   const saveConfigStartedAt = performance.now();
                   await invoke('save_general_config', {
                     language: config.language,
@@ -368,91 +308,20 @@ export function useAutoRefresh() {
                   );
                   config.auto_refresh_minutes = 2;
                 }
-              } catch (e) {
-                console.error('[AutoRefresh] 解析任务列表失败:', e);
+              } catch (error) {
+                console.error('[AutoRefresh] 解析任务列表失败:', error);
               }
             }
           }
 
           if (destroyedRef.current) {
-            console.log('[StartupPerf][AutoRefresh] setupAutoRefresh aborted before interval setup: destroyed flag set');
+            console.log('[StartupPerf][AutoRefresh] setupAutoRefresh aborted before scheduler setup: destroyed flag set');
             return;
           }
 
-          clearAllIntervals();
-
-          if (config.auto_refresh_minutes > 0) {
-            console.log(`[AutoRefresh] Antigravity 已启用: 每 ${config.auto_refresh_minutes} 分钟`);
-            const agMs = config.auto_refresh_minutes * 60 * 1000;
-
-            agIntervalRef.current = window.setInterval(async () => {
-              if (agRefreshingRef.current) {
-                return;
-              }
-              agRefreshingRef.current = true;
-
-              try {
-                console.log('[AutoRefresh] 触发定时配额刷新...');
-                await syncCurrentFromClient();
-                await refreshAllQuotas();
-              } catch (e) {
-                console.error('[AutoRefresh] 刷新失败:', e);
-              } finally {
-                agRefreshingRef.current = false;
-              }
-            }, agMs);
-          } else {
-            console.log('[AutoRefresh] Antigravity 已禁用');
-          }
-
-          if (config.codex_auto_refresh_minutes > 0) {
-            console.log(`[AutoRefresh] Codex 已启用: 每 ${config.codex_auto_refresh_minutes} 分钟`);
-            const codexMs = config.codex_auto_refresh_minutes * 60 * 1000;
-
-            codexIntervalRef.current = window.setInterval(async () => {
-              if (codexRefreshingRef.current) {
-                return;
-              }
-              codexRefreshingRef.current = true;
-
-              try {
-                console.log('[AutoRefresh] 触发 Codex 配额刷新...');
-                await refreshAllCodexQuotas();
-              } catch (e) {
-                console.error('[AutoRefresh] Codex 刷新失败:', e);
-              } finally {
-                codexRefreshingRef.current = false;
-              }
-            }, codexMs);
-          } else {
-            console.log('[AutoRefresh] Codex 已禁用');
-          }
+          stopScheduler();
 
           const currentRefreshMinutesMap = loadCurrentAccountRefreshMinutesMap();
-          const scheduleCurrentRefresh = (
-            label: string,
-            intervalRef: { current: number | null },
-            refreshingRef: { current: boolean },
-            minutes: number,
-            run: () => Promise<void>,
-          ) => {
-            const refreshMs = minutes * 60 * 1000;
-            console.log(`[AutoRefresh] ${label} 当前账号刷新: 每 ${minutes} 分钟`);
-            intervalRef.current = window.setInterval(async () => {
-              if (refreshingRef.current) {
-                return;
-              }
-              refreshingRef.current = true;
-              try {
-                await run();
-              } catch (error) {
-                console.error(`[AutoRefresh] ${label} 当前账号刷新失败:`, error);
-              } finally {
-                refreshingRef.current = false;
-              }
-            }, refreshMs);
-          };
-
           const runProviderCurrentRefresh = async (
             fetchCurrentProviderAccountId: () => Promise<string | null>,
             refreshProviderToken: (accountId: string) => Promise<void>,
@@ -464,481 +333,271 @@ export function useAutoRefresh() {
             await refreshProviderToken(accountId);
           };
 
-          scheduleCurrentRefresh(
-            'Antigravity',
-            agCurrentIntervalRef,
-            agCurrentRefreshingRef,
-            currentRefreshMinutesMap.antigravity,
-            async () => {
-              if (agRefreshingRef.current) {
-                return;
-              }
-              await syncCurrentFromClient();
-              if (!useAccountStore.getState().currentAccount?.id) {
+          const descriptors: PlatformRefreshDescriptor[] = [
+            {
+              key: 'antigravity',
+              label: 'Antigravity',
+              intervalMinutes: config.auto_refresh_minutes,
+              currentMinutes: currentRefreshMinutesMap.antigravity,
+              fullRefreshingRef: agRefreshingRef,
+              currentRefreshingRef: agCurrentRefreshingRef,
+              runFullRefresh: async () => {
+                await syncCurrentFromClient();
+                await refreshAllQuotas();
+              },
+              runCurrentRefresh: async () => {
+                await syncCurrentFromClient();
+                if (!useAccountStore.getState().currentAccount?.id) {
+                  await fetchCurrentAccount();
+                }
+                if (!useAccountStore.getState().currentAccount?.id) {
+                  return;
+                }
+                await invoke('refresh_current_quota');
+                await fetchAccounts();
                 await fetchCurrentAccount();
-              }
-              if (!useAccountStore.getState().currentAccount?.id) {
-                return;
-              }
-              await invoke('refresh_current_quota');
-              await fetchAccounts();
-              await fetchCurrentAccount();
+              },
             },
-          );
-
-          scheduleCurrentRefresh(
-            'Codex',
-            codexCurrentRefreshIntervalRef,
-            codexCurrentRefreshingRef,
-            currentRefreshMinutesMap.codex,
-            async () => {
-              if (codexRefreshingRef.current) {
-                return;
-              }
-              if (!useCodexAccountStore.getState().currentAccount?.id) {
+            {
+              key: 'codex',
+              label: 'Codex',
+              intervalMinutes: config.codex_auto_refresh_minutes,
+              currentMinutes: currentRefreshMinutesMap.codex,
+              fullRefreshingRef: codexRefreshingRef,
+              currentRefreshingRef: codexCurrentRefreshingRef,
+              runFullRefresh: async () => {
+                await refreshAllCodexQuotas();
+              },
+              runCurrentRefresh: async () => {
+                if (!useCodexAccountStore.getState().currentAccount?.id) {
+                  await fetchCurrentCodexAccount();
+                }
+                if (!useCodexAccountStore.getState().currentAccount?.id) {
+                  return;
+                }
+                await invoke('refresh_current_codex_quota');
+                await fetchCodexAccounts();
                 await fetchCurrentCodexAccount();
-              }
-              if (!useCodexAccountStore.getState().currentAccount?.id) {
-                return;
-              }
-              await invoke('refresh_current_codex_quota');
-              await fetchCodexAccounts();
-              await fetchCurrentCodexAccount();
+              },
             },
-          );
-
-          if (config.ghcp_auto_refresh_minutes > 0) {
-            console.log(`[AutoRefresh] GitHub Copilot 已启用: 每 ${config.ghcp_auto_refresh_minutes} 分钟`);
-            const ghcpMs = config.ghcp_auto_refresh_minutes * 60 * 1000;
-
-            ghcpIntervalRef.current = window.setInterval(async () => {
-              if (ghcpRefreshingRef.current) {
-                return;
-              }
-              ghcpRefreshingRef.current = true;
-
-              try {
-                console.log('[AutoRefresh] 触发 GitHub Copilot Token 刷新...');
+            {
+              key: 'ghcp',
+              label: 'GitHub Copilot',
+              intervalMinutes: config.ghcp_auto_refresh_minutes,
+              currentMinutes: currentRefreshMinutesMap.ghcp,
+              fullRefreshingRef: ghcpRefreshingRef,
+              currentRefreshingRef: ghcpCurrentRefreshingRef,
+              runFullRefresh: async () => {
                 await refreshAllGhcpTokens();
-              } catch (e) {
-                console.error('[AutoRefresh] GitHub Copilot 刷新失败:', e);
-              } finally {
-                ghcpRefreshingRef.current = false;
-              }
-            }, ghcpMs);
-          } else {
-            console.log('[AutoRefresh] GitHub Copilot 已禁用');
-          }
-
-          scheduleCurrentRefresh(
-            'GitHub Copilot',
-            ghcpCurrentIntervalRef,
-            ghcpCurrentRefreshingRef,
-            currentRefreshMinutesMap.ghcp,
-            async () => {
-              if (ghcpRefreshingRef.current) {
-                return;
-              }
-              await runProviderCurrentRefresh(fetchCurrentGhcpAccountId, refreshGhcpToken);
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(fetchCurrentGhcpAccountId, refreshGhcpToken);
+              },
             },
-          );
-
-          if (config.windsurf_auto_refresh_minutes > 0) {
-            console.log(`[AutoRefresh] Windsurf 已启用: 每 ${config.windsurf_auto_refresh_minutes} 分钟`);
-            const windsurfMs = config.windsurf_auto_refresh_minutes * 60 * 1000;
-
-            windsurfIntervalRef.current = window.setInterval(async () => {
-              if (windsurfRefreshingRef.current) {
-                return;
-              }
-              windsurfRefreshingRef.current = true;
-
-              try {
-                console.log('[AutoRefresh] 触发 Windsurf 配额刷新...');
+            {
+              key: 'windsurf',
+              label: 'Windsurf',
+              intervalMinutes: config.windsurf_auto_refresh_minutes,
+              currentMinutes: currentRefreshMinutesMap.windsurf,
+              fullRefreshingRef: windsurfRefreshingRef,
+              currentRefreshingRef: windsurfCurrentRefreshingRef,
+              runFullRefresh: async () => {
                 await refreshAllWindsurfTokens();
-              } catch (e) {
-                console.error('[AutoRefresh] Windsurf 刷新失败:', e);
-              } finally {
-                windsurfRefreshingRef.current = false;
-              }
-            }, windsurfMs);
-          } else {
-            console.log('[AutoRefresh] Windsurf 已禁用');
-          }
-
-          scheduleCurrentRefresh(
-            'Windsurf',
-            windsurfCurrentIntervalRef,
-            windsurfCurrentRefreshingRef,
-            currentRefreshMinutesMap.windsurf,
-            async () => {
-              if (windsurfRefreshingRef.current) {
-                return;
-              }
-              await runProviderCurrentRefresh(
-                fetchCurrentWindsurfAccountId,
-                refreshWindsurfToken,
-              );
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(
+                  fetchCurrentWindsurfAccountId,
+                  refreshWindsurfToken,
+                );
+              },
             },
-          );
-
-          if (config.kiro_auto_refresh_minutes > 0) {
-            console.log(`[AutoRefresh] Kiro 已启用: 每 ${config.kiro_auto_refresh_minutes} 分钟`);
-            const kiroMs = config.kiro_auto_refresh_minutes * 60 * 1000;
-
-            kiroIntervalRef.current = window.setInterval(async () => {
-              if (kiroRefreshingRef.current) {
-                return;
-              }
-              kiroRefreshingRef.current = true;
-
-              try {
-                console.log('[AutoRefresh] 触发 Kiro 配额刷新...');
+            {
+              key: 'kiro',
+              label: 'Kiro',
+              intervalMinutes: config.kiro_auto_refresh_minutes,
+              currentMinutes: currentRefreshMinutesMap.kiro,
+              fullRefreshingRef: kiroRefreshingRef,
+              currentRefreshingRef: kiroCurrentRefreshingRef,
+              runFullRefresh: async () => {
                 await refreshAllKiroTokens();
-              } catch (e) {
-                console.error('[AutoRefresh] Kiro 刷新失败:', e);
-              } finally {
-                kiroRefreshingRef.current = false;
-              }
-            }, kiroMs);
-          } else {
-            console.log('[AutoRefresh] Kiro 已禁用');
-          }
-
-          scheduleCurrentRefresh(
-            'Kiro',
-            kiroCurrentIntervalRef,
-            kiroCurrentRefreshingRef,
-            currentRefreshMinutesMap.kiro,
-            async () => {
-              if (kiroRefreshingRef.current) {
-                return;
-              }
-              await runProviderCurrentRefresh(fetchCurrentKiroAccountId, refreshKiroToken);
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(fetchCurrentKiroAccountId, refreshKiroToken);
+              },
             },
-          );
-
-          if (config.cursor_auto_refresh_minutes > 0) {
-            console.log(`[AutoRefresh] Cursor 已启用: 每 ${config.cursor_auto_refresh_minutes} 分钟`);
-            const cursorMs = config.cursor_auto_refresh_minutes * 60 * 1000;
-
-            cursorIntervalRef.current = window.setInterval(async () => {
-              if (cursorRefreshingRef.current) {
-                return;
-              }
-              cursorRefreshingRef.current = true;
-
-              try {
-                console.log('[AutoRefresh] 触发 Cursor 配额刷新...');
+            {
+              key: 'cursor',
+              label: 'Cursor',
+              intervalMinutes: config.cursor_auto_refresh_minutes,
+              currentMinutes: currentRefreshMinutesMap.cursor,
+              fullRefreshingRef: cursorRefreshingRef,
+              currentRefreshingRef: cursorCurrentRefreshingRef,
+              runFullRefresh: async () => {
                 await refreshAllCursorTokens();
-              } catch (e) {
-                console.error('[AutoRefresh] Cursor 刷新失败:', e);
-              } finally {
-                cursorRefreshingRef.current = false;
-              }
-            }, cursorMs);
-          } else {
-            console.log('[AutoRefresh] Cursor 已禁用');
-          }
-
-          scheduleCurrentRefresh(
-            'Cursor',
-            cursorCurrentIntervalRef,
-            cursorCurrentRefreshingRef,
-            currentRefreshMinutesMap.cursor,
-            async () => {
-              if (cursorRefreshingRef.current) {
-                return;
-              }
-              await runProviderCurrentRefresh(fetchCurrentCursorAccountId, refreshCursorToken);
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(fetchCurrentCursorAccountId, refreshCursorToken);
+              },
             },
-          );
-
-          if (config.gemini_auto_refresh_minutes > 0) {
-            console.log(`[AutoRefresh] Gemini 已启用: 每 ${config.gemini_auto_refresh_minutes} 分钟`);
-            const geminiMs = config.gemini_auto_refresh_minutes * 60 * 1000;
-
-            geminiIntervalRef.current = window.setInterval(async () => {
-              if (geminiRefreshingRef.current) {
-                return;
-              }
-              geminiRefreshingRef.current = true;
-
-              try {
-                console.log('[AutoRefresh] 触发 Gemini 配额刷新...');
+            {
+              key: 'gemini',
+              label: 'Gemini',
+              intervalMinutes: config.gemini_auto_refresh_minutes,
+              currentMinutes: currentRefreshMinutesMap.gemini,
+              fullRefreshingRef: geminiRefreshingRef,
+              currentRefreshingRef: geminiCurrentRefreshingRef,
+              runFullRefresh: async () => {
                 await refreshAllGeminiTokens();
-              } catch (e) {
-                console.error('[AutoRefresh] Gemini 刷新失败:', e);
-              } finally {
-                geminiRefreshingRef.current = false;
-              }
-            }, geminiMs);
-          } else {
-            console.log('[AutoRefresh] Gemini 已禁用');
-          }
-
-          scheduleCurrentRefresh(
-            'Gemini',
-            geminiCurrentIntervalRef,
-            geminiCurrentRefreshingRef,
-            currentRefreshMinutesMap.gemini,
-            async () => {
-              if (geminiRefreshingRef.current) {
-                return;
-              }
-              await runProviderCurrentRefresh(fetchCurrentGeminiAccountId, refreshGeminiToken);
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(fetchCurrentGeminiAccountId, refreshGeminiToken);
+              },
             },
-          );
-
-          if (config.codebuddy_auto_refresh_minutes > 0) {
-            console.log(`[AutoRefresh] CodeBuddy 已启用: 每 ${config.codebuddy_auto_refresh_minutes} 分钟`);
-            const codebuddyMs = config.codebuddy_auto_refresh_minutes * 60 * 1000;
-
-            codebuddyIntervalRef.current = window.setInterval(async () => {
-              if (codebuddyRefreshingRef.current) {
-                return;
-              }
-              codebuddyRefreshingRef.current = true;
-
-              try {
-                console.log('[AutoRefresh] 触发 CodeBuddy 配额刷新...');
+            {
+              key: 'codebuddy',
+              label: 'CodeBuddy',
+              intervalMinutes: config.codebuddy_auto_refresh_minutes,
+              currentMinutes: currentRefreshMinutesMap.codebuddy,
+              fullRefreshingRef: codebuddyRefreshingRef,
+              currentRefreshingRef: codebuddyCurrentRefreshingRef,
+              runFullRefresh: async () => {
                 await refreshAllCodebuddyTokens();
-              } catch (e) {
-                console.error('[AutoRefresh] CodeBuddy 刷新失败:', e);
-              } finally {
-                codebuddyRefreshingRef.current = false;
-              }
-            }, codebuddyMs);
-          } else {
-            console.log('[AutoRefresh] CodeBuddy 已禁用');
-          }
-
-          scheduleCurrentRefresh(
-            'CodeBuddy',
-            codebuddyCurrentIntervalRef,
-            codebuddyCurrentRefreshingRef,
-            currentRefreshMinutesMap.codebuddy,
-            async () => {
-              if (codebuddyRefreshingRef.current) {
-                return;
-              }
-              await runProviderCurrentRefresh(
-                fetchCurrentCodebuddyAccountId,
-                refreshCodebuddyToken,
-              );
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(
+                  fetchCurrentCodebuddyAccountId,
+                  refreshCodebuddyToken,
+                );
+              },
             },
-          );
-
-          if (config.codebuddy_cn_auto_refresh_minutes > 0) {
-            console.log(
-              `[AutoRefresh] CodeBuddy CN 已启用: 每 ${config.codebuddy_cn_auto_refresh_minutes} 分钟`,
-            );
-            const codebuddyCnMs = config.codebuddy_cn_auto_refresh_minutes * 60 * 1000;
-
-            codebuddyCnIntervalRef.current = window.setInterval(async () => {
-              if (codebuddyCnRefreshingRef.current) {
-                return;
-              }
-              codebuddyCnRefreshingRef.current = true;
-
-              try {
-                console.log('[AutoRefresh] 触发 CodeBuddy CN 配额刷新...');
+            {
+              key: 'codebuddy_cn',
+              label: 'CodeBuddy CN',
+              intervalMinutes: config.codebuddy_cn_auto_refresh_minutes,
+              currentMinutes: currentRefreshMinutesMap.codebuddy_cn,
+              fullRefreshingRef: codebuddyCnRefreshingRef,
+              currentRefreshingRef: codebuddyCnCurrentRefreshingRef,
+              runFullRefresh: async () => {
                 await refreshAllCodebuddyCnTokens();
-              } catch (e) {
-                console.error('[AutoRefresh] CodeBuddy CN 刷新失败:', e);
-              } finally {
-                codebuddyCnRefreshingRef.current = false;
-              }
-            }, codebuddyCnMs);
-          } else {
-            console.log('[AutoRefresh] CodeBuddy CN 已禁用');
-          }
-
-          scheduleCurrentRefresh(
-            'CodeBuddy CN',
-            codebuddyCnCurrentIntervalRef,
-            codebuddyCnCurrentRefreshingRef,
-            currentRefreshMinutesMap.codebuddy_cn,
-            async () => {
-              if (codebuddyCnRefreshingRef.current) {
-                return;
-              }
-              await runProviderCurrentRefresh(
-                fetchCurrentCodebuddyCnAccountId,
-                refreshCodebuddyCnToken,
-              );
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(
+                  fetchCurrentCodebuddyCnAccountId,
+                  refreshCodebuddyCnToken,
+                );
+              },
             },
-          );
-
-          if (config.workbuddy_auto_refresh_minutes > 0) {
-            console.log(`[AutoRefresh] WorkBuddy 已启用: 每 ${config.workbuddy_auto_refresh_minutes} 分钟`);
-            const workbuddyMs = config.workbuddy_auto_refresh_minutes * 60 * 1000;
-
-            workbuddyIntervalRef.current = window.setInterval(async () => {
-              if (workbuddyRefreshingRef.current) {
-                return;
-              }
-              workbuddyRefreshingRef.current = true;
-
-              try {
-                console.log('[AutoRefresh] 触发 WorkBuddy 配额刷新...');
+            {
+              key: 'workbuddy',
+              label: 'WorkBuddy',
+              intervalMinutes: config.workbuddy_auto_refresh_minutes,
+              currentMinutes: currentRefreshMinutesMap.workbuddy,
+              fullRefreshingRef: workbuddyRefreshingRef,
+              currentRefreshingRef: workbuddyCurrentRefreshingRef,
+              runFullRefresh: async () => {
                 await refreshAllWorkbuddyTokens();
-              } catch (e) {
-                console.error('[AutoRefresh] WorkBuddy 刷新失败:', e);
-              } finally {
-                workbuddyRefreshingRef.current = false;
-              }
-            }, workbuddyMs);
-          } else {
-            console.log('[AutoRefresh] WorkBuddy 已禁用');
-          }
-
-          scheduleCurrentRefresh(
-            'WorkBuddy',
-            workbuddyCurrentIntervalRef,
-            workbuddyCurrentRefreshingRef,
-            currentRefreshMinutesMap.workbuddy,
-            async () => {
-              if (workbuddyRefreshingRef.current) {
-                return;
-              }
-              await runProviderCurrentRefresh(
-                fetchCurrentWorkbuddyAccountId,
-                refreshWorkbuddyToken,
-              );
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(
+                  fetchCurrentWorkbuddyAccountId,
+                  refreshWorkbuddyToken,
+                );
+              },
             },
-          );
-
-          if (config.qoder_auto_refresh_minutes > 0) {
-            console.log(`[AutoRefresh] Qoder 已启用: 每 ${config.qoder_auto_refresh_minutes} 分钟`);
-            const qoderMs = config.qoder_auto_refresh_minutes * 60 * 1000;
-
-            qoderIntervalRef.current = window.setInterval(async () => {
-              if (qoderRefreshingRef.current) {
-                return;
-              }
-              qoderRefreshingRef.current = true;
-
-              try {
-                console.log('[AutoRefresh] 触发 Qoder 配额刷新...');
+            {
+              key: 'qoder',
+              label: 'Qoder',
+              intervalMinutes: config.qoder_auto_refresh_minutes,
+              currentMinutes: currentRefreshMinutesMap.qoder,
+              fullRefreshingRef: qoderRefreshingRef,
+              currentRefreshingRef: qoderCurrentRefreshingRef,
+              runFullRefresh: async () => {
                 await refreshAllQoderTokens();
-              } catch (e) {
-                console.error('[AutoRefresh] Qoder 刷新失败:', e);
-              } finally {
-                qoderRefreshingRef.current = false;
-              }
-            }, qoderMs);
-          } else {
-            console.log('[AutoRefresh] Qoder 已禁用');
-          }
-
-          scheduleCurrentRefresh(
-            'Qoder',
-            qoderCurrentIntervalRef,
-            qoderCurrentRefreshingRef,
-            currentRefreshMinutesMap.qoder,
-            async () => {
-              if (qoderRefreshingRef.current) {
-                return;
-              }
-              await runProviderCurrentRefresh(fetchCurrentQoderAccountId, refreshQoderToken);
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(fetchCurrentQoderAccountId, refreshQoderToken);
+              },
             },
-          );
-
-          if (config.trae_auto_refresh_minutes > 0) {
-            console.log(`[AutoRefresh] Trae 已启用: 每 ${config.trae_auto_refresh_minutes} 分钟`);
-            const traeMs = config.trae_auto_refresh_minutes * 60 * 1000;
-
-            traeIntervalRef.current = window.setInterval(async () => {
-              if (traeRefreshingRef.current) {
-                return;
-              }
-              traeRefreshingRef.current = true;
-
-              try {
-                console.log('[AutoRefresh] 触发 Trae 配额刷新...');
+            {
+              key: 'trae',
+              label: 'Trae',
+              intervalMinutes: config.trae_auto_refresh_minutes,
+              currentMinutes: currentRefreshMinutesMap.trae,
+              fullRefreshingRef: traeRefreshingRef,
+              currentRefreshingRef: traeCurrentRefreshingRef,
+              runFullRefresh: async () => {
                 await refreshAllTraeTokens();
-              } catch (e) {
-                console.error('[AutoRefresh] Trae 刷新失败:', e);
-              } finally {
-                traeRefreshingRef.current = false;
-              }
-            }, traeMs);
-          } else {
-            console.log('[AutoRefresh] Trae 已禁用');
-          }
-
-          scheduleCurrentRefresh(
-            'Trae',
-            traeCurrentIntervalRef,
-            traeCurrentRefreshingRef,
-            currentRefreshMinutesMap.trae,
-            async () => {
-              if (traeRefreshingRef.current) {
-                return;
-              }
-              await runProviderCurrentRefresh(fetchCurrentTraeAccountId, refreshTraeToken);
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(fetchCurrentTraeAccountId, refreshTraeToken);
+              },
             },
-          );
-
-          if (config.zed_auto_refresh_minutes > 0) {
-            console.log(`[AutoRefresh] Zed 已启用: 每 ${config.zed_auto_refresh_minutes} 分钟`);
-            const zedMs = config.zed_auto_refresh_minutes * 60 * 1000;
-
-            zedIntervalRef.current = window.setInterval(async () => {
-              if (zedRefreshingRef.current) {
-                return;
-              }
-              zedRefreshingRef.current = true;
-
-              try {
-                console.log('[AutoRefresh] 触发 Zed 配额刷新...');
+            {
+              key: 'zed',
+              label: 'Zed',
+              intervalMinutes: config.zed_auto_refresh_minutes,
+              currentMinutes: currentRefreshMinutesMap.zed,
+              fullRefreshingRef: zedRefreshingRef,
+              currentRefreshingRef: zedCurrentRefreshingRef,
+              runFullRefresh: async () => {
                 await refreshAllZedTokens();
-              } catch (e) {
-                console.error('[AutoRefresh] Zed 刷新失败:', e);
-              } finally {
-                zedRefreshingRef.current = false;
-              }
-            }, zedMs);
-          } else {
-            console.log('[AutoRefresh] Zed 已禁用');
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(fetchCurrentZedAccountId, refreshZedToken);
+              },
+            },
+          ];
+
+          const tasks: AutoRefreshSchedulerTask[] = [];
+          for (const descriptor of descriptors) {
+            if (descriptor.intervalMinutes > 0) {
+              console.log(`[AutoRefresh] ${descriptor.label} 已启用: 每 ${descriptor.intervalMinutes} 分钟`);
+              tasks.push({
+                key: `full:${descriptor.key}`,
+                label: `${descriptor.label} 全量刷新`,
+                intervalMs: minutesToMs(descriptor.intervalMinutes),
+                run: () =>
+                  executeWithGuard(
+                    descriptor.fullRefreshingRef,
+                    descriptor.runFullRefresh,
+                    `[AutoRefresh] 触发 ${descriptor.label} 刷新...`,
+                    `[AutoRefresh] ${descriptor.label} 刷新失败:`,
+                  ),
+              });
+            } else {
+              console.log(`[AutoRefresh] ${descriptor.label} 已禁用`);
+            }
+
+            if (descriptor.intervalMinutes > 0) {
+              console.log(`[AutoRefresh] ${descriptor.label} 当前账号刷新: 每 ${descriptor.currentMinutes} 分钟`);
+              tasks.push({
+                key: `current:${descriptor.key}`,
+                label: `${descriptor.label} 当前账号刷新`,
+                intervalMs: minutesToMs(descriptor.currentMinutes),
+                shouldSkip: () => descriptor.fullRefreshingRef.current,
+                run: () =>
+                  executeWithGuard(
+                    descriptor.currentRefreshingRef,
+                    descriptor.runCurrentRefresh,
+                    null,
+                    `[AutoRefresh] ${descriptor.label} 当前账号刷新失败:`,
+                  ),
+              });
+            } else {
+              console.log(`[AutoRefresh] ${descriptor.label} 当前账号刷新已禁用（配额自动刷新未开启）`);
+            }
           }
 
-          scheduleCurrentRefresh(
-            'Zed',
-            zedCurrentIntervalRef,
-            zedCurrentRefreshingRef,
-            currentRefreshMinutesMap.zed,
-            async () => {
-              if (zedRefreshingRef.current) {
-                return;
-              }
-              await runProviderCurrentRefresh(fetchCurrentZedAccountId, refreshZedToken);
-            },
-          );
+          if (tasks.length > 0) {
+            const scheduler = createAutoRefreshScheduler(tasks, {
+              tickMs: AUTO_REFRESH_TICK_MS,
+              maxConcurrent: AUTO_REFRESH_MAX_CONCURRENT,
+            });
+            scheduler.start();
+            schedulerRef.current = scheduler;
+          }
 
-          const enabledPlatforms = [
-            config.auto_refresh_minutes > 0 ? `antigravity=${config.auto_refresh_minutes}` : null,
-            config.codex_auto_refresh_minutes > 0 ? `codex=${config.codex_auto_refresh_minutes}` : null,
-            config.ghcp_auto_refresh_minutes > 0 ? `ghcp=${config.ghcp_auto_refresh_minutes}` : null,
-            config.windsurf_auto_refresh_minutes > 0 ? `windsurf=${config.windsurf_auto_refresh_minutes}` : null,
-            config.kiro_auto_refresh_minutes > 0 ? `kiro=${config.kiro_auto_refresh_minutes}` : null,
-            config.cursor_auto_refresh_minutes > 0 ? `cursor=${config.cursor_auto_refresh_minutes}` : null,
-            config.gemini_auto_refresh_minutes > 0 ? `gemini=${config.gemini_auto_refresh_minutes}` : null,
-            config.codebuddy_auto_refresh_minutes > 0 ? `codebuddy=${config.codebuddy_auto_refresh_minutes}` : null,
-            config.codebuddy_cn_auto_refresh_minutes > 0
-              ? `codebuddy_cn=${config.codebuddy_cn_auto_refresh_minutes}`
-              : null,
-            config.workbuddy_auto_refresh_minutes > 0
-              ? `workbuddy=${config.workbuddy_auto_refresh_minutes}`
-              : null,
-            config.qoder_auto_refresh_minutes > 0 ? `qoder=${config.qoder_auto_refresh_minutes}` : null,
-            config.trae_auto_refresh_minutes > 0 ? `trae=${config.trae_auto_refresh_minutes}` : null,
-            config.zed_auto_refresh_minutes > 0 ? `zed=${config.zed_auto_refresh_minutes}` : null,
-            `current=${CURRENT_ACCOUNT_REFRESH_PLATFORMS.map(
-              (platform) => `${platform}:${currentRefreshMinutesMap[platform]}`,
-            ).join('|')}`,
-          ].filter(Boolean).join(', ');
+          const enabledPlatforms = buildEnabledPlatformsSummary(descriptors);
           console.log(
             `[StartupPerf][AutoRefresh] setupAutoRefresh completed in ${(performance.now() - setupStartedAt).toFixed(2)}ms; enabled=${enabledPlatforms || 'none'}`,
           );
@@ -957,8 +616,9 @@ export function useAutoRefresh() {
       );
     }
   }, [
-    clearAllIntervals,
+    executeWithGuard,
     fetchCodexAccounts,
+    fetchCurrentAccount,
     fetchCurrentCodebuddyAccountId,
     fetchCurrentCodebuddyCnAccountId,
     fetchCurrentCodexAccount,
@@ -972,20 +632,19 @@ export function useAutoRefresh() {
     fetchCurrentWorkbuddyAccountId,
     fetchCurrentZedAccountId,
     fetchAccounts,
-    fetchCurrentAccount,
+    refreshAllCodebuddyCnTokens,
+    refreshAllCodebuddyTokens,
     refreshAllCodexQuotas,
     refreshAllCursorTokens,
     refreshAllGeminiTokens,
     refreshAllGhcpTokens,
     refreshAllKiroTokens,
-    refreshAllCodebuddyTokens,
-    refreshAllCodebuddyCnTokens,
-    refreshAllWorkbuddyTokens,
+    refreshAllQuotas,
     refreshAllQoderTokens,
     refreshAllTraeTokens,
-    refreshAllZedTokens,
-    refreshAllQuotas,
     refreshAllWindsurfTokens,
+    refreshAllWorkbuddyTokens,
+    refreshAllZedTokens,
     refreshCodebuddyCnToken,
     refreshCodebuddyToken,
     refreshCursorToken,
@@ -997,6 +656,7 @@ export function useAutoRefresh() {
     refreshWindsurfToken,
     refreshWorkbuddyToken,
     refreshZedToken,
+    stopScheduler,
     syncCurrentFromClient,
   ]);
 
@@ -1015,7 +675,7 @@ export function useAutoRefresh() {
         window.clearTimeout(startupTimer);
         startupTimer = 0;
       }
-      console.log('[AutoRefresh] 检测到配置变更，重新设置定时器');
+      console.log('[AutoRefresh] 检测到配置变更，重新设置调度器');
       void setupAutoRefresh();
     };
 
@@ -1027,8 +687,8 @@ export function useAutoRefresh() {
       if (startupTimer) {
         window.clearTimeout(startupTimer);
       }
-      clearAllIntervals();
+      stopScheduler();
       window.removeEventListener('config-updated', handleConfigUpdate);
     };
-  }, [clearAllIntervals, setupAutoRefresh]);
+  }, [setupAutoRefresh, stopScheduler]);
 }

@@ -278,6 +278,10 @@ fn truncate_log_text(text: &str, max_len: usize) -> String {
     preview
 }
 
+fn summarize_body_len(text: &str) -> usize {
+    text.len()
+}
+
 fn process_stream_object(
     obj: &serde_json::Value,
     reply_parts: &mut Vec<String>,
@@ -487,8 +491,8 @@ async fn send_stream_request(
                             .await?
                             .unwrap_or_default();
                         crate::modules::logger::log_info(&format!(
-                            "[Wakeup] stream响应: {}",
-                            truncate_log_text(&text, 2000)
+                            "[Wakeup] stream响应已接收: body_len={}",
+                            summarize_body_len(&text)
                         ));
                         match parse_stream_result(&text) {
                             Ok(parsed) => {
@@ -752,25 +756,26 @@ async fn post_gateway_json(
         .unwrap_or_default();
     if !status.is_success() {
         crate::modules::logger::log_error(&format!(
-            "[Wakeup] 网关 {} 返回错误: url={}, status={}, body={}",
+            "[Wakeup] 网关 {} 返回错误: url={}, status={}, body_len={}",
             op_name,
             url,
             status,
-            if status == reqwest::StatusCode::FORBIDDEN {
-                text.clone()
-            } else {
-                truncate_log_text(&text, 8000)
-            }
+            summarize_body_len(&text)
         ));
-        return Err(format!("网关 {} 返回错误: {} - {}", op_name, status, text));
+        return Err(format!(
+            "网关 {} 返回错误: status={}, body_len={}",
+            op_name,
+            status,
+            summarize_body_len(&text)
+        ));
     }
 
     serde_json::from_str::<serde_json::Value>(&text).map_err(|e| {
         let message = format!("网关 {} 响应解析失败: {} (url={})", op_name, e, url);
         crate::modules::logger::log_error(&format!(
-            "[Wakeup] {}，原始响应={}",
+            "[Wakeup] {}，body_len={}",
             message,
-            truncate_log_text(&text, 4000)
+            summarize_body_len(&text)
         ));
         message
     })
@@ -1581,22 +1586,22 @@ async fn trigger_wakeup_via_client_gateway_once(
 
                 if err.error_code == Some(403) {
                     crate::modules::logger::log_error(&format!(
-                        "[Wakeup] 网关轨迹错误(403): cascade_id={}, status={}, message={}, validation_url={:?}, errorMessage={}, step={}",
+                        "[Wakeup] 网关轨迹错误(403): cascade_id={}, status={}, message={}, validation_url={:?}, errorMessage_len={}, step_len={}",
                         cascade_id,
                         if last_status.is_empty() { "-" } else { &last_status },
                         err.message,
                         err.validation_url,
-                        err.error_message_json,
-                        err.step_json
+                        err.error_message_json.len(),
+                        err.step_json.len()
                     ));
                 } else {
                     crate::modules::logger::log_error(&format!(
-                        "[Wakeup] 网关轨迹错误: cascade_id={}, status={}, error_code={:?}, message={}, errorMessage={}",
+                        "[Wakeup] 网关轨迹错误: cascade_id={}, status={}, error_code={:?}, message={}, errorMessage_len={}",
                         cascade_id,
                         if last_status.is_empty() { "-" } else { &last_status },
                         err.error_code,
                         err.message,
-                        truncate_log_text(&err.error_message_json, 4000)
+                        err.error_message_json.len()
                     ));
                 }
                 return Err(encode_wakeup_ui_error_payload(&err));

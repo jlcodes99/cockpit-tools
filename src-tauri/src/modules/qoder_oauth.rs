@@ -545,8 +545,9 @@ async fn poll_device_token_once(
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
         return Err(format!(
-            "轮询 Qoder device token 失败: status={}, body={}",
-            status, body
+            "轮询 Qoder device token 失败: status={}, body_len={}",
+            status,
+            body.len()
         ));
     }
 
@@ -591,8 +592,10 @@ async fn fetch_openapi_json(
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
         return Err(format!(
-            "请求 Qoder OpenAPI 失败 ({}): status={}, body={}",
-            path, status, body
+            "请求 Qoder OpenAPI 失败 ({}): status={}, body_len={}",
+            path,
+            status,
+            body.len()
         ));
     }
     response
@@ -883,6 +886,7 @@ async fn refresh_account_from_openapi_once(account_id: &str) -> Result<QoderAcco
             }
         };
 
+    let mut quota_query_error: Option<String> = None;
     let credit_usage_raw =
         match fetch_qoder_credit_usage(&client, DEFAULT_OPENAPI_BASE_URL, &access_token).await {
             Ok(value) => Some(value),
@@ -891,6 +895,7 @@ async fn refresh_account_from_openapi_once(account_id: &str) -> Result<QoderAcco
                     "[Qoder Refresh] 获取 /api/v2/quota/usage 失败，将沿用本地缓存: {}",
                     err
                 ));
+                quota_query_error = Some(err.clone());
                 target.auth_credit_usage_raw.clone()
             }
         };
@@ -900,6 +905,12 @@ async fn refresh_account_from_openapi_once(account_id: &str) -> Result<QoderAcco
         user_plan_raw,
         credit_usage_raw,
     )?;
+    let refreshed = if refreshed.id == target.id {
+        qoder_account::update_quota_query_error(&refreshed.id, quota_query_error)?
+            .unwrap_or(refreshed)
+    } else {
+        refreshed
+    };
     if refreshed.id != target.id {
         return Err(format!(
             "刷新结果账号不一致: target_id={}, actual_id={}",
@@ -910,10 +921,16 @@ async fn refresh_account_from_openapi_once(account_id: &str) -> Result<QoderAcco
 }
 
 pub async fn refresh_account_from_openapi(account_id: &str) -> Result<QoderAccount, String> {
-    crate::modules::refresh_retry::retry_once_with_delay("Qoder Refresh", account_id, || async {
-        refresh_account_from_openapi_once(account_id).await
-    })
-    .await
+    let result = crate::modules::refresh_retry::retry_once_with_delay(
+        "Qoder Refresh",
+        account_id,
+        || async { refresh_account_from_openapi_once(account_id).await },
+    )
+    .await;
+    if let Err(err) = &result {
+        let _ = qoder_account::update_quota_query_error(account_id, Some(err.clone()));
+    }
+    result
 }
 
 pub async fn refresh_all_accounts_from_openapi() -> Result<i32, String> {

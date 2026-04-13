@@ -58,6 +58,15 @@ pub struct CodexCliStatus {
     pub install_hints: Vec<CodexCliInstallHint>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexCliResolvedRuntime {
+    pub binary_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub node_path: Option<String>,
+    pub source: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexWakeupRuntimeConfig {
@@ -1005,15 +1014,12 @@ fn resolve_binary_with_runtime_config(
 
     if let Some(configured_cli_path) = configured_cli_path {
         let configured_path = PathBuf::from(&configured_cli_path);
-        let resolved = resolve_configured_binary_path(
-            &configured_path,
-            binary_candidates(),
-            "Codex CLI",
-        )
-        .map_err(|err| {
-            logger::log_warn(&format!("[CodexWakeup][CLI] {}", err));
-            CliResolveError::new(err, &[REQUIRED_RUNTIME_PATH_CODEX_CLI])
-        })?;
+        let resolved =
+            resolve_configured_binary_path(&configured_path, binary_candidates(), "Codex CLI")
+                .map_err(|err| {
+                    logger::log_warn(&format!("[CodexWakeup][CLI] {}", err));
+                    CliResolveError::new(err, &[REQUIRED_RUNTIME_PATH_CODEX_CLI])
+                })?;
         logger::log_info(&format!(
             "[CodexWakeup][CLI] 命中自定义 Codex CLI 路径: input={}, resolved={}",
             configured_path.display(),
@@ -1070,10 +1076,7 @@ fn resolve_binary() -> Result<ResolvedBinary, CliResolveError> {
     let runtime_config = load_runtime_config().map_err(|err| {
         CliResolveError::new(
             err,
-            &[
-                REQUIRED_RUNTIME_PATH_CODEX_CLI,
-                REQUIRED_RUNTIME_PATH_NODE,
-            ],
+            &[REQUIRED_RUNTIME_PATH_CODEX_CLI, REQUIRED_RUNTIME_PATH_NODE],
         )
     })?;
     resolve_binary_with_runtime_config(&runtime_config)
@@ -1196,6 +1199,15 @@ pub fn get_cli_status() -> CodexCliStatus {
             }
         }
     }
+}
+
+pub fn resolve_cli_runtime() -> Result<CodexCliResolvedRuntime, String> {
+    let binary = resolve_binary().map_err(|err| err.message)?;
+    Ok(CodexCliResolvedRuntime {
+        binary_path: binary.path.display().to_string(),
+        node_path: binary.node_path.map(|path| path.display().to_string()),
+        source: binary.source,
+    })
 }
 
 fn parse_time_to_minutes(value: &str) -> Option<i32> {
@@ -1437,8 +1449,8 @@ pub fn load_runtime_config() -> Result<CodexWakeupRuntimeConfig, String> {
     if content.trim().is_empty() {
         return Ok(CodexWakeupRuntimeConfig::default());
     }
-    let raw: CodexWakeupRuntimeConfig =
-        serde_json::from_str(&content).map_err(|e| format!("解析 Codex 唤醒运行时配置失败: {}", e))?;
+    let raw: CodexWakeupRuntimeConfig = serde_json::from_str(&content)
+        .map_err(|e| format!("解析 Codex 唤醒运行时配置失败: {}", e))?;
     Ok(normalize_runtime_config(&raw))
 }
 
@@ -1910,7 +1922,31 @@ async fn run_single_account(
         );
     };
 
-    let account = match codex_account::prepare_account_for_injection(account_id).await {
+    let managed_home = match managed_home_path(account_id) {
+        Ok(path) => path,
+        Err(err) => {
+            return create_failure_record(
+                run_id,
+                &context.trigger_type,
+                context.task_id.as_deref(),
+                context.task_name.as_deref(),
+                account_id,
+                existing.email,
+                existing_context_text,
+                prompt_value,
+                execution_config,
+                err,
+                Some(binary.path.display().to_string()),
+            );
+        }
+    };
+
+    let account = match codex_account::prepare_account_for_injection_from_auth_dir(
+        account_id,
+        Some(&managed_home),
+    )
+    .await
+    {
         Ok(account) => account,
         Err(err) => {
             return create_failure_record(
@@ -1926,27 +1962,6 @@ async fn run_single_account(
                 err,
                 binary_path,
             )
-        }
-    };
-
-    let managed_home = match managed_home_path(&account.id) {
-        Ok(path) => path,
-        Err(err) => {
-            let account_context_text = resolve_account_context_text(&account);
-            let account_email = account.email;
-            return create_failure_record(
-                run_id,
-                &context.trigger_type,
-                context.task_id.as_deref(),
-                context.task_name.as_deref(),
-                account_id,
-                account_email,
-                account_context_text,
-                prompt_value,
-                execution_config,
-                err,
-                Some(binary.path.display().to_string()),
-            );
         }
     };
 
@@ -1986,13 +2001,16 @@ async fn run_single_account(
         );
     }
 
-    let command_result = run_codex_exec_sync(
-        binary,
-        &managed_home,
-        prompt,
-        execution_config,
-        cancel_flag,
-    );
+    let command_result =
+        run_codex_exec_sync(binary, &managed_home, prompt, execution_config, cancel_flag);
+    if let Err(err) = codex_account::sync_account_from_auth_dir(account_id, &managed_home) {
+        logger::log_warn(&format!(
+            "Codex 唤醒执行后同步受管目录 Token 失败: account_id={}, managed_home={}, error={}",
+            account_id,
+            managed_home.display(),
+            err
+        ));
+    }
 
     match command_result {
         Ok(output) => {

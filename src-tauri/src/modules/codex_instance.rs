@@ -5,12 +5,10 @@ use std::sync::Mutex;
 use chrono::Utc;
 use uuid::Uuid;
 
-use crate::models::{DefaultInstanceSettings, InstanceProfile, InstanceStore};
+use crate::models::{DefaultInstanceSettings, InstanceLaunchMode, InstanceProfile, InstanceStore};
 use crate::modules;
 use crate::modules::instance::InstanceDefaults;
 use crate::modules::instance_store;
-
-pub use crate::modules::instance_store::{CreateInstanceParams, UpdateInstanceParams};
 
 static CODEX_INSTANCE_STORE_LOCK: std::sync::LazyLock<Mutex<()>> =
     std::sync::LazyLock::new(|| Mutex::new(()));
@@ -20,6 +18,28 @@ const CODEX_SHARED_SKILLS_DIR_NAME: &str = "skills";
 const CODEX_SHARED_RULES_DIR_NAME: &str = "rules";
 const CODEX_SHARED_AGENTS_FILE_NAME: &str = "AGENTS.md";
 const CODEX_SHARED_VENDOR_IMPORTS_SKILLS_DIR: &str = "vendor_imports/skills";
+
+#[derive(Debug, Clone)]
+pub struct CreateInstanceParams {
+    pub name: String,
+    pub user_data_dir: String,
+    pub working_dir: Option<String>,
+    pub extra_args: String,
+    pub bind_account_id: Option<String>,
+    pub copy_source_instance_id: Option<String>,
+    pub init_mode: Option<String>,
+    pub launch_mode: Option<InstanceLaunchMode>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateInstanceParams {
+    pub instance_id: String,
+    pub name: Option<String>,
+    pub working_dir: Option<String>,
+    pub extra_args: Option<String>,
+    pub bind_account_id: Option<Option<String>>,
+    pub launch_mode: Option<InstanceLaunchMode>,
+}
 
 fn instances_path() -> Result<PathBuf, String> {
     let data_dir = modules::account::get_data_dir()?;
@@ -45,6 +65,7 @@ pub fn update_default_settings(
     bind_account_id: Option<Option<String>>,
     extra_args: Option<String>,
     follow_local_account: Option<bool>,
+    launch_mode: Option<InstanceLaunchMode>,
 ) -> Result<DefaultInstanceSettings, String> {
     let _lock = CODEX_INSTANCE_STORE_LOCK
         .lock()
@@ -68,6 +89,10 @@ pub fn update_default_settings(
 
     if let Some(args) = extra_args {
         settings.extra_args = args.trim().to_string();
+    }
+
+    if let Some(mode) = launch_mode {
+        settings.launch_mode = mode;
     }
 
     let updated = settings.clone();
@@ -626,12 +651,14 @@ pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, 
         id: Uuid::new_v4().to_string(),
         name,
         user_data_dir,
+        working_dir: params.working_dir,
         extra_args: params.extra_args.trim().to_string(),
         bind_account_id: if create_empty {
             None
         } else {
             params.bind_account_id
         },
+        launch_mode: params.launch_mode.unwrap_or_default(),
         created_at: Utc::now().timestamp_millis(),
         last_launched_at: None,
         last_pid: None,
@@ -672,8 +699,18 @@ pub fn update_instance(params: UpdateInstanceParams) -> Result<InstanceProfile, 
     if let Some(ref extra_args) = params.extra_args {
         instance.extra_args = extra_args.trim().to_string();
     }
+    if let Some(working_dir) = params.working_dir {
+        instance.working_dir = if working_dir.trim().is_empty() {
+            None
+        } else {
+            Some(working_dir.trim().to_string())
+        };
+    }
     if let Some(bind) = params.bind_account_id.clone() {
         instance.bind_account_id = bind;
+    }
+    if let Some(mode) = params.launch_mode {
+        instance.launch_mode = mode;
     }
 
     let updated = instance.clone();
@@ -713,6 +750,25 @@ pub fn update_instance_after_start(instance_id: &str, pid: u32) -> Result<Instan
         if instance.id == instance_id {
             instance.last_launched_at = Some(Utc::now().timestamp_millis());
             instance.last_pid = Some(pid);
+            updated = Some(instance.clone());
+            break;
+        }
+    }
+    let updated = updated.ok_or("实例不存在")?;
+    save_instance_store(&store)?;
+    Ok(updated)
+}
+
+pub fn update_instance_after_cli_prepare(instance_id: &str) -> Result<InstanceProfile, String> {
+    let _lock = CODEX_INSTANCE_STORE_LOCK
+        .lock()
+        .map_err(|_| "无法获取实例锁")?;
+    let mut store = load_instance_store()?;
+    let mut updated = None;
+    for instance in &mut store.instances {
+        if instance.id == instance_id {
+            instance.last_launched_at = Some(Utc::now().timestamp_millis());
+            instance.last_pid = None;
             updated = Some(instance.clone());
             break;
         }
@@ -801,6 +857,10 @@ pub fn replace_bind_account_references(
 }
 
 pub async fn inject_account_to_profile(profile_dir: &Path, account_id: &str) -> Result<(), String> {
-    let account = modules::codex_account::prepare_account_for_injection(account_id).await?;
-    modules::codex_account::write_auth_file_to_dir(profile_dir, &account)
+    let account = modules::codex_account::prepare_account_for_injection_from_auth_dir(
+        account_id,
+        Some(profile_dir),
+    )
+    .await?;
+    modules::codex_account::write_account_bundle_to_dir(profile_dir, &account)
 }

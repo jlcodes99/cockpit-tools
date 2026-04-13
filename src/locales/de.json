@@ -33,19 +33,24 @@
         "creditPackage": "Credit-Paket",
         "sharedCreditPackage": "Geteiltes Credit-Paket",
         "account": "Konto",
-        "createdAt": "Erstellt am"
+        "createdAt": "Erstellt am",
+        "userId": "Benutzer-ID"
       },
       "empty": {
         "title": "Keine Konten"
       },
-      "export": "Exportieren",
+      "export": {
+        "title": "Exportieren",
+        "copyFailed": "Kopieren fehlgeschlagen, bitte manuell kopieren"
+      },
       "filter": {
         "all": "Alle ({{count}})",
         "enterprise": "UNTERNEHMEN ({{count}})",
         "free": "KOSTENLOS ({{count}})",
         "pro": "PRO ({{count}})",
         "business": "GESCHÄFT ({{count}})",
-        "individual": "EINZEL ({{count}})"
+        "individual": "EINZEL ({{count}})",
+        "validAccounts": "Gültige Konten ({{count}})"
       },
       "filterLabel": "Filter",
       "import": {
@@ -127,9 +132,11 @@
       },
       "quota": {
         "noData": "Keine Kontingentdaten",
+        "queryFailed": "Kontingentabfrage fehlgeschlagen",
         "resetDone": "Zurückgesetzt",
         "hourly": "5-Stunden-Kontingent",
-        "weekly": "Wöchentliches Kontingent"
+        "weekly": "Wöchentliches Kontingent",
+        "resetAt": "Zurücksetzung: {{time}}"
       },
       "subtitle": "Verwalte deine GitHub Copilot-Konten",
       "time": {
@@ -161,7 +168,10 @@
       },
       "updated": {
         "label": "Vor {{relative}} aktualisiert"
-      }
+      },
+      "clear": "Löschen",
+      "loginSuccess": "Anmeldung erfolgreich",
+      "switchAccount": "Konto wechseln"
     },
     "topRightAd": {
       "ariaLabel": "Globaler Anzeigenplatz oben rechts",
@@ -169,7 +179,15 @@
       "title": "Anzeigenplatz oben rechts",
       "desc": "Dieser Bereich ist auf allen Seiten oben rechts fixiert und eignet sich für Kampagnen oder Markenanzeigen.",
       "action": "Details ansehen"
-    }
+    },
+    "appName": "Cockpit Tools",
+    "collapse": "Einklappen",
+    "confirmDelete": "Löschen bestätigen",
+    "confirmDeleteTag": "Tag-Löschung bestätigen",
+    "deleteTagWarning": "Möchten Sie dieses Tag wirklich von allen Konten entfernen?",
+    "expand": "Erweitern",
+    "processing": "Verarbeitung...",
+    "selectAll": "Alle auswählen"
   },
   "nav": {
     "overview": "Antigravity",
@@ -292,7 +310,8 @@
       "running": "Laufend",
       "stopped": "Gestoppt",
       "restarting": "Neu startend",
-      "starting": "Beginnt"
+      "starting": "Beginnt",
+      "ready": "Bereit"
     },
     "labels": {
       "path": "Verzeichnis",
@@ -302,7 +321,8 @@
       "unbound": "Nicht gekoppelt",
       "pendingInit": "Warten auf Initialisierung (zuerst einmal starten)",
       "quota": "Quote",
-      "lastLaunched": "Zuletzt gestartet"
+      "lastLaunched": "Zuletzt gestartet",
+      "argsPresent": "Vorhanden"
     },
     "columns": {
       "instance": "Instanz",
@@ -352,7 +372,14 @@
       "extraArgsDesc": "Argumente durch Leerzeichen trennen, Anführungszeichen werden unterstützt",
       "nameRequired": "Bitte geben Sie einen Instanznamen ein",
       "pathRequired": "Bitte wählen Sie ein Instanzverzeichnis aus",
-      "bindRequired": "Bitte wählen Sie ein Konto zum Koppeln aus"
+      "bindRequired": "Bitte wählen Sie ein Konto zum Koppeln aus",
+      "optional": "Optional",
+      "launchMode": "Startmodus",
+      "launchModeApp": "Desktop-App",
+      "launchModeCli": "CLI-Modus",
+      "workingDir": "Arbeitsverzeichnis",
+      "workingDirPlaceholder": "Standardmäßig aktueller Pfad",
+      "workingDirDesc": "Beim Start wird zuerst in dieses Verzeichnis gewechselt"
     },
     "quota": {
       "unbound": "Nicht gekoppelt",
@@ -372,7 +399,8 @@
       "closedAll": "Alle Instanzen gestoppt",
       "allAlreadyRunning": "Alle Instanzen laufen bereits",
       "noneRunning": "Keine laufenden Instanzen gefunden",
-      "syncThreadsNeedTwo": "Mindestens zwei Instanzen sind erforderlich, um Threads zu synchronisieren"
+      "syncThreadsNeedTwo": "Mindestens zwei Instanzen sind erforderlich, um Threads zu synchronisieren",
+      "launchPrepared": "Startbefehl ist bereit"
     },
     "runningDialog": {
       "title": "Instanz läuft bereits",
@@ -435,6 +463,13 @@
       "bindHint": "Konto kann später in der Instanzliste gebunden werden",
       "pathRequired": "Bitte zuerst ein Verzeichnis auswählen",
       "submit": "Importieren"
+    },
+    "launchDialog": {
+      "title": "Instanz starten",
+      "terminal": "Terminalfenster",
+      "command": "Startbefehl",
+      "hint": "Kopieren Sie den Befehl und führen Sie ihn manuell aus oder starten Sie ihn direkt im Terminal.",
+      "runInTerminal": "Im Terminal ausführen"
     }
   },
   "settings": {
@@ -451,6 +486,9 @@
       "languageDesc": "Wählen Sie die Oberflächensprache",
       "theme": "Design",
       "themeDesc": "Zwischen hellem und dunklem Modus wechseln",
+      "defaultTerminal": "Standard-Terminal",
+      "defaultTerminalDesc": "Das beim Öffnen der Gemini CLI verwendete Terminal",
+      "terminalSystem": "Systemstandard",
       "themeLight": "Hell",
       "themeDark": "Dunkel",
       "themeSystem": "System",
@@ -611,7 +649,24 @@
       "autoSwitchAccountScopeDialogTitle": "Bereich für automatisches Kontowechseln auswählen",
       "autoSwitchAccountScopeAllHint": "Der aktuelle Bereich umfasst alle Konten. {{total}} Konto/Konten nehmen am automatischen Wechsel teil.",
       "codexAutoSwitchAccountScope": "Codex-Bereich für automatisches Kontowechseln",
-      "codexAutoSwitchAccountScopeDesc": "Aktueller Codex-Auto-Wechsel-Status: {{status}}. Es werden nur Konten in diesem Bereich berücksichtigt."
+      "codexAutoSwitchAccountScopeDesc": "Aktueller Codex-Auto-Wechsel-Status: {{status}}. Es werden nur Konten in diesem Bereich berücksichtigt.",
+      "currentAccountRefreshRequiresAutoRefresh": "Aktivieren Sie zuerst „Automatische Kontingent-Aktualisierung“, um die Aktualisierung des aktuellen Kontos zu konfigurieren.",
+      "codebuddyCnAppPath": "CodeBuddy CN App-Pfad",
+      "codebuddyCnAppPathDesc": "Wenn leer, wird der Standardpfad verwendet",
+      "codebuddyCnAppPathPlaceholder": "Standardpfad",
+      "codebuddyCnAutoRefresh": "CodeBuddy CN Auto-Aktualisierung",
+      "codebuddyCnAutoRefreshDesc": "Häufigkeit der automatischen Aktualisierung im Hintergrund",
+      "codebuddyCnPathReset": "Auf Standard zurücksetzen",
+      "codebuddyCnPathSelect": "Auswählen",
+      "codebuddyCnSettingsTitle": "CodeBuddy CN Einstellungen",
+      "qoderAppPath": "Qoder App-Pfad",
+      "qoderAppPathDesc": "Wenn leer, wird der Standardpfad verwendet",
+      "qoderAppPathPlaceholder": "Standardpfad",
+      "qoderAutoRefresh": "Qoder Auto-Aktualisierung",
+      "qoderAutoRefreshDesc": "Häufigkeit der automatischen Aktualisierung im Hintergrund",
+      "qoderPathSelect": "Auswählen",
+      "workbuddyAutoRefresh": "WorkBuddy Auto-Aktualisierung",
+      "workbuddyAutoRefreshDesc": "Häufigkeit der automatischen Aktualisierung im Hintergrund"
     },
     "network": {
       "apiTitle": "Antigravity-Cockpit-API",
@@ -672,7 +727,93 @@
       "download": "Herunterladen",
       "checkFailed": "Fehler bei der Update-Suche"
     },
-    "saveSettings": "Einstellungen speichern"
+    "saveSettings": "Einstellungen speichern",
+    "transfer": {
+      "backup": {
+        "title": "Backup-Verwaltung",
+        "desc": "Verwalten Sie geplante Backups, den Backup-Ordner und die Backup-Dateien an einem Ort.",
+        "modalDesc": "Konfigurieren Sie automatische Backups, durchsuchen Sie Dateien im Backup-Ordner des Projekts und stellen Sie sie hier wieder her oder bereinigen Sie sie.",
+        "statusEnabled": "Automatisches Backup ist aktiv",
+        "statusDisabled": "Automatisches Backup ist aus",
+        "lastRunLabel": "Letztes Backup: {{time}}",
+        "lastRunNever": "Noch kein Backup erstellt",
+        "autoTitle": "Geplantes Backup",
+        "autoDesc": "Wenn aktiviert, wird täglich ein Backup exportiert und kann über den aktuellen Import wiederhergestellt werden.",
+        "runNow": "Jetzt sichern",
+        "running": "Backup läuft...",
+        "typeTitle": "Backup-Typ",
+        "typeDesc": "Wählen Sie den Datenumfang für automatische Backups.",
+        "typeFull": "Komplette Daten",
+        "typeAccounts": "Nur Konten",
+        "typeConfig": "Nur Einstellungen",
+        "retentionTitle": "Aufbewahrung",
+        "retentionDesc": "Ältere Backups werden bei der nächsten Prüfung entfernt.",
+        "retentionUnit": "Tage",
+        "directoryTitle": "Backup-Ordner",
+        "directoryDesc": "Backups werden immer im backups-Ordner des Projekts gespeichert.",
+        "openFolder": "Ordner öffnen",
+        "listTitle": "Backup-Liste",
+        "listDesc": "Importieren Sie ein Backup direkt oder entfernen Sie alte Dateien.",
+        "openList": "Liste öffnen",
+        "emptyTitle": "Noch keine Backups",
+        "emptyDesc": "Aktivieren Sie das automatische Backup oder klicken Sie auf „Jetzt sichern“, um hier wiederherstellbare JSON-Backups zu erstellen.",
+        "sourceAuto": "Automatisch",
+        "sourceManual": "Manuell",
+        "fileTime": "Zeit: {{time}}",
+        "fileSize": "Größe: {{size}}",
+        "importAction": "Importieren",
+        "deleteAction": "Löschen",
+        "deleteConfirm": "Backup {{name}} löschen?",
+        "feedback": {
+          "running": "Backup wird erstellt...",
+          "runSuccess": "Backup wurde in {{path}} gespeichert",
+          "runSuccessWithCleanup": "Backup wurde in {{path}} gespeichert und {{count}} abgelaufene Backups wurden bereinigt",
+          "runFailed": "Backup fehlgeschlagen: {{error}}",
+          "deleteSuccess": "Backup gelöscht",
+          "deleteFailed": "Löschen des Backups fehlgeschlagen: {{error}}",
+          "loadFailed": "Laden der Backup-Liste fehlgeschlagen: {{error}}",
+          "saveSettingsFailed": "Speichern der Backup-Einstellungen fehlgeschlagen: {{error}}",
+          "cleanupDone": "{{count}} abgelaufene Backups bereinigt",
+          "cleanupFailed": "Bereinigung abgelaufener Backups fehlgeschlagen: {{error}}",
+          "openFolderFailed": "Öffnen des Backup-Ordners fehlgeschlagen: {{error}}"
+        },
+        "errors": {
+          "invalidRetention": "Die Aufbewahrung muss zwischen 1 und 365 Tagen liegen"
+        }
+      },
+      "exportTitle": "Datenexport",
+      "exportDesc": "Exportieren Sie bei Bedarf Kontodaten, Konfigurationsdaten oder ein komplettes Migrationspaket.",
+      "importTitle": "Datenimport",
+      "importDesc": "Importieren Sie Kontosicherungen, Konfigurationssicherungen oder das einheitliche Datenpaket.",
+      "exportModalDesc": "Wählen Sie aus, was exportiert werden soll. Wählen Sie Konten und Konfiguration zusammen für ein vollständiges Migrationspaket.",
+      "importModalDesc": "Wählen Sie aus, was importiert werden soll. Legacy-Kontosicherungen werden als reiner Kontodaten-Import behandelt.",
+      "selectionTitle": "Datenumfang",
+      "accountsOptionTitle": "Kontodaten",
+      "accountsOptionDesc": "Enthält Sicherungen der Plattformkonten und bleibt mit Legacy-Konto-JSON kompatibel.",
+      "configOptionTitle": "Konfigurationsdaten",
+      "configOptionDesc": "Enthält App-Einstellungen, Gruppen, Instanzen, Wakeup-Aufgaben und die Konfiguration der Modellanbieter.",
+      "exportConfirm": "Daten exportieren",
+      "fromFileTitle": "Aus Datei importieren",
+      "fromFileDesc": "Wählen Sie eine JSON-Datei für den Import. Legacy-Kontosicherungen werden hier ebenfalls unterstützt.",
+      "jsonPlaceholder": "Datenpaket oder Legacy-Konto-JSON einfügen",
+      "feedback": {
+        "accountsImported": "{{count}} Konten importiert",
+        "configImported": "Konfigurationsdaten wiederhergestellt",
+        "accountsSectionMissing": "Diese Sicherung enthält keine Kontodaten",
+        "configSectionMissing": "Diese Sicherung enthält keine Konfigurationsdaten; es wurden nur Kontodaten wiederhergestellt",
+        "unresolvedRefs": "{{count}} Kontozuordnungen konnten nicht aufgelöst werden und wurden übersprungen",
+        "disabledTasks": "{{count}} Aufgaben wurden deaktiviert, weil kein Konto zugeordnet werden konnte",
+        "restartRequired": "Netzwerkdiensteinstellungen wurden wiederhergestellt. Einige Änderungen werden erst nach einem Neustart wirksam",
+        "partialAccountFailure": "Einige Kontoimporte sind fehlgeschlagen: {{error}}"
+      },
+      "errors": {
+        "selectionRequired": "Wählen Sie mindestens einen Datentyp aus",
+        "accountsOnlyFile": "Diese Sicherung enthält nur Kontodaten. Wählen Sie „Kontodaten“, um sie zu importieren",
+        "selectedSectionsMissing": "Der ausgewählte Datentyp ist in dieser Sicherung nicht enthalten",
+        "unsupportedLegacyFile": "Dieses Legacy-Konto-Backup-Format wird nicht erkannt",
+        "unsupportedVersion": "Diese App-Version unterstützt diese Bundle-Version nicht"
+      }
+    }
   },
   "appPath": {
     "missing": {
@@ -680,6 +821,9 @@
       "desc": "Der Anwendungspfad für {{app}} wurde nicht gefunden. Bitte jetzt festlegen, um fortzufahren.",
       "action": "Jetzt festlegen",
       "codexLaunchHint": "Wenn deaktiviert, laufen Kontowechsel und Login-Überschreibung weiter, aber die Codex-App wird nicht mehr gestartet und dieser Pfadhinweis erscheint nicht erneut."
+    },
+    "modal": {
+      "desc": "Der App-Pfad für {{app}} wurde nicht gefunden. Bitte jetzt konfigurieren, um fortzufahren."
     }
   },
   "accounts": {
@@ -789,7 +933,11 @@
       "fingerprint": "Fingerabdruck",
       "switch": "Konto wechseln",
       "switchTo": "Zu diesem Konto wechseln",
-      "selectFingerprint": "Fingerabdruck auswählen"
+      "selectFingerprint": "Fingerabdruck auswählen",
+      "delete": "Löschen",
+      "deleteSelected": "Ausgewählte löschen",
+      "export": "Exportieren",
+      "refreshAll": "Alle aktualisieren"
     },
     "tabs": {
       "oauth": "OAuth-Autorisierung",
@@ -886,7 +1034,40 @@
       "clearConfirm": "Gesamten Wechselverlauf löschen?",
       "loadFailed": "Wechselverlauf konnte nicht geladen werden: {{error}}",
       "clearFailed": "Wechselverlauf konnte nicht gelöscht werden: {{error}}"
-    }
+    },
+    "clearTagFilter": "Tag-Filter löschen",
+    "compact": {
+      "hide": "Ausblenden",
+      "show": "Anzeigen"
+    },
+    "deleteConfirm": {
+      "multi": "Möchten Sie {{count}} ausgewählte Konten löschen?",
+      "single": "Möchten Sie dieses Konto löschen?"
+    },
+    "deleteFailed": "Löschen fehlgeschlagen: {{error}}",
+    "deleteSuccess": "Erfolgreich gelöscht",
+    "deleteTagFailed": "Tag-Löschung fehlgeschlagen: {{error}}",
+    "exportError": "Export fehlgeschlagen: {{error}}",
+    "exportModal": {
+      "title": "JSON exportieren"
+    },
+    "importJsonFailed": "JSON-Import fehlgeschlagen: {{error}}",
+    "importJsonHint": "Importieren Sie eine Qoder-JSON-Datei, die aus diesem Tool exportiert wurde.",
+    "importJsonSuccess": "JSON-Import erfolgreich",
+    "noTags": "Keine Tags",
+    "privacy": {
+      "disable": "Privatmodus deaktivieren",
+      "enable": "Privatmodus aktivieren"
+    },
+    "refreshAllFailed": "Massenaktualisierung fehlgeschlagen: {{error}}",
+    "refreshAllSuccess": "Alle Konten aktualisiert",
+    "refreshFailed": "Aktualisierung fehlgeschlagen: {{error}}",
+    "refreshSuccess": "Erfolgreich aktualisiert",
+    "switchFailed": "Kontowechsel fehlgeschlagen: {{error}}",
+    "switchSuccess": "Konto erfolgreich gewechselt",
+    "switched": "Zu {{email}} gewechselt",
+    "tagButton": "Tags bearbeiten",
+    "tagUpdated": "Tag aktualisiert"
   },
   "overview": {
     "title": "Kontoübersicht",
@@ -1098,7 +1279,10 @@
       "actions": {
         "selectAllAccounts": "Alle auswählen",
         "clearSelectedAccounts": "Auswahl aufheben",
-        "runCheckNow": "Bestätigung abschließen"
+        "runCheckNow": "Bestätigung abschließen",
+        "retryFiltered": "Aktuellen Filter erneut versuchen ({{count}})",
+        "retryMissingModel": "In diesem Durchlauf fehlen Modellinformationen; ein erneuter Versuch ist nicht möglich.",
+        "retryMissingAccount": "Im aktuellen Filter gibt es keine Konten, die erneut versucht werden können."
       },
       "runHint": {
         "title": "Hinweise zur Verifizierung",
@@ -1383,7 +1567,9 @@
       "portInUseConfirm": "Port {{port}} ist belegt. Prozess schließen, der den Port verwendet?",
       "portCloseFailed": "Port konnte nicht geschlossen werden: {{error}}",
       "portStillInUse": "Port {{port}} ist weiterhin belegt.",
-      "portInUseAction": "Port schließen und erneut versuchen"
+      "portInUseAction": "Port schließen und erneut versuchen",
+      "timeout": "Authentifizierung abgelaufen. Bitte klicken",
+      "timeoutRetry": "Authentifizierungslink aktualisieren"
     },
     "token": {
       "desc": "auth.json-Inhalt oder Konto-JSON einfügen",
@@ -1455,7 +1641,10 @@
     "usage": {
       "open": "OpenAI-Nutzung öffnen",
       "hint": "API-Key-Guthaben findest du auf der OpenAI-Usage-Seite.",
-      "openFailed": "Nutzungsseite konnte nicht geöffnet werden: {{error}}"
+      "openFailed": "Nutzungsseite konnte nicht geöffnet werden: {{error}}",
+      "search": {
+        "placeholder": "Konten suchen..."
+      }
     },
     "wakeup": {
       "tab": "Wakeup-Aufgaben",
@@ -1641,12 +1830,15 @@
         "moveToTrash": "In den Papierkorb verschieben",
         "syncSessions": "Sitzungen synchronisieren",
         "expand": "Erweitern",
-        "collapse": "Einklappen"
+        "collapse": "Einklappen",
+        "repairVisibility": "Sichtbarkeit reparieren",
+        "restoreSessions": "Sitzungen wiederherstellen"
       },
       "confirm": {
         "title": "In den Papierkorb verschieben",
         "message": "Ausgewählte Sitzungen werden aus den jeweiligen Instanzen in den Papierkorb verschoben, damit sie später wiederhergestellt werden können. Laufende Instanzen müssen möglicherweise neu gestartet werden, bevor die Änderung sichtbar wird. Fortfahren?",
-        "syncMessage": "Fehlende Threads und ihre Sitzungsdaten werden in alle Instanzen synchronisiert. Vorhandene Inhalte werden nicht erneut geschrieben, und die Dateien der Zielinstanz werden vor jedem Schreibvorgang gesichert. Fortfahren?"
+        "syncMessage": "Fehlende Threads und ihre Sitzungsdaten werden in alle Instanzen synchronisiert. Vorhandene Inhalte werden nicht erneut geschrieben, und die Dateien der Zielinstanz werden vor jedem Schreibvorgang gesichert. Fortfahren?",
+        "repairVisibilityMessage": "Dadurch werden die Anbieter-Metadaten in Rollout-Dateien und in state_5.sqlite anhand des model_provider aus der jeweiligen root-config.toml der Instanz repariert (wenn er fehlt, wird standardmäßig openai verwendet). Dateien, die geändert werden, werden vor dem Schreiben gesichert. Bei laufenden Instanzen kann ein Neustart nötig sein, bevor die Änderung sichtbar wird. Fortfahren?"
       },
       "empty": {
         "title": "Keine Sitzungen zur Verwaltung",
@@ -1654,12 +1846,20 @@
       },
       "messages": {
         "pickOne": "Bitte wähle mindestens eine Sitzung aus",
-        "syncNeedTwo": "Mindestens zwei Instanzen sind erforderlich, um Sitzungen zu synchronisieren"
+        "syncNeedTwo": "Mindestens zwei Instanzen sind erforderlich, um Sitzungen zu synchronisieren",
+        "pickRestoreOne": "Bitte wählen Sie mindestens eine Sitzung zur Wiederherstellung aus"
       },
       "groupCount": "{{count}} Sitzungen",
       "updatedAt": "Aktualisiert",
       "locationRunning": " (wird ausgeführt)",
-      "untitled": "Unbenannte Sitzung"
+      "untitled": "Unbenannte Sitzung",
+      "restoreModal": {
+        "title": "Sitzungen wiederherstellen",
+        "hint": "Bei der Wiederherstellung werden die Rollout-Datei, die SQLite-Thread-Zeile und der session_index-Eintrag gemeinsam in die ursprüngliche Instanz zurückgelegt.",
+        "emptyTitle": "Papierkorb ist leer",
+        "emptyDesc": "In den Papierkorb verschobene Sitzungen erscheinen hier.",
+        "restoreAction": "Ausgewählte Sitzungen wiederherstellen"
+      }
     },
     "api": {
       "baseUrl": "Basis-URL",
@@ -1668,7 +1868,178 @@
         "apiKeyCannotBeUrl": "Der API-Schlüssel darf keine URL sein. Bitte prüfen Sie, ob die Felder vertauscht wurden.",
         "baseUrlInvalid": "Ungültige Basis-URL. Bitte geben Sie eine vollständige URL mit http:// oder https:// ein.",
         "apiKeyEqualsBaseUrl": "Der API-Schlüssel darf nicht mit der Basis-URL identisch sein."
+      },
+      "addAndSwitchSuccess": "Hinzugefügt und gewechselt: {{email}}",
+      "actions": {
+        "addAndSwitch": "Hinzufügen und wechseln"
+      },
+      "provider": {
+        "label": "Anbieter",
+        "custom": "Benutzerdefiniert",
+        "endpoint": "Anbieter-Endpunkt",
+        "hint": "Eine kompatible Base URL wurde automatisch eingetragen. Sie können sie weiterhin manuell bearbeiten.",
+        "website": "Website",
+        "apiKeyPage": "API-Key-Seite"
+      },
+      "providers": {
+        "openai_official": {
+          "name": "OpenAI Official"
+        },
+        "azure_openai": {
+          "name": "Azure OpenAI"
+        },
+        "packycode": {
+          "name": "PackyCode"
+        },
+        "cubence": {
+          "name": "Cubence"
+        },
+        "aigocode": {
+          "name": "AIGoCode"
+        },
+        "rightcode": {
+          "name": "RightCode"
+        },
+        "sssaicode": {
+          "name": "SSSAiCode"
+        },
+        "micu": {
+          "name": "Micu"
+        },
+        "x_code_api": {
+          "name": "X-Code API"
+        },
+        "ctok_ai": {
+          "name": "CTok.ai"
+        },
+        "aihubmix": {
+          "name": "AiHubMix"
+        },
+        "dmxapi": {
+          "name": "DMXAPI"
+        },
+        "compshare": {
+          "name": "Compshare"
+        },
+        "openrouter": {
+          "name": "OpenRouter"
+        },
+        "aicodemirror": {
+          "name": "AICodeMirror"
+        },
+        "aicoding": {
+          "name": "AICoding"
+        },
+        "crazyrouter": {
+          "name": "CrazyRouter"
+        },
+        "deepseek": {
+          "name": "DeepSeek"
+        },
+        "moonshot": {
+          "name": "Moonshot"
+        },
+        "siliconflow": {
+          "name": "SiliconFlow"
+        }
       }
+    },
+    "modelProviders": {
+      "tab": "Modellanbieter",
+      "desc": "Verwalten Sie Modellanbieter und mehrere API-Keys an einem Ort und verwenden Sie sie beim Hinzufügen von Codex-Konten mit API-Key direkt wieder.",
+      "add": "Anbieter hinzufügen",
+      "loadFailed": "Modellanbieter konnten nicht geladen werden: {{error}}",
+      "emptyTitle": "Noch keine Modellanbieter",
+      "emptyDesc": "Klicken Sie oben rechts auf „Anbieter hinzufügen“, um loszulegen.",
+      "baseUrl": "Basis-URL",
+      "website": "Website",
+      "apiKeyPage": "API-Key-Seite",
+      "apiKeysCount": "{{count}} API-Keys",
+      "referencesCount": "{{count}} verknüpfte Konten",
+      "unnamedKey": "Unbenannter Schlüssel",
+      "createTitle": "Modellanbieter hinzufügen",
+      "editTitle": "Modellanbieter bearbeiten",
+      "existingApiKeys": "Vorhandene API-Keys",
+      "fields": {
+        "name": "Name des Anbieters",
+        "baseUrl": "Basis-URL",
+        "website": "Website (optional)",
+        "apiKeyUrl": "API-Key-Seite (optional)",
+        "newApiKeyName": "Name des neuen Keys (optional)",
+        "newApiKey": "Neuer API-Key"
+      },
+      "validation": {
+        "nameRequired": "Der Name des Anbieters ist erforderlich.",
+        "baseUrlInvalid": "Ungültige Base URL.",
+        "baseUrlExists": "Diese Base URL existiert bereits.",
+        "providerNotFound": "Anbieter nicht gefunden.",
+        "apiKeyRequiredOnCreate": "Beim Erstellen eines Anbieters ist mindestens ein API-Key erforderlich.",
+        "apiKeyRequiredWhenEmpty": "Dieser Anbieter hat noch keinen API-Key. Bitte fügen Sie zuerst einen hinzu."
+      },
+      "saveSuccess": "Modellanbieter gespeichert.",
+      "deleteBlocked": "Dieser Anbieter ist mit {{count}} Konten verknüpft und kann nicht gelöscht werden.",
+      "confirmDelete": "Anbieter „{{name}}“ löschen?",
+      "deleteFailed": "Anbieter konnte nicht gelöscht werden: {{error}}",
+      "deleteApiKeyFailed": "API-Key konnte nicht gelöscht werden: {{error}}",
+      "selectSavedProvider": "Gespeicherte Anbieter",
+      "selectSavedApiKey": "Gespeicherte API-Keys",
+      "noSavedProviders": "Es sind noch keine Anbieter gespeichert. Sie können die Felder direkt ausfüllen; der Eintrag wird automatisch gespeichert.",
+      "newProviderName": "Name des Anbieters (optional, für die automatische Speicherung)",
+      "newProviderNamePlaceholder": "Wenn leer, wird der Hostname automatisch verwendet",
+      "preview": {
+        "title": "Speichervorschau",
+        "desc": "Beim Speichern eines Anbieters wird zuerst der Anbieterspeicher aktualisiert. Die aktuelle offizielle Codex-Konfiguration wird nicht sofort umgeschaltet.",
+        "writeNow": "Wird geschrieben",
+        "noImmediateChange": "Keine sofortige Änderung",
+        "providerStoreTitle": "Anbieterspeicher",
+        "providerStoreDesc": "Speichert den Anbieternamen, die Base URL, Website/API-Key-Seite und jeden neuen API-Key aus diesem Dialog.",
+        "codexConfigTitle": "Aktuelle Codex-Konfiguration",
+        "codexConfigDesc": "Der aktuelle Anbieter oder die Base URL ändern sich nicht sofort. Diese Datei wird erst aktualisiert, wenn ein Codex-API-Key-Konto gespeichert oder gewechselt wird.",
+        "authFileTitle": "Aktuelle Codex-Anmeldedaten",
+        "authFileDesc": "Beim Speichern eines Anbieters wird OPENAI_API_KEY in auth.json nicht überschrieben."
+      },
+      "quickConfig": {
+        "title": "Aktuelle Codex-Konfiguration",
+        "desc": "Diese Schnelleinstellungen schreiben direkt in die aktive ~/.codex/config.toml und ändern den Modellanbieterspeicher nicht.",
+        "configPath": "Konfigurationsdatei",
+        "openConfig": "Datei öffnen",
+        "loadFailed": "Aktuelle Codex-Konfiguration konnte nicht geladen werden: {{error}}",
+        "openFailed": "config.toml konnte nicht geöffnet werden: {{error}}",
+        "saveSuccess": "Aktuelle Codex-Konfiguration gespeichert.",
+        "saveFailed": "Aktuelle Codex-Konfiguration konnte nicht gespeichert werden: {{error}}",
+        "contextWindow1m": "1M-Kontextfenster",
+        "contextWindow1mHint": "Wenn aktiviert, wird model_context_window = 1000000 geschrieben und das Auto-Compact-Limit gemeinsam verwaltet.",
+        "autoCompactLimit": "Auto-Compact-Limit",
+        "autoCompactLimitHint": "Schreibt model_auto_compact_token_limit. Wenn der 1M-Schalter deaktiviert wird, wird dieses Feld ebenfalls entfernt.",
+        "preview": "Schreibvorschau",
+        "previewApply": "Wird geschrieben",
+        "previewRemove": "Wird entfernt",
+        "customDetected": "In config.toml wurde ein benutzerdefiniertes model_context_window = {{context}} erkannt. Beim Speichern wird es durch die folgende Schnelleinstellung überschrieben.",
+        "compactMissingDetected": "1M-Kontext ist bereits aktiviert, aber das Auto-Compact-Limit fehlt. Beim Speichern wird der Standardwert {{limit}} geschrieben.",
+        "validation": {
+          "autoCompactInvalid": "Das Auto-Compact-Limit muss eine ganze Zahl größer als 0 sein."
+        }
+      }
+    },
+    "quickSwitch": {
+      "action": "Anbieter schnell wechseln",
+      "inlineAction": "Wechseln",
+      "title": "Anbieter schnell wechseln",
+      "desc": "Wechseln Sie dieses API-Key-Konto schnell zu einem gespeicherten Anbieter und API-Key.",
+      "currentAccount": "Aktuelles Konto: {{name}}",
+      "noProviders": "Es sind noch keine Anbieter gespeichert. Bitte fügen Sie zuerst einen unter „Modellanbieter“ hinzu.",
+      "providerHasNoKeys": "Dieser Anbieter hat noch keinen verfügbaren API-Key. Fügen Sie zuerst einen unter „Modellanbieter“ hinzu.",
+      "gotoProviders": "Anbieter verwalten",
+      "apply": "Jetzt wechseln",
+      "success": "Zum Anbieter gewechselt: {{provider}}",
+      "failed": "Anbieterwechsel fehlgeschlagen: {{error}}",
+      "validation": {
+        "providerRequired": "Bitte wählen Sie einen Anbieter aus.",
+        "apiKeyRequired": "Bitte wählen Sie einen API-Key aus."
+      }
+    },
+    "groups": {
+      "addToGroup": "Zur Gruppe hinzufügen"
     }
   },
   "githubCopilot": {
@@ -1788,7 +2159,10 @@
     },
     "codex": {
       "title": "Codex-Einstellungen",
-      "appPath": "App-Pfad"
+      "appPath": "App-Pfad",
+      "configToml": "Codex-Konfigurationsdatei",
+      "openConfigToml": "Datei öffnen",
+      "openConfigHint": "Öffnet schnell die aktive Codex-config.toml."
     },
     "githubCopilot": {
       "title": "GitHub Copilot-Einstellungen",
@@ -1848,7 +2222,8 @@
       "loadFailed": "Konfiguration konnte nicht geladen werden: {{error}}",
       "saveFailed": "Konfiguration konnte nicht gespeichert werden: {{error}}",
       "pickPathFailed": "Pfadauswahl fehlgeschlagen: {{error}}",
-      "resetPathFailed": "Pfad konnte nicht zurückgesetzt werden: {{error}}"
+      "resetPathFailed": "Pfad konnte nicht zurückgesetzt werden: {{error}}",
+      "openCodexConfigFailed": "Codex config.toml konnte nicht geöffnet werden: {{error}}"
     },
     "qoder": {
       "title": "Qoder-Einstellungen",
@@ -1904,8 +2279,7 @@
       "description": "Klicke auf \"Konto hinzufügen\", um zu starten"
     },
     "addModal": {
-      "title": "Windsurf-Konto hinzufügen",
-      "password": "E-Mail & Passwort"
+      "title": "Windsurf-Konto hinzufügen"
     },
     "oauth": {
       "desc": "Klicke unten und schließe die Windsurf-Windsurf-Autorisierung im Browser ab."
@@ -1948,16 +2322,6 @@
       "inject": "Ein-Klick-Wechsel: Dieses Tool liest das lokale Verschlüsselungsmaterial von Windsurf (DPAPI/Keychain/Secret Service), entschlüsselt die Auth-Sitzung in state.vscdb, ersetzt das Windsurf-Windsurf-Token und verschlüsselt sie erneut – alles lokal auf deinem Gerät.",
       "reason": "Berechtigungsumfang: Lesen der VS-Code-Auth-Datenbank (state.vscdb) und Aufruf der System-Verschlüsselung (Windows DPAPI / macOS Keychain / Linux Secret Service) zum Entschlüsseln und Zurückschreiben.",
       "storage": "Lesebereich: Es werden nur Windsurf-Login-Sitzungsdaten verarbeitet; alle Prozesse werden lokal ausgeführt."
-    },
-    "password": {
-      "desc": "Melden Sie sich mit E-Mail und Passwort Ihres Windsurf-Kontos an, um API-Schlüssel und Kontoinformationen automatisch zu laden.",
-      "emailPlaceholder": "E-Mail-Adresse",
-      "passwordPlaceholder": "Passwort",
-      "login": "Anmelden",
-      "logging": "Anmeldung läuft...",
-      "empty": "Bitte E-Mail und Passwort eingeben",
-      "success": "Anmeldung erfolgreich: {{login}}",
-      "failed": "Anmeldung fehlgeschlagen: {{error}}"
     }
   },
   "kiro": {
@@ -2400,7 +2764,11 @@
       "unsupportedDescPlatform": "Gemini Cli-Mehrinstanzen werden nur unter macOS, Windows und Linux unterstützt.",
       "launchDialogTitle": "Instanz starten",
       "launchHint": "Kopieren Sie den Befehl und führen Sie ihn manuell aus oder direkt im Terminal.",
-      "runInTerminal": "Im Terminal ausführen"
+      "runInTerminal": "Im Terminal ausführen",
+      "workingDir": "Arbeitsverzeichnis",
+      "workingDirPlaceholder": "Standardmäßig aktueller Pfad",
+      "workingDirDesc": "Wechselt beim Start zuerst in dieses Verzeichnis",
+      "pickWorkingDir": "Arbeitsverzeichnis auswählen"
     },
     "switch": {
       "success": "Konto erfolgreich gewechselt"
@@ -2443,6 +2811,26 @@
       "saved": "Projekt gespeichert: {{projectId}}",
       "cleared": "Zur automatischen Projekterkennung zurückgekehrt",
       "savedWithRefreshError": "Projekt gespeichert, aber Quota-Aktualisierung fehlgeschlagen: {{error}}"
+    },
+    "identity": {
+      "authMethod": "Anmeldemethode",
+      "tier": "Tarif",
+      "signedInWithGoogle": "Mit Google angemeldet",
+      "signedInWithGoogleEmail": "Mit Google angemeldet ({{email}})"
+    },
+    "quotaTable": {
+      "model": "Modell",
+      "leftOfTotal": "Übrig / Gesamt",
+      "usage": "Verbraucht",
+      "usageResets": "Nutzung wird zurückgesetzt",
+      "usedPercent": "{{value}}%",
+      "remainingOfTotal": "{{remaining}} / {{total}}",
+      "resetAtWithRelative": "{{absolute}} ({{relative}})"
+    },
+    "tierText": {
+      "pro": "Gemini Code Assist für Google One AI Pro",
+      "ultra": "Gemini Code Assist für Google AI Ultra",
+      "free": "Gemini Code Assist Free"
     }
   },
   "codebuddy": {
@@ -2510,7 +2898,8 @@
       "expireUnknown": "Ablaufzeit: keine Angabe",
       "packageTitle": {
         "base": "Basis-Erlebnispaket",
-        "activity": "Aktions-Geschenkpaket"
+        "activity": "Aktions-Geschenkpaket",
+        "pro": "Pro-Abonnement"
       }
     },
     "extraCredit": {
@@ -2578,7 +2967,12 @@
       "title": "Qoder-Konto hinzufügen"
     },
     "import": {
-      "localDesc": "Liest den aktuellen Anmeldestatus aus dem lokalen Qoder-Client, einschließlich Benutzerinfos, Tarif und Credits-Nutzung."
+      "localDesc": "Liest den aktuellen Anmeldestatus aus dem lokalen Qoder-Client, einschließlich Benutzerinfos, Tarif und Credits-Nutzung.",
+      "localFailed": "Lokaler Import fehlgeschlagen: {{error}}",
+      "localSuccess": "Konto aus lokalem Qoder importiert."
+    },
+    "empty": {
+      "desc": "Klicken Sie auf Konto hinzufügen, um die Anmeldung, den lokalen Import oder den JSON-Import zu verwenden."
     }
   },
   "trae": {
@@ -2675,7 +3069,10 @@
         "other": "Sonstiges",
         "empty": "Keine Kontingentdaten"
       }
-    }
+    },
+    "syncFailed": "Synchronisierung fehlgeschlagen: {{error}}",
+    "syncSuccess": "{{count}} Konto/-en mit WorkBuddy synchronisiert",
+    "syncToWorkbuddy": "Mit WorkBuddy synchronisieren"
   },
   "workbuddy": {
     "title": "WorkBuddy-Kontenverwaltung",
@@ -2810,7 +3207,8 @@
       "unknownStatus": "Unbekannter Status",
       "overdueField": "Überfällig",
       "overdueYes": "Ja",
-      "overdueNo": "Nein"
+      "overdueNo": "Nein",
+      "usageUpdatedAt": "Aktualisiert: {{time}}"
     },
     "runtime": {
       "title": "Aktuelle Zed-Sitzung",
@@ -2830,7 +3228,8 @@
       "complete": "Login abschließen",
       "startFailed": "Zed-Login konnte nicht gestartet werden",
       "completeSuccess": "Zed-Login abgeschlossen: {{account}}",
-      "importOnlySuccess": "Die Autorisierung war erfolgreich. Das Konto wurde importiert. Damit das offizielle Zed dieses Konto verwendet, klicken Sie auf „Anwenden und neu starten“."
+      "importOnlySuccess": "Die Autorisierung war erfolgreich. Das Konto wurde importiert. Damit das offizielle Zed dieses Konto verwendet, klicken Sie auf „Anwenden und neu starten“.",
+      "desc": "Klicken Sie auf die Schaltfläche unten, um die offizielle Zed-Anmeldung im Browser abzuschließen."
     },
     "actions": {
       "addAccount": "Bei Zed anmelden",
@@ -2846,6 +3245,9 @@
       "applyAndRestart": "Anwenden und neu starten",
       "reapply": "Erneut anwenden",
       "exportTitle": "Zed-Konten als JSON exportieren"
+    },
+    "sort": {
+      "tokenSpend": "Nach Token-Verbrauch sortieren"
     }
   },
   "floatingCard": {

@@ -33,19 +33,24 @@
         "creditPackage": "Kredi paketi",
         "sharedCreditPackage": "Paylaşılan kredi paketi",
         "account": "Hesap",
-        "createdAt": "Oluşturulma zamanı"
+        "createdAt": "Oluşturulma zamanı",
+        "userId": "Kullanıcı Kimliği"
       },
       "empty": {
         "title": "Hesap yok"
       },
-      "export": "Dışa aktar",
+      "export": {
+        "title": "Dışa aktar",
+        "copyFailed": "Kopyalama başarısız, lütfen manuel kopyalayın"
+      },
       "filter": {
         "all": "Tümü ({{count}})",
         "enterprise": "KURUMSAL ({{count}})",
         "free": "ÜCRETSİZ ({{count}})",
         "pro": "PRO ({{count}})",
         "business": "İŞ ({{count}})",
-        "individual": "BİREYSEL ({{count}})"
+        "individual": "BİREYSEL ({{count}})",
+        "validAccounts": "Geçerli hesaplar ({{count}})"
       },
       "filterLabel": "Filtre",
       "import": {
@@ -127,9 +132,11 @@
       },
       "quota": {
         "noData": "Kota verisi yok",
+        "queryFailed": "Kota sorgusu başarısız",
         "resetDone": "Sıfırlandı",
         "hourly": "5 saatlik kota",
-        "weekly": "Haftalık kota"
+        "weekly": "Haftalık kota",
+        "resetAt": "Sıfırlama: {{time}}"
       },
       "subtitle": "GitHub Copilot hesaplarınızı yönetin",
       "time": {
@@ -161,7 +168,10 @@
       },
       "updated": {
         "label": "{{relative}} önce güncellendi"
-      }
+      },
+      "clear": "Temizle",
+      "loginSuccess": "Giriş başarılı",
+      "switchAccount": "Hesap Değiştir"
     },
     "topRightAd": {
       "ariaLabel": "Genel sağ üst reklam alanı",
@@ -169,7 +179,15 @@
       "title": "Sağ üst reklam alanı",
       "desc": "Bu alan tüm sayfalarda sağ üstte sabitlenir ve kampanya ya da marka reklamları için uygundur.",
       "action": "Ayrıntıları görüntüle"
-    }
+    },
+    "appName": "Cockpit Tools",
+    "collapse": "Daralt",
+    "confirmDelete": "Silmeyi Onayla",
+    "confirmDeleteTag": "Etiket Silmeyi Onayla",
+    "deleteTagWarning": "Bu etiketi tüm hesaplardan silmek istediğinizden emin misiniz?",
+    "expand": "Genişlet",
+    "processing": "İşleniyor...",
+    "selectAll": "Tümünü Seç"
   },
   "nav": {
     "overview": "Antigravity",
@@ -292,7 +310,8 @@
       "running": "Çalışıyor",
       "stopped": "Durduruldu",
       "restarting": "Yeniden başlatılıyor",
-      "starting": "Başlangıç"
+      "starting": "Başlangıç",
+      "ready": "Hazır"
     },
     "labels": {
       "path": "Dizin",
@@ -302,7 +321,8 @@
       "unbound": "Bağlı değil",
       "pendingInit": "Başlatma bekleniyor (önce bir kez çalıştırın)",
       "quota": "Kota",
-      "lastLaunched": "Son başlatma"
+      "lastLaunched": "Son başlatma",
+      "argsPresent": "Arg var"
     },
     "columns": {
       "instance": "Oturum",
@@ -352,7 +372,14 @@
       "extraArgsDesc": "Parametreleri boşlukla ayırın, tırnak işaretleri desteklenir",
       "nameRequired": "Lütfen bir oturum adı girin",
       "pathRequired": "Lütfen bir oturum dizini seçin",
-      "bindRequired": "Lütfen bağlanacak bir hesap seçin"
+      "bindRequired": "Lütfen bağlanacak bir hesap seçin",
+      "optional": "İsteğe bağlı",
+      "launchMode": "Başlatma modu",
+      "launchModeApp": "Masaüstü",
+      "launchModeCli": "CLI modu",
+      "workingDir": "Çalışma dizini",
+      "workingDirPlaceholder": "Varsayılan olarak mevcut yol",
+      "workingDirDesc": "Başlangıçta önce bu dizine geçer"
     },
     "quota": {
       "unbound": "Hesap bağlı değil",
@@ -372,7 +399,8 @@
       "closedAll": "Tüm oturumlar durduruldu",
       "allAlreadyRunning": "Tüm oturumlar zaten çalışıyor",
       "noneRunning": "Çalışan oturum bulunamadı",
-      "syncThreadsNeedTwo": "İş parçacıklarını eşitlemek için en az iki örnek gerekir"
+      "syncThreadsNeedTwo": "İş parçacıklarını eşitlemek için en az iki örnek gerekir",
+      "launchPrepared": "Başlatma komutu hazır"
     },
     "runningDialog": {
       "title": "Oturum zaten çalışıyor",
@@ -435,6 +463,13 @@
       "bindHint": "Hesabı daha sonra örnek listesinden bağlayabilirsiniz",
       "pathRequired": "Önce bir dizin seçin",
       "submit": "İçe aktar"
+    },
+    "launchDialog": {
+      "title": "Örneği başlat",
+      "terminal": "Uçbirim",
+      "command": "Başlatma komutu",
+      "hint": "Komutu kopyalayıp elle çalıştırın veya doğrudan terminalde yürütün.",
+      "runInTerminal": "Terminalde çalıştır"
     }
   },
   "settings": {
@@ -451,6 +486,9 @@
       "languageDesc": "Arayüz dilini seçin",
       "theme": "Tema",
       "themeDesc": "Koyu ve açık mod arasında geçiş yapın",
+      "defaultTerminal": "Varsayılan Terminal",
+      "defaultTerminalDesc": "Gemini CLI açılırken kullanılan terminal",
+      "terminalSystem": "Sistem Varsayılanı",
       "themeLight": "Açık",
       "themeDark": "Koyu",
       "themeSystem": "Sistem",
@@ -611,7 +649,24 @@
       "autoSwitchAccountScopeDialogTitle": "Otomatik geçiş hesap kapsamını seç",
       "autoSwitchAccountScopeAllHint": "Geçerli kapsam tüm hesaplardır. {{total}} hesap otomatik geçişe dahil olur.",
       "codexAutoSwitchAccountScope": "Codex otomatik hesap geçiş kapsamı",
-      "codexAutoSwitchAccountScopeDesc": "Mevcut Codex otomatik geçiş durumu: {{status}}. Yalnızca bu kapsam içindeki hesaplar dikkate alınır."
+      "codexAutoSwitchAccountScopeDesc": "Mevcut Codex otomatik geçiş durumu: {{status}}. Yalnızca bu kapsam içindeki hesaplar dikkate alınır.",
+      "currentAccountRefreshRequiresAutoRefresh": "Mevcut hesap yenilemeyi yapılandırmak için önce \"Kota Otomatik Yenileme\" özelliğini etkinleştirin.",
+      "codebuddyCnAppPath": "CodeBuddy CN Uygulama Yolu",
+      "codebuddyCnAppPathDesc": "Boş bırakırsanız varsayılan yol kullanılır",
+      "codebuddyCnAppPathPlaceholder": "Varsayılan yol",
+      "codebuddyCnAutoRefresh": "CodeBuddy CN Otomatik Kota Yenileme",
+      "codebuddyCnAutoRefreshDesc": "Arka planda otomatik yenileme sıklığı",
+      "codebuddyCnPathReset": "Varsayılana Sıfırla",
+      "codebuddyCnPathSelect": "Seç",
+      "codebuddyCnSettingsTitle": "CodeBuddy CN Ayarları",
+      "qoderAppPath": "Qoder Uygulama Yolu",
+      "qoderAppPathDesc": "Boş bırakırsanız varsayılan yol kullanılır",
+      "qoderAppPathPlaceholder": "Varsayılan yol",
+      "qoderAutoRefresh": "Qoder Otomatik Kota Yenileme",
+      "qoderAutoRefreshDesc": "Arka planda otomatik yenileme sıklığı",
+      "qoderPathSelect": "Seç",
+      "workbuddyAutoRefresh": "WorkBuddy Otomatik Kota Yenileme",
+      "workbuddyAutoRefreshDesc": "Arka planda otomatik yenileme sıklığı"
     },
     "network": {
       "apiTitle": "Yerçekimine Karşı Kokpit API'si",
@@ -672,7 +727,93 @@
       "download": "İndir",
       "checkFailed": "Güncelleme kontrolü başarısız oldu"
     },
-    "saveSettings": "Ayarları Kaydet"
+    "saveSettings": "Ayarları Kaydet",
+    "transfer": {
+      "backup": {
+        "title": "Yedek yöneticisi",
+        "desc": "Zamanlanmış yedekleri, yedek klasörünü ve dosya listesini tek yerden yönetin.",
+        "modalDesc": "Otomatik yedekleri yapılandırın, projenin yedek klasöründeki dosyalara göz atın ve burada geri yükleyin ya da temizleyin.",
+        "statusEnabled": "Otomatik yedek açık",
+        "statusDisabled": "Otomatik yedek kapalı",
+        "lastRunLabel": "Son yedek: {{time}}",
+        "lastRunNever": "Henüz yedek yok",
+        "autoTitle": "Zamanlanmış yedek",
+        "autoDesc": "Açıldığında günde bir yedek dışa aktarılır ve mevcut içe aktarma akışıyla geri yüklenebilir.",
+        "runNow": "Şimdi yedekle",
+        "running": "Yedekleniyor...",
+        "typeTitle": "Yedek türü",
+        "typeDesc": "Otomatik yedekleme için veri kapsamını seçin.",
+        "typeFull": "Tüm veri",
+        "typeAccounts": "Yalnızca hesaplar",
+        "typeConfig": "Yalnızca ayarlar",
+        "retentionTitle": "Saklama süresi",
+        "retentionDesc": "Bundan eski yedekler bir sonraki kontrolde kaldırılır.",
+        "retentionUnit": "gün",
+        "directoryTitle": "Yedek klasörü",
+        "directoryDesc": "Yedekler her zaman projenin backups klasörüne kaydedilir.",
+        "openFolder": "Klasörü aç",
+        "listTitle": "Yedek listesi",
+        "listDesc": "Bir yedeği doğrudan içe aktarın veya eski dosyaları kaldırın.",
+        "openList": "Listeyi aç",
+        "emptyTitle": "Henüz yedek yok",
+        "emptyDesc": "Otomatik yedeği açın ya da burada geri yüklenebilir JSON yedekleri oluşturmak için \"Şimdi yedekle\" düğmesine basın.",
+        "sourceAuto": "Otomatik",
+        "sourceManual": "Manuel",
+        "fileTime": "Zaman: {{time}}",
+        "fileSize": "Boyut: {{size}}",
+        "importAction": "İçe aktar",
+        "deleteAction": "Sil",
+        "deleteConfirm": "{{name}} yedeği silinsin mi?",
+        "feedback": {
+          "running": "Yedek oluşturuluyor...",
+          "runSuccess": "Yedek {{path}} konumuna kaydedildi",
+          "runSuccessWithCleanup": "Yedek {{path}} konumuna kaydedildi ve süresi geçmiş {{count}} yedek temizlendi",
+          "runFailed": "Yedekleme başarısız: {{error}}",
+          "deleteSuccess": "Yedek silindi",
+          "deleteFailed": "Yedek silinemedi: {{error}}",
+          "loadFailed": "Yedek listesi yüklenemedi: {{error}}",
+          "saveSettingsFailed": "Yedek ayarları kaydedilemedi: {{error}}",
+          "cleanupDone": "Süresi geçmiş {{count}} yedek temizlendi",
+          "cleanupFailed": "Süresi geçmiş yedekler temizlenemedi: {{error}}",
+          "openFolderFailed": "Yedek klasörü açılamadı: {{error}}"
+        },
+        "errors": {
+          "invalidRetention": "Saklama süresi 1 ile 365 gün arasında olmalıdır"
+        }
+      },
+      "exportTitle": "Veri dışa aktarımı",
+      "exportDesc": "İhtiyaca göre hesap verilerini, yapılandırma verilerini veya tam taşıma paketini dışa aktarın.",
+      "importTitle": "Veri içe aktarımı",
+      "importDesc": "Hesap yedeklerini, yapılandırma yedeklerini veya birleşik veri paketini içe aktarın.",
+      "exportModalDesc": "Neyi dışa aktaracağınızı seçin. Tam bir taşıma paketi için hesaplar ve yapılandırmayı birlikte seçin.",
+      "importModalDesc": "Neyi içe aktaracağınızı seçin. Eski hesap yedekleri yalnızca hesap verisi olarak işlenir.",
+      "selectionTitle": "Veri kapsamı",
+      "accountsOptionTitle": "Hesap verileri",
+      "accountsOptionDesc": "Platform hesap yedeklerini içerir ve eski hesap JSON biçimiyle uyumluluğu korur.",
+      "configOptionTitle": "Yapılandırma verileri",
+      "configOptionDesc": "Uygulama ayarları, gruplar, örnekler, wakeup görevleri ve model sağlayıcı yapılandırmasını içerir.",
+      "exportConfirm": "Verileri dışa aktar",
+      "fromFileTitle": "Dosyadan içe aktar",
+      "fromFileDesc": "İçe aktarmak için bir JSON dosyası seçin. Eski hesap yedekleri de burada desteklenir.",
+      "jsonPlaceholder": "Bir veri paketi veya eski hesap JSON'u yapıştırın",
+      "feedback": {
+        "accountsImported": "{{count}} hesap içe aktarıldı",
+        "configImported": "Yapılandırma verileri geri yüklendi",
+        "accountsSectionMissing": "Bu yedek hesap verilerini içermiyor",
+        "configSectionMissing": "Bu yedek yapılandırma verilerini içermiyor; bu yüzden yalnızca hesap verileri geri yüklendi",
+        "unresolvedRefs": "{{count}} hesap bağlantısı eşleştirilemedi ve atlandı",
+        "disabledTasks": "Eşleşen hesap bulunamadığı için {{count}} görev devre dışı bırakıldı",
+        "restartRequired": "Ağ hizmeti ayarları geri yüklendi. Bazı değişiklikler yeniden başlatmadan sonra etkili olur",
+        "partialAccountFailure": "Bazı hesaplar içe aktarılamadı: {{error}}"
+      },
+      "errors": {
+        "selectionRequired": "En az bir veri türü seçin",
+        "accountsOnlyFile": "Bu yedek yalnızca hesap verilerini içeriyor. İçe aktarmak için \"Hesap verileri\"ni seçin",
+        "selectedSectionsMissing": "Seçilen veri türü bu yedekte yok",
+        "unsupportedLegacyFile": "Bu eski hesap yedeği biçimi tanınmadı",
+        "unsupportedVersion": "Bu uygulama sürümü bu paket sürümünü desteklemiyor"
+      }
+    }
   },
   "appPath": {
     "missing": {
@@ -680,6 +821,9 @@
       "desc": "{{app}} uygulama yolu bulunamadı. Devam etmek için şimdi ayarlayın.",
       "action": "Şimdi ayarla",
       "codexLaunchHint": "Kapattığınızda hesap değiştirme ve giriş üzerine yazma çalışmaya devam eder, ancak Codex uygulaması artık başlatılmaz ve bu yol istemi tekrar gösterilmez."
+    },
+    "modal": {
+      "desc": "{{app}} uygulama yolu bulunamadı. Devam etmek için lütfen şimdi yapılandırın."
     }
   },
   "accounts": {
@@ -789,7 +933,11 @@
       "fingerprint": "Parmak izi",
       "switch": "Hesap değiştir",
       "switchTo": "Bu hesaba geç",
-      "selectFingerprint": "Parmak izi seç"
+      "selectFingerprint": "Parmak izi seç",
+      "delete": "Sil",
+      "deleteSelected": "Seçilenleri Sil",
+      "export": "Dışa Aktar",
+      "refreshAll": "Tümünü Yenile"
     },
     "tabs": {
       "oauth": "OAuth Yetkilendirme",
@@ -886,7 +1034,40 @@
       "clearConfirm": "Tüm geçiş geçmişi temizlensin mi?",
       "loadFailed": "Geçiş geçmişi yüklenemedi: {{error}}",
       "clearFailed": "Geçiş geçmişi temizlenemedi: {{error}}"
-    }
+    },
+    "clearTagFilter": "Etiket Filtresini Temizle",
+    "compact": {
+      "hide": "Gizle",
+      "show": "Göster"
+    },
+    "deleteConfirm": {
+      "multi": "{{count}} seçili hesap silinsin mi?",
+      "single": "Bu hesap silinsin mi?"
+    },
+    "deleteFailed": "Silme başarısız: {{error}}",
+    "deleteSuccess": "Başarıyla silindi",
+    "deleteTagFailed": "Etiket silme başarısız: {{error}}",
+    "exportError": "Dışa aktarma başarısız: {{error}}",
+    "exportModal": {
+      "title": "JSON Dışa Aktar"
+    },
+    "importJsonFailed": "JSON içe aktarma başarısız: {{error}}",
+    "importJsonHint": "Bu araçtan dışa aktarılan Qoder JSON dosyasını içe aktarın.",
+    "importJsonSuccess": "JSON içe aktarma başarılı",
+    "noTags": "Etiket yok",
+    "privacy": {
+      "disable": "Gizlilik Modunu Kapat",
+      "enable": "Gizlilik Modunu Aç"
+    },
+    "refreshAllFailed": "Toplu yenileme başarısız: {{error}}",
+    "refreshAllSuccess": "Tüm hesaplar yenilendi",
+    "refreshFailed": "Yenileme başarısız: {{error}}",
+    "refreshSuccess": "Başarıyla yenilendi",
+    "switchFailed": "Geçiş başarısız: {{error}}",
+    "switchSuccess": "Geçiş başarılı",
+    "switched": "{{email}} hesabına geçildi",
+    "tagButton": "Etiketleri Düzenle",
+    "tagUpdated": "Etiket güncellendi"
   },
   "overview": {
     "title": "Hesap Genel Bakışı",
@@ -1098,7 +1279,10 @@
       "actions": {
         "selectAllAccounts": "Tümünü seç",
         "clearSelectedAccounts": "Seçimi temizle",
-        "runCheckNow": "Doğrulamayı tamamla"
+        "runCheckNow": "Doğrulamayı tamamla",
+        "retryFiltered": "Geçerli filtreyi yeniden dene ({{count}})",
+        "retryMissingModel": "Bu partide model bilgisi eksik olduğu için yeniden deneme yapılamıyor.",
+        "retryMissingAccount": "Geçerli filtrede yeniden denenebilir hesap yok."
       },
       "runHint": {
         "title": "Doğrulama notları",
@@ -1383,7 +1567,9 @@
       "portInUseConfirm": "Port {{port}} kullanımda. Bu portu kullanan işlemi kapatmak ister misiniz?",
       "portCloseFailed": "Port kapatılamadı: {{error}}",
       "portStillInUse": "Port {{port}} hâlâ kullanımda.",
-      "portInUseAction": "Portu kapatıp yeniden dene"
+      "portInUseAction": "Portu kapatıp yeniden dene",
+      "timeout": "Kimlik doğrulama zaman aşımına uğradı. Lütfen tıklayın",
+      "timeoutRetry": "Kimlik Doğrulama Bağlantısını Yenile"
     },
     "token": {
       "desc": "auth.json içeriğini veya hesap JSON verisini yapıştırın",
@@ -1455,7 +1641,10 @@
     "usage": {
       "open": "OpenAI kullanımını aç",
       "hint": "API Key kredileri için OpenAI Usage sayfasını kullanın.",
-      "openFailed": "Kullanım sayfası açılamadı: {{error}}"
+      "openFailed": "Kullanım sayfası açılamadı: {{error}}",
+      "search": {
+        "placeholder": "Hesap ara..."
+      }
     },
     "wakeup": {
       "tab": "Uyandırma görevleri",
@@ -1641,12 +1830,15 @@
         "moveToTrash": "Çöp kutusuna taşı",
         "syncSessions": "Oturumları eşitle",
         "expand": "Genişlet",
-        "collapse": "Daralt"
+        "collapse": "Daralt",
+        "repairVisibility": "Görünürlüğü düzelt",
+        "restoreSessions": "Oturumları geri yükle"
       },
       "confirm": {
         "title": "Çöp kutusuna taşı",
         "message": "Seçilen oturumlar daha sonra geri yüklenebilmesi için ilgili örneklerden çöp kutusuna taşınacaktır. Çalışan örneklerin değişikliğin görünmesi için yeniden başlatılması gerekebilir. Devam edilsin mi?",
-        "syncMessage": "Eksik iş parçacıkları ve bunlara ait oturum verileri tüm örneklerle eşitlenecektir. Mevcut içerik yeniden yazılmayacak ve hedef örnek dosyaları herhangi bir yazma işleminden önce yedeklenecektir. Devam edilsin mi?"
+        "syncMessage": "Eksik iş parçacıkları ve bunlara ait oturum verileri tüm örneklerle eşitlenecektir. Mevcut içerik yeniden yazılmayacak ve hedef örnek dosyaları herhangi bir yazma işleminden önce yedeklenecektir. Devam edilsin mi?",
+        "repairVisibilityMessage": "Bu işlem, her örneğin kök config.toml dosyasındaki model_provider değerini kullanarak rollout dosyaları ve state_5.sqlite içindeki sağlayıcı meta verilerini onarır (eksikse varsayılan olarak openai kullanılır). Değiştirilecek dosyalar yazılmadan önce yedeklenir. Değişikliğin görünmesi için çalışan örneklerin yeniden başlatılması gerekebilir. Devam edilsin mi?"
       },
       "empty": {
         "title": "Yönetilecek oturum yok",
@@ -1654,12 +1846,20 @@
       },
       "messages": {
         "pickOne": "Lütfen en az bir oturum seçin",
-        "syncNeedTwo": "Oturumları eşitlemek için en az iki örnek gerekir"
+        "syncNeedTwo": "Oturumları eşitlemek için en az iki örnek gerekir",
+        "pickRestoreOne": "Lütfen geri yüklenecek en az bir oturum seçin"
       },
       "groupCount": "{{count}} oturum",
       "updatedAt": "Güncellendi",
       "locationRunning": " (çalışıyor)",
-      "untitled": "Adsız oturum"
+      "untitled": "Adsız oturum",
+      "restoreModal": {
+        "title": "Oturumları geri yükle",
+        "hint": "Geri yükleme sırasında rollout dosyası, SQLite ileti satırı ve session_index girdisi birlikte özgün örneğe geri konur.",
+        "emptyTitle": "Çöp kutusu boş",
+        "emptyDesc": "Çöp kutusuna taşınan oturumlar burada görünür.",
+        "restoreAction": "Seçili oturumları geri yükle"
+      }
     },
     "api": {
       "baseUrl": "Temel URL",
@@ -1668,7 +1868,178 @@
         "apiKeyCannotBeUrl": "API anahtarı bir URL olamaz. Alanların yer değiştirmediğini kontrol edin.",
         "baseUrlInvalid": "Geçersiz temel URL. Lütfen http:// veya https:// içeren tam bir URL girin.",
         "apiKeyEqualsBaseUrl": "API anahtarı temel URL ile aynı olamaz."
+      },
+      "addAndSwitchSuccess": "Eklendi ve geçiş yapıldı: {{email}}",
+      "actions": {
+        "addAndSwitch": "Ekle ve geçiş yap"
+      },
+      "provider": {
+        "label": "Sağlayıcı",
+        "custom": "Özel",
+        "endpoint": "Sağlayıcı uç noktası",
+        "hint": "Uyumlu bir Base URL otomatik olarak dolduruldu. İsterseniz bunu yine de elle düzenleyebilirsiniz.",
+        "website": "Web sitesi",
+        "apiKeyPage": "API anahtarı sayfası"
+      },
+      "providers": {
+        "openai_official": {
+          "name": "OpenAI Official"
+        },
+        "azure_openai": {
+          "name": "Azure OpenAI"
+        },
+        "packycode": {
+          "name": "PackyCode"
+        },
+        "cubence": {
+          "name": "Cubence"
+        },
+        "aigocode": {
+          "name": "AIGoCode"
+        },
+        "rightcode": {
+          "name": "RightCode"
+        },
+        "sssaicode": {
+          "name": "SSSAiCode"
+        },
+        "micu": {
+          "name": "Micu"
+        },
+        "x_code_api": {
+          "name": "X-Code API"
+        },
+        "ctok_ai": {
+          "name": "CTok.ai"
+        },
+        "aihubmix": {
+          "name": "AiHubMix"
+        },
+        "dmxapi": {
+          "name": "DMXAPI"
+        },
+        "compshare": {
+          "name": "Compshare"
+        },
+        "openrouter": {
+          "name": "OpenRouter"
+        },
+        "aicodemirror": {
+          "name": "AICodeMirror"
+        },
+        "aicoding": {
+          "name": "AICoding"
+        },
+        "crazyrouter": {
+          "name": "CrazyRouter"
+        },
+        "deepseek": {
+          "name": "DeepSeek"
+        },
+        "moonshot": {
+          "name": "Moonshot"
+        },
+        "siliconflow": {
+          "name": "SiliconFlow"
+        }
       }
+    },
+    "modelProviders": {
+      "tab": "Model sağlayıcıları",
+      "desc": "Model sağlayıcılarını ve birden çok API anahtarını tek bir yerde yönetin, ardından Codex API anahtarı hesapları eklerken bunları doğrudan yeniden kullanın.",
+      "add": "Sağlayıcı ekle",
+      "loadFailed": "Model sağlayıcıları yüklenemedi: {{error}}",
+      "emptyTitle": "Henüz model sağlayıcısı yok",
+      "emptyDesc": "Başlamak için sağ üstteki \"Sağlayıcı ekle\" düğmesine tıklayın.",
+      "baseUrl": "Temel URL",
+      "website": "Web sitesi",
+      "apiKeyPage": "API anahtarı sayfası",
+      "apiKeysCount": "{{count}} API anahtarı",
+      "referencesCount": "{{count}} bağlantılı hesap",
+      "unnamedKey": "Adsız anahtar",
+      "createTitle": "Model sağlayıcı ekle",
+      "editTitle": "Model sağlayıcıyı düzenle",
+      "existingApiKeys": "Mevcut API anahtarları",
+      "fields": {
+        "name": "Sağlayıcı adı",
+        "baseUrl": "Temel URL",
+        "website": "Web sitesi (isteğe bağlı)",
+        "apiKeyUrl": "API anahtarı sayfası (isteğe bağlı)",
+        "newApiKeyName": "Yeni anahtar adı (isteğe bağlı)",
+        "newApiKey": "Yeni API anahtarı"
+      },
+      "validation": {
+        "nameRequired": "Sağlayıcı adı gerekli.",
+        "baseUrlInvalid": "Geçersiz temel URL.",
+        "baseUrlExists": "Bu temel URL zaten mevcut.",
+        "providerNotFound": "Sağlayıcı bulunamadı.",
+        "apiKeyRequiredOnCreate": "Sağlayıcı oluştururken en az bir API anahtarı gereklidir.",
+        "apiKeyRequiredWhenEmpty": "Bu sağlayıcının henüz API anahtarı yok. Lütfen önce bir tane ekleyin."
+      },
+      "saveSuccess": "Model sağlayıcı kaydedildi.",
+      "deleteBlocked": "Bu sağlayıcı {{count}} hesapla bağlantılı olduğu için silinemez.",
+      "confirmDelete": "\"{{name}}\" sağlayıcısı silinsin mi?",
+      "deleteFailed": "Sağlayıcı silinemedi: {{error}}",
+      "deleteApiKeyFailed": "API anahtarı silinemedi: {{error}}",
+      "selectSavedProvider": "Kayıtlı sağlayıcılar",
+      "selectSavedApiKey": "Kayıtlı API anahtarları",
+      "noSavedProviders": "Henüz kayıtlı sağlayıcı yok. Alanları doğrudan doldurabilirsiniz; otomatik olarak kaydedilir.",
+      "newProviderName": "Sağlayıcı adı (isteğe bağlı, otomatik kayıt için kullanılır)",
+      "newProviderNamePlaceholder": "Boş bırakılırsa ana bilgisayar adı otomatik olarak kullanılır",
+      "preview": {
+        "title": "Kaydetme önizlemesi",
+        "desc": "Bir sağlayıcı kaydedildiğinde önce sağlayıcı deposu güncellenir. Mevcut resmi Codex yapılandırması hemen değişmez.",
+        "writeNow": "Yazılacak",
+        "noImmediateChange": "Anında değişmez",
+        "providerStoreTitle": "Sağlayıcı deposu",
+        "providerStoreDesc": "Bu pencerede eklenen sağlayıcı adı, Base URL, site/API Key sayfası bağlantıları ve yeni API Key'i kaydeder.",
+        "codexConfigTitle": "Geçerli Codex yapılandırması",
+        "codexConfigDesc": "Geçerli provider veya Base URL hemen değişmez. Bu dosya yalnızca bir Codex API key hesabı kaydedildiğinde veya değiştirildiğinde güncellenir.",
+        "authFileTitle": "Geçerli Codex kimlik bilgileri",
+        "authFileDesc": "Bir sağlayıcıyı kaydetmek, auth.json içindeki mevcut OPENAI_API_KEY değerinin üzerine yazmaz."
+      },
+      "quickConfig": {
+        "title": "Geçerli Codex yapılandırması",
+        "desc": "Bu hızlı ayarlar doğrudan etkin ~/.codex/config.toml dosyasına yazar ve model sağlayıcı deposunu değiştirmez.",
+        "configPath": "Yapılandırma dosyası",
+        "openConfig": "Dosyayı aç",
+        "loadFailed": "Geçerli Codex yapılandırması yüklenemedi: {{error}}",
+        "openFailed": "config.toml açılamadı: {{error}}",
+        "saveSuccess": "Geçerli Codex yapılandırması kaydedildi.",
+        "saveFailed": "Geçerli Codex yapılandırması kaydedilemedi: {{error}}",
+        "contextWindow1m": "1M bağlam penceresi",
+        "contextWindow1mHint": "Etkinleştirildiğinde model_context_window = 1000000 yazar ve auto-compact sınırını birlikte yönetir.",
+        "autoCompactLimit": "Auto-compact sınırı",
+        "autoCompactLimitHint": "model_auto_compact_token_limit yazar. 1M anahtarı kapatıldığında bu alan da kaldırılır.",
+        "preview": "Yazma önizlemesi",
+        "previewApply": "Yazılacak",
+        "previewRemove": "Kaldırılacak",
+        "customDetected": "config.toml içinde özel bir model_context_window = {{context}} algılandı. Kaydetme işlemi bunu aşağıdaki hızlı ayarla yeniden yazar.",
+        "compactMissingDetected": "1M bağlam zaten açık, ancak auto-compact sınırı eksik. Kaydedildiğinde varsayılan {{limit}} değeri yazılacak.",
+        "validation": {
+          "autoCompactInvalid": "Auto-compact sınırı 0'dan büyük bir tam sayı olmalıdır."
+        }
+      }
+    },
+    "quickSwitch": {
+      "action": "Sağlayıcıyı hızlı değiştir",
+      "inlineAction": "Geçiş yap",
+      "title": "Sağlayıcıyı hızlı değiştir",
+      "desc": "Bu API anahtarı hesabını kayıtlı bir sağlayıcıya ve API anahtarına hızlıca geçirin.",
+      "currentAccount": "Geçerli hesap: {{name}}",
+      "noProviders": "Henüz kayıtlı sağlayıcı yok. Önce Model sağlayıcıları bölümünde bir tane ekleyin.",
+      "providerHasNoKeys": "Bu sağlayıcının henüz kullanılabilir bir API anahtarı yok. Önce Model sağlayıcıları bölümünde bir tane ekleyin.",
+      "gotoProviders": "Sağlayıcıları yönet",
+      "apply": "Şimdi geçiş yap",
+      "success": "Şu sağlayıcıya geçildi: {{provider}}",
+      "failed": "Sağlayıcı değiştirilemedi: {{error}}",
+      "validation": {
+        "providerRequired": "Lütfen bir sağlayıcı seçin.",
+        "apiKeyRequired": "Lütfen bir API anahtarı seçin."
+      }
+    },
+    "groups": {
+      "addToGroup": "Gruba Ekle"
     }
   },
   "githubCopilot": {
@@ -1788,7 +2159,10 @@
     },
     "codex": {
       "title": "Codex Ayarları",
-      "appPath": "Uygulama Yolu"
+      "appPath": "Uygulama Yolu",
+      "configToml": "Codex yapılandırma dosyası",
+      "openConfigToml": "Dosyayı aç",
+      "openConfigHint": "Etkin Codex config.toml dosyasını hızla açın."
     },
     "githubCopilot": {
       "title": "GitHub Copilot Ayarları",
@@ -1848,7 +2222,8 @@
       "loadFailed": "Yapılandırma yüklenemedi: {{error}}",
       "saveFailed": "Yapılandırma kaydedilemedi: {{error}}",
       "pickPathFailed": "Yol seçilemedi: {{error}}",
-      "resetPathFailed": "Yol sıfırlanamadı: {{error}}"
+      "resetPathFailed": "Yol sıfırlanamadı: {{error}}",
+      "openCodexConfigFailed": "Codex config.toml açılamadı: {{error}}"
     },
     "qoder": {
       "title": "Qoder Ayarları",
@@ -1904,8 +2279,7 @@
       "description": "\"Hesap ekle\"ye tıklayın"
     },
     "addModal": {
-      "title": "Windsurf hesabı ekle",
-      "password": "E-posta ve şifre"
+      "title": "Windsurf hesabı ekle"
     },
     "oauth": {
       "desc": "Aşağıdaki düğmeye tıklayın ve tarayıcıda Windsurf yetkilendirmesini tamamlayın."
@@ -1948,16 +2322,6 @@
       "inject": "Tek tıkla geçiş: Bu araç Windsurf'un yerel şifreleme materyalini (DPAPI/Keychain/Secret Service) okur, state.vscdb içindeki kimlik doğrulama oturumunu çözer, Windsurf belirtecini değiştirir ve yeniden şifreler — tüm işlem cihazınızda yerel olarak yapılır.",
       "reason": "İzin kapsamı: Windsurf kimlik doğrulama veritabanını (state.vscdb) okumak ve şifre çözme/geri yazma için sistem şifreleme yeteneklerini (Windows DPAPI / macOS Keychain / Linux Secret Service) çağırmak.",
       "storage": "Okuma kapsamı: yalnızca Windsurf oturum açma oturumu ile ilgili veriler işlenir; tüm işlemler yerel olarak yürütülür."
-    },
-    "password": {
-      "desc": "Windsurf hesabınızın e-posta ve şifresiyle giriş yapın; API anahtarı ve hesap bilgileri otomatik alınır.",
-      "emailPlaceholder": "E-posta adresi",
-      "passwordPlaceholder": "Şifre",
-      "login": "Giriş yap",
-      "logging": "Giriş yapılıyor...",
-      "empty": "Lütfen e-posta ve şifre girin",
-      "success": "Giriş başarılı: {{login}}",
-      "failed": "Giriş başarısız: {{error}}"
     }
   },
   "kiro": {
@@ -2426,7 +2790,11 @@
       "unsupportedDescPlatform": "Gemini Cli çoklu örneği yalnızca macOS, Windows ve Linux'ta desteklenir.",
       "launchDialogTitle": "Örneği Başlat",
       "launchHint": "Komutu kopyalayın ve manuel olarak çalıştırın veya doğrudan terminalde çalıştırın.",
-      "runInTerminal": "Terminalde Çalıştır"
+      "runInTerminal": "Terminalde Çalıştır",
+      "workingDir": "Çalışma Dizini",
+      "workingDirPlaceholder": "Geçerli yol varsayılan",
+      "workingDirDesc": "Başlatıldığında önce bu dizine geçiş yapacaktır",
+      "pickWorkingDir": "Çalışma Dizini Seç"
     },
     "switch": {
       "success": "Hesap başarıyla değiştirildi"
@@ -2443,6 +2811,26 @@
       "saved": "Proje kaydedildi: {{projectId}}",
       "cleared": "Otomatik proje çözümlemeye geri dönüldü",
       "savedWithRefreshError": "Proje kaydedildi ancak kota yenileme başarısız oldu: {{error}}"
+    },
+    "identity": {
+      "authMethod": "Kimlik doğrulama yöntemi",
+      "tier": "Paket",
+      "signedInWithGoogle": "Google ile oturum açıldı",
+      "signedInWithGoogleEmail": "Google ile oturum açıldı ({{email}})"
+    },
+    "quotaTable": {
+      "model": "Model adı",
+      "leftOfTotal": "Kalan / Toplam",
+      "usage": "Kullanılan",
+      "usageResets": "Kullanım sıfırlanır",
+      "usedPercent": "{{value}}%",
+      "remainingOfTotal": "{{remaining}} / {{total}}",
+      "resetAtWithRelative": "{{absolute}} ({{relative}})"
+    },
+    "tierText": {
+      "pro": "Google One AI Pro içindeki Gemini Code Assist",
+      "ultra": "Google AI Ultra içindeki Gemini Code Assist",
+      "free": "Ücretsiz Gemini Code Assist"
     }
   },
   "codebuddy": {
@@ -2510,7 +2898,8 @@
       "expireUnknown": "Bitiş: Yok",
       "packageTitle": {
         "base": "Temel deneyim paketi",
-        "activity": "Etkinlik hediye paketi"
+        "activity": "Etkinlik hediye paketi",
+        "pro": "Pro Aboneliği"
       }
     },
     "extraCredit": {
@@ -2578,7 +2967,12 @@
       "title": "Qoder hesabı ekle"
     },
     "import": {
-      "localDesc": "Yerel Qoder istemcisinden mevcut oturum durumunu okur; kullanıcı bilgileri, plan ve kredi kullanımı dahildir."
+      "localDesc": "Yerel Qoder istemcisinden mevcut oturum durumunu okur; kullanıcı bilgileri, plan ve kredi kullanımı dahildir.",
+      "localFailed": "Yerel içe aktarma başarısız: {{error}}",
+      "localSuccess": "Hesap yerel Qoder'dan içe aktarıldı."
+    },
+    "empty": {
+      "desc": "Auth girişini, yerel içe aktarmayı veya JSON içe aktarmayı kullanmak için \"Hesap Ekle\"ye tıklayın."
     }
   },
   "trae": {
@@ -2675,7 +3069,10 @@
         "other": "Diğer",
         "empty": "Kota verisi yok"
       }
-    }
+    },
+    "syncFailed": "Senkronizasyon başarısız: {{error}}",
+    "syncSuccess": "{{count}} hesap WorkBuddy ile senkronize edildi",
+    "syncToWorkbuddy": "WorkBuddy ile Senkronize Et"
   },
   "workbuddy": {
     "title": "WorkBuddy Hesap Yönetimi",
@@ -2810,7 +3207,8 @@
       "unknownStatus": "Bilinmeyen durum",
       "overdueField": "Gecikmiş faturalar",
       "overdueYes": "Evet",
-      "overdueNo": "Hayır"
+      "overdueNo": "Hayır",
+      "usageUpdatedAt": "Güncellendi: {{time}}"
     },
     "runtime": {
       "title": "Geçerli Zed oturumu",
@@ -2830,7 +3228,8 @@
       "complete": "Girişi tamamla",
       "startFailed": "Zed oturumu başlatılamadı",
       "completeSuccess": "Zed oturumu tamamlandı: {{account}}",
-      "importOnlySuccess": "Yetkilendirme başarıyla tamamlandı. Hesap içe aktarıldı. Resmi Zed'in bu hesabı kullanması için \"Uygula ve Yeniden Başlat\" seçeneğine tıklayın."
+      "importOnlySuccess": "Yetkilendirme başarıyla tamamlandı. Hesap içe aktarıldı. Resmi Zed'in bu hesabı kullanması için \"Uygula ve Yeniden Başlat\" seçeneğine tıklayın.",
+      "desc": "Tarayıcıda resmi Zed giriş kimlik doğrulamasını tamamlamak için aşağıdaki düğmeye tıklayın."
     },
     "actions": {
       "addAccount": "Zed’e giriş yap",
@@ -2846,6 +3245,9 @@
       "applyAndRestart": "Uygula ve yeniden başlat",
       "reapply": "Yeniden uygula",
       "exportTitle": "Zed hesaplarını JSON olarak dışa aktar"
+    },
+    "sort": {
+      "tokenSpend": "Token Harcamasına Göre Sırala"
     }
   },
   "floatingCard": {

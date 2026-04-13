@@ -795,15 +795,19 @@ async fn exchange_code_for_token(
         .unwrap_or_else(|_| "<no-body>".to_string());
     if !status.is_success() {
         return Err(format!(
-            "Kiro oauth/token 接口返回异常: status={}, body={}",
-            status, body
+            "Kiro oauth/token 接口返回异常: status={}, body_len={}",
+            status,
+            body.len()
         ));
     }
 
-    let mut token = unwrap_token_response(
-        serde_json::from_str::<Value>(&body)
-            .map_err(|e| format!("解析 Kiro oauth/token 响应失败: {} (body={})", e, body))?,
-    );
+    let mut token = unwrap_token_response(serde_json::from_str::<Value>(&body).map_err(|e| {
+        format!(
+            "解析 Kiro oauth/token 响应失败: {} (body_len={})",
+            e,
+            body.len()
+        )
+    })?);
     inject_callback_context_into_token(&mut token, callback);
     Ok(token)
 }
@@ -1490,8 +1494,9 @@ async fn refresh_token_via_remote(refresh_token: &str) -> Result<Value, String> 
 
     if !status.is_success() {
         return Err(format!(
-            "Kiro refreshToken 接口返回异常: status={}, body={}",
-            status, body
+            "Kiro refreshToken 接口返回异常: status={}, body_len={}",
+            status,
+            body.len()
         ));
     }
 
@@ -1535,8 +1540,9 @@ async fn refresh_token_via_idc_oidc(
         .unwrap_or_else(|_| "<no-body>".to_string());
     if !status.is_success() {
         return Err(format!(
-            "AWS IAM Identity Center OIDC 刷新接口返回异常: status={}, body={}",
-            status, body
+            "AWS IAM Identity Center OIDC 刷新接口返回异常: status={}, body_len={}",
+            status,
+            body.len()
         ));
     }
 
@@ -1630,8 +1636,9 @@ async fn fetch_usage_limits_via_runtime(
             return Err(format!("BANNED:{}", reason));
         }
         return Err(format!(
-            "Kiro runtime usage 接口返回异常: status={}, body={}",
-            status, body
+            "Kiro runtime usage 接口返回异常: status={}, body_len={}",
+            status,
+            body.len()
         ));
     }
 
@@ -2559,6 +2566,8 @@ mod tests {
             kiro_usage_raw: None,
             status: None,
             status_reason: None,
+            quota_query_last_error: None,
+            quota_query_last_error_at: None,
             usage_updated_at: None,
             created_at: 0,
             last_used: 0,

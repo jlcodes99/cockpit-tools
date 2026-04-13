@@ -46,6 +46,7 @@ fn windows_cmd_quote(value: &str) -> String {
 
 struct GeminiLaunchContext {
     user_data_dir: String,
+    working_dir: Option<String>,
     extra_args: String,
     use_home_env: bool,
 }
@@ -56,6 +57,7 @@ fn resolve_instance_launch_context(instance_id: &str) -> Result<GeminiLaunchCont
         let default_settings = modules::gemini_instance::load_default_settings()?;
         return Ok(GeminiLaunchContext {
             user_data_dir: default_dir.to_string_lossy().to_string(),
+            working_dir: None,
             extra_args: default_settings.extra_args,
             use_home_env: false,
         });
@@ -69,6 +71,7 @@ fn resolve_instance_launch_context(instance_id: &str) -> Result<GeminiLaunchCont
         .ok_or("实例不存在")?;
     Ok(GeminiLaunchContext {
         user_data_dir: instance.user_data_dir,
+        working_dir: instance.working_dir,
         extra_args: instance.extra_args,
         use_home_env: true,
     })
@@ -77,51 +80,56 @@ fn resolve_instance_launch_context(instance_id: &str) -> Result<GeminiLaunchCont
 fn build_launch_command(context: &GeminiLaunchContext) -> String {
     let parsed_args = modules::process::parse_extra_args(&context.extra_args);
 
+    let mut command_parts = Vec::new();
+
+    // 如果指定了工作目录，先 cd 过去
+    if let Some(ref dir) = context.working_dir {
+        if !dir.trim().is_empty() {
+            #[cfg(target_os = "windows")]
+            command_parts.push(format!("cd /d \"{}\"", dir.replace("\"", "\"\"")));
+            #[cfg(not(target_os = "windows"))]
+            command_parts.push(format!("cd {}", posix_shell_quote(dir)));
+        }
+    }
+
     #[cfg(target_os = "windows")]
     {
-        let mut env_prefixes = Vec::new();
         if context.use_home_env {
             let escaped_home = context.user_data_dir.replace('"', "\"\"");
-            env_prefixes.push(format!("set \"GEMINI_CLI_HOME={}\"", escaped_home));
+            command_parts.push(format!("set \"GEMINI_CLI_HOME={}\"", escaped_home));
         }
 
-        let mut command = if env_prefixes.is_empty() {
-            "gemini".to_string()
-        } else {
-            format!("{} && gemini", env_prefixes.join(" && "))
-        };
+        let mut gemini_cmd = "gemini".to_string();
         for arg in parsed_args {
             if !arg.trim().is_empty() {
-                command.push(' ');
-                command.push_str(&windows_cmd_quote(arg.trim()));
+                gemini_cmd.push(' ');
+                gemini_cmd.push_str(&windows_cmd_quote(arg.trim()));
             }
         }
-        return command;
+        command_parts.push(gemini_cmd);
+        return command_parts.join(" && ");
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        let mut env_prefixes = Vec::new();
-        if context.use_home_env {
-            env_prefixes.push(format!(
-                "GEMINI_CLI_HOME={}",
+        let mut gemini_cmd = if context.use_home_env {
+            format!(
+                "GEMINI_CLI_HOME={} gemini",
                 posix_shell_quote(&context.user_data_dir)
-            ));
-        }
-
-        let mut command = if env_prefixes.is_empty() {
-            "gemini".to_string()
+            )
         } else {
-            format!("{} gemini", env_prefixes.join(" "))
+            "gemini".to_string()
         };
+
         for arg in parsed_args {
             let trimmed = arg.trim();
             if !trimmed.is_empty() {
-                command.push(' ');
-                command.push_str(&posix_shell_quote(trimmed));
+                gemini_cmd.push(' ');
+                gemini_cmd.push_str(&posix_shell_quote(trimmed));
             }
         }
-        command
+        command_parts.push(gemini_cmd);
+        command_parts.join(" && ")
     }
 }
 
@@ -158,6 +166,7 @@ pub async fn gemini_list_instances() -> Result<Vec<InstanceProfileView>, String>
         id: DEFAULT_INSTANCE_ID.to_string(),
         name: String::new(),
         user_data_dir: default_dir_str,
+        working_dir: None,
         extra_args: default_settings.extra_args.clone(),
         bind_account_id: default_settings.bind_account_id.clone(),
         created_at: 0,
@@ -176,6 +185,7 @@ pub async fn gemini_list_instances() -> Result<Vec<InstanceProfileView>, String>
 pub async fn gemini_create_instance(
     name: String,
     user_data_dir: String,
+    working_dir: Option<String>,
     extra_args: Option<String>,
     bind_account_id: Option<String>,
     copy_source_instance_id: Option<String>,
@@ -185,6 +195,7 @@ pub async fn gemini_create_instance(
         modules::gemini_instance::CreateInstanceParams {
             name,
             user_data_dir,
+            working_dir,
             extra_args: extra_args.unwrap_or_default(),
             bind_account_id,
             copy_source_instance_id,
@@ -204,6 +215,7 @@ pub async fn gemini_create_instance(
 pub async fn gemini_update_instance(
     instance_id: String,
     name: Option<String>,
+    working_dir: Option<String>,
     extra_args: Option<String>,
     bind_account_id: Option<Option<String>>,
     follow_local_account: Option<bool>,
@@ -221,6 +233,7 @@ pub async fn gemini_update_instance(
             id: DEFAULT_INSTANCE_ID.to_string(),
             name: String::new(),
             user_data_dir: default_dir_str,
+            working_dir: None,
             extra_args: updated.extra_args,
             bind_account_id: updated.bind_account_id,
             created_at: 0,
@@ -253,6 +266,7 @@ pub async fn gemini_update_instance(
         modules::gemini_instance::UpdateInstanceParams {
             instance_id,
             name,
+            working_dir,
             extra_args,
             bind_account_id,
         },
@@ -287,6 +301,7 @@ pub async fn gemini_start_instance(instance_id: String) -> Result<InstanceProfil
             id: DEFAULT_INSTANCE_ID.to_string(),
             name: String::new(),
             user_data_dir: default_dir_str,
+            working_dir: None,
             extra_args: default_settings.extra_args,
             bind_account_id: default_settings.bind_account_id,
             created_at: 0,
@@ -333,6 +348,7 @@ pub async fn gemini_stop_instance(instance_id: String) -> Result<InstanceProfile
             id: DEFAULT_INSTANCE_ID.to_string(),
             name: String::new(),
             user_data_dir: default_dir_str,
+            working_dir: None,
             extra_args: default_settings.extra_args,
             bind_account_id: default_settings.bind_account_id,
             created_at: 0,
@@ -385,54 +401,134 @@ fn escape_applescript(value: &str) -> String {
 }
 
 #[tauri::command]
-pub async fn gemini_execute_instance_launch_command(instance_id: String) -> Result<String, String> {
+pub async fn gemini_execute_instance_launch_command(
+    instance_id: String,
+    terminal: Option<String>,
+) -> Result<String, String> {
     let context = resolve_instance_launch_context(&instance_id)?;
     let command = build_launch_command(&context);
 
+    let config = crate::modules::config::get_user_config();
+    let terminal = terminal
+        .unwrap_or(config.default_terminal)
+        .trim()
+        .to_string();
+
     #[cfg(target_os = "macos")]
     {
+        let is_iterm = terminal.to_lowercase().contains("iterm");
+        let is_terminal_app = terminal == "system" || terminal.is_empty() || terminal == "Terminal";
+        let app_name = if is_terminal_app {
+            "Terminal"
+        } else {
+            &terminal
+        };
+
+        let script = if is_iterm {
+            format!(
+                "tell application \"iTerm\"
+                    activate
+                    if not (exists window 1) then
+                        create window with default profile
+                        tell current session of current window
+                            write text \"{}\"
+                        end tell
+                    else
+                        tell current window
+                            create tab with default profile
+                            tell current session
+                                write text \"{}\"
+                            end tell
+                        end tell
+                    end if
+                end tell",
+                escape_applescript(&command),
+                escape_applescript(&command)
+            )
+        } else if is_terminal_app {
+            format!(
+                "tell application \"Terminal\"
+                    activate
+                    do script \"{}\"
+                end tell",
+                escape_applescript(&command)
+            )
+        } else {
+            return Err(format!(
+                "当前终端暂不支持直接执行：{}。请改用 Terminal 或 iTerm2。",
+                terminal
+            ));
+        };
+
         let output = Command::new("osascript")
             .arg("-e")
-            .arg("tell application \"Terminal\" to activate")
-            .arg("-e")
-            .arg(format!(
-                "tell application \"Terminal\" to do script \"{}\"",
-                escape_applescript(&command)
-            ))
+            .arg(&script)
             .output()
-            .map_err(|e| format!("打开终端失败: {}", e))?;
+            .map_err(|e| format!("打开终端失败 ({}): {}", app_name, e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!("终端执行失败: {}", stderr.trim()));
         }
-        return Ok("已在终端执行 Gemini Cli 命令".to_string());
+        return Ok(format!("已在 {} 执行 Gemini Cli 命令", app_name));
     }
 
     #[cfg(target_os = "windows")]
     {
-        Command::new("cmd")
-            .args(["/C", "start", "", "cmd", "/K", &command])
-            .spawn()
-            .map_err(|e| format!("打开终端失败: {}", e))?;
+        let mut cmd;
+        if terminal == "PowerShell" || terminal == "powershell" {
+            cmd = Command::new("powershell");
+            cmd.args(["-NoExit", "-Command", &command]);
+        } else if terminal == "pwsh" {
+            cmd = Command::new("pwsh");
+            cmd.args(["-NoExit", "-Command", &command]);
+        } else if terminal == "wt" {
+            cmd = Command::new("wt");
+            cmd.args(["-p", "Command Prompt", "cmd", "/K", &command]);
+        } else {
+            // 默认为 cmd
+            cmd = Command::new("cmd");
+            cmd.args(["/C", "start", "", "cmd", "/K", &command]);
+        }
+
+        cmd.spawn().map_err(|e| format!("打开终端失败: {}", e))?;
         return Ok("已在终端执行 Gemini Cli 命令".to_string());
     }
 
     #[cfg(target_os = "linux")]
     {
         let shell_command = format!("{}; exec bash", command);
-        Command::new("x-terminal-emulator")
-            .args(["-e", "bash", "-lc", &shell_command])
+        let mut cmd = if terminal == "system" || terminal.is_empty() {
+            Command::new("x-terminal-emulator")
+        } else {
+            Command::new(&terminal)
+        };
+
+        cmd.args(["-e", "bash", "-lc", &shell_command])
             .spawn()
             .or_else(|_| {
-                Command::new("gnome-terminal")
-                    .args(["--", "bash", "-lc", &shell_command])
-                    .spawn()
+                if terminal == "system" || terminal.is_empty() {
+                    Command::new("gnome-terminal")
+                        .args(["--", "bash", "-lc", &shell_command])
+                        .spawn()
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "指定终端未找到",
+                    ))
+                }
             })
             .or_else(|_| {
-                Command::new("konsole")
-                    .args(["-e", "bash", "-lc", &shell_command])
-                    .spawn()
+                if terminal == "system" || terminal.is_empty() {
+                    Command::new("konsole")
+                        .args(["-e", "bash", "-lc", &shell_command])
+                        .spawn()
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "指定终端未找到",
+                    ))
+                }
             })
             .or_else(|_| Command::new("sh").args(["-lc", &command]).spawn())
             .map_err(|e| format!("执行 Gemini Cli 命令失败: {}", e))?;

@@ -1,6 +1,6 @@
 import { ReactNode, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Clock3, FolderOpen, Github, Layers } from 'lucide-react';
+import { Bot, Clock3, FolderOpen, Github, Layers, Server } from 'lucide-react';
 import { CodexIcon } from '../icons/CodexIcon';
 import { WindsurfIcon } from '../icons/WindsurfIcon';
 import { KiroIcon } from '../icons/KiroIcon';
@@ -21,7 +21,7 @@ import {
 import { getPlatformLabel } from '../../utils/platformMeta';
 import { PlatformGroupSwitcher } from './PlatformGroupSwitcher';
 
-export type PlatformOverviewTab = 'overview' | 'wakeup' | 'instances' | 'sessions';
+export type PlatformOverviewTab = 'overview' | 'wakeup' | 'instances' | 'sessions' | 'providers';
 export type PlatformOverviewHeaderId =
   | 'codex'
   | 'zed'
@@ -166,6 +166,11 @@ export function PlatformOverviewTabsHeader({
       key: 'sessions',
       label: t('codex.sessionManager.title', '会话管理'),
       icon: <FolderOpen className="tab-icon" />,
+    },
+    providers: {
+      key: 'providers',
+      label: t('codex.modelProviders.tab', '模型供应商'),
+      icon: <Server className="tab-icon" />,
     },
   };
   const tabSpecs: TabSpec[] = tabOrder.map((tab) => tabLabels[tab]);

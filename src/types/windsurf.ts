@@ -36,6 +36,8 @@ export interface WindsurfAccount {
   windsurf_user_status?: unknown;
   windsurf_plan_status?: unknown;
   windsurf_auth_status_raw?: unknown;
+  quota_query_last_error?: string | null;
+  quota_query_last_error_at?: number | null;
 
   created_at: number;
   last_used: number;
@@ -1206,6 +1208,15 @@ export function getWindsurfQuotaUsageSummary(account: WindsurfAccount): Windsurf
     weeklyResetAt,
     overageBalanceMicros,
   };
+}
+
+export function hasWindsurfQuotaData(account: WindsurfAccount): boolean {
+  return (
+    account.copilot_quota_snapshots != null ||
+    account.copilot_limited_user_quotas != null ||
+    account.windsurf_plan_status != null ||
+    account.windsurf_user_status != null
+  );
 }
 
 export function formatUnixSecondsToYmd(seconds: number, locale = 'zh-CN'): string {

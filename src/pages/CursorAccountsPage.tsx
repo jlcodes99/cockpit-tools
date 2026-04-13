@@ -30,19 +30,34 @@ import * as cursorService from '../services/cursorService';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
+import { PaginationControls } from '../components/PaginationControls';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
+import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
 import {
   getCursorPlanBadge,
   getCursorPlanDisplayName,
   getCursorPlanBadgeClass,
   getCursorAccountDisplayEmail,
+  getCursorOnDemandSummary,
   getCursorUsage,
   formatCursorUsageDollars,
+  hasCursorQuotaData,
   isCursorAccountBanned,
 } from '../types/cursor';
 import type { CursorAccount } from '../types/cursor';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
+import {
+  buildValidAccountsFilterOption,
+  splitValidityFilterValues,
+  VALID_ACCOUNTS_FILTER_VALUE,
+} from '../utils/accountValidityFilter';
+import {
+  buildPaginatedGroups,
+  buildPaginationPageSizeStorageKey,
+  isEveryIdSelected,
+  usePagination,
+} from '../hooks/usePagination';
 
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
 import { CursorOverviewTabsHeader, CursorTab } from '../components/CursorOverviewTabsHeader';
@@ -189,6 +204,12 @@ export function CursorAccountsPage() {
     [],
   );
 
+  const isAbnormalAccount = useCallback(
+    (account: CursorAccount) =>
+      isCursorAccountBanned(account) || (account.status || '').toLowerCase() === 'error',
+    [],
+  );
+
   const resolvePlanBadgeClass = useCallback(
     (account: CursorAccount) =>
       getCursorPlanBadgeClass(account.membership_type, account),
@@ -263,41 +284,35 @@ export function CursorAccountsPage() {
   const resolveOnDemandQuota = useCallback(
     (account: CursorAccount) => {
       const usage = getCursorUsage(account);
-      const limitType = (usage.onDemandLimitType || '').toLowerCase();
-      const isTeamLimit = limitType === 'team';
-      const limit = usage.onDemandLimitCents;
-      const individualUsed = usage.onDemandUsedCents ?? 0;
-      const teamUsed = usage.teamOnDemandUsedCents ?? 0;
-      const used = individualUsed > 0 ? individualUsed : (isTeamLimit ? teamUsed : individualUsed);
-      const isFixed = limit != null && limit > 0;
-      const isUnlimited = !isFixed && usage.onDemandEnabled === true && !isTeamLimit;
-      const isDisabled = !isFixed && !isUnlimited;
+      const onDemand = getCursorOnDemandSummary(usage);
 
-      if (isDisabled) {
+      if (onDemand.isDisabled) {
         return {
           percentage: 0,
           quotaClass: 'normal',
-          valueText: used > 0
-            ? formatCursorUsageDollars(used)
+          valueText: onDemand.usedCents > 0
+            ? formatCursorUsageDollars(onDemand.usedCents)
             : t('common.disabled', 'Disabled'),
           costText: null as string | null,
           disabled: true,
         };
       }
 
-      if (isUnlimited) {
+      if (onDemand.isUnlimited) {
         return {
           percentage: 0,
           quotaClass: 'normal',
           valueText: 'Unlimited',
-          costText: formatCursorUsageDollars(used),
+          costText: formatCursorUsageDollars(onDemand.usedCents),
           disabled: false,
         };
       }
 
-      const rawPct = limit && limit > 0 ? (used / limit) * 100 : 0;
+      const rawPct = onDemand.limitCents && onDemand.limitCents > 0
+        ? (onDemand.usedCents / onDemand.limitCents) * 100
+        : 0;
       const fixed = normalizeCursorPercent(rawPct);
-      const costText = `${formatCursorUsageDollars(used)} / ${formatCursorUsageDollars(limit)}`;
+      const costText = `${formatCursorUsageDollars(onDemand.usedCents)} / ${formatCursorUsageDollars(onDemand.limitCents)}`;
       return {
         percentage: fixed.bar,
         quotaClass: getCursorQuotaClass(fixed.display),
@@ -352,17 +367,23 @@ export function CursorAccountsPage() {
         displayLabels.set(tier, resolvePlanLabel(account));
       }
     });
+    const validCount = accounts.reduce(
+      (count, account) => (isAbnormalAccount(account) ? count : count + 1),
+      0,
+    );
 
     const extraKeys = Array.from(dynamicCounts.keys())
       .filter((tier) => !(CURSOR_KNOWN_PLAN_FILTERS as readonly string[]).includes(tier))
       .sort((a, b) => a.localeCompare(b));
 
-    return { all: accounts.length, knownCounts, dynamicCounts, extraKeys, displayLabels };
-  }, [accounts, resolvePlanKey, resolvePlanLabel]);
+    return { all: accounts.length, validCount, knownCounts, dynamicCounts, extraKeys, displayLabels };
+  }, [accounts, isAbnormalAccount, resolvePlanKey, resolvePlanLabel]);
 
   useEffect(() => {
     setFilterTypes((prev) => {
-      const next = prev.filter((value) => tierSummary.dynamicCounts.has(value));
+      const next = prev.filter(
+        (value) => value === VALID_ACCOUNTS_FILTER_VALUE || tierSummary.dynamicCounts.has(value),
+      );
       return next.length === prev.length ? prev : next;
     });
   }, [tierSummary.dynamicCounts]);
@@ -390,8 +411,9 @@ export function CursorAccountsPage() {
         label: resolveFilterLabel(planKey, tierSummary.dynamicCounts.get(planKey) ?? 0),
       });
     });
+    options.push(buildValidAccountsFilterOption(t, tierSummary.validCount));
     return options;
-  }, [resolveFilterLabel, tierSummary.dynamicCounts, tierSummary.extraKeys, tierSummary.knownCounts.ENTERPRISE, tierSummary.knownCounts.FREE, tierSummary.knownCounts.FREE_TRIAL, tierSummary.knownCounts.PRO, tierSummary.knownCounts.PRO_PLUS, tierSummary.knownCounts.ULTRA]);
+  }, [resolveFilterLabel, t, tierSummary.dynamicCounts, tierSummary.extraKeys, tierSummary.knownCounts.ENTERPRISE, tierSummary.knownCounts.FREE, tierSummary.knownCounts.FREE_TRIAL, tierSummary.knownCounts.PRO, tierSummary.knownCounts.PRO_PLUS, tierSummary.knownCounts.ULTRA, tierSummary.validCount]);
 
   // ─── Filtering & Sorting ──────────────────────────────────────────
 
@@ -445,8 +467,13 @@ export function CursorAccountsPage() {
     }
 
     if (filterTypes.length > 0) {
-      const selectedTypes = new Set(filterTypes);
-      result = result.filter((account) => selectedTypes.has(resolvePlanKey(account)));
+      const { requireValidAccounts, selectedTypes } = splitValidityFilterValues(filterTypes);
+      if (requireValidAccounts) {
+        result = result.filter((account) => !isAbnormalAccount(account));
+      }
+      if (selectedTypes.size > 0) {
+        result = result.filter((account) => selectedTypes.has(resolvePlanKey(account)));
+      }
     }
 
     if (tagFilter.length > 0) {
@@ -460,10 +487,20 @@ export function CursorAccountsPage() {
     result.sort(compareAccountsBySort);
 
     return result;
-  }, [accounts, compareAccountsBySort, filterTypes, normalizeTag, resolvePlanKey, searchQuery, tagFilter]);
+  }, [accounts, compareAccountsBySort, filterTypes, isAbnormalAccount, normalizeTag, resolvePlanKey, searchQuery, tagFilter]);
 
   const filteredIds = useMemo(() => filteredAccounts.map((account) => account.id), [filteredAccounts]);
   const exportSelectionCount = getScopedSelectedCount(filteredIds);
+  const pagination = usePagination({
+    items: filteredAccounts,
+    storageKey: buildPaginationPageSizeStorageKey('Cursor'),
+  });
+  const paginatedAccounts = pagination.pageItems;
+  const paginatedIds = useMemo(() => paginatedAccounts.map((account) => account.id), [paginatedAccounts]);
+  const isAllPaginatedSelected = useMemo(
+    () => isEveryIdSelected(selected, paginatedIds),
+    [paginatedIds, selected],
+  );
 
   const groupedAccounts = useMemo(() => {
     if (!groupByTag) return [] as Array<[string, typeof filteredAccounts]>;
@@ -493,6 +530,11 @@ export function CursorAccountsPage() {
     });
   }, [filteredAccounts, groupByTag, normalizeTag, tagFilter, untaggedKey]);
 
+  const paginatedGroupedAccounts = useMemo(
+    () => buildPaginatedGroups(groupedAccounts, paginatedAccounts),
+    [groupedAccounts, paginatedAccounts],
+  );
+
   const resolveGroupLabel = (groupKey: string) =>
     groupKey === untaggedKey ? t('accounts.defaultGroup', '默认分组') : groupKey;
 
@@ -516,6 +558,8 @@ export function CursorAccountsPage() {
       const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
       const isSelected = selected.has(account.id);
       const isCurrent = currentAccountId === account.id;
+      const quotaError = account.quota_query_last_error?.trim();
+      const hasQuotaData = hasCursorQuotaData(account);
       const isBanned = isCursorAccountBanned(account);
       const hasStatusError = (account.status || '').toLowerCase() === 'error';
       const statusReason = account.status_reason ?? null;
@@ -539,6 +583,12 @@ export function CursorAccountsPage() {
               <span className="status-pill warning" title={errorTitle}>
                 <CircleAlert size={12} />
                 {t('accounts.status.refreshFailed')}
+              </span>
+            )}
+            {quotaError && (
+              <span className="status-pill warning" title={quotaError}>
+                <CircleAlert size={12} />
+                {t('common.shared.quota.queryFailed', '配额查询失败')}
               </span>
             )}
             {isBanned && (
@@ -566,60 +616,66 @@ export function CursorAccountsPage() {
           )}
 
           <div className="ghcp-quota-section">
-            <div className="quota-item windsurf-credit-item">
-              <div className="quota-header">
-                <span className="quota-label">Total Usage</span>
-                <span className={`quota-pct ${total.quotaClass}`}>{total.valueText}</span>
-              </div>
-              {total.costText && (
-                <div className="windsurf-credit-meta-row">
-                  <span className="windsurf-credit-used">{total.costText}</span>
+            {hasQuotaData ? (
+              <>
+                <div className="quota-item windsurf-credit-item">
+                  <div className="quota-header">
+                    <span className="quota-label">Total Usage</span>
+                    <span className={`quota-pct ${total.quotaClass}`}>{total.valueText}</span>
+                  </div>
+                  {total.costText && (
+                    <div className="windsurf-credit-meta-row">
+                      <span className="windsurf-credit-used">{total.costText}</span>
+                    </div>
+                  )}
+                  {resetText && (
+                    <div className="windsurf-credit-meta-row">
+                      <span className="windsurf-credit-used">{t('common.shared.quota.resetAt', { time: resetText, defaultValue: 'Reset: {{time}}' })}</span>
+                    </div>
+                  )}
+                  <div className="quota-bar-track">
+                    <div className={`quota-bar ${total.quotaClass}`} style={{ width: `${Math.min(total.percentage, 100)}%` }} />
+                  </div>
                 </div>
-              )}
-              {resetText && (
-                <div className="windsurf-credit-meta-row">
-                  <span className="windsurf-credit-used">{t('common.shared.quota.resetAt', { time: resetText, defaultValue: 'Reset: {{time}}' })}</span>
+
+                <div className="quota-item windsurf-credit-item">
+                  <div className="quota-header">
+                    <span className="quota-label">Auto + Composer</span>
+                    <span className={`quota-pct ${auto.quotaClass}`}>{auto.valueText}</span>
+                  </div>
+                  <div className="quota-bar-track">
+                    <div className={`quota-bar ${auto.quotaClass}`} style={{ width: `${Math.min(auto.percentage, 100)}%` }} />
+                  </div>
                 </div>
-              )}
-              <div className="quota-bar-track">
-                <div className={`quota-bar ${total.quotaClass}`} style={{ width: `${Math.min(total.percentage, 100)}%` }} />
-              </div>
-            </div>
 
-            <div className="quota-item windsurf-credit-item">
-              <div className="quota-header">
-                <span className="quota-label">Auto + Composer</span>
-                <span className={`quota-pct ${auto.quotaClass}`}>{auto.valueText}</span>
-              </div>
-              <div className="quota-bar-track">
-                <div className={`quota-bar ${auto.quotaClass}`} style={{ width: `${Math.min(auto.percentage, 100)}%` }} />
-              </div>
-            </div>
-
-            <div className="quota-item windsurf-credit-item">
-              <div className="quota-header">
-                <span className="quota-label">API Usage</span>
-                <span className={`quota-pct ${api.quotaClass}`}>{api.valueText}</span>
-              </div>
-              <div className="quota-bar-track">
-                <div className={`quota-bar ${api.quotaClass}`} style={{ width: `${Math.min(api.percentage, 100)}%` }} />
-              </div>
-            </div>
-
-            <div className="quota-item windsurf-credit-item">
-              <div className="quota-header">
-                <span className="quota-label">{t('cursor.quota.onDemand', 'On-Demand')}</span>
-                <span className={`quota-pct ${onDemand.quotaClass}`}>{onDemand.valueText}</span>
-              </div>
-              {onDemand.costText && (
-                <div className="windsurf-credit-meta-row">
-                  <span className="windsurf-credit-used">{onDemand.costText}</span>
+                <div className="quota-item windsurf-credit-item">
+                  <div className="quota-header">
+                    <span className="quota-label">API Usage</span>
+                    <span className={`quota-pct ${api.quotaClass}`}>{api.valueText}</span>
+                  </div>
+                  <div className="quota-bar-track">
+                    <div className={`quota-bar ${api.quotaClass}`} style={{ width: `${Math.min(api.percentage, 100)}%` }} />
+                  </div>
                 </div>
-              )}
-              <div className="quota-bar-track">
-                <div className={`quota-bar ${onDemand.quotaClass}`} style={{ width: `${Math.min(onDemand.percentage, 100)}%` }} />
-              </div>
-            </div>
+
+                <div className="quota-item windsurf-credit-item">
+                  <div className="quota-header">
+                    <span className="quota-label">{t('cursor.quota.onDemand', 'On-Demand')}</span>
+                    <span className={`quota-pct ${onDemand.quotaClass}`}>{onDemand.valueText}</span>
+                  </div>
+                  {onDemand.costText && (
+                    <div className="windsurf-credit-meta-row">
+                      <span className="windsurf-credit-used">{onDemand.costText}</span>
+                    </div>
+                  )}
+                  <div className="quota-bar-track">
+                    <div className={`quota-bar ${onDemand.quotaClass}`} style={{ width: `${Math.min(onDemand.percentage, 100)}%` }} />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
+            )}
           </div>
 
           <div className="card-footer">
@@ -638,7 +694,7 @@ export function CursorAccountsPage() {
               <button
                 className="card-action-btn export-btn"
                 onClick={() => handleExportByIds([account.id], resolveSingleExportBaseName(account))}
-                title={t('common.shared.export', '导出')}
+                title={t('common.shared.export.title', '导出')}
               >
                 <Upload size={14} />
               </button>
@@ -669,6 +725,8 @@ export function CursorAccountsPage() {
       const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
       const isCurrent = currentAccountId === account.id;
       const isBanned = isCursorAccountBanned(account);
+      const quotaError = account.quota_query_last_error?.trim();
+      const hasQuotaData = hasCursorQuotaData(account);
       const hasStatusError = (account.status || '').toLowerCase() === 'error';
       const statusReason = account.status_reason ?? null;
       const bannedTitle = statusReason || t('accounts.status.forbidden_tooltip');
@@ -689,6 +747,14 @@ export function CursorAccountsPage() {
                   {isBanned && (<span className="status-pill forbidden" title={bannedTitle}><Lock size={12} />{t('accounts.status.forbidden')}</span>)}
                 </div>
               )}
+              {quotaError && (
+                <div className="account-sub-line">
+                  <span className="status-pill warning" title={quotaError}>
+                    <CircleAlert size={12} />
+                    {t('common.shared.quota.queryFailed', '配额查询失败')}
+                  </span>
+                </div>
+              )}
               <div className="account-sub-line">
                 <span className="kiro-table-subline">Auth ID: {maskedAuthIdText}</span>
               </div>
@@ -702,59 +768,69 @@ export function CursorAccountsPage() {
           </td>
           <td><span className={`tier-badge ${resolvePlanBadgeClass(account)}`}>{planLabel}</span></td>
           <td>
-            <div className="quota-item windsurf-table-credit-item">
-              <div className="quota-header">
-                <span className="quota-name">Total Usage</span>
-                <span className={`quota-value ${total.quotaClass}`}>{total.valueText}</span>
-              </div>
-              {total.costText && (
-                <div className="windsurf-credit-meta-row table">
-                  <span className="windsurf-credit-used">{total.costText}</span>
+            {hasQuotaData ? (
+              <div className="quota-item windsurf-table-credit-item">
+                <div className="quota-header">
+                  <span className="quota-name">Total Usage</span>
+                  <span className={`quota-value ${total.quotaClass}`}>{total.valueText}</span>
                 </div>
-              )}
-              {resetText && (
-                <div className="windsurf-credit-meta-row table">
-                  <span className="windsurf-credit-used">{t('common.shared.quota.resetAt', { time: resetText, defaultValue: 'Reset: {{time}}' })}</span>
+                {total.costText && (
+                  <div className="windsurf-credit-meta-row table">
+                    <span className="windsurf-credit-used">{total.costText}</span>
+                  </div>
+                )}
+                {resetText && (
+                  <div className="windsurf-credit-meta-row table">
+                    <span className="windsurf-credit-used">{t('common.shared.quota.resetAt', { time: resetText, defaultValue: 'Reset: {{time}}' })}</span>
+                  </div>
+                )}
+                <div className="quota-progress-track">
+                  <div className={`quota-progress-bar ${total.quotaClass}`} style={{ width: `${Math.min(total.percentage, 100)}%` }} />
                 </div>
-              )}
-              <div className="quota-progress-track">
-                <div className={`quota-progress-bar ${total.quotaClass}`} style={{ width: `${Math.min(total.percentage, 100)}%` }} />
               </div>
-            </div>
+            ) : (
+              <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
+            )}
           </td>
           <td>
-            <div className="quota-item windsurf-table-credit-item">
-              <div className="quota-header">
-                <span className="quota-name">Auto + Composer</span>
-                <span className={`quota-value ${auto.quotaClass}`}>{auto.valueText}</span>
-              </div>
-              <div className="quota-progress-track">
-                <div className={`quota-progress-bar ${auto.quotaClass}`} style={{ width: `${Math.min(auto.percentage, 100)}%` }} />
-              </div>
-            </div>
-            <div className="quota-item windsurf-table-credit-item" style={{ marginTop: 4 }}>
-              <div className="quota-header">
-                <span className="quota-name">API</span>
-                <span className={`quota-value ${api.quotaClass}`}>{api.valueText}</span>
-              </div>
-              <div className="quota-progress-track">
-                <div className={`quota-progress-bar ${api.quotaClass}`} style={{ width: `${Math.min(api.percentage, 100)}%` }} />
-              </div>
-            </div>
-            <div className="quota-item windsurf-table-credit-item" style={{ marginTop: 4 }}>
-              <div className="quota-header">
-                <span className="quota-name">{t('cursor.quota.onDemand', 'On-Demand')}</span>
-                <span className={`quota-value ${onDemand.quotaClass}`}>{onDemand.valueText}</span>
-              </div>
-              {onDemand.costText && (
-                <div className="windsurf-credit-meta-row table">
-                  <span className="windsurf-credit-used">{onDemand.costText}</span>
+            {hasQuotaData ? (
+              <>
+                <div className="quota-item windsurf-table-credit-item">
+                  <div className="quota-header">
+                    <span className="quota-name">Auto + Composer</span>
+                    <span className={`quota-value ${auto.quotaClass}`}>{auto.valueText}</span>
+                  </div>
+                  <div className="quota-progress-track">
+                    <div className={`quota-progress-bar ${auto.quotaClass}`} style={{ width: `${Math.min(auto.percentage, 100)}%` }} />
+                  </div>
                 </div>
-              )}
-              <div className="quota-progress-track">
-                <div className={`quota-progress-bar ${onDemand.quotaClass}`} style={{ width: `${Math.min(onDemand.percentage, 100)}%` }} />
-              </div>
-            </div>
+                <div className="quota-item windsurf-table-credit-item" style={{ marginTop: 4 }}>
+                  <div className="quota-header">
+                    <span className="quota-name">API</span>
+                    <span className={`quota-value ${api.quotaClass}`}>{api.valueText}</span>
+                  </div>
+                  <div className="quota-progress-track">
+                    <div className={`quota-progress-bar ${api.quotaClass}`} style={{ width: `${Math.min(api.percentage, 100)}%` }} />
+                  </div>
+                </div>
+                <div className="quota-item windsurf-table-credit-item" style={{ marginTop: 4 }}>
+                  <div className="quota-header">
+                    <span className="quota-name">{t('cursor.quota.onDemand', 'On-Demand')}</span>
+                    <span className={`quota-value ${onDemand.quotaClass}`}>{onDemand.valueText}</span>
+                  </div>
+                  {onDemand.costText && (
+                    <div className="windsurf-credit-meta-row table">
+                      <span className="windsurf-credit-used">{onDemand.costText}</span>
+                    </div>
+                  )}
+                  <div className="quota-progress-track">
+                    <div className={`quota-progress-bar ${onDemand.quotaClass}`} style={{ width: `${Math.min(onDemand.percentage, 100)}%` }} />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
+            )}
           </td>
           <td className="sticky-action-cell table-action-cell">
             <div className="action-buttons">
@@ -771,7 +847,7 @@ export function CursorAccountsPage() {
               <button
                 className="action-btn"
                 onClick={() => handleExportByIds([account.id], resolveSingleExportBaseName(account))}
-                title={t('common.shared.export', '导出')}
+                title={t('common.shared.export.title', '导出')}
               >
                 <Upload size={14} />
               </button>
@@ -847,11 +923,14 @@ export function CursorAccountsPage() {
               {tagFilter.length > 0 ? `${t('accounts.filterTagsCount', '标签')}(${tagFilter.length})` : t('accounts.filterTags', '标签筛选')}
             </button>
             {showTagFilter && (
-              <div className="tag-filter-panel">
+              <div
+                ref={page.tagFilterPanelRef}
+                className={`tag-filter-panel ${page.tagFilterPanelPlacement === 'top' ? 'open-top' : ''}`}
+              >
                 {availableTags.length === 0 ? (
                   <div className="tag-filter-empty">{t('accounts.noAvailableTags', '暂无可用标签')}</div>
                 ) : (
-                  <div className="tag-filter-options">
+                  <div className="tag-filter-options" style={page.tagFilterScrollContainerStyle}>
                     {availableTags.map((tag) => (
                       <label key={tag} className={`tag-filter-option ${tagFilter.includes(tag) ? 'selected' : ''}`}>
                         <input type="checkbox" checked={tagFilter.includes(tag)} onChange={() => toggleTagFilterValue(tag)} />
@@ -876,14 +955,17 @@ export function CursorAccountsPage() {
             )}
           </div>
 
-          <div className="sort-select">
-            <ArrowDownWideNarrow size={14} className="sort-icon" />
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label={t('common.shared.sortLabel', '排序')}>
-              <option value="created_at">{t('common.shared.sort.createdAt', '按创建时间')}</option>
-              <option value="credits">{t('common.shared.sort.credits', '按剩余 Credits')}</option>
-              <option value="plan_end">{t('common.shared.sort.planEnd', '按配额周期结束时间')}</option>
-            </select>
-          </div>
+          <SingleSelectFilterDropdown
+            value={sortBy}
+            options={[
+              { value: 'created_at', label: t('common.shared.sort.createdAt', '按创建时间') },
+              { value: 'credits', label: t('common.shared.sort.credits', '按剩余 Credits') },
+              { value: 'plan_end', label: t('common.shared.sort.planEnd', '按配额周期结束时间') },
+            ]}
+            ariaLabel={t('common.shared.sortLabel', '排序')}
+            icon={<ArrowDownWideNarrow size={14} />}
+            onChange={setSortBy}
+          />
 
           <button className="sort-direction-btn" onClick={() => setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
             title={sortDirection === 'desc' ? t('common.shared.sort.descTooltip', '当前：降序，点击切换为升序') : t('common.shared.sort.ascTooltip', '当前：升序，点击切换为降序')}
@@ -903,8 +985,8 @@ export function CursorAccountsPage() {
           </button>
           <button className="btn btn-secondary icon-only" onClick={() => openAddModal('import')} disabled={importing} title={t('common.shared.import.label', '导入')} aria-label={t('common.shared.import.label', '导入')}><Download size={14} /></button>
           <button className="btn btn-secondary export-btn icon-only" onClick={() => void handleExport(filteredIds)} disabled={exporting || filteredIds.length === 0}
-            title={exportSelectionCount > 0 ? `${t('common.shared.export', '导出')} (${exportSelectionCount})` : t('common.shared.export', '导出')}
-            aria-label={exportSelectionCount > 0 ? `${t('common.shared.export', '导出')} (${exportSelectionCount})` : t('common.shared.export', '导出')}>
+            title={exportSelectionCount > 0 ? `${t('common.shared.export.title', '导出')} (${exportSelectionCount})` : t('common.shared.export.title', '导出')}
+            aria-label={exportSelectionCount > 0 ? `${t('common.shared.export.title', '导出')} (${exportSelectionCount})` : t('common.shared.export.title', '导出')}>
             <Upload size={14} />
           </button>
           {selected.size > 0 && (
@@ -941,28 +1023,28 @@ export function CursorAccountsPage() {
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid-view-container">
-          {filteredAccounts.length > 0 && (
+          {paginatedAccounts.length > 0 && (
             <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
-                <input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} />
+                <input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} />
                 {t('common.selectAll', '全选')}
               </label>
             </div>
           )}
           {groupByTag ? (
           <div className="tag-group-list">
-            {groupedAccounts.map(([groupKey, groupAccounts]) => (
+            {paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
               <div key={groupKey} className="tag-group-section">
                 <div className="tag-group-header">
                   <span className="tag-group-title">{resolveGroupLabel(groupKey)}</span>
-                  <span className="tag-group-count">{groupAccounts.length}</span>
+                  <span className="tag-group-count">{totalCount}</span>
                 </div>
-                <div className="tag-group-grid ghcp-accounts-grid">{renderGridCards(groupAccounts, groupKey)}</div>
+                <div className="tag-group-grid ghcp-accounts-grid">{renderGridCards(items, groupKey)}</div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="ghcp-accounts-grid">{renderGridCards(filteredAccounts)}</div>
+          <div className="ghcp-accounts-grid">{renderGridCards(paginatedAccounts)}</div>
         )}
         </div>
       ) : groupByTag ? (
@@ -971,7 +1053,7 @@ export function CursorAccountsPage() {
             <thead>
               <tr>
                 <th style={{ width: 40 }}>
-                  <input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} />
+                  <input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} />
                 </th>
                 <th style={{ width: 240 }}>{t('common.shared.columns.email', '邮箱')}</th>
                 <th style={{ width: 120 }}>{t('common.shared.columns.plan', '计划')}</th>
@@ -981,17 +1063,17 @@ export function CursorAccountsPage() {
               </tr>
             </thead>
             <tbody>
-              {groupedAccounts.map(([groupKey, groupAccounts]) => (
+              {paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
                 <Fragment key={groupKey}>
                   <tr className="tag-group-row">
                     <td colSpan={6}>
                       <div className="tag-group-header">
                         <span className="tag-group-title">{resolveGroupLabel(groupKey)}</span>
-                        <span className="tag-group-count">{groupAccounts.length}</span>
+                        <span className="tag-group-count">{totalCount}</span>
                       </div>
                     </td>
                   </tr>
-                  {renderTableRows(groupAccounts, groupKey)}
+                  {renderTableRows(items, groupKey)}
                 </Fragment>
               ))}
             </tbody>
@@ -1003,7 +1085,7 @@ export function CursorAccountsPage() {
             <thead>
               <tr>
                 <th style={{ width: 40 }}>
-                  <input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} />
+                  <input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} />
                 </th>
                 <th style={{ width: 240 }}>{t('common.shared.columns.email', '邮箱')}</th>
                 <th style={{ width: 120 }}>{t('common.shared.columns.plan', '计划')}</th>
@@ -1012,10 +1094,25 @@ export function CursorAccountsPage() {
                 <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', '操作')}</th>
               </tr>
             </thead>
-            <tbody>{renderTableRows(filteredAccounts)}</tbody>
+            <tbody>{renderTableRows(paginatedAccounts)}</tbody>
           </table>
         </div>
       )}
+
+      <PaginationControls
+        totalItems={pagination.totalItems}
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        pageSize={pagination.pageSize}
+        pageSizeOptions={pagination.pageSizeOptions}
+        rangeStart={pagination.rangeStart}
+        rangeEnd={pagination.rangeEnd}
+        canGoPrevious={pagination.canGoPrevious}
+        canGoNext={pagination.canGoNext}
+        onPageSizeChange={pagination.setPageSize}
+        onPreviousPage={pagination.goToPreviousPage}
+        onNextPage={pagination.goToNextPage}
+      />
 
       {showAddModal && (
         <div className="modal-overlay" onClick={closeAddModal}>
@@ -1157,7 +1254,7 @@ export function CursorAccountsPage() {
 
       <ExportJsonModal
         isOpen={showExportModal}
-        title={`${t('common.shared.export', '导出')} JSON`}
+        title={`${t('common.shared.export.title', '导出')} JSON`}
         jsonContent={exportJsonContent}
         hidden={exportJsonHidden}
         copied={exportJsonCopied}

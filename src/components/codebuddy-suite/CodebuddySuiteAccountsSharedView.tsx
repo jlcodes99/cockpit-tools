@@ -8,13 +8,21 @@ import { TagEditModal } from '../TagEditModal';
 import { ExportJsonModal } from '../ExportJsonModal';
 import { ModalErrorMessage } from '../ModalErrorMessage';
 import { QuickSettingsPopover } from '../QuickSettingsPopover';
+import { PaginationControls } from '../PaginationControls';
 import { useCodebuddySuitePage, formatQuotaNumber } from '../../hooks/useCodebuddySuitePage';
 import type { UseProviderAccountsPageReturn } from '../../hooks/useProviderAccountsPage';
+import {
+  buildPaginatedGroups,
+  buildPaginationPageSizeStorageKey,
+  isEveryIdSelected,
+  usePagination,
+} from '../../hooks/usePagination';
 import { KNOWN_PLAN_FILTERS } from './CodebuddySuiteConfig';
 import { DosageNotifyUsageStatus } from '../platform/DosageNotifyUsageStatus';
 import { CodeBuddyQuotaCategoryList } from '../codebuddy/CodeBuddyQuotaCategoryList';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../MultiSelectFilterDropdown';
 import type { CodebuddySuiteAccountBase, QuotaCategoryGroup, CodebuddyUsage } from '../../types/codebuddy-suite';
+import { buildValidAccountsFilterOption } from '../../utils/accountValidityFilter';
 
 interface CheckinModalProps<TAccount extends CodebuddySuiteAccountBase> {
   accounts: TAccount[];
@@ -155,6 +163,11 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
     }
   }, [platformConfig, t]);
 
+  const isAbnormalAccount = useCallback(
+    (account: TAccount) => !platformConfig.getUsage(account).isNormal,
+    [platformConfig],
+  );
+
   const suitePage = useCodebuddySuitePage({
     accounts,
     currentAccountId,
@@ -163,6 +176,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
     tagFilter,
     sortDirection,
     getPlanBadge: platformConfig.getPlanBadge,
+    isAbnormalAccount,
     normalizeTag,
     groupByTag,
   });
@@ -190,10 +204,28 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
         label: `${key} (${tierSummary.dynamicCounts.get(key) ?? 0})`,
       });
     });
+    options.push(buildValidAccountsFilterOption(t, tierSummary.validCount));
     return options;
-  }, [tierSummary.dynamicCounts, tierSummary.extraKeys]);
+  }, [t, tierSummary.dynamicCounts, tierSummary.extraKeys, tierSummary.validCount]);
 
   const exportSelectionCount = getScopedSelectedCount(filteredIds);
+  const pagination = usePagination({
+    items: filteredAccounts,
+    storageKey: buildPaginationPageSizeStorageKey(platformConfig.quickSettingsType),
+  });
+  const paginatedAccounts = pagination.pageItems;
+  const paginatedIds = useMemo(
+    () => paginatedAccounts.map((account) => account.id),
+    [paginatedAccounts],
+  );
+  const paginatedGroupedAccounts = useMemo(
+    () => buildPaginatedGroups(groupedAccounts, paginatedAccounts),
+    [groupedAccounts, paginatedAccounts],
+  );
+  const isAllPaginatedSelected = useMemo(
+    () => isEveryIdSelected(selected, paginatedIds),
+    [paginatedIds, selected],
+  );
 
   const resolveGroupLabel = (groupKey: string) =>
     groupKey === '__untagged__' ? t('accounts.defaultGroup', '默认分组') : groupKey;
@@ -299,7 +331,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
               <button className="card-action-btn" onClick={() => handleRefresh(account.id)} disabled={refreshing === account.id} title={t('common.shared.refreshQuota', '刷新')}>
                 <RotateCw size={14} className={refreshing === account.id ? 'loading-spinner' : ''} />
               </button>
-              <button className="card-action-btn export-btn" onClick={() => handleExportByIds([account.id])} title={t('common.shared.export', '导出')}><Upload size={14} /></button>
+              <button className="card-action-btn export-btn" onClick={() => handleExportByIds([account.id])} title={t('common.shared.export.title', '导出')}><Upload size={14} /></button>
               <button className="card-action-btn danger" onClick={() => handleDelete(account.id)} title={t('common.delete', '删除')}><Trash2 size={14} /></button>
             </div>
           </div>
@@ -406,7 +438,10 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
               {tagFilter.length > 0 ? `${t('accounts.filterTagsCount', '标签')}(${tagFilter.length})` : t('accounts.filterTags', '标签筛选')}
             </button>
             {showTagFilter && (
-              <div className="tag-filter-panel">
+              <div
+                ref={page.tagFilterPanelRef}
+                className={`tag-filter-panel ${page.tagFilterPanelPlacement === 'top' ? 'open-top' : ''}`}
+              >
                 {availableTags.length === 0 ? (
                   <div className="tag-filter-empty">{t('accounts.noAvailableTags', '暂无可用标签')}</div>
                 ) : (
@@ -415,7 +450,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
                       <label className="group-toggle"><input type="checkbox" checked={groupByTag} onChange={() => setGroupByTag(!groupByTag)} /> {t('accounts.groupByTag', '按标签分组')}</label>
                       {tagFilter.length > 0 && <button className="tag-filter-clear" onClick={clearTagFilter}>{t('common.shared.clear', '清除')}</button>}
                     </div>
-                    <div className="tag-filter-list">
+                    <div className="tag-filter-list" style={page.tagFilterScrollContainerStyle}>
                       {availableTags.map((tag) => (
                         <label key={tag} className="tag-filter-item">
                           <input type="checkbox" checked={tagFilter.includes(tag)} onChange={() => toggleTagFilterValue(tag)} />
@@ -446,7 +481,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
           </button>
           <button className="btn btn-secondary icon-only" onClick={() => openAddModal('token')} disabled={importing} title={t('common.shared.import.label', '导入')}><Download size={14} /></button>
           <button className="btn btn-secondary export-btn icon-only" onClick={() => void handleExport(filteredIds)} disabled={exporting || filteredIds.length === 0}
-            title={exportSelectionCount > 0 ? `${t('common.shared.export', '导出')} (${exportSelectionCount})` : t('common.shared.export', '导出')}>
+            title={exportSelectionCount > 0 ? `${t('common.shared.export.title', '导出')} (${exportSelectionCount})` : t('common.shared.export.title', '导出')}>
             <Upload size={14} />
           </button>
           {selected.size > 0 && (
@@ -476,28 +511,28 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid-view-container">
-          {filteredAccounts.length > 0 && (
+          {paginatedAccounts.length > 0 && (
             <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
-                <input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} />
+                <input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} />
                 {t('common.selectAll', '全选')}
               </label>
             </div>
           )}
           {groupByTag ? (
           <div className="tag-group-list">
-            {groupedAccounts.map(([groupKey, groupAccounts]) => (
+            {paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
               <div key={groupKey} className="tag-group-section">
                 <div className="tag-group-header">
                   <span className="tag-group-title">{resolveGroupLabel(groupKey)}</span>
-                  <span className="tag-group-count">{groupAccounts.length}</span>
+                  <span className="tag-group-count">{totalCount}</span>
                 </div>
-                <div className="tag-group-grid ghcp-accounts-grid">{renderGridCards(groupAccounts, groupKey)}</div>
+                <div className="tag-group-grid ghcp-accounts-grid">{renderGridCards(items, groupKey)}</div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="ghcp-accounts-grid">{renderGridCards(filteredAccounts)}</div>
+          <div className="ghcp-accounts-grid">{renderGridCards(paginatedAccounts)}</div>
         )}
         </div>
       ) : groupByTag ? (
@@ -505,7 +540,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
           <table className="account-table">
             <thead>
               <tr>
-                <th style={{ width: 40 }}><input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} /></th>
+                <th style={{ width: 40 }}><input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} /></th>
                 <th style={{ width: 240 }}>{t('common.shared.columns.email', '邮箱')}</th>
                 <th style={{ width: 120 }}>{t('common.shared.columns.plan', '套餐')}</th>
                 <th>{t('instances.labels.quota', '配额')}</th>
@@ -513,10 +548,10 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
               </tr>
             </thead>
             <tbody>
-              {groupedAccounts.map(([groupKey, groupAccounts]) => (
+              {paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
                 <Fragment key={groupKey}>
-                  <tr className="tag-group-row"><td colSpan={5}><div className="tag-group-header"><span className="tag-group-title">{resolveGroupLabel(groupKey)}</span><span className="tag-group-count">{groupAccounts.length}</span></div></td></tr>
-                  {renderTableRows(groupAccounts, groupKey)}
+                  <tr className="tag-group-row"><td colSpan={5}><div className="tag-group-header"><span className="tag-group-title">{resolveGroupLabel(groupKey)}</span><span className="tag-group-count">{totalCount}</span></div></td></tr>
+                  {renderTableRows(items, groupKey)}
                 </Fragment>
               ))}
             </tbody>
@@ -527,17 +562,32 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
           <table className="account-table">
             <thead>
               <tr>
-                <th style={{ width: 40 }}><input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={() => toggleSelectAll(filteredAccounts.map((a) => a.id))} /></th>
+                <th style={{ width: 40 }}><input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} /></th>
                 <th style={{ width: 240 }}>{t('common.shared.columns.email', '邮箱')}</th>
                 <th style={{ width: 120 }}>{t('common.shared.columns.plan', '套餐')}</th>
                 <th>{t('instances.labels.quota', '配额')}</th>
                 <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', '操作')}</th>
               </tr>
             </thead>
-            <tbody>{renderTableRows(filteredAccounts)}</tbody>
+            <tbody>{renderTableRows(paginatedAccounts)}</tbody>
           </table>
         </div>
       )}
+
+      <PaginationControls
+        totalItems={pagination.totalItems}
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        pageSize={pagination.pageSize}
+        pageSizeOptions={pagination.pageSizeOptions}
+        rangeStart={pagination.rangeStart}
+        rangeEnd={pagination.rangeEnd}
+        canGoPrevious={pagination.canGoPrevious}
+        canGoNext={pagination.canGoNext}
+        onPageSizeChange={pagination.setPageSize}
+        onPreviousPage={pagination.goToPreviousPage}
+        onNextPage={pagination.goToNextPage}
+      />
 
       {showAddModal && (
         <div className="modal-overlay" onClick={closeAddModal}>
@@ -723,7 +773,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
 
       <ExportJsonModal
         isOpen={showExportModal}
-        title={`${t('common.shared.export', '导出')} JSON`}
+        title={`${t('common.shared.export.title', '导出')} JSON`}
         jsonContent={exportJsonContent}
         hidden={exportJsonHidden}
         copied={exportJsonCopied}

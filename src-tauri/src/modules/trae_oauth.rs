@@ -1105,12 +1105,11 @@ async fn request_login_guidance(login_trace_id: &str) -> Result<String, String> 
         };
 
         if !status.is_success() {
-            let short = text.chars().take(180).collect::<String>();
             errors.push(format!(
-                "{} => HTTP {}: {}",
+                "{} => HTTP {} (body_len={})",
                 endpoint,
                 status.as_u16(),
-                short
+                text.len()
             ));
             continue;
         }
@@ -1429,8 +1428,12 @@ async fn request_exchange_token(
         };
 
         if !status.is_success() {
-            let short = text.chars().take(180).collect::<String>();
-            errors.push(format!("{} => HTTP {}: {}", url, status.as_u16(), short));
+            errors.push(format!(
+                "{} => HTTP {} (body_len={})",
+                url,
+                status.as_u16(),
+                text.len()
+            ));
             continue;
         }
 
@@ -1489,8 +1492,12 @@ async fn request_user_info(
         };
 
         if !status.is_success() {
-            let short = text.chars().take(180).collect::<String>();
-            errors.push(format!("{} => HTTP {}: {}", url, status.as_u16(), short));
+            errors.push(format!(
+                "{} => HTTP {} (body_len={})",
+                url,
+                status.as_u16(),
+                text.len()
+            ));
             continue;
         }
 

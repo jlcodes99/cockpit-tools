@@ -21,6 +21,8 @@ export interface GitHubCopilotAccount {
   copilot_quota_reset_date?: string | null;
   copilot_limited_user_quotas?: unknown;
   copilot_limited_user_reset_date?: number | null;
+  quota_query_last_error?: string | null;
+  quota_query_last_error_at?: number | null;
 
   created_at: number;
   last_used: number;
@@ -308,6 +310,21 @@ export function getGitHubCopilotUsage(account: GitHubCopilotAccount): GitHubCopi
     totalCompletions,
     totalChat,
   };
+}
+
+export function hasGitHubCopilotQuotaData(account: GitHubCopilotAccount): boolean {
+  const usage = getGitHubCopilotUsage(account);
+  return (
+    account.copilot_quota_snapshots != null ||
+    account.copilot_limited_user_quotas != null ||
+    usage.inlineSuggestionsUsedPercent != null ||
+    usage.chatMessagesUsedPercent != null ||
+    usage.premiumRequestsUsedPercent != null ||
+    usage.remainingCompletions != null ||
+    usage.remainingChat != null ||
+    usage.totalCompletions != null ||
+    usage.totalChat != null
+  );
 }
 
 export function formatUnixSecondsToYmd(seconds: number, locale = 'zh-CN'): string {

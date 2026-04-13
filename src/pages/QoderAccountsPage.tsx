@@ -29,8 +29,10 @@ import { useTranslation } from 'react-i18next';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorMessage';
+import { PaginationControls } from '../components/PaginationControls';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
+import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
 import {
   PlatformOverviewTab,
   PlatformOverviewTabsHeader,
@@ -44,6 +46,7 @@ import {
   getQoderPlanBadge,
   getQoderSubscriptionInfo,
   getQoderUsage,
+  hasQoderQuotaData,
   shouldShowQoderSubscriptionReset,
 } from '../types/qoder';
 import {
@@ -52,12 +55,24 @@ import {
   persistPrivacyModeEnabled,
 } from '../utils/privacy';
 import { useExportJsonModal } from '../hooks/useExportJsonModal';
+import { useDropdownPanelPlacement } from '../hooks/useDropdownPanelPlacement';
 import { parseFileCorruptedError } from '../components/FileCorruptedModal';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 import {
   consumeQueuedExternalProviderImportForPlatform,
   EXTERNAL_PROVIDER_IMPORT_EVENT,
 } from '../utils/externalProviderImport';
+import {
+  buildValidAccountsFilterOption,
+  splitValidityFilterValues,
+  VALID_ACCOUNTS_FILTER_VALUE,
+} from '../utils/accountValidityFilter';
+import {
+  buildPaginatedGroups,
+  buildPaginationPageSizeStorageKey,
+  isEveryIdSelected,
+  usePagination,
+} from '../hooks/usePagination';
 
 const QODER_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.qoder.flow_notice_collapsed';
 const QODER_VIEW_MODE_KEY = 'agtools.qoder.accounts_view_mode';
@@ -433,6 +448,8 @@ export function QoderAccountsPage() {
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, [showTagFilter]);
 
+  const isAbnormalAccount = useCallback((_account: QoderAccount) => false, []);
+
   const tierSummary = useMemo(() => {
     const counts = new Map<string, number>();
     counts.set('UNKNOWN', 0);
@@ -445,9 +462,13 @@ export function QoderAccountsPage() {
       .sort((a, b) => a[0].localeCompare(b[0]));
     return {
       all: accounts.length,
+      valid: accounts.reduce(
+        (count, account) => (isAbnormalAccount(account) ? count : count + 1),
+        0,
+      ),
       entries,
     };
-  }, [accounts]);
+  }, [accounts, isAbnormalAccount]);
 
   const allFilterLabel = useMemo(() => {
     const text = t('common.shared.filter.all', {
@@ -459,16 +480,19 @@ export function QoderAccountsPage() {
   }, [t, tierSummary.all]);
 
   const tierFilterOptions = useMemo<MultiSelectFilterOption[]>(
-    () =>
-      tierSummary.entries.map(([plan, count]) => ({
+    () => [
+      ...tierSummary.entries.map(([plan, count]) => ({
         value: plan,
         label: `${plan} (${count})`,
       })),
-    [tierSummary.entries],
+      buildValidAccountsFilterOption(t, tierSummary.valid),
+    ],
+    [t, tierSummary.entries, tierSummary.valid],
   );
 
   useEffect(() => {
     const allowed = new Set(tierSummary.entries.map(([plan]) => plan));
+    allowed.add(VALID_ACCOUNTS_FILTER_VALUE);
     setFilterTypes((prev) => {
       const next = prev.filter((value) => allowed.has(value));
       return next.length === prev.length ? prev : next;
@@ -485,6 +509,11 @@ export function QoderAccountsPage() {
     }
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
   }, [accounts]);
+  const {
+    panelRef: tagFilterPanelRef,
+    panelPlacement: tagFilterPanelPlacement,
+    scrollContainerStyle: tagFilterScrollContainerStyle,
+  } = useDropdownPanelPlacement(tagFilterRef, showTagFilter, availableTags.length);
 
   const compareAccountsBySort = useCallback(
     (a: QoderAccount, b: QoderAccount) => {
@@ -523,8 +552,13 @@ export function QoderAccountsPage() {
     }
 
     if (filterTypes.length > 0) {
-      const selectedTypes = new Set(filterTypes);
-      result = result.filter((account) => selectedTypes.has(getQoderPlanBadge(account)));
+      const { requireValidAccounts, selectedTypes } = splitValidityFilterValues(filterTypes);
+      if (requireValidAccounts) {
+        result = result.filter((account) => !isAbnormalAccount(account));
+      }
+      if (selectedTypes.size > 0) {
+        result = result.filter((account) => selectedTypes.has(getQoderPlanBadge(account)));
+      }
     }
 
     if (tagFilter.length > 0) {
@@ -536,7 +570,7 @@ export function QoderAccountsPage() {
 
     result.sort(compareAccountsBySort);
     return result;
-  }, [accounts, compareAccountsBySort, filterTypes, searchQuery, tagFilter]);
+  }, [accounts, compareAccountsBySort, filterTypes, isAbnormalAccount, searchQuery, tagFilter]);
 
   const groupedAccounts = useMemo(() => {
     if (!groupByTag) return [] as Array<[string, QoderAccount[]]>;
@@ -567,11 +601,21 @@ export function QoderAccountsPage() {
   }, [filteredAccounts, groupByTag, tagFilter]);
 
   const filteredIds = useMemo(() => filteredAccounts.map((item) => item.id), [filteredAccounts]);
+  const pagination = usePagination({
+    items: filteredAccounts,
+    storageKey: buildPaginationPageSizeStorageKey('Qoder'),
+  });
+  const paginatedAccounts = pagination.pageItems;
+  const paginatedIds = useMemo(() => paginatedAccounts.map((item) => item.id), [paginatedAccounts]);
+  const paginatedGroupedAccounts = useMemo(
+    () => buildPaginatedGroups(groupedAccounts, paginatedAccounts),
+    [groupedAccounts, paginatedAccounts],
+  );
   const visibleSelectedCount = useMemo(
     () => filteredIds.filter((id) => selected.has(id)).length,
     [filteredIds, selected],
   );
-  const allSelected = filteredIds.length > 0 && filteredIds.every((id) => selected.has(id));
+  const allSelected = isEveryIdSelected(selected, paginatedIds);
 
   const toggleSelect = useCallback((id: string) => {
     setSelected((prev) => {
@@ -583,8 +627,18 @@ export function QoderAccountsPage() {
   }, []);
 
   const toggleSelectAll = useCallback(() => {
-    setSelected(allSelected ? new Set() : new Set(filteredIds));
-  }, [allSelected, filteredIds]);
+    if (paginatedIds.length === 0) return;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const pageFullySelected = paginatedIds.every((id) => next.has(id));
+      if (pageFullySelected) {
+        paginatedIds.forEach((id) => next.delete(id));
+      } else {
+        paginatedIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }, [paginatedIds]);
 
   const togglePrivacyMode = useCallback(() => {
     setPrivacyModeEnabled((prev) => {
@@ -961,10 +1015,11 @@ export function QoderAccountsPage() {
         (response as unknown as { verification_uri?: string }).verification_uri ||
         '';
       if (!verificationUri) {
+        const responseKeys = Object.keys(response);
         logQoderOauthUi('prepare:verification-uri-empty', {
           loginId,
-          responseKeys: Object.keys(response),
-          rawResponse: JSON.stringify(response).slice(0, 300),
+          responseKeyCount: responseKeys.length,
+          responseKeys: responseKeys.slice(0, 12),
         });
         throw new Error('Qoder OAuth 授权链接为空');
       }
@@ -1211,6 +1266,14 @@ export function QoderAccountsPage() {
 
   const renderQuotaSection = useCallback(
     (account: QoderAccount) => {
+      if (!hasQoderQuotaData(account)) {
+        return (
+          <div className="ghcp-quota-section qoder-usage-section">
+            <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
+          </div>
+        );
+      }
+
       const quota = resolveQuotaDisplay(account);
 
       return (
@@ -1245,7 +1308,7 @@ export function QoderAccountsPage() {
         </div>
       );
     },
-    [resolveQuotaDisplay],
+    [resolveQuotaDisplay, t],
   );
 
   const renderGridCards = useCallback(
@@ -1263,6 +1326,7 @@ export function QoderAccountsPage() {
         const createdAtText = formatDateTime(account.created_at);
         const isRefreshing = refreshing === account.id;
         const isInjecting = injecting === account.id;
+        const quotaError = account.quota_query_last_error?.trim();
 
         return (
           <div
@@ -1280,6 +1344,12 @@ export function QoderAccountsPage() {
               <span className="account-email" title={maskedEmail}>
                 {maskedEmail}
               </span>
+              {quotaError && (
+                <span className="status-pill warning" title={quotaError}>
+                  <CircleAlert size={12} />
+                  {t('common.shared.quota.queryFailed', '配额查询失败')}
+                </span>
+              )}
               <span className={`tier-badge ${planClass} raw-value`}>{plan}</span>
               {isCurrent && <span className="current-tag">{t('accounts.status.current', '当前')}</span>}
             </div>
@@ -1383,6 +1453,7 @@ export function QoderAccountsPage() {
         const isSelected = selected.has(account.id);
         const isRefreshing = refreshing === account.id;
         const isInjecting = injecting === account.id;
+        const quotaError = account.quota_query_last_error?.trim();
         return (
           <tr key={groupKey ? `${groupKey}-${account.id}` : account.id} className={isCurrent ? 'current' : undefined}>
             <td>
@@ -1393,7 +1464,19 @@ export function QoderAccountsPage() {
               />
             </td>
             <td title={maskAccountText(getQoderAccountDisplayEmail(account))}>
-              {maskAccountText(getQoderAccountDisplayEmail(account))}
+              <div className="account-cell">
+                <div className="account-main-line">
+                  {maskAccountText(getQoderAccountDisplayEmail(account))}
+                </div>
+                {quotaError && (
+                  <div className="account-sub-line">
+                    <span className="status-pill warning" title={quotaError}>
+                      <CircleAlert size={12} />
+                      {t('common.shared.quota.queryFailed', '配额查询失败')}
+                    </span>
+                  </div>
+                )}
+              </div>
             </td>
             <td>{maskAccountText(account.user_id || '--')}</td>
             <td>
@@ -1501,25 +1584,25 @@ export function QoderAccountsPage() {
     if (viewMode === 'grid') {
       return (
         <div className="grid-view-container">
-          {filteredAccounts.length > 0 && (
+          {paginatedAccounts.length > 0 && (
             <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
-                <input type="checkbox" checked={selected.size === filteredAccounts.length && filteredAccounts.length > 0} onChange={toggleSelectAll} />
+                <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
                 {t('common.selectAll', '全选')}
               </label>
             </div>
           )}
           {!groupByTag ? (
-            <div className="ghcp-accounts-grid">{renderGridCards(filteredAccounts)}</div>
+            <div className="ghcp-accounts-grid">{renderGridCards(paginatedAccounts)}</div>
           ) : (
             <div className="tag-group-list">
-              {groupedAccounts.map(([groupKey, items]) => (
+              {paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
                 <div key={groupKey} className="tag-group-section">
                   <div className="tag-group-header">
                     <span className="tag-group-title">
                       {groupKey === UNTAGGED_KEY ? t('accounts.defaultGroup', '默认分组') : groupKey}
                     </span>
-                    <span className="tag-group-count">{items.length}</span>
+                    <span className="tag-group-count">{totalCount}</span>
                   </div>
                   <div className="tag-group-grid ghcp-accounts-grid">{renderGridCards(items, groupKey)}</div>
                 </div>
@@ -1547,7 +1630,7 @@ export function QoderAccountsPage() {
                 <th>{t('common.shared.columns.actions')}</th>
               </tr>
             </thead>
-            <tbody>{renderListRows(filteredAccounts)}</tbody>
+            <tbody>{renderListRows(paginatedAccounts)}</tbody>
           </table>
         </div>
       );
@@ -1555,13 +1638,13 @@ export function QoderAccountsPage() {
 
     return (
       <div className="tag-group-list">
-        {groupedAccounts.map(([groupKey, items]) => (
+        {paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
           <div key={groupKey} className="tag-group-section">
             <div className="tag-group-header">
               <span className="tag-group-title">
                 {groupKey === UNTAGGED_KEY ? t('accounts.defaultGroup', '默认分组') : groupKey}
               </span>
-              <span className="tag-group-count">{items.length}</span>
+              <span className="tag-group-count">{totalCount}</span>
             </div>
             <div className="account-table-container grouped">
               <table className="account-table">
@@ -1689,11 +1772,14 @@ export function QoderAccountsPage() {
                     : t('accounts.filterTags', '标签筛选')}
                 </button>
                 {showTagFilter && (
-                  <div className="tag-filter-panel">
+                  <div
+                    ref={tagFilterPanelRef}
+                    className={`tag-filter-panel ${tagFilterPanelPlacement === 'top' ? 'open-top' : ''}`}
+                  >
                     {availableTags.length === 0 ? (
                       <div className="tag-filter-empty">{t('accounts.noTags', '暂无标签')}</div>
                     ) : (
-                      <div className="tag-filter-options">
+                      <div className="tag-filter-options" style={tagFilterScrollContainerStyle}>
                         {availableTags.map((tag) => (
                           <label key={tag} className={`tag-filter-option ${tagFilter.includes(tag) ? 'selected' : ''}`}>
                             <input
@@ -1738,17 +1824,17 @@ export function QoderAccountsPage() {
                   </div>
                 )}
               </div>
-              <div className="sort-select">
-                <ArrowDownWideNarrow size={14} className="sort-icon" />
-                <select
-                  value={sortBy}
-                  onChange={(event) => setSortBy(event.target.value as SortBy)}
-                >
-                  <option value="created_at">{t('accounts.sort.createdAt')}</option>
-                  <option value="plan">{t('accounts.sort.plan')}</option>
-                  <option value="quota">{t('accounts.sort.quota')}</option>
-                </select>
-              </div>
+              <SingleSelectFilterDropdown
+                value={sortBy}
+                options={[
+                  { value: 'created_at', label: t('accounts.sort.createdAt') },
+                  { value: 'plan', label: t('accounts.sort.plan') },
+                  { value: 'quota', label: t('accounts.sort.quota') },
+                ]}
+                ariaLabel={t('common.shared.sortLabel', '排序')}
+                icon={<ArrowDownWideNarrow size={14} />}
+                onChange={(value) => setSortBy(value as SortBy)}
+              />
               <button
                 className="sort-direction-btn"
                 onClick={() => setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
@@ -1845,7 +1931,23 @@ export function QoderAccountsPage() {
               <p>{t('common.shared.noMatch.desc', '请尝试调整搜索或筛选条件')}</p>
             </div>
           ) : (
-            <>{renderGroupedAccounts()}</>
+            <>
+              {renderGroupedAccounts()}
+              <PaginationControls
+                totalItems={pagination.totalItems}
+                currentPage={pagination.currentPage}
+                totalPages={pagination.totalPages}
+                pageSize={pagination.pageSize}
+                pageSizeOptions={pagination.pageSizeOptions}
+                rangeStart={pagination.rangeStart}
+                rangeEnd={pagination.rangeEnd}
+                canGoPrevious={pagination.canGoPrevious}
+                canGoNext={pagination.canGoNext}
+                onPageSizeChange={pagination.setPageSize}
+                onPreviousPage={pagination.goToPreviousPage}
+                onNextPage={pagination.goToNextPage}
+              />
+            </>
           )}
         </>
       )}

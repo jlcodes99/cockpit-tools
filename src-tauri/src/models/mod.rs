@@ -17,6 +17,9 @@ pub mod zed;
 pub use account::{
     Account, AccountIndex, AccountSummary, DeviceProfile, DeviceProfileVersion, QuotaErrorInfo,
 };
-pub use instance::{DefaultInstanceSettings, InstanceProfile, InstanceProfileView, InstanceStore};
+pub use instance::{
+    DefaultInstanceSettings, InstanceLaunchMode, InstanceProfile, InstanceProfileView,
+    InstanceStore,
+};
 pub use quota::{CreditInfo, QuotaData};
 pub use token::TokenData;

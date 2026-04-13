@@ -74,15 +74,16 @@ pub fn load_account(account_id: &str) -> Option<CodebuddyAccount> {
     if !account_path.exists() {
         return None;
     }
-    let content = fs::read_to_string(account_path).ok()?;
-    serde_json::from_str(&content).ok()
+    let content = fs::read_to_string(&account_path).ok()?;
+    crate::modules::atomic_write::parse_json_with_auto_restore(&account_path, &content).ok()
 }
 
 fn save_account_file(account: &CodebuddyAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
     let content =
         serde_json::to_string_pretty(account).map_err(|e| format!("序列化账号失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("保存账号失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("保存账号失败: {}", e))
 }
 
 fn delete_account_file(account_id: &str) -> Result<(), String> {
@@ -107,7 +108,10 @@ fn load_account_index() -> CodebuddyAccountIndex {
             repair_account_index_from_details("索引文件为空")
                 .unwrap_or_else(CodebuddyAccountIndex::new)
         }
-        Ok(content) => match serde_json::from_str::<CodebuddyAccountIndex>(&content) {
+        Ok(content) => match crate::modules::atomic_write::parse_json_with_auto_restore::<
+            CodebuddyAccountIndex,
+        >(&path, &content)
+        {
             Ok(index) if !index.accounts.is_empty() => index,
             Ok(_) => repair_account_index_from_details("索引账号列表为空")
                 .unwrap_or_else(CodebuddyAccountIndex::new),
@@ -151,7 +155,9 @@ fn load_account_index_checked() -> Result<CodebuddyAccountIndex, String> {
         return Ok(CodebuddyAccountIndex::new());
     }
 
-    match serde_json::from_str::<CodebuddyAccountIndex>(&content) {
+    match crate::modules::atomic_write::parse_json_with_auto_restore::<CodebuddyAccountIndex>(
+        &path, &content,
+    ) {
         Ok(index) if !index.accounts.is_empty() => Ok(index),
         Ok(index) => {
             if let Some(repaired) = repair_account_index_from_details("索引账号列表为空") {
@@ -176,7 +182,8 @@ fn save_account_index(index: &CodebuddyAccountIndex) -> Result<(), String> {
     let path = get_accounts_index_path()?;
     let content =
         serde_json::to_string_pretty(index).map_err(|e| format!("序列化账号索引失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("写入账号索引失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("写入账号索引失败: {}", e))
 }
 
 fn repair_account_index_from_details(reason: &str) -> Option<CodebuddyAccountIndex> {

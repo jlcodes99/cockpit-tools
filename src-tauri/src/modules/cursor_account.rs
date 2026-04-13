@@ -118,15 +118,16 @@ pub fn load_account(account_id: &str) -> Option<CursorAccount> {
     if !account_path.exists() {
         return None;
     }
-    let content = fs::read_to_string(account_path).ok()?;
-    serde_json::from_str(&content).ok()
+    let content = fs::read_to_string(&account_path).ok()?;
+    crate::modules::atomic_write::parse_json_with_auto_restore(&account_path, &content).ok()
 }
 
 fn save_account_file(account: &CursorAccount) -> Result<(), String> {
     let path = resolve_account_file_path(account.id.as_str())?;
     let content =
         serde_json::to_string_pretty(account).map_err(|e| format!("序列化账号失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("保存账号失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("保存账号失败: {}", e))
 }
 
 fn delete_account_file(account_id: &str) -> Result<(), String> {
@@ -152,7 +153,10 @@ fn load_account_index() -> CursorAccountIndex {
     }
 
     match fs::read_to_string(path.as_path()) {
-        Ok(content) => match serde_json::from_str(&content) {
+        Ok(content) => match crate::modules::atomic_write::parse_json_with_auto_restore::<
+            CursorAccountIndex,
+        >(&path, &content)
+        {
             Ok(index) => index,
             Err(err) => {
                 logger::log_warn(&format!(
@@ -199,7 +203,9 @@ fn load_account_index_checked() -> Result<CursorAccountIndex, String> {
         return Ok(CursorAccountIndex::new());
     }
 
-    match serde_json::from_str::<CursorAccountIndex>(&content) {
+    match crate::modules::atomic_write::parse_json_with_auto_restore::<CursorAccountIndex>(
+        &path, &content,
+    ) {
         Ok(index) => Ok(index),
         Err(err) => {
             if !collect_account_ids_from_directory().is_empty() {
@@ -223,7 +229,8 @@ fn save_account_index(index: &CursorAccountIndex) -> Result<(), String> {
     let path = get_accounts_index_path()?;
     let content =
         serde_json::to_string_pretty(index).map_err(|e| format!("序列化账号索引失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("写入账号索引失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("写入账号索引失败: {}", e))
 }
 
 fn refresh_summary(index: &mut CursorAccountIndex, account: &CursorAccount) {
@@ -243,6 +250,15 @@ fn upsert_account_record(account: CursorAccount) -> Result<CursorAccount, String
     refresh_summary(&mut index, &account);
     save_account_index(&index)?;
     Ok(account)
+}
+
+fn persist_quota_query_error(account_id: &str, message: &str) {
+    let Some(mut account) = load_account(account_id) else {
+        return;
+    };
+    account.quota_query_last_error = Some(message.to_string());
+    account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
+    let _ = upsert_account_record(account);
 }
 
 // ---------------------------------------------------------------------------
@@ -823,6 +839,8 @@ pub fn upsert_account(payload: CursorImportPayload) -> Result<CursorAccount, Str
         cursor_usage_raw: payload.cursor_usage_raw.clone(),
         status: payload.status.clone(),
         status_reason: payload.status_reason.clone(),
+        quota_query_last_error: None,
+        quota_query_last_error_at: None,
         usage_updated_at: None,
         created_at,
         last_used: now,
@@ -831,6 +849,8 @@ pub fn upsert_account(payload: CursorImportPayload) -> Result<CursorAccount, Str
     apply_payload(&mut account, payload, incoming_auth_id);
     account.id = account_id;
     account.created_at = created_at;
+    account.quota_query_last_error = None;
+    account.quota_query_last_error_at = None;
     account.last_used = now;
 
     save_account_file(&account)?;
@@ -1375,8 +1395,9 @@ async fn exchange_refresh_token_with_client(
             format!("Cursor token 刷新接口返回异常状态码: {}", status)
         } else {
             format!(
-                "Cursor token 刷新接口返回异常状态码: {}, body: {}",
-                status, detail
+                "Cursor token 刷新接口返回异常状态码: {}, body_len={}",
+                status,
+                body.len()
             )
         });
     }
@@ -1668,6 +1689,8 @@ async fn refresh_account_async_once(account_id: &str) -> Result<CursorAccount, S
                 }
             }
             account.cursor_usage_raw = Some(usage);
+            account.quota_query_last_error = None;
+            account.quota_query_last_error_at = None;
             usage_refreshed = true;
             logger::log_info(&format!(
                 "[Cursor Refresh] API 配额拉取成功: id={}",
@@ -1679,6 +1702,8 @@ async fn refresh_account_async_once(account_id: &str) -> Result<CursorAccount, S
                 "[Cursor Refresh] API 配额拉取失败: id={}, error={}",
                 account.id, err
             ));
+            account.quota_query_last_error = Some(err);
+            account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
         }
     }
 
@@ -1697,10 +1722,16 @@ async fn refresh_account_async_once(account_id: &str) -> Result<CursorAccount, S
 }
 
 pub async fn refresh_account_async(account_id: &str) -> Result<CursorAccount, String> {
-    crate::modules::refresh_retry::retry_once_with_delay("Cursor Refresh", account_id, || async {
-        refresh_account_async_once(account_id).await
-    })
-    .await
+    let result = crate::modules::refresh_retry::retry_once_with_delay(
+        "Cursor Refresh",
+        account_id,
+        || async { refresh_account_async_once(account_id).await },
+    )
+    .await;
+    if let Err(err) = &result {
+        persist_quota_query_error(account_id, err);
+    }
+    result
 }
 
 pub async fn refresh_all_tokens() -> Result<Vec<(String, Result<CursorAccount, String>)>, String> {

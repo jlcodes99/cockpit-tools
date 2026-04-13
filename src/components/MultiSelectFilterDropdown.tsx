@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Filter } from 'lucide-react';
+import { useDropdownPanelPlacement } from '../hooks/useDropdownPanelPlacement';
 import './AccountFilterDropdown.css'
 
 export interface MultiSelectFilterOption {
@@ -33,6 +34,11 @@ export function MultiSelectFilterDropdown({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const selectedCount = selectedValues.length;
+  const { panelPlacement, panelRef, scrollContainerStyle } = useDropdownPanelPlacement(
+    rootRef,
+    open,
+    options.length,
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -58,8 +64,11 @@ export function MultiSelectFilterDropdown({
         {selectedCount > 0 ? `${filterLabel}(${selectedCount})` : allLabel}
       </button>
       {open && (
-        <div className="tag-filter-panel">
-          <div className="tag-filter-options">
+        <div
+          ref={panelRef}
+          className={`tag-filter-panel ${panelPlacement === 'top' ? 'open-top' : ''}`}
+        >
+          <div className="tag-filter-options" style={scrollContainerStyle}>
             <label className={`tag-filter-option ${selectedCount === 0 ? 'selected' : ''}`}>
               <input type="checkbox" checked={selectedCount === 0} onChange={onClear} />
               <span className="tag-filter-name">{allLabel}</span>

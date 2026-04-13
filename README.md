@@ -13,15 +13,15 @@
 
 | 赞助商 (Sponsor) | 简介 (Description) |
 | :---: | :--- |
-| **🛒 [https://xiangzili.xyz](https://xiangzili.xyz)** | 作者自营买号地址，提供 Gemini Pro 成品号与 Codex Plus 兑换码；购买账号即送 Antigravity 无感切号方案。感谢大家长期支持，另外有号商有合适的账号资源，也欢迎联系我合作。 |
+| **🛒 [https://xiangzili.xyz](https://xiangzili.xyz)** | 作者自营买号地址，提供 Gemini Pro 成品号与 Codex Plus 兑换码；购买账号即送 Antigravity 无感切号方案。 |
 
 > 本工具旨在帮助用户高效管理多个 AI IDE 账号，支持一键切换、配额监控、自动唤醒与多开实例并行运行，助您充分利用不同账号的资源。
 
 **功能**：一键切号 · 多账号管理 · 多开实例 · 配额监控 · 唤醒任务 · 设备指纹 · 插件联动 · GitHub Copilot 管理 · Windsurf 管理 · Kiro 管理 · Cursor 管理 · Gemini Cli 管理 · CodeBuddy 管理 · CodeBuddy CN 管理 · Qoder 管理 · Trae 管理 · Zed 管理
 
-**语言**：支持 17 种语言
+**语言**：支持 18 种语言
 
-🇺🇸 English · 🇨🇳 简体中文 · 繁體中文 · 🇯🇵 日本語 · 🇩🇪 Deutsch · 🇪🇸 Español · 🇫🇷 Français · 🇮🇹 Italiano · 🇰🇷 한국어 · 🇧🇷 Português · 🇷🇺 Русский · 🇹🇷 Türkçe · 🇵🇱 Polski · 🇨🇿 Čeština · 🇸🇦 العربية · 🇻🇳 Tiếng Việt
+🇺🇸 English · 🇨🇳 简体中文 · 繁體中文 · 🇯🇵 日本語 · 🇩🇪 Deutsch · 🇪🇸 Español · 🇫🇷 Français · 🇮🇹 Italiano · 🇰🇷 한국어 · 🇧🇷 Português · 🇷🇺 Русский · 🇹🇷 Türkçe · 🇵🇱 Polski · 🇨🇿 Čeština · 🇸🇦 العربية · 🇻🇳 Tiếng Việt · 🇮🇩 Bahasa Indonesia
 
 ---
 

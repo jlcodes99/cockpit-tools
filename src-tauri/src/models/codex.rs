@@ -14,6 +14,31 @@ impl Default for CodexAuthMode {
     }
 }
 
+/// Codex API Key 账号的模型提供商模式
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CodexApiProviderMode {
+    OpenaiBuiltin,
+    Custom,
+}
+
+impl Default for CodexApiProviderMode {
+    fn default() -> Self {
+        Self::OpenaiBuiltin
+    }
+}
+
+/// Codex config.toml 快捷配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodexQuickConfig {
+    pub context_window_1m: bool,
+    pub auto_compact_token_limit: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detected_model_context_window: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detected_auto_compact_token_limit: Option<i64>,
+}
+
 /// Codex 账号数据结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexAccount {
@@ -25,6 +50,12 @@ pub struct CodexAccount {
     pub openai_api_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_base_url: Option<String>,
+    #[serde(default)]
+    pub api_provider_mode: CodexApiProviderMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_provider_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_provider_name: Option<String>,
     pub user_id: Option<String>,
     pub plan_type: Option<String>,
     pub account_id: Option<String>,
@@ -188,6 +219,9 @@ impl CodexAccount {
             auth_mode: CodexAuthMode::OAuth,
             openai_api_key: None,
             api_base_url: None,
+            api_provider_mode: CodexApiProviderMode::OpenaiBuiltin,
+            api_provider_id: None,
+            api_provider_name: None,
             user_id: None,
             plan_type: None,
             account_id: None,
@@ -208,7 +242,10 @@ impl CodexAccount {
         id: String,
         email: String,
         openai_api_key: String,
+        api_provider_mode: CodexApiProviderMode,
         api_base_url: Option<String>,
+        api_provider_id: Option<String>,
+        api_provider_name: Option<String>,
     ) -> Self {
         let mut account = Self::new(
             id,
@@ -221,7 +258,10 @@ impl CodexAccount {
         );
         account.auth_mode = CodexAuthMode::Apikey;
         account.openai_api_key = Some(openai_api_key);
+        account.api_provider_mode = api_provider_mode;
         account.api_base_url = api_base_url;
+        account.api_provider_id = api_provider_id;
+        account.api_provider_name = api_provider_name;
         account.plan_type = Some("API_KEY".to_string());
         account
     }

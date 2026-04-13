@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { open } from '@tauri-apps/plugin-dialog';
+import { openPath } from '@tauri-apps/plugin-opener';
 import { invoke } from '@tauri-apps/api/core';
 import { Settings, RefreshCw, FolderOpen, Zap, X } from 'lucide-react';
 import * as accountService from '../services/accountService';
@@ -228,6 +229,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const [config, setConfig] = useState<GeneralConfig | null>(null);
   const [saving, setSaving] = useState(false);
   const [pathDetecting, setPathDetecting] = useState(false);
+  const [openingCodexConfig, setOpeningCodexConfig] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshEditing, setRefreshEditing] = useState(false);
   const [currentAccountRefreshEditing, setCurrentAccountRefreshEditing] = useState(false);
@@ -654,6 +656,22 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     }
   };
 
+  const handleOpenCodexConfigToml = useCallback(async () => {
+    if (openingCodexConfig) return;
+    setOpeningCodexConfig(true);
+    try {
+      const configTomlPath = await codexService.getCodexConfigTomlPath();
+      await openPath(configTomlPath);
+    } catch (err) {
+      setError(t('quickSettings.error.openCodexConfigFailed', {
+        error: String(err),
+        defaultValue: '打开 Codex config.toml 失败：{{error}}',
+      }));
+    } finally {
+      setOpeningCodexConfig(false);
+    }
+  }, [openingCodexConfig, t]);
+
   const getTitle = () => {
     const platformLabel = (() => {
       switch (type) {
@@ -900,10 +918,14 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const showRefreshInput = refreshEditing;
   const currentAccountRefreshPlatform = getCurrentAccountRefreshPlatformForType(type);
   const currentAccountRefreshValue = currentAccountRefreshMap[currentAccountRefreshPlatform] ?? 1;
+  const isCurrentAccountRefreshAllowed = refreshValue > 0;
+  const currentAccountRefreshDisplayValue = isCurrentAccountRefreshAllowed
+    ? String(currentAccountRefreshValue)
+    : '-1';
   const isCurrentAccountRefreshPreset = CURRENT_ACCOUNT_REFRESH_PRESETS.includes(
     String(currentAccountRefreshValue),
   );
-  const showCurrentAccountRefreshInput = currentAccountRefreshEditing;
+  const showCurrentAccountRefreshInput = currentAccountRefreshEditing && isCurrentAccountRefreshAllowed;
 
   const isThresholdPreset = config ? thresholdPresets.includes(String(config.auto_switch_threshold)) : true;
   const showThresholdInput = thresholdEditing;
@@ -977,6 +999,11 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   };
 
   const handleCurrentAccountRefreshSelectChange = (value: string) => {
+    if (!isCurrentAccountRefreshAllowed) {
+      setCurrentAccountCustomRefresh('');
+      setCurrentAccountRefreshEditing(false);
+      return;
+    }
     if (value === 'custom') {
       setCurrentAccountCustomRefresh(String(currentAccountRefreshValue || 1));
       setCurrentAccountRefreshEditing(true);
@@ -991,6 +1018,11 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   };
 
   const handleCurrentAccountCustomRefreshApply = () => {
+    if (!isCurrentAccountRefreshAllowed) {
+      setCurrentAccountCustomRefresh('');
+      setCurrentAccountRefreshEditing(false);
+      return;
+    }
     const parsed = parseInt(currentAccountCustomRefresh, 10);
     if (!isNaN(parsed) && parsed >= 1) {
       saveCurrentAccountRefresh(parsed);
@@ -1399,9 +1431,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 ) : (
                   <select
                     className="qs-select"
-                    value={String(currentAccountRefreshValue)}
+                    value={currentAccountRefreshDisplayValue}
                     onChange={(e) => handleCurrentAccountRefreshSelectChange(e.target.value)}
+                    disabled={!isCurrentAccountRefreshAllowed}
                   >
+                    {!isCurrentAccountRefreshAllowed && (
+                      <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
+                    )}
                     {!isCurrentAccountRefreshPreset && (
                       <option value={String(currentAccountRefreshValue)}>
                         {currentAccountRefreshValue} {t('settings.general.minutes')}
@@ -1416,7 +1452,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                   </select>
                 )}
                 <div className="qs-hint" style={{ marginTop: 6 }}>
-                  {t('settings.general.currentAccountRefreshItemDesc')}
+                  {isCurrentAccountRefreshAllowed
+                    ? t('settings.general.currentAccountRefreshItemDesc')
+                    : t(
+                      'settings.general.currentAccountRefreshRequiresAutoRefresh',
+                      '需先开启“配额自动刷新”后，才能设置当前账号刷新。',
+                    )}
                 </div>
               </div>
             </div>
@@ -1491,6 +1532,27 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
             {/* ─── Codex: opencode sync ─── */}
             {type === 'codex' && (
               <div className="qs-section">
+                <div className="qs-row">
+                  <div className="qs-row-label">
+                    <FolderOpen size={15} />
+                    <span>{t('quickSettings.codex.configToml', 'Codex config.toml')}</span>
+                  </div>
+                  <div className="qs-row-control">
+                    <button
+                      className="qs-btn"
+                      onClick={() => void handleOpenCodexConfigToml()}
+                      disabled={openingCodexConfig}
+                    >
+                      {openingCodexConfig
+                        ? t('common.loading', '加载中...')
+                        : t('quickSettings.codex.openConfigToml', '打开文件')}
+                    </button>
+                  </div>
+                </div>
+                <div className="qs-hint" style={{ marginTop: -2, marginBottom: 2 }}>
+                  {t('quickSettings.codex.openConfigHint', '快速打开当前使用的 Codex config.toml 文件。')}
+                </div>
+
                 <div className="qs-row">
                   <div className="qs-row-label">
                     <Zap size={15} />

@@ -107,7 +107,6 @@ export async function addWindsurfAccountsWithPassword(
 ): Promise<WindsurfPasswordBatchResult> {
   return await invoke('add_windsurf_accounts_with_password', { credentials });
 }
-
 export async function updateWindsurfAccountTags(accountId: string, tags: string[]): Promise<WindsurfAccount> {
   return await invoke('update_windsurf_account_tags', { accountId, tags });
 }

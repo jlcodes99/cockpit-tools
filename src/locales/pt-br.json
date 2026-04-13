@@ -33,19 +33,24 @@
         "creditPackage": "Pacote de créditos",
         "sharedCreditPackage": "Pacote de créditos compartilhado",
         "account": "Conta",
-        "createdAt": "Data de criação"
+        "createdAt": "Data de criação",
+        "userId": "ID do usuário"
       },
       "empty": {
         "title": "Sem contas"
       },
-      "export": "Exportar",
+      "export": {
+        "title": "Exportar",
+        "copyFailed": "Falha ao copiar, copie manualmente"
+      },
       "filter": {
         "all": "Todas ({{count}})",
         "enterprise": "EMPRESA ({{count}})",
         "free": "GRATUITO ({{count}})",
         "pro": "PRO (__MÁSCARA_0__)",
         "business": "NEGÓCIO ({{count}})",
-        "individual": "INDIVÍDUO (__MÁSCARA_0__)"
+        "individual": "INDIVÍDUO (__MÁSCARA_0__)",
+        "validAccounts": "Contas válidas ({{count}})"
       },
       "filterLabel": "Filtrar",
       "import": {
@@ -127,9 +132,11 @@
       },
       "quota": {
         "noData": "Sem dados de cota",
+        "queryFailed": "Falha na consulta de cota",
         "resetDone": "Redefinido",
         "hourly": "Sugestões inline",
-        "weekly": "Mensagens de chat"
+        "weekly": "Mensagens de chat",
+        "resetAt": "Reinicia: {{time}}"
       },
       "subtitle": "Monitore em tempo real o status de cota de todas as contas.",
       "time": {
@@ -161,7 +168,10 @@
       },
       "updated": {
         "label": "Atualizado há {{relative}}"
-      }
+      },
+      "clear": "Limpar",
+      "loginSuccess": "Login bem-sucedido",
+      "switchAccount": "Trocar conta"
     },
     "topRightAd": {
       "ariaLabel": "Slot global de anúncio no canto superior direito",
@@ -169,7 +179,15 @@
       "title": "Slot de anúncio no canto superior direito",
       "desc": "Esta área fica fixa no canto superior direito de todas as páginas para campanhas ou anúncios da marca.",
       "action": "Ver detalhes"
-    }
+    },
+    "appName": "Cockpit Tools",
+    "collapse": "Recolher",
+    "confirmDelete": "Confirmar exclusão",
+    "confirmDeleteTag": "Confirmar exclusão de tag",
+    "deleteTagWarning": "Tem certeza de que deseja excluir esta tag de todas as contas?",
+    "expand": "Expandir",
+    "processing": "Processando...",
+    "selectAll": "Selecionar tudo"
   },
   "nav": {
     "overview": "Antigravity",
@@ -292,7 +310,8 @@
       "running": "Executando",
       "stopped": "Parado",
       "restarting": "Reiniciando",
-      "starting": "Começando"
+      "starting": "Começando",
+      "ready": "Pronta"
     },
     "labels": {
       "path": "Diretório",
@@ -302,7 +321,8 @@
       "unbound": "Não vinculada",
       "pendingInit": "Aguardando inicialização (inicie uma vez primeiro)",
       "quota": "Cota",
-      "lastLaunched": "Última execução"
+      "lastLaunched": "Última execução",
+      "argsPresent": "Args definidos"
     },
     "columns": {
       "instance": "Instância",
@@ -352,7 +372,14 @@
       "extraArgsDesc": "Separar argumentos com espaços, aspas são suportadas",
       "nameRequired": "Insira um nome para a instância",
       "pathRequired": "Selecione um diretório para a instância",
-      "bindRequired": "Selecione uma conta para vincular"
+      "bindRequired": "Selecione uma conta para vincular",
+      "optional": "Opcional",
+      "launchMode": "Modo de inicialização",
+      "launchModeApp": "Aplicativo",
+      "launchModeCli": "Modo CLI",
+      "workingDir": "Diretório de trabalho",
+      "workingDirPlaceholder": "Usa o caminho atual por padrão",
+      "workingDirDesc": "Ao iniciar, primeiro mudará para este diretório"
     },
     "quota": {
       "unbound": "Conta não vinculada",
@@ -372,7 +399,8 @@
       "closedAll": "Todas as instâncias foram paradas",
       "allAlreadyRunning": "Todas as instâncias já estão em execução",
       "noneRunning": "Nenhuma instância em execução encontrada",
-      "syncThreadsNeedTwo": "Pelo menos duas instâncias são necessárias para sincronizar threads"
+      "syncThreadsNeedTwo": "Pelo menos duas instâncias são necessárias para sincronizar threads",
+      "launchPrepared": "O comando de inicialização está pronto"
     },
     "runningDialog": {
       "title": "A instância já está em execução",
@@ -435,6 +463,13 @@
       "bindHint": "Você pode vincular uma conta depois pela lista de instâncias",
       "pathRequired": "Selecione um diretório primeiro",
       "submit": "Importar"
+    },
+    "launchDialog": {
+      "title": "Iniciar instância",
+      "terminal": "Console",
+      "command": "Comando de inicialização",
+      "hint": "Copie o comando e execute manualmente, ou rode diretamente no terminal.",
+      "runInTerminal": "Executar no terminal"
     }
   },
   "settings": {
@@ -456,6 +491,9 @@
       "themeSystem": "Sistema",
       "uiScale": "Escala da interface",
       "uiScaleDesc": "Ajuste a escala da interface",
+      "defaultTerminal": "Terminal Padrão",
+      "defaultTerminalDesc": "O terminal usado ao abrir o Gemini CLI",
+      "terminalSystem": "Padrão do Sistema",
       "accountManagement": "Gerenciamento de Contas",
       "autoRefresh": "Atualização automática da cota Antigravity",
       "codexAutoRefresh": "Atualização automática da cota Codex",
@@ -611,7 +649,24 @@
       "autoSwitchAccountScopeDialogTitle": "Selecionar escopo de contas para troca automática",
       "autoSwitchAccountScopeAllHint": "O escopo atual inclui todas as contas. {{total}} conta(s) participarão da troca automática.",
       "codexAutoSwitchAccountScope": "Escopo de troca automática de contas do Codex",
-      "codexAutoSwitchAccountScopeDesc": "Status atual da troca automática do Codex: {{status}}. Apenas contas dentro deste escopo serão consideradas."
+      "codexAutoSwitchAccountScopeDesc": "Status atual da troca automática do Codex: {{status}}. Apenas contas dentro deste escopo serão consideradas.",
+      "currentAccountRefreshRequiresAutoRefresh": "Ative primeiro a \"Atualização automática de cota\" para configurar a atualização da conta atual.",
+      "codebuddyCnAppPath": "Caminho do aplicativo CodeBuddy CN",
+      "codebuddyCnAppPathDesc": "Deixe em branco para usar o caminho padrão",
+      "codebuddyCnAppPathPlaceholder": "Caminho padrão",
+      "codebuddyCnAutoRefresh": "Atualização automática de cota CodeBuddy CN",
+      "codebuddyCnAutoRefreshDesc": "Frequência de atualização automática em segundo plano",
+      "codebuddyCnPathReset": "Redefinir para padrão",
+      "codebuddyCnPathSelect": "Selecionar",
+      "codebuddyCnSettingsTitle": "Configurações do CodeBuddy CN",
+      "qoderAppPath": "Caminho do aplicativo Qoder",
+      "qoderAppPathDesc": "Deixe em branco para usar o caminho padrão",
+      "qoderAppPathPlaceholder": "Caminho padrão",
+      "qoderAutoRefresh": "Atualização automática de cota Qoder",
+      "qoderAutoRefreshDesc": "Frequência de atualização automática em segundo plano",
+      "qoderPathSelect": "Selecionar",
+      "workbuddyAutoRefresh": "Atualização automática de cota WorkBuddy",
+      "workbuddyAutoRefreshDesc": "Frequência de atualização automática em segundo plano"
     },
     "network": {
       "apiTitle": "API de cockpit antigravidade",
@@ -672,7 +727,93 @@
       "download": "Baixar",
       "checkFailed": "Falha ao verificar atualizações"
     },
-    "saveSettings": "Salvar Configurações"
+    "saveSettings": "Salvar Configurações",
+    "transfer": {
+      "backup": {
+        "title": "Gerenciador de backup",
+        "desc": "Gerencie backups agendados, a pasta de backup e a lista de arquivos em um só lugar.",
+        "modalDesc": "Configure backups automáticos, navegue pelos arquivos salvos na pasta de backup do projeto e restaure ou limpe tudo por aqui.",
+        "statusEnabled": "Backup automático ativado",
+        "statusDisabled": "Backup automático desativado",
+        "lastRunLabel": "Último backup: {{time}}",
+        "lastRunNever": "Ainda não há backup",
+        "autoTitle": "Backup agendado",
+        "autoDesc": "Quando ativado, um backup é exportado por dia e continua restaurável pelo fluxo atual de importação.",
+        "runNow": "Fazer backup agora",
+        "running": "Fazendo backup...",
+        "typeTitle": "Tipo de backup",
+        "typeDesc": "Escolha o escopo de dados para o backup automático.",
+        "typeFull": "Dados completos",
+        "typeAccounts": "Só contas",
+        "typeConfig": "Só configurações",
+        "retentionTitle": "Retenção",
+        "retentionDesc": "Backups mais antigos do que isso serão removidos na próxima verificação.",
+        "retentionUnit": "dias",
+        "directoryTitle": "Pasta de backup",
+        "directoryDesc": "Os backups são sempre salvos na pasta backups do projeto.",
+        "openFolder": "Abrir pasta",
+        "listTitle": "Lista de backups",
+        "listDesc": "Importe um backup diretamente ou remova arquivos antigos.",
+        "openList": "Abrir lista",
+        "emptyTitle": "Ainda não há backups",
+        "emptyDesc": "Ative o backup automático ou clique em “Fazer backup agora” para criar aqui backups JSON restauráveis.",
+        "sourceAuto": "Automático",
+        "sourceManual": "Modo manual",
+        "fileTime": "Hora: {{time}}",
+        "fileSize": "Tamanho: {{size}}",
+        "importAction": "Importar",
+        "deleteAction": "Excluir",
+        "deleteConfirm": "Excluir o backup {{name}}?",
+        "feedback": {
+          "running": "Criando backup...",
+          "runSuccess": "Backup salvo em {{path}}",
+          "runSuccessWithCleanup": "Backup salvo em {{path}} e {{count}} backup(s) expirado(s) foram limpos",
+          "runFailed": "Falha no backup: {{error}}",
+          "deleteSuccess": "Backup excluído",
+          "deleteFailed": "Falha ao excluir o backup: {{error}}",
+          "loadFailed": "Falha ao carregar a lista de backups: {{error}}",
+          "saveSettingsFailed": "Falha ao salvar as configurações de backup: {{error}}",
+          "cleanupDone": "{{count}} backup(s) expirado(s) limpos",
+          "cleanupFailed": "Falha ao limpar backups expirados: {{error}}",
+          "openFolderFailed": "Falha ao abrir a pasta de backup: {{error}}"
+        },
+        "errors": {
+          "invalidRetention": "A retenção deve ficar entre 1 e 365 dias"
+        }
+      },
+      "exportTitle": "Exportação de dados",
+      "exportDesc": "Exporte dados de contas, dados de configuração ou um pacote completo de migração conforme necessário.",
+      "importTitle": "Importação de dados",
+      "importDesc": "Importe backups de contas, backups de configuração ou o pacote de dados unificado.",
+      "exportModalDesc": "Escolha o que exportar. Selecione contas e configuração para um pacote completo de migração.",
+      "importModalDesc": "Escolha o que importar. Backups antigos de contas são tratados como importação apenas de contas.",
+      "selectionTitle": "Escopo dos dados",
+      "accountsOptionTitle": "Dados das contas",
+      "accountsOptionDesc": "Inclui backups das contas das plataformas e mantém compatibilidade com o JSON legado de contas.",
+      "configOptionTitle": "Dados de configuração",
+      "configOptionDesc": "Inclui configurações do app, grupos, instâncias, tarefas de wakeup e configuração de provedores de modelo.",
+      "exportConfirm": "Exportar dados",
+      "fromFileTitle": "Importar de arquivo",
+      "fromFileDesc": "Escolha um arquivo JSON para importar. Backups antigos de contas também são aceitos aqui.",
+      "jsonPlaceholder": "Cole um pacote de dados ou o JSON legado de contas",
+      "feedback": {
+        "accountsImported": "{{count}} contas importadas",
+        "configImported": "Dados de configuração restaurados",
+        "accountsSectionMissing": "Este backup não inclui dados de contas",
+        "configSectionMissing": "Este backup não inclui dados de configuração, então apenas os dados de contas foram restaurados",
+        "unresolvedRefs": "{{count}} vínculos de conta não puderam ser correspondidos e foram ignorados",
+        "disabledTasks": "{{count}} tarefas foram desativadas porque nenhuma conta pôde ser correspondida",
+        "restartRequired": "As configurações do serviço de rede foram restauradas. Algumas mudanças entram em vigor após reiniciar",
+        "partialAccountFailure": "Falha ao importar algumas contas: {{error}}"
+      },
+      "errors": {
+        "selectionRequired": "Selecione pelo menos um tipo de dado",
+        "accountsOnlyFile": "Este backup contém apenas dados de contas. Selecione \"Dados das contas\" para importá-lo",
+        "selectedSectionsMissing": "O tipo de dado selecionado não está presente neste backup",
+        "unsupportedLegacyFile": "Este formato legado de backup de contas não foi reconhecido",
+        "unsupportedVersion": "Esta versão do app não oferece suporte a essa versão do pacote"
+      }
+    }
   },
   "appPath": {
     "missing": {
@@ -680,6 +821,9 @@
       "desc": "Não foi possível encontrar o caminho do aplicativo {{app}}. Defina agora para continuar.",
       "action": "Definir agora",
       "codexLaunchHint": "Ao desativar, a troca de conta e a sobrescrita de login continuam funcionando, mas o app Codex não será mais iniciado e este aviso de caminho não aparecerá novamente."
+    },
+    "modal": {
+      "desc": "O caminho do aplicativo {{app}} não foi encontrado. Configure-o agora para continuar."
     }
   },
   "accounts": {
@@ -789,7 +933,11 @@
       "fingerprint": "Impressão digital",
       "switch": "Trocar conta",
       "switchTo": "Trocar para esta conta",
-      "selectFingerprint": "Selecionar impressão digital"
+      "selectFingerprint": "Selecionar impressão digital",
+      "delete": "Excluir",
+      "deleteSelected": "Excluir selecionados",
+      "export": "Exportar",
+      "refreshAll": "Atualizar tudo"
     },
     "tabs": {
       "oauth": "Autorização OAuth",
@@ -886,7 +1034,40 @@
       "clearConfirm": "Limpar todo o histórico de trocas?",
       "loadFailed": "Falha ao carregar o histórico de trocas: {{error}}",
       "clearFailed": "Falha ao limpar o histórico de trocas: {{error}}"
-    }
+    },
+    "clearTagFilter": "Limpar filtro de tag",
+    "compact": {
+      "hide": "Ocultar",
+      "show": "Mostrar"
+    },
+    "deleteConfirm": {
+      "multi": "Excluir {{count}} conta(s) selecionada(s)?",
+      "single": "Excluir esta conta?"
+    },
+    "deleteFailed": "Falha ao excluir: {{error}}",
+    "deleteSuccess": "Excluído com sucesso",
+    "deleteTagFailed": "Falha ao excluir tag: {{error}}",
+    "exportError": "Falha ao exportar: {{error}}",
+    "exportModal": {
+      "title": "Exportar JSON"
+    },
+    "importJsonFailed": "Falha ao importar JSON: {{error}}",
+    "importJsonHint": "Importe um arquivo Qoder JSON exportado desta ferramenta.",
+    "importJsonSuccess": "Importação JSON bem-sucedida",
+    "noTags": "Sem tags",
+    "privacy": {
+      "disable": "Desativar modo de privacidade",
+      "enable": "Ativar modo de privacidade"
+    },
+    "refreshAllFailed": "Falha na atualização em massa: {{error}}",
+    "refreshAllSuccess": "Todas as contas atualizadas",
+    "refreshFailed": "Falha ao atualizar: {{error}}",
+    "refreshSuccess": "Atualizado com sucesso",
+    "switchFailed": "Falha ao trocar: {{error}}",
+    "switchSuccess": "Troca bem-sucedida",
+    "switched": "Alternado para {{email}}",
+    "tagButton": "Editar tags",
+    "tagUpdated": "Tag atualizado"
   },
   "overview": {
     "title": "Visão Geral das Contas",
@@ -1098,7 +1279,10 @@
       "actions": {
         "selectAllAccounts": "Selecionar tudo",
         "clearSelectedAccounts": "Limpar seleção",
-        "runCheckNow": "Concluir verificação"
+        "runCheckNow": "Concluir verificação",
+        "retryFiltered": "Tentar novamente o filtro atual ({{count}})",
+        "retryMissingModel": "Este lote não tem informações do modelo e não pode ser tentado novamente.",
+        "retryMissingAccount": "Não há contas que possam ser tentadas novamente no filtro atual."
       },
       "runHint": {
         "title": "Notas de verificação",
@@ -1383,7 +1567,9 @@
       "portInUseConfirm": "A porta {{port}} está em uso. Fechar o processo que usa esta porta?",
       "portCloseFailed": "Falha ao fechar a porta: {{error}}",
       "portStillInUse": "A porta {{port}} ainda está em uso.",
-      "portInUseAction": "Fechar a porta e tentar novamente"
+      "portInUseAction": "Fechar a porta e tentar novamente",
+      "timeout": "Autenticação expirou. Clique",
+      "timeoutRetry": "Atualizar link de autenticação"
     },
     "token": {
       "desc": "Cole o conteúdo do auth.json ou dados JSON da conta",
@@ -1455,7 +1641,10 @@
     "usage": {
       "open": "Abrir uso da OpenAI",
       "hint": "Para créditos de API Key, consulte a página de uso da OpenAI.",
-      "openFailed": "Falha ao abrir a página de uso: {{error}}"
+      "openFailed": "Falha ao abrir a página de uso: {{error}}",
+      "search": {
+        "placeholder": "Pesquisar contas..."
+      }
     },
     "wakeup": {
       "tab": "Tarefas de ativação",
@@ -1641,12 +1830,15 @@
         "moveToTrash": "Mover para a lixeira",
         "syncSessions": "Sincronizar sessões",
         "expand": "Expandir",
-        "collapse": "Recolher"
+        "collapse": "Recolher",
+        "repairVisibility": "Reparar visibilidade",
+        "restoreSessions": "Restaurar sessões"
       },
       "confirm": {
         "title": "Mover para a lixeira",
         "message": "As sessões selecionadas serão movidas para a lixeira de suas instâncias para que possam ser restauradas depois. Instâncias em execução podem precisar ser reiniciadas antes que a mudança apareça. Continuar?",
-        "syncMessage": "Os threads ausentes e seus dados de sessão serão sincronizados com todas as instâncias. O conteúdo existente não será gravado novamente, e os arquivos da instância de destino serão copiados antes de qualquer gravação. Continuar?"
+        "syncMessage": "Os threads ausentes e seus dados de sessão serão sincronizados com todas as instâncias. O conteúdo existente não será gravado novamente, e os arquivos da instância de destino serão copiados antes de qualquer gravação. Continuar?",
+        "repairVisibilityMessage": "Isto vai reparar os metadados do provedor nos arquivos rollout e em state_5.sqlite usando o model_provider do config.toml raiz de cada instância (se estiver ausente, o padrão será openai). Os arquivos que serão alterados recebem backup antes da gravação. Instâncias em execução podem precisar ser reiniciadas antes que a mudança apareça. Continuar?"
       },
       "empty": {
         "title": "Nenhuma sessão para gerenciar",
@@ -1654,12 +1846,20 @@
       },
       "messages": {
         "pickOne": "Selecione pelo menos uma sessão",
-        "syncNeedTwo": "Pelo menos duas instâncias são necessárias para sincronizar sessões"
+        "syncNeedTwo": "Pelo menos duas instâncias são necessárias para sincronizar sessões",
+        "pickRestoreOne": "Selecione pelo menos uma sessão para restaurar"
       },
       "groupCount": "{{count}} sessões",
       "updatedAt": "Atualizado",
       "locationRunning": " (em execução)",
-      "untitled": "Sessão sem título"
+      "untitled": "Sessão sem título",
+      "restoreModal": {
+        "title": "Restaurar sessões",
+        "hint": "Ao restaurar, o arquivo rollout, a linha da thread no SQLite e a entrada de session_index voltam juntos para a instância original.",
+        "emptyTitle": "A lixeira está vazia",
+        "emptyDesc": "As sessões movidas para a lixeira aparecerão aqui.",
+        "restoreAction": "Restaurar sessões selecionadas"
+      }
     },
     "api": {
       "baseUrl": "URL base",
@@ -1668,7 +1868,178 @@
         "apiKeyCannotBeUrl": "A chave de API não pode ser uma URL. Verifique se os campos foram invertidos.",
         "baseUrlInvalid": "URL base inválida. Informe uma URL completa com http:// ou https://.",
         "apiKeyEqualsBaseUrl": "A chave de API não pode ser igual à URL base."
+      },
+      "addAndSwitchSuccess": "Adicionado e alternado: {{email}}",
+      "actions": {
+        "addAndSwitch": "Adicionar e alternar"
+      },
+      "provider": {
+        "label": "Provedor",
+        "custom": "Personalizado",
+        "endpoint": "Endpoint do provedor",
+        "hint": "Uma Base URL compatível foi preenchida automaticamente. Você ainda pode editá-la manualmente.",
+        "website": "Site",
+        "apiKeyPage": "Página da chave API"
+      },
+      "providers": {
+        "openai_official": {
+          "name": "OpenAI Official"
+        },
+        "azure_openai": {
+          "name": "Azure OpenAI"
+        },
+        "packycode": {
+          "name": "PackyCode"
+        },
+        "cubence": {
+          "name": "Cubence"
+        },
+        "aigocode": {
+          "name": "AIGoCode"
+        },
+        "rightcode": {
+          "name": "RightCode"
+        },
+        "sssaicode": {
+          "name": "SSSAiCode"
+        },
+        "micu": {
+          "name": "Micu"
+        },
+        "x_code_api": {
+          "name": "X-Code API"
+        },
+        "ctok_ai": {
+          "name": "CTok.ai"
+        },
+        "aihubmix": {
+          "name": "AiHubMix"
+        },
+        "dmxapi": {
+          "name": "DMXAPI"
+        },
+        "compshare": {
+          "name": "Compshare"
+        },
+        "openrouter": {
+          "name": "OpenRouter"
+        },
+        "aicodemirror": {
+          "name": "AICodeMirror"
+        },
+        "aicoding": {
+          "name": "AICoding"
+        },
+        "crazyrouter": {
+          "name": "CrazyRouter"
+        },
+        "deepseek": {
+          "name": "DeepSeek"
+        },
+        "moonshot": {
+          "name": "Moonshot"
+        },
+        "siliconflow": {
+          "name": "SiliconFlow"
+        }
       }
+    },
+    "modelProviders": {
+      "tab": "Provedores de modelo",
+      "desc": "Gerencie provedores de modelo e várias chaves API em um só lugar e reutilize-os diretamente ao adicionar contas Codex com chave API.",
+      "add": "Adicionar provedor",
+      "loadFailed": "Falha ao carregar os provedores de modelo: {{error}}",
+      "emptyTitle": "Ainda não há provedores de modelo",
+      "emptyDesc": "Clique em “Adicionar provedor” no canto superior direito para começar.",
+      "baseUrl": "URL base",
+      "website": "Site",
+      "apiKeyPage": "Página da chave API",
+      "apiKeysCount": "{{count}} chaves API",
+      "referencesCount": "{{count}} contas vinculadas",
+      "unnamedKey": "Chave sem nome",
+      "createTitle": "Adicionar provedor de modelo",
+      "editTitle": "Editar provedor de modelo",
+      "existingApiKeys": "Chaves API existentes",
+      "fields": {
+        "name": "Nome do provedor",
+        "baseUrl": "URL base",
+        "website": "Site (opcional)",
+        "apiKeyUrl": "Página da chave API (opcional)",
+        "newApiKeyName": "Nome da nova chave (opcional)",
+        "newApiKey": "Nova chave API"
+      },
+      "validation": {
+        "nameRequired": "O nome do provedor é obrigatório.",
+        "baseUrlInvalid": "URL base inválida.",
+        "baseUrlExists": "Esta URL base já existe.",
+        "providerNotFound": "Provedor não encontrado.",
+        "apiKeyRequiredOnCreate": "Ao criar um provedor, é necessária pelo menos uma chave API.",
+        "apiKeyRequiredWhenEmpty": "Este provedor ainda não tem chave API. Adicione uma primeiro."
+      },
+      "saveSuccess": "Provedor de modelo salvo.",
+      "deleteBlocked": "Este provedor está vinculado a {{count}} conta(s) e não pode ser excluído.",
+      "confirmDelete": "Excluir o provedor \"{{name}}\"?",
+      "deleteFailed": "Falha ao excluir o provedor: {{error}}",
+      "deleteApiKeyFailed": "Falha ao excluir a chave API: {{error}}",
+      "selectSavedProvider": "Provedores salvos",
+      "selectSavedApiKey": "Chaves API salvas",
+      "noSavedProviders": "Ainda não há provedores salvos. Você pode preencher os campos diretamente e eles serão salvos automaticamente.",
+      "newProviderName": "Nome do provedor (opcional, usado no salvamento automático)",
+      "newProviderNamePlaceholder": "Se ficar vazio, o nome do host será usado automaticamente",
+      "preview": {
+        "title": "Prévia de salvamento",
+        "desc": "Salvar um provedor atualiza primeiro o repositório de provedores. A configuração oficial atual do Codex não muda imediatamente.",
+        "writeNow": "Será gravado",
+        "noImmediateChange": "Sem mudança imediata",
+        "providerStoreTitle": "Repositório de provedores",
+        "providerStoreDesc": "Salva o nome do provedor, a Base URL, os links do site/da página de API Key e qualquer nova API Key adicionada neste modal.",
+        "codexConfigTitle": "Configuração atual do Codex",
+        "codexConfigDesc": "O provedor atual ou a Base URL não mudam na hora. Esse arquivo só é atualizado ao salvar ou trocar uma conta Codex com API Key.",
+        "authFileTitle": "Credenciais atuais do Codex",
+        "authFileDesc": "Salvar um provedor não sobrescreve o OPENAI_API_KEY atual em auth.json."
+      },
+      "quickConfig": {
+        "title": "Configuração atual do Codex",
+        "desc": "Essas configurações rápidas gravam diretamente no ~/.codex/config.toml ativo e não alteram o repositório de provedores de modelo.",
+        "configPath": "Arquivo de configuração",
+        "openConfig": "Abrir arquivo",
+        "loadFailed": "Falha ao carregar a configuração atual do Codex: {{error}}",
+        "openFailed": "Falha ao abrir config.toml: {{error}}",
+        "saveSuccess": "A configuração atual do Codex foi salva.",
+        "saveFailed": "Falha ao salvar a configuração atual do Codex: {{error}}",
+        "contextWindow1m": "Janela de contexto 1M",
+        "contextWindow1mHint": "Quando ativado, grava model_context_window = 1000000 e gerencia junto o limite de compactação automática.",
+        "autoCompactLimit": "Limite de compactação automática",
+        "autoCompactLimitHint": "Grava model_auto_compact_token_limit. Ao desligar a chave 1M, este campo também será removido.",
+        "preview": "Prévia de gravação",
+        "previewApply": "Será gravado",
+        "previewRemove": "Será removido",
+        "customDetected": "Foi detectado um model_context_window = {{context}} personalizado em config.toml. Ao salvar, ele será reescrito usando a configuração rápida abaixo.",
+        "compactMissingDetected": "O contexto 1M já está ativado, mas o limite de compactação automática está ausente. Ao salvar, o valor padrão {{limit}} será gravado.",
+        "validation": {
+          "autoCompactInvalid": "O limite de compactação automática deve ser um número inteiro maior que 0."
+        }
+      }
+    },
+    "quickSwitch": {
+      "action": "Troca rápida de provedor",
+      "inlineAction": "Alternar",
+      "title": "Troca rápida de provedor",
+      "desc": "Altere rapidamente esta conta com chave API para um provedor salvo e uma chave API salva.",
+      "currentAccount": "Conta atual: {{name}}",
+      "noProviders": "Ainda não há provedores salvos. Adicione um primeiro em Provedores de modelo.",
+      "providerHasNoKeys": "Este provedor ainda não tem uma chave API disponível. Adicione uma primeiro em Provedores de modelo.",
+      "gotoProviders": "Gerenciar provedores",
+      "apply": "Alternar agora",
+      "success": "Alternado para o provedor: {{provider}}",
+      "failed": "Falha ao alternar o provedor: {{error}}",
+      "validation": {
+        "providerRequired": "Selecione um provedor.",
+        "apiKeyRequired": "Selecione uma chave API."
+      }
+    },
+    "groups": {
+      "addToGroup": "Adicionar ao grupo"
     }
   },
   "githubCopilot": {
@@ -1788,7 +2159,10 @@
     },
     "codex": {
       "title": "Configurações do Codex",
-      "appPath": "Caminho do aplicativo"
+      "appPath": "Caminho do aplicativo",
+      "configToml": "Arquivo de configuração do Codex",
+      "openConfigToml": "Abrir arquivo",
+      "openConfigHint": "Abra rapidamente o arquivo config.toml ativo do Codex."
     },
     "githubCopilot": {
       "title": "Configurações do GitHub Copilot",
@@ -1848,7 +2222,8 @@
       "loadFailed": "Falha ao carregar configuração: {{error}}",
       "saveFailed": "Falha ao salvar configuração: {{error}}",
       "pickPathFailed": "Falha ao selecionar caminho: {{error}}",
-      "resetPathFailed": "Falha ao redefinir caminho: {{error}}"
+      "resetPathFailed": "Falha ao redefinir caminho: {{error}}",
+      "openCodexConfigFailed": "Falha ao abrir o config.toml do Codex: {{error}}"
     },
     "qoder": {
       "title": "Configuracoes do Qoder",
@@ -1904,8 +2279,7 @@
       "description": "Clique em \"Adicionar conta\" para começar a gerenciar suas contas do Windsurf"
     },
     "addModal": {
-      "title": "Adicionar conta do Windsurf",
-      "password": "E-mail e senha"
+      "title": "Adicionar conta do Windsurf"
     },
     "oauth": {
       "desc": "Clique no botão abaixo e conclua a autorização do Windsurf no navegador."
@@ -1948,16 +2322,6 @@
       "inject": "Troca com um clique: esta ferramenta lê o material de criptografia local do Windsurf (DPAPI/Keychain/Secret Service), descriptografa a sessão de autenticação em state.vscdb, substitui o token do Windsurf e criptografa novamente — tudo localmente na sua máquina.",
       "reason": "Escopo de permissões: ler o banco de autenticação do Windsurf (state.vscdb) e chamar a criptografia do sistema (Windows DPAPI / macOS Keychain / Linux Secret Service) para descriptografar e gravar de volta.",
       "storage": "Escopo de leitura: apenas dados relacionados à sessão de login do Windsurf são processados; todos os processos são executados localmente."
-    },
-    "password": {
-      "desc": "Entre com o e-mail e a senha da sua conta Windsurf para obter automaticamente a chave de API e as informações da conta.",
-      "emailPlaceholder": "Endereço de e-mail",
-      "passwordPlaceholder": "Senha",
-      "login": "Entrar",
-      "logging": "Entrando...",
-      "empty": "Informe e-mail e senha",
-      "success": "Login realizado: {{login}}",
-      "failed": "Falha no login: {{error}}"
     }
   },
   "kiro": {
@@ -2400,7 +2764,11 @@
       "unsupportedDescPlatform": "A multiinstância Gemini Cli é compatível apenas com macOS, Windows e Linux.",
       "launchDialogTitle": "Iniciar instância",
       "launchHint": "Copie o comando e execute-o manualmente ou execute-o diretamente no terminal.",
-      "runInTerminal": "Execute no Terminal"
+      "runInTerminal": "Execute no Terminal",
+      "workingDir": "Diretório de Trabalho",
+      "workingDirPlaceholder": "Padrão para o caminho atual",
+      "workingDirDesc": "Mudará para este diretório primeiro ao iniciar",
+      "pickWorkingDir": "Selecionar Diretório de Trabalho"
     },
     "switch": {
       "success": "Conta trocada com sucesso"
@@ -2443,6 +2811,26 @@
       "saved": "Projeto salvo: {{projectId}}",
       "cleared": "Voltou para resolução automática de projeto",
       "savedWithRefreshError": "Projeto salvo, mas a atualização de cota falhou: {{error}}"
+    },
+    "identity": {
+      "authMethod": "Método de autenticação",
+      "tier": "Plano",
+      "signedInWithGoogle": "Conectado com Google",
+      "signedInWithGoogleEmail": "Conectado com Google ({{email}})"
+    },
+    "quotaTable": {
+      "model": "Modelo",
+      "leftOfTotal": "Restante / Total",
+      "usage": "Usado",
+      "usageResets": "Redefinição de uso",
+      "usedPercent": "{{value}}%",
+      "remainingOfTotal": "{{remaining}} / {{total}}",
+      "resetAtWithRelative": "{{absolute}} ({{relative}})"
+    },
+    "tierText": {
+      "pro": "Gemini Code Assist no Google One AI Pro",
+      "ultra": "Gemini Code Assist no Google AI Ultra",
+      "free": "Gemini Code Assist grátis"
     }
   },
   "codebuddy": {
@@ -2510,7 +2898,8 @@
       "expireUnknown": "Expiracao: N/A",
       "packageTitle": {
         "base": "Pacote de experiência básica",
-        "activity": "Pacote de bônus de atividade"
+        "activity": "Pacote de bônus de atividade",
+        "pro": "Assinatura Pro"
       }
     },
     "extraCredit": {
@@ -2578,7 +2967,12 @@
       "title": "Adicionar conta Qoder"
     },
     "import": {
-      "localDesc": "Lê o estado atual de login do cliente local do Qoder, incluindo informações do usuário, plano e uso de créditos."
+      "localDesc": "Lê o estado atual de login do cliente local do Qoder, incluindo informações do usuário, plano e uso de créditos.",
+      "localFailed": "Falha na importação local: {{error}}",
+      "localSuccess": "Conta importada do Qoder local."
+    },
+    "empty": {
+      "desc": "Clique em \"Adicionar conta\" para usar login de autenticação, importação local ou importação JSON."
     }
   },
   "trae": {
@@ -2675,7 +3069,10 @@
         "other": "Outros",
         "empty": "Sem dados de cota"
       }
-    }
+    },
+    "syncFailed": "Falha na sincronização: {{error}}",
+    "syncSuccess": "{{count}} conta(s) sincronizada(s) com WorkBuddy",
+    "syncToWorkbuddy": "Sincronizar com WorkBuddy"
   },
   "workbuddy": {
     "title": "Gerenciamento de contas do WorkBuddy",
@@ -2810,7 +3207,8 @@
       "unknownStatus": "Status desconhecido",
       "overdueField": "Faturas vencidas",
       "overdueYes": "Sim",
-      "overdueNo": "Não"
+      "overdueNo": "Não",
+      "usageUpdatedAt": "Atualizado: {{time}}"
     },
     "runtime": {
       "title": "Sessão atual do Zed",
@@ -2830,7 +3228,8 @@
       "complete": "Concluir login",
       "startFailed": "Falha ao iniciar o login do Zed",
       "completeSuccess": "Login do Zed concluído: {{account}}",
-      "importOnlySuccess": "A autorização foi concluída com sucesso. A conta foi importada. Para fazer o Zed oficial usar esta conta, clique em \"Aplicar e reiniciar\"."
+      "importOnlySuccess": "A autorização foi concluída com sucesso. A conta foi importada. Para fazer o Zed oficial usar esta conta, clique em \"Aplicar e reiniciar\".",
+      "desc": "Clique no botão abaixo para concluir a autenticação de login oficial do Zed no navegador."
     },
     "actions": {
       "addAccount": "Entrar no Zed",
@@ -2846,6 +3245,9 @@
       "applyAndRestart": "Aplicar e reiniciar",
       "reapply": "Aplicar novamente",
       "exportTitle": "Exportar contas do Zed em JSON"
+    },
+    "sort": {
+      "tokenSpend": "Classificar por gasto de Token"
     }
   },
   "floatingCard": {

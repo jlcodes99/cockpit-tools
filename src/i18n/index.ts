@@ -12,6 +12,8 @@ const languageAliases: Record<string, string> = {
   'pt-BR': 'pt-br',
   'vi-VN': 'vi',
   'vi-vn': 'vi',
+  'id-ID': 'id',
+  'id-id': 'id',
 };
 
 export const supportedLanguages = [
@@ -31,6 +33,7 @@ export const supportedLanguages = [
   'cs',
   'vi',
   'ar',
+  'id',
 ];
 
 const localeLoaders: Record<string, () => Promise<LocaleModule>> = {
@@ -48,6 +51,7 @@ const localeLoaders: Record<string, () => Promise<LocaleModule>> = {
   cs: () => import('../locales/cs.json'),
   vi: () => import('../locales/vi.json'),
   ar: () => import('../locales/ar.json'),
+  id: () => import('../locales/id.json'),
 };
 
 const loadedLanguages = new Set<string>();

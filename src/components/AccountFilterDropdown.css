@@ -18,6 +18,11 @@
   cursor: pointer;
 }
 
+.account-filter-surface .tag-filter-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .account-filter-surface .tag-filter-btn.active {
   border-color: rgba(59, 130, 246, 0.4);
   background: linear-gradient(135deg, rgba(191, 219, 254, 0.45), rgba(153, 246, 228, 0.4));
@@ -37,6 +42,46 @@
   z-index: 20;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+.account-filter-surface .tag-filter-panel.open-top {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+.account-filter-surface.single-filter {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.account-filter-surface .single-filter-btn {
+  min-width: 120px;
+  justify-content: flex-start;
+}
+
+.account-filter-surface .single-filter-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.account-filter-surface .single-filter-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-filter-surface .single-filter-panel {
+  min-width: 180px;
+}
+
+.account-filter-surface .single-filter-option {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
 }
 
 .account-filter-surface .tag-filter-divider {

@@ -1,7 +1,7 @@
-import { invoke } from '@tauri-apps/api/core';
-import { createPlatformInstanceService } from './platform/createPlatformInstanceService';
+import { invoke } from "@tauri-apps/api/core";
+import { createPlatformInstanceService } from "./platform/createPlatformInstanceService";
 
-const service = createPlatformInstanceService('gemini');
+const service = createPlatformInstanceService("gemini");
 
 export const getInstanceDefaults = service.getInstanceDefaults;
 export const listInstances = service.listInstances;
@@ -19,10 +19,18 @@ export interface GeminiInstanceLaunchInfo {
   launchCommand: string;
 }
 
-export async function getGeminiInstanceLaunchCommand(instanceId: string): Promise<GeminiInstanceLaunchInfo> {
-  return await invoke('gemini_get_instance_launch_command', { instanceId });
+export async function getGeminiInstanceLaunchCommand(
+  instanceId: string,
+): Promise<GeminiInstanceLaunchInfo> {
+  return await invoke("gemini_get_instance_launch_command", { instanceId });
 }
 
-export async function executeGeminiInstanceLaunchCommand(instanceId: string): Promise<string> {
-  return await invoke('gemini_execute_instance_launch_command', { instanceId });
+export async function executeGeminiInstanceLaunchCommand(
+  instanceId: string,
+  terminal?: string,
+): Promise<string> {
+  return await invoke("gemini_execute_instance_launch_command", {
+    instanceId,
+    terminal: terminal ?? null,
+  });
 }

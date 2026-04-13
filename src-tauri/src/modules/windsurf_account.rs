@@ -51,15 +51,16 @@ pub fn load_account(account_id: &str) -> Option<WindsurfAccount> {
     if !account_path.exists() {
         return None;
     }
-    let content = fs::read_to_string(account_path).ok()?;
-    serde_json::from_str(&content).ok()
+    let content = fs::read_to_string(&account_path).ok()?;
+    crate::modules::atomic_write::parse_json_with_auto_restore(&account_path, &content).ok()
 }
 
 fn save_account_file(account: &WindsurfAccount) -> Result<(), String> {
     let path = get_accounts_dir()?.join(format!("{}.json", account.id));
     let content =
         serde_json::to_string_pretty(account).map_err(|e| format!("序列化账号失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("保存账号失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("保存账号失败: {}", e))
 }
 
 fn delete_account_file(account_id: &str) -> Result<(), String> {
@@ -86,7 +87,10 @@ fn load_account_index() -> WindsurfAccountIndex {
             repair_account_index_from_details("索引文件为空")
                 .unwrap_or_else(WindsurfAccountIndex::new)
         }
-        Ok(content) => match serde_json::from_str::<WindsurfAccountIndex>(&content) {
+        Ok(content) => match crate::modules::atomic_write::parse_json_with_auto_restore::<
+            WindsurfAccountIndex,
+        >(&path, &content)
+        {
             Ok(index) if !index.accounts.is_empty() => index,
             Ok(_) => repair_account_index_from_details("索引账号列表为空")
                 .unwrap_or_else(WindsurfAccountIndex::new),
@@ -130,7 +134,9 @@ fn load_account_index_checked() -> Result<WindsurfAccountIndex, String> {
         return Ok(WindsurfAccountIndex::new());
     }
 
-    match serde_json::from_str::<WindsurfAccountIndex>(&content) {
+    match crate::modules::atomic_write::parse_json_with_auto_restore::<WindsurfAccountIndex>(
+        &path, &content,
+    ) {
         Ok(index) if !index.accounts.is_empty() => Ok(index),
         Ok(index) => {
             if let Some(repaired) = repair_account_index_from_details("索引账号列表为空") {
@@ -155,7 +161,8 @@ fn save_account_index(index: &WindsurfAccountIndex) -> Result<(), String> {
     let path = get_accounts_index_path()?;
     let content =
         serde_json::to_string_pretty(index).map_err(|e| format!("序列化账号索引失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("写入账号索引失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("写入账号索引失败: {}", e))
 }
 
 fn repair_account_index_from_details(reason: &str) -> Option<WindsurfAccountIndex> {
@@ -230,6 +237,15 @@ fn upsert_account_record(account: WindsurfAccount) -> Result<WindsurfAccount, St
     refresh_summary(&mut index, &account);
     save_account_index(&index)?;
     Ok(account)
+}
+
+fn persist_quota_query_error(account_id: &str, message: &str) {
+    let Some(mut account) = load_account(account_id) else {
+        return;
+    };
+    account.quota_query_last_error = Some(message.to_string());
+    account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
+    let _ = upsert_account_record(account);
 }
 
 fn normalize_login(payload: &WindsurfOAuthCompletePayload) -> String {
@@ -850,6 +866,8 @@ pub fn upsert_account(payload: WindsurfOAuthCompletePayload) -> Result<WindsurfA
         windsurf_user_status: payload.windsurf_user_status.clone(),
         windsurf_plan_status: payload.windsurf_plan_status.clone(),
         windsurf_auth_status_raw: payload.windsurf_auth_status_raw.clone(),
+        quota_query_last_error: None,
+        quota_query_last_error_at: None,
         usage_updated_at: None,
         created_at,
         last_used: now,
@@ -858,6 +876,8 @@ pub fn upsert_account(payload: WindsurfOAuthCompletePayload) -> Result<WindsurfA
     apply_payload(&mut account, payload);
     account.id = account_id;
     account.created_at = created_at;
+    account.quota_query_last_error = None;
+    account.quota_query_last_error_at = None;
     account.last_used = now;
 
     save_account_file(&account)?;
@@ -903,7 +923,13 @@ async fn refresh_account_token_once(account_id: &str) -> Result<WindsurfAccount,
     account.created_at = created_at;
     let refreshed_at = now_ts();
     if !preserved_quota {
+        account.quota_query_last_error = None;
+        account.quota_query_last_error_at = None;
         account.usage_updated_at = Some(refreshed_at);
+    } else {
+        account.quota_query_last_error =
+            Some("未获取到有效配额快照，已保留旧配额缓存".to_string());
+        account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
     }
     account.last_used = refreshed_at;
 
@@ -920,10 +946,14 @@ async fn refresh_account_token_once(account_id: &str) -> Result<WindsurfAccount,
 }
 
 pub async fn refresh_account_token(account_id: &str) -> Result<WindsurfAccount, String> {
-    crate::modules::refresh_retry::retry_once_with_delay("Windsurf Refresh", account_id, || async {
+    let result = crate::modules::refresh_retry::retry_once_with_delay("Windsurf Refresh", account_id, || async {
         refresh_account_token_once(account_id).await
     })
-    .await
+    .await;
+    if let Err(err) = &result {
+        persist_quota_query_error(account_id, err);
+    }
+    result
 }
 
 pub async fn refresh_all_tokens() -> Result<Vec<(String, Result<WindsurfAccount, String>)>, String>

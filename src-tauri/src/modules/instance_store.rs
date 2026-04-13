@@ -9,6 +9,7 @@ use crate::models::InstanceStore;
 pub struct CreateInstanceParams {
     pub name: String,
     pub user_data_dir: String,
+    pub working_dir: Option<String>,
     pub extra_args: String,
     pub bind_account_id: Option<String>,
     pub copy_source_instance_id: Option<String>,
@@ -19,6 +20,7 @@ pub struct CreateInstanceParams {
 pub struct UpdateInstanceParams {
     pub instance_id: String,
     pub name: Option<String>,
+    pub working_dir: Option<String>,
     pub extra_args: Option<String>,
     pub bind_account_id: Option<Option<String>>,
 }

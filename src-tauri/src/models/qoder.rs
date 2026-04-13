@@ -19,6 +19,10 @@ pub struct QoderAccount {
     pub credits_remaining: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub credits_usage_percent: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_query_last_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_query_last_error_at: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage_updated_at: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]

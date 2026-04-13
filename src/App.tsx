@@ -51,6 +51,7 @@ import {
   dispatchExternalProviderImportEvent,
   normalizeExternalProviderImportPayload,
 } from './utils/externalProviderImport';
+import { runAutoBackupCycle } from './services/scheduledBackupService';
 
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })),
@@ -181,7 +182,7 @@ type AppPathMissingDetail = {
     | { kind: 'switchAccount'; accountId?: string };
 };
 
-const WAKEUP_ENABLED_KEY = 'agtools.wakeup.enabled';
+  const WAKEUP_ENABLED_KEY = 'agtools.wakeup.enabled';
 const TASKS_STORAGE_KEY = 'agtools.wakeup.tasks';
 const WAKEUP_FORCE_DISABLE_MIGRATION_KEY = 'agtools.wakeup.migration.force_disable_0_8_14';
 
@@ -1315,8 +1316,6 @@ function MainApp() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-
     const syncWakeupStateOnStartup = async () => {
       let officialLsVersionMode = loadWakeupOfficialLsVersionMode();
       try {
@@ -1329,38 +1328,47 @@ function MainApp() {
         const tasksRaw = localStorage.getItem(TASKS_STORAGE_KEY);
         const tasks = tasksRaw ? JSON.parse(tasksRaw) : [];
         officialLsVersionMode = loadWakeupOfficialLsVersionMode();
-        await invoke('wakeup_sync_state', { enabled, tasks, officialLsVersionMode });
+        await invoke('wakeup_sync_state', {
+          enabled,
+          tasks,
+          officialLsVersionMode,
+          runStartupTasks: true,
+        });
       } catch (error) {
         console.error('唤醒任务状态同步失败:', error);
       }
-
-      if (cancelled) {
-        return;
-      }
-
-      try {
-        await invoke('wakeup_run_enabled_tasks', {
-          triggerSource: 'startup',
-          officialLsVersionMode,
-        });
-      } catch (error) {
-        console.error('执行 Antigravity 启动后唤醒失败:', error);
-      }
-
-      if (cancelled) {
-        return;
-      }
-
-      try {
-        await invoke('codex_wakeup_run_enabled_tasks', { triggerType: 'startup' });
-      } catch (error) {
-        console.error('执行 Codex 启动后唤醒失败:', error);
-      }
     };
     void syncWakeupStateOnStartup();
+  }, []);
+
+  useEffect(() => {
+    const AUTO_BACKUP_POLL_INTERVAL_MS = 60 * 60 * 1000;
+    let intervalId: number | undefined;
+    let inFlight = false;
+
+    const checkAutoBackup = async () => {
+      if (inFlight) {
+        return;
+      }
+      inFlight = true;
+      try {
+        await runAutoBackupCycle();
+      } catch (error) {
+        console.warn('[AutoBackup] 定期备份执行失败:', error);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void checkAutoBackup();
+    intervalId = window.setInterval(() => {
+      void checkAutoBackup();
+    }, AUTO_BACKUP_POLL_INTERVAL_MS);
 
     return () => {
-      cancelled = true;
+      if (intervalId !== undefined) {
+        window.clearInterval(intervalId);
+      }
     };
   }, []);
 
