@@ -22,7 +22,20 @@ import {
   usePlatformLayoutStore,
 } from '../stores/usePlatformLayoutStore';
 import { Page } from '../types/navigation';
-import { Users, CheckCircle2, Sparkles, RotateCw, Play, Github, Tag, ChevronDown } from 'lucide-react';
+import {
+  Users,
+  CheckCircle2,
+  Sparkles,
+  RotateCw,
+  Play,
+  Github,
+  Tag,
+  ChevronDown,
+  Rows3,
+  LayoutGrid,
+  List,
+  ExternalLink,
+} from 'lucide-react';
 import { TagEditModal } from '../components/TagEditModal';
 import { Account } from '../types/account';
 import {
@@ -172,6 +185,50 @@ interface DashboardCardCollapseState {
   workbuddy: boolean;
 }
 
+type DashboardViewMode = 'grid' | 'list' | 'compact';
+
+interface DashboardRenderableAccount {
+  platformId: PlatformId;
+  accountId: string;
+  displayName: string;
+  maskedDisplayName: string;
+  platformLabel: string;
+  presentation: UnifiedAccountPresentation;
+  sortTimestamp: number;
+  isCurrent: boolean;
+  isRefreshing: boolean;
+  isSwitching: boolean;
+  switchDisabled?: boolean;
+  sublineText?: string;
+  sublineTitle?: string;
+  onRefresh: () => void;
+  onSwitch: () => void;
+  onEditTags: () => void;
+}
+
+interface DashboardBrowseGroup {
+  entryId: PlatformLayoutEntryId;
+  platformId: PlatformId;
+  label: string;
+  childLabels: string[];
+  page: Page;
+  accounts: DashboardRenderableAccount[];
+  iconKind?: 'platform' | 'custom';
+  iconPlatformId?: PlatformId;
+  iconCustomDataUrl?: string;
+}
+
+interface DashboardCompactItem {
+  account: DashboardRenderableAccount;
+  entryId: PlatformLayoutEntryId;
+  groupLabel: string;
+  iconKind?: 'platform' | 'custom';
+  iconPlatformId?: PlatformId;
+  iconCustomDataUrl?: string;
+}
+
+const DASHBOARD_VIEW_MODE_STORAGE_KEY = 'agtools.dashboard.view_mode';
+
 export function DashboardPage({
   onNavigate,
   onOpenPlatformLayout,
@@ -184,6 +241,20 @@ export function DashboardPage({
   const [dashboardCardCollapse, setDashboardCardCollapse] = React.useState<DashboardCardCollapseState>({
     workbuddy: false,
   });
+  const [dashboardViewMode, setDashboardViewMode] = React.useState<DashboardViewMode>(() => {
+    try {
+      const saved = localStorage.getItem(DASHBOARD_VIEW_MODE_STORAGE_KEY);
+      if (saved === 'list' || saved === 'compact') {
+        return saved;
+      }
+      if (saved === 'summary' || saved === 'grid') {
+        return 'grid';
+      }
+    } catch {
+      // ignore storage access failures
+    }
+    return 'grid';
+  });
 
   const toggleDashboardCardCollapse = useCallback((platform: keyof DashboardCardCollapseState) => {
     setDashboardCardCollapse((prev) => ({
@@ -191,6 +262,14 @@ export function DashboardPage({
       [platform]: !prev[platform],
     }));
   }, []);
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(DASHBOARD_VIEW_MODE_STORAGE_KEY, dashboardViewMode);
+    } catch {
+      // ignore storage access failures
+    }
+  }, [dashboardViewMode]);
 
   const handleSaveTags = async (newTags: string[]) => {
     if (!tagModalState) return;
@@ -2024,6 +2103,395 @@ export function DashboardPage({
     });
   };
 
+  const formatRelativeDuration = useCallback((seconds: number) => {
+    const safe = Math.max(0, Math.floor(seconds));
+    const totalMinutes = Math.floor(safe / 60);
+    if (totalMinutes < 1) {
+      return t('common.shared.time.lessThanMinute', '<1分钟');
+    }
+    const days = Math.floor(totalMinutes / (60 * 24));
+    const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+    const minutes = totalMinutes % 60;
+    if (days > 0 && hours > 0) {
+      return t('common.shared.time.relativeDaysHours', '{{days}}天{{hours}}小时', { days, hours });
+    }
+    if (days > 0) {
+      return t('common.shared.time.relativeDays', '{{days}}天', { days });
+    }
+    if (hours > 0 && minutes > 0) {
+      return t('common.shared.time.relativeHoursMinutes', '{{hours}}小时{{minutes}}分钟', { hours, minutes });
+    }
+    if (hours > 0) {
+      return t('common.shared.time.relativeHours', '{{hours}}小时', { hours });
+    }
+    return t('common.shared.time.relativeMinutes', '{{minutes}}分钟', { minutes });
+  }, [t]);
+
+  const buildDashboardBrowseAccounts = useMemo(() => {
+    const compareBrowseAccounts = (a: DashboardRenderableAccount, b: DashboardRenderableAccount) => {
+      if (a.isCurrent !== b.isCurrent) {
+        return a.isCurrent ? -1 : 1;
+      }
+      if (b.sortTimestamp !== a.sortTimestamp) {
+        return b.sortTimestamp - a.sortTimestamp;
+      }
+      return a.displayName.localeCompare(b.displayName);
+    };
+
+    const buildMaskedName = (value: string) => maskAccountText(value);
+    const platformLabelMap: Record<PlatformId, string> = {
+      antigravity: getPlatformLabel('antigravity', t),
+      codex: getPlatformLabel('codex', t),
+      zed: getPlatformLabel('zed', t),
+      'github-copilot': getPlatformLabel('github-copilot', t),
+      windsurf: getPlatformLabel('windsurf', t),
+      kiro: getPlatformLabel('kiro', t),
+      cursor: getPlatformLabel('cursor', t),
+      gemini: getPlatformLabel('gemini', t),
+      codebuddy: getPlatformLabel('codebuddy', t),
+      codebuddy_cn: getPlatformLabel('codebuddy_cn', t),
+      qoder: getPlatformLabel('qoder', t),
+      trae: getPlatformLabel('trae', t),
+      workbuddy: getPlatformLabel('workbuddy', t),
+    };
+
+    const byPlatform: Record<PlatformId, DashboardRenderableAccount[]> = {
+      antigravity: agAccounts.map((account) => {
+        const presentation = buildAntigravityAccountPresentation(account, agDisplayGroups, t);
+        return {
+          platformId: 'antigravity' as PlatformId,
+          platformLabel: platformLabelMap.antigravity,
+          accountId: account.id,
+          displayName: presentation.displayName,
+          maskedDisplayName: buildMaskedName(presentation.displayName),
+          presentation,
+          sortTimestamp: account.last_used || account.created_at || 0,
+          isCurrent: account.id === agCurrentId,
+          isRefreshing: refreshing.has(account.id),
+          isSwitching: false,
+          onRefresh: () => handleRefreshAg(account.id),
+          onSwitch: () => switchAgAccount(account.id),
+          onEditTags: () => setTagModalState({ accountId: account.id, platform: 'antigravity', tags: account.tags || [] }),
+        };
+      }).sort(compareBrowseAccounts),
+      codex: codexAccounts.map((account) => {
+        const presentation = buildCodexAccountPresentation(account, t);
+        return {
+          platformId: 'codex' as PlatformId,
+          platformLabel: platformLabelMap.codex,
+          accountId: account.id,
+          displayName: presentation.displayName,
+          maskedDisplayName: buildMaskedName(presentation.displayName),
+          presentation,
+          sortTimestamp: account.last_used || account.created_at || 0,
+          isCurrent: account.id === codexCurrentId,
+          isRefreshing: refreshing.has(account.id),
+          isSwitching: false,
+          onRefresh: () => handleRefreshCodex(account.id),
+          onSwitch: () => switchCodexAccount(account.id),
+          onEditTags: () => setTagModalState({ accountId: account.id, platform: 'codex', tags: account.tags || [] }),
+        };
+      }).sort(compareBrowseAccounts),
+      zed: zedAccounts.map((account) => {
+        const presentation = buildZedAccountPresentation(account, t);
+        return {
+          platformId: 'zed' as PlatformId,
+          platformLabel: platformLabelMap.zed,
+          accountId: account.id,
+          displayName: presentation.displayName,
+          maskedDisplayName: buildMaskedName(presentation.displayName),
+          presentation,
+          sortTimestamp: account.last_used || account.created_at || 0,
+          isCurrent: account.id === zedCurrentId,
+          isRefreshing: refreshing.has(account.id),
+          isSwitching: switching.has(account.id),
+          onRefresh: () => handleRefreshZed(account.id),
+          onSwitch: () => handleSwitchZed(account.id),
+          onEditTags: () => setTagModalState({ accountId: account.id, platform: 'zed', tags: account.tags || [] }),
+        };
+      }).sort(compareBrowseAccounts),
+      'github-copilot': githubCopilotAccounts.map((account) => {
+        const presentation = buildGitHubCopilotAccountPresentation(account, t);
+        return {
+          platformId: 'github-copilot' as PlatformId,
+          platformLabel: platformLabelMap['github-copilot'],
+          accountId: account.id,
+          displayName: presentation.displayName,
+          maskedDisplayName: buildMaskedName(presentation.displayName),
+          presentation,
+          sortTimestamp: account.last_used || account.created_at || 0,
+          isCurrent: account.id === githubCopilotCurrent?.id,
+          isRefreshing: refreshing.has(account.id),
+          isSwitching: switching.has(account.id),
+          onRefresh: () => handleRefreshGitHubCopilot(account.id),
+          onSwitch: () => handleSwitchGitHubCopilot(account.id),
+          onEditTags: () => setTagModalState({ accountId: account.id, platform: 'github-copilot', tags: account.tags || [] }),
+        };
+      }).sort(compareBrowseAccounts),
+      windsurf: windsurfAccounts.map((account) => {
+        const presentation = buildWindsurfAccountPresentation(account, t);
+        return {
+          platformId: 'windsurf' as PlatformId,
+          platformLabel: platformLabelMap.windsurf,
+          accountId: account.id,
+          displayName: presentation.displayName,
+          maskedDisplayName: buildMaskedName(presentation.displayName),
+          presentation,
+          sortTimestamp: account.last_used || account.created_at || 0,
+          isCurrent: account.id === windsurfCurrent?.id,
+          isRefreshing: refreshing.has(account.id),
+          isSwitching: switching.has(account.id),
+          onRefresh: () => handleRefreshWindsurf(account.id),
+          onSwitch: () => handleSwitchWindsurf(account.id),
+          onEditTags: () => setTagModalState({ accountId: account.id, platform: 'windsurf', tags: account.tags || [] }),
+        };
+      }).sort(compareBrowseAccounts),
+      kiro: kiroAccounts.map((account) => {
+        const presentation = buildKiroAccountPresentation(account, t);
+        return {
+          platformId: 'kiro' as PlatformId,
+          platformLabel: platformLabelMap.kiro,
+          accountId: account.id,
+          displayName: presentation.displayName,
+          maskedDisplayName: buildMaskedName(presentation.displayName),
+          presentation,
+          sortTimestamp: account.last_used || account.created_at || 0,
+          isCurrent: account.id === kiroCurrent?.id,
+          isRefreshing: refreshing.has(account.id),
+          isSwitching: switching.has(account.id),
+          switchDisabled: presentation.isBanned,
+          onRefresh: () => handleRefreshKiro(account.id),
+          onSwitch: () => handleSwitchKiro(account.id),
+          onEditTags: () => setTagModalState({ accountId: account.id, platform: 'kiro', tags: account.tags || [] }),
+        };
+      }).sort(compareBrowseAccounts),
+      cursor: cursorAccounts.map((account) => {
+        const presentation = buildCursorAccountPresentation(account, t);
+        const authIdText = (account.auth_id || '').trim();
+        const maskedAuthIdText = authIdText ? buildMaskedName(authIdText) : '--';
+        return {
+          platformId: 'cursor' as PlatformId,
+          platformLabel: platformLabelMap.cursor,
+          accountId: account.id,
+          displayName: presentation.displayName,
+          maskedDisplayName: buildMaskedName(presentation.displayName),
+          presentation,
+          sortTimestamp: account.last_used || account.created_at || 0,
+          isCurrent: account.id === cursorCurrent?.id,
+          isRefreshing: refreshing.has(account.id),
+          isSwitching: switching.has(account.id),
+          switchDisabled: presentation.isBanned,
+          sublineText: `Auth ID: ${maskedAuthIdText}`,
+          sublineTitle: `Auth ID: ${maskedAuthIdText}`,
+          onRefresh: () => handleRefreshCursor(account.id),
+          onSwitch: () => handleSwitchCursor(account.id),
+          onEditTags: () => setTagModalState({ accountId: account.id, platform: 'cursor', tags: account.tags || [] }),
+        };
+      }).sort(compareBrowseAccounts),
+      gemini: geminiAccounts.map((account) => {
+        const presentation = buildGeminiAccountPresentation(account, t);
+        const updatedAt = account.last_used || account.created_at || 0;
+        const updatedDiffSeconds = Math.floor(Date.now() / 1000) - updatedAt;
+        return {
+          platformId: 'gemini' as PlatformId,
+          platformLabel: platformLabelMap.gemini,
+          accountId: account.id,
+          displayName: presentation.displayName,
+          maskedDisplayName: buildMaskedName(presentation.displayName),
+          presentation,
+          sortTimestamp: updatedAt,
+          isCurrent: account.id === geminiCurrent?.id,
+          isRefreshing: refreshing.has(account.id),
+          isSwitching: switching.has(account.id),
+          sublineText: t('gemini.updated.label', 'Updated {{relative}} ago', {
+            relative: formatRelativeDuration(updatedDiffSeconds),
+          }),
+          onRefresh: () => handleRefreshGemini(account.id),
+          onSwitch: () => handleSwitchGemini(account.id),
+          onEditTags: () => setTagModalState({ accountId: account.id, platform: 'gemini', tags: account.tags || [] }),
+        };
+      }).sort(compareBrowseAccounts),
+      codebuddy: codebuddyAccounts.map((account) => {
+        const presentation = buildCodebuddyAccountPresentation(account, t);
+        return {
+          platformId: 'codebuddy' as PlatformId,
+          platformLabel: platformLabelMap.codebuddy,
+          accountId: account.id,
+          displayName: presentation.displayName,
+          maskedDisplayName: buildMaskedName(presentation.displayName),
+          presentation: {
+            ...presentation,
+            quotaItems: buildCodebuddyCategoryQuotaItems(account),
+          },
+          sortTimestamp: account.last_used || account.created_at || 0,
+          isCurrent: account.id === codebuddyCurrent?.id,
+          isRefreshing: refreshing.has(account.id),
+          isSwitching: switching.has(account.id),
+          onRefresh: () => handleRefreshCodebuddy(account.id),
+          onSwitch: () => handleSwitchCodebuddy(account.id),
+          onEditTags: () => setTagModalState({ accountId: account.id, platform: 'codebuddy', tags: account.tags || [] }),
+        };
+      }).sort(compareBrowseAccounts),
+      codebuddy_cn: codebuddyCnAccounts.map((account) => {
+        const presentation = buildCodebuddyAccountPresentation(account, t);
+        return {
+          platformId: 'codebuddy_cn' as PlatformId,
+          platformLabel: platformLabelMap.codebuddy_cn,
+          accountId: account.id,
+          displayName: presentation.displayName,
+          maskedDisplayName: buildMaskedName(presentation.displayName),
+          presentation: {
+            ...presentation,
+            quotaItems: buildCodebuddyCategoryQuotaItems(account),
+          },
+          sortTimestamp: account.last_used || account.created_at || 0,
+          isCurrent: account.id === codebuddyCnCurrent?.id,
+          isRefreshing: refreshing.has(account.id),
+          isSwitching: switching.has(account.id),
+          onRefresh: () => handleRefreshCodebuddyCn(account.id),
+          onSwitch: () => handleSwitchCodebuddyCn(account.id),
+          onEditTags: () => setTagModalState({ accountId: account.id, platform: 'codebuddy_cn', tags: account.tags || [] }),
+        };
+      }).sort(compareBrowseAccounts),
+      qoder: qoderAccounts.map((account) => {
+        const presentation = buildQoderAccountPresentation(account, t);
+        return {
+          platformId: 'qoder' as PlatformId,
+          platformLabel: platformLabelMap.qoder,
+          accountId: account.id,
+          displayName: presentation.displayName,
+          maskedDisplayName: buildMaskedName(presentation.displayName),
+          presentation,
+          sortTimestamp: account.last_used || account.created_at || 0,
+          isCurrent: account.id === qoderCurrent?.id,
+          isRefreshing: refreshing.has(account.id),
+          isSwitching: switching.has(account.id),
+          onRefresh: () => handleRefreshQoder(account.id),
+          onSwitch: () => handleSwitchQoder(account.id),
+          onEditTags: () => setTagModalState({ accountId: account.id, platform: 'qoder', tags: account.tags || [] }),
+        };
+      }).sort(compareBrowseAccounts),
+      trae: traeAccounts.map((account) => {
+        const presentation = buildTraeAccountPresentation(account, t);
+        return {
+          platformId: 'trae' as PlatformId,
+          platformLabel: platformLabelMap.trae,
+          accountId: account.id,
+          displayName: presentation.displayName,
+          maskedDisplayName: buildMaskedName(presentation.displayName),
+          presentation,
+          sortTimestamp: account.last_used || account.created_at || 0,
+          isCurrent: account.id === traeCurrent?.id,
+          isRefreshing: refreshing.has(account.id),
+          isSwitching: switching.has(account.id),
+          onRefresh: () => handleRefreshTrae(account.id),
+          onSwitch: () => handleSwitchTrae(account.id),
+          onEditTags: () => setTagModalState({ accountId: account.id, platform: 'trae', tags: account.tags || [] }),
+        };
+      }).sort(compareBrowseAccounts),
+      workbuddy: workbuddyAccounts.map((account) => {
+        const presentation = buildWorkbuddyAccountPresentation(account, t);
+        return {
+          platformId: 'workbuddy' as PlatformId,
+          platformLabel: platformLabelMap.workbuddy,
+          accountId: account.id,
+          displayName: presentation.displayName,
+          maskedDisplayName: buildMaskedName(presentation.displayName),
+          presentation,
+          sortTimestamp: account.last_used || account.created_at || 0,
+          isCurrent: account.id === workbuddyCurrent?.id,
+          isRefreshing: refreshing.has(account.id),
+          isSwitching: switching.has(account.id),
+          onRefresh: () => handleRefreshWorkbuddy(account.id),
+          onSwitch: () => handleSwitchWorkbuddy(account.id),
+          onEditTags: () => setTagModalState({ accountId: account.id, platform: 'workbuddy', tags: account.tags || [] }),
+        };
+      }).sort(compareBrowseAccounts),
+    };
+
+    return byPlatform;
+  }, [
+    agAccounts,
+    agCurrentId,
+    agDisplayGroups,
+    codexAccounts,
+    codexCurrentId,
+    zedAccounts,
+    zedCurrentId,
+    githubCopilotAccounts,
+    githubCopilotCurrent,
+    windsurfAccounts,
+    windsurfCurrent,
+    kiroAccounts,
+    kiroCurrent,
+    cursorAccounts,
+    cursorCurrent,
+    geminiAccounts,
+    geminiCurrent,
+    codebuddyAccounts,
+    codebuddyCurrent,
+    codebuddyCnAccounts,
+    codebuddyCnCurrent,
+    qoderAccounts,
+    qoderCurrent,
+    traeAccounts,
+    traeCurrent,
+    workbuddyAccounts,
+    workbuddyCurrent,
+    refreshing,
+    switching,
+    maskAccountText,
+    switchAgAccount,
+    switchCodexAccount,
+    t,
+    formatRelativeDuration,
+  ]);
+
+  const dashboardBrowseGroups = useMemo<DashboardBrowseGroup[]>(() => {
+    const groups: DashboardBrowseGroup[] = [];
+    for (const entryId of visibleEntryOrder) {
+      const platformId = resolveEntryDefaultPlatformId(entryId, platformGroups);
+      if (!platformId) continue;
+
+      const groupId = parseGroupEntryId(entryId);
+      const group = groupId ? platformGroups.find((item) => item.id === groupId) : null;
+      const platformIds = resolveEntryPlatformIds(entryId, platformGroups);
+      const childLabels = group
+        ? group.platformIds.map((childPlatformId) =>
+            resolveGroupChildName(group, childPlatformId, getPlatformLabel(childPlatformId, t)),
+          )
+        : [getPlatformLabel(platformId, t)];
+      const accounts = platformIds.flatMap((id) => buildDashboardBrowseAccounts[id] ?? []);
+      if (accounts.length === 0) continue;
+
+      groups.push({
+        entryId,
+        platformId,
+        label: group ? group.name : getPlatformLabel(platformId, t),
+        childLabels,
+        page: PLATFORM_PAGE_MAP[platformId],
+        accounts,
+        iconKind: group?.iconKind,
+        iconPlatformId: group?.iconPlatformId,
+        iconCustomDataUrl: group?.iconCustomDataUrl,
+      });
+    }
+    return groups;
+  }, [buildDashboardBrowseAccounts, platformGroups, t, visibleEntryOrder]);
+
+  const dashboardCompactItems = useMemo<DashboardCompactItem[]>(() => {
+    return dashboardBrowseGroups.flatMap((group) =>
+      group.accounts.map((account) => ({
+        account,
+        entryId: group.entryId,
+        groupLabel: group.label,
+        iconKind: group.iconKind,
+        iconPlatformId: group.iconPlatformId,
+        iconCustomDataUrl: group.iconCustomDataUrl,
+      })),
+    );
+  }, [dashboardBrowseGroups]);
+
   const platformCounts: Record<PlatformId, number> = {
     antigravity: stats.antigravity,
     codex: stats.codex,
@@ -2059,6 +2527,191 @@ export function DashboardPage({
     }
     return rows;
   }, [visibleCardPlatformIds]);
+
+  const renderBrowseGroupIcon = (group: DashboardBrowseGroup) => {
+    if (group.iconKind === 'custom' && group.iconCustomDataUrl) {
+      return (
+        <img
+          src={group.iconCustomDataUrl}
+          alt={group.label}
+          className="dashboard-group-icon"
+          style={{ width: 20, height: 20 }}
+        />
+      );
+    }
+    return renderPlatformIcon(group.iconPlatformId ?? group.platformId, 20);
+  };
+
+  const renderDashboardListRow = (account: DashboardRenderableAccount) => {
+    const compactQuotaItems = account.presentation.quotaItems.slice(0, 2);
+    return (
+      <article
+        key={account.accountId}
+        className={`dashboard-account-list-row${account.isCurrent ? ' is-current' : ''}`}
+      >
+        <div className="dashboard-account-list-main dashboard-account-list-main--dense">
+          <span className="dashboard-account-list-name" title={account.maskedDisplayName}>
+            {account.maskedDisplayName}
+          </span>
+          <span className="dashboard-account-list-platform">{account.platformLabel}</span>
+          {compactQuotaItems.map((item) => (
+            <span
+              key={`${account.accountId}-${item.key}`}
+              className={`dashboard-account-list-quota ${item.quotaClass || ''}`}
+            >
+              {item.valueText}
+            </span>
+          ))}
+          {account.sublineText && (
+            <span
+              className="dashboard-account-list-subline"
+              title={account.sublineTitle || account.sublineText}
+            >
+              {account.sublineText}
+            </span>
+          )}
+          {account.isCurrent && (
+            <span className="dashboard-account-current-badge">
+              {t('dashboard.current', '当前账户')}
+            </span>
+          )}
+        </div>
+        <div className="dashboard-account-list-actions">
+          <button
+            className="mini-icon-btn"
+            onClick={account.onEditTags}
+            title={t('accounts.editTags', '编辑标签')}
+          >
+            <Tag size={14} />
+          </button>
+          <button
+            className="mini-icon-btn"
+            onClick={account.onRefresh}
+            title={t('common.refresh', '刷新')}
+            disabled={account.isRefreshing || account.isSwitching}
+          >
+            <RotateCw size={14} className={account.isRefreshing ? 'loading-spinner' : ''} />
+          </button>
+          <button
+            className="mini-icon-btn"
+            onClick={account.onSwitch}
+            title={t('dashboard.switch', '切换')}
+            disabled={account.isCurrent || account.switchDisabled || account.isSwitching}
+          >
+            {account.isSwitching ? <RotateCw size={14} className="loading-spinner" /> : <Play size={14} />}
+          </button>
+        </div>
+      </article>
+    );
+  };
+
+  const renderDashboardCompactItemIcon = (item: DashboardCompactItem) => {
+    if (item.iconKind === 'custom' && item.iconCustomDataUrl) {
+      return (
+        <img
+          src={item.iconCustomDataUrl}
+          alt={item.groupLabel}
+          className="dashboard-group-icon"
+          style={{ width: 16, height: 16 }}
+        />
+      );
+    }
+    return renderPlatformIcon(item.iconPlatformId ?? item.account.platformId, 16);
+  };
+
+  const renderDashboardCompactRow = (item: DashboardCompactItem) => {
+    const { account } = item;
+    const quotaItem = account.presentation.quotaItems[0];
+    return (
+      <article
+        key={`${item.entryId}-${account.accountId}`}
+        className={`dashboard-account-compact-row${account.isCurrent ? ' is-current' : ''}`}
+      >
+        <div className="dashboard-account-compact-main">
+          <span
+            className="dashboard-account-compact-entry-icon"
+            title={item.groupLabel}
+            aria-label={item.groupLabel}
+          >
+            {renderDashboardCompactItemIcon(item)}
+          </span>
+          <span className="dashboard-account-compact-name" title={account.maskedDisplayName}>
+            {account.maskedDisplayName}
+          </span>
+          <span className="dashboard-account-compact-platform" title={item.groupLabel}>
+            {item.groupLabel}
+          </span>
+          {quotaItem && (
+            <span
+              className={`dashboard-account-compact-quota ${quotaItem.quotaClass || ''}`}
+            >
+              {quotaItem.valueText}
+            </span>
+          )}
+          {account.isCurrent && (
+            <span className="dashboard-account-current-badge">
+              {t('dashboard.current', '当前账户')}
+            </span>
+          )}
+        </div>
+        <div className="dashboard-account-compact-actions">
+          <button
+            className="mini-icon-btn"
+            onClick={account.onEditTags}
+            title={t('accounts.editTags', '编辑标签')}
+          >
+            <Tag size={14} />
+          </button>
+          <button
+            className="mini-icon-btn"
+            onClick={account.onRefresh}
+            title={t('common.refresh', '刷新')}
+            disabled={account.isRefreshing || account.isSwitching}
+          >
+            <RotateCw size={14} className={account.isRefreshing ? 'loading-spinner' : ''} />
+          </button>
+          <button
+            className="mini-icon-btn"
+            onClick={account.onSwitch}
+            title={t('dashboard.switch', '切换')}
+            disabled={account.isCurrent || account.switchDisabled || account.isSwitching}
+          >
+            {account.isSwitching ? <RotateCw size={14} className="loading-spinner" /> : <Play size={14} />}
+          </button>
+        </div>
+      </article>
+    );
+  };
+
+  const renderDashboardBrowseGroup = (group: DashboardBrowseGroup) => (
+    <section className="dashboard-browse-group" key={group.entryId}>
+      <div className="dashboard-browse-group-header">
+        <button
+          className="dashboard-browse-group-title"
+          onClick={() => onNavigate(group.page)}
+          title={group.childLabels.join(', ')}
+        >
+          <span className="dashboard-browse-group-icon">{renderBrowseGroupIcon(group)}</span>
+          <span className="dashboard-browse-group-name">{group.label}</span>
+          <span className="dashboard-browse-group-count">{group.accounts.length}</span>
+        </button>
+        <button
+          className="header-action-btn dashboard-browse-group-link"
+          onClick={() => onNavigate(group.page)}
+          title={t('dashboard.viewAllAccounts', '查看所有账号')}
+        >
+          <ExternalLink size={14} />
+          <span>{t('dashboard.viewAllAccounts', '查看所有账号')}</span>
+        </button>
+      </div>
+
+      {dashboardViewMode === 'list' && (
+        <div className="dashboard-browse-list">
+          {group.accounts.map((account) => renderDashboardListRow(account))}
+        </div>
+      )}
+    </section>
+  );
 
   const renderPlatformCard = (platformId: PlatformId) => {
     if (platformId === 'antigravity') {
@@ -2687,6 +3340,29 @@ export function DashboardPage({
          </div>
          {topCenterBanner}
          <div className="dashboard-top-actions">
+           <div className="view-switcher dashboard-view-switcher" aria-label={t('nav.dashboard', 'Dashboard')}>
+             <button
+               className={`view-btn ${dashboardViewMode === 'grid' ? 'active' : ''}`}
+               onClick={() => setDashboardViewMode('grid')}
+               title={t('accounts.view.grid', 'Card view')}
+             >
+               <LayoutGrid size={16} />
+             </button>
+             <button
+               className={`view-btn ${dashboardViewMode === 'list' ? 'active' : ''}`}
+               onClick={() => setDashboardViewMode('list')}
+               title={t('accounts.view.list', 'List view')}
+             >
+               <List size={16} />
+             </button>
+             <button
+               className={`view-btn ${dashboardViewMode === 'compact' ? 'active' : ''}`}
+               onClick={() => setDashboardViewMode('compact')}
+               title={t('accounts.view.compact', 'Compact view')}
+             >
+               <Rows3 size={16} />
+             </button>
+           </div>
            <button className="header-action-btn" onClick={onOpenPlatformLayout}>
              <span>{t('platformLayout.title', '平台布局')}</span>
            </button>
@@ -2783,15 +3459,37 @@ export function DashboardPage({
 
       {/* Main Comparison Section */}
       <div className="cards-section">
-        {cardRows.map((row, rowIndex) => (
-          <div
-            className={`cards-split-row${isSinglePlatformMode ? ' single-platform-row' : ''}`}
-            key={`row-${rowIndex}`}
-          >
-            {row.map((platformId) => renderPlatformCard(platformId))}
-            {!isSinglePlatformMode && row.length < 2 && <div className="main-card main-card-placeholder" />}
+        {dashboardViewMode === 'grid' ? (
+          cardRows.map((row, rowIndex) => (
+            <div
+              className={`cards-split-row${isSinglePlatformMode ? ' single-platform-row' : ''}`}
+              key={`row-${rowIndex}`}
+            >
+              {row.map((platformId) => renderPlatformCard(platformId))}
+              {!isSinglePlatformMode && row.length < 2 && <div className="main-card main-card-placeholder" />}
+            </div>
+          ))
+        ) : dashboardViewMode === 'compact' ? (
+          dashboardCompactItems.length > 0 ? (
+            <div className="dashboard-compact-flat-list">
+              {dashboardCompactItems.map((item) => renderDashboardCompactRow(item))}
+            </div>
+          ) : (
+            <div className="dashboard-browse-empty">
+              <Users size={24} />
+              <span>{t('dashboard.noAccount', '无账号')}</span>
+            </div>
+          )
+        ) : dashboardBrowseGroups.length > 0 ? (
+          <div className={`dashboard-browse-groups dashboard-browse-groups--${dashboardViewMode}`}>
+            {dashboardBrowseGroups.map((group) => renderDashboardBrowseGroup(group))}
           </div>
-        ))}
+        ) : (
+          <div className="dashboard-browse-empty">
+            <Users size={24} />
+            <span>{t('dashboard.noAccount', '无账号')}</span>
+          </div>
+        )}
       </div>
 
       {tagModalState && (
