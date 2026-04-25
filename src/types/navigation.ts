@@ -8,6 +8,7 @@ export type Page =
   | 'windsurf'
   | 'kiro'
   | 'cursor'
+  | 'claude'
   | 'gemini'
   | 'codebuddy'
   | 'codebuddy-cn'

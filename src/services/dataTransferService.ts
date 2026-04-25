@@ -24,6 +24,7 @@ import {
   invalidateCodexModelProviderCache,
   listCodexModelProviders,
 } from './codexModelProviderService';
+import * as claudeService from './claudeService';
 import {
   getCodexWakeupCliStatus,
   getCodexWakeupState,
@@ -258,6 +259,7 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   windsurf: async () => (await windsurfService.listWindsurfAccounts()) as unknown as TransferAccountRecord[],
   kiro: async () => (await kiroService.listKiroAccounts()) as unknown as TransferAccountRecord[],
   cursor: async () => (await cursorService.listCursorAccounts()) as unknown as TransferAccountRecord[],
+  claude: async () => (await claudeService.listClaudeAccounts()) as unknown as TransferAccountRecord[],
   gemini: async () => (await geminiService.listGeminiAccounts()) as unknown as TransferAccountRecord[],
   codebuddy: async () => (await codebuddyService.listCodebuddyAccounts()) as unknown as TransferAccountRecord[],
   codebuddy_cn: async () =>
@@ -275,6 +277,7 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   windsurf: windsurfService.importWindsurfFromJson,
   kiro: kiroService.importKiroFromJson,
   cursor: cursorService.importCursorFromJson,
+  claude: claudeService.importClaudeFromJson,
   gemini: geminiService.importGeminiFromJson,
   codebuddy: codebuddyService.importCodebuddyFromJson,
   codebuddy_cn: codebuddyCnService.importCodebuddyCnFromJson,
@@ -414,6 +417,9 @@ function buildAccountRef(platform: PlatformId, account: TransferAccountRecord): 
       ref.userId = normalizeString(account.user_id) ?? undefined;
       ref.loginProvider = normalizeString(account.login_provider) ?? undefined;
       break;
+    case 'claude':
+      ref.email = normalizeString(account.email) ?? normalizeString(account.login_hint_email) ?? undefined;
+      break;
     case 'cursor':
     case 'gemini':
       ref.email = normalizeString(account.email) ?? undefined;
@@ -482,6 +488,9 @@ function scoreAccountRef(ref: DataTransferAccountRef, account: TransferAccountRe
       addStringScore(ref.userId, account.user_id, 24);
       addStringScore(ref.email, account.email, 10);
       addStringScore(ref.loginProvider, account.login_provider, 4);
+      break;
+    case 'claude':
+      addStringScore(ref.email, account.email ?? account.login_hint_email, 10);
       break;
     case 'cursor':
     case 'gemini':

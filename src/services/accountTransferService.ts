@@ -5,6 +5,7 @@ import * as githubCopilotService from './githubCopilotService';
 import * as windsurfService from './windsurfService';
 import * as kiroService from './kiroService';
 import * as cursorService from './cursorService';
+import * as claudeService from './claudeService';
 import * as geminiService from './geminiService';
 import * as codebuddyService from './codebuddyService';
 import * as codebuddyCnService from './codebuddyCnService';
@@ -56,6 +57,11 @@ const PLATFORM_ADAPTERS: Record<PlatformId, TransferAdapter> = {
     listAccounts: cursorService.listCursorAccounts,
     exportAccounts: cursorService.exportCursorAccounts,
     importFromJson: cursorService.importCursorFromJson,
+  },
+  claude: {
+    listAccounts: claudeService.listClaudeAccounts,
+    exportAccounts: claudeService.exportClaudeAccounts,
+    importFromJson: claudeService.importClaudeFromJson,
   },
   gemini: {
     listAccounts: geminiService.listGeminiAccounts,

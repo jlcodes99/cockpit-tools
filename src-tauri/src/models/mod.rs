@@ -1,4 +1,5 @@
 pub mod account;
+pub mod claude;
 pub mod codebuddy;
 pub mod codex;
 pub mod codex_local_access;

@@ -4,6 +4,7 @@ import { getCodebuddyExtraCreditSummary, getCodebuddyOfficialQuotaModel, getCode
 import type { CodexAccount } from '../types/codex';
 import type { CursorAccount } from '../types/cursor';
 import { getCursorUsage } from '../types/cursor';
+import type { ClaudeAccount } from '../types/claude';
 import type { GeminiAccount } from '../types/gemini';
 import { getGeminiTierQuotaSummary } from '../types/gemini';
 import type { GitHubCopilotAccount } from '../types/githubCopilot';
@@ -25,6 +26,7 @@ export const GHCP_CURRENT_ACCOUNT_ID_KEY = 'agtools.github_copilot.current_accou
 export const WINDSURF_CURRENT_ACCOUNT_ID_KEY = 'agtools.windsurf.current_account_id';
 export const KIRO_CURRENT_ACCOUNT_ID_KEY = 'agtools.kiro.current_account_id';
 export const CURSOR_CURRENT_ACCOUNT_ID_KEY = 'agtools.cursor.current_account_id';
+export const CLAUDE_CURRENT_ACCOUNT_ID_KEY = 'agtools.claude.current_account_id';
 export const GEMINI_CURRENT_ACCOUNT_ID_KEY = 'agtools.gemini.current_account_id';
 export const CODEBUDDY_CURRENT_ACCOUNT_ID_KEY = 'agtools.codebuddy.current_account_id';
 export const CODEBUDDY_CN_CURRENT_ACCOUNT_ID_KEY = 'agtools.codebuddycn.current_account_id';
@@ -44,6 +46,7 @@ export type StoredCurrentPlatformId =
   | 'windsurf'
   | 'kiro'
   | 'cursor'
+  | 'claude'
   | 'gemini'
   | 'codebuddy'
   | 'codebuddy_cn'
@@ -57,6 +60,7 @@ const CURRENT_ACCOUNT_STORAGE_KEYS: Record<StoredCurrentPlatformId, string> = {
   windsurf: WINDSURF_CURRENT_ACCOUNT_ID_KEY,
   kiro: KIRO_CURRENT_ACCOUNT_ID_KEY,
   cursor: CURSOR_CURRENT_ACCOUNT_ID_KEY,
+  claude: CLAUDE_CURRENT_ACCOUNT_ID_KEY,
   gemini: GEMINI_CURRENT_ACCOUNT_ID_KEY,
   codebuddy: CODEBUDDY_CURRENT_ACCOUNT_ID_KEY,
   codebuddy_cn: CODEBUDDY_CN_CURRENT_ACCOUNT_ID_KEY,
@@ -338,6 +342,16 @@ export function getRecommendedGeminiAccount(
     }
     return candidateScore.freshness > bestScore.freshness ? candidate : best;
   });
+}
+
+export function getRecommendedClaudeAccount(
+  accounts: ClaudeAccount[],
+  currentId: string | null | undefined,
+): ClaudeAccount | null {
+  if (accounts.length <= 1) return null;
+  const others = accounts.filter((account) => account.id !== currentId);
+  if (others.length === 0) return null;
+  return resolveCurrentOrMostRecentAccount(others, null);
 }
 
 export function getRecommendedCodebuddyAccount(

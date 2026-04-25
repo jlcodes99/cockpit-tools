@@ -164,6 +164,7 @@ type AppPathTarget =
   | 'windsurf'
   | 'kiro'
   | 'cursor'
+  | 'claude'
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
@@ -186,13 +187,14 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   windsurf: 3,
   kiro: 4,
   cursor: 5,
-  gemini: 6,
-  codebuddy: 7,
-  codebuddy_cn: 8,
-  qoder: 9,
-  trae: 10,
-  workbuddy: 11,
-  zed: 12,
+  claude: 6,
+  gemini: 7,
+  codebuddy: 8,
+  codebuddy_cn: 9,
+  qoder: 10,
+  trae: 11,
+  workbuddy: 12,
+  zed: 13,
 };
 type UpdateCheckSource = 'auto' | 'manual';
 type UpdateCheckFinishedDetail = {

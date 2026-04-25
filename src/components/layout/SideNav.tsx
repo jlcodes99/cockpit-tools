@@ -55,6 +55,7 @@ const PAGE_PLATFORM_MAP: Partial<Record<Page, PlatformId>> = {
   windsurf: 'windsurf',
   kiro: 'kiro',
   cursor: 'cursor',
+  claude: 'claude',
   gemini: 'gemini',
   codebuddy: 'codebuddy',
   'codebuddy-cn': 'codebuddy_cn',

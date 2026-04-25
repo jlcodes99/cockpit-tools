@@ -4,6 +4,7 @@ export type ProviderCurrentPlatform =
   | 'windsurf'
   | 'kiro'
   | 'cursor'
+  | 'claude'
   | 'gemini'
   | 'codebuddy'
   | 'codebuddy_cn'

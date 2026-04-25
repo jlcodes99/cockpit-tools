@@ -76,6 +76,9 @@ const KiroAccountsPage = lazy(() =>
 const CursorAccountsPage = lazy(() =>
   import('./pages/CursorAccountsPage').then((module) => ({ default: module.CursorAccountsPage })),
 );
+const ClaudeAccountsPage = lazy(() =>
+  import('./pages/ClaudeAccountsPage').then((module) => ({ default: module.ClaudeAccountsPage })),
+);
 const GeminiAccountsPage = lazy(() =>
   import('./pages/GeminiAccountsPage').then((module) => ({ default: module.GeminiAccountsPage })),
 );
@@ -171,6 +174,7 @@ type AppPathMissingDetail = {
     | 'windsurf'
     | 'kiro'
     | 'cursor'
+    | 'claude'
     | 'codebuddy'
     | 'codebuddy_cn'
     | 'qoder'
@@ -2568,6 +2572,7 @@ function MainApp() {
             case 'windsurf':
             case 'kiro':
             case 'cursor':
+            case 'claude':
             case 'gemini':
             case 'codebuddy':
             case 'codebuddy-cn':
@@ -2988,6 +2993,7 @@ function MainApp() {
           {page === 'windsurf' && <WindsurfAccountsPage />}
           {page === 'kiro' && <KiroAccountsPage />}
           {page === 'cursor' && <CursorAccountsPage />}
+          {page === 'claude' && <ClaudeAccountsPage />}
           {page === 'gemini' && <GeminiAccountsPage />}
           {page === 'codebuddy' && <CodebuddyAccountsPage />}
           {page === 'codebuddy-cn' && <CodebuddyCnAccountsPage />}

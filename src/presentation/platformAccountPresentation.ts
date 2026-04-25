@@ -69,6 +69,12 @@ import {
   getCursorUsage,
   isCursorAccountBanned,
 } from '../types/cursor';
+import type { ClaudeAccount } from '../types/claude';
+import {
+  getClaudeAccountDisplayName,
+  getClaudePlanBadge,
+  getClaudePlanBadgeClass,
+} from '../types/claude';
 import {
   getGeminiAccountDisplayEmail,
   getGeminiPlanDisplayName,
@@ -1141,6 +1147,36 @@ export function buildKiroAccountPresentation(
 
 export interface CursorAccountPresentation extends UnifiedAccountPresentation {
   isBanned: boolean;
+}
+
+export function buildClaudeAccountPresentation(
+  account: ClaudeAccount,
+  t: Translate,
+): UnifiedAccountPresentation {
+  const loggedInPercent = account.logged_in ? 100 : 0;
+  const quotaItems: UnifiedQuotaMetric[] = [
+    {
+      key: 'login_status',
+      label: t('claude.status.label', 'Login Status'),
+      percentage: loggedInPercent,
+      progressPercent: loggedInPercent,
+      quotaClass: getRemainingQuotaClass(loggedInPercent),
+      valueText: account.logged_in
+        ? t('claude.status.loggedIn', 'Signed In')
+        : t('claude.status.loggedOut', 'Logged Out'),
+      resetText: account.auth_method || account.org_name || account.config_dir,
+      showProgress: true,
+    },
+  ];
+
+  return {
+    id: account.id,
+    displayName: getClaudeAccountDisplayName(account),
+    planLabel: getClaudePlanBadge(account),
+    planClass: getClaudePlanBadgeClass(account),
+    quotaItems,
+    sublineText: account.org_name || account.auth_method || getClaudeAccountDisplayName(account),
+  };
 }
 
 export interface GeminiAccountPresentation extends UnifiedAccountPresentation {

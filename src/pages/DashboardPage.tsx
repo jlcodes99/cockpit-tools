@@ -6,6 +6,7 @@ import { useGitHubCopilotAccountStore } from '../stores/useGitHubCopilotAccountS
 import { useWindsurfAccountStore } from '../stores/useWindsurfAccountStore';
 import { useKiroAccountStore } from '../stores/useKiroAccountStore';
 import { useCursorAccountStore } from '../stores/useCursorAccountStore';
+import { useClaudeAccountStore } from '../stores/useClaudeAccountStore';
 import { useGeminiAccountStore } from '../stores/useGeminiAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
@@ -56,6 +57,7 @@ import {
   isKiroAccountBanned,
 } from '../types/kiro';
 import { CursorAccount, getCursorUsage } from '../types/cursor';
+import { ClaudeAccount } from '../types/claude';
 import {
   GeminiAccount,
   getGeminiTierQuotaSummary,
@@ -80,6 +82,7 @@ import { isPrivacyModeEnabledByDefault, maskSensitiveValue } from '../utils/priv
 import { DisplayGroup, getDisplayGroups } from '../services/groupService';
 import {
   buildAntigravityAccountPresentation,
+  buildClaudeAccountPresentation,
   buildCodebuddyAccountPresentation,
   buildCodexAccountPresentation,
   buildCursorAccountPresentation,
@@ -215,6 +218,9 @@ export function DashboardPage({
         case 'cursor':
           await useCursorAccountStore.getState().updateAccountTags(accountId, newTags);
           break;
+        case 'claude':
+          await useClaudeAccountStore.getState().updateAccountTags(accountId, newTags);
+          break;
         case 'gemini':
           await useGeminiAccountStore.getState().updateAccountTags(accountId, newTags);
           break;
@@ -337,6 +343,13 @@ export function DashboardPage({
     switchAccount: switchCursorAccount,
   } = useCursorAccountStore();
 
+  const {
+    accounts: claudeAccounts,
+    currentAccountId: claudeCurrentId,
+    fetchAccounts: fetchClaudeAccounts,
+    switchAccount: switchClaudeAccount,
+  } = useClaudeAccountStore();
+
   // Gemini Data
   const {
     accounts: geminiAccounts,
@@ -429,6 +442,7 @@ export function DashboardPage({
       fetchWindsurfAccounts,
       fetchKiroAccounts,
       fetchCursorAccounts,
+      fetchClaudeAccounts,
       fetchGeminiAccounts,
       fetchCodebuddyAccounts,
       fetchCodebuddyCnAccounts,
@@ -491,6 +505,7 @@ export function DashboardPage({
         windsurfAccounts.length +
         kiroAccounts.length +
         cursorAccounts.length +
+        claudeAccounts.length +
         geminiAccounts.length +
         codebuddyAccounts.length +
         codebuddyCnAccounts.length +
@@ -504,6 +519,7 @@ export function DashboardPage({
       windsurf: windsurfAccounts.length,
       kiro: kiroAccounts.length,
       cursor: cursorAccounts.length,
+      claude: claudeAccounts.length,
       gemini: geminiAccounts.length,
       codebuddy: codebuddyAccounts.length,
       codebuddy_cn: codebuddyCnAccounts.length,
@@ -511,7 +527,7 @@ export function DashboardPage({
       trae: traeAccounts.length,
       workbuddy: workbuddyAccounts.length,
     };
-  }, [agAccounts, codexAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, traeAccounts, workbuddyAccounts]);
+  }, [agAccounts, codexAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, claudeAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, traeAccounts, workbuddyAccounts]);
 
   const dashboardAvailableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -523,6 +539,7 @@ export function DashboardPage({
       ...windsurfAccounts,
       ...kiroAccounts,
       ...cursorAccounts,
+      ...claudeAccounts,
       ...geminiAccounts,
       ...codebuddyAccounts,
       ...codebuddyCnAccounts,
@@ -538,7 +555,7 @@ export function DashboardPage({
       }
     }
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
-  }, [agAccounts, codexAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, traeAccounts, workbuddyAccounts]);
+  }, [agAccounts, codexAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, claudeAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, traeAccounts, workbuddyAccounts]);
 
 
   // Refresh States
@@ -552,6 +569,7 @@ export function DashboardPage({
     windsurf: boolean;
     kiro: boolean;
     cursor: boolean;
+    claude: boolean;
     gemini: boolean;
     codebuddy: boolean;
     codebuddyCn: boolean;
@@ -566,6 +584,7 @@ export function DashboardPage({
     windsurf: false,
     kiro: false,
     cursor: false,
+    claude: false,
     gemini: false,
     codebuddy: false,
     codebuddyCn: false,
@@ -676,6 +695,22 @@ export function DashboardPage({
     setRefreshing((prev) => new Set(prev).add(accountId));
     try {
       await useCursorAccountStore.getState().refreshToken(accountId);
+    } catch (error) {
+      console.error('Refresh failed:', error);
+    } finally {
+      setRefreshing((prev) => {
+        const next = new Set(prev);
+        next.delete(accountId);
+        return next;
+      });
+    }
+  };
+
+  const handleRefreshClaude = async (accountId: string) => {
+    if (refreshing.has(accountId)) return;
+    setRefreshing((prev) => new Set(prev).add(accountId));
+    try {
+      await useClaudeAccountStore.getState().refreshToken(accountId);
     } catch (error) {
       console.error('Refresh failed:', error);
     } finally {
@@ -808,6 +843,21 @@ export function DashboardPage({
     }
   };
 
+  const handleRefreshClaudeCard = async () => {
+    if (cardRefreshing.claude) return;
+    setCardRefreshing((prev) => ({ ...prev, claude: true }));
+    const idsToRefresh = [claudeCurrent?.id, claudeRecommended?.id].filter(Boolean) as string[];
+    try {
+      for (const id of idsToRefresh) {
+        await useClaudeAccountStore.getState().refreshToken(id);
+      }
+    } catch (error) {
+      console.error('Card refresh failed:', error);
+    } finally {
+      setCardRefreshing((prev) => ({ ...prev, claude: false }));
+    }
+  };
+
   const handleRefreshGeminiCard = async () => {
     if (cardRefreshing.gemini) return;
     setCardRefreshing((prev) => ({ ...prev, gemini: true }));
@@ -892,6 +942,22 @@ export function DashboardPage({
     setSwitching((prev) => new Set(prev).add(accountId));
     try {
       await switchCursorAccount(accountId);
+    } catch (error) {
+      console.error('Switch failed:', error);
+    } finally {
+      setSwitching((prev) => {
+        const next = new Set(prev);
+        next.delete(accountId);
+        return next;
+      });
+    }
+  };
+
+  const handleSwitchClaude = async (accountId: string) => {
+    if (switching.has(accountId)) return;
+    setSwitching((prev) => new Set(prev).add(accountId));
+    try {
+      await switchClaudeAccount(accountId);
     } catch (error) {
       console.error('Switch failed:', error);
     } finally {
@@ -1221,6 +1287,11 @@ export function DashboardPage({
     [cursorAccounts, cursorCurrentId],
   );
 
+  const claudeCurrent = useMemo(
+    () => resolveCurrentAccountById(claudeAccounts, claudeCurrentId),
+    [claudeAccounts, claudeCurrentId],
+  );
+
   const geminiCurrent = useMemo(
     () => resolveCurrentAccountById(geminiAccounts, geminiCurrentId),
     [geminiAccounts, geminiCurrentId],
@@ -1398,6 +1469,14 @@ export function DashboardPage({
       return candidateScore.freshness > bestScore.freshness ? candidate : best;
     });
   }, [cursorAccounts, cursorCurrent?.id]);
+
+  const claudeRecommended = useMemo(() => {
+    if (claudeAccounts.length <= 1) return null;
+    const currentId = claudeCurrent?.id;
+    const others = claudeAccounts.filter((account) => account.id !== currentId);
+    if (others.length === 0) return null;
+    return resolveCurrentOrMostRecentAccount(others, null);
+  }, [claudeAccounts, claudeCurrent?.id]);
 
   const geminiRecommended = useMemo(() => {
     if (geminiAccounts.length <= 1) return null;
@@ -1902,6 +1981,20 @@ export function DashboardPage({
     });
   };
 
+  const renderClaudeAccountContent = (account: ClaudeAccount | null) => {
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+
+    const presentation = buildClaudeAccountPresentation(account, t);
+    return renderUnifiedAccountCard({
+      presentation,
+      onRefresh: () => handleRefreshClaude(account.id),
+      onSwitch: () => handleSwitchClaude(account.id),
+      isRefreshing: refreshing.has(account.id),
+      isSwitching: switching.has(account.id),
+      onEditTags: () => setTagModalState({ accountId: account.id, platform: 'claude', tags: account.tags || [] }),
+    });
+  };
+
   const renderGeminiAccountContent = (account: GeminiAccount | null) => {
     if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
 
@@ -2032,6 +2125,7 @@ export function DashboardPage({
     windsurf: stats.windsurf,
     kiro: stats.kiro,
     cursor: stats.cursor,
+    claude: stats.claude,
     gemini: stats.gemini,
     codebuddy: stats.codebuddy,
     codebuddy_cn: stats.codebuddy_cn,
@@ -2407,6 +2501,50 @@ export function DashboardPage({
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('gemini')}>
+            {t('dashboard.viewAllAccounts', '查看所有账号')}
+          </button>
+        </div>
+      );
+    }
+
+    if (platformId === 'claude') {
+      return (
+        <div className="main-card windsurf-card" key={platformId}>
+          <div className="main-card-header">
+            <div className="header-title">
+              {renderPlatformIcon('claude', 18)}
+              <h3>Claude Cli</h3>
+            </div>
+            <button
+              className="header-action-btn"
+              onClick={handleRefreshClaudeCard}
+              disabled={cardRefreshing.claude}
+              title={t('common.refresh', '刷新')}
+            >
+              <RotateCw size={14} className={cardRefreshing.claude ? 'loading-spinner' : ''} />
+              <span>{t('common.refresh', '刷新')}</span>
+            </button>
+          </div>
+
+          <div className="split-content">
+            <div className="split-half current-half">
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              {renderClaudeAccountContent(claudeCurrent)}
+            </div>
+
+            <div className="split-divider"></div>
+
+            <div className="split-half recommend-half">
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              {claudeRecommended ? (
+                renderClaudeAccountContent(claudeRecommended)
+              ) : (
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+              )}
+            </div>
+          </div>
+
+          <button className="card-footer-action" onClick={() => onNavigate('claude')}>
             {t('dashboard.viewAllAccounts', '查看所有账号')}
           </button>
         </div>

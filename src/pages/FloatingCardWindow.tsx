@@ -8,6 +8,7 @@ import { TauriEvent, listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import {
   buildAntigravityAccountPresentation,
+  buildClaudeAccountPresentation,
   buildCodebuddyAccountPresentation,
   buildCodexAccountPresentation,
   buildCursorAccountPresentation,
@@ -37,6 +38,7 @@ import {
 import { useAccountStore } from '../stores/useAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
+import { useClaudeAccountStore } from '../stores/useClaudeAccountStore';
 import { useCodexAccountStore } from '../stores/useCodexAccountStore';
 import { useCursorAccountStore } from '../stores/useCursorAccountStore';
 import { useGeminiAccountStore } from '../stores/useGeminiAccountStore';
@@ -67,6 +69,7 @@ import { isPrivacyModeEnabledByDefault, maskSensitiveValue } from '../utils/priv
 import { getPlatformLabel, renderPlatformIcon } from '../utils/platformMeta';
 import {
   getRecommendedAntigravityAccount,
+  getRecommendedClaudeAccount,
   getRecommendedCodebuddyAccount,
   getRecommendedCodebuddyCnAccount,
   getRecommendedCodexAccount,
@@ -114,6 +117,7 @@ type FloatingCardAccount =
   | ReturnType<typeof useWindsurfAccountStore.getState>['accounts'][number]
   | ReturnType<typeof useKiroAccountStore.getState>['accounts'][number]
   | ReturnType<typeof useCursorAccountStore.getState>['accounts'][number]
+  | ReturnType<typeof useClaudeAccountStore.getState>['accounts'][number]
   | ReturnType<typeof useGeminiAccountStore.getState>['accounts'][number]
   | ReturnType<typeof useCodebuddyAccountStore.getState>['accounts'][number]
   | ReturnType<typeof useCodebuddyCnAccountStore.getState>['accounts'][number]
@@ -168,6 +172,8 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useKiroInstanceStore.getState();
     case 'cursor':
       return useCursorInstanceStore.getState();
+    case 'claude':
+      return null;
     case 'gemini':
       return useGeminiInstanceStore.getState();
     case 'codebuddy':
@@ -215,6 +221,10 @@ export function FloatingCardWindow() {
     accounts: cursorAccounts,
     currentAccountId: cursorCurrentId,
   } = useCursorAccountStore();
+  const {
+    accounts: claudeAccounts,
+    currentAccountId: claudeCurrentId,
+  } = useClaudeAccountStore();
   const {
     accounts: geminiAccounts,
     currentAccountId: geminiCurrentId,
@@ -396,6 +406,9 @@ export function FloatingCardWindow() {
           break;
         case 'cursor':
           await useCursorAccountStore.getState().fetchAccounts();
+          break;
+        case 'claude':
+          await useClaudeAccountStore.getState().fetchAccounts();
           break;
         case 'gemini':
           await useGeminiAccountStore.getState().fetchAccounts();
@@ -653,6 +666,10 @@ export function FloatingCardWindow() {
     () => resolveCurrentAccountById(cursorAccounts, cursorCurrentId),
     [cursorAccounts, cursorCurrentId],
   );
+  const claudeCurrent = useMemo(
+    () => resolveCurrentAccountById(claudeAccounts, claudeCurrentId),
+    [claudeAccounts, claudeCurrentId],
+  );
   const geminiCurrent = useMemo(
     () => resolveCurrentAccountById(geminiAccounts, geminiCurrentId),
     [geminiAccounts, geminiCurrentId],
@@ -714,6 +731,11 @@ export function FloatingCardWindow() {
           accounts: cursorAccounts,
           actualCurrentAccount: cursorCurrent,
         };
+      case 'claude':
+        return {
+          accounts: claudeAccounts,
+          actualCurrentAccount: claudeCurrent,
+        };
       case 'gemini':
         return {
           accounts: geminiAccounts,
@@ -757,6 +779,8 @@ export function FloatingCardWindow() {
     codebuddyCnAccounts,
     codebuddyCnCurrent,
     codebuddyCurrent,
+    claudeAccounts,
+    claudeCurrent,
     codexAccounts,
     codexCurrent,
     cursorAccounts,
@@ -805,6 +829,8 @@ export function FloatingCardWindow() {
         return getRecommendedKiroAccount(kiroAccounts, effectiveCurrentId);
       case 'cursor':
         return getRecommendedCursorAccount(cursorAccounts, effectiveCurrentId);
+      case 'claude':
+        return getRecommendedClaudeAccount(claudeAccounts, effectiveCurrentId);
       case 'gemini':
         return getRecommendedGeminiAccount(geminiAccounts, effectiveCurrentId);
       case 'codebuddy':
@@ -824,6 +850,7 @@ export function FloatingCardWindow() {
     agAccounts,
     codebuddyAccounts,
     codebuddyCnAccounts,
+    claudeAccounts,
     codexAccounts,
     currentAccount?.id,
     cursorAccounts,
@@ -889,6 +916,8 @@ export function FloatingCardWindow() {
         return buildKiroAccountPresentation(viewedAccount as typeof kiroAccounts[number], t);
       case 'cursor':
         return buildCursorAccountPresentation(viewedAccount as typeof cursorAccounts[number], t);
+      case 'claude':
+        return buildClaudeAccountPresentation(viewedAccount as typeof claudeAccounts[number], t);
       case 'gemini':
         return buildGeminiAccountPresentation(viewedAccount as typeof geminiAccounts[number], t);
       case 'codebuddy':
@@ -908,6 +937,7 @@ export function FloatingCardWindow() {
     agAccounts,
     codebuddyAccounts,
     codebuddyCnAccounts,
+    claudeAccounts,
     codexAccounts,
     cursorAccounts,
     displayGroups,
@@ -975,6 +1005,9 @@ export function FloatingCardWindow() {
             break;
           case 'cursor':
             await useCursorAccountStore.getState().refreshToken(viewedAccount.id);
+            break;
+          case 'claude':
+            await useClaudeAccountStore.getState().refreshToken(viewedAccount.id);
             break;
           case 'gemini':
             await useGeminiAccountStore.getState().refreshToken(viewedAccount.id);
@@ -1082,6 +1115,9 @@ export function FloatingCardWindow() {
             break;
           case 'cursor':
             await useCursorAccountStore.getState().switchAccount(viewedAccount.id);
+            break;
+          case 'claude':
+            await useClaudeAccountStore.getState().switchAccount(viewedAccount.id);
             break;
           case 'gemini':
             await useGeminiAccountStore.getState().switchAccount(viewedAccount.id);
