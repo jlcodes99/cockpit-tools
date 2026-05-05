@@ -3359,6 +3359,38 @@ function MainApp() {
     setAppPathDraft(candidate.target);
   };
 
+  const applyMainWindowNavigationTarget = useCallback((target: string) => {
+    switch (target) {
+      case 'overview':
+      case 'api-relay':
+      case 'codex':
+      case 'codex-api-service':
+      case 'claude':
+      case 'claude-cli':
+      case 'github-copilot':
+      case 'windsurf':
+      case 'kiro':
+      case 'cursor':
+      case 'gemini':
+      case 'grok':
+      case 'codebuddy':
+      case 'codebuddy-cn':
+      case 'qoder':
+      case 'trae':
+      case 'trae-solo':
+      case 'trae-cn':
+      case 'trae-solo-cn':
+      case 'workbuddy':
+      case 'zed':
+      case 'manual':
+      case 'settings':
+        setPageWithRuntimeGate(target as Page);
+        break;
+      default:
+        break;
+    }
+  }, [setPageWithRuntimeGate]);
+
   // 监听窗口关闭请求事件
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
@@ -3379,43 +3411,25 @@ function MainApp() {
 
         listen<string>('tray:navigate', (event) => {
           const target = String(event.payload || '');
-          switch (target) {
-            case 'overview':
-            case 'api-relay':
-            case 'codex':
-            case 'codex-api-service':
-            case 'claude':
-            case 'claude-cli':
-            case 'github-copilot':
-            case 'windsurf':
-            case 'kiro':
-            case 'cursor':
-            case 'gemini':
-            case 'grok':
-            case 'codebuddy':
-            case 'codebuddy-cn':
-            case 'qoder':
-            case 'trae':
-            case 'trae-solo':
-            case 'trae-cn':
-            case 'trae-solo-cn':
-            case 'workbuddy':
-            case 'zed':
-            case 'manual':
-            case 'settings':
-              setPage(target as Page);
-              break;
-            default:
-              break;
-          }
+          applyMainWindowNavigationTarget(target);
         }).then((fn) => { unlisten = fn; });
+
+    void invoke<string | null>('main_window_take_pending_navigation')
+      .then((target) => {
+        if (target) {
+          applyMainWindowNavigationTarget(target);
+        }
+      })
+      .catch((error) => {
+        console.warn('[Window] 读取待处理导航失败:', error);
+      });
 
     return () => {
       if (unlisten) {
         unlisten();
       }
     };
-  }, []);
+  }, [applyMainWindowNavigationTarget]);
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;

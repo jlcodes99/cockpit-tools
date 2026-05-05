@@ -3595,10 +3595,11 @@ pub fn handle_window_close(
     // 执行操作
     match action.as_str() {
         "minimize" => {
-            let _ = window.hide();
-            modules::logger::log_info("[Window] 窗口已最小化到托盘");
+            modules::floating_card_window::destroy_main_window_to_tray(&window)?;
+            modules::logger::log_info("[Window] 窗口已关闭到托盘");
         }
         "quit" => {
+            modules::floating_card_window::request_app_exit();
             window.app_handle().exit(0);
         }
         _ => {
@@ -3607,6 +3608,11 @@ pub fn handle_window_close(
     }
 
     Ok(())
+}
+
+#[tauri::command]
+pub fn main_window_take_pending_navigation() -> Result<Option<String>, String> {
+    modules::floating_card_window::take_pending_main_window_navigation()
 }
 
 #[tauri::command]

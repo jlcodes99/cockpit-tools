@@ -3677,6 +3677,7 @@ fn handle_menu_event<R: Runtime>(app: &tauri::AppHandle<R>, event: tauri::menu::
         }
         menu_ids::QUIT => {
             info!("[Tray] 用户选择退出应用");
+            crate::modules::floating_card_window::request_app_exit();
             app.exit(0);
         }
         _ => {

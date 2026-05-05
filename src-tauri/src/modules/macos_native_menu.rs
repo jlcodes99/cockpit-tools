@@ -480,6 +480,7 @@ mod imp {
             }
             "quit" => {
                 if let Some(app) = crate::get_app_handle() {
+                    modules::floating_card_window::request_app_exit();
                     app.exit(0);
                 }
             }
