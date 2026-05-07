@@ -49,7 +49,7 @@ fn apply_macos_activation_policy(app: &tauri::AppHandle) {
         }
     }
 
-    info!("[Window] 已应用 macOS Dock 图标策略: {}", policy_label);
+    info!("[Window] применена политика иконки в Dock на macOS: {}", policy_label);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -94,7 +94,7 @@ pub fn run() {
             }
         }))
         .setup(|app| {
-            info!("Cockpit Tools 启动...");
+            info!("Cockpit Tools запускается...");
 
             // 存储全局 AppHandle
             let _ = APP_HANDLE.set(app.handle().clone());
@@ -109,7 +109,7 @@ pub fn run() {
                     tauri_plugin_autostart::MacosLauncher::LaunchAgent,
                     None::<Vec<&'static str>>,
                 ))?;
-                info!("[Updater] Tauri Updater + Process 插件已初始化");
+                info!("[Updater] плагины Tauri Updater и Process инициализированы");
             }
 
             // 启动时同步设置合并（移至后台线程，不阻塞窗口显示）

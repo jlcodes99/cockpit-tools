@@ -184,7 +184,7 @@ struct CopilotUsage {
 pub fn create_tray_skeleton<R: Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<TrayIcon<R>, tauri::Error> {
-    info!("[Tray] 创建骨架托盘...");
+    info!("[Tray] создание базового трей-меню...");
 
     #[cfg(not(target_os = "macos"))]
     let lang = crate::modules::config::get_user_config().language;
@@ -268,7 +268,7 @@ pub fn create_tray_skeleton<R: Runtime>(
     #[cfg(target_os = "macos")]
     let _ = tray.set_show_menu_on_left_click(false);
 
-    info!("[Tray] 骨架托盘创建完成，等待后台加载完整菜单");
+    info!("[Tray] базовое трей-меню создано, жду фоновую загрузку полного меню");
     Ok(tray)
 }
 
