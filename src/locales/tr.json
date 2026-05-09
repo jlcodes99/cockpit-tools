@@ -1616,7 +1616,7 @@
       "comingSoon": "Çoklu Örnek Yakında",
       "comingSoonDesc": "Farklı hesaplarla birden fazla Codex.app örneğini aynı anda çalıştırın.",
       "unsupported": {
-        "desc": "Codex çoklu örnek şu anda yalnızca macOS'ta kullanılabilir."
+        "desc": "Codex çoklu örnek şu anda yalnızca macOS ve Windows'ta kullanılabilir."
       },
       "quota": {
         "hourly": "5sa",

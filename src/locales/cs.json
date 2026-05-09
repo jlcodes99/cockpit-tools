@@ -1616,7 +1616,7 @@
       "comingSoon": "Funkce více instancí již brzy",
       "comingSoonDesc": "Spusťte více instancí Codex.app s různými účty současně, zůstaňte naladěni.",
       "unsupported": {
-        "desc": "Více instancí Codex je aktuálně dostupné pouze na macOS."
+        "desc": "Více instancí Codex je aktuálně dostupné pouze na macOS a Windows."
       },
       "quota": {
         "hourly": "5 hodin",

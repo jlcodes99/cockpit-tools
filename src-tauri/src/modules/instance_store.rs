@@ -31,11 +31,12 @@ pub fn load_instance_store(path: &Path, file_name: &str) -> Result<InstanceStore
     }
 
     let content = fs::read_to_string(path).map_err(|e| format!("读取实例配置失败: {}", e))?;
+    let content = content.trim_start_matches('\u{feff}');
     if content.trim().is_empty() {
         return Ok(InstanceStore::new());
     }
 
-    serde_json::from_str(&content)
+    serde_json::from_str(content)
         .map_err(|e| file_corrupted_error(file_name, &path.to_string_lossy(), &e.to_string()))
 }
 
@@ -133,4 +134,33 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_instance_store_accepts_utf8_bom() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "cockpit-instance-store-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let path = temp_dir.join("instances.json");
+        fs::write(
+            &path,
+            "\u{feff}{\"instances\":[],\"defaultSettings\":{\"bindAccountId\":null,\"extraArgs\":\"\",\"workingDir\":null,\"launchMode\":\"app\",\"followLocalAccount\":false,\"lastPid\":null}}",
+        )
+        .expect("write store");
+
+        let store = load_instance_store(&path, "instances.json").expect("load store");
+        assert!(store.instances.is_empty());
+        assert!(store.default_settings.bind_account_id.is_none());
+        let _ = fs::remove_dir_all(temp_dir);
+    }
 }

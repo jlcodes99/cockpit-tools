@@ -1662,7 +1662,7 @@
       "comingSoon": "多开实例功能即将上线",
       "comingSoonDesc": "支持以不同账号同时运行多个 Codex.app 实例，敬请期待。",
       "unsupported": {
-        "desc": "Codex 多开实例仅支持 macOS，请在 macOS 上使用。"
+        "desc": "Codex 多开实例仅支持 macOS 和 Windows。"
       },
       "quota": {
         "hourly": "5小时",

@@ -1662,7 +1662,7 @@
       "comingSoon": "Multi-Instance Coming Soon",
       "comingSoonDesc": "Run multiple Codex.app instances with different accounts simultaneously, stay tuned.",
       "unsupported": {
-        "desc": "Codex multi-instance is currently available only on macOS."
+        "desc": "Codex multi-instance is currently available only on macOS and Windows."
       },
       "quota": {
         "hourly": "5h",

@@ -116,8 +116,15 @@ pub fn get_default_instances_root_dir() -> Result<PathBuf, String> {
         return Ok(home.join(".antigravity_cockpit/instances/codex"));
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        let appdata = std::env::var("APPDATA")
+            .map_err(|_| "Failed to read APPDATA environment variable".to_string())?;
+        return Ok(PathBuf::from(appdata).join(".antigravity_cockpit\\instances\\codex"));
+    }
+
     #[allow(unreachable_code)]
-    Err("Codex 多开实例仅支持 macOS".to_string())
+    Err("Codex multi-instance is only supported on macOS and Windows".to_string())
 }
 
 pub fn get_instance_defaults() -> Result<InstanceDefaults, String> {
@@ -136,8 +143,33 @@ fn create_directory_symlink(source: &Path, target: &Path) -> Result<(), String> 
 
 #[cfg(windows)]
 fn create_directory_symlink(source: &Path, target: &Path) -> Result<(), String> {
-    std::os::windows::fs::symlink_dir(source, target)
-        .map_err(|e| format!("创建目录共享链接失败: {}", e))
+    match std::os::windows::fs::symlink_dir(source, target) {
+        Ok(()) => Ok(()),
+        Err(symlink_err) => {
+            modules::logger::log_warn(&format!(
+                "Windows directory symlink failed, falling back to junction: source={}, target={}, error={}",
+                source.display(),
+                target.display(),
+                symlink_err
+            ));
+            let status = std::process::Command::new("cmd")
+                .arg("/C")
+                .arg("mklink")
+                .arg("/J")
+                .arg(target)
+                .arg(source)
+                .status()
+                .map_err(|e| format!("创建目录 junction 失败: {}", e))?;
+            if status.success() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "创建目录共享链接失败: symlink_error={}, junction_status={}",
+                    symlink_err, status
+                ))
+            }
+        }
+    }
 }
 
 #[cfg(not(any(unix, windows)))]
@@ -152,8 +184,23 @@ fn create_file_symlink(source: &Path, target: &Path) -> Result<(), String> {
 
 #[cfg(windows)]
 fn create_file_symlink(source: &Path, target: &Path) -> Result<(), String> {
-    std::os::windows::fs::symlink_file(source, target)
-        .map_err(|e| format!("创建文件共享链接失败: {}", e))
+    match std::os::windows::fs::symlink_file(source, target) {
+        Ok(()) => Ok(()),
+        Err(symlink_err) => {
+            modules::logger::log_warn(&format!(
+                "Windows file symlink failed, falling back to hard link: source={}, target={}, error={}",
+                source.display(),
+                target.display(),
+                symlink_err
+            ));
+            std::fs::hard_link(source, target).map_err(|hardlink_err| {
+                format!(
+                    "创建文件共享链接失败: symlink_error={}, hardlink_error={}",
+                    symlink_err, hardlink_err
+                )
+            })
+        }
+    }
 }
 
 #[cfg(not(any(unix, windows)))]
@@ -868,4 +915,52 @@ pub async fn inject_account_to_profile(profile_dir: &Path, account_id: &str) -> 
     )
     .await
     .map(|_| ())
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn make_temp_dir(prefix: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be valid")
+            .as_nanos();
+        let path =
+            std::env::temp_dir().join(format!("{}-{}-{}", prefix, std::process::id(), unique));
+        fs::create_dir_all(&path).expect("create temp dir");
+        path
+    }
+
+    #[test]
+    fn windows_directory_shared_link_falls_back_without_admin_symlink_privilege() {
+        let root = make_temp_dir("codex-dir-link-test");
+        let source = root.join("global-skills");
+        let target = root.join("instance-skills");
+        fs::create_dir_all(&source).expect("create source dir");
+
+        create_directory_symlink(&source, &target).expect("create shared directory link");
+        fs::write(source.join("probe.txt"), "shared").expect("write source probe");
+
+        let content = fs::read_to_string(target.join("probe.txt")).expect("read through link");
+        assert_eq!(content, "shared");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn windows_file_shared_link_falls_back_without_admin_symlink_privilege() {
+        let root = make_temp_dir("codex-file-link-test");
+        let source = root.join("AGENTS.md");
+        let target = root.join("instance-AGENTS.md");
+        fs::write(&source, "shared").expect("write source file");
+
+        create_file_symlink(&source, &target).expect("create shared file link");
+
+        let content = fs::read_to_string(&target).expect("read through link");
+        assert_eq!(content, "shared");
+
+        let _ = fs::remove_dir_all(&root);
+    }
 }

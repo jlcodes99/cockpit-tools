@@ -1616,7 +1616,7 @@
       "comingSoon": "Multi-Istanza In Arrivo",
       "comingSoonDesc": "Esegui più istanze Codex.app con account diversi contemporaneamente.",
       "unsupported": {
-        "desc": "La multi-istanza Codex è attualmente disponibile solo su macOS."
+        "desc": "La multi-istanza Codex è attualmente disponibile solo su macOS e Windows."
       },
       "quota": {
         "hourly": "5 ore",

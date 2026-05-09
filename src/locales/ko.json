@@ -1616,7 +1616,7 @@
       "comingSoon": "멀티 인스턴스 곧 출시",
       "comingSoonDesc": "다른 계정으로 여러 Codex.app 인스턴스를 동시에 실행할 수 있습니다.",
       "unsupported": {
-        "desc": "Codex 멀티 인스턴스는 현재 macOS에서만 사용 가능합니다."
+        "desc": "Codex 멀티 인스턴스는 현재 macOS 및 Windows에서만 사용할 수 있습니다."
       },
       "quota": {
         "hourly": "5시간",

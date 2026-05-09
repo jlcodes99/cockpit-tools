@@ -1616,7 +1616,7 @@
       "comingSoon": "Multi-Instância Em Breve",
       "comingSoonDesc": "Execute várias instâncias do Codex.app com diferentes contas simultaneamente.",
       "unsupported": {
-        "desc": "Multi-instância Codex está disponível atualmente apenas no macOS."
+        "desc": "Multi-instância Codex está disponível atualmente apenas no macOS e Windows."
       },
       "quota": {
         "hourly": "5h",
