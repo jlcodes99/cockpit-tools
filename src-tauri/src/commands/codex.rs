@@ -5,7 +5,8 @@ use crate::models::codex_local_access::{
     CodexLocalAccessPortCleanupResult, CodexLocalAccessRoutingStrategy, CodexLocalAccessState,
 };
 use crate::modules::{
-    codex_account, codex_local_access, codex_oauth, codex_quota, codex_wakeup,
+    codex_account, codex_local_access, codex_oauth, codex_quota, codex_session_visibility,
+    codex_wakeup,
     codex_wakeup_scheduler, config, logger, openclaw_auth, opencode_auth, process,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,6 +15,58 @@ use tauri::Emitter;
 use tauri_plugin_opener::OpenerExt;
 
 static CODEX_POST_REFRESH_CHECK_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+
+fn read_codex_history_visibility_provider_for_default_home() -> Option<String> {
+    let codex_home = codex_account::get_codex_home();
+    match codex_session_visibility::read_history_visibility_provider_for_dir(&codex_home) {
+        Ok(provider) => Some(provider),
+        Err(error) => {
+            logger::log_warn(&format!(
+                "读取 Codex 历史会话 provider 失败，后续会尝试按当前状态修复: {}",
+                error
+            ));
+            None
+        }
+    }
+}
+
+fn repair_codex_session_visibility_after_provider_change(before_provider: Option<String>) {
+    let Some(after_provider) = read_codex_history_visibility_provider_for_default_home() else {
+        return;
+    };
+    if before_provider.as_deref() == Some(after_provider.as_str()) {
+        logger::log_info(&format!(
+            "Codex provider 未变化，跳过自动会话可见性修复: provider={}",
+            after_provider
+        ));
+        return;
+    }
+
+    logger::log_info(&format!(
+        "检测到 Codex provider 变化，开始自动修复历史会话可见性: from={}, to={}",
+        before_provider.as_deref().unwrap_or("unknown"),
+        after_provider
+    ));
+    let codex_home = codex_account::get_codex_home();
+    match codex_session_visibility::repair_session_visibility_for_dir(
+        &codex_home,
+        "__default__",
+        "默认实例",
+    ) {
+        Ok(item) => {
+            logger::log_info(&format!(
+                "Codex 默认实例历史会话可见性自动修复完成: rollout_files={}, sqlite_rows={}",
+                item.changed_rollout_file_count, item.updated_sqlite_row_count
+            ));
+        }
+        Err(error) => {
+            logger::log_warn(&format!(
+                "Codex 历史会话可见性自动修复失败，账号切换已保留，可稍后在会话管理中手动重试: {}",
+                error
+            ));
+        }
+    }
+}
 
 fn restart_codex_specified_app_if_enabled(user_config: &config::UserConfig) {
     if !user_config.codex_restart_specified_app_on_switch {
@@ -92,8 +145,11 @@ pub async fn switch_codex_account(
     app: AppHandle,
     account_id: String,
 ) -> Result<CodexAccount, String> {
+    let before_provider = read_codex_history_visibility_provider_for_default_home();
+
     // 切换账号（写入 auth.json）
     let account = codex_account::switch_account_managed(&account_id).await?;
+    repair_codex_session_visibility_after_provider_change(before_provider);
 
     // 同步更新 Codex 默认实例的绑定账号（不同步到 Antigravity，因为账号体系不同）
     if let Err(e) = crate::modules::codex_instance::update_default_settings(
@@ -778,7 +834,9 @@ pub async fn codex_local_access_set_enabled(
 #[tauri::command]
 pub async fn codex_local_access_activate(app: AppHandle) -> Result<CodexLocalAccessState, String> {
     let codex_home = codex_account::get_codex_home();
+    let before_provider = read_codex_history_visibility_provider_for_default_home();
     let state = codex_local_access::activate_local_access_for_dir(&codex_home).await?;
+    repair_codex_session_visibility_after_provider_change(before_provider);
 
     let mut index = codex_account::load_account_index();
     index.current_account_id = None;

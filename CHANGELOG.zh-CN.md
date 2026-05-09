@@ -69,6 +69,7 @@
 - **Windsurf Devin 账号切入实例时会使用更新的 IDE 凭据**：实例启动前会预刷新 Devin 账号，写入稳定的 installation、onboarding、sign-in 与 user 字段，并带上 Devin account/org/protobuf 状态数据，避免启动后显示未登录或出现权限拒绝。
 - **账号列表不再因存储临时返回异常空结果而消失**：共享账号 store 在异常空读取时会保留当前缓存账号与当前账号，同时仍允许用户主动删除后的真实空列表。
 - **备份恢复与保留清理现一致处理 JSON/ZIP 配对文件**：读取备份时可从损坏或缺失的 JSON 回退到对应压缩包，过期清理也会同时清理 JSON 与 ZIP 备份。
+- **Codex provider 切换后会在启动前修复旧会话 provider**：在 OAuth、API Key 与本地 API 服务之间切换时，会在启动对应 Codex 配置目录前修复 rollout 与 `state_5.sqlite` 里的 provider 元数据，避免旧会话继续按上一个 provider 重连。
 
 ---
 ## [0.22.19] - 2026-05-05

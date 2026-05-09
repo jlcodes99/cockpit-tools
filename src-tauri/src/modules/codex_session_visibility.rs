@@ -191,6 +191,90 @@ pub fn read_history_visibility_provider_for_dir(data_dir: &Path) -> Result<Strin
     read_target_provider(data_dir)
 }
 
+pub fn repair_session_visibility_for_dir(
+    data_dir: &Path,
+    instance_id: &str,
+    instance_name: &str,
+) -> Result<CodexSessionVisibilityRepairItem, String> {
+    let target_provider = read_target_provider(data_dir)?;
+    let rollout_changes = collect_rollout_provider_changes(data_dir, &target_provider)?;
+    let sqlite_scan = count_sqlite_rows_to_update(data_dir, &target_provider)?;
+    let sqlite_rows_to_update = sqlite_scan.rows_to_update;
+
+    if rollout_changes.is_empty() && sqlite_rows_to_update == 0 {
+        return Ok(CodexSessionVisibilityRepairItem {
+            instance_id: instance_id.to_string(),
+            instance_name: instance_name.to_string(),
+            target_provider,
+            changed_rollout_file_count: 0,
+            updated_sqlite_row_count: 0,
+            skipped_sqlite_file: sqlite_scan.skipped_unusable_database,
+            backup_dir: None,
+            running: false,
+        });
+    }
+
+    let backup_dir = backup_instance_files(
+        data_dir,
+        &rollout_changes,
+        sqlite_rows_to_update > 0,
+        instance_id,
+        &target_provider,
+    )?;
+    let backup_dir_string = backup_dir.to_string_lossy().to_string();
+
+    let repaired = repair_single_instance(
+        data_dir,
+        &target_provider,
+        &rollout_changes,
+        sqlite_rows_to_update > 0,
+    );
+    let sqlite_rows_updated = match repaired {
+        Ok(value) => value,
+        Err(error) => {
+            let restore_result = restore_instance_files_from_backup(
+                data_dir,
+                &backup_dir,
+                sqlite_rows_to_update > 0,
+            );
+            if let Err(restore_error) = restore_result {
+                return Err(format!(
+                    "修复实例历史会话可见性失败 ({}): {}；自动回滚也失败: {}；备份目录: {}",
+                    instance_name,
+                    error,
+                    restore_error,
+                    backup_dir.display()
+                ));
+            }
+            return Err(format!(
+                "修复实例历史会话可见性失败 ({}): {}；已自动回滚，备份目录: {}",
+                instance_name,
+                error,
+                backup_dir.display()
+            ));
+        }
+    };
+
+    if let Err(error) = prune_instance_session_visibility_repair_backups(data_dir) {
+        modules::logger::log_warn(&format!(
+            "清理 Codex 会话可见性修复旧备份失败 ({}): {}",
+            data_dir.display(),
+            error
+        ));
+    }
+
+    Ok(CodexSessionVisibilityRepairItem {
+        instance_id: instance_id.to_string(),
+        instance_name: instance_name.to_string(),
+        target_provider,
+        changed_rollout_file_count: rollout_changes.len(),
+        updated_sqlite_row_count: sqlite_rows_updated,
+        skipped_sqlite_file: sqlite_scan.skipped_unusable_database,
+        backup_dir: Some(backup_dir_string),
+        running: false,
+    })
+}
+
 fn repair_single_instance(
     data_dir: &Path,
     target_provider: &str,
@@ -871,4 +955,115 @@ fn restore_directory_contents(source_root: &Path, target_root: &Path) -> Result<
         })?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_temp_dir(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be available")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "cockpit-tools-codex-session-visibility-{}-{}-{}",
+            name,
+            std::process::id(),
+            nonce
+        ))
+    }
+
+    fn create_threads_db(data_dir: &Path, provider: &str) {
+        let connection =
+            Connection::open(data_dir.join(STATE_DB_FILE)).expect("state db should open");
+        connection
+            .execute(
+                "CREATE TABLE threads (id TEXT PRIMARY KEY, model_provider TEXT)",
+                [],
+            )
+            .expect("threads table should be created");
+        connection
+            .execute(
+                "INSERT INTO threads (id, model_provider) VALUES (?1, ?2)",
+                rusqlite::params!["thread-1", provider],
+            )
+            .expect("thread row should be inserted");
+    }
+
+    fn read_thread_provider(data_dir: &Path) -> String {
+        let connection =
+            Connection::open(data_dir.join(STATE_DB_FILE)).expect("state db should open");
+        connection
+            .query_row(
+                "SELECT model_provider FROM threads WHERE id = ?1",
+                ["thread-1"],
+                |row| row.get::<usize, String>(0),
+            )
+            .expect("thread provider should be readable")
+    }
+
+    #[test]
+    fn repair_profile_dir_rewrites_rollout_and_sqlite_to_target_provider() {
+        let data_dir = unique_temp_dir("rewrite");
+        fs::create_dir_all(data_dir.join("sessions/2026/05/09"))
+            .expect("session dir should be created");
+        fs::write(data_dir.join(CONFIG_FILE_NAME), "model_provider = \"relay\"\n")
+            .expect("config should be written");
+        let rollout_path = data_dir.join("sessions/2026/05/09/rollout-test.jsonl");
+        fs::write(
+            &rollout_path,
+            concat!(
+                "{\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-1\",\"model_provider\":\"openai\"}}\n",
+                "{\"type\":\"event\",\"payload\":{}}\n"
+            ),
+        )
+        .expect("rollout should be written");
+        create_threads_db(&data_dir, "openai");
+
+        let item = repair_session_visibility_for_dir(&data_dir, "test", "Test")
+            .expect("repair should succeed");
+
+        assert_eq!(item.target_provider, "relay");
+        assert_eq!(item.changed_rollout_file_count, 1);
+        assert_eq!(item.updated_sqlite_row_count, 1);
+        assert!(item.backup_dir.is_some());
+        assert_eq!(read_thread_provider(&data_dir), "relay");
+
+        let first_line = fs::read_to_string(&rollout_path)
+            .expect("rollout should be readable")
+            .lines()
+            .next()
+            .expect("rollout should have first line")
+            .to_string();
+        let parsed: JsonValue =
+            serde_json::from_str(&first_line).expect("session meta should stay valid json");
+        assert_eq!(
+            parsed["payload"]["model_provider"].as_str(),
+            Some("relay")
+        );
+
+        fs::remove_dir_all(&data_dir).expect("temp dir should be removed");
+    }
+
+    #[test]
+    fn repair_profile_dir_noops_when_provider_metadata_already_matches() {
+        let data_dir = unique_temp_dir("noop");
+        fs::create_dir_all(&data_dir).expect("temp dir should be created");
+        fs::write(data_dir.join(CONFIG_FILE_NAME), "model_provider = \"relay\"\n")
+            .expect("config should be written");
+        create_threads_db(&data_dir, "relay");
+
+        let item = repair_session_visibility_for_dir(&data_dir, "test", "Test")
+            .expect("repair should succeed");
+
+        assert_eq!(item.target_provider, "relay");
+        assert_eq!(item.changed_rollout_file_count, 0);
+        assert_eq!(item.updated_sqlite_row_count, 0);
+        assert!(item.backup_dir.is_none());
+        assert_eq!(read_thread_provider(&data_dir), "relay");
+
+        fs::remove_dir_all(&data_dir).expect("temp dir should be removed");
+    }
 }

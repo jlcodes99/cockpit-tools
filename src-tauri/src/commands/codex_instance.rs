@@ -82,16 +82,70 @@ fn resolve_local_account_id() -> Option<String> {
     Some(account.id)
 }
 
+fn read_profile_visibility_provider(profile_dir: &Path) -> Option<String> {
+    match modules::codex_session_visibility::read_history_visibility_provider_for_dir(profile_dir) {
+        Ok(provider) => Some(provider),
+        Err(error) => {
+            modules::logger::log_warn(&format!(
+                "读取 Codex 实例 provider 失败，启动前会跳过会话可见性自动修复: dir={}, error={}",
+                profile_dir.display(),
+                error
+            ));
+            None
+        }
+    }
+}
+
+fn repair_profile_visibility_after_provider_change(
+    profile_dir: &Path,
+    before_provider: Option<String>,
+) {
+    let Some(after_provider) = read_profile_visibility_provider(profile_dir) else {
+        return;
+    };
+    if before_provider.as_deref() == Some(after_provider.as_str()) {
+        return;
+    }
+
+    match modules::codex_session_visibility::repair_session_visibility_for_dir(
+        profile_dir,
+        "__launch__",
+        "启动实例",
+    ) {
+        Ok(item) => {
+            modules::logger::log_info(&format!(
+                "Codex 实例启动前已修复会话可见性: dir={}, from={}, to={}, rollout_files={}, sqlite_rows={}",
+                profile_dir.display(),
+                before_provider.as_deref().unwrap_or("unknown"),
+                item.target_provider,
+                item.changed_rollout_file_count,
+                item.updated_sqlite_row_count
+            ));
+        }
+        Err(error) => {
+            modules::logger::log_warn(&format!(
+                "Codex 实例启动前会话可见性修复失败，仍继续启动: dir={}, error={}",
+                profile_dir.display(),
+                error
+            ));
+        }
+    }
+}
+
 async fn inject_bound_account_to_profile(
     profile_dir: &Path,
     bind_account_id: &str,
 ) -> Result<(), String> {
+    let before_provider = read_profile_visibility_provider(profile_dir);
     if modules::codex_instance::is_api_service_bind_account_id(bind_account_id) {
         modules::codex_local_access::activate_local_access_for_dir(profile_dir).await?;
+        repair_profile_visibility_after_provider_change(profile_dir, before_provider);
         return Ok(());
     }
 
-    modules::codex_instance::inject_account_to_profile(profile_dir, bind_account_id).await
+    modules::codex_instance::inject_account_to_profile(profile_dir, bind_account_id).await?;
+    repair_profile_visibility_after_provider_change(profile_dir, before_provider);
+    Ok(())
 }
 
 fn default_instance_view(

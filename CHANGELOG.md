@@ -69,6 +69,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Windsurf Devin accounts switch into instances with fresher IDE credentials**: instance launch pre-refreshes Devin accounts, writes stable installation/onboarding/sign-in/user fields, and includes Devin account/org/protobuf status data to avoid launch-time signed-out or permission-denied states.
 - **Account lists no longer disappear when storage temporarily returns an unexpected empty result**: shared account stores keep the current cached accounts/current account during abnormal empty reads, while still allowing real empty results after intentional deletion.
 - **Backup restore and retention now handle JSON/ZIP pairs consistently**: backup reads can fall back from a damaged or missing JSON file to its archive, and cleanup removes expired JSON and ZIP backups together.
+- **Codex provider switches repair stale session providers before launch**: switching between OAuth, API Key, and Local API Service providers now repairs the affected Codex profile's rollout and `state_5.sqlite` provider metadata before starting that profile, preventing old sessions from reconnecting through the previous provider.
 
 ---
 ## [0.22.19] - 2026-05-05
