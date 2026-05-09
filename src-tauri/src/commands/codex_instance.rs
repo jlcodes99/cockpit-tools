@@ -98,6 +98,9 @@ fn read_profile_visibility_provider(profile_dir: &Path) -> Option<String> {
 
 fn repair_profile_visibility_after_provider_change(
     profile_dir: &Path,
+    instance_id: &str,
+    instance_name: &str,
+    running: bool,
     before_provider: Option<String>,
 ) {
     let Some(after_provider) = read_profile_visibility_provider(profile_dir) else {
@@ -109,8 +112,9 @@ fn repair_profile_visibility_after_provider_change(
 
     match modules::codex_session_visibility::repair_session_visibility_for_dir(
         profile_dir,
-        "__launch__",
-        "启动实例",
+        instance_id,
+        instance_name,
+        running,
     ) {
         Ok(item) => {
             modules::logger::log_info(&format!(
@@ -134,17 +138,32 @@ fn repair_profile_visibility_after_provider_change(
 
 async fn inject_bound_account_to_profile(
     profile_dir: &Path,
+    instance_id: &str,
+    instance_name: &str,
+    running: bool,
     bind_account_id: &str,
 ) -> Result<(), String> {
     let before_provider = read_profile_visibility_provider(profile_dir);
     if modules::codex_instance::is_api_service_bind_account_id(bind_account_id) {
         modules::codex_local_access::activate_local_access_for_dir(profile_dir).await?;
-        repair_profile_visibility_after_provider_change(profile_dir, before_provider);
+        repair_profile_visibility_after_provider_change(
+            profile_dir,
+            instance_id,
+            instance_name,
+            running,
+            before_provider,
+        );
         return Ok(());
     }
 
     modules::codex_instance::inject_account_to_profile(profile_dir, bind_account_id).await?;
-    repair_profile_visibility_after_provider_change(profile_dir, before_provider);
+    repair_profile_visibility_after_provider_change(
+        profile_dir,
+        instance_id,
+        instance_name,
+        running,
+        before_provider,
+    );
     Ok(())
 }
 
@@ -585,7 +604,14 @@ pub async fn codex_start_instance(instance_id: String) -> Result<CodexInstancePr
             let _ = modules::codex_instance::update_default_pid(None)?;
         }
         if let Some(ref account_id) = default_bind_account_id {
-            inject_bound_account_to_profile(&default_dir, account_id).await?;
+            inject_bound_account_to_profile(
+                &default_dir,
+                DEFAULT_INSTANCE_ID,
+                "默认实例",
+                false,
+                account_id,
+            )
+            .await?;
         }
 
         if default_settings.launch_mode == InstanceLaunchMode::Cli {
@@ -632,7 +658,14 @@ pub async fn codex_start_instance(instance_id: String) -> Result<CodexInstancePr
     }
 
     if let Some(ref account_id) = instance.bind_account_id {
-        inject_bound_account_to_profile(Path::new(&instance.user_data_dir), account_id).await?;
+        inject_bound_account_to_profile(
+            Path::new(&instance.user_data_dir),
+            &instance.id,
+            &instance.name,
+            false,
+            account_id,
+        )
+        .await?;
     }
 
     if instance.launch_mode == InstanceLaunchMode::Cli {

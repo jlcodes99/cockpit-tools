@@ -52,6 +52,7 @@ fn repair_codex_session_visibility_after_provider_change(before_provider: Option
         &codex_home,
         "__default__",
         "默认实例",
+        process::is_codex_running(),
     ) {
         Ok(item) => {
             logger::log_info(&format!(

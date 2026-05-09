@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -110,6 +110,7 @@ pub fn repair_session_visibility_across_instances(
             &rollout_changes,
             sqlite_rows_to_update > 0,
             &instance.id,
+            &instance.name,
             &target_provider,
         )?;
         let backup_dir_string = backup_dir.to_string_lossy().to_string();
@@ -195,6 +196,7 @@ pub fn repair_session_visibility_for_dir(
     data_dir: &Path,
     instance_id: &str,
     instance_name: &str,
+    running: bool,
 ) -> Result<CodexSessionVisibilityRepairItem, String> {
     let target_provider = read_target_provider(data_dir)?;
     let rollout_changes = collect_rollout_provider_changes(data_dir, &target_provider)?;
@@ -210,7 +212,7 @@ pub fn repair_session_visibility_for_dir(
             updated_sqlite_row_count: 0,
             skipped_sqlite_file: sqlite_scan.skipped_unusable_database,
             backup_dir: None,
-            running: false,
+            running,
         });
     }
 
@@ -219,6 +221,7 @@ pub fn repair_session_visibility_for_dir(
         &rollout_changes,
         sqlite_rows_to_update > 0,
         instance_id,
+        instance_name,
         &target_provider,
     )?;
     let backup_dir_string = backup_dir.to_string_lossy().to_string();
@@ -271,7 +274,7 @@ pub fn repair_session_visibility_for_dir(
         updated_sqlite_row_count: sqlite_rows_updated,
         skipped_sqlite_file: sqlite_scan.skipped_unusable_database,
         backup_dir: Some(backup_dir_string),
-        running: false,
+        running,
     })
 }
 
@@ -723,17 +726,10 @@ fn backup_instance_files(
     rollout_changes: &[RolloutProviderChange],
     include_sqlite: bool,
     instance_id: &str,
+    instance_name: &str,
     target_provider: &str,
 ) -> Result<PathBuf, String> {
-    let backup_dir_name = format!(
-        "{}{}{}",
-        SESSION_VISIBILITY_REPAIR_BACKUP_PREFIX,
-        Utc::now().format("%Y%m%d-%H%M%S"),
-        SESSION_VISIBILITY_REPAIR_BACKUP_SUFFIX
-    );
-    let backup_dir = data_dir.join(backup_dir_name);
-    fs::create_dir_all(&backup_dir)
-        .map_err(|error| format!("创建备份目录失败 ({}): {}", backup_dir.display(), error))?;
+    let backup_dir = create_session_visibility_repair_backup_dir(data_dir)?;
 
     let mut backed_up_files = Vec::new();
     for change in rollout_changes {
@@ -775,6 +771,7 @@ fn backup_instance_files(
 
     let manifest = json!({
         "instanceId": instance_id,
+        "instanceName": instance_name,
         "instanceRoot": data_dir,
         "targetProvider": target_provider,
         "createdAt": Utc::now().to_rfc3339(),
@@ -800,10 +797,46 @@ fn backup_instance_files(
     Ok(backup_dir)
 }
 
+fn create_session_visibility_repair_backup_dir(data_dir: &Path) -> Result<PathBuf, String> {
+    for attempt in 0..16 {
+        let now = Utc::now();
+        let backup_dir_name = format!(
+            "{}{}-{:09}-{}-{}{}",
+            SESSION_VISIBILITY_REPAIR_BACKUP_PREFIX,
+            now.format("%Y%m%d-%H%M%S"),
+            now.timestamp_subsec_nanos(),
+            std::process::id(),
+            attempt,
+            SESSION_VISIBILITY_REPAIR_BACKUP_SUFFIX
+        );
+        let backup_dir = data_dir.join(backup_dir_name);
+        match fs::create_dir(&backup_dir) {
+            Ok(()) => return Ok(backup_dir),
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(format!(
+                    "创建备份目录失败 ({}): {}",
+                    backup_dir.display(),
+                    error
+                ));
+            }
+        }
+    }
+
+    Err(format!(
+        "创建备份目录失败 ({})：连续生成的备份目录名均已存在",
+        data_dir.display()
+    ))
+}
+
 fn parse_session_visibility_repair_backup_timestamp(name: &str) -> Option<&str> {
-    let timestamp = name
+    let sort_key = name
         .strip_prefix(SESSION_VISIBILITY_REPAIR_BACKUP_PREFIX)?
         .strip_suffix(SESSION_VISIBILITY_REPAIR_BACKUP_SUFFIX)?;
+    if sort_key.len() < 15 {
+        return None;
+    }
+    let timestamp = &sort_key[..15];
     if timestamp.len() != 15 {
         return None;
     }
@@ -816,7 +849,17 @@ fn parse_session_visibility_repair_backup_timestamp(name: &str) -> Option<&str> 
     }) {
         return None;
     }
-    Some(timestamp)
+    let extra = &sort_key[15..];
+    if !extra.is_empty()
+        && (!extra.starts_with('-')
+            || extra.len() == 1
+            || !extra[1..]
+                .chars()
+                .all(|value| value.is_ascii_digit() || value == '-'))
+    {
+        return None;
+    }
+    Some(sort_key)
 }
 
 fn prune_session_visibility_repair_backups(instances: &[CodexSyncInstance]) {
@@ -1022,13 +1065,22 @@ mod tests {
         .expect("rollout should be written");
         create_threads_db(&data_dir, "openai");
 
-        let item = repair_session_visibility_for_dir(&data_dir, "test", "Test")
+        let item = repair_session_visibility_for_dir(&data_dir, "test", "Test", true)
             .expect("repair should succeed");
 
         assert_eq!(item.target_provider, "relay");
         assert_eq!(item.changed_rollout_file_count, 1);
         assert_eq!(item.updated_sqlite_row_count, 1);
         assert!(item.backup_dir.is_some());
+        assert!(item.running);
+        let backup_dir = PathBuf::from(item.backup_dir.as_deref().expect("backup dir"));
+        let manifest: JsonValue = serde_json::from_str(
+            &fs::read_to_string(backup_dir.join("manifest.json"))
+                .expect("backup manifest should be readable"),
+        )
+        .expect("backup manifest should be valid json");
+        assert_eq!(manifest["instanceId"].as_str(), Some("test"));
+        assert_eq!(manifest["instanceName"].as_str(), Some("Test"));
         assert_eq!(read_thread_provider(&data_dir), "relay");
 
         let first_line = fs::read_to_string(&rollout_path)
@@ -1055,14 +1107,54 @@ mod tests {
             .expect("config should be written");
         create_threads_db(&data_dir, "relay");
 
-        let item = repair_session_visibility_for_dir(&data_dir, "test", "Test")
+        let item = repair_session_visibility_for_dir(&data_dir, "test", "Test", false)
             .expect("repair should succeed");
 
         assert_eq!(item.target_provider, "relay");
         assert_eq!(item.changed_rollout_file_count, 0);
         assert_eq!(item.updated_sqlite_row_count, 0);
         assert!(item.backup_dir.is_none());
+        assert!(!item.running);
         assert_eq!(read_thread_provider(&data_dir), "relay");
+
+        fs::remove_dir_all(&data_dir).expect("temp dir should be removed");
+    }
+
+    #[test]
+    fn backup_dir_names_are_collision_resistant_and_prunable() {
+        let data_dir = unique_temp_dir("backup");
+        fs::create_dir_all(&data_dir).expect("temp dir should be created");
+
+        let first = create_session_visibility_repair_backup_dir(&data_dir)
+            .expect("first backup dir should be created");
+        let second = create_session_visibility_repair_backup_dir(&data_dir)
+            .expect("second backup dir should be created");
+
+        assert_ne!(first, second);
+        assert!(
+            parse_session_visibility_repair_backup_timestamp(
+                first
+                    .file_name()
+                    .and_then(|item| item.to_str())
+                    .expect("backup dir should have utf-8 name"),
+            )
+            .is_some()
+        );
+        assert!(
+            parse_session_visibility_repair_backup_timestamp(
+                second
+                    .file_name()
+                    .and_then(|item| item.to_str())
+                    .expect("backup dir should have utf-8 name"),
+            )
+            .is_some()
+        );
+        assert!(
+            parse_session_visibility_repair_backup_timestamp(
+                "backup-20260509-152944-session-visibility-repair",
+            )
+            .is_some()
+        );
 
         fs::remove_dir_all(&data_dir).expect("temp dir should be removed");
     }
