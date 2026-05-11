@@ -297,7 +297,7 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
       ...groupOptions,
       {
         value: UNGROUPED_ACCOUNT_GROUP_FILTER_KEY,
-        label: `${t('accounts.groups.ungrouped', '未分组')} (${ungroupedCount})`,
+        label: `${t('accounts.groups.ungrouped', "Ungrouped")} (${ungroupedCount})`,
       },
     ];
   }, [accountById, accountGroups, accountIdsInAnyGroup, accounts, t]);
@@ -1226,7 +1226,7 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
             disabled={running || accounts.length === 0}
           >
             <ShieldCheck size={16} />
-            {t('wakeup.verification.actions.runCheckNow', '立即检测')}
+            {t('wakeup.verification.actions.runCheckNow', "Check now")}
           </button>
         </div>
       </div>
@@ -1331,7 +1331,7 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
         <div className="modal-overlay" onClick={closeConfigModal}>
           <div className="modal wakeup-modal verification-config-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{t('wakeup.verification.actions.runCheckNow', '立即检测')}</h2>
+              <h2>{t('wakeup.verification.actions.runCheckNow', "Check now")}</h2>
               <button className="modal-close" onClick={closeConfigModal} disabled={running}>
                 <X />
               </button>
@@ -1399,7 +1399,7 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
                     <input
                       type="text"
                       className="verification-account-search"
-                      placeholder={t('accounts.search.placeholder', '搜索账号...')}
+                      placeholder={t('accounts.search.placeholder', 'Search accounts...')}
                       value={accountSearchQuery}
                       onChange={(e) => setAccountSearchQuery(e.target.value)}
                     />
@@ -1408,33 +1408,33 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
                     <MultiSelectFilterDropdown
                       options={typeFilterOptions}
                       selectedValues={configTypeFilter}
-                      allLabel={t('wakeup.verification.filters.typeShort', '类型')}
-                      filterLabel={t('wakeup.verification.filters.typeShort', '类型')}
-                      clearLabel={t('accounts.clearFilter', '清空筛选')}
-                      emptyLabel={t('common.none', '暂无')}
-                      ariaLabel={t('wakeup.verification.filters.typeShort', '类型')}
+                      allLabel={t('wakeup.verification.filters.typeShort', "Type")}
+                      filterLabel={t('wakeup.verification.filters.typeShort', "Type")}
+                      clearLabel={t('accounts.clearFilter', "Clear Filter")}
+                      emptyLabel={t('common.none', "None")}
+                      ariaLabel={t('wakeup.verification.filters.typeShort', "Type")}
                       onToggleValue={toggleConfigFilterTypeValue}
                       onClear={clearConfigTypeFilter}
                     />
                     <MultiSelectFilterDropdown
                       options={availableFilterTagOptions}
                       selectedValues={configTagFilter}
-                      allLabel={t('wakeup.verification.filters.tagsShort', '标签')}
-                      filterLabel={t('wakeup.verification.filters.tagsShort', '标签')}
-                      clearLabel={t('accounts.clearFilter', '清空筛选')}
-                      emptyLabel={t('accounts.noAvailableTags', '暂无可用标签')}
-                      ariaLabel={t('wakeup.verification.filters.tagsShort', '标签')}
+                      allLabel={t('wakeup.verification.filters.tagsShort', "Tags")}
+                      filterLabel={t('wakeup.verification.filters.tagsShort', "Tags")}
+                      clearLabel={t('accounts.clearFilter', "Clear Filter")}
+                      emptyLabel={t('accounts.noAvailableTags', "No tags available")}
+                      ariaLabel={t('wakeup.verification.filters.tagsShort', "Tags")}
                       onToggleValue={toggleConfigTagFilterValue}
                       onClear={clearConfigTagFilter}
                     />
                     <MultiSelectFilterDropdown
                       options={groupFilterOptions}
                       selectedValues={configGroupFilter}
-                      allLabel={t('wakeup.verification.filters.groupsShort', '分组')}
-                      filterLabel={t('wakeup.verification.filters.groupsShort', '分组')}
-                      clearLabel={t('accounts.clearFilter', '清空筛选')}
-                      emptyLabel={t('accounts.groups.noGroups', '暂无分组')}
-                      ariaLabel={t('wakeup.verification.filters.groupsShort', '分组')}
+                      allLabel={t('wakeup.verification.filters.groupsShort', "Groups")}
+                      filterLabel={t('wakeup.verification.filters.groupsShort', "Groups")}
+                      clearLabel={t('accounts.clearFilter', "Clear Filter")}
+                      emptyLabel={t('accounts.groups.noGroups', "No Groups")}
+                      ariaLabel={t('wakeup.verification.filters.groupsShort', "Groups")}
                       onToggleValue={toggleConfigGroupFilterValue}
                       onClear={clearConfigGroupFilter}
                     />

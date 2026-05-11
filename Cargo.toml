@@ -6,6 +6,13 @@ members = [
 ]
 resolver = "2"
 
+[profile.dev]
+incremental = true
+
+[profile.release]
+codegen-units = 16
+lto = "thin"
+
 [workspace.dependencies]
 # Common dependencies with shared versions
 serde = { version = "1", features = ["derive"] }

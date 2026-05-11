@@ -1,7 +1,7 @@
 /**
- * CodeBuddy Suite 配额模型函数
+ * CodeBuddy Suite quota model functions
  *
- * 用于计算和展示配额信息的统一函数
+ * Unified functions for calculating and displaying quota information
  */
 
 import {
@@ -34,7 +34,7 @@ import {
 } from './parser';
 
 /**
- * 将原始资源转换为 OfficialQuotaResource
+ * Convert raw resource to OfficialQuotaResource
  */
 export function toOfficialQuotaResource(raw: Record<string, unknown>): OfficialQuotaResource {
   const packageCode = typeof raw.PackageCode === 'string' ? raw.PackageCode : null;
@@ -75,14 +75,14 @@ export function toOfficialQuotaResource(raw: Record<string, unknown>): OfficialQ
 }
 
 /**
- * 获取套餐详情
- * 遵循官方 CodeBuddy web client 逻辑
+ * Get plan detail
+ * Follows official CodeBuddy web client logic
  */
 export function getPlanDetail(account: CodebuddySuiteAccountBase): CodebuddyPlanDetail {
   const profile = asRecord(account.profile_raw);
   const accountType = typeof profile?.type === 'string' ? profile.type.toLowerCase() : '';
 
-  // 企业账号类型优先
+  // Enterprise account types take priority
   if (ENTERPRISE_ACCOUNT_TYPES.includes(accountType)) {
     return { type: 'pro', isPro: true, isTrial: false, badge: 'ENTERPRISE', packageCode: null };
   }
@@ -120,7 +120,7 @@ export function getPlanDetail(account: CodebuddySuiteAccountBase): CodebuddyPlan
 }
 
 /**
- * 套餐徽章回退逻辑
+ * Plan badge fallback logic
  */
 function planBadgeFallback(account: CodebuddySuiteAccountBase): CodebuddyPlanDetail {
   const payment = account.payment_type?.toLowerCase() || '';
@@ -139,14 +139,14 @@ function planBadgeFallback(account: CodebuddySuiteAccountBase): CodebuddyPlanDet
 }
 
 /**
- * 获取套餐徽章
+ * Get plan badge
  */
 export function getPlanBadge(account: CodebuddySuiteAccountBase): string {
   return getPlanDetail(account).badge;
 }
 
 /**
- * 获取套餐徽章样式类
+ * Get plan badge CSS class
  */
 export function getPlanBadgeClass(badge: string): string {
   switch (badge) {
@@ -164,7 +164,7 @@ export function getPlanBadgeClass(badge: string): string {
 }
 
 /**
- * 获取使用量信息
+ * Get usage info
  */
 export function getUsage(account: CodebuddySuiteAccountBase): CodebuddyUsage {
   const code = account.dosage_notify_code || '';
@@ -181,14 +181,14 @@ export function getUsage(account: CodebuddySuiteAccountBase): CodebuddyUsage {
 }
 
 /**
- * 获取账号状态
+ * Get account status
  */
 export function getAccountStatus(account: CodebuddySuiteAccountBase): string {
   return account.status || 'unknown';
 }
 
 /**
- * 获取积分余额
+ * Get credits balance
  */
 export function getCreditsBalance(account: CodebuddySuiteAccountBase): number | null {
   const active = extractResourceAccounts(account).filter(isActiveResource);
@@ -199,21 +199,21 @@ export function getCreditsBalance(account: CodebuddySuiteAccountBase): number | 
 }
 
 /**
- * 获取账号显示邮箱
+ * Get account display email
  */
 export function getAccountDisplayEmail(account: CodebuddySuiteAccountBase): string {
   return account.email || account.nickname || account.uid || account.id;
 }
 
 /**
- * 获取账号显示名称
+ * Get account display name
  */
 export function getAccountDisplayName(account: CodebuddySuiteAccountBase): string {
   return account.nickname || account.email || account.uid || account.id;
 }
 
 /**
- * 获取官方配额模型
+ * Get official quota model
  */
 export function getOfficialQuotaModel(account: CodebuddySuiteAccountBase): OfficialQuotaModel {
   const updatedAt = getAccountQuotaUpdatedAtMs(account);
@@ -264,22 +264,22 @@ export function getOfficialQuotaModel(account: CodebuddySuiteAccountBase): Offic
 }
 
 /**
- * 解析包名称
+ * Resolve package name
  */
 function resolvePackageName(resource: OfficialQuotaResource): string {
-  if (resource.packageCode === PACKAGE_CODE.extra) return '加量包';
-  if (resource.packageCode === PACKAGE_CODE.activity) return '活动赠送包';
+  if (resource.packageCode === PACKAGE_CODE.extra) return 'Add-on package';
+  if (resource.packageCode === PACKAGE_CODE.activity) return 'Promotional package';
   if (resource.packageCode === PACKAGE_CODE.free || resource.packageCode === PACKAGE_CODE.gift || resource.packageCode === PACKAGE_CODE.freeMon) {
-    return '基础体验包';
+    return 'Base package';
   }
   if (resource.packageCode === PACKAGE_CODE.proMon || resource.packageCode === PACKAGE_CODE.proYear) {
-    return '专业版订阅';
+    return 'Pro subscription';
   }
-  return resource.packageName || '基础包';
+  return resource.packageName || 'Base package';
 }
 
 /**
- * 获取配额显示项列表
+ * Get quota display items list
  */
 export function getQuotaDisplayItems(account: CodebuddySuiteAccountBase): QuotaDisplayItem[] {
   const model = getOfficialQuotaModel(account);
@@ -310,7 +310,7 @@ export function getQuotaDisplayItems(account: CodebuddySuiteAccountBase): QuotaD
 
     items.push({
       key: 'extra',
-      label: '加量包',
+      label: 'Add-on package',
       used: model.extra.used,
       total: model.extra.total,
       remain: model.extra.remain,
@@ -325,7 +325,7 @@ export function getQuotaDisplayItems(account: CodebuddySuiteAccountBase): QuotaD
 }
 
 /**
- * 获取配额分组聚合数据
+ * Get quota category group aggregation data
  */
 export function getQuotaCategoryGroups(account: CodebuddySuiteAccountBase, t: (key: string, defaultValue?: string) => string): QuotaCategoryGroup[] {
   const model = getOfficialQuotaModel(account);
@@ -367,9 +367,9 @@ export function getQuotaCategoryGroups(account: CodebuddySuiteAccountBase, t: (k
   const otherAgg = aggregate(otherItems);
 
   return [
-    { key: 'base', label: t('codebuddy.quotaCategory.base', '基础体验包'), ...baseAgg, items: baseItems, visible: baseAgg.total > 0 },
-    { key: 'activity', label: t('codebuddy.quotaCategory.activity', '活动赠送包'), ...activityAgg, items: activityItems, visible: activityAgg.total > 0 },
-    { key: 'extra', label: t('codebuddy.quotaCategory.extra', '加量包'), ...extraAgg, items: extraItems, visible: extraAgg.total > 0 },
-    { key: 'other', label: t('codebuddy.quotaCategory.other', '其他'), ...otherAgg, items: otherItems, visible: otherAgg.total > 0 },
+    { key: 'base', label: t('codebuddy.quotaCategory.base', 'Base package'), ...baseAgg, items: baseItems, visible: baseAgg.total > 0 },
+    { key: 'activity', label: t('codebuddy.quotaCategory.activity', 'Promotional package'), ...activityAgg, items: activityItems, visible: activityAgg.total > 0 },
+    { key: 'extra', label: t('codebuddy.quotaCategory.extra', 'Add-on package'), ...extraAgg, items: extraItems, visible: extraAgg.total > 0 },
+    { key: 'other', label: t('codebuddy.quotaCategory.other', 'Other'), ...otherAgg, items: otherItems, visible: otherAgg.total > 0 },
   ];
 }

@@ -3227,13 +3227,20 @@ enum CodexJsonImportCandidate {
 
 fn extract_account_note_from_value(value: &serde_json::Value) -> Option<String> {
     let obj = value.as_object()?;
-    ["account_note", "accountInfo", "account_info", "note", "notes", "remark"]
-        .iter()
-        .find_map(|key| {
-            obj.get(*key)
-                .and_then(|value| value.as_str())
-                .and_then(|value| normalize_optional_ref(Some(value)))
-        })
+    [
+        "account_note",
+        "accountInfo",
+        "account_info",
+        "note",
+        "notes",
+        "remark",
+    ]
+    .iter()
+    .find_map(|key| {
+        obj.get(*key)
+            .and_then(|value| value.as_str())
+            .and_then(|value| normalize_optional_ref(Some(value)))
+    })
 }
 
 fn extract_refresh_token_only_from_value(value: &serde_json::Value) -> Option<String> {

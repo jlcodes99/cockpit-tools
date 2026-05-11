@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
 import {
-  ACCOUNT_TRANSFER_SCHEMA,
   AccountTransferBundle,
   AccountTransferImportProgress,
   AccountTransferImportResult,
@@ -52,6 +51,7 @@ import * as windsurfService from './windsurfService';
 import * as kiroService from './kiroService';
 import * as cursorService from './cursorService';
 import * as geminiService from './geminiService';
+import * as devinCliService from './devinCliService';
 import * as codebuddyService from './codebuddyService';
 import * as codebuddyCnService from './codebuddyCnService';
 import * as qoderService from './qoderService';
@@ -72,6 +72,7 @@ const INSTANCE_PLATFORMS = [
   'kiro',
   'cursor',
   'gemini',
+  'devin-cli',
   'codebuddy',
   'codebuddy_cn',
   'qoder',
@@ -84,6 +85,11 @@ type TransferAccountRecord = Record<string, unknown> & { id: string };
 type AccountLoader = () => Promise<TransferAccountRecord[]>;
 type LegacyFormat = 'data_bundle' | 'account_bundle' | 'legacy_account_json';
 type DataTransferWarningCode = 'accounts_section_missing' | 'config_section_missing';
+
+interface DataTransferAnalysis {
+  detected_format: LegacyFormat;
+  legacy_account_platform?: PlatformId | null;
+}
 
 interface RawUserConfig extends Record<string, unknown> {
   auto_switch_selected_account_ids?: string[];
@@ -259,6 +265,7 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   kiro: async () => (await kiroService.listKiroAccounts()) as unknown as TransferAccountRecord[],
   cursor: async () => (await cursorService.listCursorAccounts()) as unknown as TransferAccountRecord[],
   gemini: async () => (await geminiService.listGeminiAccounts()) as unknown as TransferAccountRecord[],
+  'devin-cli': async () => (await devinCliService.listDevinCliAccounts()) as unknown as TransferAccountRecord[],
   codebuddy: async () => (await codebuddyService.listCodebuddyAccounts()) as unknown as TransferAccountRecord[],
   codebuddy_cn: async () =>
     (await codebuddyCnService.listCodebuddyCnAccounts()) as unknown as TransferAccountRecord[],
@@ -276,6 +283,7 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   kiro: kiroService.importKiroFromJson,
   cursor: cursorService.importCursorFromJson,
   gemini: geminiService.importGeminiFromJson,
+  'devin-cli': undefined,
   codebuddy: codebuddyService.importCodebuddyFromJson,
   codebuddy_cn: codebuddyCnService.importCodebuddyCnFromJson,
   qoder: qoderService.importQoderFromJson,
@@ -315,11 +323,6 @@ function stringEquals(left: unknown, right: unknown): boolean {
   return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
 }
 
-function stringContains(value: unknown, keyword: string): boolean {
-  const normalized = normalizeString(value)?.toLowerCase();
-  return Boolean(normalized && normalized.includes(keyword.toLowerCase()));
-}
-
 function parseJsonOrThrow(jsonContent: string, errorCode: string): unknown {
   try {
     return JSON.parse(jsonContent) as unknown;
@@ -332,21 +335,6 @@ function ensureSelection(selection: DataTransferSelection): void {
   if (!selection.includeAccounts && !selection.includeConfig) {
     throw new Error('transfer_selection_required');
   }
-}
-
-function firstLegacySample(value: unknown): Record<string, unknown> | null {
-  if (Array.isArray(value)) {
-    return value.find((item) => isRecord(item)) ?? null;
-  }
-  return isRecord(value) ? value : null;
-}
-
-function isDataTransferBundle(value: unknown): value is DataTransferBundle {
-  return isRecord(value) && value.schema === DATA_TRANSFER_SCHEMA;
-}
-
-function isAccountTransferBundleLike(value: unknown): boolean {
-  return isRecord(value) && value.schema === ACCOUNT_TRANSFER_SCHEMA;
 }
 
 function buildAccountRegistry(
@@ -1074,68 +1062,6 @@ function synthesizeAccountImportResult(
   };
 }
 
-function detectLegacyPlatform(value: unknown): PlatformId | null {
-  const sample = firstLegacySample(value);
-  if (!sample) return null;
-
-  const id = normalizeString(sample.id);
-  if (id?.startsWith('codebuddy_cn_')) return 'codebuddy_cn';
-  if (id?.startsWith('workbuddy_')) return 'workbuddy';
-  if (id?.startsWith('codebuddy_')) return 'codebuddy';
-
-  if ('tokens' in sample || 'OPENAI_API_KEY' in sample || 'auth_mode' in sample || 'authMode' in sample) {
-    return 'codex';
-  }
-  if ('windsurf_api_key' in sample || 'windsurf_auth_token' in sample || 'windsurf_plan_status' in sample) {
-    return 'windsurf';
-  }
-  if ('copilot_token' in sample) {
-    return 'github-copilot';
-  }
-  if ('zed' in sample) {
-    return 'zed';
-  }
-  if ('user_raw' in sample || 'subscription_raw' in sample || 'plan_raw' in sample) {
-    return 'zed';
-  }
-  if ('kiro_auth_token_raw' in sample || 'kiro_usage_raw' in sample || 'login_provider' in sample) {
-    return 'kiro';
-  }
-  if ('gemini_auth_raw' in sample || 'gemini_usage_raw' in sample || 'selected_auth_type' in sample) {
-    return 'gemini';
-  }
-  if ('cursor_auth_raw' in sample || 'cursor_usage_raw' in sample || 'membership_type' in sample) {
-    return 'cursor';
-  }
-  if ('trae_auth_raw' in sample || 'trae_profile_raw' in sample || 'trae_server_raw' in sample) {
-    return 'trae';
-  }
-  if ('auth_user_info_raw' in sample || 'auth_credit_usage_raw' in sample || 'credits_usage_percent' in sample) {
-    return 'qoder';
-  }
-  if ('uid' in sample || 'enterprise_id' in sample || 'dosage_notify_code' in sample) {
-    if (stringContains(sample.domain, 'workbuddy')) return 'workbuddy';
-    if (stringContains(sample.domain, 'codebuddy.cn')) return 'codebuddy_cn';
-    if (stringContains(sample.domain, 'codebuddy')) return 'codebuddy';
-    return id?.startsWith('workbuddy_')
-      ? 'workbuddy'
-      : id?.startsWith('codebuddy_cn_')
-        ? 'codebuddy_cn'
-        : 'codebuddy';
-  }
-  if ('github_login' in sample && 'user_id' in sample && ('plan_raw' in sample || 'usage_raw' in sample)) {
-    return 'zed';
-  }
-  if ('github_login' in sample || 'github_id' in sample) {
-    return 'github-copilot';
-  }
-  if ('token' in sample || ('refresh_token' in sample && 'email' in sample)) {
-    return 'antigravity';
-  }
-
-  return null;
-}
-
 async function importLegacyAccountJson(
   platform: PlatformId,
   jsonContent: string,
@@ -1188,13 +1114,12 @@ export async function importDataTransferJson(
   options: DataTransferImportOptions,
 ): Promise<DataTransferImportResult> {
   ensureSelection(options);
-  const parsed = parseJsonOrThrow(jsonContent, 'invalid_json');
+  const analysis = await invoke<DataTransferAnalysis>('data_transfer_analyze_json', {
+    jsonContent,
+  });
 
-  if (isDataTransferBundle(parsed)) {
-    if (parsed.version !== DATA_TRANSFER_VERSION) {
-      throw new Error('invalid_bundle_version');
-    }
-
+  if (analysis.detected_format === 'data_bundle') {
+    const parsed = parseJsonOrThrow(jsonContent, 'invalid_json') as DataTransferBundle;
     const warnings: DataTransferWarningCode[] = [];
     let accountResult: AccountTransferImportResult | null = null;
     let configResult: DataTransferConfigImportResult | null = null;
@@ -1230,7 +1155,7 @@ export async function importDataTransferJson(
     };
   }
 
-  if (isAccountTransferBundleLike(parsed)) {
+  if (analysis.detected_format === 'account_bundle') {
     if (!options.includeAccounts) {
       throw new Error('accounts_section_required');
     }
@@ -1248,7 +1173,7 @@ export async function importDataTransferJson(
     };
   }
 
-  const legacyPlatform = detectLegacyPlatform(parsed);
+  const legacyPlatform = analysis.legacy_account_platform ?? null;
   if (!legacyPlatform) {
     throw new Error('unsupported_legacy_account_json');
   }

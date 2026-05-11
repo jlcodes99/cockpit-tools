@@ -233,7 +233,7 @@ export function ZedAccountsPage() {
     resolveOauthSuccessMessage: () =>
       t(
         'zed.oauth.importOnlySuccess',
-        '授权成功，账号已导入；如需让官方 Zed 使用该账号，请点击“应用并重启”。',
+        "Authorization succeeded. The account has been imported. To make the official Zed use it, click \"Apply and Restart\".",
       ),
     onInjectSuccess: async () => {
       await store.fetchCurrentAccountId();
@@ -553,7 +553,7 @@ export function ZedAccountsPage() {
 
   const resolveGroupLabel = useCallback(
     (groupKey: string) =>
-      groupKey === ZED_UNTAGGED_KEY ? t('accounts.defaultGroup', '默认分组') : groupKey,
+      groupKey === ZED_UNTAGGED_KEY ? t('accounts.defaultGroup', "Default Group") : groupKey,
     [t],
   );
 
@@ -573,7 +573,7 @@ export function ZedAccountsPage() {
                 end: endText,
                 defaultValue: '周期结束：{{end}}',
               })
-            : t('common.shared.credits.planEndsUnknown', '配额周期时间未知');
+            : t('common.shared.credits.planEndsUnknown', "Cycle timing unavailable");
 
       const summary = periodRangeText;
       const detail = '';
@@ -611,7 +611,7 @@ export function ZedAccountsPage() {
       if (!account) {
         return {
           headline: '',
-          note: t('zed.runtime.noCurrentAccount', '当前没有生效的 Zed 账号'),
+          note: t('zed.runtime.noCurrentAccount', "No active Zed account"),
           items: [
             {
               key: 'edit',
@@ -624,18 +624,18 @@ export function ZedAccountsPage() {
             {
               key: 'overdue',
               variant: 'simple',
-              label: t('zed.page.overdueField', '是否欠费'),
+              label: t('zed.page.overdueField', "Overdue"),
               value: '--',
               detail: '',
-              title: t('zed.page.overdueField', '是否欠费'),
+              title: t('zed.page.overdueField', "Overdue"),
             },
           ],
-          title: t('zed.runtime.noCurrentAccount', '当前没有生效的 Zed 账号'),
+          title: t('zed.runtime.noCurrentAccount', "No active Zed account"),
         };
       }
 
       if (!hasZedQuotaData(account)) {
-        const note = t('common.shared.quota.noData', '暂无配额数据');
+        const note = t('common.shared.quota.noData', "No quota data");
         return {
           headline: '',
           note,
@@ -674,15 +674,15 @@ export function ZedAccountsPage() {
       }
       if (account.has_overdue_invoices != null) {
         const overdueValue = account.has_overdue_invoices
-          ? t('zed.page.overdueYes', '是')
-          : t('zed.page.overdueNo', '否');
+          ? t('zed.page.overdueYes', "Yes")
+          : t('zed.page.overdueNo', "No");
         items.push({
           key: 'overdue',
           variant: 'simple',
-          label: t('zed.page.overdueField', '是否欠费'),
+          label: t('zed.page.overdueField', "Overdue"),
           value: overdueValue,
           detail: updatedText,
-          title: `${t('zed.page.overdueField', '是否欠费')}: ${overdueValue}`,
+          title: `${t('zed.page.overdueField', "Overdue")}: ${overdueValue}`,
           tone: account.has_overdue_invoices ? 'low' : 'high',
         });
       }
@@ -785,7 +785,7 @@ export function ZedAccountsPage() {
             {quotaError && (
               <span className="status-pill warning" title={quotaError}>
                 <CircleAlert size={12} />
-                {t('common.shared.quota.queryFailed', '配额查询失败')}
+                {t('common.shared.quota.queryFailed', "Quota query failed")}
               </span>
             )}
             <span className={`tier-badge ${getZedPlanTone(account.plan_raw)}`}>
@@ -823,8 +823,8 @@ export function ZedAccountsPage() {
                 disabled={injecting === account.id}
                 title={
                   isCurrent
-                    ? t('zed.actions.reapply', '重新应用')
-                    : t('zed.actions.applyAndRestart', '应用并重启')
+                    ? t('zed.actions.reapply', "Reapply")
+                    : t('zed.actions.applyAndRestart', "Apply and Restart")
                 }
               >
                 {injecting === account.id ? (
@@ -836,7 +836,7 @@ export function ZedAccountsPage() {
               <button
                 className="card-action-btn"
                 onClick={() => openTagModal(account.id)}
-                title={t('accounts.editTags', '编辑标签')}
+                title={t('accounts.editTags', "Edit Tags")}
               >
                 <Tag size={14} />
               </button>
@@ -844,21 +844,21 @@ export function ZedAccountsPage() {
                 className="card-action-btn"
                 onClick={() => handleRefresh(account.id)}
                 disabled={refreshing === account.id}
-                title={t('common.shared.refreshQuota', '刷新配额')}
+                title={t('common.shared.refreshQuota', "Refresh Quota")}
               >
                 <RotateCw size={14} className={refreshing === account.id ? 'loading-spinner' : ''} />
               </button>
               <button
                 className="card-action-btn export-btn"
                 onClick={() => handleExportByIds([account.id], resolveSingleExportBaseName(account))}
-                title={t('common.shared.export.title', '导出')}
+                title={t('common.shared.export.title', "Export")}
               >
                 <Upload size={14} />
               </button>
               <button
                 className="card-action-btn danger"
                 onClick={() => handleDelete(account.id)}
-                title={t('common.delete', '删除')}
+                title={t('common.delete', "Delete")}
               >
                 <Trash2 size={14} />
               </button>
@@ -910,7 +910,7 @@ export function ZedAccountsPage() {
                 <div className="account-sub-line">
                   <span className="status-pill warning" title={quotaError}>
                     <CircleAlert size={12} />
-                    {t('common.shared.quota.queryFailed', '配额查询失败')}
+                    {t('common.shared.quota.queryFailed', "Quota query failed")}
                   </span>
                 </div>
               )}
@@ -941,8 +941,8 @@ export function ZedAccountsPage() {
                 disabled={injecting === account.id}
                 title={
                   isCurrent
-                    ? t('zed.actions.reapply', '重新应用')
-                    : t('zed.actions.applyAndRestart', '应用并重启')
+                    ? t('zed.actions.reapply', "Reapply")
+                    : t('zed.actions.applyAndRestart', "Apply and Restart")
                 }
               >
                 {injecting === account.id ? (
@@ -954,7 +954,7 @@ export function ZedAccountsPage() {
               <button
                 className="action-btn"
                 onClick={() => openTagModal(account.id)}
-                title={t('accounts.editTags', '编辑标签')}
+                title={t('accounts.editTags', "Edit Tags")}
               >
                 <Tag size={14} />
               </button>
@@ -962,21 +962,21 @@ export function ZedAccountsPage() {
                 className="action-btn"
                 onClick={() => handleRefresh(account.id)}
                 disabled={refreshing === account.id}
-                title={t('common.shared.refreshQuota', '刷新配额')}
+                title={t('common.shared.refreshQuota', "Refresh Quota")}
               >
                 <RotateCw size={14} className={refreshing === account.id ? 'loading-spinner' : ''} />
               </button>
               <button
                 className="action-btn"
                 onClick={() => handleExportByIds([account.id], resolveSingleExportBaseName(account))}
-                title={t('common.shared.export.title', '导出')}
+                title={t('common.shared.export.title', "Export")}
               >
                 <Upload size={14} />
               </button>
               <button
                 className="action-btn danger"
                 onClick={() => handleDelete(account.id)}
-                title={t('common.delete', '删除')}
+                title={t('common.delete', "Delete")}
               >
                 <Trash2 size={14} />
               </button>
@@ -999,7 +999,7 @@ export function ZedAccountsPage() {
         >
           <div className="ghcp-flow-notice-title">
             <CircleAlert size={16} />
-            <span>{t('zed.flowNotice.title', 'Zed 账号接入说明（点击展开/收起）')}</span>
+            <span>{t('zed.flowNotice.title', "Zed Account Integration Notes (click to expand/collapse)")}</span>
           </div>
           <ChevronDown size={16} className={`ghcp-flow-notice-arrow ${isFlowNoticeCollapsed ? 'collapsed' : ''}`} />
         </button>
@@ -1008,20 +1008,20 @@ export function ZedAccountsPage() {
             <div className="ghcp-flow-notice-desc">
               {t(
                 'zed.flowNotice.desc',
-                '支持官方 OAuth 登录、JSON 导入、本机当前登录状态导入，以及按 Zed 客户端真实落盘规则应用账号并重启官方客户端。页面仅展示桌面端可直接读取的状态字段。',
+                "Supports official OAuth sign-in, JSON import, importing the current local sign-in state, and applying a saved account back to the official Zed client using the client's real persistence rules. This page only shows status fields that the desktop client can read directly.",
               )}
             </div>
             <ul className="ghcp-flow-notice-list">
               <li>
                 {t(
                   'zed.flowNotice.reason',
-                  '权限范围：浏览器打开 Zed 官方同源登录；读取本机当前 Zed 登录凭据用于导入；应用账号时按官方客户端相同位点写回系统凭据，并可按需启动或重启 Zed。',
+                  "Permissions: opens the official same-origin Zed sign-in in your browser; reads the current local Zed credentials for import; writes back to the same system credential slot when applying an account; and can start or restart Zed when needed.",
                 )}
               </li>
               <li>
                 {t(
                   'zed.flowNotice.storage',
-                  '数据范围：本地仅保存导入或授权得到的账号记录、标签和导出内容；不会上传本机 Keychain/凭据原文，不会扫描浏览器网页登录会话，也不会修改无关系统凭据。',
+                  "Data handling: only imported or authorized account records, tags, and exported content are stored locally. Local Keychain or credential contents are not uploaded, browser web sessions are not scanned, and unrelated system credentials are not modified.",
                 )}
               </li>
             </ul>
@@ -1044,7 +1044,7 @@ export function ZedAccountsPage() {
             <Search size={16} className="search-icon" />
             <input
               type="text"
-              placeholder={t('zed.page.searchPlaceholder', '搜索账号、套餐或标签')}
+              placeholder={t('zed.page.searchPlaceholder', "Search GitHub login, plan, or tags")}
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
             />
@@ -1054,14 +1054,14 @@ export function ZedAccountsPage() {
             <button
               className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
               onClick={() => setViewMode('list')}
-              title={t('common.shared.view.list', '列表视图')}
+              title={t('common.shared.view.list', "List view")}
             >
               <List size={16} />
             </button>
             <button
               className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
               onClick={() => setViewMode('grid')}
-              title={t('common.shared.view.grid', '卡片视图')}
+              title={t('common.shared.view.grid', "Card view")}
             >
               <LayoutGrid size={16} />
             </button>
@@ -1071,10 +1071,10 @@ export function ZedAccountsPage() {
             options={tierFilterOptions}
             selectedValues={filterTypes}
             allLabel={`ALL (${accounts.length})`}
-            filterLabel={t('common.shared.filterLabel', '筛选')}
-            clearLabel={t('accounts.clearFilter', '清空筛选')}
-            emptyLabel={t('common.none', '暂无')}
-            ariaLabel={t('common.shared.filterLabel', '筛选')}
+            filterLabel={t('common.shared.filterLabel', "Filter")}
+            clearLabel={t('accounts.clearFilter', "Clear Filter")}
+            emptyLabel={t('common.none', "None")}
+            ariaLabel={t('common.shared.filterLabel', "Filter")}
             onToggleValue={toggleFilterTypeValue}
             onClear={clearFilterTypes}
           />
@@ -1084,12 +1084,12 @@ export function ZedAccountsPage() {
               type="button"
               className={`tag-filter-btn ${tagFilter.length > 0 ? 'active' : ''}`}
               onClick={() => setShowTagFilter((prev) => !prev)}
-              aria-label={t('accounts.filterTags', '标签筛选')}
+              aria-label={t('accounts.filterTags', "Filter Tags")}
             >
               <Tag size={14} />
               {tagFilter.length > 0
-                ? `${t('accounts.filterTagsCount', '标签')}(${tagFilter.length})`
-                : t('accounts.filterTags', '标签筛选')}
+                ? `${t('accounts.filterTagsCount', "Tags")}(${tagFilter.length})`
+                : t('accounts.filterTags', "Filter Tags")}
             </button>
             {showTagFilter && (
               <div
@@ -1097,7 +1097,7 @@ export function ZedAccountsPage() {
                 className={`tag-filter-panel ${page.tagFilterPanelPlacement === 'top' ? 'open-top' : ''}`}
               >
                 {availableTags.length === 0 ? (
-                  <div className="tag-filter-empty">{t('accounts.noAvailableTags', '暂无可用标签')}</div>
+                  <div className="tag-filter-empty">{t('accounts.noAvailableTags', "No tags available")}</div>
                 ) : (
                   <div className="tag-filter-options" style={page.tagFilterScrollContainerStyle}>
                     {availableTags.map((tag) => (
@@ -1137,11 +1137,11 @@ export function ZedAccountsPage() {
                     checked={groupByTag}
                     onChange={(event) => setGroupByTag(event.target.checked)}
                   />
-                  <span>{t('accounts.groupByTag', '按标签分组展示')}</span>
+                  <span>{t('accounts.groupByTag', "Group by tags")}</span>
                 </label>
                 {tagFilter.length > 0 && (
                   <button type="button" className="tag-filter-clear" onClick={clearTagFilter}>
-                    {t('accounts.clearFilter', '清空筛选')}
+                    {t('accounts.clearFilter', "Clear Filter")}
                   </button>
                 )}
               </div>
@@ -1151,11 +1151,11 @@ export function ZedAccountsPage() {
           <SingleSelectFilterDropdown
             value={sortBy}
             options={[
-              { value: 'created_at', label: t('common.shared.sort.createdAt', '按创建时间') },
-              { value: 'token_spend', label: t('zed.sort.tokenSpend', '按 Token Spend') },
-              { value: 'billing_end', label: t('common.shared.sort.planEnd', '按配额周期结束时间') },
+              { value: 'created_at', label: t('common.shared.sort.createdAt', "Created time") },
+              { value: 'token_spend', label: t('zed.sort.tokenSpend', "Sort by Token Spend") },
+              { value: 'billing_end', label: t('common.shared.sort.planEnd', "By cycle end time") },
             ]}
-            ariaLabel={t('common.shared.sortLabel', '排序')}
+            ariaLabel={t('common.shared.sortLabel', "Sort")}
             icon={<ArrowDownWideNarrow size={14} />}
             onChange={setSortBy}
           />
@@ -1165,10 +1165,10 @@ export function ZedAccountsPage() {
             onClick={() => setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
             title={
               sortDirection === 'desc'
-                ? t('common.shared.sort.descTooltip', '当前：降序，点击切换为升序')
-                : t('common.shared.sort.ascTooltip', '当前：升序，点击切换为降序')
+                ? t('common.shared.sort.descTooltip', "Current: Descending. Click to switch to ascending")
+                : t('common.shared.sort.ascTooltip', "Current: Ascending. Click to switch to descending")
             }
-            aria-label={t('common.shared.sort.toggleDirection', '切换排序方向')}
+            aria-label={t('common.shared.sort.toggleDirection', "Toggle sort direction")}
           >
             {sortDirection === 'desc' ? '⬇' : '⬆'}
           </button>
@@ -1178,7 +1178,7 @@ export function ZedAccountsPage() {
           <button
             className="btn btn-primary icon-only"
             onClick={() => openAddModal('oauth')}
-            title={t('zed.actions.addAccount', '登录 Zed')}
+            title={t('zed.actions.addAccount', "Login to Zed")}
           >
             <Plus size={14} />
           </button>
@@ -1186,7 +1186,7 @@ export function ZedAccountsPage() {
             className="btn btn-secondary icon-only"
             onClick={handleRefreshAll}
             disabled={refreshingAll || accounts.length === 0}
-            title={t('common.shared.refreshAll', '刷新全部')}
+            title={t('common.shared.refreshAll', "Refresh All")}
           >
             <RefreshCw size={14} className={refreshingAll ? 'loading-spinner' : ''} />
           </button>
@@ -1195,8 +1195,8 @@ export function ZedAccountsPage() {
             onClick={togglePrivacyMode}
             title={
               privacyModeEnabled
-                ? t('privacy.showSensitive', '显示邮箱')
-                : t('privacy.hideSensitive', '隐藏邮箱')
+                ? t('privacy.showSensitive', "Show emails")
+                : t('privacy.hideSensitive', "Hide emails")
             }
           >
             {privacyModeEnabled ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -1205,7 +1205,7 @@ export function ZedAccountsPage() {
             className="btn btn-secondary icon-only"
             onClick={() => openAddModal('import')}
             disabled={importing}
-            title={t('common.shared.import.label', '导入')}
+            title={t('common.shared.import.label', "Import")}
           >
             <Download size={14} />
           </button>
@@ -1215,8 +1215,8 @@ export function ZedAccountsPage() {
             disabled={exporting || filteredIds.length === 0}
             title={
               exportSelectionCount > 0
-                ? `${t('common.shared.export.title', '导出')} (${exportSelectionCount})`
-                : t('common.shared.export.title', '导出')
+                ? `${t('common.shared.export.title', "Export")} (${exportSelectionCount})`
+                : t('common.shared.export.title', "Export")
             }
           >
             <Upload size={14} />
@@ -1225,7 +1225,7 @@ export function ZedAccountsPage() {
             <button
               className="btn btn-danger icon-only"
               onClick={handleBatchDelete}
-              title={`${t('common.delete', '删除')} (${selected.size})`}
+              title={`${t('common.delete', "Delete")} (${selected.size})`}
             >
               <Trash2 size={14} />
             </button>
@@ -1237,21 +1237,21 @@ export function ZedAccountsPage() {
       {loading && accounts.length === 0 ? (
         <div className="loading-container">
           <RefreshCw size={24} className="loading-spinner" />
-          <p>{t('common.loading', '加载中...')}</p>
+          <p>{t('common.loading', "Loading...")}</p>
         </div>
       ) : accounts.length === 0 ? (
         <div className="empty-state">
-          <h3>{t('common.shared.empty.title', '暂无账号')}</h3>
-          <p>{t('zed.empty.description', '点击“添加账号”开始管理你的 Zed 账号。')}</p>
+          <h3>{t('common.shared.empty.title', "No Accounts")}</h3>
+          <p>{t('zed.empty.description', "Click \"Add Account\" to start managing your Zed accounts, or import them from JSON or the current local sign-in state.")}</p>
           <button className="btn btn-primary" onClick={() => openAddModal('oauth')}>
             <Plus size={16} />
-            {t('common.shared.addAccount', '添加账号')}
+            {t('common.shared.addAccount', "Add Account")}
           </button>
         </div>
       ) : filteredAccounts.length === 0 ? (
         <div className="empty-state">
-          <h3>{t('common.shared.noMatch.title', '没有匹配的账号')}</h3>
-          <p>{t('common.shared.noMatch.desc', '请尝试调整搜索或筛选条件')}</p>
+          <h3>{t('common.shared.noMatch.title', "No matching accounts")}</h3>
+          <p>{t('common.shared.noMatch.desc', "Try adjusting your search or filters")}</p>
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid-view-container">
@@ -1259,7 +1259,7 @@ export function ZedAccountsPage() {
             <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
                 <input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} />
-                {t('common.selectAll', '全选')}
+                {t('common.selectAll', "Select All")}
               </label>
             </div>
           )}
@@ -1362,11 +1362,11 @@ export function ZedAccountsPage() {
         <div className="modal-overlay" onClick={closeAddModal}>
           <div className="modal-content ghcp-add-modal zed-add-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
-              <h2>{t('zed.addModal.title', '添加 Zed 账号')}</h2>
+              <h2>{t('zed.addModal.title', "Add Zed Account")}</h2>
               <button
                 className="modal-close"
                 onClick={closeAddModal}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>
@@ -1378,7 +1378,7 @@ export function ZedAccountsPage() {
                 onClick={() => openAddModal('oauth')}
               >
                 <Globe size={14} />
-                {t('common.shared.addModal.oauth', 'OAuth 授权')}
+                {t('common.shared.addModal.oauth', "OAuth Authorization")}
               </button>
               <button
                 className={`modal-tab ${addTab === 'token' ? 'active' : ''}`}
@@ -1393,7 +1393,7 @@ export function ZedAccountsPage() {
                   onClick={() => openAddModal('import')}
                 >
                   <Database size={14} />
-                  {t('accounts.tabs.import', '导入')}
+                  {t('accounts.tabs.import', "Import")}
                 </button>
               )}
             </div>
@@ -1402,20 +1402,20 @@ export function ZedAccountsPage() {
               {addTab === 'oauth' && (
                 <div className="add-section">
                   <p className="section-desc">
-                    {t('zed.oauth.desc', '点击下方按钮，在浏览器中完成 Zed 官方登录授权。')}
+                    {t('zed.oauth.desc', "Click the button below to complete the official Zed login authentication in your browser.")}
                   </p>
                   {oauthPrepareError ? (
                     <div className="add-status error">
                       <CircleAlert size={16} />
                       <span>{oauthPrepareError}</span>
                       <button className="btn btn-sm btn-outline" onClick={handleRetryOauth}>
-                        {t('common.shared.oauth.retry', '重新生成授权信息')}
+                        {t('common.shared.oauth.retry', "Regenerate authorization info")}
                       </button>
                     </div>
                   ) : oauthUrl ? (
                     <div className="oauth-url-section">
                       <div className="oauth-link">
-                        <label>{t('accounts.oauth.linkLabel', '授权链接')}</label>
+                        <label>{t('accounts.oauth.linkLabel', "Authorization link")}</label>
                         <div className="oauth-url-box">
                           <input type="text" value={oauthUrl} readOnly />
                           <button onClick={handleCopyOauthUrl}>
@@ -1425,7 +1425,7 @@ export function ZedAccountsPage() {
                       </div>
                       {oauthMeta ? (
                         <p className="oauth-hint">
-                          {t('common.shared.oauth.meta', '授权有效期：{{expires}}s；轮询间隔：{{interval}}s', {
+                          {t('common.shared.oauth.meta', "Expires in: {{expires}}s; Poll interval: {{interval}}s", {
                             expires: oauthMeta.expiresIn,
                             interval: oauthMeta.intervalSeconds,
                           })}
@@ -1433,11 +1433,11 @@ export function ZedAccountsPage() {
                       ) : null}
                       <button className="btn btn-primary btn-full" onClick={handleOpenOauthUrl}>
                         <Globe size={16} />
-                        {t('common.shared.oauth.openBrowser', '在浏览器中打开')}
+                        {t('common.shared.oauth.openBrowser', "Open in Browser")}
                       </button>
                       {oauthSupportsManualCallback && (
                         <div className="oauth-link">
-                          <label>{t('common.shared.oauth.manualCallbackLabel', '手动输入回调地址')}</label>
+                          <label>{t('common.shared.oauth.manualCallbackLabel', "Manual callback URL")}</label>
                           <div className="oauth-url-box oauth-manual-input">
                             <input
                               type="text"
@@ -1445,7 +1445,7 @@ export function ZedAccountsPage() {
                               onChange={(event) => setOauthManualCallbackInput(event.target.value)}
                               placeholder={t(
                                 'common.shared.oauth.manualCallbackPlaceholder',
-                                '粘贴完整回调地址，例如：http://localhost:1455/auth/callback?code=...&state=...',
+                                "Paste the full callback URL, e.g. http://localhost:1455/auth/callback?code=...&state=...",
                               )}
                             />
                             <button
@@ -1458,7 +1458,7 @@ export function ZedAccountsPage() {
                               ) : (
                                 <Check size={16} />
                               )}
-                              {t('accounts.oauth.continue', '我已授权，继续')}
+                              {t('accounts.oauth.continue', "I've authorized, continue")}
                             </button>
                           </div>
                         </div>
@@ -1472,7 +1472,7 @@ export function ZedAccountsPage() {
                       {oauthPolling ? (
                         <div className="add-status loading">
                           <RefreshCw size={16} className="loading-spinner" />
-                          <span>{t('common.shared.oauth.waiting', '等待授权完成...')}</span>
+                          <span>{t('common.shared.oauth.waiting', "Waiting for authorization...")}</span>
                         </div>
                       ) : null}
                       {oauthCompleteError ? (
@@ -1481,7 +1481,7 @@ export function ZedAccountsPage() {
                           <span>{oauthCompleteError}</span>
                           {oauthTimedOut ? (
                             <button className="btn btn-sm btn-outline" onClick={handleRetryOauth}>
-                              {t('common.shared.oauth.timeoutRetry', '刷新授权链接')}
+                              {t('common.shared.oauth.timeoutRetry', "Refresh authorization link")}
                             </button>
                           ) : (
                             <button className="btn btn-sm btn-outline" onClick={handleRetryOauthComplete}>
@@ -1497,7 +1497,7 @@ export function ZedAccountsPage() {
                   ) : (
                     <div className="oauth-loading">
                       <RefreshCw size={24} className="loading-spinner" />
-                      <span>{t('common.shared.oauth.preparing', '正在准备授权信息...')}</span>
+                      <span>{t('common.shared.oauth.preparing', "Preparing authorization info...")}</span>
                     </div>
                   )}
                 </div>
@@ -1506,7 +1506,7 @@ export function ZedAccountsPage() {
               {addTab === 'token' && (
                 <div className="add-section">
                   <p className="section-desc">
-                    {t('zed.import.jsonDesc', '导入由本工具导出的 Zed JSON 文件。')}
+                    {t('zed.import.jsonDesc', "Import a Zed JSON file exported by this tool.")}
                   </p>
                   <textarea
                     className="token-input"
@@ -1514,7 +1514,7 @@ export function ZedAccountsPage() {
                     onChange={(event) => setTokenInput(event.target.value)}
                     placeholder={t(
                       'common.shared.token.placeholder',
-                      '示例：ghu_xxx / sk-ws-xxx / {"access_token":"eyJ...","refresh_token":"rt_..."} / [{...}]',
+                      "Example: ghu_xxx / sk-ws-xxx / {\"access_token\":\"eyJ...\",\"refresh_token\":\"rt_...\"} / [{...}]",
                     )}
                   />
                   <button
@@ -1527,7 +1527,7 @@ export function ZedAccountsPage() {
                     ) : (
                       <Download size={16} />
                     )}
-                    {t('common.shared.token.import', '导入')}
+                    {t('common.shared.token.import', "Import")}
                   </button>
                 </div>
               )}
@@ -1535,7 +1535,7 @@ export function ZedAccountsPage() {
               {isMacOS && addTab === 'import' && (
                 <div className="add-section">
                   <p className="section-desc">
-                    {t('zed.import.localDesc', '支持从本机 Zed 当前登录状态或导出的 JSON 文件导入账号数据。')}
+                    {t('zed.import.localDesc', "Import account data from the current local Zed sign-in state or an exported JSON file.")}
                   </p>
                   <button
                     className="btn btn-secondary btn-full"
@@ -1547,10 +1547,10 @@ export function ZedAccountsPage() {
                     ) : (
                       <Database size={16} />
                     )}
-                    {t('common.shared.addModal.import', '本地导入')}
+                    {t('common.shared.addModal.import', "Local Import")}
                   </button>
                   <div className="oauth-hint" style={{ margin: '8px 0 4px' }}>
-                    {t('common.shared.import.orJson', '或从 JSON 文件导入')}
+                    {t('common.shared.import.orJson', "Or import from JSON file")}
                   </div>
                   <input
                     ref={importFileInputRef}
@@ -1574,7 +1574,7 @@ export function ZedAccountsPage() {
                     ) : (
                       <Database size={16} />
                     )}
-                    {t('common.shared.import.pickFile', '选择 JSON 文件导入')}
+                    {t('common.shared.import.pickFile', "Select JSON file to import")}
                   </button>
                 </div>
               )}
@@ -1592,7 +1592,7 @@ export function ZedAccountsPage() {
 
       <ExportJsonModal
         isOpen={showExportModal}
-        title={t('zed.actions.exportTitle', '导出 Zed 账号 JSON')}
+        title={t('zed.actions.exportTitle', "Export Zed Accounts JSON")}
         jsonContent={exportJsonContent}
         hidden={exportJsonHidden}
         copied={exportJsonCopied}
@@ -1616,7 +1616,7 @@ export function ZedAccountsPage() {
               <button
                 className="modal-close"
                 onClick={() => !deleting && setDeleteConfirm(null)}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>
@@ -1645,7 +1645,7 @@ export function ZedAccountsPage() {
               <button
                 className="modal-close"
                 onClick={() => !deletingTag && setTagDeleteConfirm(null)}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>
@@ -1668,7 +1668,7 @@ export function ZedAccountsPage() {
                 {t('common.cancel')}
               </button>
               <button className="btn btn-danger" onClick={confirmDeleteTag} disabled={deletingTag}>
-                {deletingTag ? t('common.processing', '处理中...') : t('common.confirm')}
+                {deletingTag ? t('common.processing', "Processing...") : t('common.confirm')}
               </button>
             </div>
           </div>

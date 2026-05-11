@@ -250,16 +250,16 @@ export function CodexModelProviderManager({
     (err: unknown): string => {
       const raw = String(err ?? '');
       if (raw.includes('PROVIDER_NAME_REQUIRED')) {
-        return t('codex.modelProviders.validation.nameRequired', '供应商名称不能为空');
+        return t('codex.modelProviders.validation.nameRequired', "Provider name is required.");
       }
       if (raw.includes('PROVIDER_BASE_URL_INVALID')) {
-        return t('codex.modelProviders.validation.baseUrlInvalid', 'Base URL 格式无效');
+        return t('codex.modelProviders.validation.baseUrlInvalid', "Invalid Base URL.");
       }
       if (raw.includes('PROVIDER_BASE_URL_EXISTS')) {
-        return t('codex.modelProviders.validation.baseUrlExists', '该 Base URL 已存在');
+        return t('codex.modelProviders.validation.baseUrlExists', "This Base URL already exists.");
       }
       if (raw.includes('PROVIDER_NOT_FOUND')) {
-        return t('codex.modelProviders.validation.providerNotFound', '供应商不存在');
+        return t('codex.modelProviders.validation.providerNotFound', "Provider not found.");
       }
       return raw.replace(/^Error:\s*/, '');
     },
@@ -279,19 +279,19 @@ export function CodexModelProviderManager({
     const existingKeyCount = currentEditingProvider?.apiKeys.length ?? 0;
 
     if (!name) {
-      setFormError(t('codex.modelProviders.validation.nameRequired', '供应商名称不能为空'));
+      setFormError(t('codex.modelProviders.validation.nameRequired', "Provider name is required."));
       return;
     }
     if (!normalizedBaseUrl) {
-      setFormError(t('codex.modelProviders.validation.baseUrlInvalid', 'Base URL 格式无效'));
+      setFormError(t('codex.modelProviders.validation.baseUrlInvalid', "Invalid Base URL."));
       return;
     }
     if (isCreate && !newApiKey) {
-      setFormError(t('codex.modelProviders.validation.apiKeyRequiredOnCreate', '新增供应商时必须至少填写一个 API Key'));
+      setFormError(t('codex.modelProviders.validation.apiKeyRequiredOnCreate', "At least one API Key is required when creating a provider."));
       return;
     }
     if (!isCreate && existingKeyCount === 0 && !newApiKey) {
-      setFormError(t('codex.modelProviders.validation.apiKeyRequiredWhenEmpty', '当前供应商没有可用 API Key，请先添加一个'));
+      setFormError(t('codex.modelProviders.validation.apiKeyRequiredWhenEmpty', "This provider has no API key yet. Please add one first."));
       return;
     }
 
@@ -323,7 +323,7 @@ export function CodexModelProviderManager({
       setFormError(null);
       setNotice({
         tone: 'success',
-        text: t('codex.modelProviders.saveSuccess', '模型供应商已保存'),
+        text: t('codex.modelProviders.saveSuccess', "Model provider saved."),
       });
     } catch (err) {
       setFormError(parseServiceError(err));
@@ -351,10 +351,10 @@ export function CodexModelProviderManager({
           name: provider.name,
         }),
         {
-          title: t('common.confirm', '确认'),
+          title: t('common.confirm', "Confirm"),
           kind: 'warning',
-          okLabel: t('common.delete', '删除'),
-          cancelLabel: t('common.cancel', '取消'),
+          okLabel: t('common.delete', "Delete"),
+          cancelLabel: t('common.cancel', "Cancel"),
         },
       );
       if (!confirmed) return;
@@ -397,7 +397,7 @@ export function CodexModelProviderManager({
       {notice && (
         <div className={`message-bar ${notice.tone === 'error' ? 'error' : 'success'}`}>
           {notice.text}
-          <button onClick={() => setNotice(null)} aria-label={t('common.close', '关闭')}>
+          <button onClick={() => setNotice(null)} aria-label={t('common.close', "Close")}>
             <X size={14} />
           </button>
         </div>
@@ -413,7 +413,7 @@ export function CodexModelProviderManager({
             <Search className="search-icon" size={16} />
             <input
               type="text"
-              placeholder={t('common.search', '搜索...')}
+              placeholder={t('common.search', 'Search...')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -423,16 +423,16 @@ export function CodexModelProviderManager({
           {onManageModelPresets && (
             <button className="btn btn-secondary" onClick={onManageModelPresets}>
               <Settings size={14} />
-              {t('codex.modelProviders.managePresets', '模型预设')}
+              {t('codex.modelProviders.managePresets', "Model Presets")}
             </button>
           )}
           <button className="btn btn-secondary" onClick={() => setShowQuickConfigModal(true)}>
             <Settings size={14} />
-            {t('codex.modelProviders.quickConfig.title', '当前 Codex 配置')}
+            {t('codex.modelProviders.quickConfig.title', "Current Codex Config")}
           </button>
           <button className="btn btn-primary" onClick={openCreateModal}>
             <Plus size={14} />
-            {t('codex.modelProviders.add', '新增供应商')}
+            {t('codex.modelProviders.add', "Add Provider")}
           </button>
         </div>
       </div>
@@ -440,16 +440,16 @@ export function CodexModelProviderManager({
       {error && <div className="add-status error"><CircleAlert size={16} /><span>{error}</span></div>}
 
       {loading ? (
-        <div className="section-desc">{t('common.loading', '加载中...')}</div>
+        <div className="section-desc">{t('common.loading', "Loading...")}</div>
       ) : providers.length === 0 ? (
         <div className="empty-state">
-          <h3>{t('codex.modelProviders.emptyTitle', '暂无模型供应商')}</h3>
-          <p>{t('codex.modelProviders.emptyDesc', '点击右上角“新增供应商”开始维护。')}</p>
+          <h3>{t('codex.modelProviders.emptyTitle', "No model providers yet")}</h3>
+          <p>{t('codex.modelProviders.emptyDesc', "Click \"Add Provider\" in the top right to start.")}</p>
         </div>
       ) : filteredProviders.length === 0 ? (
         <div className="empty-state">
-          <h3>{t('codex.modelProviders.noMatchTitle', '没有匹配的供应商')}</h3>
-          <p>{t('common.shared.noMatch.desc', '请尝试调整搜索或筛选条件')}</p>
+          <h3>{t('codex.modelProviders.noMatchTitle', 'No matching providers')}</h3>
+          <p>{t('common.shared.noMatch.desc', "Try adjusting your search or filters")}</p>
         </div>
       ) : (
         <div className="codex-provider-grid">
@@ -463,14 +463,14 @@ export function CodexModelProviderManager({
                     <button
                       className="action-btn"
                       onClick={() => openEditModal(provider)}
-                      title={t('instances.actions.edit', '编辑')}
+                      title={t('instances.actions.edit', "Edit")}
                     >
                       <Pencil size={14} />
                     </button>
                     <button
                       className="action-btn danger"
                       onClick={() => void handleDeleteProvider(provider)}
-                      title={t('common.delete', '删除')}
+                      title={t('common.delete', "Delete")}
                     >
                       <Trash2 size={14} />
                     </button>
@@ -485,13 +485,13 @@ export function CodexModelProviderManager({
                     {provider.website && (
                       <a href={provider.website} target="_blank" rel="noreferrer">
                         <ExternalLink size={12} />
-                        {t('codex.modelProviders.website', '官网')}
+                        {t('codex.modelProviders.website', "Website")}
                       </a>
                     )}
                     {provider.apiKeyUrl && (
                       <a href={provider.apiKeyUrl} target="_blank" rel="noreferrer">
                         <KeyRound size={12} />
-                        {t('codex.modelProviders.apiKeyPage', 'API Key 页面')}
+                        {t('codex.modelProviders.apiKeyPage', "API Key Page")}
                       </a>
                     )}
                   </div>
@@ -516,14 +516,14 @@ export function CodexModelProviderManager({
                       <div className="codex-provider-key-row" key={item.id}>
                         <div className="codex-provider-key-text">
                           <span className="codex-provider-key-name">
-                            {item.name || t('codex.modelProviders.unnamedKey', '未命名 Key')}
+                            {item.name || t('codex.modelProviders.unnamedKey', "Unnamed Key")}
                           </span>
                           <code>{maskApiKey(item.apiKey)}</code>
                         </div>
                         <button
                           className="action-btn danger"
                           onClick={() => void handleDeleteApiKey(provider, item)}
-                          title={t('common.delete', '删除')}
+                          title={t('common.delete', "Delete")}
                         >
                           <Trash2 size={12} />
                         </button>
@@ -543,13 +543,13 @@ export function CodexModelProviderManager({
             <div className="modal-header">
               <h2>
                 {form.providerId
-                  ? t('codex.modelProviders.editTitle', '编辑模型供应商')
-                  : t('codex.modelProviders.createTitle', '新增模型供应商')}
+                  ? t('codex.modelProviders.editTitle', "Edit Model Provider")
+                  : t('codex.modelProviders.createTitle', "Add Model Provider")}
               </h2>
               <button
                 className="modal-close"
                 onClick={closeModal}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
                 disabled={saving}
               >
                 <X />
@@ -557,7 +557,7 @@ export function CodexModelProviderManager({
             </div>
             <div className="modal-body">
               <div className="form-group">
-                <label>{t('codex.api.provider.label', '供应商')}</label>
+                <label>{t('codex.api.provider.label', "Provider")}</label>
                 <div className="api-provider-chip-list">
                   <button
                     className={`api-provider-chip ${selectedPresetId === CODEX_API_PROVIDER_CUSTOM_ID ? 'active' : ''}`}
@@ -565,7 +565,7 @@ export function CodexModelProviderManager({
                     type="button"
                     disabled={saving}
                   >
-                    <span>{t('codex.api.provider.custom', '自定义')}</span>
+                    <span>{t('codex.api.provider.custom', "Custom")}</span>
                   </button>
                   {CODEX_API_PROVIDER_PRESETS.map((preset) => (
                     <button
@@ -583,7 +583,7 @@ export function CodexModelProviderManager({
               </div>
               {selectedPreset && selectedPreset.baseUrls.length > 1 && (
                 <div className="form-group">
-                  <label>{t('codex.api.provider.endpoint', '供应商端点')}</label>
+                  <label>{t('codex.api.provider.endpoint', "Provider Endpoint")}</label>
                   <div className="api-provider-endpoint-list">
                     {selectedPreset.baseUrls.map((baseUrl) => (
                       <button
@@ -602,26 +602,26 @@ export function CodexModelProviderManager({
               {selectedPreset && (
                 <div className="api-provider-hint-block">
                   <p className="api-provider-hint">
-                    {t('codex.api.provider.hint', '已自动填写兼容 Base URL，可继续手动调整。')}
+                    {t('codex.api.provider.hint', "A compatible Base URL has been filled in automatically. You can still edit it manually.")}
                   </p>
                   <div className="api-provider-links">
                     {selectedPreset.website && (
                       <a className="btn btn-secondary" href={selectedPreset.website} target="_blank" rel="noreferrer">
                         <ExternalLink size={14} />
-                        {t('codex.api.provider.website', '官网')}
+                        {t('codex.api.provider.website', "Website")}
                       </a>
                     )}
                     {selectedPreset.apiKeyUrl && (
                       <a className="btn btn-secondary" href={selectedPreset.apiKeyUrl} target="_blank" rel="noreferrer">
                         <KeyRound size={14} />
-                        {t('codex.api.provider.apiKeyPage', 'API Key 页面')}
+                        {t('codex.api.provider.apiKeyPage', "API Key Page")}
                       </a>
                     )}
                   </div>
                 </div>
               )}
               <div className="form-group">
-                <label>{t('codex.modelProviders.fields.name', '供应商名称')}</label>
+                <label>{t('codex.modelProviders.fields.name', "Provider Name")}</label>
                 <input
                   className="form-input"
                   type="text"
@@ -641,7 +641,7 @@ export function CodexModelProviderManager({
                 />
               </div>
               <div className="form-group">
-                <label>{t('codex.modelProviders.fields.website', '官网（可选）')}</label>
+                <label>{t('codex.modelProviders.fields.website', "Website (Optional)")}</label>
                 <input
                   className="form-input"
                   type="text"
@@ -651,7 +651,7 @@ export function CodexModelProviderManager({
                 />
               </div>
               <div className="form-group">
-                <label>{t('codex.modelProviders.fields.apiKeyUrl', 'API Key 页面（可选）')}</label>
+                <label>{t('codex.modelProviders.fields.apiKeyUrl', "API Key Page (Optional)")}</label>
                 <input
                   className="form-input"
                   type="text"
@@ -663,13 +663,13 @@ export function CodexModelProviderManager({
 
               {currentEditingProvider && currentEditingProvider.apiKeys.length > 0 && (
                 <div className="form-group">
-                  <label>{t('codex.modelProviders.existingApiKeys', '现有 API Keys')}</label>
+                  <label>{t('codex.modelProviders.existingApiKeys', "Existing API Keys")}</label>
                   <div className="codex-provider-key-list inline">
                     {currentEditingProvider.apiKeys.map((item) => (
                       <div className="codex-provider-key-row" key={item.id}>
                         <div className="codex-provider-key-text">
                           <span className="codex-provider-key-name">
-                            {item.name || t('codex.modelProviders.unnamedKey', '未命名 Key')}
+                            {item.name || t('codex.modelProviders.unnamedKey', "Unnamed Key")}
                           </span>
                           <code>{maskApiKey(item.apiKey)}</code>
                         </div>
@@ -677,7 +677,7 @@ export function CodexModelProviderManager({
                           className="action-btn danger"
                           onClick={() => void handleDeleteApiKey(currentEditingProvider, item)}
                           disabled={saving}
-                          title={t('common.delete', '删除')}
+                          title={t('common.delete', "Delete")}
                         >
                           <Trash2 size={12} />
                         </button>
@@ -688,7 +688,7 @@ export function CodexModelProviderManager({
               )}
 
               <div className="form-group">
-                <label>{t('codex.modelProviders.fields.newApiKeyName', '新增 Key 名称（可选）')}</label>
+                <label>{t('codex.modelProviders.fields.newApiKeyName', "New Key Name (Optional)")}</label>
                 <input
                   className="form-input"
                   type="text"
@@ -698,7 +698,7 @@ export function CodexModelProviderManager({
                 />
               </div>
               <div className="form-group">
-                <label>{t('codex.modelProviders.fields.newApiKey', '新增 API Key')}</label>
+                <label>{t('codex.modelProviders.fields.newApiKey', "New API Key")}</label>
                 <input
                   className="form-input"
                   type="text"
@@ -711,16 +711,16 @@ export function CodexModelProviderManager({
               <div className="provider-save-preview">
                 <div className="provider-save-preview-header">
                   <div className="provider-save-preview-title">
-                    {t('codex.modelProviders.preview.title', '保存预览')}
+                    {t('codex.modelProviders.preview.title', "Save Preview")}
                   </div>
                   <span className="provider-save-preview-chip primary">
-                    {t('codex.modelProviders.preview.writeNow', '会写入')}
+                    {t('codex.modelProviders.preview.writeNow', "Will Write")}
                   </span>
                 </div>
                 <p className="provider-save-preview-desc">
                   {t(
                     'codex.modelProviders.preview.desc',
-                    '保存供应商时会先更新供应商仓库；不会因为这次操作立刻切换官方 Codex 的当前配置。',
+                    "Saving a provider updates the provider store first. It does not switch the current official Codex config immediately.",
                   )}
                 </p>
                 <div className="provider-save-preview-list">
@@ -729,18 +729,18 @@ export function CodexModelProviderManager({
                       <span className="provider-save-preview-item-title">
                         {t(
                           'codex.modelProviders.preview.providerStoreTitle',
-                          '模型供应商仓库',
+                          "Provider Store",
                         )}
                       </span>
                       <span className="provider-save-preview-chip primary">
-                        {t('codex.modelProviders.preview.writeNow', '会写入')}
+                        {t('codex.modelProviders.preview.writeNow', "Will Write")}
                       </span>
                     </div>
                     <code>{previewPaths.providerStorePath}</code>
                     <p>
                       {t(
                         'codex.modelProviders.preview.providerStoreDesc',
-                        '保存供应商名称、Base URL、官网/API Key 页面链接，以及本弹框新增的 API Key。',
+                        "Saves the provider name, Base URL, website/API Key page links, and any new API key added in this modal.",
                       )}
                     </p>
                   </div>
@@ -750,13 +750,13 @@ export function CodexModelProviderManager({
                       <span className="provider-save-preview-item-title">
                         {t(
                           'codex.modelProviders.preview.codexConfigTitle',
-                          '当前 Codex 配置',
+                          "Current Codex Config",
                         )}
                       </span>
                       <span className="provider-save-preview-chip muted">
                         {t(
                           'codex.modelProviders.preview.noImmediateChange',
-                          '不会立即修改',
+                          "No Immediate Change",
                         )}
                       </span>
                     </div>
@@ -764,7 +764,7 @@ export function CodexModelProviderManager({
                     <p>
                       {t(
                         'codex.modelProviders.preview.codexConfigDesc',
-                        '不会立即改动当前 provider 或 Base URL；只有在保存或切换 Codex API Key 账号时才会更新。',
+                        "The current provider or Base URL will not change right away. That file updates only when a Codex API-key account is saved or switched.",
                       )}
                     </p>
                   </div>
@@ -774,13 +774,13 @@ export function CodexModelProviderManager({
                       <span className="provider-save-preview-item-title">
                         {t(
                           'codex.modelProviders.preview.authFileTitle',
-                          '当前 Codex 登录凭据',
+                          "Current Codex Credentials",
                         )}
                       </span>
                       <span className="provider-save-preview-chip muted">
                         {t(
                           'codex.modelProviders.preview.noImmediateChange',
-                          '不会立即修改',
+                          "No Immediate Change",
                         )}
                       </span>
                     </div>
@@ -788,7 +788,7 @@ export function CodexModelProviderManager({
                     <p>
                       {t(
                         'codex.modelProviders.preview.authFileDesc',
-                        '不会因为保存供应商而覆盖当前 auth.json 中的 OPENAI_API_KEY。',
+                        "Saving a provider does not overwrite the current OPENAI_API_KEY in auth.json.",
                       )}
                     </p>
                   </div>
@@ -805,14 +805,14 @@ export function CodexModelProviderManager({
             
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={closeModal} disabled={saving}>
-                {t('common.cancel', '取消')}
+                {t('common.cancel', "Cancel")}
               </button>
               <button
                 className="btn btn-primary"
                 onClick={() => void handleSaveProvider()}
                 disabled={saving}
               >
-                {saving ? t('common.saving', '保存中...') : t('common.save', '保存')}
+                {saving ? t('common.saving', "Saving...") : t('common.save', "Save")}
               </button>
             </div>
           </div>

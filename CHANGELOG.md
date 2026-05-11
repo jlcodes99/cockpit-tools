@@ -1,8 +1,8 @@
 # Changelog
 
-English · [简体中文](CHANGELOG.zh-CN.md)
+English
 
-All notable changes to Cockpit Tools will be documented in this file.
+All notable changes to Switchme will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
@@ -53,7 +53,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 - **Codex account imports now refresh OAuth quota data in the backend**: local, JSON, and file imports refresh imported OAuth accounts after saving, skip API Key accounts, then update account and tray state from the refreshed records.
 - **Codex import bundles now accept more portable JSON shapes**: remote and pasted JSON imports can read root arrays, nested string payloads, direct Codex token objects, and JSON Lines with one account object per line.
-- **Codex portable export output now normalizes Cockpit Tools JSON**: Cockpit Tools exports produce portable token/API-key JSON, while CPA documents preserve token refresh and expiry metadata.
+- **Codex portable export output now normalizes Switchme JSON**: Switchme exports produce portable token/API-key JSON, while CPA documents preserve token refresh and expiry metadata.
 - **Codex PRO plan handling now aligns bare `pro` accounts with CPA 20x semantics**: accounts without an explicit `prolite` marker are shown as PRO Max/20x and ranked as the 20x tier by Local API Service routing.
 - **Codex session-visibility repair now keeps only the latest repair backup per instance**: old session-visibility repair backup directories are pruned before running a new repair to avoid long-term backup buildup.
 
@@ -294,7 +294,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.21.4] - 2026-04-16
 
 ### Added
-- **Codex account export now supports Cockpit Tools, sub2api, and CPA formats**: the export dialog can switch formats before preview, copy, or save so Codex credentials can be moved directly into each target tool.
+- **Codex account export now supports Switchme, sub2api, and CPA formats**: the export dialog can switch formats before preview, copy, or save so Codex credentials can be moved directly into each target tool.
 - **Instance account pickers now support tag filtering while binding accounts**: instance dropdowns can search and narrow accounts by tags, making large account pools easier to bind without memorizing email addresses.
 - **Account pages now support keyboard refresh shortcuts**: `Cmd/Ctrl + R` and `F5` on Windows trigger the visible page refresh action without clicking the toolbar button.
 
@@ -486,13 +486,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 - **Sidebar layout configuration now supports mode-specific behavior across Settings and platform layout management**: Settings now provides an `Original / Classic` layout selector, first-time entry into classic mode syncs sidebar entries from dashboard visibility, and the platform layout modal now allows unlimited sidebar selections in classic mode while keeping the original mode limit.
 - **Antigravity account quota display groups are now fixed to built-in model families (Claude / Gemini Pro / Gemini Flash)**: account page rendering now uses predefined display groups directly, and no longer depends on manual group-settings configuration.
-- **Documentation now includes Arch Linux AUR installation paths**: README and README.en.md now document both source-built (`cockpit-tools`) and prebuilt (`cockpit-tools-bin`) AUR packages.
+- **Documentation now includes Arch Linux AUR installation paths**: README and README.en.md now document both source-built (`switchme`) and prebuilt (`switchme-bin`) AUR packages.
 
 ---
 ## [0.20.8] - 2026-03-24
 
 ### Fixed
-- **macOS shell-launched proxy environments now remain effective when Cockpit's in-app global proxy is not explicitly enabled**: app startup and config saves now restore the proxy variables inherited at launch instead of clearing them outright, so workflows such as `export http_proxy=... && open -a 'Cockpit Tools'` continue to work unless users intentionally override proxy settings inside the app.
+- **macOS shell-launched proxy environments now remain effective when Cockpit's in-app global proxy is not explicitly enabled**: app startup and config saves now restore the proxy variables inherited at launch instead of clearing them outright, so workflows such as `export http_proxy=... && open -a 'Switchme'` continue to work unless users intentionally override proxy settings inside the app.
 
 ---
 ## [0.20.7] - 2026-03-24
@@ -873,7 +873,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.12.3] - 2026-03-11
 
 ### Fixed
-- **macOS permission prompts no longer attribute to Cockpit Tools**: All IDE launches (Codex, VS Code, CodeBuddy) on macOS now use `open -a` via LaunchServices instead of direct binary execution, so macOS TCC permission dialogs (e.g. Downloads folder access) correctly attribute to the launched IDE rather than Cockpit Tools. Multi-instance PID tracking is preserved through post-launch process polling.
+- **macOS permission prompts no longer attribute to Switchme**: All IDE launches (Codex, VS Code, CodeBuddy) on macOS now use `open -a` via LaunchServices instead of direct binary execution, so macOS TCC permission dialogs (e.g. Downloads folder access) correctly attribute to the launched IDE rather than Switchme. Multi-instance PID tracking is preserved through post-launch process polling.
 
 ---
 ## [0.12.2] - 2026-03-11
@@ -1268,17 +1268,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.8.12] - 2026-02-22
 
 ### Added
-- **One-command GitHub Release + Homebrew Cask publisher**: Added `scripts/release/publish_github_release_and_cask.cjs` and `npm run release:github-and-cask` to build a `universal.dmg`, upload assets to GitHub Release, and update `Casks/cockpit-tools.rb` (with `--skip-build` / `--skip-gh` / `--skip-cask` / `--dry-run` support).
+- **One-command GitHub Release + Homebrew Cask publisher**: Added `scripts/release/publish_github_release_and_cask.cjs` and `npm run release:github-and-cask` to build a `universal.dmg`, upload assets to GitHub Release, and update `Casks/Switchme.rb` (with `--skip-build` / `--skip-gh` / `--skip-cask` / `--dry-run` support).
 
 ### Changed
 - **Startup app-path detection strategy**: On startup, the app now loads local config first, probes only platforms without configured paths, and staggers detection calls with a small delay to reduce bursts of system path-detection commands.
 - **Release-process docs expanded for Homebrew flow**: Updated `docs/release-process.md` with recommended `universal` build flow, checksum generation examples, GitHub CLI/Rust target prerequisites, and cask update ordering notes.
-- **Release workflow restores automatic Homebrew Cask updates**: `release.yml` now restores the `update-homebrew-cask` job to compute `sha256` from the published `*_universal.dmg`, update `Casks/cockpit-tools.rb`, and open a cask PR after release assets are available.
+- **Release workflow restores automatic Homebrew Cask updates**: `release.yml` now restores the `update-homebrew-cask` job to compute `sha256` from the published `*_universal.dmg`, update `Casks/Switchme.rb`, and open a cask PR after release assets are available.
 - **Auto-merge is limited to generated cask PRs only**: The release workflow now enables auto-merge only for Homebrew cask PRs created on `automation/update-cask-v*` branches (squash + delete branch), without affecting normal PRs.
 
 ### Fixed
 - **Windows black console flashes during startup**: Fixed unhidden `cmd /c reg query` calls in the VS Code registry fallback path detection flow. Background commands now run hidden, reducing startup black-window flashes for some Windows users.
-- **Brand names and plan/tier labels incorrectly localized**: Restored original brand/product names and raw plan labels in non-English locales, including `Cockpit Tools`, `Antigravity`, `Codex`, `GitHub Copilot`, `Windsurf`, plus `accounts.tier.*`, `codex.plan.*`, and `kiro.plan.*`.
+- **Brand names and plan/tier labels incorrectly localized**: Restored original brand/product names and raw plan labels in non-English locales, including `Switchme`, `Antigravity`, `Codex`, `GitHub Copilot`, `Windsurf`, plus `accounts.tier.*`, `codex.plan.*`, and `kiro.plan.*`.
 - **Locale-check false positives for brand names**: Added brand-name allowlist entries to the locale validation script so English brand strings are not flagged as missing localization.
 
 ---
@@ -1732,7 +1732,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - View Hourly (5H) and Weekly quotas.
   - Automatic Plan recognition (Basic, Plus, Team, Enterprise).
   - Independent account list and card view.
-- **Rebranding**: Project officially renamed to **Cockpit Tools**.
+- **Rebranding**: Project officially renamed to **Switchme**.
 - **Sponsor & Feedback**: Added "Sponsor" and "Feedback" sections in Settings -> About for better community engagement.
 
 ### Changed

@@ -31,9 +31,9 @@ export function CodebuddyInstancesContent({
       <DosageNotifyQuotaPreview
         usage={usage}
         locale={locale}
-        emptyText={t('instances.quota.empty', '暂无配额缓存')}
-        normalText={t('codebuddy.usageNormal', '正常')}
-        abnormalText={t('codebuddy.usageAbnormal', '异常')}
+        emptyText={t('instances.quota.empty', "No cached quota")}
+        normalText={t('codebuddy.usageNormal', "Normal")}
+        abnormalText={t('codebuddy.usageAbnormal', "Abnormal")}
         abnormalDisplay="detail"
       />
     );

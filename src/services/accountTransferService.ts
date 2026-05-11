@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import { ALL_PLATFORM_IDS, PlatformId } from '../types/platform';
 import * as accountService from './accountService';
 import * as codexService from './codexService';
@@ -6,6 +7,7 @@ import * as windsurfService from './windsurfService';
 import * as kiroService from './kiroService';
 import * as cursorService from './cursorService';
 import * as geminiService from './geminiService';
+import * as devinCliService from './devinCliService';
 import * as codebuddyService from './codebuddyService';
 import * as codebuddyCnService from './codebuddyCnService';
 import * as qoderService from './qoderService';
@@ -61,6 +63,14 @@ const PLATFORM_ADAPTERS: Record<PlatformId, TransferAdapter> = {
     listAccounts: geminiService.listGeminiAccounts,
     exportAccounts: geminiService.exportGeminiAccounts,
     importFromJson: geminiService.importGeminiFromJson,
+  },
+  'devin-cli': {
+    listAccounts: devinCliService.listDevinCliAccounts,
+    exportAccounts: async (accountIds) => {
+      const accounts = await devinCliService.listDevinCliAccounts();
+      return JSON.stringify(accounts.filter((account) => accountIds.includes(account.id)));
+    },
+    importFromJson: async () => [],
   },
   codebuddy: {
     listAccounts: codebuddyService.listCodebuddyAccounts,
@@ -152,10 +162,6 @@ export interface AccountTransferImportOptions {
   onProgress?: (progress: AccountTransferImportProgress) => void;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function parseJsonOrThrow(json: string, errorCode: string): unknown {
   try {
     return JSON.parse(json) as unknown;
@@ -168,45 +174,6 @@ function normalizeAccountIds(accounts: AccountWithId[]): string[] {
   return accounts
     .map((account) => account.id)
     .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
-}
-
-function resolvePlatformPayload(rawSection: unknown): AccountTransferPlatformPayload | null {
-  if (rawSection === undefined) return null;
-  if (rawSection === null) {
-    return {
-      account_count: 0,
-      exported_data: [],
-    };
-  }
-
-  if (isRecord(rawSection)) {
-    const isWrappedPayload = 'account_count' in rawSection || 'exported_data' in rawSection;
-    if (isWrappedPayload) {
-      const wrapped = rawSection as {
-        account_count?: unknown;
-        exported_data?: unknown;
-        data?: unknown;
-        accounts?: unknown;
-      };
-      const exportedData =
-        wrapped.exported_data ?? wrapped.data ?? wrapped.accounts ?? [];
-      const accountCount =
-        typeof wrapped.account_count === 'number' && Number.isFinite(wrapped.account_count)
-          ? Math.max(0, Math.floor(wrapped.account_count))
-          : Array.isArray(exportedData)
-            ? exportedData.length
-            : 0;
-      return {
-        account_count: accountCount,
-        exported_data: exportedData,
-      };
-    }
-  }
-
-  return {
-    account_count: Array.isArray(rawSection) ? rawSection.length : 0,
-    exported_data: rawSection,
-  };
 }
 
 function estimatePayloadCount(payload: AccountTransferPlatformPayload): number {
@@ -279,41 +246,11 @@ export async function exportAllAccountsTransferJson(): Promise<string> {
   return JSON.stringify(bundle, null, 2);
 }
 
-function parseAccountTransferBundle(jsonContent: string): Record<PlatformId, AccountTransferPlatformPayload> {
-  const parsed = parseJsonOrThrow(jsonContent, 'invalid_json');
-  if (!isRecord(parsed)) {
-    throw new Error('invalid_bundle_root');
-  }
-
-  if (parsed.schema !== ACCOUNT_TRANSFER_SCHEMA) {
-    throw new Error('invalid_bundle_schema');
-  }
-
-  if (parsed.version !== ACCOUNT_TRANSFER_VERSION) {
-    throw new Error('invalid_bundle_version');
-  }
-
-  const rawPlatforms = parsed.platforms;
-  if (!isRecord(rawPlatforms)) {
-    throw new Error('invalid_bundle_platforms');
-  }
-
-  const platforms: Record<PlatformId, AccountTransferPlatformPayload> = {} as Record<
-    PlatformId,
-    AccountTransferPlatformPayload
-  >;
-
-  for (const platform of ALL_PLATFORM_IDS) {
-    const resolved = resolvePlatformPayload(rawPlatforms[platform]);
-    platforms[platform] =
-      resolved ??
-      ({
-        account_count: 0,
-        exported_data: [],
-      } as AccountTransferPlatformPayload);
-  }
-
-  return platforms;
+async function parseAccountTransferBundle(jsonContent: string): Promise<Record<PlatformId, AccountTransferPlatformPayload>> {
+  return await invoke<Record<PlatformId, AccountTransferPlatformPayload>>(
+    'account_transfer_parse_platforms',
+    { jsonContent },
+  );
 }
 
 export async function importAllAccountsFromTransferJson(
@@ -321,7 +258,7 @@ export async function importAllAccountsFromTransferJson(
   options: AccountTransferImportOptions = {},
 ): Promise<AccountTransferImportResult> {
   const { onProgress } = options;
-  const platforms = parseAccountTransferBundle(jsonContent);
+  const platforms = await parseAccountTransferBundle(jsonContent);
   const progressDetails: AccountTransferImportProgressDetail[] = ALL_PLATFORM_IDS.map((platform) => {
     const payload = platforms[platform];
     return {

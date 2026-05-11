@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Cockpit Tools",
+  "productName": "Switchme",
   "version": "0.22.21",
-  "identifier": "com.jlcodes.cockpit-tools",
+  "identifier": "com.adxptived.switchme",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Cockpit Tools",
+        "title": "Switchme",
         "width": 1280,
         "height": 800,
         "minWidth": 900,
@@ -27,7 +27,7 @@
       },
       {
         "label": "floating-card",
-        "title": "Cockpit Tools",
+        "title": "Switchme",
         "create": false,
         "width": 250,
         "height": 290,
@@ -80,15 +80,15 @@
     "deep-link": {
       "desktop": {
         "schemes": [
-          "cockpit-tools",
-          "cockpittools"
+          "switchme",
+          "switchmeapp"
         ]
       }
     },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMxRkU1RTdBRDdCRUUzM0QKUldROTQ3N1hlbDcrd1ZVQ2E3b1ZoVUdXL3BWQmpjdzNnWllNUW1LNHVwcE9wdGI1Q1UxQmdnQ0oK",
       "endpoints": [
-        "https://github.com/jlcodes99/cockpit-tools/releases/latest/download/latest.json"
+        "https://github.com/adxptived/Switchme/releases/latest/download/latest.json"
       ]
     }
   }

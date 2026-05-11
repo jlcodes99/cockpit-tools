@@ -89,6 +89,9 @@ const CursorAccountsPage = lazy(() =>
 const GeminiAccountsPage = lazy(() =>
   import('./pages/GeminiAccountsPage').then((module) => ({ default: module.GeminiAccountsPage })),
 );
+const DevinCliPage = lazy(() =>
+  import('./pages/DevinCliPage').then((module) => ({ default: module.DevinCliPage })),
+);
 const CodebuddyAccountsPage = lazy(() =>
   import('./pages/CodebuddyAccountsPage').then((module) => ({ default: module.CodebuddyAccountsPage })),
 );
@@ -566,16 +569,16 @@ function MainApp() {
       }
 
       showModal({
-        title: t('common.shared.externalImport.versionUnsupportedTitle', '应用版本过低'),
+        title: t('common.shared.externalImport.versionUnsupportedTitle', "App version too low"),
         description: t(
           'common.shared.externalImport.versionUnsupportedDesc',
-          '暂不支持此方式，请下载最新版。',
+          "This method is not supported yet. Please download the latest version.",
         ),
         width: 'sm',
         actions: [
           {
             id: 'check-update',
-            label: t('common.shared.externalImport.checkUpdate', '检查更新'),
+            label: t('common.shared.externalImport.checkUpdate', "Check Updates"),
             variant: 'primary',
             onClick: () => {
               window.dispatchEvent(
@@ -587,7 +590,7 @@ function MainApp() {
           },
           {
             id: 'close',
-            label: t('common.close', '关闭'),
+            label: t('common.close', "Close"),
             variant: 'secondary',
           },
         ],
@@ -755,7 +758,7 @@ function MainApp() {
 
   const prepareCodexLocalAccessBeforeRelaunch = useCallback(async () => {
     setUpdateRetryStatus(
-      t('update_notification.stoppingApiService', '正在关闭 API 服务...'),
+      t('update_notification.stoppingApiService', "Stopping API service..."),
     );
     try {
       const state = await prepareCodexLocalAccessForRestart();
@@ -1101,7 +1104,7 @@ function MainApp() {
         progress: 100,
         requiresInstall: false,
       });
-      setUpdateRetryStatus(t('update_notification.installSuccess', '更新已安装，正在重启...'));
+      setUpdateRetryStatus(t('update_notification.installSuccess', "Update installed! Restarting..."));
       setUpdateDownloadError('');
       setUpdateErrorDetails('');
 
@@ -1119,7 +1122,7 @@ function MainApp() {
         );
         setUpdateRetryStatus('');
         setUpdateDownloadError(
-          t('update_notification.restartRequiredAfterInstall', '更新已安装，请手动重启应用完成切换。'),
+          t('update_notification.restartRequiredAfterInstall', "The update is installed. Restart the app manually to finish switching."),
         );
         setUpdateErrorDetails(compactError);
       }
@@ -1129,7 +1132,7 @@ function MainApp() {
       writeUpdateLog('error', `Linux 托管更新失败: version=${expectedVersion}, error=${compactError}`);
       setUpdateRetryStatus('');
       setUpdateDownloadError(
-        t('update_notification.installFailed', '系统安装失败，请稍后重试或手动下载安装。'),
+        t('update_notification.installFailed', "System installation failed. Try again later or download manually."),
       );
       setUpdateErrorDetails(compactError);
       setUpdateAction({
@@ -1302,7 +1305,7 @@ function MainApp() {
     } catch (error) {
       if (isUpdaterCanceledError(error) || updateCancelRequestedRef.current || updateDownloadTaskIdRef.current !== taskId) {
         writeUpdateLog('info', `统一更新下载已取消: version=${expectedVersion}`);
-        setUpdateRetryStatus(t('update_notification.updateCancelled', '已取消更新'));
+        setUpdateRetryStatus(t('update_notification.updateCancelled', "Update canceled."));
         setUpdateDownloadError('');
         setUpdateErrorDetails('');
         return;
@@ -2139,42 +2142,42 @@ function MainApp() {
       const hasRecommendation = Boolean(payload.recommended_account_id && payload.recommended_email);
       const modelsText = payload.low_models.length > 0
         ? payload.low_models.join(', ')
-        : t('quotaAlert.modal.unknownModel', '未知模型');
+        : t('quotaAlert.modal.unknownModel', "Unknown model");
 
       showModal({
-        title: t('quotaAlert.modal.title', '配额预警'),
+        title: t('quotaAlert.modal.title', "Quota Alert"),
         description: t(
           'quotaAlert.modal.desc',
-          '当前账号配额已达到预警阈值，请尽快处理。'
+          "The current account quota has reached the alert threshold. Please handle it soon."
         ),
         width: 'md',
         closeOnOverlay: false,
         content: (
           <div className="quota-alert-modal-content">
             <div className="quota-alert-modal-row">
-              <span>{t('quotaAlert.modal.platform', '平台')}</span>
+              <span>{t('quotaAlert.modal.platform', "Platform")}</span>
               <strong>{platformLabel}</strong>
             </div>
             <div className="quota-alert-modal-row">
-              <span>{t('quotaAlert.modal.account', '当前账号')}</span>
+              <span>{t('quotaAlert.modal.account', "Current account")}</span>
               <strong>{payload.current_email}</strong>
             </div>
             <div className="quota-alert-modal-row">
-              <span>{t('quotaAlert.modal.threshold', '预警阈值')}</span>
+              <span>{t('quotaAlert.modal.threshold', "Alert threshold")}</span>
               <strong>{payload.threshold_display || `${payload.threshold}%`}</strong>
             </div>
             <div className="quota-alert-modal-row">
-              <span>{t('quotaAlert.modal.lowest', '当前最低')}</span>
+              <span>{t('quotaAlert.modal.lowest', "Current lowest")}</span>
               <strong>{payload.lowest_percentage}%</strong>
             </div>
             <div className="quota-alert-modal-row quota-alert-modal-row--stack">
-              <span>{t('quotaAlert.modal.models', '触发模型')}</span>
+              <span>{t('quotaAlert.modal.models', "Triggered models")}</span>
               <strong>{modelsText}</strong>
             </div>
             <div className="quota-alert-modal-row">
-              <span>{t('quotaAlert.modal.recommended', '建议切换')}</span>
+              <span>{t('quotaAlert.modal.recommended', "Recommended switch")}</span>
               <strong>
-                {payload.recommended_email || t('quotaAlert.modal.noRecommendation', '暂无可切换账号')}
+                {payload.recommended_email || t('quotaAlert.modal.noRecommendation', "No switch candidate available")}
               </strong>
             </div>
           </div>
@@ -2182,12 +2185,12 @@ function MainApp() {
         actions: [
           {
             id: 'quota-alert-later',
-            label: t('quotaAlert.modal.later', '稍后处理'),
+            label: t('quotaAlert.modal.later', "Later"),
             variant: 'secondary',
           },
           {
             id: 'quota-alert-open-settings',
-            label: t('quotaAlert.modal.openSettings', '调整预警设置'),
+            label: t('quotaAlert.modal.openSettings', "Adjust alert settings"),
             variant: 'secondary',
             autoClose: false,
             onClick: () => {
@@ -2197,7 +2200,7 @@ function MainApp() {
           ...(hasRecommendation
             ? [{
                 id: 'quota-alert-switch',
-                label: t('quotaAlert.modal.switchNow', '快捷切号到 {{email}}', {
+                label: t('quotaAlert.modal.switchNow', "Quick switch to {{email}}", {
                   email: payload.recommended_email as string,
                 }),
                 variant: 'primary' as const,
@@ -2248,15 +2251,15 @@ function MainApp() {
                     closeModal();
                   } catch (error) {
                     showModal({
-                      title: t('quotaAlert.modal.switchFailedTitle', '切号失败'),
-                      description: t('quotaAlert.modal.switchFailedBody', '快捷切号失败：{{error}}', {
+                      title: t('quotaAlert.modal.switchFailedTitle', "Switch failed"),
+                      description: t('quotaAlert.modal.switchFailedBody', "Quick switch failed: {{error}}", {
                         error: String(error),
                       }),
                       width: 'sm',
                       actions: [
                         {
                           id: 'quota-alert-switch-failed-ok',
-                          label: t('common.confirm', '确定'),
+                          label: t('common.confirm', "Confirm"),
                           variant: 'primary',
                         },
                       ],
@@ -2378,21 +2381,21 @@ function MainApp() {
 
       if (phase === 'auth_required' || phase === 'downloaded') {
         setUpdateRetryStatus(
-          t('update_notification.authorizing', '等待系统授权安装...'),
+          t('update_notification.authorizing', "Waiting for system authorization..."),
         );
         return;
       }
 
       if (phase === 'installing') {
         setUpdateRetryStatus(
-          t('update_notification.installing', '安装中...'),
+          t('update_notification.installing', "Installing..."),
         );
         return;
       }
 
       if (phase === 'completed') {
         setUpdateRetryStatus(
-          t('update_notification.installSuccess', '更新已安装，正在重启...'),
+          t('update_notification.installSuccess', "Update installed! Restarting..."),
         );
         return;
       }
@@ -2739,6 +2742,7 @@ function MainApp() {
             case 'kiro':
             case 'cursor':
             case 'gemini':
+            case 'devin-cli':
             case 'codebuddy':
             case 'codebuddy-cn':
             case 'qoder':
@@ -2838,7 +2842,7 @@ function MainApp() {
   }, []);
   const suspenseFallback = (
     <div className="loading-state">
-      {t('common.loading', '加载中...')}
+      {t('common.loading', "Loading...")}
     </div>
   );
 
@@ -2866,25 +2870,25 @@ function MainApp() {
 
   const appPathMissingPathLabel = appPathMissing
     ? appPathMissing.app === 'codex'
-      ? t('quickSettings.codex.appPath', '启动路径')
+      ? t('quickSettings.codex.appPath', "Launch Path")
       : appPathMissing.app === 'vscode'
-        ? t('quickSettings.githubCopilot.appPath', 'VS Code 路径')
+        ? t('quickSettings.githubCopilot.appPath', "VS Code Path")
         : appPathMissing.app === 'windsurf'
-          ? t('quickSettings.windsurf.appPath', 'Windsurf 路径')
+          ? t('quickSettings.windsurf.appPath', "Windsurf Path")
           : appPathMissing.app === 'kiro'
-            ? t('quickSettings.kiro.appPath', 'Kiro 路径')
+            ? t('quickSettings.kiro.appPath', "Kiro Path")
             : appPathMissing.app === 'cursor'
-            ? t('quickSettings.cursor.appPath', 'Cursor 路径')
+            ? t('quickSettings.cursor.appPath', "Cursor Path")
             : appPathMissing.app === 'codebuddy'
-              ? t('quickSettings.codebuddy.appPath', 'CodeBuddy 路径')
+              ? t('quickSettings.codebuddy.appPath', "CodeBuddy Path")
               : appPathMissing.app === 'codebuddy_cn'
-                ? t('quickSettings.codebuddyCn.appPath', 'CodeBuddy CN 路径')
+                ? t('quickSettings.codebuddyCn.appPath', "CodeBuddy CN Path")
               : appPathMissing.app === 'qoder'
-                ? t('quickSettings.qoder.appPath', 'Qoder 路径')
+                ? t('quickSettings.qoder.appPath', "Qoder Path")
               : appPathMissing.app === 'trae'
-                ? t('quickSettings.trae.appPath', 'Trae 路径')
-              : t('quickSettings.antigravity.appPath', '启动路径')
-    : t('quickSettings.antigravity.appPath', '启动路径');
+                ? t('quickSettings.trae.appPath', "Trae Path")
+              : t('quickSettings.antigravity.appPath', "Launch Path")
+    : t('quickSettings.antigravity.appPath', "Launch Path");
   const appPathMissingBusy = appPathSetting || appPathDetecting || appPathCodexLaunchSetting;
   const shouldRenderUpdateNotification = showUpdateNotification
     || (updateRemindersEnabled && updateAction.state !== 'hidden');
@@ -2949,11 +2953,11 @@ function MainApp() {
         <div className="qs-overlay" style={{ zIndex: 10100 }}>
           <div className="qs-modal app-path-missing-modal" onClick={(e) => e.stopPropagation()}>
             <div className="qs-header">
-              <span className="qs-title">{t('appPath.missing.title', '未找到应用程序路径')}</span>
+              <span className="qs-title">{t('appPath.missing.title', "Application path not found")}</span>
               <button
                 className="qs-close"
                 onClick={() => setAppPathMissing(null)}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
                 disabled={appPathMissingBusy}
               >
                 <X size={16} />
@@ -2963,7 +2967,7 @@ function MainApp() {
             <div className="qs-body">
               <div className="qs-section">
                 <p className="app-path-missing-desc">
-                  {t('appPath.missing.desc', '未找到 {{app}} 应用程序路径，请立即设置后继续启动。', {
+                  {t('appPath.missing.desc', "Could not find the {{app}} application path. Please set it now to continue.", {
                     app: appPathMissingAppName,
                   })}
                 </p>
@@ -2973,7 +2977,7 @@ function MainApp() {
                 <div className="qs-section">
                   <div className="qs-row">
                     <div className="qs-row-label">
-                      {t('settings.general.codexLaunchOnSwitch', '切换 Codex 时自动启动 Codex App')}
+                      {t('settings.general.codexLaunchOnSwitch', "Launch Codex App when switching Codex")}
                     </div>
                     <label className="qs-switch">
                       <input
@@ -2988,7 +2992,7 @@ function MainApp() {
                   <p className="app-path-missing-hint">
                     {t(
                       'appPath.missing.codexLaunchHint',
-                      '关闭后仅执行切号与登录覆盖，不再尝试启动 Codex App，也不会再次要求设置启动路径。'
+                      "When turned off, account switching and login overwrite still run, but Codex App will no longer be launched and this path prompt will not appear again."
                     )}
                   </p>
                 </div>
@@ -3004,7 +3008,7 @@ function MainApp() {
                     type="text"
                     className="qs-path-input"
                     value={appPathDraft}
-                    placeholder={t('settings.general.codexAppPathPlaceholder', '默认路径')}
+                    placeholder={t('settings.general.codexAppPathPlaceholder', "Default path")}
                     onChange={(e) => setAppPathDraft(e.target.value)}
                     disabled={appPathMissingBusy}
                   />
@@ -3014,7 +3018,7 @@ function MainApp() {
                       onClick={handlePickMissingAppPath}
                       disabled={appPathMissingBusy}
                     >
-                      {t('settings.general.codexPathSelect', '选择')}
+                      {t('settings.general.codexPathSelect', "Select")}
                     </button>
                     <button
                       className="qs-btn"
@@ -3022,25 +3026,25 @@ function MainApp() {
                       disabled={appPathMissingBusy}
                       title={
                         appPathDetecting
-                          ? t('common.loading', '加载中...')
+                          ? t('common.loading', "Loading...")
                           : (
                             appPathMissing.app === 'vscode'
-                              ? t('settings.general.vscodePathReset', '重置默认')
+                              ? t('settings.general.vscodePathReset', "Reset to default")
                               : appPathMissing.app === 'windsurf'
-                                ? t('settings.general.windsurfPathReset', '重置默认')
+                                ? t('settings.general.windsurfPathReset', "Reset to default")
                                 : appPathMissing.app === 'kiro'
-                                  ? t('settings.general.kiroPathReset', '重置默认')
+                                  ? t('settings.general.kiroPathReset', "Reset to default")
                                   : appPathMissing.app === 'cursor'
-                                  ? t('settings.general.cursorPathReset', '重置默认')
+                                  ? t('settings.general.cursorPathReset', "Reset default")
                                     : appPathMissing.app === 'codebuddy'
-                                      ? t('settings.general.codebuddyPathReset', '重置默认')
+                                      ? t('settings.general.codebuddyPathReset', "Reset to default")
                                     : appPathMissing.app === 'codebuddy_cn'
-                                      ? t('settings.general.codebuddyPathReset', '重置默认')
+                                      ? t('settings.general.codebuddyPathReset', "Reset to default")
                                     : appPathMissing.app === 'qoder'
-                                      ? t('settings.general.qoderPathReset', '重置默认')
+                                      ? t('settings.general.qoderPathReset', "Reset to default")
                                     : appPathMissing.app === 'trae'
-                                      ? t('settings.general.traePathReset', '重置默认')
-                                    : t('settings.general.codexPathReset', '重置默认')
+                                      ? t('settings.general.traePathReset', "Reset to default")
+                                    : t('settings.general.codexPathReset', "Reset to default")
                           )
                       }
                     >
@@ -3062,14 +3066,14 @@ function MainApp() {
                 onClick={() => setAppPathMissing(null)}
                 disabled={appPathMissingBusy}
               >
-                {t('common.cancel', '取消')}
+                {t('common.cancel', "Cancel")}
               </button>
               <button
                 className="btn btn-primary"
                 onClick={handleSaveMissingAppPath}
                 disabled={appPathMissingBusy || !appPathDraft.trim()}
               >
-                {t('common.save', '保存')}
+                {t('common.save', "Save")}
               </button>
             </div>
           </div>
@@ -3102,8 +3106,8 @@ function MainApp() {
         <button
           className="log-entry-fab"
           onClick={() => setShowLogViewer(true)}
-          title={t('manual.dataPrivacy.keywords.5', '日志')}
-          aria-label={t('manual.dataPrivacy.keywords.5', '日志')}
+          title={t('manual.dataPrivacy.keywords.5', "logs")}
+          aria-label={t('manual.dataPrivacy.keywords.5', "logs")}
         >
           <FileText size={18} />
         </button>
@@ -3137,18 +3141,18 @@ function MainApp() {
                   <div
                     className="global-promo-center"
                     role="complementary"
-                    aria-label={t('common.topRightAd.ariaLabel', '全局右上角广告位')}
+                    aria-label={t('common.topRightAd.ariaLabel', "Global top-right ad slot")}
                   >
                     <div className="global-promo-slot">
                       <span className="global-ad-slot-badge">
-                        {topRightAdState.ad.badge || t('common.topRightAd.badge', '广告')}
+                        {topRightAdState.ad.badge || t('common.topRightAd.badge', "AD")}
                       </span>
                       <div className="global-promo-main">
                         <p className="global-promo-text">{topRightAdState.ad.text}</p>
                       </div>
                       {topRightAdState.ad.ctaUrl ? (
                         <button className="global-ad-slot-action" onClick={handleTopRightAdClick}>
-                          {topRightAdState.ad.ctaLabel || t('common.topRightAd.action', '查看详情')}
+                          {topRightAdState.ad.ctaLabel || t('common.topRightAd.action', "View details")}
                         </button>
                       ) : null}
                     </div>
@@ -3164,6 +3168,7 @@ function MainApp() {
           {page === 'kiro' && <KiroAccountsPage />}
           {page === 'cursor' && <CursorAccountsPage />}
           {page === 'gemini' && <GeminiAccountsPage />}
+          {page === 'devin-cli' && <DevinCliPage />}
           {page === 'codebuddy' && <CodebuddyAccountsPage />}
           {page === 'codebuddy-cn' && <CodebuddyCnAccountsPage />}
           {page === 'qoder' && <QoderAccountsPage />}

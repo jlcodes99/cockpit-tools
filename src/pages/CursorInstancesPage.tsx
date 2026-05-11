@@ -26,7 +26,7 @@ export function CursorInstancesContent({
     const presentation = buildCursorAccountPresentation(account, t);
     const lines = buildQuotaPreviewLines(presentation.quotaItems, 3);
     if (lines.length === 0) {
-      return <span className="account-quota-empty">{t('instances.quota.empty', '暂无配额缓存')}</span>;
+      return <span className="account-quota-empty">{t('instances.quota.empty', "No cached quota")}</span>;
     }
     return (
       <div className="account-quota-preview">

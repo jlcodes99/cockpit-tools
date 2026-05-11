@@ -1,364 +1,345 @@
-# Cockpit Tools
+# Switchme
 
-[English](README.en.md) · 简体中文
+[![GitHub stars](https://img.shields.io/github/stars/adxptived/Switchme?style=flat&color=gold)](https://github.com/adxptived/Switchme)
+[![GitHub downloads](https://img.shields.io/github/downloads/adxptived/Switchme/total?style=flat&color=blue)](https://github.com/adxptived/Switchme/releases)
+[![GitHub release](https://img.shields.io/github/v/release/adxptived/Switchme?style=flat)](https://github.com/adxptived/Switchme/releases)
+[![GitHub issues](https://img.shields.io/github/issues/adxptived/Switchme)](https://github.com/adxptived/Switchme/issues)
 
-[![GitHub stars](https://img.shields.io/github/stars/jlcodes99/cockpit-tools?style=flat&color=gold)](https://github.com/jlcodes99/cockpit-tools)
-[![GitHub downloads](https://img.shields.io/github/downloads/jlcodes99/cockpit-tools/total?style=flat&color=blue)](https://github.com/jlcodes99/cockpit-tools/releases)
-[![GitHub release](https://img.shields.io/github/v/release/jlcodes99/cockpit-tools?style=flat)](https://github.com/jlcodes99/cockpit-tools/releases)
-[![GitHub issues](https://img.shields.io/github/issues/jlcodes99/cockpit-tools)](https://github.com/jlcodes99/cockpit-tools/issues)
+A **universal AI IDE account management tool**, currently supporting **Antigravity**, **Codex**, **GitHub Copilot**, **Windsurf**, **Kiro**, **Cursor**, **Gemini Cli**, **CodeBuddy**, **CodeBuddy CN**, **Qoder**, **Trae**, and **Zed**, with multi-instance parallel workflows.
 
-一款**通用的 AI IDE 账号管理工具**，目前支持 **Antigravity**、**Codex**、**GitHub Copilot**、**Windsurf**、**Kiro**、**Cursor**、**Gemini Cli**、**CodeBuddy**、**CodeBuddy CN**、**Qoder**、**Trae** 和 **Zed**，并支持多账号多实例并行运行。
+> Designed to help users efficiently manage multiple AI IDE accounts, this tool supports one-click switching, quota monitoring, wake-up tasks, and multi-instance parallel runs, helping you fully utilize resources from different accounts.
 
+**Features**: One-click Switch · Multi-account Management · Multi-instance · Quota Monitoring · Wake-up Tasks · Device Fingerprints · Plugin Integration · GitHub Copilot Management · Windsurf Management · Kiro Management · Cursor Management · Gemini Cli Management · CodeBuddy Management · CodeBuddy CN Management · Qoder Management · Trae Management · Zed Management
 
-> 本工具旨在帮助用户高效管理多个 AI IDE 账号，支持一键切换、配额监控、自动唤醒与多开实例并行运行，助您充分利用不同账号的资源。
-
-**功能**：一键切号 · 多账号管理 · 多开实例 · 配额监控 · 唤醒任务 · 设备指纹 · 插件联动 · GitHub Copilot 管理 · Windsurf 管理 · Kiro 管理 · Cursor 管理 · Gemini Cli 管理 · CodeBuddy 管理 · CodeBuddy CN 管理 · Qoder 管理 · Trae 管理 · Zed 管理
-
-**语言**：支持 18 种语言
+**Languages**: Supports 18 languages
 
 🇺🇸 English · 🇨🇳 简体中文 · 繁體中文 · 🇯🇵 日本語 · 🇩🇪 Deutsch · 🇪🇸 Español · 🇫🇷 Français · 🇮🇹 Italiano · 🇰🇷 한국어 · 🇧🇷 Português · 🇷🇺 Русский · 🇹🇷 Türkçe · 🇵🇱 Polski · 🇨🇿 Čeština · 🇸🇦 العربية · 🇻🇳 Tiếng Việt · 🇮🇩 Bahasa Indonesia
 
-**官方支持平台**：macOS、Windows、Linux。
+**Officially supported platforms**: macOS, Windows, and Linux.
 
 ---
 
-## 功能概览
+## Feature Overview
 
-### 1. 仪表盘 (Dashboard)
+### 1. Dashboard
 
-全新的可视化仪表盘，为您提供一站式的状态概览：
+A brand new visual dashboard providing a one-stop status overview:
 
-- **十二平台支持**：同时展示 Antigravity、Codex、GitHub Copilot、Windsurf、Kiro、Cursor、Gemini Cli、CodeBuddy、CodeBuddy CN、Qoder、Trae 与 Zed 的账号状态
-- **配额监控**：实时查看各模型剩余配额、重置时间
-- **快捷操作**：一键刷新、一键唤醒
-- **可视化进度**：直观的进度条展示配额消耗情况
+- **Twelve-Platform Support**: Simultaneously displays Antigravity, Codex, GitHub Copilot, Windsurf, Kiro, Cursor, Gemini Cli, CodeBuddy, CodeBuddy CN, Qoder, Trae, and Zed account status
+- **Quota Monitoring**: Real-time view of remaining quotas and reset times for each model
+- **Quick Actions**: One-click refresh, one-click wake-up
+- **Visual Progress**: Intuitive progress bars showing quota consumption
 
-> ![Dashboard Overview](docs/images/dashboard_overview.png)
+### 2. Antigravity Account Management
 
-### 2. Antigravity 账号管理
+- **One-Click Switch**: Switch the currently active account instantly without manual login/logout
+- **Multiple Import Methods**: OAuth, Refresh Token, Plugin Sync
+- **Wake-up Tasks**: Schedule AI model wake-ups to trigger quota reset cycles in advance
+- **Device Fingerprints**: Generate, manage, and bind device fingerprints to reduce risk
 
-- **一键切号**：一键切换当前使用的账号，无需手动登录登出
-- **多种导入**：支持 OAuth 授权、Refresh Token、插件同步
-- **唤醒任务**：定时唤醒 AI 模型，提前触发配额重置周期
-- **设备指纹**：生成、管理、绑定设备指纹，降低风控风险
+#### 2.1 Antigravity Multi-Instance
 
-> ![Antigravity Accounts](docs/images/antigravity_list.png)
->
-> *(唤醒任务与设备指纹管理)*
-> ![Wakeup Tasks](docs/images/wakeup_detail.png)
-> ![Device Fingerprints](docs/images/fingerprint_detail.png)
+Run multiple Antigravity instances in parallel with different accounts. For example, open two Antigravity instances, bind different accounts, and handle different projects independently.
 
-#### 2.1 Antigravity 多开实例
+- **Isolated Accounts**: Each instance binds a different account and runs independently
+- **Parallel Projects**: Run multiple tasks/projects at the same time
+- **Argument Isolation**: Custom instance directory and launch arguments
 
-支持同一平台多账号多实例并行运行。比如同时打开两个 Antigravity，分别绑定不同账号，分别处理不同项目，互不影响。
+### 3. Codex Account Management
 
-- **独立账号**：每个实例绑定不同账号并独立运行
-- **并行项目**：多实例同时处理不同任务/项目
-- **参数隔离**：支持自定义实例目录与启动参数
+- **Dedicated Support**: Optimized account management experience for Codex
+- **Quota Display**: Clear display of Hourly and Weekly quota status
+- **Plan Recognition**: Automatically identifies account Plan types (Basic, Plus, Team, etc.)
 
-> ![Antigravity Instances](docs/images/antigravity_instances.png)
+#### 3.1 Codex Multi-Instance
 
-### 3. Codex 账号管理
+Codex also supports parallel multi-instance usage. For example, open two Codex instances, bind different accounts, and handle different projects independently.
 
-- **专属支持**：专为 Codex 优化的账号管理体验
-- **配额展示**：清晰展示 Hourly 和 Weekly 配额状态
-- **计划识别**：自动识别账号 Plan 类型 (Basic, Plus, Team 等)
+- **Isolated Accounts**: Each instance binds a different account and runs independently
+- **Parallel Projects**: Run multiple tasks/projects at the same time
+- **Argument Isolation**: Custom instance directory and launch arguments
 
-> ![Codex Accounts](docs/images/codex_list.png)
+### 4. GitHub Copilot Account Management
 
-#### 3.1 Codex 多开实例
+- **Account Import**: OAuth, Token/JSON import
+- **Quota View**: Inline Suggestions / Chat messages usage and reset time
+- **Plan Recognition**: Auto-detects Free / Individual / Pro / Business / Enterprise tiers
+- **Batch Operations**: Tags and bulk actions
 
-Codex 同样支持多账号多实例并行运行。比如同时打开两个 Codex，分别绑定不同账号，分别处理不同项目，互不影响。
+#### 4.1 GitHub Copilot Multi-Instance
 
-- **独立账号**：每个实例绑定不同账号并独立运行
-- **并行项目**：多实例同时处理不同任务/项目
-- **参数隔离**：支持自定义实例目录与启动参数
+Manage VS Code Copilot instances with isolated profiles and lifecycle controls.
 
-> ![Codex Instances](docs/images/codex_instances.png)
+- **Isolated Profiles**: Each instance uses its own user data directory
+- **Quick Lifecycle**: Start/stop/force stop instances
+- **Window Control**: Open instance windows and close all instances
 
-### 4. GitHub Copilot 账号管理
+### 5. Windsurf Account Management
 
-- **账号导入**：支持 OAuth 授权、Token/JSON 导入
-- **配额视图**：展示 Inline Suggestions / Chat messages 使用情况与重置时间
-- **订阅识别**：自动识别 Free / Individual / Pro / Business / Enterprise 等计划类型
-- **批量管理**：支持标签与批量操作
+- **Account Import**: OAuth, Token/JSON import, and local import
+- **Quota View**: Shows Plan, User Prompt credits, Add-on prompt credits, and cycle information
+- **Batch Operations**: Tags and bulk actions
+- **Switch Injection**: Supports injecting and launching Windsurf after account switch
 
-#### 4.1 GitHub Copilot 多开实例
+#### 5.1 Windsurf Multi-Instance
 
-基于 VS Code 的 Copilot 多实例管理，支持独立配置与生命周期控制。
+Manage Windsurf instances with isolated profiles and lifecycle controls.
 
-- **独立配置**：每个实例拥有独立的用户目录
-- **快速启停**：一键启动/停止/强制关闭实例
-- **窗口管理**：支持打开实例窗口与批量关闭
+- **Isolated Profiles**: Each instance uses its own user data directory
+- **Quick Lifecycle**: Start/stop/force stop instances
+- **Window Control**: Open instance windows and close all instances
 
-### 5. Windsurf 账号管理
+### 6. Kiro Account Management
 
-- **账号导入**：支持 OAuth 授权、Token/JSON 导入与本地导入
-- **配额视图**：展示 Plan、User Prompt credits、Add-on prompt credits 与周期信息
-- **批量管理**：支持标签与批量操作
-- **切号注入**：支持切号后注入并启动 Windsurf
+- **Account Import**: OAuth, Token/JSON import, and local import
+- **Quota View**: Shows Plan, User Prompt credits, Add-on prompt credits, and cycle information
+- **Batch Operations**: Tags and bulk actions
+- **Switch Injection**: Supports injecting and launching Kiro after account switch
 
-#### 5.1 Windsurf 多开实例
+#### 6.1 Kiro Multi-Instance
 
-支持 Windsurf 多实例管理，支持独立配置与生命周期控制。
+Manage Kiro instances with isolated profiles and lifecycle controls.
 
-- **独立配置**：每个实例拥有独立的用户目录
-- **快速启停**：一键启动/停止/强制关闭实例
-- **窗口管理**：支持打开实例窗口与批量关闭
+- **Isolated Profiles**: Each instance uses its own user data directory
+- **Quick Lifecycle**: Start/stop/force stop instances
+- **Window Control**: Open instance windows and close all instances
 
-### 6. Kiro 账号管理
+### 7. Cursor Account Management
 
-- **账号导入**：支持 OAuth 授权、Token/JSON 导入与本地导入
-- **配额视图**：展示 Plan、User Prompt credits、Add-on prompt credits 与周期信息
-- **批量管理**：支持标签与批量操作
-- **切号注入**：支持切号后注入并启动 Kiro
+- **Account Import**: OAuth, Token/JSON import, and local import
+- **Quota View**: Shows Total Usage, Auto + Composer, API Usage, On-Demand, and cycle information
+- **Batch Operations**: Tags and bulk actions
+- **Switch Injection**: Supports injecting and launching Cursor after account switch
 
-#### 6.1 Kiro 多开实例
+#### 7.1 Cursor Multi-Instance
 
-支持 Kiro 多实例管理，支持独立配置与生命周期控制。
+Manage Cursor instances with isolated profiles and lifecycle controls.
 
-- **独立配置**：每个实例拥有独立的用户目录
-- **快速启停**：一键启动/停止/强制关闭实例
-- **窗口管理**：支持打开实例窗口与批量关闭
+- **Isolated Profiles**: Each instance uses its own user data directory
+- **Quick Lifecycle**: Start/stop/force stop instances
+- **Window Control**: Open instance windows and close all instances
 
-### 7. Cursor 账号管理
+### 8. Gemini Cli Account Management
 
-- **账号导入**：支持 OAuth 授权、Token/JSON 导入与本地导入
-- **配额视图**：展示 Total Usage、Auto + Composer、API Usage、On-Demand 与周期信息
-- **批量管理**：支持标签与批量操作
-- **切号注入**：支持切号后注入并启动 Cursor
+- **Account Import**: OAuth, Token/JSON import, and local import
+- **Quota View**: Shows Total Usage, Auto + Composer, API Usage, On-Demand, and cycle information
+- **Batch Operations**: Tags and bulk actions
+- **Switch Injection**: Supports injecting Gemini Cli local credentials after account switch (`~/.gemini`)
+- **Platform Limitation**: Gemini Cli multi-instance management is not supported yet
 
-#### 7.1 Cursor 多开实例
+### 9. CodeBuddy Account Management
 
-支持 Cursor 多实例管理，支持独立配置与生命周期控制。
+- **Account Import**: OAuth and Token/JSON import
+- **Quota View**: quota query, cycle details, and extra-credit display
+- **Batch Operations**: tags and bulk actions
+- **Switch Injection**: supports injecting and launching CodeBuddy after account switch
 
-- **独立配置**：每个实例拥有独立的用户目录
-- **快速启停**：一键启动/停止/强制关闭实例
-- **窗口管理**：支持打开实例窗口与批量关闭
+#### 9.1 CodeBuddy Multi-Instance
 
-### 8. Gemini Cli 账号管理
+Manage CodeBuddy instances with isolated profiles and lifecycle controls.
 
-- **账号导入**：支持 OAuth 授权、Token/JSON 导入与本地导入
-- **配额视图**：展示 Total Usage、Auto + Composer、API Usage、On-Demand 与周期信息
-- **批量管理**：支持标签与批量操作
-- **切号注入**：支持切号后注入 Gemini Cli 本地凭证（`~/.gemini`）
-- **平台限制**：Gemini Cli 暂不支持多开实例管理
+- **Isolated Profiles**: Each instance uses its own user data directory
+- **Quick Lifecycle**: Start/stop/force stop instances
+- **Window Control**: Open instance windows and close all instances
 
-### 9. CodeBuddy 账号管理
+### 10. CodeBuddy CN Account Management
 
-- **账号导入**：支持 OAuth 授权、Token/JSON 导入
-- **配额视图**：支持配额查询、周期信息与加量包展示
-- **批量管理**：支持标签与批量操作
-- **切号注入**：支持切号后注入并启动 CodeBuddy
+- **Account Import**: supports OAuth, Token/JSON import, and local-client import
+- **Quota View**: shows plan and usage status, with a shortcut to open detailed quota information on the official web page
+- **Batch Operations**: supports tags and bulk actions
+- **Switch Injection**: supports writing local auth state back and launching CodeBuddy CN after account switch
 
-#### 9.1 CodeBuddy 多开实例
+#### 10.1 CodeBuddy CN Multi-Instance
 
-支持 CodeBuddy 多实例管理，支持独立配置与生命周期控制。
+Manage CodeBuddy CN instances with isolated profiles and lifecycle controls.
 
-- **独立配置**：每个实例拥有独立的用户目录
-- **快速启停**：一键启动/停止/强制关闭实例
-- **窗口管理**：支持打开实例窗口与批量关闭
+- **Isolated Profiles**: each instance uses its own user data directory
+- **Quick Lifecycle**: start/stop/force stop instances
+- **Window Control**: open instance windows and close all instances
 
-### 10. CodeBuddy CN 账号管理
+### 11. Qoder Account Management
 
-- **账号导入**：支持 OAuth 授权、Token/JSON 导入与本机客户端导入
-- **配额视图**：展示套餐与用量状态，并支持跳转官方网页查看配额详情
-- **批量管理**：支持标签与批量操作
-- **切号注入**：支持切号后按客户端本地认证存储规则注入并启动 CodeBuddy CN
+- **Account Import**: supports local import and JSON import
+- **Quota View**: shows Credits usage, remaining credits, and raw plan values
+- **Batch Operations**: supports tags, filters, export, and batch delete/refresh
+- **Switch Injection**: supports injecting and launching Qoder after account switch
 
-#### 10.1 CodeBuddy CN 多开实例
+#### 11.1 Qoder Multi-Instance
 
-支持 CodeBuddy CN 多实例管理，支持独立配置与生命周期控制。
+Manage Qoder instances with isolated profiles and lifecycle controls.
 
-- **独立配置**：每个实例拥有独立的用户目录
-- **快速启停**：一键启动/停止/强制关闭实例
-- **窗口管理**：支持打开实例窗口与批量关闭
+- **Isolated Profiles**: each instance uses its own user data directory
+- **Quick Lifecycle**: start/stop/force stop instances
+- **Window Control**: open instance windows and close all instances
 
-### 11. Qoder 账号管理
+### 12. Trae Account Management
 
-- **账号导入**：支持本机导入与 JSON 导入
-- **配额视图**：展示 Credits 使用、剩余额度与套餐原始值
-- **批量管理**：支持标签、筛选、导出与批量删除/刷新
-- **切号注入**：支持切号后注入并启动 Qoder
+- **Account Import**: supports local import and JSON import
+- **Quota View**: shows raw plan values, USD spent/total budget, and reset time
+- **Batch Operations**: supports tags, filters, export, and batch delete/refresh
+- **Switch Injection**: supports writing back local auth state and launching Trae after account switch
 
-#### 11.1 Qoder 多开实例
+#### 12.1 Trae Multi-Instance
 
-支持 Qoder 多实例管理，支持独立配置与生命周期控制。
+Manage Trae instances with isolated profiles and lifecycle controls.
 
-- **独立配置**：每个实例拥有独立的用户目录
-- **快速启停**：一键启动/停止/强制关闭实例
-- **窗口管理**：支持打开实例窗口与批量关闭
+- **Isolated Profiles**: each instance uses its own user data directory
+- **Quick Lifecycle**: start/stop/force stop instances
+- **Window Control**: open instance windows and close all instances
 
-### 12. Trae 账号管理
+### 13. Zed Account Management
 
-- **账号导入**：支持本机导入与 JSON 导入
-- **配额视图**：展示套餐原始值、美元消耗/总额度与重置时间
-- **批量管理**：支持标签、筛选、导出与批量删除/刷新
-- **切号注入**：支持切号后按客户端落盘规则写回并启动 Trae
+- **Account Import**: Supports official OAuth sign-in, JSON import, and importing the current local sign-in state
+- **Usage View**: Shows subscription status, Edit Predictions, Token Spend, Spend Limit, and billing period end
+- **Batch Operations**: Supports tags, filters, export, and batch delete/refresh
+- **Switch Injection**: Applies the selected account back to the official Zed client using the client's real local persistence rules and restarts the client when needed
 
-#### 12.1 Trae 多开实例
+### 14. General Settings
 
-支持 Trae 多实例管理，支持独立配置与生命周期控制。
-
-- **独立配置**：每个实例拥有独立的用户目录
-- **快速启停**：一键启动/停止/强制关闭实例
-- **窗口管理**：支持打开实例窗口与批量关闭
-
-### 13. Zed 账号管理
-
-- **账号导入**：支持官方 OAuth 授权、JSON 导入与本机当前登录状态导入
-- **配额视图**：展示订阅状态、Edit Predictions、Token Spend、Spend Limit 与账期结束时间
-- **批量管理**：支持标签、筛选、导出与批量删除/刷新
-- **切号注入**：支持切号后按 Zed 客户端真实落盘规则应用账号，并可按需重启官方客户端
-
-### 14. 通用设置
-
-- **个性化设置**：主题切换、语言设置、自动刷新间隔
-- **平台配置**：统一管理 CodeBuddy CN / Qoder / Trae / Zed 等平台的启动路径与配额预警
-
-> ![Settings](docs/images/settings_page.png)
+- **Personalized Settings**: Theme switching, language settings, auto-refresh interval
+- **Platform Controls**: Centralized CodeBuddy CN/Qoder/Trae/Zed launch-path and quota-alert settings
 
 ---
 
-## 安全性与隐私（简明版）
+## Security & Privacy (Plain-English)
 
-下面是最关心的几个问题，尽量用直白语言说明：
+These are the most common security questions answered directly:
 
-- **这是本地桌面工具**：不需要单独注册平台账号，也不依赖项目自建云端来存你的账号列表。
-- **数据主要保存在本机**：
-  - `~/.antigravity_cockpit`：Antigravity 账号、配置、WebSocket 状态等
-  - `~/.codex`：Codex 官方当前登录 `auth.json`
-  - `~/.gemini`：Gemini Cli 本地会话文件（如 `oauth_creds.json`、`google_accounts.json`、`settings.json`）
-  - 系统本地应用数据目录下 `com.antigravity.cockpit-tools`：Codex / GitHub Copilot / Windsurf / Kiro / Cursor / Gemini Cli / CodeBuddy / CodeBuddy CN / Qoder / Trae / Zed 多账号索引等
-- **WebSocket 默认仅本机访问**：监听 `127.0.0.1`，默认端口 `19528`，可在设置中关闭或改端口。
-- **什么时候会联网**：OAuth 登录、Token 刷新、配额查询、版本更新检查等官方接口请求。
-- **实用安全建议**：
-  1. 不使用插件联动时，可关闭 WebSocket 服务。
-  2. 不要把用户目录直接打包分享；备份前注意脱敏 token 文件。
-  3. 在公共或共用电脑上，使用后删除账号并退出应用。
+- **This is a local desktop tool**: it does not require a separate cloud account for this project, and it does not rely on a project-hosted cloud account storage.
+- **Data is mainly stored on your machine**:
+  - `~/.antigravity_cockpit`: Antigravity accounts, configs, WebSocket status, etc.
+  - `~/.codex`: official Codex current login `auth.json`
+  - `~/.gemini`: Gemini Cli local session files (for example `oauth_creds.json`, `google_accounts.json`, `settings.json`)
+  - local app data folder under `com.adxptived.switchme`: Codex / GitHub Copilot / Windsurf / Kiro / Cursor / Gemini Cli / CodeBuddy / CodeBuddy CN / Qoder / Trae / Zed multi-account index data, etc.
+- **WebSocket is local-only by default**: binds to `127.0.0.1`, default port `19528`; you can disable it or change the port in Settings.
+- **When network access happens**: OAuth login, token refresh, quota fetching, update checks, and other official API requests.
+- **Practical safety tips**:
+  1. If you do not need plugin integration, disable WebSocket.
+  2. Do not share your full user directory directly; redact token files before backup/share.
+  3. On shared/public computers, remove accounts and quit the app after use.
 
-## 设置项说明（小白版）
+## Settings Guide (Beginner Friendly)
 
-如果你只想“能用、稳定、不折腾”，优先按“推荐值”设置即可。
+If you want a stable setup with minimal tuning, follow the "Recommended" values.
 
-### 通用设置
+### General Settings
 
-| 设置项 | 这是做什么的（通俗） | 推荐值 | 什么时候改 |
+| Setting | What it does (simple) | Recommended | When to change |
 | --- | --- | --- | --- |
-| 显示语言 | 改界面文字语言 | 你最熟悉的语言 | 只在看不懂时改 |
-| 应用主题 | 改亮色/暗色外观 | 跟随系统 | 长时间夜间使用可改深色 |
-| 窗口关闭行为 | 点关闭按钮后的动作 | 每次询问 | 想后台常驻选“最小化到托盘” |
-| Antigravity 自动刷新配额 | 后台定时更新 Antigravity 配额 | 5~10 分钟 | 账号多、想更实时可改 2 分钟 |
-| Codex 自动刷新配额 | 后台定时更新 Codex 配额 | 5~10 分钟 | 同上 |
-| GitHub Copilot 自动刷新配额 | 后台定时更新 GitHub Copilot 配额 | 5~10 分钟 | 同上 |
-| Windsurf 自动刷新配额 | 后台定时更新 Windsurf 配额 | 5~10 分钟 | 同上 |
-| Kiro 自动刷新配额 | 后台定时更新 Kiro 配额 | 5~10 分钟 | 同上 |
-| Cursor 自动刷新配额 | 后台定时更新 Cursor 配额 | 5~10 分钟 | 同上 |
-| Gemini Cli 自动刷新配额 | 后台定时更新 Gemini Cli 配额 | 5~10 分钟 | 同上 |
-| CodeBuddy 自动刷新配额 | 后台定时更新 CodeBuddy 配额 | 5~10 分钟 | 同上 |
-| CodeBuddy CN 自动刷新配额 | 后台定时更新 CodeBuddy CN 配额 | 5~10 分钟 | 同上 |
-| Qoder 自动刷新配额 | 后台定时更新 Qoder 配额 | 5~10 分钟 | 同上 |
-| Trae 自动刷新配额 | 后台定时更新 Trae 配额 | 5~10 分钟 | 同上 |
-| Zed 自动刷新配额 | 后台定时更新 Zed 配额 | 5~10 分钟 | 同上 |
-| 数据目录 | 存账号与配置文件的位置 | 默认即可 | 仅用于排查、备份 |
-| Antigravity/Codex/VS Code/Windsurf/Kiro/Cursor/Gemini Cli/CodeBuddy/CodeBuddy CN/Qoder/Trae/Zed/OpenCode 启动路径 | 指定应用可执行文件位置 | 留空（自动检测） | 自动检测失败、或你装在自定义路径时 |
-| 切换 Codex 时自动重启 OpenCode | 切换 Codex 后自动同步 OpenCode 账号信息 | 使用 OpenCode 就开启；不用就关闭 | 频繁切号且需要 OpenCode 同步时开启 |
+| Display Language | Changes UI language | Your native/comfortable language | Only if current language is hard to read |
+| Theme | Light/dark appearance | System | Use dark mode for long night sessions |
+| Window Close Behavior | What happens when clicking close | Ask every time | Choose "Minimize to tray" if you want background running |
+| Antigravity Auto Refresh | Periodically updates Antigravity quota | 5-10 minutes | Use 2 minutes if you need near real-time updates |
+| Codex Auto Refresh | Periodically updates Codex quota | 5-10 minutes | Same as above |
+| GitHub Copilot Auto Refresh | Periodically updates GitHub Copilot quota | 5-10 minutes | Same as above |
+| Windsurf Auto Refresh | Periodically updates Windsurf quota | 5-10 minutes | Same as above |
+| Kiro Auto Refresh | Periodically updates Kiro quota | 5-10 minutes | Same as above |
+| Cursor Auto Refresh | Periodically updates Cursor quota | 5-10 minutes | Same as above |
+| Gemini Cli Auto Refresh | Periodically updates Gemini Cli quota | 5-10 minutes | Same as above |
+| CodeBuddy Auto Refresh | Periodically updates CodeBuddy quota | 5-10 minutes | Same as above |
+| CodeBuddy CN Auto Refresh | Periodically updates CodeBuddy CN quota | 5-10 minutes | Same as above |
+| Qoder Auto Refresh | Periodically updates Qoder quota | 5-10 minutes | Same as above |
+| Trae Auto Refresh | Periodically updates Trae quota | 5-10 minutes | Same as above |
+| Zed Auto Refresh | Periodically updates Zed quota | 5-10 minutes | Same as above |
+| Data Directory | Where account/config files are stored | Keep default | Only for troubleshooting or backups |
+| Antigravity/Codex/VS Code/Windsurf/Kiro/Cursor/Gemini Cli/CodeBuddy/CodeBuddy CN/Qoder/Trae/Zed/OpenCode App Path | Manually set executable path | Leave empty (auto-detect) | Change only if auto-detect fails or you use custom install paths |
+| Auto-restart OpenCode on Codex switch | Sync OpenCode auth after Codex switch | ON if you use OpenCode; otherwise OFF | Enable for frequent Codex switching with OpenCode |
 
-补充说明：
-- 自动刷新间隔越小，请求越频繁；若你更关注稳定，间隔可适当拉大。
-- 当启用“配额重置唤醒”相关任务时，部分刷新间隔会有最小值限制（界面会提示）。
+Notes:
+- Smaller refresh intervals mean more frequent requests.
+- If quota-reset wake-up tasks are enabled, some minimum refresh limits may apply (UI will show hints).
 
-### 网络服务设置
+### Network Settings
 
-| 设置项 | 这是做什么的（通俗） | 推荐值 | 风险/注意点 |
+| Setting | What it does (simple) | Recommended | Risk / Notes |
 | --- | --- | --- | --- |
-| WebSocket 服务 | 给本机插件/客户端实时通信用 | 不用插件联动就关闭 | 开启后仍是本机 `127.0.0.1` 访问 |
-| 首选端口 | WebSocket 监听端口 | 默认 `19528` | 若端口冲突可改，保存后需重启应用 |
-| 当前运行端口 | 实际已使用端口 | 只读查看 | 配置端口被占用时会自动回退到其它端口 |
+| WebSocket Service | Real-time local integration for plugins/clients | OFF if not needed | Still local-only (`127.0.0.1`) when enabled |
+| Preferred Port | Listening port for WebSocket | Default `19528` | Change only on conflict; restart required after save |
+| Current Running Port | The actual active port | Read-only info | May differ if preferred port is occupied |
 
-### 三套推荐配置（直接抄）
+### 3 Ready-to-Use Presets
 
-1. **稳定省心**：自动刷新 10 分钟 + WebSocket 关闭（不用插件时）+ 路径保持默认。  
-2. **高频切号**：自动刷新 2~5 分钟 + 需要联动时开启 WebSocket + OpenCode 联动开启。  
-3. **安全优先**：WebSocket 关闭 + 不共享用户目录 + 定期清理不再使用的账号。  
+1. **Stable default**: 10-min refresh, WebSocket OFF (if no plugin), keep default paths.
+2. **Frequent switching**: 2-5 min refresh, WebSocket ON if needed, OpenCode sync ON.
+3. **Security-first**: WebSocket OFF, do not share user directory, remove unused accounts regularly.
 
 ---
 
-## 安装指南 (Installation)
+## Installation Guide
 
-### 选项 A: 手动下载 (推荐)
+### Option A: Manual Download (Recommended)
 
-前往 [GitHub Releases](https://github.com/jlcodes99/cockpit-tools/releases) 下载对应系统的安装包：
+Go to [GitHub Releases](https://github.com/adxptived/Switchme/releases) to download the package for your system:
 
 *   **macOS**: `.dmg` (Apple Silicon & Intel)
-*   **Windows**: `.msi` (推荐) 或 `.exe`
-*   **Linux**: `.deb` (Debian/Ubuntu)、`.rpm` 或 `.AppImage` (通用)
+*   **Windows**: `.msi` (Recommended) or `.exe`
+*   **Linux**: `.deb` (Debian/Ubuntu), `.rpm`, or `.AppImage` (Universal)
 
-### 选项 B: Homebrew 安装 (macOS)
+### Option B: Install with Homebrew (macOS)
 
-> 需要先安装 Homebrew。
-
-```bash
-brew tap jlcodes99/cockpit-tools https://github.com/jlcodes99/cockpit-tools
-brew install --cask cockpit-tools
-```
-
-如果遇到 macOS “应用已损坏”或无法打开，也可以使用 `--no-quarantine` 安装：
+> Homebrew is required.
 
 ```bash
-brew install --cask --no-quarantine cockpit-tools
+brew tap adxptived/Switchme https://github.com/adxptived/Switchme
+brew install --cask switchme
 ```
 
-如果提示已存在应用（例如：`already an App at '/Applications/Cockpit Tools.app'`），请先删除旧版本再安装：
+If you hit the macOS "App is damaged" warning, you can also install with `--no-quarantine`:
 
 ```bash
-rm -rf "/Applications/Cockpit Tools.app"
-brew install --cask cockpit-tools
+brew install --cask --no-quarantine switchme
 ```
 
-或者直接强制覆盖安装：
+If Homebrew says the app already exists (e.g. `already an App at '/Applications/Switchme.app'`), remove the old app and install again:
 
 ```bash
-brew install --cask --force cockpit-tools
+rm -rf "/Applications/Switchme.app"
+brew install --cask switchme
 ```
 
-### 🛠️ 常见问题排查 (Troubleshooting)
+Or force overwrite the existing app:
 
-#### macOS 提示“应用已损坏，无法打开”？
-由于 macOS 的安全机制，非 App Store 下载的应用可能会触发此提示。您可以按照以下步骤快速修复：
+```bash
+brew install --cask --force switchme
+```
 
-1.  **命令行修复** (推荐):
-    打开终端，执行以下命令：
+### Troubleshooting
+
+#### macOS says "App is damaged and can't be opened"?
+Due to macOS security mechanisms, apps not downloaded from the App Store may trigger this warning. You can quickly fix this by following these steps:
+
+1.  **Command Line Fix** (Recommended):
+    Open Terminal and run the following command:
     ```bash
-    sudo xattr -rd com.apple.quarantine "/Applications/Cockpit Tools.app"
+    sudo xattr -rd com.apple.quarantine "/Applications/Switchme.app"
     ```
-    > **注意**: 如果您修改了应用名称，请在命令中相应调整路径。
+    > **Note**: If you changed the app name, please adjust the path in the command accordingly.
 
-2.  **或者**: 在“系统设置” -> “隐私与安全性”中点击“仍要打开”。
+2.  **Or**: Go to "System Settings" -> "Privacy & Security" and click "Open Anyway".
 
 ---
 
-## 开发与构建
+## Development & Build
 
-### 前置要求
+### Prerequisites
 
 - Node.js v18+
 - npm v9+
-- Rust（Tauri 运行时）
+- Rust (Tauri runtime)
 
-### 安装依赖
+### Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 开发模式
+### Development Mode
 
 ```bash
 npm run tauri dev
 ```
 
-### 构建产物
+### Build
 
 ```bash
 npm run tauri build
@@ -368,52 +349,34 @@ npm run tauri build
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=jlcodes99/cockpit-tools&type=Date)](https://star-history.com/#jlcodes99/cockpit-tools&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=adxptived/Switchme&type=Date)](https://star-history.com/#adxptived/Switchme&Date)
 
 ---
 
-## 💬 交流群
+## Acknowledgments
 
-QQ交流群 或者加我微信 拉微信群
+- Antigravity account switching logic based on: [Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager)
 
-| QQ 群 | 微信（个人） |
-| :---: | :---: |
-| <img src="docs/images/qq_group_20260404_183718.png" width="200" /> | <img src="docs/images/wechat_info.jpg" width="200" /> |
+Thanks to the project author for their open-source contributions! If these projects have helped you, please give them a Star to show your support!
 
 ---
 
-## ☕ 赞助项目
+## License
 
-如果不介意，请 [☕ 赞赏支持一下](docs/DONATE.md)
+This project is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 
-您的每一份支持都是对开源项目最大的鼓励！无论金额大小，都代表着您对这个项目的认可。
-
----
-
-## 致谢
-
-- Antigravity 账号切号逻辑参考：[Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager)
-
-感谢项目作者的开源贡献！如果这些项目对你有帮助，也请给他们点个 ⭐ Star 支持一下！
+- Allowed: personal learning, research, and non-commercial use/modification (with attribution and share-alike obligations).
+- Not allowed: any commercial use without authorization (including internal commercial operations, external paid services, paid product integration, or resale/redistribution for profit).
+- Commercial license: contact the author for a separate written commercial license and pricing.
 
 ---
 
-## 许可证
+## Disclaimer
 
-本项目默认采用 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans) 许可协议（署名-非商业性使用-相同方式共享）。
+This project is for personal learning and research purposes only. By using this project, you agree to:
 
-- 允许：个人学习、研究、非商业场景下的使用与修改（需保留署名并遵循同协议分享要求）。
-- 不允许：任何未获授权的商业使用（含企业内部商业目的、对外商业服务、付费产品集成、二次分发售卖等）。
-- 商业授权：如需商业使用，请联系作者获取单独书面商业授权与报价。
+- Not use this project for any commercial purposes without prior written authorization from the author
+- Bear all risks and responsibilities of using this project
+- Comply with relevant terms of service and laws and regulations
 
----
-
-## 免责声明
-
-本项目仅供个人学习和研究使用。使用本项目即表示您同意：
-
-- 未获得作者书面商业授权前，不将本项目用于任何商业用途
-- 承担使用本项目的所有风险和责任
-- 遵守相关服务条款和法律法规
-
-项目作者对因使用本项目而产生的任何直接或间接损失不承担责任。
+The project author is not responsible for any direct or indirect losses arising from the use of this project.

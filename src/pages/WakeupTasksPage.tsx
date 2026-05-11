@@ -2367,7 +2367,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
               <button
                 className="modal-close"
                 onClick={closeTestModal}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>
@@ -2564,7 +2564,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
               <button
                 className="modal-close"
                 onClick={() => setShowHistoryModal(false)}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>
@@ -2637,7 +2637,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
               <button
                 className="modal-close"
                 onClick={() => setShowModal(false)}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>

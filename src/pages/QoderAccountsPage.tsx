@@ -465,7 +465,7 @@ export function QoderAccountsPage() {
     const corrupted = parseFileCorruptedError(store.error);
     if (corrupted) {
       setMessage({
-        text: t('error.fileCorrupted.description', '文件 {{fileName}} 已损坏，无法解析。', {
+        text: t('error.fileCorrupted.description', "File {{fileName}} is corrupted and cannot be parsed.", {
           fileName: corrupted.file_name,
         }),
         tone: 'error',
@@ -502,7 +502,7 @@ export function QoderAccountsPage() {
     onError: (error) =>
       setMessage({
         tone: 'error',
-        text: t('accounts.exportError', '导出失败：{{error}}', { error: String(error) }),
+        text: t('accounts.exportError', "Export failed: {{error}}", { error: String(error) }),
       }),
   });
 
@@ -834,11 +834,11 @@ export function QoderAccountsPage() {
       setRefreshing(accountId);
       try {
         await store.refreshToken(accountId);
-        setMessage({ text: t('accounts.refreshSuccess', '刷新成功') });
+        setMessage({ text: t('accounts.refreshSuccess', "Refresh successful") });
       } catch (error) {
         setMessage({
           tone: 'error',
-          text: t('accounts.refreshFailed', '刷新失败：{{error}}', { error: String(error) }),
+          text: t('accounts.refreshFailed', "Refresh failed: {{error}}", { error: String(error) }),
         });
       } finally {
         setRefreshing(null);
@@ -852,11 +852,11 @@ export function QoderAccountsPage() {
     setRefreshingAll(true);
     try {
       await store.refreshAllTokens();
-      setMessage({ text: t('accounts.refreshAllSuccess', '已刷新全部账号') });
+      setMessage({ text: t('accounts.refreshAllSuccess', "All accounts refreshed") });
     } catch (error) {
       setMessage({
         tone: 'error',
-        text: t('accounts.refreshAllFailed', '批量刷新失败：{{error}}', { error: String(error) }),
+        text: t('accounts.refreshAllFailed', "Bulk refresh failed: {{error}}", { error: String(error) }),
       });
     } finally {
       setRefreshingAll(false);
@@ -869,11 +869,11 @@ export function QoderAccountsPage() {
       setInjecting(accountId);
       try {
         await store.switchAccount(accountId);
-        setMessage({ text: t('accounts.switchSuccess', '切换成功') });
+        setMessage({ text: t('accounts.switchSuccess', "Switch successful") });
       } catch (error) {
         setMessage({
           tone: 'error',
-          text: t('accounts.switchFailed', '切换失败：{{error}}', { error: String(error) }),
+          text: t('accounts.switchFailed', "Switch failed: {{error}}", { error: String(error) }),
         });
       } finally {
         setInjecting(null);
@@ -887,13 +887,13 @@ export function QoderAccountsPage() {
       if (ids.length === 0 || deleting) return;
       const confirmed = await confirmDialog(
         ids.length === 1
-          ? t('accounts.deleteConfirm.single', '确认删除该账号？')
-          : t('accounts.deleteConfirm.multi', '确认删除选中的 {{count}} 个账号？', { count: ids.length }),
+          ? t('accounts.deleteConfirm.single', "Delete this account?")
+          : t('accounts.deleteConfirm.multi', "Delete {{count}} selected account(s)?", { count: ids.length }),
         {
           title: t('common.appName', 'Cockpit Tools'),
           kind: 'warning',
-          okLabel: t('common.confirm', '确认'),
-          cancelLabel: t('common.cancel', '取消'),
+          okLabel: t('common.confirm', "Confirm"),
+          cancelLabel: t('common.cancel', "Cancel"),
         },
       );
       if (!confirmed) return;
@@ -902,11 +902,11 @@ export function QoderAccountsPage() {
       try {
         await store.deleteAccounts(ids);
         setSelected(new Set());
-        setMessage({ text: t('accounts.deleteSuccess', '删除成功') });
+        setMessage({ text: t('accounts.deleteSuccess', "Delete successful") });
       } catch (error) {
         setMessage({
           tone: 'error',
-          text: t('accounts.deleteFailed', '删除失败：{{error}}', { error: String(error) }),
+          text: t('accounts.deleteFailed', "Delete failed: {{error}}", { error: String(error) }),
         });
       } finally {
         setDeleting(false);
@@ -919,7 +919,7 @@ export function QoderAccountsPage() {
     async (accountId: string, tags: string[]) => {
       const scrollY = window.scrollY;
       await store.updateAccountTags(accountId, tags);
-      setMessage({ text: t('accounts.tagUpdated', '标签已更新') });
+      setMessage({ text: t('accounts.tagUpdated', "Tag updated") });
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
           window.scrollTo({ top: scrollY, behavior: 'auto' });
@@ -975,10 +975,10 @@ export function QoderAccountsPage() {
       setTagFilter((prev) => prev.filter((item) => normalizeTag(item) !== normalized));
       setTagDeleteConfirm(null);
       setTagDeleteConfirmError(null);
-      setMessage({ text: t('accounts.tagUpdated', '标签已更新') });
+      setMessage({ text: t('accounts.tagUpdated', "Tag updated") });
     } catch (error) {
       setTagDeleteConfirmError(
-        t('accounts.deleteTagFailed', '删除标签失败：{{error}}', { error: String(error) }),
+        t('accounts.deleteTagFailed', "Tag deletion failed: {{error}}", { error: String(error) }),
       );
     } finally {
       setDeletingTag(false);
@@ -995,10 +995,10 @@ export function QoderAccountsPage() {
       await new Promise((resolve) => setTimeout(resolve, 180));
       await store.fetchAccounts();
       setAddStatus('success');
-      setAddMessage(t('qoder.import.localSuccess', '已从本机 Qoder 导入账号。'));
+      setAddMessage(t('qoder.import.localSuccess', "Account imported from local Qoder."));
     } catch (error) {
       setAddStatus('error');
-      setAddMessage(t('qoder.import.localFailed', '本机导入失败：{{error}}', { error: String(error) }));
+      setAddMessage(t('qoder.import.localFailed', "Local import failed: {{error}}", { error: String(error) }));
     }
   }, [addStatus, store, t]);
 
@@ -1012,10 +1012,10 @@ export function QoderAccountsPage() {
         await store.importFromJson(content);
         await store.fetchAccounts();
         setAddStatus('success');
-        setAddMessage(t('accounts.importJsonSuccess', 'JSON 导入成功'));
+        setAddMessage(t('accounts.importJsonSuccess', "JSON import successful"));
       } catch (error) {
         setAddStatus('error');
-        setAddMessage(t('accounts.importJsonFailed', 'JSON 导入失败：{{error}}', { error: String(error) }));
+        setAddMessage(t('accounts.importJsonFailed', "JSON import failed: {{error}}", { error: String(error) }));
       }
     },
     [addStatus, store, t],
@@ -1026,7 +1026,7 @@ export function QoderAccountsPage() {
     const payload = tokenInput.trim();
     if (!payload) {
       setAddStatus('error');
-      setAddMessage(t('common.shared.token.empty', '请输入 Token 或 JSON'));
+      setAddMessage(t('common.shared.token.empty', "Please enter a token or JSON"));
       return;
     }
     setAddStatus('loading');
@@ -1036,14 +1036,14 @@ export function QoderAccountsPage() {
       await store.fetchAccounts();
       setAddStatus('success');
       setAddMessage(
-        t('common.shared.token.importSuccessMsg', '成功导入 {{count}} 个账号', {
+        t('common.shared.token.importSuccessMsg', "Imported {{count}} account(s) successfully", {
           count: imported.length,
         }),
       );
     } catch (error) {
       setAddStatus('error');
       setAddMessage(
-        t('common.shared.token.importFailedMsg', '导入失败: {{error}}', {
+        t('common.shared.token.importFailedMsg', "Import failed: {{error}}", {
           error: String(error),
         }),
       );
@@ -1088,7 +1088,7 @@ export function QoderAccountsPage() {
             if (oauthSessionRef.current !== loginId) return;
             await store.fetchAccounts();
             setAddStatus('success');
-            setAddMessage(t('common.shared.oauth.success', '授权成功'));
+            setAddMessage(t('common.shared.oauth.success', "Authorization successful"));
             setOauthError(null);
             setOauthCompleting(false);
             oauthSessionRef.current = null;
@@ -1105,7 +1105,7 @@ export function QoderAccountsPage() {
             const msg = String(error);
             setOauthError(msg);
             setAddStatus('error');
-            setAddMessage(t('common.shared.oauth.failed', '授权失败') + ': ' + msg);
+            setAddMessage(t('common.shared.oauth.failed', "Authorization failed") + ': ' + msg);
             setOauthCompleting(false);
             oauthCompletingLoginIdRef.current = null;
           });
@@ -1229,7 +1229,7 @@ export function QoderAccountsPage() {
       setOauthCompleting(false);
       setOauthError(msg);
       setAddStatus('error');
-      setAddMessage(t('common.shared.oauth.failed', '授权失败') + ': ' + msg);
+      setAddMessage(t('common.shared.oauth.failed', "Authorization failed") + ': ' + msg);
     }
   }, [oauthCompleting, oauthLoginId, oauthPreparing, store, t]);
 
@@ -1246,7 +1246,7 @@ export function QoderAccountsPage() {
       const msg = String(error);
       setOauthError(msg);
       setAddStatus('error');
-      setAddMessage(t('common.shared.oauth.failed', '授权失败') + ': ' + msg);
+      setAddMessage(t('common.shared.oauth.failed', "Authorization failed") + ': ' + msg);
     }
   }, [oauthUrl, t]);
 
@@ -1336,7 +1336,7 @@ export function QoderAccountsPage() {
   const formatRelativeDuration = useCallback(
     (seconds: number) => {
       if (seconds < 60) {
-        return t('common.shared.time.lessThanMinute', '<1分钟');
+        return t('common.shared.time.lessThanMinute', "<1m");
       }
       const minutes = Math.floor(seconds / 60);
       const hours = Math.floor(minutes / 60);
@@ -1345,24 +1345,24 @@ export function QoderAccountsPage() {
       if (days > 0) {
         const remainingHours = hours % 24;
         if (remainingHours > 0) {
-          return t('common.shared.time.relativeDaysHours', '{{days}}天{{hours}}小时', {
+          return t('common.shared.time.relativeDaysHours', "{{days}}d {{hours}}h", {
             days,
             hours: remainingHours,
           });
         }
-        return t('common.shared.time.relativeDays', '{{days}}天', { days });
+        return t('common.shared.time.relativeDays', "{{days}}d", { days });
       }
       if (hours > 0) {
         const remainingMinutes = minutes % 60;
         if (remainingMinutes > 0) {
-          return t('common.shared.time.relativeHoursMinutes', '{{hours}}小时{{minutes}}分钟', {
+          return t('common.shared.time.relativeHoursMinutes', "{{hours}}h {{minutes}}m", {
             hours,
             minutes: remainingMinutes,
           });
         }
-        return t('common.shared.time.relativeHours', '{{hours}}小时', { hours });
+        return t('common.shared.time.relativeHours', "{{hours}}h", { hours });
       }
-      return t('common.shared.time.relativeMinutes', '{{minutes}}分钟', { minutes });
+      return t('common.shared.time.relativeMinutes', "{{minutes}}m", { minutes });
     },
     [t],
   );
@@ -1371,7 +1371,7 @@ export function QoderAccountsPage() {
     (account: QoderAccount) => {
       const updatedAt = account.last_used || account.created_at || 0;
       const secondsAgo = Math.max(0, Math.floor(Date.now() / 1000) - updatedAt);
-      return t('common.shared.updated.label', '更新于 {{relative}}前', {
+      return t('common.shared.updated.label', "Updated {{relative}} ago", {
         relative: formatRelativeDuration(secondsAgo),
       });
     },
@@ -1416,7 +1416,7 @@ export function QoderAccountsPage() {
         items: [
           buildQuotaItem(
             'included',
-            t('qoder.usageOverview.includedCredits', '套餐内 Credits'),
+            t('qoder.usageOverview.includedCredits', "Included Credits"),
             subscription.userQuota.used,
             subscription.userQuota.total,
             subscription.userQuota.percentage,
@@ -1455,7 +1455,7 @@ export function QoderAccountsPage() {
       if (!hasQoderQuotaData(account)) {
         return (
           <div className="ghcp-quota-section qoder-usage-section">
-            <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
+            <div className="quota-empty">{t('common.shared.quota.noData', "No quota data")}</div>
           </div>
         );
       }
@@ -1533,11 +1533,11 @@ export function QoderAccountsPage() {
               {quotaError && (
                 <span className="status-pill warning" title={quotaError}>
                   <CircleAlert size={12} />
-                  {t('common.shared.quota.queryFailed', '配额查询失败')}
+                  {t('common.shared.quota.queryFailed', "Quota query failed")}
                 </span>
               )}
               <span className={`tier-badge ${planClass} raw-value`}>{plan}</span>
-              {isCurrent && <span className="current-tag">{t('accounts.status.current', '当前')}</span>}
+              {isCurrent && <span className="current-tag">{t('accounts.status.current', "Current")}</span>}
             </div>
 
             <div className="account-sub-line qoder-account-subline">
@@ -1567,7 +1567,7 @@ export function QoderAccountsPage() {
                 <button
                   className="card-action-btn success"
                   onClick={() => void handleSwitch(account.id)}
-                  title={t('dashboard.switch', '切换')}
+                  title={t('dashboard.switch', "Switch")}
                   disabled={isInjecting || deleting}
                 >
                   {isInjecting ? <RotateCw size={14} className="loading-spinner" /> : <Play size={14} />}
@@ -1575,7 +1575,7 @@ export function QoderAccountsPage() {
                 <button
                   className="card-action-btn"
                   onClick={() => setShowTagModal(account.id)}
-                  title={t('accounts.tagButton', '编辑标签')}
+                  title={t('accounts.tagButton', "Edit Tags")}
                   disabled={isInjecting || deleting}
                 >
                   <Tag size={14} />
@@ -1583,7 +1583,7 @@ export function QoderAccountsPage() {
                 <button
                   className="card-action-btn"
                   onClick={() => void handleRefresh(account.id)}
-                  title={t('common.refresh', '刷新')}
+                  title={t('common.refresh', "Refresh")}
                   disabled={isRefreshing || isInjecting || deleting}
                 >
                   <RefreshCw size={14} className={isRefreshing ? 'loading-spinner' : ''} />
@@ -1591,7 +1591,7 @@ export function QoderAccountsPage() {
                 <button
                   className="card-action-btn export-btn"
                   onClick={() => void handleExportByIds([account.id], getQoderAccountDisplayEmail(account))}
-                  title={t('accounts.actions.export', '导出')}
+                  title={t('accounts.actions.export', "Export")}
                   disabled={exportModal.preparing || exportModal.saving}
                 >
                   <Download size={14} />
@@ -1599,7 +1599,7 @@ export function QoderAccountsPage() {
                 <button
                   className="card-action-btn danger"
                   onClick={() => void handleDeleteAccounts([account.id])}
-                  title={t('accounts.actions.delete', '删除')}
+                  title={t('accounts.actions.delete', "Delete")}
                   disabled={deleting}
                 >
                   <Trash2 size={14} />
@@ -1658,7 +1658,7 @@ export function QoderAccountsPage() {
                   <div className="account-sub-line">
                     <span className="status-pill warning" title={quotaError}>
                       <CircleAlert size={12} />
-                      {t('common.shared.quota.queryFailed', '配额查询失败')}
+                      {t('common.shared.quota.queryFailed', "Quota query failed")}
                     </span>
                   </div>
                 )}
@@ -1705,7 +1705,7 @@ export function QoderAccountsPage() {
                 <button
                   className="action-btn"
                   onClick={() => void handleRefresh(account.id)}
-                  title={t('common.refresh', '刷新')}
+                  title={t('common.refresh', "Refresh")}
                   disabled={isRefreshing || isInjecting || deleting}
                 >
                   <RefreshCw size={14} className={isRefreshing ? 'loading-spinner' : ''} />
@@ -1713,7 +1713,7 @@ export function QoderAccountsPage() {
                 <button
                   className="action-btn"
                   onClick={() => void handleSwitch(account.id)}
-                  title={t('dashboard.switch', '切换')}
+                  title={t('dashboard.switch', "Switch")}
                   disabled={isInjecting || deleting}
                 >
                   {isInjecting ? <RotateCw size={14} className="loading-spinner" /> : <Play size={14} />}
@@ -1721,7 +1721,7 @@ export function QoderAccountsPage() {
                 <button
                   className="action-btn"
                   onClick={() => setShowTagModal(account.id)}
-                  title={t('accounts.tagButton', '编辑标签')}
+                  title={t('accounts.tagButton', "Edit Tags")}
                   disabled={isInjecting || deleting}
                 >
                   <Tag size={14} />
@@ -1729,7 +1729,7 @@ export function QoderAccountsPage() {
                 <button
                   className="action-btn"
                   onClick={() => void handleExportByIds([account.id], getQoderAccountDisplayEmail(account))}
-                  title={t('accounts.actions.export', '导出')}
+                  title={t('accounts.actions.export', "Export")}
                   disabled={exportModal.preparing || exportModal.saving}
                 >
                   <Upload size={14} />
@@ -1737,7 +1737,7 @@ export function QoderAccountsPage() {
                 <button
                   className="action-btn danger"
                   onClick={() => void handleDeleteAccounts([account.id])}
-                  title={t('accounts.actions.delete', '删除')}
+                  title={t('accounts.actions.delete', "Delete")}
                   disabled={deleting}
                 >
                   <Trash2 size={14} />
@@ -1774,7 +1774,7 @@ export function QoderAccountsPage() {
             <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
                 <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
-                {t('common.selectAll', '全选')}
+                {t('common.selectAll', "Select All")}
               </label>
             </div>
           )}
@@ -1786,7 +1786,7 @@ export function QoderAccountsPage() {
                 <div key={groupKey} className="tag-group-section">
                   <div className="tag-group-header">
                     <span className="tag-group-title">
-                      {groupKey === UNTAGGED_KEY ? t('accounts.defaultGroup', '默认分组') : groupKey}
+                      {groupKey === UNTAGGED_KEY ? t('accounts.defaultGroup', "Default Group") : groupKey}
                     </span>
                     <span className="tag-group-count">{totalCount}</span>
                   </div>
@@ -1809,9 +1809,9 @@ export function QoderAccountsPage() {
                   <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
                 </th>
                 <th>{t('common.shared.columns.account')}</th>
-                <th>{t('common.shared.columns.userId', '用户 ID')}</th>
-                <th>{t('common.shared.columns.plan', '套餐')}</th>
-                <th>{t('instances.labels.quota', '配额')}</th>
+                <th>{t('common.shared.columns.userId', "User ID")}</th>
+                <th>{t('common.shared.columns.plan', "Plan")}</th>
+                <th>{t('instances.labels.quota', "Quota")}</th>
                 <th>{t('common.shared.columns.createdAt')}</th>
                 <th>{t('common.shared.columns.actions')}</th>
               </tr>
@@ -1828,7 +1828,7 @@ export function QoderAccountsPage() {
           <div key={groupKey} className="tag-group-section">
             <div className="tag-group-header">
               <span className="tag-group-title">
-                {groupKey === UNTAGGED_KEY ? t('accounts.defaultGroup', '默认分组') : groupKey}
+                {groupKey === UNTAGGED_KEY ? t('accounts.defaultGroup', "Default Group") : groupKey}
               </span>
               <span className="tag-group-count">{totalCount}</span>
             </div>
@@ -1840,9 +1840,9 @@ export function QoderAccountsPage() {
                       <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
                     </th>
                     <th>{t('common.shared.columns.account')}</th>
-                    <th>{t('common.shared.columns.userId', '用户 ID')}</th>
-                    <th>{t('common.shared.columns.plan', '套餐')}</th>
-                    <th>{t('instances.labels.quota', '配额')}</th>
+                    <th>{t('common.shared.columns.userId', "User ID")}</th>
+                    <th>{t('common.shared.columns.plan', "Plan")}</th>
+                    <th>{t('instances.labels.quota', "Quota")}</th>
                     <th>{t('common.shared.columns.createdAt')}</th>
                     <th>{t('common.shared.columns.actions')}</th>
                   </tr>
@@ -1879,7 +1879,7 @@ export function QoderAccountsPage() {
             >
               <div className="ghcp-flow-notice-title">
                 <CircleAlert size={16} />
-                <span>{t('qoder.flowNotice.title', 'Qoder 账号接入说明（点击展开/收起）')}</span>
+                <span>{t('qoder.flowNotice.title', "Qoder account guide (click to expand/collapse)")}</span>
               </div>
               <ChevronDown size={16} className={`ghcp-flow-notice-arrow ${isFlowNoticeCollapsed ? 'collapsed' : ''}`} />
             </button>
@@ -1888,12 +1888,12 @@ export function QoderAccountsPage() {
                 <div className="ghcp-flow-notice-desc">
                   {t(
                     'qoder.flowNotice.desc',
-                    '当前支持官方授权登录（回调）、本地导入、JSON 导入、切号注入、多开实例绑定与配额概览。登录流程沿用 Qoder 客户端真实落盘数据。',
+                    "Supports official CLI device login authorization, local import, JSON import, account switching injection, multi-instance binding, and quota overview. Browser authorization does not require Qoder to stay running; injection writes back using Qoder client's actual on-disk rules.",
                   )}
                 </div>
                 <ul className="ghcp-flow-notice-list">
-                  <li>{t('qoder.flowNotice.permission', '权限范围：读取 Qoder 本地认证存储（auth 凭据与用户信息），用于账号切换与会话注入；所有数据仅在本机处理。')}</li>
-                  <li>{t('qoder.flowNotice.network', '网络范围：OAuth 授权登录需联网请求 Qoder 官方服务完成回调；配额查询通过 Qoder API 获取用量数据。不上传本地密钥或凭证。')}</li>
+                  <li>{t('qoder.flowNotice.permission', "Permission scope: reads Qoder local auth storage, user info, and machine identity caches such as machine_token.json and cache/id for official authorization, local import, account switching, and session injection. All data is processed locally on your machine.")}</li>
+                  <li>{t('qoder.flowNotice.network', "Network scope: OAuth authorization opens Qoder's official device login page in your browser and polls Qoder official OpenAPI to finish authorization. Quota queries call Qoder APIs for usage data. No local keys, credentials, or raw storage contents are uploaded.")}</li>
                 </ul>
               </div>
             )}
@@ -1902,7 +1902,7 @@ export function QoderAccountsPage() {
           {message && (
             <div className={`message-bar ${message.tone === 'error' ? 'error' : 'success'}`}>
               {message.text}
-              <button onClick={() => setMessage(null)} aria-label={t('common.close', '关闭')}>
+              <button onClick={() => setMessage(null)} aria-label={t('common.close', "Close")}>
                 <X size={14} />
               </button>
             </div>
@@ -1923,14 +1923,14 @@ export function QoderAccountsPage() {
                 <button
                   className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
                   onClick={() => setViewMode('list')}
-                  title={t('common.shared.view.list', '列表视图')}
+                  title={t('common.shared.view.list', "List view")}
                 >
                   <List size={16} />
                 </button>
                 <button
                   className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
                   onClick={() => setViewMode('grid')}
-                  title={t('common.shared.view.grid', '卡片视图')}
+                  title={t('common.shared.view.grid', "Card view")}
                 >
                   <LayoutGrid size={16} />
                 </button>
@@ -1939,10 +1939,10 @@ export function QoderAccountsPage() {
                 options={tierFilterOptions}
                 selectedValues={filterTypes}
                 allLabel={allFilterLabel}
-                filterLabel={t('common.shared.filterLabel', '筛选')}
-                clearLabel={t('accounts.clearFilter', '清空筛选')}
-                emptyLabel={t('common.none', '暂无')}
-                ariaLabel={t('common.shared.filterLabel', '筛选')}
+                filterLabel={t('common.shared.filterLabel', "Filter")}
+                clearLabel={t('accounts.clearFilter', "Clear Filter")}
+                emptyLabel={t('common.none', "None")}
+                ariaLabel={t('common.shared.filterLabel', "Filter")}
                 onToggleValue={toggleFilterTypeValue}
                 onClear={clearFilterTypes}
               />
@@ -1954,8 +1954,8 @@ export function QoderAccountsPage() {
                 >
                   <Tag size={14} />
                   {tagFilter.length > 0
-                    ? `${t('accounts.filterTags', '标签筛选')} (${tagFilter.length})`
-                    : t('accounts.filterTags', '标签筛选')}
+                    ? `${t('accounts.filterTags', "Filter Tags")} (${tagFilter.length})`
+                    : t('accounts.filterTags', "Filter Tags")}
                 </button>
                 {showTagFilter && (
                   <div
@@ -1963,7 +1963,7 @@ export function QoderAccountsPage() {
                     className={`tag-filter-panel ${tagFilterPanelPlacement === 'top' ? 'open-top' : ''}`}
                   >
                     {availableTags.length === 0 ? (
-                      <div className="tag-filter-empty">{t('accounts.noTags', '暂无标签')}</div>
+                      <div className="tag-filter-empty">{t('accounts.noTags', "No tags")}</div>
                     ) : (
                       <div className="tag-filter-options" style={tagFilterScrollContainerStyle}>
                         {availableTags.map((tag) => (
@@ -2000,11 +2000,11 @@ export function QoderAccountsPage() {
                         checked={groupByTag}
                         onChange={(event) => setGroupByTag(event.target.checked)}
                       />
-                      <span>{t('accounts.groupByTag', '按标签分组展示')}</span>
+                      <span>{t('accounts.groupByTag', "Group by tags")}</span>
                     </label>
                     {tagFilter.length > 0 && (
                       <button type="button" className="tag-filter-clear" onClick={clearTagFilter}>
-                        {t('accounts.clearTagFilter', '清空标签')}
+                        {t('accounts.clearTagFilter', "Clear Tag Filter")}
                       </button>
                     )}
                   </div>
@@ -2017,7 +2017,7 @@ export function QoderAccountsPage() {
                   { value: 'plan', label: t('accounts.sort.plan') },
                   { value: 'quota', label: t('accounts.sort.quota') },
                 ]}
-                ariaLabel={t('common.shared.sortLabel', '排序')}
+                ariaLabel={t('common.shared.sortLabel', "Sort")}
                 icon={<ArrowDownWideNarrow size={14} />}
                 onChange={(value) => setSortBy(value as SortBy)}
               />
@@ -2026,10 +2026,10 @@ export function QoderAccountsPage() {
                 onClick={() => setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
                 title={
                   sortDirection === 'desc'
-                    ? t('common.shared.sort.descTooltip', '当前：降序，点击切换为升序')
-                    : t('common.shared.sort.ascTooltip', '当前：升序，点击切换为降序')
+                    ? t('common.shared.sort.descTooltip', "Current: Descending. Click to switch to ascending")
+                    : t('common.shared.sort.ascTooltip', "Current: Ascending. Click to switch to descending")
                 }
-                aria-label={t('common.shared.sort.toggleDirection', '切换排序方向')}
+                aria-label={t('common.shared.sort.toggleDirection', "Toggle sort direction")}
               >
                 {sortDirection === 'desc' ? '⬇' : '⬆'}
               </button>
@@ -2046,7 +2046,7 @@ export function QoderAccountsPage() {
                 className="btn btn-secondary icon-only"
                 onClick={() => void handleRefreshAll()}
                 disabled={refreshingAll || accounts.length === 0}
-                title={t('accounts.actions.refreshAll', '刷新全部')}
+                title={t('accounts.actions.refreshAll', "Refresh All")}
               >
                 <RefreshCw size={14} className={refreshingAll ? 'loading-spinner' : ''} />
               </button>
@@ -2055,8 +2055,8 @@ export function QoderAccountsPage() {
                 onClick={togglePrivacyMode}
                 title={
                   privacyModeEnabled
-                    ? t('accounts.privacy.disable', '关闭隐私模式')
-                    : t('accounts.privacy.enable', '开启隐私模式')
+                    ? t('accounts.privacy.disable', "Disable Privacy Mode")
+                    : t('accounts.privacy.enable', "Enable Privacy Mode")
                 }
               >
                 {privacyModeEnabled ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -2064,7 +2064,7 @@ export function QoderAccountsPage() {
               <button
                 className="btn btn-secondary icon-only"
                 onClick={() => openAddModal('token')}
-                title={t('common.shared.import.label', '导入')}
+                title={t('common.shared.import.label', "Import")}
               >
                 <Download size={14} />
               </button>
@@ -2074,8 +2074,8 @@ export function QoderAccountsPage() {
                 disabled={exportModal.preparing || exportModal.saving || filteredAccounts.length === 0}
                 title={
                   visibleSelectedCount > 0
-                    ? `${t('accounts.actions.export', '导出')} (${visibleSelectedCount})`
-                    : t('accounts.actions.export', '导出')
+                    ? `${t('accounts.actions.export', "Export")} (${visibleSelectedCount})`
+                    : t('accounts.actions.export', "Export")
                 }
               >
                 <Upload size={14} />
@@ -2085,7 +2085,7 @@ export function QoderAccountsPage() {
                   className="btn btn-danger icon-only"
                   onClick={() => void handleDeleteAccounts(Array.from(selected))}
                   disabled={deleting}
-                  title={t('accounts.actions.deleteSelected', '删除选中')}
+                  title={t('accounts.actions.deleteSelected', "Delete Selected")}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -2097,12 +2097,12 @@ export function QoderAccountsPage() {
           {loading && accounts.length === 0 ? (
             <div className="loading-container">
               <RefreshCw size={24} className="loading-spinner" />
-              <p>{t('common.loading', '加载中...')}</p>
+              <p>{t('common.loading', "Loading...")}</p>
             </div>
           ) : accounts.length === 0 ? (
             <div className="empty-state">
-              <h3>{t('accounts.empty.title', '暂无账号')}</h3>
-              <p>{t('qoder.empty.desc', '点击“添加账号”，可使用授权登录、本机导入或 JSON 导入。')}</p>
+              <h3>{t('accounts.empty.title', "No Accounts")}</h3>
+              <p>{t('qoder.empty.desc', "Click \"Add Account\" to use auth login, local import, or JSON import.")}</p>
               <button
                 className="btn btn-primary"
                 onClick={() => openAddModal('oauth')}
@@ -2113,8 +2113,8 @@ export function QoderAccountsPage() {
             </div>
           ) : filteredAccounts.length === 0 ? (
             <div className="empty-state">
-              <h3>{t('common.shared.noMatch.title', '没有匹配的账号')}</h3>
-              <p>{t('common.shared.noMatch.desc', '请尝试调整搜索或筛选条件')}</p>
+              <h3>{t('common.shared.noMatch.title', "No matching accounts")}</h3>
+              <p>{t('common.shared.noMatch.desc', "Try adjusting your search or filters")}</p>
             </div>
           ) : (
             <>
@@ -2143,7 +2143,7 @@ export function QoderAccountsPage() {
           <div className="modal-content codex-add-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <h2>{t('qoder.addModal.title')}</h2>
-              <button className="modal-close" onClick={() => setShowAddModal(false)} aria-label={t('common.close', '关闭')}>
+              <button className="modal-close" onClick={() => setShowAddModal(false)} aria-label={t('common.close', "Close")}>
                 <X />
               </button>
             </div>
@@ -2153,7 +2153,7 @@ export function QoderAccountsPage() {
                 onClick={() => openAddModal('oauth')}
               >
                 <Globe size={14} />
-                {t('common.shared.addModal.oauth', '授权登录')}
+                {t('common.shared.addModal.oauth', "OAuth Authorization")}
               </button>
               <button
                 className={`modal-tab ${addTab === 'token' ? 'active' : ''}`}
@@ -2167,21 +2167,21 @@ export function QoderAccountsPage() {
                 onClick={() => openAddModal('import')}
               >
                 <Database size={14} />
-                {t('accounts.tabs.import', '导入')}
+                {t('accounts.tabs.import', "Import")}
               </button>
             </div>
             <div className="modal-body">
               {addTab === 'oauth' ? (
                 <div className="add-section">
                   <p className="section-desc">
-                    {t('qoder.oauth.hint', '点击下方按钮，在浏览器中完成 Qoder 账号 OAuth 授权。')}
+                    {t('qoder.oauth.hint', "Click the button below to complete Qoder authorization in your browser. This uses the official CLI device login flow and does not require Qoder to stay running.")}
                   </p>
                   {oauthError ? (
                     <div className="add-status error">
                       <CircleAlert size={16} />
                       <span>{oauthError}</span>
                       <button className="btn btn-sm btn-outline" onClick={() => void handlePrepareOauth()}>
-                        {t('common.shared.oauth.retry', '重新生成授权信息')}
+                        {t('common.shared.oauth.retry', "Regenerate authorization info")}
                       </button>
                     </div>
                   ) : null}
@@ -2191,47 +2191,47 @@ export function QoderAccountsPage() {
                         <input type="text" value={oauthUrl} readOnly />
                         <button
                           onClick={() => void handleCopyOauthUrl()}
-                          title={t('qoder.oauth.copyLoginUrl', '复制登录链接')}
-                          aria-label={t('qoder.oauth.copyLoginUrl', '复制登录链接')}
+                          title={t('qoder.oauth.copyLoginUrl', "Copy Sign In URL")}
+                          aria-label={t('qoder.oauth.copyLoginUrl', "Copy Sign In URL")}
                         >
                           {oauthUrlCopied ? <Check size={16} /> : <Copy size={16} />}
                         </button>
                       </div>
                       <button className="btn btn-primary btn-full" onClick={() => void handleOpenOauthUrl()}>
                         <Globe size={16} />
-                        {t('common.shared.oauth.openBrowser', '在浏览器中打开')}
+                        {t('common.shared.oauth.openBrowser', "Open in Browser")}
                       </button>
                       {oauthCompleting && (
                         <div className="add-status loading">
                           <RefreshCw size={16} className="loading-spinner" />
-                          <span>{t('common.shared.oauth.waiting', '等待授权完成...')}</span>
+                          <span>{t('common.shared.oauth.waiting', "Waiting for authorization...")}</span>
                         </div>
                       )}
-                      <p className="oauth-hint">{t('common.shared.oauth.hint', '完成授权后，此窗口将自动更新')}</p>
+                      <p className="oauth-hint">{t('common.shared.oauth.hint', "Once authorized, this window will update automatically")}</p>
                     </div>
                   ) : (
                     <div className="oauth-loading">
                       <RefreshCw size={24} className="loading-spinner" />
                       <span>
                         {oauthPreparing
-                          ? t('common.shared.oauth.preparing', '正在准备授权信息...')
-                          : t('common.loading', '加载中...')}
+                          ? t('common.shared.oauth.preparing', "Preparing authorization info...")
+                          : t('common.loading', "Loading...")}
                       </span>
                     </div>
                   )}
                 </div>
               ) : addTab === 'token' ? (
                 <div className="add-section">
-                  <p className="section-desc">{t('accounts.importJsonHint', '导入由本工具导出的 Qoder JSON 文件。')}</p>
+                  <p className="section-desc">{t('accounts.importJsonHint', "Import a Qoder JSON file exported from this tool.")}</p>
                   <textarea
                     className="token-input"
                     value={tokenInput}
                     onChange={(event) => setTokenInput(event.target.value)}
-                    placeholder={t('common.shared.token.placeholder', '粘贴 Token 或 JSON...')}
+                    placeholder={t('common.shared.token.placeholder', "Example: ghu_xxx / sk-ws-xxx / {\"access_token\":\"eyJ...\",\"refresh_token\":\"rt_...\"} / [{...}]")}
                   />
                   <button className="btn btn-primary btn-full" onClick={() => void handleTokenImport()} disabled={addStatus === 'loading' || !tokenInput.trim()}>
                     {addStatus === 'loading' ? <RefreshCw size={16} className="loading-spinner" /> : <Download size={16} />}
-                    {t('common.shared.token.import', '导入')}
+                    {t('common.shared.token.import', "Import")}
                   </button>
                 </div>
               ) : (
@@ -2244,7 +2244,7 @@ export function QoderAccountsPage() {
                     {t('common.shared.addModal.import')}
                   </button>
                   <div className="oauth-hint" style={{ margin: '8px 0 4px' }}>
-                    {t('common.shared.import.orJson', '或从 JSON 文件导入')}
+                    {t('common.shared.import.orJson', "Or import from JSON file")}
                   </div>
                   <input
                     ref={importFileInputRef}
@@ -2255,7 +2255,7 @@ export function QoderAccountsPage() {
                   />
                   <button className="btn btn-primary btn-full" onClick={handlePickImportFile} disabled={addStatus === 'loading'}>
                     {addStatus === 'loading' ? <RefreshCw size={16} className="loading-spinner" /> : <Upload size={16} />}
-                    {t('common.shared.import.pickFile', '选择 JSON 文件导入')}
+                    {t('common.shared.import.pickFile', "Select JSON file to import")}
                   </button>
                 </div>
               )}
@@ -2293,7 +2293,7 @@ export function QoderAccountsPage() {
                   setTagDeleteConfirm(null);
                   setTagDeleteConfirmError(null);
                 }}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>
@@ -2315,7 +2315,7 @@ export function QoderAccountsPage() {
                 {t('common.cancel')}
               </button>
               <button className="btn btn-danger" onClick={confirmDeleteTag} disabled={deletingTag}>
-                {deletingTag ? t('common.processing', '处理中...') : t('common.confirm')}
+                {deletingTag ? t('common.processing', "Processing...") : t('common.confirm')}
               </button>
             </div>
           </div>
@@ -2336,7 +2336,7 @@ export function QoderAccountsPage() {
 
       <ExportJsonModal
         isOpen={exportModal.showModal}
-        title={t('accounts.exportModal.title', '导出 JSON')}
+        title={t('accounts.exportModal.title', "Export JSON")}
         jsonContent={exportModal.jsonContent}
         hidden={exportModal.hidden}
         copied={exportModal.copied}

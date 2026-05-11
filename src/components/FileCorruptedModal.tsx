@@ -74,14 +74,14 @@ export function FileCorruptedModal({ error, onClose }: FileCorruptedModalProps) 
         <div className="modal-header">
           <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span>⚠️</span>
-            {t('error.fileCorrupted.title', '文件读取失败')}
+            {t('error.fileCorrupted.title', "File Read Failed")}
           </h2>
           <button className="modal-close" onClick={onClose}><X size={20} /></button>
         </div>
 
         <div className="modal-body">
           <p style={{ marginBottom: 16, color: 'var(--text-primary)' }}>
-            {t('error.fileCorrupted.description', '文件 {{fileName}} 已损坏，无法解析。', {
+            {t('error.fileCorrupted.description', "File {{fileName}} is corrupted and cannot be parsed.", {
               fileName: error.file_name,
             })}
           </p>
@@ -89,11 +89,11 @@ export function FileCorruptedModal({ error, onClose }: FileCorruptedModalProps) 
           <div className="profile-card" style={{ marginBottom: 16 }}>
             <div className="fp-fields">
               <div className="fp-field">
-                <span className="fp-label">{t('error.fileCorrupted.errorInfo', '错误信息')}:</span>
+                <span className="fp-label">{t('error.fileCorrupted.errorInfo', "Error Details")}:</span>
                 <span className="fp-value" style={{ color: 'var(--danger)' }}>{error.original_error}</span>
               </div>
               <div className="fp-field">
-                <span className="fp-label">{t('error.fileCorrupted.filePath', '文件位置')}:</span>
+                <span className="fp-label">{t('error.fileCorrupted.filePath', "File Location")}:</span>
                 <span className="fp-value">{error.file_path}</span>
               </div>
             </div>
@@ -102,7 +102,7 @@ export function FileCorruptedModal({ error, onClose }: FileCorruptedModalProps) 
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 0 }}>
             {t(
               'error.fileCorrupted.helpText',
-              '请打开文件夹手动修复或删除该文件，然后重新启动应用。'
+              "Please open the folder to repair manually or delete the file, then restart the application."
             )}
           </p>
 
@@ -124,10 +124,10 @@ export function FileCorruptedModal({ error, onClose }: FileCorruptedModalProps) 
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={handleOpenFolder}>
             <FolderOpen size={16} />
-            {t('error.fileCorrupted.openFolder', '打开文件夹')}
+            {t('error.fileCorrupted.openFolder', "Open Folder")}
           </button>
           <button className="btn btn-primary" onClick={onClose}>
-            {t('common.close', '关闭')}
+            {t('common.close', "Close")}
           </button>
         </div>
       </div>

@@ -9,6 +9,7 @@ export type Page =
   | 'kiro'
   | 'cursor'
   | 'gemini'
+  | 'devin-cli'
   | 'codebuddy'
   | 'codebuddy-cn'
   | 'qoder'

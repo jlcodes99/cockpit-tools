@@ -65,7 +65,7 @@ export const CodexAccountGroupModal = ({
     setError(null);
     try {
       if (groups.some((g) => g.name === name)) {
-        setError(t('accounts.groups.error.duplicate', '分组名称已存在'));
+        setError(t('accounts.groups.error.duplicate', "Group name already exists"));
         return;
       }
       await createCodexGroup(name);
@@ -87,7 +87,7 @@ export const CodexAccountGroupModal = ({
     setError(null);
     try {
       if (groups.some((g) => g.id !== id && g.name === name)) {
-        setError(t('accounts.groups.error.duplicate', '分组名称已存在'));
+        setError(t('accounts.groups.error.duplicate', "Group name already exists"));
         return;
       }
       await renameCodexGroup(id, name);
@@ -130,7 +130,7 @@ export const CodexAccountGroupModal = ({
         <div className="modal-header">
           <h2>
             <FolderOpen size={18} />
-            {t('accounts.groups.manageTitle', '分组管理')}
+            {t('accounts.groups.manageTitle', "Group Management")}
           </h2>
           <button className="modal-close" onClick={onClose}>
             <X size={18} />
@@ -145,7 +145,7 @@ export const CodexAccountGroupModal = ({
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
-              placeholder={t('accounts.groups.newPlaceholder', '输入分组名称...')}
+              placeholder={t('accounts.groups.newPlaceholder', "Enter group name...")}
               maxLength={30}
             />
             <button
@@ -154,7 +154,7 @@ export const CodexAccountGroupModal = ({
               disabled={!newName.trim()}
             >
               <Plus size={14} />
-              {t('accounts.groups.create', '创建')}
+              {t('accounts.groups.create', "Create")}
             </button>
           </div>
 
@@ -169,9 +169,9 @@ export const CodexAccountGroupModal = ({
           {/* 筛选提示 */}
           {hasFilter && onClearGroupFilter && (
             <div className="group-filter-hint">
-              <span>{t('accounts.groups.filterHint', '已勾选 {{count}} 个分组做筛选', { count: groupFilter.length })}</span>
+              <span>{t('accounts.groups.filterHint', "{{count}} group(s) selected for filtering", { count: groupFilter.length })}</span>
               <button type="button" className="group-filter-clear-btn" onClick={onClearGroupFilter}>
-                {t('accounts.clearFilter', '清空筛选')}
+                {t('accounts.clearFilter', "Clear Filter")}
               </button>
             </div>
           )}
@@ -180,7 +180,7 @@ export const CodexAccountGroupModal = ({
           {groups.length === 0 ? (
             <div className="group-modal-empty">
               <FolderPlus size={36} />
-              <div>{t('accounts.groups.empty', '暂无分组，创建一个开始使用吧')}</div>
+              <div>{t('accounts.groups.empty', "No groups yet, create one to get started")}</div>
             </div>
           ) : (
             <div className="group-modal-list">
@@ -193,7 +193,7 @@ export const CodexAccountGroupModal = ({
                       className="group-filter-checkbox"
                       checked={groupFilter.includes(group.id)}
                       onChange={() => onToggleGroupFilter(group.id)}
-                      title={t('accounts.groups.filterToggle', '勾选以筛选此分组')}
+                      title={t('accounts.groups.filterToggle', "Check to filter by this group")}
                     />
                   )}
                   <FolderOpen size={18} className="group-icon" />
@@ -229,14 +229,14 @@ export const CodexAccountGroupModal = ({
                         <button
                           className="group-action-btn danger"
                           onClick={() => handleDelete(group.id)}
-                          title={t('common.confirm', '确认')}
+                          title={t('common.confirm', "Confirm")}
                         >
                           ✓
                         </button>
                         <button
                           className="group-action-btn"
                           onClick={() => setDeleteConfirmId(null)}
-                          title={t('common.cancel', '取消')}
+                          title={t('common.cancel', "Cancel")}
                         >
                           ✗
                         </button>
@@ -249,14 +249,14 @@ export const CodexAccountGroupModal = ({
                             setRenamingId(group.id);
                             setRenameValue(group.name);
                           }}
-                          title={t('accounts.groups.rename', '重命名')}
+                          title={t('accounts.groups.rename', "Rename")}
                         >
                           <Pencil size={14} />
                         </button>
                         <button
                           className="group-action-btn danger"
                           onClick={() => setDeleteConfirmId(group.id)}
-                          title={t('common.delete', '删除')}
+                          title={t('common.delete', "Delete")}
                         >
                           <Trash2 size={14} />
                         </button>
@@ -271,7 +271,7 @@ export const CodexAccountGroupModal = ({
 
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>
-            {t('common.close', '关闭')}
+            {t('common.close', "Close")}
           </button>
         </div>
       </div>
@@ -354,7 +354,7 @@ export const CodexAddToGroupModal = ({
             <FolderPlus size={18} />
             {sourceGroupId
               ? t('accounts.groups.moveToGroup')
-              : t('accounts.groups.addToGroup', '添加至分组')}
+              : t('accounts.groups.addToGroup', "Add to Group")}
           </h2>
           <button className="modal-close" onClick={onClose}>
             <X size={18} />
@@ -368,7 +368,7 @@ export const CodexAddToGroupModal = ({
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleCreateAndAdd(); }}
-              placeholder={t('accounts.groups.createAndAdd', '新建分组并添加...')}
+              placeholder={t('accounts.groups.createAndAdd', "Create group and add...")}
               maxLength={30}
             />
             <button

@@ -198,7 +198,7 @@ function IconSelector({
 
   const currentLabel =
     iconKind === 'custom'
-      ? selectedCustom?.name ?? t('platformLayout.groupIconCustom', '自定义图片')
+      ? selectedCustom?.name ?? t('platformLayout.groupIconCustom', "Custom image")
       : getPlatformLabel(iconPlatformId, t);
 
   return (
@@ -260,9 +260,9 @@ function IconSelector({
               <Upload size={14} />
             </span>
             <span>
-              {t('platformLayout.groupIconCustom', '自定义图片')}
+              {t('platformLayout.groupIconCustom', "Custom image")}
               {' · '}
-              {t('common.add', '添加')}
+              {t('common.add', "Add")}
             </span>
           </button>
 
@@ -322,7 +322,7 @@ function IconSelector({
                         event.stopPropagation();
                         onDeleteCustom(icon.id);
                       }}
-                      aria-label={t('common.delete', '删除')}
+                      aria-label={t('common.delete', "Delete")}
                     >
                       <X size={12} />
                     </button>
@@ -621,7 +621,7 @@ export function PlatformLayoutModal({
     }
 
     const confirmed = window.confirm(
-      t('platformLayout.customIconDeleteConfirm', '确认删除这个自定义图标吗？'),
+      t('platformLayout.customIconDeleteConfirm', "Delete this custom icon?"),
     );
     if (!confirmed) {
       return;
@@ -834,15 +834,15 @@ export function PlatformLayoutModal({
   const handleSaveGroup = () => {
     const name = groupDraftName.trim();
     if (!name) {
-      setGroupDraftError(t('platformLayout.groupNameRequired', '请输入分组名称'));
+      setGroupDraftError(t('platformLayout.groupNameRequired', "Please enter a group name"));
       return;
     }
     if (groupDraftPlatformIds.length === 0 || !groupDraftDefaultPlatformId) {
-      setGroupDraftError(t('platformLayout.groupChildrenRequired', '至少选择一个子平台'));
+      setGroupDraftError(t('platformLayout.groupChildrenRequired', "Select at least one child platform"));
       return;
     }
     if (groupDraftIconKind === 'custom' && !groupDraftIconCustomDataUrl.trim()) {
-      setGroupDraftError(t('platformLayout.groupCustomIconRequired', '请上传自定义图标'));
+      setGroupDraftError(t('platformLayout.groupCustomIconRequired', "Please upload a custom icon"));
       return;
     }
 
@@ -891,11 +891,11 @@ export function PlatformLayoutModal({
 
     const name = childDraftName.trim();
     if (!name) {
-      setChildDraftError(t('platformLayout.groupNameRequired', '请输入分组名称'));
+      setChildDraftError(t('platformLayout.groupNameRequired', "Please enter a group name"));
       return;
     }
     if (childDraftIconKind === 'custom' && !childDraftIconCustomDataUrl.trim()) {
-      setChildDraftError(t('platformLayout.groupCustomIconRequired', '请上传自定义图标'));
+      setChildDraftError(t('platformLayout.groupCustomIconRequired', "Please upload a custom icon"));
       return;
     }
 
@@ -1014,8 +1014,8 @@ export function PlatformLayoutModal({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-lg" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
-          <h2>{t('platformLayout.title', '平台布局')}</h2>
-          <button className="modal-close" onClick={onClose} aria-label={t('common.close', '关闭')}>
+          <h2>{t('platformLayout.title', "Platform Layout")}</h2>
+          <button className="modal-close" onClick={onClose} aria-label={t('common.close', "Close")}>
             <X />
           </button>
         </div>
@@ -1037,10 +1037,10 @@ export function PlatformLayoutModal({
             <div className="platform-layout-summary-actions">
               <button className="btn btn-secondary" onClick={openCreateGroupEditor}>
                 <Plus size={14} />
-                <span>{t('platformLayout.addGroup', '新建分组')}</span>
+                <span>{t('platformLayout.addGroup', "Add group")}</span>
               </button>
               <button className="btn btn-secondary" onClick={resetPlatformLayout}>
-                {t('platformLayout.reset', '恢复默认')}
+                {t('platformLayout.reset', "Reset to default")}
               </button>
             </div>
           </div>
@@ -1049,11 +1049,11 @@ export function PlatformLayoutModal({
             {isSidebarSelectionLimited
               ? t(
                 'platformLayout.tipWithGroups',
-                '拖拽可排序；最多选择三个入口显示在侧边栏。分组子级不参与侧边栏/仪表盘开关，仅用于菜单栏与默认平台切换。',
+                "Drag to reorder. Up to three entries can appear in the sidebar. Group children do not have sidebar/dashboard toggles and are only used for tray visibility and default-platform switching.",
               )
               : t(
                 'platformLayout.tipWithGroupsUnlimited',
-                '拖拽可排序；可选择任意数量入口显示在侧边栏。分组子级不参与侧边栏/仪表盘开关，仅用于菜单栏与默认平台切换。',
+                "Drag to reorder. Any number of entries can appear in the sidebar. Group children do not have sidebar/dashboard toggles and are only used for tray visibility and default-platform switching.",
               )}
           </div>
 
@@ -1076,7 +1076,7 @@ export function PlatformLayoutModal({
                     checked={sidebarBulkEnabled}
                     onChange={() => handleBulkSidebar(!sidebarBulkEnabled)}
                   />
-                  <span>{t('platformLayout.sidebarToggle', '侧边栏显示')}</span>
+                  <span>{t('platformLayout.sidebarToggle', "Show in sidebar")}</span>
                 </label>
               </div>
               <div className="platform-layout-bulk-cell">
@@ -1086,7 +1086,7 @@ export function PlatformLayoutModal({
                     checked={dashboardBulkEnabled}
                     onChange={() => handleBulkDashboard(!dashboardBulkEnabled)}
                   />
-                  <span>{t('platformLayout.dashboardToggle', '仪表盘显示')}</span>
+                  <span>{t('platformLayout.dashboardToggle', "Show in dashboard")}</span>
                 </label>
               </div>
               <div className="platform-layout-bulk-cell">
@@ -1096,7 +1096,7 @@ export function PlatformLayoutModal({
                     checked={trayBulkEnabled}
                     onChange={() => handleBulkTray(!trayBulkEnabled)}
                   />
-                  <span>{t('platformLayout.trayToggle', '菜单栏显示')}</span>
+                  <span>{t('platformLayout.trayToggle', "Show in tray")}</span>
                 </label>
               </div>
               <div className="platform-layout-bulk-cell is-edit-column" />
@@ -1154,7 +1154,7 @@ export function PlatformLayoutModal({
                         type="button"
                         className="platform-layout-drag-trigger"
                         onMouseDown={(event) => handleDragStart(event, entry.id)}
-                        aria-label={t('platformLayout.dragHandleLabel', '拖拽排序')}
+                        aria-label={t('platformLayout.dragHandleLabel', "Drag to reorder")}
                       >
                         <GripVertical size={16} className="drag-handle" />
                       </button>
@@ -1169,8 +1169,8 @@ export function PlatformLayoutModal({
                           }}
                           aria-label={
                             groupExpanded
-                              ? t('platformLayout.collapseChildren', '收起子级')
-                              : t('platformLayout.expandChildren', '展开子级')
+                              ? t('platformLayout.collapseChildren', "Collapse child platforms")
+                              : t('platformLayout.expandChildren', "Expand child platforms")
                           }
                         >
                           {groupExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -1203,7 +1203,7 @@ export function PlatformLayoutModal({
                           disabled={sidebarDisabled}
                           onChange={(event) => setSidebarEntry(entry.id, event.target.checked)}
                         />
-                        <span>{t('platformLayout.sidebarToggle', '侧边栏显示')}</span>
+                        <span>{t('platformLayout.sidebarToggle', "Show in sidebar")}</span>
                       </label>
 
                       <label className="platform-layout-toggle">
@@ -1212,7 +1212,7 @@ export function PlatformLayoutModal({
                           checked={!entry.hidden}
                           onChange={(event) => setHiddenEntry(entry.id, !event.target.checked)}
                         />
-                        <span>{t('platformLayout.dashboardToggle', '仪表盘显示')}</span>
+                        <span>{t('platformLayout.dashboardToggle', "Show in dashboard")}</span>
                       </label>
 
                       <label className="platform-layout-toggle">
@@ -1224,7 +1224,7 @@ export function PlatformLayoutModal({
                             entry.platformIds.forEach((platformId) => setTrayPlatform(platformId, target));
                           }}
                         />
-                        <span>{t('platformLayout.trayToggle', '菜单栏显示')}</span>
+                        <span>{t('platformLayout.trayToggle', "Show in tray")}</span>
                       </label>
 
                       {entry.group ? (
@@ -1232,8 +1232,8 @@ export function PlatformLayoutModal({
                           type="button"
                           className="action-btn"
                           onClick={() => openEditGroupEditor(entry.group!)}
-                          title={t('platformLayout.editGroup', '编辑')}
-                          aria-label={t('platformLayout.editGroup', '编辑')}
+                          title={t('platformLayout.editGroup', "Edit")}
+                          aria-label={t('platformLayout.editGroup', "Edit")}
                         >
                           <Pencil size={13} />
                         </button>
@@ -1284,20 +1284,20 @@ export function PlatformLayoutModal({
                               ))}
                               {(availableAddChildByGroup.get(entry.group.id) ?? []).length === 0 && (
                                 <span className="platform-layout-no-options">
-                                  {t('platformLayout.noAvailableChildren', '暂无可添加的平台')}
+                                  {t('platformLayout.noAvailableChildren', "No platforms available to add")}
                                 </span>
                               )}
                             </div>
                             <div className="platform-layout-add-child-actions">
                               <button type="button" className="btn btn-secondary" onClick={closeAddChildPanel}>
-                                {t('common.cancel', '取消')}
+                                {t('common.cancel', "Cancel")}
                               </button>
                               <button
                                 type="button"
                                 className="btn btn-primary"
                                 onClick={() => applyAddChildren(entry.group!)}
                               >
-                                {t('common.confirm', '确认')}
+                                {t('common.confirm', "Confirm")}
                               </button>
                             </div>
                           </div>
@@ -1339,7 +1339,7 @@ export function PlatformLayoutModal({
                                 type="button"
                                 className="platform-layout-child-drag-trigger"
                                 onMouseDown={(event) => handleChildDragStart(event, entry.group!.id, platformId)}
-                                aria-label={t('platformLayout.dragHandleLabel', '拖拽排序')}
+                                aria-label={t('platformLayout.dragHandleLabel', "Drag to reorder")}
                               >
                                 <GripVertical size={14} className="drag-handle" />
                               </button>
@@ -1370,7 +1370,7 @@ export function PlatformLayoutModal({
                                   checked={isDefault}
                                   onChange={() => handleSetGroupDefault(entry.group!, platformId)}
                                 />
-                                <span>{t('platformLayout.groupDefault', '默认平台')}</span>
+                                <span>{t('platformLayout.groupDefault', "Default platform")}</span>
                               </label>
                               <label className="platform-layout-toggle">
                                 <input
@@ -1378,14 +1378,14 @@ export function PlatformLayoutModal({
                                   checked={traySet.has(platformId)}
                                   onChange={(event) => setTrayPlatform(platformId, event.target.checked)}
                                 />
-                                <span>{t('platformLayout.trayToggle', '菜单栏显示')}</span>
+                                <span>{t('platformLayout.trayToggle', "Show in tray")}</span>
                               </label>
                               <button
                                 type="button"
                                 className="action-btn"
                                 onClick={() => openEditChildEditor(entry.group!, platformId)}
-                                title={t('platformLayout.editGroup', '编辑')}
-                                aria-label={t('platformLayout.editGroup', '编辑')}
+                                title={t('platformLayout.editGroup', "Edit")}
+                                aria-label={t('platformLayout.editGroup', "Edit")}
                               >
                                 <Pencil size={13} />
                               </button>
@@ -1396,13 +1396,13 @@ export function PlatformLayoutModal({
                                 disabled={entry.group!.platformIds.length <= 1}
                                 title={
                                   entry.group!.platformIds.length <= 1
-                                    ? t('platformLayout.groupChildrenRequired', '至少选择一个子平台')
-                                    : t('common.delete', '删除')
+                                    ? t('platformLayout.groupChildrenRequired', "Select at least one child platform")
+                                    : t('common.delete', "Delete")
                                 }
                                 aria-label={
                                   entry.group!.platformIds.length <= 1
-                                    ? t('platformLayout.groupChildrenRequired', '至少选择一个子平台')
-                                    : t('common.delete', '删除')
+                                    ? t('platformLayout.groupChildrenRequired', "Select at least one child platform")
+                                    : t('common.delete', "Delete")
                                 }
                               >
                                 <Trash2 size={13} />
@@ -1425,14 +1425,14 @@ export function PlatformLayoutModal({
               <div className="platform-layout-group-editor-header">
                 <span>
                   {editingGroupId
-                    ? t('platformLayout.editGroup', '编辑分组')
-                    : t('platformLayout.addGroup', '新建分组')}
+                    ? t('platformLayout.editGroup', "Edit")
+                    : t('platformLayout.addGroup', "Add group")}
                 </span>
                 <button
                   type="button"
                   className="platform-layout-group-editor-close"
                   onClick={closeGroupEditor}
-                  aria-label={t('common.close', '关闭')}
+                  aria-label={t('common.close', "Close")}
                 >
                   <X size={16} />
                 </button>
@@ -1440,17 +1440,17 @@ export function PlatformLayoutModal({
 
               <div className="platform-layout-group-editor-grid">
                 <label className="platform-layout-group-field">
-                  <span>{t('platformLayout.groupName', '分组名称')}</span>
+                  <span>{t('platformLayout.groupName', "Group name")}</span>
                   <input
                     type="text"
                     value={groupDraftName}
                     onChange={(event) => setGroupDraftName(event.target.value)}
-                    placeholder={t('platformLayout.groupNamePlaceholder', '例如：CodeBuddy 套件')}
+                    placeholder={t('platformLayout.groupNamePlaceholder', "Example: CodeBuddy Suite")}
                   />
                 </label>
 
                 <div className="platform-layout-group-field">
-                  <span>{t('platformLayout.groupIcon', '分组图标')}</span>
+                  <span>{t('platformLayout.groupIcon', "Group icon")}</span>
                   <IconSelector
                     customIcons={customIcons}
                     iconKind={groupDraftIconKind}
@@ -1473,7 +1473,7 @@ export function PlatformLayoutModal({
                 </div>
 
                 <div className="platform-layout-group-field full-width">
-                  <span>{t('platformLayout.groupChildren', '子级平台')}</span>
+                  <span>{t('platformLayout.groupChildren', "Child platforms")}</span>
                   <div className="platform-layout-group-children-picker">
                     {MENU_VISIBLE_PLATFORM_IDS.map((platformId) => {
                       const checked = groupDraftPlatformIds.includes(platformId);
@@ -1500,7 +1500,7 @@ export function PlatformLayoutModal({
                 </div>
 
                 <label className="platform-layout-group-field">
-                  <span>{t('platformLayout.groupDefault', '默认平台')}</span>
+                  <span>{t('platformLayout.groupDefault', "Default platform")}</span>
                   <select
                     value={groupDraftDefaultPlatformId}
                     onChange={(event) => setGroupDraftDefaultPlatformId(event.target.value as PlatformId)}
@@ -1521,15 +1521,15 @@ export function PlatformLayoutModal({
                 {editingGroupId && (
                   <button type="button" className="btn btn-danger" onClick={handleDeleteGroup}>
                     <Trash2 size={14} />
-                    <span>{t('platformLayout.deleteGroup', '删除分组')}</span>
+                    <span>{t('platformLayout.deleteGroup', "Delete group")}</span>
                   </button>
                 )}
                 <div className="platform-layout-group-editor-actions-right">
                   <button type="button" className="btn btn-secondary" onClick={closeGroupEditor}>
-                    {t('common.cancel', '取消')}
+                    {t('common.cancel', "Cancel")}
                   </button>
                   <button type="button" className="btn btn-primary" onClick={handleSaveGroup}>
-                    {t('common.save', '保存')}
+                    {t('common.save', "Save")}
                   </button>
                 </div>
               </div>
@@ -1541,12 +1541,12 @@ export function PlatformLayoutModal({
           <div className="platform-layout-group-editor-overlay" onClick={closeChildEditor}>
             <div className="platform-layout-group-editor-modal" onClick={(event) => event.stopPropagation()}>
               <div className="platform-layout-group-editor-header">
-                <span>{t('platformLayout.editChildPlatform', '编辑子级平台')}</span>
+                <span>{t('platformLayout.editChildPlatform', "Edit child platform")}</span>
                 <button
                   type="button"
                   className="platform-layout-group-editor-close"
                   onClick={closeChildEditor}
-                  aria-label={t('common.close', '关闭')}
+                  aria-label={t('common.close', "Close")}
                 >
                   <X size={16} />
                 </button>
@@ -1554,7 +1554,7 @@ export function PlatformLayoutModal({
 
               <div className="platform-layout-group-editor-grid">
                 <label className="platform-layout-group-field">
-                  <span>{t('platformLayout.groupName', '分组名称')}</span>
+                  <span>{t('platformLayout.groupName', "Group name")}</span>
                   <input
                     type="text"
                     value={childDraftName}
@@ -1563,7 +1563,7 @@ export function PlatformLayoutModal({
                 </label>
 
                 <div className="platform-layout-group-field">
-                  <span>{t('platformLayout.groupIcon', '分组图标')}</span>
+                  <span>{t('platformLayout.groupIcon', "Group icon")}</span>
                   <IconSelector
                     customIcons={customIcons}
                     iconKind={childDraftIconKind}
@@ -1586,14 +1586,14 @@ export function PlatformLayoutModal({
                 </div>
 
                 <label className="platform-layout-group-field full-width">
-                  <span>{t('platformLayout.groupDefault', '默认平台')}</span>
+                  <span>{t('platformLayout.groupDefault', "Default platform")}</span>
                   <label className="platform-layout-toggle">
                     <input
                       type="checkbox"
                       checked={childDraftSetDefault}
                       onChange={(event) => setChildDraftSetDefault(event.target.checked)}
                     />
-                    <span>{t('platformLayout.setAsDefaultInGroup', '设为分组内默认平台')}</span>
+                    <span>{t('platformLayout.setAsDefaultInGroup', "Set as the default platform in this group")}</span>
                   </label>
                 </label>
               </div>
@@ -1608,19 +1608,19 @@ export function PlatformLayoutModal({
                   disabled={(platformGroups.find((item) => item.id === childEditorGroupId)?.platformIds.length ?? 0) <= 1}
                   title={
                     (platformGroups.find((item) => item.id === childEditorGroupId)?.platformIds.length ?? 0) <= 1
-                      ? t('platformLayout.groupChildrenRequired', '至少选择一个子平台')
-                      : t('platformLayout.removeFromGroup', '移出分组')
+                      ? t('platformLayout.groupChildrenRequired', "Select at least one child platform")
+                      : t('platformLayout.removeFromGroup', "Remove from group")
                   }
                 >
                   <Trash2 size={14} />
-                  <span>{t('platformLayout.removeFromGroup', '移出分组')}</span>
+                  <span>{t('platformLayout.removeFromGroup', "Remove from group")}</span>
                 </button>
                 <div className="platform-layout-group-editor-actions-right">
                   <button type="button" className="btn btn-secondary" onClick={closeChildEditor}>
-                    {t('common.cancel', '取消')}
+                    {t('common.cancel', "Cancel")}
                   </button>
                   <button type="button" className="btn btn-primary" onClick={handleSaveChild}>
-                    {t('common.save', '保存')}
+                    {t('common.save', "Save")}
                   </button>
                 </div>
               </div>

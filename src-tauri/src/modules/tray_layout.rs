@@ -16,13 +16,14 @@ pub const PLATFORM_WINDSURF: &str = "windsurf";
 pub const PLATFORM_KIRO: &str = "kiro";
 pub const PLATFORM_CURSOR: &str = "cursor";
 pub const PLATFORM_GEMINI: &str = "gemini";
+pub const PLATFORM_DEVIN_CLI: &str = "devin-cli";
 pub const PLATFORM_CODEBUDDY: &str = "codebuddy";
 pub const PLATFORM_CODEBUDDY_CN: &str = "codebuddy_cn";
 pub const PLATFORM_QODER: &str = "qoder";
 pub const PLATFORM_TRAE: &str = "trae";
 pub const PLATFORM_WORKBUDDY: &str = "workbuddy";
 
-pub const SUPPORTED_PLATFORM_IDS: [&str; 13] = [
+pub const SUPPORTED_PLATFORM_IDS: [&str; 14] = [
     PLATFORM_ANTIGRAVITY,
     PLATFORM_CODEX,
     PLATFORM_ZED,
@@ -31,6 +32,7 @@ pub const SUPPORTED_PLATFORM_IDS: [&str; 13] = [
     PLATFORM_KIRO,
     PLATFORM_CURSOR,
     PLATFORM_GEMINI,
+    PLATFORM_DEVIN_CLI,
     PLATFORM_CODEBUDDY,
     PLATFORM_CODEBUDDY_CN,
     PLATFORM_QODER,
@@ -170,6 +172,7 @@ fn normalize_tray_platforms(
         PLATFORM_KIRO,
         PLATFORM_CURSOR,
         PLATFORM_GEMINI,
+        PLATFORM_DEVIN_CLI,
         PLATFORM_CODEBUDDY,
         PLATFORM_CODEBUDDY_CN,
         PLATFORM_QODER,
@@ -377,6 +380,7 @@ fn normalize_config(
         PLATFORM_KIRO,
         PLATFORM_CURSOR,
         PLATFORM_GEMINI,
+        PLATFORM_DEVIN_CLI,
         PLATFORM_CODEBUDDY,
         PLATFORM_CODEBUDDY_CN,
         PLATFORM_QODER,
@@ -449,7 +453,7 @@ pub fn save_tray_layout(
 
     let path = get_tray_layout_path()?;
     let content = serde_json::to_string_pretty(&normalized)
-        .map_err(|e| format!("序列化托盘布局配置失败: {}", e))?;
-    fs::write(&path, content).map_err(|e| format!("保存托盘布局配置失败: {}", e))?;
+        .map_err(|e| format!("Failed to serialize tray layout config: {}", e))?;
+    fs::write(&path, content).map_err(|e| format!("Failed to save tray layout config: {}", e))?;
     Ok(normalized)
 }

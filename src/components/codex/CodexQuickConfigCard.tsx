@@ -128,10 +128,10 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
     () => [
       {
         id: 'default' as QuickConfigPresetId,
-        label: t('codex.modelProviders.quickConfig.presetDefaultShort', '默认'),
+        label: t('codex.modelProviders.quickConfig.presetDefaultShort', "Default"),
         desc: t(
           'codex.modelProviders.quickConfig.presetDefaultDesc',
-          '移除两个字段，回到官方默认',
+          "Remove both fields and use official defaults",
         ),
       },
       {
@@ -152,10 +152,10 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
       },
       {
         id: 'custom' as QuickConfigPresetId,
-        label: t('codex.modelProviders.quickConfig.presetCustomShort', '自定义'),
+        label: t('codex.modelProviders.quickConfig.presetCustomShort', "Custom"),
         desc: t(
           'codex.modelProviders.quickConfig.presetCustomDesc',
-          '手动填写上下文与压缩阈值',
+          "Manually set context and compact values",
         ),
       },
     ],
@@ -194,7 +194,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
     if (parsedContextWindow !== null) return null;
     return t(
       'codex.modelProviders.quickConfig.validation.contextWindowInvalid',
-      '上下文窗口必须是大于 0 的整数',
+      "Context window must be an integer greater than 0.",
     );
   }, [isCustomPreset, parsedContextWindow, t]);
 
@@ -203,7 +203,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
     if (parsedAutoCompactLimit !== null) return null;
     return t(
       'codex.modelProviders.quickConfig.validation.autoCompactInvalid',
-      '自动压缩阈值必须是大于 0 的整数',
+      "Auto-compact limit must be an integer greater than 0.",
     );
   }, [isCustomPreset, parsedAutoCompactLimit, t]);
 
@@ -230,20 +230,20 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
       return t('codex.modelProviders.quickConfig.partialDetected', {
         defaultValue:
           '检测到当前两个字段并不完整：model_context_window={{context}}，model_auto_compact_token_limit={{compact}}。保存后会按当前方案改写。',
-        context: detectedModelContextWindow ?? t('codex.modelProviders.quickConfig.notSet', '未设置'),
+        context: detectedModelContextWindow ?? t('codex.modelProviders.quickConfig.notSet', "Not set"),
         compact:
           detectedAutoCompactTokenLimit ??
-          t('codex.modelProviders.quickConfig.notSet', '未设置'),
+          t('codex.modelProviders.quickConfig.notSet', "Not set"),
       });
     }
     if (detectedPresetId === 'custom' && selectedPresetId !== 'custom') {
       return t('codex.modelProviders.quickConfig.customDetected', {
         defaultValue:
           '检测到当前 config.toml 为自定义值：model_context_window={{context}}，model_auto_compact_token_limit={{compact}}。保存后会按你选择的预设改写。',
-        context: detectedModelContextWindow ?? t('codex.modelProviders.quickConfig.notSet', '未设置'),
+        context: detectedModelContextWindow ?? t('codex.modelProviders.quickConfig.notSet', "Not set"),
         compact:
           detectedAutoCompactTokenLimit ??
-          t('codex.modelProviders.quickConfig.notSet', '未设置'),
+          t('codex.modelProviders.quickConfig.notSet', "Not set"),
       });
     }
     return null;
@@ -305,7 +305,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
       setNotice(
         t(
           'codex.modelProviders.quickConfig.saveSuccess',
-          '当前 Codex 配置已保存',
+          "Current Codex config saved.",
         ),
       );
     } catch (err) {
@@ -324,29 +324,29 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal codex-quick-config-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>{t('codex.modelProviders.quickConfig.title', '当前 Codex 配置')}</h2>
-          <button className="modal-close" onClick={onClose} aria-label={t('common.close', '关闭')}>
+          <h2>{t('codex.modelProviders.quickConfig.title', "Current Codex Config")}</h2>
+          <button className="modal-close" onClick={onClose} aria-label={t('common.close', "Close")}>
             <X />
           </button>
         </div>
         <div className="modal-body">
           <p className="codex-quick-config-desc">
-            {t('codex.modelProviders.quickConfig.desc', '这里的快捷项直接写入当前生效的 ~/.codex/config.toml，不会改动模型供应商仓库。')}
+            {t('codex.modelProviders.quickConfig.desc', "These quick settings write directly to the active ~/.codex/config.toml and do not change the model provider store.")}
           </p>
 
           <div className="codex-quick-config-card__path">
-            <span>{t('codex.modelProviders.quickConfig.configPath', '配置文件')}</span>
+            <span>{t('codex.modelProviders.quickConfig.configPath', "Config File")}</span>
             <code>{configPath}</code>
           </div>
 
       {loading ? (
-        <div className="section-desc">{t('common.loading', '加载中...')}</div>
+        <div className="section-desc">{t('common.loading', "Loading...")}</div>
       ) : loadedConfig ? (
         <>
           <div className="codex-quick-config-grid">
             <div className="codex-quick-config-field codex-quick-config-field--full">
               <label id="codex-quick-config-preset-label">
-                {t('codex.modelProviders.quickConfig.presetLabel', '配置预设')}
+                {t('codex.modelProviders.quickConfig.presetLabel', "Config Preset")}
               </label>
               <div
                 className="codex-quick-config-presets"
@@ -373,7 +373,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
               <p>
                 {t(
                   'codex.modelProviders.quickConfig.presetHint',
-                  '可直接选择预设（默认 / 516K / 1M），或切到自定义手动填写两个字段。',
+                  "Choose a preset (Default / 516K / 1M), or switch to Custom and fill both fields manually.",
                 )}
               </p>
             </div>
@@ -383,7 +383,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
                 <label htmlFor="codex-context-window">
                 {t(
                   'codex.modelProviders.quickConfig.contextWindow',
-                  '上下文窗口',
+                  "Context Window",
                 )}
               </label>
               <input
@@ -403,7 +403,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
               <p>
                 {t(
                   'codex.modelProviders.quickConfig.contextWindowHint',
-                  '写入 model_context_window。仅在“自定义”模式可编辑。',
+                  "Writes model_context_window. Editable only in Custom mode.",
                 )}
               </p>
               {contextWindowError && (
@@ -418,7 +418,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
               <label htmlFor="codex-auto-compact-limit">
                 {t(
                   'codex.modelProviders.quickConfig.autoCompactLimit',
-                  '自动压缩阈值',
+                  "Auto-Compact Limit",
                 )}
               </label>
               <input
@@ -438,7 +438,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
               <p>
                 {t(
                   'codex.modelProviders.quickConfig.autoCompactLimitHint',
-                  '写入 model_auto_compact_token_limit。仅在“自定义”模式可编辑。',
+                  "Writes model_auto_compact_token_limit. Editable only in Custom mode.",
                 )}
               </p>
               {compactLimitError && (
@@ -460,7 +460,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
 
           <div className="codex-quick-config-preview">
             <div className="codex-quick-config-preview__head">
-              <span>{t('codex.modelProviders.quickConfig.preview', '写入预览')}</span>
+              <span>{t('codex.modelProviders.quickConfig.preview', "Write Preview")}</span>
               <span
                 className={`provider-save-preview-chip ${
                   targetConfig.modelContextWindow == null &&
@@ -471,8 +471,8 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
               >
                 {targetConfig.modelContextWindow == null &&
                 targetConfig.autoCompactTokenLimit == null
-                  ? t('codex.modelProviders.quickConfig.previewRemove', '将移除')
-                  : t('codex.modelProviders.quickConfig.previewApply', '将写入')}
+                  ? t('codex.modelProviders.quickConfig.previewRemove', "Will Remove")
+                  : t('codex.modelProviders.quickConfig.previewApply', "Will Write")}
               </span>
             </div>
             <pre>{previewText}</pre>
@@ -497,8 +497,8 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
           >
             <FolderOpen size={14} />
             {opening
-              ? t('common.loading', '加载中...')
-              : t('codex.modelProviders.quickConfig.openConfig', '打开文件')}
+              ? t('common.loading', "Loading...")
+              : t('codex.modelProviders.quickConfig.openConfig', "Open File")}
           </button>
           <button
             className="btn btn-primary"
@@ -507,7 +507,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
             type="button"
           >
             <Save size={14} />
-            {saving ? t('common.saving', '保存中...') : t('common.save', '保存')}
+            {saving ? t('common.saving', "Saving...") : t('common.save', "Save")}
           </button>
         </div>
       </div>

@@ -68,7 +68,7 @@ export function InstancesPage({ onNavigate }: InstancesPageProps) {
     const presentation = buildAntigravityAccountPresentation(account, displayGroups, t);
     const lines = buildQuotaPreviewLines(presentation.quotaItems, 3);
     if (lines.length === 0) {
-      return <span className="account-quota-empty">{t('instances.quota.empty', '暂无配额缓存')}</span>;
+      return <span className="account-quota-empty">{t('instances.quota.empty', "No cached quota")}</span>;
     }
     return (
       <div className="account-quota-preview">
@@ -89,7 +89,7 @@ export function InstancesPage({ onNavigate }: InstancesPageProps) {
       <OverviewTabsHeader
         active="instances"
         onNavigate={onNavigate}
-        subtitle={t('instances.subtitle', '多实例独立配置，多账号并行运行。')}
+        subtitle={t('instances.subtitle', "Isolated profiles for multi-account parallel runs.")}
       />
       <InstancesManager
         instanceStore={instanceStore}

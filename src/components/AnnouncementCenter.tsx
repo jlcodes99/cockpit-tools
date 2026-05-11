@@ -208,10 +208,10 @@ export function AnnouncementCenter({
   };
 
   const currentTypeLabel = (type: string) => {
-    if (type === 'feature') return t('announcement.type.feature', '✨ 新功能');
-    if (type === 'warning') return t('announcement.type.warning', '⚠️ 警告');
-    if (type === 'urgent') return t('announcement.type.urgent', '🚨 紧急');
-    return t('announcement.type.info', 'ℹ️ 信息');
+    if (type === 'feature') return t('announcement.type.feature', "✨ New Feature");
+    if (type === 'warning') return t('announcement.type.warning', "⚠️ Warning");
+    if (type === 'urgent') return t('announcement.type.urgent', "🚨 Urgent");
+    return t('announcement.type.info', "ℹ️ Info");
   };
 
   const renderInBody = (node: ReactNode) => {
@@ -227,11 +227,11 @@ export function AnnouncementCenter({
         <button
           className={trigger === 'button' ? 'announcement-trigger-btn' : 'announcement-bell-btn'}
           onClick={() => setListOpen(true)}
-          title={t('announcement.title', '公告')}
+          title={t('announcement.title', "Notifications")}
         >
           <Bell size={16} />
           {trigger === 'button' ? (
-            <span className="announcement-trigger-label">{t('announcement.title', '公告')}</span>
+            <span className="announcement-trigger-label">{t('announcement.title', "Notifications")}</span>
           ) : null}
           {unreadCount > 0 && (
             <span className={`announcement-bell-badge ${unreadCount === 0 ? 'is-hidden' : ''}`}>
@@ -246,8 +246,8 @@ export function AnnouncementCenter({
           <div className="modal-overlay announcement-modal-overlay" onClick={() => setListOpen(false)}>
             <div className="modal announcement-list-modal" onClick={(event) => event.stopPropagation()}>
               <div className="modal-header">
-                <h2>{t('announcement.title', '公告')}</h2>
-                <button className="modal-close" onClick={() => setListOpen(false)} aria-label={t('common.close', '关闭')}>
+                <h2>{t('announcement.title', "Notifications")}</h2>
+                <button className="modal-close" onClick={() => setListOpen(false)} aria-label={t('common.close', "Close")}>
                   <X size={16} />
                 </button>
               </div>
@@ -261,7 +261,7 @@ export function AnnouncementCenter({
                       }}
                       disabled={unreadCount === 0}
                     >
-                      {t('announcement.markAllRead', '全部已读')}
+                      {t('announcement.markAllRead', "Mark all read")}
                     </button>
                     <button
                       className="announcement-toolbar-text-btn"
@@ -270,13 +270,13 @@ export function AnnouncementCenter({
                       }}
                       disabled={loading}
                     >
-                      {t('common.refresh', '刷新')}
+                      {t('common.refresh', "Refresh")}
                     </button>
                   </div>
                 </div>
 
                 {sortedAnnouncements.length === 0 && (
-                  <div className="announcement-empty">{t('announcement.empty', '暂无公告')}</div>
+                  <div className="announcement-empty">{t('announcement.empty', "No notifications")}</div>
                 )}
 
                 {sortedAnnouncements.map((announcement) => {
@@ -320,7 +320,7 @@ export function AnnouncementCenter({
                       onClick={() => {
                         void closeDetail(true);
                       }}
-                      title={t('common.back', '返回')}
+                      title={t('common.back', 'Back')}
                     >
                       <ChevronLeft size={14} />
                     </button>
@@ -330,7 +330,7 @@ export function AnnouncementCenter({
                   </span>
                   <h2 className="announcement-detail-header-title">{detailAnnouncement.title}</h2>
                 </div>
-                <button className="modal-close" onClick={() => void closeDetail(false)} aria-label={t('common.close', '关闭')}>
+                <button className="modal-close" onClick={() => void closeDetail(false)} aria-label={t('common.close', "Close")}>
                   <X size={16} />
                 </button>
               </div>
@@ -366,7 +366,7 @@ export function AnnouncementCenter({
                             />
                           ) : (
                             <div className="announcement-image-error">
-                              {t('announcement.imageLoadFailed', '图片加载失败')}
+                              {t('announcement.imageLoadFailed', "Image failed to load")}
                             </div>
                           )}
                           {image.label ? <span>{image.label}</span> : null}
@@ -379,7 +379,7 @@ export function AnnouncementCenter({
 
               <div className="modal-footer">
                 <button className="btn btn-secondary" onClick={() => void closeDetail(false)}>
-                  {detailAnnouncement.action ? t('announcement.later', '稍后再说') : t('announcement.gotIt', '知道了')}
+                  {detailAnnouncement.action ? t('announcement.later', "Later") : t('announcement.gotIt', "Got it")}
                 </button>
                 {detailAnnouncement.action ? (
                   <button
@@ -388,7 +388,7 @@ export function AnnouncementCenter({
                       void runAction(detailAnnouncement.action as AnnouncementAction);
                     }}
                   >
-                    {(detailAnnouncement.action as AnnouncementAction).label || t('common.open', '打开')}
+                    {(detailAnnouncement.action as AnnouncementAction).label || t('common.open', "Open")}
                   </button>
                 ) : null}
               </div>
@@ -402,7 +402,7 @@ export function AnnouncementCenter({
             <div className="announcement-image-preview-wrapper">
               <img src={imagePreviewUrl} alt="preview" className="announcement-image-preview" />
               <div className="announcement-image-preview-hint">
-                {t('announcement.clickToClose', '点击关闭')}
+                {t('announcement.clickToClose', "Click to close")}
               </div>
             </div>
           </div>,

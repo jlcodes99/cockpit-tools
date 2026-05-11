@@ -16,10 +16,10 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tracing::info;
 
-/// 全局 AppHandle 存储
+/// Global AppHandle storage
 static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
 
-/// 获取全局 AppHandle
+/// Get the global AppHandle
 pub fn get_app_handle() -> Option<&'static tauri::AppHandle> {
     APP_HANDLE.get()
 }
@@ -55,7 +55,7 @@ fn apply_macos_activation_policy(app: &tauri::AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     logger::init_logger();
-    // 启动时先加载一次配置，确保进程级代理环境与用户设置同步。
+    // Load config once at startup to ensure process-level proxy environment is synced with user settings.
     let _ = modules::config::get_user_config();
 
     #[cfg(target_os = "linux")]
@@ -96,10 +96,10 @@ pub fn run() {
         .setup(|app| {
             info!("Cockpit Tools 启动...");
 
-            // 存储全局 AppHandle
+            // Store global AppHandle
             let _ = APP_HANDLE.set(app.handle().clone());
 
-            // 初始化 Updater 插件
+            // Initialize Updater plugin
             #[cfg(desktop)]
             {
                 app.handle()
@@ -112,7 +112,7 @@ pub fn run() {
                 info!("[Updater] Tauri Updater + Process 插件已初始化");
             }
 
-            // 启动时同步设置合并（移至后台线程，不阻塞窗口显示）
+            // Sync settings merge on startup (moved to background thread, non-blocking for window display)
             std::thread::spawn(|| {
                 let current_config = modules::config::get_user_config();
                 if let Some(merged_language) = modules::sync_settings::merge_setting_on_startup(
@@ -134,12 +134,12 @@ pub fn run() {
                 }
             });
 
-            // 启动 WebSocket 服务（使用 Tauri 的 async runtime）
+            // Start WebSocket service (using Tauri's async runtime)
             tauri::async_runtime::spawn(async {
                 modules::websocket::start_server().await;
             });
 
-            // 启动网页查询服务（网络服务配置中的独立模块）
+            // Start web report service (independent module in network service config)
             tauri::async_runtime::spawn(async {
                 modules::web_report::start_server().await;
             });
@@ -224,12 +224,12 @@ pub fn run() {
                 }
             }
 
-            // 创建骨架托盘（无账号文件 I/O，秒出）
+            // Create skeleton tray (no account file I/O, instant)
             if let Err(e) = modules::tray::create_tray_skeleton(app.handle()) {
                 logger::log_error(&format!("[Tray] 创建骨架托盘失败: {}", e));
             }
 
-            // 后台线程加载完整托盘菜单（含账号数据）
+            // Load full tray menu in background thread (with account data)
             let tray_app_handle = app.handle().clone();
             std::thread::spawn(move || {
                 if let Err(e) = modules::tray::update_tray_menu(&tray_app_handle) {
@@ -345,6 +345,8 @@ pub fn run() {
             commands::data_transfer::data_transfer_get_user_config,
             commands::data_transfer::data_transfer_apply_user_config,
             commands::data_transfer::data_transfer_get_instance_store,
+            commands::data_transfer::data_transfer_analyze_json,
+            commands::data_transfer::account_transfer_parse_platforms,
             commands::data_transfer::data_transfer_replace_instance_store,
             commands::provider_current::get_provider_current_account_id,
             // System Commands
@@ -435,6 +437,7 @@ pub fn run() {
             commands::codex::list_codex_accounts,
             commands::codex::get_current_codex_account,
             commands::codex::get_codex_config_toml_path,
+            commands::codex::codex_build_export_content,
             commands::codex::open_codex_config_toml,
             commands::codex::get_codex_quick_config,
             commands::codex::save_codex_quick_config,
@@ -816,6 +819,16 @@ pub fn run() {
             commands::instance::stop_instance,
             commands::instance::open_instance_window,
             commands::instance::close_all_instances,
+            // Devin CLI Commands
+            commands::devin_cli::devin_cli_list_accounts,
+            commands::devin_cli::devin_cli_is_devin_installed,
+            commands::devin_cli::devin_cli_add_account,
+            commands::devin_cli::devin_cli_remove_account,
+            commands::devin_cli::devin_cli_rename_account,
+            commands::devin_cli::devin_cli_login_account,
+            commands::devin_cli::devin_cli_use_account,
+            commands::devin_cli::devin_cli_check_auth_status,
+            commands::devin_cli::devin_cli_sync_all_accounts,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

@@ -114,17 +114,17 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content checkin-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2><CalendarCheck size={20} /> {t('codebuddyCn.checkin.modalTitle', '每日签到')} - {platformLabel}</h2>
+          <h2><CalendarCheck size={20} /> {t('codebuddyCn.checkin.modalTitle', "Daily Check-in")} - {platformLabel}</h2>
           <button className="modal-close" onClick={onClose}><X size={18} /></button>
         </div>
 
         <div className="checkin-modal-toolbar">
           <div className="checkin-summary">
             <span className="checkin-stat checked">
-              <CheckCircle size={14} /> {checkedCount} {t('codebuddyCn.checkin.checkedIn', '已签到')}
+              <CheckCircle size={14} /> {checkedCount} {t('codebuddyCn.checkin.checkedIn', "Checked In")}
             </span>
             <span className="checkin-stat unchecked">
-              <XCircle size={14} /> {uncheckedCount} {t('codebuddyCn.checkin.notCheckedIn', '未签到')}
+              <XCircle size={14} /> {uncheckedCount} {t('codebuddyCn.checkin.notCheckedIn', "Not Checked In")}
             </span>
           </div>
           <div className="checkin-actions">
@@ -134,7 +134,7 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
               disabled={refreshLoading}
             >
               {refreshLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-              {t('codebuddyCn.checkin.refreshStatus', '刷新状态')}
+              {t('codebuddyCn.checkin.refreshStatus', "Refresh")}
             </button>
             <button
               className="btn btn-primary btn-sm"
@@ -142,14 +142,14 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
               disabled={checkAllLoading || uncheckedCount === 0}
             >
               {checkAllLoading ? <Loader2 size={14} className="animate-spin" /> : <Gift size={14} />}
-              {t('codebuddyCn.checkin.checkAll', '一键签到')}
+              {t('codebuddyCn.checkin.checkAll', "Check In All")}
             </button>
           </div>
         </div>
 
         <div className="modal-body checkin-modal-body">
           {accounts.length === 0 ? (
-            <div className="checkin-empty">{t('codebuddyCn.checkin.noAccounts', '暂无账号')}</div>
+            <div className="checkin-empty">{t('codebuddyCn.checkin.noAccounts', "No accounts")}</div>
           ) : (
             <div className="checkin-account-list">
               {accounts.map((account) => {
@@ -172,23 +172,23 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
 
                     <div className="checkin-account-status">
                       {state === undefined || state.status === null ? (
-                        <span className="checkin-status-unknown">{t('codebuddyCn.checkin.querying', '查询中...')}</span>
+                        <span className="checkin-status-unknown">{t('codebuddyCn.checkin.querying', "Loading...")}</span>
                       ) : isCheckedIn ? (
                         <span className="checkin-status-yes">
                           <CheckCircle size={16} />
-                          {t('codebuddyCn.checkin.checkedIn', '已签到')}
+                          {t('codebuddyCn.checkin.checkedIn', "Checked In")}
                         </span>
                       ) : (
                         <span className="checkin-status-no">
                           <XCircle size={16} />
-                          {t('codebuddyCn.checkin.notCheckedIn', '未签到')}
+                          {t('codebuddyCn.checkin.notCheckedIn', "Not Checked In")}
                         </span>
                       )}
 
                       {state?.status && streakDays > 0 && (
                         <span className="checkin-streak-badge">
                           <Flame size={12} />
-                          {t('codebuddyCn.checkin.streakDays', '{{days}} 天', { days: streakDays })}
+                          {t('codebuddyCn.checkin.streakDays', "{{days}} days", { days: streakDays })}
                         </span>
                       )}
 
@@ -203,8 +203,8 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
                         <span className={`checkin-streak-reward ${isStreakDay ? 'streak-today' : ''}`}>
                           <Trophy size={12} />
                           {isStreakDay
-                            ? t('codebuddyCn.checkin.streakRewardToday', '今日可获得大礼包!')
-                            : t('codebuddyCn.checkin.streakRewardCountdown', '再签 {{days}} 天获大礼包', { days: nextStreakDay })}
+                            ? t('codebuddyCn.checkin.streakRewardToday', "Bonus reward available today!")
+                            : t('codebuddyCn.checkin.streakRewardCountdown', "{{days}} more days for bonus reward", { days: nextStreakDay })}
                         </span>
                       )}
                     </div>
@@ -213,17 +213,17 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
                       {isCheckingIn ? (
                         <button className="btn btn-primary btn-sm" disabled>
                           <Loader2 size={14} className="animate-spin" />
-                          {t('codebuddyCn.checkin.button.loading', '签到中...')}
+                          {t('codebuddyCn.checkin.button.loading', 'Checking in...')}
                         </button>
                       ) : isCheckedIn ? (
                         <button className="btn btn-ghost btn-sm" disabled>
                           <CheckCircle size={14} />
-                          {t('codebuddyCn.checkin.done', '已完成')}
+                          {t('codebuddyCn.checkin.done', "Done")}
                         </button>
                       ) : (
                         <button className="btn btn-primary btn-sm" onClick={() => handleSingleCheckin(account.id)}>
                           <Gift size={14} />
-                          {t('codebuddyCn.checkin.button', '签到')}
+                          {t('codebuddyCn.checkin.button', "Check In")}
                         </button>
                       )}
                     </div>
@@ -231,7 +231,7 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
                     {state?.checkinResult && state.checkinResult.success && (
                       <div className="checkin-account-success">
                         <CheckCircle size={14} />
-                        {t('codebuddyCn.checkin.success', '签到成功！连续签到 {{days}} 天', {
+                        {t('codebuddyCn.checkin.success', "Check-in successful! {{days}} day streak", {
                           days: state.status?.streak_days ?? 0,
                         })}
                       </div>
@@ -256,7 +256,7 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
 
                     {checkinDates && checkinDates.length > 0 && (
                       <div className="checkin-dates">
-                        {t('codebuddyCn.checkin.recentDates', '近期签到：')}
+                        {t('codebuddyCn.checkin.recentDates', "Recent: ")}
                         {checkinDates.slice(0, 5).map((d) => (
                           <span key={d} className="checkin-date-tag">{d}</span>
                         ))}
@@ -285,7 +285,7 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
 
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>
-            {t('common.close', '关闭')}
+            {t('common.close', "Close")}
           </button>
         </div>
       </div>

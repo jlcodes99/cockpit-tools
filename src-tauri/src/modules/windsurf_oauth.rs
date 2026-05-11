@@ -1315,7 +1315,9 @@ async fn build_devin_payload(
     name_hint: Option<&str>,
     refresh: &crate::modules::windsurf_devin_oauth::DevinFullRefreshResult,
 ) -> WindsurfOAuthCompletePayload {
-    let email = email_hint.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let email = email_hint
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
     let github_login = email
         .as_ref()
         .map(|e| e.split('@').next().unwrap_or(e).to_string())
@@ -1332,20 +1334,19 @@ async fn build_devin_payload(
     };
 
     // 拉 Devin 配额数据（GetUserStatus），失败不致命
-    let user_status_resp = match crate::modules::windsurf_devin_oauth::fetch_devin_user_status(
-        &refresh.ide_token,
-    )
-    .await
-    {
-        Ok(value) => Some(value),
-        Err(err) => {
-            logger::log_warn(&format!(
-                "[Windsurf Devin] GetUserStatus 失败（配额信息将缺失）: {}",
-                err
-            ));
-            None
-        }
-    };
+    let user_status_resp =
+        match crate::modules::windsurf_devin_oauth::fetch_devin_user_status(&refresh.ide_token)
+            .await
+        {
+            Ok(value) => Some(value),
+            Err(err) => {
+                logger::log_warn(&format!(
+                    "[Windsurf Devin] GetUserStatus 失败（配额信息将缺失）: {}",
+                    err
+                ));
+                None
+            }
+        };
 
     // 解析配额响应
     let user_status = user_status_resp
@@ -1382,10 +1383,7 @@ async fn build_devin_payload(
                 key_list
             ));
 
-            let has_plan_end = obj
-                .get("planEnd")
-                .map(|v| !v.is_null())
-                .unwrap_or(false);
+            let has_plan_end = obj.get("planEnd").map(|v| !v.is_null()).unwrap_or(false);
             if !has_plan_end {
                 // 兼容 i64 / f64 / 字符串 三种类型（服务端返回不一定）
                 let extract_unix_secs = |v: &Value| -> Option<i64> {
@@ -2108,10 +2106,8 @@ pub async fn build_payload_from_password(
             }
 
             logger::log_info("[Windsurf PasswordLogin] Auth1 登录开始 (走完整 4 步链路)");
-            let login_result = crate::modules::windsurf_devin_oauth::login_with_password(
-                email, password,
-            )
-            .await?;
+            let login_result =
+                crate::modules::windsurf_devin_oauth::login_with_password(email, password).await?;
             logger::log_info(&format!(
                 "[Windsurf PasswordLogin] Auth1 邮密换 auth1 成功 (user_id={:?})",
                 login_result.user_id
@@ -2196,8 +2192,7 @@ pub async fn refresh_payload_for_account(
             "[Windsurf Refresh] 使用 Devin auth1 刷新: account_id={}, login={}",
             account.id, account.github_login
         ));
-        let refresh =
-            crate::modules::windsurf_devin_oauth::full_refresh_from_auth1(auth1).await?;
+        let refresh = crate::modules::windsurf_devin_oauth::full_refresh_from_auth1(auth1).await?;
         return Ok(build_devin_payload(
             account.github_email.as_deref(),
             account.github_name.as_deref(),

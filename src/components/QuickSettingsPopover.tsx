@@ -439,7 +439,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     } catch (err) {
       setCodexQuickConfigError(
         t('quickSettings.codex.quickConfig.loadFailed', {
-          defaultValue: '加载当前 Codex 配置失败：{{error}}',
+          defaultValue: 'Failed to load current Codex config: {{error}}',
           error: String(err),
         }),
       );
@@ -452,10 +452,10 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     () => [
       {
         id: 'default' as CodexQuickConfigPresetId,
-        label: t('quickSettings.codex.quickConfig.presetDefaultShort', '默认'),
+        label: t('quickSettings.codex.quickConfig.presetDefaultShort', "Default"),
         desc: t(
           'quickSettings.codex.quickConfig.presetDefaultDesc',
-          '移除两个字段，回到官方默认',
+          "Remove both fields and use official defaults",
         ),
       },
       {
@@ -476,10 +476,10 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       },
       {
         id: 'custom' as CodexQuickConfigPresetId,
-        label: t('quickSettings.codex.quickConfig.presetCustomShort', '自定义'),
+        label: t('quickSettings.codex.quickConfig.presetCustomShort', "Custom"),
         desc: t(
           'quickSettings.codex.quickConfig.presetCustomDesc',
-          '手动填写上下文与压缩阈值',
+          "Manually set context and compact values",
         ),
       },
     ],
@@ -504,7 +504,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     if (codexQuickParsedContextWindow !== null) return null;
     return t(
       'quickSettings.codex.quickConfig.validation.contextWindowInvalid',
-      '上下文窗口必须是大于 0 的整数',
+      "Context window must be an integer greater than 0.",
     );
   }, [codexQuickIsCustomPreset, codexQuickParsedContextWindow, t]);
   const codexQuickCompactLimitError = useMemo(() => {
@@ -512,7 +512,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     if (codexQuickParsedCompactLimit !== null) return null;
     return t(
       'quickSettings.codex.quickConfig.validation.autoCompactInvalid',
-      '自动压缩阈值必须是大于 0 的整数',
+      "Auto-compact limit must be an integer greater than 0.",
     );
   }, [codexQuickIsCustomPreset, codexQuickParsedCompactLimit, t]);
   const codexQuickValidationError =
@@ -561,25 +561,25 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     ) {
       return t('quickSettings.codex.quickConfig.partialDetected', {
         defaultValue:
-          '检测到当前两个字段并不完整：model_context_window={{context}}，model_auto_compact_token_limit={{compact}}。保存后会按当前方案改写。',
+          'The current values are incomplete: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. Saving will rewrite them using the current preset.',
         context:
           codexQuickDetectedModelContextWindow ??
-          t('quickSettings.codex.quickConfig.notSet', '未设置'),
+          t('quickSettings.codex.quickConfig.notSet', "Not set"),
         compact:
           codexQuickDetectedAutoCompactTokenLimit ??
-          t('quickSettings.codex.quickConfig.notSet', '未设置'),
+          t('quickSettings.codex.quickConfig.notSet', "Not set"),
       });
     }
     if (codexQuickDetectedPresetId === 'custom' && codexQuickConfigPresetId !== 'custom') {
       return t('quickSettings.codex.quickConfig.customDetected', {
         defaultValue:
-          '检测到当前 config.toml 为自定义值：model_context_window={{context}}，model_auto_compact_token_limit={{compact}}。保存后会按你选择的预设改写。',
+          'The current config.toml uses custom values: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. Saving will rewrite them using the selected preset.',
         context:
           codexQuickDetectedModelContextWindow ??
-          t('quickSettings.codex.quickConfig.notSet', '未设置'),
+          t('quickSettings.codex.quickConfig.notSet', "Not set"),
         compact:
           codexQuickDetectedAutoCompactTokenLimit ??
-          t('quickSettings.codex.quickConfig.notSet', '未设置'),
+          t('quickSettings.codex.quickConfig.notSet', "Not set"),
       });
     }
     return null;
@@ -632,14 +632,14 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       setCodexQuickConfigNotice(
         t(
           'quickSettings.codex.quickConfig.saveSuccess',
-          '当前 Codex 配置已保存',
+          "Current Codex config saved.",
         ),
       );
       window.dispatchEvent(new Event('config-updated'));
     } catch (err) {
       setCodexQuickConfigError(
         t('quickSettings.codex.quickConfig.saveFailed', {
-          defaultValue: '保存当前 Codex 配置失败：{{error}}',
+          defaultValue: 'Failed to save current Codex config: {{error}}',
           error: String(err),
         }),
       );
@@ -778,7 +778,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       console.error('Failed to load config:', err);
       setError(t('quickSettings.error.loadFailed', {
         error: String(err),
-        defaultValue: '加载配置失败：{{error}}',
+        defaultValue: 'Failed to load config: {{error}}',
       }));
     }
   };
@@ -900,7 +900,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         console.error('Failed to save config:', err);
         setError(t('quickSettings.error.saveFailed', {
           error: String(err),
-          defaultValue: '保存配置失败：{{error}}',
+          defaultValue: 'Failed to save config: {{error}}',
         }));
       } finally {
         setSaving(false);
@@ -959,7 +959,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       console.error('Failed to pick path:', err);
       setError(t('quickSettings.error.pickPathFailed', {
         error: String(err),
-        defaultValue: '选择路径失败：{{error}}',
+        defaultValue: 'Failed to select path: {{error}}',
       }));
     }
   };
@@ -1013,7 +1013,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       console.error('Failed to reset path:', err);
       setError(t('quickSettings.error.resetPathFailed', {
         error: String(err),
-        defaultValue: '重置路径失败：{{error}}',
+        defaultValue: 'Failed to reset path: {{error}}',
       }));
     } finally {
       setPathDetecting(false);
@@ -1030,7 +1030,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       console.error('Failed to pick codex specified app path:', err);
       setError(t('quickSettings.error.pickPathFailed', {
         error: String(err),
-        defaultValue: '选择路径失败：{{error}}',
+        defaultValue: 'Failed to select path: {{error}}',
       }));
     }
   };
@@ -1043,7 +1043,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     } catch (err) {
       setError(t('quickSettings.error.openCodexConfigFailed', {
         error: String(err),
-        defaultValue: '打开 Codex config.toml 失败：{{error}}',
+        defaultValue: 'Failed to open Codex config.toml: {{error}}',
       }));
     } finally {
       setOpeningCodexConfig(false);
@@ -1081,7 +1081,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           return 'Zed';
       }
     })();
-    return `${platformLabel} ${t('nav.settings', '设置')}`;
+    return `${platformLabel} ${t('nav.settings', "Settings")}`;
   };
 
   const getRefreshKey = (): keyof GeneralConfig => {
@@ -1153,31 +1153,31 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const getRefreshLabel = () => {
     switch (type) {
       case 'antigravity':
-        return t('quickSettings.refreshInterval', '配额自动刷新');
+        return t('quickSettings.refreshInterval', "Quota Auto Refresh");
       case 'codex':
-        return t('quickSettings.codexRefreshInterval', '配额自动刷新');
+        return t('quickSettings.codexRefreshInterval', "Quota Auto Refresh");
       case 'github_copilot':
-        return t('quickSettings.ghcpRefreshInterval', '配额自动刷新');
+        return t('quickSettings.ghcpRefreshInterval', "Quota Auto Refresh");
       case 'windsurf':
-        return t('quickSettings.windsurfRefreshInterval', '配额自动刷新');
+        return t('quickSettings.windsurfRefreshInterval', "Quota Auto Refresh");
       case 'kiro':
-        return t('quickSettings.kiroRefreshInterval', '配额自动刷新');
+        return t('quickSettings.kiroRefreshInterval', "Auto refresh quota");
       case 'cursor':
-        return t('quickSettings.cursorRefreshInterval', '配额自动刷新');
+        return t('quickSettings.cursorRefreshInterval', "Quota Auto Refresh");
       case 'gemini':
-        return t('quickSettings.geminiRefreshInterval', '配额自动刷新');
+        return t('quickSettings.geminiRefreshInterval', "Quota Auto Refresh");
       case 'codebuddy':
-        return t('quickSettings.refreshInterval', '配额自动刷新');
+        return t('quickSettings.refreshInterval', "Quota Auto Refresh");
       case 'codebuddy_cn':
-        return t('quickSettings.refreshInterval', '配额自动刷新');
+        return t('quickSettings.refreshInterval', "Quota Auto Refresh");
       case 'qoder':
-        return t('quickSettings.refreshInterval', '配额自动刷新');
+        return t('quickSettings.refreshInterval', "Quota Auto Refresh");
       case 'trae':
-        return t('quickSettings.refreshInterval', '配额自动刷新');
+        return t('quickSettings.refreshInterval', "Quota Auto Refresh");
       case 'workbuddy':
-        return t('quickSettings.refreshInterval', '配额自动刷新');
+        return t('quickSettings.refreshInterval', "Quota Auto Refresh");
       case 'zed':
-        return t('quickSettings.refreshInterval', '配额自动刷新');
+        return t('quickSettings.refreshInterval', "Quota Auto Refresh");
     }
   };
 
@@ -1220,31 +1220,31 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const getAppPathLabel = () => {
     switch (type) {
       case 'antigravity':
-        return t('quickSettings.antigravity.appPath', '启动路径');
+        return t('quickSettings.antigravity.appPath', "Launch Path");
       case 'codex':
-        return t('quickSettings.codex.appPath', '启动路径');
+        return t('quickSettings.codex.appPath', "Launch Path");
       case 'github_copilot':
-        return t('quickSettings.githubCopilot.appPath', 'VS Code 路径');
+        return t('quickSettings.githubCopilot.appPath', "VS Code Path");
       case 'windsurf':
-        return t('quickSettings.windsurf.appPath', 'Windsurf 路径');
+        return t('quickSettings.windsurf.appPath', "Windsurf Path");
       case 'kiro':
-        return t('quickSettings.kiro.appPath', 'Kiro 路径');
+        return t('quickSettings.kiro.appPath', "Kiro Path");
       case 'cursor':
-        return t('quickSettings.cursor.appPath', 'Cursor 路径');
+        return t('quickSettings.cursor.appPath', "Cursor Path");
       case 'gemini':
-        return t('quickSettings.gemini.appPath', 'Gemini Cli 路径');
+        return t('quickSettings.gemini.appPath', "Gemini Cli Path");
       case 'codebuddy':
-        return t('quickSettings.codebuddy.appPath', 'CodeBuddy 路径');
+        return t('quickSettings.codebuddy.appPath', "CodeBuddy Path");
       case 'codebuddy_cn':
-        return t('quickSettings.codebuddyCn.appPath', 'CodeBuddy CN 路径');
+        return t('quickSettings.codebuddyCn.appPath', "CodeBuddy CN Path");
       case 'qoder':
-        return t('quickSettings.qoder.appPath', 'Qoder 路径');
+        return t('quickSettings.qoder.appPath', "Qoder Path");
       case 'trae':
-        return t('quickSettings.trae.appPath', 'Trae 路径');
+        return t('quickSettings.trae.appPath', "Trae Path");
       case 'workbuddy':
-        return t('quickSettings.workbuddy.appPath', 'WorkBuddy 路径');
+        return t('quickSettings.workbuddy.appPath', "WorkBuddy Path");
       case 'zed':
-        return t('quickSettings.zed.appPath', 'Zed 路径');
+        return t('quickSettings.zed.appPath', "Zed Path");
     }
   };
 
@@ -1543,7 +1543,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       <>
         <div className="qs-row" style={{ marginTop: type === 'antigravity' ? 10 : 0 }}>
           <div className="qs-row-label">
-            <span>{t('quickSettings.quotaAlert.enable', '超额预警')}</span>
+            <span>{t('quickSettings.quotaAlert.enable', "Enable Quota Alert")}</span>
           </div>
           <div className="qs-row-control">
             <label className="qs-switch">
@@ -1566,7 +1566,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 <div className="qs-row">
                   <div className="qs-row-label">
                     <span>
-                      primary_window ({t('codex.quota.hourly', '5小时配额')}) {t('quickSettings.quotaAlert.threshold', '预警阈值')}
+                      primary_window ({t('codex.quota.hourly', "5-hour quota")}) {t('quickSettings.quotaAlert.threshold', "Alert Threshold")}
                     </span>
                   </div>
                   <div className="qs-row-control">
@@ -1577,7 +1577,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         max={100}
                         className="qs-select qs-select--input-mode qs-select--with-unit"
                         value={codexQuotaAlertPrimaryCustomThreshold}
-                        placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                        placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                         onChange={(e) =>
                           handleCodexWindowThresholdInputChange(
                             e.target.value,
@@ -1610,13 +1610,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 </div>
 
                 <div className="qs-hint" style={{ marginTop: 0, marginBottom: 4 }}>
-                  {t('quickSettings.codexWindow.orDivider', 'OR（命中任一即触发）')}
+                  {t('quickSettings.codexWindow.orDivider', 'OR (trigger if either threshold is reached)')}
                 </div>
 
                 <div className="qs-row">
                   <div className="qs-row-label">
                     <span>
-                      secondary_window ({t('codex.quota.weekly', '周配额')}) {t('quickSettings.quotaAlert.threshold', '预警阈值')}
+                      secondary_window ({t('codex.quota.weekly', "Weekly quota")}) {t('quickSettings.quotaAlert.threshold', "Alert Threshold")}
                     </span>
                   </div>
                   <div className="qs-row-control">
@@ -1627,7 +1627,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         max={100}
                         className="qs-select qs-select--input-mode qs-select--with-unit"
                         value={codexQuotaAlertSecondaryCustomThreshold}
-                        placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                        placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                         onChange={(e) =>
                           handleCodexWindowThresholdInputChange(
                             e.target.value,
@@ -1662,7 +1662,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
             ) : (
               <div className="qs-row">
                 <div className="qs-row-label">
-                  <span>{t('quickSettings.quotaAlert.threshold', '预警阈值')}</span>
+                  <span>{t('quickSettings.quotaAlert.threshold', "Alert Threshold")}</span>
                 </div>
                 <div className="qs-row-control">
                   {showQuotaAlertThresholdInput ? (
@@ -1673,7 +1673,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         max={100}
                         className="qs-select qs-select--input-mode qs-select--with-unit"
                         value={quotaAlertCustomThreshold}
-                        placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                        placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                         onChange={(e) => setQuotaAlertCustomThreshold(e.target.value.replace(/[^\d]/g, ''))}
                         onBlur={handleQuotaAlertCustomThresholdApply}
                         onKeyDown={(e) => {
@@ -1700,7 +1700,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       <option value="20">20%</option>
                       <option value="40">40%</option>
                       <option value="60">60%</option>
-                      <option value="custom">{t('quickSettings.customInput', '自定义')}</option>
+                      <option value="custom">{t('quickSettings.customInput', "Custom")}</option>
                     </select>
                   )}
                 </div>
@@ -1709,14 +1709,14 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
             <div className="qs-hint" style={{ marginTop: 6 }}>
               {t(
                 'quickSettings.quotaAlert.hint',
-                '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。'
+                "When any current-account model quota drops below the threshold, send a native notification and show a quick-switch action in the app."
               )}
               {isCodexAlert && (
                 <>
                   <div>
                     {t(
                       'quickSettings.codexWindow.primaryWindowMeaning',
-                      'primary_window 一般指 5 小时配额；免费用户下 primary_window 可能对应周配额，不同订阅可能不同。'
+                      'primary_window usually means the 5-hour quota; for free users it may map to the weekly quota, and behavior may differ by subscription.'
                     )}
                   </div>
                   <div>
@@ -1766,7 +1766,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     <span>
                       {t(
                         'settings.general.codexLocalAccessEntryVisible',
-                        '显示 API 服务入口',
+                        "Show API Service Entry",
                       )}
                     </span>
                   </div>
@@ -1786,7 +1786,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 <div className="qs-hint">
                   {t(
                     'settings.general.codexLocalAccessEntryVisibleDesc',
-                    '仅控制 Codex 总览中的 API 服务入口显示，不会停止本地 API 服务；关闭后可在这里重新打开。',
+                    "Only controls whether the API service entry is shown in the Codex overview. It does not stop the local API service; you can turn it back on here or in Quick Settings.",
                   )}
                 </div>
               </div>
@@ -1807,7 +1807,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       max={999}
                       className="qs-select qs-select--input-mode qs-select--with-unit"
                       value={customRefresh}
-                      placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                      placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                       onChange={(e) => setCustomRefresh(e.target.value.replace(/[^\d]/g, ''))}
                       onBlur={handleCustomRefreshApply}
                       onKeyDown={(e) => {
@@ -1835,7 +1835,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     <option value="5">5 {t('settings.general.minutes')}</option>
                     <option value="10">10 {t('settings.general.minutes')}</option>
                     <option value="15">15 {t('settings.general.minutes')}</option>
-                    <option value="custom">{t('quickSettings.customInput', '自定义')}</option>
+                    <option value="custom">{t('quickSettings.customInput', "Custom")}</option>
                   </select>
                 )}
               </div>
@@ -1855,7 +1855,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       max={999}
                       className="qs-select qs-select--input-mode qs-select--with-unit"
                       value={currentAccountCustomRefresh}
-                      placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                      placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                       onChange={(e) =>
                         setCurrentAccountCustomRefresh(e.target.value.replace(/[^\d]/g, ''))
                       }
@@ -1889,7 +1889,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     <option value="5">5 {t('settings.general.minutes')}</option>
                     <option value="10">10 {t('settings.general.minutes')}</option>
                     <option value="15">15 {t('settings.general.minutes')}</option>
-                    <option value="custom">{t('quickSettings.customInput', '自定义')}</option>
+                    <option value="custom">{t('quickSettings.customInput', "Custom")}</option>
                   </select>
                 )}
                 <div className="qs-hint" style={{ marginTop: 6 }}>
@@ -1897,7 +1897,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     ? t('settings.general.currentAccountRefreshItemDesc')
                     : t(
                       'settings.general.currentAccountRefreshRequiresAutoRefresh',
-                      '需先开启“配额自动刷新”后，才能设置当前账号刷新。',
+                      "Enable \"Quota Auto Refresh\" first to configure current account refresh.",
                     )}
                 </div>
               </div>
@@ -1906,14 +1906,14 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
             <div className="qs-section">
               <div className="qs-section-header">
                 <Settings size={15} />
-                <span>{t('quickSettings.filterPersistence.title', '筛选记忆')}</span>
+                <span>{t('quickSettings.filterPersistence.title', "Filter Memory")}</span>
               </div>
               <div className="qs-row">
                 <div className="qs-row-label">
                   <span>
                     {t(
                       'quickSettings.filterPersistence.enable',
-                      '记住账号总览筛选（不含搜索）',
+                      "Remember overview filters (excluding search)",
                     )}
                   </span>
                 </div>
@@ -1933,7 +1933,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
               <div className="qs-hint">
                 {t(
                   'quickSettings.filterPersistence.hint',
-                  '默认关闭。开启后会按平台记住筛选、标签和排序。',
+                  "Off by default. When enabled, each platform keeps filter, tag, and sort selections.",
                 )}
               </div>
             </div>
@@ -1950,7 +1950,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     type="text"
                     className="qs-path-input"
                     value={getAppPath()}
-                    placeholder={t('settings.general.codexAppPathPlaceholder', '默认路径')}
+                    placeholder={t('settings.general.codexAppPathPlaceholder', "Default path")}
                     onChange={(e) => {
                       const key =
                         type === 'antigravity'
@@ -1984,9 +1984,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       className="qs-btn"
                       onClick={() => handlePickAppPath(getAppTarget())}
                       disabled={pathDetecting}
-                      title={t('settings.general.codexPathSelect', '选择')}
+                      title={t('settings.general.codexPathSelect', "Select")}
                     >
-                      {t('settings.general.codexPathSelect', '选择')}
+                      {t('settings.general.codexPathSelect', "Select")}
                     </button>
                     <button
                       className="qs-btn"
@@ -1994,8 +1994,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       disabled={pathDetecting}
                       title={
                         pathDetecting
-                          ? t('common.loading', '加载中...')
-                          : t('settings.general.codexPathReset', '恢复默认')
+                          ? t('common.loading', "Loading...")
+                          : t('settings.general.codexPathReset', "Reset to default")
                       }
                     >
                       <RefreshCw size={12} className={pathDetecting ? 'spin' : undefined} />
@@ -2011,7 +2011,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         <span>
                           {t(
                             'settings.general.codexRestartSpecifiedAppOnSwitch',
-                            '切换 Codex 时重启指定应用',
+                            "Restart specified app when switching Codex",
                           )}
                         </span>
                       </div>
@@ -2036,7 +2036,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         value={config.codex_specified_app_path}
                         placeholder={t(
                           'settings.general.codexSpecifiedAppPathPlaceholder',
-                          '例如 /Applications/Host.app',
+                          "For example /Applications/Host.app",
                         )}
                         onChange={(e) =>
                           saveConfig({ codex_specified_app_path: e.target.value })
@@ -2046,14 +2046,14 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         <button
                           className="qs-btn"
                           onClick={() => void handlePickCodexSpecifiedAppPath()}
-                          title={t('settings.general.codexPathSelect', '选择')}
+                          title={t('settings.general.codexPathSelect', "Select")}
                         >
-                          {t('settings.general.codexPathSelect', '选择')}
+                          {t('settings.general.codexPathSelect', "Select")}
                         </button>
                         <button
                           className="qs-btn"
                           onClick={() => saveConfig({ codex_specified_app_path: '' })}
-                          title={t('settings.general.codexPathReset', '恢复默认')}
+                          title={t('settings.general.codexPathReset', "Reset to default")}
                         >
                           <RefreshCw size={12} />
                         </button>
@@ -2079,13 +2079,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       disabled={openingCodexConfig}
                     >
                       {openingCodexConfig
-                        ? t('common.loading', '加载中...')
-                        : t('quickSettings.codex.openConfigToml', '打开文件')}
+                        ? t('common.loading', "Loading...")
+                        : t('quickSettings.codex.openConfigToml', "Open File")}
                     </button>
                   </div>
                 </div>
                 <div className="qs-hint" style={{ marginTop: -2, marginBottom: 2 }}>
-                  {t('quickSettings.codex.openConfigHint', '快速打开当前使用的 Codex config.toml 文件。')}
+                  {t('quickSettings.codex.openConfigHint', "Quickly open the active Codex config.toml file.")}
                 </div>
 
                 <div className="qs-codex-quick-config">
@@ -2095,7 +2095,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       <span>
                         {t(
                           'quickSettings.codex.quickConfig.title',
-                          '上下文与压缩阈值',
+                          "Context & Compact Limits",
                         )}
                       </span>
                     </div>
@@ -2106,8 +2106,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         disabled={codexQuickConfigLoading || codexQuickConfigSaving}
                       >
                         {codexQuickConfigLoading
-                          ? t('common.loading', '加载中...')
-                          : t('common.refresh', '刷新')}
+                          ? t('common.loading', "Loading...")
+                          : t('common.refresh', "Refresh")}
                       </button>
                       <button
                         className="qs-btn qs-btn--primary"
@@ -2120,14 +2120,14 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         }
                       >
                         {codexQuickConfigSaving
-                          ? t('common.saving', '保存中...')
-                          : t('common.save', '保存')}
+                          ? t('common.saving', "Saving...")
+                          : t('common.save', "Save")}
                       </button>
                     </div>
                   </div>
 
                   {codexQuickConfigLoading ? (
-                    <div className="qs-hint">{t('common.loading', '加载中...')}</div>
+                    <div className="qs-hint">{t('common.loading', "Loading...")}</div>
                   ) : (
                     <>
                       <div
@@ -2135,7 +2135,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         role="radiogroup"
                         aria-label={t(
                           'quickSettings.codex.quickConfig.presetLabel',
-                          '配置预设',
+                          "Config Preset",
                         )}
                       >
                         {codexQuickPresetOptions.map((option) => (
@@ -2162,7 +2162,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       <div className="qs-hint">
                         {t(
                           'quickSettings.codex.quickConfig.presetHint',
-                          '可直接选择预设（默认 / 516K / 1M），或切到自定义手动填写两个字段。',
+                          "Choose a preset (Default / 516K / 1M), or switch to Custom and fill both fields manually.",
                         )}
                       </div>
 
@@ -2171,7 +2171,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                           <label>
                             {t(
                               'quickSettings.codex.quickConfig.contextWindow',
-                              '上下文窗口',
+                              "Context Window",
                             )}
                           </label>
                           <input
@@ -2190,7 +2190,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                           <div className="qs-hint">
                             {t(
                               'quickSettings.codex.quickConfig.contextWindowHint',
-                              '写入 model_context_window。仅在“自定义”模式可编辑。',
+                              "Writes model_context_window. Editable only in Custom mode.",
                             )}
                           </div>
                           {codexQuickContextWindowError && (
@@ -2204,7 +2204,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                           <label>
                             {t(
                               'quickSettings.codex.quickConfig.autoCompactLimit',
-                              '自动压缩阈值',
+                              "Auto-Compact Limit",
                             )}
                           </label>
                           <input
@@ -2223,7 +2223,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                           <div className="qs-hint">
                             {t(
                               'quickSettings.codex.quickConfig.autoCompactLimitHint',
-                              '写入 model_auto_compact_token_limit。仅在“自定义”模式可编辑。',
+                              "Writes model_auto_compact_token_limit. Editable only in Custom mode.",
                             )}
                           </div>
                           {codexQuickCompactLimitError && (
@@ -2259,7 +2259,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     <span>
                       {t(
                         'settings.general.codexLaunchOnSwitch',
-                        '切换 Codex 时自动启动 Codex App'
+                        "Launch Codex App when switching Codex"
                       )}
                     </span>
                   </div>
@@ -2281,7 +2281,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     <span>
                       {t(
                         'settings.general.openclawAuthOverwrite',
-                        '切换 Codex 时覆盖 OpenClaw 登录信息'
+                        "Overwrite OpenClaw login when switching Codex"
                       )}
                     </span>
                   </div>
@@ -2305,7 +2305,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     <span>
                       {t(
                         'settings.general.opencodeAuthOverwrite',
-                        '切换 Codex 时覆盖 OpenCode 登录信息'
+                        "Overwrite OpenCode login when switching Codex"
                       )}
                     </span>
                   </div>
@@ -2333,7 +2333,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 <div className="qs-row">
                   <div className="qs-row-label">
                     <Zap size={15} />
-                    <span>{t('settings.general.opencodeRestart', '切换时自动重启 OpenCode')}</span>
+                    <span>{t('settings.general.opencodeRestart', "Restart OpenCode when switching Codex")}</span>
                   </div>
                   <div className="qs-row-control">
                     <label className="qs-switch">
@@ -2351,7 +2351,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 <div className="qs-row">
                   <div className="qs-row-label">
                     <Zap size={15} />
-                    <span>{t('codex.list.showCodeReviewQuota', '显示 Code Review 配额')}</span>
+                    <span>{t('codex.list.showCodeReviewQuota', "Show Code Review quota")}</span>
                   </div>
                   <div className="qs-row-control">
                     <label className="qs-switch">
@@ -2372,7 +2372,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                   <div className="qs-row">
                     <div className="qs-row-label">
                       <Zap size={15} />
-                      <span>{t('quickSettings.autoSwitch.enable', '启用自动切号')}</span>
+                      <span>{t('quickSettings.autoSwitch.enable', "Enable Auto Switch")}</span>
                     </div>
                     <div className="qs-row-control">
                       <label className="qs-switch">
@@ -2391,7 +2391,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       <div className="qs-row">
                         <div className="qs-row-label">
                           <span>
-                            primary_window ({t('codex.quota.hourly', '5小时配额')}) {t('quickSettings.autoSwitch.threshold', '切号阈值')}
+                            primary_window ({t('codex.quota.hourly', "5-hour quota")}) {t('quickSettings.autoSwitch.threshold', "Switch Threshold")}
                           </span>
                         </div>
                         <div className="qs-row-control">
@@ -2402,7 +2402,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                               max={100}
                               className="qs-select qs-select--input-mode qs-select--with-unit"
                               value={codexAutoSwitchPrimaryCustomThreshold}
-                              placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                              placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                               onChange={(e) =>
                                 handleCodexWindowThresholdInputChange(
                                   e.target.value,
@@ -2435,13 +2435,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       </div>
 
                       <div className="qs-hint" style={{ marginTop: 0, marginBottom: 4 }}>
-                        {t('quickSettings.codexWindow.orDivider', 'OR（命中任一即触发）')}
+                        {t('quickSettings.codexWindow.orDivider', 'OR (trigger if either threshold is reached)')}
                       </div>
 
                       <div className="qs-row">
                         <div className="qs-row-label">
                           <span>
-                            secondary_window ({t('codex.quota.weekly', '周配额')}) {t('quickSettings.autoSwitch.threshold', '切号阈值')}
+                            secondary_window ({t('codex.quota.weekly', "Weekly quota")}) {t('quickSettings.autoSwitch.threshold', "Switch Threshold")}
                           </span>
                         </div>
                         <div className="qs-row-control">
@@ -2452,7 +2452,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                               max={100}
                               className="qs-select qs-select--input-mode qs-select--with-unit"
                               value={codexAutoSwitchSecondaryCustomThreshold}
-                              placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                              placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                               onChange={(e) =>
                                 handleCodexWindowThresholdInputChange(
                                   e.target.value,
@@ -2486,7 +2486,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
 
                       <div className="qs-row qs-row--top">
                         <div className="qs-row-label">
-                          <span>{t('settings.general.codexAutoSwitchAccountScope', 'Codex 自动切号账号范围')}</span>
+                          <span>{t('settings.general.codexAutoSwitchAccountScope', "Codex auto switch account scope")}</span>
                         </div>
                         <div className="qs-row-control qs-row-control--fill">
                           <AutoSwitchAccountScopeSelector
@@ -2508,12 +2508,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       <div className="qs-hint">
                         {t(
                           'quickSettings.autoSwitch.hint',
-                          '当任意模型配额低于阈值时，自动切换到配额最高的账号。'
+                          "Auto switch when monitored model groups hit the threshold; if credits monitoring is enabled, it also triggers when remaining credits fall below the threshold."
                         )}
                         <div>
                           {t(
                             'quickSettings.codexWindow.primaryWindowMeaning',
-                            'primary_window 一般指 5 小时配额；免费用户下 primary_window 可能对应周配额，不同订阅可能不同。'
+                            'primary_window usually means the 5-hour quota; for free users it may map to the weekly quota, and behavior may differ by subscription.'
                           )}
                         </div>
                         <div>
@@ -2535,7 +2535,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     <span>
                       {t(
                         'settings.general.ghcpLaunchOnSwitch',
-                        '切换 GitHub Copilot 时自动启动 GitHub Copilot'
+                        "Launch GitHub Copilot App when switching GitHub Copilot"
                       )}
                     </span>
                   </div>
@@ -2557,7 +2557,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     <span>
                       {t(
                         'settings.general.ghcpOpencodeAuthOverwrite',
-                        '切换 GitHub Copilot 时覆盖 OpenCode 登录信息'
+                        "Overwrite OpenCode login when switching GitHub Copilot"
                       )}
                     </span>
                   </div>
@@ -2588,7 +2588,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     <span>
                       {t(
                         'settings.general.ghcpOpencodeRestart',
-                        '切换 GitHub Copilot 时自动重启 OpenCode'
+                        "Restart OpenCode when switching GitHub Copilot"
                       )}
                     </span>
                   </div>
@@ -2614,7 +2614,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
               <div className="qs-section qs-section--highlight">
                 <div className="qs-section-header">
                   <Zap size={15} />
-                  <span>{t('quickSettings.autoSwitch.title', '自动切号')}</span>
+                  <span>{t('quickSettings.autoSwitch.title', "Auto Switch")}</span>
                 </div>
 
                 {antigravitySeamlessSwitchUnlocked && (
@@ -2624,7 +2624,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         <span>
                           {t(
                             'settings.general.antigravityDualSwitchNoRestart',
-                            '无感双通道切号（不重启）'
+                            "Dual switch without restart"
                           )}
                         </span>
                       </div>
@@ -2647,7 +2647,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     <div className="qs-hint">
                       {t(
                         'settings.general.antigravityDualSwitchNoRestartDesc',
-                        '切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity。'
+                        "On switch, write local account data and call extension seamless switch in one flow, without restarting Antigravity."
                       )}
                     </div>
                   </>
@@ -2655,7 +2655,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
 
                 <div className="qs-row">
                   <div className="qs-row-label">
-                    <span>{t('quickSettings.autoSwitch.enable', '启用自动切号')}</span>
+                    <span>{t('quickSettings.autoSwitch.enable', "Enable Auto Switch")}</span>
                   </div>
                   <div className="qs-row-control">
                     <label className="qs-switch">
@@ -2673,7 +2673,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                   <div className="qs-field-group" style={{ animation: 'qsFadeUp 0.2s ease both' }}>
                     <div className="qs-row">
                       <div className="qs-row-label">
-                        <span>{t('quickSettings.autoSwitch.threshold', '切号阈值')}</span>
+                        <span>{t('quickSettings.autoSwitch.threshold', "Switch Threshold")}</span>
                       </div>
                       <div className="qs-row-control">
                         {showThresholdInput ? (
@@ -2684,7 +2684,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                               max={100}
                               className="qs-select qs-select--input-mode qs-select--with-unit"
                               value={customThreshold}
-                              placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                              placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                               onChange={(e) => setCustomThreshold(e.target.value.replace(/[^\d]/g, ''))}
                               onBlur={handleCustomThresholdApply}
                               onKeyDown={(e) => {
@@ -2711,7 +2711,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                             <option value="20">20%</option>
                             <option value="40">40%</option>
                             <option value="60">60%</option>
-                            <option value="custom">{t('quickSettings.customInput', '自定义')}</option>
+                            <option value="custom">{t('quickSettings.customInput', "Custom")}</option>
                           </select>
                         )}
                       </div>
@@ -2719,7 +2719,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
 
                     <div className="qs-row">
                       <div className="qs-row-label">
-                        <span>{t('quickSettings.autoSwitch.creditsEnable', '监控 Credits')}</span>
+                        <span>{t('quickSettings.autoSwitch.creditsEnable', "Monitor Credits")}</span>
                       </div>
                       <div className="qs-row-control">
                         <label className="qs-switch">
@@ -2738,7 +2738,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     {creditsAutoSwitchEnabled && (
                       <div className="qs-row">
                         <div className="qs-row-label">
-                          <span>{t('quickSettings.autoSwitch.creditsThreshold', 'Credits 阈值')}</span>
+                          <span>{t('quickSettings.autoSwitch.creditsThreshold', "Credits Threshold")}</span>
                         </div>
                         <div className="qs-row-control">
                           {showCreditsThresholdInput ? (
@@ -2748,7 +2748,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                                 min={0}
                                 className="qs-select qs-select--input-mode"
                                 value={customCreditsThreshold}
-                                placeholder={t('quickSettings.inputCredits', '输入 Credits')}
+                                placeholder={t('quickSettings.inputCredits', "Enter credits")}
                                 onChange={(e) =>
                                   setCustomCreditsThreshold(e.target.value.replace(/[^\d]/g, ''))
                                 }
@@ -2776,7 +2776,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                               <option value="5">5</option>
                               <option value="10">10</option>
                               <option value="20">20</option>
-                              <option value="custom">{t('quickSettings.customInput', '自定义')}</option>
+                              <option value="custom">{t('quickSettings.customInput', "Custom")}</option>
                             </select>
                           )}
                         </div>
@@ -2785,7 +2785,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
 
                     <div className="qs-row">
                       <div className="qs-row-label">
-                        <span>{t('quickSettings.autoSwitch.triggerModel', '触发模型')}</span>
+                        <span>{t('quickSettings.autoSwitch.triggerModel', "Trigger Model")}</span>
                       </div>
                       <div className="qs-row-control">
                         <select
@@ -2794,10 +2794,10 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                           onChange={(e) => handleAutoSwitchScopeModeChange(e.target.value)}
                         >
                           <option value="any_group">
-                            {t('quickSettings.autoSwitch.scopeAnyGroup', '任一模型分组')}
+                            {t('quickSettings.autoSwitch.scopeAnyGroup', "Any model group")}
                           </option>
                           <option value="selected_groups">
-                            {t('quickSettings.autoSwitch.scopeSelectedGroups', '指定模型分组')}
+                            {t('quickSettings.autoSwitch.scopeSelectedGroups', "Selected model groups")}
                           </option>
                         </select>
                       </div>
@@ -2806,12 +2806,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     {autoSwitchScopeMode === 'selected_groups' && (
                       <div className="qs-row qs-row--top">
                         <div className="qs-row-label">
-                          <span>{t('quickSettings.autoSwitch.selectedGroups', '指定分组')}</span>
+                          <span>{t('quickSettings.autoSwitch.selectedGroups', "Selected groups")}</span>
                         </div>
                         <div className="qs-row-control qs-row-control--fill">
                           {autoSwitchDisplayGroups.length === 0 ? (
                             <div className="qs-hint qs-hint--compact">
-                              {t('quickSettings.autoSwitch.selectedGroupsEmpty', '暂无可选分组')}
+                              {t('quickSettings.autoSwitch.selectedGroupsEmpty', "No model groups available")}
                             </div>
                           ) : (
                             <div className="qs-check-group-inline">
@@ -2839,7 +2839,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
 
                     <div className="qs-row qs-row--top">
                       <div className="qs-row-label">
-                        <span>{t('settings.general.autoSwitchAccountScope', '自动切号账号范围')}</span>
+                        <span>{t('settings.general.autoSwitchAccountScope', "Auto switch account scope")}</span>
                       </div>
                       <div className="qs-row-control qs-row-control--fill">
                         <AutoSwitchAccountScopeSelector
@@ -2864,7 +2864,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 <div className="qs-hint">
                   {t(
                     'quickSettings.autoSwitch.hint',
-                    '命中监控的模型分组阈值时会自动切号；启用 Credits 监控后，剩余 Credits 低于阈值时也会触发。'
+                    "Auto switch when monitored model groups hit the threshold; if credits monitoring is enabled, it also triggers when remaining credits fall below the threshold."
                   )}
                 </div>
 
@@ -2876,7 +2876,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
               <div className="qs-section qs-section--highlight">
                 <div className="qs-section-header">
                   <Zap size={15} />
-                  <span>{t('quickSettings.quotaAlert.enable', '超额预警')}</span>
+                  <span>{t('quickSettings.quotaAlert.enable', "Enable Quota Alert")}</span>
                 </div>
                 {renderQuotaAlertControls()}
               </div>

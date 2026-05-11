@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 
 /**
- * 翻译文件检查脚本
- * - 检测不同语言翻译文件之间的 key 差异
- * - 检测非英语语言是否复用英文值（同 key）
+ * Locale file check script
+ * - Detect key differences between locale files
+ * - Detect whether non-English languages reuse English values (same key)
  */
 
 const fs = require('fs');
 const path = require('path');
 
-// 配置
+// Configuration
 const LOCALES_DIR = path.join(__dirname, '../src/locales');
-const BASELINE_FILE = 'en-US.json'; // 基准文件
+const BASELINE_FILE = 'en-US.json'; // Baseline file
 const ENGLISH_REFERENCE_FILES = new Set(['en-US.json', 'en.json']);
 const MIN_REUSED_ENGLISH_LOCALES = 2;
 const VALUE_REUSE_PREVIEW_LIMIT = 10;
@@ -20,7 +20,7 @@ const MIN_PLATFORM_DUPLICATE_COUNT = 2;
 const PLATFORM_DUP_PREVIEW_LIMIT = 10;
 const FAIL_ON_PLATFORM_COMMON_DUP = process.env.LOCALE_FAIL_ON_PLATFORM_COMMON_DUP === '1';
 
-// 颜色输出
+// Color output
 const colors = {
   reset: '\x1b[0m',
   bright: '\x1b[1m',
@@ -36,10 +36,10 @@ function log(message, color = 'reset') {
 }
 
 /**
- * 递归获取所有的 key 路径
- * @param {Object} obj - JSON 对象
- * @param {string} prefix - 当前路径前缀
- * @returns {Set<string>} - 所有 key 的集合
+ * Recursively get all key paths
+ * @param {Object} obj - JSON object
+ * @param {string} prefix - Current path prefix
+ * @returns {Set<string>} - Set of all keys
  */
 function getAllKeys(obj, prefix = '') {
   const keys = new Set();
@@ -64,10 +64,10 @@ function getAllKeys(obj, prefix = '') {
 }
 
 /**
- * 递归获取所有叶子字符串值（key -> value）
- * @param {Object} obj - JSON 对象
- * @param {string} prefix - 当前路径前缀
- * @returns {Map<string, string>} - 叶子字符串键值映射
+ * Recursively get all leaf string values (key -> value)
+ * @param {Object} obj - JSON object
+ * @param {string} prefix - Current path prefix
+ * @returns {Map<string, string>} - Leaf string key-value mapping
  */
 function getLeafStringMap(obj, prefix = '') {
   const valueMap = new Map();
@@ -97,7 +97,7 @@ function getLeafStringMap(obj, prefix = '') {
 }
 
 /**
- * 读取对象某个路径下的值
+ * Read the value at a given path in an object
  * @param {Object} obj
  * @param {string} keyPath
  * @returns {any}
@@ -108,7 +108,7 @@ function getValueByPath(obj, keyPath) {
 }
 
 /**
- * 判断字符串是否可能是英文文案
+ * Determine whether a string is likely an English copy string
  * @param {string} value
  * @returns {boolean}
  */
@@ -118,14 +118,14 @@ function isLikelyEnglishValue(value) {
   const normalized = value.trim();
   if (!normalized) return false;
 
-  // 去掉插值变量，避免 {{count}} 这类占位符影响判断
+  // Remove interpolation variables to avoid placeholders like {{count}} affecting the check
   const withoutInterpolation = normalized.replace(/\{\{[^{}]+\}\}/g, '').trim();
   if (!withoutInterpolation) return false;
 
-  // 不包含字母则不判断为英文文案
+  // If it contains no letters, it is not considered English copy
   if (!/[A-Za-z]/.test(withoutInterpolation)) return false;
 
-  // 若包含明显的非拉丁文字符，则视为已本地化
+  // If it contains obvious non-Latin characters, consider it already localized
   if (/[\u0400-\u04FF\u0600-\u06FF\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF]/.test(withoutInterpolation)) {
     return false;
   }
@@ -134,10 +134,10 @@ function isLikelyEnglishValue(value) {
 }
 
 /**
- * 判断该 key/value 是否属于允许保留英文的场景
- * - 品牌名、协议名、缩写
- * - 命令/路径片段、时间与占位符格式
- * - 套餐代码（如 PRO/FREE）等约定术语
+ * Determine whether the key/value belongs to a scenario where keeping English is allowed
+ * - Brand names, protocol names, abbreviations
+ * - Command/path fragments, time and placeholder formats
+ * - Plan codes (e.g. PRO/FREE) and other conventional terms
  * @param {string} key
  * @param {string} value
  * @returns {boolean}
@@ -162,8 +162,8 @@ function isAllowedEnglishReuse(key, value) {
   const allowedExactValues = new Set([
     'OAuth',
     'Token / JSON',
-    // 品牌名 / 产品名允许跨语言保持英文原文
-    'Cockpit Tools',
+    // Brand / product names are allowed to keep English across languages
+    'Switchme',
     'Antigravity',
     'Codex',
     'GitHub Copilot',
@@ -212,12 +212,12 @@ function isAllowedEnglishReuse(key, value) {
     return true;
   }
 
-  // 套餐/层级代码通常直接沿用英文缩写
+  // Plan/tier codes typically use English abbreviations directly
   if (/(^|\.)(plan|tier|filter)\.(free|plus|pro|ultra|team|business|enterprise|individual)$/.test(key)) {
     return true;
   }
 
-  // 命令/参数片段保留原样
+  // Command/argument fragments are kept as-is
   if (/restartStrategy\.force\.command(Mac|Win)$/.test(key)) {
     return true;
   }
@@ -225,7 +225,7 @@ function isAllowedEnglishReuse(key, value) {
     return true;
   }
 
-  // 唤醒日志格式字段，保留结构化英文标记
+  // Wakeup log format fields, keep structured English markers
   if (/^wakeup\.format\.(durationMs|traceId|tokens|crontab)$/.test(key)) {
     return true;
   }
@@ -245,7 +245,7 @@ function isAllowedEnglishReuse(key, value) {
     return true;
   }
 
-  // 少量在多语言里普遍沿用的单词/缩写，避免误报
+  // A small number of words/abbreviations commonly reused across languages to avoid false positives
   const allowedKeys = new Set([
     'accounts.status.normal',
     'codex.columns.plan',
@@ -330,7 +330,7 @@ function detectPlatformCommonDuplication(baselineData) {
 }
 
 /**
- * 检测非英语语言是否复用英文值（同一 key）
+ * Detect whether non-English languages reuse English values (same key)
  * @param {string} baselineFile
  * @param {Map<string, Map<string, string>>} localeValueMaps
  * @returns {Array<{key: string, value: string, locales: string[]}>}
@@ -376,9 +376,9 @@ function detectEnglishValueReuse(baselineFile, localeValueMaps) {
 }
 
 /**
- * 读取并解析 JSON 文件
- * @param {string} filePath - 文件路径
- * @returns {Object|null} - 解析后的 JSON 对象
+ * Read and parse a JSON file
+ * @param {string} filePath - File path
+ * @returns {Object|null} - Parsed JSON object
  */
 function readJsonFile(filePath) {
   try {

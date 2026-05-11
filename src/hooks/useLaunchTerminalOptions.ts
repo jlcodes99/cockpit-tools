@@ -59,7 +59,7 @@ export function useLaunchTerminalOptions(enabled = true) {
     const common = [
       {
         value: "system",
-        label: t("settings.general.terminalSystem", "跟随系统"),
+        label: t("settings.general.terminalSystem", "System Default"),
       },
     ];
 
