@@ -744,7 +744,7 @@ function resolveAccountContextText(
   const isPersonalStructure = structure.includes('personal');
 
   if (isPersonalStructure || (!structure && !isTeamLikePlan)) {
-    return t('codex.account.personal', '个人账户');
+    return t('codex.account.personal', "Personal account");
   }
 
   return accountName || workspaceTitle || '';
@@ -1697,10 +1697,10 @@ export function CodexWakeupContent({
               options={wakeupTierFilterOptions}
               selectedValues={filters.planTypes}
               allLabel={t('common.shared.filter.all', { count: wakeupTierCounts.all })}
-              filterLabel={t('common.shared.filterLabel', '筛选')}
-              clearLabel={t('accounts.clearFilter', '清空筛选')}
-              emptyLabel={t('common.none', '暂无')}
-              ariaLabel={t('common.shared.filterLabel', '筛选')}
+              filterLabel={t('common.shared.filterLabel', "Filter")}
+              clearLabel={t('accounts.clearFilter', "Clear Filter")}
+              emptyLabel={t('common.none', "None")}
+              ariaLabel={t('common.shared.filterLabel', "Filter")}
               onToggleValue={(value) =>
                 setFilters((current) => ({
                   ...current,
@@ -1908,7 +1908,7 @@ export function CodexWakeupContent({
   const handleDeletePreset = useCallback(
     async (preset: CodexWakeupModelPreset) => {
       const confirmed = await confirmDialog(t('codex.wakeup.presetDeleteConfirm', { name: preset.name }), {
-        title: t('common.confirm', '确认'),
+        title: t('common.confirm', "Confirm"),
         kind: 'warning',
       });
       if (!confirmed) return;
@@ -2053,7 +2053,7 @@ export function CodexWakeupContent({
       const confirmed = await confirmDialog(
         t('codex.wakeup.deleteConfirm', { name: task.name }),
         {
-          title: t('common.confirm', '确认'),
+          title: t('common.confirm', "Confirm"),
           kind: 'warning',
         },
       );
@@ -2167,10 +2167,10 @@ export function CodexWakeupContent({
           count: task.account_ids.length,
         }),
         {
-          title: t('common.confirm', '确认'),
+          title: t('common.confirm', "Confirm"),
           kind: 'warning',
-          okLabel: t('common.confirm', '确认'),
-          cancelLabel: t('common.cancel', '取消'),
+          okLabel: t('common.confirm', "Confirm"),
+          cancelLabel: t('common.cancel', "Cancel"),
         },
       );
       if (!confirmed) {
@@ -2392,7 +2392,7 @@ export function CodexWakeupContent({
 
   const handleClearHistory = useCallback(async () => {
     const confirmed = await confirmDialog(t('codex.wakeup.clearHistoryConfirm'), {
-      title: t('common.confirm', '确认'),
+      title: t('common.confirm', "Confirm"),
       kind: 'warning',
     });
     if (!confirmed) return;
@@ -2462,7 +2462,7 @@ export function CodexWakeupContent({
       {loading ? (
         <div className="loading-container">
           <RefreshCw size={24} className="loading-spinner" />
-          <p>{t('common.loading', '加载中...')}</p>
+          <p>{t('common.loading', "Loading...")}</p>
         </div>
       ) : sortedTasks.length === 0 ? (
         <div className="empty-state">
@@ -2512,7 +2512,7 @@ export function CodexWakeupContent({
                     <button
                       className="btn btn-secondary icon-only"
                       onClick={() => openEditTaskModal(task)}
-                      title={t('common.edit', '编辑')}
+                      title={t('common.edit', 'Edit')}
                     >
                       <Pencil size={14} />
                     </button>
@@ -2842,7 +2842,7 @@ export function CodexWakeupContent({
               </div>
 
               <div className="wakeup-form-group">
-                <label>{t('common.status', '状态')}</label>
+                <label>{t('common.status', 'Status')}</label>
                 <div className="wakeup-toggle-group">
                   <button
                     className={`btn btn-secondary ${taskDraft.enabled ? 'is-active' : ''}`}
@@ -3153,7 +3153,7 @@ export function CodexWakeupContent({
               </div>
 
               <div className="wakeup-form-group">
-                <label>{t('wakeup.form.nextRuns', '接下来执行')}</label>
+                <label>{t('wakeup.form.nextRuns', "Next runs")}</label>
                 <ul className="wakeup-preview-list">
                   {previewRuns.length === 0 && (
                     <li>
@@ -3166,7 +3166,7 @@ export function CodexWakeupContent({
                                 Math.max(1, Number(taskDraft.startupDelayMinutes) || 1),
                               )}${t('settings.general.minutes')}`
                             : t('settings.general.startupWakeupImmediate')
-                          : t('wakeup.form.nextRunsEmpty', '暂无预览')}
+                          : t('wakeup.form.nextRunsEmpty', "Please select trigger times")}
                     </li>
                   )}
                   {previewRuns.map((date, index) => (
@@ -3182,7 +3182,7 @@ export function CodexWakeupContent({
                 {t('common.cancel')}
               </button>
               <button className="btn btn-primary" onClick={() => void handleSaveTask()} disabled={saving}>
-                {saving ? t('common.saving', '保存中...') : t('common.save')}
+                {saving ? t('common.saving', "Saving...") : t('common.save')}
               </button>
             </div>
           </div>
@@ -3575,7 +3575,7 @@ export function CodexWakeupContent({
                   );
                 })}
                 {filteredExecutionRecords.length === 0 && (
-                  <p className="wakeup-hint">{t('common.none', '暂无')}</p>
+                  <p className="wakeup-hint">{t('common.none', "None")}</p>
                 )}
               </div>
             </div>
@@ -3593,7 +3593,7 @@ export function CodexWakeupContent({
                 onClick={() => setExecutionSession(null)}
                 disabled={executionSession.running}
               >
-                {t('common.close', '关闭')}
+                {t('common.close', "Close")}
               </button>
             </div>
           </div>

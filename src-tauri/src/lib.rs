@@ -816,6 +816,10 @@ pub fn run() {
             commands::instance::stop_instance,
             commands::instance::open_instance_window,
             commands::instance::close_all_instances,
+            // Devin CLI Commands
+            commands::devin_cli::read_devin_cli_accounts,
+            commands::devin_cli::devin_cli_is_installed,
+            commands::devin_cli::execute_devin_cli_command,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

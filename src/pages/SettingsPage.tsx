@@ -187,12 +187,13 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   kiro: 4,
   cursor: 5,
   gemini: 6,
-  codebuddy: 7,
-  codebuddy_cn: 8,
-  qoder: 9,
-  trae: 10,
-  workbuddy: 11,
-  zed: 12,
+  'devin-cli': 7,
+  codebuddy: 8,
+  codebuddy_cn: 9,
+  qoder: 10,
+  trae: 11,
+  workbuddy: 12,
+  zed: 13,
 };
 type UpdateCheckSource = 'auto' | 'manual';
 type UpdateCheckFinishedDetail = {
@@ -263,7 +264,7 @@ export function SettingsPage() {
   }, []);
 
   const terminalOptions = useMemo(() => {
-    const common = [{ value: 'system', label: t('settings.general.terminalSystem', '系统默认') }];
+    const common = [{ value: 'system', label: t('settings.general.terminalSystem', "System Default") }];
     const allOptions = isMacOS ? [
       { value: 'Terminal', label: 'Terminal.app' },
       { value: 'iTerm2', label: 'iTerm2' },
@@ -1392,39 +1393,39 @@ export function SettingsPage() {
 
   const getResetLabelByTarget = (target: AppPathTarget) => {
     if (target === 'vscode') {
-      return t('settings.general.vscodePathReset', '重置默认');
+      return t('settings.general.vscodePathReset', "Reset to default");
     }
     if (target === 'windsurf') {
-      return t('settings.general.windsurfPathReset', '重置默认');
+      return t('settings.general.windsurfPathReset', "Reset to default");
     }
     if (target === 'kiro') {
-      return t('settings.general.kiroPathReset', '重置默认');
+      return t('settings.general.kiroPathReset', "Reset to default");
     }
     if (target === 'cursor') {
-      return t('settings.general.cursorPathReset', '重置默认');
+      return t('settings.general.cursorPathReset', "Reset default");
     }
     if (target === 'codebuddy') {
-      return t('settings.general.codebuddyPathReset', '重置默认');
+      return t('settings.general.codebuddyPathReset', "Reset to default");
     }
     if (target === 'codebuddy_cn') {
-      return t('settings.general.codebuddyCnPathReset', '重置默认');
+      return t('settings.general.codebuddyCnPathReset', "Reset to Default");
     }
     if (target === 'qoder') {
-      return t('settings.general.qoderPathReset', '重置默认');
+      return t('settings.general.qoderPathReset', "Reset to default");
     }
     if (target === 'trae') {
-      return t('settings.general.traePathReset', '重置默认');
+      return t('settings.general.traePathReset', "Reset to default");
     }
     if (target === 'workbuddy') {
-      return t('settings.general.workbuddyPathReset', '重置默认');
+      return t('settings.general.workbuddyPathReset', "Reset to default");
     }
     if (target === 'zed') {
-      return t('settings.general.zedPathReset', '重置默认');
+      return t('settings.general.zedPathReset', "Reset to default");
     }
     if (target === 'opencode') {
-      return t('settings.general.opencodePathReset', '重置默认');
+      return t('settings.general.opencodePathReset', "Reset to default");
     }
-    return t('settings.general.codexPathReset', '重置默认');
+    return t('settings.general.codexPathReset', "Reset to default");
   };
 
   const handlePickAppPath = async (target: AppPathTarget) => {
@@ -1560,7 +1561,7 @@ export function SettingsPage() {
               ? t('settings.general.currentAccountRefreshItemDesc')
               : t(
                 'settings.general.currentAccountRefreshRequiresAutoRefresh',
-                '需先开启“配额自动刷新”后，才能设置当前账号刷新。',
+                "Enable \"Quota Auto Refresh\" first to configure current account refresh.",
               )}
           </div>
         </div>
@@ -1574,7 +1575,7 @@ export function SettingsPage() {
                   max={999}
                   className="settings-select settings-select--input-mode settings-select--with-unit"
                   value={value}
-                  placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                  placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                   onChange={(event) =>
                     setCurrentAccountRefreshValue(platform, sanitizeNumberInput(event.target.value))
                   }
@@ -1687,10 +1688,10 @@ export function SettingsPage() {
     Array<{ key: ReleaseHistorySectionKey; label: string }>
   >(
     () => [
-      { key: 'added', label: t('settings.about.releaseHistorySectionAdded', '新增') },
-      { key: 'changed', label: t('settings.about.releaseHistorySectionChanged', '变更') },
-      { key: 'fixed', label: t('settings.about.releaseHistorySectionFixed', '修复') },
-      { key: 'removed', label: t('settings.about.releaseHistorySectionRemoved', '移除') },
+      { key: 'added', label: t('settings.about.releaseHistorySectionAdded', "Added") },
+      { key: 'changed', label: t('settings.about.releaseHistorySectionChanged', "Changed") },
+      { key: 'fixed', label: t('settings.about.releaseHistorySectionFixed', "Fixed") },
+      { key: 'removed', label: t('settings.about.releaseHistorySectionRemoved', "Removed") },
     ],
     [t],
   );
@@ -1807,7 +1808,7 @@ export function SettingsPage() {
         {/* === General Tab === */}
         {activeTab === 'general' && (
           <>
-            <div className="group-title">{t('settings.general.commonTitle', '通用')}</div>
+            <div className="group-title">{t('settings.general.commonTitle', "Common")}</div>
             <div className="settings-group">
               <div className="settings-row">
                 <div className="row-label">
@@ -1847,8 +1848,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.defaultTerminal', '默认终端')}</div>
-                  <div className="row-desc">{t('settings.general.defaultTerminalDesc', 'Gemini CLI 打开时使用的终端')}</div>
+                  <div className="row-title">{t('settings.general.defaultTerminal', "Default Terminal")}</div>
+                  <div className="row-desc">{t('settings.general.defaultTerminalDesc', "The terminal used when opening Gemini CLI")}</div>
                 </div>
                 <div className="row-control">
                   <select 
@@ -1865,8 +1866,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.sideNavLayout', '侧边栏布局')}</div>
-                  <div className="row-desc">{t('settings.general.sideNavLayoutDesc', '切换原始布局或经典布局')}</div>
+                  <div className="row-title">{t('settings.general.sideNavLayout', "Sidebar Layout")}</div>
+                  <div className="row-desc">{t('settings.general.sideNavLayoutDesc', "Switch between original and classic sidebar layouts")}</div>
                 </div>
                 <div className="row-control">
                   <select
@@ -1874,8 +1875,8 @@ export function SettingsPage() {
                     value={sideNavLayoutMode}
                     onChange={(e) => setSideNavLayoutMode(e.target.value as SideNavLayoutMode)}
                   >
-                    <option value="original">{t('settings.general.sideNavLayoutOriginal', '原始布局')}</option>
-                    <option value="classic">{t('settings.general.sideNavLayoutClassic', '经典布局')}</option>
+                    <option value="original">{t('settings.general.sideNavLayoutOriginal', "Original Layout")}</option>
+                    <option value="classic">{t('settings.general.sideNavLayoutClassic', "Classic Layout")}</option>
                   </select>
                 </div>
               </div>
@@ -1960,12 +1961,12 @@ export function SettingsPage() {
                 <div className="settings-row">
                   <div className="row-label">
                     <div className="row-title">
-                      {t('settings.general.hideDockIcon', '是否隐藏Dock图标（仅 macOS）')}
+                      {t('settings.general.hideDockIcon', "Hide Dock icon (macOS only)")}
                     </div>
                     <div className="row-desc">
                       {t(
                         'settings.general.hideDockIconDesc',
-                        '独立控制程序坞图标显示状态，不受窗口最小化行为影响'
+                        "Control Dock icon visibility independently; not affected by window minimize behavior"
                       )}
                     </div>
                   </div>
@@ -1976,10 +1977,10 @@ export function SettingsPage() {
                       onChange={(e) => setHideDockIcon(e.target.value === 'true')}
                     >
                       <option value="false">
-                        {t('settings.general.hideDockIconOff', '否（显示Dock图标）')}
+                        {t('settings.general.hideDockIconOff', "No (Show Dock icon)")}
                       </option>
                       <option value="true">
-                        {t('settings.general.hideDockIconOn', '是（隐藏Dock图标）')}
+                        {t('settings.general.hideDockIconOn', "Yes (Hide Dock icon)")}
                       </option>
                     </select>
                   </div>
@@ -1988,8 +1989,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.floatingCardStartup', '启动时显示悬浮卡片')}</div>
-                  <div className="row-desc">{t('settings.general.floatingCardStartupDesc', '应用启动后默认展示悬浮账号卡片')}</div>
+                  <div className="row-title">{t('settings.general.floatingCardStartup', "Show floating card on startup")}</div>
+                  <div className="row-desc">{t('settings.general.floatingCardStartupDesc', "Display the floating account card automatically after app launch")}</div>
                 </div>
                 <div className="row-control">
                   <select
@@ -1997,16 +1998,16 @@ export function SettingsPage() {
                     value={floatingCardShowOnStartup ? 'true' : 'false'}
                     onChange={(e) => setFloatingCardShowOnStartup(e.target.value === 'true')}
                   >
-                    <option value="true">{t('common.enable', '启用')}</option>
-                    <option value="false">{t('common.disable', '停用')}</option>
+                    <option value="true">{t('common.enable', "Enable")}</option>
+                    <option value="false">{t('common.disable', "Disable")}</option>
                   </select>
                 </div>
               </div>
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.floatingCardAlwaysOnTop', '悬浮卡片默认置顶')}</div>
-                  <div className="row-desc">{t('settings.general.floatingCardAlwaysOnTopDesc', '新打开的悬浮卡片窗口默认保持置顶')}</div>
+                  <div className="row-title">{t('settings.general.floatingCardAlwaysOnTop', "Keep floating card on top by default")}</div>
+                  <div className="row-desc">{t('settings.general.floatingCardAlwaysOnTopDesc', "New floating card windows stay on top when opened")}</div>
                 </div>
                 <div className="row-control">
                   <select
@@ -2014,8 +2015,8 @@ export function SettingsPage() {
                     value={floatingCardAlwaysOnTop ? 'true' : 'false'}
                     onChange={(e) => setFloatingCardAlwaysOnTop(e.target.value === 'true')}
                   >
-                    <option value="false">{t('common.disable', '停用')}</option>
-                    <option value="true">{t('common.enable', '启用')}</option>
+                    <option value="false">{t('common.disable', "Disable")}</option>
+                    <option value="true">{t('common.enable', "Enable")}</option>
                   </select>
                 </div>
               </div>
@@ -2031,20 +2032,20 @@ export function SettingsPage() {
                     value={appAutoLaunchEnabled ? 'true' : 'false'}
                     onChange={(e) => setAppAutoLaunchEnabled(e.target.value === 'true')}
                   >
-                    <option value="false">{t('common.disable', '停用')}</option>
-                    <option value="true">{t('common.enable', '启用')}</option>
+                    <option value="false">{t('common.disable', "Disable")}</option>
+                    <option value="true">{t('common.enable', "Enable")}</option>
                   </select>
                 </div>
               </div>
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.floatingCardShowNow', '立即显示悬浮卡片')}</div>
-                  <div className="row-desc">{t('settings.general.floatingCardShowNowDesc', '关闭后可在这里或托盘菜单中重新打开')}</div>
+                  <div className="row-title">{t('settings.general.floatingCardShowNow', "Show floating card now")}</div>
+                  <div className="row-desc">{t('settings.general.floatingCardShowNowDesc', "After closing it, reopen it here or from the tray menu")}</div>
                 </div>
                 <div className="row-control">
                   <button className="btn btn-secondary" onClick={() => void showFloatingCardWindow()}>
-                    {t('settings.general.floatingCardShowNowAction', '显示悬浮卡片')}
+                    {t('settings.general.floatingCardShowNowAction', "Show floating card")}
                   </button>
                 </div>
               </div>
@@ -2078,7 +2079,7 @@ export function SettingsPage() {
 
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <div style={{ order: platformSettingsOrder.antigravity }}>
-                <div className="group-title">{t('settings.general.antigravitySettingsTitle', 'Antigravity 设置')}</div>
+                <div className="group-title">{t('settings.general.antigravitySettingsTitle', "Antigravity Settings")}</div>
                 <div className="settings-group">
               <div className="settings-row">
                 <div className="row-label">
@@ -2095,7 +2096,7 @@ export function SettingsPage() {
                           max={999}
                           className="settings-select settings-select--input-mode settings-select--with-unit"
                           value={autoRefresh}
-                          placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                          placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                           onChange={(e) => setAutoRefresh(sanitizeNumberInput(e.target.value))}
                         onBlur={() => {
                           const normalized = normalizeNumberInput(autoRefresh, 1, 999);
@@ -2168,8 +2169,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.antigravityAppPath', 'Antigravity 启动路径')}</div>
-                  <div className="row-desc">{t('settings.general.codexAppPathDesc', '留空则使用默认路径')}</div>
+                  <div className="row-title">{t('settings.general.antigravityAppPath', "Antigravity App Path")}</div>
+                  <div className="row-desc">{t('settings.general.codexAppPathDesc', "Leave empty to use default path")}</div>
                 </div>
                 <div className="row-control row-control--grow">
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
@@ -2177,7 +2178,7 @@ export function SettingsPage() {
                       type="text"
                       className="settings-input settings-input--path"
                       value={antigravityAppPath}
-                      placeholder={t('settings.general.codexAppPathPlaceholder', '默认路径')}
+                      placeholder={t('settings.general.codexAppPathPlaceholder', "Default path")}
                       onChange={(e) => setAntigravityAppPath(e.target.value)}
                     />
                     <button
@@ -2185,7 +2186,7 @@ export function SettingsPage() {
                       onClick={() => handlePickAppPath('antigravity')}
                       disabled={isAppPathResetDetecting('antigravity')}
                     >
-                      {t('settings.general.codexPathSelect', '选择')}
+                      {t('settings.general.codexPathSelect', "Select")}
                     </button>
                     <button
                       className="btn btn-secondary"
@@ -2194,7 +2195,7 @@ export function SettingsPage() {
                     >
                       <RefreshCw size={16} className={isAppPathResetDetecting('antigravity') ? 'spin' : undefined} />
                       {isAppPathResetDetecting('antigravity')
-                        ? t('common.loading', '加载中...')
+                        ? t('common.loading', "Loading...")
                         : getResetLabelByTarget('antigravity')}
                     </button>
                   </div>
@@ -2207,13 +2208,13 @@ export function SettingsPage() {
                     <div className="row-title">
                       {t(
                         'settings.general.antigravityDualSwitchNoRestart',
-                        '无感双通道切号（不重启）'
+                        "Dual switch without restart"
                       )}
                     </div>
                     <div className="row-desc">
                       {t(
                         'settings.general.antigravityDualSwitchNoRestartDesc',
-                        '切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity。'
+                        "On switch, write local account data and call extension seamless switch in one flow, without restarting Antigravity."
                       )}
                     </div>
                   </div>
@@ -2234,8 +2235,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('quickSettings.autoSwitch.enable', '自动切号')}</div>
-                  <div className="row-desc">{t('quickSettings.autoSwitch.hint', '命中监控的模型分组阈值时会自动切号；启用 Credits 监控后，剩余 Credits 低于阈值时也会触发。')}</div>
+                  <div className="row-title">{t('quickSettings.autoSwitch.enable', "Enable Auto Switch")}</div>
+                  <div className="row-desc">{t('quickSettings.autoSwitch.hint', "Auto switch when monitored model groups hit the threshold; if credits monitoring is enabled, it also triggers when remaining credits fall below the threshold.")}</div>
                 </div>
                 <div className="row-control">
                   <label className="switch">
@@ -2251,8 +2252,8 @@ export function SettingsPage() {
               {autoSwitchEnabled && (
                 <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                   <div className="row-label">
-                    <div className="row-title">{t('quickSettings.autoSwitch.threshold', '切号阈值')}</div>
-                    <div className="row-desc">{t('quickSettings.autoSwitch.thresholdDesc', '任意模型配额低于此百分比时触发自动切号')}</div>
+                    <div className="row-title">{t('quickSettings.autoSwitch.threshold', "Switch Threshold")}</div>
+                    <div className="row-desc">{t('quickSettings.autoSwitch.thresholdDesc', "Auto switch when monitored model groups hit this percentage threshold")}</div>
                   </div>
                   <div className="row-control">
                     {autoSwitchThresholdCustomMode ? (
@@ -2263,7 +2264,7 @@ export function SettingsPage() {
                           max={100}
                           className="settings-select settings-select--input-mode settings-select--with-unit"
                           value={autoSwitchThreshold}
-                          placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                          placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                           onChange={(e) => setAutoSwitchThreshold(sanitizeNumberInput(e.target.value))}
                         onBlur={() => {
                           const normalized = normalizeNumberInput(autoSwitchThreshold, 0, 100);
@@ -2313,10 +2314,10 @@ export function SettingsPage() {
                 <div className="settings-row">
                   <div className="row-label">
                     <div className="row-title">
-                      {t('quickSettings.autoSwitch.creditsEnable', '监控 Credits')}
+                      {t('quickSettings.autoSwitch.creditsEnable', "Monitor Credits")}
                     </div>
                     <div className="row-desc">
-                      {t('quickSettings.autoSwitch.creditsThresholdDesc', '剩余 Credits 小于等于此值时也会触发自动切号')}
+                      {t('quickSettings.autoSwitch.creditsThresholdDesc', "Also auto switch when remaining credits are at or below this value")}
                     </div>
                   </div>
                   <div className="row-control">
@@ -2335,10 +2336,10 @@ export function SettingsPage() {
                 <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                   <div className="row-label">
                     <div className="row-title">
-                      {t('quickSettings.autoSwitch.creditsThreshold', 'Credits 阈值')}
+                      {t('quickSettings.autoSwitch.creditsThreshold', "Credits Threshold")}
                     </div>
                     <div className="row-desc">
-                      {t('quickSettings.autoSwitch.creditsThresholdDesc', '剩余 Credits 小于等于此值时也会触发自动切号')}
+                      {t('quickSettings.autoSwitch.creditsThresholdDesc', "Also auto switch when remaining credits are at or below this value")}
                     </div>
                   </div>
                   <div className="row-control">
@@ -2349,7 +2350,7 @@ export function SettingsPage() {
                           min={0}
                           className="settings-select settings-select--input-mode"
                           value={autoSwitchCreditsThreshold}
-                          placeholder={t('quickSettings.inputCredits', '输入 Credits')}
+                          placeholder={t('quickSettings.inputCredits', "Enter credits")}
                           onChange={(e) =>
                             setAutoSwitchCreditsThreshold(sanitizeNumberInput(e.target.value))
                           }
@@ -2425,8 +2426,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('quickSettings.quotaAlert.enable', '超额预警')}</div>
-                  <div className="row-desc">{t('quickSettings.quotaAlert.hint', '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。')}</div>
+                  <div className="row-title">{t('quickSettings.quotaAlert.enable', "Enable Quota Alert")}</div>
+                  <div className="row-desc">{t('quickSettings.quotaAlert.hint', "When any current-account model quota drops below the threshold, send a native notification and show a quick-switch action in the app.")}</div>
                 </div>
                 <div className="row-control">
                   <label className="switch">
@@ -2442,8 +2443,8 @@ export function SettingsPage() {
               {quotaAlertEnabled && (
                 <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                   <div className="row-label">
-                    <div className="row-title">{t('quickSettings.quotaAlert.threshold', '预警阈值')}</div>
-                    <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', '任意模型配额低于此百分比时触发预警')}</div>
+                    <div className="row-title">{t('quickSettings.quotaAlert.threshold', "Alert Threshold")}</div>
+                    <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', "Trigger alert when any model quota falls below this percentage")}</div>
                   </div>
                   <div className="row-control">
                     {quotaAlertThresholdCustomMode ? (
@@ -2454,7 +2455,7 @@ export function SettingsPage() {
                           max={100}
                           className="settings-select settings-select--input-mode settings-select--with-unit"
                           value={quotaAlertThreshold}
-                          placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                          placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                           onChange={(e) => setQuotaAlertThreshold(sanitizeNumberInput(e.target.value))}
                           onBlur={() => {
                             const normalized = normalizeNumberInput(quotaAlertThreshold, 0, 100);
@@ -2505,17 +2506,17 @@ export function SettingsPage() {
               </div>
 
               <div style={{ order: platformSettingsOrder.codex }}>
-                <div className="group-title">{t('settings.general.codexSettingsTitle', 'Codex 设置')}</div>
+                <div className="group-title">{t('settings.general.codexSettingsTitle', "Codex Settings")}</div>
                 <div className="settings-group">
               <div className="settings-row">
                 <div className="row-label">
                   <div className="row-title">
-                    {t('settings.general.codexLocalAccessEntryVisible', '显示 API 服务入口')}
+                    {t('settings.general.codexLocalAccessEntryVisible', "Show API Service Entry")}
                   </div>
                   <div className="row-desc">
                     {t(
                       'settings.general.codexLocalAccessEntryVisibleDesc',
-                      '仅控制 Codex 总览中的 API 服务入口显示，不会停止本地 API 服务；关闭后可在这里重新打开。',
+                      "Only controls whether the API service entry is shown in the Codex overview. It does not stop the local API service; you can turn it back on here or in Quick Settings.",
                     )}
                   </div>
                 </div>
@@ -2545,7 +2546,7 @@ export function SettingsPage() {
                           max={999}
                           className="settings-select settings-select--input-mode settings-select--with-unit"
                           value={codexAutoRefresh}
-                          placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                          placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                           onChange={(e) => setCodexAutoRefresh(sanitizeNumberInput(e.target.value))}
                         onBlur={() => {
                           const normalized = normalizeNumberInput(codexAutoRefresh, 1, 999);
@@ -2600,8 +2601,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.codexAppPath', 'Codex 启动路径')}</div>
-                  <div className="row-desc">{t('settings.general.codexAppPathDesc', '留空则使用默认路径')}</div>
+                  <div className="row-title">{t('settings.general.codexAppPath', "Codex App Path")}</div>
+                  <div className="row-desc">{t('settings.general.codexAppPathDesc', "Leave empty to use default path")}</div>
                 </div>
                 <div className="row-control row-control--grow">
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
@@ -2609,7 +2610,7 @@ export function SettingsPage() {
                       type="text"
                       className="settings-input settings-input--path"
                       value={codexAppPath}
-                      placeholder={t('settings.general.codexAppPathPlaceholder', '默认路径')}
+                      placeholder={t('settings.general.codexAppPathPlaceholder', "Default path")}
                       onChange={(e) => setCodexAppPath(e.target.value)}
                     />
                     <button
@@ -2617,7 +2618,7 @@ export function SettingsPage() {
                       onClick={() => handlePickAppPath('codex')}
                       disabled={isAppPathResetDetecting('codex')}
                     >
-                      {t('settings.general.codexPathSelect', '选择')}
+                      {t('settings.general.codexPathSelect', "Select")}
                     </button>
                     <button
                       className="btn btn-secondary"
@@ -2626,7 +2627,7 @@ export function SettingsPage() {
                     >
                       <RefreshCw size={16} className={isAppPathResetDetecting('codex') ? 'spin' : undefined} />
                       {isAppPathResetDetecting('codex')
-                        ? t('common.loading', '加载中...')
+                        ? t('common.loading', "Loading...")
                         : getResetLabelByTarget('codex')}
                     </button>
                   </div>
@@ -2635,8 +2636,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.codexLaunchOnSwitch', '切换 Codex 时自动启动 Codex App')}</div>
-                  <div className="row-desc">{t('settings.general.codexLaunchOnSwitchDesc', '切换账号后自动启动或重启 Codex App')}</div>
+                  <div className="row-title">{t('settings.general.codexLaunchOnSwitch', "Launch Codex App when switching Codex")}</div>
+                  <div className="row-desc">{t('settings.general.codexLaunchOnSwitchDesc', "Start or restart Codex App after switching accounts")}</div>
                 </div>
                 <div className="row-control">
                   <label className="switch">
@@ -2655,13 +2656,13 @@ export function SettingsPage() {
                   <div className="row-title">
                     {t(
                       'settings.general.codexRestartSpecifiedAppOnSwitch',
-                      '切换 Codex 时重启指定应用',
+                      "Restart specified app when switching Codex",
                     )}
                   </div>
                   <div className="row-desc">
                     {t(
                       'settings.general.codexRestartSpecifiedAppOnSwitchDesc',
-                      '开启后按下方路径重启指定应用（适用于依赖插件宿主的场景）',
+                      "When enabled, restart the app at the path below (for plugin-host workflows).",
                     )}
                   </div>
                 </div>
@@ -2682,12 +2683,12 @@ export function SettingsPage() {
               <div className="settings-row">
                 <div className="row-label">
                   <div className="row-title">
-                    {t('settings.general.codexSpecifiedAppPath', '指定应用启动路径')}
+                    {t('settings.general.codexSpecifiedAppPath', "Specified app path")}
                   </div>
                   <div className="row-desc">
                     {t(
                       'settings.general.codexSpecifiedAppPathDesc',
-                      '填写需联动重启的应用路径',
+                      "Path of the app to restart together with Codex switching.",
                     )}
                   </div>
                 </div>
@@ -2699,18 +2700,18 @@ export function SettingsPage() {
                       value={codexSpecifiedAppPath}
                       placeholder={t(
                         'settings.general.codexSpecifiedAppPathPlaceholder',
-                        '例如 /Applications/Host.app',
+                        "For example /Applications/Host.app",
                       )}
                       onChange={(e) => setCodexSpecifiedAppPath(e.target.value)}
                     />
                     <button className="btn btn-secondary" onClick={handlePickCodexSpecifiedAppPath}>
-                      {t('settings.general.codexPathSelect', '选择')}
+                      {t('settings.general.codexPathSelect', "Select")}
                     </button>
                     <button
                       className="btn btn-secondary"
                       onClick={() => setCodexSpecifiedAppPath('')}
                     >
-                      {t('settings.general.codexSpecifiedAppPathClear', '清空')}
+                      {t('settings.general.codexSpecifiedAppPathClear', "Clear")}
                     </button>
                   </div>
                 </div>
@@ -2820,7 +2821,7 @@ export function SettingsPage() {
                       onClick={() => handlePickAppPath('opencode')}
                       disabled={isAppPathResetDetecting('opencode')}
                     >
-                      {t('settings.general.opencodePathSelect', '选择')}
+                      {t('settings.general.opencodePathSelect', "Select")}
                     </button>
                     <button
                       className="btn btn-secondary"
@@ -2829,7 +2830,7 @@ export function SettingsPage() {
                     >
                       <RefreshCw size={16} className={isAppPathResetDetecting('opencode') ? 'spin' : undefined} />
                       {isAppPathResetDetecting('opencode')
-                        ? t('common.loading', '加载中...')
+                        ? t('common.loading', "Loading...")
                         : getResetLabelByTarget('opencode')}
                     </button>
                   </div>
@@ -2838,8 +2839,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('quickSettings.quotaAlert.enable', '超额预警')}</div>
-                  <div className="row-desc">{t('quickSettings.quotaAlert.hint', '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。')}</div>
+                  <div className="row-title">{t('quickSettings.quotaAlert.enable', "Enable Quota Alert")}</div>
+                  <div className="row-desc">{t('quickSettings.quotaAlert.hint', "When any current-account model quota drops below the threshold, send a native notification and show a quick-switch action in the app.")}</div>
                 </div>
                 <div className="row-control">
                   <label className="switch">
@@ -2855,8 +2856,8 @@ export function SettingsPage() {
               {codexQuotaAlertEnabled && (
                 <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                   <div className="row-label">
-                    <div className="row-title">{t('quickSettings.quotaAlert.threshold', '预警阈值')}</div>
-                    <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', '任意模型配额低于此百分比时触发预警')}</div>
+                    <div className="row-title">{t('quickSettings.quotaAlert.threshold', "Alert Threshold")}</div>
+                    <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', "Trigger alert when any model quota falls below this percentage")}</div>
                   </div>
                   <div className="row-control">
                     {codexQuotaAlertThresholdCustomMode ? (
@@ -2867,7 +2868,7 @@ export function SettingsPage() {
                           max={100}
                           className="settings-select settings-select--input-mode settings-select--with-unit"
                           value={codexQuotaAlertThreshold}
-                          placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                          placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                           onChange={(e) => setCodexQuotaAlertThreshold(sanitizeNumberInput(e.target.value))}
                           onBlur={() => {
                             const normalized = normalizeNumberInput(codexQuotaAlertThreshold, 0, 100);
@@ -2918,12 +2919,12 @@ export function SettingsPage() {
               </div>
 
               <div style={{ order: platformSettingsOrder['github-copilot'] }}>
-                <div className="group-title">{t('settings.general.githubCopilotSettingsTitle', 'GitHub Copilot 设置')}</div>
+                <div className="group-title">{t('settings.general.githubCopilotSettingsTitle', "GitHub Copilot Settings")}</div>
                 <div className="settings-group">
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.ghcpAutoRefresh', 'GitHub Copilot 自动刷新配额')}</div>
-                  <div className="row-desc">{t('settings.general.ghcpAutoRefreshDesc', '后台自动更新频率')}</div>
+                  <div className="row-title">{t('settings.general.ghcpAutoRefresh', "GitHub Copilot Auto Refresh Quota")}</div>
+                  <div className="row-desc">{t('settings.general.ghcpAutoRefreshDesc', "Background update frequency")}</div>
                 </div>
                 <div className="row-control">
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -2935,7 +2936,7 @@ export function SettingsPage() {
                           max={999}
                           className="settings-select settings-select--input-mode settings-select--with-unit"
                           value={ghcpAutoRefresh}
-                          placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                          placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                           onChange={(e) => setGhcpAutoRefresh(sanitizeNumberInput(e.target.value))}
                         onBlur={() => {
                           const normalized = normalizeNumberInput(ghcpAutoRefresh, 1, 999);
@@ -2990,8 +2991,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.vscodeAppPath', 'VS Code 启动路径')}</div>
-                  <div className="row-desc">{t('settings.general.vscodeAppPathDesc', '留空则使用默认路径')}</div>
+                  <div className="row-title">{t('settings.general.vscodeAppPath', "VS Code App Path")}</div>
+                  <div className="row-desc">{t('settings.general.vscodeAppPathDesc', "Leave empty to use default path")}</div>
                 </div>
                 <div className="row-control row-control--grow">
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
@@ -2999,7 +3000,7 @@ export function SettingsPage() {
                       type="text"
                       className="settings-input settings-input--path"
                       value={vscodeAppPath}
-                      placeholder={t('settings.general.vscodeAppPathPlaceholder', '默认路径')}
+                      placeholder={t('settings.general.vscodeAppPathPlaceholder', "Default path")}
                       onChange={(e) => setVscodeAppPath(e.target.value)}
                     />
                     <button
@@ -3007,7 +3008,7 @@ export function SettingsPage() {
                       onClick={() => handlePickAppPath('vscode')}
                       disabled={isAppPathResetDetecting('vscode')}
                     >
-                      {t('settings.general.vscodePathSelect', '选择')}
+                      {t('settings.general.vscodePathSelect', "Select")}
                     </button>
                     <button
                       className="btn btn-secondary"
@@ -3016,7 +3017,7 @@ export function SettingsPage() {
                     >
                       <RefreshCw size={16} className={isAppPathResetDetecting('vscode') ? 'spin' : undefined} />
                       {isAppPathResetDetecting('vscode')
-                        ? t('common.loading', '加载中...')
+                        ? t('common.loading', "Loading...")
                         : getResetLabelByTarget('vscode')}
                     </button>
                   </div>
@@ -3025,8 +3026,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('quickSettings.quotaAlert.enable', '超额预警')}</div>
-                  <div className="row-desc">{t('quickSettings.quotaAlert.hint', '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。')}</div>
+                  <div className="row-title">{t('quickSettings.quotaAlert.enable', "Enable Quota Alert")}</div>
+                  <div className="row-desc">{t('quickSettings.quotaAlert.hint', "When any current-account model quota drops below the threshold, send a native notification and show a quick-switch action in the app.")}</div>
                 </div>
                 <div className="row-control">
                   <label className="switch">
@@ -3042,8 +3043,8 @@ export function SettingsPage() {
               {ghcpQuotaAlertEnabled && (
                 <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                   <div className="row-label">
-                    <div className="row-title">{t('quickSettings.quotaAlert.threshold', '预警阈值')}</div>
-                    <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', '任意模型配额低于此百分比时触发预警')}</div>
+                    <div className="row-title">{t('quickSettings.quotaAlert.threshold', "Alert Threshold")}</div>
+                    <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', "Trigger alert when any model quota falls below this percentage")}</div>
                   </div>
                   <div className="row-control">
                     {ghcpQuotaAlertThresholdCustomMode ? (
@@ -3054,7 +3055,7 @@ export function SettingsPage() {
                           max={100}
                           className="settings-select settings-select--input-mode settings-select--with-unit"
                           value={ghcpQuotaAlertThreshold}
-                          placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                          placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                           onChange={(e) => setGhcpQuotaAlertThreshold(sanitizeNumberInput(e.target.value))}
                           onBlur={() => {
                             const normalized = normalizeNumberInput(ghcpQuotaAlertThreshold, 0, 100);
@@ -3105,12 +3106,12 @@ export function SettingsPage() {
               </div>
 
               <div style={{ order: platformSettingsOrder.windsurf }}>
-                <div className="group-title">{t('settings.general.windsurfSettingsTitle', 'Windsurf 设置')}</div>
+                <div className="group-title">{t('settings.general.windsurfSettingsTitle', "Windsurf Settings")}</div>
                 <div className="settings-group">
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.windsurfAutoRefresh', 'Windsurf 自动刷新配额')}</div>
-                  <div className="row-desc">{t('settings.general.windsurfAutoRefreshDesc', '后台自动更新频率')}</div>
+                  <div className="row-title">{t('settings.general.windsurfAutoRefresh', "Windsurf Auto Refresh Quota")}</div>
+                  <div className="row-desc">{t('settings.general.windsurfAutoRefreshDesc', "Background update frequency")}</div>
                 </div>
                 <div className="row-control">
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -3122,7 +3123,7 @@ export function SettingsPage() {
                           max={999}
                           className="settings-select settings-select--input-mode settings-select--with-unit"
                           value={windsurfAutoRefresh}
-                          placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                          placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                           onChange={(e) => setWindsurfAutoRefresh(sanitizeNumberInput(e.target.value))}
                         onBlur={() => {
                           const normalized = normalizeNumberInput(windsurfAutoRefresh, 1, 999);
@@ -3177,8 +3178,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.windsurfAppPath', 'Windsurf 启动路径')}</div>
-                  <div className="row-desc">{t('settings.general.windsurfAppPathDesc', '留空则使用默认路径')}</div>
+                  <div className="row-title">{t('settings.general.windsurfAppPath', "Windsurf App Path")}</div>
+                  <div className="row-desc">{t('settings.general.windsurfAppPathDesc', "Leave empty to use default path")}</div>
                 </div>
                 <div className="row-control row-control--grow">
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
@@ -3186,7 +3187,7 @@ export function SettingsPage() {
                       type="text"
                       className="settings-input settings-input--path"
                       value={windsurfAppPath}
-                      placeholder={t('settings.general.windsurfAppPathPlaceholder', '默认路径')}
+                      placeholder={t('settings.general.windsurfAppPathPlaceholder', "Default path")}
                       onChange={(e) => setWindsurfAppPath(e.target.value)}
                     />
                     <button
@@ -3194,7 +3195,7 @@ export function SettingsPage() {
                       onClick={() => handlePickAppPath('windsurf')}
                       disabled={isAppPathResetDetecting('windsurf')}
                     >
-                      {t('settings.general.windsurfPathSelect', '选择')}
+                      {t('settings.general.windsurfPathSelect', "Select")}
                     </button>
                     <button
                       className="btn btn-secondary"
@@ -3203,7 +3204,7 @@ export function SettingsPage() {
                     >
                       <RefreshCw size={16} className={isAppPathResetDetecting('windsurf') ? 'spin' : undefined} />
                       {isAppPathResetDetecting('windsurf')
-                        ? t('common.loading', '加载中...')
+                        ? t('common.loading', "Loading...")
                         : getResetLabelByTarget('windsurf')}
                     </button>
                   </div>
@@ -3212,8 +3213,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('quickSettings.quotaAlert.enable', '超额预警')}</div>
-                  <div className="row-desc">{t('quickSettings.quotaAlert.hint', '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。')}</div>
+                  <div className="row-title">{t('quickSettings.quotaAlert.enable', "Enable Quota Alert")}</div>
+                  <div className="row-desc">{t('quickSettings.quotaAlert.hint', "When any current-account model quota drops below the threshold, send a native notification and show a quick-switch action in the app.")}</div>
                 </div>
                 <div className="row-control">
                   <label className="switch">
@@ -3229,8 +3230,8 @@ export function SettingsPage() {
               {windsurfQuotaAlertEnabled && (
                 <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                   <div className="row-label">
-                    <div className="row-title">{t('quickSettings.quotaAlert.threshold', '预警阈值')}</div>
-                    <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', '任意模型配额低于此百分比时触发预警')}</div>
+                    <div className="row-title">{t('quickSettings.quotaAlert.threshold', "Alert Threshold")}</div>
+                    <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', "Trigger alert when any model quota falls below this percentage")}</div>
                   </div>
                   <div className="row-control">
                     {windsurfQuotaAlertThresholdCustomMode ? (
@@ -3241,7 +3242,7 @@ export function SettingsPage() {
                           max={100}
                           className="settings-select settings-select--input-mode settings-select--with-unit"
                           value={windsurfQuotaAlertThreshold}
-                          placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                          placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                           onChange={(e) => setWindsurfQuotaAlertThreshold(sanitizeNumberInput(e.target.value))}
                           onBlur={() => {
                             const normalized = normalizeNumberInput(windsurfQuotaAlertThreshold, 0, 100);
@@ -3292,12 +3293,12 @@ export function SettingsPage() {
               </div>
 
               <div style={{ order: platformSettingsOrder.kiro }}>
-                <div className="group-title">{t('settings.general.kiroSettingsTitle', 'Kiro 设置')}</div>
+                <div className="group-title">{t('settings.general.kiroSettingsTitle', "Kiro Settings")}</div>
                 <div className="settings-group">
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.kiroAutoRefresh', 'Kiro 自动刷新配额')}</div>
-                  <div className="row-desc">{t('settings.general.kiroAutoRefreshDesc', '后台自动更新频率')}</div>
+                  <div className="row-title">{t('settings.general.kiroAutoRefresh', "Kiro Auto Refresh Quota")}</div>
+                  <div className="row-desc">{t('settings.general.kiroAutoRefreshDesc', "Background update frequency")}</div>
                 </div>
                 <div className="row-control">
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -3309,7 +3310,7 @@ export function SettingsPage() {
                           max={999}
                           className="settings-select settings-select--input-mode settings-select--with-unit"
                           value={kiroAutoRefresh}
-                          placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                          placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                           onChange={(e) => setKiroAutoRefresh(sanitizeNumberInput(e.target.value))}
                           onBlur={() => {
                             const normalized = normalizeNumberInput(kiroAutoRefresh, 1, 999);
@@ -3364,8 +3365,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.kiroAppPath', 'Kiro 启动路径')}</div>
-                  <div className="row-desc">{t('settings.general.kiroAppPathDesc', '留空则使用默认路径')}</div>
+                  <div className="row-title">{t('settings.general.kiroAppPath', "Kiro App Path")}</div>
+                  <div className="row-desc">{t('settings.general.kiroAppPathDesc', "Leave empty to use default path")}</div>
                 </div>
                 <div className="row-control row-control--grow">
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
@@ -3373,7 +3374,7 @@ export function SettingsPage() {
                       type="text"
                       className="settings-input settings-input--path"
                       value={kiroAppPath}
-                      placeholder={t('settings.general.kiroAppPathPlaceholder', '默认路径')}
+                      placeholder={t('settings.general.kiroAppPathPlaceholder', "Default path")}
                       onChange={(e) => setKiroAppPath(e.target.value)}
                     />
                     <button
@@ -3381,7 +3382,7 @@ export function SettingsPage() {
                       onClick={() => handlePickAppPath('kiro')}
                       disabled={isAppPathResetDetecting('kiro')}
                     >
-                      {t('settings.general.kiroPathSelect', '选择')}
+                      {t('settings.general.kiroPathSelect', "Select")}
                     </button>
                     <button
                       className="btn btn-secondary"
@@ -3390,7 +3391,7 @@ export function SettingsPage() {
                     >
                       <RefreshCw size={16} className={isAppPathResetDetecting('kiro') ? 'spin' : undefined} />
                       {isAppPathResetDetecting('kiro')
-                        ? t('common.loading', '加载中...')
+                        ? t('common.loading', "Loading...")
                         : getResetLabelByTarget('kiro')}
                     </button>
                   </div>
@@ -3399,8 +3400,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('quickSettings.quotaAlert.enable', '超额预警')}</div>
-                  <div className="row-desc">{t('quickSettings.quotaAlert.hint', '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。')}</div>
+                  <div className="row-title">{t('quickSettings.quotaAlert.enable', "Enable Quota Alert")}</div>
+                  <div className="row-desc">{t('quickSettings.quotaAlert.hint', "When any current-account model quota drops below the threshold, send a native notification and show a quick-switch action in the app.")}</div>
                 </div>
                 <div className="row-control">
                   <label className="switch">
@@ -3416,8 +3417,8 @@ export function SettingsPage() {
               {kiroQuotaAlertEnabled && (
                 <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                   <div className="row-label">
-                    <div className="row-title">{t('quickSettings.quotaAlert.threshold', '预警阈值')}</div>
-                    <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', '任意模型配额低于此百分比时触发预警')}</div>
+                    <div className="row-title">{t('quickSettings.quotaAlert.threshold', "Alert Threshold")}</div>
+                    <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', "Trigger alert when any model quota falls below this percentage")}</div>
                   </div>
                   <div className="row-control">
                     {kiroQuotaAlertThresholdCustomMode ? (
@@ -3428,7 +3429,7 @@ export function SettingsPage() {
                           max={100}
                           className="settings-select settings-select--input-mode settings-select--with-unit"
                           value={kiroQuotaAlertThreshold}
-                          placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                          placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                           onChange={(e) => setKiroQuotaAlertThreshold(sanitizeNumberInput(e.target.value))}
                           onBlur={() => {
                             const normalized = normalizeNumberInput(kiroQuotaAlertThreshold, 0, 100);
@@ -3478,12 +3479,12 @@ export function SettingsPage() {
               </div>
 
               <div style={{ order: platformSettingsOrder.codebuddy }}>
-                <div className="group-title">{t('settings.general.codebuddySettingsTitle', 'CodeBuddy 设置')}</div>
+                <div className="group-title">{t('settings.general.codebuddySettingsTitle', "CodeBuddy Settings")}</div>
                 <div className="settings-group">
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.codebuddyAutoRefresh', 'CodeBuddy 自动刷新配额')}</div>
-                  <div className="row-desc">{t('settings.general.codebuddyAutoRefreshDesc', '后台自动更新频率')}</div>
+                  <div className="row-title">{t('settings.general.codebuddyAutoRefresh', "CodeBuddy Auto Refresh Quota")}</div>
+                  <div className="row-desc">{t('settings.general.codebuddyAutoRefreshDesc', "Background auto-refresh interval")}</div>
                 </div>
                 <div className="row-control">
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -3495,7 +3496,7 @@ export function SettingsPage() {
                           max={999}
                           className="settings-select settings-select--input-mode settings-select--with-unit"
                           value={codebuddyAutoRefresh}
-                          placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                          placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                           onChange={(e) => setCodebuddyAutoRefresh(sanitizeNumberInput(e.target.value))}
                           onBlur={() => {
                             const normalized = normalizeNumberInput(codebuddyAutoRefresh, 1, 999);
@@ -3552,8 +3553,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.codebuddyAppPath', 'CodeBuddy 启动路径')}</div>
-                  <div className="row-desc">{t('settings.general.codebuddyAppPathDesc', '留空则使用默认路径')}</div>
+                  <div className="row-title">{t('settings.general.codebuddyAppPath', "CodeBuddy Launch Path")}</div>
+                  <div className="row-desc">{t('settings.general.codebuddyAppPathDesc', "Leave empty for default path")}</div>
                 </div>
                 <div className="row-control row-control--grow">
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
@@ -3561,7 +3562,7 @@ export function SettingsPage() {
                       type="text"
                       className="settings-input settings-input--path"
                       value={codebuddyAppPath}
-                      placeholder={t('settings.general.codebuddyAppPathPlaceholder', '默认路径')}
+                      placeholder={t('settings.general.codebuddyAppPathPlaceholder', "Default path")}
                       onChange={(e) => setCodebuddyAppPath(e.target.value)}
                     />
                     <button
@@ -3569,7 +3570,7 @@ export function SettingsPage() {
                       onClick={() => handlePickAppPath('codebuddy')}
                       disabled={isAppPathResetDetecting('codebuddy')}
                     >
-                      {t('settings.general.codebuddyPathSelect', '选择')}
+                      {t('settings.general.codebuddyPathSelect', "Select")}
                     </button>
                     <button
                       className="btn btn-secondary"
@@ -3578,7 +3579,7 @@ export function SettingsPage() {
                     >
                       <RefreshCw size={16} className={isAppPathResetDetecting('codebuddy') ? 'spin' : undefined} />
                       {isAppPathResetDetecting('codebuddy')
-                        ? t('common.loading', '加载中...')
+                        ? t('common.loading', "Loading...")
                         : getResetLabelByTarget('codebuddy')}
                     </button>
                   </div>
@@ -3587,8 +3588,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('quickSettings.quotaAlert.enable', '超额预警')}</div>
-                  <div className="row-desc">{t('quickSettings.quotaAlert.hint', '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。')}</div>
+                  <div className="row-title">{t('quickSettings.quotaAlert.enable', "Enable Quota Alert")}</div>
+                  <div className="row-desc">{t('quickSettings.quotaAlert.hint', "When any current-account model quota drops below the threshold, send a native notification and show a quick-switch action in the app.")}</div>
                 </div>
                 <div className="row-control">
                   <label className="switch">
@@ -3604,8 +3605,8 @@ export function SettingsPage() {
               {codebuddyQuotaAlertEnabled && (
                 <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                   <div className="row-label">
-                    <div className="row-title">{t('quickSettings.quotaAlert.threshold', '预警阈值')}</div>
-                    <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', '任意模型配额低于此百分比时触发预警')}</div>
+                    <div className="row-title">{t('quickSettings.quotaAlert.threshold', "Alert Threshold")}</div>
+                    <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', "Trigger alert when any model quota falls below this percentage")}</div>
                   </div>
                   <div className="row-control">
                     {codebuddyQuotaAlertThresholdCustomMode ? (
@@ -3616,7 +3617,7 @@ export function SettingsPage() {
                           max={100}
                           className="settings-select settings-select--input-mode settings-select--with-unit"
                           value={codebuddyQuotaAlertThreshold}
-                          placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                          placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                           onChange={(e) => setCodebuddyQuotaAlertThreshold(sanitizeNumberInput(e.target.value))}
                           onBlur={() => {
                             const normalized = normalizeNumberInput(codebuddyQuotaAlertThreshold, 0, 100);
@@ -3668,12 +3669,12 @@ export function SettingsPage() {
               </div>
 
               <div style={{ order: platformSettingsOrder.codebuddy_cn }}>
-                <div className="group-title">{t('settings.general.codebuddyCnSettingsTitle', 'CodeBuddy CN 设置')}</div>
+                <div className="group-title">{t('settings.general.codebuddyCnSettingsTitle', "CodeBuddy CN Settings")}</div>
                 <div className="settings-group">
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('settings.general.codebuddyCnAutoRefresh', 'CodeBuddy CN 自动刷新配额')}</div>
-                      <div className="row-desc">{t('settings.general.codebuddyCnAutoRefreshDesc', '后台自动更新频率')}</div>
+                      <div className="row-title">{t('settings.general.codebuddyCnAutoRefresh', "CodeBuddy CN Auto Refresh")}</div>
+                      <div className="row-desc">{t('settings.general.codebuddyCnAutoRefreshDesc', "Background auto-refresh frequency")}</div>
                     </div>
                     <div className="row-control">
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -3685,7 +3686,7 @@ export function SettingsPage() {
                               max={999}
                               className="settings-select settings-select--input-mode settings-select--with-unit"
                               value={codebuddyCnAutoRefresh}
-                              placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                              placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                               onChange={(e) => setCodebuddyCnAutoRefresh(sanitizeNumberInput(e.target.value))}
                               onBlur={() => {
                                 const normalized = normalizeNumberInput(codebuddyCnAutoRefresh, 1, 999);
@@ -3742,8 +3743,8 @@ export function SettingsPage() {
 
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('settings.general.codebuddyCnAppPath', 'CodeBuddy CN 启动路径')}</div>
-                      <div className="row-desc">{t('settings.general.codebuddyCnAppPathDesc', '留空则使用默认路径')}</div>
+                      <div className="row-title">{t('settings.general.codebuddyCnAppPath', "CodeBuddy CN App Path")}</div>
+                      <div className="row-desc">{t('settings.general.codebuddyCnAppPathDesc', "Leave blank to use the default path")}</div>
                     </div>
                     <div className="row-control row-control--grow">
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
@@ -3751,7 +3752,7 @@ export function SettingsPage() {
                           type="text"
                           className="settings-input settings-input--path"
                           value={codebuddyCnAppPath}
-                          placeholder={t('settings.general.codebuddyCnAppPathPlaceholder', '默认路径')}
+                          placeholder={t('settings.general.codebuddyCnAppPathPlaceholder', "Default path")}
                           onChange={(e) => setCodebuddyCnAppPath(e.target.value)}
                         />
                         <button
@@ -3759,7 +3760,7 @@ export function SettingsPage() {
                           onClick={() => handlePickAppPath('codebuddy_cn')}
                           disabled={isAppPathResetDetecting('codebuddy_cn')}
                         >
-                          {t('settings.general.codebuddyCnPathSelect', '选择')}
+                          {t('settings.general.codebuddyCnPathSelect', "Select")}
                         </button>
                         <button
                           className="btn btn-secondary"
@@ -3768,7 +3769,7 @@ export function SettingsPage() {
                         >
                           <RefreshCw size={16} className={isAppPathResetDetecting('codebuddy_cn') ? 'spin' : undefined} />
                           {isAppPathResetDetecting('codebuddy_cn')
-                            ? t('common.loading', '加载中...')
+                            ? t('common.loading', "Loading...")
                             : getResetLabelByTarget('codebuddy_cn')}
                         </button>
                       </div>
@@ -3777,8 +3778,8 @@ export function SettingsPage() {
 
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('quickSettings.quotaAlert.enable', '超额预警')}</div>
-                      <div className="row-desc">{t('quickSettings.quotaAlert.hint', '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。')}</div>
+                      <div className="row-title">{t('quickSettings.quotaAlert.enable', "Enable Quota Alert")}</div>
+                      <div className="row-desc">{t('quickSettings.quotaAlert.hint', "When any current-account model quota drops below the threshold, send a native notification and show a quick-switch action in the app.")}</div>
                     </div>
                     <div className="row-control">
                       <label className="switch">
@@ -3794,8 +3795,8 @@ export function SettingsPage() {
                   {codebuddyCnQuotaAlertEnabled && (
                     <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                       <div className="row-label">
-                        <div className="row-title">{t('quickSettings.quotaAlert.threshold', '预警阈值')}</div>
-                        <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', '任意模型配额低于此百分比时触发预警')}</div>
+                        <div className="row-title">{t('quickSettings.quotaAlert.threshold', "Alert Threshold")}</div>
+                        <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', "Trigger alert when any model quota falls below this percentage")}</div>
                       </div>
                       <div className="row-control">
                         {codebuddyCnQuotaAlertThresholdCustomMode ? (
@@ -3806,7 +3807,7 @@ export function SettingsPage() {
                               max={100}
                               className="settings-select settings-select--input-mode settings-select--with-unit"
                               value={codebuddyCnQuotaAlertThreshold}
-                              placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                              placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                               onChange={(e) => setCodebuddyCnQuotaAlertThreshold(sanitizeNumberInput(e.target.value))}
                               onBlur={() => {
                                 const normalized = normalizeNumberInput(codebuddyCnQuotaAlertThreshold, 0, 100);
@@ -3858,12 +3859,12 @@ export function SettingsPage() {
               </div>
 
               <div style={{ order: platformSettingsOrder.qoder }}>
-                <div className="group-title">{t('quickSettings.qoder.title', 'Qoder 设置')}</div>
+                <div className="group-title">{t('quickSettings.qoder.title', "Qoder Settings")}</div>
                 <div className="settings-group">
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('settings.general.qoderAutoRefresh', 'Qoder 自动刷新配额')}</div>
-                      <div className="row-desc">{t('settings.general.qoderAutoRefreshDesc', '后台自动更新频率')}</div>
+                      <div className="row-title">{t('settings.general.qoderAutoRefresh', "Qoder Auto Refresh")}</div>
+                      <div className="row-desc">{t('settings.general.qoderAutoRefreshDesc', "Background auto-refresh frequency")}</div>
                     </div>
                     <div className="row-control">
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -3875,7 +3876,7 @@ export function SettingsPage() {
                               max={999}
                               className="settings-select settings-select--input-mode settings-select--with-unit"
                               value={qoderAutoRefresh}
-                              placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                              placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                               onChange={(e) => setQoderAutoRefresh(sanitizeNumberInput(e.target.value))}
                               onBlur={() => {
                                 const normalized = normalizeNumberInput(qoderAutoRefresh, 1, 999);
@@ -3932,8 +3933,8 @@ export function SettingsPage() {
 
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('settings.general.qoderAppPath', 'Qoder 启动路径')}</div>
-                      <div className="row-desc">{t('settings.general.qoderAppPathDesc', '留空则使用默认路径')}</div>
+                      <div className="row-title">{t('settings.general.qoderAppPath', "Qoder App Path")}</div>
+                      <div className="row-desc">{t('settings.general.qoderAppPathDesc', "Leave blank to use the default path")}</div>
                     </div>
                     <div className="row-control row-control--grow">
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
@@ -3941,7 +3942,7 @@ export function SettingsPage() {
                           type="text"
                           className="settings-input settings-input--path"
                           value={qoderAppPath}
-                          placeholder={t('settings.general.qoderAppPathPlaceholder', '默认路径')}
+                          placeholder={t('settings.general.qoderAppPathPlaceholder', "Default path")}
                           onChange={(e) => setQoderAppPath(e.target.value)}
                         />
                         <button
@@ -3949,7 +3950,7 @@ export function SettingsPage() {
                           onClick={() => handlePickAppPath('qoder')}
                           disabled={isAppPathResetDetecting('qoder')}
                         >
-                          {t('settings.general.qoderPathSelect', '选择')}
+                          {t('settings.general.qoderPathSelect', "Select")}
                         </button>
                         <button
                           className="btn btn-secondary"
@@ -3958,7 +3959,7 @@ export function SettingsPage() {
                         >
                           <RefreshCw size={16} className={isAppPathResetDetecting('qoder') ? 'spin' : undefined} />
                           {isAppPathResetDetecting('qoder')
-                            ? t('common.loading', '加载中...')
+                            ? t('common.loading', "Loading...")
                             : getResetLabelByTarget('qoder')}
                         </button>
                       </div>
@@ -3967,8 +3968,8 @@ export function SettingsPage() {
 
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('quickSettings.quotaAlert.enable', '超额预警')}</div>
-                      <div className="row-desc">{t('quickSettings.quotaAlert.hint', '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。')}</div>
+                      <div className="row-title">{t('quickSettings.quotaAlert.enable', "Enable Quota Alert")}</div>
+                      <div className="row-desc">{t('quickSettings.quotaAlert.hint', "When any current-account model quota drops below the threshold, send a native notification and show a quick-switch action in the app.")}</div>
                     </div>
                     <div className="row-control">
                       <label className="switch">
@@ -3984,8 +3985,8 @@ export function SettingsPage() {
                   {qoderQuotaAlertEnabled && (
                     <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                       <div className="row-label">
-                        <div className="row-title">{t('quickSettings.quotaAlert.threshold', '预警阈值')}</div>
-                        <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', '任意模型配额低于此百分比时触发预警')}</div>
+                        <div className="row-title">{t('quickSettings.quotaAlert.threshold', "Alert Threshold")}</div>
+                        <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', "Trigger alert when any model quota falls below this percentage")}</div>
                       </div>
                       <div className="row-control">
                         {qoderQuotaAlertThresholdCustomMode ? (
@@ -3996,7 +3997,7 @@ export function SettingsPage() {
                               max={100}
                               className="settings-select settings-select--input-mode settings-select--with-unit"
                               value={qoderQuotaAlertThreshold}
-                              placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                              placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                               onChange={(e) => setQoderQuotaAlertThreshold(sanitizeNumberInput(e.target.value))}
                               onBlur={() => {
                                 const normalized = normalizeNumberInput(qoderQuotaAlertThreshold, 0, 100);
@@ -4048,12 +4049,12 @@ export function SettingsPage() {
               </div>
 
               <div style={{ order: platformSettingsOrder.trae }}>
-                <div className="group-title">{t('quickSettings.trae.title', 'Trae 设置')}</div>
+                <div className="group-title">{t('quickSettings.trae.title', "Trae Settings")}</div>
                 <div className="settings-group">
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('settings.general.traeAutoRefresh', 'Trae 自动刷新配额')}</div>
-                      <div className="row-desc">{t('settings.general.traeAutoRefreshDesc', '后台自动更新频率')}</div>
+                      <div className="row-title">{t('settings.general.traeAutoRefresh', "Trae Auto Refresh Quota")}</div>
+                      <div className="row-desc">{t('settings.general.traeAutoRefreshDesc', "Background auto-refresh interval")}</div>
                     </div>
                     <div className="row-control">
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -4065,7 +4066,7 @@ export function SettingsPage() {
                               max={999}
                               className="settings-select settings-select--input-mode settings-select--with-unit"
                               value={traeAutoRefresh}
-                              placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                              placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                               onChange={(e) => setTraeAutoRefresh(sanitizeNumberInput(e.target.value))}
                               onBlur={() => {
                                 const normalized = normalizeNumberInput(traeAutoRefresh, 1, 999);
@@ -4122,8 +4123,8 @@ export function SettingsPage() {
 
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('settings.general.traeAppPath', 'Trae 启动路径')}</div>
-                      <div className="row-desc">{t('settings.general.traeAppPathDesc', '留空则使用默认路径')}</div>
+                      <div className="row-title">{t('settings.general.traeAppPath', "Trae Launch Path")}</div>
+                      <div className="row-desc">{t('settings.general.traeAppPathDesc', "Leave empty for default path")}</div>
                     </div>
                     <div className="row-control row-control--grow">
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
@@ -4131,7 +4132,7 @@ export function SettingsPage() {
                           type="text"
                           className="settings-input settings-input--path"
                           value={traeAppPath}
-                          placeholder={t('settings.general.traeAppPathPlaceholder', '默认路径')}
+                          placeholder={t('settings.general.traeAppPathPlaceholder', "Default path")}
                           onChange={(e) => setTraeAppPath(e.target.value)}
                         />
                         <button
@@ -4139,7 +4140,7 @@ export function SettingsPage() {
                           onClick={() => handlePickAppPath('trae')}
                           disabled={isAppPathResetDetecting('trae')}
                         >
-                          {t('settings.general.traePathSelect', '选择')}
+                          {t('settings.general.traePathSelect', "Select")}
                         </button>
                         <button
                           className="btn btn-secondary"
@@ -4148,7 +4149,7 @@ export function SettingsPage() {
                         >
                           <RefreshCw size={16} className={isAppPathResetDetecting('trae') ? 'spin' : undefined} />
                           {isAppPathResetDetecting('trae')
-                            ? t('common.loading', '加载中...')
+                            ? t('common.loading', "Loading...")
                             : getResetLabelByTarget('trae')}
                         </button>
                       </div>
@@ -4157,8 +4158,8 @@ export function SettingsPage() {
 
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('quickSettings.quotaAlert.enable', '超额预警')}</div>
-                      <div className="row-desc">{t('quickSettings.quotaAlert.hint', '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。')}</div>
+                      <div className="row-title">{t('quickSettings.quotaAlert.enable', "Enable Quota Alert")}</div>
+                      <div className="row-desc">{t('quickSettings.quotaAlert.hint', "When any current-account model quota drops below the threshold, send a native notification and show a quick-switch action in the app.")}</div>
                     </div>
                     <div className="row-control">
                       <label className="switch">
@@ -4174,8 +4175,8 @@ export function SettingsPage() {
                   {traeQuotaAlertEnabled && (
                     <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                       <div className="row-label">
-                        <div className="row-title">{t('quickSettings.quotaAlert.threshold', '预警阈值')}</div>
-                        <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', '任意模型配额低于此百分比时触发预警')}</div>
+                        <div className="row-title">{t('quickSettings.quotaAlert.threshold', "Alert Threshold")}</div>
+                        <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', "Trigger alert when any model quota falls below this percentage")}</div>
                       </div>
                       <div className="row-control">
                         {traeQuotaAlertThresholdCustomMode ? (
@@ -4186,7 +4187,7 @@ export function SettingsPage() {
                               max={100}
                               className="settings-select settings-select--input-mode settings-select--with-unit"
                               value={traeQuotaAlertThreshold}
-                              placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                              placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                               onChange={(e) => setTraeQuotaAlertThreshold(sanitizeNumberInput(e.target.value))}
                               onBlur={() => {
                                 const normalized = normalizeNumberInput(traeQuotaAlertThreshold, 0, 100);
@@ -4238,12 +4239,12 @@ export function SettingsPage() {
               </div>
 
               <div style={{ order: platformSettingsOrder.workbuddy }}>
-                <div className="group-title">{t('quickSettings.workbuddy.title', 'WorkBuddy 设置')}</div>
+                <div className="group-title">{t('quickSettings.workbuddy.title', "WorkBuddy Settings")}</div>
                 <div className="settings-group">
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('settings.general.workbuddyAutoRefresh', 'WorkBuddy 自动刷新配额')}</div>
-                      <div className="row-desc">{t('settings.general.workbuddyAutoRefreshDesc', '后台自动更新频率')}</div>
+                      <div className="row-title">{t('settings.general.workbuddyAutoRefresh', "WorkBuddy Auto Refresh")}</div>
+                      <div className="row-desc">{t('settings.general.workbuddyAutoRefreshDesc', "Background auto-refresh frequency")}</div>
                     </div>
                     <div className="row-control">
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -4255,7 +4256,7 @@ export function SettingsPage() {
                               max={999}
                               className="settings-select settings-select--input-mode settings-select--with-unit"
                               value={workbuddyAutoRefresh}
-                              placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                              placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                               onChange={(e) => setWorkbuddyAutoRefresh(sanitizeNumberInput(e.target.value))}
                               onBlur={() => {
                                 const normalized = normalizeNumberInput(workbuddyAutoRefresh, 1, 999);
@@ -4312,8 +4313,8 @@ export function SettingsPage() {
 
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('settings.general.workbuddyAppPath', 'WorkBuddy 启动路径')}</div>
-                      <div className="row-desc">{t('settings.general.workbuddyAppPathDesc', '留空则使用默认路径')}</div>
+                      <div className="row-title">{t('settings.general.workbuddyAppPath', "WorkBuddy Launch Path")}</div>
+                      <div className="row-desc">{t('settings.general.workbuddyAppPathDesc', "Leave empty for default path")}</div>
                     </div>
                     <div className="row-control row-control--grow">
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
@@ -4321,7 +4322,7 @@ export function SettingsPage() {
                           type="text"
                           className="settings-input settings-input--path"
                           value={workbuddyAppPath}
-                          placeholder={t('settings.general.workbuddyAppPathPlaceholder', '默认路径')}
+                          placeholder={t('settings.general.workbuddyAppPathPlaceholder', "Default path")}
                           onChange={(e) => setWorkbuddyAppPath(e.target.value)}
                         />
                         <button
@@ -4329,7 +4330,7 @@ export function SettingsPage() {
                           onClick={() => handlePickAppPath('workbuddy')}
                           disabled={isAppPathResetDetecting('workbuddy')}
                         >
-                          {t('settings.general.workbuddyPathSelect', '选择')}
+                          {t('settings.general.workbuddyPathSelect', "Select")}
                         </button>
                         <button
                           className="btn btn-secondary"
@@ -4338,7 +4339,7 @@ export function SettingsPage() {
                         >
                           <RefreshCw size={16} className={isAppPathResetDetecting('workbuddy') ? 'spin' : undefined} />
                           {isAppPathResetDetecting('workbuddy')
-                            ? t('common.loading', '加载中...')
+                            ? t('common.loading', "Loading...")
                             : getResetLabelByTarget('workbuddy')}
                         </button>
                       </div>
@@ -4347,8 +4348,8 @@ export function SettingsPage() {
 
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('quickSettings.quotaAlert.enable', '超额预警')}</div>
-                      <div className="row-desc">{t('quickSettings.quotaAlert.hint', '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。')}</div>
+                      <div className="row-title">{t('quickSettings.quotaAlert.enable', "Enable Quota Alert")}</div>
+                      <div className="row-desc">{t('quickSettings.quotaAlert.hint', "When any current-account model quota drops below the threshold, send a native notification and show a quick-switch action in the app.")}</div>
                     </div>
                     <div className="row-control">
                       <label className="switch">
@@ -4364,8 +4365,8 @@ export function SettingsPage() {
                   {workbuddyQuotaAlertEnabled && (
                     <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                       <div className="row-label">
-                        <div className="row-title">{t('quickSettings.quotaAlert.threshold', '预警阈值')}</div>
-                        <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', '任意模型配额低于此百分比时触发预警')}</div>
+                        <div className="row-title">{t('quickSettings.quotaAlert.threshold', "Alert Threshold")}</div>
+                        <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', "Trigger alert when any model quota falls below this percentage")}</div>
                       </div>
                       <div className="row-control">
                         {workbuddyQuotaAlertThresholdCustomMode ? (
@@ -4376,7 +4377,7 @@ export function SettingsPage() {
                               max={100}
                               className="settings-select settings-select--input-mode settings-select--with-unit"
                               value={workbuddyQuotaAlertThreshold}
-                              placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                              placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                               onChange={(e) => setWorkbuddyQuotaAlertThreshold(sanitizeNumberInput(e.target.value))}
                               onBlur={() => {
                                 const normalized = normalizeNumberInput(workbuddyQuotaAlertThreshold, 0, 100);
@@ -4428,12 +4429,12 @@ export function SettingsPage() {
               </div>
 
               <div style={{ order: platformSettingsOrder.zed }}>
-                <div className="group-title">{t('quickSettings.zed.title', 'Zed 设置')}</div>
+                <div className="group-title">{t('quickSettings.zed.title', "Zed Settings")}</div>
                 <div className="settings-group">
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('settings.general.zedAutoRefresh', 'Zed 自动刷新配额')}</div>
-                      <div className="row-desc">{t('settings.general.zedAutoRefreshDesc', '后台自动更新频率')}</div>
+                      <div className="row-title">{t('settings.general.zedAutoRefresh', "Zed Auto Refresh Quota")}</div>
+                      <div className="row-desc">{t('settings.general.zedAutoRefreshDesc', "Background update frequency")}</div>
                     </div>
                     <div className="row-control">
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -4445,7 +4446,7 @@ export function SettingsPage() {
                               max={999}
                               className="settings-select settings-select--input-mode settings-select--with-unit"
                               value={zedAutoRefresh}
-                              placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                              placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                               onChange={(e) => setZedAutoRefresh(sanitizeNumberInput(e.target.value))}
                               onBlur={() => {
                                 const normalized = normalizeNumberInput(zedAutoRefresh, 1, 999);
@@ -4500,8 +4501,8 @@ export function SettingsPage() {
 
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('settings.general.zedAppPath', 'Zed 启动路径')}</div>
-                      <div className="row-desc">{t('settings.general.zedAppPathDesc', '留空则使用默认路径')}</div>
+                      <div className="row-title">{t('settings.general.zedAppPath', "Zed Launch Path")}</div>
+                      <div className="row-desc">{t('settings.general.zedAppPathDesc', "Leave empty to use default path")}</div>
                     </div>
                     <div className="row-control row-control--grow">
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
@@ -4509,7 +4510,7 @@ export function SettingsPage() {
                           type="text"
                           className="settings-input settings-input--path"
                           value={zedAppPath}
-                          placeholder={t('settings.general.zedAppPathPlaceholder', '默认路径')}
+                          placeholder={t('settings.general.zedAppPathPlaceholder', "Default path")}
                           onChange={(e) => setZedAppPath(e.target.value)}
                         />
                         <button
@@ -4517,7 +4518,7 @@ export function SettingsPage() {
                           onClick={() => handlePickAppPath('zed')}
                           disabled={isAppPathResetDetecting('zed')}
                         >
-                          {t('settings.general.zedPathSelect', '选择')}
+                          {t('settings.general.zedPathSelect', "Select")}
                         </button>
                         <button
                           className="btn btn-secondary"
@@ -4526,7 +4527,7 @@ export function SettingsPage() {
                         >
                           <RefreshCw size={16} className={isAppPathResetDetecting('zed') ? 'spin' : undefined} />
                           {isAppPathResetDetecting('zed')
-                            ? t('common.loading', '加载中...')
+                            ? t('common.loading', "Loading...")
                             : getResetLabelByTarget('zed')}
                         </button>
                       </div>
@@ -4535,8 +4536,8 @@ export function SettingsPage() {
 
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('quickSettings.quotaAlert.enable', '超额预警')}</div>
-                      <div className="row-desc">{t('quickSettings.quotaAlert.hint', '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。')}</div>
+                      <div className="row-title">{t('quickSettings.quotaAlert.enable', "Enable Quota Alert")}</div>
+                      <div className="row-desc">{t('quickSettings.quotaAlert.hint', "When any current-account model quota drops below the threshold, send a native notification and show a quick-switch action in the app.")}</div>
                     </div>
                     <div className="row-control">
                       <label className="switch">
@@ -4552,8 +4553,8 @@ export function SettingsPage() {
                   {zedQuotaAlertEnabled && (
                     <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                       <div className="row-label">
-                        <div className="row-title">{t('quickSettings.quotaAlert.threshold', '预警阈值')}</div>
-                        <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', '任意模型配额低于此百分比时触发预警')}</div>
+                        <div className="row-title">{t('quickSettings.quotaAlert.threshold', "Alert Threshold")}</div>
+                        <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', "Trigger alert when any model quota falls below this percentage")}</div>
                       </div>
                       <div className="row-control">
                         {zedQuotaAlertThresholdCustomMode ? (
@@ -4564,7 +4565,7 @@ export function SettingsPage() {
                               max={100}
                               className="settings-select settings-select--input-mode settings-select--with-unit"
                               value={zedQuotaAlertThreshold}
-                              placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                              placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                               onChange={(e) => setZedQuotaAlertThreshold(sanitizeNumberInput(e.target.value))}
                               onBlur={() => {
                                 const normalized = normalizeNumberInput(zedQuotaAlertThreshold, 0, 100);
@@ -4614,12 +4615,12 @@ export function SettingsPage() {
               </div>
 
               <div style={{ order: platformSettingsOrder.cursor }}>
-                <div className="group-title">{t('quickSettings.cursor.title', 'Cursor 设置')}</div>
+                <div className="group-title">{t('quickSettings.cursor.title', "Cursor Settings")}</div>
                 <div className="settings-group">
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('quickSettings.cursorRefreshInterval', '配额自动刷新')}</div>
-                  <div className="row-desc">{t('settings.general.windsurfAutoRefreshDesc', '后台自动更新频率')}</div>
+                  <div className="row-title">{t('quickSettings.cursorRefreshInterval', "Quota Auto Refresh")}</div>
+                  <div className="row-desc">{t('settings.general.windsurfAutoRefreshDesc', "Background update frequency")}</div>
                 </div>
                 <div className="row-control">
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -4631,7 +4632,7 @@ export function SettingsPage() {
                           max={999}
                           className="settings-select settings-select--input-mode settings-select--with-unit"
                           value={cursorAutoRefresh}
-                          placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                          placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                           onChange={(e) => setCursorAutoRefresh(sanitizeNumberInput(e.target.value))}
                           onBlur={() => {
                             const normalized = normalizeNumberInput(cursorAutoRefresh, 1, 999);
@@ -4686,8 +4687,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('quickSettings.cursor.appPath', 'Cursor 路径')}</div>
-                  <div className="row-desc">{t('settings.general.codexAppPathDesc', '留空则使用默认路径')}</div>
+                  <div className="row-title">{t('quickSettings.cursor.appPath', "Cursor Path")}</div>
+                  <div className="row-desc">{t('settings.general.codexAppPathDesc', "Leave empty to use default path")}</div>
                 </div>
                 <div className="row-control row-control--grow">
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
@@ -4695,7 +4696,7 @@ export function SettingsPage() {
                       type="text"
                       className="settings-input settings-input--path"
                       value={cursorAppPath}
-                      placeholder={t('settings.general.codexAppPathPlaceholder', '默认路径')}
+                      placeholder={t('settings.general.codexAppPathPlaceholder', "Default path")}
                       onChange={(e) => setCursorAppPath(e.target.value)}
                     />
                     <button
@@ -4703,7 +4704,7 @@ export function SettingsPage() {
                       onClick={() => handlePickAppPath('cursor')}
                       disabled={isAppPathResetDetecting('cursor')}
                     >
-                      {t('settings.general.codexPathSelect', '选择')}
+                      {t('settings.general.codexPathSelect', "Select")}
                     </button>
                     <button
                       className="btn btn-secondary"
@@ -4712,7 +4713,7 @@ export function SettingsPage() {
                     >
                       <RefreshCw size={16} className={isAppPathResetDetecting('cursor') ? 'spin' : undefined} />
                       {isAppPathResetDetecting('cursor')
-                        ? t('common.loading', '加载中...')
+                        ? t('common.loading', "Loading...")
                         : getResetLabelByTarget('cursor')}
                     </button>
                   </div>
@@ -4721,8 +4722,8 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('quickSettings.quotaAlert.enable', '超额预警')}</div>
-                  <div className="row-desc">{t('quickSettings.quotaAlert.hint', '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。')}</div>
+                  <div className="row-title">{t('quickSettings.quotaAlert.enable', "Enable Quota Alert")}</div>
+                  <div className="row-desc">{t('quickSettings.quotaAlert.hint', "When any current-account model quota drops below the threshold, send a native notification and show a quick-switch action in the app.")}</div>
                 </div>
                 <div className="row-control">
                   <label className="switch">
@@ -4738,8 +4739,8 @@ export function SettingsPage() {
               {cursorQuotaAlertEnabled && (
                 <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                   <div className="row-label">
-                    <div className="row-title">{t('quickSettings.quotaAlert.threshold', '预警阈值')}</div>
-                    <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', '任意模型配额低于此百分比时触发预警')}</div>
+                    <div className="row-title">{t('quickSettings.quotaAlert.threshold', "Alert Threshold")}</div>
+                    <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', "Trigger alert when any model quota falls below this percentage")}</div>
                   </div>
                   <div className="row-control">
                     {cursorQuotaAlertThresholdCustomMode ? (
@@ -4750,7 +4751,7 @@ export function SettingsPage() {
                           max={100}
                           className="settings-select settings-select--input-mode settings-select--with-unit"
                           value={cursorQuotaAlertThreshold}
-                          placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                          placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                           onChange={(e) => setCursorQuotaAlertThreshold(sanitizeNumberInput(e.target.value))}
                           onBlur={() => {
                             const normalized = normalizeNumberInput(cursorQuotaAlertThreshold, 0, 100);
@@ -4800,12 +4801,12 @@ export function SettingsPage() {
               </div>
 
               <div style={{ order: platformSettingsOrder.gemini }}>
-                <div className="group-title">{t('quickSettings.gemini.title', 'Gemini Cli 设置')}</div>
+                <div className="group-title">{t('quickSettings.gemini.title', "Gemini Cli Settings")}</div>
                 <div className="settings-group">
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('quickSettings.geminiRefreshInterval', '配额自动刷新')}</div>
-                      <div className="row-desc">{t('settings.general.windsurfAutoRefreshDesc', '后台自动更新频率')}</div>
+                      <div className="row-title">{t('quickSettings.geminiRefreshInterval', "Quota Auto Refresh")}</div>
+                      <div className="row-desc">{t('settings.general.windsurfAutoRefreshDesc', "Background update frequency")}</div>
                     </div>
                     <div className="row-control">
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -4817,7 +4818,7 @@ export function SettingsPage() {
                               max={999}
                               className="settings-select settings-select--input-mode settings-select--with-unit"
                               value={geminiAutoRefresh}
-                              placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                              placeholder={t('quickSettings.inputMinutes', "Enter minutes")}
                               onChange={(e) => setGeminiAutoRefresh(sanitizeNumberInput(e.target.value))}
                               onBlur={() => {
                                 const normalized = normalizeNumberInput(geminiAutoRefresh, 1, 999);
@@ -4872,8 +4873,8 @@ export function SettingsPage() {
 
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('quickSettings.quotaAlert.enable', '超额预警')}</div>
-                      <div className="row-desc">{t('quickSettings.quotaAlert.hint', '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。')}</div>
+                      <div className="row-title">{t('quickSettings.quotaAlert.enable', "Enable Quota Alert")}</div>
+                      <div className="row-desc">{t('quickSettings.quotaAlert.hint', "When any current-account model quota drops below the threshold, send a native notification and show a quick-switch action in the app.")}</div>
                     </div>
                     <div className="row-control">
                       <label className="switch">
@@ -4889,8 +4890,8 @@ export function SettingsPage() {
                   {geminiQuotaAlertEnabled && (
                     <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                       <div className="row-label">
-                        <div className="row-title">{t('quickSettings.quotaAlert.threshold', '预警阈值')}</div>
-                        <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', '任意模型配额低于此百分比时触发预警')}</div>
+                        <div className="row-title">{t('quickSettings.quotaAlert.threshold', "Alert Threshold")}</div>
+                        <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', "Trigger alert when any model quota falls below this percentage")}</div>
                       </div>
                       <div className="row-control">
                         {geminiQuotaAlertThresholdCustomMode ? (
@@ -4901,7 +4902,7 @@ export function SettingsPage() {
                               max={100}
                               className="settings-select settings-select--input-mode settings-select--with-unit"
                               value={geminiQuotaAlertThreshold}
-                              placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                              placeholder={t('quickSettings.inputPercent', "Enter percentage")}
                               onChange={(e) => setGeminiQuotaAlertThreshold(sanitizeNumberInput(e.target.value))}
                               onBlur={() => {
                                 const normalized = normalizeNumberInput(geminiQuotaAlertThreshold, 0, 100);
@@ -5277,7 +5278,7 @@ export function SettingsPage() {
                     }}
                   >
                     <FileText size={14} />
-                    {t('settings.about.viewReleaseHistory', '更新记录')}
+                    {t('settings.about.viewReleaseHistory', "Release Notes")}
                   </button>
                 </div>
                 {updateCheckMessage && (
@@ -5316,7 +5317,7 @@ export function SettingsPage() {
 
               <button className="credit-item" onClick={() => openLink('https://github.com/jlcodes99/cockpit-tools/issues')}>
                 <div className="credit-icon" style={{ color: '#3b82f6' }}><MessageSquare size={24} /></div>
-                <h3>{t('settings.about.feedback', '意见反馈')}</h3>
+                <h3>{t('settings.about.feedback', "Feedback")}</h3>
                 <p>{t('settings.about.feedbackDesc', 'Issues')}</p>
               </button>
             </div>
@@ -5328,11 +5329,11 @@ export function SettingsPage() {
         <div className="modal-overlay" onClick={handleCloseReleaseHistory}>
           <div className="modal settings-release-history-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
-              <h2>{t('settings.about.releaseHistoryTitle', '更新记录')}</h2>
+              <h2>{t('settings.about.releaseHistoryTitle', "Release Notes")}</h2>
               <button
                 className="modal-close"
                 onClick={handleCloseReleaseHistory}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X size={16} />
               </button>
@@ -5341,19 +5342,19 @@ export function SettingsPage() {
               {releaseHistoryLoading && (
                 <div className="settings-release-history-state">
                   <RefreshCw size={14} className="spin" />
-                  <span>{t('settings.about.releaseHistoryLoading', '加载中...')}</span>
+                  <span>{t('settings.about.releaseHistoryLoading', "Loading release notes...")}</span>
                 </div>
               )}
               {!releaseHistoryLoading && releaseHistoryError && (
                 <div className="settings-release-history-state settings-release-history-state-error">
-                  {t('settings.about.releaseHistoryLoadFailed', '加载失败：{{error}}', {
+                  {t('settings.about.releaseHistoryLoadFailed', "Failed to load: {{error}}", {
                     error: releaseHistoryError,
                   })}
                 </div>
               )}
               {!releaseHistoryLoading && !releaseHistoryError && releaseHistoryItems.length === 0 && (
                 <div className="settings-release-history-state">
-                  {t('settings.about.releaseHistoryEmpty', '暂无更新记录')}
+                  {t('settings.about.releaseHistoryEmpty', "No release notes yet")}
                 </div>
               )}
               {!releaseHistoryLoading &&
@@ -5377,7 +5378,7 @@ export function SettingsPage() {
                           type="button"
                         >
                           <Download size={12} />
-                          {t('settings.about.downloadThisVersion', '下载此版本')}
+                          {t('settings.about.downloadThisVersion', "Download")}
                         </button>
                       </div>
                     </div>
@@ -5406,7 +5407,7 @@ export function SettingsPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={handleCloseReleaseHistory}>
-                {t('common.close', '关闭')}
+                {t('common.close', "Close")}
               </button>
             </div>
           </div>

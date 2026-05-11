@@ -1014,7 +1014,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     const corrupted = parseFileCorruptedError(storeError);
     if (corrupted) {
       setMessage({
-        text: t('error.fileCorrupted.description', '文件 {{fileName}} 已损坏，无法解析。', {
+        text: t('error.fileCorrupted.description', "File {{fileName}} is corrupted and cannot be parsed.", {
           fileName: corrupted.file_name,
         }),
         tone: 'error',
@@ -1055,7 +1055,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     (accountId: string) => {
       setDeleteConfirm({
         ids: [accountId],
-        message: t('messages.deleteConfirm', '确定要删除此账号吗？'),
+        message: t('messages.deleteConfirm', "Are you sure you want to delete this account?"),
       });
     },
     [t],
@@ -1291,7 +1291,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
         current: 0,
         message: t(
           'common.shared.externalImport.statusReceiving',
-          '正在接收导入请求...',
+          "Receiving import request...",
         ),
         failures: [],
       });
@@ -1305,7 +1305,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
               progress: 20,
               message: t(
                 'common.shared.externalImport.statusFetching',
-                '正在获取导入包...',
+                "Getting import bundle...",
               ),
             });
             content = await invoke<string>('external_import_fetch_import_url', {
@@ -1313,7 +1313,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
             });
           }
           if (!content.trim()) {
-            throw new Error(t('common.shared.externalImport.bundleEmpty', '导入包内容为空'));
+            throw new Error(t('common.shared.externalImport.bundleEmpty', "The import bundle is empty"));
           }
 
           updateProgress({
@@ -1321,22 +1321,22 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
             progress: 35,
             message: t(
               'common.shared.externalImport.statusParsing',
-              '正在解析 Codex JSON...',
+              "Parsing Codex import content...",
             ),
           });
           const items = resolveExternalImportBundleItems(content, platformId, {
             invalidJson: t(
               'common.shared.externalImport.bundleInvalidJson',
-              '导入包不是有效 JSON',
+              "The import bundle is not valid JSON",
             ),
-            empty: t('common.shared.externalImport.bundleEmpty', '导入包内容为空'),
+            empty: t('common.shared.externalImport.bundleEmpty', "The import bundle is empty"),
             providerMismatch: t(
               'common.shared.externalImport.bundleProviderMismatch',
-              '导入包平台不匹配',
+              "The import bundle provider does not match",
             ),
             noItems: t(
               'common.shared.externalImport.bundleNoItems',
-              '导入包没有可导入内容',
+              "The import bundle has no importable items",
             ),
             rawLineNoRefreshToken: (line) =>
               t('common.shared.externalImport.rawLineNoRefreshToken', {
@@ -1417,7 +1417,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
             failures: [...failures],
             message: t(
               'common.shared.externalImport.statusRefreshing',
-              '正在刷新账号列表...',
+              "Refreshing account list...",
             ),
           });
           await fetchAccounts();
@@ -1439,10 +1439,10 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
             failures: [...failures],
             message:
               status === 'success'
-                ? t('common.shared.externalImport.statusSuccess', '导入完成')
+                ? t('common.shared.externalImport.statusSuccess', "Import complete")
                 : status === 'partial'
-                  ? t('common.shared.externalImport.statusPartial', '部分导入完成')
-                  : t('common.shared.externalImport.statusFailed', '导入失败'),
+                  ? t('common.shared.externalImport.statusPartial', "Partially imported")
+                  : t('common.shared.externalImport.statusFailed', "Import failed"),
           });
         } catch (error) {
           updateProgress({
@@ -1495,7 +1495,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     async (file: File) => {
       setImporting(true);
       setAddStatus('loading');
-      setAddMessage(t('common.shared.import.importing', '正在导入...'));
+      setAddMessage(t('common.shared.import.importing', "Importing..."));
 
       try {
         const content = await file.text();
@@ -1541,7 +1541,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     return async () => {
       setImporting(true);
       setAddStatus('loading');
-      setAddMessage(t('common.shared.import.importing', '正在导入...'));
+      setAddMessage(t('common.shared.import.importing', "Importing..."));
       try {
         const imported = await importFn();
         await fetchAccounts();
@@ -1583,13 +1583,13 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     const trimmed = tokenInput.trim();
     if (!trimmed) {
       setAddStatus('error');
-      setAddMessage(t('common.shared.token.empty', '请输入 Token 或 JSON'));
+      setAddMessage(t('common.shared.token.empty', "Please enter a token or JSON"));
       return;
     }
 
     setImporting(true);
     setAddStatus('loading');
-    setAddMessage(t('common.shared.token.importing', '正在导入...'));
+    setAddMessage(t('common.shared.token.importing', "Importing..."));
 
     try {
       let importedCount = 0;
@@ -1702,7 +1702,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
       setOauthCallbackUrl(null);
       setOauthManualCallbackSubmitting(false);
       setOauthManualCallbackError(null);
-      setOauthPrepareError(t('common.shared.oauth.failed', '授权失败') + ': ' + msg);
+      setOauthPrepareError(t('common.shared.oauth.failed', "Authorization failed") + ': ' + msg);
     },
     [oauthLogPrefix, t],
   );
@@ -1720,7 +1720,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     }
     setAddStatus('success');
     setAddMessage(
-      config.resolveOauthSuccessMessage?.() ?? t('common.shared.oauth.success', '授权成功'),
+      config.resolveOauthSuccessMessage?.() ?? t('common.shared.oauth.success', "Authorization successful"),
     );
     // 授权完成后不再触发 cancelLogin，避免误关仍需用户手动确认的授权页
     oauthLoginIdRef.current = null;
@@ -2084,7 +2084,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     const callbackUrl = oauthManualCallbackInput.trim();
     if (!callbackUrl) return;
     if (!loginId) {
-      setOauthManualCallbackError(t('common.shared.oauth.failed', '授权失败'));
+      setOauthManualCallbackError(t('common.shared.oauth.failed', "Authorization failed"));
       return;
     }
 

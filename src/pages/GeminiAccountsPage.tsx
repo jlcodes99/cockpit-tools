@@ -352,7 +352,7 @@ export function GeminiAccountsPage() {
       const safe = Math.max(0, Math.floor(seconds));
       const totalMinutes = Math.floor(safe / 60);
       if (totalMinutes < 1) {
-        return t("common.shared.time.lessThanMinute", "<1分钟");
+        return t("common.shared.time.lessThanMinute", "<1m");
       }
 
       const days = Math.floor(totalMinutes / (60 * 24));
@@ -362,7 +362,7 @@ export function GeminiAccountsPage() {
       if (days > 0 && hours > 0) {
         return t(
           "common.shared.time.relativeDaysHours",
-          "{{days}}天{{hours}}小时",
+          "{{days}}d {{hours}}h",
           {
             days,
             hours,
@@ -370,21 +370,21 @@ export function GeminiAccountsPage() {
         );
       }
       if (days > 0) {
-        return t("common.shared.time.relativeDays", "{{days}}天", { days });
+        return t("common.shared.time.relativeDays", "{{days}}d", { days });
       }
       if (hours > 0 && minutes > 0) {
         return t(
           "common.shared.time.relativeHoursMinutes",
-          "{{hours}}小时{{minutes}}分钟",
+          "{{hours}}h {{minutes}}m",
           { hours, minutes },
         );
       }
       if (hours > 0) {
-        return t("common.shared.time.relativeHours", "{{hours}}小时", {
+        return t("common.shared.time.relativeHours", "{{hours}}h", {
           hours,
         });
       }
-      return t("common.shared.time.relativeMinutes", "{{minutes}}分钟", {
+      return t("common.shared.time.relativeMinutes", "{{minutes}}m", {
         minutes,
       });
     },
@@ -394,15 +394,15 @@ export function GeminiAccountsPage() {
   const formatQuotaResetText = useCallback(
     (resetAt: number | null) => {
       if (resetAt == null || !Number.isFinite(resetAt)) {
-        return t("gemini.quota.resetsUnknown", "重置时间未知");
+        return t("gemini.quota.resetsUnknown", "Reset time unknown");
       }
 
       const secondsLeft = Math.floor(resetAt - Date.now() / 1000);
       if (secondsLeft <= 0) {
-        return t("gemini.quota.resetsSoon", "即将重置");
+        return t("gemini.quota.resetsSoon", "Resets soon");
       }
 
-      return t("gemini.quota.resetsIn", "{{relative}} 后重置", {
+      return t("gemini.quota.resetsIn", "Resets in {{relative}}", {
         relative: formatRelativeDuration(secondsLeft),
       });
     },
@@ -416,7 +416,7 @@ export function GeminiAccountsPage() {
         0,
         Math.floor(Date.now() / 1000) - updatedAt,
       );
-      return t("gemini.updated.label", "{{relative}}前更新", {
+      return t("gemini.updated.label", "Updated {{relative}} ago", {
         relative: formatRelativeDuration(secondsAgo),
       });
     },
@@ -442,7 +442,7 @@ export function GeminiAccountsPage() {
           remainingText:
             tier.remainingPercent == null
               ? "--"
-              : t("gemini.quota.left", "{{value}}% 剩余", {
+              : t("gemini.quota.left", "{{value}}% left", {
                   value: remainingPercent,
                 }),
           resetText: formatQuotaResetText(tier.resetAt),
@@ -472,7 +472,7 @@ export function GeminiAccountsPage() {
               ...prev,
               executeError: t(
                 "common.shared.export.copyFailed",
-                "复制失败，请手动复制",
+                "Copy failed, please copy manually",
               ),
             }
           : prev,
@@ -802,7 +802,7 @@ export function GeminiAccountsPage() {
 
   const resolveGroupLabel = (groupKey: string) =>
     groupKey === untaggedKey
-      ? t("accounts.defaultGroup", "默认分组")
+      ? t("accounts.defaultGroup", "Default Group")
       : groupKey;
 
   // ─── Render helpers ────────────────────────────────────────────────
@@ -815,7 +815,7 @@ export function GeminiAccountsPage() {
       return (
         <div className="ghcp-quota-section">
           <div className="quota-empty">
-            {t("common.shared.quota.noData", "暂无配额数据")}
+            {t("common.shared.quota.noData", "No quota data")}
           </div>
         </div>
       );
@@ -910,7 +910,7 @@ export function GeminiAccountsPage() {
             {quotaError && (
               <span className="status-pill warning" title={quotaError}>
                 <CircleAlert size={12} />
-                {t("common.shared.quota.queryFailed", "配额查询失败")}
+                {t("common.shared.quota.queryFailed", "Quota query failed")}
               </span>
             )}
             {isBanned && (
@@ -950,7 +950,7 @@ export function GeminiAccountsPage() {
                 title={
                   isBanned
                     ? t("accounts.status.forbidden_msg")
-                    : t("gemini.injectToGemini", "切换到 Gemini")
+                    : t("gemini.injectToGemini", "Switch to Gemini Cli")
                 }
               >
                 {injecting === account.id ? (
@@ -962,7 +962,7 @@ export function GeminiAccountsPage() {
               <button
                 className="card-action-btn"
                 onClick={() => openTagModal(account.id)}
-                title={t("accounts.editTags", "编辑标签")}
+                title={t("accounts.editTags", "Edit Tags")}
               >
                 <Tag size={14} />
               </button>
@@ -970,7 +970,7 @@ export function GeminiAccountsPage() {
                 className="card-action-btn"
                 onClick={() => handleRefresh(account.id)}
                 disabled={refreshing === account.id}
-                title={t("common.refresh", "刷新")}
+                title={t("common.refresh", "Refresh")}
               >
                 <RotateCw
                   size={14}
@@ -985,14 +985,14 @@ export function GeminiAccountsPage() {
                     resolveSingleExportBaseName(account),
                   )
                 }
-                title={t("common.shared.export.title", "导出")}
+                title={t("common.shared.export.title", "Export")}
               >
                 <Upload size={14} />
               </button>
               <button
                 className="card-action-btn danger"
                 onClick={() => handleDelete(account.id)}
-                title={t("common.delete", "删除")}
+                title={t("common.delete", "Delete")}
               >
                 <Trash2 size={14} />
               </button>
@@ -1074,7 +1074,7 @@ export function GeminiAccountsPage() {
                 <div className="account-sub-line">
                   <span className="status-pill warning" title={quotaError}>
                     <CircleAlert size={12} />
-                    {t("common.shared.quota.queryFailed", "配额查询失败")}
+                    {t("common.shared.quota.queryFailed", "Quota query failed")}
                   </span>
                 </div>
               )}
@@ -1110,7 +1110,7 @@ export function GeminiAccountsPage() {
                 title={
                   isBanned
                     ? t("accounts.status.forbidden_msg")
-                    : t("gemini.injectToGemini", "切换到 Gemini")
+                    : t("gemini.injectToGemini", "Switch to Gemini Cli")
                 }
               >
                 {injecting === account.id ? (
@@ -1122,7 +1122,7 @@ export function GeminiAccountsPage() {
               <button
                 className="action-btn"
                 onClick={() => openTagModal(account.id)}
-                title={t("accounts.editTags", "编辑标签")}
+                title={t("accounts.editTags", "Edit Tags")}
               >
                 <Tag size={14} />
               </button>
@@ -1130,7 +1130,7 @@ export function GeminiAccountsPage() {
                 className="action-btn"
                 onClick={() => handleRefresh(account.id)}
                 disabled={refreshing === account.id}
-                title={t("common.refresh", "刷新")}
+                title={t("common.refresh", "Refresh")}
               >
                 <RotateCw
                   size={14}
@@ -1145,14 +1145,14 @@ export function GeminiAccountsPage() {
                     resolveSingleExportBaseName(account),
                   )
                 }
-                title={t("common.shared.export.title", "导出")}
+                title={t("common.shared.export.title", "Export")}
               >
                 <Upload size={14} />
               </button>
               <button
                 className="action-btn danger"
                 onClick={() => handleDelete(account.id)}
-                title={t("common.delete", "删除")}
+                title={t("common.delete", "Delete")}
               >
                 <Trash2 size={14} />
               </button>
@@ -1181,7 +1181,7 @@ export function GeminiAccountsPage() {
             <span>
               {t(
                 "gemini.flowNotice.title",
-                "Gemini 账号管理说明（点击展开/收起）",
+                "Gemini Cli account guide (click to expand/collapse)",
               )}
             </span>
           </div>
@@ -1235,7 +1235,7 @@ export function GeminiAccountsPage() {
                 <Search size={16} className="search-icon" />
                 <input
                   type="text"
-                  placeholder={t("common.shared.search", "搜索账号...")}
+                  placeholder={t("common.shared.search", "Search accounts...")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -1245,14 +1245,14 @@ export function GeminiAccountsPage() {
                 <button
                   className={`view-btn ${viewMode === "list" ? "active" : ""}`}
                   onClick={() => setViewMode("list")}
-                  title={t("common.shared.view.list", "列表视图")}
+                  title={t("common.shared.view.list", "List view")}
                 >
                   <List size={16} />
                 </button>
                 <button
                   className={`view-btn ${viewMode === "grid" ? "active" : ""}`}
                   onClick={() => setViewMode("grid")}
-                  title={t("common.shared.view.grid", "卡片视图")}
+                  title={t("common.shared.view.grid", "Card view")}
                 >
                   <LayoutGrid size={16} />
                 </button>
@@ -1262,10 +1262,10 @@ export function GeminiAccountsPage() {
                 options={tierFilterOptions}
                 selectedValues={filterTypes}
                 allLabel={`ALL (${tierSummary.all})`}
-                filterLabel={t("common.shared.filterLabel", "筛选")}
-                clearLabel={t("accounts.clearFilter", "清空筛选")}
-                emptyLabel={t("common.none", "暂无")}
-                ariaLabel={t("common.shared.filterLabel", "筛选")}
+                filterLabel={t("common.shared.filterLabel", "Filter")}
+                clearLabel={t("accounts.clearFilter", "Clear Filter")}
+                emptyLabel={t("common.none", "None")}
+                ariaLabel={t("common.shared.filterLabel", "Filter")}
                 onToggleValue={toggleFilterTypeValue}
                 onClear={clearFilterTypes}
               />
@@ -1275,12 +1275,12 @@ export function GeminiAccountsPage() {
                   type="button"
                   className={`tag-filter-btn ${tagFilter.length > 0 ? "active" : ""}`}
                   onClick={() => setShowTagFilter((prev) => !prev)}
-                  aria-label={t("accounts.filterTags", "标签筛选")}
+                  aria-label={t("accounts.filterTags", "Filter Tags")}
                 >
                   <Tag size={14} />
                   {tagFilter.length > 0
-                    ? `${t("accounts.filterTagsCount", "标签")}(${tagFilter.length})`
-                    : t("accounts.filterTags", "标签筛选")}
+                    ? `${t("accounts.filterTagsCount", "Tags")}(${tagFilter.length})`
+                    : t("accounts.filterTags", "Filter Tags")}
                 </button>
                 {showTagFilter && (
                   <div
@@ -1289,7 +1289,7 @@ export function GeminiAccountsPage() {
                   >
                     {availableTags.length === 0 ? (
                       <div className="tag-filter-empty">
-                        {t("accounts.noAvailableTags", "暂无可用标签")}
+                        {t("accounts.noAvailableTags", "No tags available")}
                       </div>
                     ) : (
                       <div
@@ -1333,7 +1333,7 @@ export function GeminiAccountsPage() {
                         checked={groupByTag}
                         onChange={(e) => setGroupByTag(e.target.checked)}
                       />
-                      <span>{t("accounts.groupByTag", "按标签分组展示")}</span>
+                      <span>{t("accounts.groupByTag", "Group by tags")}</span>
                     </label>
                     {tagFilter.length > 0 && (
                       <button
@@ -1341,7 +1341,7 @@ export function GeminiAccountsPage() {
                         className="tag-filter-clear"
                         onClick={clearTagFilter}
                       >
-                        {t("accounts.clearFilter", "清空筛选")}
+                        {t("accounts.clearFilter", "Clear Filter")}
                       </button>
                     )}
                   </div>
@@ -1353,10 +1353,10 @@ export function GeminiAccountsPage() {
                 options={[
                   {
                     value: "created_at",
-                    label: t("common.shared.sort.createdAt", "按创建时间"),
+                    label: t("common.shared.sort.createdAt", "Created time"),
                   },
                 ]}
-                ariaLabel={t("common.shared.sortLabel", "排序")}
+                ariaLabel={t("common.shared.sortLabel", "Sort")}
                 icon={<ArrowDownWideNarrow size={14} />}
                 onChange={setSortBy}
               />
@@ -1370,16 +1370,16 @@ export function GeminiAccountsPage() {
                   sortDirection === "desc"
                     ? t(
                         "common.shared.sort.descTooltip",
-                        "当前：降序，点击切换为升序",
+                        "Current: Descending. Click to switch to ascending",
                       )
                     : t(
                         "common.shared.sort.ascTooltip",
-                        "当前：升序，点击切换为降序",
+                        "Current: Ascending. Click to switch to descending",
                       )
                 }
                 aria-label={t(
                   "common.shared.sort.toggleDirection",
-                  "切换排序方向",
+                  "Toggle sort direction",
                 )}
               >
                 {sortDirection === "desc" ? "⬇" : "⬆"}
@@ -1389,8 +1389,8 @@ export function GeminiAccountsPage() {
               <button
                 className="btn btn-primary icon-only"
                 onClick={() => openAddModal("oauth")}
-                title={t("common.shared.addAccount", "添加账号")}
-                aria-label={t("common.shared.addAccount", "添加账号")}
+                title={t("common.shared.addAccount", "Add Account")}
+                aria-label={t("common.shared.addAccount", "Add Account")}
               >
                 <Plus size={14} />
               </button>
@@ -1398,8 +1398,8 @@ export function GeminiAccountsPage() {
                 className="btn btn-secondary icon-only"
                 onClick={handleRefreshAll}
                 disabled={refreshingAll || accounts.length === 0}
-                title={t("common.shared.refreshAll", "刷新全部")}
-                aria-label={t("common.shared.refreshAll", "刷新全部")}
+                title={t("common.shared.refreshAll", "Refresh All")}
+                aria-label={t("common.shared.refreshAll", "Refresh All")}
               >
                 <RefreshCw
                   size={14}
@@ -1411,13 +1411,13 @@ export function GeminiAccountsPage() {
                 onClick={togglePrivacyMode}
                 title={
                   privacyModeEnabled
-                    ? t("privacy.showSensitive", "显示邮箱")
-                    : t("privacy.hideSensitive", "隐藏邮箱")
+                    ? t("privacy.showSensitive", "Show emails")
+                    : t("privacy.hideSensitive", "Hide emails")
                 }
                 aria-label={
                   privacyModeEnabled
-                    ? t("privacy.showSensitive", "显示邮箱")
-                    : t("privacy.hideSensitive", "隐藏邮箱")
+                    ? t("privacy.showSensitive", "Show emails")
+                    : t("privacy.hideSensitive", "Hide emails")
                 }
               >
                 {privacyModeEnabled ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -1426,8 +1426,8 @@ export function GeminiAccountsPage() {
                 className="btn btn-secondary icon-only"
                 onClick={() => openAddModal("import")}
                 disabled={importing}
-                title={t("common.shared.import.label", "导入")}
-                aria-label={t("common.shared.import.label", "导入")}
+                title={t("common.shared.import.label", "Import")}
+                aria-label={t("common.shared.import.label", "Import")}
               >
                 <Download size={14} />
               </button>
@@ -1437,13 +1437,13 @@ export function GeminiAccountsPage() {
                 disabled={exporting || filteredIds.length === 0}
                 title={
                   exportSelectionCount > 0
-                    ? `${t("common.shared.export.title", "导出")} (${exportSelectionCount})`
-                    : t("common.shared.export.title", "导出")
+                    ? `${t("common.shared.export.title", "Export")} (${exportSelectionCount})`
+                    : t("common.shared.export.title", "Export")
                 }
                 aria-label={
                   exportSelectionCount > 0
-                    ? `${t("common.shared.export.title", "导出")} (${exportSelectionCount})`
-                    : t("common.shared.export.title", "导出")
+                    ? `${t("common.shared.export.title", "Export")} (${exportSelectionCount})`
+                    : t("common.shared.export.title", "Export")
                 }
               >
                 <Upload size={14} />
@@ -1452,8 +1452,8 @@ export function GeminiAccountsPage() {
                 <button
                   className="btn btn-danger icon-only"
                   onClick={handleBatchDelete}
-                  title={`${t("common.delete", "删除")} (${selected.size})`}
-                  aria-label={`${t("common.delete", "删除")} (${selected.size})`}
+                  title={`${t("common.delete", "Delete")} (${selected.size})`}
+                  aria-label={`${t("common.delete", "Delete")} (${selected.size})`}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -1465,16 +1465,16 @@ export function GeminiAccountsPage() {
           {loading && accounts.length === 0 ? (
             <div className="loading-container">
               <RefreshCw size={24} className="loading-spinner" />
-              <p>{t("common.loading", "加载中...")}</p>
+              <p>{t("common.loading", "Loading...")}</p>
             </div>
           ) : accounts.length === 0 ? (
             <div className="empty-state">
               <Globe size={48} />
-              <h3>{t("common.shared.empty.title", "暂无账号")}</h3>
+              <h3>{t("common.shared.empty.title", "No Accounts")}</h3>
               <p>
                 {t(
                   "gemini.empty.description",
-                  '点击"添加账号"开始管理您的 Gemini 账号',
+                  "Click \"Add Account\" to start managing your Gemini Cli accounts",
                 )}
               </p>
               <div
@@ -1490,7 +1490,7 @@ export function GeminiAccountsPage() {
                   onClick={() => openAddModal("oauth")}
                 >
                   <Plus size={16} />
-                  {t("common.shared.addAccount", "添加账号")}
+                  {t("common.shared.addAccount", "Add Account")}
                 </button>
                 <button
                   className="btn btn-secondary"
@@ -1503,15 +1503,15 @@ export function GeminiAccountsPage() {
                   }
                 >
                   <BookOpen size={16} />
-                  {t("manual.navTitle", "功能使用手册")}
+                  {t("manual.navTitle", "User Manual")}
                 </button>
               </div>
             </div>
           ) : filteredAccounts.length === 0 ? (
             <div className="empty-state">
-              <h3>{t("common.shared.noMatch.title", "没有匹配的账号")}</h3>
+              <h3>{t("common.shared.noMatch.title", "No matching accounts")}</h3>
               <p>
-                {t("common.shared.noMatch.desc", "请尝试调整搜索或筛选条件")}
+                {t("common.shared.noMatch.desc", "Try adjusting your search or filters")}
               </p>
             </div>
           ) : viewMode === "grid" ? (
@@ -1536,7 +1536,7 @@ export function GeminiAccountsPage() {
                       checked={isAllPaginatedSelected}
                       onChange={() => toggleSelectAll(paginatedIds)}
                     />
-                    {t("common.selectAll", "全选")}
+                    {t("common.selectAll", "Select All")}
                   </label>
                 </div>
               )}
@@ -1577,13 +1577,13 @@ export function GeminiAccountsPage() {
                       />
                     </th>
                     <th style={{ width: 240 }}>
-                      {t("common.shared.columns.email", "邮箱")}
+                      {t("common.shared.columns.email", "Email")}
                     </th>
                     <th style={{ width: 460 }}>
-                      {t("accounts.columns.quota", "配额状态")}
+                      {t("accounts.columns.quota", "Quota Status")}
                     </th>
                     <th className="sticky-action-header table-action-header">
-                      {t("common.shared.columns.actions", "操作")}
+                      {t("common.shared.columns.actions", "Actions")}
                     </th>
                   </tr>
                 </thead>
@@ -1623,13 +1623,13 @@ export function GeminiAccountsPage() {
                       />
                     </th>
                     <th style={{ width: 240 }}>
-                      {t("common.shared.columns.email", "邮箱")}
+                      {t("common.shared.columns.email", "Email")}
                     </th>
                     <th style={{ width: 460 }}>
-                      {t("accounts.columns.quota", "配额状态")}
+                      {t("accounts.columns.quota", "Quota Status")}
                     </th>
                     <th className="sticky-action-header table-action-header">
-                      {t("common.shared.columns.actions", "操作")}
+                      {t("common.shared.columns.actions", "Actions")}
                     </th>
                   </tr>
                 </thead>
@@ -1660,11 +1660,11 @@ export function GeminiAccountsPage() {
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="modal-header">
-                  <h2>{t("gemini.addModal.title", "添加 Gemini 账号")}</h2>
+                  <h2>{t("gemini.addModal.title", "Add Gemini Cli Account")}</h2>
                   <button
                     className="modal-close"
                     onClick={closeAddModal}
-                    aria-label={t("common.close", "关闭")}
+                    aria-label={t("common.close", "Close")}
                   >
                     <X />
                   </button>
@@ -1676,7 +1676,7 @@ export function GeminiAccountsPage() {
                     onClick={() => openAddModal("oauth")}
                   >
                     <Globe size={14} />
-                    {t("common.shared.addModal.oauth", "授权登录")}
+                    {t("common.shared.addModal.oauth", "OAuth Authorization")}
                   </button>
                   <button
                     className={`modal-tab ${addTab === "token" ? "active" : ""}`}
@@ -1690,7 +1690,7 @@ export function GeminiAccountsPage() {
                     onClick={() => openAddModal("import")}
                   >
                     <Database size={14} />
-                    {t("common.shared.addModal.import", "本地导入")}
+                    {t("common.shared.addModal.import", "Local Import")}
                   </button>
                 </div>
 
@@ -1700,7 +1700,7 @@ export function GeminiAccountsPage() {
                       <p className="section-desc">
                         {t(
                           "gemini.oauth.desc",
-                          "点击下方按钮，在浏览器中完成 Gemini 授权登录。",
+                          "Click the button below and complete Gemini Cli OAuth authorization in your browser.",
                         )}
                       </p>
 
@@ -1712,14 +1712,14 @@ export function GeminiAccountsPage() {
                             className="btn btn-sm btn-outline"
                             onClick={handleRetryOauth}
                           >
-                            {t("common.shared.oauth.retry", "重新生成授权信息")}
+                            {t("common.shared.oauth.retry", "Regenerate authorization info")}
                           </button>
                         </div>
                       ) : oauthUrl ? (
                         <div className="oauth-url-section">
                           <div className="oauth-link">
                             <label>
-                              {t("accounts.oauth.linkLabel", "授权链接")}
+                              {t("accounts.oauth.linkLabel", "Authorization link")}
                             </label>
                             <div className="oauth-url-box">
                               <input type="text" value={oauthUrl} readOnly />
@@ -1753,7 +1753,7 @@ export function GeminiAccountsPage() {
                             <p className="oauth-hint">
                               {t(
                                 "common.shared.oauth.meta",
-                                "授权有效期：{{expires}}s；轮询间隔：{{interval}}s",
+                                "Expires in: {{expires}}s; Poll interval: {{interval}}s",
                                 {
                                   expires: oauthMeta.expiresIn,
                                   interval: oauthMeta.intervalSeconds,
@@ -1768,7 +1768,7 @@ export function GeminiAccountsPage() {
                             <Globe size={16} />
                             {t(
                               "common.shared.oauth.openBrowser",
-                              "在浏览器中打开",
+                              "Open in Browser",
                             )}
                           </button>
                           {oauthSupportsManualCallback && (
@@ -1776,7 +1776,7 @@ export function GeminiAccountsPage() {
                               <label>
                                 {t(
                                   "common.shared.oauth.manualCallbackLabel",
-                                  "手动输入回调地址",
+                                  "Manual callback URL",
                                 )}
                               </label>
                               <div className="oauth-url-box oauth-manual-input">
@@ -1788,7 +1788,7 @@ export function GeminiAccountsPage() {
                                   }
                                   placeholder={t(
                                     "common.shared.oauth.manualCallbackPlaceholder",
-                                    "粘贴完整回调地址，例如：http://localhost:1455/auth/callback?code=...&state=...",
+                                    "Paste the full callback URL, e.g. http://localhost:1455/auth/callback?code=...&state=...",
                                   )}
                                 />
                                 <button
@@ -1811,7 +1811,7 @@ export function GeminiAccountsPage() {
                                   )}
                                   {t(
                                     "accounts.oauth.continue",
-                                    "我已授权，继续",
+                                    "I've authorized, continue",
                                   )}
                                 </button>
                               </div>
@@ -1832,7 +1832,7 @@ export function GeminiAccountsPage() {
                               <span>
                                 {t(
                                   "common.shared.oauth.waiting",
-                                  "等待授权完成...",
+                                  "Waiting for authorization...",
                                 )}
                               </span>
                             </div>
@@ -1848,7 +1848,7 @@ export function GeminiAccountsPage() {
                                 >
                                   {t(
                                     "common.shared.oauth.timeoutRetry",
-                                    "刷新授权链接",
+                                    "Refresh authorization link",
                                   )}
                                 </button>
                               )}
@@ -1867,7 +1867,7 @@ export function GeminiAccountsPage() {
                           <span>
                             {t(
                               "common.shared.oauth.preparing",
-                              "正在准备授权信息...",
+                              "Preparing authorization info...",
                             )}
                           </span>
                         </div>
@@ -1880,28 +1880,28 @@ export function GeminiAccountsPage() {
                       <p className="section-desc">
                         {t(
                           "gemini.token.desc",
-                          "粘贴您的 Gemini Access Token（JWT）或导出的 JSON 数据。",
+                          "Paste your Gemini Cli Access Token (JWT) or exported JSON data.",
                         )}
                       </p>
                       <details className="token-format-collapse">
                         <summary className="token-format-collapse-summary">
                           {t(
                             "gemini.token.formatHint",
-                            "必填字段与示例（点击展开）",
+                            "Required fields & examples (click to expand)",
                           )}
                         </summary>
                         <div className="token-format">
                           <p className="token-format-required">
                             {t(
                               "gemini.token.formatRequired",
-                              "单条 Token 直接粘贴 JWT；批量导入使用 JSON 数组格式",
+                              "Single token: paste JWT directly; batch import: use JSON array format",
                             )}
                           </p>
                           <div className="token-format-group">
                             <div className="token-format-label">
                               {t(
                                 "gemini.token.singleExample",
-                                "单条示例（JWT）",
+                                "Single example (JWT)",
                               )}
                             </div>
                             <pre className="token-format-code">
@@ -1912,7 +1912,7 @@ export function GeminiAccountsPage() {
                             <div className="token-format-label">
                               {t(
                                 "gemini.token.batchExample",
-                                "批量示例（JSON）",
+                                "Batch example (JSON)",
                               )}
                             </div>
                             <pre className="token-format-code">
@@ -1927,7 +1927,7 @@ export function GeminiAccountsPage() {
                         onChange={(e) => setTokenInput(e.target.value)}
                         placeholder={t(
                           "common.shared.token.placeholder",
-                          "粘贴 Token 或 JSON...",
+                          "Example: ghu_xxx / sk-ws-xxx / {\"access_token\":\"eyJ...\",\"refresh_token\":\"rt_...\"} / [{...}]",
                         )}
                       />
                       <button
@@ -1950,7 +1950,7 @@ export function GeminiAccountsPage() {
                       <p className="section-desc">
                         {t(
                           "gemini.import.localDesc",
-                          "支持从本机 Gemini 客户端或 JSON 文件导入账号数据。",
+                          "Import Gemini Cli account data from local Gemini Cli config directory (~/.gemini) or a JSON file.",
                         )}
                       </p>
                       <button
@@ -1963,13 +1963,13 @@ export function GeminiAccountsPage() {
                         ) : (
                           <Database size={16} />
                         )}
-                        {t("gemini.import.localClient", "从本机 Gemini 导入")}
+                        {t("gemini.import.localClient", "Import from local Gemini Cli")}
                       </button>
                       <div
                         className="oauth-hint"
                         style={{ margin: "8px 0 4px" }}
                       >
-                        {t("common.shared.import.orJson", "或从 JSON 文件导入")}
+                        {t("common.shared.import.orJson", "Or import from JSON file")}
                       </div>
                       <input
                         ref={importFileInputRef}
@@ -1995,7 +1995,7 @@ export function GeminiAccountsPage() {
                         )}
                         {t(
                           "common.shared.import.pickFile",
-                          "选择 JSON 文件导入",
+                          "Select JSON file to import",
                         )}
                       </button>
                     </div>
@@ -2018,7 +2018,7 @@ export function GeminiAccountsPage() {
 
           <ExportJsonModal
             isOpen={showExportModal}
-            title={`${t("common.shared.export.title", "导出")} JSON`}
+            title={`${t("common.shared.export.title", "Export")} JSON`}
             jsonContent={exportJsonContent}
             hidden={exportJsonHidden}
             copied={exportJsonCopied}
@@ -2045,7 +2045,7 @@ export function GeminiAccountsPage() {
                   <button
                     className="modal-close"
                     onClick={() => !deleting && setDeleteConfirm(null)}
-                    aria-label={t("common.close", "关闭")}
+                    aria-label={t("common.close", "Close")}
                   >
                     <X />
                   </button>
@@ -2088,7 +2088,7 @@ export function GeminiAccountsPage() {
                   <button
                     className="modal-close"
                     onClick={() => !deletingTag && setTagDeleteConfirm(null)}
-                    aria-label={t("common.close", "关闭")}
+                    aria-label={t("common.close", "Close")}
                   >
                     <X />
                   </button>
@@ -2123,7 +2123,7 @@ export function GeminiAccountsPage() {
                     disabled={deletingTag}
                   >
                     {deletingTag
-                      ? t("common.processing", "处理中...")
+                      ? t("common.processing", "Processing...")
                       : t("common.confirm")}
                   </button>
                 </div>
@@ -2148,11 +2148,11 @@ export function GeminiAccountsPage() {
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="modal-header">
-                  <h2>{t("gemini.instances.launchDialogTitle", "启动实例")}</h2>
+                  <h2>{t("gemini.instances.launchDialogTitle", "Launch Instance")}</h2>
                   <button
                     className="modal-close"
                     onClick={() => setLaunchModal(null)}
-                    aria-label={t("common.close", "关闭")}
+                    aria-label={t("common.close", "Close")}
                   >
                     <X />
                   </button>
@@ -2161,18 +2161,18 @@ export function GeminiAccountsPage() {
                   <div className="add-status success">
                     <Check size={16} />
                     <span>
-                      {t("accounts.switched", "已切换至 {{email}}", {
+                      {t("accounts.switched", "Switched to {{email}}", {
                         email: launchModal.accountEmail,
                       })}
                     </span>
                   </div>
                   <div className="form-group">
-                    <label>{t("instances.columns.instance", "实例")}</label>
+                    <label>{t("instances.columns.instance", "Instance")}</label>
                     <input
                       className="form-input"
                       value={
                         launchModal.instanceName === "__default__"
-                          ? t("instances.defaultName", "默认实例")
+                          ? t("instances.defaultName", "Default Instance")
                           : launchModal.instanceName
                       }
                       readOnly
@@ -2180,7 +2180,7 @@ export function GeminiAccountsPage() {
                   </div>
                   <div className="form-group">
                     <label>
-                      {t("instances.form.extraArgs", "自定义启动参数")}
+                      {t("instances.form.extraArgs", "Custom launch args")}
                     </label>
                     <textarea
                       className="form-input instance-args-input"
@@ -2190,20 +2190,20 @@ export function GeminiAccountsPage() {
                     <p className="form-hint">
                       {t(
                         "gemini.instances.launchHint",
-                        "可复制命令手动执行，或点击下方按钮直接在终端执行。",
+                        "Copy the command and run manually, or execute it directly in terminal.",
                       )}
                     </p>
                   </div>
                   <div className="form-group">
                     <label>
-                      {t("instances.launchDialog.terminal", "终端")}
+                      {t("instances.launchDialog.terminal", "Terminal")}
                     </label>
                     <SingleSelectDropdown
                       value={selectedTerminal}
                       onChange={setSelectedTerminal}
                       options={terminalOptions}
                       disabled={launchModal.executing}
-                      ariaLabel={t("instances.launchDialog.terminal", "终端")}
+                      ariaLabel={t("instances.launchDialog.terminal", "Terminal")}
                     />
                   </div>
                   {launchModal.executeMessage && (
@@ -2223,8 +2223,8 @@ export function GeminiAccountsPage() {
                   >
                     <Copy size={16} />
                     {launchModal.copied
-                      ? t("common.success", "成功")
-                      : t("common.copy", "复制")}
+                      ? t("common.success", "Success")
+                      : t("common.copy", "Copy")}
                   </button>
                   <button
                     className="btn btn-primary"
@@ -2233,8 +2233,8 @@ export function GeminiAccountsPage() {
                   >
                     <Play size={16} />
                     {launchModal.executing
-                      ? t("common.loading", "加载中...")
-                      : t("gemini.instances.runInTerminal", "终端执行")}
+                      ? t("common.loading", "Loading...")
+                      : t("gemini.instances.runInTerminal", "Run in Terminal")}
                   </button>
                 </div>
               </div>

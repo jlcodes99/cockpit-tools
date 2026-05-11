@@ -52,6 +52,7 @@ import * as windsurfService from './windsurfService';
 import * as kiroService from './kiroService';
 import * as cursorService from './cursorService';
 import * as geminiService from './geminiService';
+import * as devinCliService from './devinCliService';
 import * as codebuddyService from './codebuddyService';
 import * as codebuddyCnService from './codebuddyCnService';
 import * as qoderService from './qoderService';
@@ -72,6 +73,7 @@ const INSTANCE_PLATFORMS = [
   'kiro',
   'cursor',
   'gemini',
+  'devin-cli',
   'codebuddy',
   'codebuddy_cn',
   'qoder',
@@ -259,6 +261,7 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   kiro: async () => (await kiroService.listKiroAccounts()) as unknown as TransferAccountRecord[],
   cursor: async () => (await cursorService.listCursorAccounts()) as unknown as TransferAccountRecord[],
   gemini: async () => (await geminiService.listGeminiAccounts()) as unknown as TransferAccountRecord[],
+  'devin-cli': async () => (await devinCliService.listDevinCliAccounts()) as unknown as TransferAccountRecord[],
   codebuddy: async () => (await codebuddyService.listCodebuddyAccounts()) as unknown as TransferAccountRecord[],
   codebuddy_cn: async () =>
     (await codebuddyCnService.listCodebuddyCnAccounts()) as unknown as TransferAccountRecord[],
@@ -276,6 +279,7 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   kiro: kiroService.importKiroFromJson,
   cursor: cursorService.importCursorFromJson,
   gemini: geminiService.importGeminiFromJson,
+  'devin-cli': undefined,
   codebuddy: codebuddyService.importCodebuddyFromJson,
   codebuddy_cn: codebuddyCnService.importCodebuddyCnFromJson,
   qoder: qoderService.importQoderFromJson,

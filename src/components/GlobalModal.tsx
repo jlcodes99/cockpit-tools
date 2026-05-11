@@ -48,7 +48,7 @@ export function GlobalModal() {
     : [
         {
           id: 'default-ok',
-          label: t('globalModal.ok', '知道了'),
+          label: t('globalModal.ok', 'OK'),
           variant: 'primary' as const,
         },
       ];
@@ -63,12 +63,12 @@ export function GlobalModal() {
     <div className="modal-overlay global-modal-overlay" onClick={handleOverlayClick}>
       <div className={modalSizeClass} onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
-          <h2>{modal.title || t('globalModal.title', '提示')}</h2>
+          <h2>{modal.title || t('globalModal.title', 'Notice')}</h2>
           {modal.showCloseButton !== false && (
             <button
               className="modal-close"
               onClick={closeModal}
-              aria-label={t('common.close', '关闭')}
+              aria-label={t('common.close', "Close")}
             >
               <X />
             </button>

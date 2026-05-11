@@ -1,6 +1,6 @@
 import { ReactNode, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Clock3, FolderOpen, Github, Layers, Server } from 'lucide-react';
+import { Bot, Clock3, FolderOpen, Github, Layers, Server, Terminal } from 'lucide-react';
 import { CodexIcon } from '../icons/CodexIcon';
 import { WindsurfIcon } from '../icons/WindsurfIcon';
 import { KiroIcon } from '../icons/KiroIcon';
@@ -30,6 +30,7 @@ export type PlatformOverviewHeaderId =
   | 'kiro'
   | 'cursor'
   | 'gemini'
+  | 'devin-cli'
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
@@ -82,6 +83,10 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
   gemini: {
     platformLabel: 'Gemini Cli',
     overviewIcon: <GeminiIcon className="tab-icon" />,
+  },
+  'devin-cli': {
+    platformLabel: 'Devin CLI',
+    overviewIcon: <Terminal className="tab-icon" />,
   },
   codebuddy: {
     platformLabel: 'CodeBuddy',
@@ -146,30 +151,30 @@ export function PlatformOverviewTabsHeader({
   const tabLabels: Record<PlatformOverviewTab, TabSpec> = {
     overview: {
       key: 'overview',
-      label: t('overview.title', '账号总览'),
+      label: t('overview.title', "Overview"),
       icon: config.overviewIcon,
     },
     wakeup: {
       key: 'wakeup',
       label:
         platform === 'codex'
-          ? t('codex.wakeup.tab', '唤醒任务')
-          : t('wakeup.title', '唤醒任务'),
+          ? t('codex.wakeup.tab', "Wakeup Tasks")
+          : t('wakeup.title', "Wakeups"),
       icon: <Clock3 className="tab-icon" />,
     },
     instances: {
       key: 'instances',
-      label: t('instances.title', '多开实例'),
+      label: t('instances.title', "Instances"),
       icon: <Layers className="tab-icon" />,
     },
     sessions: {
       key: 'sessions',
-      label: t('codex.sessionManager.title', '会话管理'),
+      label: t('codex.sessionManager.title', "Session Manager"),
       icon: <FolderOpen className="tab-icon" />,
     },
     providers: {
       key: 'providers',
-      label: t('codex.modelProviders.tab', '模型供应商'),
+      label: t('codex.modelProviders.tab', "Model Providers"),
       icon: <Server className="tab-icon" />,
     },
   };
@@ -180,7 +185,7 @@ export function PlatformOverviewTabsHeader({
       <div className="page-top-strip">
         <div className="page-top-strip-left">
           <span className="page-top-strip-label">
-            {t('settings.general.account', '账号')}
+            {t('settings.general.account', 'Accounts')}
           </span>
           <ManualHelpIconButton className="platform-header-help" />
         </div>

@@ -9,6 +9,7 @@ export type PlatformId =
   | 'kiro'
   | 'cursor'
   | 'gemini'
+  | 'devin-cli'
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
@@ -24,6 +25,7 @@ export const ALL_PLATFORM_IDS: PlatformId[] = [
   'kiro',
   'cursor',
   'gemini',
+  'devin-cli',
   'codebuddy',
   'codebuddy_cn',
   'qoder',
@@ -50,6 +52,7 @@ export const PLATFORM_PAGE_MAP: Record<PlatformId, Page> = {
   kiro: 'kiro',
   cursor: 'cursor',
   gemini: 'gemini',
+  'devin-cli': 'devin-cli',
   codebuddy: 'codebuddy',
   codebuddy_cn: 'codebuddy-cn',
   qoder: 'qoder',

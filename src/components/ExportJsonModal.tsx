@@ -100,7 +100,7 @@ export function ExportJsonModal(props: ExportJsonModalProps) {
       <div className="modal export-json-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <h2>{title}</h2>
-          <button className="modal-close" onClick={onClose} aria-label={t('common.close', '关闭')}>
+          <button className="modal-close" onClick={onClose} aria-label={t('common.close', "Close")}>
             <X />
           </button>
         </div>
@@ -119,15 +119,15 @@ export function ExportJsonModal(props: ExportJsonModalProps) {
               <div className="export-json-actions">
                 <button className="btn btn-secondary btn-sm" onClick={onToggleHidden}>
                   {hidden ? <Eye size={14} /> : <EyeOff size={14} />}
-                  {hidden ? t('common.preview', '预览') : t('common.close', '关闭')}
+                  {hidden ? t('common.preview', "Preview") : t('common.close', "Close")}
                 </button>
                 <button className="btn btn-secondary btn-sm" onClick={onCopyJson}>
                   {copied ? <Check size={14} /> : <Copy size={14} />}
-                  {copied ? t('common.success', '成功') : t('common.copy', '复制')}
+                  {copied ? t('common.success', "Success") : t('common.copy', "Copy")}
                 </button>
                 <button className="btn btn-primary btn-sm" onClick={onSaveJson} disabled={saving}>
                   <Download size={14} />
-                  {saving ? t('common.loading', '加载中...') : t('settings.about.download', 'Download')}
+                  {saving ? t('common.loading', "Loading...") : t('settings.about.download', 'Download')}
                 </button>
               </div>
 
@@ -140,7 +140,7 @@ export function ExportJsonModal(props: ExportJsonModalProps) {
 
               {savedPath && (
                 <div className="export-json-path-box">
-                  <div className="export-json-path-title">{t('instances.labels.path', '目录')}</div>
+                  <div className="export-json-path-title">{t('instances.labels.path', "Directory")}</div>
                   <div className="export-json-path-value">{savedPath}</div>
                   <div className="export-json-path-actions">
                     <button
@@ -149,11 +149,11 @@ export function ExportJsonModal(props: ExportJsonModalProps) {
                       disabled={!canOpenSavedDirectory}
                     >
                       <FolderOpen size={14} />
-                      {t('instances.actions.openFolder', '打开文件夹')}
+                      {t('instances.actions.openFolder', "Open Folder")}
                     </button>
                     <button className="btn btn-secondary btn-sm" onClick={onCopySavedPath}>
                       {pathCopied ? <Check size={14} /> : <Copy size={14} />}
-                      {pathCopied ? t('common.success', '成功') : t('common.copy', '复制')}
+                      {pathCopied ? t('common.success', "Success") : t('common.copy', "Copy")}
                     </button>
                   </div>
                 </div>

@@ -6,6 +6,7 @@ import * as windsurfService from './windsurfService';
 import * as kiroService from './kiroService';
 import * as cursorService from './cursorService';
 import * as geminiService from './geminiService';
+import * as devinCliService from './devinCliService';
 import * as codebuddyService from './codebuddyService';
 import * as codebuddyCnService from './codebuddyCnService';
 import * as qoderService from './qoderService';
@@ -61,6 +62,14 @@ const PLATFORM_ADAPTERS: Record<PlatformId, TransferAdapter> = {
     listAccounts: geminiService.listGeminiAccounts,
     exportAccounts: geminiService.exportGeminiAccounts,
     importFromJson: geminiService.importGeminiFromJson,
+  },
+  'devin-cli': {
+    listAccounts: devinCliService.listDevinCliAccounts,
+    exportAccounts: async (accountIds) => {
+      const accounts = await devinCliService.listDevinCliAccounts();
+      return JSON.stringify(accounts.filter((account) => accountIds.includes(account.id)));
+    },
+    importFromJson: async () => [],
   },
   codebuddy: {
     listAccounts: codebuddyService.listCodebuddyAccounts,

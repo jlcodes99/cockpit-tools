@@ -50,12 +50,12 @@ export function AccountTagFilterDropdown({
         type="button"
         className={`tag-filter-btn ${selectedTags.length > 0 ? 'active' : ''}`}
         onClick={() => setOpen((prev) => !prev)}
-        aria-label={t('accounts.filterTags', '标签筛选')}
+        aria-label={t('accounts.filterTags', "Filter Tags")}
       >
         <Tag size={14} />
         {selectedTags.length > 0
-          ? `${t('accounts.filterTagsCount', '标签')}(${selectedTags.length})`
-          : t('accounts.filterTags', '标签筛选')}
+          ? `${t('accounts.filterTagsCount', "Tags")}(${selectedTags.length})`
+          : t('accounts.filterTags', "Filter Tags")}
       </button>
       {open && (
         <div
@@ -64,7 +64,7 @@ export function AccountTagFilterDropdown({
         >
           {availableTags.length === 0 ? (
             <div className="tag-filter-empty">
-              {t('accounts.noAvailableTags', '暂无可用标签')}
+              {t('accounts.noAvailableTags', "No tags available")}
             </div>
           ) : (
             <div className="tag-filter-options" style={scrollContainerStyle}>
@@ -109,13 +109,13 @@ export function AccountTagFilterDropdown({
                   checked={groupByTag}
                   onChange={(event) => onToggleGroupByTag(event.target.checked)}
                 />
-                <span>{t('accounts.groupByTag', '按标签分组展示')}</span>
+                <span>{t('accounts.groupByTag', "Group by tags")}</span>
               </label>
             </>
           )}
           {selectedTags.length > 0 && (
             <button type="button" className="tag-filter-clear" onClick={onClear}>
-              {t('accounts.clearFilter', '清空筛选')}
+              {t('accounts.clearFilter', "Clear Filter")}
             </button>
           )}
         </div>

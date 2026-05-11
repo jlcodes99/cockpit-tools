@@ -3815,5 +3815,61 @@
       "warn": "Предупр.",
       "error": "Ошибка"
     }
+  },
+  "devinCli": {
+    "title": "Devin CLI",
+    "notice": {
+      "title": "Безопасное переключение аккаунтов Devin через dsw",
+      "desc": "Cockpit Tools читает только метаданные аккаунтов dsw и запускает команды dsw в терминале. Учетные данные остаются изолированными в профильных каталогах dsw.",
+      "storage": "Источник данных: ~/.dsw/accounts.json или DSW_DATA_HOME/accounts.json.",
+      "runtime": "Во время запуска dsw выбирает аккаунт и задает изолированное окружение профиля Devin CLI."
+    },
+    "status": {
+      "installed": "dsw установлен",
+      "notInstalled": "dsw не найден"
+    },
+    "terminal": {
+      "ariaLabel": "Терминал",
+      "placeholder": "Терминал"
+    },
+    "actions": {
+      "list": "Список",
+      "quota": "Квоты",
+      "rotate": "Запустить лучший аккаунт",
+      "add": "Добавить",
+      "use": "Использовать",
+      "login": "Войти"
+    },
+    "messages": {
+      "loadFailed": "Не удалось загрузить аккаунты Devin CLI: {{error}}",
+      "commandFailed": "Не удалось выполнить команду dsw: {{error}}",
+      "addStarted": "Команда dsw add открыта в терминале. Завершите вход Devin там.",
+      "listStarted": "Команда dsw list открыта в терминале.",
+      "quotaStarted": "Команда dsw quota открыта в терминале.",
+      "rotateStarted": "dsw открыт с ротацией аккаунтов по квотам.",
+      "useStarted": "Команда dsw use открыта для выбранного аккаунта.",
+      "loginStarted": "Команда dsw login открыта для выбранного аккаунта."
+    },
+    "installHint": "Сначала установите Devin Switcher: npm install -g @itsddvn/dsw",
+    "add": {
+      "title": "Добавить аккаунт Devin",
+      "desc": "Оставьте имя пустым, чтобы dsw определил его после входа, или укажите безопасное имя профиля.",
+      "placeholder": "work или personal",
+      "invalidName": "Используйте только буквы, цифры, подчеркивания и дефисы."
+    },
+    "summary": {
+      "total": "Всего профилей",
+      "ready": "Готовы",
+      "needsLogin": "Нужен вход"
+    },
+    "empty": {
+      "title": "Профилей Devin CLI пока нет",
+      "desc": "Используйте dsw add, чтобы создать изолированный профиль Devin CLI и войти."
+    },
+    "account": {
+      "needsLogin": "Нужен вход",
+      "ready": "Готов",
+      "lastUsed": "Последнее использование"
+    }
   }
 }

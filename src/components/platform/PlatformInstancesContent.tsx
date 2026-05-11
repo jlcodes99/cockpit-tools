@@ -67,7 +67,7 @@ export function PlatformInstancesContent<TAccount extends AccountLike>({
           <p>{t(unsupportedDescKey, unsupportedDescDefault)}</p>
           <button className="btn btn-primary" disabled>
             <Plus size={16} />
-            {t('instances.actions.create', '新建实例')}
+            {t('instances.actions.create', "New Instance")}
           </button>
         </div>
       </div>

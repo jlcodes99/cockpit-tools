@@ -32,9 +32,9 @@ export function CodebuddyCnInstancesContent({
       <DosageNotifyQuotaPreview
         usage={usage}
         locale={locale}
-        emptyText={t('instances.quota.empty', '暂无配额缓存')}
-        normalText={t('codebuddy.usageNormal', '正常')}
-        abnormalText={t('codebuddy.usageAbnormal', '异常')}
+        emptyText={t('instances.quota.empty', "No cached quota")}
+        normalText={t('codebuddy.usageNormal', "Normal")}
+        abnormalText={t('codebuddy.usageAbnormal', "Abnormal")}
         abnormalDisplay="detail"
       />
     );
@@ -67,7 +67,7 @@ export function CodebuddyCnInstancesContent({
           <div className="badge-group inline-flex items-center gap-1">
             <span className={`instance-plan-badge ${normalizedClass}`}>{planBadge}</span>
             {isCheckedIn && (
-              <span className="checkin-badge badge badge-success badge-sm" title={t('codebuddyCn.checkin.checkedIn', '已签到')}>
+              <span className="checkin-badge badge badge-success badge-sm" title={t('codebuddyCn.checkin.checkedIn', "Checked In")}>
                 <CheckCircle size={12} />
               </span>
             )}

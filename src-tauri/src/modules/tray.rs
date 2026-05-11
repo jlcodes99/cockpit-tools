@@ -36,6 +36,7 @@ pub(crate) enum PlatformId {
     Kiro,
     Cursor,
     Gemini,
+    DevinCli,
     Codebuddy,
     CodebuddyCn,
     Qoder,
@@ -44,7 +45,7 @@ pub(crate) enum PlatformId {
 }
 
 impl PlatformId {
-    pub(crate) fn default_order() -> [Self; 13] {
+    pub(crate) fn default_order() -> [Self; 14] {
         [
             Self::Antigravity,
             Self::Codex,
@@ -54,6 +55,7 @@ impl PlatformId {
             Self::Kiro,
             Self::Cursor,
             Self::Gemini,
+            Self::DevinCli,
             Self::Codebuddy,
             Self::CodebuddyCn,
             Self::Qoder,
@@ -72,6 +74,7 @@ impl PlatformId {
             crate::modules::tray_layout::PLATFORM_KIRO => Some(Self::Kiro),
             crate::modules::tray_layout::PLATFORM_CURSOR => Some(Self::Cursor),
             crate::modules::tray_layout::PLATFORM_GEMINI => Some(Self::Gemini),
+            crate::modules::tray_layout::PLATFORM_DEVIN_CLI => Some(Self::DevinCli),
             crate::modules::tray_layout::PLATFORM_CODEBUDDY => Some(Self::Codebuddy),
             crate::modules::tray_layout::PLATFORM_CODEBUDDY_CN => Some(Self::CodebuddyCn),
             crate::modules::tray_layout::PLATFORM_QODER => Some(Self::Qoder),
@@ -91,6 +94,7 @@ impl PlatformId {
             Self::Kiro => crate::modules::tray_layout::PLATFORM_KIRO,
             Self::Cursor => crate::modules::tray_layout::PLATFORM_CURSOR,
             Self::Gemini => crate::modules::tray_layout::PLATFORM_GEMINI,
+            Self::DevinCli => crate::modules::tray_layout::PLATFORM_DEVIN_CLI,
             Self::Codebuddy => crate::modules::tray_layout::PLATFORM_CODEBUDDY,
             Self::CodebuddyCn => crate::modules::tray_layout::PLATFORM_CODEBUDDY_CN,
             Self::Qoder => crate::modules::tray_layout::PLATFORM_QODER,
@@ -109,6 +113,7 @@ impl PlatformId {
             Self::Kiro => "Kiro",
             Self::Cursor => "Cursor",
             Self::Gemini => "Gemini Cli",
+            Self::DevinCli => "Devin CLI",
             Self::Codebuddy => "CodeBuddy",
             Self::CodebuddyCn => "CodeBuddy CN",
             Self::Qoder => "Qoder",
@@ -127,6 +132,7 @@ impl PlatformId {
             Self::Kiro => "kiro",
             Self::Cursor => "cursor",
             Self::Gemini => "gemini",
+            Self::DevinCli => "devin-cli",
             Self::Codebuddy => "codebuddy",
             Self::CodebuddyCn => "codebuddy-cn",
             Self::Qoder => "qoder",
@@ -615,6 +621,7 @@ fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayI
         PlatformId::Kiro => build_kiro_display_info(lang),
         PlatformId::Cursor => build_cursor_display_info(lang),
         PlatformId::Gemini => build_gemini_display_info(lang),
+        PlatformId::DevinCli => build_devin_cli_display_info(lang),
         PlatformId::Codebuddy => build_codebuddy_display_info(lang),
         PlatformId::CodebuddyCn => build_codebuddy_cn_display_info(lang),
         PlatformId::Qoder => build_qoder_display_info(lang),
@@ -1210,6 +1217,96 @@ fn build_gemini_display_info(lang: &str) -> AccountDisplayInfo {
             first_non_empty(&[Some(account.email.as_str()), Some(account.id.as_str())])
                 .unwrap_or("—")
         ),
+        quota_lines,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn build_devin_cli_display_info(lang: &str) -> AccountDisplayInfo {
+    let store_path = std::env::var("DSW_DATA_HOME")
+        .ok()
+        .map(|value| std::path::PathBuf::from(value.trim()))
+        .filter(|path| !path.as_os_str().is_empty())
+        .or_else(|| dirs::home_dir().map(|home| home.join(".dsw")))
+        .map(|dir| dir.join("accounts.json"));
+
+    let Some(store_path) = store_path else {
+        return AccountDisplayInfo {
+            account: format!("📧 {}", get_text("not_logged_in", lang)),
+            quota_lines: vec!["—".to_string()],
+        };
+    };
+
+    let parsed = std::fs::read_to_string(&store_path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok());
+    let accounts = parsed
+        .as_ref()
+        .and_then(|value| value.get("accounts"))
+        .and_then(|value| value.as_array());
+
+    let Some(accounts) = accounts else {
+        return AccountDisplayInfo {
+            account: format!("📧 {}", get_text("not_logged_in", lang)),
+            quota_lines: vec!["—".to_string()],
+        };
+    };
+
+    let ready_count = accounts
+        .iter()
+        .filter(|account| {
+            !account
+                .get("needsLogin")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+        })
+        .count();
+    let selected = accounts.iter().max_by_key(|account| {
+        account
+            .get("lastUsedAt")
+            .and_then(|value| value.as_i64())
+            .or_else(|| account.get("createdAt").and_then(|value| value.as_i64()))
+            .unwrap_or(0)
+    });
+
+    let Some(account) = selected else {
+        return AccountDisplayInfo {
+            account: format!("📧 {}", get_text("not_logged_in", lang)),
+            quota_lines: vec!["—".to_string()],
+        };
+    };
+
+    let display = first_non_empty(&[
+        account.get("email").and_then(|value| value.as_str()),
+        account.get("name").and_then(|value| value.as_str()),
+        account.get("id").and_then(|value| value.as_str()),
+    ])
+    .unwrap_or("—");
+    let plan = first_non_empty(&[
+        account.get("plan").and_then(|value| value.as_str()),
+        account.get("tier").and_then(|value| value.as_str()),
+    ]);
+    let needs_login = account
+        .get("needsLogin")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    let mut quota_lines = vec![
+        format!("Profiles: {} / {}", ready_count, accounts.len()),
+        format!(
+            "Status: {}",
+            if needs_login {
+                "Needs login"
+            } else {
+                "Ready"
+            }
+        ),
+    ];
+    if let Some(plan) = plan {
+        quota_lines.push(format!("Plan: {}", plan));
+    }
+
+    AccountDisplayInfo {
+        account: format!("📧 {}", display),
         quota_lines,
     }
 }

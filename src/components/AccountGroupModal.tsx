@@ -166,7 +166,7 @@ export const AccountGroupModal = ({
             <div className="group-filter-hint">
               <span>{t('accounts.groups.filterHint', { count: groupFilter.length })}</span>
               <button type="button" className="group-filter-clear-btn" onClick={onClearGroupFilter}>
-                {t('accounts.clearFilter', '清空筛选')}
+                {t('accounts.clearFilter', "Clear Filter")}
               </button>
             </div>
           )}
@@ -188,7 +188,7 @@ export const AccountGroupModal = ({
                       className="group-filter-checkbox"
                       checked={groupFilter.includes(group.id)}
                       onChange={() => onToggleGroupFilter(group.id)}
-                      title={t('accounts.groups.filterToggle', '勾选以筛选此分组')}
+                      title={t('accounts.groups.filterToggle', "Check to filter by this group")}
                     />
                   )}
                   <FolderOpen size={18} className="group-icon" />

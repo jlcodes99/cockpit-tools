@@ -1616,7 +1616,7 @@ export function DashboardPage({
   ) => {
     const quotaItems = presentation.quotaItems.slice(0, Math.max(0, limit));
     if (quotaItems.length === 0) {
-      return <span className="no-data-text">{t('dashboard.noData', '暂无数据')}</span>;
+      return <span className="no-data-text">{t('dashboard.noData', "No data")}</span>;
     }
 
     return quotaItems.map((item) => {
@@ -1703,7 +1703,7 @@ export function DashboardPage({
             <button
               className="mini-icon-btn"
               onClick={onEditTags}
-              title={t('accounts.editTags', '编辑标签')}
+              title={t('accounts.editTags', "Edit Tags")}
             >
               <Tag size={14} />
             </button>
@@ -1711,7 +1711,7 @@ export function DashboardPage({
           <button
             className="mini-icon-btn"
             onClick={onRefresh}
-            title={t('common.refresh', '刷新')}
+            title={t('common.refresh', "Refresh")}
             disabled={isRefreshing || isSwitching}
           >
             <RotateCw size={14} className={isRefreshing ? 'loading-spinner' : ''} />
@@ -1719,7 +1719,7 @@ export function DashboardPage({
           <button
             className="mini-icon-btn"
             onClick={onSwitch}
-            title={t('dashboard.switch', '切换')}
+            title={t('dashboard.switch', "Switch")}
             disabled={isSwitching || switchDisabled}
           >
             {isSwitching ? <RotateCw size={14} className="loading-spinner" /> : <Play size={14} />}
@@ -1730,7 +1730,7 @@ export function DashboardPage({
   };
 
   const renderAgAccountContent = (account: Account | null) => {
-    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', "No account")}</div>;
 
     const presentation = buildAntigravityAccountPresentation(account, agDisplayGroups, t);
     const quotaDisplayItems = presentation.quotaItems.slice(0, 4);
@@ -1766,21 +1766,21 @@ export function DashboardPage({
               )}
             </div>
           ))}
-          {quotaDisplayItems.length === 0 && <span className="no-data-text">{t('dashboard.noData', '暂无数据')}</span>}
+          {quotaDisplayItems.length === 0 && <span className="no-data-text">{t('dashboard.noData', "No data")}</span>}
         </div>
 
         <div className="account-mini-actions icon-only-row">
           <button
             className="mini-icon-btn"
             onClick={() => setTagModalState({ accountId: account.id, platform: 'antigravity', tags: account.tags || [] })}
-            title={t('accounts.editTags', '编辑标签')}
+            title={t('accounts.editTags', "Edit Tags")}
           >
             <Tag size={14} />
           </button>
           <button
             className="mini-icon-btn"
             onClick={() => handleRefreshAg(account.id)}
-            title={t('common.refresh', '刷新')}
+            title={t('common.refresh', "Refresh")}
             disabled={refreshing.has(account.id)}
           >
             <RotateCw size={14} className={refreshing.has(account.id) ? 'loading-spinner' : ''} />
@@ -1788,7 +1788,7 @@ export function DashboardPage({
           <button
             className="mini-icon-btn"
             onClick={() => switchAgAccount(account.id)}
-            title={t('dashboard.switch', '切换')}
+            title={t('dashboard.switch', "Switch")}
           >
             <Play size={14} />
           </button>
@@ -1798,7 +1798,7 @@ export function DashboardPage({
   };
 
   const renderCodexAccountContent = (account: CodexAccount | null) => {
-    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', "No account")}</div>;
 
     const presentation = buildCodexAccountPresentation(account, t);
     return renderUnifiedAccountCard({
@@ -1813,7 +1813,7 @@ export function DashboardPage({
   };
 
   const renderZedAccountContent = (account: ZedAccount | null) => {
-    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', "No account")}</div>;
 
     const presentation = buildZedAccountPresentation(account, t);
     return renderUnifiedAccountCard({
@@ -1827,7 +1827,7 @@ export function DashboardPage({
   };
 
   const renderGitHubCopilotAccountContent = (account: GitHubCopilotAccount | null) => {
-    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', "No account")}</div>;
 
     const presentation = buildGitHubCopilotAccountPresentation(account, t);
     return renderUnifiedAccountCard({
@@ -1841,7 +1841,7 @@ export function DashboardPage({
   };
 
   const renderWindsurfAccountContent = (account: WindsurfAccount | null) => {
-    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', "No account")}</div>;
 
     const presentation = buildWindsurfAccountPresentation(account, t);
     return renderUnifiedAccountCard({
@@ -1855,7 +1855,7 @@ export function DashboardPage({
   };
 
   const renderKiroAccountContent = (account: KiroAccount | null) => {
-    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', "No account")}</div>;
 
     const presentation = buildKiroAccountPresentation(account, t);
     return renderUnifiedAccountCard({
@@ -1870,7 +1870,7 @@ export function DashboardPage({
   };
 
   const renderCursorAccountContent = (account: CursorAccount | null) => {
-    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', "No account")}</div>;
 
     const presentation = buildCursorAccountPresentation(account, t);
     const authIdText = (account.auth_id || '').trim();
@@ -1889,30 +1889,30 @@ export function DashboardPage({
   };
 
   const renderGeminiAccountContent = (account: GeminiAccount | null) => {
-    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', "No account")}</div>;
 
     const formatRelativeDuration = (seconds: number) => {
       const safe = Math.max(0, Math.floor(seconds));
       const totalMinutes = Math.floor(safe / 60);
       if (totalMinutes < 1) {
-        return t('common.shared.time.lessThanMinute', '<1分钟');
+        return t('common.shared.time.lessThanMinute', "<1m");
       }
       const days = Math.floor(totalMinutes / (60 * 24));
       const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
       const minutes = totalMinutes % 60;
       if (days > 0 && hours > 0) {
-        return t('common.shared.time.relativeDaysHours', '{{days}}天{{hours}}小时', { days, hours });
+        return t('common.shared.time.relativeDaysHours', "{{days}}d {{hours}}h", { days, hours });
       }
       if (days > 0) {
-        return t('common.shared.time.relativeDays', '{{days}}天', { days });
+        return t('common.shared.time.relativeDays', "{{days}}d", { days });
       }
       if (hours > 0 && minutes > 0) {
-        return t('common.shared.time.relativeHoursMinutes', '{{hours}}小时{{minutes}}分钟', { hours, minutes });
+        return t('common.shared.time.relativeHoursMinutes', "{{hours}}h {{minutes}}m", { hours, minutes });
       }
       if (hours > 0) {
-        return t('common.shared.time.relativeHours', '{{hours}}小时', { hours });
+        return t('common.shared.time.relativeHours', "{{hours}}h", { hours });
       }
-      return t('common.shared.time.relativeMinutes', '{{minutes}}分钟', { minutes });
+      return t('common.shared.time.relativeMinutes', "{{minutes}}m", { minutes });
     };
 
     const updatedAt = account.last_used || account.created_at || 0;
@@ -1933,7 +1933,7 @@ export function DashboardPage({
   };
 
   const renderCodebuddyAccountContent = (account: CodebuddyAccount | null) => {
-    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', "No account")}</div>;
 
     const presentation = buildCodebuddyAccountPresentation(account, t);
     const mergedQuotaItems = buildCodebuddyCategoryQuotaItems(account);
@@ -1951,7 +1951,7 @@ export function DashboardPage({
   };
 
   const renderCodebuddyCnAccountContent = (account: CodebuddyAccount | null) => {
-    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', "No account")}</div>;
 
     const presentation = buildCodebuddyAccountPresentation(account, t);
     const mergedQuotaItems = buildCodebuddyCategoryQuotaItems(account);
@@ -1969,7 +1969,7 @@ export function DashboardPage({
   };
 
   const renderQoderAccountContent = (account: QoderAccount | null) => {
-    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', "No account")}</div>;
 
     const presentation = buildQoderAccountPresentation(account, t);
     return renderUnifiedAccountCard({
@@ -1983,7 +1983,7 @@ export function DashboardPage({
   };
 
   const renderTraeAccountContent = (account: TraeAccount | null) => {
-    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', "No account")}</div>;
 
     const presentation = buildTraeAccountPresentation(account, t);
     return renderUnifiedAccountCard({
@@ -1997,7 +1997,7 @@ export function DashboardPage({
   };
 
   const renderWorkbuddyAccountContent = (account: WorkbuddyAccount | null) => {
-    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', "No account")}</div>;
 
     const presentation = buildWorkbuddyAccountPresentation(account, t);
     return renderUnifiedAccountCard({
@@ -2019,6 +2019,7 @@ export function DashboardPage({
     kiro: stats.kiro,
     cursor: stats.cursor,
     gemini: stats.gemini,
+    'devin-cli': 0,
     codebuddy: stats.codebuddy,
     codebuddy_cn: stats.codebuddy_cn,
     qoder: stats.qoder,
@@ -2060,8 +2061,8 @@ export function DashboardPage({
     <button
       className="header-action-btn header-icon-btn"
       onClick={() => handleHidePlatformCard(platformId)}
-      title={t('accounts.compact.hide', '隐藏')}
-      aria-label={t('accounts.compact.hide', '隐藏')}
+      title={t('accounts.compact.hide', "Hide")}
+      aria-label={t('accounts.compact.hide', "Hide")}
     >
       <EyeOff size={14} />
     </button>
@@ -2081,10 +2082,10 @@ export function DashboardPage({
                 className="header-action-btn"
                 onClick={handleRefreshAgCard}
                 disabled={cardRefreshing.ag}
-                title={t('common.refresh', '刷新')}
+                title={t('common.refresh', "Refresh")}
               >
                 <RotateCw size={14} className={cardRefreshing.ag ? 'loading-spinner' : ''} />
-                <span>{t('common.refresh', '刷新')}</span>
+                <span>{t('common.refresh', "Refresh")}</span>
               </button>
               {renderHideCardButton(platformId)}
             </div>
@@ -2092,24 +2093,24 @@ export function DashboardPage({
 
           <div className="split-content">
             <div className="split-half current-half">
-              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', "Current account")}</span>
               {renderAgAccountContent(agCurrentAccount)}
             </div>
 
             <div className="split-divider"></div>
 
             <div className="split-half recommend-half">
-              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', "Recommended account")}</span>
               {agRecommended ? (
                 renderAgAccountContent(agRecommended)
               ) : (
-                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', "No better recommendation")}</div>
               )}
             </div>
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('overview')}>
-            {t('dashboard.viewAllAccounts', '查看所有账号')}
+            {t('dashboard.viewAllAccounts', "View all accounts")}
           </button>
         </div>
       );
@@ -2128,10 +2129,10 @@ export function DashboardPage({
                 className="header-action-btn"
                 onClick={handleRefreshCodexCard}
                 disabled={cardRefreshing.codex}
-                title={t('common.refresh', '刷新')}
+                title={t('common.refresh', "Refresh")}
               >
                 <RotateCw size={14} className={cardRefreshing.codex ? 'loading-spinner' : ''} />
-                <span>{t('common.refresh', '刷新')}</span>
+                <span>{t('common.refresh', "Refresh")}</span>
               </button>
               {renderHideCardButton(platformId)}
             </div>
@@ -2139,24 +2140,24 @@ export function DashboardPage({
 
           <div className="split-content">
             <div className="split-half current-half">
-              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', "Current account")}</span>
               {renderCodexAccountContent(codexCurrentAccount)}
             </div>
 
             <div className="split-divider"></div>
 
             <div className="split-half recommend-half">
-              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', "Recommended account")}</span>
               {codexRecommended ? (
                 renderCodexAccountContent(codexRecommended)
               ) : (
-                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', "No better recommendation")}</div>
               )}
             </div>
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('codex')}>
-            {t('dashboard.viewAllAccounts', '查看所有账号')}
+            {t('dashboard.viewAllAccounts', "View all accounts")}
           </button>
         </div>
       );
@@ -2175,10 +2176,10 @@ export function DashboardPage({
                 className="header-action-btn"
                 onClick={handleRefreshZedCard}
                 disabled={cardRefreshing.zed}
-                title={t('common.refresh', '刷新')}
+                title={t('common.refresh', "Refresh")}
               >
                 <RotateCw size={14} className={cardRefreshing.zed ? 'loading-spinner' : ''} />
-                <span>{t('common.refresh', '刷新')}</span>
+                <span>{t('common.refresh', "Refresh")}</span>
               </button>
               {renderHideCardButton(platformId)}
             </div>
@@ -2186,24 +2187,24 @@ export function DashboardPage({
 
           <div className="split-content">
             <div className="split-half current-half">
-              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', "Current account")}</span>
               {renderZedAccountContent(zedCurrent)}
             </div>
 
             <div className="split-divider"></div>
 
             <div className="split-half recommend-half">
-              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', "Recommended account")}</span>
               {zedRecommended ? (
                 renderZedAccountContent(zedRecommended)
               ) : (
-                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', "No better recommendation")}</div>
               )}
             </div>
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('zed')}>
-            {t('dashboard.viewAllAccounts', '查看所有账号')}
+            {t('dashboard.viewAllAccounts', "View all accounts")}
           </button>
         </div>
       );
@@ -2222,10 +2223,10 @@ export function DashboardPage({
                 className="header-action-btn"
                 onClick={handleRefreshGitHubCopilotCard}
                 disabled={cardRefreshing.githubCopilot}
-                title={t('common.refresh', '刷新')}
+                title={t('common.refresh', "Refresh")}
               >
                 <RotateCw size={14} className={cardRefreshing.githubCopilot ? 'loading-spinner' : ''} />
-                <span>{t('common.refresh', '刷新')}</span>
+                <span>{t('common.refresh', "Refresh")}</span>
               </button>
               {renderHideCardButton(platformId)}
             </div>
@@ -2233,24 +2234,24 @@ export function DashboardPage({
 
           <div className="split-content">
             <div className="split-half current-half">
-              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', "Current account")}</span>
               {renderGitHubCopilotAccountContent(githubCopilotCurrent)}
             </div>
 
             <div className="split-divider"></div>
 
             <div className="split-half recommend-half">
-              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', "Recommended account")}</span>
               {githubCopilotRecommended ? (
                 renderGitHubCopilotAccountContent(githubCopilotRecommended)
               ) : (
-                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', "No better recommendation")}</div>
               )}
             </div>
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('github-copilot')}>
-            {t('dashboard.viewAllAccounts', '查看所有账号')}
+            {t('dashboard.viewAllAccounts', "View all accounts")}
           </button>
         </div>
       );
@@ -2269,10 +2270,10 @@ export function DashboardPage({
                 className="header-action-btn"
                 onClick={handleRefreshWindsurfCard}
                 disabled={cardRefreshing.windsurf}
-                title={t('common.refresh', '刷新')}
+                title={t('common.refresh', "Refresh")}
               >
                 <RotateCw size={14} className={cardRefreshing.windsurf ? 'loading-spinner' : ''} />
-                <span>{t('common.refresh', '刷新')}</span>
+                <span>{t('common.refresh', "Refresh")}</span>
               </button>
               {renderHideCardButton(platformId)}
             </div>
@@ -2280,24 +2281,24 @@ export function DashboardPage({
 
           <div className="split-content">
             <div className="split-half current-half">
-              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', "Current account")}</span>
               {renderWindsurfAccountContent(windsurfCurrent)}
             </div>
 
             <div className="split-divider"></div>
 
             <div className="split-half recommend-half">
-              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', "Recommended account")}</span>
               {windsurfRecommended ? (
                 renderWindsurfAccountContent(windsurfRecommended)
               ) : (
-                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', "No better recommendation")}</div>
               )}
             </div>
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('windsurf')}>
-            {t('dashboard.viewAllAccounts', '查看所有账号')}
+            {t('dashboard.viewAllAccounts', "View all accounts")}
           </button>
         </div>
       );
@@ -2316,10 +2317,10 @@ export function DashboardPage({
                 className="header-action-btn"
                 onClick={handleRefreshKiroCard}
                 disabled={cardRefreshing.kiro}
-                title={t('common.refresh', '刷新')}
+                title={t('common.refresh', "Refresh")}
               >
                 <RotateCw size={14} className={cardRefreshing.kiro ? 'loading-spinner' : ''} />
-                <span>{t('common.refresh', '刷新')}</span>
+                <span>{t('common.refresh', "Refresh")}</span>
               </button>
               {renderHideCardButton(platformId)}
             </div>
@@ -2327,24 +2328,24 @@ export function DashboardPage({
 
           <div className="split-content">
             <div className="split-half current-half">
-              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', "Current account")}</span>
               {renderKiroAccountContent(kiroCurrent)}
             </div>
 
             <div className="split-divider"></div>
 
             <div className="split-half recommend-half">
-              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', "Recommended account")}</span>
               {kiroRecommended ? (
                 renderKiroAccountContent(kiroRecommended)
               ) : (
-                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', "No better recommendation")}</div>
               )}
             </div>
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('kiro')}>
-            {t('dashboard.viewAllAccounts', '查看所有账号')}
+            {t('dashboard.viewAllAccounts', "View all accounts")}
           </button>
         </div>
       );
@@ -2363,10 +2364,10 @@ export function DashboardPage({
                 className="header-action-btn"
                 onClick={handleRefreshCursorCard}
                 disabled={cardRefreshing.cursor}
-                title={t('common.refresh', '刷新')}
+                title={t('common.refresh', "Refresh")}
               >
                 <RotateCw size={14} className={cardRefreshing.cursor ? 'loading-spinner' : ''} />
-                <span>{t('common.refresh', '刷新')}</span>
+                <span>{t('common.refresh', "Refresh")}</span>
               </button>
               {renderHideCardButton(platformId)}
             </div>
@@ -2374,24 +2375,24 @@ export function DashboardPage({
 
           <div className="split-content">
             <div className="split-half current-half">
-              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', "Current account")}</span>
               {renderCursorAccountContent(cursorCurrent)}
             </div>
 
             <div className="split-divider"></div>
 
             <div className="split-half recommend-half">
-              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', "Recommended account")}</span>
               {cursorRecommended ? (
                 renderCursorAccountContent(cursorRecommended)
               ) : (
-                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', "No better recommendation")}</div>
               )}
             </div>
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('cursor')}>
-            {t('dashboard.viewAllAccounts', '查看所有账号')}
+            {t('dashboard.viewAllAccounts', "View all accounts")}
           </button>
         </div>
       );
@@ -2410,10 +2411,10 @@ export function DashboardPage({
                 className="header-action-btn"
                 onClick={handleRefreshGeminiCard}
                 disabled={cardRefreshing.gemini}
-                title={t('common.refresh', '刷新')}
+                title={t('common.refresh', "Refresh")}
               >
                 <RotateCw size={14} className={cardRefreshing.gemini ? 'loading-spinner' : ''} />
-                <span>{t('common.refresh', '刷新')}</span>
+                <span>{t('common.refresh', "Refresh")}</span>
               </button>
               {renderHideCardButton(platformId)}
             </div>
@@ -2421,24 +2422,24 @@ export function DashboardPage({
 
           <div className="split-content">
             <div className="split-half current-half">
-              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', "Current account")}</span>
               {renderGeminiAccountContent(geminiCurrent)}
             </div>
 
             <div className="split-divider"></div>
 
             <div className="split-half recommend-half">
-              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', "Recommended account")}</span>
               {geminiRecommended ? (
                 renderGeminiAccountContent(geminiRecommended)
               ) : (
-                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', "No better recommendation")}</div>
               )}
             </div>
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('gemini')}>
-            {t('dashboard.viewAllAccounts', '查看所有账号')}
+            {t('dashboard.viewAllAccounts', "View all accounts")}
           </button>
         </div>
       );
@@ -2457,10 +2458,10 @@ export function DashboardPage({
                 className="header-action-btn"
                 onClick={handleRefreshCodebuddyCard}
                 disabled={cardRefreshing.codebuddy}
-                title={t('common.refresh', '刷新')}
+                title={t('common.refresh', "Refresh")}
               >
                 <RotateCw size={14} className={cardRefreshing.codebuddy ? 'loading-spinner' : ''} />
-                <span>{t('common.refresh', '刷新')}</span>
+                <span>{t('common.refresh', "Refresh")}</span>
               </button>
               {renderHideCardButton(platformId)}
             </div>
@@ -2468,24 +2469,24 @@ export function DashboardPage({
 
           <div className="split-content">
             <div className="split-half current-half">
-              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', "Current account")}</span>
               {renderCodebuddyAccountContent(codebuddyCurrent)}
             </div>
 
             <div className="split-divider"></div>
 
             <div className="split-half recommend-half">
-              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', "Recommended account")}</span>
               {codebuddyRecommended ? (
                 renderCodebuddyAccountContent(codebuddyRecommended)
               ) : (
-                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', "No better recommendation")}</div>
               )}
             </div>
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('codebuddy')}>
-            {t('dashboard.viewAllAccounts', '查看所有账号')}
+            {t('dashboard.viewAllAccounts', "View all accounts")}
           </button>
         </div>
       );
@@ -2504,10 +2505,10 @@ export function DashboardPage({
                 className="header-action-btn"
                 onClick={handleRefreshCodebuddyCnCard}
                 disabled={cardRefreshing.codebuddyCn}
-                title={t('common.refresh', '刷新')}
+                title={t('common.refresh', "Refresh")}
               >
                 <RotateCw size={14} className={cardRefreshing.codebuddyCn ? 'loading-spinner' : ''} />
-                <span>{t('common.refresh', '刷新')}</span>
+                <span>{t('common.refresh', "Refresh")}</span>
               </button>
               {renderHideCardButton(platformId)}
             </div>
@@ -2515,24 +2516,24 @@ export function DashboardPage({
 
           <div className="split-content">
             <div className="split-half current-half">
-              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', "Current account")}</span>
               {renderCodebuddyCnAccountContent(codebuddyCnCurrent)}
             </div>
 
             <div className="split-divider"></div>
 
             <div className="split-half recommend-half">
-              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', "Recommended account")}</span>
               {codebuddyCnRecommended ? (
                 renderCodebuddyCnAccountContent(codebuddyCnRecommended)
               ) : (
-                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', "No better recommendation")}</div>
               )}
             </div>
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('codebuddy-cn')}>
-            {t('dashboard.viewAllAccounts', '查看所有账号')}
+            {t('dashboard.viewAllAccounts', "View all accounts")}
           </button>
         </div>
       );
@@ -2551,10 +2552,10 @@ export function DashboardPage({
                 className="header-action-btn"
                 onClick={handleRefreshQoderCard}
                 disabled={cardRefreshing.qoder}
-                title={t('common.refresh', '刷新')}
+                title={t('common.refresh', "Refresh")}
               >
                 <RotateCw size={14} className={cardRefreshing.qoder ? 'loading-spinner' : ''} />
-                <span>{t('common.refresh', '刷新')}</span>
+                <span>{t('common.refresh', "Refresh")}</span>
               </button>
               {renderHideCardButton(platformId)}
             </div>
@@ -2562,24 +2563,24 @@ export function DashboardPage({
 
           <div className="split-content">
             <div className="split-half current-half">
-              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', "Current account")}</span>
               {renderQoderAccountContent(qoderCurrent)}
             </div>
 
             <div className="split-divider"></div>
 
             <div className="split-half recommend-half">
-              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', "Recommended account")}</span>
               {qoderRecommended ? (
                 renderQoderAccountContent(qoderRecommended)
               ) : (
-                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', "No better recommendation")}</div>
               )}
             </div>
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('qoder')}>
-            {t('dashboard.viewAllAccounts', '查看所有账号')}
+            {t('dashboard.viewAllAccounts', "View all accounts")}
           </button>
         </div>
       );
@@ -2598,10 +2599,10 @@ export function DashboardPage({
                 className="header-action-btn"
                 onClick={handleRefreshTraeCard}
                 disabled={cardRefreshing.trae}
-                title={t('common.refresh', '刷新')}
+                title={t('common.refresh', "Refresh")}
               >
                 <RotateCw size={14} className={cardRefreshing.trae ? 'loading-spinner' : ''} />
-                <span>{t('common.refresh', '刷新')}</span>
+                <span>{t('common.refresh', "Refresh")}</span>
               </button>
               {renderHideCardButton(platformId)}
             </div>
@@ -2609,24 +2610,24 @@ export function DashboardPage({
 
           <div className="split-content">
             <div className="split-half current-half">
-              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', "Current account")}</span>
               {renderTraeAccountContent(traeCurrent)}
             </div>
 
             <div className="split-divider"></div>
 
             <div className="split-half recommend-half">
-              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', "Recommended account")}</span>
               {traeRecommended ? (
                 renderTraeAccountContent(traeRecommended)
               ) : (
-                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', "No better recommendation")}</div>
               )}
             </div>
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('trae')}>
-            {t('dashboard.viewAllAccounts', '查看所有账号')}
+            {t('dashboard.viewAllAccounts', "View all accounts")}
           </button>
         </div>
       );
@@ -2649,17 +2650,17 @@ export function DashboardPage({
                 className="header-action-btn"
                 onClick={handleRefreshWorkbuddyCard}
                 disabled={cardRefreshing.workbuddy}
-                title={t('common.refresh', '刷新')}
+                title={t('common.refresh', "Refresh")}
               >
                 <RotateCw size={14} className={cardRefreshing.workbuddy ? 'loading-spinner' : ''} />
-                <span>{t('common.refresh', '刷新')}</span>
+                <span>{t('common.refresh', "Refresh")}</span>
               </button>
               {renderHideCardButton(platformId)}
               <button
                 className="header-action-btn header-collapse-btn"
                 onClick={() => toggleDashboardCardCollapse('workbuddy')}
-                title={workbuddyCollapsed ? t('common.expand', '展开') : t('common.collapse', '收起')}
-                aria-label={workbuddyCollapsed ? t('common.expand', '展开') : t('common.collapse', '收起')}
+                title={workbuddyCollapsed ? t('common.expand', "Expand") : t('common.collapse', "Collapse")}
+                aria-label={workbuddyCollapsed ? t('common.expand', "Expand") : t('common.collapse', "Collapse")}
               >
                 <ChevronDown size={14} className={`collapse-arrow ${workbuddyCollapsed ? 'collapsed' : ''}`} />
               </button>
@@ -2668,24 +2669,24 @@ export function DashboardPage({
 
           <div className="split-content">
             <div className="split-half current-half">
-              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', "Current account")}</span>
               {renderWorkbuddyAccountContent(workbuddyCurrent)}
             </div>
 
             <div className="split-divider"></div>
 
             <div className="split-half recommend-half">
-              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', "Recommended account")}</span>
               {workbuddyRecommended ? (
                 renderWorkbuddyAccountContent(workbuddyRecommended)
               ) : (
-                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', "No better recommendation")}</div>
               )}
             </div>
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('workbuddy')}>
-            {t('dashboard.viewAllAccounts', '查看所有账号')}
+            {t('dashboard.viewAllAccounts', "View all accounts")}
           </button>
         </div>
       );
@@ -2706,20 +2707,20 @@ export function DashboardPage({
 
         <div className="split-content">
           <div className="split-half current-half">
-            <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
-            <div className="empty-slot-text">{t('dashboard.noData', '暂无数据')}</div>
+            <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', "Current account")}</span>
+            <div className="empty-slot-text">{t('dashboard.noData', "No data")}</div>
           </div>
 
           <div className="split-divider"></div>
 
           <div className="split-half recommend-half">
-            <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
-            <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+            <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', "Recommended account")}</span>
+            <div className="empty-slot-text">{t('dashboard.noRecommendation', "No better recommendation")}</div>
           </div>
         </div>
 
         <button className="card-footer-action" onClick={() => onNavigate(PLATFORM_PAGE_MAP[platformId])}>
-          {t('dashboard.viewAllAccounts', '查看所有账号')}
+          {t('dashboard.viewAllAccounts', "View all accounts")}
         </button>
       </div>
     );
@@ -2729,13 +2730,13 @@ export function DashboardPage({
     <main className="main-content dashboard-page fade-in">
       <div className="page-tabs-row" style={{ minHeight: '60px' }}>
         <div className="page-tabs-label dashboard-title-label">
-          <span>{t('nav.dashboard', '仪表盘')}</span>
+          <span>{t('nav.dashboard', "Dashboard")}</span>
           <ManualHelpIconButton className="header-action-btn dashboard-manual-btn dashboard-title-manual-btn" />
         </div>
         {topCenterBanner}
         <div className="dashboard-top-actions">
           <button className="header-action-btn" onClick={onOpenPlatformLayout}>
-            <span>{t('platformLayout.title', '平台布局')}</span>
+            <span>{t('platformLayout.title', "Platform Layout")}</span>
           </button>
           <AnnouncementCenter onNavigate={onNavigate} variant="inline" trigger="button" />
         </div>
@@ -2746,7 +2747,7 @@ export function DashboardPage({
         <div className="stat-card">
           <div className="stat-icon-bg primary"><Users size={24} /></div>
           <div className="stat-info">
-            <span className="stat-label">{t('dashboard.totalAccounts', '账号总数')}</span>
+            <span className="stat-label">{t('dashboard.totalAccounts', "Total accounts")}</span>
             <span className="stat-value">{stats.total}</span>
           </div>
         </div>
@@ -2791,8 +2792,8 @@ export function DashboardPage({
               onClick={() => onNavigate(PLATFORM_PAGE_MAP[platformId])}
               title={
                 groupExtraCount > 0
-                  ? `${t('dashboard.switchTo', '切换到此账号')} · ${groupTooltip}`
-                  : t('dashboard.switchTo', '切换到此账号')
+                  ? `${t('dashboard.switchTo', "Switch to this account")} · ${groupTooltip}`
+                  : t('dashboard.switchTo', "Switch to this account")
               }
             >
               {groupExtraCount > 0 && (

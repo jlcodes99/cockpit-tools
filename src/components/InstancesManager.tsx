@@ -394,7 +394,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     [appType],
   );
   const resolveApiServiceLabel = useCallback(
-    () => t("codex.localAccess.title", "API 服务"),
+    () => t("codex.localAccess.title", "API Service"),
     [t],
   );
   const isApiServiceBindId = useCallback(
@@ -538,7 +538,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     if (!query) return sortedInstances;
     return sortedInstances.filter((instance) => {
       const displayName = instance.isDefault
-        ? t("instances.defaultName", "默认实例")
+        ? t("instances.defaultName", "Default Instance")
         : instance.name || "";
       const { account, isApiService } = resolveBoundAccount(
         instance.bindAccountId,
@@ -632,7 +632,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     setEditing(instance);
     setFormName(
       instance.isDefault
-        ? t("instances.defaultName", "默认实例")
+        ? t("instances.defaultName", "Default Instance")
         : instance.name || "",
     );
     setFormPath(instance.userDataDir || "");
@@ -709,12 +709,12 @@ export function InstancesManager<TAccount extends AccountLike>({
 
     if (!isEditingDefault) {
       if (!formName.trim()) {
-        setFormError(t("instances.form.nameRequired", "请输入实例名称"));
+        setFormError(t("instances.form.nameRequired", "Please enter an instance name"));
         setFormErrorTick((prev) => prev + 1);
         return;
       }
       if (!formPath.trim()) {
-        setFormError(t("instances.form.pathRequired", "请选择实例目录"));
+        setFormError(t("instances.form.pathRequired", "Please select an instance directory"));
         setFormErrorTick((prev) => prev + 1);
         return;
       }
@@ -729,14 +729,14 @@ export function InstancesManager<TAccount extends AccountLike>({
       !formCopySourceInstanceId
     ) {
       setFormError(
-        t("instances.form.copySourceRequired", "请选择复制来源实例"),
+        t("instances.form.copySourceRequired", "Please select a source instance"),
       );
       setFormErrorTick((prev) => prev + 1);
       return;
     }
 
     if (!editing && !isCreateEmpty && !isExistingDir && !formBindAccountId) {
-      setFormError(t("instances.form.bindRequired", "请选择要绑定的账号"));
+      setFormError(t("instances.form.bindRequired", "Please select an account to bind"));
       setFormErrorTick((prev) => prev + 1);
       return;
     }
@@ -795,7 +795,7 @@ export function InstancesManager<TAccount extends AccountLike>({
             formCodexQuickTargetConfig.autoCompactTokenLimit ?? undefined,
           );
         }
-        setMessage({ text: t("instances.messages.updated", "实例已更新") });
+        setMessage({ text: t("instances.messages.updated", "Instance updated") });
       } else {
         setActionLoading("create");
         await createInstance({
@@ -812,9 +812,9 @@ export function InstancesManager<TAccount extends AccountLike>({
           text: isCreateEmpty
             ? t(
                 "instances.messages.emptyCreated",
-                "空白实例已创建，请先启动一次后再绑定账号",
+                "Blank instance created. Start it once before binding an account.",
               )
-            : t("instances.messages.created", "实例已创建"),
+            : t("instances.messages.created", "Instance created"),
         });
       }
       closeModal();
@@ -835,7 +835,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     setActionLoading(target.id);
     try {
       await deleteInstance(target.id);
-      setMessage({ text: t("instances.messages.deleted", "实例已删除") });
+      setMessage({ text: t("instances.messages.deleted", "Instance deleted") });
       setDeleteConfirmInstance(null);
     } catch (e) {
       setMessage({ text: String(e), tone: "error" });
@@ -919,7 +919,7 @@ export function InstancesManager<TAccount extends AccountLike>({
         if (showSuccessMessage && !startHookError) {
           const successMessage = resolveStartSuccessMessage
             ? resolveStartSuccessMessage(startedInstance)
-            : t("instances.messages.started", "实例已启动");
+            : t("instances.messages.started", "Instance started");
           setMessage({ text: successMessage });
         }
         return "started";
@@ -959,10 +959,10 @@ export function InstancesManager<TAccount extends AccountLike>({
       const confirmed = await confirmDialog(
         t(
           "instances.stop.message",
-          "将向实例进程发送终止信号（SIGTERM）强制关闭，可能导致未保存的数据丢失。确认继续？",
+          "A termination signal (SIGTERM) will be sent to force close this instance, which may cause data loss. Continue?",
         ),
         {
-          title: t("instances.stop.title", "强制关闭实例"),
+          title: t("instances.stop.title", "Force close instance"),
           kind: "warning",
         },
       );
@@ -974,7 +974,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     markInstanceStopping(instance.id);
     try {
       await stopInstance(instance.id);
-      setMessage({ text: t("instances.messages.stopped", "实例已关闭") });
+      setMessage({ text: t("instances.messages.stopped", "Instance stopped") });
     } catch (e) {
       setMessage({ text: String(e), tone: "error" });
     } finally {
@@ -1017,8 +1017,8 @@ export function InstancesManager<TAccount extends AccountLike>({
         platformId: floatingCardPlatformId,
         instanceId: instance.id,
         instanceName: instance.isDefault
-          ? t("instances.defaultName", "默认实例")
-          : instance.name || t("instances.defaultName", "默认实例"),
+          ? t("instances.defaultName", "Default Instance")
+          : instance.name || t("instances.defaultName", "Default Instance"),
         boundAccountId: instance.bindAccountId,
       });
     } catch (e) {
@@ -1078,7 +1078,7 @@ export function InstancesManager<TAccount extends AccountLike>({
         .map((item) => item.id);
       if (stoppedIds.length === 0) {
         setMessage({
-          text: t("instances.messages.allAlreadyRunning", "所有实例已在运行"),
+          text: t("instances.messages.allAlreadyRunning", "All instances are already running"),
         });
         return;
       }
@@ -1111,11 +1111,11 @@ export function InstancesManager<TAccount extends AccountLike>({
 
       if (startedCount > 0) {
         setMessage({
-          text: t("instances.messages.startedAll", "已启动所有未运行实例"),
+          text: t("instances.messages.startedAll", "Started all stopped instances"),
         });
       } else {
         setMessage({
-          text: t("instances.messages.allAlreadyRunning", "所有实例已在运行"),
+          text: t("instances.messages.allAlreadyRunning", "All instances are already running"),
         });
       }
     } catch (e) {
@@ -1140,7 +1140,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     try {
       await refreshInstances();
       await closeAllInstances();
-      setMessage({ text: t("instances.messages.closedAll", "已关闭所有实例") });
+      setMessage({ text: t("instances.messages.closedAll", "Closed all instances") });
     } catch (e) {
       setMessage({ text: String(e), tone: "error" });
     } finally {
@@ -1165,10 +1165,10 @@ export function InstancesManager<TAccount extends AccountLike>({
     () => [
       {
         id: "default" as CodexQuickConfigPresetId,
-        label: t("instances.form.codexQuickConfig.presetDefaultShort", "默认"),
+        label: t("instances.form.codexQuickConfig.presetDefaultShort", "Default"),
         desc: t(
           "instances.form.codexQuickConfig.presetDefaultDesc",
-          "移除两个字段，回到官方默认",
+          "Remove both fields and use official defaults",
         ),
       },
       {
@@ -1189,10 +1189,10 @@ export function InstancesManager<TAccount extends AccountLike>({
       },
       {
         id: "custom" as CodexQuickConfigPresetId,
-        label: t("instances.form.codexQuickConfig.presetCustomShort", "自定义"),
+        label: t("instances.form.codexQuickConfig.presetCustomShort", "Custom"),
         desc: t(
           "instances.form.codexQuickConfig.presetCustomDesc",
-          "手动填写上下文与压缩阈值",
+          "Manually set context and compact values",
         ),
       },
     ],
@@ -1236,7 +1236,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     if (formCodexQuickParsedContextWindow !== null) return null;
     return t(
       "instances.form.codexQuickConfig.validation.contextWindowInvalid",
-      "上下文窗口必须是大于 0 的整数",
+      "Context window must be an integer greater than 0.",
     );
   }, [formCodexQuickIsCustomPreset, formCodexQuickParsedContextWindow, t]);
   const formCodexQuickCompactLimitError = useMemo(() => {
@@ -1244,7 +1244,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     if (formCodexQuickParsedCompactLimit !== null) return null;
     return t(
       "instances.form.codexQuickConfig.validation.autoCompactInvalid",
-      "自动压缩阈值必须是大于 0 的整数",
+      "Auto-compact limit must be an integer greater than 0.",
     );
   }, [formCodexQuickIsCustomPreset, formCodexQuickParsedCompactLimit, t]);
   const formCodexQuickValidationError =
@@ -1299,10 +1299,10 @@ export function InstancesManager<TAccount extends AccountLike>({
           "检测到当前两个字段并不完整：model_context_window={{context}}，model_auto_compact_token_limit={{compact}}。保存后会按当前方案改写。",
         context:
           formCodexQuickDetectedModelContextWindow ??
-          t("instances.form.codexQuickConfig.notSet", "未设置"),
+          t("instances.form.codexQuickConfig.notSet", "Not set"),
         compact:
           formCodexQuickDetectedAutoCompactTokenLimit ??
-          t("instances.form.codexQuickConfig.notSet", "未设置"),
+          t("instances.form.codexQuickConfig.notSet", "Not set"),
       });
     }
     if (
@@ -1314,10 +1314,10 @@ export function InstancesManager<TAccount extends AccountLike>({
           "检测到当前 config.toml 为自定义值：model_context_window={{context}}，model_auto_compact_token_limit={{compact}}。保存后会按你选择的预设改写。",
         context:
           formCodexQuickDetectedModelContextWindow ??
-          t("instances.form.codexQuickConfig.notSet", "未设置"),
+          t("instances.form.codexQuickConfig.notSet", "Not set"),
         compact:
           formCodexQuickDetectedAutoCompactTokenLimit ??
-          t("instances.form.codexQuickConfig.notSet", "未设置"),
+          t("instances.form.codexQuickConfig.notSet", "Not set"),
       });
     }
     return null;
@@ -1454,13 +1454,13 @@ export function InstancesManager<TAccount extends AccountLike>({
             type="text"
             value={searchValue}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder={t("accounts.search", "搜索账号...")}
+            placeholder={t("accounts.search", "Search accounts...")}
           />
         </label>
         {availableTags.length > 0 ? (
           <div className="account-select-tag-filter">
             <span className="account-select-tag-filter-label">
-              {t("accounts.filterTags", "标签筛选")}
+              {t("accounts.filterTags", "Filter Tags")}
             </span>
             <div className="account-select-tag-filter-list">
               {availableTags.map((tag) => (
@@ -1481,7 +1481,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                   className="account-select-tag-clear"
                   onClick={onClearTagFilter}
                 >
-                  {t("accounts.clearFilter", "清空筛选")}
+                  {t("accounts.clearFilter", "Clear Filter")}
                 </button>
               ) : null}
             </div>
@@ -1504,7 +1504,7 @@ export function InstancesManager<TAccount extends AccountLike>({
         >
           <span className="account-select-email-row">
             <span className="account-select-email">
-              {t("instances.form.followCurrent", "跟随当前账号")}
+              {t("instances.form.followCurrent", "Follow current account")}
             </span>
             {selectedAccount ? renderAccountBadge?.(selectedAccount) : null}
           </span>
@@ -1524,7 +1524,7 @@ export function InstancesManager<TAccount extends AccountLike>({
           }}
         >
           <span className="account-select-email muted">
-            {t("instances.form.unbound", "不绑定")}
+            {t("instances.form.unbound", "Unbound")}
           </span>
         </button>
       )}
@@ -1577,7 +1577,7 @@ export function InstancesManager<TAccount extends AccountLike>({
       !allowUnbound &&
       !allowFollowCurrent ? (
         <div className="account-select-empty">
-          {t("common.noData", "暂无数据")}
+          {t("common.noData", "No data")}
         </div>
       ) : null}
     </>
@@ -1721,13 +1721,13 @@ export function InstancesManager<TAccount extends AccountLike>({
     const basePlaceholder =
       placeholder ||
       (allowUnbound
-        ? t("instances.form.unbound", "不绑定")
-        : t("instances.form.selectAccount", "选择账号"));
+        ? t("instances.form.unbound", "Unbound")
+        : t("instances.form.selectAccount", "Select account"));
     const selectedLabel = missing
-      ? t("instances.quota.accountMissing", "账号不存在")
+      ? t("instances.quota.accountMissing", "Account not found")
       : isFollowingCurrent
         ? maskAccountText(selectedAccount?.email) ||
-          t("instances.form.followCurrent", "跟随当前账号")
+          t("instances.form.followCurrent", "Follow current account")
         : isApiServiceSelected
           ? resolveApiServiceLabel()
         : maskAccountText(selectedAccount?.email) || basePlaceholder;
@@ -1932,13 +1932,13 @@ export function InstancesManager<TAccount extends AccountLike>({
     const basePlaceholder =
       placeholder ||
       (allowUnbound
-        ? t("instances.form.unbound", "不绑定")
-        : t("instances.form.selectAccount", "选择账号"));
+        ? t("instances.form.unbound", "Unbound")
+        : t("instances.form.selectAccount", "Select account"));
     const selectedLabel = missing
-      ? t("instances.quota.accountMissing", "账号不存在")
+      ? t("instances.quota.accountMissing", "Account not found")
       : isFollowingCurrent
         ? maskAccountText(selectedAccount?.email) ||
-          t("instances.form.followCurrent", "跟随当前账号")
+          t("instances.form.followCurrent", "Follow current account")
         : isApiServiceSelected
           ? resolveApiServiceLabel()
         : maskAccountText(selectedAccount?.email) || basePlaceholder;
@@ -2062,11 +2062,11 @@ export function InstancesManager<TAccount extends AccountLike>({
       null;
     const selectedLabel = selected
       ? selected.isDefault
-        ? t("instances.defaultName", "默认实例")
+        ? t("instances.defaultName", "Default Instance")
         : selected.name || ""
       : value === "__default__"
-        ? t("instances.defaultName", "默认实例")
-        : t("instances.form.copySourcePlaceholder", "选择来源实例");
+        ? t("instances.defaultName", "Default Instance")
+        : t("instances.form.copySourcePlaceholder", "Select a source instance");
 
     return (
       <div
@@ -2094,13 +2094,13 @@ export function InstancesManager<TAccount extends AccountLike>({
             {sortedInstances.length === 0 ? (
               <div className="account-select-item active">
                 <span className="account-select-email muted">
-                  {t("instances.defaultName", "默认实例")}
+                  {t("instances.defaultName", "Default Instance")}
                 </span>
               </div>
             ) : (
               sortedInstances.map((instance) => {
                 const label = instance.isDefault
-                  ? t("instances.defaultName", "默认实例")
+                  ? t("instances.defaultName", "Default Instance")
                   : instance.name || "";
                 return (
                   <button
@@ -2186,7 +2186,7 @@ export function InstancesManager<TAccount extends AccountLike>({
             <Search size={16} className="search-icon" />
             <input
               type="text"
-              placeholder={t("instances.search", "搜索实例")}
+              placeholder={t("instances.search", "Search instances")}
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
             />
@@ -2198,13 +2198,13 @@ export function InstancesManager<TAccount extends AccountLike>({
               onChange={(event) =>
                 setSortField(event.target.value as InstanceSortField)
               }
-              aria-label={t("instances.sort.label", "排序")}
+              aria-label={t("instances.sort.label", "Sort")}
             >
               <option value="createdAt">
-                {t("instances.sort.createdAt", "按创建时间")}
+                {t("instances.sort.createdAt", "By creation time")}
               </option>
               <option value="lastLaunchedAt">
-                {t("instances.sort.lastLaunchedAt", "按启动时间")}
+                {t("instances.sort.lastLaunchedAt", "By launch time")}
               </option>
             </select>
           </div>
@@ -2215,10 +2215,10 @@ export function InstancesManager<TAccount extends AccountLike>({
             }
             title={
               sortDirection === "asc"
-                ? t("instances.sort.ascTooltip", "当前：正序，点击切换为倒序")
-                : t("instances.sort.descTooltip", "当前：倒序，点击切换为正序")
+                ? t("instances.sort.ascTooltip", "Current: ascending, click to switch to descending")
+                : t("instances.sort.descTooltip", "Current: descending, click to switch to ascending")
             }
-            aria-label={t("instances.sort.toggleDirection", "切换排序方向")}
+            aria-label={t("instances.sort.toggleDirection", "Toggle sort direction")}
           >
             {sortDirection === "asc" ? "⬆" : "⬇"}
           </button>
@@ -2227,13 +2227,13 @@ export function InstancesManager<TAccount extends AccountLike>({
             onClick={togglePrivacyMode}
             title={
               privacyModeEnabled
-                ? t("privacy.showSensitive", "显示邮箱")
-                : t("privacy.hideSensitive", "隐藏邮箱")
+                ? t("privacy.showSensitive", "Show emails")
+                : t("privacy.hideSensitive", "Hide emails")
             }
             aria-label={
               privacyModeEnabled
-                ? t("privacy.showSensitive", "显示邮箱")
-                : t("privacy.hideSensitive", "隐藏邮箱")
+                ? t("privacy.showSensitive", "Show emails")
+                : t("privacy.hideSensitive", "Hide emails")
             }
           >
             {privacyModeEnabled ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -2243,7 +2243,7 @@ export function InstancesManager<TAccount extends AccountLike>({
           <button
             className="btn btn-primary"
             onClick={openCreateModal}
-            title={t("instances.actions.create", "新建实例")}
+            title={t("instances.actions.create", "New Instance")}
           >
             <Plus size={16} />
           </button>
@@ -2251,7 +2251,7 @@ export function InstancesManager<TAccount extends AccountLike>({
             className="btn btn-secondary"
             onClick={handleStartAll}
             disabled={bulkActionLoading || restartingAll}
-            title={t("instances.actions.startAll", "全部启动")}
+            title={t("instances.actions.startAll", "Start All")}
           >
             <Play size={16} />
           </button>
@@ -2260,7 +2260,7 @@ export function InstancesManager<TAccount extends AccountLike>({
               className="btn btn-secondary"
               onClick={handleCloseAll}
               disabled={bulkActionLoading || restartingAll}
-              title={t("instances.actions.stopAll", "全部关闭")}
+              title={t("instances.actions.stopAll", "Stop All")}
             >
               <Square size={16} />
             </button>
@@ -2270,7 +2270,7 @@ export function InstancesManager<TAccount extends AccountLike>({
             onClick={handleRefresh}
             disabled={refreshing || bulkActionLoading || restartingAll}
           >
-            {t("instances.actions.refresh", "刷新")}
+            {t("instances.actions.refresh", "Refresh")}
           </button>
         </div>
       </div>
@@ -2283,7 +2283,7 @@ export function InstancesManager<TAccount extends AccountLike>({
           <button
             className="action-message-close"
             onClick={() => setMessage(null)}
-            aria-label={t("common.close", "关闭")}
+            aria-label={t("common.close", "Close")}
           >
             <X size={14} />
           </button>
@@ -2291,19 +2291,19 @@ export function InstancesManager<TAccount extends AccountLike>({
       )}
 
       {loading ? (
-        <div className="loading-state">{t("common.loading", "加载中...")}</div>
+        <div className="loading-state">{t("common.loading", "Loading...")}</div>
       ) : sortedInstances.length === 0 ? (
         <div className="empty-state">
-          <h3>{t("instances.empty.title", "还没有实例")}</h3>
+          <h3>{t("instances.empty.title", "No instances yet")}</h3>
           <p>
             {t(
               "instances.empty.desc",
-              "创建一个独立配置目录，快速开启多实例。",
+              "Create an isolated profile to quickly spin up multiple instances.",
             )}
           </p>
           <button className="btn btn-primary" onClick={openCreateModal}>
             <Plus size={16} />
-            {t("instances.actions.create", "新建实例")}
+            {t("instances.actions.create", "New Instance")}
           </button>
         </div>
       ) : (
@@ -2312,11 +2312,11 @@ export function InstancesManager<TAccount extends AccountLike>({
         >
           <div className="instances-list-header">
             <div></div>
-            <div>{t("instances.columns.instance", "实例")}</div>
+            <div>{t("instances.columns.instance", "Instance")}</div>
             <div></div>
-            <div>{t("instances.columns.email", "账号")}</div>
+            <div>{t("instances.columns.email", "Account")}</div>
             <div>PID</div>
-            <div>{t("instances.columns.actions", "操作")}</div>
+            <div>{t("instances.columns.actions", "Actions")}</div>
           </div>
           {filteredInstances.map((instance) => {
             const {
@@ -2343,28 +2343,28 @@ export function InstancesManager<TAccount extends AccountLike>({
                     ? "ready"
                     : "stopped";
             const statusLabel = restartingAll
-              ? t("instances.status.restarting", "重启中")
+              ? t("instances.status.restarting", "Restarting")
               : isInstanceStarting
-                ? t("instances.status.starting", "启动中")
+                ? t("instances.status.starting", "Starting")
                 : instance.running
-                  ? t("instances.status.running", "运行中")
+                  ? t("instances.status.running", "Running")
                   : isTerminalLaunchInstance && instance.lastLaunchedAt
-                    ? t("instances.status.ready", "已准备")
-                    : t("instances.status.stopped", "未运行");
+                    ? t("instances.status.ready", "Ready")
+                    : t("instances.status.stopped", "Stopped");
             const canShowFloatingCard =
               Boolean(instance.bindAccountId) &&
               !accountMissing &&
               !accountIsApiService;
             const floatingCardActionTitle = canShowFloatingCard
-              ? t("instances.actions.showFloatingCard", "显示悬浮框")
+              ? t("instances.actions.showFloatingCard", "Show floating card")
               : accountMissing
                 ? t(
                     "instances.actions.showFloatingCardMissing",
-                    "绑定账号不存在，无法显示悬浮框",
+                    "The bound account no longer exists, so the floating card cannot be shown",
                   )
                 : t(
                     "instances.actions.showFloatingCardDisabled",
-                    "请先绑定账号后再显示悬浮框",
+                    "Bind an account before showing the floating card",
                   );
             return (
               <div
@@ -2378,7 +2378,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                   <div className="instance-title-row">
                     <span className="instance-name">
                       {instance.isDefault
-                        ? t("instances.defaultName", "默认实例")
+                        ? t("instances.defaultName", "Default Instance")
                         : instance.name}
                     </span>
                     {isCodexApp && (
@@ -2387,7 +2387,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                       >
                         {launchMode === "cli"
                           ? t("instances.form.launchModeCli", "CLI")
-                          : t("instances.form.launchModeApp", "桌面版")}
+                          : t("instances.form.launchModeApp", "Desktop")}
                       </span>
                     )}
                   </div>
@@ -2395,7 +2395,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                     <div className="instance-sub-info">
                       <span className="info-item" title={instance.extraArgs}>
                         <Terminal size={12} />
-                        {t("instances.labels.argsPresent", "有参数")}
+                        {t("instances.labels.argsPresent", "Args Set")}
                       </span>
                     </div>
                   )}
@@ -2416,7 +2416,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                     >
                       {t(
                         "instances.labels.pendingInit",
-                        "待初始化（先启动一次）",
+                        "Pending initialization (start once)",
                       )}
                     </button>
                   ) : (
@@ -2427,7 +2427,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                       }
                       disabled={isInstanceBusy}
                       missing={accountMissing}
-                      placeholder={t("instances.labels.unbound", "未绑定")}
+                      placeholder={t("instances.labels.unbound", "Unbound")}
                       instanceId={instance.id}
                       currentOpenId={openInlineMenuId}
                       onOpenChange={(open) => {
@@ -2459,7 +2459,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                   </button>
                   <button
                     className="icon-button"
-                    title={t("instances.actions.start", "启动")}
+                    title={t("instances.actions.start", "Start")}
                     onClick={() => handleStart(instance)}
                     disabled={
                       isInstanceBusy || restartingAll || bulkActionLoading
@@ -2470,7 +2470,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                   {!isTerminalLaunchInstance && (
                     <button
                       className="icon-button"
-                      title={t("instances.actions.openWindow", "定位窗口")}
+                      title={t("instances.actions.openWindow", "Open Window")}
                       onClick={() => handleLocateInstance(instance)}
                       disabled={
                         !instance.running ||
@@ -2485,7 +2485,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                   {!isTerminalLaunchInstance && (
                     <button
                       className="icon-button danger"
-                      title={t("instances.actions.stop", "停止")}
+                      title={t("instances.actions.stop", "Stop")}
                       onClick={() => handleStop(instance)}
                       disabled={
                         !instance.running ||
@@ -2499,7 +2499,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                   )}
                   <button
                     className="icon-button"
-                    title={t("instances.actions.edit", "编辑")}
+                    title={t("instances.actions.edit", "Edit")}
                     onClick={() => openEditModal(instance)}
                     disabled={
                       isInstanceBusy || restartingAll || bulkActionLoading
@@ -2509,7 +2509,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                   </button>
                   <button
                     className="icon-button danger"
-                    title={t("common.delete", "删除")}
+                    title={t("common.delete", "Delete")}
                     onClick={() => handleDelete(instance)}
                     disabled={
                       instance.isDefault ||
@@ -2537,11 +2537,11 @@ export function InstancesManager<TAccount extends AccountLike>({
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
-              <h2>{t("instances.initGuide.title", "实例尚未初始化")}</h2>
+              <h2>{t("instances.initGuide.title", "Instance not initialized")}</h2>
               <button
                 className="modal-close"
                 onClick={() => setInitGuideInstance(null)}
-                aria-label={t("common.close", "关闭")}
+                aria-label={t("common.close", "Close")}
               >
                 <X />
               </button>
@@ -2550,18 +2550,18 @@ export function InstancesManager<TAccount extends AccountLike>({
               <p className="form-hint">
                 {t(
                   "instances.initGuide.desc",
-                  "该实例为“空白实例”，当前仅创建了目录，尚未生成实例数据。",
+                  "This is a blank instance. Only the directory exists and instance data has not been generated yet.",
                 )}
               </p>
               <div className="instance-init-guide-box">
                 {t(
                   "instances.initGuide.tip",
-                  "请先启动一次实例，初始化完成后即可绑定账号。",
+                  "Please start this instance once. You can bind an account after initialization is complete.",
                 )}
               </div>
               <div className="form-group">
                 <label>
-                  {t("instances.runningDialog.pathLabel", "实例目录")}
+                  {t("instances.runningDialog.pathLabel", "Instance directory")}
                 </label>
                 <input
                   className="form-input"
@@ -2575,7 +2575,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                 className="btn btn-secondary"
                 onClick={() => setInitGuideInstance(null)}
               >
-                {t("common.cancel", "取消")}
+                {t("common.cancel", "Cancel")}
               </button>
               <button
                 className="btn btn-primary"
@@ -2585,7 +2585,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                   startingInstanceIdSet.has(initGuideInstance.id)
                 }
               >
-                {t("instances.initGuide.startNow", "立即启动")}
+                {t("instances.initGuide.startNow", "Start now")}
               </button>
             </div>
           </div>
@@ -2599,11 +2599,11 @@ export function InstancesManager<TAccount extends AccountLike>({
         >
           <div className="modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
-              <h2>{t("instances.delete.title", "删除实例")}</h2>
+              <h2>{t("instances.delete.title", "Delete Instance")}</h2>
               <button
                 className="modal-close"
                 onClick={() => setDeleteConfirmInstance(null)}
-                aria-label={t("common.close", "关闭")}
+                aria-label={t("common.close", "Close")}
               >
                 <X />
               </button>
@@ -2612,7 +2612,7 @@ export function InstancesManager<TAccount extends AccountLike>({
               <p className="form-hint">
                 {t(
                   "instances.delete.message",
-                  "确认删除实例 {{name}}？将移除配置并删除实例目录。",
+                  "Delete instance {{name}}? This will remove the config and delete the instance folder.",
                   {
                     name: deleteConfirmInstance.name,
                   },
@@ -2624,14 +2624,14 @@ export function InstancesManager<TAccount extends AccountLike>({
                 className="btn btn-secondary"
                 onClick={() => setDeleteConfirmInstance(null)}
               >
-                {t("common.cancel", "取消")}
+                {t("common.cancel", "Cancel")}
               </button>
               <button
                 className="btn btn-danger"
                 onClick={handleConfirmDelete}
                 disabled={actionLoading === deleteConfirmInstance.id}
               >
-                {t("common.delete", "删除")}
+                {t("common.delete", "Delete")}
               </button>
             </div>
           </div>
@@ -2645,11 +2645,11 @@ export function InstancesManager<TAccount extends AccountLike>({
         >
           <div className="modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
-              <h2>{t("instances.runningDialog.title", "实例已在运行")}</h2>
+              <h2>{t("instances.runningDialog.title", "Instance already running")}</h2>
               <button
                 className="modal-close"
                 onClick={() => setRunningNoticeInstance(null)}
-                aria-label={t("common.close", "关闭")}
+                aria-label={t("common.close", "Close")}
               >
                 <X />
               </button>
@@ -2658,12 +2658,12 @@ export function InstancesManager<TAccount extends AccountLike>({
               <p className="form-hint">
                 {t(
                   "instances.runningDialog.desc",
-                  "实例已在运行中，可立马前往或关闭后重启。",
+                  "This instance is already running. You can go to the window or restart it after closing.",
                 )}
               </p>
               <div className="form-group">
                 <label>
-                  {t("instances.runningDialog.pathLabel", "实例目录")}
+                  {t("instances.runningDialog.pathLabel", "Instance directory")}
                 </label>
                 <input
                   className="form-input"
@@ -2677,10 +2677,10 @@ export function InstancesManager<TAccount extends AccountLike>({
                 className="btn btn-secondary"
                 onClick={handleOpenRunningInstance}
               >
-                {t("instances.runningDialog.go", "立马前往")}
+                {t("instances.runningDialog.go", "Go now")}
               </button>
               <button className="btn btn-danger" onClick={handleForceRestart}>
-                {t("instances.runningDialog.restart", "关闭并重启")}
+                {t("instances.runningDialog.restart", "Close & restart")}
               </button>
             </div>
           </div>
@@ -2696,27 +2696,27 @@ export function InstancesManager<TAccount extends AccountLike>({
             <div className="modal-header">
               <h2>
                 {editing
-                  ? t("instances.modal.editTitle", "编辑实例")
-                  : t("instances.modal.createTitle", "新建实例")}
+                  ? t("instances.modal.editTitle", "Edit Instance")
+                  : t("instances.modal.createTitle", "New Instance")}
               </h2>
               <button
                 className="modal-close"
                 onClick={closeModal}
-                aria-label={t("common.close", "关闭")}
+                aria-label={t("common.close", "Close")}
               >
                 <X />
               </button>
             </div>
             <div className="modal-body">
               <div className="form-group">
-                <label>{t("instances.form.name", "实例名称")}</label>
+                <label>{t("instances.form.name", "Instance Name")}</label>
                 <input
                   className="form-input"
                   value={formName}
                   onChange={(e) => handleNameChange(e.target.value)}
                   placeholder={t(
                     "instances.form.namePlaceholder",
-                    "例如：工作账号",
+                    "e.g. Work Account",
                   )}
                   disabled={Boolean(editing?.isDefault)}
                 />
@@ -2724,7 +2724,7 @@ export function InstancesManager<TAccount extends AccountLike>({
 
               {!editing && (
                 <div className="form-group">
-                  <label>{t("instances.form.initMode", "初始化方式")}</label>
+                  <label>{t("instances.form.initMode", "Initialization Mode")}</label>
                   <div className="instance-init-mode-group">
                     <label
                       className={`instance-init-mode-option ${formInitMode === "copy" ? "active" : ""}`}
@@ -2738,7 +2738,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                       <span>
                         {t(
                           "instances.form.initModeCopy",
-                          "复制来源实例（默认）",
+                          "Copy source instance (default)",
                         )}
                       </span>
                     </label>
@@ -2754,7 +2754,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                       <span>
                         {t(
                           "instances.form.initModeEmpty",
-                          "空白实例（不复制）",
+                          "Blank instance (no copy)",
                         )}
                       </span>
                     </label>
@@ -2773,7 +2773,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                       <span>
                         {t(
                           "instances.form.initModeExistingDir",
-                          "使用已存在目录",
+                          "Use existing directory",
                         )}
                       </span>
                     </label>
@@ -2782,7 +2782,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                     <div className="instance-init-note">
                       {t(
                         "instances.form.emptyInitHint",
-                        "选择无需复制实例，只会创建空白目录。需要启动一次后，才可以进行账号绑定。",
+                        "Choosing no-copy will create an empty directory only. Start once before binding an account.",
                       )}
                     </div>
                   )}
@@ -2791,7 +2791,7 @@ export function InstancesManager<TAccount extends AccountLike>({
 
               {!hidePathFieldInEditModal && (
                 <div className="form-group">
-                  <label>{t("instances.form.path", "实例目录")}</label>
+                  <label>{t("instances.form.path", "Instance Directory")}</label>
                   <div className="instance-path-row">
                     <input
                       className="form-input"
@@ -2799,7 +2799,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                       onChange={(e) => setFormPath(e.target.value)}
                       placeholder={t(
                         "instances.form.pathPlaceholder",
-                        "选择实例目录",
+                        "Select instance directory",
                       )}
                       disabled={Boolean(editing)}
                     />
@@ -2809,7 +2809,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                         onClick={handleSelectPath}
                       >
                         <FolderOpen size={16} />
-                        {t("instances.actions.selectPath", "选择目录")}
+                        {t("instances.actions.selectPath", "Select Folder")}
                       </button>
                     )}
                   </div>
@@ -2817,13 +2817,13 @@ export function InstancesManager<TAccount extends AccountLike>({
                     <p className="form-hint">
                       {t(
                         "instances.form.pathAutoHint",
-                        "修改名称时自动更新路径，也可手动选择",
+                        "Path auto-updates when name changes, or select manually",
                       )}
                     </p>
                   )}
                   {editing && (
                     <p className="form-hint">
-                      {t("instances.form.pathReadOnly", "编辑时不可修改路径")}
+                      {t("instances.form.pathReadOnly", "Path cannot be changed when editing")}
                     </p>
                   )}
                 </div>
@@ -2831,7 +2831,7 @@ export function InstancesManager<TAccount extends AccountLike>({
 
               {supportsLaunchModeSelect && (
                 <div className="form-group">
-                  <label>{t("instances.form.launchMode", "启动方式")}</label>
+                  <label>{t("instances.form.launchMode", "Launch Mode")}</label>
                   <div className="instance-init-mode-group">
                     <label
                       className={`instance-init-mode-option ${formLaunchMode === "app" ? "active" : ""}`}
@@ -2842,7 +2842,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                         checked={formLaunchMode === "app"}
                         onChange={() => setFormLaunchMode("app")}
                       />
-                      <span>{t("instances.form.launchModeApp", "桌面版")}</span>
+                      <span>{t("instances.form.launchModeApp", "Desktop")}</span>
                     </label>
                     <label
                       className={`instance-init-mode-option ${formLaunchMode === "cli" ? "active" : ""}`}
@@ -2861,7 +2861,7 @@ export function InstancesManager<TAccount extends AccountLike>({
 
               {showWorkingDirField && (
                 <div className="form-group">
-                  <label>{t("instances.form.workingDir", "工作目录")}</label>
+                  <label>{t("instances.form.workingDir", "Working Directory")}</label>
                   <div className="instance-path-row">
                     <input
                       className="form-input"
@@ -2869,7 +2869,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                       onChange={(e) => setFormWorkingDir(e.target.value)}
                       placeholder={t(
                         "instances.form.workingDirPlaceholder",
-                        "默认当前路径",
+                        "Default to current path",
                       )}
                     />
                     <button
@@ -2877,13 +2877,13 @@ export function InstancesManager<TAccount extends AccountLike>({
                       onClick={handleSelectWorkingDir}
                     >
                       <FolderOpen size={16} />
-                      {t("instances.actions.selectPath", "选择目录")}
+                      {t("instances.actions.selectPath", "Select Folder")}
                     </button>
                   </div>
                   <p className="form-hint">
                     {t(
                       "instances.form.workingDirDesc",
-                      "启动时将首先切换到此目录",
+                      "Will switch to this directory first upon startup",
                     )}
                   </p>
                 </div>
@@ -2892,7 +2892,7 @@ export function InstancesManager<TAccount extends AccountLike>({
               {!editing && formInitMode === "copy" && (
                 <div className="form-group">
                   <label>
-                    {t("instances.form.copySource", "复制来源实例")}
+                    {t("instances.form.copySource", "Copy source instance")}
                   </label>
                   <InstanceSelect
                     value={formCopySourceInstanceId}
@@ -2901,14 +2901,14 @@ export function InstancesManager<TAccount extends AccountLike>({
                   <p className="form-hint">
                     {t(
                       "instances.form.copySourceDesc",
-                      "从指定实例复制配置与登录信息",
+                      "Copy configuration and login data from the selected instance",
                     )}
                   </p>
                   {selectedCopySourceInstance?.running && (
                     <p className="form-hint warning">
                       {t(
                         "instances.form.copySourceRunningHint",
-                        "该实例正在运行，建议先关闭以避免数据不一致",
+                        "The source instance is running. It's recommended to close it first to avoid inconsistent data.",
                       )}
                     </p>
                   )}
@@ -2918,9 +2918,9 @@ export function InstancesManager<TAccount extends AccountLike>({
               {!editing ? (
                 <div className="form-group">
                   <label>
-                    {t("instances.form.bindInject", "绑定账号")}
+                    {t("instances.form.bindInject", "Bind account")}
                     {formInitMode === "existingDir"
-                      ? `（${t("instances.form.optional", "可选")}）`
+                      ? `（${t("instances.form.optional", "Optional")}）`
                       : ""}
                   </label>
                   {formInitMode === "empty" ? (
@@ -2931,13 +2931,13 @@ export function InstancesManager<TAccount extends AccountLike>({
                         disabled
                         placeholder={t(
                           "instances.form.bindAfterInit",
-                          "初始化后可绑定",
+                          "Bindable after initialization",
                         )}
                       />
                       <p className="form-hint">
                         {t(
                           "instances.form.bindDisabledHint",
-                          "空白实例需先启动一次生成实例数据后，才可绑定账号。",
+                          "For blank instances, start once to generate data before binding an account.",
                         )}
                       </p>
                     </>
@@ -2950,7 +2950,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                 </div>
               ) : (
                 <div className="form-group">
-                  <label>{t("instances.form.bindAccount", "绑定账号")}</label>
+                  <label>{t("instances.form.bindAccount", "Bind account")}</label>
                   {editing?.initialized === false && !editing.isDefault ? (
                     <>
                       <FormAccountSelect
@@ -2959,13 +2959,13 @@ export function InstancesManager<TAccount extends AccountLike>({
                         disabled
                         placeholder={t(
                           "instances.form.bindAfterInit",
-                          "初始化后可绑定",
+                          "Bindable after initialization",
                         )}
                       />
                       <p className="form-hint">
                         {t(
                           "instances.form.bindDisabledHint",
-                          "空白实例需先启动一次生成实例数据后，才可绑定账号。",
+                          "For blank instances, start once to generate data before binding an account.",
                         )}
                       </p>
                     </>
@@ -2984,20 +2984,20 @@ export function InstancesManager<TAccount extends AccountLike>({
               )}
 
               <div className="form-group">
-                <label>{t("instances.form.extraArgs", "自定义启动参数")}</label>
+                <label>{t("instances.form.extraArgs", "Custom launch args")}</label>
                 <textarea
                   className="form-input instance-args-input"
                   value={formExtraArgs}
                   onChange={(e) => setFormExtraArgs(e.target.value)}
                   placeholder={t(
                     "instances.form.extraArgsPlaceholder",
-                    "例如：--disable-gpu --log-level=2",
+                    "e.g. --disable-gpu --log-level=2",
                   )}
                 />
                 <p className="form-hint">
                   {t(
                     "instances.form.extraArgsDesc",
-                    "按空格分隔参数，支持引号包裹",
+                    "Separate args with spaces, quotes supported",
                   )}
                 </p>
               </div>
@@ -3008,7 +3008,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                     <label>
                       {t(
                         "instances.form.codexQuickConfig.title",
-                        "上下文与压缩阈值",
+                        "Context & Compact Limits",
                       )}
                     </label>
                     <button
@@ -3021,15 +3021,15 @@ export function InstancesManager<TAccount extends AccountLike>({
                     >
                       <FolderOpen size={14} />
                       {formCodexOpenConfigLoading
-                        ? t("common.loading", "加载中...")
+                        ? t("common.loading", "Loading...")
                         : t(
                             "instances.form.codexQuickConfig.openConfig",
-                            "打开 config.toml",
+                            "Open config.toml",
                           )}
                     </button>
                   </div>
                   {formCodexQuickConfigLoading ? (
-                    <p className="form-hint">{t("common.loading", "加载中...")}</p>
+                    <p className="form-hint">{t("common.loading", "Loading...")}</p>
                   ) : (
                     <>
                       <div
@@ -3037,7 +3037,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                         role="radiogroup"
                         aria-label={t(
                           "instances.form.codexQuickConfig.presetLabel",
-                          "配置预设",
+                          "Config Preset",
                         )}
                       >
                         {formCodexQuickPresetOptions.map((option) => (
@@ -3067,7 +3067,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                       <p className="form-hint">
                         {t(
                           "instances.form.codexQuickConfig.presetHint",
-                          "可直接选择预设（默认 / 516K / 1M），或切到自定义手动填写两个字段。",
+                          "Choose a preset (Default / 516K / 1M), or switch to Custom and fill both fields manually.",
                         )}
                       </p>
                       <div className="instance-codex-quick-fields">
@@ -3075,7 +3075,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                           <label>
                             {t(
                               "instances.form.codexQuickConfig.contextWindow",
-                              "上下文窗口",
+                              "Context Window",
                             )}
                           </label>
                           <input
@@ -3095,7 +3095,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                           <p className="form-hint">
                             {t(
                               "instances.form.codexQuickConfig.contextWindowHint",
-                              "写入 model_context_window。仅在“自定义”模式可编辑。",
+                              "Writes model_context_window. Editable only in Custom mode.",
                             )}
                           </p>
                           {formCodexQuickContextWindowError && (
@@ -3108,7 +3108,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                           <label>
                             {t(
                               "instances.form.codexQuickConfig.autoCompactLimit",
-                              "自动压缩阈值",
+                              "Auto-Compact Limit",
                             )}
                           </label>
                           <input
@@ -3128,7 +3128,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                           <p className="form-hint">
                             {t(
                               "instances.form.codexQuickConfig.autoCompactLimitHint",
-                              "写入 model_auto_compact_token_limit。仅在“自定义”模式可编辑。",
+                              "Writes model_auto_compact_token_limit. Editable only in Custom mode.",
                             )}
                           </p>
                           {formCodexQuickCompactLimitError && (
@@ -3161,7 +3161,7 @@ export function InstancesManager<TAccount extends AccountLike>({
 
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={closeModal}>
-                {t("common.cancel", "取消")}
+                {t("common.cancel", "Cancel")}
               </button>
               <button
                 className="btn btn-primary"
@@ -3172,8 +3172,8 @@ export function InstancesManager<TAccount extends AccountLike>({
                 }
               >
                 {editing
-                  ? t("common.save", "保存")
-                  : t("instances.actions.create", "新建实例")}
+                  ? t("common.save", "Save")
+                  : t("instances.actions.create", "New Instance")}
               </button>
             </div>
           </div>

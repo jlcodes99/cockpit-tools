@@ -52,13 +52,13 @@ export function CodeBuddyQuotaCategoryList({ groups, formatDateTime }: CodeBuddy
     });
   }, []);
 
-  // 只显示 visible 的分组
+  // Only show visible groups
   const visibleGroups = groups.filter((g) => g.visible);
 
   if (visibleGroups.length === 0) {
     return (
       <div className="quota-category-empty">
-        {t('codebuddy.quotaCategory.empty', '暂无配额数据')}
+        {t('codebuddy.quotaCategory.empty', 'No quota data')}
       </div>
     );
   }
@@ -71,7 +71,7 @@ export function CodeBuddyQuotaCategoryList({ groups, formatDateTime }: CodeBuddy
 
         return (
           <div key={group.key} className={`quota-category-item ${getQuotaClass(group.remainPercent)}`}>
-            {/* 分组头部 - 始终显示 */}
+            {/* Group header - always visible */}
             <div
               className="quota-category-header"
               onClick={() => hasDetails && toggleExpand(group.key)}
@@ -98,7 +98,7 @@ export function CodeBuddyQuotaCategoryList({ groups, formatDateTime }: CodeBuddy
               </div>
             </div>
 
-            {/* 进度条 */}
+            {/* Progress bar */}
             <div className="quota-category-progress">
               <div
                 className={`quota-category-progress-bar ${getQuotaClass(group.remainPercent)}`}
@@ -106,7 +106,7 @@ export function CodeBuddyQuotaCategoryList({ groups, formatDateTime }: CodeBuddy
               />
             </div>
 
-            {/* 详情列表 - 展开时显示 */}
+            {/* Detail list - shown when expanded */}
             {isExpanded && hasDetails && (
               <div className="quota-category-details">
                 {group.items.map((item, idx) => (
@@ -134,19 +134,19 @@ function QuotaItemDetail({ item, formatDateTime }: QuotaItemDetailProps) {
   const { t } = useTranslation();
   const remainPercent = item.remainPercent ?? (item.total > 0 ? (item.remain / item.total) * 100 : null);
 
-  // 时间显示逻辑
+  // Time display logic
   let timeText = '';
   if (item.expireAt) {
-    timeText = t('codebuddy.quotaQuery.expireAt', '到期时间：{{time}}', { time: formatDateTime(item.expireAt) });
+    timeText = t('codebuddy.quotaQuery.expireAt', "Expires at: {{time}}", { time: formatDateTime(item.expireAt) });
   } else if (item.refreshAt) {
-    timeText = t('codebuddy.quotaQuery.updatedAt', '下次刷新时间：{{time}}', { time: formatDateTime(item.refreshAt) });
+    timeText = t('codebuddy.quotaQuery.updatedAt', "Next refresh time: {{time}}", { time: formatDateTime(item.refreshAt) });
   }
 
   return (
     <div className={`quota-category-detail-item ${getQuotaClass(remainPercent)}`}>
       <div className="quota-detail-header">
         <span className="quota-detail-name" title={item.packageName || ''}>
-          {item.packageName || t('codebuddy.quotaQuery.packageUnknown', '套餐信息未知')}
+          {item.packageName || t('codebuddy.quotaQuery.packageUnknown', "Unknown package")}
         </span>
         <span className={`quota-detail-value ${getQuotaClass(remainPercent)}`}>
           {formatQuotaNumber(item.used)} / {formatQuotaNumber(item.total)}
