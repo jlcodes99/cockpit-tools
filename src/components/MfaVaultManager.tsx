@@ -415,15 +415,15 @@ export function MfaVaultManager() {
   const confirmDeleteSaved = async (id: string, secret: string) => {
     try {
       const yes = await confirm(
-        t('twoFactorAuth.confirmDeleteSavedMsg', '确定要永久删除 \n{{secret}}\n 这条认证记录吗？').replace('{{secret}}', secret),
-        { title: t('twoFactorAuth.confirmDeleteSavedTitle', '删除确认'), kind: 'warning' }
+        t('twoFactorAuth.confirmDeleteSavedMsg', "Are you sure you want to permanently delete \n{{secret}}\n?").replace('{{secret}}', secret),
+        { title: t('twoFactorAuth.confirmDeleteSavedTitle', "Delete Confirmation"), kind: 'warning' }
       );
       if (yes) {
         setRecords(prev => prev.filter(item => item.id !== id));
         if (editingAccountId === id) cancelEditAccountName();
       }
     } catch {
-      if (window.confirm(t('twoFactorAuth.confirmDeleteSavedFallback', '确定要永久删除这条认证记录吗？'))) {
+      if (window.confirm(t('twoFactorAuth.confirmDeleteSavedFallback', "Are you sure you want to permanently delete this secret?"))) {
         setRecords(prev => prev.filter(item => item.id !== id));
         if (editingAccountId === id) cancelEditAccountName();
       }
@@ -433,14 +433,14 @@ export function MfaVaultManager() {
   const confirmDeleteHistory = async (id: string, secret: string) => {
     try {
       const yes = await confirm(
-        t('twoFactorAuth.confirmDeleteHistoryMsg', '确定要删除 \n{{secret}}\n 的查询历史吗？').replace('{{secret}}', secret),
-        { title: t('twoFactorAuth.confirmDeleteHistoryTitle', '删除历史'), kind: 'info' }
+        t('twoFactorAuth.confirmDeleteHistoryMsg', "Are you sure you want to delete the query history for \n{{secret}}\n?").replace('{{secret}}', secret),
+        { title: t('twoFactorAuth.confirmDeleteHistoryTitle', "Delete History"), kind: 'info' }
       );
       if (yes) {
         setHistoryRecords(prev => prev.filter(item => item.id !== id));
       }
     } catch {
-      if (window.confirm(t('twoFactorAuth.confirmDeleteHistoryFallback', '确定要删除这条查询历史吗？'))) {
+      if (window.confirm(t('twoFactorAuth.confirmDeleteHistoryFallback', "Are you sure you want to delete this query history?"))) {
         setHistoryRecords(prev => prev.filter(item => item.id !== id));
       }
     }
@@ -448,13 +448,13 @@ export function MfaVaultManager() {
 
   const confirmClearAllHistory = async () => {
     try {
-      const yes = await confirm(t('twoFactorAuth.confirmClearAllMsg', '确定要清空全部近期查询历史吗？'), {
-        title: t('twoFactorAuth.confirmClearAllTitle', '清空确认'),
+      const yes = await confirm(t('twoFactorAuth.confirmClearAllMsg', "Are you sure you want to clear all recent query history?"), {
+        title: t('twoFactorAuth.confirmClearAllTitle', "Clear History"),
         kind: 'warning'
       });
       if (yes) setHistoryRecords([]);
     } catch {
-      if (window.confirm(t('twoFactorAuth.confirmClearAllMsg', '确定要清空全部近期查询历史吗？'))) {
+      if (window.confirm(t('twoFactorAuth.confirmClearAllMsg', "Are you sure you want to clear all recent query history?"))) {
         setHistoryRecords([]);
       }
     }
@@ -549,7 +549,7 @@ export function MfaVaultManager() {
       });
     } catch (err) {
       console.error('Import error:', err);
-      alert(t('mfaVault.importErrorMsg', '导入失败，请检查文件内容格式。'));
+      alert(t('mfaVault.importErrorMsg', "Import failed. Please check the file format (must be a valid JSON array containing secret; accountName is optional)."));
     }
   };
 
@@ -612,7 +612,7 @@ export function MfaVaultManager() {
         <tr>
           <td colSpan={5}>
             <div className="tfa-empty-state">
-              {isHistory ? t('twoFactorAuth.emptyHistory', '暂无查询历史') : t('mfaVault.noData', '暂无保存的凭证数据')}
+              {isHistory ? t('twoFactorAuth.emptyHistory', "No query history") : t('mfaVault.noData', "No saved credential data")}
             </div>
           </td>
         </tr>
@@ -692,7 +692,7 @@ export function MfaVaultManager() {
                 <button
                   type="button"
                   className="action-btn"
-                  title={t('mfaVault.copySecret', '复制秘钥')}
+                  title={t('mfaVault.copySecret', "Copy Secret")}
                   onClick={() => handleCopy(`${record.id}-secret`, record.secret)}
                 >
                   {copiedId === `${record.id}-secret` ? <Check size={14} className="is-success" /> : <Copy size={14} />}
@@ -708,13 +708,13 @@ export function MfaVaultManager() {
                   </>
                 ) : (
                   <span style={{ color: 'var(--text-tertiary)' }}>
-                    {t('mfaVault.invalidSecretVal', '无效秘钥')}
+                    {t('mfaVault.invalidSecretVal', "Invalid Secret")}
                   </span>
                 )}
                 <button
                   type="button"
                   className="action-btn"
-                  title={t('mfaVault.copyCode', '复制验证码')}
+                  title={t('mfaVault.copyCode', "Copy Code")}
                   disabled={!token}
                   onClick={() => handleCopy(`${record.id}-code`, token)}
                 >
@@ -731,7 +731,7 @@ export function MfaVaultManager() {
                   <button
                     type="button"
                     className="action-btn"
-                    title={t('twoFactorAuth.actionReload', '重新加载到查询器')}
+                    title={t('twoFactorAuth.actionReload', "Reload into Query Data")}
                     onClick={() => handleLoadFromHistory(record)}
                   >
                     <History size={14} />
@@ -740,7 +740,7 @@ export function MfaVaultManager() {
                 <button
                   type="button"
                   className="action-btn is-danger"
-                  title={t('mfaVault.delete', '删除')}
+                  title={t('mfaVault.delete', "Delete")}
                   onClick={() => (isHistory ? confirmDeleteHistory(record.id, record.secret) : confirmDeleteSaved(record.id, record.secret))}
                 >
                   <Trash2 size={14} />
@@ -756,7 +756,7 @@ export function MfaVaultManager() {
     <>
       <div className="query-section">
         <h3 style={{ margin: 0, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Key size={16} /> {t('twoFactorAuth.panelQuery', '功能区 (查询面板)')}
+          <Key size={16} /> {t('twoFactorAuth.panelQuery', "Workspace (Query Panel)")}
         </h3>
 
         <div className="query-main" style={{ alignItems: 'stretch' }}>
@@ -784,14 +784,14 @@ export function MfaVaultManager() {
                 onClick={handleQuery}
                 disabled={!inputValue.trim() || recognizingImage}
               >
-                {t('twoFactorAuth.btnQuery', '查 询')}
+                {t('twoFactorAuth.btnQuery', "Query")}
               </button>
               <button
                 className="btn btn-secondary"
                 onClick={handleSave}
                 disabled={!inputValue.trim() || recognizingImage}
               >
-                {t('twoFactorAuth.btnSaveToFavorites', '保存到列表')}
+                {t('twoFactorAuth.btnSaveToFavorites', "Save to List")}
               </button>
               <button
                 className="btn btn-secondary"
@@ -825,7 +825,7 @@ export function MfaVaultManager() {
                 className={`query-result-countdown ${timeRemaining <= 5 ? 'error-text' : ''}`}
                 style={{ color: timeRemaining <= 5 ? 'var(--danger)' : undefined }}
               >
-                {t('twoFactorAuth.refreshInSeconds', '{{time}} 秒后刷新').replace('{{time}}', timeRemaining.toString())}
+                {t('twoFactorAuth.refreshInSeconds', "Refresh in {{time}}s").replace('{{time}}', timeRemaining.toString())}
               </span>
             )}
             {currentToken ? (
@@ -840,7 +840,7 @@ export function MfaVaultManager() {
               </div>
             ) : (
               <span className="query-result-empty">
-                {t('twoFactorAuth.emptyQueryData', '暂未查询数据')}
+                {t('twoFactorAuth.emptyQueryData', "No query data yet")}
               </span>
             )}
           </div>
@@ -855,13 +855,13 @@ export function MfaVaultManager() {
                 className={`list-tab ${activeListTab === 'saved' ? 'active' : ''}`}
                 onClick={() => setActiveListTab('saved')}
               >
-                {t('twoFactorAuth.tabSaved', '★ 已保存')}
+                {t('twoFactorAuth.tabSaved', "★ Saved")}
               </button>
               <button
                 className={`list-tab ${activeListTab === 'history' ? 'active' : ''}`}
                 onClick={() => setActiveListTab('history')}
               >
-                <History size={16} /> {t('twoFactorAuth.tabHistory', '近期查询')}
+                <History size={16} /> {t('twoFactorAuth.tabHistory', "Recent Queries")}
               </button>
             </div>
 
@@ -869,18 +869,18 @@ export function MfaVaultManager() {
               {activeListTab === 'saved' ? (
                 <>
                   <button className="btn btn-secondary btn-sm" onClick={handleImport}>
-                    <Upload size={14} /> {t('mfaVault.import', '导入')}
+                    <Upload size={14} /> {t('mfaVault.import', "Import")}
                   </button>
                   {records.length > 0 ? (
                     <button className="btn btn-secondary btn-sm" onClick={handleExport}>
-                      <Download size={14} /> {t('mfaVault.export', '导出')}
+                      <Download size={14} /> {t('mfaVault.export', "Export")}
                     </button>
                   ) : null}
                 </>
               ) : (
                 historyRecords.length > 0 ? (
                   <button className="btn btn-secondary btn-sm" onClick={confirmClearAllHistory}>
-                    {t('twoFactorAuth.btnClear', '清空')}
+                    {t('twoFactorAuth.btnClear', "Clear")}
                   </button>
                 ) : null
               )}
@@ -892,24 +892,24 @@ export function MfaVaultManager() {
               <table className="tfa-table">
                 <thead>
                   <tr>
-                    <th style={{ width: '24%' }}>{t('mfaVault.accountName', '账号名')}</th>
-                    <th>{t('twoFactorAuth.tableSecret', '秘钥')}</th>
-                    <th>{t('mfaVault.dynamicCode', '动态码')}</th>
+                    <th style={{ width: '24%' }}>{t('mfaVault.accountName', "Account Name")}</th>
+                    <th>{t('twoFactorAuth.tableSecret', "Secret")}</th>
+                    <th>{t('mfaVault.dynamicCode', "Code")}</th>
                     <th style={{ width: '15%' }}>
                       <span className="tfa-sort-header">
-                        {t('mfaVault.time', '时间')}
+                        {t('mfaVault.time', "Time")}
                         <button
                           type="button"
                           className="tfa-sort-toggle"
-                          title={t('instances.sort.toggleDirection', '切换排序方向')}
-                          aria-label={t('instances.sort.toggleDirection', '切换排序方向')}
+                          title={t('instances.sort.toggleDirection', "Toggle sort direction")}
+                          aria-label={t('instances.sort.toggleDirection', "Toggle sort direction")}
                           onClick={() => setSavedTimeSort(prev => toggleSortDirection(prev))}
                         >
                           {savedTimeSort === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
                         </button>
                       </span>
                     </th>
-                    <th style={{ width: '100px' }}>{t('mfaVault.actions', '操作')}</th>
+                    <th style={{ width: '100px' }}>{t('mfaVault.actions', "Actions")}</th>
                   </tr>
                 </thead>
                 <tbody>{renderRows(records, false)}</tbody>
@@ -918,24 +918,24 @@ export function MfaVaultManager() {
               <table className="tfa-table">
                 <thead>
                   <tr>
-                    <th style={{ width: '24%' }}>{t('mfaVault.accountName', '账号名')}</th>
-                    <th>{t('twoFactorAuth.tableSecret', '秘钥')}</th>
-                    <th>{t('mfaVault.dynamicCode', '动态码')}</th>
+                    <th style={{ width: '24%' }}>{t('mfaVault.accountName', "Account Name")}</th>
+                    <th>{t('twoFactorAuth.tableSecret', "Secret")}</th>
+                    <th>{t('mfaVault.dynamicCode', "Code")}</th>
                     <th style={{ width: '15%' }}>
                       <span className="tfa-sort-header">
-                        {t('mfaVault.time', '时间')}
+                        {t('mfaVault.time', "Time")}
                         <button
                           type="button"
                           className="tfa-sort-toggle"
-                          title={t('instances.sort.toggleDirection', '切换排序方向')}
-                          aria-label={t('instances.sort.toggleDirection', '切换排序方向')}
+                          title={t('instances.sort.toggleDirection', "Toggle sort direction")}
+                          aria-label={t('instances.sort.toggleDirection', "Toggle sort direction")}
                           onClick={() => setHistoryTimeSort(prev => toggleSortDirection(prev))}
                         >
                           {historyTimeSort === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
                         </button>
                       </span>
                     </th>
-                    <th style={{ width: '120px' }}>{t('mfaVault.actions', '操作')}</th>
+                    <th style={{ width: '120px' }}>{t('mfaVault.actions', "Actions")}</th>
                   </tr>
                 </thead>
                 <tbody>{renderRows(historyRecords, true)}</tbody>

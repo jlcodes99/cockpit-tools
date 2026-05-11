@@ -186,17 +186,17 @@ export function CodexLocalAccessModal({
   const statsRangeOptions = useMemo(
     () =>
       [
-        { key: 'daily', label: t('codex.localAccess.statsRange.daily', '日') },
-        { key: 'weekly', label: t('codex.localAccess.statsRange.weekly', '周') },
-        { key: 'monthly', label: t('codex.localAccess.statsRange.monthly', '月') },
+        { key: 'daily', label: t('codex.localAccess.statsRange.daily', "Day") },
+        { key: 'weekly', label: t('codex.localAccess.statsRange.weekly', "Week") },
+        { key: 'monthly', label: t('codex.localAccess.statsRange.monthly', "Month") },
       ] satisfies Array<{ key: StatsRangeKey; label: string }>,
     [t],
   );
   const quotaPoolLabels = useMemo(
     () => ({
       hourly: t('codex.localAccess.quotaPool.hourlyShort', '5h'),
-      weekly: t('codex.localAccess.quotaPool.weeklyShort', '周'),
-      title: t('codex.localAccess.quotaPool.title', '额度池'),
+      weekly: t('codex.localAccess.quotaPool.weeklyShort', "Week"),
+      title: t('codex.localAccess.quotaPool.title', "Quota Pool"),
     }),
     [t],
   );
@@ -223,7 +223,7 @@ export function CodexLocalAccessModal({
     () => [
       {
         key: 'requests',
-        label: t('codex.localAccess.stats.requests', '总请求数'),
+        label: t('codex.localAccess.stats.requests', "Requests"),
         value: formatCompactNumber(selectedTotals?.requestCount ?? 0),
         detail: t('codex.localAccess.stats.requestsDetail', {
           success: formatCompactNumber(selectedTotals?.successCount ?? 0),
@@ -233,7 +233,7 @@ export function CodexLocalAccessModal({
       },
       {
         key: 'tokens',
-        label: t('codex.localAccess.stats.tokens', '总 Token 数'),
+        label: t('codex.localAccess.stats.tokens', "Tokens"),
         value: formatCompactNumber(selectedTotals?.totalTokens ?? 0),
         detail: t('codex.localAccess.stats.tokensDetail', {
           input: formatCompactNumber(selectedTotals?.inputTokens ?? 0),
@@ -243,7 +243,7 @@ export function CodexLocalAccessModal({
       },
       {
         key: 'specialTokens',
-        label: t('codex.localAccess.stats.specialTokens', '缓存 / 思考'),
+        label: t('codex.localAccess.stats.specialTokens', "Cache / Reasoning"),
         value: formatCompactNumber(
           (selectedTotals?.cachedTokens ?? 0) + (selectedTotals?.reasoningTokens ?? 0),
         ),
@@ -255,7 +255,7 @@ export function CodexLocalAccessModal({
       },
       {
         key: 'latency',
-        label: t('codex.localAccess.stats.avgLatency', '平均延迟'),
+        label: t('codex.localAccess.stats.avgLatency', "Avg Latency"),
         value: formatLatencyMs(avgLatencyMs),
         detail: t('codex.localAccess.stats.successRate', {
           rate: successRate,
@@ -574,27 +574,27 @@ export function CodexLocalAccessModal({
     () => [
       {
         value: 'auto',
-        label: t('codex.localAccess.routingStrategy.auto', '自动（推荐）'),
+        label: t('codex.localAccess.routingStrategy.auto', "Auto (Recommended)"),
       },
       {
         value: 'quota_high_first',
-        label: t('codex.localAccess.routingStrategy.quotaHighFirst', '优先高配额'),
+        label: t('codex.localAccess.routingStrategy.quotaHighFirst', "High Quota First"),
       },
       {
         value: 'quota_low_first',
-        label: t('codex.localAccess.routingStrategy.quotaLowFirst', '优先低配额'),
+        label: t('codex.localAccess.routingStrategy.quotaLowFirst', "Low Quota First"),
       },
       {
         value: 'plan_high_first',
-        label: t('codex.localAccess.routingStrategy.planHighFirst', '优先高订阅'),
+        label: t('codex.localAccess.routingStrategy.planHighFirst', "High Plan First"),
       },
       {
         value: 'plan_low_first',
-        label: t('codex.localAccess.routingStrategy.planLowFirst', '优先低订阅'),
+        label: t('codex.localAccess.routingStrategy.planLowFirst', "Low Plan First"),
       },
       {
         value: 'expiry_soon_first',
-        label: t('codex.localAccess.routingStrategy.expirySoonFirst', '优先近到期'),
+        label: t('codex.localAccess.routingStrategy.expirySoonFirst', "Expiry Soon First"),
       },
     ] satisfies Array<{ value: CodexLocalAccessRoutingStrategy; label: string }>,
     [t],
@@ -639,7 +639,7 @@ export function CodexLocalAccessModal({
         1200,
       );
     } catch (err) {
-      setError(t('common.shared.export.copyFailed', '复制失败，请手动复制'));
+      setError(t('common.shared.export.copyFailed', "Copy failed, please copy manually"));
       console.error('Failed to copy local access value:', err);
     }
   };
@@ -721,7 +721,7 @@ export function CodexLocalAccessModal({
   const handleSavePort = async () => {
     const nextPort = Number(portInput.trim());
     if (!Number.isInteger(nextPort) || nextPort <= 0 || nextPort > 65535) {
-      setError(t('codex.localAccess.portInvalid', '请输入 1 到 65535 之间的端口'));
+      setError(t('codex.localAccess.portInvalid', "Enter a port between 1 and 65535"));
       return;
     }
 
@@ -729,7 +729,7 @@ export function CodexLocalAccessModal({
       async () => {
         await onUpdatePort(nextPort);
       },
-      t('codex.localAccess.portSaveSuccess', 'API 服务端口已更新'),
+      t('codex.localAccess.portSaveSuccess', "API service port updated"),
     );
   };
 
@@ -741,7 +741,7 @@ export function CodexLocalAccessModal({
       async () => {
         await onUpdateRoutingStrategy(nextStrategy as CodexLocalAccessRoutingStrategy);
       },
-      t('codex.localAccess.routingSaveSuccess', 'API 服务调度策略已更新'),
+      t('codex.localAccess.routingSaveSuccess', "API service routing updated"),
     );
   };
 
@@ -749,10 +749,10 @@ export function CodexLocalAccessModal({
     const confirmed = await confirmDialog(
       t(
         'codex.localAccess.rotateConfirmMessage',
-        '重置后当前 API 服务密钥会立即失效，正在进行中的请求可能不可用。确认继续吗？',
+        "The current API service key will stop working immediately after reset, and in-flight requests may become unavailable. Continue?",
       ),
       {
-        title: t('codex.localAccess.rotateKey', '重置密钥'),
+        title: t('codex.localAccess.rotateKey', "Reset Key"),
         kind: 'warning',
         okLabel: t('common.confirm'),
         cancelLabel: t('common.cancel'),
@@ -768,15 +768,15 @@ export function CodexLocalAccessModal({
         await onRotateApiKey();
         setKeyVisible(true);
       },
-      t('codex.localAccess.rotateSuccess', 'API 服务密钥已重置'),
+      t('codex.localAccess.rotateSuccess', "API service key reset"),
     );
   };
 
   const handleClearStats = async () => {
     const confirmed = await confirmDialog(
-      t('codex.localAccess.clearStatsConfirm', '确定要清空 API 服务统计吗？'),
+      t('codex.localAccess.clearStatsConfirm', "Clear all API service stats?"),
       {
-        title: t('codex.localAccess.clearStats', '清除统计'),
+        title: t('codex.localAccess.clearStats', "Clear Stats"),
         kind: 'warning',
         okLabel: t('common.confirm'),
         cancelLabel: t('common.cancel'),
@@ -789,7 +789,7 @@ export function CodexLocalAccessModal({
 
     await runAction(async () => {
       await onClearStats();
-    }, t('codex.localAccess.clearStatsSuccess', 'API 服务统计已清空'));
+    }, t('codex.localAccess.clearStatsSuccess', "API service stats have been cleared"));
   };
 
   const handleKillPort = async () => {
@@ -797,7 +797,7 @@ export function CodexLocalAccessModal({
       async () => {
         await onKillPort();
       },
-      t('codex.localAccess.killPortSuccessUnknown', 'API 服务端口已清理'),
+      t('codex.localAccess.killPortSuccessUnknown', "API service port cleared"),
     );
   };
 
@@ -817,8 +817,8 @@ export function CodexLocalAccessModal({
         await onToggleEnabled();
       },
       collection?.enabled
-        ? t('codex.localAccess.disabledSuccess', 'API 服务已停用')
-        : t('codex.localAccess.enabledSuccess', 'API 服务已启用'),
+        ? t('codex.localAccess.disabledSuccess', "API service disabled")
+        : t('codex.localAccess.enabledSuccess', "API service enabled"),
     );
   };
 
@@ -863,8 +863,8 @@ export function CodexLocalAccessModal({
               <Server size={18} />
               <span>
                 {isMembersMode
-                  ? t('codex.localAccess.entryAction', '添加至 API 服务')
-                  : t('codex.localAccess.title', 'API 服务')}
+                  ? t('codex.localAccess.entryAction', "Add to API Service")
+                  : t('codex.localAccess.title', "API Service")}
               </span>
             </h2>
             {!isMembersMode && (
@@ -877,12 +877,12 @@ export function CodexLocalAccessModal({
                   >
                     {collection?.enabled
                       ? state?.running
-                        ? t('codex.localAccess.statusRunning', '运行中')
-                        : t('codex.localAccess.statusStopped', '未运行')
-                      : t('codex.localAccess.statusDisabled', '已停用')}
+                        ? t('codex.localAccess.statusRunning', "Running")
+                        : t('codex.localAccess.statusStopped', "Stopped")
+                      : t('codex.localAccess.statusDisabled', "Disabled")}
                   </span>
                   <span className="codex-local-access-subtle-badge">
-                    {t('codex.localAccess.memberOnlyLocal', '本机/局域网')}
+                    {t('codex.localAccess.memberOnlyLocal', "Local/LAN")}
                   </span>
                 </div>
                 <div className="codex-local-access-header-tools">
@@ -891,8 +891,8 @@ export function CodexLocalAccessModal({
                     className="folder-icon-btn codex-local-access-toolbar-btn"
                     onClick={() => void handleRefreshStats()}
                     disabled={!collection || actionBusy}
-                    title={t('codex.localAccess.refreshStats', '刷新统计')}
-                    aria-label={t('codex.localAccess.refreshStats', '刷新统计')}
+                    title={t('codex.localAccess.refreshStats', "Refresh Stats")}
+                    aria-label={t('codex.localAccess.refreshStats', "Refresh Stats")}
                   >
                     <RefreshCw size={14} className={saving ? 'loading-spinner' : ''} />
                   </button>
@@ -903,7 +903,7 @@ export function CodexLocalAccessModal({
                         options={routingStrategyOptions}
                         onChange={(value) => void handleChangeRoutingStrategy(value)}
                         disabled={saving || testing || starting}
-                        ariaLabel={t('codex.localAccess.routingLabel', '调度策略')}
+                        ariaLabel={t('codex.localAccess.routingLabel', "Routing")}
                       />
                     </div>
                   )}
@@ -912,8 +912,8 @@ export function CodexLocalAccessModal({
                     className="folder-icon-btn codex-local-access-toolbar-btn"
                     onClick={() => void handleTest()}
                     disabled={!collection || testing || saving}
-                    title={t('codex.localAccess.testAction', '测试 API 服务')}
-                    aria-label={t('codex.localAccess.testAction', '测试 API 服务')}
+                    title={t('codex.localAccess.testAction', "Test API Service")}
+                    aria-label={t('codex.localAccess.testAction', "Test API Service")}
                   >
                     <ShieldCheck size={14} className={testing ? 'loading-spinner' : ''} />
                   </button>
@@ -926,13 +926,13 @@ export function CodexLocalAccessModal({
                     disabled={!collection || saving || testing || starting}
                     title={
                       collection?.enabled
-                        ? t('codex.localAccess.disableService', '停用服务')
-                        : t('codex.localAccess.enableService', '启用服务')
+                        ? t('codex.localAccess.disableService', "Disable Service")
+                        : t('codex.localAccess.enableService', "Enable Service")
                     }
                     aria-label={
                       collection?.enabled
-                        ? t('codex.localAccess.disableService', '停用服务')
-                        : t('codex.localAccess.enableService', '启用服务')
+                        ? t('codex.localAccess.disableService', "Disable Service")
+                        : t('codex.localAccess.enableService', "Enable Service")
                     }
                   >
                     <Power size={14} />
@@ -967,7 +967,7 @@ export function CodexLocalAccessModal({
                   ) : (
                     <Wrench size={14} />
                   )}
-                  {t('codex.localAccess.killPortAction', '清理端口')}
+                  {t('codex.localAccess.killPortAction', "Clear Port")}
                 </button>
               )}
             </div>
@@ -992,13 +992,13 @@ export function CodexLocalAccessModal({
               <div className="codex-local-access-summary-head">
                 <div className="codex-local-access-section-title">
                   <Activity size={16} />
-                  <span>{t('codex.localAccess.statsTitle', '总量统计')}</span>
+                  <span>{t('codex.localAccess.statsTitle', "Totals")}</span>
                 </div>
                 <div className="codex-local-access-summary-actions">
                   <div
                     className="codex-local-access-stats-range-tabs"
                     role="tablist"
-                    aria-label={t('codex.localAccess.statsRange.label', '统计范围')}
+                    aria-label={t('codex.localAccess.statsRange.label', "Stats Range")}
                   >
                     {statsRangeOptions.map((option) => (
                       <button
@@ -1021,11 +1021,11 @@ export function CodexLocalAccessModal({
                     className="btn btn-danger btn-sm"
                     onClick={() => void handleClearStats()}
                     disabled={!collection || actionBusy}
-                    title={t('codex.localAccess.clearStats', '清除统计')}
-                    aria-label={t('codex.localAccess.clearStats', '清除统计')}
+                    title={t('codex.localAccess.clearStats', "Clear Stats")}
+                    aria-label={t('codex.localAccess.clearStats', "Clear Stats")}
                   >
                     <Trash2 size={14} />
-                    {t('codex.localAccess.clearStats', '清除统计')}
+                    {t('codex.localAccess.clearStats', "Clear Stats")}
                   </button>
                 </div>
               </div>
@@ -1069,21 +1069,21 @@ export function CodexLocalAccessModal({
               <section className="codex-local-access-section codex-local-access-section-surface codex-local-access-config-section">
                 <div className="codex-local-access-section-title">
                   <KeyRound size={16} />
-                  <span>{t('codex.localAccess.configTitle', '服务配置')}</span>
+                  <span>{t('codex.localAccess.configTitle', "Service Config")}</span>
                 </div>
                 {collection ? (
                   <div className="codex-local-access-config-grid">
                     <div className="codex-local-access-config-card codex-local-access-config-card-base">
                       <div className="codex-local-access-config-head">
                         <span className="codex-local-access-config-label">
-                          {t('codex.localAccess.baseUrl', '地址')}
+                          {t('codex.localAccess.baseUrl', "URL")}
                         </span>
                         <div className="codex-local-access-config-actions">
                           <button
                             type="button"
                             className="folder-icon-btn"
                             onClick={() => void handleCopy('baseUrl', baseUrl)}
-                            title={t('common.copy', '复制')}
+                            title={t('common.copy', "Copy")}
                           >
                             {copiedField === 'baseUrl' ? <Check size={14} /> : <Copy size={14} />}
                           </button>
@@ -1097,7 +1097,7 @@ export function CodexLocalAccessModal({
                     <div className="codex-local-access-config-card codex-local-access-config-card-key">
                       <div className="codex-local-access-config-head">
                         <span className="codex-local-access-config-label">
-                          {t('codex.localAccess.apiKey', '密钥')}
+                          {t('codex.localAccess.apiKey', "API Key")}
                         </span>
                         <div className="codex-local-access-config-actions">
                           <button
@@ -1106,8 +1106,8 @@ export function CodexLocalAccessModal({
                             onClick={() => setKeyVisible((prev) => !prev)}
                             title={
                               keyVisible
-                                ? t('codex.localAccess.hideKey', '隐藏密钥')
-                                : t('codex.localAccess.showKey', '显示密钥')
+                                ? t('codex.localAccess.hideKey', "Hide API key")
+                                : t('codex.localAccess.showKey', "Show API key")
                             }
                           >
                             {keyVisible ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -1116,7 +1116,7 @@ export function CodexLocalAccessModal({
                             type="button"
                             className="folder-icon-btn"
                             onClick={() => void handleCopy('apiKey', collection.apiKey)}
-                            title={t('common.copy', '复制')}
+                            title={t('common.copy', "Copy")}
                           >
                             {copiedField === 'apiKey' ? <Check size={14} /> : <Copy size={14} />}
                           </button>
@@ -1131,7 +1131,7 @@ export function CodexLocalAccessModal({
                             ) : (
                               <RefreshCw size={14} />
                             )}
-                            {t('codex.localAccess.rotateKey', '重置密钥')}
+                            {t('codex.localAccess.rotateKey', "Reset Key")}
                           </button>
                         </div>
                       </div>
@@ -1148,7 +1148,7 @@ export function CodexLocalAccessModal({
                           className="codex-local-access-config-label"
                           htmlFor="codex-local-access-port"
                         >
-                          {t('codex.localAccess.portLabel', '服务端口')}
+                          {t('codex.localAccess.portLabel', "Service Port")}
                         </label>
                         <div className="codex-local-access-config-actions">
                           <button
@@ -1162,7 +1162,7 @@ export function CodexLocalAccessModal({
                             ) : (
                               <Gauge size={14} />
                             )}
-                            {t('codex.localAccess.portSave', '保存端口')}
+                            {t('codex.localAccess.portSave', "Save Port")}
                           </button>
                         </div>
                       </div>
@@ -1183,7 +1183,7 @@ export function CodexLocalAccessModal({
                   <div className="group-account-empty">
                     {t(
                       'codex.localAccess.configEmpty',
-                      '先把账号保存到 API 服务集合，随后会自动生成地址、密钥和端口。',
+                      "Save at least one account to the API service collection before the URL, key, and port are generated.",
                     )}
                   </div>
                 )}
@@ -1193,14 +1193,14 @@ export function CodexLocalAccessModal({
                       <div className="codex-local-access-config-card codex-local-access-config-card-root">
                         <div className="codex-local-access-config-head">
                           <span className="codex-local-access-config-label">
-                            {t('codex.localAccess.apiPortUrl', 'API端口URL')}
+                            {t('codex.localAccess.apiPortUrl', "API Port URL")}
                           </span>
                           <div className="codex-local-access-config-actions">
                             <button
                               type="button"
                               className="folder-icon-btn"
                               onClick={() => void handleCopy('apiPortUrl', apiPortUrl)}
-                              title={t('common.copy', '复制')}
+                              title={t('common.copy', "Copy")}
                             >
                               {copiedField === 'apiPortUrl' ? <Check size={14} /> : <Copy size={14} />}
                             </button>
@@ -1216,17 +1216,17 @@ export function CodexLocalAccessModal({
                       <div className="codex-local-access-config-card codex-local-access-config-card-model">
                         <div className="codex-local-access-config-head">
                           <span className="codex-local-access-config-label">
-                            {t('codex.localAccess.modelId', '模型 ID')}
+                            {t('codex.localAccess.modelId', "Model ID")}
                           </span>
                           <span className="codex-local-access-view-only-badge">
-                            {t('codex.localAccess.modelIdViewOnly', '仅查看使用，无切换功能')}
+                            {t('codex.localAccess.modelIdViewOnly', "View only, no switching")}
                           </span>
                           <div className="codex-local-access-config-actions">
                             <button
                               type="button"
                               className="folder-icon-btn"
                               onClick={() => void handleCopy('modelId', selectedModelId)}
-                              title={t('common.copy', '复制')}
+                              title={t('common.copy', "Copy")}
                               disabled={!selectedModelId}
                             >
                               {copiedField === 'modelId' ? <Check size={14} /> : <Copy size={14} />}
@@ -1239,8 +1239,8 @@ export function CodexLocalAccessModal({
                             options={modelIdOptions}
                             onChange={setSelectedModelId}
                             disabled={modelIdOptions.length === 0}
-                            ariaLabel={t('codex.localAccess.modelId', '模型 ID')}
-                            placeholder={t('codex.localAccess.modelIdPlaceholder', '选择模型 ID')}
+                            ariaLabel={t('codex.localAccess.modelId', "Model ID")}
+                            placeholder={t('codex.localAccess.modelIdPlaceholder', "Select model ID")}
                             menuPlacement="up"
                             menuMaxHeight={240}
                           />
@@ -1254,12 +1254,12 @@ export function CodexLocalAccessModal({
               <section className="codex-local-access-section codex-local-access-section-surface codex-local-access-account-stats-section">
                 <div className="codex-local-access-section-title">
                   <Server size={16} />
-                  <span>{t('codex.localAccess.accountStatsTitle', '按账号统计')}</span>
+                  <span>{t('codex.localAccess.accountStatsTitle', "By Account")}</span>
                 </div>
                 <div className="codex-local-access-account-stats">
                   {currentMemberStats.length === 0 ? (
                     <div className="group-account-empty">
-                      {t('codex.localAccess.statsEmpty', '当前还没有统计数据')}
+                      {t('codex.localAccess.statsEmpty', "No stats yet")}
                     </div>
                   ) : (
                     currentMemberStats.map(({ account, presentation, stats: accountStats }) => (
@@ -1315,7 +1315,7 @@ export function CodexLocalAccessModal({
               <div className="codex-local-access-section-head">
                 <div className="codex-local-access-section-title">
                   <FolderPlus size={16} />
-                  <span>{t('codex.localAccess.memberTitle', '集合成员')}</span>
+                  <span>{t('codex.localAccess.memberTitle', "Collection Members")}</span>
                 </div>
                 <label className="codex-local-access-free-toggle">
                   <input
@@ -1327,7 +1327,7 @@ export function CodexLocalAccessModal({
                   <span>
                     {t(
                       'codex.localAccess.modal.restrictFreeToggle',
-                      '限制 Free 账号使用',
+                      "Limit Free Accounts",
                     )}
                   </span>
                 </label>
@@ -1349,10 +1349,10 @@ export function CodexLocalAccessModal({
                     options={tierFilterOptions}
                     selectedValues={filterTypes}
                     allLabel={allTierFilterLabel}
-                    filterLabel={t('common.shared.filterLabel', '筛选')}
-                    clearLabel={t('accounts.clearFilter', '清空筛选')}
-                    emptyLabel={t('common.none', '暂无')}
-                    ariaLabel={t('common.shared.filterLabel', '筛选')}
+                    filterLabel={t('common.shared.filterLabel', "Filter")}
+                    clearLabel={t('accounts.clearFilter', "Clear Filter")}
+                    emptyLabel={t('common.none', "None")}
+                    ariaLabel={t('common.shared.filterLabel', "Filter")}
                     onToggleValue={(value) =>
                       setFilterTypes((prev) =>
                         prev.includes(value)
@@ -1377,11 +1377,11 @@ export function CodexLocalAccessModal({
                   <MultiSelectFilterDropdown
                     options={groupFilterOptions}
                     selectedValues={groupFilter}
-                    allLabel={t('accounts.groups.allGroups', '全部分组')}
-                    filterLabel={t('accounts.groups.manageTitle', '分组管理')}
-                    clearLabel={t('accounts.clearFilter', '清空筛选')}
-                    emptyLabel={t('common.none', '暂无')}
-                    ariaLabel={t('accounts.groups.manageTitle', '分组管理')}
+                    allLabel={t('accounts.groups.allGroups', "All Groups")}
+                    filterLabel={t('accounts.groups.manageTitle', "Group Management")}
+                    clearLabel={t('accounts.clearFilter', "Clear Filter")}
+                    emptyLabel={t('common.none', "None")}
+                    ariaLabel={t('accounts.groups.manageTitle', "Group Management")}
                     onToggleValue={(value) =>
                       setGroupFilter((prev) =>
                         prev.includes(value)
@@ -1408,11 +1408,11 @@ export function CodexLocalAccessModal({
               <div className="group-account-list codex-local-access-member-list">
                 {oauthAccounts.length === 0 ? (
                   <div className="group-account-empty">
-                    {t('codex.localAccess.modal.empty', '暂无可加入的 OAuth 账号')}
+                    {t('codex.localAccess.modal.empty', "No OAuth accounts available")}
                   </div>
                 ) : visibleAccounts.length === 0 ? (
                   <div className="group-account-empty">
-                    {t('common.shared.noMatch.title', '没有匹配的账号')}
+                    {t('common.shared.noMatch.title', "No matching accounts")}
                   </div>
                 ) : (
                   visibleAccounts.map((account) => {
@@ -1476,7 +1476,7 @@ export function CodexLocalAccessModal({
                 onClick={() => void handleSaveMembers()}
                 disabled={actionBusy || !selectionDirty}
               >
-                {saving ? t('common.saving') : t('codex.localAccess.modal.save', '保存集合')}
+                {saving ? t('common.saving') : t('codex.localAccess.modal.save', "Save Collection")}
               </button>
             </>
           ) : (

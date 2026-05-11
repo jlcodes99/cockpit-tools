@@ -3,6 +3,7 @@ use tauri_plugin_autostart::ManagerExt as _;
 use crate::models::InstanceStore;
 use crate::modules;
 use crate::modules::config::{self, UserConfig};
+use crate::modules::data_transfer_core::{self, DataTransferAnalysis};
 use crate::modules::websocket;
 
 fn get_app_auto_launch_enabled(app: &tauri::AppHandle) -> Result<bool, String> {
@@ -124,6 +125,16 @@ pub fn data_transfer_apply_user_config(
 #[tauri::command]
 pub fn data_transfer_get_instance_store(platform: String) -> Result<InstanceStore, String> {
     load_instance_store_by_platform(platform.trim())
+}
+
+#[tauri::command]
+pub fn data_transfer_analyze_json(json_content: String) -> Result<DataTransferAnalysis, String> {
+    data_transfer_core::analyze_data_transfer_json(&json_content)
+}
+
+#[tauri::command]
+pub fn account_transfer_parse_platforms(json_content: String) -> Result<serde_json::Value, String> {
+    data_transfer_core::parse_account_transfer_platforms(&json_content)
 }
 
 #[tauri::command]

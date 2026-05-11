@@ -28,7 +28,7 @@ export function QoderInstancesContent({
     if (usage.inlineSuggestionsUsedPercent == null) {
       return (
         <span className="account-quota-empty">
-          {t('instances.quota.empty', '暂无配额缓存')}
+          {t('instances.quota.empty', "No cached quota")}
         </span>
       );
     }

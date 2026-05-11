@@ -72,7 +72,7 @@ export function OverviewTabsHeader({
     },
     {
       key: 'instances',
-      label: t('instances.title', '多开实例'),
+      label: t('instances.title', "Instances"),
       icon: <Layers className="tab-icon" />,
     },
     {
@@ -97,7 +97,7 @@ export function OverviewTabsHeader({
       <div className="page-top-strip">
         <div className="page-top-strip-left">
           <span className="page-top-strip-label">
-            {t('settings.general.account', '账号')}
+            {t('settings.general.account', 'Accounts')}
           </span>
           <ManualHelpIconButton className="platform-header-help" onClick={onOpenManual} />
         </div>

@@ -56,7 +56,7 @@ export function GeminiInstancesContent({
     if (lines.length === 0) {
       return (
         <span className="account-quota-empty">
-          {t("instances.quota.empty", "暂无配额缓存")}
+          {t("instances.quota.empty", "No cached quota")}
         </span>
       );
     }
@@ -79,16 +79,16 @@ export function GeminiInstancesContent({
       ? accountMap.get(instance.bindAccountId)
       : undefined;
     const instanceName = instance.isDefault
-      ? t("instances.defaultName", "默认实例")
-      : instance.name || t("instances.defaultName", "默认实例");
+      ? t("instances.defaultName", "Default Instance")
+      : instance.name || t("instances.defaultName", "Default Instance");
     setLaunchModal({
       instanceId: instance.id,
       instanceName,
       switchMessage: boundAccount
-        ? t("accounts.switched", "已切换至 {{email}}", {
+        ? t("accounts.switched", "Switched to {{email}}", {
             email: boundAccount.email,
           })
-        : t("gemini.switch.success", "切号成功"),
+        : t("gemini.switch.success", "Account switched successfully"),
       launchCommand: launchInfo.launchCommand,
       copied: false,
       executing: false,
@@ -112,7 +112,7 @@ export function GeminiInstancesContent({
               ...prev,
               executeError: t(
                 "common.shared.export.copyFailed",
-                "复制失败，请手动复制",
+                "Copy failed, please copy manually",
               ),
             }
           : prev,
@@ -182,7 +182,7 @@ export function GeminiInstancesContent({
         unsupportedDescDefault="Gemini Cli 多开实例仅支持 macOS、Windows 和 Linux。"
         onInstanceStarted={handleInstanceStarted}
         resolveStartSuccessMessage={() =>
-          t("gemini.switch.success", "切号成功")
+          t("gemini.switch.success", "Account switched successfully")
         }
       />
 
@@ -193,11 +193,11 @@ export function GeminiInstancesContent({
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
-              <h2>{t("gemini.instances.launchDialogTitle", "启动实例")}</h2>
+              <h2>{t("gemini.instances.launchDialogTitle", "Launch Instance")}</h2>
               <button
                 className="modal-close"
                 onClick={() => setLaunchModal(null)}
-                aria-label={t("common.close", "关闭")}
+                aria-label={t("common.close", "Close")}
               >
                 <X />
               </button>
@@ -208,7 +208,7 @@ export function GeminiInstancesContent({
                 <span>{launchModal.switchMessage}</span>
               </div>
               <div className="form-group">
-                <label>{t("instances.columns.instance", "实例")}</label>
+                <label>{t("instances.columns.instance", "Instance")}</label>
                 <input
                   className="form-input"
                   value={launchModal.instanceName}
@@ -216,7 +216,7 @@ export function GeminiInstancesContent({
                 />
               </div>
               <div className="form-group">
-                <label>{t("instances.form.extraArgs", "自定义启动参数")}</label>
+                <label>{t("instances.form.extraArgs", "Custom launch args")}</label>
                 <textarea
                   className="form-input instance-args-input"
                   value={launchModal.launchCommand}
@@ -225,18 +225,18 @@ export function GeminiInstancesContent({
                 <p className="form-hint">
                   {t(
                     "gemini.instances.launchHint",
-                    "可复制命令手动执行，或点击下方按钮直接在终端执行。",
+                    "Copy the command and run manually, or execute it directly in terminal.",
                   )}
                 </p>
               </div>
               <div className="form-group">
-                <label>{t("instances.launchDialog.terminal", "终端")}</label>
+                <label>{t("instances.launchDialog.terminal", "Terminal")}</label>
                 <SingleSelectDropdown
                   value={selectedTerminal}
                   onChange={setSelectedTerminal}
                   options={terminalOptions}
                   disabled={launchModal.executing}
-                  ariaLabel={t("instances.launchDialog.terminal", "终端")}
+                  ariaLabel={t("instances.launchDialog.terminal", "Terminal")}
                 />
               </div>
               {launchModal.executeMessage && (
@@ -256,8 +256,8 @@ export function GeminiInstancesContent({
               >
                 <Copy size={16} />
                 {launchModal.copied
-                  ? t("common.success", "成功")
-                  : t("common.copy", "复制")}
+                  ? t("common.success", "Success")
+                  : t("common.copy", "Copy")}
               </button>
               <button
                 className="btn btn-primary"
@@ -266,8 +266,8 @@ export function GeminiInstancesContent({
               >
                 <Play size={16} />
                 {launchModal.executing
-                  ? t("common.loading", "加载中...")
-                  : t("gemini.instances.runInTerminal", "终端执行")}
+                  ? t("common.loading", "Loading...")
+                  : t("gemini.instances.runInTerminal", "Run in Terminal")}
               </button>
             </div>
           </div>

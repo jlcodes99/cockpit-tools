@@ -1,7 +1,7 @@
 [package]
-name = "cockpit-tools"
+name = "switchme"
 version = "0.22.21"
-description = "Cockpit Tools"
+description = "Switchme"
 authors = ["jlcodes"]
 license = "CC-BY-NC-SA-4.0"
 edition = "2021"
@@ -30,8 +30,8 @@ uuid = { version = "1.10", features = ["v4", "serde"] }
 chrono = "0.4"
 dirs = "5.0"
 reqwest = { version = "0.12", features = ["json", "gzip", "brotli", "deflate", "zstd", "stream"] }
-# 为 tauri-plugin-updater 所依赖的 reqwest 0.13 合并 socks 特性，
-# 使 updater 链路在全局代理配置为 socks5:// 时可正常发起请求。
+# Merge socks feature into reqwest 0.13 (required by tauri-plugin-updater),
+# so the updater pipeline can make requests when the global proxy is set to socks5://.
 reqwest_updater_socks = { package = "reqwest", version = "0.13", default-features = false, features = ["socks"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "time"] }

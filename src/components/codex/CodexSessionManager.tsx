@@ -330,7 +330,7 @@ export function CodexSessionManager() {
       const latestInstances = await refreshInstances();
       if (latestInstances.length < 2) {
         setMessage({
-          text: t('codex.sessionManager.messages.syncNeedTwo', '至少需要两个实例才能同步会话'),
+          text: t('codex.sessionManager.messages.syncNeedTwo', "At least two instances are required to sync sessions"),
           tone: 'error',
         });
         return;
@@ -339,12 +339,12 @@ export function CodexSessionManager() {
       const confirmed = await confirmDialog(
         t(
           'codex.sessionManager.confirm.syncMessage',
-          '会将缺失的线程与对应会话同步到所有实例中，已有内容不会重复写入，写入前会先备份目标实例关键文件。确认继续？',
+          "Missing threads and their session data will be synced to all instances. Existing content will not be written again, and target instance files will be backed up before any write occurs. Continue?",
         ),
         {
-          title: t('codex.sessionManager.actions.syncSessions', '同步会话'),
-          okLabel: t('common.confirm', '确认'),
-          cancelLabel: t('common.cancel', '取消'),
+          title: t('codex.sessionManager.actions.syncSessions', "Sync Sessions"),
+          okLabel: t('common.confirm', "Confirm"),
+          cancelLabel: t('common.cancel', "Cancel"),
         },
       );
       if (!confirmed) return;
@@ -378,12 +378,12 @@ export function CodexSessionManager() {
     const confirmed = await confirmDialog(
       t(
         'codex.sessionManager.confirm.repairVisibilityMessage',
-        '会按各实例 config.toml 根级 model_provider（缺失时按 openai）修复 rollout 文件与 state_5.sqlite 中的 provider 元数据，写入前会先备份将要修改的文件。运行中的实例可能需要重启后显示。确认继续？',
+        "This will repair provider metadata in rollout files and state_5.sqlite using each instance's root config.toml model_provider (defaulting to openai when missing). Files that will be changed are backed up before writing. Running instances may need a restart before the change appears. Continue?",
       ),
       {
-        title: t('codex.sessionManager.actions.repairVisibility', '修复可见性'),
-        okLabel: t('common.confirm', '确认'),
-        cancelLabel: t('common.cancel', '取消'),
+        title: t('codex.sessionManager.actions.repairVisibility', "Repair Visibility"),
+        okLabel: t('common.confirm', "Confirm"),
+        cancelLabel: t('common.cancel', "Cancel"),
       },
     );
     if (!confirmed) return;
@@ -402,19 +402,19 @@ export function CodexSessionManager() {
 
   const handleMoveToTrash = async () => {
     if (selectedIds.length === 0) {
-      setMessage({ text: t('codex.sessionManager.messages.pickOne', '请至少选择一条会话'), tone: 'error' });
+      setMessage({ text: t('codex.sessionManager.messages.pickOne', "Please select at least one session"), tone: 'error' });
       return;
     }
 
     const confirmed = await confirmDialog(
       t(
         'codex.sessionManager.confirm.message',
-        '会将所选会话从对应实例中移到废纸篓，便于后续恢复；运行中的实例可能需要重启后才会反映。确认继续？',
+        "Selected sessions will be moved to Trash from their instances so they can be restored later. Running instances may need a restart before the change appears. Continue?",
       ),
       {
-        title: t('codex.sessionManager.confirm.title', '移到废纸篓'),
-        okLabel: t('common.confirm', '确认'),
-        cancelLabel: t('common.cancel', '取消'),
+        title: t('codex.sessionManager.confirm.title', "Move to Trash"),
+        okLabel: t('common.confirm', "Confirm"),
+        cancelLabel: t('common.cancel', "Cancel"),
         kind: 'warning',
       },
     );
@@ -439,7 +439,7 @@ export function CodexSessionManager() {
 
   const handleRestoreFromTrash = async () => {
     if (selectedTrashIds.length === 0) {
-      setRestoreModalError(t('codex.sessionManager.messages.pickRestoreOne', '请至少选择一条待恢复会话'));
+      setRestoreModalError(t('codex.sessionManager.messages.pickRestoreOne', "Please select at least one session to restore"));
       return;
     }
 
@@ -477,7 +477,7 @@ export function CodexSessionManager() {
     } catch (error) {
       console.error('Failed to copy session id:', error);
       setMessage({
-        text: t('common.shared.export.copyFailed', '复制失败，请手动复制'),
+        text: t('common.shared.export.copyFailed', "Copy failed, please copy manually"),
         tone: 'error',
       });
     }
@@ -494,12 +494,12 @@ export function CodexSessionManager() {
             disabled={syncing || repairingVisibility || deleting || loading || instanceCount < 2}
             title={
               instanceCount < 2
-                ? t('codex.sessionManager.messages.syncNeedTwo', '至少需要两个实例才能同步会话')
-                : t('codex.sessionManager.actions.syncSessions', '同步会话')
+                ? t('codex.sessionManager.messages.syncNeedTwo', "At least two instances are required to sync sessions")
+                : t('codex.sessionManager.actions.syncSessions', "Sync Sessions")
             }
           >
             <RefreshCw size={14} className={syncing ? 'icon-spin' : undefined} />
-            {t('codex.sessionManager.actions.syncSessions', '同步会话')}
+            {t('codex.sessionManager.actions.syncSessions', "Sync Sessions")}
           </button>
           <button
             className="btn btn-secondary codex-session-manager__action-button"
@@ -508,7 +508,7 @@ export function CodexSessionManager() {
             disabled={repairingVisibility || loading || deleting || syncing}
           >
             <Eye size={14} />
-            {t('codex.sessionManager.actions.repairVisibility', '修复可见性')}
+            {t('codex.sessionManager.actions.repairVisibility', "Repair Visibility")}
           </button>
           <button
             className="btn btn-secondary codex-session-manager__action-button"
@@ -517,7 +517,7 @@ export function CodexSessionManager() {
             disabled={loading || syncing || repairingVisibility || deleting || restoring}
           >
             <RotateCcw size={14} />
-            {t('codex.sessionManager.actions.restoreSessions', '恢复会话')}
+            {t('codex.sessionManager.actions.restoreSessions', "Restore Sessions")}
           </button>
           <button
             className="btn btn-secondary codex-session-manager__action-button"
@@ -526,7 +526,7 @@ export function CodexSessionManager() {
             disabled={loading || deleting || syncing || repairingVisibility}
           >
             <RefreshCw size={14} className={loading ? 'icon-spin' : undefined} />
-            {t('common.refresh', '刷新')}
+            {t('common.refresh', "Refresh")}
           </button>
           <button
             className="btn btn-danger codex-session-manager__action-button"
@@ -535,7 +535,7 @@ export function CodexSessionManager() {
             disabled={deleting || loading || syncing || repairingVisibility || selectedIds.length === 0}
           >
             <Trash2 size={14} />
-            {t('codex.sessionManager.actions.moveToTrash', '移到废纸篓')} ({selectedIds.length})
+            {t('codex.sessionManager.actions.moveToTrash', "Move to Trash")} ({selectedIds.length})
           </button>
         </div>
       </div>
@@ -546,15 +546,15 @@ export function CodexSessionManager() {
 
       {loading && sessions.length === 0 ? (
         <div className="empty-state">
-          <h3>{t('common.loading', '加载中...')}</h3>
+          <h3>{t('common.loading', "Loading...")}</h3>
         </div>
       ) : null}
 
       {!loading && groupedSessions.length === 0 ? (
         <div className="empty-state codex-session-manager__empty">
           <Folder size={42} className="empty-icon" />
-          <h3>{t('codex.sessionManager.empty.title', '还没有可管理的会话')}</h3>
-          <p>{t('codex.sessionManager.empty.desc', '当前实例集合中还没有发现会话记录。')}</p>
+          <h3>{t('codex.sessionManager.empty.title', "No sessions to manage")}</h3>
+          <p>{t('codex.sessionManager.empty.desc', "No session records were found in the current instance set.")}</p>
         </div>
       ) : null}
 
@@ -575,8 +575,8 @@ export function CodexSessionManager() {
                       onClick={() => toggleGroupExpanded(group.cwd)}
                       aria-label={
                         isExpanded
-                          ? t('codex.sessionManager.actions.collapse', '收起')
-                          : t('codex.sessionManager.actions.expand', '展开')
+                          ? t('codex.sessionManager.actions.collapse', "Collapse")
+                          : t('codex.sessionManager.actions.expand', "Expand")
                       }
                     >
                       {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -617,16 +617,16 @@ export function CodexSessionManager() {
                             />
                             <div className="codex-session-row__content">
                               <span className="codex-session-row__title" title={session.title}>
-                                {session.title || t('codex.sessionManager.untitled', '未命名会话')}
+                                {session.title || t('codex.sessionManager.untitled', "Untitled session")}
                               </span>
                               <span className="codex-session-row__meta">
                                 {session.locations.map((location) => location.instanceName).join(' / ')}
                                 {hasRunningLocation
-                                  ? t('codex.sessionManager.locationRunning', '（运行中）')
+                                  ? t('codex.sessionManager.locationRunning', " (running)")
                                   : ''}
                               </span>
                               <span className="codex-session-row__meta codex-session-row__session-id" title={session.sessionId}>
-                                {t('codex.sessionManager.labels.sessionId', '会话 ID')}: {formatSessionId(session.sessionId)}
+                                {t('codex.sessionManager.labels.sessionId', "Session ID")}: {formatSessionId(session.sessionId)}
                               </span>
                             </div>
                           </label>
@@ -635,18 +635,18 @@ export function CodexSessionManager() {
                               className={`codex-session-row__copy-button${copiedSessionId === session.sessionId ? ' is-copied' : ''}`}
                               type="button"
                               onClick={(event) => void handleCopySessionId(event, session.sessionId)}
-                              title={t('codex.sessionManager.actions.copySessionId', '复制会话 ID')}
-                              aria-label={t('codex.sessionManager.actions.copySessionId', '复制会话 ID')}
+                              title={t('codex.sessionManager.actions.copySessionId', "Copy Session ID")}
+                              aria-label={t('codex.sessionManager.actions.copySessionId', "Copy Session ID")}
                             >
                               {copiedSessionId === session.sessionId ? <Check size={14} /> : <Copy size={14} />}
                             </button>
                             {tokenText ? (
-                              <span className="codex-session-row__tokens" title={t('codex.sessionManager.labels.tokenUsage', 'Token使用')}>
+                              <span className="codex-session-row__tokens" title={t('codex.sessionManager.labels.tokenUsage', "Token Usage")}>
                                 {tokenText}
                               </span>
                             ) : null}
                             {!tokenText && isTokenStatsLoading ? (
-                              <span className="codex-session-row__tokens" title={t('common.loading', '加载中...')}>
+                              <span className="codex-session-row__tokens" title={t('common.loading', "Loading...")}>
                                 <RefreshCw size={12} className="icon-spin" />
                               </span>
                             ) : null}
@@ -669,13 +669,13 @@ export function CodexSessionManager() {
         <div className="modal-overlay" onClick={handleCloseRestoreModal}>
           <div className="modal codex-session-restore-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
-              <h2>{t('codex.sessionManager.restoreModal.title', '恢复会话')}</h2>
+              <h2>{t('codex.sessionManager.restoreModal.title', "Restore Sessions")}</h2>
               <button
                 className="modal-close"
                 type="button"
                 onClick={handleCloseRestoreModal}
                 disabled={restoring}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X size={18} />
               </button>
@@ -684,14 +684,14 @@ export function CodexSessionManager() {
               <ModalErrorMessage message={restoreModalError} scrollKey={restoreModalErrorScrollKey} />
               {loadingTrash ? (
                 <div className="codex-session-restore-modal__empty">
-                  <h3>{t('common.loading', '加载中...')}</h3>
+                  <h3>{t('common.loading', "Loading...")}</h3>
                 </div>
               ) : null}
               {!loadingTrash && trashedSessions.length === 0 ? (
                 <div className="codex-session-restore-modal__empty">
                   <Folder size={36} className="empty-icon" />
-                  <h3>{t('codex.sessionManager.restoreModal.emptyTitle', '废纸篓里还没有会话')}</h3>
-                  <p>{t('codex.sessionManager.restoreModal.emptyDesc', '已移到废纸篓的会话会显示在这里。')}</p>
+                  <h3>{t('codex.sessionManager.restoreModal.emptyTitle', "Trash is empty")}</h3>
+                  <p>{t('codex.sessionManager.restoreModal.emptyDesc', "Sessions moved to Trash will appear here.")}</p>
                 </div>
               ) : null}
               {!loadingTrash && trashedSessions.length > 0 ? (
@@ -699,7 +699,7 @@ export function CodexSessionManager() {
                   <p className="codex-session-restore-modal__hint">
                     {t(
                       'codex.sessionManager.restoreModal.hint',
-                      '恢复会把 rollout 文件、SQLite 线程记录和 session_index 条目一起放回原实例。',
+                      "Restoring puts the rollout file, SQLite thread row, and session_index entry back into the original instance together.",
                     )}
                   </p>
                   <div className="codex-session-restore-list">
@@ -714,7 +714,7 @@ export function CodexSessionManager() {
                           />
                           <div className="codex-session-restore-row__content">
                             <span className="codex-session-restore-row__title" title={session.title}>
-                              {session.title || t('codex.sessionManager.untitled', '未命名会话')}
+                              {session.title || t('codex.sessionManager.untitled', "Untitled session")}
                             </span>
                             <span className="codex-session-restore-row__meta">
                               {session.locations.map((location) => location.instanceName).join(' / ')}
@@ -740,7 +740,7 @@ export function CodexSessionManager() {
                 onClick={handleCloseRestoreModal}
                 disabled={restoring}
               >
-                {t('common.cancel', '取消')}
+                {t('common.cancel', "Cancel")}
               </button>
               <button
                 className="btn btn-primary"
@@ -749,7 +749,7 @@ export function CodexSessionManager() {
                 disabled={restoring || loadingTrash || selectedTrashIds.length === 0}
               >
                 <RotateCcw size={14} className={restoring ? 'icon-spin' : undefined} />
-                {t('codex.sessionManager.restoreModal.restoreAction', '恢复选中会话')} ({selectedTrashIds.length})
+                {t('codex.sessionManager.restoreModal.restoreAction', "Restore Selected Sessions")} ({selectedTrashIds.length})
               </button>
             </div>
           </div>

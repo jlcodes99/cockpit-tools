@@ -310,7 +310,7 @@ export function CodebuddyAccountsPage() {
   );
 
   const resolveGroupLabel = (groupKey: string) =>
-    groupKey === untaggedKey ? t('accounts.defaultGroup', '默认分组') : groupKey;
+    groupKey === untaggedKey ? t('accounts.defaultGroup', "Default Group") : groupKey;
 
   const formatQuotaDateTime = useCallback((timeMs: number | null) => {
     if (timeMs == null || !Number.isFinite(timeMs)) return null;
@@ -341,46 +341,46 @@ export function CodebuddyAccountsPage() {
     const primaryTimeText = formatQuotaDateTime(isBase ? resource.refreshAt : resource.expireAt);
     if (primaryTimeText) {
       return isBase
-        ? t('codebuddy.quotaQuery.updatedAt', '下次刷新时间：{{time}}', { time: primaryTimeText })
-        : t('codebuddy.quotaQuery.expireAt', '到期时间：{{time}}', { time: primaryTimeText });
+        ? t('codebuddy.quotaQuery.updatedAt', "Next refresh time: {{time}}", { time: primaryTimeText })
+        : t('codebuddy.quotaQuery.expireAt', "Expires at: {{time}}", { time: primaryTimeText });
     }
     const fallbackTimeText = formatQuotaDateTime(isBase ? resource.expireAt : resource.refreshAt);
     if (fallbackTimeText) {
       return isBase
-        ? t('codebuddy.quotaQuery.expireAt', '到期时间：{{time}}', { time: fallbackTimeText })
-        : t('codebuddy.quotaQuery.updatedAt', '下次刷新时间：{{time}}', { time: fallbackTimeText });
+        ? t('codebuddy.quotaQuery.expireAt', "Expires at: {{time}}", { time: fallbackTimeText })
+        : t('codebuddy.quotaQuery.updatedAt', "Next refresh time: {{time}}", { time: fallbackTimeText });
     }
     return null;
   }, [formatQuotaDateTime, t]);
 
   const resolveResourcePackageTitle = useCallback((resource: CodebuddyOfficialQuotaResource, isExtra: boolean) => {
     if (isExtra || resource.packageCode === CB_PACKAGE_CODE.extra) {
-      return t('codebuddy.extraCredit.title', '加量包');
+      return t('codebuddy.extraCredit.title', "Credit Package");
     }
     if (resource.packageCode === CB_PACKAGE_CODE.activity) {
-      return t('codebuddy.quotaQuery.packageTitle.activity', '活动赠送包');
+      return t('codebuddy.quotaQuery.packageTitle.activity', "Activity Gift Package");
     }
     if (
       resource.packageCode === CB_PACKAGE_CODE.free ||
       resource.packageCode === CB_PACKAGE_CODE.gift ||
       resource.packageCode === CB_PACKAGE_CODE.freeMon
     ) {
-      return t('codebuddy.quotaQuery.packageTitle.base', '基础体验包');
+      return t('codebuddy.quotaQuery.packageTitle.base', "Base Experience Package");
     }
     if (
       resource.packageCode === CB_PACKAGE_CODE.proMon ||
       resource.packageCode === CB_PACKAGE_CODE.proYear
     ) {
-      return t('codebuddy.quotaQuery.packageTitle.pro', '专业版订阅');
+      return t('codebuddy.quotaQuery.packageTitle.pro', "Pro Subscription");
     }
-    return resource.packageName || t('codebuddy.quotaQuery.packageUnknown', '套餐信息未知');
+    return resource.packageName || t('codebuddy.quotaQuery.packageUnknown', "Unknown package");
   }, [t]);
 
   const renderResourceQuotaItems = useCallback((account: CodebuddyAccount, variant: 'card' | 'table') => {
     const model = getCodebuddyOfficialQuotaModel(account);
     const extraResource: CodebuddyOfficialQuotaResource = {
       ...model.extra,
-      packageName: t('codebuddy.extraCredit.title', '加量包'),
+      packageName: t('codebuddy.extraCredit.title', "Credit Package"),
     };
     const allResources = [...model.resources, extraResource];
 
@@ -428,13 +428,13 @@ export function CodebuddyAccountsPage() {
         usage={usage}
         locale={locale}
         accountLabel={maskAccountText(getCodebuddyAccountDisplayEmail(account))}
-        normalText={t('codebuddy.usageNormal', '正常')}
-        abnormalText={t('codebuddy.usageAbnormal', '异常')}
-        viewDetailText={t('codebuddy.usageViewDetail', '查看详情')}
-        detailTitle={t('codebuddy.usageDetailTitle', '用量状态详情')}
-        accountText={t('common.shared.columns.account', '账号')}
-        confirmText={t('common.confirm', '确认')}
-        closeText={t('common.close', '关闭')}
+        normalText={t('codebuddy.usageNormal', "Normal")}
+        abnormalText={t('codebuddy.usageAbnormal', "Abnormal")}
+        viewDetailText={t('codebuddy.usageViewDetail', "View details")}
+        detailTitle={t('codebuddy.usageDetailTitle', "Usage Status Details")}
+        accountText={t('common.shared.columns.account', "Account")}
+        confirmText={t('common.confirm', "Confirm")}
+        closeText={t('common.close', "Close")}
         classPrefix="codebuddy"
       />
     );
@@ -447,19 +447,19 @@ export function CodebuddyAccountsPage() {
     const refreshFailed = !!account.quota_query_last_error?.trim();
     const shouldShowQuota = hasQuotaData && !refreshFailed;
     const statusText = refreshFailed
-      ? t('codebuddy.quotaQuery.failedRefreshCompact', '配额查询失败')
-      : t('codebuddy.quotaQuery.empty', '暂无可用配额数据');
+      ? t('codebuddy.quotaQuery.failedRefreshCompact', "Quota query failed")
+      : t('codebuddy.quotaQuery.empty', "No quota data available");
     return (
       <>
         <div className="quota-item">
           <div className="quota-header">
-            <span className="quota-name">{t('codebuddy.usage', '用量状态')}</span>
+            <span className="quota-name">{t('codebuddy.usage', "Usage Status")}</span>
             {renderUsageInfo(account)}
           </div>
         </div>
         <div className="quota-item codebuddy-quota-item">
           <div className="quota-header codebuddy-quota-header">
-            <span className="quota-name">{t('codebuddy.quotaQuery.sectionTitle', '配额查询')}</span>
+            <span className="quota-name">{t('codebuddy.quotaQuery.sectionTitle', "Quota Query")}</span>
           </div>
           {shouldShowQuota ? (
             renderResourceQuotaItems(account, variant)
@@ -491,7 +491,7 @@ export function CodebuddyAccountsPage() {
               <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(account.id)} />
             </div>
             <span className="account-email" title={maskAccountText(displayEmail)}>{maskAccountText(displayEmail)}</span>
-            {isCurrent && <span className="current-tag">{t('accounts.status.current', '当前')}</span>}
+            {isCurrent && <span className="current-tag">{t('accounts.status.current', "Current")}</span>}
             <span className={`tier-badge ${tierBadgeClass}`}>{planBadge}</span>
           </div>
           {accountTags.length > 0 && (
@@ -507,15 +507,15 @@ export function CodebuddyAccountsPage() {
             <span className="card-date">{formatDate(account.created_at)}</span>
             <div className="card-actions">
               <button className="card-action-btn success" onClick={() => handleInjectToVSCode?.(account.id)} disabled={!!injecting}
-                title={t('common.shared.switchAccount', '切换账号')}>
+                title={t('common.shared.switchAccount', "Switch Account")}>
                 {injecting === account.id ? <RefreshCw size={14} className="loading-spinner" /> : <Play size={14} />}
               </button>
-              <button className="card-action-btn" onClick={() => openTagModal(account.id)} title={t('accounts.editTags', '编辑标签')}><Tag size={14} /></button>
-              <button className="card-action-btn" onClick={() => handleRefresh(account.id)} disabled={refreshing === account.id} title={t('common.shared.refreshQuota', '刷新')}>
+              <button className="card-action-btn" onClick={() => openTagModal(account.id)} title={t('accounts.editTags', "Edit Tags")}><Tag size={14} /></button>
+              <button className="card-action-btn" onClick={() => handleRefresh(account.id)} disabled={refreshing === account.id} title={t('common.shared.refreshQuota', "Refresh Quota")}>
                 <RotateCw size={14} className={refreshing === account.id ? 'loading-spinner' : ''} />
               </button>
-              <button className="card-action-btn export-btn" onClick={() => handleExportByIds([account.id])} title={t('common.shared.export.title', '导出')}><Upload size={14} /></button>
-              <button className="card-action-btn danger" onClick={() => handleDelete(account.id)} title={t('common.delete', '删除')}><Trash2 size={14} /></button>
+              <button className="card-action-btn export-btn" onClick={() => handleExportByIds([account.id])} title={t('common.shared.export.title', "Export")}><Upload size={14} /></button>
+              <button className="card-action-btn danger" onClick={() => handleDelete(account.id)} title={t('common.delete', "Delete")}><Trash2 size={14} /></button>
             </div>
           </div>
         </div>
@@ -534,7 +534,7 @@ export function CodebuddyAccountsPage() {
           <td><input type="checkbox" checked={isSelected} onChange={() => toggleSelect(account.id)} /></td>
           <td>
             <span className="table-email" title={maskAccountText(displayEmail)}>{maskAccountText(displayEmail)}</span>
-            {isCurrent && <span className="current-tag">{t('accounts.status.current', '当前')}</span>}
+            {isCurrent && <span className="current-tag">{t('accounts.status.current', "Current")}</span>}
           </td>
           <td><span className={`tier-badge ${tierBadgeClass}`}>{planBadge}</span></td>
           <td>
@@ -570,18 +570,18 @@ export function CodebuddyAccountsPage() {
         <button type="button" className="ghcp-flow-notice-toggle" onClick={() => setIsFlowNoticeCollapsed((prev) => !prev)}>
           <div className="ghcp-flow-notice-title">
             <CircleAlert size={16} />
-            <span>{t('codebuddy.flowNotice.title', 'CodeBuddy 账号管理说明（点击展开/收起）')}</span>
+            <span>{t('codebuddy.flowNotice.title', "CodeBuddy Account Info (click to expand/collapse)")}</span>
           </div>
           <ChevronDown size={16} className={`ghcp-flow-notice-arrow ${isFlowNoticeCollapsed ? 'collapsed' : ''}`} />
         </button>
         {!isFlowNoticeCollapsed && (
           <div className="ghcp-flow-notice-body">
             <div className="ghcp-flow-notice-desc">
-              {t('codebuddy.flowNotice.desc', '切换账号需读取 CodeBuddy 本地认证存储并调用系统凭据服务进行加解密，数据仅在本地处理。')}
+              {t('codebuddy.flowNotice.desc', "Switching accounts requires reading CodeBuddy local auth storage and calling system credential services for decryption/re-encryption. Data is processed locally only.")}
             </div>
             <ul className="ghcp-flow-notice-list">
-              <li>{t('codebuddy.flowNotice.permission', '权限范围：读取 CodeBuddy 认证数据库 (state.vscdb)，调用系统凭据能力（macOS Keychain / Windows DPAPI / Linux Secret Service）进行解密/回写。')}</li>
-              <li>{t('codebuddy.flowNotice.network', '网络范围：OAuth 授权登录与 Token 刷新需联网请求 codebuddy.ai；配额查询需调用计费 API。不上传本地密钥或凭证。')}</li>
+              <li>{t('codebuddy.flowNotice.permission', "Permission scope: read CodeBuddy auth database (state.vscdb), call system credential capabilities (macOS Keychain / Windows DPAPI / Linux Secret Service) for decrypt/write-back.")}</li>
+              <li>{t('codebuddy.flowNotice.network', "Network scope: OAuth login and token refresh require network requests to codebuddy.ai; quota queries call billing APIs. No local keys or credentials are uploaded.")}</li>
             </ul>
           </div>
         )}
@@ -598,27 +598,27 @@ export function CodebuddyAccountsPage() {
         <div className="toolbar-left">
           <div className="search-box">
             <Search size={16} className="search-icon" />
-            <input type="text" placeholder={t('codebuddy.search', '搜索 CodeBuddy 账号...')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            <input type="text" placeholder={t('codebuddy.search', "Search CodeBuddy accounts...")} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
           </div>
           <div className="view-switcher">
-            <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} title={t('common.shared.view.list', '列表视图')}><List size={16} /></button>
-            <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} title={t('common.shared.view.grid', '卡片视图')}><LayoutGrid size={16} /></button>
+            <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} title={t('common.shared.view.list', "List view")}><List size={16} /></button>
+            <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} title={t('common.shared.view.grid', "Card view")}><LayoutGrid size={16} /></button>
           </div>
           <MultiSelectFilterDropdown
             options={tierFilterOptions}
             selectedValues={filterTypes}
             allLabel={`ALL (${tierSummary.all})`}
-            filterLabel={t('common.shared.filterLabel', '筛选')}
-            clearLabel={t('accounts.clearFilter', '清空筛选')}
-            emptyLabel={t('common.none', '暂无')}
-            ariaLabel={t('common.shared.filterLabel', '筛选')}
+            filterLabel={t('common.shared.filterLabel', "Filter")}
+            clearLabel={t('accounts.clearFilter', "Clear Filter")}
+            emptyLabel={t('common.none', "None")}
+            ariaLabel={t('common.shared.filterLabel', "Filter")}
             onToggleValue={toggleFilterTypeValue}
             onClear={clearFilterTypes}
           />
           <div className="tag-filter" ref={tagFilterRef}>
             <button type="button" className={`tag-filter-btn ${tagFilter.length > 0 ? 'active' : ''}`} onClick={() => setShowTagFilter((prev) => !prev)}>
               <Tag size={14} />
-              {tagFilter.length > 0 ? `${t('accounts.filterTagsCount', '标签')}(${tagFilter.length})` : t('accounts.filterTags', '标签筛选')}
+              {tagFilter.length > 0 ? `${t('accounts.filterTagsCount', "Tags")}(${tagFilter.length})` : t('accounts.filterTags', "Filter Tags")}
             </button>
             {showTagFilter && (
               <div
@@ -626,12 +626,12 @@ export function CodebuddyAccountsPage() {
                 className={`tag-filter-panel ${page.tagFilterPanelPlacement === 'top' ? 'open-top' : ''}`}
               >
                 {availableTags.length === 0 ? (
-                  <div className="tag-filter-empty">{t('accounts.noAvailableTags', '暂无可用标签')}</div>
+                  <div className="tag-filter-empty">{t('accounts.noAvailableTags', "No tags available")}</div>
                 ) : (
                   <>
                     <div className="tag-filter-header">
-                      <label className="group-toggle"><input type="checkbox" checked={groupByTag} onChange={() => setGroupByTag(!groupByTag)} /> {t('accounts.groupByTag', '按标签分组')}</label>
-                      {tagFilter.length > 0 && <button className="tag-filter-clear" onClick={clearTagFilter}>{t('common.shared.clear', '清除')}</button>}
+                      <label className="group-toggle"><input type="checkbox" checked={groupByTag} onChange={() => setGroupByTag(!groupByTag)} /> {t('accounts.groupByTag', "Group by tags")}</label>
+                      {tagFilter.length > 0 && <button className="tag-filter-clear" onClick={clearTagFilter}>{t('common.shared.clear', "Clear")}</button>}
                     </div>
                     <div className="tag-filter-list" style={page.tagFilterScrollContainerStyle}>
                       {availableTags.map((tag) => (
@@ -648,43 +648,43 @@ export function CodebuddyAccountsPage() {
           </div>
         </div>
         <div className="toolbar-right">
-          <button className="btn btn-primary icon-only" onClick={() => openAddModal('oauth')} title={t('common.shared.addAccount', '添加账号')}><Plus size={14} /></button>
-          <button className="btn btn-secondary icon-only" onClick={handleRefreshAll} disabled={refreshingAll || accounts.length === 0} title={t('common.shared.refreshAll', '刷新全部')}>
+          <button className="btn btn-primary icon-only" onClick={() => openAddModal('oauth')} title={t('common.shared.addAccount', "Add Account")}><Plus size={14} /></button>
+          <button className="btn btn-secondary icon-only" onClick={handleRefreshAll} disabled={refreshingAll || accounts.length === 0} title={t('common.shared.refreshAll', "Refresh All")}>
             <RefreshCw size={14} className={refreshingAll ? 'loading-spinner' : ''} />
           </button>
           <button className="btn btn-secondary icon-only" onClick={togglePrivacyMode}
-            title={privacyModeEnabled ? t('privacy.showSensitive', '显示邮箱') : t('privacy.hideSensitive', '隐藏邮箱')}>
+            title={privacyModeEnabled ? t('privacy.showSensitive', "Show emails") : t('privacy.hideSensitive', "Hide emails")}>
             {privacyModeEnabled ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
-          <button className="btn btn-secondary icon-only" onClick={() => openAddModal('token')} disabled={importing} title={t('common.shared.import.label', '导入')}><Download size={14} /></button>
+          <button className="btn btn-secondary icon-only" onClick={() => openAddModal('token')} disabled={importing} title={t('common.shared.import.label', "Import")}><Download size={14} /></button>
           <button className="btn btn-secondary export-btn icon-only" onClick={() => void handleExport(filteredIds)} disabled={exporting || filteredIds.length === 0}
-            title={exportSelectionCount > 0 ? `${t('common.shared.export.title', '导出')} (${exportSelectionCount})` : t('common.shared.export.title', '导出')}>
+            title={exportSelectionCount > 0 ? `${t('common.shared.export.title', "Export")} (${exportSelectionCount})` : t('common.shared.export.title', "Export")}>
             <Upload size={14} />
           </button>
           {selected.size > 0 && (
-            <button className="btn btn-danger icon-only" onClick={handleBatchDelete} title={`${t('common.delete', '删除')} (${selected.size})`}><Trash2 size={14} /></button>
+            <button className="btn btn-danger icon-only" onClick={handleBatchDelete} title={`${t('common.delete', "Delete")} (${selected.size})`}><Trash2 size={14} /></button>
           )}
           <QuickSettingsPopover type="codebuddy" />
         </div>
       </div>
 
       {loading && accounts.length === 0 ? (
-        <div className="loading-container"><RefreshCw size={24} className="loading-spinner" /><p>{t('common.loading', '加载中...')}</p></div>
+        <div className="loading-container"><RefreshCw size={24} className="loading-spinner" /><p>{t('common.loading', "Loading...")}</p></div>
       ) : accounts.length === 0 ? (
         <div className="empty-state">
           <Globe size={48} />
-          <h3>{t('common.shared.empty.title', '暂无账号')}</h3>
-          <p>{t('codebuddy.noAccounts', '暂无 CodeBuddy 账号')}</p>
+          <h3>{t('common.shared.empty.title', "No Accounts")}</h3>
+          <p>{t('codebuddy.noAccounts', "No CodeBuddy accounts")}</p>
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '16px' }}>
             <button className="btn btn-primary" onClick={() => openAddModal('oauth')}>
-              <Plus size={16} /> {t('common.shared.addAccount', '添加账号')}
+              <Plus size={16} /> {t('common.shared.addAccount', "Add Account")}
             </button>
           </div>
         </div>
       ) : filteredAccounts.length === 0 ? (
         <div className="empty-state">
-          <h3>{t('common.shared.noMatch.title', '没有匹配的账号')}</h3>
-          <p>{t('common.shared.noMatch.desc', '请尝试调整搜索或筛选条件')}</p>
+          <h3>{t('common.shared.noMatch.title', "No matching accounts")}</h3>
+          <p>{t('common.shared.noMatch.desc', "Try adjusting your search or filters")}</p>
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid-view-container">
@@ -692,7 +692,7 @@ export function CodebuddyAccountsPage() {
             <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
                 <input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} />
-                {t('common.selectAll', '全选')}
+                {t('common.selectAll', "Select All")}
               </label>
             </div>
           )}
@@ -718,10 +718,10 @@ export function CodebuddyAccountsPage() {
             <thead>
               <tr>
                 <th style={{ width: 40 }}><input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} /></th>
-                <th style={{ width: 240 }}>{t('common.shared.columns.email', '邮箱')}</th>
-                <th style={{ width: 120 }}>{t('common.shared.columns.plan', '套餐')}</th>
-                <th>{t('codebuddy.quotaQuery.sectionTitle', '配额查询')}</th>
-                <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', '操作')}</th>
+                <th style={{ width: 240 }}>{t('common.shared.columns.email', "Email")}</th>
+                <th style={{ width: 120 }}>{t('common.shared.columns.plan', "Plan")}</th>
+                <th>{t('codebuddy.quotaQuery.sectionTitle', "Quota Query")}</th>
+                <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', "Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -740,10 +740,10 @@ export function CodebuddyAccountsPage() {
             <thead>
               <tr>
                 <th style={{ width: 40 }}><input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} /></th>
-                <th style={{ width: 240 }}>{t('common.shared.columns.email', '邮箱')}</th>
-                <th style={{ width: 120 }}>{t('common.shared.columns.plan', '套餐')}</th>
-                <th>{t('codebuddy.quotaQuery.sectionTitle', '配额查询')}</th>
-                <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', '操作')}</th>
+                <th style={{ width: 240 }}>{t('common.shared.columns.email', "Email")}</th>
+                <th style={{ width: 120 }}>{t('common.shared.columns.plan', "Plan")}</th>
+                <th>{t('codebuddy.quotaQuery.sectionTitle', "Quota Query")}</th>
+                <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', "Actions")}</th>
               </tr>
             </thead>
             <tbody>{renderTableRows(paginatedAccounts)}</tbody>
@@ -770,28 +770,28 @@ export function CodebuddyAccountsPage() {
         <div className="modal-overlay" onClick={closeAddModal}>
             <div className="modal-content ghcp-add-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{t('codebuddy.addAccount', '添加 CodeBuddy 账号')}</h2>
+              <h2>{t('codebuddy.addAccount', "Add CodeBuddy Account")}</h2>
               <button className="modal-close" onClick={closeAddModal}><X size={18} /></button>
             </div>
             <div className="modal-tabs">
-              <button className={`modal-tab ${addTab === 'oauth' ? 'active' : ''}`} onClick={() => openAddModal('oauth')}><Globe size={14} /> {t('common.shared.addModal.oauth', '授权登录')}</button>
+              <button className={`modal-tab ${addTab === 'oauth' ? 'active' : ''}`} onClick={() => openAddModal('oauth')}><Globe size={14} /> {t('common.shared.addModal.oauth', "OAuth Authorization")}</button>
               <button className={`modal-tab ${addTab === 'token' ? 'active' : ''}`} onClick={() => openAddModal('token')}><KeyRound size={14} />Token / JSON</button>
-              <button className={`modal-tab ${addTab === 'json' ? 'active' : ''}`} onClick={() => openAddModal('json')}><Database size={14} />{t('common.shared.addModal.import', '本地导入')}</button>
+              <button className={`modal-tab ${addTab === 'json' ? 'active' : ''}`} onClick={() => openAddModal('json')}><Database size={14} />{t('common.shared.addModal.import', "Local Import")}</button>
             </div>
             <div className="modal-body">
               {addTab === 'oauth' && (
                 <div className="add-section oauth-section">
                   <p className="section-desc">
-                    {t('codebuddy.oauthDesc', '点击下方按钮将在浏览器中打开 CodeBuddy 授权页面。')}
+                    {t('codebuddy.oauthDesc', "Click the button below to open the CodeBuddy authorization page in your browser.")}
                   </p>
                   <div className="codebuddy-oauth-feature-card oauth">
                     <p className="feature-title">
-                      {t('codebuddy.oauthFeature.oauth.title', '仅授权 IDE 登录信息')}
+                      {t('codebuddy.oauthFeature.oauth.title', "IDE sign-in only")}
                     </p>
                     <ul className="feature-list">
-                      <li>{t('codebuddy.oauthFeature.oauth.item1', '在浏览器完成 OAuth 后即可添加账号并用于 IDE 切换。')}</li>
-                      <li>{t('codebuddy.oauthFeature.oauth.item2', '授权完成后会自动刷新资源包配额数据。')}</li>
-                      <li>{t('codebuddy.oauthFeature.oauth.item3', '账号卡片将按资源包展示额度、进度和刷新/到期时间。')}</li>
+                      <li>{t('codebuddy.oauthFeature.oauth.item1', "Add the account after completing OAuth in your browser, then use it for IDE switching.")}</li>
+                      <li>{t('codebuddy.oauthFeature.oauth.item2', "Resource-package quota data will refresh automatically after authorization.")}</li>
+                      <li>{t('codebuddy.oauthFeature.oauth.item3', "Account cards show quota amount, progress, and refresh/expiry time by resource package.")}</li>
                     </ul>
                   </div>
                   {oauthPrepareError ? (
@@ -799,7 +799,7 @@ export function CodebuddyAccountsPage() {
                       <CircleAlert size={16} />
                       <span>{oauthPrepareError}</span>
                       <button className="btn btn-sm btn-outline" onClick={handleRetryOauth}>
-                        {t('common.shared.oauth.retry', '重新生成授权信息')}
+                        {t('common.shared.oauth.retry', "Regenerate authorization info")}
                       </button>
                     </div>
                   ) : oauthUrl ? (
@@ -809,7 +809,7 @@ export function CodebuddyAccountsPage() {
                           type="text"
                           value={oauthUrl}
                           readOnly
-                          placeholder={t('codebuddy.oauthUrlInputPlaceholder', '可手动输入授权地址')}
+                          placeholder={t('codebuddy.oauthUrlInputPlaceholder', "You can enter an authorization URL manually")}
                         />
                         <button onClick={handleCopyOauthUrl}>
                           {oauthUrlCopied ? <Check size={16} /> : <Copy size={16} />}
@@ -825,7 +825,7 @@ export function CodebuddyAccountsPage() {
                       )}
                       {oauthMeta && (
                         <p className="oauth-hint">
-                          {t('common.shared.oauth.meta', '授权有效期：{{expires}}s；轮询间隔：{{interval}}s', {
+                          {t('common.shared.oauth.meta', "Expires in: {{expires}}s; Poll interval: {{interval}}s", {
                             expires: oauthMeta.expiresIn,
                             interval: oauthMeta.intervalSeconds,
                           })}
@@ -836,12 +836,12 @@ export function CodebuddyAccountsPage() {
                         onClick={handleOpenOauthUrl}
                       >
                         <Globe size={16} />
-                        {t('common.shared.oauth.openBrowser', '在浏览器中打开')}
+                        {t('common.shared.oauth.openBrowser', "Open in Browser")}
                       </button>
                       {oauthPolling && (
                         <div className="add-status loading">
                           <RefreshCw size={16} className="loading-spinner" />
-                          <span>{t('codebuddy.oauthWaiting', '等待授权完成...')}</span>
+                          <span>{t('codebuddy.oauthWaiting', "Waiting for authorization...")}</span>
                         </div>
                       )}
                       {oauthCompleteError && (
@@ -850,7 +850,7 @@ export function CodebuddyAccountsPage() {
                           <span>{oauthCompleteError}</span>
                           {oauthTimedOut && (
                             <button className="btn btn-sm btn-outline" onClick={handleRetryOauth}>
-                              {t('common.shared.oauth.timeoutRetry', '刷新授权链接')}
+                              {t('common.shared.oauth.timeoutRetry', "Refresh authorization link")}
                             </button>
                           )}
                         </div>
@@ -862,15 +862,15 @@ export function CodebuddyAccountsPage() {
                   ) : (
                     <div className="oauth-loading">
                       <RefreshCw size={24} className="loading-spinner" />
-                      <span>{t('common.shared.oauth.preparing', '正在准备授权信息...')}</span>
+                      <span>{t('common.shared.oauth.preparing', "Preparing authorization info...")}</span>
                     </div>
                   )}
                 </div>
               )}
               {addTab === 'token' && (
                 <div className="add-section token-section">
-                  <p className="section-desc">{t('codebuddy.tokenDesc', '粘贴 CodeBuddy 的 access token：')}</p>
-                  <textarea className="token-input" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} placeholder={t('common.shared.token.placeholder', '粘贴 Token 或 JSON...')} />
+                  <p className="section-desc">{t('codebuddy.tokenDesc', "Paste your CodeBuddy access token:")}</p>
+                  <textarea className="token-input" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} placeholder={t('common.shared.token.placeholder', "Example: ghu_xxx / sk-ws-xxx / {\"access_token\":\"eyJ...\",\"refresh_token\":\"rt_...\"} / [{...}]")} />
                   <button className="btn btn-primary btn-full" onClick={handleTokenImport} disabled={importing || !tokenInput.trim()}>
                     {importing ? <RefreshCw size={16} className="loading-spinner" /> : <Download size={16} />}
                     {t('common.shared.token.import', 'Import')}
@@ -879,17 +879,17 @@ export function CodebuddyAccountsPage() {
               )}
               {addTab === 'json' && (
                 <div className="add-section json-section">
-                  <p className="section-desc">{t('codebuddy.import.localDesc', '支持从本机 CodeBuddy 客户端或 JSON 文件导入账号数据。')}</p>
+                  <p className="section-desc">{t('codebuddy.import.localDesc', "Import account data from local CodeBuddy client or a JSON file.")}</p>
                   <button className="btn btn-secondary btn-full" onClick={() => handleImportFromLocal?.()} disabled={importing}>
                     {importing ? <RefreshCw size={16} className="loading-spinner" /> : <Database size={16} />}
-                    {t('codebuddy.import.localClient', '从本机 CodeBuddy 导入')}
+                    {t('codebuddy.import.localClient', "Import from local CodeBuddy")}
                   </button>
-                  <div className="oauth-hint" style={{ margin: '8px 0 4px' }}>{t('common.shared.import.orJson', '或从 JSON 文件导入')}</div>
+                  <div className="oauth-hint" style={{ margin: '8px 0 4px' }}>{t('common.shared.import.orJson', "Or import from JSON file")}</div>
                   <input ref={importFileInputRef} type="file" accept="application/json" style={{ display: 'none' }}
                     onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (!file) return; void handleImportJsonFile(file); }} />
                   <button className="btn btn-primary btn-full" onClick={handlePickImportFile} disabled={importing}>
                     {importing ? <RefreshCw size={16} className="loading-spinner" /> : <Database size={16} />}
-                    {t('common.shared.import.pickFile', '选择 JSON 文件导入')}
+                    {t('common.shared.import.pickFile', "Select JSON file to import")}
                   </button>
                 </div>
               )}
@@ -897,7 +897,7 @@ export function CodebuddyAccountsPage() {
               {addStatus !== 'idle' && addStatus !== 'loading' && (
                 <div className={`add-status ${addStatus}`}>
                   {addStatus === 'success' ? <Check size={16} /> : <CircleAlert size={16} />}
-                  <span>{addMessage || t('common.shared.loginSuccess', '登录成功')}</span>
+                  <span>{addMessage || t('common.shared.loginSuccess', "Login successful")}</span>
                 </div>
               )}
             </div>
@@ -909,11 +909,11 @@ export function CodebuddyAccountsPage() {
         <div className="modal-overlay" onClick={() => !deleting && setDeleteConfirm(null)}>
           <div className="modal confirm-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{t('common.confirmDelete', '确认删除')}</h2>
+              <h2>{t('common.confirmDelete', "Confirm Delete")}</h2>
               <button
                 className="modal-close"
                 onClick={() => !deleting && setDeleteConfirm(null)}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>
@@ -923,8 +923,8 @@ export function CodebuddyAccountsPage() {
               <p>{deleteConfirm.message}</p>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setDeleteConfirm(null)} disabled={deleting}>{t('common.cancel', '取消')}</button>
-              <button className="btn btn-danger" onClick={confirmDelete} disabled={deleting}>{deleting ? t('common.processing', '处理中...') : t('common.confirm', '确认')}</button>
+              <button className="btn btn-secondary" onClick={() => setDeleteConfirm(null)} disabled={deleting}>{t('common.cancel', "Cancel")}</button>
+              <button className="btn btn-danger" onClick={confirmDelete} disabled={deleting}>{deleting ? t('common.processing', "Processing...") : t('common.confirm', "Confirm")}</button>
             </div>
           </div>
         </div>
@@ -934,11 +934,11 @@ export function CodebuddyAccountsPage() {
         <div className="modal-overlay" onClick={() => !deletingTag && setTagDeleteConfirm(null)}>
           <div className="modal confirm-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{t('common.confirmDeleteTag', '确认删除标签')}</h2>
+              <h2>{t('common.confirmDeleteTag', "Confirm Tag Deletion")}</h2>
               <button
                 className="modal-close"
                 onClick={() => !deletingTag && setTagDeleteConfirm(null)}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>
@@ -948,8 +948,8 @@ export function CodebuddyAccountsPage() {
               <p>{t('common.deleteTagWarning', { tag: tagDeleteConfirm, defaultValue: '确定要从所有账号中移除标签 "{{tag}}" 吗？' })}</p>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setTagDeleteConfirm(null)} disabled={deletingTag}>{t('common.cancel', '取消')}</button>
-              <button className="btn btn-danger" onClick={confirmDeleteTag} disabled={deletingTag}>{deletingTag ? t('common.processing', '处理中...') : t('common.confirm', '确认')}</button>
+              <button className="btn btn-secondary" onClick={() => setTagDeleteConfirm(null)} disabled={deletingTag}>{t('common.cancel', "Cancel")}</button>
+              <button className="btn btn-danger" onClick={confirmDeleteTag} disabled={deletingTag}>{deletingTag ? t('common.processing', "Processing...") : t('common.confirm', "Confirm")}</button>
             </div>
           </div>
         </div>
@@ -957,7 +957,7 @@ export function CodebuddyAccountsPage() {
 
       <ExportJsonModal
         isOpen={showExportModal}
-        title={`${t('common.shared.export.title', '导出')} JSON`}
+        title={`${t('common.shared.export.title', "Export")} JSON`}
         jsonContent={exportJsonContent}
         hidden={exportJsonHidden}
         copied={exportJsonCopied}

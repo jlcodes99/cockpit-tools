@@ -1512,69 +1512,69 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
 
   const formatSwitchHistoryStage = (stage?: string | null) => {
     if (stage === 'local') {
-      return t('accounts.switchHistory.stageLocal', '本地落盘')
+      return t('accounts.switchHistory.stageLocal', "Local write")
     }
     if (stage === 'client_start') {
-      return t('accounts.switchHistory.stageClientStart', '启动客户端')
+      return t('accounts.switchHistory.stageClientStart', "Client startup")
     }
     if (stage === 'seamless') {
-      return t('accounts.switchHistory.stageSeamless', '扩展无感')
+      return t('accounts.switchHistory.stageSeamless', "Extension seamless")
     }
-    return t('accounts.switchHistory.stageUnknown', '未知阶段')
+    return t('accounts.switchHistory.stageUnknown', "Unknown stage")
   }
 
   const formatSwitchHistoryTrigger = (triggerType?: string | null) => {
     if (triggerType === 'auto') {
-      return t('accounts.switchHistory.triggerAuto', '自动切换')
+      return t('accounts.switchHistory.triggerAuto', "Auto switch")
     }
     if (triggerType === 'manual') {
-      return t('accounts.switchHistory.triggerManual', '手动切换')
+      return t('accounts.switchHistory.triggerManual', "Manual switch")
     }
-    return t('accounts.switchHistory.triggerUnknown', '未知')
+    return t('accounts.switchHistory.triggerUnknown', "Unknown")
   }
 
   const formatSwitchHistoryOrigin = (triggerSource?: string | null) => {
     const normalizedSource = (triggerSource || '').trim().toLowerCase()
     if (normalizedSource.startsWith('tools.ws.')) {
-      return t('accounts.switchHistory.originPlugin', '插件端')
+      return t('accounts.switchHistory.originPlugin', "Plugin")
     }
     if (normalizedSource.startsWith('tools.account.')) {
-      return t('accounts.switchHistory.originDesktop', '桌面端')
+      return t('accounts.switchHistory.originDesktop', "Desktop")
     }
-    return t('accounts.switchHistory.originUnknown', '未知')
+    return t('accounts.switchHistory.originUnknown', "Unknown")
   }
 
   const formatSwitchHistoryAutoRule = (rule?: string | null) => {
     if (rule === 'current_disabled') {
-      return t('accounts.switchHistory.autoReasonRuleCurrentDisabled', '当前账号已禁用')
+      return t('accounts.switchHistory.autoReasonRuleCurrentDisabled', "Current account is disabled")
     }
     if (rule === 'current_quota_forbidden') {
-      return t('accounts.switchHistory.autoReasonRuleQuotaForbidden', '当前账号配额受限')
+      return t('accounts.switchHistory.autoReasonRuleQuotaForbidden', "Current account quota is forbidden")
     }
     if (rule === 'group_and_credits_below_threshold') {
-      return t('accounts.switchHistory.autoReasonRuleGroupAndCreditsBelowThreshold', '模型分组和 Credits 同时低于阈值')
+      return t('accounts.switchHistory.autoReasonRuleGroupAndCreditsBelowThreshold', "Model groups and credits are both below threshold")
     }
     if (rule === 'group_below_threshold') {
-      return t('accounts.switchHistory.autoReasonRuleGroupBelowThreshold', '模型分组低于阈值')
+      return t('accounts.switchHistory.autoReasonRuleGroupBelowThreshold', "Model group below threshold")
     }
     if (rule === 'credits_below_threshold') {
-      return t('accounts.switchHistory.autoReasonRuleCreditsBelowThreshold', '剩余 Credits 低于阈值')
+      return t('accounts.switchHistory.autoReasonRuleCreditsBelowThreshold', "Remaining credits below threshold")
     }
-    return t('accounts.switchHistory.triggerUnknown', '未知')
+    return t('accounts.switchHistory.triggerUnknown', "Unknown")
   }
 
   const formatSwitchHistoryAutoScope = (scopeMode?: string | null) => {
     if (scopeMode === 'selected_groups') {
-      return t('accounts.switchHistory.autoReasonScopeSelectedGroups', '指定模型分组')
+      return t('accounts.switchHistory.autoReasonScopeSelectedGroups', "Selected model groups")
     }
-    return t('accounts.switchHistory.autoReasonScopeAnyGroup', '任一模型分组')
+    return t('accounts.switchHistory.autoReasonScopeAnyGroup', "Any model group")
   }
 
   const formatSwitchHistoryAutoReason = (
     reason?: accountService.AntigravityAutoSwitchReason | null
   ) => {
     if (!reason) {
-      return t('accounts.switchHistory.autoReasonUnknown', '自动切号触发，未记录详细原因')
+      return t('accounts.switchHistory.autoReasonUnknown', "Auto switch triggered, but no detailed reason was recorded")
     }
     const formatCreditsValue = (value?: number | null) => {
       if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -2257,7 +2257,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
   }, [accounts, refreshWarnings])
 
   const resolveGroupLabel = (groupKey: string) =>
-    groupKey === untaggedKey ? t('accounts.untagged', '未分组') : groupKey
+    groupKey === untaggedKey ? t('accounts.untagged', "Untagged") : groupKey
 
   const renderGridCards = (items: Account[], groupKey?: string) =>
     items.map((account) => {
@@ -2363,7 +2363,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
               <>
                 {hasQuotaError && (
                   <div className="quota-empty" title={quotaError?.message}>
-                    {t('common.shared.quota.queryFailed', '配额查询失败')}
+                    {t('common.shared.quota.queryFailed', "Quota query failed")}
                   </div>
                 )}
                 {quotaDisplayItems.map((item) => {
@@ -2445,7 +2445,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
               <button
                 className="card-action-btn"
                 onClick={() => openTagModal(account.id)}
-                title={t('accounts.editTags', '编辑标签')}
+                title={t('accounts.editTags', "Edit Tags")}
               >
                 <Tag size={14} />
               </button>
@@ -2600,7 +2600,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                 checked={allPaginatedSelected}
                 onChange={toggleSelectAll}
               />
-              {t('common.selectAll', '全选')}
+              {t('common.selectAll', "Select All")}
             </label>
           </div>
         )}
@@ -2844,8 +2844,8 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                       }}
                       title={
                         isHidden
-                          ? t('accounts.compact.show', '显示')
-                          : t('accounts.compact.hide', '隐藏')
+                          ? t('accounts.compact.show', "Show")
+                          : t('accounts.compact.hide', "Hide")
                       }
                     >
                       {isHidden ? <EyeOff size={12} /> : <Eye size={12} />}
@@ -3027,7 +3027,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                 <>
                   {hasQuotaError && (
                     <div className="quota-empty" title={quotaError?.message}>
-                      {t('common.shared.quota.queryFailed', '配额查询失败')}
+                      {t('common.shared.quota.queryFailed', "Quota query failed")}
                     </div>
                   )}
                   {quotaDisplayItems.map((item) => (
@@ -3092,7 +3092,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
               <button
                 className="action-btn"
                 onClick={() => openTagModal(account.id)}
-                title={t('accounts.editTags', '编辑标签')}
+                title={t('accounts.editTags', "Edit Tags")}
               >
                 <Tag size={16} />
               </button>
@@ -3363,10 +3363,10 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
               options={tierFilterOptions}
               selectedValues={filterTypes}
               allLabel={t('accounts.filter.all', { count: tierCounts.all })}
-              filterLabel={t('accounts.filterLabel', '筛选')}
-              clearLabel={t('accounts.clearFilter', '清空筛选')}
-              emptyLabel={t('common.none', '暂无')}
-              ariaLabel={t('accounts.filterLabel', '筛选')}
+              filterLabel={t('accounts.filterLabel', "Filter accounts")}
+              clearLabel={t('accounts.clearFilter', "Clear Filter")}
+              emptyLabel={t('common.none', "None")}
+              ariaLabel={t('accounts.filterLabel', "Filter accounts")}
               onToggleValue={(value) => toggleFilterTypeValue(value as AccountsFilterType)}
               onClear={clearFilterTypes}
             />
@@ -3386,11 +3386,11 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
               options={[
                 {
                   value: 'overall',
-                  label: t('accounts.sort.overall', '按综合配额'),
+                  label: t('accounts.sort.overall', "By overall quota"),
                 },
                 {
                   value: 'created_at',
-                  label: t('accounts.sort.createdAt', '按创建时间'),
+                  label: t('accounts.sort.createdAt', "By creation time"),
                 },
                 ...displayGroups.map((group) => ({
                   value: group.id,
@@ -3407,7 +3407,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                   }),
                 })),
               ]}
-              ariaLabel={t('accounts.sortLabel', '排序')}
+              ariaLabel={t('accounts.sortLabel', "Sort")}
               icon={<ArrowDownWideNarrow size={14} />}
               onChange={setSortBy}
             />
@@ -3420,10 +3420,10 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
               }
               title={
                 sortDirection === 'desc'
-                  ? t('accounts.sort.descTooltip', '当前：降序，点击切换为升序')
-                  : t('accounts.sort.ascTooltip', '当前：升序，点击切换为降序')
+                  ? t('accounts.sort.descTooltip', "Desc, click to switch to Asc")
+                  : t('accounts.sort.ascTooltip', "Asc, click to switch to Desc")
               }
-              aria-label={t('accounts.sort.toggleDirection', '切换排序方向')}
+              aria-label={t('accounts.sort.toggleDirection', "Toggle sort direction")}
             >
               {sortDirection === 'desc' ? '⬇' : '⬆'}
             </button>
@@ -3454,8 +3454,8 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
               <button
                 className="btn btn-secondary icon-only"
                 onClick={openSwitchHistoryModal}
-                title={t('accounts.switchHistory.title', '切换记录')}
-                aria-label={t('accounts.switchHistory.title', '切换记录')}
+                title={t('accounts.switchHistory.title', "Switch History")}
+                aria-label={t('accounts.switchHistory.title', "Switch History")}
               >
                 <History size={14} />
               </button>
@@ -3465,13 +3465,13 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
               onClick={togglePrivacyMode}
               title={
                 privacyModeEnabled
-                  ? t('privacy.showSensitive', '显示邮箱')
-                  : t('privacy.hideSensitive', '隐藏邮箱')
+                  ? t('privacy.showSensitive', "Show emails")
+                  : t('privacy.hideSensitive', "Hide emails")
               }
               aria-label={
                 privacyModeEnabled
-                  ? t('privacy.showSensitive', '显示邮箱')
-                  : t('privacy.hideSensitive', '隐藏邮箱')
+                  ? t('privacy.showSensitive', "Show emails")
+                  : t('privacy.hideSensitive', "Hide emails")
               }
             >
               {privacyModeEnabled ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -3570,7 +3570,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                 onClick={() => onNavigate?.('manual')}
               >
                 <BookOpen size={18} />
-                {t('manual.navTitle', '查阅接入手册')}
+                {t('manual.navTitle', "User Manual")}
               </button>
             </div>
           </div>
@@ -3692,13 +3692,13 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                     </div>
                   </div>
                   <div className="oauth-link">
-                    <label>{t('common.shared.oauth.manualCallbackLabel', '手动输入回调地址')}</label>
+                    <label>{t('common.shared.oauth.manualCallbackLabel', "Manual callback URL")}</label>
                     <div className="oauth-link-row oauth-manual-input">
                       <input
                         type="text"
                         value={oauthCallbackInput}
                         onChange={(e) => setOauthCallbackInput(e.target.value)}
-                        placeholder={t('common.shared.oauth.manualCallbackPlaceholder', '粘贴完整回调地址，例如：http://localhost:1455/auth/callback?code=...&state=...')}
+                        placeholder={t('common.shared.oauth.manualCallbackPlaceholder', "Paste the full callback URL, e.g. http://localhost:1455/auth/callback?code=...&state=...")}
                       />
                       <button
                         className="btn btn-secondary"
@@ -3876,7 +3876,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
         >
           <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{t('accounts.switchHistory.title', '切换记录')}</h2>
+              <h2>{t('accounts.switchHistory.title', "Switch History")}</h2>
               <button
                 className="modal-close"
                 onClick={() => {
@@ -3884,7 +3884,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                   setShowSwitchHistoryModal(false)
                   setSwitchHistoryClearConfirmOpen(false)
                 }}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>
@@ -3896,7 +3896,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                 </div>
               ) : switchHistory.length === 0 ? (
                 <div className="empty-state" style={{ minHeight: 180 }}>
-                  <p>{t('accounts.switchHistory.empty', '暂无切换记录')}</p>
+                  <p>{t('accounts.switchHistory.empty', "No switch history yet")}</p>
                 </div>
               ) : (
                 <div style={{ maxHeight: 420, overflowY: 'auto', display: 'grid', gap: 10 }}>
@@ -3929,8 +3929,8 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                           }}
                         >
                           {item.success
-                            ? t('accounts.switchHistory.success', '成功')
-                            : t('accounts.switchHistory.failed', '失败')}
+                            ? t('accounts.switchHistory.success', "Success")
+                            : t('accounts.switchHistory.failed', "Failed")}
                         </div>
                       </div>
                       <div style={{ fontWeight: 600, fontSize: 14 }}>
@@ -3962,11 +3962,11 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                       <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                         {t('accounts.switchHistory.stageResult', {
                           local: item.localOk
-                            ? t('accounts.switchHistory.success', '成功')
-                            : t('accounts.switchHistory.failed', '失败'),
+                            ? t('accounts.switchHistory.success', "Success")
+                            : t('accounts.switchHistory.failed', "Failed"),
                           seamless: item.seamlessOk
-                            ? t('accounts.switchHistory.success', '成功')
-                            : t('accounts.switchHistory.failed', '失败'),
+                            ? t('accounts.switchHistory.success', "Success")
+                            : t('accounts.switchHistory.failed', "Failed"),
                           defaultValue: '本地：{{local}} / 无感：{{seamless}}',
                         })}
                       </div>
@@ -4002,7 +4002,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                 }}
                 disabled={switchHistoryClearing}
               >
-                {t('common.close', '关闭')}
+                {t('common.close', "Close")}
               </button>
               <button
                 className="btn btn-danger"
@@ -4010,8 +4010,8 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                 disabled={switchHistoryClearing || switchHistoryLoading || switchHistory.length === 0}
               >
                 {switchHistoryClearing
-                  ? t('common.loading', '加载中...')
-                  : t('accounts.switchHistory.clear', '清空记录')}
+                  ? t('common.loading', "Loading...")
+                  : t('accounts.switchHistory.clear', "Clear History")}
               </button>
             </div>
           </div>
@@ -4035,13 +4035,13 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                   if (switchHistoryClearing) return
                   setSwitchHistoryClearConfirmOpen(false)
                 }}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>
             </div>
             <div className="modal-body">
-              <p>{t('accounts.switchHistory.clearConfirm', '确定清空全部切换记录吗？')}</p>
+              <p>{t('accounts.switchHistory.clearConfirm', "Clear all switch history records?")}</p>
             </div>
             <div className="modal-footer">
               <button
@@ -4057,8 +4057,8 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                 disabled={switchHistoryClearing}
               >
                 {switchHistoryClearing
-                  ? t('common.loading', '加载中...')
-                  : t('accounts.switchHistory.clear', '清空记录')}
+                  ? t('common.loading', "Loading...")
+                  : t('accounts.switchHistory.clear', "Clear History")}
               </button>
             </div>
           </div>
@@ -4084,7 +4084,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                   setDeleteConfirm(null)
                   setDeleteConfirmError(null)
                 }}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>
@@ -4135,7 +4135,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                   setGroupDeleteConfirm(null)
                   setGroupDeleteError(null)
                 }}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>
@@ -4190,7 +4190,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                   setTagDeleteConfirm(null)
                   setTagDeleteConfirmError(null)
                 }}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>
@@ -4519,8 +4519,8 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
           const vDetail = verificationDetailMap[account.id]
           const isTos = vReason === 'tos_violation'
           const title = isTos
-            ? t('wakeup.errorUi.tosViolationTitle', 'TOS 违规')
-            : t('wakeup.errorUi.verificationRequiredTitle', '需要验证')
+            ? t('wakeup.errorUi.tosViolationTitle', "TOS Violation")
+            : t('wakeup.errorUi.verificationRequiredTitle', "Verification required")
 
           const openLink = async (url: string) => {
             try {
@@ -4572,7 +4572,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                   </div>
                   {!vDetail && (
                     <div className="empty-state-small" style={{ marginTop: 12 }}>
-                      {t('modals.errors.empty', '暂无验证详情')}
+                      {t('modals.errors.empty', "No error details")}
                     </div>
                   )}
 
@@ -4585,14 +4585,14 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                           onClick={() => openLink(vDetail.validationUrl!)}
                         >
                           <ExternalLink size={14} />
-                          {t('wakeup.errorUi.completeVerification', '立即验证')}
+                          {t('wakeup.errorUi.completeVerification', "Verify now")}
                         </button>
                         <button
                           className="btn btn-secondary"
                           onClick={() => copyLink(vDetail.validationUrl!)}
                         >
                           <Copy size={14} />
-                          {t('wakeup.errorUi.copyValidationUrl', '复制验证地址')}
+                          {t('wakeup.errorUi.copyValidationUrl', "Copy validation URL")}
                         </button>
                       </>
                     )}
@@ -4603,14 +4603,14 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                           onClick={() => openLink(vDetail.appealUrl!)}
                         >
                           <ExternalLink size={14} />
-                          {t('wakeup.errorUi.submitAppeal', '立即提交保证书')}
+                          {t('wakeup.errorUi.submitAppeal', "Submit Appeal")}
                         </button>
                         <button
                           className="btn btn-secondary"
                           onClick={() => copyLink(vDetail.appealUrl!)}
                         >
                           <Copy size={14} />
-                          {t('wakeup.errorUi.copyAppealUrl', '复制链接')}
+                          {t('wakeup.errorUi.copyAppealUrl', "Copy Link")}
                         </button>
                       </>
                     )}

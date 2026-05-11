@@ -1649,16 +1649,16 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
   const topThreeRankRecords = useMemo(() => sortedRankRecords.slice(0, 3), [sortedRankRecords]);
   const latestRecord = historyRecords[0] ?? null;
   const rankingLabel = t('breakout.ranking', {
-    defaultValue: t('breakout.history', '历史记录'),
+    defaultValue: t('breakout.history', "History"),
   });
   const rankingShortLabel = t('breakout.rankingShort', {
-    defaultValue: t('breakout.historyShort', '历史'),
+    defaultValue: t('breakout.historyShort', "Log"),
   });
   const rankingEmptyLabel = t('breakout.rankingEmpty', {
-    defaultValue: t('breakout.historyEmpty', '暂无历史记录'),
+    defaultValue: t('breakout.historyEmpty', "No records yet"),
   });
   const rankingClearLabel = t('breakout.rankingClear', {
-    defaultValue: t('breakout.historyClear', '清空'),
+    defaultValue: t('breakout.historyClear', "Clear"),
   });
   const latestRecordRank = useMemo(() => {
     if (!latestRecord) return null;
@@ -2392,8 +2392,8 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
                 type="button"
                 className="breakout-pause-btn"
                 onClick={handlePauseToggle}
-                title={isPaused ? t('breakout.resume', '继续') : t('breakout.pause', '暂停')}
-                aria-label={isPaused ? t('breakout.resume', '继续') : t('breakout.pause', '暂停')}
+                title={isPaused ? t('breakout.resume', "Resume") : t('breakout.pause', "Pause")}
+                aria-label={isPaused ? t('breakout.resume', "Resume") : t('breakout.pause', "Pause")}
               >
                 {isPaused ? <Play size={14} /> : <Pause size={14} />}
               </button>
@@ -2401,8 +2401,8 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
                 type="button"
                 className="breakout-window-btn"
                 onClick={handleMinimize}
-                title={t('breakout.minimize', '最小化')}
-                aria-label={t('breakout.minimize', '最小化')}
+                title={t('breakout.minimize', "Minimize")}
+                aria-label={t('breakout.minimize', "Minimize")}
               >
                 <Minus size={14} />
               </button>
@@ -2410,8 +2410,8 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
                 type="button"
                 className="breakout-window-btn close"
                 onClick={handleRequestClose}
-                title={t('common.close', '关闭')}
-                aria-label={t('common.close', '关闭')}
+                title={t('common.close', "Close")}
+                aria-label={t('common.close', "Close")}
               >
                 <X size={14} />
               </button>
@@ -2441,8 +2441,8 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
                     type="button"
                     className="breakout-history-close"
                     onClick={() => setHistoryOpen(false)}
-                    aria-label={t('common.close', '关闭')}
-                    title={t('common.close', '关闭')}
+                    aria-label={t('common.close', "Close")}
+                    title={t('common.close', "Close")}
                   >
                     <X size={14} />
                   </button>
@@ -2471,8 +2471,8 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
                         <span>{t('breakout.historyDurationShort', { duration: formatHistoryDuration(record.durationMs), defaultValue: `时长 ${formatHistoryDuration(record.durationMs)}` })}</span>
                         <span>
                           {record.reason === 'gameOver'
-                            ? t('breakout.historyReasonGameOver', '本局结束')
-                            : t('breakout.historyReasonManualExit', '手动退出')}
+                            ? t('breakout.historyReasonGameOver', "Game Over")
+                            : t('breakout.historyReasonManualExit', "Manual Exit")}
                         </span>
                         <span>{formatHistoryTime(record.createdAt)}</span>
                       </div>
@@ -2499,10 +2499,10 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
             <div className="breakout-close-confirm">
               <div className="breakout-close-confirm-card">
                 <div className="breakout-close-confirm-title">
-                  {t('breakout.closeConfirmTitle', '结束本局？')}
+                  {t('breakout.closeConfirmTitle', "End this run?")}
                 </div>
                 <div className="breakout-close-confirm-desc">
-                  {t('breakout.closeConfirmDesc', '关闭后本局将结束，进度不会保留。')}
+                  {t('breakout.closeConfirmDesc', "Closing will end this run and progress will not be kept.")}
                 </div>
                 <div className="breakout-close-confirm-actions">
                   <button
@@ -2510,21 +2510,21 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
                     className="breakout-close-confirm-btn"
                     onClick={() => setShowCloseConfirm(false)}
                   >
-                    {t('breakout.closeContinue', '继续游戏')}
+                    {t('breakout.closeContinue', "Keep Playing")}
                   </button>
                   <button
                     type="button"
                     className="breakout-close-confirm-btn"
                     onClick={handleMinimize}
                   >
-                    {t('breakout.closeMinimize', '最小化保留')}
+                    {t('breakout.closeMinimize', "Minimize and Keep")}
                   </button>
                   <button
                     type="button"
                     className="breakout-close-confirm-btn danger"
                     onClick={handleEndAndClose}
                   >
-                    {t('breakout.closeEnd', '结束并关闭')}
+                    {t('breakout.closeEnd', "End and Close")}
                   </button>
                 </div>
               </div>
@@ -2533,10 +2533,10 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
 
           {!isStarted && !isGameOver && !isLevelCleared && (
             <div className="breakout-start-screen">
-              <div className="breakout-start-title">{t('breakout.startGame', '开始游戏')}</div>
-              <div className="breakout-start-hint">{t('breakout.startHint', '点击开始按钮或按空格')}</div>
+              <div className="breakout-start-title">{t('breakout.startGame', "Start Game")}</div>
+              <div className="breakout-start-hint">{t('breakout.startHint', "Click start or press Space")}</div>
               <div className="breakout-rank-summary">
-                <div className="breakout-rank-summary-title">{t('breakout.rankTitle', '历史排名')}</div>
+                <div className="breakout-rank-summary-title">{t('breakout.rankTitle', "Local Leaderboard")}</div>
                 <div className="breakout-rank-summary-list">
                   {Array.from({ length: 3 }).map((_, index) => {
                     const record = topThreeRankRecords[index];
@@ -2549,7 +2549,7 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
                             ? t('breakout.historyScoreShort', { score: record.score, defaultValue: `分 ${record.score}` })
                             : t('breakout.rankNoData', '--')}
                         </span>
-                        <span className="breakout-rank-tag">{isCurrent ? t('breakout.rankCurrent', '当前') : ''}</span>
+                        <span className="breakout-rank-tag">{isCurrent ? t('breakout.rankCurrent', "Current") : ''}</span>
                       </div>
                     );
                   })}
@@ -2561,14 +2561,14 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
                           ? t('breakout.historyScoreShort', { score: latestRecord.score, defaultValue: `分 ${latestRecord.score}` })
                           : t('breakout.rankNoData', '--')}
                       </span>
-                      <span className="breakout-rank-tag">{t('breakout.rankCurrent', '当前')}</span>
+                      <span className="breakout-rank-tag">{t('breakout.rankCurrent', "Current")}</span>
                     </div>
                   )}
                 </div>
               </div>
               <div className="breakout-start-actions">
                 <button className="breakout-restart-btn" onClick={handleStartGame}>
-                  {t('breakout.startGame', '开始游戏')}
+                  {t('breakout.startGame', "Start Game")}
                 </button>
                 <button
                   type="button"
@@ -2583,15 +2583,15 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
 
           {isStarted && !isBallLaunched && !isGameOver && !isLevelCleared && !isPaused && (
             <div className="breakout-serve-hint">
-              {t('breakout.serveHint', '按空格开始发球')}
+              {t('breakout.serveHint', "Press Space to launch the ball")}
             </div>
           )}
 
           {isPaused && !isGameOver && (
             <div className="breakout-paused">
-              <div className="breakout-paused-title">{t('breakout.paused', '已暂停')}</div>
+              <div className="breakout-paused-title">{t('breakout.paused', "Paused")}</div>
               <button className="breakout-restart-btn" onClick={handlePauseToggle}>
-                {t('breakout.resume', '继续')}
+                {t('breakout.resume', "Resume")}
               </button>
             </div>
           )}
@@ -2599,7 +2599,7 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
           {isLevelCleared && !isGameOver && (
             <div className="breakout-level-clear">
               <div className="breakout-level-clear-title">
-                {t('breakout.levelCleared', '关卡完成')}
+                {t('breakout.levelCleared', "Level Cleared")}
               </div>
               <div className="breakout-level-clear-stats">
                 <div className="breakout-level-clear-score">
@@ -2620,14 +2620,14 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
                 </div>
               </div>
               <button className="breakout-restart-btn" onClick={handleNextLevel}>
-                {t('breakout.nextLevel', '下一关')}
+                {t('breakout.nextLevel', "Next Level")}
               </button>
             </div>
           )}
 
           {isGameOver && (
             <div className="breakout-gameover">
-              <div className="breakout-gameover-title">{t('breakout.gameOver', '本局结束')}</div>
+              <div className="breakout-gameover-title">{t('breakout.gameOver', "Game Over")}</div>
               <div className="breakout-gameover-drops">
                 <div className="breakout-drop-counts breakout-drop-counts-gameover">
                   {getSortedDropTypes(stateRef.current.dropCounts, dropTypeOrder).map((dropType) => (
@@ -2641,7 +2641,7 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
                 </div>
               </div>
               <div className="breakout-rank-summary">
-                <div className="breakout-rank-summary-title">{t('breakout.rankTitle', '历史排名')}</div>
+                <div className="breakout-rank-summary-title">{t('breakout.rankTitle', "Local Leaderboard")}</div>
                 <div className="breakout-rank-summary-list">
                   {Array.from({ length: 3 }).map((_, index) => {
                     const record = topThreeRankRecords[index];
@@ -2654,7 +2654,7 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
                             ? t('breakout.historyScoreShort', { score: record.score, defaultValue: `分 ${record.score}` })
                             : t('breakout.rankNoData', '--')}
                         </span>
-                        <span className="breakout-rank-tag">{isCurrent ? t('breakout.rankCurrent', '当前') : ''}</span>
+                        <span className="breakout-rank-tag">{isCurrent ? t('breakout.rankCurrent', "Current") : ''}</span>
                       </div>
                     );
                   })}
@@ -2664,13 +2664,13 @@ export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalPr
                       <span className="breakout-rank-value">
                         {t('breakout.historyScoreShort', { score, defaultValue: `分 ${score}` })}
                       </span>
-                      <span className="breakout-rank-tag">{t('breakout.rankCurrent', '当前')}</span>
+                      <span className="breakout-rank-tag">{t('breakout.rankCurrent', "Current")}</span>
                     </div>
                   )}
                 </div>
               </div>
               <button className="breakout-restart-btn" onClick={handleRestart}>
-                {t('breakout.restart', '重新开始')}
+                {t('breakout.restart', "Restart")}
               </button>
             </div>
           )}

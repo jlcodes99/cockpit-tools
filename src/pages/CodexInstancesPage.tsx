@@ -119,7 +119,7 @@ export function CodexInstancesContent({
       const preset = findCodexApiProviderPresetById(OPENAI_OFFICIAL_PRESET_ID);
       return preset
         ? t(`codex.api.providers.${preset.id}.name`, preset.name)
-        : t("codex.api.provider.custom", "自定义");
+        : t("codex.api.provider.custom", "Custom");
     }
 
     const providerName = account.api_provider_name?.trim();
@@ -131,7 +131,7 @@ export function CodexInstancesContent({
     if (preset) {
       return t(`codex.api.providers.${preset.id}.name`, preset.name);
     }
-    return t("codex.api.provider.custom", "自定义");
+    return t("codex.api.provider.custom", "Custom");
   };
 
   const accountMap = useMemo(() => {
@@ -164,7 +164,7 @@ export function CodexInstancesContent({
     if (lines.length === 0) {
       return (
         <span className="account-quota-empty">
-          {t("instances.quota.empty", "暂无配额缓存")}
+          {t("instances.quota.empty", "No cached quota")}
         </span>
       );
     }
@@ -202,21 +202,21 @@ export function CodexInstancesContent({
       : undefined;
     const accountLabel =
       instance.bindAccountId === CODEX_API_SERVICE_BIND_ID
-        ? t("codex.localAccess.title", "API 服务")
+        ? t("codex.localAccess.title", "API Service")
         : boundAccount
           ? buildCodexAccountPresentation(boundAccount, t).displayName ||
             boundAccount.email
           : null;
     const instanceName = instance.isDefault
-      ? t("instances.defaultName", "默认实例")
-      : instance.name || t("instances.defaultName", "默认实例");
+      ? t("instances.defaultName", "Default Instance")
+      : instance.name || t("instances.defaultName", "Default Instance");
 
     setLaunchModal({
       instanceId: instance.id,
       instanceName,
       switchMessage: accountLabel
-        ? t("codex.switched", "已切换至 {{email}}", { email: accountLabel })
-        : t("instances.messages.launchPrepared", "启动命令已准备"),
+        ? t("codex.switched", "Switched to {{email}}", { email: accountLabel })
+        : t("instances.messages.launchPrepared", "Launch command is ready"),
       launchCommand: launchInfo.launchCommand,
       copied: false,
       executing: false,
@@ -240,7 +240,7 @@ export function CodexInstancesContent({
               ...prev,
               executeError: t(
                 "common.shared.export.copyFailed",
-                "复制失败，请手动复制",
+                "Copy failed, please copy manually",
               ),
             }
           : prev,
@@ -308,8 +308,8 @@ export function CodexInstancesContent({
           onInstanceStarted={handleInstanceStarted}
           resolveStartSuccessMessage={(instance) =>
             (instance.launchMode ?? "app") === "cli"
-              ? t("instances.messages.launchPrepared", "启动命令已准备")
-              : t("instances.messages.started", "实例已启动")
+              ? t("instances.messages.launchPrepared", "Launch command is ready")
+              : t("instances.messages.started", "Instance started")
           }
         />
       </div>
@@ -321,11 +321,11 @@ export function CodexInstancesContent({
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
-              <h2>{t("instances.launchDialog.title", "启动实例")}</h2>
+              <h2>{t("instances.launchDialog.title", "Launch Instance")}</h2>
               <button
                 className="modal-close"
                 onClick={() => setLaunchModal(null)}
-                aria-label={t("common.close", "关闭")}
+                aria-label={t("common.close", "Close")}
               >
                 <X />
               </button>
@@ -336,7 +336,7 @@ export function CodexInstancesContent({
                 <span>{launchModal.switchMessage}</span>
               </div>
               <div className="form-group">
-                <label>{t("instances.columns.instance", "实例")}</label>
+                <label>{t("instances.columns.instance", "Instance")}</label>
                 <input
                   className="form-input"
                   value={launchModal.instanceName}
@@ -344,7 +344,7 @@ export function CodexInstancesContent({
                 />
               </div>
               <div className="form-group">
-                <label>{t("instances.launchDialog.command", "启动命令")}</label>
+                <label>{t("instances.launchDialog.command", "Launch Command")}</label>
                 <textarea
                   className="form-input instance-args-input"
                   value={launchModal.launchCommand}
@@ -353,18 +353,18 @@ export function CodexInstancesContent({
                 <p className="form-hint">
                   {t(
                     "instances.launchDialog.hint",
-                    "可复制命令手动执行，或点击下方按钮直接在终端执行。",
+                    "Copy the command and run it manually, or execute it directly in the terminal.",
                   )}
                 </p>
               </div>
               <div className="form-group">
-                <label>{t("instances.launchDialog.terminal", "终端")}</label>
+                <label>{t("instances.launchDialog.terminal", "Terminal")}</label>
                 <SingleSelectDropdown
                   value={selectedTerminal}
                   onChange={setSelectedTerminal}
                   options={terminalOptions}
                   disabled={launchModal.executing}
-                  ariaLabel={t("instances.launchDialog.terminal", "终端")}
+                  ariaLabel={t("instances.launchDialog.terminal", "Terminal")}
                 />
               </div>
               {launchModal.executeMessage && (
@@ -384,8 +384,8 @@ export function CodexInstancesContent({
               >
                 <Copy size={16} />
                 {launchModal.copied
-                  ? t("common.success", "成功")
-                  : t("common.copy", "复制")}
+                  ? t("common.success", "Success")
+                  : t("common.copy", "Copy")}
               </button>
               <button
                 className="btn btn-primary"
@@ -394,8 +394,8 @@ export function CodexInstancesContent({
               >
                 <Play size={16} />
                 {launchModal.executing
-                  ? t("common.loading", "加载中...")
-                  : t("instances.launchDialog.runInTerminal", "终端执行")}
+                  ? t("common.loading", "Loading...")
+                  : t("instances.launchDialog.runInTerminal", "Run in Terminal")}
               </button>
             </div>
           </div>

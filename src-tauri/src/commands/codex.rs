@@ -5,7 +5,7 @@ use crate::models::codex_local_access::{
     CodexLocalAccessPortCleanupResult, CodexLocalAccessRoutingStrategy, CodexLocalAccessState,
 };
 use crate::modules::{
-    codex_account, codex_local_access, codex_oauth, codex_quota, codex_wakeup,
+    codex_account, codex_export, codex_local_access, codex_oauth, codex_quota, codex_wakeup,
     codex_wakeup_scheduler, config, logger, openclaw_auth, opencode_auth, process,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -53,6 +53,15 @@ pub fn get_current_codex_account() -> Result<Option<CodexAccount>, String> {
 pub fn get_codex_config_toml_path() -> Result<String, String> {
     let path = codex_account::get_codex_home().join("config.toml");
     Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn codex_build_export_content(
+    raw_json: String,
+    format: codex_export::CodexExportFormat,
+    base_name: String,
+) -> Result<codex_export::CodexExportContent, String> {
+    codex_export::build_codex_export_content(&raw_json, format, &base_name)
 }
 
 #[tauri::command]

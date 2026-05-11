@@ -56,6 +56,7 @@ const PAGE_PLATFORM_MAP: Partial<Record<Page, PlatformId>> = {
   kiro: 'kiro',
   cursor: 'cursor',
   gemini: 'gemini',
+  'devin-cli': 'devin-cli',
   codebuddy: 'codebuddy',
   'codebuddy-cn': 'codebuddy_cn',
   qoder: 'qoder',
@@ -467,10 +468,10 @@ export function SideNav({
     }
     classicSwitchDontAskAgainRef.current = false;
     showModal({
-      title: t('nav.switchClassicLayoutTitle', '切换至经典侧边栏布局'),
+      title: t('nav.switchClassicLayoutTitle', "Switch to the classic sidebar layout"),
       description: t(
         'nav.switchClassicLayoutDesc',
-        '经典布局会展示完整平台导航并支持折叠。你仍可在“设置 > 通用 > 侧边栏布局”中随时切换回原始布局。',
+        "The classic layout shows the full platform navigation and supports sidebar collapsing. You can switch back anytime in Settings > General > Sidebar Layout.",
       ),
       width: 'sm',
       closeOnOverlay: false,
@@ -483,19 +484,19 @@ export function SideNav({
                 classicSwitchDontAskAgainRef.current = event.target.checked;
               }}
             />
-            <span>{t('nav.switchClassicLayoutDontAskAgain', '不再提示此引导')}</span>
+            <span>{t('nav.switchClassicLayoutDontAskAgain', "Don't show this prompt again")}</span>
           </label>
         </div>
       ),
       actions: [
         {
           id: 'classic-switch-cancel',
-          label: t('common.cancel', '取消'),
+          label: t('common.cancel', "Cancel"),
           variant: 'secondary',
         },
         {
           id: 'classic-switch-confirm',
-          label: t('nav.switchClassicLayoutConfirm', '立即切换'),
+          label: t('nav.switchClassicLayoutConfirm', "Switch now"),
           variant: 'primary',
           onClick: () => {
             if (classicSwitchDontAskAgainRef.current) {
@@ -640,7 +641,7 @@ export function SideNav({
           : undefined
       }
     >
-      <div className="side-nav-more-title">{t('nav.morePlatforms', '更多平台')}</div>
+      <div className="side-nav-more-title">{t('nav.morePlatforms', "More Platforms")}</div>
       <div className="side-nav-more-list">
         {moreMenuEntries.map((entry) => {
           const active = isClassicLayout
@@ -662,7 +663,7 @@ export function SideNav({
                   <span className="side-nav-more-item-label">{entry.label}</span>
                   {entry.hidden && (
                     <span className="side-nav-more-item-badge">
-                      {t('platformLayout.hiddenBadge', '已隐藏')}
+                      {t('platformLayout.hiddenBadge', "Hidden")}
                     </span>
                   )}
                 </button>
@@ -720,7 +721,7 @@ export function SideNav({
         }}
       >
         <SlidersHorizontal size={14} />
-        <span>{t('platformLayout.openFromMore', '管理平台布局')}</span>
+        <span>{t('platformLayout.openFromMore', "Manage platform layout")}</span>
       </button>
     </div>
   ) : null;
@@ -740,12 +741,12 @@ export function SideNav({
             onClick={onUpdateActionClick}
             title={
               updateActionState === 'downloading'
-                ? t('update_notification.downloading', '下载中...')
+                ? t('update_notification.downloading', "Downloading...")
                 : updateActionState === 'installing'
-                  ? t('nav.quickUpdate.installing', '安装中')
+                  ? t('nav.quickUpdate.installing', "Installing")
                   : updateActionState === 'ready'
-                    ? t('nav.quickUpdate.restart', '重启')
-                    : t('nav.quickUpdate.update', '更新')
+                    ? t('nav.quickUpdate.restart', "Restart")
+                    : t('nav.quickUpdate.update', "Update")
             }
             disabled={updateActionState === 'installing'}
           >
@@ -761,12 +762,12 @@ export function SideNav({
                 <span className="side-nav-update-progress-percent">{clampedUpdateProgress}%</span>
               </span>
             ) : updateActionState === 'installing' ? (
-              <span className="side-nav-update-text">{t('nav.quickUpdate.installing', '安装中')}</span>
+              <span className="side-nav-update-text">{t('nav.quickUpdate.installing', "Installing")}</span>
             ) : (
               <span className="side-nav-update-text">
                 {updateActionState === 'ready'
-                  ? t('nav.quickUpdate.restart', '重启')
-                  : t('nav.quickUpdate.update', '更新')}
+                  ? t('nav.quickUpdate.restart', "Restart")
+                  : t('nav.quickUpdate.update', "Update")}
               </span>
             )}
           </button>
@@ -779,7 +780,7 @@ export function SideNav({
             ref={logoRef}
             className={`brand-logo rocket-easter-egg${hasBreakoutSession ? ' rocket-easter-egg-active' : ''}`}
             onClick={handleLogoClick}
-            title={hasBreakoutSession ? t('breakout.resumeGameNav', '继续游戏') : undefined}
+            title={hasBreakoutSession ? t('breakout.resumeGameNav', "Resume Game") : undefined}
           >
             <Rocket size={isClassicLayout ? classicBrandLogoIconSize : 20} />
             {hasBreakoutSession && <span className="rocket-session-indicator" aria-hidden="true" />}
@@ -856,13 +857,13 @@ export function SideNav({
           ref={moreButtonRef}
           className={`nav-item ${showMore || isMoreActive ? 'active' : ''}`}
           onClick={() => setShowMore((prev) => !prev)}
-          title={t('nav.morePlatforms', '更多平台')}
+          title={t('nav.morePlatforms', "More Platforms")}
         >
           <LayoutGrid size={isClassicLayout ? classicMainIconSize : 20} />
           {showClassicLabels ? (
-            <span className="nav-item-text">{t('nav.morePlatforms', '更多平台')}</span>
+            <span className="nav-item-text">{t('nav.morePlatforms', "More Platforms")}</span>
           ) : !isClassicLayout ? (
-            <span className="tooltip">{t('nav.morePlatforms', '更多平台')}</span>
+            <span className="tooltip">{t('nav.morePlatforms', "More Platforms")}</span>
           ) : null}
         </button>
 
@@ -879,22 +880,22 @@ export function SideNav({
           <button
             className={`nav-item ${page === '2fa' && !shouldLockActiveOnMore ? 'active' : ''}`}
             onClick={() => setPage('2fa')}
-            title={t('nav.2faManager', '2FA / MFA 管理')}
+            title={t('nav.2faManager', "2FA")}
           >
             <ShieldCheck size={isClassicLayout ? classicMainIconSize : 20} />
             {showClassicLabels ? (
-              <span className="nav-item-text">{t('nav.2faManager', '2FA / MFA 管理')}</span>
+              <span className="nav-item-text">{t('nav.2faManager', "2FA")}</span>
             ) : null}
           </button>
 
           <button
             className="nav-item"
             onClick={onOpenLogViewer}
-            title={t('nav.logs', '日志')}
+            title={t('nav.logs', "Logs")}
           >
             <FileText size={isClassicLayout ? classicMainIconSize : 20} />
             {showClassicLabels ? (
-              <span className="nav-item-text">{t('nav.logs', '日志')}</span>
+              <span className="nav-item-text">{t('nav.logs', "Logs")}</span>
             ) : null}
           </button>
 
@@ -928,10 +929,10 @@ export function SideNav({
             type="button"
             className="side-nav-layout-switch-trigger"
             onClick={handleClassicLayoutEntryClick}
-            aria-label={t('nav.switchClassicLayoutEntry', '切换到经典布局')}
+            aria-label={t('nav.switchClassicLayoutEntry', "Switch to classic layout")}
           >
             <ChevronDown size={16} />
-            <span className="tooltip">{t('nav.switchClassicLayoutEntry', '切换到经典布局')}</span>
+            <span className="tooltip">{t('nav.switchClassicLayoutEntry', "Switch to classic layout")}</span>
           </button>
         </>
       )}
@@ -946,13 +947,13 @@ export function SideNav({
           style={classicHandleStyle}
           title={
             classicCollapsed
-              ? t('nav.expandSidebar', '展开侧边栏')
-              : t('nav.collapseSidebar', '收起侧边栏')
+              ? t('nav.expandSidebar', "Expand sidebar")
+              : t('nav.collapseSidebar', "Collapse sidebar")
           }
           aria-label={
             classicCollapsed
-              ? t('nav.expandSidebar', '展开侧边栏')
-              : t('nav.collapseSidebar', '收起侧边栏')
+              ? t('nav.expandSidebar', "Expand sidebar")
+              : t('nav.collapseSidebar', "Collapse sidebar")
           }
         >
           {classicCollapsed

@@ -3815,5 +3815,61 @@
     "importErrorMsg": "Import failed. Please ensure the file format is a valid exported JSON array.",
     "btnImportTitle": "Import Local JSON Backup",
     "btnExportTitle": "Export Saved as JSON"
+  },
+  "devinCli": {
+    "title": "Devin CLI",
+    "notice": {
+      "title": "Safe Devin account switching through dsw",
+      "desc": "Cockpit Tools only reads dsw account metadata and launches dsw commands in a terminal. Credentials stay isolated in dsw profile directories.",
+      "storage": "Data source: ~/.dsw/accounts.json or DSW_DATA_HOME/accounts.json.",
+      "runtime": "Runtime: dsw selects the account and sets the isolated Devin CLI profile environment."
+    },
+    "status": {
+      "installed": "dsw installed",
+      "notInstalled": "dsw not found"
+    },
+    "terminal": {
+      "ariaLabel": "Terminal",
+      "placeholder": "Terminal"
+    },
+    "actions": {
+      "list": "List",
+      "quota": "Quota",
+      "rotate": "Run best account",
+      "add": "Add",
+      "use": "Use",
+      "login": "Login"
+    },
+    "messages": {
+      "loadFailed": "Failed to load Devin CLI accounts: {{error}}",
+      "commandFailed": "Failed to run dsw command: {{error}}",
+      "addStarted": "Opened dsw add in a terminal. Complete the Devin login flow there.",
+      "listStarted": "Opened dsw list in a terminal.",
+      "quotaStarted": "Opened dsw quota in a terminal.",
+      "rotateStarted": "Opened dsw with quota-aware account rotation.",
+      "useStarted": "Opened dsw use for the selected account.",
+      "loginStarted": "Opened dsw login for the selected account."
+    },
+    "installHint": "Install Devin Switcher first: npm install -g @itsddvn/dsw",
+    "add": {
+      "title": "Add Devin account",
+      "desc": "Leave the name empty to let dsw infer it after login, or enter a safe profile name.",
+      "placeholder": "work or personal",
+      "invalidName": "Use only letters, numbers, underscores, and hyphens."
+    },
+    "summary": {
+      "total": "Total profiles",
+      "ready": "Ready",
+      "needsLogin": "Needs login"
+    },
+    "empty": {
+      "title": "No Devin CLI profiles yet",
+      "desc": "Use dsw add to create an isolated Devin CLI profile and log in."
+    },
+    "account": {
+      "needsLogin": "Needs login",
+      "ready": "Ready",
+      "lastUsed": "Last used"
+    }
   }
 }

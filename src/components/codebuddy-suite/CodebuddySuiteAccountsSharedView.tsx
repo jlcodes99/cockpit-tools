@@ -248,7 +248,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
   );
 
   const resolveGroupLabel = (groupKey: string) =>
-    groupKey === '__untagged__' ? t('accounts.defaultGroup', '默认分组') : groupKey;
+    groupKey === '__untagged__' ? t('accounts.defaultGroup', "Default Group") : groupKey;
 
   const renderResourceQuotaItems = useCallback((account: TAccount, _variant: 'card' | 'table') => {
     const groups = platformConfig.getQuotaGroups(account, t as (key: string, defaultValue?: string) => string);
@@ -272,9 +272,9 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
         abnormalText={t(`${platformConfig.usagePrefix}.usageAbnormal`, '异常')}
         viewDetailText={t(`${platformConfig.usagePrefix}.usageViewDetail`, '查看详情')}
         detailTitle={t(`${platformConfig.usagePrefix}.usageDetailTitle`, '用量状态详情')}
-        accountText={t('common.shared.columns.account', '账号')}
-        confirmText={t('common.confirm', '确认')}
-        closeText={t('common.close', '关闭')}
+        accountText={t('common.shared.columns.account', "Account")}
+        confirmText={t('common.confirm', "Confirm")}
+        closeText={t('common.close', "Close")}
         classPrefix={platformConfig.usagePrefix}
       />
     );
@@ -328,7 +328,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
               <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(account.id)} />
             </div>
             <span className="account-email" title={maskAccountText(displayEmail)}>{maskAccountText(displayEmail)}</span>
-            {isCurrent && <span className="current-tag">{t('accounts.status.current', '当前')}</span>}
+            {isCurrent && <span className="current-tag">{t('accounts.status.current', "Current")}</span>}
             <span className={`tier-badge ${tierBadgeClass}`}>{planBadge}</span>
           </div>
           {accountTags.length > 0 && (
@@ -344,15 +344,15 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
             <span className="card-date">{formatDate(account.created_at)}</span>
             <div className="card-actions">
               <button className="card-action-btn success" onClick={() => handleInjectToVSCode?.(account.id)} disabled={!!injecting}
-                title={t('common.shared.switchAccount', '切换账号')}>
+                title={t('common.shared.switchAccount', "Switch Account")}>
                 {injecting === account.id ? <RefreshCw size={14} className="loading-spinner" /> : <Play size={14} />}
               </button>
-              <button className="card-action-btn" onClick={() => openTagModal(account.id)} title={t('accounts.editTags', '编辑标签')}><Tag size={14} /></button>
-              <button className="card-action-btn" onClick={() => handleRefresh(account.id)} disabled={refreshing === account.id} title={t('common.shared.refreshQuota', '刷新')}>
+              <button className="card-action-btn" onClick={() => openTagModal(account.id)} title={t('accounts.editTags', "Edit Tags")}><Tag size={14} /></button>
+              <button className="card-action-btn" onClick={() => handleRefresh(account.id)} disabled={refreshing === account.id} title={t('common.shared.refreshQuota', "Refresh Quota")}>
                 <RotateCw size={14} className={refreshing === account.id ? 'loading-spinner' : ''} />
               </button>
-              <button className="card-action-btn export-btn" onClick={() => handleExportByIds([account.id])} title={t('common.shared.export.title', '导出')}><Upload size={14} /></button>
-              <button className="card-action-btn danger" onClick={() => handleDelete(account.id)} title={t('common.delete', '删除')}><Trash2 size={14} /></button>
+              <button className="card-action-btn export-btn" onClick={() => handleExportByIds([account.id])} title={t('common.shared.export.title', "Export")}><Upload size={14} /></button>
+              <button className="card-action-btn danger" onClick={() => handleDelete(account.id)} title={t('common.delete', "Delete")}><Trash2 size={14} /></button>
             </div>
           </div>
         </div>
@@ -371,7 +371,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
           <td><input type="checkbox" checked={isSelected} onChange={() => toggleSelect(account.id)} /></td>
           <td>
             <span className="table-email" title={maskAccountText(displayEmail)}>{maskAccountText(displayEmail)}</span>
-            {isCurrent && <span className="current-tag">{t('accounts.status.current', '当前')}</span>}
+            {isCurrent && <span className="current-tag">{t('accounts.status.current', "Current")}</span>}
           </td>
           <td><span className={`tier-badge ${tierBadgeClass}`}>{planBadge}</span></td>
           <td>
@@ -438,24 +438,24 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
             <input type="text" placeholder={t(platformConfig.searchPlaceholderKey, platformConfig.searchPlaceholderDefault)} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
           </div>
           <div className="view-switcher">
-            <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} title={t('common.shared.view.list', '列表视图')}><List size={16} /></button>
-            <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} title={t('common.shared.view.grid', '卡片视图')}><LayoutGrid size={16} /></button>
+            <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} title={t('common.shared.view.list', "List view")}><List size={16} /></button>
+            <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} title={t('common.shared.view.grid', "Card view")}><LayoutGrid size={16} /></button>
           </div>
           <MultiSelectFilterDropdown
             options={tierFilterOptions}
             selectedValues={filterTypes}
             allLabel={`ALL (${tierSummary.all})`}
-            filterLabel={t('common.shared.filterLabel', '筛选')}
-            clearLabel={t('accounts.clearFilter', '清空筛选')}
-            emptyLabel={t('common.none', '暂无')}
-            ariaLabel={t('common.shared.filterLabel', '筛选')}
+            filterLabel={t('common.shared.filterLabel', "Filter")}
+            clearLabel={t('accounts.clearFilter', "Clear Filter")}
+            emptyLabel={t('common.none', "None")}
+            ariaLabel={t('common.shared.filterLabel', "Filter")}
             onToggleValue={toggleFilterTypeValue}
             onClear={clearFilterTypes}
           />
           <div className="tag-filter" ref={tagFilterRef}>
             <button type="button" className={`tag-filter-btn ${tagFilter.length > 0 ? 'active' : ''}`} onClick={() => setShowTagFilter((prev) => !prev)}>
               <Tag size={14} />
-              {tagFilter.length > 0 ? `${t('accounts.filterTagsCount', '标签')}(${tagFilter.length})` : t('accounts.filterTags', '标签筛选')}
+              {tagFilter.length > 0 ? `${t('accounts.filterTagsCount', "Tags")}(${tagFilter.length})` : t('accounts.filterTags', "Filter Tags")}
             </button>
             {showTagFilter && (
               <div
@@ -463,12 +463,12 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
                 className={`tag-filter-panel ${page.tagFilterPanelPlacement === 'top' ? 'open-top' : ''}`}
               >
                 {availableTags.length === 0 ? (
-                  <div className="tag-filter-empty">{t('accounts.noAvailableTags', '暂无可用标签')}</div>
+                  <div className="tag-filter-empty">{t('accounts.noAvailableTags', "No tags available")}</div>
                 ) : (
                   <>
                     <div className="tag-filter-header">
-                      <label className="group-toggle"><input type="checkbox" checked={groupByTag} onChange={() => setGroupByTag(!groupByTag)} /> {t('accounts.groupByTag', '按标签分组')}</label>
-                      {tagFilter.length > 0 && <button className="tag-filter-clear" onClick={clearTagFilter}>{t('common.shared.clear', '清除')}</button>}
+                      <label className="group-toggle"><input type="checkbox" checked={groupByTag} onChange={() => setGroupByTag(!groupByTag)} /> {t('accounts.groupByTag', "Group by tags")}</label>
+                      {tagFilter.length > 0 && <button className="tag-filter-clear" onClick={clearTagFilter}>{t('common.shared.clear', "Clear")}</button>}
                     </div>
                     <div className="tag-filter-list" style={page.tagFilterScrollContainerStyle}>
                       {availableTags.map((tag) => (
@@ -485,49 +485,49 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
           </div>
         </div>
         <div className="toolbar-right">
-          <button className="btn btn-primary icon-only" onClick={() => openAddModal('oauth')} title={t('common.shared.addAccount', '添加账号')}><Plus size={14} /></button>
+          <button className="btn btn-primary icon-only" onClick={() => openAddModal('oauth')} title={t('common.shared.addAccount', "Add Account")}><Plus size={14} /></button>
           <button className="btn btn-secondary icon-only" onClick={handleSync} disabled={syncing || accounts.length === 0} title={platformConfig.syncButtonTitle(t)}>
             {syncing ? <RefreshCw size={14} className="loading-spinner" /> : <ArrowRightLeft size={14} />}
           </button>
-          <button className="btn btn-secondary icon-only" onClick={() => setShowCheckinModal(true)} disabled={accounts.length === 0} title={t('codebuddyCn.checkin.modalTitle', '每日签到')}>
+          <button className="btn btn-secondary icon-only" onClick={() => setShowCheckinModal(true)} disabled={accounts.length === 0} title={t('codebuddyCn.checkin.modalTitle', "Daily Check-in")}>
             <CalendarCheck size={14} />
           </button>
-          <button className="btn btn-secondary icon-only" onClick={handleRefreshAll} disabled={refreshingAll || accounts.length === 0} title={t('common.shared.refreshAll', '刷新全部')}>
+          <button className="btn btn-secondary icon-only" onClick={handleRefreshAll} disabled={refreshingAll || accounts.length === 0} title={t('common.shared.refreshAll', "Refresh All")}>
             <RefreshCw size={14} className={refreshingAll ? 'loading-spinner' : ''} />
           </button>
           <button className="btn btn-secondary icon-only" onClick={togglePrivacyMode}
-            title={privacyModeEnabled ? t('privacy.showSensitive', '显示邮箱') : t('privacy.hideSensitive', '隐藏邮箱')}>
+            title={privacyModeEnabled ? t('privacy.showSensitive', "Show emails") : t('privacy.hideSensitive', "Hide emails")}>
             {privacyModeEnabled ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
-          <button className="btn btn-secondary icon-only" onClick={() => openAddModal('token')} disabled={importing} title={t('common.shared.import.label', '导入')}><Download size={14} /></button>
+          <button className="btn btn-secondary icon-only" onClick={() => openAddModal('token')} disabled={importing} title={t('common.shared.import.label', "Import")}><Download size={14} /></button>
           <button className="btn btn-secondary export-btn icon-only" onClick={() => void handleExport(filteredIds)} disabled={exporting || filteredIds.length === 0}
-            title={exportSelectionCount > 0 ? `${t('common.shared.export.title', '导出')} (${exportSelectionCount})` : t('common.shared.export.title', '导出')}>
+            title={exportSelectionCount > 0 ? `${t('common.shared.export.title', "Export")} (${exportSelectionCount})` : t('common.shared.export.title', "Export")}>
             <Upload size={14} />
           </button>
           {selected.size > 0 && (
-            <button className="btn btn-danger icon-only" onClick={handleBatchDelete} title={`${t('common.delete', '删除')} (${selected.size})`}><Trash2 size={14} /></button>
+            <button className="btn btn-danger icon-only" onClick={handleBatchDelete} title={`${t('common.delete', "Delete")} (${selected.size})`}><Trash2 size={14} /></button>
           )}
           <QuickSettingsPopover type={platformConfig.quickSettingsType} />
         </div>
       </div>
 
       {loading && accounts.length === 0 ? (
-        <div className="loading-container"><RefreshCw size={24} className="loading-spinner" /><p>{t('common.loading', '加载中...')}</p></div>
+        <div className="loading-container"><RefreshCw size={24} className="loading-spinner" /><p>{t('common.loading', "Loading...")}</p></div>
       ) : accounts.length === 0 ? (
         <div className="empty-state">
           <Globe size={48} />
-          <h3>{t('common.shared.empty.title', '暂无账号')}</h3>
+          <h3>{t('common.shared.empty.title', "No Accounts")}</h3>
           <p>{t(platformConfig.noAccountsKey, platformConfig.noAccountsDefault)}</p>
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '16px' }}>
             <button className="btn btn-primary" onClick={() => openAddModal('oauth')}>
-              <Plus size={16} /> {t('common.shared.addAccount', '添加账号')}
+              <Plus size={16} /> {t('common.shared.addAccount', "Add Account")}
             </button>
           </div>
         </div>
       ) : filteredAccounts.length === 0 ? (
         <div className="empty-state">
-          <h3>{t('common.shared.noMatch.title', '没有匹配的账号')}</h3>
-          <p>{t('common.shared.noMatch.desc', '请尝试调整搜索或筛选条件')}</p>
+          <h3>{t('common.shared.noMatch.title', "No matching accounts")}</h3>
+          <p>{t('common.shared.noMatch.desc', "Try adjusting your search or filters")}</p>
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid-view-container">
@@ -535,7 +535,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
             <div className="grid-view-header" style={{ marginBottom: '12px', paddingLeft: '4px' }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-color)' }}>
                 <input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} />
-                {t('common.selectAll', '全选')}
+                {t('common.selectAll', "Select All")}
               </label>
             </div>
           )}
@@ -561,10 +561,10 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
             <thead>
               <tr>
                 <th style={{ width: 40 }}><input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} /></th>
-                <th style={{ width: 240 }}>{t('common.shared.columns.email', '邮箱')}</th>
-                <th style={{ width: 120 }}>{t('common.shared.columns.plan', '套餐')}</th>
-                <th>{t('instances.labels.quota', '配额')}</th>
-                <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', '操作')}</th>
+                <th style={{ width: 240 }}>{t('common.shared.columns.email', "Email")}</th>
+                <th style={{ width: 120 }}>{t('common.shared.columns.plan', "Plan")}</th>
+                <th>{t('instances.labels.quota', "Quota")}</th>
+                <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', "Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -583,10 +583,10 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
             <thead>
               <tr>
                 <th style={{ width: 40 }}><input type="checkbox" checked={isAllPaginatedSelected} onChange={() => toggleSelectAll(paginatedIds)} /></th>
-                <th style={{ width: 240 }}>{t('common.shared.columns.email', '邮箱')}</th>
-                <th style={{ width: 120 }}>{t('common.shared.columns.plan', '套餐')}</th>
-                <th>{t('instances.labels.quota', '配额')}</th>
-                <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', '操作')}</th>
+                <th style={{ width: 240 }}>{t('common.shared.columns.email', "Email")}</th>
+                <th style={{ width: 120 }}>{t('common.shared.columns.plan', "Plan")}</th>
+                <th>{t('instances.labels.quota', "Quota")}</th>
+                <th className="sticky-action-header table-action-header">{t('common.shared.columns.actions', "Actions")}</th>
               </tr>
             </thead>
             <tbody>{renderTableRows(paginatedAccounts)}</tbody>
@@ -617,9 +617,9 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
               <button className="modal-close" onClick={closeAddModal}><X size={18} /></button>
             </div>
             <div className="modal-tabs">
-              <button className={`modal-tab ${addTab === 'oauth' ? 'active' : ''}`} onClick={() => openAddModal('oauth')}><Globe size={14} /> {t('common.shared.addModal.oauth', '授权登录')}</button>
+              <button className={`modal-tab ${addTab === 'oauth' ? 'active' : ''}`} onClick={() => openAddModal('oauth')}><Globe size={14} /> {t('common.shared.addModal.oauth', "OAuth Authorization")}</button>
               <button className={`modal-tab ${addTab === 'token' ? 'active' : ''}`} onClick={() => openAddModal('token')}><KeyRound size={14} />{t('common.shared.addModal.token', 'Token / JSON')}</button>
-              <button className={`modal-tab ${addTab === 'json' ? 'active' : ''}`} onClick={() => openAddModal('json')}><Database size={14} />{t('common.shared.addModal.import', '本地导入')}</button>
+              <button className={`modal-tab ${addTab === 'json' ? 'active' : ''}`} onClick={() => openAddModal('json')}><Database size={14} />{t('common.shared.addModal.import', "Local Import")}</button>
             </div>
             <div className="modal-body">
               {addTab === 'oauth' && (
@@ -640,7 +640,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
                       <CircleAlert size={16} />
                       <span>{oauthPrepareError}</span>
                       <button className="btn btn-sm btn-outline" onClick={handleRetryOauth}>
-                        {t('common.shared.oauth.retry', '重新生成授权信息')}
+                        {t('common.shared.oauth.retry', "Regenerate authorization info")}
                       </button>
                     </div>
                   ) : oauthUrl ? (
@@ -666,7 +666,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
                       )}
                       {oauthMeta && (
                         <p className="oauth-hint">
-                          {t('common.shared.oauth.meta', '授权有效期：{{expires}}s；轮询间隔：{{interval}}s', {
+                          {t('common.shared.oauth.meta', "Expires in: {{expires}}s; Poll interval: {{interval}}s", {
                             expires: oauthMeta.expiresIn,
                             interval: oauthMeta.intervalSeconds,
                           })}
@@ -674,7 +674,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
                       )}
                       <button className="btn btn-primary btn-full" onClick={handleOpenOauthUrl}>
                         <Globe size={16} />
-                        {t('common.shared.oauth.openBrowser', '在浏览器中打开')}
+                        {t('common.shared.oauth.openBrowser', "Open in Browser")}
                       </button>
                       {oauthPolling && (
                         <div className="add-status loading">
@@ -688,7 +688,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
                           <span>{oauthCompleteError}</span>
                           {oauthTimedOut && (
                             <button className="btn btn-sm btn-outline" onClick={handleRetryOauth}>
-                              {t('common.shared.oauth.timeoutRetry', '刷新授权链接')}
+                              {t('common.shared.oauth.timeoutRetry', "Refresh authorization link")}
                             </button>
                           )}
                         </div>
@@ -698,7 +698,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
                   ) : (
                     <div className="oauth-loading">
                       <RefreshCw size={24} className="loading-spinner" />
-                      <span>{t('common.shared.oauth.preparing', '正在准备授权信息...')}</span>
+                      <span>{t('common.shared.oauth.preparing', "Preparing authorization info...")}</span>
                     </div>
                   )}
                 </div>
@@ -706,7 +706,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
               {addTab === 'token' && (
                 <div className="add-section token-section">
                   <p className="section-desc">{t(platformConfig.tokenDescKey, platformConfig.tokenDescDefault)}</p>
-                  <textarea className="token-input" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} placeholder={t('common.shared.token.placeholder', '粘贴 Token 或 JSON...')} />
+                  <textarea className="token-input" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} placeholder={t('common.shared.token.placeholder', "Example: ghu_xxx / sk-ws-xxx / {\"access_token\":\"eyJ...\",\"refresh_token\":\"rt_...\"} / [{...}]")} />
                   <button className="btn btn-primary btn-full" onClick={handleTokenImport} disabled={importing || !tokenInput.trim()}>
                     {importing ? <RefreshCw size={16} className="loading-spinner" /> : <Download size={16} />}
                     {t('common.shared.token.import', 'Import')}
@@ -720,12 +720,12 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
                     {importing ? <RefreshCw size={16} className="loading-spinner" /> : <Database size={16} />}
                     {t(platformConfig.importLocalClientKey, platformConfig.importLocalClientDefault)}
                   </button>
-                  <div className="oauth-hint" style={{ margin: '8px 0 4px' }}>{t('common.shared.import.orJson', '或从 JSON 文件导入')}</div>
+                  <div className="oauth-hint" style={{ margin: '8px 0 4px' }}>{t('common.shared.import.orJson', "Or import from JSON file")}</div>
                   <input ref={importFileInputRef} type="file" accept="application/json" style={{ display: 'none' }}
                     onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (!file) return; void handleImportJsonFile(file); }} />
                   <button className="btn btn-primary btn-full" onClick={handlePickImportFile} disabled={importing}>
                     {importing ? <RefreshCw size={16} className="loading-spinner" /> : <Database size={16} />}
-                    {t('common.shared.import.pickFile', '选择 JSON 文件导入')}
+                    {t('common.shared.import.pickFile', "Select JSON file to import")}
                   </button>
                 </div>
               )}
@@ -733,7 +733,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
               {addStatus !== 'idle' && addStatus !== 'loading' && (
                 <div className={`add-status ${addStatus}`}>
                   {addStatus === 'success' ? <Check size={16} /> : <CircleAlert size={16} />}
-                  <span>{addMessage || t('common.shared.loginSuccess', '登录成功')}</span>
+                  <span>{addMessage || t('common.shared.loginSuccess', "Login successful")}</span>
                 </div>
               )}
             </div>
@@ -745,11 +745,11 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
         <div className="modal-overlay" onClick={() => !deleting && setDeleteConfirm(null)}>
           <div className="modal confirm-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{t('common.confirmDelete', '确认删除')}</h2>
+              <h2>{t('common.confirmDelete', "Confirm Delete")}</h2>
               <button
                 className="modal-close"
                 onClick={() => !deleting && setDeleteConfirm(null)}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>
@@ -759,8 +759,8 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
               <p>{deleteConfirm.message}</p>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setDeleteConfirm(null)} disabled={deleting}>{t('common.cancel', '取消')}</button>
-              <button className="btn btn-danger" onClick={confirmDelete} disabled={deleting}>{deleting ? t('common.processing', '处理中...') : t('common.confirm', '确认')}</button>
+              <button className="btn btn-secondary" onClick={() => setDeleteConfirm(null)} disabled={deleting}>{t('common.cancel', "Cancel")}</button>
+              <button className="btn btn-danger" onClick={confirmDelete} disabled={deleting}>{deleting ? t('common.processing', "Processing...") : t('common.confirm', "Confirm")}</button>
             </div>
           </div>
         </div>
@@ -770,11 +770,11 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
         <div className="modal-overlay" onClick={() => !deletingTag && setTagDeleteConfirm(null)}>
           <div className="modal confirm-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{t('common.confirmDeleteTag', '确认删除标签')}</h2>
+              <h2>{t('common.confirmDeleteTag', "Confirm Tag Deletion")}</h2>
               <button
                 className="modal-close"
                 onClick={() => !deletingTag && setTagDeleteConfirm(null)}
-                aria-label={t('common.close', '关闭')}
+                aria-label={t('common.close', "Close")}
               >
                 <X />
               </button>
@@ -784,8 +784,8 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
               <p>{t('common.deleteTagWarning', { tag: tagDeleteConfirm, defaultValue: '确定要从所有账号中移除标签 "{{tag}}" 吗？' })}</p>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setTagDeleteConfirm(null)} disabled={deletingTag}>{t('common.cancel', '取消')}</button>
-              <button className="btn btn-danger" onClick={confirmDeleteTag} disabled={deletingTag}>{deletingTag ? t('common.processing', '处理中...') : t('common.confirm', '确认')}</button>
+              <button className="btn btn-secondary" onClick={() => setTagDeleteConfirm(null)} disabled={deletingTag}>{t('common.cancel', "Cancel")}</button>
+              <button className="btn btn-danger" onClick={confirmDeleteTag} disabled={deletingTag}>{deletingTag ? t('common.processing', "Processing...") : t('common.confirm', "Confirm")}</button>
             </div>
           </div>
         </div>
@@ -793,7 +793,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
 
       <ExportJsonModal
         isOpen={showExportModal}
-        title={`${t('common.shared.export.title', '导出')} JSON`}
+        title={`${t('common.shared.export.title', "Export")} JSON`}
         jsonContent={exportJsonContent}
         hidden={exportJsonHidden}
         copied={exportJsonCopied}

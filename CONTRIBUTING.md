@@ -1,13 +1,13 @@
-# Contributing to Cockpit Tools
+# Contributing to Switchme
 
-Thank you for your interest in contributing to Cockpit Tools! This project aims to be the universal manager for AI IDEs, and we welcome contributions of all kinds.
+Thank you for your interest in contributing to Switchme! This project aims to be the universal manager for AI IDEs, and we welcome contributions of all kinds.
 
 ## 🚀 Getting Started
 
 1.  **Fork** the repository on GitHub.
 2.  **Clone** your fork locally:
     ```bash
-    git clone https://github.com/YOUR_USERNAME/cockpit-tools.git
+    git clone https://github.com/YOUR_USERNAME/Switchme.git
     ```
 3.  **Create a branch** for your feature or bug fix:
     ```bash

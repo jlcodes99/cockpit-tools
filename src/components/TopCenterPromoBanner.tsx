@@ -31,18 +31,18 @@ export function TopCenterPromoBanner({ reserveWhenEmpty = true }: TopCenterPromo
     <div
       className="global-promo-center"
       role="complementary"
-      aria-label={t('common.topRightAd.ariaLabel', '全局右上角广告位')}
+      aria-label={t('common.topRightAd.ariaLabel', "Global top-right ad slot")}
     >
       <div className="global-promo-slot">
         <span className="global-ad-slot-badge">
-          {ad.badge || t('common.topRightAd.badge', '广告')}
+          {ad.badge || t('common.topRightAd.badge', "AD")}
         </span>
         <div className="global-promo-main">
           <p className="global-promo-text">{ad.text}</p>
         </div>
         {ad.ctaUrl ? (
           <button className="global-ad-slot-action" onClick={handleClick}>
-            {ad.ctaLabel || t('common.topRightAd.action', '查看详情')}
+            {ad.ctaLabel || t('common.topRightAd.action', "View details")}
           </button>
         ) : null}
       </div>

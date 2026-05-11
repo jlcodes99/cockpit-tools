@@ -182,6 +182,8 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useWorkbuddyInstanceStore.getState();
     case 'zed':
       return null;
+    case 'devin-cli':
+      return null;
   }
 }
 
@@ -355,13 +357,13 @@ export function FloatingCardWindow() {
     () =>
       isPrimaryFloatingCardWindow || !isInstanceFloatingCardWindow
         ? [
-            t('nav.settings', '设置'),
-            t('settings.general.commonTitle', '通用'),
-            t('settings.general.floatingCardShowNowAction', '显示悬浮卡片'),
+            t('nav.settings', "Settings"),
+            t('settings.general.commonTitle', "Common"),
+            t('settings.general.floatingCardShowNowAction', "Show floating card"),
           ].join(' > ')
         : [
-            t('instances.title', '多开实例'),
-            instanceContext?.instanceName || t('instances.defaultName', '默认实例'),
+            t('instances.title', "Instances"),
+            instanceContext?.instanceName || t('instances.defaultName', "Default Instance"),
           ].join(' > '),
     [instanceContext?.instanceName, isInstanceFloatingCardWindow, isPrimaryFloatingCardWindow, t],
   );
@@ -417,6 +419,8 @@ export function FloatingCardWindow() {
           break;
         case 'zed':
           await useZedAccountStore.getState().fetchAccounts();
+          break;
+        case 'devin-cli':
           break;
       }
     } finally {
@@ -749,6 +753,11 @@ export function FloatingCardWindow() {
           accounts: zedAccounts,
           actualCurrentAccount: zedCurrent,
         };
+      case 'devin-cli':
+        return {
+          accounts: [] as FloatingCardAccount[],
+          actualCurrentAccount: null,
+        };
     }
   }, [
     agAccounts,
@@ -819,6 +828,8 @@ export function FloatingCardWindow() {
         return getRecommendedWorkbuddyAccount(workbuddyAccounts, effectiveCurrentId);
       case 'zed':
         return getRecommendedZedAccount(zedAccounts, effectiveCurrentId);
+      case 'devin-cli':
+        return null;
     }
   }, [
     agAccounts,
@@ -903,6 +914,8 @@ export function FloatingCardWindow() {
         return buildWorkbuddyAccountPresentation(viewedAccount as typeof workbuddyAccounts[number], t);
       case 'zed':
         return buildZedAccountPresentation(viewedAccount as typeof zedAccounts[number], t);
+      case 'devin-cli':
+        return null;
     }
   }, [
     agAccounts,
@@ -928,10 +941,10 @@ export function FloatingCardWindow() {
   const visibleQuotaItems = presentation?.quotaItems.slice(0, 2) ?? [];
   const accountStateLabel = viewedAccount
     ? isCurrentViewed
-      ? t('floatingCard.currentAccount', '当前账号')
-      : t('floatingCard.accountPreview', '账号预览')
+      ? t('floatingCard.currentAccount', "Current")
+      : t('floatingCard.accountPreview', "Account preview")
     : null;
-  const floatingCardTitle = instanceContext?.instanceName || t('instances.defaultName', '默认实例');
+  const floatingCardTitle = instanceContext?.instanceName || t('instances.defaultName', "Default Instance");
   const platformLabel = getPlatformLabel(selectedPlatform, t);
   const platformLocked = Boolean(instanceContext);
 
@@ -997,6 +1010,8 @@ export function FloatingCardWindow() {
           case 'zed':
             await useZedAccountStore.getState().refreshToken(viewedAccount.id);
             break;
+          case 'devin-cli':
+            break;
         }
       } catch (error) {
         if (!silent) {
@@ -1042,7 +1057,7 @@ export function FloatingCardWindow() {
       if (instanceContext) {
         const instanceStore = resolveInstanceStoreApi(selectedPlatform);
         if (!instanceStore) {
-          throw new Error(t('common.shared.instances.unsupported.title', '暂不支持当前系统'));
+          throw new Error(t('common.shared.instances.unsupported.title', "Unsupported on this system"));
         }
         const instances = await instanceStore.refreshInstances();
         const targetInstance = findInstanceById(instances, instanceContext.instanceId);
@@ -1103,6 +1118,8 @@ export function FloatingCardWindow() {
             break;
           case 'zed':
             await useZedAccountStore.getState().switchAccount(viewedAccount.id);
+            break;
+          case 'devin-cli':
             break;
         }
       }
@@ -1273,8 +1290,8 @@ export function FloatingCardWindow() {
               className="floating-card-icon-button"
               type="button"
               onClick={() => void handleTogglePin()}
-              title={alwaysOnTop ? t('floatingCard.actions.unpin', '取消置顶') : t('floatingCard.actions.pin', '置顶')}
-              aria-label={alwaysOnTop ? t('floatingCard.actions.unpin', '取消置顶') : t('floatingCard.actions.pin', '置顶')}
+              title={alwaysOnTop ? t('floatingCard.actions.unpin', "Unpin") : t('floatingCard.actions.pin', "Pin")}
+              aria-label={alwaysOnTop ? t('floatingCard.actions.unpin', "Unpin") : t('floatingCard.actions.pin', "Pin")}
             >
               {alwaysOnTop ? <PinOff size={15} /> : <Pin size={15} />}
             </button>
@@ -1282,8 +1299,8 @@ export function FloatingCardWindow() {
               className="floating-card-icon-button"
               type="button"
               onClick={() => void requestCloseWindow()}
-              title={t('floatingCard.actions.close', '关闭')}
-              aria-label={t('floatingCard.actions.close', '关闭')}
+              title={t('floatingCard.actions.close', "Close")}
+              aria-label={t('floatingCard.actions.close', "Close")}
             >
               <X size={15} />
             </button>
@@ -1297,7 +1314,7 @@ export function FloatingCardWindow() {
                 <div
                   className="floating-card-platform-lock"
                   title={platformLabel}
-                  aria-label={t('floatingCard.lockedPlatform', '实例已锁定平台')}
+                  aria-label={t('floatingCard.lockedPlatform', "Platform locked by instance")}
                 >
                   {platformLabel}
                 </div>
@@ -1306,7 +1323,7 @@ export function FloatingCardWindow() {
                   className="floating-card-platform-select"
                   value={selectedPlatform}
                   onChange={(event) => setSelectedPlatform(event.target.value as PlatformId)}
-                  aria-label={t('floatingCard.selectPlatform', '切换平台')}
+                  aria-label={t('floatingCard.selectPlatform', "Switch platform")}
                 >
                   {platformOrder.map((platformId) => (
                     <option key={platformId} value={platformId}>
@@ -1323,7 +1340,7 @@ export function FloatingCardWindow() {
                 type="button"
                 onClick={() => handleMoveAccount(-1)}
                 disabled={accountIndex < 0 || accounts.length <= 1}
-                aria-label={t('floatingCard.actions.previousAccount', '上一个账号')}
+                aria-label={t('floatingCard.actions.previousAccount', "Previous account")}
               >
                 <ChevronLeft size={15} />
               </button>
@@ -1341,7 +1358,7 @@ export function FloatingCardWindow() {
                 type="button"
                 onClick={() => handleMoveAccount(1)}
                 disabled={accountIndex < 0 || accounts.length <= 1}
-                aria-label={t('floatingCard.actions.nextAccount', '下一个账号')}
+                aria-label={t('floatingCard.actions.nextAccount', "Next account")}
               >
                 <ChevronRight size={15} />
               </button>
@@ -1364,7 +1381,7 @@ export function FloatingCardWindow() {
                   {presentation.cycleText ? (
                     <div className="floating-card-account-subline">
                       <span className="floating-card-section-label">
-                        {t('floatingCard.cycle', '周期')}
+                        {t('floatingCard.cycle', "Cycle")}
                       </span>
                       <span className="floating-card-inline-value">{presentation.cycleText}</span>
                     </div>
@@ -1379,7 +1396,7 @@ export function FloatingCardWindow() {
                 {presentation.sublineText ? (
                   <div className="floating-card-meta-pill">
                     <span className="floating-card-section-label">
-                      {t('floatingCard.status', '状态')}
+                      {t('floatingCard.status', "Status")}
                     </span>
                     <span
                       className={`floating-card-inline-value floating-card-inline-value--${presentation.sublineClass || 'neutral'}`}
@@ -1421,7 +1438,7 @@ export function FloatingCardWindow() {
                   })
                 ) : (
                   <div className="floating-card-empty-text">
-                    {t('common.shared.quota.noData', '暂无配额数据')}
+                    {t('common.shared.quota.noData', "No quota data")}
                   </div>
                 )}
               </div>
@@ -1429,12 +1446,12 @@ export function FloatingCardWindow() {
           ) : (
             <div className="floating-card-empty-state">
               <div className="floating-card-section-label">
-                {platformLoading ? t('common.loading', '加载中...') : t('floatingCard.empty.title', '暂无账号')}
+                {platformLoading ? t('common.loading', "Loading...") : t('floatingCard.empty.title', "No accounts")}
               </div>
               <div className="floating-card-empty-text">
                 {platformLoading
-                  ? t('floatingCard.empty.loading', '正在读取当前平台账号信息')
-                  : t('floatingCard.empty.desc', '当前平台还没有可展示的账号')}
+                  ? t('floatingCard.empty.loading', "Loading account information for the current platform")
+                  : t('floatingCard.empty.desc', "There are no accounts to display on this platform yet")}
               </div>
             </div>
           )}
@@ -1453,7 +1470,7 @@ export function FloatingCardWindow() {
                 onClick={() => selectAccount(selectedPlatform, recommendedAccount.id)}
               >
                 <Star size={14} />
-                {t('floatingCard.actions.viewRecommended', '查看推荐账号')}
+                {t('floatingCard.actions.viewRecommended', "View recommended account")}
               </button>
             ) : null}
             {!isCurrentViewed && currentAccount ? (
@@ -1463,7 +1480,7 @@ export function FloatingCardWindow() {
                 onClick={() => selectAccount(selectedPlatform, currentAccount.id)}
               >
                 <Undo2 size={14} />
-                {t('floatingCard.actions.backToCurrent', '回到当前账号')}
+                {t('floatingCard.actions.backToCurrent', "Back")}
               </button>
             ) : null}
             {!isCurrentViewed && viewedAccount ? (
@@ -1476,7 +1493,7 @@ export function FloatingCardWindow() {
                 {switchingAccountId === viewedAccount.id ? (
                   <RefreshCw size={14} className="floating-card-spin" />
                 ) : null}
-                {t('floatingCard.actions.switchToThisAccount', '切换到此账号')}
+                {t('floatingCard.actions.switchToThisAccount', "Switch")}
               </button>
             ) : null}
           </div>
@@ -1487,8 +1504,8 @@ export function FloatingCardWindow() {
               type="button"
               onClick={() => void handleRefresh()}
               disabled={!viewedAccount || Boolean(refreshingAccountId)}
-              title={t('common.refresh', '刷新')}
-              aria-label={t('common.refresh', '刷新')}
+              title={t('common.refresh', "Refresh")}
+              aria-label={t('common.refresh', "Refresh")}
             >
               <RefreshCw size={14} className={refreshingAccountId ? 'floating-card-spin' : undefined} />
             </button>
@@ -1496,8 +1513,8 @@ export function FloatingCardWindow() {
               className="floating-card-button floating-card-button--ghost floating-card-button--icon"
               type="button"
               onClick={() => void handleOpenDetails()}
-              title={t('floatingCard.actions.openDetails', '打开详情页')}
-              aria-label={t('floatingCard.actions.openDetails', '打开详情页')}
+              title={t('floatingCard.actions.openDetails', "Open details")}
+              aria-label={t('floatingCard.actions.openDetails', "Open details")}
             >
               <ExternalLink size={14} />
             </button>
@@ -1508,7 +1525,7 @@ export function FloatingCardWindow() {
           <div className="floating-card-close-confirm-backdrop" data-floating-card-no-drag="true">
             <div className="floating-card-close-confirm" data-floating-card-no-drag="true" role="dialog" aria-modal="true">
               <div className="floating-card-close-confirm-title">
-                {t('floatingCard.closeConfirm.title', '关闭悬浮卡片？')}
+                {t('floatingCard.closeConfirm.title', "Close floating card?")}
               </div>
               <div className="floating-card-close-confirm-message">
                 {t('floatingCard.closeConfirm.message', {
@@ -1522,7 +1539,7 @@ export function FloatingCardWindow() {
                   checked={closeConfirmSkipPrompt}
                   onChange={(event) => setCloseConfirmSkipPrompt(event.target.checked)}
                 />
-                <span>{t('floatingCard.closeConfirm.dontAskAgain', '不再提示')}</span>
+                <span>{t('floatingCard.closeConfirm.dontAskAgain', "Don't ask again")}</span>
               </label>
               <div className="floating-card-close-confirm-actions">
                 <button
@@ -1530,14 +1547,14 @@ export function FloatingCardWindow() {
                   type="button"
                   onClick={handleCloseConfirmDismiss}
                 >
-                  {t('common.cancel', '取消')}
+                  {t('common.cancel', "Cancel")}
                 </button>
                 <button
                   className="floating-card-button floating-card-button--primary"
                   type="button"
                   onClick={() => void handleCloseConfirmAccept()}
                 >
-                  {t('floatingCard.actions.close', '关闭')}
+                  {t('floatingCard.actions.close', "Close")}
                 </button>
               </div>
             </div>

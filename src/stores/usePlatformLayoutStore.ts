@@ -9,6 +9,7 @@ const TRAY_MIGRATED_PLATFORM_IDS: PlatformId[] = [
   'kiro',
   'cursor',
   'gemini',
+  'devin-cli',
   'codebuddy',
   'codebuddy_cn',
   'qoder',
@@ -345,6 +346,9 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
   }
   if (fallbackPlatform === 'gemini') {
     return 'Gemini Cli';
+  }
+  if (fallbackPlatform === 'devin-cli') {
+    return 'Devin CLI';
   }
   return fallbackPlatform.charAt(0).toUpperCase() + fallbackPlatform.slice(1);
 }

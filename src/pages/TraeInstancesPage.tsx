@@ -33,7 +33,7 @@ export function TraeInstancesContent({
   const renderTraeQuotaPreview = (account: TraeAccount) => {
     const usage = getTraeUsage(account);
     if (usage.usedPercent == null && usage.spentUsd == null && usage.totalUsd == null) {
-      return <span className="account-quota-empty">{t('instances.quota.empty', '暂无配额缓存')}</span>;
+      return <span className="account-quota-empty">{t('instances.quota.empty', "No cached quota")}</span>;
     }
 
     const usageText = usage.usedPercent == null ? '--' : `${usage.usedPercent}%`;

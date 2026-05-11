@@ -17,7 +17,7 @@ export function ManualHelpIconButton({
   iconSize = 16,
 }: ManualHelpIconButtonProps) {
   const { t } = useTranslation();
-  const manualTitle = t('manual.navTitle', '功能使用手册');
+  const manualTitle = t('manual.navTitle', "User Manual");
 
   return (
     <button

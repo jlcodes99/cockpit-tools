@@ -62,7 +62,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
   const addTag = (rawValue: string) => {
     const normalized = normalizeTag(rawValue);
     if (!normalized) {
-      setError(t('accounts.tagModal.error.empty', '标签不能为空'));
+      setError(t('accounts.tagModal.error.empty', "Tag cannot be empty"));
       return;
     }
     if (normalized.length > MAX_TAG_LENGTH) {
@@ -75,7 +75,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
       return;
     }
     if (tags.includes(normalized)) {
-      setError(t('accounts.tagModal.error.duplicate', '标签已存在'));
+      setError(t('accounts.tagModal.error.duplicate', "Tag already exists"));
       return;
     }
     if (tags.length >= MAX_TAGS) {
@@ -145,7 +145,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
     if (saving || !globalRenamingTag) return;
     const newName = normalizeTag(inputValue);
     if (!newName) {
-      setError(t('accounts.tagModal.error.empty', '标签不能为空'));
+      setError(t('accounts.tagModal.error.empty', "Tag cannot be empty"));
       return;
     }
     if (newName.length > MAX_TAG_LENGTH) {
@@ -196,9 +196,9 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
         <div className="modal-header">
           <h2 className="tag-edit-title">
             <Tag size={18} />
-            {t('accounts.tagModal.title', '账户标签')}
+            {t('accounts.tagModal.title', "Account Tags")}
           </h2>
-          <button className="modal-close" onClick={onClose} aria-label={t('common.close', '关闭')}>
+          <button className="modal-close" onClick={onClose} aria-label={t('common.close', "Close")}>
             <X size={18} />
           </button>
         </div>
@@ -226,7 +226,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
           )}
           <div className="tag-list">
             {tags.length === 0 ? (
-              <div className="tag-empty">{t('accounts.tagModal.empty', '暂无标签')}</div>
+              <div className="tag-empty">{t('accounts.tagModal.empty', "No tags")}</div>
             ) : (
               tags.map((tag) => (
                 <span key={tag} className="tag-chip">
@@ -237,7 +237,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
                       removeTag(tag);
                     }}
                     style={{ cursor: 'pointer' }}
-                    title={t('accounts.tagModal.editHint', '点击修改')}
+                    title={t('accounts.tagModal.editHint', 'Click to edit')}
                   >
                     {tag}
                   </span>
@@ -258,9 +258,9 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
           </div>
           {normalizedAvailableTags.length > 0 && (
             <div className="tag-suggestions">
-              <div className="tag-suggestions-title">{t('accounts.tagModal.suggestionsTitle', '已有标签')}</div>
+              <div className="tag-suggestions-title">{t('accounts.tagModal.suggestionsTitle', "Existing tags")}</div>
               {suggestedTags.length === 0 ? (
-                <div className="tag-suggestions-empty">{t('accounts.tagModal.suggestionsEmpty', '暂无可选标签')}</div>
+                <div className="tag-suggestions-empty">{t('accounts.tagModal.suggestionsEmpty', "No available tags")}</div>
               ) : (
                 <div className="tag-suggestions-list">
                   {suggestedTags.map((tag) => (
@@ -270,7 +270,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
                         className="tag-suggestion"
                         style={{ border: 'none', background: 'transparent', paddingRight: 4, margin: 0 }}
                         onClick={() => addTag(tag)}
-                        title={t('accounts.tagModal.addHint', '点击添加')}
+                        title={t('accounts.tagModal.addHint', 'Click to add')}
                       >
                         <Tag size={12} style={{ marginRight: 4 }} />
                         {tag}
@@ -284,7 +284,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
                           setInputValue(tag);
                           setError('');
                         }}
-                        title={t('accounts.tagModal.globalRenameHint', '全局重命名此标签')}
+                        title={t('accounts.tagModal.globalRenameHint', 'Rename this tag globally')}
                         style={{
                           background: 'transparent',
                           border: 'none',
@@ -305,7 +305,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
                           e.stopPropagation();
                           handleGlobalDelete(tag);
                         }}
-                        title={t('accounts.tagModal.globalDeleteHint', '全局删除此标签')}
+                        title={t('accounts.tagModal.globalDeleteHint', 'Delete this tag globally')}
                         style={{
                           background: 'transparent',
                           border: 'none',
@@ -328,7 +328,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
           {globalRenamingTag ? (
             <div className="tag-input-row">
               <div className="tag-global-rename-hint" style={{ fontSize: 12, color: 'var(--text-secondary, #6b7280)', marginBottom: 4 }}>
-                {t('accounts.tagModal.renamingGlobal', '正在全局重命名已存在标签所有账号记录：')} <b>{globalRenamingTag}</b>
+                {t('accounts.tagModal.renamingGlobal', 'Renaming this existing tag across all account records: ')} <b>{globalRenamingTag}</b>
               </div>
               <div className="tag-input-wrap">
                 <input
@@ -347,7 +347,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
                       setInputValue('');
                     }
                   }}
-                  placeholder={t('accounts.tagModal.renamePlaceholder', '输入新的标签名称')}
+                  placeholder={t('accounts.tagModal.renamePlaceholder', 'Enter a new tag name')}
                   autoFocus
                 />
                 <button
@@ -356,7 +356,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
                   onClick={handleGlobalRename}
                   disabled={!inputValue.trim() || saving}
                 >
-                  {t('common.save', '保存')}
+                  {t('common.save', "Save")}
                 </button>
                 <button
                   type="button"
@@ -389,7 +389,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
                     remaining,
                     defaultValue: '输入标签（还能添加 {{remaining}} 个）',
                   })
-                  : t('accounts.tagModal.inputDisabledPlaceholder', '已达到标签上限')}
+                  : t('accounts.tagModal.inputDisabledPlaceholder', "Tag limit reached")}
                 disabled={remaining <= 0}
               />
               <button
@@ -399,7 +399,7 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
                 disabled={!inputValue.trim() || remaining <= 0}
               >
                 <Plus size={14} />
-                {t('accounts.tagModal.add', '添加')}
+                {t('accounts.tagModal.add', "Add")}
               </button>
             </div>
           </div>
@@ -408,10 +408,10 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
         </div>
         <div className="modal-footer tag-edit-footer">
           <button className="btn btn-secondary" onClick={onClose} disabled={saving}>
-            {t('common.cancel', '取消')}
+            {t('common.cancel', "Cancel")}
           </button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? t('common.saving', '保存中...') : t('accounts.tagModal.save', '保存标签')}
+            {saving ? t('common.saving', "Saving...") : t('accounts.tagModal.save', "Save Tags")}
           </button>
         </div>
       </div>

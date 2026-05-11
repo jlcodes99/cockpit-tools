@@ -1,5 +1,5 @@
 {
-  "name": "cockpit-tools",
+  "name": "switchme",
   "private": true,
   "version": "0.22.21",
   "type": "module",
@@ -7,7 +7,7 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "prebuild": "npm run typecheck",
-    "build": "npm run sync-version && tsc && vite build",
+    "build": "npm run sync-version && vite build",
     "release:preflight": "node scripts/release/preflight.cjs",
     "preview": "vite preview",
     "pretauri": "npm run typecheck",

@@ -290,25 +290,25 @@ function resolveCodebuddyResourceLabel(
   t: Translate,
 ): string {
   if (resource.packageCode === CB_PACKAGE_CODE.extra) {
-    return t('codebuddy.extraCredit.title', '加量包');
+    return t('codebuddy.extraCredit.title', "Credit Package");
   }
   if (resource.packageCode === CB_PACKAGE_CODE.activity) {
-    return t('codebuddy.quotaQuery.packageTitle.activity', '活动赠送包');
+    return t('codebuddy.quotaQuery.packageTitle.activity', "Activity Gift Package");
   }
   if (
     resource.packageCode === CB_PACKAGE_CODE.free ||
     resource.packageCode === CB_PACKAGE_CODE.gift ||
     resource.packageCode === CB_PACKAGE_CODE.freeMon
   ) {
-    return t('codebuddy.quotaQuery.packageTitle.base', '基础体验包');
+    return t('codebuddy.quotaQuery.packageTitle.base', "Base Experience Package");
   }
   if (
     resource.packageCode === CB_PACKAGE_CODE.proMon ||
     resource.packageCode === CB_PACKAGE_CODE.proYear
   ) {
-    return t('codebuddy.quotaQuery.packageTitle.pro', '专业版订阅');
+    return t('codebuddy.quotaQuery.packageTitle.pro', "Pro Subscription");
   }
-  return resource.packageName || t('codebuddy.quotaQuery.packageUnknown', '套餐信息未知');
+  return resource.packageName || t('codebuddy.quotaQuery.packageUnknown', "Unknown package");
 }
 
 function resolveWorkbuddyResourceLabel(
@@ -316,17 +316,17 @@ function resolveWorkbuddyResourceLabel(
   t: Translate,
 ): string {
   if (resource.packageCode === WORKBUDDY_PACKAGE_CODE.extra) {
-    return t('workbuddy.extraCredit.title', '加量包');
+    return t('workbuddy.extraCredit.title', "Credit Package");
   }
   if (resource.packageCode === WORKBUDDY_PACKAGE_CODE.activity) {
-    return t('workbuddy.quotaQuery.packageTitle.activity', '活动赠送包');
+    return t('workbuddy.quotaQuery.packageTitle.activity', "Activity Gift Package");
   }
   if (
     resource.packageCode === WORKBUDDY_PACKAGE_CODE.free ||
     resource.packageCode === WORKBUDDY_PACKAGE_CODE.gift ||
     resource.packageCode === WORKBUDDY_PACKAGE_CODE.freeMon
   ) {
-    return t('workbuddy.quotaQuery.packageTitle.base', '基础体验包');
+    return t('workbuddy.quotaQuery.packageTitle.base', "Base Experience Package");
   }
   if (
     resource.packageCode === WORKBUDDY_PACKAGE_CODE.proMon ||
@@ -334,7 +334,7 @@ function resolveWorkbuddyResourceLabel(
   ) {
     return resource.packageName || 'PRO';
   }
-  return resource.packageName || t('workbuddy.quotaQuery.packageUnknown', '套餐信息未知');
+  return resource.packageName || t('workbuddy.quotaQuery.packageUnknown', "Unknown package");
 }
 
 function resolveResourceTimeText(
@@ -521,7 +521,7 @@ export function buildCodexAccountPresentation(
   const weeklyBlocksHourlyHint = effectiveQuota.weeklyBlocksHourly
     ? t(
         'codex.quota.weeklyBlocksHourly',
-        '周额度为 0，5小时额度已不可用',
+        "Weekly quota is 0, so the 5-hour quota is unavailable",
       )
     : '';
   const quotaItems: UnifiedQuotaMetric[] = getCodexQuotaWindows(account.quota).map((window) => ({
@@ -675,7 +675,7 @@ export function buildWindsurfAccountPresentation(
   const cycleText =
     credits.planEndsAt
       ? formatWindsurfResetTime(credits.planEndsAt, t)
-      : t('common.shared.credits.planEndsUnknown', '配额周期时间未知');
+      : t('common.shared.credits.planEndsUnknown', "Cycle timing unavailable");
 
   if (usageMode === 'quota') {
     const dailyUsedPercent = quotaSummary.dailyUsedPercent == null ? null : clampPercent(quotaSummary.dailyUsedPercent);
@@ -928,7 +928,7 @@ export function buildQoderAccountPresentation(
   ) {
     quotaItems.push({
       key: 'included',
-      label: t('qoder.usageOverview.includedCredits', '套餐内 Credits'),
+      label: t('qoder.usageOverview.includedCredits', "Included Credits"),
       percentage: userRemainingPercent ?? 0,
       progressPercent: userRemainingPercent ?? 0,
       quotaClass: getCursorUsageQuotaClass(userUsedPercent ?? 0),
@@ -1124,7 +1124,7 @@ export function buildKiroAccountPresentation(
   const cycleText =
     credits.planEndsAt
       ? formatKiroResetTime(credits.planEndsAt, t)
-      : t('common.shared.credits.planEndsUnknown', '配额周期时间未知');
+      : t('common.shared.credits.planEndsUnknown', "Cycle timing unavailable");
 
   const quotaItems: UnifiedQuotaMetric[] = [
     {
@@ -1358,13 +1358,13 @@ export function buildZedAccountPresentation(
   if (account.has_overdue_invoices != null) {
     quotaItems.push({
       key: 'overdue_invoices',
-      label: t('zed.page.overdueField', '是否欠费'),
+      label: t('zed.page.overdueField', "Overdue"),
       percentage: 0,
       progressPercent: 0,
       quotaClass: account.has_overdue_invoices ? 'low' : 'high',
       valueText: account.has_overdue_invoices
-        ? t('zed.page.overdueYes', '是')
-        : t('zed.page.overdueNo', '否'),
+        ? t('zed.page.overdueYes', "Yes")
+        : t('zed.page.overdueNo', "No"),
       showProgress: false,
     });
   }

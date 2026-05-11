@@ -63,11 +63,11 @@ function filterLogContent(content: string, level: LogLevelFilter): string {
 
 export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
   const { t } = useTranslation();
-  const logsLabel = t('manual.dataPrivacy.keywords.5', '日志');
-  const logDirLabel = t('manual.dataPrivacy.keywords.6', '日志目录');
+  const logsLabel = t('manual.dataPrivacy.keywords.5', "logs");
+  const logDirLabel = t('manual.dataPrivacy.keywords.6', "log directory");
   const levelOptions: Array<{ value: LogLevelFilter; label: string }> = useMemo(
     () => [
-      { value: 'ALL', label: t('logViewer.levels.all', '全部') },
+      { value: 'ALL', label: t('logViewer.levels.all', "All") },
       { value: 'INFO', label: t('logViewer.levels.info', 'INFO') },
       { value: 'WARN', label: t('logViewer.levels.warn', 'WARN') },
       { value: 'ERROR', label: t('logViewer.levels.error', 'ERROR') },
@@ -240,7 +240,7 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
       <div className="modal log-viewer-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <h2>{logsLabel}</h2>
-          <button className="modal-close" onClick={onClose} aria-label={t('common.close', '关闭')}>
+          <button className="modal-close" onClick={onClose} aria-label={t('common.close', "Close")}>
             <X size={16} />
           </button>
         </div>
@@ -258,7 +258,7 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
                       setSelectedFileName(event.target.value);
                       setError('');
                     }}
-                    aria-label={t('logViewer.fileLabel', '日志文件')}
+                    aria-label={t('logViewer.fileLabel', "Log File")}
                   >
                     {snapshot.available_files.map((file) => (
                       <option key={file.log_file_name} value={file.log_file_name}>
@@ -283,14 +283,14 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
             <div className="log-viewer-toolbar">
               <div className="log-viewer-filter-wrap">
                 <span className="log-viewer-line-limit-label">
-                  {t('logViewer.levelLabel', '级别')}
+                  {t('logViewer.levelLabel', "Level")}
                 </span>
                 <div className="log-viewer-select-wrap log-viewer-level-select-wrap">
                   <select
                     className="log-viewer-select"
                     value={levelFilter}
                     onChange={(event) => setLevelFilter(event.target.value as LogLevelFilter)}
-                    aria-label={t('logViewer.levelLabel', '级别')}
+                    aria-label={t('logViewer.levelLabel', "Level")}
                   >
                     {levelOptions.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -333,14 +333,14 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
             }}
           >
             {loading && !displayedContent ? (
-              <div className="log-viewer-placeholder">{t('common.loading', '加载中...')}</div>
+              <div className="log-viewer-placeholder">{t('common.loading', "Loading...")}</div>
             ) : displayedContent ? (
               <pre>{displayedContent}</pre>
             ) : (
               <div className="log-viewer-placeholder">
                 {hasFilteredOutContent
-                  ? t('logViewer.noMatches', '当前筛选下无匹配日志')
-                  : t('common.none', '暂无')}
+                  ? t('logViewer.noMatches', "No logs match the current filter")
+                  : t('common.none', "None")}
               </div>
             )}
           </div>
@@ -350,25 +350,25 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
 
         <div className="modal-footer log-viewer-footer">
           <button className="btn btn-ghost" onClick={onClose}>
-            {t('common.close', '关闭')}
+            {t('common.close', "Close")}
           </button>
           <button className="btn btn-secondary" onClick={() => void loadSnapshot(true)}>
-            {t('common.refresh', '刷新')}
+            {t('common.refresh', "Refresh")}
           </button>
           <button className="btn btn-secondary" onClick={handleClearOutput}>
-            {t('breakout.historyClear', '清空')}
+            {t('breakout.historyClear', "Clear")}
           </button>
           <button className="btn btn-secondary" onClick={handleOpenDir}>
-            {t('common.open', '打开')} {logDirLabel}
+            {t('common.open', "Open")} {logDirLabel}
           </button>
           <button className="btn btn-secondary" onClick={() => void handleCopyPath()}>
             {pathCopied
-              ? t('common.success', '成功')
-              : `${t('common.copy', '复制')} ${t('error.fileCorrupted.filePath', '文件位置')}`}
+              ? t('common.success', "Success")
+              : `${t('common.copy', "Copy")} ${t('error.fileCorrupted.filePath', "File Location")}`}
           </button>
           <button className="btn btn-primary" onClick={() => void handleCopyLogs()}>
             <Copy size={14} />
-            {copied ? t('common.success', '成功') : `${t('common.copy', '复制')} ${logsLabel}`}
+            {copied ? t('common.success', "Success") : `${t('common.copy', "Copy")} ${logsLabel}`}
           </button>
         </div>
       </div>

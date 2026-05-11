@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { Github } from 'lucide-react';
+import { Github, Terminal } from 'lucide-react';
 import { TFunction } from 'i18next';
 import { PlatformId } from '../types/platform';
 import { RobotIcon } from '../components/icons/RobotIcon';
@@ -32,6 +32,8 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
       return 'Cursor';
     case 'gemini':
       return 'Gemini Cli';
+    case 'devin-cli':
+      return 'Devin CLI';
     case 'codebuddy':
       return 'CodeBuddy';
     case 'codebuddy_cn':
@@ -65,6 +67,8 @@ export function renderPlatformIcon(platformId: PlatformId, size = 20): ReactNode
       return <CursorIcon style={{ width: size, height: size }} />;
     case 'gemini':
       return <GeminiIcon style={{ width: size, height: size }} />;
+    case 'devin-cli':
+      return <Terminal size={size} />;
     case 'codebuddy':
       return <CodebuddyIcon style={{ width: size, height: size }} />;
     case 'codebuddy_cn':
