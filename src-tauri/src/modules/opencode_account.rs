@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -7,7 +6,7 @@ use std::sync::Mutex;
 use crate::models::opencode::{
     OpenCodeAccount, OpenCodeAccountIndex, OpenCodeImportPayload, OpenCodeTier,
 };
-use crate::modules::{account, logger};
+use crate::modules::logger;
 
 const ACCOUNTS_INDEX_FILE: &str = "opencode_accounts.json";
 const ACCOUNTS_DIR: &str = "opencode_accounts";
@@ -27,7 +26,7 @@ fn now_ts() -> i64 {
 // ---------------------------------------------------------------------------
 
 fn data_dir() -> Result<PathBuf, String> {
-    account::accounts_dir().map(|d| d.join(ACCOUNTS_DIR))
+    crate::modules::account::get_data_dir().map(|d| d.join(ACCOUNTS_DIR))
 }
 
 fn accounts_index_path() -> Result<PathBuf, String> {
@@ -43,18 +42,18 @@ fn account_file_path(account_id: &str) -> Result<PathBuf, String> {
 }
 
 // ---------------------------------------------------------------------------
-// Check API access — validate token by hitting models endpoint
+// Check API access and fetch usage - async HTTP calls
 // ---------------------------------------------------------------------------
 
-fn check_api_access(tier: &OpenCodeTier, token: &str) -> Result<(), String> {
+async fn check_api_access(tier: &OpenCodeTier, token: &str) -> Result<(), String> {
     let base_url = match tier {
         OpenCodeTier::Go => OPENCODE_GO_BASE_URL,
         OpenCodeTier::Zen => OPENCODE_ZEN_BASE_URL,
-        OpenCodeTier::Free => return Ok(()), // Free tier needs no validation
+        OpenCodeTier::Free => return Ok(()),
     };
 
     let url = format!("{}models", base_url);
-    let client = reqwest::blocking::Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
@@ -63,27 +62,21 @@ fn check_api_access(tier: &OpenCodeTier, token: &str) -> Result<(), String> {
         .get(&url)
         .header("Authorization", format!("Bearer {}", token))
         .send()
+        .await
         .map_err(|e| format!("API request failed: {}", e))?;
 
     if response.status().is_success() {
         Ok(())
     } else {
         let status = response.status();
-        Err(format!(
-            "API returned status {}: {}",
-            status,
-            response.text().unwrap_or_default()
-        ))
+        let text = response.text().await.unwrap_or_default();
+        Err(format!("API returned status {}: {}", status, text))
     }
 }
 
-// ---------------------------------------------------------------------------
-// Fetch usage/quota data
-// ---------------------------------------------------------------------------
-
-fn fetch_go_usage(token: &str) -> Result<Option<serde_json::Value>, String> {
+async fn fetch_go_usage(token: &str) -> Result<Option<serde_json::Value>, String> {
     let url = format!("{}models", OPENCODE_GO_BASE_URL);
-    let client = reqwest::blocking::Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
@@ -92,6 +85,7 @@ fn fetch_go_usage(token: &str) -> Result<Option<serde_json::Value>, String> {
         .get(&url)
         .header("Authorization", format!("Bearer {}", token))
         .send()
+        .await
         .map_err(|e| format!("Go usage fetch failed: {}", e))?;
 
     if !response.status().is_success() {
@@ -102,35 +96,28 @@ fn fetch_go_usage(token: &str) -> Result<Option<serde_json::Value>, String> {
         return Ok(None);
     }
 
-    // Parse rate limit headers for dollar-value tracking
-    let usage_5h_str = response
-        .headers()
+    let headers = response.headers().clone();
+    let usage_5h_str = headers
         .get("x-ratelimit-usage-5h")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse::<f64>().ok());
-    let usage_weekly_str = response
-        .headers()
+    let usage_weekly_str = headers
         .get("x-ratelimit-usage-weekly")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse::<f64>().ok());
-    let usage_monthly_str = response
-        .headers()
+    let usage_monthly_str = headers
         .get("x-ratelimit-usage-monthly")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse::<f64>().ok());
-
-    let limit_5h_str = response
-        .headers()
+    let limit_5h_str = headers
         .get("x-ratelimit-limit-5h")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse::<f64>().ok());
-    let limit_weekly_str = response
-        .headers()
+    let limit_weekly_str = headers
         .get("x-ratelimit-limit-weekly")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse::<f64>().ok());
-    let limit_monthly_str = response
-        .headers()
+    let limit_monthly_str = headers
         .get("x-ratelimit-limit-monthly")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse::<f64>().ok());
@@ -168,11 +155,8 @@ fn fetch_go_usage(token: &str) -> Result<Option<serde_json::Value>, String> {
     Ok(Some(serde_json::Value::Object(usage)))
 }
 
-fn fetch_zen_usage(_token: &str) -> Result<Option<serde_json::Value>, String> {
+fn fetch_zen_usage() -> Result<Option<serde_json::Value>, String> {
     // Zen doesn't have a public balance API via REST.
-    // Balance info is only available from the console at https://opencode.ai/console.
-    // We return a minimal placeholder with zero balance and auto-reload flag.
-    // Users should check their balance via the console URL.
     let usage = serde_json::json!({
         "balance_dollars": 0.0,
         "auto_reload_enabled": false,
@@ -180,21 +164,6 @@ fn fetch_zen_usage(_token: &str) -> Result<Option<serde_json::Value>, String> {
         "console_url": "https://opencode.ai/console"
     });
     Ok(Some(usage))
-}
-
-async fn fetch_go_usage_async(token: &str) -> Result<Option<serde_json::Value>, String> {
-    // Run the blocking call in a blocking thread pool
-    let token = token.to_string();
-    tokio::task::spawn_blocking(move || fetch_go_usage(&token))
-        .await
-        .map_err(|e| format!("Async task failed: {}", e))?
-}
-
-async fn fetch_zen_usage_async(token: &str) -> Result<Option<serde_json::Value>, String> {
-    let token = token.to_string();
-    tokio::task::spawn_blocking(move || fetch_zen_usage(&token))
-        .await
-        .map_err(|e| format!("Async task failed: {}", e))?
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +224,11 @@ fn save_account(account: &OpenCodeAccount) -> Result<(), String> {
     fs::write(&path, content).map_err(|e| format!("Failed to write account: {}", e))
 }
 
+async fn validate_api(token: &str, tier: &OpenCodeTier) -> Result<(), String> {
+    check_api_access(tier, token).await
+        .map_err(|e| format!("API key validation failed: {}", e))
+}
+
 pub(crate) fn upsert_account(payload: OpenCodeImportPayload) -> Result<OpenCodeAccount, String> {
     let _lock = OPENCODE_ACCOUNT_INDEX_LOCK
         .lock()
@@ -262,16 +236,7 @@ pub(crate) fn upsert_account(payload: OpenCodeImportPayload) -> Result<OpenCodeA
 
     ensure_data_dir()?;
 
-    // Validate API key by checking access (skip for free tier)
-    match &payload.tier {
-        OpenCodeTier::Free => {}
-        _ => {
-            check_api_access(&payload.tier, &payload.access_token).map_err(|e| {
-                format!("API key validation failed: {}", e)
-            })?;
-        }
-    }
-
+    // Note: sync API key validation is done in the command layer
     let mut index = read_index()?;
     let now = now_ts();
 
@@ -468,18 +433,32 @@ pub(crate) fn export_accounts(account_ids: &[String]) -> Result<String, String> 
 pub(crate) async fn refresh_account_async(
     account_id: &str,
 ) -> Result<OpenCodeAccount, String> {
+    // Fetch usage data without holding the lock
+    let account_snapshot = {
+        let _lock = OPENCODE_ACCOUNT_INDEX_LOCK
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        load_account(account_id)
+            .ok_or_else(|| format!("OpenCode account not found: {}", account_id))?
+    };
+
+    let usage = match &account_snapshot.tier {
+        OpenCodeTier::Go => fetch_go_usage(&account_snapshot.access_token).await?,
+        OpenCodeTier::Zen => {
+            // Zen usage doesn't require network
+            let _ = &account_snapshot.access_token;
+            None
+        }
+        OpenCodeTier::Free => None,
+    };
+
+    // Now re-acquire the lock to update
     let _lock = OPENCODE_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
 
     let mut account = load_account(account_id)
         .ok_or_else(|| format!("OpenCode account not found: {}", account_id))?;
-
-    let usage = match &account.tier {
-        OpenCodeTier::Go => fetch_go_usage_async(&account.access_token).await?,
-        OpenCodeTier::Zen => fetch_zen_usage_async(&account.access_token).await?,
-        OpenCodeTier::Free => None,
-    };
 
     if let Some(ref usage_data) = usage {
         account.usage_raw = Some(usage_data.clone());
@@ -519,29 +498,33 @@ pub(crate) fn inject_to_opencode(account_id: &str) -> Result<(), String> {
     let account = load_account(account_id)
         .ok_or_else(|| format!("OpenCode account not found: {}", account_id))?;
 
-    // For OpenCode, injection writes the API key to VS Code settings
-    // Similar to how other token-based providers inject their credentials
-    let config = crate::modules::config::get_user_config();
-
-    let vscode_path = config.vscode_app_path.trim();
-    if vscode_path.is_empty() {
-        return Err("APP_PATH_NOT_FOUND:vscode".to_string());
-    }
+    let data_root = crate::modules::vscode_paths::resolve_preferred_vscode_data_root()
+        .map_err(|_| "APP_PATH_NOT_FOUND:vscode".to_string())?;
 
     let base_url = match &account.tier {
-        OpenCodeTier::Go => OPENCODE_GO_BASE_URL,
-        OpenCodeTier::Zen => OPENCODE_ZEN_BASE_URL,
+        OpenCodeTier::Go => OPENCODE_GO_BASE_URL.trim_end_matches('/'),
+        OpenCodeTier::Zen => OPENCODE_ZEN_BASE_URL.trim_end_matches('/'),
         OpenCodeTier::Free => return Err("Free tier cannot be injected".to_string()),
     };
 
-    crate::modules::vscode_inject::inject_settings_json(&crate::modules::vscode_paths::VSCodeSettingsInjection {
-        vscode_path: vscode_path.to_string(),
-        settings: serde_json::json!({
-            "opencode.api_key": account.access_token,
-            "opencode.base_url": base_url,
-            "opencode.tier": account.tier.to_string(),
-        }),
-    })?;
+    // Write OpenCode config to VS Code storage
+    let storage_dir = crate::modules::vscode_paths::vscode_state_db_path(&data_root)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or(data_root.clone());
+
+    let config_path = storage_dir.join("opencode_config.json");
+    let config_content = serde_json::json!({
+        "api_key": account.access_token,
+        "base_url": base_url,
+        "tier": account.tier.to_string(),
+    });
+
+    std::fs::write(
+        &config_path,
+        serde_json::to_string_pretty(&config_content)
+            .map_err(|e| format!("Failed to serialize config: {}", e))?
+    ).map_err(|e| format!("Failed to write config file: {}", e))?;
 
     logger::log_info(&format!(
         "[OpenCode] 已注入 VS Code 配置: account_id={}, email={}, tier={}",

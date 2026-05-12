@@ -83,8 +83,6 @@ impl PlatformId {
             _ => None,
         }
     }
-}
-    }
 
     pub(crate) fn as_str(self) -> &'static str {
         match self {
@@ -101,6 +99,7 @@ impl PlatformId {
             Self::Qoder => crate::modules::tray_layout::PLATFORM_QODER,
             Self::Trae => crate::modules::tray_layout::PLATFORM_TRAE,
             Self::Workbuddy => crate::modules::tray_layout::PLATFORM_WORKBUDDY,
+            Self::OpenCode => crate::modules::tray_layout::PLATFORM_OPENCODE,
         }
     }
 
@@ -631,41 +630,11 @@ fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayI
     }
 }
 
-fn build_opencode_display_info(lang: &str) -> AccountDisplayInfo {
-    let accounts = match crate::commands::opencode::list_opencode_accounts() {
-        Ok(accounts) => accounts,
-        Err(_) => return AccountDisplayInfo {
-            display_name: "OpenCode".to_string(),
-            current: None,
-            all: vec![],
-        },
-    };
-
-    let current_account_id = crate::modules::provider_current_state::get_current_account_id("opencode");
-    let all_accounts: Vec<AccountSummary> = accounts.iter().map(|a| AccountSummary {
-        id: a.id.clone(),
-        email: a.email.clone(),
-        platform_id: "opencode".to_string(),
-    }).collect();
-
-    let current = current_account_id.as_ref().and_then(|id| {
-        accounts.iter().find(|a| &a.id == id).map(|a| AccountSummary {
-            id: a.id.clone(),
-            email: a.email.clone(),
-            platform_id: "opencode".to_string(),
-        })
-    });
-
-    let display_name = if lang.starts_with("zh") {
-        "OpenCode"
-    } else {
-        "OpenCode"
-    };
-
+#[cfg(not(target_os = "macos"))]
+fn build_opencode_display_info(_lang: &str) -> AccountDisplayInfo {
     AccountDisplayInfo {
-        display_name: display_name.to_string(),
-        current,
-        all: all_accounts,
+        account: "OpenCode".to_string(),
+        quota_lines: vec![],
     }
 }
 

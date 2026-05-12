@@ -2648,7 +2648,7 @@ mod imp {
             PlatformId::Codebuddy => build_codebuddy_cards(lang),
             PlatformId::CodebuddyCn => build_codebuddy_cn_cards(lang),
             PlatformId::Workbuddy => build_workbuddy_cards(lang),
-            PlatformId::OpenCode => Vec::new(),
+            PlatformId::OpenCode => (Vec::new(), None, None),
             PlatformId::Zed => build_zed_cards(lang),
         }
     }
