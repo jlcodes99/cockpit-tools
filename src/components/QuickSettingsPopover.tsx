@@ -148,7 +148,8 @@ export type QuickSettingsType =
   | 'qoder'
   | 'trae'
   | 'workbuddy'
-  | 'zed';
+  | 'zed'
+  | 'opencode';
 
 type QuotaAlertEnabledKey =
   | 'quota_alert_enabled'
@@ -163,7 +164,8 @@ type QuotaAlertEnabledKey =
   | 'qoder_quota_alert_enabled'
   | 'trae_quota_alert_enabled'
   | 'workbuddy_quota_alert_enabled'
-  | 'zed_quota_alert_enabled';
+  | 'zed_quota_alert_enabled'
+  | 'opencode_quota_alert_enabled';
 type QuotaAlertThresholdKey =
   | 'quota_alert_threshold'
   | 'codex_quota_alert_threshold'
