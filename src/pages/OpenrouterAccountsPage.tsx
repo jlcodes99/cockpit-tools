@@ -187,48 +187,78 @@ export function OpenrouterAccountsPage() {
           </div>
         )}
 
-        <div className="ghcp-quota-section">
-          {account.usage != null || account.usage_daily != null || account.usage_weekly != null || account.usage_monthly != null ? (
-            <div className="quota-item">
-              <div className="quota-header">
-                <span className="quota-label">{t('openrouter.usage.used', 'Usage')}</span>
-                {account.usage != null && (
-                  <span className="quota-value">
+        {account.usage != null || account.usage_daily != null || account.usage_weekly != null || account.usage_monthly != null ? (
+          <div className="opencode-quota-section">
+            {account.usage != null && (
+              <div className="quota-item windsurf-credit-item">
+                <div className="quota-header">
+                  <span className="quota-label">Total Usage</span>
+                  <span className={`quota-pct ${pct != null ? (pct >= 90 ? 'critical' : pct >= 70 ? 'warning' : 'high') : ''}`}>
                     ${account.usage.toFixed(4)}
                     {account.limit != null ? ` / $${account.limit.toFixed(2)}` : ''}
                   </span>
+                </div>
+                {pct != null && (
+                  <div className="quota-bar-track">
+                    <div className={`quota-bar ${pct >= 90 ? 'critical' : pct >= 70 ? 'warning' : 'high'}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                  </div>
+                )}
+                {account.limit_remaining != null && (
+                  <div className="windsurf-credit-meta-row">
+                    <span className="windsurf-credit-left">Remaining: ${account.limit_remaining.toFixed(4)}</span>
+                  </div>
                 )}
               </div>
-              {pct != null && (
-                <div className="quota-bar-track">
-                  <div className={`quota-bar ${pct >= 90 ? 'critical' : pct >= 70 ? 'low' : 'high'}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+            )}
+            {account.usage_daily != null && (
+              <div className="quota-item windsurf-credit-item">
+                <div className="quota-header">
+                  <span className="quota-label">Daily</span>
+                  <span className="quota-pct">${account.usage_daily.toFixed(4)}</span>
                 </div>
-              )}
-              {(account.usage_daily != null || account.usage_weekly != null || account.usage_monthly != null) && (
-                <div className="windsurf-credit-meta-row">
-                  <span className="windsurf-credit-left">
-                    {account.usage_daily != null ? `D: $${account.usage_daily.toFixed(4)}` : ''}
-                    {account.usage_weekly != null ? ` W: $${account.usage_weekly.toFixed(4)}` : ''}
-                    {account.usage_monthly != null ? ` M: $${account.usage_monthly.toFixed(4)}` : ''}
-                  </span>
+              </div>
+            )}
+            {account.usage_weekly != null && (
+              <div className="quota-item windsurf-credit-item">
+                <div className="quota-header">
+                  <span className="quota-label">Weekly</span>
+                  <span className="quota-pct">${account.usage_weekly.toFixed(4)}</span>
                 </div>
-              )}
-            </div>
-          ) : (
-            <div className="quota-item">
-              <div className="quota-empty">
+              </div>
+            )}
+            {account.usage_monthly != null && (
+              <div className="quota-item windsurf-credit-item">
+                <div className="quota-header">
+                  <span className="quota-label">Monthly</span>
+                  <span className="quota-pct">${account.usage_monthly.toFixed(4)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="opencode-quota-section">
+            <div className="quota-item windsurf-credit-item">
+              <div className="quota-empty" style={{ textAlign: 'center', padding: '8px 0', fontSize: '12px', color: 'var(--text-muted)' }}>
                 {t('openrouter.usage.noData', 'No usage data')}
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {isMgmt && creditsInfo && (
-          <div className="ghcp-quota-section" style={{ marginTop: 0, paddingTop: 0 }}>
-            <button className="card-action-btn" onClick={async (e) => { e.stopPropagation(); try { await openrouterService.fetchOpenRouterCredits(account.id); await refreshToken(account.id); } catch {} }}>
-              {t('openrouter.credits.check', 'Check Credits')}
-            </button>
-            {creditsInfo.total_credits != null && <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginLeft: '8px' }}>{t('openrouter.credits.total', 'Credits')}: {formatOpenRouterCredits(creditsInfo.total_credits)}</span>}
+        {isMgmt && (
+          <div className="opencode-quota-section" style={{ marginTop: 0 }}>
+            <div className="quota-item windsurf-credit-item" style={{ border: 'none', padding: '4px 0' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button className="card-action-btn" onClick={async (e) => { e.stopPropagation(); try { await openrouterService.fetchOpenRouterCredits(account.id); await refreshToken(account.id); } catch {} }} style={{ fontSize: '11px', padding: '2px 8px' }}>
+                  {t('openrouter.credits.check', 'Check Credits')}
+                </button>
+                {creditsInfo?.total_credits != null && (
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    {t('openrouter.credits.total', 'Credits')}: {formatOpenRouterCredits(creditsInfo.total_credits)}
+                  </span>
+                )}
+              </span>
+            </div>
           </div>
         )}
 

@@ -4,7 +4,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::models::openrouter::{OpenRouterAccount, OpenRouterAccountIndex, OpenRouterKeyType, OpenRouterModel};
+use crate::models::openrouter::{
+    OpenRouterAccount, OpenRouterAccountIndex, OpenRouterKeyType, OpenRouterModel,
+};
 use crate::modules::{account, logger};
 
 const ACCOUNTS_INDEX_FILE: &str = "openrouter_accounts.json";
@@ -121,8 +123,8 @@ fn load_account_index_checked() -> Result<OpenRouterAccountIndex, String> {
     if !path.exists() {
         return Ok(OpenRouterAccountIndex::new());
     }
-    let content = fs::read_to_string(&path)
-        .map_err(|e| format!("读取 OpenRouter 账号索引失败: {}", e))?;
+    let content =
+        fs::read_to_string(&path).map_err(|e| format!("读取 OpenRouter 账号索引失败: {}", e))?;
     if content.trim().is_empty() {
         return Ok(OpenRouterAccountIndex::new());
     }
@@ -244,7 +246,11 @@ async fn openrouter_get(path: &str, api_key: &str) -> Result<Value, String> {
             .and_then(|e| e.get("message"))
             .and_then(|m| m.as_str())
             .unwrap_or("未知错误");
-        Err(format!("OpenRouter API 错误 ({}): {}", status.as_u16(), error_msg))
+        Err(format!(
+            "OpenRouter API 错误 ({}): {}",
+            status.as_u16(),
+            error_msg
+        ))
     }
 }
 
@@ -393,7 +399,10 @@ fn account_from_key_response(raw: &Value, api_key: &str) -> OpenRouterAccount {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    let status = key_data.get("status").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let status = key_data
+        .get("status")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
     let status_reason = key_data
         .get("status_reason")
         .and_then(|v| v.as_str())
@@ -462,9 +471,9 @@ pub async fn add_account_with_key(api_key: &str) -> Result<OpenRouterAccount, St
     }
 
     // Validate via API
-    let key_response = validate_key(trimmed).await.map_err(|e| {
-        format!("OpenRouter API key 验证失败: {}", e)
-    })?;
+    let key_response = validate_key(trimmed)
+        .await
+        .map_err(|e| format!("OpenRouter API key 验证失败: {}", e))?;
 
     let account = account_from_key_response(&key_response, trimmed);
     let saved = upsert_account_record(account)?;
@@ -481,8 +490,8 @@ pub async fn add_account_with_key(api_key: &str) -> Result<OpenRouterAccount, St
 
 /// Refresh account data from OpenRouter API
 pub async fn refresh_account_from_api(account_id: &str) -> Result<OpenRouterAccount, String> {
-    let account = load_account(account_id)
-        .ok_or_else(|| format!("OpenRouter 账号不存在: {}", account_id))?;
+    let account =
+        load_account(account_id).ok_or_else(|| format!("OpenRouter 账号不存在: {}", account_id))?;
 
     // Need the raw API key for the refresh. We store it encrypted
     // and need the key storage mechanism. For now, use the raw key from metadata
@@ -532,8 +541,8 @@ pub async fn refresh_all_accounts_from_api() -> Result<i32, String> {
 
 /// Fetch credits for a management key account
 pub async fn fetch_credits_from_api(account_id: &str) -> Result<Value, String> {
-    let account = load_account(account_id)
-        .ok_or_else(|| format!("OpenRouter 账号不存在: {}", account_id))?;
+    let account =
+        load_account(account_id).ok_or_else(|| format!("OpenRouter 账号不存在: {}", account_id))?;
 
     if !matches!(account.key_type, OpenRouterKeyType::Management) {
         return Err("仅 Management 类型的 key 可以查询 credits".to_string());
@@ -554,8 +563,8 @@ pub async fn fetch_credits_from_api(account_id: &str) -> Result<Value, String> {
 
 /// Fetch activity data
 pub async fn fetch_activity_from_api(account_id: &str, _days: u32) -> Result<Value, String> {
-    let account = load_account(account_id)
-        .ok_or_else(|| format!("OpenRouter 账号不存在: {}", account_id))?;
+    let account =
+        load_account(account_id).ok_or_else(|| format!("OpenRouter 账号不存在: {}", account_id))?;
 
     if !matches!(account.key_type, OpenRouterKeyType::Management) {
         return Err("仅 Management 类型的 key 可以查询 activity".to_string());
@@ -567,11 +576,13 @@ pub async fn fetch_activity_from_api(account_id: &str, _days: u32) -> Result<Val
 
 /// Get the raw API key for an account
 fn get_account_api_key(account_id: &str) -> Result<String, String> {
-    let account = load_account(account_id)
-        .ok_or_else(|| format!("OpenRouter 账号不存在: {}", account_id))?;
-    let raw = account.auth_key_raw
+    let account =
+        load_account(account_id).ok_or_else(|| format!("OpenRouter 账号不存在: {}", account_id))?;
+    let raw = account
+        .auth_key_raw
         .ok_or_else(|| "API key 数据未找到".to_string())?;
-    let api_key = raw.get("api_key")
+    let api_key = raw
+        .get("api_key")
         .and_then(|v| v.as_str())
         .ok_or_else(|| "API key 字段缺失".to_string())?
         .to_string();
@@ -583,8 +594,8 @@ fn get_account_api_key(account_id: &str) -> Result<String, String> {
 
 /// Inject account (write config) for injection
 pub fn inject_to_openrouter(account_id: &str) -> Result<(), String> {
-    let _account = load_account(account_id)
-        .ok_or_else(|| format!("OpenRouter 账号不存在: {}", account_id))?;
+    let _account =
+        load_account(account_id).ok_or_else(|| format!("OpenRouter 账号不存在: {}", account_id))?;
     // OpenRouter injection writes the API key to the VS Code settings JSON
     // This is a placeholder — actual implementation would write to
     // the VS Code settings.json or similar config location
@@ -595,11 +606,18 @@ pub fn inject_to_openrouter(account_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn update_account_tags(account_id: &str, tags: Vec<String>) -> Result<OpenRouterAccount, String> {
+pub fn update_account_tags(
+    account_id: &str,
+    tags: Vec<String>,
+) -> Result<OpenRouterAccount, String> {
     let mut account =
         load_account(account_id).ok_or_else(|| format!("OpenRouter 账号不存在: {}", account_id))?;
 
-    let set: HashSet<String> = tags.iter().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect();
+    let set: HashSet<String> = tags
+        .iter()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect();
     account.tags = if set.is_empty() {
         None
     } else {

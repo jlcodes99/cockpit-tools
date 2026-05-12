@@ -55,9 +55,7 @@ pub fn export_openrouter_accounts(account_ids: Vec<String>) -> Result<String, St
 }
 
 #[tauri::command]
-pub async fn refresh_openrouter_token(
-    account_id: String,
-) -> Result<OpenRouterAccount, String> {
+pub async fn refresh_openrouter_token(account_id: String) -> Result<OpenRouterAccount, String> {
     let started_at = Instant::now();
     logger::log_info(&format!(
         "[OpenRouter Command] 手动刷新账号开始: account_id={}",
@@ -99,9 +97,7 @@ pub async fn refresh_all_openrouter_tokens() -> Result<i32, String> {
 }
 
 #[tauri::command]
-pub async fn inject_openrouter_account(
-    account_id: String,
-) -> Result<String, String> {
+pub async fn inject_openrouter_account(account_id: String) -> Result<String, String> {
     let started_at = Instant::now();
     logger::log_info(&format!(
         "[OpenRouter Command] 开始注入账号: account_id={}",
@@ -134,14 +130,13 @@ pub fn update_openrouter_account_tags(
 }
 
 #[tauri::command]
-pub async fn fetch_openrouter_credits(
-    account_id: String,
-) -> Result<serde_json::Value, String> {
+pub async fn fetch_openrouter_credits(account_id: String) -> Result<serde_json::Value, String> {
     openrouter_account::fetch_credits_from_api(&account_id).await
 }
 
 #[tauri::command]
-pub async fn fetch_openrouter_models() -> Result<Vec<crate::models::openrouter::OpenRouterModel>, String> {
+pub async fn fetch_openrouter_models(
+) -> Result<Vec<crate::models::openrouter::OpenRouterModel>, String> {
     let started_at = Instant::now();
     logger::log_info("[OpenRouter Command] 获取模型列表开始");
     match openrouter_account::fetch_models_from_api().await {

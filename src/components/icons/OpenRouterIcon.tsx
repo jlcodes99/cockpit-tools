@@ -15,21 +15,21 @@ export function OpenRouterIcon({ className = 'nav-item-icon', style }: OpenRoute
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
-      {/* OpenRouter "O" stylized icon - rounded hexagon shape with inner O */}
       <path
-        d="M12 2L20 6.5V17.5L12 22L4 17.5V6.5L12 2Z"
+        d="M4 4h7l9 9v7h-7l-9-9V4z"
         stroke="currentColor"
         strokeWidth="1.5"
+        strokeLinejoin="round"
         fill="none"
       />
-      <circle
-        cx="12"
-        cy="12"
-        r="4"
+      <path
+        d="M11 11l2 2"
         stroke="currentColor"
         strokeWidth="1.5"
-        fill="none"
+        strokeLinecap="round"
       />
+      <circle cx="7.5" cy="7.5" r="1.5" fill="currentColor" />
+      <circle cx="16.5" cy="16.5" r="1.5" fill="currentColor" />
     </svg>
   );
 }
