@@ -7,6 +7,7 @@ pub mod gemini;
 pub mod github_copilot;
 pub mod instance;
 pub mod kiro;
+pub mod opencode;
 pub mod qoder;
 pub mod quota;
 pub mod token;
@@ -14,7 +15,6 @@ pub mod trae;
 pub mod windsurf;
 pub mod workbuddy;
 pub mod zed;
-pub mod opencode;
 
 pub use account::{
     Account, AccountIndex, AccountSummary, DeviceProfile, DeviceProfileVersion, QuotaErrorInfo,

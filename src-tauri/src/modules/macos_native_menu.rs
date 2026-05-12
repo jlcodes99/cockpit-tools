@@ -4038,9 +4038,11 @@ mod imp {
                 PlatformId::Zed => commands::zed::inject_zed_account(app, account_id)
                     .await
                     .map(|_| ()),
-                PlatformId::OpenCode => commands::opencode::inject_opencode_account(app, account_id)
-                    .await
-                    .map(|_| ()),
+                PlatformId::OpenCode => {
+                    commands::opencode::inject_opencode_account(app, account_id)
+                        .await
+                        .map(|_| ())
+                }
             };
         });
     }

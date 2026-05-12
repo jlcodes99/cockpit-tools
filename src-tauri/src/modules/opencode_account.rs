@@ -181,8 +181,7 @@ fn read_index() -> Result<OpenCodeAccountIndex, String> {
     if !path.exists() {
         return Ok(OpenCodeAccountIndex::new());
     }
-    let content = fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read index: {}", e))?;
+    let content = fs::read_to_string(&path).map_err(|e| format!("Failed to read index: {}", e))?;
     serde_json::from_str(&content).map_err(|e| format!("Failed to parse index: {}", e))
 }
 
@@ -225,7 +224,8 @@ fn save_account(account: &OpenCodeAccount) -> Result<(), String> {
 }
 
 async fn validate_api(token: &str, tier: &OpenCodeTier) -> Result<(), String> {
-    check_api_access(tier, token).await
+    check_api_access(tier, token)
+        .await
         .map_err(|e| format!("API key validation failed: {}", e))
 }
 
@@ -310,7 +310,11 @@ pub(crate) fn update_account_tags(
 
     let mut account = load_account(account_id)
         .ok_or_else(|| format!("OpenCode account not found: {}", account_id))?;
-    let clean_tags: Vec<String> = tags.into_iter().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect();
+    let clean_tags: Vec<String> = tags
+        .into_iter()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect();
     account.tags = if clean_tags.is_empty() {
         None
     } else {
@@ -351,8 +355,8 @@ pub(crate) fn import_from_json(json_content: &str) -> Result<Vec<OpenCodeAccount
         "unknown".to_string()
     }
 
-    let items: Vec<ImportItem> = serde_json::from_str(json_content)
-        .map_err(|e| format!("JSON parse error: {}", e))?;
+    let items: Vec<ImportItem> =
+        serde_json::from_str(json_content).map_err(|e| format!("JSON parse error: {}", e))?;
 
     let mut accounts = Vec::new();
     for item in items {
@@ -422,17 +426,14 @@ pub(crate) fn export_accounts(account_ids: &[String]) -> Result<String, String> 
         }
     }
 
-    serde_json::to_string_pretty(&items)
-        .map_err(|e| format!("Failed to serialize export: {}", e))
+    serde_json::to_string_pretty(&items).map_err(|e| format!("Failed to serialize export: {}", e))
 }
 
 // ---------------------------------------------------------------------------
 // Refresh
 // ---------------------------------------------------------------------------
 
-pub(crate) async fn refresh_account_async(
-    account_id: &str,
-) -> Result<OpenCodeAccount, String> {
+pub(crate) async fn refresh_account_async(account_id: &str) -> Result<OpenCodeAccount, String> {
     // Fetch usage data without holding the lock
     let account_snapshot = {
         let _lock = OPENCODE_ACCOUNT_INDEX_LOCK
@@ -523,8 +524,9 @@ pub(crate) fn inject_to_opencode(account_id: &str) -> Result<(), String> {
     std::fs::write(
         &config_path,
         serde_json::to_string_pretty(&config_content)
-            .map_err(|e| format!("Failed to serialize config: {}", e))?
-    ).map_err(|e| format!("Failed to write config file: {}", e))?;
+            .map_err(|e| format!("Failed to serialize config: {}", e))?,
+    )
+    .map_err(|e| format!("Failed to write config file: {}", e))?;
 
     logger::log_info(&format!(
         "[OpenCode] 已注入 VS Code 配置: account_id={}, email={}, tier={}",
