@@ -14,6 +14,7 @@ export type Page =
   | 'qoder'
   | 'trae'
   | 'workbuddy'
+  | 'opencode'
   | 'codex-instances'
   | 'instances'
   | 'accounts'

@@ -61,6 +61,7 @@ const PAGE_PLATFORM_MAP: Partial<Record<Page, PlatformId>> = {
   qoder: 'qoder',
   trae: 'trae',
   workbuddy: 'workbuddy',
+  opencode: 'opencode',
 };
 
 const CLASSIC_NAV_MIN_SCALE = 0.5;
