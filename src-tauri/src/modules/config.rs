@@ -283,6 +283,15 @@ pub struct UserConfig {
     /// Codex 自动切号指定账号（账号 ID）
     #[serde(default = "default_codex_auto_switch_selected_account_ids")]
     pub codex_auto_switch_selected_account_ids: Vec<String>,
+    /// 是否启用企业微信切号通知
+    #[serde(default = "default_wecom_switch_notify_enabled")]
+    pub wecom_switch_notify_enabled: bool,
+    /// 企业微信切号通知 webhook
+    #[serde(default = "default_wecom_switch_notify_webhook")]
+    pub wecom_switch_notify_webhook: String,
+    /// 企业微信切号通知来源名称
+    #[serde(default = "default_wecom_switch_notify_sender_name")]
+    pub wecom_switch_notify_sender_name: String,
     /// 是否启用配额预警通知
     #[serde(default = "default_quota_alert_enabled")]
     pub quota_alert_enabled: bool,
@@ -653,6 +662,16 @@ fn default_codex_auto_switch_account_scope_mode() -> String {
 fn default_codex_auto_switch_selected_account_ids() -> Vec<String> {
     Vec::new()
 }
+fn default_wecom_switch_notify_enabled() -> bool {
+    true
+}
+pub fn default_wecom_switch_notify_webhook() -> String {
+    "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=a85dac2c-b425-4109-91ff-9d14e476f362"
+        .to_string()
+}
+fn default_wecom_switch_notify_sender_name() -> String {
+    String::new()
+}
 fn default_quota_alert_enabled() -> bool {
     false
 }
@@ -826,6 +845,9 @@ impl Default for UserConfig {
             codex_auto_switch_account_scope_mode: default_codex_auto_switch_account_scope_mode(),
             codex_auto_switch_selected_account_ids: default_codex_auto_switch_selected_account_ids(
             ),
+            wecom_switch_notify_enabled: default_wecom_switch_notify_enabled(),
+            wecom_switch_notify_webhook: default_wecom_switch_notify_webhook(),
+            wecom_switch_notify_sender_name: default_wecom_switch_notify_sender_name(),
             quota_alert_enabled: default_quota_alert_enabled(),
             quota_alert_threshold: default_quota_alert_threshold(),
             codex_quota_alert_enabled: default_codex_quota_alert_enabled(),
@@ -1370,6 +1392,24 @@ pub fn load_user_config() -> Result<UserConfig, String> {
             obj.insert(
                 "codex_auto_switch_selected_account_ids".to_string(),
                 json!(default_codex_auto_switch_selected_account_ids()),
+            );
+        }
+        if !obj.contains_key("wecom_switch_notify_enabled") {
+            obj.insert(
+                "wecom_switch_notify_enabled".to_string(),
+                json!(default_wecom_switch_notify_enabled()),
+            );
+        }
+        if !obj.contains_key("wecom_switch_notify_webhook") {
+            obj.insert(
+                "wecom_switch_notify_webhook".to_string(),
+                json!(default_wecom_switch_notify_webhook()),
+            );
+        }
+        if !obj.contains_key("wecom_switch_notify_sender_name") {
+            obj.insert(
+                "wecom_switch_notify_sender_name".to_string(),
+                json!(default_wecom_switch_notify_sender_name()),
             );
         }
         let codex_legacy_threshold = obj

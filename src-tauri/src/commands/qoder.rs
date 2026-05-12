@@ -213,6 +213,17 @@ pub async fn inject_qoder_account(app: AppHandle, account_id: String) -> Result<
     };
 
     let _ = crate::modules::tray::update_tray_menu(&app);
+    let notification_note = launch_warning
+        .as_ref()
+        .map(|_| "账号已切换，但 Qoder 启动失败");
+    crate::modules::wecom_switch_notify::notify_switch(
+        "Qoder",
+        &account.id,
+        &account.email,
+        "manual",
+        "tools.qoder.switch",
+        notification_note,
+    );
 
     if let Some(err) = launch_warning {
         logger::log_warn(&format!(

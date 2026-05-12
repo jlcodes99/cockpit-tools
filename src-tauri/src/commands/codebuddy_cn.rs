@@ -402,6 +402,17 @@ pub async fn inject_codebuddy_cn_to_vscode(
     };
 
     let _ = crate::modules::tray::update_tray_menu(&app);
+    let notification_note = launch_warning
+        .as_ref()
+        .map(|_| "账号已切换，但 CodeBuddy CN 启动失败");
+    crate::modules::wecom_switch_notify::notify_switch(
+        "CodeBuddy CN",
+        &account.id,
+        &account.email,
+        "manual",
+        "tools.codebuddy_cn.switch",
+        notification_note,
+    );
 
     if let Some(err) = launch_warning {
         logger::log_warn(&format!(

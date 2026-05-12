@@ -382,6 +382,18 @@ pub async fn inject_windsurf_to_vscode(
 
     if let Some(err) = launch_warning {
         let _ = crate::modules::tray::update_tray_menu(&app);
+        let account_label = account
+            .github_email
+            .as_deref()
+            .unwrap_or(account.github_login.as_str());
+        crate::modules::wecom_switch_notify::notify_switch(
+            "Windsurf",
+            &account.id,
+            account_label,
+            "manual",
+            "tools.windsurf.switch",
+            Some("账号已切换，但 Windsurf 启动失败"),
+        );
         logger::log_warn(&format!(
             "[Windsurf Switch] 切号完成但启动失败: account_id={}, login={}, elapsed={}ms, error={}",
             account.id,
@@ -392,6 +404,18 @@ pub async fn inject_windsurf_to_vscode(
         Ok(format!("切换完成，但 Windsurf 启动失败: {}", err))
     } else {
         let _ = crate::modules::tray::update_tray_menu(&app);
+        let account_label = account
+            .github_email
+            .as_deref()
+            .unwrap_or(account.github_login.as_str());
+        crate::modules::wecom_switch_notify::notify_switch(
+            "Windsurf",
+            &account.id,
+            account_label,
+            "manual",
+            "tools.windsurf.switch",
+            None,
+        );
         logger::log_info(&format!(
             "[Windsurf Switch] 切号成功: account_id={}, login={}, elapsed={}ms",
             account.id,

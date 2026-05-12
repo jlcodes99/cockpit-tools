@@ -51,8 +51,7 @@ pub const GET_USER_STATUS_URL: &str =
 
 const UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
                   (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36";
-const SEC_CH_UA: &str =
-    r#""Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147""#;
+const SEC_CH_UA: &str = r#""Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147""#;
 
 // ========== 公共数据结构 ==========
 
@@ -182,8 +181,13 @@ pub async fn login_with_password(
         return Err(friendly);
     }
 
-    let parsed: PasswordLoginResponse = serde_json::from_str(&text)
-        .map_err(|e| format!("解析 Devin 登录响应失败: {} (body: {})", e, truncate(&text, 200)))?;
+    let parsed: PasswordLoginResponse = serde_json::from_str(&text).map_err(|e| {
+        format!(
+            "解析 Devin 登录响应失败: {} (body: {})",
+            e,
+            truncate(&text, 200)
+        )
+    })?;
 
     let auth1 = parsed
         .token
@@ -241,12 +245,15 @@ async fn windsurf_post_auth(
                     }
                     return Err(format!("WindsurfPostAuth 失败: {}", last_err));
                 }
-                let raw = r.bytes().await.map_err(|e| format!("读取响应失败: {}", e))?;
+                let raw = r
+                    .bytes()
+                    .await
+                    .map_err(|e| format!("读取响应失败: {}", e))?;
                 let session_token = proto_get_first_string(&raw, 1)
                     .filter(|s| s.starts_with("devin-session-token$"))
                     .ok_or_else(|| "WindsurfPostAuth 响应未含 session_token".to_string())?;
-                let auth1_back = proto_get_first_string(&raw, 3)
-                    .unwrap_or_else(|| auth1_token.to_string());
+                let auth1_back =
+                    proto_get_first_string(&raw, 3).unwrap_or_else(|| auth1_token.to_string());
                 let account_id = proto_get_first_string(&raw, 4)
                     .ok_or_else(|| "WindsurfPostAuth 响应未含 account_id".to_string())?;
                 let org_id = proto_get_first_string(&raw, 5)
@@ -306,7 +313,10 @@ async fn get_one_time_auth_token(
                     }
                     return Err(format!("GetOneTimeAuthToken 失败: {}", last_err));
                 }
-                let raw = r.bytes().await.map_err(|e| format!("读取响应失败: {}", e))?;
+                let raw = r
+                    .bytes()
+                    .await
+                    .map_err(|e| format!("读取响应失败: {}", e))?;
                 let ott = proto_get_first_string(&raw, 1)
                     .filter(|s| s.starts_with("ott$"))
                     .ok_or_else(|| "GetOTT 响应未含 ott".to_string())?;
@@ -356,7 +366,10 @@ async fn register_user(client: &Client, ott: &str) -> Result<String, String> {
                     }
                     return Err(format!("RegisterUser 失败: {}", last_err));
                 }
-                let raw = r.bytes().await.map_err(|e| format!("读取响应失败: {}", e))?;
+                let raw = r
+                    .bytes()
+                    .await
+                    .map_err(|e| format!("读取响应失败: {}", e))?;
                 // 找第一个 "devin-session-token$" 开头的 ASCII 字符串
                 let needle = b"devin-session-token$";
                 if let Some(idx) = find_subslice(&raw, needle) {
@@ -440,9 +453,7 @@ async fn get_current_user_proto(
 ///
 /// 任何一步失败都返回 Err（GetCurrentUser 除外，它失败不致命），
 /// 避免产出"能登录但不能对话"的脏号。
-pub async fn full_refresh_from_auth1(
-    auth1_token: &str,
-) -> Result<DevinFullRefreshResult, String> {
+pub async fn full_refresh_from_auth1(auth1_token: &str) -> Result<DevinFullRefreshResult, String> {
     let auth1 = auth1_token.trim();
     if !auth1.starts_with("auth1_") {
         return Err(format!(
@@ -464,8 +475,8 @@ pub async fn full_refresh_from_auth1(
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Step 2: GetOneTimeAuthToken
-    let ott = get_one_time_auth_token(&client, &session_token, &auth1_back, &account_id, &org_id)
-        .await?;
+    let ott =
+        get_one_time_auth_token(&client, &session_token, &auth1_back, &account_id, &org_id).await?;
     tokio::time::sleep(Duration::from_millis(400)).await;
 
     // Step 3: RegisterUser → ide_token (机器绑定)
@@ -564,8 +575,13 @@ pub async fn fetch_devin_user_status(ide_token: &str) -> Result<serde_json::Valu
             truncate(&text, 200)
         ));
     }
-    serde_json::from_str::<serde_json::Value>(&text)
-        .map_err(|e| format!("解析 GetUserStatus 响应失败: {} (body_len={})", e, text.len()))
+    serde_json::from_str::<serde_json::Value>(&text).map_err(|e| {
+        format!(
+            "解析 GetUserStatus 响应失败: {} (body_len={})",
+            e,
+            text.len()
+        )
+    })
 }
 
 // ========== 辅助：查询邮箱可用 auth_method（诊断用） ==========

@@ -183,6 +183,14 @@ pub async fn switch_codex_account(
     restart_codex_specified_app_if_enabled(&user_config);
 
     let _ = crate::modules::tray::update_tray_menu(&app);
+    crate::modules::wecom_switch_notify::notify_switch(
+        "Codex",
+        &account.id,
+        &account.email,
+        "switch",
+        "tools.codex.switch",
+        None,
+    );
     Ok(account)
 }
 

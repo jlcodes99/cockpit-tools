@@ -74,6 +74,7 @@ pub mod wakeup_scheduler;
 pub mod wakeup_verification;
 pub mod web_report;
 pub mod websocket;
+pub mod wecom_switch_notify;
 pub mod windsurf_account;
 pub mod windsurf_devin_oauth;
 pub mod windsurf_instance;

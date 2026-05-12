@@ -272,6 +272,21 @@ pub async fn inject_github_copilot_to_vscode(
         account.github_login
     ));
     let _ = crate::modules::tray::update_tray_menu(&app);
+    let notification_note = launch_warning
+        .as_ref()
+        .map(|_| "账号已切换，但 VS Code 启动失败");
+    let account_label = account
+        .github_email
+        .as_deref()
+        .unwrap_or(account.github_login.as_str());
+    crate::modules::wecom_switch_notify::notify_switch(
+        "GitHub Copilot",
+        &account.id,
+        account_label,
+        "manual",
+        "tools.github_copilot.switch",
+        notification_note,
+    );
     if let Some(err) = launch_warning {
         Ok(format!("切换完成，但 VS Code 启动失败: {}", err))
     } else {

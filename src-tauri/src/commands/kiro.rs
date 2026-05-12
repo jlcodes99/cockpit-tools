@@ -225,6 +225,17 @@ pub async fn inject_kiro_to_vscode(app: AppHandle, account_id: String) -> Result
     };
 
     let _ = crate::modules::tray::update_tray_menu(&app);
+    let notification_note = launch_warning
+        .as_ref()
+        .map(|_| "账号已切换，但 Kiro 启动失败");
+    crate::modules::wecom_switch_notify::notify_switch(
+        "Kiro",
+        &account.id,
+        &account.email,
+        "manual",
+        "tools.kiro.switch",
+        notification_note,
+    );
 
     if let Some(err) = launch_warning {
         logger::log_warn(&format!(

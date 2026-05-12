@@ -1831,7 +1831,13 @@ async fn run_auto_switch_if_needed_inner() -> Result<Option<Account>, String> {
         )
         .await?
     } else {
-        let switched = switch_account_internal(&target.id).await?;
+        let switched = switch_account_internal_with_context(
+            &target.id,
+            "auto",
+            "tools.account.auto_switch",
+            Some("自动切号触发"),
+        )
+        .await?;
         modules::websocket::broadcast_account_switched(&switched.id, &switched.email);
         switched
     };
@@ -2016,6 +2022,21 @@ pub async fn fetch_quota_with_fresh_token(
 /// 内部切换账号函数（供 WebSocket 调用）
 /// 完整流程：Token刷新 + 关闭程序 + 注入 + 指纹同步 + 重启
 pub async fn switch_account_internal(account_id: &str) -> Result<Account, String> {
+    switch_account_internal_with_context(
+        account_id,
+        "manual",
+        "modules.account.switch_account_internal",
+        None,
+    )
+    .await
+}
+
+pub async fn switch_account_internal_with_context(
+    account_id: &str,
+    trigger_type: &str,
+    trigger_source: &str,
+    note: Option<&str>,
+) -> Result<Account, String> {
     modules::logger::log_info("[Switch] 开始切换账号");
 
     // 路径缺失时不执行关闭/注入，避免破坏当前运行态。
@@ -2079,6 +2100,14 @@ pub async fn switch_account_internal(account_id: &str) -> Result<Account, String
     }
 
     modules::logger::log_info("[Switch] 账号切换完成");
+    crate::modules::wecom_switch_notify::notify_switch(
+        "Antigravity",
+        &account.id,
+        &account.email,
+        trigger_type,
+        trigger_source,
+        note,
+    );
     Ok(account)
 }
 
@@ -2191,6 +2220,14 @@ pub async fn switch_account_dual_no_restart(
         Ok(started_now) => started_now,
         Err(error) => {
             modules::websocket::broadcast_account_switched(&account.id, &account.email);
+            crate::modules::wecom_switch_notify::notify_switch(
+                "Antigravity",
+                &account.id,
+                &account.email,
+                &trigger_type,
+                &trigger_source,
+                Some("本地切换已完成，但客户端启动失败"),
+            );
             persist_switch_history(
                 modules::antigravity_switch_history::AntigravitySwitchHistoryItem {
                     id: history_id,
@@ -2246,6 +2283,19 @@ pub async fn switch_account_dual_no_restart(
     match seamless_result {
         Ok(response) if response.success => {
             modules::websocket::broadcast_account_switched(&account.id, &account.email);
+            let notification_note = if trigger_type == "auto" {
+                Some(reason)
+            } else {
+                None
+            };
+            crate::modules::wecom_switch_notify::notify_switch(
+                "Antigravity",
+                &account.id,
+                &account.email,
+                &trigger_type,
+                &trigger_source,
+                notification_note,
+            );
             persist_switch_history(
                 modules::antigravity_switch_history::AntigravitySwitchHistoryItem {
                     id: history_id,
@@ -2275,6 +2325,14 @@ pub async fn switch_account_dual_no_restart(
         }
         Ok(response) => {
             modules::websocket::broadcast_account_switched(&account.id, &account.email);
+            crate::modules::wecom_switch_notify::notify_switch(
+                "Antigravity",
+                &account.id,
+                &account.email,
+                &trigger_type,
+                &trigger_source,
+                Some("本地切换已完成，但扩展无感切号失败"),
+            );
             persist_switch_history(
                 modules::antigravity_switch_history::AntigravitySwitchHistoryItem {
                     id: history_id,
@@ -2309,6 +2367,14 @@ pub async fn switch_account_dual_no_restart(
         }
         Err(error) => {
             modules::websocket::broadcast_account_switched(&account.id, &account.email);
+            crate::modules::wecom_switch_notify::notify_switch(
+                "Antigravity",
+                &account.id,
+                &account.email,
+                &trigger_type,
+                &trigger_source,
+                Some("本地切换已完成，但扩展无感切号失败"),
+            );
             persist_switch_history(
                 modules::antigravity_switch_history::AntigravitySwitchHistoryItem {
                     id: history_id,

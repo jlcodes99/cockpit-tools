@@ -267,5 +267,13 @@ pub fn inject_gemini_account(app: AppHandle, account_id: String) -> Result<Strin
         account.email,
         started_at.elapsed().as_millis()
     ));
+    crate::modules::wecom_switch_notify::notify_switch(
+        "Gemini",
+        &account.id,
+        &account.email,
+        "manual",
+        "tools.gemini.switch",
+        None,
+    );
     Ok(format!("切换完成: {}", account.email))
 }

@@ -285,6 +285,14 @@ pub async fn switch_account(app: AppHandle, account_id: String) -> Result<models
     if let Some(err) = launch_error {
         // 账号状态已经切换成功，仍广播账号切换事件，确保前端状态与本地落盘一致
         modules::websocket::broadcast_account_switched(&account.id, &account.email);
+        modules::wecom_switch_notify::notify_switch(
+            "Antigravity",
+            &account.id,
+            &account.email,
+            "manual",
+            "tools.account.switch",
+            Some("账号已切换，但 Antigravity 启动失败"),
+        );
         if err.starts_with("APP_PATH_NOT_FOUND:") {
             return Err(err);
         }
@@ -295,6 +303,14 @@ pub async fn switch_account(app: AppHandle, account_id: String) -> Result<models
 
     // 广播切换完成通知
     modules::websocket::broadcast_account_switched(&account.id, &account.email);
+    modules::wecom_switch_notify::notify_switch(
+        "Antigravity",
+        &account.id,
+        &account.email,
+        "manual",
+        "tools.account.switch",
+        None,
+    );
 
     Ok(account)
 }

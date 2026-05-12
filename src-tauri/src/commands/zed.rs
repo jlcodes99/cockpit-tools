@@ -170,6 +170,14 @@ pub async fn inject_zed_account(app: AppHandle, account_id: String) -> Result<St
                 account.github_login,
                 started_at.elapsed().as_millis()
             ));
+            crate::modules::wecom_switch_notify::notify_switch(
+                "Zed",
+                &account.id,
+                &account.github_login,
+                "manual",
+                "tools.zed.switch",
+                None,
+            );
             Ok(format!("切换完成: {}", account.github_login))
         }
         Err(err) => {
@@ -185,8 +193,24 @@ pub async fn inject_zed_account(app: AppHandle, account_id: String) -> Result<St
                     "[Zed Switch] 切号完成但重启失败: account_id={}, err={}",
                     account.id, err
                 ));
+                crate::modules::wecom_switch_notify::notify_switch(
+                    "Zed",
+                    &account.id,
+                    &account.github_login,
+                    "manual",
+                    "tools.zed.switch",
+                    Some("账号已切换，但 Zed 重启失败"),
+                );
                 return Ok(format!("切换完成，但 Zed 重启失败: {}", err));
             }
+            crate::modules::wecom_switch_notify::notify_switch(
+                "Zed",
+                &account.id,
+                &account.github_login,
+                "manual",
+                "tools.zed.switch",
+                Some("账号已切换，但 Zed 重启失败"),
+            );
             Err(err)
         }
     }
