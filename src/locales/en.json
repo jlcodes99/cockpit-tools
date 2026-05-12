@@ -3451,7 +3451,7 @@
     },
     "flowNotice": "Enter your OpenRouter API key to add an account.",
     "addKeyPlaceholder": "sk-or-v1-...",
-    "keyType": "Key Type",
+    "keyTypeLabel": "Key Type",
     "keyTypeApi": "API",
     "keyTypeManagement": "Management",
     "keyTypeProvisioning": "Provisioning",

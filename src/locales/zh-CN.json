@@ -3451,7 +3451,7 @@
     },
     "flowNotice": "输入您的 OpenRouter API key 即可添加账号",
     "addKeyPlaceholder": "sk-or-v1-...",
-    "keyType": "密钥类型",
+    "keyTypeLabel": "密钥类型",
     "keyTypeApi": "API",
     "keyTypeManagement": "管理",
     "keyTypeProvisioning": "预配",

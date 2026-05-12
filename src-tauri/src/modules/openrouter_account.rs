@@ -57,16 +57,11 @@ fn normalize_account_id(account_id: &str) -> Result<String, String> {
     if trimmed.is_empty() {
         return Err("账号 ID 不能为空".to_string());
     }
-    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains("..") {
-        return Err("账号 ID 非法，包含路径字符".to_string());
+    let sanitized = sanitize_account_id_component(trimmed);
+    if sanitized.is_empty() {
+        return Err("账号 ID 经 sanitize 后为空".to_string());
     }
-    let valid = trimmed
-        .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.');
-    if !valid {
-        return Err("账号 ID 非法，仅允许字母/数字/._-".to_string());
-    }
-    Ok(trimmed.to_string())
+    Ok(sanitized)
 }
 
 fn resolve_account_file_path(account_id: &str) -> Result<PathBuf, String> {
@@ -449,7 +444,10 @@ fn account_from_key_response(raw: &Value, api_key: &str) -> OpenRouterAccount {
         tags: None,
         quota_query_last_error: None,
         quota_query_last_error_at: None,
-        auth_key_raw: Some(raw.clone()),
+        auth_key_raw: Some(serde_json::json!({
+            "api_key": api_key,
+            "key_response": raw,
+        })),
         auth_credits_raw: None,
         created_at: now,
         last_used: now,
@@ -568,18 +566,19 @@ pub async fn fetch_activity_from_api(account_id: &str, _days: u32) -> Result<Val
 }
 
 /// Get the raw API key for an account
-/// TODO: Replace with encrypted key storage in production
 fn get_account_api_key(account_id: &str) -> Result<String, String> {
-    // In a real implementation, this would read from encrypted storage
-    // For now, we'll use a stored key from the account metadata
-    let _account = load_account(account_id)
+    let account = load_account(account_id)
         .ok_or_else(|| format!("OpenRouter 账号不存在: {}", account_id))?;
-
-    // Since we don't have the actual key stored in plaintext for security,
-    // we need the encrypted storage mechanism. For the initial implementation,
-    // the key is passed during add and stored encrypted.
-    // This function should use the app's secure storage to retrieve it.
-    Err("API key 检索尚未实现 — 需要集成加密存储".to_string())
+    let raw = account.auth_key_raw
+        .ok_or_else(|| "API key 数据未找到".to_string())?;
+    let api_key = raw.get("api_key")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "API key 字段缺失".to_string())?
+        .to_string();
+    if api_key.is_empty() {
+        return Err("API key 为空".to_string());
+    }
+    Ok(api_key)
 }
 
 /// Inject account (write config) for injection

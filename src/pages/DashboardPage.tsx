@@ -12,6 +12,7 @@ import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
+import { useOpenrouterAccountStore } from '../stores/useOpenrouterAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
 import {
   parseGroupEntryId,
@@ -366,6 +367,11 @@ export function DashboardPage({
     switchAccount: switchWorkbuddyAccount,
   } = useWorkbuddyAccountStore();
 
+  // OpenRouter Data
+  const {
+    accounts: openrouterAccounts,
+  } = useOpenrouterAccountStore();
+
   const {
     accounts: zedAccounts,
     currentAccountId: zedCurrentId,
@@ -492,11 +498,11 @@ export function DashboardPage({
       codebuddy: codebuddyAccounts.length,
       codebuddy_cn: codebuddyCnAccounts.length,
       qoder: qoderAccounts.length,
-      openrouter: 0,
+      openrouter: openrouterAccounts.length,
       trae: traeAccounts.length,
       workbuddy: workbuddyAccounts.length,
     };
-  }, [agAccounts, codexAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, traeAccounts, workbuddyAccounts]);
+  }, [agAccounts, codexAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, openrouterAccounts, traeAccounts, workbuddyAccounts]);
 
   const dashboardAvailableTags = useMemo(() => {
     const tagSet = new Set<string>();

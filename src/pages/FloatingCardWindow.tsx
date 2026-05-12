@@ -182,6 +182,8 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useWorkbuddyInstanceStore.getState();
     case 'zed':
       return null;
+    default:
+      return null;
   }
 }
 
@@ -749,6 +751,11 @@ export function FloatingCardWindow() {
           accounts: zedAccounts,
           actualCurrentAccount: zedCurrent,
         };
+      default:
+        return {
+          accounts: [] as FloatingCardAccount[],
+          actualCurrentAccount: null,
+        };
     }
   }, [
     agAccounts,
@@ -903,6 +910,8 @@ export function FloatingCardWindow() {
         return buildWorkbuddyAccountPresentation(viewedAccount as typeof workbuddyAccounts[number], t);
       case 'zed':
         return buildZedAccountPresentation(viewedAccount as typeof zedAccounts[number], t);
+      default:
+        return null;
     }
   }, [
     agAccounts,
