@@ -81,6 +81,7 @@
         "statusParsing": "Analyzuje se obsah importu Codex...",
         "statusImporting": "Importuje se účet {{current}} / {{total}}",
         "statusRefreshing": "Obnovuje se seznam účtů...",
+        "statusActivating": "Přepíná se na importovaný účet...",
         "statusSuccess": "Import dokončen",
         "statusPartial": "Částečně importováno",
         "statusFailed": "Import se nezdařil",
@@ -1615,6 +1616,13 @@
   },
   "codex": {
     "title": "Správa účtů Codex",
+    "newApi": {
+      "quota": {
+        "available": "Kvóta",
+        "unlimited": "Neomezeně",
+        "usedHint": "Využito {{used}}"
+      }
+    },
     "subtitle": "Spravujte své účty OpenAI Codex",
     "instances": {
       "subtitle": "Nezávislá konfigurace pro každou instanci, paralelní provoz s více účty.",
@@ -2163,7 +2171,8 @@
         "endpoint": "Koncový bod poskytovatele",
         "hint": "Kompatibilní Base URL byla vyplněna automaticky. Stále ji můžete upravit ručně.",
         "website": "Web",
-        "apiKeyPage": "Stránka API klíče"
+        "apiKeyPage": "Stránka API klíče",
+        "getApiKey": "Získat klíč"
       },
       "providers": {
         "openai_official": {
@@ -2225,6 +2234,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
       }
     },
@@ -2385,6 +2397,21 @@
       "addShort": "Přidat",
       "saved": "Poznámka účtu uložena",
       "saveFailed": "Uložení poznámky účtu selhalo: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "Panel služby Cockpit Api",
+      "servicePanel": "Panel služby",
+      "balance": "Zůstatek",
+      "requests": "Požadavky",
+      "total": "Celkem",
+      "today": "Dnes",
+      "periods": "Období",
+      "tokens": "Tokeny",
+      "quotaUsed": "Spotřeba",
+      "modelStats": "Statistiky modelů",
+      "noStats": "Zatím žádné statistiky",
+      "refreshHint": "Kliknutím na obnovit synchronizujete statistiky tohoto API klíče.",
+      "dailyStats": "Denní statistiky"
     }
   },
   "githubCopilot": {
@@ -3471,37 +3498,6 @@
         "descPlatform": "Více instancí CodeBuddy CN je podporováno pouze na macOS, Windows a Linuxu."
       }
     },
-    "checkin": {
-      "title": "Denní check-in",
-      "modalTitle": "Denní check-in",
-      "status": "Stav check-inu",
-      "checkedIn": "Zaregistrováno",
-      "notCheckedIn": "Nezaregistrováno",
-      "button": "Přihlásit",
-      "button.loading": "Probíhá check-in...",
-      "done": "Hotovo",
-      "success": "Check-in úspěšný! Série {{days}} dní",
-      "failure": "Přihlášení selhalo: {{message}}",
-      "failure.network": "Chyba sítě, zkuste to prosím později",
-      "lastCheckin": "Poslední check-in: {{time}}",
-      "streak": "{{days}}denní série",
-      "reward": "Odměna: {{reward}}",
-      "refreshStatus": "Obnovit",
-      "checkAll": "Check-in všeho",
-      "noAccounts": "Žádné účty",
-      "querying": "Načítání...",
-      "streakDays": "{{days}} dní",
-      "streakRewardCountdown": "Do bonusové odměny zbývá {{days}} dní",
-      "streakRewardToday": "Bonusová odměna je dnes dostupná!",
-      "recentDates": "Nedávno: ",
-      "quotaCategory": {
-        "base": "Základní balíček",
-        "activity": "Aktivní bonus",
-        "extra": "Extra kredity",
-        "other": "Ostatní",
-        "empty": "Žádná data kvóty"
-      }
-    },
     "syncFailed": "Synchronizace selhala: {{error}}",
     "syncSuccess": "{{count}} účtů bylo synchronizováno s WorkBuddy",
     "syncToWorkbuddy": "Synchronizovat s WorkBuddy"
@@ -3608,6 +3604,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "Denní check-in",
+      "modalTitle": "Denní check-in",
+      "status": "Stav check-inu",
+      "checkedIn": "Zaregistrováno",
+      "notCheckedIn": "Nezaregistrováno",
+      "button": "Přihlásit",
+      "button.loading": "Probíhá check-in...",
+      "done": "Hotovo",
+      "success": "Check-in úspěšný! Série {{days}} dní",
+      "failure": "Přihlášení selhalo: {{message}}",
+      "failure.network": "Chyba sítě, zkuste to prosím později",
+      "lastCheckin": "Poslední check-in: {{time}}",
+      "streak": "{{days}}denní série",
+      "reward": "Odměna: {{reward}}",
+      "refreshStatus": "Obnovit",
+      "checkAll": "Check-in všeho",
+      "noAccounts": "Žádné účty",
+      "querying": "Načítání...",
+      "streakDays": "{{days}} dní",
+      "streakRewardCountdown": "Do bonusové odměny zbývá {{days}} dní",
+      "streakRewardToday": "Bonusová odměna je dnes dostupná!",
+      "recentDates": "Nedávno: "
     }
   },
   "zed": {

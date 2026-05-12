@@ -81,6 +81,7 @@
         "statusParsing": "Codex インポート内容を解析中...",
         "statusImporting": "{{current}} / {{total}} 個目のアカウントをインポート中",
         "statusRefreshing": "アカウント一覧を更新中...",
+        "statusActivating": "インポートしたアカウントに切り替え中...",
         "statusSuccess": "インポート完了",
         "statusPartial": "一部インポート完了",
         "statusFailed": "インポート失敗",
@@ -1615,6 +1616,13 @@
   },
   "codex": {
     "title": "Codex アカウント管理",
+    "newApi": {
+      "quota": {
+        "available": "残高",
+        "unlimited": "無制限",
+        "usedHint": "使用済み {{used}}"
+      }
+    },
     "subtitle": "OpenAI Codex アカウントを管理します",
     "instances": {
       "subtitle": "インスタンスごとの独立設定、複数アカウントでの並列運用。",
@@ -2163,7 +2171,8 @@
         "endpoint": "プロバイダーエンドポイント",
         "hint": "互換性のある Base URL を自動入力しました。必要なら手動で編集できます。",
         "website": "ウェブサイト",
-        "apiKeyPage": "API キーページ"
+        "apiKeyPage": "API キーページ",
+        "getApiKey": "キーを取得"
       },
       "providers": {
         "openai_official": {
@@ -2225,6 +2234,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
       }
     },
@@ -2385,6 +2397,21 @@
       "addShort": "追加",
       "saved": "アカウントメモを保存しました",
       "saveFailed": "アカウントメモの保存に失敗しました: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "Cockpit Api サービスパネル",
+      "servicePanel": "サービスパネル",
+      "balance": "残高",
+      "requests": "リクエスト",
+      "total": "合計",
+      "today": "今日",
+      "periods": "期間",
+      "tokens": "トークン",
+      "quotaUsed": "使用量",
+      "modelStats": "モデル統計",
+      "noStats": "統計はまだありません",
+      "refreshHint": "更新をクリックすると、この API キーの統計を同期します。",
+      "dailyStats": "日別統計"
     }
   },
   "githubCopilot": {
@@ -3471,37 +3498,6 @@
         "descPlatform": "CodeBuddy CN のマルチインスタンスは macOS、Windows、Linux のみ対応しています。"
       }
     },
-    "checkin": {
-      "title": "デイリーチェックイン",
-      "modalTitle": "デイリーチェックイン",
-      "status": "チェックイン状態",
-      "checkedIn": "チェックイン済み",
-      "notCheckedIn": "未チェックイン",
-      "button": "チェックイン",
-      "button.loading": "チェックイン中...",
-      "done": "完了",
-      "success": "チェックイン成功！{{days}}日連続",
-      "failure": "チェックイン失敗: {{message}}",
-      "failure.network": "ネットワークエラーです。しばらくしてから再試行してください",
-      "lastCheckin": "最終チェックイン: {{time}}",
-      "streak": "{{days}}日連続",
-      "reward": "報酬: {{reward}}",
-      "refreshStatus": "更新",
-      "checkAll": "一括チェックイン",
-      "noAccounts": "アカウントがありません",
-      "querying": "読み込み中...",
-      "streakDays": "{{days}}日",
-      "streakRewardCountdown": "ボーナス報酬まであと{{days}}日",
-      "streakRewardToday": "本日はボーナス報酬を受け取れます！",
-      "recentDates": "最近: ",
-      "quotaCategory": {
-        "base": "基本パッケージ",
-        "activity": "アクティビティボーナス",
-        "extra": "追加クレジット",
-        "other": "その他",
-        "empty": "クォータデータがありません"
-      }
-    },
     "syncFailed": "同期に失敗: {{error}}",
     "syncSuccess": "{{count}} 件のアカウントを WorkBuddy に同期しました",
     "syncToWorkbuddy": "WorkBuddyに同期"
@@ -3608,6 +3604,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "デイリーチェックイン",
+      "modalTitle": "デイリーチェックイン",
+      "status": "チェックイン状態",
+      "checkedIn": "チェックイン済み",
+      "notCheckedIn": "未チェックイン",
+      "button": "チェックイン",
+      "button.loading": "チェックイン中...",
+      "done": "完了",
+      "success": "チェックイン成功！{{days}}日連続",
+      "failure": "チェックイン失敗: {{message}}",
+      "failure.network": "ネットワークエラーです。しばらくしてから再試行してください",
+      "lastCheckin": "最終チェックイン: {{time}}",
+      "streak": "{{days}}日連続",
+      "reward": "報酬: {{reward}}",
+      "refreshStatus": "更新",
+      "checkAll": "一括チェックイン",
+      "noAccounts": "アカウントがありません",
+      "querying": "読み込み中...",
+      "streakDays": "{{days}}日",
+      "streakRewardCountdown": "ボーナス報酬まであと{{days}}日",
+      "streakRewardToday": "本日はボーナス報酬を受け取れます！",
+      "recentDates": "最近: "
     }
   },
   "zed": {

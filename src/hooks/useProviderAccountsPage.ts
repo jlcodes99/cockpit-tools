@@ -127,6 +127,7 @@ export interface ProviderStoreActions<TAccount> {
   fetchCurrentAccountId?: () => Promise<string | null>;
   setCurrentAccountId?: (accountId: string | null) => void;
   fetchAccounts: () => Promise<void>;
+  switchAccount?: (accountId: string) => Promise<unknown>;
   deleteAccounts: (ids: string[]) => Promise<void>;
   refreshToken: (id: string) => Promise<void>;
   refreshAllTokens: () => Promise<void>;
@@ -252,6 +253,14 @@ const isCodexDirectImportItem = (value: unknown): boolean => {
     return true;
   }
   if (typeof payload.refresh_token === 'string' && payload.refresh_token.trim()) {
+    return true;
+  }
+  if (
+    typeof payload.auth_mode === 'string' &&
+    payload.auth_mode.trim().toLowerCase() === 'apikey' &&
+    typeof payload.OPENAI_API_KEY === 'string' &&
+    payload.OPENAI_API_KEY.trim()
+  ) {
     return true;
   }
   if (!tokens || typeof tokens !== 'object' || Array.isArray(tokens)) return false;
@@ -426,6 +435,17 @@ const resolveExternalImportItemLabel = (
     }
   }
   return fallback;
+};
+
+const collectImportedAccountIds = (imported: unknown): string[] => {
+  const items = Array.isArray(imported) ? imported : [imported];
+  return items
+    .map((item) => {
+      if (!item || typeof item !== 'object') return '';
+      const id = (item as { id?: unknown }).id;
+      return typeof id === 'string' ? id.trim() : '';
+    })
+    .filter(Boolean);
 };
 
 // ---------------------------------------------------------------------------
@@ -647,6 +667,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     deleteAccounts,
     refreshToken,
     refreshAllTokens,
+    switchAccount,
     setCurrentAccountId: setStoreCurrentAccountId,
     updateAccountTags,
   } = store;
@@ -1352,6 +1373,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
 
           let success = 0;
           const failures: ExternalImportProgressFailure[] = [];
+          const importedAccountIds: string[] = [];
           const total = items.length;
           updateProgress({
             status: 'importing',
@@ -1398,6 +1420,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
 
             try {
               const imported = await dataService.importFromJson(JSON.stringify(items[index]));
+              importedAccountIds.push(...collectImportedAccountIds(imported));
               success += Array.isArray(imported) ? imported.length : 1;
             } catch (error) {
               failures.push({
@@ -1408,6 +1431,34 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
             }
           }
 
+          const activateImportedAccount = request.activate ? switchAccount : undefined;
+          const activatedAccountId =
+            activateImportedAccount
+              ? importedAccountIds[importedAccountIds.length - 1]
+              : '';
+          if (activatedAccountId && activateImportedAccount) {
+            updateProgress({
+              status: 'refreshing',
+              progress: 92,
+              current: total,
+              success,
+              failed: failures.length,
+              failures: [...failures],
+              message: t(
+                'common.shared.externalImport.statusActivating',
+                '正在切换到导入账号...',
+              ),
+            });
+            await activateImportedAccount(activatedAccountId);
+            await refreshToken(activatedAccountId).catch(() => undefined);
+            if (platformId) {
+              await emitCurrentAccountChanged({
+                platformId,
+                accountId: activatedAccountId,
+                reason: 'external-import',
+              });
+            }
+          }
           updateProgress({
             status: 'refreshing',
             progress: 95,
@@ -1453,7 +1504,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
         }
       })();
     },
-    [dataService, fetchAccounts, platformId, t],
+    [dataService, fetchAccounts, platformId, refreshToken, switchAccount, t],
   );
 
   const consumeExternalProviderImport = useCallback(() => {

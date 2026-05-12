@@ -20,6 +20,8 @@ pub struct ExternalProviderImportPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min_app_version: Option<String>,
     pub auto_import: bool,
+    #[serde(default)]
+    pub activate: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -213,6 +215,12 @@ fn parse_external_import_url_with_reason(
             .or_else(|| query.get("auto_submit"))
             .or_else(|| query.get("autosubmit")),
     );
+    let activate = parse_boolean_like(
+        query
+            .get("activate")
+            .or_else(|| query.get("auto_activate"))
+            .or_else(|| query.get("autoactivate")),
+    );
 
     Ok(ExternalProviderImportPayload {
         provider_id: provider_id.to_string(),
@@ -221,6 +229,7 @@ fn parse_external_import_url_with_reason(
         import_url,
         min_app_version,
         auto_import,
+        activate,
         source: None,
         raw_url: None,
     })
@@ -403,6 +412,15 @@ mod tests {
         );
         assert_eq!(payload.min_app_version, None);
         assert!(payload.auto_import);
+    }
+
+    #[test]
+    fn parse_activate_flag() {
+        let raw = "cockpit-tools://provider-import?platform=codex&import_url=https%3A%2F%2Fexample.com%2Fbundle&auto_import=true&activate=true";
+        let payload = parse_external_import_url(raw).expect("payload");
+        assert_eq!(payload.provider_id, "codex");
+        assert!(payload.auto_import);
+        assert!(payload.activate);
     }
 
     #[test]

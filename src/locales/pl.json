@@ -81,6 +81,7 @@
         "statusParsing": "Analizowanie zawartości importu Codex...",
         "statusImporting": "Importowanie konta {{current}} / {{total}}",
         "statusRefreshing": "Odświeżanie listy kont...",
+        "statusActivating": "Przełączanie na zaimportowane konto...",
         "statusSuccess": "Import zakończony",
         "statusPartial": "Import częściowo zakończony",
         "statusFailed": "Import nieudany",
@@ -1615,6 +1616,13 @@
   },
   "codex": {
     "title": "Zarządzanie kontami Codex",
+    "newApi": {
+      "quota": {
+        "available": "Limit",
+        "unlimited": "Bez limitu",
+        "usedHint": "Użyto {{used}}"
+      }
+    },
     "subtitle": "Zarządzaj kontami OpenAI Codex",
     "instances": {
       "subtitle": "Niezależna konfiguracja dla każdej instancji, równoległa praca z wieloma kontami.",
@@ -2163,7 +2171,8 @@
         "endpoint": "Punkt końcowy dostawcy",
         "hint": "Zgodny Base URL został uzupełniony automatycznie. Nadal możesz go edytować ręcznie.",
         "website": "Witryna",
-        "apiKeyPage": "Strona klucza API"
+        "apiKeyPage": "Strona klucza API",
+        "getApiKey": "Pobierz klucz"
       },
       "providers": {
         "openai_official": {
@@ -2225,6 +2234,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
       }
     },
@@ -2385,6 +2397,21 @@
       "addShort": "Dodaj",
       "saved": "Notatka konta zapisana",
       "saveFailed": "Nie udało się zapisać notatki konta: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "Panel usługi Cockpit Api",
+      "servicePanel": "Panel usługi",
+      "balance": "Saldo",
+      "requests": "Żądania",
+      "total": "Łącznie",
+      "today": "Dzisiaj",
+      "periods": "Okresy",
+      "tokens": "Tokeny",
+      "quotaUsed": "Zużycie",
+      "modelStats": "Statystyki modeli",
+      "noStats": "Brak statystyk",
+      "refreshHint": "Kliknij odśwież, aby zsynchronizować statystyki tego klucza API.",
+      "dailyStats": "Statystyki dzienne"
     }
   },
   "githubCopilot": {
@@ -3471,37 +3498,6 @@
         "descPlatform": "Wiele instancji CodeBuddy CN jest obsługiwane tylko na macOS, Windows i Linux."
       }
     },
-    "checkin": {
-      "title": "Codzienne zameldowanie",
-      "modalTitle": "Codzienne zameldowanie",
-      "status": "Status zameldowania",
-      "checkedIn": "Zameldowano",
-      "notCheckedIn": "Brak zameldowania",
-      "button": "Zamelduj",
-      "button.loading": "Trwa zameldowanie...",
-      "done": "Gotowe",
-      "success": "Zameldowanie udane! Seria {{days}} dni",
-      "failure": "Zameldowanie nie powiodło się: {{message}}",
-      "failure.network": "Błąd sieci, spróbuj ponownie później",
-      "lastCheckin": "Ostatnie zameldowanie: {{time}}",
-      "streak": "Seria {{days}} dni",
-      "reward": "Nagroda: {{reward}}",
-      "refreshStatus": "Odśwież",
-      "checkAll": "Zamelduj wszystkie",
-      "noAccounts": "Brak kont",
-      "querying": "Ładowanie...",
-      "streakDays": "{{days}} dni",
-      "streakRewardCountdown": "Do nagrody bonusowej pozostało {{days}} dni",
-      "streakRewardToday": "Nagroda bonusowa dostępna dzisiaj!",
-      "recentDates": "Ostatnie: ",
-      "quotaCategory": {
-        "base": "Pakiet podstawowy",
-        "activity": "Bonus aktywności",
-        "extra": "Dodatkowe kredyty",
-        "other": "Inne",
-        "empty": "Brak danych limitu"
-      }
-    },
     "syncFailed": "Synchronizacja nie powiodła się: {{error}}",
     "syncSuccess": "{{count}} kont(a) zsynchronizowanych z WorkBuddy",
     "syncToWorkbuddy": "Synchronizuj z WorkBuddy"
@@ -3608,6 +3604,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "Codzienne zameldowanie",
+      "modalTitle": "Codzienne zameldowanie",
+      "status": "Status zameldowania",
+      "checkedIn": "Zameldowano",
+      "notCheckedIn": "Brak zameldowania",
+      "button": "Zamelduj",
+      "button.loading": "Trwa zameldowanie...",
+      "done": "Gotowe",
+      "success": "Zameldowanie udane! Seria {{days}} dni",
+      "failure": "Zameldowanie nie powiodło się: {{message}}",
+      "failure.network": "Błąd sieci, spróbuj ponownie później",
+      "lastCheckin": "Ostatnie zameldowanie: {{time}}",
+      "streak": "Seria {{days}} dni",
+      "reward": "Nagroda: {{reward}}",
+      "refreshStatus": "Odśwież",
+      "checkAll": "Zamelduj wszystkie",
+      "noAccounts": "Brak kont",
+      "querying": "Ładowanie...",
+      "streakDays": "{{days}} dni",
+      "streakRewardCountdown": "Do nagrody bonusowej pozostało {{days}} dni",
+      "streakRewardToday": "Nagroda bonusowa dostępna dzisiaj!",
+      "recentDates": "Ostatnie: "
     }
   },
   "zed": {

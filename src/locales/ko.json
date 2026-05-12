@@ -81,6 +81,7 @@
         "statusParsing": "Codex 가져오기 내용을 분석 중...",
         "statusImporting": "{{current}} / {{total}}번째 계정 가져오는 중",
         "statusRefreshing": "계정 목록 새로 고치는 중...",
+        "statusActivating": "가져온 계정으로 전환 중...",
         "statusSuccess": "가져오기 완료",
         "statusPartial": "일부 가져오기 완료",
         "statusFailed": "가져오기 실패",
@@ -1615,6 +1616,13 @@
   },
   "codex": {
     "title": "Codex 계정 관리",
+    "newApi": {
+      "quota": {
+        "available": "할당량",
+        "unlimited": "무제한",
+        "usedHint": "{{used}} 사용됨"
+      }
+    },
     "subtitle": "OpenAI Codex 계정을 관리합니다",
     "instances": {
       "subtitle": "인스턴스별 독립 구성, 여러 계정으로 병렬 운영.",
@@ -2163,7 +2171,8 @@
         "endpoint": "공급자 엔드포인트",
         "hint": "호환되는 Base URL이 자동으로 입력되었습니다. 필요하면 수동으로 수정할 수 있습니다.",
         "website": "웹사이트",
-        "apiKeyPage": "API 키 페이지"
+        "apiKeyPage": "API 키 페이지",
+        "getApiKey": "키 받기"
       },
       "providers": {
         "openai_official": {
@@ -2225,6 +2234,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
       }
     },
@@ -2385,6 +2397,21 @@
       "addShort": "추가",
       "saved": "계정 메모를 저장했습니다",
       "saveFailed": "계정 메모 저장 실패: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "Cockpit Api 서비스 패널",
+      "servicePanel": "서비스 패널",
+      "balance": "잔액",
+      "requests": "요청",
+      "total": "합계",
+      "today": "오늘",
+      "periods": "기간",
+      "tokens": "토큰",
+      "quotaUsed": "사용량",
+      "modelStats": "모델 통계",
+      "noStats": "아직 통계 없음",
+      "refreshHint": "새로고침을 누르면 이 API 키의 통계를 동기화합니다.",
+      "dailyStats": "일별 통계"
     }
   },
   "githubCopilot": {
@@ -3471,37 +3498,6 @@
         "descPlatform": "CodeBuddy CN 다중 인스턴스는 macOS, Windows, Linux에서만 지원됩니다."
       }
     },
-    "checkin": {
-      "title": "일일 체크인",
-      "modalTitle": "일일 체크인",
-      "status": "체크인 상태",
-      "checkedIn": "체크인 완료",
-      "notCheckedIn": "미체크인",
-      "button": "출석",
-      "button.loading": "체크인 중...",
-      "done": "완료",
-      "success": "체크인 성공! {{days}}일 연속",
-      "failure": "출석 실패: {{message}}",
-      "failure.network": "네트워크 오류입니다. 잠시 후 다시 시도해 주세요",
-      "lastCheckin": "마지막 체크인: {{time}}",
-      "streak": "{{days}}일 연속",
-      "reward": "보상: {{reward}}",
-      "refreshStatus": "새로고침",
-      "checkAll": "전체 체크인",
-      "noAccounts": "계정 없음",
-      "querying": "로딩 중...",
-      "streakDays": "{{days}}일",
-      "streakRewardCountdown": "보너스 보상까지 {{days}}일 남음",
-      "streakRewardToday": "오늘 보너스 보상을 받을 수 있습니다!",
-      "recentDates": "최근: ",
-      "quotaCategory": {
-        "base": "기본 패키지",
-        "activity": "활동 보너스",
-        "extra": "추가 크레딧",
-        "other": "기타",
-        "empty": "쿼터 데이터 없음"
-      }
-    },
     "syncFailed": "동기화 실패: {{error}}",
     "syncSuccess": "{{count}}개의 계정이 WorkBuddy에 동기화되었습니다",
     "syncToWorkbuddy": "WorkBuddy에 동기화"
@@ -3608,6 +3604,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "일일 체크인",
+      "modalTitle": "일일 체크인",
+      "status": "체크인 상태",
+      "checkedIn": "체크인 완료",
+      "notCheckedIn": "미체크인",
+      "button": "출석",
+      "button.loading": "체크인 중...",
+      "done": "완료",
+      "success": "체크인 성공! {{days}}일 연속",
+      "failure": "출석 실패: {{message}}",
+      "failure.network": "네트워크 오류입니다. 잠시 후 다시 시도해 주세요",
+      "lastCheckin": "마지막 체크인: {{time}}",
+      "streak": "{{days}}일 연속",
+      "reward": "보상: {{reward}}",
+      "refreshStatus": "새로고침",
+      "checkAll": "전체 체크인",
+      "noAccounts": "계정 없음",
+      "querying": "로딩 중...",
+      "streakDays": "{{days}}일",
+      "streakRewardCountdown": "보너스 보상까지 {{days}}일 남음",
+      "streakRewardToday": "오늘 보너스 보상을 받을 수 있습니다!",
+      "recentDates": "최근: "
     }
   },
   "zed": {

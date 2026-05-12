@@ -81,6 +81,7 @@
         "statusParsing": "Đang phân tích nội dung nhập Codex...",
         "statusImporting": "Đang nhập tài khoản {{current}} / {{total}}",
         "statusRefreshing": "Đang làm mới danh sách tài khoản...",
+        "statusActivating": "Đang chuyển sang tài khoản đã nhập...",
         "statusSuccess": "Nhập hoàn tất",
         "statusPartial": "Nhập một phần hoàn tất",
         "statusFailed": "Nhập thất bại",
@@ -1615,6 +1616,13 @@
   },
   "codex": {
     "title": "Quản lý tài khoản Codex",
+    "newApi": {
+      "quota": {
+        "available": "Hạn mức",
+        "unlimited": "Không giới hạn",
+        "usedHint": "Đã dùng {{used}}"
+      }
+    },
     "subtitle": "Quản lý các tài khoản OpenAI Codex",
     "instances": {
       "subtitle": "Cấu hình độc lập cho mỗi phiên bản, vận hành song song với nhiều tài khoản.",
@@ -2163,7 +2171,8 @@
         "endpoint": "Điểm cuối nhà cung cấp",
         "hint": "Base URL tương thích đã được điền tự động. Bạn vẫn có thể chỉnh sửa thủ công.",
         "website": "Trang web",
-        "apiKeyPage": "Trang API Key"
+        "apiKeyPage": "Trang API Key",
+        "getApiKey": "Lấy khóa"
       },
       "providers": {
         "openai_official": {
@@ -2225,6 +2234,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
       }
     },
@@ -2385,6 +2397,21 @@
       "addShort": "Thêm",
       "saved": "Đã lưu ghi chú tài khoản",
       "saveFailed": "Không thể lưu ghi chú tài khoản: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "Bảng dịch vụ Cockpit Api",
+      "servicePanel": "Bảng dịch vụ",
+      "balance": "Số dư",
+      "requests": "Yêu cầu",
+      "total": "Tổng",
+      "today": "Hôm nay",
+      "periods": "Kỳ",
+      "tokens": "Token",
+      "quotaUsed": "Đã dùng",
+      "modelStats": "Thống kê mô hình",
+      "noStats": "Chưa có thống kê",
+      "refreshHint": "Bấm làm mới để đồng bộ thống kê của API key này.",
+      "dailyStats": "Thống kê hằng ngày"
     }
   },
   "githubCopilot": {
@@ -3471,37 +3498,6 @@
         "descPlatform": "Phiên bản đa phiên bản CodeBuddy CN chỉ được hỗ trợ trên macOS, Windows và Linux."
       }
     },
-    "checkin": {
-      "title": "Điểm danh hằng ngày",
-      "modalTitle": "Điểm danh hằng ngày",
-      "status": "Trạng thái điểm danh",
-      "checkedIn": "Đã điểm danh",
-      "notCheckedIn": "Chưa điểm danh",
-      "button": "Điểm danh",
-      "button.loading": "Đang điểm danh...",
-      "done": "Hoàn tất",
-      "success": "Điểm danh thành công! Chuỗi {{days}} ngày",
-      "failure": "Điểm danh thất bại: {{message}}",
-      "failure.network": "Lỗi mạng, vui lòng thử lại sau",
-      "lastCheckin": "Lần điểm danh gần nhất: {{time}}",
-      "streak": "Chuỗi {{days}} ngày",
-      "reward": "Phần thưởng: {{reward}}",
-      "refreshStatus": "Làm mới",
-      "checkAll": "Điểm danh tất cả",
-      "noAccounts": "Không có tài khoản",
-      "querying": "Đang tải...",
-      "streakDays": "{{days}} ngày",
-      "streakRewardCountdown": "Còn {{days}} ngày nữa để nhận thưởng bonus",
-      "streakRewardToday": "Hôm nay có thể nhận thưởng bonus!",
-      "recentDates": "Gần đây: ",
-      "quotaCategory": {
-        "base": "Gói cơ bản",
-        "activity": "Thưởng hoạt động",
-        "extra": "Tín dụng bổ sung",
-        "other": "Khác",
-        "empty": "Không có dữ liệu hạn mức"
-      }
-    },
     "syncFailed": "Đồng bộ thất bại: {{error}}",
     "syncSuccess": "Đã đồng bộ {{count}} tài khoản với WorkBuddy",
     "syncToWorkbuddy": "Đồng bộ tới WorkBuddy"
@@ -3608,6 +3604,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "Điểm danh hằng ngày",
+      "modalTitle": "Điểm danh hằng ngày",
+      "status": "Trạng thái điểm danh",
+      "checkedIn": "Đã điểm danh",
+      "notCheckedIn": "Chưa điểm danh",
+      "button": "Điểm danh",
+      "button.loading": "Đang điểm danh...",
+      "done": "Hoàn tất",
+      "success": "Điểm danh thành công! Chuỗi {{days}} ngày",
+      "failure": "Điểm danh thất bại: {{message}}",
+      "failure.network": "Lỗi mạng, vui lòng thử lại sau",
+      "lastCheckin": "Lần điểm danh gần nhất: {{time}}",
+      "streak": "Chuỗi {{days}} ngày",
+      "reward": "Phần thưởng: {{reward}}",
+      "refreshStatus": "Làm mới",
+      "checkAll": "Điểm danh tất cả",
+      "noAccounts": "Không có tài khoản",
+      "querying": "Đang tải...",
+      "streakDays": "{{days}} ngày",
+      "streakRewardCountdown": "Còn {{days}} ngày nữa để nhận thưởng bonus",
+      "streakRewardToday": "Hôm nay có thể nhận thưởng bonus!",
+      "recentDates": "Gần đây: "
     }
   },
   "zed": {

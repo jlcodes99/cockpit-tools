@@ -89,7 +89,7 @@ export interface CodebuddySuiteAccountsPlatformConfig<TAccount extends Codebuddy
   usagePrefix: 'codebuddy' | 'workbuddy';
   quotaPrefix: 'codebuddy' | 'workbuddy';
   tableUsageClassName: string;
-  CheckinModal: ComponentType<CheckinModalProps<TAccount>>;
+  CheckinModal?: ComponentType<CheckinModalProps<TAccount>>;
 }
 
 interface CodebuddySuiteAccountsSharedViewProps<TAccount extends CodebuddySuiteAccountBase> {
@@ -489,9 +489,11 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
           <button className="btn btn-secondary icon-only" onClick={handleSync} disabled={syncing || accounts.length === 0} title={platformConfig.syncButtonTitle(t)}>
             {syncing ? <RefreshCw size={14} className="loading-spinner" /> : <ArrowRightLeft size={14} />}
           </button>
-          <button className="btn btn-secondary icon-only" onClick={() => setShowCheckinModal(true)} disabled={accounts.length === 0} title={t('codebuddyCn.checkin.modalTitle', '每日签到')}>
-            <CalendarCheck size={14} />
-          </button>
+          {CheckinModal && (
+            <button className="btn btn-secondary icon-only" onClick={() => setShowCheckinModal(true)} disabled={accounts.length === 0} title={t('workbuddy.checkin.modalTitle', '每日签到')}>
+              <CalendarCheck size={14} />
+            </button>
+          )}
           <button className="btn btn-secondary icon-only" onClick={handleRefreshAll} disabled={refreshingAll || accounts.length === 0} title={t('common.shared.refreshAll', '刷新全部')}>
             <RefreshCw size={14} className={refreshingAll ? 'loading-spinner' : ''} />
           </button>
@@ -817,7 +819,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
         onSave={handleSaveTags}
       />
 
-      {showCheckinModal && (
+      {showCheckinModal && CheckinModal && (
         <CheckinModal
           accounts={filteredAccounts}
           onClose={() => setShowCheckinModal(false)}

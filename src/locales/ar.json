@@ -81,6 +81,7 @@
         "statusParsing": "جارٍ تحليل محتوى استيراد Codex...",
         "statusImporting": "جارٍ استيراد الحساب {{current}} / {{total}}",
         "statusRefreshing": "جارٍ تحديث قائمة الحسابات...",
+        "statusActivating": "جارٍ التبديل إلى الحساب المستورد...",
         "statusSuccess": "اكتمل الاستيراد",
         "statusPartial": "اكتمل الاستيراد جزئيا",
         "statusFailed": "فشل الاستيراد",
@@ -1661,6 +1662,13 @@
   },
   "codex": {
     "title": "إدارة حسابات Codex",
+    "newApi": {
+      "quota": {
+        "available": "الحصة",
+        "unlimited": "غير محدود",
+        "usedHint": "المستخدم {{used}}"
+      }
+    },
     "subtitle": "إدارة حسابات OpenAI Codex",
     "instances": {
       "subtitle": "تكوين مستقل لكل مثيل، تشغيل متوازٍ بحسابات متعددة.",
@@ -2209,7 +2217,8 @@
         "endpoint": "نقطة نهاية المزوّد",
         "hint": "تم ملء Base URL متوافق تلقائيًا، وما زال بإمكانك تعديله يدويًا.",
         "website": "الموقع الإلكتروني",
-        "apiKeyPage": "صفحة مفتاح API"
+        "apiKeyPage": "صفحة مفتاح API",
+        "getApiKey": "الحصول على المفتاح"
       },
       "providers": {
         "openai_official": {
@@ -2271,6 +2280,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
       }
     },
@@ -2431,6 +2443,21 @@
       "addShort": "أضف ملاحظة",
       "saved": "تم حفظ ملاحظة الحساب",
       "saveFailed": "فشل حفظ ملاحظة الحساب: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "لوحة خدمة Cockpit Api",
+      "servicePanel": "لوحة الخدمة",
+      "balance": "الرصيد",
+      "requests": "الطلبات",
+      "total": "الإجمالي",
+      "today": "اليوم",
+      "periods": "الفترات",
+      "tokens": "الرموز",
+      "quotaUsed": "المستهلك",
+      "modelStats": "إحصاءات النماذج",
+      "noStats": "لا توجد إحصاءات بعد",
+      "refreshHint": "انقر على التحديث لمزامنة إحصاءات مفتاح API هذا.",
+      "dailyStats": "الإحصاءات اليومية"
     }
   },
   "githubCopilot": {
@@ -3517,37 +3544,6 @@
         "descPlatform": "تعدد مثيلات CodeBuddy CN مدعوم فقط على macOS وWindows وLinux."
       }
     },
-    "checkin": {
-      "title": "التسجيل اليومي",
-      "modalTitle": "التسجيل اليومي",
-      "status": "حالة التسجيل",
-      "checkedIn": "تم التسجيل",
-      "notCheckedIn": "لم يتم التسجيل",
-      "button": "تسجيل الحضور",
-      "button.loading": "جاري التسجيل...",
-      "done": "تم",
-      "success": "تم التسجيل بنجاح! {{days}} يوم متتالي",
-      "failure": "فشل تسجيل الحضور: {{message}}",
-      "failure.network": "خطأ في الشبكة، يرجى المحاولة لاحقًا",
-      "lastCheckin": "آخر تسجيل: {{time}}",
-      "streak": "{{days}} يوم متتالي",
-      "reward": "المكافأة: {{reward}}",
-      "refreshStatus": "تحديث الحالة",
-      "checkAll": "تسجيل الكل",
-      "noAccounts": "لا توجد حسابات",
-      "querying": "جارٍ التحميل...",
-      "streakDays": "{{days}} يوم",
-      "streakRewardCountdown": "يتبقى {{days}} يومًا للحصول على المكافأة الإضافية",
-      "streakRewardToday": "المكافأة الإضافية متاحة اليوم!",
-      "recentDates": "الأيام الأخيرة: ",
-      "quotaCategory": {
-        "base": "الباقة الأساسية",
-        "activity": "مكافأة النشاط",
-        "extra": "أرصدة إضافية",
-        "other": "أخرى",
-        "empty": "لا توجد بيانات حصة"
-      }
-    },
     "syncFailed": "فشل المزامنة: {{error}}",
     "syncSuccess": "تمت مزامنة {{count}} حساب/حسابات مع WorkBuddy",
     "syncToWorkbuddy": "مزامنة مع WorkBuddy"
@@ -3654,6 +3650,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "التسجيل اليومي",
+      "modalTitle": "التسجيل اليومي",
+      "status": "حالة التسجيل",
+      "checkedIn": "تم التسجيل",
+      "notCheckedIn": "لم يتم التسجيل",
+      "button": "تسجيل الحضور",
+      "button.loading": "جاري التسجيل...",
+      "done": "تم",
+      "success": "تم التسجيل بنجاح! {{days}} يوم متتالي",
+      "failure": "فشل تسجيل الحضور: {{message}}",
+      "failure.network": "خطأ في الشبكة، يرجى المحاولة لاحقًا",
+      "lastCheckin": "آخر تسجيل: {{time}}",
+      "streak": "{{days}} يوم متتالي",
+      "reward": "المكافأة: {{reward}}",
+      "refreshStatus": "تحديث الحالة",
+      "checkAll": "تسجيل الكل",
+      "noAccounts": "لا توجد حسابات",
+      "querying": "جارٍ التحميل...",
+      "streakDays": "{{days}} يوم",
+      "streakRewardCountdown": "يتبقى {{days}} يومًا للحصول على المكافأة الإضافية",
+      "streakRewardToday": "المكافأة الإضافية متاحة اليوم!",
+      "recentDates": "الأيام الأخيرة: "
     }
   },
   "zed": {

@@ -1498,6 +1498,22 @@ fn read_json_i64(value: &serde_json::Value, keys: &[&str]) -> Option<i64> {
     })
 }
 
+fn read_json_string_array(value: &serde_json::Value, keys: &[&str]) -> Option<Vec<String>> {
+    let items = keys
+        .iter()
+        .find_map(|key| value.get(*key).and_then(|item| item.as_array()))?;
+    let normalized = items
+        .iter()
+        .filter_map(|item| item.as_str())
+        .filter_map(|item| normalize_optional_ref(Some(item)))
+        .collect::<Vec<_>>();
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
+}
+
 fn read_codex_api_provider_mode(value: &serde_json::Value) -> Option<CodexApiProviderMode> {
     value
         .get("api_provider_mode")
@@ -1520,6 +1536,8 @@ fn apply_compat_account_metadata(
         .or_else(|| account.account_name.clone());
     account.account_structure = read_json_string(value, &["account_structure", "accountStructure"])
         .or_else(|| account.account_structure.clone());
+    account.account_note = read_json_string(value, &["account_note", "accountNote"])
+        .or_else(|| account.account_note.clone());
     account.auth_file_plan_type =
         read_json_string(value, &["auth_file_plan_type", "authFilePlanType"])
             .or_else(|| account.auth_file_plan_type.clone());
@@ -1541,6 +1559,33 @@ fn apply_compat_account_metadata(
     account.token_updated_at = read_json_i64(value, &["token_updated_at", "tokenUpdatedAt"])
         .or_else(|| parse_auth_file_last_refresh(value.get("last_refresh")))
         .or(account.token_updated_at);
+    account.tags = read_json_string_array(value, &["tags"]).or_else(|| account.tags.clone());
+}
+
+fn apply_api_key_import_metadata(account: &mut CodexAccount, value: &serde_json::Value) {
+    if let Some(account_name) = read_json_string(value, &["account_name", "accountName"]) {
+        account.account_name = Some(account_name);
+    }
+    if let Some(account_note) = read_json_string(value, &["account_note", "accountNote"]) {
+        account.account_note = Some(account_note);
+    }
+    if let Some(plan_type) = read_json_string(value, &["plan_type", "planType"]) {
+        account.plan_type = Some(plan_type);
+    }
+    if let Some(subscription_active_until) = read_json_string(
+        value,
+        &["subscription_active_until", "subscriptionActiveUntil"],
+    ) {
+        account.subscription_active_until = Some(subscription_active_until);
+    }
+    if let Some(auth_file_plan_type) =
+        read_json_string(value, &["auth_file_plan_type", "authFilePlanType"])
+    {
+        account.auth_file_plan_type = Some(auth_file_plan_type);
+    }
+    if let Some(tags) = read_json_string_array(value, &["tags"]) {
+        account.tags = Some(tags);
+    }
 }
 
 fn parse_codex_account_compat(
@@ -3326,10 +3371,10 @@ async fn import_account_from_json_value(
             .and_then(|value| value.as_str())
             .and_then(normalize_api_key)
         {
-            return Ok(Some(upsert_api_key_account(
+            let mut account = upsert_api_key_account(
                 api_key,
                 extract_api_base_url_from_json_value(&value),
-                None,
+                read_codex_api_provider_mode(&value),
                 value
                     .get("api_provider_id")
                     .and_then(|value| value.as_str())
@@ -3338,7 +3383,15 @@ async fn import_account_from_json_value(
                     .get("api_provider_name")
                     .and_then(|value| value.as_str())
                     .map(|value| value.to_string()),
-            )?));
+            )?;
+            apply_api_key_import_metadata(&mut account, &value);
+            save_account(&account)?;
+            update_account_plan_type_in_index(
+                &account.id,
+                &account.plan_type,
+                &account.subscription_active_until,
+            )?;
+            return Ok(Some(account));
         }
     }
 
@@ -3417,22 +3470,44 @@ pub async fn import_from_json(json_content: &str) -> Result<Vec<CodexAccount>, S
 
     // 尝试解析为 auth.json 格式
     if let Ok(auth_file) = serde_json::from_str::<CodexAuthFile>(json_content) {
+        let raw_value = serde_json::from_str::<serde_json::Value>(json_content).ok();
         let fallback_api_key = extract_api_key_from_auth_file(&auth_file);
-        let fallback_provider = infer_api_provider_config(
-            extract_api_base_url_from_auth_file(&auth_file).as_deref(),
-            None,
-            None,
-            None,
-        );
+        let fallback_provider = if let Some(value) = raw_value.as_ref() {
+            infer_api_provider_config(
+                extract_api_base_url_from_auth_file(&auth_file).as_deref(),
+                read_codex_api_provider_mode(value),
+                value.get("api_provider_id").and_then(|item| item.as_str()),
+                value
+                    .get("api_provider_name")
+                    .and_then(|item| item.as_str()),
+            )
+        } else {
+            infer_api_provider_config(
+                extract_api_base_url_from_auth_file(&auth_file).as_deref(),
+                None,
+                None,
+                None,
+            )
+        };
         if is_auth_mode_apikey(auth_file.auth_mode.as_deref()) {
             let api_key = fallback_api_key.ok_or("auth.json 缺少 OPENAI_API_KEY")?;
-            return Ok(vec![upsert_api_key_account(
+            let mut account = upsert_api_key_account(
                 api_key,
                 fallback_provider.base_url.clone(),
                 Some(fallback_provider.mode),
                 fallback_provider.provider_id.clone(),
                 fallback_provider.provider_name.clone(),
-            )?]);
+            )?;
+            if let Some(value) = raw_value.as_ref() {
+                apply_api_key_import_metadata(&mut account, value);
+                save_account(&account)?;
+                update_account_plan_type_in_index(
+                    &account.id,
+                    &account.plan_type,
+                    &account.subscription_active_until,
+                )?;
+            }
+            return Ok(vec![account]);
         }
 
         if let Some(tokens) = auth_file.tokens {
@@ -3447,13 +3522,23 @@ pub async fn import_from_json(json_content: &str) -> Result<Vec<CodexAccount>, S
         }
 
         if let Some(api_key) = fallback_api_key {
-            return Ok(vec![upsert_api_key_account(
+            let mut account = upsert_api_key_account(
                 api_key,
                 fallback_provider.base_url.clone(),
                 Some(fallback_provider.mode),
                 fallback_provider.provider_id.clone(),
                 fallback_provider.provider_name.clone(),
-            )?]);
+            )?;
+            if let Some(value) = raw_value.as_ref() {
+                apply_api_key_import_metadata(&mut account, value);
+                save_account(&account)?;
+                update_account_plan_type_in_index(
+                    &account.id,
+                    &account.plan_type,
+                    &account.subscription_active_until,
+                )?;
+            }
+            return Ok(vec![account]);
         }
     }
 

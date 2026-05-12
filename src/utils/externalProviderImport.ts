@@ -10,6 +10,7 @@ export type ExternalProviderImportPayload = {
   importUrl?: string | null;
   minAppVersion?: string | null;
   autoImport: boolean;
+  activate: boolean;
   source?: string | null;
   rawUrl?: string | null;
 };
@@ -30,6 +31,8 @@ type RawExternalProviderImportPayload = {
   min_app_version?: unknown;
   autoImport?: unknown;
   autoSubmit?: unknown;
+  activate?: unknown;
+  autoActivate?: unknown;
   source?: unknown;
   rawUrl?: unknown;
   url?: unknown;
@@ -177,6 +180,7 @@ export function normalizeExternalProviderImportPayload(
     importUrl,
     minAppVersion,
     autoImport: parseBooleanLike(payload.autoImport ?? payload.autoSubmit),
+    activate: parseBooleanLike(payload.activate ?? payload.autoActivate),
     source: readString(payload.source),
     rawUrl: readString(payload.rawUrl ?? payload.url),
   };
