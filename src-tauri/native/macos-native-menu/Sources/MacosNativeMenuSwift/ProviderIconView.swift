@@ -56,7 +56,7 @@ enum ProviderIconRegistry {
         case "workbuddy":
             return ProviderIconResource(name: "workbuddy", ext: "png", renderingMode: .original)
         case "openrouter":
-            return ProviderIconResource(name: "openrouter", ext: "svg", renderingMode: .template)
+            return ProviderIconResource(name: "openrouter", ext: "png", renderingMode: .template)
         default:
             return nil
         }
