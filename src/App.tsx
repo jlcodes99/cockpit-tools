@@ -38,6 +38,7 @@ import { useQoderAccountStore } from './stores/useQoderAccountStore';
 import { useTraeAccountStore } from './stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from './stores/useWorkbuddyAccountStore';
 import { useZedAccountStore } from './stores/useZedAccountStore';
+import { useOpencodeAccountStore } from './stores/useOpencodeAccountStore';
 import { useSideNavLayoutStore } from './stores/useSideNavLayoutStore';
 import { usePlatformLayoutStore } from './stores/usePlatformLayoutStore';
 import { useTopRightAdStore } from './stores/useTopRightAdStore';
@@ -106,6 +107,9 @@ const WorkbuddyAccountsPage = lazy(() =>
 );
 const ZedAccountsPage = lazy(() =>
   import('./pages/ZedAccountsPage').then((module) => ({ default: module.ZedAccountsPage })),
+);
+const OpencodeAccountsPage = lazy(() =>
+  import('./pages/OpencodeAccountsPage').then((module) => ({ default: module.OpencodeAccountsPage })),
 );
 const FingerprintsPage = lazy(() =>
   import('./pages/FingerprintsPage').then((module) => ({ default: module.FingerprintsPage })),
@@ -244,7 +248,8 @@ type QuotaAlertPlatform =
   | 'qoder'
   | 'trae'
   | 'workbuddy'
-  | 'zed';
+  | 'zed'
+  | 'opencode';
 type UpdateCheckSource = 'auto' | 'manual';
 type UpdateActionState = 'hidden' | 'available' | 'downloading' | 'installing' | 'ready';
 
@@ -345,6 +350,8 @@ function normalizeQuotaAlertPlatform(platform: string | undefined): QuotaAlertPl
       return 'trae';
     case 'zed':
       return 'zed';
+    case 'opencode':
+      return 'opencode';
     default:
       return 'antigravity';
   }
@@ -377,6 +384,8 @@ function getQuotaAlertPlatformLabel(
       return t('nav.trae', 'Trae');
     case 'zed':
       return t('nav.zed', 'Zed');
+    case 'opencode':
+      return 'OpenCode';
     default:
       return t('nav.overview', 'Antigravity');
   }
@@ -408,6 +417,8 @@ function getQuotaAlertTargetPage(platform: QuotaAlertPlatform): Page {
       return 'workbuddy';
     case 'zed':
       return 'zed';
+    case 'opencode':
+      return 'opencode';
     default:
       return 'overview';
   }
@@ -439,6 +450,8 @@ function getQuotaAlertQuickSettingsType(platform: QuotaAlertPlatform): QuickSett
       return 'workbuddy';
     case 'zed':
       return 'zed';
+    case 'opencode':
+      return 'opencode';
     default:
       return 'antigravity';
   }
@@ -2241,6 +2254,9 @@ function MainApp() {
                     } else if (platform === 'zed') {
                       await useZedAccountStore.getState().switchAccount(targetAccountId);
                       setPage('zed');
+                    } else if (platform === 'opencode') {
+                      await useOpencodeAccountStore.getState().switchAccount(targetAccountId);
+                      setPage('opencode');
                     } else {
                       await useAccountStore.getState().switchAccount(targetAccountId);
                       setPage('overview');
@@ -2460,6 +2476,10 @@ function MainApp() {
       {
         command: 'refresh_all_zed_tokens',
         errorMessage: 'Failed to refresh Zed:',
+      },
+      {
+        command: 'refresh_all_opencode_tokens',
+        errorMessage: 'Failed to refresh OpenCode:',
       },
     ] as const;
 
@@ -2745,6 +2765,7 @@ function MainApp() {
             case 'trae':
             case 'workbuddy':
             case 'zed':
+            case 'opencode':
             case 'manual':
             case 'settings':
               setPage(target as Page);
@@ -3170,6 +3191,7 @@ function MainApp() {
           {page === 'trae' && <TraeAccountsPage />}
           {page === 'workbuddy' && <WorkbuddyAccountsPage />}
           {page === 'zed' && <ZedAccountsPage />}
+          {page === 'opencode' && <OpencodeAccountsPage />}
           {page === 'instances' && <InstancesPage onNavigate={setPage} />}
           {page === 'fingerprints' && <FingerprintsPage onNavigate={setPage} />}
           {page === 'wakeup' && <WakeupTasksPage onNavigate={setPage} />}
