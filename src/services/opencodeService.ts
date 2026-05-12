@@ -1,5 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import type { OpenCodeAccount } from '../types/opencode';
+
+export async function openOpenCodeAuthPage(): Promise<void> {
+  await openUrl('https://opencode.ai/auth');
+}
 
 export async function listOpenCodeAccounts(): Promise<OpenCodeAccount[]> {
   return await invoke('list_opencode_accounts');

@@ -21,6 +21,7 @@ import {
   Lock,
   BookOpen,
   DollarSign,
+  ExternalLink,
 } from 'lucide-react';
 import { useOpencodeAccountStore } from '../stores/useOpencodeAccountStore';
 import * as opencodeService from '../services/opencodeService';
@@ -936,48 +937,97 @@ export function OpencodeAccountsPage() {
 
       {showAddModal && (
         <div className="modal-overlay">
-          <div className="modal add-account-modal">
+          <div className="modal add-account-modal opencode-add-modal">
             <div className="modal-header">
-              <h3>{t('opencode.addAccount.title', '添加 OpenCode 账号')}</h3>
+              <h3>{t('opencode.addAccount.title', 'Connect OpenCode')}</h3>
               <p className="add-account-desc">
-                {t('opencode.addAccount.desc', '选择 tier 并粘贴你的 OpenCode API Key。')}
+                {t('opencode.addAccount.desc', 'Sign in to get your API key, then paste it below.')}
               </p>
             </div>
 
             {addTab === 'token' && (
             <div className="add-token-section">
+              {/* Step 1: Open Browser */}
               <div className="single-input-section">
-                <label>{t('opencode.addAccount.tier', 'Tier')}</label>
-                <div className="tier-selector" style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                <label>{t('opencode.addAccount.step1', 'Step 1: Sign in & get your API key')}</label>
+                <button
+                  className="btn btn-primary open-browser-btn"
+                  onClick={() => opencodeService.openOpenCodeAuthPage()}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}
+                >
+                  <ExternalLink size={16} />
+                  {t('opencode.addAccount.openBrowser', 'Sign in at opencode.ai')}
+                </button>
+                <p className="add-account-hint">
+                  {t('opencode.addAccount.browserHint', 'A browser will open. Sign in with GitHub or Google, then copy your API key.')}
+                </p>
+              </div>
+
+              {/* Step 2: Select Tier */}
+              <div className="single-input-section">
+                <label>{t('opencode.addAccount.tier', 'Step 2: Select your plan')}</label>
+                <div className="opencode-tier-cards">
                   <button
-                    className={`btn ${selectedAddTier === 'go' ? 'btn-primary' : 'btn-secondary'}`}
+                    className={`opencode-tier-card ${selectedAddTier === 'go' ? 'selected' : ''}`}
                     onClick={() => setSelectedAddTier('go')}
                   >
-                    Go
+                    <div className="opencode-tier-card-header">
+                      <span className="opencode-tier-name">Go</span>
+                      <span className="opencode-tier-price">$5-10/mo</span>
+                    </div>
+                    <span className="opencode-tier-desc">
+                      {t('opencode.tier.go', 'Monthly subscription • 12 open-source models • Dollar-value usage limits')}
+                    </span>
+                    <div className="opencode-tier-features">
+                      <span>$12/5hr • $30/wk • $60/mo</span>
+                    </div>
                   </button>
                   <button
-                    className={`btn ${selectedAddTier === 'zen' ? 'btn-primary' : 'btn-secondary'}`}
+                    className={`opencode-tier-card ${selectedAddTier === 'zen' ? 'selected' : ''}`}
                     onClick={() => setSelectedAddTier('zen')}
                   >
-                    Zen
+                    <div className="opencode-tier-card-header">
+                      <span className="opencode-tier-name">Zen</span>
+                      <span className="opencode-tier-price">Pay-as-you-go</span>
+                    </div>
+                    <span className="opencode-tier-desc">
+                      {t('opencode.tier.zen', '$20 top-up • 40+ models including GPT, Claude, Gemini • Per-token pricing')}
+                    </span>
+                    <div className="opencode-tier-features">
+                      <span>Auto-reload at $5</span>
+                    </div>
                   </button>
                 </div>
               </div>
+
+              {/* Step 3: Paste API Key */}
               <div className="single-input-section">
-                <label>{t('opencode.addAccount.apiKey', 'API Key')}</label>
-                <input
-                  type="text"
-                  placeholder={ADD_ACCOUNT_TOKEN_EXAMPLE}
-                  value={tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value)}
-                />
+                <label>{t('opencode.addAccount.step3', 'Step 3: Paste your API key')}</label>
+                <div className="opencode-api-input-wrap">
+                  <input
+                    type="text"
+                    className="opencode-api-input"
+                    placeholder={ADD_ACCOUNT_TOKEN_EXAMPLE}
+                    value={tokenInput}
+                    onChange={(e) => setTokenInput(e.target.value)}
+                  />
+                  {tokenInput && (
+                    <button
+                      className="opencode-input-clear"
+                      onClick={() => setTokenInput('')}
+                      title={t('common.clear', 'Clear')}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
             )}
 
             {addTab === 'import' && (
               <div className="batch-import-section">
-                <label>{t('common.shared.import.jsonLabel', '粘贴 JSON')}</label>
+                <label>{t('common.shared.import.jsonLabel', 'Paste JSON')}</label>
                 <textarea
                   rows={6}
                   placeholder='[{&quot;access_token&quot;:&quot;...&quot;,&quot;tier&quot;:&quot;go&quot;,&quot;email&quot;:&quot;...&quot;}]'
@@ -1000,16 +1050,16 @@ export function OpencodeAccountsPage() {
 
             <div className="modal-actions">
               <button className="btn btn-secondary" onClick={closeAddModal} disabled={importing}>
-                {t('common.cancel', '取消')}
+                {t('common.cancel', 'Cancel')}
               </button>
               {addTab === 'token' && (
                 <button className="btn btn-primary" onClick={handleTokenImport} disabled={importing || !tokenInput.trim()}>
-                  {importing ? t('common.importing', '导入中...') : t('common.shared.addAccount', '添加账号')}
+                  {importing ? t('common.importing', 'Importing...') : t('common.shared.addAccount', 'Add Account')}
                 </button>
               )}
               {addTab === 'import' && (
                 <button className="btn btn-primary" onClick={handleTokenImport} disabled={importing || !tokenInput.trim()}>
-                  {importing ? t('common.importing', '导入中...') : t('common.shared.import.title', '导入')}
+                  {importing ? t('common.importing', 'Importing...') : t('common.shared.import.title', 'Import')}
                 </button>
               )}
             </div>

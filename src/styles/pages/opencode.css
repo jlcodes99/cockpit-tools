@@ -1,0 +1,219 @@
+/* ============================================
+   OpenCode Page Styles
+   ============================================ */
+
+/* ── Add Account Modal ── */
+.opencode-add-modal .modal-header {
+  padding-bottom: 4px;
+}
+
+.opencode-add-modal .add-account-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.opencode-add-modal .add-token-section {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 8px 0;
+}
+
+.opencode-add-modal .single-input-section label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.opencode-add-modal .add-account-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 4px 0 0 0;
+  line-height: 1.4;
+}
+
+/* ── Step label ── */
+.single-input-section:first-child label {
+  margin-bottom: 8px;
+}
+
+/* ── Tier Cards ── */
+.opencode-tier-cards {
+  display: flex;
+  gap: 10px;
+}
+
+.opencode-tier-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border: 1.5px solid var(--border-color, #e2e8f0);
+  border-radius: 10px;
+  background: var(--card-bg, #fff);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  font-family: inherit;
+}
+
+.opencode-tier-card:hover {
+  border-color: var(--accent-color, #3b82f6);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.15);
+}
+
+.opencode-tier-card.selected {
+  border-color: var(--accent-color, #3b82f6);
+  background: color-mix(in srgb, var(--accent-color, #3b82f6) 6%, transparent);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+}
+
+.opencode-tier-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.opencode-tier-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.opencode-tier-price {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent-color, #3b82f6);
+  background: color-mix(in srgb, var(--accent-color, #3b82f6) 10%, transparent);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.opencode-tier-card.selected .opencode-tier-price {
+  background: color-mix(in srgb, var(--accent-color, #3b82f6) 18%, transparent);
+}
+
+.opencode-tier-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.opencode-tier-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.opencode-tier-features span {
+  font-size: 11px;
+  color: var(--text-tertiary, #94a3b8);
+  background: var(--bg-muted, #f1f5f9);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* ── API Key Input ── */
+.opencode-api-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.opencode-api-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-family: var(--font-mono, 'SF Mono', 'Fira Code', monospace);
+  font-size: 13px;
+  border: 1.5px solid var(--border-color, #e2e8f0);
+  border-radius: 8px;
+  background: var(--input-bg, #fff);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.opencode-api-input:focus {
+  border-color: var(--accent-color, #3b82f6);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+}
+
+.opencode-api-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.opencode-input-clear {
+  position: absolute;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.opencode-input-clear:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-primary);
+}
+
+/* ── Open in Browser Button ── */
+.open-browser-btn {
+  padding: 10px 16px;
+  font-size: 14px;
+}
+
+/* ── Dark theme overrides ── */
+[data-theme="dark"] .opencode-tier-card {
+  border-color: #334155;
+  background: #1e293b;
+}
+
+[data-theme="dark"] .opencode-tier-card:hover {
+  border-color: #60a5fa;
+}
+
+[data-theme="dark"] .opencode-tier-card.selected {
+  border-color: #60a5fa;
+  background: color-mix(in srgb, #60a5fa 10%, #1e293b);
+}
+
+[data-theme="dark"] .opencode-tier-price {
+  background: color-mix(in srgb, #60a5fa 14%, transparent);
+}
+
+[data-theme="dark"] .opencode-tier-card.selected .opencode-tier-price {
+  background: color-mix(in srgb, #60a5fa 22%, transparent);
+}
+
+[data-theme="dark"] .opencode-tier-features span {
+  background: #334155;
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .opencode-api-input {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .opencode-api-input:focus {
+  border-color: #60a5fa;
+}
+
+[data-theme="dark"] .opencode-input-clear:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
