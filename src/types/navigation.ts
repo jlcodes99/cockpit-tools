@@ -12,6 +12,7 @@ export type Page =
   | 'codebuddy'
   | 'codebuddy-cn'
   | 'qoder'
+  | 'openrouter'
   | 'trae'
   | 'workbuddy'
   | 'codex-instances'

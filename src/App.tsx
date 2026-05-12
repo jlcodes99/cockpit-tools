@@ -38,6 +38,7 @@ import { useQoderAccountStore } from './stores/useQoderAccountStore';
 import { useTraeAccountStore } from './stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from './stores/useWorkbuddyAccountStore';
 import { useZedAccountStore } from './stores/useZedAccountStore';
+import { useOpenrouterAccountStore } from './stores/useOpenrouterAccountStore';
 import { useSideNavLayoutStore } from './stores/useSideNavLayoutStore';
 import { usePlatformLayoutStore } from './stores/usePlatformLayoutStore';
 import { useTopRightAdStore } from './stores/useTopRightAdStore';
@@ -106,6 +107,9 @@ const WorkbuddyAccountsPage = lazy(() =>
 );
 const ZedAccountsPage = lazy(() =>
   import('./pages/ZedAccountsPage').then((module) => ({ default: module.ZedAccountsPage })),
+);
+const OpenrouterAccountsPage = lazy(() =>
+  import('./pages/OpenrouterAccountsPage').then((module) => ({ default: module.OpenrouterAccountsPage })),
 );
 const FingerprintsPage = lazy(() =>
   import('./pages/FingerprintsPage').then((module) => ({ default: module.FingerprintsPage })),
@@ -242,6 +246,7 @@ type QuotaAlertPlatform =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'openrouter'
   | 'trae'
   | 'workbuddy'
   | 'zed';
@@ -341,8 +346,10 @@ function normalizeQuotaAlertPlatform(platform: string | undefined): QuotaAlertPl
       return 'codebuddy_cn';
     case 'qoder':
       return 'qoder';
-    case 'trae':
-      return 'trae';
+    case 'openrouter':
+      return 'openrouter';
+    case 'workbuddy':
+      return 'workbuddy';
     case 'zed':
       return 'zed';
     default:
@@ -373,6 +380,8 @@ function getQuotaAlertPlatformLabel(
       return t('nav.codebuddyCn', 'CodeBuddy CN');
     case 'qoder':
       return t('nav.qoder', 'Qoder');
+    case 'openrouter':
+      return t('nav.openrouter', 'OpenRouter');
     case 'trae':
       return t('nav.trae', 'Trae');
     case 'zed':
@@ -402,6 +411,8 @@ function getQuotaAlertTargetPage(platform: QuotaAlertPlatform): Page {
       return 'codebuddy-cn';
     case 'qoder':
       return 'qoder';
+    case 'openrouter':
+      return 'openrouter';
     case 'trae':
       return 'trae';
     case 'workbuddy':
@@ -433,8 +444,6 @@ function getQuotaAlertQuickSettingsType(platform: QuotaAlertPlatform): QuickSett
       return 'codebuddy_cn';
     case 'qoder':
       return 'qoder';
-    case 'trae':
-      return 'trae';
     case 'workbuddy':
       return 'workbuddy';
     case 'zed':
@@ -2232,6 +2241,9 @@ function MainApp() {
                     } else if (platform === 'qoder') {
                       await useQoderAccountStore.getState().switchAccount(targetAccountId);
                       setPage('qoder');
+                    } else if (platform === 'openrouter') {
+                      await useOpenrouterAccountStore.getState().switchAccount(targetAccountId);
+                      setPage('openrouter');
                     } else if (platform === 'trae') {
                       await useTraeAccountStore.getState().switchAccount(targetAccountId);
                       setPage('trae');
@@ -2742,6 +2754,7 @@ function MainApp() {
             case 'codebuddy':
             case 'codebuddy-cn':
             case 'qoder':
+            case 'openrouter':
             case 'trae':
             case 'workbuddy':
             case 'zed':
@@ -3167,6 +3180,7 @@ function MainApp() {
           {page === 'codebuddy' && <CodebuddyAccountsPage />}
           {page === 'codebuddy-cn' && <CodebuddyCnAccountsPage />}
           {page === 'qoder' && <QoderAccountsPage />}
+          {page === 'openrouter' && <OpenrouterAccountsPage />}
           {page === 'trae' && <TraeAccountsPage />}
           {page === 'workbuddy' && <WorkbuddyAccountsPage />}
           {page === 'zed' && <ZedAccountsPage />}
