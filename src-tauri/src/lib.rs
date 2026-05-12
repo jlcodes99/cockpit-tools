@@ -650,6 +650,18 @@ pub fn run() {
             commands::qoder::inject_qoder_account,
             commands::qoder::update_qoder_account_tags,
             commands::qoder::get_qoder_accounts_index_path,
+            // OpenCode Commands
+            commands::opencode::list_opencode_accounts,
+            commands::opencode::add_opencode_account,
+            commands::opencode::delete_opencode_account,
+            commands::opencode::delete_opencode_accounts,
+            commands::opencode::import_opencode_from_json,
+            commands::opencode::export_opencode_accounts,
+            commands::opencode::refresh_opencode_token,
+            commands::opencode::refresh_all_opencode_tokens,
+            commands::opencode::update_opencode_account_tags,
+            commands::opencode::get_opencode_accounts_index_path,
+            commands::opencode::inject_opencode_account,
             // Zed Commands
             commands::zed::list_zed_accounts,
             commands::zed::delete_zed_account,

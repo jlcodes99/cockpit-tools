@@ -14,6 +14,7 @@ pub mod trae;
 pub mod windsurf;
 pub mod workbuddy;
 pub mod zed;
+pub mod opencode;
 
 pub use account::{
     Account, AccountIndex, AccountSummary, DeviceProfile, DeviceProfileVersion, QuotaErrorInfo,

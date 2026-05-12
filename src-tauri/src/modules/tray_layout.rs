@@ -21,8 +21,9 @@ pub const PLATFORM_CODEBUDDY_CN: &str = "codebuddy_cn";
 pub const PLATFORM_QODER: &str = "qoder";
 pub const PLATFORM_TRAE: &str = "trae";
 pub const PLATFORM_WORKBUDDY: &str = "workbuddy";
+pub const PLATFORM_OPENCODE: &str = "opencode";
 
-pub const SUPPORTED_PLATFORM_IDS: [&str; 13] = [
+pub const SUPPORTED_PLATFORM_IDS: [&str; 14] = [
     PLATFORM_ANTIGRAVITY,
     PLATFORM_CODEX,
     PLATFORM_ZED,
@@ -36,6 +37,7 @@ pub const SUPPORTED_PLATFORM_IDS: [&str; 13] = [
     PLATFORM_QODER,
     PLATFORM_TRAE,
     PLATFORM_WORKBUDDY,
+    PLATFORM_OPENCODE,
 ];
 
 pub const SORT_MODE_AUTO: &str = "auto";

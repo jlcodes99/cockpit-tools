@@ -422,6 +422,7 @@ mod imp {
             PlatformId::Qoder => "#5664ff",
             PlatformId::Trae => "#4f46e5",
             PlatformId::Workbuddy => "#2fa36a",
+            PlatformId::OpenCode => "#00d4ff",
         }
     }
 
@@ -2647,6 +2648,7 @@ mod imp {
             PlatformId::Codebuddy => build_codebuddy_cards(lang),
             PlatformId::CodebuddyCn => build_codebuddy_cn_cards(lang),
             PlatformId::Workbuddy => build_workbuddy_cards(lang),
+            PlatformId::OpenCode => Vec::new(),
             PlatformId::Zed => build_zed_cards(lang),
         }
     }
@@ -3953,6 +3955,14 @@ mod imp {
                         .map(|_| 0)
                 }
                 (PlatformId::Zed, None) => commands::zed::refresh_all_zed_tokens(app.clone()).await,
+                (PlatformId::OpenCode, Some(account_id)) => {
+                    commands::opencode::refresh_opencode_token(app.clone(), account_id)
+                        .await
+                        .map(|_| 0)
+                }
+                (PlatformId::OpenCode, None) => {
+                    commands::opencode::refresh_all_opencode_tokens(app.clone()).await
+                }
             };
             let _ = refresh_result;
             refresh_native_menu_snapshot();
@@ -4026,6 +4036,9 @@ mod imp {
                         .map(|_| ())
                 }
                 PlatformId::Zed => commands::zed::inject_zed_account(app, account_id)
+                    .await
+                    .map(|_| ()),
+                PlatformId::OpenCode => commands::opencode::inject_opencode_account(app, account_id)
                     .await
                     .map(|_| ()),
             };

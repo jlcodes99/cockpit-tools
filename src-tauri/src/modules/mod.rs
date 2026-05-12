@@ -50,6 +50,7 @@ pub mod oauth_pending_state;
 pub mod oauth_server;
 pub mod openclaw_auth;
 pub mod opencode_auth;
+pub mod opencode_account;
 pub mod process;
 pub mod provider_current_state;
 pub mod provider_token_keeper;

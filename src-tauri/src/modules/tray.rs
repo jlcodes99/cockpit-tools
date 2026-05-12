@@ -41,10 +41,11 @@ pub(crate) enum PlatformId {
     Qoder,
     Trae,
     Workbuddy,
+    OpenCode,
 }
 
 impl PlatformId {
-    pub(crate) fn default_order() -> [Self; 13] {
+    pub(crate) fn default_order() -> [Self; 14] {
         [
             Self::Antigravity,
             Self::Codex,
@@ -59,6 +60,7 @@ impl PlatformId {
             Self::Qoder,
             Self::Trae,
             Self::Workbuddy,
+            Self::OpenCode,
         ]
     }
 
@@ -77,8 +79,11 @@ impl PlatformId {
             crate::modules::tray_layout::PLATFORM_QODER => Some(Self::Qoder),
             crate::modules::tray_layout::PLATFORM_TRAE => Some(Self::Trae),
             crate::modules::tray_layout::PLATFORM_WORKBUDDY => Some(Self::Workbuddy),
+            crate::modules::tray_layout::PLATFORM_OPENCODE => Some(Self::OpenCode),
             _ => None,
         }
+    }
+}
     }
 
     pub(crate) fn as_str(self) -> &'static str {
@@ -114,6 +119,7 @@ impl PlatformId {
             Self::Qoder => "Qoder",
             Self::Trae => "Trae",
             Self::Workbuddy => "WorkBuddy",
+            Self::OpenCode => "OpenCode",
         }
     }
 
@@ -132,6 +138,7 @@ impl PlatformId {
             Self::Qoder => "qoder",
             Self::Trae => "trae",
             Self::Workbuddy => "workbuddy",
+            Self::OpenCode => "opencode",
         }
     }
 }
@@ -620,6 +627,45 @@ fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayI
         PlatformId::Qoder => build_qoder_display_info(lang),
         PlatformId::Trae => build_trae_display_info(lang),
         PlatformId::Workbuddy => build_workbuddy_display_info(lang),
+        PlatformId::OpenCode => build_opencode_display_info(lang),
+    }
+}
+
+fn build_opencode_display_info(lang: &str) -> AccountDisplayInfo {
+    let accounts = match crate::commands::opencode::list_opencode_accounts() {
+        Ok(accounts) => accounts,
+        Err(_) => return AccountDisplayInfo {
+            display_name: "OpenCode".to_string(),
+            current: None,
+            all: vec![],
+        },
+    };
+
+    let current_account_id = crate::modules::provider_current_state::get_current_account_id("opencode");
+    let all_accounts: Vec<AccountSummary> = accounts.iter().map(|a| AccountSummary {
+        id: a.id.clone(),
+        email: a.email.clone(),
+        platform_id: "opencode".to_string(),
+    }).collect();
+
+    let current = current_account_id.as_ref().and_then(|id| {
+        accounts.iter().find(|a| &a.id == id).map(|a| AccountSummary {
+            id: a.id.clone(),
+            email: a.email.clone(),
+            platform_id: "opencode".to_string(),
+        })
+    });
+
+    let display_name = if lang.starts_with("zh") {
+        "OpenCode"
+    } else {
+        "OpenCode"
+    };
+
+    AccountDisplayInfo {
+        display_name: display_name.to_string(),
+        current,
+        all: all_accounts,
     }
 }
 
