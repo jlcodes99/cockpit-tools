@@ -149,21 +149,19 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: "v${{ steps.app_version.outputs.VERSION }}"
           releaseName: "Cockpit Tools v${{ steps.app_version.outputs.VERSION }}"
           releaseBody: ${{ steps.release_notes.outputs.body }}
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
   rebuild-latest-json:
     name: Rebuild merged latest.json
     needs: release
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: ${{ false }}
     permissions:
       contents: write
     env:
@@ -259,9 +257,7 @@ jobs:
 
   upload-checksums:
     name: Upload SHA256SUMS
-    needs:
-      - release
-      - rebuild-latest-json
+    needs: release
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -327,7 +323,6 @@ jobs:
     name: Update Homebrew Cask
     needs:
       - release
-      - rebuild-latest-json
       - upload-checksums
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
@@ -420,7 +415,7 @@ jobs:
     name: Publish release as latest
     needs:
       - release
-      - rebuild-latest-json
+      - upload-checksums
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
