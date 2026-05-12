@@ -1542,6 +1542,8 @@ export function SettingsPage() {
         return parseRefresh(traeAutoRefresh) > 0;
       case 'zed':
         return parseRefresh(zedAutoRefresh) > 0;
+      case 'opencode':
+        return false;
     }
   };
 

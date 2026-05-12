@@ -46,3 +46,9 @@ target/
 **/*.rs.bk
 docs/plugin-architecture-proposal.md
 .aitasks
+
+# Graphify knowledge graph output
+graphify-out/
+.graphify_*
+.graphify_python
+.opencode/

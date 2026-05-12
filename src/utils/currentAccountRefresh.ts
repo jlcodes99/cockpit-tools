@@ -16,7 +16,8 @@ export type CurrentAccountRefreshPlatform =
   | 'workbuddy'
   | 'qoder'
   | 'trae'
-  | 'zed';
+  | 'zed'
+  | 'opencode';
 
 export const CURRENT_ACCOUNT_REFRESH_PLATFORMS: CurrentAccountRefreshPlatform[] = [
   'antigravity',
@@ -32,6 +33,7 @@ export const CURRENT_ACCOUNT_REFRESH_PLATFORMS: CurrentAccountRefreshPlatform[] 
   'qoder',
   'trae',
   'zed',
+  'opencode',
 ];
 
 export type CurrentAccountRefreshMinutesMap = Record<CurrentAccountRefreshPlatform, number>;
@@ -66,6 +68,7 @@ export function buildDefaultCurrentAccountRefreshMinutesMap(): CurrentAccountRef
     qoder: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     trae: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     zed: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
+    opencode: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
   };
 }
 

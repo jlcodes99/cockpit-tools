@@ -282,6 +282,8 @@ const getCurrentAccountRefreshPlatformForType = (
       return 'workbuddy';
     case 'zed':
       return 'zed';
+    case 'opencode':
+      return 'opencode';
   }
 };
 
@@ -1185,7 +1187,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     }
   };
 
-  const showAppPathSection = type !== 'gemini';
+  const showAppPathSection = type !== 'gemini' && type !== 'opencode';
 
   const getAppPath = (): string => {
     if (!config) return '';
@@ -1292,6 +1294,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return 'workbuddy';
       case 'zed':
         return 'zed';
+      default:
+        return 'antigravity';
     }
   };
 
