@@ -11,7 +11,8 @@ export type ProviderCurrentPlatform =
   | 'trae'
   | 'workbuddy'
   | 'github_copilot'
-  | 'zed';
+  | 'zed'
+  | 'opencode';
 
 export async function getProviderCurrentAccountId(
   platform: ProviderCurrentPlatform,

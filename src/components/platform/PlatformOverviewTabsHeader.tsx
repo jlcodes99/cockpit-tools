@@ -10,6 +10,7 @@ import { CodebuddyIcon } from '../icons/CodebuddyIcon';
 import { QoderIcon } from '../icons/QoderIcon';
 import { WorkbuddyIcon } from '../icons/WorkbuddyIcon';
 import { ZedIcon } from '../icons/ZedIcon';
+import { OpenCodeIcon } from '../icons/OpenCodeIcon';
 import { ManualHelpIconButton } from '../ManualHelpIconButton';
 import { TopCenterPromoBanner } from '../TopCenterPromoBanner';
 import { PlatformId } from '../../types/platform';
@@ -34,7 +35,8 @@ export type PlatformOverviewHeaderId =
   | 'codebuddy_cn'
   | 'qoder'
   | 'trae'
-  | 'workbuddy';
+  | 'workbuddy'
+  | 'opencode';
 
 interface PlatformOverviewTabsHeaderProps {
   platform: PlatformOverviewHeaderId;
@@ -102,6 +104,10 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
   workbuddy: {
     platformLabel: 'WorkBuddy',
     overviewIcon: <WorkbuddyIcon className="tab-icon" />,
+  },
+  opencode: {
+    platformLabel: 'OpenCode',
+    overviewIcon: <OpenCodeIcon className="tab-icon" />,
   },
 };
 

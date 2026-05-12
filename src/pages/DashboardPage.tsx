@@ -12,6 +12,7 @@ import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
+import { useOpencodeAccountStore } from '../stores/useOpencodeAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
 import {
   parseGroupEntryId,
@@ -373,6 +374,10 @@ export function DashboardPage({
     switchAccount: switchZedAccount,
   } = useZedAccountStore();
 
+  const {
+    accounts: opencodeAccounts,
+  } = useOpencodeAccountStore();
+
   const agCurrentId = agCurrent?.id;
   const codexCurrentId = codexCurrent?.id;
 
@@ -480,7 +485,8 @@ export function DashboardPage({
         codebuddyCnAccounts.length +
         qoderAccounts.length +
         traeAccounts.length +
-        workbuddyAccounts.length,
+        workbuddyAccounts.length +
+        opencodeAccounts.length,
       antigravity: agAccounts.length,
       codex: codexAccounts.length,
       zed: zedAccounts.length,
@@ -494,6 +500,7 @@ export function DashboardPage({
       qoder: qoderAccounts.length,
       trae: traeAccounts.length,
       workbuddy: workbuddyAccounts.length,
+      opencode: opencodeAccounts.length,
     };
   }, [agAccounts, codexAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, traeAccounts, workbuddyAccounts]);
 
@@ -2024,6 +2031,7 @@ export function DashboardPage({
     qoder: stats.qoder,
     trae: stats.trae,
     workbuddy: stats.workbuddy,
+    opencode: stats.opencode,
   };
 
   const entryCounts = useMemo(() => {

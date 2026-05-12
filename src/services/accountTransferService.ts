@@ -12,6 +12,7 @@ import * as qoderService from './qoderService';
 import * as traeService from './traeService';
 import * as workbuddyService from './workbuddyService';
 import * as zedService from './zedService';
+import * as opencodeService from './opencodeService';
 
 type AccountWithId = { id: string };
 
@@ -86,6 +87,11 @@ const PLATFORM_ADAPTERS: Record<PlatformId, TransferAdapter> = {
     listAccounts: workbuddyService.listWorkbuddyAccounts,
     exportAccounts: workbuddyService.exportWorkbuddyAccounts,
     importFromJson: workbuddyService.importWorkbuddyFromJson,
+  },
+  opencode: {
+    listAccounts: opencodeService.listOpenCodeAccounts,
+    exportAccounts: opencodeService.exportOpenCodeAccounts,
+    importFromJson: opencodeService.importOpenCodeFromJson,
   },
 };
 

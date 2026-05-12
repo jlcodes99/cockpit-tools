@@ -57,6 +57,7 @@ import * as codebuddyCnService from './codebuddyCnService';
 import * as qoderService from './qoderService';
 import * as traeService from './traeService';
 import * as workbuddyService from './workbuddyService';
+import * as opencodeService from './opencodeService';
 import type { InstanceLaunchMode } from '../types/instance';
 
 const DATA_TRANSFER_SCHEMA = 'cockpit-tools.data-transfer';
@@ -265,6 +266,7 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   qoder: async () => (await qoderService.listQoderAccounts()) as unknown as TransferAccountRecord[],
   trae: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
   workbuddy: async () => (await workbuddyService.listWorkbuddyAccounts()) as unknown as TransferAccountRecord[],
+  opencode: async () => (await opencodeService.listOpenCodeAccounts()) as unknown as TransferAccountRecord[],
 };
 
 const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unknown[]>) | undefined> = {
@@ -281,6 +283,7 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   qoder: qoderService.importQoderFromJson,
   trae: traeService.importTraeFromJson,
   workbuddy: workbuddyService.importWorkbuddyFromJson,
+  opencode: opencodeService.importOpenCodeFromJson,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

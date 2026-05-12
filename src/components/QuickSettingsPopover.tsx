@@ -133,6 +133,8 @@ interface GeneralConfig {
   workbuddy_quota_alert_threshold: number;
   zed_quota_alert_enabled: boolean;
   zed_quota_alert_threshold: number;
+  opencode_quota_alert_enabled: boolean;
+  opencode_quota_alert_threshold: number;
 }
 
 export type QuickSettingsType =

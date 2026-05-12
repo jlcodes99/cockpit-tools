@@ -7,9 +7,6 @@ import {
   Trash2,
   X,
   Globe,
-  KeyRound,
-  Copy,
-  Check,
   RotateCw,
   CircleAlert,
   LayoutGrid,
@@ -84,18 +81,6 @@ function getQuotaClass(percentage: number): string {
   return 'high';
 }
 
-function normalizePercent(raw: number | null | undefined): {
-  bar: number;
-  display: number;
-} {
-  if (raw == null || !Number.isFinite(raw)) {
-    return { bar: 0, display: 0 };
-  }
-  const base = raw > 0 && raw < 1 ? 1 : raw;
-  const bar = Math.min(100, Math.max(0, base));
-  return { bar, display: Math.round(bar) };
-}
-
 export function OpencodeAccountsPage() {
   const [activeTab, setActiveTab] = useState<OpencodeTab>('overview');
   const [filterTypes, setFilterTypes] = useState<string[]>(() =>
@@ -142,15 +127,15 @@ export function OpencodeAccountsPage() {
   });
 
   const {
-    t, locale, privacyModeEnabled, togglePrivacyMode, maskAccountText,
+    t, privacyModeEnabled, togglePrivacyMode, maskAccountText,
     viewMode, setViewMode, searchQuery, setSearchQuery,
     filterPersistenceEnabled, filterPersistenceScope,
     sortBy, setSortBy, sortDirection, setSortDirection,
     selected, toggleSelect, toggleSelectAll,
     tagFilter, groupByTag, setGroupByTag, showTagFilter, setShowTagFilter,
     showTagModal, setShowTagModal, tagFilterRef, availableTags,
-    toggleTagFilterValue, clearTagFilter, tagDeleteConfirm, tagDeleteConfirmError, tagDeleteConfirmErrorScrollKey, setTagDeleteConfirm,
-    deletingTag, requestDeleteTag, confirmDeleteTag, openTagModal, handleSaveTags,
+    toggleTagFilterValue, clearTagFilter,
+    openTagModal, handleSaveTags,
     refreshing, refreshingAll, injecting,
     handleRefresh, handleRefreshAll, handleDelete, handleBatchDelete,
     deleteConfirm, deleteConfirmError, deleteConfirmErrorScrollKey, setDeleteConfirm, deleting, confirmDelete,
@@ -742,10 +727,6 @@ export function OpencodeAccountsPage() {
                       <label key={tag} className={`tag-filter-option ${tagFilter.includes(tag) ? 'selected' : ''}`}>
                         <input type="checkbox" checked={tagFilter.includes(tag)} onChange={() => toggleTagFilterValue(tag)} />
                         <span className="tag-filter-name">{tag}</span>
-                        <button type="button" className="tag-filter-delete" onClick={(e) => { e.preventDefault(); e.stopPropagation(); requestDeleteTag(tag); }}
-                          aria-label={t('accounts.deleteTagAria', { tag, defaultValue: '删除标签 {{tag}}' })}>
-                          <X size={12} />
-                        </button>
                       </label>
                     ))}
                   </div>
@@ -904,43 +885,42 @@ export function OpencodeAccountsPage() {
         </div>
       )}
 
-      {showTagModal && (
-        <TagEditModal
-          accountId={page.tagEditAccountId}
-          platformName="OpenCode"
-          tags={page.tagEditTags}
-          onSave={handleSaveTags}
-          onClose={() => setShowTagModal(false)}
-        />
-      )}
+      <TagEditModal
+        isOpen={!!showTagModal}
+        initialTags={accounts.find((a) => a.id === showTagModal)?.tags || []}
+        availableTags={availableTags}
+        onClose={() => setShowTagModal(null)}
+        onSave={handleSaveTags}
+      />
 
-      {showExportModal && (
-        <ExportJsonModal
-          jsonContent={exportJsonContent}
-          hidden={exportJsonHidden}
-          onToggleHidden={toggleExportJsonHidden}
-          onCopy={copyExportJson}
-          copied={exportJsonCopied}
-          onSave={savingExportJson ? undefined : saveExportJson}
-          savedPath={exportSavedPath}
-          canOpenDirectory={canOpenExportSavedDirectory}
-          onOpenDirectory={openExportSavedDirectory}
-          onCopyPath={copyExportSavedPath}
-          pathCopied={exportPathCopied}
-          onClose={closeExportModal}
-        />
-      )}
+      <ExportJsonModal
+        isOpen={showExportModal}
+        title={`${t('common.shared.export.title', '导出')} JSON`}
+        jsonContent={exportJsonContent}
+        hidden={exportJsonHidden}
+        copied={exportJsonCopied}
+        saving={savingExportJson}
+        savedPath={exportSavedPath}
+        canOpenSavedDirectory={canOpenExportSavedDirectory}
+        pathCopied={exportPathCopied}
+        onClose={closeExportModal}
+        onToggleHidden={toggleExportJsonHidden}
+        onCopyJson={copyExportJson}
+        onSaveJson={saveExportJson}
+        onOpenSavedDirectory={openExportSavedDirectory}
+        onCopySavedPath={copyExportSavedPath}
+      />
 
       {deleteConfirm && (
-        <div className="modal-overlay">
-          <div className="modal confirm-dialog">
-            <h3>{t('accounts.confirmDeleteTitle', '确认删除')}</h3>
-            <p>{t('accounts.confirmDeleteMsg', '确定要删除选中的账号吗？此操作不可撤销。')}</p>
+        <div className="modal-overlay" onClick={() => !deleting && setDeleteConfirm(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{t('common.confirm')}</h2>
+              <button className="modal-close" onClick={() => !deleting && setDeleteConfirm(null)} aria-label={t('common.close', '关闭')}><X /></button>
+            </div>
+            <p className="modal-message">{t('accounts.confirmDeleteMsg', '确定要删除选中的账号吗？此操作不可撤销。')}</p>
             {deleteConfirmError && (
-              <ModalErrorMessage
-                message={deleteConfirmError}
-                scrollKey={deleteConfirmErrorScrollKey}
-              />
+              <ModalErrorMessage message={deleteConfirmError} scrollKey={deleteConfirmErrorScrollKey} />
             )}
             <div className="modal-actions">
               <button className="btn btn-secondary" disabled={deleting} onClick={() => setDeleteConfirm(null)}>
@@ -948,29 +928,6 @@ export function OpencodeAccountsPage() {
               </button>
               <button className="btn btn-danger" disabled={deleting} onClick={confirmDelete}>
                 {deleting ? t('common.deleting', '删除中...') : t('common.delete', '删除')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {tagDeleteConfirm && (
-        <div className="modal-overlay">
-          <div className="modal confirm-dialog">
-            <h3>{t('accounts.confirmDeleteTagTitle', '确认删除标签')}</h3>
-            <p>{t('accounts.confirmDeleteTagMsg', '确定要删除标签"{{tag}}"吗？该操作会从所有使用此标签的账号中移除该标签。', { tag: tagDeleteConfirm })}</p>
-            {tagDeleteConfirmError && (
-              <ModalErrorMessage
-                message={tagDeleteConfirmError}
-                scrollKey={tagDeleteConfirmErrorScrollKey}
-              />
-            )}
-            <div className="modal-actions">
-              <button className="btn btn-secondary" disabled={deletingTag} onClick={() => setTagDeleteConfirm(null)}>
-                {t('common.cancel', '取消')}
-              </button>
-              <button className="btn btn-danger" disabled={deletingTag} onClick={confirmDeleteTag}>
-                {deletingTag ? t('common.deleting', '删除中...') : t('common.delete', '删除')}
               </button>
             </div>
           </div>
@@ -1031,7 +988,7 @@ export function OpencodeAccountsPage() {
                   <Download size={14} />
                   {t('common.shared.import.fromFile', '从文件导入')}
                 </button>
-                <input ref={importFileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImportJsonFile} />
+                <input ref={importFileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={(event) => { if (event.target.files?.[0]) { handleImportJsonFile(event.target.files[0]); } }} />
               </div>
             )}
 
@@ -1046,12 +1003,12 @@ export function OpencodeAccountsPage() {
                 {t('common.cancel', '取消')}
               </button>
               {addTab === 'token' && (
-                <button className="btn btn-primary" onClick={handleTokenImport} disabled={importing || !tokenInput.value.trim()}>
+                <button className="btn btn-primary" onClick={handleTokenImport} disabled={importing || !tokenInput.trim()}>
                   {importing ? t('common.importing', '导入中...') : t('common.shared.addAccount', '添加账号')}
                 </button>
               )}
               {addTab === 'import' && (
-                <button className="btn btn-primary" onClick={handleTokenImport} disabled={importing || !tokenInput.value.trim()}>
+                <button className="btn btn-primary" onClick={handleTokenImport} disabled={importing || !tokenInput.trim()}>
                   {importing ? t('common.importing', '导入中...') : t('common.shared.import.title', '导入')}
                 </button>
               )}
@@ -1062,7 +1019,20 @@ export function OpencodeAccountsPage() {
       </>
       )}
 
-      <PaginationControls pagination={pagination} />
+      <PaginationControls
+        totalItems={pagination.totalItems}
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        pageSize={pagination.pageSize}
+        pageSizeOptions={pagination.pageSizeOptions}
+        rangeStart={pagination.rangeStart}
+        rangeEnd={pagination.rangeEnd}
+        canGoPrevious={pagination.canGoPrevious}
+        canGoNext={pagination.canGoNext}
+        onPageSizeChange={pagination.setPageSize}
+        onPreviousPage={pagination.goToPreviousPage}
+        onNextPage={pagination.goToNextPage}
+      />
     </div>
   );
 }
