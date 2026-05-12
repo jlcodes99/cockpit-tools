@@ -303,7 +303,8 @@
     "switchClassicLayoutDesc": "The classic layout shows the full platform navigation and supports sidebar collapsing. You can switch back anytime in Settings > General > Sidebar Layout.",
     "switchClassicLayoutDontAskAgain": "Don't show this prompt again",
     "switchClassicLayoutConfirm": "Switch now",
-    "2faManager": "2FA"
+    "2faManager": "2FA",
+    "opencode": "OpenCode"
   },
   "platformLayout": {
     "title": "Platform Layout",
@@ -3815,5 +3816,25 @@
     "importErrorMsg": "Import failed. Please ensure the file format is a valid exported JSON array.",
     "btnImportTitle": "Import Local JSON Backup",
     "btnExportTitle": "Export Saved as JSON"
+  },
+  "opencode": {
+    "injectToVSCode": "Inject into VS Code",
+    "freeUsageNote": "Free tier — no usage tracking",
+    "empty": {
+      "description": "Click \"Add Account\" to start managing your OpenCode accounts"
+    },
+    "addAccount": {
+      "title": "Add OpenCode Account",
+      "desc": "Select a tier and paste your OpenCode API Key.",
+      "tier": "Tier",
+      "apiKey": "API Key"
+    },
+    "flowNotice": {
+      "title": "OpenCode account guide (click to expand/collapse)",
+      "desc": "Manage OpenCode accounts by pasting API keys. Go = monthly subscription, Zen = pay-as-you-go, Free = no key needed.",
+      "go": "Go tier: $5-10/mo subscription with 12 open-source models. Dollar-value limits: $12/5hr, $30/weekly, $60/monthly.",
+      "zen": "Zen tier: $20 minimum top-up, 40+ models including GPT/Claude/Gemini, per-token pricing.",
+      "free": "Free tier: Limited free models, no API key required."
+    }
   }
 }
