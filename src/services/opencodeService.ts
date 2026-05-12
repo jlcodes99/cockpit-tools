@@ -39,6 +39,10 @@ export async function updateOpenCodeAccountTags(
   return await invoke('update_opencode_account_tags', { accountId, tags });
 }
 
+export async function refreshAllOpenCodeTokens(): Promise<number> {
+  return await invoke('refresh_all_opencode_tokens');
+}
+
 export async function injectOpenCodeAccount(accountId: string): Promise<string> {
   return await invoke('inject_opencode_account', { accountId });
 }
