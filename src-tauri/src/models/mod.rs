@@ -7,6 +7,7 @@ pub mod gemini;
 pub mod github_copilot;
 pub mod instance;
 pub mod kiro;
+pub mod openrouter;
 pub mod qoder;
 pub mod quota;
 pub mod token;

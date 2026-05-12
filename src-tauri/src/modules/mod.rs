@@ -48,6 +48,7 @@ pub mod macos_native_menu;
 pub mod oauth;
 pub mod oauth_pending_state;
 pub mod oauth_server;
+pub mod openrouter_account;
 pub mod openclaw_auth;
 pub mod opencode_auth;
 pub mod process;
