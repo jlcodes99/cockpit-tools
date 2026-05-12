@@ -9,6 +9,7 @@ import * as geminiService from './geminiService';
 import * as codebuddyService from './codebuddyService';
 import * as codebuddyCnService from './codebuddyCnService';
 import * as qoderService from './qoderService';
+import * as openrouterService from './openrouterService';
 import * as traeService from './traeService';
 import * as workbuddyService from './workbuddyService';
 import * as zedService from './zedService';
@@ -86,6 +87,11 @@ const PLATFORM_ADAPTERS: Record<PlatformId, TransferAdapter> = {
     listAccounts: workbuddyService.listWorkbuddyAccounts,
     exportAccounts: workbuddyService.exportWorkbuddyAccounts,
     importFromJson: workbuddyService.importWorkbuddyFromJson,
+  },
+  openrouter: {
+    listAccounts: openrouterService.listOpenRouterAccounts,
+    exportAccounts: openrouterService.exportOpenRouterAccounts,
+    importFromJson: openrouterService.importOpenRouterFromJson,
   },
 };
 

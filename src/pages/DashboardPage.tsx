@@ -492,6 +492,7 @@ export function DashboardPage({
       codebuddy: codebuddyAccounts.length,
       codebuddy_cn: codebuddyCnAccounts.length,
       qoder: qoderAccounts.length,
+      openrouter: 0,
       trae: traeAccounts.length,
       workbuddy: workbuddyAccounts.length,
     };
@@ -2022,6 +2023,7 @@ export function DashboardPage({
     codebuddy: stats.codebuddy,
     codebuddy_cn: stats.codebuddy_cn,
     qoder: stats.qoder,
+    openrouter: stats.openrouter ?? 0,
     trae: stats.trae,
     workbuddy: stats.workbuddy,
   };

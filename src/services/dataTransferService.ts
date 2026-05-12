@@ -55,6 +55,7 @@ import * as geminiService from './geminiService';
 import * as codebuddyService from './codebuddyService';
 import * as codebuddyCnService from './codebuddyCnService';
 import * as qoderService from './qoderService';
+import * as openrouterService from './openrouterService';
 import * as traeService from './traeService';
 import * as workbuddyService from './workbuddyService';
 import type { InstanceLaunchMode } from '../types/instance';
@@ -263,6 +264,7 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   codebuddy_cn: async () =>
     (await codebuddyCnService.listCodebuddyCnAccounts()) as unknown as TransferAccountRecord[],
   qoder: async () => (await qoderService.listQoderAccounts()) as unknown as TransferAccountRecord[],
+  openrouter: async () => (await openrouterService.listOpenRouterAccounts()) as unknown as TransferAccountRecord[],
   trae: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
   workbuddy: async () => (await workbuddyService.listWorkbuddyAccounts()) as unknown as TransferAccountRecord[],
 };
@@ -279,6 +281,7 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   codebuddy: codebuddyService.importCodebuddyFromJson,
   codebuddy_cn: codebuddyCnService.importCodebuddyCnFromJson,
   qoder: qoderService.importQoderFromJson,
+  openrouter: openrouterService.importOpenRouterFromJson,
   trae: traeService.importTraeFromJson,
   workbuddy: workbuddyService.importWorkbuddyFromJson,
 };

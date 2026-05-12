@@ -46,3 +46,6 @@ target/
 **/*.rs.bk
 docs/plugin-architecture-proposal.md
 .aitasks
+.opencode/
+graphify-out/
+.graphify_detect.json

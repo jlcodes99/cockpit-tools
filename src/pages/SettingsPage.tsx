@@ -190,8 +190,9 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   codebuddy: 7,
   codebuddy_cn: 8,
   qoder: 9,
-  trae: 10,
-  workbuddy: 11,
+  openrouter: 10,
+  trae: 11,
+  workbuddy: 12,
   zed: 12,
 };
 type UpdateCheckSource = 'auto' | 'manual';

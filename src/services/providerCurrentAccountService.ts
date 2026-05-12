@@ -8,6 +8,7 @@ export type ProviderCurrentPlatform =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'openrouter'
   | 'trae'
   | 'workbuddy'
   | 'github_copilot'

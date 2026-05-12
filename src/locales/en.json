@@ -297,6 +297,7 @@
       "installing": "Installing"
     },
     "qoder": "Qoder",
+    "openrouter": "OpenRouter",
     "trae": "Trae",
     "codebuddyCn": "CodeBuddy CN",
     "switchClassicLayoutEntry": "Switch to classic layout",
@@ -2800,6 +2801,10 @@
     "workbuddy": {
       "title": "WorkBuddy Settings",
       "appPath": "WorkBuddy Path"
+    },
+    "openrouter": {
+      "title": "OpenRouter Settings",
+      "appPath": "OpenRouter Path"
     }
   },
   "quotaAlert": {
@@ -3436,6 +3441,45 @@
       },
       "summary": "Used for scheduled wakeup tasks and batch verification, helping continuous tracking of account availability and status.",
       "title": "Wakeup Tasks & Verification"
+    }
+  },
+  "openrouter": {
+    "title": "OpenRouter Account",
+    "tabs": {
+      "accounts": "Accounts",
+      "models": "Models"
+    },
+    "flowNotice": "Enter your OpenRouter API key to add an account.",
+    "addKeyPlaceholder": "sk-or-v1-...",
+    "keyType": "Key Type",
+    "keyTypeApi": "API",
+    "keyTypeManagement": "Management",
+    "keyTypeProvisioning": "Provisioning",
+    "keyType": {
+      "api": "API",
+      "management": "Management",
+      "provisioning": "Provisioning"
+    },
+    "limit": "Limit",
+    "usageRate": "Usage Rate",
+    "usage": {
+      "used": "Usage",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "noData": "No data"
+    },
+    "credits": {
+      "check": "Check Credits",
+      "total": "Credits"
+    },
+    "models": {
+      "title": "Available Models",
+      "count": "{{total}} models ({{free}} free)",
+      "refresh": "Refresh Models"
+    },
+    "nav": {
+      "openrouter": "OpenRouter"
     }
   },
   "qoder": {

@@ -297,6 +297,7 @@
       "installing": "安装中"
     },
     "qoder": "Qoder",
+    "openrouter": "OpenRouter",
     "trae": "Trae",
     "codebuddyCn": "CodeBuddy CN",
     "switchClassicLayoutEntry": "切换到经典布局",
@@ -2800,6 +2801,10 @@
     "workbuddy": {
       "title": "WorkBuddy 设置",
       "appPath": "WorkBuddy 路径"
+    },
+    "openrouter": {
+      "title": "OpenRouter 设置",
+      "appPath": "OpenRouter 路径"
     }
   },
   "quotaAlert": {
@@ -3436,6 +3441,45 @@
       },
       "summary": "用于定时运行唤醒任务和批量验证结果，帮助你持续跟踪账号可用性与状态。",
       "title": "唤醒任务与验证"
+    }
+  },
+  "openrouter": {
+    "title": "OpenRouter 账号管理",
+    "tabs": {
+      "accounts": "账号列表",
+      "models": "模型列表"
+    },
+    "flowNotice": "输入您的 OpenRouter API key 即可添加账号",
+    "addKeyPlaceholder": "sk-or-v1-...",
+    "keyType": "密钥类型",
+    "keyTypeApi": "API",
+    "keyTypeManagement": "管理",
+    "keyTypeProvisioning": "预配",
+    "keyType": {
+      "api": "API",
+      "management": "管理",
+      "provisioning": "预配"
+    },
+    "limit": "额度上限",
+    "usageRate": "使用率",
+    "usage": {
+      "used": "使用量",
+      "daily": "今日",
+      "weekly": "本周",
+      "monthly": "本月",
+      "noData": "暂无数据"
+    },
+    "credits": {
+      "check": "查询额度",
+      "total": "总额度"
+    },
+    "models": {
+      "title": "可用模型",
+      "count": "共 {{total}} 个模型（{{free}} 个免费）",
+      "refresh": "刷新模型列表"
+    },
+    "nav": {
+      "openrouter": "OpenRouter"
     }
   },
   "qoder": {

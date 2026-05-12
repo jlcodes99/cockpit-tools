@@ -39,12 +39,13 @@ pub(crate) enum PlatformId {
     Codebuddy,
     CodebuddyCn,
     Qoder,
+    OpenRouter,
     Trae,
     Workbuddy,
 }
 
 impl PlatformId {
-    pub(crate) fn default_order() -> [Self; 13] {
+    pub(crate) fn default_order() -> [Self; 14] {
         [
             Self::Antigravity,
             Self::Codex,
@@ -57,6 +58,7 @@ impl PlatformId {
             Self::Codebuddy,
             Self::CodebuddyCn,
             Self::Qoder,
+            Self::OpenRouter,
             Self::Trae,
             Self::Workbuddy,
         ]
@@ -75,6 +77,7 @@ impl PlatformId {
             crate::modules::tray_layout::PLATFORM_CODEBUDDY => Some(Self::Codebuddy),
             crate::modules::tray_layout::PLATFORM_CODEBUDDY_CN => Some(Self::CodebuddyCn),
             crate::modules::tray_layout::PLATFORM_QODER => Some(Self::Qoder),
+            crate::modules::tray_layout::PLATFORM_OPENROUTER => Some(Self::OpenRouter),
             crate::modules::tray_layout::PLATFORM_TRAE => Some(Self::Trae),
             crate::modules::tray_layout::PLATFORM_WORKBUDDY => Some(Self::Workbuddy),
             _ => None,
@@ -94,6 +97,7 @@ impl PlatformId {
             Self::Codebuddy => crate::modules::tray_layout::PLATFORM_CODEBUDDY,
             Self::CodebuddyCn => crate::modules::tray_layout::PLATFORM_CODEBUDDY_CN,
             Self::Qoder => crate::modules::tray_layout::PLATFORM_QODER,
+            Self::OpenRouter => crate::modules::tray_layout::PLATFORM_OPENROUTER,
             Self::Trae => crate::modules::tray_layout::PLATFORM_TRAE,
             Self::Workbuddy => crate::modules::tray_layout::PLATFORM_WORKBUDDY,
         }
@@ -112,6 +116,7 @@ impl PlatformId {
             Self::Codebuddy => "CodeBuddy",
             Self::CodebuddyCn => "CodeBuddy CN",
             Self::Qoder => "Qoder",
+            Self::OpenRouter => "OpenRouter",
             Self::Trae => "Trae",
             Self::Workbuddy => "WorkBuddy",
         }
@@ -130,6 +135,7 @@ impl PlatformId {
             Self::Codebuddy => "codebuddy",
             Self::CodebuddyCn => "codebuddy-cn",
             Self::Qoder => "qoder",
+            Self::OpenRouter => "openrouter",
             Self::Trae => "trae",
             Self::Workbuddy => "workbuddy",
         }
@@ -618,6 +624,7 @@ fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayI
         PlatformId::Codebuddy => build_codebuddy_display_info(lang),
         PlatformId::CodebuddyCn => build_codebuddy_cn_display_info(lang),
         PlatformId::Qoder => build_qoder_display_info(lang),
+        PlatformId::OpenRouter => build_openrouter_display_info(lang),
         PlatformId::Trae => build_trae_display_info(lang),
         PlatformId::Workbuddy => build_workbuddy_display_info(lang),
     }
@@ -3257,6 +3264,61 @@ fn handle_menu_event<R: Runtime>(app: &tauri::AppHandle<R>, event: tauri::menu::
                 }
             }
         }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn build_openrouter_display_info(lang: &str) -> AccountDisplayInfo {
+    let accounts = crate::modules::openrouter_account::list_accounts();
+    let Some(account) = accounts.first() else {
+        return AccountDisplayInfo {
+            account: get_text("not_logged_in", lang).to_string(),
+            quota_lines: vec!["—".to_string()],
+        };
+    };
+
+    let mut quota_lines = Vec::new();
+
+    if let Some(usage) = account.usage {
+        let usage_text = if usage < 1.0 {
+            format!("${:.4}", usage)
+        } else {
+            format!("${:.2}", usage)
+        };
+        quota_lines.push(format!("Usage: {}", usage_text));
+    }
+
+    if let Some(limit) = account.limit {
+        if let Some(usage) = account.usage {
+            let pct = if limit > 0.0 {
+                ((usage / limit) * 100.0).min(100.0)
+            } else {
+                0.0
+            };
+            quota_lines.push(format!("Limit: ${:.2} ({}%)", limit, (pct as i32)));
+        } else {
+            quota_lines.push(format!("Limit: ${:.2}", limit));
+        }
+    }
+
+    if account.is_free_tier {
+        quota_lines.push("FREE Tier".to_string());
+    }
+
+    if quota_lines.is_empty() {
+        quota_lines.push(get_text("loading", lang));
+    }
+
+    AccountDisplayInfo {
+        account: format!(
+            "🔑 {}",
+            account
+                .label
+                .as_deref()
+                .or_else(|| Some(account.email.as_str()))
+                .unwrap_or("—")
+        ),
+        quota_lines,
     }
 }
 

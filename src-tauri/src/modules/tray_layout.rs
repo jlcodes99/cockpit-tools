@@ -19,10 +19,11 @@ pub const PLATFORM_GEMINI: &str = "gemini";
 pub const PLATFORM_CODEBUDDY: &str = "codebuddy";
 pub const PLATFORM_CODEBUDDY_CN: &str = "codebuddy_cn";
 pub const PLATFORM_QODER: &str = "qoder";
+pub const PLATFORM_OPENROUTER: &str = "openrouter";
 pub const PLATFORM_TRAE: &str = "trae";
 pub const PLATFORM_WORKBUDDY: &str = "workbuddy";
 
-pub const SUPPORTED_PLATFORM_IDS: [&str; 13] = [
+pub const SUPPORTED_PLATFORM_IDS: [&str; 14] = [
     PLATFORM_ANTIGRAVITY,
     PLATFORM_CODEX,
     PLATFORM_ZED,
@@ -34,6 +35,7 @@ pub const SUPPORTED_PLATFORM_IDS: [&str; 13] = [
     PLATFORM_CODEBUDDY,
     PLATFORM_CODEBUDDY_CN,
     PLATFORM_QODER,
+    PLATFORM_OPENROUTER,
     PLATFORM_TRAE,
     PLATFORM_WORKBUDDY,
 ];
@@ -173,6 +175,7 @@ fn normalize_tray_platforms(
         PLATFORM_CODEBUDDY,
         PLATFORM_CODEBUDDY_CN,
         PLATFORM_QODER,
+        PLATFORM_OPENROUTER,
         PLATFORM_TRAE,
         PLATFORM_WORKBUDDY,
     ] {
@@ -380,6 +383,7 @@ fn normalize_config(
         PLATFORM_CODEBUDDY,
         PLATFORM_CODEBUDDY_CN,
         PLATFORM_QODER,
+        PLATFORM_OPENROUTER,
         PLATFORM_TRAE,
         PLATFORM_WORKBUDDY,
     ]

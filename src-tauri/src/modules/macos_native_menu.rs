@@ -420,6 +420,7 @@ mod imp {
             PlatformId::Codebuddy => "#4b74ff",
             PlatformId::CodebuddyCn => "#4b74ff",
             PlatformId::Qoder => "#5664ff",
+            PlatformId::OpenRouter => "#ff6b35",
             PlatformId::Trae => "#4f46e5",
             PlatformId::Workbuddy => "#2fa36a",
         }
@@ -2643,6 +2644,7 @@ mod imp {
             PlatformId::Cursor => build_cursor_cards(lang),
             PlatformId::Gemini => build_gemini_cards(lang),
             PlatformId::Qoder => build_qoder_cards(lang),
+            PlatformId::OpenRouter => build_openrouter_cards(lang),
             PlatformId::Trae => build_trae_cards(lang),
             PlatformId::Codebuddy => build_codebuddy_cards(lang),
             PlatformId::CodebuddyCn => build_codebuddy_cn_cards(lang),
@@ -3477,6 +3479,74 @@ mod imp {
         (cards, current_id, None)
     }
 
+    fn build_openrouter_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {
+        let mut accounts = modules::openrouter_account::list_accounts();
+        accounts
+            .sort_by_key(|account| std::cmp::Reverse(account.last_used.max(account.created_at)));
+        let cards = accounts
+            .into_iter()
+            .map(|account| {
+                let mut rows = Vec::new();
+                if let Some(usage) = account.usage {
+                    let usage_text = if usage < 1.0 {
+                        format!("${:.4}", usage)
+                    } else {
+                        format!("${:.2}", usage)
+                    };
+                    rows.push(QuotaRow {
+                        label: translate_or(lang, "openrouter.usage.used", "Usage", &[]),
+                        value: usage_text,
+                        progress: None,
+                        progress_tone: None,
+                        subtext: None,
+                    });
+                }
+                if let Some(limit) = account.limit {
+                    let pct = account.usage.map(|u| ((u / limit) * 100.0).min(100.0) as i32);
+                    rows.push(QuotaRow {
+                        label: translate_or(lang, "openrouter.limit", "Limit", &[]),
+                        value: format!("${:.2}", limit),
+                        progress: pct,
+                        progress_tone: pct.map(|v| {
+                            if v >= 90 {
+                                ProgressTone::High
+                            } else if v >= 70 {
+                                ProgressTone::Medium
+                            } else {
+                                ProgressTone::Low
+                            }
+                        }),
+                        subtext: None,
+                    });
+                }
+                if rows.is_empty() {
+                    rows.push(QuotaRow {
+                        label: translate_or(lang, "common.status", "Status", &[]),
+                        value: "—".to_string(),
+                        progress: None,
+                        progress_tone: None,
+                        subtext: None,
+                    });
+                }
+                AccountCard {
+                    id: account.id.clone(),
+                    title: account
+                        .label
+                        .clone()
+                        .unwrap_or_else(|| account.email.clone()),
+                    plan: if account.is_free_tier {
+                        Some("FREE".to_string())
+                    } else {
+                        Some("PAID".to_string())
+                    },
+                    updated_at: account.usage_updated_at.or(Some(account.last_used)),
+                    quota_rows: rows,
+                }
+            })
+            .collect();
+        (cards, None, None)
+    }
+
     fn build_trae_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {
         let mut accounts = modules::trae_account::list_accounts();
         let current_id = modules::trae_account::resolve_current_account_id(&accounts);
@@ -3931,6 +4001,14 @@ mod imp {
                 (PlatformId::Qoder, None) => {
                     commands::qoder::refresh_all_qoder_tokens(app.clone()).await
                 }
+                (PlatformId::OpenRouter, Some(account_id)) => {
+                    commands::openrouter::refresh_openrouter_token(account_id)
+                        .await
+                        .map(|_| 0)
+                }
+                (PlatformId::OpenRouter, None) => {
+                    commands::openrouter::refresh_all_openrouter_tokens().await
+                }
                 (PlatformId::Trae, Some(account_id)) => {
                     commands::trae::refresh_trae_token(app.clone(), account_id)
                         .await
@@ -4017,6 +4095,11 @@ mod imp {
                 PlatformId::Qoder => commands::qoder::inject_qoder_account(app, account_id)
                     .await
                     .map(|_| ()),
+                PlatformId::OpenRouter => {
+                    commands::openrouter::inject_openrouter_account(account_id)
+                        .await
+                        .map(|_| ())
+                }
                 PlatformId::Trae => commands::trae::inject_trae_account(app, account_id)
                     .await
                     .map(|_| ()),

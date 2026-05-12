@@ -920,6 +920,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       | 'codebuddy'
       | 'codebuddy_cn'
       | 'qoder'
+      | 'openrouter'
       | 'trae'
       | 'workbuddy'
       | 'zed',
