@@ -1,6 +1,6 @@
 use crate::models::codex::{
     CodexAccount, CodexAccountIndex, CodexAccountSummary, CodexApiProviderMode, CodexAuthFile,
-    CodexAuthMode, CodexAuthTokens, CodexJwtPayload, CodexQuickConfig, CodexTokens,
+    CodexAuthMode, CodexAuthTokens, CodexJwtPayload, CodexQuickConfig, CodexQuota, CodexTokens,
 };
 use crate::modules::{account, codex_oauth, logger};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
@@ -3635,11 +3635,12 @@ fn extract_codex_tokens_from_value(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_account_storage_id, detect_auth_file_plan_type_from_path,
-        extract_codex_tokens_from_value, extract_user_info, format_refresh_error_for_user,
-        get_accounts_dir, get_accounts_storage_path, get_current_account, list_accounts_checked,
-        load_account, load_account_index, parse_auth_file_last_refresh, parse_codex_account_compat,
-        parse_line_delimited_json_values, read_api_provider_from_config_toml,
+        build_account_storage_id, build_usage_recommendation_candidate,
+        detect_auth_file_plan_type_from_path, extract_codex_tokens_from_value, extract_user_info,
+        format_refresh_error_for_user, get_accounts_dir, get_accounts_storage_path,
+        get_current_account, list_accounts_checked, load_account, load_account_index,
+        parse_auth_file_last_refresh, parse_codex_account_compat, parse_line_delimited_json_values,
+        pick_best_usage_recommendation, read_api_provider_from_config_toml,
         read_quick_config_from_config_toml, resolve_api_provider_config, save_account,
         save_account_index, should_accept_authority_snapshot, sync_account_from_auth_dir,
         sync_managed_projection_from_auth_dir, validate_api_key_credentials,
@@ -3648,7 +3649,7 @@ mod tests {
         CodexAccountSummary, CodexAuthFile, CodexAuthTokens, LocalCodexOAuthSnapshot,
         CODEX_AUTO_COMPACT_DEFAULT_LIMIT, CODEX_CONTEXT_WINDOW_1M_VALUE,
     };
-    use crate::models::codex::{CodexAccount, CodexApiProviderMode, CodexTokens};
+    use crate::models::codex::{CodexAccount, CodexApiProviderMode, CodexQuota, CodexTokens};
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use std::fs;
     use std::sync::{LazyLock, Mutex};
@@ -3851,6 +3852,98 @@ mod tests {
             access_token,
             refresh_token: Some(refresh_token.to_string()),
         }
+    }
+
+    fn make_quota_recommendation_account(
+        id: &str,
+        email: &str,
+        hourly_percentage: i32,
+        weekly_percentage: i32,
+        weekly_reset_time: Option<i64>,
+        last_used: i64,
+    ) -> CodexAccount {
+        let mut account = CodexAccount::new(
+            id.to_string(),
+            email.to_string(),
+            CodexTokens {
+                id_token: "id-token".to_string(),
+                access_token: "access-token".to_string(),
+                refresh_token: None,
+            },
+        );
+        account.quota = Some(CodexQuota {
+            hourly_percentage,
+            hourly_reset_time: None,
+            hourly_window_minutes: Some(300),
+            hourly_window_present: Some(true),
+            weekly_percentage,
+            weekly_reset_time,
+            weekly_window_minutes: Some(10_080),
+            weekly_window_present: Some(true),
+            raw_data: None,
+        });
+        account.last_used = last_used;
+        account
+    }
+
+    #[test]
+    fn usage_recommendation_prefers_earliest_weekly_reset_without_fixed_window() {
+        let now = 1_700_000_000;
+        let later = make_quota_recommendation_account(
+            "later",
+            "later@example.com",
+            99,
+            99,
+            Some(now + 30 * 24 * 60 * 60),
+            1,
+        );
+        let earlier = make_quota_recommendation_account(
+            "earlier",
+            "earlier@example.com",
+            20,
+            5,
+            Some(now + 7 * 24 * 60 * 60),
+            2,
+        );
+
+        let picked = pick_best_usage_recommendation(
+            vec![
+                build_usage_recommendation_candidate(&later, now).expect("later candidate"),
+                build_usage_recommendation_candidate(&earlier, now).expect("earlier candidate"),
+            ],
+            now,
+        )
+        .expect("recommendation");
+
+        assert_eq!(picked.account_id, "earlier");
+        assert_eq!(picked.account_label, "earlier@example.com");
+        assert!(picked.reason.contains("Weekly 将在 7 天后重置"));
+        assert!(picked.reason.contains("Weekly 5%"));
+        assert!(picked.reason.contains("5h 20%"));
+    }
+
+    #[test]
+    fn usage_recommendation_requires_hourly_and_weekly_quota() {
+        let now = 1_700_000_000;
+        let no_hourly = make_quota_recommendation_account(
+            "no-hourly",
+            "no-hourly@example.com",
+            0,
+            50,
+            Some(now + 60 * 60),
+            1,
+        );
+        let no_weekly = make_quota_recommendation_account(
+            "no-weekly",
+            "no-weekly@example.com",
+            50,
+            0,
+            Some(now + 60 * 60),
+            2,
+        );
+
+        assert!(build_usage_recommendation_candidate(&no_hourly, now).is_none());
+        assert!(build_usage_recommendation_candidate(&no_weekly, now).is_none());
     }
 
     fn seed_oauth_account(tokens: CodexTokens) -> CodexAccount {
@@ -4947,6 +5040,65 @@ struct CodexSwitchCandidate {
     average_percentage: f64,
 }
 
+#[derive(Debug, Clone)]
+struct CodexUsageRecommendationCandidate {
+    account: CodexAccount,
+    weekly_priority_reset_time: Option<i64>,
+    hourly_percentage: i32,
+    weekly_percentage: i32,
+    min_percentage: i32,
+    average_percentage: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct CodexUsageRecommendation {
+    pub account_id: String,
+    pub account_label: String,
+    pub reason: String,
+}
+
+fn has_codex_quota_window(quota: &CodexQuota, window: &str) -> bool {
+    let has_presence =
+        quota.hourly_window_present.is_some() || quota.weekly_window_present.is_some();
+    if !has_presence {
+        return true;
+    }
+
+    match window {
+        "primary_window" => quota.hourly_window_present.unwrap_or(false),
+        "secondary_window" => quota.weekly_window_present.unwrap_or(false),
+        _ => false,
+    }
+}
+
+fn weekly_priority_reset_time(quota: &CodexQuota, now: i64) -> Option<i64> {
+    if !has_codex_quota_window(quota, "primary_window")
+        || !has_codex_quota_window(quota, "secondary_window")
+        || quota.hourly_percentage <= 0
+        || quota.weekly_percentage <= 0
+    {
+        return None;
+    }
+
+    quota
+        .weekly_reset_time
+        .filter(|reset_time| *reset_time > now)
+}
+
+fn format_duration_until(timestamp: i64, now: i64) -> String {
+    let seconds_left = (timestamp - now).max(0);
+    if seconds_left < 60 * 60 {
+        let minutes = ((seconds_left + 59) / 60).max(1);
+        return format!("{} 分钟", minutes);
+    }
+    if seconds_left < 24 * 60 * 60 {
+        let hours = ((seconds_left + 60 * 60 - 1) / (60 * 60)).max(1);
+        return format!("{} 小时", hours);
+    }
+    let days = ((seconds_left + 24 * 60 * 60 - 1) / (24 * 60 * 60)).max(1);
+    format!("{} 天", days)
+}
+
 fn build_switch_candidate(
     account: &CodexAccount,
     primary_threshold: i32,
@@ -5001,6 +5153,90 @@ fn pick_best_candidate(mut candidates: Vec<CodexSwitchCandidate>) -> Option<Code
         .into_iter()
         .next()
         .map(|candidate| candidate.account)
+}
+
+fn build_usage_recommendation_candidate(
+    account: &CodexAccount,
+    now: i64,
+) -> Option<CodexUsageRecommendationCandidate> {
+    let quota = account.quota.as_ref()?;
+    if !has_codex_quota_window(quota, "primary_window")
+        || !has_codex_quota_window(quota, "secondary_window")
+    {
+        return None;
+    }
+
+    let hourly_percentage = quota.hourly_percentage.clamp(0, 100);
+    let weekly_percentage = quota.weekly_percentage.clamp(0, 100);
+    if hourly_percentage <= 0 || weekly_percentage <= 0 {
+        return None;
+    }
+
+    let min_percentage = hourly_percentage.min(weekly_percentage);
+    let average_percentage = (hourly_percentage + weekly_percentage) as f64 / 2.0;
+
+    Some(CodexUsageRecommendationCandidate {
+        account: account.clone(),
+        weekly_priority_reset_time: weekly_priority_reset_time(quota, now),
+        hourly_percentage,
+        weekly_percentage,
+        min_percentage,
+        average_percentage,
+    })
+}
+
+fn pick_best_usage_recommendation(
+    mut candidates: Vec<CodexUsageRecommendationCandidate>,
+    now: i64,
+) -> Option<CodexUsageRecommendation> {
+    if candidates.is_empty() {
+        return None;
+    }
+
+    candidates.sort_by(|a, b| {
+        {
+            let left_reset = a.weekly_priority_reset_time.unwrap_or(i64::MAX);
+            let right_reset = b.weekly_priority_reset_time.unwrap_or(i64::MAX);
+            left_reset.cmp(&right_reset)
+        }
+        .then_with(|| b.min_percentage.cmp(&a.min_percentage))
+        .then_with(|| {
+            b.average_percentage
+                .partial_cmp(&a.average_percentage)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .then_with(|| a.account.last_used.cmp(&b.account.last_used))
+    });
+
+    let candidate = candidates.into_iter().next()?;
+    let reason = if let Some(reset_time) = candidate.weekly_priority_reset_time {
+        let reset_text = format_duration_until(reset_time, now);
+        format!(
+            "Weekly 将在 {}后重置，剩余 Weekly {}%，5h {}%",
+            reset_text, candidate.weekly_percentage, candidate.hourly_percentage
+        )
+    } else {
+        format!(
+            "剩余额度：5h {}%，Weekly {}%",
+            candidate.hourly_percentage, candidate.weekly_percentage
+        )
+    };
+
+    Some(CodexUsageRecommendation {
+        account_id: candidate.account.id,
+        account_label: candidate.account.email,
+        reason,
+    })
+}
+
+pub fn pick_usage_recommendation() -> Option<CodexUsageRecommendation> {
+    let now = chrono::Utc::now().timestamp();
+    let candidates = list_accounts()
+        .iter()
+        .filter_map(|account| build_usage_recommendation_candidate(account, now))
+        .collect();
+
+    pick_best_usage_recommendation(candidates, now)
 }
 
 fn build_quota_alert_cooldown_key(

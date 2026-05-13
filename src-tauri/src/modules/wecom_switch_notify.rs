@@ -12,6 +12,9 @@ pub struct SwitchNotifyPayload {
     pub trigger_type: String,
     pub trigger_source: String,
     pub note: Option<String>,
+    pub recommended_account_id: Option<String>,
+    pub recommended_account_label: Option<String>,
+    pub recommended_account_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -145,6 +148,26 @@ pub(crate) fn build_markdown_content(
         lines.push(format!("> 备注：{}", note));
     }
 
+    if let Some(recommended_account) = payload
+        .recommended_account_label
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        lines.push(format!(
+            "> 推荐使用账号：<font color=\"warning\">{}</font>",
+            normalize_text(recommended_account, "-")
+        ));
+        if let Some(reason) = payload
+            .recommended_account_reason
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            lines.push(format!("> 推荐理由：{}", normalize_text(reason, "-")));
+        }
+    }
+
     lines.join("\n")
 }
 
@@ -201,18 +224,24 @@ pub fn dispatch_switch_notification(payload: SwitchNotifyPayload) {
     let masked_webhook = mask_webhook_url(&webhook);
     let sender_name = cfg.wecom_switch_notify_sender_name.trim().to_string();
     let content = build_markdown_content(&payload, Some(sender_name.as_str()));
+    let recommended_account_id = payload
+        .recommended_account_id
+        .as_deref()
+        .map(|value| normalize_text(value, ""))
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "-".to_string());
     let account_id = payload.account_id;
     let platform = payload.platform;
 
     tauri::async_runtime::spawn(async move {
         match send_wecom_markdown(webhook, content).await {
             Ok(()) => logger::log_info(&format!(
-                "[WeComSwitchNotify] 切号通知发送成功: platform={}, account_id={}, webhook={}",
-                platform, account_id, masked_webhook
+                "[WeComSwitchNotify] 切号通知发送成功: platform={}, account_id={}, recommended_account_id={}, webhook={}",
+                platform, account_id, recommended_account_id, masked_webhook
             )),
             Err(err) => logger::log_warn(&format!(
-                "[WeComSwitchNotify] 切号通知发送失败: platform={}, account_id={}, webhook={}, error={}",
-                platform, account_id, masked_webhook, err
+                "[WeComSwitchNotify] 切号通知发送失败: platform={}, account_id={}, recommended_account_id={}, webhook={}, error={}",
+                platform, account_id, recommended_account_id, masked_webhook, err
             )),
         }
     });
@@ -226,6 +255,30 @@ pub fn notify_switch(
     trigger_source: &str,
     note: Option<&str>,
 ) {
+    notify_switch_with_recommendation(
+        platform,
+        account_id,
+        account_label,
+        trigger_type,
+        trigger_source,
+        note,
+        None,
+        None,
+        None,
+    );
+}
+
+pub fn notify_switch_with_recommendation(
+    platform: &str,
+    account_id: &str,
+    account_label: &str,
+    trigger_type: &str,
+    trigger_source: &str,
+    note: Option<&str>,
+    recommended_account_id: Option<&str>,
+    recommended_account_label: Option<&str>,
+    recommended_account_reason: Option<&str>,
+) {
     dispatch_switch_notification(SwitchNotifyPayload {
         platform: platform.to_string(),
         account_id: account_id.to_string(),
@@ -233,6 +286,9 @@ pub fn notify_switch(
         trigger_type: trigger_type.to_string(),
         trigger_source: trigger_source.to_string(),
         note: note.map(str::to_string),
+        recommended_account_id: recommended_account_id.map(str::to_string),
+        recommended_account_label: recommended_account_label.map(str::to_string),
+        recommended_account_reason: recommended_account_reason.map(str::to_string),
     });
 }
 
@@ -263,11 +319,39 @@ mod tests {
                 trigger_type: "manual".to_string(),
                 trigger_source: "desktop".to_string(),
                 note: None,
+                recommended_account_id: None,
+                recommended_account_label: None,
+                recommended_account_reason: None,
             },
             Some("主力工作机"),
         );
         assert!(content.contains("Codex"));
         assert!(content.contains("abcdef@example.com"));
         assert!(content.contains("通知来源：主力工作机"));
+    }
+
+    #[test]
+    fn build_markdown_content_contains_recommended_account() {
+        let content = build_markdown_content(
+            &SwitchNotifyPayload {
+                platform: "Codex".to_string(),
+                account_id: "account-1".to_string(),
+                account_label: "current@example.com".to_string(),
+                trigger_type: "manual".to_string(),
+                trigger_source: "desktop".to_string(),
+                note: None,
+                recommended_account_id: Some("account-2".to_string()),
+                recommended_account_label: Some("next@example.com".to_string()),
+                recommended_account_reason: Some(
+                    "Weekly 将在 2 小时后重置，剩余 Weekly 12%，5h 60%".to_string(),
+                ),
+            },
+            Some("主力工作机"),
+        );
+
+        assert!(content.contains("推荐使用账号"));
+        assert!(content.contains("next@example.com"));
+        assert!(content.contains("推荐理由"));
+        assert!(content.contains("Weekly 将在 2 小时后重置"));
     }
 }

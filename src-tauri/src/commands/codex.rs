@@ -183,13 +183,23 @@ pub async fn switch_codex_account(
     restart_codex_specified_app_if_enabled(&user_config);
 
     let _ = crate::modules::tray::update_tray_menu(&app);
-    crate::modules::wecom_switch_notify::notify_switch(
+    let usage_recommendation = codex_account::pick_usage_recommendation();
+    crate::modules::wecom_switch_notify::notify_switch_with_recommendation(
         "Codex",
         &account.id,
         &account.email,
         "switch",
         "tools.codex.switch",
         None,
+        usage_recommendation
+            .as_ref()
+            .map(|recommendation| recommendation.account_id.as_str()),
+        usage_recommendation
+            .as_ref()
+            .map(|recommendation| recommendation.account_label.as_str()),
+        usage_recommendation
+            .as_ref()
+            .map(|recommendation| recommendation.reason.as_str()),
     );
     Ok(account)
 }
