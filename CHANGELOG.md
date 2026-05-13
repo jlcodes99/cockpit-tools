@@ -60,6 +60,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Codex account loading now accepts more portable managed-account files**: token/API-key detail files with portable JSON shapes can be recovered into the current account model, including API provider metadata, timestamps, account IDs, organization IDs, and subscription/plan fields.
 - **Codex account overview now treats the Local API Service as the current entry when it is active**: the current marker moves from the underlying account to the API Service card on this page, while the rest of the app keeps its existing current-account logic.
 - **Codex Local API Service cards now align with regular account cards**: the card keeps the same action-bar rhythm and hover styling as normal accounts while keeping member previews and quota-pool stats stacked in the body.
+- **Codex OAuth switches now clear legacy top-level Base URL config**: switching back from API-provider mode removes stale `base_url` entries from `config.toml`, avoiding OAuth tokens being sent through a previous custom endpoint.
 - **Codex instance account selection now identifies API Key providers**: API Key accounts show their provider inline in instance quota previews and can be searched by provider name.
 - **File writes for account/config state now use a shared synced atomic path**: account indexes, OAuth pending state, `config.toml`, group/sync settings, OpenCode/OpenClaw auth files, and backup files write through temp-file replacement with validated backup restore behavior.
 - **Quota and token refreshes now use the primary refresh path directly**: provider refresh flows no longer wait on a hidden delayed retry before surfacing the actual failure.
@@ -69,7 +70,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Windsurf Devin accounts switch into instances with fresher IDE credentials**: instance launch pre-refreshes Devin accounts, writes stable installation/onboarding/sign-in/user fields, and includes Devin account/org/protobuf status data to avoid launch-time signed-out or permission-denied states.
 - **Account lists no longer disappear when storage temporarily returns an unexpected empty result**: shared account stores keep the current cached accounts/current account during abnormal empty reads, while still allowing real empty results after intentional deletion.
 - **Backup restore and retention now handle JSON/ZIP pairs consistently**: backup reads can fall back from a damaged or missing JSON file to its archive, and cleanup removes expired JSON and ZIP backups together.
-- **Codex provider switches repair stale session providers before launch**: switching between OAuth, API Key, and Local API Service providers now repairs the affected Codex profile's rollout and `state_5.sqlite` provider metadata before starting that profile, preventing old sessions from reconnecting through the previous provider.
+- **Codex provider switches repair stale session providers before launch**: switching between OAuth, API Key, and Local API Service providers now repairs the affected Codex profile's rollout and `state_5.sqlite` provider metadata before starting that profile, including every `session_meta` record inside rollout JSONL files, preventing old sessions from reconnecting through the previous provider.
 
 ---
 ## [0.22.19] - 2026-05-05

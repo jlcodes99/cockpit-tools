@@ -27,6 +27,7 @@ const API_KEY_LOGIN_PLAN_TYPE: &str = "API_KEY";
 const API_KEY_EMAIL_PREFIX: &str = "api-key";
 const API_KEY_AUTH_MODE: &str = "apikey";
 const CODEX_CONFIG_FILE_NAME: &str = "config.toml";
+const CODEX_CONFIG_LEGACY_BASE_URL_KEY: &str = "base_url";
 const CODEX_CONFIG_OPENAI_BASE_URL_KEY: &str = "openai_base_url";
 const CODEX_CONFIG_MODEL_PROVIDER_KEY: &str = "model_provider";
 const CODEX_CONFIG_MODEL_PROVIDERS_KEY: &str = "model_providers";
@@ -778,6 +779,8 @@ fn write_api_provider_to_config_toml(
             .parse::<Document>()
             .map_err(|e| format!("解析 config.toml 失败: {}", e))?
     };
+
+    let _ = doc.remove(CODEX_CONFIG_LEGACY_BASE_URL_KEY);
 
     match provider_config.mode {
         CodexApiProviderMode::OpenaiBuiltin => {
@@ -4335,6 +4338,54 @@ mod tests {
             latest_tokens.refresh_token.as_deref()
         );
         assert!(synced.token_generation > stored.token_generation);
+    }
+
+    #[test]
+    fn config_toml_removes_legacy_top_level_base_url_when_switching_to_official_oauth() {
+        let base_dir = make_temp_dir("codex-config-remove-legacy-base-url-test");
+        let config_path = base_dir.join("config.toml");
+        fs::write(
+            &config_path,
+            r#"base_url = "https://relay.example.com/v1"
+model_provider = "relay"
+model = "gpt-5.5"
+
+[model_providers.relay]
+name = "Relay"
+base_url = "https://relay.example.com/v1"
+wire_api = "responses"
+requires_openai_auth = true
+"#,
+        )
+        .expect("write config");
+        let provider_config = ApiProviderConfig {
+            mode: CodexApiProviderMode::OpenaiBuiltin,
+            base_url: None,
+            provider_id: None,
+            provider_name: None,
+        };
+
+        write_api_provider_to_config_toml(&base_dir, &provider_config).expect("write config");
+
+        let content = fs::read_to_string(&config_path).expect("read config");
+        assert!(!content
+            .lines()
+            .take_while(|line| !line.trim_start().starts_with('['))
+            .any(|line| line.trim_start().starts_with("base_url =")));
+        assert!(!content.contains("model_provider ="));
+        assert!(!content.contains("openai_base_url"));
+        assert!(content.contains("[model_providers.relay]"));
+        assert_eq!(
+            read_api_provider_from_config_toml(&base_dir),
+            ApiProviderConfig {
+                mode: CodexApiProviderMode::OpenaiBuiltin,
+                base_url: None,
+                provider_id: None,
+                provider_name: None,
+            }
+        );
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
 
     #[test]

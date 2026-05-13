@@ -60,6 +60,7 @@
 - **Codex 账号读取现兼容更多便携账号文件**：可把便携 token/API-key JSON 详情文件恢复到当前账号模型，并保留 API 供应商、时间戳、账号 ID、组织 ID、套餐与订阅字段。
 - **Codex 账号总览会在本地 API 服务启用时把“当前”标识移到 API 服务入口**：该变化仅影响此账号列表页的展示，应用其他位置仍沿用原有当前账号逻辑。
 - **Codex 本地 API 服务卡片现与普通账号卡片对齐**：卡片操作栏和悬浮样式跟随普通账号，主体内保留成员预览并在其下方竖排展示额度池统计。
+- **Codex 切回 OAuth 现会清理旧版顶层 Base URL 配置**：从 API provider 切回 OAuth 时会移除 `config.toml` 中遗留的顶层 `base_url`，避免 OAuth token 继续被发往上一个自定义端点。
 - **Codex 实例账号选择现可识别 API Key 供应商**：API Key 账号在实例配额预览中展示供应商，也可按供应商名称搜索。
 - **账号与配置文件写入现统一使用同步原子写入路径**：账号索引、OAuth pending 状态、`config.toml`、分组/同步设置、OpenCode/OpenClaw auth 文件和备份文件都会通过临时文件替换写入，并只从有效备份恢复。
 - **配额和 Token 刷新现直接使用主刷新链路**：各平台刷新不再等待隐藏的延迟重试，失败时会更快暴露真实错误。
@@ -69,7 +70,7 @@
 - **Windsurf Devin 账号切入实例时会使用更新的 IDE 凭据**：实例启动前会预刷新 Devin 账号，写入稳定的 installation、onboarding、sign-in 与 user 字段，并带上 Devin account/org/protobuf 状态数据，避免启动后显示未登录或出现权限拒绝。
 - **账号列表不再因存储临时返回异常空结果而消失**：共享账号 store 在异常空读取时会保留当前缓存账号与当前账号，同时仍允许用户主动删除后的真实空列表。
 - **备份恢复与保留清理现一致处理 JSON/ZIP 配对文件**：读取备份时可从损坏或缺失的 JSON 回退到对应压缩包，过期清理也会同时清理 JSON 与 ZIP 备份。
-- **Codex provider 切换后会在启动前修复旧会话 provider**：在 OAuth、API Key 与本地 API 服务之间切换时，会在启动对应 Codex 配置目录前修复 rollout 与 `state_5.sqlite` 里的 provider 元数据，避免旧会话继续按上一个 provider 重连。
+- **Codex provider 切换后会在启动前修复旧会话 provider**：在 OAuth、API Key 与本地 API 服务之间切换时，会在启动对应 Codex 配置目录前修复 rollout 与 `state_5.sqlite` 里的 provider 元数据，并覆盖 rollout JSONL 内所有 `session_meta` 记录，避免旧会话继续按上一个 provider 重连。
 
 ---
 ## [0.22.19] - 2026-05-05

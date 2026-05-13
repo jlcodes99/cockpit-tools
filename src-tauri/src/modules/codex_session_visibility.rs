@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{BufRead, BufReader, ErrorKind};
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -59,7 +59,7 @@ struct CodexSyncInstance {
 struct RolloutProviderChange {
     relative_path: PathBuf,
     absolute_path: PathBuf,
-    updated_first_line: String,
+    updated_content: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -406,35 +406,27 @@ fn collect_rollout_provider_changes(
         }
         let rollout_paths = list_rollout_files(&root_dir)?;
         for rollout_path in rollout_paths {
-            let Some((first_line, _separator)) = read_first_line(&rollout_path)? else {
+            let bytes = fs::read(&rollout_path).map_err(|error| {
+                format!(
+                    "读取 rollout 文件失败 ({}): {}",
+                    rollout_path.display(),
+                    error
+                )
+            })?;
+            let Some(updated_content) = rewrite_rollout_session_meta_providers(
+                &bytes,
+                target_provider,
+                &rollout_path,
+            )? else {
                 continue;
             };
-            let Some(mut parsed) = parse_session_meta_record(&first_line) else {
-                continue;
-            };
-            let current_provider = parsed["payload"]
-                .get("model_provider")
-                .and_then(JsonValue::as_str)
-                .unwrap_or("");
-            if current_provider == target_provider {
-                continue;
-            }
-
-            if let Some(payload) = parsed.get_mut("payload").and_then(JsonValue::as_object_mut) {
-                payload.insert(
-                    "model_provider".to_string(),
-                    JsonValue::String(target_provider.to_string()),
-                );
-            }
-
             let relative_path = rollout_path
                 .strip_prefix(data_dir)
                 .map_err(|_| format!("无法计算 rollout 相对路径: {}", rollout_path.display()))?;
             changes.push(RolloutProviderChange {
                 relative_path: relative_path.to_path_buf(),
                 absolute_path: rollout_path,
-                updated_first_line: serde_json::to_string(&parsed)
-                    .map_err(|error| format!("序列化 session_meta 失败: {}", error))?,
+                updated_content,
             });
         }
     }
@@ -474,36 +466,6 @@ fn list_rollout_files(root_dir: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(result)
 }
 
-fn read_first_line(path: &Path) -> Result<Option<(String, String)>, String> {
-    let file = fs::File::open(path)
-        .map_err(|error| format!("打开 rollout 文件失败 ({}): {}", path.display(), error))?;
-    let mut reader = BufReader::new(file);
-    let mut buffer = Vec::new();
-    let bytes_read = reader
-        .read_until(b'\n', &mut buffer)
-        .map_err(|error| format!("读取 rollout 首行失败 ({}): {}", path.display(), error))?;
-    if bytes_read == 0 {
-        return Ok(None);
-    }
-
-    let (line_bytes, separator) = if buffer.ends_with(b"\r\n") {
-        (&buffer[..buffer.len() - 2], "\r\n")
-    } else if buffer.ends_with(b"\n") {
-        (&buffer[..buffer.len() - 1], "\n")
-    } else {
-        (&buffer[..], "")
-    };
-
-    let line = String::from_utf8(line_bytes.to_vec()).map_err(|error| {
-        format!(
-            "解析 rollout 首行 UTF-8 失败 ({}): {}",
-            path.display(),
-            error
-        )
-    })?;
-    Ok(Some((line, separator.to_string())))
-}
-
 fn parse_session_meta_record(first_line: &str) -> Option<JsonValue> {
     if first_line.trim().is_empty() {
         return None;
@@ -517,6 +479,72 @@ fn parse_session_meta_record(first_line: &str) -> Option<JsonValue> {
         return None;
     }
     Some(parsed)
+}
+
+fn rewrite_rollout_session_meta_providers(
+    bytes: &[u8],
+    target_provider: &str,
+    path: &Path,
+) -> Result<Option<Vec<u8>>, String> {
+    let mut changed = false;
+    let mut next_bytes = Vec::with_capacity(bytes.len());
+
+    for (line_bytes, separator) in split_jsonl_lines(bytes) {
+        let line = String::from_utf8(line_bytes.to_vec()).map_err(|error| {
+            format!(
+                "解析 rollout JSONL UTF-8 失败 ({}): {}",
+                path.display(),
+                error
+            )
+        })?;
+        let next_line = if let Some(mut parsed) = parse_session_meta_record(&line) {
+            let current_provider = parsed["payload"]
+                .get("model_provider")
+                .and_then(JsonValue::as_str)
+                .unwrap_or("");
+            if current_provider == target_provider {
+                line
+            } else {
+                if let Some(payload) = parsed.get_mut("payload").and_then(JsonValue::as_object_mut)
+                {
+                    payload.insert(
+                        "model_provider".to_string(),
+                        JsonValue::String(target_provider.to_string()),
+                    );
+                }
+                changed = true;
+                serde_json::to_string(&parsed)
+                    .map_err(|error| format!("序列化 session_meta 失败: {}", error))?
+            }
+        } else {
+            line
+        };
+
+        next_bytes.extend_from_slice(next_line.as_bytes());
+        next_bytes.extend_from_slice(separator);
+    }
+
+    Ok(changed.then_some(next_bytes))
+}
+
+fn split_jsonl_lines(bytes: &[u8]) -> Vec<(&[u8], &'static [u8])> {
+    let mut lines = Vec::new();
+    let mut start = 0usize;
+    for (index, byte) in bytes.iter().enumerate() {
+        if *byte != b'\n' {
+            continue;
+        }
+        if index > start && bytes[index - 1] == b'\r' {
+            lines.push((&bytes[start..index - 1], b"\r\n".as_slice()));
+        } else {
+            lines.push((&bytes[start..index], b"\n".as_slice()));
+        }
+        start = index + 1;
+    }
+    if start < bytes.len() {
+        lines.push((&bytes[start..], b"".as_slice()));
+    }
+    lines
 }
 
 fn is_missing_threads_table_error(error: &rusqlite::Error) -> bool {
@@ -670,31 +698,7 @@ fn format_sqlite_write_error(path: &Path, error: &rusqlite::Error) -> String {
 }
 
 fn rewrite_rollout_provider(change: &RolloutProviderChange) -> Result<(), String> {
-    let bytes = fs::read(&change.absolute_path).map_err(|error| {
-        format!(
-            "读取 rollout 文件失败 ({}): {}",
-            change.absolute_path.display(),
-            error
-        )
-    })?;
-    let (offset, separator) = detect_first_line_boundary(&bytes);
-    let mut next_bytes = Vec::with_capacity(change.updated_first_line.len() + bytes.len());
-    next_bytes.extend_from_slice(change.updated_first_line.as_bytes());
-    next_bytes.extend_from_slice(separator.as_bytes());
-    next_bytes.extend_from_slice(&bytes[offset..]);
-    write_bytes_atomic(&change.absolute_path, &next_bytes)
-}
-
-fn detect_first_line_boundary(bytes: &[u8]) -> (usize, &'static str) {
-    for (index, byte) in bytes.iter().enumerate() {
-        if *byte == b'\n' {
-            if index > 0 && bytes[index - 1] == b'\r' {
-                return (index + 1, "\r\n");
-            }
-            return (index + 1, "\n");
-        }
-    }
-    (bytes.len(), "")
+    write_bytes_atomic(&change.absolute_path, &change.updated_content)
 }
 
 fn write_bytes_atomic(path: &Path, content: &[u8]) -> Result<(), String> {
@@ -1047,6 +1051,20 @@ mod tests {
             .expect("thread provider should be readable")
     }
 
+    fn read_rollout_session_meta_providers(path: &Path) -> Vec<String> {
+        fs::read_to_string(path)
+            .expect("rollout should be readable")
+            .lines()
+            .filter_map(|line| serde_json::from_str::<JsonValue>(line).ok())
+            .filter(|value| value.get("type").and_then(JsonValue::as_str) == Some("session_meta"))
+            .filter_map(|value| {
+                value["payload"]["model_provider"]
+                    .as_str()
+                    .map(str::to_string)
+            })
+            .collect()
+    }
+
     #[test]
     fn repair_profile_dir_rewrites_rollout_and_sqlite_to_target_provider() {
         let data_dir = unique_temp_dir("rewrite");
@@ -1094,6 +1112,39 @@ mod tests {
         assert_eq!(
             parsed["payload"]["model_provider"].as_str(),
             Some("relay")
+        );
+
+        fs::remove_dir_all(&data_dir).expect("temp dir should be removed");
+    }
+
+    #[test]
+    fn repair_profile_dir_rewrites_every_session_meta_in_rollout_jsonl() {
+        let data_dir = unique_temp_dir("multi-session-meta");
+        fs::create_dir_all(data_dir.join("sessions/2026/05/09"))
+            .expect("session dir should be created");
+        fs::write(data_dir.join(CONFIG_FILE_NAME), "model_provider = \"relay\"\n")
+            .expect("config should be written");
+        let rollout_path = data_dir.join("sessions/2026/05/09/rollout-test.jsonl");
+        fs::write(
+            &rollout_path,
+            concat!(
+                "{\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-1\",\"model_provider\":\"relay\"}}\n",
+                "{\"type\":\"event\",\"payload\":{}}\n",
+                "{\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-1\",\"model_provider\":\"openai\"}}\n"
+            ),
+        )
+        .expect("rollout should be written");
+        create_threads_db(&data_dir, "relay");
+
+        let item = repair_session_visibility_for_dir(&data_dir, "test", "Test", false)
+            .expect("repair should succeed");
+
+        assert_eq!(item.target_provider, "relay");
+        assert_eq!(item.changed_rollout_file_count, 1);
+        assert_eq!(item.updated_sqlite_row_count, 0);
+        assert_eq!(
+            read_rollout_session_meta_providers(&rollout_path),
+            vec!["relay".to_string(), "relay".to_string()]
         );
 
         fs::remove_dir_all(&data_dir).expect("temp dir should be removed");
