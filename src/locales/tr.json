@@ -81,6 +81,7 @@
         "statusParsing": "Codex içe aktarma içeriği ayrıştırılıyor...",
         "statusImporting": "{{current}} / {{total}} hesabı içe aktarılıyor",
         "statusRefreshing": "Hesap listesi yenileniyor...",
+        "statusActivating": "İçe aktarılan hesaba geçiliyor...",
         "statusSuccess": "İçe aktarma tamamlandı",
         "statusPartial": "Kısmi içe aktarma tamamlandı",
         "statusFailed": "İçe aktarma başarısız",
@@ -1615,6 +1616,13 @@
   },
   "codex": {
     "title": "Codex Hesap Yönetimi",
+    "newApi": {
+      "quota": {
+        "available": "Kota",
+        "unlimited": "Sınırsız",
+        "usedHint": "{{used}} kullanıldı"
+      }
+    },
     "subtitle": "OpenAI Codex hesaplarınızı yönetin",
     "instances": {
       "subtitle": "Örnek başına bağımsız yapılandırma, birden fazla hesapla paralel çalışma.",
@@ -2163,7 +2171,8 @@
         "endpoint": "Sağlayıcı uç noktası",
         "hint": "Uyumlu bir Base URL otomatik olarak dolduruldu. İsterseniz bunu yine de elle düzenleyebilirsiniz.",
         "website": "Web sitesi",
-        "apiKeyPage": "API anahtarı sayfası"
+        "apiKeyPage": "API anahtarı sayfası",
+        "getApiKey": "Anahtarı al"
       },
       "providers": {
         "openai_official": {
@@ -2225,6 +2234,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
       }
     },
@@ -2385,6 +2397,21 @@
       "addShort": "Ekle",
       "saved": "Hesap notu kaydedildi",
       "saveFailed": "Hesap notu kaydedilemedi: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "Cockpit Api hizmet paneli",
+      "servicePanel": "Hizmet paneli",
+      "balance": "Bakiye",
+      "requests": "İstekler",
+      "total": "Toplam",
+      "today": "Bugün",
+      "periods": "Dönemler",
+      "tokens": "Tokenlar",
+      "quotaUsed": "Kullanım",
+      "modelStats": "Model istatistikleri",
+      "noStats": "Henüz istatistik yok",
+      "refreshHint": "Bu API anahtarının istatistiklerini eşitlemek için yenileye tıklayın.",
+      "dailyStats": "Günlük istatistikler"
     }
   },
   "githubCopilot": {
@@ -3471,37 +3498,6 @@
         "descPlatform": "CodeBuddy CN çoklu örneği yalnızca macOS, Windows ve Linux'ta desteklenir."
       }
     },
-    "checkin": {
-      "title": "Günlük check-in",
-      "modalTitle": "Günlük check-in",
-      "status": "Check-in durumu",
-      "checkedIn": "Check-in yapıldı",
-      "notCheckedIn": "Check-in yapılmadı",
-      "button": "Yoklama",
-      "button.loading": "Check-in yapılıyor...",
-      "done": "Tamam",
-      "success": "Check-in başarılı! {{days}} günlük seri",
-      "failure": "Yoklama başarısız: {{message}}",
-      "failure.network": "Ağ hatası, lütfen daha sonra tekrar deneyin",
-      "lastCheckin": "Son check-in: {{time}}",
-      "streak": "{{days}} günlük seri",
-      "reward": "Ödül: {{reward}}",
-      "refreshStatus": "Yenile",
-      "checkAll": "Tümünü check-in yap",
-      "noAccounts": "Hesap yok",
-      "querying": "Yükleniyor...",
-      "streakDays": "{{days}} gün",
-      "streakRewardCountdown": "Bonus ödüle {{days}} gün kaldı",
-      "streakRewardToday": "Bonus ödül bugün kullanılabilir!",
-      "recentDates": "Son: ",
-      "quotaCategory": {
-        "base": "Temel paket",
-        "activity": "Etkinlik bonusu",
-        "extra": "Ek krediler",
-        "other": "Diğer",
-        "empty": "Kota verisi yok"
-      }
-    },
     "syncFailed": "Senkronizasyon başarısız: {{error}}",
     "syncSuccess": "{{count}} hesap WorkBuddy ile senkronize edildi",
     "syncToWorkbuddy": "WorkBuddy ile Senkronize Et"
@@ -3608,6 +3604,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "Günlük check-in",
+      "modalTitle": "Günlük check-in",
+      "status": "Check-in durumu",
+      "checkedIn": "Check-in yapıldı",
+      "notCheckedIn": "Check-in yapılmadı",
+      "button": "Yoklama",
+      "button.loading": "Check-in yapılıyor...",
+      "done": "Tamam",
+      "success": "Check-in başarılı! {{days}} günlük seri",
+      "failure": "Yoklama başarısız: {{message}}",
+      "failure.network": "Ağ hatası, lütfen daha sonra tekrar deneyin",
+      "lastCheckin": "Son check-in: {{time}}",
+      "streak": "{{days}} günlük seri",
+      "reward": "Ödül: {{reward}}",
+      "refreshStatus": "Yenile",
+      "checkAll": "Tümünü check-in yap",
+      "noAccounts": "Hesap yok",
+      "querying": "Yükleniyor...",
+      "streakDays": "{{days}} gün",
+      "streakRewardCountdown": "Bonus ödüle {{days}} gün kaldı",
+      "streakRewardToday": "Bonus ödül bugün kullanılabilir!",
+      "recentDates": "Son: "
     }
   },
   "zed": {

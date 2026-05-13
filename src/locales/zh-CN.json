@@ -88,6 +88,7 @@
         "statusParsing": "正在解析 Codex 导入内容...",
         "statusImporting": "正在导入第 {{current}} / {{total}} 个账号",
         "statusRefreshing": "正在刷新账号列表...",
+        "statusActivating": "正在切换到导入账号...",
         "statusSuccess": "导入完成",
         "statusPartial": "部分导入完成",
         "statusFailed": "导入失败",
@@ -1661,6 +1662,13 @@
   },
   "codex": {
     "title": "Codex 账号管理",
+    "newApi": {
+      "quota": {
+        "available": "额度",
+        "unlimited": "不限量",
+        "usedHint": "已用 {{used}}"
+      }
+    },
     "subtitle": "实时监控所有Codex账号的模型配额状态。",
     "instances": {
       "subtitle": "多实例独立配置，多账号并行运行。",
@@ -1926,9 +1934,13 @@
         "endpoint": "供应商端点",
         "hint": "已自动填写兼容 Base URL，可继续手动调整。",
         "website": "官网",
-        "apiKeyPage": "API Key 页面"
+        "apiKeyPage": "API Key 页面",
+        "getApiKey": "获取秘钥"
       },
       "providers": {
+        "cockpit_api": {
+          "name": "Cockpit Api"
+        },
         "openai_official": {
           "name": "OpenAI Official"
         },
@@ -1995,6 +2007,21 @@
         "baseUrlInvalid": "Base URL 格式无效，请输入完整的 http:// 或 https:// 地址",
         "apiKeyEqualsBaseUrl": "API Key 不能与 Base URL 相同"
       }
+    },
+    "cockpitApi": {
+      "panelTitle": "Cockpit Api 服务面板",
+      "servicePanel": "服务面板",
+      "balance": "额度",
+      "requests": "请求",
+      "total": "总计",
+      "today": "今日",
+      "periods": "周期",
+      "tokens": "令牌",
+      "quotaUsed": "消耗",
+      "modelStats": "模型统计",
+      "noStats": "暂无统计",
+      "refreshHint": "点击刷新后会同步当前 API key 的统计。",
+      "dailyStats": "每日统计"
     },
     "modelProviders": {
       "tab": "模型供应商",
@@ -3589,6 +3616,14 @@
         "descPlatform": "CodeBuddy CN 多开实例仅支持 macOS、Windows 和 Linux。"
       }
     },
+    "syncFailed": "同步失败: {{error}}",
+    "syncSuccess": "成功同步 {{count}} 个账号到 WorkBuddy",
+    "syncToWorkbuddy": "同步到 WorkBuddy"
+  },
+  "workbuddy": {
+    "title": "WorkBuddy 账号管理",
+    "noAccounts": "暂无 WorkBuddy 账号",
+    "addAccount": "添加 WorkBuddy 账号",
     "checkin": {
       "title": "每日签到",
       "modalTitle": "每日签到",
@@ -3611,23 +3646,8 @@
       "streakDays": "{{days}} 天",
       "streakRewardCountdown": "再签 {{days}} 天获大礼包",
       "streakRewardToday": "今日可获得大礼包!",
-      "recentDates": "近期签到：",
-      "quotaCategory": {
-        "base": "基础体验包",
-        "activity": "活动赠送包",
-        "extra": "加量包",
-        "other": "其他",
-        "empty": "暂无配额数据"
-      }
+      "recentDates": "近期签到："
     },
-    "syncFailed": "同步失败: {{error}}",
-    "syncSuccess": "成功同步 {{count}} 个账号到 WorkBuddy",
-    "syncToWorkbuddy": "同步到 WorkBuddy"
-  },
-  "workbuddy": {
-    "title": "WorkBuddy 账号管理",
-    "noAccounts": "暂无 WorkBuddy 账号",
-    "addAccount": "添加 WorkBuddy 账号",
     "flowNotice": {
       "title": "WorkBuddy 账号管理说明（点击展开/收起）",
       "desc": "切换账号会按新版 WorkBuddy 官方客户端规则写入本机登录文件；本机导入读取同一登录文件，数据仅在本地处理。",

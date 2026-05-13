@@ -88,6 +88,7 @@
         "statusParsing": "Mengurai konten impor Codex...",
         "statusImporting": "Mengimpor akun {{current}} / {{total}}",
         "statusRefreshing": "Memperbarui daftar akun...",
+        "statusActivating": "Beralih ke akun yang diimpor...",
         "statusSuccess": "Impor selesai",
         "statusPartial": "Impor sebagian selesai",
         "statusFailed": "Impor gagal",
@@ -1661,6 +1662,13 @@
   },
   "codex": {
     "title": "Codex Account",
+    "newApi": {
+      "quota": {
+        "available": "Kuota",
+        "unlimited": "Tidak terbatas",
+        "usedHint": "Terpakai {{used}}"
+      }
+    },
     "subtitle": "Real-time monitoring of all Codex account model quotas.",
     "instances": {
       "subtitle": "Independent configuration per instance, parallel operation with multiple accounts.",
@@ -1909,7 +1917,8 @@
         "endpoint": "Endpoint penyedia",
         "hint": "Base URL yang kompatibel sudah diisi otomatis. Anda masih bisa mengubahnya secara manual.",
         "website": "Situs web",
-        "apiKeyPage": "Halaman API Key"
+        "apiKeyPage": "Halaman API Key",
+        "getApiKey": "Dapatkan kunci"
       },
       "providers": {
         "openai_official": {
@@ -1971,6 +1980,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
       }
     },
@@ -2431,6 +2443,21 @@
       "addShort": "Tambah",
       "saved": "Catatan akun disimpan",
       "saveFailed": "Gagal menyimpan catatan akun: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "Panel layanan Cockpit Api",
+      "servicePanel": "Panel layanan",
+      "balance": "Saldo",
+      "requests": "Permintaan",
+      "total": "Jumlah",
+      "today": "Hari ini",
+      "periods": "Periode",
+      "tokens": "Token",
+      "quotaUsed": "Terpakai",
+      "modelStats": "Statistik model",
+      "noStats": "Belum ada statistik",
+      "refreshHint": "Klik segarkan untuk menyinkronkan statistik kunci API ini.",
+      "dailyStats": "Statistik harian"
     }
   },
   "codebuddy": {
@@ -3589,37 +3616,6 @@
         "descPlatform": "Multi-instansi CodeBuddy CN didukung hanya di macOS, Windows, dan Linux."
       }
     },
-    "checkin": {
-      "title": "Check-in Harian",
-      "modalTitle": "Check-in Harian",
-      "status": "Status Check-in",
-      "checkedIn": "Sudah Check-in",
-      "notCheckedIn": "Belum Check-in",
-      "button": "Absen",
-      "button.loading": "Melakukan check-in...",
-      "done": "Selesai",
-      "success": "Check-in berhasil! Streak {{days}} hari",
-      "failure": "Absen gagal: {{message}}",
-      "failure.network": "Kesalahan jaringan, silakan coba lagi nanti",
-      "lastCheckin": "Check-in terakhir: {{time}}",
-      "streak": "Streak {{days}} hari",
-      "reward": "Hadiah: {{reward}}",
-      "refreshStatus": "Segarkan",
-      "checkAll": "Check In Semua",
-      "noAccounts": "Tidak ada akun",
-      "querying": "Memuat...",
-      "streakDays": "{{days}} hari",
-      "streakRewardCountdown": "{{days}} hari lagi untuk hadiah bonus",
-      "streakRewardToday": "Hadiah bonus tersedia hari ini!",
-      "recentDates": "Terbaru: ",
-      "quotaCategory": {
-        "base": "Paket Dasar",
-        "activity": "Bonus Aktivitas",
-        "extra": "Kredit Ekstra",
-        "other": "Lainnya",
-        "empty": "Tidak ada data kuota"
-      }
-    },
     "syncFailed": "Sinkronisasi gagal: {{error}}",
     "syncSuccess": "{{count}} akun berhasil disinkronkan ke WorkBuddy",
     "syncToWorkbuddy": "Sinkronkan ke WorkBuddy"
@@ -3726,6 +3722,30 @@
       "unsupported": {
         "descPlatform": "Multi-instansi WorkBuddy didukung hanya di macOS, Windows, dan Linux."
       }
+    },
+    "checkin": {
+      "title": "Check-in Harian",
+      "modalTitle": "Check-in Harian",
+      "status": "Status Check-in",
+      "checkedIn": "Sudah Check-in",
+      "notCheckedIn": "Belum Check-in",
+      "button": "Absen",
+      "button.loading": "Melakukan check-in...",
+      "done": "Selesai",
+      "success": "Check-in berhasil! Streak {{days}} hari",
+      "failure": "Absen gagal: {{message}}",
+      "failure.network": "Kesalahan jaringan, silakan coba lagi nanti",
+      "lastCheckin": "Check-in terakhir: {{time}}",
+      "streak": "Streak {{days}} hari",
+      "reward": "Hadiah: {{reward}}",
+      "refreshStatus": "Segarkan",
+      "checkAll": "Check In Semua",
+      "noAccounts": "Tidak ada akun",
+      "querying": "Memuat...",
+      "streakDays": "{{days}} hari",
+      "streakRewardCountdown": "{{days}} hari lagi untuk hadiah bonus",
+      "streakRewardToday": "Hadiah bonus tersedia hari ini!",
+      "recentDates": "Terbaru: "
     }
   },
   "mfaVault": {

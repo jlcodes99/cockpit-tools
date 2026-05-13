@@ -81,6 +81,7 @@
         "statusParsing": "正在解析 Codex 匯入內容...",
         "statusImporting": "正在匯入第 {{current}} / {{total}} 個帳號",
         "statusRefreshing": "正在重新整理帳號列表...",
+        "statusActivating": "正在切換到匯入帳號...",
         "statusSuccess": "匯入完成",
         "statusPartial": "部分匯入完成",
         "statusFailed": "匯入失敗",
@@ -1615,6 +1616,13 @@
   },
   "codex": {
     "title": "Codex 帳號管理",
+    "newApi": {
+      "quota": {
+        "available": "額度",
+        "unlimited": "不限量",
+        "usedHint": "已用 {{used}}"
+      }
+    },
     "subtitle": "管理您的 OpenAI Codex 帳號",
     "instances": {
       "subtitle": "多實例獨立配置，多帳號並行運行。",
@@ -1860,7 +1868,8 @@
         "endpoint": "供應商端點",
         "hint": "已自動填入相容的 Base URL，你仍可手動編輯。",
         "website": "網站",
-        "apiKeyPage": "API Key 頁面"
+        "apiKeyPage": "API Key 頁面",
+        "getApiKey": "取得秘鑰"
       },
       "providers": {
         "openai_official": {
@@ -1922,6 +1931,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
       }
     },
@@ -2385,6 +2397,21 @@
       "addShort": "加備註",
       "saved": "帳號備註已儲存",
       "saveFailed": "儲存帳號備註失敗：{{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "Cockpit Api 服務面板",
+      "servicePanel": "服務面板",
+      "balance": "額度",
+      "requests": "請求",
+      "total": "總計",
+      "today": "今日",
+      "periods": "週期",
+      "tokens": "權杖",
+      "quotaUsed": "消耗",
+      "modelStats": "模型統計",
+      "noStats": "暫無統計",
+      "refreshHint": "點擊重新整理後會同步目前 API key 的統計。",
+      "dailyStats": "每日統計"
     }
   },
   "githubCopilot": {
@@ -3471,37 +3498,6 @@
         "descPlatform": "CodeBuddy CN 多執行個體僅在 macOS、Windows 和 Linux 上支援。"
       }
     },
-    "checkin": {
-      "title": "每日簽到",
-      "modalTitle": "每日簽到",
-      "status": "簽到狀態",
-      "checkedIn": "已簽到",
-      "notCheckedIn": "未簽到",
-      "button": "簽到",
-      "button.loading": "簽到中...",
-      "done": "已完成",
-      "success": "簽到成功！連續簽到 {{days}} 天",
-      "failure": "簽到失敗：{{message}}",
-      "failure.network": "網路異常，請稍後重試",
-      "lastCheckin": "最後簽到：{{time}}",
-      "streak": "連續簽到 {{days}} 天",
-      "reward": "獎勵：{{reward}}",
-      "refreshStatus": "刷新狀態",
-      "checkAll": "一鍵簽到",
-      "noAccounts": "暫無帳號",
-      "querying": "查詢中...",
-      "streakDays": "{{days}} 天",
-      "streakRewardCountdown": "再簽 {{days}} 天可得大禮包",
-      "streakRewardToday": "今日可獲得大禮包！",
-      "recentDates": "近期簽到：",
-      "quotaCategory": {
-        "base": "基礎體驗包",
-        "activity": "活動贈送包",
-        "extra": "加量包",
-        "other": "其他",
-        "empty": "暫無配額資料"
-      }
-    },
     "syncFailed": "同步失敗：{{error}}",
     "syncSuccess": "已將 {{count}} 個帳號同步至 WorkBuddy",
     "syncToWorkbuddy": "同步至 WorkBuddy"
@@ -3608,6 +3604,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "每日簽到",
+      "modalTitle": "每日簽到",
+      "status": "簽到狀態",
+      "checkedIn": "已簽到",
+      "notCheckedIn": "未簽到",
+      "button": "簽到",
+      "button.loading": "簽到中...",
+      "done": "已完成",
+      "success": "簽到成功！連續簽到 {{days}} 天",
+      "failure": "簽到失敗：{{message}}",
+      "failure.network": "網路異常，請稍後重試",
+      "lastCheckin": "最後簽到：{{time}}",
+      "streak": "連續簽到 {{days}} 天",
+      "reward": "獎勵：{{reward}}",
+      "refreshStatus": "刷新狀態",
+      "checkAll": "一鍵簽到",
+      "noAccounts": "暫無帳號",
+      "querying": "查詢中...",
+      "streakDays": "{{days}} 天",
+      "streakRewardCountdown": "再簽 {{days}} 天可得大禮包",
+      "streakRewardToday": "今日可獲得大禮包！",
+      "recentDates": "近期簽到："
     }
   },
   "zed": {

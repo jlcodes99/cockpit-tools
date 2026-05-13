@@ -81,6 +81,7 @@
         "statusParsing": "Разбор содержимого импорта Codex...",
         "statusImporting": "Импорт аккаунта {{current}} / {{total}}",
         "statusRefreshing": "Обновление списка аккаунтов...",
+        "statusActivating": "Переключение на импортированный аккаунт...",
         "statusSuccess": "Импорт завершен",
         "statusPartial": "Импорт частично завершен",
         "statusFailed": "Ошибка импорта",
@@ -1615,6 +1616,13 @@
   },
   "codex": {
     "title": "Управление аккаунтами Codex",
+    "newApi": {
+      "quota": {
+        "available": "Квота",
+        "unlimited": "Без лимита",
+        "usedHint": "Использовано {{used}}"
+      }
+    },
     "subtitle": "Управляйте аккаунтами OpenAI Codex",
     "instances": {
       "subtitle": "Независимая конфигурация для каждого экземпляра, параллельная работа с несколькими аккаунтами.",
@@ -2163,7 +2171,8 @@
         "endpoint": "Конечная точка провайдера",
         "hint": "Совместимый Base URL был заполнен автоматически. При необходимости вы можете отредактировать его вручную.",
         "website": "Сайт",
-        "apiKeyPage": "Страница ключа API"
+        "apiKeyPage": "Страница ключа API",
+        "getApiKey": "Получить ключ"
       },
       "providers": {
         "openai_official": {
@@ -2225,6 +2234,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
       }
     },
@@ -2385,6 +2397,21 @@
       "addShort": "Добавить",
       "saved": "Заметка аккаунта сохранена",
       "saveFailed": "Не удалось сохранить заметку аккаунта: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "Панель сервиса Cockpit Api",
+      "servicePanel": "Панель сервиса",
+      "balance": "Баланс",
+      "requests": "Запросы",
+      "total": "Всего",
+      "today": "Сегодня",
+      "periods": "Периоды",
+      "tokens": "Токены",
+      "quotaUsed": "Расход",
+      "modelStats": "Статистика моделей",
+      "noStats": "Статистики пока нет",
+      "refreshHint": "Нажмите обновить, чтобы синхронизировать статистику этого API-ключа.",
+      "dailyStats": "Статистика по дням"
     }
   },
   "githubCopilot": {
@@ -3471,37 +3498,6 @@
         "descPlatform": "Мультиэкземпляр CodeBuddy CN поддерживается только в macOS, Windows и Linux."
       }
     },
-    "checkin": {
-      "title": "Ежедневный check-in",
-      "modalTitle": "Ежедневный check-in",
-      "status": "Статус check-in",
-      "checkedIn": "Отмечено",
-      "notCheckedIn": "Не отмечено",
-      "button": "Отметиться",
-      "button.loading": "Выполняется check-in...",
-      "done": "Готово",
-      "success": "Check-in выполнен! Серия {{days}} дней",
-      "failure": "Не удалось отметиться: {{message}}",
-      "failure.network": "Ошибка сети, попробуйте позже",
-      "lastCheckin": "Последний check-in: {{time}}",
-      "streak": "Серия {{days}} дней",
-      "reward": "Награда: {{reward}}",
-      "refreshStatus": "Обновить",
-      "checkAll": "Отметить все",
-      "noAccounts": "Нет аккаунтов",
-      "querying": "Загрузка...",
-      "streakDays": "{{days}} дней",
-      "streakRewardCountdown": "До бонусной награды осталось {{days}} дней",
-      "streakRewardToday": "Бонусная награда доступна сегодня!",
-      "recentDates": "Недавние: ",
-      "quotaCategory": {
-        "base": "Базовый пакет",
-        "activity": "Бонус активности",
-        "extra": "Дополнительные кредиты",
-        "other": "Прочее",
-        "empty": "Нет данных по квоте"
-      }
-    },
     "syncFailed": "Ошибка синхронизации: {{error}}",
     "syncSuccess": "{{count}} аккаунт(ов) синхронизировано с WorkBuddy",
     "syncToWorkbuddy": "Синхронизировать с WorkBuddy"
@@ -3608,6 +3604,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "Ежедневный check-in",
+      "modalTitle": "Ежедневный check-in",
+      "status": "Статус check-in",
+      "checkedIn": "Отмечено",
+      "notCheckedIn": "Не отмечено",
+      "button": "Отметиться",
+      "button.loading": "Выполняется check-in...",
+      "done": "Готово",
+      "success": "Check-in выполнен! Серия {{days}} дней",
+      "failure": "Не удалось отметиться: {{message}}",
+      "failure.network": "Ошибка сети, попробуйте позже",
+      "lastCheckin": "Последний check-in: {{time}}",
+      "streak": "Серия {{days}} дней",
+      "reward": "Награда: {{reward}}",
+      "refreshStatus": "Обновить",
+      "checkAll": "Отметить все",
+      "noAccounts": "Нет аккаунтов",
+      "querying": "Загрузка...",
+      "streakDays": "{{days}} дней",
+      "streakRewardCountdown": "До бонусной награды осталось {{days}} дней",
+      "streakRewardToday": "Бонусная награда доступна сегодня!",
+      "recentDates": "Недавние: "
     }
   },
   "zed": {

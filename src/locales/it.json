@@ -81,6 +81,7 @@
         "statusParsing": "Analisi del contenuto di importazione Codex...",
         "statusImporting": "Importazione account {{current}} / {{total}}",
         "statusRefreshing": "Aggiornamento elenco account...",
+        "statusActivating": "Passaggio all'account importato...",
         "statusSuccess": "Importazione completata",
         "statusPartial": "Importazione parziale completata",
         "statusFailed": "Importazione non riuscita",
@@ -1615,6 +1616,13 @@
   },
   "codex": {
     "title": "Gestione account Codex",
+    "newApi": {
+      "quota": {
+        "available": "Credito",
+        "unlimited": "Illimitata",
+        "usedHint": "Usati {{used}}"
+      }
+    },
     "subtitle": "Gestisci i tuoi account OpenAI Codex",
     "instances": {
       "subtitle": "Configurazione indipendente per istanza, operazione parallela con più account.",
@@ -2163,7 +2171,8 @@
         "endpoint": "Endpoint del provider",
         "hint": "È stata compilata automaticamente una Base URL compatibile. Puoi comunque modificarla manualmente.",
         "website": "Sito web",
-        "apiKeyPage": "Pagina della chiave API"
+        "apiKeyPage": "Pagina della chiave API",
+        "getApiKey": "Ottieni chiave"
       },
       "providers": {
         "openai_official": {
@@ -2225,6 +2234,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
       }
     },
@@ -2385,6 +2397,21 @@
       "addShort": "Aggiungi",
       "saved": "Nota account salvata",
       "saveFailed": "Salvataggio nota account non riuscito: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "Pannello servizio Cockpit Api",
+      "servicePanel": "Pannello servizio",
+      "balance": "Saldo",
+      "requests": "Richieste",
+      "total": "Totale",
+      "today": "Oggi",
+      "periods": "Periodi",
+      "tokens": "Token",
+      "quotaUsed": "Usato",
+      "modelStats": "Statistiche modelli",
+      "noStats": "Nessuna statistica",
+      "refreshHint": "Fai clic su aggiorna per sincronizzare le statistiche di questa chiave API.",
+      "dailyStats": "Statistiche giornaliere"
     }
   },
   "githubCopilot": {
@@ -3471,37 +3498,6 @@
         "descPlatform": "La multi-istanza CodeBuddy CN è supportata solo su macOS, Windows e Linux."
       }
     },
-    "checkin": {
-      "title": "Check-in giornaliero",
-      "modalTitle": "Check-in giornaliero",
-      "status": "Stato check-in",
-      "checkedIn": "Check-in effettuato",
-      "notCheckedIn": "Non effettuato",
-      "button": "Registra presenza",
-      "button.loading": "Check-in in corso...",
-      "done": "Fatto",
-      "success": "Check-in riuscito! Serie di {{days}} giorni",
-      "failure": "Registrazione non riuscita: {{message}}",
-      "failure.network": "Errore di rete, riprova più tardi",
-      "lastCheckin": "Ultimo check-in: {{time}}",
-      "streak": "Serie di {{days}} giorni",
-      "reward": "Ricompensa: {{reward}}",
-      "refreshStatus": "Aggiorna",
-      "checkAll": "Check-in per tutti",
-      "noAccounts": "Nessun account",
-      "querying": "Caricamento...",
-      "streakDays": "{{days}} giorni",
-      "streakRewardCountdown": "Mancano {{days}} giorni alla ricompensa bonus",
-      "streakRewardToday": "Ricompensa bonus disponibile oggi!",
-      "recentDates": "Recenti: ",
-      "quotaCategory": {
-        "base": "Pacchetto base",
-        "activity": "Bonus attività",
-        "extra": "Crediti extra",
-        "other": "Altro",
-        "empty": "Nessun dato quota"
-      }
-    },
     "syncFailed": "Sincronizzazione fallita: {{error}}",
     "syncSuccess": "{{count}} account sincronizzato/i con WorkBuddy",
     "syncToWorkbuddy": "Sincronizza con WorkBuddy"
@@ -3608,6 +3604,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "Check-in giornaliero",
+      "modalTitle": "Check-in giornaliero",
+      "status": "Stato check-in",
+      "checkedIn": "Check-in effettuato",
+      "notCheckedIn": "Non effettuato",
+      "button": "Registra presenza",
+      "button.loading": "Check-in in corso...",
+      "done": "Fatto",
+      "success": "Check-in riuscito! Serie di {{days}} giorni",
+      "failure": "Registrazione non riuscita: {{message}}",
+      "failure.network": "Errore di rete, riprova più tardi",
+      "lastCheckin": "Ultimo check-in: {{time}}",
+      "streak": "Serie di {{days}} giorni",
+      "reward": "Ricompensa: {{reward}}",
+      "refreshStatus": "Aggiorna",
+      "checkAll": "Check-in per tutti",
+      "noAccounts": "Nessun account",
+      "querying": "Caricamento...",
+      "streakDays": "{{days}} giorni",
+      "streakRewardCountdown": "Mancano {{days}} giorni alla ricompensa bonus",
+      "streakRewardToday": "Ricompensa bonus disponibile oggi!",
+      "recentDates": "Recenti: "
     }
   },
   "zed": {

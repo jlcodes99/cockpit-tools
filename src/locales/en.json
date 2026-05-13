@@ -88,6 +88,7 @@
         "statusParsing": "Parsing Codex import content...",
         "statusImporting": "Importing account {{current}} / {{total}}",
         "statusRefreshing": "Refreshing account list...",
+        "statusActivating": "Activating imported account...",
         "statusSuccess": "Import complete",
         "statusPartial": "Partially imported",
         "statusFailed": "Import failed",
@@ -1661,6 +1662,13 @@
   },
   "codex": {
     "title": "Codex Account",
+    "newApi": {
+      "quota": {
+        "available": "Quota",
+        "unlimited": "Unlimited",
+        "usedHint": "Used {{used}}"
+      }
+    },
     "subtitle": "Real-time monitoring of all Codex account model quotas.",
     "instances": {
       "subtitle": "Independent configuration per instance, parallel operation with multiple accounts.",
@@ -1926,9 +1934,13 @@
         "endpoint": "Provider Endpoint",
         "hint": "A compatible Base URL has been filled in automatically. You can still edit it manually.",
         "website": "Website",
-        "apiKeyPage": "API Key Page"
+        "apiKeyPage": "API Key Page",
+        "getApiKey": "Get API Key"
       },
       "providers": {
+        "cockpit_api": {
+          "name": "Cockpit Api"
+        },
         "openai_official": {
           "name": "OpenAI Official"
         },
@@ -1995,6 +2007,21 @@
         "baseUrlInvalid": "Invalid Base URL. Please enter a full http:// or https:// URL.",
         "apiKeyEqualsBaseUrl": "API key cannot be the same as Base URL."
       }
+    },
+    "cockpitApi": {
+      "panelTitle": "Cockpit Api Service Panel",
+      "servicePanel": "Service Panel",
+      "balance": "Balance",
+      "requests": "Requests",
+      "total": "Total",
+      "today": "Today",
+      "periods": "Periods",
+      "tokens": "Tokens",
+      "quotaUsed": "Used",
+      "modelStats": "Model Stats",
+      "noStats": "No stats yet",
+      "refreshHint": "Click refresh to sync stats for this API key.",
+      "dailyStats": "Daily Stats"
     },
     "modelProviders": {
       "tab": "Model Providers",
@@ -3589,6 +3616,14 @@
         "descPlatform": "CodeBuddy CN multi-instance is supported on macOS, Windows, and Linux only."
       }
     },
+    "syncFailed": "Sync failed: {{error}}",
+    "syncSuccess": "{{count}} account(s) synced to WorkBuddy",
+    "syncToWorkbuddy": "Sync to WorkBuddy"
+  },
+  "workbuddy": {
+    "title": "WorkBuddy Account",
+    "noAccounts": "No WorkBuddy accounts",
+    "addAccount": "Add WorkBuddy Account",
     "checkin": {
       "title": "Daily Check-in",
       "modalTitle": "Daily Check-in",
@@ -3611,23 +3646,8 @@
       "streakDays": "{{days}} days",
       "streakRewardCountdown": "{{days}} more days for bonus reward",
       "streakRewardToday": "Bonus reward available today!",
-      "recentDates": "Recent: ",
-      "quotaCategory": {
-        "base": "Base Package",
-        "activity": "Activity Bonus",
-        "extra": "Extra Credits",
-        "other": "Other",
-        "empty": "No quota data"
-      }
+      "recentDates": "Recent: "
     },
-    "syncFailed": "Sync failed: {{error}}",
-    "syncSuccess": "{{count}} account(s) synced to WorkBuddy",
-    "syncToWorkbuddy": "Sync to WorkBuddy"
-  },
-  "workbuddy": {
-    "title": "WorkBuddy Account",
-    "noAccounts": "No WorkBuddy accounts",
-    "addAccount": "Add WorkBuddy Account",
     "flowNotice": {
       "title": "WorkBuddy Account Info (click to expand/collapse)",
       "desc": "Account switching writes the local sign-in file using the latest official WorkBuddy client layout; local import reads the same file. Data is processed locally only.",

@@ -81,6 +81,7 @@
         "statusParsing": "Codex-Importinhalt wird analysiert...",
         "statusImporting": "Konto {{current}} / {{total}} wird importiert",
         "statusRefreshing": "Kontoliste wird aktualisiert...",
+        "statusActivating": "Zum importierten Konto wechseln...",
         "statusSuccess": "Import abgeschlossen",
         "statusPartial": "Teilweise importiert",
         "statusFailed": "Import fehlgeschlagen",
@@ -1615,6 +1616,13 @@
   },
   "codex": {
     "title": "Codex-Konten verwalten",
+    "newApi": {
+      "quota": {
+        "available": "Kontingent",
+        "unlimited": "Unbegrenzt",
+        "usedHint": "Verbraucht {{used}}"
+      }
+    },
     "subtitle": "Verwalte deine OpenAI Codex-Konten",
     "instances": {
       "subtitle": "Unabhängige Konfiguration pro Instanz, paralleler Betrieb mit mehreren Konten.",
@@ -2163,7 +2171,8 @@
         "endpoint": "Anbieter-Endpunkt",
         "hint": "Eine kompatible Base URL wurde automatisch eingetragen. Sie können sie weiterhin manuell bearbeiten.",
         "website": "Website",
-        "apiKeyPage": "API-Key-Seite"
+        "apiKeyPage": "API-Key-Seite",
+        "getApiKey": "Schlüssel holen"
       },
       "providers": {
         "openai_official": {
@@ -2225,6 +2234,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
       }
     },
@@ -2385,6 +2397,21 @@
       "addShort": "Notiz",
       "saved": "Kontonotiz gespeichert",
       "saveFailed": "Kontonotiz konnte nicht gespeichert werden: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "Cockpit Api Dienstpanel",
+      "servicePanel": "Dienstpanel",
+      "balance": "Guthaben",
+      "requests": "Anfragen",
+      "total": "Gesamt",
+      "today": "Heute",
+      "periods": "Zeiträume",
+      "tokens": "Token",
+      "quotaUsed": "Verbraucht",
+      "modelStats": "Modellstatistik",
+      "noStats": "Noch keine Statistik",
+      "refreshHint": "Klicke auf Aktualisieren, um die Statistik dieses API-Schlüssels zu synchronisieren.",
+      "dailyStats": "Tägliche Statistiken"
     }
   },
   "githubCopilot": {
@@ -3471,37 +3498,6 @@
         "descPlatform": "CodeBuddy CN-Mehrinstanzen werden nur unter macOS, Windows und Linux unterstützt."
       }
     },
-    "checkin": {
-      "title": "Täglicher Check-in",
-      "modalTitle": "Täglicher Check-in",
-      "status": "Check-in-Status",
-      "checkedIn": "Eingecheckt",
-      "notCheckedIn": "Nicht eingecheckt",
-      "button": "Einchecken",
-      "button.loading": "Check-in läuft...",
-      "done": "Fertig",
-      "success": "Check-in erfolgreich! {{days}} Tage Serie",
-      "failure": "Einchecken fehlgeschlagen: {{message}}",
-      "failure.network": "Netzwerkfehler, bitte später erneut versuchen",
-      "lastCheckin": "Letzter Check-in: {{time}}",
-      "streak": "{{days}}-Tage-Serie",
-      "reward": "Belohnung: {{reward}}",
-      "refreshStatus": "Aktualisieren",
-      "checkAll": "Alle einchecken",
-      "noAccounts": "Keine Konten",
-      "querying": "Wird geladen...",
-      "streakDays": "{{days}} Tage",
-      "streakRewardCountdown": "Noch {{days}} Tage bis zur Bonusbelohnung",
-      "streakRewardToday": "Bonusbelohnung heute verfügbar!",
-      "recentDates": "Kürzlich: ",
-      "quotaCategory": {
-        "base": "Basispaket",
-        "activity": "Aktivitätsbonus",
-        "extra": "Zusatzguthaben",
-        "other": "Sonstiges",
-        "empty": "Keine Kontingentdaten"
-      }
-    },
     "syncFailed": "Synchronisierung fehlgeschlagen: {{error}}",
     "syncSuccess": "{{count}} Konto/-en mit WorkBuddy synchronisiert",
     "syncToWorkbuddy": "Mit WorkBuddy synchronisieren"
@@ -3608,6 +3604,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "Täglicher Check-in",
+      "modalTitle": "Täglicher Check-in",
+      "status": "Check-in-Status",
+      "checkedIn": "Eingecheckt",
+      "notCheckedIn": "Nicht eingecheckt",
+      "button": "Einchecken",
+      "button.loading": "Check-in läuft...",
+      "done": "Fertig",
+      "success": "Check-in erfolgreich! {{days}} Tage Serie",
+      "failure": "Einchecken fehlgeschlagen: {{message}}",
+      "failure.network": "Netzwerkfehler, bitte später erneut versuchen",
+      "lastCheckin": "Letzter Check-in: {{time}}",
+      "streak": "{{days}}-Tage-Serie",
+      "reward": "Belohnung: {{reward}}",
+      "refreshStatus": "Aktualisieren",
+      "checkAll": "Alle einchecken",
+      "noAccounts": "Keine Konten",
+      "querying": "Wird geladen...",
+      "streakDays": "{{days}} Tage",
+      "streakRewardCountdown": "Noch {{days}} Tage bis zur Bonusbelohnung",
+      "streakRewardToday": "Bonusbelohnung heute verfügbar!",
+      "recentDates": "Kürzlich: "
     }
   },
   "zed": {

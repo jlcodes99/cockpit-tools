@@ -7,6 +7,15 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [0.22.22] - 2026-05-12
+
+### Added
+- **Codex model-provider management now supports new provider presets**: the account and model-provider flows can recognize and manage the newly added provider options for API-key based Codex usage.
+
+### Removed
+- **CodeBuddy CN daily check-in has been removed**: the account-page check-in entry, check-in dialog, instance-page check-in badge, frontend service calls, and desktop commands have been removed from the CodeBuddy CN path.
+
+---
 ## [0.22.21] - 2026-05-10
 
 ### Added

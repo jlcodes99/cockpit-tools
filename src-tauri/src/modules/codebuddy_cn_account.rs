@@ -1394,34 +1394,6 @@ pub(crate) fn resolve_current_account_id(accounts: &[CodebuddyAccount]) -> Optio
     )
 }
 
-/// 更新账号的签到信息
-pub fn update_checkin_info(
-    account_id: &str,
-    last_checkin_time: Option<i64>,
-    streak: i32,
-    rewards: Option<serde_json::Value>,
-) -> Result<CodebuddyAccount, String> {
-    let mut account = load_account(account_id).ok_or_else(|| "账号不存在".to_string())?;
-
-    // 更新签到字段
-    if let Some(time) = last_checkin_time {
-        account.last_checkin_time = Some(time);
-    }
-    account.checkin_streak = streak;
-    account.checkin_rewards = rewards;
-
-    account.last_used = now_ts();
-    let updated = account.clone();
-    upsert_account_record(account)?;
-
-    logger::log_info(&format!(
-        "[CodeBuddy CN Checkin] 签到信息已更新: account_id={}, streak={}",
-        updated.id, streak
-    ));
-
-    Ok(updated)
-}
-
 pub fn run_quota_alert_if_needed() -> Result<(), String> {
     let config = crate::modules::config::get_user_config();
     if !config.codebuddy_cn_quota_alert_enabled {
