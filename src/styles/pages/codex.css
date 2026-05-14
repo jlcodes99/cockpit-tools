@@ -1479,6 +1479,15 @@
   margin-top: 8px;
 }
 
+.codex-accounts-page .sticky-action-cell {
+  pointer-events: none;
+}
+
+.codex-accounts-page .sticky-action-cell .action-btn,
+.codex-accounts-page .sticky-action-cell button {
+  pointer-events: auto;
+}
+
 /* 卡片底部 */
 .codex-account-card .codex-card-bottom {
   margin-top: auto;
