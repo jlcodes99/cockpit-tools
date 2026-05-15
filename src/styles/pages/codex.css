@@ -1168,9 +1168,89 @@
 
 .codex-account-card .tier-badge.free,
 .codex-accounts-page .account-table .tier-badge.free {
-  background: var(--plan-free-bg);
-  color: var(--plan-free-color);
-  border: 1px solid var(--plan-free-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, transparent 45%),
+    linear-gradient(135deg, #1f2937 0%, #3b2a12 44%, #8a5a08 100%);
+  color: #fff7d6;
+  border: 1px solid rgba(245, 202, 86, 0.68);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(54, 30, 4, 0.42),
+    0 5px 14px rgba(15, 23, 42, 0.16),
+    0 0 0 1px rgba(255, 244, 191, 0.2);
+}
+
+.codex-account-card .tier-badge.codex-free-plan-badge,
+.codex-accounts-page .account-table .tier-badge.codex-free-plan-badge,
+.codex-accounts-page .folder-preview-item .tier-badge.codex-free-plan-badge,
+.tier-badge.codex-free-plan-badge {
+  gap: 5px;
+  padding: 3px 8px 3px 5px;
+  min-height: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, transparent 45%),
+    linear-gradient(135deg, #1f2937 0%, #3b2a12 44%, #8a5a08 100%);
+  color: #fff7d6;
+  border: 1px solid rgba(245, 202, 86, 0.68);
+  font-weight: 800;
+  letter-spacing: 0;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(54, 30, 4, 0.42),
+    0 5px 14px rgba(15, 23, 42, 0.16),
+    0 0 0 1px rgba(255, 244, 191, 0.2);
+}
+
+.tier-badge.codex-free-plan-badge .codex-free-plan-icon-shell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  border-radius: 999px;
+  color: #3b2502;
+  background:
+    radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.98) 0 12%, transparent 28%),
+    linear-gradient(145deg, #fff4c7 0%, #f7cd55 50%, #b87512 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    inset 0 -1px 0 rgba(83, 46, 5, 0.3),
+    0 1px 2px rgba(0, 0, 0, 0.22);
+}
+
+.tier-badge.codex-free-plan-badge .codex-free-plan-icon-shell svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.5));
+}
+
+.tier-badge.codex-free-plan-badge .codex-free-plan-label {
+  color: #fff9df;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.68),
+    0 0 5px rgba(255, 232, 153, 0.32);
+  -webkit-text-stroke: 0.2px rgba(53, 31, 5, 0.45);
+}
+
+.codex-local-access-member-plan.codex-free-plan-badge {
+  width: 42px;
+  min-width: 42px;
+  padding: 2px 4px;
+  gap: 0;
+}
+
+.codex-local-access-member-plan.codex-free-plan-badge .codex-free-plan-icon-shell {
+  width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+}
+
+.codex-local-access-member-plan.codex-free-plan-badge .codex-free-plan-label {
+  display: none;
 }
 
 .codex-account-card .tier-badge.plus,
@@ -1240,6 +1320,71 @@
   color: #134e4a;
   border: 1px solid rgba(20, 184, 166, 0.42);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.66), 0 1px 4px rgba(15, 118, 110, 0.16);
+}
+
+.codex-account-card .tier-badge.codex-plan-badge-custom,
+.codex-accounts-page .account-table .tier-badge.codex-plan-badge-custom,
+.codex-accounts-page .folder-preview-item .tier-badge.codex-plan-badge-custom,
+.codex-plan-style-modal .tier-badge.codex-plan-badge-custom,
+.tier-badge.codex-plan-badge-custom {
+  gap: 5px;
+  padding: 3px 8px 3px 5px;
+  min-height: 24px;
+  background: var(--codex-plan-badge-bg);
+  color: var(--codex-plan-badge-color);
+  border: 1px solid var(--codex-plan-badge-border);
+  font-weight: 850;
+  letter-spacing: 0;
+  box-shadow: var(--codex-plan-badge-shadow);
+}
+
+.tier-badge.codex-plan-badge-custom .codex-plan-icon-shell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  border-radius: 999px;
+  color: var(--codex-plan-badge-icon-color);
+  background: var(--codex-plan-badge-icon-bg);
+  box-shadow: var(--codex-plan-badge-icon-shadow);
+}
+
+.tier-badge.codex-plan-badge-custom .codex-plan-icon-shell svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.45));
+}
+
+.tier-badge.codex-plan-badge-custom.codex-plan-badge-no-icon {
+  gap: 0;
+  padding: 4px 10px;
+}
+
+.tier-badge.codex-plan-badge-custom .codex-plan-label {
+  color: inherit;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: var(--codex-plan-badge-label-shadow);
+}
+
+.codex-local-access-member-plan.codex-plan-badge-custom {
+  width: 42px;
+  min-width: 42px;
+  padding: 2px 4px;
+  gap: 0;
+}
+
+.codex-local-access-member-plan.codex-plan-badge-custom .codex-plan-icon-shell {
+  width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+}
+
+.codex-local-access-member-plan.codex-plan-badge-custom .codex-plan-label {
+  display: none;
 }
 
 .codex-accounts-page .codex-status-pill {
@@ -1927,6 +2072,33 @@
 }
 
 .codex-accounts-page .toolbar .btn.icon-only svg {
+  width: 14px;
+  height: 14px;
+}
+
+.codex-accounts-page .codex-plan-style-trigger {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
+  gap: 6px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(248, 250, 252, 0.92)),
+    var(--bg-tertiary);
+  border-color: rgba(148, 163, 184, 0.32);
+  color: var(--text-secondary);
+}
+
+.codex-accounts-page .codex-plan-style-trigger:hover {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
+  color: var(--primary);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.codex-accounts-page .codex-plan-style-trigger svg {
   width: 14px;
   height: 14px;
 }
@@ -2680,6 +2852,135 @@
   max-height: 85vh;
   overflow: auto;
   animation: modalFadeIn 0.25s ease;
+}
+
+.codex-plan-style-modal {
+  width: min(980px, calc(100vw - 48px));
+  max-width: min(980px, calc(100vw - 48px));
+  max-height: min(820px, calc(100vh - 48px));
+  overflow: hidden;
+  background: var(--bg-card);
+  border-color: color-mix(in srgb, var(--border) 78%, var(--primary));
+  border-radius: 16px;
+}
+
+.codex-plan-style-modal-header {
+  padding: 18px 22px 16px;
+}
+
+.codex-plan-style-title {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.codex-plan-style-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 10px;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, var(--bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border));
+}
+
+.codex-plan-style-body {
+  display: grid;
+  gap: 14px;
+  padding: 18px 22px;
+  overflow: auto;
+  background: var(--bg-secondary);
+}
+
+.codex-plan-style-section {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+
+.codex-plan-style-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.codex-plan-style-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.codex-plan-style-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.codex-plan-style-option {
+  min-height: 76px;
+  display: grid;
+  grid-template-rows: 28px 1fr;
+  align-items: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 10px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease,
+    background 0.18s ease;
+}
+
+.codex-plan-style-option:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+}
+
+.codex-plan-style-option.selected {
+  border-color: color-mix(in srgb, var(--primary) 58%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--primary) 9%, transparent), transparent 62%),
+    var(--bg-card);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent),
+    0 10px 20px rgba(37, 99, 235, 0.1);
+}
+
+.codex-plan-style-option-name {
+  max-width: 100%;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  white-space: normal;
+}
+
+.codex-plan-style-option.selected .codex-plan-style-option-name {
+  color: color-mix(in srgb, var(--primary) 72%, var(--text-primary));
+}
+
+.codex-plan-style-footer {
+  padding: 14px 22px 18px;
+  background: var(--bg-card);
 }
 
 .cockpit-api-panel-modal {
@@ -7905,6 +8206,26 @@
 }
 
 @media (max-width: 860px) {
+  .codex-accounts-page .codex-plan-style-trigger {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .codex-accounts-page .codex-plan-style-trigger-label {
+    display: none;
+  }
+
+  .codex-plan-style-modal {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .codex-plan-style-grid {
+    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  }
+
   .codex-quick-config-modal .codex-quick-config-grid {
     grid-template-columns: 1fr;
   }

@@ -47,6 +47,10 @@ import {
 } from '../utils/codexQuotaPool';
 import { AccountTagFilterDropdown } from './AccountTagFilterDropdown';
 import {
+  CodexPlanBadge,
+  type CodexPlanBadgeStylePreferences,
+} from './codex/CodexPlanBadge';
+import {
   MultiSelectFilterDropdown,
   type MultiSelectFilterOption,
 } from './MultiSelectFilterDropdown';
@@ -83,6 +87,7 @@ interface CodexLocalAccessModalProps {
   onKillPort: () => Promise<unknown> | unknown;
   onToggleEnabled: () => Promise<unknown> | unknown;
   onTest: () => Promise<CodexLocalAccessTestResult> | CodexLocalAccessTestResult;
+  planBadgeStylePreferences: CodexPlanBadgeStylePreferences;
   saving: boolean;
   testing: boolean;
   starting: boolean;
@@ -173,6 +178,7 @@ export function CodexLocalAccessModal({
   onKillPort,
   onToggleEnabled,
   onTest,
+  planBadgeStylePreferences,
   saving,
   testing,
   starting,
@@ -1373,9 +1379,11 @@ export function CodexLocalAccessModal({
                             >
                               {maskAccountText(presentation.displayName)}
                             </span>
-                            <span className={`tier-badge ${presentation.planClass}`}>
-                              {presentation.planLabel}
-                            </span>
+                            <CodexPlanBadge
+                              planClass={presentation.planClass}
+                              planLabel={presentation.planLabel}
+                              preferences={planBadgeStylePreferences}
+                            />
                           </div>
                           <div className="codex-local-access-account-stat-block codex-local-access-account-stat-block-quota">
                             {renderQuotaPreview(presentation, 3)}
@@ -1545,9 +1553,11 @@ export function CodexLocalAccessModal({
                           >
                               {maskAccountText(presentation.displayName)}
                             </span>
-                          <span className={`tier-badge ${presentation.planClass}`}>
-                              {presentation.planLabel}
-                            </span>
+                          <CodexPlanBadge
+                            planClass={presentation.planClass}
+                            planLabel={presentation.planLabel}
+                            preferences={planBadgeStylePreferences}
+                          />
                           <span className="codex-local-access-member-metric">
                             {t('codex.localAccess.stats.accountRequests', {
                               count: accountStats?.requestCount ?? 0,

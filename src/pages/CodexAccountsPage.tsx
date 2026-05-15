@@ -53,6 +53,7 @@ import {
   Wrench,
   Terminal,
   Link2,
+  Palette,
 } from "lucide-react";
 import { useCodexAccountStore } from "../stores/useCodexAccountStore";
 import { useCodexInstanceStore } from "../stores/useCodexInstanceStore";
@@ -116,6 +117,15 @@ import { CodexWakeupContent } from "../components/codex/CodexWakeupContent";
 import { CodexModelProviderManager } from "../components/codex/CodexModelProviderManager";
 import { CodexSpeedSelect } from "../components/codex/CodexSpeedSelect";
 import { QuickSettingsPopover } from "../components/QuickSettingsPopover";
+import {
+  CodexPlanBadge,
+  DEFAULT_CODEX_PLAN_BADGE_STYLE_PREFERENCES,
+  readCodexPlanBadgeStylePreferences,
+  writeCodexPlanBadgeStylePreferences,
+  type CodexPlanBadgeStyleId,
+  type CodexPlanBadgeTier,
+} from "../components/codex/CodexPlanBadge";
+import { CodexPlanBadgeStyleModal } from "../components/codex/CodexPlanBadgeStyleModal";
 import { useProviderAccountsPage } from "../hooks/useProviderAccountsPage";
 import {
   MultiSelectFilterDropdown,
@@ -680,6 +690,47 @@ export function CodexAccountsPage() {
       }
       return "grid";
     });
+  const [showPlanBadgeStyleModal, setShowPlanBadgeStyleModal] =
+    useState(false);
+  const [planBadgeStylePreferences, setPlanBadgeStylePreferences] = useState(
+    () => readCodexPlanBadgeStylePreferences(),
+  );
+
+  useEffect(() => {
+    writeCodexPlanBadgeStylePreferences(planBadgeStylePreferences);
+  }, [planBadgeStylePreferences]);
+
+  const handlePlanBadgeStyleChange = useCallback(
+    (tier: CodexPlanBadgeTier, styleId: CodexPlanBadgeStyleId) => {
+      setPlanBadgeStylePreferences((prev) => ({
+        ...prev,
+        [tier]: styleId,
+      }));
+    },
+    [],
+  );
+
+  const resetPlanBadgeStyles = useCallback(() => {
+    setPlanBadgeStylePreferences({
+      ...DEFAULT_CODEX_PLAN_BADGE_STYLE_PREFERENCES,
+    });
+  }, []);
+
+  const renderCodexPlanBadge = useCallback(
+    (
+      planClass: string | null | undefined,
+      planLabel: string,
+      extraClassName = "",
+    ) => (
+      <CodexPlanBadge
+        planClass={planClass}
+        planLabel={planLabel}
+        preferences={planBadgeStylePreferences}
+        extraClassName={extraClassName}
+      />
+    ),
+    [planBadgeStylePreferences],
+  );
 
   const store = useCodexAccountStore();
   const codexInstanceStore = useCodexInstanceStore();
@@ -5664,9 +5715,7 @@ export function CodexAccountsPage() {
                 {accountIssueBadge}
               </span>
             )}
-            <span className={`tier-badge ${planClass}`}>
-              {presentation.planLabel}
-            </span>
+            {renderCodexPlanBadge(planClass, presentation.planLabel)}
           </div>
           {(meta.accountContextText ||
             isInLocalAccess ||
@@ -6286,11 +6335,11 @@ export function CodexAccountsPage() {
                         >
                           {weeklyQuota?.valueText || "-"}
                         </span>
-                        <span
-                          className={`codex-local-access-member-plan tier-badge ${presentation.planClass || "unknown"}`}
-                        >
-                          {presentation.planLabel}
-                        </span>
+                        {renderCodexPlanBadge(
+                          presentation.planClass,
+                          presentation.planLabel,
+                          "codex-local-access-member-plan",
+                        )}
                         <button
                           type="button"
                           className="folder-preview-remove-btn"
@@ -6568,11 +6617,10 @@ export function CodexAccountsPage() {
                         >
                           {maskAccountText(presentation.displayName)}
                         </span>
-                        <span
-                          className={`tier-badge ${presentation.planClass || "unknown"}`}
-                        >
-                          {presentation.planLabel}
-                        </span>
+                        {renderCodexPlanBadge(
+                          presentation.planClass,
+                          presentation.planLabel,
+                        )}
                         <button
                           type="button"
                           className="folder-preview-remove-btn"
@@ -6797,9 +6845,7 @@ export function CodexAccountsPage() {
             </div>
           </td>
           <td>
-            <span className={`tier-badge ${planClass}`}>
-              {presentation.planLabel}
-            </span>
+            {renderCodexPlanBadge(planClass, presentation.planLabel)}
           </td>
           <td>
             {isApiKeyAccount ? (
@@ -7859,6 +7905,16 @@ export function CodexAccountsPage() {
               )}
             </div>
             <div className="toolbar-right">
+              <button
+                className="btn btn-secondary codex-plan-style-trigger"
+                onClick={() => setShowPlanBadgeStyleModal(true)}
+                title={t("codex.badgeStyle.title", "徽章图标样式")}
+              >
+                <Palette size={14} />
+                <span className="codex-plan-style-trigger-label">
+                  {t("codex.badgeStyle.shortTitle", "徽章样式")}
+                </span>
+              </button>
               <button
                 className="btn btn-primary icon-only"
                 onClick={() => openAddModal("oauth")}
@@ -9753,11 +9809,10 @@ export function CodexAccountsPage() {
                                     {t("codex.current", "当前")}
                                   </span>
                                 )}
-                                <span
-                                  className={`tier-badge ${presentation.planClass || "unknown"}`}
-                                >
-                                  {presentation.planLabel}
-                                </span>
+                                {renderCodexPlanBadge(
+                                  presentation.planClass,
+                                  presentation.planLabel,
+                                )}
                               </div>
                               <div className="codex-custom-sort-quota-line">
                                 {quotaItems.length > 0 ? (
@@ -9835,6 +9890,15 @@ export function CodexAccountsPage() {
                 </div>
               </div>
             </div>
+          )}
+
+          {showPlanBadgeStyleModal && (
+            <CodexPlanBadgeStyleModal
+              preferences={planBadgeStylePreferences}
+              onChange={handlePlanBadgeStyleChange}
+              onReset={resetPlanBadgeStyles}
+              onClose={() => setShowPlanBadgeStyleModal(false)}
+            />
           )}
 
           <ExportJsonModal
@@ -10445,6 +10509,7 @@ export function CodexAccountsPage() {
             onKillPort={handleKillLocalAccessPort}
             onToggleEnabled={handleToggleLocalAccessEnabled}
             onTest={handleTestLocalAccess}
+            planBadgeStylePreferences={planBadgeStylePreferences}
             saving={localAccessSaving}
             testing={localAccessTesting}
             starting={localAccessStarting}
