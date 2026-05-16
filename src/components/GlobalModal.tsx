@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGlobalModalStore, type GlobalModalAction } from '../stores/useGlobalModalStore';
 import './GlobalModal.css';
@@ -22,6 +22,15 @@ export function GlobalModal() {
     if (!modal || modal.closeOnOverlay === false) return;
     closeModal();
   }, [closeModal, modal]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeModal();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [visible, closeModal]);
 
   const handleActionClick = useCallback(async (action: GlobalModalAction) => {
     if (action.disabled) return;

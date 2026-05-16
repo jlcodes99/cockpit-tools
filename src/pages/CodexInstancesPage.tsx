@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Copy, Play, X } from "lucide-react";
+import { Check, ChevronLeft, Copy, Play, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PlatformInstancesContent } from "../components/platform/PlatformInstancesContent";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
@@ -323,6 +323,7 @@ export function CodexInstancesContent({
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
+              <button className="btn btn-secondary icon-only" onClick={() => setLaunchModal(null)} title={t("common.back", "返回")} aria-label={t("common.back", "返回")}><ChevronLeft size={14} /></button>
               <h2>{t("instances.launchDialog.title", "启动实例")}</h2>
               <button
                 className="modal-close"

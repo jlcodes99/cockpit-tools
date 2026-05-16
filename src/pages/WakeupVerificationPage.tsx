@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { confirm as confirmDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { ShieldCheck, X } from 'lucide-react';
+import { ChevronLeft, ShieldCheck, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorMessage';
 import { OverviewTabsHeader } from '../components/OverviewTabsHeader';
@@ -1331,6 +1331,15 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
         <div className="modal-overlay" onClick={closeConfigModal}>
           <div className="modal wakeup-modal verification-config-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
+              <button
+                className="btn btn-secondary icon-only"
+                onClick={closeConfigModal}
+                title={t('common.back', '返回')}
+                aria-label={t('common.back', '返回')}
+                disabled={running}
+              >
+                <ChevronLeft size={14} />
+              </button>
               <h2>{t('wakeup.verification.actions.runCheckNow', '立即检测')}</h2>
               <button className="modal-close" onClick={closeConfigModal} disabled={running}>
                 <X />
@@ -1491,6 +1500,7 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
         <div className="modal-overlay" onClick={closeDetailModal}>
           <div className="modal wakeup-modal verification-progress-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
+              <button className="btn btn-secondary icon-only" onClick={closeDetailModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t('accounts.actions.viewDetails')}</h2>
               <button className="modal-close" onClick={closeDetailModal}>
                 <X />

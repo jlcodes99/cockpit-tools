@@ -10,6 +10,7 @@ import {
   Database,
   Copy,
   Check,
+  ChevronLeft,
   KeyRound,
   Play,
   RotateCw,
@@ -1382,6 +1383,7 @@ export function TraeAccountsPage() {
             <div className="modal-overlay" onClick={closeAddModal}>
               <div className="modal-content ghcp-add-modal" onClick={(event) => event.stopPropagation()}>
                 <div className="modal-header">
+                  <button className="btn btn-secondary icon-only" onClick={closeAddModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
                   <h2>{t('trae.addModal.title')}</h2>
                   <button
                     className="modal-close"

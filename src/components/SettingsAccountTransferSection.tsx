@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Archive, Download, FolderOpen, RefreshCw, Trash2, X } from 'lucide-react';
+import { Archive, ChevronLeft, Download, FolderOpen, RefreshCw, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { save } from '@tauri-apps/plugin-dialog';
@@ -1044,6 +1044,7 @@ export function SettingsAccountTransferSection() {
           <div className="modal-overlay" onClick={closeExportOptionsModal}>
             <div className="modal settings-transfer-modal" onClick={(event) => event.stopPropagation()}>
               <div className="modal-header">
+                <button className="btn btn-secondary icon-only" onClick={closeExportOptionsModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
                 <h2>{t('settings.transfer.exportTitle')}</h2>
                 <button
                   className="modal-close"
@@ -1094,6 +1095,7 @@ export function SettingsAccountTransferSection() {
           <div className="modal-overlay" onClick={closeImportModal}>
             <div className="modal settings-transfer-modal" onClick={(event) => event.stopPropagation()}>
               <div className="modal-header">
+                <button className="btn btn-secondary icon-only" onClick={closeImportModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
                 <h2>{t('settings.transfer.importTitle')}</h2>
                 <button className="modal-close" onClick={closeImportModal} aria-label={t('common.close')}>
                   <X />
@@ -1230,6 +1232,7 @@ export function SettingsAccountTransferSection() {
               onClick={(event) => event.stopPropagation()}
             >
               <div className="modal-header">
+                <button className="btn btn-secondary icon-only" onClick={closeBackupManagerModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
                 <h2>{t('settings.transfer.backup.title')}</h2>
                 <button className="modal-close" onClick={closeBackupManagerModal} aria-label={t('common.close')}>
                   <X />
