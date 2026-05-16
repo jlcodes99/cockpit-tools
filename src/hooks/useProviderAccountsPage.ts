@@ -165,6 +165,7 @@ export interface ProviderPageConfig<TAccount extends ProviderAccountBase> {
   /** OAuth 成功后的提示文案（可选） */
   resolveOauthSuccessMessage?: () => string;
   defaultSortBy?: string;
+  defaultSortDirection?: SortDirection;
 }
 
 export interface ProviderAccountBase {
@@ -177,8 +178,15 @@ const DEFAULT_SORT_BY = 'created_at';
 const DEFAULT_SORT_DIRECTION: SortDirection = 'desc';
 const DEFAULT_VIEW_MODE: ViewMode = 'grid';
 
-const normalizeSortDirection = (value: string | null): SortDirection =>
-  value === 'asc' ? 'asc' : DEFAULT_SORT_DIRECTION;
+const normalizeOptionalSortDirection = (
+  value: string | null | undefined,
+): SortDirection | null => {
+  if (value === 'asc' || value === 'desc') return value;
+  return null;
+};
+
+const normalizeSortDirection = (value: string | null | undefined): SortDirection =>
+  normalizeOptionalSortDirection(value) ?? DEFAULT_SORT_DIRECTION;
 
 const normalizeViewMode = (value: string | null): ViewMode =>
   value === 'list' ? 'list' : DEFAULT_VIEW_MODE;
@@ -767,8 +775,10 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     oauthTabKeys: oauthTabKeysConfig,
     dataService,
     defaultSortBy: defaultSortByConfig,
+    defaultSortDirection: defaultSortDirectionConfig,
   } = config;
   const defaultSortBy = defaultSortByConfig?.trim() || DEFAULT_SORT_BY;
+  const defaultSortDirection = normalizeSortDirection(defaultSortDirectionConfig);
 
   const oauthTabKeys = useMemo(() => {
     const normalized = (oauthTabKeysConfig || [])
@@ -889,14 +899,14 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   });
   const [sortDirection, setSortDirection] = useState<SortDirection>(() => {
     if (!readAccountsOverviewFilterPersistenceEnabled(filterPersistenceScope)) {
-      return DEFAULT_SORT_DIRECTION;
+      return defaultSortDirection;
     }
     const saved = readAccountsOverviewFilterField<string | null>(
       filterPersistenceScope,
       FILTER_FIELD_SORT_DIRECTION,
       null,
     );
-    return normalizeSortDirection(saved);
+    return normalizeOptionalSortDirection(saved) ?? defaultSortDirection;
   });
 
   useEffect(() => {

@@ -126,7 +126,10 @@ import {
   type CodexPlanBadgeTier,
 } from "../components/codex/CodexPlanBadge";
 import { CodexPlanBadgeStyleModal } from "../components/codex/CodexPlanBadgeStyleModal";
-import { useProviderAccountsPage } from "../hooks/useProviderAccountsPage";
+import {
+  useProviderAccountsPage,
+  type SortDirection,
+} from "../hooks/useProviderAccountsPage";
 import {
   MultiSelectFilterDropdown,
   type MultiSelectFilterOption,
@@ -259,6 +262,8 @@ const CODEX_LOCAL_ACCESS_ADDRESS_KIND_KEY =
   "agtools.codex.local_access_address_kind.v1";
 const CODEX_CUSTOM_SORT_ORDER_KEY =
   "agtools.codex.accounts.custom_sort_order.v1";
+const CODEX_SORT_PREFERENCE_KEY =
+  "agtools.codex.accounts.sort_preference.v1";
 const DEFAULT_CODEX_API_PROVIDER_ID = COCKPIT_API_PROVIDER_ID;
 const DEFAULT_CODEX_API_BASE_URL = COCKPIT_API_BASE_URL;
 const CODEX_LOCAL_ACCESS_FALLBACK_PORT = 54140;
@@ -274,6 +279,22 @@ const OAUTH_BINDING_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 type CodexOverviewLayoutMode = "compact" | "list" | "grid";
 type OAuthBindingSortBy = "account" | "created_at" | "last_used" | "plan";
 type OAuthBindingTargetKind = "api_key_account" | "local_access";
+const CODEX_SORT_BY_VALUES = [
+  "created_at",
+  "weekly",
+  "hourly",
+  "weekly_reset",
+  "hourly_reset",
+  "subscription_expiry",
+  "custom",
+] as const;
+type CodexSortBy = (typeof CODEX_SORT_BY_VALUES)[number];
+interface CodexSortPreference {
+  sortBy: CodexSortBy;
+  sortDirection: SortDirection;
+}
+const DEFAULT_CODEX_SORT_BY: CodexSortBy = "created_at";
+const DEFAULT_CODEX_SORT_DIRECTION: SortDirection = "desc";
 
 function normalizeLocalAccessAddressKind(
   value: string | null | undefined,
@@ -355,6 +376,65 @@ function formatCockpitApiTokenCount(value: number): string {
     notation: normalized >= 1000 ? "compact" : "standard",
     maximumFractionDigits: normalized >= 1000 ? 1 : 0,
   }).format(normalized);
+}
+
+function normalizeCodexSortBy(value: unknown): CodexSortBy {
+  return typeof value === "string" &&
+    CODEX_SORT_BY_VALUES.includes(value as CodexSortBy)
+    ? (value as CodexSortBy)
+    : DEFAULT_CODEX_SORT_BY;
+}
+
+function normalizeCodexSortDirection(value: unknown): SortDirection {
+  return value === "asc" || value === "desc"
+    ? value
+    : DEFAULT_CODEX_SORT_DIRECTION;
+}
+
+function readCodexSortPreference(): CodexSortPreference {
+  try {
+    const raw = localStorage.getItem(CODEX_SORT_PREFERENCE_KEY);
+    if (!raw) {
+      return {
+        sortBy: DEFAULT_CODEX_SORT_BY,
+        sortDirection: DEFAULT_CODEX_SORT_DIRECTION,
+      };
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {
+        sortBy: DEFAULT_CODEX_SORT_BY,
+        sortDirection: DEFAULT_CODEX_SORT_DIRECTION,
+      };
+    }
+    const record = parsed as Record<string, unknown>;
+    return {
+      sortBy: normalizeCodexSortBy(record.sortBy),
+      sortDirection: normalizeCodexSortDirection(record.sortDirection),
+    };
+  } catch {
+    return {
+      sortBy: DEFAULT_CODEX_SORT_BY,
+      sortDirection: DEFAULT_CODEX_SORT_DIRECTION,
+    };
+  }
+}
+
+function writeCodexSortPreference(
+  sortBy: string,
+  sortDirection: SortDirection,
+): void {
+  try {
+    localStorage.setItem(
+      CODEX_SORT_PREFERENCE_KEY,
+      JSON.stringify({
+        sortBy: normalizeCodexSortBy(sortBy),
+        sortDirection: normalizeCodexSortDirection(sortDirection),
+      }),
+    );
+  } catch {
+    // ignore persistence failures
+  }
 }
 
 function getCockpitApiUsageRecord(
@@ -753,6 +833,7 @@ export function CodexAccountsPage() {
     scrollKey: accountNoteErrorScrollKey,
     set: setAccountNoteError,
   } = useModalErrorState();
+  const initialSortPreference = useMemo(readCodexSortPreference, []);
 
   // Use the common hook WITHOUT oauthService since Codex uses Tauri event-based OAuth
   const page = useProviderAccountsPage<CodexAccount>({
@@ -775,6 +856,8 @@ export function CodexAccountsPage() {
       exportAccounts: codexService.exportCodexAccounts,
     },
     getDisplayEmail: (account) => account.email ?? account.id,
+    defaultSortBy: initialSortPreference.sortBy,
+    defaultSortDirection: initialSortPreference.sortDirection,
   });
 
   const {
@@ -854,6 +937,10 @@ export function CodexAccountsPage() {
     normalizeTag,
     saveJsonFile,
   } = page;
+
+  useEffect(() => {
+    writeCodexSortPreference(sortBy, sortDirection);
+  }, [sortBy, sortDirection]);
 
   useEffect(() => {
     if (!filterPersistenceEnabled) {
