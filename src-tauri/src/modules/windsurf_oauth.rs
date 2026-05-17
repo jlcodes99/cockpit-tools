@@ -946,6 +946,7 @@ fn build_payload_from_remote(
         windsurf_user_status: user_status_resp,
         windsurf_plan_status: plan_status_resp,
         windsurf_auth_status_raw,
+        ..Default::default()
     }
 }
 
@@ -1271,14 +1272,288 @@ pub async fn build_payload_from_token(token: &str) -> Result<WindsurfOAuthComple
         return build_payload_from_firebase_token(trimmed, None).await;
     }
 
+    // Devin Auth: auth1_xxx 长期凭证（注册机产物 / 用户从其他来源粘贴）
+    // 走完整 4 步链路 (PostAuth → GetOTT → RegisterUser → GetCurrentUser) 拿可用的 IDE token
+    if trimmed.starts_with("auth1_") {
+        return build_payload_from_devin_auth1_token(trimmed, None).await;
+    }
+
     if trimmed.starts_with("devin-session-token$") {
         return build_payload_from_auth1_session_token(trimmed, None).await;
     }
 
     Err(
-        "Token 格式不支持：请使用 Windsurf API Key、Firebase JWT 或 Devin Session Token"
+        "Token 格式不支持：请使用 Windsurf API Key、Firebase JWT、Devin auth1 凭证 或 Devin Session Token"
             .to_string(),
     )
+}
+
+/// 用 Devin auth1 长期凭证构造 payload。
+///
+/// 这是 Devin 体系的"主入口"——走完整 4 步链路拿到机器绑定的 ide_token，
+/// 同时把 auth1/account/org/proto 都写入 payload 的 Devin 字段以备后续刷新。
+async fn build_payload_from_devin_auth1_token(
+    auth1_token: &str,
+    email_hint: Option<&str>,
+) -> Result<WindsurfOAuthCompletePayload, String> {
+    let refresh = crate::modules::windsurf_devin_oauth::full_refresh_from_auth1(auth1_token)
+        .await
+        .map_err(|err| format!("Devin auth1 刷新失败: {}", err))?;
+    Ok(build_devin_payload(email_hint, None, &refresh).await)
+}
+
+/// 把 DevinFullRefreshResult 转成 WindsurfOAuthCompletePayload。
+///
+/// 设计要点：
+/// - `windsurf_api_key` 填 `ide_token`，注入 IDE 时直接用作 sessions.accessToken
+/// - `windsurf_api_server_url` 用 Devin 专用的 self-serve 域名
+/// - `devin_*` 字段全填，便于 refresh 时识别走 Devin 路径
+/// - GitHub 字段用 email 兜底（Devin 账号没有 GitHub 概念）
+/// - 调用 GetUserStatus 拉配额数据填 plan_status/quota（失败不致命）
+async fn build_devin_payload(
+    email_hint: Option<&str>,
+    name_hint: Option<&str>,
+    refresh: &crate::modules::windsurf_devin_oauth::DevinFullRefreshResult,
+) -> WindsurfOAuthCompletePayload {
+    let email = email_hint
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let github_login = email
+        .as_ref()
+        .map(|e| e.split('@').next().unwrap_or(e).to_string())
+        .unwrap_or_else(|| {
+            // user_id 取 hash 做 login fallback
+            format!("devin_{}", &refresh.account_id)
+        });
+    // github_id 用 account_id 的 md5 取低 64 位，保证相同账号 ID 稳定（不与 sk-ws 体系冲突）
+    let github_id = {
+        let digest = md5::compute(&refresh.account_id);
+        let mut buf = [0u8; 8];
+        buf.copy_from_slice(&digest.0[..8]);
+        u64::from_be_bytes(buf)
+    };
+
+    // 拉 Devin 配额数据（GetUserStatus），失败不致命
+    let user_status_resp =
+        match crate::modules::windsurf_devin_oauth::fetch_devin_user_status(&refresh.ide_token)
+            .await
+        {
+            Ok(value) => Some(value),
+            Err(err) => {
+                logger::log_warn(&format!(
+                    "[Windsurf Devin] GetUserStatus 失败（配额信息将缺失）: {}",
+                    err
+                ));
+                None
+            }
+        };
+
+    // 解析配额响应
+    let user_status = user_status_resp
+        .as_ref()
+        .and_then(|v| v.get("userStatus"))
+        .cloned();
+    let mut plan_status = user_status
+        .as_ref()
+        .and_then(|v| v.get("planStatus"))
+        .cloned();
+    let plan_info = user_status_resp
+        .as_ref()
+        .and_then(|v| v.get("planInfo"))
+        .cloned()
+        .or_else(|| {
+            user_status
+                .as_ref()
+                .and_then(|v| v.get("planInfo"))
+                .cloned()
+        });
+    let plan_name = plan_info
+        .as_ref()
+        .and_then(|v| pick_string_from_object(Some(v), &["planName"]))
+        .filter(|s| !s.trim().is_empty());
+
+    // Free 账号服务端不返回 planEnd（计划无限期），但前端 UI「配额周期」需要这个字段。
+    // Fallback 顺序: weeklyResetAtUnix → dailyResetAtUnix（按下一次配额重置当作周期结束）
+    if let Some(ps) = plan_status.as_mut() {
+        if let Some(obj) = ps.as_object_mut() {
+            // 调试：列出 planStatus 顶层 key，方便排查字段名变化
+            let key_list: Vec<&str> = obj.keys().map(|k| k.as_str()).collect();
+            logger::log_info(&format!(
+                "[Windsurf Devin] planStatus 顶层 keys: {:?}",
+                key_list
+            ));
+
+            let has_plan_end = obj.get("planEnd").map(|v| !v.is_null()).unwrap_or(false);
+            if !has_plan_end {
+                // 兼容 i64 / f64 / 字符串 三种类型（服务端返回不一定）
+                let extract_unix_secs = |v: &Value| -> Option<i64> {
+                    if let Some(n) = v.as_i64() {
+                        return Some(n);
+                    }
+                    if let Some(f) = v.as_f64() {
+                        if f.is_finite() && f > 0.0 {
+                            return Some(f as i64);
+                        }
+                    }
+                    if let Some(s) = v.as_str() {
+                        let trimmed = s.trim();
+                        if let Ok(n) = trimmed.parse::<i64>() {
+                            return Some(n);
+                        }
+                        if let Ok(f) = trimmed.parse::<f64>() {
+                            if f.is_finite() && f > 0.0 {
+                                return Some(f as i64);
+                            }
+                        }
+                    }
+                    None
+                };
+                let candidates = [
+                    "weeklyResetAtUnix",
+                    "weeklyQuotaResetAtUnix",
+                    "weekly_reset_at_unix",
+                    "weekly_quota_reset_at_unix",
+                    "dailyResetAtUnix",
+                    "dailyQuotaResetAtUnix",
+                    "daily_reset_at_unix",
+                    "daily_quota_reset_at_unix",
+                ];
+                let mut fallback_reset: Option<(&str, i64)> = None;
+                for key in &candidates {
+                    if let Some(v) = obj.get(*key) {
+                        if let Some(n) = extract_unix_secs(v) {
+                            fallback_reset = Some((key, n));
+                            break;
+                        }
+                    }
+                }
+                // 也试试嵌套 quotaUsage 子对象（用户切号器代码里见过这个结构）
+                if fallback_reset.is_none() {
+                    if let Some(qu) = obj.get("quotaUsage").and_then(|v| v.as_object()) {
+                        for key in &candidates {
+                            if let Some(v) = qu.get(*key) {
+                                if let Some(n) = extract_unix_secs(v) {
+                                    fallback_reset = Some((key, n));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                match fallback_reset {
+                    Some((key, reset)) => {
+                        logger::log_info(&format!(
+                            "[Windsurf Devin] planEnd fallback 命中 {} = {}",
+                            key, reset
+                        ));
+                        obj.insert("planEnd".to_string(), json!(reset));
+                    }
+                    None => {
+                        logger::log_warn(
+                            "[Windsurf Devin] planEnd fallback 失败：planStatus 里没找到任何重置时间字段",
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // 构造与 Firebase 路径兼容的配额快照（前端读这些字段）
+    let copilot_quota_snapshots = if user_status_resp.is_some() {
+        Some(json!({
+            "windsurfPlanStatus": plan_status,
+            "windsurfPlanInfo": plan_info,
+            "windsurfUserStatus": user_status,
+            "windsurfCurrentUser": serde_json::Value::Null,
+        }))
+    } else {
+        None
+    };
+
+    // 限额快照（提取关键数字字段，前端 extract_quota_metrics 会读 chat/completions 等键）
+    let copilot_limited_user_quotas = plan_status.as_ref().and_then(|ps| {
+        let obj = ps.as_object()?;
+        let mut limited = serde_json::Map::new();
+        // 通用字段映射（前端 extract_limited_metrics 会优先读这些）
+        for key in &[
+            "completions",
+            "chat",
+            "availablePromptCredits",
+            "availableFlowCredits",
+            "usedPromptCredits",
+            "usedFlowCredits",
+        ] {
+            if let Some(v) = obj.get(*key) {
+                limited.insert(key.to_string(), v.clone());
+            }
+        }
+        if limited.is_empty() {
+            None
+        } else {
+            Some(Value::Object(limited))
+        }
+    });
+
+    let copilot_limited_user_reset_date = plan_status.as_ref().and_then(|ps| {
+        ps.get("dailyResetAtUnix")
+            .or_else(|| ps.get("dailyQuotaResetAtUnix"))
+            .and_then(|v| v.as_i64())
+    });
+
+    // 写入 state.vscdb 的 windsurfAuthStatus 用，IDE 启动时读取
+    let mut auth_status_raw = json!({
+        "apiKey": refresh.ide_token,
+        "apiServerUrl": "https://server.self-serve.windsurf.com",
+        "authMethod": "auth1",
+    });
+    if let Some(obj) = auth_status_raw.as_object_mut() {
+        if let Some(e) = email.as_ref() {
+            obj.insert("email".to_string(), Value::String(e.clone()));
+        }
+        if let Some(n) = name_hint.map(|s| s.trim()).filter(|s| !s.is_empty()) {
+            obj.insert("name".to_string(), Value::String(n.to_string()));
+        }
+        if let Some(proto) = refresh.user_status_proto_b64.as_ref() {
+            obj.insert(
+                "userStatusProtoBinaryBase64".to_string(),
+                Value::String(proto.clone()),
+            );
+        }
+    }
+
+    WindsurfOAuthCompletePayload {
+        github_login,
+        github_id,
+        github_name: name_hint.map(|s| s.to_string()),
+        github_email: email.clone(),
+        // ide_token 也存到 access_token，与现有刷新逻辑兼容（虽然 Devin 主刷新用 auth1）
+        github_access_token: refresh.ide_token.clone(),
+        github_token_type: Some("Bearer".to_string()),
+        github_scope: None,
+        copilot_token: refresh.ide_token.clone(),
+        copilot_plan: plan_name,
+        copilot_chat_enabled: Some(true),
+        copilot_expires_at: None,
+        copilot_refresh_in: None,
+        copilot_quota_snapshots,
+        copilot_quota_reset_date: None,
+        copilot_limited_user_quotas,
+        copilot_limited_user_reset_date,
+        windsurf_api_key: Some(refresh.ide_token.clone()),
+        windsurf_api_server_url: Some("https://server.self-serve.windsurf.com".to_string()),
+        windsurf_auth_token: Some(refresh.session_token.clone()),
+        windsurf_user_status: user_status,
+        windsurf_plan_status: plan_status,
+        windsurf_auth_status_raw: Some(auth_status_raw),
+        // 标记为 Devin 账号，refresh_payload_for_account 据此分流
+        windsurf_token_type: Some("devin-session".to_string()),
+        devin_auth1_token: Some(refresh.auth1_token.clone()),
+        devin_account_id: Some(refresh.account_id.clone()),
+        devin_org_id: Some(refresh.org_id.clone()),
+        devin_session_token: Some(refresh.session_token.clone()),
+        devin_user_status_proto_b64: refresh.user_status_proto_b64.clone(),
+    }
 }
 
 fn parse_error_message_from_body_text(body_text: &str) -> Option<String> {
@@ -1830,19 +2105,24 @@ pub async fn build_payload_from_password(
                 );
             }
 
-            logger::log_info("[Windsurf PasswordLogin] Auth1 登录开始");
-            let auth1_token = login_with_auth1_password(email, password).await?;
-            let (session_token, account_id, primary_org_id) =
-                exchange_auth1_for_session(&auth1_token).await?;
-            let auth_status_raw = Some(json!({
-                "authMethod": "auth1",
-                "sessionToken": session_token.clone(),
-                "devinAccountId": account_id,
-                "devinPrimaryOrgId": primary_org_id,
-                "email": email
-            }));
-            logger::log_info("[Windsurf PasswordLogin] Auth1 登录成功，开始获取账号信息");
-            build_payload_from_auth1_session_token(&session_token, auth_status_raw).await
+            logger::log_info("[Windsurf PasswordLogin] Auth1 登录开始 (走完整 4 步链路)");
+            let login_result =
+                crate::modules::windsurf_devin_oauth::login_with_password(email, password).await?;
+            logger::log_info(&format!(
+                "[Windsurf PasswordLogin] Auth1 邮密换 auth1 成功 (user_id={:?})",
+                login_result.user_id
+            ));
+
+            let refresh = crate::modules::windsurf_devin_oauth::full_refresh_from_auth1(
+                &login_result.auth1_token,
+            )
+            .await?;
+            logger::log_info(&format!(
+                "[Windsurf PasswordLogin] Auth1 完整链路成功: account_id={}, org_id={}",
+                refresh.account_id, refresh.org_id
+            ));
+
+            Ok(build_devin_payload(Some(email), None, &refresh).await)
         }
     }
 }
@@ -1898,6 +2178,29 @@ pub async fn build_payload_from_local_auth_status(
 pub async fn refresh_payload_for_account(
     account: &WindsurfAccount,
 ) -> Result<WindsurfOAuthCompletePayload, String> {
+    // ===== Devin 账号: auth1 是长期凭证，优先走完整 4 步链路刷新 =====
+    // 这条路径产出真正的机器绑定 ide_token + 新鲜 user_status_proto，
+    // IDE 启动后能立即对话；旧的 build_payload_from_auth1_session_token 路径
+    // 因为漏了 RegisterUser 步骤，产出的只是 sessionToken，不能机器对话。
+    if let Some(auth1) = account
+        .devin_auth1_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| s.starts_with("auth1_"))
+    {
+        logger::log_info(&format!(
+            "[Windsurf Refresh] 使用 Devin auth1 刷新: account_id={}, login={}",
+            account.id, account.github_login
+        ));
+        let refresh = crate::modules::windsurf_devin_oauth::full_refresh_from_auth1(auth1).await?;
+        return Ok(build_devin_payload(
+            account.github_email.as_deref(),
+            account.github_name.as_deref(),
+            &refresh,
+        )
+        .await);
+    }
+
     let mut auth_status_hint = account
         .windsurf_auth_status_raw
         .clone()

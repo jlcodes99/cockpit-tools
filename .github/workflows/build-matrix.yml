@@ -64,6 +64,14 @@ jobs:
             platform: "macos-latest"
             args: "--target universal-apple-darwin"
             release_dir: "src-tauri/target/universal-apple-darwin/release"
+          - label: "ubuntu-22.04"
+            platform: "ubuntu-22.04"
+            args: ""
+            release_dir: "src-tauri/target/release"
+          - label: "ubuntu-24.04-arm"
+            platform: "ubuntu-24.04-arm"
+            args: ""
+            release_dir: "src-tauri/target/release"
           - label: "windows-latest"
             platform: "windows-latest"
             args: ""
@@ -72,6 +80,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf pkg-config libsoup-3.0-dev javascriptcoregtk-4.1 libjavascriptcoregtk-4.1-dev
+          sudo apt-get install -y libnm-dev xdg-utils
 
       - name: Rust setup
         uses: dtolnay/rust-toolchain@stable

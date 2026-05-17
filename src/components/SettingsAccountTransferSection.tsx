@@ -5,14 +5,17 @@ import {
   SetStateAction,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
-import { Download, FolderOpen, RefreshCw, Trash2, X } from 'lucide-react';
+import { Archive, ChevronLeft, Download, FolderOpen, RefreshCw, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
+import { save } from '@tauri-apps/plugin-dialog';
 import { ExportJsonModal } from './ExportJsonModal';
 import { useExportJsonModal } from '../hooks/useExportJsonModal';
+import { useEscClose } from '../hooks/useEscClose';
 import {
   AccountTransferImportProgress,
   AccountTransferImportProgressDetail,
@@ -31,16 +34,20 @@ import {
   AutoBackupSettings,
   autoBackupModeToSelection,
   cleanupAutoBackupFiles,
+  copyAutoBackupFile,
   createManagedBackup,
   deleteAutoBackupFile,
+  extractAutoBackupPlatformJson,
   getAutoBackupSettings,
   getSelectionFromAutoBackupSettings,
   listAutoBackupFiles,
+  normalizeAutoBackupPlatforms,
   openAutoBackupDir,
   readAutoBackupFile,
   saveAutoBackupSettings,
   selectionToAutoBackupMode,
 } from '../services/scheduledBackupService';
+import { ALL_PLATFORM_IDS, PlatformId } from '../types/platform';
 import { getPlatformLabel } from '../utils/platformMeta';
 
 type TransferFeedbackTone = 'loading' | 'success' | 'error';
@@ -57,7 +64,7 @@ const DEFAULT_TRANSFER_SELECTION: DataTransferSelection = {
 };
 
 const BACKUP_FILE_NAME_REGEX =
-  /^cockpit_(auto|manual)_backup_(full|accounts|config)_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.json$/i;
+  /^cockpit_(auto|manual)_backup_(full|accounts|config)_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.(json|zip)$/i;
 
 function normalizeError(error: unknown): string {
   return String(error).replace(/^Error:\s*/, '');
@@ -128,6 +135,18 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
 }
 
+function stripBackupExtension(fileName: string): string {
+  return fileName.replace(/\.(json|zip)$/i, '');
+}
+
+function buildBackupJsonFileName(fileName: string): string {
+  return `${stripBackupExtension(fileName)}.json`;
+}
+
+function buildPlatformBackupFileName(fileName: string, platform: PlatformId): string {
+  return `${stripBackupExtension(fileName)}_${platform}.json`;
+}
+
 export function SettingsAccountTransferSection() {
   const { t } = useTranslation();
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -155,6 +174,9 @@ export function SettingsAccountTransferSection() {
   const [backupRunning, setBackupRunning] = useState(false);
   const [backupDeletingFile, setBackupDeletingFile] = useState<string | null>(null);
   const [backupImportingFile, setBackupImportingFile] = useState<string | null>(null);
+  const [backupDownloadingFile, setBackupDownloadingFile] = useState<string | null>(null);
+  const [backupDownloadingPlatform, setBackupDownloadingPlatform] = useState<string | null>(null);
+  const [backupPlatformFilter, setBackupPlatformFilter] = useState<PlatformId | 'all'>('all');
   const [backupRetentionInput, setBackupRetentionInput] = useState('15');
 
   const setExportFailed = useCallback(
@@ -224,6 +246,10 @@ export function SettingsAccountTransferSection() {
     if (backupSaving || backupRunning || backupImportingFile || backupDeletingFile) return;
     setShowBackupManagerModal(false);
   }, [backupDeletingFile, backupImportingFile, backupRunning, backupSaving]);
+
+  useEscClose(showExportOptionsModal, closeExportOptionsModal);
+  useEscClose(showImportModal, closeImportModal);
+  useEscClose(showBackupManagerModal, closeBackupManagerModal);
 
   const calcProgressPercent = useCallback((progress: AccountTransferImportProgress | null) => {
     if (!progress || progress.total_platforms <= 0) {
@@ -725,6 +751,97 @@ export function SettingsAccountTransferSection() {
     [executeImportContent, t],
   );
 
+  const handleDownloadBackupJson = useCallback(
+    async (fileName: string) => {
+      setBackupDownloadingFile(`${fileName}:json`);
+      try {
+        const content = await readAutoBackupFile(fileName);
+        const savedPath = await exportModal.saveJsonFile(content, buildBackupJsonFileName(fileName));
+        if (savedPath) {
+          setBackupFeedback({
+            tone: 'success',
+            text: t('settings.transfer.backup.feedback.downloadSuccess', {
+              path: savedPath,
+            }),
+          });
+        }
+      } catch (error) {
+        setBackupFeedback({
+          tone: 'error',
+          text: t('settings.transfer.backup.feedback.downloadFailed', {
+            error: normalizeError(error),
+          }),
+        });
+      } finally {
+        setBackupDownloadingFile(null);
+      }
+    },
+    [exportModal, t],
+  );
+
+  const handleDownloadBackupZip = useCallback(
+    async (fileName: string) => {
+      setBackupDownloadingFile(`${fileName}:zip`);
+      try {
+        const defaultPath = await exportModal.resolveDefaultExportPath(fileName);
+        const targetPath = await save({
+          defaultPath,
+          filters: [{ name: 'ZIP', extensions: ['zip'] }],
+        });
+        if (!targetPath) return;
+        const savedPath = await copyAutoBackupFile(fileName, targetPath);
+        setBackupFeedback({
+          tone: 'success',
+          text: t('settings.transfer.backup.feedback.downloadSuccess', {
+            path: savedPath,
+          }),
+        });
+      } catch (error) {
+        setBackupFeedback({
+          tone: 'error',
+          text: t('settings.transfer.backup.feedback.downloadFailed', {
+            error: normalizeError(error),
+          }),
+        });
+      } finally {
+        setBackupDownloadingFile(null);
+      }
+    },
+    [exportModal, t],
+  );
+
+  const handleDownloadBackupPlatform = useCallback(
+    async (fileName: string, platform: PlatformId) => {
+      setBackupDownloadingPlatform(`${fileName}:${platform}`);
+      try {
+        const content = await readAutoBackupFile(fileName);
+        const platformJson = extractAutoBackupPlatformJson(content, platform);
+        const savedPath = await exportModal.saveJsonFile(
+          platformJson,
+          buildPlatformBackupFileName(fileName, platform),
+        );
+        if (savedPath) {
+          setBackupFeedback({
+            tone: 'success',
+            text: t('settings.transfer.backup.feedback.downloadSuccess', {
+              path: savedPath,
+            }),
+          });
+        }
+      } catch (error) {
+        setBackupFeedback({
+          tone: 'error',
+          text: t('settings.transfer.backup.feedback.downloadFailed', {
+            error: normalizeError(error),
+          }),
+        });
+      } finally {
+        setBackupDownloadingPlatform(null);
+      }
+    },
+    [exportModal, t],
+  );
+
   const handleOpenBackupDir = useCallback(async () => {
     try {
       await openAutoBackupDir();
@@ -743,7 +860,37 @@ export function SettingsAccountTransferSection() {
     : DEFAULT_TRANSFER_SELECTION;
   const backupMode = selectionToAutoBackupMode(backupSelection);
   const backupControlsDisabled =
-    backupSaving || backupRunning || backupImportingFile !== null || backupDeletingFile !== null;
+    backupSaving ||
+    backupRunning ||
+    backupImportingFile !== null ||
+    backupDeletingFile !== null ||
+    backupDownloadingFile !== null ||
+    backupDownloadingPlatform !== null;
+  const backupPlatformOptions = useMemo(() => {
+    const present = new Set<PlatformId>();
+    for (const file of backupFiles) {
+      for (const item of normalizeAutoBackupPlatforms(file.platforms)) {
+        present.add(item.platform);
+      }
+    }
+    return ALL_PLATFORM_IDS.filter((platform) => present.has(platform));
+  }, [backupFiles]);
+  const visibleBackupFiles = useMemo(() => {
+    if (backupPlatformFilter === 'all') {
+      return backupFiles;
+    }
+    return backupFiles.filter((file) =>
+      normalizeAutoBackupPlatforms(file.platforms).some(
+        (item) => item.platform === backupPlatformFilter,
+      ),
+    );
+  }, [backupFiles, backupPlatformFilter]);
+
+  useEffect(() => {
+    if (backupPlatformFilter === 'all') return;
+    if (backupPlatformOptions.includes(backupPlatformFilter)) return;
+    setBackupPlatformFilter('all');
+  }, [backupPlatformFilter, backupPlatformOptions]);
 
   const formatBackupTime = useCallback((value: string | number | null | undefined) => {
     if (value == null) {
@@ -902,6 +1049,7 @@ export function SettingsAccountTransferSection() {
           <div className="modal-overlay" onClick={closeExportOptionsModal}>
             <div className="modal settings-transfer-modal" onClick={(event) => event.stopPropagation()}>
               <div className="modal-header">
+                <button className="btn btn-secondary icon-only" onClick={closeExportOptionsModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
                 <h2>{t('settings.transfer.exportTitle')}</h2>
                 <button
                   className="modal-close"
@@ -952,6 +1100,7 @@ export function SettingsAccountTransferSection() {
           <div className="modal-overlay" onClick={closeImportModal}>
             <div className="modal settings-transfer-modal" onClick={(event) => event.stopPropagation()}>
               <div className="modal-header">
+                <button className="btn btn-secondary icon-only" onClick={closeImportModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
                 <h2>{t('settings.transfer.importTitle')}</h2>
                 <button className="modal-close" onClick={closeImportModal} aria-label={t('common.close')}>
                   <X />
@@ -1088,6 +1237,7 @@ export function SettingsAccountTransferSection() {
               onClick={(event) => event.stopPropagation()}
             >
               <div className="modal-header">
+                <button className="btn btn-secondary icon-only" onClick={closeBackupManagerModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
                 <h2>{t('settings.transfer.backup.title')}</h2>
                 <button className="modal-close" onClick={closeBackupManagerModal} aria-label={t('common.close')}>
                   <X />
@@ -1242,6 +1392,27 @@ export function SettingsAccountTransferSection() {
                     {t('settings.transfer.backup.listDesc')}
                   </div>
 
+                  {backupPlatformOptions.length > 0 && (
+                    <div className="settings-backup-platform-filter">
+                      <span>{t('settings.transfer.backup.platformFilterLabel')}</span>
+                      <select
+                        className="settings-select"
+                        value={backupPlatformFilter}
+                        onChange={(event) =>
+                          setBackupPlatformFilter(event.target.value as PlatformId | 'all')
+                        }
+                        disabled={backupControlsDisabled}
+                      >
+                        <option value="all">{t('settings.transfer.backup.platformFilterAll')}</option>
+                        {backupPlatformOptions.map((platform) => (
+                          <option key={platform} value={platform}>
+                            {getPlatformLabel(platform, t)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   <div className="settings-backup-list-wrap">
                     {backupLoading ? (
                       <div className="settings-backup-empty">
@@ -1257,12 +1428,29 @@ export function SettingsAccountTransferSection() {
                           {t('settings.transfer.backup.emptyDesc')}
                         </div>
                       </div>
+                    ) : visibleBackupFiles.length === 0 ? (
+                      <div className="settings-backup-empty">
+                        <div className="settings-backup-empty-title">
+                          {t('settings.transfer.backup.platformEmptyTitle')}
+                        </div>
+                        <div className="settings-backup-empty-desc">
+                          {t('settings.transfer.backup.platformEmptyDesc')}
+                        </div>
+                      </div>
                     ) : (
                       <div className="settings-backup-list">
-                        {backupFiles.map((file) => {
+                        {visibleBackupFiles.map((file) => {
                           const meta = parseManagedBackupMeta(file.file_name);
                           const isDeleting = backupDeletingFile === file.file_name;
                           const isImportingBackup = backupImportingFile === file.file_name;
+                          const platformEntries = normalizeAutoBackupPlatforms(file.platforms);
+                          const archiveFileName = file.archive_file_name ?? (
+                            file.file_kind === 'zip' ? file.file_name : null
+                          );
+                          const isDownloadingJson = backupDownloadingFile === `${file.file_name}:json`;
+                          const isDownloadingZip = archiveFileName
+                            ? backupDownloadingFile === `${archiveFileName}:zip`
+                            : false;
                           return (
                             <div key={file.file_name} className="settings-backup-item">
                               <div className="settings-backup-item-head">
@@ -1274,6 +1462,11 @@ export function SettingsAccountTransferSection() {
                                   <span className="settings-backup-tag">
                                     {getBackupModeLabel(meta.mode)}
                                   </span>
+                                  {archiveFileName && (
+                                    <span className="settings-backup-tag">
+                                      {t('settings.transfer.backup.archiveTag')}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                               <div className="settings-backup-item-meta">
@@ -1287,8 +1480,80 @@ export function SettingsAccountTransferSection() {
                                     size: formatFileSize(file.size_bytes),
                                   })}
                                 </span>
+                                {file.archive_size_bytes ? (
+                                  <span>
+                                    {t('settings.transfer.backup.archiveSize', {
+                                      size: formatFileSize(file.archive_size_bytes),
+                                    })}
+                                  </span>
+                                ) : null}
                               </div>
+                              {platformEntries.length > 0 && (
+                                <div className="settings-backup-platforms">
+                                  <div className="settings-backup-platforms-title">
+                                    {t('settings.transfer.backup.platformsTitle')}
+                                  </div>
+                                  <div className="settings-backup-platform-list">
+                                    {platformEntries.map((item) => {
+                                      const isDownloadingPlatform =
+                                        backupDownloadingPlatform === `${file.file_name}:${item.platform}`;
+                                      return (
+                                        <button
+                                          key={item.platform}
+                                          type="button"
+                                          className="settings-backup-platform-pill"
+                                          onClick={() => {
+                                            void handleDownloadBackupPlatform(file.file_name, item.platform);
+                                          }}
+                                          disabled={backupControlsDisabled}
+                                          title={t('settings.transfer.backup.platformDownloadAction')}
+                                        >
+                                          {isDownloadingPlatform ? (
+                                            <RefreshCw size={13} className="loading-spinner" />
+                                          ) : (
+                                            <Download size={13} />
+                                          )}
+                                          <span>{getPlatformLabel(item.platform, t)}</span>
+                                          <span className="settings-backup-platform-count">
+                                            {item.account_count}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
                               <div className="settings-backup-item-actions">
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => {
+                                    void handleDownloadBackupJson(file.file_name);
+                                  }}
+                                  disabled={backupControlsDisabled || isDeleting}
+                                >
+                                  {isDownloadingJson ? (
+                                    <RefreshCw size={14} className="loading-spinner" />
+                                  ) : (
+                                    <Download size={14} />
+                                  )}
+                                  {t('settings.transfer.backup.downloadJsonAction')}
+                                </button>
+                                {archiveFileName && (
+                                  <button
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => {
+                                      void handleDownloadBackupZip(archiveFileName);
+                                    }}
+                                    disabled={backupControlsDisabled || isDeleting}
+                                  >
+                                    {isDownloadingZip ? (
+                                      <RefreshCw size={14} className="loading-spinner" />
+                                    ) : (
+                                      <Archive size={14} />
+                                    )}
+                                    {t('settings.transfer.backup.downloadZipAction')}
+                                  </button>
+                                )}
                                 <button
                                   className="btn btn-secondary btn-sm"
                                   onClick={() => {

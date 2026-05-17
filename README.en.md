@@ -17,7 +17,7 @@ A **universal AI IDE account management tool**, currently supporting **Antigravi
 
 🇺🇸 English · 🇨🇳 简体中文 · 繁體中文 · 🇯🇵 日本語 · 🇩🇪 Deutsch · 🇪🇸 Español · 🇫🇷 Français · 🇮🇹 Italiano · 🇰🇷 한국어 · 🇧🇷 Português · 🇷🇺 Русский · 🇹🇷 Türkçe · 🇵🇱 Polski · 🇨🇿 Čeština · 🇸🇦 العربية · 🇻🇳 Tiếng Việt · 🇮🇩 Bahasa Indonesia
 
-**Officially supported platforms**: macOS and Windows. Future versions no longer provide official Linux/Ubuntu installers or Linux/Ubuntu compatibility maintenance.
+**Officially supported platforms**: macOS, Windows, and Linux.
 
 ---
 
@@ -231,6 +231,7 @@ These are the most common security questions answered directly:
   - local app data folder under `com.antigravity.cockpit-tools`: Codex / GitHub Copilot / Windsurf / Kiro / Cursor / Gemini Cli / CodeBuddy / CodeBuddy CN / Qoder / Trae / Zed multi-account index data, etc.
 - **WebSocket is local-only by default**: binds to `127.0.0.1`, default port `19528`; you can disable it or change the port in Settings.
 - **When network access happens**: OAuth login, token refresh, quota fetching, update checks, and other official API requests.
+- **macOS privacy permission prompts**: after you start Codex/agent from Cockpit Tools, if an agent-run shell command accesses protected folders such as Desktop, Documents, Downloads, or Photos, macOS may show the request as "Cockpit Tools would like to access...". This happens because those commands are child processes launched by Cockpit Tools, so macOS attributes the request to the host app; it does not by itself mean the Cockpit Tools main process is actively scanning those folders. Grant access only when you trust the current agent task and the commands it is going to run. If unsure, deny the prompt or run the project from a normal working directory first.
 - **Practical safety tips**:
   1. If you do not need plugin integration, disable WebSocket.
   2. Do not share your full user directory directly; redact token files before backup/share.
@@ -295,8 +296,7 @@ Go to [GitHub Releases](https://github.com/jlcodes99/cockpit-tools/releases) to 
 
 *   **macOS**: `.dmg` (Apple Silicon & Intel)
 *   **Windows**: `.msi` (Recommended) or `.exe`
-
-> Linux/Ubuntu is no longer an official release target; the Releases page will no longer provide `.deb`, `.rpm`, or `.AppImage` installers.
+*   **Linux**: `.deb` (Debian/Ubuntu), `.rpm`, or `.AppImage` (Universal)
 
 ### Option B: Install with Homebrew (macOS)
 
@@ -329,7 +329,7 @@ brew install --cask --force cockpit-tools
 ### 🛠️ Troubleshooting
 
 #### macOS says "App is damaged and can't be opened"?
-Due to macOS security mechanisms, apps not downloaded from the App Store may trigger this warning. You can quickly fix this by following these steps:
+Due to macOS security mechanisms, apps not downloaded from the App Store may trigger this warning. The current open-source release flow does not yet use Apple Developer ID signing or notarization, so some macOS versions may show stricter Gatekeeper prompts. You can quickly fix this by following these steps:
 
 1.  **Command Line Fix** (Recommended):
     Open Terminal and run the following command:

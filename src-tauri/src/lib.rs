@@ -99,6 +99,11 @@ pub fn run() {
             // 存储全局 AppHandle
             let _ = APP_HANDLE.set(app.handle().clone());
 
+            // 启动时清理 WebKit LocalStorage WAL，防止无限膨胀
+            std::thread::spawn(|| {
+                modules::webkit_cache_maintenance::checkpoint_webkit_localstorage();
+            });
+
             // 初始化 Updater 插件
             #[cfg(desktop)]
             {
@@ -273,6 +278,7 @@ pub fn run() {
                     }
                     CloseWindowBehavior::Quit => {
                         info!("[Window] 用户选择退出应用");
+                        window.app_handle().exit(0);
                     }
                     CloseWindowBehavior::Ask => {
                         api.prevent_close();
@@ -356,6 +362,7 @@ pub fn run() {
             commands::system::update_auto_backup_last_run,
             commands::system::write_auto_backup_file,
             commands::system::read_auto_backup_file,
+            commands::system::copy_auto_backup_file,
             commands::system::list_auto_backup_files,
             commands::system::delete_auto_backup_file,
             commands::system::cleanup_auto_backup_files,
@@ -383,6 +390,7 @@ pub fn run() {
             commands::system::save_floating_card_position,
             commands::system::show_main_window_and_navigate,
             commands::system::external_import_take_pending,
+            commands::system::external_import_fetch_import_url,
             commands::system::open_folder,
             commands::system::delete_corrupted_file,
             // Logs Commands
@@ -436,6 +444,11 @@ pub fn run() {
             commands::codex::open_codex_config_toml,
             commands::codex::get_codex_quick_config,
             commands::codex::save_codex_quick_config,
+            commands::codex::get_codex_app_speed_config,
+            commands::codex::save_codex_app_speed,
+            commands::codex::get_codex_api_service_app_speed_config,
+            commands::codex::save_codex_api_service_app_speed,
+            commands::codex::update_codex_account_app_speed,
             commands::codex::refresh_codex_account_profile,
             commands::codex::switch_codex_account,
             commands::codex::delete_codex_account,
@@ -455,9 +468,11 @@ pub fn run() {
             commands::codex::add_codex_account_with_api_key,
             commands::codex::update_codex_account_name,
             commands::codex::update_codex_api_key_credentials,
+            commands::codex::update_codex_api_key_bound_oauth_account,
             commands::codex::is_codex_oauth_port_in_use,
             commands::codex::close_codex_oauth_port,
             commands::codex::update_codex_account_tags,
+            commands::codex::update_codex_account_note,
             commands::codex::codex_wakeup_get_cli_status,
             commands::codex::codex_wakeup_update_runtime_config,
             commands::codex::codex_wakeup_get_overview,
@@ -478,13 +493,16 @@ pub fn run() {
             commands::codex::codex_local_access_save_accounts,
             commands::codex::codex_local_access_remove_account,
             commands::codex::codex_local_access_rotate_api_key,
+            commands::codex::codex_local_access_update_bound_oauth_account,
             commands::codex::codex_local_access_clear_stats,
             commands::codex::codex_local_access_prepare_restart,
             commands::codex::codex_local_access_kill_port,
             commands::codex::codex_local_access_update_port,
             commands::codex::codex_local_access_update_routing_strategy,
+            commands::codex::codex_local_access_update_access_scope,
             commands::codex::codex_local_access_set_enabled,
             commands::codex::codex_local_access_activate,
+            commands::codex::codex_local_access_test,
             // GitHub Copilot Commands
             commands::github_copilot::list_github_copilot_accounts,
             commands::github_copilot::delete_github_copilot_account,
@@ -580,8 +598,6 @@ pub fn run() {
             commands::codebuddy_cn::get_codebuddy_cn_accounts_index_path,
             commands::codebuddy_cn::inject_codebuddy_cn_to_vscode,
             commands::codebuddy_cn::sync_codebuddy_cn_to_workbuddy,
-            commands::codebuddy_cn::get_checkin_status_codebuddy_cn,
-            commands::codebuddy_cn::checkin_codebuddy_cn,
             // WorkBuddy Commands
             commands::workbuddy::list_workbuddy_accounts,
             commands::workbuddy::delete_workbuddy_account,
@@ -788,6 +804,7 @@ pub fn run() {
             commands::codex_instance::codex_save_instance_quick_config,
             commands::codex_instance::codex_open_instance_config_toml,
             commands::codex_instance::codex_sync_threads_across_instances,
+            commands::codex_instance::codex_sync_sessions_to_instance,
             commands::codex_instance::codex_repair_session_visibility_across_instances,
             commands::codex_instance::codex_list_sessions_across_instances,
             commands::codex_instance::codex_get_session_token_stats_across_instances,
@@ -822,10 +839,8 @@ pub fn run() {
         {
             match event {
                 RunEvent::Reopen { .. } => {
-                    if let Some(window) = app_handle.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.unminimize();
-                        let _ = window.set_focus();
+                    if let Err(err) = modules::floating_card_window::show_main_window(app_handle) {
+                        logger::log_warn(&format!("[Window] Dock 重新打开主窗口失败: {}", err));
                     }
                 }
                 RunEvent::Opened { urls } => {

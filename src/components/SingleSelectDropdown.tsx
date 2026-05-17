@@ -12,10 +12,13 @@ interface SingleSelectDropdownProps {
   value: string;
   options: SingleSelectOption[];
   onChange: (value: string) => void;
+  className?: string;
+  menuClassName?: string;
   disabled?: boolean;
   ariaLabel?: string;
   placeholder?: string;
   menuPlacement?: "down" | "up";
+  menuWidth?: number;
   menuMaxHeight?: number;
 }
 
@@ -23,10 +26,13 @@ export function SingleSelectDropdown({
   value,
   options,
   onChange,
+  className,
+  menuClassName,
   disabled = false,
   ariaLabel,
   placeholder,
   menuPlacement = "down",
+  menuWidth,
   menuMaxHeight = 280,
 }: SingleSelectDropdownProps) {
   const [open, setOpen] = useState(false);
@@ -52,12 +58,17 @@ export function SingleSelectDropdown({
     const updateMenuPosition = () => {
       const rect = triggerRef.current?.getBoundingClientRect();
       if (!rect) return;
+      const width = menuWidth ? Math.max(rect.width, menuWidth) : rect.width;
+      const left = Math.min(
+        rect.left,
+        Math.max(12, window.innerWidth - width - 12),
+      );
       if (menuPlacement === "up") {
         const availableHeight = Math.max(160, rect.top - 20);
         setMenuStyle({
           bottom: window.innerHeight - rect.top + 10,
-          left: rect.left,
-          width: rect.width,
+          left,
+          width,
           maxHeight: Math.min(menuMaxHeight, availableHeight),
         });
         return;
@@ -66,8 +77,8 @@ export function SingleSelectDropdown({
       const availableHeight = Math.max(160, window.innerHeight - rect.bottom - 20);
       setMenuStyle({
         top: rect.bottom + 10,
-        left: rect.left,
-        width: rect.width,
+        left,
+        width,
         maxHeight: Math.min(menuMaxHeight, availableHeight),
       });
     };
@@ -90,7 +101,7 @@ export function SingleSelectDropdown({
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [menuMaxHeight, menuPlacement, open]);
+  }, [menuMaxHeight, menuPlacement, menuWidth, open]);
 
   useEffect(() => {
     if (!disabled) return;
@@ -102,7 +113,13 @@ export function SingleSelectDropdown({
   return (
     <div
       ref={rootRef}
-      className={`single-select-dropdown${disabled ? " disabled" : ""}`}
+      className={[
+        "single-select-dropdown",
+        disabled ? "disabled" : "",
+        className ?? "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       <button
         ref={triggerRef}
@@ -129,7 +146,12 @@ export function SingleSelectDropdown({
         ? createPortal(
             <div
               ref={menuRef}
-              className="single-select-dropdown-menu"
+              className={[
+                "single-select-dropdown-menu",
+                menuClassName ?? "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
               style={{
                 position: "fixed",
                 top: menuStyle.top !== undefined ? `${menuStyle.top}px` : "auto",

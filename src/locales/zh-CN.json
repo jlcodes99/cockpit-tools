@@ -77,6 +77,40 @@
           "statusPending": "待导入"
         }
       },
+      "externalImport": {
+        "bundleInvalidJson": "导入包不是有效 JSON",
+        "bundleEmpty": "导入包内容为空",
+        "bundleProviderMismatch": "导入包平台不匹配",
+        "bundleNoItems": "导入包没有可导入内容",
+        "titleCodex": "Codex 批量导入",
+        "statusReceiving": "正在接收导入请求...",
+        "statusFetching": "正在获取导入包...",
+        "statusParsing": "正在解析 Codex 导入内容...",
+        "statusImporting": "正在导入第 {{current}} / {{total}} 个账号",
+        "statusRefreshing": "正在刷新账号列表...",
+        "statusActivating": "正在切换到导入账号...",
+        "statusSuccess": "导入完成",
+        "statusPartial": "部分导入完成",
+        "statusFailed": "导入失败",
+        "total": "总数",
+        "success": "成功",
+        "failed": "失败",
+        "stepReceive": "接收导入请求",
+        "stepFetch": "获取导入包",
+        "stepParse": "解析导入内容",
+        "stepImport": "导入账号",
+        "stepRefresh": "刷新账号列表",
+        "errorsTitle": "失败项",
+        "viewAccounts": "查看 Codex 账号",
+        "copyErrors": "复制错误",
+        "copied": "已复制",
+        "unknownItem": "第 {{index}} 个导入项",
+        "versionUnsupportedTitle": "应用版本过低",
+        "versionUnsupportedDesc": "暂不支持此方式，请下载最新版。",
+        "checkUpdate": "检查更新",
+        "rawLineNoRefreshToken": "第 {{line}} 行没有匹配到 refresh_token",
+        "rawLineMultipleRefreshTokens": "第 {{line}} 行匹配到多个 refresh_token，请只保留一个"
+      },
       "instances": {
         "unsupported": {
           "title": "暂不支持当前系统"
@@ -112,6 +146,9 @@
         "ascTooltip": "当前：升序，点击切换为降序",
         "createdAt": "按创建时间",
         "descTooltip": "当前：降序，点击切换为升序",
+        "recommended": "按推荐",
+        "recommendedAscTooltip": "按推荐度升序（最不值得切去的在前）",
+        "recommendedDescTooltip": "按推荐度降序（最值得切去的在前）",
         "toggleDirection": "切换排序方向",
         "credits": "按剩余 Credits",
         "planEnd": "按配额周期结束时间"
@@ -386,7 +423,8 @@
       "instance": "实例",
       "email": "账号",
       "quota": "配额状态",
-      "actions": "操作"
+      "actions": "操作",
+      "speed": "速度"
     },
     "empty": {
       "title": "还没有实例",
@@ -464,7 +502,9 @@
       },
       "nameRequired": "请输入实例名称",
       "pathRequired": "请选择实例目录",
-      "bindRequired": "请选择要绑定的账号"
+      "bindRequired": "请选择要绑定的账号",
+      "appSpeed": "速度",
+      "appSpeedDesc": "启动官方 Codex 前写入对应速度"
     },
     "quota": {
       "unbound": "未绑定账号",
@@ -485,7 +525,8 @@
       "closedAll": "已关闭所有实例",
       "allAlreadyRunning": "所有实例已在运行",
       "noneRunning": "当前没有运行中的实例",
-      "syncThreadsNeedTwo": "至少需要两个实例才能同步线程"
+      "syncThreadsNeedTwo": "至少需要两个实例才能同步线程",
+      "speedUpdated": "速度已更新"
     },
     "runningDialog": {
       "title": "实例已在运行",
@@ -557,13 +598,13 @@
       "backup": {
         "title": "备份管理",
         "desc": "统一管理定期备份、备份目录和备份列表。",
-        "modalDesc": "在这里配置自动备份规则，查看项目目录内的备份文件，并执行恢复或清理。",
+        "modalDesc": "在这里配置自动备份规则，查看项目目录内的备份文件，并执行恢复、下载或清理。",
         "statusEnabled": "自动备份已开启",
         "statusDisabled": "自动备份已关闭",
         "lastRunLabel": "最近备份：{{time}}",
         "lastRunNever": "尚未生成备份",
         "autoTitle": "定期备份",
-        "autoDesc": "开启后每天自动导出一次备份，文件可直接用当前导入恢复。",
+        "autoDesc": "开启后每天自动导出一次 JSON 备份，并同步生成 ZIP 压缩包副本。",
         "runNow": "立即备份",
         "running": "备份中...",
         "typeTitle": "备份类型",
@@ -578,14 +619,24 @@
         "directoryDesc": "备份固定保存到项目目录下的 backups 文件夹。",
         "openFolder": "打开目录",
         "listTitle": "备份列表",
-        "listDesc": "支持直接导入当前备份，或删除旧备份。",
+        "listDesc": "支持按平台查看账号内容，下载完整 JSON、ZIP 或单个平台 JSON。",
+        "platformFilterLabel": "平台",
+        "platformFilterAll": "全部平台",
         "openList": "打开列表",
         "emptyTitle": "暂无备份",
-        "emptyDesc": "开启自动备份或点击“立即备份”后，会在这里显示可恢复的 JSON 备份。",
+        "emptyDesc": "开启自动备份或点击“立即备份”后，会在这里显示可恢复的 JSON 与 ZIP 备份。",
+        "platformEmptyTitle": "无匹配备份",
+        "platformEmptyDesc": "当前平台没有可下载的账号备份。",
         "sourceAuto": "自动",
         "sourceManual": "手动",
         "fileTime": "时间：{{time}}",
         "fileSize": "大小：{{size}}",
+        "archiveTag": "ZIP",
+        "archiveSize": "压缩包：{{size}}",
+        "platformsTitle": "平台账号",
+        "platformDownloadAction": "下载平台 JSON",
+        "downloadJsonAction": "JSON",
+        "downloadZipAction": "ZIP",
         "importAction": "导入",
         "deleteAction": "删除",
         "deleteConfirm": "确认删除备份 {{name}}？",
@@ -600,7 +651,9 @@
           "saveSettingsFailed": "保存备份设置失败：{{error}}",
           "cleanupDone": "已清理 {{count}} 个过期备份",
           "cleanupFailed": "清理过期备份失败：{{error}}",
-          "openFolderFailed": "打开备份目录失败：{{error}}"
+          "openFolderFailed": "打开备份目录失败：{{error}}",
+          "downloadSuccess": "备份已下载到 {{path}}",
+          "downloadFailed": "下载备份失败：{{error}}"
         },
         "errors": {
           "invalidRetention": "保留天数需在 1 到 365 天之间"
@@ -836,7 +889,14 @@
       "qoderAutoRefreshDesc": "后台自动更新频率",
       "qoderPathSelect": "选择",
       "workbuddyAutoRefresh": "WorkBuddy 自动刷新配额",
-      "workbuddyAutoRefreshDesc": "后台自动更新频率"
+      "workbuddyAutoRefreshDesc": "后台自动更新频率",
+      "codexAppSpeed": "Codex 速度",
+      "codexAppSpeedDesc": "保存为官方 Codex 启动速度；每次从本应用启动 Codex 前都会写入。",
+      "codexAppSpeedStandard": "标准",
+      "codexAppSpeedFast": "快速",
+      "codexAppSpeedLaunch": "重启 Codex",
+      "codexAppSpeedSaveFailed": "保存 Codex 速度失败：{{error}}",
+      "codexAppSpeedLaunchFailed": "重启 Codex 失败：{{error}}"
     },
     "network": {
       "apiTitle": "反重力驾驶舱 API",
@@ -1593,7 +1653,8 @@
     "authorizing": "等待系统授权安装...",
     "installFailed": "系统安装失败，请稍后重试或手动下载安装。",
     "restartRequiredAfterInstall": "更新已安装，请手动重启应用完成切换。",
-    "stoppingApiService": "正在关闭 API 服务..."
+    "stoppingApiService": "正在关闭 API 服务...",
+    "stopApiServiceFailed": "无法关闭 API 服务，请先停用后重试。"
   },
   "closeDialog": {
     "title": "关闭窗口",
@@ -1613,13 +1674,20 @@
   },
   "codex": {
     "title": "Codex 账号管理",
+    "newApi": {
+      "quota": {
+        "available": "额度",
+        "unlimited": "不限量",
+        "usedHint": "已用 {{used}}"
+      }
+    },
     "subtitle": "实时监控所有Codex账号的模型配额状态。",
     "instances": {
       "subtitle": "多实例独立配置，多账号并行运行。",
       "comingSoon": "多开实例功能即将上线",
       "comingSoonDesc": "支持以不同账号同时运行多个 Codex.app 实例，敬请期待。",
       "unsupported": {
-        "desc": "Codex 多开实例仅支持 macOS，请在 macOS 上使用。"
+        "desc": "Codex 多开实例仅支持 macOS 和 Windows。"
       },
       "quota": {
         "hourly": "5小时",
@@ -1655,11 +1723,14 @@
     },
     "apiSwitchNotice": {
       "title": "Codex 会话不可见",
-      "message": "由于 Codex 官方机制，API 与账号直接切换后，原有会话可能不会自动显示。你可以在本弹框中执行一次「修复可见性」，后续也可以通过「会话管理」里的「修复可见性」功能修复。",
-      "dontAskAgain": "不再提示",
-      "switchOnly": "仅切换",
-      "switchAndRepair": "切换并修复一次",
-      "repairFailed": "快捷修复失败。你仍可稍后在「会话管理」中使用「修复可见性」重试。"
+      "message": "检测到 Codex 已从 {{from}} 切换到 {{to}}。由于官方机制，API 与账号直接切换后，原有会话可能不会自动显示。正在自动修复会话可见性，后续也可以通过「会话管理」里的「修复可见性」功能修复。",
+      "repairing": "正在修复 Codex 会话可见性...",
+      "repairFailed": "自动修复失败。你仍可稍后在「会话管理」中使用「修复可见性」重试。",
+      "type": {
+        "apiKey": "API 密钥",
+        "apiService": "API 服务",
+        "account": "账号"
+      }
     },
     "current": "当前",
     "account": {
@@ -1688,8 +1759,13 @@
       "timeoutRetry": "刷新授权链接"
     },
     "token": {
-      "desc": "粘贴 auth.json 内容或账号 JSON 数据",
-      "placeholder": "示例：{\"tokens\":{\"id_token\":\"eyJ...\",\"access_token\":\"eyJ...\"}}"
+      "desc": "粘贴 auth.json、账号 JSON 或 refresh_token。",
+      "placeholder": "示例：每行一个 refresh_token，或 {\"refresh_token\":\"rt_...\"}",
+      "formatSummary": "必填字段与示例（点击展开）",
+      "formatRequired": "支持完整 tokens（id_token + access_token）、单个 refresh_token，或每行一个 refresh_token。仅 refresh_token 会先联网换取完整凭据。",
+      "formatSingleLabel": "完整 tokens 示例",
+      "formatRefreshOnlyLabel": "仅 refresh_token 示例",
+      "formatBatchLabel": "批量示例"
     },
     "exportFormat": {
       "label": "导出格式",
@@ -1701,6 +1777,17 @@
       "savedFolder": "保存目录",
       "savedPath": "保存路径"
     },
+    "accountNote": {
+      "title": "账号备注",
+      "label": "账号备注",
+      "desc": "给 {{account}} 填写单独展示的账号备注。",
+      "placeholder": "例如邮箱、密码、辅助邮箱或其他交付备注",
+      "emptyTitle": "填写账号备注",
+      "short": "账号备注",
+      "addShort": "加备注",
+      "saved": "账号备注已保存",
+      "saveFailed": "保存账号备注失败：{{error}}"
+    },
     "localAccess": {
       "title": "API 服务",
       "entryAction": "添加至 API 服务",
@@ -1708,6 +1795,15 @@
       "manageDesc": "在这里统一管理 API 服务的统计、成员、端口、密钥和连通性测试。",
       "accountCount": "{{count}} 个账号",
       "baseUrl": "地址",
+      "addressKind": "地址类型",
+      "addressLocal": "本机",
+      "addressLan": "局域网",
+      "accessScopeLabel": "访问范围",
+      "accessScopeLocalhost": "仅本机",
+      "accessScopeLan": "局域网",
+      "accessScopeLocalhostShort": "仅本机",
+      "accessScopeLanShort": "本机+局域网",
+      "accessScopeSaveSuccess": "API 服务访问范围已更新",
       "apiPortUrl": "API端口URL",
       "apiKey": "密钥",
       "modelId": "模型 ID",
@@ -1718,17 +1814,36 @@
       "statusDisabled": "已停用",
       "statusUnconfigured": "未配置",
       "emptyMembers": "将账号添加到 API 服务，点击启动即可，无需其他配置",
-      "footerHint": "监听本机与局域网",
+      "footerHint": "监听范围：{{scope}}",
       "memberOnlyLocal": "本机/局域网",
       "manageAccounts": "管理账号",
       "rotateKey": "重置密钥",
       "rotateConfirmMessage": "重置后当前 API 服务密钥会立即失效，正在进行中的请求可能不可用。确认继续吗？",
       "disableService": "停用服务",
       "enableService": "启用服务",
-      "testAction": "测试 API 服务",
-      "testSuccess": "API 服务测试成功（{{count}} 个模型）",
-      "testTimeout": "测试超时，请确认本地服务已启动",
+      "testAction": "测试",
+      "testDialogTitle": "测试 API 服务",
+      "testDialogDesc": "通过 Codex CLI 发起一次真实请求，验证本地服务、密钥和上游响应。",
+      "testProgressTitle": "正在测试服务",
+      "testProgressDesc": "正在向本地 API 服务发起真实请求，请稍候。",
+      "testOutputTitle": "返回结果",
+      "testResultTitle": "服务检测结果",
+      "testSuccess": "服务检测成功：本地服务、密钥和上游响应正常（{{model}}，{{latency}}）。如果 Codex 仍报 502，请检查 Codex 的 Base URL、API Key 或运行环境。",
+      "testFailureStage": "定位阶段",
+      "testFailureCause": "失败原因",
+      "testFailureSuggestion": "处理建议",
+      "testFailureStatus": "HTTP 状态",
+      "testFailureModel": "检测模型",
+      "testFailureDetail": "诊断详情",
+      "testFailureCliOutput": "CLI 输出",
+      "testFailureGatewayOutput": "网关返回",
+      "testTimeout": "真实请求检测超时，请检查本地服务、代理或上游网络。",
       "testUnavailable": "当前 API 服务地址不可用",
+      "testConnectFailed": "无法连接 {{url}}。请确认 API 服务已启动、端口未被改动或被拦截。",
+      "testAuthFailed": "服务可达，但鉴权失败：{{detail}}。请检查 API 服务密钥或账号登录状态。",
+      "testServiceUnavailable": "服务可达，但当前不可用：{{detail}}。请检查服务是否启用、账号集合是否为空或账号是否可用。",
+      "testRateLimited": "服务可达，但上游限流或额度不足：{{detail}}。",
+      "testHttpFailed": "服务可达，但请求返回 HTTP {{status}}：{{detail}}。",
       "activateAction": "启动 API 服务",
       "enableBeforeActivateTitle": "服务未启用",
       "enableBeforeActivateMessage": "API 服务当前未启用，需要先启用服务。是否启用并切号？",
@@ -1771,8 +1886,8 @@
       "refreshStatsSuccess": "API 服务统计已刷新",
       "accountStatsTitle": "按账号统计",
       "statsEmpty": "当前还没有统计数据",
-      "summaryMeta": "{{count}} 个账号 · 本机/局域网",
-      "summaryMetaUnconfigured": "未配置 · 本机/局域网",
+      "summaryMeta": "{{count}} 个账号 · {{scope}}",
+      "summaryMetaUnconfigured": "未配置 · {{scope}}",
       "expandDetails": "展开详情",
       "collapseDetails": "收起详情",
       "hideEntryAction": "关闭 API 服务入口",
@@ -1793,6 +1908,14 @@
         "daily": "日",
         "weekly": "周",
         "monthly": "月"
+      },
+      "quotaPool": {
+        "title": "额度池",
+        "hourlyShort": "5h",
+        "weeklyShort": "周",
+        "viewFull": "查看完整统计",
+        "modalTitle": "API 服务额度池",
+        "empty": "暂无额度统计"
       },
       "memberTitle": "集合成员",
       "routingStrategy": {
@@ -1830,7 +1953,12 @@
         "empty": "暂无可加入的 OAuth 账号",
         "selected": "已加入 API 服务",
         "available": "普通面板",
+        "manageMembers": "管理成员",
         "save": "保存集合"
+      },
+      "oauthBinding": {
+        "desc": "可选绑定。未绑定时 API 服务按原 API Key 逻辑运行；绑定后登录态使用 OAuth 账号，Provider 使用当前 API 服务配置。",
+        "currentService": "API 服务：{{name}}"
       }
     },
     "api": {
@@ -1845,13 +1973,18 @@
       },
       "provider": {
         "label": "供应商",
+        "inlineLabel": "供应商：{{provider}}",
         "custom": "自定义",
         "endpoint": "供应商端点",
         "hint": "已自动填写兼容 Base URL，可继续手动调整。",
         "website": "官网",
-        "apiKeyPage": "API Key 页面"
+        "apiKeyPage": "API Key 页面",
+        "getApiKey": "获取秘钥"
       },
       "providers": {
+        "cockpit_api": {
+          "name": "Cockpit Api"
+        },
         "openai_official": {
           "name": "OpenAI Official"
         },
@@ -1917,7 +2050,40 @@
         "apiKeyCannotBeUrl": "API Key 不能是 URL，请检查是否填反",
         "baseUrlInvalid": "Base URL 格式无效，请输入完整的 http:// 或 https:// 地址",
         "apiKeyEqualsBaseUrl": "API Key 不能与 Base URL 相同"
+      },
+      "oauthBinding": {
+        "label": "OAuth 绑定",
+        "unbound": "未绑定",
+        "action": "绑定 OAuth",
+        "actionShort": "绑定",
+        "title": "绑定 OAuth 账号",
+        "desc": "可选绑定。未绑定时该账号按原 API Key 逻辑切换；绑定后登录态使用 OAuth 账号，Provider 使用当前 API Key 账号配置。",
+        "currentAccount": "API Key 账号：{{name}}",
+        "selectLabel": "选择 OAuth 账号",
+        "empty": "暂无 OAuth 账号，请先添加 OAuth 授权账号。",
+        "validationRequired": "请选择 OAuth 账号",
+        "saveSuccess": "OAuth 绑定已更新",
+        "saveFailed": "OAuth 绑定失败：{{error}}",
+        "switchRequiresBinding": "请先绑定 OAuth 账号",
+        "clearAction": "解除绑定",
+        "clearSuccess": "OAuth 绑定已解除",
+        "clearFailed": "解除 OAuth 绑定失败：{{error}}"
       }
+    },
+    "cockpitApi": {
+      "panelTitle": "Cockpit Api 服务面板",
+      "servicePanel": "服务面板",
+      "balance": "额度",
+      "requests": "请求",
+      "total": "总计",
+      "today": "今日",
+      "periods": "周期",
+      "tokens": "token",
+      "quotaUsed": "消耗",
+      "modelStats": "模型统计",
+      "noStats": "暂无统计",
+      "refreshHint": "点击刷新后会同步当前 API key 的统计。",
+      "dailyStats": "每日统计"
     },
     "modelProviders": {
       "tab": "模型供应商",
@@ -2045,6 +2211,7 @@
     "quota": {
       "hourly": "5小时配额",
       "weekly": "周配额",
+      "weeklyBlocksHourly": "周额度为 0，5小时额度已不可用",
       "reset": "重置"
     },
     "usage": {
@@ -2057,9 +2224,10 @@
     },
     "quotaError": {
       "badge": "配额异常",
+      "refreshFailedBadge": "刷新失败",
       "generic": "配额刷新失败，请稍后重试",
       "deactivatedWorkspace": "工作区已停用，请切换账号或重新授权",
-      "requestFailedManualRetry": "网络异常，请手动刷新配额"
+      "requestFailedManualRetry": "请检查网络，未获取到最新额度。可刷新重试。"
     },
     "plan": {
       "free": "FREE",
@@ -2311,6 +2479,7 @@
       "actions": {
         "moveToTrash": "移到废纸篓",
         "syncSessions": "同步会话",
+        "copyToInstance": "复制到实例",
         "repairVisibility": "修复可见性",
         "restoreSessions": "恢复会话",
         "copySessionId": "复制会话 ID",
@@ -2330,7 +2499,9 @@
       "messages": {
         "pickOne": "请至少选择一条会话",
         "pickRestoreOne": "请至少选择一条待恢复会话",
-        "syncNeedTwo": "至少需要两个实例才能同步会话"
+        "syncNeedTwo": "至少需要两个实例才能同步会话",
+        "repairVisibilitySkippedOnly": "未发现需要写入的 provider 差异；已跳过 {{count}} 个无效或损坏的 state_5.sqlite，需由 Codex 重新生成后才能修复其中的 SQLite 记录",
+        "repairVisibilitySkippedWithBase": "{{message}}；已跳过 {{count}} 个无效或损坏的 state_5.sqlite，需由 Codex 重新生成后才能修复其中的 SQLite 记录"
       },
       "groupCount": "{{count}} 条会话",
       "updatedAt": "最近更新",
@@ -2346,10 +2517,28 @@
         "emptyTitle": "废纸篓里还没有会话",
         "emptyDesc": "已移到废纸篓的会话会显示在这里。",
         "restoreAction": "恢复选中会话"
+      },
+      "targetModal": {
+        "title": "复制到实例",
+        "hint": "会把所选会话补到目标实例，已有同 ID 会话会自动跳过；目标实例运行中时可能需要重启后显示。",
+        "targetInstance": "目标实例",
+        "pickTarget": "请选择目标实例",
+        "selectedCount": "已选择 {{count}} 条会话",
+        "existingCount": "目标已存在 {{count}} 条",
+        "confirm": "复制会话"
       }
     },
     "groups": {
       "addToGroup": "添加至分组"
+    },
+    "speed": {
+      "title": "速度",
+      "standard": "标准",
+      "standardDesc": "默认速度，常规用量",
+      "fast": "快速",
+      "fastDesc": "1.5 倍速，用量增加",
+      "saveSuccess": "速度已更新",
+      "saveFailed": "保存速度失败：{{error}}"
     }
   },
   "codebuddy": {
@@ -2602,6 +2791,18 @@
           "contextWindowInvalid": "上下文窗口必须是大于 0 的整数",
           "autoCompactInvalid": "自动压缩阈值必须是大于 0 的整数"
         }
+      },
+      "appSpeed": {
+        "title": "Codex 速度",
+        "desc": "保存为启动速度；从本应用启动 Codex 前会写入。",
+        "standard": "标准",
+        "fast": "快速",
+        "launch": "重启",
+        "loadFailed": "加载 Codex 速度失败：{{error}}",
+        "saveSuccess": "Codex 启动速度已保存",
+        "saveFailed": "保存 Codex 速度失败：{{error}}",
+        "launchSuccess": "Codex 已按当前速度重启",
+        "launchFailed": "重启 Codex 失败：{{error}}"
       }
     },
     "githubCopilot": {
@@ -2664,7 +2865,9 @@
     },
     "gemini": {
       "title": "Gemini Cli 设置",
-      "appPath": "Gemini Cli 路径"
+      "appPath": "Gemini Cli 路径",
+      "syncWsl": "同步 WSL 配置",
+      "syncWslDesc": "切换账号时自动覆盖 WSL 下的 .gemini 配置"
     },
     "geminiRefreshInterval": "配额自动刷新",
     "error": {
@@ -3508,6 +3711,14 @@
         "descPlatform": "CodeBuddy CN 多开实例仅支持 macOS、Windows 和 Linux。"
       }
     },
+    "syncFailed": "同步失败: {{error}}",
+    "syncSuccess": "成功同步 {{count}} 个账号到 WorkBuddy",
+    "syncToWorkbuddy": "同步到 WorkBuddy"
+  },
+  "workbuddy": {
+    "title": "WorkBuddy 账号管理",
+    "noAccounts": "暂无 WorkBuddy 账号",
+    "addAccount": "添加 WorkBuddy 账号",
     "checkin": {
       "title": "每日签到",
       "modalTitle": "每日签到",
@@ -3530,23 +3741,8 @@
       "streakDays": "{{days}} 天",
       "streakRewardCountdown": "再签 {{days}} 天获大礼包",
       "streakRewardToday": "今日可获得大礼包!",
-      "recentDates": "近期签到：",
-      "quotaCategory": {
-        "base": "基础体验包",
-        "activity": "活动赠送包",
-        "extra": "加量包",
-        "other": "其他",
-        "empty": "暂无配额数据"
-      }
+      "recentDates": "近期签到："
     },
-    "syncFailed": "同步失败: {{error}}",
-    "syncSuccess": "成功同步 {{count}} 个账号到 WorkBuddy",
-    "syncToWorkbuddy": "同步到 WorkBuddy"
-  },
-  "workbuddy": {
-    "title": "WorkBuddy 账号管理",
-    "noAccounts": "暂无 WorkBuddy 账号",
-    "addAccount": "添加 WorkBuddy 账号",
     "flowNotice": {
       "title": "WorkBuddy 账号管理说明（点击展开/收起）",
       "desc": "切换账号会按新版 WorkBuddy 官方客户端规则写入本机登录文件；本机导入读取同一登录文件，数据仅在本地处理。",

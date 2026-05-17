@@ -707,12 +707,7 @@ async fn refresh_account_token_once(account_id: &str) -> Result<WorkbuddyAccount
 }
 
 pub async fn refresh_account_token(account_id: &str) -> Result<WorkbuddyAccount, String> {
-    crate::modules::refresh_retry::retry_once_with_delay(
-        "WorkBuddy Refresh",
-        account_id,
-        || async { refresh_account_token_once(account_id).await },
-    )
-    .await
+    refresh_account_token_once(account_id).await
 }
 
 pub async fn refresh_all_tokens() -> Result<Vec<(String, Result<WorkbuddyAccount, String>)>, String>

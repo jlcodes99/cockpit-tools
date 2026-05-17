@@ -737,12 +737,7 @@ async fn refresh_account_token_once(account_id: &str) -> Result<CodebuddyAccount
 }
 
 pub async fn refresh_account_token(account_id: &str) -> Result<CodebuddyAccount, String> {
-    crate::modules::refresh_retry::retry_once_with_delay(
-        "CodeBuddy CN Refresh",
-        account_id,
-        || async { refresh_account_token_once(account_id).await },
-    )
-    .await
+    refresh_account_token_once(account_id).await
 }
 
 pub async fn refresh_all_tokens() -> Result<Vec<(String, Result<CodebuddyAccount, String>)>, String>
@@ -1334,34 +1329,6 @@ pub(crate) fn resolve_current_account_id(accounts: &[CodebuddyAccount]) -> Optio
             )
         })
         .map(|account| account.id.clone())
-}
-
-/// 更新账号的签到信息
-pub fn update_checkin_info(
-    account_id: &str,
-    last_checkin_time: Option<i64>,
-    streak: i32,
-    rewards: Option<serde_json::Value>,
-) -> Result<CodebuddyAccount, String> {
-    let mut account = load_account(account_id).ok_or_else(|| "账号不存在".to_string())?;
-
-    // 更新签到字段
-    if let Some(time) = last_checkin_time {
-        account.last_checkin_time = Some(time);
-    }
-    account.checkin_streak = streak;
-    account.checkin_rewards = rewards;
-
-    account.last_used = now_ts();
-    let updated = account.clone();
-    upsert_account_record(account)?;
-
-    logger::log_info(&format!(
-        "[CodeBuddy CN Checkin] 签到信息已更新: account_id={}, streak={}",
-        updated.id, streak
-    ));
-
-    Ok(updated)
 }
 
 pub fn run_quota_alert_if_needed() -> Result<(), String> {

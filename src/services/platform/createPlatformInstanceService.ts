@@ -5,6 +5,7 @@ import {
   InstanceLaunchMode,
   InstanceProfile,
 } from "../../types/instance";
+import type { CodexAppSpeed } from "../../types/codex";
 
 type PlatformInstanceCommandPrefix =
   | ""
@@ -27,6 +28,7 @@ type InstancePayload = {
   extraArgs?: string;
   bindAccountId?: string | null;
   launchMode?: InstanceLaunchMode;
+  appSpeed?: CodexAppSpeed;
   copySourceInstanceId: string;
   initMode?: InstanceInitMode;
 };
@@ -39,6 +41,7 @@ type UpdateInstancePayload = {
   bindAccountId?: string | null;
   followLocalAccount?: boolean;
   launchMode?: InstanceLaunchMode;
+  appSpeed?: CodexAppSpeed;
 };
 
 export type PlatformInstanceService = {
@@ -75,6 +78,7 @@ export function createPlatformInstanceService(
         workingDir: payload.workingDir ?? null,
         extraArgs: payload.extraArgs ?? "",
         bindAccountId: payload.bindAccountId ?? null,
+        appSpeed: payload.appSpeed ?? "standard",
         copySourceInstanceId: payload.copySourceInstanceId,
         initMode: payload.initMode ?? "copy",
       });
@@ -98,6 +102,9 @@ export function createPlatformInstanceService(
       }
       if (payload.followLocalAccount !== undefined) {
         body.followLocalAccount = payload.followLocalAccount;
+      }
+      if (payload.appSpeed !== undefined) {
+        body.appSpeed = payload.appSpeed;
       }
       return await invoke(commandFor(prefix, "update_instance"), body);
     },

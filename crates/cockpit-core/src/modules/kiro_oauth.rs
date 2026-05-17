@@ -1367,8 +1367,7 @@ pub(crate) fn build_payload_from_snapshot(
             access_token_claims.as_ref(),
             &[&["sub"], &["user_id"], &["uid"]],
         )
-    })
-    .or_else(|| profile_arn.clone());
+    });
 
     let login_provider = pick_string(
         profile.as_ref(),

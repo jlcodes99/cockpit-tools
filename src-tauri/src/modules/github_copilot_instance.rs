@@ -198,6 +198,7 @@ pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, 
             params.bind_account_id
         },
         launch_mode: crate::models::InstanceLaunchMode::App,
+        app_speed: crate::models::codex::CodexAppSpeed::Standard,
         created_at: Utc::now().timestamp_millis(),
         last_launched_at: None,
         last_pid: None,

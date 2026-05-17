@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { X, Minimize2, LogOut } from 'lucide-react';
+import { useEscClose } from '../hooks/useEscClose';
 import './CloseConfirmDialog.css';
 
 interface CloseConfirmDialogProps {
@@ -12,6 +13,8 @@ export function CloseConfirmDialog({ onClose }: CloseConfirmDialogProps) {
   const { t } = useTranslation();
   const [rememberChoice, setRememberChoice] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEscClose(true, onClose);
 
   const handleAction = async (action: 'minimize' | 'quit') => {
     setLoading(true);

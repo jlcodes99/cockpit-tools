@@ -70,6 +70,40 @@
           "statusPending": "Ожидает импорта"
         }
       },
+      "externalImport": {
+        "bundleInvalidJson": "Пакет импорта не является корректным JSON",
+        "bundleEmpty": "Пакет импорта пуст",
+        "bundleProviderMismatch": "Поставщик пакета импорта не совпадает",
+        "bundleNoItems": "В пакете импорта нет элементов для импорта",
+        "titleCodex": "Пакетный импорт Codex",
+        "statusReceiving": "Получение запроса на импорт...",
+        "statusFetching": "Получение пакета импорта...",
+        "statusParsing": "Разбор содержимого импорта Codex...",
+        "statusImporting": "Импорт аккаунта {{current}} / {{total}}",
+        "statusRefreshing": "Обновление списка аккаунтов...",
+        "statusActivating": "Переключение на импортированный аккаунт...",
+        "statusSuccess": "Импорт завершен",
+        "statusPartial": "Импорт частично завершен",
+        "statusFailed": "Ошибка импорта",
+        "total": "Всего",
+        "success": "Успешно",
+        "failed": "Ошибки",
+        "stepReceive": "Получить запрос",
+        "stepFetch": "Получить пакет",
+        "stepParse": "Разобрать содержимое",
+        "stepImport": "Импортировать аккаунты",
+        "stepRefresh": "Обновить список",
+        "errorsTitle": "Ошибочные элементы",
+        "viewAccounts": "Показать аккаунты Codex",
+        "copyErrors": "Копировать ошибки",
+        "copied": "Скопировано",
+        "unknownItem": "Элемент №{{index}}",
+        "versionUnsupportedTitle": "Версия приложения слишком старая",
+        "versionUnsupportedDesc": "Этот способ пока не поддерживается. Скачайте последнюю версию.",
+        "checkUpdate": "Проверить обновления",
+        "rawLineNoRefreshToken": "Строка {{line}} не содержит refresh_token",
+        "rawLineMultipleRefreshTokens": "Строка {{line}} содержит несколько refresh_token. Оставьте только один."
+      },
       "instances": {
         "unsupported": {
           "title": "Не поддерживается на этой системе"
@@ -107,7 +141,10 @@
         "descTooltip": "По убыванию (нажмите для возрастания)",
         "toggleDirection": "Изменить порядок",
         "credits": "По оставшимся кредитам",
-        "planEnd": "По времени окончания цикла"
+        "planEnd": "По времени окончания цикла",
+        "recommended": "Рекомендуемое",
+        "recommendedAscTooltip": "Рекомендуемое (сначала наименее выгодные)",
+        "recommendedDescTooltip": "Рекомендуемое (сначала наиболее выгодные)"
       },
       "sortLabel": "Сортировка",
       "token": {
@@ -328,7 +365,8 @@
       "instance": "Инстанс",
       "email": "Аккаунт",
       "quota": "Статус квоты",
-      "actions": "Действия"
+      "actions": "Действия",
+      "speed": "Скорость"
     },
     "empty": {
       "title": "Нет инстансов",
@@ -406,7 +444,9 @@
           "contextWindowInvalid": "Контекстное окно должно быть целым числом больше 0.",
           "autoCompactInvalid": "Предел автокомпактности должен быть целым числом больше 0."
         }
-      }
+      },
+      "appSpeed": "Скорость",
+      "appSpeedDesc": "Записывает выбранную скорость перед запуском Codex"
     },
     "quota": {
       "unbound": "Аккаунт не привязан",
@@ -427,7 +467,8 @@
       "allAlreadyRunning": "Все инстансы уже запущены",
       "noneRunning": "Работающих инстансов не найдено",
       "syncThreadsNeedTwo": "Для синхронизации тредов требуется как минимум два экземпляра",
-      "launchPrepared": "Команда запуска готова"
+      "launchPrepared": "Команда запуска готова",
+      "speedUpdated": "Скорость обновлена"
     },
     "runningDialog": {
       "title": "Инстанс уже запущен",
@@ -704,7 +745,14 @@
       "codexSpecifiedAppPath": "Путь к указанному приложению",
       "codexSpecifiedAppPathDesc": "Путь приложения, которое перезапускается вместе с переключением Codex.",
       "codexSpecifiedAppPathPlaceholder": "Например /Applications/Host.app",
-      "codexSpecifiedAppPathClear": "Очистить"
+      "codexSpecifiedAppPathClear": "Очистить",
+      "codexAppSpeed": "Скорость Codex",
+      "codexAppSpeedDesc": "Сохраняет скорость запуска Codex и записывает её перед каждым запуском из этого приложения.",
+      "codexAppSpeedStandard": "Стандарт",
+      "codexAppSpeedFast": "Быстро",
+      "codexAppSpeedLaunch": "Перезапустить Codex",
+      "codexAppSpeedSaveFailed": "Не удалось сохранить скорость Codex: {{error}}",
+      "codexAppSpeedLaunchFailed": "Не удалось перезапустить Codex: {{error}}"
     },
     "network": {
       "apiTitle": "API антигравитационной кабины",
@@ -823,11 +871,23 @@
           "saveSettingsFailed": "Не удалось сохранить настройки резервного копирования: {{error}}",
           "cleanupDone": "Очищено {{count}} устаревших копий",
           "cleanupFailed": "Не удалось очистить устаревшие копии: {{error}}",
-          "openFolderFailed": "Не удалось открыть папку резервных копий: {{error}}"
+          "openFolderFailed": "Не удалось открыть папку резервных копий: {{error}}",
+          "downloadSuccess": "Резервная копия скачана в {{path}}",
+          "downloadFailed": "Не удалось скачать резервную копию: {{error}}"
         },
         "errors": {
           "invalidRetention": "Срок хранения должен быть от 1 до 365 дней"
-        }
+        },
+        "platformFilterLabel": "Платформа",
+        "platformFilterAll": "Все платформы",
+        "platformEmptyTitle": "Нет подходящих резервных копий",
+        "platformEmptyDesc": "Для этой платформы нет резервной копии аккаунтов для скачивания.",
+        "archiveTag": "Архив",
+        "archiveSize": "Архив: {{size}}",
+        "platformsTitle": "Аккаунты платформы",
+        "platformDownloadAction": "Скачать JSON платформы",
+        "downloadJsonAction": "Файл JSON",
+        "downloadZipAction": "ZIP-архив"
       },
       "exportTitle": "Экспорт данных",
       "exportDesc": "При необходимости экспортируйте данные аккаунтов, данные конфигурации или полный пакет миграции.",
@@ -1546,6 +1606,7 @@
     "installFailed": "Системная установка не удалась. Повторите попытку позже или скачайте пакет вручную.",
     "restartRequiredAfterInstall": "Обновление установлено. Перезапустите приложение вручную, чтобы завершить переключение.",
     "stoppingApiService": "Остановка API-сервиса...",
+    "stopApiServiceFailed": "Не удалось остановить службу API. Сначала отключите её и повторите попытку.",
     "skipThisVersion": "Пропустить эту версию",
     "skipFailed": "Не удалось пропустить это обновление: {{error}}"
   },
@@ -1567,6 +1628,13 @@
   },
   "codex": {
     "title": "Управление аккаунтами Codex",
+    "newApi": {
+      "quota": {
+        "available": "Квота",
+        "unlimited": "Без лимита",
+        "usedHint": "Использовано {{used}}"
+      }
+    },
     "subtitle": "Управляйте аккаунтами OpenAI Codex",
     "instances": {
       "subtitle": "Независимая конфигурация для каждого экземпляра, параллельная работа с несколькими аккаунтами.",
@@ -1631,8 +1699,13 @@
       "timeoutRetry": "Обновить ссылку аутентификации"
     },
     "token": {
-      "desc": "Вставьте содержимое auth.json или JSON данных аккаунта",
-      "placeholder": "Пример: {\"tokens\":{\"id_token\":\"eyJ...\",\"access_token\":\"eyJ...\"}}"
+      "desc": "Вставьте auth.json, JSON аккаунта или refresh_token.",
+      "placeholder": "Пример: один refresh_token в строке или {\"refresh_token\":\"rt_...\"}",
+      "formatSummary": "Обязательные поля и примеры",
+      "formatRequired": "Поддерживаются полные tokens (id_token + access_token), один refresh_token или один refresh_token в строке. При импорте только refresh_token он сначала обменивается онлайн на полные учетные данные.",
+      "formatSingleLabel": "Полные tokens",
+      "formatRefreshOnlyLabel": "Только refresh_token",
+      "formatBatchLabel": "Пакетный пример"
     },
     "exportFormat": {
       "label": "Формат экспорта",
@@ -1648,12 +1721,21 @@
       "title": "API-сервис",
       "accountCount": "{{count}} аккаунтов",
       "baseUrl": "Адрес",
+      "addressKind": "Тип адреса",
+      "addressLocal": "Локально",
+      "addressLan": "Локальная сеть",
+      "accessScopeLabel": "Область доступа",
+      "accessScopeLocalhost": "Только локально",
+      "accessScopeLan": "Локальная сеть",
+      "accessScopeLocalhostShort": "Только локально",
+      "accessScopeLanShort": "Локально+сеть",
+      "accessScopeSaveSuccess": "Область доступа API-сервиса обновлена",
       "apiKey": "Ключ",
       "statusRunning": "Запущено",
       "statusStopped": "Остановлено",
       "statusDisabled": "Отключено",
       "emptyMembers": "В коллекции пока нет аккаунтов",
-      "footerHint": "Слушает локально и в LAN",
+      "footerHint": "Область доступа: {{scope}}",
       "manageAccounts": "Управлять аккаунтами",
       "rotateKey": "Обновить ключ",
       "rotateConfirmMessage": "После сброса текущий ключ API-сервиса сразу перестанет работать, а выполняющиеся запросы могут стать недоступны. Продолжить?",
@@ -1681,13 +1763,33 @@
         "freeNoticeRestricted": "Free-аккаунты ограничены. Отключите это, чтобы их выбирать.",
         "freeNoticeUnstable": "Прокси Free-аккаунтов может быть нестабильным. Используйте с осторожностью.",
         "restrictFreeDisableConfirmTitle": "Разрешить Free-аккаунты",
-        "restrictFreeDisableConfirmMessage": "Прокси Free-аккаунтов может быть нестабильным. Вы уверены, что хотите их использовать?"
+        "restrictFreeDisableConfirmMessage": "Прокси Free-аккаунтов может быть нестабильным. Вы уверены, что хотите их использовать?",
+        "manageMembers": "Управление участниками"
       },
       "entryAction": "Добавить в API-сервис",
-      "testAction": "Проверить API-сервис",
-      "testSuccess": "Проверка API-сервиса прошла успешно ({{count}} моделей)",
-      "testTimeout": "Время проверки истекло. Убедитесь, что локальный сервис запущен.",
+      "testAction": "Тест",
+      "testDialogTitle": "Тест API-сервиса",
+      "testDialogDesc": "Отправляет реальный запрос через Codex CLI, чтобы проверить локальный сервис, ключ и ответ upstream.",
+      "testProgressTitle": "Идёт тест сервиса",
+      "testProgressDesc": "Отправляется реальный запрос к локальному API-сервису. Подождите.",
+      "testOutputTitle": "Возвращённый результат",
+      "testResultTitle": "Результат проверки сервиса",
+      "testSuccess": "Проверка сервиса успешна: локальный сервис, ключ и ответ upstream в порядке ({{model}}, {{latency}}). Если Codex всё ещё возвращает 502, проверьте Base URL, API Key или среду запуска Codex.",
+      "testFailureStage": "Этап проверки",
+      "testFailureCause": "Причина сбоя",
+      "testFailureSuggestion": "Рекомендуемое действие",
+      "testFailureStatus": "HTTP-статус",
+      "testFailureModel": "Модель проверки",
+      "testFailureDetail": "Детали диагностики",
+      "testFailureCliOutput": "Вывод CLI",
+      "testFailureGatewayOutput": "Ответ шлюза",
+      "testTimeout": "Проверка реальным запросом превысила время ожидания. Проверьте локальный сервис, прокси или upstream-сеть.",
       "testUnavailable": "Текущий URL API-сервиса недоступен",
+      "testConnectFailed": "Не удалось подключиться к {{url}}. Убедитесь, что API-сервис запущен, порт не изменён и ничего его не блокирует.",
+      "testAuthFailed": "Сервис доступен, но аутентификация не прошла: {{detail}}. Проверьте ключ API-сервиса или состояние входа в аккаунт.",
+      "testServiceUnavailable": "Сервис доступен, но сейчас недоступен: {{detail}}. Проверьте, включён ли сервис, не пуста ли коллекция аккаунтов и доступны ли аккаунты.",
+      "testRateLimited": "Сервис доступен, но upstream ограничен или квота исчерпана: {{detail}}.",
+      "testHttpFailed": "Сервис доступен, но запрос вернул HTTP {{status}}: {{detail}}.",
       "activateAction": "Запустить API-сервис",
       "activateSuccess": "Переключено на API-сервис",
       "dashboardAction": "Панель сервиса",
@@ -1702,8 +1804,8 @@
       "statsTitle": "Итого",
       "accountStatsTitle": "По аккаунтам",
       "statsEmpty": "Статистики пока нет",
-      "summaryMeta": "{{count}} аккаунтов · Локально/LAN",
-      "summaryMetaUnconfigured": "Не настроено · Локально/LAN",
+      "summaryMeta": "{{count}} аккаунтов · {{scope}}",
+      "summaryMetaUnconfigured": "Не настроено · {{scope}}",
       "memberTitle": "Участники коллекции",
       "stats": {
         "requests": "Запросы",
@@ -1774,7 +1876,19 @@
       "apiPortUrl": "URL API-порта",
       "modelId": "ID модели",
       "modelIdPlaceholder": "Выберите ID модели",
-      "modelIdViewOnly": "Только просмотр"
+      "modelIdViewOnly": "Только просмотр",
+      "quotaPool": {
+        "title": "Пул квот",
+        "hourlyShort": "5h",
+        "weeklyShort": "Неделя",
+        "viewFull": "Показать полную статистику",
+        "modalTitle": "Пул квот сервиса API",
+        "empty": "Статистики квот пока нет"
+      },
+      "oauthBinding": {
+        "desc": "Необязательно. Без привязки API-сервис работает по прежней логике API Key; после привязки вход использует OAuth-аккаунт, а Provider — настройки API-сервиса.",
+        "currentService": "API-сервис: {{name}}"
+      }
     },
     "local": {
       "desc": "Импортировать текущий аккаунт из ~/.codex/auth.json",
@@ -1788,13 +1902,15 @@
     "quota": {
       "hourly": "Квота 5 часов",
       "weekly": "Недельная квота",
-      "reset": "Сброс"
+      "reset": "Сброс",
+      "weeklyBlocksHourly": "Недельная квота равна 0, поэтому 5-часовая квота недоступна"
     },
     "quotaError": {
       "badge": "Ошибка квоты",
+      "refreshFailedBadge": "Сбой обновления",
       "generic": "Не удалось обновить квоту, попробуйте позже",
       "deactivatedWorkspace": "Рабочее пространство деактивировано, переключите аккаунт или авторизуйтесь заново",
-      "requestFailedManualRetry": "Не удалось выполнить запрос, повторите вручную: {{error}}"
+      "requestFailedManualRetry": "Проверьте сеть. Не удалось получить актуальную квоту. Обновите, чтобы повторить попытку."
     },
     "plan": {
       "free": "FREE",
@@ -2042,7 +2158,8 @@
         "collapse": "Свернуть",
         "repairVisibility": "Исправить видимость",
         "restoreSessions": "Восстановить сессии",
-        "copySessionId": "Копировать ID сессии"
+        "copySessionId": "Копировать ID сессии",
+        "copyToInstance": "Копировать в экземпляр"
       },
       "confirm": {
         "title": "Переместить в корзину",
@@ -2057,7 +2174,9 @@
       "messages": {
         "pickOne": "Выберите хотя бы одну сессию",
         "syncNeedTwo": "Для синхронизации сессий требуется как минимум два экземпляра",
-        "pickRestoreOne": "Выберите хотя бы одну сессию для восстановления"
+        "pickRestoreOne": "Выберите хотя бы одну сессию для восстановления",
+        "repairVisibilitySkippedOnly": "Записываемые различия provider не найдены; пропущено {{count}} недействительных или поврежденных файлов state_5.sqlite. Codex должен создать их заново, прежде чем можно будет исправить их записи SQLite.",
+        "repairVisibilitySkippedWithBase": "{{message}}; пропущено {{count}} недействительных или поврежденных файлов state_5.sqlite. Codex должен создать их заново, прежде чем можно будет исправить их записи SQLite."
       },
       "groupCount": "{{count}} сессий",
       "updatedAt": "Обновлено",
@@ -2073,6 +2192,15 @@
         "emptyTitle": "Корзина пуста",
         "emptyDesc": "Сессии, перемещённые в корзину, появятся здесь.",
         "restoreAction": "Восстановить выбранные сессии"
+      },
+      "targetModal": {
+        "title": "Копировать в экземпляр",
+        "hint": "Копирует выбранные сеансы в целевой экземпляр. Сеансы с тем же ID, которые уже есть там, пропускаются. Запущенные целевые экземпляры могут потребовать перезапуска, прежде чем они появятся.",
+        "targetInstance": "Целевой экземпляр",
+        "pickTarget": "Выберите целевой экземпляр",
+        "selectedCount": "Выбрано сеансов: {{count}}",
+        "existingCount": "Уже в цели: {{count}}",
+        "confirm": "Копировать сеансы"
       }
     },
     "api": {
@@ -2092,11 +2220,13 @@
       },
       "provider": {
         "label": "Провайдер",
+        "inlineLabel": "Провайдер: {{provider}}",
         "custom": "Пользовательский",
         "endpoint": "Конечная точка провайдера",
         "hint": "Совместимый Base URL был заполнен автоматически. При необходимости вы можете отредактировать его вручную.",
         "website": "Сайт",
-        "apiKeyPage": "Страница ключа API"
+        "apiKeyPage": "Страница ключа API",
+        "getApiKey": "Получить ключ"
       },
       "providers": {
         "openai_official": {
@@ -2158,7 +2288,28 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
+      },
+      "oauthBinding": {
+        "label": "Связь OAuth",
+        "unbound": "Не связано",
+        "action": "Связать OAuth",
+        "actionShort": "Связать",
+        "title": "Связать OAuth-аккаунт",
+        "desc": "Необязательно. Без привязки этот аккаунт переключается по прежней логике API Key; после привязки вход использует OAuth-аккаунт, а Provider — настройки этого API Key аккаунта.",
+        "currentAccount": "API Key аккаунт: {{name}}",
+        "selectLabel": "Выберите OAuth-аккаунт",
+        "empty": "OAuth-аккаунтов пока нет. Сначала добавьте аккаунт с OAuth-авторизацией.",
+        "validationRequired": "Выберите OAuth-аккаунт",
+        "saveSuccess": "Связь OAuth обновлена",
+        "saveFailed": "Не удалось связать OAuth: {{error}}",
+        "switchRequiresBinding": "Сначала свяжите OAuth-аккаунт",
+        "clearAction": "Отвязать",
+        "clearSuccess": "Привязка OAuth удалена.",
+        "clearFailed": "Не удалось удалить привязку OAuth: {{error}}"
       }
     },
     "modelProviders": {
@@ -2299,11 +2450,49 @@
     },
     "apiSwitchNotice": {
       "title": "Сеансы Codex скрыты",
-      "message": "Из-за официального поведения Codex существующие сеансы могут не появиться автоматически после прямого переключения между режимом API и аккаунтами. Можно один раз выполнить Исправить видимость в этом окне, а позже повторить в Управление сеансами > Исправить видимость.",
-      "dontAskAgain": "Больше не показывать",
-      "switchOnly": "Только переключить",
-      "switchAndRepair": "Перекл. и исправить",
-      "repairFailed": "Быстрое исправление не удалось. Повторите позже в Управление сеансами > Исправить видимость."
+      "message": "Обнаружено, что Codex переключился с {{from}} на {{to}}. Из-за официального поведения существующие сеансы могут не появиться автоматически после прямого переключения между API и аккаунтами. Видимость сеансов сейчас исправляется автоматически; позже можно также использовать Управление сеансами > Исправить видимость.",
+      "repairing": "Исправление видимости сеансов Codex...",
+      "repairFailed": "Автоматическое исправление не удалось. Повторите позже в Управление сеансами > Исправить видимость.",
+      "type": {
+        "apiKey": "Ключ API",
+        "apiService": "Сервис API",
+        "account": "Аккаунт"
+      }
+    },
+    "accountNote": {
+      "title": "Заметка аккаунта",
+      "label": "Заметка аккаунта",
+      "desc": "Добавьте отдельную заметку для {{account}}.",
+      "placeholder": "Почта, пароль, резервная почта или заметки к выдаче",
+      "emptyTitle": "Добавить заметку аккаунта",
+      "short": "Заметка",
+      "addShort": "Добавить",
+      "saved": "Заметка аккаунта сохранена",
+      "saveFailed": "Не удалось сохранить заметку аккаунта: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "Панель сервиса Cockpit Api",
+      "servicePanel": "Панель сервиса",
+      "balance": "Баланс",
+      "requests": "Запросы",
+      "total": "Всего",
+      "today": "Сегодня",
+      "periods": "Периоды",
+      "tokens": "Токены",
+      "quotaUsed": "Расход",
+      "modelStats": "Статистика моделей",
+      "noStats": "Статистики пока нет",
+      "refreshHint": "Нажмите обновить, чтобы синхронизировать статистику этого API-ключа.",
+      "dailyStats": "Статистика по дням"
+    },
+    "speed": {
+      "title": "Скорость",
+      "standard": "Стандарт",
+      "standardDesc": "Скорость по умолчанию, обычный расход",
+      "fast": "Быстрая",
+      "fastDesc": "Скорость 1,5x, расход выше",
+      "saveSuccess": "Скорость обновлена",
+      "saveFailed": "Не удалось сохранить скорость: {{error}}"
     }
   },
   "githubCopilot": {
@@ -2456,6 +2645,18 @@
           "contextWindowInvalid": "Контекстное окно должно быть целым числом больше 0.",
           "autoCompactInvalid": "Предел автокомпактности должен быть целым числом больше 0."
         }
+      },
+      "appSpeed": {
+        "title": "Скорость Codex",
+        "desc": "Сохранено как скорость запуска; записывается перед стартом Codex.",
+        "standard": "Стандарт",
+        "fast": "Быстро",
+        "launch": "Перезапуск",
+        "loadFailed": "Не удалось загрузить скорость Codex: {{error}}",
+        "saveSuccess": "Скорость запуска Codex сохранена.",
+        "saveFailed": "Не удалось сохранить скорость Codex: {{error}}",
+        "launchSuccess": "Codex перезапущен с сохраненной скоростью.",
+        "launchFailed": "Не удалось перезапустить Codex: {{error}}"
       }
     },
     "githubCopilot": {
@@ -2509,7 +2710,9 @@
     "cursorRefreshInterval": "Автообновление квоты",
     "gemini": {
       "title": "Настройки Gemini Cli",
-      "appPath": "Путь Gemini Cli"
+      "appPath": "Путь Gemini Cli",
+      "syncWsl": "Синхронизировать конфигурацию WSL",
+      "syncWslDesc": "Автоматически перезаписывать конфигурацию .gemini в WSL при переключении аккаунта"
     },
     "geminiRefreshInterval": "Автоматическое обновление квоты",
     "codebuddy": {
@@ -3390,37 +3593,6 @@
         "descPlatform": "Мультиэкземпляр CodeBuddy CN поддерживается только в macOS, Windows и Linux."
       }
     },
-    "checkin": {
-      "title": "Ежедневный check-in",
-      "modalTitle": "Ежедневный check-in",
-      "status": "Статус check-in",
-      "checkedIn": "Отмечено",
-      "notCheckedIn": "Не отмечено",
-      "button": "Отметиться",
-      "button.loading": "Выполняется check-in...",
-      "done": "Готово",
-      "success": "Check-in выполнен! Серия {{days}} дней",
-      "failure": "Не удалось отметиться: {{message}}",
-      "failure.network": "Ошибка сети, попробуйте позже",
-      "lastCheckin": "Последний check-in: {{time}}",
-      "streak": "Серия {{days}} дней",
-      "reward": "Награда: {{reward}}",
-      "refreshStatus": "Обновить",
-      "checkAll": "Отметить все",
-      "noAccounts": "Нет аккаунтов",
-      "querying": "Загрузка...",
-      "streakDays": "{{days}} дней",
-      "streakRewardCountdown": "До бонусной награды осталось {{days}} дней",
-      "streakRewardToday": "Бонусная награда доступна сегодня!",
-      "recentDates": "Недавние: ",
-      "quotaCategory": {
-        "base": "Базовый пакет",
-        "activity": "Бонус активности",
-        "extra": "Дополнительные кредиты",
-        "other": "Прочее",
-        "empty": "Нет данных по квоте"
-      }
-    },
     "syncFailed": "Ошибка синхронизации: {{error}}",
     "syncSuccess": "{{count}} аккаунт(ов) синхронизировано с WorkBuddy",
     "syncToWorkbuddy": "Синхронизировать с WorkBuddy"
@@ -3527,6 +3699,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "Ежедневный check-in",
+      "modalTitle": "Ежедневный check-in",
+      "status": "Статус check-in",
+      "checkedIn": "Отмечено",
+      "notCheckedIn": "Не отмечено",
+      "button": "Отметиться",
+      "button.loading": "Выполняется check-in...",
+      "done": "Готово",
+      "success": "Check-in выполнен! Серия {{days}} дней",
+      "failure": "Не удалось отметиться: {{message}}",
+      "failure.network": "Ошибка сети, попробуйте позже",
+      "lastCheckin": "Последний check-in: {{time}}",
+      "streak": "Серия {{days}} дней",
+      "reward": "Награда: {{reward}}",
+      "refreshStatus": "Обновить",
+      "checkAll": "Отметить все",
+      "noAccounts": "Нет аккаунтов",
+      "querying": "Загрузка...",
+      "streakDays": "{{days}} дней",
+      "streakRewardCountdown": "До бонусной награды осталось {{days}} дней",
+      "streakRewardToday": "Бонусная награда доступна сегодня!",
+      "recentDates": "Недавние: "
     }
   },
   "zed": {

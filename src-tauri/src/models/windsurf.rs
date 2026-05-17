@@ -51,6 +51,26 @@ pub struct WindsurfAccount {
     pub quota_query_last_error_at: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage_updated_at: Option<i64>,
+    // ===== Devin Auth (2026-04+) 新账号体系字段 =====
+    // 老账号 (Firebase) 读取这些字段时为 None，与现有逻辑完全兼容
+    /// 账号类型: "firebase" (老 sk-ws- 体系) | "devin-session" (新 auth1 体系)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub windsurf_token_type: Option<String>,
+    /// Devin 长期凭证（refresh_token 等价物，每次切号用它换出新 ide_token）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub devin_auth1_token: Option<String>,
+    /// Devin 账号 ID (account-xxx)，注入 IDE 时作为 x-devin-account-id header
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub devin_account_id: Option<String>,
+    /// Devin 组织 ID (org-xxx)，注入 IDE 时作为 x-devin-primary-org-id header
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub devin_org_id: Option<String>,
+    /// Devin 短期 session token (devin-session-token$...)，主要用于 web 端
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub devin_session_token: Option<String>,
+    /// UserStatus protobuf 的 base64 编码，写入 windsurfAuthStatus.userStatusProtoBinaryBase64
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub devin_user_status_proto_b64: Option<String>,
     pub created_at: i64,
     pub last_used: i64,
 }
@@ -103,7 +123,7 @@ pub struct WindsurfOAuthStartResponse {
     pub callback_url: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WindsurfOAuthCompletePayload {
     pub github_login: String,
     pub github_id: u64,
@@ -127,6 +147,13 @@ pub struct WindsurfOAuthCompletePayload {
     pub windsurf_user_status: Option<serde_json::Value>,
     pub windsurf_plan_status: Option<serde_json::Value>,
     pub windsurf_auth_status_raw: Option<serde_json::Value>,
+    // ===== Devin Auth 字段 =====
+    pub windsurf_token_type: Option<String>,
+    pub devin_auth1_token: Option<String>,
+    pub devin_account_id: Option<String>,
+    pub devin_org_id: Option<String>,
+    pub devin_session_token: Option<String>,
+    pub devin_user_status_proto_b64: Option<String>,
 }
 
 impl WindsurfAccount {

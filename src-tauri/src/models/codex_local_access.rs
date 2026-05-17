@@ -17,6 +17,17 @@ impl Default for CodexLocalAccessRoutingStrategy {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CodexLocalAccessScope {
+    Localhost,
+    Lan,
+}
+
+fn default_access_scope_for_existing_config() -> CodexLocalAccessScope {
+    CodexLocalAccessScope::Lan
+}
+
 fn default_restrict_free_accounts() -> bool {
     true
 }
@@ -27,10 +38,14 @@ pub struct CodexLocalAccessCollection {
     pub enabled: bool,
     pub port: u16,
     pub api_key: String,
+    #[serde(default = "default_access_scope_for_existing_config")]
+    pub access_scope: CodexLocalAccessScope,
     #[serde(default)]
     pub routing_strategy: CodexLocalAccessRoutingStrategy,
     #[serde(default = "default_restrict_free_accounts")]
     pub restrict_free_accounts: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bound_oauth_account_id: Option<String>,
     pub account_ids: Vec<String>,
     pub created_at: i64,
     pub updated_at: i64,
@@ -136,10 +151,34 @@ pub struct CodexLocalAccessState {
     pub running: bool,
     pub api_port_url: Option<String>,
     pub base_url: Option<String>,
+    pub lan_base_url: Option<String>,
     pub model_ids: Vec<String>,
     pub last_error: Option<String>,
     pub member_count: usize,
     pub stats: CodexLocalAccessStats,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessTestFailure {
+    pub title: String,
+    pub stage: String,
+    pub cause: String,
+    pub suggestion: String,
+    pub status: Option<u16>,
+    pub model_id: Option<String>,
+    pub detail: Option<String>,
+    pub cli_output: Option<String>,
+    pub gateway_output: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessTestResult {
+    pub model_id: Option<String>,
+    pub latency_ms: Option<u64>,
+    pub output: Option<String>,
+    pub failure: Option<CodexLocalAccessTestFailure>,
 }
 
 #[derive(Debug, Clone, Serialize)]

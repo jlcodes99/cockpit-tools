@@ -5,6 +5,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 use tauri_plugin_autostart::ManagerExt as _;
+use url::Url;
 
 use crate::modules;
 use crate::modules::config::{
@@ -74,6 +75,8 @@ pub struct GeneralConfig {
     pub cursor_auto_refresh_minutes: i32,
     /// Gemini 自动刷新间隔（分钟），-1 表示禁用
     pub gemini_auto_refresh_minutes: i32,
+    /// Gemini 切号时是否同步覆盖 WSL 配置 (Windows Only)
+    pub gemini_sync_wsl: bool,
     /// CodeBuddy 自动刷新间隔（分钟），-1 表示禁用
     pub codebuddy_auto_refresh_minutes: i32,
     /// CodeBuddy CN 自动刷新间隔（分钟），-1 表示禁用
@@ -262,10 +265,29 @@ pub struct AutoBackupFileEntry {
     pub file_name: String,
     /// 文件绝对路径
     pub path: String,
+    /// 文件类型：json / zip
+    pub file_kind: String,
     /// 文件大小（字节）
     pub size_bytes: u64,
     /// 最后修改时间（毫秒时间戳）
     pub modified_at_ms: Option<i64>,
+    /// 同名 ZIP 备份文件名
+    pub archive_file_name: Option<String>,
+    /// 同名 ZIP 备份绝对路径
+    pub archive_path: Option<String>,
+    /// 同名 ZIP 备份大小（字节）
+    pub archive_size_bytes: Option<u64>,
+    /// 备份内包含账号的平台摘要
+    pub platforms: Vec<AutoBackupPlatformEntry>,
+}
+
+/// 自动备份内的平台摘要（前端使用）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoBackupPlatformEntry {
+    /// 平台 ID
+    pub platform: String,
+    /// 账号数量
+    pub account_count: u64,
 }
 
 const DEFAULT_UI_SCALE: f64 = 1.0;
@@ -372,8 +394,8 @@ fn sanitize_auto_backup_file_name(file_name: &str) -> Result<String, String> {
     if trimmed.contains('/') || trimmed.contains('\\') {
         return Err("备份文件名不合法".to_string());
     }
-    if !trimmed.ends_with(".json") {
-        return Err("自动备份文件必须为 JSON".to_string());
+    if !trimmed.ends_with(".json") && !trimmed.ends_with(".zip") {
+        return Err("自动备份文件必须为 JSON 或 ZIP".to_string());
     }
     Ok(trimmed.to_string())
 }
@@ -381,6 +403,320 @@ fn sanitize_auto_backup_file_name(file_name: &str) -> Result<String, String> {
 fn resolve_auto_backup_file_path(file_name: &str) -> Result<PathBuf, String> {
     let safe_name = sanitize_auto_backup_file_name(file_name)?;
     Ok(get_auto_backup_dir_path()?.join(safe_name))
+}
+
+fn auto_backup_archive_file_name(file_name: &str) -> Option<String> {
+    file_name
+        .strip_suffix(".json")
+        .map(|stem| format!("{}.zip", stem))
+}
+
+fn auto_backup_json_file_name(file_name: &str) -> Option<String> {
+    file_name
+        .strip_suffix(".zip")
+        .map(|stem| format!("{}.json", stem))
+}
+
+fn read_u16_le(bytes: &[u8], offset: usize) -> Option<u16> {
+    let slice = bytes.get(offset..offset + 2)?;
+    Some(u16::from_le_bytes([slice[0], slice[1]]))
+}
+
+fn read_u32_le(bytes: &[u8], offset: usize) -> Option<u32> {
+    let slice = bytes.get(offset..offset + 4)?;
+    Some(u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]))
+}
+
+fn push_u16_le(out: &mut Vec<u8>, value: u16) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_u32_le(out: &mut Vec<u8>, value: u32) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = 0xffff_ffffu32;
+    for byte in bytes {
+        crc ^= *byte as u32;
+        for _ in 0..8 {
+            let mask = 0u32.wrapping_sub(crc & 1);
+            crc = (crc >> 1) ^ (0xedb8_8320 & mask);
+        }
+    }
+    !crc
+}
+
+fn push_zip_entry(
+    out: &mut Vec<u8>,
+    central: &mut Vec<(String, u32, u32, u32)>,
+    name: &str,
+    content: &[u8],
+) -> Result<(), String> {
+    let name_bytes = name.as_bytes();
+    let name_len =
+        u16::try_from(name_bytes.len()).map_err(|_| format!("ZIP 条目名过长: {}", name))?;
+    let size = u32::try_from(content.len()).map_err(|_| format!("ZIP 条目过大: {}", name))?;
+    let offset = u32::try_from(out.len()).map_err(|_| "ZIP 文件过大".to_string())?;
+    let crc = crc32(content);
+    let dos_time = 0u16;
+    let dos_date = 33u16;
+
+    push_u32_le(out, 0x0403_4b50);
+    push_u16_le(out, 20);
+    push_u16_le(out, 0);
+    push_u16_le(out, 0);
+    push_u16_le(out, dos_time);
+    push_u16_le(out, dos_date);
+    push_u32_le(out, crc);
+    push_u32_le(out, size);
+    push_u32_le(out, size);
+    push_u16_le(out, name_len);
+    push_u16_le(out, 0);
+    out.extend_from_slice(name_bytes);
+    out.extend_from_slice(content);
+
+    central.push((name.to_string(), crc, size, offset));
+    Ok(())
+}
+
+fn build_stored_zip(entries: Vec<(String, Vec<u8>)>) -> Result<Vec<u8>, String> {
+    if entries.is_empty() {
+        return Err("ZIP 条目不能为空".to_string());
+    }
+
+    let mut out = Vec::new();
+    let mut central_entries = Vec::new();
+    for (name, content) in entries {
+        push_zip_entry(&mut out, &mut central_entries, &name, &content)?;
+    }
+
+    let central_offset = u32::try_from(out.len()).map_err(|_| "ZIP 文件过大".to_string())?;
+    let dos_time = 0u16;
+    let dos_date = 33u16;
+
+    for (name, crc, size, offset) in &central_entries {
+        let name_bytes = name.as_bytes();
+        let name_len =
+            u16::try_from(name_bytes.len()).map_err(|_| format!("ZIP 条目名过长: {}", name))?;
+        push_u32_le(&mut out, 0x0201_4b50);
+        push_u16_le(&mut out, 20);
+        push_u16_le(&mut out, 20);
+        push_u16_le(&mut out, 0);
+        push_u16_le(&mut out, 0);
+        push_u16_le(&mut out, dos_time);
+        push_u16_le(&mut out, dos_date);
+        push_u32_le(&mut out, *crc);
+        push_u32_le(&mut out, *size);
+        push_u32_le(&mut out, *size);
+        push_u16_le(&mut out, name_len);
+        push_u16_le(&mut out, 0);
+        push_u16_le(&mut out, 0);
+        push_u16_le(&mut out, 0);
+        push_u16_le(&mut out, 0);
+        push_u32_le(&mut out, 0);
+        push_u32_le(&mut out, *offset);
+        out.extend_from_slice(name_bytes);
+    }
+
+    let central_size = u32::try_from(out.len())
+        .ok()
+        .and_then(|len| len.checked_sub(central_offset))
+        .ok_or_else(|| "ZIP 中央目录过大".to_string())?;
+    let entry_count =
+        u16::try_from(central_entries.len()).map_err(|_| "ZIP 条目过多".to_string())?;
+
+    push_u32_le(&mut out, 0x0605_4b50);
+    push_u16_le(&mut out, 0);
+    push_u16_le(&mut out, 0);
+    push_u16_le(&mut out, entry_count);
+    push_u16_le(&mut out, entry_count);
+    push_u32_le(&mut out, central_size);
+    push_u32_le(&mut out, central_offset);
+    push_u16_le(&mut out, 0);
+
+    Ok(out)
+}
+
+fn backup_json_from_zip_bytes(bytes: &[u8]) -> Result<String, String> {
+    let mut offset = 0usize;
+    while offset + 30 <= bytes.len() {
+        let Some(signature) = read_u32_le(bytes, offset) else {
+            break;
+        };
+        if signature != 0x0403_4b50 {
+            break;
+        }
+        let compression =
+            read_u16_le(bytes, offset + 8).ok_or_else(|| "ZIP 本地文件头不完整".to_string())?;
+        let compressed_size =
+            read_u32_le(bytes, offset + 18).ok_or_else(|| "ZIP 条目大小缺失".to_string())? as usize;
+        let name_len = read_u16_le(bytes, offset + 26)
+            .ok_or_else(|| "ZIP 条目名长度缺失".to_string())? as usize;
+        let extra_len =
+            read_u16_le(bytes, offset + 28).ok_or_else(|| "ZIP 扩展长度缺失".to_string())? as usize;
+        let name_start = offset + 30;
+        let name_end = name_start + name_len;
+        let data_start = name_end + extra_len;
+        let data_end = data_start + compressed_size;
+        if data_end > bytes.len() {
+            return Err("ZIP 条目内容不完整".to_string());
+        }
+        let name = String::from_utf8_lossy(&bytes[name_start..name_end]);
+        if name == "backup.json" {
+            if compression != 0 {
+                return Err("暂不支持压缩过的 ZIP 备份条目".to_string());
+            }
+            return String::from_utf8(bytes[data_start..data_end].to_vec())
+                .map_err(|_| "ZIP 备份中的 backup.json 不是 UTF-8".to_string());
+        }
+        offset = data_end;
+    }
+
+    Err("ZIP 备份中未找到 backup.json".to_string())
+}
+
+fn backup_json_from_path(path: &Path) -> Result<String, String> {
+    match path.extension().and_then(|item| item.to_str()) {
+        Some("json") => match fs::read_to_string(path) {
+            Ok(content) => {
+                if serde_json::from_str::<serde_json::Value>(&content).is_ok() {
+                    return Ok(content);
+                }
+                if let Some(file_name) = path.file_name().and_then(|name| name.to_str()) {
+                    if let Some(archive_name) = auto_backup_archive_file_name(file_name) {
+                        let archive_path = path.with_file_name(archive_name);
+                        if archive_path.exists() {
+                            return backup_json_from_path(&archive_path);
+                        }
+                    }
+                }
+                Ok(content)
+            }
+            Err(err) => {
+                if let Some(file_name) = path.file_name().and_then(|name| name.to_str()) {
+                    if let Some(archive_name) = auto_backup_archive_file_name(file_name) {
+                        let archive_path = path.with_file_name(archive_name);
+                        if archive_path.exists() {
+                            return backup_json_from_path(&archive_path);
+                        }
+                    }
+                }
+                Err(format!("读取自动备份文件失败: {}", err))
+            }
+        },
+        Some("zip") => {
+            let bytes = fs::read(path).map_err(|err| format!("读取自动备份压缩包失败: {}", err))?;
+            backup_json_from_zip_bytes(&bytes)
+        }
+        _ => Err("不支持的自动备份文件类型".to_string()),
+    }
+}
+
+fn collect_auto_backup_platforms_from_value(
+    value: &serde_json::Value,
+) -> Vec<AutoBackupPlatformEntry> {
+    let accounts = value
+        .get("accounts")
+        .filter(|item| item.is_object())
+        .unwrap_or(value);
+    let Some(platforms) = accounts.get("platforms").and_then(|item| item.as_object()) else {
+        return Vec::new();
+    };
+
+    let mut result = Vec::new();
+    for (platform, payload) in platforms {
+        let exported_data = payload
+            .get("exported_data")
+            .or_else(|| payload.get("data"))
+            .or_else(|| payload.get("accounts"));
+        let account_count = payload
+            .get("account_count")
+            .and_then(|item| item.as_u64())
+            .or_else(|| {
+                exported_data
+                    .and_then(|item| item.as_array())
+                    .map(|items| items.len() as u64)
+            })
+            .unwrap_or(0);
+        if account_count == 0 {
+            continue;
+        }
+        result.push(AutoBackupPlatformEntry {
+            platform: platform.clone(),
+            account_count,
+        });
+    }
+    result.sort_by(|left, right| left.platform.cmp(&right.platform));
+    result
+}
+
+fn collect_auto_backup_platforms(json_content: &str) -> Vec<AutoBackupPlatformEntry> {
+    serde_json::from_str::<serde_json::Value>(json_content)
+        .ok()
+        .map(|value| collect_auto_backup_platforms_from_value(&value))
+        .unwrap_or_default()
+}
+
+fn build_auto_backup_zip_bytes(file_name: &str, content: &str) -> Result<Vec<u8>, String> {
+    let root = serde_json::from_str::<serde_json::Value>(content)
+        .map_err(|err| format!("自动备份 JSON 解析失败，无法生成 ZIP: {}", err))?;
+    let platforms = collect_auto_backup_platforms_from_value(&root);
+    let manifest = serde_json::json!({
+        "schema": "cockpit-tools.auto-backup-archive",
+        "version": 1,
+        "source_file_name": file_name,
+        "platforms": &platforms,
+        "sections": root.get("sections").cloned().unwrap_or(serde_json::Value::Null),
+        "exported_at": root.get("exported_at").cloned().unwrap_or(serde_json::Value::Null),
+    });
+
+    let mut entries = vec![
+        ("backup.json".to_string(), content.as_bytes().to_vec()),
+        (
+            "manifest.json".to_string(),
+            serde_json::to_vec_pretty(&manifest)
+                .map_err(|err| format!("序列化 ZIP 清单失败: {}", err))?,
+        ),
+    ];
+
+    if let Some(accounts) = root.get("accounts").filter(|item| item.is_object()) {
+        if let Some(platforms_map) = accounts.get("platforms").and_then(|item| item.as_object()) {
+            for platform in &platforms {
+                if let Some(payload) = platforms_map.get(&platform.platform) {
+                    let exported_data = payload
+                        .get("exported_data")
+                        .or_else(|| payload.get("data"))
+                        .or_else(|| payload.get("accounts"))
+                        .cloned()
+                        .unwrap_or_else(|| serde_json::json!([]));
+                    entries.push((
+                        format!("accounts/{}.json", platform.platform),
+                        serde_json::to_vec_pretty(&exported_data)
+                            .map_err(|err| format!("序列化平台备份失败: {}", err))?,
+                    ));
+                }
+            }
+        }
+    } else if let Some(platforms_map) = root.get("platforms").and_then(|item| item.as_object()) {
+        for platform in &platforms {
+            if let Some(payload) = platforms_map.get(&platform.platform) {
+                let exported_data = payload
+                    .get("exported_data")
+                    .or_else(|| payload.get("data"))
+                    .or_else(|| payload.get("accounts"))
+                    .cloned()
+                    .unwrap_or_else(|| serde_json::json!([]));
+                entries.push((
+                    format!("accounts/{}.json", platform.platform),
+                    serde_json::to_vec_pretty(&exported_data)
+                        .map_err(|err| format!("序列化平台备份失败: {}", err))?,
+                ));
+            }
+        }
+    }
+
+    build_stored_zip(entries)
 }
 
 fn system_time_to_unix_ms(value: SystemTime) -> Option<i64> {
@@ -488,16 +824,47 @@ pub fn update_auto_backup_last_run(
 #[tauri::command]
 pub fn write_auto_backup_file(file_name: String, content: String) -> Result<String, String> {
     let safe_name = sanitize_auto_backup_file_name(&file_name)?;
+    if !safe_name.ends_with(".json") {
+        return Err("自动备份主文件必须为 JSON".to_string());
+    }
     let dir = ensure_auto_backup_dir_path()?;
-    let path = dir.join(safe_name);
-    fs::write(&path, content).map_err(|err| format!("写入自动备份文件失败: {}", err))?;
+    let path = dir.join(&safe_name);
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|err| format!("写入自动备份文件失败: {}", err))?;
+
+    if let Some(archive_name) = auto_backup_archive_file_name(&safe_name) {
+        let archive_path = dir.join(archive_name);
+        let zip_bytes = build_auto_backup_zip_bytes(&safe_name, &content)?;
+        crate::modules::atomic_write::write_bytes_atomic(&archive_path, &zip_bytes)
+            .map_err(|err| format!("写入自动备份压缩包失败: {}", err))?;
+    }
+
     Ok(path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
 pub fn read_auto_backup_file(file_name: String) -> Result<String, String> {
     let path = resolve_auto_backup_file_path(&file_name)?;
-    fs::read_to_string(&path).map_err(|err| format!("读取自动备份文件失败: {}", err))
+    backup_json_from_path(&path)
+}
+
+#[tauri::command]
+pub fn copy_auto_backup_file(file_name: String, target_path: String) -> Result<String, String> {
+    let source_path = resolve_auto_backup_file_path(&file_name)?;
+    if !source_path.exists() {
+        return Err("备份文件不存在".to_string());
+    }
+    let target = PathBuf::from(target_path.trim());
+    if target.as_os_str().is_empty() {
+        return Err("目标路径不能为空".to_string());
+    }
+    if let Some(parent) = target.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|err| format!("创建下载目录失败: {}", err))?;
+        }
+    }
+    fs::copy(&source_path, &target).map_err(|err| format!("复制备份文件失败: {}", err))?;
+    Ok(target.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -509,24 +876,77 @@ pub fn list_auto_backup_files() -> Result<Vec<AutoBackupFileEntry>, String> {
 
     let mut files = Vec::new();
     let entries = fs::read_dir(&dir).map_err(|err| format!("读取自动备份目录失败: {}", err))?;
+    let mut json_stems = std::collections::HashSet::new();
 
+    let mut paths = Vec::new();
     for entry in entries {
         let entry = entry.map_err(|err| format!("读取自动备份文件失败: {}", err))?;
         let path = entry.path();
         if !path.is_file() {
             continue;
         }
+        paths.push(path);
+    }
+
+    for path in &paths {
+        if let Some(stem) = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .and_then(|name| name.strip_suffix(".json"))
+        {
+            json_stems.insert(stem.to_string());
+        }
+    }
+
+    for path in paths {
         let file_name = match path.file_name().and_then(|name| name.to_str()) {
-            Some(name) if name.ends_with(".json") => name.to_string(),
+            Some(name) if name.ends_with(".json") || name.ends_with(".zip") => name.to_string(),
             _ => continue,
         };
+        if file_name.ends_with(".zip") {
+            if let Some(json_name) = auto_backup_json_file_name(&file_name) {
+                if json_stems.contains(json_name.trim_end_matches(".json")) {
+                    continue;
+                }
+            }
+        }
         let metadata =
             fs::metadata(&path).map_err(|err| format!("读取备份文件信息失败: {}", err))?;
+        let archive_name = if file_name.ends_with(".json") {
+            auto_backup_archive_file_name(&file_name)
+        } else {
+            None
+        };
+        let archive_path = archive_name
+            .as_ref()
+            .map(|name| dir.join(name))
+            .filter(|path| path.exists());
+        let archive_metadata = archive_path
+            .as_ref()
+            .and_then(|path| fs::metadata(path).ok());
+        let json_content = backup_json_from_path(&path).ok();
         files.push(AutoBackupFileEntry {
             file_name,
             path: path.to_string_lossy().to_string(),
+            file_kind: path
+                .extension()
+                .and_then(|item| item.to_str())
+                .unwrap_or("json")
+                .to_string(),
             size_bytes: metadata.len(),
             modified_at_ms: metadata.modified().ok().and_then(system_time_to_unix_ms),
+            archive_file_name: archive_path
+                .as_ref()
+                .and_then(|path| path.file_name().and_then(|name| name.to_str()))
+                .map(|name| name.to_string()),
+            archive_path: archive_path
+                .as_ref()
+                .map(|path| path.to_string_lossy().to_string()),
+            archive_size_bytes: archive_metadata.map(|metadata| metadata.len()),
+            platforms: json_content
+                .as_deref()
+                .map(collect_auto_backup_platforms)
+                .unwrap_or_default(),
         });
     }
 
@@ -547,7 +967,17 @@ pub fn delete_auto_backup_file(file_name: String) -> Result<(), String> {
     if !path.exists() {
         return Ok(());
     }
-    fs::remove_file(&path).map_err(|err| format!("删除自动备份文件失败: {}", err))
+    fs::remove_file(&path).map_err(|err| format!("删除自动备份文件失败: {}", err))?;
+    if file_name.ends_with(".json") {
+        if let Some(archive_name) = auto_backup_archive_file_name(&file_name) {
+            let archive_path = resolve_auto_backup_file_path(&archive_name)?;
+            if archive_path.exists() {
+                fs::remove_file(&archive_path)
+                    .map_err(|err| format!("删除自动备份压缩包失败: {}", err))?;
+            }
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -574,7 +1004,7 @@ pub fn cleanup_auto_backup_files(retention_days: i32) -> Result<Vec<String>, Str
             continue;
         }
         let file_name = match path.file_name().and_then(|name| name.to_str()) {
-            Some(name) if name.ends_with(".json") => name.to_string(),
+            Some(name) if name.ends_with(".json") || name.ends_with(".zip") => name.to_string(),
             _ => continue,
         };
         let metadata =
@@ -687,6 +1117,7 @@ pub fn save_network_config(
         kiro_auto_refresh_minutes: current.kiro_auto_refresh_minutes,
         cursor_auto_refresh_minutes: current.cursor_auto_refresh_minutes,
         gemini_auto_refresh_minutes: current.gemini_auto_refresh_minutes,
+        gemini_sync_wsl: current.gemini_sync_wsl,
         codebuddy_auto_refresh_minutes: current.codebuddy_auto_refresh_minutes,
         codebuddy_cn_auto_refresh_minutes: current.codebuddy_cn_auto_refresh_minutes,
         workbuddy_auto_refresh_minutes: current.workbuddy_auto_refresh_minutes,
@@ -951,6 +1382,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         kiro_auto_refresh_minutes: user_config.kiro_auto_refresh_minutes,
         cursor_auto_refresh_minutes: user_config.cursor_auto_refresh_minutes,
         gemini_auto_refresh_minutes: user_config.gemini_auto_refresh_minutes,
+        gemini_sync_wsl: user_config.gemini_sync_wsl,
         codebuddy_auto_refresh_minutes: user_config.codebuddy_auto_refresh_minutes,
         codebuddy_cn_auto_refresh_minutes: user_config.codebuddy_cn_auto_refresh_minutes,
         workbuddy_auto_refresh_minutes: user_config.workbuddy_auto_refresh_minutes,
@@ -1077,6 +1509,7 @@ pub fn save_general_config(
     kiro_auto_refresh_minutes: Option<i32>,
     cursor_auto_refresh_minutes: Option<i32>,
     gemini_auto_refresh_minutes: Option<i32>,
+    gemini_sync_wsl: Option<bool>,
     codebuddy_auto_refresh_minutes: Option<i32>,
     codebuddy_cn_auto_refresh_minutes: Option<i32>,
     workbuddy_auto_refresh_minutes: Option<i32>,
@@ -1280,6 +1713,8 @@ pub fn save_general_config(
             .unwrap_or(current.cursor_auto_refresh_minutes),
         gemini_auto_refresh_minutes: gemini_auto_refresh_minutes
             .unwrap_or(current.gemini_auto_refresh_minutes),
+        gemini_sync_wsl: gemini_sync_wsl
+            .unwrap_or(current.gemini_sync_wsl),
         codebuddy_auto_refresh_minutes: codebuddy_auto_refresh_minutes
             .unwrap_or(current.codebuddy_auto_refresh_minutes),
         codebuddy_cn_auto_refresh_minutes: codebuddy_cn_auto_refresh_minutes
@@ -1706,6 +2141,46 @@ pub fn show_main_window_and_navigate(app: tauri::AppHandle, page: String) -> Res
 pub fn external_import_take_pending(
 ) -> Option<modules::external_import::ExternalProviderImportPayload> {
     modules::external_import::take_pending_external_import()
+}
+
+#[tauri::command]
+pub async fn external_import_fetch_import_url(import_url: String) -> Result<String, String> {
+    const MAX_IMPORT_BUNDLE_BYTES: usize = 8 * 1024 * 1024;
+
+    let import_url = import_url.trim();
+    if import_url.is_empty() {
+        return Err("导入包地址为空".to_string());
+    }
+
+    let parsed = Url::parse(import_url).map_err(|err| format!("导入包地址无效: {}", err))?;
+    if !matches!(parsed.scheme(), "https" | "http") {
+        return Err("导入包地址仅支持 http/https".to_string());
+    }
+
+    let response = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|err| format!("创建网络客户端失败: {}", err))?
+        .get(parsed)
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+        .map_err(|err| format!("拉取导入包失败: {}", err))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("拉取导入包失败: HTTP {}", status.as_u16()));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|err| format!("读取导入包失败: {}", err))?;
+    if bytes.len() > MAX_IMPORT_BUNDLE_BYTES {
+        return Err("导入包过大".to_string());
+    }
+
+    String::from_utf8(bytes.to_vec()).map_err(|_| "导入包不是有效 UTF-8 文本".to_string())
 }
 
 /// 打开指定文件夹（如不存在则创建）

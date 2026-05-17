@@ -3498,12 +3498,7 @@ async fn refresh_account_async_once(account_id: &str) -> Result<TraeAccount, Str
 }
 
 pub async fn refresh_account_async(account_id: &str) -> Result<TraeAccount, String> {
-    let result = crate::modules::refresh_retry::retry_once_with_delay(
-        "Trae Refresh",
-        account_id,
-        || async { refresh_account_async_once(account_id).await },
-    )
-    .await;
+    let result = refresh_account_async_once(account_id).await;
     if let Err(err) = &result {
         persist_quota_query_error(account_id, err);
     }
@@ -3554,19 +3549,7 @@ pub async fn refresh_account_usage_only_async(
     account_id: &str,
     runtime_storage_path: Option<&Path>,
 ) -> Result<TraeAccount, String> {
-    let runtime_storage_path = runtime_storage_path.map(|path| path.to_path_buf());
-    let result = crate::modules::refresh_retry::retry_once_with_delay(
-        "Trae Quota Refresh",
-        account_id,
-        || {
-            let runtime_storage_path = runtime_storage_path.clone();
-            async move {
-                refresh_account_usage_only_async_once(account_id, runtime_storage_path.as_deref())
-                    .await
-            }
-        },
-    )
-    .await;
+    let result = refresh_account_usage_only_async_once(account_id, runtime_storage_path).await;
     if let Err(err) = &result {
         persist_quota_query_error(account_id, err);
     }

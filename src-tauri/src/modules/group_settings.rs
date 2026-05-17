@@ -317,7 +317,8 @@ pub fn save_group_settings(settings: &GroupSettings) -> Result<(), String> {
     let content =
         serde_json::to_string_pretty(settings).map_err(|e| format!("序列化失败: {}", e))?;
 
-    fs::write(&path, content).map_err(|e| format!("写入文件失败: {}", e))?;
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("写入文件失败: {}", e))?;
 
     crate::modules::logger::log_info(&format!(
         "[GroupSettings] 保存配置成功: {} 个映射, {} 个分组",

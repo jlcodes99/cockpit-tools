@@ -40,6 +40,7 @@ import {
   getWindsurfQuotaUsageSummary,
   formatWindsurfResetTime,
   hasWindsurfQuotaData,
+  getWindsurfUsage,
 } from '../types/windsurf';
 import { buildWindsurfAccountPresentation } from '../presentation/platformAccountPresentation';
 
@@ -51,6 +52,7 @@ import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../comp
 import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
 import type { WindsurfAccount, WindsurfPlanBadge } from '../types/windsurf';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
+import { computeWindsurfRecommendScoreStatic } from '../utils/windsurfRecommend';
 import { emitAccountsChanged } from '../utils/accountSyncEvents';
 import {
   buildValidAccountsFilterOption,
@@ -319,6 +321,7 @@ export function WindsurfAccountsPage() {
     flowNoticeCollapsedKey: WINDSURF_FLOW_NOTICE_COLLAPSED_KEY,
     currentAccountIdKey: WINDSURF_CURRENT_ACCOUNT_ID_KEY,
     exportFilePrefix: 'windsurf_accounts',
+    defaultSortBy: 'recommended',
     store: {
       accounts: store.accounts,
       currentAccountId: store.currentAccountId,
@@ -406,6 +409,7 @@ export function WindsurfAccountsPage() {
 
   const accounts = store.accounts;
   const loading = store.loading;
+  const recommendNowSec = useMemo(() => Math.floor(Date.now() / 1000), [accounts]);
   const [passwordEmail, setPasswordEmail] = useState('');
   const [passwordPassword, setPasswordPassword] = useState('');
   const [passwordMode, setPasswordMode] = useState<WindsurfPasswordMode>('single');
@@ -1052,11 +1056,27 @@ export function WindsurfAccountsPage() {
       if (bReset == null) return -1;
       return sortDirection === 'desc' ? bReset - aReset : aReset - bReset;
     }
+    if (sortBy === 'recommended') {
+      const aScore = computeWindsurfRecommendScoreStatic(a, {
+        nowSec: recommendNowSec,
+        usage: getWindsurfUsage(a),
+        quotaSummary: resolveQuotaSummary(a),
+        summary: resolveCreditsSummary(a),
+      });
+      const bScore = computeWindsurfRecommendScoreStatic(b, {
+        nowSec: recommendNowSec,
+        usage: getWindsurfUsage(b),
+        quotaSummary: resolveQuotaSummary(b),
+        summary: resolveCreditsSummary(b),
+      });
+      const diff = bScore - aScore;
+      return sortDirection === 'desc' ? diff : -diff;
+    }
     const aValue = resolveCreditsSummary(a).creditsLeft ?? -1;
     const bValue = resolveCreditsSummary(b).creditsLeft ?? -1;
     const diff = bValue - aValue;
     return sortDirection === 'desc' ? diff : -diff;
-  }, [currentAccountId, resolveCreditsSummary, sortBy, sortDirection]);
+  }, [currentAccountId, recommendNowSec, resolveCreditsSummary, resolveQuotaSummary, sortBy, sortDirection]);
 
   const sortedAccountsForInstances = useMemo(
     () => [...accounts].sort(compareAccountsBySort),
@@ -1369,6 +1389,7 @@ export function WindsurfAccountsPage() {
           <SingleSelectFilterDropdown
             value={sortBy}
             options={[
+              { value: 'recommended', label: t('common.shared.sort.recommended', '按推荐') },
               { value: 'created_at', label: t('common.shared.sort.createdAt', '按创建时间') },
               { value: 'credits', label: t('common.shared.sort.credits', '按剩余 Credits') },
               { value: 'plan_end', label: t('common.shared.sort.planEnd', '按配额周期结束时间') },
@@ -1378,7 +1399,13 @@ export function WindsurfAccountsPage() {
             onChange={setSortBy}
           />
           <button className="sort-direction-btn" onClick={() => setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
-            title={sortDirection === 'desc' ? t('common.shared.sort.descTooltip', '当前：降序，点击切换为升序') : t('common.shared.sort.ascTooltip', '当前：升序，点击切换为降序')}
+            title={sortBy === 'recommended'
+              ? (sortDirection === 'desc'
+                ? t('common.shared.sort.recommendedDescTooltip', '按推荐度降序（最值得切去的在前）')
+                : t('common.shared.sort.recommendedAscTooltip', '按推荐度升序（最不值得切去的在前）'))
+              : (sortDirection === 'desc'
+                ? t('common.shared.sort.descTooltip', '当前：降序，点击切换为升序')
+                : t('common.shared.sort.ascTooltip', '当前：升序，点击切换为降序'))}
             aria-label={t('common.shared.sort.toggleDirection', '切换排序方向')}>{sortDirection === 'desc' ? '⬇' : '⬆'}</button>
         </div>
         <div className="toolbar-right">

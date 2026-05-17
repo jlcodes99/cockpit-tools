@@ -804,42 +804,20 @@ fn build_refresh_user_info_raw(
     user_info
 }
 
-async fn fetch_qoder_user_status_bundle_with_fallback(
+async fn fetch_qoder_user_status_bundle_with_machine_info(
     client: &reqwest::Client,
     openapi_base_url: &str,
     token: &str,
     machine_info: Option<&QoderMachineInfo>,
 ) -> Result<(Value, Option<Value>), String> {
-    let first_attempt = fetch_qoder_user_status_bundle(
+    fetch_qoder_user_status_bundle(
         client,
         openapi_base_url,
         token,
         machine_info.map(|item| item.token.as_str()),
         machine_info.and_then(|item| item.machine_type.as_deref()),
     )
-    .await;
-
-    if first_attempt.is_ok() {
-        return first_attempt;
-    }
-
-    let first_error = first_attempt
-        .err()
-        .unwrap_or_else(|| "未知错误".to_string());
-
-    if machine_info.is_some() {
-        logger::log_warn(&format!(
-            "[Qoder Refresh] user/status 首次请求失败，尝试无机器标识重试: {}",
-            first_error
-        ));
-        if let Ok(value) =
-            fetch_qoder_user_status_bundle(client, openapi_base_url, token, None, None).await
-        {
-            return Ok(value);
-        }
-    }
-
-    Err(first_error)
+    .await
 }
 
 async fn refresh_account_from_openapi_once(account_id: &str) -> Result<QoderAccount, String> {
@@ -861,7 +839,7 @@ async fn refresh_account_from_openapi_once(account_id: &str) -> Result<QoderAcco
         }
     };
 
-    let (user_status, data_policy) = fetch_qoder_user_status_bundle_with_fallback(
+    let (user_status, data_policy) = fetch_qoder_user_status_bundle_with_machine_info(
         &client,
         DEFAULT_OPENAPI_BASE_URL,
         &access_token,
@@ -921,12 +899,7 @@ async fn refresh_account_from_openapi_once(account_id: &str) -> Result<QoderAcco
 }
 
 pub async fn refresh_account_from_openapi(account_id: &str) -> Result<QoderAccount, String> {
-    let result = crate::modules::refresh_retry::retry_once_with_delay(
-        "Qoder Refresh",
-        account_id,
-        || async { refresh_account_from_openapi_once(account_id).await },
-    )
-    .await;
+    let result = refresh_account_from_openapi_once(account_id).await;
     if let Err(err) = &result {
         let _ = qoder_account::update_quota_query_error(account_id, Some(err.clone()));
     }

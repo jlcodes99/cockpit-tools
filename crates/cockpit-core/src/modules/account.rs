@@ -1758,7 +1758,7 @@ pub async fn refresh_all_quotas_logic(
             let permit = semaphore.clone();
             async move {
                 let _guard = permit.acquire().await.unwrap();
-                match fetch_quota_with_delayed_retry(&mut account, false).await {
+                match fetch_quota_with_fresh_token(&mut account, false).await {
                     Ok(quota) => {
                         if let Err(e) = update_account_quota(&account_id, quota) {
                             let msg = format!("Account {}: Save quota failed - {}", email, e);
@@ -1809,52 +1809,9 @@ pub async fn refresh_all_quotas_logic(
     })
 }
 
-pub async fn fetch_quota_with_delayed_retry(
-    account: &mut Account,
-    skip_cache: bool,
-) -> crate::error::AppResult<QuotaData> {
-    match fetch_quota_with_retry(account, skip_cache).await {
-        Ok(quota) => Ok(quota),
-        Err(first_error) => {
-            modules::logger::log_warn(&format!(
-                "[Antigravity Refresh] 首次刷新失败，{} 秒后重试: account_id={}, email={}, error={}",
-                crate::modules::refresh_retry::ACCOUNT_REFRESH_RETRY_DELAY_SECS,
-                account.id,
-                account.email,
-                first_error
-            ));
-
-            tokio::time::sleep(Duration::from_secs(
-                crate::modules::refresh_retry::ACCOUNT_REFRESH_RETRY_DELAY_SECS,
-            ))
-            .await;
-
-            match fetch_quota_with_retry(account, skip_cache).await {
-                Ok(quota) => {
-                    modules::logger::log_info(&format!(
-                        "[Antigravity Refresh] 重试刷新成功: account_id={}, email={}",
-                        account.id, account.email
-                    ));
-                    Ok(quota)
-                }
-                Err(second_error) => {
-                    modules::logger::log_warn(&format!(
-                        "[Antigravity Refresh] 重试后仍失败: account_id={}, email={}, first_error={}, second_error={}",
-                        account.id,
-                        account.email,
-                        first_error,
-                        second_error
-                    ));
-                    Err(second_error)
-                }
-            }
-        }
-    }
-}
-
-/// 带重试的配额查询
+/// 配额查询，并在查询前确保 Token 有效
 /// skip_cache: 是否跳过缓存，单个账号刷新应传 true
-pub async fn fetch_quota_with_retry(
+pub async fn fetch_quota_with_fresh_token(
     account: &mut Account,
     skip_cache: bool,
 ) -> crate::error::AppResult<QuotaData> {

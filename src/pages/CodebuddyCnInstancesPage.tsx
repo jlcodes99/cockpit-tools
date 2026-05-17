@@ -10,7 +10,6 @@ import {
 } from '../types/codebuddy';
 import { usePlatformRuntimeSupport } from '../hooks/usePlatformRuntimeSupport';
 import { DosageNotifyQuotaPreview } from '../components/platform/DosageNotifyQuotaPreview';
-import { CheckCircle } from 'lucide-react';
 
 interface CodebuddyCnInstancesContentProps {
   accountsForSelect?: CodebuddyCnAccount[];
@@ -50,27 +49,9 @@ export function CodebuddyCnInstancesContent({
         const planBadge = getCodebuddyPlanBadge(account);
         const normalizedClass = planBadge.toLowerCase();
 
-        // 检查今日是否已签到
-        const isCheckedIn = account.last_checkin_time
-          ? (() => {
-              const today = new Date();
-              const lastCheckinDate = new Date(account.last_checkin_time!);
-              return (
-                today.getFullYear() === lastCheckinDate.getFullYear() &&
-                today.getMonth() === lastCheckinDate.getMonth() &&
-                today.getDate() === lastCheckinDate.getDate()
-              );
-            })()
-          : false;
-
         return (
           <div className="badge-group inline-flex items-center gap-1">
             <span className={`instance-plan-badge ${normalizedClass}`}>{planBadge}</span>
-            {isCheckedIn && (
-              <span className="checkin-badge badge badge-success badge-sm" title={t('codebuddyCn.checkin.checkedIn', '已签到')}>
-                <CheckCircle size={12} />
-              </span>
-            )}
           </div>
         );
       }}

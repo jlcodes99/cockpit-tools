@@ -136,25 +136,8 @@ fn get_openclaw_auth_profiles_path() -> Result<PathBuf, String> {
 }
 
 fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
-    let parent = path.parent().ok_or("无法获取 auth-profiles.json 目录")?;
-    fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
-
-    let tmp_path = parent.join(format!(
-        ".auth-profiles.json.tmp.{}",
-        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
-    ));
-    fs::write(&tmp_path, content).map_err(|e| format!("写入临时文件失败: {}", e))?;
-
-    if let Err(err) = fs::rename(&tmp_path, path) {
-        if path.exists() {
-            fs::remove_file(path).map_err(|e| format!("删除旧 auth-profiles.json 失败: {}", e))?;
-            fs::rename(&tmp_path, path)
-                .map_err(|e| format!("替换 auth-profiles.json 失败: {}", e))?;
-        } else {
-            return Err(format!("替换 auth-profiles.json 失败: {}", err));
-        }
-    }
-    Ok(())
+    crate::modules::atomic_write::write_string_atomic(path, content)
+        .map_err(|e| format!("写入 auth-profiles.json 失败: {}", e))
 }
 
 fn decode_token_exp_ms(access_token: &str) -> Option<i64> {

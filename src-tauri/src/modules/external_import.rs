@@ -15,7 +15,15 @@ pub struct ExternalProviderImportPayload {
     pub provider_id: String,
     pub page: String,
     pub token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub import_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_base_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_app_version: Option<String>,
     pub auto_import: bool,
+    #[serde(default)]
+    pub activate: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -118,6 +126,8 @@ fn summarize_candidate(candidate: &str) -> String {
                 | "payload"
                 | "import_payload"
                 | "importpayload"
+                | "import_url"
+                | "importurl"
         ) && token_len.is_none()
         {
             token_len = Some(value.trim().len());
@@ -173,12 +183,39 @@ fn parse_external_import_url_with_reason(
         .or_else(|| query.get("payload"))
         .or_else(|| query.get("import_payload"))
         .or_else(|| query.get("importpayload"))
-        .ok_or_else(|| "缺少内容参数（token/import_token/payload/import_payload）".to_string())?
-        .trim()
-        .to_string();
-    if token.is_empty() {
-        return Err("内容参数为空".to_string());
+        .map(|value| value.trim().to_string())
+        .unwrap_or_default();
+    let import_url = query
+        .get("import_url")
+        .or_else(|| query.get("importurl"))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let api_base_url = query
+        .get("api_base_url")
+        .or_else(|| query.get("apibaseurl"))
+        .or_else(|| query.get("base_url"))
+        .or_else(|| query.get("baseurl"))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if token.is_empty() && import_url.is_none() {
+        return Err(
+            "缺少内容参数（token/import_token/payload/import_payload/import_url）".to_string(),
+        );
     }
+    if !token.is_empty() && import_url.is_some() {
+        return Err("内容参数不能同时包含 token/payload 与 import_url".to_string());
+    }
+    let token = token.trim().to_string();
+    let min_app_version = query
+        .get("min_app_version")
+        .or_else(|| query.get("minappversion"))
+        .map(|value| {
+            value
+                .trim()
+                .trim_start_matches(|ch| ch == 'v' || ch == 'V')
+                .to_string()
+        })
+        .filter(|value| !value.is_empty());
 
     let auto_import = parse_boolean_like(
         query
@@ -187,12 +224,22 @@ fn parse_external_import_url_with_reason(
             .or_else(|| query.get("auto_submit"))
             .or_else(|| query.get("autosubmit")),
     );
+    let activate = parse_boolean_like(
+        query
+            .get("activate")
+            .or_else(|| query.get("auto_activate"))
+            .or_else(|| query.get("autoactivate")),
+    );
 
     Ok(ExternalProviderImportPayload {
         provider_id: provider_id.to_string(),
         page: page.to_string(),
         token,
+        import_url,
+        api_base_url,
+        min_app_version,
         auto_import,
+        activate,
         source: None,
         raw_url: None,
     })
@@ -332,6 +379,9 @@ mod tests {
         assert_eq!(payload.provider_id, "codex");
         assert_eq!(payload.page, "codex");
         assert_eq!(payload.token, "abc123");
+        assert_eq!(payload.import_url, None);
+        assert_eq!(payload.api_base_url, None);
+        assert_eq!(payload.min_app_version, None);
         assert!(!payload.auto_import);
     }
 
@@ -343,6 +393,9 @@ mod tests {
         assert_eq!(payload.provider_id, "codebuddy_cn");
         assert_eq!(payload.page, "codebuddy-cn");
         assert_eq!(payload.token, "{}");
+        assert_eq!(payload.import_url, None);
+        assert_eq!(payload.api_base_url, None);
+        assert_eq!(payload.min_app_version, None);
         assert!(payload.auto_import);
     }
 
@@ -353,6 +406,53 @@ mod tests {
         assert_eq!(payload.provider_id, "antigravity");
         assert_eq!(payload.page, "overview");
         assert_eq!(payload.token, "1//0gTokenDemo");
+        assert_eq!(payload.import_url, None);
+        assert_eq!(payload.api_base_url, None);
+        assert_eq!(payload.min_app_version, None);
         assert!(!payload.auto_import);
+    }
+
+    #[test]
+    fn parse_import_url_link() {
+        let raw = "cockpit-tools://import?provider=codex&import_url=https%3A%2F%2Fexample.com%2Fuser%2Fapi%2FtoolsImport%2Ffetch%3Fid%3Dabc%26token%3Ddef&auto_import=true";
+        let payload = parse_external_import_url(raw).expect("payload");
+        assert_eq!(payload.provider_id, "codex");
+        assert_eq!(payload.page, "codex");
+        assert_eq!(payload.token, "");
+        assert_eq!(
+            payload.import_url,
+            Some("https://example.com/user/api/toolsImport/fetch?id=abc&token=def".to_string())
+        );
+        assert_eq!(payload.api_base_url, None);
+        assert_eq!(payload.min_app_version, None);
+        assert!(payload.auto_import);
+    }
+
+    #[test]
+    fn parse_import_link_with_api_base_url() {
+        let raw = "cockpit-tools://provider-import?platform=codex&import_url=https%3A%2F%2Fchongflow.cn%2Fapi%2Fcockpit-tools%2Fimport%2Fabc&api_base_url=https%3A%2F%2Fchongflow.cn%2Fv1&auto_import=true";
+        let payload = parse_external_import_url(raw).expect("payload");
+        assert_eq!(payload.provider_id, "codex");
+        assert_eq!(
+            payload.api_base_url,
+            Some("https://chongflow.cn/v1".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_activate_flag() {
+        let raw = "cockpit-tools://provider-import?platform=codex&import_url=https%3A%2F%2Fexample.com%2Fbundle&auto_import=true&activate=true";
+        let payload = parse_external_import_url(raw).expect("payload");
+        assert_eq!(payload.provider_id, "codex");
+        assert!(payload.auto_import);
+        assert!(payload.activate);
+    }
+
+    #[test]
+    fn parse_min_app_version() {
+        let raw = "cockpit-tools://import?provider=codex&token=abc123&min_app_version=v0.22.21";
+        let payload = parse_external_import_url(raw).expect("payload");
+        assert_eq!(payload.provider_id, "codex");
+        assert_eq!(payload.min_app_version, Some("0.22.21".to_string()));
     }
 }

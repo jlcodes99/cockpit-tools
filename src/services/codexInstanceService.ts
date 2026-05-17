@@ -3,12 +3,14 @@ import { createPlatformInstanceService } from "./platform/createPlatformInstance
 import type {
   CodexSessionVisibilityRepairSummary,
   CodexInstanceThreadSyncSummary,
+  CodexInstanceTargetThreadSyncSummary,
   CodexSessionRecord,
   CodexSessionTokenStats,
   CodexSessionTrashSummary,
   CodexTrashedSessionRecord,
   CodexSessionRestoreSummary,
   CodexQuickConfig,
+  CodexAppSpeed,
 } from "../types/codex";
 import type { InstanceLaunchMode, InstanceProfile } from "../types/instance";
 
@@ -29,6 +31,7 @@ export async function createInstance(payload: {
   extraArgs?: string;
   bindAccountId?: string | null;
   launchMode?: InstanceLaunchMode;
+  appSpeed?: CodexAppSpeed;
   copySourceInstanceId: string;
   initMode?: "copy" | "empty" | "existingDir";
 }): Promise<InstanceProfile> {
@@ -39,6 +42,7 @@ export async function createInstance(payload: {
     extraArgs: payload.extraArgs ?? "",
     bindAccountId: payload.bindAccountId ?? null,
     launchMode: payload.launchMode ?? "app",
+    appSpeed: payload.appSpeed ?? "standard",
     copySourceInstanceId: payload.copySourceInstanceId,
     initMode: payload.initMode ?? "copy",
   });
@@ -52,6 +56,7 @@ export async function updateInstance(payload: {
   bindAccountId?: string | null;
   followLocalAccount?: boolean;
   launchMode?: InstanceLaunchMode;
+  appSpeed?: CodexAppSpeed;
 }): Promise<InstanceProfile> {
   const body: Record<string, unknown> = {
     instanceId: payload.instanceId,
@@ -73,6 +78,9 @@ export async function updateInstance(payload: {
   }
   if (payload.launchMode !== undefined) {
     body.launchMode = payload.launchMode;
+  }
+  if (payload.appSpeed !== undefined) {
+    body.appSpeed = payload.appSpeed;
   }
   return await invoke("codex_update_instance", body);
 }
@@ -129,6 +137,16 @@ export async function executeCodexInstanceLaunchCommand(
 
 export async function syncThreadsAcrossInstances(): Promise<CodexInstanceThreadSyncSummary> {
   return await invoke("codex_sync_threads_across_instances");
+}
+
+export async function syncSessionsToInstance(
+  sessionIds: string[],
+  targetInstanceId: string,
+): Promise<CodexInstanceTargetThreadSyncSummary> {
+  return await invoke("codex_sync_sessions_to_instance", {
+    sessionIds,
+    targetInstanceId,
+  });
 }
 
 export async function repairSessionVisibilityAcrossInstances(): Promise<CodexSessionVisibilityRepairSummary> {

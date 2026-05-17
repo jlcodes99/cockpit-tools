@@ -18,6 +18,8 @@ const CODEX_SHARED_SKILLS_DIR_NAME: &str = "skills";
 const CODEX_SHARED_RULES_DIR_NAME: &str = "rules";
 const CODEX_SHARED_AGENTS_FILE_NAME: &str = "AGENTS.md";
 const CODEX_SHARED_VENDOR_IMPORTS_SKILLS_DIR: &str = "vendor_imports/skills";
+#[cfg(target_os = "windows")]
+const CODEX_WINDOWS_APP_DATA_DIR_NAME: &str = "codex-app-data";
 
 #[derive(Debug, Clone)]
 pub struct CreateInstanceParams {
@@ -111,8 +113,15 @@ pub fn get_default_instances_root_dir() -> Result<PathBuf, String> {
         return Ok(home.join(".antigravity_cockpit/instances/codex"));
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        let appdata =
+            std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
+        return Ok(PathBuf::from(appdata).join(".antigravity_cockpit\\instances\\codex"));
+    }
+
     #[allow(unreachable_code)]
-    Err("Codex 多开实例仅支持 macOS".to_string())
+    Err("Codex 多开实例仅支持 macOS 和 Windows".to_string())
 }
 
 pub fn get_instance_defaults() -> Result<InstanceDefaults, String> {
@@ -122,6 +131,29 @@ pub fn get_instance_defaults() -> Result<InstanceDefaults, String> {
         root_dir: root_dir.to_string_lossy().to_string(),
         default_user_data_dir: default_user_data_dir.to_string_lossy().to_string(),
     })
+}
+
+#[cfg(target_os = "windows")]
+fn normalize_windows_codex_home_for_hash(path: &Path) -> String {
+    let resolved = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    resolved.to_string_lossy().replace('/', "\\").to_lowercase()
+}
+
+#[cfg(target_os = "windows")]
+pub fn get_windows_app_user_data_dir(codex_home: &Path) -> Result<PathBuf, String> {
+    let root = get_default_instances_root_dir()?
+        .parent()
+        .ok_or("无法获取 Codex 实例根目录")?
+        .join(CODEX_WINDOWS_APP_DATA_DIR_NAME);
+    let normalized = normalize_windows_codex_home_for_hash(codex_home);
+    let digest = format!("{:x}", md5::compute(normalized.as_bytes()));
+    Ok(root.join(digest))
+}
+
+#[cfg(target_os = "windows")]
+pub fn delete_windows_app_user_data_dir(codex_home: &Path) -> Result<(), String> {
+    let app_user_data_dir = get_windows_app_user_data_dir(codex_home)?;
+    modules::instance::delete_instance_directory(&app_user_data_dir)
 }
 
 #[cfg(unix)]
@@ -733,6 +765,8 @@ pub fn delete_instance(instance_id: &str) -> Result<(), String> {
     if !user_data_dir.trim().is_empty() {
         let dir_path = PathBuf::from(&user_data_dir);
         modules::instance::delete_instance_directory(&dir_path)?;
+        #[cfg(target_os = "windows")]
+        delete_windows_app_user_data_dir(&dir_path)?;
     }
 
     store.instances.remove(index);

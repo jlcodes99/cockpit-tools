@@ -925,7 +925,8 @@ export function FloatingCardWindow() {
   ]);
 
   const isCurrentViewed = Boolean(viewedAccount?.id && viewedAccount.id === currentAccount?.id);
-  const visibleQuotaItems = presentation?.quotaItems.slice(0, 2) ?? [];
+  const visibleQuotaItemLimit = selectedPlatform === 'antigravity' ? 3 : 2;
+  const visibleQuotaItems = presentation?.quotaItems.slice(0, visibleQuotaItemLimit) ?? [];
   const accountStateLabel = viewedAccount
     ? isCurrentViewed
       ? t('floatingCard.currentAccount', '当前账号')

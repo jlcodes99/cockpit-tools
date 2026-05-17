@@ -73,7 +73,7 @@ pub async fn set_current_account(app: tauri::AppHandle, account_id: String) -> R
 #[tauri::command]
 pub async fn fetch_account_quota(account_id: String) -> AppResult<models::Account> {
     let mut account = modules::load_account(&account_id).map_err(AppError::Account)?;
-    let quota = modules::fetch_quota_with_delayed_retry(&mut account, true).await?;
+    let quota = modules::fetch_quota_with_fresh_token(&mut account, true).await?;
     modules::update_account_quota(&account_id, quota).map_err(AppError::Account)?;
     // 重载账号，包含写入的 quota_error 等最新信息
     let updated_account = modules::load_account(&account_id).map_err(AppError::Account)?;
@@ -116,7 +116,7 @@ pub async fn refresh_current_quota(app: tauri::AppHandle) -> Result<(), String> 
         return Err("未找到当前账号".to_string());
     };
     let mut account = account;
-    let quota = modules::fetch_quota_with_delayed_retry(&mut account, true)
+    let quota = modules::fetch_quota_with_fresh_token(&mut account, true)
         .await
         .map_err(|e| e.to_string())?;
     modules::update_account_quota(&account.id, quota).map_err(|e| e.to_string())?;

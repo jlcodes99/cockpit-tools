@@ -27,8 +27,6 @@ const CODE_ASSIST_LOAD_ENDPOINT: &str =
     "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist";
 const CODE_ASSIST_RETRIEVE_QUOTA_ENDPOINT: &str =
     "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota";
-const CODE_ASSIST_REQUEST_RETRY_COUNT: usize = 3;
-const CODE_ASSIST_REQUEST_RETRY_DELAY_MS: u64 = 100;
 
 lazy_static::lazy_static! {
     static ref GEMINI_ACCOUNT_INDEX_LOCK: Mutex<()> = Mutex::new(());
@@ -849,7 +847,7 @@ fn write_local_google_accounts_to_path(
 
     let content = serde_json::to_string_pretty(accounts)
         .map_err(|e| format!("序列化本地 Gemini google_accounts.json 失败: {}", e))?;
-    fs::write(path, content)
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
         .map_err(|e| format!("写入本地 Gemini google_accounts.json 失败: {}", e))
 }
 
@@ -935,7 +933,8 @@ fn write_local_selected_auth_type_to_path(
 
     let content = serde_json::to_string_pretty(&root_value)
         .map_err(|e| format!("序列化本地 Gemini settings.json 失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("写入本地 Gemini settings.json 失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("写入本地 Gemini settings.json 失败: {}", e))
 }
 
 pub fn import_from_local() -> Result<Option<GeminiAccount>, String> {
@@ -1036,7 +1035,8 @@ fn write_local_oauth_creds_to_path(
 
     let content = serde_json::to_string_pretty(&payload)
         .map_err(|e| format!("序列化本地 Gemini oauth_creds.json 失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("写入本地 Gemini oauth_creds.json 失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("写入本地 Gemini oauth_creds.json 失败: {}", e))
 }
 
 #[cfg(target_os = "macos")]
@@ -1187,12 +1187,7 @@ fn resolve_account_status(status: Option<&str>, reason: Option<&str>) -> Option<
     normalize_non_empty(status).map(|value| value.to_ascii_lowercase())
 }
 
-fn should_retry_code_assist_status(status: reqwest::StatusCode) -> bool {
-    let code = status.as_u16();
-    code == 429 || code == 499 || code >= 500
-}
-
-async fn post_code_assist_json_with_retry(
+async fn post_code_assist_json(
     access_token: &str,
     endpoint: &str,
     payload: &Value,
@@ -1203,78 +1198,37 @@ async fn post_code_assist_json_with_retry(
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
 
-    let mut attempt = 0usize;
-    loop {
-        attempt += 1;
-        let response = client
-            .post(endpoint)
-            .header(AUTHORIZATION, format!("Bearer {}", access_token))
-            .header(CONTENT_TYPE, "application/json")
-            .json(payload)
-            .send()
-            .await;
+    let resp = client
+        .post(endpoint)
+        .header(AUTHORIZATION, format!("Bearer {}", access_token))
+        .header(CONTENT_TYPE, "application/json")
+        .json(payload)
+        .send()
+        .await
+        .map_err(|err| format!("请求 Gemini {} 失败: {}", action_name, err))?;
 
-        match response {
-            Ok(resp) => {
-                if resp.status().as_u16() == 401 {
-                    return Err("UNAUTHORIZED: Gemini access_token 已失效".to_string());
-                }
-
-                if resp.status().is_success() {
-                    return resp
-                        .json::<Value>()
-                        .await
-                        .map_err(|e| format!("解析 Gemini {} 响应失败: {}", action_name, e));
-                }
-
-                let status = resp.status();
-                if should_retry_code_assist_status(status)
-                    && attempt <= CODE_ASSIST_REQUEST_RETRY_COUNT
-                {
-                    logger::log_warn(&format!(
-                        "[Gemini {}] 请求失败将重试: attempt={}/{}, status={}",
-                        action_name,
-                        attempt,
-                        CODE_ASSIST_REQUEST_RETRY_COUNT + 1,
-                        status
-                    ));
-                    tokio::time::sleep(std::time::Duration::from_millis(
-                        CODE_ASSIST_REQUEST_RETRY_DELAY_MS,
-                    ))
-                    .await;
-                    continue;
-                }
-
-                let body = resp
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "<empty-body>".to_string());
-                return Err(format!(
-                    "请求 Gemini {} 失败: status={}, body_len={}",
-                    action_name,
-                    status,
-                    body.len()
-                ));
-            }
-            Err(err) => {
-                if attempt <= CODE_ASSIST_REQUEST_RETRY_COUNT {
-                    logger::log_warn(&format!(
-                        "[Gemini {}] 请求异常将重试: attempt={}/{}, error={}",
-                        action_name,
-                        attempt,
-                        CODE_ASSIST_REQUEST_RETRY_COUNT + 1,
-                        err
-                    ));
-                    tokio::time::sleep(std::time::Duration::from_millis(
-                        CODE_ASSIST_REQUEST_RETRY_DELAY_MS,
-                    ))
-                    .await;
-                    continue;
-                }
-                return Err(format!("请求 Gemini {} 失败: {}", action_name, err));
-            }
-        }
+    if resp.status().as_u16() == 401 {
+        return Err("UNAUTHORIZED: Gemini access_token 已失效".to_string());
     }
+
+    if resp.status().is_success() {
+        return resp
+            .json::<Value>()
+            .await
+            .map_err(|e| format!("解析 Gemini {} 响应失败: {}", action_name, e));
+    }
+
+    let status = resp.status();
+    let body = resp
+        .text()
+        .await
+        .unwrap_or_else(|_| "<empty-body>".to_string());
+    Err(format!(
+        "请求 Gemini {} 失败: status={}, body_len={}",
+        action_name,
+        status,
+        body.len()
+    ))
 }
 
 async fn refresh_access_token(refresh_token: &str) -> Result<GoogleTokenRefreshResponse, String> {
@@ -1361,7 +1315,7 @@ async fn load_code_assist_status(access_token: &str) -> Result<LoadCodeAssistSta
     let mut payload = serde_json::Map::new();
     payload.insert("metadata".to_string(), Value::Object(metadata));
 
-    let value = post_code_assist_json_with_retry(
+    let value = post_code_assist_json(
         access_token,
         CODE_ASSIST_LOAD_ENDPOINT,
         &Value::Object(payload),
@@ -1497,7 +1451,7 @@ async fn retrieve_user_quota(access_token: &str, project_id: &str) -> Result<Val
     let payload = serde_json::json!({
         "project": project_id
     });
-    post_code_assist_json_with_retry(
+    post_code_assist_json(
         access_token,
         CODE_ASSIST_RETRIEVE_QUOTA_ENDPOINT,
         &payload,
@@ -1646,12 +1600,7 @@ async fn refresh_account_token_once(account_id: &str) -> Result<GeminiAccount, S
 }
 
 pub async fn refresh_account_token(account_id: &str) -> Result<GeminiAccount, String> {
-    let result = crate::modules::refresh_retry::retry_once_with_delay(
-        "Gemini Refresh",
-        account_id,
-        || async { refresh_account_token_once(account_id).await },
-    )
-    .await;
+    let result = refresh_account_token_once(account_id).await;
     if let Err(err) = &result {
         persist_quota_query_error(account_id, err);
     }
@@ -1696,6 +1645,28 @@ pub async fn refresh_all_tokens() -> Result<Vec<(String, Result<GeminiAccount, S
     Ok(results)
 }
 
+#[cfg(target_os = "windows")]
+fn sync_default_gemini_home_to_wsl() {
+    let Ok(target_home) = resolve_gemini_home(None) else {
+        return;
+    };
+    let target_home_str = target_home.to_string_lossy().to_string();
+
+    let script = format!(
+        "mkdir -p ~/.gemini && cd \"$(wslpath -u '{}')\" && cp -f oauth_creds.json google_accounts.json ~/.gemini/ 2>/dev/null || true && rm -f ~/.gemini/gemini-credentials.json 2>/dev/null || true",
+        target_home_str.replace('\'', "'\\''")
+    );
+
+    use std::os::windows::process::CommandExt;
+    let _ = std::process::Command::new("wsl.exe")
+        .arg("-e")
+        .arg("sh")
+        .arg("-c")
+        .arg(&script)
+        .creation_flags(0x0800_0000)
+        .spawn();
+}
+
 pub fn inject_to_gemini_home(account_id: &str, cli_home_root: Option<&Path>) -> Result<(), String> {
     let mut account =
         load_account_file(account_id).ok_or_else(|| "Gemini 账号不存在".to_string())?;
@@ -1705,6 +1676,13 @@ pub fn inject_to_gemini_home(account_id: &str, cli_home_root: Option<&Path>) -> 
     clear_local_file_keychain_to_path(cli_home_root)?;
     update_local_active_account_with_path(&account.email, cli_home_root)?;
     write_local_selected_auth_type_to_path("oauth-personal", cli_home_root)?;
+
+    #[cfg(target_os = "windows")]
+    if cli_home_root.is_none() {
+        if crate::modules::config::get_user_config().gemini_sync_wsl {
+            sync_default_gemini_home_to_wsl();
+        }
+    }
 
     account.selected_auth_type = Some("oauth-personal".to_string());
     account.last_used = now_ts();

@@ -81,6 +81,8 @@ export function createProviderAccountStore<TAccount extends ProviderAccountAugme
     options?.persistCurrentAccountId ?? !hasCurrentAccountResolver;
   const shouldHydrateCurrentAccountId =
     options?.hydrateCurrentAccountId ?? shouldPersistCurrentAccountId;
+  let allowNextEmptyAccountList = false;
+  let allowNextEmptyCurrentAccountId = false;
 
   const loadCachedAccounts = (): TAccount[] => {
     try {
@@ -205,6 +207,18 @@ export function createProviderAccountStore<TAccount extends ProviderAccountAugme
 
       try {
         const resolvedAccountId = await options.resolveCurrentAccountId();
+        if (
+          !resolvedAccountId &&
+          get().currentAccountId &&
+          accounts.length > 0 &&
+          !allowNextEmptyCurrentAccountId
+        ) {
+          console.warn(
+            `[Provider Store] 忽略异常空当前账号，保留本地缓存: ${cacheKey}`,
+          );
+          return get().currentAccountId;
+        }
+        allowNextEmptyCurrentAccountId = false;
         const currentAccountId = normalizeCurrentAccountId(resolvedAccountId, accounts);
         set({ currentAccountId });
         persistCurrentAccountId(currentAccountId);
@@ -215,6 +229,8 @@ export function createProviderAccountStore<TAccount extends ProviderAccountAugme
         set({ currentAccountId });
         persistCurrentAccountId(currentAccountId);
         return currentAccountId;
+      } finally {
+        allowNextEmptyCurrentAccountId = false;
       }
     },
 
@@ -228,35 +244,55 @@ export function createProviderAccountStore<TAccount extends ProviderAccountAugme
       set({ loading: true, error: null });
       try {
         const accounts = await service.listAccounts();
+        if (accounts.length === 0 && get().accounts.length > 0 && !allowNextEmptyAccountList) {
+          console.warn(`[Provider Store] 忽略异常空账号列表，保留本地缓存: ${cacheKey}`);
+          set({ loading: false });
+          return;
+        }
+        allowNextEmptyAccountList = false;
         const mapped = mapAccountsForUnifiedView(accounts);
         set({ accounts: mapped, loading: false });
         persistAccountsCache(mapped);
         await get().fetchCurrentAccountId();
       } catch (e) {
         set({ error: String(e), loading: false });
+      } finally {
+        allowNextEmptyAccountList = false;
       }
     },
 
     deleteAccounts: async (accountIds: string[]) => {
       if (accountIds.length === 0) return;
       const previousCurrentAccountId = get().currentAccountId;
-      if (accountIds.length === 1) {
-        await service.deleteAccount(accountIds[0]);
-      } else {
-        await service.deleteAccounts(accountIds);
-      }
-      await get().fetchAccounts();
-      await emitAccountsChanged({
-        platformId: options.platformId,
-        reason: 'delete',
-      });
-      const nextCurrentAccountId = get().currentAccountId;
-      if (previousCurrentAccountId !== nextCurrentAccountId) {
-        await emitCurrentAccountChanged({
+      const deleteIdSet = new Set(accountIds);
+      allowNextEmptyAccountList = get().accounts.every((account) =>
+        deleteIdSet.has(account.id),
+      );
+      allowNextEmptyCurrentAccountId = previousCurrentAccountId
+        ? deleteIdSet.has(previousCurrentAccountId)
+        : false;
+      try {
+        if (accountIds.length === 1) {
+          await service.deleteAccount(accountIds[0]);
+        } else {
+          await service.deleteAccounts(accountIds);
+        }
+        await get().fetchAccounts();
+        await emitAccountsChanged({
           platformId: options.platformId,
-          accountId: nextCurrentAccountId,
           reason: 'delete',
         });
+        const nextCurrentAccountId = get().currentAccountId;
+        if (previousCurrentAccountId !== nextCurrentAccountId) {
+          await emitCurrentAccountChanged({
+            platformId: options.platformId,
+            accountId: nextCurrentAccountId,
+            reason: 'delete',
+          });
+        }
+      } finally {
+        allowNextEmptyAccountList = false;
+        allowNextEmptyCurrentAccountId = false;
       }
     },
 

@@ -77,6 +77,40 @@
           "statusPending": "Pending import"
         }
       },
+      "externalImport": {
+        "bundleInvalidJson": "The import bundle is not valid JSON",
+        "bundleEmpty": "The import bundle is empty",
+        "bundleProviderMismatch": "The import bundle provider does not match",
+        "bundleNoItems": "The import bundle has no importable items",
+        "titleCodex": "Codex Batch Import",
+        "statusReceiving": "Receiving import request...",
+        "statusFetching": "Getting import bundle...",
+        "statusParsing": "Parsing Codex import content...",
+        "statusImporting": "Importing account {{current}} / {{total}}",
+        "statusRefreshing": "Refreshing account list...",
+        "statusActivating": "Activating imported account...",
+        "statusSuccess": "Import complete",
+        "statusPartial": "Partially imported",
+        "statusFailed": "Import failed",
+        "total": "Total",
+        "success": "Success",
+        "failed": "Failed",
+        "stepReceive": "Receive request",
+        "stepFetch": "Get bundle",
+        "stepParse": "Parse content",
+        "stepImport": "Import accounts",
+        "stepRefresh": "Refresh list",
+        "errorsTitle": "Failed items",
+        "viewAccounts": "View Codex Accounts",
+        "copyErrors": "Copy errors",
+        "copied": "Copied",
+        "unknownItem": "Item #{{index}}",
+        "versionUnsupportedTitle": "App version too low",
+        "versionUnsupportedDesc": "This method is not supported yet. Please download the latest version.",
+        "checkUpdate": "Check Updates",
+        "rawLineNoRefreshToken": "Line {{line}} does not contain a refresh_token",
+        "rawLineMultipleRefreshTokens": "Line {{line}} contains multiple refresh_tokens. Keep only one."
+      },
       "instances": {
         "unsupported": {
           "title": "Unsupported on this system"
@@ -112,6 +146,9 @@
         "ascTooltip": "Current: Ascending. Click to switch to descending",
         "createdAt": "Created time",
         "descTooltip": "Current: Descending. Click to switch to ascending",
+        "recommended": "Recommended",
+        "recommendedAscTooltip": "Recommended (least worthwhile first)",
+        "recommendedDescTooltip": "Recommended (most worthwhile first)",
         "toggleDirection": "Toggle sort direction",
         "credits": "By remaining credits",
         "planEnd": "By cycle end time"
@@ -386,7 +423,8 @@
       "instance": "Instance",
       "email": "Account",
       "quota": "Quota",
-      "actions": "Actions"
+      "actions": "Actions",
+      "speed": "Speed"
     },
     "empty": {
       "title": "No instances yet",
@@ -464,7 +502,9 @@
       },
       "nameRequired": "Please enter an instance name",
       "pathRequired": "Please select an instance directory",
-      "bindRequired": "Please select an account to bind"
+      "bindRequired": "Please select an account to bind",
+      "appSpeed": "Speed",
+      "appSpeedDesc": "Writes the selected speed before starting official Codex"
     },
     "quota": {
       "unbound": "No bound account",
@@ -485,7 +525,8 @@
       "closedAll": "Closed all instances",
       "allAlreadyRunning": "All instances are already running",
       "noneRunning": "No running instances found",
-      "syncThreadsNeedTwo": "At least two instances are required to sync threads"
+      "syncThreadsNeedTwo": "At least two instances are required to sync threads",
+      "speedUpdated": "Speed updated"
     },
     "runningDialog": {
       "title": "Instance already running",
@@ -557,13 +598,13 @@
       "backup": {
         "title": "Backup Manager",
         "desc": "Manage scheduled backups, the backup folder, and backup files in one place.",
-        "modalDesc": "Configure automatic backups, browse files stored in the project backup folder, and restore or clean them up here.",
+        "modalDesc": "Configure automatic backups, browse files stored in the project backup folder, and restore, download, or clean them up here.",
         "statusEnabled": "Auto backup is on",
         "statusDisabled": "Auto backup is off",
         "lastRunLabel": "Last backup: {{time}}",
         "lastRunNever": "Not backed up yet",
         "autoTitle": "Scheduled Backup",
-        "autoDesc": "When enabled, one backup is exported per day and stays restorable with the current import flow.",
+        "autoDesc": "When enabled, one JSON backup is exported per day with a matching ZIP archive copy.",
         "runNow": "Back Up Now",
         "running": "Backing up...",
         "typeTitle": "Backup Type",
@@ -578,14 +619,24 @@
         "directoryDesc": "Backups are always saved in the project's backups folder.",
         "openFolder": "Open Folder",
         "listTitle": "Backup List",
-        "listDesc": "Import a backup directly or remove old files.",
+        "listDesc": "View account contents by platform, download the full JSON, ZIP, or one platform JSON.",
+        "platformFilterLabel": "Platform",
+        "platformFilterAll": "All platforms",
         "openList": "Open List",
         "emptyTitle": "No backups yet",
-        "emptyDesc": "Turn on auto backup or click \"Back Up Now\" to create restorable JSON backups here.",
+        "emptyDesc": "Turn on auto backup or click \"Back Up Now\" to create restorable JSON and ZIP backups here.",
+        "platformEmptyTitle": "No matching backups",
+        "platformEmptyDesc": "This platform has no downloadable account backup.",
         "sourceAuto": "Auto",
         "sourceManual": "Manual",
         "fileTime": "Time: {{time}}",
         "fileSize": "Size: {{size}}",
+        "archiveTag": "ZIP",
+        "archiveSize": "Archive: {{size}}",
+        "platformsTitle": "Platform accounts",
+        "platformDownloadAction": "Download platform JSON",
+        "downloadJsonAction": "JSON",
+        "downloadZipAction": "ZIP",
         "importAction": "Import",
         "deleteAction": "Delete",
         "deleteConfirm": "Delete backup {{name}}?",
@@ -600,7 +651,9 @@
           "saveSettingsFailed": "Failed to save backup settings: {{error}}",
           "cleanupDone": "Cleaned up {{count}} expired backup(s)",
           "cleanupFailed": "Failed to clean up expired backups: {{error}}",
-          "openFolderFailed": "Failed to open backup folder: {{error}}"
+          "openFolderFailed": "Failed to open backup folder: {{error}}",
+          "downloadSuccess": "Backup downloaded to {{path}}",
+          "downloadFailed": "Failed to download backup: {{error}}"
         },
         "errors": {
           "invalidRetention": "Retention must be between 1 and 365 days"
@@ -836,7 +889,14 @@
       "qoderAutoRefreshDesc": "Background auto-refresh frequency",
       "qoderPathSelect": "Select",
       "workbuddyAutoRefresh": "WorkBuddy Auto Refresh",
-      "workbuddyAutoRefreshDesc": "Background auto-refresh frequency"
+      "workbuddyAutoRefreshDesc": "Background auto-refresh frequency",
+      "codexAppSpeed": "Codex Speed",
+      "codexAppSpeedDesc": "Saves the official Codex launch speed; this app writes it before each Codex launch.",
+      "codexAppSpeedStandard": "Standard",
+      "codexAppSpeedFast": "Fast",
+      "codexAppSpeedLaunch": "Restart Codex",
+      "codexAppSpeedSaveFailed": "Failed to save Codex speed: {{error}}",
+      "codexAppSpeedLaunchFailed": "Failed to restart Codex: {{error}}"
     },
     "network": {
       "apiTitle": "Antigravity Cockpit API",
@@ -1593,7 +1653,8 @@
     "authorizing": "Waiting for system authorization...",
     "installFailed": "System installation failed. Try again later or download manually.",
     "restartRequiredAfterInstall": "The update is installed. Restart the app manually to finish switching.",
-    "stoppingApiService": "Stopping API service..."
+    "stoppingApiService": "Stopping API service...",
+    "stopApiServiceFailed": "Couldn't stop the API service. Disable it first and try again."
   },
   "closeDialog": {
     "title": "Close Window",
@@ -1613,6 +1674,13 @@
   },
   "codex": {
     "title": "Codex Account",
+    "newApi": {
+      "quota": {
+        "available": "Quota",
+        "unlimited": "Unlimited",
+        "usedHint": "Used {{used}}"
+      }
+    },
     "subtitle": "Real-time monitoring of all Codex account model quotas.",
     "instances": {
       "subtitle": "Independent configuration per instance, parallel operation with multiple accounts.",
@@ -1655,11 +1723,14 @@
     },
     "apiSwitchNotice": {
       "title": "Codex Sessions Hidden",
-      "message": "Because of Codex's official behavior, existing sessions may not appear automatically after switching directly between API mode and accounts. You can run Repair Visibility once in this dialog, and you can also repair them later from Session Management > Repair Visibility.",
-      "dontAskAgain": "Don't show again",
-      "switchOnly": "Switch Only",
-      "switchAndRepair": "Switch & Repair Once",
-      "repairFailed": "Quick repair failed. You can retry later from Session Management > Repair Visibility."
+      "message": "Detected that Codex switched from {{from}} to {{to}}. Because of Codex's official behavior, existing sessions may not appear automatically after switching directly between API and accounts. Session visibility is being repaired automatically. You can also use Session Management > Repair Visibility later.",
+      "repairing": "Repairing Codex session visibility...",
+      "repairFailed": "Automatic repair failed. You can retry later from Session Management > Repair Visibility.",
+      "type": {
+        "apiKey": "API Key",
+        "apiService": "API Service",
+        "account": "Account"
+      }
     },
     "current": "Current",
     "account": {
@@ -1688,8 +1759,13 @@
       "timeoutRetry": "Refresh Auth Link"
     },
     "token": {
-      "desc": "Paste auth.json content or account JSON data",
-      "placeholder": "Example: {\"tokens\":{\"id_token\":\"eyJ...\",\"access_token\":\"eyJ...\"}}"
+      "desc": "Paste auth.json, account JSON, or refresh_token.",
+      "placeholder": "Example: one refresh_token per line, or {\"refresh_token\":\"rt_...\"}",
+      "formatSummary": "Required fields and examples",
+      "formatRequired": "Supports full tokens (id_token + access_token), a single refresh_token, or one refresh_token per line. refresh_token-only import exchanges it online for full credentials first.",
+      "formatSingleLabel": "Full tokens",
+      "formatRefreshOnlyLabel": "refresh_token only",
+      "formatBatchLabel": "Batch example"
     },
     "exportFormat": {
       "label": "Export Format",
@@ -1701,6 +1777,17 @@
       "savedFolder": "Saved Folder",
       "savedPath": "Saved Path"
     },
+    "accountNote": {
+      "title": "Account Note",
+      "label": "Account Note",
+      "desc": "Add a standalone account note for {{account}}.",
+      "placeholder": "Email, password, recovery email, or delivery notes",
+      "emptyTitle": "Add account note",
+      "short": "Note",
+      "addShort": "Add Note",
+      "saved": "Account note saved",
+      "saveFailed": "Failed to save account note: {{error}}"
+    },
     "localAccess": {
       "title": "API Service",
       "entryAction": "Add to API Service",
@@ -1708,6 +1795,15 @@
       "manageDesc": "Manage API service stats, members, port, key, and connectivity checks in one place.",
       "accountCount": "{{count}} accounts",
       "baseUrl": "URL",
+      "addressKind": "Address type",
+      "addressLocal": "Local",
+      "addressLan": "LAN",
+      "accessScopeLabel": "Access Scope",
+      "accessScopeLocalhost": "Local Only",
+      "accessScopeLan": "LAN",
+      "accessScopeLocalhostShort": "Local Only",
+      "accessScopeLanShort": "Local+LAN",
+      "accessScopeSaveSuccess": "API service access scope updated",
       "apiPortUrl": "API Port URL",
       "apiKey": "API Key",
       "modelId": "Model ID",
@@ -1718,17 +1814,36 @@
       "statusDisabled": "Disabled",
       "statusUnconfigured": "Not Configured",
       "emptyMembers": "Add accounts to the API service, then click Start. No extra setup is required.",
-      "footerHint": "Listens on local and LAN",
+      "footerHint": "Access scope: {{scope}}",
       "memberOnlyLocal": "Local/LAN",
       "manageAccounts": "Manage Accounts",
       "rotateKey": "Reset Key",
       "rotateConfirmMessage": "The current API service key will stop working immediately after reset, and in-flight requests may become unavailable. Continue?",
       "disableService": "Disable Service",
       "enableService": "Enable Service",
-      "testAction": "Test API Service",
-      "testSuccess": "API service test passed ({{count}} models)",
-      "testTimeout": "Test timed out. Confirm the local service is running.",
+      "testAction": "Test",
+      "testDialogTitle": "Test API Service",
+      "testDialogDesc": "Send one real request through Codex CLI to verify the local service, key, and upstream response.",
+      "testProgressTitle": "Testing service",
+      "testProgressDesc": "Sending a real request to the local API service. Please wait.",
+      "testOutputTitle": "Returned result",
+      "testResultTitle": "Service check result",
+      "testSuccess": "Service check passed: local service, key, and upstream response are healthy ({{model}}, {{latency}}). If Codex still returns 502, check Codex Base URL, API Key, or runtime environment.",
+      "testFailureStage": "Failure stage",
+      "testFailureCause": "Failure reason",
+      "testFailureSuggestion": "Suggested fix",
+      "testFailureStatus": "HTTP status",
+      "testFailureModel": "Test model",
+      "testFailureDetail": "Diagnostic details",
+      "testFailureCliOutput": "CLI output",
+      "testFailureGatewayOutput": "Gateway response",
+      "testTimeout": "Real request check timed out. Check the local service, proxy, or upstream network.",
       "testUnavailable": "The current API service URL is unavailable",
+      "testConnectFailed": "Cannot connect to {{url}}. Confirm the API service is running, the port has not changed, and nothing is blocking it.",
+      "testAuthFailed": "Service is reachable, but authentication failed: {{detail}}. Check the API service key or account sign-in state.",
+      "testServiceUnavailable": "Service is reachable, but currently unavailable: {{detail}}. Check whether the service is enabled, the account collection is empty, or accounts are usable.",
+      "testRateLimited": "Service is reachable, but upstream is rate limited or quota is exhausted: {{detail}}.",
+      "testHttpFailed": "Service is reachable, but the request returned HTTP {{status}}: {{detail}}.",
       "activateAction": "Start API Service",
       "enableBeforeActivateTitle": "Service Not Enabled",
       "enableBeforeActivateMessage": "The API service is currently disabled and must be enabled first. Enable it and switch now?",
@@ -1771,8 +1886,8 @@
       "refreshStatsSuccess": "API service stats have been refreshed",
       "accountStatsTitle": "By Account",
       "statsEmpty": "No stats yet",
-      "summaryMeta": "{{count}} accounts · Local/LAN",
-      "summaryMetaUnconfigured": "Not configured · Local/LAN",
+      "summaryMeta": "{{count}} accounts · {{scope}}",
+      "summaryMetaUnconfigured": "Not configured · {{scope}}",
       "expandDetails": "Expand details",
       "collapseDetails": "Collapse details",
       "hideEntryAction": "Hide API Service Entry",
@@ -1793,6 +1908,14 @@
         "daily": "Day",
         "weekly": "Week",
         "monthly": "Month"
+      },
+      "quotaPool": {
+        "title": "Quota Pool",
+        "hourlyShort": "5h",
+        "weeklyShort": "Week",
+        "viewFull": "View full stats",
+        "modalTitle": "API Service Quota Pool",
+        "empty": "No quota stats yet"
       },
       "memberTitle": "Collection Members",
       "routingStrategy": {
@@ -1830,7 +1953,12 @@
         "empty": "No OAuth accounts available",
         "selected": "In API Service",
         "available": "Regular Overview",
+        "manageMembers": "Manage Members",
         "save": "Save Collection"
+      },
+      "oauthBinding": {
+        "desc": "Optional. Without a link, the API service keeps the original API-key flow; after linking, sign-in uses the OAuth account and Provider uses the API service config.",
+        "currentService": "API Service: {{name}}"
       }
     },
     "api": {
@@ -1845,13 +1973,18 @@
       },
       "provider": {
         "label": "Provider",
+        "inlineLabel": "Provider: {{provider}}",
         "custom": "Custom",
         "endpoint": "Provider Endpoint",
         "hint": "A compatible Base URL has been filled in automatically. You can still edit it manually.",
         "website": "Website",
-        "apiKeyPage": "API Key Page"
+        "apiKeyPage": "API Key Page",
+        "getApiKey": "Get API Key"
       },
       "providers": {
+        "cockpit_api": {
+          "name": "Cockpit Api"
+        },
         "openai_official": {
           "name": "OpenAI Official"
         },
@@ -1917,7 +2050,40 @@
         "apiKeyCannotBeUrl": "API key cannot be a URL. Please check if the fields are swapped.",
         "baseUrlInvalid": "Invalid Base URL. Please enter a full http:// or https:// URL.",
         "apiKeyEqualsBaseUrl": "API key cannot be the same as Base URL."
+      },
+      "oauthBinding": {
+        "label": "OAuth Link",
+        "unbound": "Not linked",
+        "action": "Link OAuth",
+        "actionShort": "Link",
+        "title": "Link OAuth Account",
+        "desc": "Optional. Without a link, this account switches with the original API-key flow; after linking, sign-in uses the OAuth account and Provider uses this API-key config.",
+        "currentAccount": "API-key account: {{name}}",
+        "selectLabel": "Select OAuth account",
+        "empty": "No OAuth accounts yet. Add an OAuth-authorized account first.",
+        "validationRequired": "Select an OAuth account.",
+        "saveSuccess": "OAuth link updated.",
+        "saveFailed": "Failed to link OAuth: {{error}}",
+        "switchRequiresBinding": "Link an OAuth account first.",
+        "clearAction": "Unlink",
+        "clearSuccess": "OAuth link removed.",
+        "clearFailed": "Failed to remove OAuth link: {{error}}"
       }
+    },
+    "cockpitApi": {
+      "panelTitle": "Cockpit Api Service Panel",
+      "servicePanel": "Service Panel",
+      "balance": "Balance",
+      "requests": "Requests",
+      "total": "Total",
+      "today": "Today",
+      "periods": "Periods",
+      "tokens": "Tokens",
+      "quotaUsed": "Used",
+      "modelStats": "Model Stats",
+      "noStats": "No stats yet",
+      "refreshHint": "Click refresh to sync stats for this API key.",
+      "dailyStats": "Daily Stats"
     },
     "modelProviders": {
       "tab": "Model Providers",
@@ -2045,6 +2211,7 @@
     "quota": {
       "hourly": "5-hour quota",
       "weekly": "Weekly quota",
+      "weeklyBlocksHourly": "Weekly quota is 0, so the 5-hour quota is unavailable",
       "reset": "Reset"
     },
     "usage": {
@@ -2057,9 +2224,10 @@
     },
     "quotaError": {
       "badge": "Quota error",
+      "refreshFailedBadge": "Refresh failed",
       "generic": "Quota refresh failed, please try again later",
       "deactivatedWorkspace": "Workspace is deactivated, switch account or re-authorize",
-      "requestFailedManualRetry": "Network error, please refresh quota manually"
+      "requestFailedManualRetry": "Check your network. The latest quota was not fetched. Refresh to try again."
     },
     "plan": {
       "free": "FREE",
@@ -2308,15 +2476,16 @@
     "sessionManager": {
       "title": "Session Manager",
       "desc": "Sync, visibility repair, cleanup, and restore live here together: use the top actions to sync sessions, repair history visibility, or restore from Trash, then expand each project to review and trash sessions.",
-    "actions": {
-      "moveToTrash": "Move to Trash",
-      "syncSessions": "Sync Sessions",
-      "repairVisibility": "Repair Visibility",
-      "restoreSessions": "Restore Sessions",
-      "copySessionId": "Copy Session ID",
-      "expand": "Expand",
-      "collapse": "Collapse"
-    },
+      "actions": {
+        "moveToTrash": "Move to Trash",
+        "syncSessions": "Sync Sessions",
+        "copyToInstance": "Copy to Instance",
+        "repairVisibility": "Repair Visibility",
+        "restoreSessions": "Restore Sessions",
+        "copySessionId": "Copy Session ID",
+        "expand": "Expand",
+        "collapse": "Collapse"
+      },
       "confirm": {
         "title": "Move to Trash",
         "message": "Selected sessions will be moved to Trash from their instances so they can be restored later. Running instances may need a restart before the change appears. Continue?",
@@ -2330,26 +2499,46 @@
       "messages": {
         "pickOne": "Please select at least one session",
         "pickRestoreOne": "Please select at least one session to restore",
-        "syncNeedTwo": "At least two instances are required to sync sessions"
+        "syncNeedTwo": "At least two instances are required to sync sessions",
+        "repairVisibilitySkippedOnly": "No writable provider differences were found; skipped {{count}} invalid or corrupted state_5.sqlite file(s). Codex must regenerate them before their SQLite records can be repaired.",
+        "repairVisibilitySkippedWithBase": "{{message}}; skipped {{count}} invalid or corrupted state_5.sqlite file(s). Codex must regenerate them before their SQLite records can be repaired."
       },
-    "groupCount": "{{count}} sessions",
-    "updatedAt": "Updated",
-    "labels": {
-      "sessionId": "Session ID",
-      "tokenUsage": "Token Usage"
-    },
-    "locationRunning": " (running)",
-    "untitled": "Untitled session",
-    "restoreModal": {
+      "groupCount": "{{count}} sessions",
+      "updatedAt": "Updated",
+      "labels": {
+        "sessionId": "Session ID",
+        "tokenUsage": "Token Usage"
+      },
+      "locationRunning": " (running)",
+      "untitled": "Untitled session",
+      "restoreModal": {
         "title": "Restore Sessions",
         "hint": "Restoring puts the rollout file, SQLite thread row, and session_index entry back into the original instance together.",
         "emptyTitle": "Trash is empty",
         "emptyDesc": "Sessions moved to Trash will appear here.",
         "restoreAction": "Restore Selected Sessions"
+      },
+      "targetModal": {
+        "title": "Copy to Instance",
+        "hint": "Copies the selected sessions into the target instance. Sessions with the same ID already present there are skipped. Running target instances may need a restart before they appear.",
+        "targetInstance": "Target instance",
+        "pickTarget": "Select a target instance",
+        "selectedCount": "{{count}} session(s) selected",
+        "existingCount": "{{count}} already in target",
+        "confirm": "Copy Sessions"
       }
     },
     "groups": {
       "addToGroup": "Add to Group"
+    },
+    "speed": {
+      "title": "Speed",
+      "standard": "Standard",
+      "standardDesc": "Default speed, regular usage",
+      "fast": "Fast",
+      "fastDesc": "1.5x speed, higher usage",
+      "saveSuccess": "Speed updated",
+      "saveFailed": "Failed to save speed: {{error}}"
     }
   },
   "codebuddy": {
@@ -2602,6 +2791,18 @@
           "contextWindowInvalid": "Context window must be an integer greater than 0.",
           "autoCompactInvalid": "Auto-compact limit must be an integer greater than 0."
         }
+      },
+      "appSpeed": {
+        "title": "Codex Speed",
+        "desc": "Saved as launch speed; written before this app starts Codex.",
+        "standard": "Standard",
+        "fast": "Fast",
+        "launch": "Restart",
+        "loadFailed": "Failed to load Codex speed: {{error}}",
+        "saveSuccess": "Codex launch speed saved.",
+        "saveFailed": "Failed to save Codex speed: {{error}}",
+        "launchSuccess": "Codex restarted with the saved speed.",
+        "launchFailed": "Failed to restart Codex: {{error}}"
       }
     },
     "githubCopilot": {
@@ -2664,7 +2865,9 @@
     },
     "gemini": {
       "title": "Gemini Cli Settings",
-      "appPath": "Gemini Cli Path"
+      "appPath": "Gemini Cli Path",
+      "syncWsl": "Sync WSL Configuration",
+      "syncWslDesc": "Automatically overwrite the .gemini configuration in WSL when switching accounts"
     },
     "geminiRefreshInterval": "Quota Auto Refresh",
     "error": {
@@ -3508,6 +3711,14 @@
         "descPlatform": "CodeBuddy CN multi-instance is supported on macOS, Windows, and Linux only."
       }
     },
+    "syncFailed": "Sync failed: {{error}}",
+    "syncSuccess": "{{count}} account(s) synced to WorkBuddy",
+    "syncToWorkbuddy": "Sync to WorkBuddy"
+  },
+  "workbuddy": {
+    "title": "WorkBuddy Account",
+    "noAccounts": "No WorkBuddy accounts",
+    "addAccount": "Add WorkBuddy Account",
     "checkin": {
       "title": "Daily Check-in",
       "modalTitle": "Daily Check-in",
@@ -3530,23 +3741,8 @@
       "streakDays": "{{days}} days",
       "streakRewardCountdown": "{{days}} more days for bonus reward",
       "streakRewardToday": "Bonus reward available today!",
-      "recentDates": "Recent: ",
-      "quotaCategory": {
-        "base": "Base Package",
-        "activity": "Activity Bonus",
-        "extra": "Extra Credits",
-        "other": "Other",
-        "empty": "No quota data"
-      }
+      "recentDates": "Recent: "
     },
-    "syncFailed": "Sync failed: {{error}}",
-    "syncSuccess": "{{count}} account(s) synced to WorkBuddy",
-    "syncToWorkbuddy": "Sync to WorkBuddy"
-  },
-  "workbuddy": {
-    "title": "WorkBuddy Account",
-    "noAccounts": "No WorkBuddy accounts",
-    "addAccount": "Add WorkBuddy Account",
     "flowNotice": {
       "title": "WorkBuddy Account Info (click to expand/collapse)",
       "desc": "Account switching writes the local sign-in file using the latest official WorkBuddy client layout; local import reads the same file. Data is processed locally only.",

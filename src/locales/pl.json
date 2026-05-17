@@ -70,6 +70,40 @@
           "statusPending": "Oczekuje na import"
         }
       },
+      "externalImport": {
+        "bundleInvalidJson": "Pakiet importu nie jest poprawnym JSON",
+        "bundleEmpty": "Pakiet importu jest pusty",
+        "bundleProviderMismatch": "Dostawca pakietu importu nie pasuje",
+        "bundleNoItems": "Pakiet importu nie zawiera elementów do importu",
+        "titleCodex": "Import zbiorczy Codex",
+        "statusReceiving": "Odbieranie żądania importu...",
+        "statusFetching": "Pobieranie pakietu importu...",
+        "statusParsing": "Analizowanie zawartości importu Codex...",
+        "statusImporting": "Importowanie konta {{current}} / {{total}}",
+        "statusRefreshing": "Odświeżanie listy kont...",
+        "statusActivating": "Przełączanie na zaimportowane konto...",
+        "statusSuccess": "Import zakończony",
+        "statusPartial": "Import częściowo zakończony",
+        "statusFailed": "Import nieudany",
+        "total": "Razem",
+        "success": "Udane",
+        "failed": "Nieudane",
+        "stepReceive": "Odbierz żądanie",
+        "stepFetch": "Pobierz pakiet",
+        "stepParse": "Analizuj zawartość",
+        "stepImport": "Importuj konta",
+        "stepRefresh": "Odśwież listę",
+        "errorsTitle": "Nieudane elementy",
+        "viewAccounts": "Pokaż konta Codex",
+        "copyErrors": "Kopiuj błędy",
+        "copied": "Skopiowano",
+        "unknownItem": "Element nr {{index}}",
+        "versionUnsupportedTitle": "Wersja aplikacji jest zbyt stara",
+        "versionUnsupportedDesc": "Ta metoda nie jest jeszcze obsługiwana. Pobierz najnowszą wersję.",
+        "checkUpdate": "Sprawdź aktualizacje",
+        "rawLineNoRefreshToken": "Wiersz {{line}} nie zawiera refresh_token",
+        "rawLineMultipleRefreshTokens": "Wiersz {{line}} zawiera wiele refresh_token. Zostaw tylko jeden."
+      },
       "instances": {
         "unsupported": {
           "title": "Nieobsługiwane na tym systemie"
@@ -107,7 +141,10 @@
         "descTooltip": "Malejąco (kliknij, aby zmienić na rosnąco)",
         "toggleDirection": "Zmień kierunek sortowania",
         "credits": "Przez pozostałe kredyty",
-        "planEnd": "Według czasu zakończenia cyklu"
+        "planEnd": "Według czasu zakończenia cyklu",
+        "recommended": "Polecane",
+        "recommendedAscTooltip": "Polecane (najmniej opłacalne najpierw)",
+        "recommendedDescTooltip": "Polecane (najbardziej opłacalne najpierw)"
       },
       "sortLabel": "Sortuj",
       "token": {
@@ -328,7 +365,8 @@
       "instance": "Instancja",
       "email": "Konto",
       "quota": "Status limitu",
-      "actions": "Akcje"
+      "actions": "Akcje",
+      "speed": "Szybkość"
     },
     "empty": {
       "title": "Brak instancji",
@@ -406,7 +444,9 @@
           "contextWindowInvalid": "Okno kontekstowe musi być liczbą całkowitą większą niż 0.",
           "autoCompactInvalid": "Limit automatycznego kompaktowania musi być liczbą całkowitą większą niż 0."
         }
-      }
+      },
+      "appSpeed": "Szybkość",
+      "appSpeedDesc": "Zapisuje wybraną szybkość przed uruchomieniem oficjalnego Codex"
     },
     "quota": {
       "unbound": "Konto niepowiązane",
@@ -427,7 +467,8 @@
       "allAlreadyRunning": "Wszystkie instancje są już uruchomione",
       "noneRunning": "Nie znaleziono uruchomionych instancji",
       "syncThreadsNeedTwo": "Do synchronizacji wątków wymagane są co najmniej dwie instancje",
-      "launchPrepared": "Polecenie uruchomienia jest gotowe"
+      "launchPrepared": "Polecenie uruchomienia jest gotowe",
+      "speedUpdated": "Szybkość zaktualizowana"
     },
     "runningDialog": {
       "title": "Instancja jest już uruchomiona",
@@ -704,7 +745,14 @@
       "codexSpecifiedAppPath": "Ścieżka wskazanej aplikacji",
       "codexSpecifiedAppPathDesc": "Ścieżka aplikacji restartowanej razem z przełączeniem Codex.",
       "codexSpecifiedAppPathPlaceholder": "Np. /Applications/Host.app",
-      "codexSpecifiedAppPathClear": "Wyczyść"
+      "codexSpecifiedAppPathClear": "Wyczyść",
+      "codexAppSpeed": "Szybkość Codex",
+      "codexAppSpeedDesc": "Zapisuje oficjalną szybkość startu Codex i ustawia ją przed każdym uruchomieniem z tej aplikacji.",
+      "codexAppSpeedStandard": "Standardowa",
+      "codexAppSpeedFast": "Szybka",
+      "codexAppSpeedLaunch": "Uruchom ponownie Codex",
+      "codexAppSpeedSaveFailed": "Nie udało się zapisać szybkości Codex: {{error}}",
+      "codexAppSpeedLaunchFailed": "Nie udało się zrestartować Codex: {{error}}"
     },
     "network": {
       "apiTitle": "API kokpitu antygrawitacyjnego",
@@ -823,11 +871,23 @@
           "saveSettingsFailed": "Nie udało się zapisać ustawień kopii: {{error}}",
           "cleanupDone": "Wyczyszczono {{count}} wygasłych kopii",
           "cleanupFailed": "Nie udało się wyczyścić wygasłych kopii: {{error}}",
-          "openFolderFailed": "Nie udało się otworzyć folderu kopii: {{error}}"
+          "openFolderFailed": "Nie udało się otworzyć folderu kopii: {{error}}",
+          "downloadSuccess": "Kopia zapasowa pobrana do {{path}}",
+          "downloadFailed": "Nie udało się pobrać kopii: {{error}}"
         },
         "errors": {
           "invalidRetention": "Czas przechowywania musi wynosić od 1 do 365 dni"
-        }
+        },
+        "platformFilterLabel": "Platforma",
+        "platformFilterAll": "Wszystkie platformy",
+        "platformEmptyTitle": "Brak pasujących kopii",
+        "platformEmptyDesc": "Ta platforma nie ma kopii kont do pobrania.",
+        "archiveTag": "Archiwum",
+        "archiveSize": "Archiwum: {{size}}",
+        "platformsTitle": "Konta platformy",
+        "platformDownloadAction": "Pobierz JSON platformy",
+        "downloadJsonAction": "Plik JSON",
+        "downloadZipAction": "Archiwum ZIP"
       },
       "exportTitle": "Eksport danych",
       "exportDesc": "Eksportuj dane kont, dane konfiguracji lub pełny pakiet migracyjny w zależności od potrzeb.",
@@ -1546,6 +1606,7 @@
     "installFailed": "Instalacja systemowa nie powiodła się. Spróbuj ponownie później lub pobierz pakiet ręcznie.",
     "restartRequiredAfterInstall": "Aktualizacja jest zainstalowana. Uruchom aplikację ponownie ręcznie, aby dokończyć przełączenie.",
     "stoppingApiService": "Zatrzymywanie usługi API...",
+    "stopApiServiceFailed": "Nie udało się zatrzymać usługi API. Najpierw ją wyłącz i spróbuj ponownie.",
     "skipThisVersion": "Pomiń tę wersję",
     "skipFailed": "Nie udało się pominąć tej aktualizacji: {{error}}"
   },
@@ -1567,6 +1628,13 @@
   },
   "codex": {
     "title": "Zarządzanie kontami Codex",
+    "newApi": {
+      "quota": {
+        "available": "Limit",
+        "unlimited": "Bez limitu",
+        "usedHint": "Użyto {{used}}"
+      }
+    },
     "subtitle": "Zarządzaj kontami OpenAI Codex",
     "instances": {
       "subtitle": "Niezależna konfiguracja dla każdej instancji, równoległa praca z wieloma kontami.",
@@ -1631,8 +1699,13 @@
       "timeoutRetry": "Odśwież link uwierzytelniania"
     },
     "token": {
-      "desc": "Wklej zawartość auth.json lub dane JSON konta",
-      "placeholder": "Przykład: {\"tokens\":{\"id_token\":\"eyJ...\",\"access_token\":\"eyJ...\"}}"
+      "desc": "Wklej auth.json, JSON konta albo refresh_token.",
+      "placeholder": "Przykład: jeden refresh_token w wierszu albo {\"refresh_token\":\"rt_...\"}",
+      "formatSummary": "Wymagane pola i przykłady",
+      "formatRequired": "Obsługuje pełne tokens (id_token + access_token), pojedynczy refresh_token albo jeden refresh_token w każdym wierszu. Import z samym refresh_token najpierw wymieni go online na pełne dane logowania.",
+      "formatSingleLabel": "Pełne tokens",
+      "formatRefreshOnlyLabel": "Tylko refresh_token",
+      "formatBatchLabel": "Przykład zbiorczy"
     },
     "exportFormat": {
       "label": "Format eksportu",
@@ -1648,12 +1721,21 @@
       "title": "Usługa API",
       "accountCount": "{{count}} kont",
       "baseUrl": "Adres",
+      "addressKind": "Typ adresu",
+      "addressLocal": "Lokalny",
+      "addressLan": "Sieć lokalna",
+      "accessScopeLabel": "Zakres dostępu",
+      "accessScopeLocalhost": "Tylko lokalnie",
+      "accessScopeLan": "Sieć lokalna",
+      "accessScopeLocalhostShort": "Tylko lokalnie",
+      "accessScopeLanShort": "Lokalnie+sieć",
+      "accessScopeSaveSuccess": "Zakres dostępu usługi API zaktualizowany",
       "apiKey": "Klucz",
       "statusRunning": "Uruchomiono",
       "statusStopped": "Zatrzymano",
       "statusDisabled": "Wyłączono",
       "emptyMembers": "W tej kolekcji nie ma jeszcze kont",
-      "footerHint": "Nasłuch lokalny i w LAN",
+      "footerHint": "Zakres dostępu: {{scope}}",
       "manageAccounts": "Zarządzaj kontami",
       "rotateKey": "Odśwież klucz",
       "rotateConfirmMessage": "Po zresetowaniu bieżący klucz usługi API natychmiast przestanie działać, a trwające żądania mogą stać się niedostępne. Kontynuować?",
@@ -1681,13 +1763,33 @@
         "freeNoticeRestricted": "Konta Free są ograniczone. Wyłącz tę opcję, aby je wybrać.",
         "freeNoticeUnstable": "Proxy kont Free może być niestabilne. Używaj ostrożnie.",
         "restrictFreeDisableConfirmTitle": "Zezwól na konta Free",
-        "restrictFreeDisableConfirmMessage": "Proxy kont Free może być niestabilne. Na pewno ich użyć?"
+        "restrictFreeDisableConfirmMessage": "Proxy kont Free może być niestabilne. Na pewno ich użyć?",
+        "manageMembers": "Zarządzaj członkami"
       },
       "entryAction": "Dodaj do usługi API",
-      "testAction": "Przetestuj usługę API",
-      "testSuccess": "Test usługi API zakończył się powodzeniem ({{count}} modeli)",
-      "testTimeout": "Przekroczono limit czasu testu. Sprawdź, czy lokalna usługa działa.",
+      "testAction": "Testuj",
+      "testDialogTitle": "Test usługi API",
+      "testDialogDesc": "Wyślij prawdziwe żądanie przez Codex CLI, aby sprawdzić usługę lokalną, klucz i odpowiedź upstream.",
+      "testProgressTitle": "Trwa test usługi",
+      "testProgressDesc": "Wysyłane jest prawdziwe żądanie do lokalnej usługi API. Poczekaj.",
+      "testOutputTitle": "Zwrócony wynik",
+      "testResultTitle": "Wynik sprawdzenia usługi",
+      "testSuccess": "Sprawdzenie usługi powiodło się: lokalna usługa, klucz i odpowiedź upstream działają poprawnie ({{model}}, {{latency}}). Jeśli Codex nadal zwraca 502, sprawdź Base URL, API Key lub środowisko uruchomieniowe Codex.",
+      "testFailureStage": "Etap diagnozy",
+      "testFailureCause": "Przyczyna błędu",
+      "testFailureSuggestion": "Sugerowana naprawa",
+      "testFailureStatus": "Status HTTP",
+      "testFailureModel": "Model testowy",
+      "testFailureDetail": "Szczegóły diagnostyki",
+      "testFailureCliOutput": "Wyjście CLI",
+      "testFailureGatewayOutput": "Odpowiedź bramy",
+      "testTimeout": "Sprawdzenie rzeczywistym żądaniem przekroczyło limit czasu. Sprawdź lokalną usługę, proxy lub sieć upstream.",
       "testUnavailable": "Bieżący adres URL usługi API jest niedostępny",
+      "testConnectFailed": "Nie można połączyć się z {{url}}. Sprawdź, czy usługa API działa, port się nie zmienił i nic go nie blokuje.",
+      "testAuthFailed": "Usługa jest osiągalna, ale uwierzytelnianie nie powiodło się: {{detail}}. Sprawdź klucz usługi API lub stan logowania konta.",
+      "testServiceUnavailable": "Usługa jest osiągalna, ale obecnie niedostępna: {{detail}}. Sprawdź, czy usługa jest włączona, kolekcja kont nie jest pusta i konta są używalne.",
+      "testRateLimited": "Usługa jest osiągalna, ale upstream jest ograniczony lub limit został wyczerpany: {{detail}}.",
+      "testHttpFailed": "Usługa jest osiągalna, ale żądanie zwróciło HTTP {{status}}: {{detail}}.",
       "activateAction": "Uruchom usługę API",
       "activateSuccess": "Przełączono na usługę API",
       "dashboardAction": "Panel usługi",
@@ -1702,8 +1804,8 @@
       "statsTitle": "Łącznie",
       "accountStatsTitle": "Według konta",
       "statsEmpty": "Brak statystyk",
-      "summaryMeta": "{{count}} kont · Lokalnie/LAN",
-      "summaryMetaUnconfigured": "Nieskonfigurowane · Lokalnie/LAN",
+      "summaryMeta": "{{count}} kont · {{scope}}",
+      "summaryMetaUnconfigured": "Nie skonfigurowano · {{scope}}",
       "memberTitle": "Członkowie kolekcji",
       "stats": {
         "requests": "Żądania",
@@ -1774,7 +1876,19 @@
       "apiPortUrl": "URL portu API",
       "modelId": "ID modelu",
       "modelIdPlaceholder": "Wybierz ID modelu",
-      "modelIdViewOnly": "Tylko podgląd"
+      "modelIdViewOnly": "Tylko podgląd",
+      "quotaPool": {
+        "title": "Pula limitów",
+        "hourlyShort": "5h",
+        "weeklyShort": "Tydzień",
+        "viewFull": "Pokaż pełne statystyki",
+        "modalTitle": "Pula limitów usługi API",
+        "empty": "Brak statystyk limitów"
+      },
+      "oauthBinding": {
+        "desc": "Opcjonalne. Bez powiązania usługa API działa według dotychczasowej logiki API Key; po powiązaniu logowanie używa konta OAuth, a Provider konfiguracji usługi API.",
+        "currentService": "Usługa API: {{name}}"
+      }
     },
     "local": {
       "desc": "Importuj bieżące konto z ~/.codex/auth.json",
@@ -1788,13 +1902,15 @@
     "quota": {
       "hourly": "Limit 5 godzin",
       "weekly": "Limit tygodniowy",
-      "reset": "Resetuj"
+      "reset": "Resetuj",
+      "weeklyBlocksHourly": "Limit tygodniowy wynosi 0, więc limit 5-godzinny jest niedostępny"
     },
     "quotaError": {
       "badge": "Błąd limitu",
+      "refreshFailedBadge": "Odświeżenie nieudane",
       "generic": "Odświeżenie limitu nie powiodło się, spróbuj ponownie później",
       "deactivatedWorkspace": "Obszar roboczy jest wyłączony, przełącz konto lub ponownie autoryzuj",
-      "requestFailedManualRetry": "Żądanie nie powiodło się, spróbuj ponownie ręcznie: {{error}}"
+      "requestFailedManualRetry": "Sprawdź sieć. Nie pobrano najnowszego limitu. Odśwież i spróbuj ponownie."
     },
     "plan": {
       "free": "FREE",
@@ -2042,7 +2158,8 @@
         "collapse": "Zwiń",
         "repairVisibility": "Napraw widoczność",
         "restoreSessions": "Przywróć sesje",
-        "copySessionId": "Kopiuj ID sesji"
+        "copySessionId": "Kopiuj ID sesji",
+        "copyToInstance": "Kopiuj do instancji"
       },
       "confirm": {
         "title": "Przenieś do kosza",
@@ -2057,7 +2174,9 @@
       "messages": {
         "pickOne": "Wybierz co najmniej jedną sesję",
         "syncNeedTwo": "Do synchronizacji sesji wymagane są co najmniej dwie instancje",
-        "pickRestoreOne": "Wybierz co najmniej jedną sesję do przywrócenia"
+        "pickRestoreOne": "Wybierz co najmniej jedną sesję do przywrócenia",
+        "repairVisibilitySkippedOnly": "Nie znaleziono zapisywalnych różnic provider; pominięto {{count}} nieprawidłowych lub uszkodzonych plików state_5.sqlite. Codex musi je ponownie wygenerować, zanim będzie można naprawić ich rekordy SQLite.",
+        "repairVisibilitySkippedWithBase": "{{message}}; pominięto {{count}} nieprawidłowych lub uszkodzonych plików state_5.sqlite. Codex musi je ponownie wygenerować, zanim będzie można naprawić ich rekordy SQLite."
       },
       "groupCount": "{{count}} sesji",
       "updatedAt": "Zaktualizowano",
@@ -2073,6 +2192,15 @@
         "emptyTitle": "Kosz jest pusty",
         "emptyDesc": "Sesje przeniesione do kosza pojawią się tutaj.",
         "restoreAction": "Przywróć wybrane sesje"
+      },
+      "targetModal": {
+        "title": "Kopiuj do instancji",
+        "hint": "Kopiuje wybrane sesje do instancji docelowej. Sesje z tym samym ID, które już tam istnieją, zostaną pominięte. Działające instancje docelowe mogą wymagać restartu, zanim się pojawią.",
+        "targetInstance": "Instancja docelowa",
+        "pickTarget": "Wybierz instancję docelową",
+        "selectedCount": "Wybrano sesji: {{count}}",
+        "existingCount": "Już w celu: {{count}}",
+        "confirm": "Kopiuj sesje"
       }
     },
     "api": {
@@ -2092,11 +2220,13 @@
       },
       "provider": {
         "label": "Dostawca",
+        "inlineLabel": "Dostawca: {{provider}}",
         "custom": "Niestandardowy",
         "endpoint": "Punkt końcowy dostawcy",
         "hint": "Zgodny Base URL został uzupełniony automatycznie. Nadal możesz go edytować ręcznie.",
         "website": "Witryna",
-        "apiKeyPage": "Strona klucza API"
+        "apiKeyPage": "Strona klucza API",
+        "getApiKey": "Pobierz klucz"
       },
       "providers": {
         "openai_official": {
@@ -2158,7 +2288,28 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
+      },
+      "oauthBinding": {
+        "label": "Powiązanie OAuth",
+        "unbound": "Niepowiązane",
+        "action": "Powiąż OAuth",
+        "actionShort": "Powiąż",
+        "title": "Powiąż konto OAuth",
+        "desc": "Opcjonalne. Bez powiązania to konto przełącza się według dotychczasowej logiki API Key; po powiązaniu logowanie używa konta OAuth, a Provider konfiguracji tego konta API Key.",
+        "currentAccount": "Konto API Key: {{name}}",
+        "selectLabel": "Wybierz konto OAuth",
+        "empty": "Brak kont OAuth. Najpierw dodaj konto z autoryzacją OAuth.",
+        "validationRequired": "Wybierz konto OAuth",
+        "saveSuccess": "Powiązanie OAuth zaktualizowane",
+        "saveFailed": "Nie udało się powiązać OAuth: {{error}}",
+        "switchRequiresBinding": "Najpierw powiąż konto OAuth",
+        "clearAction": "Odłącz",
+        "clearSuccess": "Powiązanie OAuth usunięte.",
+        "clearFailed": "Nie udało się usunąć powiązania OAuth: {{error}}"
       }
     },
     "modelProviders": {
@@ -2299,11 +2450,49 @@
     },
     "apiSwitchNotice": {
       "title": "Sesje Codex są ukryte",
-      "message": "Ze względu na oficjalne zachowanie Codexu istniejące sesje mogą nie pojawić się automatycznie po bezpośrednim przełączeniu między trybem API a kontami. Możesz raz uruchomić Napraw widoczność w tym oknie, a później także w Zarządzanie sesjami > Napraw widoczność.",
-      "dontAskAgain": "Nie pokazuj ponownie",
-      "switchOnly": "Tylko przełącz",
-      "switchAndRepair": "Przełącz i napraw",
-      "repairFailed": "Szybka naprawa się nie powiodła. Możesz spróbować później w Zarządzanie sesjami > Napraw widoczność."
+      "message": "Wykryto, że Codex przełączył się z {{from}} na {{to}}. Ze względu na oficjalne zachowanie istniejące sesje mogą nie pojawić się automatycznie po bezpośrednim przełączeniu między API a kontami. Widoczność sesji jest teraz naprawiana automatycznie; później możesz też użyć Zarządzanie sesjami > Napraw widoczność.",
+      "repairing": "Naprawianie widoczności sesji Codex...",
+      "repairFailed": "Automatyczna naprawa się nie powiodła. Możesz spróbować później w Zarządzanie sesjami > Napraw widoczność.",
+      "type": {
+        "apiKey": "Klucz API",
+        "apiService": "Usługa API",
+        "account": "Konto"
+      }
+    },
+    "accountNote": {
+      "title": "Notatka konta",
+      "label": "Notatka konta",
+      "desc": "Dodaj osobną notatkę konta dla {{account}}.",
+      "placeholder": "E-mail, hasło, e-mail odzyskiwania lub notatki dostawy",
+      "emptyTitle": "Dodaj notatkę konta",
+      "short": "Notatka",
+      "addShort": "Dodaj",
+      "saved": "Notatka konta zapisana",
+      "saveFailed": "Nie udało się zapisać notatki konta: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "Panel usługi Cockpit Api",
+      "servicePanel": "Panel usługi",
+      "balance": "Saldo",
+      "requests": "Żądania",
+      "total": "Łącznie",
+      "today": "Dzisiaj",
+      "periods": "Okresy",
+      "tokens": "Tokeny",
+      "quotaUsed": "Zużycie",
+      "modelStats": "Statystyki modeli",
+      "noStats": "Brak statystyk",
+      "refreshHint": "Kliknij odśwież, aby zsynchronizować statystyki tego klucza API.",
+      "dailyStats": "Statystyki dzienne"
+    },
+    "speed": {
+      "title": "Szybkość",
+      "standard": "Zwykła",
+      "standardDesc": "Domyślna szybkość, zwykłe użycie",
+      "fast": "Szybka",
+      "fastDesc": "Szybkość 1,5x, większe użycie",
+      "saveSuccess": "Szybkość zaktualizowana",
+      "saveFailed": "Nie udało się zapisać szybkości: {{error}}"
     }
   },
   "githubCopilot": {
@@ -2456,6 +2645,18 @@
           "contextWindowInvalid": "Okno kontekstowe musi być liczbą całkowitą większą niż 0.",
           "autoCompactInvalid": "Limit automatycznego kompaktowania musi być liczbą całkowitą większą niż 0."
         }
+      },
+      "appSpeed": {
+        "title": "Szybkość Codex",
+        "desc": "Zapisana jako szybkość startu; ustawiana przed startem Codex.",
+        "standard": "Standardowa",
+        "fast": "Szybka",
+        "launch": "Restart",
+        "loadFailed": "Nie udało się wczytać szybkości Codex: {{error}}",
+        "saveSuccess": "Szybkość startu Codex zapisana.",
+        "saveFailed": "Nie udało się zapisać szybkości Codex: {{error}}",
+        "launchSuccess": "Codex zrestartowany z zapisaną szybkością.",
+        "launchFailed": "Nie udało się zrestartować Codex: {{error}}"
       }
     },
     "githubCopilot": {
@@ -2509,7 +2710,9 @@
     "cursorRefreshInterval": "Automatyczne odświeżanie limitu",
     "gemini": {
       "title": "Ustawienia Gemini Cli",
-      "appPath": "Ścieżka Gemini Cli"
+      "appPath": "Ścieżka Gemini Cli",
+      "syncWsl": "Synchronizuj konfigurację WSL",
+      "syncWslDesc": "Podczas przełączania konta automatycznie nadpisz konfigurację .gemini w WSL"
     },
     "geminiRefreshInterval": "Automatyczne odświeżanie limitu",
     "codebuddy": {
@@ -3390,37 +3593,6 @@
         "descPlatform": "Wiele instancji CodeBuddy CN jest obsługiwane tylko na macOS, Windows i Linux."
       }
     },
-    "checkin": {
-      "title": "Codzienne zameldowanie",
-      "modalTitle": "Codzienne zameldowanie",
-      "status": "Status zameldowania",
-      "checkedIn": "Zameldowano",
-      "notCheckedIn": "Brak zameldowania",
-      "button": "Zamelduj",
-      "button.loading": "Trwa zameldowanie...",
-      "done": "Gotowe",
-      "success": "Zameldowanie udane! Seria {{days}} dni",
-      "failure": "Zameldowanie nie powiodło się: {{message}}",
-      "failure.network": "Błąd sieci, spróbuj ponownie później",
-      "lastCheckin": "Ostatnie zameldowanie: {{time}}",
-      "streak": "Seria {{days}} dni",
-      "reward": "Nagroda: {{reward}}",
-      "refreshStatus": "Odśwież",
-      "checkAll": "Zamelduj wszystkie",
-      "noAccounts": "Brak kont",
-      "querying": "Ładowanie...",
-      "streakDays": "{{days}} dni",
-      "streakRewardCountdown": "Do nagrody bonusowej pozostało {{days}} dni",
-      "streakRewardToday": "Nagroda bonusowa dostępna dzisiaj!",
-      "recentDates": "Ostatnie: ",
-      "quotaCategory": {
-        "base": "Pakiet podstawowy",
-        "activity": "Bonus aktywności",
-        "extra": "Dodatkowe kredyty",
-        "other": "Inne",
-        "empty": "Brak danych limitu"
-      }
-    },
     "syncFailed": "Synchronizacja nie powiodła się: {{error}}",
     "syncSuccess": "{{count}} kont(a) zsynchronizowanych z WorkBuddy",
     "syncToWorkbuddy": "Synchronizuj z WorkBuddy"
@@ -3527,6 +3699,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "Codzienne zameldowanie",
+      "modalTitle": "Codzienne zameldowanie",
+      "status": "Status zameldowania",
+      "checkedIn": "Zameldowano",
+      "notCheckedIn": "Brak zameldowania",
+      "button": "Zamelduj",
+      "button.loading": "Trwa zameldowanie...",
+      "done": "Gotowe",
+      "success": "Zameldowanie udane! Seria {{days}} dni",
+      "failure": "Zameldowanie nie powiodło się: {{message}}",
+      "failure.network": "Błąd sieci, spróbuj ponownie później",
+      "lastCheckin": "Ostatnie zameldowanie: {{time}}",
+      "streak": "Seria {{days}} dni",
+      "reward": "Nagroda: {{reward}}",
+      "refreshStatus": "Odśwież",
+      "checkAll": "Zamelduj wszystkie",
+      "noAccounts": "Brak kont",
+      "querying": "Ładowanie...",
+      "streakDays": "{{days}} dni",
+      "streakRewardCountdown": "Do nagrody bonusowej pozostało {{days}} dni",
+      "streakRewardToday": "Nagroda bonusowa dostępna dzisiaj!",
+      "recentDates": "Ostatnie: "
     }
   },
   "zed": {

@@ -5,6 +5,7 @@ use std::sync::Mutex;
 use chrono::Utc;
 use uuid::Uuid;
 
+use crate::models::codex::CodexAppSpeed;
 use crate::models::{DefaultInstanceSettings, InstanceLaunchMode, InstanceProfile, InstanceStore};
 use crate::modules;
 use crate::modules::instance::InstanceDefaults;
@@ -19,6 +20,8 @@ const CODEX_SHARED_SKILLS_DIR_NAME: &str = "skills";
 const CODEX_SHARED_RULES_DIR_NAME: &str = "rules";
 const CODEX_SHARED_AGENTS_FILE_NAME: &str = "AGENTS.md";
 const CODEX_SHARED_VENDOR_IMPORTS_SKILLS_DIR: &str = "vendor_imports/skills";
+#[cfg(target_os = "windows")]
+const CODEX_WINDOWS_APP_DATA_DIR_NAME: &str = "codex-app-data";
 
 pub fn is_api_service_bind_account_id(account_id: &str) -> bool {
     account_id.trim() == CODEX_API_SERVICE_BIND_ACCOUNT_ID
@@ -34,6 +37,7 @@ pub struct CreateInstanceParams {
     pub copy_source_instance_id: Option<String>,
     pub init_mode: Option<String>,
     pub launch_mode: Option<InstanceLaunchMode>,
+    pub app_speed: Option<CodexAppSpeed>,
 }
 
 #[derive(Debug, Clone)]
@@ -44,6 +48,7 @@ pub struct UpdateInstanceParams {
     pub extra_args: Option<String>,
     pub bind_account_id: Option<Option<String>>,
     pub launch_mode: Option<InstanceLaunchMode>,
+    pub app_speed: Option<CodexAppSpeed>,
 }
 
 fn instances_path() -> Result<PathBuf, String> {
@@ -105,6 +110,17 @@ pub fn update_default_settings(
     Ok(updated)
 }
 
+pub fn update_default_app_speed(speed: CodexAppSpeed) -> Result<DefaultInstanceSettings, String> {
+    let _lock = CODEX_INSTANCE_STORE_LOCK
+        .lock()
+        .map_err(|_| "无法获取实例锁")?;
+    let mut store = load_instance_store()?;
+    store.default_settings.app_speed = speed;
+    let updated = store.default_settings.clone();
+    save_instance_store(&store)?;
+    Ok(updated)
+}
+
 pub fn get_default_codex_home() -> Result<PathBuf, String> {
     Ok(modules::codex_account::get_codex_home())
 }
@@ -116,8 +132,15 @@ pub fn get_default_instances_root_dir() -> Result<PathBuf, String> {
         return Ok(home.join(".antigravity_cockpit/instances/codex"));
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        let appdata =
+            std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
+        return Ok(PathBuf::from(appdata).join(".antigravity_cockpit\\instances\\codex"));
+    }
+
     #[allow(unreachable_code)]
-    Err("Codex 多开实例仅支持 macOS".to_string())
+    Err("Codex 多开实例仅支持 macOS 和 Windows".to_string())
 }
 
 pub fn get_instance_defaults() -> Result<InstanceDefaults, String> {
@@ -127,6 +150,29 @@ pub fn get_instance_defaults() -> Result<InstanceDefaults, String> {
         root_dir: root_dir.to_string_lossy().to_string(),
         default_user_data_dir: default_user_data_dir.to_string_lossy().to_string(),
     })
+}
+
+#[cfg(target_os = "windows")]
+fn normalize_windows_codex_home_for_hash(path: &Path) -> String {
+    let resolved = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    resolved.to_string_lossy().replace('/', "\\").to_lowercase()
+}
+
+#[cfg(target_os = "windows")]
+pub fn get_windows_app_user_data_dir(codex_home: &Path) -> Result<PathBuf, String> {
+    let root = get_default_instances_root_dir()?
+        .parent()
+        .ok_or("无法获取 Codex 实例根目录")?
+        .join(CODEX_WINDOWS_APP_DATA_DIR_NAME);
+    let normalized = normalize_windows_codex_home_for_hash(codex_home);
+    let digest = format!("{:x}", md5::compute(normalized.as_bytes()));
+    Ok(root.join(digest))
+}
+
+#[cfg(target_os = "windows")]
+pub fn delete_windows_app_user_data_dir(codex_home: &Path) -> Result<(), String> {
+    let app_user_data_dir = get_windows_app_user_data_dir(codex_home)?;
+    modules::instance::delete_instance_directory(&app_user_data_dir)
 }
 
 #[cfg(unix)]
@@ -664,6 +710,7 @@ pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, 
             params.bind_account_id
         },
         launch_mode: params.launch_mode.unwrap_or_default(),
+        app_speed: params.app_speed.unwrap_or_default(),
         created_at: Utc::now().timestamp_millis(),
         last_launched_at: None,
         last_pid: None,
@@ -717,6 +764,9 @@ pub fn update_instance(params: UpdateInstanceParams) -> Result<InstanceProfile, 
     if let Some(mode) = params.launch_mode {
         instance.launch_mode = mode;
     }
+    if let Some(speed) = params.app_speed {
+        instance.app_speed = speed;
+    }
 
     let updated = instance.clone();
     save_instance_store(&store)?;
@@ -738,6 +788,8 @@ pub fn delete_instance(instance_id: &str) -> Result<(), String> {
     if !user_data_dir.trim().is_empty() {
         let dir_path = PathBuf::from(&user_data_dir);
         modules::instance::delete_instance_directory(&dir_path)?;
+        #[cfg(target_os = "windows")]
+        delete_windows_app_user_data_dir(&dir_path)?;
     }
 
     store.instances.remove(index);

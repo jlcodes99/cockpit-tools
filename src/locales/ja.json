@@ -70,6 +70,40 @@
           "statusPending": "インポート待ち"
         }
       },
+      "externalImport": {
+        "bundleInvalidJson": "インポートパッケージは有効な JSON ではありません",
+        "bundleEmpty": "インポートパッケージは空です",
+        "bundleProviderMismatch": "インポートパッケージのプロバイダーが一致しません",
+        "bundleNoItems": "インポート可能な項目がありません",
+        "titleCodex": "Codex 一括インポート",
+        "statusReceiving": "インポート要求を受信中...",
+        "statusFetching": "インポートパッケージを取得中...",
+        "statusParsing": "Codex インポート内容を解析中...",
+        "statusImporting": "{{current}} / {{total}} 個目のアカウントをインポート中",
+        "statusRefreshing": "アカウント一覧を更新中...",
+        "statusActivating": "インポートしたアカウントに切り替え中...",
+        "statusSuccess": "インポート完了",
+        "statusPartial": "一部インポート完了",
+        "statusFailed": "インポート失敗",
+        "total": "合計",
+        "success": "成功",
+        "failed": "失敗",
+        "stepReceive": "要求を受信",
+        "stepFetch": "パッケージ取得",
+        "stepParse": "内容を解析",
+        "stepImport": "アカウントをインポート",
+        "stepRefresh": "一覧を更新",
+        "errorsTitle": "失敗した項目",
+        "viewAccounts": "Codex アカウントを表示",
+        "copyErrors": "エラーをコピー",
+        "copied": "コピーしました",
+        "unknownItem": "インポート項目 {{index}}",
+        "versionUnsupportedTitle": "アプリのバージョンが低すぎます",
+        "versionUnsupportedDesc": "この方式はまだサポートされていません。最新版をダウンロードしてください。",
+        "checkUpdate": "アップデートを確認",
+        "rawLineNoRefreshToken": "{{line}} 行目に refresh_token がありません",
+        "rawLineMultipleRefreshTokens": "{{line}} 行目に複数の refresh_token があります。1 つだけ残してください。"
+      },
       "instances": {
         "unsupported": {
           "title": "このシステムでは非対応"
@@ -107,7 +141,10 @@
         "descTooltip": "降順（クリックで昇順へ）",
         "toggleDirection": "順序を切り替え",
         "credits": "残りのクレジットにより",
-        "planEnd": "サイクル終了時間まで"
+        "planEnd": "サイクル終了時間まで",
+        "recommended": "おすすめ順",
+        "recommendedAscTooltip": "おすすめ順（切り替え優先度が低い順）",
+        "recommendedDescTooltip": "おすすめ順（切り替え優先度が高い順）"
       },
       "sortLabel": "並べ替え",
       "token": {
@@ -328,7 +365,8 @@
       "instance": "インスタンス",
       "email": "アカウント",
       "quota": "クォータ状況",
-      "actions": "操作"
+      "actions": "操作",
+      "speed": "速度"
     },
     "empty": {
       "title": "インスタンスがありません",
@@ -406,7 +444,9 @@
           "contextWindowInvalid": "コンテキスト ウィンドウは 0 より大きい整数でなければなりません。",
           "autoCompactInvalid": "自動圧縮制限は 0 より大きい整数である必要があります。"
         }
-      }
+      },
+      "appSpeed": "速度",
+      "appSpeedDesc": "公式 Codex の起動前に選択した速度を書き込みます"
     },
     "quota": {
       "unbound": "紐付けアカウントなし",
@@ -427,7 +467,8 @@
       "allAlreadyRunning": "すべてのインスタンスが既に実行中です",
       "noneRunning": "実行中のインスタンスが見つかりません",
       "syncThreadsNeedTwo": "スレッドを同期するには少なくとも2つのインスタンスが必要です",
-      "launchPrepared": "起動コマンドの準備ができました"
+      "launchPrepared": "起動コマンドの準備ができました",
+      "speedUpdated": "速度を更新しました"
     },
     "runningDialog": {
       "title": "インスタンスは既に実行中です",
@@ -704,7 +745,14 @@
       "codexSpecifiedAppPath": "指定アプリの起動パス",
       "codexSpecifiedAppPathDesc": "Codex切り替え時に連動再起動するアプリのパス",
       "codexSpecifiedAppPathPlaceholder": "例: /Applications/Host.app",
-      "codexSpecifiedAppPathClear": "クリア"
+      "codexSpecifiedAppPathClear": "クリア",
+      "codexAppSpeed": "Codex 速度",
+      "codexAppSpeedDesc": "公式 Codex の起動速度として保存し、このアプリから起動する前に書き込みます。",
+      "codexAppSpeedStandard": "標準",
+      "codexAppSpeedFast": "高速",
+      "codexAppSpeedLaunch": "Codex を再起動",
+      "codexAppSpeedSaveFailed": "Codex 速度の保存に失敗しました: {{error}}",
+      "codexAppSpeedLaunchFailed": "Codex の再起動に失敗しました: {{error}}"
     },
     "network": {
       "apiTitle": "反重力コックピット API",
@@ -823,11 +871,23 @@
           "saveSettingsFailed": "バックアップ設定の保存に失敗しました: {{error}}",
           "cleanupDone": "期限切れのバックアップを {{count}} 件整理しました",
           "cleanupFailed": "期限切れバックアップの整理に失敗しました: {{error}}",
-          "openFolderFailed": "バックアップフォルダーを開けませんでした: {{error}}"
+          "openFolderFailed": "バックアップフォルダーを開けませんでした: {{error}}",
+          "downloadSuccess": "バックアップを {{path}} にダウンロードしました",
+          "downloadFailed": "バックアップのダウンロードに失敗しました: {{error}}"
         },
         "errors": {
           "invalidRetention": "保持日数は 1 日から 365 日の間で指定してください"
-        }
+        },
+        "platformFilterLabel": "プラットフォーム",
+        "platformFilterAll": "すべてのプラットフォーム",
+        "platformEmptyTitle": "一致するバックアップなし",
+        "platformEmptyDesc": "このプラットフォームにはダウンロード可能なアカウントバックアップがありません。",
+        "archiveTag": "アーカイブ",
+        "archiveSize": "アーカイブ: {{size}}",
+        "platformsTitle": "プラットフォームアカウント",
+        "platformDownloadAction": "プラットフォームJSONをダウンロード",
+        "downloadJsonAction": "JSONファイル",
+        "downloadZipAction": "ZIPアーカイブ"
       },
       "exportTitle": "データのエクスポート",
       "exportDesc": "必要に応じて、アカウントデータ、設定データ、または完全な移行パッケージをエクスポートします。",
@@ -1546,6 +1606,7 @@
     "installFailed": "システムへのインストールに失敗しました。後でもう一度試すか、手動でダウンロードしてください。",
     "restartRequiredAfterInstall": "更新はインストール済みです。切り替えを完了するにはアプリを手動で再起動してください。",
     "stoppingApiService": "API サービスを停止中...",
+    "stopApiServiceFailed": "API サービスを停止できませんでした。先に無効化してから再試行してください。",
     "skipThisVersion": "このバージョンをスキップ",
     "skipFailed": "この更新をスキップできませんでした: {{error}}"
   },
@@ -1567,6 +1628,13 @@
   },
   "codex": {
     "title": "Codex アカウント管理",
+    "newApi": {
+      "quota": {
+        "available": "残高",
+        "unlimited": "無制限",
+        "usedHint": "使用済み {{used}}"
+      }
+    },
     "subtitle": "OpenAI Codex アカウントを管理します",
     "instances": {
       "subtitle": "インスタンスごとの独立設定、複数アカウントでの並列運用。",
@@ -1631,8 +1699,13 @@
       "timeoutRetry": "認証リンクを更新"
     },
     "token": {
-      "desc": "auth.json の内容またはアカウント JSON を貼り付けてください",
-      "placeholder": "例: {\"tokens\":{\"id_token\":\"eyJ...\",\"access_token\":\"eyJ...\"}}"
+      "desc": "auth.json、アカウント JSON、または refresh_token を貼り付けます。",
+      "placeholder": "例: 1 行に 1 つの refresh_token、または {\"refresh_token\":\"rt_...\"}",
+      "formatSummary": "必須項目と例",
+      "formatRequired": "完全な tokens（id_token + access_token）、単一の refresh_token、または 1 行に 1 つの refresh_token をサポートします。refresh_token のみの場合は、先にオンラインで完全な認証情報に交換します。",
+      "formatSingleLabel": "完全な tokens",
+      "formatRefreshOnlyLabel": "refresh_token のみ",
+      "formatBatchLabel": "一括例"
     },
     "exportFormat": {
       "label": "エクスポート形式",
@@ -1648,12 +1721,21 @@
       "title": "API サービス",
       "accountCount": "{{count}}アカウント",
       "baseUrl": "アドレス",
+      "addressKind": "アドレス種別",
+      "addressLocal": "ローカル",
+      "addressLan": "ローカル網",
+      "accessScopeLabel": "アクセス範囲",
+      "accessScopeLocalhost": "ローカルのみ",
+      "accessScopeLan": "ローカル網",
+      "accessScopeLocalhostShort": "ローカルのみ",
+      "accessScopeLanShort": "ローカル+ネット",
+      "accessScopeSaveSuccess": "APIサービスのアクセス範囲を更新しました",
       "apiKey": "キー",
       "statusRunning": "稼働中",
       "statusStopped": "停止",
       "statusDisabled": "無効",
       "emptyMembers": "この集合にはまだアカウントがありません",
-      "footerHint": "ローカルとLANで待ち受けます",
+      "footerHint": "アクセス範囲：{{scope}}",
       "manageAccounts": "アカウント管理",
       "rotateKey": "キーを再発行",
       "rotateConfirmMessage": "リセット後は現在の API サービスキーがすぐに無効になり、進行中のリクエストが利用できなくなる可能性があります。続行しますか？",
@@ -1681,13 +1763,33 @@
         "freeNoticeRestricted": "Freeアカウントは制限中です。選択するにはこの設定をオフにしてください。",
         "freeNoticeUnstable": "Freeアカウントのプロキシは不安定な場合があります。注意して使用してください。",
         "restrictFreeDisableConfirmTitle": "Freeアカウントを許可",
-        "restrictFreeDisableConfirmMessage": "Freeアカウントのプロキシは不安定な場合があります。使用してもよろしいですか？"
+        "restrictFreeDisableConfirmMessage": "Freeアカウントのプロキシは不安定な場合があります。使用してもよろしいですか？",
+        "manageMembers": "メンバー管理"
       },
       "entryAction": "API サービスに追加",
-      "testAction": "API サービスをテスト",
-      "testSuccess": "API サービスのテストに成功しました（{{count}} モデル）",
-      "testTimeout": "テストがタイムアウトしました。ローカルサービスが起動しているか確認してください。",
+      "testAction": "テスト",
+      "testDialogTitle": "API サービスをテスト",
+      "testDialogDesc": "Codex CLI から実リクエストを送り、ローカルサービス、キー、上流応答を確認します。",
+      "testProgressTitle": "サービスをテスト中",
+      "testProgressDesc": "ローカル API サービスへ実リクエストを送信しています。しばらくお待ちください。",
+      "testOutputTitle": "返却結果",
+      "testResultTitle": "サービス確認結果",
+      "testSuccess": "サービス確認に成功しました。ローカルサービス、キー、上流応答は正常です（{{model}}、{{latency}}）。Codex が引き続き 502 を返す場合は、Codex の Base URL、API Key、実行環境を確認してください。",
+      "testFailureStage": "特定段階",
+      "testFailureCause": "失敗理由",
+      "testFailureSuggestion": "対処方法",
+      "testFailureStatus": "HTTP ステータス",
+      "testFailureModel": "確認モデル",
+      "testFailureDetail": "診断詳細",
+      "testFailureCliOutput": "CLI 出力",
+      "testFailureGatewayOutput": "ゲートウェイ応答",
+      "testTimeout": "実リクエスト確認がタイムアウトしました。ローカルサービス、プロキシ、上流ネットワークを確認してください。",
       "testUnavailable": "現在の API サービス URL は利用できません",
+      "testConnectFailed": "{{url}} に接続できません。API サービスが起動していること、ポートが変更されていないこと、ブロックされていないことを確認してください。",
+      "testAuthFailed": "サービスには到達しましたが、認証に失敗しました: {{detail}}。API サービスキーまたはアカウントのログイン状態を確認してください。",
+      "testServiceUnavailable": "サービスには到達しましたが、現在利用できません: {{detail}}。サービスが有効か、アカウント集合が空でないか、アカウントが利用可能かを確認してください。",
+      "testRateLimited": "サービスには到達しましたが、上流でレート制限またはクォータ不足です: {{detail}}。",
+      "testHttpFailed": "サービスには到達しましたが、リクエストは HTTP {{status}} を返しました: {{detail}}。",
       "activateAction": "API サービスを起動",
       "activateSuccess": "API サービスに切り替えました",
       "dashboardAction": "サービスパネル",
@@ -1702,8 +1804,8 @@
       "statsTitle": "合計",
       "accountStatsTitle": "アカウント別",
       "statsEmpty": "まだ統計はありません",
-      "summaryMeta": "{{count}} 件のアカウント · ローカル/LAN",
-      "summaryMetaUnconfigured": "未設定 · ローカル/LAN",
+      "summaryMeta": "{{count}} 件のアカウント · {{scope}}",
+      "summaryMetaUnconfigured": "未設定 · {{scope}}",
       "memberTitle": "集合メンバー",
       "stats": {
         "requests": "リクエスト",
@@ -1774,7 +1876,19 @@
       "apiPortUrl": "APIポートURL",
       "modelId": "モデル ID",
       "modelIdPlaceholder": "モデル ID を選択",
-      "modelIdViewOnly": "表示のみ"
+      "modelIdViewOnly": "表示のみ",
+      "quotaPool": {
+        "title": "クォータプール",
+        "hourlyShort": "5h",
+        "weeklyShort": "週",
+        "viewFull": "完全な統計を表示",
+        "modalTitle": "APIサービスのクォータプール",
+        "empty": "クォータ統計はまだありません"
+      },
+      "oauthBinding": {
+        "desc": "任意です。未連携の場合、API サービスは従来の API Key ロジックで動作します。連携後はログイン状態に OAuth アカウントを使い、Provider は現在の API サービス設定を使います。",
+        "currentService": "API サービス：{{name}}"
+      }
     },
     "local": {
       "desc": "~/.codex/auth.json から現在ログイン中のアカウントをインポート",
@@ -1788,13 +1902,15 @@
     "quota": {
       "hourly": "5 時間クォータ",
       "weekly": "週次クォータ",
-      "reset": "リセット"
+      "reset": "リセット",
+      "weeklyBlocksHourly": "週クォータが 0 のため、5時間クォータは利用できません"
     },
     "quotaError": {
       "badge": "クォータエラー",
+      "refreshFailedBadge": "更新失敗",
       "generic": "クォータの更新に失敗しました。後でもう一度お試しください",
       "deactivatedWorkspace": "ワークスペースが無効です。アカウントを切り替えるか再認証してください",
-      "requestFailedManualRetry": "リクエストに失敗しました。手動で再試行してください: {{error}}"
+      "requestFailedManualRetry": "ネットワークを確認してください。最新のクォータを取得できませんでした。更新して再試行できます。"
     },
     "plan": {
       "free": "FREE",
@@ -2042,7 +2158,8 @@
         "collapse": "折りたたむ",
         "repairVisibility": "表示情報を修復",
         "restoreSessions": "セッションを復元",
-        "copySessionId": "セッション ID をコピー"
+        "copySessionId": "セッション ID をコピー",
+        "copyToInstance": "インスタンスへコピー"
       },
       "confirm": {
         "title": "ゴミ箱へ移動",
@@ -2057,7 +2174,9 @@
       "messages": {
         "pickOne": "少なくとも1件のセッションを選択してください",
         "syncNeedTwo": "セッションを同期するには少なくとも2つのインスタンスが必要です",
-        "pickRestoreOne": "復元するセッションを 1 つ以上選択してください"
+        "pickRestoreOne": "復元するセッションを 1 つ以上選択してください",
+        "repairVisibilitySkippedOnly": "書き込み可能な provider 差分は見つかりませんでした。無効または破損した state_5.sqlite ファイル {{count}} 件をスキップしました。SQLite レコードを修復するには、先に Codex がそれらを再生成する必要があります。",
+        "repairVisibilitySkippedWithBase": "{{message}}。無効または破損した state_5.sqlite ファイル {{count}} 件をスキップしました。SQLite レコードを修復するには、先に Codex がそれらを再生成する必要があります。"
       },
       "groupCount": "{{count}} 件のセッション",
       "updatedAt": "更新済み",
@@ -2073,6 +2192,15 @@
         "emptyTitle": "ゴミ箱は空です",
         "emptyDesc": "ゴミ箱へ移動したセッションはここに表示されます。",
         "restoreAction": "選択したセッションを復元"
+      },
+      "targetModal": {
+        "title": "インスタンスへコピー",
+        "hint": "選択したセッションを対象インスタンスへコピーします。同じ ID のセッションが既にある場合はスキップされます。実行中の対象インスタンスでは、表示に再起動が必要な場合があります。",
+        "targetInstance": "対象インスタンス",
+        "pickTarget": "対象インスタンスを選択",
+        "selectedCount": "{{count}} 件のセッションを選択中",
+        "existingCount": "対象に既に {{count}} 件あります",
+        "confirm": "セッションをコピー"
       }
     },
     "api": {
@@ -2092,11 +2220,13 @@
       },
       "provider": {
         "label": "プロバイダー",
+        "inlineLabel": "プロバイダー: {{provider}}",
         "custom": "カスタム",
         "endpoint": "プロバイダーエンドポイント",
         "hint": "互換性のある Base URL を自動入力しました。必要なら手動で編集できます。",
         "website": "ウェブサイト",
-        "apiKeyPage": "API キーページ"
+        "apiKeyPage": "API キーページ",
+        "getApiKey": "キーを取得"
       },
       "providers": {
         "openai_official": {
@@ -2158,7 +2288,28 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
+      },
+      "oauthBinding": {
+        "label": "OAuth 連携",
+        "unbound": "未連携",
+        "action": "OAuth 連携",
+        "actionShort": "連携",
+        "title": "OAuth アカウントを連携",
+        "desc": "任意です。未連携の場合、このアカウントは従来の API Key ロジックで切り替わります。連携後はログイン状態に OAuth アカウントを使い、Provider はこの API Key アカウント設定を使います。",
+        "currentAccount": "API Key アカウント：{{name}}",
+        "selectLabel": "OAuth アカウントを選択",
+        "empty": "OAuth アカウントがありません。先に OAuth 認証アカウントを追加してください。",
+        "validationRequired": "OAuth アカウントを選択してください",
+        "saveSuccess": "OAuth 連携を更新しました",
+        "saveFailed": "OAuth 連携に失敗しました：{{error}}",
+        "switchRequiresBinding": "先に OAuth アカウントを連携してください",
+        "clearAction": "連携解除",
+        "clearSuccess": "OAuth 連携を解除しました",
+        "clearFailed": "OAuth 連携の解除に失敗しました：{{error}}"
       }
     },
     "modelProviders": {
@@ -2299,11 +2450,49 @@
     },
     "apiSwitchNotice": {
       "title": "Codex セッションが表示されません",
-      "message": "Codex 公式の動作により、API モードとアカウントを直接切り替えた後、既存のセッションが自動表示されない場合があります。このダイアログで一度「表示を修復」を実行できます。後からセッション管理 > 表示を修復でも修復できます。",
-      "dontAskAgain": "今後表示しない",
-      "switchOnly": "切り替えのみ",
-      "switchAndRepair": "切替と修復",
-      "repairFailed": "クイック修復に失敗しました。後でセッション管理 > 表示を修復から再試行できます。"
+      "message": "Codex が {{from}} から {{to}} に切り替わったことを検出しました。公式の動作により、API とアカウントを直接切り替えた後、既存のセッションが自動表示されない場合があります。現在、セッションの表示を自動修復しています。後からセッション管理 > 表示を修復でも修復できます。",
+      "repairing": "Codex セッションの表示を修復しています...",
+      "repairFailed": "自動修復に失敗しました。後でセッション管理 > 表示を修復から再試行できます。",
+      "type": {
+        "apiKey": "API キー",
+        "apiService": "API サービス",
+        "account": "アカウント"
+      }
+    },
+    "accountNote": {
+      "title": "アカウントメモ",
+      "label": "アカウントメモ",
+      "desc": "{{account}} 用の個別メモを追加します。",
+      "placeholder": "メール、パスワード、復旧メール、受け渡しメモなど",
+      "emptyTitle": "アカウントメモを追加",
+      "short": "メモ",
+      "addShort": "追加",
+      "saved": "アカウントメモを保存しました",
+      "saveFailed": "アカウントメモの保存に失敗しました: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "Cockpit Api サービスパネル",
+      "servicePanel": "サービスパネル",
+      "balance": "残高",
+      "requests": "リクエスト",
+      "total": "合計",
+      "today": "今日",
+      "periods": "期間",
+      "tokens": "トークン",
+      "quotaUsed": "使用量",
+      "modelStats": "モデル統計",
+      "noStats": "統計はまだありません",
+      "refreshHint": "更新をクリックすると、この API キーの統計を同期します。",
+      "dailyStats": "日別統計"
+    },
+    "speed": {
+      "title": "速度",
+      "standard": "標準",
+      "standardDesc": "既定の速度、通常の使用量",
+      "fast": "高速",
+      "fastDesc": "1.5倍速、使用量が増加",
+      "saveSuccess": "速度を更新しました",
+      "saveFailed": "速度の保存に失敗しました: {{error}}"
     }
   },
   "githubCopilot": {
@@ -2456,6 +2645,18 @@
           "contextWindowInvalid": "コンテキスト ウィンドウは 0 より大きい整数でなければなりません。",
           "autoCompactInvalid": "自動圧縮制限は 0 より大きい整数である必要があります。"
         }
+      },
+      "appSpeed": {
+        "title": "Codex 速度",
+        "desc": "起動速度として保存し、このアプリからの起動前に書き込みます。",
+        "standard": "標準",
+        "fast": "高速",
+        "launch": "再起動",
+        "loadFailed": "Codex 速度の読み込みに失敗しました: {{error}}",
+        "saveSuccess": "Codex の起動速度を保存しました。",
+        "saveFailed": "Codex 速度の保存に失敗しました: {{error}}",
+        "launchSuccess": "保存済み速度で Codex を再起動しました。",
+        "launchFailed": "Codex の再起動に失敗しました: {{error}}"
       }
     },
     "githubCopilot": {
@@ -2509,7 +2710,9 @@
     "cursorRefreshInterval": "クォータ自動更新",
     "gemini": {
       "title": "Gemini Cli 設定",
-      "appPath": "Gemini Cli パス"
+      "appPath": "Gemini Cli パス",
+      "syncWsl": "WSL 設定を同期",
+      "syncWslDesc": "アカウント切り替え時に WSL 内の .gemini 設定を自動で上書きします"
     },
     "geminiRefreshInterval": "クォータ自動更新",
     "codebuddy": {
@@ -3390,37 +3593,6 @@
         "descPlatform": "CodeBuddy CN のマルチインスタンスは macOS、Windows、Linux のみ対応しています。"
       }
     },
-    "checkin": {
-      "title": "デイリーチェックイン",
-      "modalTitle": "デイリーチェックイン",
-      "status": "チェックイン状態",
-      "checkedIn": "チェックイン済み",
-      "notCheckedIn": "未チェックイン",
-      "button": "チェックイン",
-      "button.loading": "チェックイン中...",
-      "done": "完了",
-      "success": "チェックイン成功！{{days}}日連続",
-      "failure": "チェックイン失敗: {{message}}",
-      "failure.network": "ネットワークエラーです。しばらくしてから再試行してください",
-      "lastCheckin": "最終チェックイン: {{time}}",
-      "streak": "{{days}}日連続",
-      "reward": "報酬: {{reward}}",
-      "refreshStatus": "更新",
-      "checkAll": "一括チェックイン",
-      "noAccounts": "アカウントがありません",
-      "querying": "読み込み中...",
-      "streakDays": "{{days}}日",
-      "streakRewardCountdown": "ボーナス報酬まであと{{days}}日",
-      "streakRewardToday": "本日はボーナス報酬を受け取れます！",
-      "recentDates": "最近: ",
-      "quotaCategory": {
-        "base": "基本パッケージ",
-        "activity": "アクティビティボーナス",
-        "extra": "追加クレジット",
-        "other": "その他",
-        "empty": "クォータデータがありません"
-      }
-    },
     "syncFailed": "同期に失敗: {{error}}",
     "syncSuccess": "{{count}} 件のアカウントを WorkBuddy に同期しました",
     "syncToWorkbuddy": "WorkBuddyに同期"
@@ -3527,6 +3699,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "デイリーチェックイン",
+      "modalTitle": "デイリーチェックイン",
+      "status": "チェックイン状態",
+      "checkedIn": "チェックイン済み",
+      "notCheckedIn": "未チェックイン",
+      "button": "チェックイン",
+      "button.loading": "チェックイン中...",
+      "done": "完了",
+      "success": "チェックイン成功！{{days}}日連続",
+      "failure": "チェックイン失敗: {{message}}",
+      "failure.network": "ネットワークエラーです。しばらくしてから再試行してください",
+      "lastCheckin": "最終チェックイン: {{time}}",
+      "streak": "{{days}}日連続",
+      "reward": "報酬: {{reward}}",
+      "refreshStatus": "更新",
+      "checkAll": "一括チェックイン",
+      "noAccounts": "アカウントがありません",
+      "querying": "読み込み中...",
+      "streakDays": "{{days}}日",
+      "streakRewardCountdown": "ボーナス報酬まであと{{days}}日",
+      "streakRewardToday": "本日はボーナス報酬を受け取れます！",
+      "recentDates": "最近: "
     }
   },
   "zed": {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 
 export interface DosageNotifyUsage {
@@ -44,6 +44,18 @@ export function DosageNotifyUsageStatus({
   classPrefix,
 }: DosageNotifyUsageStatusProps) {
   const [showDetail, setShowDetail] = useState(false);
+
+  useEffect(() => {
+    if (!showDetail) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowDetail(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showDetail]);
   if (usage.isNormal) {
     return <span className="quota-value high">{normalText}</span>;
   }

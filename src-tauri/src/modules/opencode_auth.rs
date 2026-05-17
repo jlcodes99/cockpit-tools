@@ -60,24 +60,8 @@ pub fn get_opencode_auth_json_path() -> Result<PathBuf, String> {
 }
 
 fn atomic_write(path: &PathBuf, content: &str) -> Result<(), String> {
-    let parent = path.parent().ok_or("无法获取 auth.json 目录")?;
-    fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
-
-    let tmp_path = parent.join(format!(
-        ".auth.json.tmp.{}",
-        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
-    ));
-    fs::write(&tmp_path, content).map_err(|e| format!("写入临时文件失败: {}", e))?;
-
-    if let Err(err) = fs::rename(&tmp_path, path) {
-        if path.exists() {
-            fs::remove_file(path).map_err(|e| format!("删除旧 auth.json 失败: {}", e))?;
-            fs::rename(&tmp_path, path).map_err(|e| format!("替换 auth.json 失败: {}", e))?;
-        } else {
-            return Err(format!("替换 auth.json 失败: {}", err));
-        }
-    }
-    Ok(())
+    crate::modules::atomic_write::write_string_atomic(path, content)
+        .map_err(|e| format!("写入 auth.json 失败: {}", e))
 }
 
 fn build_openai_payload(account: &CodexAccount) -> Result<serde_json::Value, String> {

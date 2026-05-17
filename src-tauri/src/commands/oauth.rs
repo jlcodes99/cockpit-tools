@@ -6,7 +6,7 @@ async fn refresh_account_quota_after_login(account: models::Account) -> models::
     let mut refreshing_account = account;
     let account_id = refreshing_account.id.clone();
 
-    match modules::fetch_quota_with_retry(&mut refreshing_account, true).await {
+    match modules::fetch_quota_with_fresh_token(&mut refreshing_account, true).await {
         Ok(quota) => {
             if let Err(e) = modules::update_account_quota(&account_id, quota) {
                 modules::logger::log_warn(&format!(

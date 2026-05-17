@@ -3279,7 +3279,7 @@ fn handle_tray_event<R: Runtime>(tray: &TrayIcon<R>, event: TrayIconEvent) {
         } => {
             #[cfg(target_os = "macos")]
             {
-                if button == MouseButton::Left && button_state == MouseButtonState::Up {
+                if button == MouseButton::Left {
                     if let Err(err) =
                         crate::modules::floating_card_window::show_main_window(tray.app_handle())
                     {

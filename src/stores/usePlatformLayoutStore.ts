@@ -101,7 +101,7 @@ interface NormalizedLayoutStateData {
   sidebarEntryIds: PlatformLayoutEntryId[];
 }
 
-let trayLayoutSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let trayLayoutSyncTimer: number | null = null;
 
 export function makePlatformEntryId(platformId: PlatformId): PlatformLayoutEntryId {
   return `${PLATFORM_ENTRY_PREFIX}${platformId}` as PlatformLayoutEntryId;

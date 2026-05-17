@@ -70,6 +70,40 @@
           "statusPending": "In attesa di importazione"
         }
       },
+      "externalImport": {
+        "bundleInvalidJson": "Il pacchetto di importazione non è un JSON valido",
+        "bundleEmpty": "Il pacchetto di importazione è vuoto",
+        "bundleProviderMismatch": "Il provider del pacchetto di importazione non corrisponde",
+        "bundleNoItems": "Il pacchetto di importazione non contiene elementi importabili",
+        "titleCodex": "Importazione batch Codex",
+        "statusReceiving": "Ricezione richiesta di importazione...",
+        "statusFetching": "Recupero pacchetto di importazione...",
+        "statusParsing": "Analisi del contenuto di importazione Codex...",
+        "statusImporting": "Importazione account {{current}} / {{total}}",
+        "statusRefreshing": "Aggiornamento elenco account...",
+        "statusActivating": "Passaggio all'account importato...",
+        "statusSuccess": "Importazione completata",
+        "statusPartial": "Importazione parziale completata",
+        "statusFailed": "Importazione non riuscita",
+        "total": "Totale",
+        "success": "Riusciti",
+        "failed": "Falliti",
+        "stepReceive": "Ricevi richiesta",
+        "stepFetch": "Recupera pacchetto",
+        "stepParse": "Analizza contenuto",
+        "stepImport": "Importa account",
+        "stepRefresh": "Aggiorna elenco",
+        "errorsTitle": "Elementi falliti",
+        "viewAccounts": "Vedi account Codex",
+        "copyErrors": "Copia errori",
+        "copied": "Copiato",
+        "unknownItem": "Elemento n. {{index}}",
+        "versionUnsupportedTitle": "Versione app troppo vecchia",
+        "versionUnsupportedDesc": "Questo metodo non è ancora supportato. Scarica la versione più recente.",
+        "checkUpdate": "Controlla aggiornamenti",
+        "rawLineNoRefreshToken": "La riga {{line}} non contiene refresh_token",
+        "rawLineMultipleRefreshTokens": "La riga {{line}} contiene più refresh_token. Lasciane solo uno."
+      },
       "instances": {
         "unsupported": {
           "title": "Non supportato su questo sistema"
@@ -107,7 +141,10 @@
         "descTooltip": "Decrescente (clicca per Ascendente)",
         "toggleDirection": "Inverti direzione",
         "credits": "Con i crediti rimanenti",
-        "planEnd": "Per ora di fine ciclo"
+        "planEnd": "Per ora di fine ciclo",
+        "recommended": "Consigliato",
+        "recommendedAscTooltip": "Consigliato (meno conveniente prima)",
+        "recommendedDescTooltip": "Consigliato (più conveniente prima)"
       },
       "sortLabel": "Ordina",
       "token": {
@@ -328,7 +365,8 @@
       "instance": "Istanza",
       "email": "Account",
       "quota": "Stato quota",
-      "actions": "Azioni"
+      "actions": "Azioni",
+      "speed": "Velocità"
     },
     "empty": {
       "title": "Nessuna istanza",
@@ -406,7 +444,9 @@
           "contextWindowInvalid": "La finestra di contesto deve essere un numero intero maggiore di 0.",
           "autoCompactInvalid": "Il limite di compattazione automatica deve essere un numero intero maggiore di 0."
         }
-      }
+      },
+      "appSpeed": "Velocità",
+      "appSpeedDesc": "Scrive la velocità scelta prima di avviare Codex ufficiale"
     },
     "quota": {
       "unbound": "Account non collegato",
@@ -427,7 +467,8 @@
       "allAlreadyRunning": "Tutte le istanze sono già in esecuzione",
       "noneRunning": "Nessuna istanza in esecuzione trovata",
       "syncThreadsNeedTwo": "Sono necessarie almeno due istanze per sincronizzare i thread",
-      "launchPrepared": "Il comando di avvio è pronto"
+      "launchPrepared": "Il comando di avvio è pronto",
+      "speedUpdated": "Velocità aggiornata"
     },
     "runningDialog": {
       "title": "L'istanza è già in esecuzione",
@@ -704,7 +745,14 @@
       "codexSpecifiedAppPath": "Percorso app specificata",
       "codexSpecifiedAppPathDesc": "Percorso dell'app da riavviare insieme al cambio Codex.",
       "codexSpecifiedAppPathPlaceholder": "Ad esempio /Applications/Host.app",
-      "codexSpecifiedAppPathClear": "Cancella"
+      "codexSpecifiedAppPathClear": "Cancella",
+      "codexAppSpeed": "Velocità Codex",
+      "codexAppSpeedDesc": "Salva la velocità di avvio ufficiale di Codex e la scrive prima di ogni avvio da questa app.",
+      "codexAppSpeedStandard": "Normale",
+      "codexAppSpeedFast": "Rapida",
+      "codexAppSpeedLaunch": "Riavvia Codex",
+      "codexAppSpeedSaveFailed": "Impossibile salvare la velocità di Codex: {{error}}",
+      "codexAppSpeedLaunchFailed": "Impossibile riavviare Codex: {{error}}"
     },
     "network": {
       "apiTitle": "API della cabina di pilotaggio antigravità",
@@ -823,11 +871,23 @@
           "saveSettingsFailed": "Salvataggio delle impostazioni di backup non riuscito: {{error}}",
           "cleanupDone": "{{count}} backup scaduti rimossi",
           "cleanupFailed": "Pulizia dei backup scaduti non riuscita: {{error}}",
-          "openFolderFailed": "Apertura della cartella di backup non riuscita: {{error}}"
+          "openFolderFailed": "Apertura della cartella di backup non riuscita: {{error}}",
+          "downloadSuccess": "Backup scaricato in {{path}}",
+          "downloadFailed": "Download backup non riuscito: {{error}}"
         },
         "errors": {
           "invalidRetention": "La conservazione deve essere compresa tra 1 e 365 giorni"
-        }
+        },
+        "platformFilterLabel": "Piattaforma",
+        "platformFilterAll": "Tutte le piattaforme",
+        "platformEmptyTitle": "Nessun backup corrispondente",
+        "platformEmptyDesc": "Questa piattaforma non ha un backup account scaricabile.",
+        "archiveTag": "Archivio",
+        "archiveSize": "Archivio: {{size}}",
+        "platformsTitle": "Account piattaforma",
+        "platformDownloadAction": "Scarica JSON piattaforma",
+        "downloadJsonAction": "File JSON",
+        "downloadZipAction": "Archivio ZIP"
       },
       "exportTitle": "Esportazione dati",
       "exportDesc": "Esporta dati degli account, dati di configurazione o un pacchetto completo di migrazione secondo necessità.",
@@ -1546,6 +1606,7 @@
     "installFailed": "Installazione di sistema non riuscita. Riprova più tardi o scarica manualmente il pacchetto.",
     "restartRequiredAfterInstall": "L'aggiornamento è installato. Riavvia manualmente l'app per completare il passaggio.",
     "stoppingApiService": "Arresto del servizio API...",
+    "stopApiServiceFailed": "Impossibile arrestare il servizio API. Disattivalo prima e riprova.",
     "skipThisVersion": "Salta questa versione",
     "skipFailed": "Impossibile saltare questo aggiornamento: {{error}}"
   },
@@ -1567,6 +1628,13 @@
   },
   "codex": {
     "title": "Gestione account Codex",
+    "newApi": {
+      "quota": {
+        "available": "Credito",
+        "unlimited": "Illimitata",
+        "usedHint": "Usati {{used}}"
+      }
+    },
     "subtitle": "Gestisci i tuoi account OpenAI Codex",
     "instances": {
       "subtitle": "Configurazione indipendente per istanza, operazione parallela con più account.",
@@ -1631,8 +1699,13 @@
       "timeoutRetry": "Aggiorna link autenticazione"
     },
     "token": {
-      "desc": "Incolla il contenuto di auth.json o i dati JSON dell'account",
-      "placeholder": "Esempio: {\"tokens\":{\"id_token\":\"eyJ...\",\"access_token\":\"eyJ...\"}}"
+      "desc": "Incolla auth.json, JSON account o refresh_token.",
+      "placeholder": "Esempio: un refresh_token per riga oppure {\"refresh_token\":\"rt_...\"}",
+      "formatSummary": "Campi richiesti ed esempi",
+      "formatRequired": "Supporta tokens completi (id_token + access_token), un singolo refresh_token o un refresh_token per riga. Con solo refresh_token, l’import lo scambia prima online con credenziali complete.",
+      "formatSingleLabel": "Tokens completi",
+      "formatRefreshOnlyLabel": "Solo refresh_token",
+      "formatBatchLabel": "Esempio batch"
     },
     "exportFormat": {
       "label": "Formato di esportazione",
@@ -1648,12 +1721,21 @@
       "title": "Servizio API",
       "accountCount": "{{count}} account",
       "baseUrl": "Indirizzo",
+      "addressKind": "Tipo indirizzo",
+      "addressLocal": "Locale",
+      "addressLan": "Rete locale",
+      "accessScopeLabel": "Ambito accesso",
+      "accessScopeLocalhost": "Solo locale",
+      "accessScopeLan": "Rete locale",
+      "accessScopeLocalhostShort": "Solo locale",
+      "accessScopeLanShort": "Locale+rete",
+      "accessScopeSaveSuccess": "Ambito di accesso del servizio API aggiornato",
       "apiKey": "Chiave",
       "statusRunning": "In esecuzione",
       "statusStopped": "Arrestato",
       "statusDisabled": "Disattivato",
       "emptyMembers": "Nessun account nella raccolta",
-      "footerHint": "Ascolta in locale e sulla LAN",
+      "footerHint": "Ambito accesso: {{scope}}",
       "manageAccounts": "Gestisci account",
       "rotateKey": "Ruota chiave",
       "rotateConfirmMessage": "Dopo il reset, la chiave attuale del servizio API smetterà subito di funzionare e le richieste in corso potrebbero non essere più disponibili. Continuare?",
@@ -1681,13 +1763,33 @@
         "freeNoticeRestricted": "Gli account Free sono limitati. Disattiva questa opzione per selezionarli.",
         "freeNoticeUnstable": "Il proxy degli account Free può essere instabile. Usalo con cautela.",
         "restrictFreeDisableConfirmTitle": "Consenti account Free",
-        "restrictFreeDisableConfirmMessage": "Il proxy degli account Free può essere instabile. Vuoi usarli davvero?"
+        "restrictFreeDisableConfirmMessage": "Il proxy degli account Free può essere instabile. Vuoi usarli davvero?",
+        "manageMembers": "Gestisci membri"
       },
       "entryAction": "Aggiungi al servizio API",
-      "testAction": "Testa il servizio API",
-      "testSuccess": "Test del servizio API riuscito ({{count}} modelli)",
-      "testTimeout": "Test scaduto. Verifica che il servizio locale sia in esecuzione.",
+      "testAction": "Prova",
+      "testDialogTitle": "Test servizio API",
+      "testDialogDesc": "Invia una richiesta reale tramite Codex CLI per verificare servizio locale, chiave e risposta upstream.",
+      "testProgressTitle": "Verifica servizio in corso",
+      "testProgressDesc": "Invio di una richiesta reale al servizio API locale. Attendere.",
+      "testOutputTitle": "Risultato restituito",
+      "testResultTitle": "Esito del controllo servizio",
+      "testSuccess": "Verifica riuscita: servizio locale, chiave e risposta upstream sono corretti ({{model}}, {{latency}}). Se Codex restituisce ancora 502, controlla Base URL, API Key o ambiente di esecuzione di Codex.",
+      "testFailureStage": "Fase individuata",
+      "testFailureCause": "Motivo errore",
+      "testFailureSuggestion": "Correzione suggerita",
+      "testFailureStatus": "Stato HTTP",
+      "testFailureModel": "Modello test",
+      "testFailureDetail": "Dettagli diagnostica",
+      "testFailureCliOutput": "Output CLI",
+      "testFailureGatewayOutput": "Risposta gateway",
+      "testTimeout": "La verifica con richiesta reale è scaduta. Controlla il servizio locale, il proxy o la rete upstream.",
       "testUnavailable": "L’URL corrente del servizio API non è disponibile",
+      "testConnectFailed": "Impossibile connettersi a {{url}}. Verifica che il servizio API sia in esecuzione, che la porta non sia cambiata e che non sia bloccata.",
+      "testAuthFailed": "Il servizio è raggiungibile, ma l’autenticazione non è riuscita: {{detail}}. Controlla la chiave del servizio API o lo stato di accesso dell’account.",
+      "testServiceUnavailable": "Il servizio è raggiungibile, ma al momento non disponibile: {{detail}}. Controlla se il servizio è abilitato, se la raccolta account è vuota o se gli account sono utilizzabili.",
+      "testRateLimited": "Il servizio è raggiungibile, ma l’upstream è limitato o la quota è esaurita: {{detail}}.",
+      "testHttpFailed": "Il servizio è raggiungibile, ma la richiesta ha restituito HTTP {{status}}: {{detail}}.",
       "activateAction": "Avvia servizio API",
       "activateSuccess": "Passato al servizio API",
       "dashboardAction": "Pannello servizio",
@@ -1702,8 +1804,8 @@
       "statsTitle": "Totali",
       "accountStatsTitle": "Per account",
       "statsEmpty": "Nessuna statistica ancora",
-      "summaryMeta": "{{count}} account · Locale/LAN",
-      "summaryMetaUnconfigured": "Non configurato · Locale/LAN",
+      "summaryMeta": "{{count}} account · {{scope}}",
+      "summaryMetaUnconfigured": "Non configurato · {{scope}}",
       "memberTitle": "Membri della raccolta",
       "stats": {
         "requests": "Richieste",
@@ -1774,7 +1876,19 @@
       "apiPortUrl": "URL porta API",
       "modelId": "ID modello",
       "modelIdPlaceholder": "Seleziona ID modello",
-      "modelIdViewOnly": "Solo vista"
+      "modelIdViewOnly": "Solo vista",
+      "quotaPool": {
+        "title": "Pool quota",
+        "hourlyShort": "5h",
+        "weeklyShort": "Settimana",
+        "viewFull": "Vedi statistiche complete",
+        "modalTitle": "Pool quota del servizio API",
+        "empty": "Nessuna statistica quota"
+      },
+      "oauthBinding": {
+        "desc": "Opzionale. Senza collegamento, il servizio API usa il flusso API Key esistente; dopo il collegamento, l’accesso usa l’account OAuth e il Provider usa la configurazione del servizio API.",
+        "currentService": "Servizio API: {{name}}"
+      }
     },
     "local": {
       "desc": "Importa l'account attuale da ~/.codex/auth.json",
@@ -1788,13 +1902,15 @@
     "quota": {
       "hourly": "Quota di 5 ore",
       "weekly": "Quota settimanale",
-      "reset": "Reimposta"
+      "reset": "Reimposta",
+      "weeklyBlocksHourly": "La quota settimanale è 0, quindi la quota di 5 ore non è disponibile"
     },
     "quotaError": {
       "badge": "Errore quota",
+      "refreshFailedBadge": "Aggiornamento fallito",
       "generic": "Aggiornamento quota non riuscito, riprova più tardi",
       "deactivatedWorkspace": "Workspace disattivato, cambia account o riautorizza",
-      "requestFailedManualRetry": "Richiesta non riuscita, riprova manualmente: {{error}}"
+      "requestFailedManualRetry": "Controlla la rete. La quota più recente non è stata recuperata. Aggiorna per riprovare."
     },
     "plan": {
       "free": "FREE",
@@ -2042,7 +2158,8 @@
         "collapse": "Comprimi",
         "repairVisibility": "Ripara visibilità",
         "restoreSessions": "Ripristina sessioni",
-        "copySessionId": "Copia ID sessione"
+        "copySessionId": "Copia ID sessione",
+        "copyToInstance": "Copia in istanza"
       },
       "confirm": {
         "title": "Sposta nel cestino",
@@ -2057,7 +2174,9 @@
       "messages": {
         "pickOne": "Seleziona almeno una sessione",
         "syncNeedTwo": "Sono necessarie almeno due istanze per sincronizzare le sessioni",
-        "pickRestoreOne": "Seleziona almeno una sessione da ripristinare"
+        "pickRestoreOne": "Seleziona almeno una sessione da ripristinare",
+        "repairVisibilitySkippedOnly": "Non sono state trovate differenze provider scrivibili; sono stati ignorati {{count}} file state_5.sqlite non validi o danneggiati. Codex deve rigenerarli prima di poter riparare i relativi record SQLite.",
+        "repairVisibilitySkippedWithBase": "{{message}}; sono stati ignorati {{count}} file state_5.sqlite non validi o danneggiati. Codex deve rigenerarli prima di poter riparare i relativi record SQLite."
       },
       "groupCount": "{{count}} sessioni",
       "updatedAt": "Aggiornato",
@@ -2073,6 +2192,15 @@
         "emptyTitle": "Il cestino è vuoto",
         "emptyDesc": "Le sessioni spostate nel cestino appariranno qui.",
         "restoreAction": "Ripristina le sessioni selezionate"
+      },
+      "targetModal": {
+        "title": "Copia in istanza",
+        "hint": "Copia le sessioni selezionate nell’istanza di destinazione. Le sessioni con lo stesso ID già presenti vengono ignorate. Le istanze di destinazione in esecuzione potrebbero richiedere un riavvio prima di comparire.",
+        "targetInstance": "Istanza destinazione",
+        "pickTarget": "Seleziona un’istanza destinazione",
+        "selectedCount": "{{count}} sessioni selezionate",
+        "existingCount": "{{count}} già nella destinazione",
+        "confirm": "Copia sessioni"
       }
     },
     "api": {
@@ -2092,11 +2220,13 @@
       },
       "provider": {
         "label": "Provider",
+        "inlineLabel": "Fornitore: {{provider}}",
         "custom": "Personalizzato",
         "endpoint": "Endpoint del provider",
         "hint": "È stata compilata automaticamente una Base URL compatibile. Puoi comunque modificarla manualmente.",
         "website": "Sito web",
-        "apiKeyPage": "Pagina della chiave API"
+        "apiKeyPage": "Pagina della chiave API",
+        "getApiKey": "Ottieni chiave"
       },
       "providers": {
         "openai_official": {
@@ -2158,7 +2288,28 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
+      },
+      "oauthBinding": {
+        "label": "Collegamento OAuth",
+        "unbound": "Non collegato",
+        "action": "Collega OAuth",
+        "actionShort": "Collega",
+        "title": "Collega account OAuth",
+        "desc": "Opzionale. Senza collegamento, questo account cambia con il flusso API Key esistente; dopo il collegamento, l’accesso usa l’account OAuth e il Provider usa la configurazione di questo account API Key.",
+        "currentAccount": "Account API Key: {{name}}",
+        "selectLabel": "Seleziona account OAuth",
+        "empty": "Nessun account OAuth. Aggiungi prima un account autorizzato OAuth.",
+        "validationRequired": "Seleziona un account OAuth",
+        "saveSuccess": "Collegamento OAuth aggiornato",
+        "saveFailed": "Collegamento OAuth non riuscito: {{error}}",
+        "switchRequiresBinding": "Collega prima un account OAuth",
+        "clearAction": "Scollega",
+        "clearSuccess": "Collegamento OAuth rimosso.",
+        "clearFailed": "Rimozione del collegamento OAuth non riuscita: {{error}}"
       }
     },
     "modelProviders": {
@@ -2299,11 +2450,49 @@
     },
     "apiSwitchNotice": {
       "title": "Sessioni Codex nascoste",
-      "message": "Per il comportamento ufficiale di Codex, le sessioni esistenti potrebbero non apparire automaticamente dopo il passaggio diretto tra modalità API e account. Puoi eseguire Ripara visibilità una volta in questa finestra e ripararle anche più tardi da Gestione sessioni > Ripara visibilità.",
-      "dontAskAgain": "Non mostrare più",
-      "switchOnly": "Solo passa",
-      "switchAndRepair": "Passa e ripara",
-      "repairFailed": "Riparazione rapida non riuscita. Puoi riprovare più tardi da Gestione sessioni > Ripara visibilità."
+      "message": "È stato rilevato che Codex è passato da {{from}} a {{to}}. Per il comportamento ufficiale, le sessioni esistenti potrebbero non apparire automaticamente dopo il passaggio diretto tra API e account. La visibilità delle sessioni viene riparata automaticamente; puoi usare anche Gestione sessioni > Ripara visibilità più tardi.",
+      "repairing": "Riparazione della visibilità delle sessioni Codex...",
+      "repairFailed": "Riparazione automatica non riuscita. Puoi riprovare più tardi da Gestione sessioni > Ripara visibilità.",
+      "type": {
+        "apiKey": "Chiave API",
+        "apiService": "Servizio API",
+        "account": "Account"
+      }
+    },
+    "accountNote": {
+      "title": "Nota account",
+      "label": "Nota account",
+      "desc": "Aggiungi una nota account separata per {{account}}.",
+      "placeholder": "Email, password, email di recupero o note di consegna",
+      "emptyTitle": "Aggiungi nota account",
+      "short": "Nota",
+      "addShort": "Aggiungi",
+      "saved": "Nota account salvata",
+      "saveFailed": "Salvataggio nota account non riuscito: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "Pannello servizio Cockpit Api",
+      "servicePanel": "Pannello servizio",
+      "balance": "Saldo",
+      "requests": "Richieste",
+      "total": "Totale",
+      "today": "Oggi",
+      "periods": "Periodi",
+      "tokens": "Token",
+      "quotaUsed": "Usato",
+      "modelStats": "Statistiche modelli",
+      "noStats": "Nessuna statistica",
+      "refreshHint": "Fai clic su aggiorna per sincronizzare le statistiche di questa chiave API.",
+      "dailyStats": "Statistiche giornaliere"
+    },
+    "speed": {
+      "title": "Velocità",
+      "standard": "Normale",
+      "standardDesc": "Velocità predefinita, uso normale",
+      "fast": "Rapida",
+      "fastDesc": "Velocità 1,5x, uso maggiore",
+      "saveSuccess": "Velocità aggiornata",
+      "saveFailed": "Impossibile salvare la velocità: {{error}}"
     }
   },
   "githubCopilot": {
@@ -2456,6 +2645,18 @@
           "contextWindowInvalid": "La finestra di contesto deve essere un numero intero maggiore di 0.",
           "autoCompactInvalid": "Il limite di compattazione automatica deve essere un numero intero maggiore di 0."
         }
+      },
+      "appSpeed": {
+        "title": "Velocità Codex",
+        "desc": "Salvata come velocità di avvio; scritta prima di avviare Codex.",
+        "standard": "Normale",
+        "fast": "Rapida",
+        "launch": "Riavvia",
+        "loadFailed": "Impossibile caricare la velocità di Codex: {{error}}",
+        "saveSuccess": "Velocità di avvio di Codex salvata.",
+        "saveFailed": "Impossibile salvare la velocità di Codex: {{error}}",
+        "launchSuccess": "Codex riavviato con la velocità salvata.",
+        "launchFailed": "Impossibile riavviare Codex: {{error}}"
       }
     },
     "githubCopilot": {
@@ -2509,7 +2710,9 @@
     "cursorRefreshInterval": "Aggiornamento automatico quota",
     "gemini": {
       "title": "Impostazioni Gemini Cli",
-      "appPath": "Percorso Gemini Cli"
+      "appPath": "Percorso Gemini Cli",
+      "syncWsl": "Sincronizza configurazione WSL",
+      "syncWslDesc": "Sovrascrive automaticamente la configurazione .gemini in WSL quando cambi account"
     },
     "geminiRefreshInterval": "Aggiornamento automatico quota",
     "codebuddy": {
@@ -3390,37 +3593,6 @@
         "descPlatform": "La multi-istanza CodeBuddy CN è supportata solo su macOS, Windows e Linux."
       }
     },
-    "checkin": {
-      "title": "Check-in giornaliero",
-      "modalTitle": "Check-in giornaliero",
-      "status": "Stato check-in",
-      "checkedIn": "Check-in effettuato",
-      "notCheckedIn": "Non effettuato",
-      "button": "Registra presenza",
-      "button.loading": "Check-in in corso...",
-      "done": "Fatto",
-      "success": "Check-in riuscito! Serie di {{days}} giorni",
-      "failure": "Registrazione non riuscita: {{message}}",
-      "failure.network": "Errore di rete, riprova più tardi",
-      "lastCheckin": "Ultimo check-in: {{time}}",
-      "streak": "Serie di {{days}} giorni",
-      "reward": "Ricompensa: {{reward}}",
-      "refreshStatus": "Aggiorna",
-      "checkAll": "Check-in per tutti",
-      "noAccounts": "Nessun account",
-      "querying": "Caricamento...",
-      "streakDays": "{{days}} giorni",
-      "streakRewardCountdown": "Mancano {{days}} giorni alla ricompensa bonus",
-      "streakRewardToday": "Ricompensa bonus disponibile oggi!",
-      "recentDates": "Recenti: ",
-      "quotaCategory": {
-        "base": "Pacchetto base",
-        "activity": "Bonus attività",
-        "extra": "Crediti extra",
-        "other": "Altro",
-        "empty": "Nessun dato quota"
-      }
-    },
     "syncFailed": "Sincronizzazione fallita: {{error}}",
     "syncSuccess": "{{count}} account sincronizzato/i con WorkBuddy",
     "syncToWorkbuddy": "Sincronizza con WorkBuddy"
@@ -3527,6 +3699,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "Check-in giornaliero",
+      "modalTitle": "Check-in giornaliero",
+      "status": "Stato check-in",
+      "checkedIn": "Check-in effettuato",
+      "notCheckedIn": "Non effettuato",
+      "button": "Registra presenza",
+      "button.loading": "Check-in in corso...",
+      "done": "Fatto",
+      "success": "Check-in riuscito! Serie di {{days}} giorni",
+      "failure": "Registrazione non riuscita: {{message}}",
+      "failure.network": "Errore di rete, riprova più tardi",
+      "lastCheckin": "Ultimo check-in: {{time}}",
+      "streak": "Serie di {{days}} giorni",
+      "reward": "Ricompensa: {{reward}}",
+      "refreshStatus": "Aggiorna",
+      "checkAll": "Check-in per tutti",
+      "noAccounts": "Nessun account",
+      "querying": "Caricamento...",
+      "streakDays": "{{days}} giorni",
+      "streakRewardCountdown": "Mancano {{days}} giorni alla ricompensa bonus",
+      "streakRewardToday": "Ricompensa bonus disponibile oggi!",
+      "recentDates": "Recenti: "
     }
   },
   "zed": {

@@ -517,7 +517,14 @@ fn normalize_account_index(index: &mut CodebuddyAccountIndex) -> Vec<CodebuddyAc
 
 pub fn list_accounts() -> Vec<CodebuddyAccount> {
     let mut index = load_account_index();
+    let had_index_accounts = !index.accounts.is_empty();
     let accounts = normalize_account_index(&mut index);
+    if had_index_accounts && accounts.is_empty() {
+        logger::log_warn(
+            "[CodeBuddy Account] 账号索引中存在账号，但详情文件均无法读取，已跳过空索引写回",
+        );
+        return accounts;
+    }
     if let Err(err) = save_account_index(&index) {
         logger::log_warn(&format!("[CodeBuddy Account] 保存账号索引失败: {}", err));
     }
@@ -526,7 +533,11 @@ pub fn list_accounts() -> Vec<CodebuddyAccount> {
 
 pub fn list_accounts_checked() -> Result<Vec<CodebuddyAccount>, String> {
     let mut index = load_account_index_checked()?;
+    let had_index_accounts = !index.accounts.is_empty();
     let accounts = normalize_account_index(&mut index);
+    if had_index_accounts && accounts.is_empty() {
+        return Err("CodeBuddy 账号索引中存在账号，但详情文件均无法读取；已保留前端缓存，请从账号备份或本地账号文件恢复。".to_string());
+    }
     if let Err(err) = save_account_index(&index) {
         logger::log_warn(&format!("[CodeBuddy Account] 保存账号索引失败: {}", err));
     }
@@ -707,12 +718,7 @@ async fn refresh_account_token_once(account_id: &str) -> Result<CodebuddyAccount
 }
 
 pub async fn refresh_account_token(account_id: &str) -> Result<CodebuddyAccount, String> {
-    crate::modules::refresh_retry::retry_once_with_delay(
-        "CodeBuddy Refresh",
-        account_id,
-        || async { refresh_account_token_once(account_id).await },
-    )
-    .await
+    refresh_account_token_once(account_id).await
 }
 
 pub async fn refresh_all_tokens() -> Result<Vec<(String, Result<CodebuddyAccount, String>)>, String>

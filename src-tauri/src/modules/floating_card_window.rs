@@ -450,6 +450,9 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     };
 
     logger::log_info("[Window] 尝试恢复主窗口");
+    #[cfg(target_os = "macos")]
+    show_macos_application(app);
+
     window.show().map_err(|err| err.to_string())?;
     window.unminimize().map_err(|err| err.to_string())?;
 
@@ -457,12 +460,39 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
         logger::log_warn(&format!("[Window] WebView 主窗口聚焦失败: {}", err));
     }
 
+    #[cfg(target_os = "macos")]
+    activate_macos_application(app);
+
     #[cfg(target_os = "windows")]
     if let Err(err) = crate::modules::process::focus_current_process_main_window() {
         logger::log_warn(&format!("[Window] Windows 原生前置主窗口失败: {}", err));
     }
 
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn show_macos_application<R: Runtime>(app: &AppHandle<R>) {
+    if let Err(err) = app.show() {
+        logger::log_warn(&format!("[Window] macOS 应用取消隐藏失败: {}", err));
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn activate_macos_application<R: Runtime>(app: &AppHandle<R>) {
+    if let Err(err) = app.run_on_main_thread(|| {
+        use objc2_app_kit::NSApplication;
+        use objc2_foundation::MainThreadMarker;
+
+        let marker =
+            MainThreadMarker::new().unwrap_or_else(|| unsafe { MainThreadMarker::new_unchecked() });
+        let ns_app = NSApplication::sharedApplication(marker);
+        ns_app.unhide(None);
+        #[allow(deprecated)]
+        ns_app.activateIgnoringOtherApps(true);
+    }) {
+        logger::log_warn(&format!("[Window] macOS 应用激活失败: {}", err));
+    }
 }
 
 #[cfg(not(target_os = "macos"))]

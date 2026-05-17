@@ -70,6 +70,40 @@
           "statusPending": "بانتظار الاستيراد"
         }
       },
+      "externalImport": {
+        "bundleInvalidJson": "حزمة الاستيراد ليست JSON صالحا",
+        "bundleEmpty": "حزمة الاستيراد فارغة",
+        "bundleProviderMismatch": "موفر حزمة الاستيراد غير مطابق",
+        "bundleNoItems": "لا تحتوي حزمة الاستيراد على عناصر قابلة للاستيراد",
+        "titleCodex": "استيراد Codex دفعة واحدة",
+        "statusReceiving": "جارٍ استلام طلب الاستيراد...",
+        "statusFetching": "جارٍ جلب حزمة الاستيراد...",
+        "statusParsing": "جارٍ تحليل محتوى استيراد Codex...",
+        "statusImporting": "جارٍ استيراد الحساب {{current}} / {{total}}",
+        "statusRefreshing": "جارٍ تحديث قائمة الحسابات...",
+        "statusActivating": "جارٍ التبديل إلى الحساب المستورد...",
+        "statusSuccess": "اكتمل الاستيراد",
+        "statusPartial": "اكتمل الاستيراد جزئيا",
+        "statusFailed": "فشل الاستيراد",
+        "total": "الإجمالي",
+        "success": "نجح",
+        "failed": "فشل",
+        "stepReceive": "استلام الطلب",
+        "stepFetch": "جلب الحزمة",
+        "stepParse": "تحليل المحتوى",
+        "stepImport": "استيراد الحسابات",
+        "stepRefresh": "تحديث القائمة",
+        "errorsTitle": "العناصر الفاشلة",
+        "viewAccounts": "عرض حسابات Codex",
+        "copyErrors": "نسخ الأخطاء",
+        "copied": "تم النسخ",
+        "unknownItem": "عنصر رقم {{index}}",
+        "versionUnsupportedTitle": "إصدار التطبيق منخفض جدًا",
+        "versionUnsupportedDesc": "هذه الطريقة غير مدعومة مؤقتًا. يرجى تنزيل أحدث إصدار.",
+        "checkUpdate": "التحقق من التحديثات",
+        "rawLineNoRefreshToken": "لا يحتوي السطر {{line}} على refresh_token",
+        "rawLineMultipleRefreshTokens": "يحتوي السطر {{line}} على عدة refresh_token. أبقِ واحدًا فقط."
+      },
       "instances": {
         "unsupported": {
           "title": "غير مدعوم على هذا النظام"
@@ -107,7 +141,10 @@
         "descTooltip": "تنازلي (انقر للتبديل إلى تصاعدي)",
         "toggleDirection": "تبديل اتجاه الترتيب",
         "credits": "حسب الأرصدة المتبقية",
-        "planEnd": "حسب نهاية الدورة"
+        "planEnd": "حسب نهاية الدورة",
+        "recommended": "موصى به",
+        "recommendedAscTooltip": "موصى به (الأقل جدوى أولا)",
+        "recommendedDescTooltip": "موصى به (الأكثر جدوى أولا)"
       },
       "sortLabel": "ترتيب",
       "token": {
@@ -374,7 +411,8 @@
       "instance": "المثيل",
       "email": "الحساب",
       "quota": "حالة الحصة",
-      "actions": "إجراءات"
+      "actions": "إجراءات",
+      "speed": "السرعة"
     },
     "empty": {
       "title": "لا توجد مثيلات",
@@ -452,7 +490,9 @@
           "contextWindowInvalid": "يجب أن تكون نافذة السياق عددًا صحيحًا أكبر من 0.",
           "autoCompactInvalid": "يجب أن يكون حد الضغط التلقائي عددًا صحيحًا أكبر من 0."
         }
-      }
+      },
+      "appSpeed": "السرعة",
+      "appSpeedDesc": "يكتب السرعة المختارة قبل تشغيل Codex الرسمي"
     },
     "quota": {
       "unbound": "حساب غير مرتبط",
@@ -473,7 +513,8 @@
       "allAlreadyRunning": "جميع المثيلات قيد التشغيل بالفعل",
       "noneRunning": "لا توجد مثيلات قيد التشغيل حاليًا",
       "syncThreadsNeedTwo": "يلزم وجود مثيلين على الأقل لمزامنة السلاسل",
-      "launchPrepared": "أمر التشغيل جاهز"
+      "launchPrepared": "أمر التشغيل جاهز",
+      "speedUpdated": "تم تحديث السرعة"
     },
     "runningDialog": {
       "title": "المثيل قيد التشغيل",
@@ -750,7 +791,14 @@
       "codexSpecifiedAppPath": "مسار التطبيق المحدد",
       "codexSpecifiedAppPathDesc": "مسار التطبيق الذي سيُعاد تشغيله مع تبديل Codex.",
       "codexSpecifiedAppPathPlaceholder": "مثال /Applications/Host.app",
-      "codexSpecifiedAppPathClear": "مسح"
+      "codexSpecifiedAppPathClear": "مسح",
+      "codexAppSpeed": "سرعة Codex",
+      "codexAppSpeedDesc": "يحفظ سرعة تشغيل Codex الرسمية ويكتبها قبل كل تشغيل من هذا التطبيق.",
+      "codexAppSpeedStandard": "قياسي",
+      "codexAppSpeedFast": "سريع",
+      "codexAppSpeedLaunch": "إعادة تشغيل Codex",
+      "codexAppSpeedSaveFailed": "فشل حفظ سرعة Codex: {{error}}",
+      "codexAppSpeedLaunchFailed": "فشلت إعادة تشغيل Codex: {{error}}"
     },
     "network": {
       "apiTitle": "واجهة برمجة تطبيقات قمرة القيادة المضادة للجاذبية",
@@ -869,11 +917,23 @@
           "saveSettingsFailed": "فشل حفظ إعدادات النسخ الاحتياطي: {{error}}",
           "cleanupDone": "تم تنظيف {{count}} نسخة احتياطية منتهية",
           "cleanupFailed": "فشل تنظيف النسخ الاحتياطية المنتهية: {{error}}",
-          "openFolderFailed": "فشل فتح مجلد النسخ الاحتياطي: {{error}}"
+          "openFolderFailed": "فشل فتح مجلد النسخ الاحتياطي: {{error}}",
+          "downloadSuccess": "تم تنزيل النسخة الاحتياطية إلى {{path}}",
+          "downloadFailed": "فشل تنزيل النسخة الاحتياطية: {{error}}"
         },
         "errors": {
           "invalidRetention": "يجب أن تكون مدة الاحتفاظ بين 1 و365 يومًا"
-        }
+        },
+        "platformFilterLabel": "المنصة",
+        "platformFilterAll": "كل المنصات",
+        "platformEmptyTitle": "لا توجد نسخ مطابقة",
+        "platformEmptyDesc": "لا تحتوي هذه المنصة على نسخة حسابات قابلة للتنزيل.",
+        "archiveTag": "أرشيف",
+        "archiveSize": "الأرشيف: {{size}}",
+        "platformsTitle": "حسابات المنصة",
+        "platformDownloadAction": "تنزيل JSON للمنصة",
+        "downloadJsonAction": "ملف JSON",
+        "downloadZipAction": "أرشيف ZIP"
       },
       "exportTitle": "تصدير البيانات",
       "exportDesc": "صدّر بيانات الحسابات أو بيانات الإعدادات أو حزمة ترحيل كاملة حسب الحاجة.",
@@ -1592,6 +1652,7 @@
     "installFailed": "فشل التثبيت على النظام. حاول لاحقًا أو نزّل الحزمة يدويًا.",
     "restartRequiredAfterInstall": "تم تثبيت التحديث. أعد تشغيل التطبيق يدويًا لإكمال التبديل.",
     "stoppingApiService": "جارٍ إيقاف خدمة API...",
+    "stopApiServiceFailed": "تعذّر إيقاف خدمة API. عطّلها أولًا ثم أعد المحاولة.",
     "skipThisVersion": "تخطي هذا الإصدار",
     "skipFailed": "تعذر تخطي هذا التحديث: {{error}}"
   },
@@ -1613,6 +1674,13 @@
   },
   "codex": {
     "title": "إدارة حسابات Codex",
+    "newApi": {
+      "quota": {
+        "available": "الحصة",
+        "unlimited": "غير محدود",
+        "usedHint": "المستخدم {{used}}"
+      }
+    },
     "subtitle": "إدارة حسابات OpenAI Codex",
     "instances": {
       "subtitle": "تكوين مستقل لكل مثيل، تشغيل متوازٍ بحسابات متعددة.",
@@ -1677,8 +1745,13 @@
       "timeoutRetry": "تحديث رابط المصادقة"
     },
     "token": {
-      "desc": "الصق محتوى auth.json أو بيانات JSON للحساب",
-      "placeholder": "مثال: {\"tokens\":{\"id_token\":\"eyJ...\",\"access_token\":\"eyJ...\"}}"
+      "desc": "الصق auth.json أو JSON للحساب أو refresh_token.",
+      "placeholder": "مثال: refresh_token واحد في كل سطر، أو {\"refresh_token\":\"rt_...\"}",
+      "formatSummary": "الحقول المطلوبة والأمثلة",
+      "formatRequired": "يدعم tokens كاملة (id_token + access_token)، أو refresh_token واحداً، أو refresh_token واحداً في كل سطر. عند استخدام refresh_token فقط يتم استبداله عبر الإنترنت ببيانات اعتماد كاملة أولاً.",
+      "formatSingleLabel": "مثال tokens كاملة",
+      "formatRefreshOnlyLabel": "مثال refresh_token فقط",
+      "formatBatchLabel": "مثال دفعي"
     },
     "exportFormat": {
       "label": "تنسيق التصدير",
@@ -1694,12 +1767,21 @@
       "title": "خدمة API",
       "accountCount": "{{count}} حسابات",
       "baseUrl": "العنوان",
+      "addressKind": "نوع العنوان",
+      "addressLocal": "محلي",
+      "addressLan": "شبكة محلية",
+      "accessScopeLabel": "نطاق الوصول",
+      "accessScopeLocalhost": "المحلي فقط",
+      "accessScopeLan": "الشبكة المحلية",
+      "accessScopeLocalhostShort": "المحلي فقط",
+      "accessScopeLanShort": "محلي+شبكة",
+      "accessScopeSaveSuccess": "تم تحديث نطاق وصول خدمة API",
       "apiKey": "المفتاح",
       "statusRunning": "قيد التشغيل",
       "statusStopped": "متوقف",
       "statusDisabled": "معطل",
       "emptyMembers": "لا توجد حسابات في المجموعة",
-      "footerHint": "يستمع محليًا وعلى LAN",
+      "footerHint": "نطاق الوصول: {{scope}}",
       "manageAccounts": "إدارة الحسابات",
       "rotateKey": "تبديل المفتاح",
       "rotateConfirmMessage": "بعد إعادة التعيين سيتوقف مفتاح خدمة API الحالي عن العمل فورًا، وقد تصبح الطلبات الجارية غير متاحة. هل تريد المتابعة؟",
@@ -1727,13 +1809,33 @@
         "freeNoticeRestricted": "الحسابات المجانية مقيّدة. عطّل هذا الخيار لتحديدها.",
         "freeNoticeUnstable": "قد يكون وكيل الحسابات المجانية غير مستقر. استخدمه بحذر.",
         "restrictFreeDisableConfirmTitle": "السماح بالحسابات المجانية",
-        "restrictFreeDisableConfirmMessage": "قد يكون وكيل الحسابات المجانية غير مستقر. هل تريد المتابعة؟"
+        "restrictFreeDisableConfirmMessage": "قد يكون وكيل الحسابات المجانية غير مستقر. هل تريد المتابعة؟",
+        "manageMembers": "إدارة الأعضاء"
       },
       "entryAction": "إضافة إلى خدمة API",
-      "testAction": "اختبار خدمة API",
-      "testSuccess": "نجح اختبار خدمة API ({{count}} نموذجًا)",
-      "testTimeout": "انتهت مهلة الاختبار. تأكد من تشغيل الخدمة المحلية.",
+      "testAction": "اختبار",
+      "testDialogTitle": "اختبار خدمة API",
+      "testDialogDesc": "أرسل طلبًا حقيقيًا عبر Codex CLI للتحقق من الخدمة المحلية والمفتاح واستجابة upstream.",
+      "testProgressTitle": "جارٍ اختبار الخدمة",
+      "testProgressDesc": "جارٍ إرسال طلب حقيقي إلى خدمة API المحلية، يرجى الانتظار.",
+      "testOutputTitle": "النتيجة المرجعة",
+      "testResultTitle": "نتيجة فحص الخدمة",
+      "testSuccess": "نجح فحص الخدمة: الخدمة المحلية والمفتاح واستجابة upstream سليمة ({{model}}، {{latency}}). إذا ظل Codex يعيد 502، فتحقق من Base URL و API Key أو بيئة التشغيل في Codex.",
+      "testFailureStage": "مرحلة التشخيص",
+      "testFailureCause": "سبب الفشل",
+      "testFailureSuggestion": "الإجراء المقترح",
+      "testFailureStatus": "حالة HTTP",
+      "testFailureModel": "نموذج الاختبار",
+      "testFailureDetail": "تفاصيل التشخيص",
+      "testFailureCliOutput": "مخرجات CLI",
+      "testFailureGatewayOutput": "استجابة البوابة",
+      "testTimeout": "انتهت مهلة فحص الطلب الحقيقي. تحقق من الخدمة المحلية أو الوكيل أو شبكة upstream.",
       "testUnavailable": "عنوان خدمة API الحالي غير متاح",
+      "testConnectFailed": "لا يمكن الاتصال بـ {{url}}. تأكد من تشغيل خدمة API، وأن المنفذ لم يتغير، ولا يوجد ما يحظره.",
+      "testAuthFailed": "الخدمة قابلة للوصول، لكن المصادقة فشلت: {{detail}}. تحقق من مفتاح خدمة API أو حالة تسجيل الدخول للحساب.",
+      "testServiceUnavailable": "الخدمة قابلة للوصول، لكنها غير متاحة حاليًا: {{detail}}. تحقق من تفعيل الخدمة، أو من أن مجموعة الحسابات ليست فارغة، أو من صلاحية الحسابات.",
+      "testRateLimited": "الخدمة قابلة للوصول، لكن upstream مقيّد أو الحصة نفدت: {{detail}}.",
+      "testHttpFailed": "الخدمة قابلة للوصول، لكن الطلب أعاد HTTP {{status}}: {{detail}}.",
       "activateAction": "تشغيل خدمة API",
       "activateSuccess": "تم التبديل إلى خدمة API",
       "dashboardAction": "لوحة الخدمة",
@@ -1748,8 +1850,8 @@
       "statsTitle": "الإجمالي",
       "accountStatsTitle": "حسب الحساب",
       "statsEmpty": "لا توجد إحصاءات بعد",
-      "summaryMeta": "{{count}} حسابًا · محلي/LAN",
-      "summaryMetaUnconfigured": "غير مُعدّ · محلي/LAN",
+      "summaryMeta": "{{count}} حسابًا · {{scope}}",
+      "summaryMetaUnconfigured": "غير مهيأ · {{scope}}",
       "memberTitle": "أعضاء المجموعة",
       "stats": {
         "requests": "الطلبات",
@@ -1820,7 +1922,19 @@
       "apiPortUrl": "عنوان منفذ API",
       "modelId": "معرّف النموذج",
       "modelIdPlaceholder": "اختر معرّف النموذج",
-      "modelIdViewOnly": "عرض فقط"
+      "modelIdViewOnly": "عرض فقط",
+      "quotaPool": {
+        "title": "مجمع الحصة",
+        "hourlyShort": "5h",
+        "weeklyShort": "أسبوع",
+        "viewFull": "عرض الإحصاء الكامل",
+        "modalTitle": "مجمع حصة خدمة API",
+        "empty": "لا توجد إحصاءات حصة بعد"
+      },
+      "oauthBinding": {
+        "desc": "اختياري. بدون ربط، تعمل خدمة API بالمسار السابق لمفتاح API؛ وبعد الربط تستخدم حالة تسجيل الدخول حساب OAuth ويستخدم Provider إعدادات خدمة API الحالية.",
+        "currentService": "خدمة API: {{name}}"
+      }
     },
     "local": {
       "desc": "استيراد الحساب الحالي من ~/.codex/auth.json",
@@ -1834,13 +1948,15 @@
     "quota": {
       "hourly": "حصة 5 ساعات",
       "weekly": "الحصة الأسبوعية",
-      "reset": "إعادة ضبط"
+      "reset": "إعادة ضبط",
+      "weeklyBlocksHourly": "الحصة الأسبوعية 0، لذا حصة 5 ساعات غير متاحة"
     },
     "quotaError": {
       "badge": "خطأ في الحصة",
+      "refreshFailedBadge": "فشل التحديث",
       "generic": "فشل تحديث الحصة، يرجى المحاولة لاحقا",
       "deactivatedWorkspace": "تم تعطيل مساحة العمل، بدّل الحساب أو أعد التفويض",
-      "requestFailedManualRetry": "فشل الطلب، يُرجى إعادة المحاولة يدويًا: {{error}}"
+      "requestFailedManualRetry": "تحقّق من الشبكة. لم يتم جلب أحدث حصة. حدّث للمحاولة مجددًا."
     },
     "plan": {
       "free": "FREE",
@@ -2088,7 +2204,8 @@
         "collapse": "طي",
         "repairVisibility": "إصلاح الظهور",
         "restoreSessions": "استعادة الجلسات",
-        "copySessionId": "نسخ معرّف الجلسة"
+        "copySessionId": "نسخ معرّف الجلسة",
+        "copyToInstance": "نسخ إلى المثيل"
       },
       "confirm": {
         "title": "نقل إلى المهملات",
@@ -2103,7 +2220,9 @@
       "messages": {
         "pickOne": "يرجى تحديد جلسة واحدة على الأقل",
         "syncNeedTwo": "يلزم وجود مثيلين على الأقل لمزامنة الجلسات",
-        "pickRestoreOne": "يرجى تحديد جلسة واحدة على الأقل لاستعادتها"
+        "pickRestoreOne": "يرجى تحديد جلسة واحدة على الأقل لاستعادتها",
+        "repairVisibilitySkippedOnly": "لم يتم العثور على اختلافات provider قابلة للكتابة؛ تم تخطي {{count}} ملف state_5.sqlite غير صالح أو تالف. يجب أن يعيد Codex إنشاءها قبل إصلاح سجلات SQLite فيها.",
+        "repairVisibilitySkippedWithBase": "{{message}}؛ تم تخطي {{count}} ملف state_5.sqlite غير صالح أو تالف. يجب أن يعيد Codex إنشاءها قبل إصلاح سجلات SQLite فيها."
       },
       "groupCount": "{{count}} جلسة",
       "updatedAt": "تم التحديث",
@@ -2119,6 +2238,15 @@
         "emptyTitle": "سلة المهملات فارغة",
         "emptyDesc": "ستظهر هنا الجلسات المنقولة إلى سلة المهملات.",
         "restoreAction": "استعادة الجلسات المحددة"
+      },
+      "targetModal": {
+        "title": "نسخ إلى المثيل",
+        "hint": "ينسخ الجلسات المحددة إلى المثيل الهدف. يتم تخطي الجلسات التي لها نفس ID هناك. قد تحتاج المثيلات الهدف قيد التشغيل إلى إعادة تشغيل قبل أن تظهر.",
+        "targetInstance": "المثيل الهدف",
+        "pickTarget": "اختر مثيلا هدفا",
+        "selectedCount": "تم تحديد {{count}} جلسة",
+        "existingCount": "{{count}} موجودة بالفعل في الهدف",
+        "confirm": "نسخ الجلسات"
       }
     },
     "api": {
@@ -2138,11 +2266,13 @@
       },
       "provider": {
         "label": "المزوّد",
+        "inlineLabel": "المزوّد: {{provider}}",
         "custom": "مخصّص",
         "endpoint": "نقطة نهاية المزوّد",
         "hint": "تم ملء Base URL متوافق تلقائيًا، وما زال بإمكانك تعديله يدويًا.",
         "website": "الموقع الإلكتروني",
-        "apiKeyPage": "صفحة مفتاح API"
+        "apiKeyPage": "صفحة مفتاح API",
+        "getApiKey": "الحصول على المفتاح"
       },
       "providers": {
         "openai_official": {
@@ -2204,7 +2334,28 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_api": {
+          "name": "Cockpit Api"
         }
+      },
+      "oauthBinding": {
+        "label": "ربط OAuth",
+        "unbound": "غير مربوط",
+        "action": "ربط OAuth",
+        "actionShort": "ربط",
+        "title": "ربط حساب OAuth",
+        "desc": "اختياري. بدون ربط، ينتقل هذا الحساب بالمسار السابق لمفتاح API؛ وبعد الربط تستخدم حالة تسجيل الدخول حساب OAuth ويستخدم Provider إعدادات حساب API Key هذا.",
+        "currentAccount": "حساب API Key: {{name}}",
+        "selectLabel": "اختر حساب OAuth",
+        "empty": "لا توجد حسابات OAuth بعد. أضف حسابا مصرحا عبر OAuth أولا.",
+        "validationRequired": "اختر حساب OAuth",
+        "saveSuccess": "تم تحديث ربط OAuth",
+        "saveFailed": "فشل ربط OAuth: {{error}}",
+        "switchRequiresBinding": "اربط حساب OAuth أولا",
+        "clearAction": "إلغاء الربط",
+        "clearSuccess": "تم إلغاء ربط OAuth.",
+        "clearFailed": "فشل إلغاء ربط OAuth: {{error}}"
       }
     },
     "modelProviders": {
@@ -2345,11 +2496,49 @@
     },
     "apiSwitchNotice": {
       "title": "جلسات Codex مخفية",
-      "message": "بسبب آلية Codex الرسمية، قد لا تظهر الجلسات الحالية تلقائيًا بعد التبديل المباشر بين وضع API والحسابات. يمكنك تشغيل إصلاح الظهور مرة واحدة من هذه النافذة، ويمكنك أيضًا إصلاحها لاحقًا من إدارة الجلسات > إصلاح الظهور.",
-      "dontAskAgain": "عدم العرض مجددًا",
-      "switchOnly": "تبديل فقط",
-      "switchAndRepair": "تبديل وإصلاح",
-      "repairFailed": "فشل الإصلاح السريع. يمكنك إعادة المحاولة لاحقًا من إدارة الجلسات > إصلاح الظهور."
+      "message": "تم اكتشاف أن Codex تبدّل من {{from}} إلى {{to}}. بسبب الآلية الرسمية، قد لا تظهر الجلسات الحالية تلقائيًا بعد التبديل المباشر بين API والحسابات. يجري الآن إصلاح ظهور الجلسات تلقائيًا، ويمكنك أيضًا استخدام إدارة الجلسات > إصلاح الظهور لاحقًا.",
+      "repairing": "جارٍ إصلاح ظهور جلسات Codex...",
+      "repairFailed": "فشل الإصلاح التلقائي. يمكنك إعادة المحاولة لاحقًا من إدارة الجلسات > إصلاح الظهور.",
+      "type": {
+        "apiKey": "مفتاح API",
+        "apiService": "خدمة API",
+        "account": "حساب"
+      }
+    },
+    "accountNote": {
+      "title": "ملاحظة الحساب",
+      "label": "ملاحظة الحساب",
+      "desc": "أضف ملاحظة حساب مستقلة لـ {{account}}.",
+      "placeholder": "البريد، كلمة المرور، بريد الاسترداد أو ملاحظات التسليم",
+      "emptyTitle": "إضافة ملاحظة حساب",
+      "short": "ملاحظة",
+      "addShort": "أضف ملاحظة",
+      "saved": "تم حفظ ملاحظة الحساب",
+      "saveFailed": "فشل حفظ ملاحظة الحساب: {{error}}"
+    },
+    "cockpitApi": {
+      "panelTitle": "لوحة خدمة Cockpit Api",
+      "servicePanel": "لوحة الخدمة",
+      "balance": "الرصيد",
+      "requests": "الطلبات",
+      "total": "الإجمالي",
+      "today": "اليوم",
+      "periods": "الفترات",
+      "tokens": "الرموز",
+      "quotaUsed": "المستهلك",
+      "modelStats": "إحصاءات النماذج",
+      "noStats": "لا توجد إحصاءات بعد",
+      "refreshHint": "انقر على التحديث لمزامنة إحصاءات مفتاح API هذا.",
+      "dailyStats": "الإحصاءات اليومية"
+    },
+    "speed": {
+      "title": "السرعة",
+      "standard": "قياسي",
+      "standardDesc": "السرعة الافتراضية، استخدام عادي",
+      "fast": "سريع",
+      "fastDesc": "سرعة 1.5x، استخدام أعلى",
+      "saveSuccess": "تم تحديث السرعة",
+      "saveFailed": "فشل حفظ السرعة: {{error}}"
     }
   },
   "githubCopilot": {
@@ -2502,6 +2691,18 @@
           "contextWindowInvalid": "يجب أن تكون نافذة السياق عددًا صحيحًا أكبر من 0.",
           "autoCompactInvalid": "يجب أن يكون حد الضغط التلقائي عددًا صحيحًا أكبر من 0."
         }
+      },
+      "appSpeed": {
+        "title": "سرعة Codex",
+        "desc": "تُحفظ كسرعة تشغيل وتُكتب قبل فتح Codex.",
+        "standard": "قياسي",
+        "fast": "سريع",
+        "launch": "إعادة تشغيل",
+        "loadFailed": "فشل تحميل سرعة Codex: {{error}}",
+        "saveSuccess": "تم حفظ سرعة تشغيل Codex.",
+        "saveFailed": "فشل حفظ سرعة Codex: {{error}}",
+        "launchSuccess": "تمت إعادة تشغيل Codex بالسرعة المحفوظة.",
+        "launchFailed": "فشلت إعادة تشغيل Codex: {{error}}"
       }
     },
     "githubCopilot": {
@@ -2555,7 +2756,9 @@
     "cursorRefreshInterval": "تحديث الحصة تلقائيًا",
     "gemini": {
       "title": "إعدادات Gemini Cli",
-      "appPath": "مسار Gemini Cli"
+      "appPath": "مسار Gemini Cli",
+      "syncWsl": "مزامنة إعدادات WSL",
+      "syncWslDesc": "استبدال إعدادات ‎.gemini‎ داخل WSL تلقائيًا عند تبديل الحساب"
     },
     "geminiRefreshInterval": "تحديث الحصة تلقائيًا",
     "codebuddy": {
@@ -3436,37 +3639,6 @@
         "descPlatform": "تعدد مثيلات CodeBuddy CN مدعوم فقط على macOS وWindows وLinux."
       }
     },
-    "checkin": {
-      "title": "التسجيل اليومي",
-      "modalTitle": "التسجيل اليومي",
-      "status": "حالة التسجيل",
-      "checkedIn": "تم التسجيل",
-      "notCheckedIn": "لم يتم التسجيل",
-      "button": "تسجيل الحضور",
-      "button.loading": "جاري التسجيل...",
-      "done": "تم",
-      "success": "تم التسجيل بنجاح! {{days}} يوم متتالي",
-      "failure": "فشل تسجيل الحضور: {{message}}",
-      "failure.network": "خطأ في الشبكة، يرجى المحاولة لاحقًا",
-      "lastCheckin": "آخر تسجيل: {{time}}",
-      "streak": "{{days}} يوم متتالي",
-      "reward": "المكافأة: {{reward}}",
-      "refreshStatus": "تحديث الحالة",
-      "checkAll": "تسجيل الكل",
-      "noAccounts": "لا توجد حسابات",
-      "querying": "جارٍ التحميل...",
-      "streakDays": "{{days}} يوم",
-      "streakRewardCountdown": "يتبقى {{days}} يومًا للحصول على المكافأة الإضافية",
-      "streakRewardToday": "المكافأة الإضافية متاحة اليوم!",
-      "recentDates": "الأيام الأخيرة: ",
-      "quotaCategory": {
-        "base": "الباقة الأساسية",
-        "activity": "مكافأة النشاط",
-        "extra": "أرصدة إضافية",
-        "other": "أخرى",
-        "empty": "لا توجد بيانات حصة"
-      }
-    },
     "syncFailed": "فشل المزامنة: {{error}}",
     "syncSuccess": "تمت مزامنة {{count}} حساب/حسابات مع WorkBuddy",
     "syncToWorkbuddy": "مزامنة مع WorkBuddy"
@@ -3573,6 +3745,30 @@
     },
     "quota": {
       "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "التسجيل اليومي",
+      "modalTitle": "التسجيل اليومي",
+      "status": "حالة التسجيل",
+      "checkedIn": "تم التسجيل",
+      "notCheckedIn": "لم يتم التسجيل",
+      "button": "تسجيل الحضور",
+      "button.loading": "جاري التسجيل...",
+      "done": "تم",
+      "success": "تم التسجيل بنجاح! {{days}} يوم متتالي",
+      "failure": "فشل تسجيل الحضور: {{message}}",
+      "failure.network": "خطأ في الشبكة، يرجى المحاولة لاحقًا",
+      "lastCheckin": "آخر تسجيل: {{time}}",
+      "streak": "{{days}} يوم متتالي",
+      "reward": "المكافأة: {{reward}}",
+      "refreshStatus": "تحديث الحالة",
+      "checkAll": "تسجيل الكل",
+      "noAccounts": "لا توجد حسابات",
+      "querying": "جارٍ التحميل...",
+      "streakDays": "{{days}} يوم",
+      "streakRewardCountdown": "يتبقى {{days}} يومًا للحصول على المكافأة الإضافية",
+      "streakRewardToday": "المكافأة الإضافية متاحة اليوم!",
+      "recentDates": "الأيام الأخيرة: "
     }
   },
   "zed": {

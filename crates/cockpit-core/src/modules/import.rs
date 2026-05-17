@@ -1184,7 +1184,7 @@ pub async fn import_from_extension_credentials(
             total_refresh,
             Some(&account.email),
         );
-        match modules::fetch_quota_with_retry(&mut account, true).await {
+        match modules::fetch_quota_with_fresh_token(&mut account, true).await {
             Ok(quota) => {
                 if let Err(e) = modules::update_account_quota(&account_id, quota) {
                     modules::logger::log_warn(&format!(

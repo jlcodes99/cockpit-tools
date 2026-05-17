@@ -48,13 +48,6 @@ fn extract_error_code_from_message(message: &str) -> Option<String> {
     Some(message[code_start..code_start + end].to_string())
 }
 
-fn should_force_refresh_token(message: &str) -> bool {
-    let lower = message.to_ascii_lowercase();
-    lower.contains("token_invalidated")
-        || lower.contains("your authentication token has been invalidated")
-        || lower.contains("401 unauthorized")
-}
-
 fn write_quota_error(account: &mut CodexAccount, message: String) {
     account.quota_error = Some(CodexQuotaErrorInfo {
         code: extract_error_code_from_message(&message),
@@ -338,41 +331,6 @@ async fn refresh_account_quota_once(account_id: &str) -> Result<CodexQuota, Stri
 
     let result = match fetch_quota(&account).await {
         Ok(result) => result,
-        Err(e) if should_force_refresh_token(&e) => {
-            logger::log_warn(&format!(
-                "Codex 配额请求检测到失效 Token，准备强制刷新后重试: account={}, error={}",
-                account.email, e
-            ));
-
-            match refresh_account_tokens(&mut account, "配额接口返回 Token 失效").await {
-                Ok(()) => {
-                    if let Ok((_, _, new_plan_type, _, _)) =
-                        codex_account::extract_user_info(&account.tokens.id_token)
-                    {
-                        sync_plan_type_from_token(&mut account, new_plan_type);
-                    }
-                    codex_account::save_account(&account)?;
-
-                    match fetch_quota(&account).await {
-                        Ok(result) => result,
-                        Err(retry_err) => {
-                            write_quota_error(&mut account, retry_err.clone());
-                            if let Err(save_err) = codex_account::save_account(&account) {
-                                logger::log_warn(&format!("写入 Codex 配额错误失败: {}", save_err));
-                            }
-                            return Err(retry_err);
-                        }
-                    }
-                }
-                Err(refresh_err) => {
-                    write_quota_error(&mut account, refresh_err.clone());
-                    if let Err(save_err) = codex_account::save_account(&account) {
-                        logger::log_warn(&format!("写入 Codex 配额错误失败: {}", save_err));
-                    }
-                    return Err(refresh_err);
-                }
-            }
-        }
         Err(e) => {
             write_quota_error(&mut account, e.clone());
             if let Err(save_err) = codex_account::save_account(&account) {
@@ -396,10 +354,7 @@ async fn refresh_account_quota_once(account_id: &str) -> Result<CodexQuota, Stri
 }
 
 pub async fn refresh_account_quota(account_id: &str) -> Result<CodexQuota, String> {
-    crate::modules::refresh_retry::retry_once_with_delay("Codex Refresh", account_id, || async {
-        refresh_account_quota_once(account_id).await
-    })
-    .await
+    refresh_account_quota_once(account_id).await
 }
 
 /// 刷新所有账号配额

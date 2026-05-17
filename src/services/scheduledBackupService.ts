@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { DataTransferSelection, exportDataTransferJson } from './dataTransferService';
+import { ALL_PLATFORM_IDS, PlatformId } from '../types/platform';
 
 export type AutoBackupMode = 'full' | 'accounts' | 'config';
 export type AutoBackupTrigger = 'auto' | 'manual';
@@ -20,8 +21,18 @@ export interface AutoBackupSettings {
 export interface AutoBackupFileEntry {
   file_name: string;
   path: string;
+  file_kind: 'json' | 'zip';
   size_bytes: number;
   modified_at_ms: number | null;
+  archive_file_name?: string | null;
+  archive_path?: string | null;
+  archive_size_bytes?: number | null;
+  platforms: AutoBackupPlatformEntry[];
+}
+
+export interface AutoBackupPlatformEntry {
+  platform: PlatformId;
+  account_count: number;
 }
 
 export interface ManagedBackupResult {
@@ -148,6 +159,13 @@ export async function readAutoBackupFile(fileName: string): Promise<string> {
   });
 }
 
+export async function copyAutoBackupFile(fileName: string, targetPath: string): Promise<string> {
+  return invoke<string>('copy_auto_backup_file', {
+    fileName,
+    targetPath,
+  });
+}
+
 export async function deleteAutoBackupFile(fileName: string): Promise<void> {
   await invoke('delete_auto_backup_file', {
     fileName,
@@ -165,6 +183,51 @@ export async function cleanupAutoBackupFiles(retentionDays: number): Promise<str
 
 export async function openAutoBackupDir(): Promise<void> {
   await invoke('open_auto_backup_dir');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function resolveBackupPlatformPayload(jsonContent: string, platform: PlatformId): unknown {
+  const parsed = JSON.parse(jsonContent) as unknown;
+  if (!isRecord(parsed)) {
+    throw new Error('invalid_backup_json');
+  }
+  const accountBundle = isRecord(parsed.accounts) ? parsed.accounts : parsed;
+  if (!isRecord(accountBundle.platforms)) {
+    throw new Error('backup_accounts_missing');
+  }
+  const payload = accountBundle.platforms[platform];
+  if (!isRecord(payload)) {
+    throw new Error('backup_platform_missing');
+  }
+  return payload.exported_data ?? payload.data ?? payload.accounts ?? [];
+}
+
+export function extractAutoBackupPlatformJson(jsonContent: string, platform: PlatformId): string {
+  const payload = resolveBackupPlatformPayload(jsonContent, platform);
+  return JSON.stringify(payload, null, 2);
+}
+
+export function normalizeAutoBackupPlatforms(
+  platforms: AutoBackupPlatformEntry[] | undefined,
+): AutoBackupPlatformEntry[] {
+  const countByPlatform = new Map<PlatformId, number>();
+  for (const item of platforms ?? []) {
+    if (!ALL_PLATFORM_IDS.includes(item.platform)) continue;
+    const count = Number.isFinite(item.account_count)
+      ? Math.max(0, Math.floor(item.account_count))
+      : 0;
+    if (count <= 0) continue;
+    countByPlatform.set(item.platform, (countByPlatform.get(item.platform) ?? 0) + count);
+  }
+  return ALL_PLATFORM_IDS
+    .filter((platform) => countByPlatform.has(platform))
+    .map((platform) => ({
+      platform,
+      account_count: countByPlatform.get(platform) ?? 0,
+    }));
 }
 
 export function isAutoBackupDue(settings: AutoBackupSettings, now = new Date()): boolean {

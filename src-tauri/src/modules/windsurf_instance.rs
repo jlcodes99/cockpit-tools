@@ -500,6 +500,19 @@ fn upsert_windsurf_extension_state(
         } else {
             obj.remove("windsurf.pendingApiKeyMigration");
         }
+        // 关键: codeium.installationId 必须存在 — 缺这个字段 Windsurf 反作弊会把这次切号
+        // 当作"新机器登录"，触发额外验证 / Permission denied (error 12)。
+        // 优先保留原有值（同一机器多次切号要稳定），不存在才生成新的。
+        if !obj
+            .get("codeium.installationId")
+            .map(|v| v.is_string() && !v.as_str().unwrap_or("").trim().is_empty())
+            .unwrap_or(false)
+        {
+            obj.insert(
+                "codeium.installationId".to_string(),
+                Value::String(Uuid::new_v4().to_string()),
+            );
+        }
     }
 
     let serialized = serde_json::to_string(&state)
@@ -550,6 +563,19 @@ fn write_windsurf_auth_data(
 
     upsert_item(conn, WINDSURF_SELECTED_AUTH_KEY, account_label)?;
     upsert_windsurf_extension_state(conn, api_server_url, access_token)?;
+
+    // Onboarding 状态：标记新手向导已完成，避免 Windsurf 启动后弹引导浮窗
+    let onboarding = serde_json::json!({
+        "completed": true,
+        "version": 1,
+        "timestamp": Utc::now().timestamp_millis(),
+    });
+    upsert_item(
+        conn,
+        "windsurfOnboarding",
+        &serde_json::to_string(&onboarding)
+            .map_err(|e| format!("序列化 windsurfOnboarding 失败: {}", e))?,
+    )?;
 
     conn.execute("DELETE FROM ItemTable WHERE key LIKE 'windsurf_auth-%'", [])
         .map_err(|e| format!("清理旧 windsurf_auth-* 键失败: {}", e))?;
@@ -769,6 +795,7 @@ pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, 
             params.bind_account_id
         },
         launch_mode: crate::models::InstanceLaunchMode::App,
+        app_speed: crate::models::codex::CodexAppSpeed::Standard,
         created_at: Utc::now().timestamp_millis(),
         last_launched_at: None,
         last_pid: None,
@@ -2181,17 +2208,34 @@ pub fn inject_account_to_profile(profile_dir: &Path, account_id: &str) -> Result
 
     if let Some(obj) = auth_status.as_object_mut() {
         obj.insert("apiKey".to_string(), Value::String(api_key.clone()));
-        if let Some(name) = normalize_non_empty_text(account.github_name.as_deref()) {
-            obj.insert("name".to_string(), Value::String(name));
-        } else {
-            obj.insert("name".to_string(), Value::String(account_label.clone()));
-        }
-        if let Some(email) = normalize_non_empty_text(account.github_email.as_deref()) {
+        let display_name = normalize_non_empty_text(account.github_name.as_deref())
+            .unwrap_or_else(|| account_label.clone());
+        let display_email = normalize_non_empty_text(account.github_email.as_deref());
+        obj.insert("name".to_string(), Value::String(display_name.clone()));
+        if let Some(email) = display_email.clone() {
             obj.insert("email".to_string(), Value::String(email));
         }
         obj.insert(
             "apiServerUrl".to_string(),
             Value::String(api_server_url.clone()),
+        );
+        // 关键: IDE 通过 status="SignedIn" 判断已登录，缺这个字段会显示未登录
+        obj.insert("status".to_string(), Value::String("SignedIn".to_string()));
+        // 关键: IDE 头像旁边显示用户名/邮箱靠这个嵌套对象
+        let mut user_obj = serde_json::Map::new();
+        user_obj.insert("name".to_string(), Value::String(display_name));
+        user_obj.insert(
+            "email".to_string(),
+            display_email
+                .as_ref()
+                .map(|e| Value::String(e.clone()))
+                .unwrap_or(Value::Null),
+        );
+        obj.insert("user".to_string(), Value::Object(user_obj));
+        // 时间戳标记本次切号
+        obj.insert(
+            "timestamp".to_string(),
+            Value::Number(serde_json::Number::from(Utc::now().timestamp_millis())),
         );
         if is_auth1_token {
             obj.insert(
@@ -2199,6 +2243,42 @@ pub fn inject_account_to_profile(profile_dir: &Path, account_id: &str) -> Result
                 Value::String(access_token.clone()),
             );
             obj.insert("authMethod".to_string(), Value::String("auth1".to_string()));
+            // Devin 账号: 写入 UserStatus protobuf 让 IDE 启动时 UI 显示信息完整
+            // (账号名/邮箱/计划状态等都从这个 proto 解出来)
+            if let Some(proto_b64) = account
+                .devin_user_status_proto_b64
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                obj.insert(
+                    "userStatusProtoBinaryBase64".to_string(),
+                    Value::String(proto_b64.to_string()),
+                );
+            }
+            // 同时把 account_id / org_id 也塞进去，IDE 启动时可能会读
+            if let Some(account_id) = account
+                .devin_account_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                obj.insert(
+                    "accountId".to_string(),
+                    Value::String(account_id.to_string()),
+                );
+            }
+            if let Some(org_id) = account
+                .devin_org_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                obj.insert(
+                    "primaryOrgId".to_string(),
+                    Value::String(org_id.to_string()),
+                );
+            }
         }
     }
 

@@ -1084,6 +1084,189 @@
   flex-wrap: wrap;
 }
 
+.codex-speed-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.codex-speed-trigger {
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-secondary) 84%, var(--bg-card));
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.codex-speed-trigger:hover:not(:disabled),
+.codex-speed-trigger.open {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+.codex-speed-trigger.fast {
+  color: #7a4b00;
+  border-color: rgba(217, 119, 6, 0.24);
+  background: linear-gradient(180deg, rgba(255, 250, 241, 0.98), rgba(252, 240, 220, 0.94));
+  box-shadow:
+    0 1px 2px rgba(146, 64, 14, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.68);
+}
+
+.codex-speed-trigger.fast:hover:not(:disabled),
+.codex-speed-trigger.fast.open {
+  border-color: rgba(217, 119, 6, 0.42);
+  background: linear-gradient(180deg, rgba(255, 247, 232, 1), rgba(250, 232, 204, 0.96));
+}
+
+.codex-speed-trigger.compact {
+  height: 21px;
+  padding: 0 6px;
+}
+
+.codex-speed-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.codex-speed-caret {
+  opacity: 0.72;
+}
+
+.codex-speed-menu {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-card) 90%, var(--bg-secondary));
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.72) inset;
+  padding: 6px;
+  overflow: hidden;
+}
+
+.codex-speed-menu-title {
+  padding: 1px 7px 5px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.codex-speed-menu-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.codex-speed-menu.compact {
+  padding: 5px;
+  border-radius: 12px;
+}
+
+.codex-speed-option {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 7px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+
+.codex-speed-menu.compact .codex-speed-option {
+  min-height: 44px;
+  padding: 5px 7px;
+  border-radius: 9px;
+  gap: 6px;
+}
+
+.codex-speed-option:hover {
+  background: color-mix(in srgb, var(--primary) 6%, var(--bg-secondary));
+}
+
+.codex-speed-option.active {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-secondary));
+}
+
+.codex-speed-option.active svg {
+  color: var(--primary);
+}
+
+.codex-speed-option-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.codex-speed-option-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.codex-speed-menu.compact .codex-speed-option-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.codex-speed-menu.compact .codex-speed-option.active svg {
+  width: 13px;
+  height: 13px;
+}
+
+.codex-speed-menu.compact .codex-speed-option-desc {
+  font-size: 11px;
+  line-height: 1.15;
+}
+
+.codex-speed-option-desc {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+[data-theme="dark"] .codex-speed-trigger.fast {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.28);
+  background: rgba(251, 191, 36, 0.12);
+}
+
+[data-theme="dark"] .codex-speed-menu {
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.4);
+}
+
 /* Badges & Tags */
 .mini-tag {
   display: inline-flex;

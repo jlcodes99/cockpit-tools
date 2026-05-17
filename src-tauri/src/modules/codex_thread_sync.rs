@@ -38,6 +38,20 @@ pub struct CodexInstanceThreadSyncSummary {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexInstanceTargetThreadSyncSummary {
+    pub requested_session_count: usize,
+    pub target_instance_id: String,
+    pub target_instance_name: String,
+    pub synced_session_count: usize,
+    pub skipped_existing_count: usize,
+    pub missing_session_count: usize,
+    pub backup_dir: Option<String>,
+    pub running: bool,
+    pub message: String,
+}
+
 #[derive(Debug, Clone)]
 struct CodexSyncInstance {
     id: String,
@@ -192,6 +206,120 @@ pub fn sync_threads_across_instances() -> Result<CodexInstanceThreadSyncSummary,
     })
 }
 
+pub fn sync_sessions_to_instance(
+    session_ids: Vec<String>,
+    target_instance_id: String,
+) -> Result<CodexInstanceTargetThreadSyncSummary, String> {
+    let requested_ids = session_ids
+        .into_iter()
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
+        .collect::<HashSet<_>>();
+    if requested_ids.is_empty() {
+        return Err("请至少选择一条会话".to_string());
+    }
+
+    let target_id = target_instance_id.trim();
+    if target_id.is_empty() {
+        return Err("请选择目标实例".to_string());
+    }
+
+    let instances = collect_instances()?;
+    let target = instances
+        .iter()
+        .find(|instance| instance.id == target_id)
+        .cloned()
+        .ok_or_else(|| format!("目标实例不存在: {}", target_id))?;
+
+    let mut source_snapshots = HashMap::<String, ThreadSnapshot>::new();
+    let mut target_existing_ids = HashSet::<String>::new();
+    for instance in &instances {
+        let snapshots = load_thread_snapshots(instance)?;
+        if instance.id == target.id {
+            target_existing_ids = snapshots
+                .iter()
+                .map(|snapshot| snapshot.id.clone())
+                .collect::<HashSet<_>>();
+            continue;
+        }
+
+        for snapshot in snapshots {
+            if requested_ids.contains(&snapshot.id) {
+                source_snapshots
+                    .entry(snapshot.id.clone())
+                    .or_insert(snapshot);
+            }
+        }
+    }
+
+    let mut snapshots_to_sync = Vec::new();
+    let mut skipped_existing_count = 0usize;
+    let mut missing_session_count = 0usize;
+    let mut ordered_ids = requested_ids.iter().cloned().collect::<Vec<_>>();
+    ordered_ids.sort();
+    for session_id in ordered_ids {
+        if target_existing_ids.contains(&session_id) {
+            skipped_existing_count += 1;
+            continue;
+        }
+        match source_snapshots.get(&session_id) {
+            Some(snapshot) => snapshots_to_sync.push(snapshot.clone()),
+            None => missing_session_count += 1,
+        }
+    }
+
+    let process_entries = modules::process::collect_codex_process_entries();
+    let running = is_instance_running(&target, &process_entries);
+
+    if snapshots_to_sync.is_empty() {
+        let message = if skipped_existing_count > 0 && missing_session_count == 0 {
+            format!(
+                "目标实例已存在所选 {} 条会话，无需恢复",
+                skipped_existing_count
+            )
+        } else {
+            "所选会话在其他实例中不存在，无法恢复到目标实例".to_string()
+        };
+        return Ok(CodexInstanceTargetThreadSyncSummary {
+            requested_session_count: requested_ids.len(),
+            target_instance_id: target.id,
+            target_instance_name: target.name,
+            synced_session_count: 0,
+            skipped_existing_count,
+            missing_session_count,
+            backup_dir: None,
+            running,
+            message,
+        });
+    }
+
+    let backup_dir = sync_missing_threads_to_instance(&target, &snapshots_to_sync)?;
+    let synced_session_count = snapshots_to_sync.len();
+    let message = if running {
+        format!(
+            "已恢复 {} 条会话到「{}」，目标实例运行中，可能需要重启后显示",
+            synced_session_count, target.name
+        )
+    } else {
+        format!(
+            "已恢复 {} 条会话到「{}」",
+            synced_session_count, target.name
+        )
+    };
+
+    Ok(CodexInstanceTargetThreadSyncSummary {
+        requested_session_count: requested_ids.len(),
+        target_instance_id: target.id,
+        target_instance_name: target.name,
+        synced_session_count,
+        skipped_existing_count,
+        missing_session_count,
+        backup_dir: Some(backup_dir.to_string_lossy().to_string()),
+        running,
+        message,
+    })
+}
+
 fn collect_instances() -> Result<Vec<CodexSyncInstance>, String> {
     let mut instances = Vec::new();
     let default_dir = modules::codex_instance::get_default_codex_home()?;
@@ -238,27 +366,65 @@ fn load_thread_snapshots(instance: &CodexSyncInstance) -> Result<Vec<ThreadSnaps
         return Ok(Vec::new());
     }
 
-    let connection = open_readonly_connection(&db_path)?;
-    let columns = read_thread_columns(&connection)?;
+    let connection = match open_readonly_connection(&db_path) {
+        Ok(connection) => connection,
+        Err(error) if should_skip_state_db_message(&error) => {
+            log_skipped_state_db(&instance.name, &db_path, &error);
+            return Ok(Vec::new());
+        }
+        Err(error) => return Err(error),
+    };
+    let columns = match read_thread_columns(&connection) {
+        Ok(columns) => columns,
+        Err(error) if should_skip_state_db_message(&error) => {
+            log_skipped_state_db(&instance.name, &db_path, &error);
+            return Ok(Vec::new());
+        }
+        Err(error) => return Err(error),
+    };
     let select_columns = columns
         .iter()
         .map(|column| quote_identifier(column))
         .collect::<Vec<_>>()
         .join(", ");
     let query = format!("SELECT {} FROM threads", select_columns);
-    let mut statement = connection
-        .prepare(&query)
-        .map_err(|error| format!("读取实例线程失败 ({}): {}", instance.name, error))?;
-    let mut rows = statement
-        .query([])
-        .map_err(|error| format!("查询实例线程失败 ({}): {}", instance.name, error))?;
+    let mut statement = match connection.prepare(&query) {
+        Ok(statement) => statement,
+        Err(error) if should_skip_state_db_error(&error) => {
+            log_skipped_state_db(&instance.name, &db_path, &error.to_string());
+            return Ok(Vec::new());
+        }
+        Err(error) => {
+            return Err(format!("读取实例线程失败 ({}): {}", instance.name, error));
+        }
+    };
+    let mut rows = match statement.query([]) {
+        Ok(rows) => rows,
+        Err(error) if should_skip_state_db_error(&error) => {
+            log_skipped_state_db(&instance.name, &db_path, &error.to_string());
+            return Ok(Vec::new());
+        }
+        Err(error) => {
+            return Err(format!("查询实例线程失败 ({}): {}", instance.name, error));
+        }
+    };
     let session_index_map = read_session_index_map(&instance.data_dir)?;
 
     let mut snapshots = Vec::new();
-    while let Some(row) = rows
-        .next()
-        .map_err(|error| format!("迭代实例线程失败 ({}): {}", instance.name, error))?
-    {
+    loop {
+        let Some(row) = (match rows.next() {
+            Ok(row) => row,
+            Err(error) if should_skip_state_db_error(&error) => {
+                log_skipped_state_db(&instance.name, &db_path, &error.to_string());
+                return Ok(Vec::new());
+            }
+            Err(error) => {
+                return Err(format!("迭代实例线程失败 ({}): {}", instance.name, error));
+            }
+        }) else {
+            break;
+        };
+
         let mut values = Vec::with_capacity(columns.len());
         for index in 0..columns.len() {
             values.push(
@@ -310,6 +476,10 @@ fn sync_missing_threads_to_instance(
     let backup_dir = backup_instance_files(&target.data_dir)?;
     let index_map = read_session_index_map(&target.data_dir)?;
     let existing_index_ids = index_map.keys().cloned().collect::<HashSet<_>>();
+    let target_provider =
+        modules::codex_session_visibility::read_history_visibility_provider_for_dir(
+            &target.data_dir,
+        )?;
     let db_path = target.data_dir.join(STATE_DB_FILE);
     let mut connection = Connection::open(&db_path)
         .map_err(|error| format!("打开目标实例数据库失败 ({}): {}", target.name, error))?;
@@ -320,11 +490,13 @@ fn sync_missing_threads_to_instance(
 
     for snapshot in snapshots {
         let target_rollout_path = copy_rollout_file(snapshot, &target.data_dir)?;
+        rewrite_rollout_provider_for_target(&target_rollout_path, &target_provider)?;
         let mut row_data = snapshot.row_data.clone();
         row_data.set_text(
             "rollout_path",
             target_rollout_path.to_string_lossy().to_string(),
         );
+        row_data.set_text("model_provider", target_provider.clone());
         insert_thread_row(&transaction, &target_columns, &row_data)?;
     }
 
@@ -350,6 +522,30 @@ fn open_readonly_connection(db_path: &Path) -> Result<Connection, String> {
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
     )
     .map_err(|error| format!("打开只读数据库失败 ({}): {}", db_path.display(), error))
+}
+
+fn should_skip_state_db_error(error: &rusqlite::Error) -> bool {
+    modules::db::is_unusable_sqlite_database_error(error)
+        || error
+            .to_string()
+            .to_ascii_lowercase()
+            .contains("no such table: threads")
+}
+
+fn should_skip_state_db_message(message: &str) -> bool {
+    let lowered = message.to_ascii_lowercase();
+    modules::db::is_unusable_sqlite_database_message(message)
+        || lowered.contains("no such table: threads")
+        || message.contains("threads 表不存在或没有列定义")
+}
+
+fn log_skipped_state_db(instance_name: &str, db_path: &Path, reason: &str) {
+    modules::logger::log_warn(&format!(
+        "跳过无法读取的 Codex 线程数据库 ({} / {}): {}",
+        instance_name,
+        db_path.display(),
+        reason
+    ));
 }
 
 fn read_thread_columns(connection: &Connection) -> Result<Vec<String>, String> {
@@ -601,6 +797,51 @@ fn copy_rollout_file(snapshot: &ThreadSnapshot, target_root: &Path) -> Result<Pa
         )
     })?;
     Ok(target_path)
+}
+
+fn rewrite_rollout_provider_for_target(
+    rollout_path: &Path,
+    target_provider: &str,
+) -> Result<(), String> {
+    let content = fs::read_to_string(rollout_path).map_err(|error| {
+        format!(
+            "读取目标 rollout 文件失败 ({}): {}",
+            rollout_path.display(),
+            error
+        )
+    })?;
+    let Some(newline_index) = content.find('\n') else {
+        return Ok(());
+    };
+    let first_line = &content[..newline_index];
+    let rest = &content[newline_index..];
+    let Ok(mut parsed) = serde_json::from_str::<JsonValue>(first_line) else {
+        return Ok(());
+    };
+    if parsed.get("type").and_then(JsonValue::as_str) != Some("session_meta") {
+        return Ok(());
+    }
+    let Some(payload) = parsed.get_mut("payload").and_then(JsonValue::as_object_mut) else {
+        return Ok(());
+    };
+    if payload.get("model_provider").and_then(JsonValue::as_str) == Some(target_provider) {
+        return Ok(());
+    }
+
+    payload.insert(
+        "model_provider".to_string(),
+        JsonValue::String(target_provider.to_string()),
+    );
+    let updated_first_line = serde_json::to_string(&parsed)
+        .map_err(|error| format!("序列化 rollout provider 元数据失败: {}", error))?;
+    fs::write(rollout_path, format!("{}{}", updated_first_line, rest)).map_err(|error| {
+        format!(
+            "写入目标 rollout provider 元数据失败 ({}): {}",
+            rollout_path.display(),
+            error
+        )
+    })?;
+    Ok(())
 }
 
 fn insert_thread_row(

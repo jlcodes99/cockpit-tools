@@ -12,7 +12,6 @@ import {
   getCodebuddyQuotaCategoryGroups,
 } from '../types/codebuddy';
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
-import { CodeBuddyCNCheckinModal } from '../components/codebuddy-suite/CodebuddySuiteCheckinModal';
 import { CodebuddySuiteAccountsSharedView, type CodebuddySuiteAccountsPlatformConfig } from '../components/codebuddy-suite/CodebuddySuiteAccountsSharedView';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 
@@ -74,7 +73,6 @@ const codebuddyCnPlatformConfig: CodebuddySuiteAccountsPlatformConfig<CodebuddyA
   usagePrefix: 'codebuddy',
   quotaPrefix: 'codebuddy',
   tableUsageClassName: 'codebuddy-table-usage',
-  CheckinModal: CodeBuddyCNCheckinModal,
 };
 
 export function CodebuddyCnAccountsPage() {

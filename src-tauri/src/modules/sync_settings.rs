@@ -91,7 +91,8 @@ fn save_sync_settings(settings: &SyncSettings) -> Result<(), String> {
     let content =
         serde_json::to_string_pretty(settings).map_err(|e| format!("序列化失败: {}", e))?;
 
-    fs::write(&path, content).map_err(|e| format!("写入文件失败: {}", e))?;
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("写入文件失败: {}", e))?;
 
     Ok(())
 }

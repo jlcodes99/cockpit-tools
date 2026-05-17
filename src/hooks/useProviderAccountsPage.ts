@@ -19,6 +19,7 @@ import {
   type SetStateAction,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import {
   isPrivacyModeEnabledByDefault,
@@ -36,8 +37,10 @@ import {
 import {
   consumeQueuedExternalProviderImportForPlatform,
   EXTERNAL_PROVIDER_IMPORT_EVENT,
+  type ExternalProviderImportPayload,
 } from '../utils/externalProviderImport';
 import { useDropdownPanelPlacement } from './useDropdownPanelPlacement';
+import { useEscClose } from './useEscClose';
 import {
   ACCOUNTS_OVERVIEW_FILTER_PERSISTENCE_CHANGED_EVENT,
   type AccountsOverviewFilterPersistenceChangedDetail,
@@ -55,6 +58,34 @@ import {
 // ---------------------------------------------------------------------------
 
 export type AddModalStatus = 'idle' | 'loading' | 'success' | 'error';
+export type ExternalImportProgressStatus =
+  | 'idle'
+  | 'receiving'
+  | 'fetching'
+  | 'parsing'
+  | 'importing'
+  | 'refreshing'
+  | 'success'
+  | 'partial'
+  | 'error';
+
+export type ExternalImportProgressFailure = {
+  index: number;
+  label: string;
+  error: string;
+};
+
+export type ExternalImportProgressState = {
+  visible: boolean;
+  status: ExternalImportProgressStatus;
+  progress: number;
+  total: number;
+  success: number;
+  failed: number;
+  current: number;
+  message: string;
+  failures: ExternalImportProgressFailure[];
+};
 export type ViewMode = 'grid' | 'list';
 export type SortDirection = 'asc' | 'desc';
 
@@ -97,6 +128,7 @@ export interface ProviderStoreActions<TAccount> {
   fetchCurrentAccountId?: () => Promise<string | null>;
   setCurrentAccountId?: (accountId: string | null) => void;
   fetchAccounts: () => Promise<void>;
+  switchAccount?: (accountId: string) => Promise<unknown>;
   deleteAccounts: (ids: string[]) => Promise<void>;
   refreshToken: (id: string) => Promise<void>;
   refreshAllTokens: () => Promise<void>;
@@ -133,6 +165,7 @@ export interface ProviderPageConfig<TAccount extends ProviderAccountBase> {
   }) => void | Promise<void>;
   /** OAuth 成功后的提示文案（可选） */
   resolveOauthSuccessMessage?: () => string;
+  defaultSortBy?: string;
 }
 
 export interface ProviderAccountBase {
@@ -165,6 +198,378 @@ const normalizeStringArray = (value: unknown): string[] =>
         .map((item) => item.trim())
         .filter(Boolean)
     : [];
+
+type ExternalImportBundleParseMessages = {
+  invalidJson: string;
+  empty: string;
+  providerMismatch: string;
+  noItems: string;
+  rawLineNoRefreshToken: (line: number) => string;
+  rawLineMultipleRefreshTokens: (line: number) => string;
+};
+
+const CODEX_REFRESH_TOKEN_PATTERN = /rt_[A-Za-z0-9._-]+/g;
+const COCKPIT_API_PROVIDER_ID = 'cockpit_api';
+const COCKPIT_API_PROVIDER_NAME = 'Cockpit Api';
+const COCKPIT_TOOLS_IMPORT_PATH_MARKERS = [
+  '/api/cockpit-tools/import/',
+  '/user/api/toolsimport/',
+];
+
+const readBundleMessage = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
+
+const readRecordString = (
+  payload: Record<string, unknown>,
+  keys: string[],
+): string | null => {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
+};
+
+const parseLineDelimitedJsonObjects = (
+  rawContent: string,
+  invalidJsonMessage: string,
+): unknown[] | null => {
+  const lines = rawContent
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length <= 1) return null;
+
+  return lines.map((line) => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line) as unknown;
+    } catch {
+      throw new Error(invalidJsonMessage);
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error(invalidJsonMessage);
+    }
+    return parsed;
+  });
+};
+
+const isCodexDirectImportItem = (value: unknown): boolean => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const payload = value as Record<string, unknown>;
+  const tokens = payload.tokens;
+  if (
+    typeof payload.id_token === 'string' &&
+    payload.id_token.trim() &&
+    typeof payload.access_token === 'string' &&
+    payload.access_token.trim()
+  ) {
+    return true;
+  }
+  if (typeof payload.refresh_token === 'string' && payload.refresh_token.trim()) {
+    return true;
+  }
+  if (
+    typeof payload.auth_mode === 'string' &&
+    payload.auth_mode.trim().toLowerCase() === 'apikey' &&
+    typeof payload.OPENAI_API_KEY === 'string' &&
+    payload.OPENAI_API_KEY.trim()
+  ) {
+    return true;
+  }
+  if (!tokens || typeof tokens !== 'object' || Array.isArray(tokens)) return false;
+  const tokenPayload = tokens as Record<string, unknown>;
+  const hasFullTokens =
+    typeof tokenPayload.id_token === 'string' &&
+    tokenPayload.id_token.trim() &&
+    typeof tokenPayload.access_token === 'string' &&
+    tokenPayload.access_token.trim();
+  const hasRefreshTokenOnly =
+    typeof tokenPayload.refresh_token === 'string' && tokenPayload.refresh_token.trim();
+  return Boolean(hasFullTokens || hasRefreshTokenOnly);
+};
+
+const parseCodexRawRefreshTokenItems = (
+  rawContent: string,
+  messages: ExternalImportBundleParseMessages,
+): unknown[] | null => {
+  const lines = rawContent
+    .split(/\r?\n/)
+    .map((line, index) => ({ line: line.trim(), lineNumber: index + 1 }))
+    .filter((item) => item.line.length > 0);
+
+  if (lines.length === 0) return null;
+
+  const items: unknown[] = [];
+  for (const item of lines) {
+    const matches = [...item.line.matchAll(CODEX_REFRESH_TOKEN_PATTERN)];
+    if (matches.length === 0) {
+      throw new Error(messages.rawLineNoRefreshToken(item.lineNumber));
+    }
+    if (matches.length > 1) {
+      throw new Error(messages.rawLineMultipleRefreshTokens(item.lineNumber));
+    }
+
+    const match = matches[0];
+    const refreshToken = match[0].trim();
+    const accountNote = item.line.slice(0, match.index ?? 0).trim();
+    items.push({
+      refresh_token: refreshToken,
+      ...(accountNote ? { account_note: accountNote } : {}),
+    });
+  }
+
+  return items.length > 0 ? items : null;
+};
+
+const resolveExternalImportBundleItems = (
+  rawContent: string,
+  platformId: string,
+  messages: ExternalImportBundleParseMessages,
+): unknown[] => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawContent) as unknown;
+  } catch {
+    let lineDelimitedError: unknown = null;
+    try {
+      const lineDelimitedItems = parseLineDelimitedJsonObjects(rawContent, messages.invalidJson);
+      if (lineDelimitedItems && lineDelimitedItems.length > 0) {
+        return lineDelimitedItems;
+      }
+    } catch (error) {
+      lineDelimitedError = error;
+    }
+
+    if (platformId === 'codex') {
+      try {
+        const rawRefreshTokenItems = parseCodexRawRefreshTokenItems(rawContent, messages);
+        if (rawRefreshTokenItems && rawRefreshTokenItems.length > 0) {
+          return rawRefreshTokenItems;
+        }
+      } catch (error) {
+        throw error;
+      }
+    }
+
+    if (lineDelimitedError) throw lineDelimitedError;
+    throw new Error(messages.invalidJson);
+  }
+
+  if (parsed && typeof parsed === 'object' && 'code' in parsed) {
+    const code = (parsed as { code?: unknown }).code;
+    if (code !== 200 && code !== '200') {
+      throw new Error(
+        readBundleMessage((parsed as { msg?: unknown }).msg) ??
+          readBundleMessage((parsed as { message?: unknown }).message) ??
+          readBundleMessage((parsed as { error?: unknown }).error) ??
+          messages.empty,
+      );
+    }
+  }
+
+  const root =
+    parsed && typeof parsed === 'object' && 'data' in parsed
+      ? (parsed as { data?: unknown }).data
+      : parsed;
+
+  if (typeof root === 'string') {
+    return resolveExternalImportBundleItems(root, platformId, messages);
+  }
+
+  if (Array.isArray(root)) {
+    if (root.length === 0) {
+      throw new Error(messages.noItems);
+    }
+    return root;
+  }
+
+  if (!root || typeof root !== 'object') {
+    throw new Error(messages.empty);
+  }
+
+  const provider = (root as { provider?: unknown }).provider;
+  if (typeof provider === 'string' && provider.trim() && provider.trim() !== platformId) {
+    throw new Error(messages.providerMismatch);
+  }
+
+  const items = (root as { items?: unknown }).items;
+  if (Array.isArray(items) && items.length > 0) {
+    return items;
+  }
+
+  if (platformId === 'codex' && isCodexDirectImportItem(root)) {
+    return [root];
+  }
+
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error(messages.noItems);
+  }
+
+  throw new Error(messages.noItems);
+};
+
+const normalizeExternalImportApiBaseUrl = (rawValue?: string | null): string | null => {
+  const trimmed = (rawValue || '').trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
+};
+
+const deriveApiBaseUrlFromImportUrl = (importUrl?: string | null): string | null => {
+  const trimmed = (importUrl || '').trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return `${parsed.origin}/v1`;
+  } catch {
+    return null;
+  }
+};
+
+const isCockpitToolsImportUrl = (importUrl?: string | null): boolean => {
+  const trimmed = (importUrl || '').trim();
+  if (!trimmed) return false;
+  try {
+    const parsed = new URL(trimmed);
+    const pathname = parsed.pathname.toLowerCase();
+    return COCKPIT_TOOLS_IMPORT_PATH_MARKERS.some((marker) => pathname.includes(marker));
+  } catch {
+    return false;
+  }
+};
+
+const isCockpitApiImportItem = (item: Record<string, unknown>): boolean => {
+  const providerId = readRecordString(item, ['api_provider_id', 'apiProviderId']);
+  if (providerId?.toLowerCase() === COCKPIT_API_PROVIDER_ID) return true;
+
+  const candidates = [
+    readRecordString(item, ['api_provider_name', 'apiProviderName']),
+    readRecordString(item, ['plan_type', 'planType']),
+    readRecordString(item, ['account_note', 'accountNote']),
+  ];
+  const expected = COCKPIT_API_PROVIDER_NAME.toLowerCase();
+  return candidates.some(
+    (value) => value?.trim().toLowerCase().includes(expected),
+  );
+};
+
+const withCockpitApiBaseUrl = (
+  item: unknown,
+  apiBaseUrl: string | null,
+  isCockpitToolsImport: boolean,
+): unknown => {
+  if (!apiBaseUrl || !item || typeof item !== 'object' || Array.isArray(item)) {
+    return item;
+  }
+  const payload = item as Record<string, unknown>;
+  const authMode = readRecordString(payload, ['auth_mode', 'authMode']);
+  const apiKey = readRecordString(payload, ['OPENAI_API_KEY', 'openai_api_key', 'openaiApiKey']);
+  if (authMode?.toLowerCase() !== 'apikey' || !apiKey) {
+    return item;
+  }
+  if (!isCockpitToolsImport && !isCockpitApiImportItem(payload)) {
+    return item;
+  }
+
+  return {
+    ...payload,
+    base_url: apiBaseUrl,
+    api_base_url: apiBaseUrl,
+    api_provider_mode:
+      readRecordString(payload, ['api_provider_mode', 'apiProviderMode']) ?? 'custom',
+    api_provider_id:
+      readRecordString(payload, ['api_provider_id', 'apiProviderId']) ?? COCKPIT_API_PROVIDER_ID,
+    api_provider_name:
+      readRecordString(payload, ['api_provider_name', 'apiProviderName']) ??
+      COCKPIT_API_PROVIDER_NAME,
+    plan_type:
+      readRecordString(payload, ['plan_type', 'planType']) ?? COCKPIT_API_PROVIDER_NAME,
+  };
+};
+
+const applyCockpitApiBaseUrlToExternalImportItems = (
+  items: unknown[],
+  request: ExternalProviderImportPayload,
+): unknown[] => {
+  const apiBaseUrl =
+    normalizeExternalImportApiBaseUrl(request.apiBaseUrl) ??
+    deriveApiBaseUrlFromImportUrl(request.importUrl);
+  if (!apiBaseUrl) return items;
+
+  const isCockpitToolsImport =
+    Boolean(request.apiBaseUrl?.trim()) || isCockpitToolsImportUrl(request.importUrl);
+  return items.map((item) => withCockpitApiBaseUrl(item, apiBaseUrl, isCockpitToolsImport));
+};
+
+const buildInitialExternalImportProgress = (): ExternalImportProgressState => ({
+  visible: false,
+  status: 'idle',
+  progress: 0,
+  total: 0,
+  success: 0,
+  failed: 0,
+  current: 0,
+  message: '',
+  failures: [],
+});
+
+const isExternalImportRunning = (status: ExternalImportProgressStatus): boolean =>
+  ['receiving', 'fetching', 'parsing', 'importing', 'refreshing'].includes(status);
+
+const resolveExternalImportItemLabel = (
+  item: unknown,
+  fallback: string,
+): string => {
+  if (!item || typeof item !== 'object') return fallback;
+  const payload = item as Record<string, unknown>;
+  const profile = payload['https://api.openai.com/profile'];
+  const auth = payload['https://api.openai.com/auth'];
+  const candidates = [
+    payload.email,
+    payload.account_email,
+    payload.id,
+    profile && typeof profile === 'object'
+      ? (profile as Record<string, unknown>).email
+      : null,
+    auth && typeof auth === 'object'
+      ? (auth as Record<string, unknown>).chatgpt_user_id
+      : null,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return fallback;
+};
+
+const collectImportedAccountIds = (imported: unknown): string[] => {
+  const items = Array.isArray(imported) ? imported : [imported];
+  return items
+    .map((item) => {
+      if (!item || typeof item !== 'object') return '';
+      const id = (item as { id?: unknown }).id;
+      return typeof id === 'string' ? id.trim() : '';
+    })
+    .filter(Boolean);
+};
 
 // ---------------------------------------------------------------------------
 // Hook return type
@@ -297,6 +702,8 @@ export interface UseProviderAccountsPageReturn {
   handleImportFromLocal: (() => Promise<void>) | null;
   handlePickImportFile: () => void;
   importFileInputRef: RefObject<HTMLInputElement | null>;
+  externalImportProgress: ExternalImportProgressState;
+  closeExternalImportProgressModal: () => void;
 
   // OAuth (device flow style: Kiro / Windsurf / GHCP)
   oauthUrl: string | null;
@@ -360,7 +767,9 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     oauthService,
     oauthTabKeys: oauthTabKeysConfig,
     dataService,
+    defaultSortBy: defaultSortByConfig,
   } = config;
+  const defaultSortBy = defaultSortByConfig?.trim() || DEFAULT_SORT_BY;
 
   const oauthTabKeys = useMemo(() => {
     const normalized = (oauthTabKeysConfig || [])
@@ -381,6 +790,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     deleteAccounts,
     refreshToken,
     refreshAllTokens,
+    switchAccount,
     setCurrentAccountId: setStoreCurrentAccountId,
     updateAccountTags,
   } = store;
@@ -469,14 +879,14 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   // ─── Sort ─────────────────────────────────────────────────────────────
   const [sortBy, setSortBy] = useState<string>(() => {
     if (!readAccountsOverviewFilterPersistenceEnabled(filterPersistenceScope)) {
-      return DEFAULT_SORT_BY;
+      return defaultSortBy;
     }
     const saved = readAccountsOverviewFilterField<string | null>(
       filterPersistenceScope,
       FILTER_FIELD_SORT_BY,
       null,
     );
-    return saved?.trim() ? saved : DEFAULT_SORT_BY;
+    return saved?.trim() ? saved : defaultSortBy;
   });
   const [sortDirection, setSortDirection] = useState<SortDirection>(() => {
     if (!readAccountsOverviewFilterPersistenceEnabled(filterPersistenceScope)) {
@@ -932,6 +1342,10 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   const [addMessage, setAddMessage] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState('');
   const [importing, setImporting] = useState(false);
+  const [externalAutoImportNonce, setExternalAutoImportNonce] = useState(0);
+  const [externalImportProgress, setExternalImportProgress] =
+    useState<ExternalImportProgressState>(() => buildInitialExternalImportProgress());
+  const externalImportRunIdRef = useRef(0);
 
   const showAddModalRef = useRef(showAddModal);
   const addTabRef = useRef(addTab);
@@ -983,15 +1397,262 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     resetAddModalState();
   }, [resetAddModalState]);
 
+  useEscClose(showAddModal, closeAddModal);
+
+  const closeExternalImportProgressModal = useCallback(() => {
+    setExternalImportProgress((current) => {
+      if (isExternalImportRunning(current.status)) {
+        return current;
+      }
+      return buildInitialExternalImportProgress();
+    });
+  }, []);
+
+  const runExternalProviderImport = useCallback(
+    (request: ExternalProviderImportPayload) => {
+      if (!platformId) return;
+      const importUrl = request.importUrl?.trim();
+      const runId = externalImportRunIdRef.current + 1;
+      externalImportRunIdRef.current = runId;
+
+      const updateProgress = (patch: Partial<ExternalImportProgressState>) => {
+        setExternalImportProgress((current) => {
+          if (externalImportRunIdRef.current !== runId) {
+            return current;
+          }
+          return {
+            ...current,
+            ...patch,
+            visible: true,
+          };
+        });
+      };
+
+      updateProgress({
+        status: 'receiving',
+        progress: 5,
+        total: 0,
+        success: 0,
+        failed: 0,
+        current: 0,
+        message: t(
+          'common.shared.externalImport.statusReceiving',
+          '正在接收导入请求...',
+        ),
+        failures: [],
+      });
+
+      void (async () => {
+        try {
+          let content = request.token.trim();
+          if (importUrl) {
+            updateProgress({
+              status: 'fetching',
+              progress: 20,
+              message: t(
+                'common.shared.externalImport.statusFetching',
+                '正在获取导入包...',
+              ),
+            });
+            content = await invoke<string>('external_import_fetch_import_url', {
+              importUrl,
+            });
+          }
+          if (!content.trim()) {
+            throw new Error(t('common.shared.externalImport.bundleEmpty', '导入包内容为空'));
+          }
+
+          updateProgress({
+            status: 'parsing',
+            progress: 35,
+            message: t(
+              'common.shared.externalImport.statusParsing',
+              '正在解析 Codex JSON...',
+            ),
+          });
+          const resolvedItems = resolveExternalImportBundleItems(content, platformId, {
+            invalidJson: t(
+              'common.shared.externalImport.bundleInvalidJson',
+              '导入包不是有效 JSON',
+            ),
+            empty: t('common.shared.externalImport.bundleEmpty', '导入包内容为空'),
+            providerMismatch: t(
+              'common.shared.externalImport.bundleProviderMismatch',
+              '导入包平台不匹配',
+            ),
+            noItems: t(
+              'common.shared.externalImport.bundleNoItems',
+              '导入包没有可导入内容',
+            ),
+            rawLineNoRefreshToken: (line) =>
+              t('common.shared.externalImport.rawLineNoRefreshToken', {
+                line,
+                defaultValue: '第 {{line}} 行没有匹配到 refresh_token',
+              }),
+            rawLineMultipleRefreshTokens: (line) =>
+              t('common.shared.externalImport.rawLineMultipleRefreshTokens', {
+                line,
+                defaultValue: '第 {{line}} 行匹配到多个 refresh_token，请只保留一个',
+              }),
+          });
+          const items =
+            platformId === 'codex'
+              ? applyCockpitApiBaseUrlToExternalImportItems(resolvedItems, request)
+              : resolvedItems;
+
+          let success = 0;
+          const failures: ExternalImportProgressFailure[] = [];
+          const importedAccountIds: string[] = [];
+          const total = items.length;
+          updateProgress({
+            status: 'importing',
+            progress: 40,
+            total,
+            success,
+            failed: 0,
+            current: 0,
+            failures,
+            message: t(
+              'common.shared.externalImport.statusImporting',
+              {
+                current: 1,
+                total,
+                defaultValue: '正在导入第 {{current}} / {{total}} 个账号',
+              },
+            ),
+          });
+
+          for (let index = 0; index < items.length; index += 1) {
+            const current = index + 1;
+            const label = resolveExternalImportItemLabel(
+              items[index],
+              t('common.shared.externalImport.unknownItem', {
+                index: current,
+                defaultValue: '第 {{index}} 个 JSON',
+              }),
+            );
+            updateProgress({
+              status: 'importing',
+              current,
+              progress: Math.min(90, 40 + Math.round((index / total) * 50)),
+              success,
+              failed: failures.length,
+              message: t(
+                'common.shared.externalImport.statusImporting',
+                {
+                  current,
+                  total,
+                  defaultValue: '正在导入第 {{current}} / {{total}} 个账号',
+                },
+              ),
+            });
+
+            try {
+              const imported = await dataService.importFromJson(JSON.stringify(items[index]));
+              importedAccountIds.push(...collectImportedAccountIds(imported));
+              success += Array.isArray(imported) ? imported.length : 1;
+            } catch (error) {
+              failures.push({
+                index: current,
+                label,
+                error: String(error).replace(/^Error:\s*/, ''),
+              });
+            }
+          }
+
+          const activateImportedAccount = request.activate ? switchAccount : undefined;
+          const activatedAccountId =
+            activateImportedAccount
+              ? importedAccountIds[importedAccountIds.length - 1]
+              : '';
+          if (activatedAccountId && activateImportedAccount) {
+            updateProgress({
+              status: 'refreshing',
+              progress: 92,
+              current: total,
+              success,
+              failed: failures.length,
+              failures: [...failures],
+              message: t(
+                'common.shared.externalImport.statusActivating',
+                '正在切换到导入账号...',
+              ),
+            });
+            await activateImportedAccount(activatedAccountId);
+            await refreshToken(activatedAccountId).catch(() => undefined);
+            if (platformId) {
+              await emitCurrentAccountChanged({
+                platformId,
+                accountId: activatedAccountId,
+                reason: 'external-import',
+              });
+            }
+          }
+          updateProgress({
+            status: 'refreshing',
+            progress: 95,
+            current: total,
+            success,
+            failed: failures.length,
+            failures: [...failures],
+            message: t(
+              'common.shared.externalImport.statusRefreshing',
+              '正在刷新账号列表...',
+            ),
+          });
+          await fetchAccounts();
+          if (success > 0 && platformId) {
+            await emitAccountsChanged({
+              platformId,
+              reason: 'import',
+            });
+          }
+
+          const status: ExternalImportProgressStatus =
+            failures.length === 0 ? 'success' : success > 0 ? 'partial' : 'error';
+          updateProgress({
+            status,
+            progress: 100,
+            current: total,
+            success,
+            failed: failures.length,
+            failures: [...failures],
+            message:
+              status === 'success'
+                ? t('common.shared.externalImport.statusSuccess', '导入完成')
+                : status === 'partial'
+                  ? t('common.shared.externalImport.statusPartial', '部分导入完成')
+                  : t('common.shared.externalImport.statusFailed', '导入失败'),
+          });
+        } catch (error) {
+          updateProgress({
+            status: 'error',
+            progress: 100,
+            message: String(error).replace(/^Error:\s*/, ''),
+          });
+        }
+      })();
+    },
+    [dataService, fetchAccounts, platformId, refreshToken, switchAccount, t],
+  );
+
   const consumeExternalProviderImport = useCallback(() => {
     if (!platformId) return;
     const request = consumeQueuedExternalProviderImportForPlatform(platformId);
     if (!request) return;
+    if (request.importUrl || (platformId === 'codex' && request.token.trim())) {
+      runExternalProviderImport(request);
+      return;
+    }
+
     openAddModal('token');
     setTokenInput(request.token);
     setAddStatus('idle');
     setAddMessage(null);
-  }, [openAddModal, platformId]);
+    if (request.autoImport) {
+      setExternalAutoImportNonce((value) => value + 1);
+    }
+  }, [openAddModal, platformId, runExternalProviderImport]);
 
   useEffect(() => {
     if (!platformId) return;
@@ -1152,6 +1813,34 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     }
     setImporting(false);
   }, [dataService, fetchAccounts, platformId, resetAddModalState, t, tokenInput]);
+
+  useEffect(() => {
+    if (
+      externalAutoImportNonce <= 0 ||
+      !showAddModal ||
+      addTab !== 'token' ||
+      importing ||
+      !tokenInput.trim()
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setExternalAutoImportNonce(0);
+      void handleTokenImport();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    externalAutoImportNonce,
+    showAddModal,
+    addTab,
+    importing,
+    tokenInput,
+    handleTokenImport,
+  ]);
 
   // ─── OAuth (Device Flow) ──────────────────────────────────────────────
   const [oauthUrl, setOauthUrl] = useState<string | null>(null);
@@ -1784,6 +2473,8 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     handleImportFromLocal,
     handlePickImportFile,
     importFileInputRef,
+    externalImportProgress,
+    closeExternalImportProgressModal,
     oauthUrl,
     oauthCallbackUrl,
     oauthUrlCopied,

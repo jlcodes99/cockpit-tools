@@ -72,6 +72,8 @@ pub struct CodexAccount {
     pub account_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_structure: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_note: Option<String>,
     pub tokens: CodexTokens,
     #[serde(default)]
     pub token_generation: u64,
@@ -208,6 +210,7 @@ impl Default for CodexAccountIndex {
 /// JWT Payload 中的用户信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexJwtPayload {
+    #[serde(default)]
     pub aud: serde_json::Value, // 可能是 string 或 array
     pub iss: Option<String>,
     pub email: Option<String>,
@@ -246,6 +249,7 @@ impl CodexAccount {
             organization_id: None,
             account_name: None,
             account_structure: None,
+            account_note: None,
             tokens,
             token_generation: 0,
             token_updated_at: Some(now),

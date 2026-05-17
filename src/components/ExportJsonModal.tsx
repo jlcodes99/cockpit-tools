@@ -2,6 +2,7 @@ import { Check, Copy, Download, Eye, EyeOff, FolderOpen, X } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ModalErrorMessage } from './ModalErrorMessage';
+import { useEscClose } from '../hooks/useEscClose';
 
 interface ExportJsonModalProps {
   isOpen: boolean;
@@ -88,6 +89,7 @@ export function ExportJsonModal(props: ExportJsonModalProps) {
     onCopySavedPath,
   } = props;
   const { t } = useTranslation();
+  useEscClose(isOpen, onClose);
 
   const maskedContent = useMemo(() => {
     return maskJsonPreviewContent(jsonContent);

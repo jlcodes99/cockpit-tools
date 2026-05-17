@@ -2,9 +2,15 @@ use crate::models::codex::{CodexAccount, CodexQuota, CodexQuotaErrorInfo};
 use crate::modules::{codex_account, logger};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 // 使用 wham/usage 端点（Quotio 使用的）
 const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
+const COCKPIT_API_PROVIDER_ID: &str = "cockpit_api";
+const LEGACY_NEW_API_PROVIDER_ID: &str = "new_api";
+const COCKPIT_API_PLAN_TYPE: &str = "Cockpit Api";
+const LEGACY_NEW_API_EXCLUSIVE_PLAN_TYPE: &str = "NEW_API_EXCLUSIVE";
+const COCKPIT_API_BASE_URL: &str = "https://chongcodex.cn/v1";
 
 fn get_header_value(headers: &HeaderMap, name: &str) -> String {
     headers
@@ -61,13 +67,6 @@ fn extract_error_code_from_message(message: &str) -> Option<String> {
     } else {
         Some(code.to_string())
     }
-}
-
-fn should_force_refresh_token(message: &str) -> bool {
-    let lower = message.to_ascii_lowercase();
-    lower.contains("token_invalidated")
-        || lower.contains("your authentication token has been invalidated")
-        || lower.contains("401 unauthorized")
 }
 
 fn write_quota_error(account: &mut CodexAccount, message: String) {
@@ -293,6 +292,177 @@ fn parse_quota_from_usage(usage: &UsageResponse, raw_body: &str) -> Result<Codex
     })
 }
 
+fn is_new_api_account(account: &CodexAccount) -> bool {
+    account
+        .api_provider_id
+        .as_deref()
+        .map(|value| {
+            let value = value.trim();
+            value.eq_ignore_ascii_case(COCKPIT_API_PROVIDER_ID)
+                || value.eq_ignore_ascii_case(LEGACY_NEW_API_PROVIDER_ID)
+        })
+        .unwrap_or(false)
+        || is_cockpit_api_base_url(account.api_base_url.as_deref())
+        || account
+            .plan_type
+            .as_deref()
+            .map(|value| {
+                let value = value.trim();
+                value.eq_ignore_ascii_case(COCKPIT_API_PLAN_TYPE)
+                    || value.eq_ignore_ascii_case(LEGACY_NEW_API_EXCLUSIVE_PLAN_TYPE)
+            })
+            .unwrap_or(false)
+}
+
+fn normalize_api_base_url_for_match(raw: Option<&str>) -> Option<String> {
+    let parsed = reqwest::Url::parse(raw?.trim()).ok()?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return None;
+    }
+    let host = parsed.host_str()?;
+    let port = parsed
+        .port()
+        .map(|value| format!(":{}", value))
+        .unwrap_or_default();
+    let path = parsed.path().trim_end_matches('/');
+    Some(format!("{}://{}{}{}", parsed.scheme(), host, port, path).to_ascii_lowercase())
+}
+
+fn is_cockpit_api_base_url(raw: Option<&str>) -> bool {
+    let Some(actual) = normalize_api_base_url_for_match(raw) else {
+        return false;
+    };
+    let Some(expected) = normalize_api_base_url_for_match(Some(COCKPIT_API_BASE_URL)) else {
+        return false;
+    };
+    actual == expected
+}
+
+fn build_new_api_profile_url(account: &CodexAccount) -> Result<String, String> {
+    let base_url = account
+        .api_base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or("Cockpit Api 账号缺少 Base URL")?;
+    let mut parsed = reqwest::Url::parse(base_url)
+        .map_err(|err| format!("Cockpit Api Base URL 无效: {}", err))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("Cockpit Api Base URL 仅支持 http/https".to_string());
+    }
+    parsed.set_path("/api/cockpit-tools/token-profile");
+    parsed.set_query(None);
+    parsed.set_fragment(None);
+    Ok(parsed.to_string())
+}
+
+fn read_i64(value: &serde_json::Value, key: &str) -> i64 {
+    value
+        .get(key)
+        .and_then(|item| {
+            item.as_i64()
+                .or_else(|| item.as_u64().and_then(|raw| i64::try_from(raw).ok()))
+        })
+        .unwrap_or(0)
+}
+
+fn read_bool(value: &serde_json::Value, key: &str) -> bool {
+    value
+        .get(key)
+        .and_then(|item| item.as_bool())
+        .unwrap_or(false)
+}
+
+fn new_api_percentage(available: i64, total: i64, unlimited: bool) -> i32 {
+    if unlimited {
+        return 100;
+    }
+    if total <= 0 {
+        return 0;
+    }
+    let percentage = (available.max(0) as f64 / total.max(1) as f64) * 100.0;
+    percentage.round().clamp(0.0, 100.0) as i32
+}
+
+async fn fetch_new_api_quota(account: &CodexAccount) -> Result<FetchQuotaResult, String> {
+    let api_key = account
+        .openai_api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or("Cockpit Api 账号缺少 OPENAI_API_KEY")?;
+    let profile_url = build_new_api_profile_url(account)?;
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&profile_url)
+        .bearer_auth(api_key)
+        .header(ACCEPT, "application/json")
+        .send()
+        .await
+        .map_err(|err| format!("请求 Cockpit Api 额度失败: {}", err))?;
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|err| format!("读取 Cockpit Api 额度响应失败: {}", err))?;
+    if !status.is_success() {
+        return Err(format!("Cockpit Api 额度接口返回 HTTP {}", status.as_u16()));
+    }
+
+    let root: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|err| format!("解析 Cockpit Api 额度 JSON 失败: {}", err))?;
+    if root.get("success").and_then(|item| item.as_bool()) == Some(false) {
+        let message = root
+            .get("message")
+            .and_then(|item| item.as_str())
+            .unwrap_or("Cockpit Api 额度接口返回失败");
+        return Err(message.to_string());
+    }
+    let data = root.get("data").unwrap_or(&root);
+    let usage = data.get("usage").ok_or("Cockpit Api 额度响应缺少 usage")?;
+    let total = read_i64(usage, "total_granted");
+    let used = read_i64(usage, "total_used");
+    let available = read_i64(usage, "total_available");
+    let unlimited = read_bool(usage, "unlimited_quota");
+    let percentage = new_api_percentage(available, total, unlimited);
+    let expires_at = read_i64(usage, "expires_at");
+    let reset_time = if expires_at > 0 {
+        Some(expires_at)
+    } else {
+        None
+    };
+
+    Ok(FetchQuotaResult {
+        quota: CodexQuota {
+            hourly_percentage: percentage,
+            hourly_reset_time: reset_time,
+            hourly_window_minutes: None,
+            hourly_window_present: Some(true),
+            weekly_percentage: 0,
+            weekly_reset_time: None,
+            weekly_window_minutes: None,
+            weekly_window_present: Some(false),
+            raw_data: Some(json!({
+                "provider": "cockpit-api",
+                "object": "codex_cockpit_api_quota",
+                "profile": data,
+                "usage": usage,
+                "total_granted": total,
+                "total_used": used,
+                "total_available": available,
+                "unlimited_quota": unlimited
+            })),
+        },
+        plan_type: Some(
+            data.get("plan_type")
+                .and_then(|item| item.as_str())
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .unwrap_or_else(|| COCKPIT_API_PLAN_TYPE.to_string()),
+        ),
+    })
+}
+
 /// 从 id_token 中提取订阅标识并同步更新账号和索引
 fn sync_subscription_from_token(
     account: &mut CodexAccount,
@@ -342,6 +512,26 @@ fn sync_subscription_expiry_from_current_id_token(account: &mut CodexAccount) {
 async fn refresh_account_quota_once(account_id: &str) -> Result<CodexQuota, String> {
     let mut account = codex_account::prepare_account_for_injection(account_id).await?;
     if account.is_api_key_auth() {
+        if is_new_api_account(&account) {
+            let result = match fetch_new_api_quota(&account).await {
+                Ok(result) => result,
+                Err(e) => {
+                    write_quota_error(&mut account, e.clone());
+                    if let Err(save_err) = codex_account::save_account(&account) {
+                        logger::log_warn(&format!("写入 Cockpit Api 配额错误失败: {}", save_err));
+                    }
+                    return Err(e);
+                }
+            };
+            if result.plan_type.is_some() {
+                sync_subscription_from_token(&mut account, result.plan_type, None);
+            }
+            account.quota = Some(result.quota.clone());
+            account.quota_error = None;
+            account.usage_updated_at = Some(chrono::Utc::now().timestamp());
+            codex_account::save_account(&account)?;
+            return Ok(result.quota);
+        }
         account.quota = None;
         account.quota_error = None;
         account.usage_updated_at = None;
@@ -373,37 +563,6 @@ async fn refresh_account_quota_once(account_id: &str) -> Result<CodexQuota, Stri
 
     let result = match fetch_quota(&account).await {
         Ok(result) => result,
-        Err(e) if should_force_refresh_token(&e) => {
-            logger::log_warn(&format!(
-                "Codex 配额请求检测到失效 Token，准备强制刷新后重试: account={}, error={}",
-                account.email, e
-            ));
-
-            match refresh_account_tokens(&mut account, "配额接口返回 Token 失效").await {
-                Ok(()) => {
-                    sync_subscription_expiry_from_current_id_token(&mut account);
-                    codex_account::save_account(&account)?;
-
-                    match fetch_quota(&account).await {
-                        Ok(result) => result,
-                        Err(retry_err) => {
-                            write_quota_error(&mut account, retry_err.clone());
-                            if let Err(save_err) = codex_account::save_account(&account) {
-                                logger::log_warn(&format!("写入 Codex 配额错误失败: {}", save_err));
-                            }
-                            return Err(retry_err);
-                        }
-                    }
-                }
-                Err(refresh_err) => {
-                    write_quota_error(&mut account, refresh_err.clone());
-                    if let Err(save_err) = codex_account::save_account(&account) {
-                        logger::log_warn(&format!("写入 Codex 配额错误失败: {}", save_err));
-                    }
-                    return Err(refresh_err);
-                }
-            }
-        }
         Err(e) => {
             write_quota_error(&mut account, e.clone());
             if let Err(save_err) = codex_account::save_account(&account) {
@@ -427,10 +586,7 @@ async fn refresh_account_quota_once(account_id: &str) -> Result<CodexQuota, Stri
 }
 
 pub async fn refresh_account_quota(account_id: &str) -> Result<CodexQuota, String> {
-    crate::modules::refresh_retry::retry_once_with_delay("Codex Refresh", account_id, || async {
-        refresh_account_quota_once(account_id).await
-    })
-    .await
+    refresh_account_quota_once(account_id).await
 }
 
 /// 刷新所有账号配额
@@ -442,7 +598,7 @@ pub async fn refresh_all_quotas() -> Result<Vec<(String, Result<CodexQuota, Stri
     const MAX_CONCURRENT: usize = 5;
     let accounts: Vec<_> = codex_account::list_accounts()
         .into_iter()
-        .filter(|account| !account.is_api_key_auth())
+        .filter(|account| !account.is_api_key_auth() || is_new_api_account(account))
         .collect();
 
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT));

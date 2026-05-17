@@ -630,27 +630,65 @@ fn load_thread_snapshots(instance: &CodexSyncInstance) -> Result<Vec<ThreadSnaps
         return Ok(Vec::new());
     }
 
-    let connection = open_readonly_connection(&db_path)?;
-    let columns = read_thread_columns(&connection)?;
+    let connection = match open_readonly_connection(&db_path) {
+        Ok(connection) => connection,
+        Err(error) if should_skip_state_db_message(&error) => {
+            log_skipped_state_db(&instance.name, &db_path, &error);
+            return Ok(Vec::new());
+        }
+        Err(error) => return Err(error),
+    };
+    let columns = match read_thread_columns(&connection) {
+        Ok(columns) => columns,
+        Err(error) if should_skip_state_db_message(&error) => {
+            log_skipped_state_db(&instance.name, &db_path, &error);
+            return Ok(Vec::new());
+        }
+        Err(error) => return Err(error),
+    };
     let select_columns = columns
         .iter()
         .map(|column| quote_identifier(column))
         .collect::<Vec<_>>()
         .join(", ");
     let query = format!("SELECT {} FROM threads", select_columns);
-    let mut statement = connection
-        .prepare(&query)
-        .map_err(|error| format!("读取实例会话失败 ({}): {}", instance.name, error))?;
-    let mut rows = statement
-        .query([])
-        .map_err(|error| format!("查询实例会话失败 ({}): {}", instance.name, error))?;
+    let mut statement = match connection.prepare(&query) {
+        Ok(statement) => statement,
+        Err(error) if should_skip_state_db_error(&error) => {
+            log_skipped_state_db(&instance.name, &db_path, &error.to_string());
+            return Ok(Vec::new());
+        }
+        Err(error) => {
+            return Err(format!("读取实例会话失败 ({}): {}", instance.name, error));
+        }
+    };
+    let mut rows = match statement.query([]) {
+        Ok(rows) => rows,
+        Err(error) if should_skip_state_db_error(&error) => {
+            log_skipped_state_db(&instance.name, &db_path, &error.to_string());
+            return Ok(Vec::new());
+        }
+        Err(error) => {
+            return Err(format!("查询实例会话失败 ({}): {}", instance.name, error));
+        }
+    };
     let session_index_map = read_session_index_map(&instance.data_dir)?;
 
     let mut snapshots = Vec::new();
-    while let Some(row) = rows
-        .next()
-        .map_err(|error| format!("迭代实例会话失败 ({}): {}", instance.name, error))?
-    {
+    loop {
+        let Some(row) = (match rows.next() {
+            Ok(row) => row,
+            Err(error) if should_skip_state_db_error(&error) => {
+                log_skipped_state_db(&instance.name, &db_path, &error.to_string());
+                return Ok(Vec::new());
+            }
+            Err(error) => {
+                return Err(format!("迭代实例会话失败 ({}): {}", instance.name, error));
+            }
+        }) else {
+            break;
+        };
+
         let mut values = Vec::with_capacity(columns.len());
         for index in 0..columns.len() {
             values.push(
@@ -905,6 +943,30 @@ fn open_readonly_connection(db_path: &Path) -> Result<Connection, String> {
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
     )
     .map_err(|error| format!("打开只读数据库失败 ({}): {}", db_path.display(), error))
+}
+
+fn should_skip_state_db_error(error: &rusqlite::Error) -> bool {
+    modules::db::is_unusable_sqlite_database_error(error)
+        || error
+            .to_string()
+            .to_ascii_lowercase()
+            .contains("no such table: threads")
+}
+
+fn should_skip_state_db_message(message: &str) -> bool {
+    let lowered = message.to_ascii_lowercase();
+    modules::db::is_unusable_sqlite_database_message(message)
+        || lowered.contains("no such table: threads")
+        || message.contains("threads 表不存在或没有列定义")
+}
+
+fn log_skipped_state_db(instance_name: &str, db_path: &Path, reason: &str) {
+    modules::logger::log_warn(&format!(
+        "跳过无法读取的 Codex 会话数据库 ({} / {}): {}",
+        instance_name,
+        db_path.display(),
+        reason
+    ));
 }
 
 fn read_thread_columns(connection: &Connection) -> Result<Vec<String>, String> {

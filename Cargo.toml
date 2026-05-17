@@ -27,8 +27,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "time"] }
 tracing-appender = "0.2"
 tracing-log = "0.2"
 trash = "5"
-tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 mac-notification-sys = "0.6"
+tauri-plugin-notification = "2"
 rand = "0.8"
 sha2 = "0.10"
 tokio-tungstenite = "0.26"
@@ -38,9 +39,11 @@ rcgen = "0.13"
 tokio-rustls = "0.26"
 libc = "0.2"
 aes = "0.8"
+aes-gcm = "0.10"
 cbc = "0.1"
 pbkdf2 = "0.12"
 sha1 = "0.10"
 tiny_http = "0.12"
 rsa = "0.9"
 serde_urlencoded = "0.7"
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }

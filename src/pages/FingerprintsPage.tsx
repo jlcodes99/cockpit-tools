@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Sparkles, Download, Trash2, Fingerprint, Link, CircleAlert, Pencil, X, Plus, FolderOpen } from 'lucide-react';
+import { ChevronLeft, Sparkles, Download, Trash2, Fingerprint, Link, CircleAlert, Pencil, X, Plus, FolderOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { confirm as confirmDialog } from '@tauri-apps/plugin-dialog';
 import { useAccountStore } from '../stores/useAccountStore';
@@ -8,6 +8,7 @@ import { FingerprintWithStats, Account, DeviceProfile } from '../types/account';
 import { getSubscriptionTier } from '../utils/account';
 import { Page } from '../types/navigation';
 import { OverviewTabsHeader } from '../components/OverviewTabsHeader';
+import { useEscClose } from '../hooks/useEscClose';
 import { FileCorruptedModal, parseFileCorruptedError } from '../components/FileCorruptedModal';
 import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorMessage';
 
@@ -125,6 +126,12 @@ export function FingerprintsPage({ onNavigate }: FingerprintsPageProps) {
     setPreviewLoading(false);
     resetPreviewState();
   };
+
+  useEscClose(!!previewProfile, closePreviewModal);
+  useEscClose(!!showRenameModal, () => { setShowRenameModal(null); setRenameName(''); setRenameError(null); });
+  useEscClose(showImportModal, () => { if (!importing) { setShowImportModal(false); setImportError(null); } });
+  useEscClose(!!showBoundAccounts, () => { setShowBoundAccounts(null); setBoundAccountsError(null); });
+  useEscClose(!!showDetailModal, () => setShowDetailModal(null));
 
   useEffect(() => {
     if (!previewProfile) {
@@ -529,6 +536,7 @@ export function FingerprintsPage({ onNavigate }: FingerprintsPageProps) {
         <div className="modal-overlay" onClick={closePreviewModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
+              <button className="btn btn-secondary icon-only" onClick={closePreviewModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{showNameModal === 'generate' ? t('fingerprints.modals.generate.title') : t('fingerprints.modals.capture.title')}</h2>
               <button className="close-btn" onClick={closePreviewModal}><X size={20} /></button>
             </div>
@@ -595,6 +603,7 @@ export function FingerprintsPage({ onNavigate }: FingerprintsPageProps) {
         <div className="modal-overlay" onClick={() => { setShowRenameModal(null); setRenameName(''); setRenameError(null); }}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
+              <button className="btn btn-secondary icon-only" onClick={() => { setShowRenameModal(null); setRenameName(''); setRenameError(null); }} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t('fingerprints.modals.rename.title')}</h2>
               <button className="close-btn" onClick={() => { setShowRenameModal(null); setRenameName(''); setRenameError(null); }}><X size={20} /></button>
             </div>
@@ -633,6 +642,7 @@ export function FingerprintsPage({ onNavigate }: FingerprintsPageProps) {
         <div className="modal-overlay" onClick={() => !importing && (setShowImportModal(false), setImportError(null))}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
+              <button className="btn btn-secondary icon-only" onClick={() => !importing && (setShowImportModal(false), setImportError(null))} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t('fingerprints.modals.import.title')}</h2>
               <button className="close-btn" onClick={() => !importing && (setShowImportModal(false), setImportError(null))}><X size={20} /></button>
             </div>
@@ -683,6 +693,7 @@ export function FingerprintsPage({ onNavigate }: FingerprintsPageProps) {
         <div className="modal-overlay" onClick={() => { setShowBoundAccounts(null); setBoundAccountsError(null); }}>
           <div className="modal modal-md" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
+              <button className="btn btn-secondary icon-only" onClick={() => { setShowBoundAccounts(null); setBoundAccountsError(null); }} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t('fingerprints.modals.bound.title')}</h2>
               <button className="close-btn" onClick={() => { setShowBoundAccounts(null); setBoundAccountsError(null); }}><X size={20} /></button>
             </div>
@@ -767,6 +778,7 @@ export function FingerprintsPage({ onNavigate }: FingerprintsPageProps) {
         <div className="modal-overlay" onClick={() => setShowDetailModal(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
+              <button className="btn btn-secondary icon-only" onClick={() => setShowDetailModal(null)} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t('fingerprints.modals.detail.title')}</h2>
               <button className="close-btn" onClick={() => setShowDetailModal(null)}><X size={20} /></button>
             </div>

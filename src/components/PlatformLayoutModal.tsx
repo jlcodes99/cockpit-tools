@@ -37,6 +37,7 @@ import {
 } from '../stores/usePlatformLayoutStore';
 import { ORIGINAL_SIDEBAR_ENTRY_LIMIT, useSideNavLayoutStore } from '../stores/useSideNavLayoutStore';
 import { getPlatformLabel, renderPlatformIcon } from '../utils/platformMeta';
+import { useEscClose } from '../hooks/useEscClose';
 
 const PLATFORM_LAYOUT_ICON_STORAGE_KEY = 'agtools.platform_layout.custom_icons.v1';
 
@@ -343,6 +344,7 @@ export function PlatformLayoutModal({
   onClose,
 }: PlatformLayoutModalProps) {
   const { t } = useTranslation();
+  useEscClose(open, onClose);
   const sideNavLayoutMode = useSideNavLayoutStore((state) => state.mode);
   const isSidebarSelectionLimited = sideNavLayoutMode === 'original';
   const sidebarSelectionLimit = isSidebarSelectionLimited

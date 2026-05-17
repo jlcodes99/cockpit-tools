@@ -113,6 +113,8 @@ let fetchAccountsPromise: Promise<void> | null = null;
 let fetchAccountsLastTime = 0;
 let fetchCurrentPromise: Promise<void> | null = null;
 let fetchCurrentLastTime = 0;
+let allowNextEmptyAccountList = false;
+let allowNextEmptyCurrentAccount = false;
 const DEBOUNCE_MS = 500;
 
 interface AccountState {
@@ -157,10 +159,17 @@ export const useAccountStore = create<AccountState>()(
               set({ loading: true, error: null });
               try {
                   const accounts = await accountService.listAccounts();
+                  if (accounts.length === 0 && get().accounts.length > 0 && !allowNextEmptyAccountList) {
+                      console.warn('[AccountStore] 忽略异常空账号列表，保留本地缓存账号');
+                      set({ loading: false });
+                      return;
+                  }
+                  allowNextEmptyAccountList = false;
                   set({ accounts, loading: false });
               } catch (e) {
                   set({ error: String(e), loading: false });
               } finally {
+                  allowNextEmptyAccountList = false;
                   // 请求完成后延迟清除 Promise，允许短时间内的后续调用也复用结果
                   setTimeout(() => {
                       fetchAccountsPromise = null;
@@ -184,10 +193,21 @@ export const useAccountStore = create<AccountState>()(
           fetchCurrentPromise = (async () => {
               try {
                   const account = await accountService.getCurrentAccount();
+                  if (
+                      !account &&
+                      get().currentAccount &&
+                      get().accounts.length > 0 &&
+                      !allowNextEmptyCurrentAccount
+                  ) {
+                      console.warn('[AccountStore] 忽略异常空当前账号，保留本地缓存当前账号');
+                      return;
+                  }
+                  allowNextEmptyCurrentAccount = false;
                   set({ currentAccount: account });
               } catch (e) {
                   console.error('Failed to fetch current account:', e);
               } finally {
+                  allowNextEmptyCurrentAccount = false;
                   setTimeout(() => {
                       fetchCurrentPromise = null;
                   }, 100);
@@ -209,9 +229,16 @@ export const useAccountStore = create<AccountState>()(
 
     deleteAccount: async (accountId: string) => {
         const previousCurrentAccountId = get().currentAccount?.id ?? null;
-        await accountService.deleteAccount(accountId);
-        await get().fetchAccounts();
-        await get().fetchCurrentAccount();
+        allowNextEmptyAccountList = get().accounts.length <= 1;
+        allowNextEmptyCurrentAccount = previousCurrentAccountId === accountId;
+        try {
+            await accountService.deleteAccount(accountId);
+            await get().fetchAccounts();
+            await get().fetchCurrentAccount();
+        } finally {
+            allowNextEmptyAccountList = false;
+            allowNextEmptyCurrentAccount = false;
+        }
         await emitAccountsChanged({
             platformId: 'antigravity',
             reason: 'delete',
@@ -228,9 +255,19 @@ export const useAccountStore = create<AccountState>()(
 
     deleteAccounts: async (accountIds: string[]) => {
         const previousCurrentAccountId = get().currentAccount?.id ?? null;
-        await accountService.deleteAccounts(accountIds);
-        await get().fetchAccounts();
-        await get().fetchCurrentAccount();
+        const deleteIdSet = new Set(accountIds);
+        allowNextEmptyAccountList = get().accounts.every((account) => deleteIdSet.has(account.id));
+        allowNextEmptyCurrentAccount = previousCurrentAccountId
+            ? deleteIdSet.has(previousCurrentAccountId)
+            : false;
+        try {
+            await accountService.deleteAccounts(accountIds);
+            await get().fetchAccounts();
+            await get().fetchCurrentAccount();
+        } finally {
+            allowNextEmptyAccountList = false;
+            allowNextEmptyCurrentAccount = false;
+        }
         await emitAccountsChanged({
             platformId: 'antigravity',
             reason: 'delete',

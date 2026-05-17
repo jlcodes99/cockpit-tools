@@ -3,7 +3,7 @@ use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 
 use crate::models::codebuddy::{CodebuddyAccount, CodebuddyOAuthStartResponse};
-use crate::modules::codebuddy_cn_oauth::{self, CheckinResponse, CheckinStatusResponse};
+use crate::modules::codebuddy_cn_oauth;
 use crate::modules::{codebuddy_cn_account, logger};
 
 fn build_session_json(account: &CodebuddyAccount) -> String {
@@ -439,98 +439,4 @@ pub async fn sync_codebuddy_cn_to_workbuddy(app: AppHandle) -> Result<i32, Strin
     ));
 
     Ok(synced_count as i32)
-}
-
-#[tauri::command]
-pub async fn get_checkin_status_codebuddy_cn(
-    account_id: String,
-) -> Result<CheckinStatusResponse, String> {
-    let started_at = Instant::now();
-    logger::log_info(&format!(
-        "[CodeBuddy CN Checkin] 查询签到状态开始: account_id={}",
-        account_id
-    ));
-
-    let account = codebuddy_cn_account::load_account(&account_id)
-        .ok_or_else(|| format!("账号不存在: {}", account_id))?;
-
-    let status = codebuddy_cn_oauth::get_checkin_status(
-        &account.access_token,
-        account.uid.as_deref(),
-        account.enterprise_id.as_deref(),
-        account.domain.as_deref(),
-    )
-    .await?;
-
-    logger::log_info(&format!(
-        "[CodeBuddy CN Checkin] 查询签到状态完成: account_id={}, todayCheckedIn={}, streakDays={}, elapsed={}ms",
-        account_id,
-        status.today_checked_in,
-        status.streak_days,
-        started_at.elapsed().as_millis()
-    ));
-
-    Ok(status)
-}
-
-#[tauri::command]
-pub async fn checkin_codebuddy_cn(
-    app: AppHandle,
-    account_id: String,
-) -> Result<CheckinResponse, String> {
-    let started_at = Instant::now();
-    logger::log_info(&format!(
-        "[CodeBuddy CN Checkin] 执行签到开始: account_id={}",
-        account_id
-    ));
-
-    let account = codebuddy_cn_account::load_account(&account_id)
-        .ok_or_else(|| format!("账号不存在: {}", account_id))?;
-
-    let response = codebuddy_cn_oauth::perform_checkin(
-        &account.access_token,
-        account.uid.as_deref(),
-        account.enterprise_id.as_deref(),
-        account.domain.as_deref(),
-    )
-    .await?;
-
-    if response.success {
-        // 签到成功，更新账号的签到信息
-        let now = chrono::Utc::now().timestamp();
-        let streak = account.checkin_streak.saturating_add(1);
-        codebuddy_cn_account::update_checkin_info(
-            &account_id,
-            Some(now),
-            streak,
-            response.reward.clone(),
-        )
-        .map_err(|e| {
-            logger::log_warn(&format!(
-                "[CodeBuddy CN Checkin] 更新签到信息失败: account_id={}, error={}",
-                account_id, e
-            ));
-            format!("签到成功但更新状态失败: {}", e)
-        })?;
-
-        let _ = crate::modules::tray::update_tray_menu(&app);
-        let _ = app.emit(
-            "codebuddy_cn:checkin_completed",
-            serde_json::json!({
-                "accountId": account_id,
-                "success": true,
-                "reward": response.reward,
-                "streak": streak,
-            }),
-        );
-    }
-
-    logger::log_info(&format!(
-        "[CodeBuddy CN Checkin] 执行签到完成: account_id={}, success={}, elapsed={}ms",
-        account_id,
-        response.success,
-        started_at.elapsed().as_millis()
-    ));
-
-    Ok(response)
 }
