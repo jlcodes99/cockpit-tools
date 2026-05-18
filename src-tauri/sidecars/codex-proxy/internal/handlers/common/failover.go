@@ -426,15 +426,16 @@ func isSchemaValidationMessage(msgLower string) bool {
 	return false
 }
 
-// handleFuzzyModelRoutingError 在 fuzzy 模式下处理可归一化的模型路由错误
-// 如果最后失败的错误可以被归一化为非 503 状态码（如 model_not_found → 404），
-// 则透传该错误体和归一化后的状态码；否则返回 false，由调用方继续返回通用 503
-func handleFuzzyModelRoutingError(c *gin.Context, lastFailoverError *FailoverError) bool {
+// handleFuzzyPassthroughError 在 fuzzy 模式下保留明确的上游错误语义
+// - 上游 4xx：直接透传，避免 429/401/403 等被统一 503 淹没
+// - 上游 5xx 但可归一化为 4xx（如 model_not_found → 404）：也透传归一化后的状态码
+// 其他情况返回 false，由调用方继续返回通用 503
+func handleFuzzyPassthroughError(c *gin.Context, lastFailoverError *FailoverError) bool {
 	if lastFailoverError == nil {
 		return false
 	}
 	normalizedStatus := normalizeUpstreamErrorStatus(lastFailoverError.Status, lastFailoverError.Body)
-	if normalizedStatus == lastFailoverError.Status {
+	if normalizedStatus < 400 || normalizedStatus >= 500 {
 		return false
 	}
 	var errBody map[string]interface{}
@@ -483,9 +484,9 @@ func fuzzyUnavailableMessage(lastFailoverError *FailoverError, lastError error) 
 // lastError: 最后一个错误
 // apiType: API 类型（用于错误消息）
 func HandleAllChannelsFailed(c *gin.Context, fuzzyMode bool, lastFailoverError *FailoverError, lastError error, apiType string) {
-	// Fuzzy 模式下默认返回通用错误，但保留明确的模型路由错误语义
+	// Fuzzy 模式下默认返回通用错误，但保留明确的上游客户端错误语义
 	if fuzzyMode {
-		if handleFuzzyModelRoutingError(c, lastFailoverError) {
+		if handleFuzzyPassthroughError(c, lastFailoverError) {
 			return
 		}
 		message := fuzzyUnavailableMessage(lastFailoverError, lastError)
@@ -525,9 +526,9 @@ func HandleAllChannelsFailed(c *gin.Context, fuzzyMode bool, lastFailoverError *
 
 // HandleAllKeysFailed 处理所有密钥都失败的情况（单渠道模式）
 func HandleAllKeysFailed(c *gin.Context, fuzzyMode bool, lastFailoverError *FailoverError, lastError error, apiType string) {
-	// Fuzzy 模式下默认返回通用错误，但保留明确的模型路由错误语义
+	// Fuzzy 模式下默认返回通用错误，但保留明确的上游客户端错误语义
 	if fuzzyMode {
-		if handleFuzzyModelRoutingError(c, lastFailoverError) {
+		if handleFuzzyPassthroughError(c, lastFailoverError) {
 			return
 		}
 		message := fuzzyUnavailableMessage(lastFailoverError, lastError)

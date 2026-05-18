@@ -1249,10 +1249,11 @@ func TestNormalizeUpstreamErrorStatus(t *testing.T) {
 	}
 }
 
-func TestHandleAllFailedFuzzyMode_ModelNotFoundNormalizesTo404(t *testing.T) {
+func TestHandleAllFailedFuzzyMode_Passthrough4xxAndModelRouting404(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	modelNotFoundBody := []byte(`{"error":{"code":"model_not_found","message":"No available channel for model gpt-5.4 under group codex","type":"new_api_error"}}`)
 	quotaBody := []byte(`{"error":{"message":"quota exceeded"}}`)
+	invalidRequestBody := []byte(`{"error":{"type":"invalid_request_error","message":"unsupported parameter"}}`)
 
 	tests := []struct {
 		name       string
@@ -1274,18 +1275,25 @@ func TestHandleAllFailedFuzzyMode_ModelNotFoundNormalizesTo404(t *testing.T) {
 			wantStatus: http.StatusNotFound,
 		},
 		{
-			name: "all channels failed - 429 quota stays generic 503 in fuzzy mode",
+			name: "all channels failed - 429 quota preserves upstream status in fuzzy mode",
 			handle: func(c *gin.Context) {
 				HandleAllChannelsFailed(c, true, &FailoverError{Status: http.StatusTooManyRequests, Body: quotaBody}, nil, "Messages")
 			},
-			wantStatus: http.StatusServiceUnavailable,
+			wantStatus: http.StatusTooManyRequests,
 		},
 		{
-			name: "all keys failed - 429 quota stays generic 503 in fuzzy mode",
+			name: "all keys failed - 429 quota preserves upstream status in fuzzy mode",
 			handle: func(c *gin.Context) {
 				HandleAllKeysFailed(c, true, &FailoverError{Status: http.StatusTooManyRequests, Body: quotaBody}, nil, "Messages")
 			},
-			wantStatus: http.StatusServiceUnavailable,
+			wantStatus: http.StatusTooManyRequests,
+		},
+		{
+			name: "all channels failed - 400 invalid request preserves upstream status in fuzzy mode",
+			handle: func(c *gin.Context) {
+				HandleAllChannelsFailed(c, true, &FailoverError{Status: http.StatusBadRequest, Body: invalidRequestBody}, nil, "Messages")
+			},
+			wantStatus: http.StatusBadRequest,
 		},
 	}
 
