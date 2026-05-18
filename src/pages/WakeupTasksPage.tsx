@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { confirm as confirmDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { Plus, Pencil, Trash2, Power, X } from 'lucide-react';
+import { ChevronLeft, Plus, Pencil, Trash2, Power, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAccountStore } from '../stores/useAccountStore';
 import { Page } from '../types/navigation';
@@ -35,6 +35,7 @@ import {
   type WakeupOfficialLsVersionMode,
 } from '../utils/wakeupOfficialLsVersion';
 import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorMessage';
+import { useEscClose } from '../hooks/useEscClose';
 import { OverviewTabsHeader } from '../components/OverviewTabsHeader';
 
 const TASKS_STORAGE_KEY = 'agtools.wakeup.tasks';
@@ -966,6 +967,10 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
     clearTestModalError();
     setShowTestModal(false);
   }, [cancelImmediateTest, clearTestModalError, testing]);
+
+  useEscClose(showTestModal, closeTestModal);
+  useEscClose(showHistoryModal, () => setShowHistoryModal(false));
+  useEscClose(showModal, () => setShowModal(false));
   const modelById = useMemo(() => {
     const map = new Map<string, AvailableModel>();
     filteredModels.forEach((model) => map.set(model.id, model));
@@ -2363,6 +2368,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
+              <button className="btn btn-secondary icon-only" onClick={closeTestModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t('wakeup.dialogs.testTitle')}</h2>
               <button
                 className="modal-close"
@@ -2560,6 +2566,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
+              <button className="btn btn-secondary icon-only" onClick={() => setShowHistoryModal(false)} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t('wakeup.dialogs.historyTitle')}</h2>
               <button
                 className="modal-close"
@@ -2633,6 +2640,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal modal-lg wakeup-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
+              <button className="btn btn-secondary icon-only" onClick={() => setShowModal(false)} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{editingTaskId ? t('wakeup.dialogs.taskTitleEdit') : t('wakeup.dialogs.taskTitleNew')}</h2>
               <button
                 className="modal-close"

@@ -584,6 +584,10 @@
       "hideDockIconDesc": "獨立控制 Dock 圖示顯示狀態，不受視窗最小化行為影響",
       "hideDockIconOff": "否（顯示 Dock 圖示）",
       "hideDockIconOn": "是（隱藏 Dock 圖示）",
+      "trayIconStyle": "選單列圖示樣式（僅 macOS）",
+      "trayIconStyleDesc": "選擇系統單色圖示或原彩色 App 圖示",
+      "trayIconStyleTemplate": "單色圖示",
+      "trayIconStyleColor": "彩色圖示",
       "floatingCardStartup": "啟動時顯示懸浮卡片",
       "floatingCardStartupDesc": "應用啟動後預設顯示懸浮帳號卡片",
       "floatingCardAlwaysOnTop": "懸浮卡片預設置頂",
@@ -1886,7 +1890,7 @@
         "empty": "尚無額度統計"
       },
       "oauthBinding": {
-        "desc": "切換或測試 API 服務時，登入狀態使用綁定的 OAuth 帳號，Provider 使用目前 API 服務設定。",
+        "desc": "可選綁定。未綁定時 API 服務會沿用原 API Key 邏輯；綁定後登入狀態使用 OAuth 帳號，Provider 使用目前 API 服務設定。",
         "currentService": "API 服務：{{name}}"
       }
     },
@@ -1986,14 +1990,17 @@
         "action": "綁定 OAuth",
         "actionShort": "綁定",
         "title": "綁定 OAuth 帳號",
-        "desc": "切換此 API Key 帳號時，登入狀態使用綁定的 OAuth 帳號，Provider 使用目前 API Key 帳號設定。",
+        "desc": "可選綁定。未綁定時此帳號會沿用原 API Key 邏輯切換；綁定後登入狀態使用 OAuth 帳號，Provider 使用目前 API Key 帳號設定。",
         "currentAccount": "API Key 帳號：{{name}}",
         "selectLabel": "選擇 OAuth 帳號",
         "empty": "尚無 OAuth 帳號，請先新增 OAuth 授權帳號。",
         "validationRequired": "請選擇 OAuth 帳號",
         "saveSuccess": "OAuth 綁定已更新",
         "saveFailed": "OAuth 綁定失敗：{{error}}",
-        "switchRequiresBinding": "請先綁定 OAuth 帳號"
+        "switchRequiresBinding": "請先綁定 OAuth 帳號",
+        "clearAction": "解除綁定",
+        "clearSuccess": "OAuth 綁定已解除",
+        "clearFailed": "解除 OAuth 綁定失敗：{{error}}"
       }
     },
     "local": {
@@ -2707,7 +2714,9 @@
     "cursorRefreshInterval": "配額自動更新",
     "gemini": {
       "title": "Gemini Cli 設定",
-      "appPath": "Gemini Cli 路徑"
+      "appPath": "Gemini Cli 路徑",
+      "syncWsl": "同步 WSL 設定",
+      "syncWslDesc": "切換帳號時自動覆寫 WSL 內的 .gemini 設定"
     },
     "geminiRefreshInterval": "配額自動刷新",
     "codebuddy": {

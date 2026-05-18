@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { X, Download, Sparkles, RefreshCw, Check, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { useEscClose } from '../hooks/useEscClose';
 import './UpdateNotification.css';
 
 export interface UpdateInfo {
@@ -58,6 +59,9 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
   onSkipUpdate,
 }) => {
   const { t, i18n } = useTranslation();
+
+  useEscClose(true, onClose);
+
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [isSkipping, setIsSkipping] = useState(false);

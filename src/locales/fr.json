@@ -584,6 +584,10 @@
       "hideDockIconDesc": "Contrôle l’affichage de l’icône du Dock indépendamment du comportement de minimisation de la fenêtre",
       "hideDockIconOff": "Non (Afficher l’icône du Dock)",
       "hideDockIconOn": "Oui (Masquer l’icône du Dock)",
+      "trayIconStyle": "Style de l’icône de barre des menus (macOS uniquement)",
+      "trayIconStyleDesc": "Choisissez l’icône système monochrome ou l’icône d’app originale en couleur",
+      "trayIconStyleTemplate": "Icône monochrome",
+      "trayIconStyleColor": "Icône couleur",
       "floatingCardStartup": "Afficher la carte flottante au démarrage",
       "floatingCardStartupDesc": "Afficher automatiquement la carte de compte flottante après le lancement de l’application",
       "floatingCardAlwaysOnTop": "Garder la carte flottante au premier plan par défaut",
@@ -1886,7 +1890,7 @@
         "empty": "Aucune statistique de quota pour l’instant"
       },
       "oauthBinding": {
-        "desc": "Lors du basculement vers le service API ou de son test, la session utilise le compte OAuth lié et le Provider utilise la configuration actuelle du service API.",
+        "desc": "Facultatif. Sans liaison, le service API conserve le flux API Key existant ; une fois lié, la session utilise le compte OAuth et le Provider utilise la configuration du service API.",
         "currentService": "Service API : {{name}}"
       }
     },
@@ -2299,14 +2303,17 @@
         "action": "Lier OAuth",
         "actionShort": "Lier",
         "title": "Lier un compte OAuth",
-        "desc": "Lors du passage à ce compte API Key, la session utilise le compte OAuth lié et le Provider utilise la configuration de ce compte API Key.",
+        "desc": "Facultatif. Sans liaison, ce compte bascule avec le flux API Key existant ; une fois lié, la session utilise le compte OAuth et le Provider utilise la configuration de ce compte API Key.",
         "currentAccount": "Compte API Key : {{name}}",
         "selectLabel": "Choisir un compte OAuth",
         "empty": "Aucun compte OAuth. Ajoutez d’abord un compte autorisé OAuth.",
         "validationRequired": "Choisissez un compte OAuth",
         "saveSuccess": "Lien OAuth mis à jour",
         "saveFailed": "Échec du lien OAuth : {{error}}",
-        "switchRequiresBinding": "Liez d’abord un compte OAuth"
+        "switchRequiresBinding": "Liez d’abord un compte OAuth",
+        "clearAction": "Dissocier",
+        "clearSuccess": "Liaison OAuth supprimée.",
+        "clearFailed": "Échec de la suppression de la liaison OAuth : {{error}}"
       }
     },
     "modelProviders": {
@@ -2707,7 +2714,9 @@
     "cursorRefreshInterval": "Actualisation auto du quota",
     "gemini": {
       "title": "Paramètres Gemini Cli",
-      "appPath": "Chemin Gemini Cli"
+      "appPath": "Chemin Gemini Cli",
+      "syncWsl": "Synchroniser la configuration WSL",
+      "syncWslDesc": "Remplacer automatiquement la configuration .gemini dans WSL lors du changement de compte"
     },
     "geminiRefreshInterval": "Actualisation auto du quota",
     "codebuddy": {

@@ -9,8 +9,8 @@ use url::Url;
 
 use crate::modules;
 use crate::modules::config::{
-    self, CloseWindowBehavior, MinimizeWindowBehavior, UserConfig, DEFAULT_REPORT_PORT,
-    DEFAULT_WS_PORT,
+    self, CloseWindowBehavior, MinimizeWindowBehavior, TrayIconStyle, UserConfig,
+    DEFAULT_REPORT_PORT, DEFAULT_WS_PORT,
 };
 use crate::modules::web_report;
 use crate::modules::websocket;
@@ -75,6 +75,8 @@ pub struct GeneralConfig {
     pub cursor_auto_refresh_minutes: i32,
     /// Gemini 自动刷新间隔（分钟），-1 表示禁用
     pub gemini_auto_refresh_minutes: i32,
+    /// Gemini 切号时是否同步覆盖 WSL 配置 (Windows Only)
+    pub gemini_sync_wsl: bool,
     /// CodeBuddy 自动刷新间隔（分钟），-1 表示禁用
     pub codebuddy_auto_refresh_minutes: i32,
     /// CodeBuddy CN 自动刷新间隔（分钟），-1 表示禁用
@@ -91,6 +93,8 @@ pub struct GeneralConfig {
     pub minimize_behavior: String,
     /// 是否隐藏 Dock 图标（macOS）
     pub hide_dock_icon: bool,
+    /// 菜单栏图标样式（macOS）: "template", "color"
+    pub tray_icon_style: String,
     /// 是否在启动时显示悬浮卡片
     pub floating_card_show_on_startup: bool,
     /// 悬浮卡片是否默认置顶
@@ -1115,6 +1119,7 @@ pub fn save_network_config(
         kiro_auto_refresh_minutes: current.kiro_auto_refresh_minutes,
         cursor_auto_refresh_minutes: current.cursor_auto_refresh_minutes,
         gemini_auto_refresh_minutes: current.gemini_auto_refresh_minutes,
+        gemini_sync_wsl: current.gemini_sync_wsl,
         codebuddy_auto_refresh_minutes: current.codebuddy_auto_refresh_minutes,
         codebuddy_cn_auto_refresh_minutes: current.codebuddy_cn_auto_refresh_minutes,
         workbuddy_auto_refresh_minutes: current.workbuddy_auto_refresh_minutes,
@@ -1123,6 +1128,7 @@ pub fn save_network_config(
         close_behavior: current.close_behavior,
         minimize_behavior: current.minimize_behavior,
         hide_dock_icon: current.hide_dock_icon,
+        tray_icon_style: current.tray_icon_style,
         floating_card_show_on_startup: current.floating_card_show_on_startup,
         floating_card_always_on_top: current.floating_card_always_on_top,
         app_auto_launch_enabled: current.app_auto_launch_enabled,
@@ -1379,6 +1385,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         kiro_auto_refresh_minutes: user_config.kiro_auto_refresh_minutes,
         cursor_auto_refresh_minutes: user_config.cursor_auto_refresh_minutes,
         gemini_auto_refresh_minutes: user_config.gemini_auto_refresh_minutes,
+        gemini_sync_wsl: user_config.gemini_sync_wsl,
         codebuddy_auto_refresh_minutes: user_config.codebuddy_auto_refresh_minutes,
         codebuddy_cn_auto_refresh_minutes: user_config.codebuddy_cn_auto_refresh_minutes,
         workbuddy_auto_refresh_minutes: user_config.workbuddy_auto_refresh_minutes,
@@ -1387,6 +1394,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         close_behavior: close_behavior_str.to_string(),
         minimize_behavior: minimize_behavior_str.to_string(),
         hide_dock_icon: user_config.hide_dock_icon,
+        tray_icon_style: user_config.tray_icon_style.as_str().to_string(),
         floating_card_show_on_startup: user_config.floating_card_show_on_startup,
         floating_card_always_on_top: user_config.floating_card_always_on_top,
         app_auto_launch_enabled,
@@ -1505,6 +1513,7 @@ pub fn save_general_config(
     kiro_auto_refresh_minutes: Option<i32>,
     cursor_auto_refresh_minutes: Option<i32>,
     gemini_auto_refresh_minutes: Option<i32>,
+    gemini_sync_wsl: Option<bool>,
     codebuddy_auto_refresh_minutes: Option<i32>,
     codebuddy_cn_auto_refresh_minutes: Option<i32>,
     workbuddy_auto_refresh_minutes: Option<i32>,
@@ -1513,6 +1522,7 @@ pub fn save_general_config(
     close_behavior: String,
     minimize_behavior: Option<String>,
     hide_dock_icon: Option<bool>,
+    tray_icon_style: Option<String>,
     floating_card_show_on_startup: Option<bool>,
     floating_card_always_on_top: Option<bool>,
     app_auto_launch_enabled: Option<bool>,
@@ -1640,6 +1650,10 @@ pub fn save_general_config(
         Some(_) | None => current.minimize_behavior.clone(),
     };
     let hide_dock_icon_value = hide_dock_icon.unwrap_or(current.hide_dock_icon);
+    let tray_icon_style_value = tray_icon_style
+        .as_deref()
+        .map(TrayIconStyle::from_str)
+        .unwrap_or(current.tray_icon_style);
     let floating_card_show_on_startup_value =
         floating_card_show_on_startup.unwrap_or(current.floating_card_show_on_startup);
     let floating_card_always_on_top_value =
@@ -1678,6 +1692,8 @@ pub fn save_general_config(
     let current_app_auto_launch_enabled = current.app_auto_launch_enabled;
     #[cfg(target_os = "macos")]
     let hide_dock_icon_changed = current.hide_dock_icon != hide_dock_icon_value;
+    #[cfg(target_os = "macos")]
+    let tray_icon_style_changed = current.tray_icon_style != tray_icon_style_value;
 
     let new_config = UserConfig {
         // 保留网络设置不变
@@ -1708,6 +1724,8 @@ pub fn save_general_config(
             .unwrap_or(current.cursor_auto_refresh_minutes),
         gemini_auto_refresh_minutes: gemini_auto_refresh_minutes
             .unwrap_or(current.gemini_auto_refresh_minutes),
+        gemini_sync_wsl: gemini_sync_wsl
+            .unwrap_or(current.gemini_sync_wsl),
         codebuddy_auto_refresh_minutes: codebuddy_auto_refresh_minutes
             .unwrap_or(current.codebuddy_auto_refresh_minutes),
         codebuddy_cn_auto_refresh_minutes: codebuddy_cn_auto_refresh_minutes
@@ -1721,6 +1739,7 @@ pub fn save_general_config(
         close_behavior: close_behavior_enum,
         minimize_behavior: minimize_behavior_enum,
         hide_dock_icon: hide_dock_icon_value,
+        tray_icon_style: tray_icon_style_value,
         floating_card_show_on_startup: floating_card_show_on_startup_value,
         floating_card_always_on_top: floating_card_always_on_top_value,
         app_auto_launch_enabled: app_auto_launch_enabled_value,
@@ -1873,6 +1892,13 @@ pub fn save_general_config(
     #[cfg(target_os = "macos")]
     if hide_dock_icon_changed {
         crate::apply_macos_activation_policy(&app);
+    }
+
+    #[cfg(target_os = "macos")]
+    if tray_icon_style_changed {
+        if let Err(err) = modules::tray::apply_tray_icon_style(&app) {
+            modules::logger::log_warn(&format!("[Tray] 保存通用设置后应用图标样式失败: {}", err));
+        }
     }
 
     if language_changed {

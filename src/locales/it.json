@@ -584,6 +584,10 @@
       "hideDockIconDesc": "Controlla la visibilità dell’icona del Dock in modo indipendente dal comportamento di minimizzazione della finestra",
       "hideDockIconOff": "No (Mostra icona del Dock)",
       "hideDockIconOn": "Sì (Nascondi icona del Dock)",
+      "trayIconStyle": "Stile icona barra dei menu (solo macOS)",
+      "trayIconStyleDesc": "Scegli l’icona di sistema monocromatica o l’icona app originale a colori",
+      "trayIconStyleTemplate": "Icona monocromatica",
+      "trayIconStyleColor": "Icona a colori",
       "floatingCardStartup": "Mostra la scheda flottante all'avvio",
       "floatingCardStartupDesc": "Mostra automaticamente la scheda account flottante dopo l'avvio dell'app",
       "floatingCardAlwaysOnTop": "Mantieni la scheda flottante sempre in primo piano per impostazione predefinita",
@@ -1886,7 +1890,7 @@
         "empty": "Nessuna statistica quota"
       },
       "oauthBinding": {
-        "desc": "Quando passi al servizio API o lo testi, lo stato di accesso usa l’account OAuth associato e il Provider usa la configurazione attuale del servizio API.",
+        "desc": "Opzionale. Senza collegamento, il servizio API usa il flusso API Key esistente; dopo il collegamento, l’accesso usa l’account OAuth e il Provider usa la configurazione del servizio API.",
         "currentService": "Servizio API: {{name}}"
       }
     },
@@ -2299,14 +2303,17 @@
         "action": "Collega OAuth",
         "actionShort": "Collega",
         "title": "Collega account OAuth",
-        "desc": "Quando passi a questo account API Key, lo stato di accesso usa l'account OAuth collegato e il Provider usa la configurazione di questo account API Key.",
+        "desc": "Opzionale. Senza collegamento, questo account cambia con il flusso API Key esistente; dopo il collegamento, l’accesso usa l’account OAuth e il Provider usa la configurazione di questo account API Key.",
         "currentAccount": "Account API Key: {{name}}",
         "selectLabel": "Seleziona account OAuth",
         "empty": "Nessun account OAuth. Aggiungi prima un account autorizzato OAuth.",
         "validationRequired": "Seleziona un account OAuth",
         "saveSuccess": "Collegamento OAuth aggiornato",
         "saveFailed": "Collegamento OAuth non riuscito: {{error}}",
-        "switchRequiresBinding": "Collega prima un account OAuth"
+        "switchRequiresBinding": "Collega prima un account OAuth",
+        "clearAction": "Scollega",
+        "clearSuccess": "Collegamento OAuth rimosso.",
+        "clearFailed": "Rimozione del collegamento OAuth non riuscita: {{error}}"
       }
     },
     "modelProviders": {
@@ -2707,7 +2714,9 @@
     "cursorRefreshInterval": "Aggiornamento automatico quota",
     "gemini": {
       "title": "Impostazioni Gemini Cli",
-      "appPath": "Percorso Gemini Cli"
+      "appPath": "Percorso Gemini Cli",
+      "syncWsl": "Sincronizza configurazione WSL",
+      "syncWslDesc": "Sovrascrive automaticamente la configurazione .gemini in WSL quando cambi account"
     },
     "geminiRefreshInterval": "Aggiornamento automatico quota",
     "codebuddy": {

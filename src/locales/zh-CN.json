@@ -738,6 +738,10 @@
       "hideDockIconDesc": "独立控制程序坞图标显示状态，不受窗口最小化行为影响",
       "hideDockIconOff": "否（显示Dock图标）",
       "hideDockIconOn": "是（隐藏Dock图标）",
+      "trayIconStyle": "菜单栏图标样式（仅 macOS）",
+      "trayIconStyleDesc": "选择系统单色图标或原彩色 App 图标",
+      "trayIconStyleTemplate": "单色图标",
+      "trayIconStyleColor": "彩色图标",
       "floatingCardStartup": "启动时显示悬浮卡片",
       "floatingCardStartupDesc": "应用启动后默认展示悬浮账号卡片",
       "floatingCardAlwaysOnTop": "悬浮卡片默认置顶",
@@ -1759,12 +1763,12 @@
       "timeoutRetry": "刷新授权链接"
     },
     "token": {
-      "desc": "粘贴 auth.json、账号 JSON 或 refresh_token。",
-      "placeholder": "示例：每行一个 refresh_token，或 {\"refresh_token\":\"rt_...\"}",
+      "desc": "粘贴 auth.json、账号 JSON、Sub2API JSON、accessToken 或 refresh_token。",
+      "placeholder": "示例：直接粘贴 accessToken、Sub2API 导出 JSON，或 {\"accessToken\":\"eyJ...\"}",
       "formatSummary": "必填字段与示例（点击展开）",
-      "formatRequired": "支持完整 tokens（id_token + access_token）、单个 refresh_token，或每行一个 refresh_token。仅 refresh_token 会先联网换取完整凭据。",
+      "formatRequired": "支持完整 tokens（id_token + access_token）、Sub2API 导出 JSON、仅 accessToken 或仅 refresh_token。仅 refresh_token 会先联网换取完整凭据。",
       "formatSingleLabel": "完整 tokens 示例",
-      "formatRefreshOnlyLabel": "仅 refresh_token 示例",
+      "formatRefreshOnlyLabel": "仅 accessToken / refresh_token 示例",
       "formatBatchLabel": "批量示例"
     },
     "exportFormat": {
@@ -1957,7 +1961,7 @@
         "save": "保存集合"
       },
       "oauthBinding": {
-        "desc": "切换或测试 API 服务时，登录态使用绑定的 OAuth 账号，Provider 使用当前 API 服务配置。",
+        "desc": "可选绑定。未绑定时 API 服务按原 API Key 逻辑运行；绑定后登录态使用 OAuth 账号，Provider 使用当前 API 服务配置。",
         "currentService": "API 服务：{{name}}"
       }
     },
@@ -2057,14 +2061,17 @@
         "action": "绑定 OAuth",
         "actionShort": "绑定",
         "title": "绑定 OAuth 账号",
-        "desc": "切换该 API Key 账号时，登录态使用绑定的 OAuth 账号，Provider 使用当前 API Key 账号配置。",
+        "desc": "可选绑定。未绑定时该账号按原 API Key 逻辑切换；绑定后登录态使用 OAuth 账号，Provider 使用当前 API Key 账号配置。",
         "currentAccount": "API Key 账号：{{name}}",
         "selectLabel": "选择 OAuth 账号",
         "empty": "暂无 OAuth 账号，请先添加 OAuth 授权账号。",
         "validationRequired": "请选择 OAuth 账号",
         "saveSuccess": "OAuth 绑定已更新",
         "saveFailed": "OAuth 绑定失败：{{error}}",
-        "switchRequiresBinding": "请先绑定 OAuth 账号"
+        "switchRequiresBinding": "请先绑定 OAuth 账号",
+        "clearAction": "解除绑定",
+        "clearSuccess": "OAuth 绑定已解除",
+        "clearFailed": "解除 OAuth 绑定失败：{{error}}"
       }
     },
     "cockpitApi": {
@@ -2862,7 +2869,9 @@
     },
     "gemini": {
       "title": "Gemini Cli 设置",
-      "appPath": "Gemini Cli 路径"
+      "appPath": "Gemini Cli 路径",
+      "syncWsl": "同步 WSL 配置",
+      "syncWslDesc": "切换账号时自动覆盖 WSL 下的 .gemini 配置"
     },
     "geminiRefreshInterval": "配额自动刷新",
     "error": {

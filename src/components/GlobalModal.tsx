@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGlobalModalStore, type GlobalModalAction } from '../stores/useGlobalModalStore';
+import { useEscClose } from '../hooks/useEscClose';
 import './GlobalModal.css';
 
 function resolveActionClass(variant: GlobalModalAction['variant']): string {
@@ -22,6 +23,8 @@ export function GlobalModal() {
     if (!modal || modal.closeOnOverlay === false) return;
     closeModal();
   }, [closeModal, modal]);
+
+  useEscClose(visible, closeModal);
 
   const handleActionClick = useCallback(async (action: GlobalModalAction) => {
     if (action.disabled) return;

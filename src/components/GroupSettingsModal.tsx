@@ -10,6 +10,7 @@ import {
   getGroupSettings,
   saveGroupSettings,
 } from '../services/groupService';
+import { useEscClose } from '../hooks/useEscClose';
 import {
   getModelDisplayName,
   getDefaultGroups,
@@ -39,6 +40,7 @@ export const GroupSettingsModal: React.FC<GroupSettingsModalProps> = ({
   availableModels = [],
 }) => {
   const { t } = useTranslation();
+  useEscClose(isOpen, onClose);
   const [groups, setGroups] = useState<GroupData[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

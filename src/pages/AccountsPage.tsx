@@ -60,6 +60,7 @@ import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDrop
 import { AccountGroupModal, AddToGroupModal } from '../components/AccountGroupModal'
 import { GroupAccountPickerModal } from '../components/GroupAccountPickerModal'
 import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorMessage'
+import { useEscClose } from '../hooks/useEscClose'
 import {
   AccountGroup,
   getAccountGroups,
@@ -1393,7 +1394,6 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
   }, [consumeExternalProviderImport])
 
   const closeAddModal = () => {
-    // 允许用户随时关闭弹窗，取消正在进行的 OAuth 流程
     if (addStatus === 'loading') {
       accountService.cancelOAuthLogin().catch(() => { })
     }
@@ -1401,6 +1401,9 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     resetAddModalState()
     setOauthUrl('')
   }
+
+  useEscClose(showAddModal, closeAddModal);
+  useEscClose(showSwitchHistoryModal, () => setShowSwitchHistoryModal(false));
 
   const runModalAction = async (
     label: string,

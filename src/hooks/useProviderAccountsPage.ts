@@ -40,6 +40,7 @@ import {
   type ExternalProviderImportPayload,
 } from '../utils/externalProviderImport';
 import { useDropdownPanelPlacement } from './useDropdownPanelPlacement';
+import { useEscClose } from './useEscClose';
 import {
   ACCOUNTS_OVERVIEW_FILTER_PERSISTENCE_CHANGED_EVENT,
   type AccountsOverviewFilterPersistenceChangedDetail,
@@ -1395,6 +1396,8 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     setShowAddModal(false);
     resetAddModalState();
   }, [resetAddModalState]);
+
+  useEscClose(showAddModal, closeAddModal);
 
   const closeExternalImportProgressModal = useCallback(() => {
     setExternalImportProgress((current) => {

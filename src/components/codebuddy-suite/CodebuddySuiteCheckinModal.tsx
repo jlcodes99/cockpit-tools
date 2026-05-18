@@ -6,9 +6,10 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Gift, CheckCircle, XCircle, Loader2, RefreshCw, CalendarCheck, Flame, Trophy } from 'lucide-react';
+import { X, ChevronLeft, Gift, CheckCircle, XCircle, Loader2, RefreshCw, CalendarCheck, Flame, Trophy } from 'lucide-react';
 import type { CodebuddySuiteAccountBase, WorkbuddyAccount } from '../../types/codebuddy-suite';
 import type { CheckinStatusResponse, CheckinResponse } from '../../types/codebuddy';
+import { useEscClose } from '../../hooks/useEscClose';
 
 interface CodebuddySuiteCheckinModalProps<TAccount extends CodebuddySuiteAccountBase> {
   accounts: TAccount[];
@@ -36,6 +37,7 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
   onCheckinComplete,
 }: CodebuddySuiteCheckinModalProps<TAccount>) {
   const { t } = useTranslation();
+  useEscClose(true, onClose);
   const [accountStates, setAccountStates] = useState<Record<string, AccountCheckinState>>({});
   const [checkAllLoading, setCheckAllLoading] = useState(false);
   const [refreshLoading, setRefreshLoading] = useState(false);
@@ -112,6 +114,7 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content checkin-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
+          <button className="btn btn-secondary icon-only" onClick={onClose} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
           <h2><CalendarCheck size={20} /> {t('workbuddy.checkin.modalTitle', '每日签到')} - {platformLabel}</h2>
           <button className="modal-close" onClick={onClose}><X size={18} /></button>
         </div>

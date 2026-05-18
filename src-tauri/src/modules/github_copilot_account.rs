@@ -504,6 +504,38 @@ fn read_local_copilot_github_login(db_path: &Path) -> Result<Option<String>, Str
     read_vscdb_string_item(&conn, VSCODE_GHCP_CURRENT_LOGIN_KEY)
 }
 
+fn copilot_login_db_paths(data_root: &Path) -> Vec<PathBuf> {
+    let legacy_path = crate::modules::vscode_paths::vscode_state_db_path(data_root);
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut paths = Vec::new();
+        if let Some(shared_path) = crate::modules::vscode_paths::vscode_shared_storage_db_path(data_root)
+        {
+            paths.push(shared_path);
+        }
+        paths.push(legacy_path);
+        paths
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        vec![legacy_path]
+    }
+}
+
+fn read_local_copilot_github_login_from_data_root(
+    data_root: &Path,
+) -> Result<Option<(String, PathBuf)>, String> {
+    for db_path in copilot_login_db_paths(data_root) {
+        if let Some(login) = read_local_copilot_github_login(&db_path)? {
+            return Ok(Some((login, db_path)));
+        }
+    }
+
+    Ok(None)
+}
+
 fn github_session_account_field<'a>(
     session: &'a serde_json::Value,
     field: &str,
@@ -531,12 +563,8 @@ fn github_session_access_token(session: &serde_json::Value) -> Option<&str> {
 
 pub async fn import_from_local() -> Result<Option<GitHubCopilotAccount>, String> {
     let data_root = crate::modules::vscode_paths::resolve_vscode_data_root_for_state_db()?;
-    let db_path = crate::modules::vscode_paths::vscode_state_db_path(&data_root);
-    if !db_path.exists() {
-        return Ok(None);
-    }
 
-    let target_login = match read_local_copilot_github_login(&db_path)? {
+    let (target_login, db_path) = match read_local_copilot_github_login_from_data_root(&data_root)? {
         Some(value) => value,
         None => return Ok(None),
     };

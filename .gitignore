@@ -49,3 +49,4 @@ target/
 **/*.rs.bk
 docs/plugin-architecture-proposal.md
 .aitasks
+.qoder/

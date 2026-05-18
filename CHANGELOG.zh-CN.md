@@ -7,6 +7,47 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [0.23.9] - 2026-05-17
+
+### 新增
+- **Codex Token 导入现支持仅 accessToken 与 Sub2API 导出格式**：Codex 导入可读取原始 JWT access token、`accessToken`/`access_token` 字段、camelCase token JSON、逐行 Token 输入，以及 Sub2API 导出 JSON 中的 OpenAI OAuth 账号。
+- **macOS 菜单栏图标样式现可配置**：设置页可在系统单色状态图标和原彩色 App 图标之间切换；保存设置或导入用户配置变化后，会即时应用所选样式。
+
+### 变更
+- **Codex API Key 切号现写入官方运行时 provider 状态**：API Key 账号会将所选供应商写入受管 `codex_local_access` provider，并把 bearer token 写入 `config.toml`，同时保留供应商身份配置并避免残留 `openai_base_url` 状态。
+- **Codex OAuth 导入现从 access token 保留更多身份元数据**：仅 accessToken 导入会在 claim 可用时提取邮箱、用户 ID、套餐、账号 ID、组织 ID 与订阅到期时间。
+
+### 修复
+- **macOS 打包版本现可正常显示单色菜单栏图标**：使用前会将 template 托盘图标规范化到菜单栏尺寸，并在托盘创建后再次应用 template 标记。
+- **Codex 切回内置 OpenAI 时现会清理受管 API Key 运行时 provider 状态**：切回内置路径会移除 Cockpit 管理的 provider/token 条目，同时保留无关的手动 provider。
+- **Cursor 额度徽标在 70%+ 用量时现使用预期的中档样式**：额度指示不再在达到临界范围前提前使用警告样式。
+
+---
+## [0.23.8] - 2026-05-17
+
+### 新增
+- **Codex OAuth 绑定弹框现可直接解除绑定**：API Key 账号与本地 API 服务在已绑定 OAuth 账号时，会展示明确的解除绑定操作。
+
+### 变更
+- **Codex API Key 账号与本地 API 服务现将 OAuth 绑定作为可选项**：未绑定时继续按原 API Key 流程运行；绑定后则继续使用所选 OAuth 登录态，并叠加对应 provider 配置。
+- **Codex OAuth 绑定说明已对齐可选绑定行为**：绑定弹框会说明未绑定和已绑定两条运行路径，不再把 OAuth 绑定描述为必选前置条件。
+
+---
+## [0.23.7] - 2026-05-16
+
+### 新增
+- **Windows 上 Gemini 默认账号切换现可同步到 WSL 凭证目录**：切换默认 Gemini 账号时，可将 `oauth_creds.json` 与 `google_accounts.json` 同步到 WSL `~/.gemini`，并清理过期的 `gemini-credentials.json`。
+- **账号与工具弹框补齐键盘/返回交互**：多个核心弹框新增 `Esc` 关闭与显式返回操作，优化键盘操作和多层弹框流程。
+
+### 变更
+- **Gemini WSL 同步新增用户可控开关（设置页 + 快捷设置）**：新增 `同步 WSL 配置` 选项，默认开启，用于控制切号时是否执行凭证同步。
+- **Codex OAuth 绑定账号选择弹框的订阅徽标现与主账号视图样式一致**：绑定弹框中的套餐徽标已复用与 Codex 账号卡片/表格一致的视觉 class 与颜色语义。
+- **Homebrew Cask 元数据在 v0.23.6 后已更新**：Cask 的版本与校验信息已刷新到最新打包产物状态。
+
+### 修复
+- **Windows 上 GitHub Copilot 切号/导入已支持 VS Code 共享存储路径**：导入与注入会同时读写旧路径 `User/globalStorage/state.vscdb` 和新路径 `.vscode-shared*/sharedStorage/state.vscdb`，优先读取共享存储并回退兼容旧路径，适配混合安装场景。
+
+---
 ## [0.23.6] - 2026-05-16
 
 ### 新增

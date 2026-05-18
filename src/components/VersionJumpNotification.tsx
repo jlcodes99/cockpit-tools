@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { X, Sparkles, PartyPopper } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useEscClose } from '../hooks/useEscClose';
 import './UpdateNotification.css';
 
 interface VersionJumpInfo {
@@ -20,6 +21,8 @@ export const VersionJumpNotification: React.FC<VersionJumpNotificationProps> = (
   onClose,
 }) => {
   const { t, i18n } = useTranslation();
+
+  useEscClose(true, onClose);
 
   useEffect(() => {
     const perfWindow = window as Window & {

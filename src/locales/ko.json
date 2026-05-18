@@ -587,6 +587,10 @@
       "hideDockIconDesc": "창 최소화 동작과 무관하게 Dock 아이콘 표시 상태를 독립적으로 제어합니다",
       "hideDockIconOff": "아니요 (Dock 아이콘 표시)",
       "hideDockIconOn": "예 (Dock 아이콘 숨기기)",
+      "trayIconStyle": "메뉴 막대 아이콘 스타일 (macOS 전용)",
+      "trayIconStyleDesc": "시스템 단색 아이콘 또는 원래 컬러 앱 아이콘을 선택합니다",
+      "trayIconStyleTemplate": "단색 아이콘",
+      "trayIconStyleColor": "컬러 아이콘",
       "floatingCardStartup": "시작 시 플로팅 카드 표시",
       "floatingCardStartupDesc": "앱 실행 후 계정 플로팅 카드를 자동으로 표시합니다",
       "floatingCardAlwaysOnTop": "플로팅 카드를 기본적으로 항상 위에 표시",
@@ -1886,7 +1890,7 @@
         "empty": "할당량 통계가 아직 없습니다"
       },
       "oauthBinding": {
-        "desc": "API 서비스로 전환하거나 테스트할 때 로그인 상태는 연결된 OAuth 계정을 사용하고 Provider는 현재 API 서비스 설정을 사용합니다.",
+        "desc": "선택 사항입니다. 연결하지 않으면 API 서비스는 기존 API Key 로직으로 실행됩니다. 연결하면 로그인 상태는 OAuth 계정을 사용하고 Provider는 현재 API 서비스 설정을 사용합니다.",
         "currentService": "API 서비스: {{name}}"
       }
     },
@@ -2299,14 +2303,17 @@
         "action": "OAuth 연결",
         "actionShort": "연결",
         "title": "OAuth 계정 연결",
-        "desc": "이 API Key 계정으로 전환할 때 로그인 상태는 연결된 OAuth 계정을 사용하고 Provider는 이 API Key 계정 설정을 사용합니다.",
+        "desc": "선택 사항입니다. 연결하지 않으면 이 계정은 기존 API Key 로직으로 전환됩니다. 연결하면 로그인 상태는 OAuth 계정을 사용하고 Provider는 이 API Key 계정 설정을 사용합니다.",
         "currentAccount": "API Key 계정: {{name}}",
         "selectLabel": "OAuth 계정 선택",
         "empty": "OAuth 계정이 없습니다. 먼저 OAuth 인증 계정을 추가하세요.",
         "validationRequired": "OAuth 계정을 선택하세요",
         "saveSuccess": "OAuth 연결이 업데이트되었습니다",
         "saveFailed": "OAuth 연결 실패: {{error}}",
-        "switchRequiresBinding": "먼저 OAuth 계정을 연결하세요"
+        "switchRequiresBinding": "먼저 OAuth 계정을 연결하세요",
+        "clearAction": "연결 해제",
+        "clearSuccess": "OAuth 연결이 해제되었습니다",
+        "clearFailed": "OAuth 연결 해제 실패: {{error}}"
       }
     },
     "modelProviders": {
@@ -2707,7 +2714,9 @@
     "cursorRefreshInterval": "할당량 자동 새로고침",
     "gemini": {
       "title": "Gemini Cli 설정",
-      "appPath": "Gemini Cli 경로"
+      "appPath": "Gemini Cli 경로",
+      "syncWsl": "WSL 구성 동기화",
+      "syncWslDesc": "계정 전환 시 WSL의 .gemini 구성을 자동으로 덮어씁니다"
     },
     "geminiRefreshInterval": "할당량 자동 새로고침",
     "codebuddy": {

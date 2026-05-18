@@ -685,27 +685,136 @@ fn encrypt_secret_payload_with_mode(
     }
 }
 
+const GITHUB_AUTH_SECRET_KEY: &str =
+    r#"secret://{"extensionId":"vscode.github-authentication","key":"github.auth"}"#;
+const GITHUB_COPILOT_LOGIN_KEY: &str = "github.copilot-github";
+
+fn encode_secret_buffer(encrypted: Vec<u8>) -> Result<String, String> {
+    let buffer_json = serde_json::json!({
+        "type": "Buffer",
+        "data": encrypted
+    });
+    serde_json::to_string(&buffer_json).map_err(|e| format!("Failed to serialize Buffer: {}", e))
+}
+
+fn read_item_table_value(db_path: &Path, key: &str) -> Result<Option<String>, String> {
+    if !db_path.exists() {
+        return Ok(None);
+    }
+
+    let conn = Connection::open(db_path).map_err(|e| {
+        format!(
+            "Failed to open VS Code database {}: {}",
+            db_path.display(),
+            e
+        )
+    })?;
+    match conn.query_row("SELECT value FROM ItemTable WHERE key = ?", [key], |row| row.get(0)) {
+        Ok(value) => Ok(Some(value)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(format!(
+            "Failed to query key '{}' from VS Code database {}: {}",
+            key,
+            db_path.display(),
+            e
+        )),
+    }
+}
+
+fn write_copilot_items_to_db(
+    db_path: &Path,
+    secret_value: &str,
+    username: &str,
+) -> Result<(), String> {
+    if let Some(parent) = db_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create VS Code database parent dir: {}", e))?;
+    }
+
+    let conn = Connection::open(db_path).map_err(|e| {
+        format!(
+            "Failed to open VS Code database {}: {}",
+            db_path.display(),
+            e
+        )
+    })?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS ItemTable (key TEXT PRIMARY KEY, value TEXT)",
+        [],
+    )
+    .map_err(|e| format!("Failed to init ItemTable in {}: {}", db_path.display(), e))?;
+
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+
+    tx.execute(
+        "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
+        [GITHUB_AUTH_SECRET_KEY, secret_value],
+    )
+    .map_err(|e| format!("Failed to write github.auth to {}: {}", db_path.display(), e))?;
+
+    tx.execute(
+        "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
+        [GITHUB_COPILOT_LOGIN_KEY, username],
+    )
+    .map_err(|e| {
+        format!(
+            "Failed to write github.copilot-github to {}: {}",
+            db_path.display(),
+            e
+        )
+    })?;
+
+    tx.commit()
+        .map_err(|e| format!("Failed to commit transaction: {}", e))
+}
+
+fn copilot_state_db_write_paths(data_root: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut paths = Vec::new();
+
+    #[cfg(target_os = "windows")]
+    {
+        paths.push(crate::modules::vscode_paths::vscode_state_db_path(data_root));
+        if let Some(shared_path) = crate::modules::vscode_paths::vscode_shared_storage_db_path(data_root)
+        {
+            if !paths.iter().any(|path| path == &shared_path) {
+                paths.push(shared_path);
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        paths.push(get_vscode_db_path_from_data_root(data_root)?);
+    }
+
+    Ok(paths)
+}
+
+fn find_existing_github_auth_value(write_paths: &[PathBuf]) -> Result<Option<String>, String> {
+    #[cfg(target_os = "windows")]
+    let ordered_paths: Vec<&PathBuf> = write_paths.iter().rev().collect();
+    #[cfg(not(target_os = "windows"))]
+    let ordered_paths: Vec<&PathBuf> = write_paths.iter().collect();
+
+    for path in ordered_paths {
+        if let Some(value) = read_item_table_value(path, GITHUB_AUTH_SECRET_KEY)? {
+            return Ok(Some(value));
+        }
+    }
+
+    Ok(None)
+}
+
 fn inject_copilot_token_with_data_root(
     data_root: &Path,
     username: &str,
     token: &str,
     github_user_id: Option<&str>,
 ) -> Result<String, String> {
-    let db_path = get_vscode_db_path_from_data_root(data_root)?;
-    let conn = Connection::open(&db_path)
-        .map_err(|e| format!("Failed to open VS Code database: {}", e))?;
-
-    let secret_key =
-        r#"secret://{"extensionId":"vscode.github-authentication","key":"github.auth"}"#;
-    let existing: Option<String> = match conn.query_row(
-        "SELECT value FROM ItemTable WHERE key = ?",
-        [secret_key],
-        |row| row.get(0),
-    ) {
-        Ok(val) => Some(val),
-        Err(rusqlite::Error::QueryReturnedNoRows) => None,
-        Err(e) => return Err(format!("Failed to query github.auth from database: {}", e)),
-    };
+    let write_paths = copilot_state_db_write_paths(data_root)?;
+    let existing = find_existing_github_auth_value(&write_paths)?;
 
     let (new_sessions, existing_prefix) = build_github_auth_sessions(
         existing.as_deref(),
@@ -722,34 +831,18 @@ fn inject_copilot_token_with_data_root(
         existing_prefix.as_deref(),
         Some(data_root),
     )?;
+    let buffer_str = encode_secret_buffer(encrypted)?;
 
-    let buffer_json = serde_json::json!({
-        "type": "Buffer",
-        "data": encrypted
-    });
-    let buffer_str = serde_json::to_string(&buffer_json)
-        .map_err(|e| format!("Failed to serialize Buffer: {}", e))?;
+    for db_path in &write_paths {
+        write_copilot_items_to_db(db_path, &buffer_str, username)?;
+    }
 
-    let tx = conn
-        .unchecked_transaction()
-        .map_err(|e| format!("Failed to begin transaction: {}", e))?;
-
-    tx.execute(
-        "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
-        [secret_key, &buffer_str.as_str()],
-    )
-    .map_err(|e| format!("Failed to write github.auth: {}", e))?;
-
-    tx.execute(
-        "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
-        ["github.copilot-github", username],
-    )
-    .map_err(|e| format!("Failed to write github.copilot-github: {}", e))?;
-
-    tx.commit()
-        .map_err(|e| format!("Failed to commit transaction: {}", e))?;
-
-    Ok(format!("Successfully injected {} into VS Code", username))
+    Ok(format!(
+        "Successfully injected {} into VS Code ({} state DB{})",
+        username,
+        write_paths.len(),
+        if write_paths.len() == 1 { "" } else { "s" }
+    ))
 }
 
 fn decode_buffer_data(buffer: &serde_json::Value) -> Result<Vec<u8>, String> {
@@ -899,17 +992,33 @@ pub fn read_workbuddy_secret_storage_value(
     )
 }
 
+fn read_github_auth_secret_for_data_root(data_root: &Path) -> Result<Option<String>, String> {
+    #[cfg(target_os = "windows")]
+    if let Some(shared_path) = crate::modules::vscode_paths::vscode_shared_storage_db_path(data_root)
+    {
+        if let Some(raw_value) = read_item_table_value(&shared_path, GITHUB_AUTH_SECRET_KEY)? {
+            return decode_secret_storage_value_with_mode(
+                &raw_value,
+                Some(data_root),
+                SafeStorageReadMode::Default,
+            )
+            .map(Some);
+        }
+    }
+
+    read_secret_storage_value_with_data_root_and_mode(
+        data_root,
+        "vscode.github-authentication",
+        "github.auth",
+        SafeStorageReadMode::Default,
+    )
+}
+
 pub fn read_github_auth_sessions(
     user_data_dir: Option<&str>,
 ) -> Result<Option<Vec<serde_json::Value>>, String> {
     let data_root = resolve_vscode_data_root(user_data_dir)?;
-    let Some(raw_value) = read_secret_storage_value_with_data_root_and_mode(
-        &data_root,
-        "vscode.github-authentication",
-        "github.auth",
-        SafeStorageReadMode::Default,
-    )?
-    else {
+    let Some(raw_value) = read_github_auth_secret_for_data_root(&data_root)? else {
         return Ok(None);
     };
 
@@ -1025,7 +1134,7 @@ fn build_github_auth_sessions(
     let user_id = github_user_id.unwrap_or("0");
     let new_session = serde_json::json!({
         "id": uuid::Uuid::new_v4().to_string(),
-        "scopes": ["user:email"],
+        "scopes": ["read:user", "user:email"],
         "accessToken": token,
         "account": {
             "label": username,
@@ -1036,8 +1145,10 @@ fn build_github_auth_sessions(
     let mut replaced = false;
     for session in &mut sessions {
         if let Some(scopes) = session["scopes"].as_array() {
-            let has_user_email = scopes.iter().any(|s| s.as_str() == Some("user:email"));
-            if has_user_email {
+            let is_github_user_session = scopes.iter().any(|scope| {
+                matches!(scope.as_str(), Some("read:user") | Some("user:email"))
+            });
+            if is_github_user_session {
                 *session = new_session.clone();
                 replaced = true;
                 break;

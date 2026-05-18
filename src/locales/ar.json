@@ -630,6 +630,10 @@
       "hideDockIconDesc": "تحكم مستقل في ظهور أيقونة Dock دون التأثر بسلوك تصغير النافذة",
       "hideDockIconOff": "لا (إظهار أيقونة Dock)",
       "hideDockIconOn": "نعم (إخفاء أيقونة Dock)",
+      "trayIconStyle": "نمط أيقونة شريط القوائم (macOS فقط)",
+      "trayIconStyleDesc": "اختر أيقونة النظام أحادية اللون أو أيقونة التطبيق الأصلية الملونة",
+      "trayIconStyleTemplate": "أيقونة أحادية اللون",
+      "trayIconStyleColor": "أيقونة ملونة",
       "floatingCardStartup": "إظهار البطاقة العائمة عند التشغيل",
       "floatingCardStartupDesc": "عرض بطاقة الحساب العائمة تلقائياً بعد تشغيل التطبيق",
       "floatingCardAlwaysOnTop": "إبقاء البطاقة العائمة في الأعلى افتراضياً",
@@ -1932,7 +1936,7 @@
         "empty": "لا توجد إحصاءات حصة بعد"
       },
       "oauthBinding": {
-        "desc": "عند التبديل إلى خدمة API أو اختبارها، تستخدم حالة تسجيل الدخول حساب OAuth المرتبط، بينما يستخدم Provider إعداد خدمة API الحالي.",
+        "desc": "اختياري. بدون ربط، تعمل خدمة API بالمسار السابق لمفتاح API؛ وبعد الربط تستخدم حالة تسجيل الدخول حساب OAuth ويستخدم Provider إعدادات خدمة API الحالية.",
         "currentService": "خدمة API: {{name}}"
       }
     },
@@ -2345,14 +2349,17 @@
         "action": "ربط OAuth",
         "actionShort": "ربط",
         "title": "ربط حساب OAuth",
-        "desc": "عند التبديل إلى حساب API Key هذا، تُستخدم حالة تسجيل الدخول من حساب OAuth المرتبط، ويستخدم Provider إعدادات حساب API Key الحالي.",
+        "desc": "اختياري. بدون ربط، ينتقل هذا الحساب بالمسار السابق لمفتاح API؛ وبعد الربط تستخدم حالة تسجيل الدخول حساب OAuth ويستخدم Provider إعدادات حساب API Key هذا.",
         "currentAccount": "حساب API Key: {{name}}",
         "selectLabel": "اختر حساب OAuth",
         "empty": "لا توجد حسابات OAuth بعد. أضف حسابا مصرحا عبر OAuth أولا.",
         "validationRequired": "اختر حساب OAuth",
         "saveSuccess": "تم تحديث ربط OAuth",
         "saveFailed": "فشل ربط OAuth: {{error}}",
-        "switchRequiresBinding": "اربط حساب OAuth أولا"
+        "switchRequiresBinding": "اربط حساب OAuth أولا",
+        "clearAction": "إلغاء الربط",
+        "clearSuccess": "تم إلغاء ربط OAuth.",
+        "clearFailed": "فشل إلغاء ربط OAuth: {{error}}"
       }
     },
     "modelProviders": {
@@ -2753,7 +2760,9 @@
     "cursorRefreshInterval": "تحديث الحصة تلقائيًا",
     "gemini": {
       "title": "إعدادات Gemini Cli",
-      "appPath": "مسار Gemini Cli"
+      "appPath": "مسار Gemini Cli",
+      "syncWsl": "مزامنة إعدادات WSL",
+      "syncWslDesc": "استبدال إعدادات ‎.gemini‎ داخل WSL تلقائيًا عند تبديل الحساب"
     },
     "geminiRefreshInterval": "تحديث الحصة تلقائيًا",
     "codebuddy": {

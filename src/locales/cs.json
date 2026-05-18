@@ -584,6 +584,10 @@
       "hideDockIconDesc": "Nezávisle řídí viditelnost ikony v Docku bez vlivu chování minimalizace okna",
       "hideDockIconOff": "Ne (Zobrazit ikonu v Docku)",
       "hideDockIconOn": "Ano (Skrýt ikonu v Docku)",
+      "trayIconStyle": "Styl ikony v řádku nabídek (pouze macOS)",
+      "trayIconStyleDesc": "Vyberte systémovou jednobarevnou ikonu nebo původní barevnou ikonu aplikace",
+      "trayIconStyleTemplate": "Jednobarevná ikona",
+      "trayIconStyleColor": "Barevná ikona",
       "floatingCardStartup": "Zobrazit plovoucí kartu při spuštění",
       "floatingCardStartupDesc": "Po spuštění aplikace automaticky zobrazit plovoucí kartu účtu",
       "floatingCardAlwaysOnTop": "Držet plovoucí kartu vždy navrchu",
@@ -1886,7 +1890,7 @@
         "empty": "Zatím žádné statistiky kvóty"
       },
       "oauthBinding": {
-        "desc": "Při přepnutí na službu API nebo jejím testu se pro přihlášení použije svázaný účet OAuth a Provider použije aktuální konfiguraci služby API.",
+        "desc": "Volitelné. Bez propojení služba API používá původní logiku API Key; po propojení se přihlášení bere z účtu OAuth a Provider z konfigurace služby API.",
         "currentService": "Služba API: {{name}}"
       }
     },
@@ -2299,14 +2303,17 @@
         "action": "Připojit OAuth",
         "actionShort": "Připojit",
         "title": "Připojit účet OAuth",
-        "desc": "Při přepnutí na tento účet API Key se přihlášení bere z připojeného účtu OAuth a Provider použije konfiguraci tohoto účtu API Key.",
+        "desc": "Volitelné. Bez propojení se tento účet přepíná původní logikou API Key; po propojení se přihlášení bere z účtu OAuth a Provider z konfigurace tohoto účtu API Key.",
         "currentAccount": "Účet API Key: {{name}}",
         "selectLabel": "Vyberte účet OAuth",
         "empty": "Zatím není žádný účet OAuth. Nejdříve přidejte účet s autorizací OAuth.",
         "validationRequired": "Vyberte účet OAuth",
         "saveSuccess": "Vazba OAuth aktualizována",
         "saveFailed": "Připojení OAuth selhalo: {{error}}",
-        "switchRequiresBinding": "Nejdříve připojte účet OAuth"
+        "switchRequiresBinding": "Nejdříve připojte účet OAuth",
+        "clearAction": "Odpojit",
+        "clearSuccess": "Propojení OAuth bylo odebráno.",
+        "clearFailed": "Odebrání propojení OAuth selhalo: {{error}}"
       }
     },
     "modelProviders": {
@@ -2707,7 +2714,9 @@
     "cursorRefreshInterval": "Automatická obnova kvóty",
     "gemini": {
       "title": "Nastavení Gemini Cli",
-      "appPath": "Cesta k Gemini Cli"
+      "appPath": "Cesta k Gemini Cli",
+      "syncWsl": "Synchronizovat konfiguraci WSL",
+      "syncWslDesc": "Při přepnutí účtu automaticky přepsat konfiguraci .gemini ve WSL"
     },
     "geminiRefreshInterval": "Automatická obnova kvóty",
     "codebuddy": {

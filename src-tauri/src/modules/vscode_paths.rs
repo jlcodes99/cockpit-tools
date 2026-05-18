@@ -55,7 +55,7 @@ pub fn resolve_preferred_vscode_data_root() -> Result<PathBuf, String> {
 pub fn resolve_vscode_data_root_for_state_db() -> Result<PathBuf, String> {
     let candidates = vscode_data_root_candidates()?;
     for root in &candidates {
-        if vscode_state_db_path(root).exists() {
+        if vscode_state_db_path(root).exists() || vscode_shared_storage_db_exists(root) {
             return Ok(root.clone());
         }
     }
@@ -90,4 +90,40 @@ pub fn vscode_state_db_path(data_root: &Path) -> PathBuf {
 #[cfg(target_os = "windows")]
 pub fn vscode_local_state_path(data_root: &Path) -> PathBuf {
     data_root.join("Local State")
+}
+
+#[cfg(target_os = "windows")]
+pub fn vscode_shared_storage_db_path(data_root: &Path) -> Option<PathBuf> {
+    let folder_name = data_root
+        .file_name()
+        .and_then(|value| value.to_str())
+        .map(|name| {
+            if name.eq_ignore_ascii_case("Code - Insiders") {
+                ".vscode-shared-insiders"
+            } else {
+                ".vscode-shared"
+            }
+        })?;
+
+    Some(
+        dirs::home_dir()?
+            .join(folder_name)
+            .join("sharedStorage")
+            .join("state.vscdb"),
+    )
+}
+
+pub fn vscode_shared_storage_db_exists(data_root: &Path) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        vscode_shared_storage_db_path(data_root)
+            .map(|path| path.exists())
+            .unwrap_or(false)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = data_root;
+        false
+    }
 }
