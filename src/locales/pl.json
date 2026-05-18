@@ -587,6 +587,10 @@
       "hideDockIconDesc": "Niezależnie steruje widocznością ikony Docka, bez wpływu zachowania minimalizacji okna",
       "hideDockIconOff": "Nie (Pokaż ikonę Docka)",
       "hideDockIconOn": "Tak (Ukryj ikonę Docka)",
+      "trayIconStyle": "Styl ikony paska menu (tylko macOS)",
+      "trayIconStyleDesc": "Wybierz systemową ikonę monochromatyczną albo oryginalną kolorową ikonę aplikacji",
+      "trayIconStyleTemplate": "Ikona monochromatyczna",
+      "trayIconStyleColor": "Ikona kolorowa",
       "floatingCardStartup": "Pokaż kartę pływającą przy starcie",
       "floatingCardStartupDesc": "Automatycznie pokazuj pływającą kartę konta po uruchomieniu aplikacji",
       "floatingCardAlwaysOnTop": "Domyślnie utrzymuj kartę pływającą na wierzchu",
@@ -1886,7 +1890,7 @@
         "empty": "Brak statystyk limitów"
       },
       "oauthBinding": {
-        "desc": "Podczas przełączania na usługę API lub jej testowania stan logowania używa powiązanego konta OAuth, a Provider używa bieżącej konfiguracji usługi API.",
+        "desc": "Opcjonalne. Bez powiązania usługa API działa według dotychczasowej logiki API Key; po powiązaniu logowanie używa konta OAuth, a Provider konfiguracji usługi API.",
         "currentService": "Usługa API: {{name}}"
       }
     },
@@ -2299,14 +2303,17 @@
         "action": "Powiąż OAuth",
         "actionShort": "Powiąż",
         "title": "Powiąż konto OAuth",
-        "desc": "Przy przełączeniu na to konto API Key logowanie używa powiązanego konta OAuth, a Provider używa konfiguracji tego konta API Key.",
+        "desc": "Opcjonalne. Bez powiązania to konto przełącza się według dotychczasowej logiki API Key; po powiązaniu logowanie używa konta OAuth, a Provider konfiguracji tego konta API Key.",
         "currentAccount": "Konto API Key: {{name}}",
         "selectLabel": "Wybierz konto OAuth",
         "empty": "Brak kont OAuth. Najpierw dodaj konto z autoryzacją OAuth.",
         "validationRequired": "Wybierz konto OAuth",
         "saveSuccess": "Powiązanie OAuth zaktualizowane",
         "saveFailed": "Nie udało się powiązać OAuth: {{error}}",
-        "switchRequiresBinding": "Najpierw powiąż konto OAuth"
+        "switchRequiresBinding": "Najpierw powiąż konto OAuth",
+        "clearAction": "Odłącz",
+        "clearSuccess": "Powiązanie OAuth usunięte.",
+        "clearFailed": "Nie udało się usunąć powiązania OAuth: {{error}}"
       }
     },
     "modelProviders": {
@@ -2707,7 +2714,9 @@
     "cursorRefreshInterval": "Automatyczne odświeżanie limitu",
     "gemini": {
       "title": "Ustawienia Gemini Cli",
-      "appPath": "Ścieżka Gemini Cli"
+      "appPath": "Ścieżka Gemini Cli",
+      "syncWsl": "Synchronizuj konfigurację WSL",
+      "syncWslDesc": "Podczas przełączania konta automatycznie nadpisz konfigurację .gemini w WSL"
     },
     "geminiRefreshInterval": "Automatyczne odświeżanie limitu",
     "codebuddy": {

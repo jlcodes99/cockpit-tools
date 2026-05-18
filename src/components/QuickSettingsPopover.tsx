@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { Settings, RefreshCw, FolderOpen, Zap, X } from 'lucide-react';
+import { useEscClose } from '../hooks/useEscClose';
 import * as accountService from '../services/accountService';
 import * as codexService from '../services/codexService';
 import { getAccountGroups, type AccountGroup } from '../services/accountGroupService';
@@ -40,6 +41,7 @@ import {
 import type { Account } from '../types/account';
 import type { CodexAccount, CodexQuickConfig } from '../types/codex';
 import { getDisplayGroups, type DisplayGroup } from '../services/groupService';
+import { usePlatformRuntimeSupport } from '../hooks/usePlatformRuntimeSupport';
 import {
   readAccountsOverviewFilterPersistenceEnabled,
   resolveAccountsOverviewScopeFromQuickSettingsType,
@@ -59,6 +61,7 @@ interface GeneralConfig {
   kiro_auto_refresh_minutes: number;
   cursor_auto_refresh_minutes: number;
   gemini_auto_refresh_minutes: number;
+  gemini_sync_wsl: boolean;
   codebuddy_auto_refresh_minutes: number;
   codebuddy_cn_auto_refresh_minutes: number;
   qoder_auto_refresh_minutes: number;
@@ -68,6 +71,7 @@ interface GeneralConfig {
   close_behavior: string;
   minimize_behavior?: 'dock_and_tray' | 'tray_only';
   hide_dock_icon?: boolean;
+  tray_icon_style?: 'template' | 'color';
   opencode_app_path: string;
   antigravity_app_path: string;
   codex_app_path: string;
@@ -290,6 +294,7 @@ const normalizeAutoSwitchAccountScopeMode = (
 
 export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const { t } = useTranslation();
+  const isWindows = usePlatformRuntimeSupport('windows-only');
   const overviewFilterScope = useMemo(
     () => resolveAccountsOverviewScopeFromQuickSettingsType(type),
     [type],
@@ -698,19 +703,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     };
   }, []);
 
-  // Close on Escape
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsOpen(false);
-    };
-
-    document.addEventListener('keydown', handleEsc);
-    return () => {
-      document.removeEventListener('keydown', handleEsc);
-    };
-  }, [isOpen]);
+  useEscClose(isOpen, () => setIsOpen(false));
 
   // 外部触发：按平台类型打开设置弹框
   useEffect(() => {
@@ -820,6 +813,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           kiroAutoRefreshMinutes: merged.kiro_auto_refresh_minutes,
           cursorAutoRefreshMinutes: merged.cursor_auto_refresh_minutes,
           geminiAutoRefreshMinutes: merged.gemini_auto_refresh_minutes,
+          geminiSyncWsl: merged.gemini_sync_wsl,
           codebuddyAutoRefreshMinutes: merged.codebuddy_auto_refresh_minutes,
           codebuddyCnAutoRefreshMinutes: merged.codebuddy_cn_auto_refresh_minutes,
           workbuddyAutoRefreshMinutes: merged.workbuddy_auto_refresh_minutes,
@@ -829,6 +823,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           closeBehavior: merged.close_behavior,
           minimizeBehavior: merged.minimize_behavior,
           hideDockIcon: merged.hide_dock_icon,
+          trayIconStyle: merged.tray_icon_style,
           opencodeAppPath: merged.opencode_app_path,
           antigravityAppPath: merged.antigravity_app_path,
           codexAppPath: merged.codex_app_path,
@@ -1788,6 +1783,33 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     'settings.general.codexLocalAccessEntryVisibleDesc',
                     '仅控制 Codex 总览中的 API 服务入口显示，不会停止本地 API 服务；关闭后可在这里重新打开。',
                   )}
+                </div>
+              </div>
+            )}
+
+            {type === 'gemini' && isWindows && (
+              <div className="qs-section">
+                <div className="qs-row">
+                  <div className="qs-row-label">
+                    <span>
+                      {t('quickSettings.gemini.syncWsl', '同步 WSL 配置')}
+                    </span>
+                  </div>
+                  <div className="qs-row-control">
+                    <label className="qs-switch">
+                      <input
+                        type="checkbox"
+                        checked={config.gemini_sync_wsl}
+                        onChange={(e) =>
+                          saveConfig({ gemini_sync_wsl: e.target.checked })
+                        }
+                      />
+                      <span className="qs-switch-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div className="qs-hint">
+                  {t('quickSettings.gemini.syncWslDesc', '切号时自动覆盖 WSL 下的 .gemini 配置')}
                 </div>
               </div>
             )}

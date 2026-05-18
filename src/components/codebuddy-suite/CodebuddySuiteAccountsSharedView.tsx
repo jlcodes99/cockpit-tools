@@ -2,13 +2,14 @@ import { useMemo, useCallback, Fragment, useState, useEffect, type ComponentType
 import {
   Plus, RefreshCw, Download, Upload, Trash2, X, Globe, KeyRound, Database,
   Copy, Check, RotateCw, LayoutGrid, List, Search,
-  Tag, Play, Eye, EyeOff, CircleAlert, ChevronDown, ArrowRightLeft, CalendarCheck,
+  Tag, Play, Eye, EyeOff, CircleAlert, ChevronDown, ChevronLeft, ArrowRightLeft, CalendarCheck,
 } from 'lucide-react';
 import { TagEditModal } from '../TagEditModal';
 import { ExportJsonModal } from '../ExportJsonModal';
 import { ModalErrorMessage } from '../ModalErrorMessage';
 import { QuickSettingsPopover } from '../QuickSettingsPopover';
 import { PaginationControls } from '../PaginationControls';
+import { useEscClose } from '../../hooks/useEscClose';
 import { useCodebuddySuitePage, formatQuotaNumber } from '../../hooks/useCodebuddySuitePage';
 import type { UseProviderAccountsPageReturn } from '../../hooks/useProviderAccountsPage';
 import {
@@ -147,6 +148,11 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
     isFlowNoticeCollapsed, setIsFlowNoticeCollapsed,
     currentAccountId, formatDate, normalizeTag,
   } = page;
+
+  useEscClose(showAddModal, closeAddModal);
+  useEscClose(!!deleteConfirm, () => setDeleteConfirm(null));
+  useEscClose(!!tagDeleteConfirm, () => setTagDeleteConfirm(null));
+  useEscClose(showCheckinModal, () => setShowCheckinModal(false));
 
   useEffect(() => {
     if (!filterPersistenceEnabled) {
@@ -615,6 +621,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
         <div className="modal-overlay" onClick={closeAddModal}>
           <div className="modal-content ghcp-add-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
+              <button className="btn btn-secondary icon-only" onClick={closeAddModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t(platformConfig.addAccountTitleKey, platformConfig.addAccountTitleDefault)}</h2>
               <button className="modal-close" onClick={closeAddModal}><X size={18} /></button>
             </div>

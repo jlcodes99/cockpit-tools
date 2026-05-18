@@ -4,7 +4,7 @@
   "topRightAd": {
     "id": "top-right-ad-2026-04-shop",
     "priority": 100,
-    "text": "Kiro成品号。需要的可以选购，感谢",
+    "text": "少量Codex plus成品号和Kiro成品号。需要的可以选购，感谢",
     "badge": "推广",
     "ctaLabel": "选购",
     "ctaUrl": "https://xiangzili.xyz",
@@ -16,7 +16,7 @@
     "expiresAt": null,
     "locales": {
       "zh-CN": {
-        "text": "Kiro成品号。需要的可以选购，感谢",
+        "text": "少量Codex plus成品号和Kiro成品号。需要的可以选购，感谢",
         "badge": "推广",
         "ctaLabel": "选购"
       }

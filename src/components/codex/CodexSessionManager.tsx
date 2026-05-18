@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { confirm as confirmDialog } from '@tauri-apps/plugin-dialog';
 import { Check, ChevronDown, ChevronRight, Copy, Eye, Folder, RefreshCw, RotateCcw, Trash2, X } from 'lucide-react';
 import { ModalErrorMessage, useModalErrorState } from '../ModalErrorMessage';
+import { useEscClose } from '../../hooks/useEscClose';
 import type { CodexSessionRecord, CodexSessionTokenStats, CodexTrashedSessionRecord } from '../../types/codex';
 import { useCodexInstanceStore } from '../../stores/useCodexInstanceStore';
 import { formatCodexSessionVisibilityRepairMessage } from '../../utils/codexSessionVisibility';
@@ -364,11 +365,10 @@ export function CodexSessionManager() {
   };
 
   const handleCloseSyncTargetModal = () => {
-    if (syncingToInstance) return;
     setShowSyncTargetModal(false);
-    setSyncTargetInstanceId('');
-    setSyncTargetModalError(null);
   };
+
+  useEscClose(showSyncTargetModal, handleCloseSyncTargetModal);
 
   const handleCloseRestoreModal = () => {
     if (restoring) return;
@@ -376,6 +376,8 @@ export function CodexSessionManager() {
     setSelectedTrashIds([]);
     setRestoreModalError(null);
   };
+
+  useEscClose(showRestoreModal, handleCloseRestoreModal);
 
   const handleSyncSessions = async () => {
     setMessage(null);

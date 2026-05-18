@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import type { CodexAccount } from '../types/codex'
 import type { CodexAccountGroup } from '../services/codexAccountGroupService'
 import { buildCodexAccountPresentation } from '../presentation/platformAccountPresentation'
+import { useEscClose } from '../hooks/useEscClose'
 import './GroupAccountPickerModal.css'
 
 interface CodexGroupAccountPickerModalProps {
@@ -26,6 +27,7 @@ export function CodexGroupAccountPickerModal({
   onConfirm,
 }: CodexGroupAccountPickerModalProps) {
   const { t } = useTranslation()
+  useEscClose(isOpen, onClose)
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)

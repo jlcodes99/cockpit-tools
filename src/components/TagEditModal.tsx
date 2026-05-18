@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { X, Tag, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { globalRenameTag, globalDeleteTag } from '../utils/globalTagOperations';
+import { useEscClose } from '../hooks/useEscClose';
 import './TagEditModal.css';
 
 interface TagEditModalProps {
@@ -34,6 +35,7 @@ const normalizeTagList = (tags: string[]) => {
 
 export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags = [], onClose, onSave }: TagEditModalProps) => {
   const { t } = useTranslation();
+  useEscClose(isOpen, onClose);
   const [tags, setTags] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
   const [inputValue, setInputValue] = useState('');

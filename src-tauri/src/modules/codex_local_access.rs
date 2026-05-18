@@ -3842,15 +3842,13 @@ pub async fn activate_local_access_for_dir(
         .clone()
         .unwrap_or_else(|| build_base_url(collection.port));
     let bound_oauth_account_id =
-        normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref())
-            .ok_or_else(|| "API 服务需先绑定 OAuth 账号".to_string())?;
-    let _ = validate_local_access_bound_oauth_account(&bound_oauth_account_id)?;
-    let _ = codex_account::ensure_managed_account_fresh(&bound_oauth_account_id).await?;
-    let runtime_account = build_runtime_account(
-        base_url,
-        collection.api_key.clone(),
-        Some(bound_oauth_account_id),
-    );
+        normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref());
+    if let Some(bound_id) = bound_oauth_account_id.as_deref() {
+        let _ = validate_local_access_bound_oauth_account(bound_id)?;
+        let _ = codex_account::ensure_managed_account_fresh(bound_id).await?;
+    }
+    let runtime_account =
+        build_runtime_account(base_url, collection.api_key.clone(), bound_oauth_account_id);
     codex_account::write_account_bundle_to_dir(profile_dir, &runtime_account)?;
     Ok(state)
 }
@@ -4230,14 +4228,15 @@ pub async fn test_local_access_with_cli() -> Result<CodexLocalAccessTestResult, 
         )));
     }
     let bound_oauth_account_id =
-        normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref())
-            .ok_or_else(|| "API 服务需先绑定 OAuth 账号".to_string())?;
-    let _ = validate_local_access_bound_oauth_account(&bound_oauth_account_id)?;
-    let _ = codex_account::ensure_managed_account_fresh(&bound_oauth_account_id).await?;
+        normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref());
+    if let Some(bound_id) = bound_oauth_account_id.as_deref() {
+        let _ = validate_local_access_bound_oauth_account(bound_id)?;
+        let _ = codex_account::ensure_managed_account_fresh(bound_id).await?;
+    }
     let runtime_account = build_runtime_account(
         base_url.clone(),
         collection.api_key.clone(),
-        Some(bound_oauth_account_id),
+        bound_oauth_account_id,
     );
     if let Err(err) = codex_account::write_account_bundle_to_dir(&temp_home, &runtime_account) {
         let _ = std::fs::remove_dir_all(&temp_home);
@@ -4488,7 +4487,7 @@ pub async fn rotate_local_access_api_key() -> Result<CodexLocalAccessState, Stri
 }
 
 pub async fn update_local_access_bound_oauth_account(
-    bound_oauth_account_id: &str,
+    bound_oauth_account_id: Option<String>,
 ) -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded().await?;
 
@@ -4501,12 +4500,17 @@ pub async fn update_local_access_bound_oauth_account(
         return Err("本地接入集合尚未创建".to_string());
     };
 
-    let bound_account = validate_local_access_bound_oauth_account(bound_oauth_account_id)?;
-    if collection.bound_oauth_account_id.as_deref() == Some(bound_account.id.as_str()) {
+    let normalized_bound_id = normalize_optional_account_ref(bound_oauth_account_id.as_deref());
+    if collection.bound_oauth_account_id == normalized_bound_id {
         return snapshot_state().await;
     }
 
-    collection.bound_oauth_account_id = Some(bound_account.id);
+    if let Some(bound_id) = normalized_bound_id {
+        let bound_account = validate_local_access_bound_oauth_account(&bound_id)?;
+        collection.bound_oauth_account_id = Some(bound_account.id);
+    } else {
+        collection.bound_oauth_account_id = None;
+    }
     collection.updated_at = now_ms();
     save_collection_to_disk(&collection)?;
 

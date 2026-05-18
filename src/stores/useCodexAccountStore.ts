@@ -92,7 +92,7 @@ interface CodexAccountState {
   ) => Promise<CodexAccount>;
   updateApiKeyBoundOAuthAccount: (
     accountId: string,
-    boundOauthAccountId: string,
+    boundOauthAccountId: string | null,
   ) => Promise<CodexAccount>;
   updateAccountTags: (accountId: string, tags: string[]) => Promise<CodexAccount>;
   updateAccountNote: (accountId: string, note: string) => Promise<CodexAccount>;
@@ -324,7 +324,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
 
   updateApiKeyBoundOAuthAccount: async (
     accountId: string,
-    boundOauthAccountId: string,
+    boundOauthAccountId: string | null,
   ) => {
     const account = await codexService.updateCodexApiKeyBoundOAuthAccount(
       accountId,

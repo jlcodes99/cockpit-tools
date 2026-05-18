@@ -587,6 +587,10 @@
       "hideDockIconDesc": "Dock simgesinin görünürlüğünü pencere küçültme davranışından bağımsız olarak kontrol eder",
       "hideDockIconOff": "Hayır (Dock simgesini göster)",
       "hideDockIconOn": "Evet (Dock simgesini gizle)",
+      "trayIconStyle": "Menü çubuğu simge stili (yalnızca macOS)",
+      "trayIconStyleDesc": "Sistem tek renkli simgesini veya özgün renkli uygulama simgesini seçin",
+      "trayIconStyleTemplate": "Tek renkli simge",
+      "trayIconStyleColor": "Renkli simge",
       "floatingCardStartup": "Başlangıçta yüzen kartı göster",
       "floatingCardStartupDesc": "Uygulama açıldıktan sonra hesap yüzen kartını otomatik olarak göster",
       "floatingCardAlwaysOnTop": "Yüzen kartı varsayılan olarak her zaman üstte tut",
@@ -1886,7 +1890,7 @@
         "empty": "Henüz kota istatistiği yok"
       },
       "oauthBinding": {
-        "desc": "API hizmetine geçerken veya hizmeti test ederken oturum durumu bağlı OAuth hesabını kullanır, Provider ise mevcut API hizmeti yapılandırmasını kullanır.",
+        "desc": "İsteğe bağlı. Bağlantı yoksa API hizmeti eski API Key akışıyla çalışır; bağlanınca oturum OAuth hesabını, Provider ise API hizmeti yapılandırmasını kullanır.",
         "currentService": "API hizmeti: {{name}}"
       }
     },
@@ -2299,14 +2303,17 @@
         "action": "OAuth Bağla",
         "actionShort": "Bağla",
         "title": "OAuth Hesabı Bağla",
-        "desc": "Bu API Key hesabına geçerken oturum durumu bağlı OAuth hesabını kullanır; Provider bu API Key hesabının yapılandırmasını kullanır.",
+        "desc": "İsteğe bağlı. Bağlantı yoksa bu hesap eski API Key akışıyla geçiş yapar; bağlanınca oturum OAuth hesabını, Provider ise bu API Key hesap yapılandırmasını kullanır.",
         "currentAccount": "API Key hesabı: {{name}}",
         "selectLabel": "OAuth hesabı seç",
         "empty": "Henüz OAuth hesabı yok. Önce OAuth yetkili bir hesap ekleyin.",
         "validationRequired": "Bir OAuth hesabı seçin",
         "saveSuccess": "OAuth bağı güncellendi",
         "saveFailed": "OAuth bağı kurulamadı: {{error}}",
-        "switchRequiresBinding": "Önce bir OAuth hesabı bağlayın"
+        "switchRequiresBinding": "Önce bir OAuth hesabı bağlayın",
+        "clearAction": "Bağı kaldır",
+        "clearSuccess": "OAuth bağlantısı kaldırıldı.",
+        "clearFailed": "OAuth bağlantısı kaldırılamadı: {{error}}"
       }
     },
     "modelProviders": {
@@ -2707,7 +2714,9 @@
     "cursorRefreshInterval": "Kota otomatik yenileme",
     "gemini": {
       "title": "Gemini Cli Ayarları",
-      "appPath": "Gemini Cli Yolu"
+      "appPath": "Gemini Cli Yolu",
+      "syncWsl": "WSL Yapılandırmasını Eşitle",
+      "syncWslDesc": "Hesap değiştirirken WSL içindeki .gemini yapılandırmasını otomatik olarak üzerine yaz"
     },
     "geminiRefreshInterval": "Kota Otomatik Yenileme",
     "codebuddy": {

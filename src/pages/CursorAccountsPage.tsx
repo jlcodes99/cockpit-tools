@@ -90,7 +90,7 @@ const CURSOR_TOKEN_BATCH_EXAMPLE = `[
 
 function getCursorQuotaClass(percentage: number): string {
   if (percentage >= 90) return 'critical';
-  if (percentage >= 70) return 'warning';
+  if (percentage >= 70) return 'medium';
   return 'high';
 }
 

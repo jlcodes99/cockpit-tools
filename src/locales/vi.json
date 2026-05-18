@@ -587,6 +587,10 @@
       "hideDockIconDesc": "Điều khiển hiển thị biểu tượng Dock độc lập, không phụ thuộc vào hành vi thu nhỏ cửa sổ",
       "hideDockIconOff": "Không (Hiện biểu tượng Dock)",
       "hideDockIconOn": "Có (Ẩn biểu tượng Dock)",
+      "trayIconStyle": "Kiểu biểu tượng thanh menu (chỉ macOS)",
+      "trayIconStyleDesc": "Chọn biểu tượng đơn sắc của hệ thống hoặc biểu tượng app gốc có màu",
+      "trayIconStyleTemplate": "Biểu tượng đơn sắc",
+      "trayIconStyleColor": "Biểu tượng màu",
       "floatingCardStartup": "Hiển thị thẻ nổi khi khởi động",
       "floatingCardStartupDesc": "Tự động hiển thị thẻ tài khoản nổi sau khi ứng dụng khởi động",
       "floatingCardAlwaysOnTop": "Giữ thẻ nổi luôn ở trên cùng theo mặc định",
@@ -1886,7 +1890,7 @@
         "empty": "Chưa có thống kê hạn mức"
       },
       "oauthBinding": {
-        "desc": "Khi chuyển sang hoặc kiểm tra dịch vụ API, trạng thái đăng nhập dùng tài khoản OAuth đã liên kết, còn Provider dùng cấu hình dịch vụ API hiện tại.",
+        "desc": "Tùy chọn. Khi chưa liên kết, dịch vụ API chạy theo luồng API Key cũ; sau khi liên kết, trạng thái đăng nhập dùng tài khoản OAuth và Provider dùng cấu hình dịch vụ API hiện tại.",
         "currentService": "Dịch vụ API: {{name}}"
       }
     },
@@ -2299,14 +2303,17 @@
         "action": "Liên kết OAuth",
         "actionShort": "Liên kết",
         "title": "Liên kết tài khoản OAuth",
-        "desc": "Khi chuyển sang tài khoản API Key này, trạng thái đăng nhập dùng tài khoản OAuth đã liên kết, còn Provider dùng cấu hình của tài khoản API Key này.",
+        "desc": "Tùy chọn. Khi chưa liên kết, tài khoản này chuyển theo luồng API Key cũ; sau khi liên kết, trạng thái đăng nhập dùng tài khoản OAuth và Provider dùng cấu hình tài khoản API Key này.",
         "currentAccount": "Tài khoản API Key: {{name}}",
         "selectLabel": "Chọn tài khoản OAuth",
         "empty": "Chưa có tài khoản OAuth. Hãy thêm tài khoản ủy quyền OAuth trước.",
         "validationRequired": "Vui lòng chọn tài khoản OAuth",
         "saveSuccess": "Đã cập nhật liên kết OAuth",
         "saveFailed": "Liên kết OAuth thất bại: {{error}}",
-        "switchRequiresBinding": "Hãy liên kết tài khoản OAuth trước"
+        "switchRequiresBinding": "Hãy liên kết tài khoản OAuth trước",
+        "clearAction": "Bỏ liên kết",
+        "clearSuccess": "Đã bỏ liên kết OAuth.",
+        "clearFailed": "Không thể bỏ liên kết OAuth: {{error}}"
       }
     },
     "modelProviders": {
@@ -2707,7 +2714,9 @@
     "cursorRefreshInterval": "Tự động làm mới hạn mức",
     "gemini": {
       "title": "Cài đặt Gemini Cli",
-      "appPath": "Đường dẫn Gemini Cli"
+      "appPath": "Đường dẫn Gemini Cli",
+      "syncWsl": "Đồng bộ cấu hình WSL",
+      "syncWslDesc": "Tự động ghi đè cấu hình .gemini trong WSL khi chuyển tài khoản"
     },
     "geminiRefreshInterval": "Tự động làm mới hạn ngạch",
     "codebuddy": {

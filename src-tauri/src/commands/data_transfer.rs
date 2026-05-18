@@ -93,6 +93,8 @@ pub fn data_transfer_apply_user_config(
 
     #[cfg(target_os = "macos")]
     let hide_dock_icon_changed = current.hide_dock_icon != config.hide_dock_icon;
+    #[cfg(target_os = "macos")]
+    let tray_icon_style_changed = current.tray_icon_style != config.tray_icon_style;
 
     config::save_user_config(&config)?;
 
@@ -107,6 +109,16 @@ pub fn data_transfer_apply_user_config(
     #[cfg(target_os = "macos")]
     if hide_dock_icon_changed {
         crate::apply_macos_activation_policy(&app);
+    }
+
+    #[cfg(target_os = "macos")]
+    if tray_icon_style_changed {
+        if let Err(err) = modules::tray::apply_tray_icon_style(&app) {
+            modules::logger::log_warn(&format!(
+                "[DataTransfer] 应用 macOS 菜单栏图标样式失败: {}",
+                err
+            ));
+        }
     }
 
     if language_changed {

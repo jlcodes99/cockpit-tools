@@ -17,6 +17,7 @@ import {
   renameCodexGroup,
   assignAccountsToCodexGroup,
 } from '../services/codexAccountGroupService';
+import { useEscClose } from '../hooks/useEscClose';
 import './AccountGroupModal.css';
 
 // ─── Codex 分组管理弹窗 ──────────────────────────────────────────
@@ -38,6 +39,7 @@ export const CodexAccountGroupModal = ({
   groupFilter = [], onToggleGroupFilter, onClearGroupFilter,
 }: CodexAccountGroupModalProps) => {
   const { t } = useTranslation();
+  useEscClose(isOpen, onClose);
   const [groups, setGroups] = useState<CodexAccountGroup[]>([]);
   const [newName, setNewName] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);

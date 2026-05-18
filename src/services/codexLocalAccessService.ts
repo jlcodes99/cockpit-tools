@@ -32,7 +32,7 @@ export async function rotateCodexLocalAccessApiKey(): Promise<CodexLocalAccessSt
 }
 
 export async function updateCodexLocalAccessBoundOAuthAccount(
-  boundOauthAccountId: string,
+  boundOauthAccountId: string | null,
 ): Promise<CodexLocalAccessState> {
   return await invoke('codex_local_access_update_bound_oauth_account', {
     boundOauthAccountId,

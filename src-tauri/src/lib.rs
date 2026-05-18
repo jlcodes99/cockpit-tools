@@ -95,6 +95,20 @@ pub fn run() {
         }))
         .setup(|app| {
             info!("Cockpit Tools 启动...");
+            let current_exe = std::env::current_exe()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|err| format!("unknown: {}", err));
+            let build_mode = if cfg!(debug_assertions) {
+                "debug"
+            } else {
+                "release"
+            };
+            logger::log_info(&format!(
+                "[Startup] 启动诊断: marker=tray-diagnostics-v1, version={}, mode={}, exe={}",
+                env!("CARGO_PKG_VERSION"),
+                build_mode,
+                current_exe
+            ));
 
             // 存储全局 AppHandle
             let _ = APP_HANDLE.set(app.handle().clone());
@@ -232,6 +246,20 @@ pub fn run() {
             // 创建骨架托盘（无账号文件 I/O，秒出）
             if let Err(e) = modules::tray::create_tray_skeleton(app.handle()) {
                 logger::log_error(&format!("[Tray] 创建骨架托盘失败: {}", e));
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                let tray_app_handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(800));
+                    if let Err(err) = modules::tray::apply_tray_icon_style(&tray_app_handle) {
+                        logger::log_warn(&format!(
+                            "[Tray] macOS 启动后重应用菜单栏图标样式失败: {}",
+                            err
+                        ));
+                    }
+                });
             }
 
             // 后台线程加载完整托盘菜单（含账号数据）

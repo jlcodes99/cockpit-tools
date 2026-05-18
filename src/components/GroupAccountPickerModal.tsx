@@ -15,6 +15,7 @@ import {
 } from '../utils/accountFilters'
 import { MultiSelectFilterDropdown } from './MultiSelectFilterDropdown'
 import { AccountTagFilterDropdown } from './AccountTagFilterDropdown'
+import { useEscClose } from '../hooks/useEscClose'
 import './GroupAccountPickerModal.css'
 
 interface GroupAccountPickerModalProps {
@@ -43,6 +44,7 @@ export function GroupAccountPickerModal({
   mode = 'edit',
 }: GroupAccountPickerModalProps) {
   const { t } = useTranslation()
+  useEscClose(isOpen, onClose)
   const isQuickAddMode = mode === 'addAccounts'
   const [query, setQuery] = useState('')
   const [groupName, setGroupName] = useState('')

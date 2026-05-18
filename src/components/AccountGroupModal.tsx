@@ -16,6 +16,7 @@ import {
   addAccountsToGroup,
   moveAccountsBetweenGroups,
 } from '../services/accountGroupService';
+import { useEscClose } from '../hooks/useEscClose';
 import './AccountGroupModal.css';
 
 // ─── 分组管理弹窗 ──────────────────────────────────────────
@@ -37,6 +38,7 @@ export const AccountGroupModal = ({
   groupFilter = [], onToggleGroupFilter, onClearGroupFilter,
 }: AccountGroupModalProps) => {
   const { t } = useTranslation();
+  useEscClose(isOpen, onClose);
   const [groups, setGroups] = useState<AccountGroup[]>([]);
   const [newName, setNewName] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -285,6 +287,7 @@ interface AddToGroupModalProps {
 
 export const AddToGroupModal = ({ isOpen, onClose, accountIds, sourceGroupId, onAdded }: AddToGroupModalProps) => {
   const { t } = useTranslation();
+  useEscClose(isOpen, onClose);
   const [groups, setGroups] = useState<AccountGroup[]>([]);
   const [newName, setNewName] = useState('');
   const [error, setError] = useState<string | null>(null);

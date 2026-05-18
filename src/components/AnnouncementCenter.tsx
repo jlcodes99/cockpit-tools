@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import type { Page } from '../types/navigation';
 import type { Announcement, AnnouncementAction } from '../types/announcement';
 import { useAnnouncementStore } from '../stores/useAnnouncementStore';
+import { useEscClose } from '../hooks/useEscClose';
 import './AnnouncementCenter.css';
 
 interface AnnouncementCenterProps {
@@ -150,6 +151,9 @@ export function AnnouncementCenter({
       setListOpen(true);
     }
   };
+
+  useEscClose(!!detailAnnouncement, () => void closeDetail(false));
+  useEscClose(listOpen && !detailAnnouncement, () => setListOpen(false));
 
   const handleAnnouncementClick = async (announcement: Announcement) => {
     if (announcementState.unreadIds.includes(announcement.id)) {
@@ -315,15 +319,9 @@ export function AnnouncementCenter({
               <div className="modal-header">
                 <div className="announcement-detail-header-left">
                   {detailFromList ? (
-                    <button
-                      className="btn btn-secondary icon-only"
-                      onClick={() => {
-                        void closeDetail(true);
-                      }}
-                      title={t('common.back', '返回')}
-                    >
-                      <ChevronLeft size={14} />
-                    </button>
+                    <button className="btn btn-secondary icon-only" onClick={() => {
+                      void closeDetail(true);
+                    }} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
                   ) : null}
                   <span className={`announcement-type-chip ${sanitizeTypeClass(String(detailAnnouncement.type))}`}>
                     {currentTypeLabel(String(detailAnnouncement.type))}

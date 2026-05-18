@@ -2,6 +2,7 @@ import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from '
 import {
   ArrowDownWideNarrow,
   ChevronDown,
+  ChevronLeft,
   CircleAlert,
   Copy,
   Database,
@@ -33,6 +34,7 @@ import { PaginationControls } from '../components/PaginationControls';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
 import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
+import { useEscClose } from '../hooks/useEscClose';
 import {
   PlatformOverviewTab,
   PlatformOverviewTabsHeader,
@@ -295,6 +297,8 @@ export function QoderAccountsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [addTab, setAddTab] = useState<'oauth' | 'token' | 'import'>('import');
+
+  useEscClose(showAddModal, () => setShowAddModal(false));
   const [addStatus, setAddStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [addMessage, setAddMessage] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState('');
@@ -2142,6 +2146,7 @@ export function QoderAccountsPage() {
         <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
           <div className="modal-content codex-add-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
+              <button className="btn btn-secondary icon-only" onClick={() => setShowAddModal(false)} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t('qoder.addModal.title')}</h2>
               <button className="modal-close" onClick={() => setShowAddModal(false)} aria-label={t('common.close', '关闭')}>
                 <X />

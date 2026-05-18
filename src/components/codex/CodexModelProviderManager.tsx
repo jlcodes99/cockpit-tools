@@ -14,6 +14,7 @@ import {
   Search,
   Settings,
 } from "lucide-react";
+import { useEscClose } from "../../hooks/useEscClose";
 import type { CodexAccount } from "../../types/codex";
 import {
   addApiKeyToCodexModelProvider,
@@ -225,6 +226,8 @@ export function CodexModelProviderManager({
     setShowModal(false);
     setFormError(null);
   }, [saving]);
+
+  useEscClose(showModal, closeModal);
 
   const mutateForm = useCallback((patch: Partial<ProviderFormState>) => {
     setForm((prev) => ({ ...prev, ...patch }));

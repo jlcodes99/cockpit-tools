@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { FolderOpen, X } from 'lucide-react';
+import { useEscClose } from '../hooks/useEscClose';
 
 export interface FileCorruptedError {
   error_type: 'file_corrupted';
@@ -50,6 +51,8 @@ export function parseFileCorruptedError(error: unknown): FileCorruptedError | nu
 export function FileCorruptedModal({ error, onClose }: FileCorruptedModalProps) {
   const { t } = useTranslation();
   const [actionError, setActionError] = useState<string | null>(null);
+
+  useEscClose(true, onClose);
 
   const handleOpenFolder = async () => {
     try {

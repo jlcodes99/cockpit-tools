@@ -691,7 +691,7 @@ pub fn update_codex_api_key_credentials(
 #[tauri::command]
 pub async fn update_codex_api_key_bound_oauth_account(
     account_id: String,
-    bound_oauth_account_id: String,
+    bound_oauth_account_id: Option<String>,
 ) -> Result<CodexAccount, String> {
     codex_account::update_api_key_bound_oauth_account(&account_id, bound_oauth_account_id).await
 }
@@ -919,9 +919,9 @@ pub async fn codex_local_access_rotate_api_key() -> Result<CodexLocalAccessState
 
 #[tauri::command]
 pub async fn codex_local_access_update_bound_oauth_account(
-    bound_oauth_account_id: String,
+    bound_oauth_account_id: Option<String>,
 ) -> Result<CodexLocalAccessState, String> {
-    codex_local_access::update_local_access_bound_oauth_account(&bound_oauth_account_id).await
+    codex_local_access::update_local_access_bound_oauth_account(bound_oauth_account_id).await
 }
 
 #[tauri::command]

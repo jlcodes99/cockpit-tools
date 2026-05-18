@@ -587,6 +587,10 @@
       "hideDockIconDesc": "Независимо управляет отображением значка Dock, без привязки к поведению сворачивания окна",
       "hideDockIconOff": "Нет (Показывать значок Dock)",
       "hideDockIconOn": "Да (Скрывать значок Dock)",
+      "trayIconStyle": "Стиль значка в строке меню (только macOS)",
+      "trayIconStyleDesc": "Выберите системный монохромный значок или исходный цветной значок приложения",
+      "trayIconStyleTemplate": "Монохромный значок",
+      "trayIconStyleColor": "Цветной значок",
       "floatingCardStartup": "Показывать плавающую карточку при запуске",
       "floatingCardStartupDesc": "Автоматически показывать плавающую карточку аккаунта после запуска приложения",
       "floatingCardAlwaysOnTop": "Держать плавающую карточку поверх остальных по умолчанию",
@@ -1886,7 +1890,7 @@
         "empty": "Статистики квот пока нет"
       },
       "oauthBinding": {
-        "desc": "При переключении на API-сервис или его проверке состояние входа использует привязанный аккаунт OAuth, а Provider использует текущую конфигурацию API-сервиса.",
+        "desc": "Необязательно. Без привязки API-сервис работает по прежней логике API Key; после привязки вход использует OAuth-аккаунт, а Provider — настройки API-сервиса.",
         "currentService": "API-сервис: {{name}}"
       }
     },
@@ -2299,14 +2303,17 @@
         "action": "Связать OAuth",
         "actionShort": "Связать",
         "title": "Связать OAuth-аккаунт",
-        "desc": "При переключении на этот API Key аккаунт вход берется из связанного OAuth-аккаунта, а Provider использует настройки этого API Key аккаунта.",
+        "desc": "Необязательно. Без привязки этот аккаунт переключается по прежней логике API Key; после привязки вход использует OAuth-аккаунт, а Provider — настройки этого API Key аккаунта.",
         "currentAccount": "API Key аккаунт: {{name}}",
         "selectLabel": "Выберите OAuth-аккаунт",
         "empty": "OAuth-аккаунтов пока нет. Сначала добавьте аккаунт с OAuth-авторизацией.",
         "validationRequired": "Выберите OAuth-аккаунт",
         "saveSuccess": "Связь OAuth обновлена",
         "saveFailed": "Не удалось связать OAuth: {{error}}",
-        "switchRequiresBinding": "Сначала свяжите OAuth-аккаунт"
+        "switchRequiresBinding": "Сначала свяжите OAuth-аккаунт",
+        "clearAction": "Отвязать",
+        "clearSuccess": "Привязка OAuth удалена.",
+        "clearFailed": "Не удалось удалить привязку OAuth: {{error}}"
       }
     },
     "modelProviders": {
@@ -2707,7 +2714,9 @@
     "cursorRefreshInterval": "Автообновление квоты",
     "gemini": {
       "title": "Настройки Gemini Cli",
-      "appPath": "Путь Gemini Cli"
+      "appPath": "Путь Gemini Cli",
+      "syncWsl": "Синхронизировать конфигурацию WSL",
+      "syncWslDesc": "Автоматически перезаписывать конфигурацию .gemini в WSL при переключении аккаунта"
     },
     "geminiRefreshInterval": "Автоматическое обновление квоты",
     "codebuddy": {

@@ -17,6 +17,7 @@ import {
   FolderOpen,
   Square,
   ChevronDown,
+  ChevronLeft,
   X,
   Search,
   ArrowDownWideNarrow,
@@ -39,6 +40,7 @@ import {
   parseFileCorruptedError,
   type FileCorruptedError,
 } from "./FileCorruptedModal";
+import { useEscClose } from "../hooks/useEscClose";
 import type { InstanceStoreState } from "../stores/createInstanceStore";
 import { showInstanceFloatingCardWindow } from "../services/floatingCardService";
 import {
@@ -665,6 +667,11 @@ export function InstancesManager<TAccount extends AccountLike>({
     resetForm();
     setEditing(null);
   };
+
+  useEscClose(showModal, closeModal);
+  useEscClose(!!initGuideInstance, () => setInitGuideInstance(null));
+  useEscClose(!!deleteConfirmInstance, () => setDeleteConfirmInstance(null));
+  useEscClose(!!runningNoticeInstance, () => setRunningNoticeInstance(null));
 
   const handleNameChange = (value: string) => {
     setFormName(value);
@@ -2584,6 +2591,7 @@ export function InstancesManager<TAccount extends AccountLike>({
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
+              <button className="btn btn-secondary icon-only" onClick={() => setInitGuideInstance(null)} title={t("common.back", "返回")} aria-label={t("common.back", "返回")}><ChevronLeft size={14} /></button>
               <h2>{t("instances.initGuide.title", "实例尚未初始化")}</h2>
               <button
                 className="modal-close"
@@ -2741,6 +2749,7 @@ export function InstancesManager<TAccount extends AccountLike>({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-header">
+              <button className="btn btn-secondary icon-only" onClick={closeModal} title={t("common.back", "返回")} aria-label={t("common.back", "返回")}><ChevronLeft size={14} /></button>
               <h2>
                 {editing
                   ? t("instances.modal.editTitle", "编辑实例")

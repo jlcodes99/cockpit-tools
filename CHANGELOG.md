@@ -7,6 +7,47 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [0.23.9] - 2026-05-17
+
+### Added
+- **Codex token import now accepts accessToken-only and Sub2API export formats**: Codex imports can read raw JWT access tokens, `accessToken`/`access_token` fields, camelCase token JSON, line-delimited token input, and OpenAI OAuth accounts from Sub2API export JSON.
+- **macOS menu bar icon style is now configurable**: Settings can switch between the system template status icon and the original color app icon, and the selected style is applied immediately when settings or imported user config change.
+
+### Changed
+- **Codex API Key account switching now writes the official runtime provider state**: API Key accounts write the selected provider as a managed `codex_local_access` provider with the bearer token in `config.toml`, preserving the configured provider identity while avoiding stale `openai_base_url` state.
+- **Codex OAuth imports now preserve more identity metadata from access tokens**: accessToken-only imports derive email, user ID, plan, account ID, organization ID, and subscription expiry when those claims are available.
+
+### Fixed
+- **macOS packaged builds now keep the template menu bar icon visible**: the template tray asset is normalized to menu-bar size before use and the template flag is applied again after tray creation.
+- **Codex built-in OpenAI switching now clears managed API Key runtime provider state**: switching back to the built-in path removes Cockpit-managed provider/token entries while preserving unrelated manual providers.
+- **Cursor quota badges now use the intended mid-level style for 70%+ usage**: quota indicators no longer use the warning style before reaching the critical range.
+
+---
+## [0.23.8] - 2026-05-17
+
+### Added
+- **Codex OAuth bindings can now be cleared from the binding dialog**: API Key accounts and the Local API Service expose an explicit unbind action when an OAuth account is already linked.
+
+### Changed
+- **Codex API Key accounts and the Local API Service now treat OAuth binding as optional**: unbound entries continue to run through their original API Key flow, while bound entries keep using the selected OAuth login state with the configured provider.
+- **Codex OAuth binding copy now matches the optional behavior**: the binding dialog explains the unbound and bound runtime paths instead of presenting OAuth binding as required.
+
+---
+## [0.23.7] - 2026-05-16
+
+### Added
+- **Gemini account switching on Windows can now sync default credentials into WSL**: when switching the default Gemini account, Cockpit can copy `oauth_creds.json` and `google_accounts.json` into WSL `~/.gemini` and clean stale `gemini-credentials.json`.
+- **Modal keyboard/back interactions were expanded across account and tool dialogs**: major dialogs now support `Esc` close and explicit back actions to improve keyboard and layered-modal workflows.
+
+### Changed
+- **Gemini WSL sync now has a user-facing toggle in both Settings and Quick Settings**: the new `Sync WSL Configuration` option is enabled by default and controls whether switch-time credential sync is applied.
+- **Codex OAuth-binding account picker now uses the same subscription badge style as the main account view**: plan badges in the binding modal follow the same visual classes and plan color semantics as Codex account cards/tables.
+- **Homebrew Cask metadata has been updated after v0.23.6**: cask version/checksum references were refreshed to match the latest packaged artifact state.
+
+### Fixed
+- **GitHub Copilot switching/import now supports VS Code shared storage on Windows**: account import and token injection now read/write both legacy `User/globalStorage/state.vscdb` and shared `.vscode-shared*/sharedStorage/state.vscdb`, with shared-storage-first lookup and legacy fallback for mixed installs.
+
+---
 ## [0.23.6] - 2026-05-16
 
 ### Added
