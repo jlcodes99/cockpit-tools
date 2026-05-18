@@ -37,6 +37,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify release is from main branch
+        shell: bash
+        run: |
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "ERROR: Release tags must be on the main branch."
+            echo "This tag is not on main. Releases from integration/feature branches are blocked."
+            exit 1
+          fi
+          echo "Branch check passed - tag is on main branch."
 
       - name: Install dependencies (Linux)
         if: startsWith(matrix.platform, 'ubuntu')
