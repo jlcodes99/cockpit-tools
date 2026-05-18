@@ -153,6 +153,8 @@ pub fn run() {
                 modules::codex_local_access::restore_local_access_gateway().await;
             });
 
+            modules::codex_proxy::ensure_gateway_for_current_proxy_account_on_startup();
+
             {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -489,6 +491,12 @@ pub fn run() {
             commands::codex::save_codex_account_groups,
             commands::codex::load_codex_model_providers,
             commands::codex::save_codex_model_providers,
+            commands::codex::codex_proxy_load_config,
+            commands::codex::codex_proxy_save_config,
+            commands::codex::codex_proxy_health_check,
+            commands::codex::codex_proxy_start,
+            commands::codex::codex_proxy_upsert_responses_channel,
+            commands::codex::codex_proxy_list_responses_channels,
             commands::codex::codex_local_access_get_state,
             commands::codex::codex_local_access_save_accounts,
             commands::codex::codex_local_access_remove_account,

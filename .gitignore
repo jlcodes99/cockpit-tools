@@ -37,6 +37,9 @@ docs/plugin-architecture-design.md
 src-tauri/arms_cache/
 arms.biz.trace.*
 
+# Generated Codex Proxy sidecar binary
+src-tauri/resources/codex-proxy/
+
 # Swift native menu build artifacts
 src-tauri/native/macos-native-menu/.build/
 .tmp/

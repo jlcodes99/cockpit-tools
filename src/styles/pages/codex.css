@@ -3043,7 +3043,7 @@
 
 /* 添加弹窗 */
 .codex-add-modal {
-  max-width: 480px;
+  max-width: 860px;
   width: 100%;
 }
 
@@ -3108,7 +3108,7 @@
 
 .codex-add-modal .modal-tabs {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   padding: 4px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
@@ -3122,13 +3122,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  height: 32px;
-  padding: 0 6px;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   border-radius: 8px;
   cursor: pointer;
@@ -4482,6 +4482,162 @@
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.codex-add-modal .codex-proxy-switch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.codex-add-modal .codex-proxy-gateway-settings-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+  transition: all 0.2s;
+}
+
+.codex-add-modal .codex-proxy-gateway-settings-toggle:hover {
+  border-color: var(--primary);
+  background: var(--bg-hover);
+}
+
+.codex-add-modal .codex-proxy-gateway-settings-toggle span {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.codex-add-modal .codex-proxy-gateway-settings-toggle > svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: transform 0.2s ease;
+}
+
+.codex-add-modal .codex-proxy-gateway-settings-toggle.expanded > svg {
+  transform: rotate(90deg);
+}
+
+.codex-add-modal .codex-proxy-gateway-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-secondary) 72%, transparent);
+}
+
+.codex-add-modal .codex-proxy-model-mapping-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.codex-add-modal .codex-proxy-model-mapping-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.codex-add-modal .codex-proxy-model-mapping-row input {
+  min-width: 0;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.codex-add-modal .codex-proxy-model-mapping-row input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.codex-add-modal .codex-proxy-model-mapping-arrow {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 16px;
+}
+
+.codex-add-modal .codex-proxy-model-mapping-remove,
+.codex-add-modal .codex-proxy-model-mapping-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.codex-add-modal .codex-proxy-model-mapping-remove {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+}
+
+.codex-add-modal .codex-proxy-model-mapping-add {
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.codex-add-modal .codex-proxy-model-mapping-remove:hover,
+.codex-add-modal .codex-proxy-model-mapping-add:hover {
+  border-color: var(--primary);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.codex-add-modal .checkbox-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.codex-add-modal .checkbox-option input {
+  margin-top: 2px;
+}
+
+.codex-add-modal .checkbox-option span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.codex-add-modal .checkbox-option small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .codex-add-modal .token-format-collapse {

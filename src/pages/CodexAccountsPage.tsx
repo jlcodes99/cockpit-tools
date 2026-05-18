@@ -59,6 +59,12 @@ import { useCodexInstanceStore } from "../stores/useCodexInstanceStore";
 import * as codexService from "../services/codexService";
 import * as codexInstanceService from "../services/codexInstanceService";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
+import * as codexProxyService from "../services/codexProxyService";
+import type {
+  CodexProxyModelMapping,
+  CodexProxyResponsesChannel,
+  CodexProxyServiceType,
+} from "../services/codexProxyService";
 import { TagEditModal } from "../components/TagEditModal";
 import {
   ExportJsonModal,
@@ -90,9 +96,12 @@ import {
   getCodexPlanFilterKey,
   getCodexSubscriptionPresentation,
   hasCodexAccountName,
+  CODEX_PROXY_PROVIDER_ID,
+  doesCodexApiKeyAccountRequireOAuthBinding,
   isCodexApiKeyAccount,
   isCodexExplicitFreePlanType,
   isCodexNewApiAccount,
+  isCodexProxyAccount,
   isCodexTeamLikePlan,
   type CodexApiProviderMode,
   type CodexQuotaErrorInfo,
@@ -251,6 +260,21 @@ const CODEX_CUSTOM_SORT_ORDER_KEY =
   "agtools.codex.accounts.custom_sort_order.v1";
 const DEFAULT_CODEX_API_PROVIDER_ID = COCKPIT_API_PROVIDER_ID;
 const DEFAULT_CODEX_API_BASE_URL = COCKPIT_API_BASE_URL;
+const DEFAULT_CODEX_PROXY_GATEWAY_BASE_URL = "http://127.0.0.1:53000";
+const CODEX_PROXY_SOURCE_MODEL_OPTIONS = [
+  "gpt-5.5",
+  "gpt-5.4",
+  "gpt-5.3",
+  "gpt-5",
+  "gpt-4.1",
+];
+const CODEX_PROXY_TARGET_MODEL_OPTIONS = [
+  "glm-5.1",
+  "deepseek-v3.2",
+  "kimi-k2",
+  "qwen3-coder-plus",
+  "claude-sonnet-4-5",
+];
 const CODEX_LOCAL_ACCESS_FALLBACK_PORT = 54140;
 const CODEX_LOCAL_ACCESS_FALLBACK_BASE_URL = `http://127.0.0.1:${CODEX_LOCAL_ACCESS_FALLBACK_PORT}/v1`;
 const CODEX_LOCAL_ACCESS_FALLBACK_API_KEY_MASK = "agt_codex_••••••••••••";
@@ -397,6 +421,60 @@ function normalizeCodexOverviewLayoutMode(
 ): CodexOverviewLayoutMode | null {
   if (value === "compact" || value === "list" || value === "grid") return value;
   return null;
+}
+
+interface CodexProxyModelMappingRow extends CodexProxyModelMapping {
+  id: string;
+}
+
+function createCodexProxyModelMappingRow(
+  item?: Partial<CodexProxyModelMapping>,
+): CodexProxyModelMappingRow {
+  return {
+    id: `codex-proxy-model-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    source: item?.source ?? "",
+    target: item?.target ?? "",
+  };
+}
+
+function createCodexProxyModelMappingRows(
+  items?: CodexProxyModelMapping[] | null,
+): CodexProxyModelMappingRow[] {
+  const rows = (items ?? [])
+    .map((item) => createCodexProxyModelMappingRow(item))
+    .filter((row) => row.source.trim() || row.target.trim());
+  return rows.length > 0 ? rows : [createCodexProxyModelMappingRow()];
+}
+
+function buildCodexProxyModelMapping(
+  rows: CodexProxyModelMappingRow[],
+): CodexProxyModelMapping[] {
+  return rows
+    .map((row) => ({
+      source: row.source.trim(),
+      target: row.target.trim(),
+    }))
+    .filter((row) => row.source && row.target);
+}
+
+function sanitizeCodexProxyRouteName(raw: string): string {
+  return (
+    raw
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_. -]+/g, "")
+      .replace(/[_.\s-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "channel"
+  );
+}
+
+function getCodexProxyProviderId(name: string): string {
+  return `${CODEX_PROXY_PROVIDER_ID}_${sanitizeCodexProxyRouteName(name)}`;
+}
+
+function getCodexProxyProviderName(name: string): string {
+  const trimmed = name.trim();
+  return trimmed ? `兼容代理 ${trimmed}` : "兼容代理";
 }
 
 function isHttpLikeUrl(value: string): boolean {
@@ -1722,6 +1800,51 @@ export function CodexAccountsPage() {
     useState<string>("");
   const [newManagedProviderNameInput, setNewManagedProviderNameInput] =
     useState("");
+  const [codexProxyGatewayBaseUrlInput, setCodexProxyGatewayBaseUrlInput] =
+    useState(DEFAULT_CODEX_PROXY_GATEWAY_BASE_URL);
+  const [codexProxyProxyAccessKeyInput, setCodexProxyProxyAccessKeyInput] =
+    useState("");
+  const [codexProxyAdminAccessKeyInput, setCodexProxyAdminAccessKeyInput] =
+    useState("");
+  const [codexProxyBinaryPathInput, setCodexProxyBinaryPathInput] =
+    useState("");
+  const [codexProxyAutoStartInput, setCodexProxyAutoStartInput] =
+    useState(true);
+  const [showCodexProxyGatewaySettings, setShowCodexProxyGatewaySettings] =
+    useState(false);
+  const [codexProxyChannelNameInput, setCodexProxyChannelNameInput] =
+    useState("");
+  const [codexProxyServiceTypeInput, setCodexProxyServiceTypeInput] =
+    useState<CodexProxyServiceType>("openai");
+  const [codexProxyUpstreamBaseUrlInput, setCodexProxyUpstreamBaseUrlInput] =
+    useState("");
+  const [codexProxyUpstreamApiKeyInput, setCodexProxyUpstreamApiKeyInput] =
+    useState("");
+  const [codexProxyUpstreamApiKeyVisible, setCodexProxyUpstreamApiKeyVisible] =
+    useState(false);
+  const [codexProxyModelMappingRows, setCodexProxyModelMappingRows] = useState<
+    CodexProxyModelMappingRow[]
+  >(() => createCodexProxyModelMappingRows());
+  const [codexProxySkipTlsVerifyInput, setCodexProxySkipTlsVerifyInput] =
+    useState(false);
+  const [
+    codexProxyNormalizeMetadataUserIdInput,
+    setCodexProxyNormalizeMetadataUserIdInput,
+  ] = useState(true);
+  const [
+    codexProxyNormalizeNonstandardChatRolesInput,
+    setCodexProxyNormalizeNonstandardChatRolesInput,
+  ] = useState(false);
+  const [codexProxyCodexToolCompatInput, setCodexProxyCodexToolCompatInput] =
+    useState(false);
+  const [codexProxyChannelIndexInput, setCodexProxyChannelIndexInput] =
+    useState<number | null>(null);
+  const [editingCodexProxyAccountId, setEditingCodexProxyAccountId] = useState<
+    string | null
+  >(null);
+  const [savingCodexProxyChannel, setSavingCodexProxyChannel] = useState(false);
+  const [loadingCodexProxyChannel, setLoadingCodexProxyChannel] =
+    useState(false);
   const [editingApiKeyNameId, setEditingApiKeyNameId] = useState<string | null>(
     null,
   );
@@ -1880,6 +2003,14 @@ export function CodexAccountsPage() {
         (item) => item.id === quickSwitchApiKeyId,
       ) ?? null,
     [quickSwitchApiKeyId, selectedQuickSwitchProvider],
+  );
+  const editingCodexProxyAccount = useMemo(
+    () =>
+      editingCodexProxyAccountId
+        ? (accounts.find((item) => item.id === editingCodexProxyAccountId) ??
+          null)
+        : null,
+    [accounts, editingCodexProxyAccountId],
   );
   const oauthAccounts = useMemo(
     () => accounts.filter((account) => !isCodexApiKeyAccount(account)),
@@ -2112,6 +2243,17 @@ export function CodexAccountsPage() {
       setManagedProviderId("");
       setManagedProviderApiKeyId("");
       setNewManagedProviderNameInput("");
+      setCodexProxyChannelNameInput("");
+      setCodexProxyServiceTypeInput("openai");
+      setCodexProxyUpstreamBaseUrlInput("");
+      setCodexProxyUpstreamApiKeyInput("");
+      setCodexProxyUpstreamApiKeyVisible(false);
+      setCodexProxyModelMappingRows(createCodexProxyModelMappingRows());
+      setCodexProxySkipTlsVerifyInput(false);
+      setCodexProxyNormalizeMetadataUserIdInput(true);
+      setCodexProxyNormalizeNonstandardChatRolesInput(false);
+      setCodexProxyCodexToolCompatInput(false);
+      setCodexProxyChannelIndexInput(null);
     }
   }, [showAddModal]);
 
@@ -2119,6 +2261,29 @@ export function CodexAccountsPage() {
     if (showAddModal && addTab === "apikey") {
       setApiKeyInputVisible(false);
     }
+  }, [addTab, showAddModal]);
+
+  useEffect(() => {
+    if (!showAddModal || addTab !== "codex-proxy") return;
+    let cancelled = false;
+    codexProxyService
+      .loadCodexProxyGatewayConfig()
+      .then((config) => {
+        if (cancelled) return;
+        setCodexProxyGatewayBaseUrlInput(
+          config.gatewayBaseUrl || DEFAULT_CODEX_PROXY_GATEWAY_BASE_URL,
+        );
+        setCodexProxyProxyAccessKeyInput(config.proxyAccessKey || "");
+        setCodexProxyAdminAccessKeyInput(config.adminAccessKey || "");
+        setCodexProxyBinaryPathInput(config.binaryPath || "");
+        setCodexProxyAutoStartInput(config.autoStart !== false);
+      })
+      .catch((error) => {
+        console.warn("加载 Codex Proxy 配置失败:", error);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [addTab, showAddModal]);
 
   useEffect(() => {
@@ -2870,7 +3035,7 @@ export function CodexAccountsPage() {
     const targetAccount = accounts.find((account) => account.id === accountId);
     if (
       targetAccount &&
-      isCodexApiKeyAccount(targetAccount) &&
+      doesCodexApiKeyAccountRequireOAuthBinding(targetAccount) &&
       !resolveBoundOAuthAccount(targetAccount)
     ) {
       openOAuthBindingModal(targetAccount, { autoSwitch: true });
@@ -3431,6 +3596,331 @@ export function CodexAccountsPage() {
     }
   }, []);
 
+  const updateCodexProxyModelMappingRow = useCallback(
+    (
+      rowId: string,
+      field: keyof Pick<CodexProxyModelMappingRow, "source" | "target">,
+      value: string,
+    ) => {
+      setCodexProxyModelMappingRows((rows) =>
+        rows.map((row) =>
+          row.id === rowId
+            ? {
+                ...row,
+                [field]: value,
+              }
+            : row,
+        ),
+      );
+    },
+    [],
+  );
+
+  const addCodexProxyModelMappingRow = useCallback(() => {
+    setCodexProxyModelMappingRows((rows) => [
+      ...rows,
+      createCodexProxyModelMappingRow(),
+    ]);
+  }, []);
+
+  const removeCodexProxyModelMappingRow = useCallback((rowId: string) => {
+    setCodexProxyModelMappingRows((rows) => {
+      const next = rows.filter((row) => row.id !== rowId);
+      return next.length > 0 ? next : [createCodexProxyModelMappingRow()];
+    });
+  }, []);
+
+  const applyCodexProxyChannelToInputs = useCallback(
+    (channel: CodexProxyResponsesChannel) => {
+      setCodexProxyChannelIndexInput(channel.index);
+      setCodexProxyChannelNameInput(channel.name || "");
+      setCodexProxyServiceTypeInput(channel.serviceType || "openai");
+      setCodexProxyUpstreamBaseUrlInput(channel.upstreamBaseUrl || "");
+      setCodexProxyUpstreamApiKeyInput(channel.upstreamApiKey || "");
+      setCodexProxyModelMappingRows(
+        createCodexProxyModelMappingRows(channel.modelMapping),
+      );
+      setCodexProxySkipTlsVerifyInput(Boolean(channel.insecureSkipVerify));
+      setCodexProxyNormalizeMetadataUserIdInput(
+        channel.normalizeMetadataUserId !== false,
+      );
+      setCodexProxyNormalizeNonstandardChatRolesInput(
+        Boolean(channel.normalizeNonstandardChatRoles),
+      );
+      setCodexProxyCodexToolCompatInput(Boolean(channel.codexToolCompat));
+      setCodexProxyUpstreamApiKeyVisible(false);
+    },
+    [],
+  );
+
+  const findCodexProxyChannelForAccount = useCallback(
+    (
+      account: CodexAccount,
+      channels: CodexProxyResponsesChannel[],
+      gatewayBaseUrl: string,
+    ) => {
+      const providerName = (account.api_provider_name || "")
+        .replace(/^兼容代理\s*/, "")
+        .trim();
+      const baseUrl = normalizeCodexApiBaseUrl(account.api_base_url);
+      return (
+        channels.find((channel) => {
+          const routeBaseUrl = `${gatewayBaseUrl.replace(/\/+$/, "")}/${channel.routePrefix || sanitizeCodexProxyRouteName(channel.name)}/v1`;
+          return normalizeCodexApiBaseUrl(routeBaseUrl) === baseUrl;
+        }) ??
+        channels.find((channel) => channel.name.trim() === providerName) ??
+        null
+      );
+    },
+    [],
+  );
+
+  const openCodexProxyChannelModal = useCallback(
+    async (account: CodexAccount) => {
+      if (!isCodexProxyAccount(account)) return;
+      setEditingCodexProxyAccountId(account.id);
+      setLoadingCodexProxyChannel(true);
+      try {
+        const config = await codexProxyService.loadCodexProxyGatewayConfig();
+        setCodexProxyGatewayBaseUrlInput(
+          config.gatewayBaseUrl || DEFAULT_CODEX_PROXY_GATEWAY_BASE_URL,
+        );
+        setCodexProxyProxyAccessKeyInput(config.proxyAccessKey || "");
+        setCodexProxyAdminAccessKeyInput(config.adminAccessKey || "");
+        setCodexProxyBinaryPathInput(config.binaryPath || "");
+        setCodexProxyAutoStartInput(config.autoStart !== false);
+
+        const channels = await codexProxyService.listCodexProxyResponsesChannels({
+          gatewayBaseUrl: config.gatewayBaseUrl,
+          proxyAccessKey: config.proxyAccessKey,
+          adminAccessKey: config.adminAccessKey,
+        });
+        const matched = findCodexProxyChannelForAccount(
+          account,
+          channels,
+          config.gatewayBaseUrl || DEFAULT_CODEX_PROXY_GATEWAY_BASE_URL,
+        );
+        if (!matched) {
+          throw new Error(
+            channels.length === 0
+              ? "当前兼容代理还没有 Responses 渠道"
+              : "未能根据该账号匹配到绑定的兼容渠道，请检查账号名称或渠道前缀",
+          );
+        }
+        applyCodexProxyChannelToInputs(matched);
+      } catch (error) {
+        setMessage({
+          text: `读取兼容渠道失败: ${String(error).replace(/^Error:\s*/, "")}`,
+          tone: "error",
+        });
+        setEditingCodexProxyAccountId(null);
+      } finally {
+        setLoadingCodexProxyChannel(false);
+      }
+    },
+    [
+      applyCodexProxyChannelToInputs,
+      findCodexProxyChannelForAccount,
+      setMessage,
+    ],
+  );
+
+  const handleSubmitCodexProxyChannel = useCallback(
+    async (mode: "create" | "edit") => {
+      const gatewayBaseUrl = normalizeHttpBaseUrl(codexProxyGatewayBaseUrlInput);
+      if (!gatewayBaseUrl) {
+        const message = "兼容代理地址格式无效，请输入完整的 http:// 或 https:// 地址";
+        if (mode === "create") {
+          page.setAddStatus("error");
+          page.setAddMessage(message);
+        } else {
+          setMessage({ text: message, tone: "error" });
+        }
+        return;
+      }
+      const proxyAccessKey = codexProxyProxyAccessKeyInput.trim();
+      if (!proxyAccessKey) {
+        const message = "请输入代理访问密钥";
+        if (mode === "create") {
+          page.setAddStatus("error");
+          page.setAddMessage(message);
+        } else {
+          setMessage({ text: message, tone: "error" });
+        }
+        return;
+      }
+      const channelName = codexProxyChannelNameInput.trim();
+      if (!channelName) {
+        const message = "请输入渠道名称";
+        if (mode === "create") {
+          page.setAddStatus("error");
+          page.setAddMessage(message);
+        } else {
+          setMessage({ text: message, tone: "error" });
+        }
+        return;
+      }
+      const upstreamBaseUrl = normalizeHttpBaseUrl(
+        codexProxyUpstreamBaseUrlInput,
+      );
+      if (!upstreamBaseUrl) {
+        const message = "上游 Base URL 格式无效，请输入完整的 http:// 或 https:// 地址";
+        if (mode === "create") {
+          page.setAddStatus("error");
+          page.setAddMessage(message);
+        } else {
+          setMessage({ text: message, tone: "error" });
+        }
+        return;
+      }
+      const upstreamApiKey = codexProxyUpstreamApiKeyInput.trim();
+      if (!upstreamApiKey) {
+        const message = "请输入上游 API Key";
+        if (mode === "create") {
+          page.setAddStatus("error");
+          page.setAddMessage(message);
+        } else {
+          setMessage({ text: message, tone: "error" });
+        }
+        return;
+      }
+
+      if (mode === "create") {
+        page.setAddStatus("loading");
+        page.setAddMessage("正在写入兼容渠道并创建 Codex 账号...");
+      }
+      setSavingCodexProxyChannel(true);
+      try {
+        await codexProxyService.saveCodexProxyGatewayConfig({
+          gatewayBaseUrl,
+          proxyAccessKey,
+          adminAccessKey: codexProxyAdminAccessKeyInput.trim(),
+          binaryPath: codexProxyBinaryPathInput.trim(),
+          autoStart: codexProxyAutoStartInput,
+        });
+        let health = await codexProxyService.checkCodexProxyGatewayHealth(
+          gatewayBaseUrl,
+        );
+        if (!health.running && codexProxyAutoStartInput) {
+          health = await codexProxyService.startCodexProxyGateway();
+        }
+        if (!health.running) {
+          throw new Error(
+            `${health.message}。请确认已构建内置兼容代理，或填写自定义代理可执行文件路径并开启自动启动。`,
+          );
+        }
+
+        const result = await codexProxyService.upsertCodexProxyResponsesChannel({
+          gatewayBaseUrl,
+          proxyAccessKey,
+          adminAccessKey: codexProxyAdminAccessKeyInput.trim(),
+          channelIndex: mode === "edit" ? codexProxyChannelIndexInput : null,
+          name: channelName,
+          serviceType: codexProxyServiceTypeInput,
+          upstreamBaseUrl,
+          upstreamApiKey,
+          modelMapping: buildCodexProxyModelMapping(codexProxyModelMappingRows),
+          insecureSkipVerify: codexProxySkipTlsVerifyInput,
+          lowQuality: false,
+          autoBlacklistBalance: true,
+          normalizeMetadataUserId: codexProxyNormalizeMetadataUserIdInput,
+          normalizeNonstandardChatRoles:
+            codexProxyNormalizeNonstandardChatRolesInput,
+          codexToolCompat: codexProxyCodexToolCompatInput,
+        });
+
+        const proxyProviderId = getCodexProxyProviderId(
+          result.routePrefix || channelName,
+        );
+        const proxyProviderName = getCodexProxyProviderName(channelName);
+
+        if (mode === "edit" && editingCodexProxyAccountId) {
+          await updateApiKeyCredentials(
+            editingCodexProxyAccountId,
+            result.proxyAccessKey,
+            result.codexBaseUrl,
+            "custom",
+            proxyProviderId,
+            proxyProviderName,
+          );
+          setMessage({ text: "兼容渠道已更新", tone: "success" });
+          setEditingCodexProxyAccountId(null);
+        } else {
+          const account = await codexService.addCodexAccountWithApiKey(
+            result.proxyAccessKey,
+            result.codexBaseUrl,
+            "custom",
+            proxyProviderId,
+            proxyProviderName,
+          );
+          try {
+            await upsertCodexModelProviderFromCredential({
+              providerId: proxyProviderId,
+              providerName: proxyProviderName,
+              apiBaseUrl: result.codexBaseUrl,
+              apiKey: result.proxyAccessKey,
+              apiKeyName: channelName,
+            });
+            await reloadManagedProviders();
+          } catch (providerErr) {
+            console.warn("[Codex Proxy] 保存 Codex 模型供应商失败", providerErr);
+          }
+          page.setAddStatus("success");
+          page.setAddMessage(
+            `兼容渠道${result.created ? "已创建" : "已更新"}，Codex 账号已添加: ${maskAccountText(account.email)}`,
+          );
+          setTimeout(() => {
+            closeAddModal();
+          }, 1200);
+        }
+
+        await fetchAccounts();
+        await fetchCurrentAccount();
+        await emitAccountsChanged({
+          platformId: "codex",
+          reason: mode === "edit" ? "update" : "import",
+        });
+      } catch (error) {
+        const message = `${mode === "edit" ? "兼容渠道更新失败" : "兼容渠道添加失败"}: ${String(error).replace(/^Error:\s*/, "")}`;
+        if (mode === "create") {
+          page.setAddStatus("error");
+          page.setAddMessage(message);
+        } else {
+          setMessage({ text: message, tone: "error" });
+        }
+      } finally {
+        setSavingCodexProxyChannel(false);
+      }
+    },
+    [
+      closeAddModal,
+      codexProxyAdminAccessKeyInput,
+      codexProxyAutoStartInput,
+      codexProxyBinaryPathInput,
+      codexProxyChannelIndexInput,
+      codexProxyChannelNameInput,
+      codexProxyCodexToolCompatInput,
+      codexProxyGatewayBaseUrlInput,
+      codexProxyModelMappingRows,
+      codexProxyNormalizeMetadataUserIdInput,
+      codexProxyNormalizeNonstandardChatRolesInput,
+      codexProxyProxyAccessKeyInput,
+      codexProxyServiceTypeInput,
+      codexProxySkipTlsVerifyInput,
+      codexProxyUpstreamApiKeyInput,
+      codexProxyUpstreamBaseUrlInput,
+      editingCodexProxyAccountId,
+      fetchAccounts,
+      fetchCurrentAccount,
+      maskAccountText,
+      page,
+      reloadManagedProviders,
+      setMessage,
+      updateApiKeyCredentials,
+      upsertCodexModelProviderFromCredential,
+    ],
+  );
+
   const handleApiKeyLogin = async () => {
     const validation = validateApiKeyCredentialInputs(
       apiKeyInput,
@@ -3773,6 +4263,17 @@ export function CodexAccountsPage() {
       );
     },
     [managedProviders],
+  );
+
+  const openAccountCredentialsEditor = useCallback(
+    (account: CodexAccount) => {
+      if (isCodexProxyAccount(account)) {
+        void openCodexProxyChannelModal(account);
+        return;
+      }
+      openApiKeyCredentialsModal(account);
+    },
+    [openCodexProxyChannelModal, openApiKeyCredentialsModal],
   );
 
   const handleSubmitApiKeyCredentials = useCallback(async () => {
@@ -5546,6 +6047,7 @@ export function CodexAccountsPage() {
       const isCurrent = overviewCurrentAccountId === account.id;
       const isApiKeyAccount = isCodexApiKeyAccount(account);
       const isNewApiAccount = isCodexNewApiAccount(account);
+      const isProxyAccount = isCodexProxyAccount(account);
       const isEditingApiKeyName =
         isApiKeyAccount && editingApiKeyNameId === account.id;
       const isSavingApiKeyName = savingApiKeyNameId === account.id;
@@ -5701,7 +6203,7 @@ export function CodexAccountsPage() {
               <div className="account-sub-line">
                 {renderApiKeyRevealLine(account)}
               </div>
-              {renderOAuthBindingLine(account)}
+              {!isProxyAccount && renderOAuthBindingLine(account)}
               <div className="account-sub-line codex-provider-inline-line">
                 <span
                   className="codex-login-subline codex-provider-inline-text"
@@ -5709,7 +6211,7 @@ export function CodexAccountsPage() {
                 >
                   {apiProviderLine}
                 </span>
-                {!isNewApiAccount && (
+                {!isNewApiAccount && !isProxyAccount && (
                   <button
                     type="button"
                     className="codex-provider-inline-switch"
@@ -5881,7 +6383,7 @@ export function CodexAccountsPage() {
                     <FileText size={14} />
                   </button>
                 )}
-                {isApiKeyAccount && (
+                {isApiKeyAccount && !isProxyAccount && (
                   <button
                     className={`card-action-btn ${resolveBoundOAuthAccount(account) ? "active" : ""}`}
                     onClick={() => openOAuthBindingModal(account)}
@@ -5890,7 +6392,7 @@ export function CodexAccountsPage() {
                     <Link2 size={14} />
                   </button>
                 )}
-                {isApiKeyAccount && !isNewApiAccount && (
+                {isApiKeyAccount && !isNewApiAccount && !isProxyAccount && (
                   <button
                     className="card-action-btn"
                     onClick={() => openQuickSwitchProviderModal(account)}
@@ -5902,7 +6404,7 @@ export function CodexAccountsPage() {
                 {isApiKeyAccount && !isNewApiAccount && (
                   <button
                     className="card-action-btn"
-                    onClick={() => openApiKeyCredentialsModal(account)}
+                    onClick={() => openAccountCredentialsEditor(account)}
                     title={t("instances.actions.edit", "编辑")}
                   >
                     <Pencil size={14} />
@@ -6613,6 +7115,7 @@ export function CodexAccountsPage() {
       const isCurrent = overviewCurrentAccountId === account.id;
       const isApiKeyAccount = isCodexApiKeyAccount(account);
       const isNewApiAccount = isCodexNewApiAccount(account);
+      const isProxyAccount = isCodexProxyAccount(account);
       const isEditingApiKeyName =
         isApiKeyAccount && editingApiKeyNameId === account.id;
       const isSavingApiKeyName = savingApiKeyNameId === account.id;
@@ -6750,7 +7253,7 @@ export function CodexAccountsPage() {
                   <div className="account-sub-line codex-account-meta-inline">
                     {renderApiKeyRevealLine(account)}
                   </div>
-                  {renderOAuthBindingLine(account)}
+                  {!isProxyAccount && renderOAuthBindingLine(account)}
                   <div className="account-sub-line codex-account-meta-inline codex-provider-inline-line">
                     <span
                       className="codex-login-subline codex-provider-inline-text"
@@ -6758,7 +7261,7 @@ export function CodexAccountsPage() {
                     >
                       {apiProviderLine}
                     </span>
-                    {!isNewApiAccount && (
+                    {!isNewApiAccount && !isProxyAccount && (
                       <button
                         type="button"
                         className="codex-provider-inline-switch"
@@ -6940,7 +7443,7 @@ export function CodexAccountsPage() {
                   <FileText size={14} />
                 </button>
               )}
-              {isApiKeyAccount && (
+              {isApiKeyAccount && !isProxyAccount && (
                 <button
                   className={`action-btn ${resolveBoundOAuthAccount(account) ? "active" : ""}`}
                   onClick={() => openOAuthBindingModal(account)}
@@ -6949,7 +7452,7 @@ export function CodexAccountsPage() {
                   <Link2 size={14} />
                 </button>
               )}
-              {isApiKeyAccount && !isNewApiAccount && (
+              {isApiKeyAccount && !isNewApiAccount && !isProxyAccount && (
                 <button
                   className="action-btn"
                   onClick={() => openQuickSwitchProviderModal(account)}
@@ -6961,7 +7464,7 @@ export function CodexAccountsPage() {
               {isApiKeyAccount && !isNewApiAccount && (
                 <button
                   className="action-btn"
-                  onClick={() => openApiKeyCredentialsModal(account)}
+                  onClick={() => openAccountCredentialsEditor(account)}
                   title={t("instances.actions.edit", "编辑")}
                 >
                   <Pencil size={14} />
@@ -8262,6 +8765,13 @@ export function CodexAccountsPage() {
                     </span>
                   </button>
                   <button
+                    className={`modal-tab ${addTab === "codex-proxy" ? "active" : ""}`}
+                    onClick={() => openAddModal("codex-proxy")}
+                  >
+                    <Server size={14} />
+                    <span className="modal-tab-label">兼容代理</span>
+                  </button>
+                  <button
                     className={`modal-tab ${addTab === "import" ? "active" : ""}`}
                     onClick={() => openAddModal("import")}
                   >
@@ -8685,6 +9195,317 @@ export function CodexAccountsPage() {
                             <KeyRound size={16} />
                           )}
                           {t("common.shared.addAccount", "添加账号")}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {addTab === "codex-proxy" && (
+                    <div className="add-section">
+                      <p className="section-desc">
+                        添加一个内置兼容代理 Responses 渠道，并自动创建可用于 Codex 的 API Key 账号。
+                      </p>
+                      <button
+                        type="button"
+                        className={`codex-proxy-gateway-settings-toggle ${showCodexProxyGatewaySettings ? "expanded" : ""}`}
+                        onClick={() =>
+                          setShowCodexProxyGatewaySettings((visible) => !visible)
+                        }
+                      >
+                        <span>
+                          <Wrench size={14} />
+                          兼容代理设置
+                        </span>
+                        <ChevronRight size={16} />
+                      </button>
+                      {showCodexProxyGatewaySettings && (
+                        <div className="codex-proxy-gateway-settings-panel">
+                          <div className="oauth-link">
+                            <label>代理地址</label>
+                            <div className="oauth-url-box oauth-manual-input">
+                              <input
+                                type="text"
+                                value={codexProxyGatewayBaseUrlInput}
+                                onChange={(e) =>
+                                  setCodexProxyGatewayBaseUrlInput(e.target.value)
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="oauth-link">
+                            <label>代理访问密钥</label>
+                            <div className="oauth-url-box oauth-manual-input">
+                              <input
+                                type="text"
+                                value={codexProxyProxyAccessKeyInput}
+                                onChange={(e) =>
+                                  setCodexProxyProxyAccessKeyInput(e.target.value)
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="oauth-link">
+                            <label>管理密钥（可选）</label>
+                            <div className="oauth-url-box oauth-manual-input">
+                              <input
+                                type="text"
+                                value={codexProxyAdminAccessKeyInput}
+                                onChange={(e) =>
+                                  setCodexProxyAdminAccessKeyInput(e.target.value)
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="oauth-link">
+                            <label>自定义可执行文件路径（可选）</label>
+                            <div className="oauth-url-box oauth-manual-input">
+                              <input
+                                type="text"
+                                value={codexProxyBinaryPathInput}
+                                onChange={(e) =>
+                                  setCodexProxyBinaryPathInput(e.target.value)
+                                }
+                              />
+                            </div>
+                          </div>
+                          <label className="checkbox-option">
+                            <input
+                              type="checkbox"
+                              checked={codexProxyAutoStartInput}
+                              onChange={(e) =>
+                                setCodexProxyAutoStartInput(e.target.checked)
+                              }
+                            />
+                            <span>
+                              自动启动兼容代理
+                              <small>添加渠道前会检查本地代理，未运行时自动拉起</small>
+                            </span>
+                          </label>
+                        </div>
+                      )}
+                      <div className="oauth-link">
+                        <label>渠道名称</label>
+                        <div className="oauth-url-box oauth-manual-input">
+                          <input
+                            type="text"
+                            value={codexProxyChannelNameInput}
+                            onChange={(e) =>
+                              setCodexProxyChannelNameInput(e.target.value)
+                            }
+                            placeholder="例如：GLM、DeepSeek、Kimi"
+                          />
+                        </div>
+                      </div>
+                      <div className="oauth-link">
+                        <label>上游协议</label>
+                        <div className="oauth-url-box oauth-manual-input">
+                          <select
+                            value={codexProxyServiceTypeInput}
+                            onChange={(e) =>
+                              setCodexProxyServiceTypeInput(
+                                e.target.value as CodexProxyServiceType,
+                              )
+                            }
+                          >
+                            <option value="openai">OpenAI 兼容</option>
+                            <option value="responses">OpenAI Responses</option>
+                            <option value="claude">Claude Messages</option>
+                            <option value="gemini">Gemini</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="oauth-link">
+                        <label>上游 Base URL</label>
+                        <div className="oauth-url-box oauth-manual-input">
+                          <input
+                            type="text"
+                            value={codexProxyUpstreamBaseUrlInput}
+                            onChange={(e) =>
+                              setCodexProxyUpstreamBaseUrlInput(e.target.value)
+                            }
+                            placeholder="https://example.com/v1"
+                          />
+                        </div>
+                      </div>
+                      <div className="oauth-link">
+                        <label>上游 API Key</label>
+                        <div className="oauth-url-box oauth-manual-input codex-secret-input">
+                          <input
+                            type={codexProxyUpstreamApiKeyVisible ? "text" : "password"}
+                            value={codexProxyUpstreamApiKeyInput}
+                            onChange={(e) =>
+                              setCodexProxyUpstreamApiKeyInput(e.target.value)
+                            }
+                            autoComplete="off"
+                            spellCheck={false}
+                          />
+                          <button
+                            type="button"
+                            className="codex-secret-toggle-btn"
+                            onClick={() =>
+                              setCodexProxyUpstreamApiKeyVisible(
+                                (visible) => !visible,
+                              )
+                            }
+                            aria-label={
+                              codexProxyUpstreamApiKeyVisible
+                                ? "隐藏上游 API Key"
+                                : "显示上游 API Key"
+                            }
+                          >
+                            {codexProxyUpstreamApiKeyVisible ? (
+                              <EyeOff size={16} />
+                            ) : (
+                              <Eye size={16} />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="oauth-link">
+                        <label>模型映射（可选，不填则透传原始模型名）</label>
+                        <div className="codex-proxy-model-mapping-list">
+                          {codexProxyModelMappingRows.map((row) => (
+                            <div
+                              className="codex-proxy-model-mapping-row"
+                              key={row.id}
+                            >
+                              <input
+                                type="text"
+                                list="codex-proxy-source-model-options"
+                                value={row.source}
+                                onChange={(e) =>
+                                  updateCodexProxyModelMappingRow(
+                                    row.id,
+                                    "source",
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="Codex 模型名"
+                              />
+                              <span className="codex-proxy-model-mapping-arrow">
+                                →
+                              </span>
+                              <input
+                                type="text"
+                                list="codex-proxy-target-model-options"
+                                value={row.target}
+                                onChange={(e) =>
+                                  updateCodexProxyModelMappingRow(
+                                    row.id,
+                                    "target",
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="上游模型名"
+                              />
+                              <button
+                                type="button"
+                                className="codex-proxy-model-mapping-remove"
+                                onClick={() =>
+                                  removeCodexProxyModelMappingRow(row.id)
+                                }
+                                aria-label="删除模型映射"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ))}
+                          <datalist id="codex-proxy-source-model-options">
+                            {CODEX_PROXY_SOURCE_MODEL_OPTIONS.map((model) => (
+                              <option value={model} key={model} />
+                            ))}
+                          </datalist>
+                          <datalist id="codex-proxy-target-model-options">
+                            {CODEX_PROXY_TARGET_MODEL_OPTIONS.map((model) => (
+                              <option value={model} key={model} />
+                            ))}
+                          </datalist>
+                          <button
+                            type="button"
+                            className="codex-proxy-model-mapping-add"
+                            onClick={addCodexProxyModelMappingRow}
+                          >
+                            <Plus size={16} />
+                            添加映射
+                          </button>
+                        </div>
+                      </div>
+                      <div className="codex-proxy-switch-list">
+                        <label className="checkbox-option">
+                          <input
+                            type="checkbox"
+                            checked={codexProxySkipTlsVerifyInput}
+                            onChange={(e) =>
+                              setCodexProxySkipTlsVerifyInput(e.target.checked)
+                            }
+                          />
+                          <span>
+                            跳过 TLS 证书验证
+                            <small>仅在自签名或域名不匹配时临时启用，生产环境请关闭</small>
+                          </span>
+                        </label>
+                        <label className="checkbox-option">
+                          <input
+                            type="checkbox"
+                            checked={codexProxyNormalizeMetadataUserIdInput}
+                            onChange={(e) =>
+                              setCodexProxyNormalizeMetadataUserIdInput(
+                                e.target.checked,
+                              )
+                            }
+                          />
+                          <span>
+                            规范化 metadata.user_id
+                            <small>将 JSON 对象格式的 user_id 转换为扁平字符串</small>
+                          </span>
+                        </label>
+                        <label className="checkbox-option">
+                          <input
+                            type="checkbox"
+                            checked={codexProxyNormalizeNonstandardChatRolesInput}
+                            onChange={(e) =>
+                              setCodexProxyNormalizeNonstandardChatRolesInput(
+                                e.target.checked,
+                              )
+                            }
+                          />
+                          <span>
+                            规范化非常见 Chat role
+                            <small>把不符合 OpenAI Chat 协议的 role 改写为 user</small>
+                          </span>
+                        </label>
+                        <label className="checkbox-option">
+                          <input
+                            type="checkbox"
+                            checked={codexProxyCodexToolCompatInput}
+                            onChange={(e) =>
+                              setCodexProxyCodexToolCompatInput(e.target.checked)
+                            }
+                          />
+                          <span>
+                            Codex 工具兼容
+                            <small>将 Codex 原生工具转成 OpenAI function 格式</small>
+                          </span>
+                        </label>
+                      </div>
+                      <div className="api-key-add-actions">
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => void handleSubmitCodexProxyChannel("create")}
+                          disabled={
+                            savingCodexProxyChannel ||
+                            addStatus === "loading" ||
+                            !codexProxyChannelNameInput.trim() ||
+                            !codexProxyProxyAccessKeyInput.trim() ||
+                            !codexProxyUpstreamBaseUrlInput.trim() ||
+                            !codexProxyUpstreamApiKeyInput.trim()
+                          }
+                        >
+                          {savingCodexProxyChannel || addStatus === "loading" ? (
+                            <RefreshCw size={16} className="loading-spinner" />
+                          ) : (
+                            <Server size={16} />
+                          )}
+                          添加兼容渠道
                         </button>
                       </div>
                     </div>
@@ -9314,6 +10135,301 @@ export function CodexAccountsPage() {
                           : t("common.save")}
                       </button>
                     </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {editingCodexProxyAccountId && (
+            <div
+              className="modal-overlay"
+              onClick={() => {
+                if (!savingCodexProxyChannel && !loadingCodexProxyChannel) {
+                  setEditingCodexProxyAccountId(null);
+                }
+              }}
+            >
+              <div
+                className="modal-content codex-add-modal"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="modal-header">
+                  <h2>编辑兼容代理渠道</h2>
+                  <button
+                    className="modal-close"
+                    onClick={() => setEditingCodexProxyAccountId(null)}
+                    aria-label={t("common.close", "关闭")}
+                    disabled={savingCodexProxyChannel || loadingCodexProxyChannel}
+                  >
+                    <X />
+                  </button>
+                </div>
+                <div className="modal-body">
+                  <div className="add-section">
+                    <p className="section-desc">
+                      编辑当前 Codex 账号绑定的兼容代理 Responses 渠道，上游地址、密钥、模型映射和兼容性开关会同步写回本地兼容代理。
+                    </p>
+                    {editingCodexProxyAccount && (
+                      <div className="api-provider-hint-block">
+                        <p className="api-provider-hint">
+                          当前账号:{" "}
+                          {maskAccountText(
+                            editingCodexProxyAccount.account_name ||
+                              editingCodexProxyAccount.email ||
+                              editingCodexProxyAccount.id,
+                          )}
+                        </p>
+                      </div>
+                    )}
+                    {loadingCodexProxyChannel ? (
+                      <div className="add-status loading">
+                        <RefreshCw size={16} className="loading-spinner" />
+                        <span>正在读取兼容渠道...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="oauth-link">
+                          <label>渠道名称</label>
+                          <div className="oauth-url-box oauth-manual-input">
+                            <input
+                              type="text"
+                              value={codexProxyChannelNameInput}
+                              onChange={(e) =>
+                                setCodexProxyChannelNameInput(e.target.value)
+                              }
+                              disabled={savingCodexProxyChannel}
+                            />
+                          </div>
+                        </div>
+                        <div className="oauth-link">
+                          <label>上游协议</label>
+                          <div className="oauth-url-box oauth-manual-input">
+                            <select
+                              value={codexProxyServiceTypeInput}
+                              onChange={(e) =>
+                                setCodexProxyServiceTypeInput(
+                                  e.target.value as CodexProxyServiceType,
+                                )
+                              }
+                              disabled={savingCodexProxyChannel}
+                            >
+                              <option value="openai">OpenAI 兼容</option>
+                              <option value="responses">OpenAI Responses</option>
+                              <option value="claude">Claude Messages</option>
+                              <option value="gemini">Gemini</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="oauth-link">
+                          <label>上游 Base URL</label>
+                          <div className="oauth-url-box oauth-manual-input">
+                            <input
+                              type="text"
+                              value={codexProxyUpstreamBaseUrlInput}
+                              onChange={(e) =>
+                                setCodexProxyUpstreamBaseUrlInput(e.target.value)
+                              }
+                              disabled={savingCodexProxyChannel}
+                            />
+                          </div>
+                        </div>
+                        <div className="oauth-link">
+                          <label>上游 API Key</label>
+                          <div className="oauth-url-box oauth-manual-input codex-secret-input">
+                            <input
+                              type={
+                                codexProxyUpstreamApiKeyVisible
+                                  ? "text"
+                                  : "password"
+                              }
+                              value={codexProxyUpstreamApiKeyInput}
+                              onChange={(e) =>
+                                setCodexProxyUpstreamApiKeyInput(e.target.value)
+                              }
+                              disabled={savingCodexProxyChannel}
+                              autoComplete="off"
+                              spellCheck={false}
+                            />
+                            <button
+                              type="button"
+                              className="codex-secret-toggle-btn"
+                              onClick={() =>
+                                setCodexProxyUpstreamApiKeyVisible(
+                                  (visible) => !visible,
+                                )
+                              }
+                              disabled={savingCodexProxyChannel}
+                              aria-label={
+                                codexProxyUpstreamApiKeyVisible
+                                  ? "隐藏上游 API Key"
+                                  : "显示上游 API Key"
+                              }
+                            >
+                              {codexProxyUpstreamApiKeyVisible ? (
+                                <EyeOff size={16} />
+                              ) : (
+                                <Eye size={16} />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="oauth-link">
+                          <label>模型映射（可选，不填则透传原始模型名）</label>
+                          <div className="codex-proxy-model-mapping-list">
+                            {codexProxyModelMappingRows.map((row) => (
+                              <div
+                                className="codex-proxy-model-mapping-row"
+                                key={row.id}
+                              >
+                                <input
+                                  type="text"
+                                  list="codex-proxy-source-model-options"
+                                  value={row.source}
+                                  onChange={(e) =>
+                                    updateCodexProxyModelMappingRow(
+                                      row.id,
+                                      "source",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="Codex 模型名"
+                                  disabled={savingCodexProxyChannel}
+                                />
+                                <span className="codex-proxy-model-mapping-arrow">
+                                  →
+                                </span>
+                                <input
+                                  type="text"
+                                  list="codex-proxy-target-model-options"
+                                  value={row.target}
+                                  onChange={(e) =>
+                                    updateCodexProxyModelMappingRow(
+                                      row.id,
+                                      "target",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="上游模型名"
+                                  disabled={savingCodexProxyChannel}
+                                />
+                                <button
+                                  type="button"
+                                  className="codex-proxy-model-mapping-remove"
+                                  onClick={() =>
+                                    removeCodexProxyModelMappingRow(row.id)
+                                  }
+                                  aria-label="删除模型映射"
+                                  disabled={savingCodexProxyChannel}
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              className="codex-proxy-model-mapping-add"
+                              onClick={addCodexProxyModelMappingRow}
+                              disabled={savingCodexProxyChannel}
+                            >
+                              <Plus size={16} />
+                              添加映射
+                            </button>
+                          </div>
+                        </div>
+                        <div className="codex-proxy-switch-list">
+                          <label className="checkbox-option">
+                            <input
+                              type="checkbox"
+                              checked={codexProxySkipTlsVerifyInput}
+                              onChange={(e) =>
+                                setCodexProxySkipTlsVerifyInput(e.target.checked)
+                              }
+                              disabled={savingCodexProxyChannel}
+                            />
+                            <span>
+                              跳过 TLS 证书验证
+                              <small>仅在自签名或域名不匹配时临时启用，生产环境请关闭</small>
+                            </span>
+                          </label>
+                          <label className="checkbox-option">
+                            <input
+                              type="checkbox"
+                              checked={codexProxyNormalizeMetadataUserIdInput}
+                              onChange={(e) =>
+                                setCodexProxyNormalizeMetadataUserIdInput(
+                                  e.target.checked,
+                                )
+                              }
+                              disabled={savingCodexProxyChannel}
+                            />
+                            <span>
+                              规范化 metadata.user_id
+                              <small>将 JSON 对象格式的 user_id 转换为扁平字符串</small>
+                            </span>
+                          </label>
+                          <label className="checkbox-option">
+                            <input
+                              type="checkbox"
+                              checked={
+                                codexProxyNormalizeNonstandardChatRolesInput
+                              }
+                              onChange={(e) =>
+                                setCodexProxyNormalizeNonstandardChatRolesInput(
+                                  e.target.checked,
+                                )
+                              }
+                              disabled={savingCodexProxyChannel}
+                            />
+                            <span>
+                              规范化非常见 Chat role
+                              <small>把不符合 OpenAI Chat 协议的 role 改写为 user</small>
+                            </span>
+                          </label>
+                          <label className="checkbox-option">
+                            <input
+                              type="checkbox"
+                              checked={codexProxyCodexToolCompatInput}
+                              onChange={(e) =>
+                                setCodexProxyCodexToolCompatInput(
+                                  e.target.checked,
+                                )
+                              }
+                              disabled={savingCodexProxyChannel}
+                            />
+                            <span>
+                              Codex 工具兼容
+                              <small>将 Codex 原生工具转成 OpenAI function 格式</small>
+                            </span>
+                          </label>
+                        </div>
+                        <div className="api-key-edit-actions">
+                          <button
+                            className="btn btn-secondary"
+                            onClick={() => setEditingCodexProxyAccountId(null)}
+                            disabled={savingCodexProxyChannel}
+                          >
+                            {t("common.cancel")}
+                          </button>
+                          <button
+                            className="btn btn-primary"
+                            onClick={() =>
+                              void handleSubmitCodexProxyChannel("edit")
+                            }
+                            disabled={
+                              savingCodexProxyChannel ||
+                              !codexProxyChannelNameInput.trim() ||
+                              !codexProxyUpstreamBaseUrlInput.trim() ||
+                              !codexProxyUpstreamApiKeyInput.trim()
+                            }
+                          >
+                            {savingCodexProxyChannel
+                              ? t("common.saving", "保存中...")
+                              : t("common.save")}
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

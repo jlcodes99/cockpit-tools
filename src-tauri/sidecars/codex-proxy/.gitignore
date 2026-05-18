@@ -1,0 +1,36 @@
+# 忽略编译产物
+dist/
+*.exe
+ccx
+ccx-*
+stream_verify
+
+# 忽略前端资源（会在构建时复制）
+frontend/
+
+# 忽略配置文件
+.env
+.config/
+
+# Go 相关
+vendor/
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+tmp/
+
+!docs/
+
+!frontend/
+frontend/*
+!frontend/dist/
+frontend/dist/*
+!frontend/dist/.keep

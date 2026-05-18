@@ -1,0 +1,89 @@
+# Air 配置文件 - Go热重载工具
+# 文档: https://github.com/air-verse/air
+
+# 工作目录
+root = "."
+testdata_dir = "testdata"
+tmp_dir = "tmp"
+
+# 构建配置
+[build]
+  # 编译命令 (可以添加自定义参数)
+  cmd = "go build -o ./tmp/main ."
+  # 运行的二进制文件
+  bin = "tmp/main"
+  # 自定义运行时参数 (比如: ["run", "test", "-v"])
+  full_bin = ""
+  # 监听的文件扩展名
+  include_ext = ["go", "tpl", "tmpl", "html", "yaml", "yml", "toml", "env"]
+  # 忽略的文件/文件夹
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", "frontend", "dist", ".git", ".github", ".vscode", ".idea"]
+  # 监听指定的目录
+  include_dir = []
+  # 监听指定的文件（包括 .env）
+  include_file = [".env"]
+  # 忽略的文件
+  exclude_file = []
+  # 忽略未修改的文件
+  exclude_unchanged = false
+  # 监听符号链接的目录
+  follow_symlink = false
+  # 文件变更延迟触发编译 (毫秒)
+  delay = 1000
+  # 编译错误时是否停止旧的二进制文件
+  stop_on_error = true
+  # 运行二进制文件时的日志文件
+  log = "build-errors.log"
+  # air启动时是否发送中断信号
+  send_interrupt = true
+  # 中断信号延迟 (毫秒)
+  kill_delay = 500
+  # 在发送中断信号时添加额外的参数
+  rerun = false
+  # 运行后的延迟 (毫秒)
+  rerun_delay = 500
+  # 添加额外的参数
+  args_bin = []
+
+# 自定义shell命令
+[build.pre_cmd]
+  # 数组形式的命令会按顺序执行
+  # enable = true
+  # cmds = [
+  #   "echo 'Building...'"
+  # ]
+
+[build.post_cmd]
+  # enable = true
+  # cmds = [
+  #   "echo 'Build complete!'"
+  # ]
+
+# 日志配置
+[log]
+  # 是否开启主进程日志
+  main_only = false
+  # 时间格式
+  time = true
+
+# 颜色配置
+[color]
+  # 自定义颜色
+  main = "magenta"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"
+  # app日志颜色
+  app = ""
+
+# 其他配置
+[misc]
+  # 是否在退出时清理tmp目录
+  clean_on_exit = true
+
+# 屏幕清理
+[screen]
+  # 重新编译时清屏
+  clear_on_rebuild = true
+  # 保持滚动
+  keep_scroll = true

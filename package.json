@@ -8,6 +8,8 @@
     "typecheck": "tsc --noEmit",
     "prebuild": "npm run typecheck",
     "build": "npm run sync-version && tsc && vite build",
+    "prepare-codex-proxy": "node scripts/prepare-codex-proxy.cjs --ensure",
+    "prepare-codex-proxy:dev": "node scripts/prepare-codex-proxy.cjs --ensure --optional",
     "release:preflight": "node scripts/release/preflight.cjs",
     "preview": "vite preview",
     "pretauri": "npm run typecheck",

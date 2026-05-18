@@ -7,9 +7,9 @@ use crate::models::codex_local_access::{
     CodexLocalAccessState, CodexLocalAccessTestResult,
 };
 use crate::modules::{
-    codex_account, codex_local_access, codex_oauth, codex_quota, codex_session_visibility,
-    codex_speed, codex_wakeup, codex_wakeup_scheduler, config, logger, openclaw_auth,
-    opencode_auth, process,
+    codex_account, codex_local_access, codex_oauth, codex_proxy, codex_quota,
+    codex_session_visibility, codex_speed, codex_wakeup, codex_wakeup_scheduler, config, logger,
+    openclaw_auth, opencode_auth, process,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::AppHandle;
@@ -17,6 +17,46 @@ use tauri::Emitter;
 use tauri_plugin_opener::OpenerExt;
 
 static CODEX_POST_REFRESH_CHECK_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+pub fn codex_proxy_load_config() -> Result<codex_proxy::CodexProxyGatewayConfig, String> {
+    codex_proxy::load_config()
+}
+
+#[tauri::command]
+pub fn codex_proxy_save_config(
+    config: codex_proxy::CodexProxyGatewayConfig,
+) -> Result<codex_proxy::CodexProxyGatewayConfig, String> {
+    codex_proxy::save_config(config)
+}
+
+#[tauri::command]
+pub async fn codex_proxy_health_check(
+    gateway_base_url: Option<String>,
+) -> Result<codex_proxy::CodexProxyGatewayHealth, String> {
+    codex_proxy::health_check(gateway_base_url).await
+}
+
+#[tauri::command]
+pub async fn codex_proxy_start() -> Result<codex_proxy::CodexProxyGatewayHealth, String> {
+    codex_proxy::start_gateway().await
+}
+
+#[tauri::command]
+pub async fn codex_proxy_upsert_responses_channel(
+    input: codex_proxy::CodexProxyResponsesChannelInput,
+) -> Result<codex_proxy::CodexProxyUpsertChannelResult, String> {
+    codex_proxy::upsert_responses_channel(input).await
+}
+
+#[tauri::command]
+pub async fn codex_proxy_list_responses_channels(
+    gateway_base_url: Option<String>,
+    proxy_access_key: Option<String>,
+    admin_access_key: Option<String>,
+) -> Result<Vec<codex_proxy::CodexProxyResponsesChannel>, String> {
+    codex_proxy::list_responses_channels(gateway_base_url, proxy_access_key, admin_access_key).await
+}
 
 fn restart_codex_specified_app_if_enabled(user_config: &config::UserConfig) {
     if !user_config.codex_restart_specified_app_on_switch {
@@ -253,6 +293,31 @@ pub async fn switch_codex_account(
     let next_history_provider = read_default_codex_history_provider_for_switch();
     let account_speed = account.app_speed.clone();
     codex_speed::write_official_app_speed(account_speed.clone())?;
+
+    // 如果目标账号是兼容代理类型，确保代理网关正在运行
+    if codex_account::is_codex_proxy_account(&account) {
+        match codex_proxy::ensure_gateway_running().await {
+            Ok(health) => {
+                if health.running {
+                    logger::log_info(&format!(
+                        "[Codex Proxy] 切换到兼容代理账号，网关已就绪: {}",
+                        health.gateway_base_url
+                    ));
+                } else {
+                    logger::log_warn(&format!(
+                        "[Codex Proxy] 切换到兼容代理账号，但网关未能启动: {}",
+                        health.message
+                    ));
+                }
+            }
+            Err(e) => {
+                logger::log_warn(&format!(
+                    "[Codex Proxy] 切换到兼容代理账号，网关启动检查失败: {}",
+                    e
+                ));
+            }
+        }
+    }
 
     // 同步更新 Codex 默认实例的绑定账号（不同步到 Antigravity，因为账号体系不同）
     if let Err(e) = crate::modules::codex_instance::update_default_settings(

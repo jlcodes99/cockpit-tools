@@ -84,6 +84,7 @@ export interface CodexQuota {
 }
 
 const COCKPIT_API_BASE_URL = "https://chongcodex.cn/v1";
+export const CODEX_PROXY_PROVIDER_ID = "codex_proxy";
 
 function normalizeCodexApiBaseUrlForMatch(rawValue?: string | null): string {
   const trimmed = (rawValue || "").trim();
@@ -429,6 +430,30 @@ export function isCodexNewApiAccount(account: CodexAccount): boolean {
       isCodexCockpitApiBaseUrl(account.api_base_url) ||
       planType === "COCKPIT API" ||
       planType === "NEW_API_EXCLUSIVE")
+  );
+}
+
+export function isCodexProxyAccount(account: CodexAccount): boolean {
+  if (!isCodexApiKeyAccount(account)) return false;
+  const providerId = (account.api_provider_id || "").trim().toLowerCase();
+  const providerName = (account.api_provider_name || "").trim().toLowerCase();
+  return (
+    providerId === CODEX_PROXY_PROVIDER_ID ||
+    providerName.includes("codex proxy") ||
+    providerName.includes("ccx") ||
+    providerName.includes("兼容网关") ||
+    providerName.includes("兼容代理") ||
+    providerName.includes("兼容渠道")
+  );
+}
+
+export function doesCodexApiKeyAccountRequireOAuthBinding(
+  account: CodexAccount,
+): boolean {
+  return (
+    isCodexApiKeyAccount(account) &&
+    !isCodexNewApiAccount(account) &&
+    !isCodexProxyAccount(account)
   );
 }
 
