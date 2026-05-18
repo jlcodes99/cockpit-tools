@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jlcodes99/cockpit-tools/codex-proxy/internal/config"
 	"github.com/jlcodes99/cockpit-tools/codex-proxy/internal/types"
-	"github.com/gin-gonic/gin"
 )
 
 func TestResponsesProvider_BuildResponsesRequestFromClaude(t *testing.T) {
@@ -611,4 +611,33 @@ func TestResponsesProvider_BuildProviderRequestBody_NormalizesPassthroughInputTe
 	assertContentType(0, "input_text")
 	assertContentType(1, "output_text")
 	assertContentType(2, "refusal")
+}
+
+func TestResponsesProvider_BuildProviderRequestBody_OmitsImagesForDeepSeekOpenAIUpstream(t *testing.T) {
+	provider := &ResponsesProvider{}
+	upstream := &config.UpstreamConfig{
+		Name:        "DeepSeek",
+		ServiceType: "openai",
+	}
+	body := []byte(`{"model":"deepseek-v3.2","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"继续分析"},{"type":"input_image","image_url":"https://example.com/image.png"}]}]}`)
+
+	reqBody, _, err := provider.buildProviderRequestBody(nil, "/v1/responses", body, upstream)
+	if err != nil {
+		t.Fatalf("buildProviderRequestBody() err = %v", err)
+	}
+
+	reqMap, ok := reqBody.(map[string]interface{})
+	if !ok {
+		t.Fatalf("reqBody = %#v, want map", reqBody)
+	}
+	messages := reqMap["messages"].([]map[string]interface{})
+	content := messages[0]["content"].([]map[string]interface{})
+	for _, part := range content {
+		if part["type"] == "image_url" {
+			t.Fatalf("content = %#v, should omit image_url for DeepSeek text channel", content)
+		}
+	}
+	if content[len(content)-1]["type"] != "text" {
+		t.Fatalf("last content part = %#v, want text placeholder", content[len(content)-1])
+	}
 }

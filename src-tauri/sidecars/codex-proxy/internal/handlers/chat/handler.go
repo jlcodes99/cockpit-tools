@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jlcodes99/cockpit-tools/codex-proxy/internal/config"
 	"github.com/jlcodes99/cockpit-tools/codex-proxy/internal/converters"
 	"github.com/jlcodes99/cockpit-tools/codex-proxy/internal/handlers/common"
@@ -18,7 +19,6 @@ import (
 	"github.com/jlcodes99/cockpit-tools/codex-proxy/internal/scheduler"
 	"github.com/jlcodes99/cockpit-tools/codex-proxy/internal/types"
 	"github.com/jlcodes99/cockpit-tools/codex-proxy/internal/utils"
-	"github.com/gin-gonic/gin"
 )
 
 // Handler Chat Completions API 代理处理器
@@ -250,7 +250,8 @@ func buildChatCompletionRequestBody(
 	upstream *config.UpstreamConfig,
 	includeAdvancedOptions bool,
 ) ([]byte, error) {
-	needsRewrite := includeAdvancedOptions || mappedModel != model || upstream.NormalizeNonstandardChatRoles
+	omitVisionContent := config.ShouldOmitVisionContentForCompatibility(upstream, model)
+	needsRewrite := includeAdvancedOptions || mappedModel != model || upstream.NormalizeNonstandardChatRoles || omitVisionContent
 	if !needsRewrite {
 		return bodyBytes, nil
 	}
@@ -286,6 +287,9 @@ func buildChatCompletionRequestBody(
 
 	if upstream.NormalizeNonstandardChatRoles {
 		converters.NormalizeNonstandardChatRolesInRequest(reqMap)
+	}
+	if omitVisionContent {
+		converters.OmitOpenAIChatImageContent(reqMap)
 	}
 
 	return json.Marshal(reqMap)
@@ -448,13 +452,13 @@ func convertChatToClaudeRequest(bodyBytes []byte, model string, isStream bool) (
 
 			switch role {
 			case "system":
-				if text, ok := content.(string); ok {
+				if text := extractOpenAIChatTextContent(content); text != "" {
 					systemParts = append(systemParts, text)
 				}
 			case "user":
 				claudeMessages = append(claudeMessages, map[string]interface{}{
 					"role":    "user",
-					"content": content,
+					"content": convertOpenAIChatContentToClaude(content),
 				})
 			case "assistant":
 				// 检查是否包含 tool_calls（OpenAI → Claude tool_use）
@@ -467,12 +471,7 @@ func convertChatToClaudeRequest(bodyBytes []byte, model string, isStream bool) (
 						})
 					}
 					// 先添加文本内容（如有）
-					if text, ok := content.(string); ok && text != "" {
-						contentBlocks = append(contentBlocks, map[string]interface{}{
-							"type": "text",
-							"text": text,
-						})
-					}
+					contentBlocks = appendOpenAIChatContentAsClaudeBlocks(contentBlocks, content)
 					// 转换 tool_calls → tool_use blocks
 					for _, tc := range toolCalls {
 						tcMap, ok := tc.(map[string]interface{})
@@ -505,12 +504,7 @@ func convertChatToClaudeRequest(bodyBytes []byte, model string, isStream bool) (
 							"type":     "thinking",
 							"thinking": reasoning,
 						})
-						if text, ok := content.(string); ok && text != "" {
-							contentBlocks = append(contentBlocks, map[string]interface{}{
-								"type": "text",
-								"text": text,
-							})
-						}
+						contentBlocks = appendOpenAIChatContentAsClaudeBlocks(contentBlocks, content)
 						claudeMessages = append(claudeMessages, map[string]interface{}{
 							"role":    "assistant",
 							"content": contentBlocks,
@@ -519,7 +513,7 @@ func convertChatToClaudeRequest(bodyBytes []byte, model string, isStream bool) (
 					}
 					claudeMessages = append(claudeMessages, map[string]interface{}{
 						"role":    "assistant",
-						"content": content,
+						"content": convertOpenAIChatContentToClaude(content),
 					})
 				}
 			case "tool":
@@ -542,7 +536,7 @@ func convertChatToClaudeRequest(bodyBytes []byte, model string, isStream bool) (
 			default:
 				claudeMessages = append(claudeMessages, map[string]interface{}{
 					"role":    "user",
-					"content": content,
+					"content": convertOpenAIChatContentToClaude(content),
 				})
 			}
 		}
@@ -587,6 +581,123 @@ func convertChatToClaudeRequest(bodyBytes []byte, model string, isStream bool) (
 	}
 
 	return claudeReq, nil
+}
+
+func convertOpenAIChatContentToClaude(content interface{}) interface{} {
+	switch v := content.(type) {
+	case string:
+		return v
+	case []interface{}:
+		blocks := appendOpenAIChatContentAsClaudeBlocks(nil, v)
+		if len(blocks) == 0 {
+			return ""
+		}
+		return blocks
+	default:
+		return content
+	}
+}
+
+func appendOpenAIChatContentAsClaudeBlocks(dst []map[string]interface{}, content interface{}) []map[string]interface{} {
+	switch v := content.(type) {
+	case string:
+		if v != "" {
+			dst = append(dst, map[string]interface{}{"type": "text", "text": v})
+		}
+	case []interface{}:
+		for _, raw := range v {
+			block, ok := raw.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			switch blockType, _ := block["type"].(string); blockType {
+			case "text":
+				if text, _ := block["text"].(string); text != "" {
+					dst = append(dst, map[string]interface{}{"type": "text", "text": text})
+				}
+			case "image":
+				dst = append(dst, block)
+			case "image_url":
+				if imageBlock := openAIImageURLToClaudeBlock(block["image_url"]); imageBlock != nil {
+					dst = append(dst, imageBlock)
+				}
+			}
+		}
+	}
+	return dst
+}
+
+func extractOpenAIChatTextContent(content interface{}) string {
+	switch v := content.(type) {
+	case string:
+		return v
+	case []interface{}:
+		parts := make([]string, 0)
+		for _, raw := range v {
+			block, ok := raw.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if blockType, _ := block["type"].(string); blockType != "text" {
+				continue
+			}
+			if text, _ := block["text"].(string); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, "\n")
+	default:
+		return ""
+	}
+}
+
+func openAIImageURLToClaudeBlock(raw interface{}) map[string]interface{} {
+	imageURL := ""
+	switch v := raw.(type) {
+	case string:
+		imageURL = v
+	case map[string]interface{}:
+		imageURL, _ = v["url"].(string)
+	default:
+		return nil
+	}
+	if imageURL == "" {
+		return nil
+	}
+
+	source := map[string]interface{}{}
+	if mediaType, data, ok := parseDataURLImage(imageURL); ok {
+		source["type"] = "base64"
+		source["media_type"] = mediaType
+		source["data"] = data
+	} else {
+		source["type"] = "url"
+		source["url"] = imageURL
+	}
+
+	return map[string]interface{}{
+		"type":   "image",
+		"source": source,
+	}
+}
+
+func parseDataURLImage(value string) (mediaType string, data string, ok bool) {
+	const dataPrefix = "data:"
+	if !strings.HasPrefix(value, dataPrefix) {
+		return "", "", false
+	}
+	header, payload, found := strings.Cut(value[len(dataPrefix):], ",")
+	if !found || payload == "" {
+		return "", "", false
+	}
+	parts := strings.Split(header, ";")
+	if len(parts) == 0 || parts[0] == "" {
+		return "", "", false
+	}
+	if !strings.EqualFold(parts[len(parts)-1], "base64") {
+		return "", "", false
+	}
+	return parts[0], payload, true
 }
 
 // handleSuccess 处理成功的响应

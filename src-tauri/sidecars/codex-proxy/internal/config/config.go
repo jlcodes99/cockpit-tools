@@ -113,6 +113,39 @@ func (u *UpstreamConfig) IsCodexToolCompatEnabled() bool {
 	return u.StripCodexClientTools
 }
 
+// ShouldOmitVisionContentForCompatibility returns true for OpenAI-compatible
+// text-only upstreams that reject image_url content blocks in chat messages.
+func ShouldOmitVisionContentForCompatibility(upstream *UpstreamConfig, model string) bool {
+	if upstream == nil {
+		return false
+	}
+	redirectedModel := RedirectModel(model, upstream)
+	if upstream.NoVision {
+		return true
+	}
+	for _, noVisionModel := range upstream.NoVisionModels {
+		if noVisionModel == redirectedModel {
+			return true
+		}
+	}
+
+	serviceType := strings.ToLower(strings.TrimSpace(upstream.ServiceType))
+	if serviceType != "" && serviceType != "openai" && serviceType != "responses" {
+		return false
+	}
+	textOnlyHints := []string{
+		strings.ToLower(upstream.Name),
+		strings.ToLower(upstream.BaseURL),
+		strings.ToLower(redirectedModel),
+	}
+	for _, hint := range textOnlyHints {
+		if strings.Contains(hint, "deepseek") {
+			return true
+		}
+	}
+	return false
+}
+
 // UpstreamUpdate 用于部分更新 UpstreamConfig
 type UpstreamUpdate struct {
 	Name                          *string           `json:"name"`

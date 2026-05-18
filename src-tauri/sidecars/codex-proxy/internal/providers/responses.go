@@ -10,12 +10,12 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jlcodes99/cockpit-tools/codex-proxy/internal/config"
 	"github.com/jlcodes99/cockpit-tools/codex-proxy/internal/converters"
 	"github.com/jlcodes99/cockpit-tools/codex-proxy/internal/session"
 	"github.com/jlcodes99/cockpit-tools/codex-proxy/internal/types"
 	"github.com/jlcodes99/cockpit-tools/codex-proxy/internal/utils"
-	"github.com/gin-gonic/gin"
 )
 
 // ResponsesProvider Responses API 提供商
@@ -203,6 +203,12 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 	if upstream.NormalizeNonstandardChatRoles {
 		if reqMap, ok := providerReq.(map[string]interface{}); ok {
 			converters.NormalizeNonstandardChatRolesInRequest(reqMap)
+		}
+	}
+	if reqMap, ok := providerReq.(map[string]interface{}); ok {
+		model, _ := reqMap["model"].(string)
+		if config.ShouldOmitVisionContentForCompatibility(upstream, model) {
+			converters.OmitOpenAIChatImageContent(reqMap)
 		}
 	}
 

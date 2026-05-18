@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/jlcodes99/cockpit-tools/codex-proxy/internal/config"
 	"github.com/gin-gonic/gin"
+	"github.com/jlcodes99/cockpit-tools/codex-proxy/internal/config"
 )
 
 func TestBuildProviderRequest_InjectsReasoningBeforeModelRedirect(t *testing.T) {
@@ -303,6 +303,73 @@ func TestBuildProviderRequest_PreservesMultimodalContentArray(t *testing.T) {
 				t.Fatalf("image_url = %#v, want original url", imagePart["image_url"])
 			}
 		})
+	}
+}
+
+func TestConvertChatToClaudeRequest_ConvertsImageURLContent(t *testing.T) {
+	bodyBytes := []byte(`{"model":"gpt-4o-image","messages":[{"role":"user","content":[{"type":"text","text":"看这张图"},{"type":"image_url","image_url":{"url":"data:image/png;base64,abc123"}}]}]}`)
+
+	claudeReq, err := convertChatToClaudeRequest(bodyBytes, "claude-3-5-sonnet-20241022", false)
+	if err != nil {
+		t.Fatalf("convertChatToClaudeRequest() err = %v", err)
+	}
+
+	messages, ok := claudeReq["messages"].([]map[string]interface{})
+	if !ok || len(messages) != 1 {
+		t.Fatalf("messages = %#v, want single Claude message", claudeReq["messages"])
+	}
+	content, ok := messages[0]["content"].([]map[string]interface{})
+	if !ok || len(content) != 2 {
+		t.Fatalf("content = %#v, want text and image blocks", messages[0]["content"])
+	}
+	if content[0]["type"] != "text" || content[0]["text"] != "看这张图" {
+		t.Fatalf("text block = %#v, want Claude text block", content[0])
+	}
+	if content[1]["type"] != "image" {
+		t.Fatalf("image block type = %#v, want image", content[1]["type"])
+	}
+	source, ok := content[1]["source"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("source = %#v, want object", content[1]["source"])
+	}
+	if source["type"] != "base64" || source["media_type"] != "image/png" || source["data"] != "abc123" {
+		t.Fatalf("source = %#v, want Claude base64 image source", source)
+	}
+}
+
+func TestBuildProviderRequest_OmitsImageURLForDeepSeekTextChannel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(context.Background())
+
+	bodyBytes := []byte(`{"model":"deepseek-v3.2","messages":[{"role":"user","content":[{"type":"text","text":"继续分析"},{"type":"image_url","image_url":{"url":"https://example.com/image.png"}}]}]}`)
+	upstream := &config.UpstreamConfig{
+		Name:        "DeepSeek",
+		ServiceType: "openai",
+	}
+
+	req, err := buildProviderRequest(c, upstream, "https://api.deepseek.com", "sk-test", bodyBytes, "deepseek-v3.2", false)
+	if err != nil {
+		t.Fatalf("buildProviderRequest() err = %v", err)
+	}
+
+	var got map[string]interface{}
+	if err := json.NewDecoder(req.Body).Decode(&got); err != nil {
+		t.Fatalf("decode request body: %v", err)
+	}
+
+	messages := got["messages"].([]interface{})
+	content := messages[0].(map[string]interface{})["content"].([]interface{})
+	for _, raw := range content {
+		part := raw.(map[string]interface{})
+		if part["type"] == "image_url" {
+			t.Fatalf("content = %#v, should omit image_url for DeepSeek text channel", content)
+		}
+	}
+	last := content[len(content)-1].(map[string]interface{})
+	if last["type"] != "text" {
+		t.Fatalf("last content part = %#v, want text placeholder", last)
 	}
 }
 
