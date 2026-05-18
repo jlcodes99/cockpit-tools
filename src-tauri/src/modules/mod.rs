@@ -13,6 +13,7 @@ pub mod codex_account;
 pub mod codex_instance;
 pub mod codex_local_access;
 pub mod codex_oauth;
+pub mod codex_protocol;
 pub mod codex_quota;
 pub mod codex_session_manager;
 pub mod codex_session_visibility;

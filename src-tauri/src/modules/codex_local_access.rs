@@ -6,7 +6,7 @@ use crate::models::codex_local_access::{
     CodexLocalAccessTestResult, CodexLocalAccessUsageEvent, CodexLocalAccessUsageStats,
 };
 use crate::modules::atomic_write::write_string_atomic;
-use crate::modules::{codex_account, codex_oauth, codex_wakeup, logger, process};
+use crate::modules::{codex_account, codex_oauth, codex_protocol, codex_wakeup, logger, process};
 use base64::{engine::general_purpose, Engine as _};
 use futures_util::StreamExt;
 use rand::{distributions::Alphanumeric, Rng};
@@ -256,10 +256,10 @@ fn current_upstream_http_client_signature() -> UpstreamHttpClientSignature {
         };
     }
 
-    let no_proxy = config.global_proxy_no_proxy.trim();
+    let no_proxy = codex_protocol::merge_local_no_proxy(config.global_proxy_no_proxy.trim());
     UpstreamHttpClientSignature {
         proxy_url: Some(proxy_url.to_string()),
-        no_proxy: (!no_proxy.is_empty()).then(|| no_proxy.to_string()),
+        no_proxy: (!no_proxy.is_empty()).then_some(no_proxy),
     }
 }
 
@@ -560,22 +560,30 @@ fn rewrite_request_model_alias(body: &[u8]) -> Result<Option<Vec<u8>>, String> {
         return Ok(None);
     };
 
-    let Some(body_obj) = body_value.as_object_mut() else {
+    if !rewrite_request_model_alias_value(&mut body_value) {
         return Ok(None);
+    }
+
+    serde_json::to_vec(&body_value)
+        .map(Some)
+        .map_err(|e| format!("重写请求 model 失败: {}", e))
+}
+
+fn rewrite_request_model_alias_value(body_value: &mut Value) -> bool {
+    let Some(body_obj) = body_value.as_object_mut() else {
+        return false;
     };
     let Some(model) = body_obj.get("model").and_then(Value::as_str) else {
-        return Ok(None);
+        return false;
     };
 
     let resolved_model = resolve_supported_model_alias(model);
     if resolved_model == model {
-        return Ok(None);
+        return false;
     }
 
     body_obj.insert("model".to_string(), Value::String(resolved_model));
-    serde_json::to_vec(&body_value)
-        .map(Some)
-        .map_err(|e| format!("重写请求 model 失败: {}", e))
+    true
 }
 
 fn parse_request_body_json(body: &[u8]) -> Option<Value> {
@@ -1764,18 +1772,27 @@ fn prepare_gateway_request(
     }
 
     if !is_chat_completions_request(&request.target) {
-        if let Some(rewritten_body) = rewrite_request_model_alias(&request.body)? {
-            request.body = rewritten_body;
-        }
         if is_responses_request(&request.target) {
-            if let Some(mut body_value) = parse_request_body_json(&request.body) {
-                if let Some(body_obj) = body_value.as_object_mut() {
-                    if ensure_image_generation_tool_in_object(body_obj) {
-                        request.body = serde_json::to_vec(&body_value)
-                            .map_err(|e| format!("序列化 responses 请求体失败: {}", e))?;
-                    }
-                }
+            if !request.method.eq_ignore_ascii_case("POST") {
+                return Err("responses 仅支持 POST".to_string());
             }
+            let mut body_value = parse_request_body_json(&request.body)
+                .ok_or("responses 请求体必须是合法 JSON".to_string())?;
+            rewrite_request_model_alias_value(&mut body_value);
+            codex_protocol::normalize_responses_body_for_codex(&mut body_value);
+            if let Some(body_obj) = body_value.as_object_mut() {
+                ensure_image_generation_tool_in_object(body_obj);
+            }
+            request.body = serde_json::to_vec(&body_value)
+                .map_err(|e| format!("序列化 responses 请求体失败: {}", e))?;
+            request
+                .headers
+                .insert("accept".to_string(), "text/event-stream".to_string());
+            request
+                .headers
+                .insert("content-type".to_string(), "application/json".to_string());
+        } else if let Some(rewritten_body) = rewrite_request_model_alias(&request.body)? {
+            request.body = rewritten_body;
         }
         let request_is_stream = is_stream_request(&request.headers, &request.body);
         return Ok((
@@ -4809,6 +4826,11 @@ fn build_local_models_response() -> Value {
     })
 }
 
+fn build_codex_client_models_response() -> Value {
+    let model_ids = supported_codex_model_ids();
+    codex_protocol::build_codex_client_models_response(&model_ids)
+}
+
 fn usage_number(value: Option<&Value>) -> Option<u64> {
     value.and_then(Value::as_u64).or_else(|| {
         value
@@ -6598,7 +6620,12 @@ async fn handle_connection(
             return Ok(());
         }
 
-        let response = json_response(200, "OK", &build_local_models_response());
+        let response_body = if codex_protocol::is_codex_client_models_request(&parsed.target) {
+            build_codex_client_models_response()
+        } else {
+            build_local_models_response()
+        };
+        let response = json_response(200, "OK", &response_body);
         stream
             .write_all(&response)
             .await
@@ -6703,9 +6730,10 @@ async fn handle_connection(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_chat_completion_payload, build_chat_completion_stream_body, build_images_api_payload,
-        build_local_models_response, build_ordered_account_ids, build_request_routing_hint,
-        extract_usage_capture, is_responses_completion_event, parse_codex_retry_after,
+        build_chat_completion_payload, build_chat_completion_stream_body,
+        build_codex_client_models_response, build_images_api_payload, build_local_models_response,
+        build_ordered_account_ids, build_request_routing_hint, extract_usage_capture,
+        is_responses_completion_event, parse_codex_retry_after,
         parse_responses_payload_from_upstream, prepare_gateway_request,
         resolve_supported_model_alias, should_retry_single_account_upstream_status,
         should_treat_response_as_stream, should_try_next_account, GatewayResponseAdapter,
@@ -6925,6 +6953,23 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             .unwrap_or(false);
 
         assert!(has_image_model);
+    }
+
+    #[test]
+    fn codex_client_models_use_models_catalog_shape() {
+        let response = build_codex_client_models_response();
+        assert!(response.get("object").is_none());
+        assert!(response.get("data").is_none());
+        let models = response
+            .get("models")
+            .and_then(Value::as_array)
+            .expect("codex client models should be an array");
+        assert!(models
+            .iter()
+            .any(|model| model.get("slug").and_then(Value::as_str) == Some("gpt-5.4")));
+        assert!(models
+            .iter()
+            .all(|model| model.get("prefer_websockets").and_then(Value::as_bool) == Some(false)));
     }
 
     #[test]
@@ -7184,10 +7229,14 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             mapped_body.get("model").and_then(Value::as_str),
             Some("gpt-5.4")
         );
+        assert_eq!(
+            mapped_body.get("stream").and_then(Value::as_bool),
+            Some(true)
+        );
 
         match adapter {
             GatewayResponseAdapter::Passthrough { request_is_stream } => {
-                assert!(!request_is_stream);
+                assert!(request_is_stream);
             }
             _ => panic!("expected passthrough adapter"),
         }
@@ -7199,11 +7248,33 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             method: "POST".to_string(),
             target: "/v1/responses".to_string(),
             headers: HashMap::from([("accept".to_string(), "text/event-stream".to_string())]),
-            body: br#"{"model":"gpt-5.4","stream":true,"input":"hello"}"#.to_vec(),
+            body: br#"{"model":"gpt-5.4","stream":false,"store":true,"input":"hello","temperature":0.2}"#
+                .to_vec(),
         };
 
         let (prepared, adapter) = prepare_gateway_request(request).expect("request should map");
         assert_eq!(prepared.target, "/v1/responses");
+        let mapped_body: Value =
+            serde_json::from_slice(&prepared.body).expect("mapped body should be json");
+        assert_eq!(
+            mapped_body.get("stream").and_then(Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            mapped_body.get("store").and_then(Value::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            mapped_body.get("instructions").and_then(Value::as_str),
+            Some("")
+        );
+        assert!(mapped_body.get("temperature").is_none());
+        assert_eq!(
+            mapped_body
+                .pointer("/input/0/content/0/text")
+                .and_then(Value::as_str),
+            Some("hello")
+        );
 
         match adapter {
             GatewayResponseAdapter::Passthrough { request_is_stream } => {
@@ -7233,13 +7304,52 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                     && tool.get("output_format").and_then(Value::as_str) == Some("png")
             }))
             .unwrap_or(false));
+        assert_eq!(
+            mapped_body.get("stream").and_then(Value::as_bool),
+            Some(true)
+        );
 
         match adapter {
             GatewayResponseAdapter::Passthrough { request_is_stream } => {
-                assert!(!request_is_stream);
+                assert!(request_is_stream);
             }
             _ => panic!("expected passthrough adapter"),
         }
+    }
+
+    #[test]
+    fn normalizes_direct_responses_system_role_for_codex() {
+        let request = ParsedRequest {
+            method: "POST".to_string(),
+            target: "/v1/responses".to_string(),
+            headers: HashMap::new(),
+            body: br#"{"model":"gpt-5.4","input":[{"type":"message","role":"system","content":"be concise"},{"type":"message","role":"user","content":[{"type":"text","text":"hello"}]}],"tools":[{"type":"web_search_preview"}]}"#
+                .to_vec(),
+        };
+
+        let (prepared, _) = prepare_gateway_request(request).expect("request should map");
+        let mapped_body: Value =
+            serde_json::from_slice(&prepared.body).expect("mapped body should be json");
+        assert_eq!(
+            mapped_body.pointer("/input/0/role").and_then(Value::as_str),
+            Some("developer")
+        );
+        assert_eq!(
+            mapped_body
+                .pointer("/input/0/content/0/type")
+                .and_then(Value::as_str),
+            Some("input_text")
+        );
+        assert_eq!(
+            mapped_body
+                .pointer("/input/1/content/0/type")
+                .and_then(Value::as_str),
+            Some("input_text")
+        );
+        assert_eq!(
+            mapped_body.pointer("/tools/0/type").and_then(Value::as_str),
+            Some("web_search")
+        );
     }
 
     #[test]

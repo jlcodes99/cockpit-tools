@@ -964,10 +964,11 @@ fn managed_proxy_env_pairs(config: &UserConfig) -> Vec<(&'static str, String)> {
         pairs.push((key, proxy_url.to_string()));
     }
 
-    let no_proxy = config.global_proxy_no_proxy.trim();
+    let no_proxy =
+        crate::modules::codex_protocol::merge_local_no_proxy(config.global_proxy_no_proxy.trim());
     if !no_proxy.is_empty() {
         for key in MANAGED_PROXY_NO_PROXY_KEYS {
-            pairs.push((key, no_proxy.to_string()));
+            pairs.push((key, no_proxy.clone()));
         }
     }
 
