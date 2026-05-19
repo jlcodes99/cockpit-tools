@@ -23,7 +23,9 @@ import { useTranslation } from 'react-i18next';
 import type { CodexAccount } from '../types/codex';
 import type { CodexAccountGroup } from '../services/codexAccountGroupService';
 import type {
-  CodexLocalAccessAddressKind,
+  CodexLocalAccessCredentialMode,
+  CodexLocalAccessCustomCredential,
+  CodexLocalAccessEndpointKind,
   CodexLocalAccessRoutingStrategy,
   CodexLocalAccessScope,
   CodexLocalAccessState,
@@ -63,9 +65,9 @@ interface CodexLocalAccessModalProps {
   isOpen: boolean;
   mode: 'panel' | 'members';
   state: CodexLocalAccessState | null;
-  addressKind: CodexLocalAccessAddressKind;
+  addressKind: CodexLocalAccessEndpointKind;
   addressOptions: Array<{ value: string; label: string }>;
-  onAddressKindChange: (value: string) => void;
+  onAddressKindChange: (value: string) => Promise<void> | void;
   accounts: CodexAccount[];
   accountGroups: CodexAccountGroup[];
   initialSelectedIds: string[];
@@ -84,6 +86,13 @@ interface CodexLocalAccessModalProps {
   onUpdateAccessScope: (
     accessScope: CodexLocalAccessScope,
   ) => Promise<unknown> | unknown;
+  onUpdateCredentials: (payload: {
+    credentialMode: CodexLocalAccessCredentialMode;
+    activeCustomCredentialId?: string | null;
+    customCredentials?: CodexLocalAccessCustomCredential[] | null;
+    customBaseUrl?: string | null;
+    customApiKey?: string | null;
+  }) => Promise<unknown> | unknown;
   onRotateApiKey: () => Promise<unknown> | unknown;
   onKillPort: () => Promise<unknown> | unknown;
   onToggleEnabled: () => Promise<unknown> | unknown;
@@ -97,6 +106,7 @@ interface CodexLocalAccessModalProps {
 
 type StatsRangeKey = 'daily' | 'weekly' | 'monthly';
 type CopyableField = 'apiPortUrl' | 'baseUrl' | 'apiKey' | 'modelId';
+type CodexLocalAccessCollectionState = NonNullable<CodexLocalAccessState['collection']>;
 const CODEX_LOCAL_ACCESS_STATS_RANGE_STORAGE_KEY =
   'agtools.codex.local_access.stats_range.v1';
 
@@ -117,6 +127,56 @@ function readStoredStatsRange(): StatsRangeKey {
   } catch {
     return 'daily';
   }
+}
+
+function createCustomCredentialDraft(name: string): CodexLocalAccessCustomCredential {
+  const now = Date.now();
+  const suffix =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${now}-${Math.random().toString(36).slice(2, 10)}`;
+
+  return {
+    id: `custom_${suffix}`,
+    name,
+    baseUrl: '',
+    apiKey: '',
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function readCustomCredentialsFromCollection(
+  collection: CodexLocalAccessCollectionState | null,
+  defaultName: string,
+): CodexLocalAccessCustomCredential[] {
+  if (!collection) return [];
+  const savedCredentials = collection.customCredentials ?? [];
+  if (savedCredentials.length > 0) {
+    return savedCredentials.map((credential, index) => ({
+      ...credential,
+      name: credential.name?.trim() || `${defaultName} ${index + 1}`,
+      baseUrl: credential.baseUrl ?? '',
+      apiKey: credential.apiKey ?? '',
+      createdAt: credential.createdAt || Date.now(),
+      updatedAt: credential.updatedAt || Date.now(),
+    }));
+  }
+
+  const legacyBaseUrl = collection.customBaseUrl?.trim() ?? '';
+  const legacyApiKey = collection.customApiKey?.trim() ?? '';
+  if (!legacyBaseUrl && !legacyApiKey) return [];
+
+  return [
+    {
+      id: collection.activeCustomCredentialId?.trim() || 'custom_legacy',
+      name: `${defaultName} 1`,
+      baseUrl: legacyBaseUrl,
+      apiKey: legacyApiKey,
+      createdAt: collection.createdAt || Date.now(),
+      updatedAt: collection.updatedAt || Date.now(),
+    },
+  ];
 }
 
 function persistStatsRange(value: StatsRangeKey): void {
@@ -175,6 +235,7 @@ export function CodexLocalAccessModal({
   onUpdatePort,
   onUpdateRoutingStrategy,
   onUpdateAccessScope,
+  onUpdateCredentials,
   onRotateApiKey,
   onKillPort,
   onToggleEnabled,
@@ -201,7 +262,15 @@ export function CodexLocalAccessModal({
     useState<CodexLocalAccessTestResult | null>(null);
   const [testDialogError, setTestDialogError] = useState('');
   const [portInput, setPortInput] = useState('');
+  const [credentialModeInput, setCredentialModeInput] =
+    useState<CodexLocalAccessCredentialMode>('local');
+  const [customCredentialsInput, setCustomCredentialsInput] = useState<
+    CodexLocalAccessCustomCredential[]
+  >([]);
+  const [activeCustomCredentialIdInput, setActiveCustomCredentialIdInput] =
+    useState('');
   const [keyVisible, setKeyVisible] = useState(false);
+  const [customApiKeyVisible, setCustomApiKeyVisible] = useState(false);
   const [copiedField, setCopiedField] = useState<CopyableField | null>(null);
   const [selectedModelId, setSelectedModelId] = useState('');
   const [statsRange, setStatsRange] = useState<StatsRangeKey>(() => readStoredStatsRange());
@@ -213,6 +282,48 @@ export function CodexLocalAccessModal({
   const baseUrl = state?.baseUrl ?? '';
   const displayBaseUrl =
     addressKind === 'lan' && state?.lanBaseUrl ? state.lanBaseUrl : baseUrl;
+  const credentialMode = collection?.credentialMode ?? 'local';
+  const isCustomCredentialMode = credentialMode === 'custom';
+  const collectionCustomCredentials = useMemo(
+    () =>
+      readCustomCredentialsFromCollection(
+        collection,
+        t('codex.localAccess.customProfileDefaultName', '自定义配置'),
+      ),
+    [collection, t],
+  );
+  const activeCollectionCustomCredential = useMemo(() => {
+    const activeId = collection?.activeCustomCredentialId?.trim();
+    return (
+      collectionCustomCredentials.find((credential) => credential.id === activeId) ??
+      collectionCustomCredentials[0] ??
+      null
+    );
+  }, [collection?.activeCustomCredentialId, collectionCustomCredentials]);
+  const activeCustomCredentialInput = useMemo(
+    () =>
+      customCredentialsInput.find(
+        (credential) => credential.id === activeCustomCredentialIdInput,
+      ) ??
+      customCredentialsInput[0] ??
+      null,
+    [activeCustomCredentialIdInput, customCredentialsInput],
+  );
+  const activeCustomCredentialOptionValue =
+    activeCustomCredentialInput?.id ?? '';
+  const isCustomCredentialDraftMode = credentialModeInput === 'custom';
+  const activeBaseUrl = isCustomCredentialDraftMode
+    ? activeCustomCredentialInput?.baseUrl?.trim() ??
+      activeCollectionCustomCredential?.baseUrl?.trim() ??
+      collection?.customBaseUrl?.trim() ??
+      ''
+    : displayBaseUrl;
+  const activeApiKey = isCustomCredentialDraftMode
+    ? activeCustomCredentialInput?.apiKey?.trim() ??
+      activeCollectionCustomCredential?.apiKey?.trim() ??
+      collection?.customApiKey?.trim() ??
+      ''
+    : collection?.apiKey ?? '';
   const modelIds = state?.modelIds ?? [];
   const stats = state?.stats;
   const statsRangeOptions = useMemo(
@@ -342,14 +453,33 @@ export function CodexLocalAccessModal({
     setTestDialogResult(null);
     setTestDialogError('');
     setKeyVisible(false);
+    setCustomApiKeyVisible(false);
     setCopiedField(null);
     setPortInput(collection?.port ? String(collection.port) : '');
+    setCredentialModeInput(collection?.credentialMode ?? 'local');
+    setCustomCredentialsInput(collectionCustomCredentials);
+    setActiveCustomCredentialIdInput(
+      collection?.activeCustomCredentialId?.trim() ||
+        collectionCustomCredentials[0]?.id ||
+        '',
+    );
     if (mode === 'members') {
       window.setTimeout(() => {
         searchInputRef.current?.focus();
       }, 0);
     }
-  }, [collection?.port, collection?.restrictFreeAccounts, isOpen, mode, normalizedInitialSelectedIds]);
+  }, [
+    collection?.credentialMode,
+    collection?.customApiKey,
+    collection?.customBaseUrl,
+    collection?.activeCustomCredentialId,
+    collection?.port,
+    collection?.restrictFreeAccounts,
+    collectionCustomCredentials,
+    isOpen,
+    mode,
+    normalizedInitialSelectedIds,
+  ]);
 
   useEffect(() => {
     if (modelIds.length === 0) {
@@ -656,6 +786,86 @@ export function CodexLocalAccessModal({
     ],
     [t],
   );
+  const credentialModeOptions = useMemo(
+    () => [
+      {
+        value: 'local',
+        label: t('codex.localAccess.credentialModeLocal', '内置服务'),
+      },
+      {
+        value: 'custom',
+        label: t('codex.localAccess.credentialModeCustom', '自定义配置'),
+      },
+    ],
+    [t],
+  );
+  const customCredentialOptions = useMemo(
+    () =>
+      customCredentialsInput.map((credential, index) => ({
+        value: credential.id,
+        label:
+          credential.name.trim() ||
+          t('codex.localAccess.customProfileFallbackName', {
+            index: index + 1,
+            defaultValue: '自定义配置 {{index}}',
+          }),
+      })),
+    [customCredentialsInput, t],
+  );
+  const handleCredentialModeInputChange = (value: string) => {
+    const nextMode = value as CodexLocalAccessCredentialMode;
+    setCredentialModeInput(nextMode);
+    if (nextMode === 'custom' && customCredentialsInput.length === 0) {
+      const nextCredential = createCustomCredentialDraft(
+        t('codex.localAccess.customProfileFallbackName', {
+          index: 1,
+          defaultValue: '自定义配置 {{index}}',
+        }),
+      );
+      setCustomCredentialsInput([nextCredential]);
+      setActiveCustomCredentialIdInput(nextCredential.id);
+    }
+  };
+
+  const handleAddCustomCredential = () => {
+    const nextCredential = createCustomCredentialDraft(
+      t('codex.localAccess.customProfileFallbackName', {
+        index: customCredentialsInput.length + 1,
+        defaultValue: '自定义配置 {{index}}',
+      }),
+    );
+    setCustomCredentialsInput((prev) => [...prev, nextCredential]);
+    setActiveCustomCredentialIdInput(nextCredential.id);
+  };
+
+  const handleRemoveActiveCustomCredential = () => {
+    if (!activeCustomCredentialInput) return;
+    setCustomCredentialsInput((prev) => {
+      const activeIndex = prev.findIndex(
+        (credential) => credential.id === activeCustomCredentialInput.id,
+      );
+      const next = prev.filter(
+        (credential) => credential.id !== activeCustomCredentialInput.id,
+      );
+      const fallback =
+        next[Math.max(0, Math.min(activeIndex, next.length - 1))] ?? null;
+      setActiveCustomCredentialIdInput(fallback?.id ?? '');
+      return next;
+    });
+  };
+
+  const updateActiveCustomCredentialInput = (
+    patch: Partial<Pick<CodexLocalAccessCustomCredential, 'name' | 'baseUrl' | 'apiKey'>>,
+  ) => {
+    if (!activeCustomCredentialInput) return;
+    setCustomCredentialsInput((prev) =>
+      prev.map((credential) =>
+        credential.id === activeCustomCredentialInput.id
+          ? { ...credential, ...patch, updatedAt: Date.now() }
+          : credential,
+      ),
+    );
+  };
 
   const renderQuotaPreview = (
     presentation: ReturnType<typeof buildCodexAccountPresentation>,
@@ -787,6 +997,60 @@ export function CodexLocalAccessModal({
         await onUpdatePort(nextPort);
       },
       t('codex.localAccess.portSaveSuccess', 'API 服务端口已更新'),
+    );
+  };
+
+  const handleSaveCredentials = async () => {
+    const normalizedCustomCredentials = customCredentialsInput.map((credential, index) => ({
+      ...credential,
+      name:
+        credential.name.trim() ||
+        t('codex.localAccess.customProfileFallbackName', {
+          index: index + 1,
+          defaultValue: '自定义配置 {{index}}',
+        }),
+      baseUrl: credential.baseUrl.trim(),
+      apiKey: credential.apiKey.trim(),
+      updatedAt: Date.now(),
+    }));
+    const activeCredential =
+      normalizedCustomCredentials.find(
+        (credential) => credential.id === activeCustomCredentialOptionValue,
+      ) ??
+      normalizedCustomCredentials[0] ??
+      null;
+    const nextBaseUrl = activeCredential?.baseUrl ?? '';
+    const nextApiKey = activeCredential?.apiKey ?? '';
+    if (credentialModeInput === 'custom') {
+      if (!activeCredential) {
+        setError(
+          t('codex.localAccess.customProfileRequired', '请先新增一个自定义配置'),
+        );
+        return;
+      }
+      if (!/^https?:\/\//i.test(nextBaseUrl)) {
+        setError(t('codex.localAccess.customBaseUrlInvalid', '自定义 API 地址需以 http:// 或 https:// 开头'));
+        return;
+      }
+      if (!nextApiKey) {
+        setError(t('codex.localAccess.customApiKeyRequired', '请输入自定义 API 密钥'));
+        return;
+      }
+    }
+
+    await runAction(
+      async () => {
+        await onUpdateCredentials({
+          credentialMode: credentialModeInput,
+          activeCustomCredentialId: activeCredential?.id ?? null,
+          customCredentials: normalizedCustomCredentials,
+          customBaseUrl: nextBaseUrl || null,
+          customApiKey: nextApiKey || null,
+        });
+      },
+      credentialModeInput === 'custom'
+        ? t('codex.localAccess.credentialsModeCustomSuccess', '已切换到自定义配置')
+        : t('codex.localAccess.credentialsModeLocalSuccess', '已切换到内置服务'),
     );
   };
 
@@ -1150,6 +1414,39 @@ export function CodexLocalAccessModal({
                 </div>
                 {collection ? (
                   <div className="codex-local-access-config-grid">
+                    <div className="codex-local-access-config-card codex-local-access-config-card-mode">
+                      <div className="codex-local-access-config-head">
+                        <span className="codex-local-access-config-label">
+                          {t('codex.localAccess.credentialModeLabel', '运行配置')}
+                        </span>
+                        <div className="codex-local-access-config-actions">
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => void handleSaveCredentials()}
+                            disabled={saving || testing || starting}
+                          >
+                            {saving ? (
+                              <RefreshCw size={14} className="loading-spinner" />
+                            ) : (
+                              <KeyRound size={14} />
+                            )}
+                            {t('codex.localAccess.credentialsSave', '保存配置')}
+                          </button>
+                        </div>
+                      </div>
+                      <SingleSelectDropdown
+                        value={credentialModeInput}
+                        options={credentialModeOptions}
+                        onChange={handleCredentialModeInputChange}
+                        menuClassName="codex-local-access-credential-mode-menu"
+                        menuWidth={148}
+                        menuMaxHeight={120}
+                        disabled={saving || testing || starting}
+                        ariaLabel={t('codex.localAccess.credentialModeLabel', '运行配置')}
+                      />
+                    </div>
+
                     <div className="codex-local-access-config-card codex-local-access-config-card-base">
                       <div className="codex-local-access-config-head">
                         <div className="codex-local-access-config-label codex-local-access-address-select">
@@ -1158,8 +1455,8 @@ export function CodexLocalAccessModal({
                             options={addressOptions}
                             onChange={onAddressKindChange}
                             menuClassName="codex-local-access-address-menu"
-                            menuWidth={92}
-                            menuMaxHeight={120}
+                            menuWidth={104}
+                            menuMaxHeight={156}
                             disabled={addressOptions.length < 2}
                             ariaLabel={t('codex.localAccess.addressKind', '地址类型')}
                           />
@@ -1168,15 +1465,16 @@ export function CodexLocalAccessModal({
                           <button
                             type="button"
                             className="folder-icon-btn"
-                            onClick={() => void handleCopy('baseUrl', displayBaseUrl)}
+                            onClick={() => void handleCopy('baseUrl', activeBaseUrl)}
                             title={t('common.copy', '复制')}
+                            disabled={!activeBaseUrl}
                           >
                             {copiedField === 'baseUrl' ? <Check size={14} /> : <Copy size={14} />}
                           </button>
                         </div>
                       </div>
-                      <code className="codex-local-access-code" title={displayBaseUrl}>
-                        {displayBaseUrl}
+                      <code className="codex-local-access-code" title={activeBaseUrl}>
+                        {activeBaseUrl || '-'}
                       </code>
                     </div>
 
@@ -1201,8 +1499,9 @@ export function CodexLocalAccessModal({
                           <button
                             type="button"
                             className="folder-icon-btn"
-                            onClick={() => void handleCopy('apiKey', collection.apiKey)}
+                            onClick={() => void handleCopy('apiKey', activeApiKey)}
                             title={t('common.copy', '复制')}
+                            disabled={!activeApiKey}
                           >
                             {copiedField === 'apiKey' ? <Check size={14} /> : <Copy size={14} />}
                           </button>
@@ -1210,7 +1509,7 @@ export function CodexLocalAccessModal({
                             type="button"
                             className="btn btn-secondary btn-sm"
                             onClick={() => void handleResetKey()}
-                            disabled={saving || testing || starting}
+                            disabled={saving || testing || starting || isCustomCredentialMode}
                           >
                             {saving ? (
                               <RefreshCw size={14} className="loading-spinner" />
@@ -1221,11 +1520,107 @@ export function CodexLocalAccessModal({
                           </button>
                         </div>
                       </div>
-                      <code className="codex-local-access-code" title={collection.apiKey}>
+                      <code className="codex-local-access-code" title={activeApiKey || '-'}>
                         {keyVisible
-                          ? collection.apiKey
-                          : `${collection.apiKey.slice(0, 10)}••••••••••••`}
+                          ? activeApiKey || '-'
+                          : activeApiKey
+                            ? `${activeApiKey.slice(0, 10)}••••••••••••`
+                            : '-'}
                       </code>
+                    </div>
+
+                    <div className="codex-local-access-config-card codex-local-access-config-card-custom">
+                      <div className="codex-local-access-config-head">
+                        <span className="codex-local-access-config-label">
+                          {t('codex.localAccess.customEndpointLabel', '自定义配置')}
+                        </span>
+                        <div className="codex-local-access-config-actions">
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={handleAddCustomCredential}
+                            disabled={saving || testing || starting}
+                          >
+                            <FolderPlus size={14} />
+                            {t('codex.localAccess.customProfileAdd', '新增')}
+                          </button>
+                          <button
+                            type="button"
+                            className="folder-icon-btn"
+                            onClick={handleRemoveActiveCustomCredential}
+                            title={t('codex.localAccess.customProfileRemove', '删除当前配置')}
+                            aria-label={t('codex.localAccess.customProfileRemove', '删除当前配置')}
+                            disabled={
+                              saving ||
+                              testing ||
+                              starting ||
+                              !activeCustomCredentialInput
+                            }
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="codex-local-access-custom-profile-row">
+                        <SingleSelectDropdown
+                          value={activeCustomCredentialOptionValue}
+                          options={customCredentialOptions}
+                          onChange={setActiveCustomCredentialIdInput}
+                          placeholder={t('codex.localAccess.customProfileEmpty', '暂无自定义配置')}
+                          menuClassName="codex-local-access-custom-profile-menu"
+                          menuWidth={240}
+                          menuMaxHeight={220}
+                          disabled={
+                            saving ||
+                            testing ||
+                            starting ||
+                            customCredentialOptions.length === 0
+                          }
+                          ariaLabel={t('codex.localAccess.customProfileSelect', '选择自定义配置')}
+                        />
+                        <input
+                          type="text"
+                          value={activeCustomCredentialInput?.name ?? ''}
+                          onChange={(event) =>
+                            updateActiveCustomCredentialInput({ name: event.target.value })
+                          }
+                          placeholder={t('codex.localAccess.customProfileNamePlaceholder', '配置名称')}
+                          disabled={saving || testing || starting}
+                        />
+                      </div>
+                      <div className="codex-local-access-custom-fields">
+                        <input
+                          type="url"
+                          value={activeCustomCredentialInput?.baseUrl ?? ''}
+                          onChange={(event) =>
+                            updateActiveCustomCredentialInput({ baseUrl: event.target.value })
+                          }
+                          placeholder="https://api.example.com/v1"
+                          disabled={saving || testing || starting || !activeCustomCredentialInput}
+                        />
+                        <input
+                          type={customApiKeyVisible ? 'text' : 'password'}
+                          value={activeCustomCredentialInput?.apiKey ?? ''}
+                          onChange={(event) =>
+                            updateActiveCustomCredentialInput({ apiKey: event.target.value })
+                          }
+                          placeholder={t('codex.localAccess.customApiKeyPlaceholder', '自定义 API 密钥')}
+                          disabled={saving || testing || starting || !activeCustomCredentialInput}
+                        />
+                        <button
+                          type="button"
+                          className="folder-icon-btn codex-local-access-custom-key-toggle"
+                          onClick={() => setCustomApiKeyVisible((prev) => !prev)}
+                          title={
+                            customApiKeyVisible
+                              ? t('codex.localAccess.hideKey', '隐藏密钥')
+                              : t('codex.localAccess.showKey', '显示密钥')
+                          }
+                          disabled={saving || testing || starting || !activeCustomCredentialInput}
+                        >
+                          {customApiKeyVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                      </div>
                     </div>
 
                     <div className="codex-local-access-config-card codex-local-access-config-card-port codex-local-access-port-card">
@@ -1619,7 +2014,17 @@ export function CodexLocalAccessModal({
                   <ShieldCheck size={18} />
                   <span>{t('codex.localAccess.testDialogTitle', '测试 API 服务')}</span>
                 </h3>
-                <p>{t('codex.localAccess.testDialogDesc', '通过 Codex CLI 发起一次真实请求，验证本地服务、密钥和上游响应。')}</p>
+                <p>
+                  {isCustomCredentialMode
+                    ? t(
+                        'codex.localAccess.testDialogDescCustom',
+                        '直接请求自定义 API；如已绑定 OAuth，会先刷新登录态。',
+                      )
+                    : t(
+                        'codex.localAccess.testDialogDesc',
+                        '通过 Codex CLI 发起一次真实请求，验证本地服务、密钥和上游响应。',
+                      )}
+                </p>
               </div>
               <button
                 className="modal-close codex-local-access-test-dialog-close"
@@ -1637,7 +2042,17 @@ export function CodexLocalAccessModal({
                   <RefreshCw size={18} className="loading-spinner" />
                   <div>
                     <strong>{t('codex.localAccess.testProgressTitle', '正在测试服务')}</strong>
-                    <span>{t('codex.localAccess.testProgressDesc', '正在向本地 API 服务发起真实请求，请稍候。')}</span>
+                    <span>
+                      {isCustomCredentialMode
+                        ? t(
+                            'codex.localAccess.testProgressDescCustom',
+                            '正在向自定义 API 发起真实请求，请稍候。',
+                          )
+                        : t(
+                            'codex.localAccess.testProgressDesc',
+                            '正在向本地 API 服务发起真实请求，请稍候。',
+                          )}
+                    </span>
                   </div>
                 </div>
               )}
@@ -1660,12 +2075,19 @@ export function CodexLocalAccessModal({
                     <div className="codex-local-access-inline-success">
                       <Check size={14} />
                       <span>
-                        {t('codex.localAccess.testSuccess', {
-                          model: testSuccessResult.modelId ?? '--',
-                          latency: formatLatencyMs(testSuccessResult.latencyMs ?? 0),
-                          defaultValue:
-                            '服务检测成功：本地服务、密钥和上游响应正常（{{model}}，{{latency}}）。如果 Codex 仍报 502，请检查 Codex 的 Base URL、API Key 或运行环境。',
-                        })}
+                        {isCustomCredentialMode
+                          ? t('codex.localAccess.testSuccessCustom', {
+                              model: testSuccessResult.modelId ?? '--',
+                              latency: formatLatencyMs(testSuccessResult.latencyMs ?? 0),
+                              defaultValue:
+                                '服务检测成功：自定义 API 和密钥正常（{{model}}，{{latency}}）。如已绑定 OAuth，登录态也可用。',
+                            })
+                          : t('codex.localAccess.testSuccess', {
+                              model: testSuccessResult.modelId ?? '--',
+                              latency: formatLatencyMs(testSuccessResult.latencyMs ?? 0),
+                              defaultValue:
+                                '服务检测成功：本地服务、密钥和上游响应正常（{{model}}，{{latency}}）。如果 Codex 仍报 502，请检查 Codex 的 Base URL、API Key 或运行环境。',
+                            })}
                       </span>
                     </div>
                   </div>

@@ -1,4 +1,8 @@
 export type CodexLocalAccessAddressKind = 'local' | 'lan';
+export type CodexLocalAccessCredentialMode = 'local' | 'custom';
+export type CodexLocalAccessEndpointKind =
+  | CodexLocalAccessAddressKind
+  | 'custom';
 export type CodexLocalAccessScope = 'localhost' | 'lan';
 
 export type CodexLocalAccessRoutingStrategy =
@@ -9,12 +13,26 @@ export type CodexLocalAccessRoutingStrategy =
   | 'plan_low_first'
   | 'expiry_soon_first';
 
+export interface CodexLocalAccessCustomCredential {
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface CodexLocalAccessCollection {
   enabled: boolean;
   port: number;
   apiKey: string;
   accessScope: CodexLocalAccessScope;
   routingStrategy: CodexLocalAccessRoutingStrategy;
+  credentialMode: CodexLocalAccessCredentialMode;
+  customCredentials: CodexLocalAccessCustomCredential[];
+  activeCustomCredentialId?: string | null;
+  customBaseUrl?: string | null;
+  customApiKey?: string | null;
   restrictFreeAccounts: boolean;
   boundOauthAccountId?: string | null;
   accountIds: string[];

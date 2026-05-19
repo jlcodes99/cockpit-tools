@@ -24,12 +24,38 @@ pub enum CodexLocalAccessScope {
     Lan,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CodexLocalAccessCredentialMode {
+    Local,
+    Custom,
+}
+
+impl Default for CodexLocalAccessCredentialMode {
+    fn default() -> Self {
+        Self::Local
+    }
+}
+
 fn default_access_scope_for_existing_config() -> CodexLocalAccessScope {
     CodexLocalAccessScope::Lan
 }
 
 fn default_restrict_free_accounts() -> bool {
     true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessCustomCredential {
+    pub id: String,
+    pub name: String,
+    pub base_url: String,
+    pub api_key: String,
+    #[serde(default)]
+    pub created_at: i64,
+    #[serde(default)]
+    pub updated_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,6 +68,16 @@ pub struct CodexLocalAccessCollection {
     pub access_scope: CodexLocalAccessScope,
     #[serde(default)]
     pub routing_strategy: CodexLocalAccessRoutingStrategy,
+    #[serde(default)]
+    pub credential_mode: CodexLocalAccessCredentialMode,
+    #[serde(default)]
+    pub custom_credentials: Vec<CodexLocalAccessCustomCredential>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_custom_credential_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_base_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_api_key: Option<String>,
     #[serde(default = "default_restrict_free_accounts")]
     pub restrict_free_accounts: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]

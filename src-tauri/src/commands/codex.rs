@@ -3,6 +3,7 @@ use crate::models::codex::{
     CodexQuota, CodexTokens,
 };
 use crate::models::codex_local_access::{
+    CodexLocalAccessCredentialMode, CodexLocalAccessCustomCredential,
     CodexLocalAccessPortCleanupResult, CodexLocalAccessRoutingStrategy, CodexLocalAccessScope,
     CodexLocalAccessState, CodexLocalAccessTestResult,
 };
@@ -472,6 +473,47 @@ pub async fn import_codex_from_json(
 #[tauri::command]
 pub fn export_codex_accounts(account_ids: Vec<String>) -> Result<String, String> {
     codex_account::export_accounts(&account_ids)
+}
+
+#[tauri::command]
+pub fn codex_get_cpa_dir() -> Result<String, String> {
+    codex_account::get_cpa_dir_path()
+}
+
+#[tauri::command]
+pub fn codex_list_cpa_accounts() -> Result<Vec<codex_account::CodexCpaAccountFile>, String> {
+    codex_account::list_cpa_accounts()
+}
+
+#[tauri::command]
+pub async fn codex_import_from_cpa_dir(
+    app: AppHandle,
+) -> Result<codex_account::CodexFileImportResult, String> {
+    let result = codex_account::import_from_cpa_dir().await?;
+    let imported = refresh_imported_codex_accounts(&app, result.imported).await;
+    Ok(codex_account::CodexFileImportResult {
+        imported,
+        failed: result.failed,
+    })
+}
+
+#[tauri::command]
+pub fn codex_export_accounts_to_cpa_dir(
+    account_ids: Vec<String>,
+) -> Result<codex_account::CodexCpaWriteResult, String> {
+    codex_account::export_accounts_to_cpa_dir(&account_ids)
+}
+
+#[tauri::command]
+pub fn codex_delete_cpa_account_files(
+    file_names: Vec<String>,
+) -> Result<codex_account::CodexCpaDeleteResult, String> {
+    codex_account::delete_cpa_account_files(&file_names)
+}
+
+#[tauri::command]
+pub fn codex_delete_all_cpa_account_files() -> Result<codex_account::CodexCpaDeleteResult, String> {
+    codex_account::delete_all_cpa_account_files()
 }
 
 /// 从本地文件导入 Codex 账号
@@ -959,14 +1001,34 @@ pub async fn codex_local_access_update_access_scope(
 }
 
 #[tauri::command]
+pub async fn codex_local_access_update_credentials(
+    credential_mode: CodexLocalAccessCredentialMode,
+    active_custom_credential_id: Option<String>,
+    custom_credentials: Option<Vec<CodexLocalAccessCustomCredential>>,
+    custom_base_url: Option<String>,
+    custom_api_key: Option<String>,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_credentials(
+        credential_mode,
+        active_custom_credential_id,
+        custom_credentials,
+        custom_base_url,
+        custom_api_key,
+    )
+    .await
+}
+
+#[tauri::command]
 pub async fn codex_local_access_set_enabled(
     enabled: bool,
 ) -> Result<CodexLocalAccessState, String> {
     codex_local_access::set_local_access_enabled(enabled).await
 }
 
-#[tauri::command]
-pub async fn codex_local_access_activate(app: AppHandle) -> Result<CodexLocalAccessState, String> {
+async fn apply_codex_local_access_to_default_profile(
+    app: Option<&AppHandle>,
+    launch_after_apply: bool,
+) -> Result<CodexLocalAccessState, String> {
     let previous_history_provider = read_default_codex_history_provider_for_switch();
     let codex_home = codex_account::get_codex_home();
     let state = codex_local_access::activate_local_access_for_dir(&codex_home).await?;
@@ -1003,7 +1065,7 @@ pub async fn codex_local_access_activate(app: AppHandle) -> Result<CodexLocalAcc
 
     logger::log_info("API 服务启动模式下跳过 OpenCode / OpenClaw OAuth 同步");
 
-    if user_config.codex_launch_on_switch {
+    if launch_after_apply && user_config.codex_launch_on_switch {
         #[cfg(target_os = "macos")]
         if process::is_codex_running() {
             logger::log_info("检测到 Codex 正在运行，将按默认实例 PID 逻辑重启");
@@ -1014,19 +1076,37 @@ pub async fn codex_local_access_activate(app: AppHandle) -> Result<CodexLocalAcc
             Err(e) => {
                 logger::log_warn(&format!("Codex 启动失败: {}", e));
                 if e.starts_with("APP_PATH_NOT_FOUND:") {
-                    let _ = app.emit(
-                        "app:path_missing",
-                        serde_json::json!({ "app": "codex", "retry": { "kind": "default" } }),
-                    );
+                    if let Some(app) = app {
+                        let _ = app.emit(
+                            "app:path_missing",
+                            serde_json::json!({ "app": "codex", "retry": { "kind": "default" } }),
+                        );
+                    }
                 }
             }
         }
-    } else {
+    } else if launch_after_apply {
         logger::log_info("已关闭切换 Codex 时自动启动 Codex App");
+    } else {
+        logger::log_info("已写入 API 服务当前配置，按要求跳过 Codex 客户端启动/重启");
     }
 
-    let _ = crate::modules::tray::update_tray_menu(&app);
+    if let Some(app) = app {
+        let _ = crate::modules::tray::update_tray_menu(app);
+    }
     Ok(state)
+}
+
+#[tauri::command]
+pub async fn codex_local_access_apply_current_credentials(
+    app: AppHandle,
+) -> Result<CodexLocalAccessState, String> {
+    apply_codex_local_access_to_default_profile(Some(&app), false).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_activate(app: AppHandle) -> Result<CodexLocalAccessState, String> {
+    apply_codex_local_access_to_default_profile(Some(&app), true).await
 }
 
 #[tauri::command]

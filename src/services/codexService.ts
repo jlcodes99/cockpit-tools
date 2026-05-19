@@ -109,6 +109,76 @@ export async function exportCodexAccounts(accountIds: string[]): Promise<string>
   return await invoke('export_codex_accounts', { accountIds });
 }
 
+export interface CodexCpaWrittenFile {
+  account_id: string;
+  email: string;
+  file_name: string;
+  path: string;
+}
+
+export interface CodexCpaWriteResult {
+  directory: string;
+  written: CodexCpaWrittenFile[];
+}
+
+export interface CodexCpaAccountFile {
+  file_name: string;
+  path: string;
+  email?: string | null;
+  account_id?: string | null;
+  modified_at?: number | null;
+  size_bytes?: number | null;
+  valid: boolean;
+  error?: string | null;
+}
+
+export interface CodexCpaDeleteResult {
+  directory: string;
+  deleted: number;
+  deleted_files: string[];
+}
+
+/** 获取 CPA 默认目录 */
+export async function getCodexCpaDir(): Promise<string> {
+  return await invoke('codex_get_cpa_dir');
+}
+
+/** 打开 CPA 默认目录 */
+export async function openCodexCpaDir(path?: string): Promise<string> {
+  const directory = path || await getCodexCpaDir();
+  await invoke('open_folder', { path: directory });
+  return directory;
+}
+
+/** 读取 CPA 目录内的账号 JSON */
+export async function listCodexCpaAccounts(): Promise<CodexCpaAccountFile[]> {
+  return await invoke('codex_list_cpa_accounts');
+}
+
+/** 从 CPA 目录导入账号 */
+export async function importCodexFromCpaDir(): Promise<CodexFileImportResult> {
+  return await invoke('codex_import_from_cpa_dir');
+}
+
+/** 将账号导出到 CPA 默认目录 */
+export async function exportCodexAccountsToCpaDir(
+  accountIds: string[],
+): Promise<CodexCpaWriteResult> {
+  return await invoke('codex_export_accounts_to_cpa_dir', { accountIds });
+}
+
+/** 删除 CPA 目录中的指定账号 JSON */
+export async function deleteCodexCpaAccountFiles(
+  fileNames: string[],
+): Promise<CodexCpaDeleteResult> {
+  return await invoke('codex_delete_cpa_account_files', { fileNames });
+}
+
+/** 删除 CPA 目录中的全部账号 JSON */
+export async function deleteAllCodexCpaAccountFiles(): Promise<CodexCpaDeleteResult> {
+  return await invoke('codex_delete_all_cpa_account_files');
+}
+
 export interface CodexFileImportResult {
   imported: CodexAccount[];
   failed: { email: string; error: string }[];

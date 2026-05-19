@@ -143,6 +143,9 @@ import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import type { CodexAccount, CodexAppSpeed } from "../types/codex";
 import type {
   CodexLocalAccessAddressKind,
+  CodexLocalAccessCredentialMode,
+  CodexLocalAccessCustomCredential,
+  CodexLocalAccessEndpointKind,
   CodexLocalAccessRoutingStrategy,
   CodexLocalAccessScope,
   CodexLocalAccessState,
@@ -191,6 +194,7 @@ import {
 import {
   buildCodexExportContent,
   buildCodexExportFileNameBase,
+  parseCockpitToolsCodexExport,
   type CodexExportFormat,
 } from "../utils/codexExportFormats";
 import {
@@ -595,6 +599,27 @@ export function CodexAccountsPage() {
     useState(false);
   const [formattedSavingExportDocumentId, setFormattedSavingExportDocumentId] =
     useState<string | null>(null);
+  const [formattedSavingCpaDirectory, setFormattedSavingCpaDirectory] =
+    useState(false);
+  const [showCpaManagerModal, setShowCpaManagerModal] = useState(false);
+  const [cpaDir, setCpaDir] = useState("");
+  const [cpaFiles, setCpaFiles] = useState<
+    codexService.CodexCpaAccountFile[]
+  >([]);
+  const [cpaManagerLoading, setCpaManagerLoading] = useState(false);
+  const [cpaManagerNotice, setCpaManagerNotice] = useState<{
+    text: string;
+    tone?: "error" | "success";
+  } | null>(null);
+  const [cpaManagerError, setCpaManagerError] = useState<string | null>(null);
+  const [cpaImporting, setCpaImporting] = useState(false);
+  const [cpaDeletingFileName, setCpaDeletingFileName] = useState<string | null>(
+    null,
+  );
+  const [cpaClearingAll, setCpaClearingAll] = useState(false);
+  const [cpaCardExportingAccountId, setCpaCardExportingAccountId] = useState<
+    string | null
+  >(null);
   const {
     message: exportModalError,
     scrollKey: exportModalErrorScrollKey,
@@ -942,6 +967,21 @@ export function CodexAccountsPage() {
     saveJsonFile,
   } = page;
 
+  const {
+    accounts,
+    loading,
+    currentAccount,
+    fetchAccounts,
+    fetchCurrentAccount,
+    switchAccount,
+    refreshQuota,
+    hydrateAccountProfilesIfNeeded,
+    updateAccountName,
+    updateApiKeyCredentials,
+    updateApiKeyBoundOAuthAccount,
+    updateAccountAppSpeed,
+  } = store;
+
   useEffect(() => {
     writeCodexSortPreference(sortBy, sortDirection);
   }, [sortBy, sortDirection]);
@@ -1132,6 +1172,7 @@ export function CodexAccountsPage() {
     setFormattedExportPathCopied(false);
     setFormattedBatchSavingExportJson(false);
     setFormattedSavingExportDocumentId(null);
+    setFormattedSavingCpaDirectory(false);
     clearExportModalError();
   }, [clearExportModalError, exportJsonContent, showExportModal]);
 
@@ -1145,6 +1186,7 @@ export function CodexAccountsPage() {
     setFormattedExportPathCopied(false);
     setFormattedBatchSavingExportJson(false);
     setFormattedSavingExportDocumentId(null);
+    setFormattedSavingCpaDirectory(false);
     clearExportModalError();
   }, [clearExportModalError, exportFormat, showExportModal]);
 
@@ -1188,6 +1230,19 @@ export function CodexAccountsPage() {
     return formattedExportContent.documents;
   }, [formattedExportContent]);
 
+  const formattedExportAccountIds = useMemo(() => {
+    if (!exportJsonContent) {
+      return [];
+    }
+    try {
+      return parseCockpitToolsCodexExport(exportJsonContent)
+        .map((account) => account.id)
+        .filter((id): id is string => Boolean(id?.trim()));
+    } catch {
+      return [];
+    }
+  }, [exportJsonContent]);
+
   const handleExportByIds = useCallback(
     async (ids: string[], fileNameBase?: string) => {
       setExportFileNameBase(fileNameBase || "codex_accounts");
@@ -1214,6 +1269,7 @@ export function CodexAccountsPage() {
     setFormattedExportPathCopied(false);
     setFormattedBatchSavingExportJson(false);
     setFormattedSavingExportDocumentId(null);
+    setFormattedSavingCpaDirectory(false);
     clearExportModalError();
   }, [clearExportModalError, closeExportModal]);
 
@@ -1371,6 +1427,278 @@ export function CodexAccountsPage() {
     t,
   ]);
 
+  const refreshCpaFiles = useCallback(
+    async (options: { clearNotice?: boolean } = {}) => {
+      if (options.clearNotice) {
+        setCpaManagerNotice(null);
+      }
+      setCpaManagerLoading(true);
+      setCpaManagerError(null);
+      try {
+        const [directory, files] = await Promise.all([
+          codexService.getCodexCpaDir(),
+          codexService.listCodexCpaAccounts(),
+        ]);
+        setCpaDir(directory);
+        setCpaFiles(files);
+      } catch (error) {
+        console.error("[CodexCPA] load failed:", error);
+        const errorText = String(error);
+        setCpaManagerError(errorText);
+        setCpaManagerNotice({ text: errorText, tone: "error" });
+      } finally {
+        setCpaManagerLoading(false);
+      }
+    },
+    [],
+  );
+
+  const openCpaManager = useCallback(() => {
+    setCpaManagerNotice(null);
+    setCpaManagerError(null);
+    setShowCpaManagerModal(true);
+    void refreshCpaFiles();
+  }, [refreshCpaFiles]);
+
+  const exportAccountIdsToCpaDir = useCallback(
+    async (
+      accountIds: string[],
+      options: { fromExportModal?: boolean; cardAccountId?: string } = {},
+    ) => {
+      const ids = accountIds.filter(Boolean);
+      if (!ids.length) {
+        const messageText = t(
+          "codex.cpa.noExportAccount",
+          "没有可导出到 CPA 目录的账号",
+        );
+        if (options.fromExportModal) {
+          reportExportModalError(messageText);
+        } else {
+          setMessage({ text: messageText, tone: "error" });
+        }
+        return;
+      }
+
+      const directoryHint =
+        cpaDir ||
+        t("codex.cpa.defaultDirFallback", "/Users/用户名/.cli-proxy-api");
+      const confirmed = await confirmDialog(
+        t("codex.cpa.exportConfirm", {
+          count: ids.length,
+          dir: directoryHint,
+          defaultValue:
+            "将把 {{count}} 个账号的 OAuth Token 写入 {{dir}}，确认继续？",
+        }),
+        {
+          title: t("codex.cpa.exportConfirmTitle", "确认写入 CPA 目录"),
+          kind: "warning",
+        },
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      if (options.fromExportModal) {
+        setFormattedSavingCpaDirectory(true);
+      }
+      if (options.cardAccountId) {
+        setCpaCardExportingAccountId(options.cardAccountId);
+      }
+
+      try {
+        if (options.fromExportModal) {
+          clearExportModalError();
+        }
+        const result = await codexService.exportCodexAccountsToCpaDir(ids);
+        setFormattedExportSavedPath(result.directory);
+        setFormattedExportSavedPathIsDirectory(true);
+        setFormattedExportPathCopied(false);
+        const successText = t("codex.cpa.exportSuccess", {
+          count: result.written.length,
+          defaultValue: "已复制 {{count}} 个账号到 CPA 目录",
+        });
+        setMessage({ text: successText });
+        if (showCpaManagerModal) {
+          setCpaManagerNotice({ text: successText, tone: "success" });
+          void refreshCpaFiles();
+        }
+      } catch (error) {
+        console.error("[CodexCPA] export failed:", error);
+        const errorText = t("messages.exportFailed", {
+          error: String(error),
+        });
+        if (options.fromExportModal) {
+          reportExportModalError(errorText);
+        } else {
+          setMessage({ text: errorText, tone: "error" });
+        }
+        if (showCpaManagerModal) {
+          setCpaManagerNotice({ text: errorText, tone: "error" });
+        }
+      } finally {
+        if (options.fromExportModal) {
+          setFormattedSavingCpaDirectory(false);
+        }
+        if (options.cardAccountId) {
+          setCpaCardExportingAccountId(null);
+        }
+      }
+    },
+    [
+      clearExportModalError,
+      cpaDir,
+      refreshCpaFiles,
+      reportExportModalError,
+      setMessage,
+      showCpaManagerModal,
+      t,
+    ],
+  );
+
+  const exportCurrentModalAccountsToCpaDir = useCallback(async () => {
+    await exportAccountIdsToCpaDir(formattedExportAccountIds, {
+      fromExportModal: true,
+    });
+  }, [exportAccountIdsToCpaDir, formattedExportAccountIds]);
+
+  const handleImportFromCpaDir = useCallback(async () => {
+    setCpaImporting(true);
+    setCpaManagerError(null);
+    setCpaManagerNotice(null);
+    try {
+      const result = await codexService.importCodexFromCpaDir();
+      await fetchAccounts();
+      await fetchCurrentAccount();
+      await emitAccountsChanged({
+        platformId: "codex",
+        reason: "import",
+      });
+      await refreshCpaFiles();
+      const importedCount = result.imported.length;
+      const failedCount = result.failed.length;
+      const resultText = t("codex.cpa.importResult", {
+        imported: importedCount,
+        failed: failedCount,
+        defaultValue: "CPA 导入完成：成功 {{imported}} 个，失败 {{failed}} 个",
+      });
+      const resultTone = failedCount > 0 ? "error" : "success";
+      setCpaManagerNotice({
+        text: resultText,
+        tone: resultTone,
+      });
+      if (failedCount > 0) {
+        setCpaManagerError(
+          result.failed
+            .map((item) => `${item.email}: ${item.error}`)
+            .join("\n"),
+        );
+      }
+    } catch (error) {
+      console.error("[CodexCPA] import failed:", error);
+      const errorText = t("messages.importFailed", {
+        error: String(error),
+      });
+      setCpaManagerError(errorText);
+      setCpaManagerNotice({ text: errorText, tone: "error" });
+    } finally {
+      setCpaImporting(false);
+    }
+  }, [fetchAccounts, fetchCurrentAccount, refreshCpaFiles, t]);
+
+  const handleDeleteCpaFile = useCallback(
+    async (fileName: string) => {
+      const confirmed = await confirmDialog(
+        t("codex.cpa.deleteConfirm", {
+          fileName,
+          defaultValue: "确定删除 CPA 账号文件 {{fileName}} 吗？",
+        }),
+        {
+          title: t("codex.cpa.managerTitle", "CPA 目录"),
+          kind: "warning",
+        },
+      );
+      if (!confirmed) return;
+
+      setCpaDeletingFileName(fileName);
+      setCpaManagerError(null);
+      setCpaManagerNotice(null);
+      try {
+        const result = await codexService.deleteCodexCpaAccountFiles([
+          fileName,
+        ]);
+        await refreshCpaFiles();
+        const successText = t("codex.cpa.deleteSuccess", {
+          count: result.deleted,
+          defaultValue: "已删除 {{count}} 个 CPA 账号文件",
+        });
+        setCpaManagerNotice({ text: successText, tone: "success" });
+      } catch (error) {
+        console.error("[CodexCPA] delete failed:", error);
+        const errorText = t("messages.actionFailed", {
+          action: t("common.delete", "删除"),
+          error: String(error),
+        });
+        setCpaManagerError(errorText);
+        setCpaManagerNotice({ text: errorText, tone: "error" });
+      } finally {
+        setCpaDeletingFileName(null);
+      }
+    },
+    [refreshCpaFiles, t],
+  );
+
+  const handleClearCpaFiles = useCallback(async () => {
+    const confirmed = await confirmDialog(
+      t(
+        "codex.cpa.clearConfirm",
+        "确定删除 CPA 目录里的全部 JSON 账号文件吗？",
+      ),
+      {
+        title: t("codex.cpa.managerTitle", "CPA 目录"),
+        kind: "warning",
+      },
+    );
+    if (!confirmed) return;
+
+    setCpaClearingAll(true);
+    setCpaManagerError(null);
+    setCpaManagerNotice(null);
+    try {
+      const result = await codexService.deleteAllCodexCpaAccountFiles();
+      await refreshCpaFiles();
+      const successText = t("codex.cpa.deleteSuccess", {
+        count: result.deleted,
+        defaultValue: "已删除 {{count}} 个 CPA 账号文件",
+      });
+      setCpaManagerNotice({ text: successText, tone: "success" });
+    } catch (error) {
+      console.error("[CodexCPA] clear failed:", error);
+      const errorText = t("messages.actionFailed", {
+        action: t("codex.cpa.deleteAll", "删除全部"),
+        error: String(error),
+      });
+      setCpaManagerError(errorText);
+      setCpaManagerNotice({ text: errorText, tone: "error" });
+    } finally {
+      setCpaClearingAll(false);
+    }
+  }, [refreshCpaFiles, t]);
+
+  const openCpaDirectory = useCallback(async () => {
+    try {
+      const directory = cpaDir || (await codexService.getCodexCpaDir());
+      const openedDirectory = await codexService.openCodexCpaDir(directory);
+      setCpaDir(openedDirectory);
+    } catch (error) {
+      console.error("[CodexCPA] open directory failed:", error);
+      const errorText = t("messages.actionFailed", {
+        action: t("instances.actions.openFolder", "打开文件夹"),
+        error: String(error),
+      });
+      setCpaManagerNotice({ text: errorText, tone: "error" });
+    }
+  }, [cpaDir, t]);
+
   const canOpenFormattedExportSavedDirectory = useMemo(
     () => Boolean(formattedExportSavedPath),
     [formattedExportSavedPath],
@@ -1380,11 +1708,14 @@ export function CodexAccountsPage() {
     if (!formattedExportSavedPath) return;
     try {
       clearExportModalError();
-      await openPath(
-        formattedExportSavedPathIsDirectory
-          ? formattedExportSavedPath
-          : getDirectoryPath(formattedExportSavedPath),
-      );
+      const directory = formattedExportSavedPathIsDirectory
+        ? formattedExportSavedPath
+        : getDirectoryPath(formattedExportSavedPath);
+      if (formattedExportSavedPathIsDirectory) {
+        await invoke("open_folder", { path: directory });
+      } else {
+        await openPath(directory);
+      }
     } catch (error) {
       console.error("[CodexExport] open directory failed:", error);
       reportExportModalError(
@@ -1420,8 +1751,117 @@ export function CodexAccountsPage() {
   ]);
 
   const formattedExportModalCustomContent = useMemo(() => {
-    if (!formattedExportDocuments.length) {
+    if (exportFormat !== "cpa") {
       return undefined;
+    }
+
+    const pathBox = formattedExportSavedPath ? (
+      <div className="export-json-path-box">
+        <div className="export-json-path-title">
+          {formattedExportSavedPathIsDirectory
+            ? t("codex.exportFormat.savedFolder", "保存目录")
+            : t("codex.exportFormat.savedPath", "保存路径")}
+        </div>
+        <div className="export-json-path-value">{formattedExportSavedPath}</div>
+        <div className="export-json-path-actions">
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => void openFormattedExportSavedDirectory()}
+            disabled={!canOpenFormattedExportSavedDirectory}
+          >
+            <FolderOpen size={14} />
+            {t("instances.actions.openFolder", "打开文件夹")}
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => void copyFormattedExportSavedPath()}
+          >
+            {formattedExportPathCopied ? <Check size={14} /> : <Copy size={14} />}
+            {formattedExportPathCopied
+              ? t("common.success", "成功")
+              : t("common.copy", "复制")}
+          </button>
+        </div>
+      </div>
+    ) : null;
+
+    if (!formattedExportDocuments.length) {
+      return (
+        <>
+          <div className="export-json-actions">
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={handleToggleExportJsonHidden}
+            >
+              {exportJsonHidden ? <Eye size={14} /> : <EyeOff size={14} />}
+              {exportJsonHidden
+                ? t("common.preview", "预览")
+                : t("common.close", "关闭")}
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => void copyFormattedExportJson()}
+              disabled={!formattedExportJsonContent}
+            >
+              {formattedExportJsonCopied ? (
+                <Check size={14} />
+              ) : (
+                <Copy size={14} />
+              )}
+              {formattedExportJsonCopied
+                ? t("common.success", "成功")
+                : t("common.copy", "复制")}
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => void exportCurrentModalAccountsToCpaDir()}
+              disabled={
+                formattedSavingCpaDirectory ||
+                formattedExportAccountIds.length === 0
+              }
+            >
+              {formattedSavingCpaDirectory ? (
+                <RefreshCw size={14} className="loading-spinner" />
+              ) : (
+                <FolderPlus size={14} />
+              )}
+              {formattedSavingCpaDirectory
+                ? t("common.loading", "加载中...")
+                : t("codex.cpa.exportToDir", "导出到 CPA 目录")}
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={openCpaManager}
+            >
+              <FileUp size={14} />
+              {t("codex.cpa.manageAccounts", "读取/管理 CPA 账号")}
+            </button>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => void saveFormattedExportJson()}
+              disabled={formattedSavingExportJson || !formattedExportJsonContent}
+            >
+              <Download size={14} />
+              {formattedSavingExportJson
+                ? t("common.loading", "加载中...")
+                : t("settings.about.download", "Download")}
+            </button>
+          </div>
+
+          <textarea
+            className="export-json-textarea"
+            readOnly
+            spellCheck={false}
+            value={
+              exportJsonHidden
+                ? maskJsonPreviewContent(formattedExportJsonContent)
+                : formattedExportJsonContent
+            }
+          />
+
+          {pathBox}
+        </>
+      );
     }
 
     return (
@@ -1435,6 +1875,30 @@ export function CodexAccountsPage() {
             {exportJsonHidden
               ? t("common.preview", "预览")
               : t("common.close", "关闭")}
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => void exportCurrentModalAccountsToCpaDir()}
+            disabled={
+              formattedSavingCpaDirectory ||
+              formattedExportAccountIds.length === 0
+            }
+          >
+            {formattedSavingCpaDirectory ? (
+              <RefreshCw size={14} className="loading-spinner" />
+            ) : (
+              <FolderPlus size={14} />
+            )}
+            {formattedSavingCpaDirectory
+              ? t("common.loading", "加载中...")
+              : t("codex.cpa.exportToDir", "导出到 CPA 目录")}
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={openCpaManager}
+          >
+            <FileUp size={14} />
+            {t("codex.cpa.manageAccounts", "读取/管理 CPA 账号")}
           </button>
           <button
             className="btn btn-primary btn-sm"
@@ -1501,56 +1965,32 @@ export function CodexAccountsPage() {
           ))}
         </div>
 
-        {formattedExportSavedPath ? (
-          <div className="export-json-path-box">
-            <div className="export-json-path-title">
-              {formattedExportSavedPathIsDirectory
-                ? t("codex.exportFormat.savedFolder", "保存目录")
-                : t("codex.exportFormat.savedPath", "保存路径")}
-            </div>
-            <div className="export-json-path-value">
-              {formattedExportSavedPath}
-            </div>
-            <div className="export-json-path-actions">
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => void openFormattedExportSavedDirectory()}
-                disabled={!canOpenFormattedExportSavedDirectory}
-              >
-                <FolderOpen size={14} />
-                {t("instances.actions.openFolder", "打开文件夹")}
-              </button>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => void copyFormattedExportSavedPath()}
-              >
-                {formattedExportPathCopied ? (
-                  <Check size={14} />
-                ) : (
-                  <Copy size={14} />
-                )}
-                {formattedExportPathCopied
-                  ? t("common.success", "成功")
-                  : t("common.copy", "复制")}
-              </button>
-            </div>
-          </div>
-        ) : null}
+        {pathBox}
       </>
     );
   }, [
     canOpenFormattedExportSavedDirectory,
     copyFormattedExportSavedPath,
+    copyFormattedExportJson,
     exportJsonHidden,
+    exportFormat,
+    exportCurrentModalAccountsToCpaDir,
     formattedBatchSavingExportJson,
+    formattedExportAccountIds.length,
     formattedExportDocuments,
     formattedExportPathCopied,
+    formattedExportJsonContent,
+    formattedExportJsonCopied,
     formattedExportSavedPath,
     formattedExportSavedPathIsDirectory,
+    formattedSavingCpaDirectory,
     formattedSavingExportDocumentId,
+    formattedSavingExportJson,
     openFormattedExportSavedDirectory,
+    openCpaManager,
     saveAllFormattedExportDocuments,
     saveFormattedExportDocument,
+    saveFormattedExportJson,
     t,
     handleToggleExportJsonHidden,
   ]);
@@ -1648,20 +2088,6 @@ export function CodexAccountsPage() {
     [t],
   );
 
-  const {
-    accounts,
-    loading,
-    currentAccount,
-    fetchAccounts,
-    fetchCurrentAccount,
-    switchAccount,
-    refreshQuota,
-    hydrateAccountProfilesIfNeeded,
-    updateAccountName,
-    updateApiKeyCredentials,
-    updateApiKeyBoundOAuthAccount,
-    updateAccountAppSpeed,
-  } = store;
   const localAccessCollection = localAccessState?.collection ?? null;
 
   const editingAccountNoteAccount = useMemo(
@@ -4304,14 +4730,23 @@ export function CodexAccountsPage() {
     localAccessScope === "lan"
       ? t("codex.localAccess.accessScopeLanShort", "本机+局域网")
       : t("codex.localAccess.accessScopeLocalhostShort", "仅本机");
+  const localAccessCredentialMode =
+    localAccessCollection?.credentialMode ?? "local";
+  const isLocalAccessCustomCredential =
+    localAccessCredentialMode === "custom";
+  const localAccessEndpointLabel = isLocalAccessCustomCredential
+    ? t("codex.localAccess.credentialModeCustomShort", "自定义")
+    : localAccessScopeLabel;
   const localAccessBusy =
     localAccessSaving ||
     localAccessTesting ||
     localAccessStarting ||
     localAccessRefreshing ||
     localAccessPortKilling;
-  const selectedLocalAccessAddressKind: CodexLocalAccessAddressKind =
-    localAccessAddressKind === "lan" && localAccessState?.lanBaseUrl
+  const selectedLocalAccessAddressKind: CodexLocalAccessEndpointKind =
+    isLocalAccessCustomCredential
+      ? "custom"
+      : localAccessAddressKind === "lan" && localAccessState?.lanBaseUrl
       ? "lan"
       : "local";
   const localAccessAddressOptions = useMemo(
@@ -4328,16 +4763,87 @@ export function CodexAccountsPage() {
             },
           ]
         : []),
+      ...(localAccessCollection
+        ? [
+            {
+              value: "custom",
+              label: t("codex.localAccess.addressCustom", "自定义"),
+            },
+          ]
+        : []),
     ],
-    [localAccessState?.lanBaseUrl, t],
+    [localAccessCollection, localAccessState?.lanBaseUrl, t],
   );
-  const handleLocalAccessAddressKindChange = useCallback((value: string) => {
-    const next = normalizeLocalAccessAddressKind(value);
-    setLocalAccessAddressKind(next);
-    persistLocalAccessAddressKind(next);
-  }, []);
+  const handleLocalAccessAddressKindChange = useCallback(
+    async (value: string) => {
+      if (value === "custom") {
+        if (!localAccessCollection) return;
+        setLocalAccessSaving(true);
+        try {
+          const nextState =
+            await codexLocalAccessService.updateCodexLocalAccessCredentials(
+              "custom",
+              localAccessCollection.activeCustomCredentialId ?? null,
+              localAccessCollection.customCredentials ?? null,
+              localAccessCollection.customBaseUrl ?? null,
+              localAccessCollection.customApiKey ?? null,
+            );
+          setLocalAccessState(nextState);
+          setMessage({
+            text: t(
+              "codex.localAccess.credentialsModeCustomSuccess",
+              "已切换到自定义配置",
+            ),
+          });
+        } catch (error) {
+          setMessage({
+            text: t("messages.actionFailed", {
+              action: t("codex.localAccess.addressCustom", "自定义"),
+              error: String(error).replace(/^Error:\s*/, ""),
+            }),
+            tone: "error",
+          });
+        } finally {
+          setLocalAccessSaving(false);
+        }
+        return;
+      }
+
+      const next = normalizeLocalAccessAddressKind(value);
+      if (localAccessCollection?.credentialMode === "custom") {
+        setLocalAccessSaving(true);
+        try {
+          const nextState =
+            await codexLocalAccessService.updateCodexLocalAccessCredentials(
+              "local",
+              localAccessCollection.activeCustomCredentialId ?? null,
+              localAccessCollection.customCredentials ?? null,
+              localAccessCollection.customBaseUrl ?? null,
+              localAccessCollection.customApiKey ?? null,
+            );
+          setLocalAccessState(nextState);
+        } catch (error) {
+          setMessage({
+            text: t("messages.actionFailed", {
+              action: t("codex.localAccess.credentialModeLocal", "内置服务"),
+              error: String(error).replace(/^Error:\s*/, ""),
+            }),
+            tone: "error",
+          });
+        } finally {
+          setLocalAccessSaving(false);
+        }
+      }
+      setLocalAccessAddressKind(next);
+      persistLocalAccessAddressKind(next);
+    },
+    [localAccessCollection, setMessage, t],
+  );
 
   const resolveLocalAccessBaseUrl = useCallback(() => {
+    if (isLocalAccessCustomCredential) {
+      return localAccessCollection?.customBaseUrl?.trim() || "";
+    }
     if (
       selectedLocalAccessAddressKind === "lan" &&
       localAccessState?.lanBaseUrl
@@ -4351,11 +4857,18 @@ export function CodexAccountsPage() {
       `http://127.0.0.1:${localAccessCollection.port}/v1`
     );
   }, [
+    isLocalAccessCustomCredential,
     localAccessCollection,
     localAccessState?.baseUrl,
     localAccessState?.lanBaseUrl,
     selectedLocalAccessAddressKind,
   ]);
+  const resolveLocalAccessApiKey = useCallback(() => {
+    if (isLocalAccessCustomCredential) {
+      return localAccessCollection?.customApiKey?.trim() || "";
+    }
+    return localAccessCollection?.apiKey || "";
+  }, [isLocalAccessCustomCredential, localAccessCollection]);
 
   const handleCopyLocalAccessValue = useCallback(
     async (field: "baseUrl" | "apiKey", value: string) => {
@@ -5022,6 +5535,60 @@ export function CodexAccountsPage() {
     [setMessage, t],
   );
 
+  const handleUpdateLocalAccessCredentials = useCallback(
+    async (payload: {
+      credentialMode: CodexLocalAccessCredentialMode;
+      activeCustomCredentialId?: string | null;
+      customCredentials?: CodexLocalAccessCustomCredential[] | null;
+      customBaseUrl?: string | null;
+      customApiKey?: string | null;
+    }) => {
+      setLocalAccessSaving(true);
+      try {
+        const nextState =
+          await codexLocalAccessService.updateCodexLocalAccessCredentials(
+            payload.credentialMode,
+            payload.activeCustomCredentialId ?? null,
+            payload.customCredentials ?? null,
+            payload.customBaseUrl ?? null,
+            payload.customApiKey ?? null,
+          );
+        let effectiveState = nextState;
+        if (localAccessLaunchCurrent) {
+          effectiveState =
+            await codexLocalAccessService.applyCodexLocalAccessCurrentCredentials();
+          await fetchCurrentAccount();
+          setLocalAccessLaunchCurrent(true);
+        }
+        setLocalAccessState(effectiveState);
+        setMessage({
+          text:
+            localAccessLaunchCurrent
+              ? t(
+                  "codex.localAccess.credentialsAppliedToCurrentSuccess",
+                  "已保存配置并同步到当前 API 服务",
+                )
+              : payload.credentialMode === "custom"
+              ? t(
+                  "codex.localAccess.credentialsModeCustomSuccess",
+                  "已切换到自定义配置",
+                )
+              : t(
+                  "codex.localAccess.credentialsModeLocalSuccess",
+                  "已切换到内置服务",
+                ),
+        });
+        return effectiveState;
+      } catch (error) {
+        console.error("Failed to update local access credentials:", error);
+        throw new Error(String(error).replace(/^Error:\s*/, ""));
+      } finally {
+        setLocalAccessSaving(false);
+      }
+    },
+    [fetchCurrentAccount, localAccessLaunchCurrent, setMessage, t],
+  );
+
   const handleToggleLocalAccessEnabled = useCallback(async () => {
     if (!localAccessCollection) return;
     if (!localAccessCollection.enabled) {
@@ -5075,7 +5642,9 @@ export function CodexAccountsPage() {
           t("codex.localAccess.testUnavailable", "当前 API 服务地址不可用"),
         );
       }
-      if (!localAccessCollection.enabled) {
+      const useCustomCredentials =
+        localAccessCollection.credentialMode === "custom";
+      if (!useCustomCredentials && !localAccessCollection.enabled) {
         const confirmedEnableAndSwitch = await confirmDialog(
           t(
             "codex.localAccess.enableBeforeActivateMessage",
@@ -6102,6 +6671,24 @@ export function CodexAccountsPage() {
                     <Upload size={14} />
                   </button>
                 )}
+                {!isApiKeyAccount && !isNewApiAccount && (
+                  <button
+                    className="card-action-btn"
+                    onClick={() =>
+                      void exportAccountIdsToCpaDir([account.id], {
+                        cardAccountId: account.id,
+                      })
+                    }
+                    disabled={cpaCardExportingAccountId === account.id}
+                    title={t("codex.cpa.copyToDir", "复制到 CPA 目录")}
+                  >
+                    {cpaCardExportingAccountId === account.id ? (
+                      <RefreshCw size={14} className="loading-spinner" />
+                    ) : (
+                      <Copy size={14} />
+                    )}
+                  </button>
+                )}
                 <button
                   className="card-action-btn danger"
                   onClick={() => handleDelete(account.id)}
@@ -6126,11 +6713,14 @@ export function CodexAccountsPage() {
       ? true
       : localAccessDetailsExpanded;
     const baseUrl = resolveLocalAccessBaseUrl();
+    const apiKeyValue = resolveLocalAccessApiKey();
     const apiKeyDisplay = !localAccessCollection
       ? CODEX_LOCAL_ACCESS_FALLBACK_API_KEY_MASK
       : localAccessKeyVisible
-        ? localAccessCollection.apiKey
-        : `${localAccessCollection.apiKey.slice(0, 10)}••••••••••••`;
+        ? apiKeyValue
+        : apiKeyValue
+          ? `${apiKeyValue.slice(0, 10)}••••••••••••`
+          : "-";
     const previewAccounts = localAccessAccounts.slice(0, 2);
     const localAccessOAuthBindingLabel = t(
       "codex.api.oauthBinding.label",
@@ -6151,6 +6741,8 @@ export function CodexAccountsPage() {
     const showLocalAccessEmptyState = previewAccounts.length === 0;
     const localAccessStatusTone = !localAccessCollection
       ? "disabled"
+      : isLocalAccessCustomCredential
+        ? "running"
       : localAccessState?.running
         ? "running"
         : localAccessCollection.enabled
@@ -6158,6 +6750,8 @@ export function CodexAccountsPage() {
           : "disabled";
     const localAccessStatusText = !localAccessCollection
       ? t("codex.localAccess.statusDisabled", "已停用")
+      : isLocalAccessCustomCredential
+        ? t("codex.localAccess.statusCustom", "自定义")
       : localAccessState?.running
         ? t("codex.localAccess.statusRunning", "运行中")
         : localAccessCollection.enabled
@@ -6166,7 +6760,7 @@ export function CodexAccountsPage() {
     const isLocalAccessCurrent = localAccessLaunchCurrent;
     const localAccessSummaryMeta = t("codex.localAccess.summaryMeta", {
       count: localAccessState?.memberCount ?? 0,
-      scope: localAccessScopeLabel,
+      scope: localAccessEndpointLabel,
       defaultValue: "{{count}} 个账号 · {{scope}}",
     });
     const localAccessEmptyMessage = t(
@@ -6194,7 +6788,7 @@ export function CodexAccountsPage() {
                   </span>
                 </div>
                 <span className="folder-inline-count">
-                  {localAccessScopeLabel}
+                  {localAccessEndpointLabel}
                 </span>
               </div>
             </>
@@ -6224,7 +6818,7 @@ export function CodexAccountsPage() {
                   </span>
                 </div>
                 <span className="folder-inline-count">
-                  {localAccessScopeLabel}
+                  {localAccessEndpointLabel}
                 </span>
               </div>
             </button>
@@ -6292,8 +6886,8 @@ export function CodexAccountsPage() {
                     options={localAccessAddressOptions}
                     onChange={handleLocalAccessAddressKindChange}
                     menuClassName="codex-local-access-address-menu"
-                    menuWidth={92}
-                    menuMaxHeight={120}
+                    menuWidth={104}
+                    menuMaxHeight={156}
                     disabled={localAccessAddressOptions.length < 2}
                     ariaLabel={t("codex.localAccess.addressKind", "地址类型")}
                   />
@@ -6325,7 +6919,7 @@ export function CodexAccountsPage() {
                 </span>
                 <code
                   className="codex-local-access-code"
-                  title={localAccessCollection?.apiKey || "-"}
+                  title={apiKeyValue || "-"}
                 >
                   {apiKeyDisplay}
                 </code>
@@ -6355,7 +6949,7 @@ export function CodexAccountsPage() {
                     onClick={() =>
                       void handleCopyLocalAccessValue(
                         "apiKey",
-                        localAccessCollection?.apiKey || "",
+                        apiKeyValue,
                       )
                     }
                     title={t("common.copy", "复制")}
@@ -6544,7 +7138,7 @@ export function CodexAccountsPage() {
             <div className="codex-card-bottom codex-local-access-card-bottom">
               <span className="card-date">
                 {t("codex.localAccess.footerHint", {
-                  scope: localAccessScopeLabel,
+                  scope: localAccessEndpointLabel,
                   defaultValue: "监听范围：{{scope}}",
                 })}
               </span>
@@ -7156,6 +7750,24 @@ export function CodexAccountsPage() {
                   title={t("common.shared.export.title", "导出")}
                 >
                   <Upload size={14} />
+                </button>
+              )}
+              {!isApiKeyAccount && !isNewApiAccount && (
+                <button
+                  className="action-btn"
+                  onClick={() =>
+                    void exportAccountIdsToCpaDir([account.id], {
+                      cardAccountId: account.id,
+                    })
+                  }
+                  disabled={cpaCardExportingAccountId === account.id}
+                  title={t("codex.cpa.copyToDir", "复制到 CPA 目录")}
+                >
+                  {cpaCardExportingAccountId === account.id ? (
+                    <RefreshCw size={14} className="loading-spinner" />
+                  ) : (
+                    <Copy size={14} />
+                  )}
                 </button>
               )}
               <button
@@ -8059,6 +8671,13 @@ export function CodexAccountsPage() {
                 }
               >
                 <Upload size={14} />
+              </button>
+              <button
+                className="btn btn-secondary icon-only"
+                onClick={openCpaManager}
+                title={t("codex.cpa.managerTitle", "CPA 目录")}
+              >
+                <FileUp size={14} />
               </button>
               {selected.size > 0 && (
                 <>
@@ -10023,6 +10642,181 @@ export function CodexAccountsPage() {
             />
           )}
 
+          {showCpaManagerModal && (
+            <div
+              className="modal-overlay codex-cpa-manager-overlay"
+              onClick={() => setShowCpaManagerModal(false)}
+            >
+              <div
+                className="modal codex-cpa-manager-modal"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="modal-header">
+                  <h2>{t("codex.cpa.managerTitle", "CPA 目录")}</h2>
+                  <button
+                    className="modal-close"
+                    onClick={() => setShowCpaManagerModal(false)}
+                    aria-label={t("common.close", "关闭")}
+                  >
+                    <X />
+                  </button>
+                </div>
+
+                <div className="modal-body codex-cpa-manager-body">
+                  <div className="codex-cpa-directory-box">
+                    <div className="codex-cpa-directory-label">
+                      {t("codex.cpa.defaultDir", "默认目录")}
+                    </div>
+                    <div className="codex-cpa-directory-value">
+                      {cpaDir ||
+                        t(
+                          "codex.cpa.defaultDirFallback",
+                          "/Users/用户名/.cli-proxy-api",
+                        )}
+                    </div>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => void openCpaDirectory()}
+                    >
+                      <FolderOpen size={14} />
+                      {t("instances.actions.openFolder", "打开文件夹")}
+                    </button>
+                  </div>
+
+                  <div className="codex-cpa-manager-actions">
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => void handleImportFromCpaDir()}
+                      disabled={cpaImporting}
+                    >
+                      {cpaImporting ? (
+                        <RefreshCw size={14} className="loading-spinner" />
+                      ) : (
+                        <FileUp size={14} />
+                      )}
+                      {cpaImporting
+                        ? t("common.loading", "加载中...")
+                        : t("codex.cpa.importFromDir", "读取 CPA 数据")}
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => void refreshCpaFiles({ clearNotice: true })}
+                      disabled={cpaManagerLoading}
+                    >
+                      <RefreshCw
+                        size={14}
+                        className={
+                          cpaManagerLoading ? "loading-spinner" : undefined
+                        }
+                      />
+                      {t("common.refresh", "刷新")}
+                    </button>
+                    <button
+                      className="btn btn-danger btn-sm"
+                      onClick={() => void handleClearCpaFiles()}
+                      disabled={cpaClearingAll || cpaFiles.length === 0}
+                    >
+                      {cpaClearingAll ? (
+                        <RefreshCw size={14} className="loading-spinner" />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
+                      {cpaClearingAll
+                        ? t("common.loading", "加载中...")
+                        : t("codex.cpa.deleteAll", "删除全部")}
+                    </button>
+                  </div>
+
+                  {cpaManagerNotice && (
+                    <div
+                      className={`codex-cpa-manager-notice ${
+                        cpaManagerNotice.tone === "error"
+                          ? "error"
+                          : "success"
+                      }`}
+                    >
+                      <span>{cpaManagerNotice.text}</span>
+                      <button
+                        type="button"
+                        onClick={() => setCpaManagerNotice(null)}
+                        aria-label={t("common.close", "关闭")}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+
+                  {cpaManagerError && (
+                    <pre className="codex-cpa-manager-error">{cpaManagerError}</pre>
+                  )}
+
+                  <div className="codex-cpa-file-list">
+                    {cpaManagerLoading ? (
+                      <div className="codex-cpa-empty">
+                        <RefreshCw size={16} className="loading-spinner" />
+                        {t("common.loading", "加载中...")}
+                      </div>
+                    ) : cpaFiles.length === 0 ? (
+                      <div className="codex-cpa-empty">
+                        {t("codex.cpa.empty", "CPA 目录暂无 JSON 账号文件")}
+                      </div>
+                    ) : (
+                      cpaFiles.map((file) => (
+                        <div
+                          key={file.file_name}
+                          className={`codex-cpa-file-row ${file.valid ? "" : "invalid"}`}
+                        >
+                          <div className="codex-cpa-file-main">
+                            <div className="codex-cpa-file-name">
+                              {file.file_name}
+                            </div>
+                            <div className="codex-cpa-file-meta">
+                              <span>
+                                {file.email ||
+                                  t("codex.cpa.unknownEmail", "未知邮箱")}
+                              </span>
+                              {file.account_id ? (
+                                <span>{file.account_id}</span>
+                              ) : null}
+                              {file.modified_at ? (
+                                <span>{formatDate(file.modified_at)}</span>
+                              ) : null}
+                            </div>
+                            {file.error ? (
+                              <div className="codex-cpa-file-error">
+                                {file.error}
+                              </div>
+                            ) : null}
+                          </div>
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() =>
+                              void handleDeleteCpaFile(file.file_name)
+                            }
+                            disabled={
+                              cpaDeletingFileName === file.file_name ||
+                              cpaClearingAll
+                            }
+                          >
+                            {cpaDeletingFileName === file.file_name ? (
+                              <RefreshCw
+                                size={14}
+                                className="loading-spinner"
+                              />
+                            ) : (
+                              <Trash2 size={14} />
+                            )}
+                            {t("common.delete", "删除")}
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <ExportJsonModal
             isOpen={showExportModal}
             title={`${t("common.shared.export.title", "导出")} JSON`}
@@ -10627,6 +11421,7 @@ export function CodexAccountsPage() {
             onUpdatePort={handleUpdateLocalAccessPort}
             onUpdateRoutingStrategy={handleUpdateLocalAccessRoutingStrategy}
             onUpdateAccessScope={handleUpdateLocalAccessAccessScope}
+            onUpdateCredentials={handleUpdateLocalAccessCredentials}
             onRotateApiKey={handleRotateLocalAccessApiKey}
             onKillPort={handleKillLocalAccessPort}
             onToggleEnabled={handleToggleLocalAccessEnabled}

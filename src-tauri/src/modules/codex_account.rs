@@ -55,6 +55,8 @@ const CODEX_TOKEN_SOURCE_MANAGED: &str = "managed";
 const CODEX_PROACTIVE_REFRESH_INTERVAL_SECONDS: i64 = 8 * 24 * 60 * 60;
 const CODEX_AUTH_PROJECTION_FILE_NAME: &str = ".cockpit_codex_auth.json";
 const CODEX_AUTH_PROJECTION_WRITER: &str = "cockpit";
+const CPA_DIR_NAME: &str = ".cli-proxy-api";
+const CPA_EXPORT_FILE_PREFIX: &str = "codex_accounts_cpa";
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -4391,6 +4393,410 @@ pub fn export_accounts(account_ids: &[String]) -> Result<String, String> {
 }
 
 #[derive(serde::Serialize, Clone)]
+pub struct CodexCpaWrittenFile {
+    pub account_id: String,
+    pub email: String,
+    pub file_name: String,
+    pub path: String,
+}
+
+#[derive(serde::Serialize, Clone)]
+pub struct CodexCpaWriteResult {
+    pub directory: String,
+    pub written: Vec<CodexCpaWrittenFile>,
+}
+
+#[derive(serde::Serialize, Clone)]
+pub struct CodexCpaAccountFile {
+    pub file_name: String,
+    pub path: String,
+    pub email: Option<String>,
+    pub account_id: Option<String>,
+    pub modified_at: Option<i64>,
+    pub size_bytes: Option<u64>,
+    pub valid: bool,
+    pub error: Option<String>,
+}
+
+#[derive(serde::Serialize, Clone)]
+pub struct CodexCpaDeleteResult {
+    pub directory: String,
+    pub deleted: usize,
+    pub deleted_files: Vec<String>,
+}
+
+pub fn get_cpa_dir() -> Result<PathBuf, String> {
+    dirs::home_dir()
+        .map(|home| home.join(CPA_DIR_NAME))
+        .ok_or_else(|| "无法获取用户主目录".to_string())
+}
+
+pub fn get_cpa_dir_path() -> Result<String, String> {
+    Ok(ensure_cpa_dir()?.to_string_lossy().to_string())
+}
+
+fn ensure_cpa_dir() -> Result<PathBuf, String> {
+    let dir = get_cpa_dir()?;
+    fs::create_dir_all(&dir)
+        .map_err(|error| format!("创建 CPA 目录失败 ({}): {}", dir.display(), error))?;
+    Ok(dir)
+}
+
+fn format_timestamp_rfc3339(timestamp: i64) -> Option<String> {
+    chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0)
+        .map(|datetime| datetime.to_rfc3339())
+}
+
+fn format_cpa_last_refresh(account: &CodexAccount) -> String {
+    account
+        .token_updated_at
+        .and_then(format_timestamp_rfc3339)
+        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339())
+}
+
+fn resolve_cpa_account_id(account: &CodexAccount) -> Option<String> {
+    normalize_optional_value(
+        account
+            .account_id
+            .clone()
+            .or_else(|| extract_chatgpt_account_id_from_access_token(&account.tokens.access_token)),
+    )
+}
+
+fn resolve_cpa_expired(account: &CodexAccount) -> String {
+    decode_jwt_payload_value(&account.tokens.access_token)
+        .and_then(|payload| payload.get("exp").and_then(|value| value.as_i64()))
+        .and_then(format_timestamp_rfc3339)
+        .or_else(|| {
+            decode_jwt_payload_value(&account.tokens.id_token)
+                .and_then(|payload| payload.get("exp").and_then(|value| value.as_i64()))
+                .and_then(format_timestamp_rfc3339)
+        })
+        .unwrap_or_default()
+}
+
+fn build_cpa_account_payload(account: &CodexAccount) -> Result<serde_json::Value, String> {
+    if account.is_api_key_auth() {
+        return Err(format!(
+            "CPA 格式仅支持 OAuth Token 账号，{} 是 API Key 账号",
+            account.email
+        ));
+    }
+    if account.tokens.id_token.trim().is_empty() || account.tokens.access_token.trim().is_empty() {
+        return Err(format!("{} 缺少 id_token 或 access_token", account.email));
+    }
+
+    Ok(serde_json::json!({
+        "id_token": account.tokens.id_token,
+        "access_token": account.tokens.access_token,
+        "refresh_token": account.tokens.refresh_token.clone().unwrap_or_default(),
+        "account_id": resolve_cpa_account_id(account).unwrap_or_default(),
+        "last_refresh": format_cpa_last_refresh(account),
+        "email": account.email,
+        "type": "codex",
+        "expired": resolve_cpa_expired(account),
+    }))
+}
+
+fn sanitize_cpa_file_segment(input: &str, fallback: &str) -> String {
+    let mut result = String::new();
+    let mut last_was_underscore = false;
+
+    for ch in input.trim().chars() {
+        let invalid = matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
+            || ch.is_control()
+            || ch.is_whitespace();
+        if invalid {
+            if !last_was_underscore {
+                result.push('_');
+                last_was_underscore = true;
+            }
+            continue;
+        }
+        result.push(ch);
+        last_was_underscore = false;
+    }
+
+    let trimmed = result.trim_matches('_');
+    if trimmed.is_empty() {
+        fallback.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn build_cpa_account_file_name(account: &CodexAccount, index: usize) -> String {
+    let label = sanitize_cpa_file_segment(&account.email, &format!("account_{}", index + 1));
+    let account_id = resolve_cpa_account_id(account).unwrap_or_else(|| account.id.clone());
+    let suffix_source = sanitize_cpa_file_segment(&account_id, "");
+    let suffix = if suffix_source.is_empty() {
+        sanitize_cpa_file_segment(&account.id, "")
+    } else {
+        suffix_source
+    };
+    let short_suffix: String = suffix
+        .chars()
+        .rev()
+        .take(6)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    let today = chrono::Utc::now().format("%Y-%m-%d");
+
+    format!(
+        "{}_{:02}_{label}_{short_suffix}_{today}.json",
+        CPA_EXPORT_FILE_PREFIX,
+        index + 1
+    )
+}
+
+fn is_safe_cpa_json_file_name(file_name: &str) -> bool {
+    let trimmed = file_name.trim();
+    !trimmed.is_empty()
+        && trimmed == file_name
+        && trimmed.ends_with(".json")
+        && !trimmed.contains('/')
+        && !trimmed.contains('\\')
+        && trimmed != ".json"
+        && trimmed != "..json"
+        && !Path::new(trimmed).is_absolute()
+        && Path::new(trimmed)
+            .file_name()
+            .and_then(|name| name.to_str())
+            == Some(trimmed)
+}
+
+fn unique_cpa_file_path(dir: &Path, file_name: &str) -> PathBuf {
+    let initial = dir.join(file_name);
+    if !initial.exists() {
+        return initial;
+    }
+
+    let stem = file_name.strip_suffix(".json").unwrap_or(file_name);
+    for attempt in 2..=999 {
+        let candidate = dir.join(format!("{stem}_{attempt}.json"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+
+    dir.join(format!(
+        "{stem}_{}.json",
+        chrono::Utc::now().timestamp_millis()
+    ))
+}
+
+pub fn export_accounts_to_cpa_dir(account_ids: &[String]) -> Result<CodexCpaWriteResult, String> {
+    let dir = ensure_cpa_dir()?;
+    let mut written = Vec::new();
+    let mut missing = Vec::new();
+
+    for (index, account_id) in account_ids.iter().enumerate() {
+        let Some(account) = load_account(account_id) else {
+            missing.push(account_id.clone());
+            continue;
+        };
+        let payload = build_cpa_account_payload(&account)?;
+        let file_name = build_cpa_account_file_name(&account, index);
+        let path = unique_cpa_file_path(&dir, &file_name);
+        let content =
+            serde_json::to_string_pretty(&payload).map_err(|e| format!("序列化失败: {}", e))?;
+
+        write_string_atomic(&path, &content)
+            .map_err(|error| format!("写入 CPA 文件失败 ({}): {}", path.display(), error))?;
+
+        written.push(CodexCpaWrittenFile {
+            account_id: account.id,
+            email: account.email,
+            file_name: path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or(file_name.as_str())
+                .to_string(),
+            path: path.to_string_lossy().to_string(),
+        });
+    }
+
+    if written.is_empty() && !missing.is_empty() {
+        return Err(format!("未找到账号: {}", missing.join(", ")));
+    }
+
+    Ok(CodexCpaWriteResult {
+        directory: dir.to_string_lossy().to_string(),
+        written,
+    })
+}
+
+fn cpa_json_files() -> Result<Vec<PathBuf>, String> {
+    let dir = get_cpa_dir()?;
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+    let entries =
+        fs::read_dir(&dir).map_err(|error| format!("读取 CPA 目录失败 ({}): {}", dir.display(), error))?;
+    let mut files = Vec::new();
+
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("读取 CPA 目录项失败: {}", error))?;
+        let path = entry.path();
+        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if entry.file_type().map(|item| item.is_file()).unwrap_or(false)
+            && is_safe_cpa_json_file_name(file_name)
+        {
+            files.push(path);
+        }
+    }
+
+    files.sort_by(|a, b| {
+        a.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default()
+            .cmp(b.file_name().and_then(|name| name.to_str()).unwrap_or_default())
+    });
+    Ok(files)
+}
+
+fn metadata_modified_timestamp(metadata: &fs::Metadata) -> Option<i64> {
+    metadata
+        .modified()
+        .ok()
+        .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
+        .and_then(|duration| i64::try_from(duration.as_secs()).ok())
+}
+
+fn looks_like_cpa_account_json(value: &serde_json::Value) -> bool {
+    value.as_object().is_some()
+        && (value.get("type").and_then(|item| item.as_str()) == Some("codex")
+            || value.get("id_token").is_some()
+            || value.get("access_token").is_some()
+            || value.get("refresh_token").is_some()
+            || value.get("tokens").is_some())
+}
+
+fn describe_cpa_file(path: &Path) -> CodexCpaAccountFile {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_string();
+    let metadata = fs::metadata(path).ok();
+    let content = fs::read_to_string(path);
+    let mut email = None;
+    let mut account_id = None;
+    let mut valid = false;
+    let mut error = None;
+
+    match content {
+        Ok(raw) => match serde_json::from_str::<serde_json::Value>(&raw) {
+            Ok(value) => {
+                email = first_json_string(&value, &[&["email"], &["account_email"]]);
+                account_id = first_json_string(
+                    &value,
+                    &[
+                        &["account_id"],
+                        &["accountId"],
+                        &["tokens", "account_id"],
+                        &["tokens", "accountId"],
+                    ],
+                );
+                valid = looks_like_cpa_account_json(&value);
+                if !valid {
+                    error = Some("不是可识别的 CPA Codex 账号 JSON".to_string());
+                }
+            }
+            Err(parse_error) => {
+                error = Some(format!("JSON 解析失败: {}", parse_error));
+            }
+        },
+        Err(read_error) => {
+            error = Some(format!("读取失败: {}", read_error));
+        }
+    }
+
+    CodexCpaAccountFile {
+        file_name,
+        path: path.to_string_lossy().to_string(),
+        email,
+        account_id,
+        modified_at: metadata.as_ref().and_then(metadata_modified_timestamp),
+        size_bytes: metadata.as_ref().map(|item| item.len()),
+        valid,
+        error,
+    }
+}
+
+pub fn list_cpa_accounts() -> Result<Vec<CodexCpaAccountFile>, String> {
+    Ok(cpa_json_files()?
+        .iter()
+        .map(|path| describe_cpa_file(path))
+        .collect())
+}
+
+pub async fn import_from_cpa_dir() -> Result<CodexFileImportResult, String> {
+    let files = cpa_json_files()?;
+    let mut imported = Vec::new();
+    let mut failed = Vec::new();
+
+    for path in files {
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("unknown.json")
+            .to_string();
+
+        match fs::read_to_string(&path) {
+            Ok(content) => match import_from_json(&content).await {
+                Ok(mut accounts) => imported.append(&mut accounts),
+                Err(error) => failed.push(CodexFileImportFailure {
+                    email: file_name,
+                    error,
+                }),
+            },
+            Err(error) => failed.push(CodexFileImportFailure {
+                email: file_name,
+                error: format!("读取失败: {}", error),
+            }),
+        }
+    }
+
+    Ok(CodexFileImportResult { imported, failed })
+}
+
+pub fn delete_cpa_account_files(file_names: &[String]) -> Result<CodexCpaDeleteResult, String> {
+    let dir = get_cpa_dir()?;
+    let mut deleted_files = Vec::new();
+
+    for file_name in file_names {
+        if !is_safe_cpa_json_file_name(file_name) {
+            return Err(format!("CPA 文件名不安全: {}", file_name));
+        }
+        let path = dir.join(file_name);
+        if path.exists() {
+            fs::remove_file(&path)
+                .map_err(|error| format!("删除 CPA 文件失败 ({}): {}", path.display(), error))?;
+            deleted_files.push(file_name.clone());
+        }
+    }
+
+    Ok(CodexCpaDeleteResult {
+        directory: dir.to_string_lossy().to_string(),
+        deleted: deleted_files.len(),
+        deleted_files,
+    })
+}
+
+pub fn delete_all_cpa_account_files() -> Result<CodexCpaDeleteResult, String> {
+    let file_names: Vec<String> = cpa_json_files()?
+        .iter()
+        .filter_map(|path| path.file_name().and_then(|name| name.to_str()).map(String::from))
+        .collect();
+    delete_cpa_account_files(&file_names)
+}
+
+#[derive(serde::Serialize, Clone)]
 pub struct CodexFileImportResult {
     pub imported: Vec<CodexAccount>,
     pub failed: Vec<CodexFileImportFailure>,
@@ -4524,6 +4930,7 @@ mod tests {
         upsert_account_from_auth_tokens, validate_api_key_credentials,
         write_api_key_provider_to_config_toml, write_api_provider_to_config_toml,
         write_managed_projection_to_dir, write_quick_config_to_config_toml, ApiProviderConfig,
+        build_cpa_account_file_name, build_cpa_account_payload, is_safe_cpa_json_file_name,
         CodexAccountIndex, CodexAccountSummary, CodexAuthFile, CodexAuthTokens,
         CodexJsonImportCandidate, LocalCodexOAuthSnapshot, CODEX_AUTO_COMPACT_DEFAULT_LIMIT,
         CODEX_CONTEXT_WINDOW_1M_VALUE,
@@ -4631,6 +5038,83 @@ mod tests {
         assert_eq!(account.api_provider_name.as_deref(), Some("Custom OpenAI"));
         assert_eq!(account.created_at, 100);
         assert_eq!(account.last_used, 200);
+    }
+
+    #[test]
+    fn cpa_payload_uses_portable_codex_fields() {
+        let mut account = CodexAccount::new(
+            "stored-cpa".to_string(),
+            "cpa@example.com".to_string(),
+            make_codex_tokens(
+                "cpa@example.com",
+                "acc-cpa",
+                "org-cpa",
+                "cpa",
+                "refresh-cpa",
+            ),
+        );
+        account.account_id = Some("acc-cpa".to_string());
+        account.subscription_active_until = Some("2026-06-01T00:00:00Z".to_string());
+        account.token_updated_at = Some(1_765_497_600);
+        account.tokens.access_token = make_jwt(serde_json::json!({
+            "exp": 1_767_225_600i64,
+            "https://api.openai.com/auth": {
+                "chatgpt_account_id": "acc-cpa"
+            }
+        }));
+
+        let payload = build_cpa_account_payload(&account).expect("cpa payload");
+
+        assert_eq!(payload.get("type").and_then(|item| item.as_str()), Some("codex"));
+        assert_eq!(
+            payload.get("id_token").and_then(|item| item.as_str()),
+            Some(account.tokens.id_token.as_str())
+        );
+        assert_eq!(
+            payload.get("access_token").and_then(|item| item.as_str()),
+            Some(account.tokens.access_token.as_str())
+        );
+        assert_eq!(
+            payload.get("refresh_token").and_then(|item| item.as_str()),
+            Some("refresh-cpa")
+        );
+        assert_eq!(
+            payload.get("account_id").and_then(|item| item.as_str()),
+            Some("acc-cpa")
+        );
+        assert_eq!(
+            payload.get("last_refresh").and_then(|item| item.as_str()),
+            Some("2025-12-12T00:00:00+00:00")
+        );
+        assert_eq!(
+            payload.get("expired").and_then(|item| item.as_str()),
+            Some("2026-01-01T00:00:00+00:00")
+        );
+    }
+
+    #[test]
+    fn cpa_file_names_are_stable_and_delete_targets_are_safe() {
+        let mut account = CodexAccount::new(
+            "stored-cpa".to_string(),
+            "cpa/user@example.com".to_string(),
+            make_codex_tokens(
+                "cpa@example.com",
+                "account-id-abcdef",
+                "org-cpa",
+                "cpa-safe",
+                "refresh-cpa",
+            ),
+        );
+        account.account_id = Some("account-id-abcdef".to_string());
+
+        let file_name = build_cpa_account_file_name(&account, 0);
+
+        assert!(file_name.starts_with("codex_accounts_cpa_01_cpa_user@example.com_abcdef_"));
+        assert!(file_name.ends_with(".json"));
+        assert!(is_safe_cpa_json_file_name(&file_name));
+        assert!(!is_safe_cpa_json_file_name("../auth.json"));
+        assert!(!is_safe_cpa_json_file_name("nested/auth.json"));
+        assert!(!is_safe_cpa_json_file_name("not-json.txt"));
     }
 
     fn make_temp_dir(prefix: &str) -> std::path::PathBuf {

@@ -1,6 +1,7 @@
 use crate::models::codex::{CodexAccount, CodexApiProviderMode};
 use crate::models::codex_local_access::{
-    CodexLocalAccessAccountStats, CodexLocalAccessCollection, CodexLocalAccessPortCleanupResult,
+    CodexLocalAccessAccountStats, CodexLocalAccessCollection, CodexLocalAccessCredentialMode,
+    CodexLocalAccessCustomCredential, CodexLocalAccessPortCleanupResult,
     CodexLocalAccessRoutingStrategy, CodexLocalAccessScope, CodexLocalAccessState,
     CodexLocalAccessStats, CodexLocalAccessStatsWindow, CodexLocalAccessTestFailure,
     CodexLocalAccessTestResult, CodexLocalAccessUsageEvent, CodexLocalAccessUsageStats,
@@ -2872,6 +2873,191 @@ fn build_base_url(port: u16) -> String {
     format!("http://{CODEX_LOCAL_ACCESS_URL_HOST}:{port}/v1")
 }
 
+fn normalize_custom_base_url(value: Option<&str>) -> Option<String> {
+    let raw = value?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    Some(raw.trim_end_matches('/').to_string())
+}
+
+fn normalize_custom_api_key(value: Option<&str>) -> Option<String> {
+    let raw = value?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    Some(raw.to_string())
+}
+
+fn normalize_custom_credential_id(value: Option<&str>) -> Option<String> {
+    let raw = value?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    Some(raw.to_string())
+}
+
+fn generate_custom_credential_id() -> String {
+    format!("custom_{}", uuid::Uuid::new_v4())
+}
+
+fn normalize_custom_credential_name(value: Option<&str>, index: usize) -> String {
+    let raw = value.unwrap_or_default().trim();
+    if raw.is_empty() {
+        return format!("自定义 {}", index + 1);
+    }
+    raw.to_string()
+}
+
+fn validate_custom_base_url(value: &str) -> Result<String, String> {
+    let normalized = normalize_custom_base_url(Some(value))
+        .ok_or_else(|| "请输入自定义 API 地址".to_string())?;
+    let parsed = Url::parse(&normalized).map_err(|e| format!("自定义 API 地址格式无效: {}", e))?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        _ => return Err("自定义 API 地址仅支持 http 或 https".to_string()),
+    }
+    if parsed.host_str().is_none() {
+        return Err("自定义 API 地址缺少主机名".to_string());
+    }
+    Ok(normalized)
+}
+
+fn active_custom_credential(
+    collection: &CodexLocalAccessCollection,
+) -> Option<&CodexLocalAccessCustomCredential> {
+    let active_id =
+        normalize_custom_credential_id(collection.active_custom_credential_id.as_deref());
+    active_id
+        .as_deref()
+        .and_then(|id| {
+            collection
+                .custom_credentials
+                .iter()
+                .find(|item| item.id == id)
+        })
+        .or_else(|| collection.custom_credentials.first())
+}
+
+fn validate_custom_credentials(
+    collection: &CodexLocalAccessCollection,
+) -> Result<(String, String), String> {
+    let base_url_value = active_custom_credential(collection)
+        .map(|credential| credential.base_url.as_str())
+        .or_else(|| collection.custom_base_url.as_deref())
+        .unwrap_or_default();
+    let api_key_value = active_custom_credential(collection)
+        .map(|credential| credential.api_key.as_str())
+        .or_else(|| collection.custom_api_key.as_deref());
+
+    let base_url = validate_custom_base_url(base_url_value)?;
+    let api_key = normalize_custom_api_key(api_key_value)
+        .ok_or_else(|| "请输入自定义 API 密钥".to_string())?;
+    Ok((base_url, api_key))
+}
+
+fn sanitize_custom_credentials(collection: &mut CodexLocalAccessCollection) -> bool {
+    let original_credentials = collection.custom_credentials.clone();
+    let original_active_id = collection.active_custom_credential_id.clone();
+    let original_base_url = collection.custom_base_url.clone();
+    let original_api_key = collection.custom_api_key.clone();
+
+    let now = now_ms();
+    let mut next_credentials = Vec::new();
+    let mut seen_ids = HashSet::new();
+
+    for (index, credential) in collection.custom_credentials.iter().enumerate() {
+        let mut id = normalize_custom_credential_id(Some(&credential.id))
+            .unwrap_or_else(generate_custom_credential_id);
+        if !seen_ids.insert(id.clone()) {
+            id = generate_custom_credential_id();
+            seen_ids.insert(id.clone());
+        }
+        let base_url = normalize_custom_base_url(Some(&credential.base_url)).unwrap_or_default();
+        let api_key = normalize_custom_api_key(Some(&credential.api_key)).unwrap_or_default();
+        if base_url.is_empty() && api_key.is_empty() {
+            continue;
+        }
+
+        next_credentials.push(CodexLocalAccessCustomCredential {
+            id,
+            name: normalize_custom_credential_name(Some(&credential.name), index),
+            base_url,
+            api_key,
+            created_at: if credential.created_at > 0 {
+                credential.created_at
+            } else {
+                now
+            },
+            updated_at: if credential.updated_at > 0 {
+                credential.updated_at
+            } else {
+                now
+            },
+        });
+    }
+
+    let legacy_base_url = normalize_custom_base_url(collection.custom_base_url.as_deref());
+    let legacy_api_key = normalize_custom_api_key(collection.custom_api_key.as_deref());
+    if next_credentials.is_empty() {
+        if let (Some(base_url), Some(api_key)) = (legacy_base_url.clone(), legacy_api_key.clone()) {
+            let id =
+                normalize_custom_credential_id(collection.active_custom_credential_id.as_deref())
+                    .unwrap_or_else(generate_custom_credential_id);
+            next_credentials.push(CodexLocalAccessCustomCredential {
+                id,
+                name: "自定义 1".to_string(),
+                base_url,
+                api_key,
+                created_at: now,
+                updated_at: now,
+            });
+        }
+    }
+
+    let mut next_active_id =
+        normalize_custom_credential_id(collection.active_custom_credential_id.as_deref());
+    if !next_credentials
+        .iter()
+        .any(|credential| Some(credential.id.as_str()) == next_active_id.as_deref())
+    {
+        next_active_id = next_credentials
+            .first()
+            .map(|credential| credential.id.clone());
+    }
+
+    let active_pair = next_active_id.as_deref().and_then(|active_id| {
+        next_credentials
+            .iter()
+            .find(|credential| credential.id == active_id)
+            .map(|credential| (credential.base_url.clone(), credential.api_key.clone()))
+    });
+
+    collection.custom_credentials = next_credentials;
+    collection.active_custom_credential_id = next_active_id;
+    if let Some((base_url, api_key)) = active_pair {
+        collection.custom_base_url = Some(base_url);
+        collection.custom_api_key = Some(api_key);
+    } else {
+        collection.custom_base_url = legacy_base_url;
+        collection.custom_api_key = legacy_api_key;
+    }
+
+    collection.custom_credentials != original_credentials
+        || collection.active_custom_credential_id != original_active_id
+        || collection.custom_base_url != original_base_url
+        || collection.custom_api_key != original_api_key
+}
+
+fn build_responses_probe_url(base_url: &str) -> String {
+    let trimmed = base_url.trim_end_matches('/');
+    if trimmed.ends_with("/v1") {
+        format!("{trimmed}/responses")
+    } else {
+        format!("{trimmed}/v1/responses")
+    }
+}
+
 fn build_lan_base_url(port: u16) -> Option<String> {
     resolve_primary_lan_ipv4().map(|addr| format!("http://{addr}:{port}/v1"))
 }
@@ -3397,6 +3583,9 @@ fn sanitize_collection(
         collection.api_key = generate_local_api_key();
         changed = true;
     }
+    if sanitize_custom_credentials(collection) {
+        changed = true;
+    }
     if collection.created_at <= 0 {
         collection.created_at = now_ms();
         changed = true;
@@ -3474,6 +3663,11 @@ async fn ensure_runtime_loaded_without_start() -> Result<(), String> {
             api_key: generate_local_api_key(),
             access_scope: CodexLocalAccessScope::Localhost,
             routing_strategy: CodexLocalAccessRoutingStrategy::default(),
+            credential_mode: CodexLocalAccessCredentialMode::Local,
+            custom_credentials: Vec::new(),
+            active_custom_credential_id: None,
+            custom_base_url: None,
+            custom_api_key: None,
             restrict_free_accounts: true,
             bound_oauth_account_id: None,
             account_ids: Vec::new(),
@@ -3849,6 +4043,30 @@ pub async fn get_local_access_state() -> Result<CodexLocalAccessState, String> {
 pub async fn activate_local_access_for_dir(
     profile_dir: &Path,
 ) -> Result<CodexLocalAccessState, String> {
+    ensure_runtime_loaded_without_start().await?;
+    let (initial_state, initial_collection) = {
+        let runtime = gateway_runtime().lock().await;
+        let state = build_state_snapshot(&runtime);
+        let collection = state
+            .collection
+            .clone()
+            .ok_or_else(|| "API 服务集合尚未创建".to_string())?;
+        (state, collection)
+    };
+
+    if initial_collection.credential_mode == CodexLocalAccessCredentialMode::Custom {
+        let (base_url, api_key) = validate_custom_credentials(&initial_collection)?;
+        let bound_oauth_account_id =
+            normalize_optional_account_ref(initial_collection.bound_oauth_account_id.as_deref());
+        if let Some(bound_id) = bound_oauth_account_id.as_deref() {
+            let _ = validate_local_access_bound_oauth_account(bound_id)?;
+            let _ = codex_account::ensure_managed_account_fresh(bound_id).await?;
+        }
+        let runtime_account = build_runtime_account(base_url, api_key, bound_oauth_account_id);
+        codex_account::write_account_bundle_to_dir(profile_dir, &runtime_account)?;
+        return Ok(initial_state);
+    }
+
     let state = set_local_access_enabled(true).await?;
     let collection = state
         .collection
@@ -3962,7 +4180,7 @@ async fn probe_local_access_gateway(
     api_key: &str,
     model_id: &str,
 ) -> LocalAccessGatewayProbeResult {
-    let url = format!("{}/v1/responses", base_url.trim_end_matches('/'));
+    let url = build_responses_probe_url(base_url);
     let client = match Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(90))
@@ -4143,6 +4361,41 @@ fn classify_gateway_probe_failure(
     }
 }
 
+fn classify_custom_endpoint_probe_failure(
+    model_id: &str,
+    probe_failure: LocalAccessGatewayProbeFailure,
+) -> CodexLocalAccessTestFailure {
+    let status = probe_failure.status;
+    let message = probe_failure.message.trim();
+    let suggestion = if matches!(status, Some(401)) {
+        "确认自定义 API 密钥是否正确，且该服务兼容 OpenAI Responses API。"
+    } else if is_quota_or_rate_limit_message(status, message) {
+        "检查自定义 API 服务额度、限流策略或更换可用模型后重试。"
+    } else if matches!(status, Some(502) | Some(503) | Some(504)) {
+        "检查自定义 API 服务地址、代理和上游服务状态，确认网络可达后重试。"
+    } else if status.is_none() {
+        "确认自定义 API 地址可访问，Base URL 建议填写到 /v1 这一层。"
+    } else {
+        "根据 HTTP 状态和自定义服务返回内容处理；如果服务不支持 Responses API，请换用兼容地址。"
+    };
+
+    CodexLocalAccessTestFailure {
+        title: "自定义 API 检测失败".to_string(),
+        stage: "自定义 API 请求".to_string(),
+        cause: if let Some(status) = status {
+            format!("自定义 API 返回 HTTP {}：{}", status, message)
+        } else {
+            message.to_string()
+        },
+        suggestion: suggestion.to_string(),
+        status,
+        model_id: Some(model_id.to_string()),
+        detail: probe_failure.detail,
+        cli_output: None,
+        gateway_output: probe_failure.gateway_output,
+    }
+}
+
 fn build_cli_environment_failure(
     model_id: &str,
     cli_error: codex_wakeup::CodexWakeupCliConversationDetailedError,
@@ -4169,8 +4422,11 @@ fn build_cli_environment_failure(
 }
 
 pub async fn test_local_access_with_cli() -> Result<CodexLocalAccessTestResult, String> {
-    ensure_runtime_loaded().await?;
-    let state = snapshot_state().await?;
+    ensure_runtime_loaded_without_start().await?;
+    let mut state = {
+        let runtime = gateway_runtime().lock().await;
+        build_state_snapshot(&runtime)
+    };
     let Some(collection) = state.collection.clone() else {
         return Ok(build_failure_result(local_access_test_failure(
             "API 服务集合尚未创建",
@@ -4180,38 +4436,6 @@ pub async fn test_local_access_with_cli() -> Result<CodexLocalAccessTestResult, 
             None,
         )));
     };
-    if !collection.enabled {
-        return Ok(build_failure_result(local_access_test_failure(
-            "API 服务未启用",
-            "检测前置条件",
-            "当前 API 服务处于停用状态，CLI 无法通过本地网关发起请求。",
-            "先启用 API 服务，再重新执行健康检测。",
-            None,
-        )));
-    }
-    if !state.running {
-        return Ok(build_failure_result(local_access_test_failure(
-            "API 服务未运行",
-            "本地网关进程",
-            "API 服务配置已启用，但本地网关当前没有监听端口。",
-            "先启动 API 服务；如果端口被占用，清理端口或更换端口后重试。",
-            None,
-        )));
-    }
-    if collection.account_ids.is_empty() {
-        return Ok(build_failure_result(local_access_test_failure(
-            "账号集合为空",
-            "账号池配置",
-            "API 服务集合中没有账号，网关没有可路由的上游账号。",
-            "在 API 服务账号集合中加入可用的 Codex OAuth 账号后再测试。",
-            None,
-        )));
-    }
-
-    let base_url = state
-        .base_url
-        .clone()
-        .unwrap_or_else(|| build_base_url(collection.port));
     let Some(model_id) = state.model_ids.first().cloned() else {
         return Ok(build_failure_result(local_access_test_failure(
             "API 服务暂无可用模型",
@@ -4230,6 +4454,88 @@ pub async fn test_local_access_with_cli() -> Result<CodexLocalAccessTestResult, 
             None,
         )));
     }
+    if collection.credential_mode == CodexLocalAccessCredentialMode::Custom {
+        let (custom_base_url, custom_api_key) = match validate_custom_credentials(&collection) {
+            Ok(credentials) => credentials,
+            Err(error) => {
+                return Ok(build_failure_result(local_access_test_failure(
+                    "自定义 API 配置不完整",
+                    "检测前置条件",
+                    error,
+                    "在 API 服务面板填写可访问的自定义 API 地址和密钥后再测试。",
+                    Some(model_id),
+                )));
+            }
+        };
+        let bound_oauth_account_id =
+            normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref());
+        if let Some(bound_id) = bound_oauth_account_id.as_deref() {
+            let _ = validate_local_access_bound_oauth_account(bound_id)?;
+            let _ = codex_account::ensure_managed_account_fresh(bound_id).await?;
+        }
+        let started_at = Instant::now();
+        return match probe_local_access_gateway(&custom_base_url, &custom_api_key, &model_id).await
+        {
+            LocalAccessGatewayProbeResult::Passed => Ok(CodexLocalAccessTestResult {
+                model_id: Some(model_id),
+                latency_ms: Some(started_at.elapsed().as_millis() as u64),
+                output: Some("pong".to_string()),
+                failure: None,
+            }),
+            LocalAccessGatewayProbeResult::Failed(probe_failure) => Ok(build_failure_result(
+                classify_custom_endpoint_probe_failure(&model_id, probe_failure),
+            )),
+        };
+    }
+
+    ensure_runtime_loaded().await?;
+    state = snapshot_state().await?;
+    let Some(collection) = state.collection.clone() else {
+        return Ok(build_failure_result(local_access_test_failure(
+            "API 服务集合尚未创建",
+            "检测前置条件",
+            "当前没有可用于本地 API 服务的账号集合配置。",
+            "先在 API 服务弹框中选择账号并保存，然后启用服务后再测试。",
+            Some(model_id),
+        )));
+    };
+    if !collection.enabled {
+        return Ok(build_failure_result(local_access_test_failure(
+            "API 服务未启用",
+            "检测前置条件",
+            "当前 API 服务处于停用状态，CLI 无法通过本地网关发起请求。",
+            "先启用 API 服务，再重新执行健康检测。",
+            Some(model_id),
+        )));
+    }
+    if !state.running {
+        return Ok(build_failure_result(local_access_test_failure(
+            "API 服务未运行",
+            "本地网关进程",
+            "API 服务配置已启用，但本地网关当前没有监听端口。",
+            "先启动 API 服务；如果端口被占用，清理端口或更换端口后重试。",
+            Some(model_id),
+        )));
+    }
+    if collection.account_ids.is_empty() {
+        return Ok(build_failure_result(local_access_test_failure(
+            "账号集合为空",
+            "账号池配置",
+            "API 服务集合中没有账号，网关没有可路由的上游账号。",
+            "在 API 服务账号集合中加入可用的 Codex OAuth 账号后再测试。",
+            Some(model_id),
+        )));
+    }
+    let base_url = state
+        .base_url
+        .clone()
+        .unwrap_or_else(|| build_base_url(collection.port));
+    let bound_oauth_account_id =
+        normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref());
+    if let Some(bound_id) = bound_oauth_account_id.as_deref() {
+        let _ = validate_local_access_bound_oauth_account(bound_id)?;
+        let _ = codex_account::ensure_managed_account_fresh(bound_id).await?;
+    }
     let temp_home = std::env::temp_dir().join(format!(
         "antigravity-codex-api-service-test-{}",
         uuid::Uuid::new_v4()
@@ -4243,12 +4549,6 @@ pub async fn test_local_access_with_cli() -> Result<CodexLocalAccessTestResult, 
             "检查系统临时目录写入权限和磁盘空间后重试。",
             Some(model_id),
         )));
-    }
-    let bound_oauth_account_id =
-        normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref());
-    if let Some(bound_id) = bound_oauth_account_id.as_deref() {
-        let _ = validate_local_access_bound_oauth_account(bound_id)?;
-        let _ = codex_account::ensure_managed_account_fresh(bound_id).await?;
     }
     let runtime_account = build_runtime_account(
         base_url.clone(),
@@ -4343,6 +4643,11 @@ pub async fn save_local_access_accounts(
                 api_key: generate_local_api_key(),
                 access_scope: CodexLocalAccessScope::Localhost,
                 routing_strategy: CodexLocalAccessRoutingStrategy::default(),
+                credential_mode: CodexLocalAccessCredentialMode::Local,
+                custom_credentials: Vec::new(),
+                active_custom_credential_id: None,
+                custom_base_url: None,
+                custom_api_key: None,
                 restrict_free_accounts: true,
                 bound_oauth_account_id: None,
                 account_ids: Vec::new(),
@@ -4445,6 +4750,77 @@ pub async fn update_local_access_scope(
 
     ensure_gateway_matches_runtime().await?;
     snapshot_state().await
+}
+
+pub async fn update_local_access_credentials(
+    credential_mode: CodexLocalAccessCredentialMode,
+    active_custom_credential_id: Option<String>,
+    custom_credentials: Option<Vec<CodexLocalAccessCustomCredential>>,
+    custom_base_url: Option<String>,
+    custom_api_key: Option<String>,
+) -> Result<CodexLocalAccessState, String> {
+    ensure_runtime_loaded_without_start().await?;
+
+    let maybe_collection = {
+        let runtime = gateway_runtime().lock().await;
+        runtime.collection.clone()
+    };
+
+    let Some(mut collection) = maybe_collection else {
+        return Err("本地接入集合尚未创建".to_string());
+    };
+
+    if let Some(credentials) = custom_credentials {
+        collection.custom_credentials = credentials;
+        collection.active_custom_credential_id =
+            normalize_custom_credential_id(active_custom_credential_id.as_deref());
+    } else {
+        let next_custom_base_url = custom_base_url
+            .as_deref()
+            .and_then(|value| normalize_custom_base_url(Some(value)))
+            .or_else(|| collection.custom_base_url.clone());
+        let next_custom_api_key = custom_api_key
+            .as_deref()
+            .and_then(|value| normalize_custom_api_key(Some(value)))
+            .or_else(|| collection.custom_api_key.clone());
+
+        collection.custom_base_url = next_custom_base_url;
+        collection.custom_api_key = next_custom_api_key;
+        if let Some(active_id) =
+            normalize_custom_credential_id(active_custom_credential_id.as_deref())
+        {
+            collection.active_custom_credential_id = Some(active_id);
+        }
+    }
+
+    let changed_before_validation = sanitize_custom_credentials(&mut collection);
+
+    if credential_mode == CodexLocalAccessCredentialMode::Custom {
+        let (custom_base_url, custom_api_key) = validate_custom_credentials(&collection)?;
+        collection.custom_base_url = Some(custom_base_url);
+        collection.custom_api_key = Some(custom_api_key);
+    }
+
+    collection.credential_mode = credential_mode;
+    collection.updated_at = now_ms();
+    let (changed, _) = sanitize_collection(&mut collection)?;
+    if changed || changed_before_validation {
+        collection.updated_at = now_ms();
+    }
+    save_collection_to_disk(&collection)?;
+
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        sync_runtime_collection(&mut runtime, collection.clone());
+    }
+
+    if collection.credential_mode == CodexLocalAccessCredentialMode::Local {
+        ensure_gateway_matches_runtime().await?;
+        return snapshot_state().await;
+    }
+
+    let runtime = gateway_runtime().lock().await;
+    Ok(build_state_snapshot(&runtime))
 }
 
 pub async fn remove_local_access_account(

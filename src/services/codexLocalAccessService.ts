@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  CodexLocalAccessCredentialMode,
+  CodexLocalAccessCustomCredential,
   CodexLocalAccessPortCleanupResult,
   CodexLocalAccessRoutingStrategy,
   CodexLocalAccessScope,
@@ -71,6 +73,22 @@ export async function updateCodexLocalAccessAccessScope(
   });
 }
 
+export async function updateCodexLocalAccessCredentials(
+  credentialMode: CodexLocalAccessCredentialMode,
+  activeCustomCredentialId?: string | null,
+  customCredentials?: CodexLocalAccessCustomCredential[] | null,
+  customBaseUrl?: string | null,
+  customApiKey?: string | null,
+): Promise<CodexLocalAccessState> {
+  return await invoke('codex_local_access_update_credentials', {
+    credentialMode,
+    activeCustomCredentialId,
+    customCredentials,
+    customBaseUrl,
+    customApiKey,
+  });
+}
+
 export async function setCodexLocalAccessEnabled(
   enabled: boolean,
 ): Promise<CodexLocalAccessState> {
@@ -79,6 +97,10 @@ export async function setCodexLocalAccessEnabled(
 
 export async function activateCodexLocalAccess(): Promise<CodexLocalAccessState> {
   return await invoke('codex_local_access_activate');
+}
+
+export async function applyCodexLocalAccessCurrentCredentials(): Promise<CodexLocalAccessState> {
+  return await invoke('codex_local_access_apply_current_credentials');
 }
 
 export async function testCodexLocalAccess(): Promise<CodexLocalAccessTestResult> {
