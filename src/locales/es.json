@@ -1691,6 +1691,11 @@
     },
     "oauth": {
       "desc": "Haz clic abajo y completa la autorización en el navegador",
+      "trialGuideTitle": "Consejos de registro de prueba",
+      "trialGuideDesc": "Al preparar una cuenta nueva, conviene usar un Gmail al que puedas acceder a largo plazo; ayuda a conservar la cuenta y verificarla después.",
+      "trialGuideAliasDesc": "Un Gmail principal puede preparar hasta 5 alias para separar registros de ChatGPT; úsalos según las reglas del servicio de destino.",
+      "trialGuideLink": "Ver guía de prueba",
+      "gmailAliasLink": "Generar alias Gmail",
       "preparing": "Preparando enlace de autorización...",
       "exchanging": "Intercambiando token...",
       "portInUse": "El puerto {{port}} ya está en uso. Cierra la aplicación que lo usa e inténtalo de nuevo.",
@@ -1850,7 +1855,8 @@
         "quotaLowFirst": "Cuota baja primero",
         "planHighFirst": "Plan alto primero",
         "planLowFirst": "Plan bajo primero",
-        "expirySoonFirst": "Vence antes primero"
+        "expirySoonFirst": "Vence antes primero",
+        "custom": "Personalizado"
       },
       "statusUnconfigured": "Sin configurar",
       "expandDetails": "Expandir detalles",
@@ -1892,7 +1898,25 @@
       "oauthBinding": {
         "desc": "Opcional. Sin enlace, el servicio API mantiene el flujo de API Key anterior; al enlazar, la sesión usa la cuenta OAuth y el Provider usa la configuración del servicio API.",
         "currentService": "Servicio API: {{name}}"
-      }
+      },
+      "customRoutingEdit": "Editar enrutamiento personalizado",
+      "customRoutingTitle": "Enrutamiento personalizado",
+      "customRoutingDesc": "Define prioridad y peso por cuenta para controlar el orden de selección y el reparto de carga dentro del mismo nivel.",
+      "customRoutingPriorityTitle": "Prioridad",
+      "customRoutingPriorityDesc": "Los valores más altos se eligen antes; las cuentas de menor prioridad solo se prueban cuando las superiores no están disponibles.",
+      "customRoutingWeightTitle": "Peso",
+      "customRoutingWeightDesc": "Se usa para equilibrar carga dentro de la misma prioridad. A mayor peso, más solicitudes recibe.",
+      "customRoutingSearch": "Buscar correo, plan o ID de cuenta",
+      "customRoutingSelected": "{{count}} seleccionadas",
+      "customRoutingPriorityShort": "Prioridad",
+      "customRoutingWeightShort": "Peso",
+      "customRoutingApplyBatch": "Aplicar selección",
+      "customRoutingReset": "Restablecer",
+      "customRoutingAccountColumn": "Cuenta",
+      "customRoutingQuotaColumn": "Cupo",
+      "customRoutingEmpty": "No hay cuentas configurables en la colección actual del servicio API",
+      "customRoutingSave": "Guardar enrutamiento",
+      "customRoutingSaveSuccess": "Enrutamiento personalizado del servicio API actualizado"
     },
     "local": {
       "desc": "Importa la cuenta actual desde ~/.codex/auth.json",

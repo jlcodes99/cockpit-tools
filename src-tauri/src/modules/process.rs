@@ -7064,19 +7064,59 @@ pub fn close_codex_default(timeout_secs: u64) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        let mut pids: Vec<u32> = collect_codex_process_entries()
-            .into_iter()
-            .map(|(pid, _)| pid)
-            .collect();
-        pids.sort();
-        pids.dedup();
-        return close_pids(&pids, timeout_secs);
+        let default_home = crate::modules::codex_account::get_codex_home()
+            .to_string_lossy()
+            .to_string();
+        return close_codex_instances(&[default_home], timeout_secs);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = timeout_secs;
         Err("Codex 启动仅支持 macOS 和 Windows".to_string())
+    }
+}
+
+/// Request a normal Windows app shutdown before falling back to force close.
+#[cfg(target_os = "windows")]
+fn request_codex_graceful_close(pid: u32) {
+    if pid == 0 || !is_pid_running(pid) {
+        return;
+    }
+
+    use std::os::windows::process::CommandExt;
+
+    crate::modules::logger::log_info(&format!(
+        "[Codex Close] graceful taskkill start pid={}",
+        pid
+    ));
+    let output = Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .output();
+    match output {
+        Ok(value) => {
+            if value.status.success() {
+                crate::modules::logger::log_info(&format!(
+                    "[Codex Close] graceful taskkill success pid={} status={}",
+                    pid, value.status
+                ));
+            } else {
+                crate::modules::logger::log_warn(&format!(
+                    "[Codex Close] graceful taskkill failed pid={} status={}",
+                    pid, value.status
+                ));
+            }
+        }
+        Err(err) => {
+            crate::modules::logger::log_warn(&format!(
+                "[Codex Close] graceful taskkill error pid={} err={}",
+                pid, err
+            ));
+        }
     }
 }
 
@@ -7222,7 +7262,27 @@ pub fn close_codex_instances(codex_homes: &[String], timeout_secs: u64) -> Resul
             "准备关闭 {} 个受管 Codex 主进程...",
             pids.len()
         ));
-        let _ = close_pids(&pids, timeout_secs);
+        for pid in &pids {
+            request_codex_graceful_close(*pid);
+        }
+        let graceful_wait_secs = timeout_secs.min(8).max(1);
+        if wait_pids_exit(&pids, graceful_wait_secs) {
+            crate::modules::logger::log_info(&format!(
+                "[Codex Close] graceful close finished, targets={}",
+                summarize_pid_list_for_log(&pids)
+            ));
+            return Ok(());
+        }
+        let remaining: Vec<u32> = pids
+            .iter()
+            .copied()
+            .filter(|pid| is_pid_running(*pid))
+            .collect();
+        crate::modules::logger::log_warn(&format!(
+            "[Codex Close] graceful close timed out, retry force close for remaining pids={}",
+            summarize_pid_list_for_log(&remaining)
+        ));
+        let _ = close_pids(&remaining, timeout_secs);
 
         let still_running = collect_codex_process_entries()
             .into_iter()

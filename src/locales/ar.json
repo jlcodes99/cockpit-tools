@@ -1737,6 +1737,11 @@
     },
     "oauth": {
       "desc": "انقر أدناه وأكمل تفويض OpenAI في المتصفح",
+      "trialGuideTitle": "نصائح تسجيل التجربة",
+      "trialGuideDesc": "عند تجهيز حساب جديد، يُفضّل استخدام بريد Gmail يمكن الوصول إليه مدة طويلة، فهذا يساعد على بقاء الحساب وتسهيل التحقق لاحقًا.",
+      "trialGuideAliasDesc": "يمكن لكل Gmail أساسي تجهيز ما يصل إلى 5 عناوين بديلة لتمييز سجلات تسجيل ChatGPT؛ استخدمها وفق قواعد الخدمة المستهدفة.",
+      "trialGuideLink": "عرض دليل التجربة",
+      "gmailAliasLink": "إنشاء بديل Gmail",
       "preparing": "جارٍ إعداد رابط التفويض...",
       "exchanging": "جارٍ تبادل الرمز...",
       "portInUse": "المنفذ {{port}} قيد الاستخدام بالفعل. أغلق التطبيق الذي يستخدمه ثم حاول مرة أخرى.",
@@ -1896,7 +1901,8 @@
         "quotaLowFirst": "الأقل حصة أولاً",
         "planHighFirst": "الأعلى باقة أولاً",
         "planLowFirst": "الأقل باقة أولاً",
-        "expirySoonFirst": "الأقرب انتهاءً أولاً"
+        "expirySoonFirst": "الأقرب انتهاءً أولاً",
+        "custom": "مخصص"
       },
       "statusUnconfigured": "غير مُعدّ",
       "expandDetails": "توسيع التفاصيل",
@@ -1938,7 +1944,25 @@
       "oauthBinding": {
         "desc": "اختياري. بدون ربط، تعمل خدمة API بالمسار السابق لمفتاح API؛ وبعد الربط تستخدم حالة تسجيل الدخول حساب OAuth ويستخدم Provider إعدادات خدمة API الحالية.",
         "currentService": "خدمة API: {{name}}"
-      }
+      },
+      "customRoutingEdit": "تعديل التوجيه المخصص",
+      "customRoutingTitle": "التوجيه المخصص",
+      "customRoutingDesc": "عيّن الأولوية والوزن لكل حساب للتحكم في ترتيب اختيار الحسابات وتوزيع الحمل داخل الأولوية نفسها.",
+      "customRoutingPriorityTitle": "الأولوية",
+      "customRoutingPriorityDesc": "تُختار القيم الأعلى أولاً؛ ولا تُجرّب الحسابات الأقل أولوية إلا عند عدم توفر الأعلى أولوية.",
+      "customRoutingWeightTitle": "الوزن",
+      "customRoutingWeightDesc": "يُستخدم لموازنة الحمل داخل الأولوية نفسها. كلما زاد الوزن زاد عدد الطلبات الموجهة للحساب.",
+      "customRoutingSearch": "ابحث بالبريد أو الخطة أو معرّف الحساب",
+      "customRoutingSelected": "المحدد {{count}}",
+      "customRoutingPriorityShort": "الأولوية",
+      "customRoutingWeightShort": "الوزن",
+      "customRoutingApplyBatch": "تطبيق على المحدد",
+      "customRoutingReset": "إعادة ضبط",
+      "customRoutingAccountColumn": "الحساب",
+      "customRoutingQuotaColumn": "الحصة",
+      "customRoutingEmpty": "لا توجد حسابات قابلة للإعداد في مجموعة خدمة API الحالية",
+      "customRoutingSave": "حفظ التوجيه",
+      "customRoutingSaveSuccess": "تم تحديث التوجيه المخصص لخدمة API"
     },
     "local": {
       "desc": "استيراد الحساب الحالي من ~/.codex/auth.json",

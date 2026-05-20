@@ -1691,6 +1691,11 @@
     },
     "oauth": {
       "desc": "下のボタンをクリックしてブラウザで OpenAI 認可を完了してください",
+      "trialGuideTitle": "試用登録のヒント",
+      "trialGuideDesc": "新しいアカウントを準備する場合は、長期的に利用できる Gmail を優先すると、アカウント維持や後日の確認が安定しやすくなります。",
+      "trialGuideAliasDesc": "1 つのメイン Gmail で最大 5 個のエイリアスを用意し、ChatGPT の登録記録を分けられます。対象サービスのルールに従って使用してください。",
+      "trialGuideLink": "試用ガイドを見る",
+      "gmailAliasLink": "Gmail エイリアス生成",
       "preparing": "認可リンクを準備中...",
       "exchanging": "トークンを交換中...",
       "portInUse": "ポート {{port}} は既に使用中です。このポートを使用しているアプリを閉じて再試行してください。",
@@ -1850,7 +1855,8 @@
         "quotaLowFirst": "低クォータ優先",
         "planHighFirst": "上位プラン優先",
         "planLowFirst": "下位プラン優先",
-        "expirySoonFirst": "期限が近い順"
+        "expirySoonFirst": "期限が近い順",
+        "custom": "カスタム"
       },
       "statusUnconfigured": "未設定",
       "expandDetails": "詳細を開く",
@@ -1892,7 +1898,25 @@
       "oauthBinding": {
         "desc": "任意です。未連携の場合、API サービスは従来の API Key ロジックで動作します。連携後はログイン状態に OAuth アカウントを使い、Provider は現在の API サービス設定を使います。",
         "currentService": "API サービス：{{name}}"
-      }
+      },
+      "customRoutingEdit": "カスタムルーティングを編集",
+      "customRoutingTitle": "カスタムルーティング",
+      "customRoutingDesc": "アカウントごとに優先度と重みを設定し、選択順と同じ優先度内の負荷配分を制御します。",
+      "customRoutingPriorityTitle": "優先度",
+      "customRoutingPriorityDesc": "値が高いほど先に選ばれます。高優先度のアカウントが使えない場合にのみ低優先度を試します。",
+      "customRoutingWeightTitle": "重み",
+      "customRoutingWeightDesc": "同じ優先度内の負荷分散に使います。重みが高いほど割り当てられるリクエストが増えます。",
+      "customRoutingSearch": "メール、プラン、アカウント ID を検索",
+      "customRoutingSelected": "{{count}} 件選択中",
+      "customRoutingPriorityShort": "優先度",
+      "customRoutingWeightShort": "重み",
+      "customRoutingApplyBatch": "選択に適用",
+      "customRoutingReset": "リセット",
+      "customRoutingAccountColumn": "アカウント",
+      "customRoutingQuotaColumn": "残量",
+      "customRoutingEmpty": "現在の API サービス集合に設定可能なアカウントはありません",
+      "customRoutingSave": "ルーティングを保存",
+      "customRoutingSaveSuccess": "API サービスのカスタムルーティングを更新しました"
     },
     "local": {
       "desc": "~/.codex/auth.json から現在ログイン中のアカウントをインポート",

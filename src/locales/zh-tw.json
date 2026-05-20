@@ -1691,6 +1691,11 @@
     },
     "oauth": {
       "desc": "點擊下方按鈕，在瀏覽器中完成 OpenAI 帳號授權",
+      "trialGuideTitle": "試用註冊提示",
+      "trialGuideDesc": "準備新帳號時，建議優先使用可長期存取的 Gmail 信箱，帳號留存與後續驗證會更穩。",
+      "trialGuideAliasDesc": "每個主 Gmail 最多可準備 5 個別名信箱，用來區分不同 ChatGPT 註冊記錄；請依目標服務規則使用。",
+      "trialGuideLink": "查看試用指南",
+      "gmailAliasLink": "產生 Gmail 別名",
       "preparing": "正在準備授權連結...",
       "exchanging": "正在交換權杖...",
       "portInUse": "連接埠 {{port}} 已被佔用，請關閉佔用該連接埠的程式後重試。",
@@ -1850,7 +1855,8 @@
         "quotaLowFirst": "優先低配額",
         "planHighFirst": "優先高訂閱",
         "planLowFirst": "優先低訂閱",
-        "expirySoonFirst": "優先近到期"
+        "expirySoonFirst": "優先近到期",
+        "custom": "自訂"
       },
       "statusUnconfigured": "未設定",
       "expandDetails": "展開詳情",
@@ -1892,7 +1898,25 @@
       "oauthBinding": {
         "desc": "可選綁定。未綁定時 API 服務會沿用原 API Key 邏輯；綁定後登入狀態使用 OAuth 帳號，Provider 使用目前 API 服務設定。",
         "currentService": "API 服務：{{name}}"
-      }
+      },
+      "customRoutingEdit": "編輯自訂調度",
+      "customRoutingTitle": "自訂調度",
+      "customRoutingDesc": "依帳號設定優先級與權重，用來控制 API 服務選擇帳號的順序，以及同級帳號的負載分配。",
+      "customRoutingPriorityTitle": "優先級",
+      "customRoutingPriorityDesc": "數值越高越先被選中；高優先級帳號不可用時，才會繼續嘗試低優先級帳號。",
+      "customRoutingWeightTitle": "權重",
+      "customRoutingWeightDesc": "相同優先級內用於負載平衡；權重越高，分到的請求越多。",
+      "customRoutingSearch": "搜尋信箱、訂閱或帳號 ID",
+      "customRoutingSelected": "已選 {{count}}",
+      "customRoutingPriorityShort": "優先級",
+      "customRoutingWeightShort": "權重",
+      "customRoutingApplyBatch": "套用到已選",
+      "customRoutingReset": "重設",
+      "customRoutingAccountColumn": "帳號",
+      "customRoutingQuotaColumn": "額度",
+      "customRoutingEmpty": "目前 API 服務集合沒有可設定的帳號",
+      "customRoutingSave": "儲存自訂調度",
+      "customRoutingSaveSuccess": "API 服務自訂調度已更新"
     },
     "api": {
       "baseUrl": "基礎網址",

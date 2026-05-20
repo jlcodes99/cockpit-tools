@@ -1691,6 +1691,11 @@
     },
     "oauth": {
       "desc": "Nhấn nút bên dưới và hoàn tất ủy quyền OpenAI trong trình duyệt",
+      "trialGuideTitle": "Mẹo đăng ký dùng thử",
+      "trialGuideDesc": "Khi chuẩn bị tài khoản mới, nên ưu tiên Gmail có thể truy cập lâu dài để tài khoản ổn định hơn và dễ xác minh về sau.",
+      "trialGuideAliasDesc": "Một Gmail chính có thể chuẩn bị tối đa 5 địa chỉ bí danh để tách các bản ghi đăng ký ChatGPT; hãy dùng theo quy định của dịch vụ đích.",
+      "trialGuideLink": "Xem hướng dẫn dùng thử",
+      "gmailAliasLink": "Tạo bí danh Gmail",
       "preparing": "Đang chuẩn bị liên kết ủy quyền...",
       "exchanging": "Đang đổi token...",
       "portInUse": "Cổng {{port}} đang được sử dụng. Hãy đóng ứng dụng đang dùng cổng này và thử lại.",
@@ -1850,7 +1855,8 @@
         "quotaLowFirst": "Ưu tiên hạn mức thấp",
         "planHighFirst": "Ưu tiên gói cao",
         "planLowFirst": "Ưu tiên gói thấp",
-        "expirySoonFirst": "Sắp hết hạn trước"
+        "expirySoonFirst": "Sắp hết hạn trước",
+        "custom": "Tùy chỉnh"
       },
       "statusUnconfigured": "Chưa cấu hình",
       "expandDetails": "Mở chi tiết",
@@ -1892,7 +1898,25 @@
       "oauthBinding": {
         "desc": "Tùy chọn. Khi chưa liên kết, dịch vụ API chạy theo luồng API Key cũ; sau khi liên kết, trạng thái đăng nhập dùng tài khoản OAuth và Provider dùng cấu hình dịch vụ API hiện tại.",
         "currentService": "Dịch vụ API: {{name}}"
-      }
+      },
+      "customRoutingEdit": "Sửa định tuyến tùy chỉnh",
+      "customRoutingTitle": "Định tuyến tùy chỉnh",
+      "customRoutingDesc": "Đặt ưu tiên và trọng số cho từng tài khoản để kiểm soát thứ tự chọn tài khoản và phân bổ tải cùng mức ưu tiên.",
+      "customRoutingPriorityTitle": "Ưu tiên",
+      "customRoutingPriorityDesc": "Giá trị cao hơn được chọn trước; tài khoản ưu tiên thấp chỉ được thử khi nhóm ưu tiên cao không khả dụng.",
+      "customRoutingWeightTitle": "Trọng số",
+      "customRoutingWeightDesc": "Dùng để cân bằng tải trong cùng mức ưu tiên. Trọng số càng cao thì nhận càng nhiều yêu cầu.",
+      "customRoutingSearch": "Tìm email, gói hoặc ID tài khoản",
+      "customRoutingSelected": "Đã chọn {{count}}",
+      "customRoutingPriorityShort": "Ưu tiên",
+      "customRoutingWeightShort": "Trọng số",
+      "customRoutingApplyBatch": "Áp dụng cho mục chọn",
+      "customRoutingReset": "Đặt lại",
+      "customRoutingAccountColumn": "Tài khoản",
+      "customRoutingQuotaColumn": "Hạn mức",
+      "customRoutingEmpty": "Không có tài khoản có thể cấu hình trong bộ sưu tập dịch vụ API hiện tại",
+      "customRoutingSave": "Lưu định tuyến",
+      "customRoutingSaveSuccess": "Đã cập nhật định tuyến tùy chỉnh của dịch vụ API"
     },
     "local": {
       "desc": "Nhập tài khoản hiện tại từ ~/.codex/auth.json",

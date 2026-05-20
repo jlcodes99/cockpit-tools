@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use chrono::{SecondsFormat, Utc};
 use rusqlite::{types::Value, Connection, OpenFlags, Transaction};
@@ -14,8 +15,7 @@ const DEFAULT_INSTANCE_ID: &str = "__default__";
 const DEFAULT_INSTANCE_NAME: &str = "默认实例";
 const STATE_DB_FILE: &str = "state_5.sqlite";
 const SESSION_INDEX_FILE: &str = "session_index.jsonl";
-const GLOBAL_STATE_FILE: &str = ".codex-global-state.json";
-const BACKUP_FILE_NAMES: [&str; 3] = [STATE_DB_FILE, SESSION_INDEX_FILE, GLOBAL_STATE_FILE];
+const BACKUP_FILE_NAMES: [&str; 2] = [STATE_DB_FILE, SESSION_INDEX_FILE];
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,6 +23,7 @@ pub struct CodexInstanceThreadSyncItem {
     pub instance_id: String,
     pub instance_name: String,
     pub added_thread_count: usize,
+    pub updated_thread_count: usize,
     pub backup_dir: Option<String>,
 }
 
@@ -33,6 +34,8 @@ pub struct CodexInstanceThreadSyncSummary {
     pub thread_universe_count: usize,
     pub mutated_instance_count: usize,
     pub total_synced_thread_count: usize,
+    pub total_added_thread_count: usize,
+    pub total_updated_thread_count: usize,
     pub items: Vec<CodexInstanceThreadSyncItem>,
     pub backup_dirs: Vec<String>,
     pub message: String,
@@ -103,11 +106,34 @@ impl ThreadRowData {
 #[derive(Debug, Clone)]
 struct ThreadSnapshot {
     id: String,
-    cwd: String,
     rollout_path: PathBuf,
+    merged_rollout_content: Option<String>,
     row_data: ThreadRowData,
     session_index_entry: JsonValue,
     source_root: PathBuf,
+    freshness: ThreadFreshness,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+struct ThreadFreshness {
+    activity_ms: i128,
+    rollout_len: u64,
+    rollout_modified_ms: i128,
+}
+
+#[derive(Debug, Clone)]
+struct ThreadSyncPlanItem {
+    snapshot: ThreadSnapshot,
+    existing_rollout_path: Option<PathBuf>,
+    is_update: bool,
+}
+
+#[derive(Debug, Clone)]
+struct RolloutMergeLine {
+    line: String,
+    timestamp_ms: Option<i128>,
+    source_rank: usize,
+    line_index: usize,
 }
 
 pub fn sync_threads_across_instances() -> Result<CodexInstanceThreadSyncSummary, String> {
@@ -116,21 +142,30 @@ pub fn sync_threads_across_instances() -> Result<CodexInstanceThreadSyncSummary,
         return Err("至少需要两个 Codex 实例才能同步线程".to_string());
     }
 
-    let mut thread_universe = HashMap::<String, ThreadSnapshot>::new();
-    let mut existing_ids_by_instance = HashMap::<String, HashSet<String>>::new();
+    let mut snapshots_by_thread = HashMap::<String, Vec<ThreadSnapshot>>::new();
+    let mut snapshots_by_instance = HashMap::<String, HashMap<String, ThreadSnapshot>>::new();
 
     for instance in &instances {
         let snapshots = load_thread_snapshots(instance)?;
-        let ids = snapshots
-            .iter()
-            .map(|item| item.id.clone())
-            .collect::<HashSet<_>>();
+        let mut snapshots_by_id = HashMap::<String, ThreadSnapshot>::new();
         for snapshot in snapshots {
-            thread_universe
+            snapshots_by_thread
                 .entry(snapshot.id.clone())
-                .or_insert(snapshot);
+                .or_default()
+                .push(snapshot.clone());
+            match snapshots_by_id.get(&snapshot.id) {
+                Some(existing) if existing.freshness >= snapshot.freshness => {}
+                _ => {
+                    snapshots_by_id.insert(snapshot.id.clone(), snapshot);
+                }
+            }
         }
-        existing_ids_by_instance.insert(instance.id.clone(), ids);
+        snapshots_by_instance.insert(instance.id.clone(), snapshots_by_id);
+    }
+
+    let mut thread_universe = HashMap::<String, ThreadSnapshot>::new();
+    for (thread_id, snapshots) in snapshots_by_thread {
+        thread_universe.insert(thread_id, merge_thread_snapshots(&snapshots)?);
     }
 
     let mut universe_ids = thread_universe.keys().cloned().collect::<Vec<_>>();
@@ -141,34 +176,64 @@ pub fn sync_threads_across_instances() -> Result<CodexInstanceThreadSyncSummary,
     let mut backup_dirs = Vec::new();
     let mut mutated_instance_count = 0usize;
     let mut total_synced_thread_count = 0usize;
+    let mut total_added_thread_count = 0usize;
+    let mut total_updated_thread_count = 0usize;
     let mut mutated_running_instance_count = 0usize;
 
     for instance in &instances {
-        let existing_ids = existing_ids_by_instance
+        let existing_snapshots = snapshots_by_instance
             .get(&instance.id)
             .cloned()
             .unwrap_or_default();
-        let missing_snapshots = universe_ids
-            .iter()
-            .filter(|id| !existing_ids.contains(*id))
-            .filter_map(|id| thread_universe.get(id).cloned())
-            .collect::<Vec<_>>();
+        let mut plan_items = Vec::new();
+        let mut added_thread_count = 0usize;
+        let mut updated_thread_count = 0usize;
 
-        if missing_snapshots.is_empty() {
+        for id in &universe_ids {
+            let Some(best_snapshot) = thread_universe.get(id) else {
+                continue;
+            };
+            match existing_snapshots.get(id) {
+                Some(existing)
+                    if existing.freshness >= best_snapshot.freshness
+                        && snapshot_rollout_matches(existing, best_snapshot) => {}
+                Some(existing) => {
+                    updated_thread_count += 1;
+                    plan_items.push(ThreadSyncPlanItem {
+                        snapshot: best_snapshot.clone(),
+                        existing_rollout_path: Some(existing.rollout_path.clone()),
+                        is_update: true,
+                    });
+                }
+                None => {
+                    added_thread_count += 1;
+                    plan_items.push(ThreadSyncPlanItem {
+                        snapshot: best_snapshot.clone(),
+                        existing_rollout_path: None,
+                        is_update: false,
+                    });
+                }
+            }
+        }
+
+        if plan_items.is_empty() {
             items.push(CodexInstanceThreadSyncItem {
                 instance_id: instance.id.clone(),
                 instance_name: instance.name.clone(),
                 added_thread_count: 0,
+                updated_thread_count: 0,
                 backup_dir: None,
             });
             continue;
         }
 
-        let backup_dir = sync_missing_threads_to_instance(instance, &missing_snapshots)?;
+        let backup_dir = sync_thread_plan_to_instance(instance, &plan_items)?;
         let backup_dir_string = backup_dir.to_string_lossy().to_string();
         backup_dirs.push(backup_dir_string.clone());
         mutated_instance_count += 1;
-        total_synced_thread_count += missing_snapshots.len();
+        total_synced_thread_count += plan_items.len();
+        total_added_thread_count += added_thread_count;
+        total_updated_thread_count += updated_thread_count;
         if is_instance_running(instance, &process_entries) {
             mutated_running_instance_count += 1;
         }
@@ -176,22 +241,29 @@ pub fn sync_threads_across_instances() -> Result<CodexInstanceThreadSyncSummary,
         items.push(CodexInstanceThreadSyncItem {
             instance_id: instance.id.clone(),
             instance_name: instance.name.clone(),
-            added_thread_count: missing_snapshots.len(),
+            added_thread_count,
+            updated_thread_count,
             backup_dir: Some(backup_dir_string),
         });
     }
 
     let message = if total_synced_thread_count == 0 {
-        "所有 Codex 实例已是最新，无需同步线程".to_string()
+        "所有 Codex 实例会话已是最新，无需同步".to_string()
     } else if mutated_running_instance_count > 0 {
         format!(
-            "已为 {} 个实例补齐 {} 条线程，运行中的实例可能需要重启后显示",
-            mutated_instance_count, total_synced_thread_count
+            "已为 {} 个实例同步 {} 条会话（新增 {} 条，更新 {} 条），运行中的实例可能需要重启后显示",
+            mutated_instance_count,
+            total_synced_thread_count,
+            total_added_thread_count,
+            total_updated_thread_count
         )
     } else {
         format!(
-            "已为 {} 个实例补齐 {} 条线程",
-            mutated_instance_count, total_synced_thread_count
+            "已为 {} 个实例同步 {} 条会话（新增 {} 条，更新 {} 条）",
+            mutated_instance_count,
+            total_synced_thread_count,
+            total_added_thread_count,
+            total_updated_thread_count
         )
     };
 
@@ -200,10 +272,30 @@ pub fn sync_threads_across_instances() -> Result<CodexInstanceThreadSyncSummary,
         thread_universe_count: thread_universe.len(),
         mutated_instance_count,
         total_synced_thread_count,
+        total_added_thread_count,
+        total_updated_thread_count,
         items,
         backup_dirs,
         message,
     })
+}
+
+pub fn sync_threads_across_instances_if_all_stopped(
+) -> Result<Option<CodexInstanceThreadSyncSummary>, String> {
+    let instances = collect_instances()?;
+    if instances.len() < 2 {
+        return Ok(None);
+    }
+
+    let process_entries = modules::process::collect_codex_process_entries();
+    if instances
+        .iter()
+        .any(|instance| is_instance_running(instance, &process_entries))
+    {
+        return Ok(None);
+    }
+
+    sync_threads_across_instances().map(Some)
 }
 
 pub fn sync_sessions_to_instance(
@@ -447,22 +539,21 @@ fn load_thread_snapshots(instance: &CodexSyncInstance) -> Result<Vec<ThreadSnaps
             .get_text("title")
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| id.clone());
-        let cwd = row_data
-            .get_text("cwd")
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| "未知工作区".to_string());
         let updated_at = row_data.get_i64("updated_at").and_then(format_timestamp);
         let session_index_entry = session_index_map.get(&id).cloned().unwrap_or_else(|| {
             build_fallback_session_index_entry(&id, &title, updated_at.as_deref())
         });
+        let rollout_path = PathBuf::from(rollout_path);
+        let freshness = build_thread_freshness(&row_data, &session_index_entry, &rollout_path);
 
         snapshots.push(ThreadSnapshot {
             id,
-            cwd,
-            rollout_path: PathBuf::from(rollout_path),
+            rollout_path,
+            merged_rollout_content: None,
             row_data,
             session_index_entry,
             source_root: instance.data_dir.clone(),
+            freshness,
         });
     }
 
@@ -473,9 +564,23 @@ fn sync_missing_threads_to_instance(
     target: &CodexSyncInstance,
     snapshots: &[ThreadSnapshot],
 ) -> Result<PathBuf, String> {
+    let plan_items = snapshots
+        .iter()
+        .cloned()
+        .map(|snapshot| ThreadSyncPlanItem {
+            snapshot,
+            existing_rollout_path: None,
+            is_update: false,
+        })
+        .collect::<Vec<_>>();
+    sync_thread_plan_to_instance(target, &plan_items)
+}
+
+fn sync_thread_plan_to_instance(
+    target: &CodexSyncInstance,
+    plan_items: &[ThreadSyncPlanItem],
+) -> Result<PathBuf, String> {
     let backup_dir = backup_instance_files(&target.data_dir)?;
-    let index_map = read_session_index_map(&target.data_dir)?;
-    let existing_index_ids = index_map.keys().cloned().collect::<HashSet<_>>();
     let target_provider =
         modules::codex_session_visibility::read_history_visibility_provider_for_dir(
             &target.data_dir,
@@ -488,10 +593,10 @@ fn sync_missing_threads_to_instance(
         .transaction()
         .map_err(|error| format!("开启目标实例事务失败 ({}): {}", target.name, error))?;
 
-    for snapshot in snapshots {
-        let target_rollout_path = copy_rollout_file(snapshot, &target.data_dir)?;
+    for item in plan_items {
+        let target_rollout_path = copy_rollout_file_for_plan(item, &target.data_dir, &backup_dir)?;
         rewrite_rollout_provider_for_target(&target_rollout_path, &target_provider)?;
-        let mut row_data = snapshot.row_data.clone();
+        let mut row_data = item.snapshot.row_data.clone();
         row_data.set_text(
             "rollout_path",
             target_rollout_path.to_string_lossy().to_string(),
@@ -504,13 +609,228 @@ fn sync_missing_threads_to_instance(
         .commit()
         .map_err(|error| format!("提交目标实例事务失败 ({}): {}", target.name, error))?;
 
-    append_session_index_entries(&target.data_dir, &existing_index_ids, snapshots)?;
-    update_global_state(
-        &target.data_dir,
-        snapshots.iter().map(|snapshot| snapshot.cwd.as_str()),
-    )?;
-
+    let snapshots = plan_items
+        .iter()
+        .map(|item| item.snapshot.clone())
+        .collect::<Vec<_>>();
+    upsert_session_index_entries(&target.data_dir, &snapshots)?;
     Ok(backup_dir)
+}
+
+fn merge_thread_snapshots(snapshots: &[ThreadSnapshot]) -> Result<ThreadSnapshot, String> {
+    let mut ordered = snapshots.to_vec();
+    ordered.sort_by(|left, right| right.freshness.cmp(&left.freshness));
+    let Some(mut merged) = ordered.first().cloned() else {
+        return Err("没有可同步的会话快照".to_string());
+    };
+
+    if ordered.len() <= 1 {
+        return Ok(merged);
+    }
+
+    let merged_rollout_content = merge_rollout_contents(&ordered)?;
+    let (activity_ms, rollout_len) = rollout_content_activity_and_len(&merged_rollout_content);
+    merged.freshness = ThreadFreshness {
+        activity_ms: merged.freshness.activity_ms.max(activity_ms),
+        rollout_len,
+        rollout_modified_ms: ordered
+            .iter()
+            .map(|snapshot| snapshot.freshness.rollout_modified_ms)
+            .max()
+            .unwrap_or(merged.freshness.rollout_modified_ms),
+    };
+    merged.merged_rollout_content = Some(merged_rollout_content);
+    Ok(merged)
+}
+
+fn merge_rollout_contents(snapshots: &[ThreadSnapshot]) -> Result<String, String> {
+    let mut session_meta = None::<String>;
+    let mut seen_lines = HashSet::<String>::new();
+    let mut merged_lines = Vec::<RolloutMergeLine>::new();
+
+    for (source_rank, snapshot) in snapshots.iter().enumerate() {
+        let content = fs::read_to_string(&snapshot.rollout_path).map_err(|error| {
+            format!(
+                "读取 rollout 文件失败 ({}): {}",
+                snapshot.rollout_path.display(),
+                error
+            )
+        })?;
+
+        for (line_index, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            let parsed = serde_json::from_str::<JsonValue>(trimmed).ok();
+            if parsed
+                .as_ref()
+                .and_then(|value| value.get("type"))
+                .and_then(JsonValue::as_str)
+                == Some("session_meta")
+            {
+                if session_meta.is_none() {
+                    session_meta = Some(trimmed.to_string());
+                }
+                continue;
+            }
+
+            let key = rollout_line_dedupe_key(trimmed, parsed.as_ref());
+            if !seen_lines.insert(key) {
+                continue;
+            }
+
+            merged_lines.push(RolloutMergeLine {
+                line: trimmed.to_string(),
+                timestamp_ms: parsed.as_ref().and_then(parse_rollout_line_timestamp_ms),
+                source_rank,
+                line_index,
+            });
+        }
+    }
+
+    merged_lines.sort_by(|left, right| {
+        match (left.timestamp_ms, right.timestamp_ms) {
+            (Some(left_time), Some(right_time)) => left_time.cmp(&right_time),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        }
+        .then_with(|| left.source_rank.cmp(&right.source_rank))
+        .then_with(|| left.line_index.cmp(&right.line_index))
+    });
+
+    let mut output_lines = Vec::with_capacity(merged_lines.len() + 1);
+    if let Some(meta) = session_meta {
+        output_lines.push(meta);
+    }
+    output_lines.extend(merged_lines.into_iter().map(|line| line.line));
+
+    let mut output = output_lines.join("\n");
+    output.push('\n');
+    Ok(output)
+}
+
+fn rollout_line_dedupe_key(line: &str, parsed: Option<&JsonValue>) -> String {
+    parsed
+        .and_then(|value| serde_json::to_string(value).ok())
+        .unwrap_or_else(|| line.to_string())
+}
+
+fn rollout_content_activity_and_len(content: &str) -> (i128, u64) {
+    let activity_ms = content
+        .lines()
+        .filter_map(|line| serde_json::from_str::<JsonValue>(line.trim()).ok())
+        .filter_map(|value| parse_rollout_line_timestamp_ms(&value))
+        .max()
+        .unwrap_or(0);
+    (activity_ms, content.as_bytes().len() as u64)
+}
+
+fn parse_rollout_line_timestamp_ms(value: &JsonValue) -> Option<i128> {
+    value
+        .get("timestamp")
+        .or_else(|| value.get("time"))
+        .or_else(|| value.get("created_at"))
+        .or_else(|| value.get("createdAt"))
+        .and_then(parse_json_timestamp_ms)
+        .or_else(|| {
+            value
+                .get("payload")
+                .and_then(|payload| {
+                    payload
+                        .get("timestamp")
+                        .or_else(|| payload.get("time"))
+                        .or_else(|| payload.get("created_at"))
+                        .or_else(|| payload.get("createdAt"))
+                })
+                .and_then(parse_json_timestamp_ms)
+        })
+}
+
+fn parse_json_timestamp_ms(value: &JsonValue) -> Option<i128> {
+    match value {
+        JsonValue::Number(number) => number.as_i64().map(normalize_codex_timestamp_ms),
+        JsonValue::String(text) => chrono::DateTime::parse_from_rfc3339(text)
+            .ok()
+            .map(|value| value.timestamp_millis() as i128)
+            .or_else(|| text.parse::<i64>().ok().map(normalize_codex_timestamp_ms)),
+        _ => None,
+    }
+}
+
+fn snapshot_rollout_matches(existing: &ThreadSnapshot, expected: &ThreadSnapshot) -> bool {
+    let Some(expected_content) = expected.merged_rollout_content.as_deref() else {
+        return paths_point_to_same_file(&existing.rollout_path, &expected.rollout_path)
+            || existing.freshness == expected.freshness;
+    };
+
+    fs::read_to_string(&existing.rollout_path)
+        .map(|content| content == expected_content)
+        .unwrap_or(false)
+}
+
+fn build_thread_freshness(
+    row_data: &ThreadRowData,
+    session_index_entry: &JsonValue,
+    rollout_path: &Path,
+) -> ThreadFreshness {
+    let row_activity_ms = row_data
+        .get_i64("updated_at")
+        .map(normalize_codex_timestamp_ms)
+        .unwrap_or(0);
+    let index_activity_ms = parse_session_index_updated_at_ms(session_index_entry).unwrap_or(0);
+    let (rollout_modified_ms, rollout_len) = rollout_file_metadata(rollout_path);
+
+    ThreadFreshness {
+        activity_ms: row_activity_ms.max(index_activity_ms),
+        rollout_len,
+        rollout_modified_ms,
+    }
+}
+
+fn normalize_codex_timestamp_ms(timestamp: i64) -> i128 {
+    let timestamp = timestamp as i128;
+    if timestamp > 10_000_000_000_000 {
+        timestamp / 1_000
+    } else if timestamp > 10_000_000_000 {
+        timestamp
+    } else {
+        timestamp * 1_000
+    }
+}
+
+fn parse_session_index_updated_at_ms(entry: &JsonValue) -> Option<i128> {
+    [
+        "updated_at",
+        "updatedAt",
+        "last_updated_at",
+        "lastUpdatedAt",
+    ]
+    .iter()
+    .filter_map(|key| entry.get(*key))
+    .find_map(|value| match value {
+        JsonValue::Number(number) => number.as_i64().map(normalize_codex_timestamp_ms),
+        JsonValue::String(text) => chrono::DateTime::parse_from_rfc3339(text)
+            .ok()
+            .map(|value| value.timestamp_millis() as i128)
+            .or_else(|| text.parse::<i64>().ok().map(normalize_codex_timestamp_ms)),
+        _ => None,
+    })
+}
+
+fn rollout_file_metadata(path: &Path) -> (i128, u64) {
+    let Ok(metadata) = fs::metadata(path) else {
+        return (0, 0);
+    };
+    let modified_ms = metadata
+        .modified()
+        .ok()
+        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+        .map(|value| value.as_millis() as i128)
+        .unwrap_or(0);
+    (modified_ms, metadata.len())
 }
 
 fn open_readonly_connection(db_path: &Path) -> Result<Connection, String> {
@@ -648,130 +968,110 @@ fn build_fallback_session_index_entry(
     value
 }
 
-fn append_session_index_entries(
+fn upsert_session_index_entries(
     root_dir: &Path,
-    existing_ids: &HashSet<String>,
     snapshots: &[ThreadSnapshot],
 ) -> Result<(), String> {
     let path = root_dir.join(SESSION_INDEX_FILE);
-    let mut lines = Vec::new();
-
-    for snapshot in snapshots {
-        if existing_ids.contains(&snapshot.id) {
-            continue;
-        }
-        lines.push(
+    let replacements = snapshots
+        .iter()
+        .map(|snapshot| {
             serde_json::to_string(&snapshot.session_index_entry)
-                .map_err(|error| format!("序列化 session_index 条目失败: {}", error))?,
-        );
-    }
+                .map(|line| (snapshot.id.clone(), line))
+                .map_err(|error| format!("序列化 session_index 条目失败: {}", error))
+        })
+        .collect::<Result<HashMap<_, _>, _>>()?;
 
-    if lines.is_empty() {
+    if replacements.is_empty() {
         return Ok(());
     }
 
-    let needs_prefix = path.exists() && !file_ends_with_newline(&path)?;
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .map_err(|error| {
+    let existing_content = if path.exists() {
+        fs::read_to_string(&path).map_err(|error| {
             format!(
-                "打开 session_index.jsonl 失败 ({}): {}",
+                "读取 session_index.jsonl 失败 ({}): {}",
                 path.display(),
                 error
             )
-        })?;
-
-    use std::io::Write;
-    if needs_prefix {
-        file.write_all(b"\n").map_err(|error| {
-            format!(
-                "写入 session_index 换行失败 ({}): {}",
-                path.display(),
-                error
-            )
-        })?;
-    }
-
-    for line in lines {
-        file.write_all(line.as_bytes())
-            .and_then(|_| file.write_all(b"\n"))
-            .map_err(|error| {
-                format!(
-                    "追加 session_index 条目失败 ({}): {}",
-                    path.display(),
-                    error
-                )
-            })?;
-    }
-
-    Ok(())
-}
-
-fn update_global_state<'a>(
-    root_dir: &Path,
-    workspaces: impl Iterator<Item = &'a str>,
-) -> Result<(), String> {
-    let path = root_dir.join(GLOBAL_STATE_FILE);
-    let mut value = if path.exists() {
-        let raw = fs::read_to_string(&path)
-            .map_err(|error| format!("读取全局状态失败 ({}): {}", path.display(), error))?;
-        serde_json::from_str::<JsonValue>(&raw).unwrap_or_else(|_| json!({}))
+        })?
     } else {
-        json!({})
+        String::new()
     };
 
-    if !value.is_object() {
-        value = json!({});
+    let mut lines = Vec::new();
+    let mut seen_ids = HashSet::new();
+    for line in existing_content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            lines.push(line.to_string());
+            continue;
+        }
+        let replacement = serde_json::from_str::<JsonValue>(trimmed)
+            .ok()
+            .and_then(|parsed| {
+                parsed
+                    .get("id")
+                    .and_then(JsonValue::as_str)
+                    .map(str::to_string)
+            })
+            .and_then(|id| {
+                replacements.get(&id).map(|replacement| {
+                    seen_ids.insert(id);
+                    replacement.clone()
+                })
+            });
+        lines.push(replacement.unwrap_or_else(|| line.to_string()));
     }
 
-    let Some(object) = value.as_object_mut() else {
-        return Err("全局状态文件格式无效".to_string());
-    };
-
-    let unique_workspaces = workspaces
-        .filter(|item| !item.trim().is_empty())
-        .map(|item| item.to_string())
-        .collect::<HashSet<_>>();
-
-    merge_string_array(object, "project-order", &unique_workspaces);
-    merge_string_array(object, "electron-saved-workspace-roots", &unique_workspaces);
-
-    let serialized = serde_json::to_string_pretty(&value)
-        .map_err(|error| format!("序列化全局状态失败: {}", error))?;
-    fs::write(&path, format!("{}\n", serialized))
-        .map_err(|error| format!("写入全局状态失败 ({}): {}", path.display(), error))?;
-    Ok(())
-}
-
-fn merge_string_array(
-    object: &mut serde_json::Map<String, JsonValue>,
-    key: &str,
-    additions: &HashSet<String>,
-) {
-    let mut values = object
-        .get(key)
-        .and_then(JsonValue::as_array)
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|item| item.as_str().map(|value| value.to_string()))
-        .collect::<Vec<_>>();
-
-    for addition in additions {
-        if !values.contains(addition) {
-            values.push(addition.clone());
+    let mut ordered_ids = replacements.keys().cloned().collect::<Vec<_>>();
+    ordered_ids.sort();
+    for id in ordered_ids {
+        if !seen_ids.contains(&id) {
+            if let Some(line) = replacements.get(&id) {
+                lines.push(line.clone());
+            }
         }
     }
 
-    object.insert(
-        key.to_string(),
-        JsonValue::Array(values.into_iter().map(JsonValue::String).collect()),
-    );
+    let mut output = lines.join("\n");
+    output.push('\n');
+    fs::write(&path, output).map_err(|error| {
+        format!(
+            "写入 session_index.jsonl 失败 ({}): {}",
+            path.display(),
+            error
+        )
+    })?;
+    Ok(())
 }
 
-fn copy_rollout_file(snapshot: &ThreadSnapshot, target_root: &Path) -> Result<PathBuf, String> {
+fn copy_rollout_file_for_plan(
+    item: &ThreadSyncPlanItem,
+    target_root: &Path,
+    backup_dir: &Path,
+) -> Result<PathBuf, String> {
+    let target_path = resolve_target_rollout_path(
+        &item.snapshot,
+        target_root,
+        item.existing_rollout_path.as_deref(),
+    )?;
+    if item.is_update {
+        backup_existing_rollout_file(backup_dir, target_root, &target_path, &item.snapshot.id)?;
+    }
+    copy_rollout_file_to_path(&item.snapshot, &target_path)
+}
+
+fn resolve_target_rollout_path(
+    snapshot: &ThreadSnapshot,
+    target_root: &Path,
+    existing_rollout_path: Option<&Path>,
+) -> Result<PathBuf, String> {
+    if let Some(existing_path) = existing_rollout_path {
+        if existing_path.starts_with(target_root) {
+            return Ok(existing_path.to_path_buf());
+        }
+    }
+
     let relative_path = snapshot
         .rollout_path
         .strip_prefix(&snapshot.source_root)
@@ -782,7 +1082,39 @@ fn copy_rollout_file(snapshot: &ThreadSnapshot, target_root: &Path) -> Result<Pa
                 snapshot.rollout_path.display()
             )
         })?;
-    let target_path = target_root.join(relative_path);
+    Ok(target_root.join(relative_path))
+}
+
+fn copy_rollout_file_to_path(
+    snapshot: &ThreadSnapshot,
+    target_path: &Path,
+) -> Result<PathBuf, String> {
+    if let Some(content) = snapshot.merged_rollout_content.as_deref() {
+        let parent = target_path
+            .parent()
+            .ok_or_else(|| format!("无法解析目标 rollout 父目录: {}", target_path.display()))?;
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("创建 rollout 目录失败 ({}): {}", parent.display(), error))?;
+        if fs::read_to_string(target_path)
+            .map(|existing| existing == content)
+            .unwrap_or(false)
+        {
+            return Ok(target_path.to_path_buf());
+        }
+        fs::write(target_path, content).map_err(|error| {
+            format!(
+                "写入合并 rollout 文件失败 ({}): {}",
+                target_path.display(),
+                error
+            )
+        })?;
+        return Ok(target_path.to_path_buf());
+    }
+
+    if paths_point_to_same_file(&snapshot.rollout_path, target_path) {
+        return Ok(target_path.to_path_buf());
+    }
+
     let parent = target_path
         .parent()
         .ok_or_else(|| format!("无法解析目标 rollout 父目录: {}", target_path.display()))?;
@@ -796,7 +1128,65 @@ fn copy_rollout_file(snapshot: &ThreadSnapshot, target_root: &Path) -> Result<Pa
             error
         )
     })?;
-    Ok(target_path)
+    Ok(target_path.to_path_buf())
+}
+
+fn backup_existing_rollout_file(
+    backup_dir: &Path,
+    target_root: &Path,
+    rollout_path: &Path,
+    session_id: &str,
+) -> Result<(), String> {
+    if !rollout_path.exists() {
+        return Ok(());
+    }
+
+    let backup_path = match rollout_path.strip_prefix(target_root) {
+        Ok(relative_path) => backup_dir.join("rollouts").join(relative_path),
+        Err(_) => backup_dir
+            .join("rollouts")
+            .join(format!("{}.jsonl.bak", sanitize_file_name(session_id))),
+    };
+    let parent = backup_path
+        .parent()
+        .ok_or_else(|| format!("无法解析 rollout 备份父目录: {}", backup_path.display()))?;
+    fs::create_dir_all(parent).map_err(|error| {
+        format!(
+            "创建 rollout 备份目录失败 ({}): {}",
+            parent.display(),
+            error
+        )
+    })?;
+    fs::copy(rollout_path, &backup_path).map_err(|error| {
+        format!(
+            "备份目标 rollout 文件失败 ({} -> {}): {}",
+            rollout_path.display(),
+            backup_path.display(),
+            error
+        )
+    })?;
+    Ok(())
+}
+
+fn paths_point_to_same_file(left: &Path, right: &Path) -> bool {
+    if left == right {
+        return true;
+    }
+
+    match (fs::canonicalize(left), fs::canonicalize(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
+fn sanitize_file_name(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| match character {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => character,
+            _ => '_',
+        })
+        .collect()
 }
 
 fn rewrite_rollout_provider_for_target(
@@ -899,12 +1289,6 @@ fn to_sql_literal(value: &Value) -> String {
                 .collect::<String>()
         ),
     }
-}
-
-fn file_ends_with_newline(path: &Path) -> Result<bool, String> {
-    let bytes =
-        fs::read(path).map_err(|error| format!("读取文件失败 ({}): {}", path.display(), error))?;
-    Ok(bytes.is_empty() || bytes.last() == Some(&b'\n'))
 }
 
 fn format_timestamp(timestamp: i64) -> Option<String> {

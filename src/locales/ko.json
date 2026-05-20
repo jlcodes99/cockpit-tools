@@ -1691,6 +1691,11 @@
     },
     "oauth": {
       "desc": "아래 버튼을 클릭해 브라우저에서 OpenAI 인증을 완료하세요",
+      "trialGuideTitle": "체험 등록 팁",
+      "trialGuideDesc": "새 계정을 준비할 때는 장기간 접근 가능한 Gmail 주소를 우선 사용하는 것이 계정 유지와 이후 인증에 더 안정적입니다.",
+      "trialGuideAliasDesc": "기본 Gmail 하나로 최대 5개의 별칭 주소를 준비해 ChatGPT 등록 기록을 구분할 수 있습니다. 대상 서비스 규칙에 맞게 사용하세요.",
+      "trialGuideLink": "체험 가이드 보기",
+      "gmailAliasLink": "Gmail 별칭 생성",
       "preparing": "인증 링크 준비 중...",
       "exchanging": "토큰 교환 중...",
       "portInUse": "포트 {{port}}가 이미 사용 중입니다. 해당 포트를 사용하는 앱을 종료한 뒤 다시 시도해 주세요.",
@@ -1850,7 +1855,8 @@
         "quotaLowFirst": "낮은 할당량 우선",
         "planHighFirst": "상위 요금제 우선",
         "planLowFirst": "하위 요금제 우선",
-        "expirySoonFirst": "만료 임박 우선"
+        "expirySoonFirst": "만료 임박 우선",
+        "custom": "사용자 지정"
       },
       "statusUnconfigured": "미설정",
       "expandDetails": "세부 정보 펼치기",
@@ -1892,7 +1898,25 @@
       "oauthBinding": {
         "desc": "선택 사항입니다. 연결하지 않으면 API 서비스는 기존 API Key 로직으로 실행됩니다. 연결하면 로그인 상태는 OAuth 계정을 사용하고 Provider는 현재 API 서비스 설정을 사용합니다.",
         "currentService": "API 서비스: {{name}}"
-      }
+      },
+      "customRoutingEdit": "사용자 지정 라우팅 편집",
+      "customRoutingTitle": "사용자 지정 라우팅",
+      "customRoutingDesc": "계정별 우선순위와 가중치를 설정해 계정 선택 순서와 같은 우선순위 내 부하 분산을 제어합니다.",
+      "customRoutingPriorityTitle": "우선순위",
+      "customRoutingPriorityDesc": "값이 높을수록 먼저 선택됩니다. 높은 우선순위 계정을 사용할 수 없을 때만 낮은 우선순위를 시도합니다.",
+      "customRoutingWeightTitle": "가중치",
+      "customRoutingWeightDesc": "같은 우선순위 안에서 부하 분산에 사용됩니다. 가중치가 높을수록 더 많은 요청을 받습니다.",
+      "customRoutingSearch": "이메일, 요금제 또는 계정 ID 검색",
+      "customRoutingSelected": "{{count}}개 선택됨",
+      "customRoutingPriorityShort": "우선순위",
+      "customRoutingWeightShort": "가중치",
+      "customRoutingApplyBatch": "선택 항목에 적용",
+      "customRoutingReset": "초기화",
+      "customRoutingAccountColumn": "계정",
+      "customRoutingQuotaColumn": "한도",
+      "customRoutingEmpty": "현재 API 서비스 모음에 설정 가능한 계정이 없습니다",
+      "customRoutingSave": "라우팅 저장",
+      "customRoutingSaveSuccess": "API 서비스 사용자 지정 라우팅이 업데이트되었습니다"
     },
     "local": {
       "desc": "~/.codex/auth.json에서 현재 로그인된 계정 가져오기",

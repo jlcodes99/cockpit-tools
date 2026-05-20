@@ -394,7 +394,7 @@ export function CodexSessionManager() {
       const confirmed = await confirmDialog(
         t(
           'codex.sessionManager.confirm.syncMessage',
-          '会将缺失的线程与对应会话同步到所有实例中，已有内容不会重复写入，写入前会先备份目标实例关键文件。确认继续？',
+          '会将缺失会话同步到所有实例中，并对同 ID 会话做事件级合并，尽量保留各实例独有消息；写入前会先备份目标实例关键文件和旧会话文件。确认继续？',
         ),
         {
           title: t('codex.sessionManager.actions.syncSessions', '同步会话'),

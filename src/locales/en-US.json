@@ -1751,6 +1751,11 @@
     },
     "oauth": {
       "desc": "Click the button below and complete OpenAI authorization in your browser",
+      "trialGuideTitle": "Trial signup tips",
+      "trialGuideDesc": "When preparing a new account, prefer a Gmail address you can keep long term; it tends to make retention and later verification easier.",
+      "trialGuideAliasDesc": "One primary Gmail can prepare up to 5 alias addresses for separating ChatGPT signup records; use them according to the target service rules.",
+      "trialGuideLink": "View trial guide",
+      "gmailAliasLink": "Generate Gmail alias",
       "preparing": "Preparing authorization link...",
       "exchanging": "Exchanging token...",
       "portInUse": "Port {{port}} is already in use. Please close the app using this port and try again.",
@@ -1763,12 +1768,12 @@
       "timeoutRetry": "Refresh Auth Link"
     },
     "token": {
-      "desc": "Paste auth.json, account JSON, Sub2API JSON, accessToken, or refresh_token.",
-      "placeholder": "Example: paste accessToken directly, a Sub2API export JSON, or {\"accessToken\":\"eyJ...\"}",
+      "desc": "Paste session JSON, auth.json, account JSON, Sub2API JSON, accessToken, or refresh_token.",
+      "placeholder": "Example: paste session JSON, accessToken, Sub2API export JSON, or {\"accessToken\":\"eyJ...\"}",
       "formatSummary": "Required fields and examples",
-      "formatRequired": "Supports full tokens (id_token + access_token), Sub2API export JSON, accessToken only, or refresh_token only. refresh_token-only import exchanges it online for full credentials first.",
+      "formatRequired": "Supports session JSON, full tokens (id_token + access_token), Sub2API export JSON, accessToken only, or refresh_token only. refresh_token-only import exchanges it online for full credentials first.",
       "formatSingleLabel": "Full tokens",
-      "formatRefreshOnlyLabel": "accessToken / refresh_token only",
+      "formatRefreshOnlyLabel": "session / accessToken / refresh_token example",
       "formatBatchLabel": "Batch example"
     },
     "exportFormat": {
@@ -1928,7 +1933,8 @@
         "quotaLowFirst": "Low Quota First",
         "planHighFirst": "High Plan First",
         "planLowFirst": "Low Plan First",
-        "expirySoonFirst": "Expiry Soon First"
+        "expirySoonFirst": "Expiry Soon First",
+        "custom": "Custom"
       },
       "stats": {
         "requests": "Requests",
@@ -1963,7 +1969,25 @@
       "oauthBinding": {
         "desc": "Optional. Without a link, the API service keeps the original API-key flow; after linking, sign-in uses the OAuth account and Provider uses the API service config.",
         "currentService": "API Service: {{name}}"
-      }
+      },
+      "customRoutingEdit": "Edit Custom Routing",
+      "customRoutingTitle": "Custom Routing",
+      "customRoutingDesc": "Set priority and weight per account to control account selection order and same-priority load distribution.",
+      "customRoutingPriorityTitle": "Priority",
+      "customRoutingPriorityDesc": "Higher values are selected first; lower-priority accounts are tried only when higher-priority accounts are unavailable.",
+      "customRoutingWeightTitle": "Weight",
+      "customRoutingWeightDesc": "Used for load balancing within the same priority. Higher weight means more requests.",
+      "customRoutingSearch": "Search email, plan, or account ID",
+      "customRoutingSelected": "Selected {{count}}",
+      "customRoutingPriorityShort": "Priority",
+      "customRoutingWeightShort": "Weight",
+      "customRoutingApplyBatch": "Apply to selected",
+      "customRoutingReset": "Reset",
+      "customRoutingAccountColumn": "Account",
+      "customRoutingQuotaColumn": "Quota",
+      "customRoutingEmpty": "No configurable accounts in the current API service collection",
+      "customRoutingSave": "Save Custom Routing",
+      "customRoutingSaveSuccess": "API service custom routing updated"
     },
     "api": {
       "baseUrl": "Base URL",

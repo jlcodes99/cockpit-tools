@@ -1,10 +1,11 @@
 use crate::models::codex::{CodexAccount, CodexApiProviderMode};
 use crate::models::codex_local_access::{
     CodexLocalAccessAccountStats, CodexLocalAccessCollection, CodexLocalAccessCredentialMode,
-    CodexLocalAccessCustomCredential, CodexLocalAccessPortCleanupResult,
-    CodexLocalAccessRoutingStrategy, CodexLocalAccessScope, CodexLocalAccessState,
-    CodexLocalAccessStats, CodexLocalAccessStatsWindow, CodexLocalAccessTestFailure,
-    CodexLocalAccessTestResult, CodexLocalAccessUsageEvent, CodexLocalAccessUsageStats,
+    CodexLocalAccessCustomCredential, CodexLocalAccessCustomRoutingRule,
+    CodexLocalAccessPortCleanupResult, CodexLocalAccessRoutingStrategy, CodexLocalAccessScope,
+    CodexLocalAccessState, CodexLocalAccessStats, CodexLocalAccessStatsWindow,
+    CodexLocalAccessTestFailure, CodexLocalAccessTestResult, CodexLocalAccessUsageEvent,
+    CodexLocalAccessUsageStats,
 };
 use crate::modules::atomic_write::write_string_atomic;
 use crate::modules::{codex_account, codex_oauth, codex_protocol, codex_wakeup, logger, process};
@@ -15,6 +16,7 @@ use reqwest::header::{HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TY
 use reqwest::{Client, Method, NoProxy, Proxy, StatusCode, Url};
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet};
+use std::error::Error as StdError;
 use std::net::{Ipv4Addr, TcpListener as StdTcpListener};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -49,6 +51,10 @@ const PREPARED_ACCOUNT_CACHE_TTL_MS: i64 = 30 * 1000;
 const DAY_WINDOW_MS: i64 = 24 * 60 * 60 * 1000;
 const WEEK_WINDOW_MS: i64 = 7 * DAY_WINDOW_MS;
 const MONTH_WINDOW_MS: i64 = 30 * DAY_WINDOW_MS;
+const CUSTOM_ROUTING_PRIORITY_MIN: i32 = 0;
+const CUSTOM_ROUTING_PRIORITY_MAX: i32 = 100;
+const CUSTOM_ROUTING_WEIGHT_MIN: u32 = 1;
+const CUSTOM_ROUTING_WEIGHT_MAX: u32 = 100;
 const GATEWAY_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 const GATEWAY_PORT_RELEASE_TIMEOUT: Duration = Duration::from_secs(5);
 const GATEWAY_PORT_RELEASE_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -2617,6 +2623,7 @@ fn compare_routing_candidates(
                 .then_with(|| compare_option_desc(left.plan_rank, right.plan_rank))
                 .then_with(|| compare_option_desc(left.remaining_quota, right.remaining_quota))
         }
+        CodexLocalAccessRoutingStrategy::Custom => Ordering::Equal,
     };
 
     ordering.then_with(|| {
@@ -2632,10 +2639,146 @@ fn compare_routing_candidates(
     })
 }
 
+fn normalize_custom_routing_rule(
+    rule: CodexLocalAccessCustomRoutingRule,
+) -> Option<CodexLocalAccessCustomRoutingRule> {
+    let account_id = rule.account_id.trim().to_string();
+    if account_id.is_empty() {
+        return None;
+    }
+
+    Some(CodexLocalAccessCustomRoutingRule {
+        account_id,
+        priority: rule
+            .priority
+            .clamp(CUSTOM_ROUTING_PRIORITY_MIN, CUSTOM_ROUTING_PRIORITY_MAX),
+        weight: rule
+            .weight
+            .clamp(CUSTOM_ROUTING_WEIGHT_MIN, CUSTOM_ROUTING_WEIGHT_MAX),
+    })
+}
+
+fn normalize_custom_routing_rules(
+    rules: Vec<CodexLocalAccessCustomRoutingRule>,
+    account_ids: &[String],
+) -> Vec<CodexLocalAccessCustomRoutingRule> {
+    let valid_account_ids: HashSet<&str> = account_ids.iter().map(String::as_str).collect();
+    let mut normalized = Vec::new();
+    let mut seen = HashSet::new();
+
+    for rule in rules {
+        let Some(rule) = normalize_custom_routing_rule(rule) else {
+            continue;
+        };
+        if !valid_account_ids.contains(rule.account_id.as_str()) {
+            continue;
+        }
+        if seen.insert(rule.account_id.clone()) {
+            normalized.push(rule);
+        }
+    }
+
+    normalized
+}
+
+fn custom_rule_map(rules: &[CodexLocalAccessCustomRoutingRule]) -> HashMap<&str, (i32, u32)> {
+    rules
+        .iter()
+        .map(|rule| {
+            (
+                rule.account_id.as_str(),
+                (
+                    rule.priority
+                        .clamp(CUSTOM_ROUTING_PRIORITY_MIN, CUSTOM_ROUTING_PRIORITY_MAX),
+                    rule.weight
+                        .clamp(CUSTOM_ROUTING_WEIGHT_MIN, CUSTOM_ROUTING_WEIGHT_MAX),
+                ),
+            )
+        })
+        .collect()
+}
+
+fn weighted_group_order(
+    group: &[String],
+    weights: &HashMap<&str, (i32, u32)>,
+    start: usize,
+) -> Vec<String> {
+    if group.len() <= 1 {
+        return group.to_vec();
+    }
+
+    let total_weight = group.iter().fold(0usize, |sum, account_id| {
+        let weight = weights
+            .get(account_id.as_str())
+            .map(|(_, weight)| *weight)
+            .unwrap_or(CUSTOM_ROUTING_WEIGHT_MIN) as usize;
+        sum.saturating_add(weight.max(1))
+    });
+    if total_weight == 0 {
+        return group.to_vec();
+    }
+
+    let mut slot = start % total_weight;
+    let mut first_index = 0usize;
+    for (index, account_id) in group.iter().enumerate() {
+        let weight = weights
+            .get(account_id.as_str())
+            .map(|(_, weight)| *weight)
+            .unwrap_or(CUSTOM_ROUTING_WEIGHT_MIN) as usize;
+        if slot < weight {
+            first_index = index;
+            break;
+        }
+        slot -= weight;
+    }
+
+    (0..group.len())
+        .map(|offset| group[(first_index + offset) % group.len()].clone())
+        .collect()
+}
+
+fn apply_custom_routing_strategy(
+    account_ids: &[String],
+    rules: &[CodexLocalAccessCustomRoutingRule],
+    start: usize,
+) -> Vec<String> {
+    let rule_map = custom_rule_map(rules);
+    let mut priority_groups: Vec<(i32, Vec<String>)> = Vec::new();
+
+    for account_id in account_ids {
+        let priority = rule_map
+            .get(account_id.as_str())
+            .map(|(priority, _)| *priority)
+            .unwrap_or(CUSTOM_ROUTING_PRIORITY_MIN);
+        if let Some((_, group)) = priority_groups
+            .iter_mut()
+            .find(|(group_priority, _)| *group_priority == priority)
+        {
+            group.push(account_id.clone());
+        } else {
+            priority_groups.push((priority, vec![account_id.clone()]));
+        }
+    }
+
+    priority_groups.sort_by(|left, right| right.0.cmp(&left.0));
+
+    let mut ordered = Vec::with_capacity(account_ids.len());
+    for (_, group) in priority_groups {
+        ordered.extend(weighted_group_order(&group, &rule_map, start));
+    }
+    ordered
+}
+
 fn apply_routing_strategy(
     account_ids: &[String],
     strategy: CodexLocalAccessRoutingStrategy,
+    custom_rules: &[CodexLocalAccessCustomRoutingRule],
+    start: usize,
 ) -> Vec<String> {
+    if strategy == CodexLocalAccessRoutingStrategy::Custom {
+        return apply_custom_routing_strategy(account_ids, custom_rules, start);
+    }
+
     let original_index: HashMap<String, usize> = account_ids
         .iter()
         .enumerate()
@@ -3640,6 +3783,16 @@ fn sanitize_collection(
         changed = true;
     }
 
+    let original_custom_routing_rules = std::mem::take(&mut collection.custom_routing_rules);
+    let normalized_custom_routing_rules = normalize_custom_routing_rules(
+        original_custom_routing_rules.clone(),
+        &collection.account_ids,
+    );
+    if normalized_custom_routing_rules != original_custom_routing_rules {
+        changed = true;
+    }
+    collection.custom_routing_rules = normalized_custom_routing_rules;
+
     Ok((changed, valid_account_ids))
 }
 
@@ -3668,6 +3821,7 @@ async fn ensure_runtime_loaded_without_start() -> Result<(), String> {
             active_custom_credential_id: None,
             custom_base_url: None,
             custom_api_key: None,
+            custom_routing_rules: Vec::new(),
             restrict_free_accounts: true,
             bound_oauth_account_id: None,
             account_ids: Vec::new(),
@@ -4648,6 +4802,7 @@ pub async fn save_local_access_accounts(
                 active_custom_credential_id: None,
                 custom_base_url: None,
                 custom_api_key: None,
+                custom_routing_rules: Vec::new(),
                 restrict_free_accounts: true,
                 bound_oauth_account_id: None,
                 account_ids: Vec::new(),
@@ -4710,6 +4865,34 @@ pub async fn update_local_access_routing_strategy(
     }
 
     collection.routing_strategy = strategy;
+    collection.updated_at = now_ms();
+    save_collection_to_disk(&collection)?;
+
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        sync_runtime_collection(&mut runtime, collection);
+    }
+
+    snapshot_state().await
+}
+
+pub async fn update_local_access_custom_routing(
+    rules: Vec<CodexLocalAccessCustomRoutingRule>,
+) -> Result<CodexLocalAccessState, String> {
+    ensure_runtime_loaded().await?;
+
+    let maybe_collection = {
+        let runtime = gateway_runtime().lock().await;
+        runtime.collection.clone()
+    };
+
+    let Some(mut collection) = maybe_collection else {
+        return Err("本地接入集合尚未创建".to_string());
+    };
+
+    collection.custom_routing_rules =
+        normalize_custom_routing_rules(rules, &collection.account_ids);
+    collection.routing_strategy = CodexLocalAccessRoutingStrategy::Custom;
     collection.updated_at = now_ms();
     save_collection_to_disk(&collection)?;
 
@@ -6438,6 +6621,26 @@ fn should_retry_upstream_send_error(error: &reqwest::Error) -> bool {
     error.is_timeout() || error.is_connect() || error.is_request()
 }
 
+fn format_reqwest_error_chain(error: &reqwest::Error) -> String {
+    let mut parts = vec![error.to_string()];
+    let mut source = StdError::source(error);
+    while let Some(err) = source {
+        let detail = err.to_string();
+        if !detail.trim().is_empty() && parts.last().map(|item| item != &detail).unwrap_or(true) {
+            parts.push(detail);
+        }
+        source = StdError::source(err);
+    }
+    parts.join(" | caused by: ")
+}
+
+fn format_upstream_network_error(error: &reqwest::Error) -> String {
+    format!(
+        "Codex 上游网络或代理不可用，未能连接到官方 Codex 服务。请检查网络、代理配置以及 chatgpt.com 可访问性。技术细节: {}",
+        format_reqwest_error_chain(error)
+    )
+}
+
 fn upstream_send_retry_delay(retry_attempt: usize) -> Duration {
     let multiplier = match retry_attempt {
         0 | 1 => 1u32,
@@ -6547,7 +6750,7 @@ async fn send_upstream_request(
                 let should_retry = retry_attempt < UPSTREAM_SEND_RETRY_ATTEMPTS
                     && should_retry_upstream_send_error(&error);
                 if !should_retry {
-                    return Err(format!("请求 Codex 上游失败: {}", error));
+                    return Err(format_upstream_network_error(&error));
                 }
                 tokio::time::sleep(upstream_send_retry_delay(retry_attempt + 1)).await;
             }
@@ -6594,13 +6797,23 @@ async fn proxy_request_with_account_pool(
 
     loop {
         let start = GATEWAY_ROUND_ROBIN_CURSOR.fetch_add(1, Ordering::Relaxed);
-        let ordered_account_ids = build_ordered_account_ids(
-            &collection.account_ids,
-            start,
-            affinity_account_id.as_deref(),
-        );
+        let ordered_account_ids =
+            if collection.routing_strategy == CodexLocalAccessRoutingStrategy::Custom {
+                collection.account_ids.clone()
+            } else {
+                build_ordered_account_ids(
+                    &collection.account_ids,
+                    start,
+                    affinity_account_id.as_deref(),
+                )
+            };
         let strategy_account_ids = pin_account_to_front(
-            apply_routing_strategy(&ordered_account_ids, collection.routing_strategy),
+            apply_routing_strategy(
+                &ordered_account_ids,
+                collection.routing_strategy,
+                &collection.custom_routing_rules,
+                start,
+            ),
             affinity_account_id.as_deref(),
         );
         let mut attempted_in_round = false;
@@ -6686,10 +6899,11 @@ async fn proxy_request_with_account_pool(
                 let mut response = match first_response {
                     Ok(response) => response,
                     Err(err) => {
+                        last_status = StatusCode::BAD_GATEWAY.as_u16();
                         log_codex_api_failure(
                             None,
                             Some(request),
-                            None,
+                            Some(last_status),
                             Some(account.id.as_str()),
                             Some(account.email.as_str()),
                             None,
@@ -6715,10 +6929,11 @@ async fn proxy_request_with_account_pool(
                             {
                                 Ok(response) => response,
                                 Err(err) => {
+                                    last_status = StatusCode::BAD_GATEWAY.as_u16();
                                     log_codex_api_failure(
                                         None,
                                         Some(request),
-                                        None,
+                                        Some(last_status),
                                         Some(account.id.as_str()),
                                         Some(account.email.as_str()),
                                         None,
@@ -7106,14 +7321,17 @@ async fn handle_connection(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_chat_completion_payload, build_chat_completion_stream_body,
+        apply_routing_strategy, build_chat_completion_payload, build_chat_completion_stream_body,
         build_codex_client_models_response, build_images_api_payload, build_local_models_response,
         build_ordered_account_ids, build_request_routing_hint, extract_usage_capture,
-        is_responses_completion_event, parse_codex_retry_after,
+        is_responses_completion_event, normalize_custom_routing_rules, parse_codex_retry_after,
         parse_responses_payload_from_upstream, prepare_gateway_request,
         resolve_supported_model_alias, should_retry_single_account_upstream_status,
         should_treat_response_as_stream, should_try_next_account, GatewayResponseAdapter,
         ParsedRequest, ResponseUsageCollector,
+    };
+    use crate::models::codex_local_access::{
+        CodexLocalAccessCustomRoutingRule, CodexLocalAccessRoutingStrategy,
     };
     use reqwest::StatusCode;
     use serde_json::{json, Value};
@@ -7283,6 +7501,129 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
         );
 
         assert_eq!(ordered, vec!["acc-c", "acc-b", "acc-a"]);
+    }
+
+    #[test]
+    fn custom_routing_prefers_higher_priority_accounts() {
+        let account_ids = vec![
+            "acc-low".to_string(),
+            "acc-high-a".to_string(),
+            "acc-high-b".to_string(),
+        ];
+        let rules = vec![
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-low".to_string(),
+                priority: 10,
+                weight: 1,
+            },
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-high-a".to_string(),
+                priority: 40,
+                weight: 1,
+            },
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-high-b".to_string(),
+                priority: 40,
+                weight: 1,
+            },
+        ];
+
+        let ordered = apply_routing_strategy(
+            &account_ids,
+            CodexLocalAccessRoutingStrategy::Custom,
+            &rules,
+            0,
+        );
+
+        assert_eq!(ordered, vec!["acc-high-a", "acc-high-b", "acc-low"]);
+    }
+
+    #[test]
+    fn custom_routing_uses_weight_for_same_priority_first_pick() {
+        let account_ids = vec!["acc-heavy".to_string(), "acc-light".to_string()];
+        let rules = vec![
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-heavy".to_string(),
+                priority: 20,
+                weight: 3,
+            },
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-light".to_string(),
+                priority: 20,
+                weight: 1,
+            },
+        ];
+
+        let first_picks = (0..8)
+            .map(|start| {
+                apply_routing_strategy(
+                    &account_ids,
+                    CodexLocalAccessRoutingStrategy::Custom,
+                    &rules,
+                    start,
+                )[0]
+                .clone()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            first_picks,
+            vec![
+                "acc-heavy",
+                "acc-heavy",
+                "acc-heavy",
+                "acc-light",
+                "acc-heavy",
+                "acc-heavy",
+                "acc-heavy",
+                "acc-light",
+            ]
+        );
+    }
+
+    #[test]
+    fn custom_routing_rules_are_normalized_to_collection_accounts() {
+        let account_ids = vec!["acc-a".to_string(), "acc-b".to_string()];
+        let rules = vec![
+            CodexLocalAccessCustomRoutingRule {
+                account_id: " acc-a ".to_string(),
+                priority: 120,
+                weight: 0,
+            },
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-a".to_string(),
+                priority: 20,
+                weight: 10,
+            },
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-removed".to_string(),
+                priority: 30,
+                weight: 5,
+            },
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-b".to_string(),
+                priority: -5,
+                weight: 500,
+            },
+        ];
+
+        let normalized = normalize_custom_routing_rules(rules, &account_ids);
+
+        assert_eq!(
+            normalized,
+            vec![
+                CodexLocalAccessCustomRoutingRule {
+                    account_id: "acc-a".to_string(),
+                    priority: 100,
+                    weight: 1,
+                },
+                CodexLocalAccessCustomRoutingRule {
+                    account_id: "acc-b".to_string(),
+                    priority: 0,
+                    weight: 100,
+                },
+            ]
+        );
     }
 
     #[test]

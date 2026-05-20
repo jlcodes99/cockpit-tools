@@ -1691,6 +1691,11 @@
     },
     "oauth": {
       "desc": "Kliknij poniżej i zakończ autoryzację OpenAI w przeglądarce",
+      "trialGuideTitle": "Wskazówki rejestracji próbnej",
+      "trialGuideDesc": "Przy tworzeniu nowego konta najlepiej użyć Gmaila z długoterminowym dostępem; ułatwia to utrzymanie konta i późniejszą weryfikację.",
+      "trialGuideAliasDesc": "Jeden główny Gmail może przygotować do 5 aliasów do rozdzielenia rejestracji ChatGPT; używaj ich zgodnie z zasadami usługi docelowej.",
+      "trialGuideLink": "Zobacz przewodnik",
+      "gmailAliasLink": "Utwórz alias Gmail",
       "preparing": "Przygotowywanie linku autoryzacji...",
       "exchanging": "Wymiana tokenu...",
       "portInUse": "Port {{port}} jest już zajęty. Zamknij aplikację, która go używa, i spróbuj ponownie.",
@@ -1850,7 +1855,8 @@
         "quotaLowFirst": "Najpierw niski limit",
         "planHighFirst": "Najpierw wyższy plan",
         "planLowFirst": "Najpierw niższy plan",
-        "expirySoonFirst": "Najbliższe wygaśnięcie"
+        "expirySoonFirst": "Najbliższe wygaśnięcie",
+        "custom": "Niestandardowe"
       },
       "statusUnconfigured": "Nieskonfigurowane",
       "expandDetails": "Rozwiń szczegóły",
@@ -1892,7 +1898,25 @@
       "oauthBinding": {
         "desc": "Opcjonalne. Bez powiązania usługa API działa według dotychczasowej logiki API Key; po powiązaniu logowanie używa konta OAuth, a Provider konfiguracji usługi API.",
         "currentService": "Usługa API: {{name}}"
-      }
+      },
+      "customRoutingEdit": "Edytuj niestandardowe routowanie",
+      "customRoutingTitle": "Niestandardowe routowanie",
+      "customRoutingDesc": "Ustaw priorytet i wagę dla konta, aby sterować kolejnością wyboru oraz rozkładem obciążenia przy tym samym priorytecie.",
+      "customRoutingPriorityTitle": "Priorytet",
+      "customRoutingPriorityDesc": "Wyższe wartości są wybierane wcześniej; konta o niższym priorytecie są próbowane dopiero, gdy wyższe są niedostępne.",
+      "customRoutingWeightTitle": "Waga",
+      "customRoutingWeightDesc": "Służy do równoważenia obciążenia w tym samym priorytecie. Wyższa waga oznacza więcej żądań.",
+      "customRoutingSearch": "Szukaj e-maila, planu lub ID konta",
+      "customRoutingSelected": "Wybrano {{count}}",
+      "customRoutingPriorityShort": "Priorytet",
+      "customRoutingWeightShort": "Waga",
+      "customRoutingApplyBatch": "Zastosuj do wybranych",
+      "customRoutingReset": "Resetuj",
+      "customRoutingAccountColumn": "Konto",
+      "customRoutingQuotaColumn": "Limit",
+      "customRoutingEmpty": "Brak konfigurowalnych kont w bieżącej kolekcji usługi API",
+      "customRoutingSave": "Zapisz routowanie",
+      "customRoutingSaveSuccess": "Niestandardowe routowanie usługi API zostało zaktualizowane"
     },
     "local": {
       "desc": "Importuj bieżące konto z ~/.codex/auth.json",

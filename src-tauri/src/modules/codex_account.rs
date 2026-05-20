@@ -3867,6 +3867,90 @@ fn extract_account_note_from_value(value: &serde_json::Value) -> Option<String> 
     })
 }
 
+fn is_codex_session_object(value: &serde_json::Value) -> bool {
+    let Some(obj) = value.as_object() else {
+        return false;
+    };
+    let has_access_token = first_json_string(value, &[&["accessToken"], &["access_token"]])
+        .filter(|token| decode_jwt_payload_value(token).is_some())
+        .is_some();
+    if !has_access_token {
+        return false;
+    }
+
+    obj.get("user").and_then(|item| item.as_object()).is_some()
+        || obj
+            .get("account")
+            .and_then(|item| item.as_object())
+            .is_some()
+        || obj.get("expires").is_some()
+        || obj.get("sessionToken").is_some()
+        || obj
+            .get("authProvider")
+            .and_then(|item| item.as_str())
+            .map(|provider| provider.eq_ignore_ascii_case("openai"))
+            .unwrap_or(false)
+}
+
+fn normalize_codex_session_value(
+    value: &serde_json::Value,
+    depth: usize,
+) -> Option<serde_json::Value> {
+    if depth > 4 {
+        return None;
+    }
+    let obj = value.as_object()?;
+
+    for key in ["session_json", "session"] {
+        let Some(nested) = obj.get(key) else {
+            continue;
+        };
+        match nested {
+            serde_json::Value::Object(_) => {
+                if let Some(session) = normalize_codex_session_value(nested, depth + 1) {
+                    return Some(session);
+                }
+            }
+            serde_json::Value::String(raw) => {
+                let parsed = serde_json::from_str::<serde_json::Value>(raw).ok()?;
+                if let Some(session) = normalize_codex_session_value(&parsed, depth + 1) {
+                    return Some(session);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if is_codex_session_object(value) {
+        return Some(value.clone());
+    }
+
+    None
+}
+
+fn extract_codex_session_candidate_from_value(
+    value: &serde_json::Value,
+) -> Option<CodexJsonImportCandidate> {
+    let session = normalize_codex_session_value(value, 0)?;
+    let access_token = first_json_string(&session, &[&["accessToken"], &["access_token"]])
+        .filter(|token| decode_jwt_payload_value(token).is_some())?;
+    let id_token = first_json_string(&session, &[&["idToken"], &["id_token"]])
+        .unwrap_or_else(|| access_token.clone());
+    let refresh_token = first_json_string(&session, &[&["refreshToken"], &["refresh_token"]]);
+    let account_id_hint = first_json_string(&session, &[&["account", "id"], &["account_id"]]);
+
+    Some(CodexJsonImportCandidate::FullToken {
+        tokens: CodexTokens {
+            id_token,
+            access_token,
+            refresh_token,
+        },
+        account_id_hint,
+        account_note: extract_account_note_from_value(value)
+            .or_else(|| extract_account_note_from_value(&session)),
+    })
+}
+
 fn extract_refresh_token_only_from_value(value: &serde_json::Value) -> Option<String> {
     match value {
         serde_json::Value::String(raw) => normalize_optional_ref(Some(raw))
@@ -3908,6 +3992,10 @@ fn extract_access_token_only_from_value(value: &serde_json::Value) -> Option<Str
 fn extract_codex_import_candidate_from_value(
     value: &serde_json::Value,
 ) -> Option<CodexJsonImportCandidate> {
+    if let Some(candidate) = extract_codex_session_candidate_from_value(value) {
+        return Some(candidate);
+    }
+
     if let Some((tokens, account_id_hint)) = extract_codex_tokens_from_value(value) {
         return Some(CodexJsonImportCandidate::FullToken {
             tokens,
@@ -4104,7 +4192,7 @@ async fn import_accounts_from_token_lines(content: &str) -> Result<Vec<CodexAcco
 
         for value in values {
             let candidate = extract_codex_import_candidate_from_value(&value).ok_or_else(|| {
-                "未找到有效的 Codex Token（需要 accessToken/access_token、id_token + access_token，或 refresh_token）"
+                "未找到有效的 Codex Token（需要 session JSON、accessToken/access_token、id_token + access_token，或 refresh_token）"
                     .to_string()
             })?;
             accounts.push(import_codex_candidate(candidate).await?);
@@ -4367,7 +4455,7 @@ pub async fn import_from_json(json_content: &str) -> Result<Vec<CodexAccount>, S
                 Some(account) => result.push(account),
                 None => {
                     return Err(format!(
-                        "第 {} 行未找到有效的 Codex Token（需要 accessToken/access_token、id_token + access_token，或 refresh_token）",
+                        "第 {} 行未找到有效的 Codex Token（需要 session JSON、accessToken/access_token、id_token + access_token，或 refresh_token）",
                         index + 1
                     ));
                 }
@@ -5362,6 +5450,94 @@ mod tests {
             extract_codex_import_candidate_from_value(&plain_token_value).is_none(),
             "plain token fields should not be treated as accessToken-only"
         );
+    }
+
+    #[test]
+    fn extract_candidate_from_codex_session_json_as_cpa_tokens() {
+        let access_token = make_jwt(serde_json::json!({
+            "sub": "auth0|session-user",
+            "https://api.openai.com/profile": {
+                "email": "session@example.com",
+                "email_verified": true
+            },
+            "https://api.openai.com/auth": {
+                "chatgpt_account_id": "acc-session-token",
+                "chatgpt_user_id": "user-session",
+                "chatgpt_plan_type": "plus"
+            }
+        }));
+        let session = serde_json::json!({
+            "user": {
+                "id": "user-session",
+                "email": "session@example.com"
+            },
+            "expires": "2026-08-17T02:06:40.890Z",
+            "account": {
+                "id": "acc-session",
+                "planType": "plus"
+            },
+            "accessToken": access_token,
+            "authProvider": "openai",
+            "sessionToken": "encrypted-session"
+        });
+
+        let candidate = extract_codex_import_candidate_from_value(&session)
+            .expect("ChatGPT session JSON should be accepted");
+
+        match candidate {
+            CodexJsonImportCandidate::FullToken {
+                tokens,
+                account_id_hint,
+                account_note,
+            } => {
+                assert_eq!(tokens.id_token, tokens.access_token);
+                assert_eq!(tokens.refresh_token, None);
+                assert_eq!(account_id_hint.as_deref(), Some("acc-session"));
+                assert_eq!(account_note, None);
+                assert!(decode_jwt_payload_value(&tokens.access_token).is_some());
+            }
+            _ => panic!("expected session JSON to be normalized to full CPA-style tokens"),
+        }
+    }
+
+    #[test]
+    fn extract_candidate_from_wrapped_codex_session_json_string() {
+        let access_token = make_jwt(serde_json::json!({
+            "email": "wrapped-session@example.com",
+            "https://api.openai.com/auth": {
+                "chatgpt_account_id": "acc-wrapped-session"
+            }
+        }));
+        let session = serde_json::json!({
+            "user": {
+                "email": "wrapped-session@example.com"
+            },
+            "account": {
+                "id": "acc-wrapped-session"
+            },
+            "accessToken": access_token,
+            "refreshToken": "rt_wrapped",
+            "authProvider": "openai"
+        });
+        let wrapper = serde_json::json!({
+            "session_json": serde_json::to_string(&session).expect("serialize session")
+        });
+
+        let candidate = extract_codex_import_candidate_from_value(&wrapper)
+            .expect("wrapped session JSON string should be accepted");
+
+        match candidate {
+            CodexJsonImportCandidate::FullToken {
+                tokens,
+                account_id_hint,
+                ..
+            } => {
+                assert_eq!(tokens.id_token, tokens.access_token);
+                assert_eq!(tokens.refresh_token.as_deref(), Some("rt_wrapped"));
+                assert_eq!(account_id_hint.as_deref(), Some("acc-wrapped-session"));
+            }
+            _ => panic!("expected wrapped session JSON to become full CPA-style tokens"),
+        }
     }
 
     #[test]

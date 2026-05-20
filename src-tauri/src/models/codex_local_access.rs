@@ -9,6 +9,7 @@ pub enum CodexLocalAccessRoutingStrategy {
     PlanHighFirst,
     PlanLowFirst,
     ExpirySoonFirst,
+    Custom,
 }
 
 impl Default for CodexLocalAccessRoutingStrategy {
@@ -58,6 +59,20 @@ pub struct CodexLocalAccessCustomCredential {
     pub updated_at: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessCustomRoutingRule {
+    pub account_id: String,
+    #[serde(default)]
+    pub priority: i32,
+    #[serde(default = "default_custom_routing_weight")]
+    pub weight: u32,
+}
+
+fn default_custom_routing_weight() -> u32 {
+    1
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessCollection {
@@ -78,6 +93,8 @@ pub struct CodexLocalAccessCollection {
     pub custom_base_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_api_key: Option<String>,
+    #[serde(default)]
+    pub custom_routing_rules: Vec<CodexLocalAccessCustomRoutingRule>,
     #[serde(default = "default_restrict_free_accounts")]
     pub restrict_free_accounts: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]

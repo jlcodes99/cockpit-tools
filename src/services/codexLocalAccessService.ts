@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type {
   CodexLocalAccessCredentialMode,
   CodexLocalAccessCustomCredential,
+  CodexLocalAccessCustomRoutingRule,
   CodexLocalAccessPortCleanupResult,
   CodexLocalAccessRoutingStrategy,
   CodexLocalAccessScope,
@@ -63,6 +64,12 @@ export async function updateCodexLocalAccessRoutingStrategy(
   strategy: CodexLocalAccessRoutingStrategy,
 ): Promise<CodexLocalAccessState> {
   return await invoke('codex_local_access_update_routing_strategy', { strategy });
+}
+
+export async function updateCodexLocalAccessCustomRouting(
+  rules: CodexLocalAccessCustomRoutingRule[],
+): Promise<CodexLocalAccessState> {
+  return await invoke('codex_local_access_update_custom_routing', { rules });
 }
 
 export async function updateCodexLocalAccessAccessScope(

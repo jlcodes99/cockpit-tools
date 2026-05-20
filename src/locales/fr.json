@@ -1691,6 +1691,11 @@
     },
     "oauth": {
       "desc": "Cliquez ci-dessous et terminez l'autorisation OpenAI dans le navigateur",
+      "trialGuideTitle": "Conseils d’inscription d’essai",
+      "trialGuideDesc": "Pour préparer un nouveau compte, privilégiez une adresse Gmail accessible durablement afin de faciliter la conservation du compte et les vérifications ultérieures.",
+      "trialGuideAliasDesc": "Un Gmail principal peut préparer jusqu’à 5 alias pour distinguer les inscriptions ChatGPT ; utilisez-les selon les règles du service cible.",
+      "trialGuideLink": "Voir le guide d’essai",
+      "gmailAliasLink": "Générer un alias Gmail",
       "preparing": "Préparation du lien d'autorisation...",
       "exchanging": "Échange du token...",
       "portInUse": "Le port {{port}} est déjà utilisé. Fermez l'application qui l'utilise puis réessayez.",
@@ -1850,7 +1855,8 @@
         "quotaLowFirst": "Quota faible d'abord",
         "planHighFirst": "Forfait élevé d'abord",
         "planLowFirst": "Forfait faible d'abord",
-        "expirySoonFirst": "Expiration proche d'abord"
+        "expirySoonFirst": "Expiration proche d'abord",
+        "custom": "Personnalisé"
       },
       "statusUnconfigured": "Non configuré",
       "expandDetails": "Développer",
@@ -1892,7 +1898,25 @@
       "oauthBinding": {
         "desc": "Facultatif. Sans liaison, le service API conserve le flux API Key existant ; une fois lié, la session utilise le compte OAuth et le Provider utilise la configuration du service API.",
         "currentService": "Service API : {{name}}"
-      }
+      },
+      "customRoutingEdit": "Modifier le routage personnalisé",
+      "customRoutingTitle": "Routage personnalisé",
+      "customRoutingDesc": "Définissez la priorité et le poids de chaque compte pour contrôler l’ordre de sélection et la répartition à priorité égale.",
+      "customRoutingPriorityTitle": "Priorité",
+      "customRoutingPriorityDesc": "Les valeurs les plus élevées sont choisies en premier ; les priorités plus basses ne sont tentées que si les autres sont indisponibles.",
+      "customRoutingWeightTitle": "Poids",
+      "customRoutingWeightDesc": "Sert à équilibrer la charge à priorité identique. Plus le poids est élevé, plus le compte reçoit de requêtes.",
+      "customRoutingSearch": "Rechercher e-mail, offre ou ID de compte",
+      "customRoutingSelected": "{{count}} sélectionnés",
+      "customRoutingPriorityShort": "Priorité",
+      "customRoutingWeightShort": "Poids",
+      "customRoutingApplyBatch": "Appliquer aux sélectionnés",
+      "customRoutingReset": "Réinitialiser",
+      "customRoutingAccountColumn": "Compte",
+      "customRoutingQuotaColumn": "Quota",
+      "customRoutingEmpty": "Aucun compte configurable dans la collection actuelle du service API",
+      "customRoutingSave": "Enregistrer le routage",
+      "customRoutingSaveSuccess": "Routage personnalisé du service API mis à jour"
     },
     "local": {
       "desc": "Importer le compte connecté depuis ~/.codex/auth.json",

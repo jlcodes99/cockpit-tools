@@ -1691,6 +1691,11 @@
     },
     "oauth": {
       "desc": "Aşağıdaki butona tıklayın ve tarayıcıda OpenAI yetkilendirmesini tamamlayın",
+      "trialGuideTitle": "Deneme kaydı ipuçları",
+      "trialGuideDesc": "Yeni hesap hazırlarken uzun süre erişebileceğiniz bir Gmail adresini tercih edin; hesap kalıcılığı ve sonraki doğrulamalar için daha uygundur.",
+      "trialGuideAliasDesc": "Bir ana Gmail ile ChatGPT kayıtlarını ayırmak için en fazla 5 takma adres hazırlanabilir; hedef hizmetin kurallarına uygun kullanın.",
+      "trialGuideLink": "Deneme rehberini aç",
+      "gmailAliasLink": "Gmail takma adı oluştur",
       "preparing": "Yetkilendirme bağlantısı hazırlanıyor...",
       "exchanging": "Token değiş tokuşu...",
       "portInUse": "{{port}} portu zaten kullanımda. Bu portu kullanan uygulamayı kapatıp tekrar deneyin.",
@@ -1850,7 +1855,8 @@
         "quotaLowFirst": "Önce düşük kota",
         "planHighFirst": "Önce yüksek plan",
         "planLowFirst": "Önce düşük plan",
-        "expirySoonFirst": "Yakında Biten Önce"
+        "expirySoonFirst": "Yakında Biten Önce",
+        "custom": "Özel"
       },
       "statusUnconfigured": "Yapılandırılmadı",
       "expandDetails": "Ayrıntıları aç",
@@ -1892,7 +1898,25 @@
       "oauthBinding": {
         "desc": "İsteğe bağlı. Bağlantı yoksa API hizmeti eski API Key akışıyla çalışır; bağlanınca oturum OAuth hesabını, Provider ise API hizmeti yapılandırmasını kullanır.",
         "currentService": "API hizmeti: {{name}}"
-      }
+      },
+      "customRoutingEdit": "Özel yönlendirmeyi düzenle",
+      "customRoutingTitle": "Özel yönlendirme",
+      "customRoutingDesc": "Hesap seçme sırasını ve aynı öncelikteki yük dağılımını yönetmek için her hesaba öncelik ve ağırlık verin.",
+      "customRoutingPriorityTitle": "Öncelik",
+      "customRoutingPriorityDesc": "Daha yüksek değerler önce seçilir; düşük öncelikli hesaplar yalnızca yüksek öncelikliler kullanılamadığında denenir.",
+      "customRoutingWeightTitle": "Ağırlık",
+      "customRoutingWeightDesc": "Aynı öncelikte yük dengeleme için kullanılır. Ağırlık yükseldikçe daha fazla istek alır.",
+      "customRoutingSearch": "E-posta, plan veya hesap ID ara",
+      "customRoutingSelected": "{{count}} seçildi",
+      "customRoutingPriorityShort": "Öncelik",
+      "customRoutingWeightShort": "Ağırlık",
+      "customRoutingApplyBatch": "Seçilenlere uygula",
+      "customRoutingReset": "Sıfırla",
+      "customRoutingAccountColumn": "Hesap",
+      "customRoutingQuotaColumn": "Kota",
+      "customRoutingEmpty": "Geçerli API hizmeti koleksiyonunda yapılandırılabilir hesap yok",
+      "customRoutingSave": "Yönlendirmeyi kaydet",
+      "customRoutingSaveSuccess": "API hizmeti özel yönlendirmesi güncellendi"
     },
     "local": {
       "desc": "~/.codex/auth.json'dan mevcut hesabı içe aktar",

@@ -14,6 +14,7 @@ import {
   Search,
   Server,
   ShieldCheck,
+  SlidersHorizontal,
   Trash2,
   Wrench,
   X,
@@ -25,6 +26,7 @@ import type { CodexAccountGroup } from '../services/codexAccountGroupService';
 import type {
   CodexLocalAccessCredentialMode,
   CodexLocalAccessCustomCredential,
+  CodexLocalAccessCustomRoutingRule,
   CodexLocalAccessEndpointKind,
   CodexLocalAccessRoutingStrategy,
   CodexLocalAccessScope,
@@ -83,6 +85,9 @@ interface CodexLocalAccessModalProps {
   onUpdateRoutingStrategy: (
     strategy: CodexLocalAccessRoutingStrategy,
   ) => Promise<unknown> | unknown;
+  onUpdateCustomRouting: (
+    rules: CodexLocalAccessCustomRoutingRule[],
+  ) => Promise<unknown> | unknown;
   onUpdateAccessScope: (
     accessScope: CodexLocalAccessScope,
   ) => Promise<unknown> | unknown;
@@ -107,8 +112,18 @@ interface CodexLocalAccessModalProps {
 type StatsRangeKey = 'daily' | 'weekly' | 'monthly';
 type CopyableField = 'apiPortUrl' | 'baseUrl' | 'apiKey' | 'modelId';
 type CodexLocalAccessCollectionState = NonNullable<CodexLocalAccessState['collection']>;
+
+interface CustomRoutingDraftRule {
+  priority: number;
+  weight: number;
+}
+
 const CODEX_LOCAL_ACCESS_STATS_RANGE_STORAGE_KEY =
   'agtools.codex.local_access.stats_range.v1';
+const CUSTOM_ROUTING_PRIORITY_MIN = 0;
+const CUSTOM_ROUTING_PRIORITY_MAX = 100;
+const CUSTOM_ROUTING_WEIGHT_MIN = 1;
+const CUSTOM_ROUTING_WEIGHT_MAX = 100;
 
 function normalizeAccessScope(value: string): CodexLocalAccessScope {
   return value === 'lan' ? 'lan' : 'localhost';
@@ -119,6 +134,19 @@ function normalizeStatsRangeKey(value: string | null | undefined): StatsRangeKey
     return value;
   }
   return 'daily';
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function normalizeCustomRoutingPriority(value: number): number {
+  return clampInteger(value, CUSTOM_ROUTING_PRIORITY_MIN, CUSTOM_ROUTING_PRIORITY_MAX);
+}
+
+function normalizeCustomRoutingWeight(value: number): number {
+  return clampInteger(value, CUSTOM_ROUTING_WEIGHT_MIN, CUSTOM_ROUTING_WEIGHT_MAX);
 }
 
 function readStoredStatsRange(): StatsRangeKey {
@@ -234,6 +262,7 @@ export function CodexLocalAccessModal({
   onRefreshStats,
   onUpdatePort,
   onUpdateRoutingStrategy,
+  onUpdateCustomRouting,
   onUpdateAccessScope,
   onUpdateCredentials,
   onRotateApiKey,
@@ -274,7 +303,17 @@ export function CodexLocalAccessModal({
   const [copiedField, setCopiedField] = useState<CopyableField | null>(null);
   const [selectedModelId, setSelectedModelId] = useState('');
   const [statsRange, setStatsRange] = useState<StatsRangeKey>(() => readStoredStatsRange());
+  const [customRoutingOpen, setCustomRoutingOpen] = useState(false);
+  const [customRoutingQuery, setCustomRoutingQuery] = useState('');
+  const [customRoutingFilterTypes, setCustomRoutingFilterTypes] = useState<string[]>([]);
+  const [customRoutingTagFilter, setCustomRoutingTagFilter] = useState<string[]>([]);
+  const [customRoutingError, setCustomRoutingError] = useState('');
+  const [customRoutingSelected, setCustomRoutingSelected] = useState<Set<string>>(new Set());
+  const [customRoutingDraft, setCustomRoutingDraft] = useState<Record<string, CustomRoutingDraftRule>>({});
+  const [customRoutingBulkPriority, setCustomRoutingBulkPriority] = useState('10');
+  const [customRoutingBulkWeight, setCustomRoutingBulkWeight] = useState('1');
   const selectAllCheckboxRef = useRef<HTMLInputElement | null>(null);
+  const customRoutingSelectAllRef = useRef<HTMLInputElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const collection = state?.collection ?? null;
@@ -463,6 +502,33 @@ export function CodexLocalAccessModal({
         collectionCustomCredentials[0]?.id ||
         '',
     );
+    setCustomRoutingOpen(false);
+    setCustomRoutingQuery('');
+    setCustomRoutingFilterTypes([]);
+    setCustomRoutingTagFilter([]);
+    setCustomRoutingError('');
+    setCustomRoutingSelected(new Set());
+    setCustomRoutingDraft(() => {
+      const ruleMap = new Map(
+        (collection?.customRoutingRules ?? []).map((rule) => [
+          rule.accountId,
+          {
+            priority: normalizeCustomRoutingPriority(rule.priority),
+            weight: normalizeCustomRoutingWeight(rule.weight),
+          },
+        ]),
+      );
+      const next: Record<string, CustomRoutingDraftRule> = {};
+      (collection?.accountIds ?? []).forEach((accountId) => {
+        next[accountId] = ruleMap.get(accountId) ?? {
+          priority: CUSTOM_ROUTING_PRIORITY_MIN,
+          weight: CUSTOM_ROUTING_WEIGHT_MIN,
+        };
+      });
+      return next;
+    });
+    setCustomRoutingBulkPriority('10');
+    setCustomRoutingBulkWeight('1');
     if (mode === 'members') {
       window.setTimeout(() => {
         searchInputRef.current?.focus();
@@ -473,6 +539,8 @@ export function CodexLocalAccessModal({
     collection?.customApiKey,
     collection?.customBaseUrl,
     collection?.activeCustomCredentialId,
+    collection?.accountIds,
+    collection?.customRoutingRules,
     collection?.port,
     collection?.restrictFreeAccounts,
     collectionCustomCredentials,
@@ -770,6 +838,10 @@ export function CodexLocalAccessModal({
         value: 'expiry_soon_first',
         label: t('codex.localAccess.routingStrategy.expirySoonFirst', '优先近到期'),
       },
+      {
+        value: 'custom',
+        label: t('codex.localAccess.routingStrategy.custom', '自定义'),
+      },
     ] satisfies Array<{ value: CodexLocalAccessRoutingStrategy; label: string }>,
     [t],
   );
@@ -896,6 +968,197 @@ export function CodexLocalAccessModal({
     () => new Map(oauthAccounts.map((account) => [account.id, account])),
     [oauthAccounts],
   );
+
+  const customRoutingRuleByAccountId = useMemo(() => {
+    const next = new Map<string, CustomRoutingDraftRule>();
+    collection?.customRoutingRules?.forEach((rule) => {
+      next.set(rule.accountId, {
+        priority: normalizeCustomRoutingPriority(rule.priority),
+        weight: normalizeCustomRoutingWeight(rule.weight),
+      });
+    });
+    return next;
+  }, [collection?.customRoutingRules]);
+
+  const customRoutingAccounts = useMemo(() => {
+    const currentIds = collection?.accountIds ?? [];
+    return currentIds
+      .map((accountId) => oauthAccountById.get(accountId))
+      .filter((account): account is CodexAccount => Boolean(account));
+  }, [collection?.accountIds, oauthAccountById]);
+
+  const customRoutingAvailableTags = useMemo(() => {
+    const next = new Set<string>();
+    customRoutingAccounts.forEach((account) => {
+      (account.tags || []).forEach((tag) => {
+        const trimmed = tag.trim();
+        if (trimmed) next.add(trimmed);
+      });
+    });
+    return Array.from(next).sort((left, right) => left.localeCompare(right));
+  }, [customRoutingAccounts]);
+
+  const customRoutingQuotaPoolSummary = useMemo(
+    () => summarizeCodexQuotaPool(customRoutingAccounts),
+    [customRoutingAccounts],
+  );
+
+  const customRoutingTierCounts = useMemo(() => {
+    const counts = { all: customRoutingAccounts.length, VALID: 0, FREE: 0, PLUS: 0, PRO: 0, TEAM: 0, ENTERPRISE: 0, ERROR: 0 };
+    customRoutingAccounts.forEach((account) => {
+      if (!account.quota_error) {
+        counts.VALID += 1;
+      }
+      const tier = getCodexPlanFilterKey(account);
+      if (tier in counts) {
+        counts[tier as keyof typeof counts] += 1;
+      }
+      if (account.quota_error) {
+        counts.ERROR += 1;
+      }
+    });
+    return counts;
+  }, [customRoutingAccounts]);
+
+  const customRoutingAllTierFilterLabel = useMemo(
+    () =>
+      formatQuotaPoolLabel(
+        t('common.shared.filter.all', { count: customRoutingTierCounts.all }),
+        customRoutingQuotaPoolSummary.all,
+        quotaPoolLabels.hourly,
+        quotaPoolLabels.weekly,
+      ),
+    [
+      customRoutingQuotaPoolSummary.all,
+      customRoutingTierCounts.all,
+      quotaPoolLabels.hourly,
+      quotaPoolLabels.weekly,
+      t,
+    ],
+  );
+
+  const customRoutingTierFilterOptions = useMemo<MultiSelectFilterOption[]>(
+    () => [
+      {
+        value: 'FREE',
+        label: formatQuotaPoolLabel(
+          `FREE (${customRoutingTierCounts.FREE})`,
+          customRoutingQuotaPoolSummary.byPlan.FREE,
+          quotaPoolLabels.hourly,
+          quotaPoolLabels.weekly,
+        ),
+      },
+      {
+        value: 'PLUS',
+        label: formatQuotaPoolLabel(
+          `PLUS (${customRoutingTierCounts.PLUS})`,
+          customRoutingQuotaPoolSummary.byPlan.PLUS,
+          quotaPoolLabels.hourly,
+          quotaPoolLabels.weekly,
+        ),
+      },
+      {
+        value: 'PRO',
+        label: formatQuotaPoolLabel(
+          `PRO (${customRoutingTierCounts.PRO})`,
+          customRoutingQuotaPoolSummary.byPlan.PRO,
+          quotaPoolLabels.hourly,
+          quotaPoolLabels.weekly,
+        ),
+      },
+      {
+        value: 'TEAM',
+        label: formatQuotaPoolLabel(
+          `TEAM (${customRoutingTierCounts.TEAM})`,
+          customRoutingQuotaPoolSummary.byPlan.TEAM,
+          quotaPoolLabels.hourly,
+          quotaPoolLabels.weekly,
+        ),
+      },
+      {
+        value: 'ENTERPRISE',
+        label: formatQuotaPoolLabel(
+          `ENTERPRISE (${customRoutingTierCounts.ENTERPRISE})`,
+          customRoutingQuotaPoolSummary.byPlan.ENTERPRISE,
+          quotaPoolLabels.hourly,
+          quotaPoolLabels.weekly,
+        ),
+      },
+      { value: 'ERROR', label: `ERROR (${customRoutingTierCounts.ERROR})` },
+      buildValidAccountsFilterOption(t, customRoutingTierCounts.VALID),
+    ],
+    [
+      customRoutingQuotaPoolSummary.byPlan,
+      customRoutingTierCounts,
+      quotaPoolLabels.hourly,
+      quotaPoolLabels.weekly,
+      t,
+    ],
+  );
+
+  const visibleCustomRoutingAccounts = useMemo(() => {
+    const normalizedQuery = customRoutingQuery.trim().toLowerCase();
+    const selectedTags = new Set(customRoutingTagFilter.map(normalizeTag));
+    const { requireValidAccounts, selectedTypes } =
+      splitValidityFilterValues(customRoutingFilterTypes);
+
+    return customRoutingAccounts.filter((account) => {
+      const presentation = buildCodexAccountPresentation(account, t);
+      const matchesQuery =
+        !normalizedQuery ||
+        presentation.displayName.toLowerCase().includes(normalizedQuery) ||
+        account.id.toLowerCase().includes(normalizedQuery) ||
+        presentation.planLabel.toLowerCase().includes(normalizedQuery);
+      if (!matchesQuery) return false;
+
+      if (selectedTags.size > 0) {
+        const accountTags = (account.tags || []).map(normalizeTag);
+        if (!accountTags.some((tag) => selectedTags.has(tag))) {
+          return false;
+        }
+      }
+
+      if (requireValidAccounts && account.quota_error) {
+        return false;
+      }
+
+      if (selectedTypes.size > 0) {
+        const planKey = getCodexPlanFilterKey(account);
+        const matchesType = Array.from(selectedTypes).some((type) => {
+          if (type === 'ERROR') return Boolean(account.quota_error);
+          return type === planKey;
+        });
+        if (!matchesType) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [
+    customRoutingAccounts,
+    customRoutingFilterTypes,
+    customRoutingQuery,
+    customRoutingTagFilter,
+    t,
+  ]);
+
+  const selectedVisibleCustomRoutingCount = useMemo(
+    () =>
+      visibleCustomRoutingAccounts.filter((account) =>
+        customRoutingSelected.has(account.id),
+      ).length,
+    [customRoutingSelected, visibleCustomRoutingAccounts],
+  );
+  const allVisibleCustomRoutingSelected =
+    visibleCustomRoutingAccounts.length > 0 &&
+    selectedVisibleCustomRoutingCount === visibleCustomRoutingAccounts.length;
+
+  useEffect(() => {
+    if (!customRoutingSelectAllRef.current) return;
+    customRoutingSelectAllRef.current.indeterminate =
+      selectedVisibleCustomRoutingCount > 0 && !allVisibleCustomRoutingSelected;
+  }, [allVisibleCustomRoutingSelected, selectedVisibleCustomRoutingCount]);
 
   const handleCopy = async (field: CopyableField, value: string) => {
     try {
@@ -1054,8 +1317,20 @@ export function CodexLocalAccessModal({
     );
   };
 
+  const openCustomRoutingDialog = () => {
+    if (!collection) return;
+    setError('');
+    setNotice('');
+    setCustomRoutingError('');
+    setCustomRoutingOpen(true);
+  };
+
   const handleChangeRoutingStrategy = async (nextStrategy: string) => {
     if (!collection) return;
+    if (nextStrategy === 'custom') {
+      openCustomRoutingDialog();
+      return;
+    }
     if (nextStrategy === routingStrategy) return;
 
     await runAction(
@@ -1064,6 +1339,126 @@ export function CodexLocalAccessModal({
       },
       t('codex.localAccess.routingSaveSuccess', 'API 服务调度策略已更新'),
     );
+  };
+
+  const closeCustomRoutingDialog = () => {
+    if (saving) return;
+    setCustomRoutingOpen(false);
+    setCustomRoutingError('');
+    setCustomRoutingSelected(new Set());
+  };
+
+  const toggleCustomRoutingSelect = (accountId: string) => {
+    if (saving) return;
+    setCustomRoutingSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(accountId)) {
+        next.delete(accountId);
+      } else {
+        next.add(accountId);
+      }
+      return next;
+    });
+  };
+
+  const toggleCustomRoutingSelectAllVisible = () => {
+    if (saving || visibleCustomRoutingAccounts.length === 0) return;
+    setCustomRoutingSelected((prev) => {
+      const next = new Set(prev);
+      if (allVisibleCustomRoutingSelected) {
+        visibleCustomRoutingAccounts.forEach((account) => next.delete(account.id));
+      } else {
+        visibleCustomRoutingAccounts.forEach((account) => next.add(account.id));
+      }
+      return next;
+    });
+  };
+
+  const updateCustomRoutingRule = (
+    accountId: string,
+    field: keyof CustomRoutingDraftRule,
+    rawValue: string,
+  ) => {
+    const parsed = Number.parseInt(rawValue, 10);
+    setCustomRoutingDraft((prev) => {
+      const current = prev[accountId] ?? {
+        priority: CUSTOM_ROUTING_PRIORITY_MIN,
+        weight: CUSTOM_ROUTING_WEIGHT_MIN,
+      };
+      return {
+        ...prev,
+        [accountId]: {
+          ...current,
+          [field]:
+            field === 'priority'
+              ? normalizeCustomRoutingPriority(parsed)
+              : normalizeCustomRoutingWeight(parsed),
+        },
+      };
+    });
+  };
+
+  const applyCustomRoutingBatch = () => {
+    if (saving || customRoutingSelected.size === 0) return;
+    const priority = normalizeCustomRoutingPriority(
+      Number.parseInt(customRoutingBulkPriority, 10),
+    );
+    const weight = normalizeCustomRoutingWeight(
+      Number.parseInt(customRoutingBulkWeight, 10),
+    );
+    setCustomRoutingBulkPriority(String(priority));
+    setCustomRoutingBulkWeight(String(weight));
+    setCustomRoutingDraft((prev) => {
+      const next = { ...prev };
+      customRoutingSelected.forEach((accountId) => {
+        next[accountId] = { priority, weight };
+      });
+      return next;
+    });
+  };
+
+  const resetCustomRoutingDraft = () => {
+    if (!collection || saving) return;
+    const next: Record<string, CustomRoutingDraftRule> = {};
+    collection.accountIds.forEach((accountId) => {
+      next[accountId] = {
+        priority: CUSTOM_ROUTING_PRIORITY_MIN,
+        weight: CUSTOM_ROUTING_WEIGHT_MIN,
+      };
+    });
+    setCustomRoutingDraft(next);
+    setCustomRoutingSelected(new Set());
+  };
+
+  const handleSaveCustomRouting = async () => {
+    if (!collection) return;
+    setCustomRoutingError('');
+    setNotice('');
+    try {
+      const rules = collection.accountIds.map((accountId) => {
+        const rule = customRoutingDraft[accountId] ??
+          customRoutingRuleByAccountId.get(accountId) ?? {
+            priority: CUSTOM_ROUTING_PRIORITY_MIN,
+            weight: CUSTOM_ROUTING_WEIGHT_MIN,
+          };
+        return {
+          accountId,
+          priority: normalizeCustomRoutingPriority(rule.priority),
+          weight: normalizeCustomRoutingWeight(rule.weight),
+        };
+      });
+      await onUpdateCustomRouting(rules);
+      setNotice(
+        t(
+          'codex.localAccess.customRoutingSaveSuccess',
+          'API 服务自定义调度已更新',
+        ),
+      );
+      setCustomRoutingOpen(false);
+      setCustomRoutingSelected(new Set());
+    } catch (err) {
+      setCustomRoutingError(err instanceof Error ? err.message : String(err));
+    }
   };
 
   const handleChangeAccessScope = async (nextValue: string) => {
@@ -1248,15 +1643,29 @@ export function CodexLocalAccessModal({
                     <RefreshCw size={14} className={saving ? 'loading-spinner' : ''} />
                   </button>
                   {collection && (
-                    <div className="codex-local-access-header-routing">
-                      <SingleSelectDropdown
-                        value={routingStrategy}
-                        options={routingStrategyOptions}
-                        onChange={(value) => void handleChangeRoutingStrategy(value)}
-                        disabled={saving || testing || starting}
-                        ariaLabel={t('codex.localAccess.routingLabel', '调度策略')}
-                      />
-                    </div>
+                    <>
+                      <div className="codex-local-access-header-routing">
+                        <SingleSelectDropdown
+                          value={routingStrategy}
+                          options={routingStrategyOptions}
+                          onChange={(value) => void handleChangeRoutingStrategy(value)}
+                          disabled={saving || testing || starting}
+                          ariaLabel={t('codex.localAccess.routingLabel', '调度策略')}
+                        />
+                      </div>
+                      {routingStrategy === 'custom' && (
+                        <button
+                          type="button"
+                          className="folder-icon-btn codex-local-access-toolbar-btn"
+                          onClick={openCustomRoutingDialog}
+                          disabled={saving || testing || starting}
+                          title={t('codex.localAccess.customRoutingEdit', '编辑自定义调度')}
+                          aria-label={t('codex.localAccess.customRoutingEdit', '编辑自定义调度')}
+                        >
+                          <SlidersHorizontal size={14} />
+                        </button>
+                      )}
+                    </>
                   )}
                   <button
                     type="button"
@@ -1993,11 +2402,315 @@ export function CodexLocalAccessModal({
             </button>
           )}
         </div>
-      </div>
-      </div>
+              </div>
+              </div>
 
-      {testDialogOpen && (
-        <div
+              {customRoutingOpen && collection && (
+                <div
+                  className="modal-overlay codex-local-access-custom-routing-overlay"
+                  onClick={closeCustomRoutingDialog}
+                >
+                  <div
+                    className="modal codex-local-access-custom-routing-dialog"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="codex-local-access-custom-routing-title"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="modal-header codex-local-access-custom-routing-header">
+                      <div>
+                        <h3 id="codex-local-access-custom-routing-title">
+                          <SlidersHorizontal size={18} />
+                          <span>{t('codex.localAccess.customRoutingTitle', '自定义调度')}</span>
+                        </h3>
+                        <p>
+                          {t(
+                            'codex.localAccess.customRoutingDesc',
+                            '按账号设置优先级和权重，用于控制 API 服务选择账号的顺序和同级负载分配。',
+                          )}
+                        </p>
+                      </div>
+                      <button
+                        className="modal-close codex-local-access-custom-routing-close"
+                        onClick={closeCustomRoutingDialog}
+                        disabled={saving}
+                        aria-label={t('common.close')}
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+
+            <div className="modal-body codex-local-access-custom-routing-body">
+              {customRoutingError && (
+                <div className="codex-local-access-inline-error" aria-live="assertive">
+                  <CircleAlert size={14} />
+                  <span>{customRoutingError}</span>
+                </div>
+              )}
+
+              <div className="codex-local-access-custom-routing-guide">
+                        <div className="codex-local-access-custom-routing-guide-card">
+                          <strong>
+                            {t('codex.localAccess.customRoutingPriorityTitle', '优先级')}
+                          </strong>
+                          <span>
+                            {t(
+                              'codex.localAccess.customRoutingPriorityDesc',
+                              '数值越高越先被选中；高优先级账号不可用时，才会继续尝试低优先级账号。',
+                            )}
+                          </span>
+                        </div>
+                        <div className="codex-local-access-custom-routing-guide-card">
+                          <strong>
+                            {t('codex.localAccess.customRoutingWeightTitle', '权重')}
+                          </strong>
+                          <span>
+                            {t(
+                              'codex.localAccess.customRoutingWeightDesc',
+                              '相同优先级内用于负载均衡；权重越高，分到的请求越多。',
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="codex-local-access-custom-routing-toolbar">
+                        <div className="group-account-search codex-local-access-custom-routing-search">
+                          <Search size={16} className="group-account-search-icon" />
+                          <input
+                            type="text"
+                            value={customRoutingQuery}
+                            onChange={(event) => setCustomRoutingQuery(event.target.value)}
+                            placeholder={t(
+                              'codex.localAccess.customRoutingSearch',
+                              '搜索邮箱、订阅或账号 ID',
+                            )}
+                          />
+                        </div>
+                        <div className="group-account-picker-filters codex-local-access-custom-routing-filters">
+                          <MultiSelectFilterDropdown
+                            options={customRoutingTierFilterOptions}
+                            selectedValues={customRoutingFilterTypes}
+                            allLabel={customRoutingAllTierFilterLabel}
+                            filterLabel={t('common.shared.filterLabel', '筛选')}
+                            clearLabel={t('accounts.clearFilter', '清空筛选')}
+                            emptyLabel={t('common.none', '暂无')}
+                            ariaLabel={t('common.shared.filterLabel', '筛选')}
+                            onToggleValue={(value) =>
+                              setCustomRoutingFilterTypes((prev) =>
+                                prev.includes(value)
+                                  ? prev.filter((item) => item !== value)
+                                  : [...prev, value],
+                              )
+                            }
+                            onClear={() => setCustomRoutingFilterTypes([])}
+                          />
+                          <AccountTagFilterDropdown
+                            availableTags={customRoutingAvailableTags}
+                            selectedTags={customRoutingTagFilter}
+                            onToggleTag={(value) =>
+                              setCustomRoutingTagFilter((prev) =>
+                                prev.includes(value)
+                                  ? prev.filter((item) => item !== value)
+                                  : [...prev, value],
+                              )
+                            }
+                            onClear={() => setCustomRoutingTagFilter([])}
+                          />
+                        </div>
+                        <div className="codex-local-access-custom-routing-bulk">
+                          <span className="codex-local-access-custom-routing-selected-count">
+                            {t('codex.localAccess.customRoutingSelected', {
+                              count: customRoutingSelected.size,
+                              defaultValue: '已选 {{count}}',
+                            })}
+                          </span>
+                          <label>
+                            <span>{t('codex.localAccess.customRoutingPriorityShort', '优先级')}</span>
+                            <input
+                              type="number"
+                              min={CUSTOM_ROUTING_PRIORITY_MIN}
+                              max={CUSTOM_ROUTING_PRIORITY_MAX}
+                              value={customRoutingBulkPriority}
+                              onChange={(event) => setCustomRoutingBulkPriority(event.target.value)}
+                              disabled={saving}
+                            />
+                          </label>
+                          <label>
+                            <span>{t('codex.localAccess.customRoutingWeightShort', '权重')}</span>
+                            <input
+                              type="number"
+                              min={CUSTOM_ROUTING_WEIGHT_MIN}
+                              max={CUSTOM_ROUTING_WEIGHT_MAX}
+                              value={customRoutingBulkWeight}
+                              onChange={(event) => setCustomRoutingBulkWeight(event.target.value)}
+                              disabled={saving}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={applyCustomRoutingBatch}
+                            disabled={saving || customRoutingSelected.size === 0}
+                          >
+                            {t('codex.localAccess.customRoutingApplyBatch', '应用到已选')}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={resetCustomRoutingDraft}
+                            disabled={saving || customRoutingAccounts.length === 0}
+                          >
+                            {t('codex.localAccess.customRoutingReset', '重置')}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="codex-local-access-custom-routing-list-shell">
+                        <div className="codex-local-access-custom-routing-row codex-local-access-custom-routing-row-head">
+                  <input
+                    ref={customRoutingSelectAllRef}
+                    type="checkbox"
+                    checked={allVisibleCustomRoutingSelected}
+                    onChange={toggleCustomRoutingSelectAllVisible}
+                    disabled={saving || visibleCustomRoutingAccounts.length === 0}
+                    aria-label={t('common.selectAll', '全选')}
+                  />
+                          <span>{t('codex.localAccess.customRoutingAccountColumn', '账号')}</span>
+                          <span>{t('codex.localAccess.customRoutingQuotaColumn', '额度')}</span>
+                          <span>{t('codex.localAccess.customRoutingPriorityShort', '优先级')}</span>
+                          <span>{t('codex.localAccess.customRoutingWeightShort', '权重')}</span>
+                        </div>
+
+                        <div className="codex-local-access-custom-routing-list">
+                          {customRoutingAccounts.length === 0 ? (
+                            <div className="group-account-empty">
+                              {t(
+                                'codex.localAccess.customRoutingEmpty',
+                                '当前 API 服务集合没有可配置的账号',
+                              )}
+                            </div>
+                          ) : visibleCustomRoutingAccounts.length === 0 ? (
+                            <div className="group-account-empty">
+                              {t('common.shared.noMatch.title', '没有匹配的账号')}
+                            </div>
+                          ) : (
+                            visibleCustomRoutingAccounts.map((account) => {
+                              const presentation = buildCodexAccountPresentation(account, t);
+                              const draftRule = customRoutingDraft[account.id] ?? {
+                                priority: CUSTOM_ROUTING_PRIORITY_MIN,
+                                weight: CUSTOM_ROUTING_WEIGHT_MIN,
+                              };
+                              const checked = customRoutingSelected.has(account.id);
+
+                              return (
+                                <div
+                                  key={account.id}
+                                  className={`codex-local-access-custom-routing-row${
+                                    checked ? ' is-selected' : ''
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => toggleCustomRoutingSelect(account.id)}
+                                    disabled={saving}
+                                  />
+                                  <div className="codex-local-access-custom-routing-account">
+                                    <span
+                                      className="group-account-email"
+                                      title={maskAccountText(presentation.displayName)}
+                                    >
+                                      {maskAccountText(presentation.displayName)}
+                                    </span>
+                                    <span className={`tier-badge ${presentation.planClass}`}>
+                                      {presentation.planLabel}
+                                    </span>
+                                  </div>
+                                  <div className="codex-local-access-custom-routing-quota">
+                                    {renderQuotaPreview(presentation, 2) ?? (
+                                      <span className="codex-local-access-custom-routing-muted">
+                                        {t('common.none', '暂无')}
+                                      </span>
+                                    )}
+                                  </div>
+                          <label className="codex-local-access-custom-routing-number-field">
+                            <span>
+                              {t('codex.localAccess.customRoutingPriorityShort', '优先级')}
+                            </span>
+                            <input
+                              className="codex-local-access-custom-routing-number"
+                              type="number"
+                              min={CUSTOM_ROUTING_PRIORITY_MIN}
+                              max={CUSTOM_ROUTING_PRIORITY_MAX}
+                              value={draftRule.priority}
+                              onChange={(event) =>
+                                updateCustomRoutingRule(
+                                  account.id,
+                                  'priority',
+                                  event.target.value,
+                                )
+                              }
+                              disabled={saving}
+                              aria-label={t(
+                                'codex.localAccess.customRoutingPriorityShort',
+                                '优先级',
+                              )}
+                            />
+                          </label>
+                          <label className="codex-local-access-custom-routing-number-field">
+                            <span>
+                              {t('codex.localAccess.customRoutingWeightShort', '权重')}
+                            </span>
+                            <input
+                              className="codex-local-access-custom-routing-number"
+                              type="number"
+                              min={CUSTOM_ROUTING_WEIGHT_MIN}
+                              max={CUSTOM_ROUTING_WEIGHT_MAX}
+                              value={draftRule.weight}
+                              onChange={(event) =>
+                                updateCustomRoutingRule(
+                                  account.id,
+                                  'weight',
+                                  event.target.value,
+                                )
+                              }
+                              disabled={saving}
+                              aria-label={t(
+                                'codex.localAccess.customRoutingWeightShort',
+                                '权重',
+                              )}
+                            />
+                          </label>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="modal-footer codex-local-access-custom-routing-footer">
+                      <button
+                        className="btn btn-secondary"
+                        onClick={closeCustomRoutingDialog}
+                        disabled={saving}
+                      >
+                        {t('common.cancel')}
+                      </button>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => void handleSaveCustomRouting()}
+                        disabled={saving || customRoutingAccounts.length === 0}
+                      >
+                        {saving ? t('common.saving') : t('codex.localAccess.customRoutingSave', '保存自定义调度')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {testDialogOpen && (
+                <div
           className="modal-overlay codex-local-access-test-dialog-overlay"
           onClick={closeTestDialog}
         >

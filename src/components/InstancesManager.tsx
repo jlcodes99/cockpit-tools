@@ -95,6 +95,7 @@ interface InstancesManagerProps<TAccount extends AccountLike> {
     | "workbuddy";
   onInstanceStarted?: (instance: InstanceProfile) => void | Promise<void>;
   resolveStartSuccessMessage?: (instance: InstanceProfile) => string;
+  toolbarExtraActions?: ReactNode;
 }
 
 const INSTANCE_AUTO_REFRESH_INTERVAL_MS = 10_000;
@@ -282,6 +283,7 @@ export function InstancesManager<TAccount extends AccountLike>({
   appType = "antigravity",
   onInstanceStarted,
   resolveStartSuccessMessage,
+  toolbarExtraActions,
 }: InstancesManagerProps<TAccount>) {
   const { t } = useTranslation();
   const {
@@ -2276,6 +2278,7 @@ export function InstancesManager<TAccount extends AccountLike>({
           </button>
         </div>
         <div className="toolbar-right">
+          {toolbarExtraActions}
           <button
             className="btn btn-primary"
             onClick={openCreateModal}

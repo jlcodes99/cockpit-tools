@@ -1691,6 +1691,11 @@
     },
     "oauth": {
       "desc": "Нажмите ниже и завершите авторизацию OpenAI в браузере",
+      "trialGuideTitle": "Советы для пробной регистрации",
+      "trialGuideDesc": "Для нового аккаунта лучше использовать Gmail с долгосрочным доступом: так проще сохранить аккаунт и пройти последующую проверку.",
+      "trialGuideAliasDesc": "Один основной Gmail может подготовить до 5 алиасов для разделения регистраций ChatGPT; используйте их по правилам целевого сервиса.",
+      "trialGuideLink": "Открыть пробный гид",
+      "gmailAliasLink": "Создать алиас Gmail",
       "preparing": "Подготовка ссылки авторизации...",
       "exchanging": "Обмен токена...",
       "portInUse": "Порт {{port}} уже занят. Закройте приложение, которое его использует, и попробуйте снова.",
@@ -1850,7 +1855,8 @@
         "quotaLowFirst": "Сначала низкая квота",
         "planHighFirst": "Сначала высокий тариф",
         "planLowFirst": "Сначала низкий тариф",
-        "expirySoonFirst": "Скорое истечение сначала"
+        "expirySoonFirst": "Скорое истечение сначала",
+        "custom": "Настраиваемая"
       },
       "statusUnconfigured": "Не настроено",
       "expandDetails": "Развернуть",
@@ -1892,7 +1898,25 @@
       "oauthBinding": {
         "desc": "Необязательно. Без привязки API-сервис работает по прежней логике API Key; после привязки вход использует OAuth-аккаунт, а Provider — настройки API-сервиса.",
         "currentService": "API-сервис: {{name}}"
-      }
+      },
+      "customRoutingEdit": "Изменить настраиваемую маршрутизацию",
+      "customRoutingTitle": "Настраиваемая маршрутизация",
+      "customRoutingDesc": "Задайте приоритет и вес для каждой учетной записи, чтобы управлять порядком выбора и распределением нагрузки на одном уровне.",
+      "customRoutingPriorityTitle": "Приоритет",
+      "customRoutingPriorityDesc": "Более высокие значения выбираются раньше; учетные записи с низким приоритетом пробуются только при недоступности более высоких.",
+      "customRoutingWeightTitle": "Вес",
+      "customRoutingWeightDesc": "Используется для балансировки нагрузки при одинаковом приоритете. Чем выше вес, тем больше запросов.",
+      "customRoutingSearch": "Поиск по почте, тарифу или ID учетной записи",
+      "customRoutingSelected": "Выбрано {{count}}",
+      "customRoutingPriorityShort": "Приоритет",
+      "customRoutingWeightShort": "Вес",
+      "customRoutingApplyBatch": "Применить к выбранным",
+      "customRoutingReset": "Сбросить",
+      "customRoutingAccountColumn": "Учетная запись",
+      "customRoutingQuotaColumn": "Лимит",
+      "customRoutingEmpty": "В текущей коллекции API-сервиса нет настраиваемых учетных записей",
+      "customRoutingSave": "Сохранить маршрутизацию",
+      "customRoutingSaveSuccess": "Настраиваемая маршрутизация API-сервиса обновлена"
     },
     "local": {
       "desc": "Импортировать текущий аккаунт из ~/.codex/auth.json",

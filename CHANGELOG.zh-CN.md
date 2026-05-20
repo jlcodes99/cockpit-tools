@@ -7,6 +7,16 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [0.23.11] - 2026-05-19
+
+### 新增
+- **Codex 本地 API 服务现支持自定义账号调度**：API 服务集合可选择“自定义”策略，为每个账号设置优先级与权重，批量调整已选账号，并把规范化后的调度规则写入网关选号逻辑。
+- **Codex Token 导入现支持 ChatGPT/Codex session JSON**：可导入直接粘贴或包裹在 `session`/`session_json` 字段中的 session JSON，并复用现有 Codex OAuth 凭据导入流程。
+
+### 变更
+- **Codex 本地 API 服务上游连接失败现提供更可操作的网络/代理诊断**：网关会记录 502 失败状态，并把网络、代理或 `chatgpt.com` 可访问性问题提示成更清晰的错误信息。
+
+---
 ## [0.23.10] - 2026-05-18
 
 ### 修复

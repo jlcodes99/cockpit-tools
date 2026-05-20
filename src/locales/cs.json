@@ -1691,6 +1691,11 @@
     },
     "oauth": {
       "desc": "Klikněte níže a dokončete autorizaci OpenAI v prohlížeči",
+      "trialGuideTitle": "Tipy pro zkušební registraci",
+      "trialGuideDesc": "Při přípravě nového účtu dejte přednost adrese Gmail s dlouhodobým přístupem; lépe se hodí pro udržení účtu i pozdější ověření.",
+      "trialGuideAliasDesc": "Jeden hlavní Gmail může připravit až 5 aliasů pro oddělení registrací ChatGPT; používejte je podle pravidel cílové služby.",
+      "trialGuideLink": "Zobrazit průvodce",
+      "gmailAliasLink": "Vytvořit alias Gmail",
       "preparing": "Připravuje se autorizační odkaz...",
       "exchanging": "Probíhá výměna tokenu...",
       "portInUse": "Port {{port}} je již používán. Zavřete aplikaci, která jej používá, a zkuste to znovu.",
@@ -1850,7 +1855,8 @@
         "quotaLowFirst": "Nejnižší kvóta napřed",
         "planHighFirst": "Nejvyšší tarif napřed",
         "planLowFirst": "Nejnižší tarif napřed",
-        "expirySoonFirst": "Brzy končící první"
+        "expirySoonFirst": "Brzy končící první",
+        "custom": "Vlastní"
       },
       "statusUnconfigured": "Nenastaveno",
       "expandDetails": "Rozbalit detail",
@@ -1892,7 +1898,25 @@
       "oauthBinding": {
         "desc": "Volitelné. Bez propojení služba API používá původní logiku API Key; po propojení se přihlášení bere z účtu OAuth a Provider z konfigurace služby API.",
         "currentService": "Služba API: {{name}}"
-      }
+      },
+      "customRoutingEdit": "Upravit vlastní směrování",
+      "customRoutingTitle": "Vlastní směrování",
+      "customRoutingDesc": "Nastavte prioritu a váhu pro každý účet, abyste řídili pořadí výběru a rozdělení zátěže ve stejné prioritě.",
+      "customRoutingPriorityTitle": "Priorita",
+      "customRoutingPriorityDesc": "Vyšší hodnoty se vybírají dříve; účty s nižší prioritou se zkoušejí až tehdy, když vyšší nejsou dostupné.",
+      "customRoutingWeightTitle": "Váha",
+      "customRoutingWeightDesc": "Používá se pro vyvažování zátěže ve stejné prioritě. Vyšší váha znamená více požadavků.",
+      "customRoutingSearch": "Hledat e-mail, tarif nebo ID účtu",
+      "customRoutingSelected": "Vybráno {{count}}",
+      "customRoutingPriorityShort": "Priorita",
+      "customRoutingWeightShort": "Váha",
+      "customRoutingApplyBatch": "Použít na výběr",
+      "customRoutingReset": "Resetovat",
+      "customRoutingAccountColumn": "Účet",
+      "customRoutingQuotaColumn": "Limit",
+      "customRoutingEmpty": "V aktuální kolekci služby API nejsou žádné nastavitelné účty",
+      "customRoutingSave": "Uložit směrování",
+      "customRoutingSaveSuccess": "Vlastní směrování služby API bylo aktualizováno"
     },
     "local": {
       "desc": "Importovat aktuální účet z ~/.codex/auth.json",

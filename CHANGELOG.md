@@ -7,6 +7,16 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [0.23.11] - 2026-05-19
+
+### Added
+- **Codex Local API Service now supports custom account routing**: API Service collections can choose Custom routing, set per-account priority and weight, batch-edit selected accounts, and persist normalized routing rules for gateway account selection.
+- **Codex token import now accepts ChatGPT/Codex session JSON**: imports can read direct or wrapped session JSON containing accessToken/session fields and normalize it into the existing Codex OAuth token flow.
+
+### Changed
+- **Codex Local API Service upstream connection failures now show actionable network/proxy diagnostics**: gateway failures now record the 502 failure state and surface clearer guidance for network, proxy, or `chatgpt.com` reachability issues.
+
+---
 ## [0.23.10] - 2026-05-18
 
 ### Fixed

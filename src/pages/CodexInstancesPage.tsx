@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronLeft, Copy, Play, X } from "lucide-react";
+import { Check, ChevronLeft, Copy, Play, RefreshCw, X } from "lucide-react";
+import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import { PlatformInstancesContent } from "../components/platform/PlatformInstancesContent";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
@@ -68,6 +69,11 @@ export function CodexInstancesContent({
   const [launchModal, setLaunchModal] = useState<CodexLaunchModalState | null>(
     null,
   );
+  const [syncingAllRecords, setSyncingAllRecords] = useState(false);
+  const [syncRecordsMessage, setSyncRecordsMessage] = useState<{
+    text: string;
+    tone?: "error";
+  } | null>(null);
 
   useEscClose(!!launchModal, () => setLaunchModal(null));
   const { terminalOptions, selectedTerminal, setSelectedTerminal } =
@@ -288,9 +294,99 @@ export function CodexInstancesContent({
     }
   };
 
+  const handleSyncAllLocalRecords = async () => {
+    if (syncingAllRecords) return;
+
+    try {
+      const latestInstances = await instanceStore.refreshInstances();
+      if (latestInstances.length < 2) {
+        setSyncRecordsMessage({
+          text: t(
+            "codex.instances.syncAllRecords.needTwo",
+            "至少需要两个实例才能同步本地记录",
+          ),
+          tone: "error",
+        });
+        return;
+      }
+
+      const runningCount = latestInstances.filter(
+        (instance) => instance.running,
+      ).length;
+      if (runningCount > 0) {
+        setSyncRecordsMessage({
+          text: t(
+            "codex.instances.syncAllRecords.closeFirst",
+            "请先关闭所有 Codex 实例后再同步记录，避免运行中的实例把旧记录写回。",
+          ),
+          tone: "error",
+        });
+        return;
+      }
+
+      const confirmed = await confirmDialog(
+        t(
+          "codex.instances.syncAllRecords.confirmMessage",
+          "会把所有 Codex 实例中的本地会话记录做一次全量同步；同 ID 会话会进行事件级合并，写入前会备份目标实例关键文件和旧会话文件。确认继续？",
+        ),
+        {
+          title: t(
+            "codex.instances.syncAllRecords.title",
+            "同步所有本地记录",
+          ),
+          okLabel: t("common.confirm", "确认"),
+          cancelLabel: t("common.cancel", "取消"),
+        },
+      );
+      if (!confirmed) return;
+
+      setSyncingAllRecords(true);
+      setSyncRecordsMessage(null);
+      const summary = await instanceStore.syncThreadsAcrossInstances();
+      setSyncRecordsMessage({ text: summary.message });
+    } catch (error) {
+      setSyncRecordsMessage({ text: String(error), tone: "error" });
+    } finally {
+      setSyncingAllRecords(false);
+    }
+  };
+
+  const syncAllRecordsButton = (
+    <button
+      className="btn btn-secondary"
+      onClick={handleSyncAllLocalRecords}
+      disabled={syncingAllRecords}
+      title={t(
+        "codex.instances.syncAllRecords.tooltip",
+        "同步所有实例的本地会话记录",
+      )}
+    >
+      <RefreshCw size={16} />
+      {syncingAllRecords
+        ? t("common.syncing", "同步中...")
+        : t("codex.instances.syncAllRecords.action", "同步记录")}
+    </button>
+  );
+
   return (
     <>
       <div className="codex-instances-content">
+        {syncRecordsMessage && (
+          <div
+            className={`action-message${syncRecordsMessage.tone ? ` ${syncRecordsMessage.tone}` : ""}`}
+          >
+            <span className="action-message-text">
+              {syncRecordsMessage.text}
+            </span>
+            <button
+              className="action-message-close"
+              onClick={() => setSyncRecordsMessage(null)}
+              aria-label={t("common.close", "关闭")}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
         <PlatformInstancesContent
           instanceStore={instanceStore}
           accounts={accountsWithDisplayName}
@@ -316,6 +412,7 @@ export function CodexInstancesContent({
               ? t("instances.messages.launchPrepared", "启动命令已准备")
               : t("instances.messages.started", "实例已启动")
           }
+          toolbarExtraActions={syncAllRecordsButton}
         />
       </div>
 

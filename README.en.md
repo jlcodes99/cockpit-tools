@@ -376,6 +376,12 @@ npm run tauri build
 
 ---
 
+## Community
+
+Newly created Telegram chat group: [Join the group](https://t.me/+Y8gMv4SlZUU2MWY1)
+
+---
+
 ## Sponsor
 
 If you find this project useful, consider supporting it here: [☕ Donate](docs/DONATE.en.md)

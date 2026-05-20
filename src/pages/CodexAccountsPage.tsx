@@ -145,6 +145,7 @@ import type {
   CodexLocalAccessAddressKind,
   CodexLocalAccessCredentialMode,
   CodexLocalAccessCustomCredential,
+  CodexLocalAccessCustomRoutingRule,
   CodexLocalAccessEndpointKind,
   CodexLocalAccessRoutingStrategy,
   CodexLocalAccessScope,
@@ -220,8 +221,15 @@ const CODEX_TOKEN_SINGLE_EXAMPLE = `{
     "refresh_token": "rt_..."
   }
 }`;
-const CODEX_TOKEN_ACCESS_OR_REFRESH_EXAMPLE = `{
-  "accessToken": "eyJ..."
+const CODEX_TOKEN_SESSION_EXAMPLE = `{
+  "user": {
+    "email": "user@example.com"
+  },
+  "account": {
+    "id": "account-id"
+  },
+  "accessToken": "eyJ...",
+  "authProvider": "openai"
 }
 
 {
@@ -5509,6 +5517,32 @@ export function CodexAccountsPage() {
     [setMessage, t],
   );
 
+  const handleUpdateLocalAccessCustomRouting = useCallback(
+    async (rules: CodexLocalAccessCustomRoutingRule[]) => {
+      setLocalAccessSaving(true);
+      try {
+        const nextState =
+          await codexLocalAccessService.updateCodexLocalAccessCustomRouting(
+            rules,
+          );
+        setLocalAccessState(nextState);
+        setMessage({
+          text: t(
+            "codex.localAccess.customRoutingSaveSuccess",
+            "API 服务自定义调度已更新",
+          ),
+        });
+        return nextState;
+      } catch (error) {
+        console.error("Failed to update local access custom routing:", error);
+        throw new Error(String(error).replace(/^Error:\s*/, ""));
+      } finally {
+        setLocalAccessSaving(false);
+      }
+    },
+    [setMessage, t],
+  );
+
   const handleUpdateLocalAccessAccessScope = useCallback(
     async (accessScope: CodexLocalAccessScope) => {
       setLocalAccessSaving(true);
@@ -9487,7 +9521,7 @@ export function CodexAccountsPage() {
                           <p className="token-format-required">
                             {t(
                               "codex.token.formatRequired",
-                              "支持完整 tokens（id_token + access_token）、Sub2API 导出 JSON、仅 accessToken 或仅 refresh_token。仅 refresh_token 会先联网换取完整凭据。",
+                              "支持 session JSON、完整 tokens（id_token + access_token）、Sub2API 导出 JSON、仅 accessToken 或仅 refresh_token。仅 refresh_token 会先联网换取完整凭据。",
                             )}
                           </p>
                           <div className="token-format-group">
@@ -9505,11 +9539,11 @@ export function CodexAccountsPage() {
                             <div className="token-format-label">
                               {t(
                                 "codex.token.formatRefreshOnlyLabel",
-                                "仅 accessToken / refresh_token 示例",
+                                "session / accessToken / refresh_token 示例",
                               )}
                             </div>
                             <pre className="token-format-code">
-                              {CODEX_TOKEN_ACCESS_OR_REFRESH_EXAMPLE}
+                              {CODEX_TOKEN_SESSION_EXAMPLE}
                             </pre>
                           </div>
                           <div className="token-format-group">
@@ -9528,7 +9562,7 @@ export function CodexAccountsPage() {
                         onChange={(e) => setTokenInput(e.target.value)}
                         placeholder={t(
                           "codex.token.placeholder",
-                          '示例：直接粘贴 accessToken、Sub2API 导出 JSON，或 {"accessToken":"eyJ..."}',
+                          '示例：直接粘贴 session JSON、accessToken、Sub2API 导出 JSON，或 {"accessToken":"eyJ..."}',
                         )}
                       />
                       <button
@@ -11420,6 +11454,7 @@ export function CodexAccountsPage() {
             onRefreshStats={reloadLocalAccessState}
             onUpdatePort={handleUpdateLocalAccessPort}
             onUpdateRoutingStrategy={handleUpdateLocalAccessRoutingStrategy}
+            onUpdateCustomRouting={handleUpdateLocalAccessCustomRouting}
             onUpdateAccessScope={handleUpdateLocalAccessAccessScope}
             onUpdateCredentials={handleUpdateLocalAccessCredentials}
             onRotateApiKey={handleRotateLocalAccessApiKey}

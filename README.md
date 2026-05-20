@@ -375,7 +375,9 @@ npm run tauri build
 
 ## 💬 交流群
 
-QQ交流群 或者加我微信 拉微信群
+QQ 交流群、微信群或新建的 Telegram 畅聊群都可以加入。
+
+新建 Telegram 畅聊群：[点击加入](https://t.me/+Y8gMv4SlZUU2MWY1)
 
 | QQ 群 | 微信（个人） |
 | :---: | :---: |

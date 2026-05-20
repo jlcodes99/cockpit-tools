@@ -1691,6 +1691,11 @@
     },
     "oauth": {
       "desc": "Klicke unten und schließe die OpenAI-Autorisierung im Browser ab",
+      "trialGuideTitle": "Tipps zur Testregistrierung",
+      "trialGuideDesc": "Für ein neues Konto empfiehlt sich eine langfristig erreichbare Gmail-Adresse; das ist stabiler für Kontobestand und spätere Verifizierung.",
+      "trialGuideAliasDesc": "Ein Haupt-Gmail kann bis zu 5 Alias-Adressen vorbereiten, um ChatGPT-Registrierungen zu trennen; bitte gemäß den Regeln des Zielservices nutzen.",
+      "trialGuideLink": "Testanleitung öffnen",
+      "gmailAliasLink": "Gmail-Alias erzeugen",
       "preparing": "Autorisierungslink wird vorbereitet...",
       "exchanging": "Token wird ausgetauscht...",
       "portInUse": "Port {{port}} ist bereits belegt. Bitte schließen Sie die Anwendung, die ihn nutzt, und versuchen Sie es erneut.",
@@ -1850,7 +1855,8 @@
         "quotaLowFirst": "Niedrige Quote zuerst",
         "planHighFirst": "Hohes Abo zuerst",
         "planLowFirst": "Niedriges Abo zuerst",
-        "expirySoonFirst": "Bald ablaufend zuerst"
+        "expirySoonFirst": "Bald ablaufend zuerst",
+        "custom": "Benutzerdefiniert"
       },
       "statusUnconfigured": "Nicht konfiguriert",
       "expandDetails": "Details aufklappen",
@@ -1892,7 +1898,25 @@
       "oauthBinding": {
         "desc": "Optional. Ohne Verknüpfung nutzt der API-Dienst weiter den bisherigen API-Key-Ablauf; nach der Verknüpfung verwendet die Anmeldung das OAuth-Konto und der Provider die API-Dienst-Konfiguration.",
         "currentService": "API-Dienst: {{name}}"
-      }
+      },
+      "customRoutingEdit": "Benutzerdefiniertes Routing bearbeiten",
+      "customRoutingTitle": "Benutzerdefiniertes Routing",
+      "customRoutingDesc": "Lege Priorität und Gewicht je Konto fest, um Auswahlreihenfolge und Lastverteilung innerhalb gleicher Priorität zu steuern.",
+      "customRoutingPriorityTitle": "Priorität",
+      "customRoutingPriorityDesc": "Höhere Werte werden zuerst gewählt; Konten mit niedrigerer Priorität werden erst versucht, wenn höhere nicht verfügbar sind.",
+      "customRoutingWeightTitle": "Gewicht",
+      "customRoutingWeightDesc": "Dient der Lastverteilung bei gleicher Priorität. Höheres Gewicht bedeutet mehr Anfragen.",
+      "customRoutingSearch": "E-Mail, Abo oder Konto-ID suchen",
+      "customRoutingSelected": "{{count}} ausgewählt",
+      "customRoutingPriorityShort": "Priorität",
+      "customRoutingWeightShort": "Gewicht",
+      "customRoutingApplyBatch": "Auf Auswahl anwenden",
+      "customRoutingReset": "Zurücksetzen",
+      "customRoutingAccountColumn": "Konto",
+      "customRoutingQuotaColumn": "Kontingent",
+      "customRoutingEmpty": "Keine konfigurierbaren Konten in der aktuellen API-Service-Sammlung",
+      "customRoutingSave": "Routing speichern",
+      "customRoutingSaveSuccess": "Benutzerdefiniertes Routing des API-Service wurde aktualisiert"
     },
     "local": {
       "desc": "Aktuell eingeloggtes Konto aus ~/.codex/auth.json importieren",

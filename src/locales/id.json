@@ -1740,6 +1740,11 @@
     },
     "oauth": {
       "desc": "Klik tombol di bawah ini dan selesaikan otorisasi OpenAI di peramban Anda",
+      "trialGuideTitle": "Tips daftar uji coba",
+      "trialGuideDesc": "Saat menyiapkan akun baru, utamakan alamat Gmail yang bisa diakses jangka panjang agar akun lebih mudah dipertahankan dan diverifikasi lagi.",
+      "trialGuideAliasDesc": "Satu Gmail utama dapat menyiapkan hingga 5 alamat alias untuk memisahkan catatan pendaftaran ChatGPT; gunakan sesuai aturan layanan tujuan.",
+      "trialGuideLink": "Lihat panduan uji coba",
+      "gmailAliasLink": "Buat alias Gmail",
       "preparing": "Menyiapkan tautan otorisasi...",
       "exchanging": "Menukar token...",
       "portInUse": "Port {{port}} is already in use. Please close the app using this port and try again.",
@@ -1899,7 +1904,8 @@
         "quotaLowFirst": "Kuota Rendah Dulu",
         "planHighFirst": "Paket Tinggi Dulu",
         "planLowFirst": "Paket Rendah Dulu",
-        "expirySoonFirst": "Kedaluwarsa Cepat Dulu"
+        "expirySoonFirst": "Kedaluwarsa Cepat Dulu",
+        "custom": "Kustom"
       },
       "statusUnconfigured": "Belum dikonfigurasi",
       "expandDetails": "Buka detail",
@@ -1941,7 +1947,25 @@
       "oauthBinding": {
         "desc": "Opsional. Tanpa tautan, layanan API tetap memakai alur API Key lama; setelah ditautkan, status masuk memakai akun OAuth dan Provider memakai konfigurasi layanan API.",
         "currentService": "Layanan API: {{name}}"
-      }
+      },
+      "customRoutingEdit": "Edit routing kustom",
+      "customRoutingTitle": "Routing kustom",
+      "customRoutingDesc": "Atur prioritas dan bobot per akun untuk mengontrol urutan pemilihan akun dan pembagian beban pada prioritas yang sama.",
+      "customRoutingPriorityTitle": "Prioritas",
+      "customRoutingPriorityDesc": "Nilai lebih tinggi dipilih lebih dahulu; akun prioritas lebih rendah hanya dicoba saat prioritas tinggi tidak tersedia.",
+      "customRoutingWeightTitle": "Bobot",
+      "customRoutingWeightDesc": "Dipakai untuk menyeimbangkan beban dalam prioritas yang sama. Bobot lebih tinggi berarti lebih banyak permintaan.",
+      "customRoutingSearch": "Cari email, paket, atau ID akun",
+      "customRoutingSelected": "{{count}} dipilih",
+      "customRoutingPriorityShort": "Prioritas",
+      "customRoutingWeightShort": "Bobot",
+      "customRoutingApplyBatch": "Terapkan ke pilihan",
+      "customRoutingReset": "Reset",
+      "customRoutingAccountColumn": "Akun",
+      "customRoutingQuotaColumn": "Kuota",
+      "customRoutingEmpty": "Tidak ada akun yang dapat dikonfigurasi di koleksi layanan API saat ini",
+      "customRoutingSave": "Simpan routing",
+      "customRoutingSaveSuccess": "Routing kustom layanan API diperbarui"
     },
     "api": {
       "baseUrl": "URL Dasar",
