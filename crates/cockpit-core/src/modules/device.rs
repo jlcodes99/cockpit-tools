@@ -24,8 +24,8 @@ pub fn get_storage_path() -> Result<PathBuf, String> {
     #[cfg(target_os = "macos")]
     {
         let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
-        let path =
-            home.join("Library/Application Support/Antigravity/User/globalStorage/storage.json");
+        let path = home
+            .join("Library/Application Support/Antigravity IDE/User/globalStorage/storage.json");
         if path.exists() {
             return Ok(path);
         }
@@ -35,7 +35,8 @@ pub fn get_storage_path() -> Result<PathBuf, String> {
     {
         let appdata =
             std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
-        let path = PathBuf::from(appdata).join("Antigravity\\User\\globalStorage\\storage.json");
+        let path =
+            PathBuf::from(appdata).join("Antigravity IDE\\User\\globalStorage\\storage.json");
         if path.exists() {
             return Ok(path);
         }
@@ -44,13 +45,13 @@ pub fn get_storage_path() -> Result<PathBuf, String> {
     #[cfg(target_os = "linux")]
     {
         let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
-        let path = home.join(".config/Antigravity/User/globalStorage/storage.json");
+        let path = home.join(".config/Antigravity IDE/User/globalStorage/storage.json");
         if path.exists() {
             return Ok(path);
         }
     }
 
-    Err("未找到 storage.json，请确认 Antigravity 已运行过".to_string())
+    Err("未找到 storage.json，请确认 Antigravity IDE 已运行过".to_string())
 }
 
 /// 获取 storage.json 所在目录
@@ -72,20 +73,20 @@ fn get_machine_id_path() -> Result<PathBuf, String> {
     #[cfg(target_os = "macos")]
     {
         let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
-        return Ok(home.join("Library/Application Support/Antigravity/machineid"));
+        return Ok(home.join("Library/Application Support/Antigravity IDE/machineid"));
     }
 
     #[cfg(target_os = "windows")]
     {
         let appdata =
             std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
-        return Ok(PathBuf::from(appdata).join("Antigravity\\machineid"));
+        return Ok(PathBuf::from(appdata).join("Antigravity IDE\\machineid"));
     }
 
     #[cfg(target_os = "linux")]
     {
         let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
-        return Ok(home.join(".config/Antigravity/machineid"));
+        return Ok(home.join(".config/Antigravity IDE/machineid"));
     }
 
     #[allow(unreachable_code)]

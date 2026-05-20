@@ -14,6 +14,7 @@
     "close": "关闭",
     "open": "打开",
     "copy": "复制",
+    "copied": "已复制",
     "add": "添加",
     "enable": "启用",
     "disable": "停用",
@@ -273,7 +274,7 @@
     }
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "账号管理",
     "wakeup": "唤醒任务",
     "fingerprints": "设备指纹",
@@ -711,7 +712,7 @@
       "uiScale": "界面缩放",
       "uiScaleDesc": "调整界面缩放比例",
       "accountManagement": "账号管理",
-      "autoRefresh": "Antigravity 自动刷新配额",
+      "autoRefresh": "Antigravity IDE 自动刷新配额",
       "codexAutoRefresh": "Codex 自动刷新配额",
       "autoRefreshDesc": "后台自动更新频率",
       "codexAutoRefreshDesc": "后台自动更新频率",
@@ -756,8 +757,8 @@
       "floatingCardShowNowAction": "显示悬浮卡片",
       "dataDir": "数据目录",
       "dataDirDesc": "账号与配置文件的存储位置。",
-      "fpDir": "Antigravity存储目录",
-      "fpDirDesc": "Antigravity数据文件的存储位置。",
+      "fpDir": "Antigravity IDE 存储目录",
+      "fpDirDesc": "Antigravity IDE 数据文件的存储位置。",
       "opencodeTitle": "OpenCode 联动",
       "opencodeAuthOverwrite": "切换 Codex 时覆盖 OpenCode 登录信息",
       "opencodeAuthOverwriteDesc": "关闭后仅切换 Codex，不会改写 OpenCode 当前登录态",
@@ -781,10 +782,10 @@
       "vscodeAppPathPlaceholder": "默认路径",
       "vscodePathSelect": "选择",
       "vscodePathReset": "重置默认",
-      "antigravityAppPath": "Antigravity 启动路径",
-      "antigravityTitle": "Antigravity 启动",
+      "antigravityAppPath": "Antigravity IDE 启动路径",
+      "antigravityTitle": "Antigravity IDE 启动",
       "commonTitle": "通用",
-      "antigravitySettingsTitle": "Antigravity 设置",
+      "antigravitySettingsTitle": "Antigravity IDE 设置",
       "codexSettingsTitle": "Codex 设置",
       "githubCopilotSettingsTitle": "GitHub Copilot 设置",
       "ghcpAutoRefresh": "GitHub Copilot 自动刷新配额",
@@ -814,8 +815,8 @@
       "codebuddyPathSelect": "选择",
       "codebuddyPathReset": "重置默认",
       "cursorPathReset": "重置默认",
-      "antigravityStartupWakeup": "启动后执行 Antigravity 唤醒",
-      "antigravityStartupWakeupDesc": "应用启动后按此策略触发一次已启用的 Antigravity 唤醒任务",
+      "antigravityStartupWakeup": "启动后执行 Antigravity IDE 唤醒",
+      "antigravityStartupWakeupDesc": "应用启动后按此策略触发一次已启用的 Antigravity IDE 唤醒任务",
       "codexLaunchOnSwitch": "切换 Codex 时自动启动 Codex App",
       "codexLaunchOnSwitchDesc": "切换账号后自动启动或重启 Codex App",
       "codexRestartSpecifiedAppOnSwitch": "切换 Codex 时重启指定应用",
@@ -877,7 +878,7 @@
       "ghcpOpencodeRestart": "切换 GitHub Copilot 时自动重启 OpenCode",
       "ghcpLaunchOnSwitch": "切换 GitHub Copilot 时自动启动 GitHub Copilot App",
       "antigravityDualSwitchNoRestart": "无感双通道切号（不重启）",
-      "antigravityDualSwitchNoRestartDesc": "切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity。",
+      "antigravityDualSwitchNoRestartDesc": "切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity IDE。",
       "codebuddyCnAppPath": "CodeBuddy CN 启动路径",
       "codebuddyCnAppPathDesc": "留空则使用默认路径",
       "codebuddyCnAppPathPlaceholder": "默认路径",
@@ -986,7 +987,7 @@
   },
   "accounts": {
     "title": "账号管理",
-    "subtitle": "管理你的 Antigravity 账号列表。",
+    "subtitle": "管理你的 Antigravity IDE 账号列表。",
     "total": "共 {{count}} 个账号",
     "search": "搜索账号...",
     "addAccount": "添加账号",
@@ -1240,7 +1241,7 @@
     "switching": "切换中...",
     "fingerprint": "指纹",
     "bound": "已绑定",
-    "brandTitle": "Antigravity 账号管理"
+    "brandTitle": "Antigravity IDE 账号管理"
   },
   "fingerprints": {
     "title": "设备指纹",
@@ -1342,7 +1343,7 @@
   "modals": {
     "addAccount": {
       "title": "添加账号",
-      "desc": "通过 Google OAuth 授权添加您的 Antigravity 账号",
+      "desc": "通过 Google OAuth 授权添加您的 Antigravity IDE 账号",
       "loginBtn": "Google OAuth 授权",
       "waiting": "等待授权..."
     },
@@ -1350,7 +1351,7 @@
       "title": "导入账号",
       "desc": "请选择导入方式",
       "local": "导入本地账户",
-      "localDesc": "从 Antigravity 客户端导入当前登录账户",
+      "localDesc": "从 Antigravity IDE 客户端导入当前登录账户",
       "tools": "导入 Antigravity Tools",
       "toolsDesc": "从 ~/.antigravity_tools/ 目录导入",
       "jsonDivider": "或粘贴 JSON",
@@ -1363,7 +1364,7 @@
       "fromExtension": "从插件导入",
       "syncBadge": "同步 Antigravity Cockpit 插件账号",
       "fromLocalDB": "从本地数据库导入",
-      "localDBDesc": "读取本机 Antigravity 客户端登录账号",
+      "localDBDesc": "读取本机 Antigravity IDE 客户端登录账号",
       "toolsDescMigrate": "从 ~/.antigravity_tools/ 迁移历史账号",
       "importingTools": "导入 Antigravity Tools...",
       "importingLocal": "导入本地账号...",
@@ -1446,7 +1447,7 @@
       },
       "runHint": {
         "title": "验证说明",
-        "line1": "立即检测会通过「本地网关 + 官方 Language Server 协议」模拟 Antigravity 客户端发起最小对话请求。",
+        "line1": "立即检测会通过「本地网关 + 官方 Language Server 协议」模拟 Antigravity IDE 客户端发起最小对话请求。",
         "line2": "该过程会消耗少量 Token（通常为一次短对话），实际消耗取决于模型与账号策略。",
         "line3": "该操作不会修改唤醒任务配置，仅用于检测账号可用性并写入检测记录。",
         "line4": "若返回 403，需要先完成账号验证或提交保证书；结果中会提供地址与快捷操作。"
@@ -1577,6 +1578,7 @@
       "modeScheduled": "📅 定时触发",
       "modeCrontab": "🧩 定时任务",
       "modeQuotaReset": "🔄 配额重置",
+      "antigravityVersion": "Antigravity IDE 版本",
       "modelSelect": "模型选择",
       "modelHint": "同一配额组建议只选一个模型，多模型会依次触发。",
       "modelsEmpty": "暂无推荐模型",
@@ -1986,7 +1988,8 @@
       "portStillInUse": "端口 {{port}} 仍被占用。",
       "portInUseAction": "关闭占用端口并重试",
       "timeout": "授权超时，请点击",
-      "timeoutRetry": "刷新授权链接"
+      "timeoutRetry": "刷新授权链接",
+      "reauthEmailLabel": "重新授权账号"
     },
     "token": {
       "desc": "粘贴 session JSON、auth.json、账号 JSON、Sub2API JSON、accessToken 或 refresh_token。",
@@ -2253,7 +2256,13 @@
       "customRoutingQuotaColumn": "额度",
       "customRoutingEmpty": "当前 API 服务集合没有可配置的账号",
       "customRoutingSave": "保存自定义调度",
-      "customRoutingSaveSuccess": "API 服务自定义调度已更新"
+      "customRoutingSaveSuccess": "API 服务自定义调度已更新",
+      "upstreamProxyLabel": "上游连接",
+      "upstreamProxySaveSuccess": "API 服务上游连接方式已更新",
+      "upstreamProxyMode": {
+        "followGlobalProxy": "跟随全局代理",
+        "direct": "直连上游"
+      }
     },
     "api": {
       "baseUrl": "基础地址",
@@ -2990,18 +2999,18 @@
     "summary": {
       "label": "概览",
       "title": "账号快照",
-      "desc": "一览 Antigravity 与 Codex"
+      "desc": "一览 Antigravity IDE 与 Codex"
     },
     "stats": {
-      "antigravity": "Antigravity 账号",
+      "antigravity": "Antigravity IDE 账号",
       "codex": "Codex 账号",
-      "currentAntigravity": "当前 Antigravity",
+      "currentAntigravity": "当前 Antigravity IDE",
       "currentCodex": "当前 Codex",
       "providers": "服务提供商",
       "totalAccounts": "账号总数"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "订阅分布",
@@ -3016,7 +3025,7 @@
     },
     "emptyAccount": "无账号",
     "sections": {
-      "antigravity": "Antigravity 账号",
+      "antigravity": "Antigravity IDE 账号",
       "codex": "Codex 账号"
     },
     "actions": {
@@ -3049,7 +3058,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Antigravity 设置",
+      "title": "Antigravity IDE 设置",
       "appPath": "启动路径"
     },
     "codex": {
@@ -3573,7 +3582,7 @@
     "actions": {
       "collapseAll": "全部收起",
       "expandAll": "全部展开",
-      "goAntigravity": "前往 Antigravity",
+      "goAntigravity": "前往 Antigravity IDE",
       "goCodex": "前往 Codex",
       "goDashboard": "前往仪表盘",
       "goFingerprints": "前往设备指纹",
@@ -3591,7 +3600,7 @@
         "0": "若看到异常状态（如 403/刷新失败），先刷新再判断是否删除重登。"
       },
       "keywords": {
-        "0": "Antigravity账号",
+        "0": "Antigravity IDE 账号",
         "1": "账号管理",
         "2": "配额",
         "3": "标签"
@@ -3605,8 +3614,8 @@
         "1": "使用“刷新全部”先同步一轮配额状态。",
         "2": "按配额/重置时间排序，选择当前要使用的账号。"
       },
-      "summary": "管理 Antigravity 账号生命周期：添加、刷新配额、切换、分组与标签。",
-      "title": "Antigravity 账号管理"
+      "summary": "管理 Antigravity IDE 账号生命周期：添加、刷新配额、切换、分组与标签。",
+      "title": "Antigravity IDE 账号管理"
     },
     "blocks": {
       "cautions": "常见坑位 / 注意事项",
@@ -4173,6 +4182,15 @@
     "cancelEditAccountName": "取消编辑",
     "accountNameRequired": "账号名不能为空。",
     "copySecret": "复制秘钥"
+  },
+  "mfaQuick": {
+    "title": "2FA 验证码",
+    "selectLabel": "选择 2FA 秘钥",
+    "unnamedSecret": "未命名秘钥",
+    "invalidCode": "无效秘钥",
+    "copyCode": "复制验证码",
+    "copied": "已复制",
+    "refreshIn": "{{time}}s"
   },
   "logViewer": {
     "fileLabel": "日志文件",

@@ -14,6 +14,7 @@
     "close": "Kapat",
     "open": "Aç",
     "copy": "Kopyala",
+    "copied": "Kopyalandı",
     "add": "Ekle",
     "enable": "Etkinleştir",
     "disable": "Devre dışı bırak",
@@ -227,7 +228,7 @@
     "selectAll": "Tümünü Seç"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "Hesaplar",
     "wakeup": "Uyandırma Görevleri",
     "fingerprints": "Parmak İzleri",
@@ -497,9 +498,9 @@
       },
       "safe": {
         "title": "Güvenli yeniden başlatma (Önerilen)",
-        "principle": "Tüm Antigravity işlemlerine SIGTERM sinyali göndererek uygulamanın verileri kaydedip kapanmasını ister, ardından hedef oturumu başlatır (gerekirse kapanmaya zorlar).",
-        "commandMac": "macOS/Linux: kill -15 <pid> (tüm Antigravity işlemleri)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (tüm Antigravity işlemleri)",
+        "principle": "Tüm Antigravity IDE işlemlerine SIGTERM sinyali göndererek uygulamanın verileri kaydedip kapanmasını ister, ardından hedef oturumu başlatır (gerekirse kapanmaya zorlar).",
+        "commandMac": "macOS/Linux: kill -15 <pid> (tüm Antigravity IDE işlemleri)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (tüm Antigravity IDE işlemleri)",
         "pros": "Normal kapanmaya en yakın yöntem, hata uyarısı olasılığı düşük, veriler daha güvenli.",
         "cons": "Sadece tüm oturumların genel olarak yeniden başlatılmasını destekler."
       },
@@ -563,7 +564,7 @@
       "uiScale": "Arayüz ölçeği",
       "uiScaleDesc": "Arayüz ölçeğini ayarlayın",
       "accountManagement": "Hesap Yönetimi",
-      "autoRefresh": "Antigravity kota otomatik yenileme",
+      "autoRefresh": "Antigravity IDE kota otomatik yenileme",
       "codexAutoRefresh": "Codex kota otomatik yenileme",
       "autoRefreshDesc": "Arka plan güncelleme sıklığı",
       "codexAutoRefreshDesc": "Arka plan güncelleme sıklığı",
@@ -600,8 +601,8 @@
       "floatingCardShowNowAction": "Yüzen kartı göster",
       "dataDir": "Veri dizini",
       "dataDirDesc": "Hesaplar ve yapılandırma dosyaları için depolama konumu.",
-      "fpDir": "Antigravity Depolama",
-      "fpDirDesc": "Antigravity veri dosyalarının depolandığı konum.",
+      "fpDir": "Antigravity IDE Depolama",
+      "fpDirDesc": "Antigravity IDE veri dosyalarının depolandığı konum.",
       "opencodeTitle": "OpenCode Entegrasyonu",
       "opencodeRestart": "Codex değiştirildiğinde OpenCode'u yeniden başlat",
       "opencodeRestartDesc": "OpenCode içinde Codex hesap bilgisini senkronize et",
@@ -622,10 +623,10 @@
       "vscodeAppPathPlaceholder": "Varsayılan yol",
       "vscodePathSelect": "Seç",
       "vscodePathReset": "Varsayılana sıfırla",
-      "antigravityAppPath": "Antigravity Uygulama Yolu",
-      "antigravityTitle": "Antigravity Başlatma",
+      "antigravityAppPath": "Antigravity IDE Uygulama Yolu",
+      "antigravityTitle": "Antigravity IDE Başlatma",
       "commonTitle": "Genel",
-      "antigravitySettingsTitle": "Antigravity Ayarları",
+      "antigravitySettingsTitle": "Antigravity IDE Ayarları",
       "codexSettingsTitle": "Codex Ayarları",
       "githubCopilotSettingsTitle": "GitHub Copilot Ayarları",
       "ghcpAutoRefresh": "GitHub Copilot kota otomatik yenileme",
@@ -698,14 +699,14 @@
       "sideNavLayoutOriginal": "Orijinal Düzen",
       "sideNavLayoutClassic": "Klasik Düzen",
       "antigravityDualSwitchNoRestart": "Yeniden başlatmadan çift geçiş",
-      "antigravityDualSwitchNoRestartDesc": "Hesap değiştirirken yerel hesap verisi yazımı ve eklentinin kesintisiz geçişi tek akışta yürütülür; Antigravity yeniden başlatılmaz.",
+      "antigravityDualSwitchNoRestartDesc": "Hesap değiştirirken yerel hesap verisi yazımı ve eklentinin kesintisiz geçişi tek akışta yürütülür; Antigravity IDE yeniden başlatılmaz.",
       "appAutoLaunch": "Oturum açıldığında Cockpit Tools'u başlat",
       "appAutoLaunchDesc": "Sistem oturumundan sonra uygulamayı otomatik başlat",
       "startupWakeupDisabled": "Devre dışı",
       "startupWakeupImmediate": "Hemen uyandır",
       "startupWakeupDelayed": "Gecikmeli uyandır",
-      "antigravityStartupWakeup": "Başlangıçtan sonra Antigravity uyandırmayı çalıştır",
-      "antigravityStartupWakeupDesc": "Uygulama açıldıktan sonra etkin Antigravity uyandırma görevlerini bir kez çalıştır",
+      "antigravityStartupWakeup": "Başlangıçtan sonra Antigravity IDE uyandırmayı çalıştır",
+      "antigravityStartupWakeupDesc": "Uygulama açıldıktan sonra etkin Antigravity IDE uyandırma görevlerini bir kez çalıştır",
       "codexStartupWakeup": "Başlangıçtan sonra Codex uyandırmayı çalıştır",
       "codexStartupWakeupDesc": "Uygulama açıldıktan sonra etkin Codex uyandırma görevlerini bir kez çalıştır",
       "currentAccountRefreshTitle": "Mevcut hesap yenileme",
@@ -940,7 +941,7 @@
   },
   "accounts": {
     "title": "Hesap Yönetimi",
-    "subtitle": "Antigravity hesap listenizi yönetin.",
+    "subtitle": "Antigravity IDE hesap listenizi yönetin.",
     "total": "{{count}} hesap",
     "search": "Hesaplarda ara...",
     "addAccount": "Hesap Ekle",
@@ -1194,7 +1195,7 @@
     "switching": "Geçiliyor...",
     "fingerprint": "Parmak İzi",
     "bound": "Bağlı",
-    "brandTitle": "Antigravity Hesap Yönetimi"
+    "brandTitle": "Antigravity IDE Hesap Yönetimi"
   },
   "fingerprints": {
     "title": "Cihaz Parmak İzleri",
@@ -1296,7 +1297,7 @@
   "modals": {
     "addAccount": {
       "title": "Hesap Ekle",
-      "desc": "Google OAuth üzerinden Antigravity hesabınızı ekleyin",
+      "desc": "Google OAuth üzerinden Antigravity IDE hesabınızı ekleyin",
       "loginBtn": "Google OAuth Girişi",
       "waiting": "Bekleniyor..."
     },
@@ -1304,7 +1305,7 @@
       "title": "Hesapları İçe Aktar",
       "desc": "Bir içe aktarma yöntemi seçin",
       "local": "Yerel Hesabı İçe Aktar",
-      "localDesc": "Antigravity İstemcisinden mevcut giriş yapılmış hesabı içe aktar",
+      "localDesc": "Antigravity IDE İstemcisinden mevcut giriş yapılmış hesabı içe aktar",
       "tools": "Antigravity Tools'tan İçe Aktar",
       "toolsDesc": "~/.antigravity_tools/ dizininden içe aktar",
       "jsonDivider": "veya JSON Yapıştır",
@@ -1317,7 +1318,7 @@
       "fromExtension": "Eklentiden İçe Aktar",
       "syncBadge": "Antigravity Cockpit eklenti hesaplarını senkronize et",
       "fromLocalDB": "Yerel Veritabanından İçe Aktar",
-      "localDBDesc": "Bu makinedeki Antigravity İstemcisinden giriş hesaplarını oku",
+      "localDBDesc": "Bu makinedeki Antigravity IDE İstemcisinden giriş hesaplarını oku",
       "toolsDescMigrate": "Hesapları ~/.antigravity_tools/ dizininden taşı",
       "importingTools": "Antigravity Tools'tan içe aktarılıyor...",
       "importingLocal": "Yerel hesap içe aktarılıyor...",
@@ -1400,7 +1401,7 @@
       },
       "runHint": {
         "title": "Doğrulama notları",
-        "line1": "“Şimdi kontrol et”, Antigravity istemcisini yerel ağ geçidi ve resmi Language Server protokolü ile simüle ederek minimum bir sohbet isteği gönderir.",
+        "line1": "“Şimdi kontrol et”, Antigravity IDE istemcisini yerel ağ geçidi ve resmi Language Server protokolü ile simüle ederek minimum bir sohbet isteği gönderir.",
         "line2": "Bu işlem az miktarda token tüketir (genelde kısa bir konuşma). Gerçek tüketim modele ve hesap politikasına bağlıdır.",
         "line3": "Bu işlem uyandırma görevi ayarlarını değiştirmez. Yalnızca hesap kullanılabilirliğini kontrol eder ve kontrol kaydı oluşturur.",
         "line4": "403 döndürülürse, hesap doğrulaması veya itiraz gönderimi gereklidir; sonuçta adres ve hızlı işlemler sağlanacaktır."
@@ -1531,6 +1532,7 @@
       "modeScheduled": "📅 Planlı",
       "modeCrontab": "🧩 Crontab",
       "modeQuotaReset": "🔄 Kota sıfırlama",
+      "antigravityVersion": "Antigravity IDE sürümü",
       "modelSelect": "Model seçimi",
       "modelHint": "Aynı kota grubu için tek bir model seçin. Birden fazla model sırayla tetiklenir.",
       "modelsEmpty": "Önerilen model yok",
@@ -1705,7 +1707,8 @@
       "portStillInUse": "Port {{port}} hâlâ kullanımda.",
       "portInUseAction": "Portu kapatıp yeniden dene",
       "timeout": "Kimlik doğrulama zaman aşımına uğradı. Lütfen tıklayın",
-      "timeoutRetry": "Kimlik Doğrulama Bağlantısını Yenile"
+      "timeoutRetry": "Kimlik Doğrulama Bağlantısını Yenile",
+      "reauthEmailLabel": "Yeniden yetkilendirilecek hesap"
     },
     "token": {
       "desc": "auth.json, hesap JSON’u veya refresh_token yapıştırın.",
@@ -1916,7 +1919,13 @@
       "customRoutingQuotaColumn": "Kota",
       "customRoutingEmpty": "Geçerli API hizmeti koleksiyonunda yapılandırılabilir hesap yok",
       "customRoutingSave": "Yönlendirmeyi kaydet",
-      "customRoutingSaveSuccess": "API hizmeti özel yönlendirmesi güncellendi"
+      "customRoutingSaveSuccess": "API hizmeti özel yönlendirmesi güncellendi",
+      "upstreamProxyLabel": "Üst bağlantı",
+      "upstreamProxySaveSuccess": "API hizmetinin üst bağlantısı güncellendi",
+      "upstreamProxyMode": {
+        "followGlobalProxy": "Genel proxy",
+        "direct": "Doğrudan"
+      }
     },
     "local": {
       "desc": "~/.codex/auth.json'dan mevcut hesabı içe aktar",
@@ -2578,18 +2587,18 @@
     "summary": {
       "label": "Genel Bakış",
       "title": "Hesap Anlık Görüntüsü",
-      "desc": "Antigravity ve Codex'i bir bakışta görün"
+      "desc": "Antigravity IDE ve Codex'i bir bakışta görün"
     },
     "stats": {
-      "antigravity": "Antigravity Hesapları",
+      "antigravity": "Antigravity IDE Hesapları",
       "codex": "Codex Hesapları",
-      "currentAntigravity": "Mevcut Antigravity",
+      "currentAntigravity": "Mevcut Antigravity IDE",
       "currentCodex": "Mevcut Codex",
       "providers": "Sağlayıcılar",
       "totalAccounts": "Toplam hesap"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "Plan dağılımı",
@@ -2604,7 +2613,7 @@
     },
     "emptyAccount": "Hesap yok",
     "sections": {
-      "antigravity": "Antigravity hesapları",
+      "antigravity": "Antigravity IDE hesapları",
       "codex": "Codex hesapları"
     },
     "actions": {
@@ -2637,7 +2646,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Antigravity Ayarları",
+      "title": "Antigravity IDE Ayarları",
       "appPath": "Uygulama Yolu"
     },
     "codex": {
@@ -3072,7 +3081,7 @@
     "actions": {
       "collapseAll": "Tümünü daralt",
       "expandAll": "Tümünü genişlet",
-      "goAntigravity": "Antigravity sayfasına git",
+      "goAntigravity": "Antigravity IDE sayfasına git",
       "goCodex": "Codex sayfasına git",
       "goDashboard": "Gösterge paneline git",
       "goFingerprints": "Cihaz parmak izi sayfasına git",
@@ -3087,25 +3096,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "Antigravity hesap yönetimi içinde riskli veya toplu işlemden önce veri yedeği alın."
+        "0": "Antigravity IDE hesap yönetimi içinde riskli veya toplu işlemden önce veri yedeği alın."
       },
       "keywords": {
-        "0": "Antigravity hesap yönetimi",
+        "0": "Antigravity IDE hesap yönetimi",
         "1": "rehber",
         "2": "akış",
         "3": "hesap"
       },
       "outcomes": {
-        "0": "Antigravity hesap yönetimi ile nelerin çözüldüğünü anlayın.",
-        "1": "Antigravity hesap yönetimi içinde önerilen akışı kullanarak hataları azaltın."
+        "0": "Antigravity IDE hesap yönetimi ile nelerin çözüldüğünü anlayın.",
+        "1": "Antigravity IDE hesap yönetimi içinde önerilen akışı kullanarak hataları azaltın."
       },
       "steps": {
-        "0": "Antigravity hesap yönetimi sayfasını açın.",
-        "1": "Antigravity hesap yönetimi için temel kurulum ve gerekli bağları tamamlayın.",
-        "2": "Beklenen sonucu doğrulamak için Antigravity hesap yönetimi içinde bir manuel işlem çalıştırın."
+        "0": "Antigravity IDE hesap yönetimi sayfasını açın.",
+        "1": "Antigravity IDE hesap yönetimi için temel kurulum ve gerekli bağları tamamlayın.",
+        "2": "Beklenen sonucu doğrulamak için Antigravity IDE hesap yönetimi içinde bir manuel işlem çalıştırın."
       },
-      "summary": "Bu bölüm, günlük akışta Antigravity hesap yönetimi kullanımını açıklar.",
-      "title": "Antigravity hesap yönetimi"
+      "summary": "Bu bölüm, günlük akışta Antigravity IDE hesap yönetimi kullanımını açıklar.",
+      "title": "Antigravity IDE hesap yönetimi"
     },
     "blocks": {
       "cautions": "Yaygın hatalar / notlar",
@@ -3958,5 +3967,14 @@
       "warn": "Uyarı",
       "error": "Hata"
     }
+  },
+  "mfaQuick": {
+    "title": "2FA Kodu",
+    "selectLabel": "2FA anahtarı seç",
+    "unnamedSecret": "Adsız anahtar",
+    "invalidCode": "Geçersiz anahtar",
+    "copyCode": "Kodu kopyala",
+    "copied": "Kopyalandı",
+    "refreshIn": "{{time}} sn"
   }
 }

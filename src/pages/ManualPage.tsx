@@ -79,7 +79,7 @@ export function ManualPage({ onNavigate, onOpenPlatformLayout }: ManualPageProps
         ],
         actions: [
           { id: 'go-dashboard', kind: 'navigate', page: 'dashboard', label: t('manual.actions.goDashboard', '前往仪表盘'), primary: true },
-          { id: 'go-overview', kind: 'navigate', page: 'overview', label: t('manual.actions.goAntigravity', '前往 Antigravity') },
+          { id: 'go-overview', kind: 'navigate', page: 'overview', label: t('manual.actions.goAntigravity', '前往 Antigravity IDE') },
           { id: 'go-settings', kind: 'navigate', page: 'settings', label: t('manual.actions.goSettings', '前往设置') },
         ],
       },
@@ -117,10 +117,10 @@ export function ManualPage({ onNavigate, onOpenPlatformLayout }: ManualPageProps
       {
         id: 'antigravity',
         icon: <Sparkles size={18} />,
-        title: t('manual.antigravity.title', 'Antigravity 账号管理'),
+        title: t('manual.antigravity.title', 'Antigravity IDE 账号管理'),
         summary: t(
           'manual.antigravity.summary',
-          '管理 Antigravity 账号生命周期：添加、刷新配额、切换、分组与标签。',
+          '管理 Antigravity IDE 账号生命周期：添加、刷新配额、切换、分组与标签。',
         ),
         outcomes: [
           t('manual.antigravity.outcomes.0', '支持 OAuth、导入、导出和批量操作。'),
@@ -141,7 +141,7 @@ export function ManualPage({ onNavigate, onOpenPlatformLayout }: ManualPageProps
           t('manual.antigravity.keywords.3', '标签'),
         ],
         actions: [
-          { id: 'go-overview', kind: 'navigate', page: 'overview', label: t('manual.actions.goAntigravity', '前往 Antigravity'), primary: true },
+          { id: 'go-overview', kind: 'navigate', page: 'overview', label: t('manual.actions.goAntigravity', '前往 Antigravity IDE'), primary: true },
         ],
       },
       {
@@ -350,7 +350,7 @@ export function ManualPage({ onNavigate, onOpenPlatformLayout }: ManualPageProps
           t('manual.dataPrivacy.keywords.7', 'app.log'),
         ],
         actions: [
-          { id: 'go-overview', kind: 'navigate', page: 'overview', label: t('manual.actions.goAntigravity', '前往 Antigravity'), primary: true },
+          { id: 'go-overview', kind: 'navigate', page: 'overview', label: t('manual.actions.goAntigravity', '前往 Antigravity IDE'), primary: true },
           { id: 'go-settings', kind: 'navigate', page: 'settings', label: t('manual.actions.goSettings', '前往设置') },
         ],
       },

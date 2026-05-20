@@ -14,6 +14,7 @@
     "close": "إغلاق",
     "open": "فتح",
     "copy": "نسخ",
+    "copied": "تم النسخ",
     "add": "إضافة",
     "enable": "تفعيل",
     "disable": "تعطيل",
@@ -273,7 +274,7 @@
     "lockedPlatform": "المنصة مقفلة بواسطة المثيل"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "إدارة الحسابات",
     "wakeup": "مهام الاستيقاظ",
     "fingerprints": "بصمات الجهاز",
@@ -543,9 +544,9 @@
       },
       "safe": {
         "title": "إعادة تشغيل آمنة (موصى به)",
-        "principle": "إرسال SIGTERM إلى جميع عمليات Antigravity، يطلب من التطبيق الحفظ والخروج ذاتيًا، ثم تشغيل المثيل المستهدف (سيتم الإنهاء القسري إذا لزم الأمر).",
-        "commandMac": "macOS/Linux: kill -15 <pid> (جميع عمليات Antigravity)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (جميع عمليات Antigravity)",
+        "principle": "إرسال SIGTERM إلى جميع عمليات Antigravity IDE، يطلب من التطبيق الحفظ والخروج ذاتيًا، ثم تشغيل المثيل المستهدف (سيتم الإنهاء القسري إذا لزم الأمر).",
+        "commandMac": "macOS/Linux: kill -15 <pid> (جميع عمليات Antigravity IDE)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (جميع عمليات Antigravity IDE)",
         "pros": "أقرب إلى الخروج الطبيعي، أقل عرضة لتحذيرات الانهيار، البيانات أكثر أمانًا.",
         "cons": "يمكن الخروج وإعادة التشغيل بالكامل فقط، لا يمكن إعادة تشغيل مثيل واحد فقط."
       },
@@ -606,7 +607,7 @@
       "uiScale": "مقياس الواجهة",
       "uiScaleDesc": "اضبط مقياس الواجهة",
       "accountManagement": "إدارة الحسابات",
-      "autoRefresh": "تحديث تلقائي لحصة Antigravity",
+      "autoRefresh": "تحديث تلقائي لحصة Antigravity IDE",
       "codexAutoRefresh": "تحديث تلقائي لحصة Codex",
       "autoRefreshDesc": "تردد التحديث التلقائي في الخلفية",
       "codexAutoRefreshDesc": "تردد التحديث التلقائي في الخلفية",
@@ -643,8 +644,8 @@
       "floatingCardShowNowAction": "إظهار البطاقة العائمة",
       "dataDir": "مجلد البيانات",
       "dataDirDesc": "موقع تخزين الحسابات وملفات التكوين.",
-      "fpDir": "مجلد تخزين Antigravity",
-      "fpDirDesc": "موقع تخزين ملفات بيانات Antigravity.",
+      "fpDir": "مجلد تخزين Antigravity IDE",
+      "fpDirDesc": "موقع تخزين ملفات بيانات Antigravity IDE.",
       "opencodeTitle": "تكامل OpenCode",
       "opencodeRestart": "إعادة تشغيل OpenCode عند تبديل Codex",
       "opencodeRestartDesc": "مزامنة معلومات حساب Codex في OpenCode",
@@ -665,10 +666,10 @@
       "vscodeAppPathPlaceholder": "المسار الافتراضي",
       "vscodePathSelect": "اختيار",
       "vscodePathReset": "إعادة التعيين إلى الافتراضي",
-      "antigravityAppPath": "مسار تطبيق Antigravity",
-      "antigravityTitle": "تشغيل Antigravity",
+      "antigravityAppPath": "مسار تطبيق Antigravity IDE",
+      "antigravityTitle": "تشغيل Antigravity IDE",
       "commonTitle": "عام",
-      "antigravitySettingsTitle": "إعدادات Antigravity",
+      "antigravitySettingsTitle": "إعدادات Antigravity IDE",
       "codexSettingsTitle": "إعدادات Codex",
       "githubCopilotSettingsTitle": "إعدادات GitHub Copilot",
       "ghcpAutoRefresh": "تحديث حصة GitHub Copilot تلقائيا",
@@ -741,14 +742,14 @@
       "sideNavLayoutOriginal": "التخطيط الأصلي",
       "sideNavLayoutClassic": "التخطيط الكلاسيكي",
       "antigravityDualSwitchNoRestart": "تبديل ثنائي بدون إعادة تشغيل",
-      "antigravityDualSwitchNoRestartDesc": "عند تبديل الحساب، يتم تنفيذ كتابة بيانات الحساب محليًا والتبديل السلس عبر الإضافة في تدفق واحد، دون إعادة تشغيل Antigravity.",
+      "antigravityDualSwitchNoRestartDesc": "عند تبديل الحساب، يتم تنفيذ كتابة بيانات الحساب محليًا والتبديل السلس عبر الإضافة في تدفق واحد، دون إعادة تشغيل Antigravity IDE.",
       "appAutoLaunch": "تشغيل Cockpit Tools عند تسجيل الدخول",
       "appAutoLaunchDesc": "تشغيل التطبيق تلقائيًا بعد تسجيل الدخول إلى النظام",
       "startupWakeupDisabled": "معطل",
       "startupWakeupImmediate": "تنبيه فوري",
       "startupWakeupDelayed": "تنبيه بعد تأخير",
-      "antigravityStartupWakeup": "تشغيل إيقاظ Antigravity بعد بدء التشغيل",
-      "antigravityStartupWakeupDesc": "تشغيل مهام إيقاظ Antigravity المفعلة مرة واحدة بعد بدء التطبيق",
+      "antigravityStartupWakeup": "تشغيل إيقاظ Antigravity IDE بعد بدء التشغيل",
+      "antigravityStartupWakeupDesc": "تشغيل مهام إيقاظ Antigravity IDE المفعلة مرة واحدة بعد بدء التطبيق",
       "codexStartupWakeup": "تشغيل إيقاظ Codex بعد بدء التشغيل",
       "codexStartupWakeupDesc": "تشغيل مهام إيقاظ Codex المفعلة مرة واحدة بعد بدء التطبيق",
       "currentAccountRefreshTitle": "تحديث الحساب الحالي",
@@ -986,7 +987,7 @@
   },
   "accounts": {
     "title": "إدارة الحسابات",
-    "subtitle": "إدارة قائمة حسابات Antigravity الخاصة بك.",
+    "subtitle": "إدارة قائمة حسابات Antigravity IDE الخاصة بك.",
     "total": "إجمالي {{count}} حسابات",
     "search": "البحث عن حساب...",
     "addAccount": "إضافة حساب",
@@ -1240,7 +1241,7 @@
     "switching": "جارِ التبديل...",
     "fingerprint": "البصمة",
     "bound": "مرتبط",
-    "brandTitle": "إدارة حساب Antigravity"
+    "brandTitle": "إدارة حساب Antigravity IDE"
   },
   "fingerprints": {
     "title": "بصمات الجهاز",
@@ -1342,7 +1343,7 @@
   "modals": {
     "addAccount": {
       "title": "إضافة حساب",
-      "desc": "أضف حساب Antigravity الخاص بك عبر تفويض Google OAuth",
+      "desc": "أضف حساب Antigravity IDE الخاص بك عبر تفويض Google OAuth",
       "loginBtn": "تسجيل الدخول Google OAuth",
       "waiting": "في انتظار التفويض..."
     },
@@ -1350,7 +1351,7 @@
       "title": "استيراد الحسابات",
       "desc": "يرجى اختيار طريقة الاستيراد",
       "local": "استيراد حساب محلي",
-      "localDesc": "استيراد الحساب المسجل دخوله حالياً من عميل Antigravity",
+      "localDesc": "استيراد الحساب المسجل دخوله حالياً من عميل Antigravity IDE",
       "tools": "استيراد Antigravity Tools",
       "toolsDesc": "الاستيراد من مجلد ~/.antigravity_tools/",
       "jsonDivider": "أو الصق JSON",
@@ -1363,7 +1364,7 @@
       "fromExtension": "استيراد من الملحق",
       "syncBadge": "مزامنة حسابات ملحق Antigravity Cockpit",
       "fromLocalDB": "استيراد من قاعدة البيانات المحلية",
-      "localDBDesc": "قراءة حسابات تسجيل الدخول من عميل Antigravity على هذا الجهاز",
+      "localDBDesc": "قراءة حسابات تسجيل الدخول من عميل Antigravity IDE على هذا الجهاز",
       "toolsDescMigrate": "ترحيل الحسابات من ~/.antigravity_tools/",
       "importingTools": "جارِ الاستيراد من Antigravity Tools...",
       "importingLocal": "جارِ استيراد الحساب المحلي...",
@@ -1446,7 +1447,7 @@
       },
       "runHint": {
         "title": "ملاحظات التحقق",
-        "line1": "يقوم خيار «الفحص الآن» بإرسال طلب محادثة مصغّر عبر محاكاة عميل Antigravity باستخدام البوابة المحلية وبروتوكول Language Server الرسمي.",
+        "line1": "يقوم خيار «الفحص الآن» بإرسال طلب محادثة مصغّر عبر محاكاة عميل Antigravity IDE باستخدام البوابة المحلية وبروتوكول Language Server الرسمي.",
         "line2": "تستهلك العملية مقدارًا صغيرًا من الرموز (عادةً محادثة قصيرة واحدة)، ويعتمد الاستهلاك الفعلي على النموذج وسياسة الحساب.",
         "line3": "لا تعدّل هذه العملية إعدادات مهام الإيقاظ؛ فهي تفحص فقط توفر الحساب وتكتب سجل الفحص.",
         "line4": "إذا تم إرجاع 403 يجب إكمال التحقق من الحساب أو تقديم استئناف أولا ستتضمن النتيجة العنوان والإجراءات السريعة."
@@ -1577,6 +1578,7 @@
       "modeScheduled": "📅 مجدول",
       "modeCrontab": "🧩 كرونتاب",
       "modeQuotaReset": "🔄 إعادة تعيين الحصة",
+      "antigravityVersion": "إصدار Antigravity IDE",
       "modelSelect": "اختيار النموذج",
       "modelHint": "ضمن نفس مجموعة الحصة يُنصح باختيار نموذج واحد. تعدد النماذج سيُشغَّل بالتتابع.",
       "modelsEmpty": "لا توجد نماذج موصى بها",
@@ -1751,7 +1753,8 @@
       "portStillInUse": "المنفذ {{port}} ما يزال قيد الاستخدام.",
       "portInUseAction": "إغلاق المنفذ وإعادة المحاولة",
       "timeout": "انتهت مهلة المصادقة. انقر للمحاولة",
-      "timeoutRetry": "تحديث رابط المصادقة"
+      "timeoutRetry": "تحديث رابط المصادقة",
+      "reauthEmailLabel": "حساب إعادة التفويض"
     },
     "token": {
       "desc": "الصق auth.json أو JSON للحساب أو refresh_token.",
@@ -1962,7 +1965,13 @@
       "customRoutingQuotaColumn": "الحصة",
       "customRoutingEmpty": "لا توجد حسابات قابلة للإعداد في مجموعة خدمة API الحالية",
       "customRoutingSave": "حفظ التوجيه",
-      "customRoutingSaveSuccess": "تم تحديث التوجيه المخصص لخدمة API"
+      "customRoutingSaveSuccess": "تم تحديث التوجيه المخصص لخدمة API",
+      "upstreamProxyLabel": "اتصال المنبع",
+      "upstreamProxySaveSuccess": "تم تحديث اتصال المنبع لخدمة API",
+      "upstreamProxyMode": {
+        "followGlobalProxy": "الوكيل العام",
+        "direct": "اتصال مباشر"
+      }
     },
     "local": {
       "desc": "استيراد الحساب الحالي من ~/.codex/auth.json",
@@ -2624,18 +2633,18 @@
     "summary": {
       "label": "نظرة عامة",
       "title": "لمحة عن الحسابات",
-      "desc": "عرض Antigravity و Codex في لمحة"
+      "desc": "عرض Antigravity IDE و Codex في لمحة"
     },
     "stats": {
-      "antigravity": "حسابات Antigravity",
+      "antigravity": "حسابات Antigravity IDE",
       "codex": "حسابات Codex",
-      "currentAntigravity": "Antigravity الحالي",
+      "currentAntigravity": "Antigravity IDE الحالي",
       "currentCodex": "Codex الحالي",
       "providers": "المزوّدون",
       "totalAccounts": "إجمالي الحسابات"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "توزيع الخطط",
@@ -2650,7 +2659,7 @@
     },
     "emptyAccount": "لا يوجد حساب",
     "sections": {
-      "antigravity": "حسابات Antigravity",
+      "antigravity": "حسابات Antigravity IDE",
       "codex": "حسابات Codex"
     },
     "actions": {
@@ -2683,7 +2692,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "إعدادات Antigravity",
+      "title": "إعدادات Antigravity IDE",
       "appPath": "مسار التطبيق"
     },
     "codex": {
@@ -3118,7 +3127,7 @@
     "actions": {
       "collapseAll": "طي الكل",
       "expandAll": "توسيع الكل",
-      "goAntigravity": "اذهب إلى Antigravity",
+      "goAntigravity": "اذهب إلى Antigravity IDE",
       "goCodex": "اذهب إلى Codex",
       "goDashboard": "اذهب إلى لوحة المعلومات",
       "goFingerprints": "اذهب إلى بصمات الجهاز",
@@ -3133,25 +3142,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "انسخ البيانات احتياطيًا قبل الإجراءات الخطرة أو المجمعة في إدارة حساب Antigravity."
+        "0": "انسخ البيانات احتياطيًا قبل الإجراءات الخطرة أو المجمعة في إدارة حساب Antigravity IDE."
       },
       "keywords": {
-        "0": "إدارة حساب Antigravity",
+        "0": "إدارة حساب Antigravity IDE",
         "1": "دليل",
         "2": "سير عمل",
         "3": "حساب"
       },
       "outcomes": {
-        "0": "افهم ما الذي يمكن أن يقدمه إدارة حساب Antigravity.",
-        "1": "استخدم التدفق المقترح في إدارة حساب Antigravity لتقليل الأخطاء."
+        "0": "افهم ما الذي يمكن أن يقدمه إدارة حساب Antigravity IDE.",
+        "1": "استخدم التدفق المقترح في إدارة حساب Antigravity IDE لتقليل الأخطاء."
       },
       "steps": {
-        "0": "افتح صفحة إدارة حساب Antigravity.",
-        "1": "أكمل الإعداد الأساسي والربط المطلوب في إدارة حساب Antigravity.",
-        "2": "نفّذ عملية يدوية واحدة في إدارة حساب Antigravity للتحقق من النتيجة."
+        "0": "افتح صفحة إدارة حساب Antigravity IDE.",
+        "1": "أكمل الإعداد الأساسي والربط المطلوب في إدارة حساب Antigravity IDE.",
+        "2": "نفّذ عملية يدوية واحدة في إدارة حساب Antigravity IDE للتحقق من النتيجة."
       },
-      "summary": "يوضح هذا القسم كيفية استخدام إدارة حساب Antigravity ضمن سير العمل اليومي.",
-      "title": "إدارة حساب Antigravity"
+      "summary": "يوضح هذا القسم كيفية استخدام إدارة حساب Antigravity IDE ضمن سير العمل اليومي.",
+      "title": "إدارة حساب Antigravity IDE"
     },
     "blocks": {
       "cautions": "تنبيهات ومخاطر شائعة",
@@ -3958,5 +3967,14 @@
       "warn": "تحذير",
       "error": "خطأ"
     }
+  },
+  "mfaQuick": {
+    "title": "رمز 2FA",
+    "selectLabel": "اختر مفتاح 2FA",
+    "unnamedSecret": "مفتاح بلا اسم",
+    "invalidCode": "مفتاح غير صالح",
+    "copyCode": "نسخ الرمز",
+    "copied": "تم النسخ",
+    "refreshIn": "{{time}} ث"
   }
 }

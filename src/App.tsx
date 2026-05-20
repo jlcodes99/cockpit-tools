@@ -380,7 +380,7 @@ function getQuotaAlertPlatformLabel(
     case 'zed':
       return t('nav.zed', 'Zed');
     default:
-      return t('nav.overview', 'Antigravity');
+      return t('nav.overview', 'Antigravity IDE');
   }
 }
 
@@ -2451,7 +2451,7 @@ function MainApp() {
     const refreshTasks = [
       {
         command: 'refresh_current_quota',
-        errorMessage: 'Failed to refresh Antigravity quotas:',
+        errorMessage: 'Failed to refresh Antigravity IDE quotas:',
       },
       {
         command: 'refresh_current_codex_quota',
@@ -2897,7 +2897,7 @@ function MainApp() {
                 ? 'Qoder'
               : appPathMissing.app === 'trae'
                 ? 'Trae'
-              : 'Antigravity'
+              : 'Antigravity IDE'
     : '';
 
   const appPathMissingPathLabel = appPathMissing

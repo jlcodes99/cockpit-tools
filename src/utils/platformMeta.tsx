@@ -17,7 +17,7 @@ import { ZedIcon } from '../components/icons/ZedIcon';
 export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string {
   switch (platformId) {
     case 'antigravity':
-      return 'Antigravity';
+      return 'Antigravity IDE';
     case 'codex':
       return 'Codex';
     case 'zed':

@@ -14,6 +14,7 @@
     "close": "閉じる",
     "open": "開く",
     "copy": "コピー",
+    "copied": "コピー済み",
     "add": "追加",
     "enable": "有効化",
     "disable": "無効化",
@@ -227,7 +228,7 @@
     "selectAll": "すべて選択"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "アカウント管理",
     "wakeup": "ウェイクアップタスク",
     "fingerprints": "デバイス指紋",
@@ -497,9 +498,9 @@
       },
       "safe": {
         "title": "安全な再起動（推奨）",
-        "principle": "すべての Antigravity プロセスに SIGTERM を送信して、アプリが自身で保存して終了するように促します。終了後にターゲットインスタンスを起動します（必要に応じて強制終了します）。",
-        "commandMac": "macOS/Linux: kill -15 <pid> (すべての Antigravity プロセス)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (すべての Antigravity プロセス)",
+        "principle": "すべての Antigravity IDE プロセスに SIGTERM を送信して、アプリが自身で保存して終了するように促します。終了後にターゲットインスタンスを起動します（必要に応じて強制終了します）。",
+        "commandMac": "macOS/Linux: kill -15 <pid> (すべての Antigravity IDE プロセス)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (すべての Antigravity IDE プロセス)",
         "pros": "通常の終了に近く、クラッシュ警告が出にくく、データがより安全です。",
         "cons": "すべてのインスタンスの全体的な再起動のみをサポートします。"
       },
@@ -563,7 +564,7 @@
       "uiScale": "UIスケール",
       "uiScaleDesc": "インターフェースの表示倍率を調整",
       "accountManagement": "アカウント管理",
-      "autoRefresh": "Antigravity 自動更新クォータ",
+      "autoRefresh": "Antigravity IDE 自動更新クォータ",
       "codexAutoRefresh": "Codex 自動更新クォータ",
       "autoRefreshDesc": "バックグラウンドでの更新頻度",
       "codexAutoRefreshDesc": "バックグラウンドでの更新頻度",
@@ -600,8 +601,8 @@
       "floatingCardShowNowAction": "フローティングカードを表示",
       "dataDir": "データディレクトリ",
       "dataDirDesc": "アカウントと設定ファイルの保存場所。",
-      "fpDir": "Antigravityストレージ",
-      "fpDirDesc": "Antigravityデータファイルの保存場所。",
+      "fpDir": "Antigravity IDEストレージ",
+      "fpDirDesc": "Antigravity IDEデータファイルの保存場所。",
       "opencodeTitle": "OpenCode 連携",
       "opencodeRestart": "Codex 切替時に OpenCode を自動再起動",
       "opencodeRestartDesc": "OpenCode 内の Codex アカウント情報を同期して切り替え",
@@ -622,10 +623,10 @@
       "vscodeAppPathPlaceholder": "既定のパス",
       "vscodePathSelect": "選択",
       "vscodePathReset": "既定に戻す",
-      "antigravityAppPath": "Antigravity アプリのパス",
-      "antigravityTitle": "Antigravity 起動",
+      "antigravityAppPath": "Antigravity IDE アプリのパス",
+      "antigravityTitle": "Antigravity IDE 起動",
       "commonTitle": "共通",
-      "antigravitySettingsTitle": "Antigravity 設定",
+      "antigravitySettingsTitle": "Antigravity IDE 設定",
       "codexSettingsTitle": "Codex 設定",
       "githubCopilotSettingsTitle": "GitHub Copilot 設定",
       "ghcpAutoRefresh": "GitHub Copilot クォータの自動更新",
@@ -698,14 +699,14 @@
       "sideNavLayoutOriginal": "元のレイアウト",
       "sideNavLayoutClassic": "クラシックレイアウト",
       "antigravityDualSwitchNoRestart": "再起動なしデュアル切替",
-      "antigravityDualSwitchNoRestartDesc": "切替時にローカルのアカウントデータ書き込みと拡張機能のシームレス切替を1つのフローで実行し、Antigravity を再起動しません。",
+      "antigravityDualSwitchNoRestartDesc": "切替時にローカルのアカウントデータ書き込みと拡張機能のシームレス切替を1つのフローで実行し、Antigravity IDE を再起動しません。",
       "appAutoLaunch": "ログイン時に Cockpit Tools を起動",
       "appAutoLaunchDesc": "システムログイン後にアプリを自動起動します",
       "startupWakeupDisabled": "無効",
       "startupWakeupImmediate": "すぐに起動",
       "startupWakeupDelayed": "遅延して起動",
-      "antigravityStartupWakeup": "起動後に Antigravity ウェイクアップを実行",
-      "antigravityStartupWakeupDesc": "アプリ起動後に有効な Antigravity ウェイクアップタスクを一度実行します",
+      "antigravityStartupWakeup": "起動後に Antigravity IDE ウェイクアップを実行",
+      "antigravityStartupWakeupDesc": "アプリ起動後に有効な Antigravity IDE ウェイクアップタスクを一度実行します",
       "codexStartupWakeup": "起動後に Codex ウェイクアップを実行",
       "codexStartupWakeupDesc": "アプリ起動後に有効な Codex ウェイクアップタスクを一度実行します",
       "currentAccountRefreshTitle": "現在アカウントの更新",
@@ -940,7 +941,7 @@
   },
   "accounts": {
     "title": "アカウント管理",
-    "subtitle": "Antigravity アカウントの一覧を管理します。",
+    "subtitle": "Antigravity IDE アカウントの一覧を管理します。",
     "total": "合計 {{count}} 個のアカウント",
     "search": "アカウントを検索...",
     "addAccount": "アカウントを追加",
@@ -1194,7 +1195,7 @@
     "switching": "切り替え中...",
     "fingerprint": "指紋",
     "bound": "紐付け済み",
-    "brandTitle": "Antigravity アカウント管理"
+    "brandTitle": "Antigravity IDE アカウント管理"
   },
   "fingerprints": {
     "title": "デバイス指紋",
@@ -1296,7 +1297,7 @@
   "modals": {
     "addAccount": {
       "title": "アカウントを追加",
-      "desc": "Google OAuth 認証を使用して Antigravity アカウントを追加します",
+      "desc": "Google OAuth 認証を使用して Antigravity IDE アカウントを追加します",
       "loginBtn": "Google OAuth でログイン",
       "waiting": "待機中..."
     },
@@ -1304,7 +1305,7 @@
       "title": "アカウントをインポート",
       "desc": "インポート方法を選択してください",
       "local": "ローカルアカウントをインポート",
-      "localDesc": "Antigravity クライアントから現在ログイン中のアカウントを読み込みます",
+      "localDesc": "Antigravity IDE クライアントから現在ログイン中のアカウントを読み込みます",
       "tools": "Antigravity Tools からインポート",
       "toolsDesc": "~/.antigravity_tools/ ディレクトリから読み込みます",
       "jsonDivider": "または JSON を貼り付け",
@@ -1317,7 +1318,7 @@
       "fromExtension": "プラグインからインポート",
       "syncBadge": "Antigravity Cockpit プラグインのアカウントを同期",
       "fromLocalDB": "ローカル DB からインポート",
-      "localDBDesc": "このマシンの Antigravity クライアントからログインアカウントを読み込む",
+      "localDBDesc": "このマシンの Antigravity IDE クライアントからログインアカウントを読み込む",
       "toolsDescMigrate": "~/.antigravity_tools/ からアカウントを移行",
       "importingTools": "Antigravity Tools からインポート中...",
       "importingLocal": "ローカルアカウントをインポート中...",
@@ -1400,7 +1401,7 @@
       },
       "runHint": {
         "title": "検証の説明",
-        "line1": "「今すぐチェック」は、ローカルゲートウェイと公式 Language Server プロトコルで Antigravity クライアントを模擬し、最小限の対話リクエストを送信します。",
+        "line1": "「今すぐチェック」は、ローカルゲートウェイと公式 Language Server プロトコルで Antigravity IDE クライアントを模擬し、最小限の対話リクエストを送信します。",
         "line2": "この処理では少量のトークン（通常は短い1回の対話分）を消費します。実際の消費量はモデルとアカウントポリシーに依存します。",
         "line3": "この操作は起動タスクの設定を変更せず、アカウント可用性のチェックとチェック履歴の記録のみを行います。",
         "line4": "403 が返された場合、アカウント認証または異議申し立ての提出が必要です。結果にはURLとクイックアクションが含まれます。"
@@ -1531,6 +1532,7 @@
       "modeScheduled": "📅 定時",
       "modeCrontab": "🧩 クロンタブ",
       "modeQuotaReset": "🔄 クォータリセット",
+      "antigravityVersion": "Antigravity IDE バージョン",
       "modelSelect": "モデル選択",
       "modelHint": "同じクォータグループでは 1 つのモデルを推奨。複数選択すると順に実行されます。",
       "modelsEmpty": "おすすめモデルがありません",
@@ -1705,7 +1707,8 @@
       "portStillInUse": "ポート {{port}} はまだ使用中です。",
       "portInUseAction": "ポートを閉じて再試行",
       "timeout": "認証がタイムアウトしました。クリックしてください",
-      "timeoutRetry": "認証リンクを更新"
+      "timeoutRetry": "認証リンクを更新",
+      "reauthEmailLabel": "再認証アカウント"
     },
     "token": {
       "desc": "auth.json、アカウント JSON、または refresh_token を貼り付けます。",
@@ -1916,7 +1919,13 @@
       "customRoutingQuotaColumn": "残量",
       "customRoutingEmpty": "現在の API サービス集合に設定可能なアカウントはありません",
       "customRoutingSave": "ルーティングを保存",
-      "customRoutingSaveSuccess": "API サービスのカスタムルーティングを更新しました"
+      "customRoutingSaveSuccess": "API サービスのカスタムルーティングを更新しました",
+      "upstreamProxyLabel": "上流接続",
+      "upstreamProxySaveSuccess": "API サービスの上流接続を更新しました",
+      "upstreamProxyMode": {
+        "followGlobalProxy": "グローバルプロキシ",
+        "direct": "直接接続"
+      }
     },
     "local": {
       "desc": "~/.codex/auth.json から現在ログイン中のアカウントをインポート",
@@ -2578,18 +2587,18 @@
     "summary": {
       "label": "概要",
       "title": "アカウントスナップショット",
-      "desc": "Antigravity と Codex の状況を一目で確認"
+      "desc": "Antigravity IDE と Codex の状況を一目で確認"
     },
     "stats": {
-      "antigravity": "Antigravity アカウント",
+      "antigravity": "Antigravity IDE アカウント",
       "codex": "Codex アカウント",
-      "currentAntigravity": "現在の Antigravity",
+      "currentAntigravity": "現在の Antigravity IDE",
       "currentCodex": "現在の Codex",
       "providers": "プロバイダー",
       "totalAccounts": "総アカウント数"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "プラン分布",
@@ -2604,7 +2613,7 @@
     },
     "emptyAccount": "アカウントなし",
     "sections": {
-      "antigravity": "Antigravity アカウント",
+      "antigravity": "Antigravity IDE アカウント",
       "codex": "Codex アカウント"
     },
     "actions": {
@@ -2637,7 +2646,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Antigravity 設定",
+      "title": "Antigravity IDE 設定",
       "appPath": "アプリパス"
     },
     "codex": {
@@ -3072,7 +3081,7 @@
     "actions": {
       "collapseAll": "すべて折りたたむ",
       "expandAll": "すべて展開",
-      "goAntigravity": "Antigravityへ",
+      "goAntigravity": "Antigravity IDEへ",
       "goCodex": "Codexへ",
       "goDashboard": "ダッシュボードへ",
       "goFingerprints": "デバイス指紋へ",
@@ -3087,25 +3096,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "Antigravity アカウント管理 で一括・高リスク操作を行う前に必ずバックアップします。"
+        "0": "Antigravity IDE アカウント管理 で一括・高リスク操作を行う前に必ずバックアップします。"
       },
       "keywords": {
-        "0": "Antigravity アカウント管理",
+        "0": "Antigravity IDE アカウント管理",
         "1": "ガイド",
         "2": "手順",
         "3": "アカウント"
       },
       "outcomes": {
-        "0": "Antigravity アカウント管理 で何ができるかを理解します。",
-        "1": "Antigravity アカウント管理 の推奨フローでミスを減らします。"
+        "0": "Antigravity IDE アカウント管理 で何ができるかを理解します。",
+        "1": "Antigravity IDE アカウント管理 の推奨フローでミスを減らします。"
       },
       "steps": {
-        "0": "Antigravity アカウント管理 のページを開きます。",
-        "1": "Antigravity アカウント管理 の基本設定と必要な紐付けを完了します。",
-        "2": "Antigravity アカウント管理 で手動操作を1回実行し、結果を確認します。"
+        "0": "Antigravity IDE アカウント管理 のページを開きます。",
+        "1": "Antigravity IDE アカウント管理 の基本設定と必要な紐付けを完了します。",
+        "2": "Antigravity IDE アカウント管理 で手動操作を1回実行し、結果を確認します。"
       },
-      "summary": "このセクションでは Antigravity アカウント管理 の使い方を説明します。",
-      "title": "Antigravity アカウント管理"
+      "summary": "このセクションでは Antigravity IDE アカウント管理 の使い方を説明します。",
+      "title": "Antigravity IDE アカウント管理"
     },
     "blocks": {
       "cautions": "よくある注意点",
@@ -3958,5 +3967,14 @@
       "warn": "警告",
       "error": "エラー"
     }
+  },
+  "mfaQuick": {
+    "title": "2FAコード",
+    "selectLabel": "2FAキーを選択",
+    "unnamedSecret": "名前なしキー",
+    "invalidCode": "無効なキー",
+    "copyCode": "コードをコピー",
+    "copied": "コピー済み",
+    "refreshIn": "{{time}}秒"
   }
 }

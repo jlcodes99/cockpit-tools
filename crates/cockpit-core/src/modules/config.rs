@@ -136,10 +136,10 @@ pub struct UserConfig {
     /// 是否启用应用开机自启动
     #[serde(default = "default_app_auto_launch_enabled")]
     pub app_auto_launch_enabled: bool,
-    /// 是否在应用启动后触发 Antigravity 唤醒
+    /// 是否在应用启动后触发 Antigravity IDE 唤醒
     #[serde(default = "default_antigravity_startup_wakeup_enabled")]
     pub antigravity_startup_wakeup_enabled: bool,
-    /// Antigravity 启动后唤醒延时（秒），0 表示立即
+    /// Antigravity IDE 启动后唤醒延时（秒），0 表示立即
     #[serde(default = "default_antigravity_startup_wakeup_delay_seconds")]
     pub antigravity_startup_wakeup_delay_seconds: i32,
     /// 是否在应用启动后触发 Codex 唤醒
@@ -175,7 +175,7 @@ pub struct UserConfig {
     /// OpenCode 启动路径（为空则使用默认路径）
     #[serde(default = "default_opencode_app_path")]
     pub opencode_app_path: String,
-    /// Antigravity 启动路径（为空则使用默认路径）
+    /// Antigravity IDE 启动路径（为空则使用默认路径）
     #[serde(default = "default_antigravity_app_path")]
     pub antigravity_app_path: String,
     /// Codex 启动路径（为空则使用默认路径）

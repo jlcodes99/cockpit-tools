@@ -14,6 +14,7 @@
     "close": "닫기",
     "open": "열기",
     "copy": "복사",
+    "copied": "복사됨",
     "add": "추가",
     "enable": "활성화",
     "disable": "비활성화",
@@ -227,7 +228,7 @@
     "selectAll": "전체 선택"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "계정 관리",
     "wakeup": "깨우기 작업",
     "fingerprints": "기기 지문",
@@ -497,9 +498,9 @@
       },
       "safe": {
         "title": "안전한 재시작 (권장)",
-        "principle": "모든 Antigravity 프로세스에 SIGTERM을 보내 앱이 스스로 저장하고 종료하도록 한 다음, 대상 인스턴스를 다시 시작합니다 (필요 시 강제 종료).",
-        "commandMac": "macOS/Linux: kill -15 <pid> (모든 Antigravity 프로세스)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (모든 Antigravity 프로세스)",
+        "principle": "모든 Antigravity IDE 프로세스에 SIGTERM을 보내 앱이 스스로 저장하고 종료하도록 한 다음, 대상 인스턴스를 다시 시작합니다 (필요 시 강제 종료).",
+        "commandMac": "macOS/Linux: kill -15 <pid> (모든 Antigravity IDE 프로세스)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (모든 Antigravity IDE 프로세스)",
         "pros": "정상 종료에 가까우며 크래시 경고가 발생할 확률이 낮고 데이터가 더 안전합니다.",
         "cons": "모든 인스턴스의 전체 재시작만 지원합니다."
       },
@@ -563,7 +564,7 @@
       "defaultTerminalDesc": "Gemini CLI를 열 때 사용되는 터미널",
       "terminalSystem": "시스템 기본값",
       "accountManagement": "계정 관리",
-      "autoRefresh": "Antigravity 자동 새로고침 할당량",
+      "autoRefresh": "Antigravity IDE 자동 새로고침 할당량",
       "codexAutoRefresh": "Codex 자동 새로고침 할당량",
       "autoRefreshDesc": "백그라운드 업데이트 빈도",
       "codexAutoRefreshDesc": "백그라운드 업데이트 빈도",
@@ -600,8 +601,8 @@
       "floatingCardShowNowAction": "플로팅 카드 표시",
       "dataDir": "데이터 디렉터리",
       "dataDirDesc": "계정 및 구성 파일 저장 위치.",
-      "fpDir": "Antigravity 저장소",
-      "fpDirDesc": "Antigravity 데이터 파일 저장 위치.",
+      "fpDir": "Antigravity IDE 저장소",
+      "fpDirDesc": "Antigravity IDE 데이터 파일 저장 위치.",
       "opencodeTitle": "OpenCode 연동",
       "opencodeRestart": "Codex 전환 시 OpenCode 재시작",
       "opencodeRestartDesc": "OpenCode에서 Codex 계정 정보를 동기화하여 전환",
@@ -622,10 +623,10 @@
       "vscodeAppPathPlaceholder": "기본 경로",
       "vscodePathSelect": "선택",
       "vscodePathReset": "기본값으로 재설정",
-      "antigravityAppPath": "Antigravity 앱 경로",
-      "antigravityTitle": "Antigravity 실행",
+      "antigravityAppPath": "Antigravity IDE 앱 경로",
+      "antigravityTitle": "Antigravity IDE 실행",
       "commonTitle": "공통",
-      "antigravitySettingsTitle": "Antigravity 설정",
+      "antigravitySettingsTitle": "Antigravity IDE 설정",
       "codexSettingsTitle": "Codex 설정",
       "githubCopilotSettingsTitle": "GitHub Copilot 설정",
       "ghcpAutoRefresh": "GitHub Copilot 할당량 자동 새로고침",
@@ -698,14 +699,14 @@
       "sideNavLayoutOriginal": "원래 레이아웃",
       "sideNavLayoutClassic": "클래식 레이아웃",
       "antigravityDualSwitchNoRestart": "재시작 없이 이중 전환",
-      "antigravityDualSwitchNoRestartDesc": "계정 전환 시 로컬 계정 데이터 기록과 확장 프로그램의 원활한 전환을 한 번에 수행하며, Antigravity를 재시작하지 않습니다.",
+      "antigravityDualSwitchNoRestartDesc": "계정 전환 시 로컬 계정 데이터 기록과 확장 프로그램의 원활한 전환을 한 번에 수행하며, Antigravity IDE를 재시작하지 않습니다.",
       "appAutoLaunch": "로그인 시 Cockpit Tools 시작",
       "appAutoLaunchDesc": "시스템 로그인 후 앱을 자동으로 시작합니다",
       "startupWakeupDisabled": "비활성화",
       "startupWakeupImmediate": "즉시 깨우기",
       "startupWakeupDelayed": "지연 후 깨우기",
-      "antigravityStartupWakeup": "시작 후 Antigravity 깨우기 실행",
-      "antigravityStartupWakeupDesc": "앱 시작 후 활성화된 Antigravity 깨우기 작업을 한 번 실행합니다",
+      "antigravityStartupWakeup": "시작 후 Antigravity IDE 깨우기 실행",
+      "antigravityStartupWakeupDesc": "앱 시작 후 활성화된 Antigravity IDE 깨우기 작업을 한 번 실행합니다",
       "codexStartupWakeup": "시작 후 Codex 깨우기 실행",
       "codexStartupWakeupDesc": "앱 시작 후 활성화된 Codex 깨우기 작업을 한 번 실행합니다",
       "currentAccountRefreshTitle": "현재 계정 새로고침",
@@ -940,7 +941,7 @@
   },
   "accounts": {
     "title": "계정 관리",
-    "subtitle": "Antigravity 계정 목록을 관리합니다.",
+    "subtitle": "Antigravity IDE 계정 목록을 관리합니다.",
     "total": "총 {{count}}개 계정",
     "search": "계정 검색...",
     "addAccount": "계정 추가",
@@ -1194,7 +1195,7 @@
     "switching": "전환 중...",
     "fingerprint": "지문",
     "bound": "연결됨",
-    "brandTitle": "Antigravity 계정 관리"
+    "brandTitle": "Antigravity IDE 계정 관리"
   },
   "fingerprints": {
     "title": "기기 지문",
@@ -1296,7 +1297,7 @@
   "modals": {
     "addAccount": {
       "title": "계정 추가",
-      "desc": "Google OAuth 인증을 통해 Antigravity 계정을 추가합니다",
+      "desc": "Google OAuth 인증을 통해 Antigravity IDE 계정을 추가합니다",
       "loginBtn": "Google OAuth 로그인",
       "waiting": "대기 중..."
     },
@@ -1304,7 +1305,7 @@
       "title": "계정 가져오기",
       "desc": "가져오기 방법을 선택하십시오",
       "local": "로컬 계정 가져오기",
-      "localDesc": "Antigravity 클라이언트에서 현재 로그인된 계정을 가져옵니다",
+      "localDesc": "Antigravity IDE 클라이언트에서 현재 로그인된 계정을 가져옵니다",
       "tools": "Antigravity Tools에서 가져오기",
       "toolsDesc": "~/.antigravity_tools/ 디렉토리에서 가져옵니다",
       "jsonDivider": "또는 JSON 붙여넣기",
@@ -1317,7 +1318,7 @@
       "fromExtension": "플러그인에서 가져오기",
       "syncBadge": "Antigravity Cockpit 플러그인 계정 동기화",
       "fromLocalDB": "로컬 DB에서 가져오기",
-      "localDBDesc": "이 기기의 Antigravity 클라이언트에서 로그인 계정 읽기",
+      "localDBDesc": "이 기기의 Antigravity IDE 클라이언트에서 로그인 계정 읽기",
       "toolsDescMigrate": "~/.antigravity_tools/에서 계정 마이그레이션",
       "importingTools": "Antigravity Tools에서 가져오는 중...",
       "importingLocal": "로컬 계정 가져오는 중...",
@@ -1400,7 +1401,7 @@
       },
       "runHint": {
         "title": "검증 안내",
-        "line1": "지금 점검은 로컬 게이트웨이와 공식 Language Server 프로토콜로 Antigravity 클라이언트를 모사해 최소 대화 요청을 전송합니다.",
+        "line1": "지금 점검은 로컬 게이트웨이와 공식 Language Server 프로토콜로 Antigravity IDE 클라이언트를 모사해 최소 대화 요청을 전송합니다.",
         "line2": "이 과정에서 소량의 토큰(일반적으로 짧은 대화 1회)이 소모되며, 실제 소모량은 모델과 계정 정책에 따라 달라집니다.",
         "line3": "이 작업은 깨우기 작업 설정을 변경하지 않으며, 계정 가용성 점검 및 점검 기록 저장만 수행합니다.",
         "line4": "403이 반환되면 계정 인증 또는 이의 제기를 먼저 완료해야 합니다. 결과에 주소와 빠른 작업이 제공됩니다."
@@ -1531,6 +1532,7 @@
       "modeScheduled": "📅 예약",
       "modeCrontab": "🧩 크론탭",
       "modeQuotaReset": "🔄 할당량 재설정",
+      "antigravityVersion": "Antigravity IDE 버전",
       "modelSelect": "모델 선택",
       "modelHint": "같은 할당량 그룹에서는 하나의 모델을 추천합니다. 여러 모델은 순차 실행됩니다.",
       "modelsEmpty": "추천 모델 없음",
@@ -1705,7 +1707,8 @@
       "portStillInUse": "포트 {{port}}가 여전히 사용 중입니다.",
       "portInUseAction": "포트 종료 후 다시 시도",
       "timeout": "인증이 시간 초과되었습니다. 클릭하세요",
-      "timeoutRetry": "인증 링크 새로고침"
+      "timeoutRetry": "인증 링크 새로고침",
+      "reauthEmailLabel": "재인증 계정"
     },
     "token": {
       "desc": "auth.json, 계정 JSON 또는 refresh_token을 붙여넣으세요.",
@@ -1916,7 +1919,13 @@
       "customRoutingQuotaColumn": "한도",
       "customRoutingEmpty": "현재 API 서비스 모음에 설정 가능한 계정이 없습니다",
       "customRoutingSave": "라우팅 저장",
-      "customRoutingSaveSuccess": "API 서비스 사용자 지정 라우팅이 업데이트되었습니다"
+      "customRoutingSaveSuccess": "API 서비스 사용자 지정 라우팅이 업데이트되었습니다",
+      "upstreamProxyLabel": "상위 연결",
+      "upstreamProxySaveSuccess": "API 서비스 상위 연결 방식이 업데이트되었습니다",
+      "upstreamProxyMode": {
+        "followGlobalProxy": "전역 프록시",
+        "direct": "직접 연결"
+      }
     },
     "local": {
       "desc": "~/.codex/auth.json에서 현재 로그인된 계정 가져오기",
@@ -2578,18 +2587,18 @@
     "summary": {
       "label": "개요",
       "title": "계정 스냅샷",
-      "desc": "Antigravity와 Codex 상태를 한눈에 확인"
+      "desc": "Antigravity IDE와 Codex 상태를 한눈에 확인"
     },
     "stats": {
-      "antigravity": "Antigravity 계정",
+      "antigravity": "Antigravity IDE 계정",
       "codex": "Codex 계정",
-      "currentAntigravity": "현재 Antigravity",
+      "currentAntigravity": "현재 Antigravity IDE",
       "currentCodex": "현재 Codex",
       "providers": "서비스 제공자",
       "totalAccounts": "전체 계정 수"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "플랜 분포",
@@ -2604,7 +2613,7 @@
     },
     "emptyAccount": "계정 없음",
     "sections": {
-      "antigravity": "Antigravity 계정",
+      "antigravity": "Antigravity IDE 계정",
       "codex": "Codex 계정"
     },
     "actions": {
@@ -2637,7 +2646,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Antigravity 설정",
+      "title": "Antigravity IDE 설정",
       "appPath": "앱 경로"
     },
     "codex": {
@@ -3072,7 +3081,7 @@
     "actions": {
       "collapseAll": "전체 접기",
       "expandAll": "전체 펼치기",
-      "goAntigravity": "Antigravity로 이동",
+      "goAntigravity": "Antigravity IDE로 이동",
       "goCodex": "Codex로 이동",
       "goDashboard": "대시보드로 이동",
       "goFingerprints": "디바이스 지문으로 이동",
@@ -3087,25 +3096,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "Antigravity 계정 관리에서 대량/고위험 작업 전에는 반드시 백업하세요."
+        "0": "Antigravity IDE 계정 관리에서 대량/고위험 작업 전에는 반드시 백업하세요."
       },
       "keywords": {
-        "0": "Antigravity 계정 관리",
+        "0": "Antigravity IDE 계정 관리",
         "1": "가이드",
         "2": "흐름",
         "3": "계정"
       },
       "outcomes": {
-        "0": "Antigravity 계정 관리가 어떤 문제를 해결하는지 이해합니다.",
-        "1": "Antigravity 계정 관리의 권장 흐름으로 실수를 줄입니다."
+        "0": "Antigravity IDE 계정 관리가 어떤 문제를 해결하는지 이해합니다.",
+        "1": "Antigravity IDE 계정 관리의 권장 흐름으로 실수를 줄입니다."
       },
       "steps": {
-        "0": "Antigravity 계정 관리 페이지를 엽니다.",
-        "1": "Antigravity 계정 관리의 기본 설정과 필요한 바인딩을 완료합니다.",
-        "2": "Antigravity 계정 관리에서 수동 작업을 1회 실행해 결과를 확인합니다."
+        "0": "Antigravity IDE 계정 관리 페이지를 엽니다.",
+        "1": "Antigravity IDE 계정 관리의 기본 설정과 필요한 바인딩을 완료합니다.",
+        "2": "Antigravity IDE 계정 관리에서 수동 작업을 1회 실행해 결과를 확인합니다."
       },
-      "summary": "이 섹션은 일상 워크플로우에서 Antigravity 계정 관리 사용 방법을 설명합니다.",
-      "title": "Antigravity 계정 관리"
+      "summary": "이 섹션은 일상 워크플로우에서 Antigravity IDE 계정 관리 사용 방법을 설명합니다.",
+      "title": "Antigravity IDE 계정 관리"
     },
     "blocks": {
       "cautions": "자주 발생하는 실수 / 주의사항",
@@ -3958,5 +3967,14 @@
       "warn": "경고",
       "error": "오류"
     }
+  },
+  "mfaQuick": {
+    "title": "2FA 코드",
+    "selectLabel": "2FA 키 선택",
+    "unnamedSecret": "이름 없는 키",
+    "invalidCode": "유효하지 않은 키",
+    "copyCode": "코드 복사",
+    "copied": "복사됨",
+    "refreshIn": "{{time}}초"
   }
 }

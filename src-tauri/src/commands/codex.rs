@@ -6,7 +6,7 @@ use crate::models::codex_local_access::{
     CodexLocalAccessCredentialMode, CodexLocalAccessCustomCredential,
     CodexLocalAccessCustomRoutingRule, CodexLocalAccessPortCleanupResult,
     CodexLocalAccessRoutingStrategy, CodexLocalAccessScope, CodexLocalAccessState,
-    CodexLocalAccessTestResult,
+    CodexLocalAccessTestResult, CodexLocalAccessUpstreamProxyMode,
 };
 use crate::modules::{
     codex_account, codex_local_access, codex_oauth, codex_quota, codex_session_visibility,
@@ -999,6 +999,13 @@ pub async fn codex_local_access_update_custom_routing(
     rules: Vec<CodexLocalAccessCustomRoutingRule>,
 ) -> Result<CodexLocalAccessState, String> {
     codex_local_access::update_local_access_custom_routing(rules).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_upstream_proxy_mode(
+    upstream_proxy_mode: CodexLocalAccessUpstreamProxyMode,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_upstream_proxy_mode(upstream_proxy_mode).await
 }
 
 #[tauri::command]

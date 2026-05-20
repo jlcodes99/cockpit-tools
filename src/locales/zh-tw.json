@@ -14,6 +14,7 @@
     "close": "關閉",
     "open": "打開",
     "copy": "複製",
+    "copied": "已複製",
     "add": "新增",
     "enable": "啟用",
     "disable": "停用",
@@ -227,7 +228,7 @@
     "selectAll": "全選"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "帳號管理",
     "wakeup": "喚醒任務",
     "fingerprints": "裝置指纹",
@@ -497,9 +498,9 @@
       },
       "safe": {
         "title": "安全重啟（推薦）",
-        "principle": "向所有 Antigravity 進程發送 SIGTERM 信號，請求程序保存數據並退出，隨後啟動目標實例（必要時強制結束）。",
-        "commandMac": "macOS/Linux: kill -15 <pid>（全體 Antigravity）",
-        "commandWin": "Windows: taskkill /F /PID <pid>（全體 Antigravity）",
+        "principle": "向所有 Antigravity IDE 進程發送 SIGTERM 信號，請求程序保存數據並退出，隨後啟動目標實例（必要時強制結束）。",
+        "commandMac": "macOS/Linux: kill -15 <pid>（全體 Antigravity IDE）",
+        "commandWin": "Windows: taskkill /F /PID <pid>（全體 Antigravity IDE）",
         "pros": "最接近正常關閉，不易觸發錯誤提示，數據安全性高。",
         "cons": "僅支持全局重啟所有實例。"
       },
@@ -560,7 +561,7 @@
       "uiScale": "介面縮放",
       "uiScaleDesc": "調整介面縮放比例",
       "accountManagement": "帳號管理",
-      "autoRefresh": "Antigravity 自動刷新配額",
+      "autoRefresh": "Antigravity IDE 自動刷新配額",
       "codexAutoRefresh": "Codex 自動刷新配額",
       "autoRefreshDesc": "背景自動更新頻率",
       "codexAutoRefreshDesc": "背景自動更新頻率",
@@ -597,8 +598,8 @@
       "floatingCardShowNowAction": "顯示懸浮卡片",
       "dataDir": "資料目錄",
       "dataDirDesc": "帳號與設定檔的儲存位置。",
-      "fpDir": "Antigravity 儲存目錄",
-      "fpDirDesc": "Antigravity 資料檔案的儲存位置。",
+      "fpDir": "Antigravity IDE 儲存目錄",
+      "fpDirDesc": "Antigravity IDE 資料檔案的儲存位置。",
       "opencodeTitle": "OpenCode 連動",
       "opencodeRestart": "切換 Codex 時自動重新啟動 OpenCode",
       "opencodeRestartDesc": "同步切換 OpenCode 裡的 Codex 帳號資訊",
@@ -619,10 +620,10 @@
       "vscodeAppPathPlaceholder": "預設路徑",
       "vscodePathSelect": "選擇",
       "vscodePathReset": "重設預設值",
-      "antigravityAppPath": "Antigravity 啟動路徑",
-      "antigravityTitle": "Antigravity 啟動",
+      "antigravityAppPath": "Antigravity IDE 啟動路徑",
+      "antigravityTitle": "Antigravity IDE 啟動",
       "commonTitle": "通用",
-      "antigravitySettingsTitle": "Antigravity 設定",
+      "antigravitySettingsTitle": "Antigravity IDE 設定",
       "codexSettingsTitle": "Codex 設定",
       "githubCopilotSettingsTitle": "GitHub Copilot 設定",
       "ghcpAutoRefresh": "GitHub Copilot 自動重新整理配額",
@@ -695,14 +696,14 @@
       "sideNavLayoutOriginal": "原始佈局",
       "sideNavLayoutClassic": "經典佈局",
       "antigravityDualSwitchNoRestart": "無感雙通道切號（不重啟）",
-      "antigravityDualSwitchNoRestartDesc": "切號時同時執行本地落盤與擴充套件無感切號，不再自動重啟 Antigravity。",
+      "antigravityDualSwitchNoRestartDesc": "切號時同時執行本地落盤與擴充套件無感切號，不再自動重啟 Antigravity IDE。",
       "appAutoLaunch": "開機時啟動 Cockpit Tools",
       "appAutoLaunchDesc": "系統登入後自動啟動應用程式",
       "startupWakeupDisabled": "關閉",
       "startupWakeupImmediate": "立即喚醒",
       "startupWakeupDelayed": "延遲喚醒",
-      "antigravityStartupWakeup": "啟動後執行 Antigravity 喚醒",
-      "antigravityStartupWakeupDesc": "應用程式啟動後，執行一次已啟用的 Antigravity 喚醒任務",
+      "antigravityStartupWakeup": "啟動後執行 Antigravity IDE 喚醒",
+      "antigravityStartupWakeupDesc": "應用程式啟動後，執行一次已啟用的 Antigravity IDE 喚醒任務",
       "codexStartupWakeup": "啟動後執行 Codex 喚醒",
       "codexStartupWakeupDesc": "應用程式啟動後，執行一次已啟用的 Codex 喚醒任務",
       "currentAccountRefreshTitle": "當前帳號刷新",
@@ -940,7 +941,7 @@
   },
   "accounts": {
     "title": "帳號管理",
-    "subtitle": "管理您的 Antigravity 帳號清單。",
+    "subtitle": "管理您的 Antigravity IDE 帳號清單。",
     "total": "共 {{count}} 個帳號",
     "search": "搜尋帳號...",
     "addAccount": "新增帳號",
@@ -1194,7 +1195,7 @@
     "switching": "切換中...",
     "fingerprint": "指紋",
     "bound": "已綁定",
-    "brandTitle": "Antigravity 帳號管理"
+    "brandTitle": "Antigravity IDE 帳號管理"
   },
   "fingerprints": {
     "title": "裝置指紋",
@@ -1296,7 +1297,7 @@
   "modals": {
     "addAccount": {
       "title": "新增帳號",
-      "desc": "透過 Google OAuth 授權新增您的 Antigravity 帳號",
+      "desc": "透過 Google OAuth 授權新增您的 Antigravity IDE 帳號",
       "loginBtn": "Google OAuth 登入",
       "waiting": "等待授權..."
     },
@@ -1304,7 +1305,7 @@
       "title": "匯入帳號",
       "desc": "請選擇匯入方式",
       "local": "匯入本地帳戶",
-      "localDesc": "從 Antigravity 用戶端匯入目前登入帳戶",
+      "localDesc": "從 Antigravity IDE 用戶端匯入目前登入帳戶",
       "tools": "匯入 Antigravity Tools",
       "toolsDesc": "從 ~/.antigravity_tools/ 目錄匯入",
       "jsonDivider": "或貼上 JSON",
@@ -1317,7 +1318,7 @@
       "fromExtension": "從插件匯入",
       "syncBadge": "同步 Antigravity Cockpit 插件帳號",
       "fromLocalDB": "從本地資料庫匯入",
-      "localDBDesc": "從此機器的 Antigravity 客戶端讀取登入帳號",
+      "localDBDesc": "從此機器的 Antigravity IDE 客戶端讀取登入帳號",
       "toolsDescMigrate": "從 ~/.antigravity_tools/ 遷移帳號",
       "importingTools": "正從 Antigravity Tools 匯入...",
       "importingLocal": "正在匯入本地帳號...",
@@ -1400,7 +1401,7 @@
       },
       "runHint": {
         "title": "驗證說明",
-        "line1": "立即檢測會透過「本地閘道 + 官方 Language Server 協議」模擬 Antigravity 客戶端發起最小對話請求。",
+        "line1": "立即檢測會透過「本地閘道 + 官方 Language Server 協議」模擬 Antigravity IDE 客戶端發起最小對話請求。",
         "line2": "此流程會消耗少量 Token（通常為一次短對話），實際消耗取決於模型與帳號策略。",
         "line3": "此操作不會修改喚醒任務設定，僅用於檢測帳號可用性並寫入檢測記錄。",
         "line4": "若返回 403，需要先完成帳號驗證或提交保證書；結果中會提供地址與快捷操作。"
@@ -1531,6 +1532,7 @@
       "modeScheduled": "📅 定時觸發",
       "modeCrontab": "🧩 定時任務",
       "modeQuotaReset": "🔄 配額重置",
+      "antigravityVersion": "Antigravity IDE 版本",
       "modelSelect": "模型選擇",
       "modelHint": "同一配額組建議只選一個模型，多模型會依序觸發。",
       "modelsEmpty": "暫無推薦模型",
@@ -1705,7 +1707,8 @@
       "portStillInUse": "連接埠 {{port}} 仍被佔用。",
       "portInUseAction": "關閉佔用連接埠並重試",
       "timeout": "驗證逾時，請點擊",
-      "timeoutRetry": "更新驗證連結"
+      "timeoutRetry": "更新驗證連結",
+      "reauthEmailLabel": "重新授權帳號"
     },
     "token": {
       "desc": "貼上 auth.json、帳號 JSON 或 refresh_token。",
@@ -1916,7 +1919,13 @@
       "customRoutingQuotaColumn": "額度",
       "customRoutingEmpty": "目前 API 服務集合沒有可設定的帳號",
       "customRoutingSave": "儲存自訂調度",
-      "customRoutingSaveSuccess": "API 服務自訂調度已更新"
+      "customRoutingSaveSuccess": "API 服務自訂調度已更新",
+      "upstreamProxyLabel": "上游連線",
+      "upstreamProxySaveSuccess": "API 服務上游連線方式已更新",
+      "upstreamProxyMode": {
+        "followGlobalProxy": "跟隨全域代理",
+        "direct": "直連上游"
+      }
     },
     "api": {
       "baseUrl": "基礎網址",
@@ -2578,18 +2587,18 @@
     "summary": {
       "label": "總覽",
       "title": "帳號快照",
-      "desc": "同時查看 Antigravity 與 Codex 帳號狀態"
+      "desc": "同時查看 Antigravity IDE 與 Codex 帳號狀態"
     },
     "stats": {
-      "antigravity": "Antigravity 帳號",
+      "antigravity": "Antigravity IDE 帳號",
       "codex": "Codex 帳號",
-      "currentAntigravity": "目前 Antigravity",
+      "currentAntigravity": "目前 Antigravity IDE",
       "currentCodex": "目前 Codex",
       "providers": "服務商",
       "totalAccounts": "總帳戶數"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "方案分佈",
@@ -2604,7 +2613,7 @@
     },
     "emptyAccount": "暫無帳號",
     "sections": {
-      "antigravity": "Antigravity 帳號",
+      "antigravity": "Antigravity IDE 帳號",
       "codex": "Codex 帳號"
     },
     "actions": {
@@ -2637,7 +2646,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Antigravity 設定",
+      "title": "Antigravity IDE 設定",
       "appPath": "啟動路徑"
     },
     "codex": {
@@ -3072,7 +3081,7 @@
     "actions": {
       "collapseAll": "全部收起",
       "expandAll": "全部展開",
-      "goAntigravity": "前往 Antigravity",
+      "goAntigravity": "前往 Antigravity IDE",
       "goCodex": "前往 Codex",
       "goDashboard": "前往儀表板",
       "goFingerprints": "前往裝置指紋",
@@ -3090,7 +3099,7 @@
         "0": "若看到異常狀態（如 403/刷新失敗），先刷新再判斷是否刪除重登。"
       },
       "keywords": {
-        "0": "Antigravity 帳號",
+        "0": "Antigravity IDE 帳號",
         "1": "帳號管理",
         "2": "配額",
         "3": "標籤"
@@ -3104,8 +3113,8 @@
         "1": "使用「刷新全部」先同步一輪配額狀態。",
         "2": "按配額/重置時間排序，選擇當前要使用的帳號。"
       },
-      "summary": "管理 Antigravity 帳號生命週期：添加、刷新配額、切換、分組與標籤。",
-      "title": "Antigravity 帳號管理"
+      "summary": "管理 Antigravity IDE 帳號生命週期：添加、刷新配額、切換、分組與標籤。",
+      "title": "Antigravity IDE 帳號管理"
     },
     "blocks": {
       "cautions": "常見坑位 / 注意事項",
@@ -3958,5 +3967,14 @@
       "warn": "警告",
       "error": "錯誤"
     }
+  },
+  "mfaQuick": {
+    "title": "2FA 驗證碼",
+    "selectLabel": "選擇 2FA 金鑰",
+    "unnamedSecret": "未命名金鑰",
+    "invalidCode": "無效金鑰",
+    "copyCode": "複製驗證碼",
+    "copied": "已複製",
+    "refreshIn": "{{time}}秒"
   }
 }

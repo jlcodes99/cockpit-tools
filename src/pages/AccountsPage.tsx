@@ -60,6 +60,7 @@ import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDrop
 import { AccountGroupModal, AddToGroupModal } from '../components/AccountGroupModal'
 import { GroupAccountPickerModal } from '../components/GroupAccountPickerModal'
 import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorMessage'
+import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect'
 import { useEscClose } from '../hooks/useEscClose'
 import {
   AccountGroup,
@@ -3620,6 +3621,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
               </button>
             </div>
             <div className="modal-body">
+              <MfaQuickCodeSelect />
               <div className="add-tabs">
                 <button
                   className={`add-tab ${addTab === 'oauth' ? 'active' : ''}`}

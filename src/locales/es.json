@@ -14,6 +14,7 @@
     "close": "Cerrar",
     "open": "Abrir",
     "copy": "Copiar",
+    "copied": "Copiado",
     "add": "Agregar",
     "enable": "Habilitar",
     "disable": "Deshabilitar",
@@ -227,7 +228,7 @@
     "selectAll": "Seleccionar todo"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "Cuentas",
     "wakeup": "Tareas de activación",
     "fingerprints": "Huellas",
@@ -497,9 +498,9 @@
       },
       "safe": {
         "title": "Reinicio seguro (Recomendado)",
-        "principle": "Envía una señal SIGTERM a todos los procesos de Antigravity, solicitando a la aplicación que guarde y se cierre, luego inicia la instancia de destino (forzar el cierre si es necesario).",
-        "commandMac": "macOS/Linux: kill -15 <pid> (todos los procesos de Antigravity)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (todos los procesos de Antigravity)",
+        "principle": "Envía una señal SIGTERM a todos los procesos de Antigravity IDE, solicitando a la aplicación que guarde y se cierre, luego inicia la instancia de destino (forzar el cierre si es necesario).",
+        "commandMac": "macOS/Linux: kill -15 <pid> (todos los procesos de Antigravity IDE)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (todos los procesos de Antigravity IDE)",
         "pros": "Más cercano a un cierre normal, menos probable que ocurran advertencias de errores, datos más seguros.",
         "cons": "Solo admite el reinicio global de todas las instancias."
       },
@@ -560,7 +561,7 @@
       "uiScale": "Escala de la interfaz",
       "uiScaleDesc": "Ajusta la escala de la interfaz",
       "accountManagement": "Gestión de Cuentas",
-      "autoRefresh": "Actualización automática de cuota de Antigravity",
+      "autoRefresh": "Actualización automática de cuota de Antigravity IDE",
       "codexAutoRefresh": "Actualización automática de cuota de Codex",
       "autoRefreshDesc": "Frecuencia de actualización en segundo plano",
       "codexAutoRefreshDesc": "Frecuencia de actualización en segundo plano",
@@ -597,8 +598,8 @@
       "floatingCardShowNowAction": "Mostrar la tarjeta flotante",
       "dataDir": "Directorio de datos",
       "dataDirDesc": "Ubicación de almacenamiento para cuentas y archivos de configuración.",
-      "fpDir": "Almacenamiento de Antigravity",
-      "fpDirDesc": "Ubicación de los archivos de datos de Antigravity.",
+      "fpDir": "Almacenamiento de Antigravity IDE",
+      "fpDirDesc": "Ubicación de los archivos de datos de Antigravity IDE.",
       "opencodeTitle": "Integración de OpenCode",
       "opencodeRestart": "Reiniciar OpenCode al cambiar Codex",
       "opencodeRestartDesc": "Sincronizar la información de la cuenta de Codex en OpenCode",
@@ -619,10 +620,10 @@
       "vscodeAppPathPlaceholder": "Ruta predeterminada",
       "vscodePathSelect": "Seleccionar",
       "vscodePathReset": "Restablecer predeterminado",
-      "antigravityAppPath": "Ruta de la app de Antigravity",
-      "antigravityTitle": "Inicio de Antigravity",
+      "antigravityAppPath": "Ruta de la app de Antigravity IDE",
+      "antigravityTitle": "Inicio de Antigravity IDE",
       "commonTitle": "General",
-      "antigravitySettingsTitle": "Configuración de Antigravity",
+      "antigravitySettingsTitle": "Configuración de Antigravity IDE",
       "codexSettingsTitle": "Configuración de Codex",
       "githubCopilotSettingsTitle": "Configuración de GitHub Copilot",
       "ghcpAutoRefresh": "Actualización automática de cuota de GitHub Copilot",
@@ -695,14 +696,14 @@
       "sideNavLayoutOriginal": "Diseño original",
       "sideNavLayoutClassic": "Diseño clásico",
       "antigravityDualSwitchNoRestart": "Cambio dual sin reinicio",
-      "antigravityDualSwitchNoRestartDesc": "Al cambiar cuenta, se escriben los datos locales y se ejecuta el cambio fluido de la extensión en un solo flujo, sin reiniciar Antigravity.",
+      "antigravityDualSwitchNoRestartDesc": "Al cambiar cuenta, se escriben los datos locales y se ejecuta el cambio fluido de la extensión en un solo flujo, sin reiniciar Antigravity IDE.",
       "appAutoLaunch": "Iniciar Cockpit Tools al iniciar sesión",
       "appAutoLaunchDesc": "Iniciar la aplicación automáticamente después de iniciar sesión en el sistema",
       "startupWakeupDisabled": "Desactivado",
       "startupWakeupImmediate": "Despertar inmediatamente",
       "startupWakeupDelayed": "Despertar con retraso",
-      "antigravityStartupWakeup": "Ejecutar despertar de Antigravity al iniciar",
-      "antigravityStartupWakeupDesc": "Ejecutar una vez las tareas de despertar de Antigravity habilitadas tras iniciar la app",
+      "antigravityStartupWakeup": "Ejecutar despertar de Antigravity IDE al iniciar",
+      "antigravityStartupWakeupDesc": "Ejecutar una vez las tareas de despertar de Antigravity IDE habilitadas tras iniciar la app",
       "codexStartupWakeup": "Ejecutar despertar de Codex al iniciar",
       "codexStartupWakeupDesc": "Ejecutar una vez las tareas de despertar de Codex habilitadas tras iniciar la app",
       "currentAccountRefreshTitle": "Actualización de la cuenta actual",
@@ -940,7 +941,7 @@
   },
   "accounts": {
     "title": "Gestión de Cuentas",
-    "subtitle": "Gestiona tu lista de cuentas de Antigravity.",
+    "subtitle": "Gestiona tu lista de cuentas de Antigravity IDE.",
     "total": "{{count}} cuentas",
     "search": "Buscar cuentas...",
     "addAccount": "Añadir Cuenta",
@@ -1194,7 +1195,7 @@
     "switching": "Cambiando...",
     "fingerprint": "Huella",
     "bound": "Vinculado",
-    "brandTitle": "Gestión de cuenta Antigravity"
+    "brandTitle": "Gestión de cuenta Antigravity IDE"
   },
   "fingerprints": {
     "title": "Huellas de Dispositivo",
@@ -1296,7 +1297,7 @@
   "modals": {
     "addAccount": {
       "title": "Añadir Cuenta",
-      "desc": "Añade tu cuenta de Antigravity mediante Google OAuth",
+      "desc": "Añade tu cuenta de Antigravity IDE mediante Google OAuth",
       "loginBtn": "Iniciar sesión con Google",
       "waiting": "Esperando..."
     },
@@ -1304,7 +1305,7 @@
       "title": "Importar Cuentas",
       "desc": "Elige un método de importación",
       "local": "Importar Cuenta Local",
-      "localDesc": "Importar cuenta actual del cliente Antigravity",
+      "localDesc": "Importar cuenta actual del cliente Antigravity IDE",
       "tools": "Importar de Antigravity Tools",
       "toolsDesc": "Importar del directorio ~/.antigravity_tools/",
       "jsonDivider": "o Pegar JSON",
@@ -1317,7 +1318,7 @@
       "fromExtension": "Importar desde el plugin",
       "syncBadge": "Sincronizar cuentas del plugin Antigravity Cockpit",
       "fromLocalDB": "Importar desde la base de datos local",
-      "localDBDesc": "Leer cuentas del cliente Antigravity en esta máquina",
+      "localDBDesc": "Leer cuentas del cliente Antigravity IDE en esta máquina",
       "toolsDescMigrate": "Migrar cuentas desde ~/.antigravity_tools/",
       "importingTools": "Importando desde Antigravity Tools...",
       "importingLocal": "Importando cuenta local...",
@@ -1400,7 +1401,7 @@
       },
       "runHint": {
         "title": "Notas de verificación",
-        "line1": "« Detectar ahora » envía una solicitud mínima de chat simulando el cliente Antigravity mediante una puerta de enlace local y el protocolo oficial de Language Server.",
+        "line1": "« Detectar ahora » envía una solicitud mínima de chat simulando el cliente Antigravity IDE mediante una puerta de enlace local y el protocolo oficial de Language Server.",
         "line2": "Este proceso consume una pequeña cantidad de tokens (normalmente un diálogo corto). El consumo real depende del modelo y de la política de la cuenta.",
         "line3": "Esta acción no modifica la configuración de las tareas de activación. Solo detecta la disponibilidad de la cuenta y guarda el registro de detección.",
         "line4": "Si se devuelve un 403, primero debe completar la verificación de la cuenta o enviar una apelación; el resultado incluirá la dirección y acciones rápidas."
@@ -1531,6 +1532,7 @@
       "modeScheduled": "📅 Programado",
       "modeCrontab": "🧩 Tabulación cronológica",
       "modeQuotaReset": "🔄 Reinicio de cuota",
+      "antigravityVersion": "Versión de Antigravity IDE",
       "modelSelect": "Selección de modelos",
       "modelHint": "En el mismo grupo de cuota, elige un modelo. Varios modelos se activan en secuencia.",
       "modelsEmpty": "No hay modelos recomendados",
@@ -1705,7 +1707,8 @@
       "portStillInUse": "El puerto {{port}} sigue en uso.",
       "portInUseAction": "Cerrar el puerto y reintentar",
       "timeout": "La autenticación expiró. Haga clic",
-      "timeoutRetry": "Actualizar enlace de autenticación"
+      "timeoutRetry": "Actualizar enlace de autenticación",
+      "reauthEmailLabel": "Cuenta para reautorizar"
     },
     "token": {
       "desc": "Pega auth.json, JSON de cuenta o refresh_token.",
@@ -1916,7 +1919,13 @@
       "customRoutingQuotaColumn": "Cupo",
       "customRoutingEmpty": "No hay cuentas configurables en la colección actual del servicio API",
       "customRoutingSave": "Guardar enrutamiento",
-      "customRoutingSaveSuccess": "Enrutamiento personalizado del servicio API actualizado"
+      "customRoutingSaveSuccess": "Enrutamiento personalizado del servicio API actualizado",
+      "upstreamProxyLabel": "Conexión origen",
+      "upstreamProxySaveSuccess": "Conexión de origen del servicio API actualizada",
+      "upstreamProxyMode": {
+        "followGlobalProxy": "Proxy global",
+        "direct": "Directo"
+      }
     },
     "local": {
       "desc": "Importa la cuenta actual desde ~/.codex/auth.json",
@@ -2578,18 +2587,18 @@
     "summary": {
       "label": "Resumen",
       "title": "Instantánea de cuentas",
-      "desc": "Ver Antigravity y Codex de un vistazo"
+      "desc": "Ver Antigravity IDE y Codex de un vistazo"
     },
     "stats": {
-      "antigravity": "Cuentas Antigravity",
+      "antigravity": "Cuentas Antigravity IDE",
       "codex": "Cuentas Codex",
-      "currentAntigravity": "Antigravity actual",
+      "currentAntigravity": "Antigravity IDE actual",
       "currentCodex": "Codex actual",
       "providers": "Proveedores",
       "totalAccounts": "Total de cuentas"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "Distribución de planes",
@@ -2604,7 +2613,7 @@
     },
     "emptyAccount": "Sin cuenta",
     "sections": {
-      "antigravity": "Cuentas Antigravity",
+      "antigravity": "Cuentas Antigravity IDE",
       "codex": "Cuentas Codex"
     },
     "actions": {
@@ -2637,7 +2646,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Configuración de Antigravity",
+      "title": "Configuración de Antigravity IDE",
       "appPath": "Ruta de la aplicación"
     },
     "codex": {
@@ -3072,7 +3081,7 @@
     "actions": {
       "collapseAll": "Contraer todo",
       "expandAll": "Expandir todo",
-      "goAntigravity": "Ir a Antigravity",
+      "goAntigravity": "Ir a Antigravity IDE",
       "goCodex": "Ir a Codex",
       "goDashboard": "Ir al panel",
       "goFingerprints": "Ir a huellas del dispositivo",
@@ -3087,25 +3096,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "Haz copia de seguridad antes de acciones riesgosas o masivas en Gestión de cuentas de Antigravity."
+        "0": "Haz copia de seguridad antes de acciones riesgosas o masivas en Gestión de cuentas de Antigravity IDE."
       },
       "keywords": {
-        "0": "Gestión de cuentas de Antigravity",
+        "0": "Gestión de cuentas de Antigravity IDE",
         "1": "guía",
         "2": "flujo",
         "3": "cuenta"
       },
       "outcomes": {
-        "0": "Entiende qué puede resolver Gestión de cuentas de Antigravity.",
-        "1": "Usa el flujo recomendado en Gestión de cuentas de Antigravity para reducir errores."
+        "0": "Entiende qué puede resolver Gestión de cuentas de Antigravity IDE.",
+        "1": "Usa el flujo recomendado en Gestión de cuentas de Antigravity IDE para reducir errores."
       },
       "steps": {
-        "0": "Abre la página de Gestión de cuentas de Antigravity.",
-        "1": "Completa la configuración base y los enlaces requeridos en Gestión de cuentas de Antigravity.",
-        "2": "Ejecuta una operación manual en Gestión de cuentas de Antigravity para verificar el resultado."
+        "0": "Abre la página de Gestión de cuentas de Antigravity IDE.",
+        "1": "Completa la configuración base y los enlaces requeridos en Gestión de cuentas de Antigravity IDE.",
+        "2": "Ejecuta una operación manual en Gestión de cuentas de Antigravity IDE para verificar el resultado."
       },
-      "summary": "Esta sección explica cómo usar Gestión de cuentas de Antigravity en el flujo diario.",
-      "title": "Gestión de cuentas de Antigravity"
+      "summary": "Esta sección explica cómo usar Gestión de cuentas de Antigravity IDE en el flujo diario.",
+      "title": "Gestión de cuentas de Antigravity IDE"
     },
     "blocks": {
       "cautions": "Errores comunes / notas",
@@ -3958,5 +3967,14 @@
       "warn": "Aviso",
       "error": "Error"
     }
+  },
+  "mfaQuick": {
+    "title": "Código 2FA",
+    "selectLabel": "Seleccionar clave 2FA",
+    "unnamedSecret": "Clave sin nombre",
+    "invalidCode": "Clave no válida",
+    "copyCode": "Copiar código",
+    "copied": "Copiado",
+    "refreshIn": "{{time}} s"
   }
 }

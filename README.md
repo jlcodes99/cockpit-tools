@@ -7,7 +7,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/jlcodes99/cockpit-tools?style=flat)](https://github.com/jlcodes99/cockpit-tools/releases)
 [![GitHub issues](https://img.shields.io/github/issues/jlcodes99/cockpit-tools)](https://github.com/jlcodes99/cockpit-tools/issues)
 
-一款**通用的 AI IDE 账号管理工具**，目前支持 **Antigravity**、**Codex**、**GitHub Copilot**、**Windsurf**、**Kiro**、**Cursor**、**Gemini Cli**、**CodeBuddy**、**CodeBuddy CN**、**Qoder**、**Trae** 和 **Zed**，并支持多账号多实例并行运行。
+一款**通用的 AI IDE 账号管理工具**，目前支持 **Antigravity IDE**、**Codex**、**GitHub Copilot**、**Windsurf**、**Kiro**、**Cursor**、**Gemini Cli**、**CodeBuddy**、**CodeBuddy CN**、**Qoder**、**Trae** 和 **Zed**，并支持多账号多实例并行运行。
 
 
 > 本工具旨在帮助用户高效管理多个 AI IDE 账号，支持一键切换、配额监控、自动唤醒与多开实例并行运行，助您充分利用不同账号的资源。
@@ -28,35 +28,35 @@
 
 全新的可视化仪表盘，为您提供一站式的状态概览：
 
-- **十二平台支持**：同时展示 Antigravity、Codex、GitHub Copilot、Windsurf、Kiro、Cursor、Gemini Cli、CodeBuddy、CodeBuddy CN、Qoder、Trae 与 Zed 的账号状态
+- **十二平台支持**：同时展示 Antigravity IDE、Codex、GitHub Copilot、Windsurf、Kiro、Cursor、Gemini Cli、CodeBuddy、CodeBuddy CN、Qoder、Trae 与 Zed 的账号状态
 - **配额监控**：实时查看各模型剩余配额、重置时间
 - **快捷操作**：一键刷新、一键唤醒
 - **可视化进度**：直观的进度条展示配额消耗情况
 
 > ![Dashboard Overview](docs/images/dashboard_overview.png)
 
-### 2. Antigravity 账号管理
+### 2. Antigravity IDE 账号管理
 
 - **一键切号**：一键切换当前使用的账号，无需手动登录登出
 - **多种导入**：支持 OAuth 授权、Refresh Token、插件同步
 - **唤醒任务**：定时唤醒 AI 模型，提前触发配额重置周期
 - **设备指纹**：生成、管理、绑定设备指纹，降低风控风险
 
-> ![Antigravity Accounts](docs/images/antigravity_list.png)
+> ![Antigravity IDE Accounts](docs/images/antigravity_list.png)
 >
 > *(唤醒任务与设备指纹管理)*
 > ![Wakeup Tasks](docs/images/wakeup_detail.png)
 > ![Device Fingerprints](docs/images/fingerprint_detail.png)
 
-#### 2.1 Antigravity 多开实例
+#### 2.1 Antigravity IDE 多开实例
 
-支持同一平台多账号多实例并行运行。比如同时打开两个 Antigravity，分别绑定不同账号，分别处理不同项目，互不影响。
+支持同一平台多账号多实例并行运行。比如同时打开两个 Antigravity IDE，分别绑定不同账号，分别处理不同项目，互不影响。
 
 - **独立账号**：每个实例绑定不同账号并独立运行
 - **并行项目**：多实例同时处理不同任务/项目
 - **参数隔离**：支持自定义实例目录与启动参数
 
-> ![Antigravity Instances](docs/images/antigravity_instances.png)
+> ![Antigravity IDE Instances](docs/images/antigravity_instances.png)
 
 ### 3. Codex 账号管理
 
@@ -226,7 +226,7 @@ Codex 同样支持多账号多实例并行运行。比如同时打开两个 Code
 
 - **这是本地桌面工具**：不需要单独注册平台账号，也不依赖项目自建云端来存你的账号列表。
 - **数据主要保存在本机**：
-  - `~/.antigravity_cockpit`：Antigravity 账号、配置、WebSocket 状态等
+  - `~/.antigravity_cockpit`：Antigravity IDE 账号、配置、WebSocket 状态等
   - `~/.codex`：Codex 官方当前登录 `auth.json`
   - `~/.gemini`：Gemini Cli 本地会话文件（如 `oauth_creds.json`、`google_accounts.json`、`settings.json`）
   - 系统本地应用数据目录下 `com.antigravity.cockpit-tools`：Codex / GitHub Copilot / Windsurf / Kiro / Cursor / Gemini Cli / CodeBuddy / CodeBuddy CN / Qoder / Trae / Zed 多账号索引等
@@ -249,7 +249,7 @@ Codex 同样支持多账号多实例并行运行。比如同时打开两个 Code
 | 显示语言 | 改界面文字语言 | 你最熟悉的语言 | 只在看不懂时改 |
 | 应用主题 | 改亮色/暗色外观 | 跟随系统 | 长时间夜间使用可改深色 |
 | 窗口关闭行为 | 点关闭按钮后的动作 | 每次询问 | 想后台常驻选“最小化到托盘” |
-| Antigravity 自动刷新配额 | 后台定时更新 Antigravity 配额 | 5~10 分钟 | 账号多、想更实时可改 2 分钟 |
+| Antigravity IDE 自动刷新配额 | 后台定时更新 Antigravity IDE 配额 | 5~10 分钟 | 账号多、想更实时可改 2 分钟 |
 | Codex 自动刷新配额 | 后台定时更新 Codex 配额 | 5~10 分钟 | 同上 |
 | GitHub Copilot 自动刷新配额 | 后台定时更新 GitHub Copilot 配额 | 5~10 分钟 | 同上 |
 | Windsurf 自动刷新配额 | 后台定时更新 Windsurf 配额 | 5~10 分钟 | 同上 |
@@ -262,7 +262,7 @@ Codex 同样支持多账号多实例并行运行。比如同时打开两个 Code
 | Trae 自动刷新配额 | 后台定时更新 Trae 配额 | 5~10 分钟 | 同上 |
 | Zed 自动刷新配额 | 后台定时更新 Zed 配额 | 5~10 分钟 | 同上 |
 | 数据目录 | 存账号与配置文件的位置 | 默认即可 | 仅用于排查、备份 |
-| Antigravity/Codex/VS Code/Windsurf/Kiro/Cursor/Gemini Cli/CodeBuddy/CodeBuddy CN/Qoder/Trae/Zed/OpenCode 启动路径 | 指定应用可执行文件位置 | 留空（自动检测） | 自动检测失败、或你装在自定义路径时 |
+| Antigravity IDE/Codex/VS Code/Windsurf/Kiro/Cursor/Gemini Cli/CodeBuddy/CodeBuddy CN/Qoder/Trae/Zed/OpenCode 启动路径 | 指定应用可执行文件位置 | 留空（自动检测） | 自动检测失败、或你装在自定义路径时 |
 | 切换 Codex 时自动重启 OpenCode | 切换 Codex 后自动同步 OpenCode 账号信息 | 使用 OpenCode 就开启；不用就关闭 | 频繁切号且需要 OpenCode 同步时开启 |
 
 补充说明：
@@ -395,7 +395,7 @@ QQ 交流群、微信群或新建的 Telegram 畅聊群都可以加入。
 
 ## 致谢
 
-- Antigravity 账号切号逻辑参考：[Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager)
+- Antigravity IDE 账号切号逻辑参考：[Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager)
 
 感谢项目作者的开源贡献！如果这些项目对你有帮助，也请给他们点个 ⭐ Star 支持一下！
 

@@ -101,9 +101,9 @@ pub struct GeneralConfig {
     pub floating_card_always_on_top: bool,
     /// 是否启用应用开机自启动
     pub app_auto_launch_enabled: bool,
-    /// 是否在应用启动后触发 Antigravity 唤醒
+    /// 是否在应用启动后触发 Antigravity IDE 唤醒
     pub antigravity_startup_wakeup_enabled: bool,
-    /// Antigravity 启动后唤醒延时（秒）
+    /// Antigravity IDE 启动后唤醒延时（秒）
     pub antigravity_startup_wakeup_delay_seconds: i32,
     /// 是否在应用启动后触发 Codex 唤醒
     pub codex_startup_wakeup_enabled: bool,
@@ -113,7 +113,7 @@ pub struct GeneralConfig {
     pub floating_card_confirm_on_close: bool,
     /// OpenCode 启动路径（为空则使用默认路径）
     pub opencode_app_path: String,
-    /// Antigravity 启动路径（为空则使用默认路径）
+    /// Antigravity IDE 启动路径（为空则使用默认路径）
     pub antigravity_app_path: String,
     /// Codex 启动路径（为空则使用默认路径）
     pub codex_app_path: String,
@@ -1724,8 +1724,7 @@ pub fn save_general_config(
             .unwrap_or(current.cursor_auto_refresh_minutes),
         gemini_auto_refresh_minutes: gemini_auto_refresh_minutes
             .unwrap_or(current.gemini_auto_refresh_minutes),
-        gemini_sync_wsl: gemini_sync_wsl
-            .unwrap_or(current.gemini_sync_wsl),
+        gemini_sync_wsl: gemini_sync_wsl.unwrap_or(current.gemini_sync_wsl),
         codebuddy_auto_refresh_minutes: codebuddy_auto_refresh_minutes
             .unwrap_or(current.codebuddy_auto_refresh_minutes),
         codebuddy_cn_auto_refresh_minutes: codebuddy_cn_auto_refresh_minutes

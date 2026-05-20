@@ -957,7 +957,7 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
             detail: { app: 'antigravity', retry: { kind: 'default' } },
           }),
         );
-        const pathErrorText = t('appPath.modal.desc', { app: 'Antigravity' });
+        const pathErrorText = t('appPath.modal.desc', { app: 'Antigravity IDE' });
         reportError(pathErrorText);
         return false;
       }
@@ -1352,7 +1352,7 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
             <div className="modal-body verification-modal-body">
               <ModalErrorMessage message={configModalError} scrollKey={configModalErrorScrollKey} />
               <div className="wakeup-form-group">
-                <label>Antigravity Version</label>
+                <label>{t('wakeup.form.antigravityVersion', 'Antigravity IDE Version')}</label>
                 <div className="verification-select-wrap">
                   <select
                     className="wakeup-input verification-select"

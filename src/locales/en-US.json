@@ -14,6 +14,7 @@
     "close": "Close",
     "open": "Open",
     "copy": "Copy",
+    "copied": "Copied",
     "add": "Add",
     "enable": "Enable",
     "disable": "Disable",
@@ -273,7 +274,7 @@
     }
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "Accounts",
     "wakeup": "Wakeup Tasks",
     "fingerprints": "Fingerprints",
@@ -711,7 +712,7 @@
       "uiScale": "UI Scale",
       "uiScaleDesc": "Adjust interface scale",
       "accountManagement": "Account",
-      "autoRefresh": "Antigravity Auto Refresh Quota",
+      "autoRefresh": "Antigravity IDE Auto Refresh Quota",
       "codexAutoRefresh": "Codex Auto Refresh Quota",
       "autoRefreshDesc": "Background update frequency",
       "codexAutoRefreshDesc": "Background update frequency",
@@ -756,8 +757,8 @@
       "floatingCardShowNowAction": "Show floating card",
       "dataDir": "Data Directory",
       "dataDirDesc": "Storage location for accounts and configuration files.",
-      "fpDir": "Antigravity Storage",
-      "fpDirDesc": "Storage location for Antigravity data files.",
+      "fpDir": "Antigravity IDE Storage",
+      "fpDirDesc": "Storage location for Antigravity IDE data files.",
       "opencodeTitle": "OpenCode Integration",
       "opencodeAuthOverwrite": "Overwrite OpenCode login when switching Codex",
       "opencodeAuthOverwriteDesc": "When off, only Codex is switched and OpenCode keeps its current login state",
@@ -781,10 +782,10 @@
       "vscodeAppPathPlaceholder": "Default path",
       "vscodePathSelect": "Select",
       "vscodePathReset": "Reset to default",
-      "antigravityAppPath": "Antigravity App Path",
-      "antigravityTitle": "Antigravity Launch",
+      "antigravityAppPath": "Antigravity IDE App Path",
+      "antigravityTitle": "Antigravity IDE Launch",
       "commonTitle": "Common",
-      "antigravitySettingsTitle": "Antigravity Settings",
+      "antigravitySettingsTitle": "Antigravity IDE Settings",
       "codexSettingsTitle": "Codex Settings",
       "githubCopilotSettingsTitle": "GitHub Copilot Settings",
       "ghcpAutoRefresh": "GitHub Copilot Auto Refresh Quota",
@@ -814,8 +815,8 @@
       "codebuddyPathSelect": "Select",
       "codebuddyPathReset": "Reset to default",
       "cursorPathReset": "Reset default",
-      "antigravityStartupWakeup": "Run Antigravity wakeup after startup",
-      "antigravityStartupWakeupDesc": "Run enabled Antigravity wakeup tasks once after app startup",
+      "antigravityStartupWakeup": "Run Antigravity IDE wakeup after startup",
+      "antigravityStartupWakeupDesc": "Run enabled Antigravity IDE wakeup tasks once after app startup",
       "codexLaunchOnSwitch": "Launch Codex App when switching Codex",
       "codexLaunchOnSwitchDesc": "Start or restart Codex App after switching accounts",
       "codexRestartSpecifiedAppOnSwitch": "Restart specified app when switching Codex",
@@ -877,7 +878,7 @@
       "ghcpOpencodeRestart": "Restart OpenCode when switching GitHub Copilot",
       "ghcpLaunchOnSwitch": "Launch GitHub Copilot App when switching GitHub Copilot",
       "antigravityDualSwitchNoRestart": "Dual switch without restart",
-      "antigravityDualSwitchNoRestartDesc": "On switch, write local account data and call extension seamless switch in one flow, without restarting Antigravity.",
+      "antigravityDualSwitchNoRestartDesc": "On switch, write local account data and call extension seamless switch in one flow, without restarting Antigravity IDE.",
       "codebuddyCnAppPath": "CodeBuddy CN App Path",
       "codebuddyCnAppPathDesc": "Leave blank to use the default path",
       "codebuddyCnAppPathPlaceholder": "Default path",
@@ -986,7 +987,7 @@
   },
   "accounts": {
     "title": "Account",
-    "subtitle": "Manage your Antigravity account list.",
+    "subtitle": "Manage your Antigravity IDE account list.",
     "total": "{{count}} accounts",
     "search": "Search accounts...",
     "addAccount": "Add Account",
@@ -1240,7 +1241,7 @@
     "switching": "Switching...",
     "fingerprint": "Fingerprint",
     "bound": "Bound",
-    "brandTitle": "Antigravity Account"
+    "brandTitle": "Antigravity IDE Account"
   },
   "fingerprints": {
     "title": "Fingerprints",
@@ -1342,7 +1343,7 @@
   "modals": {
     "addAccount": {
       "title": "Add Account",
-      "desc": "Add your Antigravity account via Google OAuth",
+      "desc": "Add your Antigravity IDE account via Google OAuth",
       "loginBtn": "Google OAuth Authorization",
       "waiting": "Waiting..."
     },
@@ -1350,7 +1351,7 @@
       "title": "Import Accounts",
       "desc": "Choose an import method",
       "local": "Import Local Account",
-      "localDesc": "Import current logged-in account from Antigravity Client",
+      "localDesc": "Import current logged-in account from Antigravity IDE Client",
       "tools": "Import Antigravity Tools",
       "toolsDesc": "Import from ~/.antigravity_tools/ directory",
       "jsonDivider": "or Paste JSON",
@@ -1363,7 +1364,7 @@
       "fromExtension": "Import from Plugin",
       "syncBadge": "Sync Antigravity Cockpit plugin accounts",
       "fromLocalDB": "Import from Local DB",
-      "localDBDesc": "Read login accounts from Antigravity Client on this machine",
+      "localDBDesc": "Read login accounts from Antigravity IDE Client on this machine",
       "toolsDescMigrate": "Migrate accounts from ~/.antigravity_tools/",
       "importingTools": "Importing from Antigravity Tools...",
       "importingLocal": "Importing local account...",
@@ -1446,7 +1447,7 @@
       },
       "runHint": {
         "title": "Verification notes",
-        "line1": "Detect now sends a minimal chat request by simulating Antigravity with a local gateway and the official Language Server protocol.",
+        "line1": "Detect now sends a minimal chat request by simulating Antigravity IDE with a local gateway and the official Language Server protocol.",
         "line2": "This consumes a small amount of tokens (usually one short dialogue). Actual usage depends on model and account policy.",
         "line3": "This operation does not modify wakeup task settings. It only checks account availability and writes detection records.",
         "line4": "If a 403 is returned, account verification or an appeal submission may be required. The result will include the URL and quick actions."
@@ -1577,6 +1578,7 @@
       "modeScheduled": "📅 Scheduled",
       "modeCrontab": "🧩 Crontab",
       "modeQuotaReset": "🔄 Quota reset",
+      "antigravityVersion": "Antigravity IDE Version",
       "modelSelect": "Model selection",
       "modelHint": "For the same quota group, choose one model. Multiple models trigger in sequence.",
       "modelsEmpty": "No recommended models",
@@ -1765,7 +1767,8 @@
       "portStillInUse": "Port {{port}} is still in use.",
       "portInUseAction": "Close port and retry",
       "timeout": "Authentication timed out. Please click",
-      "timeoutRetry": "Refresh Auth Link"
+      "timeoutRetry": "Refresh Auth Link",
+      "reauthEmailLabel": "Reauth account"
     },
     "token": {
       "desc": "Paste session JSON, auth.json, account JSON, Sub2API JSON, accessToken, or refresh_token.",
@@ -1987,7 +1990,13 @@
       "customRoutingQuotaColumn": "Quota",
       "customRoutingEmpty": "No configurable accounts in the current API service collection",
       "customRoutingSave": "Save Custom Routing",
-      "customRoutingSaveSuccess": "API service custom routing updated"
+      "customRoutingSaveSuccess": "API service custom routing updated",
+      "upstreamProxyLabel": "Upstream",
+      "upstreamProxySaveSuccess": "API service upstream connection updated",
+      "upstreamProxyMode": {
+        "followGlobalProxy": "Global Proxy",
+        "direct": "Direct"
+      }
     },
     "api": {
       "baseUrl": "Base URL",
@@ -2724,18 +2733,18 @@
     "summary": {
       "label": "Overview",
       "title": "Account Snapshot",
-      "desc": "See Antigravity and Codex at a glance"
+      "desc": "See Antigravity IDE and Codex at a glance"
     },
     "stats": {
-      "antigravity": "Antigravity Accounts",
+      "antigravity": "Antigravity IDE Accounts",
       "codex": "Codex Accounts",
-      "currentAntigravity": "Current Antigravity",
+      "currentAntigravity": "Current Antigravity IDE",
       "currentCodex": "Current Codex",
       "providers": "Providers",
       "totalAccounts": "Total accounts"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "Plan distribution",
@@ -2750,7 +2759,7 @@
     },
     "emptyAccount": "No account",
     "sections": {
-      "antigravity": "Antigravity Accounts",
+      "antigravity": "Antigravity IDE Accounts",
       "codex": "Codex Accounts"
     },
     "actions": {
@@ -2783,7 +2792,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Antigravity Settings",
+      "title": "Antigravity IDE Settings",
       "appPath": "Launch Path"
     },
     "codex": {
@@ -3307,7 +3316,7 @@
     "actions": {
       "collapseAll": "Collapse all",
       "expandAll": "Expand all",
-      "goAntigravity": "Go to Antigravity",
+      "goAntigravity": "Go to Antigravity IDE",
       "goCodex": "Go to Codex",
       "goDashboard": "Go to Dashboard",
       "goFingerprints": "Go to Device Fingerprints",
@@ -3339,8 +3348,8 @@
         "1": "Use \"Refresh All\" to sync one full round of quota status first.",
         "2": "Sort by quota/reset time and choose the account you want to use now."
       },
-      "summary": "Manage the Antigravity account lifecycle: add, refresh quota, switch, group, and tag.",
-      "title": "Antigravity Account"
+      "summary": "Manage the Antigravity IDE account lifecycle: add, refresh quota, switch, group, and tag.",
+      "title": "Antigravity IDE Account"
     },
     "blocks": {
       "cautions": "Common pitfalls / notes",
@@ -3907,6 +3916,15 @@
     "cancelEditAccountName": "Cancel Edit",
     "accountNameRequired": "Account name is required.",
     "copySecret": "Copy Secret"
+  },
+  "mfaQuick": {
+    "title": "2FA Code",
+    "selectLabel": "Select 2FA secret",
+    "unnamedSecret": "Unnamed secret",
+    "invalidCode": "Invalid secret",
+    "copyCode": "Copy code",
+    "copied": "Copied",
+    "refreshIn": "{{time}}s"
   },
   "logViewer": {
     "fileLabel": "Log File",

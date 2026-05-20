@@ -1049,7 +1049,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     const platformLabel = (() => {
       switch (type) {
         case 'antigravity':
-          return 'Antigravity';
+          return 'Antigravity IDE';
         case 'codex':
           return 'Codex';
         case 'github_copilot':
@@ -2669,7 +2669,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     <div className="qs-hint">
                       {t(
                         'settings.general.antigravityDualSwitchNoRestartDesc',
-                        '切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity。'
+                        '切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity IDE。'
                       )}
                     </div>
                   </>

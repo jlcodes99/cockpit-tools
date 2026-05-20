@@ -125,14 +125,8 @@ fn configure_macos_status_item_identity<R: Runtime>(tray: &TrayIcon<R>) {
     });
 
     match result {
-        Ok(detail) => logger::log_info(&format!(
-            "[Tray] macOS 状态栏项目身份已设置: {}",
-            detail
-        )),
-        Err(err) => logger::log_warn(&format!(
-            "[Tray] macOS 状态栏项目身份设置失败: {}",
-            err
-        )),
+        Ok(detail) => logger::log_info(&format!("[Tray] macOS 状态栏项目身份已设置: {}", detail)),
+        Err(err) => logger::log_warn(&format!("[Tray] macOS 状态栏项目身份设置失败: {}", err)),
     }
 }
 
@@ -239,7 +233,7 @@ impl PlatformId {
 
     pub(crate) fn title(self) -> &'static str {
         match self {
-            Self::Antigravity => "Antigravity",
+            Self::Antigravity => "Antigravity IDE",
             Self::Codex => "Codex",
             Self::Zed => "Zed",
             Self::GitHubCopilot => "GitHub Copilot",
@@ -3418,7 +3412,7 @@ fn handle_menu_event<R: Runtime>(app: &tauri::AppHandle<R>, event: tauri::menu::
                         app, "overview",
                     )
                 {
-                    logger::log_warn(&format!("[Tray] 打开 Antigravity 总览失败: {}", err));
+                    logger::log_warn(&format!("[Tray] 打开 Antigravity IDE 总览失败: {}", err));
                 }
             } else if id.starts_with("codex_") {
                 if let Err(err) =

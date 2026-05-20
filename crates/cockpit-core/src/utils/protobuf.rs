@@ -1,3 +1,5 @@
+use base64::{engine::general_purpose, Engine as _};
+
 /// Protobuf Varint 编码
 pub fn encode_varint(mut value: u64) -> Vec<u8> {
     let mut buf = Vec::new();
@@ -70,31 +72,6 @@ pub fn skip_field(data: &[u8], offset: usize, wire_type: u8) -> Result<usize, St
     }
 }
 
-/// 移除指定的 Protobuf 字段
-pub fn remove_field(data: &[u8], field_num: u32) -> Result<Vec<u8>, String> {
-    let mut result = Vec::new();
-    let mut offset = 0;
-
-    while offset < data.len() {
-        let start_offset = offset;
-        let (tag, new_offset) = read_varint(data, offset)?;
-        let wire_type = (tag & 7) as u8;
-        let current_field = (tag >> 3) as u32;
-
-        if current_field == field_num {
-            // 跳过此字段
-            offset = skip_field(data, new_offset, wire_type)?;
-        } else {
-            // 保留其他字段
-            let next_offset = skip_field(data, new_offset, wire_type)?;
-            result.extend_from_slice(&data[start_offset..next_offset]);
-            offset = next_offset;
-        }
-    }
-
-    Ok(result)
-}
-
 /// 创建 OAuthTokenInfo 消息
 pub fn create_oauth_info(access_token: &str, refresh_token: &str, expiry: i64) -> Vec<u8> {
     // Field 1: access_token (string, wire_type = 2)
@@ -117,39 +94,123 @@ pub fn create_oauth_info(access_token: &str, refresh_token: &str, expiry: i64) -
     [field1, field2, field3, field4].concat()
 }
 
-/// 创建 OAuthTokenInfo (Field 6)
-pub fn create_oauth_field(access_token: &str, refresh_token: &str, expiry: i64) -> Vec<u8> {
-    let oauth_info = create_oauth_info(access_token, refresh_token, expiry);
-    encode_len_delim_field(6, &oauth_info)
+/// 从 Topic.data 中移除指定 map entry，保留同 topic 下其他 sentinel row。
+pub fn remove_unified_topic_entry(data: &[u8], target_key: &str) -> Result<Vec<u8>, String> {
+    let mut result = Vec::new();
+    let mut offset = 0;
+
+    while offset < data.len() {
+        let start_offset = offset;
+        let (tag, new_offset) = read_varint(data, offset)?;
+        let wire_type = (tag & 7) as u8;
+        let field_num = (tag >> 3) as u32;
+        let next_offset = skip_field(data, new_offset, wire_type)?;
+
+        let should_remove = if field_num == 1 && wire_type == 2 {
+            let (length, content_offset) = read_varint(data, new_offset)?;
+            let length = length as usize;
+            if content_offset + length > data.len() {
+                return Err("Topic.data entry 数据不完整".to_string());
+            }
+            let entry = &data[content_offset..content_offset + length];
+            unified_topic_entry_key(entry) == Some(target_key)
+        } else {
+            false
+        };
+
+        if !should_remove {
+            result.extend_from_slice(&data[start_offset..next_offset]);
+        }
+        offset = next_offset;
+    }
+
+    Ok(result)
 }
 
-/// 从 protobuf 数据中提取 refresh_token
-/// 结构: Field 6 (OAuthTokenInfo) -> Field 3 (refresh_token)
-pub fn extract_refresh_token(data: &[u8]) -> Option<String> {
-    // 先找到 Field 6
+fn unified_topic_entry_key(data: &[u8]) -> Option<&str> {
     let mut offset = 0;
     while offset < data.len() {
         let (tag, new_offset) = read_varint(data, offset).ok()?;
         let wire_type = (tag & 7) as u8;
         let field_num = (tag >> 3) as u32;
 
-        if field_num == 6 && wire_type == 2 {
-            // 找到 Field 6，读取其长度和内容
+        if field_num == 1 && wire_type == 2 {
             let (length, content_offset) = read_varint(data, new_offset).ok()?;
             let length = length as usize;
             if content_offset + length > data.len() {
                 return None;
             }
-            let oauth_data = &data[content_offset..content_offset + length];
-
-            // 在 OAuthTokenInfo 中找 Field 3 (refresh_token)
-            return extract_string_field(oauth_data, 3);
+            return std::str::from_utf8(&data[content_offset..content_offset + length]).ok();
         }
 
         offset = skip_field(data, new_offset, wire_type).ok()?;
     }
 
     None
+}
+
+/// 从 antigravityUnifiedStateSync.oauthToken 中提取 refresh_token。
+/// 结构: Topic.data[oauthTokenInfoSentinelKey].Row.value = base64(OAuthTokenInfo)，再取 Field 3。
+pub fn extract_refresh_token_from_unified_oauth_token(data: &[u8]) -> Option<String> {
+    let mut offset = 0;
+    while offset < data.len() {
+        let (tag, new_offset) = read_varint(data, offset).ok()?;
+        let wire_type = (tag & 7) as u8;
+        let field_num = (tag >> 3) as u32;
+
+        if field_num == 1 && wire_type == 2 {
+            let (length, content_offset) = read_varint(data, new_offset).ok()?;
+            let length = length as usize;
+            if content_offset + length > data.len() {
+                return None;
+            }
+            let entry = &data[content_offset..content_offset + length];
+            if let Some(refresh_token) = extract_refresh_token_from_unified_entry(entry) {
+                return Some(refresh_token);
+            }
+        }
+
+        offset = skip_field(data, new_offset, wire_type).ok()?;
+    }
+
+    None
+}
+
+fn extract_refresh_token_from_unified_entry(data: &[u8]) -> Option<String> {
+    let mut offset = 0;
+    let mut sentinel_matched = false;
+    let mut row_data: Option<Vec<u8>> = None;
+
+    while offset < data.len() {
+        let (tag, new_offset) = read_varint(data, offset).ok()?;
+        let wire_type = (tag & 7) as u8;
+        let field_num = (tag >> 3) as u32;
+
+        if wire_type == 2 {
+            let (length, content_offset) = read_varint(data, new_offset).ok()?;
+            let length = length as usize;
+            if content_offset + length > data.len() {
+                return None;
+            }
+            let value = &data[content_offset..content_offset + length];
+            if field_num == 1 {
+                sentinel_matched = std::str::from_utf8(value).ok()? == "oauthTokenInfoSentinelKey";
+            } else if field_num == 2 {
+                row_data = Some(value.to_vec());
+            }
+        }
+
+        offset = skip_field(data, new_offset, wire_type).ok()?;
+    }
+
+    if !sentinel_matched {
+        return None;
+    }
+
+    let row_data = row_data?;
+    let oauth_info_b64 = extract_string_field(&row_data, 1)?;
+    let oauth_info = general_purpose::STANDARD.decode(oauth_info_b64).ok()?;
+    extract_string_field(&oauth_info, 3)
 }
 
 /// 从 protobuf 消息中提取指定字段的字符串

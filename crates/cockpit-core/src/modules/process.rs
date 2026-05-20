@@ -14,7 +14,11 @@ const TRAE_APP_NAME: &str = "Trae";
 #[cfg(target_os = "macos")]
 const CODEX_APP_PATH: &str = "/Applications/Codex.app/Contents/MacOS/Codex";
 #[cfg(target_os = "macos")]
-const ANTIGRAVITY_APP_PATH: &str = "/Applications/Antigravity.app/Contents/MacOS/Electron";
+const ANTIGRAVITY_APP_PATH: &str = "/Applications/Antigravity IDE.app/Contents/MacOS/Electron";
+#[cfg(target_os = "macos")]
+const ANTIGRAVITY_APP_CONTENTS_MARKER: &str = "antigravity ide.app/contents/";
+#[cfg(target_os = "macos")]
+const ANTIGRAVITY_APP_EXEC_MARKER: &str = "antigravity ide.app/contents/macos/electron";
 #[cfg(target_os = "macos")]
 const VSCODE_APP_PATH: &str = "/Applications/Visual Studio Code.app/Contents/MacOS/Electron";
 
@@ -1225,6 +1229,14 @@ fn update_app_path_in_config(app: &str, path: &Path) {
 }
 
 #[cfg(target_os = "macos")]
+fn is_legacy_antigravity_macos_path(path: &str) -> bool {
+    let lower = path.trim().to_ascii_lowercase();
+    lower.contains("/applications/antigravity.app")
+        || lower.ends_with("/antigravity.app")
+        || lower.contains("/antigravity.app/contents/")
+}
+
+#[cfg(target_os = "macos")]
 fn resolve_macos_app_root_from_config(app: &str) -> Option<String> {
     let current = config::get_user_config();
     let raw = match app {
@@ -1302,7 +1314,7 @@ fn find_antigravity_process_exe() -> Option<std::path::PathBuf> {
             let _pid_str = parts.next().unwrap_or("").trim();
             let cmdline = parts.next().unwrap_or("").trim();
             let lower = cmdline.to_lowercase();
-            if !lower.contains("antigravity.app/contents/") {
+            if !lower.contains(ANTIGRAVITY_APP_CONTENTS_MARKER) {
                 continue;
             }
             if lower.contains("antigravity tools.app/contents/") {
@@ -1364,10 +1376,10 @@ fn find_antigravity_process_exe() -> Option<std::path::PathBuf> {
 
             #[cfg(target_os = "windows")]
             let is_antigravity =
-                name == "antigravity.exe" || exe_path.ends_with("\\antigravity.exe");
+                name == "antigravity ide.exe" || exe_path.ends_with("\\antigravity ide.exe");
             #[cfg(target_os = "linux")]
-            let is_antigravity = (name.contains("antigravity")
-                || exe_path.contains("/antigravity"))
+            let is_antigravity = (name.contains("antigravity-ide")
+                || exe_path.contains("/antigravity-ide"))
                 && !name.contains("tools")
                 && !exe_path.contains("tools");
 
@@ -1521,22 +1533,22 @@ fn detect_antigravity_exec_path() -> Option<std::path::PathBuf> {
             candidates.push(
                 std::path::PathBuf::from(local_appdata)
                     .join("Programs")
-                    .join("Antigravity")
-                    .join("Antigravity.exe"),
+                    .join("Antigravity IDE")
+                    .join("Antigravity IDE.exe"),
             );
         }
         if let Ok(program_files) = std::env::var("PROGRAMFILES") {
             candidates.push(
                 std::path::PathBuf::from(program_files)
-                    .join("Antigravity")
-                    .join("Antigravity.exe"),
+                    .join("Antigravity IDE")
+                    .join("Antigravity IDE.exe"),
             );
         }
         if let Ok(program_files_x86) = std::env::var("PROGRAMFILES(X86)") {
             candidates.push(
                 std::path::PathBuf::from(program_files_x86)
-                    .join("Antigravity")
-                    .join("Antigravity.exe"),
+                    .join("Antigravity IDE")
+                    .join("Antigravity IDE.exe"),
             );
         }
         for candidate in candidates {
@@ -1546,10 +1558,10 @@ fn detect_antigravity_exec_path() -> Option<std::path::PathBuf> {
         }
         if let Some(path) = detect_windows_exec_path_by_signatures(
             "antigravity",
-            &["Antigravity.exe", "Electron.exe"],
-            &["antigravity"],
-            &["antigravity"],
-            &["antigravity"],
+            &["Antigravity IDE.exe", "antigravity-ide.exe", "Electron.exe"],
+            &["antigravity ide"],
+            &["antigravity ide"],
+            &["antigravity ide", "antigravity"],
         ) {
             return Some(path);
         }
@@ -1558,9 +1570,9 @@ fn detect_antigravity_exec_path() -> Option<std::path::PathBuf> {
     #[cfg(target_os = "linux")]
     {
         let candidates = [
-            "/usr/bin/antigravity",
-            "/opt/antigravity/antigravity",
-            "/usr/share/antigravity/antigravity",
+            "/usr/bin/antigravity-ide",
+            "/opt/antigravity-ide/antigravity-ide",
+            "/usr/share/antigravity-ide/antigravity-ide",
         ];
         for candidate in candidates {
             let path = std::path::PathBuf::from(candidate);
@@ -1569,7 +1581,7 @@ fn detect_antigravity_exec_path() -> Option<std::path::PathBuf> {
             }
         }
         if let Some(home) = dirs::home_dir() {
-            let user_local = home.join(".local/bin/antigravity");
+            let user_local = home.join(".local/bin/antigravity-ide");
             if user_local.exists() {
                 return Some(user_local);
             }
@@ -2658,10 +2670,27 @@ fn resolve_antigravity_launch_path() -> Result<std::path::PathBuf, String> {
     if let Some(custom) =
         normalize_custom_path(Some(&config::get_user_config().antigravity_app_path))
     {
+        #[cfg(target_os = "macos")]
+        if is_legacy_antigravity_macos_path(&custom) {
+            if let Some(detected) = detect_antigravity_exec_path() {
+                update_app_path_in_config("antigravity", &detected);
+                return Ok(detected);
+            }
+        }
+
         if let Some(exec) = resolve_macos_exec_path(&custom, "Electron") {
             return Ok(exec);
         }
+        if let Some(detected) = detect_antigravity_exec_path() {
+            update_app_path_in_config("antigravity", &detected);
+            return Ok(detected);
+        }
         return Err(app_path_missing_error("antigravity"));
+    }
+
+    if let Some(detected) = detect_antigravity_exec_path() {
+        update_app_path_in_config("antigravity", &detected);
+        return Ok(detected);
     }
 
     Err(app_path_missing_error("antigravity"))
@@ -3345,20 +3374,20 @@ fn is_antigravity_main_process(
     #[cfg(target_os = "macos")]
     {
         let _ = name;
-        return exe_path.contains("antigravity.app")
+        return exe_path.contains("antigravity ide.app")
             && !exe_path.contains("antigravity tools.app")
             && !exe_path.contains("crashpad");
     }
 
     #[cfg(target_os = "windows")]
     {
-        return (name == "antigravity.exe" || exe_path.ends_with("\\antigravity.exe"))
+        return (name == "antigravity ide.exe" || exe_path.ends_with("\\antigravity ide.exe"))
             && !exe_path.contains("crashpad");
     }
 
     #[cfg(target_os = "linux")]
     {
-        return (name.contains("antigravity") || exe_path.contains("/antigravity"))
+        return (name.contains("antigravity-ide") || exe_path.contains("/antigravity-ide"))
             && !name.contains("tools")
             && !exe_path.contains("tools");
     }
@@ -3633,7 +3662,7 @@ fn collect_antigravity_process_entries_from_ps() -> Vec<(u32, Option<String>)> {
             Err(_) => continue,
         };
         let lower = cmdline.to_lowercase();
-        if !lower.contains("antigravity.app/contents/") {
+        if !lower.contains(ANTIGRAVITY_APP_CONTENTS_MARKER) {
             continue;
         }
         if lower.contains("antigravity tools.app/contents/")
@@ -3654,7 +3683,7 @@ fn collect_antigravity_process_entries_from_powershell(
 ) -> Vec<(u32, Option<String>)> {
     let mut result = Vec::new();
     let script =
-        build_windows_path_filtered_process_probe_script("Antigravity.exe", expected_exe_path);
+        build_windows_path_filtered_process_probe_script("Antigravity IDE.exe", expected_exe_path);
     let output = powershell_output_with_timeout(
         &["-NoProfile", "-Command", &script],
         WINDOWS_PROCESS_PROBE_TIMEOUT,
@@ -3696,7 +3725,7 @@ fn collect_antigravity_process_entries_from_powershell(
             Err(_) => continue,
         };
         let lower = cmdline.to_lowercase();
-        if !is_antigravity_main_process("antigravity.exe", "", Some(&lower)) {
+        if !is_antigravity_main_process("antigravity ide.exe", "", Some(&lower)) {
             continue;
         }
         let dir = extract_user_data_dir_from_command_line(cmdline);
@@ -3831,7 +3860,7 @@ fn collect_antigravity_process_entries_from_proc() -> Vec<(u32, Option<String>)>
             .ok()
             .and_then(|p| p.to_str().map(|s| s.to_lowercase()))
             .unwrap_or_default();
-        if !cmd_lower.contains("antigravity") && !exe_path.contains("antigravity") {
+        if !cmd_lower.contains("antigravity-ide") && !exe_path.contains("antigravity-ide") {
             continue;
         }
         if cmd_lower.contains("tools") || exe_path.contains("tools") {
@@ -4311,14 +4340,14 @@ pub fn focus_antigravity_instance(
     let pid = resolve_antigravity_pid(last_pid, user_data_dir)
         .ok_or_else(|| "实例未运行，无法定位窗口".to_string())?;
     crate::modules::logger::log_info(&format!(
-        "[Focus] Antigravity resolve pid={} elapsed={}ms",
+        "[Focus] Antigravity IDE resolve pid={} elapsed={}ms",
         pid,
         resolve_start.elapsed().as_millis()
     ));
     let focus_start = Instant::now();
     focus_window_by_pid(pid)?;
     crate::modules::logger::log_info(&format!(
-        "[Focus] Antigravity focus pid={} elapsed={}ms",
+        "[Focus] Antigravity IDE focus pid={} elapsed={}ms",
         pid,
         focus_start.elapsed().as_millis()
     ));
@@ -5593,10 +5622,7 @@ fn collect_antigravity_process_entries_macos() -> Vec<(u32, Option<String>)> {
             if cmdline.is_empty() {
                 continue;
             }
-            if !cmdline
-                .to_lowercase()
-                .contains("antigravity.app/contents/macos/electron")
-            {
+            if !cmdline.to_lowercase().contains(ANTIGRAVITY_APP_EXEC_MARKER) {
                 continue;
             }
             let dir = extract_user_data_dir_from_command_line(cmdline);
@@ -5821,7 +5847,7 @@ where
     Ok(())
 }
 
-/// 关闭受管 Antigravity 实例（按 user-data-dir 匹配，包含默认实例目录）
+/// 关闭受管 Antigravity IDE 实例（按 user-data-dir 匹配，包含默认实例目录）
 pub fn close_antigravity_instances(
     user_data_dirs: &[String],
     timeout_secs: u64,
@@ -5841,11 +5867,11 @@ pub fn close_antigravity_instances(
     ));
     close_managed_instances_common(
         "AG Close",
-        "正在关闭受管 Antigravity 实例...",
-        "未提供可关闭的 Antigravity 实例目录",
-        "受管 Antigravity 实例未在运行，无需关闭",
-        "受管 Antigravity ",
-        "无法关闭受管 Antigravity 实例进程，请手动关闭后重试",
+        "正在关闭受管 Antigravity IDE 实例...",
+        "未提供可关闭的 Antigravity IDE 实例目录",
+        "受管 Antigravity IDE 实例未在运行，无需关闭",
+        "受管 Antigravity IDE ",
+        "无法关闭受管 Antigravity IDE 实例进程，请手动关闭后重试",
         user_data_dirs,
         timeout_secs,
         collect_antigravity_process_entries,
@@ -6032,7 +6058,7 @@ fn log_antigravity_process_details_for_pids(pids: &[u32]) {
         .collect::<Vec<String>>()
         .join(",");
     let script = format!(
-        "$ids=@({}); Get-CimInstance Win32_Process -Filter \"Name='Antigravity.exe'\" | Where-Object {{$ids -contains $_.ProcessId}} | ForEach-Object {{ \"$($_.ProcessId)|$($_.ParentProcessId)|$($_.CommandLine)\" }}",
+        "$ids=@({}); Get-CimInstance Win32_Process -Filter \"Name='Antigravity IDE.exe'\" | Where-Object {{$ids -contains $_.ProcessId}} | ForEach-Object {{ \"$($_.ProcessId)|$($_.ParentProcessId)|$($_.CommandLine)\" }}",
         pid_list
     );
     match powershell_output(&["-Command", &script]) {
@@ -6171,17 +6197,17 @@ fn close_pids(pids: &[u32], timeout_secs: u64) -> Result<(), String> {
     }
 }
 
-/// 启动 Antigravity
+/// 启动 Antigravity IDE
 pub fn start_antigravity() -> Result<u32, String> {
     start_antigravity_with_args("", &[])
 }
 
-/// 启动 Antigravity（支持 user-data-dir 与附加参数）
+/// 启动 Antigravity IDE（支持 user-data-dir 与附加参数）
 pub fn start_antigravity_with_args(
     user_data_dir: &str,
     extra_args: &[String],
 ) -> Result<u32, String> {
-    crate::modules::logger::log_info("正在启动 Antigravity...");
+    crate::modules::logger::log_info("正在启动 Antigravity IDE...");
 
     #[cfg(target_os = "macos")]
     let launch_path = resolve_antigravity_launch_path().ok();
@@ -6209,8 +6235,8 @@ pub fn start_antigravity_with_args(
             }
         }
         let pid = spawn_open_app_with_options(&app_root, &args, true)
-            .map_err(|e| format!("启动 Antigravity 失败: {}", e))?;
-        crate::modules::logger::log_info("Antigravity 启动命令已发送（open -n -a）");
+            .map_err(|e| format!("启动 Antigravity IDE 失败: {}", e))?;
+        crate::modules::logger::log_info("Antigravity IDE 启动命令已发送（open -n -a）");
         if !user_data_dir_trimmed.is_empty() {
             let probe_started = Instant::now();
             let timeout = Duration::from_secs(6);
@@ -6255,9 +6281,9 @@ pub fn start_antigravity_with_args(
             }
         }
         let child = spawn_command_with_trace(&mut cmd)
-            .map_err(|e| format!("启动 Antigravity 失败: {}", e))?;
+            .map_err(|e| format!("启动 Antigravity IDE 失败: {}", e))?;
         crate::modules::logger::log_info(&format!(
-            "Antigravity 已启动: {}",
+            "Antigravity IDE 已启动: {}",
             launch_path.to_string_lossy()
         ));
         return Ok(child.id());
@@ -6282,10 +6308,10 @@ pub fn start_antigravity_with_args(
                 cmd.arg(arg);
             }
         }
-        let child =
-            spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 Antigravity 失败: {}", e))?;
+        let child = spawn_detached_unix(&mut cmd)
+            .map_err(|e| format!("启动 Antigravity IDE 失败: {}", e))?;
         crate::modules::logger::log_info(&format!(
-            "Antigravity 已启动: {}",
+            "Antigravity IDE 已启动: {}",
             launch_path.to_string_lossy()
         ));
         return Ok(child.id());

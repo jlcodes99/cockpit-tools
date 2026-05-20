@@ -7,6 +7,21 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [0.24.0] - 2026-05-20
+
+### Changed
+- **Antigravity integration now aligns with the official Antigravity IDE client**: default app paths, user data directories, process detection, wakeup Language Server metadata, README copy, and UI labels now use Antigravity IDE, while local import and account switching read/write the official `antigravityUnifiedStateSync.oauthToken` state.
+- **The MFA vault now exposes shared parsing and TOTP generation helpers**: saved-code management and quick-code UI reuse the same secret parsing, deduplication, history migration, refresh timer, and code generation behavior.
+
+### Added
+- **Codex Local API Service can now choose its upstream proxy mode**: API Service settings can switch between following the app's global proxy and connecting directly to the official upstream, with the selected mode persisted for gateway requests.
+- **Codex OAuth authorization now has an inline 2FA quick-code picker**: the add-account dialog can show saved MFA secrets, refresh countdowns, and one-click code copying, and reauthorization opens with the target email shown and copyable.
+
+### Fixed
+- **Antigravity IDE automatic detection now handles the renamed official install locations**: default app and Language Server resolution covers `/Applications/Antigravity IDE.app`, Windows `Antigravity IDE.exe`, and Linux `antigravity-ide`, including migration away from legacy macOS paths.
+- **Antigravity Unified State writes now preserve other synced entries**: OAuth token injection replaces only the `oauthTokenInfoSentinelKey` row instead of overwriting the whole topic, so other sentinel rows remain intact.
+
+---
 ## [0.23.11] - 2026-05-19
 
 ### Added

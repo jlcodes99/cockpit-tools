@@ -1435,7 +1435,7 @@ fn build_quota_alert_notification_text(payload: &QuotaAlertPayload) -> (String, 
         "gemini" => "Gemini Cli",
         "codebuddy" => "CodeBuddy",
         "zed" => "Zed",
-        _ => "Antigravity",
+        _ => "Antigravity IDE",
     };
     let title = format!(
         "{} {}",
@@ -1921,8 +1921,8 @@ pub async fn switch_account_internal(account_id: &str) -> Result<Account, String
     let _ = modules::instance::update_default_pid(None);
     modules::instance::inject_account_to_profile(&default_dir, account_id)?;
 
-    // 7. 启动 Antigravity（带默认实例自定义启动参数；启动失败不阻断切号，保持原行为）
-    modules::logger::log_info("[Switch] 正在启动 Antigravity 默认实例...");
+    // 7. 启动 Antigravity IDE（带默认实例自定义启动参数；启动失败不阻断切号，保持原行为）
+    modules::logger::log_info("[Switch] 正在启动 Antigravity IDE 默认实例...");
     let default_settings = modules::instance::load_default_settings()?;
     let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
     let launch_result = if extra_args.is_empty() {
@@ -1935,7 +1935,7 @@ pub async fn switch_account_internal(account_id: &str) -> Result<Account, String
             let _ = modules::instance::update_default_pid(Some(pid));
         }
         Err(e) => {
-            modules::logger::log_warn(&format!("[Switch] Antigravity 启动失败: {}", e));
+            modules::logger::log_warn(&format!("[Switch] Antigravity IDE 启动失败: {}", e));
             // 不中断流程，允许用户手动启动
         }
     }
@@ -1946,7 +1946,7 @@ pub async fn switch_account_internal(account_id: &str) -> Result<Account, String
 
 fn persist_switch_history(item: modules::antigravity_switch_history::AntigravitySwitchHistoryItem) {
     if let Err(err) = modules::antigravity_switch_history::add_history_item(item) {
-        modules::logger::log_warn(&format!("写入 Antigravity 切号记录失败: {}", err));
+        modules::logger::log_warn(&format!("写入 Antigravity IDE 切号记录失败: {}", err));
     }
 }
 
@@ -1958,13 +1958,13 @@ fn ensure_antigravity_running_for_no_restart_switch() -> Result<bool, String> {
             let _ = modules::instance::update_default_pid(Some(pid));
         }
         modules::logger::log_info(&format!(
-            "[Switch][NoRestart] 检测到 Antigravity 已运行: pid={}",
+            "[Switch][NoRestart] 检测到 Antigravity IDE 已运行: pid={}",
             pid
         ));
         return Ok(false);
     }
 
-    modules::logger::log_info("[Switch][NoRestart] Antigravity 未运行，尝试自动启动");
+    modules::logger::log_info("[Switch][NoRestart] Antigravity IDE 未运行，尝试自动启动");
     let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
     let launch_result = if extra_args.is_empty() {
         modules::process::start_antigravity()
@@ -1980,7 +1980,7 @@ fn ensure_antigravity_running_for_no_restart_switch() -> Result<bool, String> {
                 ));
             }
             modules::logger::log_info(&format!(
-                "[Switch][NoRestart] Antigravity 自动启动成功: pid={}",
+                "[Switch][NoRestart] Antigravity IDE 自动启动成功: pid={}",
                 pid
             ));
             Ok(true)
@@ -2215,7 +2215,7 @@ fn apply_bound_fingerprint_for_switch(account: &Account) {
     }
 }
 
-/// 本地切号（不关闭/不重启 Antigravity）
+/// 本地切号（不关闭/不重启 Antigravity IDE）
 /// 流程：Token刷新 + 本地状态更新 + 指纹同步 + 默认实例注入
 pub async fn switch_account_local_no_restart(account_id: &str) -> Result<Account, String> {
     modules::logger::log_info(&format!(

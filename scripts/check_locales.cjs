@@ -166,6 +166,7 @@ function isAllowedEnglishReuse(key, value) {
     'Cockpit Tools',
     'Cockpit Api',
     'Antigravity',
+    'Antigravity IDE',
     'Codex',
     'GitHub Copilot',
     'Kiro',

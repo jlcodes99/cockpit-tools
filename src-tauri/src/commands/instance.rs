@@ -25,16 +25,17 @@ fn resolve_local_account_id() -> Option<String> {
     let state_data: String = conn
         .query_row(
             "SELECT value FROM ItemTable WHERE key = ?",
-            ["jetskiStateSync.agentManagerInitState"],
+            ["antigravityUnifiedStateSync.oauthToken"],
             |row| row.get(0),
         )
         .ok()?;
 
     let blob = general_purpose::STANDARD.decode(&state_data).ok()?;
-    let local_refresh_token = match crate::utils::protobuf::extract_refresh_token(&blob) {
-        Some(token) if !token.is_empty() => token,
-        _ => return None,
-    };
+    let local_refresh_token =
+        match crate::utils::protobuf::extract_refresh_token_from_unified_oauth_token(&blob) {
+            Some(token) if !token.is_empty() => token,
+            _ => return None,
+        };
 
     let accounts = modules::list_accounts().ok()?;
     accounts
@@ -354,7 +355,7 @@ pub async fn open_instance_window(instance_id: String) -> Result<(), String> {
     if instance_id == DEFAULT_INSTANCE_ID {
         let default_settings = modules::instance::load_default_settings()?;
         modules::process::focus_antigravity_instance(default_settings.last_pid, None)
-            .map_err(|err| format!("定位 Antigravity 默认实例窗口失败: {}", err))?;
+            .map_err(|err| format!("定位 Antigravity IDE 默认实例窗口失败: {}", err))?;
         return Ok(());
     }
 
@@ -368,7 +369,7 @@ pub async fn open_instance_window(instance_id: String) -> Result<(), String> {
     modules::process::focus_antigravity_instance(instance.last_pid, Some(&instance.user_data_dir))
         .map_err(|err| {
             format!(
-                "定位 Antigravity 实例窗口失败: instance_id={}, err={}",
+                "定位 Antigravity IDE 实例窗口失败: instance_id={}, err={}",
                 instance.id, err
             )
         })?;

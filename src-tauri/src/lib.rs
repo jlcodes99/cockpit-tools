@@ -534,6 +534,7 @@ pub fn run() {
             commands::codex::codex_local_access_update_port,
             commands::codex::codex_local_access_update_routing_strategy,
             commands::codex::codex_local_access_update_custom_routing,
+            commands::codex::codex_local_access_update_upstream_proxy_mode,
             commands::codex::codex_local_access_update_access_scope,
             commands::codex::codex_local_access_update_credentials,
             commands::codex::codex_local_access_set_enabled,

@@ -349,7 +349,7 @@ fn build_macos_safe_storage_candidates(
         return vec![
             (
                 "Antigravity Safe Storage".to_string(),
-                Some("Antigravity".to_string()),
+                Some("Antigravity Key".to_string()),
             ),
             ("Antigravity Safe Storage".to_string(), None),
             (

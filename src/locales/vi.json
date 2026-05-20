@@ -14,6 +14,7 @@
     "close": "Đóng",
     "open": "Open",
     "copy": "Copy",
+    "copied": "Đã sao chép",
     "add": "Add",
     "enable": "Enable",
     "disable": "Disable",
@@ -227,7 +228,7 @@
     "selectAll": "Chọn tất cả"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "Quản lý tài khoản",
     "wakeup": "Wakeup Tasks",
     "fingerprints": "Vân tay thiết bị",
@@ -497,9 +498,9 @@
       },
       "safe": {
         "title": "Khởi động lại an toàn (Khuyên dùng)",
-        "principle": "Gửi tín hiệu SIGTERM đến tất cả các tiến trình Antigravity, yêu cầu ứng dụng lưu dữ liệu và đóng lại, sau đó bắt đầu phiên bản đích (buộc đóng nếu cần).",
-        "commandMac": "macOS/Linux: kill -15 <pid> (tất cả tiến trình Antigravity)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (tất cả tiến trình Antigravity)",
+        "principle": "Gửi tín hiệu SIGTERM đến tất cả các tiến trình Antigravity IDE, yêu cầu ứng dụng lưu dữ liệu và đóng lại, sau đó bắt đầu phiên bản đích (buộc đóng nếu cần).",
+        "commandMac": "macOS/Linux: kill -15 <pid> (tất cả tiến trình Antigravity IDE)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (tất cả tiến trình Antigravity IDE)",
         "pros": "Gần nhất với đóng bình thường, ít khả năng gây ra cảnh báo lỗi, dữ liệu an toàn hơn.",
         "cons": "Chỉ hỗ trợ khởi động lại toàn cục cho tất cả các phiên bản."
       },
@@ -563,7 +564,7 @@
       "uiScale": "Tỷ lệ giao diện",
       "uiScaleDesc": "Điều chỉnh tỷ lệ giao diện",
       "accountManagement": "Quản lý tài khoản",
-      "autoRefresh": "Tự động làm mới hạn mức Antigravity",
+      "autoRefresh": "Tự động làm mới hạn mức Antigravity IDE",
       "codexAutoRefresh": "Tự động làm mới hạn mức Codex",
       "autoRefreshDesc": "Tần suất cập nhật tự động dưới nền",
       "codexAutoRefreshDesc": "Tần suất cập nhật tự động dưới nền",
@@ -600,8 +601,8 @@
       "floatingCardShowNowAction": "Hiển thị thẻ nổi",
       "dataDir": "Thư mục dữ liệu",
       "dataDirDesc": "Vị trí lưu trữ tài khoản và cấu hình.",
-      "fpDir": "Thư mục lưu trữ Antigravity",
-      "fpDirDesc": "Vị trí lưu trữ tệp dữ liệu Antigravity.",
+      "fpDir": "Thư mục lưu trữ Antigravity IDE",
+      "fpDirDesc": "Vị trí lưu trữ tệp dữ liệu Antigravity IDE.",
       "opencodeTitle": "Tích hợp OpenCode",
       "opencodeRestart": "Khởi động lại OpenCode khi chuyển Codex",
       "opencodeRestartDesc": "Đồng bộ thông tin tài khoản Codex trong OpenCode",
@@ -622,10 +623,10 @@
       "vscodeAppPathPlaceholder": "Đường dẫn mặc định",
       "vscodePathSelect": "Chọn",
       "vscodePathReset": "Đặt lại mặc định",
-      "antigravityAppPath": "Đường dẫn ứng dụng Antigravity",
-      "antigravityTitle": "Khởi chạy Antigravity",
+      "antigravityAppPath": "Đường dẫn ứng dụng Antigravity IDE",
+      "antigravityTitle": "Khởi chạy Antigravity IDE",
       "commonTitle": "Chung",
-      "antigravitySettingsTitle": "Cài đặt Antigravity",
+      "antigravitySettingsTitle": "Cài đặt Antigravity IDE",
       "codexSettingsTitle": "Cài đặt Codex",
       "githubCopilotSettingsTitle": "Cài đặt GitHub Copilot",
       "ghcpAutoRefresh": "Tự động làm mới quota GitHub Copilot",
@@ -698,14 +699,14 @@
       "sideNavLayoutOriginal": "Bố cục gốc",
       "sideNavLayoutClassic": "Bố cục cổ điển",
       "antigravityDualSwitchNoRestart": "Chuyển đôi không cần khởi động lại",
-      "antigravityDualSwitchNoRestartDesc": "Khi chuyển tài khoản, việc ghi dữ liệu cục bộ và chuyển đổi liền mạch qua tiện ích mở rộng được thực hiện trong một luồng, không cần khởi động lại Antigravity.",
+      "antigravityDualSwitchNoRestartDesc": "Khi chuyển tài khoản, việc ghi dữ liệu cục bộ và chuyển đổi liền mạch qua tiện ích mở rộng được thực hiện trong một luồng, không cần khởi động lại Antigravity IDE.",
       "appAutoLaunch": "Khởi chạy Cockpit Tools khi đăng nhập",
       "appAutoLaunchDesc": "Tự động khởi chạy ứng dụng sau khi đăng nhập hệ thống",
       "startupWakeupDisabled": "Tắt",
       "startupWakeupImmediate": "Đánh thức ngay",
       "startupWakeupDelayed": "Đánh thức sau độ trễ",
-      "antigravityStartupWakeup": "Chạy đánh thức Antigravity sau khi khởi động",
-      "antigravityStartupWakeupDesc": "Sau khi ứng dụng khởi động, chạy một lần các tác vụ đánh thức Antigravity đã bật",
+      "antigravityStartupWakeup": "Chạy đánh thức Antigravity IDE sau khi khởi động",
+      "antigravityStartupWakeupDesc": "Sau khi ứng dụng khởi động, chạy một lần các tác vụ đánh thức Antigravity IDE đã bật",
       "codexStartupWakeup": "Chạy đánh thức Codex sau khi khởi động",
       "codexStartupWakeupDesc": "Sau khi ứng dụng khởi động, chạy một lần các tác vụ đánh thức Codex đã bật",
       "currentAccountRefreshTitle": "Làm mới tài khoản hiện tại",
@@ -940,7 +941,7 @@
   },
   "accounts": {
     "title": "Quản lý tài khoản",
-    "subtitle": "Quản lý danh sách tài khoản Antigravity của bạn.",
+    "subtitle": "Quản lý danh sách tài khoản Antigravity IDE của bạn.",
     "total": "Tổng cộng {{count}} tài khoản",
     "search": "Tìm kiếm tài khoản...",
     "addAccount": "Thêm tài khoản",
@@ -1194,7 +1195,7 @@
     "switching": "Đang chuyển...",
     "fingerprint": "Vân tay",
     "bound": "Đã liên kết",
-    "brandTitle": "Quản lý tài khoản Antigravity"
+    "brandTitle": "Quản lý tài khoản Antigravity IDE"
   },
   "fingerprints": {
     "title": "Vân tay thiết bị",
@@ -1296,7 +1297,7 @@
   "modals": {
     "addAccount": {
       "title": "Thêm tài khoản",
-      "desc": "Thêm tài khoản Antigravity của bạn qua ủy quyền Google OAuth",
+      "desc": "Thêm tài khoản Antigravity IDE của bạn qua ủy quyền Google OAuth",
       "loginBtn": "Đăng nhập Google OAuth",
       "waiting": "Đang chờ ủy quyền..."
     },
@@ -1304,7 +1305,7 @@
       "title": "Nhập tài khoản",
       "desc": "Vui lòng chọn phương thức nhập",
       "local": "Nhập tài khoản cục bộ",
-      "localDesc": "Nhập tài khoản hiện đang đăng nhập từ Antigravity Client",
+      "localDesc": "Nhập tài khoản hiện đang đăng nhập từ Antigravity IDE Client",
       "tools": "Nhập Antigravity Tools",
       "toolsDesc": "Nhập từ thư mục ~/.antigravity_tools/",
       "jsonDivider": "hoặc dán JSON",
@@ -1317,7 +1318,7 @@
       "fromExtension": "Nhập từ Plugin",
       "syncBadge": "Đồng bộ tài khoản plugin Antigravity Cockpit",
       "fromLocalDB": "Nhập từ DB cục bộ",
-      "localDBDesc": "Đọc tài khoản đăng nhập từ Antigravity Client trên máy này",
+      "localDBDesc": "Đọc tài khoản đăng nhập từ Antigravity IDE Client trên máy này",
       "toolsDescMigrate": "Di chuyển tài khoản từ ~/.antigravity_tools/",
       "importingTools": "Đang nhập từ Antigravity Tools...",
       "importingLocal": "Đang nhập tài khoản cục bộ...",
@@ -1400,7 +1401,7 @@
       },
       "runHint": {
         "title": "Ghi chú xác minh",
-        "line1": "“Kiểm tra ngay” sẽ gửi một yêu cầu chat tối thiểu bằng cách mô phỏng client Antigravity qua cổng nội bộ và giao thức Language Server chính thức.",
+        "line1": "“Kiểm tra ngay” sẽ gửi một yêu cầu chat tối thiểu bằng cách mô phỏng client Antigravity IDE qua cổng nội bộ và giao thức Language Server chính thức.",
         "line2": "Quy trình này tiêu tốn một lượng nhỏ token (thường là một đoạn hội thoại ngắn). Mức tiêu thụ thực tế phụ thuộc vào model và chính sách tài khoản.",
         "line3": "Thao tác này không thay đổi cấu hình tác vụ đánh thức. Nó chỉ kiểm tra khả dụng của tài khoản và ghi lịch sử kiểm tra.",
         "line4": "Nếu trả về 403, cần hoàn tất xác minh tài khoản hoặc gửi kháng cáo trước; kết quả sẽ cung cấp địa chỉ và thao tác nhanh."
@@ -1531,6 +1532,7 @@
       "modeScheduled": "📅 Lịch trình",
       "modeCrontab": "🧩 Crontab",
       "modeQuotaReset": "🔄 Đặt lại hạn mức",
+      "antigravityVersion": "Phiên bản Antigravity IDE",
       "modelSelect": "Chọn mô hình",
       "modelHint": "Đối với cùng một nhóm hạn mức, chỉ nên chọn một mô hình. Nhiều mô hình sẽ kích hoạt theo trình tự.",
       "modelsEmpty": "Không có mô hình gợi ý",
@@ -1705,7 +1707,8 @@
       "portStillInUse": "Cổng {{port}} vẫn đang được sử dụng.",
       "portInUseAction": "Đóng cổng và thử lại",
       "timeout": "Xác thực đã hết thời gian. Vui lòng nhấn",
-      "timeoutRetry": "Làm mới link xác thực"
+      "timeoutRetry": "Làm mới link xác thực",
+      "reauthEmailLabel": "Tài khoản ủy quyền lại"
     },
     "token": {
       "desc": "Dán auth.json, JSON tài khoản hoặc refresh_token.",
@@ -1916,7 +1919,13 @@
       "customRoutingQuotaColumn": "Hạn mức",
       "customRoutingEmpty": "Không có tài khoản có thể cấu hình trong bộ sưu tập dịch vụ API hiện tại",
       "customRoutingSave": "Lưu định tuyến",
-      "customRoutingSaveSuccess": "Đã cập nhật định tuyến tùy chỉnh của dịch vụ API"
+      "customRoutingSaveSuccess": "Đã cập nhật định tuyến tùy chỉnh của dịch vụ API",
+      "upstreamProxyLabel": "Kết nối nguồn",
+      "upstreamProxySaveSuccess": "Đã cập nhật kết nối nguồn của dịch vụ API",
+      "upstreamProxyMode": {
+        "followGlobalProxy": "Proxy chung",
+        "direct": "Trực tiếp"
+      }
     },
     "local": {
       "desc": "Nhập tài khoản hiện tại từ ~/.codex/auth.json",
@@ -2578,18 +2587,18 @@
     "summary": {
       "label": "Tổng quan",
       "title": "Ảnh chụp tài khoản",
-      "desc": "Xem Antigravity và Codex trong nháy mắt"
+      "desc": "Xem Antigravity IDE và Codex trong nháy mắt"
     },
     "stats": {
-      "antigravity": "Tài khoản Antigravity",
+      "antigravity": "Tài khoản Antigravity IDE",
       "codex": "Tài khoản Codex",
-      "currentAntigravity": "Antigravity hiện tại",
+      "currentAntigravity": "Antigravity IDE hiện tại",
       "currentCodex": "Codex hiện tại",
       "providers": "Nhà cung cấp",
       "totalAccounts": "Tổng tài khoản"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "Phân bố gói",
@@ -2604,7 +2613,7 @@
     },
     "emptyAccount": "Chưa có tài khoản",
     "sections": {
-      "antigravity": "Tài khoản Antigravity",
+      "antigravity": "Tài khoản Antigravity IDE",
       "codex": "Tài khoản Codex"
     },
     "actions": {
@@ -2637,7 +2646,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Cài đặt Antigravity",
+      "title": "Cài đặt Antigravity IDE",
       "appPath": "Đường dẫn ứng dụng"
     },
     "codex": {
@@ -3072,7 +3081,7 @@
     "actions": {
       "collapseAll": "Thu gọn tất cả",
       "expandAll": "Mở rộng tất cả",
-      "goAntigravity": "Đi tới Antigravity",
+      "goAntigravity": "Đi tới Antigravity IDE",
       "goCodex": "Đi tới Codex",
       "goDashboard": "Đi tới bảng điều khiển",
       "goFingerprints": "Đi tới dấu vân tay thiết bị",
@@ -3087,25 +3096,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "Sao lưu dữ liệu trước thao tác rủi ro hoặc hàng loạt trong Quản lý tài khoản Antigravity."
+        "0": "Sao lưu dữ liệu trước thao tác rủi ro hoặc hàng loạt trong Quản lý tài khoản Antigravity IDE."
       },
       "keywords": {
-        "0": "Quản lý tài khoản Antigravity",
+        "0": "Quản lý tài khoản Antigravity IDE",
         "1": "hướng dẫn",
         "2": "quy trình",
         "3": "tài khoản"
       },
       "outcomes": {
-        "0": "Hiểu Quản lý tài khoản Antigravity giúp giải quyết điều gì.",
-        "1": "Dùng quy trình đề xuất trong Quản lý tài khoản Antigravity để giảm lỗi thao tác."
+        "0": "Hiểu Quản lý tài khoản Antigravity IDE giúp giải quyết điều gì.",
+        "1": "Dùng quy trình đề xuất trong Quản lý tài khoản Antigravity IDE để giảm lỗi thao tác."
       },
       "steps": {
-        "0": "Mở trang Quản lý tài khoản Antigravity.",
-        "1": "Hoàn tất cấu hình cơ bản và liên kết bắt buộc cho Quản lý tài khoản Antigravity.",
-        "2": "Chạy một thao tác thủ công trong Quản lý tài khoản Antigravity để xác minh kết quả."
+        "0": "Mở trang Quản lý tài khoản Antigravity IDE.",
+        "1": "Hoàn tất cấu hình cơ bản và liên kết bắt buộc cho Quản lý tài khoản Antigravity IDE.",
+        "2": "Chạy một thao tác thủ công trong Quản lý tài khoản Antigravity IDE để xác minh kết quả."
       },
-      "summary": "Mục này giải thích cách dùng Quản lý tài khoản Antigravity trong quy trình hàng ngày.",
-      "title": "Quản lý tài khoản Antigravity"
+      "summary": "Mục này giải thích cách dùng Quản lý tài khoản Antigravity IDE trong quy trình hàng ngày.",
+      "title": "Quản lý tài khoản Antigravity IDE"
     },
     "blocks": {
       "cautions": "Lưu ý / lỗi thường gặp",
@@ -3958,5 +3967,14 @@
       "warn": "Cảnh báo",
       "error": "Lỗi"
     }
+  },
+  "mfaQuick": {
+    "title": "Mã 2FA",
+    "selectLabel": "Chọn khóa 2FA",
+    "unnamedSecret": "Khóa chưa đặt tên",
+    "invalidCode": "Khóa không hợp lệ",
+    "copyCode": "Sao chép mã",
+    "copied": "Đã sao chép",
+    "refreshIn": "{{time}} giây"
   }
 }

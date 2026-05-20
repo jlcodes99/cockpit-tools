@@ -322,8 +322,14 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
   if (typeof raw === 'string') {
     const name = raw.trim();
     if (name) {
+      if (fallbackPlatform === 'antigravity' && name === 'Antigravity') {
+        return 'Antigravity IDE';
+      }
       return name;
     }
+  }
+  if (fallbackPlatform === 'antigravity') {
+    return 'Antigravity IDE';
   }
   if (fallbackPlatform === 'codebuddy_cn') {
     return 'CodeBuddy CN';
@@ -349,12 +355,18 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
   return fallbackPlatform.charAt(0).toUpperCase() + fallbackPlatform.slice(1);
 }
 
-function normalizeGroupChildName(raw: unknown): string | undefined {
+function normalizeGroupChildName(raw: unknown, platformId: PlatformId): string | undefined {
   if (typeof raw !== 'string') {
     return undefined;
   }
   const value = raw.trim();
-  return value || undefined;
+  if (!value) {
+    return undefined;
+  }
+  if (platformId === 'antigravity' && value === 'Antigravity') {
+    return 'Antigravity IDE';
+  }
+  return value;
 }
 
 function normalizeGroupChildConfigs(
@@ -379,7 +391,7 @@ function normalizeGroupChildConfigs(
     if (!platformId) {
       continue;
     }
-    const name = normalizeGroupChildName(record.name);
+    const name = normalizeGroupChildName(record.name, platformId);
     const iconKind: PlatformGroupIconKind = record.iconKind === 'custom' ? 'custom' : 'platform';
     const iconPlatformId = ALL_PLATFORM_IDS.includes(record.iconPlatformId as PlatformId)
       ? (record.iconPlatformId as PlatformId)

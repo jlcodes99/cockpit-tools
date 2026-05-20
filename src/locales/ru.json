@@ -14,6 +14,7 @@
     "close": "Закрыть",
     "open": "Открыть",
     "copy": "Копировать",
+    "copied": "Скопировано",
     "add": "Добавить",
     "enable": "Включить",
     "disable": "Отключить",
@@ -227,7 +228,7 @@
     "selectAll": "Выбрать всё"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "Аккаунты",
     "wakeup": "Задачи пробуждения",
     "fingerprints": "Отпечатки",
@@ -497,9 +498,9 @@
       },
       "safe": {
         "title": "Безопасный перезапуск (рекомендуется)",
-        "principle": "Отправляет сигнал SIGTERM всем процессам Antigravity, запрашивая у приложения сохранение данных и выход, затем запускает целевой инстанс (при необходимости принудительно завершает работу).",
-        "commandMac": "macOS/Linux: kill -15 <pid> (все процессы Antigravity)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (все процессы Antigravity)",
+        "principle": "Отправляет сигнал SIGTERM всем процессам Antigravity IDE, запрашивая у приложения сохранение данных и выход, затем запускает целевой инстанс (при необходимости принудительно завершает работу).",
+        "commandMac": "macOS/Linux: kill -15 <pid> (все процессы Antigravity IDE)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (все процессы Antigravity IDE)",
         "pros": "Ближе к обычному завершению работы, меньше вероятность появления предупреждений об ошибках, данные более защищены.",
         "cons": "Поддерживает только глобальный перезапуск всех инстансов."
       },
@@ -563,7 +564,7 @@
       "defaultTerminalDesc": "Терминал, используемый при открытии Gemini CLI",
       "terminalSystem": "Системный по умолчанию",
       "accountManagement": "Управление аккаунтами",
-      "autoRefresh": "Автообновление квоты Antigravity",
+      "autoRefresh": "Автообновление квоты Antigravity IDE",
       "codexAutoRefresh": "Автообновление квоты Codex",
       "autoRefreshDesc": "Частота фонового обновления",
       "codexAutoRefreshDesc": "Частота фонового обновления",
@@ -600,8 +601,8 @@
       "floatingCardShowNowAction": "Показать плавающую карточку",
       "dataDir": "Каталог данных",
       "dataDirDesc": "Место хранения аккаунтов и конфигурационных файлов.",
-      "fpDir": "Хранилище Antigravity",
-      "fpDirDesc": "Место хранения файлов данных Antigravity.",
+      "fpDir": "Хранилище Antigravity IDE",
+      "fpDirDesc": "Место хранения файлов данных Antigravity IDE.",
       "opencodeTitle": "Интеграция OpenCode",
       "opencodeRestart": "Перезапускать OpenCode при переключении Codex",
       "opencodeRestartDesc": "Синхронизировать данные аккаунта Codex в OpenCode",
@@ -622,10 +623,10 @@
       "vscodeAppPathPlaceholder": "Путь по умолчанию",
       "vscodePathSelect": "Выбрать",
       "vscodePathReset": "Сбросить по умолчанию",
-      "antigravityAppPath": "Путь к приложению Antigravity",
-      "antigravityTitle": "Запуск Antigravity",
+      "antigravityAppPath": "Путь к приложению Antigravity IDE",
+      "antigravityTitle": "Запуск Antigravity IDE",
       "commonTitle": "Общие",
-      "antigravitySettingsTitle": "Настройки Antigravity",
+      "antigravitySettingsTitle": "Настройки Antigravity IDE",
       "codexSettingsTitle": "Настройки Codex",
       "githubCopilotSettingsTitle": "Настройки GitHub Copilot",
       "ghcpAutoRefresh": "Автообновление квоты GitHub Copilot",
@@ -698,14 +699,14 @@
       "sideNavLayoutOriginal": "Оригинальный макет",
       "sideNavLayoutClassic": "Классический макет",
       "antigravityDualSwitchNoRestart": "Двойное переключение без перезапуска",
-      "antigravityDualSwitchNoRestartDesc": "При переключении аккаунта локальная запись данных и плавное переключение через расширение выполняются в одном потоке без перезапуска Antigravity.",
+      "antigravityDualSwitchNoRestartDesc": "При переключении аккаунта локальная запись данных и плавное переключение через расширение выполняются в одном потоке без перезапуска Antigravity IDE.",
       "appAutoLaunch": "Запускать Cockpit Tools при входе в систему",
       "appAutoLaunchDesc": "Автоматически запускать приложение после входа в систему",
       "startupWakeupDisabled": "Отключено",
       "startupWakeupImmediate": "Разбудить сразу",
       "startupWakeupDelayed": "Разбудить с задержкой",
-      "antigravityStartupWakeup": "Выполнять пробуждение Antigravity после запуска",
-      "antigravityStartupWakeupDesc": "После запуска приложения один раз выполнять включенные задачи пробуждения Antigravity",
+      "antigravityStartupWakeup": "Выполнять пробуждение Antigravity IDE после запуска",
+      "antigravityStartupWakeupDesc": "После запуска приложения один раз выполнять включенные задачи пробуждения Antigravity IDE",
       "codexStartupWakeup": "Выполнять пробуждение Codex после запуска",
       "codexStartupWakeupDesc": "После запуска приложения один раз выполнять включенные задачи пробуждения Codex",
       "currentAccountRefreshTitle": "Обновление текущего аккаунта",
@@ -940,7 +941,7 @@
   },
   "accounts": {
     "title": "Управление аккаунтами",
-    "subtitle": "Управляйте списком ваших аккаунтов Antigravity.",
+    "subtitle": "Управляйте списком ваших аккаунтов Antigravity IDE.",
     "total": "Аккаунтов: {{count}}",
     "search": "Поиск аккаунтов...",
     "addAccount": "Добавить аккаунт",
@@ -1194,7 +1195,7 @@
     "switching": "Переключение...",
     "fingerprint": "Отпечаток",
     "bound": "Привязан",
-    "brandTitle": "Управление аккаунтом Antigravity"
+    "brandTitle": "Управление аккаунтом Antigravity IDE"
   },
   "fingerprints": {
     "title": "Отпечатки устройства",
@@ -1296,7 +1297,7 @@
   "modals": {
     "addAccount": {
       "title": "Добавить аккаунт",
-      "desc": "Добавьте аккаунт Antigravity через Google OAuth",
+      "desc": "Добавьте аккаунт Antigravity IDE через Google OAuth",
       "loginBtn": "Вход через Google",
       "waiting": "Ожидание..."
     },
@@ -1304,7 +1305,7 @@
       "title": "Импорт аккаунтов",
       "desc": "Выберите способ импорта",
       "local": "Импорт локального аккаунта",
-      "localDesc": "Импортировать текущий аккаунт из клиента Antigravity",
+      "localDesc": "Импортировать текущий аккаунт из клиента Antigravity IDE",
       "tools": "Импорт из Antigravity Tools",
       "toolsDesc": "Импорт из директории ~/.antigravity_tools/",
       "jsonDivider": "или вставьте JSON",
@@ -1317,7 +1318,7 @@
       "fromExtension": "Импорт из плагина",
       "syncBadge": "Синхронизировать аккаунты плагина Antigravity Cockpit",
       "fromLocalDB": "Импорт из локальной БД",
-      "localDBDesc": "Чтение аккаунтов из клиента Antigravity на этом устройстве",
+      "localDBDesc": "Чтение аккаунтов из клиента Antigravity IDE на этом устройстве",
       "toolsDescMigrate": "Миграция аккаунтов из ~/.antigravity_tools/",
       "importingTools": "Импорт из Antigravity Tools...",
       "importingLocal": "Импорт локального аккаунта...",
@@ -1400,7 +1401,7 @@
       },
       "runHint": {
         "title": "Пояснение к проверке",
-        "line1": "«Проверить сейчас» отправляет минимальный чат-запрос, имитируя клиент Antigravity через локальный шлюз и официальный протокол Language Server.",
+        "line1": "«Проверить сейчас» отправляет минимальный чат-запрос, имитируя клиент Antigravity IDE через локальный шлюз и официальный протокол Language Server.",
         "line2": "Во время проверки расходуется небольшое количество токенов (обычно один короткий диалог). Фактический расход зависит от модели и политики аккаунта.",
         "line3": "Эта операция не изменяет настройки задач пробуждения. Она только проверяет доступность аккаунта и записывает историю проверки.",
         "line4": "Если возвращена ошибка 403, необходимо пройти верификацию аккаунта или подать апелляцию; результат будет содержать адрес и быстрые действия."
@@ -1531,6 +1532,7 @@
       "modeScheduled": "📅 По расписанию",
       "modeCrontab": "🧩 Кронтаб",
       "modeQuotaReset": "🔄 Сброс квоты",
+      "antigravityVersion": "Версия Antigravity IDE",
       "modelSelect": "Выбор модели",
       "modelHint": "В одной группе квоты рекомендуется выбрать один модель. Несколько моделей запускаются по очереди.",
       "modelsEmpty": "Нет рекомендуемых моделей",
@@ -1705,7 +1707,8 @@
       "portStillInUse": "Порт {{port}} все еще занят.",
       "portInUseAction": "Закрыть порт и повторить",
       "timeout": "Истекло время аутентификации. Нажмите",
-      "timeoutRetry": "Обновить ссылку аутентификации"
+      "timeoutRetry": "Обновить ссылку аутентификации",
+      "reauthEmailLabel": "Аккаунт для повторной авторизации"
     },
     "token": {
       "desc": "Вставьте auth.json, JSON аккаунта или refresh_token.",
@@ -1916,7 +1919,13 @@
       "customRoutingQuotaColumn": "Лимит",
       "customRoutingEmpty": "В текущей коллекции API-сервиса нет настраиваемых учетных записей",
       "customRoutingSave": "Сохранить маршрутизацию",
-      "customRoutingSaveSuccess": "Настраиваемая маршрутизация API-сервиса обновлена"
+      "customRoutingSaveSuccess": "Настраиваемая маршрутизация API-сервиса обновлена",
+      "upstreamProxyLabel": "Внешнее соединение",
+      "upstreamProxySaveSuccess": "Подключение API-сервиса к внешнему узлу обновлено",
+      "upstreamProxyMode": {
+        "followGlobalProxy": "Глобальный прокси",
+        "direct": "Напрямую"
+      }
     },
     "local": {
       "desc": "Импортировать текущий аккаунт из ~/.codex/auth.json",
@@ -2578,18 +2587,18 @@
     "summary": {
       "label": "Обзор",
       "title": "Сводка аккаунтов",
-      "desc": "Antigravity и Codex одним взглядом"
+      "desc": "Antigravity IDE и Codex одним взглядом"
     },
     "stats": {
-      "antigravity": "Аккаунты Antigravity",
+      "antigravity": "Аккаунты Antigravity IDE",
       "codex": "Аккаунты Codex",
-      "currentAntigravity": "Текущий Antigravity",
+      "currentAntigravity": "Текущий Antigravity IDE",
       "currentCodex": "Текущий Codex",
       "providers": "Провайдеры",
       "totalAccounts": "Всего аккаунтов"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "Распределение планов",
@@ -2604,7 +2613,7 @@
     },
     "emptyAccount": "Нет аккаунта",
     "sections": {
-      "antigravity": "Аккаунты Antigravity",
+      "antigravity": "Аккаунты Antigravity IDE",
       "codex": "Аккаунты Codex"
     },
     "actions": {
@@ -2637,7 +2646,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Настройки Antigravity",
+      "title": "Настройки Antigravity IDE",
       "appPath": "Путь к приложению"
     },
     "codex": {
@@ -3072,7 +3081,7 @@
     "actions": {
       "collapseAll": "Свернуть всё",
       "expandAll": "Развернуть всё",
-      "goAntigravity": "Перейти в Antigravity",
+      "goAntigravity": "Перейти в Antigravity IDE",
       "goCodex": "Перейти в Codex",
       "goDashboard": "Перейти в панель",
       "goFingerprints": "Перейти к отпечаткам устройства",
@@ -3087,25 +3096,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "Перед рискованными или массовыми действиями в Управление аккаунтами Antigravity сделайте резервную копию."
+        "0": "Перед рискованными или массовыми действиями в Управление аккаунтами Antigravity IDE сделайте резервную копию."
       },
       "keywords": {
-        "0": "Управление аккаунтами Antigravity",
+        "0": "Управление аккаунтами Antigravity IDE",
         "1": "гайд",
         "2": "поток",
         "3": "аккаунт"
       },
       "outcomes": {
-        "0": "Поймите, какие задачи решает Управление аккаунтами Antigravity.",
-        "1": "Используйте рекомендованный поток в Управление аккаунтами Antigravity, чтобы снизить ошибки."
+        "0": "Поймите, какие задачи решает Управление аккаунтами Antigravity IDE.",
+        "1": "Используйте рекомендованный поток в Управление аккаунтами Antigravity IDE, чтобы снизить ошибки."
       },
       "steps": {
-        "0": "Откройте страницу Управление аккаунтами Antigravity.",
-        "1": "Завершите базовую настройку и необходимые привязки в Управление аккаунтами Antigravity.",
-        "2": "Выполните одно ручное действие в Управление аккаунтами Antigravity и проверьте результат."
+        "0": "Откройте страницу Управление аккаунтами Antigravity IDE.",
+        "1": "Завершите базовую настройку и необходимые привязки в Управление аккаунтами Antigravity IDE.",
+        "2": "Выполните одно ручное действие в Управление аккаунтами Antigravity IDE и проверьте результат."
       },
-      "summary": "Этот раздел объясняет использование Управление аккаунтами Antigravity в повседневном процессе.",
-      "title": "Управление аккаунтами Antigravity"
+      "summary": "Этот раздел объясняет использование Управление аккаунтами Antigravity IDE в повседневном процессе.",
+      "title": "Управление аккаунтами Antigravity IDE"
     },
     "blocks": {
       "cautions": "Частые ошибки / замечания",
@@ -3958,5 +3967,14 @@
       "warn": "Предупр.",
       "error": "Ошибка"
     }
+  },
+  "mfaQuick": {
+    "title": "Код 2FA",
+    "selectLabel": "Выберите ключ 2FA",
+    "unnamedSecret": "Ключ без имени",
+    "invalidCode": "Недействительный ключ",
+    "copyCode": "Копировать код",
+    "copied": "Скопировано",
+    "refreshIn": "{{time}} с"
   }
 }

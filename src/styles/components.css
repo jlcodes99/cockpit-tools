@@ -1622,6 +1622,119 @@
   flex: 1;
 }
 
+.mfa-quick-code-select {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-tertiary);
+}
+
+.mfa-quick-code-select__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mfa-quick-code-select__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.mfa-quick-code-select__title svg {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.mfa-quick-code-select__timer {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mfa-quick-code-select__timer.warning {
+  color: var(--danger);
+}
+
+.mfa-quick-code-select__controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.mfa-quick-code-select select {
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+
+.mfa-quick-code-select select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.mfa-quick-code-select__code {
+  min-width: 136px;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.mfa-quick-code-select__code > span {
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mfa-quick-code-select__code > span.invalid {
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.mfa-quick-code-select__code .action-btn {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .mfa-quick-code-select__controls {
+    grid-template-columns: 1fr;
+  }
+
+  .mfa-quick-code-select__code {
+    width: 100%;
+  }
+}
+
 .modal-footer {
   display: flex;
   justify-content: flex-end;

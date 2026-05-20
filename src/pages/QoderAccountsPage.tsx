@@ -30,6 +30,7 @@ import { useTranslation } from 'react-i18next';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorMessage';
+import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
@@ -2176,6 +2177,7 @@ export function QoderAccountsPage() {
               </button>
             </div>
             <div className="modal-body">
+              <MfaQuickCodeSelect />
               {addTab === 'oauth' ? (
                 <div className="add-section">
                   <p className="section-desc">

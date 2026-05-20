@@ -14,6 +14,7 @@
     "close": "Tutup",
     "open": "Buka",
     "copy": "Salin",
+    "copied": "Disalin",
     "add": "Tambah",
     "enable": "Aktifkan",
     "disable": "Nonaktifkan",
@@ -273,7 +274,7 @@
     }
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "Akun",
     "wakeup": "Tugas Bangun",
     "fingerprints": "Sidik Jari",
@@ -610,7 +611,7 @@
       "uiScale": "Skala Antarmuka",
       "uiScaleDesc": "Sesuaikan skala antarmuka",
       "accountManagement": "Akun",
-      "autoRefresh": "Penyegaran Otomatis Kuota Antigravity",
+      "autoRefresh": "Penyegaran Otomatis Kuota Antigravity IDE",
       "codexAutoRefresh": "Penyegaran Otomatis Kuota Codex",
       "autoRefreshDesc": "Frekuensi pembaruan latar belakang",
       "codexAutoRefreshDesc": "Frekuensi pembaruan latar belakang",
@@ -654,8 +655,8 @@
       "floatingCardShowNowAction": "Tampilkan kartu mengambang",
       "dataDir": "Direktori Data",
       "dataDirDesc": "Lokasi penyimpanan akun dan berkas konfigurasi.",
-      "fpDir": "Penyimpanan Antigravity",
-      "fpDirDesc": "Lokasi penyimpanan berkas data Antigravity.",
+      "fpDir": "Penyimpanan Antigravity IDE",
+      "fpDirDesc": "Lokasi penyimpanan berkas data Antigravity IDE.",
       "opencodeTitle": "Integrasi OpenCode",
       "opencodeAuthOverwrite": "Timpa login OpenCode saat mengganti Codex",
       "opencodeAuthOverwriteDesc": "Jika dinonaktifkan, hanya Codex yang diganti dan OpenCode mempertahankan status login saat ini",
@@ -679,10 +680,10 @@
       "vscodeAppPathPlaceholder": "Jalur bawaan",
       "vscodePathSelect": "Pilih",
       "vscodePathReset": "Atur ulang ke bawaan",
-      "antigravityAppPath": "Jalur Aplikasi Antigravity",
-      "antigravityTitle": "Peluncuran Antigravity",
+      "antigravityAppPath": "Jalur Aplikasi Antigravity IDE",
+      "antigravityTitle": "Peluncuran Antigravity IDE",
       "commonTitle": "Umum",
-      "antigravitySettingsTitle": "Pengaturan Antigravity",
+      "antigravitySettingsTitle": "Pengaturan Antigravity IDE",
       "codexSettingsTitle": "Pengaturan Codex",
       "githubCopilotSettingsTitle": "Pengaturan GitHub Copilot",
       "ghcpAutoRefresh": "Penyegaran Otomatis Kuota GitHub Copilot",
@@ -712,8 +713,8 @@
       "codebuddyPathSelect": "Pilih",
       "codebuddyPathReset": "Atur ulang ke bawaan",
       "cursorPathReset": "Atur ulang bawaan",
-      "antigravityStartupWakeup": "Jalankan bangun Antigravity setelah mulai",
-      "antigravityStartupWakeupDesc": "Jalankan tugas bangun Antigravity yang diaktifkan sekali setelah aplikasi dimulai",
+      "antigravityStartupWakeup": "Jalankan bangun Antigravity IDE setelah mulai",
+      "antigravityStartupWakeupDesc": "Jalankan tugas bangun Antigravity IDE yang diaktifkan sekali setelah aplikasi dimulai",
       "codexLaunchOnSwitch": "Luncurkan Aplikasi Codex saat mengganti Codex",
       "codexLaunchOnSwitchDesc": "Mulai atau mulai ulang Aplikasi Codex setelah mengganti akun",
       "autoSwitchAccountScope": "Cakupan penggantian akun otomatis",
@@ -764,7 +765,7 @@
       "ghcpOpencodeRestart": "Mulai ulang OpenCode saat mengganti GitHub Copilot",
       "ghcpLaunchOnSwitch": "Luncurkan Aplikasi GitHub Copilot saat mengganti GitHub Copilot",
       "antigravityDualSwitchNoRestart": "Penggantian ganda tanpa mulai ulang",
-      "antigravityDualSwitchNoRestartDesc": "Saat mengganti, tulis data akun lokal dan panggil penggantian mulus ekstensi dalam satu alur, tanpa memulai ulang Antigravity.",
+      "antigravityDualSwitchNoRestartDesc": "Saat mengganti, tulis data akun lokal dan panggil penggantian mulus ekstensi dalam satu alur, tanpa memulai ulang Antigravity IDE.",
       "defaultTerminal": "Terminal default",
       "defaultTerminalDesc": "Terminal yang digunakan saat membuka Gemini CLI.",
       "terminalSystem": "Ikuti sistem",
@@ -986,7 +987,7 @@
   },
   "accounts": {
     "title": "Akun",
-    "subtitle": "Kelola daftar akun Antigravity Anda.",
+    "subtitle": "Kelola daftar akun Antigravity IDE Anda.",
     "total": "{{count}} akun",
     "search": "Cari akun...",
     "addAccount": "Tambah Akun",
@@ -1240,7 +1241,7 @@
     "switching": "Mengganti...",
     "fingerprint": "Sidik Jari",
     "bound": "Tertaut",
-    "brandTitle": "Akun Antigravity"
+    "brandTitle": "Akun Antigravity IDE"
   },
   "fingerprints": {
     "title": "Sidik Jari",
@@ -1342,7 +1343,7 @@
   "modals": {
     "addAccount": {
       "title": "Tambah Akun",
-      "desc": "Tambahkan akun Antigravity Anda melalui Google OAuth",
+      "desc": "Tambahkan akun Antigravity IDE Anda melalui Google OAuth",
       "loginBtn": "Otorisasi Google OAuth",
       "waiting": "Menunggu..."
     },
@@ -1350,7 +1351,7 @@
       "title": "Impor Akun",
       "desc": "Pilih metode impor",
       "local": "Impor Akun Lokal",
-      "localDesc": "Impor akun yang sedang masuk dari Antigravity Client",
+      "localDesc": "Impor akun yang sedang masuk dari Antigravity IDE Client",
       "tools": "Impor Antigravity Tools",
       "toolsDesc": "Impor dari direktori ~/.antigravity_tools/",
       "jsonDivider": "atau Tempel JSON",
@@ -1363,7 +1364,7 @@
       "fromExtension": "Impor dari Plugin",
       "syncBadge": "Sinkronkan akun plugin Antigravity Cockpit",
       "fromLocalDB": "Impor dari DB Lokal",
-      "localDBDesc": "Baca akun login dari Antigravity Client di mesin ini",
+      "localDBDesc": "Baca akun login dari Antigravity IDE Client di mesin ini",
       "toolsDescMigrate": "Migrasi akun dari ~/.antigravity_tools/",
       "importingTools": "Mengimpor dari Antigravity Tools...",
       "importingLocal": "Mengimpor akun lokal...",
@@ -1446,7 +1447,7 @@
       },
       "runHint": {
         "title": "Catatan verifikasi",
-        "line1": "Deteksi sekarang mengirim permintaan obrolan minimal dengan mensimulasikan Antigravity menggunakan gateway lokal dan protokol Language Server resmi.",
+        "line1": "Deteksi sekarang mengirim permintaan obrolan minimal dengan mensimulasikan Antigravity IDE menggunakan gateway lokal dan protokol Language Server resmi.",
         "line2": "Ini mengonsumsi sejumlah kecil token (biasanya satu dialog singkat). Penggunaan aktual tergantung pada model dan kebijakan akun.",
         "line3": "Operasi ini tidak mengubah pengaturan tugas bangun. Ini hanya memeriksa ketersediaan akun dan menulis catatan deteksi.",
         "line4": "Jika 403 dikembalikan, verifikasi akun atau pengajuan banding mungkin diperlukan. Hasilnya akan menyertakan URL dan tindakan cepat."
@@ -1577,6 +1578,7 @@
       "modeScheduled": "Ã°Å¸â€œâ€¦ Scheduled",
       "modeCrontab": "Ã°Å¸Â§Â© Crontab",
       "modeQuotaReset": "Ã°Å¸â€â€ž Quota reset",
+      "antigravityVersion": "Versi Antigravity IDE",
       "modelSelect": "Pilihan model",
       "modelHint": "Untuk grup kuota yang sama, pilih satu model. Beberapa model dipicu secara berurutan.",
       "modelsEmpty": "Tidak ada model yang direkomendasikan",
@@ -1754,7 +1756,8 @@
       "portStillInUse": "Port {{port}} masih digunakan.",
       "portInUseAction": "Tutup port dan coba lagi",
       "timeout": "Autentikasi habis waktu. Silakan klik",
-      "timeoutRetry": "Perbarui Link Auth"
+      "timeoutRetry": "Perbarui Link Auth",
+      "reauthEmailLabel": "Akun otorisasi ulang"
     },
     "token": {
       "desc": "Tempel auth.json, JSON akun, atau refresh_token.",
@@ -1965,7 +1968,13 @@
       "customRoutingQuotaColumn": "Kuota",
       "customRoutingEmpty": "Tidak ada akun yang dapat dikonfigurasi di koleksi layanan API saat ini",
       "customRoutingSave": "Simpan routing",
-      "customRoutingSaveSuccess": "Routing kustom layanan API diperbarui"
+      "customRoutingSaveSuccess": "Routing kustom layanan API diperbarui",
+      "upstreamProxyLabel": "Koneksi hulu",
+      "upstreamProxySaveSuccess": "Koneksi hulu layanan API diperbarui",
+      "upstreamProxyMode": {
+        "followGlobalProxy": "Proxy global",
+        "direct": "Langsung"
+      }
     },
     "api": {
       "baseUrl": "URL Dasar",
@@ -2724,18 +2733,18 @@
     "summary": {
       "label": "Ringkasan",
       "title": "Snapshot Akun",
-      "desc": "Lihat Antigravity dan Codex sekilas"
+      "desc": "Lihat Antigravity IDE dan Codex sekilas"
     },
     "stats": {
-      "antigravity": "Akun Antigravity",
+      "antigravity": "Akun Antigravity IDE",
       "codex": "Akun Codex",
-      "currentAntigravity": "Antigravity Saat Ini",
+      "currentAntigravity": "Antigravity IDE Saat Ini",
       "currentCodex": "Codex Saat Ini",
       "providers": "Penyedia",
       "totalAccounts": "Total akun"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "Distribusi paket",
@@ -2750,7 +2759,7 @@
     },
     "emptyAccount": "Tidak ada akun",
     "sections": {
-      "antigravity": "Akun Antigravity",
+      "antigravity": "Akun Antigravity IDE",
       "codex": "Akun Codex"
     },
     "actions": {
@@ -2783,7 +2792,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Antigravity Settings",
+      "title": "Antigravity IDE Settings",
       "appPath": "Launch Path"
     },
     "codex": {
@@ -3307,7 +3316,7 @@
     "actions": {
       "collapseAll": "Collapse all",
       "expandAll": "Expand all",
-      "goAntigravity": "Go to Antigravity",
+      "goAntigravity": "Go to Antigravity IDE",
       "goCodex": "Go to Codex",
       "goDashboard": "Go to Dashboard",
       "goFingerprints": "Go to Device Fingerprints",
@@ -3339,8 +3348,8 @@
         "1": "Gunakan \"Segarkan Semua\" untuk menyinkronkan satu putaran penuh status kuota terlebih dahulu.",
         "2": "Urutkan berdasarkan kuota/waktu reset dan pilih akun yang ingin Anda gunakan sekarang."
       },
-      "summary": "Kelola siklus hidup akun Antigravity: tambah, segarkan kuota, ganti, kelompokkan, dan beri tag.",
-      "title": "Akun Antigravity"
+      "summary": "Kelola siklus hidup akun Antigravity IDE: tambah, segarkan kuota, ganti, kelompokkan, dan beri tag.",
+      "title": "Akun Antigravity IDE"
     },
     "blocks": {
       "cautions": "Kesalahan umum / catatan",
@@ -3958,5 +3967,14 @@
       "warn": "Peringatan",
       "error": "Galat"
     }
+  },
+  "mfaQuick": {
+    "title": "Kode 2FA",
+    "selectLabel": "Pilih kunci 2FA",
+    "unnamedSecret": "Kunci tanpa nama",
+    "invalidCode": "Kunci tidak valid",
+    "copyCode": "Salin kode",
+    "copied": "Disalin",
+    "refreshIn": "{{time}} dtk"
   }
 }

@@ -7,6 +7,21 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [0.24.0] - 2026-05-20
+
+### 变更
+- **Antigravity 集成已对齐官方 Antigravity IDE 客户端**：默认应用路径、用户数据目录、进程识别、唤醒 Language Server 元数据、README 文案与界面标签统一使用 Antigravity IDE；本地导入与切号也改为读写官方 `antigravityUnifiedStateSync.oauthToken` 状态。
+- **MFA 保险箱现抽取共享解析与 TOTP 生成逻辑**：已保存验证码管理与快速取码入口复用同一套密钥解析、去重、历史迁移、刷新倒计时与验证码生成行为。
+
+### 新增
+- **Codex 本地 API 服务现可选择上游代理模式**：API 服务设置可在跟随应用全局代理与直连官方上游之间切换，并将所选模式持久化用于网关请求。
+- **Codex OAuth 授权现内置 2FA 快速取码入口**：添加账号弹框可展示已保存 MFA 密钥、刷新倒计时与一键复制验证码；重新授权时会显示并可复制目标账号邮箱。
+
+### 修复
+- **Antigravity IDE 自动检测现适配官方重命名后的安装位置**：默认应用与 Language Server 解析覆盖 `/Applications/Antigravity IDE.app`、Windows `Antigravity IDE.exe` 和 Linux `antigravity-ide`，并可从旧 macOS 路径配置迁移到当前路径。
+- **Antigravity Unified State 写入现保留其他同步条目**：OAuth token 注入只替换 `oauthTokenInfoSentinelKey` 对应行，不再覆盖整个 topic，避免影响其他 sentinel row。
+
+---
 ## [0.23.11] - 2026-05-19
 
 ### 新增

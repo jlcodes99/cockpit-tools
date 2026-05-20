@@ -3,225 +3,26 @@ import { useTranslation } from 'react-i18next';
 import { ArrowDown, ArrowUp, Check, Copy, Download, History, Key, Pencil, Trash2, Upload, X } from 'lucide-react';
 import { save, open, confirm } from '@tauri-apps/plugin-dialog';
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
-import * as OTPAuth from 'otpauth';
 import jsQR from 'jsqr';
-
-export interface MfaRecord {
-  id: string;
-  accountName: string;
-  secret: string;
-  remark?: string;
-  time: number;
-}
-
-interface ParsedCredential {
-  accountName: string;
-  secret: string;
-}
+import {
+  MFA_STORAGE_KEY_HISTORY,
+  MFA_STORAGE_KEY_SAVED,
+  createMfaRecordId,
+  dedupeMfaRecordsBySecret,
+  getMfaOtpToken,
+  getMfaTimeRemaining,
+  loadMfaHistoryRecords,
+  loadSavedMfaRecords,
+  normalizeMfaRecord,
+  parseMfaCredentialInput,
+  toMfaSecretIdentity,
+  type MfaRecord,
+  type ParsedMfaCredential,
+} from '../utils/mfaVault';
 
 type SortDirection = 'asc' | 'desc';
 type ListTab = 'saved' | 'history';
-
-const STORAGE_KEY_SAVED = 'agtools.mfa.vault.v2';
-const STORAGE_KEY_HISTORY = 'agtools.2fa.query.history.v1';
-const LEGACY_STORAGE_KEY_SAVED_MFA = 'agtools.mfa.vault.v1';
-const LEGACY_STORAGE_KEY_SAVED_2FA = 'agtools.two_factor_auth.saved.v2';
-const LEGACY_STORAGE_KEY_HISTORY_2FA = 'agtools.two_factor_auth.history.v2';
 const MAX_HISTORY = 50;
-
-function createUniqueId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `mfa-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function normalizeStrictBase32(raw: string): string | null {
-  const cleaned = raw.trim().replace(/[\s-]/g, '').toUpperCase();
-  if (!cleaned) return null;
-  if (!/^[A-Z2-7]+=*$/.test(cleaned)) return null;
-  return cleaned;
-}
-
-function buildAccountDisplayName(issuer: string, label: string): string {
-  const issuerPart = issuer.trim();
-  const labelPart = label.trim();
-  if (issuerPart && labelPart) {
-    const lowerIssuer = issuerPart.toLowerCase();
-    if (labelPart.toLowerCase().startsWith(`${lowerIssuer}:`)) return labelPart;
-    return `${issuerPart}:${labelPart}`;
-  }
-  return labelPart || issuerPart;
-}
-
-function extractSecretFromOtpAuthUri(rawInput: string): string | null {
-  const match = rawInput.match(/(?:^|[?&])secret=([^&\s]+)/i);
-  if (!match?.[1]) return null;
-  try {
-    return decodeURIComponent(match[1]).trim();
-  } catch {
-    return match[1].trim();
-  }
-}
-
-function toSecretIdentity(secret: string): string {
-  const normalized = normalizeStrictBase32(secret);
-  return normalized || secret.trim().toUpperCase();
-}
-
-function parseCredentialInput(rawInput: string): ParsedCredential | null {
-  const input = rawInput.trim();
-  if (!input) return null;
-
-  try {
-    const parsed = OTPAuth.URI.parse(input);
-    if (parsed instanceof OTPAuth.TOTP) {
-      const rawSecret = extractSecretFromOtpAuthUri(input) || parsed.secret?.base32 || '';
-      const validated = normalizeStrictBase32(rawSecret);
-      if (!validated) return null;
-      const accountName = buildAccountDisplayName(parsed.issuer || '', parsed.label || '');
-      return {
-        accountName,
-        secret: rawSecret,
-      };
-    }
-  } catch {}
-
-  const validated = normalizeStrictBase32(input);
-  if (!validated) return null;
-
-  return {
-    accountName: '',
-    secret: input,
-  };
-}
-
-function parseAlgorithm(raw: string): 'SHA1' | 'SHA256' | 'SHA512' | undefined {
-  const upper = raw.toUpperCase();
-  if (upper === 'SHA256') return 'SHA256';
-  if (upper === 'SHA512') return 'SHA512';
-  if (upper === 'SHA1') return 'SHA1';
-  return undefined;
-}
-
-function buildTotp(rawSecret: string): OTPAuth.TOTP | null {
-  const raw = rawSecret.trim();
-  if (!raw) return null;
-
-  try {
-    const parsed = OTPAuth.URI.parse(raw);
-    if (parsed instanceof OTPAuth.TOTP) return parsed;
-  } catch {}
-
-  const secretMatch = raw.match(/(?:^|[?&])secret=([^&\s]+)/i);
-  if (secretMatch?.[1]) {
-    const secretPart = normalizeStrictBase32(decodeURIComponent(secretMatch[1]));
-    if (secretPart) {
-      const periodMatch = raw.match(/(?:^|[?&])period=(\d+)/i);
-      const digitsMatch = raw.match(/(?:^|[?&])digits=(\d+)/i);
-      const algorithmMatch = raw.match(/(?:^|[?&])algorithm=([^&\s]+)/i);
-      const period = Number(periodMatch?.[1] || 30);
-      const digits = Number(digitsMatch?.[1] || 6);
-      const algorithm = parseAlgorithm(decodeURIComponent(algorithmMatch?.[1] || ''));
-
-      try {
-        return new OTPAuth.TOTP({
-          secret: OTPAuth.Secret.fromBase32(secretPart),
-          period: Number.isFinite(period) && period > 0 ? period : 30,
-          digits: Number.isFinite(digits) && digits > 0 ? digits : 6,
-          algorithm,
-        });
-      } catch {}
-    }
-  }
-
-  const normalized = normalizeStrictBase32(raw);
-  if (!normalized) return null;
-  try {
-    return new OTPAuth.TOTP({
-      secret: OTPAuth.Secret.fromBase32(normalized),
-      period: 30,
-      digits: 6,
-    });
-  } catch {
-    return null;
-  }
-}
-
-function getOtpToken(secret: string): string {
-  const totp = buildTotp(secret);
-  if (!totp) return '';
-  try {
-    return totp.generate();
-  } catch {
-    return '';
-  }
-}
-
-function readStorageArray(key: string): unknown[] {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function normalizeRecord(raw: unknown): MfaRecord | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const item = raw as Record<string, unknown>;
-  const sourceSecret = typeof item.secret === 'string' ? item.secret : '';
-  const parsed = parseCredentialInput(sourceSecret);
-  if (!parsed) return null;
-
-  const accountNameRaw = typeof item.accountName === 'string' ? item.accountName.trim() : '';
-  const timeRaw = Number(item.time ?? item.createdAt ?? Date.now());
-
-  return {
-    id: createUniqueId(),
-    accountName: accountNameRaw || parsed.accountName,
-    secret: parsed.secret,
-    remark: typeof item.remark === 'string' ? item.remark : '',
-    time: Number.isFinite(timeRaw) ? timeRaw : Date.now(),
-  };
-}
-
-function dedupeBySecret(records: MfaRecord[]): MfaRecord[] {
-  const sorted = [...records].sort((a, b) => b.time - a.time);
-  const map = new Map<string, MfaRecord>();
-  for (const record of sorted) {
-    const identity = toSecretIdentity(record.secret);
-    if (!map.has(identity)) {
-      map.set(identity, record);
-    }
-  }
-  return Array.from(map.values());
-}
-
-function loadSavedRecords(): MfaRecord[] {
-  const merged = [
-    ...readStorageArray(STORAGE_KEY_SAVED),
-    ...readStorageArray(LEGACY_STORAGE_KEY_SAVED_MFA),
-    ...readStorageArray(LEGACY_STORAGE_KEY_SAVED_2FA),
-  ]
-    .map(normalizeRecord)
-    .filter((item): item is MfaRecord => !!item);
-
-  return dedupeBySecret(merged);
-}
-
-function loadHistoryRecords(): MfaRecord[] {
-  const merged = [
-    ...readStorageArray(STORAGE_KEY_HISTORY),
-    ...readStorageArray(LEGACY_STORAGE_KEY_HISTORY_2FA),
-  ]
-    .map(normalizeRecord)
-    .filter((item): item is MfaRecord => !!item);
-
-  return dedupeBySecret(merged).slice(0, MAX_HISTORY);
-}
 
 async function decodeQrTextFromImage(file: Blob): Promise<string | null> {
   const imageUrl = URL.createObjectURL(file);
@@ -260,14 +61,14 @@ async function decodeQrTextFromImage(file: Blob): Promise<string | null> {
 export function MfaVaultManager() {
   const { t } = useTranslation();
 
-  const [records, setRecords] = useState<MfaRecord[]>(() => loadSavedRecords());
-  const [historyRecords, setHistoryRecords] = useState<MfaRecord[]>(() => loadHistoryRecords());
+  const [records, setRecords] = useState<MfaRecord[]>(() => loadSavedMfaRecords());
+  const [historyRecords, setHistoryRecords] = useState<MfaRecord[]>(() => loadMfaHistoryRecords());
 
   const [inputValue, setInputValue] = useState('');
   const [inputError, setInputError] = useState('');
   const [recognizingImage, setRecognizingImage] = useState(false);
 
-  const [activeQuery, setActiveQuery] = useState<ParsedCredential | null>(null);
+  const [activeQuery, setActiveQuery] = useState<ParsedMfaCredential | null>(null);
   const [activeListTab, setActiveListTab] = useState<ListTab>('saved');
 
   const [savedTimeSort, setSavedTimeSort] = useState<SortDirection>('asc');
@@ -279,24 +80,19 @@ export function MfaVaultManager() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [timeRemaining, setTimeRemaining] = useState(() => {
-    const now = Math.floor(Date.now() / 1000);
-    return 30 - (now % 30);
-  });
+  const [timeRemaining, setTimeRemaining] = useState(() => getMfaTimeRemaining());
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_SAVED, JSON.stringify(records));
+    localStorage.setItem(MFA_STORAGE_KEY_SAVED, JSON.stringify(records));
   }, [records]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(historyRecords));
+    localStorage.setItem(MFA_STORAGE_KEY_HISTORY, JSON.stringify(historyRecords));
   }, [historyRecords]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      const now = Math.floor(Date.now() / 1000);
-      const value = 30 - (now % 30);
-      setTimeRemaining(value === 0 ? 30 : value);
+      setTimeRemaining(getMfaTimeRemaining());
     }, 1000);
     return () => window.clearInterval(timer);
   }, []);
@@ -313,26 +109,26 @@ export function MfaVaultManager() {
     } catch {}
   };
 
-  const applyQueryResult = (parsed: ParsedCredential) => {
+  const applyQueryResult = (parsed: ParsedMfaCredential) => {
     setActiveQuery(parsed);
     setInputError('');
 
     setHistoryRecords(prev => {
       const next: MfaRecord = {
-        id: createUniqueId(),
+        id: createMfaRecordId(),
         accountName: parsed.accountName,
         secret: parsed.secret,
         remark: '',
         time: Date.now(),
       };
-      const nextIdentity = toSecretIdentity(next.secret);
-      const filtered = prev.filter(record => toSecretIdentity(record.secret) !== nextIdentity);
+      const nextIdentity = toMfaSecretIdentity(next.secret);
+      const filtered = prev.filter(record => toMfaSecretIdentity(record.secret) !== nextIdentity);
       return [next, ...filtered].slice(0, MAX_HISTORY);
     });
   };
 
-  const parseAndQuery = (rawInput: string, invalidMessage?: string): ParsedCredential | null => {
-    const parsed = parseCredentialInput(rawInput);
+  const parseAndQuery = (rawInput: string, invalidMessage?: string): ParsedMfaCredential | null => {
+    const parsed = parseMfaCredentialInput(rawInput);
     if (!parsed) {
       setInputError(invalidMessage || t('mfaVault.invalidOtpAuthInput'));
       return null;
@@ -347,7 +143,7 @@ export function MfaVaultManager() {
   };
 
   const handleSave = () => {
-    const parsed = parseCredentialInput(inputValue);
+    const parsed = parseMfaCredentialInput(inputValue);
 
     if (!parsed) {
       setInputError(t('mfaVault.invalidOtpAuthInput'));
@@ -357,8 +153,8 @@ export function MfaVaultManager() {
     const finalAccountName = parsed.accountName || activeQuery?.accountName || '';
 
     setRecords(prev => {
-      const parsedIdentity = toSecretIdentity(parsed.secret);
-      const existsIndex = prev.findIndex(record => toSecretIdentity(record.secret) === parsedIdentity);
+      const parsedIdentity = toMfaSecretIdentity(parsed.secret);
+      const existsIndex = prev.findIndex(record => toMfaSecretIdentity(record.secret) === parsedIdentity);
       if (existsIndex >= 0) {
         return prev.map((record, idx) => (
           idx === existsIndex
@@ -371,7 +167,7 @@ export function MfaVaultManager() {
       }
 
       const newRecord: MfaRecord = {
-        id: createUniqueId(),
+        id: createMfaRecordId(),
         accountName: finalAccountName,
         secret: parsed.secret,
         remark: '',
@@ -543,9 +339,9 @@ export function MfaVaultManager() {
 
       setRecords(prev => {
         const incoming = parsed
-          .map(normalizeRecord)
+          .map(normalizeMfaRecord)
           .filter((item): item is MfaRecord => !!item);
-        return dedupeBySecret([...incoming, ...prev]);
+        return dedupeMfaRecordsBySecret([...incoming, ...prev]);
       });
     } catch (err) {
       console.error('Import error:', err);
@@ -603,7 +399,7 @@ export function MfaVaultManager() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   };
 
-  const currentToken = activeQuery ? getOtpToken(activeQuery.secret) : '';
+  const currentToken = activeQuery ? getMfaOtpToken(activeQuery.secret) : '';
   const isWarning = timeRemaining <= 5;
 
   const renderRows = (source: MfaRecord[], isHistory: boolean) => {
@@ -628,7 +424,7 @@ export function MfaVaultManager() {
           : b.time - a.time
       ))
       .map(record => {
-        const token = getOtpToken(record.secret);
+        const token = getMfaOtpToken(record.secret);
         const displayAccount = record.accountName || '--';
 
         return (

@@ -212,16 +212,16 @@ pub async fn switch_account(app: AppHandle, account_id: String) -> Result<models
     account.update_last_used();
     modules::save_account(&account)?;
 
-    // 4. 同步更新 Antigravity 默认实例的绑定账号（不同步到 Codex，因为账号体系不同）
+    // 4. 同步更新 Antigravity IDE 默认实例的绑定账号（不同步到 Codex，因为账号体系不同）
     if let Err(e) = modules::instance::update_default_settings(
         Some(Some(account_id.clone())),
         None,
         Some(false),
     ) {
-        modules::logger::log_warn(&format!("更新 Antigravity 默认实例绑定账号失败: {}", e));
+        modules::logger::log_warn(&format!("更新 Antigravity IDE 默认实例绑定账号失败: {}", e));
     } else {
         modules::logger::log_info(&format!(
-            "已同步更新 Antigravity 默认实例绑定账号: {}",
+            "已同步更新 Antigravity IDE 默认实例绑定账号: {}",
             account_id
         ));
     }
@@ -254,8 +254,8 @@ pub async fn switch_account(app: AppHandle, account_id: String) -> Result<models
     // 6.2 将账号 Token 注入默认实例目录
     modules::instance::inject_account_to_profile(&default_dir, &account_id)?;
 
-    // 7. 启动 Antigravity（带默认实例自定义启动参数；启动失败不阻断切号，保持原行为）
-    modules::logger::log_info("正在启动 Antigravity 默认实例...");
+    // 7. 启动 Antigravity IDE（带默认实例自定义启动参数；启动失败不阻断切号，保持原行为）
+    modules::logger::log_info("正在启动 Antigravity IDE 默认实例...");
     let default_settings = modules::instance::load_default_settings()?;
     let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
     let launch_result = if extra_args.is_empty() {
@@ -271,7 +271,7 @@ pub async fn switch_account(app: AppHandle, account_id: String) -> Result<models
             None
         }
         Err(e) => {
-            modules::logger::log_warn(&format!("Antigravity 启动失败: {}", e));
+            modules::logger::log_warn(&format!("Antigravity IDE 启动失败: {}", e));
             if e.starts_with("APP_PATH_NOT_FOUND:") {
                 let _ = app.emit(
                     "app:path_missing",
@@ -288,7 +288,7 @@ pub async fn switch_account(app: AppHandle, account_id: String) -> Result<models
         if err.starts_with("APP_PATH_NOT_FOUND:") {
             return Err(err);
         }
-        return Err(format!("账号已切换，但启动 Antigravity 失败: {}", err));
+        return Err(format!("账号已切换，但启动 Antigravity IDE 失败: {}", err));
     }
 
     modules::logger::log_info(&format!("账号切换完成: {}", account.email));

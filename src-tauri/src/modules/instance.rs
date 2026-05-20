@@ -80,24 +80,24 @@ pub fn get_default_user_data_dir() -> Result<PathBuf, String> {
     #[cfg(target_os = "macos")]
     {
         let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join("Library/Application Support/Antigravity"));
+        return Ok(home.join("Library/Application Support/Antigravity IDE"));
     }
 
     #[cfg(target_os = "windows")]
     {
         let appdata =
             std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
-        return Ok(PathBuf::from(appdata).join("Antigravity"));
+        return Ok(PathBuf::from(appdata).join("Antigravity IDE"));
     }
 
     #[cfg(target_os = "linux")]
     {
         let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join(".config/Antigravity"));
+        return Ok(home.join(".config/Antigravity IDE"));
     }
 
     #[allow(unreachable_code)]
-    Err("无法确定 Antigravity 默认目录".to_string())
+    Err("无法确定 Antigravity IDE 默认目录".to_string())
 }
 
 pub fn get_default_instances_root_dir() -> Result<PathBuf, String> {

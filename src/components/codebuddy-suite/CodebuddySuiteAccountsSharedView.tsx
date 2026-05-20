@@ -7,6 +7,7 @@ import {
 import { TagEditModal } from '../TagEditModal';
 import { ExportJsonModal } from '../ExportJsonModal';
 import { ModalErrorMessage } from '../ModalErrorMessage';
+import { MfaQuickCodeSelect } from '../MfaQuickCodeSelect';
 import { QuickSettingsPopover } from '../QuickSettingsPopover';
 import { PaginationControls } from '../PaginationControls';
 import { useEscClose } from '../../hooks/useEscClose';
@@ -631,6 +632,7 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
               <button className={`modal-tab ${addTab === 'json' ? 'active' : ''}`} onClick={() => openAddModal('json')}><Database size={14} />{t('common.shared.addModal.import', '本地导入')}</button>
             </div>
             <div className="modal-body">
+              <MfaQuickCodeSelect />
               {addTab === 'oauth' && (
                 <div className="add-section oauth-section">
                   <p className="section-desc">

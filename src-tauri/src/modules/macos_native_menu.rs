@@ -400,7 +400,7 @@ mod imp {
 
     fn switcher_title(platform: PlatformId) -> &'static str {
         match platform {
-            PlatformId::Antigravity => "Antigrav.",
+            PlatformId::Antigravity => "AG IDE",
             PlatformId::GitHubCopilot => "Copilot",
             PlatformId::CodebuddyCn => "CodeBuddy CN",
             _ => platform.title(),
