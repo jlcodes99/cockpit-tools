@@ -10,6 +10,7 @@ const COCKPIT_API_PROVIDER_ID: &str = "cockpit_api";
 const LEGACY_NEW_API_PROVIDER_ID: &str = "new_api";
 const COCKPIT_API_PLAN_TYPE: &str = "Cockpit Api";
 const LEGACY_NEW_API_EXCLUSIVE_PLAN_TYPE: &str = "NEW_API_EXCLUSIVE";
+const COCKPIT_API_BASE_URL: &str = "https://chongcodex.cn/v1";
 
 fn get_header_value(headers: &HeaderMap, name: &str) -> String {
     headers
@@ -301,6 +302,7 @@ fn is_new_api_account(account: &CodexAccount) -> bool {
                 || value.eq_ignore_ascii_case(LEGACY_NEW_API_PROVIDER_ID)
         })
         .unwrap_or(false)
+        || is_cockpit_api_base_url(account.api_base_url.as_deref())
         || account
             .plan_type
             .as_deref()
@@ -310,6 +312,30 @@ fn is_new_api_account(account: &CodexAccount) -> bool {
                     || value.eq_ignore_ascii_case(LEGACY_NEW_API_EXCLUSIVE_PLAN_TYPE)
             })
             .unwrap_or(false)
+}
+
+fn normalize_api_base_url_for_match(raw: Option<&str>) -> Option<String> {
+    let parsed = reqwest::Url::parse(raw?.trim()).ok()?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return None;
+    }
+    let host = parsed.host_str()?;
+    let port = parsed
+        .port()
+        .map(|value| format!(":{}", value))
+        .unwrap_or_default();
+    let path = parsed.path().trim_end_matches('/');
+    Some(format!("{}://{}{}{}", parsed.scheme(), host, port, path).to_ascii_lowercase())
+}
+
+fn is_cockpit_api_base_url(raw: Option<&str>) -> bool {
+    let Some(actual) = normalize_api_base_url_for_match(raw) else {
+        return false;
+    };
+    let Some(expected) = normalize_api_base_url_for_match(Some(COCKPIT_API_BASE_URL)) else {
+        return false;
+    };
+    actual == expected
 }
 
 fn build_new_api_profile_url(account: &CodexAccount) -> Result<String, String> {

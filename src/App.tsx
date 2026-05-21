@@ -193,7 +193,7 @@ type AppPathMissingDetail = {
   retry?:
     | { kind: 'default' }
     | { kind: 'instance'; instanceId?: string }
-    | { kind: 'switchAccount'; accountId?: string };
+    | { kind: 'switchAccount'; accountId?: string; runtimeTarget?: string };
 };
 
 const WAKEUP_ENABLED_KEY = 'agtools.wakeup.enabled';
@@ -286,6 +286,7 @@ function buildExternalImportDedupeKey(payload: {
   page: string;
   token: string;
   importUrl?: string | null;
+  apiBaseUrl?: string | null;
   minAppVersion?: string | null;
   rawUrl?: string | null;
 }): string {
@@ -294,6 +295,7 @@ function buildExternalImportDedupeKey(payload: {
     payload.page,
     payload.rawUrl ?? '',
     payload.importUrl ?? '',
+    payload.apiBaseUrl ?? '',
     payload.minAppVersion ?? '',
     payload.token,
   ].join('|');
@@ -387,7 +389,7 @@ function getQuotaAlertPlatformLabel(
     case 'zed':
       return t('nav.zed', 'Zed');
     default:
-      return t('nav.overview', 'Antigravity');
+      return t('nav.overview', 'Antigravity IDE');
   }
 }
 
@@ -639,6 +641,7 @@ function MainApp() {
       autoImport: normalized.autoImport,
       tokenLength: normalized.token.length,
       hasImportUrl: Boolean(normalized.importUrl),
+      apiBaseUrl: normalized.apiBaseUrl ?? null,
       minAppVersion: normalized.minAppVersion ?? null,
       source: normalized.source ?? null,
     });
@@ -775,8 +778,9 @@ function MainApp() {
     } catch (error) {
       writeUpdateLog(
         'warn',
-        `应用重启前关闭 Codex API 服务监听失败，继续重启: error=${sanitizeUpdaterErrorMessage(error)}`,
+        `应用重启前关闭 Codex API 服务监听失败，已中止本次重启: error=${sanitizeUpdaterErrorMessage(error)}`,
       );
+      throw error;
     }
   }, [t, writeUpdateLog]);
 
@@ -1041,42 +1045,64 @@ function MainApp() {
     const shouldInstall = updateAction.state === 'ready'
       ? updateAction.requiresInstall
       : Boolean(pendingSilentUpdateRef.current);
+    let failureStage: 'prepare' | 'install' | 'relaunch' = 'prepare';
     try {
       writeUpdateLog(
         'info',
         `用户点击立即重启应用更新: version=${targetVersion || 'unknown'}, install_before_restart=${shouldInstall}`,
       );
+      setUpdateRetryStatus(
+        t('update_notification.stoppingApiService', '正在关闭 API 服务...'),
+      );
+      setUpdateDownloadError('');
+      setUpdateErrorDetails('');
+      await prepareCodexLocalAccessBeforeRelaunch();
+      failureStage = 'install';
       const pendingUpdate = pendingSilentUpdateRef.current;
       if (shouldInstall && pendingUpdate) {
         await pendingUpdate.install();
       }
       if (pendingUpdate) {
-        await pendingUpdate.close();
+        await pendingUpdate.close().catch(() => {});
         pendingSilentUpdateRef.current = null;
       }
-      await prepareCodexLocalAccessBeforeRelaunch();
       setSilentUpdateVersion(null);
       setUpdateRetryStatus('');
       setUpdateDownloadError('');
       setUpdateErrorDetails('');
       setUpdateAction({
-        state: 'hidden',
-        version: null,
-        progress: 0,
-        requiresInstall: true,
+        state: 'ready',
+        version: targetVersion || null,
+        progress: 100,
+        requiresInstall: false,
       });
+      failureStage = 'relaunch';
       const { relaunch } = await import('@tauri-apps/plugin-process');
       await relaunch();
     } catch (error) {
       await restoreCodexLocalAccessAfterRelaunchFailure();
       console.error('[App] Failed to apply pending update:', error);
-      writeUpdateLog('error', `用户手动应用更新失败: error=${sanitizeUpdaterErrorMessage(error)}`);
+      const compactError = sanitizeUpdaterErrorMessage(error);
+      const errorMessage = failureStage === 'prepare'
+        ? t('update_notification.stopApiServiceFailed', '无法关闭 API 服务，请先停用后重试。')
+        : failureStage === 'install'
+          ? t('update_notification.installFailed', '系统安装失败，请稍后重试或手动下载安装。')
+          : t('update_notification.restartRequiredAfterInstall', '更新已安装，请手动重启应用完成切换。');
+      setUpdateRetryStatus('');
+      setUpdateDownloadError(errorMessage);
+      setUpdateErrorDetails(compactError);
+      writeUpdateLog(
+        'error',
+        `用户手动应用更新失败: stage=${failureStage}, error=${compactError}`,
+      );
+      throw error;
     }
   }, [
     prepareCodexLocalAccessBeforeRelaunch,
     restoreCodexLocalAccessAfterRelaunchFailure,
     silentUpdateVersion,
     updateAction,
+    t,
     writeUpdateLog,
   ]);
 
@@ -1114,8 +1140,10 @@ function MainApp() {
       setUpdateDownloadError('');
       setUpdateErrorDetails('');
 
+      let relaunchStage: 'prepare' | 'relaunch' = 'prepare';
       try {
         await prepareCodexLocalAccessBeforeRelaunch();
+        relaunchStage = 'relaunch';
         const { relaunch } = await import('@tauri-apps/plugin-process');
         await relaunch();
       } catch (error) {
@@ -1128,7 +1156,9 @@ function MainApp() {
         );
         setUpdateRetryStatus('');
         setUpdateDownloadError(
-          t('update_notification.restartRequiredAfterInstall', '更新已安装，请手动重启应用完成切换。'),
+          relaunchStage === 'prepare'
+            ? t('update_notification.stopApiServiceFailed', '无法关闭 API 服务，请先停用后重试。')
+            : t('update_notification.restartRequiredAfterInstall', '更新已安装，请手动重启应用完成切换。'),
         );
         setUpdateErrorDetails(compactError);
       }
@@ -1391,7 +1421,13 @@ function MainApp() {
     }
 
     if (updateAction.state === 'ready') {
-      await handleApplyPendingUpdate();
+      try {
+        await handleApplyPendingUpdate();
+      } catch (error) {
+        console.error('[App] Quick update restart failed:', error);
+        writeUpdateLog('error', `侧边栏重启更新失败: error=${sanitizeUpdaterErrorMessage(error)}`);
+        openUpdateNotification('manual');
+      }
       return;
     }
 
@@ -2427,7 +2463,7 @@ function MainApp() {
     const refreshTasks = [
       {
         command: 'refresh_current_quota',
-        errorMessage: 'Failed to refresh Antigravity quotas:',
+        errorMessage: 'Failed to refresh Antigravity IDE quotas:',
       },
       {
         command: 'refresh_current_codex_quota',
@@ -2624,7 +2660,10 @@ function MainApp() {
         await useZedAccountStore.getState().switchAccount(retry.accountId);
         setPage('zed');
       } else if (retry?.kind === 'switchAccount' && retry.accountId) {
-        await invoke('switch_account', { accountId: retry.accountId });
+        await invoke('switch_account', {
+          accountId: retry.accountId,
+          runtimeTarget: retry.runtimeTarget,
+        });
         await Promise.allSettled([
           useAccountStore.getState().fetchAccounts(),
           useAccountStore.getState().fetchCurrentAccount(),
@@ -2874,7 +2913,7 @@ function MainApp() {
                 ? 'Qoder'
               : appPathMissing.app === 'trae'
                 ? 'Trae'
-              : 'Antigravity'
+              : 'Antigravity IDE'
     : '';
 
   const appPathMissingPathLabel = appPathMissing

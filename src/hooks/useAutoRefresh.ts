@@ -33,6 +33,7 @@ interface GeneralConfig {
   kiro_auto_refresh_minutes: number;
   cursor_auto_refresh_minutes: number;
   gemini_auto_refresh_minutes: number;
+  gemini_sync_wsl: boolean;
   codebuddy_auto_refresh_minutes: number;
   codebuddy_cn_auto_refresh_minutes: number;
   workbuddy_auto_refresh_minutes: number;
@@ -335,7 +336,7 @@ export function useAutoRefresh() {
           const descriptors: PlatformRefreshDescriptor[] = [
             {
               key: 'antigravity',
-              label: 'Antigravity',
+              label: 'Antigravity IDE',
               intervalMinutes: config.auto_refresh_minutes,
               currentMinutes: currentRefreshMinutesMap.antigravity,
               fullRefreshingRef: agRefreshingRef,

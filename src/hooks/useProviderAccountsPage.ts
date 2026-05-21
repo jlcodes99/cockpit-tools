@@ -40,6 +40,7 @@ import {
   type ExternalProviderImportPayload,
 } from '../utils/externalProviderImport';
 import { useDropdownPanelPlacement } from './useDropdownPanelPlacement';
+import { useEscClose } from './useEscClose';
 import {
   ACCOUNTS_OVERVIEW_FILTER_PERSISTENCE_CHANGED_EVENT,
   type AccountsOverviewFilterPersistenceChangedDetail,
@@ -208,11 +209,30 @@ type ExternalImportBundleParseMessages = {
 };
 
 const CODEX_REFRESH_TOKEN_PATTERN = /rt_[A-Za-z0-9._-]+/g;
+const COCKPIT_API_PROVIDER_ID = 'cockpit_api';
+const COCKPIT_API_PROVIDER_NAME = 'Cockpit Api';
+const COCKPIT_TOOLS_IMPORT_PATH_MARKERS = [
+  '/api/cockpit-tools/import/',
+  '/user/api/toolsimport/',
+];
 
 const readBundleMessage = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+};
+
+const readRecordString = (
+  payload: Record<string, unknown>,
+  keys: string[],
+): string | null => {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
 };
 
 const parseLineDelimitedJsonObjects = (
@@ -393,6 +413,109 @@ const resolveExternalImportBundleItems = (
   }
 
   throw new Error(messages.noItems);
+};
+
+const normalizeExternalImportApiBaseUrl = (rawValue?: string | null): string | null => {
+  const trimmed = (rawValue || '').trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
+};
+
+const deriveApiBaseUrlFromImportUrl = (importUrl?: string | null): string | null => {
+  const trimmed = (importUrl || '').trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return `${parsed.origin}/v1`;
+  } catch {
+    return null;
+  }
+};
+
+const isCockpitToolsImportUrl = (importUrl?: string | null): boolean => {
+  const trimmed = (importUrl || '').trim();
+  if (!trimmed) return false;
+  try {
+    const parsed = new URL(trimmed);
+    const pathname = parsed.pathname.toLowerCase();
+    return COCKPIT_TOOLS_IMPORT_PATH_MARKERS.some((marker) => pathname.includes(marker));
+  } catch {
+    return false;
+  }
+};
+
+const isCockpitApiImportItem = (item: Record<string, unknown>): boolean => {
+  const providerId = readRecordString(item, ['api_provider_id', 'apiProviderId']);
+  if (providerId?.toLowerCase() === COCKPIT_API_PROVIDER_ID) return true;
+
+  const candidates = [
+    readRecordString(item, ['api_provider_name', 'apiProviderName']),
+    readRecordString(item, ['plan_type', 'planType']),
+    readRecordString(item, ['account_note', 'accountNote']),
+  ];
+  const expected = COCKPIT_API_PROVIDER_NAME.toLowerCase();
+  return candidates.some(
+    (value) => value?.trim().toLowerCase().includes(expected),
+  );
+};
+
+const withCockpitApiBaseUrl = (
+  item: unknown,
+  apiBaseUrl: string | null,
+  isCockpitToolsImport: boolean,
+): unknown => {
+  if (!apiBaseUrl || !item || typeof item !== 'object' || Array.isArray(item)) {
+    return item;
+  }
+  const payload = item as Record<string, unknown>;
+  const authMode = readRecordString(payload, ['auth_mode', 'authMode']);
+  const apiKey = readRecordString(payload, ['OPENAI_API_KEY', 'openai_api_key', 'openaiApiKey']);
+  if (authMode?.toLowerCase() !== 'apikey' || !apiKey) {
+    return item;
+  }
+  if (!isCockpitToolsImport && !isCockpitApiImportItem(payload)) {
+    return item;
+  }
+
+  return {
+    ...payload,
+    base_url: apiBaseUrl,
+    api_base_url: apiBaseUrl,
+    api_provider_mode:
+      readRecordString(payload, ['api_provider_mode', 'apiProviderMode']) ?? 'custom',
+    api_provider_id:
+      readRecordString(payload, ['api_provider_id', 'apiProviderId']) ?? COCKPIT_API_PROVIDER_ID,
+    api_provider_name:
+      readRecordString(payload, ['api_provider_name', 'apiProviderName']) ??
+      COCKPIT_API_PROVIDER_NAME,
+    plan_type:
+      readRecordString(payload, ['plan_type', 'planType']) ?? COCKPIT_API_PROVIDER_NAME,
+  };
+};
+
+const applyCockpitApiBaseUrlToExternalImportItems = (
+  items: unknown[],
+  request: ExternalProviderImportPayload,
+): unknown[] => {
+  const apiBaseUrl =
+    normalizeExternalImportApiBaseUrl(request.apiBaseUrl) ??
+    deriveApiBaseUrlFromImportUrl(request.importUrl);
+  if (!apiBaseUrl) return items;
+
+  const isCockpitToolsImport =
+    Boolean(request.apiBaseUrl?.trim()) || isCockpitToolsImportUrl(request.importUrl);
+  return items.map((item) => withCockpitApiBaseUrl(item, apiBaseUrl, isCockpitToolsImport));
 };
 
 const buildInitialExternalImportProgress = (): ExternalImportProgressState => ({
@@ -1274,6 +1397,8 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     resetAddModalState();
   }, [resetAddModalState]);
 
+  useEscClose(showAddModal, closeAddModal);
+
   const closeExternalImportProgressModal = useCallback(() => {
     setExternalImportProgress((current) => {
       if (isExternalImportRunning(current.status)) {
@@ -1345,7 +1470,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
               '正在解析 Codex JSON...',
             ),
           });
-          const items = resolveExternalImportBundleItems(content, platformId, {
+          const resolvedItems = resolveExternalImportBundleItems(content, platformId, {
             invalidJson: t(
               'common.shared.externalImport.bundleInvalidJson',
               '导入包不是有效 JSON',
@@ -1370,6 +1495,10 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
                 defaultValue: '第 {{line}} 行匹配到多个 refresh_token，请只保留一个',
               }),
           });
+          const items =
+            platformId === 'codex'
+              ? applyCockpitApiBaseUrlToExternalImportItems(resolvedItems, request)
+              : resolvedItems;
 
           let success = 0;
           const failures: ExternalImportProgressFailure[] = [];

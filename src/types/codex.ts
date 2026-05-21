@@ -7,6 +7,13 @@ export interface CodexQuickConfig {
   detected_auto_compact_token_limit?: number;
 }
 
+export type CodexAppSpeed = "standard" | "fast";
+
+export interface CodexAppSpeedConfig {
+  speed: CodexAppSpeed;
+  globalStatePath: string;
+}
+
 /** Codex 账号数据 */
 export interface CodexAccount {
   id: string;
@@ -17,6 +24,7 @@ export interface CodexAccount {
   api_provider_mode?: CodexApiProviderMode;
   api_provider_id?: string;
   api_provider_name?: string;
+  bound_oauth_account_id?: string | null;
   user_id?: string;
   plan_type?: string;
   subscription_active_until?: string;
@@ -26,6 +34,7 @@ export interface CodexAccount {
   account_name?: string;
   account_structure?: string;
   account_note?: string;
+  app_speed?: CodexAppSpeed;
   tokens: CodexTokens;
   token_generation?: number;
   token_updated_at?: number;
@@ -74,6 +83,31 @@ export interface CodexQuota {
   raw_data?: unknown;
 }
 
+const COCKPIT_API_BASE_URL = "https://chongcodex.cn/v1";
+
+function normalizeCodexApiBaseUrlForMatch(rawValue?: string | null): string {
+  const trimmed = (rawValue || "").trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+    return `${parsed.origin}${parsed.pathname}`
+      .replace(/\/+$/, "")
+      .toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+export function isCodexCockpitApiBaseUrl(rawValue?: string | null): boolean {
+  return (
+    normalizeCodexApiBaseUrlForMatch(rawValue) ===
+    normalizeCodexApiBaseUrlForMatch(COCKPIT_API_BASE_URL)
+  );
+}
+
 export interface CodexWorkspace {
   id: string;
   title: string;
@@ -98,6 +132,7 @@ export interface CodexInstanceThreadSyncItem {
   instanceId: string;
   instanceName: string;
   addedThreadCount: number;
+  updatedThreadCount: number;
   backupDir?: string | null;
 }
 
@@ -106,6 +141,8 @@ export interface CodexInstanceThreadSyncSummary {
   threadUniverseCount: number;
   mutatedInstanceCount: number;
   totalSyncedThreadCount: number;
+  totalAddedThreadCount: number;
+  totalUpdatedThreadCount: number;
   items: CodexInstanceThreadSyncItem[];
   backupDirs: string[];
   message: string;
@@ -153,6 +190,18 @@ export interface CodexSessionTokenStats {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+}
+
+export interface CodexInstanceTargetThreadSyncSummary {
+  requestedSessionCount: number;
+  targetInstanceId: string;
+  targetInstanceName: string;
+  syncedSessionCount: number;
+  skippedExistingCount: number;
+  missingSessionCount: number;
+  backupDir?: string | null;
+  running: boolean;
+  message: string;
 }
 
 export interface CodexSessionTrashSummary {
@@ -380,6 +429,7 @@ export function isCodexNewApiAccount(account: CodexAccount): boolean {
     isCodexApiKeyAccount(account) &&
     (providerId === "cockpit_api" ||
       providerId === "new_api" ||
+      isCodexCockpitApiBaseUrl(account.api_base_url) ||
       planType === "COCKPIT API" ||
       planType === "NEW_API_EXCLUSIVE")
   );
@@ -443,7 +493,7 @@ function normalizeCodexAuthFilePlanType(
   return undefined;
 }
 
-export function getCodexPlanBadgeLabel(account: CodexAccount): string {
+function getCodexPlanBadgeLabel(account: CodexAccount): string {
   if (isCodexNewApiAccount(account)) {
     return account.plan_type?.trim() || "Cockpit Api";
   }
@@ -463,7 +513,7 @@ export function getCodexPlanBadgeLabel(account: CodexAccount): string {
   return `${baseLabel} 20x`;
 }
 
-export function getCodexPlanBadgeClass(account: CodexAccount): string {
+function getCodexPlanBadgeClass(account: CodexAccount): string {
   if (isCodexNewApiAccount(account)) {
     return "api-key new-api-exclusive";
   }
@@ -483,6 +533,20 @@ export function getCodexPlanBadgeClass(account: CodexAccount): string {
   }
   // CPA 对齐：plan_type='pro' 默认视为 promax (20x)
   return "pro codex-pro-max";
+}
+
+export interface CodexPlanBadgePresentation {
+  label: string;
+  className: string;
+}
+
+export function getCodexPlanBadgePresentation(
+  account: CodexAccount,
+): CodexPlanBadgePresentation {
+  return {
+    label: getCodexPlanBadgeLabel(account),
+    className: getCodexPlanBadgeClass(account),
+  };
 }
 
 export function getCodexPlanFilterKey(account: CodexAccount): string {

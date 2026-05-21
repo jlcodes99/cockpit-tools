@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CircleAlert, FolderOpen, Save, X } from 'lucide-react';
+import { ChevronLeft, CircleAlert, FolderOpen, Save, X } from 'lucide-react';
 import {
   getCodexConfigTomlPath,
   getCodexQuickConfig,
   openCodexConfigToml,
   saveCodexQuickConfig,
 } from '../../services/codexService';
+import { useEscClose } from '../../hooks/useEscClose';
 import type { CodexQuickConfig } from '../../types/codex';
 
 const DEFAULT_AUTO_COMPACT_TOKEN_LIMIT = 900000;
@@ -68,6 +69,7 @@ function resolvePresetId(
 
 export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
   const { t } = useTranslation();
+  useEscClose(true, onClose ?? (() => {}));
   const [configPath, setConfigPath] = useState('~/.codex/config.toml');
   const [loadedConfig, setLoadedConfig] = useState<CodexQuickConfig | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<QuickConfigPresetId>('default');
@@ -324,6 +326,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal codex-quick-config-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
+          <button className="btn btn-secondary icon-only" onClick={onClose} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
           <h2>{t('codex.modelProviders.quickConfig.title', '当前 Codex 配置')}</h2>
           <button className="modal-close" onClick={onClose} aria-label={t('common.close', '关闭')}>
             <X />

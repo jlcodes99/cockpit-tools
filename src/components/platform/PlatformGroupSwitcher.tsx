@@ -4,6 +4,7 @@ import { Check, ChevronDown, Pencil } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PLATFORM_PAGE_MAP, PlatformId } from '../../types/platform';
 import { renderPlatformIcon } from '../../utils/platformMeta';
+import { setAntigravityRuntimeTargetFromPlatform } from '../../utils/antigravityRuntimeTarget';
 
 export interface PlatformGroupSwitcherOption {
   platformId: PlatformId;
@@ -96,6 +97,7 @@ export function PlatformGroupSwitcher({
       return;
     }
 
+    setAntigravityRuntimeTargetFromPlatform(nextPlatform);
     const targetPage = PLATFORM_PAGE_MAP[nextPlatform];
     window.dispatchEvent(new CustomEvent('app-request-navigate', { detail: targetPage }));
   };

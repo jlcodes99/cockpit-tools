@@ -4,7 +4,7 @@
   "topRightAd": {
     "id": "top-right-ad-2026-04-shop",
     "priority": 100,
-    "text": "此地址提供Codex 9.9元日抛号，可一键导入到此工具里。需要的可以选购，感谢",
+    "text": "9.9Codex plus号和代过试用Plus。需要的可以选购，感谢",
     "badge": "推广",
     "ctaLabel": "选购",
     "ctaUrl": "https://xiangzili.xyz",
@@ -12,17 +12,64 @@
     "targetLanguages": [
       "*"
     ],
-    "createdAt": "2026-04-07T12:00:00Z",  
+    "createdAt": "2026-04-07T12:00:00Z",
     "expiresAt": null,
     "locales": {
       "zh-CN": {
-        "text": "此地址提供Codex 9.9元日抛号，可一键导入到此工具里。需要的可以选购，感谢",
+        "text": "9.9Codex plus号和代过试用Plus。需要的可以选购，感谢",
         "badge": "推广",
         "ctaLabel": "选购"
       }
     }
   },
   "announcements": [
+    {
+      "id": "ann-2026-05-12-v0230-withdrawn-manual-update",
+      "type": "urgent",
+      "priority": 1000,
+      "title": "Withdrawn v0.23.0: install v0.23.1 manually",
+      "summary": "v0.23.0 was published by mistake. It contains unverified PR changes and may use the wrong update channel. Please install the official v0.23.1 build manually.",
+      "content": "Cockpit Tools v0.23.0 was published by mistake and has been withdrawn.\n\nThis version was built from an incorrect integration branch. It may contain PR changes that were not fully reviewed or tested, and its auto-update channel may point to the wrong release source.\n\nIf your current version is v0.23.0, we do not recommend continuing to use it. The in-app updater may fail, or it may not find the official v0.23.1 release.\n\nPlease download and install the official v0.23.1 build manually as soon as possible. After installing v0.23.1, the updater will use the official release channel again.\n\nUsers on v0.22.22 or earlier do not need this manual fix and can continue using normal updates.",
+      "action": {
+        "type": "url",
+        "target": "https://github.com/jlcodes99/cockpit-tools/releases/latest",
+        "label": "Download latest version"
+      },
+      "targetVersions": "=0.23.0",
+      "targetLanguages": [
+        "*"
+      ],
+      "showOnce": true,
+      "popup": true,
+      "createdAt": "2026-05-12T13:00:00Z",
+      "expiresAt": null,
+      "locales": {
+        "zh-CN": {
+          "title": "v0.23.0 已撤回，请手动安装 v0.23.1",
+          "summary": "v0.23.0 是误发布版本，包含未完整验证的 PR 集成改动，且自动更新通道可能指向错误来源，请手动安装官方 v0.23.1。",
+          "content": "Cockpit Tools v0.23.0 是误发布版本，现已撤回。\n\n该版本来自错误的集成分支，可能包含未经过完整评审和测试的 PR 改动，同时自动更新通道也可能指向错误的发布来源。\n\n如果你当前正在使用 v0.23.0，不建议继续使用该版本。应用内更新可能失败，或无法找到官方 v0.23.1。\n\n请尽快手动下载并安装官方 v0.23.1。安装 v0.23.1 后，后续自动更新会恢复到官方发布通道。\n\nv0.22.22 及更早版本用户不需要手动修复，可继续使用正常更新。",
+          "actionLabel": "下载最新版本"
+        },
+        "zh-tw": {
+          "title": "v0.23.0 已撤回，請手動安裝 v0.23.1",
+          "summary": "v0.23.0 是誤發布版本，包含未完整驗證的 PR 整合改動，且自動更新通道可能指向錯誤來源，請手動安裝官方 v0.23.1。",
+          "content": "Cockpit Tools v0.23.0 是誤發布版本，現已撤回。\n\n該版本來自錯誤的整合分支，可能包含未經完整審查和測試的 PR 改動，同時自動更新通道也可能指向錯誤的發布來源。\n\n如果你目前正在使用 v0.23.0，不建議繼續使用該版本。應用內更新可能失敗，或無法找到官方 v0.23.1。\n\n請盡快手動下載並安裝官方 v0.23.1。安裝 v0.23.1 後，後續自動更新會恢復到官方發布通道。\n\nv0.22.22 及更早版本使用者不需要手動修復，可繼續使用正常更新。",
+          "actionLabel": "下載最新版本"
+        },
+        "en": {
+          "title": "Withdrawn v0.23.0: install v0.23.1 manually",
+          "summary": "v0.23.0 was published by mistake. It contains unverified PR changes and may use the wrong update channel. Please install the official v0.23.1 build manually.",
+          "content": "Cockpit Tools v0.23.0 was published by mistake and has been withdrawn.\n\nThis version was built from an incorrect integration branch. It may contain PR changes that were not fully reviewed or tested, and its auto-update channel may point to the wrong release source.\n\nIf your current version is v0.23.0, we do not recommend continuing to use it. The in-app updater may fail, or it may not find the official v0.23.1 release.\n\nPlease download and install the official v0.23.1 build manually as soon as possible. After installing v0.23.1, the updater will use the official release channel again.\n\nUsers on v0.22.22 or earlier do not need this manual fix and can continue using normal updates.",
+          "actionLabel": "Download latest version"
+        },
+        "en-US": {
+          "title": "Withdrawn v0.23.0: install v0.23.1 manually",
+          "summary": "v0.23.0 was published by mistake. It contains unverified PR changes and may use the wrong update channel. Please install the official v0.23.1 build manually.",
+          "content": "Cockpit Tools v0.23.0 was published by mistake and has been withdrawn.\n\nThis version was built from an incorrect integration branch. It may contain PR changes that were not fully reviewed or tested, and its auto-update channel may point to the wrong release source.\n\nIf your current version is v0.23.0, we do not recommend continuing to use it. The in-app updater may fail, or it may not find the official v0.23.1 release.\n\nPlease download and install the official v0.23.1 build manually as soon as possible. After installing v0.23.1, the updater will use the official release channel again.\n\nUsers on v0.22.22 or earlier do not need this manual fix and can continue using normal updates.",
+          "actionLabel": "Download latest version"
+        }
+      }
+    },
     {
       "id": "ann-2026-02-welcome-cockpit-tools",
       "type": "info",

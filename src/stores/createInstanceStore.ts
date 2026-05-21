@@ -5,6 +5,7 @@ import {
   InstanceLaunchMode,
   InstanceProfile,
 } from "../types/instance";
+import type { CodexAppSpeed } from "../types/codex";
 
 export type InstanceStoreState = {
   instances: InstanceProfile[];
@@ -21,6 +22,7 @@ export type InstanceStoreState = {
     extraArgs?: string;
     bindAccountId?: string | null;
     launchMode?: InstanceLaunchMode;
+    appSpeed?: CodexAppSpeed;
     copySourceInstanceId: string;
     initMode?: InstanceInitMode;
   }) => Promise<InstanceProfile>;
@@ -32,6 +34,7 @@ export type InstanceStoreState = {
     bindAccountId?: string | null;
     followLocalAccount?: boolean;
     launchMode?: InstanceLaunchMode;
+    appSpeed?: CodexAppSpeed;
   }) => Promise<InstanceProfile>;
   deleteInstance: (instanceId: string) => Promise<void>;
   startInstance: (instanceId: string) => Promise<InstanceProfile>;
@@ -50,6 +53,7 @@ type InstanceService = {
     extraArgs?: string;
     bindAccountId?: string | null;
     launchMode?: InstanceLaunchMode;
+    appSpeed?: CodexAppSpeed;
     copySourceInstanceId: string;
     initMode?: InstanceInitMode;
   }) => Promise<InstanceProfile>;
@@ -61,6 +65,7 @@ type InstanceService = {
     bindAccountId?: string | null;
     followLocalAccount?: boolean;
     launchMode?: InstanceLaunchMode;
+    appSpeed?: CodexAppSpeed;
   }) => Promise<InstanceProfile>;
   deleteInstance: (instanceId: string) => Promise<void>;
   startInstance: (instanceId: string) => Promise<InstanceProfile>;

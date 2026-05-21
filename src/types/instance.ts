@@ -1,3 +1,5 @@
+import type { CodexAppSpeed } from "./codex";
+
 export type InstanceLaunchMode = "app" | "cli";
 
 export const CODEX_API_SERVICE_BIND_ID = "__api_service__";
@@ -10,6 +12,7 @@ export interface InstanceProfile {
   extraArgs: string;
   bindAccountId?: string | null;
   launchMode?: InstanceLaunchMode;
+  appSpeed?: CodexAppSpeed;
   createdAt: number;
   lastLaunchedAt?: number | null;
   lastPid?: number | null;

@@ -14,6 +14,7 @@
     "close": "关闭",
     "open": "打开",
     "copy": "复制",
+    "copied": "已复制",
     "add": "添加",
     "enable": "启用",
     "disable": "停用",
@@ -273,7 +274,7 @@
     }
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "账号管理",
     "wakeup": "唤醒任务",
     "fingerprints": "设备指纹",
@@ -424,7 +425,8 @@
       "instance": "实例",
       "email": "账号",
       "quota": "配额状态",
-      "actions": "操作"
+      "actions": "操作",
+      "speed": "速度"
     },
     "empty": {
       "title": "还没有实例",
@@ -502,7 +504,9 @@
       },
       "nameRequired": "请输入实例名称",
       "pathRequired": "请选择实例目录",
-      "bindRequired": "请选择要绑定的账号"
+      "bindRequired": "请选择要绑定的账号",
+      "appSpeed": "速度",
+      "appSpeedDesc": "启动官方 Codex 前写入对应速度"
     },
     "quota": {
       "unbound": "未绑定账号",
@@ -523,7 +527,8 @@
       "closedAll": "已关闭所有实例",
       "allAlreadyRunning": "所有实例已在运行",
       "noneRunning": "当前没有运行中的实例",
-      "syncThreadsNeedTwo": "至少需要两个实例才能同步线程"
+      "syncThreadsNeedTwo": "至少需要两个实例才能同步线程",
+      "speedUpdated": "速度已更新"
     },
     "runningDialog": {
       "title": "实例已在运行",
@@ -708,7 +713,7 @@
       "uiScale": "界面缩放",
       "uiScaleDesc": "调整界面缩放比例",
       "accountManagement": "账号管理",
-      "autoRefresh": "Antigravity 自动刷新配额",
+      "autoRefresh": "Antigravity IDE 自动刷新配额",
       "codexAutoRefresh": "Codex 自动刷新配额",
       "autoRefreshDesc": "后台自动更新频率",
       "codexAutoRefreshDesc": "后台自动更新频率",
@@ -735,6 +740,10 @@
       "hideDockIconDesc": "独立控制程序坞图标显示状态，不受窗口最小化行为影响",
       "hideDockIconOff": "否（显示Dock图标）",
       "hideDockIconOn": "是（隐藏Dock图标）",
+      "trayIconStyle": "菜单栏图标样式（仅 macOS）",
+      "trayIconStyleDesc": "选择系统单色图标或原彩色 App 图标",
+      "trayIconStyleTemplate": "单色图标",
+      "trayIconStyleColor": "彩色图标",
       "floatingCardStartup": "启动时显示悬浮卡片",
       "floatingCardStartupDesc": "应用启动后默认展示悬浮账号卡片",
       "floatingCardAlwaysOnTop": "悬浮卡片默认置顶",
@@ -749,8 +758,8 @@
       "floatingCardShowNowAction": "显示悬浮卡片",
       "dataDir": "数据目录",
       "dataDirDesc": "账号与配置文件的存储位置。",
-      "fpDir": "Antigravity存储目录",
-      "fpDirDesc": "Antigravity数据文件的存储位置。",
+      "fpDir": "Antigravity IDE 存储目录",
+      "fpDirDesc": "Antigravity IDE 数据文件的存储位置。",
       "opencodeTitle": "OpenCode 联动",
       "opencodeAuthOverwrite": "切换 Codex 时覆盖 OpenCode 登录信息",
       "opencodeAuthOverwriteDesc": "关闭后仅切换 Codex，不会改写 OpenCode 当前登录态",
@@ -774,10 +783,10 @@
       "vscodeAppPathPlaceholder": "默认路径",
       "vscodePathSelect": "选择",
       "vscodePathReset": "重置默认",
-      "antigravityAppPath": "Antigravity 启动路径",
-      "antigravityTitle": "Antigravity 启动",
+      "antigravityAppPath": "Antigravity IDE 启动路径",
+      "antigravityTitle": "Antigravity IDE 启动",
       "commonTitle": "通用",
-      "antigravitySettingsTitle": "Antigravity 设置",
+      "antigravitySettingsTitle": "Antigravity IDE 设置",
       "codexSettingsTitle": "Codex 设置",
       "githubCopilotSettingsTitle": "GitHub Copilot 设置",
       "ghcpAutoRefresh": "GitHub Copilot 自动刷新配额",
@@ -807,8 +816,8 @@
       "codebuddyPathSelect": "选择",
       "codebuddyPathReset": "重置默认",
       "cursorPathReset": "重置默认",
-      "antigravityStartupWakeup": "启动后执行 Antigravity 唤醒",
-      "antigravityStartupWakeupDesc": "应用启动后按此策略触发一次已启用的 Antigravity 唤醒任务",
+      "antigravityStartupWakeup": "启动后执行 Antigravity IDE 唤醒",
+      "antigravityStartupWakeupDesc": "应用启动后按此策略触发一次已启用的 Antigravity IDE 唤醒任务",
       "codexLaunchOnSwitch": "切换 Codex 时自动启动 Codex App",
       "codexLaunchOnSwitchDesc": "切换账号后自动启动或重启 Codex App",
       "codexRestartSpecifiedAppOnSwitch": "切换 Codex 时重启指定应用",
@@ -870,7 +879,7 @@
       "ghcpOpencodeRestart": "切换 GitHub Copilot 时自动重启 OpenCode",
       "ghcpLaunchOnSwitch": "切换 GitHub Copilot 时自动启动 GitHub Copilot App",
       "antigravityDualSwitchNoRestart": "无感双通道切号（不重启）",
-      "antigravityDualSwitchNoRestartDesc": "切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity。",
+      "antigravityDualSwitchNoRestartDesc": "切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity IDE。",
       "codebuddyCnAppPath": "CodeBuddy CN 启动路径",
       "codebuddyCnAppPathDesc": "留空则使用默认路径",
       "codebuddyCnAppPathPlaceholder": "默认路径",
@@ -886,7 +895,14 @@
       "qoderAutoRefreshDesc": "后台自动更新频率",
       "qoderPathSelect": "选择",
       "workbuddyAutoRefresh": "WorkBuddy 自动刷新配额",
-      "workbuddyAutoRefreshDesc": "后台自动更新频率"
+      "workbuddyAutoRefreshDesc": "后台自动更新频率",
+      "codexAppSpeed": "Codex 速度",
+      "codexAppSpeedDesc": "保存为官方 Codex 启动速度；每次从本应用启动 Codex 前都会写入。",
+      "codexAppSpeedStandard": "标准",
+      "codexAppSpeedFast": "快速",
+      "codexAppSpeedLaunch": "重启 Codex",
+      "codexAppSpeedSaveFailed": "保存 Codex 速度失败：{{error}}",
+      "codexAppSpeedLaunchFailed": "重启 Codex 失败：{{error}}"
     },
     "network": {
       "apiTitle": "反重力驾驶舱 API",
@@ -972,7 +988,7 @@
   },
   "accounts": {
     "title": "账号管理",
-    "subtitle": "管理你的 Antigravity 账号列表。",
+    "subtitle": "管理你的 Antigravity IDE 账号列表。",
     "total": "共 {{count}} 个账号",
     "search": "搜索账号...",
     "addAccount": "添加账号",
@@ -1226,7 +1242,7 @@
     "switching": "切换中...",
     "fingerprint": "指纹",
     "bound": "已绑定",
-    "brandTitle": "Antigravity 账号管理"
+    "brandTitle": "Antigravity IDE 账号管理"
   },
   "fingerprints": {
     "title": "设备指纹",
@@ -1328,7 +1344,7 @@
   "modals": {
     "addAccount": {
       "title": "添加账号",
-      "desc": "通过 Google OAuth 授权添加您的 Antigravity 账号",
+      "desc": "通过 Google OAuth 授权添加您的 Antigravity IDE 账号",
       "loginBtn": "Google OAuth 授权",
       "waiting": "等待授权..."
     },
@@ -1336,7 +1352,7 @@
       "title": "导入账号",
       "desc": "请选择导入方式",
       "local": "导入本地账户",
-      "localDesc": "从 Antigravity 客户端导入当前登录账户",
+      "localDesc": "从 Antigravity IDE 客户端导入当前登录账户",
       "tools": "导入 Antigravity Tools",
       "toolsDesc": "从 ~/.antigravity_tools/ 目录导入",
       "jsonDivider": "或粘贴 JSON",
@@ -1349,7 +1365,7 @@
       "fromExtension": "从插件导入",
       "syncBadge": "同步 Antigravity Cockpit 插件账号",
       "fromLocalDB": "从本地数据库导入",
-      "localDBDesc": "读取本机 Antigravity 客户端登录账号",
+      "localDBDesc": "读取本机 Antigravity IDE 客户端登录账号",
       "toolsDescMigrate": "从 ~/.antigravity_tools/ 迁移历史账号",
       "importingTools": "导入 Antigravity Tools...",
       "importingLocal": "导入本地账号...",
@@ -1394,6 +1410,7 @@
     "batchDeleteConfirm": "确定要删除选中的 {{count}} 个账号吗？",
     "switched": "已切换至 {{email}}",
     "switchFailed": "切换失败：{{error}}",
+    "antigravityLegacyUnsupported": "暂不支持 Antigravity 2.0.0 及以上版本，请选择小于Antigravity 2.0.0版本或者使用Antigravity IDE",
     "importSuccess": "成功导入 {{count}} 个账号",
     "importLocalSuccess": "成功导入账号: {{email}}",
     "importFailed": "导入失败: {{error}}",
@@ -1432,7 +1449,7 @@
       },
       "runHint": {
         "title": "验证说明",
-        "line1": "立即检测会通过「本地网关 + 官方 Language Server 协议」模拟 Antigravity 客户端发起最小对话请求。",
+        "line1": "立即检测会通过「本地网关 + 官方 Language Server 协议」模拟 Antigravity IDE 客户端发起最小对话请求。",
         "line2": "该过程会消耗少量 Token（通常为一次短对话），实际消耗取决于模型与账号策略。",
         "line3": "该操作不会修改唤醒任务配置，仅用于检测账号可用性并写入检测记录。",
         "line4": "若返回 403，需要先完成账号验证或提交保证书；结果中会提供地址与快捷操作。"
@@ -1563,6 +1580,7 @@
       "modeScheduled": "📅 定时触发",
       "modeCrontab": "🧩 定时任务",
       "modeQuotaReset": "🔄 配额重置",
+      "antigravityVersion": "Antigravity IDE 版本",
       "modelSelect": "模型选择",
       "modelHint": "同一配额组建议只选一个模型，多模型会依次触发。",
       "modelsEmpty": "暂无推荐模型",
@@ -1643,7 +1661,8 @@
     "authorizing": "等待系统授权安装...",
     "installFailed": "系统安装失败，请稍后重试或手动下载安装。",
     "restartRequiredAfterInstall": "更新已安装，请手动重启应用完成切换。",
-    "stoppingApiService": "正在关闭 API 服务..."
+    "stoppingApiService": "正在关闭 API 服务...",
+    "stopApiServiceFailed": "无法关闭 API 服务，请先停用后重试。"
   },
   "closeDialog": {
     "title": "关闭窗口",
@@ -1676,7 +1695,7 @@
       "comingSoon": "多开实例功能即将上线",
       "comingSoonDesc": "支持以不同账号同时运行多个 Codex.app 实例，敬请期待。",
       "unsupported": {
-        "desc": "Codex 多开实例仅支持 macOS，请在 macOS 上使用。"
+        "desc": "Codex 多开实例仅支持 macOS 和 Windows。"
       },
       "quota": {
         "hourly": "5小时",
@@ -1736,6 +1755,11 @@
     },
     "oauth": {
       "desc": "点击下方按钮，在浏览器中完成 OpenAI 账号 OAuth 授权。",
+      "trialGuideTitle": "试用注册提示",
+      "trialGuideDesc": "准备新账号时，建议优先使用长期可访问的 Gmail 邮箱，账号留存和后续验证会更稳。",
+      "trialGuideAliasDesc": "每个主 Gmail 最多可准备 5 个别名邮箱，用于区分不同 ChatGPT 注册记录；请按目标服务规则使用。",
+      "trialGuideLink": "查看试用指南",
+      "gmailAliasLink": "生成 Gmail 别名",
       "preparing": "正在准备授权链接...",
       "exchanging": "正在交换令牌...",
       "portInUse": "端口 {{port}} 已被占用，请关闭占用该端口的程序后重试。",
@@ -1745,15 +1769,16 @@
       "portStillInUse": "端口 {{port}} 仍被占用。",
       "portInUseAction": "关闭占用端口并重试",
       "timeout": "授权超时，请点击",
-      "timeoutRetry": "刷新授权链接"
+      "timeoutRetry": "刷新授权链接",
+      "reauthEmailLabel": "重新授权账号"
     },
     "token": {
-      "desc": "粘贴 auth.json、账号 JSON 或 refresh_token。",
-      "placeholder": "示例：每行一个 refresh_token，或 {\"refresh_token\":\"rt_...\"}",
+      "desc": "粘贴 session JSON、auth.json、账号 JSON、Sub2API JSON、accessToken 或 refresh_token。",
+      "placeholder": "示例：直接粘贴 session JSON、accessToken、Sub2API 导出 JSON，或 {\"accessToken\":\"eyJ...\"}",
       "formatSummary": "必填字段与示例（点击展开）",
-      "formatRequired": "支持完整 tokens（id_token + access_token）、单个 refresh_token，或每行一个 refresh_token。仅 refresh_token 会先联网换取完整凭据。",
+      "formatRequired": "支持 session JSON、完整 tokens（id_token + access_token）、Sub2API 导出 JSON、仅 accessToken 或仅 refresh_token。仅 refresh_token 会先联网换取完整凭据。",
       "formatSingleLabel": "完整 tokens 示例",
-      "formatRefreshOnlyLabel": "仅 refresh_token 示例",
+      "formatRefreshOnlyLabel": "session / accessToken / refresh_token 示例",
       "formatBatchLabel": "批量示例"
     },
     "exportFormat": {
@@ -1784,6 +1809,15 @@
       "manageDesc": "在这里统一管理 API 服务的统计、成员、端口、密钥和连通性测试。",
       "accountCount": "{{count}} 个账号",
       "baseUrl": "地址",
+      "addressKind": "地址类型",
+      "addressLocal": "本机",
+      "addressLan": "局域网",
+      "accessScopeLabel": "访问范围",
+      "accessScopeLocalhost": "仅本机",
+      "accessScopeLan": "局域网",
+      "accessScopeLocalhostShort": "仅本机",
+      "accessScopeLanShort": "本机+局域网",
+      "accessScopeSaveSuccess": "API 服务访问范围已更新",
       "apiPortUrl": "API端口URL",
       "apiKey": "密钥",
       "modelId": "模型 ID",
@@ -1794,17 +1828,36 @@
       "statusDisabled": "已停用",
       "statusUnconfigured": "未配置",
       "emptyMembers": "将账号添加到 API 服务，点击启动即可，无需其他配置",
-      "footerHint": "监听本机与局域网",
+      "footerHint": "监听范围：{{scope}}",
       "memberOnlyLocal": "本机/局域网",
       "manageAccounts": "管理账号",
       "rotateKey": "重置密钥",
       "rotateConfirmMessage": "重置后当前 API 服务密钥会立即失效，正在进行中的请求可能不可用。确认继续吗？",
       "disableService": "停用服务",
       "enableService": "启用服务",
-      "testAction": "测试 API 服务",
-      "testSuccess": "API 服务测试成功（{{count}} 个模型）",
-      "testTimeout": "测试超时，请确认本地服务已启动",
+      "testAction": "测试",
+      "testDialogTitle": "测试 API 服务",
+      "testDialogDesc": "通过 Codex CLI 发起一次真实请求，验证本地服务、密钥和上游响应。",
+      "testProgressTitle": "正在测试服务",
+      "testProgressDesc": "正在向本地 API 服务发起真实请求，请稍候。",
+      "testOutputTitle": "返回结果",
+      "testResultTitle": "服务检测结果",
+      "testSuccess": "服务检测成功：本地服务、密钥和上游响应正常（{{model}}，{{latency}}）。如果 Codex 仍报 502，请检查 Codex 的 Base URL、API Key 或运行环境。",
+      "testFailureStage": "定位阶段",
+      "testFailureCause": "失败原因",
+      "testFailureSuggestion": "处理建议",
+      "testFailureStatus": "HTTP 状态",
+      "testFailureModel": "检测模型",
+      "testFailureDetail": "诊断详情",
+      "testFailureCliOutput": "CLI 输出",
+      "testFailureGatewayOutput": "网关返回",
+      "testTimeout": "真实请求检测超时，请检查本地服务、代理或上游网络。",
       "testUnavailable": "当前 API 服务地址不可用",
+      "testConnectFailed": "无法连接 {{url}}。请确认 API 服务已启动、端口未被改动或被拦截。",
+      "testAuthFailed": "服务可达，但鉴权失败：{{detail}}。请检查 API 服务密钥或账号登录状态。",
+      "testServiceUnavailable": "服务可达，但当前不可用：{{detail}}。请检查服务是否启用、账号集合是否为空或账号是否可用。",
+      "testRateLimited": "服务可达，但上游限流或额度不足：{{detail}}。",
+      "testHttpFailed": "服务可达，但请求返回 HTTP {{status}}：{{detail}}。",
       "activateAction": "启动 API 服务",
       "enableBeforeActivateTitle": "服务未启用",
       "enableBeforeActivateMessage": "API 服务当前未启用，需要先启用服务。是否启用并切号？",
@@ -1847,8 +1900,8 @@
       "refreshStatsSuccess": "API 服务统计已刷新",
       "accountStatsTitle": "按账号统计",
       "statsEmpty": "当前还没有统计数据",
-      "summaryMeta": "{{count}} 个账号 · 本机/局域网",
-      "summaryMetaUnconfigured": "未配置 · 本机/局域网",
+      "summaryMeta": "{{count}} 个账号 · {{scope}}",
+      "summaryMetaUnconfigured": "未配置 · {{scope}}",
       "expandDetails": "展开详情",
       "collapseDetails": "收起详情",
       "hideEntryAction": "关闭 API 服务入口",
@@ -1885,7 +1938,8 @@
         "quotaLowFirst": "优先低配额",
         "planHighFirst": "优先高订阅",
         "planLowFirst": "优先低订阅",
-        "expirySoonFirst": "优先近到期"
+        "expirySoonFirst": "优先近到期",
+        "custom": "自定义"
       },
       "stats": {
         "requests": "总请求数",
@@ -1916,7 +1970,33 @@
         "available": "普通面板",
         "manageMembers": "管理成员",
         "save": "保存集合"
-      }
+      },
+      "oauthBinding": {
+        "desc": "可选绑定。未绑定时 API 服务按原 API Key 逻辑运行；绑定后登录态使用 OAuth 账号，Provider 使用当前 API 服务配置。",
+        "currentService": "API 服务：{{name}}"
+      },
+      "customRoutingEdit": "编辑自定义调度",
+      "customRoutingTitle": "自定义调度",
+      "customRoutingDesc": "按账号设置优先级和权重，用于控制 API 服务选择账号的顺序和同级负载分配。",
+      "customRoutingPriorityTitle": "优先级",
+      "customRoutingPriorityDesc": "数值越高越先被选中；高优先级账号不可用时，才会继续尝试低优先级账号。",
+      "customRoutingWeightTitle": "权重",
+      "customRoutingWeightDesc": "相同优先级内用于负载均衡；权重越高，分到的请求越多。",
+      "customRoutingSearch": "搜索邮箱、订阅或账号 ID",
+      "customRoutingSelected": "已选 {{count}}",
+      "customRoutingPriorityShort": "优先级",
+      "customRoutingWeightShort": "权重",
+      "customRoutingApplyBatch": "应用到已选",
+      "customRoutingReset": "重置",
+      "customRoutingAccountColumn": "账号",
+      "customRoutingQuotaColumn": "额度",
+      "customRoutingEmpty": "当前 API 服务集合没有可配置的账号",
+      "customRoutingSave": "保存自定义调度",
+      "customRoutingSaveSuccess": "API 服务自定义调度已更新",
+      "upstreamProxyLabel": "API 代理地址",
+      "upstreamProxySaveSuccess": "API 代理地址已更新",
+      "upstreamProxyUrlPlaceholder": "留空用全局代理",
+      "upstreamProxySaveAction": "保存代理"
     },
     "api": {
       "baseUrl": "基础地址",
@@ -2007,6 +2087,24 @@
         "apiKeyCannotBeUrl": "API Key 不能是 URL，请检查是否填反",
         "baseUrlInvalid": "Base URL 格式无效，请输入完整的 http:// 或 https:// 地址",
         "apiKeyEqualsBaseUrl": "API Key 不能与 Base URL 相同"
+      },
+      "oauthBinding": {
+        "label": "OAuth 绑定",
+        "unbound": "未绑定",
+        "action": "绑定 OAuth",
+        "actionShort": "绑定",
+        "title": "绑定 OAuth 账号",
+        "desc": "可选绑定。未绑定时该账号按原 API Key 逻辑切换；绑定后登录态使用 OAuth 账号，Provider 使用当前 API Key 账号配置。",
+        "currentAccount": "API Key 账号：{{name}}",
+        "selectLabel": "选择 OAuth 账号",
+        "empty": "暂无 OAuth 账号，请先添加 OAuth 授权账号。",
+        "validationRequired": "请选择 OAuth 账号",
+        "saveSuccess": "OAuth 绑定已更新",
+        "saveFailed": "OAuth 绑定失败：{{error}}",
+        "switchRequiresBinding": "请先绑定 OAuth 账号",
+        "clearAction": "解除绑定",
+        "clearSuccess": "OAuth 绑定已解除",
+        "clearFailed": "解除 OAuth 绑定失败：{{error}}"
       }
     },
     "cockpitApi": {
@@ -2017,7 +2115,7 @@
       "total": "总计",
       "today": "今日",
       "periods": "周期",
-      "tokens": "令牌",
+      "tokens": "token",
       "quotaUsed": "消耗",
       "modelStats": "模型统计",
       "noStats": "暂无统计",
@@ -2418,6 +2516,7 @@
       "actions": {
         "moveToTrash": "移到废纸篓",
         "syncSessions": "同步会话",
+        "copyToInstance": "复制到实例",
         "repairVisibility": "修复可见性",
         "restoreSessions": "恢复会话",
         "copySessionId": "复制会话 ID",
@@ -2455,10 +2554,28 @@
         "emptyTitle": "废纸篓里还没有会话",
         "emptyDesc": "已移到废纸篓的会话会显示在这里。",
         "restoreAction": "恢复选中会话"
+      },
+      "targetModal": {
+        "title": "复制到实例",
+        "hint": "会把所选会话补到目标实例，已有同 ID 会话会自动跳过；目标实例运行中时可能需要重启后显示。",
+        "targetInstance": "目标实例",
+        "pickTarget": "请选择目标实例",
+        "selectedCount": "已选择 {{count}} 条会话",
+        "existingCount": "目标已存在 {{count}} 条",
+        "confirm": "复制会话"
       }
     },
     "groups": {
       "addToGroup": "添加至分组"
+    },
+    "speed": {
+      "title": "速度",
+      "standard": "标准",
+      "standardDesc": "默认速度，常规用量",
+      "fast": "快速",
+      "fastDesc": "1.5 倍速，用量增加",
+      "saveSuccess": "速度已更新",
+      "saveFailed": "保存速度失败：{{error}}"
     }
   },
   "codebuddy": {
@@ -2611,23 +2728,31 @@
       "storage": "数据范围：本机导入会读取 VS Code 中的 GitHub 登录会话，切号会更新同类会话；OAuth、Token 导入、本机导入校验和配额刷新会调用 GitHub 官方 API，仅发送必要认证字段，不上传 state.vscdb 或系统密钥。"
     }
   },
+  "runtime": {
+    "installedVersion": {
+      "loading": "正在检测安装版本",
+      "missing": "未检测到已安装版本",
+      "detecting": "检测中",
+      "notFound": "未检测到版本"
+    }
+  },
   "dashboard": {
     "title": "账号仪表盘",
     "summary": {
       "label": "概览",
       "title": "账号快照",
-      "desc": "一览 Antigravity 与 Codex"
+      "desc": "一览 Antigravity IDE 与 Codex"
     },
     "stats": {
-      "antigravity": "Antigravity 账号",
+      "antigravity": "Antigravity IDE 账号",
       "codex": "Codex 账号",
-      "currentAntigravity": "当前 Antigravity",
+      "currentAntigravity": "当前 Antigravity IDE",
       "currentCodex": "当前 Codex",
       "providers": "服务提供商",
       "totalAccounts": "账号总数"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "订阅分布",
@@ -2642,7 +2767,7 @@
     },
     "emptyAccount": "无账号",
     "sections": {
-      "antigravity": "Antigravity 账号",
+      "antigravity": "Antigravity IDE 账号",
       "codex": "Codex 账号"
     },
     "actions": {
@@ -2675,7 +2800,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Antigravity 设置",
+      "title": "Antigravity IDE 设置",
       "appPath": "启动路径"
     },
     "codex": {
@@ -2711,6 +2836,18 @@
           "contextWindowInvalid": "上下文窗口必须是大于 0 的整数",
           "autoCompactInvalid": "自动压缩阈值必须是大于 0 的整数"
         }
+      },
+      "appSpeed": {
+        "title": "Codex 速度",
+        "desc": "保存为启动速度；从本应用启动 Codex 前会写入。",
+        "standard": "标准",
+        "fast": "快速",
+        "launch": "重启",
+        "loadFailed": "加载 Codex 速度失败：{{error}}",
+        "saveSuccess": "Codex 启动速度已保存",
+        "saveFailed": "保存 Codex 速度失败：{{error}}",
+        "launchSuccess": "Codex 已按当前速度重启",
+        "launchFailed": "重启 Codex 失败：{{error}}"
       }
     },
     "githubCopilot": {
@@ -2773,7 +2910,9 @@
     },
     "gemini": {
       "title": "Gemini Cli 设置",
-      "appPath": "Gemini Cli 路径"
+      "appPath": "Gemini Cli 路径",
+      "syncWsl": "同步 WSL 配置",
+      "syncWslDesc": "切换账号时自动覆盖 WSL 下的 .gemini 配置"
     },
     "geminiRefreshInterval": "配额自动刷新",
     "error": {
@@ -3189,7 +3328,7 @@
     "actions": {
       "collapseAll": "全部收起",
       "expandAll": "全部展开",
-      "goAntigravity": "前往 Antigravity",
+      "goAntigravity": "前往 Antigravity IDE",
       "goCodex": "前往 Codex",
       "goDashboard": "前往仪表盘",
       "goFingerprints": "前往设备指纹",
@@ -3207,7 +3346,7 @@
         "0": "若看到异常状态（如 403/刷新失败），先刷新再判断是否删除重登。"
       },
       "keywords": {
-        "0": "Antigravity账号",
+        "0": "Antigravity IDE 账号",
         "1": "账号管理",
         "2": "配额",
         "3": "标签"
@@ -3221,8 +3360,8 @@
         "1": "使用“刷新全部”先同步一轮配额状态。",
         "2": "按配额/重置时间排序，选择当前要使用的账号。"
       },
-      "summary": "管理 Antigravity 账号生命周期：添加、刷新配额、切换、分组与标签。",
-      "title": "Antigravity 账号管理"
+      "summary": "管理 Antigravity IDE 账号生命周期：添加、刷新配额、切换、分组与标签。",
+      "title": "Antigravity IDE 账号管理"
     },
     "blocks": {
       "cautions": "常见坑位 / 注意事项",
@@ -3828,6 +3967,15 @@
     "cancelEditAccountName": "取消编辑",
     "accountNameRequired": "账号名不能为空。",
     "copySecret": "复制秘钥"
+  },
+  "mfaQuick": {
+    "title": "2FA 验证码",
+    "selectLabel": "选择 2FA 秘钥",
+    "unnamedSecret": "未命名秘钥",
+    "invalidCode": "无效秘钥",
+    "copyCode": "复制验证码",
+    "copied": "已复制",
+    "refreshIn": "{{time}}s"
   },
   "logViewer": {
     "fileLabel": "日志文件",

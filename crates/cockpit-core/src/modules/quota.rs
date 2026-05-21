@@ -251,7 +251,7 @@ fn build_cloud_code_metadata(duet_project: Option<&str>) -> Value {
 }
 
 fn resolve_cloud_code_base_url(ctx: &QuotaCloudCodeContext) -> String {
-    // 与 Antigravity.app 的 IYs(...) 选择顺序保持一致：override > gcpTos > internal(insider/dev) > daily
+    // 与 Antigravity IDE.app 的 IYs(...) 选择顺序保持一致：override > gcpTos > internal(insider/dev) > daily
     if let Some(override_url) = env_var_trimmed("ANTIGRAVITY_CLOUD_CODE_URL_OVERRIDE") {
         return override_url;
     }
@@ -953,7 +953,7 @@ pub async fn fetch_quota_with_context(
         .clone()
         .or_else(|| ctx.preferred_project_id.clone());
 
-    // 保留缓存，但缓存命中前仍先执行与 Antigravity.app 对齐的项目识别流程。
+    // 保留缓存，但缓存命中前仍先执行与 Antigravity IDE.app 对齐的项目识别流程。
     if !skip_cache {
         if let Some(record) = read_api_cache("authorized", email) {
             if is_api_cache_valid(&record) {

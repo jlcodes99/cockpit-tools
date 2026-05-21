@@ -14,6 +14,7 @@
     "close": "إغلاق",
     "open": "فتح",
     "copy": "نسخ",
+    "copied": "تم النسخ",
     "add": "إضافة",
     "enable": "تفعيل",
     "disable": "تعطيل",
@@ -273,7 +274,7 @@
     "lockedPlatform": "المنصة مقفلة بواسطة المثيل"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "إدارة الحسابات",
     "wakeup": "مهام الاستيقاظ",
     "fingerprints": "بصمات الجهاز",
@@ -411,7 +412,8 @@
       "instance": "المثيل",
       "email": "الحساب",
       "quota": "حالة الحصة",
-      "actions": "إجراءات"
+      "actions": "إجراءات",
+      "speed": "السرعة"
     },
     "empty": {
       "title": "لا توجد مثيلات",
@@ -489,7 +491,9 @@
           "contextWindowInvalid": "يجب أن تكون نافذة السياق عددًا صحيحًا أكبر من 0.",
           "autoCompactInvalid": "يجب أن يكون حد الضغط التلقائي عددًا صحيحًا أكبر من 0."
         }
-      }
+      },
+      "appSpeed": "السرعة",
+      "appSpeedDesc": "يكتب السرعة المختارة قبل تشغيل Codex الرسمي"
     },
     "quota": {
       "unbound": "حساب غير مرتبط",
@@ -510,7 +514,8 @@
       "allAlreadyRunning": "جميع المثيلات قيد التشغيل بالفعل",
       "noneRunning": "لا توجد مثيلات قيد التشغيل حاليًا",
       "syncThreadsNeedTwo": "يلزم وجود مثيلين على الأقل لمزامنة السلاسل",
-      "launchPrepared": "أمر التشغيل جاهز"
+      "launchPrepared": "أمر التشغيل جاهز",
+      "speedUpdated": "تم تحديث السرعة"
     },
     "runningDialog": {
       "title": "المثيل قيد التشغيل",
@@ -539,9 +544,9 @@
       },
       "safe": {
         "title": "إعادة تشغيل آمنة (موصى به)",
-        "principle": "إرسال SIGTERM إلى جميع عمليات Antigravity، يطلب من التطبيق الحفظ والخروج ذاتيًا، ثم تشغيل المثيل المستهدف (سيتم الإنهاء القسري إذا لزم الأمر).",
-        "commandMac": "macOS/Linux: kill -15 <pid> (جميع عمليات Antigravity)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (جميع عمليات Antigravity)",
+        "principle": "إرسال SIGTERM إلى جميع عمليات Antigravity IDE، يطلب من التطبيق الحفظ والخروج ذاتيًا، ثم تشغيل المثيل المستهدف (سيتم الإنهاء القسري إذا لزم الأمر).",
+        "commandMac": "macOS/Linux: kill -15 <pid> (جميع عمليات Antigravity IDE)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (جميع عمليات Antigravity IDE)",
         "pros": "أقرب إلى الخروج الطبيعي، أقل عرضة لتحذيرات الانهيار، البيانات أكثر أمانًا.",
         "cons": "يمكن الخروج وإعادة التشغيل بالكامل فقط، لا يمكن إعادة تشغيل مثيل واحد فقط."
       },
@@ -602,7 +607,7 @@
       "uiScale": "مقياس الواجهة",
       "uiScaleDesc": "اضبط مقياس الواجهة",
       "accountManagement": "إدارة الحسابات",
-      "autoRefresh": "تحديث تلقائي لحصة Antigravity",
+      "autoRefresh": "تحديث تلقائي لحصة Antigravity IDE",
       "codexAutoRefresh": "تحديث تلقائي لحصة Codex",
       "autoRefreshDesc": "تردد التحديث التلقائي في الخلفية",
       "codexAutoRefreshDesc": "تردد التحديث التلقائي في الخلفية",
@@ -626,6 +631,10 @@
       "hideDockIconDesc": "تحكم مستقل في ظهور أيقونة Dock دون التأثر بسلوك تصغير النافذة",
       "hideDockIconOff": "لا (إظهار أيقونة Dock)",
       "hideDockIconOn": "نعم (إخفاء أيقونة Dock)",
+      "trayIconStyle": "نمط أيقونة شريط القوائم (macOS فقط)",
+      "trayIconStyleDesc": "اختر أيقونة النظام أحادية اللون أو أيقونة التطبيق الأصلية الملونة",
+      "trayIconStyleTemplate": "أيقونة أحادية اللون",
+      "trayIconStyleColor": "أيقونة ملونة",
       "floatingCardStartup": "إظهار البطاقة العائمة عند التشغيل",
       "floatingCardStartupDesc": "عرض بطاقة الحساب العائمة تلقائياً بعد تشغيل التطبيق",
       "floatingCardAlwaysOnTop": "إبقاء البطاقة العائمة في الأعلى افتراضياً",
@@ -635,8 +644,8 @@
       "floatingCardShowNowAction": "إظهار البطاقة العائمة",
       "dataDir": "مجلد البيانات",
       "dataDirDesc": "موقع تخزين الحسابات وملفات التكوين.",
-      "fpDir": "مجلد تخزين Antigravity",
-      "fpDirDesc": "موقع تخزين ملفات بيانات Antigravity.",
+      "fpDir": "مجلد تخزين Antigravity IDE",
+      "fpDirDesc": "موقع تخزين ملفات بيانات Antigravity IDE.",
       "opencodeTitle": "تكامل OpenCode",
       "opencodeRestart": "إعادة تشغيل OpenCode عند تبديل Codex",
       "opencodeRestartDesc": "مزامنة معلومات حساب Codex في OpenCode",
@@ -657,10 +666,10 @@
       "vscodeAppPathPlaceholder": "المسار الافتراضي",
       "vscodePathSelect": "اختيار",
       "vscodePathReset": "إعادة التعيين إلى الافتراضي",
-      "antigravityAppPath": "مسار تطبيق Antigravity",
-      "antigravityTitle": "تشغيل Antigravity",
+      "antigravityAppPath": "مسار تطبيق Antigravity IDE",
+      "antigravityTitle": "تشغيل Antigravity IDE",
       "commonTitle": "عام",
-      "antigravitySettingsTitle": "إعدادات Antigravity",
+      "antigravitySettingsTitle": "إعدادات Antigravity IDE",
       "codexSettingsTitle": "إعدادات Codex",
       "githubCopilotSettingsTitle": "إعدادات GitHub Copilot",
       "ghcpAutoRefresh": "تحديث حصة GitHub Copilot تلقائيا",
@@ -733,14 +742,14 @@
       "sideNavLayoutOriginal": "التخطيط الأصلي",
       "sideNavLayoutClassic": "التخطيط الكلاسيكي",
       "antigravityDualSwitchNoRestart": "تبديل ثنائي بدون إعادة تشغيل",
-      "antigravityDualSwitchNoRestartDesc": "عند تبديل الحساب، يتم تنفيذ كتابة بيانات الحساب محليًا والتبديل السلس عبر الإضافة في تدفق واحد، دون إعادة تشغيل Antigravity.",
+      "antigravityDualSwitchNoRestartDesc": "عند تبديل الحساب، يتم تنفيذ كتابة بيانات الحساب محليًا والتبديل السلس عبر الإضافة في تدفق واحد، دون إعادة تشغيل Antigravity IDE.",
       "appAutoLaunch": "تشغيل Cockpit Tools عند تسجيل الدخول",
       "appAutoLaunchDesc": "تشغيل التطبيق تلقائيًا بعد تسجيل الدخول إلى النظام",
       "startupWakeupDisabled": "معطل",
       "startupWakeupImmediate": "تنبيه فوري",
       "startupWakeupDelayed": "تنبيه بعد تأخير",
-      "antigravityStartupWakeup": "تشغيل إيقاظ Antigravity بعد بدء التشغيل",
-      "antigravityStartupWakeupDesc": "تشغيل مهام إيقاظ Antigravity المفعلة مرة واحدة بعد بدء التطبيق",
+      "antigravityStartupWakeup": "تشغيل إيقاظ Antigravity IDE بعد بدء التشغيل",
+      "antigravityStartupWakeupDesc": "تشغيل مهام إيقاظ Antigravity IDE المفعلة مرة واحدة بعد بدء التطبيق",
       "codexStartupWakeup": "تشغيل إيقاظ Codex بعد بدء التشغيل",
       "codexStartupWakeupDesc": "تشغيل مهام إيقاظ Codex المفعلة مرة واحدة بعد بدء التطبيق",
       "currentAccountRefreshTitle": "تحديث الحساب الحالي",
@@ -787,7 +796,14 @@
       "codexSpecifiedAppPath": "مسار التطبيق المحدد",
       "codexSpecifiedAppPathDesc": "مسار التطبيق الذي سيُعاد تشغيله مع تبديل Codex.",
       "codexSpecifiedAppPathPlaceholder": "مثال /Applications/Host.app",
-      "codexSpecifiedAppPathClear": "مسح"
+      "codexSpecifiedAppPathClear": "مسح",
+      "codexAppSpeed": "سرعة Codex",
+      "codexAppSpeedDesc": "يحفظ سرعة تشغيل Codex الرسمية ويكتبها قبل كل تشغيل من هذا التطبيق.",
+      "codexAppSpeedStandard": "قياسي",
+      "codexAppSpeedFast": "سريع",
+      "codexAppSpeedLaunch": "إعادة تشغيل Codex",
+      "codexAppSpeedSaveFailed": "فشل حفظ سرعة Codex: {{error}}",
+      "codexAppSpeedLaunchFailed": "فشلت إعادة تشغيل Codex: {{error}}"
     },
     "network": {
       "apiTitle": "واجهة برمجة تطبيقات قمرة القيادة المضادة للجاذبية",
@@ -971,7 +987,7 @@
   },
   "accounts": {
     "title": "إدارة الحسابات",
-    "subtitle": "إدارة قائمة حسابات Antigravity الخاصة بك.",
+    "subtitle": "إدارة قائمة حسابات Antigravity IDE الخاصة بك.",
     "total": "إجمالي {{count}} حسابات",
     "search": "البحث عن حساب...",
     "addAccount": "إضافة حساب",
@@ -1225,7 +1241,7 @@
     "switching": "جارِ التبديل...",
     "fingerprint": "البصمة",
     "bound": "مرتبط",
-    "brandTitle": "إدارة حساب Antigravity"
+    "brandTitle": "إدارة حساب Antigravity IDE"
   },
   "fingerprints": {
     "title": "بصمات الجهاز",
@@ -1327,7 +1343,7 @@
   "modals": {
     "addAccount": {
       "title": "إضافة حساب",
-      "desc": "أضف حساب Antigravity الخاص بك عبر تفويض Google OAuth",
+      "desc": "أضف حساب Antigravity IDE الخاص بك عبر تفويض Google OAuth",
       "loginBtn": "تسجيل الدخول Google OAuth",
       "waiting": "في انتظار التفويض..."
     },
@@ -1335,7 +1351,7 @@
       "title": "استيراد الحسابات",
       "desc": "يرجى اختيار طريقة الاستيراد",
       "local": "استيراد حساب محلي",
-      "localDesc": "استيراد الحساب المسجل دخوله حالياً من عميل Antigravity",
+      "localDesc": "استيراد الحساب المسجل دخوله حالياً من عميل Antigravity IDE",
       "tools": "استيراد Antigravity Tools",
       "toolsDesc": "الاستيراد من مجلد ~/.antigravity_tools/",
       "jsonDivider": "أو الصق JSON",
@@ -1348,7 +1364,7 @@
       "fromExtension": "استيراد من الملحق",
       "syncBadge": "مزامنة حسابات ملحق Antigravity Cockpit",
       "fromLocalDB": "استيراد من قاعدة البيانات المحلية",
-      "localDBDesc": "قراءة حسابات تسجيل الدخول من عميل Antigravity على هذا الجهاز",
+      "localDBDesc": "قراءة حسابات تسجيل الدخول من عميل Antigravity IDE على هذا الجهاز",
       "toolsDescMigrate": "ترحيل الحسابات من ~/.antigravity_tools/",
       "importingTools": "جارِ الاستيراد من Antigravity Tools...",
       "importingLocal": "جارِ استيراد الحساب المحلي...",
@@ -1393,6 +1409,7 @@
     "batchDeleteConfirm": "هل أنت متأكد من حذف {{count}} حسابات مختارة؟",
     "switched": "تم التبديل إلى {{email}}",
     "switchFailed": "فشل التبديل: {{error}}",
+    "antigravityLegacyUnsupported": "لا يدعم هذا الموضع Antigravity 2.0.0 والإصدارات الأحدث. اختر إصدار Antigravity أقل من 2.0.0، أو استخدم Antigravity IDE.",
     "importSuccess": "تم استيراد {{count}} حسابات بنجاح",
     "importLocalSuccess": "تم استيراد الحساب بنجاح: {{email}}",
     "importFailed": "فشل الاستيراد: {{error}}",
@@ -1431,7 +1448,7 @@
       },
       "runHint": {
         "title": "ملاحظات التحقق",
-        "line1": "يقوم خيار «الفحص الآن» بإرسال طلب محادثة مصغّر عبر محاكاة عميل Antigravity باستخدام البوابة المحلية وبروتوكول Language Server الرسمي.",
+        "line1": "يقوم خيار «الفحص الآن» بإرسال طلب محادثة مصغّر عبر محاكاة عميل Antigravity IDE باستخدام البوابة المحلية وبروتوكول Language Server الرسمي.",
         "line2": "تستهلك العملية مقدارًا صغيرًا من الرموز (عادةً محادثة قصيرة واحدة)، ويعتمد الاستهلاك الفعلي على النموذج وسياسة الحساب.",
         "line3": "لا تعدّل هذه العملية إعدادات مهام الإيقاظ؛ فهي تفحص فقط توفر الحساب وتكتب سجل الفحص.",
         "line4": "إذا تم إرجاع 403 يجب إكمال التحقق من الحساب أو تقديم استئناف أولا ستتضمن النتيجة العنوان والإجراءات السريعة."
@@ -1562,6 +1579,7 @@
       "modeScheduled": "📅 مجدول",
       "modeCrontab": "🧩 كرونتاب",
       "modeQuotaReset": "🔄 إعادة تعيين الحصة",
+      "antigravityVersion": "إصدار Antigravity IDE",
       "modelSelect": "اختيار النموذج",
       "modelHint": "ضمن نفس مجموعة الحصة يُنصح باختيار نموذج واحد. تعدد النماذج سيُشغَّل بالتتابع.",
       "modelsEmpty": "لا توجد نماذج موصى بها",
@@ -1641,6 +1659,7 @@
     "installFailed": "فشل التثبيت على النظام. حاول لاحقًا أو نزّل الحزمة يدويًا.",
     "restartRequiredAfterInstall": "تم تثبيت التحديث. أعد تشغيل التطبيق يدويًا لإكمال التبديل.",
     "stoppingApiService": "جارٍ إيقاف خدمة API...",
+    "stopApiServiceFailed": "تعذّر إيقاف خدمة API. عطّلها أولًا ثم أعد المحاولة.",
     "skipThisVersion": "تخطي هذا الإصدار",
     "skipFailed": "تعذر تخطي هذا التحديث: {{error}}"
   },
@@ -1721,6 +1740,11 @@
     },
     "oauth": {
       "desc": "انقر أدناه وأكمل تفويض OpenAI في المتصفح",
+      "trialGuideTitle": "نصائح تسجيل التجربة",
+      "trialGuideDesc": "عند تجهيز حساب جديد، يُفضّل استخدام بريد Gmail يمكن الوصول إليه مدة طويلة، فهذا يساعد على بقاء الحساب وتسهيل التحقق لاحقًا.",
+      "trialGuideAliasDesc": "يمكن لكل Gmail أساسي تجهيز ما يصل إلى 5 عناوين بديلة لتمييز سجلات تسجيل ChatGPT؛ استخدمها وفق قواعد الخدمة المستهدفة.",
+      "trialGuideLink": "عرض دليل التجربة",
+      "gmailAliasLink": "إنشاء بديل Gmail",
       "preparing": "جارٍ إعداد رابط التفويض...",
       "exchanging": "جارٍ تبادل الرمز...",
       "portInUse": "المنفذ {{port}} قيد الاستخدام بالفعل. أغلق التطبيق الذي يستخدمه ثم حاول مرة أخرى.",
@@ -1730,7 +1754,8 @@
       "portStillInUse": "المنفذ {{port}} ما يزال قيد الاستخدام.",
       "portInUseAction": "إغلاق المنفذ وإعادة المحاولة",
       "timeout": "انتهت مهلة المصادقة. انقر للمحاولة",
-      "timeoutRetry": "تحديث رابط المصادقة"
+      "timeoutRetry": "تحديث رابط المصادقة",
+      "reauthEmailLabel": "حساب إعادة التفويض"
     },
     "token": {
       "desc": "الصق auth.json أو JSON للحساب أو refresh_token.",
@@ -1755,12 +1780,21 @@
       "title": "خدمة API",
       "accountCount": "{{count}} حسابات",
       "baseUrl": "العنوان",
+      "addressKind": "نوع العنوان",
+      "addressLocal": "محلي",
+      "addressLan": "شبكة محلية",
+      "accessScopeLabel": "نطاق الوصول",
+      "accessScopeLocalhost": "المحلي فقط",
+      "accessScopeLan": "الشبكة المحلية",
+      "accessScopeLocalhostShort": "المحلي فقط",
+      "accessScopeLanShort": "محلي+شبكة",
+      "accessScopeSaveSuccess": "تم تحديث نطاق وصول خدمة API",
       "apiKey": "المفتاح",
       "statusRunning": "قيد التشغيل",
       "statusStopped": "متوقف",
       "statusDisabled": "معطل",
       "emptyMembers": "لا توجد حسابات في المجموعة",
-      "footerHint": "يستمع محليًا وعلى LAN",
+      "footerHint": "نطاق الوصول: {{scope}}",
       "manageAccounts": "إدارة الحسابات",
       "rotateKey": "تبديل المفتاح",
       "rotateConfirmMessage": "بعد إعادة التعيين سيتوقف مفتاح خدمة API الحالي عن العمل فورًا، وقد تصبح الطلبات الجارية غير متاحة. هل تريد المتابعة؟",
@@ -1792,10 +1826,29 @@
         "manageMembers": "إدارة الأعضاء"
       },
       "entryAction": "إضافة إلى خدمة API",
-      "testAction": "اختبار خدمة API",
-      "testSuccess": "نجح اختبار خدمة API ({{count}} نموذجًا)",
-      "testTimeout": "انتهت مهلة الاختبار. تأكد من تشغيل الخدمة المحلية.",
+      "testAction": "اختبار",
+      "testDialogTitle": "اختبار خدمة API",
+      "testDialogDesc": "أرسل طلبًا حقيقيًا عبر Codex CLI للتحقق من الخدمة المحلية والمفتاح واستجابة upstream.",
+      "testProgressTitle": "جارٍ اختبار الخدمة",
+      "testProgressDesc": "جارٍ إرسال طلب حقيقي إلى خدمة API المحلية، يرجى الانتظار.",
+      "testOutputTitle": "النتيجة المرجعة",
+      "testResultTitle": "نتيجة فحص الخدمة",
+      "testSuccess": "نجح فحص الخدمة: الخدمة المحلية والمفتاح واستجابة upstream سليمة ({{model}}، {{latency}}). إذا ظل Codex يعيد 502، فتحقق من Base URL و API Key أو بيئة التشغيل في Codex.",
+      "testFailureStage": "مرحلة التشخيص",
+      "testFailureCause": "سبب الفشل",
+      "testFailureSuggestion": "الإجراء المقترح",
+      "testFailureStatus": "حالة HTTP",
+      "testFailureModel": "نموذج الاختبار",
+      "testFailureDetail": "تفاصيل التشخيص",
+      "testFailureCliOutput": "مخرجات CLI",
+      "testFailureGatewayOutput": "استجابة البوابة",
+      "testTimeout": "انتهت مهلة فحص الطلب الحقيقي. تحقق من الخدمة المحلية أو الوكيل أو شبكة upstream.",
       "testUnavailable": "عنوان خدمة API الحالي غير متاح",
+      "testConnectFailed": "لا يمكن الاتصال بـ {{url}}. تأكد من تشغيل خدمة API، وأن المنفذ لم يتغير، ولا يوجد ما يحظره.",
+      "testAuthFailed": "الخدمة قابلة للوصول، لكن المصادقة فشلت: {{detail}}. تحقق من مفتاح خدمة API أو حالة تسجيل الدخول للحساب.",
+      "testServiceUnavailable": "الخدمة قابلة للوصول، لكنها غير متاحة حاليًا: {{detail}}. تحقق من تفعيل الخدمة، أو من أن مجموعة الحسابات ليست فارغة، أو من صلاحية الحسابات.",
+      "testRateLimited": "الخدمة قابلة للوصول، لكن upstream مقيّد أو الحصة نفدت: {{detail}}.",
+      "testHttpFailed": "الخدمة قابلة للوصول، لكن الطلب أعاد HTTP {{status}}: {{detail}}.",
       "activateAction": "تشغيل خدمة API",
       "activateSuccess": "تم التبديل إلى خدمة API",
       "dashboardAction": "لوحة الخدمة",
@@ -1810,8 +1863,8 @@
       "statsTitle": "الإجمالي",
       "accountStatsTitle": "حسب الحساب",
       "statsEmpty": "لا توجد إحصاءات بعد",
-      "summaryMeta": "{{count}} حسابًا · محلي/LAN",
-      "summaryMetaUnconfigured": "غير مُعدّ · محلي/LAN",
+      "summaryMeta": "{{count}} حسابًا · {{scope}}",
+      "summaryMetaUnconfigured": "غير مهيأ · {{scope}}",
       "memberTitle": "أعضاء المجموعة",
       "stats": {
         "requests": "الطلبات",
@@ -1852,7 +1905,8 @@
         "quotaLowFirst": "الأقل حصة أولاً",
         "planHighFirst": "الأعلى باقة أولاً",
         "planLowFirst": "الأقل باقة أولاً",
-        "expirySoonFirst": "الأقرب انتهاءً أولاً"
+        "expirySoonFirst": "الأقرب انتهاءً أولاً",
+        "custom": "مخصص"
       },
       "statusUnconfigured": "غير مُعدّ",
       "expandDetails": "توسيع التفاصيل",
@@ -1890,7 +1944,33 @@
         "viewFull": "عرض الإحصاء الكامل",
         "modalTitle": "مجمع حصة خدمة API",
         "empty": "لا توجد إحصاءات حصة بعد"
-      }
+      },
+      "oauthBinding": {
+        "desc": "اختياري. بدون ربط، تعمل خدمة API بالمسار السابق لمفتاح API؛ وبعد الربط تستخدم حالة تسجيل الدخول حساب OAuth ويستخدم Provider إعدادات خدمة API الحالية.",
+        "currentService": "خدمة API: {{name}}"
+      },
+      "customRoutingEdit": "تعديل التوجيه المخصص",
+      "customRoutingTitle": "التوجيه المخصص",
+      "customRoutingDesc": "عيّن الأولوية والوزن لكل حساب للتحكم في ترتيب اختيار الحسابات وتوزيع الحمل داخل الأولوية نفسها.",
+      "customRoutingPriorityTitle": "الأولوية",
+      "customRoutingPriorityDesc": "تُختار القيم الأعلى أولاً؛ ولا تُجرّب الحسابات الأقل أولوية إلا عند عدم توفر الأعلى أولوية.",
+      "customRoutingWeightTitle": "الوزن",
+      "customRoutingWeightDesc": "يُستخدم لموازنة الحمل داخل الأولوية نفسها. كلما زاد الوزن زاد عدد الطلبات الموجهة للحساب.",
+      "customRoutingSearch": "ابحث بالبريد أو الخطة أو معرّف الحساب",
+      "customRoutingSelected": "المحدد {{count}}",
+      "customRoutingPriorityShort": "الأولوية",
+      "customRoutingWeightShort": "الوزن",
+      "customRoutingApplyBatch": "تطبيق على المحدد",
+      "customRoutingReset": "إعادة ضبط",
+      "customRoutingAccountColumn": "الحساب",
+      "customRoutingQuotaColumn": "الحصة",
+      "customRoutingEmpty": "لا توجد حسابات قابلة للإعداد في مجموعة خدمة API الحالية",
+      "customRoutingSave": "حفظ التوجيه",
+      "customRoutingSaveSuccess": "تم تحديث التوجيه المخصص لخدمة API",
+      "upstreamProxyLabel": "عنوان وكيل API",
+      "upstreamProxySaveSuccess": "تم تحديث عنوان وكيل API",
+      "upstreamProxyUrlPlaceholder": "فارغ = الوكيل العام",
+      "upstreamProxySaveAction": "حفظ الوكيل"
     },
     "local": {
       "desc": "استيراد الحساب الحالي من ~/.codex/auth.json",
@@ -2160,7 +2240,8 @@
         "collapse": "طي",
         "repairVisibility": "إصلاح الظهور",
         "restoreSessions": "استعادة الجلسات",
-        "copySessionId": "نسخ معرّف الجلسة"
+        "copySessionId": "نسخ معرّف الجلسة",
+        "copyToInstance": "نسخ إلى المثيل"
       },
       "confirm": {
         "title": "نقل إلى المهملات",
@@ -2193,6 +2274,15 @@
         "emptyTitle": "سلة المهملات فارغة",
         "emptyDesc": "ستظهر هنا الجلسات المنقولة إلى سلة المهملات.",
         "restoreAction": "استعادة الجلسات المحددة"
+      },
+      "targetModal": {
+        "title": "نسخ إلى المثيل",
+        "hint": "ينسخ الجلسات المحددة إلى المثيل الهدف. يتم تخطي الجلسات التي لها نفس ID هناك. قد تحتاج المثيلات الهدف قيد التشغيل إلى إعادة تشغيل قبل أن تظهر.",
+        "targetInstance": "المثيل الهدف",
+        "pickTarget": "اختر مثيلا هدفا",
+        "selectedCount": "تم تحديد {{count}} جلسة",
+        "existingCount": "{{count}} موجودة بالفعل في الهدف",
+        "confirm": "نسخ الجلسات"
       }
     },
     "api": {
@@ -2284,6 +2374,24 @@
         "cockpit_api": {
           "name": "Cockpit Api"
         }
+      },
+      "oauthBinding": {
+        "label": "ربط OAuth",
+        "unbound": "غير مربوط",
+        "action": "ربط OAuth",
+        "actionShort": "ربط",
+        "title": "ربط حساب OAuth",
+        "desc": "اختياري. بدون ربط، ينتقل هذا الحساب بالمسار السابق لمفتاح API؛ وبعد الربط تستخدم حالة تسجيل الدخول حساب OAuth ويستخدم Provider إعدادات حساب API Key هذا.",
+        "currentAccount": "حساب API Key: {{name}}",
+        "selectLabel": "اختر حساب OAuth",
+        "empty": "لا توجد حسابات OAuth بعد. أضف حسابا مصرحا عبر OAuth أولا.",
+        "validationRequired": "اختر حساب OAuth",
+        "saveSuccess": "تم تحديث ربط OAuth",
+        "saveFailed": "فشل ربط OAuth: {{error}}",
+        "switchRequiresBinding": "اربط حساب OAuth أولا",
+        "clearAction": "إلغاء الربط",
+        "clearSuccess": "تم إلغاء ربط OAuth.",
+        "clearFailed": "فشل إلغاء ربط OAuth: {{error}}"
       }
     },
     "modelProviders": {
@@ -2458,6 +2566,15 @@
       "noStats": "لا توجد إحصاءات بعد",
       "refreshHint": "انقر على التحديث لمزامنة إحصاءات مفتاح API هذا.",
       "dailyStats": "الإحصاءات اليومية"
+    },
+    "speed": {
+      "title": "السرعة",
+      "standard": "قياسي",
+      "standardDesc": "السرعة الافتراضية، استخدام عادي",
+      "fast": "سريع",
+      "fastDesc": "سرعة 1.5x، استخدام أعلى",
+      "saveSuccess": "تم تحديث السرعة",
+      "saveFailed": "فشل حفظ السرعة: {{error}}"
     }
   },
   "githubCopilot": {
@@ -2510,23 +2627,31 @@
       "storage": "نطاق البيانات: يقرأ الاستيراد المحلي جلسات تسجيل الدخول إلى GitHub في VS Code، ويحدّث تبديل الحساب الإدخالات نفسها؛ تستدعي OAuth واستيراد الرمز والتحقق من الاستيراد المحلي وتحديث الحصص واجهات GitHub الرسمية مع حقول المصادقة اللازمة فقط. لا يتم رفع state.vscdb أو مفاتيح النظام."
     }
   },
+  "runtime": {
+    "installedVersion": {
+      "loading": "جارٍ اكتشاف الإصدار المثبت",
+      "missing": "لم يتم اكتشاف إصدار مثبت",
+      "detecting": "جارٍ الاكتشاف",
+      "notFound": "لم يتم اكتشاف إصدار"
+    }
+  },
   "dashboard": {
     "title": "لوحة حسابات",
     "summary": {
       "label": "نظرة عامة",
       "title": "لمحة عن الحسابات",
-      "desc": "عرض Antigravity و Codex في لمحة"
+      "desc": "عرض Antigravity IDE و Codex في لمحة"
     },
     "stats": {
-      "antigravity": "حسابات Antigravity",
+      "antigravity": "حسابات Antigravity IDE",
       "codex": "حسابات Codex",
-      "currentAntigravity": "Antigravity الحالي",
+      "currentAntigravity": "Antigravity IDE الحالي",
       "currentCodex": "Codex الحالي",
       "providers": "المزوّدون",
       "totalAccounts": "إجمالي الحسابات"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "توزيع الخطط",
@@ -2541,7 +2666,7 @@
     },
     "emptyAccount": "لا يوجد حساب",
     "sections": {
-      "antigravity": "حسابات Antigravity",
+      "antigravity": "حسابات Antigravity IDE",
       "codex": "حسابات Codex"
     },
     "actions": {
@@ -2574,7 +2699,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "إعدادات Antigravity",
+      "title": "إعدادات Antigravity IDE",
       "appPath": "مسار التطبيق"
     },
     "codex": {
@@ -2610,6 +2735,18 @@
           "contextWindowInvalid": "يجب أن تكون نافذة السياق عددًا صحيحًا أكبر من 0.",
           "autoCompactInvalid": "يجب أن يكون حد الضغط التلقائي عددًا صحيحًا أكبر من 0."
         }
+      },
+      "appSpeed": {
+        "title": "سرعة Codex",
+        "desc": "تُحفظ كسرعة تشغيل وتُكتب قبل فتح Codex.",
+        "standard": "قياسي",
+        "fast": "سريع",
+        "launch": "إعادة تشغيل",
+        "loadFailed": "فشل تحميل سرعة Codex: {{error}}",
+        "saveSuccess": "تم حفظ سرعة تشغيل Codex.",
+        "saveFailed": "فشل حفظ سرعة Codex: {{error}}",
+        "launchSuccess": "تمت إعادة تشغيل Codex بالسرعة المحفوظة.",
+        "launchFailed": "فشلت إعادة تشغيل Codex: {{error}}"
       }
     },
     "githubCopilot": {
@@ -2663,7 +2800,9 @@
     "cursorRefreshInterval": "تحديث الحصة تلقائيًا",
     "gemini": {
       "title": "إعدادات Gemini Cli",
-      "appPath": "مسار Gemini Cli"
+      "appPath": "مسار Gemini Cli",
+      "syncWsl": "مزامنة إعدادات WSL",
+      "syncWslDesc": "استبدال إعدادات ‎.gemini‎ داخل WSL تلقائيًا عند تبديل الحساب"
     },
     "geminiRefreshInterval": "تحديث الحصة تلقائيًا",
     "codebuddy": {
@@ -2995,7 +3134,7 @@
     "actions": {
       "collapseAll": "طي الكل",
       "expandAll": "توسيع الكل",
-      "goAntigravity": "اذهب إلى Antigravity",
+      "goAntigravity": "اذهب إلى Antigravity IDE",
       "goCodex": "اذهب إلى Codex",
       "goDashboard": "اذهب إلى لوحة المعلومات",
       "goFingerprints": "اذهب إلى بصمات الجهاز",
@@ -3010,25 +3149,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "انسخ البيانات احتياطيًا قبل الإجراءات الخطرة أو المجمعة في إدارة حساب Antigravity."
+        "0": "انسخ البيانات احتياطيًا قبل الإجراءات الخطرة أو المجمعة في إدارة حساب Antigravity IDE."
       },
       "keywords": {
-        "0": "إدارة حساب Antigravity",
+        "0": "إدارة حساب Antigravity IDE",
         "1": "دليل",
         "2": "سير عمل",
         "3": "حساب"
       },
       "outcomes": {
-        "0": "افهم ما الذي يمكن أن يقدمه إدارة حساب Antigravity.",
-        "1": "استخدم التدفق المقترح في إدارة حساب Antigravity لتقليل الأخطاء."
+        "0": "افهم ما الذي يمكن أن يقدمه إدارة حساب Antigravity IDE.",
+        "1": "استخدم التدفق المقترح في إدارة حساب Antigravity IDE لتقليل الأخطاء."
       },
       "steps": {
-        "0": "افتح صفحة إدارة حساب Antigravity.",
-        "1": "أكمل الإعداد الأساسي والربط المطلوب في إدارة حساب Antigravity.",
-        "2": "نفّذ عملية يدوية واحدة في إدارة حساب Antigravity للتحقق من النتيجة."
+        "0": "افتح صفحة إدارة حساب Antigravity IDE.",
+        "1": "أكمل الإعداد الأساسي والربط المطلوب في إدارة حساب Antigravity IDE.",
+        "2": "نفّذ عملية يدوية واحدة في إدارة حساب Antigravity IDE للتحقق من النتيجة."
       },
-      "summary": "يوضح هذا القسم كيفية استخدام إدارة حساب Antigravity ضمن سير العمل اليومي.",
-      "title": "إدارة حساب Antigravity"
+      "summary": "يوضح هذا القسم كيفية استخدام إدارة حساب Antigravity IDE ضمن سير العمل اليومي.",
+      "title": "إدارة حساب Antigravity IDE"
     },
     "blocks": {
       "cautions": "تنبيهات ومخاطر شائعة",
@@ -3835,5 +3974,14 @@
       "warn": "تحذير",
       "error": "خطأ"
     }
+  },
+  "mfaQuick": {
+    "title": "رمز 2FA",
+    "selectLabel": "اختر مفتاح 2FA",
+    "unnamedSecret": "مفتاح بلا اسم",
+    "invalidCode": "مفتاح غير صالح",
+    "copyCode": "نسخ الرمز",
+    "copied": "تم النسخ",
+    "refreshIn": "{{time}} ث"
   }
 }

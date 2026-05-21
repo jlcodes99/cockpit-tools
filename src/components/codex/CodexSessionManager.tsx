@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { confirm as confirmDialog } from '@tauri-apps/plugin-dialog';
 import { Check, ChevronDown, ChevronRight, Copy, Eye, Folder, RefreshCw, RotateCcw, Trash2, X } from 'lucide-react';
 import { ModalErrorMessage, useModalErrorState } from '../ModalErrorMessage';
+import { useEscClose } from '../../hooks/useEscClose';
 import type { CodexSessionRecord, CodexSessionTokenStats, CodexTrashedSessionRecord } from '../../types/codex';
 import { useCodexInstanceStore } from '../../stores/useCodexInstanceStore';
 import { formatCodexSessionVisibilityRepairMessage } from '../../utils/codexSessionVisibility';
@@ -100,6 +101,7 @@ export function CodexSessionManager() {
   const instances = useCodexInstanceStore((state) => state.instances);
   const refreshInstances = useCodexInstanceStore((state) => state.refreshInstances);
   const syncThreadsAcrossInstances = useCodexInstanceStore((state) => state.syncThreadsAcrossInstances);
+  const syncSessionsToInstance = useCodexInstanceStore((state) => state.syncSessionsToInstance);
   const repairSessionVisibilityAcrossInstances = useCodexInstanceStore(
     (state) => state.repairSessionVisibilityAcrossInstances,
   );
@@ -119,11 +121,14 @@ export function CodexSessionManager() {
   const [sessions, setSessions] = useState<CodexSessionRecord[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+  const [showSyncTargetModal, setShowSyncTargetModal] = useState(false);
+  const [syncTargetInstanceId, setSyncTargetInstanceId] = useState('');
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [trashedSessions, setTrashedSessions] = useState<CodexTrashedSessionRecord[]>([]);
   const [selectedTrashIds, setSelectedTrashIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncingToInstance, setSyncingToInstance] = useState(false);
   const [repairingVisibility, setRepairingVisibility] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [loadingTrash, setLoadingTrash] = useState(false);
@@ -138,6 +143,11 @@ export function CodexSessionManager() {
     scrollKey: restoreModalErrorScrollKey,
     set: setRestoreModalError,
   } = useModalErrorState();
+  const {
+    message: syncTargetModalError,
+    scrollKey: syncTargetModalErrorScrollKey,
+    set: setSyncTargetModalError,
+  } = useModalErrorState();
   const hasInitializedExpandedGroupsRef = useRef(false);
   const loadSessionsPromiseRef = useRef<Promise<void> | null>(null);
   const copyResetTimerRef = useRef<number | null>(null);
@@ -149,6 +159,20 @@ export function CodexSessionManager() {
   const selectedTrashIdSet = useMemo(() => new Set(selectedTrashIds), [selectedTrashIds]);
   const loadingTokenGroupSet = useMemo(() => new Set(loadingTokenGroupCwds), [loadingTokenGroupCwds]);
   const loadedTokenGroupSet = useMemo(() => new Set(loadedTokenGroupCwds), [loadedTokenGroupCwds]);
+  const selectedSessions = useMemo(
+    () => sessions.filter((session) => selectedIdSet.has(session.sessionId)),
+    [selectedIdSet, sessions],
+  );
+  const syncTargetInstance = useMemo(
+    () => instances.find((instance) => instance.id === syncTargetInstanceId) ?? null,
+    [instances, syncTargetInstanceId],
+  );
+  const syncTargetExistingCount = useMemo(() => {
+    if (!syncTargetInstance) return 0;
+    return selectedSessions.filter((session) =>
+      session.locations.some((location) => location.instanceId === syncTargetInstance.id),
+    ).length;
+  }, [selectedSessions, syncTargetInstance]);
   const instanceCount = instances.length;
 
   const loadSessions = useCallback(async () => {
@@ -317,12 +341,43 @@ export function CodexSessionManager() {
     await loadTrashedSessions();
   };
 
+  const handleOpenSyncTargetModal = async () => {
+    if (selectedIds.length === 0) {
+      setMessage({ text: t('codex.sessionManager.messages.pickOne', '请至少选择一条会话'), tone: 'error' });
+      return;
+    }
+
+    setMessage(null);
+    setSyncTargetModalError(null);
+    try {
+      const latestInstances = await refreshInstances();
+      const targetCandidates = latestInstances.length > 0 ? latestInstances : instances;
+      const firstMissingTarget = targetCandidates.find((instance) =>
+        selectedSessions.some((session) =>
+          !session.locations.some((location) => location.instanceId === instance.id),
+        ),
+      );
+      setSyncTargetInstanceId((firstMissingTarget ?? targetCandidates[0])?.id ?? '');
+      setShowSyncTargetModal(true);
+    } catch (error) {
+      setMessage({ text: String(error), tone: 'error' });
+    }
+  };
+
+  const handleCloseSyncTargetModal = () => {
+    setShowSyncTargetModal(false);
+  };
+
+  useEscClose(showSyncTargetModal, handleCloseSyncTargetModal);
+
   const handleCloseRestoreModal = () => {
     if (restoring) return;
     setShowRestoreModal(false);
     setSelectedTrashIds([]);
     setRestoreModalError(null);
   };
+
+  useEscClose(showRestoreModal, handleCloseRestoreModal);
 
   const handleSyncSessions = async () => {
     setMessage(null);
@@ -339,7 +394,7 @@ export function CodexSessionManager() {
       const confirmed = await confirmDialog(
         t(
           'codex.sessionManager.confirm.syncMessage',
-          '会将缺失的线程与对应会话同步到所有实例中，已有内容不会重复写入，写入前会先备份目标实例关键文件。确认继续？',
+          '会将缺失会话同步到所有实例中，并对同 ID 会话做事件级合并，尽量保留各实例独有消息；写入前会先备份目标实例关键文件和旧会话文件。确认继续？',
         ),
         {
           title: t('codex.sessionManager.actions.syncSessions', '同步会话'),
@@ -357,6 +412,32 @@ export function CodexSessionManager() {
       setMessage({ text: String(error), tone: 'error' });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleSyncSelectedToInstance = async () => {
+    if (selectedIds.length === 0) {
+      setSyncTargetModalError(t('codex.sessionManager.messages.pickOne', '请至少选择一条会话'));
+      return;
+    }
+    if (!syncTargetInstanceId) {
+      setSyncTargetModalError(t('codex.sessionManager.targetModal.pickTarget', '请选择目标实例'));
+      return;
+    }
+
+    setSyncingToInstance(true);
+    setSyncTargetModalError(null);
+    try {
+      const summary = await syncSessionsToInstance(selectedIds, syncTargetInstanceId);
+      setMessage({ text: summary.message });
+      setShowSyncTargetModal(false);
+      setSyncTargetInstanceId('');
+      setSelectedIds([]);
+      await loadSessions();
+    } catch (error) {
+      setSyncTargetModalError(String(error));
+    } finally {
+      setSyncingToInstance(false);
     }
   };
 
@@ -491,7 +572,7 @@ export function CodexSessionManager() {
             className="btn btn-secondary codex-session-manager__action-button"
             type="button"
             onClick={() => void handleSyncSessions()}
-            disabled={syncing || repairingVisibility || deleting || loading || instanceCount < 2}
+            disabled={syncing || syncingToInstance || repairingVisibility || deleting || loading || instanceCount < 2}
             title={
               instanceCount < 2
                 ? t('codex.sessionManager.messages.syncNeedTwo', '至少需要两个实例才能同步会话')
@@ -504,8 +585,17 @@ export function CodexSessionManager() {
           <button
             className="btn btn-secondary codex-session-manager__action-button"
             type="button"
+            onClick={() => void handleOpenSyncTargetModal()}
+            disabled={syncing || syncingToInstance || repairingVisibility || deleting || loading || selectedIds.length === 0}
+          >
+            <Copy size={14} className={syncingToInstance ? 'icon-spin' : undefined} />
+            {t('codex.sessionManager.actions.copyToInstance', '复制到实例')} ({selectedIds.length})
+          </button>
+          <button
+            className="btn btn-secondary codex-session-manager__action-button"
+            type="button"
             onClick={() => void handleRepairVisibility()}
-            disabled={repairingVisibility || loading || deleting || syncing}
+            disabled={repairingVisibility || loading || deleting || syncing || syncingToInstance}
           >
             <Eye size={14} />
             {t('codex.sessionManager.actions.repairVisibility', '修复可见性')}
@@ -514,7 +604,7 @@ export function CodexSessionManager() {
             className="btn btn-secondary codex-session-manager__action-button"
             type="button"
             onClick={() => void handleOpenRestoreModal()}
-            disabled={loading || syncing || repairingVisibility || deleting || restoring}
+            disabled={loading || syncing || syncingToInstance || repairingVisibility || deleting || restoring}
           >
             <RotateCcw size={14} />
             {t('codex.sessionManager.actions.restoreSessions', '恢复会话')}
@@ -523,7 +613,7 @@ export function CodexSessionManager() {
             className="btn btn-secondary codex-session-manager__action-button"
             type="button"
             onClick={() => void handleRefresh()}
-            disabled={loading || deleting || syncing || repairingVisibility}
+            disabled={loading || deleting || syncing || syncingToInstance || repairingVisibility}
           >
             <RefreshCw size={14} className={loading ? 'icon-spin' : undefined} />
             {t('common.refresh', '刷新')}
@@ -532,7 +622,7 @@ export function CodexSessionManager() {
             className="btn btn-danger codex-session-manager__action-button"
             type="button"
             onClick={() => void handleMoveToTrash()}
-            disabled={deleting || loading || syncing || repairingVisibility || selectedIds.length === 0}
+            disabled={deleting || loading || syncing || syncingToInstance || repairingVisibility || selectedIds.length === 0}
           >
             <Trash2 size={14} />
             {t('codex.sessionManager.actions.moveToTrash', '移到废纸篓')} ({selectedIds.length})
@@ -662,6 +752,89 @@ export function CodexSessionManager() {
               </section>
             );
           })}
+        </div>
+      ) : null}
+
+      {showSyncTargetModal ? (
+        <div className="modal-overlay" onClick={handleCloseSyncTargetModal}>
+          <div className="modal codex-session-target-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{t('codex.sessionManager.targetModal.title', '复制到实例')}</h2>
+              <button
+                className="modal-close"
+                type="button"
+                onClick={handleCloseSyncTargetModal}
+                disabled={syncingToInstance}
+                aria-label={t('common.close', '关闭')}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <ModalErrorMessage message={syncTargetModalError} scrollKey={syncTargetModalErrorScrollKey} />
+              <p className="codex-session-target-modal__hint">
+                {t(
+                  'codex.sessionManager.targetModal.hint',
+                  '会把所选会话补到目标实例，已有同 ID 会话会自动跳过；目标实例运行中时可能需要重启后显示。',
+                )}
+              </p>
+              <label className="codex-session-target-modal__field">
+                <span>{t('codex.sessionManager.targetModal.targetInstance', '目标实例')}</span>
+                <select
+                  value={syncTargetInstanceId}
+                  onChange={(event) => {
+                    setSyncTargetInstanceId(event.target.value);
+                    setSyncTargetModalError(null);
+                  }}
+                  disabled={syncingToInstance}
+                >
+                  <option value="">{t('codex.sessionManager.targetModal.pickTarget', '请选择目标实例')}</option>
+                  {instances.map((instance) => (
+                    <option key={instance.id} value={instance.id}>
+                      {instance.isDefault
+                        ? t('instances.defaultName', '默认实例')
+                        : instance.name || t('instances.defaultName', '默认实例')}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="codex-session-target-modal__summary">
+                <span>
+                  {t('codex.sessionManager.targetModal.selectedCount', {
+                    defaultValue: '已选择 {{count}} 条会话',
+                    count: selectedIds.length,
+                  })}
+                </span>
+                {syncTargetInstance ? (
+                  <span>
+                    {t('codex.sessionManager.targetModal.existingCount', {
+                      defaultValue: '目标已存在 {{count}} 条',
+                      count: syncTargetExistingCount,
+                    })}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={handleCloseSyncTargetModal}
+                disabled={syncingToInstance}
+              >
+                {t('common.cancel', '取消')}
+              </button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => void handleSyncSelectedToInstance()}
+                disabled={syncingToInstance || !syncTargetInstanceId || selectedIds.length === 0}
+              >
+                <Copy size={14} className={syncingToInstance ? 'icon-spin' : undefined} />
+                {t('codex.sessionManager.targetModal.confirm', '复制会话')}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 

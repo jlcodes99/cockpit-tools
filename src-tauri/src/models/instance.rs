@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::models::codex::CodexAppSpeed;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum InstanceLaunchMode {
@@ -25,6 +27,8 @@ pub struct InstanceProfile {
     pub bind_account_id: Option<String>,
     #[serde(default)]
     pub launch_mode: InstanceLaunchMode,
+    #[serde(default, skip_serializing_if = "is_standard_app_speed")]
+    pub app_speed: CodexAppSpeed,
     pub created_at: i64,
     pub last_launched_at: Option<i64>,
     #[serde(default)]
@@ -59,6 +63,8 @@ pub struct DefaultInstanceSettings {
     pub working_dir: Option<String>,
     #[serde(default)]
     pub launch_mode: InstanceLaunchMode,
+    #[serde(default, skip_serializing_if = "is_standard_app_speed")]
+    pub app_speed: CodexAppSpeed,
     #[serde(default = "default_follow_local_account")]
     pub follow_local_account: bool,
     #[serde(default)]
@@ -76,6 +82,7 @@ impl Default for DefaultInstanceSettings {
             extra_args: String::new(),
             working_dir: None,
             launch_mode: InstanceLaunchMode::App,
+            app_speed: CodexAppSpeed::Standard,
             follow_local_account: true,
             last_pid: None,
         }
@@ -118,4 +125,8 @@ impl InstanceProfileView {
             follow_local_account: false,
         }
     }
+}
+
+fn is_standard_app_speed(speed: &CodexAppSpeed) -> bool {
+    matches!(speed, CodexAppSpeed::Standard)
 }

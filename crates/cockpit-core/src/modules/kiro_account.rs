@@ -322,6 +322,16 @@ fn normalize_identity(value: Option<&str>) -> Option<String> {
     normalize_non_empty(value).map(|v| v.to_lowercase())
 }
 
+fn normalize_user_identity(value: Option<&str>) -> Option<String> {
+    normalize_identity(value).and_then(|identity| {
+        if identity.starts_with("arn:") {
+            None
+        } else {
+            Some(identity)
+        }
+    })
+}
+
 fn normalize_email_identity(value: Option<&str>) -> Option<String> {
     normalize_non_empty(value).and_then(|raw| {
         let lowered = raw.to_lowercase();
@@ -337,58 +347,10 @@ fn normalize_token_identity(value: Option<&str>) -> Option<String> {
     normalize_non_empty(value)
 }
 
-fn pick_profile_arn(root: Option<&Value>) -> Option<String> {
-    let root = root?;
-    let object = root.as_object()?;
-
-    for key in ["profileArn", "profile_arn", "arn"] {
-        if let Some(value) = object.get(key) {
-            if let Some(text) = value.as_str().map(str::trim).filter(|v| !v.is_empty()) {
-                return Some(text.to_string());
-            }
-        }
-    }
-
-    if let Some(profile) = object.get("profile").and_then(|value| value.as_object()) {
-        if let Some(text) = profile
-            .get("arn")
-            .and_then(|value| value.as_str())
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-        {
-            return Some(text.to_string());
-        }
-    }
-    if let Some(account) = object.get("account").and_then(|value| value.as_object()) {
-        if let Some(text) = account
-            .get("arn")
-            .and_then(|value| value.as_str())
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-        {
-            return Some(text.to_string());
-        }
-    }
-
-    None
-}
-
-fn payload_profile_arn(payload: &KiroOAuthCompletePayload) -> Option<String> {
-    pick_profile_arn(payload.kiro_profile_raw.as_ref())
-        .or_else(|| pick_profile_arn(payload.kiro_auth_token_raw.as_ref()))
-}
-
-fn account_profile_arn(account: &KiroAccount) -> Option<String> {
-    pick_profile_arn(account.kiro_profile_raw.as_ref())
-        .or_else(|| pick_profile_arn(account.kiro_auth_token_raw.as_ref()))
-}
-
 fn account_matches_payload_identity(
-    existing_profile_arn: Option<&String>,
     existing_user: Option<&String>,
     existing_email: Option<&String>,
     existing_refresh_token: Option<&String>,
-    incoming_profile_arn: Option<&String>,
     incoming_user_id: Option<&String>,
     incoming_email: Option<&String>,
     incoming_refresh_token: Option<&String>,
@@ -421,35 +383,16 @@ fn account_matches_payload_identity(
         }
     }
 
-    if let (Some(existing), Some(incoming)) = (existing_profile_arn, incoming_profile_arn) {
-        if existing != incoming {
-            return false;
-        }
-
-        let user_conflict = matches!(
-            (existing_user, incoming_user_id),
-            (Some(left), Some(right)) if left != right
-        );
-        let email_conflict = matches!(
-            (existing_email, incoming_email),
-            (Some(left), Some(right)) if left != right
-        );
-
-        return !user_conflict && !email_conflict;
-    }
-
     false
 }
 
 fn accounts_are_duplicates(left: &KiroAccount, right: &KiroAccount) -> bool {
-    let left_user = normalize_identity(left.user_id.as_deref());
-    let right_user = normalize_identity(right.user_id.as_deref());
+    let left_user = normalize_user_identity(left.user_id.as_deref());
+    let right_user = normalize_user_identity(right.user_id.as_deref());
     let left_email = normalize_email_identity(Some(left.email.as_str()));
     let right_email = normalize_email_identity(Some(right.email.as_str()));
     let left_refresh = normalize_token_identity(left.refresh_token.as_deref());
     let right_refresh = normalize_token_identity(right.refresh_token.as_deref());
-    let left_profile_arn = normalize_identity(account_profile_arn(left).as_deref());
-    let right_profile_arn = normalize_identity(account_profile_arn(right).as_deref());
 
     let user_conflict = matches!(
         (left_user.as_ref(), right_user.as_ref()),
@@ -479,12 +422,8 @@ fn accounts_are_duplicates(left: &KiroAccount, right: &KiroAccount) -> bool {
         (left_refresh.as_ref(), right_refresh.as_ref()),
         (Some(left), Some(right)) if left == right
     );
-    let profile_match = matches!(
-        (left_profile_arn.as_ref(), right_profile_arn.as_ref()),
-        (Some(left), Some(right)) if left == right
-    );
 
-    user_match || email_match || refresh_match || profile_match
+    user_match || email_match || refresh_match
 }
 
 fn merge_string_list(
@@ -774,16 +713,16 @@ pub fn upsert_account(payload: KiroOAuthCompletePayload) -> Result<KiroAccount, 
         .map_err(|_| "获取 Kiro 账号锁失败".to_string())?;
     let now = now_ts();
     let mut index = load_account_index();
-    let incoming_profile_arn = normalize_identity(payload_profile_arn(&payload).as_deref());
-    let incoming_user_id = normalize_identity(payload.user_id.as_deref());
+    let incoming_user_id = normalize_user_identity(payload.user_id.as_deref());
     let incoming_email = normalize_email_identity(Some(payload.email.as_str()));
     let incoming_refresh_token = normalize_token_identity(payload.refresh_token.as_deref());
+    let incoming_access_token = normalize_token_identity(Some(payload.access_token.as_str()));
 
     let identity_seed = incoming_user_id
         .clone()
         .or_else(|| incoming_email.clone())
         .or_else(|| incoming_refresh_token.clone())
-        .or_else(|| incoming_profile_arn.clone())
+        .or_else(|| incoming_access_token.clone())
         .unwrap_or_else(|| "kiro_user".to_string())
         .to_lowercase();
     let generated_id = format!("kiro_{:x}", md5::compute(identity_seed.as_bytes()));
@@ -793,16 +732,13 @@ pub fn upsert_account(payload: KiroOAuthCompletePayload) -> Result<KiroAccount, 
         .iter()
         .filter_map(|item| load_account(&item.id))
         .find(|account| {
-            let existing_profile_arn = normalize_identity(account_profile_arn(account).as_deref());
-            let existing_user = normalize_identity(account.user_id.as_deref());
+            let existing_user = normalize_user_identity(account.user_id.as_deref());
             let existing_email = normalize_email_identity(Some(account.email.as_str()));
             let existing_refresh_token = normalize_token_identity(account.refresh_token.as_deref());
             account_matches_payload_identity(
-                existing_profile_arn.as_ref(),
                 existing_user.as_ref(),
                 existing_email.as_ref(),
                 existing_refresh_token.as_ref(),
-                incoming_profile_arn.as_ref(),
                 incoming_user_id.as_ref(),
                 incoming_email.as_ref(),
                 incoming_refresh_token.as_ref(),
@@ -1265,9 +1201,7 @@ fn average_quota_percentage(metrics: &[(String, i32)]) -> f64 {
 
 pub(crate) fn resolve_current_account_id(accounts: &[KiroAccount]) -> Option<String> {
     if let Ok(local_payload) = crate::modules::kiro_oauth::build_payload_from_local_files() {
-        let incoming_profile_arn =
-            normalize_identity(payload_profile_arn(&local_payload).as_deref());
-        let incoming_user_id = normalize_identity(local_payload.user_id.as_deref());
+        let incoming_user_id = normalize_user_identity(local_payload.user_id.as_deref());
         let incoming_email = normalize_email_identity(Some(local_payload.email.as_str()));
         let incoming_refresh_token =
             normalize_token_identity(local_payload.refresh_token.as_deref());
@@ -1275,18 +1209,14 @@ pub(crate) fn resolve_current_account_id(accounts: &[KiroAccount]) -> Option<Str
         if let Some(account_id) = accounts
             .iter()
             .find(|account| {
-                let existing_profile_arn =
-                    normalize_identity(account_profile_arn(account).as_deref());
-                let existing_user = normalize_identity(account.user_id.as_deref());
+                let existing_user = normalize_user_identity(account.user_id.as_deref());
                 let existing_email = normalize_email_identity(Some(account.email.as_str()));
                 let existing_refresh_token =
                     normalize_token_identity(account.refresh_token.as_deref());
                 account_matches_payload_identity(
-                    existing_profile_arn.as_ref(),
                     existing_user.as_ref(),
                     existing_email.as_ref(),
                     existing_refresh_token.as_ref(),
-                    incoming_profile_arn.as_ref(),
                     incoming_user_id.as_ref(),
                     incoming_email.as_ref(),
                     incoming_refresh_token.as_ref(),

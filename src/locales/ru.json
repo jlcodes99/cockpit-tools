@@ -14,6 +14,7 @@
     "close": "Закрыть",
     "open": "Открыть",
     "copy": "Копировать",
+    "copied": "Скопировано",
     "add": "Добавить",
     "enable": "Включить",
     "disable": "Отключить",
@@ -227,7 +228,7 @@
     "selectAll": "Выбрать всё"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "Аккаунты",
     "wakeup": "Задачи пробуждения",
     "fingerprints": "Отпечатки",
@@ -365,7 +366,8 @@
       "instance": "Инстанс",
       "email": "Аккаунт",
       "quota": "Статус квоты",
-      "actions": "Действия"
+      "actions": "Действия",
+      "speed": "Скорость"
     },
     "empty": {
       "title": "Нет инстансов",
@@ -443,7 +445,9 @@
           "contextWindowInvalid": "Контекстное окно должно быть целым числом больше 0.",
           "autoCompactInvalid": "Предел автокомпактности должен быть целым числом больше 0."
         }
-      }
+      },
+      "appSpeed": "Скорость",
+      "appSpeedDesc": "Записывает выбранную скорость перед запуском Codex"
     },
     "quota": {
       "unbound": "Аккаунт не привязан",
@@ -464,7 +468,8 @@
       "allAlreadyRunning": "Все инстансы уже запущены",
       "noneRunning": "Работающих инстансов не найдено",
       "syncThreadsNeedTwo": "Для синхронизации тредов требуется как минимум два экземпляра",
-      "launchPrepared": "Команда запуска готова"
+      "launchPrepared": "Команда запуска готова",
+      "speedUpdated": "Скорость обновлена"
     },
     "runningDialog": {
       "title": "Инстанс уже запущен",
@@ -493,9 +498,9 @@
       },
       "safe": {
         "title": "Безопасный перезапуск (рекомендуется)",
-        "principle": "Отправляет сигнал SIGTERM всем процессам Antigravity, запрашивая у приложения сохранение данных и выход, затем запускает целевой инстанс (при необходимости принудительно завершает работу).",
-        "commandMac": "macOS/Linux: kill -15 <pid> (все процессы Antigravity)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (все процессы Antigravity)",
+        "principle": "Отправляет сигнал SIGTERM всем процессам Antigravity IDE, запрашивая у приложения сохранение данных и выход, затем запускает целевой инстанс (при необходимости принудительно завершает работу).",
+        "commandMac": "macOS/Linux: kill -15 <pid> (все процессы Antigravity IDE)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (все процессы Antigravity IDE)",
         "pros": "Ближе к обычному завершению работы, меньше вероятность появления предупреждений об ошибках, данные более защищены.",
         "cons": "Поддерживает только глобальный перезапуск всех инстансов."
       },
@@ -559,7 +564,7 @@
       "defaultTerminalDesc": "Терминал, используемый при открытии Gemini CLI",
       "terminalSystem": "Системный по умолчанию",
       "accountManagement": "Управление аккаунтами",
-      "autoRefresh": "Автообновление квоты Antigravity",
+      "autoRefresh": "Автообновление квоты Antigravity IDE",
       "codexAutoRefresh": "Автообновление квоты Codex",
       "autoRefreshDesc": "Частота фонового обновления",
       "codexAutoRefreshDesc": "Частота фонового обновления",
@@ -583,6 +588,10 @@
       "hideDockIconDesc": "Независимо управляет отображением значка Dock, без привязки к поведению сворачивания окна",
       "hideDockIconOff": "Нет (Показывать значок Dock)",
       "hideDockIconOn": "Да (Скрывать значок Dock)",
+      "trayIconStyle": "Стиль значка в строке меню (только macOS)",
+      "trayIconStyleDesc": "Выберите системный монохромный значок или исходный цветной значок приложения",
+      "trayIconStyleTemplate": "Монохромный значок",
+      "trayIconStyleColor": "Цветной значок",
       "floatingCardStartup": "Показывать плавающую карточку при запуске",
       "floatingCardStartupDesc": "Автоматически показывать плавающую карточку аккаунта после запуска приложения",
       "floatingCardAlwaysOnTop": "Держать плавающую карточку поверх остальных по умолчанию",
@@ -592,8 +601,8 @@
       "floatingCardShowNowAction": "Показать плавающую карточку",
       "dataDir": "Каталог данных",
       "dataDirDesc": "Место хранения аккаунтов и конфигурационных файлов.",
-      "fpDir": "Хранилище Antigravity",
-      "fpDirDesc": "Место хранения файлов данных Antigravity.",
+      "fpDir": "Хранилище Antigravity IDE",
+      "fpDirDesc": "Место хранения файлов данных Antigravity IDE.",
       "opencodeTitle": "Интеграция OpenCode",
       "opencodeRestart": "Перезапускать OpenCode при переключении Codex",
       "opencodeRestartDesc": "Синхронизировать данные аккаунта Codex в OpenCode",
@@ -614,10 +623,10 @@
       "vscodeAppPathPlaceholder": "Путь по умолчанию",
       "vscodePathSelect": "Выбрать",
       "vscodePathReset": "Сбросить по умолчанию",
-      "antigravityAppPath": "Путь к приложению Antigravity",
-      "antigravityTitle": "Запуск Antigravity",
+      "antigravityAppPath": "Путь к приложению Antigravity IDE",
+      "antigravityTitle": "Запуск Antigravity IDE",
       "commonTitle": "Общие",
-      "antigravitySettingsTitle": "Настройки Antigravity",
+      "antigravitySettingsTitle": "Настройки Antigravity IDE",
       "codexSettingsTitle": "Настройки Codex",
       "githubCopilotSettingsTitle": "Настройки GitHub Copilot",
       "ghcpAutoRefresh": "Автообновление квоты GitHub Copilot",
@@ -690,14 +699,14 @@
       "sideNavLayoutOriginal": "Оригинальный макет",
       "sideNavLayoutClassic": "Классический макет",
       "antigravityDualSwitchNoRestart": "Двойное переключение без перезапуска",
-      "antigravityDualSwitchNoRestartDesc": "При переключении аккаунта локальная запись данных и плавное переключение через расширение выполняются в одном потоке без перезапуска Antigravity.",
+      "antigravityDualSwitchNoRestartDesc": "При переключении аккаунта локальная запись данных и плавное переключение через расширение выполняются в одном потоке без перезапуска Antigravity IDE.",
       "appAutoLaunch": "Запускать Cockpit Tools при входе в систему",
       "appAutoLaunchDesc": "Автоматически запускать приложение после входа в систему",
       "startupWakeupDisabled": "Отключено",
       "startupWakeupImmediate": "Разбудить сразу",
       "startupWakeupDelayed": "Разбудить с задержкой",
-      "antigravityStartupWakeup": "Выполнять пробуждение Antigravity после запуска",
-      "antigravityStartupWakeupDesc": "После запуска приложения один раз выполнять включенные задачи пробуждения Antigravity",
+      "antigravityStartupWakeup": "Выполнять пробуждение Antigravity IDE после запуска",
+      "antigravityStartupWakeupDesc": "После запуска приложения один раз выполнять включенные задачи пробуждения Antigravity IDE",
       "codexStartupWakeup": "Выполнять пробуждение Codex после запуска",
       "codexStartupWakeupDesc": "После запуска приложения один раз выполнять включенные задачи пробуждения Codex",
       "currentAccountRefreshTitle": "Обновление текущего аккаунта",
@@ -741,7 +750,14 @@
       "codexSpecifiedAppPath": "Путь к указанному приложению",
       "codexSpecifiedAppPathDesc": "Путь приложения, которое перезапускается вместе с переключением Codex.",
       "codexSpecifiedAppPathPlaceholder": "Например /Applications/Host.app",
-      "codexSpecifiedAppPathClear": "Очистить"
+      "codexSpecifiedAppPathClear": "Очистить",
+      "codexAppSpeed": "Скорость Codex",
+      "codexAppSpeedDesc": "Сохраняет скорость запуска Codex и записывает её перед каждым запуском из этого приложения.",
+      "codexAppSpeedStandard": "Стандарт",
+      "codexAppSpeedFast": "Быстро",
+      "codexAppSpeedLaunch": "Перезапустить Codex",
+      "codexAppSpeedSaveFailed": "Не удалось сохранить скорость Codex: {{error}}",
+      "codexAppSpeedLaunchFailed": "Не удалось перезапустить Codex: {{error}}"
     },
     "network": {
       "apiTitle": "API антигравитационной кабины",
@@ -925,7 +941,7 @@
   },
   "accounts": {
     "title": "Управление аккаунтами",
-    "subtitle": "Управляйте списком ваших аккаунтов Antigravity.",
+    "subtitle": "Управляйте списком ваших аккаунтов Antigravity IDE.",
     "total": "Аккаунтов: {{count}}",
     "search": "Поиск аккаунтов...",
     "addAccount": "Добавить аккаунт",
@@ -1179,7 +1195,7 @@
     "switching": "Переключение...",
     "fingerprint": "Отпечаток",
     "bound": "Привязан",
-    "brandTitle": "Управление аккаунтом Antigravity"
+    "brandTitle": "Управление аккаунтом Antigravity IDE"
   },
   "fingerprints": {
     "title": "Отпечатки устройства",
@@ -1281,7 +1297,7 @@
   "modals": {
     "addAccount": {
       "title": "Добавить аккаунт",
-      "desc": "Добавьте аккаунт Antigravity через Google OAuth",
+      "desc": "Добавьте аккаунт Antigravity IDE через Google OAuth",
       "loginBtn": "Вход через Google",
       "waiting": "Ожидание..."
     },
@@ -1289,7 +1305,7 @@
       "title": "Импорт аккаунтов",
       "desc": "Выберите способ импорта",
       "local": "Импорт локального аккаунта",
-      "localDesc": "Импортировать текущий аккаунт из клиента Antigravity",
+      "localDesc": "Импортировать текущий аккаунт из клиента Antigravity IDE",
       "tools": "Импорт из Antigravity Tools",
       "toolsDesc": "Импорт из директории ~/.antigravity_tools/",
       "jsonDivider": "или вставьте JSON",
@@ -1302,7 +1318,7 @@
       "fromExtension": "Импорт из плагина",
       "syncBadge": "Синхронизировать аккаунты плагина Antigravity Cockpit",
       "fromLocalDB": "Импорт из локальной БД",
-      "localDBDesc": "Чтение аккаунтов из клиента Antigravity на этом устройстве",
+      "localDBDesc": "Чтение аккаунтов из клиента Antigravity IDE на этом устройстве",
       "toolsDescMigrate": "Миграция аккаунтов из ~/.antigravity_tools/",
       "importingTools": "Импорт из Antigravity Tools...",
       "importingLocal": "Импорт локального аккаунта...",
@@ -1347,6 +1363,7 @@
     "batchDeleteConfirm": "Вы уверены, что хотите удалить {{count}} выбранных аккаунтов?",
     "switched": "Переключено на {{email}}",
     "switchFailed": "Ошибка переключения: {{error}}",
+    "antigravityLegacyUnsupported": "Antigravity 2.0.0 и новее здесь не поддерживаются. Выберите версию Antigravity ниже 2.0.0 или используйте Antigravity IDE.",
     "importSuccess": "Успешно импортировано {{count}} аккаунтов",
     "importLocalSuccess": "Аккаунт успешно импортирован: {{email}}",
     "importFailed": "Ошибка импорта: {{error}}",
@@ -1385,7 +1402,7 @@
       },
       "runHint": {
         "title": "Пояснение к проверке",
-        "line1": "«Проверить сейчас» отправляет минимальный чат-запрос, имитируя клиент Antigravity через локальный шлюз и официальный протокол Language Server.",
+        "line1": "«Проверить сейчас» отправляет минимальный чат-запрос, имитируя клиент Antigravity IDE через локальный шлюз и официальный протокол Language Server.",
         "line2": "Во время проверки расходуется небольшое количество токенов (обычно один короткий диалог). Фактический расход зависит от модели и политики аккаунта.",
         "line3": "Эта операция не изменяет настройки задач пробуждения. Она только проверяет доступность аккаунта и записывает историю проверки.",
         "line4": "Если возвращена ошибка 403, необходимо пройти верификацию аккаунта или подать апелляцию; результат будет содержать адрес и быстрые действия."
@@ -1516,6 +1533,7 @@
       "modeScheduled": "📅 По расписанию",
       "modeCrontab": "🧩 Кронтаб",
       "modeQuotaReset": "🔄 Сброс квоты",
+      "antigravityVersion": "Версия Antigravity IDE",
       "modelSelect": "Выбор модели",
       "modelHint": "В одной группе квоты рекомендуется выбрать один модель. Несколько моделей запускаются по очереди.",
       "modelsEmpty": "Нет рекомендуемых моделей",
@@ -1595,6 +1613,7 @@
     "installFailed": "Системная установка не удалась. Повторите попытку позже или скачайте пакет вручную.",
     "restartRequiredAfterInstall": "Обновление установлено. Перезапустите приложение вручную, чтобы завершить переключение.",
     "stoppingApiService": "Остановка API-сервиса...",
+    "stopApiServiceFailed": "Не удалось остановить службу API. Сначала отключите её и повторите попытку.",
     "skipThisVersion": "Пропустить эту версию",
     "skipFailed": "Не удалось пропустить это обновление: {{error}}"
   },
@@ -1675,6 +1694,11 @@
     },
     "oauth": {
       "desc": "Нажмите ниже и завершите авторизацию OpenAI в браузере",
+      "trialGuideTitle": "Советы для пробной регистрации",
+      "trialGuideDesc": "Для нового аккаунта лучше использовать Gmail с долгосрочным доступом: так проще сохранить аккаунт и пройти последующую проверку.",
+      "trialGuideAliasDesc": "Один основной Gmail может подготовить до 5 алиасов для разделения регистраций ChatGPT; используйте их по правилам целевого сервиса.",
+      "trialGuideLink": "Открыть пробный гид",
+      "gmailAliasLink": "Создать алиас Gmail",
       "preparing": "Подготовка ссылки авторизации...",
       "exchanging": "Обмен токена...",
       "portInUse": "Порт {{port}} уже занят. Закройте приложение, которое его использует, и попробуйте снова.",
@@ -1684,7 +1708,8 @@
       "portStillInUse": "Порт {{port}} все еще занят.",
       "portInUseAction": "Закрыть порт и повторить",
       "timeout": "Истекло время аутентификации. Нажмите",
-      "timeoutRetry": "Обновить ссылку аутентификации"
+      "timeoutRetry": "Обновить ссылку аутентификации",
+      "reauthEmailLabel": "Аккаунт для повторной авторизации"
     },
     "token": {
       "desc": "Вставьте auth.json, JSON аккаунта или refresh_token.",
@@ -1709,12 +1734,21 @@
       "title": "API-сервис",
       "accountCount": "{{count}} аккаунтов",
       "baseUrl": "Адрес",
+      "addressKind": "Тип адреса",
+      "addressLocal": "Локально",
+      "addressLan": "Локальная сеть",
+      "accessScopeLabel": "Область доступа",
+      "accessScopeLocalhost": "Только локально",
+      "accessScopeLan": "Локальная сеть",
+      "accessScopeLocalhostShort": "Только локально",
+      "accessScopeLanShort": "Локально+сеть",
+      "accessScopeSaveSuccess": "Область доступа API-сервиса обновлена",
       "apiKey": "Ключ",
       "statusRunning": "Запущено",
       "statusStopped": "Остановлено",
       "statusDisabled": "Отключено",
       "emptyMembers": "В коллекции пока нет аккаунтов",
-      "footerHint": "Слушает локально и в LAN",
+      "footerHint": "Область доступа: {{scope}}",
       "manageAccounts": "Управлять аккаунтами",
       "rotateKey": "Обновить ключ",
       "rotateConfirmMessage": "После сброса текущий ключ API-сервиса сразу перестанет работать, а выполняющиеся запросы могут стать недоступны. Продолжить?",
@@ -1746,10 +1780,29 @@
         "manageMembers": "Управление участниками"
       },
       "entryAction": "Добавить в API-сервис",
-      "testAction": "Проверить API-сервис",
-      "testSuccess": "Проверка API-сервиса прошла успешно ({{count}} моделей)",
-      "testTimeout": "Время проверки истекло. Убедитесь, что локальный сервис запущен.",
+      "testAction": "Тест",
+      "testDialogTitle": "Тест API-сервиса",
+      "testDialogDesc": "Отправляет реальный запрос через Codex CLI, чтобы проверить локальный сервис, ключ и ответ upstream.",
+      "testProgressTitle": "Идёт тест сервиса",
+      "testProgressDesc": "Отправляется реальный запрос к локальному API-сервису. Подождите.",
+      "testOutputTitle": "Возвращённый результат",
+      "testResultTitle": "Результат проверки сервиса",
+      "testSuccess": "Проверка сервиса успешна: локальный сервис, ключ и ответ upstream в порядке ({{model}}, {{latency}}). Если Codex всё ещё возвращает 502, проверьте Base URL, API Key или среду запуска Codex.",
+      "testFailureStage": "Этап проверки",
+      "testFailureCause": "Причина сбоя",
+      "testFailureSuggestion": "Рекомендуемое действие",
+      "testFailureStatus": "HTTP-статус",
+      "testFailureModel": "Модель проверки",
+      "testFailureDetail": "Детали диагностики",
+      "testFailureCliOutput": "Вывод CLI",
+      "testFailureGatewayOutput": "Ответ шлюза",
+      "testTimeout": "Проверка реальным запросом превысила время ожидания. Проверьте локальный сервис, прокси или upstream-сеть.",
       "testUnavailable": "Текущий URL API-сервиса недоступен",
+      "testConnectFailed": "Не удалось подключиться к {{url}}. Убедитесь, что API-сервис запущен, порт не изменён и ничего его не блокирует.",
+      "testAuthFailed": "Сервис доступен, но аутентификация не прошла: {{detail}}. Проверьте ключ API-сервиса или состояние входа в аккаунт.",
+      "testServiceUnavailable": "Сервис доступен, но сейчас недоступен: {{detail}}. Проверьте, включён ли сервис, не пуста ли коллекция аккаунтов и доступны ли аккаунты.",
+      "testRateLimited": "Сервис доступен, но upstream ограничен или квота исчерпана: {{detail}}.",
+      "testHttpFailed": "Сервис доступен, но запрос вернул HTTP {{status}}: {{detail}}.",
       "activateAction": "Запустить API-сервис",
       "activateSuccess": "Переключено на API-сервис",
       "dashboardAction": "Панель сервиса",
@@ -1764,8 +1817,8 @@
       "statsTitle": "Итого",
       "accountStatsTitle": "По аккаунтам",
       "statsEmpty": "Статистики пока нет",
-      "summaryMeta": "{{count}} аккаунтов · Локально/LAN",
-      "summaryMetaUnconfigured": "Не настроено · Локально/LAN",
+      "summaryMeta": "{{count}} аккаунтов · {{scope}}",
+      "summaryMetaUnconfigured": "Не настроено · {{scope}}",
       "memberTitle": "Участники коллекции",
       "stats": {
         "requests": "Запросы",
@@ -1806,7 +1859,8 @@
         "quotaLowFirst": "Сначала низкая квота",
         "planHighFirst": "Сначала высокий тариф",
         "planLowFirst": "Сначала низкий тариф",
-        "expirySoonFirst": "Скорое истечение сначала"
+        "expirySoonFirst": "Скорое истечение сначала",
+        "custom": "Настраиваемая"
       },
       "statusUnconfigured": "Не настроено",
       "expandDetails": "Развернуть",
@@ -1844,7 +1898,33 @@
         "viewFull": "Показать полную статистику",
         "modalTitle": "Пул квот сервиса API",
         "empty": "Статистики квот пока нет"
-      }
+      },
+      "oauthBinding": {
+        "desc": "Необязательно. Без привязки API-сервис работает по прежней логике API Key; после привязки вход использует OAuth-аккаунт, а Provider — настройки API-сервиса.",
+        "currentService": "API-сервис: {{name}}"
+      },
+      "customRoutingEdit": "Изменить настраиваемую маршрутизацию",
+      "customRoutingTitle": "Настраиваемая маршрутизация",
+      "customRoutingDesc": "Задайте приоритет и вес для каждой учетной записи, чтобы управлять порядком выбора и распределением нагрузки на одном уровне.",
+      "customRoutingPriorityTitle": "Приоритет",
+      "customRoutingPriorityDesc": "Более высокие значения выбираются раньше; учетные записи с низким приоритетом пробуются только при недоступности более высоких.",
+      "customRoutingWeightTitle": "Вес",
+      "customRoutingWeightDesc": "Используется для балансировки нагрузки при одинаковом приоритете. Чем выше вес, тем больше запросов.",
+      "customRoutingSearch": "Поиск по почте, тарифу или ID учетной записи",
+      "customRoutingSelected": "Выбрано {{count}}",
+      "customRoutingPriorityShort": "Приоритет",
+      "customRoutingWeightShort": "Вес",
+      "customRoutingApplyBatch": "Применить к выбранным",
+      "customRoutingReset": "Сбросить",
+      "customRoutingAccountColumn": "Учетная запись",
+      "customRoutingQuotaColumn": "Лимит",
+      "customRoutingEmpty": "В текущей коллекции API-сервиса нет настраиваемых учетных записей",
+      "customRoutingSave": "Сохранить маршрутизацию",
+      "customRoutingSaveSuccess": "Настраиваемая маршрутизация API-сервиса обновлена",
+      "upstreamProxyLabel": "URL API-прокси",
+      "upstreamProxySaveSuccess": "URL API-прокси обновлён",
+      "upstreamProxyUrlPlaceholder": "Пусто = глобальный прокси",
+      "upstreamProxySaveAction": "Сохранить прокси"
     },
     "local": {
       "desc": "Импортировать текущий аккаунт из ~/.codex/auth.json",
@@ -2114,7 +2194,8 @@
         "collapse": "Свернуть",
         "repairVisibility": "Исправить видимость",
         "restoreSessions": "Восстановить сессии",
-        "copySessionId": "Копировать ID сессии"
+        "copySessionId": "Копировать ID сессии",
+        "copyToInstance": "Копировать в экземпляр"
       },
       "confirm": {
         "title": "Переместить в корзину",
@@ -2147,6 +2228,15 @@
         "emptyTitle": "Корзина пуста",
         "emptyDesc": "Сессии, перемещённые в корзину, появятся здесь.",
         "restoreAction": "Восстановить выбранные сессии"
+      },
+      "targetModal": {
+        "title": "Копировать в экземпляр",
+        "hint": "Копирует выбранные сеансы в целевой экземпляр. Сеансы с тем же ID, которые уже есть там, пропускаются. Запущенные целевые экземпляры могут потребовать перезапуска, прежде чем они появятся.",
+        "targetInstance": "Целевой экземпляр",
+        "pickTarget": "Выберите целевой экземпляр",
+        "selectedCount": "Выбрано сеансов: {{count}}",
+        "existingCount": "Уже в цели: {{count}}",
+        "confirm": "Копировать сеансы"
       }
     },
     "api": {
@@ -2238,6 +2328,24 @@
         "cockpit_api": {
           "name": "Cockpit Api"
         }
+      },
+      "oauthBinding": {
+        "label": "Связь OAuth",
+        "unbound": "Не связано",
+        "action": "Связать OAuth",
+        "actionShort": "Связать",
+        "title": "Связать OAuth-аккаунт",
+        "desc": "Необязательно. Без привязки этот аккаунт переключается по прежней логике API Key; после привязки вход использует OAuth-аккаунт, а Provider — настройки этого API Key аккаунта.",
+        "currentAccount": "API Key аккаунт: {{name}}",
+        "selectLabel": "Выберите OAuth-аккаунт",
+        "empty": "OAuth-аккаунтов пока нет. Сначала добавьте аккаунт с OAuth-авторизацией.",
+        "validationRequired": "Выберите OAuth-аккаунт",
+        "saveSuccess": "Связь OAuth обновлена",
+        "saveFailed": "Не удалось связать OAuth: {{error}}",
+        "switchRequiresBinding": "Сначала свяжите OAuth-аккаунт",
+        "clearAction": "Отвязать",
+        "clearSuccess": "Привязка OAuth удалена.",
+        "clearFailed": "Не удалось удалить привязку OAuth: {{error}}"
       }
     },
     "modelProviders": {
@@ -2412,6 +2520,15 @@
       "noStats": "Статистики пока нет",
       "refreshHint": "Нажмите обновить, чтобы синхронизировать статистику этого API-ключа.",
       "dailyStats": "Статистика по дням"
+    },
+    "speed": {
+      "title": "Скорость",
+      "standard": "Стандарт",
+      "standardDesc": "Скорость по умолчанию, обычный расход",
+      "fast": "Быстрая",
+      "fastDesc": "Скорость 1,5x, расход выше",
+      "saveSuccess": "Скорость обновлена",
+      "saveFailed": "Не удалось сохранить скорость: {{error}}"
     }
   },
   "githubCopilot": {
@@ -2464,23 +2581,31 @@
       "storage": "Область данных: локальный импорт читает сессии входа GitHub в VS Code, а переключение обновляет эти записи; OAuth, импорт токена, проверка локального импорта и обновление квот вызывают официальные API GitHub с необходимыми полями аутентификации. state.vscdb и системные ключи не загружаются."
     }
   },
+  "runtime": {
+    "installedVersion": {
+      "loading": "Определение установленной версии",
+      "missing": "Установленная версия не обнаружена",
+      "detecting": "Определение",
+      "notFound": "Версия не обнаружена"
+    }
+  },
   "dashboard": {
     "title": "Панель аккаунтов",
     "summary": {
       "label": "Обзор",
       "title": "Сводка аккаунтов",
-      "desc": "Antigravity и Codex одним взглядом"
+      "desc": "Antigravity IDE и Codex одним взглядом"
     },
     "stats": {
-      "antigravity": "Аккаунты Antigravity",
+      "antigravity": "Аккаунты Antigravity IDE",
       "codex": "Аккаунты Codex",
-      "currentAntigravity": "Текущий Antigravity",
+      "currentAntigravity": "Текущий Antigravity IDE",
       "currentCodex": "Текущий Codex",
       "providers": "Провайдеры",
       "totalAccounts": "Всего аккаунтов"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "Распределение планов",
@@ -2495,7 +2620,7 @@
     },
     "emptyAccount": "Нет аккаунта",
     "sections": {
-      "antigravity": "Аккаунты Antigravity",
+      "antigravity": "Аккаунты Antigravity IDE",
       "codex": "Аккаунты Codex"
     },
     "actions": {
@@ -2528,7 +2653,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Настройки Antigravity",
+      "title": "Настройки Antigravity IDE",
       "appPath": "Путь к приложению"
     },
     "codex": {
@@ -2564,6 +2689,18 @@
           "contextWindowInvalid": "Контекстное окно должно быть целым числом больше 0.",
           "autoCompactInvalid": "Предел автокомпактности должен быть целым числом больше 0."
         }
+      },
+      "appSpeed": {
+        "title": "Скорость Codex",
+        "desc": "Сохранено как скорость запуска; записывается перед стартом Codex.",
+        "standard": "Стандарт",
+        "fast": "Быстро",
+        "launch": "Перезапуск",
+        "loadFailed": "Не удалось загрузить скорость Codex: {{error}}",
+        "saveSuccess": "Скорость запуска Codex сохранена.",
+        "saveFailed": "Не удалось сохранить скорость Codex: {{error}}",
+        "launchSuccess": "Codex перезапущен с сохраненной скоростью.",
+        "launchFailed": "Не удалось перезапустить Codex: {{error}}"
       }
     },
     "githubCopilot": {
@@ -2617,7 +2754,9 @@
     "cursorRefreshInterval": "Автообновление квоты",
     "gemini": {
       "title": "Настройки Gemini Cli",
-      "appPath": "Путь Gemini Cli"
+      "appPath": "Путь Gemini Cli",
+      "syncWsl": "Синхронизировать конфигурацию WSL",
+      "syncWslDesc": "Автоматически перезаписывать конфигурацию .gemini в WSL при переключении аккаунта"
     },
     "geminiRefreshInterval": "Автоматическое обновление квоты",
     "codebuddy": {
@@ -2949,7 +3088,7 @@
     "actions": {
       "collapseAll": "Свернуть всё",
       "expandAll": "Развернуть всё",
-      "goAntigravity": "Перейти в Antigravity",
+      "goAntigravity": "Перейти в Antigravity IDE",
       "goCodex": "Перейти в Codex",
       "goDashboard": "Перейти в панель",
       "goFingerprints": "Перейти к отпечаткам устройства",
@@ -2964,25 +3103,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "Перед рискованными или массовыми действиями в Управление аккаунтами Antigravity сделайте резервную копию."
+        "0": "Перед рискованными или массовыми действиями в Управление аккаунтами Antigravity IDE сделайте резервную копию."
       },
       "keywords": {
-        "0": "Управление аккаунтами Antigravity",
+        "0": "Управление аккаунтами Antigravity IDE",
         "1": "гайд",
         "2": "поток",
         "3": "аккаунт"
       },
       "outcomes": {
-        "0": "Поймите, какие задачи решает Управление аккаунтами Antigravity.",
-        "1": "Используйте рекомендованный поток в Управление аккаунтами Antigravity, чтобы снизить ошибки."
+        "0": "Поймите, какие задачи решает Управление аккаунтами Antigravity IDE.",
+        "1": "Используйте рекомендованный поток в Управление аккаунтами Antigravity IDE, чтобы снизить ошибки."
       },
       "steps": {
-        "0": "Откройте страницу Управление аккаунтами Antigravity.",
-        "1": "Завершите базовую настройку и необходимые привязки в Управление аккаунтами Antigravity.",
-        "2": "Выполните одно ручное действие в Управление аккаунтами Antigravity и проверьте результат."
+        "0": "Откройте страницу Управление аккаунтами Antigravity IDE.",
+        "1": "Завершите базовую настройку и необходимые привязки в Управление аккаунтами Antigravity IDE.",
+        "2": "Выполните одно ручное действие в Управление аккаунтами Antigravity IDE и проверьте результат."
       },
-      "summary": "Этот раздел объясняет использование Управление аккаунтами Antigravity в повседневном процессе.",
-      "title": "Управление аккаунтами Antigravity"
+      "summary": "Этот раздел объясняет использование Управление аккаунтами Antigravity IDE в повседневном процессе.",
+      "title": "Управление аккаунтами Antigravity IDE"
     },
     "blocks": {
       "cautions": "Частые ошибки / замечания",
@@ -3835,5 +3974,14 @@
       "warn": "Предупр.",
       "error": "Ошибка"
     }
+  },
+  "mfaQuick": {
+    "title": "Код 2FA",
+    "selectLabel": "Выберите ключ 2FA",
+    "unnamedSecret": "Ключ без имени",
+    "invalidCode": "Недействительный ключ",
+    "copyCode": "Копировать код",
+    "copied": "Скопировано",
+    "refreshIn": "{{time}} с"
   }
 }

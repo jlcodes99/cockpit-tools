@@ -10,6 +10,7 @@ import {
   Database,
   Copy,
   Check,
+  ChevronLeft,
   KeyRound,
   Play,
   RotateCw,
@@ -27,6 +28,7 @@ import {
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
+import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import {
@@ -1382,6 +1384,7 @@ export function TraeAccountsPage() {
             <div className="modal-overlay" onClick={closeAddModal}>
               <div className="modal-content ghcp-add-modal" onClick={(event) => event.stopPropagation()}>
                 <div className="modal-header">
+                  <button className="btn btn-secondary icon-only" onClick={closeAddModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
                   <h2>{t('trae.addModal.title')}</h2>
                   <button
                     className="modal-close"
@@ -1417,6 +1420,7 @@ export function TraeAccountsPage() {
                 </div>
 
                 <div className="modal-body">
+                  <MfaQuickCodeSelect />
                   {addTab === 'oauth' ? (
                     <div className="add-section">
                       <p className="section-desc">

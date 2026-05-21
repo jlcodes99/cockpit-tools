@@ -100,6 +100,9 @@ pub struct UserConfig {
     /// Gemini 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_gemini_auto_refresh")]
     pub gemini_auto_refresh_minutes: i32,
+    /// Gemini 切号时是否同步覆盖 WSL 配置 (Windows Only)
+    #[serde(default = "default_gemini_sync_wsl")]
+    pub gemini_sync_wsl: bool,
     /// CodeBuddy 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_codebuddy_auto_refresh")]
     pub codebuddy_auto_refresh_minutes: i32,
@@ -133,10 +136,10 @@ pub struct UserConfig {
     /// 是否启用应用开机自启动
     #[serde(default = "default_app_auto_launch_enabled")]
     pub app_auto_launch_enabled: bool,
-    /// 是否在应用启动后触发 Antigravity 唤醒
+    /// 是否在应用启动后触发 Antigravity IDE 唤醒
     #[serde(default = "default_antigravity_startup_wakeup_enabled")]
     pub antigravity_startup_wakeup_enabled: bool,
-    /// Antigravity 启动后唤醒延时（秒），0 表示立即
+    /// Antigravity IDE 启动后唤醒延时（秒），0 表示立即
     #[serde(default = "default_antigravity_startup_wakeup_delay_seconds")]
     pub antigravity_startup_wakeup_delay_seconds: i32,
     /// 是否在应用启动后触发 Codex 唤醒
@@ -172,7 +175,7 @@ pub struct UserConfig {
     /// OpenCode 启动路径（为空则使用默认路径）
     #[serde(default = "default_opencode_app_path")]
     pub opencode_app_path: String,
-    /// Antigravity 启动路径（为空则使用默认路径）
+    /// Antigravity IDE 启动路径（为空则使用默认路径）
     #[serde(default = "default_antigravity_app_path")]
     pub antigravity_app_path: String,
     /// Codex 启动路径（为空则使用默认路径）
@@ -444,6 +447,9 @@ fn default_cursor_auto_refresh() -> i32 {
 } // 默认 10 分钟
 fn default_gemini_auto_refresh() -> i32 {
     10
+}
+fn default_gemini_sync_wsl() -> bool {
+    true
 }
 fn default_codebuddy_auto_refresh() -> i32 {
     10
@@ -725,6 +731,7 @@ impl Default for UserConfig {
             kiro_auto_refresh_minutes: default_kiro_auto_refresh(),
             cursor_auto_refresh_minutes: default_cursor_auto_refresh(),
             gemini_auto_refresh_minutes: default_gemini_auto_refresh(),
+            gemini_sync_wsl: default_gemini_sync_wsl(),
             codebuddy_auto_refresh_minutes: default_codebuddy_auto_refresh(),
             codebuddy_cn_auto_refresh_minutes: default_codebuddy_cn_auto_refresh(),
             workbuddy_auto_refresh_minutes: default_workbuddy_auto_refresh(),
@@ -1018,6 +1025,13 @@ pub fn load_user_config() -> Result<UserConfig, String> {
             obj.insert(
                 "gemini_auto_refresh_minutes".to_string(),
                 json!(inherited_refresh),
+            );
+        }
+
+        if !obj.contains_key("gemini_sync_wsl") {
+            obj.insert(
+                "gemini_sync_wsl".to_string(),
+                json!(default_gemini_sync_wsl()),
             );
         }
 

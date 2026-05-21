@@ -916,6 +916,7 @@ fn build_payload_from_remote(
         windsurf_user_status: user_status_resp,
         windsurf_plan_status: plan_status_resp,
         windsurf_auth_status_raw,
+        ..Default::default()
     }
 }
 

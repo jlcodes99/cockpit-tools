@@ -285,6 +285,23 @@ struct CommandOutput {
     duration_ms: u64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexWakeupCliConversationResult {
+    pub reply: String,
+    pub duration_ms: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct CodexWakeupCliConversationDetailedError {
+    pub message: String,
+    pub status: Option<String>,
+    pub stdout: Option<String>,
+    pub stderr: Option<String>,
+    pub last_message: Option<String>,
+    pub duration_ms: Option<u64>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct CodexWakeupExecutionConfig {
     pub model: Option<String>,
@@ -1263,6 +1280,40 @@ pub fn resolve_cli_runtime() -> Result<CodexCliResolvedRuntime, String> {
     })
 }
 
+pub fn run_cli_conversation_in_home_detailed(
+    codex_home: &Path,
+    prompt: &str,
+    execution_config: &CodexWakeupExecutionConfig,
+) -> Result<CodexWakeupCliConversationResult, CodexWakeupCliConversationDetailedError> {
+    let runtime = get_cli_status();
+    if !runtime.available {
+        return Err(CodexWakeupCliConversationDetailedError {
+            message: runtime
+                .message
+                .unwrap_or_else(|| "Codex CLI 不可用，请先配置 Codex CLI 路径。".to_string()),
+            status: None,
+            stdout: None,
+            stderr: None,
+            last_message: None,
+            duration_ms: None,
+        });
+    }
+
+    let binary = resolve_binary().map_err(|err| CodexWakeupCliConversationDetailedError {
+        message: err.message,
+        status: None,
+        stdout: None,
+        stderr: None,
+        last_message: None,
+        duration_ms: None,
+    })?;
+    let output = run_codex_exec_sync_detailed(&binary, codex_home, prompt, execution_config)?;
+    Ok(CodexWakeupCliConversationResult {
+        reply: output.reply,
+        duration_ms: output.duration_ms,
+    })
+}
+
 fn parse_time_to_minutes(value: &str) -> Option<i32> {
     let parts: Vec<&str> = value.trim().split(':').collect();
     if parts.len() != 2 {
@@ -1788,6 +1839,122 @@ fn run_codex_exec_sync(
     ));
     let message = format!("Codex CLI 退出失败: {}", status);
     Err(message)
+}
+
+fn clean_cli_output_text(value: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(value).trim().to_string();
+    if text.is_empty() {
+        None
+    } else {
+        Some(truncate_log_text(&text, 4000))
+    }
+}
+
+fn run_codex_exec_sync_detailed(
+    binary: &ResolvedBinary,
+    codex_home: &Path,
+    prompt: &str,
+    execution_config: &CodexWakeupExecutionConfig,
+) -> Result<CommandOutput, CodexWakeupCliConversationDetailedError> {
+    let workspace_dir = codex_home.join("workspace");
+    fs::create_dir_all(&workspace_dir).map_err(|e| CodexWakeupCliConversationDetailedError {
+        message: format!("创建唤醒工作目录失败: {}", e),
+        status: None,
+        stdout: None,
+        stderr: None,
+        last_message: None,
+        duration_ms: None,
+    })?;
+    let last_message_path = codex_home.join("last_message.txt");
+
+    let started = std::time::Instant::now();
+    logger::log_info(&format!(
+        "[CodexWakeup][CLI] 开始执行诊断命令: codex_path={}, node_path={}, codex_home={}, workspace_dir={}, prompt_chars={}, model={}, reasoning_effort={}",
+        binary.path.display(),
+        format_optional_path_for_log(binary.node_path.as_deref()),
+        codex_home.display(),
+        workspace_dir.display(),
+        prompt.chars().count(),
+        execution_config
+            .model
+            .as_deref()
+            .unwrap_or("<default>"),
+        execution_config
+            .model_reasoning_effort
+            .as_deref()
+            .unwrap_or("<default>")
+    ));
+    let mut command = build_binary_command(&binary);
+    command
+        .env("CODEX_HOME", codex_home)
+        .arg("exec")
+        .arg("--skip-git-repo-check")
+        .arg("--color")
+        .arg("never")
+        .arg("--output-last-message")
+        .arg(&last_message_path)
+        .arg("-C")
+        .arg(&workspace_dir);
+
+    if let Some(model) = execution_config.model.as_deref() {
+        command
+            .arg("-c")
+            .arg(format!(r#"model="{}""#, escape_toml_basic_string(model)));
+    }
+    if let Some(reasoning_effort) = execution_config.model_reasoning_effort.as_deref() {
+        command.arg("-c").arg(format!(
+            r#"model_reasoning_effort="{}""#,
+            escape_toml_basic_string(reasoning_effort)
+        ));
+    }
+    command.arg(prompt);
+
+    let output = command
+        .output()
+        .map_err(|e| CodexWakeupCliConversationDetailedError {
+            message: format!("启动 Codex CLI 失败: {}", e),
+            status: None,
+            stdout: None,
+            stderr: None,
+            last_message: None,
+            duration_ms: None,
+        })?;
+    let duration_ms = started.elapsed().as_millis().max(0) as u64;
+    let stdout = clean_cli_output_text(&output.stdout);
+    let stderr = clean_cli_output_text(&output.stderr);
+    let last_message = fs::read_to_string(&last_message_path)
+        .ok()
+        .map(|text| text.trim().to_string())
+        .filter(|text| !text.is_empty())
+        .map(|text| truncate_log_text(&text, 4000));
+
+    if output.status.success() {
+        let reply = last_message
+            .clone()
+            .or_else(|| stdout.clone())
+            .unwrap_or_else(|| "Codex CLI 已完成，但未返回可读消息。".to_string());
+        logger::log_info(&format!(
+            "[CodexWakeup][CLI] 诊断命令执行成功: duration_ms={}, reply_chars={}",
+            duration_ms,
+            reply.chars().count()
+        ));
+        return Ok(CommandOutput { reply, duration_ms });
+    }
+
+    logger::log_warn(&format!(
+        "[CodexWakeup][CLI] 诊断命令执行失败: status={}, stdout={}, stderr={}",
+        output.status,
+        stdout.as_deref().unwrap_or("-"),
+        stderr.as_deref().unwrap_or("-")
+    ));
+    Err(CodexWakeupCliConversationDetailedError {
+        message: format!("Codex CLI 退出失败: {}", output.status),
+        status: Some(output.status.to_string()),
+        stdout,
+        stderr,
+        last_message,
+        duration_ms: Some(duration_ms),
+    })
 }
 
 fn escape_toml_basic_string(value: &str) -> String {

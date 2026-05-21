@@ -1,8 +1,11 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  CodexLocalAccessCustomRoutingRule,
   CodexLocalAccessPortCleanupResult,
   CodexLocalAccessRoutingStrategy,
+  CodexLocalAccessScope,
   CodexLocalAccessState,
+  CodexLocalAccessTestResult,
 } from '../types/codexLocalAccess';
 
 export async function getCodexLocalAccessState(): Promise<CodexLocalAccessState> {
@@ -29,6 +32,14 @@ export async function rotateCodexLocalAccessApiKey(): Promise<CodexLocalAccessSt
   return await invoke('codex_local_access_rotate_api_key');
 }
 
+export async function updateCodexLocalAccessBoundOAuthAccount(
+  boundOauthAccountId: string | null,
+): Promise<CodexLocalAccessState> {
+  return await invoke('codex_local_access_update_bound_oauth_account', {
+    boundOauthAccountId,
+  });
+}
+
 export async function clearCodexLocalAccessStats(): Promise<CodexLocalAccessState> {
   return await invoke('codex_local_access_clear_stats');
 }
@@ -53,6 +64,28 @@ export async function updateCodexLocalAccessRoutingStrategy(
   return await invoke('codex_local_access_update_routing_strategy', { strategy });
 }
 
+export async function updateCodexLocalAccessCustomRouting(
+  rules: CodexLocalAccessCustomRoutingRule[],
+): Promise<CodexLocalAccessState> {
+  return await invoke('codex_local_access_update_custom_routing', { rules });
+}
+
+export async function updateCodexLocalAccessUpstreamProxyConfig(
+  upstreamProxyUrl: string | null,
+): Promise<CodexLocalAccessState> {
+  return await invoke('codex_local_access_update_upstream_proxy_config', {
+    upstreamProxyUrl,
+  });
+}
+
+export async function updateCodexLocalAccessAccessScope(
+  accessScope: CodexLocalAccessScope,
+): Promise<CodexLocalAccessState> {
+  return await invoke('codex_local_access_update_access_scope', {
+    accessScope,
+  });
+}
+
 export async function setCodexLocalAccessEnabled(
   enabled: boolean,
 ): Promise<CodexLocalAccessState> {
@@ -61,4 +94,8 @@ export async function setCodexLocalAccessEnabled(
 
 export async function activateCodexLocalAccess(): Promise<CodexLocalAccessState> {
   return await invoke('codex_local_access_activate');
+}
+
+export async function testCodexLocalAccess(): Promise<CodexLocalAccessTestResult> {
+  return await invoke('codex_local_access_test');
 }

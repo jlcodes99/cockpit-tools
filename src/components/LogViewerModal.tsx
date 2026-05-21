@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Copy, FileText, FolderOpen, RefreshCw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getLogSnapshot, openLogDirectory, type LogSnapshot } from '../services/logService';
+import { useEscClose } from '../hooks/useEscClose';
 import './LogViewerModal.css';
 
 interface LogViewerModalProps {
@@ -63,6 +64,7 @@ function filterLogContent(content: string, level: LogLevelFilter): string {
 
 export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
   const { t } = useTranslation();
+  useEscClose(open, onClose);
   const logsLabel = t('manual.dataPrivacy.keywords.5', '日志');
   const logDirLabel = t('manual.dataPrivacy.keywords.6', '日志目录');
   const levelOptions: Array<{ value: LogLevelFilter; label: string }> = useMemo(

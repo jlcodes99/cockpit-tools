@@ -869,6 +869,12 @@ pub fn upsert_account(payload: WindsurfOAuthCompletePayload) -> Result<WindsurfA
         quota_query_last_error: None,
         quota_query_last_error_at: None,
         usage_updated_at: None,
+        windsurf_token_type: payload.windsurf_token_type.clone(),
+        devin_auth1_token: payload.devin_auth1_token.clone(),
+        devin_account_id: payload.devin_account_id.clone(),
+        devin_org_id: payload.devin_org_id.clone(),
+        devin_session_token: payload.devin_session_token.clone(),
+        devin_user_status_proto_b64: payload.devin_user_status_proto_b64.clone(),
         created_at,
         last_used: now,
     });

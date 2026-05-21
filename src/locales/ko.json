@@ -14,6 +14,7 @@
     "close": "닫기",
     "open": "열기",
     "copy": "복사",
+    "copied": "복사됨",
     "add": "추가",
     "enable": "활성화",
     "disable": "비활성화",
@@ -227,7 +228,7 @@
     "selectAll": "전체 선택"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "계정 관리",
     "wakeup": "깨우기 작업",
     "fingerprints": "기기 지문",
@@ -365,7 +366,8 @@
       "instance": "인스턴스",
       "email": "계정",
       "quota": "쿼터 상태",
-      "actions": "작업"
+      "actions": "작업",
+      "speed": "속도"
     },
     "empty": {
       "title": "인스턴스가 없습니다",
@@ -443,7 +445,9 @@
           "contextWindowInvalid": "컨텍스트 창은 0보다 큰 정수여야 합니다.",
           "autoCompactInvalid": "자동 압축 한도는 0보다 큰 정수여야 합니다."
         }
-      }
+      },
+      "appSpeed": "속도",
+      "appSpeedDesc": "공식 Codex 시작 전에 선택한 속도를 기록합니다"
     },
     "quota": {
       "unbound": "연결된 계정 없음",
@@ -464,7 +468,8 @@
       "allAlreadyRunning": "모든 인스턴스가 이미 실행 중입니다",
       "noneRunning": "실행 중인 인스턴스를 찾을 수 없습니다",
       "syncThreadsNeedTwo": "스레드를 동기화하려면 인스턴스가 두 개 이상 필요합니다",
-      "launchPrepared": "실행 명령이 준비되었습니다"
+      "launchPrepared": "실행 명령이 준비되었습니다",
+      "speedUpdated": "속도가 업데이트되었습니다"
     },
     "runningDialog": {
       "title": "인스턴스가 이미 실행 중입니다",
@@ -493,9 +498,9 @@
       },
       "safe": {
         "title": "안전한 재시작 (권장)",
-        "principle": "모든 Antigravity 프로세스에 SIGTERM을 보내 앱이 스스로 저장하고 종료하도록 한 다음, 대상 인스턴스를 다시 시작합니다 (필요 시 강제 종료).",
-        "commandMac": "macOS/Linux: kill -15 <pid> (모든 Antigravity 프로세스)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (모든 Antigravity 프로세스)",
+        "principle": "모든 Antigravity IDE 프로세스에 SIGTERM을 보내 앱이 스스로 저장하고 종료하도록 한 다음, 대상 인스턴스를 다시 시작합니다 (필요 시 강제 종료).",
+        "commandMac": "macOS/Linux: kill -15 <pid> (모든 Antigravity IDE 프로세스)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (모든 Antigravity IDE 프로세스)",
         "pros": "정상 종료에 가까우며 크래시 경고가 발생할 확률이 낮고 데이터가 더 안전합니다.",
         "cons": "모든 인스턴스의 전체 재시작만 지원합니다."
       },
@@ -559,7 +564,7 @@
       "defaultTerminalDesc": "Gemini CLI를 열 때 사용되는 터미널",
       "terminalSystem": "시스템 기본값",
       "accountManagement": "계정 관리",
-      "autoRefresh": "Antigravity 자동 새로고침 할당량",
+      "autoRefresh": "Antigravity IDE 자동 새로고침 할당량",
       "codexAutoRefresh": "Codex 자동 새로고침 할당량",
       "autoRefreshDesc": "백그라운드 업데이트 빈도",
       "codexAutoRefreshDesc": "백그라운드 업데이트 빈도",
@@ -583,6 +588,10 @@
       "hideDockIconDesc": "창 최소화 동작과 무관하게 Dock 아이콘 표시 상태를 독립적으로 제어합니다",
       "hideDockIconOff": "아니요 (Dock 아이콘 표시)",
       "hideDockIconOn": "예 (Dock 아이콘 숨기기)",
+      "trayIconStyle": "메뉴 막대 아이콘 스타일 (macOS 전용)",
+      "trayIconStyleDesc": "시스템 단색 아이콘 또는 원래 컬러 앱 아이콘을 선택합니다",
+      "trayIconStyleTemplate": "단색 아이콘",
+      "trayIconStyleColor": "컬러 아이콘",
       "floatingCardStartup": "시작 시 플로팅 카드 표시",
       "floatingCardStartupDesc": "앱 실행 후 계정 플로팅 카드를 자동으로 표시합니다",
       "floatingCardAlwaysOnTop": "플로팅 카드를 기본적으로 항상 위에 표시",
@@ -592,8 +601,8 @@
       "floatingCardShowNowAction": "플로팅 카드 표시",
       "dataDir": "데이터 디렉터리",
       "dataDirDesc": "계정 및 구성 파일 저장 위치.",
-      "fpDir": "Antigravity 저장소",
-      "fpDirDesc": "Antigravity 데이터 파일 저장 위치.",
+      "fpDir": "Antigravity IDE 저장소",
+      "fpDirDesc": "Antigravity IDE 데이터 파일 저장 위치.",
       "opencodeTitle": "OpenCode 연동",
       "opencodeRestart": "Codex 전환 시 OpenCode 재시작",
       "opencodeRestartDesc": "OpenCode에서 Codex 계정 정보를 동기화하여 전환",
@@ -614,10 +623,10 @@
       "vscodeAppPathPlaceholder": "기본 경로",
       "vscodePathSelect": "선택",
       "vscodePathReset": "기본값으로 재설정",
-      "antigravityAppPath": "Antigravity 앱 경로",
-      "antigravityTitle": "Antigravity 실행",
+      "antigravityAppPath": "Antigravity IDE 앱 경로",
+      "antigravityTitle": "Antigravity IDE 실행",
       "commonTitle": "공통",
-      "antigravitySettingsTitle": "Antigravity 설정",
+      "antigravitySettingsTitle": "Antigravity IDE 설정",
       "codexSettingsTitle": "Codex 설정",
       "githubCopilotSettingsTitle": "GitHub Copilot 설정",
       "ghcpAutoRefresh": "GitHub Copilot 할당량 자동 새로고침",
@@ -690,14 +699,14 @@
       "sideNavLayoutOriginal": "원래 레이아웃",
       "sideNavLayoutClassic": "클래식 레이아웃",
       "antigravityDualSwitchNoRestart": "재시작 없이 이중 전환",
-      "antigravityDualSwitchNoRestartDesc": "계정 전환 시 로컬 계정 데이터 기록과 확장 프로그램의 원활한 전환을 한 번에 수행하며, Antigravity를 재시작하지 않습니다.",
+      "antigravityDualSwitchNoRestartDesc": "계정 전환 시 로컬 계정 데이터 기록과 확장 프로그램의 원활한 전환을 한 번에 수행하며, Antigravity IDE를 재시작하지 않습니다.",
       "appAutoLaunch": "로그인 시 Cockpit Tools 시작",
       "appAutoLaunchDesc": "시스템 로그인 후 앱을 자동으로 시작합니다",
       "startupWakeupDisabled": "비활성화",
       "startupWakeupImmediate": "즉시 깨우기",
       "startupWakeupDelayed": "지연 후 깨우기",
-      "antigravityStartupWakeup": "시작 후 Antigravity 깨우기 실행",
-      "antigravityStartupWakeupDesc": "앱 시작 후 활성화된 Antigravity 깨우기 작업을 한 번 실행합니다",
+      "antigravityStartupWakeup": "시작 후 Antigravity IDE 깨우기 실행",
+      "antigravityStartupWakeupDesc": "앱 시작 후 활성화된 Antigravity IDE 깨우기 작업을 한 번 실행합니다",
       "codexStartupWakeup": "시작 후 Codex 깨우기 실행",
       "codexStartupWakeupDesc": "앱 시작 후 활성화된 Codex 깨우기 작업을 한 번 실행합니다",
       "currentAccountRefreshTitle": "현재 계정 새로고침",
@@ -741,7 +750,14 @@
       "codexSpecifiedAppPath": "지정 앱 경로",
       "codexSpecifiedAppPathDesc": "Codex 전환 시 함께 재시작할 앱 경로",
       "codexSpecifiedAppPathPlaceholder": "예: /Applications/Host.app",
-      "codexSpecifiedAppPathClear": "지우기"
+      "codexSpecifiedAppPathClear": "지우기",
+      "codexAppSpeed": "Codex 속도",
+      "codexAppSpeedDesc": "공식 Codex 시작 속도로 저장하고, 이 앱에서 Codex를 시작하기 전에 기록합니다.",
+      "codexAppSpeedStandard": "표준",
+      "codexAppSpeedFast": "빠름",
+      "codexAppSpeedLaunch": "Codex 재시작",
+      "codexAppSpeedSaveFailed": "Codex 속도를 저장하지 못했습니다: {{error}}",
+      "codexAppSpeedLaunchFailed": "Codex를 재시작하지 못했습니다: {{error}}"
     },
     "network": {
       "apiTitle": "반중력 조종석 API",
@@ -925,7 +941,7 @@
   },
   "accounts": {
     "title": "계정 관리",
-    "subtitle": "Antigravity 계정 목록을 관리합니다.",
+    "subtitle": "Antigravity IDE 계정 목록을 관리합니다.",
     "total": "총 {{count}}개 계정",
     "search": "계정 검색...",
     "addAccount": "계정 추가",
@@ -1179,7 +1195,7 @@
     "switching": "전환 중...",
     "fingerprint": "지문",
     "bound": "연결됨",
-    "brandTitle": "Antigravity 계정 관리"
+    "brandTitle": "Antigravity IDE 계정 관리"
   },
   "fingerprints": {
     "title": "기기 지문",
@@ -1281,7 +1297,7 @@
   "modals": {
     "addAccount": {
       "title": "계정 추가",
-      "desc": "Google OAuth 인증을 통해 Antigravity 계정을 추가합니다",
+      "desc": "Google OAuth 인증을 통해 Antigravity IDE 계정을 추가합니다",
       "loginBtn": "Google OAuth 로그인",
       "waiting": "대기 중..."
     },
@@ -1289,7 +1305,7 @@
       "title": "계정 가져오기",
       "desc": "가져오기 방법을 선택하십시오",
       "local": "로컬 계정 가져오기",
-      "localDesc": "Antigravity 클라이언트에서 현재 로그인된 계정을 가져옵니다",
+      "localDesc": "Antigravity IDE 클라이언트에서 현재 로그인된 계정을 가져옵니다",
       "tools": "Antigravity Tools에서 가져오기",
       "toolsDesc": "~/.antigravity_tools/ 디렉토리에서 가져옵니다",
       "jsonDivider": "또는 JSON 붙여넣기",
@@ -1302,7 +1318,7 @@
       "fromExtension": "플러그인에서 가져오기",
       "syncBadge": "Antigravity Cockpit 플러그인 계정 동기화",
       "fromLocalDB": "로컬 DB에서 가져오기",
-      "localDBDesc": "이 기기의 Antigravity 클라이언트에서 로그인 계정 읽기",
+      "localDBDesc": "이 기기의 Antigravity IDE 클라이언트에서 로그인 계정 읽기",
       "toolsDescMigrate": "~/.antigravity_tools/에서 계정 마이그레이션",
       "importingTools": "Antigravity Tools에서 가져오는 중...",
       "importingLocal": "로컬 계정 가져오는 중...",
@@ -1347,6 +1363,7 @@
     "batchDeleteConfirm": "선택한 {{count}}개 계정을 삭제하시겠습니까?",
     "switched": "{{email}} 계정으로 전환되었습니다",
     "switchFailed": "전환 실패: {{error}}",
+    "antigravityLegacyUnsupported": "여기서는 Antigravity 2.0.0 이상을 지원하지 않습니다. Antigravity 2.0.0 미만 버전을 선택하거나 Antigravity IDE를 사용하세요.",
     "importSuccess": "{{count}}개 계정을 성공적으로 가져왔습니다",
     "importLocalSuccess": "계정을 가져왔습니다: {{email}}",
     "importFailed": "가져오기 실패: {{error}}",
@@ -1385,7 +1402,7 @@
       },
       "runHint": {
         "title": "검증 안내",
-        "line1": "지금 점검은 로컬 게이트웨이와 공식 Language Server 프로토콜로 Antigravity 클라이언트를 모사해 최소 대화 요청을 전송합니다.",
+        "line1": "지금 점검은 로컬 게이트웨이와 공식 Language Server 프로토콜로 Antigravity IDE 클라이언트를 모사해 최소 대화 요청을 전송합니다.",
         "line2": "이 과정에서 소량의 토큰(일반적으로 짧은 대화 1회)이 소모되며, 실제 소모량은 모델과 계정 정책에 따라 달라집니다.",
         "line3": "이 작업은 깨우기 작업 설정을 변경하지 않으며, 계정 가용성 점검 및 점검 기록 저장만 수행합니다.",
         "line4": "403이 반환되면 계정 인증 또는 이의 제기를 먼저 완료해야 합니다. 결과에 주소와 빠른 작업이 제공됩니다."
@@ -1516,6 +1533,7 @@
       "modeScheduled": "📅 예약",
       "modeCrontab": "🧩 크론탭",
       "modeQuotaReset": "🔄 할당량 재설정",
+      "antigravityVersion": "Antigravity IDE 버전",
       "modelSelect": "모델 선택",
       "modelHint": "같은 할당량 그룹에서는 하나의 모델을 추천합니다. 여러 모델은 순차 실행됩니다.",
       "modelsEmpty": "추천 모델 없음",
@@ -1595,6 +1613,7 @@
     "installFailed": "시스템 설치에 실패했습니다. 나중에 다시 시도하거나 수동으로 다운로드하세요.",
     "restartRequiredAfterInstall": "업데이트는 설치되었습니다. 전환을 완료하려면 앱을 수동으로 다시 시작하세요.",
     "stoppingApiService": "API 서비스 중지 중...",
+    "stopApiServiceFailed": "API 서비스를 중지하지 못했습니다. 먼저 비활성화한 뒤 다시 시도하세요.",
     "skipThisVersion": "이 버전 건너뛰기",
     "skipFailed": "이 업데이트를 건너뛰지 못했습니다: {{error}}"
   },
@@ -1675,6 +1694,11 @@
     },
     "oauth": {
       "desc": "아래 버튼을 클릭해 브라우저에서 OpenAI 인증을 완료하세요",
+      "trialGuideTitle": "체험 등록 팁",
+      "trialGuideDesc": "새 계정을 준비할 때는 장기간 접근 가능한 Gmail 주소를 우선 사용하는 것이 계정 유지와 이후 인증에 더 안정적입니다.",
+      "trialGuideAliasDesc": "기본 Gmail 하나로 최대 5개의 별칭 주소를 준비해 ChatGPT 등록 기록을 구분할 수 있습니다. 대상 서비스 규칙에 맞게 사용하세요.",
+      "trialGuideLink": "체험 가이드 보기",
+      "gmailAliasLink": "Gmail 별칭 생성",
       "preparing": "인증 링크 준비 중...",
       "exchanging": "토큰 교환 중...",
       "portInUse": "포트 {{port}}가 이미 사용 중입니다. 해당 포트를 사용하는 앱을 종료한 뒤 다시 시도해 주세요.",
@@ -1684,7 +1708,8 @@
       "portStillInUse": "포트 {{port}}가 여전히 사용 중입니다.",
       "portInUseAction": "포트 종료 후 다시 시도",
       "timeout": "인증이 시간 초과되었습니다. 클릭하세요",
-      "timeoutRetry": "인증 링크 새로고침"
+      "timeoutRetry": "인증 링크 새로고침",
+      "reauthEmailLabel": "재인증 계정"
     },
     "token": {
       "desc": "auth.json, 계정 JSON 또는 refresh_token을 붙여넣으세요.",
@@ -1709,12 +1734,21 @@
       "title": "API 서비스",
       "accountCount": "{{count}}개 계정",
       "baseUrl": "주소",
+      "addressKind": "주소 유형",
+      "addressLocal": "로컬",
+      "addressLan": "로컬망",
+      "accessScopeLabel": "접근 범위",
+      "accessScopeLocalhost": "로컬만",
+      "accessScopeLan": "로컬 네트워크",
+      "accessScopeLocalhostShort": "로컬만",
+      "accessScopeLanShort": "로컬+네트워크",
+      "accessScopeSaveSuccess": "API 서비스 접근 범위가 업데이트되었습니다",
       "apiKey": "키",
       "statusRunning": "실행 중",
       "statusStopped": "중지됨",
       "statusDisabled": "비활성화됨",
       "emptyMembers": "컬렉션에 계정이 없습니다",
-      "footerHint": "로컬 및 LAN에서 수신합니다",
+      "footerHint": "접근 범위: {{scope}}",
       "manageAccounts": "계정 관리",
       "rotateKey": "키 재발급",
       "rotateConfirmMessage": "재설정하면 현재 API 서비스 키가 즉시 무효화되며, 진행 중인 요청이 더 이상 사용되지 않을 수 있습니다. 계속할까요?",
@@ -1746,10 +1780,29 @@
         "manageMembers": "멤버 관리"
       },
       "entryAction": "API 서비스에 추가",
-      "testAction": "API 서비스 테스트",
-      "testSuccess": "API 서비스 테스트 성공 ({{count}}개 모델)",
-      "testTimeout": "테스트 시간이 초과되었습니다. 로컬 서비스가 실행 중인지 확인하세요.",
+      "testAction": "테스트",
+      "testDialogTitle": "API 서비스 테스트",
+      "testDialogDesc": "Codex CLI로 실제 요청을 보내 로컬 서비스, 키, 업스트림 응답을 확인합니다.",
+      "testProgressTitle": "서비스를 테스트하는 중",
+      "testProgressDesc": "로컬 API 서비스로 실제 요청을 보내고 있습니다. 잠시만 기다려 주세요.",
+      "testOutputTitle": "반환 결과",
+      "testResultTitle": "서비스 점검 결과",
+      "testSuccess": "서비스 점검 성공: 로컬 서비스, 키, 업스트림 응답이 정상입니다({{model}}, {{latency}}). Codex가 계속 502를 반환하면 Codex의 Base URL, API Key 또는 실행 환경을 확인하세요.",
+      "testFailureStage": "확인 단계",
+      "testFailureCause": "실패 원인",
+      "testFailureSuggestion": "조치 방법",
+      "testFailureStatus": "HTTP 상태",
+      "testFailureModel": "점검 모델",
+      "testFailureDetail": "진단 상세",
+      "testFailureCliOutput": "CLI 출력",
+      "testFailureGatewayOutput": "게이트웨이 응답",
+      "testTimeout": "실제 요청 점검 시간이 초과되었습니다. 로컬 서비스, 프록시 또는 업스트림 네트워크를 확인하세요.",
       "testUnavailable": "현재 API 서비스 URL을 사용할 수 없습니다",
+      "testConnectFailed": "{{url}}에 연결할 수 없습니다. API 서비스가 실행 중인지, 포트가 변경되지 않았는지, 차단되지 않았는지 확인하세요.",
+      "testAuthFailed": "서비스에 연결되었지만 인증에 실패했습니다: {{detail}}. API 서비스 키 또는 계정 로그인 상태를 확인하세요.",
+      "testServiceUnavailable": "서비스에 연결되었지만 현재 사용할 수 없습니다: {{detail}}. 서비스가 활성화되어 있는지, 계정 모음이 비어 있지 않은지, 계정을 사용할 수 있는지 확인하세요.",
+      "testRateLimited": "서비스에 연결되었지만 업스트림 제한 또는 할당량 부족입니다: {{detail}}.",
+      "testHttpFailed": "서비스에 연결되었지만 요청이 HTTP {{status}}를 반환했습니다: {{detail}}.",
       "activateAction": "API 서비스 시작",
       "activateSuccess": "API 서비스로 전환했습니다",
       "dashboardAction": "서비스 패널",
@@ -1764,8 +1817,8 @@
       "statsTitle": "전체",
       "accountStatsTitle": "계정별",
       "statsEmpty": "아직 통계가 없습니다",
-      "summaryMeta": "{{count}}개 계정 · 로컬/LAN",
-      "summaryMetaUnconfigured": "미설정 · 로컬/LAN",
+      "summaryMeta": "{{count}}개 계정 · {{scope}}",
+      "summaryMetaUnconfigured": "미설정 · {{scope}}",
       "memberTitle": "컬렉션 멤버",
       "stats": {
         "requests": "요청",
@@ -1806,7 +1859,8 @@
         "quotaLowFirst": "낮은 할당량 우선",
         "planHighFirst": "상위 요금제 우선",
         "planLowFirst": "하위 요금제 우선",
-        "expirySoonFirst": "만료 임박 우선"
+        "expirySoonFirst": "만료 임박 우선",
+        "custom": "사용자 지정"
       },
       "statusUnconfigured": "미설정",
       "expandDetails": "세부 정보 펼치기",
@@ -1844,7 +1898,33 @@
         "viewFull": "전체 통계 보기",
         "modalTitle": "API 서비스 할당량 풀",
         "empty": "할당량 통계가 아직 없습니다"
-      }
+      },
+      "oauthBinding": {
+        "desc": "선택 사항입니다. 연결하지 않으면 API 서비스는 기존 API Key 로직으로 실행됩니다. 연결하면 로그인 상태는 OAuth 계정을 사용하고 Provider는 현재 API 서비스 설정을 사용합니다.",
+        "currentService": "API 서비스: {{name}}"
+      },
+      "customRoutingEdit": "사용자 지정 라우팅 편집",
+      "customRoutingTitle": "사용자 지정 라우팅",
+      "customRoutingDesc": "계정별 우선순위와 가중치를 설정해 계정 선택 순서와 같은 우선순위 내 부하 분산을 제어합니다.",
+      "customRoutingPriorityTitle": "우선순위",
+      "customRoutingPriorityDesc": "값이 높을수록 먼저 선택됩니다. 높은 우선순위 계정을 사용할 수 없을 때만 낮은 우선순위를 시도합니다.",
+      "customRoutingWeightTitle": "가중치",
+      "customRoutingWeightDesc": "같은 우선순위 안에서 부하 분산에 사용됩니다. 가중치가 높을수록 더 많은 요청을 받습니다.",
+      "customRoutingSearch": "이메일, 요금제 또는 계정 ID 검색",
+      "customRoutingSelected": "{{count}}개 선택됨",
+      "customRoutingPriorityShort": "우선순위",
+      "customRoutingWeightShort": "가중치",
+      "customRoutingApplyBatch": "선택 항목에 적용",
+      "customRoutingReset": "초기화",
+      "customRoutingAccountColumn": "계정",
+      "customRoutingQuotaColumn": "한도",
+      "customRoutingEmpty": "현재 API 서비스 모음에 설정 가능한 계정이 없습니다",
+      "customRoutingSave": "라우팅 저장",
+      "customRoutingSaveSuccess": "API 서비스 사용자 지정 라우팅이 업데이트되었습니다",
+      "upstreamProxyLabel": "API 프록시 주소",
+      "upstreamProxySaveSuccess": "API 프록시 주소가 업데이트되었습니다",
+      "upstreamProxyUrlPlaceholder": "비움 = 전역 프록시",
+      "upstreamProxySaveAction": "프록시 저장"
     },
     "local": {
       "desc": "~/.codex/auth.json에서 현재 로그인된 계정 가져오기",
@@ -2114,7 +2194,8 @@
         "collapse": "접기",
         "repairVisibility": "표시 정보 복구",
         "restoreSessions": "세션 복원",
-        "copySessionId": "세션 ID 복사"
+        "copySessionId": "세션 ID 복사",
+        "copyToInstance": "인스턴스에 복사"
       },
       "confirm": {
         "title": "휴지통으로 이동",
@@ -2147,6 +2228,15 @@
         "emptyTitle": "휴지통이 비어 있습니다",
         "emptyDesc": "휴지통으로 이동한 세션이 여기에 표시됩니다.",
         "restoreAction": "선택한 세션 복원"
+      },
+      "targetModal": {
+        "title": "인스턴스에 복사",
+        "hint": "선택한 세션을 대상 인스턴스로 복사합니다. 같은 ID의 세션이 이미 있으면 건너뜁니다. 실행 중인 대상 인스턴스는 표시되기 전에 다시 시작해야 할 수 있습니다.",
+        "targetInstance": "대상 인스턴스",
+        "pickTarget": "대상 인스턴스 선택",
+        "selectedCount": "{{count}}개 세션 선택됨",
+        "existingCount": "대상에 이미 {{count}}개 있음",
+        "confirm": "세션 복사"
       }
     },
     "api": {
@@ -2238,6 +2328,24 @@
         "cockpit_api": {
           "name": "Cockpit Api"
         }
+      },
+      "oauthBinding": {
+        "label": "OAuth 연결",
+        "unbound": "미연결",
+        "action": "OAuth 연결",
+        "actionShort": "연결",
+        "title": "OAuth 계정 연결",
+        "desc": "선택 사항입니다. 연결하지 않으면 이 계정은 기존 API Key 로직으로 전환됩니다. 연결하면 로그인 상태는 OAuth 계정을 사용하고 Provider는 이 API Key 계정 설정을 사용합니다.",
+        "currentAccount": "API Key 계정: {{name}}",
+        "selectLabel": "OAuth 계정 선택",
+        "empty": "OAuth 계정이 없습니다. 먼저 OAuth 인증 계정을 추가하세요.",
+        "validationRequired": "OAuth 계정을 선택하세요",
+        "saveSuccess": "OAuth 연결이 업데이트되었습니다",
+        "saveFailed": "OAuth 연결 실패: {{error}}",
+        "switchRequiresBinding": "먼저 OAuth 계정을 연결하세요",
+        "clearAction": "연결 해제",
+        "clearSuccess": "OAuth 연결이 해제되었습니다",
+        "clearFailed": "OAuth 연결 해제 실패: {{error}}"
       }
     },
     "modelProviders": {
@@ -2412,6 +2520,15 @@
       "noStats": "아직 통계 없음",
       "refreshHint": "새로고침을 누르면 이 API 키의 통계를 동기화합니다.",
       "dailyStats": "일별 통계"
+    },
+    "speed": {
+      "title": "속도",
+      "standard": "표준",
+      "standardDesc": "기본 속도, 일반 사용량",
+      "fast": "빠름",
+      "fastDesc": "1.5배 속도, 사용량 증가",
+      "saveSuccess": "속도가 업데이트되었습니다",
+      "saveFailed": "속도 저장 실패: {{error}}"
     }
   },
   "githubCopilot": {
@@ -2464,23 +2581,31 @@
       "storage": "데이터 범위: 로컬 가져오기는 VS Code의 GitHub 로그인 세션을 읽고, 계정 전환은 같은 항목을 업데이트합니다. OAuth, 토큰 가져오기, 로컬 가져오기 검증, 할당량 새로고침은 필요한 인증 필드만 GitHub 공식 API로 전송합니다. state.vscdb와 시스템 키는 업로드하지 않습니다."
     }
   },
+  "runtime": {
+    "installedVersion": {
+      "loading": "설치된 버전 감지 중",
+      "missing": "설치된 버전을 감지하지 못했습니다",
+      "detecting": "감지 중",
+      "notFound": "버전 감지 안 됨"
+    }
+  },
   "dashboard": {
     "title": "계정 대시보드",
     "summary": {
       "label": "개요",
       "title": "계정 스냅샷",
-      "desc": "Antigravity와 Codex 상태를 한눈에 확인"
+      "desc": "Antigravity IDE와 Codex 상태를 한눈에 확인"
     },
     "stats": {
-      "antigravity": "Antigravity 계정",
+      "antigravity": "Antigravity IDE 계정",
       "codex": "Codex 계정",
-      "currentAntigravity": "현재 Antigravity",
+      "currentAntigravity": "현재 Antigravity IDE",
       "currentCodex": "현재 Codex",
       "providers": "서비스 제공자",
       "totalAccounts": "전체 계정 수"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "플랜 분포",
@@ -2495,7 +2620,7 @@
     },
     "emptyAccount": "계정 없음",
     "sections": {
-      "antigravity": "Antigravity 계정",
+      "antigravity": "Antigravity IDE 계정",
       "codex": "Codex 계정"
     },
     "actions": {
@@ -2528,7 +2653,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Antigravity 설정",
+      "title": "Antigravity IDE 설정",
       "appPath": "앱 경로"
     },
     "codex": {
@@ -2564,6 +2689,18 @@
           "contextWindowInvalid": "컨텍스트 창은 0보다 큰 정수여야 합니다.",
           "autoCompactInvalid": "자동 압축 한도는 0보다 큰 정수여야 합니다."
         }
+      },
+      "appSpeed": {
+        "title": "Codex 속도",
+        "desc": "시작 속도로 저장하며, 이 앱에서 Codex 시작 전에 기록합니다.",
+        "standard": "표준",
+        "fast": "빠름",
+        "launch": "재시작",
+        "loadFailed": "Codex 속도를 불러오지 못했습니다: {{error}}",
+        "saveSuccess": "Codex 시작 속도가 저장되었습니다.",
+        "saveFailed": "Codex 속도를 저장하지 못했습니다: {{error}}",
+        "launchSuccess": "저장된 속도로 Codex를 재시작했습니다.",
+        "launchFailed": "Codex를 재시작하지 못했습니다: {{error}}"
       }
     },
     "githubCopilot": {
@@ -2617,7 +2754,9 @@
     "cursorRefreshInterval": "할당량 자동 새로고침",
     "gemini": {
       "title": "Gemini Cli 설정",
-      "appPath": "Gemini Cli 경로"
+      "appPath": "Gemini Cli 경로",
+      "syncWsl": "WSL 구성 동기화",
+      "syncWslDesc": "계정 전환 시 WSL의 .gemini 구성을 자동으로 덮어씁니다"
     },
     "geminiRefreshInterval": "할당량 자동 새로고침",
     "codebuddy": {
@@ -2949,7 +3088,7 @@
     "actions": {
       "collapseAll": "전체 접기",
       "expandAll": "전체 펼치기",
-      "goAntigravity": "Antigravity로 이동",
+      "goAntigravity": "Antigravity IDE로 이동",
       "goCodex": "Codex로 이동",
       "goDashboard": "대시보드로 이동",
       "goFingerprints": "디바이스 지문으로 이동",
@@ -2964,25 +3103,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "Antigravity 계정 관리에서 대량/고위험 작업 전에는 반드시 백업하세요."
+        "0": "Antigravity IDE 계정 관리에서 대량/고위험 작업 전에는 반드시 백업하세요."
       },
       "keywords": {
-        "0": "Antigravity 계정 관리",
+        "0": "Antigravity IDE 계정 관리",
         "1": "가이드",
         "2": "흐름",
         "3": "계정"
       },
       "outcomes": {
-        "0": "Antigravity 계정 관리가 어떤 문제를 해결하는지 이해합니다.",
-        "1": "Antigravity 계정 관리의 권장 흐름으로 실수를 줄입니다."
+        "0": "Antigravity IDE 계정 관리가 어떤 문제를 해결하는지 이해합니다.",
+        "1": "Antigravity IDE 계정 관리의 권장 흐름으로 실수를 줄입니다."
       },
       "steps": {
-        "0": "Antigravity 계정 관리 페이지를 엽니다.",
-        "1": "Antigravity 계정 관리의 기본 설정과 필요한 바인딩을 완료합니다.",
-        "2": "Antigravity 계정 관리에서 수동 작업을 1회 실행해 결과를 확인합니다."
+        "0": "Antigravity IDE 계정 관리 페이지를 엽니다.",
+        "1": "Antigravity IDE 계정 관리의 기본 설정과 필요한 바인딩을 완료합니다.",
+        "2": "Antigravity IDE 계정 관리에서 수동 작업을 1회 실행해 결과를 확인합니다."
       },
-      "summary": "이 섹션은 일상 워크플로우에서 Antigravity 계정 관리 사용 방법을 설명합니다.",
-      "title": "Antigravity 계정 관리"
+      "summary": "이 섹션은 일상 워크플로우에서 Antigravity IDE 계정 관리 사용 방법을 설명합니다.",
+      "title": "Antigravity IDE 계정 관리"
     },
     "blocks": {
       "cautions": "자주 발생하는 실수 / 주의사항",
@@ -3835,5 +3974,14 @@
       "warn": "경고",
       "error": "오류"
     }
+  },
+  "mfaQuick": {
+    "title": "2FA 코드",
+    "selectLabel": "2FA 키 선택",
+    "unnamedSecret": "이름 없는 키",
+    "invalidCode": "유효하지 않은 키",
+    "copyCode": "코드 복사",
+    "copied": "복사됨",
+    "refreshIn": "{{time}}초"
   }
 }

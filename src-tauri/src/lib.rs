@@ -95,9 +95,28 @@ pub fn run() {
         }))
         .setup(|app| {
             info!("Cockpit Tools 启动...");
+            let current_exe = std::env::current_exe()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|err| format!("unknown: {}", err));
+            let build_mode = if cfg!(debug_assertions) {
+                "debug"
+            } else {
+                "release"
+            };
+            logger::log_info(&format!(
+                "[Startup] 启动诊断: marker=tray-diagnostics-v1, version={}, mode={}, exe={}",
+                env!("CARGO_PKG_VERSION"),
+                build_mode,
+                current_exe
+            ));
 
             // 存储全局 AppHandle
             let _ = APP_HANDLE.set(app.handle().clone());
+
+            // 启动时清理 WebKit LocalStorage WAL，防止无限膨胀
+            std::thread::spawn(|| {
+                modules::webkit_cache_maintenance::checkpoint_webkit_localstorage();
+            });
 
             // 初始化 Updater 插件
             #[cfg(desktop)]
@@ -229,6 +248,20 @@ pub fn run() {
                 logger::log_error(&format!("[Tray] 创建骨架托盘失败: {}", e));
             }
 
+            #[cfg(target_os = "macos")]
+            {
+                let tray_app_handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(800));
+                    if let Err(err) = modules::tray::apply_tray_icon_style(&tray_app_handle) {
+                        logger::log_warn(&format!(
+                            "[Tray] macOS 启动后重应用菜单栏图标样式失败: {}",
+                            err
+                        ));
+                    }
+                });
+            }
+
             // 后台线程加载完整托盘菜单（含账号数据）
             let tray_app_handle = app.handle().clone();
             std::thread::spawn(move || {
@@ -273,6 +306,7 @@ pub fn run() {
                     }
                     CloseWindowBehavior::Quit => {
                         info!("[Window] 用户选择退出应用");
+                        window.app_handle().exit(0);
                     }
                     CloseWindowBehavior::Ask => {
                         api.prevent_close();
@@ -371,6 +405,7 @@ pub fn run() {
             commands::system::set_codex_launch_on_switch,
             commands::system::set_codex_local_access_entry_visible,
             commands::system::detect_app_path,
+            commands::system::get_antigravity_installed_version_info,
             commands::system::set_wakeup_override,
             commands::system::handle_window_close,
             commands::system::show_floating_card_window,
@@ -438,6 +473,11 @@ pub fn run() {
             commands::codex::open_codex_config_toml,
             commands::codex::get_codex_quick_config,
             commands::codex::save_codex_quick_config,
+            commands::codex::get_codex_app_speed_config,
+            commands::codex::save_codex_app_speed,
+            commands::codex::get_codex_api_service_app_speed_config,
+            commands::codex::save_codex_api_service_app_speed,
+            commands::codex::update_codex_account_app_speed,
             commands::codex::refresh_codex_account_profile,
             commands::codex::switch_codex_account,
             commands::codex::delete_codex_account,
@@ -457,6 +497,7 @@ pub fn run() {
             commands::codex::add_codex_account_with_api_key,
             commands::codex::update_codex_account_name,
             commands::codex::update_codex_api_key_credentials,
+            commands::codex::update_codex_api_key_bound_oauth_account,
             commands::codex::is_codex_oauth_port_in_use,
             commands::codex::close_codex_oauth_port,
             commands::codex::update_codex_account_tags,
@@ -481,13 +522,18 @@ pub fn run() {
             commands::codex::codex_local_access_save_accounts,
             commands::codex::codex_local_access_remove_account,
             commands::codex::codex_local_access_rotate_api_key,
+            commands::codex::codex_local_access_update_bound_oauth_account,
             commands::codex::codex_local_access_clear_stats,
             commands::codex::codex_local_access_prepare_restart,
             commands::codex::codex_local_access_kill_port,
             commands::codex::codex_local_access_update_port,
             commands::codex::codex_local_access_update_routing_strategy,
+            commands::codex::codex_local_access_update_custom_routing,
+            commands::codex::codex_local_access_update_upstream_proxy_config,
+            commands::codex::codex_local_access_update_access_scope,
             commands::codex::codex_local_access_set_enabled,
             commands::codex::codex_local_access_activate,
+            commands::codex::codex_local_access_test,
             // GitHub Copilot Commands
             commands::github_copilot::list_github_copilot_accounts,
             commands::github_copilot::delete_github_copilot_account,
@@ -803,6 +849,7 @@ pub fn run() {
             commands::codex_instance::codex_save_instance_quick_config,
             commands::codex_instance::codex_open_instance_config_toml,
             commands::codex_instance::codex_sync_threads_across_instances,
+            commands::codex_instance::codex_sync_sessions_to_instance,
             commands::codex_instance::codex_repair_session_visibility_across_instances,
             commands::codex_instance::codex_list_sessions_across_instances,
             commands::codex_instance::codex_get_session_token_stats_across_instances,
@@ -837,10 +884,8 @@ pub fn run() {
         {
             match event {
                 RunEvent::Reopen { .. } => {
-                    if let Some(window) = app_handle.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.unminimize();
-                        let _ = window.set_focus();
+                    if let Err(err) = modules::floating_card_window::show_main_window(app_handle) {
+                        logger::log_warn(&format!("[Window] Dock 重新打开主窗口失败: {}", err));
                     }
                 }
                 RunEvent::Opened { urls } => {

@@ -4,6 +4,8 @@
 
 注意：项目官方发布目标是 macOS 和 Windows，Linux/Ubuntu 不是官方发布目标。本文档用于本地验证和自用构建。
 
+兼容性声明：当前 Linux/Ubuntu 仅验证 Ubuntu 24.04 LTS。Ubuntu 20.04 缺少当前构建需要的 WebKitGTK 4.1、OpenSSL 3 与较新的 glibc，不支持；Ubuntu 26 尚未完成兼容性验证，遇到问题需提供日志后再判断。
+
 ## 系统要求
 
 操作系统：

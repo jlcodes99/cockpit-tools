@@ -246,6 +246,75 @@
   background: var(--bg-hover);
 }
 
+.instances-list.instances-list-codex .instances-list-header,
+.instances-list.instances-list-codex .instance-item {
+  display: grid;
+  grid-template-columns: 160px 90px minmax(320px, 1fr) 76px 72px 204px;
+  min-width: 1120px;
+  justify-content: stretch;
+}
+
+.instances-list.instances-list-codex .instances-list-header > div,
+.instances-list.instances-list-codex .instance-item > div {
+  width: auto;
+  min-width: 0;
+  margin-left: 0;
+}
+
+.instances-list.instances-list-codex .instances-list-header > div:nth-child(5),
+.instances-list.instances-list-codex .instance-item > div:nth-child(5) {
+  justify-self: center;
+}
+
+.instances-list.instances-list-codex .instances-list-header > div:nth-child(6),
+.instances-list.instances-list-codex .instance-item > div:nth-child(6) {
+  position: static;
+  right: auto;
+  z-index: auto;
+  background: transparent;
+  box-shadow: none;
+  align-self: center;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.instances-list.instances-list-codex .instances-list-header > div:nth-child(7),
+.instances-list.instances-list-codex .instance-item > div:nth-child(7) {
+  width: 100%;
+}
+
+.instances-list.instances-list-codex .instances-list-header > div:nth-child(7) {
+  position: sticky;
+  right: 0;
+  z-index: 20;
+  background: var(--bg-tertiary);
+  box-shadow: -8px 0 12px -8px rgba(15, 23, 42, 0.12);
+  align-self: stretch;
+  margin-top: -14px;
+  margin-bottom: -14px;
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+.instances-list.instances-list-codex .instance-item > div:nth-child(7) {
+  position: sticky;
+  right: 0;
+  z-index: 10;
+  background: var(--bg-secondary);
+  box-shadow: -8px 0 12px -8px rgba(15, 23, 42, 0.12);
+  align-self: stretch;
+  margin-top: -12px;
+  margin-bottom: -12px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.instances-list.instances-list-codex .instance-item:hover > div:nth-child(7) {
+  background: var(--bg-hover);
+}
+
 .instances-list.instances-list-no-pid .instances-list-header > div:nth-child(5),
 .instances-list.instances-list-no-pid .instance-item > div:nth-child(5) {
   display: none;
@@ -415,6 +484,17 @@
 
 /* Account column */
 .instance-account {
+  min-width: 0;
+}
+
+.instance-speed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.instances-list.instances-list-codex .instance-account .account-select {
   min-width: 0;
 }
 
@@ -1444,6 +1524,26 @@
 }
 
 [data-theme="dark"] .instance-item:hover > div:nth-child(6) {
+  background: rgb(23, 42, 79);
+}
+
+[data-theme="dark"] .instances-list.instances-list-codex .instances-list-header > div:nth-child(6),
+[data-theme="dark"] .instances-list.instances-list-codex .instance-item > div:nth-child(6),
+[data-theme="dark"] .instances-list.instances-list-codex .instance-item:nth-child(even) > div:nth-child(6),
+[data-theme="dark"] .instances-list.instances-list-codex .instance-item:hover > div:nth-child(6) {
+  background: transparent;
+}
+
+[data-theme="dark"] .instances-list.instances-list-codex .instances-list-header > div:nth-child(7) {
+  background: rgb(15, 23, 42);
+}
+
+[data-theme="dark"] .instances-list.instances-list-codex .instance-item > div:nth-child(7),
+[data-theme="dark"] .instances-list.instances-list-codex .instance-item:nth-child(even) > div:nth-child(7) {
+  background: rgb(14, 22, 41);
+}
+
+[data-theme="dark"] .instances-list.instances-list-codex .instance-item:hover > div:nth-child(7) {
   background: rgb(23, 42, 79);
 }
 

@@ -1,22 +1,26 @@
 use crate::models::codex::{CodexAccount, CodexApiProviderMode};
 use crate::models::codex_local_access::{
-    CodexLocalAccessAccountStats, CodexLocalAccessCollection, CodexLocalAccessPortCleanupResult,
-    CodexLocalAccessRoutingStrategy, CodexLocalAccessState, CodexLocalAccessStats,
-    CodexLocalAccessStatsWindow, CodexLocalAccessUsageEvent, CodexLocalAccessUsageStats,
+    CodexLocalAccessAccountStats, CodexLocalAccessCollection, CodexLocalAccessCustomRoutingRule,
+    CodexLocalAccessPortCleanupResult, CodexLocalAccessRoutingStrategy, CodexLocalAccessScope,
+    CodexLocalAccessState, CodexLocalAccessStats, CodexLocalAccessStatsWindow,
+    CodexLocalAccessTestFailure, CodexLocalAccessTestResult, CodexLocalAccessUsageEvent,
+    CodexLocalAccessUsageStats,
 };
 use crate::modules::atomic_write::write_string_atomic;
-use crate::modules::{codex_account, codex_oauth, codex_wakeup, logger, process};
+use crate::modules::{codex_account, codex_oauth, codex_protocol, codex_wakeup, logger, process};
 use base64::{engine::general_purpose, Engine as _};
 use futures_util::StreamExt;
 use rand::{distributions::Alphanumeric, Rng};
 use reqwest::header::{HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
-use reqwest::{Client, Method, StatusCode};
+use reqwest::{Client, Method, Proxy, StatusCode, Url};
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet};
-use std::net::TcpListener as StdTcpListener;
+use std::error::Error as StdError;
+use std::net::{Ipv4Addr, TcpListener as StdTcpListener};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -25,7 +29,8 @@ use tokio::time::{timeout, Duration};
 
 const CODEX_LOCAL_ACCESS_FILE: &str = "codex_local_access.json";
 const CODEX_LOCAL_ACCESS_STATS_FILE: &str = "codex_local_access_stats.json";
-const CODEX_LOCAL_ACCESS_BIND_HOST: &str = "0.0.0.0";
+const CODEX_LOCAL_ACCESS_LOCALHOST_BIND_HOST: &str = "127.0.0.1";
+const CODEX_LOCAL_ACCESS_LAN_BIND_HOST: &str = "0.0.0.0";
 const CODEX_LOCAL_ACCESS_URL_HOST: &str = "127.0.0.1";
 const MAX_HTTP_REQUEST_BYTES: usize = 64 * 1024 * 1024;
 const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(15);
@@ -45,7 +50,13 @@ const PREPARED_ACCOUNT_CACHE_TTL_MS: i64 = 30 * 1000;
 const DAY_WINDOW_MS: i64 = 24 * 60 * 60 * 1000;
 const WEEK_WINDOW_MS: i64 = 7 * DAY_WINDOW_MS;
 const MONTH_WINDOW_MS: i64 = 30 * DAY_WINDOW_MS;
+const CUSTOM_ROUTING_PRIORITY_MIN: i32 = 0;
+const CUSTOM_ROUTING_PRIORITY_MAX: i32 = 100;
+const CUSTOM_ROUTING_WEIGHT_MIN: u32 = 1;
+const CUSTOM_ROUTING_WEIGHT_MAX: u32 = 100;
 const GATEWAY_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
+const GATEWAY_PORT_RELEASE_TIMEOUT: Duration = Duration::from_secs(5);
+const GATEWAY_PORT_RELEASE_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const UPSTREAM_CODEX_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
 const DEFAULT_CODEX_USER_AGENT: &str =
     "codex-tui/0.118.0 (Mac OS 26.3.1; arm64) iTerm.app/3.6.9 (codex-tui; 0.118.0)";
@@ -71,7 +82,7 @@ const IMAGES_GENERATIONS_PATH: &str = "/v1/images/generations";
 const IMAGES_EDITS_PATH: &str = "/v1/images/edits";
 static GATEWAY_RUNTIME: OnceLock<TokioMutex<GatewayRuntime>> = OnceLock::new();
 static GATEWAY_ROUND_ROBIN_CURSOR: AtomicUsize = AtomicUsize::new(0);
-static UPSTREAM_HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
+static UPSTREAM_HTTP_CLIENT: OnceLock<Mutex<Option<CachedUpstreamHttpClient>>> = OnceLock::new();
 
 #[derive(Default)]
 struct GatewayRuntime {
@@ -85,9 +96,16 @@ struct GatewayRuntime {
     prepared_accounts: HashMap<String, CachedPreparedAccount>,
     running: bool,
     actual_port: Option<u16>,
+    actual_bind_host: Option<String>,
     last_error: Option<String>,
     shutdown_sender: Option<watch::Sender<bool>>,
     task: Option<tokio::task::JoinHandle<()>>,
+}
+
+#[derive(Debug, Clone)]
+struct GatewayBindEndpoint {
+    bind_host: String,
+    port: u16,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -143,6 +161,32 @@ struct AccountModelCooldown {
 struct CachedPreparedAccount {
     account: CodexAccount,
     cached_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UpstreamHttpClientSignature {
+    proxy_source: UpstreamProxySource,
+    proxy_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UpstreamProxySource {
+    ApiService,
+    Global,
+    SystemEnv,
+    SystemAuto,
+}
+
+#[derive(Debug, Clone)]
+struct UpstreamProxyDiagnostics {
+    proxy_source: UpstreamProxySource,
+    proxy_url: Option<String>,
+}
+
+#[derive(Clone)]
+struct CachedUpstreamHttpClient {
+    signature: UpstreamHttpClientSignature,
+    client: Client,
 }
 
 #[derive(Debug)]
@@ -211,8 +255,147 @@ fn gateway_runtime() -> &'static TokioMutex<GatewayRuntime> {
     GATEWAY_RUNTIME.get_or_init(|| TokioMutex::new(GatewayRuntime::default()))
 }
 
-fn upstream_http_client() -> &'static Client {
-    UPSTREAM_HTTP_CLIENT.get_or_init(Client::new)
+fn upstream_http_client_cache() -> &'static Mutex<Option<CachedUpstreamHttpClient>> {
+    UPSTREAM_HTTP_CLIENT.get_or_init(|| Mutex::new(None))
+}
+
+fn upstream_env_proxy_url() -> Option<String> {
+    const ENV_PROXY_KEYS: [&str; 6] = [
+        "HTTPS_PROXY",
+        "https_proxy",
+        "ALL_PROXY",
+        "all_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+    ];
+
+    for key in ENV_PROXY_KEYS {
+        if let Ok(value) = std::env::var(key) {
+            let proxy_url = value.trim();
+            if !proxy_url.is_empty() {
+                return Some(proxy_url.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+fn current_upstream_http_client_signature(
+    upstream_proxy_url: Option<&str>,
+) -> UpstreamHttpClientSignature {
+    if let Some(proxy_url) = upstream_proxy_url
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return UpstreamHttpClientSignature {
+            proxy_source: UpstreamProxySource::ApiService,
+            proxy_url: Some(proxy_url.to_string()),
+        };
+    }
+
+    let config = crate::modules::config::get_user_config();
+    if config.global_proxy_enabled {
+        let proxy_url = config.global_proxy_url.trim();
+        if !proxy_url.is_empty() {
+            return UpstreamHttpClientSignature {
+                proxy_source: UpstreamProxySource::Global,
+                proxy_url: Some(proxy_url.to_string()),
+            };
+        }
+    }
+
+    if let Some(proxy_url) = upstream_env_proxy_url() {
+        return UpstreamHttpClientSignature {
+            proxy_source: UpstreamProxySource::SystemEnv,
+            proxy_url: Some(proxy_url),
+        };
+    }
+
+    UpstreamHttpClientSignature {
+        proxy_source: UpstreamProxySource::SystemAuto,
+        proxy_url: None,
+    }
+}
+
+fn redact_proxy_url_for_log(proxy_url: &str) -> String {
+    match Url::parse(proxy_url) {
+        Ok(mut url) => {
+            if !url.username().is_empty() {
+                let _ = url.set_username("redacted");
+            }
+            if url.password().is_some() {
+                let _ = url.set_password(Some("redacted"));
+            }
+            url.to_string()
+        }
+        Err(_) => "<invalid>".to_string(),
+    }
+}
+
+fn current_upstream_proxy_diagnostics(
+    upstream_proxy_url: Option<&str>,
+) -> UpstreamProxyDiagnostics {
+    let signature = current_upstream_http_client_signature(upstream_proxy_url);
+    UpstreamProxyDiagnostics {
+        proxy_source: signature.proxy_source,
+        proxy_url: signature.proxy_url.as_deref().map(redact_proxy_url_for_log),
+    }
+}
+
+fn build_upstream_http_client(signature: &UpstreamHttpClientSignature) -> Result<Client, String> {
+    let mut builder = Client::builder();
+
+    if let Some(proxy_url) = signature.proxy_url.as_deref() {
+        let proxy = Proxy::all(proxy_url).map_err(|e| format!("Codex 上游代理地址无效: {}", e))?;
+        builder = builder.proxy(proxy);
+    }
+
+    builder
+        .build()
+        .map_err(|e| format!("创建 Codex 上游 HTTP 客户端失败: {}", e))
+}
+
+fn log_upstream_http_client_signature(signature: &UpstreamHttpClientSignature) {
+    match (signature.proxy_source, signature.proxy_url.as_deref()) {
+        (UpstreamProxySource::ApiService, Some(proxy_url)) => logger::log_info(&format!(
+            "[CodexLocalAccess] 上游 HTTP 客户端已应用 API 服务代理 proxy_url={}",
+            redact_proxy_url_for_log(proxy_url)
+        )),
+        (UpstreamProxySource::Global, Some(proxy_url)) => logger::log_info(&format!(
+            "[CodexLocalAccess] 上游 HTTP 客户端已跟随全局代理 proxy_url={}，API 服务上游请求不应用 no_proxy 绕过",
+            redact_proxy_url_for_log(proxy_url)
+        )),
+        (UpstreamProxySource::SystemEnv, Some(proxy_url)) => logger::log_info(&format!(
+            "[CodexLocalAccess] 上游 HTTP 客户端已使用环境代理 proxy_url={}，API 服务上游请求不应用 no_proxy 绕过",
+            redact_proxy_url_for_log(proxy_url)
+        )),
+        (UpstreamProxySource::SystemAuto, None) => logger::log_info(
+            "[CodexLocalAccess] 未配置 API 服务代理、全局代理或环境代理，已回退到 reqwest 系统自动代理配置",
+        ),
+        _ => logger::log_warn("[CodexLocalAccess] 上游 HTTP 客户端代理状态异常"),
+    }
+}
+
+fn upstream_http_client(upstream_proxy_url: Option<&str>) -> Result<Client, String> {
+    let signature = current_upstream_http_client_signature(upstream_proxy_url);
+    let mut cache = upstream_http_client_cache()
+        .lock()
+        .map_err(|_| "Codex 上游 HTTP 客户端缓存已损坏".to_string())?;
+
+    if let Some(cached) = cache.as_ref() {
+        if cached.signature == signature {
+            return Ok(cached.client.clone());
+        }
+    }
+
+    let client = build_upstream_http_client(&signature)?;
+    log_upstream_http_client_signature(&signature);
+    *cache = Some(CachedUpstreamHttpClient {
+        signature,
+        client: client.clone(),
+    });
+    Ok(client)
 }
 
 fn local_access_file_path() -> Result<PathBuf, String> {
@@ -238,6 +421,16 @@ fn is_prepared_account_cache_valid(entry: &CachedPreparedAccount, now: i64) -> b
         && !codex_oauth::is_token_expired(&entry.account.tokens.access_token)
 }
 
+fn account_has_refresh_token(account: &CodexAccount) -> bool {
+    account
+        .tokens
+        .refresh_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .is_some()
+}
+
 fn prune_prepared_account_cache(runtime: &mut GatewayRuntime, now: i64) {
     let allowed_account_ids = runtime.collection.as_ref().map(|collection| {
         collection
@@ -261,6 +454,26 @@ fn sync_runtime_collection(runtime: &mut GatewayRuntime, collection: CodexLocalA
     runtime.loaded = true;
     runtime.last_error = None;
     prune_prepared_account_cache(runtime, now_ms());
+}
+
+fn normalize_optional_account_ref(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(str::to_string)
+}
+
+fn validate_local_access_bound_oauth_account(
+    bound_oauth_account_id: &str,
+) -> Result<CodexAccount, String> {
+    let bound_id = normalize_optional_account_ref(Some(bound_oauth_account_id))
+        .ok_or_else(|| "请选择要绑定的 OAuth 账号".to_string())?;
+    let oauth_account = codex_account::load_account(&bound_id)
+        .ok_or_else(|| format!("绑定的 OAuth 账号不存在: {}", bound_id))?;
+    if oauth_account.is_api_key_auth() {
+        return Err("API 服务只能绑定 OAuth 账号，不能绑定 API Key 账号".to_string());
+    }
+    Ok(oauth_account)
 }
 
 async fn cache_prepared_account(account: &CodexAccount) {
@@ -428,22 +641,30 @@ fn rewrite_request_model_alias(body: &[u8]) -> Result<Option<Vec<u8>>, String> {
         return Ok(None);
     };
 
-    let Some(body_obj) = body_value.as_object_mut() else {
+    if !rewrite_request_model_alias_value(&mut body_value) {
         return Ok(None);
+    }
+
+    serde_json::to_vec(&body_value)
+        .map(Some)
+        .map_err(|e| format!("重写请求 model 失败: {}", e))
+}
+
+fn rewrite_request_model_alias_value(body_value: &mut Value) -> bool {
+    let Some(body_obj) = body_value.as_object_mut() else {
+        return false;
     };
     let Some(model) = body_obj.get("model").and_then(Value::as_str) else {
-        return Ok(None);
+        return false;
     };
 
     let resolved_model = resolve_supported_model_alias(model);
     if resolved_model == model {
-        return Ok(None);
+        return false;
     }
 
     body_obj.insert("model".to_string(), Value::String(resolved_model));
-    serde_json::to_vec(&body_value)
-        .map(Some)
-        .map_err(|e| format!("重写请求 model 失败: {}", e))
+    true
 }
 
 fn parse_request_body_json(body: &[u8]) -> Option<Value> {
@@ -1632,18 +1853,27 @@ fn prepare_gateway_request(
     }
 
     if !is_chat_completions_request(&request.target) {
-        if let Some(rewritten_body) = rewrite_request_model_alias(&request.body)? {
-            request.body = rewritten_body;
-        }
         if is_responses_request(&request.target) {
-            if let Some(mut body_value) = parse_request_body_json(&request.body) {
-                if let Some(body_obj) = body_value.as_object_mut() {
-                    if ensure_image_generation_tool_in_object(body_obj) {
-                        request.body = serde_json::to_vec(&body_value)
-                            .map_err(|e| format!("序列化 responses 请求体失败: {}", e))?;
-                    }
-                }
+            if !request.method.eq_ignore_ascii_case("POST") {
+                return Err("responses 仅支持 POST".to_string());
             }
+            let mut body_value = parse_request_body_json(&request.body)
+                .ok_or("responses 请求体必须是合法 JSON".to_string())?;
+            rewrite_request_model_alias_value(&mut body_value);
+            codex_protocol::normalize_responses_body_for_codex(&mut body_value);
+            if let Some(body_obj) = body_value.as_object_mut() {
+                ensure_image_generation_tool_in_object(body_obj);
+            }
+            request.body = serde_json::to_vec(&body_value)
+                .map_err(|e| format!("序列化 responses 请求体失败: {}", e))?;
+            request
+                .headers
+                .insert("accept".to_string(), "text/event-stream".to_string());
+            request
+                .headers
+                .insert("content-type".to_string(), "application/json".to_string());
+        } else if let Some(rewritten_body) = rewrite_request_model_alias(&request.body)? {
+            request.body = rewritten_body;
         }
         let request_is_stream = is_stream_request(&request.headers, &request.body);
         return Ok((
@@ -2467,6 +2697,7 @@ fn compare_routing_candidates(
                 .then_with(|| compare_option_desc(left.plan_rank, right.plan_rank))
                 .then_with(|| compare_option_desc(left.remaining_quota, right.remaining_quota))
         }
+        CodexLocalAccessRoutingStrategy::Custom => Ordering::Equal,
     };
 
     ordering.then_with(|| {
@@ -2482,10 +2713,146 @@ fn compare_routing_candidates(
     })
 }
 
+fn normalize_custom_routing_rule(
+    rule: CodexLocalAccessCustomRoutingRule,
+) -> Option<CodexLocalAccessCustomRoutingRule> {
+    let account_id = rule.account_id.trim().to_string();
+    if account_id.is_empty() {
+        return None;
+    }
+
+    Some(CodexLocalAccessCustomRoutingRule {
+        account_id,
+        priority: rule
+            .priority
+            .clamp(CUSTOM_ROUTING_PRIORITY_MIN, CUSTOM_ROUTING_PRIORITY_MAX),
+        weight: rule
+            .weight
+            .clamp(CUSTOM_ROUTING_WEIGHT_MIN, CUSTOM_ROUTING_WEIGHT_MAX),
+    })
+}
+
+fn normalize_custom_routing_rules(
+    rules: Vec<CodexLocalAccessCustomRoutingRule>,
+    account_ids: &[String],
+) -> Vec<CodexLocalAccessCustomRoutingRule> {
+    let valid_account_ids: HashSet<&str> = account_ids.iter().map(String::as_str).collect();
+    let mut normalized = Vec::new();
+    let mut seen = HashSet::new();
+
+    for rule in rules {
+        let Some(rule) = normalize_custom_routing_rule(rule) else {
+            continue;
+        };
+        if !valid_account_ids.contains(rule.account_id.as_str()) {
+            continue;
+        }
+        if seen.insert(rule.account_id.clone()) {
+            normalized.push(rule);
+        }
+    }
+
+    normalized
+}
+
+fn custom_rule_map(rules: &[CodexLocalAccessCustomRoutingRule]) -> HashMap<&str, (i32, u32)> {
+    rules
+        .iter()
+        .map(|rule| {
+            (
+                rule.account_id.as_str(),
+                (
+                    rule.priority
+                        .clamp(CUSTOM_ROUTING_PRIORITY_MIN, CUSTOM_ROUTING_PRIORITY_MAX),
+                    rule.weight
+                        .clamp(CUSTOM_ROUTING_WEIGHT_MIN, CUSTOM_ROUTING_WEIGHT_MAX),
+                ),
+            )
+        })
+        .collect()
+}
+
+fn weighted_group_order(
+    group: &[String],
+    weights: &HashMap<&str, (i32, u32)>,
+    start: usize,
+) -> Vec<String> {
+    if group.len() <= 1 {
+        return group.to_vec();
+    }
+
+    let total_weight = group.iter().fold(0usize, |sum, account_id| {
+        let weight = weights
+            .get(account_id.as_str())
+            .map(|(_, weight)| *weight)
+            .unwrap_or(CUSTOM_ROUTING_WEIGHT_MIN) as usize;
+        sum.saturating_add(weight.max(1))
+    });
+    if total_weight == 0 {
+        return group.to_vec();
+    }
+
+    let mut slot = start % total_weight;
+    let mut first_index = 0usize;
+    for (index, account_id) in group.iter().enumerate() {
+        let weight = weights
+            .get(account_id.as_str())
+            .map(|(_, weight)| *weight)
+            .unwrap_or(CUSTOM_ROUTING_WEIGHT_MIN) as usize;
+        if slot < weight {
+            first_index = index;
+            break;
+        }
+        slot -= weight;
+    }
+
+    (0..group.len())
+        .map(|offset| group[(first_index + offset) % group.len()].clone())
+        .collect()
+}
+
+fn apply_custom_routing_strategy(
+    account_ids: &[String],
+    rules: &[CodexLocalAccessCustomRoutingRule],
+    start: usize,
+) -> Vec<String> {
+    let rule_map = custom_rule_map(rules);
+    let mut priority_groups: Vec<(i32, Vec<String>)> = Vec::new();
+
+    for account_id in account_ids {
+        let priority = rule_map
+            .get(account_id.as_str())
+            .map(|(priority, _)| *priority)
+            .unwrap_or(CUSTOM_ROUTING_PRIORITY_MIN);
+        if let Some((_, group)) = priority_groups
+            .iter_mut()
+            .find(|(group_priority, _)| *group_priority == priority)
+        {
+            group.push(account_id.clone());
+        } else {
+            priority_groups.push((priority, vec![account_id.clone()]));
+        }
+    }
+
+    priority_groups.sort_by(|left, right| right.0.cmp(&left.0));
+
+    let mut ordered = Vec::with_capacity(account_ids.len());
+    for (_, group) in priority_groups {
+        ordered.extend(weighted_group_order(&group, &rule_map, start));
+    }
+    ordered
+}
+
 fn apply_routing_strategy(
     account_ids: &[String],
     strategy: CodexLocalAccessRoutingStrategy,
+    custom_rules: &[CodexLocalAccessCustomRoutingRule],
+    start: usize,
 ) -> Vec<String> {
+    if strategy == CodexLocalAccessRoutingStrategy::Custom {
+        return apply_custom_routing_strategy(account_ids, custom_rules, start);
+    }
+
     let original_index: HashMap<String, usize> = account_ids
         .iter()
         .enumerate()
@@ -2723,7 +3090,237 @@ fn build_base_url(port: u16) -> String {
     format!("http://{CODEX_LOCAL_ACCESS_URL_HOST}:{port}/v1")
 }
 
-fn build_runtime_account(base_url: String, api_key: String) -> CodexAccount {
+fn build_lan_base_url(port: u16) -> Option<String> {
+    resolve_primary_lan_ipv4().map(|addr| format!("http://{addr}:{port}/v1"))
+}
+
+fn bind_host_for_access_scope(scope: CodexLocalAccessScope) -> &'static str {
+    match scope {
+        CodexLocalAccessScope::Localhost => CODEX_LOCAL_ACCESS_LOCALHOST_BIND_HOST,
+        CodexLocalAccessScope::Lan => CODEX_LOCAL_ACCESS_LAN_BIND_HOST,
+    }
+}
+
+fn bind_host_for_collection(collection: &CodexLocalAccessCollection) -> &'static str {
+    bind_host_for_access_scope(collection.access_scope)
+}
+
+#[derive(Debug)]
+struct LanIpv4Candidate {
+    interface_name: String,
+    addr: Ipv4Addr,
+}
+
+fn resolve_primary_lan_ipv4() -> Option<Ipv4Addr> {
+    let mut candidates = collect_private_lan_ipv4_candidates();
+    candidates.sort_by_key(|candidate| {
+        (
+            lan_interface_score(&candidate.interface_name),
+            lan_addr_score(candidate.addr),
+            candidate.addr.octets(),
+        )
+    });
+    candidates
+        .into_iter()
+        .next()
+        .map(|candidate| candidate.addr)
+}
+
+fn is_lan_ipv4(addr: Ipv4Addr) -> bool {
+    addr.is_private()
+}
+
+fn lan_interface_score(interface_name: &str) -> u8 {
+    let name = interface_name.to_ascii_lowercase();
+    if name.starts_with("en")
+        || name.starts_with("eth")
+        || name.starts_with("wlan")
+        || name.starts_with("wi-fi")
+        || name.starts_with("wifi")
+        || name.starts_with("ethernet")
+        || name.contains("wireless")
+    {
+        return 0;
+    }
+    if name.starts_with("lo")
+        || name.starts_with("utun")
+        || name.starts_with("tun")
+        || name.starts_with("tap")
+        || name.starts_with("awdl")
+        || name.starts_with("llw")
+        || name.starts_with("bridge")
+        || name.starts_with("br-")
+        || name.starts_with("docker")
+        || name.starts_with("veth")
+        || name.starts_with("virbr")
+        || name.starts_with("vmnet")
+        || name.starts_with("vbox")
+        || name.starts_with("tailscale")
+        || name.starts_with("wg")
+    {
+        return 2;
+    }
+    1
+}
+
+fn lan_addr_score(addr: Ipv4Addr) -> u8 {
+    let octets = addr.octets();
+    if octets[0] == 192 && octets[1] == 168 {
+        return 0;
+    }
+    if octets[0] == 10 {
+        return 1;
+    }
+    2
+}
+
+#[cfg(target_os = "macos")]
+fn collect_private_lan_ipv4_candidates() -> Vec<LanIpv4Candidate> {
+    let output = Command::new("ifconfig").arg("-a").output();
+    match output {
+        Ok(output) => parse_ifconfig_ipv4_candidates(&String::from_utf8_lossy(&output.stdout)),
+        Err(_) => Vec::new(),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn collect_private_lan_ipv4_candidates() -> Vec<LanIpv4Candidate> {
+    let output = Command::new("ip")
+        .args(["-o", "-4", "addr", "show", "scope", "global"])
+        .output();
+    match output {
+        Ok(output) => parse_linux_ip_addr_candidates(&String::from_utf8_lossy(&output.stdout)),
+        Err(_) => Vec::new(),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn collect_private_lan_ipv4_candidates() -> Vec<LanIpv4Candidate> {
+    let mut command = Command::new("ipconfig");
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    match command.output() {
+        Ok(output) => parse_windows_ipconfig_candidates(&String::from_utf8_lossy(&output.stdout)),
+        Err(_) => Vec::new(),
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+fn collect_private_lan_ipv4_candidates() -> Vec<LanIpv4Candidate> {
+    Vec::new()
+}
+
+#[cfg(target_os = "macos")]
+fn parse_ifconfig_ipv4_candidates(output: &str) -> Vec<LanIpv4Candidate> {
+    let mut candidates = Vec::new();
+    let mut current_interface = String::new();
+    for line in output.lines() {
+        if !line
+            .chars()
+            .next()
+            .map(|item| item.is_whitespace())
+            .unwrap_or(false)
+        {
+            current_interface = line
+                .split(':')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            continue;
+        }
+        let mut parts = line.split_whitespace();
+        while let Some(part) = parts.next() {
+            if part != "inet" {
+                continue;
+            }
+            let Some(raw_addr) = parts.next() else {
+                continue;
+            };
+            if let Ok(addr) = raw_addr.parse::<Ipv4Addr>() {
+                if is_lan_ipv4(addr) {
+                    candidates.push(LanIpv4Candidate {
+                        interface_name: current_interface.clone(),
+                        addr,
+                    });
+                }
+            }
+        }
+    }
+    candidates
+}
+
+#[cfg(target_os = "linux")]
+fn parse_linux_ip_addr_candidates(output: &str) -> Vec<LanIpv4Candidate> {
+    let mut candidates = Vec::new();
+    for line in output.lines() {
+        let mut parts = line.split_whitespace();
+        let _index = parts.next();
+        let Some(interface_name) = parts.next() else {
+            continue;
+        };
+        while let Some(part) = parts.next() {
+            if part != "inet" {
+                continue;
+            }
+            let Some(raw_addr) = parts.next() else {
+                continue;
+            };
+            let addr_text = raw_addr.split('/').next().unwrap_or_default();
+            if let Ok(addr) = addr_text.parse::<Ipv4Addr>() {
+                if is_lan_ipv4(addr) {
+                    candidates.push(LanIpv4Candidate {
+                        interface_name: interface_name.trim_end_matches(':').to_string(),
+                        addr,
+                    });
+                }
+            }
+        }
+    }
+    candidates
+}
+
+#[cfg(target_os = "windows")]
+fn parse_windows_ipconfig_candidates(output: &str) -> Vec<LanIpv4Candidate> {
+    let mut candidates = Vec::new();
+    let mut current_interface = String::new();
+    for line in output.lines() {
+        let trimmed = line.trim();
+        let is_indented = line
+            .chars()
+            .next()
+            .map(|item| item.is_whitespace())
+            .unwrap_or(false);
+        if trimmed.ends_with(':') && !is_indented {
+            current_interface = trimmed.trim_end_matches(':').to_string();
+            continue;
+        }
+        if !trimmed.contains("IPv4") {
+            continue;
+        }
+        let Some(raw_addr) = trimmed.rsplit(':').next() else {
+            continue;
+        };
+        if let Ok(addr) = raw_addr.trim().parse::<Ipv4Addr>() {
+            if is_lan_ipv4(addr) {
+                candidates.push(LanIpv4Candidate {
+                    interface_name: current_interface.clone(),
+                    addr,
+                });
+            }
+        }
+    }
+    candidates
+}
+
+fn build_runtime_account(
+    base_url: String,
+    api_key: String,
+    bound_oauth_account_id: Option<String>,
+) -> CodexAccount {
     let mut runtime_account = CodexAccount::new_api_key(
         "codex_local_access_runtime".to_string(),
         "api-service-local".to_string(),
@@ -2734,6 +3331,7 @@ fn build_runtime_account(base_url: String, api_key: String) -> CodexAccount {
         Some("Codex API Service".to_string()),
     );
     runtime_account.account_name = Some("API Service".to_string());
+    runtime_account.bound_oauth_account_id = bound_oauth_account_id;
     runtime_account
 }
 
@@ -2746,9 +3344,9 @@ fn generate_local_api_key() -> String {
     format!("agt_codex_{}", suffix)
 }
 
-fn allocate_random_local_port() -> Result<u16, String> {
-    let listener = StdTcpListener::bind((CODEX_LOCAL_ACCESS_BIND_HOST, 0))
-        .map_err(|e| format!("分配本地接入端口失败: {}", e))?;
+fn allocate_random_local_port(bind_host: &str) -> Result<u16, String> {
+    let listener =
+        StdTcpListener::bind((bind_host, 0)).map_err(|e| format!("分配本地接入端口失败: {}", e))?;
     listener
         .local_addr()
         .map(|addr| addr.port())
@@ -2910,24 +3508,77 @@ async fn get_model_cooldown_wait(account_id: &str, model_key: &str) -> Option<Du
     Some(Duration::from_millis(wait_ms as u64))
 }
 
-fn ensure_local_port_available(port: u16, current_port: Option<u16>) -> Result<(), String> {
+fn ensure_local_port_available(
+    bind_host: &str,
+    port: u16,
+    current_port: Option<u16>,
+) -> Result<(), String> {
     if port == 0 {
         return Err("端口必须在 1 到 65535 之间".to_string());
     }
     if current_port == Some(port) {
         return Ok(());
     }
-    let listener = StdTcpListener::bind((CODEX_LOCAL_ACCESS_BIND_HOST, port))
+    let listener = StdTcpListener::bind((bind_host, port))
         .map_err(|e| format!("端口 {} 不可用: {}", port, e))?;
     drop(listener);
     Ok(())
 }
 
-fn format_gateway_bind_error(port: u16, error: &std::io::Error) -> String {
+fn is_local_access_port_bindable(bind_host: &str, port: u16) -> Result<bool, std::io::Error> {
+    match StdTcpListener::bind((bind_host, port)) {
+        Ok(listener) => {
+            drop(listener);
+            Ok(true)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
+async fn wait_for_gateway_port_release(bind_host: &str, port: u16) -> Result<(), String> {
+    let deadline = Instant::now() + GATEWAY_PORT_RELEASE_TIMEOUT;
+
+    loop {
+        match is_local_access_port_bindable(bind_host, port) {
+            Ok(true) => return Ok(()),
+            Ok(false) if Instant::now() < deadline => {
+                tokio::time::sleep(GATEWAY_PORT_RELEASE_POLL_INTERVAL).await;
+            }
+            Ok(false) => {
+                return Err(format!("API 服务端口 {} 停止后仍未释放，请稍后重试", port));
+            }
+            Err(error) => {
+                return Err(format!(
+                    "检查 API 服务端口 {} 释放状态失败: {}",
+                    port, error
+                ));
+            }
+        }
+    }
+}
+
+async fn bind_gateway_listener(bind_host: &str, port: u16) -> Result<TcpListener, std::io::Error> {
+    let deadline = Instant::now() + GATEWAY_PORT_RELEASE_TIMEOUT;
+
+    loop {
+        match TcpListener::bind((bind_host, port)).await {
+            Ok(listener) => return Ok(listener),
+            Err(error)
+                if error.kind() == std::io::ErrorKind::AddrInUse && Instant::now() < deadline =>
+            {
+                tokio::time::sleep(GATEWAY_PORT_RELEASE_POLL_INTERVAL).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+fn format_gateway_bind_error(bind_host: &str, port: u16, error: &std::io::Error) -> String {
     if error.kind() == std::io::ErrorKind::AddrInUse {
         return format!(
-            "启动本地接入服务失败: 端口 {} 已被占用，请先清理端口或改用其他端口（{}）",
-            port, error
+            "启动本地接入服务失败: {}:{} 已被占用，请先清理端口或改用其他端口（{}）",
+            bind_host, port, error
         );
     }
     format!("启动本地接入服务失败: {}", error)
@@ -2951,13 +3602,29 @@ fn is_local_access_eligible_account(account: &CodexAccount, restrict_free_accoun
     true
 }
 
+fn normalize_upstream_proxy_url(upstream_proxy_url: Option<String>) -> Option<String> {
+    upstream_proxy_url
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn validate_upstream_proxy_config(
+    upstream_proxy_url: Option<String>,
+) -> Result<Option<String>, String> {
+    let normalized = normalize_upstream_proxy_url(upstream_proxy_url);
+    if let Some(proxy_url) = normalized.as_deref() {
+        Proxy::all(proxy_url).map_err(|e| format!("API 代理地址无效: {}", e))?;
+    }
+    Ok(normalized)
+}
+
 fn sanitize_collection(
     collection: &mut CodexLocalAccessCollection,
 ) -> Result<(bool, HashSet<String>), String> {
     let mut changed = false;
 
     if collection.port == 0 {
-        collection.port = allocate_random_local_port()?;
+        collection.port = allocate_random_local_port(bind_host_for_collection(collection))?;
         changed = true;
     }
     if collection.api_key.trim().is_empty() {
@@ -2972,14 +3639,39 @@ fn sanitize_collection(
         collection.updated_at = now_ms();
         changed = true;
     }
+    let normalized_upstream_proxy_url =
+        normalize_upstream_proxy_url(collection.upstream_proxy_url.clone());
+    if normalized_upstream_proxy_url != collection.upstream_proxy_url {
+        collection.upstream_proxy_url = normalized_upstream_proxy_url;
+        changed = true;
+    }
 
-    let valid_account_ids: HashSet<String> = codex_account::list_accounts_checked()?
+    let accounts = codex_account::list_accounts_checked()?;
+    let valid_bound_oauth_account_ids: HashSet<String> = accounts
+        .iter()
+        .filter(|account| !account.is_api_key_auth())
+        .map(|account| account.id.clone())
+        .collect();
+    let valid_account_ids: HashSet<String> = accounts
         .into_iter()
         .filter(|account| {
             is_local_access_eligible_account(account, collection.restrict_free_accounts)
         })
         .map(|account| account.id)
         .collect();
+
+    let normalized_bound_oauth_account_id =
+        normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref());
+    if normalized_bound_oauth_account_id != collection.bound_oauth_account_id {
+        collection.bound_oauth_account_id = normalized_bound_oauth_account_id;
+        changed = true;
+    }
+    if let Some(bound_id) = collection.bound_oauth_account_id.as_deref() {
+        if !valid_bound_oauth_account_ids.contains(bound_id) {
+            collection.bound_oauth_account_id = None;
+            changed = true;
+        }
+    }
 
     let mut deduped = Vec::new();
     let mut seen = HashSet::new();
@@ -2998,6 +3690,16 @@ fn sanitize_collection(
         collection.account_ids = deduped;
         changed = true;
     }
+
+    let original_custom_routing_rules = std::mem::take(&mut collection.custom_routing_rules);
+    let normalized_custom_routing_rules = normalize_custom_routing_rules(
+        original_custom_routing_rules.clone(),
+        &collection.account_ids,
+    );
+    if normalized_custom_routing_rules != original_custom_routing_rules {
+        changed = true;
+    }
+    collection.custom_routing_rules = normalized_custom_routing_rules;
 
     Ok((changed, valid_account_ids))
 }
@@ -3018,10 +3720,14 @@ async fn ensure_runtime_loaded_without_start() -> Result<(), String> {
     if next_collection.is_none() {
         next_collection = Some(CodexLocalAccessCollection {
             enabled: false,
-            port: allocate_random_local_port()?,
+            port: allocate_random_local_port(CODEX_LOCAL_ACCESS_LOCALHOST_BIND_HOST)?,
             api_key: generate_local_api_key(),
+            access_scope: CodexLocalAccessScope::Localhost,
+            upstream_proxy_url: None,
             routing_strategy: CodexLocalAccessRoutingStrategy::default(),
+            custom_routing_rules: Vec::new(),
             restrict_free_accounts: true,
+            bound_oauth_account_id: None,
             account_ids: Vec::new(),
             created_at: now_ms(),
             updated_at: now_ms(),
@@ -3079,7 +3785,7 @@ async fn ensure_runtime_loaded() -> Result<(), String> {
 }
 
 async fn ensure_gateway_matches_runtime() -> Result<(), String> {
-    let (collection, running, actual_port, stale_task) = {
+    let (collection, running, actual_port, actual_bind_host, stale_task) = {
         let mut runtime = gateway_runtime().lock().await;
         let stale_task = if !runtime.running {
             runtime.task.take()
@@ -3090,6 +3796,7 @@ async fn ensure_gateway_matches_runtime() -> Result<(), String> {
             runtime.collection.clone(),
             runtime.running,
             runtime.actual_port,
+            runtime.actual_bind_host.clone(),
             stale_task,
         )
     };
@@ -3108,29 +3815,41 @@ async fn ensure_gateway_matches_runtime() -> Result<(), String> {
         return Ok(());
     }
 
-    if running && actual_port == Some(collection.port) {
+    let bind_host = bind_host_for_collection(&collection);
+    if running
+        && actual_port == Some(collection.port)
+        && actual_bind_host.as_deref() == Some(bind_host)
+    {
         return Ok(());
     }
 
-    stop_gateway().await;
+    let stopped_endpoint = stop_gateway().await;
+    if let Some(endpoint) = stopped_endpoint {
+        wait_for_gateway_port_release(&endpoint.bind_host, endpoint.port).await?;
+    }
 
-    let listener = match TcpListener::bind((CODEX_LOCAL_ACCESS_BIND_HOST, collection.port)).await {
+    let listener = match bind_gateway_listener(bind_host, collection.port).await {
         Ok(listener) => listener,
         Err(error) => {
-            let message = format_gateway_bind_error(collection.port, &error);
+            let message = format_gateway_bind_error(bind_host, collection.port, &error);
             let mut runtime = gateway_runtime().lock().await;
             runtime.running = false;
             runtime.actual_port = None;
+            runtime.actual_bind_host = None;
             runtime.last_error = Some(message.clone());
             return Err(message);
         }
     };
     let (shutdown_sender, mut shutdown_receiver) = watch::channel(false);
     let port = collection.port;
+    let bind_host = bind_host.to_string();
+    let task_bind_host = bind_host.clone();
 
     let task = tokio::spawn(async move {
         logger::log_codex_api_info(&format!(
-            "[CodexLocalAccess] 本地接入服务已启动: {}",
+            "[CodexLocalAccess] 本地接入服务已启动: bind={}:{} base={}",
+            task_bind_host,
+            port,
             build_base_url(port)
         ));
 
@@ -3166,9 +3885,12 @@ async fn ensure_gateway_matches_runtime() -> Result<(), String> {
         }
 
         let mut runtime = gateway_runtime().lock().await;
-        if runtime.actual_port == Some(port) {
+        if runtime.actual_port == Some(port)
+            && runtime.actual_bind_host.as_deref() == Some(&task_bind_host)
+        {
             runtime.running = false;
             runtime.actual_port = None;
+            runtime.actual_bind_host = None;
             runtime.shutdown_sender = None;
         }
     });
@@ -3176,18 +3898,28 @@ async fn ensure_gateway_matches_runtime() -> Result<(), String> {
     let mut runtime = gateway_runtime().lock().await;
     runtime.running = true;
     runtime.actual_port = Some(collection.port);
+    runtime.actual_bind_host = Some(bind_host);
     runtime.last_error = None;
     runtime.shutdown_sender = Some(shutdown_sender);
     runtime.task = Some(task);
     Ok(())
 }
 
-async fn stop_gateway() {
-    let (shutdown_sender, task) = {
+async fn stop_gateway() -> Option<GatewayBindEndpoint> {
+    let (shutdown_sender, task, endpoint) = {
         let mut runtime = gateway_runtime().lock().await;
+        let endpoint = runtime
+            .actual_port
+            .zip(runtime.actual_bind_host.clone())
+            .map(|(port, bind_host)| GatewayBindEndpoint { bind_host, port });
         runtime.running = false;
         runtime.actual_port = None;
-        (runtime.shutdown_sender.take(), runtime.task.take())
+        runtime.actual_bind_host = None;
+        (
+            runtime.shutdown_sender.take(),
+            runtime.task.take(),
+            endpoint,
+        )
     };
 
     if let Some(sender) = shutdown_sender {
@@ -3205,6 +3937,8 @@ async fn stop_gateway() {
             }
         }
     }
+
+    endpoint
 }
 
 fn apply_usage_stats(
@@ -3325,6 +4059,13 @@ fn build_state_snapshot(runtime: &GatewayRuntime) -> CodexLocalAccessState {
         .as_ref()
         .map(|item| build_api_port_url(item.port));
     let base_url = collection.as_ref().map(|item| build_base_url(item.port));
+    let lan_base_url = collection.as_ref().and_then(|item| {
+        if item.access_scope == CodexLocalAccessScope::Lan {
+            build_lan_base_url(item.port)
+        } else {
+            None
+        }
+    });
     let model_ids = supported_codex_model_ids();
     let mut stats = runtime.stats.clone();
     stats.events.clear();
@@ -3334,6 +4075,7 @@ fn build_state_snapshot(runtime: &GatewayRuntime) -> CodexLocalAccessState {
         running: runtime.running,
         api_port_url,
         base_url,
+        lan_base_url,
         model_ids,
         last_error: runtime.last_error.clone(),
         member_count,
@@ -3368,9 +4110,472 @@ pub async fn activate_local_access_for_dir(
         .base_url
         .clone()
         .unwrap_or_else(|| build_base_url(collection.port));
-    let runtime_account = build_runtime_account(base_url, collection.api_key.clone());
+    let bound_oauth_account_id =
+        normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref());
+    if let Some(bound_id) = bound_oauth_account_id.as_deref() {
+        let _ = validate_local_access_bound_oauth_account(bound_id)?;
+        let _ = codex_account::ensure_managed_account_fresh(bound_id).await?;
+    }
+    let runtime_account =
+        build_runtime_account(base_url, collection.api_key.clone(), bound_oauth_account_id);
     codex_account::write_account_bundle_to_dir(profile_dir, &runtime_account)?;
     Ok(state)
+}
+
+#[derive(Debug, Clone)]
+struct LocalAccessGatewayProbeFailure {
+    status: Option<u16>,
+    message: String,
+    detail: Option<String>,
+    gateway_output: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+enum LocalAccessGatewayProbeResult {
+    Passed,
+    Failed(LocalAccessGatewayProbeFailure),
+}
+
+fn truncate_diagnostic_text(value: &str, max_chars: usize) -> String {
+    let count = value.chars().count();
+    if count <= max_chars {
+        return value.to_string();
+    }
+    let mut result = value.chars().take(max_chars).collect::<String>();
+    result.push_str("...");
+    result
+}
+
+fn clean_diagnostic_text(value: impl Into<String>) -> Option<String> {
+    let text = value.into().trim().to_string();
+    if text.is_empty() {
+        None
+    } else {
+        Some(truncate_diagnostic_text(&text, 4000))
+    }
+}
+
+fn extract_gateway_error_message(body: &str) -> String {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return "网关未返回错误内容".to_string();
+    }
+
+    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+        if let Some(message) = value.get("error").and_then(Value::as_str) {
+            return message.to_string();
+        }
+        if let Some(message) = value
+            .get("error")
+            .and_then(|item| item.get("message"))
+            .and_then(Value::as_str)
+        {
+            return message.to_string();
+        }
+        if let Some(message) = value.get("message").and_then(Value::as_str) {
+            return message.to_string();
+        }
+    }
+
+    truncate_diagnostic_text(trimmed, 800)
+}
+
+fn build_failure_result(failure: CodexLocalAccessTestFailure) -> CodexLocalAccessTestResult {
+    CodexLocalAccessTestResult {
+        model_id: failure.model_id.clone(),
+        latency_ms: None,
+        output: None,
+        failure: Some(failure),
+    }
+}
+
+fn local_access_test_failure(
+    title: impl Into<String>,
+    stage: impl Into<String>,
+    cause: impl Into<String>,
+    suggestion: impl Into<String>,
+    model_id: Option<String>,
+) -> CodexLocalAccessTestFailure {
+    CodexLocalAccessTestFailure {
+        title: title.into(),
+        stage: stage.into(),
+        cause: cause.into(),
+        suggestion: suggestion.into(),
+        status: None,
+        model_id,
+        detail: None,
+        cli_output: None,
+        gateway_output: None,
+    }
+}
+
+async fn probe_local_access_gateway(
+    base_url: &str,
+    api_key: &str,
+    model_id: &str,
+) -> LocalAccessGatewayProbeResult {
+    let url = format!("{}/v1/responses", base_url.trim_end_matches('/'));
+    let client = match Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(90))
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => {
+            return LocalAccessGatewayProbeResult::Failed(LocalAccessGatewayProbeFailure {
+                status: None,
+                message: format!("创建本地网关诊断客户端失败: {}", error),
+                detail: Some(error.to_string()),
+                gateway_output: None,
+            });
+        }
+    };
+
+    let body = json!({
+        "model": model_id,
+        "stream": false,
+        "store": false,
+        "input": "Reply with exactly: pong"
+    });
+    let response = match client
+        .post(&url)
+        .header(AUTHORIZATION, format!("Bearer {}", api_key.trim()))
+        .header(CONTENT_TYPE, "application/json")
+        .header(ACCEPT, "application/json")
+        .json(&body)
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(error) => {
+            return LocalAccessGatewayProbeResult::Failed(LocalAccessGatewayProbeFailure {
+                status: error.status().map(|status| status.as_u16()),
+                message: format!("无法连接本地网关 {}: {}", url, error),
+                detail: Some(error.to_string()),
+                gateway_output: None,
+            });
+        }
+    };
+
+    let status = response.status();
+    let body_text = match response.text().await {
+        Ok(text) => text,
+        Err(error) => {
+            return LocalAccessGatewayProbeResult::Failed(LocalAccessGatewayProbeFailure {
+                status: Some(status.as_u16()),
+                message: format!("读取本地网关响应失败: {}", error),
+                detail: Some(error.to_string()),
+                gateway_output: None,
+            });
+        }
+    };
+
+    if status.is_success() {
+        return LocalAccessGatewayProbeResult::Passed;
+    }
+
+    LocalAccessGatewayProbeResult::Failed(LocalAccessGatewayProbeFailure {
+        status: Some(status.as_u16()),
+        message: extract_gateway_error_message(&body_text),
+        detail: clean_diagnostic_text(body_text.clone()),
+        gateway_output: clean_diagnostic_text(format!("HTTP {}\n{}", status.as_u16(), body_text)),
+    })
+}
+
+fn format_cli_failure_output(
+    error: &codex_wakeup::CodexWakeupCliConversationDetailedError,
+) -> Option<String> {
+    let mut lines = Vec::new();
+    if let Some(status) = error.status.as_deref() {
+        lines.push(format!("exit_status: {}", status));
+    }
+    if let Some(duration_ms) = error.duration_ms {
+        lines.push(format!("duration_ms: {}", duration_ms));
+    }
+    if let Some(stderr) = error.stderr.as_deref() {
+        lines.push(format!("stderr:\n{}", stderr));
+    }
+    if let Some(stdout) = error.stdout.as_deref() {
+        lines.push(format!("stdout:\n{}", stdout));
+    }
+    if let Some(last_message) = error.last_message.as_deref() {
+        lines.push(format!("last_message:\n{}", last_message));
+    }
+    clean_diagnostic_text(lines.join("\n\n"))
+}
+
+fn is_quota_or_rate_limit_message(status: Option<u16>, message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    matches!(status, Some(429))
+        || lower.contains("usage_limit_reached")
+        || lower.contains("limit reached")
+        || lower.contains("rate limit")
+        || lower.contains("quota")
+        || lower.contains("cooldown")
+        || lower.contains("额度")
+        || lower.contains("限流")
+        || lower.contains("冷却")
+}
+
+fn classify_gateway_probe_failure(
+    model_id: &str,
+    cli_error: &codex_wakeup::CodexWakeupCliConversationDetailedError,
+    probe_failure: LocalAccessGatewayProbeFailure,
+) -> CodexLocalAccessTestFailure {
+    let status = probe_failure.status;
+    let message = probe_failure.message.trim();
+    let lower = message.to_ascii_lowercase();
+    let (title, stage, suggestion) = if status.is_none() {
+        (
+            "无法连接本地网关",
+            "本地网关连接",
+            "确认 API 服务仍在运行，端口未被系统占用或安全软件拦截；如端口异常，可先清理端口或更换端口后重试。",
+        )
+    } else if matches!(status, Some(401)) {
+        if lower.contains("authorization") || message.contains("密钥") || lower.contains("api-key")
+        {
+            (
+                "本地 API 服务密钥无效",
+                "本地网关鉴权",
+                "重置 API 服务密钥后重新复制 Base URL/API Key，并确认 Codex CLI 使用的是最新配置。",
+            )
+        } else {
+            (
+                "Codex 账号鉴权失败",
+                "上游账号鉴权",
+                "刷新该 Codex 账号额度或重新导入账号；如果账号已退出登录或令牌过期，需要重新登录后再测试。",
+            )
+        }
+    } else if is_quota_or_rate_limit_message(status, message) {
+        (
+            "上游限流或额度不足",
+            "上游额度",
+            "查看账号额度池，切换到仍有额度的账号，或等待冷却窗口结束后重试。",
+        )
+    } else if matches!(status, Some(502) | Some(503) | Some(504)) {
+        if message.contains("暂无可用账号")
+            || message.contains("集合暂无")
+            || message.contains("Free 账号")
+            || message.contains("API Key 账号")
+        {
+            (
+                "账号池暂无可用账号",
+                "账号池路由",
+                "在 API 服务账号集合中加入可用的 Codex OAuth 账号，并确认未被 Free 账号限制或账号类型限制拦截。",
+            )
+        } else {
+            (
+                "上游服务或代理不可用",
+                "上游请求",
+                "检查 API 服务代理地址、网络连通性和 Codex 上游服务状态；如果 API 服务没有请求记录，检查代理工具是否拦截 localhost / 127.0.0.1。",
+            )
+        }
+    } else {
+        (
+            "本地网关请求失败",
+            "本地网关响应",
+            "根据 HTTP 状态和网关返回内容处理；如果是账号相关错误，优先刷新或重新导入对应账号。",
+        )
+    };
+
+    CodexLocalAccessTestFailure {
+        title: title.to_string(),
+        stage: stage.to_string(),
+        cause: if let Some(status) = status {
+            format!("本地网关返回 HTTP {}：{}", status, message)
+        } else {
+            message.to_string()
+        },
+        suggestion: suggestion.to_string(),
+        status,
+        model_id: Some(model_id.to_string()),
+        detail: probe_failure.detail,
+        cli_output: format_cli_failure_output(cli_error),
+        gateway_output: probe_failure.gateway_output,
+    }
+}
+
+fn build_cli_environment_failure(
+    model_id: &str,
+    cli_error: codex_wakeup::CodexWakeupCliConversationDetailedError,
+    gateway_passed: bool,
+) -> CodexLocalAccessTestFailure {
+    CodexLocalAccessTestFailure {
+        title: "Codex CLI 执行环境异常".to_string(),
+        stage: "Codex CLI".to_string(),
+        cause: if gateway_passed {
+            format!(
+                "本地网关直接诊断已通过，但 Codex CLI 真实请求失败：{}",
+                cli_error.message
+            )
+        } else {
+            cli_error.message.clone()
+        },
+        suggestion: "检查 Codex CLI 路径、版本、配置文件读取权限和运行时环境；如果刚升级过 CLI，请重启应用后再测。".to_string(),
+        status: None,
+        model_id: Some(model_id.to_string()),
+        detail: None,
+        cli_output: format_cli_failure_output(&cli_error),
+        gateway_output: None,
+    }
+}
+
+pub async fn test_local_access_with_cli() -> Result<CodexLocalAccessTestResult, String> {
+    ensure_runtime_loaded().await?;
+    let state = snapshot_state().await?;
+    let Some(collection) = state.collection.clone() else {
+        return Ok(build_failure_result(local_access_test_failure(
+            "API 服务集合尚未创建",
+            "检测前置条件",
+            "当前没有可用于本地 API 服务的账号集合配置。",
+            "先在 API 服务弹框中选择账号并保存，然后启用服务后再测试。",
+            None,
+        )));
+    };
+    if !collection.enabled {
+        return Ok(build_failure_result(local_access_test_failure(
+            "API 服务未启用",
+            "检测前置条件",
+            "当前 API 服务处于停用状态，CLI 无法通过本地网关发起请求。",
+            "先启用 API 服务，再重新执行健康检测。",
+            None,
+        )));
+    }
+    if !state.running {
+        return Ok(build_failure_result(local_access_test_failure(
+            "API 服务未运行",
+            "本地网关进程",
+            "API 服务配置已启用，但本地网关当前没有监听端口。",
+            "先启动 API 服务；如果端口被占用，清理端口或更换端口后重试。",
+            None,
+        )));
+    }
+    if collection.account_ids.is_empty() {
+        return Ok(build_failure_result(local_access_test_failure(
+            "账号集合为空",
+            "账号池配置",
+            "API 服务集合中没有账号，网关没有可路由的上游账号。",
+            "在 API 服务账号集合中加入可用的 Codex OAuth 账号后再测试。",
+            None,
+        )));
+    }
+
+    let base_url = state
+        .base_url
+        .clone()
+        .unwrap_or_else(|| build_base_url(collection.port));
+    let Some(model_id) = state.model_ids.first().cloned() else {
+        return Ok(build_failure_result(local_access_test_failure(
+            "API 服务暂无可用模型",
+            "模型配置",
+            "当前 API 服务没有可用于检测的模型 ID。",
+            "确认账号集合中至少有一个可用账号，并刷新模型/账号状态后再测试。",
+            None,
+        )));
+    };
+    if model_id.trim().is_empty() {
+        return Ok(build_failure_result(local_access_test_failure(
+            "API 服务暂无可用模型",
+            "模型配置",
+            "当前 API 服务没有可用于检测的模型 ID。",
+            "确认账号集合中至少有一个可用账号，并刷新模型/账号状态后再测试。",
+            None,
+        )));
+    }
+    let temp_home = std::env::temp_dir().join(format!(
+        "antigravity-codex-api-service-test-{}",
+        uuid::Uuid::new_v4()
+    ));
+
+    if let Err(error) = std::fs::create_dir_all(&temp_home) {
+        return Ok(build_failure_result(local_access_test_failure(
+            "创建 CLI 检测环境失败",
+            "Codex CLI 环境",
+            format!("无法创建临时 CODEX_HOME：{}", error),
+            "检查系统临时目录写入权限和磁盘空间后重试。",
+            Some(model_id),
+        )));
+    }
+    let bound_oauth_account_id =
+        normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref());
+    if let Some(bound_id) = bound_oauth_account_id.as_deref() {
+        let _ = validate_local_access_bound_oauth_account(bound_id)?;
+        let _ = codex_account::ensure_managed_account_fresh(bound_id).await?;
+    }
+    let runtime_account = build_runtime_account(
+        base_url.clone(),
+        collection.api_key.clone(),
+        bound_oauth_account_id,
+    );
+    if let Err(err) = codex_account::write_account_bundle_to_dir(&temp_home, &runtime_account) {
+        let _ = std::fs::remove_dir_all(&temp_home);
+        return Ok(build_failure_result(local_access_test_failure(
+            "写入 CLI 检测账号失败",
+            "Codex CLI 环境",
+            format!("无法写入检测用 auth.json/config.toml：{}", err),
+            "检查临时目录写入权限；如果文件被安全软件拦截，放行后再重试。",
+            Some(model_id),
+        )));
+    }
+
+    let run_home = temp_home.clone();
+    let run_model_id = model_id.clone();
+    let cli_result = tokio::task::spawn_blocking(move || {
+        codex_wakeup::run_cli_conversation_in_home_detailed(
+            &run_home,
+            "Reply with exactly: pong",
+            &codex_wakeup::CodexWakeupExecutionConfig {
+                model: Some(run_model_id),
+                model_display_name: None,
+                model_reasoning_effort: None,
+            },
+        )
+    })
+    .await
+    .map_err(|e| {
+        local_access_test_failure(
+            "API 服务检测任务执行失败",
+            "检测任务",
+            format!("后台检测任务无法完成：{}", e),
+            "重试检测；如果持续发生，重启应用后再测试。",
+            Some(model_id.clone()),
+        )
+    });
+
+    if let Err(err) = std::fs::remove_dir_all(&temp_home) {
+        logger::log_codex_api_warn(&format!(
+            "[CodexLocalAccess] 清理 API 服务检测环境失败: path={}, error={}",
+            temp_home.display(),
+            err
+        ));
+    }
+
+    let cli_result = match cli_result {
+        Ok(result) => result,
+        Err(failure) => return Ok(build_failure_result(failure)),
+    };
+    let cli_result = match cli_result {
+        Ok(result) => result,
+        Err(cli_error) => {
+            let probe_result =
+                probe_local_access_gateway(&base_url, &collection.api_key, &model_id).await;
+            let failure = match probe_result {
+                LocalAccessGatewayProbeResult::Passed => {
+                    build_cli_environment_failure(&model_id, cli_error, true)
+                }
+                LocalAccessGatewayProbeResult::Failed(probe_failure) => {
+                    classify_gateway_probe_failure(&model_id, &cli_error, probe_failure)
+                }
+            };
+            return Ok(build_failure_result(failure));
+        }
+    };
+    Ok(CodexLocalAccessTestResult {
+        model_id: Some(model_id),
+        latency_ms: Some(cli_result.duration_ms),
+        output: Some(cli_result.reply),
+        failure: None,
+    })
 }
 
 pub async fn save_local_access_accounts(
@@ -3386,10 +4591,14 @@ pub async fn save_local_access_accounts(
             .clone()
             .unwrap_or(CodexLocalAccessCollection {
                 enabled: false,
-                port: allocate_random_local_port()?,
+                port: allocate_random_local_port(CODEX_LOCAL_ACCESS_LOCALHOST_BIND_HOST)?,
                 api_key: generate_local_api_key(),
+                access_scope: CodexLocalAccessScope::Localhost,
+                upstream_proxy_url: None,
                 routing_strategy: CodexLocalAccessRoutingStrategy::default(),
+                custom_routing_rules: Vec::new(),
                 restrict_free_accounts: true,
+                bound_oauth_account_id: None,
                 account_ids: Vec::new(),
                 created_at: now_ms(),
                 updated_at: now_ms(),
@@ -3461,6 +4670,96 @@ pub async fn update_local_access_routing_strategy(
     snapshot_state().await
 }
 
+pub async fn update_local_access_custom_routing(
+    rules: Vec<CodexLocalAccessCustomRoutingRule>,
+) -> Result<CodexLocalAccessState, String> {
+    ensure_runtime_loaded().await?;
+
+    let maybe_collection = {
+        let runtime = gateway_runtime().lock().await;
+        runtime.collection.clone()
+    };
+
+    let Some(mut collection) = maybe_collection else {
+        return Err("本地接入集合尚未创建".to_string());
+    };
+
+    collection.custom_routing_rules =
+        normalize_custom_routing_rules(rules, &collection.account_ids);
+    collection.routing_strategy = CodexLocalAccessRoutingStrategy::Custom;
+    collection.updated_at = now_ms();
+    save_collection_to_disk(&collection)?;
+
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        sync_runtime_collection(&mut runtime, collection);
+    }
+
+    snapshot_state().await
+}
+
+pub async fn update_local_access_upstream_proxy_config(
+    upstream_proxy_url: Option<String>,
+) -> Result<CodexLocalAccessState, String> {
+    ensure_runtime_loaded().await?;
+    let normalized_upstream_proxy_url = validate_upstream_proxy_config(upstream_proxy_url)?;
+
+    let maybe_collection = {
+        let runtime = gateway_runtime().lock().await;
+        runtime.collection.clone()
+    };
+
+    let Some(mut collection) = maybe_collection else {
+        return Err("本地接入集合尚未创建".to_string());
+    };
+
+    if collection.upstream_proxy_url == normalized_upstream_proxy_url {
+        return snapshot_state().await;
+    }
+
+    collection.upstream_proxy_url = normalized_upstream_proxy_url;
+    collection.updated_at = now_ms();
+    save_collection_to_disk(&collection)?;
+
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        sync_runtime_collection(&mut runtime, collection);
+    }
+
+    snapshot_state().await
+}
+
+pub async fn update_local_access_scope(
+    access_scope: CodexLocalAccessScope,
+) -> Result<CodexLocalAccessState, String> {
+    ensure_runtime_loaded().await?;
+
+    let maybe_collection = {
+        let runtime = gateway_runtime().lock().await;
+        runtime.collection.clone()
+    };
+
+    let Some(mut collection) = maybe_collection else {
+        return Err("本地接入集合尚未创建".to_string());
+    };
+
+    if collection.access_scope == access_scope {
+        return snapshot_state().await;
+    }
+
+    collection.access_scope = access_scope;
+    collection.updated_at = now_ms();
+    save_collection_to_disk(&collection)?;
+
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        sync_runtime_collection(&mut runtime, collection);
+    }
+
+    ensure_gateway_matches_runtime().await?;
+    snapshot_state().await
+}
+
 pub async fn remove_local_access_account(
     account_id: &str,
 ) -> Result<CodexLocalAccessState, String> {
@@ -3517,6 +4816,42 @@ pub async fn rotate_local_access_api_key() -> Result<CodexLocalAccessState, Stri
     snapshot_state().await
 }
 
+pub async fn update_local_access_bound_oauth_account(
+    bound_oauth_account_id: Option<String>,
+) -> Result<CodexLocalAccessState, String> {
+    ensure_runtime_loaded().await?;
+
+    let maybe_collection = {
+        let runtime = gateway_runtime().lock().await;
+        runtime.collection.clone()
+    };
+
+    let Some(mut collection) = maybe_collection else {
+        return Err("本地接入集合尚未创建".to_string());
+    };
+
+    let normalized_bound_id = normalize_optional_account_ref(bound_oauth_account_id.as_deref());
+    if collection.bound_oauth_account_id == normalized_bound_id {
+        return snapshot_state().await;
+    }
+
+    if let Some(bound_id) = normalized_bound_id {
+        let bound_account = validate_local_access_bound_oauth_account(&bound_id)?;
+        collection.bound_oauth_account_id = Some(bound_account.id);
+    } else {
+        collection.bound_oauth_account_id = None;
+    }
+    collection.updated_at = now_ms();
+    save_collection_to_disk(&collection)?;
+
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        sync_runtime_collection(&mut runtime, collection);
+    }
+
+    snapshot_state().await
+}
+
 pub async fn clear_local_access_stats() -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded().await?;
 
@@ -3533,7 +4868,10 @@ pub async fn clear_local_access_stats() -> Result<CodexLocalAccessState, String>
 
 pub async fn prepare_local_access_gateway_for_restart() -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded_without_start().await?;
-    stop_gateway().await;
+    let stopped_endpoint = stop_gateway().await;
+    if let Some(endpoint) = stopped_endpoint {
+        wait_for_gateway_port_release(&endpoint.bind_host, endpoint.port).await?;
+    }
 
     let runtime = gateway_runtime().lock().await;
     Ok(build_state_snapshot(&runtime))
@@ -3582,7 +4920,11 @@ pub async fn update_local_access_port(port: u16) -> Result<CodexLocalAccessState
         return Err("本地接入集合尚未创建".to_string());
     };
 
-    ensure_local_port_available(port, Some(collection.port))?;
+    ensure_local_port_available(
+        bind_host_for_collection(&collection),
+        port,
+        Some(collection.port),
+    )?;
     if collection.port == port {
         return snapshot_state().await;
     }
@@ -3795,6 +5137,11 @@ fn build_local_models_response() -> Value {
         "object": "list",
         "data": data,
     })
+}
+
+fn build_codex_client_models_response() -> Value {
+    let model_ids = supported_codex_model_ids();
+    codex_protocol::build_codex_client_models_response(&model_ids)
 }
 
 fn usage_number(value: Option<&Value>) -> Option<u64> {
@@ -4184,6 +5531,112 @@ fn json_response(status: u16, status_text: &str, body: &Value) -> Vec<u8> {
     response
 }
 
+fn gateway_error_code(status: u16) -> &'static str {
+    match status {
+        400 => "bad_request",
+        401 => "unauthorized",
+        404 => "not_found",
+        405 => "method_not_allowed",
+        429 => "rate_limited",
+        502 => "upstream_unavailable",
+        503 => "service_unavailable",
+        _ => "codex_local_access_error",
+    }
+}
+
+fn gateway_proxy_diagnostics_message(diagnostics: &UpstreamProxyDiagnostics) -> String {
+    match diagnostics.proxy_source {
+        UpstreamProxySource::ApiService => match diagnostics.proxy_url.as_deref() {
+            Some(proxy_url) => format!("当前使用 API 代理地址：{}。", proxy_url),
+            None => "当前 API 代理地址为空。".to_string(),
+        },
+        UpstreamProxySource::Global => match diagnostics.proxy_url.as_deref() {
+            Some(proxy_url) => format!("当前 API 代理地址为空，已跟随全局代理：{}。", proxy_url),
+            None => "当前 API 代理地址为空，已尝试跟随全局代理。".to_string(),
+        },
+        UpstreamProxySource::SystemEnv => match diagnostics.proxy_url.as_deref() {
+            Some(proxy_url) => {
+                format!(
+                    "当前 API 代理地址为空，且全局代理未启用或未配置，已使用环境代理：{}。",
+                    proxy_url
+                )
+            }
+            None => {
+                "当前 API 代理地址为空，且全局代理未启用或未配置，已尝试使用环境代理。".to_string()
+            }
+        },
+        UpstreamProxySource::SystemAuto => {
+            "当前 API 代理地址为空，且全局代理与环境代理均未配置，已回退到系统自动代理配置；如仍失败，请在 API 代理地址中填写 Clash 的 HTTP/mixed 端口。".to_string()
+        }
+    }
+}
+
+fn upstream_proxy_source_code(source: UpstreamProxySource) -> &'static str {
+    match source {
+        UpstreamProxySource::ApiService => "api_service",
+        UpstreamProxySource::Global => "global",
+        UpstreamProxySource::SystemEnv => "system_env",
+        UpstreamProxySource::SystemAuto => "system_auto",
+    }
+}
+
+fn gateway_user_visible_error_message(
+    status: u16,
+    message: &str,
+    proxy_diagnostics: Option<&UpstreamProxyDiagnostics>,
+) -> String {
+    if status != StatusCode::BAD_GATEWAY.as_u16() {
+        return message.to_string();
+    }
+
+    let proxy_context = proxy_diagnostics
+        .map(|diagnostics| format!(" {}", gateway_proxy_diagnostics_message(diagnostics)))
+        .unwrap_or_default();
+    format!(
+        "Codex API 服务连接官方上游失败。API 代理地址留空时会依次使用全局代理、环境代理、系统自动代理；如需固定出口，建议填写 API 代理地址（例如 http://127.0.0.1:7890）后重试。{} 如果 Codex 客户端仍显示 502 且 API 服务没有请求记录，请检查代理工具是否拦截或屏蔽 localhost / 127.0.0.1。原始错误：{}",
+        proxy_context, message
+    )
+}
+
+fn gateway_error_body(
+    status: u16,
+    message: &str,
+    proxy_diagnostics: Option<&UpstreamProxyDiagnostics>,
+) -> Value {
+    let mut error = Map::new();
+    error.insert(
+        "message".to_string(),
+        Value::String(gateway_user_visible_error_message(
+            status,
+            message,
+            proxy_diagnostics,
+        )),
+    );
+    error.insert(
+        "type".to_string(),
+        Value::String("codex_local_access_error".to_string()),
+    );
+    error.insert(
+        "code".to_string(),
+        Value::String(gateway_error_code(status).to_string()),
+    );
+    error.insert("status".to_string(), json!(status));
+
+    if let Some(diagnostics) = proxy_diagnostics {
+        error.insert(
+            "upstreamProxy".to_string(),
+            json!({
+                "source": upstream_proxy_source_code(diagnostics.proxy_source),
+                "proxyUrl": diagnostics.proxy_url.clone(),
+            }),
+        );
+    }
+
+    let mut body = Map::new();
+    body.insert("error".to_string(), Value::Object(error));
+    Value::Object(body)
+}
+
 fn options_response() -> Vec<u8> {
     let headers = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 0\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: {}\r\n\r\n",
@@ -4258,7 +5711,11 @@ async fn write_json_error_response(
         message,
     );
 
-    let response = json_response(status, status_text, &json!({ "error": message }));
+    let response = json_response(
+        status,
+        status_text,
+        &gateway_error_body(status, message, None),
+    );
     stream
         .write_all(&response)
         .await
@@ -5028,6 +6485,26 @@ fn should_retry_upstream_send_error(error: &reqwest::Error) -> bool {
     error.is_timeout() || error.is_connect() || error.is_request()
 }
 
+fn format_reqwest_error_chain(error: &reqwest::Error) -> String {
+    let mut parts = vec![error.to_string()];
+    let mut source = StdError::source(error);
+    while let Some(err) = source {
+        let detail = err.to_string();
+        if !detail.trim().is_empty() && parts.last().map(|item| item != &detail).unwrap_or(true) {
+            parts.push(detail);
+        }
+        source = StdError::source(err);
+    }
+    parts.join(" | caused by: ")
+}
+
+fn format_upstream_network_error(error: &reqwest::Error) -> String {
+    format!(
+        "Codex 上游网络或代理不可用，未能连接到官方 Codex 服务。请检查网络、代理配置以及 chatgpt.com 可访问性。技术细节: {}",
+        format_reqwest_error_chain(error)
+    )
+}
+
 fn upstream_send_retry_delay(retry_attempt: usize) -> Duration {
     let multiplier = match retry_attempt {
         0 | 1 => 1u32,
@@ -5073,11 +6550,12 @@ async fn send_upstream_request(
     headers: &HashMap<String, String>,
     body: &[u8],
     account: &CodexAccount,
+    upstream_proxy_url: Option<&str>,
 ) -> Result<reqwest::Response, String> {
     let method =
         Method::from_bytes(method.as_bytes()).map_err(|e| format!("不支持的请求方法: {}", e))?;
     let url = format!("{}{}", UPSTREAM_CODEX_BASE_URL, target);
-    let client = upstream_http_client();
+    let client = upstream_http_client(upstream_proxy_url)?;
     for retry_attempt in 0..=UPSTREAM_SEND_RETRY_ATTEMPTS {
         let mut request = client.request(method.clone(), &url);
 
@@ -5137,7 +6615,7 @@ async fn send_upstream_request(
                 let should_retry = retry_attempt < UPSTREAM_SEND_RETRY_ATTEMPTS
                     && should_retry_upstream_send_error(&error);
                 if !should_retry {
-                    return Err(format!("请求 Codex 上游失败: {}", error));
+                    return Err(format_upstream_network_error(&error));
                 }
                 tokio::time::sleep(upstream_send_retry_delay(retry_attempt + 1)).await;
             }
@@ -5184,13 +6662,23 @@ async fn proxy_request_with_account_pool(
 
     loop {
         let start = GATEWAY_ROUND_ROBIN_CURSOR.fetch_add(1, Ordering::Relaxed);
-        let ordered_account_ids = build_ordered_account_ids(
-            &collection.account_ids,
-            start,
-            affinity_account_id.as_deref(),
-        );
+        let ordered_account_ids =
+            if collection.routing_strategy == CodexLocalAccessRoutingStrategy::Custom {
+                collection.account_ids.clone()
+            } else {
+                build_ordered_account_ids(
+                    &collection.account_ids,
+                    start,
+                    affinity_account_id.as_deref(),
+                )
+            };
         let strategy_account_ids = pin_account_to_front(
-            apply_routing_strategy(&ordered_account_ids, collection.routing_strategy),
+            apply_routing_strategy(
+                &ordered_account_ids,
+                collection.routing_strategy,
+                &collection.custom_routing_rules,
+                start,
+            ),
             affinity_account_id.as_deref(),
         );
         let mut attempted_in_round = false;
@@ -5270,16 +6758,18 @@ async fn proxy_request_with_account_pool(
                     &request.headers,
                     &request.body,
                     &account,
+                    collection.upstream_proxy_url.as_deref(),
                 )
                 .await;
 
                 let mut response = match first_response {
                     Ok(response) => response,
                     Err(err) => {
+                        last_status = StatusCode::BAD_GATEWAY.as_u16();
                         log_codex_api_failure(
                             None,
                             Some(request),
-                            None,
+                            Some(last_status),
                             Some(account.id.as_str()),
                             Some(account.email.as_str()),
                             None,
@@ -5289,6 +6779,31 @@ async fn proxy_request_with_account_pool(
                         break;
                     }
                 };
+
+                if response.status() == StatusCode::UNAUTHORIZED
+                    && !account_has_refresh_token(&account)
+                {
+                    last_status = StatusCode::UNAUTHORIZED.as_u16();
+                    invalidate_prepared_account(&account_id).await;
+                    log_codex_api_failure(
+                        None,
+                        Some(request),
+                        Some(last_status),
+                        Some(account.id.as_str()),
+                        Some(account.email.as_str()),
+                        None,
+                        format!(
+                            "上游返回 401，access-token-only 账号缺少 refresh_token，按普通账号路径轮转: {}",
+                            account.email
+                        )
+                        .as_str(),
+                    );
+                    last_error = format!(
+                        "账号 {} 当前 access_token 不可用，且没有 refresh_token 可续期",
+                        account.email
+                    );
+                    break;
+                }
 
                 if response.status() == StatusCode::UNAUTHORIZED {
                     match force_refresh_gateway_account(&account_id).await {
@@ -5300,15 +6815,17 @@ async fn proxy_request_with_account_pool(
                                 &request.headers,
                                 &request.body,
                                 &account,
+                                collection.upstream_proxy_url.as_deref(),
                             )
                             .await
                             {
                                 Ok(response) => response,
                                 Err(err) => {
+                                    last_status = StatusCode::BAD_GATEWAY.as_u16();
                                     log_codex_api_failure(
                                         None,
                                         Some(request),
-                                        None,
+                                        Some(last_status),
                                         Some(account.id.as_str()),
                                         Some(account.email.as_str()),
                                         None,
@@ -5336,6 +6853,7 @@ async fn proxy_request_with_account_pool(
                             }
                         }
                         Err(err) => {
+                            last_status = StatusCode::UNAUTHORIZED.as_u16();
                             invalidate_prepared_account(&account_id).await;
                             log_codex_api_failure(
                                 None,
@@ -5457,8 +6975,44 @@ async fn handle_connection(
     mut stream: TcpStream,
     addr: std::net::SocketAddr,
 ) -> Result<(), String> {
-    let raw_request = read_http_request(&mut stream).await?;
-    let mut parsed = parse_http_request(&raw_request)?;
+    let raw_request = match read_http_request(&mut stream).await {
+        Ok(raw_request) => raw_request,
+        Err(err) => {
+            let message = format!("读取本地 API 请求失败: {}", err);
+            write_json_error_response(
+                &mut stream,
+                Some(&addr),
+                None,
+                400,
+                "Bad Request",
+                message.as_str(),
+                None,
+                None,
+                None,
+            )
+            .await?;
+            return Ok(());
+        }
+    };
+    let mut parsed = match parse_http_request(&raw_request) {
+        Ok(parsed) => parsed,
+        Err(err) => {
+            let message = format!("解析本地 API 请求失败: {}", err);
+            write_json_error_response(
+                &mut stream,
+                Some(&addr),
+                None,
+                400,
+                "Bad Request",
+                message.as_str(),
+                None,
+                None,
+                None,
+            )
+            .await?;
+            return Ok(());
+        }
+    };
 
     if parsed.method.eq_ignore_ascii_case("OPTIONS") {
         stream
@@ -5586,7 +7140,12 @@ async fn handle_connection(
             return Ok(());
         }
 
-        let response = json_response(200, "OK", &build_local_models_response());
+        let response_body = if codex_protocol::is_codex_client_models_request(&parsed.target) {
+            build_codex_client_models_response()
+        } else {
+            build_local_models_response()
+        };
+        let response = json_response(200, "OK", &response_body);
         stream
             .write_all(&response)
             .await
@@ -5664,7 +7223,14 @@ async fn handle_connection(
                 502 => "Bad Gateway",
                 _ => "Service Unavailable",
             };
-            let response = json_response(status, status_text, &json!({ "error": message }));
+            let proxy_diagnostics = (status == StatusCode::BAD_GATEWAY.as_u16()).then(|| {
+                current_upstream_proxy_diagnostics(collection.upstream_proxy_url.as_deref())
+            });
+            let response = json_response(
+                status,
+                status_text,
+                &gateway_error_body(status, &message, proxy_diagnostics.as_ref()),
+            );
             let write_result = stream
                 .write_all(&response)
                 .await
@@ -5691,13 +7257,17 @@ async fn handle_connection(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_chat_completion_payload, build_chat_completion_stream_body, build_images_api_payload,
-        build_local_models_response, build_ordered_account_ids, build_request_routing_hint,
-        extract_usage_capture, is_responses_completion_event, parse_codex_retry_after,
+        apply_routing_strategy, build_chat_completion_payload, build_chat_completion_stream_body,
+        build_codex_client_models_response, build_images_api_payload, build_local_models_response,
+        build_ordered_account_ids, build_request_routing_hint, extract_usage_capture,
+        is_responses_completion_event, normalize_custom_routing_rules, parse_codex_retry_after,
         parse_responses_payload_from_upstream, prepare_gateway_request,
         resolve_supported_model_alias, should_retry_single_account_upstream_status,
         should_treat_response_as_stream, should_try_next_account, GatewayResponseAdapter,
         ParsedRequest, ResponseUsageCollector,
+    };
+    use crate::models::codex_local_access::{
+        CodexLocalAccessCustomRoutingRule, CodexLocalAccessRoutingStrategy,
     };
     use reqwest::StatusCode;
     use serde_json::{json, Value};
@@ -5870,6 +7440,129 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
     }
 
     #[test]
+    fn custom_routing_prefers_higher_priority_accounts() {
+        let account_ids = vec![
+            "acc-low".to_string(),
+            "acc-high-a".to_string(),
+            "acc-high-b".to_string(),
+        ];
+        let rules = vec![
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-low".to_string(),
+                priority: 10,
+                weight: 1,
+            },
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-high-a".to_string(),
+                priority: 40,
+                weight: 1,
+            },
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-high-b".to_string(),
+                priority: 40,
+                weight: 1,
+            },
+        ];
+
+        let ordered = apply_routing_strategy(
+            &account_ids,
+            CodexLocalAccessRoutingStrategy::Custom,
+            &rules,
+            0,
+        );
+
+        assert_eq!(ordered, vec!["acc-high-a", "acc-high-b", "acc-low"]);
+    }
+
+    #[test]
+    fn custom_routing_uses_weight_for_same_priority_first_pick() {
+        let account_ids = vec!["acc-heavy".to_string(), "acc-light".to_string()];
+        let rules = vec![
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-heavy".to_string(),
+                priority: 20,
+                weight: 3,
+            },
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-light".to_string(),
+                priority: 20,
+                weight: 1,
+            },
+        ];
+
+        let first_picks = (0..8)
+            .map(|start| {
+                apply_routing_strategy(
+                    &account_ids,
+                    CodexLocalAccessRoutingStrategy::Custom,
+                    &rules,
+                    start,
+                )[0]
+                .clone()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            first_picks,
+            vec![
+                "acc-heavy",
+                "acc-heavy",
+                "acc-heavy",
+                "acc-light",
+                "acc-heavy",
+                "acc-heavy",
+                "acc-heavy",
+                "acc-light",
+            ]
+        );
+    }
+
+    #[test]
+    fn custom_routing_rules_are_normalized_to_collection_accounts() {
+        let account_ids = vec!["acc-a".to_string(), "acc-b".to_string()];
+        let rules = vec![
+            CodexLocalAccessCustomRoutingRule {
+                account_id: " acc-a ".to_string(),
+                priority: 120,
+                weight: 0,
+            },
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-a".to_string(),
+                priority: 20,
+                weight: 10,
+            },
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-removed".to_string(),
+                priority: 30,
+                weight: 5,
+            },
+            CodexLocalAccessCustomRoutingRule {
+                account_id: "acc-b".to_string(),
+                priority: -5,
+                weight: 500,
+            },
+        ];
+
+        let normalized = normalize_custom_routing_rules(rules, &account_ids);
+
+        assert_eq!(
+            normalized,
+            vec![
+                CodexLocalAccessCustomRoutingRule {
+                    account_id: "acc-a".to_string(),
+                    priority: 100,
+                    weight: 1,
+                },
+                CodexLocalAccessCustomRoutingRule {
+                    account_id: "acc-b".to_string(),
+                    priority: 0,
+                    weight: 100,
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn builds_routing_hint_from_previous_response_id_and_model() {
         let request = ParsedRequest {
             method: "POST".to_string(),
@@ -5913,6 +7606,23 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             .unwrap_or(false);
 
         assert!(has_image_model);
+    }
+
+    #[test]
+    fn codex_client_models_use_models_catalog_shape() {
+        let response = build_codex_client_models_response();
+        assert!(response.get("object").is_none());
+        assert!(response.get("data").is_none());
+        let models = response
+            .get("models")
+            .and_then(Value::as_array)
+            .expect("codex client models should be an array");
+        assert!(models
+            .iter()
+            .any(|model| model.get("slug").and_then(Value::as_str) == Some("gpt-5.4")));
+        assert!(models
+            .iter()
+            .all(|model| model.get("prefer_websockets").and_then(Value::as_bool) == Some(false)));
     }
 
     #[test]
@@ -6172,10 +7882,14 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             mapped_body.get("model").and_then(Value::as_str),
             Some("gpt-5.4")
         );
+        assert_eq!(
+            mapped_body.get("stream").and_then(Value::as_bool),
+            Some(true)
+        );
 
         match adapter {
             GatewayResponseAdapter::Passthrough { request_is_stream } => {
-                assert!(!request_is_stream);
+                assert!(request_is_stream);
             }
             _ => panic!("expected passthrough adapter"),
         }
@@ -6187,11 +7901,33 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             method: "POST".to_string(),
             target: "/v1/responses".to_string(),
             headers: HashMap::from([("accept".to_string(), "text/event-stream".to_string())]),
-            body: br#"{"model":"gpt-5.4","stream":true,"input":"hello"}"#.to_vec(),
+            body: br#"{"model":"gpt-5.4","stream":false,"store":true,"input":"hello","temperature":0.2}"#
+                .to_vec(),
         };
 
         let (prepared, adapter) = prepare_gateway_request(request).expect("request should map");
         assert_eq!(prepared.target, "/v1/responses");
+        let mapped_body: Value =
+            serde_json::from_slice(&prepared.body).expect("mapped body should be json");
+        assert_eq!(
+            mapped_body.get("stream").and_then(Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            mapped_body.get("store").and_then(Value::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            mapped_body.get("instructions").and_then(Value::as_str),
+            Some("")
+        );
+        assert!(mapped_body.get("temperature").is_none());
+        assert_eq!(
+            mapped_body
+                .pointer("/input/0/content/0/text")
+                .and_then(Value::as_str),
+            Some("hello")
+        );
 
         match adapter {
             GatewayResponseAdapter::Passthrough { request_is_stream } => {
@@ -6221,13 +7957,52 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                     && tool.get("output_format").and_then(Value::as_str) == Some("png")
             }))
             .unwrap_or(false));
+        assert_eq!(
+            mapped_body.get("stream").and_then(Value::as_bool),
+            Some(true)
+        );
 
         match adapter {
             GatewayResponseAdapter::Passthrough { request_is_stream } => {
-                assert!(!request_is_stream);
+                assert!(request_is_stream);
             }
             _ => panic!("expected passthrough adapter"),
         }
+    }
+
+    #[test]
+    fn normalizes_direct_responses_system_role_for_codex() {
+        let request = ParsedRequest {
+            method: "POST".to_string(),
+            target: "/v1/responses".to_string(),
+            headers: HashMap::new(),
+            body: br#"{"model":"gpt-5.4","input":[{"type":"message","role":"system","content":"be concise"},{"type":"message","role":"user","content":[{"type":"text","text":"hello"}]}],"tools":[{"type":"web_search_preview"}]}"#
+                .to_vec(),
+        };
+
+        let (prepared, _) = prepare_gateway_request(request).expect("request should map");
+        let mapped_body: Value =
+            serde_json::from_slice(&prepared.body).expect("mapped body should be json");
+        assert_eq!(
+            mapped_body.pointer("/input/0/role").and_then(Value::as_str),
+            Some("developer")
+        );
+        assert_eq!(
+            mapped_body
+                .pointer("/input/0/content/0/type")
+                .and_then(Value::as_str),
+            Some("input_text")
+        );
+        assert_eq!(
+            mapped_body
+                .pointer("/input/1/content/0/type")
+                .and_then(Value::as_str),
+            Some("input_text")
+        );
+        assert_eq!(
+            mapped_body.pointer("/tools/0/type").and_then(Value::as_str),
+            Some("web_search")
+        );
     }
 
     #[test]

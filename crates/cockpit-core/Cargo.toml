@@ -32,7 +32,7 @@ tracing-appender.workspace = true
 tracing-log.workspace = true
 trash.workspace = true
 tauri.workspace = true
-mac-notification-sys.workspace = true
+tauri-plugin-notification.workspace = true
 rand.workspace = true
 sha2.workspace = true
 tokio-tungstenite.workspace = true
@@ -42,9 +42,16 @@ rcgen.workspace = true
 tokio-rustls.workspace = true
 libc.workspace = true
 aes.workspace = true
+aes-gcm.workspace = true
 cbc.workspace = true
 pbkdf2.workspace = true
 sha1.workspace = true
 tiny_http.workspace = true
 rsa.workspace = true
 serde_urlencoded.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+mac-notification-sys.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows.workspace = true

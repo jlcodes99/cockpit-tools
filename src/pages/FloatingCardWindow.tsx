@@ -65,6 +65,7 @@ import { ALL_PLATFORM_IDS, PLATFORM_PAGE_MAP, PlatformId } from '../types/platfo
 import type { InstanceProfile } from '../types/instance';
 import { isPrivacyModeEnabledByDefault, maskSensitiveValue } from '../utils/privacy';
 import { getPlatformLabel, renderPlatformIcon } from '../utils/platformMeta';
+import { getAntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget';
 import {
   getRecommendedAntigravityAccount,
   getRecommendedCodebuddyAccount,
@@ -157,6 +158,7 @@ function resolveAppliedTheme(theme: string): 'light' | 'dark' {
 function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceStoreApi | null {
   switch (platformId) {
     case 'antigravity':
+    case 'antigravity_ide':
       return useInstanceStore.getState();
     case 'codex':
       return useCodexInstanceStore.getState();
@@ -687,6 +689,7 @@ export function FloatingCardWindow() {
   const selectedState = useMemo(() => {
     switch (selectedPlatform) {
       case 'antigravity':
+      case 'antigravity_ide':
         return {
           accounts: agAccounts,
           actualCurrentAccount: agCurrent,
@@ -885,6 +888,7 @@ export function FloatingCardWindow() {
     if (!viewedAccount) return null;
     switch (selectedPlatform) {
       case 'antigravity':
+      case 'antigravity_ide':
         return buildAntigravityAccountPresentation(viewedAccount as typeof agAccounts[number], displayGroups, t);
       case 'codex':
         return buildCodexAccountPresentation(viewedAccount as typeof codexAccounts[number], t);
@@ -934,7 +938,8 @@ export function FloatingCardWindow() {
   ]);
 
   const isCurrentViewed = Boolean(viewedAccount?.id && viewedAccount.id === currentAccount?.id);
-  const visibleQuotaItems = presentation?.quotaItems.slice(0, 2) ?? [];
+  const visibleQuotaItemLimit = selectedPlatform === 'antigravity' ? 3 : 2;
+  const visibleQuotaItems = presentation?.quotaItems.slice(0, visibleQuotaItemLimit) ?? [];
   const accountStateLabel = viewedAccount
     ? isCurrentViewed
       ? t('floatingCard.currentAccount', '当前账号')
@@ -1073,7 +1078,13 @@ export function FloatingCardWindow() {
       } else {
         switch (selectedPlatform) {
           case 'antigravity':
-            await useAccountStore.getState().switchAccount(viewedAccount.id);
+          case 'antigravity_ide':
+            await useAccountStore.getState().switchAccount(
+              viewedAccount.id,
+              selectedPlatform === 'antigravity_ide'
+                ? 'antigravity_ide'
+                : getAntigravityRuntimeTarget(),
+            );
             await useAccountStore.getState().fetchCurrentAccount();
             break;
           case 'codex':

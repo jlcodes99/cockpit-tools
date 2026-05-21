@@ -1,11 +1,12 @@
 use std::path::{Path, PathBuf};
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use std::process::Command;
 
 use serde::Serialize;
 use tauri::AppHandle;
 use tauri_plugin_opener::OpenerExt;
 
+use crate::models::codex::CodexAppSpeed;
 use crate::models::{DefaultInstanceSettings, InstanceLaunchMode, InstanceProfile};
 use crate::modules;
 
@@ -21,6 +22,7 @@ pub struct CodexInstanceProfileView {
     pub extra_args: String,
     pub bind_account_id: Option<String>,
     pub launch_mode: InstanceLaunchMode,
+    pub app_speed: CodexAppSpeed,
     pub created_at: i64,
     pub last_launched_at: Option<i64>,
     pub last_pid: Option<u32>,
@@ -40,6 +42,7 @@ impl CodexInstanceProfileView {
             extra_args: profile.extra_args,
             bind_account_id: profile.bind_account_id,
             launch_mode: profile.launch_mode,
+            app_speed: profile.app_speed,
             created_at: profile.created_at,
             last_launched_at: profile.last_launched_at,
             last_pid: profile.last_pid,
@@ -109,6 +112,7 @@ fn default_instance_view(
         extra_args: default_settings.extra_args.clone(),
         bind_account_id,
         launch_mode: default_settings.launch_mode.clone(),
+        app_speed: default_settings.app_speed.clone(),
         created_at: 0,
         last_launched_at: None,
         last_pid,
@@ -163,6 +167,26 @@ fn resolve_instance_launch_context(instance_id: &str) -> Result<CodexLaunchConte
     })
 }
 
+fn sync_codex_threads_across_idle_instances(context: &str) {
+    match modules::codex_thread_sync::sync_threads_across_instances_if_all_stopped() {
+        Ok(Some(summary)) => {
+            if summary.total_synced_thread_count > 0 {
+                modules::logger::log_info(&format!(
+                    "[Codex Thread Sync] {}: synced {} sessions across {} instances",
+                    context, summary.total_synced_thread_count, summary.mutated_instance_count
+                ));
+            }
+        }
+        Ok(None) => {}
+        Err(error) => {
+            modules::logger::log_warn(&format!(
+                "[Codex Thread Sync] {}: skipped automatic idle sync: {}",
+                context, error
+            ));
+        }
+    }
+}
+
 #[cfg(not(target_os = "windows"))]
 fn posix_shell_quote(value: &str) -> String {
     if value.is_empty() {
@@ -179,6 +203,11 @@ fn posix_shell_quote(value: &str) -> String {
         return value.to_string();
     }
     format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+#[cfg(target_os = "windows")]
+fn powershell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
 }
 
 fn build_launch_command(context: &CodexLaunchContext) -> Result<String, String> {
@@ -214,6 +243,46 @@ fn build_launch_command(context: &CodexLaunchContext) -> Result<String, String> 
 
         command_parts.push(codex_cmd);
         return Ok(command_parts.join(" && "));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut command_parts = Vec::new();
+        command_parts.push(format!(
+            "$env:CODEX_HOME={}",
+            powershell_quote(&context.user_data_dir)
+        ));
+
+        if let Some(ref dir) = context.working_dir {
+            if !dir.trim().is_empty() {
+                command_parts.push(format!(
+                    "Set-Location -LiteralPath {}",
+                    powershell_quote(dir)
+                ));
+            }
+        }
+
+        let mut codex_cmd = String::new();
+        if let Some(node_path) = runtime.node_path.as_deref() {
+            codex_cmd.push_str("& ");
+            codex_cmd.push_str(&powershell_quote(node_path));
+            codex_cmd.push(' ');
+            codex_cmd.push_str(&powershell_quote(&runtime.binary_path));
+        } else {
+            codex_cmd.push_str("& ");
+            codex_cmd.push_str(&powershell_quote(&runtime.binary_path));
+        }
+
+        for arg in parsed_args {
+            let trimmed = arg.trim();
+            if !trimmed.is_empty() {
+                codex_cmd.push(' ');
+                codex_cmd.push_str(&powershell_quote(trimmed));
+            }
+        }
+
+        command_parts.push(codex_cmd);
+        return Ok(command_parts.join("; "));
     }
 
     #[allow(unreachable_code)]
@@ -319,6 +388,14 @@ pub async fn codex_sync_threads_across_instances(
 }
 
 #[tauri::command]
+pub async fn codex_sync_sessions_to_instance(
+    session_ids: Vec<String>,
+    target_instance_id: String,
+) -> Result<modules::codex_thread_sync::CodexInstanceTargetThreadSyncSummary, String> {
+    modules::codex_thread_sync::sync_sessions_to_instance(session_ids, target_instance_id)
+}
+
+#[tauri::command]
 pub async fn codex_repair_session_visibility_across_instances(
 ) -> Result<modules::codex_session_visibility::CodexSessionVisibilityRepairSummary, String> {
     modules::codex_session_visibility::repair_session_visibility_across_instances()
@@ -367,6 +444,7 @@ pub async fn codex_create_instance(
     copy_source_instance_id: Option<String>,
     init_mode: Option<String>,
     launch_mode: Option<InstanceLaunchMode>,
+    app_speed: Option<CodexAppSpeed>,
 ) -> Result<CodexInstanceProfileView, String> {
     let instance =
         modules::codex_instance::create_instance(modules::codex_instance::CreateInstanceParams {
@@ -378,6 +456,7 @@ pub async fn codex_create_instance(
             copy_source_instance_id,
             init_mode,
             launch_mode,
+            app_speed,
         })?;
 
     let initialized = is_profile_initialized(&instance.user_data_dir);
@@ -397,15 +476,19 @@ pub async fn codex_update_instance(
     bind_account_id: Option<Option<String>>,
     follow_local_account: Option<bool>,
     launch_mode: Option<InstanceLaunchMode>,
+    app_speed: Option<CodexAppSpeed>,
 ) -> Result<CodexInstanceProfileView, String> {
     if instance_id == DEFAULT_INSTANCE_ID {
         let default_dir = modules::codex_instance::get_default_codex_home()?;
-        let updated = modules::codex_instance::update_default_settings(
+        let mut updated = modules::codex_instance::update_default_settings(
             bind_account_id,
             extra_args,
             follow_local_account,
             launch_mode,
         )?;
+        if let Some(speed) = app_speed {
+            updated = modules::codex_instance::update_default_app_speed(speed)?;
+        }
         let running = updated
             .last_pid
             .map(modules::process::is_pid_running)
@@ -445,6 +528,7 @@ pub async fn codex_update_instance(
             extra_args,
             bind_account_id,
             launch_mode,
+            app_speed,
         })?;
 
     let running = instance
@@ -473,13 +557,19 @@ pub async fn codex_start_instance(instance_id: String) -> Result<CodexInstancePr
         let default_dir = modules::codex_instance::get_default_codex_home()?;
         let default_settings = modules::codex_instance::load_default_settings()?;
         let default_bind_account_id = resolve_default_account_id(&default_settings);
-        if let Some(pid) = modules::process::resolve_codex_pid(default_settings.last_pid, None) {
-            modules::process::close_pid(pid, 20)?;
-            let _ = modules::codex_instance::update_default_pid(None)?;
+        if default_settings.launch_mode != InstanceLaunchMode::Cli {
+            modules::process::ensure_codex_launch_path_configured()?;
         }
+        modules::process::close_codex_default(20)?;
+        let _ = modules::codex_instance::update_default_pid(None)?;
+        modules::codex_speed::write_app_speed_for_dir(
+            &default_dir,
+            default_settings.app_speed.clone(),
+        )?;
         if let Some(ref account_id) = default_bind_account_id {
             inject_bound_account_to_profile(&default_dir, account_id).await?;
         }
+        sync_codex_threads_across_idle_instances("before-start-default");
 
         if default_settings.launch_mode == InstanceLaunchMode::Cli {
             let context = resolve_instance_launch_context(DEFAULT_INSTANCE_ID)?;
@@ -494,7 +584,6 @@ pub async fn codex_start_instance(instance_id: String) -> Result<CodexInstancePr
             ));
         }
 
-        modules::process::ensure_codex_launch_path_configured()?;
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
         let pid = modules::process::start_codex_default(&extra_args)?;
         let updated = modules::codex_instance::update_default_pid(Some(pid))?;
@@ -527,6 +616,11 @@ pub async fn codex_start_instance(instance_id: String) -> Result<CodexInstancePr
     if let Some(ref account_id) = instance.bind_account_id {
         inject_bound_account_to_profile(Path::new(&instance.user_data_dir), account_id).await?;
     }
+    modules::codex_speed::write_app_speed_for_dir(
+        Path::new(&instance.user_data_dir),
+        instance.app_speed.clone(),
+    )?;
+    sync_codex_threads_across_idle_instances("before-start-instance");
 
     if instance.launch_mode == InstanceLaunchMode::Cli {
         let context = resolve_instance_launch_context(&instance.id)?;
@@ -557,12 +651,10 @@ pub async fn codex_start_instance(instance_id: String) -> Result<CodexInstancePr
 pub async fn codex_stop_instance(instance_id: String) -> Result<CodexInstanceProfileView, String> {
     if instance_id == DEFAULT_INSTANCE_ID {
         let default_dir = modules::codex_instance::get_default_codex_home()?;
-        let default_settings = modules::codex_instance::load_default_settings()?;
-        if let Some(pid) = modules::process::resolve_codex_pid(default_settings.last_pid, None) {
-            modules::process::close_pid(pid, 20)?;
-        }
+        modules::process::close_codex_default(20)?;
         let updated = modules::codex_instance::update_default_pid(None)?;
         let default_bind_account_id = resolve_default_account_id(&updated);
+        sync_codex_threads_across_idle_instances("after-stop-default");
         return Ok(default_instance_view(
             &default_dir,
             &updated,
@@ -586,6 +678,7 @@ pub async fn codex_stop_instance(instance_id: String) -> Result<CodexInstancePro
     }
     let updated = modules::codex_instance::update_instance_pid(&instance.id, None)?;
     let initialized = is_profile_initialized(&updated.user_data_dir);
+    sync_codex_threads_across_idle_instances("after-stop-instance");
     Ok(CodexInstanceProfileView::from_profile(
         updated,
         false,
@@ -608,6 +701,7 @@ pub async fn codex_close_all_instances() -> Result<(), String> {
 
     modules::process::close_codex_instances(&target_homes, 20)?;
     let _ = modules::codex_instance::clear_all_pids();
+    sync_codex_threads_across_idle_instances("after-close-all");
     Ok(())
 }
 
@@ -662,13 +756,6 @@ pub async fn codex_execute_instance_launch_command(
 ) -> Result<String, String> {
     let context = resolve_instance_launch_context(&instance_id)?;
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = terminal;
-        let _ = context;
-    }
-
-    #[cfg(target_os = "macos")]
     let command = build_launch_command(&context)?;
 
     #[cfg(target_os = "macos")]
@@ -735,6 +822,44 @@ pub async fn codex_execute_instance_launch_command(
         return Ok(format!("已在 {} 执行 Codex CLI 命令", app_name));
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        let config = crate::modules::config::get_user_config();
+        let terminal = terminal
+            .unwrap_or(config.default_terminal)
+            .trim()
+            .to_string();
+
+        let mut cmd = if terminal == "pwsh" {
+            let mut command_process = Command::new("pwsh");
+            command_process.args(["-NoExit", "-Command", &command]);
+            command_process
+        } else if terminal == "wt" {
+            let mut command_process = Command::new("wt");
+            command_process.args(["powershell", "-NoExit", "-Command", &command]);
+            command_process
+        } else if terminal == "cmd" {
+            let mut command_process = Command::new("cmd");
+            command_process.args([
+                "/C",
+                "start",
+                "",
+                "powershell",
+                "-NoExit",
+                "-Command",
+                &command,
+            ]);
+            command_process
+        } else {
+            let mut command_process = Command::new("powershell");
+            command_process.args(["-NoExit", "-Command", &command]);
+            command_process
+        };
+
+        cmd.spawn().map_err(|e| format!("打开终端失败: {}", e))?;
+        return Ok("已在终端执行 Codex CLI 命令".to_string());
+    }
+
     #[allow(unreachable_code)]
-    Err("Codex CLI 终端执行仅支持 macOS".to_string())
+    Err("Codex CLI 终端执行仅支持 macOS 和 Windows".to_string())
 }

@@ -1645,6 +1645,28 @@ pub async fn refresh_all_tokens() -> Result<Vec<(String, Result<GeminiAccount, S
     Ok(results)
 }
 
+#[cfg(target_os = "windows")]
+fn sync_default_gemini_home_to_wsl() {
+    let Ok(target_home) = resolve_gemini_home(None) else {
+        return;
+    };
+    let target_home_str = target_home.to_string_lossy().to_string();
+
+    let script = format!(
+        "mkdir -p ~/.gemini && cd \"$(wslpath -u '{}')\" && cp -f oauth_creds.json google_accounts.json ~/.gemini/ 2>/dev/null || true && rm -f ~/.gemini/gemini-credentials.json 2>/dev/null || true",
+        target_home_str.replace('\'', "'\\''")
+    );
+
+    use std::os::windows::process::CommandExt;
+    let _ = std::process::Command::new("wsl.exe")
+        .arg("-e")
+        .arg("sh")
+        .arg("-c")
+        .arg(&script)
+        .creation_flags(0x0800_0000)
+        .spawn();
+}
+
 pub fn inject_to_gemini_home(account_id: &str, cli_home_root: Option<&Path>) -> Result<(), String> {
     let mut account =
         load_account_file(account_id).ok_or_else(|| "Gemini 账号不存在".to_string())?;
@@ -1654,6 +1676,13 @@ pub fn inject_to_gemini_home(account_id: &str, cli_home_root: Option<&Path>) -> 
     clear_local_file_keychain_to_path(cli_home_root)?;
     update_local_active_account_with_path(&account.email, cli_home_root)?;
     write_local_selected_auth_type_to_path("oauth-personal", cli_home_root)?;
+
+    #[cfg(target_os = "windows")]
+    if cli_home_root.is_none() {
+        if crate::modules::config::get_user_config().gemini_sync_wsl {
+            sync_default_gemini_home_to_wsl();
+        }
+    }
 
     account.selected_auth_type = Some("oauth-personal".to_string());
     account.last_used = now_ts();

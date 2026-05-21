@@ -1,8 +1,138 @@
 use crate::error::{AppError, AppResult};
 use crate::models;
 use crate::modules;
+use std::path::PathBuf;
 use tauri::AppHandle;
 use tauri::Emitter;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AntigravityRuntimeTarget {
+    Legacy,
+    Ide,
+}
+
+fn normalize_antigravity_runtime_target(raw: Option<&str>) -> AntigravityRuntimeTarget {
+    match raw.unwrap_or("").trim().to_ascii_lowercase().as_str() {
+        "antigravity" => AntigravityRuntimeTarget::Legacy,
+        _ => AntigravityRuntimeTarget::Ide,
+    }
+}
+
+fn parse_version_parts(value: &str) -> Vec<u64> {
+    value
+        .trim()
+        .trim_start_matches(|ch| ch == 'v' || ch == 'V')
+        .split(|ch: char| !ch.is_ascii_digit())
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.parse::<u64>().ok())
+        .collect()
+}
+
+fn compare_versions(left: &str, right: &str) -> Option<std::cmp::Ordering> {
+    let left_parts = parse_version_parts(left);
+    let right_parts = parse_version_parts(right);
+    if left_parts.is_empty() || right_parts.is_empty() {
+        return None;
+    }
+    let max_len = left_parts.len().max(right_parts.len());
+    for index in 0..max_len {
+        let left_value = left_parts.get(index).copied().unwrap_or(0);
+        let right_value = right_parts.get(index).copied().unwrap_or(0);
+        match left_value.cmp(&right_value) {
+            std::cmp::Ordering::Equal => {}
+            ordering => return Some(ordering),
+        }
+    }
+    Some(std::cmp::Ordering::Equal)
+}
+
+fn ensure_legacy_antigravity_switch_supported() -> Result<(), String> {
+    let Some(info) =
+        crate::commands::system::get_cached_antigravity_installed_version_info_for_target(Some(
+            "antigravity",
+        ))
+    else {
+        modules::logger::log_info(
+            "[Antigravity] 未命中旧版安装版本缓存，放行旧版切号逻辑",
+        );
+        return Ok(());
+    };
+
+    match compare_versions(&info.version, "2.0.0") {
+        Some(std::cmp::Ordering::Less) => Ok(()),
+        Some(_) => Err(
+            "ANTIGRAVITY_LEGACY_UNSUPPORTED:暂不支持 Antigravity 2.0.0 及以上版本，请选择小于Antigravity 2.0.0版本或者使用Antigravity IDE"
+                .to_string(),
+        ),
+        None => {
+            modules::logger::log_info(&format!(
+                "[Antigravity] 旧版安装版本无法解析，放行旧版切号逻辑: {}",
+                info.version
+            ));
+            Ok(())
+        }
+    }
+}
+
+fn legacy_antigravity_user_data_dir() -> Result<PathBuf, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
+        return Ok(home.join("Library/Application Support/Antigravity"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let appdata =
+            std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
+        return Ok(PathBuf::from(appdata).join("Antigravity"));
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
+        return Ok(home.join(".config/Antigravity"));
+    }
+
+    #[allow(unreachable_code)]
+    Err("无法确定 Antigravity 默认目录".to_string())
+}
+
+fn legacy_antigravity_storage_path() -> Result<PathBuf, String> {
+    let path = legacy_antigravity_user_data_dir()?
+        .join("User")
+        .join("globalStorage")
+        .join("storage.json");
+    if path.exists() {
+        Ok(path)
+    } else {
+        Err("未找到 storage.json，请确认 Antigravity 已运行过".to_string())
+    }
+}
+
+fn legacy_antigravity_state_db_path() -> Result<PathBuf, String> {
+    let path = legacy_antigravity_user_data_dir()?
+        .join("User")
+        .join("globalStorage")
+        .join("state.vscdb");
+    if path.exists() {
+        Ok(path)
+    } else {
+        Err(format!("数据库文件不存在: {:?}", path))
+    }
+}
+
+fn write_legacy_service_machine_id(service_machine_id: &str) -> Result<(), String> {
+    let db_path = legacy_antigravity_state_db_path()?;
+    let conn =
+        rusqlite::Connection::open(&db_path).map_err(|e| format!("打开数据库失败: {}", e))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
+        ["storage.serviceMachineId", service_machine_id],
+    )
+    .map_err(|e| format!("写入 serviceMachineId 失败: {}", e))?;
+    Ok(())
+}
 
 #[tauri::command]
 pub async fn list_accounts() -> Result<Vec<models::Account>, String> {
@@ -146,9 +276,127 @@ pub async fn refresh_current_quota(app: tauri::AppHandle) -> Result<(), String> 
     Ok(())
 }
 
+async fn switch_account_legacy_antigravity(
+    app: AppHandle,
+    account_id: String,
+) -> Result<models::Account, String> {
+    modules::logger::log_info(&format!("开始切换 Antigravity 旧版账号: {}", account_id));
+
+    if let Err(e) = modules::process::ensure_antigravity_legacy_launch_path_configured() {
+        if e.starts_with("APP_PATH_NOT_FOUND:") {
+            let _ = app.emit(
+                "app:path_missing",
+                serde_json::json!({
+                    "app": "antigravity",
+                    "retry": {
+                        "kind": "switchAccount",
+                        "accountId": account_id,
+                        "runtimeTarget": "antigravity"
+                    }
+                }),
+            );
+        }
+        return Err(e);
+    }
+
+    let mut account = modules::account::prepare_account_for_injection(&account_id).await?;
+    modules::set_current_account_id(&account_id)?;
+    account.update_last_used();
+    modules::save_account(&account)?;
+
+    if let Err(e) = modules::instance::update_default_settings(
+        Some(Some(account_id.clone())),
+        None,
+        Some(false),
+    ) {
+        modules::logger::log_warn(&format!("更新 Antigravity 默认实例绑定账号失败: {}", e));
+    }
+
+    let default_dir = legacy_antigravity_user_data_dir()?;
+    let default_dir_str = default_dir.to_string_lossy().to_string();
+    modules::process::close_antigravity_legacy_instances(
+        &[default_dir_str.clone()],
+        &default_dir_str,
+        20,
+    )?;
+    let _ = modules::instance::update_default_pid(None);
+
+    if let Some(ref fp_id) = account.fingerprint_id {
+        if let Ok(fingerprint) = modules::fingerprint::get_fingerprint(fp_id) {
+            if let Ok(storage_path) = legacy_antigravity_storage_path() {
+                modules::logger::log_info("写入 Antigravity 旧版设备指纹");
+                let _ = modules::device::write_profile(&storage_path, &fingerprint.profile);
+                let _ = write_legacy_service_machine_id(&fingerprint.profile.service_machine_id);
+                let _ = modules::fingerprint::set_current_fingerprint_id(fp_id);
+            }
+        }
+    }
+
+    let db_path = legacy_antigravity_state_db_path()?;
+    modules::db::inject_token_to_path(
+        &db_path,
+        &account.token.access_token,
+        &account.token.refresh_token,
+        account.token.expiry_timestamp,
+    )
+    .map_err(|e| format!("注入 Antigravity 旧版账号失败: {}", e))?;
+
+    modules::logger::log_info("正在启动 Antigravity 默认实例...");
+    let default_settings = modules::instance::load_default_settings()?;
+    let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
+    let launch_result = modules::process::start_antigravity_legacy_with_args("", &extra_args);
+    let launch_error = match launch_result {
+        Ok(pid) => {
+            if let Err(e) = modules::instance::update_default_pid(Some(pid)) {
+                modules::logger::log_warn(&format!("更新默认实例 PID 失败: {}", e));
+            }
+            None
+        }
+        Err(e) => {
+            modules::logger::log_warn(&format!("Antigravity 启动失败: {}", e));
+            if e.starts_with("APP_PATH_NOT_FOUND:") {
+                let _ = app.emit(
+                    "app:path_missing",
+                    serde_json::json!({
+                        "app": "antigravity",
+                        "retry": {
+                            "kind": "switchAccount",
+                            "accountId": account_id,
+                            "runtimeTarget": "antigravity"
+                        }
+                    }),
+                );
+            }
+            Some(e)
+        }
+    };
+
+    if let Some(err) = launch_error {
+        modules::websocket::broadcast_account_switched(&account.id, &account.email);
+        if err.starts_with("APP_PATH_NOT_FOUND:") {
+            return Err(err);
+        }
+        return Err(format!("账号已切换，但启动 Antigravity 失败: {}", err));
+    }
+
+    modules::logger::log_info(&format!("Antigravity 旧版账号切换完成: {}", account.email));
+    modules::websocket::broadcast_account_switched(&account.id, &account.email);
+    Ok(account)
+}
+
 /// 切换账号（完整流程：Token刷新 + 关闭程序 + 注入 + 指纹同步 + 重启）
 #[tauri::command]
-pub async fn switch_account(app: AppHandle, account_id: String) -> Result<models::Account, String> {
+pub async fn switch_account(
+    app: AppHandle,
+    account_id: String,
+    runtime_target: Option<String>,
+) -> Result<models::Account, String> {
+    let runtime_target = normalize_antigravity_runtime_target(runtime_target.as_deref());
+    if runtime_target == AntigravityRuntimeTarget::Legacy {
+        ensure_legacy_antigravity_switch_supported()?;
+        return switch_account_legacy_antigravity(app, account_id).await;
+    }
+
     if modules::config::get_user_config().antigravity_dual_switch_no_restart_enabled {
         let result = modules::account::switch_account_dual_no_restart(
             &account_id,
@@ -212,16 +460,16 @@ pub async fn switch_account(app: AppHandle, account_id: String) -> Result<models
     account.update_last_used();
     modules::save_account(&account)?;
 
-    // 4. 同步更新 Antigravity 默认实例的绑定账号（不同步到 Codex，因为账号体系不同）
+    // 4. 同步更新 Antigravity IDE 默认实例的绑定账号（不同步到 Codex，因为账号体系不同）
     if let Err(e) = modules::instance::update_default_settings(
         Some(Some(account_id.clone())),
         None,
         Some(false),
     ) {
-        modules::logger::log_warn(&format!("更新 Antigravity 默认实例绑定账号失败: {}", e));
+        modules::logger::log_warn(&format!("更新 Antigravity IDE 默认实例绑定账号失败: {}", e));
     } else {
         modules::logger::log_info(&format!(
-            "已同步更新 Antigravity 默认实例绑定账号: {}",
+            "已同步更新 Antigravity IDE 默认实例绑定账号: {}",
             account_id
         ));
     }
@@ -254,8 +502,8 @@ pub async fn switch_account(app: AppHandle, account_id: String) -> Result<models
     // 6.2 将账号 Token 注入默认实例目录
     modules::instance::inject_account_to_profile(&default_dir, &account_id)?;
 
-    // 7. 启动 Antigravity（带默认实例自定义启动参数；启动失败不阻断切号，保持原行为）
-    modules::logger::log_info("正在启动 Antigravity 默认实例...");
+    // 7. 启动 Antigravity IDE（带默认实例自定义启动参数；启动失败不阻断切号，保持原行为）
+    modules::logger::log_info("正在启动 Antigravity IDE 默认实例...");
     let default_settings = modules::instance::load_default_settings()?;
     let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
     let launch_result = if extra_args.is_empty() {
@@ -271,7 +519,7 @@ pub async fn switch_account(app: AppHandle, account_id: String) -> Result<models
             None
         }
         Err(e) => {
-            modules::logger::log_warn(&format!("Antigravity 启动失败: {}", e));
+            modules::logger::log_warn(&format!("Antigravity IDE 启动失败: {}", e));
             if e.starts_with("APP_PATH_NOT_FOUND:") {
                 let _ = app.emit(
                     "app:path_missing",
@@ -288,7 +536,7 @@ pub async fn switch_account(app: AppHandle, account_id: String) -> Result<models
         if err.starts_with("APP_PATH_NOT_FOUND:") {
             return Err(err);
         }
-        return Err(format!("账号已切换，但启动 Antigravity 失败: {}", err));
+        return Err(format!("账号已切换，但启动 Antigravity IDE 失败: {}", err));
     }
 
     modules::logger::log_info(&format!("账号切换完成: {}", account.email));

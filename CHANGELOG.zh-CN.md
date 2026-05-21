@@ -7,6 +7,185 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [0.24.3] - 2026-05-21
+
+### 变更
+- **紧急修复 Codex 本地 API 服务在未配置显式代理时的路由问题**：API 代理地址、Cockpit 全局代理与环境代理变量仍会按顺序优先使用；服务现在会继续进入 reqwest 的系统代理自动发现，而不是在系统自动代理路径生效前停止请求。
+- **Antigravity 已安装版本读取现区分快速徽标读取与完整扫描**：总览徽标会短暂延迟后启动，优先使用可用缓存，并在后台完成更长的扫描，避免版本显示阻塞页面。
+- **Codex 套餐徽标现复用账号原始套餐值与共享样式**：账号卡片、摘要与路由视图都会保留后端或本地套餐标签原值，同时通过统一展示路径生成徽标样式。
+
+### 修复
+- **Antigravity 旧版切号不再因安装版本元数据缺失或无法解析而失败**：已缓存的明确版本仍会阻断 Antigravity `2.0.0` 及以上版本；缺少缓存信息时允许旧版路径继续执行。
+- **Codex 自定义路由账号列表现将表头与行内容限制在固定滚动区域内**：弹框主体可正确滚动，套餐徽标在窄布局下也保持稳定尺寸。
+
+---
+## [0.24.2] - 2026-05-21
+
+### 修复
+- **紧急修复 v0.24.1 后 Codex 本地 API 服务代理路由异常**：API 代理地址为空时会依次回退到 Cockpit 全局代理和显式环境代理变量（`HTTPS_PROXY`、`HTTP_PROXY` 或 `ALL_PROXY`）；没有可用代理地址时，网关会拒绝官方上游请求，避免意外直连官方上游。
+- **Codex 本地 API 服务上游失败诊断现标明实际代理来源**：502 诊断与日志会标明使用的是 API 服务代理、Cockpit 全局代理、环境代理或缺少代理配置，便于快速修正网络出口。
+
+---
+## [0.24.1] - 2026-05-21
+
+### 新增
+- **Antigravity 主页面现显示所选目标的已安装版本**：版本徽标会跟随当前 Antigravity 或 Antigravity IDE 目标，便于确认正在管理的本地客户端版本。
+
+### 变更
+- **Antigravity 现作为一个分组管理 Antigravity 与 Antigravity IDE 两个目标**：平台管理会保持 Antigravity 分组在首位，分组切换器会决定总览操作、版本读取与切号使用的目标。
+- **Antigravity 旧版切号现按安装版本门禁执行**：低于 `2.0.0` 的 Antigravity 继续使用旧版落盘与启动路径；Antigravity `2.0.0` 及以上版本会阻断切号，并引导使用 Antigravity IDE。
+- **Codex 本地 API 服务代理配置改为专用 API 代理地址**：服务会校验填写的代理地址，仅将其用于 API 上游请求；地址为空时直连上游。
+
+### 修复
+- **Antigravity IDE 路径与版本检测现适配官方重命名后的安装结构**：macOS、Windows 与 Linux 检测会区分旧版 Antigravity 和 Antigravity IDE，并解析正确的应用元数据与可执行文件候选路径。
+
+---
+## [0.24.0] - 2026-05-20
+
+### 变更
+- **Antigravity 集成已对齐官方 Antigravity IDE 客户端**：默认应用路径、用户数据目录、进程识别、唤醒 Language Server 元数据、README 文案与界面标签统一使用 Antigravity IDE；本地导入与切号也改为读写官方 `antigravityUnifiedStateSync.oauthToken` 状态。
+- **MFA 保险箱现抽取共享解析与 TOTP 生成逻辑**：已保存验证码管理与快速取码入口复用同一套密钥解析、去重、历史迁移、刷新倒计时与验证码生成行为。
+
+### 新增
+- **Codex 本地 API 服务现可选择上游代理模式**：API 服务设置可在跟随应用全局代理与直连官方上游之间切换，并将所选模式持久化用于网关请求。
+- **Codex OAuth 授权现内置 2FA 快速取码入口**：添加账号弹框可展示已保存 MFA 密钥、刷新倒计时与一键复制验证码；重新授权时会显示并可复制目标账号邮箱。
+
+### 修复
+- **Antigravity IDE 自动检测现适配官方重命名后的安装位置**：默认应用与 Language Server 解析覆盖 `/Applications/Antigravity IDE.app`、Windows `Antigravity IDE.exe` 和 Linux `antigravity-ide`，并可从旧 macOS 路径配置迁移到当前路径。
+- **Antigravity Unified State 写入现保留其他同步条目**：OAuth token 注入只替换 `oauthTokenInfoSentinelKey` 对应行，不再覆盖整个 topic，避免影响其他 sentinel row。
+
+---
+## [0.23.11] - 2026-05-19
+
+### 新增
+- **Codex 本地 API 服务现支持自定义账号调度**：API 服务集合可选择“自定义”策略，为每个账号设置优先级与权重，批量调整已选账号，并把规范化后的调度规则写入网关选号逻辑。
+- **Codex Token 导入现支持 ChatGPT/Codex session JSON**：可导入直接粘贴或包裹在 `session`/`session_json` 字段中的 session JSON，并复用现有 Codex OAuth 凭据导入流程。
+
+### 变更
+- **Codex 本地 API 服务上游连接失败现提供更可操作的网络/代理诊断**：网关会记录 502 失败状态，并把网络、代理或 `chatgpt.com` 可访问性问题提示成更清晰的错误信息。
+
+---
+## [0.23.10] - 2026-05-18
+
+### 修复
+- **Codex CLI 通过本地 API 服务访问时现可稳定使用 Cockpit 管理的 OAuth 账号**：`/v1/responses` 请求会先按 Codex 客户端兼容形状规范化，再转发到现有上游管线。
+- **Codex 启动时不再因模型刷新结构不匹配报错**：当 Codex 客户端请求本地 `/v1/models` 时，会返回其期望的模型列表格式。
+- **本地 Codex API 服务请求现可绕过 localhost 代理干扰**：`NO_PROXY`/`no_proxy` 会自动合并回环地址，系统代理开启时本地网关仍保持直连。
+
+---
+## [0.23.9] - 2026-05-17
+
+### 新增
+- **Codex Token 导入现支持仅 accessToken 与 Sub2API 导出格式**：Codex 导入可读取原始 JWT access token、`accessToken`/`access_token` 字段、camelCase token JSON、逐行 Token 输入，以及 Sub2API 导出 JSON 中的 OpenAI OAuth 账号。
+- **macOS 菜单栏图标样式现可配置**：设置页可在系统单色状态图标和原彩色 App 图标之间切换；保存设置或导入用户配置变化后，会即时应用所选样式。
+
+### 变更
+- **Codex API Key 切号现写入官方运行时 provider 状态**：API Key 账号会将所选供应商写入受管 `codex_local_access` provider，并把 bearer token 写入 `config.toml`，同时保留供应商身份配置并避免残留 `openai_base_url` 状态。
+- **Codex OAuth 导入现从 access token 保留更多身份元数据**：仅 accessToken 导入会在 claim 可用时提取邮箱、用户 ID、套餐、账号 ID、组织 ID 与订阅到期时间。
+
+### 修复
+- **macOS 打包版本现可正常显示单色菜单栏图标**：使用前会将 template 托盘图标规范化到菜单栏尺寸，并在托盘创建后再次应用 template 标记。
+- **Codex 切回内置 OpenAI 时现会清理受管 API Key 运行时 provider 状态**：切回内置路径会移除 Cockpit 管理的 provider/token 条目，同时保留无关的手动 provider。
+- **Cursor 额度徽标在 70%+ 用量时现使用预期的中档样式**：额度指示不再在达到临界范围前提前使用警告样式。
+
+---
+## [0.23.8] - 2026-05-17
+
+### 新增
+- **Codex OAuth 绑定弹框现可直接解除绑定**：API Key 账号与本地 API 服务在已绑定 OAuth 账号时，会展示明确的解除绑定操作。
+
+### 变更
+- **Codex API Key 账号与本地 API 服务现将 OAuth 绑定作为可选项**：未绑定时继续按原 API Key 流程运行；绑定后则继续使用所选 OAuth 登录态，并叠加对应 provider 配置。
+- **Codex OAuth 绑定说明已对齐可选绑定行为**：绑定弹框会说明未绑定和已绑定两条运行路径，不再把 OAuth 绑定描述为必选前置条件。
+
+---
+## [0.23.7] - 2026-05-16
+
+### 新增
+- **Windows 上 Gemini 默认账号切换现可同步到 WSL 凭证目录**：切换默认 Gemini 账号时，可将 `oauth_creds.json` 与 `google_accounts.json` 同步到 WSL `~/.gemini`，并清理过期的 `gemini-credentials.json`。
+- **账号与工具弹框补齐键盘/返回交互**：多个核心弹框新增 `Esc` 关闭与显式返回操作，优化键盘操作和多层弹框流程。
+
+### 变更
+- **Gemini WSL 同步新增用户可控开关（设置页 + 快捷设置）**：新增 `同步 WSL 配置` 选项，默认开启，用于控制切号时是否执行凭证同步。
+- **Codex OAuth 绑定账号选择弹框的订阅徽标现与主账号视图样式一致**：绑定弹框中的套餐徽标已复用与 Codex 账号卡片/表格一致的视觉 class 与颜色语义。
+- **Homebrew Cask 元数据在 v0.23.6 后已更新**：Cask 的版本与校验信息已刷新到最新打包产物状态。
+
+### 修复
+- **Windows 上 GitHub Copilot 切号/导入已支持 VS Code 共享存储路径**：导入与注入会同时读写旧路径 `User/globalStorage/state.vscdb` 和新路径 `.vscode-shared*/sharedStorage/state.vscdb`，优先读取共享存储并回退兼容旧路径，适配混合安装场景。
+
+---
+## [0.23.6] - 2026-05-16
+
+### 新增
+- **Codex API Key 账号与本地 API 服务现可绑定 OAuth 账号**：基于 API Key 的 Codex 使用会保留所选 OAuth 账号作为登录身份，同时由 API Key 账号或本地 API 服务提供运行时 provider。
+- **Codex OAuth 绑定现提供可检索的账号选择器**：绑定弹框支持搜索、套餐/状态筛选、标签筛选、排序、分页，以及更紧凑的单选账号行，便于快速定位账号。
+
+### 变更
+- **Codex 本地 API 服务启动和检测前现要求完成 OAuth 绑定**：服务启用与健康检测会使用绑定的 OAuth 登录态，并叠加本地 API 服务的 provider 配置。
+- **Codex 账号总览现内联展示 API Key 与本地 API 服务的 OAuth 绑定状态**：账号卡片可直接查看并调整绑定关系，本地 API 服务预览也会保留显示 2 个成员账号。
+- **Codex OAuth 绑定弹框已重新设计**：弹框采用更紧凑的布局、内部账号列表滚动区域，以及蓝绿色分层视觉，确保保存操作默认可见。
+
+---
+## [0.23.5] - 2026-05-16
+
+### 新增
+- **Codex 本地 API 服务现支持带可操作诊断的真实 CLI 健康检测**：API 服务弹框可通过本地网关发起一次真实 Codex CLI 请求，并在结果中展示检测模型、耗时、返回内容，以及失败时的具体定位阶段。
+- **Codex 本地 API 服务现可配置访问范围**：新建 API 服务集合默认仅允许本机访问，用户可在服务弹框中明确切换为“仅本机”或“局域网”监听。
+
+### 变更
+- **Codex 本地 API 服务状态现按真实可访问范围展示**：账号卡片与 API 服务弹框会显示当前选择的访问范围，不再固定展示“本机/局域网”。
+- **Codex 外部导入现会保留 Cockpit API 账号的接口地址设置**：支持的导入链接可携带 API Base URL，导入后的 Codex API Key 账号会自动带上对应供应商配置。
+- **Antigravity 悬浮卡片现展示更多额度信息**：Antigravity 账号弹窗最多可显示 3 条额度信息，不再只显示 2 条。
+
+### 修复
+- **Codex 本地 API 服务现会在应用更新前释放原端口**：更新重启会先停止进程内网关，再等待原端口可重新绑定；如果无法停止服务，会在更新弹框内提示错误。
+- **Codex 切号后本地会话可见性更稳定**：在普通 Codex 账号与 API 服务模式之间切换时，如果底层 provider 变化，会自动修复受影响的本地历史会话可见性。
+- **Kiro 账号导入不再把仅共享 AWS profile ARN 的不同账号合并**：账号匹配现会忽略作为用户 ID 的 ARN 值，并按真实用户身份、邮箱或 refresh token 去重。
+
+---
+## [0.23.4] - 2026-05-14
+
+### 新增
+- **Codex 本地 API 服务现会在可用时提供局域网地址**：账号总览和 API 服务弹框可在本机地址与检测到的内网地址之间切换，并复制所选地址供同一局域网内其他设备使用。
+
+### 变更
+- **Codex 本地 API 服务上游请求现跟随应用全局代理设置**：网关会在代理设置变化时重建上游 HTTP 客户端，支持 `no_proxy`，并可使用 SOCKS 代理地址。
+
+### 修复
+- **Codex API Key provider 状态现与非 OAuth 本地网关行为一致**：API Key provider 写入时不再声明 OpenAI 授权或 websocket 要求；切回内置 OpenAI 时会移除受管 API Key provider 配置，同时保留无关的手动 provider。
+- **Codex 会话可见性修复现可恢复更多隐藏本地会话**：SQLite 修复会把已有首条用户消息的 thread 标记为用户可见，补齐缺失的 `thread_source`，并继续兼容只有 provider 字段的旧数据库结构。
+
+---
+## [0.23.3] - 2026-05-13
+
+### 新增
+- **Codex 官方 App 速度现可随账号、本地 API 服务和受管实例分别管理**：账号卡片/表格、API 服务卡片以及 Codex 实例列表/表单都可选择“标准 / 快速”，保存所选启动速度，并在切换账号、启用 API 服务和启动受管 App 前写入官方全局状态。
+
+### 变更
+- **Codex 默认 App 启动现会先准备真实启动状态再重启**：受管启动可在缺少路径时自动识别 Codex App，按默认 home/进程扫描关闭默认 Codex 进程而不只依赖已保存 PID，并在启动前写入所选速度。
+- **macOS Dock 和菜单栏重新打开统一使用共享主窗口恢复链路**：重新打开时会通过同一套后端逻辑恢复、取消隐藏、激活并聚焦主窗口。
+
+### 修复
+- **Windows 源码构建在旧调试程序仍运行时不再因替换 exe 失败中断**：Tauri dev/build 会在 Cargo 替换调试二进制前清理过期的 `target\debug\cockpit_tools.exe` 进程。
+
+---
+## [0.23.2] - 2026-05-12
+
+### 新增
+- **Codex 实例现支持 Windows 启动与进程识别**：Windows 可解析 Codex 路径，按应用用户数据目录识别托管实例进程，并通过 PowerShell、Windows Terminal 或 cmd 打开 Codex CLI 会话。
+- **Codex 会话管理现支持把选中会话复制到目标实例**：可将选中会话恢复到指定 Codex 实例，自动跳过目标中已有的同 ID 会话，写入前备份目标文件，并在目标实例运行中时提示可能需要重启后显示。
+
+### 修复
+- **Codex API Key 在不同 API 供应商之间切号后会话不再消失**：API Key 账号现统一向 `config.toml` 写入单一运行时 provider，保留所选 base URL 与 Responses wire API；切回内置 OAuth 时会移除该运行时 provider 状态。
+- **macOS 上 WebKit LocalStorage WAL 文件不再缺少启动 checkpoint 而持续膨胀**：应用启动时会在后台对 WebKit LocalStorage SQLite 数据库执行 checkpoint，避免 WAL 文件随时间持续堆积。
+
+---
+## [0.23.1] - 2026-05-12
+
+### 变更
+- **基于主线状态重新发布，用于替换已撤回的 v0.23.0 构建**：本版本保留稳定的 v0.22.22 代码路径，不包含误发布到 v0.23.0 的实验性 PR 集成改动。
+
+---
 ## [0.22.22] - 2026-05-12
 
 ### 新增

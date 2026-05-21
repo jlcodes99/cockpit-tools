@@ -3,6 +3,7 @@ import {
   ArrowDownWideNarrow,
   Check,
   ChevronDown,
+  ChevronLeft,
   CircleAlert,
   Copy,
   Database,
@@ -26,6 +27,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
+import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
@@ -1362,6 +1364,7 @@ export function ZedAccountsPage() {
         <div className="modal-overlay" onClick={closeAddModal}>
           <div className="modal-content ghcp-add-modal zed-add-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
+              <button className="btn btn-secondary icon-only" onClick={closeAddModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t('zed.addModal.title', '添加 Zed 账号')}</h2>
               <button
                 className="modal-close"
@@ -1399,6 +1402,7 @@ export function ZedAccountsPage() {
             </div>
 
             <div className="modal-body">
+              <MfaQuickCodeSelect />
               {addTab === 'oauth' && (
                 <div className="add-section">
                   <p className="section-desc">

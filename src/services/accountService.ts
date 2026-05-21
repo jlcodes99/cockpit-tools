@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { Account, DeviceProfile, DeviceProfiles, RefreshStats, Fingerprint, FingerprintWithStats } from '../types/account';
+import { AntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget';
 
 export interface PreviewCurrentProfileResult {
     profile: DeviceProfile;
@@ -102,8 +103,11 @@ export async function openDataFolder(): Promise<void> {
     return await invoke('open_data_folder');
 }
 
-export async function switchAccount(accountId: string): Promise<Account> {
-    return await invoke('switch_account', { accountId });
+export async function switchAccount(
+    accountId: string,
+    runtimeTarget?: AntigravityRuntimeTarget,
+): Promise<Account> {
+    return await invoke('switch_account', { accountId, runtimeTarget });
 }
 
 export interface AntigravitySwitchHistoryItem {

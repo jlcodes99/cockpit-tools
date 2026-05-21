@@ -39,6 +39,7 @@ interface PlatformInstancesContentProps<TAccount extends AccountLike> {
   unsupportedDescDefault: string;
   onInstanceStarted?: (instance: InstanceProfile) => void | Promise<void>;
   resolveStartSuccessMessage?: (instance: InstanceProfile) => string;
+  toolbarExtraActions?: ReactNode;
 }
 
 export function PlatformInstancesContent<TAccount extends AccountLike>({
@@ -56,6 +57,7 @@ export function PlatformInstancesContent<TAccount extends AccountLike>({
   unsupportedDescDefault,
   onInstanceStarted,
   resolveStartSuccessMessage,
+  toolbarExtraActions,
 }: PlatformInstancesContentProps<TAccount>) {
   const { t } = useTranslation();
 
@@ -86,6 +88,7 @@ export function PlatformInstancesContent<TAccount extends AccountLike>({
         appType={appType}
         onInstanceStarted={onInstanceStarted}
         resolveStartSuccessMessage={resolveStartSuccessMessage}
+        toolbarExtraActions={toolbarExtraActions}
       />
     </div>
   );

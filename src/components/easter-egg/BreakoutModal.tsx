@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ALL_PLATFORM_IDS, PlatformId } from '../../types/platform';
 import { renderPlatformIcon } from '../../utils/platformMeta';
+import { useEscClose } from '../../hooks/useEscClose';
 import './BreakoutModal.css';
 
 interface BreakoutModalProps {
@@ -1606,6 +1607,7 @@ function getHistoryRank(records: GameHistoryRecord[], targetId: string): number 
 
 export function BreakoutModal({ open, onMinimize, onTerminate }: BreakoutModalProps) {
   const { t } = useTranslation();
+  useEscClose(open, onTerminate);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const keysRef = useRef({ left: false, right: false });
   const isStartedRef = useRef(false);

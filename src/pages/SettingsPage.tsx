@@ -47,6 +47,7 @@ import {
 } from '../utils/currentAccountRefresh';
 import { ALL_PLATFORM_IDS, PlatformId } from '../types/platform';
 import { SettingsAccountTransferSection } from '../components/SettingsAccountTransferSection';
+import { useEscClose } from '../hooks/useEscClose';
 import './settings/Settings.css';
 import { 
   Github, User, Rocket, Save, FolderOpen,
@@ -84,9 +85,11 @@ interface GeneralConfig {
   kiro_auto_refresh_minutes: number;
   cursor_auto_refresh_minutes: number;
   gemini_auto_refresh_minutes: number;
+  gemini_sync_wsl: boolean;
   close_behavior: 'ask' | 'minimize' | 'quit';
   minimize_behavior?: 'dock_and_tray' | 'tray_only';
   hide_dock_icon?: boolean;
+  tray_icon_style?: 'template' | 'color';
   floating_card_show_on_startup?: boolean;
   floating_card_always_on_top?: boolean;
   app_auto_launch_enabled?: boolean;
@@ -194,6 +197,19 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   trae: 11,
   workbuddy: 12,
   zed: 12,
+  antigravity_ide: 1,
+  codex: 2,
+  'github-copilot': 3,
+  windsurf: 4,
+  kiro: 5,
+  cursor: 6,
+  gemini: 7,
+  codebuddy: 8,
+  codebuddy_cn: 9,
+  qoder: 10,
+  trae: 11,
+  workbuddy: 12,
+  zed: 13,
 };
 type UpdateCheckSource = 'auto' | 'manual';
 type UpdateCheckFinishedDetail = {
@@ -338,9 +354,11 @@ export function SettingsPage() {
   const [kiroAutoRefresh, setKiroAutoRefresh] = useState('10');
   const [cursorAutoRefresh, setCursorAutoRefresh] = useState('10');
   const [geminiAutoRefresh, setGeminiAutoRefresh] = useState('10');
+  const [geminiSyncWsl, setGeminiSyncWsl] = useState(true);
   const [closeBehavior, setCloseBehavior] = useState<'ask' | 'minimize' | 'quit'>('ask');
   const [minimizeBehavior, setMinimizeBehavior] = useState<'dock_and_tray' | 'tray_only'>('dock_and_tray');
   const [hideDockIcon, setHideDockIcon] = useState(false);
+  const [trayIconStyle, setTrayIconStyle] = useState<'template' | 'color'>('template');
   const [floatingCardShowOnStartup, setFloatingCardShowOnStartup] = useState(false);
   const [floatingCardAlwaysOnTop, setFloatingCardAlwaysOnTop] = useState(false);
   const [appAutoLaunchEnabled, setAppAutoLaunchEnabled] = useState(false);
@@ -773,9 +791,11 @@ export function SettingsPage() {
           zedAutoRefreshMinutes: zedAutoRefreshNum,
           cursorAutoRefreshMinutes: cursorAutoRefreshNum,
           geminiAutoRefreshMinutes: geminiAutoRefreshNum,
+          geminiSyncWsl,
           closeBehavior,
           minimizeBehavior,
           hideDockIcon,
+          trayIconStyle: isMacOS ? trayIconStyle : undefined,
           floatingCardShowOnStartup,
           floatingCardAlwaysOnTop,
           appAutoLaunchEnabled,
@@ -888,6 +908,8 @@ export function SettingsPage() {
     closeBehavior,
     minimizeBehavior,
     hideDockIcon,
+    trayIconStyle,
+    isMacOS,
     floatingCardShowOnStartup,
     floatingCardAlwaysOnTop,
     appAutoLaunchEnabled,
@@ -1173,9 +1195,11 @@ export function SettingsPage() {
       setKiroAutoRefresh(String(config.kiro_auto_refresh_minutes ?? 10));
       setCursorAutoRefresh(String(config.cursor_auto_refresh_minutes ?? 10));
       setGeminiAutoRefresh(String(config.gemini_auto_refresh_minutes ?? 10));
+      setGeminiSyncWsl(Boolean(config.gemini_sync_wsl ?? true));
       setCloseBehavior(config.close_behavior || 'ask');
       setMinimizeBehavior(config.minimize_behavior || 'dock_and_tray');
       setHideDockIcon(Boolean(config.hide_dock_icon));
+      setTrayIconStyle(config.tray_icon_style === 'color' ? 'color' : 'template');
       setFloatingCardShowOnStartup(config.floating_card_show_on_startup ?? false);
       setFloatingCardAlwaysOnTop(config.floating_card_always_on_top ?? false);
       setAppAutoLaunchEnabled(config.app_auto_launch_enabled ?? false);
@@ -1725,6 +1749,8 @@ export function SettingsPage() {
     setReleaseHistoryOpen(false);
   };
 
+  useEscClose(releaseHistoryOpen, handleCloseReleaseHistory);
+
   const handleDownloadReleaseVersion = async (version: string) => {
     const targetVersion = String(version || '').trim();
     if (!targetVersion) {
@@ -1958,33 +1984,65 @@ export function SettingsPage() {
               </div>
 
               {isMacOS && (
-                <div className="settings-row">
-                  <div className="row-label">
-                    <div className="row-title">
-                      {t('settings.general.hideDockIcon', '是否隐藏Dock图标（仅 macOS）')}
+                <>
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">
+                        {t('settings.general.hideDockIcon', '是否隐藏Dock图标（仅 macOS）')}
+                      </div>
+                      <div className="row-desc">
+                        {t(
+                          'settings.general.hideDockIconDesc',
+                          '独立控制程序坞图标显示状态，不受窗口最小化行为影响'
+                        )}
+                      </div>
                     </div>
-                    <div className="row-desc">
-                      {t(
-                        'settings.general.hideDockIconDesc',
-                        '独立控制程序坞图标显示状态，不受窗口最小化行为影响'
-                      )}
+                    <div className="row-control">
+                      <select
+                        className="settings-select"
+                        value={hideDockIcon ? 'true' : 'false'}
+                        onChange={(e) => setHideDockIcon(e.target.value === 'true')}
+                      >
+                        <option value="false">
+                          {t('settings.general.hideDockIconOff', '否（显示Dock图标）')}
+                        </option>
+                        <option value="true">
+                          {t('settings.general.hideDockIconOn', '是（隐藏Dock图标）')}
+                        </option>
+                      </select>
                     </div>
                   </div>
-                  <div className="row-control">
-                    <select
-                      className="settings-select"
-                      value={hideDockIcon ? 'true' : 'false'}
-                      onChange={(e) => setHideDockIcon(e.target.value === 'true')}
-                    >
-                      <option value="false">
-                        {t('settings.general.hideDockIconOff', '否（显示Dock图标）')}
-                      </option>
-                      <option value="true">
-                        {t('settings.general.hideDockIconOn', '是（隐藏Dock图标）')}
-                      </option>
-                    </select>
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">
+                        {t('settings.general.trayIconStyle', '菜单栏图标样式（仅 macOS）')}
+                      </div>
+                      <div className="row-desc">
+                        {t(
+                          'settings.general.trayIconStyleDesc',
+                          '选择系统单色图标或原彩色 App 图标'
+                        )}
+                      </div>
+                    </div>
+                    <div className="row-control">
+                      <select
+                        className="settings-select"
+                        value={trayIconStyle}
+                        onChange={(e) =>
+                          setTrayIconStyle(e.target.value === 'color' ? 'color' : 'template')
+                        }
+                      >
+                        <option value="template">
+                          {t('settings.general.trayIconStyleTemplate', '单色图标')}
+                        </option>
+                        <option value="color">
+                          {t('settings.general.trayIconStyleColor', '彩色图标')}
+                        </option>
+                      </select>
+                    </div>
                   </div>
-                </div>
+                </>
               )}
 
               <div className="settings-row">
@@ -2079,7 +2137,7 @@ export function SettingsPage() {
 
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <div style={{ order: platformSettingsOrder.antigravity }}>
-                <div className="group-title">{t('settings.general.antigravitySettingsTitle', 'Antigravity 设置')}</div>
+                <div className="group-title">{t('settings.general.antigravitySettingsTitle', 'Antigravity IDE 设置')}</div>
                 <div className="settings-group">
               <div className="settings-row">
                 <div className="row-label">
@@ -2169,7 +2227,7 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.antigravityAppPath', 'Antigravity 启动路径')}</div>
+                  <div className="row-title">{t('settings.general.antigravityAppPath', 'Antigravity IDE 启动路径')}</div>
                   <div className="row-desc">{t('settings.general.codexAppPathDesc', '留空则使用默认路径')}</div>
                 </div>
                 <div className="row-control row-control--grow">
@@ -2214,7 +2272,7 @@ export function SettingsPage() {
                     <div className="row-desc">
                       {t(
                         'settings.general.antigravityDualSwitchNoRestartDesc',
-                        '切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity。'
+                        '切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity IDE。'
                       )}
                     </div>
                   </div>
@@ -4868,6 +4926,25 @@ export function SettingsPage() {
                       </div>
                     </div>
                   </div>
+
+                  {isWindows && (
+                    <div className="settings-row">
+                      <div className="row-label">
+                        <div className="row-title">{t('quickSettings.gemini.syncWsl', '同步 WSL 配置')}</div>
+                        <div className="row-desc">{t('quickSettings.gemini.syncWslDesc', '切号时自动覆盖 WSL 下的 .gemini 配置')}</div>
+                      </div>
+                      <div className="row-control">
+                        <label className="switch">
+                          <input
+                            type="checkbox"
+                            checked={geminiSyncWsl}
+                            onChange={(e) => setGeminiSyncWsl(e.target.checked)}
+                          />
+                          <span className="slider"></span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
 
                   {renderCurrentAccountRefreshRow('gemini')}
 

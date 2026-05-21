@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -66,6 +67,14 @@ struct RolloutProviderChange {
 struct SqliteProviderScan {
     rows_to_update: usize,
     skipped_unusable_database: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ThreadsTableColumns {
+    model_provider: bool,
+    has_user_event: bool,
+    first_user_message: bool,
+    thread_source: bool,
 }
 
 pub fn repair_session_visibility_across_instances(
@@ -476,11 +485,44 @@ fn count_sqlite_rows_to_update(
             ));
         }
     };
-    let count = match connection.query_row(
-        "SELECT COUNT(*) FROM threads WHERE COALESCE(model_provider, '') <> ?1",
-        [target_provider],
-        |row| row.get::<usize, i64>(0),
-    ) {
+    let columns = match read_threads_table_columns(&connection) {
+        Ok(columns) => columns,
+        Err(error) if modules::db::is_unusable_sqlite_database_error(&error) => {
+            log_skipped_sqlite_database(&db_path, &error.to_string());
+            return Ok(SqliteProviderScan {
+                rows_to_update: 0,
+                skipped_unusable_database: true,
+            });
+        }
+        Err(error) => {
+            return Err(format_sqlite_read_error(
+                &db_path,
+                "读取 SQLite threads 表结构失败",
+                &error,
+            ));
+        }
+    };
+    let Some(columns) = columns else {
+        return Ok(SqliteProviderScan {
+            rows_to_update: 0,
+            skipped_unusable_database: false,
+        });
+    };
+    let Some(where_clause) = build_threads_repair_where_clause(columns) else {
+        return Ok(SqliteProviderScan {
+            rows_to_update: 0,
+            skipped_unusable_database: false,
+        });
+    };
+    let sql = format!("SELECT COUNT(*) FROM threads WHERE {where_clause}");
+    let count_result = if columns.model_provider {
+        connection.query_row(sql.as_str(), [target_provider], |row| {
+            row.get::<usize, i64>(0)
+        })
+    } else {
+        connection.query_row(sql.as_str(), [], |row| row.get::<usize, i64>(0))
+    };
+    let count = match count_result {
         Ok(count) => count,
         Err(error) if modules::db::is_unusable_sqlite_database_error(&error) => {
             log_skipped_sqlite_database(&db_path, &error.to_string());
@@ -497,7 +539,7 @@ fn count_sqlite_rows_to_update(
         }
         Err(error) => {
             return Err(format!(
-                "统计 SQLite provider 差异失败 ({}): {}",
+                "统计 SQLite 会话可见性差异失败 ({}): {}",
                 db_path.display(),
                 error
             ));
@@ -538,13 +580,37 @@ fn update_sqlite_provider(data_dir: &Path, target_provider: &str) -> Result<usiz
                 error
             )
         })?;
+    let columns = match read_threads_table_columns(&connection) {
+        Ok(columns) => columns,
+        Err(error) if modules::db::is_unusable_sqlite_database_error(&error) => {
+            log_skipped_sqlite_database(&db_path, &error.to_string());
+            return Ok(0);
+        }
+        Err(error) => {
+            return Err(format_sqlite_read_error(
+                &db_path,
+                "读取 SQLite threads 表结构失败",
+                &error,
+            ));
+        }
+    };
+    let Some(columns) = columns else {
+        return Ok(0);
+    };
+    let Some(where_clause) = build_threads_repair_where_clause(columns) else {
+        return Ok(0);
+    };
+    let set_clause = build_threads_repair_set_clause(columns);
     let transaction = connection
         .transaction()
         .map_err(|error| format_sqlite_write_error(&db_path, &error))?;
-    let updated_rows = match transaction.execute(
-        "UPDATE threads SET model_provider = ?1 WHERE COALESCE(model_provider, '') <> ?1",
-        [target_provider],
-    ) {
+    let sql = format!("UPDATE threads SET {set_clause} WHERE {where_clause}");
+    let update_result = if columns.model_provider {
+        transaction.execute(sql.as_str(), [target_provider])
+    } else {
+        transaction.execute(sql.as_str(), [])
+    };
+    let updated_rows = match update_result {
         Ok(updated_rows) => updated_rows,
         Err(error) if modules::db::is_unusable_sqlite_database_error(&error) => {
             log_skipped_sqlite_database(&db_path, &error.to_string());
@@ -565,6 +631,69 @@ fn update_sqlite_provider(data_dir: &Path, target_provider: &str) -> Result<usiz
     Ok(updated_rows)
 }
 
+fn read_threads_table_columns(
+    connection: &Connection,
+) -> Result<Option<ThreadsTableColumns>, rusqlite::Error> {
+    let mut statement = connection.prepare("PRAGMA table_info(threads)")?;
+    let rows = statement.query_map([], |row| row.get::<usize, String>(1))?;
+    let mut names = HashSet::new();
+    for row in rows {
+        let name = row?;
+        names.insert(name);
+    }
+    if names.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(ThreadsTableColumns {
+        model_provider: names.contains("model_provider"),
+        has_user_event: names.contains("has_user_event"),
+        first_user_message: names.contains("first_user_message"),
+        thread_source: names.contains("thread_source"),
+    }))
+}
+
+fn build_threads_repair_where_clause(columns: ThreadsTableColumns) -> Option<String> {
+    let mut predicates = Vec::new();
+    if columns.model_provider {
+        predicates.push("COALESCE(model_provider, '') <> ?1");
+    }
+    if columns.has_user_event && columns.first_user_message {
+        predicates
+            .push("(COALESCE(first_user_message, '') <> '' AND COALESCE(has_user_event, 0) <> 1)");
+    }
+    if columns.thread_source && columns.first_user_message {
+        predicates
+            .push("(COALESCE(first_user_message, '') <> '' AND COALESCE(thread_source, '') = '')");
+    }
+    if predicates.is_empty() {
+        None
+    } else {
+        Some(predicates.join(" OR "))
+    }
+}
+
+fn build_threads_repair_set_clause(columns: ThreadsTableColumns) -> String {
+    let mut assignments = Vec::new();
+    if columns.model_provider {
+        assignments.push("model_provider = ?1");
+    }
+    if columns.has_user_event && columns.first_user_message {
+        assignments.push(
+            "has_user_event = CASE WHEN COALESCE(first_user_message, '') <> '' THEN 1 ELSE has_user_event END",
+        );
+    }
+    if columns.thread_source && columns.first_user_message {
+        assignments.push(
+            "thread_source = CASE WHEN COALESCE(thread_source, '') = '' AND COALESCE(first_user_message, '') <> '' THEN 'user' ELSE thread_source END",
+        );
+    }
+    assignments.join(", ")
+}
+
+fn format_sqlite_read_error(path: &Path, action: &str, error: &rusqlite::Error) -> String {
+    format!("{} ({}): {}", action, path.display(), error)
+}
+
 fn format_sqlite_write_error(path: &Path, error: &rusqlite::Error) -> String {
     let message = error.to_string();
     let lowered = message.to_ascii_lowercase();
@@ -576,7 +705,7 @@ fn format_sqlite_write_error(path: &Path, error: &rusqlite::Error) -> String {
         );
     }
     format!(
-        "更新 SQLite provider 失败 ({}): {}",
+        "更新 SQLite 会话可见性失败 ({}): {}",
         path.display(),
         message
     )
@@ -871,4 +1000,144 @@ fn restore_directory_contents(source_root: &Path, target_root: &Path) -> Result<
         })?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn make_temp_dir(prefix: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after unix epoch")
+            .as_nanos();
+        let base_dir =
+            std::env::temp_dir().join(format!("{}-{}-{}", prefix, std::process::id(), unique));
+        if base_dir.exists() {
+            fs::remove_dir_all(&base_dir).expect("cleanup old temp dir");
+        }
+        fs::create_dir_all(&base_dir).expect("create temp dir");
+        base_dir
+    }
+
+    #[test]
+    fn sqlite_repair_marks_threads_with_first_user_message_visible() {
+        let data_dir = make_temp_dir("codex-session-visibility-sqlite-test");
+        let db_path = data_dir.join(STATE_DB_FILE);
+        let connection = Connection::open(&db_path).expect("open sqlite");
+        connection
+            .execute(
+                "CREATE TABLE threads (
+                    id TEXT PRIMARY KEY,
+                    model_provider TEXT,
+                    has_user_event INTEGER,
+                    first_user_message TEXT,
+                    thread_source TEXT
+                )",
+                [],
+            )
+            .expect("create threads table");
+        connection
+            .execute(
+                "INSERT INTO threads (id, model_provider, has_user_event, first_user_message, thread_source)
+                 VALUES
+                 ('matched-invisible', 'relay', 0, 'hello', ''),
+                 ('old-invisible', 'old', 0, 'hi', NULL),
+                 ('already-visible', 'relay', 1, 'visible', 'user'),
+                 ('provider-only', '', 0, '', NULL)",
+                [],
+            )
+            .expect("insert rows");
+        drop(connection);
+
+        let scan = count_sqlite_rows_to_update(&data_dir, "relay").expect("scan sqlite");
+        assert_eq!(scan.rows_to_update, 3);
+        assert!(!scan.skipped_unusable_database);
+
+        let updated_rows = update_sqlite_provider(&data_dir, "relay").expect("update sqlite");
+        assert_eq!(updated_rows, 3);
+
+        let connection = Connection::open(&db_path).expect("reopen sqlite");
+        let matched_invisible = connection
+            .query_row(
+                "SELECT model_provider, has_user_event, thread_source FROM threads WHERE id = 'matched-invisible'",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<usize, String>(0)?,
+                        row.get::<usize, i64>(1)?,
+                        row.get::<usize, String>(2)?,
+                    ))
+                },
+            )
+            .expect("read matched row");
+        assert_eq!(
+            matched_invisible,
+            ("relay".to_string(), 1, "user".to_string())
+        );
+
+        let old_invisible = connection
+            .query_row(
+                "SELECT model_provider, has_user_event, thread_source FROM threads WHERE id = 'old-invisible'",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<usize, String>(0)?,
+                        row.get::<usize, i64>(1)?,
+                        row.get::<usize, String>(2)?,
+                    ))
+                },
+            )
+            .expect("read old row");
+        assert_eq!(old_invisible, ("relay".to_string(), 1, "user".to_string()));
+
+        let provider_only = connection
+            .query_row(
+                "SELECT model_provider, has_user_event FROM threads WHERE id = 'provider-only'",
+                [],
+                |row| Ok((row.get::<usize, String>(0)?, row.get::<usize, i64>(1)?)),
+            )
+            .expect("read provider-only row");
+        assert_eq!(provider_only, ("relay".to_string(), 0));
+
+        fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn sqlite_repair_keeps_provider_only_schema_working() {
+        let data_dir = make_temp_dir("codex-session-provider-only-sqlite-test");
+        let db_path = data_dir.join(STATE_DB_FILE);
+        let connection = Connection::open(&db_path).expect("open sqlite");
+        connection
+            .execute(
+                "CREATE TABLE threads (id TEXT PRIMARY KEY, model_provider TEXT)",
+                [],
+            )
+            .expect("create threads table");
+        connection
+            .execute(
+                "INSERT INTO threads (id, model_provider) VALUES ('old', 'old'), ('same', 'relay')",
+                [],
+            )
+            .expect("insert rows");
+        drop(connection);
+
+        let scan = count_sqlite_rows_to_update(&data_dir, "relay").expect("scan sqlite");
+        assert_eq!(scan.rows_to_update, 1);
+        let updated_rows = update_sqlite_provider(&data_dir, "relay").expect("update sqlite");
+        assert_eq!(updated_rows, 1);
+
+        let connection = Connection::open(&db_path).expect("reopen sqlite");
+        let old_provider = connection
+            .query_row(
+                "SELECT model_provider FROM threads WHERE id = 'old'",
+                [],
+                |row| row.get::<usize, String>(0),
+            )
+            .expect("read old provider");
+        assert_eq!(old_provider, "relay");
+
+        fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
+    }
 }

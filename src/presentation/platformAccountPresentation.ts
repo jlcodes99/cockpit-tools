@@ -35,8 +35,7 @@ import {
   formatCodexResetTime,
   getCodexCodeReviewQuotaMetric,
   getCodexEffectiveQuotaPercentages,
-  getCodexPlanBadgeClass,
-  getCodexPlanBadgeLabel,
+  getCodexPlanBadgePresentation,
   getCodexQuotaClass,
   getCodexQuotaWindows,
   isCodexApiKeyAccount,
@@ -633,6 +632,8 @@ export function buildCodexAccountPresentation(
   const displayName =
     isCodexApiKeyAccount(account) && apiKeyDisplayName
       ? apiKeyDisplayName
+      : isCodexNewApiAccount(account)
+        ? "Codex API"
       : account.email;
   const effectiveQuota = getCodexEffectiveQuotaPercentages(account.quota);
   const weeklyBlocksHourlyHint = effectiveQuota.weeklyBlocksHourly
@@ -673,12 +674,13 @@ export function buildCodexAccountPresentation(
       resetAt: codeReviewMetric.resetTime,
     });
   }
+  const planBadge = getCodexPlanBadgePresentation(account);
 
   return {
     id: account.id,
     displayName,
-    planLabel: getCodexPlanBadgeLabel(account),
-    planClass: getCodexPlanBadgeClass(account),
+    planLabel: planBadge.label,
+    planClass: planBadge.className,
     quotaItems,
   };
 }

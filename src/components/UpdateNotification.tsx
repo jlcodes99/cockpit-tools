@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { X, Download, Sparkles, RefreshCw, Check, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { useEscClose } from '../hooks/useEscClose';
 import './UpdateNotification.css';
 
 export interface UpdateInfo {
@@ -58,6 +59,9 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
   onSkipUpdate,
 }) => {
   const { t, i18n } = useTranslation();
+
+  useEscClose(true, onClose);
+
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [isSkipping, setIsSkipping] = useState(false);
@@ -165,15 +169,16 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
   const isDownloaded = Boolean(updateInfo) && actionState === 'ready' && versionMatched;
   const clampedProgress = Math.max(0, Math.min(100, Math.round(actionProgress)));
   const mergedRetryStatus = actionRetryStatus;
-  const isError =
-    Boolean(actionError) && !checking && !isDownloading && !isInstalling && !isDownloaded;
+  const showActionError =
+    Boolean(actionError) && !checking && !isDownloading && !isInstalling;
+  const isError = showActionError && !isDownloaded;
   const canSkipByState = actionState === 'available' || isDownloaded;
   const showSkipAction = Boolean(onSkipUpdate)
     && canSkipByState
     && !checking
     && !isDownloading
     && !isInstalling
-    && !isError;
+    && !showActionError;
   const modalTitle = updateInfo
     ? t('update_notification.title')
     : t('settings.about.checkUpdate');
@@ -298,7 +303,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
             </div>
           )}
 
-          {isError && (
+          {showActionError && (
             <div className="update-status update-status-error">
               <span>
                 {actionError || t('update_notification.autoUpdateFailed', 'Auto-update failed. You can download manually.')}

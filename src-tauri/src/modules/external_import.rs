@@ -18,6 +18,8 @@ pub struct ExternalProviderImportPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub import_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_base_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub min_app_version: Option<String>,
     pub auto_import: bool,
     #[serde(default)]
@@ -188,6 +190,13 @@ fn parse_external_import_url_with_reason(
         .or_else(|| query.get("importurl"))
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
+    let api_base_url = query
+        .get("api_base_url")
+        .or_else(|| query.get("apibaseurl"))
+        .or_else(|| query.get("base_url"))
+        .or_else(|| query.get("baseurl"))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
     if token.is_empty() && import_url.is_none() {
         return Err(
             "缺少内容参数（token/import_token/payload/import_payload/import_url）".to_string(),
@@ -227,6 +236,7 @@ fn parse_external_import_url_with_reason(
         page: page.to_string(),
         token,
         import_url,
+        api_base_url,
         min_app_version,
         auto_import,
         activate,
@@ -370,6 +380,7 @@ mod tests {
         assert_eq!(payload.page, "codex");
         assert_eq!(payload.token, "abc123");
         assert_eq!(payload.import_url, None);
+        assert_eq!(payload.api_base_url, None);
         assert_eq!(payload.min_app_version, None);
         assert!(!payload.auto_import);
     }
@@ -383,6 +394,7 @@ mod tests {
         assert_eq!(payload.page, "codebuddy-cn");
         assert_eq!(payload.token, "{}");
         assert_eq!(payload.import_url, None);
+        assert_eq!(payload.api_base_url, None);
         assert_eq!(payload.min_app_version, None);
         assert!(payload.auto_import);
     }
@@ -395,6 +407,7 @@ mod tests {
         assert_eq!(payload.page, "overview");
         assert_eq!(payload.token, "1//0gTokenDemo");
         assert_eq!(payload.import_url, None);
+        assert_eq!(payload.api_base_url, None);
         assert_eq!(payload.min_app_version, None);
         assert!(!payload.auto_import);
     }
@@ -410,8 +423,20 @@ mod tests {
             payload.import_url,
             Some("https://example.com/user/api/toolsImport/fetch?id=abc&token=def".to_string())
         );
+        assert_eq!(payload.api_base_url, None);
         assert_eq!(payload.min_app_version, None);
         assert!(payload.auto_import);
+    }
+
+    #[test]
+    fn parse_import_link_with_api_base_url() {
+        let raw = "cockpit-tools://provider-import?platform=codex&import_url=https%3A%2F%2Fchongflow.cn%2Fapi%2Fcockpit-tools%2Fimport%2Fabc&api_base_url=https%3A%2F%2Fchongflow.cn%2Fv1&auto_import=true";
+        let payload = parse_external_import_url(raw).expect("payload");
+        assert_eq!(payload.provider_id, "codex");
+        assert_eq!(
+            payload.api_base_url,
+            Some("https://chongflow.cn/v1".to_string())
+        );
     }
 
     #[test]

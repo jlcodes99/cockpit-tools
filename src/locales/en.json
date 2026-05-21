@@ -14,6 +14,7 @@
     "close": "Close",
     "open": "Open",
     "copy": "Copy",
+    "copied": "Copied",
     "add": "Add",
     "enable": "Enable",
     "disable": "Disable",
@@ -273,7 +274,7 @@
     }
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "Accounts",
     "wakeup": "Wakeup Tasks",
     "fingerprints": "Fingerprints",
@@ -424,7 +425,8 @@
       "instance": "Instance",
       "email": "Account",
       "quota": "Quota",
-      "actions": "Actions"
+      "actions": "Actions",
+      "speed": "Speed"
     },
     "empty": {
       "title": "No instances yet",
@@ -502,7 +504,9 @@
       },
       "nameRequired": "Please enter an instance name",
       "pathRequired": "Please select an instance directory",
-      "bindRequired": "Please select an account to bind"
+      "bindRequired": "Please select an account to bind",
+      "appSpeed": "Speed",
+      "appSpeedDesc": "Writes the selected speed before starting official Codex"
     },
     "quota": {
       "unbound": "No bound account",
@@ -523,7 +527,8 @@
       "closedAll": "Closed all instances",
       "allAlreadyRunning": "All instances are already running",
       "noneRunning": "No running instances found",
-      "syncThreadsNeedTwo": "At least two instances are required to sync threads"
+      "syncThreadsNeedTwo": "At least two instances are required to sync threads",
+      "speedUpdated": "Speed updated"
     },
     "runningDialog": {
       "title": "Instance already running",
@@ -708,7 +713,7 @@
       "uiScale": "UI Scale",
       "uiScaleDesc": "Adjust interface scale",
       "accountManagement": "Account",
-      "autoRefresh": "Antigravity Auto Refresh Quota",
+      "autoRefresh": "Antigravity IDE Auto Refresh Quota",
       "codexAutoRefresh": "Codex Auto Refresh Quota",
       "autoRefreshDesc": "Background update frequency",
       "codexAutoRefreshDesc": "Background update frequency",
@@ -735,6 +740,10 @@
       "hideDockIconDesc": "Control Dock icon visibility independently; not affected by window minimize behavior",
       "hideDockIconOff": "No (Show Dock icon)",
       "hideDockIconOn": "Yes (Hide Dock icon)",
+      "trayIconStyle": "Menu bar icon style (macOS only)",
+      "trayIconStyleDesc": "Choose the system template icon or the original color app icon",
+      "trayIconStyleTemplate": "Template icon",
+      "trayIconStyleColor": "Color icon",
       "floatingCardStartup": "Show floating card on startup",
       "floatingCardStartupDesc": "Display the floating account card automatically after app launch",
       "floatingCardAlwaysOnTop": "Keep floating card on top by default",
@@ -749,8 +758,8 @@
       "floatingCardShowNowAction": "Show floating card",
       "dataDir": "Data Directory",
       "dataDirDesc": "Storage location for accounts and configuration files.",
-      "fpDir": "Antigravity Storage",
-      "fpDirDesc": "Storage location for Antigravity data files.",
+      "fpDir": "Antigravity IDE Storage",
+      "fpDirDesc": "Storage location for Antigravity IDE data files.",
       "opencodeTitle": "OpenCode Integration",
       "opencodeAuthOverwrite": "Overwrite OpenCode login when switching Codex",
       "opencodeAuthOverwriteDesc": "When off, only Codex is switched and OpenCode keeps its current login state",
@@ -774,10 +783,10 @@
       "vscodeAppPathPlaceholder": "Default path",
       "vscodePathSelect": "Select",
       "vscodePathReset": "Reset to default",
-      "antigravityAppPath": "Antigravity App Path",
-      "antigravityTitle": "Antigravity Launch",
+      "antigravityAppPath": "Antigravity IDE App Path",
+      "antigravityTitle": "Antigravity IDE Launch",
       "commonTitle": "Common",
-      "antigravitySettingsTitle": "Antigravity Settings",
+      "antigravitySettingsTitle": "Antigravity IDE Settings",
       "codexSettingsTitle": "Codex Settings",
       "githubCopilotSettingsTitle": "GitHub Copilot Settings",
       "ghcpAutoRefresh": "GitHub Copilot Auto Refresh Quota",
@@ -807,8 +816,8 @@
       "codebuddyPathSelect": "Select",
       "codebuddyPathReset": "Reset to default",
       "cursorPathReset": "Reset default",
-      "antigravityStartupWakeup": "Run Antigravity wakeup after startup",
-      "antigravityStartupWakeupDesc": "Run enabled Antigravity wakeup tasks once after app startup",
+      "antigravityStartupWakeup": "Run Antigravity IDE wakeup after startup",
+      "antigravityStartupWakeupDesc": "Run enabled Antigravity IDE wakeup tasks once after app startup",
       "codexLaunchOnSwitch": "Launch Codex App when switching Codex",
       "codexLaunchOnSwitchDesc": "Start or restart Codex App after switching accounts",
       "codexRestartSpecifiedAppOnSwitch": "Restart specified app when switching Codex",
@@ -870,7 +879,7 @@
       "ghcpOpencodeRestart": "Restart OpenCode when switching GitHub Copilot",
       "ghcpLaunchOnSwitch": "Launch GitHub Copilot App when switching GitHub Copilot",
       "antigravityDualSwitchNoRestart": "Dual switch without restart",
-      "antigravityDualSwitchNoRestartDesc": "On switch, write local account data and call extension seamless switch in one flow, without restarting Antigravity.",
+      "antigravityDualSwitchNoRestartDesc": "On switch, write local account data and call extension seamless switch in one flow, without restarting Antigravity IDE.",
       "codebuddyCnAppPath": "CodeBuddy CN App Path",
       "codebuddyCnAppPathDesc": "Leave blank to use the default path",
       "codebuddyCnAppPathPlaceholder": "Default path",
@@ -886,7 +895,14 @@
       "qoderAutoRefreshDesc": "Background auto-refresh frequency",
       "qoderPathSelect": "Select",
       "workbuddyAutoRefresh": "WorkBuddy Auto Refresh",
-      "workbuddyAutoRefreshDesc": "Background auto-refresh frequency"
+      "workbuddyAutoRefreshDesc": "Background auto-refresh frequency",
+      "codexAppSpeed": "Codex Speed",
+      "codexAppSpeedDesc": "Saves the official Codex launch speed; this app writes it before each Codex launch.",
+      "codexAppSpeedStandard": "Standard",
+      "codexAppSpeedFast": "Fast",
+      "codexAppSpeedLaunch": "Restart Codex",
+      "codexAppSpeedSaveFailed": "Failed to save Codex speed: {{error}}",
+      "codexAppSpeedLaunchFailed": "Failed to restart Codex: {{error}}"
     },
     "network": {
       "apiTitle": "Antigravity Cockpit API",
@@ -972,7 +988,7 @@
   },
   "accounts": {
     "title": "Account",
-    "subtitle": "Manage your Antigravity account list.",
+    "subtitle": "Manage your Antigravity IDE account list.",
     "total": "{{count}} accounts",
     "search": "Search accounts...",
     "addAccount": "Add Account",
@@ -1226,7 +1242,7 @@
     "switching": "Switching...",
     "fingerprint": "Fingerprint",
     "bound": "Bound",
-    "brandTitle": "Antigravity Account"
+    "brandTitle": "Antigravity IDE Account"
   },
   "fingerprints": {
     "title": "Fingerprints",
@@ -1328,7 +1344,7 @@
   "modals": {
     "addAccount": {
       "title": "Add Account",
-      "desc": "Add your Antigravity account via Google OAuth",
+      "desc": "Add your Antigravity IDE account via Google OAuth",
       "loginBtn": "Google OAuth Authorization",
       "waiting": "Waiting..."
     },
@@ -1336,7 +1352,7 @@
       "title": "Import Accounts",
       "desc": "Choose an import method",
       "local": "Import Local Account",
-      "localDesc": "Import current logged-in account from Antigravity Client",
+      "localDesc": "Import current logged-in account from Antigravity IDE Client",
       "tools": "Import Antigravity Tools",
       "toolsDesc": "Import from ~/.antigravity_tools/ directory",
       "jsonDivider": "or Paste JSON",
@@ -1349,7 +1365,7 @@
       "fromExtension": "Import from Plugin",
       "syncBadge": "Sync Antigravity Cockpit plugin accounts",
       "fromLocalDB": "Import from Local DB",
-      "localDBDesc": "Read login accounts from Antigravity Client on this machine",
+      "localDBDesc": "Read login accounts from Antigravity IDE Client on this machine",
       "toolsDescMigrate": "Migrate accounts from ~/.antigravity_tools/",
       "importingTools": "Importing from Antigravity Tools...",
       "importingLocal": "Importing local account...",
@@ -1394,6 +1410,7 @@
     "batchDeleteConfirm": "Are you sure you want to delete {{count}} selected accounts?",
     "switched": "Switched to {{email}}",
     "switchFailed": "Switch failed: {{error}}",
+    "antigravityLegacyUnsupported": "Antigravity 2.0.0 and later is not supported here. Choose an Antigravity version below 2.0.0, or use Antigravity IDE.",
     "importSuccess": "Successfully imported {{count}} accounts",
     "importLocalSuccess": "Successfully imported account: {{email}}",
     "importFailed": "Import failed: {{error}}",
@@ -1432,7 +1449,7 @@
       },
       "runHint": {
         "title": "Verification notes",
-        "line1": "Detect now sends a minimal chat request by simulating Antigravity with a local gateway and the official Language Server protocol.",
+        "line1": "Detect now sends a minimal chat request by simulating Antigravity IDE with a local gateway and the official Language Server protocol.",
         "line2": "This consumes a small amount of tokens (usually one short dialogue). Actual usage depends on model and account policy.",
         "line3": "This operation does not modify wakeup task settings. It only checks account availability and writes detection records.",
         "line4": "If a 403 is returned, account verification or an appeal submission may be required. The result will include the URL and quick actions."
@@ -1563,6 +1580,7 @@
       "modeScheduled": "📅 Scheduled",
       "modeCrontab": "🧩 Crontab",
       "modeQuotaReset": "🔄 Quota reset",
+      "antigravityVersion": "Antigravity IDE Version",
       "modelSelect": "Model selection",
       "modelHint": "For the same quota group, choose one model. Multiple models trigger in sequence.",
       "modelsEmpty": "No recommended models",
@@ -1643,7 +1661,8 @@
     "authorizing": "Waiting for system authorization...",
     "installFailed": "System installation failed. Try again later or download manually.",
     "restartRequiredAfterInstall": "The update is installed. Restart the app manually to finish switching.",
-    "stoppingApiService": "Stopping API service..."
+    "stoppingApiService": "Stopping API service...",
+    "stopApiServiceFailed": "Couldn't stop the API service. Disable it first and try again."
   },
   "closeDialog": {
     "title": "Close Window",
@@ -1736,6 +1755,11 @@
     },
     "oauth": {
       "desc": "Click the button below and complete OpenAI authorization in your browser",
+      "trialGuideTitle": "Trial signup tips",
+      "trialGuideDesc": "When preparing a new account, prefer a Gmail address you can keep long term; it tends to make retention and later verification easier.",
+      "trialGuideAliasDesc": "One primary Gmail can prepare up to 5 alias addresses for separating ChatGPT signup records; use them according to the target service rules.",
+      "trialGuideLink": "View trial guide",
+      "gmailAliasLink": "Generate Gmail alias",
       "preparing": "Preparing authorization link...",
       "exchanging": "Exchanging token...",
       "portInUse": "Port {{port}} is already in use. Please close the app using this port and try again.",
@@ -1745,15 +1769,16 @@
       "portStillInUse": "Port {{port}} is still in use.",
       "portInUseAction": "Close port and retry",
       "timeout": "Authentication timed out. Please click",
-      "timeoutRetry": "Refresh Auth Link"
+      "timeoutRetry": "Refresh Auth Link",
+      "reauthEmailLabel": "Reauth account"
     },
     "token": {
-      "desc": "Paste auth.json, account JSON, or refresh_token.",
-      "placeholder": "Example: one refresh_token per line, or {\"refresh_token\":\"rt_...\"}",
+      "desc": "Paste session JSON, auth.json, account JSON, Sub2API JSON, accessToken, or refresh_token.",
+      "placeholder": "Example: paste session JSON, accessToken, Sub2API export JSON, or {\"accessToken\":\"eyJ...\"}",
       "formatSummary": "Required fields and examples",
-      "formatRequired": "Supports full tokens (id_token + access_token), a single refresh_token, or one refresh_token per line. refresh_token-only import exchanges it online for full credentials first.",
+      "formatRequired": "Supports session JSON, full tokens (id_token + access_token), Sub2API export JSON, accessToken only, or refresh_token only. refresh_token-only import exchanges it online for full credentials first.",
       "formatSingleLabel": "Full tokens",
-      "formatRefreshOnlyLabel": "refresh_token only",
+      "formatRefreshOnlyLabel": "session / accessToken / refresh_token example",
       "formatBatchLabel": "Batch example"
     },
     "exportFormat": {
@@ -1784,6 +1809,15 @@
       "manageDesc": "Manage API service stats, members, port, key, and connectivity checks in one place.",
       "accountCount": "{{count}} accounts",
       "baseUrl": "URL",
+      "addressKind": "Address type",
+      "addressLocal": "Local",
+      "addressLan": "LAN",
+      "accessScopeLabel": "Access Scope",
+      "accessScopeLocalhost": "Local Only",
+      "accessScopeLan": "LAN",
+      "accessScopeLocalhostShort": "Local Only",
+      "accessScopeLanShort": "Local+LAN",
+      "accessScopeSaveSuccess": "API service access scope updated",
       "apiPortUrl": "API Port URL",
       "apiKey": "API Key",
       "modelId": "Model ID",
@@ -1794,17 +1828,36 @@
       "statusDisabled": "Disabled",
       "statusUnconfigured": "Not Configured",
       "emptyMembers": "Add accounts to the API service, then click Start. No extra setup is required.",
-      "footerHint": "Listens on local and LAN",
+      "footerHint": "Access scope: {{scope}}",
       "memberOnlyLocal": "Local/LAN",
       "manageAccounts": "Manage Accounts",
       "rotateKey": "Reset Key",
       "rotateConfirmMessage": "The current API service key will stop working immediately after reset, and in-flight requests may become unavailable. Continue?",
       "disableService": "Disable Service",
       "enableService": "Enable Service",
-      "testAction": "Test API Service",
-      "testSuccess": "API service test passed ({{count}} models)",
-      "testTimeout": "Test timed out. Confirm the local service is running.",
+      "testAction": "Test",
+      "testDialogTitle": "Test API Service",
+      "testDialogDesc": "Send one real request through Codex CLI to verify the local service, key, and upstream response.",
+      "testProgressTitle": "Testing service",
+      "testProgressDesc": "Sending a real request to the local API service. Please wait.",
+      "testOutputTitle": "Returned result",
+      "testResultTitle": "Service check result",
+      "testSuccess": "Service check passed: local service, key, and upstream response are healthy ({{model}}, {{latency}}). If Codex still returns 502, check Codex Base URL, API Key, or runtime environment.",
+      "testFailureStage": "Failure stage",
+      "testFailureCause": "Failure reason",
+      "testFailureSuggestion": "Suggested fix",
+      "testFailureStatus": "HTTP status",
+      "testFailureModel": "Test model",
+      "testFailureDetail": "Diagnostic details",
+      "testFailureCliOutput": "CLI output",
+      "testFailureGatewayOutput": "Gateway response",
+      "testTimeout": "Real request check timed out. Check the local service, proxy, or upstream network.",
       "testUnavailable": "The current API service URL is unavailable",
+      "testConnectFailed": "Cannot connect to {{url}}. Confirm the API service is running, the port has not changed, and nothing is blocking it.",
+      "testAuthFailed": "Service is reachable, but authentication failed: {{detail}}. Check the API service key or account sign-in state.",
+      "testServiceUnavailable": "Service is reachable, but currently unavailable: {{detail}}. Check whether the service is enabled, the account collection is empty, or accounts are usable.",
+      "testRateLimited": "Service is reachable, but upstream is rate limited or quota is exhausted: {{detail}}.",
+      "testHttpFailed": "Service is reachable, but the request returned HTTP {{status}}: {{detail}}.",
       "activateAction": "Start API Service",
       "enableBeforeActivateTitle": "Service Not Enabled",
       "enableBeforeActivateMessage": "The API service is currently disabled and must be enabled first. Enable it and switch now?",
@@ -1847,8 +1900,8 @@
       "refreshStatsSuccess": "API service stats have been refreshed",
       "accountStatsTitle": "By Account",
       "statsEmpty": "No stats yet",
-      "summaryMeta": "{{count}} accounts · Local/LAN",
-      "summaryMetaUnconfigured": "Not configured · Local/LAN",
+      "summaryMeta": "{{count}} accounts · {{scope}}",
+      "summaryMetaUnconfigured": "Not configured · {{scope}}",
       "expandDetails": "Expand details",
       "collapseDetails": "Collapse details",
       "hideEntryAction": "Hide API Service Entry",
@@ -1885,7 +1938,8 @@
         "quotaLowFirst": "Low Quota First",
         "planHighFirst": "High Plan First",
         "planLowFirst": "Low Plan First",
-        "expirySoonFirst": "Expiry Soon First"
+        "expirySoonFirst": "Expiry Soon First",
+        "custom": "Custom"
       },
       "stats": {
         "requests": "Requests",
@@ -1916,7 +1970,33 @@
         "available": "Regular Overview",
         "manageMembers": "Manage Members",
         "save": "Save Collection"
-      }
+      },
+      "oauthBinding": {
+        "desc": "Optional. Without a link, the API service keeps the original API-key flow; after linking, sign-in uses the OAuth account and Provider uses the API service config.",
+        "currentService": "API Service: {{name}}"
+      },
+      "customRoutingEdit": "Edit Custom Routing",
+      "customRoutingTitle": "Custom Routing",
+      "customRoutingDesc": "Set priority and weight per account to control account selection order and same-priority load distribution.",
+      "customRoutingPriorityTitle": "Priority",
+      "customRoutingPriorityDesc": "Higher values are selected first; lower-priority accounts are tried only when higher-priority accounts are unavailable.",
+      "customRoutingWeightTitle": "Weight",
+      "customRoutingWeightDesc": "Used for load balancing within the same priority. Higher weight means more requests.",
+      "customRoutingSearch": "Search email, plan, or account ID",
+      "customRoutingSelected": "Selected {{count}}",
+      "customRoutingPriorityShort": "Priority",
+      "customRoutingWeightShort": "Weight",
+      "customRoutingApplyBatch": "Apply to selected",
+      "customRoutingReset": "Reset",
+      "customRoutingAccountColumn": "Account",
+      "customRoutingQuotaColumn": "Quota",
+      "customRoutingEmpty": "No configurable accounts in the current API service collection",
+      "customRoutingSave": "Save Custom Routing",
+      "customRoutingSaveSuccess": "API service custom routing updated",
+      "upstreamProxyLabel": "API proxy URL",
+      "upstreamProxySaveSuccess": "API proxy URL updated",
+      "upstreamProxyUrlPlaceholder": "Blank = global proxy",
+      "upstreamProxySaveAction": "Save proxy"
     },
     "api": {
       "baseUrl": "Base URL",
@@ -2007,6 +2087,24 @@
         "apiKeyCannotBeUrl": "API key cannot be a URL. Please check if the fields are swapped.",
         "baseUrlInvalid": "Invalid Base URL. Please enter a full http:// or https:// URL.",
         "apiKeyEqualsBaseUrl": "API key cannot be the same as Base URL."
+      },
+      "oauthBinding": {
+        "label": "OAuth Link",
+        "unbound": "Not linked",
+        "action": "Link OAuth",
+        "actionShort": "Link",
+        "title": "Link OAuth Account",
+        "desc": "Optional. Without a link, this account switches with the original API-key flow; after linking, sign-in uses the OAuth account and Provider uses this API-key config.",
+        "currentAccount": "API-key account: {{name}}",
+        "selectLabel": "Select OAuth account",
+        "empty": "No OAuth accounts yet. Add an OAuth-authorized account first.",
+        "validationRequired": "Select an OAuth account.",
+        "saveSuccess": "OAuth link updated.",
+        "saveFailed": "Failed to link OAuth: {{error}}",
+        "switchRequiresBinding": "Link an OAuth account first.",
+        "clearAction": "Unlink",
+        "clearSuccess": "OAuth link removed.",
+        "clearFailed": "Failed to remove OAuth link: {{error}}"
       }
     },
     "cockpitApi": {
@@ -2418,6 +2516,7 @@
       "actions": {
         "moveToTrash": "Move to Trash",
         "syncSessions": "Sync Sessions",
+        "copyToInstance": "Copy to Instance",
         "repairVisibility": "Repair Visibility",
         "restoreSessions": "Restore Sessions",
         "copySessionId": "Copy Session ID",
@@ -2455,10 +2554,28 @@
         "emptyTitle": "Trash is empty",
         "emptyDesc": "Sessions moved to Trash will appear here.",
         "restoreAction": "Restore Selected Sessions"
+      },
+      "targetModal": {
+        "title": "Copy to Instance",
+        "hint": "Copies the selected sessions into the target instance. Sessions with the same ID already present there are skipped. Running target instances may need a restart before they appear.",
+        "targetInstance": "Target instance",
+        "pickTarget": "Select a target instance",
+        "selectedCount": "{{count}} session(s) selected",
+        "existingCount": "{{count}} already in target",
+        "confirm": "Copy Sessions"
       }
     },
     "groups": {
       "addToGroup": "Add to Group"
+    },
+    "speed": {
+      "title": "Speed",
+      "standard": "Standard",
+      "standardDesc": "Default speed, regular usage",
+      "fast": "Fast",
+      "fastDesc": "1.5x speed, higher usage",
+      "saveSuccess": "Speed updated",
+      "saveFailed": "Failed to save speed: {{error}}"
     }
   },
   "codebuddy": {
@@ -2611,23 +2728,31 @@
       "storage": "Data scope: local import reads GitHub auth sessions from VS Code, and switching updates the same entries; OAuth, token import, local-import validation, and quota refresh call GitHub official APIs with required auth fields. state.vscdb and system keys are not uploaded."
     }
   },
+  "runtime": {
+    "installedVersion": {
+      "loading": "Detecting installed version",
+      "missing": "No installed version detected",
+      "detecting": "Detecting",
+      "notFound": "No version detected"
+    }
+  },
   "dashboard": {
     "title": "Account Dashboard",
     "summary": {
       "label": "Overview",
       "title": "Account Snapshot",
-      "desc": "See Antigravity and Codex at a glance"
+      "desc": "See Antigravity IDE and Codex at a glance"
     },
     "stats": {
-      "antigravity": "Antigravity Accounts",
+      "antigravity": "Antigravity IDE Accounts",
       "codex": "Codex Accounts",
-      "currentAntigravity": "Current Antigravity",
+      "currentAntigravity": "Current Antigravity IDE",
       "currentCodex": "Current Codex",
       "providers": "Providers",
       "totalAccounts": "Total accounts"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "Plan distribution",
@@ -2642,7 +2767,7 @@
     },
     "emptyAccount": "No account",
     "sections": {
-      "antigravity": "Antigravity Accounts",
+      "antigravity": "Antigravity IDE Accounts",
       "codex": "Codex Accounts"
     },
     "actions": {
@@ -2675,7 +2800,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Antigravity Settings",
+      "title": "Antigravity IDE Settings",
       "appPath": "Launch Path"
     },
     "codex": {
@@ -2711,6 +2836,18 @@
           "contextWindowInvalid": "Context window must be an integer greater than 0.",
           "autoCompactInvalid": "Auto-compact limit must be an integer greater than 0."
         }
+      },
+      "appSpeed": {
+        "title": "Codex Speed",
+        "desc": "Saved as launch speed; written before this app starts Codex.",
+        "standard": "Standard",
+        "fast": "Fast",
+        "launch": "Restart",
+        "loadFailed": "Failed to load Codex speed: {{error}}",
+        "saveSuccess": "Codex launch speed saved.",
+        "saveFailed": "Failed to save Codex speed: {{error}}",
+        "launchSuccess": "Codex restarted with the saved speed.",
+        "launchFailed": "Failed to restart Codex: {{error}}"
       }
     },
     "githubCopilot": {
@@ -2773,7 +2910,9 @@
     },
     "gemini": {
       "title": "Gemini Cli Settings",
-      "appPath": "Gemini Cli Path"
+      "appPath": "Gemini Cli Path",
+      "syncWsl": "Sync WSL Configuration",
+      "syncWslDesc": "Automatically overwrite the .gemini configuration in WSL when switching accounts"
     },
     "geminiRefreshInterval": "Quota Auto Refresh",
     "error": {
@@ -3189,7 +3328,7 @@
     "actions": {
       "collapseAll": "Collapse all",
       "expandAll": "Expand all",
-      "goAntigravity": "Go to Antigravity",
+      "goAntigravity": "Go to Antigravity IDE",
       "goCodex": "Go to Codex",
       "goDashboard": "Go to Dashboard",
       "goFingerprints": "Go to Device Fingerprints",
@@ -3221,8 +3360,8 @@
         "1": "Use \"Refresh All\" to sync one full round of quota status first.",
         "2": "Sort by quota/reset time and choose the account you want to use now."
       },
-      "summary": "Manage the Antigravity account lifecycle: add, refresh quota, switch, group, and tag.",
-      "title": "Antigravity Account"
+      "summary": "Manage the Antigravity IDE account lifecycle: add, refresh quota, switch, group, and tag.",
+      "title": "Antigravity IDE Account"
     },
     "blocks": {
       "cautions": "Common pitfalls / notes",
@@ -3828,6 +3967,15 @@
     "cancelEditAccountName": "Cancel Edit",
     "accountNameRequired": "Account name is required.",
     "copySecret": "Copy Secret"
+  },
+  "mfaQuick": {
+    "title": "2FA Code",
+    "selectLabel": "Select 2FA secret",
+    "unnamedSecret": "Unnamed secret",
+    "invalidCode": "Invalid secret",
+    "copyCode": "Copy code",
+    "copied": "Copied",
+    "refreshIn": "{{time}}s"
   },
   "logViewer": {
     "fileLabel": "Log File",
