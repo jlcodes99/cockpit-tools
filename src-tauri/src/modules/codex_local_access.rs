@@ -5406,7 +5406,6 @@ async fn prepare_sidecar_launch_config(
 
     let mut manifest_accounts = Vec::new();
     let mut codex_keys = Vec::new();
-    let mut oauth_account_count = 0usize;
     for account_id in &collection.account_ids {
         let Some(account) = load_sidecar_account(account_id).await else {
             logger::log_codex_api_warn(&format!(
@@ -5436,14 +5435,6 @@ async fn prepare_sidecar_launch_config(
             .map_err(|e| format!("序列化 sidecar Codex OAuth 认证失败: {}", e))?;
         write_string_atomic(&auth_path, &auth_content)?;
         manifest_accounts.push(sidecar_account_manifest_value(&account, Some(&file_name)));
-        oauth_account_count += 1;
-    }
-
-    if oauth_account_count == 0 && !codex_keys.is_empty() {
-        return Err(
-            "当前 API 服务 sidecar 暂不支持纯 API Key 账号池；请至少加入一个 Codex OAuth 账号，或继续改为主网关直连 API Key 路径。"
-                .to_string(),
-        );
     }
 
     let health_snapshot = {
