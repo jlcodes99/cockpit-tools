@@ -6,6 +6,7 @@ pub mod codebuddy_cn_instance;
 pub mod codebuddy_instance;
 pub mod codex;
 pub mod codex_instance;
+pub mod codex_switcher;
 pub mod cursor;
 pub mod cursor_instance;
 pub mod data_transfer;

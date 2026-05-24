@@ -4194,6 +4194,10 @@ fn upsert_account_from_access_token(
     Ok(account)
 }
 
+pub fn import_access_token(access_token: &str) -> Result<CodexAccount, String> {
+    upsert_account_from_access_token(access_token.to_string(), None)
+}
+
 async fn import_codex_candidate(
     candidate: CodexJsonImportCandidate,
 ) -> Result<CodexAccount, String> {
