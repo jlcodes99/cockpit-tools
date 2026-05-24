@@ -383,6 +383,33 @@ func TestRelayServerExecutesNonStreamingRequestThroughRuntime(t *testing.T) {
 	}
 }
 
+func TestRelayServerAcceptsResponsesPathAppendedToChatCompletionsBaseURL(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	runtime := &fakeRuntime{
+		response: cliproxyexecutor.Response{
+			Headers: http.Header{"Content-Type": []string{"application/json"}},
+			Payload: []byte(`{"ok":true}`),
+		},
+	}
+	router := testRelayRouter(runtime)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions/v1/responses", strings.NewReader(`{"model":"gpt-5.5","input":"hello","stream":false}`))
+	req.Header.Set("Authorization", "Bearer client-key")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", w.Code, w.Body.String())
+	}
+	if runtime.executeCalls != 1 || runtime.streamCalls != 0 {
+		t.Fatalf("unexpected runtime calls: execute=%d stream=%d", runtime.executeCalls, runtime.streamCalls)
+	}
+	if runtime.lastReq.Model != "gpt-5.5" || runtime.lastOpts.SourceFormat != sdktranslator.FormatOpenAIResponse {
+		t.Fatalf("unexpected executor request: %#v %#v", runtime.lastReq, runtime.lastOpts)
+	}
+}
+
 func TestRelayServerFramesStreamingChatCompletionThroughRuntime(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	stream := make(chan cliproxyexecutor.StreamChunk, 2)

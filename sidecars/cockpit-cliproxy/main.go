@@ -1745,6 +1745,8 @@ func (s *relayServer) router() *gin.Engine {
 	router.POST("/v1/responses", s.handleResponses)
 	router.POST("/v1/responses/compact", s.handleResponsesCompact)
 	router.POST("/v1/chat/completions", s.handleChatCompletions)
+	router.POST("/v1/chat/completions/v1/responses", s.handleResponses)
+	router.POST("/v1/chat/completions/v1/responses/compact", s.handleResponsesCompact)
 	router.NoRoute(func(c *gin.Context) {
 		writeAPIError(c, http.StatusNotFound, "endpoint not supported", "not_found")
 	})
