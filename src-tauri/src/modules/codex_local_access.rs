@@ -3042,14 +3042,14 @@ fn parse_windows_ipconfig_candidates(output: &str) -> Vec<LanIpv4Candidate> {
 fn build_runtime_account(base_url: String, api_key: String) -> CodexAccount {
     let mut runtime_account = CodexAccount::new_api_key(
         "codex_local_access_runtime".to_string(),
-        "api-service-local".to_string(),
+        "cockpit-codex-lb".to_string(),
         api_key,
         CodexApiProviderMode::Custom,
         Some(base_url),
-        Some("codex_local_access".to_string()),
-        Some("Codex API Service".to_string()),
+        Some(codex_account::CODEX_RUNTIME_MODEL_PROVIDER_ID.to_string()),
+        Some("OpenAI".to_string()),
     );
-    runtime_account.account_name = Some("API Service".to_string());
+    runtime_account.account_name = Some("Cockpit Codex LB".to_string());
     runtime_account
 }
 
@@ -3748,6 +3748,45 @@ pub async fn save_local_access_accounts(
     }
 
     ensure_gateway_matches_runtime().await?;
+    snapshot_state().await
+}
+
+pub async fn pin_local_access_account(account_id: &str) -> Result<CodexLocalAccessState, String> {
+    let account_id = account_id.trim();
+    if account_id.is_empty() {
+        return snapshot_state().await;
+    }
+
+    ensure_runtime_loaded_without_start().await?;
+
+    let mut should_persist = false;
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        let Some(collection) = runtime.collection.as_mut() else {
+            return Ok(build_state_snapshot(&runtime));
+        };
+        if !collection.enabled || !collection.account_ids.iter().any(|id| id == account_id) {
+            return Ok(build_state_snapshot(&runtime));
+        }
+
+        let pinned = pin_account_to_front(collection.account_ids.clone(), Some(account_id));
+        if pinned != collection.account_ids {
+            collection.account_ids = pinned;
+            collection.updated_at = now_ms();
+            should_persist = true;
+        }
+    }
+
+    if should_persist {
+        let collection = {
+            let runtime = gateway_runtime().lock().await;
+            runtime.collection.clone()
+        };
+        if let Some(collection) = collection.as_ref() {
+            save_collection_to_disk(collection)?;
+        }
+    }
+
     snapshot_state().await
 }
 
@@ -6013,11 +6052,11 @@ mod tests {
     use super::{
         build_chat_completion_payload, build_chat_completion_stream_body, build_images_api_payload,
         build_local_models_response, build_ordered_account_ids, build_request_routing_hint,
-        extract_usage_capture, is_responses_completion_event, parse_codex_retry_after,
-        parse_responses_payload_from_upstream, prepare_gateway_request,
-        resolve_supported_model_alias, should_retry_single_account_upstream_status,
-        should_treat_response_as_stream, should_try_next_account, GatewayResponseAdapter,
-        ParsedRequest, ResponseUsageCollector,
+        build_runtime_account, extract_usage_capture, is_responses_completion_event,
+        parse_codex_retry_after, parse_responses_payload_from_upstream, pin_account_to_front,
+        prepare_gateway_request, resolve_supported_model_alias,
+        should_retry_single_account_upstream_status, should_treat_response_as_stream,
+        should_try_next_account, GatewayResponseAdapter, ParsedRequest, ResponseUsageCollector,
     };
     use reqwest::StatusCode;
     use serde_json::{json, Value};
@@ -6943,5 +6982,34 @@ data: {"response":{"id":"resp_done","model":"gpt-5.4","status":"completed","usag
                 .and_then(Value::as_u64),
             Some(2)
         );
+    }
+
+    #[test]
+    fn pins_preferred_account_to_front_without_dropping_fallbacks() {
+        let ordered = pin_account_to_front(
+            vec![
+                "account-a".to_string(),
+                "account-b".to_string(),
+                "account-c".to_string(),
+            ],
+            Some("account-b"),
+        );
+
+        assert_eq!(ordered, vec!["account-b", "account-a", "account-c"]);
+    }
+
+    #[test]
+    fn runtime_account_uses_cockpit_codex_lb_provider() {
+        let account = build_runtime_account(
+            "http://127.0.0.1:14567/backend-api/codex".to_string(),
+            "agt_codex_test".to_string(),
+        );
+
+        assert_eq!(
+            account.api_provider_id.as_deref(),
+            Some(crate::modules::codex_account::CODEX_RUNTIME_MODEL_PROVIDER_ID)
+        );
+        assert_eq!(account.api_provider_name.as_deref(), Some("OpenAI"));
+        assert_eq!(account.account_name.as_deref(), Some("Cockpit Codex LB"));
     }
 }

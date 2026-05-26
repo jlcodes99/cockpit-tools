@@ -146,6 +146,12 @@ pub async fn switch_codex_account(
     let account = codex_account::switch_account_managed(&account_id).await?;
     let account_speed = account.app_speed.clone();
     codex_speed::write_official_app_speed(account_speed.clone())?;
+    if let Err(e) = codex_local_access::pin_local_access_account(&account_id).await {
+        logger::log_warn(&format!(
+            "[Codex Switch] Codex LB 账号置顶失败: account_id={}, error={}",
+            account_id, e
+        ));
+    }
 
     // 同步更新 Codex 默认实例的绑定账号（不同步到 Antigravity，因为账号体系不同）
     if let Err(e) = crate::modules::codex_instance::update_default_settings(
