@@ -6,7 +6,7 @@ name = "cockpit-tools-codex-lb"
 script = '''
 cd "$env:CODEX_WORKTREE_PATH"
 npm install
-$src = "C:\Users\user\Documents\Codex\CPTools\cockpit-tools-v0.24.8-build\sidecars\cockpit-cliproxy\bin\cockpit-cliproxy-x86_64-pc-windows-msvc.exe"
+$src = "C:\Users\user\Documents\Codex\CPTools\cockpit-tools-codex-lb\builds\cockpit-tools-v0.24.8-build\sidecars\cockpit-cliproxy\bin\cockpit-cliproxy-x86_64-pc-windows-msvc.exe"
 $dstDir = Join-Path $env:CODEX_WORKTREE_PATH "sidecars\cockpit-cliproxy\bin"
 New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
 Copy-Item -LiteralPath $src -Destination (Join-Path $dstDir "cockpit-cliproxy-x86_64-pc-windows-msvc.exe") -Force
