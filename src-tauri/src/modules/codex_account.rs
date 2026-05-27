@@ -1011,8 +1011,8 @@ fn write_oauth_runtime_provider_to_config_toml(base_dir: &Path) -> Result<(), St
     let features = doc[CODEX_CONFIG_FEATURES_KEY]
         .as_table_mut()
         .ok_or("config.toml 中 features 不是合法表结构")?;
-    features["plugins"] = value(false);
-    features["rmcp_client"] = value(false);
+    features["plugins"] = value(true);
+    features["rmcp_client"] = value(true);
 
     if doc.get(CODEX_CONFIG_MODEL_PROVIDERS_KEY).is_none() {
         doc[CODEX_CONFIG_MODEL_PROVIDERS_KEY] = toml_edit::table();
@@ -4691,8 +4691,8 @@ requires_openai_auth = false
         assert!(content.contains("model_reasoning_effort = \"low\""));
         assert!(content.contains("model_provider = \"codex-lb\""));
         assert!(content.contains("[features]"));
-        assert!(content.contains("plugins = false"));
-        assert!(content.contains("rmcp_client = false"));
+        assert!(content.contains("plugins = true"));
+        assert!(content.contains("rmcp_client = true"));
         assert!(content.contains("[model_providers.codex-lb]"));
         assert!(content.contains("name = \"codex-lb\""));
         assert!(content.contains("base_url = \"http://127.0.0.1:2455/backend-api/codex\""));
