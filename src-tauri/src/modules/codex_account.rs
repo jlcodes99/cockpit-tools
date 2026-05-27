@@ -30,8 +30,11 @@ const API_KEY_EMAIL_PREFIX: &str = "api-key";
 const API_KEY_AUTH_MODE: &str = "apikey";
 const CODEX_CONFIG_FILE_NAME: &str = "config.toml";
 const CODEX_CONFIG_OPENAI_BASE_URL_KEY: &str = "openai_base_url";
+const CODEX_CONFIG_MODEL_KEY: &str = "model";
+const CODEX_CONFIG_MODEL_REASONING_EFFORT_KEY: &str = "model_reasoning_effort";
 const CODEX_CONFIG_MODEL_PROVIDER_KEY: &str = "model_provider";
 const CODEX_CONFIG_MODEL_PROVIDERS_KEY: &str = "model_providers";
+const CODEX_CONFIG_FEATURES_KEY: &str = "features";
 const CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY: &str = "model_context_window";
 const CODEX_CONFIG_MODEL_AUTO_COMPACT_TOKEN_LIMIT_KEY: &str = "model_auto_compact_token_limit";
 const CODEX_DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
@@ -39,6 +42,11 @@ const CODEX_COCKPIT_API_BASE_URL: &str = "https://chongcodex.cn/v1";
 const CODEX_COCKPIT_API_PROVIDER_ID: &str = "cockpit_api";
 const CODEX_OPENAI_PROVIDER_ID: &str = "openai";
 pub(crate) const CODEX_RUNTIME_MODEL_PROVIDER_ID: &str = "cockpit-codex-lb";
+const CODEX_OAUTH_LB_MODEL_PROVIDER_ID: &str = "codex-lb";
+const CODEX_LB_RUNTIME_BASE_URL: &str = "http://127.0.0.1:2455/backend-api/codex";
+const CODEX_LB_RUNTIME_PROVIDER_NAME: &str = "codex-lb";
+const CODEX_OAUTH_DEFAULT_MODEL: &str = "gpt-5.5";
+const CODEX_OAUTH_DEFAULT_REASONING_EFFORT: &str = "low";
 const CODEX_LEGACY_RUNTIME_MODEL_PROVIDER_ID: &str = "codex_local_access";
 const CODEX_LEGACY_API_KEY_OPENAI_PROVIDER_ID: &str = "openai_api_key";
 const CODEX_DEFAULT_RUNTIME_PROVIDER_NAME: &str = "OpenAI Official";
@@ -972,6 +980,56 @@ fn write_api_key_provider_to_config_toml(
     provider_table["wire_api"] = value(CODEX_PROVIDER_WIRE_API);
     provider_table["requires_openai_auth"] = value(true);
     provider_table["supports_websockets"] = value(true);
+
+    if let Some(parent) = config_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("创建 config.toml 目录失败: {}", e))?;
+    }
+    let content = doc.to_string();
+    crate::modules::atomic_write::write_string_atomic(&config_path, &content)
+        .map_err(|e| format!("写入 config.toml 失败: {}", e))
+}
+
+fn write_oauth_runtime_provider_to_config_toml(base_dir: &Path) -> Result<(), String> {
+    let config_path = get_config_toml_path(base_dir);
+    let existing = fs::read_to_string(&config_path).unwrap_or_default();
+    let mut doc = if existing.trim().is_empty() {
+        Document::new()
+    } else {
+        existing
+            .parse::<Document>()
+            .map_err(|e| format!("解析 config.toml 失败: {}", e))?
+    };
+
+    let _ = doc.remove(CODEX_CONFIG_OPENAI_BASE_URL_KEY);
+    doc[CODEX_CONFIG_MODEL_KEY] = value(CODEX_OAUTH_DEFAULT_MODEL);
+    doc[CODEX_CONFIG_MODEL_REASONING_EFFORT_KEY] = value(CODEX_OAUTH_DEFAULT_REASONING_EFFORT);
+    doc[CODEX_CONFIG_MODEL_PROVIDER_KEY] = value(CODEX_OAUTH_LB_MODEL_PROVIDER_ID);
+
+    if doc.get(CODEX_CONFIG_FEATURES_KEY).is_none() {
+        doc[CODEX_CONFIG_FEATURES_KEY] = toml_edit::table();
+    }
+    let features = doc[CODEX_CONFIG_FEATURES_KEY]
+        .as_table_mut()
+        .ok_or("config.toml 中 features 不是合法表结构")?;
+    features["plugins"] = value(false);
+    features["rmcp_client"] = value(false);
+
+    if doc.get(CODEX_CONFIG_MODEL_PROVIDERS_KEY).is_none() {
+        doc[CODEX_CONFIG_MODEL_PROVIDERS_KEY] = toml_edit::table();
+    }
+    let model_providers = doc[CODEX_CONFIG_MODEL_PROVIDERS_KEY]
+        .as_table_mut()
+        .ok_or("config.toml 中 model_providers 不是合法表结构")?;
+    let _ = model_providers.remove(CODEX_RUNTIME_MODEL_PROVIDER_ID);
+    model_providers[CODEX_OAUTH_LB_MODEL_PROVIDER_ID] = toml_edit::table();
+    let provider_table = model_providers[CODEX_OAUTH_LB_MODEL_PROVIDER_ID]
+        .as_table_mut()
+        .ok_or("config.toml 中目标 provider 不是合法表结构")?;
+    provider_table["name"] = value(CODEX_LB_RUNTIME_PROVIDER_NAME);
+    provider_table["base_url"] = value(CODEX_LB_RUNTIME_BASE_URL);
+    provider_table["wire_api"] = value(CODEX_PROVIDER_WIRE_API);
+    provider_table["requires_openai_auth"] = value(false);
+    provider_table["supports_websockets"] = value(false);
 
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("创建 config.toml 目录失败: {}", e))?;
@@ -3025,12 +3083,12 @@ pub fn write_auth_file_to_dir(base_dir: &Path, account: &CodexAccount) -> Result
         provider_config
     } else {
         let provider_config = ApiProviderConfig {
-            mode: CodexApiProviderMode::OpenaiBuiltin,
-            base_url: None,
-            provider_id: None,
-            provider_name: None,
+            mode: CodexApiProviderMode::Custom,
+            base_url: Some(CODEX_LB_RUNTIME_BASE_URL.to_string()),
+            provider_id: Some(CODEX_OAUTH_LB_MODEL_PROVIDER_ID.to_string()),
+            provider_name: Some(CODEX_LB_RUNTIME_PROVIDER_NAME.to_string()),
         };
-        write_api_provider_to_config_toml(base_dir, &provider_config)?;
+        write_oauth_runtime_provider_to_config_toml(base_dir)?;
         provider_config
     };
 
@@ -3901,8 +3959,8 @@ mod tests {
         save_account_index, should_accept_authority_snapshot, sync_account_from_auth_dir,
         sync_managed_projection_from_auth_dir, validate_api_key_credentials,
         write_api_key_provider_to_config_toml, write_api_provider_to_config_toml,
-        write_managed_projection_to_dir, write_quick_config_to_config_toml, ApiProviderConfig,
-        CodexAccountIndex, CodexAccountSummary, CodexAuthFile, CodexAuthTokens,
+        write_auth_file_to_dir, write_managed_projection_to_dir, write_quick_config_to_config_toml,
+        ApiProviderConfig, CodexAccountIndex, CodexAccountSummary, CodexAuthFile, CodexAuthTokens,
         LocalCodexOAuthSnapshot, CODEX_AUTO_COMPACT_DEFAULT_LIMIT, CODEX_CONTEXT_WINDOW_1M_VALUE,
     };
     use crate::models::codex::{CodexAccount, CodexApiProviderMode, CodexTokens};
@@ -4609,6 +4667,38 @@ requires_openai_auth = false
                 provider_name: Some("OpenAI Official".to_string()),
             }
         );
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn oauth_account_bundle_uses_fixed_runtime_provider() {
+        let base_dir = make_temp_dir("codex-oauth-config-runtime-provider-test");
+        let tokens = make_codex_tokens(
+            "oauth@example.com",
+            "acc-oauth",
+            "org-oauth",
+            "oauth",
+            "refresh-oauth",
+        );
+        let account = CodexAccount::new("acc-oauth".to_string(), "oauth@example.com".to_string(), tokens);
+
+        write_auth_file_to_dir(&base_dir, &account).expect("write auth bundle");
+
+        let config_path = base_dir.join("config.toml");
+        let content = fs::read_to_string(&config_path).expect("read config");
+        assert!(content.contains("model = \"gpt-5.5\""));
+        assert!(content.contains("model_reasoning_effort = \"low\""));
+        assert!(content.contains("model_provider = \"codex-lb\""));
+        assert!(content.contains("[features]"));
+        assert!(content.contains("plugins = false"));
+        assert!(content.contains("rmcp_client = false"));
+        assert!(content.contains("[model_providers.codex-lb]"));
+        assert!(content.contains("name = \"codex-lb\""));
+        assert!(content.contains("base_url = \"http://127.0.0.1:2455/backend-api/codex\""));
+        assert!(content.contains("wire_api = \"responses\""));
+        assert!(content.contains("requires_openai_auth = false"));
+        assert!(content.contains("supports_websockets = false"));
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }

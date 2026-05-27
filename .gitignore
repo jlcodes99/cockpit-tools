@@ -46,3 +46,7 @@ target/
 **/*.rs.bk
 docs/plugin-architecture-proposal.md
 .aitasks
+
+# Local migration/build artifacts
+.migration-backup-*/
+builds/

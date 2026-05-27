@@ -6945,6 +6945,37 @@ pub fn start_codex_default(extra_args: &[String]) -> Result<u32, String> {
     {
         use std::os::windows::process::CommandExt;
 
+        if let Ok(launch_path) = resolve_codex_launch_path() {
+            crate::modules::logger::log_info(&format!(
+                "[Codex Start] 启动策略=exe-path launch_path={}",
+                launch_path.to_string_lossy()
+            ));
+            let mut cmd = Command::new(&launch_path);
+            apply_managed_proxy_env_to_command(&mut cmd);
+            if should_detach_child() {
+                cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+                cmd.stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null());
+            }
+            // Codex 是 GUI 应用，不设置 CREATE_NO_WINDOW，否则会导致其内部 spawn CLI 子进程失败
+            for arg in extra_args {
+                let trimmed = arg.trim();
+                if !trimmed.is_empty() {
+                    cmd.arg(trimmed);
+                }
+            }
+
+            let child =
+                spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Codex 失败: {}", e))?;
+            crate::modules::logger::log_info(&format!(
+                "[Codex Start] 启动策略=exe-path launch_path={} pid={}",
+                launch_path.to_string_lossy(),
+                child.id()
+            ));
+            return Ok(child.id());
+        }
+
         let before_pids: HashSet<u32> = collect_codex_process_entries()
             .into_iter()
             .map(|(pid, _)| pid)
@@ -7013,35 +7044,7 @@ pub fn start_codex_default(extra_args: &[String]) -> Result<u32, String> {
             );
         }
 
-        let launch_path = resolve_codex_launch_path()?;
-        crate::modules::logger::log_info(&format!(
-            "[Codex Start] 启动策略=exe-path launch_path={}",
-            launch_path.to_string_lossy()
-        ));
-        let mut cmd = Command::new(&launch_path);
-        apply_managed_proxy_env_to_command(&mut cmd);
-        if should_detach_child() {
-            cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
-            cmd.stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null());
-        }
-        // Codex 是 GUI 应用，不设置 CREATE_NO_WINDOW，否则会导致其内部 spawn CLI 子进程失败
-        for arg in extra_args {
-            let trimmed = arg.trim();
-            if !trimmed.is_empty() {
-                cmd.arg(trimmed);
-            }
-        }
-
-        let child =
-            spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Codex 失败: {}", e))?;
-        crate::modules::logger::log_info(&format!(
-            "[Codex Start] 启动策略=exe-path launch_path={} pid={}",
-            launch_path.to_string_lossy(),
-            child.id()
-        ));
-        return Ok(child.id());
+        return Err(app_path_missing_error("codex"));
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
