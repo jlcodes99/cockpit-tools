@@ -29,7 +29,7 @@ toml_edit = "0.20"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 chrono = "0.4"
 dirs = "5.0"
-reqwest = { version = "0.12", features = ["json", "gzip", "brotli", "deflate", "zstd", "stream", "socks"] }
+reqwest = { version = "0.12", features = ["json", "gzip", "brotli", "deflate", "zstd", "stream", "socks", "multipart"] }
 # 为 tauri-plugin-updater 所依赖的 reqwest 0.13 合并 socks 特性，
 # 使 updater 链路在全局代理配置为 socks5:// 时可正常发起请求。
 reqwest_updater_socks = { package = "reqwest", version = "0.13", default-features = false, features = ["socks"] }

@@ -11,6 +11,7 @@ pub mod codebuddy_instance;
 pub mod codebuddy_oauth;
 pub mod codex_account;
 pub mod codex_instance;
+pub mod codex_lb_sync;
 pub mod codex_local_access;
 pub mod codex_oauth;
 pub mod codex_quota;

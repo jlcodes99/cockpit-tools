@@ -2907,7 +2907,9 @@ mod tests {
     struct TestEnvGuard {
         home_dir: std::path::PathBuf,
         previous_home: Option<String>,
+        previous_userprofile: Option<String>,
         previous_codex_home: Option<String>,
+        previous_test_data_dir: Option<String>,
     }
 
     impl TestEnvGuard {
@@ -2917,14 +2919,24 @@ mod tests {
             fs::create_dir_all(&codex_home).expect("create codex home");
 
             let previous_home = std::env::var("HOME").ok();
+            let previous_userprofile = std::env::var("USERPROFILE").ok();
             let previous_codex_home = std::env::var("CODEX_HOME").ok();
+            let previous_test_data_dir = std::env::var("COCKPIT_TOOLS_TEST_DATA_DIR").ok();
             std::env::set_var("HOME", &home_dir);
+            // Windows resolves dirs::home_dir() from USERPROFILE, not HOME.
+            std::env::set_var("USERPROFILE", &home_dir);
             std::env::set_var("CODEX_HOME", &codex_home);
+            std::env::set_var(
+                "COCKPIT_TOOLS_TEST_DATA_DIR",
+                home_dir.join(".antigravity_cockpit"),
+            );
 
             Self {
                 home_dir,
                 previous_home,
+                previous_userprofile,
                 previous_codex_home,
+                previous_test_data_dir,
             }
         }
 
@@ -2939,9 +2951,17 @@ mod tests {
                 Some(value) => std::env::set_var("HOME", value),
                 None => std::env::remove_var("HOME"),
             }
+            match self.previous_userprofile.as_ref() {
+                Some(value) => std::env::set_var("USERPROFILE", value),
+                None => std::env::remove_var("USERPROFILE"),
+            }
             match self.previous_codex_home.as_ref() {
                 Some(value) => std::env::set_var("CODEX_HOME", value),
                 None => std::env::remove_var("CODEX_HOME"),
+            }
+            match self.previous_test_data_dir.as_ref() {
+                Some(value) => std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", value),
+                None => std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR"),
             }
             let _ = fs::remove_dir_all(&self.home_dir);
         }

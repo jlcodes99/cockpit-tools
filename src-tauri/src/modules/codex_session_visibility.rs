@@ -690,6 +690,74 @@ fn build_threads_repair_set_clause(columns: ThreadsTableColumns) -> String {
     assignments.join(", ")
 }
 
+/// Retag active (non-archived) thread rows from one provider id to another.
+pub fn retag_active_threads_model_provider(
+    data_dir: &Path,
+    from_provider: &str,
+    to_provider: &str,
+) -> Result<usize, String> {
+    let from_provider = from_provider.trim();
+    let to_provider = to_provider.trim();
+    if from_provider.is_empty() || to_provider.is_empty() || from_provider == to_provider {
+        return Ok(0);
+    }
+
+    let db_path = data_dir.join(STATE_DB_FILE);
+    if !db_path.exists() {
+        return Ok(0);
+    }
+
+    let connection = match Connection::open(&db_path) {
+        Ok(connection) => connection,
+        Err(error) if modules::db::is_unusable_sqlite_database_error(&error) => {
+            log_skipped_sqlite_database(&db_path, &error.to_string());
+            return Ok(0);
+        }
+        Err(error) => {
+            return Err(format!(
+                "打开实例数据库失败 ({}): {}",
+                db_path.display(),
+                error
+            ));
+        }
+    };
+    connection
+        .busy_timeout(Duration::from_secs(3))
+        .map_err(|error| format_sqlite_write_error(&db_path, &error))?;
+
+    let columns = match read_threads_table_columns(&connection) {
+        Ok(columns) => columns,
+        Err(error) if modules::db::is_unusable_sqlite_database_error(&error) => {
+            log_skipped_sqlite_database(&db_path, &error.to_string());
+            return Ok(0);
+        }
+        Err(error) => {
+            return Err(format_sqlite_read_error(
+                &db_path,
+                "读取 SQLite threads 表结构失败",
+                &error,
+            ));
+        }
+    };
+    if !columns.is_some_and(|columns| columns.model_provider) {
+        return Ok(0);
+    }
+
+    let sql = "UPDATE threads SET model_provider = ?1 \
+               WHERE COALESCE(model_provider, '') = ?2 \
+                 AND archived_at IS NULL";
+    let updated_rows = match connection.execute(sql, [to_provider, from_provider]) {
+        Ok(updated_rows) => updated_rows,
+        Err(error) if modules::db::is_unusable_sqlite_database_error(&error) => {
+            log_skipped_sqlite_database(&db_path, &error.to_string());
+            return Ok(0);
+        }
+        Err(error) if is_missing_threads_table_error(&error) => return Ok(0),
+        Err(error) => return Err(format_sqlite_write_error(&db_path, &error)),
+    };
+    Ok(updated_rows)
+}
+
 fn format_sqlite_read_error(path: &Path, action: &str, error: &rusqlite::Error) -> String {
     format!("{} ({}): {}", action, path.display(), error)
 }
@@ -1100,6 +1168,7 @@ mod tests {
             )
             .expect("read provider-only row");
         assert_eq!(provider_only, ("relay".to_string(), 0));
+        drop(connection);
 
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
@@ -1137,6 +1206,7 @@ mod tests {
             )
             .expect("read old provider");
         assert_eq!(old_provider, "relay");
+        drop(connection);
 
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }

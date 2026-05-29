@@ -45,6 +45,7 @@ pub(crate) const CODEX_RUNTIME_MODEL_PROVIDER_ID: &str = "cockpit-codex-lb";
 const CODEX_OAUTH_LB_MODEL_PROVIDER_ID: &str = "codex-lb";
 const CODEX_LB_RUNTIME_BASE_URL: &str = "http://127.0.0.1:2455/backend-api/codex";
 const CODEX_LB_RUNTIME_PROVIDER_NAME: &str = "codex-lb";
+const CODEX_LB_RUNTIME_REQUIRES_OPENAI_AUTH: bool = true;
 const CODEX_OAUTH_DEFAULT_MODEL: &str = "gpt-5.5";
 const CODEX_OAUTH_DEFAULT_REASONING_EFFORT: &str = "low";
 const CODEX_LEGACY_RUNTIME_MODEL_PROVIDER_ID: &str = "codex_local_access";
@@ -63,6 +64,20 @@ const CODEX_TOKEN_SOURCE_MANAGED: &str = "managed";
 const CODEX_PROACTIVE_REFRESH_INTERVAL_SECONDS: i64 = 8 * 24 * 60 * 60;
 const CODEX_AUTH_PROJECTION_FILE_NAME: &str = ".cockpit_codex_auth.json";
 const CODEX_AUTH_PROJECTION_WRITER: &str = "cockpit";
+
+fn write_model_provider_table(
+    provider_table: &mut toml_edit::Table,
+    name: &str,
+    base_url: &str,
+    requires_openai_auth: bool,
+    supports_websockets: bool,
+) {
+    provider_table["name"] = value(name);
+    provider_table["base_url"] = value(base_url);
+    provider_table["wire_api"] = value(CODEX_PROVIDER_WIRE_API);
+    provider_table["requires_openai_auth"] = value(requires_openai_auth);
+    provider_table["supports_websockets"] = value(supports_websockets);
+}
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -834,12 +849,15 @@ fn write_api_provider_to_config_toml(
 
     match provider_config.mode {
         CodexApiProviderMode::OpenaiBuiltin => {
+            let managed_provider_ids = collect_managed_api_key_provider_ids();
             let preserve_existing_provider = doc
                 .get(CODEX_CONFIG_MODEL_PROVIDER_KEY)
                 .and_then(|item| item.as_str())
                 .map(str::trim)
                 .filter(|provider_id| {
-                    !provider_id.is_empty() && *provider_id != CODEX_OPENAI_PROVIDER_ID
+                    !provider_id.is_empty()
+                        && *provider_id != CODEX_OPENAI_PROVIDER_ID
+                        && !managed_provider_ids.contains(*provider_id)
                 })
                 .and_then(|provider_id| {
                     doc.get(CODEX_CONFIG_MODEL_PROVIDERS_KEY)
@@ -887,11 +905,7 @@ fn write_api_provider_to_config_toml(
             let provider_table = model_providers[provider_id]
                 .as_table_mut()
                 .ok_or("config.toml 中目标 provider 不是合法表结构")?;
-            provider_table["name"] = value(provider_name);
-            provider_table["base_url"] = value(base_url);
-            provider_table["wire_api"] = value(CODEX_PROVIDER_WIRE_API);
-            provider_table["requires_openai_auth"] = value(false);
-            provider_table["supports_websockets"] = value(false);
+            write_model_provider_table(provider_table, provider_name, base_url, false, false);
         }
     }
 
@@ -975,11 +989,7 @@ fn write_api_key_provider_to_config_toml(
     let provider_table = model_providers[CODEX_RUNTIME_MODEL_PROVIDER_ID]
         .as_table_mut()
         .ok_or("config.toml 中目标 provider 不是合法表结构")?;
-    provider_table["name"] = value(provider_name);
-    provider_table["base_url"] = value(base_url);
-    provider_table["wire_api"] = value(CODEX_PROVIDER_WIRE_API);
-    provider_table["requires_openai_auth"] = value(true);
-    provider_table["supports_websockets"] = value(true);
+    write_model_provider_table(provider_table, provider_name, base_url, true, true);
 
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("创建 config.toml 目录失败: {}", e))?;
@@ -1025,11 +1035,13 @@ fn write_oauth_runtime_provider_to_config_toml(base_dir: &Path) -> Result<(), St
     let provider_table = model_providers[CODEX_OAUTH_LB_MODEL_PROVIDER_ID]
         .as_table_mut()
         .ok_or("config.toml 中目标 provider 不是合法表结构")?;
-    provider_table["name"] = value(CODEX_LB_RUNTIME_PROVIDER_NAME);
-    provider_table["base_url"] = value(CODEX_LB_RUNTIME_BASE_URL);
-    provider_table["wire_api"] = value(CODEX_PROVIDER_WIRE_API);
-    provider_table["requires_openai_auth"] = value(false);
-    provider_table["supports_websockets"] = value(false);
+    write_model_provider_table(
+        provider_table,
+        CODEX_LB_RUNTIME_PROVIDER_NAME,
+        CODEX_LB_RUNTIME_BASE_URL,
+        CODEX_LB_RUNTIME_REQUIRES_OPENAI_AUTH,
+        false,
+    );
 
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("创建 config.toml 目录失败: {}", e))?;
@@ -2232,6 +2244,8 @@ fn upsert_account_with_hints(
         email, account_id, organization_id
     ));
 
+    crate::modules::codex_lb_sync::schedule_sync_oauth_account_to_codex_lb(account.clone());
+
     Ok(account)
 }
 
@@ -2839,7 +2853,7 @@ pub fn get_current_account() -> Option<CodexAccount> {
     Some(account)
 }
 
-fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, String> {
+pub(crate) fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, String> {
     if account.is_api_key_auth() {
         let api_key = normalize_optional_ref(account.openai_api_key.as_deref())
             .ok_or("API Key 账号缺少 OPENAI_API_KEY")?;
@@ -3089,6 +3103,27 @@ pub fn write_auth_file_to_dir(base_dir: &Path, account: &CodexAccount) -> Result
             provider_name: Some(CODEX_LB_RUNTIME_PROVIDER_NAME.to_string()),
         };
         write_oauth_runtime_provider_to_config_toml(base_dir)?;
+        match crate::modules::codex_session_visibility::retag_active_threads_model_provider(
+            base_dir,
+            CODEX_OPENAI_PROVIDER_ID,
+            CODEX_OAUTH_LB_MODEL_PROVIDER_ID,
+        ) {
+            Ok(updated_rows) if updated_rows > 0 => {
+                logger::log_info(&format!(
+                    "[Codex切号] 已将 {} 条活跃线程从 openai 改回 codex-lb: dir={}",
+                    updated_rows,
+                    base_dir.display()
+                ));
+            }
+            Ok(_) => {}
+            Err(err) => {
+                logger::log_warn(&format!(
+                    "[Codex切号] 活跃线程 provider 改回 codex-lb 失败: dir={}, error={}",
+                    base_dir.display(),
+                    err
+                ));
+            }
+        }
         provider_config
     };
 
@@ -3406,6 +3441,13 @@ pub async fn switch_account_managed(account_id: &str) -> Result<CodexAccount, St
     let lock = codex_token_lock_for(account_id);
     let _guard = lock.lock().await;
     let account = refresh_managed_account_locked(account_id, false, "switch").await?;
+    if let Err(err) = crate::modules::codex_lb_sync::sync_oauth_account_to_codex_lb(&account).await
+    {
+        logger::log_warn(&format!(
+            "[codex-lb] switch import skipped: account_id={}, error={}",
+            account.id, err
+        ));
+    }
     switch_account_with_prepared(account_id, account)
 }
 
@@ -4085,7 +4127,9 @@ mod tests {
     struct TestEnvGuard {
         home_dir: std::path::PathBuf,
         previous_home: Option<String>,
+        previous_userprofile: Option<String>,
         previous_codex_home: Option<String>,
+        previous_test_data_dir: Option<String>,
     }
 
     impl TestEnvGuard {
@@ -4095,14 +4139,24 @@ mod tests {
             fs::create_dir_all(&codex_home).expect("create codex home");
 
             let previous_home = std::env::var("HOME").ok();
+            let previous_userprofile = std::env::var("USERPROFILE").ok();
             let previous_codex_home = std::env::var("CODEX_HOME").ok();
+            let previous_test_data_dir = std::env::var("COCKPIT_TOOLS_TEST_DATA_DIR").ok();
             std::env::set_var("HOME", &home_dir);
+            // Windows resolves dirs::home_dir() from USERPROFILE, not HOME.
+            std::env::set_var("USERPROFILE", &home_dir);
             std::env::set_var("CODEX_HOME", &codex_home);
+            std::env::set_var(
+                "COCKPIT_TOOLS_TEST_DATA_DIR",
+                home_dir.join(".antigravity_cockpit"),
+            );
 
             Self {
                 home_dir,
                 previous_home,
+                previous_userprofile,
                 previous_codex_home,
+                previous_test_data_dir,
             }
         }
 
@@ -4117,9 +4171,17 @@ mod tests {
                 Some(value) => std::env::set_var("HOME", value),
                 None => std::env::remove_var("HOME"),
             }
+            match self.previous_userprofile.as_ref() {
+                Some(value) => std::env::set_var("USERPROFILE", value),
+                None => std::env::remove_var("USERPROFILE"),
+            }
             match self.previous_codex_home.as_ref() {
                 Some(value) => std::env::set_var("CODEX_HOME", value),
                 None => std::env::remove_var("CODEX_HOME"),
+            }
+            match self.previous_test_data_dir.as_ref() {
+                Some(value) => std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", value),
+                None => std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR"),
             }
             let _ = fs::remove_dir_all(&self.home_dir);
         }
@@ -4681,7 +4743,11 @@ requires_openai_auth = false
             "oauth",
             "refresh-oauth",
         );
-        let account = CodexAccount::new("acc-oauth".to_string(), "oauth@example.com".to_string(), tokens);
+        let account = CodexAccount::new(
+            "acc-oauth".to_string(),
+            "oauth@example.com".to_string(),
+            tokens,
+        );
 
         write_auth_file_to_dir(&base_dir, &account).expect("write auth bundle");
 
@@ -4697,8 +4763,36 @@ requires_openai_auth = false
         assert!(content.contains("name = \"codex-lb\""));
         assert!(content.contains("base_url = \"http://127.0.0.1:2455/backend-api/codex\""));
         assert!(content.contains("wire_api = \"responses\""));
-        assert!(content.contains("requires_openai_auth = false"));
+        assert!(content.contains("requires_openai_auth = true"));
         assert!(content.contains("supports_websockets = false"));
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn usage_based_oauth_account_bundle_uses_codex_lb() {
+        let base_dir = make_temp_dir("codex-usage-based-oauth-config-test");
+        let tokens = make_codex_tokens(
+            "usage@example.com",
+            "6ef7c0da-8fca-4fbf-91c5-50d67faaa4b8",
+            "org-usage",
+            "usage-access",
+            "usage-refresh",
+        );
+        let mut account = CodexAccount::new(
+            "codex-usage".to_string(),
+            "usage@example.com".to_string(),
+            tokens,
+        );
+        account.plan_type = Some("self_serve_business_usage_based".to_string());
+
+        write_auth_file_to_dir(&base_dir, &account).expect("write auth bundle");
+
+        let config_path = base_dir.join("config.toml");
+        let content = fs::read_to_string(&config_path).expect("read config");
+        assert!(content.contains("model_provider = \"codex-lb\""));
+        assert!(content.contains("[model_providers.codex-lb]"));
+        assert!(content.contains("base_url = \"http://127.0.0.1:2455/backend-api/codex\""));
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
