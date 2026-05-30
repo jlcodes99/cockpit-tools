@@ -58,7 +58,11 @@ fn instances_path() -> Result<PathBuf, String> {
 
 pub fn load_instance_store() -> Result<InstanceStore, String> {
     let path = instances_path()?;
-    instance_store::load_instance_store(&path, CODEX_INSTANCES_FILE)
+    let mut store = instance_store::load_instance_store(&path, CODEX_INSTANCES_FILE)?;
+    if normalize_managed_instance_dirs(&mut store)? {
+        save_instance_store(&store)?;
+    }
+    Ok(store)
 }
 
 pub fn save_instance_store(store: &InstanceStore) -> Result<(), String> {
@@ -126,21 +130,72 @@ pub fn get_default_codex_home() -> Result<PathBuf, String> {
 }
 
 pub fn get_default_instances_root_dir() -> Result<PathBuf, String> {
+    Ok(modules::account::get_data_dir()?
+        .join("instances")
+        .join("codex"))
+}
+
+fn legacy_hardcoded_instances_root_dir() -> Result<Option<PathBuf>, String> {
     #[cfg(target_os = "macos")]
     {
         let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join(".antigravity_cockpit/instances/codex"));
+        return Ok(Some(home.join(".antigravity_cockpit/instances/codex")));
     }
 
     #[cfg(target_os = "windows")]
     {
         let appdata =
             std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
-        return Ok(PathBuf::from(appdata).join(".antigravity_cockpit\\instances\\codex"));
+        return Ok(Some(
+            PathBuf::from(appdata).join(".antigravity_cockpit\\instances\\codex"),
+        ));
     }
 
-    #[allow(unreachable_code)]
-    Err("Codex 多开实例仅支持 macOS 和 Windows".to_string())
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        Ok(None)
+    }
+}
+
+fn migrate_managed_instance_dir(
+    instance: &mut InstanceProfile,
+    active_root: &Path,
+    legacy_root: &Path,
+) -> Result<bool, String> {
+    let current = PathBuf::from(instance.user_data_dir.trim());
+    let relative_path = match current.strip_prefix(legacy_root) {
+        Ok(path) if path.components().next().is_some() => path.to_path_buf(),
+        _ => return Ok(false),
+    };
+    let next = active_root.join(relative_path);
+    if paths_point_to_same_location(&current, &next) {
+        return Ok(false);
+    }
+
+    if current.exists() && !next.exists() {
+        instance_store::copy_dir_recursive(&current, &next)?;
+    }
+
+    instance.user_data_dir = next.to_string_lossy().to_string();
+    Ok(true)
+}
+
+fn normalize_managed_instance_dirs(store: &mut InstanceStore) -> Result<bool, String> {
+    let active_root = get_default_instances_root_dir()?;
+    let Some(legacy_root) = legacy_hardcoded_instances_root_dir()? else {
+        return Ok(false);
+    };
+    if paths_point_to_same_location(&active_root, &legacy_root) {
+        return Ok(false);
+    }
+
+    let mut changed = false;
+    for instance in &mut store.instances {
+        if migrate_managed_instance_dir(instance, &active_root, &legacy_root)? {
+            changed = true;
+        }
+    }
+    Ok(changed)
 }
 
 pub fn get_instance_defaults() -> Result<InstanceDefaults, String> {
@@ -771,6 +826,40 @@ pub fn update_instance(params: UpdateInstanceParams) -> Result<InstanceProfile, 
     let updated = instance.clone();
     save_instance_store(&store)?;
     Ok(updated)
+}
+
+pub fn update_bound_instances_app_speed(
+    account_id: &str,
+    speed: CodexAppSpeed,
+) -> Result<Vec<InstanceProfile>, String> {
+    let target_account_id = account_id.trim();
+    if target_account_id.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let _lock = CODEX_INSTANCE_STORE_LOCK
+        .lock()
+        .map_err(|_| "无法获取实例锁")?;
+    let mut store = load_instance_store()?;
+    let mut changed = false;
+    let mut updated_instances = Vec::new();
+
+    for instance in &mut store.instances {
+        if instance.bind_account_id.as_deref() != Some(target_account_id) {
+            continue;
+        }
+        if instance.app_speed != speed {
+            instance.app_speed = speed.clone();
+            changed = true;
+        }
+        updated_instances.push(instance.clone());
+    }
+
+    if changed {
+        save_instance_store(&store)?;
+    }
+
+    Ok(updated_instances)
 }
 
 pub fn delete_instance(instance_id: &str) -> Result<(), String> {

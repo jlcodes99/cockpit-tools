@@ -14,6 +14,7 @@
     "close": "Schließen",
     "open": "Öffnen",
     "copy": "Kopieren",
+    "copied": "Kopiert",
     "add": "Hinzufügen",
     "enable": "Aktivieren",
     "disable": "Deaktivieren",
@@ -227,7 +228,7 @@
     "selectAll": "Alle auswählen"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "Konten",
     "wakeup": "Weckaufgaben",
     "fingerprints": "Fingerabdrücke",
@@ -497,9 +498,9 @@
       },
       "safe": {
         "title": "Sicherer Neustart (Empfohlen)",
-        "principle": "Sendet ein SIGTERM-Signal an alle Antigravity-Prozesse, damit die App speichern und sich selbst beenden kann, und startet dann die Zielinstanz (erzwingt das Beenden, falls erforderlich).",
-        "commandMac": "macOS/Linux: kill -15 <pid> (alle Antigravity-Prozesse)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (alle Antigravity-Prozesse)",
+        "principle": "Sendet ein SIGTERM-Signal an alle Antigravity IDE-Prozesse, damit die App speichern und sich selbst beenden kann, und startet dann die Zielinstanz (erzwingt das Beenden, falls erforderlich).",
+        "commandMac": "macOS/Linux: kill -15 <pid> (alle Antigravity IDE-Prozesse)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (alle Antigravity IDE-Prozesse)",
         "pros": "Näher am normalen Beenden, weniger wahrscheinlich Crash-Warnungen, Daten sind sicherer.",
         "cons": "Unterstützt nur den vollständigen Neustart aller Instanzen."
       },
@@ -563,7 +564,7 @@
       "uiScale": "UI-Skalierung",
       "uiScaleDesc": "UI-Skalierung anpassen",
       "accountManagement": "Kontoverwaltung",
-      "autoRefresh": "Antigravity-Quote automatisch aktualisieren",
+      "autoRefresh": "Antigravity IDE-Quote automatisch aktualisieren",
       "codexAutoRefresh": "Codex-Quote automatisch aktualisieren",
       "autoRefreshDesc": "Hintergrundaktualisierungsfrequenz",
       "codexAutoRefreshDesc": "Hintergrundaktualisierungsfrequenz",
@@ -587,6 +588,10 @@
       "hideDockIconDesc": "Steuert die Sichtbarkeit des Dock-Symbols unabhängig vom Minimierungsverhalten des Fensters",
       "hideDockIconOff": "Nein (Dock-Symbol anzeigen)",
       "hideDockIconOn": "Ja (Dock-Symbol ausblenden)",
+      "trayIconStyle": "Menüleisten-Symbolstil (nur macOS)",
+      "trayIconStyleDesc": "Systemvorlagen-Symbol oder ursprüngliches farbiges App-Symbol wählen",
+      "trayIconStyleTemplate": "Vorlagen-Symbol",
+      "trayIconStyleColor": "Farbiges Symbol",
       "floatingCardStartup": "Schwebende Karte beim Start anzeigen",
       "floatingCardStartupDesc": "Die schwebende Kontokarte nach dem Start der App automatisch anzeigen",
       "floatingCardAlwaysOnTop": "Schwebende Karte standardmäßig im Vordergrund halten",
@@ -596,8 +601,8 @@
       "floatingCardShowNowAction": "Schwebende Karte anzeigen",
       "dataDir": "Datenverzeichnis",
       "dataDirDesc": "Speicherort für Konten und Konfigurationsdateien.",
-      "fpDir": "Antigravity-Speicher",
-      "fpDirDesc": "Speicherort für Antigravity-Datendateien.",
+      "fpDir": "Antigravity IDE-Speicher",
+      "fpDirDesc": "Speicherort für Antigravity IDE-Datendateien.",
       "opencodeTitle": "OpenCode-Integration",
       "opencodeRestart": "OpenCode beim Codex-Wechsel neu starten",
       "opencodeRestartDesc": "Codex-Kontoinformationen in OpenCode synchronisieren",
@@ -618,10 +623,10 @@
       "vscodeAppPathPlaceholder": "Standardpfad",
       "vscodePathSelect": "Auswählen",
       "vscodePathReset": "Standard zurücksetzen",
-      "antigravityAppPath": "Antigravity-App-Pfad",
-      "antigravityTitle": "Antigravity-Start",
+      "antigravityAppPath": "Antigravity IDE-App-Pfad",
+      "antigravityTitle": "Antigravity IDE-Start",
       "commonTitle": "Allgemein",
-      "antigravitySettingsTitle": "Antigravity-Einstellungen",
+      "antigravitySettingsTitle": "Antigravity IDE-Einstellungen",
       "codexSettingsTitle": "Codex-Einstellungen",
       "githubCopilotSettingsTitle": "GitHub Copilot-Einstellungen",
       "ghcpAutoRefresh": "GitHub Copilot-Kontingent automatisch aktualisieren",
@@ -694,14 +699,14 @@
       "sideNavLayoutOriginal": "Ursprüngliches Layout",
       "sideNavLayoutClassic": "Klassisches Layout",
       "antigravityDualSwitchNoRestart": "Nahtloser Doppelwechsel (ohne Neustart)",
-      "antigravityDualSwitchNoRestartDesc": "Beim Kontowechsel werden lokale Kontodaten geschrieben und der nahtlose Erweiterungswechsel in einem Ablauf ausgeführt, ohne Antigravity neu zu starten.",
+      "antigravityDualSwitchNoRestartDesc": "Beim Kontowechsel werden lokale Kontodaten geschrieben und der nahtlose Erweiterungswechsel in einem Ablauf ausgeführt, ohne Antigravity IDE neu zu starten.",
       "appAutoLaunch": "Cockpit Tools beim Anmelden starten",
       "appAutoLaunchDesc": "App nach der Systemanmeldung automatisch starten",
       "startupWakeupDisabled": "Deaktiviert",
       "startupWakeupImmediate": "Sofort aufwecken",
       "startupWakeupDelayed": "Mit Verzögerung aufwecken",
-      "antigravityStartupWakeup": "Antigravity-Wecklauf nach dem Start ausführen",
-      "antigravityStartupWakeupDesc": "Nach dem App-Start aktivierte Antigravity-Weckaufgaben einmal ausführen",
+      "antigravityStartupWakeup": "Antigravity IDE-Wecklauf nach dem Start ausführen",
+      "antigravityStartupWakeupDesc": "Nach dem App-Start aktivierte Antigravity IDE-Weckaufgaben einmal ausführen",
       "codexStartupWakeup": "Codex-Wecklauf nach dem Start ausführen",
       "codexStartupWakeupDesc": "Nach dem App-Start aktivierte Codex-Weckaufgaben einmal ausführen",
       "currentAccountRefreshTitle": "Aktuelles Konto aktualisieren",
@@ -936,7 +941,7 @@
   },
   "accounts": {
     "title": "Kontoverwaltung",
-    "subtitle": "Verwalten Sie Ihre Antigravity-Kontenliste.",
+    "subtitle": "Verwalten Sie Ihre Antigravity IDE-Kontenliste.",
     "total": "{{count}} Konten",
     "search": "Konten suchen...",
     "addAccount": "Konto hinzufügen",
@@ -1093,6 +1098,8 @@
       "noGroups": "Keine Gruppen",
       "noGroupsDesc": "Erstellen Sie Gruppen, um Ihre Konten zu verwalten",
       "manage": "Verwalten",
+      "refresh": "Gruppe aktualisieren",
+      "refreshEmpty": "Keine aktualisierbaren Konten in dieser Gruppe",
       "error": {
         "duplicate": "Gruppenname existiert bereits",
         "createFailed": "Gruppe konnte nicht erstellt werden: {{error}}",
@@ -1190,7 +1197,7 @@
     "switching": "Wechselt...",
     "fingerprint": "Fingerabdruck",
     "bound": "Gebunden",
-    "brandTitle": "Antigravity Kontoverwaltung"
+    "brandTitle": "Antigravity IDE Kontoverwaltung"
   },
   "fingerprints": {
     "title": "Geräte-Fingerabdrücke",
@@ -1292,7 +1299,7 @@
   "modals": {
     "addAccount": {
       "title": "Konto hinzufügen",
-      "desc": "Fügen Sie Ihr Antigravity-Konto via Google OAuth hinzu",
+      "desc": "Fügen Sie Ihr Antigravity IDE-Konto via Google OAuth hinzu",
       "loginBtn": "Google OAuth Login",
       "waiting": "Warten..."
     },
@@ -1300,7 +1307,7 @@
       "title": "Konten importieren",
       "desc": "Wählen Sie eine Importmethode",
       "local": "Lokales Konto importieren",
-      "localDesc": "Importiere das aktuelle Konto vom Antigravity Client",
+      "localDesc": "Importiere das aktuelle Konto vom Antigravity IDE Client",
       "tools": "Antigravity Tools importieren",
       "toolsDesc": "Import aus dem Verzeichnis ~/.antigravity_tools/",
       "jsonDivider": "oder JSON einfügen",
@@ -1313,7 +1320,7 @@
       "fromExtension": "Von Plugin importieren",
       "syncBadge": "Antigravity Cockpit Plugin-Konten synchronisieren",
       "fromLocalDB": "Aus lokaler Datenbank importieren",
-      "localDBDesc": "Login-Konten vom Antigravity-Client auf diesem Rechner lesen",
+      "localDBDesc": "Login-Konten vom Antigravity IDE-Client auf diesem Rechner lesen",
       "toolsDescMigrate": "Konten von ~/.antigravity_tools/ migrieren",
       "importingTools": "Importiere von Antigravity Tools...",
       "importingLocal": "Lokales Konto wird importiert...",
@@ -1358,6 +1365,7 @@
     "batchDeleteConfirm": "Sind Sie sicher, dass Sie die {{count}} ausgewählten Konten löschen möchten?",
     "switched": "Zu {{email}} gewechselt",
     "switchFailed": "Wechsel fehlgeschlagen: {{error}}",
+    "antigravityLegacyUnsupported": "Antigravity 2.0.0 und neuer wird hier nicht unterstützt. Wählen Sie eine Antigravity-Version unter 2.0.0 oder verwenden Sie Antigravity IDE.",
     "importSuccess": "{{count}} Konten erfolgreich importiert",
     "importLocalSuccess": "Konto erfolgreich importiert: {{email}}",
     "importFailed": "Import fehlgeschlagen: {{error}}",
@@ -1396,7 +1404,7 @@
       },
       "runHint": {
         "title": "Hinweise zur Verifizierung",
-        "line1": "„Jetzt prüfen“ sendet eine minimale Chat-Anfrage, indem der Antigravity-Client über ein lokales Gateway und das offizielle Language-Server-Protokoll simuliert wird.",
+        "line1": "„Jetzt prüfen“ sendet eine minimale Chat-Anfrage, indem der Antigravity IDE-Client über ein lokales Gateway und das offizielle Language-Server-Protokoll simuliert wird.",
         "line2": "Dabei werden wenige Token verbraucht (in der Regel ein kurzer Dialog). Der tatsächliche Verbrauch hängt von Modell und Kontorichtlinie ab.",
         "line3": "Diese Aktion ändert keine Wakeup-Task-Einstellungen. Sie prüft nur die Kontoverfügbarkeit und schreibt einen Prüfdatensatz.",
         "line4": "Bei einem 403-Fehler muss zuerst die Kontoverifizierung abgeschlossen oder ein Einspruch eingereicht werden; das Ergebnis enthält die URL und Schnellaktionen."
@@ -1527,6 +1535,7 @@
       "modeScheduled": "📅 Geplant",
       "modeCrontab": "🧩 Crontab",
       "modeQuotaReset": "🔄 Quoten-Reset",
+      "antigravityVersion": "Antigravity IDE-Version",
       "modelSelect": "Modellauswahl",
       "modelHint": "Im selben Quotengruppe nur ein Modell wählen. Mehrere Modelle werden nacheinander ausgelöst.",
       "modelsEmpty": "Keine empfohlenen Modelle",
@@ -1673,6 +1682,7 @@
       "refreshTokenExpired": "Die Codex-Anmeldeautorisierung ist abgelaufen und kann nicht automatisch erneuert werden. Melden Sie sich erneut beim Codex-Konto an.",
       "refreshTokenInvalidated": "Die Codex-Anmeldeautorisierung wurde vom Dienst widerrufen und kann nicht automatisch erneuert werden. Melden Sie sich erneut beim Codex-Konto an.",
       "invalidGrant": "Die Codex-Anmeldeautorisierung ist ungültig und kann nicht automatisch erneuert werden. Melden Sie sich erneut beim Codex-Konto an.",
+      "staleAccount": "Dieses Konto ist nicht mehr im lokalen Kontospeicher. Die Kontoliste wurde aktualisiert. Importieren Sie dieses Codex-Konto erneut oder melden Sie sich erneut an.",
       "unsupportedCountryRegion": "Die aktuelle Netzwerkregion unterstützt das Erneuern der Codex-Autorisierung nicht. Der OpenAI-Autorisierungsdienst hat diesen Netzwerkausgang abgelehnt. Wechseln Sie in eine unterstützte Region und versuchen Sie es erneut."
     },
     "current": "Aktuell",
@@ -1687,6 +1697,11 @@
     },
     "oauth": {
       "desc": "Klicke unten und schließe die OpenAI-Autorisierung im Browser ab",
+      "trialGuideTitle": "Tipps zur Testregistrierung",
+      "trialGuideDesc": "Für ein neues Konto empfiehlt sich eine langfristig erreichbare Gmail-Adresse; das ist stabiler für Kontobestand und spätere Verifizierung.",
+      "trialGuideAliasDesc": "Ein Haupt-Gmail kann bis zu 5 Alias-Adressen vorbereiten, um ChatGPT-Registrierungen zu trennen; bitte gemäß den Regeln des Zielservices nutzen.",
+      "trialGuideLink": "Testanleitung öffnen",
+      "gmailAliasLink": "Gmail-Alias erzeugen",
       "preparing": "Autorisierungslink wird vorbereitet...",
       "exchanging": "Token wird ausgetauscht...",
       "portInUse": "Port {{port}} ist bereits belegt. Bitte schließen Sie die Anwendung, die ihn nutzt, und versuchen Sie es erneut.",
@@ -1696,7 +1711,8 @@
       "portStillInUse": "Port {{port}} ist weiterhin belegt.",
       "portInUseAction": "Port schließen und erneut versuchen",
       "timeout": "Authentifizierung abgelaufen. Bitte klicken",
-      "timeoutRetry": "Authentifizierungslink aktualisieren"
+      "timeoutRetry": "Authentifizierungslink aktualisieren",
+      "reauthEmailLabel": "Konto erneut autorisieren"
     },
     "token": {
       "desc": "auth.json, Konto-JSON oder refresh_token einfügen.",
@@ -1742,6 +1758,7 @@
       "disableService": "Dienst deaktivieren",
       "enableService": "Dienst aktivieren",
       "saveSuccess": "API-Dienst-Sammlung aktualisiert",
+      "noEligibleAccountsSelected": "Die ausgewählten Konten befinden sich nicht in dieser Umgebung oder können vom API-Dienst nicht verwendet werden. Importiere zuerst ein nutzbares Codex-Konto in diese Umgebung.",
       "removeSuccess": "Konto aus dem API-Dienst entfernt",
       "rotateSuccess": "API-Dienst-Schlüssel erneuert",
       "enabledSuccess": "API-Dienst aktiviert",
@@ -1752,7 +1769,7 @@
       "hideKey": "Schlüssel ausblenden",
       "modal": {
         "title": "Zum API-Dienst hinzufügen",
-        "desc": "Wählen Sie die OAuth-Konten aus, die in die API-Dienst-Sammlung aufgenommen werden sollen. Hinzugefügte Konten werden aus der normalen Übersicht ausgeblendet und nur noch über die API-Dienst-Karte verwaltet.",
+        "desc": "Wählen Sie OAuth- oder API-Key-Konten aus, die in die API-Dienst-Sammlung aufgenommen werden sollen. Hinzugefügte Konten werden aus der normalen Übersicht ausgeblendet und nur noch über die API-Dienst-Karte verwaltet.",
         "empty": "Keine OAuth-Konten verfügbar",
         "selected": "Im API-Dienst",
         "available": "Normale Übersicht",
@@ -1809,7 +1826,7 @@
       "memberTitle": "Sammlungsmitglieder",
       "stats": {
         "requests": "Anfragen",
-        "requestsDetail": "Erfolg {{success}} / Fehler {{failed}}",
+        "requestsDetail": "OK {{success}} / Fehler {{failed}} / Abbr. {{canceled}} / Quelle {{upstreamFailed}} / Unvollst. {{incomplete}}",
         "tokens": "Token",
         "tokensDetail": "Eingabe {{input}} / Ausgabe {{output}}",
         "specialTokens": "Cache / Denken",
@@ -1819,7 +1836,11 @@
         "accountRequests": "{{count}} Anfragen",
         "accountTokens": "{{count}} Token",
         "accountResult": "Erfolg {{success}} / Fehler {{failed}}",
-        "accountTokensCompact": "{{value}}"
+        "accountTokensCompact": "{{value}}",
+        "images": "Bildanfragen",
+        "imagesDetail": "Erzeugen {{generate}} / Bearbeiten {{edit}} / Berechtigung {{blocked}}",
+        "estimatedCost": "Geschätzter Wert",
+        "estimatedCostDetail": "Aus Preis-Snapshots der Anfragen summiert"
       },
       "routingLabel": "Routing",
       "routingSaveSuccess": "API-Service-Routing wurde aktualisiert",
@@ -1846,7 +1867,8 @@
         "quotaLowFirst": "Niedrige Quote zuerst",
         "planHighFirst": "Hohes Abo zuerst",
         "planLowFirst": "Niedriges Abo zuerst",
-        "expirySoonFirst": "Bald ablaufend zuerst"
+        "expirySoonFirst": "Bald ablaufend zuerst",
+        "custom": "Benutzerdefiniert"
       },
       "statusUnconfigured": "Nicht konfiguriert",
       "expandDetails": "Details aufklappen",
@@ -1886,9 +1908,92 @@
         "empty": "Noch keine Kontingentstatistik"
       },
       "oauthBinding": {
-        "desc": "Optional. Ohne Verknüpfung nutzt der API-Dienst weiter den bisherigen API-Key-Ablauf; nach der Verknüpfung verwendet die Anmeldung das OAuth-Konto und der Provider die API-Dienst-Konfiguration.",
+        "desc": "Optional. Es können nur OAuth-Konten mit Abo-Laufzeitangabe ausgewählt werden; abgelaufene Laufzeiten sind zulässig. Ohne Verknüpfung nutzt der API-Dienst weiter den bisherigen API-Key-Ablauf; nach der Verknüpfung verwendet die Anmeldung das OAuth-Konto und der Provider die API-Dienst-Konfiguration.",
         "currentService": "API-Dienst: {{name}}"
-      }
+      },
+      "customRoutingEdit": "Benutzerdefiniertes Routing bearbeiten",
+      "customRoutingTitle": "Benutzerdefiniertes Routing",
+      "customRoutingDesc": "Lege Priorität und Gewicht je Konto fest, um Auswahlreihenfolge und Lastverteilung innerhalb gleicher Priorität zu steuern.",
+      "customRoutingPriorityTitle": "Priorität",
+      "customRoutingPriorityDesc": "Höhere Werte werden zuerst gewählt; Konten mit niedrigerer Priorität werden erst versucht, wenn höhere nicht verfügbar sind.",
+      "customRoutingWeightTitle": "Gewicht",
+      "customRoutingWeightDesc": "Dient der Lastverteilung bei gleicher Priorität. Höheres Gewicht bedeutet mehr Anfragen.",
+      "customRoutingSearch": "E-Mail, Abo oder Konto-ID suchen",
+      "customRoutingSelected": "{{count}} ausgewählt",
+      "customRoutingPriorityShort": "Priorität",
+      "customRoutingWeightShort": "Gewicht",
+      "customRoutingApplyBatch": "Auf Auswahl anwenden",
+      "customRoutingReset": "Zurücksetzen",
+      "customRoutingAccountColumn": "Konto",
+      "customRoutingQuotaColumn": "Kontingent",
+      "customRoutingEmpty": "Keine konfigurierbaren Konten in der aktuellen API-Service-Sammlung",
+      "customRoutingSave": "Routing speichern",
+      "customRoutingSaveSuccess": "Benutzerdefiniertes Routing des API-Service wurde aktualisiert",
+      "upstreamProxyLabel": "API-Proxy-URL",
+      "upstreamProxySaveSuccess": "API-Proxy-URL aktualisiert",
+      "upstreamProxyUrlPlaceholder": "Leer = globaler Proxy",
+      "upstreamProxySaveAction": "Proxy speichern",
+      "imageGenerationLabel": "image_generation-Tool",
+      "imageGenerationDesc": "Steuert, ob Text-Chats das Bildwerkzeug deklarieren und ob Bild-Endpunkte verfügbar sind.",
+      "imageGenerationSaveSuccess": "image_generation-Einstellung aktualisiert",
+      "apiKeysTitle": "Client-Schlüssel",
+      "apiKeyAdd": "Schlüssel hinzufügen",
+      "apiKeyLabel": "Schlüsselname",
+      "apiKeySaveLabel": "Namen speichern",
+      "apiKeyDefaultLabel": "Kunde {{index}}",
+      "apiKeyCreateSuccess": "API Key erstellt",
+      "apiKeyUpdateSuccess": "API Key aktualisiert",
+      "apiKeyRotateSuccess": "API Key zurückgesetzt",
+      "apiKeyDeleteSuccess": "API Key gelöscht",
+      "apiKeyRotateConfirm": "Dieser API Key ist nach dem Zurücksetzen sofort ungültig. Fortfahren?",
+      "apiKeyDeleteConfirm": "Diesen API Key löschen?",
+      "apiKeyDelete": "Schlüssel löschen",
+      "apiKeyDisable": "Schlüssel deaktivieren",
+      "apiKeyEnable": "Schlüssel aktivieren",
+      "modelStatsTitle": "Nach Modell",
+      "apiKeyStatsTitle": "Nach Schlüssel",
+      "healthAvailable": "Verfügbar",
+      "healthUnavailable": "Nicht verfügbar",
+      "healthCooldown": "Abklingzeit {{count}}",
+      "healthImageUnavailable": "Bilder nicht verfügbar",
+      "requestLogTitle": "Anfragenprotokoll",
+      "requestLogEmpty": "Noch keine Anfragenprotokolle",
+      "requestLogSuccess": "Erfolg",
+      "requestLogFailed": "Fehlgeschlagen",
+      "requestLogTokens": "{{value}} Token",
+      "imageGenerationMode": {
+        "enabled": "Aktiv",
+        "imagesOnly": "Nur Bilder",
+        "disabled": "Aus"
+      },
+      "requestKind": {
+        "text": "Textmodus",
+        "imageGeneration": "Bild",
+        "imageEdit": "Bearbeitung",
+        "other": "Sonstige"
+      },
+      "testSuccessInline": "API-Diensttest bestanden",
+      "gatewayModeLabel": "Gateway-Modus",
+      "gatewayModeLegacyShort": "Alt",
+      "gatewayModeSidecarShort": "Neu",
+      "gatewayModeNewLabel": "API-Dienst-Neu",
+      "gatewayModeOldLabel": "API-Dienst-Alt",
+      "gatewayModeSaveSuccess": "Gateway-Modus des API-Dienstes aktualisiert",
+      "gatewayGuideTitle": "Gateway hier wechseln",
+      "gatewayGuideDesc": "Standard ist das neue Gateway. Bei Kompatibilitätsproblemen oder Client-Anfragefehlern kannst du hier auf das alte Gateway wechseln.",
+      "gatewayGuideAction": "Verstanden",
+      "upstreamProxyUrlPlaceholderLegacy": "Leer lassen fur globalen Proxy, Umgebungs-Proxy oder System-Proxy",
+      "upstreamProxyUrlPlaceholderSidecar": "Leer lassen, um den globalen Proxy zu verwenden",
+      "debugLogsLabel": "Debugprotokolle",
+      "debugLogsDescription": "Gibt API-Debugprotokolle zur Analyse von Gateway- und Streamingproblemen aus",
+      "debugLogsEnabledSuccess": "Debugprotokolle aktiviert",
+      "debugLogsDisabledSuccess": "Debugprotokolle deaktiviert",
+      "debugLogsEnableConfirmTitle": "Debugprotokolle aktivieren",
+      "debugLogsEnableConfirmMessage": "Nach dem Aktivieren schreibt der API-Dienst Debugprotokolle zur Diagnose von Gateway-, Proxy-, Upstream-Request- und Streaming-Problemen. Bei hoher Parallelität oder langen Streaming-Anfragen kann das etwas Leistung kosten. Nach der Fehlersuche wieder deaktivieren. Aktivieren?",
+      "debugLogsEnableConfirmAction": "Aktivieren",
+      "debugLogsDisableConfirmTitle": "Debugprotokolle deaktivieren",
+      "debugLogsDisableConfirmMessage": "Nach dem Deaktivieren schreibt der API-Dienst keine Debugprotokolle mehr. Das reduziert Log-Rauschen und Zusatzaufwand. Für die Diagnose von Gateway-, Proxy- oder Streaming-Problemen können Sie sie erneut aktivieren. Deaktivieren?",
+      "debugLogsDisableConfirmAction": "Deaktivieren"
     },
     "local": {
       "desc": "Aktuell eingeloggtes Konto aus ~/.codex/auth.json importieren",
@@ -2299,11 +2404,13 @@
         "action": "OAuth binden",
         "actionShort": "Binden",
         "title": "OAuth-Konto binden",
-        "desc": "Optional. Ohne Verknüpfung wechselt dieses Konto mit dem bisherigen API-Key-Ablauf; nach der Verknüpfung verwendet die Anmeldung das OAuth-Konto und der Provider die Konfiguration dieses API-Key-Kontos.",
+        "desc": "Optional. Es können nur OAuth-Konten mit Abo-Laufzeitangabe ausgewählt werden; abgelaufene Laufzeiten sind zulässig. Ohne Verknüpfung wechselt dieses Konto mit dem bisherigen API-Key-Ablauf; nach der Verknüpfung verwendet die Anmeldung das OAuth-Konto und der Provider die Konfiguration dieses API-Key-Kontos.",
         "currentAccount": "API-Key-Konto: {{name}}",
         "selectLabel": "OAuth-Konto wählen",
         "empty": "Noch kein OAuth-Konto vorhanden. Bitte zuerst ein OAuth-Konto hinzufügen.",
+        "emptyEligible": "Keine OAuth-Konten mit Abo-Laufzeitangabe. Bitte Kontingent aktualisieren oder zuerst ein geeignetes OAuth-Konto hinzufügen.",
         "validationRequired": "Bitte ein OAuth-Konto wählen",
+        "validationSubscriptionRequired": "Es können nur OAuth-Konten mit Abo-Laufzeitangabe verknüpft werden",
         "saveSuccess": "OAuth-Bindung aktualisiert",
         "saveFailed": "OAuth-Bindung fehlgeschlagen: {{error}}",
         "switchRequiresBinding": "Bitte zuerst ein OAuth-Konto binden",
@@ -2434,6 +2541,7 @@
       "column": "Ablauf",
       "unknown": "Neu autorisieren",
       "missingDetail": "Zum Abrufen neu autorisieren",
+      "refresh": "Abo aktualisieren",
       "expired": "Abgelaufen",
       "hoursLeft": "{{count}} h",
       "daysLeft": "{{count}} T.",
@@ -2454,6 +2562,7 @@
       "repairing": "Codex-Sitzungssichtbarkeit wird repariert...",
       "repairFailed": "Die automatische Reparatur ist fehlgeschlagen. Sie können es später unter Sitzungsverwaltung > Sichtbarkeit reparieren erneut versuchen.",
       "type": {
+        "api": "API-Modus",
         "apiKey": "API-Schlüssel",
         "apiService": "API-Dienst",
         "account": "Konto"
@@ -2493,6 +2602,152 @@
       "fastDesc": "1,5-faches Tempo, höherer Verbrauch",
       "saveSuccess": "Tempo aktualisiert",
       "saveFailed": "Tempo konnte nicht gespeichert werden: {{error}}"
+    },
+    "apiService": {
+      "navTitle": "Codex-API-Dienst",
+      "title": "Codex-API-Dienst",
+      "openPage": "API-Dienst öffnen",
+      "openFullPage": "Alle Funktionen anzeigen",
+      "tabs": {
+        "overview": "Dienstübersicht",
+        "keys": "Client-Schlüssel",
+        "accounts": "Kontopool",
+        "models": "Modelle & Fähigkeiten",
+        "logs": "Statistik & Protokolle"
+      },
+      "healthTitle": "Dienstzustand",
+      "health": {
+        "availableAccounts": "Verfügbare Konten",
+        "cooldowns": "Abklingzeiten",
+        "imageUnavailable": "Bilder nicht verfügbar",
+        "keys": "Client-Schlüssel"
+      },
+      "accountHealth": {
+        "failures": "{{count}} Fehlversuche in Folge",
+        "image": "Bilder {{status}}"
+      },
+      "models": {
+        "availableTitle": "Verfügbare Modelle",
+        "capabilityTitle": "Fähigkeitsschalter",
+        "capabilityDesc": "gpt-image-2 wird je nach Dienstschalter, Kontotarif und aufgezeichnetem Bildfähigkeitsstatus automatisch angezeigt oder ausgeblendet.",
+        "rulesTitle": "Modellregeln",
+        "aliasTitle": "Modellaliasse",
+        "aliasPlaceholder": "gpt-5 => g5; + erhält das Originalmodell",
+        "excludedTitle": "Versteckte Modelle",
+        "excludedPlaceholder": "Ein Modell oder Muster pro Zeile, z. B. gpt-5-*",
+        "saveRules": "Regeln speichern",
+        "rulesSaved": "Modellregeln gespeichert",
+        "pricingAction": "Preise",
+        "pricingTitle": "Modellpreise",
+        "pricingDesc": "USD / 1M Token, nur für lokale Wertstatistiken.",
+        "pricingModel": "Modell",
+        "pricingInput": "Eingabe",
+        "pricingCache": "Cache-Eingabe",
+        "pricingOutput": "Ausgabe",
+        "pricingSource": "Quelle",
+        "pricingActions": "Aktion",
+        "pricingCachePlaceholder": "Wie Eingabe",
+        "pricingCustom": "Eigen",
+        "pricingPreset": "Vorgabe",
+        "pricingUnset": "Nicht gesetzt",
+        "pricingReset": "Zurücksetzen",
+        "pricingSaved": "Preise gespeichert",
+        "pricingInvalid": "Preise müssen Zahlen größer oder gleich 0 sein"
+      },
+      "keys": {
+        "policyTitle": "Modellrichtlinie",
+        "advancedPolicyTitle": "Erweitert: Modellrichtlinie",
+        "modelPrefix": "Modellpräfix",
+        "modelPrefixPlaceholder": "Beispiel: codex",
+        "allowedModels": "Erlaubte Modelle",
+        "allowedModelsPlaceholder": "Leer erlaubt alle; ein Modell oder Muster pro Zeile",
+        "excludedModels": "Ausgeschlossene Modelle",
+        "excludedModelsPlaceholder": "Ein Modell oder Muster pro Zeile",
+        "savePolicy": "Richtlinie speichern",
+        "policySaved": "Key-Modellrichtlinie gespeichert"
+      },
+      "routing": {
+        "optionsTitle": "Routingoptionen",
+        "sessionAffinity": "Sitzungsbindung",
+        "sessionAffinityTtl": "Bindungs-TTL",
+        "maxRetryCredentials": "Retry-Konten",
+        "maxRetryInterval": "Retry-Wartezeit",
+        "disableCooling": "Cooldown deaktivieren",
+        "saveOptions": "Optionen speichern",
+        "optionsSaved": "Routingoptionen gespeichert"
+      },
+      "validation": {
+        "numberRange": "Zahl von {{min}} bis {{max}} eingeben"
+      },
+      "logs": {
+        "allKinds": "Alle Typen",
+        "allStatuses": "Alle Status",
+        "allGatewayModes": "Alle Modi",
+        "modelFilter": "Modell",
+        "modelPlaceholder": "Modell-ID",
+        "accountFilter": "Konto",
+        "accountPlaceholder": "E-Mail oder Konto-ID",
+        "apiKeyFilter": "API-Schlüssel",
+        "apiKeyPlaceholder": "Name oder ID",
+        "kindFilter": "Typ",
+        "statusFilter": "Zustand",
+        "gatewayModeFilter": "Modus",
+        "errorFilter": "Fehler",
+        "errorPlaceholder": "Fehlerkategorie",
+        "clearFilters": "Filter löschen",
+        "loading": "Anfrageprotokolle werden geladen",
+        "gatewayModeUnknown": "Unbekannter Modus",
+        "requestIdShort": "Anfrage-ID {{id}}",
+        "httpStatus": "HTTP-Status {{status}}"
+      },
+      "timeouts": {
+        "entryLabel": "Erweitert",
+        "openAction": "Timeouts & Wiederholungen",
+        "title": "Timeouts & Wiederholungen",
+        "desc": "Werte in Sekunden. Beim Speichern wird der API-Dienst je nach aktuellem Gateway-Modus neu gestartet oder neu geladen.",
+        "sidecarTitle": "Neuer API-Dienst",
+        "legacyTitle": "Alter API-Dienst",
+        "streamOpen": "Stream-Start",
+        "streamIdle": "Stream-Leerlauf",
+        "imageOpen": "Bildstream-Start",
+        "imageIdle": "Bildstream-Leerlauf",
+        "openAttempts": "Startversuche",
+        "keepalive": "Verbindungsimpuls",
+        "requestRead": "Anfrage lesen",
+        "connect": "Upstream-Verbindung",
+        "streamTotal": "Stream gesamt",
+        "resetDefaults": "Standardwerte",
+        "saved": "Timeouts und Wiederholungen gespeichert",
+        "totalGteIdle": "Das Gesamt-Timeout des alten API-Streams darf nicht kleiner sein als das Leerlauf-Timeout",
+        "bootstrapRetries": "Start-Wdh.",
+        "websocketTitle": "WebSocket-Einstellungen",
+        "websocketConnect": "Verbindungs-Timeout",
+        "websocketInitial": "Timeout erste Nachricht",
+        "websocketIdle": "Leerlauf-Timeout",
+        "websocketHeartbeat": "Heartbeat-Intervall",
+        "sendRetryAttempts": "Sende-Wdh.",
+        "sendRetryBaseDelay": "Sende-Basisdelay (ms)",
+        "sendRetryMaxDelay": "Sende-Maxdelay (ms)",
+        "singleStatusAttempts": "Einzelkonto-Wdh.",
+        "singleStatusBaseDelay": "Konto-Basisdelay (ms)",
+        "singleStatusMaxDelay": "Konto-Maxdelay (ms)",
+        "maxDelayGteBase": "Maximale Verzögerung darf nicht kleiner als die Basisverzögerung sein",
+        "longWaitPreset": "Lange-Wartezeit-Profil",
+        "shortWaitPreset": "Kurz-Wartezeit-Profil",
+        "presetTitle": "Parameterprofil",
+        "presetSelect": "Profil wählen",
+        "presetName": "Profilname",
+        "presetNamePlaceholder": "Neues eigenes Profil",
+        "saveAsPreset": "Als Profil speichern",
+        "updatePreset": "Aktuelles Profil aktualisieren",
+        "deletePreset": "Profil löschen",
+        "presetSaved": "Profil gespeichert",
+        "presetUpdated": "Profil aktualisiert",
+        "presetDeleted": "Profil gelöscht",
+        "presetNameRequired": "Profilnamen eingeben",
+        "deletePresetConfirm": "Dieses eigene Profil löschen?",
+        "deletePresetTitle": "Profil löschen"
+      }
     }
   },
   "githubCopilot": {
@@ -2545,23 +2800,31 @@
       "storage": "Datenumfang: Der lokale Import liest GitHub-Anmeldesitzungen aus VS Code, der Wechsel aktualisiert dieselben Einträge; OAuth, Token-Import, lokale Importprüfung und Quotenaktualisierung rufen offizielle GitHub-APIs mit den erforderlichen Auth-Feldern auf. state.vscdb und Systemschlüssel werden nicht hochgeladen."
     }
   },
+  "runtime": {
+    "installedVersion": {
+      "loading": "Installierte Version wird erkannt",
+      "missing": "Keine installierte Version erkannt",
+      "detecting": "Erkennung",
+      "notFound": "Keine Version erkannt"
+    }
+  },
   "dashboard": {
     "title": "Account-Dashboard",
     "summary": {
       "label": "Überblick",
       "title": "Account-Snapshot",
-      "desc": "Antigravity und Codex auf einen Blick"
+      "desc": "Antigravity IDE und Codex auf einen Blick"
     },
     "stats": {
-      "antigravity": "Antigravity-Konten",
+      "antigravity": "Antigravity IDE-Konten",
       "codex": "Codex-Konten",
-      "currentAntigravity": "Aktuelles Antigravity",
+      "currentAntigravity": "Aktuelles Antigravity IDE",
       "currentCodex": "Aktuelles Codex",
       "providers": "Anbieter",
       "totalAccounts": "Gesamtanzahl"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "Planverteilung",
@@ -2576,7 +2839,7 @@
     },
     "emptyAccount": "Kein Konto",
     "sections": {
-      "antigravity": "Antigravity-Konten",
+      "antigravity": "Antigravity IDE-Konten",
       "codex": "Codex-Konten"
     },
     "actions": {
@@ -2609,7 +2872,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Antigravity-Einstellungen",
+      "title": "Antigravity IDE-Einstellungen",
       "appPath": "App-Pfad"
     },
     "codex": {
@@ -3044,7 +3307,7 @@
     "actions": {
       "collapseAll": "Alle einklappen",
       "expandAll": "Alle ausklappen",
-      "goAntigravity": "Zu Antigravity",
+      "goAntigravity": "Zu Antigravity IDE",
       "goCodex": "Zu Codex",
       "goDashboard": "Zum Dashboard",
       "goFingerprints": "Zu Geräte-Fingerprints",
@@ -3059,25 +3322,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "Vor riskanten oder Batch-Aktionen in Antigravity-Kontoverwaltung Daten sichern."
+        "0": "Vor riskanten oder Batch-Aktionen in Antigravity IDE-Kontoverwaltung Daten sichern."
       },
       "keywords": {
-        "0": "Antigravity-Kontoverwaltung",
+        "0": "Antigravity IDE-Kontoverwaltung",
         "1": "Leitfaden",
         "2": "Workflow",
         "3": "Konto"
       },
       "outcomes": {
-        "0": "Verstehe, was dir Antigravity-Kontoverwaltung bringt.",
-        "1": "Nutze den empfohlenen Ablauf in Antigravity-Kontoverwaltung, um Fehler zu vermeiden."
+        "0": "Verstehe, was dir Antigravity IDE-Kontoverwaltung bringt.",
+        "1": "Nutze den empfohlenen Ablauf in Antigravity IDE-Kontoverwaltung, um Fehler zu vermeiden."
       },
       "steps": {
-        "0": "Öffne die Seite für Antigravity-Kontoverwaltung.",
-        "1": "Schließe Grundkonfiguration und erforderliche Bindungen für Antigravity-Kontoverwaltung ab.",
-        "2": "Führe eine manuelle Aktion in Antigravity-Kontoverwaltung aus und prüfe das Ergebnis."
+        "0": "Öffne die Seite für Antigravity IDE-Kontoverwaltung.",
+        "1": "Schließe Grundkonfiguration und erforderliche Bindungen für Antigravity IDE-Kontoverwaltung ab.",
+        "2": "Führe eine manuelle Aktion in Antigravity IDE-Kontoverwaltung aus und prüfe das Ergebnis."
       },
-      "summary": "Dieser Abschnitt erklärt die Nutzung von Antigravity-Kontoverwaltung im täglichen Workflow.",
-      "title": "Antigravity-Kontoverwaltung"
+      "summary": "Dieser Abschnitt erklärt die Nutzung von Antigravity IDE-Kontoverwaltung im täglichen Workflow.",
+      "title": "Antigravity IDE-Kontoverwaltung"
     },
     "blocks": {
       "cautions": "Häufige Fallstricke / Hinweise",
@@ -3930,5 +4193,14 @@
       "warn": "Warnung",
       "error": "Fehler"
     }
+  },
+  "mfaQuick": {
+    "title": "2FA-Code",
+    "selectLabel": "2FA-Schlüssel auswählen",
+    "unnamedSecret": "Unbenannter Schlüssel",
+    "invalidCode": "Ungültiger Schlüssel",
+    "copyCode": "Code kopieren",
+    "copied": "Kopiert",
+    "refreshIn": "{{time}} s"
   }
 }

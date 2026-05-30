@@ -418,14 +418,35 @@ pub fn load_tray_layout() -> TrayLayoutConfig {
         return TrayLayoutConfig::default();
     }
 
-    let content = match fs::read_to_string(path) {
+    let content = match fs::read_to_string(&path) {
         Ok(content) => content,
         Err(_) => return TrayLayoutConfig::default(),
     };
 
     match serde_json::from_str::<TrayLayoutConfig>(&content) {
         Ok(config) => normalize_config(config, true),
-        Err(_) => TrayLayoutConfig::default(),
+        Err(error) => {
+            match crate::modules::atomic_write::quarantine_file(&path, "invalid-json") {
+                Ok(Some(backup_path)) => crate::modules::logger::log_warn(&format!(
+                    "托盘布局配置解析失败，已隔离并使用默认布局: path={}, backup={}, error={}",
+                    path.display(),
+                    backup_path.display(),
+                    error
+                )),
+                Ok(None) => crate::modules::logger::log_warn(&format!(
+                    "托盘布局配置解析失败，文件已不存在，使用默认布局: path={}, error={}",
+                    path.display(),
+                    error
+                )),
+                Err(backup_error) => crate::modules::logger::log_warn(&format!(
+                    "托盘布局配置解析失败，隔离失败，使用默认布局: path={}, parse_error={}, backup_error={}",
+                    path.display(),
+                    error,
+                    backup_error
+                )),
+            }
+            TrayLayoutConfig::default()
+        }
     }
 }
 
@@ -450,6 +471,7 @@ pub fn save_tray_layout(
     let path = get_tray_layout_path()?;
     let content = serde_json::to_string_pretty(&normalized)
         .map_err(|e| format!("序列化托盘布局配置失败: {}", e))?;
-    fs::write(&path, content).map_err(|e| format!("保存托盘布局配置失败: {}", e))?;
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("保存托盘布局配置失败: {}", e))?;
     Ok(normalized)
 }

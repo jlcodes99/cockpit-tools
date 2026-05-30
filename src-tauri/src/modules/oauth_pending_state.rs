@@ -38,9 +38,31 @@ where
     if raw.trim().is_empty() {
         return Ok(None);
     }
-    let parsed = serde_json::from_str::<T>(&raw)
-        .map_err(|e| format!("解析 OAuth pending 文件失败({}): {}", path.display(), e))?;
-    Ok(Some(parsed))
+    match serde_json::from_str::<T>(&raw) {
+        Ok(parsed) => Ok(Some(parsed)),
+        Err(error) => {
+            match crate::modules::atomic_write::quarantine_file(&path, "invalid-json") {
+                Ok(Some(backup_path)) => crate::modules::logger::log_warn(&format!(
+                    "OAuth pending 文件解析失败，已隔离并忽略: path={}, backup={}, error={}",
+                    path.display(),
+                    backup_path.display(),
+                    error
+                )),
+                Ok(None) => crate::modules::logger::log_warn(&format!(
+                    "OAuth pending 文件解析失败，文件已不存在，忽略: path={}, error={}",
+                    path.display(),
+                    error
+                )),
+                Err(backup_error) => crate::modules::logger::log_warn(&format!(
+                    "OAuth pending 文件解析失败，隔离失败，忽略: path={}, parse_error={}, backup_error={}",
+                    path.display(),
+                    error,
+                    backup_error
+                )),
+            }
+            Ok(None)
+        }
+    }
 }
 
 pub fn save<T>(file_name: &str, value: &T) -> Result<(), String>

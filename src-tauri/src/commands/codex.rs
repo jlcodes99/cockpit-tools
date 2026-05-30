@@ -3,11 +3,14 @@ use crate::models::codex::{
     CodexQuota, CodexTokens,
 };
 use crate::models::codex_local_access::{
-    CodexLocalAccessPortCleanupResult, CodexLocalAccessRoutingStrategy, CodexLocalAccessScope,
-    CodexLocalAccessState, CodexLocalAccessTestResult,
+    CodexLocalAccessCustomRoutingRule, CodexLocalAccessGatewayMode, CodexLocalAccessModelAlias,
+    CodexLocalAccessModelPricing, CodexLocalAccessPortCleanupResult, CodexLocalAccessRequestKind,
+    CodexLocalAccessRoutingStrategy, CodexLocalAccessScope, CodexLocalAccessState,
+    CodexLocalAccessTestResult, CodexLocalAccessTimeoutPreset, CodexLocalAccessTimeouts,
+    CodexLocalAccessUsageEventPage,
 };
 use crate::modules::{
-    codex_account, codex_local_access, codex_oauth, codex_quota, codex_session_visibility,
+    account, codex_account, codex_local_access, codex_oauth, codex_quota, codex_session_visibility,
     codex_speed, codex_wakeup, codex_wakeup_scheduler, config, logger, openclaw_auth,
     opencode_auth, process,
 };
@@ -126,11 +129,9 @@ fn repair_codex_session_visibility_after_provider_change(
     match codex_session_visibility::repair_session_visibility_across_instances() {
         Ok(summary) => {
             logger::log_info(&format!(
-                "[Codex切号] 会话可见性修复完成: mutated_instances={}, rollout_files={}, sqlite_rows={}, skipped_sqlite_files={}, message={}",
+                "[Codex切号] 会话可见性修复完成: mutated_instances={}, rollout_files={}, official_rebuild=true, message={}",
                 summary.mutated_instance_count,
                 summary.changed_rollout_file_count,
-                summary.updated_sqlite_row_count,
-                summary.skipped_sqlite_file_count,
                 summary.message
             ));
         }
@@ -222,6 +223,7 @@ pub fn update_codex_account_app_speed(
     speed: CodexAppSpeed,
 ) -> Result<CodexAccount, String> {
     let account = codex_account::update_account_app_speed(&account_id, speed)?;
+    let account_speed = account.app_speed.clone();
     let current_account_id = codex_account::load_account_index().current_account_id;
     let default_bind_account_id = crate::modules::codex_instance::load_default_settings()
         .ok()
@@ -229,8 +231,19 @@ pub fn update_codex_account_app_speed(
     if current_account_id.as_deref() == Some(account_id.as_str())
         || default_bind_account_id.as_deref() == Some(account_id.as_str())
     {
-        codex_speed::write_official_app_speed(account.app_speed.clone())?;
-        let _ = crate::modules::codex_instance::update_default_app_speed(account.app_speed.clone());
+        codex_speed::write_official_app_speed(account_speed.clone())?;
+        let _ = crate::modules::codex_instance::update_default_app_speed(account_speed.clone());
+    }
+
+    let bound_instances = crate::modules::codex_instance::update_bound_instances_app_speed(
+        &account_id,
+        account_speed.clone(),
+    )?;
+    for instance in bound_instances {
+        codex_speed::write_app_speed_for_dir(
+            std::path::Path::new(&instance.user_data_dir),
+            account_speed.clone(),
+        )?;
     }
     Ok(account)
 }
@@ -494,6 +507,18 @@ pub async fn refresh_codex_quota(app: AppHandle, account_id: String) -> Result<C
     let result = codex_quota::refresh_account_quota(&account_id).await;
     if result.is_ok() {
         run_codex_post_refresh_checks(&app).await;
+        let _ = crate::modules::tray::update_tray_menu(&app);
+    }
+    result
+}
+
+#[tauri::command]
+pub async fn refresh_codex_subscription_info(
+    app: AppHandle,
+    account_id: String,
+) -> Result<CodexAccount, String> {
+    let result = codex_quota::refresh_account_subscription_info(&account_id, true).await;
+    if result.is_ok() {
         let _ = crate::modules::tray::update_tray_menu(&app);
     }
     result
@@ -845,8 +870,7 @@ const CODEX_MODEL_PROVIDERS_FILE: &str = "codex_model_providers.json";
 
 #[tauri::command]
 pub async fn load_codex_account_groups() -> Result<String, String> {
-    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
-    let path = home.join(".antigravity_cockpit").join(CODEX_GROUPS_FILE);
+    let path = account::get_data_dir()?.join(CODEX_GROUPS_FILE);
     if !path.exists() {
         return Ok("[]".to_string());
     }
@@ -855,8 +879,7 @@ pub async fn load_codex_account_groups() -> Result<String, String> {
 
 #[tauri::command]
 pub async fn save_codex_account_groups(data: String) -> Result<(), String> {
-    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
-    let dir = home.join(".antigravity_cockpit");
+    let dir = account::get_data_dir()?;
     if !dir.exists() {
         std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
     }
@@ -866,10 +889,7 @@ pub async fn save_codex_account_groups(data: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn load_codex_model_providers() -> Result<String, String> {
-    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
-    let path = home
-        .join(".antigravity_cockpit")
-        .join(CODEX_MODEL_PROVIDERS_FILE);
+    let path = account::get_data_dir()?.join(CODEX_MODEL_PROVIDERS_FILE);
     if !path.exists() {
         return Ok("[]".to_string());
     }
@@ -879,8 +899,7 @@ pub async fn load_codex_model_providers() -> Result<String, String> {
 
 #[tauri::command]
 pub async fn save_codex_model_providers(data: String) -> Result<(), String> {
-    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
-    let dir = home.join(".antigravity_cockpit");
+    let dir = account::get_data_dir()?;
     if !dir.exists() {
         std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
     }
@@ -930,6 +949,34 @@ pub async fn codex_local_access_clear_stats() -> Result<CodexLocalAccessState, S
 }
 
 #[tauri::command]
+pub async fn codex_local_access_query_request_logs(
+    page: u32,
+    page_size: u32,
+    stats_range: Option<String>,
+    model_query: Option<String>,
+    account_query: Option<String>,
+    api_key_query: Option<String>,
+    gateway_mode: Option<CodexLocalAccessGatewayMode>,
+    request_kind: Option<CodexLocalAccessRequestKind>,
+    success: Option<bool>,
+    error_category: Option<String>,
+) -> Result<CodexLocalAccessUsageEventPage, String> {
+    codex_local_access::query_local_access_usage_events(
+        page,
+        page_size,
+        stats_range,
+        model_query,
+        account_query,
+        api_key_query,
+        gateway_mode,
+        request_kind,
+        success,
+        error_category,
+    )
+    .await
+}
+
+#[tauri::command]
 pub async fn codex_local_access_prepare_restart() -> Result<CodexLocalAccessState, String> {
     codex_local_access::prepare_local_access_gateway_for_restart().await
 }
@@ -952,10 +999,139 @@ pub async fn codex_local_access_update_routing_strategy(
 }
 
 #[tauri::command]
+pub async fn codex_local_access_update_custom_routing(
+    rules: Vec<CodexLocalAccessCustomRoutingRule>,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_custom_routing(rules).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_model_rules(
+    model_aliases: Vec<CodexLocalAccessModelAlias>,
+    excluded_models: Vec<String>,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_model_rules(model_aliases, excluded_models).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_model_pricings(
+    model_pricings: Vec<CodexLocalAccessModelPricing>,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_model_pricings(model_pricings).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_routing_options(
+    session_affinity: bool,
+    session_affinity_ttl_ms: i64,
+    max_retry_credentials: u16,
+    max_retry_interval_ms: u64,
+    disable_cooling: bool,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_routing_options(
+        session_affinity,
+        session_affinity_ttl_ms,
+        max_retry_credentials,
+        max_retry_interval_ms,
+        disable_cooling,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_timeouts(
+    timeouts: CodexLocalAccessTimeouts,
+    active_timeout_preset_id: Option<String>,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_timeouts(timeouts, active_timeout_preset_id).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_timeout_presets(
+    timeout_presets: Vec<CodexLocalAccessTimeoutPreset>,
+    active_timeout_preset_id: Option<String>,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_timeout_presets(
+        timeout_presets,
+        active_timeout_preset_id,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_upstream_proxy_config(
+    upstream_proxy_url: Option<String>,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_upstream_proxy_config(upstream_proxy_url).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_gateway_mode(
+    gateway_mode: CodexLocalAccessGatewayMode,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_gateway_mode(gateway_mode).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_debug_logs(
+    debug_logs: bool,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_debug_logs(debug_logs).await
+}
+
+#[tauri::command]
 pub async fn codex_local_access_update_access_scope(
     access_scope: CodexLocalAccessScope,
 ) -> Result<CodexLocalAccessState, String> {
     codex_local_access::update_local_access_scope(access_scope).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_image_generation_mode(
+    image_generation_mode: crate::models::codex_local_access::CodexLocalAccessImageGenerationMode,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_image_generation_mode(image_generation_mode).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_create_api_key(
+    label: Option<String>,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::create_local_access_api_key(label).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_api_key(
+    api_key_id: String,
+    label: Option<String>,
+    enabled: Option<bool>,
+    model_prefix: Option<String>,
+    allowed_models: Option<Vec<String>>,
+    excluded_models: Option<Vec<String>>,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_api_key(
+        api_key_id,
+        label,
+        enabled,
+        model_prefix,
+        allowed_models,
+        excluded_models,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_rotate_named_api_key(
+    api_key_id: String,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::rotate_local_access_named_api_key(api_key_id).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_delete_api_key(
+    api_key_id: String,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::delete_local_access_api_key(api_key_id).await
 }
 
 #[tauri::command]

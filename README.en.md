@@ -1,13 +1,13 @@
 # Cockpit Tools
 
-English · [简体中文](README.md)
+English · [Portuguese (BR)](README.pt-br.md) · [简体中文](README.md)
 
 [![GitHub stars](https://img.shields.io/github/stars/jlcodes99/cockpit-tools?style=flat&color=gold)](https://github.com/jlcodes99/cockpit-tools)
 [![GitHub downloads](https://img.shields.io/github/downloads/jlcodes99/cockpit-tools/total?style=flat&color=blue)](https://github.com/jlcodes99/cockpit-tools/releases)
 [![GitHub release](https://img.shields.io/github/v/release/jlcodes99/cockpit-tools?style=flat)](https://github.com/jlcodes99/cockpit-tools/releases)
 [![GitHub issues](https://img.shields.io/github/issues/jlcodes99/cockpit-tools)](https://github.com/jlcodes99/cockpit-tools/issues)
 
-A **universal AI IDE account management tool**, currently supporting **Antigravity**, **Codex**, **GitHub Copilot**, **Windsurf**, **Kiro**, **Cursor**, **Gemini Cli**, **CodeBuddy**, **CodeBuddy CN**, **Qoder**, **Trae**, and **Zed**, with multi-instance parallel workflows.
+A **universal AI IDE account management tool**, currently supporting **Antigravity IDE**, **Codex**, **GitHub Copilot**, **Windsurf**, **Kiro**, **Cursor**, **Gemini Cli**, **CodeBuddy**, **CodeBuddy CN**, **Qoder**, **Trae**, and **Zed**, with multi-instance parallel workflows.
 
 > Designed to help users efficiently manage multiple AI IDE accounts, this tool supports one-click switching, quota monitoring, wake-up tasks, and multi-instance parallel runs, helping you fully utilize resources from different accounts.
 
@@ -27,41 +27,42 @@ A **universal AI IDE account management tool**, currently supporting **Antigravi
 
 A brand new visual dashboard providing a one-stop status overview:
 
-- **Twelve-Platform Support**: Simultaneously displays Antigravity, Codex, GitHub Copilot, Windsurf, Kiro, Cursor, Gemini Cli, CodeBuddy, CodeBuddy CN, Qoder, Trae, and Zed account status
+- **Twelve-Platform Support**: Simultaneously displays Antigravity IDE, Codex, GitHub Copilot, Windsurf, Kiro, Cursor, Gemini Cli, CodeBuddy, CodeBuddy CN, Qoder, Trae, and Zed account status
 - **Quota Monitoring**: Real-time view of remaining quotas and reset times for each model
 - **Quick Actions**: One-click refresh, one-click wake-up
 - **Visual Progress**: Intuitive progress bars showing quota consumption
 
 > ![Dashboard Overview](docs/images/dashboard_overview.png)
 
-### 2. Antigravity Account Management
+### 2. Antigravity IDE Account Management
 
 - **One-Click Switch**: Switch the currently active account instantly without manual login/logout
 - **Multiple Import Methods**: OAuth, Refresh Token, Plugin Sync
 - **Wake-up Tasks**: Schedule AI model wake-ups to trigger quota reset cycles in advance
 - **Device Fingerprints**: Generate, manage, and bind device fingerprints to reduce risk
 
-> ![Antigravity Accounts](docs/images/antigravity_list.png)
+> ![Antigravity IDE Accounts](docs/images/antigravity_list.png)
 >
 > *(Wakeup Tasks & Device Fingerprints)*
 > ![Wakeup Tasks](docs/images/wakeup_detail.png)
 > ![Device Fingerprints](docs/images/fingerprint_detail.png)
 
-#### 2.1 Antigravity Multi-Instance
+#### 2.1 Antigravity IDE Multi-Instance
 
-Run multiple Antigravity instances in parallel with different accounts. For example, open two Antigravity instances, bind different accounts, and handle different projects independently.
+Run multiple Antigravity IDE instances in parallel with different accounts. For example, open two Antigravity IDE instances, bind different accounts, and handle different projects independently.
 
 - **Isolated Accounts**: Each instance binds a different account and runs independently
 - **Parallel Projects**: Run multiple tasks/projects at the same time
 - **Argument Isolation**: Custom instance directory and launch arguments
 
-> ![Antigravity Instances](docs/images/antigravity_instances.png)
+> ![Antigravity IDE Instances](docs/images/antigravity_instances.png)
 
 ### 3. Codex Account Management
 
 - **Dedicated Support**: Optimized account management experience for Codex
 - **Quota Display**: Clear display of Hourly and Weekly quota status
 - **Plan Recognition**: Automatically identifies account Plan types (Basic, Plus, Team, etc.)
+- **API Service**: The local Codex API service is powered by the bundled CLIProxyAPI sidecar. Cockpit Tools handles account sync, config projection, status, and usage statistics while keeping the same Base URL, API keys, and user workflow.
 
 > ![Codex Accounts](docs/images/codex_list.png)
 
@@ -225,7 +226,7 @@ These are the most common security questions answered directly:
 
 - **This is a local desktop tool**: it does not require a separate cloud account for this project, and it does not rely on a project-hosted cloud account storage.
 - **Data is mainly stored on your machine**:
-  - `~/.antigravity_cockpit`: Antigravity accounts, configs, WebSocket status, etc.
+  - `~/.antigravity_cockpit`: Antigravity IDE accounts, configs, WebSocket status, etc.
   - `~/.codex`: official Codex current login `auth.json`
   - `~/.gemini`: Gemini Cli local session files (for example `oauth_creds.json`, `google_accounts.json`, `settings.json`)
   - local app data folder under `com.antigravity.cockpit-tools`: Codex / GitHub Copilot / Windsurf / Kiro / Cursor / Gemini Cli / CodeBuddy / CodeBuddy CN / Qoder / Trae / Zed multi-account index data, etc.
@@ -248,7 +249,7 @@ If you want a stable setup with minimal tuning, follow the "Recommended" values.
 | Display Language | Changes UI language | Your native/comfortable language | Only if current language is hard to read |
 | Theme | Light/dark appearance | System | Use dark mode for long night sessions |
 | Window Close Behavior | What happens when clicking close | Ask every time | Choose "Minimize to tray" if you want background running |
-| Antigravity Auto Refresh | Periodically updates Antigravity quota | 5-10 minutes | Use 2 minutes if you need near real-time updates |
+| Antigravity IDE Auto Refresh | Periodically updates Antigravity IDE quota | 5-10 minutes | Use 2 minutes if you need near real-time updates |
 | Codex Auto Refresh | Periodically updates Codex quota | 5-10 minutes | Same as above |
 | GitHub Copilot Auto Refresh | Periodically updates GitHub Copilot quota | 5-10 minutes | Same as above |
 | Windsurf Auto Refresh | Periodically updates Windsurf quota | 5-10 minutes | Same as above |
@@ -261,7 +262,7 @@ If you want a stable setup with minimal tuning, follow the "Recommended" values.
 | Trae Auto Refresh | Periodically updates Trae quota | 5-10 minutes | Same as above |
 | Zed Auto Refresh | Periodically updates Zed quota | 5-10 minutes | Same as above |
 | Data Directory | Where account/config files are stored | Keep default | Only for troubleshooting or backups |
-| Antigravity/Codex/VS Code/Windsurf/Kiro/Cursor/Gemini Cli/CodeBuddy/CodeBuddy CN/Qoder/Trae/Zed/OpenCode App Path | Manually set executable path | Leave empty (auto-detect) | Change only if auto-detect fails or you use custom install paths |
+| Antigravity IDE/Codex/VS Code/Windsurf/Kiro/Cursor/Gemini Cli/CodeBuddy/CodeBuddy CN/Qoder/Trae/Zed/OpenCode App Path | Manually set executable path | Leave empty (auto-detect) | Change only if auto-detect fails or you use custom install paths |
 | Auto-restart OpenCode on Codex switch | Sync OpenCode auth after Codex switch | ON if you use OpenCode; otherwise OFF | Enable for frequent Codex switching with OpenCode |
 
 Notes:
@@ -376,6 +377,12 @@ npm run tauri build
 
 ---
 
+## Community
+
+Newly created Telegram chat group: [Join the group](https://t.me/+Y8gMv4SlZUU2MWY1)
+
+---
+
 ## Sponsor
 
 If you find this project useful, consider supporting it here: [☕ Donate](docs/DONATE.en.md)
@@ -386,7 +393,8 @@ Every bit of support helps sustain open-source development. Thank you!
 
 ## Acknowledgments
 
-- Antigravity account switching logic based on: [Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager)
+- Antigravity IDE account switching logic based on: [Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager)
+- Codex API service sidecar integration: [router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
 
 Thanks to the project author for their open-source contributions! If these projects have helped you, please give them a ⭐ Star to show your support!
 

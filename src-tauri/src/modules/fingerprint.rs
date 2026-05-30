@@ -86,13 +86,31 @@ pub fn load_fingerprint_store() -> Result<FingerprintStore, String> {
         return Ok(FingerprintStore::new());
     }
 
-    serde_json::from_str(&content).map_err(|e| {
-        crate::error::file_corrupted_error(
-            FINGERPRINTS_FILE,
-            &path.to_string_lossy(),
-            &e.to_string(),
-        )
-    })
+    match serde_json::from_str(&content) {
+        Ok(store) => Ok(store),
+        Err(error) => {
+            match crate::modules::atomic_write::quarantine_file(&path, "invalid-json") {
+                Ok(Some(backup_path)) => logger::log_warn(&format!(
+                    "指纹存储解析失败，已隔离并使用空指纹列表: path={}, backup={}, error={}",
+                    path.display(),
+                    backup_path.display(),
+                    error
+                )),
+                Ok(None) => logger::log_warn(&format!(
+                    "指纹存储解析失败，文件已不存在，使用空指纹列表: path={}, error={}",
+                    path.display(),
+                    error
+                )),
+                Err(backup_error) => logger::log_warn(&format!(
+                    "指纹存储解析失败，隔离失败，使用空指纹列表: path={}, parse_error={}, backup_error={}",
+                    path.display(),
+                    error,
+                    backup_error
+                )),
+            }
+            Ok(FingerprintStore::new())
+        }
+    }
 }
 
 /// 保存指纹存储
@@ -100,7 +118,8 @@ pub fn save_fingerprint_store(store: &FingerprintStore) -> Result<(), String> {
     let path = get_fingerprints_path()?;
     let content =
         serde_json::to_string_pretty(store).map_err(|e| format!("序列化指纹存储失败: {}", e))?;
-    fs::write(&path, content).map_err(|e| format!("保存指纹存储失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("保存指纹存储失败: {}", e))
 }
 
 /// 获取指纹详情

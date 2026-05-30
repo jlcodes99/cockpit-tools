@@ -124,6 +124,11 @@ export async function refreshCodexQuota(accountId: string): Promise<CodexQuota> 
   return await invoke('refresh_codex_quota', { accountId });
 }
 
+/** 强制刷新单个账号的订阅信息 */
+export async function refreshCodexSubscriptionInfo(accountId: string): Promise<CodexAccount> {
+  return await invoke('refresh_codex_subscription_info', { accountId });
+}
+
 /** 刷新所有账号配额 */
 export async function refreshAllCodexQuotas(): Promise<number> {
   return await invoke('refresh_all_codex_quotas');

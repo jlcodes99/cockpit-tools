@@ -34,6 +34,42 @@ fn build_temp_file_path(parent: &Path, target: &Path, suffix: &str) -> PathBuf {
     ))
 }
 
+fn unique_timestamp_nanos() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos()
+}
+
+pub fn quarantine_file(path: &Path, reason: &str) -> Result<Option<PathBuf>, String> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let parent = path.parent().ok_or("无法定位目标目录")?;
+    let file_name = path
+        .file_name()
+        .and_then(|item| item.to_str())
+        .ok_or_else(|| format!("无法解析目标文件名: {}", path.display()))?;
+    let safe_reason = reason
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    let quarantine_path = parent.join(format!(
+        "{}.{}.{}",
+        file_name,
+        safe_reason,
+        unique_timestamp_nanos()
+    ));
+    fs::rename(path, &quarantine_path).map_err(|e| format_io_error("隔离损坏文件", path, &e))?;
+    Ok(Some(quarantine_path))
+}
+
 fn write_string_atomic_internal(
     path: &Path,
     content: &str,
@@ -44,8 +80,14 @@ fn write_string_atomic_internal(
 
     if create_backup && path.exists() {
         let backup_path = build_backup_path(path)?;
-        fs::copy(path, &backup_path)
-            .map_err(|e| format_io_error("写入备份文件", &backup_path, &e))?;
+        if let Err(error) = fs::copy(path, &backup_path) {
+            crate::modules::logger::log_warn(&format!(
+                "写入备份文件失败，继续写入主文件: path={}, backup={}, error={}",
+                path.display(),
+                backup_path.display(),
+                error
+            ));
+        }
     }
 
     let temp_path = build_temp_file_path(parent, path, "atomic");

@@ -9,7 +9,6 @@ use modules::logger;
 use std::sync::OnceLock;
 #[cfg(target_os = "macos")]
 use tauri::ActivationPolicy;
-#[cfg(target_os = "macos")]
 use tauri::RunEvent;
 use tauri::WindowEvent;
 use tauri::{Emitter, Manager};
@@ -95,6 +94,20 @@ pub fn run() {
         }))
         .setup(|app| {
             info!("Cockpit Tools 启动...");
+            let current_exe = std::env::current_exe()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|err| format!("unknown: {}", err));
+            let build_mode = if cfg!(debug_assertions) {
+                "debug"
+            } else {
+                "release"
+            };
+            logger::log_info(&format!(
+                "[Startup] 启动诊断: marker=tray-diagnostics-v1, version={}, mode={}, exe={}",
+                env!("CARGO_PKG_VERSION"),
+                build_mode,
+                current_exe
+            ));
 
             // 存储全局 AppHandle
             let _ = APP_HANDLE.set(app.handle().clone());
@@ -232,6 +245,20 @@ pub fn run() {
             // 创建骨架托盘（无账号文件 I/O，秒出）
             if let Err(e) = modules::tray::create_tray_skeleton(app.handle()) {
                 logger::log_error(&format!("[Tray] 创建骨架托盘失败: {}", e));
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                let tray_app_handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(800));
+                    if let Err(err) = modules::tray::apply_tray_icon_style(&tray_app_handle) {
+                        logger::log_warn(&format!(
+                            "[Tray] macOS 启动后重应用菜单栏图标样式失败: {}",
+                            err
+                        ));
+                    }
+                });
             }
 
             // 后台线程加载完整托盘菜单（含账号数据）
@@ -377,6 +404,7 @@ pub fn run() {
             commands::system::set_codex_launch_on_switch,
             commands::system::set_codex_local_access_entry_visible,
             commands::system::detect_app_path,
+            commands::system::get_antigravity_installed_version_info,
             commands::system::set_wakeup_override,
             commands::system::handle_window_close,
             commands::system::show_floating_card_window,
@@ -458,6 +486,7 @@ pub fn run() {
             commands::codex::export_codex_accounts,
             commands::codex::import_codex_from_files,
             commands::codex::refresh_codex_quota,
+            commands::codex::refresh_codex_subscription_info,
             commands::codex::refresh_all_codex_quotas,
             commands::codex::refresh_current_codex_quota,
             commands::codex::codex_oauth_login_start,
@@ -495,11 +524,26 @@ pub fn run() {
             commands::codex::codex_local_access_rotate_api_key,
             commands::codex::codex_local_access_update_bound_oauth_account,
             commands::codex::codex_local_access_clear_stats,
+            commands::codex::codex_local_access_query_request_logs,
             commands::codex::codex_local_access_prepare_restart,
             commands::codex::codex_local_access_kill_port,
             commands::codex::codex_local_access_update_port,
             commands::codex::codex_local_access_update_routing_strategy,
+            commands::codex::codex_local_access_update_custom_routing,
+            commands::codex::codex_local_access_update_model_rules,
+            commands::codex::codex_local_access_update_model_pricings,
+            commands::codex::codex_local_access_update_routing_options,
+            commands::codex::codex_local_access_update_timeouts,
+            commands::codex::codex_local_access_update_timeout_presets,
+            commands::codex::codex_local_access_update_upstream_proxy_config,
+            commands::codex::codex_local_access_update_gateway_mode,
+            commands::codex::codex_local_access_update_debug_logs,
             commands::codex::codex_local_access_update_access_scope,
+            commands::codex::codex_local_access_update_image_generation_mode,
+            commands::codex::codex_local_access_create_api_key,
+            commands::codex::codex_local_access_update_api_key,
+            commands::codex::codex_local_access_rotate_named_api_key,
+            commands::codex::codex_local_access_delete_api_key,
             commands::codex::codex_local_access_set_enabled,
             commands::codex::codex_local_access_activate,
             commands::codex::codex_local_access_test,
@@ -835,6 +879,15 @@ pub fn run() {
         .expect("error while building tauri application");
 
     app.run(|app_handle, event| {
+        match &event {
+            RunEvent::ExitRequested { .. } | RunEvent::Exit => {
+                tauri::async_runtime::block_on(async {
+                    modules::codex_local_access::shutdown_local_access_gateway_for_app_exit().await;
+                });
+            }
+            _ => {}
+        }
+
         #[cfg(target_os = "macos")]
         {
             match event {

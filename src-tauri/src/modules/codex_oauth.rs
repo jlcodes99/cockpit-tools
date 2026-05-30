@@ -9,6 +9,7 @@ use std::io::{ErrorKind, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use url::Url;
 
@@ -23,6 +24,7 @@ const OAUTH_PORT_IN_USE_CODE: &str = "CODEX_OAUTH_PORT_IN_USE";
 const OAUTH_STATE_FILE: &str = "codex_oauth_pending.json";
 const OAUTH_TIMEOUT_SECONDS: i64 = 300;
 const TOKEN_REFRESH_SKEW_SECONDS: i64 = 300;
+const TOKEN_REFRESH_TIMEOUT: Duration = Duration::from_secs(25);
 
 pub fn get_callback_port() -> u16 {
     OAUTH_CALLBACK_PORT
@@ -849,7 +851,11 @@ pub async fn refresh_access_token_with_fallback(
     refresh_token: &str,
     current_id_token: Option<&str>,
 ) -> Result<CodexTokens, String> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .connect_timeout(TOKEN_REFRESH_TIMEOUT)
+        .timeout(TOKEN_REFRESH_TIMEOUT)
+        .build()
+        .map_err(|e| format!("创建 Token 刷新客户端失败: {}", e))?;
 
     logger::log_info("Codex Token 刷新中...");
 

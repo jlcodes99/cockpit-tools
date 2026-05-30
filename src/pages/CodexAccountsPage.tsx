@@ -48,7 +48,6 @@ import {
   FolderPlus,
   ChevronRight,
   LogOut,
-  Server,
   Wrench,
   Terminal,
   Link2,
@@ -67,6 +66,7 @@ import {
   ModalErrorMessage,
   useModalErrorState,
 } from "../components/ModalErrorMessage";
+import { MfaQuickCodeSelect } from "../components/MfaQuickCodeSelect";
 import { PaginationControls } from "../components/PaginationControls";
 import {
   CodexAccountGroupModal,
@@ -90,12 +90,12 @@ import {
   getCodexSubscriptionPresentation,
   hasCodexAccountName,
   isCodexApiKeyAccount,
-  isCodexExplicitFreePlanType,
   isCodexNewApiAccount,
   isCodexTeamLikePlan,
   type CodexApiProviderMode,
   type CodexQuotaErrorInfo,
 } from "../types/codex";
+import { filterCodexLocalAccessAccountIds } from "../utils/codexLocalAccessAccounts";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
 
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
@@ -129,6 +129,8 @@ import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import type { CodexAccount, CodexAppSpeed } from "../types/codex";
 import type {
   CodexLocalAccessAddressKind,
+  CodexLocalAccessCustomRoutingRule,
+  CodexLocalAccessGatewayMode,
   CodexLocalAccessRoutingStrategy,
   CodexLocalAccessScope,
   CodexLocalAccessState,
@@ -148,9 +150,11 @@ import { compareCurrentAccountFirst } from "../utils/currentAccountSort";
 import {
   CODEX_API_PROVIDER_CUSTOM_ID,
   CODEX_API_PROVIDER_PRESETS,
+  COCKPIT_API_BASE_URL,
   COCKPIT_API_PROVIDER_ID,
-  findCodexApiProviderPresetByBaseUrl,
+  COCKPIT_API_PROVIDER_NAME,
   findCodexApiProviderPresetById,
+  isCockpitApiProviderBaseUrl,
   resolveCodexApiProviderPresetId,
 } from "../utils/codexProviderPresets";
 import {
@@ -202,7 +206,18 @@ const CODEX_TOKEN_SINGLE_EXAMPLE = `{
     "refresh_token": "rt_..."
   }
 }`;
-const CODEX_TOKEN_REFRESH_ONLY_EXAMPLE = `{
+const CODEX_TOKEN_SESSION_EXAMPLE = `{
+  "user": {
+    "email": "user@example.com"
+  },
+  "account": {
+    "id": "account-id"
+  },
+  "accessToken": "eyJ...",
+  "authProvider": "openai"
+}
+
+{
   "refresh_token": "rt_..."
 }`;
 const CODEX_TOKEN_BATCH_EXAMPLE = `[
@@ -219,7 +234,7 @@ const CODEX_TOKEN_BATCH_EXAMPLE = `[
   }
 ]`;
 const OPENAI_OFFICIAL_PRESET_ID = "openai_official";
-const COCKPIT_API_BASE_URL = "https://chongcodex.cn/v1";
+const OPENAI_OFFICIAL_BASE_URL = "https://api.openai.com/v1";
 
 function normalizeCodexApiBaseUrl(rawValue?: string | null): string {
   return normalizeHttpBaseUrl(rawValue ?? "") ?? "";
@@ -246,10 +261,12 @@ const CODEX_LOCAL_ACCESS_EXPANDED_KEY =
   "agtools.codex.local_access_entry_expanded.v1";
 const CODEX_LOCAL_ACCESS_ADDRESS_KIND_KEY =
   "agtools.codex.local_access_address_kind.v1";
+const CODEX_LOCAL_ACCESS_GATEWAY_GUIDE_DISMISSED_KEY =
+  "agtools.codex.api_service.gateway_guide.dismissed.v1";
 const CODEX_CUSTOM_SORT_ORDER_KEY =
   "agtools.codex.accounts.custom_sort_order.v1";
-const DEFAULT_CODEX_API_PROVIDER_ID = COCKPIT_API_PROVIDER_ID;
-const DEFAULT_CODEX_API_BASE_URL = COCKPIT_API_BASE_URL;
+const DEFAULT_CODEX_API_PROVIDER_ID = OPENAI_OFFICIAL_PRESET_ID;
+const DEFAULT_CODEX_API_BASE_URL = OPENAI_OFFICIAL_BASE_URL;
 const CODEX_LOCAL_ACCESS_FALLBACK_PORT = 54140;
 const CODEX_LOCAL_ACCESS_FALLBACK_BASE_URL = `http://127.0.0.1:${CODEX_LOCAL_ACCESS_FALLBACK_PORT}/v1`;
 const CODEX_LOCAL_ACCESS_FALLBACK_API_KEY_MASK = "agt_codex_••••••••••••";
@@ -285,6 +302,25 @@ function persistLocalAccessAddressKind(
 ): void {
   try {
     localStorage.setItem(CODEX_LOCAL_ACCESS_ADDRESS_KIND_KEY, value);
+  } catch {
+    // ignore storage write failures
+  }
+}
+
+function readLocalAccessGatewayGuideDismissed(): boolean {
+  try {
+    return (
+      localStorage.getItem(CODEX_LOCAL_ACCESS_GATEWAY_GUIDE_DISMISSED_KEY) ===
+      "1"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function persistLocalAccessGatewayGuideDismissed(): void {
+  try {
+    localStorage.setItem(CODEX_LOCAL_ACCESS_GATEWAY_GUIDE_DISMISSED_KEY, "1");
   } catch {
     // ignore storage write failures
   }
@@ -548,6 +584,11 @@ export function CodexAccountsPage() {
     set: setGroupDeleteError,
   } = useModalErrorState();
   const [deletingGroup, setDeletingGroup] = useState(false);
+  const [refreshingGroupId, setRefreshingGroupId] = useState<string | null>(
+    null,
+  );
+  const [refreshingSubscriptionAccountId, setRefreshingSubscriptionAccountId] =
+    useState<string | null>(null);
   const [removingGroupAccountIds, setRemovingGroupAccountIds] = useState<
     Set<string>
   >(new Set());
@@ -652,6 +693,11 @@ export function CodexAccountsPage() {
     [],
   );
 
+  const dismissLocalAccessGatewayGuide = useCallback(() => {
+    persistLocalAccessGatewayGuideDismissed();
+    setLocalAccessGatewayGuideDismissed(true);
+  }, []);
+
   const toggleGroupFilterValue = useCallback((groupId: string) => {
     setGroupFilter((prev) => {
       if (prev.includes(groupId)) return prev.filter((id) => id !== groupId);
@@ -679,6 +725,10 @@ export function CodexAccountsPage() {
       }
       return "grid";
     });
+  const [
+    localAccessGatewayGuideDismissed,
+    setLocalAccessGatewayGuideDismissed,
+  ] = useState(readLocalAccessGatewayGuideDismissed);
 
   const store = useCodexAccountStore();
   const codexInstanceStore = useCodexInstanceStore();
@@ -696,6 +746,9 @@ export function CodexAccountsPage() {
   const [savingAppSpeedId, setSavingAppSpeedId] = useState<string | null>(null);
   const [apiServiceAppSpeed, setApiServiceAppSpeed] =
     useState<CodexAppSpeed>("standard");
+  const [reauthTargetAccount, setReauthTargetAccount] =
+    useState<CodexAccount | null>(null);
+  const [reauthEmailCopied, setReauthEmailCopied] = useState(false);
   const {
     message: accountNoteError,
     scrollKey: accountNoteErrorScrollKey,
@@ -802,6 +855,38 @@ export function CodexAccountsPage() {
     normalizeTag,
     saveJsonFile,
   } = page;
+
+  const reauthTargetEmail = reauthTargetAccount?.email?.trim() ?? "";
+
+  const openCodexAddModal = useCallback(
+    (tab: string, targetAccount?: CodexAccount | null) => {
+      setReauthTargetAccount(targetAccount ?? null);
+      setReauthEmailCopied(false);
+      openAddModal(tab);
+    },
+    [openAddModal],
+  );
+
+  const closeCodexAddModal = useCallback(() => {
+    setReauthTargetAccount(null);
+    setReauthEmailCopied(false);
+    closeAddModal();
+  }, [closeAddModal]);
+
+  const handleCopyReauthEmail = useCallback(async () => {
+    if (!reauthTargetEmail) return;
+    try {
+      await navigator.clipboard.writeText(reauthTargetEmail);
+      setReauthEmailCopied(true);
+      window.setTimeout(() => setReauthEmailCopied(false), 1200);
+    } catch {}
+  }, [reauthTargetEmail]);
+
+  useEffect(() => {
+    if (showAddModal) return;
+    setReauthTargetAccount(null);
+    setReauthEmailCopied(false);
+  }, [showAddModal]);
 
   useEffect(() => {
     if (!filterPersistenceEnabled) {
@@ -1513,6 +1598,7 @@ export function CodexAccountsPage() {
     fetchCurrentAccount,
     switchAccount,
     refreshQuota,
+    refreshSubscriptionInfo,
     hydrateAccountProfilesIfNeeded,
     updateAccountName,
     updateApiKeyCredentials,
@@ -1520,6 +1606,20 @@ export function CodexAccountsPage() {
     updateAccountAppSpeed,
   } = store;
   const localAccessCollection = localAccessState?.collection ?? null;
+
+  const handleRefreshSubscriptionInfo = useCallback(
+    async (accountId: string) => {
+      setRefreshingSubscriptionAccountId(accountId);
+      try {
+        await refreshSubscriptionInfo(accountId);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setRefreshingSubscriptionAccountId(null);
+      }
+    },
+    [refreshSubscriptionInfo],
+  );
 
   const editingAccountNoteAccount = useMemo(
     () =>
@@ -1884,6 +1984,20 @@ export function CodexAccountsPage() {
     () => accounts.filter((account) => !isCodexApiKeyAccount(account)),
     [accounts],
   );
+  const isOAuthBindingEligibleAccount = useCallback(
+    (account: CodexAccount) => {
+      const subscription = getCodexSubscriptionPresentation(
+        account.subscription_active_until,
+        t,
+      );
+      return subscription.timestampMs != null;
+    },
+    [t],
+  );
+  const oauthBindingEligibleAccounts = useMemo(
+    () => oauthAccounts.filter(isOAuthBindingEligibleAccount),
+    [isOAuthBindingEligibleAccount, oauthAccounts],
+  );
   const oauthBindingAccount = useMemo(
     () =>
       oauthBindingAccountId
@@ -1893,9 +2007,10 @@ export function CodexAccountsPage() {
   );
   const selectedOAuthBindingAccount = useMemo(
     () =>
-      oauthAccounts.find((item) => item.id === oauthBindingSelectedAccountId) ??
-      null,
-    [oauthAccounts, oauthBindingSelectedAccountId],
+      oauthBindingEligibleAccounts.find(
+        (item) => item.id === oauthBindingSelectedAccountId,
+      ) ?? null,
+    [oauthBindingEligibleAccounts, oauthBindingSelectedAccountId],
   );
   const boundLocalAccessOAuthAccount = useMemo(
     () =>
@@ -2001,13 +2116,11 @@ export function CodexAccountsPage() {
       if (!normalizedBaseUrl) {
         return { apiProviderMode: "openai_builtin" };
       }
-      const matchedPresetByBaseUrl =
-        findCodexApiProviderPresetByBaseUrl(normalizedBaseUrl);
-      if (matchedPresetByBaseUrl?.id === COCKPIT_API_PROVIDER_ID) {
+      if (isCockpitApiProviderBaseUrl(normalizedBaseUrl)) {
         return {
           apiProviderMode: "custom",
-          apiProviderId: matchedPresetByBaseUrl.id,
-          apiProviderName: matchedPresetByBaseUrl.name,
+          apiProviderId: COCKPIT_API_PROVIDER_ID,
+          apiProviderName: COCKPIT_API_PROVIDER_NAME,
         };
       }
       if (providerPresetId === OPENAI_OFFICIAL_PRESET_ID) {
@@ -2672,9 +2785,9 @@ export function CodexAccountsPage() {
     (account: CodexAccount) => {
       const boundId = (account.bound_oauth_account_id || "").trim();
       if (!boundId) return null;
-      return accounts.find((item) => item.id === boundId) ?? null;
+      return oauthAccounts.find((item) => item.id === boundId) ?? null;
     },
-    [accounts],
+    [oauthAccounts],
   );
 
   const resetOAuthBindingModal = useCallback(() => {
@@ -2699,28 +2812,45 @@ export function CodexAccountsPage() {
       const boundAccount = resolveBoundOAuthAccount(account);
       setOauthBindingTargetKind("api_key_account");
       setOauthBindingAccountId(account.id);
-      setOauthBindingSelectedAccountId(boundAccount?.id ?? "");
+      setOauthBindingSelectedAccountId(
+        boundAccount && isOAuthBindingEligibleAccount(boundAccount)
+          ? boundAccount.id
+          : "",
+      );
       setOauthBindingAutoSwitch(options?.autoSwitch ?? false);
       setOauthBindingSearchQuery("");
       setOauthBindingFilterTypes([]);
       setOauthBindingTagFilter([]);
       setOauthBindingError(null);
     },
-    [resolveBoundOAuthAccount, setOauthBindingError],
+    [
+      isOAuthBindingEligibleAccount,
+      resolveBoundOAuthAccount,
+      setOauthBindingError,
+    ],
   );
 
   const openLocalAccessOAuthBindingModal = useCallback(
     (options?: { autoSwitch?: boolean }) => {
       setOauthBindingTargetKind("local_access");
       setOauthBindingAccountId(null);
-      setOauthBindingSelectedAccountId(boundLocalAccessOAuthAccount?.id ?? "");
+      setOauthBindingSelectedAccountId(
+        boundLocalAccessOAuthAccount &&
+          isOAuthBindingEligibleAccount(boundLocalAccessOAuthAccount)
+          ? boundLocalAccessOAuthAccount.id
+          : "",
+      );
       setOauthBindingAutoSwitch(options?.autoSwitch ?? false);
       setOauthBindingSearchQuery("");
       setOauthBindingFilterTypes([]);
       setOauthBindingTagFilter([]);
       setOauthBindingError(null);
     },
-    [boundLocalAccessOAuthAccount?.id, setOauthBindingError],
+    [
+      boundLocalAccessOAuthAccount,
+      isOAuthBindingEligibleAccount,
+      setOauthBindingError,
+    ],
   );
 
   const closeApiSwitchVisibilityNotice = useCallback(() => {
@@ -2806,6 +2936,12 @@ export function CodexAccountsPage() {
         .replace(/^Error:\s*/, "")
         .trim();
       const lower = raw.toLowerCase();
+      if (raw === "CODEX_STALE_ACCOUNT") {
+        return t(
+          "codex.authError.staleAccount",
+          "该账号已不在本地账号库中，账号列表已刷新。请重新导入或重新登录该 Codex 账号。",
+        );
+      }
       if (
         lower.includes("unsupported_country_region_territory") ||
         raw.includes("当前网络地区不支持刷新 Codex 授权")
@@ -2925,6 +3061,15 @@ export function CodexAccountsPage() {
       );
       return;
     }
+    if (!isOAuthBindingEligibleAccount(selectedOAuthBindingAccount)) {
+      setOauthBindingError(
+        t(
+          "codex.api.oauthBinding.validationSubscriptionRequired",
+          "只能绑定带订阅时间的 OAuth 账号",
+        ),
+      );
+      return;
+    }
 
     setOauthBindingSaving(true);
     setOauthBindingError(null);
@@ -2966,6 +3111,7 @@ export function CodexAccountsPage() {
     oauthBindingAccount,
     oauthBindingAutoSwitch,
     oauthBindingTargetKind,
+    isOAuthBindingEligibleAccount,
     selectedOAuthBindingAccount,
     setMessage,
     setOauthBindingError,
@@ -4240,6 +4386,15 @@ export function CodexAccountsPage() {
     setShowLocalAccessModal(true);
   }, []);
 
+  const openCodexApiServicePage = useCallback(() => {
+    setShowLocalAccessModal(false);
+    window.dispatchEvent(
+      new CustomEvent("app-request-navigate", {
+        detail: "codex-api-service",
+      }),
+    );
+  }, []);
+
   const openLocalAccessMemberPicker = useCallback(() => {
     setLocalAccessModalMode("members");
     setShowLocalAccessModal(true);
@@ -4299,21 +4454,22 @@ export function CodexAccountsPage() {
       setLocalAccessSaving(true);
       try {
         const restrictFreeAccounts = options?.restrictFreeAccounts ?? true;
-        const accountById = new Map(
-          accounts.map((account) => [account.id, account]),
-        );
-        const filteredAccountIds = accountIds.filter((accountId) => {
-          const account = accountById.get(accountId);
-          if (!account) return false;
-          if (isCodexApiKeyAccount(account)) return false;
-          if (
-            restrictFreeAccounts &&
-            isCodexExplicitFreePlanType(account.plan_type)
-          ) {
-            return false;
-          }
-          return true;
-        });
+        const filteredAccountIds =
+          accountIds.length === 0
+            ? []
+            : filterCodexLocalAccessAccountIds(
+                accountIds,
+                await codexService.listCodexAccounts(),
+                restrictFreeAccounts,
+              );
+        if (accountIds.length > 0 && filteredAccountIds.length === 0) {
+          throw new Error(
+            t(
+              "codex.localAccess.noEligibleAccountsSelected",
+              "所选账号不在当前环境中，或不符合 API 服务条件。请先在当前环境导入可用 Codex 账号后再添加。",
+            ),
+          );
+        }
         const nextState =
           await codexLocalAccessService.saveCodexLocalAccessAccounts(
             filteredAccountIds,
@@ -4331,7 +4487,7 @@ export function CodexAccountsPage() {
         setLocalAccessSaving(false);
       }
     },
-    [accounts, setMessage, t],
+    [setMessage, t],
   );
 
   const handleRemoveLocalAccessAccount = useCallback(
@@ -4395,7 +4551,7 @@ export function CodexAccountsPage() {
 
   const oauthBindingTierCounts = useMemo(() => {
     const counts = {
-      all: oauthAccounts.length,
+      all: oauthBindingEligibleAccounts.length,
       VALID: 0,
       FREE: 0,
       PLUS: 0,
@@ -4404,7 +4560,7 @@ export function CodexAccountsPage() {
       ENTERPRISE: 0,
       ERROR: 0,
     };
-    oauthAccounts.forEach((account) => {
+    oauthBindingEligibleAccounts.forEach((account) => {
       if (!isAbnormalAccount(account)) {
         counts.VALID += 1;
       }
@@ -4413,7 +4569,7 @@ export function CodexAccountsPage() {
       if (account.quota_error) counts.ERROR += 1;
     });
     return counts;
-  }, [isAbnormalAccount, oauthAccounts, resolvePlanKey]);
+  }, [isAbnormalAccount, oauthBindingEligibleAccounts, resolvePlanKey]);
 
   const oauthBindingTierFilterOptions = useMemo<MultiSelectFilterOption[]>(
     () => [
@@ -4433,7 +4589,7 @@ export function CodexAccountsPage() {
 
   const oauthBindingAvailableTags = useMemo(() => {
     const tagSet = new Set<string>();
-    oauthAccounts.forEach((account) => {
+    oauthBindingEligibleAccounts.forEach((account) => {
       (account.tags || []).forEach((tag) => {
         const normalized = normalizeTag(tag);
         if (normalized) {
@@ -4442,7 +4598,7 @@ export function CodexAccountsPage() {
       });
     });
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
-  }, [normalizeTag, oauthAccounts]);
+  }, [normalizeTag, oauthBindingEligibleAccounts]);
 
   const toggleOAuthBindingFilterTypeValue = useCallback((value: string) => {
     setOauthBindingFilterTypes((prev) =>
@@ -4461,7 +4617,7 @@ export function CodexAccountsPage() {
   }, []);
 
   const oauthBindingFilteredAccounts = useMemo(() => {
-    let result = [...oauthAccounts];
+    let result = [...oauthBindingEligibleAccounts];
     const query = oauthBindingSearchQuery.trim().toLowerCase();
     if (query) {
       result = result.filter((account) => {
@@ -4533,7 +4689,7 @@ export function CodexAccountsPage() {
   }, [
     isAbnormalAccount,
     normalizeTag,
-    oauthAccounts,
+    oauthBindingEligibleAccounts,
     oauthBindingFilterTypes,
     oauthBindingSearchQuery,
     oauthBindingSortBy,
@@ -4853,6 +5009,58 @@ export function CodexAccountsPage() {
     [setMessage, t],
   );
 
+  const handleUpdateLocalAccessCustomRouting = useCallback(
+    async (rules: CodexLocalAccessCustomRoutingRule[]) => {
+      setLocalAccessSaving(true);
+      try {
+        const nextState =
+          await codexLocalAccessService.updateCodexLocalAccessCustomRouting(
+            rules,
+          );
+        setLocalAccessState(nextState);
+        setMessage({
+          text: t(
+            "codex.localAccess.customRoutingSaveSuccess",
+            "API 服务自定义调度已更新",
+          ),
+        });
+        return nextState;
+      } catch (error) {
+        console.error("Failed to update local access custom routing:", error);
+        throw new Error(String(error).replace(/^Error:\s*/, ""));
+      } finally {
+        setLocalAccessSaving(false);
+      }
+    },
+    [setMessage, t],
+  );
+
+  const handleUpdateLocalAccessUpstreamProxyConfig = useCallback(
+    async (upstreamProxyUrl: string | null) => {
+      setLocalAccessSaving(true);
+      try {
+        const nextState =
+          await codexLocalAccessService.updateCodexLocalAccessUpstreamProxyConfig(
+            upstreamProxyUrl,
+          );
+        setLocalAccessState(nextState);
+        setMessage({
+          text: t(
+            "codex.localAccess.upstreamProxySaveSuccess",
+            "API 代理地址已更新",
+          ),
+        });
+        return nextState;
+      } catch (error) {
+        console.error("Failed to update local access upstream proxy config:", error);
+        throw new Error(String(error).replace(/^Error:\s*/, ""));
+      } finally {
+        setLocalAccessSaving(false);
+      }
+    },
+    [setMessage, t],
+  );
+
   const handleUpdateLocalAccessAccessScope = useCallback(
     async (accessScope: CodexLocalAccessScope) => {
       setLocalAccessSaving(true);
@@ -4877,6 +5085,36 @@ export function CodexAccountsPage() {
       }
     },
     [setMessage, t],
+  );
+
+  const handleUpdateLocalAccessGatewayMode = useCallback(
+    async (gatewayMode: CodexLocalAccessGatewayMode) => {
+      if (!localAccessCollection || localAccessCollection.gatewayMode === gatewayMode) {
+        return;
+      }
+      setLocalAccessSaving(true);
+      try {
+        const nextState =
+          await codexLocalAccessService.updateCodexLocalAccessGatewayMode(
+            gatewayMode,
+          );
+        setLocalAccessState(nextState);
+        setMessage({
+          text: t(
+            "codex.localAccess.gatewayModeSaveSuccess",
+            "API 服务网关模式已更新",
+          ),
+        });
+        dismissLocalAccessGatewayGuide();
+        return nextState;
+      } catch (error) {
+        console.error("Failed to update local access gateway mode:", error);
+        throw new Error(String(error).replace(/^Error:\s*/, ""));
+      } finally {
+        setLocalAccessSaving(false);
+      }
+    },
+    [dismissLocalAccessGatewayGuide, localAccessCollection, setMessage, t],
   );
 
   const handleToggleLocalAccessEnabled = useCallback(async () => {
@@ -5418,6 +5656,80 @@ export function CodexAccountsPage() {
     [accountsById, compareAccountsBySort],
   );
 
+  const handleRefreshGroup = useCallback(
+    async (group: CodexAccountGroup) => {
+      const groupAccounts = resolveGroupAccounts(group);
+      const targetIds = groupAccounts
+        .filter(
+          (account) =>
+            !isCodexApiKeyAccount(account) || isCodexNewApiAccount(account),
+        )
+        .map((account) => account.id);
+
+      if (targetIds.length === 0) {
+        setMessage({
+          text: t(
+            "accounts.groups.refreshEmpty",
+            "当前分组没有可刷新的账号",
+          ),
+          tone: "error",
+        });
+        return;
+      }
+
+      setRefreshingGroupId(group.id);
+      try {
+        const results = await Promise.allSettled(
+          targetIds.map((accountId) => codexService.refreshCodexQuota(accountId)),
+        );
+        const successCount = results.filter(
+          (result) => result.status === "fulfilled",
+        ).length;
+
+        await fetchAccounts();
+        await fetchCurrentAccount();
+
+        if (successCount === targetIds.length) {
+          setMessage({
+            text: t("codex.refreshAllSuccess", { count: successCount }),
+          });
+          return;
+        }
+
+        if (successCount > 0) {
+          setMessage({
+            text: t("codex.refreshAllPartialFailed", {
+              success: successCount,
+              total: targetIds.length,
+            }),
+            tone: "error",
+          });
+          return;
+        }
+
+        const firstFailure = results.find(
+          (result): result is PromiseRejectedResult =>
+            result.status === "rejected",
+        );
+        setMessage({
+          text: t("codex.refreshFailed", {
+            error: String(firstFailure?.reason ?? "").replace(/^Error:\s*/, ""),
+          }),
+          tone: "error",
+        });
+      } finally {
+        setRefreshingGroupId(null);
+      }
+    },
+    [
+      fetchAccounts,
+      fetchCurrentAccount,
+      resolveGroupAccounts,
+      setMessage,
+      t,
+    ],
+  );
+
   useEffect(() => {
     const teamAccountIds = filteredAccounts
       .filter(
@@ -5481,6 +5793,13 @@ export function CodexAccountsPage() {
       const subscriptionInfo = resolveSubscriptionPresentation(account);
       const showCompactExpiry =
         !isApiKeyAccount && subscriptionInfo.bucket !== "active";
+      const showSubscriptionRefreshAction =
+        !isApiKeyAccount &&
+        (subscriptionInfo.bucket === "missing" ||
+          subscriptionInfo.bucket === "expired");
+      const isSubscriptionRefreshPending =
+        refreshingSubscriptionAccountId === account.id ||
+        refreshing === account.id;
       return (
         <div
           key={groupKey ? `${groupKey}-${account.id}` : account.id}
@@ -5515,11 +5834,27 @@ export function CodexAccountsPage() {
               </span>
             ))}
             {showCompactExpiry && (
-              <span
-                className={`codex-compact-expiry ${subscriptionInfo.tone}`}
-                title={subscriptionInfo.titleText}
-              >
-                {subscriptionInfo.valueText}
+              <span className="codex-compact-expiry-wrap">
+                <span
+                  className={`codex-compact-expiry ${subscriptionInfo.tone}`}
+                  title={subscriptionInfo.titleText}
+                >
+                  {subscriptionInfo.valueText}
+                </span>
+                {showSubscriptionRefreshAction && (
+                  <button
+                    type="button"
+                    className="codex-subscription-refresh-btn"
+                    onClick={() =>
+                      void handleRefreshSubscriptionInfo(account.id)
+                    }
+                    disabled={isSubscriptionRefreshPending}
+                    title={t("common.refresh", "刷新")}
+                    aria-label={t("common.refresh", "刷新")}
+                  >
+                    {t("common.refresh", "刷新")}
+                  </button>
+                )}
               </span>
             )}
           </div>
@@ -5617,6 +5952,13 @@ export function CodexAccountsPage() {
       const isInLocalAccess = localAccessAccountIdSet.has(account.id);
       const subscriptionInfo = resolveSubscriptionPresentation(account);
       const isSubscriptionInfoMissing = subscriptionInfo.bucket === "missing";
+      const showSubscriptionRefreshAction =
+        !isApiKeyAccount &&
+        (subscriptionInfo.bucket === "missing" ||
+          subscriptionInfo.bucket === "expired");
+      const isSubscriptionRefreshPending =
+        refreshingSubscriptionAccountId === account.id ||
+        refreshing === account.id;
       return (
         <div key={groupKey ? `${groupKey}-${account.id}` : account.id} className={`account-card codex-account-card ${isCurrent ? 'current' : ''} ${isSelected ? 'selected' : ''} ${isNewApiAccount ? "new-api-exclusive" : ""}`}>
           <div className="card-top">
@@ -5758,7 +6100,7 @@ export function CodexAccountsPage() {
                     {showReauthorizeAction && (
                       <button
                         className="btn btn-sm btn-outline"
-                        onClick={() => openAddModal("oauth")}
+                        onClick={() => openCodexAddModal("oauth", account)}
                         title={t("common.shared.addModal.oauth", "OAuth 授权")}
                       >
                         {t("common.shared.addModal.oauth", "OAuth 授权")}
@@ -5805,10 +6147,29 @@ export function CodexAccountsPage() {
                   </>
                 )}
               </div>
-              {subscriptionInfo.timestampMs != null && (
-                <span className="codex-subscription-footer-date">
-                  {subscriptionInfo.detailText}
-                </span>
+              {(subscriptionInfo.timestampMs != null ||
+                showSubscriptionRefreshAction) && (
+                <div className="codex-subscription-footer-side">
+                  {subscriptionInfo.timestampMs != null && (
+                    <span className="codex-subscription-footer-date">
+                      {subscriptionInfo.detailText}
+                    </span>
+                  )}
+                  {showSubscriptionRefreshAction && (
+                    <button
+                      type="button"
+                      className="codex-subscription-refresh-btn"
+                      onClick={() =>
+                        void handleRefreshSubscriptionInfo(account.id)
+                      }
+                      disabled={isSubscriptionRefreshPending}
+                      title={t("common.refresh", "刷新")}
+                      aria-label={t("common.refresh", "刷新")}
+                    >
+                      {t("common.refresh", "刷新")}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -5989,15 +6350,66 @@ export function CodexAccountsPage() {
           ? t("codex.localAccess.statusStopped", "未运行")
           : t("codex.localAccess.statusDisabled", "已停用");
     const isLocalAccessCurrent = localAccessLaunchCurrent;
-    const localAccessSummaryMeta = t("codex.localAccess.summaryMeta", {
+    const localAccessMemberCountLabel = t("codex.localAccess.accountCount", {
       count: localAccessState?.memberCount ?? 0,
-      scope: localAccessScopeLabel,
-      defaultValue: "{{count}} 个账号 · {{scope}}",
+      defaultValue: "{{count}} 个账号",
     });
+    const localAccessGatewayMode = localAccessCollection?.gatewayMode ?? "sidecar";
+    const localAccessGatewayModeOptions = [
+      {
+        value: "sidecar",
+        label: t("codex.localAccess.gatewayModeNewLabel", "API 服务-新"),
+      },
+      {
+        value: "legacy",
+        label: t("codex.localAccess.gatewayModeOldLabel", "API 服务-旧"),
+      },
+    ];
     const localAccessEmptyMessage = t(
       "codex.localAccess.emptyMembers",
       "当前集合暂无账号",
     );
+    const showLocalAccessGatewayGuide = !localAccessGatewayGuideDismissed;
+    const renderLocalAccessGatewayGuide = () =>
+      showLocalAccessGatewayGuide ? (
+        <div
+          className="codex-local-access-gateway-guide"
+          role="dialog"
+          aria-label={t(
+            "codex.localAccess.gatewayGuideTitle",
+            "这里可以切换网关",
+          )}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="codex-local-access-gateway-guide-close"
+            onClick={dismissLocalAccessGatewayGuide}
+            aria-label={t("common.close", "关闭")}
+          >
+            <X size={12} />
+          </button>
+          <div className="codex-local-access-gateway-guide-title">
+            {t(
+              "codex.localAccess.gatewayGuideTitle",
+              "这里可以切换网关",
+            )}
+          </div>
+          <p>
+            {t(
+              "codex.localAccess.gatewayGuideDesc",
+              "默认使用新网关。如果遇到兼容性问题或客户端请求异常，可以在这里切换到旧网关。",
+            )}
+          </p>
+          <button
+            type="button"
+            className="codex-local-access-gateway-guide-action"
+            onClick={dismissLocalAccessGatewayGuide}
+          >
+            {t("codex.localAccess.gatewayGuideAction", "我知道了")}
+          </button>
+        </div>
+      ) : null;
 
     return (
       <div
@@ -6009,50 +6421,84 @@ export function CodexAccountsPage() {
         <div className="folder-inline-header codex-local-access-header">
           {isGridLocalAccessCard ? (
             <>
-              <div className="folder-inline-icon codex-local-access-icon">
-                <Server size={24} />
-              </div>
               <div className="folder-inline-info">
                 <div className="codex-local-access-title-row">
-                  <span className="folder-inline-name">
-                    {t("codex.localAccess.title", "API 服务")}
-                  </span>
+                  <div
+                    className="codex-local-access-title-mode-select"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <SingleSelectDropdown
+                      value={localAccessGatewayMode}
+                      options={localAccessGatewayModeOptions}
+                      onChange={(value) =>
+                        void handleUpdateLocalAccessGatewayMode(
+                          value as CodexLocalAccessGatewayMode,
+                        )
+                      }
+                      disabled={!localAccessCollection || localAccessBusy}
+                      menuClassName="codex-local-access-title-mode-menu"
+                      menuWidth={116}
+                      menuMaxHeight={120}
+                      ariaLabel={t(
+                        "codex.localAccess.gatewayModeLabel",
+                        "网关模式",
+                      )}
+                    />
+                    {renderLocalAccessGatewayGuide()}
+                  </div>
                 </div>
-                <span className="folder-inline-count">
-                  {localAccessScopeLabel}
-                </span>
               </div>
             </>
           ) : (
-            <button
-              type="button"
+            <div
               className="codex-local-access-summary-trigger"
+              role="button"
+              tabIndex={0}
               onClick={() =>
                 setLocalAccessDetailsExpanded((current) => !current)
               }
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                setLocalAccessDetailsExpanded((current) => !current);
+              }}
               title={
                 showLocalAccessDetails
                   ? t("codex.localAccess.collapseDetails", "收起详情")
                   : t("codex.localAccess.expandDetails", "展开详情")
               }
             >
-              <div className="folder-inline-icon codex-local-access-icon">
-                <Server size={24} />
-              </div>
               <div className="folder-inline-info">
                 <div className="codex-local-access-title-row">
-                  <span className="folder-inline-name">
-                    {t("codex.localAccess.title", "API 服务")}
-                  </span>
+                  <div
+                    className="codex-local-access-title-mode-select"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <SingleSelectDropdown
+                      value={localAccessGatewayMode}
+                      options={localAccessGatewayModeOptions}
+                      onChange={(value) =>
+                        void handleUpdateLocalAccessGatewayMode(
+                          value as CodexLocalAccessGatewayMode,
+                        )
+                      }
+                      disabled={!localAccessCollection || localAccessBusy}
+                      menuClassName="codex-local-access-title-mode-menu"
+                      menuWidth={116}
+                      menuMaxHeight={120}
+                      ariaLabel={t(
+                        "codex.localAccess.gatewayModeLabel",
+                        "网关模式",
+                      )}
+                    />
+                    {renderLocalAccessGatewayGuide()}
+                  </div>
                   <span className="codex-local-access-summary-text">
-                    {localAccessSummaryMeta}
+                    {localAccessMemberCountLabel}
                   </span>
                 </div>
-                <span className="folder-inline-count">
-                  {localAccessScopeLabel}
-                </span>
               </div>
-            </button>
+            </div>
           )}
           <div className="codex-local-access-header-actions">
             {isLocalAccessCurrent && (
@@ -6416,6 +6862,14 @@ export function CodexAccountsPage() {
                   </button>
                   <button
                     className="card-action-btn"
+                    onClick={openCodexApiServicePage}
+                    title={t("codex.apiService.openPage", "进入 API 服务")}
+                    disabled={localAccessBusy}
+                  >
+                    <ExternalLink size={14} />
+                  </button>
+                  <button
+                    className="card-action-btn"
                     onClick={() => void handleQuickRefreshLocalAccessQuota()}
                     title={t("common.shared.refreshQuota", "刷新配额")}
                     disabled={localAccessBusy || !localAccessCollection}
@@ -6469,10 +6923,23 @@ export function CodexAccountsPage() {
     }
 
     if (!activeGroupId && !groupByTag) {
-      cards.push(...codexGroups.map((group) => {
-        const groupAccounts = resolveGroupAccounts(group);
-        const previewAccounts = groupAccounts.slice(0, 4);
-        const hiddenCount = Math.max(0, groupAccounts.length - previewAccounts.length);
+      cards.push(
+        ...codexGroups.map((group) => {
+          const groupAccounts = resolveGroupAccounts(group);
+          const previewAccounts = groupAccounts.slice(0, 4);
+          const hiddenCount = Math.max(
+            0,
+            groupAccounts.length - previewAccounts.length,
+          );
+          const refreshableCount = groupAccounts.filter(
+            (account) =>
+              !isCodexApiKeyAccount(account) || isCodexNewApiAccount(account),
+          ).length;
+          const isGroupRefreshing = refreshingGroupId === group.id;
+          const groupRefreshDisabled =
+            refreshingAll ||
+            Boolean(refreshingGroupId) ||
+            refreshableCount === 0;
 
         return (
           <div
@@ -6534,6 +7001,28 @@ export function CodexAccountsPage() {
                     })}
                   </span>
                 </div>
+                <button
+                  className="folder-icon-btn"
+                  title={
+                    refreshableCount === 0
+                      ? t(
+                          "accounts.groups.refreshEmpty",
+                          "当前分组没有可刷新的账号",
+                        )
+                      : t("accounts.groups.refresh", "刷新分组")
+                  }
+                  aria-label={t("accounts.groups.refresh", "刷新分组")}
+                  disabled={groupRefreshDisabled}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleRefreshGroup(group);
+                  }}
+                >
+                  <RefreshCw
+                    size={14}
+                    className={isGroupRefreshing ? "loading-spinner" : ""}
+                  />
+                </button>
                 <button
                   className="folder-icon-btn"
                   title={t("accounts.groups.addAccounts")}
@@ -6681,6 +7170,13 @@ export function CodexAccountsPage() {
       const apiBaseUrlLine = `${t("codex.api.baseUrl", "Base URL")}：${apiBaseUrlText}`;
       const isInLocalAccess = localAccessAccountIdSet.has(account.id);
       const subscriptionInfo = resolveSubscriptionPresentation(account);
+      const showSubscriptionRefreshAction =
+        !isApiKeyAccount &&
+        (subscriptionInfo.bucket === "missing" ||
+          subscriptionInfo.bucket === "expired");
+      const isSubscriptionRefreshPending =
+        refreshingSubscriptionAccountId === account.id ||
+        refreshing === account.id;
       return (
         <tr
           key={groupKey ? `${groupKey}-${account.id}` : account.id}
@@ -6836,11 +7332,27 @@ export function CodexAccountsPage() {
                 className="codex-subscription-table-cell"
                 title={subscriptionInfo.titleText}
               >
-                <span
-                  className={`codex-subscription-badge ${subscriptionInfo.tone}`}
-                >
-                  {subscriptionInfo.valueText}
-                </span>
+                <div className="codex-subscription-table-head">
+                  <span
+                    className={`codex-subscription-badge ${subscriptionInfo.tone}`}
+                  >
+                    {subscriptionInfo.valueText}
+                  </span>
+                  {showSubscriptionRefreshAction && (
+                    <button
+                      type="button"
+                      className="codex-subscription-refresh-btn"
+                      onClick={() =>
+                        void handleRefreshSubscriptionInfo(account.id)
+                      }
+                      disabled={isSubscriptionRefreshPending}
+                      title={t("common.refresh", "刷新")}
+                      aria-label={t("common.refresh", "刷新")}
+                    >
+                      {t("common.refresh", "刷新")}
+                    </button>
+                  )}
+                </div>
                 {subscriptionInfo.timestampMs != null && (
                   <span className="codex-subscription-date">
                     {subscriptionInfo.detailText}
@@ -6900,7 +7412,7 @@ export function CodexAccountsPage() {
                     {showReauthorizeAction && (
                       <button
                         className="btn btn-sm btn-outline"
-                        onClick={() => openAddModal("oauth")}
+                        onClick={() => openCodexAddModal("oauth", account)}
                         title={t("common.shared.addModal.oauth", "OAuth 授权")}
                       >
                         {t("common.shared.addModal.oauth", "OAuth 授权")}
@@ -7042,6 +7554,13 @@ export function CodexAccountsPage() {
 
     const rows: ReactElement[] = codexGroups.map((group) => {
       const groupAccounts = resolveGroupAccounts(group);
+      const refreshableCount = groupAccounts.filter(
+        (account) =>
+          !isCodexApiKeyAccount(account) || isCodexNewApiAccount(account),
+      ).length;
+      const isGroupRefreshing = refreshingGroupId === group.id;
+      const groupRefreshDisabled =
+        refreshingAll || Boolean(refreshingGroupId) || refreshableCount === 0;
       return (
         <tr
           key={`folder-row-${group.id}`}
@@ -7063,6 +7582,28 @@ export function CodexAccountsPage() {
           </td>
           <td>
             <div className="folder-table-actions">
+              <button
+                className="folder-icon-btn"
+                title={
+                  refreshableCount === 0
+                    ? t(
+                        "accounts.groups.refreshEmpty",
+                        "当前分组没有可刷新的账号",
+                      )
+                    : t("accounts.groups.refresh", "刷新分组")
+                }
+                aria-label={t("accounts.groups.refresh", "刷新分组")}
+                disabled={groupRefreshDisabled}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void handleRefreshGroup(group);
+                }}
+              >
+                <RefreshCw
+                  size={14}
+                  className={isGroupRefreshing ? "loading-spinner" : ""}
+                />
+              </button>
               <button
                 className="folder-icon-btn"
                 title={t("accounts.groups.addAccounts")}
@@ -7898,7 +8439,7 @@ export function CodexAccountsPage() {
             <div className="toolbar-right">
               <button
                 className="btn btn-primary icon-only"
-                onClick={() => openAddModal("oauth")}
+                onClick={() => openCodexAddModal("oauth")}
                 title={t("common.shared.addAccount", "添加账号")}
               >
                 <Plus size={14} />
@@ -8001,7 +8542,7 @@ export function CodexAccountsPage() {
               >
                 <button
                   className="btn btn-primary"
-                  onClick={() => openAddModal("oauth")}
+                  onClick={() => openCodexAddModal("oauth")}
                 >
                   <Plus size={16} />
                   {t("common.shared.addAccount", "添加账号")}
@@ -8255,7 +8796,7 @@ export function CodexAccountsPage() {
           />
 
           {showAddModal && (
-            <div className="modal-overlay" onClick={closeAddModal}>
+            <div className="modal-overlay" onClick={closeCodexAddModal}>
               <div
                 className="modal-content codex-add-modal"
                 onClick={(e) => e.stopPropagation()}
@@ -8264,7 +8805,7 @@ export function CodexAccountsPage() {
                   <h2>{t("codex.addModal.title", "添加 Codex 账号")}</h2>
                   <button
                     className="modal-close"
-                    onClick={closeAddModal}
+                    onClick={closeCodexAddModal}
                     aria-label={t("common.close", "关闭")}
                   >
                     <X />
@@ -8273,7 +8814,7 @@ export function CodexAccountsPage() {
                 <div className="modal-tabs">
                   <button
                     className={`modal-tab ${addTab === "oauth" ? "active" : ""}`}
-                    onClick={() => openAddModal("oauth")}
+                    onClick={() => openCodexAddModal("oauth")}
                   >
                     <Globe size={14} />
                     <span className="modal-tab-label">
@@ -8282,7 +8823,7 @@ export function CodexAccountsPage() {
                   </button>
                   <button
                     className={`modal-tab ${addTab === "token" ? "active" : ""}`}
-                    onClick={() => openAddModal("token")}
+                    onClick={() => openCodexAddModal("token")}
                   >
                     <FileText size={14} />
                     <span className="modal-tab-label">
@@ -8291,7 +8832,7 @@ export function CodexAccountsPage() {
                   </button>
                   <button
                     className={`modal-tab ${addTab === "apikey" ? "active" : ""}`}
-                    onClick={() => openAddModal("apikey")}
+                    onClick={() => openCodexAddModal("apikey")}
                   >
                     <KeyRound size={14} />
                     <span className="modal-tab-label">
@@ -8300,7 +8841,7 @@ export function CodexAccountsPage() {
                   </button>
                   <button
                     className={`modal-tab ${addTab === "import" ? "active" : ""}`}
-                    onClick={() => openAddModal("import")}
+                    onClick={() => openCodexAddModal("import")}
                   >
                     <Database size={14} />
                     <span className="modal-tab-label">
@@ -8309,8 +8850,50 @@ export function CodexAccountsPage() {
                   </button>
                 </div>
                 <div className="modal-body">
+                  <MfaQuickCodeSelect />
                   {addTab === "oauth" && (
                     <div className="add-section">
+                      {reauthTargetEmail && (
+                        <div className="oauth-link codex-reauth-email-block">
+                          <label>
+                            {t(
+                              "codex.oauth.reauthEmailLabel",
+                              "本次重新授权账号",
+                            )}
+                          </label>
+                          <div className="oauth-url-box">
+                            <input
+                              type="text"
+                              value={reauthTargetEmail}
+                              readOnly
+                              aria-label={t(
+                                "codex.oauth.reauthEmailLabel",
+                                "本次重新授权账号",
+                              )}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => void handleCopyReauthEmail()}
+                              title={
+                                reauthEmailCopied
+                                  ? t("common.copied", "已复制")
+                                  : t("common.copy", "复制")
+                              }
+                              aria-label={
+                                reauthEmailCopied
+                                  ? t("common.copied", "已复制")
+                                  : t("common.copy", "复制")
+                              }
+                            >
+                              {reauthEmailCopied ? (
+                                <Check size={16} />
+                              ) : (
+                                <Copy size={16} />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       <p className="section-desc">
                         {t(
                           "codex.oauth.desc",
@@ -8731,7 +9314,7 @@ export function CodexAccountsPage() {
                       <p className="section-desc">
                         {t(
                           "codex.token.desc",
-                          "粘贴 auth.json、账号 JSON 或 refresh_token。",
+                          "粘贴 auth.json、账号 JSON、Sub2API JSON、accessToken 或 refresh_token。",
                         )}
                       </p>
                       <details className="token-format-collapse">
@@ -8745,7 +9328,7 @@ export function CodexAccountsPage() {
                           <p className="token-format-required">
                             {t(
                               "codex.token.formatRequired",
-                              "支持完整 tokens（id_token + access_token）或仅 refresh_token。仅 refresh_token 会先联网换取完整凭据。",
+                              "支持 session JSON、完整 tokens（id_token + access_token）、Sub2API 导出 JSON、仅 accessToken 或仅 refresh_token。仅 refresh_token 会先联网换取完整凭据。",
                             )}
                           </p>
                           <div className="token-format-group">
@@ -8763,11 +9346,11 @@ export function CodexAccountsPage() {
                             <div className="token-format-label">
                               {t(
                                 "codex.token.formatRefreshOnlyLabel",
-                                "仅 refresh_token 示例",
+                                "session / accessToken / refresh_token 示例",
                               )}
                             </div>
                             <pre className="token-format-code">
-                              {CODEX_TOKEN_REFRESH_ONLY_EXAMPLE}
+                              {CODEX_TOKEN_SESSION_EXAMPLE}
                             </pre>
                           </div>
                           <div className="token-format-group">
@@ -8786,7 +9369,7 @@ export function CodexAccountsPage() {
                         onChange={(e) => setTokenInput(e.target.value)}
                         placeholder={t(
                           "codex.token.placeholder",
-                          '示例：每行一个 refresh_token，或 {"refresh_token":"rt_..."}',
+                          '示例：直接粘贴 session JSON、accessToken、Sub2API 导出 JSON，或 {"accessToken":"eyJ..."}',
                         )}
                       />
                       <button
@@ -9066,11 +9649,11 @@ export function CodexAccountsPage() {
                         {oauthBindingTargetKind === "local_access"
                           ? t(
                               "codex.localAccess.oauthBinding.desc",
-                              "可选绑定。未绑定时 API 服务按原 API Key 逻辑运行；绑定后登录态使用 OAuth 账号，Provider 使用当前 API 服务配置。",
+                              "可选绑定。只能选择带订阅时间（有效期标识）的 OAuth 账号，已过期也可绑定；未绑定时 API 服务按原 API Key 逻辑运行；绑定后登录态使用 OAuth 账号，Provider 使用当前 API 服务配置。",
                             )
                           : t(
                               "codex.api.oauthBinding.desc",
-                              "可选绑定。未绑定时该账号按原 API Key 逻辑切换；绑定后登录态使用 OAuth 账号，Provider 使用当前 API Key 账号配置。",
+                              "可选绑定。只能选择带订阅时间（有效期标识）的 OAuth 账号，已过期也可绑定；未绑定时该账号按原 API Key 逻辑切换；绑定后登录态使用 OAuth 账号，Provider 使用当前 API Key 账号配置。",
                             )}
                       </p>
                       <div className="section-desc codex-oauth-binding-current-target">
@@ -9104,6 +9687,16 @@ export function CodexAccountsPage() {
                             {t(
                               "codex.api.oauthBinding.empty",
                               "暂无 OAuth 账号，请先添加 OAuth 授权账号。",
+                            )}
+                          </span>
+                        </div>
+                      ) : oauthBindingEligibleAccounts.length === 0 ? (
+                        <div className="add-status error">
+                          <CircleAlert size={16} />
+                          <span>
+                            {t(
+                              "codex.api.oauthBinding.emptyEligible",
+                              "没有带订阅时间的 OAuth 账号，请先刷新配额或添加符合条件的 OAuth 账号。",
                             )}
                           </span>
                         </div>
@@ -9240,6 +9833,8 @@ export function CodexAccountsPage() {
                                 (account) => {
                                   const presentation =
                                     resolvePresentation(account);
+                                  const subscriptionInfo =
+                                    resolveSubscriptionPresentation(account);
                                   const selected =
                                     oauthBindingSelectedAccountId ===
                                     account.id;
@@ -9291,6 +9886,24 @@ export function CodexAccountsPage() {
                                         >
                                           {presentation.planLabel}
                                         </span>
+                                        <span
+                                          className={`codex-oauth-binding-row-term ${subscriptionInfo.tone}`}
+                                          title={subscriptionInfo.titleText}
+                                        >
+                                          <Clock size={12} />
+                                          <span>
+                                            {t(
+                                              "codex.subscription.label",
+                                              "有效期",
+                                            )}
+                                          </span>
+                                          <strong>
+                                            {subscriptionInfo.valueText}
+                                          </strong>
+                                          <span>
+                                            {subscriptionInfo.detailText}
+                                          </span>
+                                        </span>
                                       </div>
                                     </label>
                                   );
@@ -9329,7 +9942,7 @@ export function CodexAccountsPage() {
                           className="btn btn-secondary"
                           onClick={() => {
                             closeOAuthBindingModal();
-                            openAddModal("oauth");
+                            openCodexAddModal("oauth");
                           }}
                           disabled={oauthBindingSaving}
                         >
@@ -9361,7 +9974,7 @@ export function CodexAccountsPage() {
                         disabled={
                           oauthBindingSaving ||
                           !selectedOAuthBindingAccount ||
-                          oauthAccounts.length === 0
+                          oauthBindingEligibleAccounts.length === 0
                         }
                       >
                         {oauthBindingSaving
@@ -10486,6 +11099,7 @@ export function CodexAccountsPage() {
             initialSelectedIds={localAccessModalSelectedIds}
             maskAccountText={maskAccountText}
             onClose={() => setShowLocalAccessModal(false)}
+            onOpenFullPage={openCodexApiServicePage}
             onSaveAccounts={({ accountIds, restrictFreeAccounts }) =>
               handleSaveLocalAccessAccounts(accountIds, {
                 restrictFreeAccounts,
@@ -10495,7 +11109,16 @@ export function CodexAccountsPage() {
             onRefreshStats={reloadLocalAccessState}
             onUpdatePort={handleUpdateLocalAccessPort}
             onUpdateRoutingStrategy={handleUpdateLocalAccessRoutingStrategy}
+            onUpdateCustomRouting={handleUpdateLocalAccessCustomRouting}
             onUpdateAccessScope={handleUpdateLocalAccessAccessScope}
+            onUpdateDebugLogs={(debugLogs) =>
+              codexLocalAccessService
+                .updateCodexLocalAccessDebugLogs(debugLogs)
+                .then(setLocalAccessState)
+            }
+            onUpdateUpstreamProxyConfig={
+              handleUpdateLocalAccessUpstreamProxyConfig
+            }
             onRotateApiKey={handleRotateLocalAccessApiKey}
             onKillPort={handleKillLocalAccessPort}
             onToggleEnabled={handleToggleLocalAccessEnabled}

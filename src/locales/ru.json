@@ -14,6 +14,7 @@
     "close": "Закрыть",
     "open": "Открыть",
     "copy": "Копировать",
+    "copied": "Скопировано",
     "add": "Добавить",
     "enable": "Включить",
     "disable": "Отключить",
@@ -227,7 +228,7 @@
     "selectAll": "Выбрать всё"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "Аккаунты",
     "wakeup": "Задачи пробуждения",
     "fingerprints": "Отпечатки",
@@ -497,9 +498,9 @@
       },
       "safe": {
         "title": "Безопасный перезапуск (рекомендуется)",
-        "principle": "Отправляет сигнал SIGTERM всем процессам Antigravity, запрашивая у приложения сохранение данных и выход, затем запускает целевой инстанс (при необходимости принудительно завершает работу).",
-        "commandMac": "macOS/Linux: kill -15 <pid> (все процессы Antigravity)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (все процессы Antigravity)",
+        "principle": "Отправляет сигнал SIGTERM всем процессам Antigravity IDE, запрашивая у приложения сохранение данных и выход, затем запускает целевой инстанс (при необходимости принудительно завершает работу).",
+        "commandMac": "macOS/Linux: kill -15 <pid> (все процессы Antigravity IDE)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (все процессы Antigravity IDE)",
         "pros": "Ближе к обычному завершению работы, меньше вероятность появления предупреждений об ошибках, данные более защищены.",
         "cons": "Поддерживает только глобальный перезапуск всех инстансов."
       },
@@ -563,7 +564,7 @@
       "defaultTerminalDesc": "Терминал, используемый при открытии Gemini CLI",
       "terminalSystem": "Системный по умолчанию",
       "accountManagement": "Управление аккаунтами",
-      "autoRefresh": "Автообновление квоты Antigravity",
+      "autoRefresh": "Автообновление квоты Antigravity IDE",
       "codexAutoRefresh": "Автообновление квоты Codex",
       "autoRefreshDesc": "Частота фонового обновления",
       "codexAutoRefreshDesc": "Частота фонового обновления",
@@ -587,6 +588,10 @@
       "hideDockIconDesc": "Независимо управляет отображением значка Dock, без привязки к поведению сворачивания окна",
       "hideDockIconOff": "Нет (Показывать значок Dock)",
       "hideDockIconOn": "Да (Скрывать значок Dock)",
+      "trayIconStyle": "Стиль значка в строке меню (только macOS)",
+      "trayIconStyleDesc": "Выберите системный монохромный значок или исходный цветной значок приложения",
+      "trayIconStyleTemplate": "Монохромный значок",
+      "trayIconStyleColor": "Цветной значок",
       "floatingCardStartup": "Показывать плавающую карточку при запуске",
       "floatingCardStartupDesc": "Автоматически показывать плавающую карточку аккаунта после запуска приложения",
       "floatingCardAlwaysOnTop": "Держать плавающую карточку поверх остальных по умолчанию",
@@ -596,8 +601,8 @@
       "floatingCardShowNowAction": "Показать плавающую карточку",
       "dataDir": "Каталог данных",
       "dataDirDesc": "Место хранения аккаунтов и конфигурационных файлов.",
-      "fpDir": "Хранилище Antigravity",
-      "fpDirDesc": "Место хранения файлов данных Antigravity.",
+      "fpDir": "Хранилище Antigravity IDE",
+      "fpDirDesc": "Место хранения файлов данных Antigravity IDE.",
       "opencodeTitle": "Интеграция OpenCode",
       "opencodeRestart": "Перезапускать OpenCode при переключении Codex",
       "opencodeRestartDesc": "Синхронизировать данные аккаунта Codex в OpenCode",
@@ -618,10 +623,10 @@
       "vscodeAppPathPlaceholder": "Путь по умолчанию",
       "vscodePathSelect": "Выбрать",
       "vscodePathReset": "Сбросить по умолчанию",
-      "antigravityAppPath": "Путь к приложению Antigravity",
-      "antigravityTitle": "Запуск Antigravity",
+      "antigravityAppPath": "Путь к приложению Antigravity IDE",
+      "antigravityTitle": "Запуск Antigravity IDE",
       "commonTitle": "Общие",
-      "antigravitySettingsTitle": "Настройки Antigravity",
+      "antigravitySettingsTitle": "Настройки Antigravity IDE",
       "codexSettingsTitle": "Настройки Codex",
       "githubCopilotSettingsTitle": "Настройки GitHub Copilot",
       "ghcpAutoRefresh": "Автообновление квоты GitHub Copilot",
@@ -694,14 +699,14 @@
       "sideNavLayoutOriginal": "Оригинальный макет",
       "sideNavLayoutClassic": "Классический макет",
       "antigravityDualSwitchNoRestart": "Двойное переключение без перезапуска",
-      "antigravityDualSwitchNoRestartDesc": "При переключении аккаунта локальная запись данных и плавное переключение через расширение выполняются в одном потоке без перезапуска Antigravity.",
+      "antigravityDualSwitchNoRestartDesc": "При переключении аккаунта локальная запись данных и плавное переключение через расширение выполняются в одном потоке без перезапуска Antigravity IDE.",
       "appAutoLaunch": "Запускать Cockpit Tools при входе в систему",
       "appAutoLaunchDesc": "Автоматически запускать приложение после входа в систему",
       "startupWakeupDisabled": "Отключено",
       "startupWakeupImmediate": "Разбудить сразу",
       "startupWakeupDelayed": "Разбудить с задержкой",
-      "antigravityStartupWakeup": "Выполнять пробуждение Antigravity после запуска",
-      "antigravityStartupWakeupDesc": "После запуска приложения один раз выполнять включенные задачи пробуждения Antigravity",
+      "antigravityStartupWakeup": "Выполнять пробуждение Antigravity IDE после запуска",
+      "antigravityStartupWakeupDesc": "После запуска приложения один раз выполнять включенные задачи пробуждения Antigravity IDE",
       "codexStartupWakeup": "Выполнять пробуждение Codex после запуска",
       "codexStartupWakeupDesc": "После запуска приложения один раз выполнять включенные задачи пробуждения Codex",
       "currentAccountRefreshTitle": "Обновление текущего аккаунта",
@@ -936,7 +941,7 @@
   },
   "accounts": {
     "title": "Управление аккаунтами",
-    "subtitle": "Управляйте списком ваших аккаунтов Antigravity.",
+    "subtitle": "Управляйте списком ваших аккаунтов Antigravity IDE.",
     "total": "Аккаунтов: {{count}}",
     "search": "Поиск аккаунтов...",
     "addAccount": "Добавить аккаунт",
@@ -1093,6 +1098,8 @@
       "noGroups": "Нет групп",
       "noGroupsDesc": "Создайте группы для управления аккаунтами",
       "manage": "Управление",
+      "refresh": "Обновить группу",
+      "refreshEmpty": "В этой группе нет аккаунтов для обновления",
       "error": {
         "duplicate": "Название группы уже существует",
         "createFailed": "Не удалось создать группу: {{error}}",
@@ -1190,7 +1197,7 @@
     "switching": "Переключение...",
     "fingerprint": "Отпечаток",
     "bound": "Привязан",
-    "brandTitle": "Управление аккаунтом Antigravity"
+    "brandTitle": "Управление аккаунтом Antigravity IDE"
   },
   "fingerprints": {
     "title": "Отпечатки устройства",
@@ -1292,7 +1299,7 @@
   "modals": {
     "addAccount": {
       "title": "Добавить аккаунт",
-      "desc": "Добавьте аккаунт Antigravity через Google OAuth",
+      "desc": "Добавьте аккаунт Antigravity IDE через Google OAuth",
       "loginBtn": "Вход через Google",
       "waiting": "Ожидание..."
     },
@@ -1300,7 +1307,7 @@
       "title": "Импорт аккаунтов",
       "desc": "Выберите способ импорта",
       "local": "Импорт локального аккаунта",
-      "localDesc": "Импортировать текущий аккаунт из клиента Antigravity",
+      "localDesc": "Импортировать текущий аккаунт из клиента Antigravity IDE",
       "tools": "Импорт из Antigravity Tools",
       "toolsDesc": "Импорт из директории ~/.antigravity_tools/",
       "jsonDivider": "или вставьте JSON",
@@ -1313,7 +1320,7 @@
       "fromExtension": "Импорт из плагина",
       "syncBadge": "Синхронизировать аккаунты плагина Antigravity Cockpit",
       "fromLocalDB": "Импорт из локальной БД",
-      "localDBDesc": "Чтение аккаунтов из клиента Antigravity на этом устройстве",
+      "localDBDesc": "Чтение аккаунтов из клиента Antigravity IDE на этом устройстве",
       "toolsDescMigrate": "Миграция аккаунтов из ~/.antigravity_tools/",
       "importingTools": "Импорт из Antigravity Tools...",
       "importingLocal": "Импорт локального аккаунта...",
@@ -1358,6 +1365,7 @@
     "batchDeleteConfirm": "Вы уверены, что хотите удалить {{count}} выбранных аккаунтов?",
     "switched": "Переключено на {{email}}",
     "switchFailed": "Ошибка переключения: {{error}}",
+    "antigravityLegacyUnsupported": "Antigravity 2.0.0 и новее здесь не поддерживаются. Выберите версию Antigravity ниже 2.0.0 или используйте Antigravity IDE.",
     "importSuccess": "Успешно импортировано {{count}} аккаунтов",
     "importLocalSuccess": "Аккаунт успешно импортирован: {{email}}",
     "importFailed": "Ошибка импорта: {{error}}",
@@ -1396,7 +1404,7 @@
       },
       "runHint": {
         "title": "Пояснение к проверке",
-        "line1": "«Проверить сейчас» отправляет минимальный чат-запрос, имитируя клиент Antigravity через локальный шлюз и официальный протокол Language Server.",
+        "line1": "«Проверить сейчас» отправляет минимальный чат-запрос, имитируя клиент Antigravity IDE через локальный шлюз и официальный протокол Language Server.",
         "line2": "Во время проверки расходуется небольшое количество токенов (обычно один короткий диалог). Фактический расход зависит от модели и политики аккаунта.",
         "line3": "Эта операция не изменяет настройки задач пробуждения. Она только проверяет доступность аккаунта и записывает историю проверки.",
         "line4": "Если возвращена ошибка 403, необходимо пройти верификацию аккаунта или подать апелляцию; результат будет содержать адрес и быстрые действия."
@@ -1527,6 +1535,7 @@
       "modeScheduled": "📅 По расписанию",
       "modeCrontab": "🧩 Кронтаб",
       "modeQuotaReset": "🔄 Сброс квоты",
+      "antigravityVersion": "Версия Antigravity IDE",
       "modelSelect": "Выбор модели",
       "modelHint": "В одной группе квоты рекомендуется выбрать один модель. Несколько моделей запускаются по очереди.",
       "modelsEmpty": "Нет рекомендуемых моделей",
@@ -1673,6 +1682,7 @@
       "refreshTokenExpired": "Авторизация входа Codex истекла и не может быть обновлена автоматически. Войдите в аккаунт Codex снова.",
       "refreshTokenInvalidated": "Авторизация входа Codex была отозвана сервисом и не может быть обновлена автоматически. Войдите в аккаунт Codex снова.",
       "invalidGrant": "Авторизация входа Codex недействительна и не может быть обновлена автоматически. Войдите в аккаунт Codex снова.",
+      "staleAccount": "Этой учетной записи больше нет в локальном хранилище. Список учетных записей обновлен. Импортируйте эту учетную запись Codex заново или войдите снова.",
       "unsupportedCountryRegion": "Текущий сетевой регион не поддерживает обновление авторизации Codex. Сервис авторизации OpenAI отклонил этот сетевой выход. Переключитесь на поддерживаемый регион и повторите попытку."
     },
     "current": "Текущий",
@@ -1687,6 +1697,11 @@
     },
     "oauth": {
       "desc": "Нажмите ниже и завершите авторизацию OpenAI в браузере",
+      "trialGuideTitle": "Советы для пробной регистрации",
+      "trialGuideDesc": "Для нового аккаунта лучше использовать Gmail с долгосрочным доступом: так проще сохранить аккаунт и пройти последующую проверку.",
+      "trialGuideAliasDesc": "Один основной Gmail может подготовить до 5 алиасов для разделения регистраций ChatGPT; используйте их по правилам целевого сервиса.",
+      "trialGuideLink": "Открыть пробный гид",
+      "gmailAliasLink": "Создать алиас Gmail",
       "preparing": "Подготовка ссылки авторизации...",
       "exchanging": "Обмен токена...",
       "portInUse": "Порт {{port}} уже занят. Закройте приложение, которое его использует, и попробуйте снова.",
@@ -1696,7 +1711,8 @@
       "portStillInUse": "Порт {{port}} все еще занят.",
       "portInUseAction": "Закрыть порт и повторить",
       "timeout": "Истекло время аутентификации. Нажмите",
-      "timeoutRetry": "Обновить ссылку аутентификации"
+      "timeoutRetry": "Обновить ссылку аутентификации",
+      "reauthEmailLabel": "Аккаунт для повторной авторизации"
     },
     "token": {
       "desc": "Вставьте auth.json, JSON аккаунта или refresh_token.",
@@ -1742,6 +1758,7 @@
       "disableService": "Отключить сервис",
       "enableService": "Включить сервис",
       "saveSuccess": "Коллекция API-сервиса обновлена",
+      "noEligibleAccountsSelected": "Выбранных аккаунтов нет в этой среде или их нельзя использовать в API-сервисе. Сначала импортируйте в эту среду пригодный аккаунт Codex.",
       "removeSuccess": "Аккаунт удалён из API-сервиса",
       "rotateSuccess": "Ключ API-сервиса сброшен",
       "enabledSuccess": "API-сервис включён",
@@ -1752,7 +1769,7 @@
       "hideKey": "Скрыть ключ",
       "modal": {
         "title": "Добавить в API-сервис",
-        "desc": "Выберите OAuth-аккаунты, которые нужно включить в коллекцию API-сервиса. Добавленные аккаунты будут скрыты из обычного обзора и будут управляться только из карточки API-сервиса.",
+        "desc": "Выберите OAuth-аккаунты или аккаунты API Key для коллекции API-сервиса. Добавленные аккаунты будут скрыты из обычного обзора и будут управляться только из карточки API-сервиса.",
         "empty": "Нет доступных OAuth-аккаунтов",
         "selected": "В API-сервисе",
         "available": "Обычный обзор",
@@ -1809,7 +1826,7 @@
       "memberTitle": "Участники коллекции",
       "stats": {
         "requests": "Запросы",
-        "requestsDetail": "Успех {{success}} / Ошибка {{failed}}",
+        "requestsDetail": "ОК {{success}} / Ошибка {{failed}} / Отмена {{canceled}} / Источник {{upstreamFailed}} / Неполн. {{incomplete}}",
         "tokens": "Токены",
         "tokensDetail": "Вход {{input}} / Выход {{output}}",
         "specialTokens": "Кэш / Размышления",
@@ -1819,7 +1836,11 @@
         "accountRequests": "{{count}} запросов",
         "accountTokens": "{{count}} токенов",
         "accountResult": "Успех {{success}} / Ошибка {{failed}}",
-        "accountTokensCompact": "{{value}}"
+        "accountTokensCompact": "{{value}}",
+        "images": "Запросы изображений",
+        "imagesDetail": "Создание {{generate}} / Правка {{edit}} / Доступ {{blocked}}",
+        "estimatedCost": "Оценка стоимости",
+        "estimatedCostDetail": "Сумма по снимкам цены каждого запроса"
       },
       "routingLabel": "Маршрутизация",
       "routingSaveSuccess": "Маршрутизация API-сервиса обновлена",
@@ -1846,7 +1867,8 @@
         "quotaLowFirst": "Сначала низкая квота",
         "planHighFirst": "Сначала высокий тариф",
         "planLowFirst": "Сначала низкий тариф",
-        "expirySoonFirst": "Скорое истечение сначала"
+        "expirySoonFirst": "Скорое истечение сначала",
+        "custom": "Настраиваемая"
       },
       "statusUnconfigured": "Не настроено",
       "expandDetails": "Развернуть",
@@ -1886,9 +1908,92 @@
         "empty": "Статистики квот пока нет"
       },
       "oauthBinding": {
-        "desc": "Необязательно. Без привязки API-сервис работает по прежней логике API Key; после привязки вход использует OAuth-аккаунт, а Provider — настройки API-сервиса.",
+        "desc": "Необязательно. Можно выбрать только OAuth-аккаунт с указанным сроком подписки; истекший срок тоже допускается. Без привязки API-сервис работает по прежней логике API Key; после привязки вход использует OAuth-аккаунт, а Provider — настройки API-сервиса.",
         "currentService": "API-сервис: {{name}}"
-      }
+      },
+      "customRoutingEdit": "Изменить настраиваемую маршрутизацию",
+      "customRoutingTitle": "Настраиваемая маршрутизация",
+      "customRoutingDesc": "Задайте приоритет и вес для каждой учетной записи, чтобы управлять порядком выбора и распределением нагрузки на одном уровне.",
+      "customRoutingPriorityTitle": "Приоритет",
+      "customRoutingPriorityDesc": "Более высокие значения выбираются раньше; учетные записи с низким приоритетом пробуются только при недоступности более высоких.",
+      "customRoutingWeightTitle": "Вес",
+      "customRoutingWeightDesc": "Используется для балансировки нагрузки при одинаковом приоритете. Чем выше вес, тем больше запросов.",
+      "customRoutingSearch": "Поиск по почте, тарифу или ID учетной записи",
+      "customRoutingSelected": "Выбрано {{count}}",
+      "customRoutingPriorityShort": "Приоритет",
+      "customRoutingWeightShort": "Вес",
+      "customRoutingApplyBatch": "Применить к выбранным",
+      "customRoutingReset": "Сбросить",
+      "customRoutingAccountColumn": "Учетная запись",
+      "customRoutingQuotaColumn": "Лимит",
+      "customRoutingEmpty": "В текущей коллекции API-сервиса нет настраиваемых учетных записей",
+      "customRoutingSave": "Сохранить маршрутизацию",
+      "customRoutingSaveSuccess": "Настраиваемая маршрутизация API-сервиса обновлена",
+      "upstreamProxyLabel": "URL API-прокси",
+      "upstreamProxySaveSuccess": "URL API-прокси обновлён",
+      "upstreamProxyUrlPlaceholder": "Пусто = глобальный прокси",
+      "upstreamProxySaveAction": "Сохранить прокси",
+      "imageGenerationLabel": "Инструмент image_generation",
+      "imageGenerationDesc": "Управляет объявлением инструмента изображений в текстовых чатах и доступностью image endpoint.",
+      "imageGenerationSaveSuccess": "Настройка image_generation обновлена",
+      "apiKeysTitle": "Ключи клиентов",
+      "apiKeyAdd": "Добавить ключ",
+      "apiKeyLabel": "Имя ключа",
+      "apiKeySaveLabel": "Сохранить имя",
+      "apiKeyDefaultLabel": "Клиент {{index}}",
+      "apiKeyCreateSuccess": "API Key создан",
+      "apiKeyUpdateSuccess": "API Key обновлён",
+      "apiKeyRotateSuccess": "API Key сброшен",
+      "apiKeyDeleteSuccess": "API Key удалён",
+      "apiKeyRotateConfirm": "Этот API Key сразу перестанет работать после сброса. Продолжить?",
+      "apiKeyDeleteConfirm": "Удалить этот API Key?",
+      "apiKeyDelete": "Удалить ключ",
+      "apiKeyDisable": "Отключить ключ",
+      "apiKeyEnable": "Включить ключ",
+      "modelStatsTitle": "По модели",
+      "apiKeyStatsTitle": "По ключу",
+      "healthAvailable": "Доступно",
+      "healthUnavailable": "Недоступно",
+      "healthCooldown": "Ожидание {{count}}",
+      "healthImageUnavailable": "Изображения недоступны",
+      "requestLogTitle": "Журнал запросов",
+      "requestLogEmpty": "Журнал запросов пуст",
+      "requestLogSuccess": "Успех",
+      "requestLogFailed": "Ошибка",
+      "requestLogTokens": "{{value}} токенов",
+      "imageGenerationMode": {
+        "enabled": "Включено",
+        "imagesOnly": "Только изображения",
+        "disabled": "Выключено"
+      },
+      "requestKind": {
+        "text": "Текст",
+        "imageGeneration": "Изображение",
+        "imageEdit": "Правка",
+        "other": "Другое"
+      },
+      "testSuccessInline": "Проверка API-сервиса пройдена",
+      "gatewayModeLabel": "Режим шлюза",
+      "gatewayModeLegacyShort": "Старый",
+      "gatewayModeSidecarShort": "Новый",
+      "gatewayModeNewLabel": "API-сервис-Новый",
+      "gatewayModeOldLabel": "API-сервис-Старый",
+      "gatewayModeSaveSuccess": "Режим шлюза API-сервиса обновлен",
+      "gatewayGuideTitle": "Здесь можно сменить шлюз",
+      "gatewayGuideDesc": "По умолчанию используется новый шлюз. Если возникнут проблемы совместимости или ошибки клиентских запросов, здесь можно вернуться на старый шлюз.",
+      "gatewayGuideAction": "Понятно",
+      "upstreamProxyUrlPlaceholderLegacy": "Оставьте пустым, чтобы использовать глобальный прокси, прокси окружения или системный прокси",
+      "upstreamProxyUrlPlaceholderSidecar": "Оставьте пустым, чтобы использовать глобальный прокси",
+      "debugLogsLabel": "Отладочные логи",
+      "debugLogsDescription": "Выводит отладочные логи API-сервиса для диагностики шлюза и потоков",
+      "debugLogsEnabledSuccess": "Отладочные логи включены",
+      "debugLogsDisabledSuccess": "Отладочные логи отключены",
+      "debugLogsEnableConfirmTitle": "Включить отладочные логи",
+      "debugLogsEnableConfirmMessage": "После включения API-сервис будет выводить отладочные логи для диагностики шлюза, прокси, upstream-запросов и потоковых ответов. При высокой параллельности или длинных потоках это может немного влиять на производительность. После диагностики лучше отключить. Включить?",
+      "debugLogsEnableConfirmAction": "Включить",
+      "debugLogsDisableConfirmTitle": "Отключить отладочные логи",
+      "debugLogsDisableConfirmMessage": "После отключения API-сервис перестанет выводить отладочные логи, что уменьшит шум и накладные расходы. Их можно снова включить для диагностики шлюза, прокси или потоков. Отключить?",
+      "debugLogsDisableConfirmAction": "Отключить"
     },
     "local": {
       "desc": "Импортировать текущий аккаунт из ~/.codex/auth.json",
@@ -2299,11 +2404,13 @@
         "action": "Связать OAuth",
         "actionShort": "Связать",
         "title": "Связать OAuth-аккаунт",
-        "desc": "Необязательно. Без привязки этот аккаунт переключается по прежней логике API Key; после привязки вход использует OAuth-аккаунт, а Provider — настройки этого API Key аккаунта.",
+        "desc": "Необязательно. Можно выбрать только OAuth-аккаунт с указанным сроком подписки; истекший срок тоже допускается. Без привязки этот аккаунт переключается по прежней логике API Key; после привязки вход использует OAuth-аккаунт, а Provider — настройки этого API Key аккаунта.",
         "currentAccount": "API Key аккаунт: {{name}}",
         "selectLabel": "Выберите OAuth-аккаунт",
         "empty": "OAuth-аккаунтов пока нет. Сначала добавьте аккаунт с OAuth-авторизацией.",
+        "emptyEligible": "Нет OAuth-аккаунтов с указанным сроком подписки. Сначала обновите квоту или добавьте подходящий OAuth-аккаунт.",
         "validationRequired": "Выберите OAuth-аккаунт",
+        "validationSubscriptionRequired": "Можно привязать только OAuth-аккаунт с указанным сроком подписки",
         "saveSuccess": "Связь OAuth обновлена",
         "saveFailed": "Не удалось связать OAuth: {{error}}",
         "switchRequiresBinding": "Сначала свяжите OAuth-аккаунт",
@@ -2434,6 +2541,7 @@
       "column": "Истекает",
       "unknown": "Повторить вход",
       "missingDetail": "Повторите вход для получения",
+      "refresh": "Обновить подписку",
       "expired": "Истекла",
       "hoursLeft": "{{count}} ч",
       "daysLeft": "{{count}} дн.",
@@ -2454,6 +2562,7 @@
       "repairing": "Исправление видимости сеансов Codex...",
       "repairFailed": "Автоматическое исправление не удалось. Повторите позже в Управление сеансами > Исправить видимость.",
       "type": {
+        "api": "Режим API",
         "apiKey": "Ключ API",
         "apiService": "Сервис API",
         "account": "Аккаунт"
@@ -2493,6 +2602,152 @@
       "fastDesc": "Скорость 1,5x, расход выше",
       "saveSuccess": "Скорость обновлена",
       "saveFailed": "Не удалось сохранить скорость: {{error}}"
+    },
+    "apiService": {
+      "navTitle": "API-сервис Codex",
+      "title": "API-сервис Codex",
+      "openPage": "Открыть API-сервис",
+      "openFullPage": "Показать все функции",
+      "tabs": {
+        "overview": "Обзор сервиса",
+        "keys": "Ключи клиентов",
+        "accounts": "Пул аккаунтов",
+        "models": "Модели и возможности",
+        "logs": "Статистика и журналы"
+      },
+      "healthTitle": "Состояние сервиса",
+      "health": {
+        "availableAccounts": "Доступные аккаунты",
+        "cooldowns": "Ожидания",
+        "imageUnavailable": "Изображения недоступны",
+        "keys": "Ключи клиентов"
+      },
+      "accountHealth": {
+        "failures": "{{count}} сбоев подряд",
+        "image": "Изображения {{status}}"
+      },
+      "models": {
+        "availableTitle": "Доступные модели",
+        "capabilityTitle": "Переключатели возможностей",
+        "capabilityDesc": "gpt-image-2 автоматически показывается или скрывается по переключателю сервиса, тарифу аккаунта и записанному состоянию возможностей изображений.",
+        "rulesTitle": "Правила моделей",
+        "aliasTitle": "Алиасы моделей",
+        "aliasPlaceholder": "gpt-5 => g5; + оставляет исходную модель",
+        "excludedTitle": "Скрытые модели",
+        "excludedPlaceholder": "Модель или шаблон на строку, напр. gpt-5-*",
+        "saveRules": "Сохранить правила",
+        "rulesSaved": "Правила моделей сохранены",
+        "pricingAction": "Цены",
+        "pricingTitle": "Цены моделей",
+        "pricingDesc": "USD / 1M токенов, только для локальной статистики стоимости.",
+        "pricingModel": "Модель",
+        "pricingInput": "Вход",
+        "pricingCache": "Кэш-вход",
+        "pricingOutput": "Выход",
+        "pricingSource": "Источник",
+        "pricingActions": "Действие",
+        "pricingCachePlaceholder": "Как вход",
+        "pricingCustom": "Своя",
+        "pricingPreset": "Шаблон",
+        "pricingUnset": "Не задано",
+        "pricingReset": "Сброс",
+        "pricingSaved": "Цены сохранены",
+        "pricingInvalid": "Цены должны быть числами больше или равны 0"
+      },
+      "keys": {
+        "policyTitle": "Политика моделей",
+        "advancedPolicyTitle": "Дополнительно: политика моделей",
+        "modelPrefix": "Префикс модели",
+        "modelPrefixPlaceholder": "Например: codex",
+        "allowedModels": "Разрешенные модели",
+        "allowedModelsPlaceholder": "Пусто значит все; модель или шаблон на строку",
+        "excludedModels": "Исключенные модели",
+        "excludedModelsPlaceholder": "Модель или шаблон на строку",
+        "savePolicy": "Сохранить политику",
+        "policySaved": "Политика моделей Key сохранена"
+      },
+      "routing": {
+        "optionsTitle": "Параметры маршрута",
+        "sessionAffinity": "Привязка сессии",
+        "sessionAffinityTtl": "TTL привязки",
+        "maxRetryCredentials": "Аккаунты retry",
+        "maxRetryInterval": "Ожидание retry",
+        "disableCooling": "Отключить cooldown",
+        "saveOptions": "Сохранить параметры",
+        "optionsSaved": "Параметры маршрута сохранены"
+      },
+      "validation": {
+        "numberRange": "Введите число от {{min}} до {{max}}"
+      },
+      "logs": {
+        "allKinds": "Все типы",
+        "allStatuses": "Все статусы",
+        "allGatewayModes": "Все режимы",
+        "modelFilter": "Модель",
+        "modelPlaceholder": "ID модели",
+        "accountFilter": "Аккаунт",
+        "accountPlaceholder": "Почта или ID аккаунта",
+        "apiKeyFilter": "Ключ API",
+        "apiKeyPlaceholder": "Имя или ID",
+        "kindFilter": "Тип",
+        "statusFilter": "Статус",
+        "gatewayModeFilter": "Режим",
+        "errorFilter": "Ошибка",
+        "errorPlaceholder": "Категория ошибки",
+        "clearFilters": "Сбросить фильтры",
+        "loading": "Загрузка журналов",
+        "gatewayModeUnknown": "Неизвестный режим",
+        "requestIdShort": "ID запроса {{id}}",
+        "httpStatus": "Статус HTTP {{status}}"
+      },
+      "timeouts": {
+        "entryLabel": "Дополнительно",
+        "openAction": "Таймауты и повторы",
+        "title": "Таймауты и повторы",
+        "desc": "Значения указаны в секундах. При сохранении API-сервис перезапустится или перезагрузится согласно текущему режиму шлюза.",
+        "sidecarTitle": "Новый API-сервис",
+        "legacyTitle": "Старый API-сервис",
+        "streamOpen": "Открытие потока",
+        "streamIdle": "Простой потока",
+        "imageOpen": "Открытие изображений",
+        "imageIdle": "Простой изображений",
+        "openAttempts": "Попытки открытия",
+        "keepalive": "Сигнал связи",
+        "requestRead": "Чтение запроса",
+        "connect": "Подключение upstream",
+        "streamTotal": "Поток всего",
+        "resetDefaults": "Сбросить",
+        "saved": "Таймауты и повторы сохранены",
+        "totalGteIdle": "Общий таймаут потока старого API не может быть меньше таймаута простоя",
+        "bootstrapRetries": "Повторы запуска",
+        "websocketTitle": "Настройки WebSocket",
+        "websocketConnect": "Тайм-аут подключения",
+        "websocketInitial": "Тайм-аут 1-го сообщения",
+        "websocketIdle": "Тайм-аут простоя",
+        "websocketHeartbeat": "Интервал пинга",
+        "sendRetryAttempts": "Повторы отправки",
+        "sendRetryBaseDelay": "Базовая задержка отправки (мс)",
+        "sendRetryMaxDelay": "Макс. задержка отправки (мс)",
+        "singleStatusAttempts": "Повторы одного аккаунта",
+        "singleStatusBaseDelay": "Базовая задержка аккаунта (мс)",
+        "singleStatusMaxDelay": "Макс. задержка аккаунта (мс)",
+        "maxDelayGteBase": "Максимальная задержка не может быть меньше базовой",
+        "longWaitPreset": "Профиль долгого ожидания",
+        "shortWaitPreset": "Профиль короткого ожидания",
+        "presetTitle": "Профиль параметров",
+        "presetSelect": "Выбрать профиль",
+        "presetName": "Название профиля",
+        "presetNamePlaceholder": "Новый пользовательский профиль",
+        "saveAsPreset": "Сохранить как профиль",
+        "updatePreset": "Обновить профиль",
+        "deletePreset": "Удалить профиль",
+        "presetSaved": "Профиль сохранён",
+        "presetUpdated": "Профиль обновлён",
+        "presetDeleted": "Профиль удалён",
+        "presetNameRequired": "Введите название профиля",
+        "deletePresetConfirm": "Удалить этот пользовательский профиль?",
+        "deletePresetTitle": "Удалить профиль"
+      }
     }
   },
   "githubCopilot": {
@@ -2545,23 +2800,31 @@
       "storage": "Область данных: локальный импорт читает сессии входа GitHub в VS Code, а переключение обновляет эти записи; OAuth, импорт токена, проверка локального импорта и обновление квот вызывают официальные API GitHub с необходимыми полями аутентификации. state.vscdb и системные ключи не загружаются."
     }
   },
+  "runtime": {
+    "installedVersion": {
+      "loading": "Определение установленной версии",
+      "missing": "Установленная версия не обнаружена",
+      "detecting": "Определение",
+      "notFound": "Версия не обнаружена"
+    }
+  },
   "dashboard": {
     "title": "Панель аккаунтов",
     "summary": {
       "label": "Обзор",
       "title": "Сводка аккаунтов",
-      "desc": "Antigravity и Codex одним взглядом"
+      "desc": "Antigravity IDE и Codex одним взглядом"
     },
     "stats": {
-      "antigravity": "Аккаунты Antigravity",
+      "antigravity": "Аккаунты Antigravity IDE",
       "codex": "Аккаунты Codex",
-      "currentAntigravity": "Текущий Antigravity",
+      "currentAntigravity": "Текущий Antigravity IDE",
       "currentCodex": "Текущий Codex",
       "providers": "Провайдеры",
       "totalAccounts": "Всего аккаунтов"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "Распределение планов",
@@ -2576,7 +2839,7 @@
     },
     "emptyAccount": "Нет аккаунта",
     "sections": {
-      "antigravity": "Аккаунты Antigravity",
+      "antigravity": "Аккаунты Antigravity IDE",
       "codex": "Аккаунты Codex"
     },
     "actions": {
@@ -2609,7 +2872,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Настройки Antigravity",
+      "title": "Настройки Antigravity IDE",
       "appPath": "Путь к приложению"
     },
     "codex": {
@@ -3044,7 +3307,7 @@
     "actions": {
       "collapseAll": "Свернуть всё",
       "expandAll": "Развернуть всё",
-      "goAntigravity": "Перейти в Antigravity",
+      "goAntigravity": "Перейти в Antigravity IDE",
       "goCodex": "Перейти в Codex",
       "goDashboard": "Перейти в панель",
       "goFingerprints": "Перейти к отпечаткам устройства",
@@ -3059,25 +3322,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "Перед рискованными или массовыми действиями в Управление аккаунтами Antigravity сделайте резервную копию."
+        "0": "Перед рискованными или массовыми действиями в Управление аккаунтами Antigravity IDE сделайте резервную копию."
       },
       "keywords": {
-        "0": "Управление аккаунтами Antigravity",
+        "0": "Управление аккаунтами Antigravity IDE",
         "1": "гайд",
         "2": "поток",
         "3": "аккаунт"
       },
       "outcomes": {
-        "0": "Поймите, какие задачи решает Управление аккаунтами Antigravity.",
-        "1": "Используйте рекомендованный поток в Управление аккаунтами Antigravity, чтобы снизить ошибки."
+        "0": "Поймите, какие задачи решает Управление аккаунтами Antigravity IDE.",
+        "1": "Используйте рекомендованный поток в Управление аккаунтами Antigravity IDE, чтобы снизить ошибки."
       },
       "steps": {
-        "0": "Откройте страницу Управление аккаунтами Antigravity.",
-        "1": "Завершите базовую настройку и необходимые привязки в Управление аккаунтами Antigravity.",
-        "2": "Выполните одно ручное действие в Управление аккаунтами Antigravity и проверьте результат."
+        "0": "Откройте страницу Управление аккаунтами Antigravity IDE.",
+        "1": "Завершите базовую настройку и необходимые привязки в Управление аккаунтами Antigravity IDE.",
+        "2": "Выполните одно ручное действие в Управление аккаунтами Antigravity IDE и проверьте результат."
       },
-      "summary": "Этот раздел объясняет использование Управление аккаунтами Antigravity в повседневном процессе.",
-      "title": "Управление аккаунтами Antigravity"
+      "summary": "Этот раздел объясняет использование Управление аккаунтами Antigravity IDE в повседневном процессе.",
+      "title": "Управление аккаунтами Antigravity IDE"
     },
     "blocks": {
       "cautions": "Частые ошибки / замечания",
@@ -3930,5 +4193,14 @@
       "warn": "Предупр.",
       "error": "Ошибка"
     }
+  },
+  "mfaQuick": {
+    "title": "Код 2FA",
+    "selectLabel": "Выберите ключ 2FA",
+    "unnamedSecret": "Ключ без имени",
+    "invalidCode": "Недействительный ключ",
+    "copyCode": "Копировать код",
+    "copied": "Скопировано",
+    "refreshIn": "{{time}} с"
   }
 }

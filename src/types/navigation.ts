@@ -3,6 +3,7 @@ export type Page =
   | 'manual'
   | 'overview'
   | 'codex'
+  | 'codex-api-service'
   | 'zed'
   | 'github-copilot'
   | 'windsurf'

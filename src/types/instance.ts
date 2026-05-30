@@ -4,6 +4,13 @@ export type InstanceLaunchMode = "app" | "cli";
 
 export const CODEX_API_SERVICE_BIND_ID = "__api_service__";
 
+export type CodexLaunchCredentialType = "api" | "account";
+
+export interface CodexLaunchCredentialChange {
+  from: CodexLaunchCredentialType;
+  to: CodexLaunchCredentialType;
+}
+
 export interface InstanceProfile {
   id: string;
   name: string;
@@ -20,6 +27,7 @@ export interface InstanceProfile {
   initialized?: boolean;
   isDefault?: boolean;
   followLocalAccount?: boolean;
+  codexLaunchCredentialChange?: CodexLaunchCredentialChange | null;
 }
 
 export type InstanceInitMode = "copy" | "empty" | "existingDir";

@@ -123,8 +123,9 @@ fn normalize_extension_credentials(
 fn resolve_antigravity_user_data_dir() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        let appdata = std::env::var("APPDATA").ok()?;
-        return Some(format!("{}\\Antigravity", appdata));
+        return crate::modules::antigravity_paths::default_user_data_dir()
+            .ok()
+            .map(|path| path.to_string_lossy().to_string());
     }
     #[cfg(target_os = "macos")]
     {
@@ -132,7 +133,7 @@ fn resolve_antigravity_user_data_dir() -> Option<String> {
         return Some(
             home.join("Library")
                 .join("Application Support")
-                .join("Antigravity")
+                .join("Antigravity IDE")
                 .to_string_lossy()
                 .to_string(),
         );
@@ -142,13 +143,13 @@ fn resolve_antigravity_user_data_dir() -> Option<String> {
         if let Ok(xdg_config_home) = std::env::var("XDG_CONFIG_HOME") {
             let trimmed = xdg_config_home.trim();
             if !trimmed.is_empty() {
-                return Some(format!("{}/Antigravity", trimmed));
+                return Some(format!("{}/Antigravity IDE", trimmed));
             }
         }
         let home = dirs::home_dir()?;
         return Some(
             home.join(".config")
-                .join("Antigravity")
+                .join("Antigravity IDE")
                 .to_string_lossy()
                 .to_string(),
         );
@@ -739,34 +740,34 @@ pub async fn import_fingerprints_from_json_logic(json_content: String) -> Result
     Ok(imported_count)
 }
 
-/// 从本地 Antigravity 客户端导入当前账号
+/// 从本地 Antigravity IDE 客户端导入当前账号
 pub async fn import_from_local_logic() -> Result<models::Account, String> {
     use base64::{engine::general_purpose, Engine as _};
 
-    modules::logger::log_info("开始从本地 Antigravity 客户端导入...");
+    modules::logger::log_info("开始从本地 Antigravity IDE 客户端导入...");
 
     // 读取 state.vscdb
     let db_path = modules::db::get_db_path()?;
     let conn =
         rusqlite::Connection::open(&db_path).map_err(|e| format!("打开数据库失败: {}", e))?;
 
-    // 读取 protobuf 数据
+    // 读取新版 Unified State Sync OAuth 数据
     let state_data: String = conn
         .query_row(
             "SELECT value FROM ItemTable WHERE key = ?",
-            ["jetskiStateSync.agentManagerInitState"],
+            ["antigravityUnifiedStateSync.oauthToken"],
             |row| row.get(0),
         )
-        .map_err(|_| "未找到登录状态，请确保 Antigravity 客户端已登录")?;
+        .map_err(|_| "未找到登录状态，请确保 Antigravity IDE 客户端已登录")?;
 
     // Base64 解码
     let blob = general_purpose::STANDARD
         .decode(&state_data)
         .map_err(|e| format!("Base64 解码失败: {}", e))?;
 
-    // 解析 protobuf 获取 refresh_token（Field 6）
-    let refresh_token =
-        utils::protobuf::extract_refresh_token(&blob).ok_or("无法从本地数据解析 refresh_token")?;
+    // 解析 protobuf 获取 refresh_token
+    let refresh_token = utils::protobuf::extract_refresh_token_from_unified_oauth_token(&blob)
+        .ok_or("无法从本地数据解析 refresh_token")?;
 
     if refresh_token.is_empty() {
         return Err("本地 refresh_token 为空".to_string());

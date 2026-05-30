@@ -14,6 +14,7 @@
     "close": "閉じる",
     "open": "開く",
     "copy": "コピー",
+    "copied": "コピー済み",
     "add": "追加",
     "enable": "有効化",
     "disable": "無効化",
@@ -227,7 +228,7 @@
     "selectAll": "すべて選択"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "アカウント管理",
     "wakeup": "ウェイクアップタスク",
     "fingerprints": "デバイス指紋",
@@ -497,9 +498,9 @@
       },
       "safe": {
         "title": "安全な再起動（推奨）",
-        "principle": "すべての Antigravity プロセスに SIGTERM を送信して、アプリが自身で保存して終了するように促します。終了後にターゲットインスタンスを起動します（必要に応じて強制終了します）。",
-        "commandMac": "macOS/Linux: kill -15 <pid> (すべての Antigravity プロセス)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (すべての Antigravity プロセス)",
+        "principle": "すべての Antigravity IDE プロセスに SIGTERM を送信して、アプリが自身で保存して終了するように促します。終了後にターゲットインスタンスを起動します（必要に応じて強制終了します）。",
+        "commandMac": "macOS/Linux: kill -15 <pid> (すべての Antigravity IDE プロセス)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (すべての Antigravity IDE プロセス)",
         "pros": "通常の終了に近く、クラッシュ警告が出にくく、データがより安全です。",
         "cons": "すべてのインスタンスの全体的な再起動のみをサポートします。"
       },
@@ -563,7 +564,7 @@
       "uiScale": "UIスケール",
       "uiScaleDesc": "インターフェースの表示倍率を調整",
       "accountManagement": "アカウント管理",
-      "autoRefresh": "Antigravity 自動更新クォータ",
+      "autoRefresh": "Antigravity IDE 自動更新クォータ",
       "codexAutoRefresh": "Codex 自動更新クォータ",
       "autoRefreshDesc": "バックグラウンドでの更新頻度",
       "codexAutoRefreshDesc": "バックグラウンドでの更新頻度",
@@ -587,6 +588,10 @@
       "hideDockIconDesc": "Dockアイコンの表示状態を独立して制御します。ウィンドウの最小化動作の影響を受けません",
       "hideDockIconOff": "いいえ（Dockアイコンを表示）",
       "hideDockIconOn": "はい（Dockアイコンを隠す）",
+      "trayIconStyle": "メニューバーアイコンのスタイル（macOSのみ）",
+      "trayIconStyleDesc": "システムの単色アイコンまたは元のカラーアプリアイコンを選択します",
+      "trayIconStyleTemplate": "単色アイコン",
+      "trayIconStyleColor": "カラーアイコン",
       "floatingCardStartup": "起動時にフローティングカードを表示",
       "floatingCardStartupDesc": "アプリ起動後にアカウントのフローティングカードを自動表示します",
       "floatingCardAlwaysOnTop": "フローティングカードを常に最前面にする",
@@ -596,8 +601,8 @@
       "floatingCardShowNowAction": "フローティングカードを表示",
       "dataDir": "データディレクトリ",
       "dataDirDesc": "アカウントと設定ファイルの保存場所。",
-      "fpDir": "Antigravityストレージ",
-      "fpDirDesc": "Antigravityデータファイルの保存場所。",
+      "fpDir": "Antigravity IDEストレージ",
+      "fpDirDesc": "Antigravity IDEデータファイルの保存場所。",
       "opencodeTitle": "OpenCode 連携",
       "opencodeRestart": "Codex 切替時に OpenCode を自動再起動",
       "opencodeRestartDesc": "OpenCode 内の Codex アカウント情報を同期して切り替え",
@@ -618,10 +623,10 @@
       "vscodeAppPathPlaceholder": "既定のパス",
       "vscodePathSelect": "選択",
       "vscodePathReset": "既定に戻す",
-      "antigravityAppPath": "Antigravity アプリのパス",
-      "antigravityTitle": "Antigravity 起動",
+      "antigravityAppPath": "Antigravity IDE アプリのパス",
+      "antigravityTitle": "Antigravity IDE 起動",
       "commonTitle": "共通",
-      "antigravitySettingsTitle": "Antigravity 設定",
+      "antigravitySettingsTitle": "Antigravity IDE 設定",
       "codexSettingsTitle": "Codex 設定",
       "githubCopilotSettingsTitle": "GitHub Copilot 設定",
       "ghcpAutoRefresh": "GitHub Copilot クォータの自動更新",
@@ -694,14 +699,14 @@
       "sideNavLayoutOriginal": "元のレイアウト",
       "sideNavLayoutClassic": "クラシックレイアウト",
       "antigravityDualSwitchNoRestart": "再起動なしデュアル切替",
-      "antigravityDualSwitchNoRestartDesc": "切替時にローカルのアカウントデータ書き込みと拡張機能のシームレス切替を1つのフローで実行し、Antigravity を再起動しません。",
+      "antigravityDualSwitchNoRestartDesc": "切替時にローカルのアカウントデータ書き込みと拡張機能のシームレス切替を1つのフローで実行し、Antigravity IDE を再起動しません。",
       "appAutoLaunch": "ログイン時に Cockpit Tools を起動",
       "appAutoLaunchDesc": "システムログイン後にアプリを自動起動します",
       "startupWakeupDisabled": "無効",
       "startupWakeupImmediate": "すぐに起動",
       "startupWakeupDelayed": "遅延して起動",
-      "antigravityStartupWakeup": "起動後に Antigravity ウェイクアップを実行",
-      "antigravityStartupWakeupDesc": "アプリ起動後に有効な Antigravity ウェイクアップタスクを一度実行します",
+      "antigravityStartupWakeup": "起動後に Antigravity IDE ウェイクアップを実行",
+      "antigravityStartupWakeupDesc": "アプリ起動後に有効な Antigravity IDE ウェイクアップタスクを一度実行します",
       "codexStartupWakeup": "起動後に Codex ウェイクアップを実行",
       "codexStartupWakeupDesc": "アプリ起動後に有効な Codex ウェイクアップタスクを一度実行します",
       "currentAccountRefreshTitle": "現在アカウントの更新",
@@ -936,7 +941,7 @@
   },
   "accounts": {
     "title": "アカウント管理",
-    "subtitle": "Antigravity アカウントの一覧を管理します。",
+    "subtitle": "Antigravity IDE アカウントの一覧を管理します。",
     "total": "合計 {{count}} 個のアカウント",
     "search": "アカウントを検索...",
     "addAccount": "アカウントを追加",
@@ -1093,6 +1098,8 @@
       "noGroups": "グループなし",
       "noGroupsDesc": "グループを作成してアカウントを一括管理",
       "manage": "管理",
+      "refresh": "グループを更新",
+      "refreshEmpty": "このグループに更新可能なアカウントはありません",
       "error": {
         "duplicate": "グループ名は既に存在します",
         "createFailed": "グループの作成に失敗しました：{{error}}",
@@ -1190,7 +1197,7 @@
     "switching": "切り替え中...",
     "fingerprint": "指紋",
     "bound": "紐付け済み",
-    "brandTitle": "Antigravity アカウント管理"
+    "brandTitle": "Antigravity IDE アカウント管理"
   },
   "fingerprints": {
     "title": "デバイス指紋",
@@ -1292,7 +1299,7 @@
   "modals": {
     "addAccount": {
       "title": "アカウントを追加",
-      "desc": "Google OAuth 認証を使用して Antigravity アカウントを追加します",
+      "desc": "Google OAuth 認証を使用して Antigravity IDE アカウントを追加します",
       "loginBtn": "Google OAuth でログイン",
       "waiting": "待機中..."
     },
@@ -1300,7 +1307,7 @@
       "title": "アカウントをインポート",
       "desc": "インポート方法を選択してください",
       "local": "ローカルアカウントをインポート",
-      "localDesc": "Antigravity クライアントから現在ログイン中のアカウントを読み込みます",
+      "localDesc": "Antigravity IDE クライアントから現在ログイン中のアカウントを読み込みます",
       "tools": "Antigravity Tools からインポート",
       "toolsDesc": "~/.antigravity_tools/ ディレクトリから読み込みます",
       "jsonDivider": "または JSON を貼り付け",
@@ -1313,7 +1320,7 @@
       "fromExtension": "プラグインからインポート",
       "syncBadge": "Antigravity Cockpit プラグインのアカウントを同期",
       "fromLocalDB": "ローカル DB からインポート",
-      "localDBDesc": "このマシンの Antigravity クライアントからログインアカウントを読み込む",
+      "localDBDesc": "このマシンの Antigravity IDE クライアントからログインアカウントを読み込む",
       "toolsDescMigrate": "~/.antigravity_tools/ からアカウントを移行",
       "importingTools": "Antigravity Tools からインポート中...",
       "importingLocal": "ローカルアカウントをインポート中...",
@@ -1358,6 +1365,7 @@
     "batchDeleteConfirm": "選択した {{count}} 個のアカウントを削除してもよろしいですか？",
     "switched": "{{email}} に切り替えました",
     "switchFailed": "切り替えに失敗しました: {{error}}",
+    "antigravityLegacyUnsupported": "ここでは Antigravity 2.0.0 以降はサポートしていません。Antigravity 2.0.0 未満のバージョンを選ぶか、Antigravity IDE を使用してください。",
     "importSuccess": "{{count}} 個のアカウントをインポートしました",
     "importLocalSuccess": "アカウントをインポートしました: {{email}}",
     "importFailed": "インポートに失敗しました: {{error}}",
@@ -1396,7 +1404,7 @@
       },
       "runHint": {
         "title": "検証の説明",
-        "line1": "「今すぐチェック」は、ローカルゲートウェイと公式 Language Server プロトコルで Antigravity クライアントを模擬し、最小限の対話リクエストを送信します。",
+        "line1": "「今すぐチェック」は、ローカルゲートウェイと公式 Language Server プロトコルで Antigravity IDE クライアントを模擬し、最小限の対話リクエストを送信します。",
         "line2": "この処理では少量のトークン（通常は短い1回の対話分）を消費します。実際の消費量はモデルとアカウントポリシーに依存します。",
         "line3": "この操作は起動タスクの設定を変更せず、アカウント可用性のチェックとチェック履歴の記録のみを行います。",
         "line4": "403 が返された場合、アカウント認証または異議申し立ての提出が必要です。結果にはURLとクイックアクションが含まれます。"
@@ -1527,6 +1535,7 @@
       "modeScheduled": "📅 定時",
       "modeCrontab": "🧩 クロンタブ",
       "modeQuotaReset": "🔄 クォータリセット",
+      "antigravityVersion": "Antigravity IDE バージョン",
       "modelSelect": "モデル選択",
       "modelHint": "同じクォータグループでは 1 つのモデルを推奨。複数選択すると順に実行されます。",
       "modelsEmpty": "おすすめモデルがありません",
@@ -1673,6 +1682,7 @@
       "refreshTokenExpired": "Codex のログイン認証が期限切れで、自動更新できません。Codex アカウントに再ログインしてください。",
       "refreshTokenInvalidated": "Codex のログイン認証がサービス側で取り消され、自動更新できません。Codex アカウントに再ログインしてください。",
       "invalidGrant": "Codex のログイン認証が無効で、自動更新できません。Codex アカウントに再ログインしてください。",
+      "staleAccount": "このアカウントはローカルのアカウント保存先に存在しません。アカウント一覧を更新しました。この Codex アカウントを再インポートするか、再度サインインしてください。",
       "unsupportedCountryRegion": "現在のネットワーク地域では Codex 認証を更新できません。OpenAI 認証サービスがこのネットワーク出口を拒否しました。対応地域に切り替えてから再試行してください。"
     },
     "current": "現在",
@@ -1687,6 +1697,11 @@
     },
     "oauth": {
       "desc": "下のボタンをクリックしてブラウザで OpenAI 認可を完了してください",
+      "trialGuideTitle": "試用登録のヒント",
+      "trialGuideDesc": "新しいアカウントを準備する場合は、長期的に利用できる Gmail を優先すると、アカウント維持や後日の確認が安定しやすくなります。",
+      "trialGuideAliasDesc": "1 つのメイン Gmail で最大 5 個のエイリアスを用意し、ChatGPT の登録記録を分けられます。対象サービスのルールに従って使用してください。",
+      "trialGuideLink": "試用ガイドを見る",
+      "gmailAliasLink": "Gmail エイリアス生成",
       "preparing": "認可リンクを準備中...",
       "exchanging": "トークンを交換中...",
       "portInUse": "ポート {{port}} は既に使用中です。このポートを使用しているアプリを閉じて再試行してください。",
@@ -1696,7 +1711,8 @@
       "portStillInUse": "ポート {{port}} はまだ使用中です。",
       "portInUseAction": "ポートを閉じて再試行",
       "timeout": "認証がタイムアウトしました。クリックしてください",
-      "timeoutRetry": "認証リンクを更新"
+      "timeoutRetry": "認証リンクを更新",
+      "reauthEmailLabel": "再認証アカウント"
     },
     "token": {
       "desc": "auth.json、アカウント JSON、または refresh_token を貼り付けます。",
@@ -1742,6 +1758,7 @@
       "disableService": "サービスを無効化",
       "enableService": "サービスを有効化",
       "saveSuccess": "API サービスのコレクションを更新しました",
+      "noEligibleAccountsSelected": "選択したアカウントはこの環境に存在しないか、API サービスで使用できません。先にこの環境へ使用可能な Codex アカウントをインポートしてください。",
       "removeSuccess": "アカウントを API サービスから削除しました",
       "rotateSuccess": "API サービスキーを再生成しました",
       "enabledSuccess": "API サービスを有効にしました",
@@ -1752,7 +1769,7 @@
       "hideKey": "キーを非表示",
       "modal": {
         "title": "API サービスに追加",
-        "desc": "API サービスのコレクションに含める OAuth アカウントを選択します。追加したアカウントは通常の一覧から非表示になり、API サービスカードからのみ管理されます。",
+        "desc": "API サービスのコレクションに含める OAuth または API Key アカウントを選択します。追加したアカウントは通常の一覧から非表示になり、API サービスカードからのみ管理されます。",
         "empty": "利用可能な OAuth アカウントがありません",
         "selected": "API サービスに追加済み",
         "available": "通常一覧",
@@ -1809,7 +1826,7 @@
       "memberTitle": "集合メンバー",
       "stats": {
         "requests": "リクエスト",
-        "requestsDetail": "成功 {{success}} / 失敗 {{failed}}",
+        "requestsDetail": "成功 {{success}} / 失敗 {{failed}} / 取消 {{canceled}} / 上流失敗 {{upstreamFailed}} / 未完了 {{incomplete}}",
         "tokens": "トークン",
         "tokensDetail": "入力 {{input}} / 出力 {{output}}",
         "specialTokens": "キャッシュ / 思考",
@@ -1819,7 +1836,11 @@
         "accountRequests": "{{count}} 件のリクエスト",
         "accountTokens": "{{count}} トークン",
         "accountResult": "成功 {{success}} / 失敗 {{failed}}",
-        "accountTokensCompact": "{{value}}"
+        "accountTokensCompact": "{{value}}",
+        "images": "画像リクエスト",
+        "imagesDetail": "生成 {{generate}} / 編集 {{edit}} / 権限 {{blocked}}",
+        "estimatedCost": "推定価値",
+        "estimatedCostDetail": "各リクエストの価格スナップショットで累計"
       },
       "routingLabel": "ルーティング",
       "routingSaveSuccess": "API サービスのルーティングを更新しました",
@@ -1846,7 +1867,8 @@
         "quotaLowFirst": "低クォータ優先",
         "planHighFirst": "上位プラン優先",
         "planLowFirst": "下位プラン優先",
-        "expirySoonFirst": "期限が近い順"
+        "expirySoonFirst": "期限が近い順",
+        "custom": "カスタム"
       },
       "statusUnconfigured": "未設定",
       "expandDetails": "詳細を開く",
@@ -1886,9 +1908,92 @@
         "empty": "クォータ統計はまだありません"
       },
       "oauthBinding": {
-        "desc": "任意です。未連携の場合、API サービスは従来の API Key ロジックで動作します。連携後はログイン状態に OAuth アカウントを使い、Provider は現在の API サービス設定を使います。",
+        "desc": "任意です。サブスクリプション期間（有効期限表示）がある OAuth アカウントだけ選択できます。期限切れでも連携できます。未連携の場合、API サービスは従来の API Key ロジックで動作します。連携後はログイン状態に OAuth アカウントを使い、Provider は現在の API サービス設定を使います。",
         "currentService": "API サービス：{{name}}"
-      }
+      },
+      "customRoutingEdit": "カスタムルーティングを編集",
+      "customRoutingTitle": "カスタムルーティング",
+      "customRoutingDesc": "アカウントごとに優先度と重みを設定し、選択順と同じ優先度内の負荷配分を制御します。",
+      "customRoutingPriorityTitle": "優先度",
+      "customRoutingPriorityDesc": "値が高いほど先に選ばれます。高優先度のアカウントが使えない場合にのみ低優先度を試します。",
+      "customRoutingWeightTitle": "重み",
+      "customRoutingWeightDesc": "同じ優先度内の負荷分散に使います。重みが高いほど割り当てられるリクエストが増えます。",
+      "customRoutingSearch": "メール、プラン、アカウント ID を検索",
+      "customRoutingSelected": "{{count}} 件選択中",
+      "customRoutingPriorityShort": "優先度",
+      "customRoutingWeightShort": "重み",
+      "customRoutingApplyBatch": "選択に適用",
+      "customRoutingReset": "リセット",
+      "customRoutingAccountColumn": "アカウント",
+      "customRoutingQuotaColumn": "残量",
+      "customRoutingEmpty": "現在の API サービス集合に設定可能なアカウントはありません",
+      "customRoutingSave": "ルーティングを保存",
+      "customRoutingSaveSuccess": "API サービスのカスタムルーティングを更新しました",
+      "upstreamProxyLabel": "API プロキシアドレス",
+      "upstreamProxySaveSuccess": "API プロキシアドレスを更新しました",
+      "upstreamProxyUrlPlaceholder": "空欄 = グローバルプロキシ",
+      "upstreamProxySaveAction": "プロキシを保存",
+      "imageGenerationLabel": "image_generation ツール",
+      "imageGenerationDesc": "テキスト会話で画像ツールを宣言するか、画像エンドポイントを使えるかを制御します。",
+      "imageGenerationSaveSuccess": "image_generation 設定を更新しました",
+      "apiKeysTitle": "クライアントキー",
+      "apiKeyAdd": "キー追加",
+      "apiKeyLabel": "キー名",
+      "apiKeySaveLabel": "名前を保存",
+      "apiKeyDefaultLabel": "クライアント {{index}}",
+      "apiKeyCreateSuccess": "API Key を作成しました",
+      "apiKeyUpdateSuccess": "API Key を更新しました",
+      "apiKeyRotateSuccess": "API Key をリセットしました",
+      "apiKeyDeleteSuccess": "API Key を削除しました",
+      "apiKeyRotateConfirm": "リセット後、この API Key はすぐに無効になります。続行しますか？",
+      "apiKeyDeleteConfirm": "この API Key を削除しますか？",
+      "apiKeyDelete": "キー削除",
+      "apiKeyDisable": "キー無効化",
+      "apiKeyEnable": "キー有効化",
+      "modelStatsTitle": "モデル別",
+      "apiKeyStatsTitle": "キー別",
+      "healthAvailable": "利用可",
+      "healthUnavailable": "利用不可",
+      "healthCooldown": "待機 {{count}}",
+      "healthImageUnavailable": "画像不可",
+      "requestLogTitle": "リクエストログ",
+      "requestLogEmpty": "リクエストログはまだありません",
+      "requestLogSuccess": "成功",
+      "requestLogFailed": "失敗",
+      "requestLogTokens": "{{value}} トークン",
+      "imageGenerationMode": {
+        "enabled": "有効",
+        "imagesOnly": "画像のみ",
+        "disabled": "無効"
+      },
+      "requestKind": {
+        "text": "テキスト",
+        "imageGeneration": "画像生成",
+        "imageEdit": "画像編集",
+        "other": "その他"
+      },
+      "testSuccessInline": "API サービスのテストに成功しました",
+      "gatewayModeLabel": "Gateway mode",
+      "gatewayModeLegacyShort": "旧版",
+      "gatewayModeSidecarShort": "新版",
+      "gatewayModeNewLabel": "APIサービス-新",
+      "gatewayModeOldLabel": "APIサービス-旧",
+      "gatewayModeSaveSuccess": "APIサービスのゲートウェイモードを更新しました",
+      "gatewayGuideTitle": "ここでゲートウェイを切替",
+      "gatewayGuideDesc": "既定は新ゲートウェイです。互換性の問題やクライアント要求の異常がある場合は、ここで旧ゲートウェイに戻せます。",
+      "gatewayGuideAction": "了解",
+      "upstreamProxyUrlPlaceholderLegacy": "空欄でグローバルプロキシ、環境変数プロキシ、システムプロキシの順に使用",
+      "upstreamProxyUrlPlaceholderSidecar": "空欄でグローバルプロキシを使用",
+      "debugLogsLabel": "デバッグログ",
+      "debugLogsDescription": "API サービスのデバッグログを出力し、ゲートウェイとストリーミングの問題を調査します",
+      "debugLogsEnabledSuccess": "デバッグログを有効にしました",
+      "debugLogsDisabledSuccess": "デバッグログを無効にしました",
+      "debugLogsEnableConfirmTitle": "デバッグログを有効化",
+      "debugLogsEnableConfirmMessage": "有効にすると、API サービスがゲートウェイ、プロキシ、上流リクエスト、ストリーミング応答の診断用デバッグログを出力します。高並行時や長時間のストリーミングではわずかな性能負荷が発生する場合があります。調査後は無効にしてください。有効にしますか？",
+      "debugLogsEnableConfirmAction": "有効化",
+      "debugLogsDisableConfirmTitle": "デバッグログを無効化",
+      "debugLogsDisableConfirmMessage": "無効にすると、API サービスのデバッグログ出力を停止し、ログのノイズと追加負荷を減らします。ゲートウェイ、プロキシ、ストリーミングの調査時に再度有効化できます。無効にしますか？",
+      "debugLogsDisableConfirmAction": "無効化"
     },
     "local": {
       "desc": "~/.codex/auth.json から現在ログイン中のアカウントをインポート",
@@ -2299,11 +2404,13 @@
         "action": "OAuth 連携",
         "actionShort": "連携",
         "title": "OAuth アカウントを連携",
-        "desc": "任意です。未連携の場合、このアカウントは従来の API Key ロジックで切り替わります。連携後はログイン状態に OAuth アカウントを使い、Provider はこの API Key アカウント設定を使います。",
+        "desc": "任意です。サブスクリプション期間（有効期限表示）がある OAuth アカウントだけ選択できます。期限切れでも連携できます。未連携の場合、このアカウントは従来の API Key ロジックで切り替わります。連携後はログイン状態に OAuth アカウントを使い、Provider はこの API Key アカウント設定を使います。",
         "currentAccount": "API Key アカウント：{{name}}",
         "selectLabel": "OAuth アカウントを選択",
         "empty": "OAuth アカウントがありません。先に OAuth 認証アカウントを追加してください。",
+        "emptyEligible": "サブスクリプション期間がある OAuth アカウントがありません。先にクォータを更新するか、条件を満たす OAuth アカウントを追加してください。",
         "validationRequired": "OAuth アカウントを選択してください",
+        "validationSubscriptionRequired": "サブスクリプション期間がある OAuth アカウントのみ連携できます",
         "saveSuccess": "OAuth 連携を更新しました",
         "saveFailed": "OAuth 連携に失敗しました：{{error}}",
         "switchRequiresBinding": "先に OAuth アカウントを連携してください",
@@ -2434,6 +2541,7 @@
       "column": "期限",
       "unknown": "再認証",
       "missingDetail": "再認証して取得",
+      "refresh": "契約を更新",
       "expired": "期限切れ",
       "hoursLeft": "{{count}}時間",
       "daysLeft": "{{count}}日",
@@ -2454,6 +2562,7 @@
       "repairing": "Codex セッションの表示を修復しています...",
       "repairFailed": "自動修復に失敗しました。後でセッション管理 > 表示を修復から再試行できます。",
       "type": {
+        "api": "API モード",
         "apiKey": "API キー",
         "apiService": "API サービス",
         "account": "アカウント"
@@ -2493,6 +2602,152 @@
       "fastDesc": "1.5倍速、使用量が増加",
       "saveSuccess": "速度を更新しました",
       "saveFailed": "速度の保存に失敗しました: {{error}}"
+    },
+    "apiService": {
+      "navTitle": "Codex API サービス",
+      "title": "Codex API サービス",
+      "openPage": "API サービスを開く",
+      "openFullPage": "すべての機能を見る",
+      "tabs": {
+        "overview": "サービス概要",
+        "keys": "クライアントキー",
+        "accounts": "アカウントプール",
+        "models": "モデルと機能",
+        "logs": "統計とログ"
+      },
+      "healthTitle": "サービス状態",
+      "health": {
+        "availableAccounts": "利用可能なアカウント",
+        "cooldowns": "クールダウン",
+        "imageUnavailable": "画像不可",
+        "keys": "クライアントキー"
+      },
+      "accountHealth": {
+        "failures": "連続失敗 {{count}} 回",
+        "image": "画像 {{status}}"
+      },
+      "models": {
+        "availableTitle": "利用可能なモデル",
+        "capabilityTitle": "機能スイッチ",
+        "capabilityDesc": "gpt-image-2 は、サービススイッチ、アカウントプラン、記録された画像機能状態に基づいて自動的に表示または非表示になります。",
+        "rulesTitle": "モデルルール",
+        "aliasTitle": "モデル別名",
+        "aliasPlaceholder": "gpt-5 => g5。元モデルを残すには +",
+        "excludedTitle": "非表示モデル",
+        "excludedPlaceholder": "1行にモデルまたはワイルドカード、例 gpt-5-*",
+        "saveRules": "ルール保存",
+        "rulesSaved": "モデルルールを保存しました",
+        "pricingAction": "価格設定",
+        "pricingTitle": "モデル価格設定",
+        "pricingDesc": "USD / 100万 tokens。ローカルの価値統計にのみ使用します。",
+        "pricingModel": "モデル",
+        "pricingInput": "入力",
+        "pricingCache": "キャッシュ入力",
+        "pricingOutput": "出力",
+        "pricingSource": "ソース",
+        "pricingActions": "操作",
+        "pricingCachePlaceholder": "入力と同じ",
+        "pricingCustom": "カスタム",
+        "pricingPreset": "プリセット",
+        "pricingUnset": "未設定",
+        "pricingReset": "リセット",
+        "pricingSaved": "価格設定を保存しました",
+        "pricingInvalid": "価格は 0 以上の数値で入力してください"
+      },
+      "keys": {
+        "policyTitle": "モデルポリシー",
+        "advancedPolicyTitle": "詳細機能：モデルポリシー",
+        "modelPrefix": "モデル接頭辞",
+        "modelPrefixPlaceholder": "例: codex",
+        "allowedModels": "許可モデル",
+        "allowedModelsPlaceholder": "空なら全許可。1行にモデルまたはワイルドカード",
+        "excludedModels": "除外モデル",
+        "excludedModelsPlaceholder": "1行にモデルまたはワイルドカード",
+        "savePolicy": "ポリシー保存",
+        "policySaved": "Key のモデルポリシーを保存しました"
+      },
+      "routing": {
+        "optionsTitle": "ルーティング設定",
+        "sessionAffinity": "セッション固定",
+        "sessionAffinityTtl": "固定 TTL",
+        "maxRetryCredentials": "再試行アカウント",
+        "maxRetryInterval": "再試行待ち",
+        "disableCooling": "クールダウン無効",
+        "saveOptions": "設定を保存",
+        "optionsSaved": "ルーティング設定を保存しました"
+      },
+      "validation": {
+        "numberRange": "{{min}} から {{max}} の数字を入力してください"
+      },
+      "logs": {
+        "allKinds": "全タイプ",
+        "allStatuses": "全ステータス",
+        "allGatewayModes": "すべてのモード",
+        "modelFilter": "モデル",
+        "modelPlaceholder": "モデル ID",
+        "accountFilter": "アカウント",
+        "accountPlaceholder": "メールまたはアカウント ID",
+        "apiKeyFilter": "APIキー",
+        "apiKeyPlaceholder": "名前または ID",
+        "kindFilter": "タイプ",
+        "statusFilter": "状態",
+        "gatewayModeFilter": "モード",
+        "errorFilter": "エラー",
+        "errorPlaceholder": "エラー分類",
+        "clearFilters": "フィルター解除",
+        "loading": "リクエストログを読み込み中",
+        "gatewayModeUnknown": "不明なモード",
+        "requestIdShort": "リクエストID {{id}}",
+        "httpStatus": "HTTP状態 {{status}}"
+      },
+      "timeouts": {
+        "entryLabel": "詳細",
+        "openAction": "タイムアウトと再試行",
+        "title": "タイムアウトと再試行",
+        "desc": "値は秒単位です。保存すると現在のゲートウェイモードに応じて API サービスを再起動または再読み込みします。",
+        "sidecarTitle": "新 API サービス",
+        "legacyTitle": "旧 API サービス",
+        "streamOpen": "ストリーム開始",
+        "streamIdle": "ストリーム待機",
+        "imageOpen": "画像開始",
+        "imageIdle": "画像待機",
+        "openAttempts": "開始試行",
+        "keepalive": "接続維持",
+        "requestRead": "リクエスト読取",
+        "connect": "上流接続",
+        "streamTotal": "ストリーム合計",
+        "resetDefaults": "既定に戻す",
+        "saved": "タイムアウトと再試行を保存しました",
+        "totalGteIdle": "旧 API のストリーム合計タイムアウトは待機タイムアウト以上にしてください",
+        "bootstrapRetries": "起動再試行",
+        "websocketTitle": "WebSocket 設定",
+        "websocketConnect": "接続タイムアウト",
+        "websocketInitial": "初回メッセージ待ち",
+        "websocketIdle": "アイドル待ち",
+        "websocketHeartbeat": "ハートビート間隔",
+        "sendRetryAttempts": "送信再試行",
+        "sendRetryBaseDelay": "送信基本遅延(ms)",
+        "sendRetryMaxDelay": "送信最大遅延(ms)",
+        "singleStatusAttempts": "単一アカウント再試行",
+        "singleStatusBaseDelay": "単一基本遅延(ms)",
+        "singleStatusMaxDelay": "単一最大遅延(ms)",
+        "maxDelayGteBase": "最大遅延は基本遅延未満にできません",
+        "longWaitPreset": "長待機プリセット",
+        "shortWaitPreset": "短待機プリセット",
+        "presetTitle": "パラメータープリセット",
+        "presetSelect": "プリセット選択",
+        "presetName": "プリセット名",
+        "presetNamePlaceholder": "新しいカスタムプリセット",
+        "saveAsPreset": "プリセットとして保存",
+        "updatePreset": "現在のプリセットを更新",
+        "deletePreset": "プリセットを削除",
+        "presetSaved": "プリセットを保存しました",
+        "presetUpdated": "プリセットを更新しました",
+        "presetDeleted": "プリセットを削除しました",
+        "presetNameRequired": "プリセット名を入力してください",
+        "deletePresetConfirm": "このカスタムプリセットを削除しますか？",
+        "deletePresetTitle": "プリセットを削除"
+      }
     }
   },
   "githubCopilot": {
@@ -2545,23 +2800,31 @@
       "storage": "データ範囲: ローカルインポートは VS Code の GitHub ログインセッションを読み取り、切り替えは同じ種類のセッションを更新します。OAuth、トークンインポート、ローカルインポート検証、クォータ更新では GitHub 公式 API に必要な認証フィールドのみを送信し、state.vscdb やシステムキーはアップロードしません。"
     }
   },
+  "runtime": {
+    "installedVersion": {
+      "loading": "インストール済みバージョンを検出中",
+      "missing": "インストール済みバージョンは検出されませんでした",
+      "detecting": "検出中",
+      "notFound": "バージョン未検出"
+    }
+  },
   "dashboard": {
     "title": "アカウントダッシュボード",
     "summary": {
       "label": "概要",
       "title": "アカウントスナップショット",
-      "desc": "Antigravity と Codex の状況を一目で確認"
+      "desc": "Antigravity IDE と Codex の状況を一目で確認"
     },
     "stats": {
-      "antigravity": "Antigravity アカウント",
+      "antigravity": "Antigravity IDE アカウント",
       "codex": "Codex アカウント",
-      "currentAntigravity": "現在の Antigravity",
+      "currentAntigravity": "現在の Antigravity IDE",
       "currentCodex": "現在の Codex",
       "providers": "プロバイダー",
       "totalAccounts": "総アカウント数"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "プラン分布",
@@ -2576,7 +2839,7 @@
     },
     "emptyAccount": "アカウントなし",
     "sections": {
-      "antigravity": "Antigravity アカウント",
+      "antigravity": "Antigravity IDE アカウント",
       "codex": "Codex アカウント"
     },
     "actions": {
@@ -2609,7 +2872,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Antigravity 設定",
+      "title": "Antigravity IDE 設定",
       "appPath": "アプリパス"
     },
     "codex": {
@@ -3044,7 +3307,7 @@
     "actions": {
       "collapseAll": "すべて折りたたむ",
       "expandAll": "すべて展開",
-      "goAntigravity": "Antigravityへ",
+      "goAntigravity": "Antigravity IDEへ",
       "goCodex": "Codexへ",
       "goDashboard": "ダッシュボードへ",
       "goFingerprints": "デバイス指紋へ",
@@ -3059,25 +3322,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "Antigravity アカウント管理 で一括・高リスク操作を行う前に必ずバックアップします。"
+        "0": "Antigravity IDE アカウント管理 で一括・高リスク操作を行う前に必ずバックアップします。"
       },
       "keywords": {
-        "0": "Antigravity アカウント管理",
+        "0": "Antigravity IDE アカウント管理",
         "1": "ガイド",
         "2": "手順",
         "3": "アカウント"
       },
       "outcomes": {
-        "0": "Antigravity アカウント管理 で何ができるかを理解します。",
-        "1": "Antigravity アカウント管理 の推奨フローでミスを減らします。"
+        "0": "Antigravity IDE アカウント管理 で何ができるかを理解します。",
+        "1": "Antigravity IDE アカウント管理 の推奨フローでミスを減らします。"
       },
       "steps": {
-        "0": "Antigravity アカウント管理 のページを開きます。",
-        "1": "Antigravity アカウント管理 の基本設定と必要な紐付けを完了します。",
-        "2": "Antigravity アカウント管理 で手動操作を1回実行し、結果を確認します。"
+        "0": "Antigravity IDE アカウント管理 のページを開きます。",
+        "1": "Antigravity IDE アカウント管理 の基本設定と必要な紐付けを完了します。",
+        "2": "Antigravity IDE アカウント管理 で手動操作を1回実行し、結果を確認します。"
       },
-      "summary": "このセクションでは Antigravity アカウント管理 の使い方を説明します。",
-      "title": "Antigravity アカウント管理"
+      "summary": "このセクションでは Antigravity IDE アカウント管理 の使い方を説明します。",
+      "title": "Antigravity IDE アカウント管理"
     },
     "blocks": {
       "cautions": "よくある注意点",
@@ -3930,5 +4193,14 @@
       "warn": "警告",
       "error": "エラー"
     }
+  },
+  "mfaQuick": {
+    "title": "2FAコード",
+    "selectLabel": "2FAキーを選択",
+    "unnamedSecret": "名前なしキー",
+    "invalidCode": "無効なキー",
+    "copyCode": "コードをコピー",
+    "copied": "コピー済み",
+    "refreshIn": "{{time}}秒"
   }
 }

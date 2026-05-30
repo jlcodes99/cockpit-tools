@@ -38,9 +38,31 @@ where
     if raw.trim().is_empty() {
         return Ok(None);
     }
-    let parsed = serde_json::from_str::<T>(&raw)
-        .map_err(|e| format!("解析 OAuth pending 文件失败({}): {}", path.display(), e))?;
-    Ok(Some(parsed))
+    match serde_json::from_str::<T>(&raw) {
+        Ok(parsed) => Ok(Some(parsed)),
+        Err(error) => {
+            match crate::modules::atomic_write::quarantine_file(&path, "invalid-json") {
+                Ok(Some(backup_path)) => crate::modules::logger::log_warn(&format!(
+                    "OAuth pending 文件解析失败，已隔离并忽略: path={}, backup={}, error={}",
+                    path.display(),
+                    backup_path.display(),
+                    error
+                )),
+                Ok(None) => crate::modules::logger::log_warn(&format!(
+                    "OAuth pending 文件解析失败，文件已不存在，忽略: path={}, error={}",
+                    path.display(),
+                    error
+                )),
+                Err(backup_error) => crate::modules::logger::log_warn(&format!(
+                    "OAuth pending 文件解析失败，隔离失败，忽略: path={}, parse_error={}, backup_error={}",
+                    path.display(),
+                    error,
+                    backup_error
+                )),
+            }
+            Ok(None)
+        }
+    }
 }
 
 pub fn save<T>(file_name: &str, value: &T) -> Result<(), String>
@@ -48,25 +70,10 @@ where
     T: Serialize,
 {
     let path = pending_file_path(file_name)?;
-    let temp_path = path.with_extension("tmp");
     let content = serde_json::to_string_pretty(value)
         .map_err(|e| format!("序列化 OAuth pending 失败: {}", e))?;
-    fs::write(&temp_path, content).map_err(|e| {
-        format!(
-            "写入 OAuth pending 临时文件失败({}): {}",
-            temp_path.display(),
-            e
-        )
-    })?;
-    fs::rename(&temp_path, &path).map_err(|e| {
-        format!(
-            "替换 OAuth pending 文件失败: temp={}, target={}, error={}",
-            temp_path.display(),
-            path.display(),
-            e
-        )
-    })?;
-    Ok(())
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("保存 OAuth pending 文件失败({}): {}", path.display(), e))
 }
 
 pub fn clear(file_name: &str) -> Result<(), String> {

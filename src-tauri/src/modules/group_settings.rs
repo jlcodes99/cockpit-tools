@@ -248,13 +248,31 @@ pub fn load_group_settings() -> GroupSettings {
 
     match fs::read_to_string(&path) {
         Ok(content) => {
-            let mut settings: GroupSettings = serde_json::from_str(&content).unwrap_or_else(|e| {
-                crate::modules::logger::log_warn(&format!(
-                    "[GroupSettings] 解析配置失败, 返回默认配置: {}",
-                    e
-                ));
-                default_settings.clone()
-            });
+            let mut settings: GroupSettings = match serde_json::from_str(&content) {
+                Ok(settings) => settings,
+                Err(error) => {
+                    match crate::modules::atomic_write::quarantine_file(&path, "invalid-json") {
+                        Ok(Some(backup_path)) => crate::modules::logger::log_warn(&format!(
+                            "[GroupSettings] 配置解析失败，已隔离并返回默认配置: path={}, backup={}, error={}",
+                            path.display(),
+                            backup_path.display(),
+                            error
+                        )),
+                        Ok(None) => crate::modules::logger::log_warn(&format!(
+                            "[GroupSettings] 配置解析失败，文件已不存在，返回默认配置: path={}, error={}",
+                            path.display(),
+                            error
+                        )),
+                        Err(backup_error) => crate::modules::logger::log_warn(&format!(
+                            "[GroupSettings] 配置解析失败，隔离失败，返回默认配置: path={}, parse_error={}, backup_error={}",
+                            path.display(),
+                            error,
+                            backup_error
+                        )),
+                    }
+                    default_settings.clone()
+                }
+            };
             let original_settings = settings.clone();
 
             // 兼容增量升级：补齐缺失的默认映射/名称/排序，保留用户自定义配置

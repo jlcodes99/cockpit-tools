@@ -1,4 +1,4 @@
-use crate::modules::{account, codex_account, logger};
+use crate::modules::{account, codex_account, logger, process};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
@@ -33,6 +33,31 @@ static TASKS_LOCK: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| 
 static HISTORY_LOCK: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| Mutex::new(()));
 static TEST_CANCEL_SCOPES: std::sync::LazyLock<Mutex<HashMap<String, Arc<AtomicBool>>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn quarantine_corrupted_wakeup_file(path: &Path, label: &str, error: &impl std::fmt::Display) {
+    match crate::modules::atomic_write::quarantine_file(path, "invalid-json") {
+        Ok(Some(backup_path)) => logger::log_warn(&format!(
+            "[CodexWakeup] {} 解析失败，已隔离并使用空状态: path={}, backup={}, error={}",
+            label,
+            path.display(),
+            backup_path.display(),
+            error
+        )),
+        Ok(None) => logger::log_warn(&format!(
+            "[CodexWakeup] {} 解析失败，文件已不存在，使用空状态: path={}, error={}",
+            label,
+            path.display(),
+            error
+        )),
+        Err(backup_error) => logger::log_warn(&format!(
+            "[CodexWakeup] {} 解析失败，隔离失败，使用空状态: path={}, parse_error={}, backup_error={}",
+            label,
+            path.display(),
+            error,
+            backup_error
+        )),
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1206,6 +1231,7 @@ fn build_binary_command(binary: &ResolvedBinary) -> Command {
     } else {
         Command::new(&binary.path)
     };
+    process::apply_managed_proxy_env_to_command(&mut command);
     apply_hidden_window_flags(&mut command);
     command
 }
@@ -1531,16 +1557,9 @@ fn refresh_next_run_at(state: &mut CodexWakeupState) {
 fn save_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
     let parent = path.parent().ok_or("无法定位目标目录")?;
     fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
-    let temp_path = parent.join(format!(
-        "{}.tmp",
-        path.file_name()
-            .and_then(|item| item.to_str())
-            .unwrap_or("codex_wakeup")
-    ));
     let content =
         serde_json::to_string_pretty(value).map_err(|e| format!("序列化 JSON 失败: {}", e))?;
-    fs::write(&temp_path, content).map_err(|e| format!("写入临时文件失败: {}", e))?;
-    fs::rename(&temp_path, path).map_err(|e| format!("替换文件失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(path, &content)
 }
 
 pub fn load_runtime_config() -> Result<CodexWakeupRuntimeConfig, String> {
@@ -1553,8 +1572,13 @@ pub fn load_runtime_config() -> Result<CodexWakeupRuntimeConfig, String> {
     if content.trim().is_empty() {
         return Ok(CodexWakeupRuntimeConfig::default());
     }
-    let raw: CodexWakeupRuntimeConfig = serde_json::from_str(&content)
-        .map_err(|e| format!("解析 Codex 唤醒运行时配置失败: {}", e))?;
+    let raw: CodexWakeupRuntimeConfig = match serde_json::from_str(&content) {
+        Ok(raw) => raw,
+        Err(error) => {
+            quarantine_corrupted_wakeup_file(&path, "运行时配置", &error);
+            return Ok(CodexWakeupRuntimeConfig::default());
+        }
+    };
     Ok(normalize_runtime_config(&raw))
 }
 
@@ -1579,8 +1603,13 @@ fn load_state_inner(
     if content.trim().is_empty() {
         return Ok(CodexWakeupState::default());
     }
-    let mut state: CodexWakeupState =
-        serde_json::from_str(&content).map_err(|e| format!("解析 Codex 唤醒任务失败: {}", e))?;
+    let mut state: CodexWakeupState = match serde_json::from_str(&content) {
+        Ok(state) => state,
+        Err(error) => {
+            quarantine_corrupted_wakeup_file(&path, "任务配置", &error);
+            return Ok(CodexWakeupState::default());
+        }
+    };
     state.tasks = state.tasks.iter().map(normalize_task).collect();
     let mut preset_ids = HashSet::new();
     state.model_presets = state
@@ -1686,7 +1715,13 @@ pub fn load_history() -> Result<Vec<CodexWakeupHistoryItem>, String> {
     if content.trim().is_empty() {
         return Ok(Vec::new());
     }
-    serde_json::from_str(&content).map_err(|e| format!("解析 Codex 唤醒历史失败: {}", e))
+    match serde_json::from_str(&content) {
+        Ok(history) => Ok(history),
+        Err(error) => {
+            quarantine_corrupted_wakeup_file(&path, "历史记录", &error);
+            Ok(Vec::new())
+        }
+    }
 }
 
 pub fn add_history_items(new_items: Vec<CodexWakeupHistoryItem>) -> Result<(), String> {

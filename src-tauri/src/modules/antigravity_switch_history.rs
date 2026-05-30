@@ -95,19 +95,40 @@ pub fn load_history() -> Result<Vec<AntigravitySwitchHistoryItem>, String> {
         return Ok(Vec::new());
     }
 
-    serde_json::from_str::<Vec<AntigravitySwitchHistoryItem>>(&content)
-        .map_err(|e| format!("解析 Antigravity 切号记录失败: {}", e))
+    match serde_json::from_str::<Vec<AntigravitySwitchHistoryItem>>(&content) {
+        Ok(items) => Ok(items),
+        Err(error) => {
+            match modules::atomic_write::quarantine_file(&path, "invalid-json") {
+                Ok(Some(backup_path)) => modules::logger::log_warn(&format!(
+                    "Antigravity 切号记录解析失败，已隔离并使用空记录: path={}, backup={}, error={}",
+                    path.display(),
+                    backup_path.display(),
+                    error
+                )),
+                Ok(None) => modules::logger::log_warn(&format!(
+                    "Antigravity 切号记录解析失败，文件已不存在，使用空记录: path={}, error={}",
+                    path.display(),
+                    error
+                )),
+                Err(backup_error) => modules::logger::log_warn(&format!(
+                    "Antigravity 切号记录解析失败，隔离失败，使用空记录: path={}, parse_error={}, backup_error={}",
+                    path.display(),
+                    error,
+                    backup_error
+                )),
+            }
+            Ok(Vec::new())
+        }
+    }
 }
 
 fn save_history(items: &[AntigravitySwitchHistoryItem]) -> Result<(), String> {
     let path = history_path()?;
-    let data_dir = modules::account::get_data_dir()?;
-    let temp_path = data_dir.join(format!("{}.tmp", HISTORY_FILE));
     let content = serde_json::to_string_pretty(items)
         .map_err(|e| format!("序列化 Antigravity 切号记录失败: {}", e))?;
 
-    fs::write(&temp_path, content).map_err(|e| format!("写入临时切号记录文件失败: {}", e))?;
-    fs::rename(temp_path, path).map_err(|e| format!("替换切号记录文件失败: {}", e))
+    modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("保存 Antigravity 切号记录失败: {}", e))
 }
 
 pub fn add_history_item(item: AntigravitySwitchHistoryItem) -> Result<(), String> {

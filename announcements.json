@@ -4,7 +4,8 @@
   "topRightAd": {
     "id": "top-right-ad-2026-04-shop",
     "priority": 100,
-    "text": "Kiro成品号。需要的可以选购，感谢",
+    "text": "Codex Plus已接码成品号，Gemini给自己账号订阅一年Pro 需要的了解一下",
+    "text_backup": "9.9Codex plus号和12元代过试用Plus。欢迎选购",
     "badge": "推广",
     "ctaLabel": "选购",
     "ctaUrl": "https://xiangzili.xyz",
@@ -12,11 +13,12 @@
     "targetLanguages": [
       "*"
     ],
-    "createdAt": "2026-04-07T12:00:00Z",  
+    "createdAt": "2026-04-07T12:00:00Z",
     "expiresAt": null,
     "locales": {
       "zh-CN": {
-        "text": "Kiro成品号。需要的可以选购，感谢",
+      "text": "Codex Plus已接码成品号，Gemini给自己账号订阅一年Pro 需要的了解下",
+        "text_backup": "9.9Codex plus号和12元代过试用Plus。欢迎选购",
         "badge": "推广",
         "ctaLabel": "选购"
       }

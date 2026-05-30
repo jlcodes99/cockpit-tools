@@ -62,13 +62,31 @@ pub fn read_sync_settings() -> SyncSettings {
     }
 
     match fs::read_to_string(&path) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
-            crate::modules::logger::log_warn(&format!(
-                "[SyncSettings] 解析配置失败, 返回空配置: {}",
-                e
-            ));
-            SyncSettings::default()
-        }),
+        Ok(content) => match serde_json::from_str(&content) {
+            Ok(settings) => settings,
+            Err(error) => {
+                match crate::modules::atomic_write::quarantine_file(&path, "invalid-json") {
+                    Ok(Some(backup_path)) => crate::modules::logger::log_warn(&format!(
+                        "[SyncSettings] 配置解析失败，已隔离并返回空配置: path={}, backup={}, error={}",
+                        path.display(),
+                        backup_path.display(),
+                        error
+                    )),
+                    Ok(None) => crate::modules::logger::log_warn(&format!(
+                        "[SyncSettings] 配置解析失败，文件已不存在，返回空配置: path={}, error={}",
+                        path.display(),
+                        error
+                    )),
+                    Err(backup_error) => crate::modules::logger::log_warn(&format!(
+                        "[SyncSettings] 配置解析失败，隔离失败，返回空配置: path={}, parse_error={}, backup_error={}",
+                        path.display(),
+                        error,
+                        backup_error
+                    )),
+                }
+                SyncSettings::default()
+            }
+        },
         Err(e) => {
             crate::modules::logger::log_warn(&format!(
                 "[SyncSettings] 读取配置失败, 返回空配置: {}",

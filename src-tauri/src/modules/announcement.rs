@@ -255,7 +255,23 @@ fn load_cache() -> Result<Option<AnnouncementCache>, String> {
         }));
     }
 
-    Err("解析公告缓存失败: 不支持的缓存格式".to_string())
+    match crate::modules::atomic_write::quarantine_file(&path, "invalid-json") {
+        Ok(Some(backup_path)) => logger::log_warn(&format!(
+            "[Announcement] 公告缓存解析失败，已隔离并忽略缓存: path={}, backup={}",
+            path.display(),
+            backup_path.display()
+        )),
+        Ok(None) => logger::log_warn(&format!(
+            "[Announcement] 公告缓存解析失败，文件已不存在，忽略缓存: path={}",
+            path.display()
+        )),
+        Err(error) => logger::log_warn(&format!(
+            "[Announcement] 公告缓存解析失败，隔离失败，忽略缓存: path={}, error={}",
+            path.display(),
+            error
+        )),
+    }
+    Ok(None)
 }
 
 fn save_cache(payload: &AnnouncementResponse) -> Result<(), String> {
@@ -265,8 +281,8 @@ fn save_cache(payload: &AnnouncementResponse) -> Result<(), String> {
     };
     let content =
         serde_json::to_string_pretty(&cache).map_err(|e| format!("序列化公告缓存失败: {}", e))?;
-    fs::write(get_cache_path()?, content).map_err(|e| format!("写入公告缓存失败: {}", e))?;
-    Ok(())
+    crate::modules::atomic_write::write_string_atomic(&get_cache_path()?, &content)
+        .map_err(|e| format!("写入公告缓存失败: {}", e))
 }
 
 fn remove_cache() -> Result<(), String> {
@@ -282,18 +298,42 @@ fn get_read_ids() -> Result<Vec<String>, String> {
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let content = fs::read_to_string(path).map_err(|e| format!("读取公告已读状态失败: {}", e))?;
+    let content = fs::read_to_string(&path).map_err(|e| format!("读取公告已读状态失败: {}", e))?;
     if content.trim().is_empty() {
         return Ok(Vec::new());
     }
-    serde_json::from_str(&content).map_err(|e| format!("解析公告已读状态失败: {}", e))
+    match serde_json::from_str(&content) {
+        Ok(ids) => Ok(ids),
+        Err(error) => {
+            match crate::modules::atomic_write::quarantine_file(&path, "invalid-json") {
+                Ok(Some(backup_path)) => logger::log_warn(&format!(
+                    "[Announcement] 公告已读状态解析失败，已隔离并使用空状态: path={}, backup={}, error={}",
+                    path.display(),
+                    backup_path.display(),
+                    error
+                )),
+                Ok(None) => logger::log_warn(&format!(
+                    "[Announcement] 公告已读状态解析失败，文件已不存在，使用空状态: path={}, error={}",
+                    path.display(),
+                    error
+                )),
+                Err(backup_error) => logger::log_warn(&format!(
+                    "[Announcement] 公告已读状态解析失败，隔离失败，使用空状态: path={}, parse_error={}, backup_error={}",
+                    path.display(),
+                    error,
+                    backup_error
+                )),
+            }
+            Ok(Vec::new())
+        }
+    }
 }
 
 fn save_read_ids(ids: &[String]) -> Result<(), String> {
     let content =
         serde_json::to_string_pretty(ids).map_err(|e| format!("序列化公告已读状态失败: {}", e))?;
-    fs::write(get_read_ids_path()?, content).map_err(|e| format!("写入公告已读状态失败: {}", e))?;
-    Ok(())
+    crate::modules::atomic_write::write_string_atomic(&get_read_ids_path()?, &content)
+        .map_err(|e| format!("写入公告已读状态失败: {}", e))
 }
 
 fn parse_version(value: &str) -> Vec<i64> {

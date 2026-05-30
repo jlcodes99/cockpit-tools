@@ -462,6 +462,67 @@
   pointer-events: none;
 }
 
+.page-top-strip-right {
+  position: absolute;
+  right: 0;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  max-width: min(260px, 32vw);
+}
+
+.installed-version-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  height: 30px;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.installed-version-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.14);
+}
+
+.installed-version-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.installed-version-value {
+  flex: 0 0 auto;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.installed-version-badge.is-loading .installed-version-dot {
+  background: #94a3b8;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.16);
+}
+
+.installed-version-badge.is-missing .installed-version-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.16);
+}
+
 .page-tabs-row-with-leading {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -785,6 +846,10 @@
 }
 
 @media (max-width: 900px) {
+  .page-top-strip-right {
+    display: none;
+  }
+
   .page-tabs-row-with-leading {
     grid-template-columns: 1fr;
     justify-items: stretch;
@@ -1620,6 +1685,119 @@
   padding: 28px;
   overflow-y: auto;
   flex: 1;
+}
+
+.mfa-quick-code-select {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-tertiary);
+}
+
+.mfa-quick-code-select__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mfa-quick-code-select__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.mfa-quick-code-select__title svg {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.mfa-quick-code-select__timer {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mfa-quick-code-select__timer.warning {
+  color: var(--danger);
+}
+
+.mfa-quick-code-select__controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.mfa-quick-code-select select {
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+
+.mfa-quick-code-select select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.mfa-quick-code-select__code {
+  min-width: 136px;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.mfa-quick-code-select__code > span {
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mfa-quick-code-select__code > span.invalid {
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.mfa-quick-code-select__code .action-btn {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .mfa-quick-code-select__controls {
+    grid-template-columns: 1fr;
+  }
+
+  .mfa-quick-code-select__code {
+    width: 100%;
+  }
 }
 
 .modal-footer {

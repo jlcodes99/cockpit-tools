@@ -14,6 +14,7 @@
     "close": "Fechar",
     "open": "Abrir",
     "copy": "Copiar",
+    "copied": "Copiado",
     "add": "Adicionar",
     "enable": "Ativar",
     "disable": "Desativar",
@@ -227,7 +228,7 @@
     "selectAll": "Selecionar tudo"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "Contas",
     "wakeup": "Tarefas de despertar",
     "fingerprints": "Impressões",
@@ -497,9 +498,9 @@
       },
       "safe": {
         "title": "Reinicialização segura (Recomendado)",
-        "principle": "Envia um sinal SIGTERM para todos os processos do Antigravity, solicitando que o app salve os dados e feche, em seguida inicia a instância de destino (força o fechamento se necessário).",
-        "commandMac": "macOS/Linux: kill -15 <pid> (todos os processos Antigravity)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (todos os processos Antigravity)",
+        "principle": "Envia um sinal SIGTERM para todos os processos do Antigravity IDE, solicitando que o app salve os dados e feche, em seguida inicia a instância de destino (força o fechamento se necessário).",
+        "commandMac": "macOS/Linux: kill -15 <pid> (todos os processos Antigravity IDE)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (todos os processos Antigravity IDE)",
         "pros": "Mais próximo de um fechamento normal, menos provável de ocorrer avisos de erro, dados mais seguros.",
         "cons": "Suporta apenas o reinício global de todas as instâncias."
       },
@@ -563,7 +564,7 @@
       "defaultTerminalDesc": "O terminal usado ao abrir o Gemini CLI",
       "terminalSystem": "Padrão do Sistema",
       "accountManagement": "Gerenciamento de Contas",
-      "autoRefresh": "Atualização automática da cota Antigravity",
+      "autoRefresh": "Atualização automática da cota Antigravity IDE",
       "codexAutoRefresh": "Atualização automática da cota Codex",
       "autoRefreshDesc": "Frequência de atualização em segundo plano",
       "codexAutoRefreshDesc": "Frequência de atualização em segundo plano",
@@ -587,6 +588,10 @@
       "hideDockIconDesc": "Controla a visibilidade do ícone do Dock de forma independente, sem relação com o comportamento de minimizar a janela",
       "hideDockIconOff": "Não (Mostrar ícone do Dock)",
       "hideDockIconOn": "Sim (Ocultar ícone do Dock)",
+      "trayIconStyle": "Estilo do ícone da barra de menus (somente macOS)",
+      "trayIconStyleDesc": "Escolha o ícone monocromático do sistema ou o ícone colorido original do app",
+      "trayIconStyleTemplate": "Ícone monocromático",
+      "trayIconStyleColor": "Ícone colorido",
       "floatingCardStartup": "Mostrar cartão flutuante ao iniciar",
       "floatingCardStartupDesc": "Exibir automaticamente o cartão flutuante da conta após iniciar o aplicativo",
       "floatingCardAlwaysOnTop": "Manter o cartão flutuante sempre no topo por padrão",
@@ -596,8 +601,8 @@
       "floatingCardShowNowAction": "Mostrar cartão flutuante",
       "dataDir": "Diretório de dados",
       "dataDirDesc": "Local de armazenamento de contas e arquivos de configuração.",
-      "fpDir": "Armazenamento do Antigravity",
-      "fpDirDesc": "Local de armazenamento dos arquivos de dados do Antigravity.",
+      "fpDir": "Armazenamento do Antigravity IDE",
+      "fpDirDesc": "Local de armazenamento dos arquivos de dados do Antigravity IDE.",
       "opencodeTitle": "Integração OpenCode",
       "opencodeRestart": "Reiniciar o OpenCode ao trocar o Codex",
       "opencodeRestartDesc": "Sincronizar informações da conta Codex no OpenCode",
@@ -618,10 +623,10 @@
       "vscodeAppPathPlaceholder": "Caminho padrão",
       "vscodePathSelect": "Selecionar",
       "vscodePathReset": "Redefinir padrão",
-      "antigravityAppPath": "Caminho do app Antigravity",
-      "antigravityTitle": "Inicialização do Antigravity",
+      "antigravityAppPath": "Caminho do app Antigravity IDE",
+      "antigravityTitle": "Inicialização do Antigravity IDE",
       "commonTitle": "Geral",
-      "antigravitySettingsTitle": "Configurações do Antigravity",
+      "antigravitySettingsTitle": "Configurações do Antigravity IDE",
       "codexSettingsTitle": "Configurações do Codex",
       "githubCopilotSettingsTitle": "Configurações do GitHub Copilot",
       "ghcpAutoRefresh": "Atualização automática de cota do GitHub Copilot",
@@ -694,14 +699,14 @@
       "sideNavLayoutOriginal": "Layout original",
       "sideNavLayoutClassic": "Layout clássico",
       "antigravityDualSwitchNoRestart": "Troca dupla sem reiniciar",
-      "antigravityDualSwitchNoRestartDesc": "Ao trocar de conta, a gravação local dos dados e a troca contínua da extensão são executadas em um único fluxo, sem reiniciar o Antigravity.",
+      "antigravityDualSwitchNoRestartDesc": "Ao trocar de conta, a gravação local dos dados e a troca contínua da extensão são executadas em um único fluxo, sem reiniciar o Antigravity IDE.",
       "appAutoLaunch": "Iniciar o Cockpit Tools ao entrar no sistema",
       "appAutoLaunchDesc": "Iniciar o app automaticamente após o login no sistema",
       "startupWakeupDisabled": "Desativado",
       "startupWakeupImmediate": "Despertar imediatamente",
       "startupWakeupDelayed": "Despertar com atraso",
-      "antigravityStartupWakeup": "Executar despertar do Antigravity após iniciar",
-      "antigravityStartupWakeupDesc": "Executar uma vez as tarefas de despertar do Antigravity habilitadas após iniciar o app",
+      "antigravityStartupWakeup": "Executar despertar do Antigravity IDE após iniciar",
+      "antigravityStartupWakeupDesc": "Executar uma vez as tarefas de despertar do Antigravity IDE habilitadas após iniciar o app",
       "codexStartupWakeup": "Executar despertar do Codex após iniciar",
       "codexStartupWakeupDesc": "Executar uma vez as tarefas de despertar do Codex habilitadas após iniciar o app",
       "currentAccountRefreshTitle": "Atualização da conta atual",
@@ -936,7 +941,7 @@
   },
   "accounts": {
     "title": "Gerenciamento de Contas",
-    "subtitle": "Gerencie sua lista de contas Antigravity.",
+    "subtitle": "Gerencie sua lista de contas Antigravity IDE.",
     "total": "{{count}} contas",
     "search": "Pesquisar contas...",
     "addAccount": "Adicionar Conta",
@@ -1093,6 +1098,8 @@
       "noGroups": "Sem grupos",
       "noGroupsDesc": "Crie grupos para gerenciar suas contas",
       "manage": "Gerenciar",
+      "refresh": "Atualizar grupo",
+      "refreshEmpty": "Nenhuma conta atualizável neste grupo",
       "error": {
         "duplicate": "Nome do grupo já existe",
         "createFailed": "Falha ao criar grupo: {{error}}",
@@ -1190,7 +1197,7 @@
     "switching": "Trocando...",
     "fingerprint": "Impressão",
     "bound": "Vinculado",
-    "brandTitle": "Gerenciamento de conta Antigravity"
+    "brandTitle": "Gerenciamento de conta Antigravity IDE"
   },
   "fingerprints": {
     "title": "Impressões de Dispositivo",
@@ -1292,7 +1299,7 @@
   "modals": {
     "addAccount": {
       "title": "Adicionar Conta",
-      "desc": "Adicione sua conta Antigravity via Google OAuth",
+      "desc": "Adicione sua conta Antigravity IDE via Google OAuth",
       "loginBtn": "Login com Google OAuth",
       "waiting": "Aguardando..."
     },
@@ -1300,7 +1307,7 @@
       "title": "Importar Contas",
       "desc": "Escolha um método de importação",
       "local": "Importar Conta Local",
-      "localDesc": "Importar conta atual do cliente Antigravity",
+      "localDesc": "Importar conta atual do cliente Antigravity IDE",
       "tools": "Importar Antigravity Tools",
       "toolsDesc": "Importar do diretório ~/.antigravity_tools/",
       "jsonDivider": "ou Colar JSON",
@@ -1313,7 +1320,7 @@
       "fromExtension": "Importar do Plugin",
       "syncBadge": "Sincronizar contas do plugin Antigravity Cockpit",
       "fromLocalDB": "Importar do BD Local",
-      "localDBDesc": "Ler contas de login do cliente Antigravity nesta máquina",
+      "localDBDesc": "Ler contas de login do cliente Antigravity IDE nesta máquina",
       "toolsDescMigrate": "Migrar contas de ~/.antigravity_tools/",
       "importingTools": "Importando do Antigravity Tools...",
       "importingLocal": "Importando conta local...",
@@ -1358,6 +1365,7 @@
     "batchDeleteConfirm": "Tem certeza que deseja excluir as {{count}} contas selecionadas?",
     "switched": "Trocado para {{email}}",
     "switchFailed": "Falha ao trocar: {{error}}",
+    "antigravityLegacyUnsupported": "Antigravity 2.0.0 e versões posteriores não são compatíveis aqui. Escolha uma versão do Antigravity anterior a 2.0.0 ou use Antigravity IDE.",
     "importSuccess": "Importadas com sucesso {{count}} contas",
     "importLocalSuccess": "Conta importada com sucesso: {{email}}",
     "importFailed": "Falha na importação: {{error}}",
@@ -1396,7 +1404,7 @@
       },
       "runHint": {
         "title": "Notas de verificação",
-        "line1": "“Detectar agora” envia uma solicitação mínima de chat simulando o cliente Antigravity por meio de gateway local e do protocolo oficial Language Server.",
+        "line1": "“Detectar agora” envia uma solicitação mínima de chat simulando o cliente Antigravity IDE por meio de gateway local e do protocolo oficial Language Server.",
         "line2": "Esse processo consome uma pequena quantidade de tokens (normalmente um diálogo curto). O consumo real depende do modelo e da política da conta.",
         "line3": "Essa ação não altera a configuração das tarefas de despertar. Ela apenas detecta a disponibilidade da conta e grava o histórico de detecção.",
         "line4": "Se retornar 403, é necessário concluir a verificação da conta ou enviar uma apelação; o resultado incluirá o endereço e ações rápidas."
@@ -1527,6 +1535,7 @@
       "modeScheduled": "📅 Agendado",
       "modeCrontab": "🧩Crontab",
       "modeQuotaReset": "🔄 Reset de cota",
+      "antigravityVersion": "Versão do Antigravity IDE",
       "modelSelect": "Seleção de modelos",
       "modelHint": "No mesmo grupo de cota, escolha um modelo. Vários modelos disparam em sequência.",
       "modelsEmpty": "Nenhum modelo recomendado",
@@ -1673,6 +1682,7 @@
       "refreshTokenExpired": "A autorização de login do Codex expirou e não pode ser atualizada automaticamente. Entre novamente na conta Codex.",
       "refreshTokenInvalidated": "A autorização de login do Codex foi revogada pelo serviço e não pode ser atualizada automaticamente. Entre novamente na conta Codex.",
       "invalidGrant": "A autorização de login do Codex é inválida e não pode ser atualizada automaticamente. Entre novamente na conta Codex.",
+      "staleAccount": "Esta conta não está mais no armazenamento local de contas. A lista de contas foi atualizada. Reimporte esta conta do Codex ou entre novamente.",
       "unsupportedCountryRegion": "A região de rede atual não permite atualizar a autorização do Codex. O serviço de autorização da OpenAI recusou esta saída de rede. Mude para uma região compatível e tente novamente."
     },
     "current": "Atual",
@@ -1687,6 +1697,11 @@
     },
     "oauth": {
       "desc": "Clique abaixo e conclua a autorização OpenAI no navegador",
+      "trialGuideTitle": "Dicas de cadastro de teste",
+      "trialGuideDesc": "Ao preparar uma nova conta, prefira um Gmail com acesso de longo prazo; isso ajuda na permanência da conta e em verificações futuras.",
+      "trialGuideAliasDesc": "Um Gmail principal pode preparar até 5 aliases para separar registros do ChatGPT; use-os conforme as regras do serviço de destino.",
+      "trialGuideLink": "Ver guia de teste",
+      "gmailAliasLink": "Gerar alias Gmail",
       "preparing": "Preparando link de autorização...",
       "exchanging": "Trocando token...",
       "portInUse": "A porta {{port}} já está em uso. Feche o aplicativo que a utiliza e tente novamente.",
@@ -1696,7 +1711,8 @@
       "portStillInUse": "A porta {{port}} ainda está em uso.",
       "portInUseAction": "Fechar a porta e tentar novamente",
       "timeout": "Autenticação expirou. Clique",
-      "timeoutRetry": "Atualizar link de autenticação"
+      "timeoutRetry": "Atualizar link de autenticação",
+      "reauthEmailLabel": "Conta para reautorizar"
     },
     "token": {
       "desc": "Cole auth.json, JSON da conta ou refresh_token.",
@@ -1742,6 +1758,7 @@
       "disableService": "Desativar serviço",
       "enableService": "Ativar serviço",
       "saveSuccess": "Coleção do serviço de API atualizada",
+      "noEligibleAccountsSelected": "As contas selecionadas não estão neste ambiente ou não podem ser usadas pelo serviço de API. Importe primeiro uma conta Codex utilizável neste ambiente.",
       "removeSuccess": "Conta removida do serviço de API",
       "rotateSuccess": "Chave do serviço de API redefinida",
       "enabledSuccess": "Serviço de API ativado",
@@ -1752,7 +1769,7 @@
       "hideKey": "Ocultar chave",
       "modal": {
         "title": "Adicionar ao serviço de API",
-        "desc": "Escolha as contas OAuth que deseja incluir na coleção do serviço de API. As contas adicionadas serão ocultadas da visão normal e gerenciadas apenas no cartão do serviço de API.",
+        "desc": "Escolha as contas OAuth ou API Key que deseja incluir na coleção do serviço de API. As contas adicionadas serão ocultadas da visão normal e gerenciadas apenas no cartão do serviço de API.",
         "empty": "Nenhuma conta OAuth disponível",
         "selected": "No serviço de API",
         "available": "Visão normal",
@@ -1809,7 +1826,7 @@
       "memberTitle": "Membros da coleção",
       "stats": {
         "requests": "Requisições",
-        "requestsDetail": "Sucesso {{success}} / Falha {{failed}}",
+        "requestsDetail": "OK {{success}} / Falha {{failed}} / Canc. {{canceled}} / Origem {{upstreamFailed}} / Incomp. {{incomplete}}",
         "tokens": "Tokens totais",
         "tokensDetail": "Entrada {{input}} / Saída {{output}}",
         "specialTokens": "Cache / Raciocínio",
@@ -1819,7 +1836,11 @@
         "accountRequests": "{{count}} requisições",
         "accountTokens": "{{count}} tokens totais",
         "accountResult": "Sucesso {{success}} / Falha {{failed}}",
-        "accountTokensCompact": "{{value}}"
+        "accountTokensCompact": "{{value}}",
+        "images": "Requisições de imagem",
+        "imagesDetail": "Gerar {{generate}} / Editar {{edit}} / Permissão {{blocked}}",
+        "estimatedCost": "Valor estimado",
+        "estimatedCostDetail": "Acumulado do snapshot de preço de cada requisição"
       },
       "routingLabel": "Roteamento",
       "routingSaveSuccess": "Roteamento do serviço API atualizado",
@@ -1846,7 +1867,8 @@
         "quotaLowFirst": "Cota baixa primeiro",
         "planHighFirst": "Plano alto primeiro",
         "planLowFirst": "Plano baixo primeiro",
-        "expirySoonFirst": "Vence antes primeiro"
+        "expirySoonFirst": "Vence antes primeiro",
+        "custom": "Personalizado"
       },
       "statusUnconfigured": "Não configurado",
       "expandDetails": "Expandir detalhes",
@@ -1886,9 +1908,92 @@
         "empty": "Ainda sem estatísticas de cota"
       },
       "oauthBinding": {
-        "desc": "Opcional. Sem vínculo, o serviço API mantém o fluxo de API Key original; ao vincular, o login usa a conta OAuth e o Provider usa a configuração do serviço API.",
+        "desc": "Opcional. Só é possível selecionar contas OAuth com indicação de período de assinatura; períodos expirados também são aceitos. Sem vínculo, o serviço API mantém o fluxo de API Key original; ao vincular, o login usa a conta OAuth e o Provider usa a configuração do serviço API.",
         "currentService": "Serviço de API: {{name}}"
-      }
+      },
+      "customRoutingEdit": "Editar roteamento personalizado",
+      "customRoutingTitle": "Roteamento personalizado",
+      "customRoutingDesc": "Defina prioridade e peso por conta para controlar a ordem de seleção e a distribuição de carga no mesmo nível.",
+      "customRoutingPriorityTitle": "Prioridade",
+      "customRoutingPriorityDesc": "Valores maiores são escolhidos primeiro; contas de prioridade menor só são tentadas quando as superiores estão indisponíveis.",
+      "customRoutingWeightTitle": "Peso",
+      "customRoutingWeightDesc": "Usado para balancear carga na mesma prioridade. Peso maior significa mais requisições.",
+      "customRoutingSearch": "Buscar e-mail, plano ou ID da conta",
+      "customRoutingSelected": "{{count}} selecionadas",
+      "customRoutingPriorityShort": "Prioridade",
+      "customRoutingWeightShort": "Peso",
+      "customRoutingApplyBatch": "Aplicar à seleção",
+      "customRoutingReset": "Redefinir",
+      "customRoutingAccountColumn": "Conta",
+      "customRoutingQuotaColumn": "Cota",
+      "customRoutingEmpty": "Não há contas configuráveis na coleção atual do serviço API",
+      "customRoutingSave": "Salvar roteamento",
+      "customRoutingSaveSuccess": "Roteamento personalizado do serviço API atualizado",
+      "upstreamProxyLabel": "URL do proxy da API",
+      "upstreamProxySaveSuccess": "URL do proxy da API atualizada",
+      "upstreamProxyUrlPlaceholder": "Vazio = proxy global",
+      "upstreamProxySaveAction": "Salvar proxy",
+      "imageGenerationLabel": "Ferramenta image_generation",
+      "imageGenerationDesc": "Controla se conversas de texto declaram a ferramenta de imagem e se endpoints de imagem ficam disponíveis.",
+      "imageGenerationSaveSuccess": "Configuração de image_generation atualizada",
+      "apiKeysTitle": "Chaves de cliente",
+      "apiKeyAdd": "Adicionar chave",
+      "apiKeyLabel": "Nome da chave",
+      "apiKeySaveLabel": "Salvar nome",
+      "apiKeyDefaultLabel": "Cliente {{index}}",
+      "apiKeyCreateSuccess": "API Key criada",
+      "apiKeyUpdateSuccess": "API Key atualizada",
+      "apiKeyRotateSuccess": "API Key redefinida",
+      "apiKeyDeleteSuccess": "API Key excluída",
+      "apiKeyRotateConfirm": "Esta API Key deixará de funcionar imediatamente após redefinir. Continuar?",
+      "apiKeyDeleteConfirm": "Excluir esta API Key?",
+      "apiKeyDelete": "Excluir chave",
+      "apiKeyDisable": "Desativar chave",
+      "apiKeyEnable": "Ativar chave",
+      "modelStatsTitle": "Por modelo",
+      "apiKeyStatsTitle": "Por chave",
+      "healthAvailable": "Disponível",
+      "healthUnavailable": "Indisponível",
+      "healthCooldown": "Espera {{count}}",
+      "healthImageUnavailable": "Imagem indisponível",
+      "requestLogTitle": "Log de requisições",
+      "requestLogEmpty": "Ainda não há logs",
+      "requestLogSuccess": "Sucesso",
+      "requestLogFailed": "Falhou",
+      "requestLogTokens": "{{value}} tokens",
+      "imageGenerationMode": {
+        "enabled": "Ativado",
+        "imagesOnly": "Só imagens",
+        "disabled": "Desativado"
+      },
+      "requestKind": {
+        "text": "Texto",
+        "imageGeneration": "Imagem",
+        "imageEdit": "Edição",
+        "other": "Outro"
+      },
+      "testSuccessInline": "Teste do serviço API aprovado",
+      "gatewayModeLabel": "Modo do gateway",
+      "gatewayModeLegacyShort": "Legado",
+      "gatewayModeSidecarShort": "Novo",
+      "gatewayModeNewLabel": "Servico API-Novo",
+      "gatewayModeOldLabel": "Servico API-Antigo",
+      "gatewayModeSaveSuccess": "O modo de gateway do servico de API foi atualizado",
+      "gatewayGuideTitle": "Troque o gateway aqui",
+      "gatewayGuideDesc": "O gateway novo é o padrão. Se houver problemas de compatibilidade ou erros de requisição do cliente, volte aqui para o gateway antigo.",
+      "gatewayGuideAction": "Entendi",
+      "upstreamProxyUrlPlaceholderLegacy": "Deixe vazio para usar proxy global, proxy de ambiente ou proxy do sistema",
+      "upstreamProxyUrlPlaceholderSidecar": "Deixe vazio para usar o proxy global",
+      "debugLogsLabel": "Logs debug",
+      "debugLogsDescription": "Emite logs de debug do serviço API para diagnosticar gateway e streaming",
+      "debugLogsEnabledSuccess": "Logs debug ativados",
+      "debugLogsDisabledSuccess": "Logs debug desativados",
+      "debugLogsEnableConfirmTitle": "Ativar logs debug",
+      "debugLogsEnableConfirmMessage": "Ao ativar, o serviço API emitirá logs debug para diagnosticar gateway, proxy, requisições upstream e respostas em streaming. Isso pode adicionar um pequeno custo de desempenho com alta concorrência ou streams longos. Desative após a investigação. Ativar?",
+      "debugLogsEnableConfirmAction": "Ativar",
+      "debugLogsDisableConfirmTitle": "Desativar logs debug",
+      "debugLogsDisableConfirmMessage": "Ao desativar, o serviço API para de emitir logs debug, reduzindo ruído e sobrecarga. Você pode ativar novamente ao diagnosticar gateway, proxy ou streaming. Desativar?",
+      "debugLogsDisableConfirmAction": "Desativar"
     },
     "local": {
       "desc": "Importe a conta atual de ~/.codex/auth.json",
@@ -2299,11 +2404,13 @@
         "action": "Vincular OAuth",
         "actionShort": "Vincular",
         "title": "Vincular conta OAuth",
-        "desc": "Opcional. Sem vínculo, esta conta alterna pelo fluxo de API Key original; ao vincular, o login usa a conta OAuth e o Provider usa a configuração desta conta API Key.",
+        "desc": "Opcional. Só é possível selecionar contas OAuth com indicação de período de assinatura; períodos expirados também são aceitos. Sem vínculo, esta conta alterna pelo fluxo de API Key original; ao vincular, o login usa a conta OAuth e o Provider usa a configuração desta conta API Key.",
         "currentAccount": "Conta API Key: {{name}}",
         "selectLabel": "Selecione a conta OAuth",
         "empty": "Nenhuma conta OAuth. Adicione primeiro uma conta autorizada por OAuth.",
+        "emptyEligible": "Nenhuma conta OAuth com período de assinatura. Atualize a cota ou adicione primeiro uma conta OAuth elegível.",
         "validationRequired": "Selecione uma conta OAuth",
+        "validationSubscriptionRequired": "Só é possível vincular contas OAuth com período de assinatura",
         "saveSuccess": "Vínculo OAuth atualizado",
         "saveFailed": "Falha ao vincular OAuth: {{error}}",
         "switchRequiresBinding": "Vincule uma conta OAuth primeiro",
@@ -2434,6 +2541,7 @@
       "column": "Expira",
       "unknown": "Reautorizar",
       "missingDetail": "Reautorize para buscar",
+      "refresh": "Atualizar assinatura",
       "expired": "Expirada",
       "hoursLeft": "{{count}} h",
       "daysLeft": "{{count}} d",
@@ -2454,6 +2562,7 @@
       "repairing": "Reparando a visibilidade das sessões do Codex...",
       "repairFailed": "O reparo automático falhou. Você pode tentar novamente depois em Gerenciamento de sessões > Reparar visibilidade.",
       "type": {
+        "api": "Modo API",
         "apiKey": "Chave API",
         "apiService": "Serviço API",
         "account": "Conta"
@@ -2493,6 +2602,152 @@
       "fastDesc": "Velocidade 1,5x, uso maior",
       "saveSuccess": "Velocidade atualizada",
       "saveFailed": "Falha ao salvar a velocidade: {{error}}"
+    },
+    "apiService": {
+      "navTitle": "Serviço API Codex",
+      "title": "Serviço API Codex",
+      "openPage": "Abrir serviço API",
+      "openFullPage": "Ver todos os recursos",
+      "tabs": {
+        "overview": "Visão geral do serviço",
+        "keys": "Chaves cliente",
+        "accounts": "Pool de contas",
+        "models": "Modelos e capacidades",
+        "logs": "Estatísticas e logs"
+      },
+      "healthTitle": "Saúde do serviço",
+      "health": {
+        "availableAccounts": "Contas disponíveis",
+        "cooldowns": "Resfriamentos",
+        "imageUnavailable": "Imagens indisponíveis",
+        "keys": "Chaves cliente"
+      },
+      "accountHealth": {
+        "failures": "{{count}} falhas seguidas",
+        "image": "Imagens {{status}}"
+      },
+      "models": {
+        "availableTitle": "Modelos disponíveis",
+        "capabilityTitle": "Chaves de capacidade",
+        "capabilityDesc": "gpt-image-2 é exibido ou ocultado automaticamente conforme a chave do serviço, o plano da conta e o estado registrado da capacidade de imagem.",
+        "rulesTitle": "Regras de modelos",
+        "aliasTitle": "Aliases de modelos",
+        "aliasPlaceholder": "gpt-5 => g5; adicione + para manter o modelo original",
+        "excludedTitle": "Modelos ocultos",
+        "excludedPlaceholder": "Um modelo ou padrão por linha, ex. gpt-5-*",
+        "saveRules": "Salvar regras",
+        "rulesSaved": "Regras de modelos salvas",
+        "pricingAction": "Preços",
+        "pricingTitle": "Preços dos modelos",
+        "pricingDesc": "USD / 1M tokens, usado apenas para estatísticas locais de valor.",
+        "pricingModel": "Modelo",
+        "pricingInput": "Entrada",
+        "pricingCache": "Entrada cache",
+        "pricingOutput": "Saída",
+        "pricingSource": "Origem",
+        "pricingActions": "Ação",
+        "pricingCachePlaceholder": "Igual entrada",
+        "pricingCustom": "Personal.",
+        "pricingPreset": "Predef.",
+        "pricingUnset": "Não definido",
+        "pricingReset": "Redefinir",
+        "pricingSaved": "Preços salvos",
+        "pricingInvalid": "Os preços devem ser números maiores ou iguais a 0"
+      },
+      "keys": {
+        "policyTitle": "Política de modelos",
+        "advancedPolicyTitle": "Avançado: política de modelos",
+        "modelPrefix": "Prefixo do modelo",
+        "modelPrefixPlaceholder": "Exemplo: codex",
+        "allowedModels": "Modelos permitidos",
+        "allowedModelsPlaceholder": "Vazio libera todos; um modelo ou padrão por linha",
+        "excludedModels": "Modelos excluídos",
+        "excludedModelsPlaceholder": "Um modelo ou padrão por linha",
+        "savePolicy": "Salvar política",
+        "policySaved": "Política de modelos do Key salva"
+      },
+      "routing": {
+        "optionsTitle": "Opções de rota",
+        "sessionAffinity": "Afinidade de sessão",
+        "sessionAffinityTtl": "TTL de afinidade",
+        "maxRetryCredentials": "Contas retry",
+        "maxRetryInterval": "Espera retry",
+        "disableCooling": "Desativar cooldown",
+        "saveOptions": "Salvar opções",
+        "optionsSaved": "Opções de rota salvas"
+      },
+      "validation": {
+        "numberRange": "Digite um número de {{min}} a {{max}}"
+      },
+      "logs": {
+        "allKinds": "Todos os tipos",
+        "allStatuses": "Todos os status",
+        "allGatewayModes": "Todos os modos",
+        "modelFilter": "Modelo",
+        "modelPlaceholder": "ID do modelo",
+        "accountFilter": "Conta",
+        "accountPlaceholder": "E-mail ou ID da conta",
+        "apiKeyFilter": "Chave API",
+        "apiKeyPlaceholder": "Nome ou ID",
+        "kindFilter": "Tipo",
+        "statusFilter": "Situação",
+        "gatewayModeFilter": "Modo",
+        "errorFilter": "Erro",
+        "errorPlaceholder": "Categoria do erro",
+        "clearFilters": "Limpar filtros",
+        "loading": "Carregando logs",
+        "gatewayModeUnknown": "Modo desconhecido",
+        "requestIdShort": "ID da requisição {{id}}",
+        "httpStatus": "Status HTTP {{status}}"
+      },
+      "timeouts": {
+        "entryLabel": "Avançado",
+        "openAction": "Tempos e tentativas",
+        "title": "Tempos e tentativas",
+        "desc": "Os valores estão em segundos. Ao salvar, o serviço de API reinicia ou recarrega conforme o modo de gateway atual.",
+        "sidecarTitle": "Novo serviço API",
+        "legacyTitle": "Serviço API antigo",
+        "streamOpen": "Abrir stream",
+        "streamIdle": "Stream ocioso",
+        "imageOpen": "Abrir imagem",
+        "imageIdle": "Imagem ociosa",
+        "openAttempts": "Tentativas de abertura",
+        "keepalive": "Pulso de conexão",
+        "requestRead": "Ler requisição",
+        "connect": "Conexão upstream",
+        "streamTotal": "Total do stream",
+        "resetDefaults": "Restaurar padrão",
+        "saved": "Tempos e tentativas salvos",
+        "totalGteIdle": "O tempo total do stream da API antiga não pode ser menor que o tempo ocioso",
+        "bootstrapRetries": "Tentativas de início",
+        "websocketTitle": "Config. WebSocket",
+        "websocketConnect": "Tempo de conexão",
+        "websocketInitial": "Tempo 1ª mensagem",
+        "websocketIdle": "Tempo ocioso",
+        "websocketHeartbeat": "Intervalo heartbeat",
+        "sendRetryAttempts": "Tentativas envio",
+        "sendRetryBaseDelay": "Atraso base envio (ms)",
+        "sendRetryMaxDelay": "Atraso máx. envio (ms)",
+        "singleStatusAttempts": "Tentativas uma conta",
+        "singleStatusBaseDelay": "Atraso base conta (ms)",
+        "singleStatusMaxDelay": "Atraso máx. conta (ms)",
+        "maxDelayGteBase": "O atraso máximo não pode ser menor que o atraso base",
+        "longWaitPreset": "Predef. espera longa",
+        "shortWaitPreset": "Predef. espera curta",
+        "presetTitle": "Predefinição de parâmetros",
+        "presetSelect": "Escolher predefinição",
+        "presetName": "Nome da predefinição",
+        "presetNamePlaceholder": "Nova predefinição personalizada",
+        "saveAsPreset": "Salvar como predefinição",
+        "updatePreset": "Atualizar predefinição",
+        "deletePreset": "Excluir predefinição",
+        "presetSaved": "Predefinição salva",
+        "presetUpdated": "Predefinição atualizada",
+        "presetDeleted": "Predefinição excluída",
+        "presetNameRequired": "Informe o nome da predefinição",
+        "deletePresetConfirm": "Excluir esta predefinição personalizada?",
+        "deletePresetTitle": "Excluir predefinição"
+      }
     }
   },
   "githubCopilot": {
@@ -2545,23 +2800,31 @@
       "storage": "Escopo de dados: a importação local lê as sessões de login do GitHub no VS Code, e a troca atualiza essas entradas; OAuth, importação de token, validação da importação local e atualização de cotas chamam as APIs oficiais do GitHub com os campos de autenticação necessários. state.vscdb e chaves do sistema não são enviados."
     }
   },
+  "runtime": {
+    "installedVersion": {
+      "loading": "Detectando a versão instalada",
+      "missing": "Nenhuma versão instalada detectada",
+      "detecting": "Detectando",
+      "notFound": "Nenhuma versão detectada"
+    }
+  },
   "dashboard": {
     "title": "Painel de contas",
     "summary": {
       "label": "Visão geral",
       "title": "Resumo das contas",
-      "desc": "Veja Antigravity e Codex rapidamente"
+      "desc": "Veja Antigravity IDE e Codex rapidamente"
     },
     "stats": {
-      "antigravity": "Contas Antigravity",
+      "antigravity": "Contas Antigravity IDE",
       "codex": "Contas Codex",
-      "currentAntigravity": "Antigravity atual",
+      "currentAntigravity": "Antigravity IDE atual",
       "currentCodex": "Codex atual",
       "providers": "Provedores",
       "totalAccounts": "Total de contas"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "Distribuição de planos",
@@ -2576,7 +2839,7 @@
     },
     "emptyAccount": "Sem conta",
     "sections": {
-      "antigravity": "Contas Antigravity",
+      "antigravity": "Contas Antigravity IDE",
       "codex": "Contas Codex"
     },
     "actions": {
@@ -2609,7 +2872,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Configurações do Antigravity",
+      "title": "Configurações do Antigravity IDE",
       "appPath": "Caminho do aplicativo"
     },
     "codex": {
@@ -3044,7 +3307,7 @@
     "actions": {
       "collapseAll": "Recolher tudo",
       "expandAll": "Expandir tudo",
-      "goAntigravity": "Ir para Antigravity",
+      "goAntigravity": "Ir para Antigravity IDE",
       "goCodex": "Ir para Codex",
       "goDashboard": "Ir para o painel",
       "goFingerprints": "Ir para impressões do dispositivo",
@@ -3059,25 +3322,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "Faça backup antes de ações arriscadas ou em lote em Gerenciamento de contas Antigravity."
+        "0": "Faça backup antes de ações arriscadas ou em lote em Gerenciamento de contas Antigravity IDE."
       },
       "keywords": {
-        "0": "Gerenciamento de contas Antigravity",
+        "0": "Gerenciamento de contas Antigravity IDE",
         "1": "guia",
         "2": "fluxo",
         "3": "conta"
       },
       "outcomes": {
-        "0": "Entenda o que Gerenciamento de contas Antigravity ajuda a resolver.",
-        "1": "Use o fluxo recomendado em Gerenciamento de contas Antigravity para reduzir erros."
+        "0": "Entenda o que Gerenciamento de contas Antigravity IDE ajuda a resolver.",
+        "1": "Use o fluxo recomendado em Gerenciamento de contas Antigravity IDE para reduzir erros."
       },
       "steps": {
-        "0": "Abra a página de Gerenciamento de contas Antigravity.",
-        "1": "Conclua configuração básica e vínculos necessários em Gerenciamento de contas Antigravity.",
-        "2": "Execute uma operação manual em Gerenciamento de contas Antigravity para verificar o resultado."
+        "0": "Abra a página de Gerenciamento de contas Antigravity IDE.",
+        "1": "Conclua configuração básica e vínculos necessários em Gerenciamento de contas Antigravity IDE.",
+        "2": "Execute uma operação manual em Gerenciamento de contas Antigravity IDE para verificar o resultado."
       },
-      "summary": "Esta seção explica como usar Gerenciamento de contas Antigravity no fluxo diário.",
-      "title": "Gerenciamento de contas Antigravity"
+      "summary": "Esta seção explica como usar Gerenciamento de contas Antigravity IDE no fluxo diário.",
+      "title": "Gerenciamento de contas Antigravity IDE"
     },
     "blocks": {
       "cautions": "Erros comuns / atenção",
@@ -3930,5 +4193,14 @@
       "warn": "Aviso",
       "error": "Erro"
     }
+  },
+  "mfaQuick": {
+    "title": "Código 2FA",
+    "selectLabel": "Selecionar chave 2FA",
+    "unnamedSecret": "Chave sem nome",
+    "invalidCode": "Chave inválida",
+    "copyCode": "Copiar código",
+    "copied": "Copiado",
+    "refreshIn": "{{time}} s"
   }
 }

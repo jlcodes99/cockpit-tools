@@ -4,7 +4,7 @@
  * 内存中维护一份缓存避免频繁 IO
  *
  * 结构与 accountGroupService 相同，但使用独立的后端存储，
- * 因为 Codex 账号与 Antigravity 账号是两套不同的账号体系。
+ * 因为 Codex 账号与 Antigravity IDE 账号是两套不同的账号体系。
  */
 
 import { invoke } from '@tauri-apps/api/core'

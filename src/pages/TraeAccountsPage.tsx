@@ -28,6 +28,7 @@ import {
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
+import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import {
@@ -1419,6 +1420,7 @@ export function TraeAccountsPage() {
                 </div>
 
                 <div className="modal-body">
+                  <MfaQuickCodeSelect />
                   {addTab === 'oauth' ? (
                     <div className="add-section">
                       <p className="section-desc">

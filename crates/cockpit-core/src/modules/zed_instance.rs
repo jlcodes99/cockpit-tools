@@ -38,8 +38,32 @@ fn load_runtime_state() -> ZedRuntimeState {
     if !path.exists() {
         return ZedRuntimeState::default();
     }
-    match fs::read_to_string(path) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+    match fs::read_to_string(&path) {
+        Ok(content) => match serde_json::from_str(&content) {
+            Ok(state) => state,
+            Err(error) => {
+                match crate::modules::atomic_write::quarantine_file(&path, "invalid-json") {
+                    Ok(Some(backup_path)) => logger::log_warn(&format!(
+                        "[Zed] 运行时状态解析失败，已隔离并使用空状态: path={}, backup={}, error={}",
+                        path.display(),
+                        backup_path.display(),
+                        error
+                    )),
+                    Ok(None) => logger::log_warn(&format!(
+                        "[Zed] 运行时状态解析失败，文件已不存在，使用空状态: path={}, error={}",
+                        path.display(),
+                        error
+                    )),
+                    Err(backup_error) => logger::log_warn(&format!(
+                        "[Zed] 运行时状态解析失败，隔离失败，使用空状态: path={}, parse_error={}, backup_error={}",
+                        path.display(),
+                        error,
+                        backup_error
+                    )),
+                }
+                ZedRuntimeState::default()
+            }
+        },
         Err(_) => ZedRuntimeState::default(),
     }
 }
@@ -48,7 +72,8 @@ fn save_runtime_state(state: &ZedRuntimeState) -> Result<(), String> {
     let path = runtime_path()?;
     let content = serde_json::to_string_pretty(state)
         .map_err(|e| format!("序列化 Zed 运行时状态失败: {}", e))?;
-    fs::write(path, content).map_err(|e| format!("保存 Zed 运行时状态失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("保存 Zed 运行时状态失败: {}", e))
 }
 
 fn resolve_running_pid(last_pid: Option<u32>) -> Option<u32> {

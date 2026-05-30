@@ -2,6 +2,7 @@ import { Page } from './navigation';
 
 export type PlatformId =
   | 'antigravity'
+  | 'antigravity_ide'
   | 'codex'
   | 'zed'
   | 'github-copilot'
@@ -17,6 +18,7 @@ export type PlatformId =
 
 export const ALL_PLATFORM_IDS: PlatformId[] = [
   'antigravity',
+  'antigravity_ide',
   'codex',
   'zed',
   'github-copilot',
@@ -43,6 +45,7 @@ export function isMenuVisiblePlatform(platformId: PlatformId): boolean {
 
 export const PLATFORM_PAGE_MAP: Record<PlatformId, Page> = {
   antigravity: 'overview',
+  antigravity_ide: 'overview',
   codex: 'codex',
   zed: 'zed',
   'github-copilot': 'github-copilot',

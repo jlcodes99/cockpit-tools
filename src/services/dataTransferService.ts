@@ -251,6 +251,8 @@ interface AccountRegistry {
 
 const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   antigravity: async () => (await accountService.listAccounts()) as unknown as TransferAccountRecord[],
+  antigravity_ide: async () =>
+    (await accountService.listAccounts()) as unknown as TransferAccountRecord[],
   codex: async () => (await codexService.listCodexAccounts()) as unknown as TransferAccountRecord[],
   zed: async () => (await zedService.listZedAccounts()) as unknown as TransferAccountRecord[],
   'github-copilot': async () =>
@@ -269,6 +271,7 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
 
 const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unknown[]>) | undefined> = {
   antigravity: accountService.importFromJson,
+  antigravity_ide: accountService.importFromJson,
   codex: codexService.importCodexFromJson,
   zed: zedService.importZedFromJson,
   'github-copilot': githubCopilotService.importGitHubCopilotFromJson,

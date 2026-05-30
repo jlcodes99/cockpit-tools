@@ -141,6 +141,20 @@ export function PlatformOverviewTabsHeader({
       }),
     [switchablePlatforms, currentGroup, t],
   );
+  const extraSwitchOptions = useMemo(
+    () =>
+      platform === 'codex'
+        ? [
+            {
+              id: 'codex-api-service',
+              label: t('codex.apiService.navTitle', 'Codex API 服务'),
+              page: 'codex-api-service' as const,
+              icon: <CodexIcon size={18} />,
+            },
+          ]
+        : [],
+    [platform, t],
+  );
   const tabOrder: PlatformOverviewTab[] =
     tabs && tabs.length > 0 ? tabs : ['overview', 'instances'];
   const tabLabels: Record<PlatformOverviewTab, TabSpec> = {
@@ -194,6 +208,7 @@ export function PlatformOverviewTabsHeader({
             currentLabel={currentDisplayName}
             options={switchOptions}
             currentGroupId={currentGroup?.id ?? null}
+            extraOptions={extraSwitchOptions}
           />
         </div>
         <div className="page-tabs filter-tabs">

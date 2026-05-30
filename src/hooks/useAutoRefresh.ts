@@ -336,7 +336,7 @@ export function useAutoRefresh() {
           const descriptors: PlatformRefreshDescriptor[] = [
             {
               key: 'antigravity',
-              label: 'Antigravity',
+              label: 'Antigravity IDE',
               intervalMinutes: config.auto_refresh_minutes,
               currentMinutes: currentRefreshMinutesMap.antigravity,
               fullRefreshingRef: agRefreshingRef,

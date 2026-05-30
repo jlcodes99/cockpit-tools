@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
-use crate::error::file_corrupted_error;
 use crate::models::InstanceStore;
 
 #[derive(Debug, Clone)]
@@ -35,22 +34,47 @@ pub fn load_instance_store(path: &Path, file_name: &str) -> Result<InstanceStore
         return Ok(InstanceStore::new());
     }
 
-    serde_json::from_str(&content)
-        .map_err(|e| file_corrupted_error(file_name, &path.to_string_lossy(), &e.to_string()))
+    match serde_json::from_str(&content) {
+        Ok(store) => Ok(store),
+        Err(error) => {
+            match crate::modules::atomic_write::quarantine_file(path, "invalid-json") {
+                Ok(Some(backup_path)) => crate::modules::logger::log_warn(&format!(
+                    "实例配置解析失败，已隔离并使用空实例列表: file={}, path={}, backup={}, error={}",
+                    file_name,
+                    path.display(),
+                    backup_path.display(),
+                    error
+                )),
+                Ok(None) => crate::modules::logger::log_warn(&format!(
+                    "实例配置解析失败，文件已不存在，使用空实例列表: file={}, path={}, error={}",
+                    file_name,
+                    path.display(),
+                    error
+                )),
+                Err(backup_error) => crate::modules::logger::log_warn(&format!(
+                    "实例配置解析失败，隔离失败，使用空实例列表: file={}, path={}, parse_error={}, backup_error={}",
+                    file_name,
+                    path.display(),
+                    error,
+                    backup_error
+                )),
+            }
+            Ok(InstanceStore::new())
+        }
+    }
 }
 
 pub fn save_instance_store(
     path: &Path,
-    file_name: &str,
+    _file_name: &str,
     store: &InstanceStore,
 ) -> Result<(), String> {
     let data_dir = path.parent().ok_or("无法获取实例配置目录")?;
-    let temp_path = data_dir.join(format!("{}.tmp", file_name));
+    fs::create_dir_all(data_dir).map_err(|e| format!("创建实例配置目录失败: {}", e))?;
     let content =
         serde_json::to_string_pretty(store).map_err(|e| format!("序列化实例配置失败: {}", e))?;
-    fs::write(&temp_path, content).map_err(|e| format!("写入实例配置失败: {}", e))?;
-    fs::rename(temp_path, path).map_err(|e| format!("保存实例配置失败: {}", e))?;
-    Ok(())
+    crate::modules::atomic_write::write_string_atomic(path, &content)
+        .map_err(|e| format!("保存实例配置失败: {}", e))
 }
 
 pub fn normalize_name(name: &str) -> Result<String, String> {

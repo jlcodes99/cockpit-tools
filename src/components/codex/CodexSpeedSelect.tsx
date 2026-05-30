@@ -159,7 +159,7 @@ export function CodexSpeedSelect({
 
   const handleSelect = (nextSpeed: CodexAppSpeed) => {
     setOpen(false);
-    if (nextSpeed === speed || disabled || busy) return;
+    if (disabled || busy) return;
     void onChange(nextSpeed);
   };
 

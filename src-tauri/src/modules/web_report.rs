@@ -632,7 +632,7 @@ fn append_antigravity_rows(rows: &mut Vec<ReportRow>) {
                 if let Some(quota) = account.quota {
                     if quota.models.is_empty() {
                         rows.push(make_row(
-                            "Antigravity",
+                            "Antigravity IDE",
                             &account_name,
                             "Models",
                             "-",
@@ -656,7 +656,7 @@ fn append_antigravity_rows(rows: &mut Vec<ReportRow>) {
                             note = reason.to_string();
                         }
                         rows.push(make_row(
-                            "Antigravity",
+                            "Antigravity IDE",
                             &account_name,
                             &metric,
                             &percent_text(used),
@@ -668,7 +668,7 @@ fn append_antigravity_rows(rows: &mut Vec<ReportRow>) {
                     }
                 } else {
                     rows.push(make_row(
-                        "Antigravity",
+                        "Antigravity IDE",
                         &account_name,
                         "Models",
                         "-",
@@ -681,7 +681,7 @@ fn append_antigravity_rows(rows: &mut Vec<ReportRow>) {
             }
         }
         Err(err) => rows.push(make_row(
-            "Antigravity",
+            "Antigravity IDE",
             "-",
             "-",
             "-",

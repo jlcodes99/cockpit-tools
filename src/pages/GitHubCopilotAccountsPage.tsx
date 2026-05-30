@@ -30,6 +30,7 @@ import * as githubCopilotService from '../services/githubCopilotService';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
+import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { buildGitHubCopilotAccountPresentation } from '../presentation/platformAccountPresentation';
 
@@ -1146,7 +1147,7 @@ export function GitHubCopilotAccountsPage() {
                 onClick={() => openAddModal('token')}
               >
                 <KeyRound size={14} />
-                Token / JSON
+                {t('common.shared.addModal.token', 'Token / JSON')}
               </button>
               <button
                 className={`modal-tab ${addTab === 'import' ? 'active' : ''}`}
@@ -1158,6 +1159,7 @@ export function GitHubCopilotAccountsPage() {
             </div>
 
             <div className="modal-body">
+              <MfaQuickCodeSelect />
               {addTab === 'oauth' && (
                 <div className="add-section">
                   <p className="section-desc">

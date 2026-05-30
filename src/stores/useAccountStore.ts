@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { Account, QuotaData, RefreshStats, TokenData } from '../types/account';
 import * as accountService from '../services/accountService';
 import { emitAccountsChanged, emitCurrentAccountChanged } from '../utils/accountSyncEvents';
+import { AntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget';
 
 const ACCOUNTS_STORE_KEY = 'agtools.accounts.store.v1';
 const LEGACY_ACCOUNTS_CACHE_KEY = 'agtools.accounts.cache';
@@ -132,7 +133,7 @@ interface AccountState {
     refreshAllQuotas: () => Promise<RefreshStats>;
     startOAuthLogin: () => Promise<Account>;
     reorderAccounts: (accountIds: string[]) => Promise<void>;
-    switchAccount: (accountId: string) => Promise<Account>;
+    switchAccount: (accountId: string, runtimeTarget?: AntigravityRuntimeTarget) => Promise<Account>;
     syncCurrentFromClient: () => Promise<void>;
     updateAccountTags: (accountId: string, tags: string[]) => Promise<Account>;
 }
@@ -353,10 +354,10 @@ export const useAccountStore = create<AccountState>()(
         await get().fetchAccounts();
     },
 
-    switchAccount: async (accountId: string) => {
+    switchAccount: async (accountId: string, runtimeTarget?: AntigravityRuntimeTarget) => {
         const previousCurrentAccountId = get().currentAccount?.id ?? null;
         try {
-            const account = await accountService.switchAccount(accountId);
+            const account = await accountService.switchAccount(accountId, runtimeTarget);
             set({ currentAccount: account });
             await get().fetchAccounts();
             await emitCurrentAccountChanged({

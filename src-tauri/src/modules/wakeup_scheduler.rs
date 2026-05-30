@@ -139,19 +139,35 @@ fn tasks_state_path() -> Result<std::path::PathBuf, String> {
     Ok(modules::account::get_data_dir()?.join(WAKEUP_TASKS_FILE))
 }
 
+fn quarantine_corrupted_tasks_file(path: &Path, error: &impl std::fmt::Display) {
+    match modules::atomic_write::quarantine_file(path, "invalid-json") {
+        Ok(Some(backup_path)) => modules::logger::log_warn(&format!(
+            "[WakeupTasks] 持久化任务解析失败，已隔离并使用空状态: path={}, backup={}, error={}",
+            path.display(),
+            backup_path.display(),
+            error
+        )),
+        Ok(None) => modules::logger::log_warn(&format!(
+            "[WakeupTasks] 持久化任务解析失败，文件已不存在，使用空状态: path={}, error={}",
+            path.display(),
+            error
+        )),
+        Err(backup_error) => modules::logger::log_warn(&format!(
+            "[WakeupTasks] 持久化任务解析失败，隔离失败，使用空状态: path={}, parse_error={}, backup_error={}",
+            path.display(),
+            error,
+            backup_error
+        )),
+    }
+}
+
 fn save_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
     let parent = path.parent().ok_or("无法定位唤醒任务目录")?;
     fs::create_dir_all(parent).map_err(|e| format!("创建唤醒任务目录失败: {}", e))?;
-    let temp_path = parent.join(format!(
-        "{}.tmp",
-        path.file_name()
-            .and_then(|item| item.to_str())
-            .unwrap_or("wakeup_tasks")
-    ));
     let content =
         serde_json::to_string_pretty(value).map_err(|e| format!("序列化唤醒任务失败: {}", e))?;
-    fs::write(&temp_path, content).map_err(|e| format!("写入唤醒任务临时文件失败: {}", e))?;
-    fs::rename(&temp_path, path).map_err(|e| format!("替换唤醒任务文件失败: {}", e))
+    modules::atomic_write::write_string_atomic(path, &content)
+        .map_err(|e| format!("保存唤醒任务失败: {}", e))
 }
 
 fn persist_state(enabled: bool, tasks: &[WakeupTaskInput]) -> Result<(), String> {
@@ -201,7 +217,7 @@ pub fn restore_state_from_disk() {
     let persisted: PersistedWakeupState = match serde_json::from_str(&content) {
         Ok(state) => state,
         Err(err) => {
-            modules::logger::log_warn(&format!("[WakeupTasks] 解析持久化任务失败: {}", err));
+            quarantine_corrupted_tasks_file(&path, &err);
             return;
         }
     };

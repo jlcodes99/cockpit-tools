@@ -14,6 +14,7 @@
     "close": "Tutup",
     "open": "Buka",
     "copy": "Salin",
+    "copied": "Disalin",
     "add": "Tambah",
     "enable": "Aktifkan",
     "disable": "Nonaktifkan",
@@ -273,7 +274,7 @@
     }
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "Akun",
     "wakeup": "Tugas Bangun",
     "fingerprints": "Sidik Jari",
@@ -610,7 +611,7 @@
       "uiScale": "Skala Antarmuka",
       "uiScaleDesc": "Sesuaikan skala antarmuka",
       "accountManagement": "Akun",
-      "autoRefresh": "Penyegaran Otomatis Kuota Antigravity",
+      "autoRefresh": "Penyegaran Otomatis Kuota Antigravity IDE",
       "codexAutoRefresh": "Penyegaran Otomatis Kuota Codex",
       "autoRefreshDesc": "Frekuensi pembaruan latar belakang",
       "codexAutoRefreshDesc": "Frekuensi pembaruan latar belakang",
@@ -636,6 +637,10 @@
       "hideDockIconDesc": "Kontrol visibilitas ikon Dock secara independen; tidak terpengaruh oleh perilaku perkecil jendela",
       "hideDockIconOff": "Tidak (Tampilkan ikon Dock)",
       "hideDockIconOn": "Ya (Sembunyikan ikon Dock)",
+      "trayIconStyle": "Gaya ikon bilah menu (khusus macOS)",
+      "trayIconStyleDesc": "Pilih ikon template sistem atau ikon app asli berwarna",
+      "trayIconStyleTemplate": "Ikon template",
+      "trayIconStyleColor": "Ikon berwarna",
       "floatingCardStartup": "Tampilkan kartu mengambang saat mulai",
       "floatingCardStartupDesc": "Tampilkan kartu akun mengambang secara otomatis setelah aplikasi diluncurkan",
       "floatingCardAlwaysOnTop": "Kartu mengambang selalu di atas secara bawaan",
@@ -650,8 +655,8 @@
       "floatingCardShowNowAction": "Tampilkan kartu mengambang",
       "dataDir": "Direktori Data",
       "dataDirDesc": "Lokasi penyimpanan akun dan berkas konfigurasi.",
-      "fpDir": "Penyimpanan Antigravity",
-      "fpDirDesc": "Lokasi penyimpanan berkas data Antigravity.",
+      "fpDir": "Penyimpanan Antigravity IDE",
+      "fpDirDesc": "Lokasi penyimpanan berkas data Antigravity IDE.",
       "opencodeTitle": "Integrasi OpenCode",
       "opencodeAuthOverwrite": "Timpa login OpenCode saat mengganti Codex",
       "opencodeAuthOverwriteDesc": "Jika dinonaktifkan, hanya Codex yang diganti dan OpenCode mempertahankan status login saat ini",
@@ -675,10 +680,10 @@
       "vscodeAppPathPlaceholder": "Jalur bawaan",
       "vscodePathSelect": "Pilih",
       "vscodePathReset": "Atur ulang ke bawaan",
-      "antigravityAppPath": "Jalur Aplikasi Antigravity",
-      "antigravityTitle": "Peluncuran Antigravity",
+      "antigravityAppPath": "Jalur Aplikasi Antigravity IDE",
+      "antigravityTitle": "Peluncuran Antigravity IDE",
       "commonTitle": "Umum",
-      "antigravitySettingsTitle": "Pengaturan Antigravity",
+      "antigravitySettingsTitle": "Pengaturan Antigravity IDE",
       "codexSettingsTitle": "Pengaturan Codex",
       "githubCopilotSettingsTitle": "Pengaturan GitHub Copilot",
       "ghcpAutoRefresh": "Penyegaran Otomatis Kuota GitHub Copilot",
@@ -708,8 +713,8 @@
       "codebuddyPathSelect": "Pilih",
       "codebuddyPathReset": "Atur ulang ke bawaan",
       "cursorPathReset": "Atur ulang bawaan",
-      "antigravityStartupWakeup": "Jalankan bangun Antigravity setelah mulai",
-      "antigravityStartupWakeupDesc": "Jalankan tugas bangun Antigravity yang diaktifkan sekali setelah aplikasi dimulai",
+      "antigravityStartupWakeup": "Jalankan bangun Antigravity IDE setelah mulai",
+      "antigravityStartupWakeupDesc": "Jalankan tugas bangun Antigravity IDE yang diaktifkan sekali setelah aplikasi dimulai",
       "codexLaunchOnSwitch": "Luncurkan Aplikasi Codex saat mengganti Codex",
       "codexLaunchOnSwitchDesc": "Mulai atau mulai ulang Aplikasi Codex setelah mengganti akun",
       "autoSwitchAccountScope": "Cakupan penggantian akun otomatis",
@@ -760,7 +765,7 @@
       "ghcpOpencodeRestart": "Mulai ulang OpenCode saat mengganti GitHub Copilot",
       "ghcpLaunchOnSwitch": "Luncurkan Aplikasi GitHub Copilot saat mengganti GitHub Copilot",
       "antigravityDualSwitchNoRestart": "Penggantian ganda tanpa mulai ulang",
-      "antigravityDualSwitchNoRestartDesc": "Saat mengganti, tulis data akun lokal dan panggil penggantian mulus ekstensi dalam satu alur, tanpa memulai ulang Antigravity.",
+      "antigravityDualSwitchNoRestartDesc": "Saat mengganti, tulis data akun lokal dan panggil penggantian mulus ekstensi dalam satu alur, tanpa memulai ulang Antigravity IDE.",
       "defaultTerminal": "Terminal default",
       "defaultTerminalDesc": "Terminal yang digunakan saat membuka Gemini CLI.",
       "terminalSystem": "Ikuti sistem",
@@ -982,7 +987,7 @@
   },
   "accounts": {
     "title": "Akun",
-    "subtitle": "Kelola daftar akun Antigravity Anda.",
+    "subtitle": "Kelola daftar akun Antigravity IDE Anda.",
     "total": "{{count}} akun",
     "search": "Cari akun...",
     "addAccount": "Tambah Akun",
@@ -1175,6 +1180,8 @@
       "noGroups": "Tidak Ada Grup",
       "noGroupsDesc": "Buat grup untuk mengelola akun Anda secara berkelompok",
       "manage": "Kelola",
+      "refresh": "Segarkan grup",
+      "refreshEmpty": "Tidak ada akun yang dapat disegarkan di grup ini",
       "error": {
         "duplicate": "Nama grup sudah ada",
         "createFailed": "Gagal membuat grup: {{error}}",
@@ -1236,7 +1243,7 @@
     "switching": "Mengganti...",
     "fingerprint": "Sidik Jari",
     "bound": "Tertaut",
-    "brandTitle": "Akun Antigravity"
+    "brandTitle": "Akun Antigravity IDE"
   },
   "fingerprints": {
     "title": "Sidik Jari",
@@ -1338,7 +1345,7 @@
   "modals": {
     "addAccount": {
       "title": "Tambah Akun",
-      "desc": "Tambahkan akun Antigravity Anda melalui Google OAuth",
+      "desc": "Tambahkan akun Antigravity IDE Anda melalui Google OAuth",
       "loginBtn": "Otorisasi Google OAuth",
       "waiting": "Menunggu..."
     },
@@ -1346,7 +1353,7 @@
       "title": "Impor Akun",
       "desc": "Pilih metode impor",
       "local": "Impor Akun Lokal",
-      "localDesc": "Impor akun yang sedang masuk dari Antigravity Client",
+      "localDesc": "Impor akun yang sedang masuk dari Antigravity IDE Client",
       "tools": "Impor Antigravity Tools",
       "toolsDesc": "Impor dari direktori ~/.antigravity_tools/",
       "jsonDivider": "atau Tempel JSON",
@@ -1359,7 +1366,7 @@
       "fromExtension": "Impor dari Plugin",
       "syncBadge": "Sinkronkan akun plugin Antigravity Cockpit",
       "fromLocalDB": "Impor dari DB Lokal",
-      "localDBDesc": "Baca akun login dari Antigravity Client di mesin ini",
+      "localDBDesc": "Baca akun login dari Antigravity IDE Client di mesin ini",
       "toolsDescMigrate": "Migrasi akun dari ~/.antigravity_tools/",
       "importingTools": "Mengimpor dari Antigravity Tools...",
       "importingLocal": "Mengimpor akun lokal...",
@@ -1404,6 +1411,7 @@
     "batchDeleteConfirm": "Yakin ingin menghapus {{count}} akun yang dipilih?",
     "switched": "Beralih ke {{email}}",
     "switchFailed": "Penggantian gagal: {{error}}",
+    "antigravityLegacyUnsupported": "Antigravity 2.0.0 dan yang lebih baru tidak didukung di sini. Pilih versi Antigravity di bawah 2.0.0, atau gunakan Antigravity IDE.",
     "importSuccess": "Berhasil mengimpor {{count}} akun",
     "importLocalSuccess": "Berhasil mengimpor akun: {{email}}",
     "importFailed": "Impor gagal: {{error}}",
@@ -1442,7 +1450,7 @@
       },
       "runHint": {
         "title": "Catatan verifikasi",
-        "line1": "Deteksi sekarang mengirim permintaan obrolan minimal dengan mensimulasikan Antigravity menggunakan gateway lokal dan protokol Language Server resmi.",
+        "line1": "Deteksi sekarang mengirim permintaan obrolan minimal dengan mensimulasikan Antigravity IDE menggunakan gateway lokal dan protokol Language Server resmi.",
         "line2": "Ini mengonsumsi sejumlah kecil token (biasanya satu dialog singkat). Penggunaan aktual tergantung pada model dan kebijakan akun.",
         "line3": "Operasi ini tidak mengubah pengaturan tugas bangun. Ini hanya memeriksa ketersediaan akun dan menulis catatan deteksi.",
         "line4": "Jika 403 dikembalikan, verifikasi akun atau pengajuan banding mungkin diperlukan. Hasilnya akan menyertakan URL dan tindakan cepat."
@@ -1573,6 +1581,7 @@
       "modeScheduled": "Ã°Å¸â€œâ€¦ Scheduled",
       "modeCrontab": "Ã°Å¸Â§Â© Crontab",
       "modeQuotaReset": "Ã°Å¸â€â€ž Quota reset",
+      "antigravityVersion": "Versi Antigravity IDE",
       "modelSelect": "Pilihan model",
       "modelHint": "Untuk grup kuota yang sama, pilih satu model. Beberapa model dipicu secara berurutan.",
       "modelsEmpty": "Tidak ada model yang direkomendasikan",
@@ -1719,6 +1728,7 @@
       "refreshTokenExpired": "Otorisasi login Codex sudah kedaluwarsa dan tidak dapat disegarkan otomatis. Masuk lagi ke akun Codex.",
       "refreshTokenInvalidated": "Otorisasi login Codex dicabut oleh layanan dan tidak dapat disegarkan otomatis. Masuk lagi ke akun Codex.",
       "invalidGrant": "Otorisasi login Codex tidak valid dan tidak dapat disegarkan otomatis. Masuk lagi ke akun Codex.",
+      "staleAccount": "Akun ini tidak lagi ada di penyimpanan akun lokal. Daftar akun telah disegarkan. Impor ulang atau masuk lagi ke akun Codex ini.",
       "unsupportedCountryRegion": "Wilayah jaringan saat ini tidak mendukung penyegaran otorisasi Codex. Layanan otorisasi OpenAI menolak jalur keluar jaringan ini. Beralih ke wilayah yang didukung lalu coba lagi."
     },
     "current": "Saat Ini",
@@ -1736,6 +1746,11 @@
     },
     "oauth": {
       "desc": "Klik tombol di bawah ini dan selesaikan otorisasi OpenAI di peramban Anda",
+      "trialGuideTitle": "Tips daftar uji coba",
+      "trialGuideDesc": "Saat menyiapkan akun baru, utamakan alamat Gmail yang bisa diakses jangka panjang agar akun lebih mudah dipertahankan dan diverifikasi lagi.",
+      "trialGuideAliasDesc": "Satu Gmail utama dapat menyiapkan hingga 5 alamat alias untuk memisahkan catatan pendaftaran ChatGPT; gunakan sesuai aturan layanan tujuan.",
+      "trialGuideLink": "Lihat panduan uji coba",
+      "gmailAliasLink": "Buat alias Gmail",
       "preparing": "Menyiapkan tautan otorisasi...",
       "exchanging": "Menukar token...",
       "portInUse": "Port {{port}} is already in use. Please close the app using this port and try again.",
@@ -1745,7 +1760,8 @@
       "portStillInUse": "Port {{port}} masih digunakan.",
       "portInUseAction": "Tutup port dan coba lagi",
       "timeout": "Autentikasi habis waktu. Silakan klik",
-      "timeoutRetry": "Perbarui Link Auth"
+      "timeoutRetry": "Perbarui Link Auth",
+      "reauthEmailLabel": "Akun otorisasi ulang"
     },
     "token": {
       "desc": "Tempel auth.json, JSON akun, atau refresh_token.",
@@ -1791,6 +1807,7 @@
       "disableService": "Nonaktifkan layanan",
       "enableService": "Aktifkan layanan",
       "saveSuccess": "Koleksi layanan API diperbarui",
+      "noEligibleAccountsSelected": "Akun yang dipilih tidak ada di lingkungan ini atau tidak dapat digunakan oleh layanan API. Impor akun Codex yang dapat digunakan di lingkungan ini terlebih dahulu.",
       "removeSuccess": "Akun dihapus dari layanan API",
       "rotateSuccess": "Kunci layanan API direset",
       "enabledSuccess": "Layanan API diaktifkan",
@@ -1801,7 +1818,7 @@
       "hideKey": "Sembunyikan kunci",
       "modal": {
         "title": "Tambahkan ke Layanan API",
-        "desc": "Pilih akun OAuth yang ingin dimasukkan ke koleksi layanan API. Akun yang ditambahkan akan disembunyikan dari tampilan biasa dan hanya dikelola dari kartu layanan API.",
+        "desc": "Pilih akun OAuth atau API Key yang ingin dimasukkan ke koleksi layanan API. Akun yang ditambahkan akan disembunyikan dari tampilan biasa dan hanya dikelola dari kartu layanan API.",
         "empty": "Tidak ada akun OAuth yang tersedia",
         "selected": "Di layanan API",
         "available": "Tampilan biasa",
@@ -1858,7 +1875,7 @@
       "memberTitle": "Anggota koleksi",
       "stats": {
         "requests": "Permintaan",
-        "requestsDetail": "Berhasil {{success}} / Gagal {{failed}}",
+        "requestsDetail": "OK {{success}} / Gagal {{failed}} / Batal {{canceled}} / Hulu {{upstreamFailed}} / Belum lengkap {{incomplete}}",
         "tokens": "Token",
         "tokensDetail": "Masuk {{input}} / Keluar {{output}}",
         "specialTokens": "Cache / Penalaran",
@@ -1868,7 +1885,11 @@
         "accountRequests": "{{count}} permintaan",
         "accountTokens": "{{count}} token",
         "accountResult": "Berhasil {{success}} / Gagal {{failed}}",
-        "accountTokensCompact": "{{value}}"
+        "accountTokensCompact": "{{value}}",
+        "images": "Permintaan gambar",
+        "imagesDetail": "Buat {{generate}} / Edit {{edit}} / Izin {{blocked}}",
+        "estimatedCost": "Nilai estimasi",
+        "estimatedCostDetail": "Akumulasi dari snapshot harga tiap permintaan"
       },
       "routingLabel": "Rute",
       "routingSaveSuccess": "Rute layanan API diperbarui",
@@ -1895,7 +1916,8 @@
         "quotaLowFirst": "Kuota Rendah Dulu",
         "planHighFirst": "Paket Tinggi Dulu",
         "planLowFirst": "Paket Rendah Dulu",
-        "expirySoonFirst": "Kedaluwarsa Cepat Dulu"
+        "expirySoonFirst": "Kedaluwarsa Cepat Dulu",
+        "custom": "Kustom"
       },
       "statusUnconfigured": "Belum dikonfigurasi",
       "expandDetails": "Buka detail",
@@ -1935,9 +1957,92 @@
         "empty": "Belum ada statistik kuota"
       },
       "oauthBinding": {
-        "desc": "Opsional. Tanpa tautan, layanan API tetap memakai alur API Key lama; setelah ditautkan, status masuk memakai akun OAuth dan Provider memakai konfigurasi layanan API.",
+        "desc": "Opsional. Hanya akun OAuth dengan penanda masa langganan yang dapat dipilih; masa yang sudah kedaluwarsa juga boleh. Tanpa tautan, layanan API tetap memakai alur API Key lama; setelah ditautkan, status masuk memakai akun OAuth dan Provider memakai konfigurasi layanan API.",
         "currentService": "Layanan API: {{name}}"
-      }
+      },
+      "customRoutingEdit": "Edit routing kustom",
+      "customRoutingTitle": "Routing kustom",
+      "customRoutingDesc": "Atur prioritas dan bobot per akun untuk mengontrol urutan pemilihan akun dan pembagian beban pada prioritas yang sama.",
+      "customRoutingPriorityTitle": "Prioritas",
+      "customRoutingPriorityDesc": "Nilai lebih tinggi dipilih lebih dahulu; akun prioritas lebih rendah hanya dicoba saat prioritas tinggi tidak tersedia.",
+      "customRoutingWeightTitle": "Bobot",
+      "customRoutingWeightDesc": "Dipakai untuk menyeimbangkan beban dalam prioritas yang sama. Bobot lebih tinggi berarti lebih banyak permintaan.",
+      "customRoutingSearch": "Cari email, paket, atau ID akun",
+      "customRoutingSelected": "{{count}} dipilih",
+      "customRoutingPriorityShort": "Prioritas",
+      "customRoutingWeightShort": "Bobot",
+      "customRoutingApplyBatch": "Terapkan ke pilihan",
+      "customRoutingReset": "Reset",
+      "customRoutingAccountColumn": "Akun",
+      "customRoutingQuotaColumn": "Kuota",
+      "customRoutingEmpty": "Tidak ada akun yang dapat dikonfigurasi di koleksi layanan API saat ini",
+      "customRoutingSave": "Simpan routing",
+      "customRoutingSaveSuccess": "Routing kustom layanan API diperbarui",
+      "upstreamProxyLabel": "URL proxy API",
+      "upstreamProxySaveSuccess": "URL proxy API diperbarui",
+      "upstreamProxyUrlPlaceholder": "Kosong = proxy global",
+      "upstreamProxySaveAction": "Simpan proxy",
+      "imageGenerationLabel": "Alat image_generation",
+      "imageGenerationDesc": "Mengatur apakah chat teks mendeklarasikan alat gambar dan apakah endpoint gambar tersedia.",
+      "imageGenerationSaveSuccess": "Pengaturan image_generation diperbarui",
+      "apiKeysTitle": "Kunci klien",
+      "apiKeyAdd": "Tambah kunci",
+      "apiKeyLabel": "Nama kunci",
+      "apiKeySaveLabel": "Simpan nama",
+      "apiKeyDefaultLabel": "Klien {{index}}",
+      "apiKeyCreateSuccess": "API Key dibuat",
+      "apiKeyUpdateSuccess": "API Key diperbarui",
+      "apiKeyRotateSuccess": "API Key direset",
+      "apiKeyDeleteSuccess": "API Key dihapus",
+      "apiKeyRotateConfirm": "API Key ini akan langsung tidak valid setelah direset. Lanjutkan?",
+      "apiKeyDeleteConfirm": "Hapus API Key ini?",
+      "apiKeyDelete": "Hapus kunci",
+      "apiKeyDisable": "Nonaktifkan kunci",
+      "apiKeyEnable": "Aktifkan kunci",
+      "modelStatsTitle": "Per model",
+      "apiKeyStatsTitle": "Per kunci",
+      "healthAvailable": "Tersedia",
+      "healthUnavailable": "Tidak tersedia",
+      "healthCooldown": "Jeda {{count}}",
+      "healthImageUnavailable": "Gambar tidak tersedia",
+      "requestLogTitle": "Log permintaan",
+      "requestLogEmpty": "Belum ada log permintaan",
+      "requestLogSuccess": "Berhasil",
+      "requestLogFailed": "Gagal",
+      "requestLogTokens": "{{value}} token",
+      "imageGenerationMode": {
+        "enabled": "Aktif",
+        "imagesOnly": "Gambar saja",
+        "disabled": "Nonaktif"
+      },
+      "requestKind": {
+        "text": "Teks",
+        "imageGeneration": "Gambar",
+        "imageEdit": "Edit",
+        "other": "Lainnya"
+      },
+      "testSuccessInline": "Uji layanan API berhasil",
+      "gatewayModeLabel": "Mode gateway",
+      "gatewayModeLegacyShort": "Lama",
+      "gatewayModeSidecarShort": "Baru",
+      "gatewayModeNewLabel": "Layanan API-Baru",
+      "gatewayModeOldLabel": "Layanan API-Lama",
+      "gatewayModeSaveSuccess": "Mode gateway layanan API telah diperbarui",
+      "gatewayGuideTitle": "Ganti gateway di sini",
+      "gatewayGuideDesc": "Gateway baru menjadi default. Jika ada masalah kompatibilitas atau error permintaan klien, kembali ke gateway lama dari sini.",
+      "gatewayGuideAction": "Mengerti",
+      "upstreamProxyUrlPlaceholderLegacy": "Kosongkan untuk memakai proxy global, proxy environment, atau proxy sistem",
+      "upstreamProxyUrlPlaceholderSidecar": "Kosongkan untuk memakai proxy global",
+      "debugLogsLabel": "Log debug",
+      "debugLogsDescription": "Keluarkan log debug layanan API untuk mendiagnosis gateway dan streaming",
+      "debugLogsEnabledSuccess": "Log debug diaktifkan",
+      "debugLogsDisabledSuccess": "Log debug dinonaktifkan",
+      "debugLogsEnableConfirmTitle": "Aktifkan Log Debug",
+      "debugLogsEnableConfirmMessage": "Saat aktif, layanan API akan mengeluarkan log debug untuk mendiagnosis masalah gateway, proxy, permintaan upstream, dan respons streaming. Ini dapat menambah sedikit beban performa saat konkurensi tinggi atau streaming panjang. Matikan setelah selesai mendiagnosis. Aktifkan?",
+      "debugLogsEnableConfirmAction": "Aktifkan",
+      "debugLogsDisableConfirmTitle": "Nonaktifkan Log Debug",
+      "debugLogsDisableConfirmMessage": "Saat nonaktif, layanan API berhenti mengeluarkan log debug sehingga kebisingan log dan beban tambahan berkurang. Anda dapat mengaktifkannya lagi saat mendiagnosis gateway, proxy, atau streaming. Nonaktifkan?",
+      "debugLogsDisableConfirmAction": "Nonaktifkan"
     },
     "api": {
       "baseUrl": "URL Dasar",
@@ -2035,11 +2140,13 @@
         "action": "Tautkan OAuth",
         "actionShort": "Tautkan",
         "title": "Tautkan Akun OAuth",
-        "desc": "Opsional. Tanpa tautan, akun ini beralih dengan alur API Key lama; setelah ditautkan, status masuk memakai akun OAuth dan Provider memakai konfigurasi akun API Key ini.",
+        "desc": "Opsional. Hanya akun OAuth dengan penanda masa langganan yang dapat dipilih; masa yang sudah kedaluwarsa juga boleh. Tanpa tautan, akun ini beralih dengan alur API Key lama; setelah ditautkan, status masuk memakai akun OAuth dan Provider memakai konfigurasi akun API Key ini.",
         "currentAccount": "Akun API Key: {{name}}",
         "selectLabel": "Pilih akun OAuth",
         "empty": "Belum ada akun OAuth. Tambahkan akun berotorisasi OAuth terlebih dahulu.",
+        "emptyEligible": "Tidak ada akun OAuth dengan masa langganan. Segarkan kuota atau tambahkan akun OAuth yang memenuhi syarat terlebih dahulu.",
         "validationRequired": "Pilih akun OAuth",
+        "validationSubscriptionRequired": "Hanya akun OAuth dengan masa langganan yang dapat ditautkan",
         "saveSuccess": "Tautan OAuth diperbarui",
         "saveFailed": "Gagal menautkan OAuth: {{error}}",
         "switchRequiresBinding": "Tautkan akun OAuth terlebih dahulu",
@@ -2480,6 +2587,7 @@
       "column": "Berakhir",
       "unknown": "Otorisasi ulang",
       "missingDetail": "Otorisasi ulang untuk ambil",
+      "refresh": "Segarkan langganan",
       "expired": "Kedaluwarsa",
       "hoursLeft": "{{count}} jam",
       "daysLeft": "{{count}} hr",
@@ -2500,6 +2608,7 @@
       "repairing": "Memperbaiki visibilitas sesi Codex...",
       "repairFailed": "Perbaikan otomatis gagal. Anda dapat mencoba lagi nanti dari Manajemen Sesi > Perbaiki Visibilitas.",
       "type": {
+        "api": "Mode API",
         "apiKey": "Kunci API",
         "apiService": "Layanan API",
         "account": "Akun"
@@ -2539,6 +2648,152 @@
       "fastDesc": "Kecepatan 1,5x, pemakaian lebih tinggi",
       "saveSuccess": "Kecepatan diperbarui",
       "saveFailed": "Gagal menyimpan kecepatan: {{error}}"
+    },
+    "apiService": {
+      "navTitle": "Layanan API Codex",
+      "title": "Layanan API Codex",
+      "openPage": "Buka layanan API",
+      "openFullPage": "Lihat semua fitur",
+      "tabs": {
+        "overview": "Ringkasan Layanan",
+        "keys": "Kunci klien",
+        "accounts": "Kumpulan akun",
+        "models": "Model dan kemampuan",
+        "logs": "Statistik dan log"
+      },
+      "healthTitle": "Kesehatan layanan",
+      "health": {
+        "availableAccounts": "Akun tersedia",
+        "cooldowns": "Cooldown",
+        "imageUnavailable": "Gambar tidak tersedia",
+        "keys": "Kunci klien"
+      },
+      "accountHealth": {
+        "failures": "{{count}} kegagalan beruntun",
+        "image": "Gambar {{status}}"
+      },
+      "models": {
+        "availableTitle": "Model tersedia",
+        "capabilityTitle": "Sakelar kemampuan",
+        "capabilityDesc": "gpt-image-2 ditampilkan atau disembunyikan otomatis berdasarkan sakelar layanan, paket akun, dan status kemampuan gambar yang tercatat.",
+        "rulesTitle": "Aturan Model",
+        "aliasTitle": "Alias Model",
+        "aliasPlaceholder": "gpt-5 => g5; tambah + untuk mempertahankan model asli",
+        "excludedTitle": "Model Tersembunyi",
+        "excludedPlaceholder": "Satu model atau pola per baris, mis. gpt-5-*",
+        "saveRules": "Simpan Aturan",
+        "rulesSaved": "Aturan model tersimpan",
+        "pricingAction": "Harga",
+        "pricingTitle": "Harga Model",
+        "pricingDesc": "USD / 1M token, hanya untuk statistik nilai lokal.",
+        "pricingModel": "Nama model",
+        "pricingInput": "Masuk",
+        "pricingCache": "Input cache",
+        "pricingOutput": "Keluar",
+        "pricingSource": "Sumber",
+        "pricingActions": "Aksi",
+        "pricingCachePlaceholder": "Sama input",
+        "pricingCustom": "Kustom",
+        "pricingPreset": "Prasetel",
+        "pricingUnset": "Belum diatur",
+        "pricingReset": "Atur ulang",
+        "pricingSaved": "Harga tersimpan",
+        "pricingInvalid": "Harga harus berupa angka lebih besar atau sama dengan 0"
+      },
+      "keys": {
+        "policyTitle": "Kebijakan Model",
+        "advancedPolicyTitle": "Lanjutan: Kebijakan Model",
+        "modelPrefix": "Prefiks Model",
+        "modelPrefixPlaceholder": "Contoh: codex",
+        "allowedModels": "Model Diizinkan",
+        "allowedModelsPlaceholder": "Kosong berarti semua; satu model atau pola per baris",
+        "excludedModels": "Model Dikecualikan",
+        "excludedModelsPlaceholder": "Satu model atau pola per baris",
+        "savePolicy": "Simpan Kebijakan",
+        "policySaved": "Kebijakan model Key tersimpan"
+      },
+      "routing": {
+        "optionsTitle": "Opsi Routing",
+        "sessionAffinity": "Afinitas Sesi",
+        "sessionAffinityTtl": "TTL Afinitas",
+        "maxRetryCredentials": "Akun retry",
+        "maxRetryInterval": "Tunggu retry",
+        "disableCooling": "Matikan cooldown",
+        "saveOptions": "Simpan Opsi",
+        "optionsSaved": "Opsi routing tersimpan"
+      },
+      "validation": {
+        "numberRange": "Masukkan angka dari {{min}} hingga {{max}}"
+      },
+      "logs": {
+        "allKinds": "Semua Jenis",
+        "allStatuses": "Semua Status",
+        "allGatewayModes": "Semua mode",
+        "modelFilter": "Model layanan",
+        "modelPlaceholder": "ID model",
+        "accountFilter": "Akun",
+        "accountPlaceholder": "Email atau ID akun",
+        "apiKeyFilter": "Kunci API",
+        "apiKeyPlaceholder": "Nama atau ID",
+        "kindFilter": "Jenis",
+        "statusFilter": "Keadaan",
+        "gatewayModeFilter": "Mode layanan",
+        "errorFilter": "Kesalahan",
+        "errorPlaceholder": "Kategori error",
+        "clearFilters": "Hapus Filter",
+        "loading": "Memuat log permintaan",
+        "gatewayModeUnknown": "Mode tidak diketahui",
+        "requestIdShort": "ID permintaan {{id}}",
+        "httpStatus": "Status HTTP {{status}}"
+      },
+      "timeouts": {
+        "entryLabel": "Lanjutan",
+        "openAction": "Timeout & Coba Lagi",
+        "title": "Timeout & Coba Lagi",
+        "desc": "Nilai dalam detik. Menyimpan akan memulai ulang atau memuat ulang layanan API sesuai mode gateway saat ini.",
+        "sidecarTitle": "Layanan API Baru",
+        "legacyTitle": "Layanan API Lama",
+        "streamOpen": "Buka Stream",
+        "streamIdle": "Idle Stream",
+        "imageOpen": "Buka Gambar",
+        "imageIdle": "Idle Gambar",
+        "openAttempts": "Percobaan Buka",
+        "keepalive": "Sinyal koneksi",
+        "requestRead": "Baca Request",
+        "connect": "Koneksi Upstream",
+        "streamTotal": "Total Stream",
+        "resetDefaults": "Pulihkan Default",
+        "saved": "Timeout dan coba lagi disimpan",
+        "totalGteIdle": "Timeout total stream API lama tidak boleh lebih kecil dari timeout idle stream",
+        "bootstrapRetries": "Coba ulang mulai",
+        "websocketTitle": "Pengaturan WebSocket",
+        "websocketConnect": "Batas koneksi",
+        "websocketInitial": "Batas pesan awal",
+        "websocketIdle": "Batas idle",
+        "websocketHeartbeat": "Interval heartbeat",
+        "sendRetryAttempts": "Coba ulang kirim",
+        "sendRetryBaseDelay": "Jeda dasar kirim (ms)",
+        "sendRetryMaxDelay": "Jeda maks kirim (ms)",
+        "singleStatusAttempts": "Coba ulang satu akun",
+        "singleStatusBaseDelay": "Jeda dasar akun (ms)",
+        "singleStatusMaxDelay": "Jeda maks akun (ms)",
+        "maxDelayGteBase": "Jeda maksimum tidak boleh lebih kecil dari jeda dasar",
+        "longWaitPreset": "Preset tunggu lama",
+        "shortWaitPreset": "Preset tunggu singkat",
+        "presetTitle": "Preset parameter",
+        "presetSelect": "Pilih preset",
+        "presetName": "Nama preset",
+        "presetNamePlaceholder": "Preset kustom baru",
+        "saveAsPreset": "Simpan sebagai preset",
+        "updatePreset": "Perbarui preset",
+        "deletePreset": "Hapus preset",
+        "presetSaved": "Preset disimpan",
+        "presetUpdated": "Preset diperbarui",
+        "presetDeleted": "Preset dihapus",
+        "presetNameRequired": "Masukkan nama preset",
+        "deletePresetConfirm": "Hapus preset kustom ini?",
+        "deletePresetTitle": "Hapus preset"
+      }
     }
   },
   "codebuddy": {
@@ -2691,23 +2946,31 @@
       "storage": "Cakupan data: impor lokal membaca sesi masuk GitHub di VS Code, dan pergantian akun memperbarui entri yang sama; OAuth, impor token, validasi impor lokal, dan penyegaran kuota memanggil API resmi GitHub dengan bidang autentikasi yang diperlukan. state.vscdb dan kunci sistem tidak diunggah."
     }
   },
+  "runtime": {
+    "installedVersion": {
+      "loading": "Mendeteksi versi terpasang",
+      "missing": "Tidak ada versi terpasang yang terdeteksi",
+      "detecting": "Mendeteksi",
+      "notFound": "Versi tidak terdeteksi"
+    }
+  },
   "dashboard": {
     "title": "Dasbor Akun",
     "summary": {
       "label": "Ringkasan",
       "title": "Snapshot Akun",
-      "desc": "Lihat Antigravity dan Codex sekilas"
+      "desc": "Lihat Antigravity IDE dan Codex sekilas"
     },
     "stats": {
-      "antigravity": "Akun Antigravity",
+      "antigravity": "Akun Antigravity IDE",
       "codex": "Akun Codex",
-      "currentAntigravity": "Antigravity Saat Ini",
+      "currentAntigravity": "Antigravity IDE Saat Ini",
       "currentCodex": "Codex Saat Ini",
       "providers": "Penyedia",
       "totalAccounts": "Total akun"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "Distribusi paket",
@@ -2722,7 +2985,7 @@
     },
     "emptyAccount": "Tidak ada akun",
     "sections": {
-      "antigravity": "Akun Antigravity",
+      "antigravity": "Akun Antigravity IDE",
       "codex": "Akun Codex"
     },
     "actions": {
@@ -2755,7 +3018,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Antigravity Settings",
+      "title": "Antigravity IDE Settings",
       "appPath": "Launch Path"
     },
     "codex": {
@@ -3279,7 +3542,7 @@
     "actions": {
       "collapseAll": "Collapse all",
       "expandAll": "Expand all",
-      "goAntigravity": "Go to Antigravity",
+      "goAntigravity": "Go to Antigravity IDE",
       "goCodex": "Go to Codex",
       "goDashboard": "Go to Dashboard",
       "goFingerprints": "Go to Device Fingerprints",
@@ -3311,8 +3574,8 @@
         "1": "Gunakan \"Segarkan Semua\" untuk menyinkronkan satu putaran penuh status kuota terlebih dahulu.",
         "2": "Urutkan berdasarkan kuota/waktu reset dan pilih akun yang ingin Anda gunakan sekarang."
       },
-      "summary": "Kelola siklus hidup akun Antigravity: tambah, segarkan kuota, ganti, kelompokkan, dan beri tag.",
-      "title": "Akun Antigravity"
+      "summary": "Kelola siklus hidup akun Antigravity IDE: tambah, segarkan kuota, ganti, kelompokkan, dan beri tag.",
+      "title": "Akun Antigravity IDE"
     },
     "blocks": {
       "cautions": "Kesalahan umum / catatan",
@@ -3930,5 +4193,14 @@
       "warn": "Peringatan",
       "error": "Galat"
     }
+  },
+  "mfaQuick": {
+    "title": "Kode 2FA",
+    "selectLabel": "Pilih kunci 2FA",
+    "unnamedSecret": "Kunci tanpa nama",
+    "invalidCode": "Kunci tidak valid",
+    "copyCode": "Salin kode",
+    "copied": "Disalin",
+    "refreshIn": "{{time}} dtk"
   }
 }

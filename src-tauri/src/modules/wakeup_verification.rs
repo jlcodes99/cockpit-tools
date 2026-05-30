@@ -136,8 +136,35 @@ fn load_state_file_unlocked() -> Result<WakeupVerificationStateFile, String> {
         });
     }
 
-    let mut parsed: WakeupVerificationStateFile =
-        serde_json::from_str(&content).map_err(|e| format!("解析验证状态文件失败: {}", e))?;
+    let mut parsed: WakeupVerificationStateFile = match serde_json::from_str(&content) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            match modules::atomic_write::quarantine_file(&path, "invalid-json") {
+                Ok(Some(backup_path)) => modules::logger::log_warn(&format!(
+                    "验证状态文件解析失败，已隔离并使用空状态: path={}, backup={}, error={}",
+                    path.display(),
+                    backup_path.display(),
+                    error
+                )),
+                Ok(None) => modules::logger::log_warn(&format!(
+                    "验证状态文件解析失败，文件已不存在，使用空状态: path={}, error={}",
+                    path.display(),
+                    error
+                )),
+                Err(backup_error) => modules::logger::log_warn(&format!(
+                    "验证状态文件解析失败，隔离失败，使用空状态: path={}, parse_error={}, backup_error={}",
+                    path.display(),
+                    error,
+                    backup_error
+                )),
+            }
+            WakeupVerificationStateFile {
+                version: WAKEUP_VERIFICATION_STATE_VERSION,
+                items: Vec::new(),
+                history: Vec::new(),
+            }
+        }
+    };
     if parsed.version == 0 {
         parsed.version = WAKEUP_VERIFICATION_STATE_VERSION;
     }
@@ -146,8 +173,6 @@ fn load_state_file_unlocked() -> Result<WakeupVerificationStateFile, String> {
 
 fn save_state_file_unlocked(state: &WakeupVerificationStateFile) -> Result<(), String> {
     let path = state_file_path()?;
-    let data_dir = modules::account::get_data_dir()?;
-    let temp_path = data_dir.join(format!("{}.tmp", WAKEUP_VERIFICATION_STATE_FILE));
 
     let payload = WakeupVerificationStateFile {
         version: WAKEUP_VERIFICATION_STATE_VERSION,
@@ -157,8 +182,8 @@ fn save_state_file_unlocked(state: &WakeupVerificationStateFile) -> Result<(), S
 
     let content =
         serde_json::to_string_pretty(&payload).map_err(|e| format!("序列化验证状态失败: {}", e))?;
-    fs::write(&temp_path, content).map_err(|e| format!("写入验证状态临时文件失败: {}", e))?;
-    fs::rename(temp_path, path).map_err(|e| format!("替换验证状态文件失败: {}", e))
+    modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("保存验证状态失败: {}", e))
 }
 
 pub fn load_state() -> Result<Vec<WakeupVerificationStateItem>, String> {

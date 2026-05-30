@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronLeft, Copy, Play, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronLeft, Copy, Play, RefreshCw, X } from "lucide-react";
+import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import { PlatformInstancesContent } from "../components/platform/PlatformInstancesContent";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
@@ -9,6 +10,8 @@ import { useCodexAccountStore } from "../stores/useCodexAccountStore";
 import { isCodexApiKeyAccount, type CodexAccount } from "../types/codex";
 import {
   CODEX_API_SERVICE_BIND_ID,
+  type CodexLaunchCredentialChange,
+  type CodexLaunchCredentialType,
   type InstanceProfile,
 } from "../types/instance";
 import { usePlatformRuntimeSupport } from "../hooks/usePlatformRuntimeSupport";
@@ -26,6 +29,8 @@ import {
   resolveCodexApiProviderPresetId,
 } from "../utils/codexProviderPresets";
 import { useEscClose } from "../hooks/useEscClose";
+import { ModalErrorMessage, useModalErrorState } from "../components/ModalErrorMessage";
+import { formatCodexSessionVisibilityRepairMessage } from "../utils/codexSessionVisibility";
 
 /**
  * Codex 多开实例内容组件（不包含 header）
@@ -68,6 +73,23 @@ export function CodexInstancesContent({
   const [launchModal, setLaunchModal] = useState<CodexLaunchModalState | null>(
     null,
   );
+  const [syncingAllRecords, setSyncingAllRecords] = useState(false);
+  const [syncRecordsMessage, setSyncRecordsMessage] = useState<{
+    text: string;
+    tone?: "error";
+  } | null>(null);
+  const [visibilityNoticeChange, setVisibilityNoticeChange] =
+    useState<CodexLaunchCredentialChange | null>(null);
+  const [visibilityRepairing, setVisibilityRepairing] = useState(false);
+  const [visibilityRepairResult, setVisibilityRepairResult] = useState<string | null>(null);
+  const {
+    message: visibilityRepairError,
+    scrollKey: visibilityRepairErrorScrollKey,
+    report: reportVisibilityRepairError,
+    clear: clearVisibilityRepairError,
+  } = useModalErrorState();
+  const visibilityRepairSeqRef = useRef(0);
+  const visibilityRepairAutoCloseTimerRef = useRef<number | null>(null);
 
   useEscClose(!!launchModal, () => setLaunchModal(null));
   const { terminalOptions, selectedTerminal, setSelectedTerminal } =
@@ -194,7 +216,91 @@ export function CodexInstancesContent({
     );
   };
 
+  const closeVisibilityNotice = useCallback(() => {
+    visibilityRepairSeqRef.current += 1;
+    if (visibilityRepairAutoCloseTimerRef.current != null) {
+      window.clearTimeout(visibilityRepairAutoCloseTimerRef.current);
+      visibilityRepairAutoCloseTimerRef.current = null;
+    }
+    setVisibilityNoticeChange(null);
+    setVisibilityRepairing(false);
+    setVisibilityRepairResult(null);
+    clearVisibilityRepairError();
+  }, [clearVisibilityRepairError]);
+
+  useEscClose(!!visibilityNoticeChange, closeVisibilityNotice);
+
+  const formatCredentialTypeLabel = useCallback(
+    (type: CodexLaunchCredentialType) => {
+      if (type === "api") {
+        return t("codex.apiSwitchNotice.type.api", "API");
+      }
+      return t("codex.apiSwitchNotice.type.account", "账号");
+    },
+    [t],
+  );
+
+  const runVisibilityRepair = useCallback(async () => {
+    const repairSeq = visibilityRepairSeqRef.current + 1;
+    visibilityRepairSeqRef.current = repairSeq;
+    if (visibilityRepairAutoCloseTimerRef.current != null) {
+      window.clearTimeout(visibilityRepairAutoCloseTimerRef.current);
+      visibilityRepairAutoCloseTimerRef.current = null;
+    }
+    clearVisibilityRepairError();
+    setVisibilityRepairResult(null);
+    setVisibilityRepairing(true);
+    try {
+      const summary = await instanceStore.repairSessionVisibilityAcrossInstances();
+      if (visibilityRepairSeqRef.current !== repairSeq) return;
+      setVisibilityRepairResult(
+        formatCodexSessionVisibilityRepairMessage(summary, t),
+      );
+      visibilityRepairAutoCloseTimerRef.current = window.setTimeout(() => {
+        if (visibilityRepairSeqRef.current !== repairSeq) return;
+        visibilityRepairSeqRef.current += 1;
+        visibilityRepairAutoCloseTimerRef.current = null;
+        setVisibilityNoticeChange(null);
+        setVisibilityRepairing(false);
+        setVisibilityRepairResult(null);
+        clearVisibilityRepairError();
+      }, 1200);
+    } catch {
+      if (visibilityRepairSeqRef.current === repairSeq) {
+        reportVisibilityRepairError(
+          t(
+            "codex.apiSwitchNotice.repairFailed",
+            "自动修复失败。你仍可稍后在「会话管理」中使用「修复可见性」重试。",
+          ),
+        );
+      }
+    } finally {
+      if (visibilityRepairSeqRef.current === repairSeq) {
+        setVisibilityRepairing(false);
+      }
+    }
+  }, [
+    clearVisibilityRepairError,
+    instanceStore,
+    reportVisibilityRepairError,
+    t,
+  ]);
+
+  const openVisibilityNotice = useCallback(
+    (change: CodexLaunchCredentialChange) => {
+      setVisibilityNoticeChange(change);
+      setVisibilityRepairResult(null);
+      clearVisibilityRepairError();
+      void runVisibilityRepair();
+    },
+    [clearVisibilityRepairError, runVisibilityRepair],
+  );
+
   const handleInstanceStarted = async (instance: InstanceProfile) => {
+    if (instance.codexLaunchCredentialChange) {
+      openVisibilityNotice(instance.codexLaunchCredentialChange);
+    }
+
     if ((instance.launchMode ?? "app") !== "cli") {
       return;
     }
@@ -288,9 +394,99 @@ export function CodexInstancesContent({
     }
   };
 
+  const handleSyncAllLocalRecords = async () => {
+    if (syncingAllRecords) return;
+
+    try {
+      const latestInstances = await instanceStore.refreshInstances();
+      if (latestInstances.length < 2) {
+        setSyncRecordsMessage({
+          text: t(
+            "codex.instances.syncAllRecords.needTwo",
+            "至少需要两个实例才能同步本地记录",
+          ),
+          tone: "error",
+        });
+        return;
+      }
+
+      const runningCount = latestInstances.filter(
+        (instance) => instance.running,
+      ).length;
+      if (runningCount > 0) {
+        setSyncRecordsMessage({
+          text: t(
+            "codex.instances.syncAllRecords.closeFirst",
+            "请先关闭所有 Codex 实例后再同步记录，避免运行中的实例把旧记录写回。",
+          ),
+          tone: "error",
+        });
+        return;
+      }
+
+      const confirmed = await confirmDialog(
+        t(
+          "codex.instances.syncAllRecords.confirmMessage",
+          "会把所有 Codex 实例中的本地会话记录做一次全量同步；同 ID 会话会进行事件级合并，写入前会备份目标实例关键文件和旧会话文件。确认继续？",
+        ),
+        {
+          title: t(
+            "codex.instances.syncAllRecords.title",
+            "同步所有本地记录",
+          ),
+          okLabel: t("common.confirm", "确认"),
+          cancelLabel: t("common.cancel", "取消"),
+        },
+      );
+      if (!confirmed) return;
+
+      setSyncingAllRecords(true);
+      setSyncRecordsMessage(null);
+      const summary = await instanceStore.syncThreadsAcrossInstances();
+      setSyncRecordsMessage({ text: summary.message });
+    } catch (error) {
+      setSyncRecordsMessage({ text: String(error), tone: "error" });
+    } finally {
+      setSyncingAllRecords(false);
+    }
+  };
+
+  const syncAllRecordsButton = (
+    <button
+      className="btn btn-secondary"
+      onClick={handleSyncAllLocalRecords}
+      disabled={syncingAllRecords}
+      title={t(
+        "codex.instances.syncAllRecords.tooltip",
+        "同步所有实例的本地会话记录",
+      )}
+    >
+      <RefreshCw size={16} />
+      {syncingAllRecords
+        ? t("common.syncing", "同步中...")
+        : t("codex.instances.syncAllRecords.action", "同步记录")}
+    </button>
+  );
+
   return (
     <>
       <div className="codex-instances-content">
+        {syncRecordsMessage && (
+          <div
+            className={`action-message${syncRecordsMessage.tone ? ` ${syncRecordsMessage.tone}` : ""}`}
+          >
+            <span className="action-message-text">
+              {syncRecordsMessage.text}
+            </span>
+            <button
+              className="action-message-close"
+              onClick={() => setSyncRecordsMessage(null)}
+              aria-label={t("common.close", "关闭")}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
         <PlatformInstancesContent
           instanceStore={instanceStore}
           accounts={accountsWithDisplayName}
@@ -316,8 +512,70 @@ export function CodexInstancesContent({
               ? t("instances.messages.launchPrepared", "启动命令已准备")
               : t("instances.messages.started", "实例已启动")
           }
+          toolbarExtraActions={syncAllRecordsButton}
         />
       </div>
+
+      {visibilityNoticeChange && (
+        <div
+          className="modal-overlay codex-local-access-hide-confirm-overlay"
+          onClick={closeVisibilityNotice}
+        >
+          <div
+            className="modal codex-local-access-hide-confirm-modal codex-api-switch-notice-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2>{t("codex.apiSwitchNotice.title", "Codex 会话不可见")}</h2>
+              <button
+                className="modal-close"
+                onClick={closeVisibilityNotice}
+                aria-label={t("common.close", "关闭")}
+              >
+                <X />
+              </button>
+            </div>
+            <div className="modal-body">
+              <ModalErrorMessage
+                message={visibilityRepairError}
+                scrollKey={visibilityRepairErrorScrollKey}
+              />
+              <p className="codex-local-access-hide-confirm-desc">
+                {t(
+                  "codex.apiSwitchNotice.message",
+                  "检测到 Codex 已从 {{from}} 切换到 {{to}}。由于官方机制，API 与账号直接切换后，原有会话可能不会自动显示。正在自动修复会话可见性，后续也可以通过「会话管理」里的「修复可见性」功能修复。",
+                  {
+                    from: formatCredentialTypeLabel(visibilityNoticeChange.from),
+                    to: formatCredentialTypeLabel(visibilityNoticeChange.to),
+                  },
+                )}
+              </p>
+              {visibilityRepairing && (
+                <div className="codex-api-switch-notice-repair-status is-loading">
+                  <RefreshCw size={14} className="loading-spinner" />
+                  <span>
+                    {t(
+                      "codex.apiSwitchNotice.repairing",
+                      "正在修复 Codex 会话可见性...",
+                    )}
+                  </span>
+                </div>
+              )}
+              {visibilityRepairResult && (
+                <div className="codex-api-switch-notice-repair-status is-success">
+                  <Check size={14} />
+                  <span>{visibilityRepairResult}</span>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer codex-api-switch-notice-footer">
+              <button className="btn btn-primary" onClick={closeVisibilityNotice}>
+                {t("common.close", "关闭")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {launchModal && (
         <div className="modal-overlay" onClick={() => setLaunchModal(null)}>

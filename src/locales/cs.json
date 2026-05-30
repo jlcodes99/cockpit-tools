@@ -14,6 +14,7 @@
     "close": "Zavřít",
     "open": "Otevřít",
     "copy": "Kopírovat",
+    "copied": "Zkopírováno",
     "add": "Přidat",
     "enable": "Povolit",
     "disable": "Zakázat",
@@ -227,7 +228,7 @@
     "selectAll": "Vybrat vše"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "Účty",
     "wakeup": "Úlohy probuzení",
     "fingerprints": "Otisky",
@@ -497,9 +498,9 @@
       },
       "safe": {
         "title": "Bezpečný restart (Doporučeno)",
-        "principle": "Odešle signál SIGTERM všem procesům Antigravity, požádá aplikaci o uložení dat a ukončení, poté spustí cílovou instanci (v případě potřeby vynutí ukončení).",
-        "commandMac": "macOS/Linux: kill -15 <pid> (všechny procesy Antigravity)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (všechny procesy Antigravity)",
+        "principle": "Odešle signál SIGTERM všem procesům Antigravity IDE, požádá aplikaci o uložení dat a ukončení, poté spustí cílovou instanci (v případě potřeby vynutí ukončení).",
+        "commandMac": "macOS/Linux: kill -15 <pid> (všechny procesy Antigravity IDE)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (všechny procesy Antigravity IDE)",
         "pros": "Nejblíže normálnímu ukončení, menší pravděpodobnost varování o chybách, data jsou v bezpečí.",
         "cons": "Podporuje pouze globální restart všech instancí."
       },
@@ -560,7 +561,7 @@
       "uiScale": "Měřítko rozhraní",
       "uiScaleDesc": "Upravte měřítko rozhraní",
       "accountManagement": "Správa účtů",
-      "autoRefresh": "Automatické obnovení kvóty Antigravity",
+      "autoRefresh": "Automatické obnovení kvóty Antigravity IDE",
       "codexAutoRefresh": "Automatické obnovení kvóty Codex",
       "autoRefreshDesc": "Frekvence aktualizace na pozadí",
       "codexAutoRefreshDesc": "Frekvence aktualizace na pozadí",
@@ -584,6 +585,10 @@
       "hideDockIconDesc": "Nezávisle řídí viditelnost ikony v Docku bez vlivu chování minimalizace okna",
       "hideDockIconOff": "Ne (Zobrazit ikonu v Docku)",
       "hideDockIconOn": "Ano (Skrýt ikonu v Docku)",
+      "trayIconStyle": "Styl ikony v řádku nabídek (pouze macOS)",
+      "trayIconStyleDesc": "Vyberte systémovou jednobarevnou ikonu nebo původní barevnou ikonu aplikace",
+      "trayIconStyleTemplate": "Jednobarevná ikona",
+      "trayIconStyleColor": "Barevná ikona",
       "floatingCardStartup": "Zobrazit plovoucí kartu při spuštění",
       "floatingCardStartupDesc": "Po spuštění aplikace automaticky zobrazit plovoucí kartu účtu",
       "floatingCardAlwaysOnTop": "Držet plovoucí kartu vždy navrchu",
@@ -593,8 +598,8 @@
       "floatingCardShowNowAction": "Zobrazit plovoucí kartu",
       "dataDir": "Datový adresář",
       "dataDirDesc": "Umístění pro uložení účtů a konfiguračních souborů.",
-      "fpDir": "Úložiště Antigravity",
-      "fpDirDesc": "Umístění datových souborů Antigravity.",
+      "fpDir": "Úložiště Antigravity IDE",
+      "fpDirDesc": "Umístění datových souborů Antigravity IDE.",
       "opencodeTitle": "Integrace OpenCode",
       "opencodeRestart": "Restartovat OpenCode při přepnutí Codex",
       "opencodeRestartDesc": "Synchronizovat informace o účtu Codex v OpenCode",
@@ -615,10 +620,10 @@
       "vscodeAppPathPlaceholder": "Výchozí cesta",
       "vscodePathSelect": "Vybrat",
       "vscodePathReset": "Obnovit výchozí",
-      "antigravityAppPath": "Cesta k aplikaci Antigravity",
-      "antigravityTitle": "Spuštění Antigravity",
+      "antigravityAppPath": "Cesta k aplikaci Antigravity IDE",
+      "antigravityTitle": "Spuštění Antigravity IDE",
       "commonTitle": "Obecné",
-      "antigravitySettingsTitle": "Nastavení Antigravity",
+      "antigravitySettingsTitle": "Nastavení Antigravity IDE",
       "codexSettingsTitle": "Nastavení Codex",
       "githubCopilotSettingsTitle": "Nastavení GitHub Copilot",
       "ghcpAutoRefresh": "Automatické obnovení kvóty GitHub Copilot",
@@ -691,14 +696,14 @@
       "sideNavLayoutOriginal": "Původní rozložení",
       "sideNavLayoutClassic": "Klasické rozložení",
       "antigravityDualSwitchNoRestart": "Duální přepnutí bez restartu",
-      "antigravityDualSwitchNoRestartDesc": "Při přepnutí účtu se v jednom kroku zapíší lokální data účtu a provede plynulé přepnutí rozšíření bez restartu Antigravity.",
+      "antigravityDualSwitchNoRestartDesc": "Při přepnutí účtu se v jednom kroku zapíší lokální data účtu a provede plynulé přepnutí rozšíření bez restartu Antigravity IDE.",
       "appAutoLaunch": "Spustit Cockpit Tools po přihlášení",
       "appAutoLaunchDesc": "Po přihlášení do systému spustit aplikaci automaticky",
       "startupWakeupDisabled": "Vypnuto",
       "startupWakeupImmediate": "Probudit okamžitě",
       "startupWakeupDelayed": "Probudit se zpožděním",
-      "antigravityStartupWakeup": "Spustit probuzení Antigravity po startu",
-      "antigravityStartupWakeupDesc": "Po spuštění aplikace jednou spustit povolené úlohy probuzení Antigravity",
+      "antigravityStartupWakeup": "Spustit probuzení Antigravity IDE po startu",
+      "antigravityStartupWakeupDesc": "Po spuštění aplikace jednou spustit povolené úlohy probuzení Antigravity IDE",
       "codexStartupWakeup": "Spustit probuzení Codex po startu",
       "codexStartupWakeupDesc": "Po spuštění aplikace jednou spustit povolené úlohy probuzení Codex",
       "currentAccountRefreshTitle": "Obnovení aktuálního účtu",
@@ -936,7 +941,7 @@
   },
   "accounts": {
     "title": "Správa účtů",
-    "subtitle": "Spravujte svůj seznam účtů Antigravity.",
+    "subtitle": "Spravujte svůj seznam účtů Antigravity IDE.",
     "total": "Počet účtů: {{count}}",
     "search": "Hledat účty...",
     "addAccount": "Přidat účet",
@@ -1093,6 +1098,8 @@
       "noGroups": "Žádné skupiny",
       "noGroupsDesc": "Vytvořte skupiny pro správu účtů",
       "manage": "Spravovat",
+      "refresh": "Obnovit skupinu",
+      "refreshEmpty": "V této skupině nejsou žádné obnovitelné účty",
       "error": {
         "duplicate": "Název skupiny již existuje",
         "createFailed": "Nepodařilo se vytvořit skupinu: {{error}}",
@@ -1190,7 +1197,7 @@
     "switching": "Přepínání...",
     "fingerprint": "Otisk",
     "bound": "Vázáno",
-    "brandTitle": "Správa účtu Antigravity"
+    "brandTitle": "Správa účtu Antigravity IDE"
   },
   "fingerprints": {
     "title": "Otisky zařízení",
@@ -1292,7 +1299,7 @@
   "modals": {
     "addAccount": {
       "title": "Přidat účet",
-      "desc": "Přidejte svůj účet Antigravity přes Google OAuth",
+      "desc": "Přidejte svůj účet Antigravity IDE přes Google OAuth",
       "loginBtn": "Přihlášení přes Google OAuth",
       "waiting": "Čekání..."
     },
@@ -1300,7 +1307,7 @@
       "title": "Importovat účty",
       "desc": "Vyberte metodu importu",
       "local": "Importovat místní účet",
-      "localDesc": "Importovat aktuálně přihlášený účet z klienta Antigravity",
+      "localDesc": "Importovat aktuálně přihlášený účet z klienta Antigravity IDE",
       "tools": "Importovat z Antigravity Tools",
       "toolsDesc": "Importovat z adresáře ~/.antigravity_tools/",
       "jsonDivider": "nebo vložit JSON",
@@ -1313,7 +1320,7 @@
       "fromExtension": "Import z pluginu",
       "syncBadge": "Synchronizovat účty pluginu Antigravity Cockpit",
       "fromLocalDB": "Import z lokální DB",
-      "localDBDesc": "Načte přihlašovací účty z Antigravity klienta v tomto zařízení",
+      "localDBDesc": "Načte přihlašovací účty z Antigravity IDE klienta v tomto zařízení",
       "toolsDescMigrate": "Migrace účtů z ~/.antigravity_tools/",
       "importingTools": "Importuji z Antigravity Tools...",
       "importingLocal": "Importuji lokální účet...",
@@ -1358,6 +1365,7 @@
     "batchDeleteConfirm": "Opravdu chcete smazat {{count}} vybraných účtů?",
     "switched": "Přepnuto na {{email}}",
     "switchFailed": "Přepnutí selhalo: {{error}}",
+    "antigravityLegacyUnsupported": "Antigravity 2.0.0 a novější zde není podporováno. Vyberte verzi Antigravity nižší než 2.0.0, nebo použijte Antigravity IDE.",
     "importSuccess": "Úspěšně importováno {{count}} účtů",
     "importLocalSuccess": "Úspěšně importován účet: {{email}}",
     "importFailed": "Import selhal: {{error}}",
@@ -1396,7 +1404,7 @@
       },
       "runHint": {
         "title": "Poznámky k ověření",
-        "line1": "„Zkontrolovat nyní“ odešle minimální chat požadavek simulací klienta Antigravity přes lokální bránu a oficiální protokol Language Server.",
+        "line1": "„Zkontrolovat nyní“ odešle minimální chat požadavek simulací klienta Antigravity IDE přes lokální bránu a oficiální protokol Language Server.",
         "line2": "Tento proces spotřebuje malé množství tokenů (obvykle jeden krátký dialog). Skutečná spotřeba závisí na modelu a zásadách účtu.",
         "line3": "Tato akce nemění nastavení úloh probuzení. Pouze zkontroluje dostupnost účtu a zapíše záznam kontroly.",
         "line4": "Pokud je vrácena chyba 403, je nutné nejprve ověřit účet nebo podat odvolání; výsledek bude obsahovat adresu a rychlé akce."
@@ -1527,6 +1535,7 @@
       "modeScheduled": "📅 Plánováno",
       "modeCrontab": "🧩 Crontab",
       "modeQuotaReset": "🔄 Reset kvóty",
+      "antigravityVersion": "Verze Antigravity IDE",
       "modelSelect": "Výběr modelu",
       "modelHint": "V rámci stejné skupiny kvót vyberte jeden model. Více modelů se spouští postupně.",
       "modelsEmpty": "Žádné doporučené modely",
@@ -1673,6 +1682,7 @@
       "refreshTokenExpired": "Autorizace přihlášení do Codexu vypršela a nelze ji automaticky obnovit. Přihlaste se k účtu Codex znovu.",
       "refreshTokenInvalidated": "Autorizace přihlášení do Codexu byla službou zrušena a nelze ji automaticky obnovit. Přihlaste se k účtu Codex znovu.",
       "invalidGrant": "Autorizace přihlášení do Codexu je neplatná a nelze ji automaticky obnovit. Přihlaste se k účtu Codex znovu.",
+      "staleAccount": "Tento účet už není v místním úložišti účtů. Seznam účtů byl obnoven. Znovu tento účet Codex importujte nebo se k němu přihlaste.",
       "unsupportedCountryRegion": "Aktuální síťová oblast nepodporuje obnovení autorizace Codexu. Autorizační služba OpenAI odmítla tento síťový výstup. Přepněte na podporovanou oblast a zkuste to znovu."
     },
     "current": "Aktuální",
@@ -1687,6 +1697,11 @@
     },
     "oauth": {
       "desc": "Klikněte níže a dokončete autorizaci OpenAI v prohlížeči",
+      "trialGuideTitle": "Tipy pro zkušební registraci",
+      "trialGuideDesc": "Při přípravě nového účtu dejte přednost adrese Gmail s dlouhodobým přístupem; lépe se hodí pro udržení účtu i pozdější ověření.",
+      "trialGuideAliasDesc": "Jeden hlavní Gmail může připravit až 5 aliasů pro oddělení registrací ChatGPT; používejte je podle pravidel cílové služby.",
+      "trialGuideLink": "Zobrazit průvodce",
+      "gmailAliasLink": "Vytvořit alias Gmail",
       "preparing": "Připravuje se autorizační odkaz...",
       "exchanging": "Probíhá výměna tokenu...",
       "portInUse": "Port {{port}} je již používán. Zavřete aplikaci, která jej používá, a zkuste to znovu.",
@@ -1696,7 +1711,8 @@
       "portStillInUse": "Port {{port}} je stále obsazen.",
       "portInUseAction": "Zavřít port a zkusit znovu",
       "timeout": "Autentizace vypršela. Klikněte prosím",
-      "timeoutRetry": "Aktualizovat odkaz pro ověření"
+      "timeoutRetry": "Aktualizovat odkaz pro ověření",
+      "reauthEmailLabel": "Účet pro nové ověření"
     },
     "token": {
       "desc": "Vložte auth.json, JSON účtu nebo refresh_token.",
@@ -1742,6 +1758,7 @@
       "disableService": "Vypnout službu",
       "enableService": "Zapnout službu",
       "saveSuccess": "Kolekce API služby byla aktualizována",
+      "noEligibleAccountsSelected": "Vybrané účty nejsou v tomto prostředí nebo je služba API nemůže použít. Nejprve do tohoto prostředí importujte použitelný účet Codex.",
       "removeSuccess": "Účet byl odebrán z API služby",
       "rotateSuccess": "Klíč API služby byl obnoven",
       "enabledSuccess": "API služba byla povolena",
@@ -1752,7 +1769,7 @@
       "hideKey": "Skrýt klíč",
       "modal": {
         "title": "Přidat do API služby",
-        "desc": "Vyberte účty OAuth, které chcete zahrnout do kolekce API služby. Přidané účty se skryjí z běžného přehledu a budou spravovány pouze z karty API služby.",
+        "desc": "Vyberte účty OAuth nebo API Key, které chcete zahrnout do kolekce API služby. Přidané účty se skryjí z běžného přehledu a budou spravovány pouze z karty API služby.",
         "empty": "Nejsou k dispozici žádné účty OAuth",
         "selected": "V API službě",
         "available": "Běžný přehled",
@@ -1809,7 +1826,7 @@
       "memberTitle": "Členové kolekce",
       "stats": {
         "requests": "Požadavky",
-        "requestsDetail": "Úspěch {{success}} / Chyba {{failed}}",
+        "requestsDetail": "OK {{success}} / Chyba {{failed}} / Zruš. {{canceled}} / Zdroj {{upstreamFailed}} / Nedok. {{incomplete}}",
         "tokens": "Tokeny",
         "tokensDetail": "Vstup {{input}} / Výstup {{output}}",
         "specialTokens": "Cache / Přemýšlení",
@@ -1819,7 +1836,11 @@
         "accountRequests": "{{count}} požadavků",
         "accountTokens": "{{count}} tokenů",
         "accountResult": "Úspěch {{success}} / Chyba {{failed}}",
-        "accountTokensCompact": "{{value}}"
+        "accountTokensCompact": "{{value}}",
+        "images": "Obrazové požadavky",
+        "imagesDetail": "Generování {{generate}} / Úpravy {{edit}} / Oprávnění {{blocked}}",
+        "estimatedCost": "Odhad hodnoty",
+        "estimatedCostDetail": "Součet ze snímků cen požadavků"
       },
       "routingLabel": "Směrování",
       "routingSaveSuccess": "Směrování služby API bylo aktualizováno",
@@ -1846,7 +1867,8 @@
         "quotaLowFirst": "Nejnižší kvóta napřed",
         "planHighFirst": "Nejvyšší tarif napřed",
         "planLowFirst": "Nejnižší tarif napřed",
-        "expirySoonFirst": "Brzy končící první"
+        "expirySoonFirst": "Brzy končící první",
+        "custom": "Vlastní"
       },
       "statusUnconfigured": "Nenastaveno",
       "expandDetails": "Rozbalit detail",
@@ -1886,9 +1908,92 @@
         "empty": "Zatím žádné statistiky kvóty"
       },
       "oauthBinding": {
-        "desc": "Volitelné. Bez propojení služba API používá původní logiku API Key; po propojení se přihlášení bere z účtu OAuth a Provider z konfigurace služby API.",
+        "desc": "Volitelné. Vybrat lze pouze účet OAuth s údajem o době předplatného; prošlé údaje jsou povolené. Bez propojení služba API používá původní logiku API Key; po propojení se přihlášení bere z účtu OAuth a Provider z konfigurace služby API.",
         "currentService": "Služba API: {{name}}"
-      }
+      },
+      "customRoutingEdit": "Upravit vlastní směrování",
+      "customRoutingTitle": "Vlastní směrování",
+      "customRoutingDesc": "Nastavte prioritu a váhu pro každý účet, abyste řídili pořadí výběru a rozdělení zátěže ve stejné prioritě.",
+      "customRoutingPriorityTitle": "Priorita",
+      "customRoutingPriorityDesc": "Vyšší hodnoty se vybírají dříve; účty s nižší prioritou se zkoušejí až tehdy, když vyšší nejsou dostupné.",
+      "customRoutingWeightTitle": "Váha",
+      "customRoutingWeightDesc": "Používá se pro vyvažování zátěže ve stejné prioritě. Vyšší váha znamená více požadavků.",
+      "customRoutingSearch": "Hledat e-mail, tarif nebo ID účtu",
+      "customRoutingSelected": "Vybráno {{count}}",
+      "customRoutingPriorityShort": "Priorita",
+      "customRoutingWeightShort": "Váha",
+      "customRoutingApplyBatch": "Použít na výběr",
+      "customRoutingReset": "Resetovat",
+      "customRoutingAccountColumn": "Účet",
+      "customRoutingQuotaColumn": "Limit",
+      "customRoutingEmpty": "V aktuální kolekci služby API nejsou žádné nastavitelné účty",
+      "customRoutingSave": "Uložit směrování",
+      "customRoutingSaveSuccess": "Vlastní směrování služby API bylo aktualizováno",
+      "upstreamProxyLabel": "Adresa API proxy",
+      "upstreamProxySaveSuccess": "Adresa API proxy byla aktualizována",
+      "upstreamProxyUrlPlaceholder": "Prázdné = globální proxy",
+      "upstreamProxySaveAction": "Uložit proxy",
+      "imageGenerationLabel": "Nástroj image_generation",
+      "imageGenerationDesc": "Řídí, zda textové konverzace deklarují obrazový nástroj a zda jsou dostupné obrazové endpointy.",
+      "imageGenerationSaveSuccess": "Nastavení image_generation bylo aktualizováno",
+      "apiKeysTitle": "Klientské klíče",
+      "apiKeyAdd": "Přidat klíč",
+      "apiKeyLabel": "Název klíče",
+      "apiKeySaveLabel": "Uložit název",
+      "apiKeyDefaultLabel": "Klient {{index}}",
+      "apiKeyCreateSuccess": "API Key vytvořen",
+      "apiKeyUpdateSuccess": "API Key aktualizován",
+      "apiKeyRotateSuccess": "API Key resetován",
+      "apiKeyDeleteSuccess": "API Key smazán",
+      "apiKeyRotateConfirm": "Tento API Key po resetu okamžitě přestane platit. Pokračovat?",
+      "apiKeyDeleteConfirm": "Smazat tento API Key?",
+      "apiKeyDelete": "Smazat klíč",
+      "apiKeyDisable": "Vypnout klíč",
+      "apiKeyEnable": "Zapnout klíč",
+      "modelStatsTitle": "Podle modelu",
+      "apiKeyStatsTitle": "Podle klíče",
+      "healthAvailable": "Dostupné",
+      "healthUnavailable": "Nedostupné",
+      "healthCooldown": "Čekání {{count}}",
+      "healthImageUnavailable": "Obrázky nedostupné",
+      "requestLogTitle": "Log požadavků",
+      "requestLogEmpty": "Zatím žádné logy požadavků",
+      "requestLogSuccess": "Úspěch",
+      "requestLogFailed": "Selhalo",
+      "requestLogTokens": "{{value}} tokenů",
+      "imageGenerationMode": {
+        "enabled": "Zapnuto",
+        "imagesOnly": "Jen obrázky",
+        "disabled": "Vypnuto"
+      },
+      "requestKind": {
+        "text": "Textový",
+        "imageGeneration": "Obrázek",
+        "imageEdit": "Úprava",
+        "other": "Jiné"
+      },
+      "testSuccessInline": "Test služby API prošel",
+      "gatewayModeLabel": "Rezim brany",
+      "gatewayModeLegacyShort": "Stary",
+      "gatewayModeSidecarShort": "Novy",
+      "gatewayModeNewLabel": "API sluzba-Nova",
+      "gatewayModeOldLabel": "API sluzba-Stara",
+      "gatewayModeSaveSuccess": "Rezim brany API sluzby byl aktualizovan",
+      "gatewayGuideTitle": "Zde lze prepnout branu",
+      "gatewayGuideDesc": "Výchozí je nová brána. Při problémech s kompatibilitou nebo chybách klientských požadavků se zde můžete vrátit ke staré bráně.",
+      "gatewayGuideAction": "Rozumim",
+      "upstreamProxyUrlPlaceholderLegacy": "Ponechte prazdne pro globalni proxy, proxy z prostredi nebo systemovou proxy",
+      "upstreamProxyUrlPlaceholderSidecar": "Ponechte prazdne pro globalni proxy",
+      "debugLogsLabel": "Ladicí logy",
+      "debugLogsDescription": "Vypisuje ladicí logy API služby pro diagnostiku brány a streamování",
+      "debugLogsEnabledSuccess": "Ladicí logy zapnuty",
+      "debugLogsDisabledSuccess": "Ladicí logy vypnuty",
+      "debugLogsEnableConfirmTitle": "Zapnout ladicí logy",
+      "debugLogsEnableConfirmMessage": "Po zapnutí bude API služba vypisovat ladicí logy pro diagnostiku brány, proxy, upstream požadavků a streamovaných odpovědí. Při vysoké souběžnosti nebo dlouhých streamech to může mít malý dopad na výkon. Po dokončení diagnostiky je vypněte. Zapnout?",
+      "debugLogsEnableConfirmAction": "Zapnout",
+      "debugLogsDisableConfirmTitle": "Vypnout ladicí logy",
+      "debugLogsDisableConfirmMessage": "Po vypnutí se ladicí logy API služby přestanou vypisovat, což sníží šum v logu a dodatečnou režii. Při diagnostice brány, proxy nebo streamů je můžete znovu zapnout. Vypnout?",
+      "debugLogsDisableConfirmAction": "Vypnout"
     },
     "local": {
       "desc": "Importovat aktuální účet z ~/.codex/auth.json",
@@ -2299,11 +2404,13 @@
         "action": "Připojit OAuth",
         "actionShort": "Připojit",
         "title": "Připojit účet OAuth",
-        "desc": "Volitelné. Bez propojení se tento účet přepíná původní logikou API Key; po propojení se přihlášení bere z účtu OAuth a Provider z konfigurace tohoto účtu API Key.",
+        "desc": "Volitelné. Vybrat lze pouze účet OAuth s údajem o době předplatného; prošlé údaje jsou povolené. Bez propojení se tento účet přepíná původní logikou API Key; po propojení se přihlášení bere z účtu OAuth a Provider z konfigurace tohoto účtu API Key.",
         "currentAccount": "Účet API Key: {{name}}",
         "selectLabel": "Vyberte účet OAuth",
         "empty": "Zatím není žádný účet OAuth. Nejdříve přidejte účet s autorizací OAuth.",
+        "emptyEligible": "Žádný účet OAuth s údajem o době předplatného. Nejdříve obnovte kvótu nebo přidejte způsobilý účet OAuth.",
         "validationRequired": "Vyberte účet OAuth",
+        "validationSubscriptionRequired": "Propojit lze pouze účet OAuth s údajem o době předplatného",
         "saveSuccess": "Vazba OAuth aktualizována",
         "saveFailed": "Připojení OAuth selhalo: {{error}}",
         "switchRequiresBinding": "Nejdříve připojte účet OAuth",
@@ -2434,6 +2541,7 @@
       "column": "Konec",
       "unknown": "Ověřit znovu",
       "missingDetail": "Ověřit znovu pro načtení",
+      "refresh": "Obnovit předplatné",
       "expired": "Vypršelo",
       "hoursLeft": "{{count}} h",
       "daysLeft": "{{count}} d",
@@ -2454,6 +2562,7 @@
       "repairing": "Opravuji viditelnost relací Codexu...",
       "repairFailed": "Automatická oprava selhala. Zkuste to později ve Správa relací > Opravit viditelnost.",
       "type": {
+        "api": "Režim API",
         "apiKey": "Klíč API",
         "apiService": "Služba API",
         "account": "Účet"
@@ -2493,6 +2602,152 @@
       "fastDesc": "Rychlost 1,5x, vyšší využití",
       "saveSuccess": "Rychlost aktualizována",
       "saveFailed": "Rychlost se nepodařilo uložit: {{error}}"
+    },
+    "apiService": {
+      "navTitle": "Služba Codex API",
+      "title": "Služba Codex API",
+      "openPage": "Otevřít službu API",
+      "openFullPage": "Zobrazit všechny funkce",
+      "tabs": {
+        "overview": "Přehled služby",
+        "keys": "Klientské klíče",
+        "accounts": "Fond účtů",
+        "models": "Modely a schopnosti",
+        "logs": "Statistiky a protokoly"
+      },
+      "healthTitle": "Stav služby",
+      "health": {
+        "availableAccounts": "Dostupné účty",
+        "cooldowns": "Prodlevy",
+        "imageUnavailable": "Obrázky nedostupné",
+        "keys": "Klientské klíče"
+      },
+      "accountHealth": {
+        "failures": "{{count}} po sobě jdoucích selhání",
+        "image": "Obrázky {{status}}"
+      },
+      "models": {
+        "availableTitle": "Dostupné modely",
+        "capabilityTitle": "Přepínače schopností",
+        "capabilityDesc": "gpt-image-2 se automaticky zobrazí nebo skryje podle přepínače služby, tarifu účtu a zaznamenaného stavu obrazových schopností.",
+        "rulesTitle": "Pravidla modelů",
+        "aliasTitle": "Aliasy modelů",
+        "aliasPlaceholder": "gpt-5 => g5; + ponechá původní model",
+        "excludedTitle": "Skryté modely",
+        "excludedPlaceholder": "Jeden model nebo vzor na řádek, např. gpt-5-*",
+        "saveRules": "Uložit pravidla",
+        "rulesSaved": "Pravidla modelů uložena",
+        "pricingAction": "Ceny",
+        "pricingTitle": "Ceny modelů",
+        "pricingDesc": "USD / 1M tokenů, pouze pro místní statistiku hodnoty.",
+        "pricingModel": "Název",
+        "pricingInput": "Vstup",
+        "pricingCache": "Cache vstup",
+        "pricingOutput": "Výstup",
+        "pricingSource": "Zdroj",
+        "pricingActions": "Akce",
+        "pricingCachePlaceholder": "Jako vstup",
+        "pricingCustom": "Vlastní",
+        "pricingPreset": "Předvolba",
+        "pricingUnset": "Nenast.",
+        "pricingReset": "Obnovit",
+        "pricingSaved": "Ceny uloženy",
+        "pricingInvalid": "Ceny musí být čísla větší nebo rovna 0"
+      },
+      "keys": {
+        "policyTitle": "Zásady modelů",
+        "advancedPolicyTitle": "Pokročilé: zásady modelů",
+        "modelPrefix": "Předpona modelu",
+        "modelPrefixPlaceholder": "Příklad: codex",
+        "allowedModels": "Povolené modely",
+        "allowedModelsPlaceholder": "Prázdné povolí vše; jeden model nebo vzor na řádek",
+        "excludedModels": "Vyloučené modely",
+        "excludedModelsPlaceholder": "Jeden model nebo vzor na řádek",
+        "savePolicy": "Uložit zásady",
+        "policySaved": "Zásady modelů pro Key uloženy"
+      },
+      "routing": {
+        "optionsTitle": "Volby směrování",
+        "sessionAffinity": "Vazba relace",
+        "sessionAffinityTtl": "TTL vazby",
+        "maxRetryCredentials": "Retry účty",
+        "maxRetryInterval": "Čekání retry",
+        "disableCooling": "Vypnout cooldown",
+        "saveOptions": "Uložit volby",
+        "optionsSaved": "Volby směrování uloženy"
+      },
+      "validation": {
+        "numberRange": "Zadejte číslo od {{min}} do {{max}}"
+      },
+      "logs": {
+        "allKinds": "Všechny typy",
+        "allStatuses": "Všechny stavy",
+        "allGatewayModes": "Vsechny rezimy",
+        "modelFilter": "Modely",
+        "modelPlaceholder": "ID modelu",
+        "accountFilter": "Účet",
+        "accountPlaceholder": "E-mail nebo ID účtu",
+        "apiKeyFilter": "Klíč API",
+        "apiKeyPlaceholder": "Název nebo ID",
+        "kindFilter": "Typ",
+        "statusFilter": "Stav",
+        "gatewayModeFilter": "Rezim",
+        "errorFilter": "Chyba",
+        "errorPlaceholder": "Kategorie chyby",
+        "clearFilters": "Vymazat filtry",
+        "loading": "Načítání protokolů",
+        "gatewayModeUnknown": "Neznamy rezim",
+        "requestIdShort": "ID požadavku {{id}}",
+        "httpStatus": "Stav HTTP {{status}}"
+      },
+      "timeouts": {
+        "entryLabel": "Pokročilé",
+        "openAction": "Časy a opakování",
+        "title": "Časy a opakování",
+        "desc": "Hodnoty jsou v sekundách. Uložení restartuje nebo znovu načte API službu podle aktuálního režimu brány.",
+        "sidecarTitle": "Nová API služba",
+        "legacyTitle": "Stará API služba",
+        "streamOpen": "Otevření streamu",
+        "streamIdle": "Nečinnost streamu",
+        "imageOpen": "Otevření obrázků",
+        "imageIdle": "Nečinnost obrázků",
+        "openAttempts": "Pokusy otevření",
+        "keepalive": "Signál spojení",
+        "requestRead": "Čtení požadavku",
+        "connect": "Připojení upstream",
+        "streamTotal": "Celkem stream",
+        "resetDefaults": "Obnovit výchozí",
+        "saved": "Časy a opakování uloženy",
+        "totalGteIdle": "Celkový čas starého API streamu nesmí být menší než čas nečinnosti streamu",
+        "bootstrapRetries": "Restart pokusy",
+        "websocketTitle": "Nastavení WebSocketu",
+        "websocketConnect": "Limit připojení",
+        "websocketInitial": "Limit první zprávy",
+        "websocketIdle": "Limit nečinnosti",
+        "websocketHeartbeat": "Interval pulzu",
+        "sendRetryAttempts": "Opak. odeslání",
+        "sendRetryBaseDelay": "Základní prodleva odeslání (ms)",
+        "sendRetryMaxDelay": "Max. prodleva odeslání (ms)",
+        "singleStatusAttempts": "Opak. jednoho účtu",
+        "singleStatusBaseDelay": "Základní prodleva účtu (ms)",
+        "singleStatusMaxDelay": "Max. prodleva účtu (ms)",
+        "maxDelayGteBase": "Maximální prodleva nesmí být menší než základní",
+        "longWaitPreset": "Dlouhé čekání",
+        "shortWaitPreset": "Krátké čekání",
+        "presetTitle": "Sada parametrů",
+        "presetSelect": "Vybrat sadu",
+        "presetName": "Název sady",
+        "presetNamePlaceholder": "Nová vlastní sada",
+        "saveAsPreset": "Uložit jako sadu",
+        "updatePreset": "Aktualizovat sadu",
+        "deletePreset": "Smazat sadu",
+        "presetSaved": "Sada uložena",
+        "presetUpdated": "Sada aktualizována",
+        "presetDeleted": "Sada smazána",
+        "presetNameRequired": "Zadejte název sady",
+        "deletePresetConfirm": "Smazat tuto vlastní sadu?",
+        "deletePresetTitle": "Smazat sadu"
+      }
     }
   },
   "githubCopilot": {
@@ -2545,23 +2800,31 @@
       "storage": "Rozsah dat: místní import čte relace přihlášení GitHub ve VS Code a přepnutí účtu aktualizuje stejné záznamy; OAuth, import tokenu, ověření místního importu a obnovení kvót volají oficiální API GitHub s nezbytnými autentizačními poli. state.vscdb ani systémové klíče se neodesílají."
     }
   },
+  "runtime": {
+    "installedVersion": {
+      "loading": "Zjišťuji nainstalovanou verzi",
+      "missing": "Nebyla zjištěna nainstalovaná verze",
+      "detecting": "Zjišťuji",
+      "notFound": "Verze nenalezena"
+    }
+  },
   "dashboard": {
     "title": "Přehled účtů",
     "summary": {
       "label": "Přehled",
       "title": "Snímek účtů",
-      "desc": "Antigravity a Codex na první pohled"
+      "desc": "Antigravity IDE a Codex na první pohled"
     },
     "stats": {
-      "antigravity": "Účty Antigravity",
+      "antigravity": "Účty Antigravity IDE",
       "codex": "Účty Codex",
-      "currentAntigravity": "Aktuální Antigravity",
+      "currentAntigravity": "Aktuální Antigravity IDE",
       "currentCodex": "Aktuální Codex",
       "providers": "Poskytovatelé",
       "totalAccounts": "Celkem účtů"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "Rozložení plánů",
@@ -2576,7 +2839,7 @@
     },
     "emptyAccount": "Žádný účet",
     "sections": {
-      "antigravity": "Antigravity účty",
+      "antigravity": "Antigravity IDE účty",
       "codex": "Codex účty"
     },
     "actions": {
@@ -2609,7 +2872,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Nastavení Antigravity",
+      "title": "Nastavení Antigravity IDE",
       "appPath": "Cesta k aplikaci"
     },
     "codex": {
@@ -3044,7 +3307,7 @@
     "actions": {
       "collapseAll": "Sbalit vše",
       "expandAll": "Rozbalit vše",
-      "goAntigravity": "Přejít na Antigravity",
+      "goAntigravity": "Přejít na Antigravity IDE",
       "goCodex": "Přejít na Codex",
       "goDashboard": "Přejít na Dashboard",
       "goFingerprints": "Přejít na otisky zařízení",
@@ -3059,25 +3322,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "Před rizikovými nebo hromadnými akcemi v Správa účtů Antigravity zálohujte data."
+        "0": "Před rizikovými nebo hromadnými akcemi v Správa účtů Antigravity IDE zálohujte data."
       },
       "keywords": {
-        "0": "Správa účtů Antigravity",
+        "0": "Správa účtů Antigravity IDE",
         "1": "návod",
         "2": "postup",
         "3": "účet"
       },
       "outcomes": {
-        "0": "Pochopte, co vám Správa účtů Antigravity přináší.",
-        "1": "Použijte doporučený postup v Správa účtů Antigravity a snižte chyby."
+        "0": "Pochopte, co vám Správa účtů Antigravity IDE přináší.",
+        "1": "Použijte doporučený postup v Správa účtů Antigravity IDE a snižte chyby."
       },
       "steps": {
-        "0": "Otevřete stránku Správa účtů Antigravity.",
-        "1": "Dokončete základní nastavení a potřebné vazby pro Správa účtů Antigravity.",
-        "2": "Proveďte jednu ruční operaci v Správa účtů Antigravity a ověřte výsledek."
+        "0": "Otevřete stránku Správa účtů Antigravity IDE.",
+        "1": "Dokončete základní nastavení a potřebné vazby pro Správa účtů Antigravity IDE.",
+        "2": "Proveďte jednu ruční operaci v Správa účtů Antigravity IDE a ověřte výsledek."
       },
-      "summary": "Tato sekce vysvětluje, jak používat Správa účtů Antigravity v běžném workflow.",
-      "title": "Správa účtů Antigravity"
+      "summary": "Tato sekce vysvětluje, jak používat Správa účtů Antigravity IDE v běžném workflow.",
+      "title": "Správa účtů Antigravity IDE"
     },
     "blocks": {
       "cautions": "Časté chyby / upozornění",
@@ -3930,5 +4193,14 @@
       "warn": "Varování",
       "error": "Chyba"
     }
+  },
+  "mfaQuick": {
+    "title": "Kód 2FA",
+    "selectLabel": "Vyberte tajný klíč 2FA",
+    "unnamedSecret": "Nepojmenovaný klíč",
+    "invalidCode": "Neplatný klíč",
+    "copyCode": "Kopírovat kód",
+    "copied": "Zkopírováno",
+    "refreshIn": "{{time}} s"
   }
 }

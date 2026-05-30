@@ -11,17 +11,12 @@ export interface CodexApiProviderPreset {
 
 export const CODEX_API_PROVIDER_CUSTOM_ID = "custom";
 export const COCKPIT_API_PROVIDER_ID = "cockpit_api";
+export const COCKPIT_API_PROVIDER_NAME = "Cockpit Api";
+export const COCKPIT_API_BASE_URL = "https://chongcodex.cn/v1";
+
+const COCKPIT_API_HIDDEN_BASE_URLS = [COCKPIT_API_BASE_URL] as const;
 
 export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
-  {
-    id: COCKPIT_API_PROVIDER_ID,
-    name: "Cockpit Api",
-    baseUrls: ["https://chongcodex.cn/v1"],
-    website: "https://chongcodex.cn/console",
-    apiKeyUrl: "https://chongcodex.cn/console",
-    isPartner: true,
-    isService: true,
-  },
   {
     id: "openai_official",
     name: "OpenAI Official",
@@ -224,6 +219,14 @@ export function findCodexApiProviderPresetByBaseUrl(
         (baseUrl) => normalizeCodexProviderBaseUrl(baseUrl) === normalized,
       ),
     ) ?? null
+  );
+}
+
+export function isCockpitApiProviderBaseUrl(rawBaseUrl: string): boolean {
+  const normalized = normalizeCodexProviderBaseUrl(rawBaseUrl);
+  if (!normalized) return false;
+  return COCKPIT_API_HIDDEN_BASE_URLS.some(
+    (baseUrl) => normalizeCodexProviderBaseUrl(baseUrl) === normalized,
   );
 }
 

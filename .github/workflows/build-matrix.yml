@@ -55,27 +55,27 @@ jobs:
           - label: "macos-aarch64"
             platform: "macos-latest"
             args: "--target aarch64-apple-darwin"
-            release_dir: "src-tauri/target/aarch64-apple-darwin/release"
+            release_dir: "target/aarch64-apple-darwin/release"
           - label: "macos-x86_64"
             platform: "macos-latest"
             args: "--target x86_64-apple-darwin"
-            release_dir: "src-tauri/target/x86_64-apple-darwin/release"
+            release_dir: "target/x86_64-apple-darwin/release"
           - label: "macos-universal"
             platform: "macos-latest"
             args: "--target universal-apple-darwin"
-            release_dir: "src-tauri/target/universal-apple-darwin/release"
+            release_dir: "target/universal-apple-darwin/release"
           - label: "ubuntu-22.04"
             platform: "ubuntu-22.04"
             args: ""
-            release_dir: "src-tauri/target/release"
+            release_dir: "target/release"
           - label: "ubuntu-24.04-arm"
             platform: "ubuntu-24.04-arm"
             args: ""
-            release_dir: "src-tauri/target/release"
+            release_dir: "target/release"
           - label: "windows-latest"
             platform: "windows-latest"
             args: ""
-            release_dir: "src-tauri/target/release"
+            release_dir: "target/release"
 
     steps:
       - name: Checkout repository
@@ -93,6 +93,12 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
+      - name: Go setup
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sidecars/cockpit-cliproxy/go.mod
+          cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
+
       - name: Node.js setup
         uses: actions/setup-node@v4
         with:
@@ -105,7 +111,17 @@ jobs:
       - name: Sync versions
         run: npm run sync-version
 
-      - name: Build app
+      - name: Build app (pull request)
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx tauri build --ci --config '{"bundle":{"createUpdaterArtifacts":false}}' ${{ matrix.args }} 2>&1 | tee "build-${{ matrix.label }}.log"
+
+      - name: Build app (signed)
+        if: github.event_name != 'pull_request'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

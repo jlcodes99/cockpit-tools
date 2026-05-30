@@ -519,6 +519,25 @@ fn parse_value_or_json_string(value: Option<&Value>) -> Option<Value> {
     None
 }
 
+fn parse_value_or_json_string_or_icube_cipher(value: Option<&Value>) -> Option<Value> {
+    let value = value?;
+    if value.is_object() || value.is_array() {
+        return Some(value.clone());
+    }
+    let text = value.as_str()?;
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(parsed) = serde_json::from_str::<Value>(trimmed) {
+        return Some(parsed);
+    }
+    let decoded = BASE64_STANDARD.decode(trimmed.as_bytes()).ok()?;
+    let decrypted = byte_crypto_decrypt(&decoded)?;
+    let decrypted_text = String::from_utf8(decrypted).ok()?;
+    serde_json::from_str::<Value>(decrypted_text.as_str()).ok()
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ByteCryptoVersion {
     Aes,
@@ -1038,6 +1057,11 @@ fn storage_object_value(root: &Value, key: &str) -> Option<Value> {
         .and_then(|obj| parse_value_or_json_string(obj.get(key)))
 }
 
+fn storage_object_value_auth(root: &Value, key: &str) -> Option<Value> {
+    root.as_object()
+        .and_then(|obj| parse_value_or_json_string_or_icube_cipher(obj.get(key)))
+}
+
 fn payload_from_storage_root(storage_root: &Value) -> Result<TraeImportPayload, String> {
     let root_obj = storage_root.as_object();
     let provider_id = root_obj
@@ -1047,8 +1071,8 @@ fn payload_from_storage_root(storage_root: &Value) -> Result<TraeImportPayload, 
     let server_storage_key = build_server_storage_key(provider_id.as_str());
     let entitlement_storage_key = build_entitlement_storage_key(provider_id.as_str());
 
-    let auth_raw = storage_object_value(storage_root, auth_storage_key.as_str())
-        .or_else(|| storage_object_value(storage_root, TRAE_STORAGE_AUTH_KEY));
+    let auth_raw = storage_object_value_auth(storage_root, auth_storage_key.as_str())
+        .or_else(|| storage_object_value_auth(storage_root, TRAE_STORAGE_AUTH_KEY));
     let entitlement_raw = storage_object_value(storage_root, entitlement_storage_key.as_str())
         .or_else(|| storage_object_value(storage_root, TRAE_STORAGE_ENTITLEMENT_KEY));
     let server_raw = storage_object_value(storage_root, server_storage_key.as_str())
@@ -1653,6 +1677,13 @@ fn to_json_string_value(value: &Value) -> Result<Value, String> {
     let text =
         serde_json::to_string(value).map_err(|e| format!("序列化 Trae 存储键值失败: {}", e))?;
     Ok(Value::String(text))
+}
+
+fn to_icube_cipher_string_value(value: &Value) -> Result<Value, String> {
+    let plaintext =
+        serde_json::to_string(value).map_err(|e| format!("序列化 Trae 存储键值失败: {}", e))?;
+    let encrypted = byte_crypto_encrypt_v1(plaintext.as_bytes())?;
+    Ok(Value::String(BASE64_STANDARD.encode(encrypted)))
 }
 
 fn pick_string_multi(roots: &[Option<&Value>], paths: &[&[&str]]) -> Option<String> {
@@ -2287,9 +2318,9 @@ pub fn inject_to_trae_at_path(storage_path: &Path, account_id: &str) -> Result<(
 
     let existing_auth_raw = root_obj
         .get(auth_storage_key.as_str())
-        .and_then(|value| parse_value_or_json_string(Some(value)));
+        .and_then(|value| parse_value_or_json_string_or_icube_cipher(Some(value)));
     let auth_raw = ensure_auth_raw_for_inject(&account, existing_auth_raw.as_ref());
-    root_obj.insert(auth_storage_key, to_json_string_value(&auth_raw)?);
+    root_obj.insert(auth_storage_key, to_icube_cipher_string_value(&auth_raw)?);
 
     if let Some(entitlement_raw) = ensure_entitlement_raw_for_inject(&account) {
         root_obj.insert(

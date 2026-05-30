@@ -27,6 +27,11 @@ const PLATFORM_ADAPTERS: Record<PlatformId, TransferAdapter> = {
     exportAccounts: accountService.exportAccounts,
     importFromJson: accountService.importFromJson,
   },
+  antigravity_ide: {
+    listAccounts: accountService.listAccounts,
+    exportAccounts: accountService.exportAccounts,
+    importFromJson: accountService.importFromJson,
+  },
   codex: {
     listAccounts: codexService.listCodexAccounts,
     exportAccounts: codexService.exportCodexAccounts,

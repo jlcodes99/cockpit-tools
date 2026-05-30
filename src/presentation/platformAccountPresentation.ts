@@ -35,8 +35,7 @@ import {
   formatCodexResetTime,
   getCodexCodeReviewQuotaMetric,
   getCodexEffectiveQuotaPercentages,
-  getCodexPlanBadgeClass,
-  getCodexPlanBadgeLabel,
+  getCodexPlanBadgePresentation,
   getCodexQuotaClass,
   getCodexQuotaWindows,
   isCodexApiKeyAccount,
@@ -675,12 +674,13 @@ export function buildCodexAccountPresentation(
       resetAt: codeReviewMetric.resetTime,
     });
   }
+  const planBadge = getCodexPlanBadgePresentation(account);
 
   return {
     id: account.id,
     displayName,
-    planLabel: getCodexPlanBadgeLabel(account),
-    planClass: getCodexPlanBadgeClass(account),
+    planLabel: planBadge.label,
+    planClass: planBadge.className,
     quotaItems,
   };
 }

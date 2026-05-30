@@ -27,6 +27,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
+import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
@@ -1401,6 +1402,7 @@ export function ZedAccountsPage() {
             </div>
 
             <div className="modal-body">
+              <MfaQuickCodeSelect />
               {addTab === 'oauth' && (
                 <div className="add-section">
                   <p className="section-desc">

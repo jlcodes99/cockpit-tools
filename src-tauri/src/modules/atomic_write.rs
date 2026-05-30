@@ -35,6 +35,42 @@ fn build_temp_file_path(parent: &Path, target: &Path, suffix: &str) -> PathBuf {
     ))
 }
 
+fn unique_timestamp_nanos() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos()
+}
+
+pub fn quarantine_file(path: &Path, reason: &str) -> Result<Option<PathBuf>, String> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let parent = path.parent().ok_or("无法定位目标目录")?;
+    let file_name = path
+        .file_name()
+        .and_then(|item| item.to_str())
+        .ok_or_else(|| format!("无法解析目标文件名: {}", path.display()))?;
+    let safe_reason = reason
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    let quarantine_path = parent.join(format!(
+        "{}.{}.{}",
+        file_name,
+        safe_reason,
+        unique_timestamp_nanos()
+    ));
+    fs::rename(path, &quarantine_path).map_err(|e| format_io_error("隔离损坏文件", path, &e))?;
+    Ok(Some(quarantine_path))
+}
+
 fn is_json_path(path: &Path) -> bool {
     path.extension()
         .and_then(|item| item.to_str())
@@ -81,7 +117,16 @@ fn write_string_atomic_internal(
         let backup_path = build_backup_path(path)?;
         if let Ok(existing_content) = fs::read_to_string(path) {
             if content_is_safe_backup_source(path, &existing_content) {
-                write_string_atomic_internal(&backup_path, &existing_content, false)?;
+                if let Err(err) =
+                    write_string_atomic_internal(&backup_path, &existing_content, false)
+                {
+                    crate::modules::logger::log_warn(&format!(
+                        "写入备份文件失败，继续写入主文件: path={}, backup={}, error={}",
+                        path.display(),
+                        backup_path.display(),
+                        err
+                    ));
+                }
             }
         }
     }
@@ -160,7 +205,7 @@ pub fn parse_json_with_auto_restore<T: DeserializeOwned>(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_backup_path, restore_from_backup, write_string_atomic};
+    use super::{build_backup_path, quarantine_file, restore_from_backup, write_string_atomic};
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -199,6 +244,26 @@ mod tests {
             fs::read_to_string(&backup_path).expect("read backup again"),
             r#"{"version":1}"#
         );
+    }
+
+    #[test]
+    fn quarantine_file_renames_existing_file_with_reason() {
+        let dir = make_temp_dir("atomic_write_quarantine");
+        let path = dir.join("state.json");
+        fs::write(&path, r#"{"bad":true}"#).expect("write source");
+
+        let quarantine_path = quarantine_file(&path, "invalid-json")
+            .expect("quarantine result")
+            .expect("quarantine path");
+
+        assert!(!path.exists());
+        assert!(quarantine_path.exists());
+        assert!(quarantine_path
+            .file_name()
+            .and_then(|item| item.to_str())
+            .unwrap_or_default()
+            .starts_with("state.json.invalid-json."));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -18,6 +18,8 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
   switch (platformId) {
     case 'antigravity':
       return 'Antigravity';
+    case 'antigravity_ide':
+      return 'Antigravity IDE';
     case 'codex':
       return 'Codex';
     case 'zed':
@@ -50,6 +52,7 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
 export function renderPlatformIcon(platformId: PlatformId, size = 20): ReactNode {
   switch (platformId) {
     case 'antigravity':
+    case 'antigravity_ide':
       return <RobotIcon style={{ width: size, height: size }} />;
     case 'codex':
       return <CodexIcon size={size} />;

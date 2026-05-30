@@ -14,6 +14,7 @@
     "close": "Đóng",
     "open": "Open",
     "copy": "Copy",
+    "copied": "Đã sao chép",
     "add": "Add",
     "enable": "Enable",
     "disable": "Disable",
@@ -227,7 +228,7 @@
     "selectAll": "Chọn tất cả"
   },
   "nav": {
-    "overview": "Antigravity",
+    "overview": "Antigravity IDE",
     "accounts": "Quản lý tài khoản",
     "wakeup": "Wakeup Tasks",
     "fingerprints": "Vân tay thiết bị",
@@ -497,9 +498,9 @@
       },
       "safe": {
         "title": "Khởi động lại an toàn (Khuyên dùng)",
-        "principle": "Gửi tín hiệu SIGTERM đến tất cả các tiến trình Antigravity, yêu cầu ứng dụng lưu dữ liệu và đóng lại, sau đó bắt đầu phiên bản đích (buộc đóng nếu cần).",
-        "commandMac": "macOS/Linux: kill -15 <pid> (tất cả tiến trình Antigravity)",
-        "commandWin": "Windows: taskkill /F /PID <pid> (tất cả tiến trình Antigravity)",
+        "principle": "Gửi tín hiệu SIGTERM đến tất cả các tiến trình Antigravity IDE, yêu cầu ứng dụng lưu dữ liệu và đóng lại, sau đó bắt đầu phiên bản đích (buộc đóng nếu cần).",
+        "commandMac": "macOS/Linux: kill -15 <pid> (tất cả tiến trình Antigravity IDE)",
+        "commandWin": "Windows: taskkill /F /PID <pid> (tất cả tiến trình Antigravity IDE)",
         "pros": "Gần nhất với đóng bình thường, ít khả năng gây ra cảnh báo lỗi, dữ liệu an toàn hơn.",
         "cons": "Chỉ hỗ trợ khởi động lại toàn cục cho tất cả các phiên bản."
       },
@@ -563,7 +564,7 @@
       "uiScale": "Tỷ lệ giao diện",
       "uiScaleDesc": "Điều chỉnh tỷ lệ giao diện",
       "accountManagement": "Quản lý tài khoản",
-      "autoRefresh": "Tự động làm mới hạn mức Antigravity",
+      "autoRefresh": "Tự động làm mới hạn mức Antigravity IDE",
       "codexAutoRefresh": "Tự động làm mới hạn mức Codex",
       "autoRefreshDesc": "Tần suất cập nhật tự động dưới nền",
       "codexAutoRefreshDesc": "Tần suất cập nhật tự động dưới nền",
@@ -587,6 +588,10 @@
       "hideDockIconDesc": "Điều khiển hiển thị biểu tượng Dock độc lập, không phụ thuộc vào hành vi thu nhỏ cửa sổ",
       "hideDockIconOff": "Không (Hiện biểu tượng Dock)",
       "hideDockIconOn": "Có (Ẩn biểu tượng Dock)",
+      "trayIconStyle": "Kiểu biểu tượng thanh menu (chỉ macOS)",
+      "trayIconStyleDesc": "Chọn biểu tượng đơn sắc của hệ thống hoặc biểu tượng app gốc có màu",
+      "trayIconStyleTemplate": "Biểu tượng đơn sắc",
+      "trayIconStyleColor": "Biểu tượng màu",
       "floatingCardStartup": "Hiển thị thẻ nổi khi khởi động",
       "floatingCardStartupDesc": "Tự động hiển thị thẻ tài khoản nổi sau khi ứng dụng khởi động",
       "floatingCardAlwaysOnTop": "Giữ thẻ nổi luôn ở trên cùng theo mặc định",
@@ -596,8 +601,8 @@
       "floatingCardShowNowAction": "Hiển thị thẻ nổi",
       "dataDir": "Thư mục dữ liệu",
       "dataDirDesc": "Vị trí lưu trữ tài khoản và cấu hình.",
-      "fpDir": "Thư mục lưu trữ Antigravity",
-      "fpDirDesc": "Vị trí lưu trữ tệp dữ liệu Antigravity.",
+      "fpDir": "Thư mục lưu trữ Antigravity IDE",
+      "fpDirDesc": "Vị trí lưu trữ tệp dữ liệu Antigravity IDE.",
       "opencodeTitle": "Tích hợp OpenCode",
       "opencodeRestart": "Khởi động lại OpenCode khi chuyển Codex",
       "opencodeRestartDesc": "Đồng bộ thông tin tài khoản Codex trong OpenCode",
@@ -618,10 +623,10 @@
       "vscodeAppPathPlaceholder": "Đường dẫn mặc định",
       "vscodePathSelect": "Chọn",
       "vscodePathReset": "Đặt lại mặc định",
-      "antigravityAppPath": "Đường dẫn ứng dụng Antigravity",
-      "antigravityTitle": "Khởi chạy Antigravity",
+      "antigravityAppPath": "Đường dẫn ứng dụng Antigravity IDE",
+      "antigravityTitle": "Khởi chạy Antigravity IDE",
       "commonTitle": "Chung",
-      "antigravitySettingsTitle": "Cài đặt Antigravity",
+      "antigravitySettingsTitle": "Cài đặt Antigravity IDE",
       "codexSettingsTitle": "Cài đặt Codex",
       "githubCopilotSettingsTitle": "Cài đặt GitHub Copilot",
       "ghcpAutoRefresh": "Tự động làm mới quota GitHub Copilot",
@@ -694,14 +699,14 @@
       "sideNavLayoutOriginal": "Bố cục gốc",
       "sideNavLayoutClassic": "Bố cục cổ điển",
       "antigravityDualSwitchNoRestart": "Chuyển đôi không cần khởi động lại",
-      "antigravityDualSwitchNoRestartDesc": "Khi chuyển tài khoản, việc ghi dữ liệu cục bộ và chuyển đổi liền mạch qua tiện ích mở rộng được thực hiện trong một luồng, không cần khởi động lại Antigravity.",
+      "antigravityDualSwitchNoRestartDesc": "Khi chuyển tài khoản, việc ghi dữ liệu cục bộ và chuyển đổi liền mạch qua tiện ích mở rộng được thực hiện trong một luồng, không cần khởi động lại Antigravity IDE.",
       "appAutoLaunch": "Khởi chạy Cockpit Tools khi đăng nhập",
       "appAutoLaunchDesc": "Tự động khởi chạy ứng dụng sau khi đăng nhập hệ thống",
       "startupWakeupDisabled": "Tắt",
       "startupWakeupImmediate": "Đánh thức ngay",
       "startupWakeupDelayed": "Đánh thức sau độ trễ",
-      "antigravityStartupWakeup": "Chạy đánh thức Antigravity sau khi khởi động",
-      "antigravityStartupWakeupDesc": "Sau khi ứng dụng khởi động, chạy một lần các tác vụ đánh thức Antigravity đã bật",
+      "antigravityStartupWakeup": "Chạy đánh thức Antigravity IDE sau khi khởi động",
+      "antigravityStartupWakeupDesc": "Sau khi ứng dụng khởi động, chạy một lần các tác vụ đánh thức Antigravity IDE đã bật",
       "codexStartupWakeup": "Chạy đánh thức Codex sau khi khởi động",
       "codexStartupWakeupDesc": "Sau khi ứng dụng khởi động, chạy một lần các tác vụ đánh thức Codex đã bật",
       "currentAccountRefreshTitle": "Làm mới tài khoản hiện tại",
@@ -936,7 +941,7 @@
   },
   "accounts": {
     "title": "Quản lý tài khoản",
-    "subtitle": "Quản lý danh sách tài khoản Antigravity của bạn.",
+    "subtitle": "Quản lý danh sách tài khoản Antigravity IDE của bạn.",
     "total": "Tổng cộng {{count}} tài khoản",
     "search": "Tìm kiếm tài khoản...",
     "addAccount": "Thêm tài khoản",
@@ -1093,6 +1098,8 @@
       "noGroups": "Chưa có nhóm",
       "noGroupsDesc": "Tạo nhóm để quản lý tài khoản hàng loạt",
       "manage": "Quản lý",
+      "refresh": "Làm mới nhóm",
+      "refreshEmpty": "Nhóm này không có tài khoản nào có thể làm mới",
       "error": {
         "duplicate": "Tên nhóm đã tồn tại",
         "createFailed": "Tạo nhóm thất bại: {{error}}",
@@ -1190,7 +1197,7 @@
     "switching": "Đang chuyển...",
     "fingerprint": "Vân tay",
     "bound": "Đã liên kết",
-    "brandTitle": "Quản lý tài khoản Antigravity"
+    "brandTitle": "Quản lý tài khoản Antigravity IDE"
   },
   "fingerprints": {
     "title": "Vân tay thiết bị",
@@ -1292,7 +1299,7 @@
   "modals": {
     "addAccount": {
       "title": "Thêm tài khoản",
-      "desc": "Thêm tài khoản Antigravity của bạn qua ủy quyền Google OAuth",
+      "desc": "Thêm tài khoản Antigravity IDE của bạn qua ủy quyền Google OAuth",
       "loginBtn": "Đăng nhập Google OAuth",
       "waiting": "Đang chờ ủy quyền..."
     },
@@ -1300,7 +1307,7 @@
       "title": "Nhập tài khoản",
       "desc": "Vui lòng chọn phương thức nhập",
       "local": "Nhập tài khoản cục bộ",
-      "localDesc": "Nhập tài khoản hiện đang đăng nhập từ Antigravity Client",
+      "localDesc": "Nhập tài khoản hiện đang đăng nhập từ Antigravity IDE Client",
       "tools": "Nhập Antigravity Tools",
       "toolsDesc": "Nhập từ thư mục ~/.antigravity_tools/",
       "jsonDivider": "hoặc dán JSON",
@@ -1313,7 +1320,7 @@
       "fromExtension": "Nhập từ Plugin",
       "syncBadge": "Đồng bộ tài khoản plugin Antigravity Cockpit",
       "fromLocalDB": "Nhập từ DB cục bộ",
-      "localDBDesc": "Đọc tài khoản đăng nhập từ Antigravity Client trên máy này",
+      "localDBDesc": "Đọc tài khoản đăng nhập từ Antigravity IDE Client trên máy này",
       "toolsDescMigrate": "Di chuyển tài khoản từ ~/.antigravity_tools/",
       "importingTools": "Đang nhập từ Antigravity Tools...",
       "importingLocal": "Đang nhập tài khoản cục bộ...",
@@ -1358,6 +1365,7 @@
     "batchDeleteConfirm": "Bạn có chắc chắn muốn xóa {{count}} tài khoản đã chọn không?",
     "switched": "Đã chuyển sang {{email}}",
     "switchFailed": "Chuyển đổi thất bại: {{error}}",
+    "antigravityLegacyUnsupported": "Antigravity 2.0.0 trở lên không được hỗ trợ tại đây. Hãy chọn phiên bản Antigravity thấp hơn 2.0.0 hoặc dùng Antigravity IDE.",
     "importSuccess": "Nhập thành công {{count}} tài khoản",
     "importLocalSuccess": "Nhập thành công tài khoản: {{email}}",
     "importFailed": "Nhập thất bại: {{error}}",
@@ -1396,7 +1404,7 @@
       },
       "runHint": {
         "title": "Ghi chú xác minh",
-        "line1": "“Kiểm tra ngay” sẽ gửi một yêu cầu chat tối thiểu bằng cách mô phỏng client Antigravity qua cổng nội bộ và giao thức Language Server chính thức.",
+        "line1": "“Kiểm tra ngay” sẽ gửi một yêu cầu chat tối thiểu bằng cách mô phỏng client Antigravity IDE qua cổng nội bộ và giao thức Language Server chính thức.",
         "line2": "Quy trình này tiêu tốn một lượng nhỏ token (thường là một đoạn hội thoại ngắn). Mức tiêu thụ thực tế phụ thuộc vào model và chính sách tài khoản.",
         "line3": "Thao tác này không thay đổi cấu hình tác vụ đánh thức. Nó chỉ kiểm tra khả dụng của tài khoản và ghi lịch sử kiểm tra.",
         "line4": "Nếu trả về 403, cần hoàn tất xác minh tài khoản hoặc gửi kháng cáo trước; kết quả sẽ cung cấp địa chỉ và thao tác nhanh."
@@ -1527,6 +1535,7 @@
       "modeScheduled": "📅 Lịch trình",
       "modeCrontab": "🧩 Crontab",
       "modeQuotaReset": "🔄 Đặt lại hạn mức",
+      "antigravityVersion": "Phiên bản Antigravity IDE",
       "modelSelect": "Chọn mô hình",
       "modelHint": "Đối với cùng một nhóm hạn mức, chỉ nên chọn một mô hình. Nhiều mô hình sẽ kích hoạt theo trình tự.",
       "modelsEmpty": "Không có mô hình gợi ý",
@@ -1673,6 +1682,7 @@
       "refreshTokenExpired": "Ủy quyền đăng nhập Codex đã hết hạn và không thể tự động làm mới. Hãy đăng nhập lại tài khoản Codex.",
       "refreshTokenInvalidated": "Ủy quyền đăng nhập Codex đã bị dịch vụ thu hồi và không thể tự động làm mới. Hãy đăng nhập lại tài khoản Codex.",
       "invalidGrant": "Ủy quyền đăng nhập Codex không hợp lệ và không thể tự động làm mới. Hãy đăng nhập lại tài khoản Codex.",
+      "staleAccount": "Tài khoản này không còn trong kho tài khoản cục bộ. Danh sách tài khoản đã được làm mới. Hãy nhập lại hoặc đăng nhập lại tài khoản Codex này.",
       "unsupportedCountryRegion": "Khu vực mạng hiện tại không hỗ trợ làm mới ủy quyền Codex. Dịch vụ ủy quyền OpenAI đã từ chối lối ra mạng này. Hãy chuyển sang khu vực được hỗ trợ rồi thử lại."
     },
     "current": "Hiện tại",
@@ -1687,6 +1697,11 @@
     },
     "oauth": {
       "desc": "Nhấn nút bên dưới và hoàn tất ủy quyền OpenAI trong trình duyệt",
+      "trialGuideTitle": "Mẹo đăng ký dùng thử",
+      "trialGuideDesc": "Khi chuẩn bị tài khoản mới, nên ưu tiên Gmail có thể truy cập lâu dài để tài khoản ổn định hơn và dễ xác minh về sau.",
+      "trialGuideAliasDesc": "Một Gmail chính có thể chuẩn bị tối đa 5 địa chỉ bí danh để tách các bản ghi đăng ký ChatGPT; hãy dùng theo quy định của dịch vụ đích.",
+      "trialGuideLink": "Xem hướng dẫn dùng thử",
+      "gmailAliasLink": "Tạo bí danh Gmail",
       "preparing": "Đang chuẩn bị liên kết ủy quyền...",
       "exchanging": "Đang đổi token...",
       "portInUse": "Cổng {{port}} đang được sử dụng. Hãy đóng ứng dụng đang dùng cổng này và thử lại.",
@@ -1696,7 +1711,8 @@
       "portStillInUse": "Cổng {{port}} vẫn đang được sử dụng.",
       "portInUseAction": "Đóng cổng và thử lại",
       "timeout": "Xác thực đã hết thời gian. Vui lòng nhấn",
-      "timeoutRetry": "Làm mới link xác thực"
+      "timeoutRetry": "Làm mới link xác thực",
+      "reauthEmailLabel": "Tài khoản ủy quyền lại"
     },
     "token": {
       "desc": "Dán auth.json, JSON tài khoản hoặc refresh_token.",
@@ -1742,6 +1758,7 @@
       "disableService": "Tắt dịch vụ",
       "enableService": "Bật dịch vụ",
       "saveSuccess": "Đã cập nhật bộ dịch vụ API",
+      "noEligibleAccountsSelected": "Các tài khoản đã chọn không có trong môi trường này hoặc không thể dùng với dịch vụ API. Trước tiên hãy nhập một tài khoản Codex dùng được trong môi trường này.",
       "removeSuccess": "Đã xóa tài khoản khỏi dịch vụ API",
       "rotateSuccess": "Đã đặt lại khóa dịch vụ API",
       "enabledSuccess": "Đã bật dịch vụ API",
@@ -1752,7 +1769,7 @@
       "hideKey": "Ẩn khóa",
       "modal": {
         "title": "Thêm vào dịch vụ API",
-        "desc": "Chọn các tài khoản OAuth muốn đưa vào bộ dịch vụ API. Các tài khoản được thêm sẽ bị ẩn khỏi bảng thông thường và chỉ được quản lý từ thẻ dịch vụ API.",
+        "desc": "Chọn tài khoản OAuth hoặc API Key muốn đưa vào bộ dịch vụ API. Các tài khoản được thêm sẽ bị ẩn khỏi bảng thông thường và chỉ được quản lý từ thẻ dịch vụ API.",
         "empty": "Không có tài khoản OAuth khả dụng",
         "selected": "Trong dịch vụ API",
         "available": "Bảng thông thường",
@@ -1809,7 +1826,7 @@
       "memberTitle": "Thành viên bộ sưu tập",
       "stats": {
         "requests": "Yêu cầu",
-        "requestsDetail": "Thành công {{success}} / Thất bại {{failed}}",
+        "requestsDetail": "OK {{success}} / Lỗi {{failed}} / Hủy {{canceled}} / Nguồn {{upstreamFailed}} / Chưa xong {{incomplete}}",
         "tokens": "Token",
         "tokensDetail": "Đầu vào {{input}} / Đầu ra {{output}}",
         "specialTokens": "Bộ đệm / Suy luận",
@@ -1819,7 +1836,11 @@
         "accountRequests": "{{count}} yêu cầu",
         "accountTokens": "{{count}} token",
         "accountResult": "Thành công {{success}} / Thất bại {{failed}}",
-        "accountTokensCompact": "{{value}}"
+        "accountTokensCompact": "{{value}}",
+        "images": "Yêu cầu ảnh",
+        "imagesDetail": "Tạo {{generate}} / Sửa {{edit}} / Quyền {{blocked}}",
+        "estimatedCost": "Giá trị ước tính",
+        "estimatedCostDetail": "Cộng dồn từ ảnh chụp giá của từng yêu cầu"
       },
       "routingLabel": "Định tuyến",
       "routingSaveSuccess": "Đã cập nhật định tuyến dịch vụ API",
@@ -1846,7 +1867,8 @@
         "quotaLowFirst": "Ưu tiên hạn mức thấp",
         "planHighFirst": "Ưu tiên gói cao",
         "planLowFirst": "Ưu tiên gói thấp",
-        "expirySoonFirst": "Sắp hết hạn trước"
+        "expirySoonFirst": "Sắp hết hạn trước",
+        "custom": "Tùy chỉnh"
       },
       "statusUnconfigured": "Chưa cấu hình",
       "expandDetails": "Mở chi tiết",
@@ -1886,9 +1908,92 @@
         "empty": "Chưa có thống kê hạn mức"
       },
       "oauthBinding": {
-        "desc": "Tùy chọn. Khi chưa liên kết, dịch vụ API chạy theo luồng API Key cũ; sau khi liên kết, trạng thái đăng nhập dùng tài khoản OAuth và Provider dùng cấu hình dịch vụ API hiện tại.",
+        "desc": "Tùy chọn. Chỉ có thể chọn tài khoản OAuth có thông tin thời hạn đăng ký; tài khoản đã hết hạn cũng được phép liên kết. Khi chưa liên kết, dịch vụ API chạy theo luồng API Key cũ; sau khi liên kết, trạng thái đăng nhập dùng tài khoản OAuth và Provider dùng cấu hình dịch vụ API hiện tại.",
         "currentService": "Dịch vụ API: {{name}}"
-      }
+      },
+      "customRoutingEdit": "Sửa định tuyến tùy chỉnh",
+      "customRoutingTitle": "Định tuyến tùy chỉnh",
+      "customRoutingDesc": "Đặt ưu tiên và trọng số cho từng tài khoản để kiểm soát thứ tự chọn tài khoản và phân bổ tải cùng mức ưu tiên.",
+      "customRoutingPriorityTitle": "Ưu tiên",
+      "customRoutingPriorityDesc": "Giá trị cao hơn được chọn trước; tài khoản ưu tiên thấp chỉ được thử khi nhóm ưu tiên cao không khả dụng.",
+      "customRoutingWeightTitle": "Trọng số",
+      "customRoutingWeightDesc": "Dùng để cân bằng tải trong cùng mức ưu tiên. Trọng số càng cao thì nhận càng nhiều yêu cầu.",
+      "customRoutingSearch": "Tìm email, gói hoặc ID tài khoản",
+      "customRoutingSelected": "Đã chọn {{count}}",
+      "customRoutingPriorityShort": "Ưu tiên",
+      "customRoutingWeightShort": "Trọng số",
+      "customRoutingApplyBatch": "Áp dụng cho mục chọn",
+      "customRoutingReset": "Đặt lại",
+      "customRoutingAccountColumn": "Tài khoản",
+      "customRoutingQuotaColumn": "Hạn mức",
+      "customRoutingEmpty": "Không có tài khoản có thể cấu hình trong bộ sưu tập dịch vụ API hiện tại",
+      "customRoutingSave": "Lưu định tuyến",
+      "customRoutingSaveSuccess": "Đã cập nhật định tuyến tùy chỉnh của dịch vụ API",
+      "upstreamProxyLabel": "URL proxy API",
+      "upstreamProxySaveSuccess": "Đã cập nhật URL proxy API",
+      "upstreamProxyUrlPlaceholder": "Trống = proxy toàn cục",
+      "upstreamProxySaveAction": "Lưu proxy",
+      "imageGenerationLabel": "Công cụ image_generation",
+      "imageGenerationDesc": "Điều khiển việc chat văn bản khai báo công cụ ảnh và việc endpoint ảnh có khả dụng hay không.",
+      "imageGenerationSaveSuccess": "Đã cập nhật cài đặt image_generation",
+      "apiKeysTitle": "Khóa máy khách",
+      "apiKeyAdd": "Thêm khóa",
+      "apiKeyLabel": "Tên khóa",
+      "apiKeySaveLabel": "Lưu tên",
+      "apiKeyDefaultLabel": "Máy khách {{index}}",
+      "apiKeyCreateSuccess": "Đã tạo API Key",
+      "apiKeyUpdateSuccess": "Đã cập nhật API Key",
+      "apiKeyRotateSuccess": "Đã đặt lại API Key",
+      "apiKeyDeleteSuccess": "Đã xóa API Key",
+      "apiKeyRotateConfirm": "API Key này sẽ ngừng hoạt động ngay sau khi đặt lại. Tiếp tục?",
+      "apiKeyDeleteConfirm": "Xóa API Key này?",
+      "apiKeyDelete": "Xóa khóa",
+      "apiKeyDisable": "Tắt khóa",
+      "apiKeyEnable": "Bật khóa",
+      "modelStatsTitle": "Theo mô hình",
+      "apiKeyStatsTitle": "Theo khóa",
+      "healthAvailable": "Khả dụng",
+      "healthUnavailable": "Không khả dụng",
+      "healthCooldown": "Chờ {{count}}",
+      "healthImageUnavailable": "Ảnh không khả dụng",
+      "requestLogTitle": "Nhật ký yêu cầu",
+      "requestLogEmpty": "Chưa có nhật ký yêu cầu",
+      "requestLogSuccess": "Thành công",
+      "requestLogFailed": "Thất bại",
+      "requestLogTokens": "{{value}} token",
+      "imageGenerationMode": {
+        "enabled": "Bật",
+        "imagesOnly": "Chỉ ảnh",
+        "disabled": "Tắt"
+      },
+      "requestKind": {
+        "text": "Văn bản",
+        "imageGeneration": "Ảnh",
+        "imageEdit": "Sửa ảnh",
+        "other": "Khác"
+      },
+      "testSuccessInline": "Kiểm thử dịch vụ API đã đạt",
+      "gatewayModeLabel": "Che do cong",
+      "gatewayModeLegacyShort": "Cu",
+      "gatewayModeSidecarShort": "Moi",
+      "gatewayModeNewLabel": "Dich vu API-Moi",
+      "gatewayModeOldLabel": "Dich vu API-Cu",
+      "gatewayModeSaveSuccess": "Da cap nhat che do cong cua dich vu API",
+      "gatewayGuideTitle": "Đổi cổng tại đây",
+      "gatewayGuideDesc": "Mặc định dùng cổng mới. Nếu gặp vấn đề tương thích hoặc lỗi yêu cầu từ client, bạn có thể chuyển về cổng cũ tại đây.",
+      "gatewayGuideAction": "Đã hiểu",
+      "upstreamProxyUrlPlaceholderLegacy": "De trong de dung proxy toan cuc, proxy moi truong hoac proxy he thong",
+      "upstreamProxyUrlPlaceholderSidecar": "De trong de dung proxy toan cuc",
+      "debugLogsLabel": "Nhật ký debug",
+      "debugLogsDescription": "Xuất nhật ký debug của dịch vụ API để chẩn đoán cổng và luồng",
+      "debugLogsEnabledSuccess": "Đã bật nhật ký debug",
+      "debugLogsDisabledSuccess": "Đã tắt nhật ký debug",
+      "debugLogsEnableConfirmTitle": "Bật nhật ký debug",
+      "debugLogsEnableConfirmMessage": "Khi bật, dịch vụ API sẽ xuất nhật ký debug để chẩn đoán sự cố gateway, proxy, yêu cầu upstream và phản hồi streaming. Việc này có thể thêm một ít chi phí hiệu năng khi đồng thời cao hoặc streaming dài. Nên tắt sau khi chẩn đoán xong. Bật?",
+      "debugLogsEnableConfirmAction": "Bật",
+      "debugLogsDisableConfirmTitle": "Tắt nhật ký debug",
+      "debugLogsDisableConfirmMessage": "Khi tắt, dịch vụ API sẽ dừng xuất nhật ký debug, giảm nhiễu nhật ký và chi phí bổ sung. Bạn có thể bật lại khi chẩn đoán gateway, proxy hoặc streaming. Tắt?",
+      "debugLogsDisableConfirmAction": "Tắt"
     },
     "local": {
       "desc": "Nhập tài khoản hiện tại từ ~/.codex/auth.json",
@@ -2299,11 +2404,13 @@
         "action": "Liên kết OAuth",
         "actionShort": "Liên kết",
         "title": "Liên kết tài khoản OAuth",
-        "desc": "Tùy chọn. Khi chưa liên kết, tài khoản này chuyển theo luồng API Key cũ; sau khi liên kết, trạng thái đăng nhập dùng tài khoản OAuth và Provider dùng cấu hình tài khoản API Key này.",
+        "desc": "Tùy chọn. Chỉ có thể chọn tài khoản OAuth có thông tin thời hạn đăng ký; tài khoản đã hết hạn cũng được phép liên kết. Khi chưa liên kết, tài khoản này chuyển theo luồng API Key cũ; sau khi liên kết, trạng thái đăng nhập dùng tài khoản OAuth và Provider dùng cấu hình tài khoản API Key này.",
         "currentAccount": "Tài khoản API Key: {{name}}",
         "selectLabel": "Chọn tài khoản OAuth",
         "empty": "Chưa có tài khoản OAuth. Hãy thêm tài khoản ủy quyền OAuth trước.",
+        "emptyEligible": "Không có tài khoản OAuth có thông tin thời hạn đăng ký. Hãy làm mới quota hoặc thêm tài khoản OAuth đủ điều kiện trước.",
         "validationRequired": "Vui lòng chọn tài khoản OAuth",
+        "validationSubscriptionRequired": "Chỉ có thể liên kết tài khoản OAuth có thông tin thời hạn đăng ký",
         "saveSuccess": "Đã cập nhật liên kết OAuth",
         "saveFailed": "Liên kết OAuth thất bại: {{error}}",
         "switchRequiresBinding": "Hãy liên kết tài khoản OAuth trước",
@@ -2434,6 +2541,7 @@
       "column": "Hết hạn",
       "unknown": "Ủy quyền lại",
       "missingDetail": "Ủy quyền lại để lấy",
+      "refresh": "Làm mới gói",
       "expired": "Đã hết hạn",
       "hoursLeft": "{{count}} giờ",
       "daysLeft": "{{count}} ngày",
@@ -2454,6 +2562,7 @@
       "repairing": "Đang sửa khả năng hiển thị phiên Codex...",
       "repairFailed": "Tự động sửa thất bại. Bạn có thể thử lại sau trong Quản lý phiên > Sửa hiển thị.",
       "type": {
+        "api": "Chế độ API",
         "apiKey": "Khóa API",
         "apiService": "Dịch vụ API",
         "account": "Tài khoản"
@@ -2493,6 +2602,152 @@
       "fastDesc": "Tốc độ 1,5x, dùng nhiều hơn",
       "saveSuccess": "Đã cập nhật tốc độ",
       "saveFailed": "Không thể lưu tốc độ: {{error}}"
+    },
+    "apiService": {
+      "navTitle": "Dịch vụ API Codex",
+      "title": "Dịch vụ API Codex",
+      "openPage": "Mở dịch vụ API",
+      "openFullPage": "Xem tất cả tính năng",
+      "tabs": {
+        "overview": "Tổng quan dịch vụ",
+        "keys": "Khóa máy khách",
+        "accounts": "Nhóm tài khoản",
+        "models": "Mô hình và năng lực",
+        "logs": "Thống kê và nhật ký"
+      },
+      "healthTitle": "Sức khỏe dịch vụ",
+      "health": {
+        "availableAccounts": "Tài khoản khả dụng",
+        "cooldowns": "Thời gian chờ",
+        "imageUnavailable": "Ảnh không khả dụng",
+        "keys": "Khóa máy khách"
+      },
+      "accountHealth": {
+        "failures": "{{count}} lỗi liên tiếp",
+        "image": "Ảnh {{status}}"
+      },
+      "models": {
+        "availableTitle": "Mô hình khả dụng",
+        "capabilityTitle": "Công tắc năng lực",
+        "capabilityDesc": "gpt-image-2 được tự động hiển thị hoặc ẩn theo công tắc dịch vụ, gói tài khoản và trạng thái năng lực ảnh đã ghi nhận.",
+        "rulesTitle": "Quy tắc mô hình",
+        "aliasTitle": "Bí danh mô hình",
+        "aliasPlaceholder": "gpt-5 => g5; thêm + để giữ mô hình gốc",
+        "excludedTitle": "Mô hình ẩn",
+        "excludedPlaceholder": "Mỗi dòng một mô hình hoặc mẫu, ví dụ gpt-5-*",
+        "saveRules": "Lưu quy tắc",
+        "rulesSaved": "Đã lưu quy tắc mô hình",
+        "pricingAction": "Giá",
+        "pricingTitle": "Giá mô hình",
+        "pricingDesc": "USD / 1M token, chỉ dùng cho thống kê giá trị cục bộ.",
+        "pricingModel": "Mô hình",
+        "pricingInput": "Đầu vào",
+        "pricingCache": "Đầu vào cache",
+        "pricingOutput": "Đầu ra",
+        "pricingSource": "Nguồn",
+        "pricingActions": "Thao tác",
+        "pricingCachePlaceholder": "Như đầu vào",
+        "pricingCustom": "Tùy chỉnh",
+        "pricingPreset": "Cài sẵn",
+        "pricingUnset": "Chưa đặt",
+        "pricingReset": "Đặt lại",
+        "pricingSaved": "Đã lưu giá",
+        "pricingInvalid": "Giá phải là số lớn hơn hoặc bằng 0"
+      },
+      "keys": {
+        "policyTitle": "Chính sách mô hình",
+        "advancedPolicyTitle": "Nâng cao: chính sách mô hình",
+        "modelPrefix": "Tiền tố mô hình",
+        "modelPrefixPlaceholder": "Ví dụ: codex",
+        "allowedModels": "Mô hình được phép",
+        "allowedModelsPlaceholder": "Để trống là tất cả; mỗi dòng một mô hình hoặc mẫu",
+        "excludedModels": "Mô hình loại trừ",
+        "excludedModelsPlaceholder": "Mỗi dòng một mô hình hoặc mẫu",
+        "savePolicy": "Lưu chính sách",
+        "policySaved": "Đã lưu chính sách mô hình của Key"
+      },
+      "routing": {
+        "optionsTitle": "Tùy chọn định tuyến",
+        "sessionAffinity": "Gắn phiên",
+        "sessionAffinityTtl": "TTL gắn phiên",
+        "maxRetryCredentials": "Tài khoản retry",
+        "maxRetryInterval": "Chờ retry",
+        "disableCooling": "Tắt cooldown",
+        "saveOptions": "Lưu tùy chọn",
+        "optionsSaved": "Đã lưu tùy chọn định tuyến"
+      },
+      "validation": {
+        "numberRange": "Nhập số từ {{min}} đến {{max}}"
+      },
+      "logs": {
+        "allKinds": "Mọi loại",
+        "allStatuses": "Mọi trạng thái",
+        "allGatewayModes": "Tat ca che do",
+        "modelFilter": "Mô hình",
+        "modelPlaceholder": "ID mô hình",
+        "accountFilter": "Tài khoản",
+        "accountPlaceholder": "Email hoặc ID tài khoản",
+        "apiKeyFilter": "Khóa API",
+        "apiKeyPlaceholder": "Tên hoặc ID",
+        "kindFilter": "Loại",
+        "statusFilter": "Trạng thái",
+        "gatewayModeFilter": "Che do",
+        "errorFilter": "Lỗi",
+        "errorPlaceholder": "Nhóm lỗi",
+        "clearFilters": "Xóa bộ lọc",
+        "loading": "Đang tải nhật ký",
+        "gatewayModeUnknown": "Che do khong xac dinh",
+        "requestIdShort": "ID yêu cầu {{id}}",
+        "httpStatus": "Trạng thái HTTP {{status}}"
+      },
+      "timeouts": {
+        "entryLabel": "Nâng cao",
+        "openAction": "Hết hạn & thử lại",
+        "title": "Hết hạn & thử lại",
+        "desc": "Giá trị tính bằng giây. Khi lưu, dịch vụ API sẽ khởi động lại hoặc tải lại theo chế độ gateway hiện tại.",
+        "sidecarTitle": "Dịch vụ API mới",
+        "legacyTitle": "Dịch vụ API cũ",
+        "streamOpen": "Mở stream",
+        "streamIdle": "Stream rỗi",
+        "imageOpen": "Mở ảnh",
+        "imageIdle": "Ảnh rỗi",
+        "openAttempts": "Lần mở",
+        "keepalive": "Giữ kết nối",
+        "requestRead": "Đọc yêu cầu",
+        "connect": "Kết nối upstream",
+        "streamTotal": "Tổng stream",
+        "resetDefaults": "Khôi phục mặc định",
+        "saved": "Đã lưu hết hạn và thử lại",
+        "totalGteIdle": "Tổng thời gian stream API cũ không được nhỏ hơn thời gian stream rỗi",
+        "bootstrapRetries": "Thử lại khởi động",
+        "websocketTitle": "Thiết lập WebSocket",
+        "websocketConnect": "Hết hạn kết nối",
+        "websocketInitial": "Hết hạn tin đầu",
+        "websocketIdle": "Hết hạn nhàn rỗi",
+        "websocketHeartbeat": "Khoảng heartbeat",
+        "sendRetryAttempts": "Thử lại gửi",
+        "sendRetryBaseDelay": "Trễ cơ bản gửi (ms)",
+        "sendRetryMaxDelay": "Trễ tối đa gửi (ms)",
+        "singleStatusAttempts": "Thử lại một tài khoản",
+        "singleStatusBaseDelay": "Trễ cơ bản tài khoản (ms)",
+        "singleStatusMaxDelay": "Trễ tối đa tài khoản (ms)",
+        "maxDelayGteBase": "Độ trễ tối đa không được nhỏ hơn độ trễ cơ bản",
+        "longWaitPreset": "Mẫu chờ lâu",
+        "shortWaitPreset": "Mẫu chờ ngắn",
+        "presetTitle": "Mẫu tham số",
+        "presetSelect": "Chọn mẫu",
+        "presetName": "Tên mẫu",
+        "presetNamePlaceholder": "Mẫu tùy chỉnh mới",
+        "saveAsPreset": "Lưu thành mẫu",
+        "updatePreset": "Cập nhật mẫu hiện tại",
+        "deletePreset": "Xóa mẫu",
+        "presetSaved": "Đã lưu mẫu",
+        "presetUpdated": "Đã cập nhật mẫu",
+        "presetDeleted": "Đã xóa mẫu",
+        "presetNameRequired": "Nhập tên mẫu",
+        "deletePresetConfirm": "Xóa mẫu tùy chỉnh này?",
+        "deletePresetTitle": "Xóa mẫu"
+      }
     }
   },
   "githubCopilot": {
@@ -2545,23 +2800,31 @@
       "storage": "Phạm vi dữ liệu: nhập cục bộ đọc các phiên đăng nhập GitHub trong VS Code, còn chuyển tài khoản cập nhật các mục này; OAuth, nhập token, xác minh nhập cục bộ và làm mới hạn mức gọi API chính thức của GitHub với các trường xác thực cần thiết. Không tải lên state.vscdb hoặc khóa hệ thống."
     }
   },
+  "runtime": {
+    "installedVersion": {
+      "loading": "Đang phát hiện phiên bản đã cài",
+      "missing": "Không phát hiện phiên bản đã cài",
+      "detecting": "Đang phát hiện",
+      "notFound": "Không phát hiện phiên bản"
+    }
+  },
   "dashboard": {
     "title": "Bảng điều khiển tài khoản",
     "summary": {
       "label": "Tổng quan",
       "title": "Ảnh chụp tài khoản",
-      "desc": "Xem Antigravity và Codex trong nháy mắt"
+      "desc": "Xem Antigravity IDE và Codex trong nháy mắt"
     },
     "stats": {
-      "antigravity": "Tài khoản Antigravity",
+      "antigravity": "Tài khoản Antigravity IDE",
       "codex": "Tài khoản Codex",
-      "currentAntigravity": "Antigravity hiện tại",
+      "currentAntigravity": "Antigravity IDE hiện tại",
       "currentCodex": "Codex hiện tại",
       "providers": "Nhà cung cấp",
       "totalAccounts": "Tổng tài khoản"
     },
     "panels": {
-      "antigravity": "Antigravity",
+      "antigravity": "Antigravity IDE",
       "codex": "Codex",
       "githubCopilot": "GitHub Copilot",
       "planDistribution": "Phân bố gói",
@@ -2576,7 +2839,7 @@
     },
     "emptyAccount": "Chưa có tài khoản",
     "sections": {
-      "antigravity": "Tài khoản Antigravity",
+      "antigravity": "Tài khoản Antigravity IDE",
       "codex": "Tài khoản Codex"
     },
     "actions": {
@@ -2609,7 +2872,7 @@
   },
   "quickSettings": {
     "antigravity": {
-      "title": "Cài đặt Antigravity",
+      "title": "Cài đặt Antigravity IDE",
       "appPath": "Đường dẫn ứng dụng"
     },
     "codex": {
@@ -3044,7 +3307,7 @@
     "actions": {
       "collapseAll": "Thu gọn tất cả",
       "expandAll": "Mở rộng tất cả",
-      "goAntigravity": "Đi tới Antigravity",
+      "goAntigravity": "Đi tới Antigravity IDE",
       "goCodex": "Đi tới Codex",
       "goDashboard": "Đi tới bảng điều khiển",
       "goFingerprints": "Đi tới dấu vân tay thiết bị",
@@ -3059,25 +3322,25 @@
     },
     "antigravity": {
       "cautions": {
-        "0": "Sao lưu dữ liệu trước thao tác rủi ro hoặc hàng loạt trong Quản lý tài khoản Antigravity."
+        "0": "Sao lưu dữ liệu trước thao tác rủi ro hoặc hàng loạt trong Quản lý tài khoản Antigravity IDE."
       },
       "keywords": {
-        "0": "Quản lý tài khoản Antigravity",
+        "0": "Quản lý tài khoản Antigravity IDE",
         "1": "hướng dẫn",
         "2": "quy trình",
         "3": "tài khoản"
       },
       "outcomes": {
-        "0": "Hiểu Quản lý tài khoản Antigravity giúp giải quyết điều gì.",
-        "1": "Dùng quy trình đề xuất trong Quản lý tài khoản Antigravity để giảm lỗi thao tác."
+        "0": "Hiểu Quản lý tài khoản Antigravity IDE giúp giải quyết điều gì.",
+        "1": "Dùng quy trình đề xuất trong Quản lý tài khoản Antigravity IDE để giảm lỗi thao tác."
       },
       "steps": {
-        "0": "Mở trang Quản lý tài khoản Antigravity.",
-        "1": "Hoàn tất cấu hình cơ bản và liên kết bắt buộc cho Quản lý tài khoản Antigravity.",
-        "2": "Chạy một thao tác thủ công trong Quản lý tài khoản Antigravity để xác minh kết quả."
+        "0": "Mở trang Quản lý tài khoản Antigravity IDE.",
+        "1": "Hoàn tất cấu hình cơ bản và liên kết bắt buộc cho Quản lý tài khoản Antigravity IDE.",
+        "2": "Chạy một thao tác thủ công trong Quản lý tài khoản Antigravity IDE để xác minh kết quả."
       },
-      "summary": "Mục này giải thích cách dùng Quản lý tài khoản Antigravity trong quy trình hàng ngày.",
-      "title": "Quản lý tài khoản Antigravity"
+      "summary": "Mục này giải thích cách dùng Quản lý tài khoản Antigravity IDE trong quy trình hàng ngày.",
+      "title": "Quản lý tài khoản Antigravity IDE"
     },
     "blocks": {
       "cautions": "Lưu ý / lỗi thường gặp",
@@ -3930,5 +4193,14 @@
       "warn": "Cảnh báo",
       "error": "Lỗi"
     }
+  },
+  "mfaQuick": {
+    "title": "Mã 2FA",
+    "selectLabel": "Chọn khóa 2FA",
+    "unnamedSecret": "Khóa chưa đặt tên",
+    "invalidCode": "Khóa không hợp lệ",
+    "copyCode": "Sao chép mã",
+    "copied": "Đã sao chép",
+    "refreshIn": "{{time}} giây"
   }
 }

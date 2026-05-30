@@ -14,6 +14,13 @@ const DEFAULT_INSTANCE_ID: &str = "__default__";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CodexLaunchCredentialChange {
+    pub from: String,
+    pub to: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodexInstanceProfileView {
     pub id: String,
     pub name: String,
@@ -30,6 +37,8 @@ pub struct CodexInstanceProfileView {
     pub initialized: bool,
     pub is_default: bool,
     pub follow_local_account: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codex_launch_credential_change: Option<CodexLaunchCredentialChange>,
 }
 
 impl CodexInstanceProfileView {
@@ -50,7 +59,16 @@ impl CodexInstanceProfileView {
             initialized,
             is_default: false,
             follow_local_account: false,
+            codex_launch_credential_change: None,
         }
+    }
+
+    fn with_launch_credential_change(
+        mut self,
+        change: Option<CodexLaunchCredentialChange>,
+    ) -> Self {
+        self.codex_launch_credential_change = change;
+        self
     }
 }
 
@@ -120,6 +138,7 @@ fn default_instance_view(
         initialized: modules::instance::is_profile_initialized(default_dir),
         is_default: true,
         follow_local_account: default_settings.follow_local_account,
+        codex_launch_credential_change: None,
     }
 }
 
@@ -165,6 +184,59 @@ fn resolve_instance_launch_context(instance_id: &str) -> Result<CodexLaunchConte
         working_dir: instance.working_dir,
         extra_args: instance.extra_args,
     })
+}
+
+fn sync_codex_threads_across_idle_instances(context: &str) {
+    match modules::codex_thread_sync::sync_threads_across_instances_if_all_stopped() {
+        Ok(Some(summary)) => {
+            if summary.total_synced_thread_count > 0 {
+                modules::logger::log_info(&format!(
+                    "[Codex Thread Sync] {}: synced {} sessions across {} instances",
+                    context, summary.total_synced_thread_count, summary.mutated_instance_count
+                ));
+            }
+        }
+        Ok(None) => {}
+        Err(error) => {
+            modules::logger::log_warn(&format!(
+                "[Codex Thread Sync] {}: skipped automatic idle sync: {}",
+                context, error
+            ));
+        }
+    }
+}
+
+fn read_launch_credential_kind_for_dir(data_dir: &Path) -> Option<String> {
+    match modules::codex_session_visibility::read_history_visibility_provider_for_dir(data_dir) {
+        Ok(provider) => {
+            if provider == "openai" {
+                Some("account".to_string())
+            } else {
+                Some("api".to_string())
+            }
+        }
+        Err(error) => {
+            modules::logger::log_warn(&format!(
+                "[Codex Instance] 读取实例 provider 类型失败，跳过会话可见性弹框判断 ({}): {}",
+                data_dir.display(),
+                error
+            ));
+            None
+        }
+    }
+}
+
+fn build_launch_credential_change(
+    before: Option<String>,
+    after: Option<String>,
+) -> Option<CodexLaunchCredentialChange> {
+    let (Some(from), Some(to)) = (before, after) else {
+        return None;
+    };
+    if from == to {
+        return None;
+    }
+    Some(CodexLaunchCredentialChange { from, to })
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -467,7 +539,8 @@ pub async fn codex_update_instance(
             launch_mode,
         )?;
         if let Some(speed) = app_speed {
-            updated = modules::codex_instance::update_default_app_speed(speed)?;
+            updated = modules::codex_instance::update_default_app_speed(speed.clone())?;
+            modules::codex_speed::write_app_speed_for_dir(&default_dir, speed)?;
         }
         let running = updated
             .last_pid
@@ -500,6 +573,7 @@ pub async fn codex_update_instance(
         }
     }
 
+    let selected_app_speed = app_speed.clone();
     let instance =
         modules::codex_instance::update_instance(modules::codex_instance::UpdateInstanceParams {
             instance_id,
@@ -510,6 +584,9 @@ pub async fn codex_update_instance(
             launch_mode,
             app_speed,
         })?;
+    if let Some(speed) = selected_app_speed {
+        modules::codex_speed::write_app_speed_for_dir(Path::new(&instance.user_data_dir), speed)?;
+    }
 
     let running = instance
         .last_pid
@@ -535,6 +612,7 @@ pub async fn codex_delete_instance(instance_id: String) -> Result<(), String> {
 pub async fn codex_start_instance(instance_id: String) -> Result<CodexInstanceProfileView, String> {
     if instance_id == DEFAULT_INSTANCE_ID {
         let default_dir = modules::codex_instance::get_default_codex_home()?;
+        let previous_credential_kind = read_launch_credential_kind_for_dir(&default_dir);
         let default_settings = modules::codex_instance::load_default_settings()?;
         let default_bind_account_id = resolve_default_account_id(&default_settings);
         if default_settings.launch_mode != InstanceLaunchMode::Cli {
@@ -549,6 +627,11 @@ pub async fn codex_start_instance(instance_id: String) -> Result<CodexInstancePr
         if let Some(ref account_id) = default_bind_account_id {
             inject_bound_account_to_profile(&default_dir, account_id).await?;
         }
+        let launch_credential_change = build_launch_credential_change(
+            previous_credential_kind,
+            read_launch_credential_kind_for_dir(&default_dir),
+        );
+        sync_codex_threads_across_idle_instances("before-start-default");
 
         if default_settings.launch_mode == InstanceLaunchMode::Cli {
             let context = resolve_instance_launch_context(DEFAULT_INSTANCE_ID)?;
@@ -560,7 +643,8 @@ pub async fn codex_start_instance(instance_id: String) -> Result<CodexInstancePr
                 default_bind_account_id,
                 false,
                 None,
-            ));
+            )
+            .with_launch_credential_change(launch_credential_change));
         }
 
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
@@ -573,7 +657,8 @@ pub async fn codex_start_instance(instance_id: String) -> Result<CodexInstancePr
             default_bind_account_id,
             running,
             Some(pid),
-        ));
+        )
+        .with_launch_credential_change(launch_credential_change));
     }
 
     let store = modules::codex_instance::load_instance_store()?;
@@ -584,6 +669,8 @@ pub async fn codex_start_instance(instance_id: String) -> Result<CodexInstancePr
         .ok_or("实例不存在")?;
 
     modules::codex_instance::ensure_instance_shared_skills(Path::new(&instance.user_data_dir))?;
+    let instance_dir = Path::new(&instance.user_data_dir);
+    let previous_credential_kind = read_launch_credential_kind_for_dir(instance_dir);
 
     if let Some(pid) =
         modules::process::resolve_codex_pid(instance.last_pid, Some(&instance.user_data_dir))
@@ -593,23 +680,24 @@ pub async fn codex_start_instance(instance_id: String) -> Result<CodexInstancePr
     }
 
     if let Some(ref account_id) = instance.bind_account_id {
-        inject_bound_account_to_profile(Path::new(&instance.user_data_dir), account_id).await?;
+        inject_bound_account_to_profile(instance_dir, account_id).await?;
     }
-    modules::codex_speed::write_app_speed_for_dir(
-        Path::new(&instance.user_data_dir),
-        instance.app_speed.clone(),
-    )?;
+    let launch_credential_change = build_launch_credential_change(
+        previous_credential_kind,
+        read_launch_credential_kind_for_dir(instance_dir),
+    );
+    modules::codex_speed::write_app_speed_for_dir(instance_dir, instance.app_speed.clone())?;
+    sync_codex_threads_across_idle_instances("before-start-instance");
 
     if instance.launch_mode == InstanceLaunchMode::Cli {
         let context = resolve_instance_launch_context(&instance.id)?;
         let _ = build_launch_command(&context)?;
         let updated = modules::codex_instance::update_instance_after_cli_prepare(&instance.id)?;
         let initialized = is_profile_initialized(&updated.user_data_dir);
-        return Ok(CodexInstanceProfileView::from_profile(
-            updated,
-            false,
-            initialized,
-        ));
+        return Ok(
+            CodexInstanceProfileView::from_profile(updated, false, initialized)
+                .with_launch_credential_change(launch_credential_change),
+        );
     }
 
     modules::process::ensure_codex_launch_path_configured()?;
@@ -618,11 +706,10 @@ pub async fn codex_start_instance(instance_id: String) -> Result<CodexInstancePr
     let updated = modules::codex_instance::update_instance_after_start(&instance.id, pid)?;
     let running = modules::process::is_pid_running(pid);
     let initialized = is_profile_initialized(&updated.user_data_dir);
-    Ok(CodexInstanceProfileView::from_profile(
-        updated,
-        running,
-        initialized,
-    ))
+    Ok(
+        CodexInstanceProfileView::from_profile(updated, running, initialized)
+            .with_launch_credential_change(launch_credential_change),
+    )
 }
 
 #[tauri::command]
@@ -632,6 +719,7 @@ pub async fn codex_stop_instance(instance_id: String) -> Result<CodexInstancePro
         modules::process::close_codex_default(20)?;
         let updated = modules::codex_instance::update_default_pid(None)?;
         let default_bind_account_id = resolve_default_account_id(&updated);
+        sync_codex_threads_across_idle_instances("after-stop-default");
         return Ok(default_instance_view(
             &default_dir,
             &updated,
@@ -655,6 +743,7 @@ pub async fn codex_stop_instance(instance_id: String) -> Result<CodexInstancePro
     }
     let updated = modules::codex_instance::update_instance_pid(&instance.id, None)?;
     let initialized = is_profile_initialized(&updated.user_data_dir);
+    sync_codex_threads_across_idle_instances("after-stop-instance");
     Ok(CodexInstanceProfileView::from_profile(
         updated,
         false,
@@ -677,6 +766,7 @@ pub async fn codex_close_all_instances() -> Result<(), String> {
 
     modules::process::close_codex_instances(&target_homes, 20)?;
     let _ = modules::codex_instance::clear_all_pids();
+    sync_codex_threads_across_idle_instances("after-close-all");
     Ok(())
 }
 

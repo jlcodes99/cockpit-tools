@@ -132,6 +132,7 @@ export interface CodexInstanceThreadSyncItem {
   instanceId: string;
   instanceName: string;
   addedThreadCount: number;
+  updatedThreadCount: number;
   backupDir?: string | null;
 }
 
@@ -140,6 +141,8 @@ export interface CodexInstanceThreadSyncSummary {
   threadUniverseCount: number;
   mutatedInstanceCount: number;
   totalSyncedThreadCount: number;
+  totalAddedThreadCount: number;
+  totalUpdatedThreadCount: number;
   items: CodexInstanceThreadSyncItem[];
   backupDirs: string[];
   message: string;
@@ -490,7 +493,7 @@ function normalizeCodexAuthFilePlanType(
   return undefined;
 }
 
-export function getCodexPlanBadgeLabel(account: CodexAccount): string {
+function getCodexPlanBadgeLabel(account: CodexAccount): string {
   if (isCodexNewApiAccount(account)) {
     return account.plan_type?.trim() || "Cockpit Api";
   }
@@ -510,7 +513,7 @@ export function getCodexPlanBadgeLabel(account: CodexAccount): string {
   return `${baseLabel} 20x`;
 }
 
-export function getCodexPlanBadgeClass(account: CodexAccount): string {
+function getCodexPlanBadgeClass(account: CodexAccount): string {
   if (isCodexNewApiAccount(account)) {
     return "api-key new-api-exclusive";
   }
@@ -530,6 +533,20 @@ export function getCodexPlanBadgeClass(account: CodexAccount): string {
   }
   // CPA 对齐：plan_type='pro' 默认视为 promax (20x)
   return "pro codex-pro-max";
+}
+
+export interface CodexPlanBadgePresentation {
+  label: string;
+  className: string;
+}
+
+export function getCodexPlanBadgePresentation(
+  account: CodexAccount,
+): CodexPlanBadgePresentation {
+  return {
+    label: getCodexPlanBadgeLabel(account),
+    className: getCodexPlanBadgeClass(account),
+  };
 }
 
 export function getCodexPlanFilterKey(account: CodexAccount): string {

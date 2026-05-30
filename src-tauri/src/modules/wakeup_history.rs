@@ -44,8 +44,31 @@ pub fn load_history() -> Result<Vec<WakeupHistoryItem>, String> {
         return Ok(Vec::new());
     }
 
-    let items: Vec<WakeupHistoryItem> =
-        serde_json::from_str(&content).map_err(|e| format!("解析唤醒历史失败: {}", e))?;
+    let items: Vec<WakeupHistoryItem> = match serde_json::from_str(&content) {
+        Ok(items) => items,
+        Err(error) => {
+            match modules::atomic_write::quarantine_file(&path, "invalid-json") {
+                Ok(Some(backup_path)) => modules::logger::log_warn(&format!(
+                    "唤醒历史解析失败，已隔离并使用空历史: path={}, backup={}, error={}",
+                    path.display(),
+                    backup_path.display(),
+                    error
+                )),
+                Ok(None) => modules::logger::log_warn(&format!(
+                    "唤醒历史解析失败，文件已不存在，使用空历史: path={}, error={}",
+                    path.display(),
+                    error
+                )),
+                Err(backup_error) => modules::logger::log_warn(&format!(
+                    "唤醒历史解析失败，隔离失败，使用空历史: path={}, parse_error={}, backup_error={}",
+                    path.display(),
+                    error,
+                    backup_error
+                )),
+            }
+            Vec::new()
+        }
+    };
 
     Ok(items)
 }
@@ -53,15 +76,10 @@ pub fn load_history() -> Result<Vec<WakeupHistoryItem>, String> {
 /// 保存唤醒历史记录
 fn save_history(items: &[WakeupHistoryItem]) -> Result<(), String> {
     let path = history_path()?;
-    let data_dir = modules::account::get_data_dir()?;
-    let temp_path = data_dir.join(format!("{}.tmp", HISTORY_FILE));
-
     let content =
         serde_json::to_string_pretty(items).map_err(|e| format!("序列化唤醒历史失败: {}", e))?;
-
-    fs::write(&temp_path, content).map_err(|e| format!("写入临时历史文件失败: {}", e))?;
-
-    fs::rename(temp_path, path).map_err(|e| format!("替换历史文件失败: {}", e))
+    modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("保存唤醒历史失败: {}", e))
 }
 
 /// 添加历史记录（自动去重、限制数量）

@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Pencil } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { PLATFORM_PAGE_MAP, PlatformId } from '../../types/platform';
+import { PLATFORM_PAGE_MAP, type PlatformId } from '../../types/platform';
+import type { Page } from '../../types/navigation';
 import { renderPlatformIcon } from '../../utils/platformMeta';
+import { setAntigravityRuntimeTargetFromPlatform } from '../../utils/antigravityRuntimeTarget';
 
 export interface PlatformGroupSwitcherOption {
   platformId: PlatformId;
@@ -15,6 +17,14 @@ interface PlatformGroupSwitcherProps {
   currentLabel: string;
   options: PlatformGroupSwitcherOption[];
   currentGroupId?: string | null;
+  activePlatformId?: PlatformId | null;
+  extraOptions?: Array<{
+    id: string;
+    label: string;
+    page: Page;
+    icon?: ReactNode;
+    active?: boolean;
+  }>;
 }
 
 export function PlatformGroupSwitcher({
@@ -22,6 +32,8 @@ export function PlatformGroupSwitcher({
   currentLabel,
   options,
   currentGroupId = null,
+  activePlatformId = currentPlatformId,
+  extraOptions = [],
 }: PlatformGroupSwitcherProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -92,10 +104,11 @@ export function PlatformGroupSwitcher({
 
   const handleSwitchPlatform = (nextPlatform: PlatformId) => {
     setOpen(false);
-    if (nextPlatform === currentPlatformId) {
+    if (nextPlatform === activePlatformId) {
       return;
     }
 
+    setAntigravityRuntimeTargetFromPlatform(nextPlatform);
     const targetPage = PLATFORM_PAGE_MAP[nextPlatform];
     window.dispatchEvent(new CustomEvent('app-request-navigate', { detail: targetPage }));
   };
@@ -107,6 +120,11 @@ export function PlatformGroupSwitcher({
         detail: { groupId: currentGroupId },
       }),
     );
+  };
+
+  const handleSwitchPage = (page: Page) => {
+    setOpen(false);
+    window.dispatchEvent(new CustomEvent('app-request-navigate', { detail: page }));
   };
 
   return (
@@ -139,7 +157,7 @@ export function PlatformGroupSwitcher({
             }}
           >
             {options.map((item) => {
-              const activeItem = item.platformId === currentPlatformId;
+              const activeItem = activePlatformId === item.platformId;
               return (
                 <button
                   key={`switch-${item.platformId}`}
@@ -159,6 +177,25 @@ export function PlatformGroupSwitcher({
                 </button>
               );
             })}
+
+            {extraOptions.map((item) => (
+              <button
+                key={`switch-page-${item.id}`}
+                type="button"
+                className={`platform-group-switcher-option ${item.active ? 'is-active' : ''}`}
+                role="option"
+                aria-selected={item.active === true}
+                onClick={() => handleSwitchPage(item.page)}
+              >
+                <span className="platform-group-switcher-option-icon">
+                  {item.icon ?? renderPlatformIcon(currentPlatformId, 18)}
+                </span>
+                <span className="platform-group-switcher-option-label">{item.label}</span>
+                <span className="platform-group-switcher-option-check">
+                  {item.active ? <Check size={16} /> : null}
+                </span>
+              </button>
+            ))}
 
             <div className="platform-group-switcher-divider" />
 

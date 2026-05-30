@@ -510,7 +510,8 @@ fn copilot_login_db_paths(data_root: &Path) -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         let mut paths = Vec::new();
-        if let Some(shared_path) = crate::modules::vscode_paths::vscode_shared_storage_db_path(data_root)
+        if let Some(shared_path) =
+            crate::modules::vscode_paths::vscode_shared_storage_db_path(data_root)
         {
             paths.push(shared_path);
         }
@@ -564,7 +565,8 @@ fn github_session_access_token(session: &serde_json::Value) -> Option<&str> {
 pub async fn import_from_local() -> Result<Option<GitHubCopilotAccount>, String> {
     let data_root = crate::modules::vscode_paths::resolve_vscode_data_root_for_state_db()?;
 
-    let (target_login, db_path) = match read_local_copilot_github_login_from_data_root(&data_root)? {
+    let (target_login, db_path) = match read_local_copilot_github_login_from_data_root(&data_root)?
+    {
         Some(value) => value,
         None => return Ok(None),
     };

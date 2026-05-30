@@ -349,7 +349,7 @@ fn build_macos_safe_storage_candidates(
         return vec![
             (
                 "Antigravity Safe Storage".to_string(),
-                Some("Antigravity".to_string()),
+                Some("Antigravity Key".to_string()),
             ),
             ("Antigravity Safe Storage".to_string(), None),
             (
@@ -709,7 +709,9 @@ fn read_item_table_value(db_path: &Path, key: &str) -> Result<Option<String>, St
             e
         )
     })?;
-    match conn.query_row("SELECT value FROM ItemTable WHERE key = ?", [key], |row| row.get(0)) {
+    match conn.query_row("SELECT value FROM ItemTable WHERE key = ?", [key], |row| {
+        row.get(0)
+    }) {
         Ok(value) => Ok(Some(value)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(format!(
@@ -752,7 +754,13 @@ fn write_copilot_items_to_db(
         "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
         [GITHUB_AUTH_SECRET_KEY, secret_value],
     )
-    .map_err(|e| format!("Failed to write github.auth to {}: {}", db_path.display(), e))?;
+    .map_err(|e| {
+        format!(
+            "Failed to write github.auth to {}: {}",
+            db_path.display(),
+            e
+        )
+    })?;
 
     tx.execute(
         "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
@@ -775,8 +783,11 @@ fn copilot_state_db_write_paths(data_root: &Path) -> Result<Vec<PathBuf>, String
 
     #[cfg(target_os = "windows")]
     {
-        paths.push(crate::modules::vscode_paths::vscode_state_db_path(data_root));
-        if let Some(shared_path) = crate::modules::vscode_paths::vscode_shared_storage_db_path(data_root)
+        paths.push(crate::modules::vscode_paths::vscode_state_db_path(
+            data_root,
+        ));
+        if let Some(shared_path) =
+            crate::modules::vscode_paths::vscode_shared_storage_db_path(data_root)
         {
             if !paths.iter().any(|path| path == &shared_path) {
                 paths.push(shared_path);
@@ -994,7 +1005,8 @@ pub fn read_workbuddy_secret_storage_value(
 
 fn read_github_auth_secret_for_data_root(data_root: &Path) -> Result<Option<String>, String> {
     #[cfg(target_os = "windows")]
-    if let Some(shared_path) = crate::modules::vscode_paths::vscode_shared_storage_db_path(data_root)
+    if let Some(shared_path) =
+        crate::modules::vscode_paths::vscode_shared_storage_db_path(data_root)
     {
         if let Some(raw_value) = read_item_table_value(&shared_path, GITHUB_AUTH_SECRET_KEY)? {
             return decode_secret_storage_value_with_mode(
@@ -1145,9 +1157,9 @@ fn build_github_auth_sessions(
     let mut replaced = false;
     for session in &mut sessions {
         if let Some(scopes) = session["scopes"].as_array() {
-            let is_github_user_session = scopes.iter().any(|scope| {
-                matches!(scope.as_str(), Some("read:user") | Some("user:email"))
-            });
+            let is_github_user_session = scopes
+                .iter()
+                .any(|scope| matches!(scope.as_str(), Some("read:user") | Some("user:email")));
             if is_github_user_session {
                 *session = new_session.clone();
                 replaced = true;

@@ -18,6 +18,8 @@ import {
 import { ORIGINAL_SIDEBAR_ENTRY_LIMIT, useSideNavLayoutStore } from '../../stores/useSideNavLayoutStore';
 import { useGlobalModal } from '../../hooks/useGlobalModal';
 import { getPlatformLabel, renderPlatformIcon } from '../../utils/platformMeta';
+import { useAntigravityRuntimeTarget } from '../../hooks/useAntigravityRuntimeTarget';
+import { setAntigravityRuntimeTargetFromPlatform } from '../../utils/antigravityRuntimeTarget';
 
 interface SideNavProps {
   page: Page;
@@ -50,6 +52,7 @@ interface SideNavEntry {
 const PAGE_PLATFORM_MAP: Partial<Record<Page, PlatformId>> = {
   overview: 'antigravity',
   codex: 'codex',
+  'codex-api-service': 'codex',
   zed: 'zed',
   'github-copilot': 'github-copilot',
   windsurf: 'windsurf',
@@ -62,6 +65,9 @@ const PAGE_PLATFORM_MAP: Partial<Record<Page, PlatformId>> = {
   trae: 'trae',
   workbuddy: 'workbuddy',
 };
+
+const APP_DISPLAY_NAME =
+  import.meta.env.VITE_COCKPIT_TOOLS_PROFILE === 'dev' ? 'Cockpit Tools Dev' : 'Cockpit Tools';
 
 const CLASSIC_NAV_MIN_SCALE = 0.5;
 const CLASSIC_NAV_SCALE_EPSILON = 0.004;
@@ -139,7 +145,10 @@ export function SideNav({
     platformGroups,
   } = usePlatformLayoutStore();
 
-  const currentPlatformId = PAGE_PLATFORM_MAP[page] ?? null;
+  const antigravityRuntimeTarget = useAntigravityRuntimeTarget();
+  const currentPlatformId = page === 'overview'
+    ? antigravityRuntimeTarget
+    : PAGE_PLATFORM_MAP[page] ?? null;
   const currentEntryId = useMemo(
     () => (currentPlatformId ? resolveEntryIdForPlatform(currentPlatformId, platformGroups) : null),
     [currentPlatformId, platformGroups],
@@ -214,6 +223,11 @@ export function SideNav({
     ),
     [isClassicLayout, sidebarVisibleEntries],
   );
+
+  const navigateToPlatform = useCallback((platformId: PlatformId) => {
+    setAntigravityRuntimeTargetFromPlatform(platformId);
+    setPage(PLATFORM_PAGE_MAP[platformId]);
+  }, [setPage]);
 
   const classicScaleContentKey = useMemo(
     () => sidebarMenuEntries
@@ -654,7 +668,7 @@ export function SideNav({
                 <button
                   className={`side-nav-more-item ${active ? 'active' : ''}`}
                   onClick={() => {
-                    setPage(PLATFORM_PAGE_MAP[entry.targetPlatformId]);
+                    navigateToPlatform(entry.targetPlatformId);
                     setShowMore(false);
                   }}
                 >
@@ -684,7 +698,7 @@ export function SideNav({
                           showGroupParent ? 'side-nav-more-sub-item' : 'side-nav-more-item'
                         } ${currentPlatformId === platformId ? 'active' : ''}`}
                         onClick={() => {
-                          setPage(PLATFORM_PAGE_MAP[platformId]);
+                          navigateToPlatform(platformId);
                           setShowMore(false);
                         }}
                       >
@@ -789,7 +803,7 @@ export function SideNav({
           </div>
 
           {isClassicLayout && !isClassicCollapsed && (
-            <div className="side-nav-brand-title">Cockpit Tools</div>
+            <div className="side-nav-brand-title">{APP_DISPLAY_NAME}</div>
           )}
         </div>
 
@@ -839,7 +853,7 @@ export function SideNav({
             <button
               key={entry.id}
               className={`nav-item ${active ? 'active' : ''}`}
-              onClick={() => setPage(PLATFORM_PAGE_MAP[entry.targetPlatformId])}
+              onClick={() => navigateToPlatform(entry.targetPlatformId)}
               title={entry.label}
             >
               {renderEntryIcon(entry, isClassicLayout ? classicMainIconSize : 20)}

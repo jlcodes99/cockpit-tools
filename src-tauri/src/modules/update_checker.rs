@@ -270,9 +270,31 @@ fn load_pending_update_notes() -> Result<Option<PendingUpdateNotes>, String> {
 
     let content = std::fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read pending update notes: {}", e))?;
-    let pending: PendingUpdateNotes = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse pending update notes: {}", e))?;
-    Ok(Some(pending))
+    match serde_json::from_str(&content) {
+        Ok(pending) => Ok(Some(pending)),
+        Err(error) => {
+            match crate::modules::atomic_write::quarantine_file(&path, "invalid-json") {
+                Ok(Some(backup_path)) => logger::log_warn(&format!(
+                    "[UpdateChecker] 待安装更新说明解析失败，已隔离并忽略: path={}, backup={}, error={}",
+                    path.display(),
+                    backup_path.display(),
+                    error
+                )),
+                Ok(None) => logger::log_warn(&format!(
+                    "[UpdateChecker] 待安装更新说明解析失败，文件已不存在，忽略: path={}, error={}",
+                    path.display(),
+                    error
+                )),
+                Err(backup_error) => logger::log_warn(&format!(
+                    "[UpdateChecker] 待安装更新说明解析失败，隔离失败，忽略: path={}, parse_error={}, backup_error={}",
+                    path.display(),
+                    error,
+                    backup_error
+                )),
+            }
+            Ok(None)
+        }
+    }
 }
 
 fn remove_pending_update_notes_file() {
@@ -313,7 +335,7 @@ pub fn save_pending_update_notes(
     };
     let content = serde_json::to_string_pretty(&payload)
         .map_err(|e| format!("Failed to serialize pending update notes: {}", e))?;
-    std::fs::write(&path, content)
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
         .map_err(|e| format!("Failed to write pending update notes: {}", e))?;
 
     logger::log_info(&format!(
@@ -335,8 +357,31 @@ pub fn load_update_settings() -> Result<UpdateSettings, String> {
 
     let content = std::fs::read_to_string(&settings_path)
         .map_err(|e| format!("Failed to read settings file: {}", e))?;
-    let mut settings: UpdateSettings =
-        serde_json::from_str(&content).map_err(|e| format!("Failed to parse settings: {}", e))?;
+    let mut settings: UpdateSettings = match serde_json::from_str(&content) {
+        Ok(settings) => settings,
+        Err(error) => {
+            match crate::modules::atomic_write::quarantine_file(&settings_path, "invalid-json") {
+                Ok(Some(backup_path)) => logger::log_warn(&format!(
+                    "[UpdateChecker] 更新设置解析失败，已隔离并使用默认设置: path={}, backup={}, error={}",
+                    settings_path.display(),
+                    backup_path.display(),
+                    error
+                )),
+                Ok(None) => logger::log_warn(&format!(
+                    "[UpdateChecker] 更新设置解析失败，文件已不存在，使用默认设置: path={}, error={}",
+                    settings_path.display(),
+                    error
+                )),
+                Err(backup_error) => logger::log_warn(&format!(
+                    "[UpdateChecker] 更新设置解析失败，隔离失败，使用默认设置: path={}, parse_error={}, backup_error={}",
+                    settings_path.display(),
+                    error,
+                    backup_error
+                )),
+            }
+            return Ok(UpdateSettings::default());
+        }
+    };
 
     let mut should_persist = false;
     if settings.check_interval_hours == 0
@@ -363,7 +408,7 @@ pub fn save_update_settings(settings: &UpdateSettings) -> Result<(), String> {
     let content = serde_json::to_string_pretty(settings)
         .map_err(|e| format!("Failed to serialize settings: {}", e))?;
 
-    std::fs::write(&settings_path, content)
+    crate::modules::atomic_write::write_string_atomic(&settings_path, &content)
         .map_err(|e| format!("Failed to write settings file: {}", e))
 }
 

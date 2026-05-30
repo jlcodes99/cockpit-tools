@@ -7,16 +7,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-const DATA_DIR: &str = ".antigravity_cockpit";
 const GLOBAL_BASELINE: &str = "device_original.json";
 
 fn get_data_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-    let data_dir = home.join(DATA_DIR);
-    if !data_dir.exists() {
-        fs::create_dir_all(&data_dir).map_err(|e| format!("创建数据目录失败: {}", e))?;
-    }
-    Ok(data_dir)
+    crate::modules::account::get_data_dir()
 }
 
 /// 寻找 storage.json 路径
@@ -24,8 +18,8 @@ pub fn get_storage_path() -> Result<PathBuf, String> {
     #[cfg(target_os = "macos")]
     {
         let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
-        let path =
-            home.join("Library/Application Support/Antigravity/User/globalStorage/storage.json");
+        let path = home
+            .join("Library/Application Support/Antigravity IDE/User/globalStorage/storage.json");
         if path.exists() {
             return Ok(path);
         }
@@ -33,9 +27,7 @@ pub fn get_storage_path() -> Result<PathBuf, String> {
 
     #[cfg(target_os = "windows")]
     {
-        let appdata =
-            std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
-        let path = PathBuf::from(appdata).join("Antigravity\\User\\globalStorage\\storage.json");
+        let path = crate::modules::antigravity_paths::storage_json_path()?;
         if path.exists() {
             return Ok(path);
         }
@@ -44,13 +36,13 @@ pub fn get_storage_path() -> Result<PathBuf, String> {
     #[cfg(target_os = "linux")]
     {
         let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
-        let path = home.join(".config/Antigravity/User/globalStorage/storage.json");
+        let path = home.join(".config/Antigravity IDE/User/globalStorage/storage.json");
         if path.exists() {
             return Ok(path);
         }
     }
 
-    Err("未找到 storage.json，请确认 Antigravity 已运行过".to_string())
+    Err("未找到 storage.json，请确认 Antigravity IDE 已运行过".to_string())
 }
 
 /// 获取 storage.json 所在目录
@@ -72,20 +64,18 @@ fn get_machine_id_path() -> Result<PathBuf, String> {
     #[cfg(target_os = "macos")]
     {
         let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
-        return Ok(home.join("Library/Application Support/Antigravity/machineid"));
+        return Ok(home.join("Library/Application Support/Antigravity IDE/machineid"));
     }
 
     #[cfg(target_os = "windows")]
     {
-        let appdata =
-            std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
-        return Ok(PathBuf::from(appdata).join("Antigravity\\machineid"));
+        return crate::modules::antigravity_paths::machine_id_path();
     }
 
     #[cfg(target_os = "linux")]
     {
         let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
-        return Ok(home.join(".config/Antigravity/machineid"));
+        return Ok(home.join(".config/Antigravity IDE/machineid"));
     }
 
     #[allow(unreachable_code)]
@@ -433,7 +423,8 @@ fn save_global_original_force(profile: &DeviceProfile) -> Result<(), String> {
     let path = dir.join(GLOBAL_BASELINE);
     let content =
         serde_json::to_string_pretty(profile).map_err(|e| format!("序列化失败: {}", e))?;
-    fs::write(&path, content).map_err(|e| format!("写入失败: {}", e))
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|e| format!("写入失败: {}", e))
 }
 
 /// 恢复原始设备指纹到 storage.json

@@ -74,6 +74,7 @@ import { TraeIcon } from '../components/icons/TraeIcon';
 import { WorkbuddyIcon } from '../components/icons/WorkbuddyIcon';
 import { PlatformId, PLATFORM_PAGE_MAP } from '../types/platform';
 import { getPlatformLabel, renderPlatformIcon } from '../utils/platformMeta';
+import { setAntigravityRuntimeTargetFromPlatform } from '../utils/antigravityRuntimeTarget';
 import { ManualHelpIconButton } from '../components/ManualHelpIconButton';
 import { AnnouncementCenter } from '../components/AnnouncementCenter';
 import { isPrivacyModeEnabledByDefault, maskSensitiveValue } from '../utils/privacy';
@@ -106,6 +107,10 @@ const DASHBOARD_DEFERRED_PREFETCH_DELAY_MS = 6000;
 const DASHBOARD_DEFERRED_PREFETCH_BATCH_SIZE = 1;
 const DASHBOARD_DEFERRED_PREFETCH_BATCH_DELAY_MS = 1200;
 let dashboardStartupPrefetched = false;
+
+function normalizeDashboardCardPlatformId(platformId: PlatformId): PlatformId {
+  return platformId === 'antigravity_ide' ? 'antigravity' : platformId;
+}
 
 function toFiniteNumber(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -250,6 +255,10 @@ export function DashboardPage({
     [privacyModeEnabled],
   );
   const [agDisplayGroups, setAgDisplayGroups] = React.useState<DisplayGroup[]>([]);
+  const navigateToPlatform = useCallback((platformId: PlatformId) => {
+    setAntigravityRuntimeTargetFromPlatform(platformId);
+    onNavigate(PLATFORM_PAGE_MAP[platformId]);
+  }, [onNavigate]);
 
   React.useEffect(() => {
     const syncPrivacyMode = () => {
@@ -2012,6 +2021,7 @@ export function DashboardPage({
 
   const platformCounts: Record<PlatformId, number> = {
     antigravity: stats.antigravity,
+    antigravity_ide: stats.antigravity,
     codex: stats.codex,
     zed: stats.zed,
     'github-copilot': stats.githubCopilot,
@@ -2030,13 +2040,33 @@ export function DashboardPage({
     const result = new Map<PlatformLayoutEntryId, number>();
     for (const entryId of visibleEntryOrder) {
       const platformIds = resolveEntryPlatformIds(entryId, platformGroups);
-      const count = platformIds.reduce((sum, platformId) => sum + (platformCounts[platformId] ?? 0), 0);
+      const countedPlatformIds = new Set<PlatformId>();
+      const count = platformIds.reduce((sum, platformId) => {
+        const countPlatformId = platformId === 'antigravity_ide' ? 'antigravity' : platformId;
+        if (countedPlatformIds.has(countPlatformId)) {
+          return sum;
+        }
+        countedPlatformIds.add(countPlatformId);
+        return sum + (platformCounts[countPlatformId] ?? 0);
+      }, 0);
       result.set(entryId, count);
     }
     return result;
   }, [visibleEntryOrder, platformGroups, platformCounts]);
 
-  const visibleCardPlatformIds = visiblePlatformOrder;
+  const visibleCardPlatformIds = useMemo(() => {
+    const seen = new Set<PlatformId>();
+    const result: PlatformId[] = [];
+    for (const platformId of visiblePlatformOrder) {
+      const normalizedPlatformId = normalizeDashboardCardPlatformId(platformId);
+      if (seen.has(normalizedPlatformId)) {
+        continue;
+      }
+      seen.add(normalizedPlatformId);
+      result.push(normalizedPlatformId);
+    }
+    return result;
+  }, [visiblePlatformOrder]);
   const isSinglePlatformMode = visibleCardPlatformIds.length === 1;
   const cardRows = useMemo(() => {
     const rows: PlatformId[][] = [];
@@ -2048,7 +2078,7 @@ export function DashboardPage({
 
   const handleHidePlatformCard = useCallback((platformId: PlatformId) => {
     const entryId = orderedEntryIds.find(
-      (candidate) => resolveEntryDefaultPlatformId(candidate, platformGroups) === platformId,
+      (candidate) => resolveEntryPlatformIds(candidate, platformGroups).includes(platformId),
     );
     if (!entryId) {
       return;
@@ -2718,7 +2748,7 @@ export function DashboardPage({
           </div>
         </div>
 
-        <button className="card-footer-action" onClick={() => onNavigate(PLATFORM_PAGE_MAP[platformId])}>
+        <button className="card-footer-action" onClick={() => navigateToPlatform(platformId)}>
           {t('dashboard.viewAllAccounts', '查看所有账号')}
         </button>
       </div>
@@ -2788,7 +2818,7 @@ export function DashboardPage({
             <button
               className="stat-card stat-card-button"
               key={entryId}
-              onClick={() => onNavigate(PLATFORM_PAGE_MAP[platformId])}
+              onClick={() => navigateToPlatform(platformId)}
               title={
                 groupExtraCount > 0
                   ? `${t('dashboard.switchTo', '切换到此账号')} · ${groupTooltip}`
