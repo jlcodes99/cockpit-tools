@@ -79,9 +79,57 @@ interface PlatformRefreshDescriptor {
 const STARTUP_AUTO_REFRESH_SETUP_DELAY_MS = 2500;
 const AUTO_REFRESH_TICK_MS = 5_000;
 const AUTO_REFRESH_MAX_CONCURRENT = 1;
+/** Minutes before quota reset to schedule a calibration refresh. */
+const SMART_PRE_RESET_BUFFER_MINUTES = 2;
 
 function minutesToMs(minutes: number): number {
   return minutes * 60 * 1000;
+}
+
+/**
+ * Compute the optimal next-refresh interval for a platform based on
+ * the soonest quota reset time across all its accounts.
+ *
+ * Strategy: use the configured interval as a floor. If the quota reset
+ * is farther away than that, skip unnecessary API calls and schedule
+ * the next refresh right before the reset instead.
+ */
+function computeSmartIntervalMs(
+  accounts: Array<{ quota?: { hourly_reset_time?: number | null; weekly_reset_time?: number | null } }>,
+  configuredMinutes: number,
+): number {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const configuredMs = minutesToMs(configuredMinutes);
+
+  let soonestReset = Infinity;
+  for (const account of accounts) {
+    const q = account.quota;
+    if (!q) continue;
+    for (const resetTime of [q.hourly_reset_time, q.weekly_reset_time]) {
+      if (resetTime && resetTime > nowSeconds && resetTime < soonestReset) {
+        soonestReset = resetTime;
+      }
+    }
+  }
+
+  // No valid reset time found — stick with configured interval
+  if (!Number.isFinite(soonestReset)) {
+    return configuredMs;
+  }
+
+  const secondsUntilReset = soonestReset - nowSeconds;
+  const bufferSeconds = SMART_PRE_RESET_BUFFER_MINUTES * 60;
+
+  // Reset already passed or imminent — use configured interval
+  if (secondsUntilReset <= bufferSeconds) {
+    return configuredMs;
+  }
+
+  // Time to schedule a refresh right before reset
+  const smartMs = (secondsUntilReset - bufferSeconds) * 1000;
+
+  // Never exceed configured interval — user may want to see usage updates
+  return Math.min(smartMs, configuredMs);
 }
 
 function buildEnabledPlatformsSummary(
@@ -548,12 +596,32 @@ export function useAutoRefresh() {
 
           const tasks: AutoRefreshSchedulerTask[] = [];
           for (const descriptor of descriptors) {
+            // Smart interval: skip unnecessary API calls when quota reset is far away
+            const smartFullIntervalMs = descriptor.key === 'codex'
+              ? () => {
+                  const accounts = useCodexAccountStore.getState().accounts;
+                  const ms = computeSmartIntervalMs(accounts, descriptor.intervalMinutes);
+                  console.log(
+                    `[AutoRefresh] ${descriptor.label} 智能刷新: ${(ms / 60000).toFixed(1)}min`,
+                  );
+                  return ms;
+                }
+              : undefined;
+            const smartCurrentIntervalMs = descriptor.key === 'codex'
+              ? () => {
+                  const accounts = useCodexAccountStore.getState().accounts;
+                  const ms = computeSmartIntervalMs(accounts, descriptor.currentMinutes);
+                  return ms;
+                }
+              : undefined;
+
             if (descriptor.intervalMinutes > 0) {
               console.log(`[AutoRefresh] ${descriptor.label} 已启用: 每 ${descriptor.intervalMinutes} 分钟`);
               tasks.push({
                 key: `full:${descriptor.key}`,
                 label: `${descriptor.label} 全量刷新`,
                 intervalMs: minutesToMs(descriptor.intervalMinutes),
+                getNextIntervalMs: smartFullIntervalMs,
                 run: () =>
                   executeWithGuard(
                     descriptor.fullRefreshingRef,
@@ -572,6 +640,7 @@ export function useAutoRefresh() {
                 key: `current:${descriptor.key}`,
                 label: `${descriptor.label} 当前账号刷新`,
                 intervalMs: minutesToMs(descriptor.currentMinutes),
+                getNextIntervalMs: smartCurrentIntervalMs,
                 shouldSkip: () => descriptor.fullRefreshingRef.current,
                 run: () =>
                   executeWithGuard(

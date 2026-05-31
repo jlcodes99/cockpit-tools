@@ -5,6 +5,8 @@ export interface AutoRefreshSchedulerTask {
   run: () => Promise<void>;
   shouldSkip?: () => boolean;
   initialDelayMs?: number;
+  /** If provided, called after each run to compute the next interval dynamically. */
+  getNextIntervalMs?: () => number;
 }
 
 export interface AutoRefreshSchedulerOptions {
@@ -113,6 +115,11 @@ export function createAutoRefreshScheduler(
           task.running = false;
           activeCount = Math.max(0, activeCount - 1);
           if (!stopped) {
+            // Recompute nextRunAt after execution so smart intervals take effect
+            const dynamicMs = task.getNextIntervalMs?.();
+            if (typeof dynamicMs === 'number' && Number.isFinite(dynamicMs) && dynamicMs > 0) {
+              task.nextRunAt = Date.now() + clampIntervalMs(dynamicMs);
+            }
             scheduleDueTasks();
           }
         });
