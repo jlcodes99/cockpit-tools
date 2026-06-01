@@ -1704,7 +1704,7 @@ pub fn detect_antigravity_legacy_exec_path() -> Option<std::path::PathBuf> {
         if let Some(path) = detect_windows_exec_path_by_signatures(
             "antigravity",
             &["Antigravity.exe", "antigravity.exe", "Electron.exe"],
-            &["antigravity"],
+            &[],
             &["antigravity"],
             &["antigravity"],
         ) {
