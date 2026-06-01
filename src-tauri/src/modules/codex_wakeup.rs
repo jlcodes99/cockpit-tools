@@ -163,6 +163,10 @@ pub struct CodexWakeupTask {
     pub last_duration_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_run_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirm_timeout_minutes: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1511,6 +1515,8 @@ fn normalize_task(raw: &CodexWakeupTask) -> CodexWakeupTask {
         last_failure_count: raw.last_failure_count,
         last_duration_ms: raw.last_duration_ms,
         next_run_at: raw.next_run_at,
+        execution_mode: raw.execution_mode.as_ref().map(|item| item.trim().to_string()).filter(|item| !item.is_empty()),
+        confirm_timeout_minutes: raw.confirm_timeout_minutes.map(|value| value.max(1)),
     }
 }
 

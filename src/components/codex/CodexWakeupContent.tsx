@@ -100,6 +100,8 @@ interface TaskDraft {
   quotaResetWindow: CodexWakeupQuotaResetWindow;
   startupDelayMode: 'immediate' | 'delayed';
   startupDelayMinutes: string;
+  executionMode: 'auto' | 'confirm';
+  confirmTimeoutMinutes: number;
 }
 
 interface PresetDraft {
@@ -296,6 +298,8 @@ function createEmptyTaskDraft(defaultPreset?: CodexWakeupModelPreset | null): Ta
     quotaResetWindow: 'either',
     startupDelayMode: 'immediate',
     startupDelayMinutes: '1',
+    executionMode: 'auto',
+    confirmTimeoutMinutes: 5,
   };
 }
 
@@ -358,6 +362,8 @@ function buildTaskDraft(task: CodexWakeupTask, presets: CodexWakeupModelPreset[]
     quotaResetWindow: task.schedule.quota_reset_window ?? 'either',
     startupDelayMode: startupDelayMinutes > 0 ? 'delayed' : 'immediate',
     startupDelayMinutes: String(startupDelayMinutes > 0 ? startupDelayMinutes : 1),
+    executionMode: task.execution_mode ?? 'auto',
+    confirmTimeoutMinutes: task.confirm_timeout_minutes ?? 5,
   };
 }
 
@@ -2157,6 +2163,8 @@ export function CodexWakeupContent({
       last_failure_count: existingTask?.last_failure_count,
       last_duration_ms: existingTask?.last_duration_ms,
       next_run_at: existingTask?.next_run_at,
+      execution_mode: taskDraft.executionMode,
+      confirm_timeout_minutes: taskDraft.executionMode === 'confirm' ? taskDraft.confirmTimeoutMinutes : undefined,
     };
 
     const nextTasks = taskDraft.id
@@ -3174,6 +3182,43 @@ export function CodexWakeupContent({
                       setTaskDraft((current) => ({ ...current, intervalHours: event.target.value }))
                     }
                   />
+                </div>
+              )}
+
+              <div className="wakeup-form-group">
+                <label>{t('wakeup.form.executionMode', '执行模式')}</label>
+                <select
+                  className="wakeup-select"
+                  value={taskDraft.executionMode}
+                  onChange={(event) =>
+                    setTaskDraft((current) => ({
+                      ...current,
+                      executionMode: event.target.value as 'auto' | 'confirm',
+                    }))
+                  }
+                >
+                  <option value="auto">{t('wakeup.form.executionModeAuto', '直接执行')}</option>
+                  <option value="confirm">{t('wakeup.form.executionModeConfirm', '需要确认')}</option>
+                </select>
+              </div>
+
+              {taskDraft.executionMode === 'confirm' && (
+                <div className="wakeup-form-group">
+                  <label>{t('wakeup.form.confirmTimeout', '确认超时（分钟）')}</label>
+                  <div className="wakeup-input-with-unit">
+                    <input
+                      className="wakeup-input"
+                      type="number"
+                      min={1}
+                      max={60}
+                      value={taskDraft.confirmTimeoutMinutes}
+                      onChange={(event) => {
+                        const value = Math.min(60, Math.max(1, Number(event.target.value)));
+                        setTaskDraft((current) => ({ ...current, confirmTimeoutMinutes: value }));
+                      }}
+                    />
+                    <span>{t('settings.general.minutes')}</span>
+                  </div>
                 </div>
               )}
 

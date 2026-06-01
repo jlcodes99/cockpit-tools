@@ -369,6 +369,23 @@ select.wakeup-input::-ms-expand,
   min-width: 132px;
 }
 
+.wakeup-input-with-unit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wakeup-input-with-unit .wakeup-input {
+  width: auto;
+  min-width: 80px;
+}
+
+.wakeup-input-with-unit span {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
 .wakeup-hint {
   font-size: 12px;
   color: var(--text-muted);

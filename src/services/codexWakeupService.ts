@@ -58,6 +58,8 @@ interface RawCodexWakeupTask {
   lastFailureCount?: number;
   lastDurationMs?: number;
   nextRunAt?: number;
+  executionMode?: string;
+  confirmTimeoutMinutes?: number;
 }
 
 interface RawCodexWakeupModelPreset {
@@ -178,6 +180,8 @@ function toRawTask(task: CodexWakeupTask): RawCodexWakeupTask {
     lastFailureCount: task.last_failure_count,
     lastDurationMs: task.last_duration_ms,
     nextRunAt: task.next_run_at,
+    executionMode: task.execution_mode,
+    confirmTimeoutMinutes: task.confirm_timeout_minutes,
   };
 }
 
@@ -209,6 +213,8 @@ function fromRawTask(raw: RawCodexWakeupTask): CodexWakeupTask {
     last_failure_count: raw.lastFailureCount,
     last_duration_ms: raw.lastDurationMs,
     next_run_at: raw.nextRunAt,
+    execution_mode: raw.executionMode as 'auto' | 'confirm' | undefined,
+    confirm_timeout_minutes: raw.confirmTimeoutMinutes,
   };
 }
 
