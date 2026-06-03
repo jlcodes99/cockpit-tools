@@ -17,6 +17,7 @@ const COCKPIT_API_BASE_URL: &str = "https://chongcodex.cn/v1";
 const CHATGPT_WEB_REFERER: &str = "https://chatgpt.com/";
 const CHATGPT_WEB_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36";
 const SUBSCRIPTION_RETRY_INTERVAL_SECONDS: i64 = 30 * 60;
+const HTTP_ERROR_BODY_DISPLAY_MAX_CHARS: usize = 4000;
 
 fn get_header_value(headers: &HeaderMap, name: &str) -> String {
     headers
@@ -50,6 +51,34 @@ fn extract_detail_code_from_body(body: &str) -> Option<String> {
     }
 
     None
+}
+
+fn normalize_http_error_body_for_display(body: &str) -> String {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return "<empty>".to_string();
+    }
+
+    let mut compact = trimmed.split_whitespace().collect::<Vec<_>>().join(" ");
+    let char_count = compact.chars().count();
+    if char_count > HTTP_ERROR_BODY_DISPLAY_MAX_CHARS {
+        compact = compact
+            .chars()
+            .take(HTTP_ERROR_BODY_DISPLAY_MAX_CHARS)
+            .collect::<String>();
+        compact.push_str("...(truncated)");
+    }
+    compact
+}
+
+fn append_http_error_diagnostics(message: &mut String, headers: &HeaderMap, body: &str) {
+    message.push_str(&format!(
+        " [request-id:{}] [x-request-id:{}] [cf-ray:{}] [body:{}]",
+        get_header_value(headers, "request-id"),
+        get_header_value(headers, "x-request-id"),
+        get_header_value(headers, "cf-ray"),
+        normalize_http_error_body_for_display(body)
+    ));
 }
 
 fn extract_error_code_from_message(message: &str) -> Option<String> {
@@ -495,6 +524,7 @@ async fn fetch_subscription_account_check(
             error_message.push_str(&format!(" [error_code:{}]", code));
         }
         error_message.push_str(&format!(" [body_len:{}]", body_len));
+        append_http_error_diagnostics(&mut error_message, &headers, &body);
         return Err(error_message);
     }
 
@@ -542,6 +572,7 @@ async fn fetch_subscriptions_snapshot(
             error_message.push_str(&format!(" [error_code:{}]", code));
         }
         error_message.push_str(&format!(" [body_len:{}]", body_len));
+        append_http_error_diagnostics(&mut error_message, &headers, &body);
         return Err(error_message);
     }
 
@@ -701,14 +732,15 @@ pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, Str
         let detail_code = extract_detail_code_from_body(&body);
 
         logger::log_error(&format!(
-            "Codex 配额接口返回非成功状态: url={}, status={}, request-id={}, x-request-id={}, cf-ray={}, detail_code={:?}, body_len={}",
+            "Codex 配额接口返回非成功状态: url={}, status={}, request-id={}, x-request-id={}, cf-ray={}, detail_code={:?}, body_len={}, body={}",
             USAGE_URL,
             status,
             request_id,
             x_request_id,
             cf_ray,
             detail_code,
-            body_len
+            body_len,
+            normalize_http_error_body_for_display(&body)
         ));
 
         let mut error_message = format!("API 返回错误 {}", status);
@@ -716,6 +748,7 @@ pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, Str
             error_message.push_str(&format!(" [error_code:{}]", code));
         }
         error_message.push_str(&format!(" [body_len:{}]", body_len));
+        append_http_error_diagnostics(&mut error_message, &headers, &body);
         return Err(error_message);
     }
 
@@ -1171,4 +1204,27 @@ pub async fn refresh_all_quotas() -> Result<Vec<(String, Result<CodexQuota, Stri
     }
 
     Ok(results)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize_http_error_body_for_display, HTTP_ERROR_BODY_DISPLAY_MAX_CHARS};
+
+    #[test]
+    fn displays_empty_http_error_body_explicitly() {
+        assert_eq!(normalize_http_error_body_for_display(" \n\t "), "<empty>");
+    }
+
+    #[test]
+    fn compacts_and_truncates_http_error_body_for_display() {
+        let body = format!(
+            " first\n\nsecond   {} ",
+            "x".repeat(HTTP_ERROR_BODY_DISPLAY_MAX_CHARS)
+        );
+        let display = normalize_http_error_body_for_display(&body);
+
+        assert!(display.starts_with("first second "));
+        assert!(display.ends_with("...(truncated)"));
+        assert!(display.chars().count() <= HTTP_ERROR_BODY_DISPLAY_MAX_CHARS + 14);
+    }
 }

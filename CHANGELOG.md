@@ -7,6 +7,43 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [0.24.12] - 2026-06-03
+
+### Added
+- **Codex API Service now more closely follows official Codex client traffic behavior**: sidecar requests use stronger client fingerprinting, reasoning/signature replay support, sanitized request signing, and expanded Responses/WebSocket handling; the maintained Legacy/WebSocket gateway also fills Codex client metadata and turn metadata while dropping invalid reasoning signatures, so account-pool requests look more consistent with official client flows.
+- **Codex wakeup tasks now support execution modes**: each Codex wakeup task can run directly or require confirmation with a configurable timeout before execution. Thanks @Ac-spider.
+
+### Changed
+- **Codex API Service errors now preserve fuller diagnostics**: local API Service tests, request logs, and upstream failures keep more complete error details so operators can distinguish auth failures, quota failures, proxy issues, and upstream response problems.
+- **Codex API Service account-pool health now avoids marking quota-refresh-only failures as abnormal accounts**: non-auth quota refresh failures no longer have the same effect as 401-style authentication failures, reducing unnecessary account exclusion.
+- **Codex API Service gateway compatibility is kept across Legacy, Sidecar, and WebSocket paths**: routing, usage capture, image handling, reasoning output, and stream completion behavior are aligned across the maintained gateways instead of favoring a single path.
+- **Account-level refresh settings now match platform-level refresh controls**: account overrides use the same preset set as platform defaults and support custom minute values without offering inconsistent 30/60 minute presets. Thanks @Ac-spider.
+- **Windows Antigravity Desktop version detection is more reliable**: executable metadata probing passes the target path through the process environment, adds uninstall-registry `DisplayVersion` fallback, and reuses cached version information before choosing the Desktop auth mode. Thanks @insane66613.
+
+### Fixed
+- **Codex API Service auth projection no longer writes invalid OAuth auth files for API Key bindings**: API Key accounts bound to OAuth snapshots without `id_token` now keep the API Key auth shape instead of producing an invalid OAuth `auth.json`. Thanks @luoyanglang.
+- **External import Deep Links no longer treat the executable name as an import argument**: single-instance and startup import handling skips `argv0`, avoiding misleading diagnostics and failed WSL import handling. Thanks @Disaster-Terminator.
+- **Dashboard Antigravity quota cards now display grouped quota data before canonical-model fallback**: accounts whose quota only maps through display groups no longer appear as having no data. Thanks @Hao-Wu.
+- **Codex wakeup execution-mode controls now use the standard form styling**: the execution-mode selector keeps the same height, padding, border, focus state, and typography as the rest of the wakeup task form.
+- **Codex launch paths are re-detected after updates when the saved path becomes stale**: if the stored Codex launch path no longer resolves, the launch flow detects the current install location and writes it back to configuration, reducing manual path repair after app updates.
+
+---
+## [0.24.11] - 2026-06-01
+
+### Added
+- **Codex API Service account pools now support account-level disabled model rules**: each account can configure blocked models, apply rules in bulk, and have Legacy, WebSocket, and Sidecar routing avoid accounts that cannot serve the requested model.
+- **Codex wakeup tasks now use direct official Codex chat**: wakeup runs through the selected OAuth account without requiring Codex CLI or a running local API Service, follows the saved upstream proxy and timeout settings, parses official streaming responses, and shows the execution result as official direct chat.
+
+### Changed
+- **Codex API Service account-pool controls are visually more consistent**: the Codex API/Cockpit API copy, scheduling options, checkboxes, form control heights, and typography now use a more aligned layout.
+- **Codex OAuth binding now accepts any OAuth account with `refresh_token`**: binding filters no longer require the account to pass the normal-account validity shortcut, and the binding description matches the actual eligibility rule.
+- **Codex launches now repair session visibility when the launch credential changes**: default and managed instance launches run session visibility repair before startup when a credential switch is involved.
+
+### Fixed
+- **Codex config.toml managed rewrites now preserve more user configuration**: API account switching no longer rebuilds the entire model provider table, API Service takeover restore keeps current plugin settings, and repeated blank lines are collapsed when writing the active config.
+- **Windows Antigravity local account import now reads the current system credential path**: local import uses Windows Credential Manager `gemini:antigravity` credentials and reuses the refresh-token import flow, while non-Windows platforms keep the state database path.
+
+---
 ## [0.24.10] - 2026-05-31
 
 ### Added

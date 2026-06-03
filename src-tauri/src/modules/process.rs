@@ -2766,6 +2766,12 @@ fn detect_codex_exec_path() -> Option<std::path::PathBuf> {
     None
 }
 
+fn detect_and_save_codex_launch_path() -> Option<std::path::PathBuf> {
+    let detected = detect_codex_exec_path()?;
+    update_app_path_in_config("codex", &detected);
+    Some(detected)
+}
+
 fn detect_opencode_exec_path() -> Option<std::path::PathBuf> {
     #[cfg(target_os = "macos")]
     {
@@ -3137,7 +3143,14 @@ fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
         if let Some(exec) = resolve_macos_exec_path(&custom, "Codex") {
             return Ok(exec);
         }
+        if let Some(detected) = detect_and_save_codex_launch_path() {
+            return Ok(detected);
+        }
         return Err(app_path_missing_error("codex"));
+    }
+
+    if let Some(detected) = detect_and_save_codex_launch_path() {
+        return Ok(detected);
     }
 
     Err(app_path_missing_error("codex"))
@@ -3149,12 +3162,15 @@ fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
         if let Some(exec) = resolve_macos_exec_path(&custom, "Codex") {
             return Ok(exec);
         }
+        if let Some(detected) = detect_and_save_codex_launch_path() {
+            return Ok(detected);
+        }
         return Err(app_path_missing_error("codex"));
     }
 
     #[cfg(target_os = "windows")]
     {
-        if let Some(detected) = detect_codex_exec_path() {
+        if let Some(detected) = detect_and_save_codex_launch_path() {
             return Ok(detected);
         }
     }

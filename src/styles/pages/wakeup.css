@@ -321,7 +321,8 @@
   gap: 12px;
 }
 
-.wakeup-input {
+.wakeup-input,
+.wakeup-select {
   width: 100%;
   min-height: 40px;
   padding: 8px 12px;
@@ -329,10 +330,12 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-size: 13px;
+  line-height: 20px;
   color: var(--text-primary);
 }
 
-.wakeup-input:focus {
+.wakeup-input:focus,
+.wakeup-select:focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.1);

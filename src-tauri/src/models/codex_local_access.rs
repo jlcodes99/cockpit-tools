@@ -120,6 +120,14 @@ fn default_custom_routing_weight() -> u32 {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessAccountModelRule {
+    pub account_id: String,
+    #[serde(default)]
+    pub excluded_models: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessModelAlias {
     pub source_model: String,
     pub alias: String,
@@ -378,6 +386,8 @@ pub struct CodexLocalAccessCollection {
     pub routing_strategy: CodexLocalAccessRoutingStrategy,
     #[serde(default)]
     pub custom_routing_rules: Vec<CodexLocalAccessCustomRoutingRule>,
+    #[serde(default)]
+    pub account_model_rules: Vec<CodexLocalAccessAccountModelRule>,
     #[serde(default)]
     pub model_aliases: Vec<CodexLocalAccessModelAlias>,
     #[serde(default)]

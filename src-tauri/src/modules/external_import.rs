@@ -299,6 +299,18 @@ fn emit_external_import_payload<R: Runtime>(
     ));
 }
 
+/// Skip argv[0] (the executable name) for sources where the first argument
+/// is guaranteed to be the process path rather than a deep link.
+/// On Linux/WSL the single-instance callback and startup args always include
+/// the binary name as the first element (e.g. `["cockpit-tools",
+/// "cockpit-tools://import?..."]`).  Consuming it wastes a log line, can
+/// mislead diagnostics (`is_deep_link=false, candidate='cockpit-tools'`),
+/// and on WSL where D-Bus is unreliable it is the *only* element received,
+/// causing an "未发现 Deep Link 参数" dead-end.
+fn should_skip_argv0(source: &str) -> bool {
+    matches!(source, "single-instance" | "startup")
+}
+
 pub fn handle_external_import_args<R: Runtime>(
     app: &AppHandle<R>,
     args: &[String],
@@ -309,8 +321,12 @@ pub fn handle_external_import_args<R: Runtime>(
         source,
         args.len()
     ));
+    let skip_argv0 = should_skip_argv0(source);
     let mut saw_deep_link = false;
-    for arg in args {
+    for (i, arg) in args.iter().enumerate() {
+        if skip_argv0 && i == 0 {
+            continue;
+        }
         let candidate = arg.trim();
         if candidate.is_empty() {
             continue;
@@ -370,7 +386,28 @@ pub fn handle_external_import_args<R: Runtime>(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_external_import_url;
+    use super::{parse_external_import_url, should_skip_argv0};
+
+    // --- argv0 skip logic ---
+
+    #[test]
+    fn skip_argv0_for_single_instance() {
+        assert!(should_skip_argv0("single-instance"));
+    }
+
+    #[test]
+    fn skip_argv0_for_startup() {
+        assert!(should_skip_argv0("startup"));
+    }
+
+    #[test]
+    fn do_not_skip_argv0_for_deep_link_sources() {
+        assert!(!should_skip_argv0("deep-link-open-url"));
+        assert!(!should_skip_argv0("deep-link-current"));
+        assert!(!should_skip_argv0("run-event-opened"));
+    }
+
+    // --- URL parsing (existing) ---
 
     #[test]
     fn parse_basic_import_link() {

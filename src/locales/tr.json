@@ -1577,7 +1577,11 @@
       "timeWindowFrom": "Başlangıç",
       "timeWindowTo": "Bitiş",
       "fallbackTimes": "Geri dönüş zamanları",
-      "saveTask": "Görevi kaydet"
+      "saveTask": "Görevi kaydet",
+      "executionMode": "Çalıştırma modu",
+      "executionModeAuto": "Doğrudan çalıştır",
+      "executionModeConfirm": "Onay gerekli",
+      "confirmTimeout": "Onay zaman aşımı"
     },
     "test": {
       "modelsLabel": "Tetiklenecek modeller",
@@ -2288,7 +2292,11 @@
       "runtimeConfigCodexCliPlaceholder": "örn. /opt/homebrew/bin/codex",
       "runtimeConfigNodeLabel": "node yolu",
       "runtimeConfigNodePlaceholder": "örn. /opt/homebrew/bin/node",
-      "runtimeConfigApplyHint": "Değişiklikten sonra \"CLI’yi yeniden kontrol et\"e tıklayarak hemen kaydedip uygulayın."
+      "runtimeConfigApplyHint": "Değişiklikten sonra \"CLI’yi yeniden kontrol et\"e tıklayarak hemen kaydedip uygulayın.",
+      "officialChatRuntimeTitle": "Resmi doğrudan",
+      "officialChatRuntimePath": "ChatGPT resmi Codex sohbeti",
+      "officialChatRuntimeSource": "Resmi doğrudan",
+      "officialChatRuntimeMessage": "OAuth hesabıyla doğrudan sohbet"
     },
     "sessionManager": {
       "title": "Oturum yöneticisi",
@@ -2784,6 +2792,18 @@
         "presetNameRequired": "Ön ayar adı girin",
         "deletePresetConfirm": "Bu özel ön ayar silinsin mi?",
         "deletePresetTitle": "Ön ayarı sil"
+      },
+      "accountModelRules": {
+        "action": "Model engelle",
+        "title": "Hesap model engelleri",
+        "desc": "Kurallarla eşleşen hesaplar bu model isteğinde atlanır. Satır başına bir model veya joker yazın.",
+        "bulkLabel": "Toplu kurallar",
+        "placeholder": "Örnek:\ngpt-5.4-mini\ngpt-5.3-*",
+        "applySelected": "Seçilenlere uygula",
+        "selectAll": "Hesapları seç",
+        "clearSelection": "Seçimi temizle",
+        "saveSuccess": "Hesap model engelleri kaydedildi",
+        "cardCount": "{{count}} engelli"
       }
     }
   },

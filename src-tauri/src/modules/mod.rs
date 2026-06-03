@@ -12,6 +12,7 @@ pub mod codebuddy_cn_oauth;
 pub mod codebuddy_instance;
 pub mod codebuddy_oauth;
 pub mod codex_account;
+pub mod codex_config_format;
 pub mod codex_instance;
 pub mod codex_local_access;
 pub mod codex_oauth;

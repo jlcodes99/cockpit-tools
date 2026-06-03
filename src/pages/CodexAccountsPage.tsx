@@ -97,6 +97,7 @@ import {
   type CodexQuotaErrorInfo,
 } from "../types/codex";
 import { filterCodexLocalAccessAccountIds } from "../utils/codexLocalAccessAccounts";
+import { isBlockingCodexQuotaError } from "../utils/codexQuotaError";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
 
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
@@ -4327,7 +4328,7 @@ export function CodexAccountsPage() {
           summary.cooldown += 1;
           return;
         }
-        if (account.quota_error) {
+        if (isBlockingCodexQuotaError(account.quota_error)) {
           summary.quotaLimited += 1;
           summary.abnormal += 1;
           return;
@@ -4654,9 +4655,8 @@ export function CodexAccountsPage() {
         label: `ENTERPRISE (${oauthBindingTierCounts.ENTERPRISE})`,
       },
       { value: "ERROR", label: `ERROR (${oauthBindingTierCounts.ERROR})` },
-      buildValidAccountsFilterOption(t, oauthBindingTierCounts.VALID),
     ],
-    [oauthBindingTierCounts, t],
+    [oauthBindingTierCounts],
   );
 
   const oauthBindingAvailableTags = useMemo(() => {
@@ -4709,12 +4709,8 @@ export function CodexAccountsPage() {
     }
 
     if (oauthBindingFilterTypes.length > 0) {
-      const { requireValidAccounts, selectedTypes } = splitValidityFilterValues(
-        oauthBindingFilterTypes,
-      );
-      if (requireValidAccounts) {
-        result = result.filter((account) => !isAbnormalAccount(account));
-      }
+      const { selectedTypes } =
+        splitValidityFilterValues(oauthBindingFilterTypes);
       if (selectedTypes.size > 0) {
         result = result.filter((account) => {
           if (selectedTypes.has("ERROR") && account.quota_error) {
@@ -4758,7 +4754,6 @@ export function CodexAccountsPage() {
 
     return result;
   }, [
-    isAbnormalAccount,
     normalizeTag,
     oauthBindingEligibleAccounts,
     oauthBindingFilterTypes,
@@ -9710,11 +9705,11 @@ export function CodexAccountsPage() {
                         {oauthBindingTargetKind === "local_access"
                           ? t(
                               "codex.localAccess.oauthBinding.desc",
-                              "可选绑定。只能选择带 refresh_token、可自动续期的 OAuth 账号；未绑定时 API 服务按原 API Key 逻辑运行；绑定后登录态使用 OAuth 账号，Provider 使用当前 API 服务配置。",
+                              "可选绑定。只要 OAuth 账号带 refresh_token 即可选择；未绑定时 API 服务按原 API Key 逻辑运行；绑定后登录态使用 OAuth 账号，Provider 使用当前 API 服务配置。",
                             )
                           : t(
                               "codex.api.oauthBinding.desc",
-                              "可选绑定。只能选择带 refresh_token、可自动续期的 OAuth 账号；未绑定时该账号按原 API Key 逻辑切换；绑定后登录态使用 OAuth 账号，Provider 使用当前 API Key 账号配置。",
+                              "可选绑定。只要 OAuth 账号带 refresh_token 即可选择；未绑定时该账号按原 API Key 逻辑切换；绑定后登录态使用 OAuth 账号，Provider 使用当前 API Key 账号配置。",
                             )}
                       </p>
                       <div className="section-desc codex-oauth-binding-current-target">

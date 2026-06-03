@@ -741,7 +741,65 @@ pub async fn import_fingerprints_from_json_logic(json_content: String) -> Result
 }
 
 /// 从本地 Antigravity IDE 客户端导入当前账号
+#[cfg(target_os = "windows")]
 pub async fn import_from_local_logic() -> Result<models::Account, String> {
+    modules::logger::log_info("开始从 Windows Credential Manager 导入 Antigravity 账号...");
+    let system_credential = modules::antigravity_credential::read_antigravity_system_credential()?
+        .ok_or_else(|| {
+            "未找到 Antigravity 系统凭据，请确保 Antigravity IDE 客户端已登录".to_string()
+        })?;
+    import_from_refresh_token(system_credential.refresh_token, "Antigravity 系统凭据").await
+}
+
+/// 从本地 Antigravity IDE 客户端导入当前账号
+#[cfg(not(target_os = "windows"))]
+pub async fn import_from_local_logic() -> Result<models::Account, String> {
+    import_from_local_state_db_logic().await
+}
+
+async fn import_from_refresh_token(
+    refresh_token: String,
+    source_label: &str,
+) -> Result<models::Account, String> {
+    if refresh_token.trim().is_empty() {
+        return Err(format!("{} refresh_token 为空", source_label));
+    }
+
+    modules::logger::log_info(&format!(
+        "从{}获取到 refresh_token (len={})",
+        source_label,
+        refresh_token.len()
+    ));
+
+    // 使用 refresh_token 获取新的 access_token
+    let token_response = modules::oauth::refresh_access_token(&refresh_token).await?;
+
+    // 获取用户信息
+    let user_info = modules::oauth::get_user_info(&token_response.access_token).await?;
+    let email = user_info.email.clone();
+
+    // 构建 TokenData
+    let token = models::TokenData::new(
+        token_response.access_token,
+        token_response.refresh_token.unwrap_or(refresh_token),
+        token_response.expires_in,
+        Some(email.clone()),
+        None,
+        None,
+    );
+
+    // 添加或更新账号
+    let account = modules::upsert_account(email.clone(), user_info.get_display_name(), token)?;
+
+    modules::logger::log_info(&format!("本地账号导入成功: {}", email));
+
+    // 广播数据变更通知
+    modules::websocket::broadcast_data_changed("import_from_local");
+
+    Ok(account)
+}
+
+async fn import_from_local_state_db_logic() -> Result<models::Account, String> {
     use base64::{engine::general_purpose, Engine as _};
 
     modules::logger::log_info("开始从本地 Antigravity IDE 客户端导入...");
@@ -778,32 +836,7 @@ pub async fn import_from_local_logic() -> Result<models::Account, String> {
         refresh_token.len()
     ));
 
-    // 使用 refresh_token 获取新的 access_token
-    let token_response = modules::oauth::refresh_access_token(&refresh_token).await?;
-
-    // 获取用户信息
-    let user_info = modules::oauth::get_user_info(&token_response.access_token).await?;
-    let email = user_info.email.clone();
-
-    // 构建 TokenData
-    let token = models::TokenData::new(
-        token_response.access_token,
-        token_response.refresh_token.unwrap_or(refresh_token),
-        token_response.expires_in,
-        Some(email.clone()),
-        None,
-        None,
-    );
-
-    // 添加或更新账号
-    let account = modules::upsert_account(email.clone(), user_info.get_display_name(), token)?;
-
-    modules::logger::log_info(&format!("本地账号导入成功: {}", email));
-
-    // 广播数据变更通知
-    modules::websocket::broadcast_data_changed("import_from_local");
-
-    Ok(account)
+    import_from_refresh_token(refresh_token, "Antigravity state.vscdb").await
 }
 
 /// 从 JSON 导入账号

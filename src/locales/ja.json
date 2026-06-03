@@ -1577,7 +1577,11 @@
       "timeWindowFrom": "開始",
       "timeWindowTo": "終了",
       "fallbackTimes": "時間外の実行時間",
-      "saveTask": "タスクを保存"
+      "saveTask": "タスクを保存",
+      "executionMode": "実行モード",
+      "executionModeAuto": "直接実行",
+      "executionModeConfirm": "確認が必要",
+      "confirmTimeout": "確認タイムアウト"
     },
     "test": {
       "modelsLabel": "起動するモデル",
@@ -2288,7 +2292,11 @@
       "runtimeConfigCodexCliPlaceholder": "例: /opt/homebrew/bin/codex",
       "runtimeConfigNodeLabel": "node パス",
       "runtimeConfigNodePlaceholder": "例: /opt/homebrew/bin/node",
-      "runtimeConfigApplyHint": "変更後に「CLI を再チェック」をクリックすると保存され、すぐ反映されます。"
+      "runtimeConfigApplyHint": "変更後に「CLI を再チェック」をクリックすると保存され、すぐ反映されます。",
+      "officialChatRuntimeTitle": "公式直接接続",
+      "officialChatRuntimePath": "ChatGPT 公式 Codex チャット",
+      "officialChatRuntimeSource": "公式直接接続",
+      "officialChatRuntimeMessage": "OAuth アカウントで直接対話"
     },
     "sessionManager": {
       "title": "セッション管理",
@@ -2784,6 +2792,18 @@
         "presetNameRequired": "プリセット名を入力してください",
         "deletePresetConfirm": "このカスタムプリセットを削除しますか？",
         "deletePresetTitle": "プリセットを削除"
+      },
+      "accountModelRules": {
+        "action": "モデル除外",
+        "title": "アカウント別モデル除外",
+        "desc": "ルールに一致するアカウントは、そのモデルのリクエストでは使われません。1 行に 1 つのモデルまたはワイルドカードを入力します。",
+        "bulkLabel": "一括ルール",
+        "placeholder": "例:\ngpt-5.4-mini\ngpt-5.3-*",
+        "applySelected": "選択に適用",
+        "selectAll": "アカウント選択",
+        "clearSelection": "選択解除",
+        "saveSuccess": "アカウント別モデル除外を保存しました",
+        "cardCount": "{{count}} 件除外"
       }
     }
   },

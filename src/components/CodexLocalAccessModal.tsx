@@ -53,6 +53,7 @@ import {
   type CodexQuotaPoolItem,
 } from "../utils/codexQuotaPool";
 import { isCodexLocalAccessEligibleAccount } from "../utils/codexLocalAccessAccounts";
+import { isBlockingCodexQuotaError } from "../utils/codexQuotaError";
 import { AccountTagFilterDropdown } from "./AccountTagFilterDropdown";
 import {
   MultiSelectFilterDropdown,
@@ -494,7 +495,7 @@ export function CodexLocalAccessModal({
         summary.cooldown += 1;
         return;
       }
-      if (account.quota_error) {
+      if (isBlockingCodexQuotaError(account.quota_error)) {
         summary.quotaLimited += 1;
         summary.abnormal += 1;
         return;
@@ -671,14 +672,14 @@ export function CodexLocalAccessModal({
       ERROR: 0,
     };
     localAccessAccounts.forEach((account) => {
-      if (!account.quota_error) {
+      if (!isBlockingCodexQuotaError(account.quota_error)) {
         counts.VALID += 1;
       }
       const tier = getCodexPlanFilterKey(account);
       if (tier in counts) {
         counts[tier as keyof typeof counts] += 1;
       }
-      if (account.quota_error) {
+      if (isBlockingCodexQuotaError(account.quota_error)) {
         counts.ERROR += 1;
       }
     });
@@ -817,14 +818,19 @@ export function CodexLocalAccessModal({
         }
       }
 
-      if (requireValidAccounts && account.quota_error) {
+      if (
+        requireValidAccounts &&
+        isBlockingCodexQuotaError(account.quota_error)
+      ) {
         return false;
       }
 
       if (selectedTypes.size > 0) {
         const planKey = getCodexPlanFilterKey(account);
         const matchesType = Array.from(selectedTypes).some((type) => {
-          if (type === "ERROR") return Boolean(account.quota_error);
+          if (type === "ERROR") {
+            return isBlockingCodexQuotaError(account.quota_error);
+          }
           return type === planKey;
         });
         if (!matchesType) {
@@ -1072,14 +1078,14 @@ export function CodexLocalAccessModal({
       ERROR: 0,
     };
     customRoutingAccounts.forEach((account) => {
-      if (!account.quota_error) {
+      if (!isBlockingCodexQuotaError(account.quota_error)) {
         counts.VALID += 1;
       }
       const tier = getCodexPlanFilterKey(account);
       if (tier in counts) {
         counts[tier as keyof typeof counts] += 1;
       }
-      if (account.quota_error) {
+      if (isBlockingCodexQuotaError(account.quota_error)) {
         counts.ERROR += 1;
       }
     });
@@ -1185,14 +1191,19 @@ export function CodexLocalAccessModal({
         }
       }
 
-      if (requireValidAccounts && account.quota_error) {
+      if (
+        requireValidAccounts &&
+        isBlockingCodexQuotaError(account.quota_error)
+      ) {
         return false;
       }
 
       if (selectedTypes.size > 0) {
         const planKey = getCodexPlanFilterKey(account);
         const matchesType = Array.from(selectedTypes).some((type) => {
-          if (type === "ERROR") return Boolean(account.quota_error);
+          if (type === "ERROR") {
+            return isBlockingCodexQuotaError(account.quota_error);
+          }
           return type === planKey;
         });
         if (!matchesType) {

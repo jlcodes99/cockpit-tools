@@ -240,6 +240,27 @@ fn sync_codex_threads_across_idle_instances(context: &str) {
     }
 }
 
+fn repair_session_visibility_before_launch(
+    context: &str,
+    launch_credential_change: &Option<CodexLaunchCredentialChange>,
+) -> Result<(), String> {
+    if launch_credential_change.is_none() {
+        return Ok(());
+    }
+
+    let started = Instant::now();
+    let summary = modules::codex_session_visibility::repair_session_visibility_across_instances()?;
+    modules::logger::log_info(&format!(
+        "[Codex Session Visibility] {}: repaired before launch, mutated_instances={}, rollout_files={}, sqlite_rows={}, elapsed_ms={}",
+        context,
+        summary.mutated_instance_count,
+        summary.changed_rollout_file_count,
+        summary.updated_sqlite_row_count,
+        started.elapsed().as_millis()
+    ));
+    Ok(())
+}
+
 fn read_launch_credential_kind_for_dir(data_dir: &Path) -> Option<String> {
     match modules::codex_session_visibility::read_history_visibility_provider_for_dir(data_dir) {
         Ok(provider) => {
@@ -694,6 +715,7 @@ async fn codex_start_instance_internal(
             previous_credential_kind,
             read_launch_credential_kind_for_dir(&default_dir),
         );
+        repair_session_visibility_before_launch("before-start-default", &launch_credential_change)?;
         if skip_default_bind_account_injection {
             modules::logger::log_info(
                 "[Codex Thread Sync] before-start-default: skipped on prepared-profile fast path",
@@ -767,6 +789,7 @@ async fn codex_start_instance_internal(
         read_launch_credential_kind_for_dir(instance_dir),
     );
     modules::codex_speed::write_app_speed_for_dir(instance_dir, instance.app_speed.clone())?;
+    repair_session_visibility_before_launch("before-start-instance", &launch_credential_change)?;
     sync_codex_threads_across_idle_instances("before-start-instance");
 
     if instance.launch_mode == InstanceLaunchMode::Cli {

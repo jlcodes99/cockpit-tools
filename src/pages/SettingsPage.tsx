@@ -405,6 +405,9 @@ export function SettingsPage() {
   const [accountOverrides, setAccountOverrides] = useState<AccountRefreshOverrides>(
     loadAccountRefreshOverrides(),
   );
+  const [accountLevelRefreshCustomMode, setAccountLevelRefreshCustomMode] = useState<
+    Record<string, boolean>
+  >({});
   const [codebuddyQuotaAlertEnabled, setCodebuddyQuotaAlertEnabled] = useState(false);
   const [codebuddyQuotaAlertThreshold, setCodebuddyQuotaAlertThreshold] = useState('20');
   const [codebuddyCnQuotaAlertEnabled, setCodebuddyCnQuotaAlertEnabled] = useState(false);
@@ -1731,8 +1734,29 @@ export function SettingsPage() {
   ) => {
     if (value === 'inherit') {
       removeAccountRefreshOverride(platform, email);
+      setAccountLevelRefreshCustomMode((prev) => {
+        const next = { ...prev };
+        delete next[`${platform}:${email}`];
+        return next;
+      });
+    } else if (value === 'custom') {
+      setAccountLevelRefreshCustomMode((prev) => ({
+        ...prev,
+        [`${platform}:${email}`]: true,
+      }));
+      const currentValue = accountOverrides[platform]?.[email];
+      if (currentValue !== undefined) {
+        setAccountRefreshMinutes(platform, email, currentValue);
+      } else {
+        setAccountRefreshMinutes(platform, email, 1);
+      }
     } else {
       setAccountRefreshMinutes(platform, email, Number(value));
+      setAccountLevelRefreshCustomMode((prev) => {
+        const next = { ...prev };
+        delete next[`${platform}:${email}`];
+        return next;
+      });
     }
     setAccountOverrides(loadAccountRefreshOverrides());
   };
@@ -1771,7 +1795,11 @@ export function SettingsPage() {
             <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {accounts.map((account) => {
                 const overrideValue = platformOverrides[account.email];
-                const selectValue = overrideValue !== undefined ? String(overrideValue) : 'inherit';
+                const isCustomMode = accountLevelRefreshCustomMode[`${platform}:${account.email}`];
+                const isPreset = overrideValue !== undefined && [1, 2, 5, 10, 15, -1].includes(overrideValue);
+                const selectValue = isCustomMode
+                  ? 'custom'
+                  : (overrideValue !== undefined ? String(overrideValue) : 'inherit');
                 return (
                   <div
                     key={account.id}
@@ -1789,28 +1817,78 @@ export function SettingsPage() {
                     >
                       {account.email}
                     </span>
-                    <select
-                      className="settings-select"
-                      style={{ minWidth: '100px', width: 'auto', fontSize: '12px' }}
-                      value={selectValue}
-                      onChange={(e) =>
-                        handleAccountOverrideChange(platform, account.email, e.target.value)
-                      }
-                    >
-                      <option value="inherit">
-                        {t('settings.general.accountLevelRefreshInherit', '继承平台设置')}
-                      </option>
-                      <option value="-1">
-                        {t('settings.general.accountLevelRefreshDisabled', '禁用')}
-                      </option>
-                      <option value="1">1 {t('settings.general.minutes')}</option>
-                      <option value="2">2 {t('settings.general.minutes')}</option>
-                      <option value="5">5 {t('settings.general.minutes')}</option>
-                      <option value="10">10 {t('settings.general.minutes')}</option>
-                      <option value="15">15 {t('settings.general.minutes')}</option>
-                      <option value="30">30 {t('settings.general.minutes')}</option>
-                      <option value="60">60 {t('settings.general.minutes')}</option>
-                    </select>
+                    {isCustomMode ? (
+                      <div className="settings-inline-input" style={{ minWidth: '100px', width: 'auto' }}>
+                        <input
+                          type="number"
+                          min={1}
+                          max={999}
+                          className="settings-select settings-select--input-mode settings-select--with-unit"
+                          value={overrideValue !== undefined ? String(overrideValue) : '1'}
+                          placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                          onChange={(e) => {
+                            const sanitized = sanitizeNumberInput(e.target.value);
+                            if (sanitized) {
+                              setAccountRefreshMinutes(platform, account.email, Number(sanitized));
+                              setAccountOverrides(loadAccountRefreshOverrides());
+                            }
+                          }}
+                          onBlur={() => {
+                            const currentValue = overrideValue !== undefined ? String(overrideValue) : '1';
+                            const normalized = normalizeNumberInput(currentValue, 1, 999);
+                            setAccountRefreshMinutes(platform, account.email, Number(normalized));
+                            setAccountOverrides(loadAccountRefreshOverrides());
+                            setAccountLevelRefreshCustomMode((prev) => {
+                              const next = { ...prev };
+                              delete next[`${platform}:${account.email}`];
+                              return next;
+                            });
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              const currentValue = overrideValue !== undefined ? String(overrideValue) : '1';
+                              const normalized = normalizeNumberInput(currentValue, 1, 999);
+                              setAccountRefreshMinutes(platform, account.email, Number(normalized));
+                              setAccountOverrides(loadAccountRefreshOverrides());
+                              setAccountLevelRefreshCustomMode((prev) => {
+                                const next = { ...prev };
+                                delete next[`${platform}:${account.email}`];
+                                return next;
+                              });
+                            }
+                          }}
+                        />
+                        <span className="settings-input-unit">{t('settings.general.minutes')}</span>
+                      </div>
+                    ) : (
+                      <select
+                        className="settings-select"
+                        style={{ minWidth: '100px', width: 'auto', fontSize: '12px' }}
+                        value={selectValue}
+                        onChange={(e) =>
+                          handleAccountOverrideChange(platform, account.email, e.target.value)
+                        }
+                      >
+                        <option value="inherit">
+                          {t('settings.general.accountLevelRefreshInherit', '继承平台设置')}
+                        </option>
+                        <option value="-1">
+                          {t('settings.general.accountLevelRefreshDisabled', '禁用')}
+                        </option>
+                        <option value="1">1 {t('settings.general.minutes')}</option>
+                        <option value="2">2 {t('settings.general.minutes')}</option>
+                        <option value="5">5 {t('settings.general.minutes')}</option>
+                        <option value="10">10 {t('settings.general.minutes')}</option>
+                        <option value="15">15 {t('settings.general.minutes')}</option>
+                        {!isPreset && overrideValue !== undefined && overrideValue > 0 && (
+                          <option value={String(overrideValue)}>
+                            {overrideValue} {t('settings.general.minutes')}
+                          </option>
+                        )}
+                        <option value="custom">{t('settings.general.autoRefreshCustom', '自定义')}</option>
+                      </select>
+                    )}
                   </div>
                 );
               })}

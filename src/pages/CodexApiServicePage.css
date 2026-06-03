@@ -439,6 +439,83 @@
   accent-color: var(--primary);
 }
 
+.codex-api-service-routing-form {
+  gap: 12px;
+}
+
+.codex-api-service-routing-form label {
+  grid-template-columns: minmax(104px, 0.42fr) minmax(180px, 1fr);
+  gap: 14px;
+}
+
+.codex-api-service-routing-form label > span {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 620;
+  line-height: 1.25;
+}
+
+.codex-api-service-routing-form label > input[type="number"] {
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 520;
+  line-height: 38px;
+}
+
+.codex-api-service-routing-form .single-select-dropdown-trigger {
+  min-height: 38px;
+  border-radius: 12px;
+  padding: 0 10px 0 12px;
+}
+
+.codex-api-service-routing-form .single-select-dropdown-value {
+  font-size: 13px;
+  font-weight: 620;
+  letter-spacing: 0;
+}
+
+.codex-api-service-routing-form .single-select-dropdown-arrow {
+  width: 22px;
+  height: 22px;
+}
+
+.codex-api-service-routing-form label > input[type="checkbox"] {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 1.5px solid var(--border-strong, var(--border));
+  border-radius: 6px;
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.codex-api-service-routing-form label > input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3.5 8.2 6.6 11.2 12.6 4.8' fill='none' stroke='white' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 14px 14px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.codex-api-service-routing-form label > input[type="checkbox"]:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.codex-api-service-routing-form label > input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .codex-api-service-copy-row,
 .codex-api-service-input-row {
   display: flex;
@@ -1172,6 +1249,91 @@
   background: var(--bg-card);
 }
 
+.codex-api-service-account-model-bulk {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+  min-width: 240px;
+}
+
+.codex-api-service-account-model-bulk span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.codex-api-service-account-model-bulk textarea,
+.codex-api-service-account-model-row textarea {
+  width: 100%;
+  min-height: 70px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  outline: none;
+  resize: vertical;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.codex-api-service-account-model-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.72fr) minmax(320px, 1.28fr);
+  gap: 18px;
+  align-items: center;
+  min-width: 620px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.codex-api-service-account-model-row:last-child {
+  border-bottom: 0;
+}
+
+.codex-api-service-account-model-check {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.codex-api-service-account-model-check input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.codex-api-service-account-model-check > span {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.codex-api-service-account-model-check strong,
+.codex-api-service-account-model-check small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-api-service-account-model-check strong {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.codex-api-service-account-model-check small {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
 .codex-api-service-pricing-head,
 .codex-api-service-pricing-row {
   display: grid;
@@ -1556,6 +1718,11 @@
 
   .codex-api-service-table-row {
     grid-template-columns: 1fr;
+  }
+
+  .codex-api-service-account-model-row {
+    grid-template-columns: 1fr;
+    min-width: 0;
   }
 
   .codex-api-service-key-main {

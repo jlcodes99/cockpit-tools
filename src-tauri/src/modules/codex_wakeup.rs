@@ -1,4 +1,4 @@
-use crate::modules::{account, codex_account, logger, process};
+use crate::modules::{account, codex_account, codex_local_access, logger, process};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
@@ -432,6 +432,21 @@ fn normalize_reasoning_effort(value: &str) -> Option<String> {
         Some(normalized)
     } else {
         None
+    }
+}
+
+fn official_chat_runtime_status() -> CodexCliStatus {
+    CodexCliStatus {
+        available: true,
+        binary_path: None,
+        configured_codex_cli_path: None,
+        configured_node_path: None,
+        version: None,
+        source: Some("official_chat".to_string()),
+        message: Some("官方直连对话".to_string()),
+        required_runtime_paths: Vec::new(),
+        checked_at: now_ms(),
+        install_hints: Vec::new(),
     }
 }
 
@@ -1515,7 +1530,11 @@ fn normalize_task(raw: &CodexWakeupTask) -> CodexWakeupTask {
         last_failure_count: raw.last_failure_count,
         last_duration_ms: raw.last_duration_ms,
         next_run_at: raw.next_run_at,
-        execution_mode: raw.execution_mode.as_ref().map(|item| item.trim().to_string()).filter(|item| !item.is_empty()),
+        execution_mode: raw
+            .execution_mode
+            .as_ref()
+            .map(|item| item.trim().to_string())
+            .filter(|item| !item.is_empty()),
         confirm_timeout_minutes: raw.confirm_timeout_minutes.map(|value| value.max(1)),
     }
 }
@@ -2134,7 +2153,6 @@ fn create_cancelled_record(
 }
 
 async fn run_single_account(
-    binary: Option<&ResolvedBinary>,
     run_id: &str,
     context: &TaskRunContext,
     account_id: &str,
@@ -2143,7 +2161,6 @@ async fn run_single_account(
     cancel_flag: Option<&Arc<AtomicBool>>,
 ) -> CodexWakeupHistoryItem {
     let prompt_value = Some(prompt.to_string());
-    let binary_path = binary.map(|item| item.path.display().to_string());
     if is_scope_cancelled(cancel_flag) {
         return create_cancelled_record(
             run_id,
@@ -2151,7 +2168,7 @@ async fn run_single_account(
             account_id,
             prompt_value,
             execution_config,
-            binary_path,
+            None,
         );
     }
 
@@ -2169,7 +2186,7 @@ async fn run_single_account(
                 prompt_value,
                 execution_config,
                 "账号不存在".to_string(),
-                binary_path,
+                None,
             )
         }
     };
@@ -2186,95 +2203,33 @@ async fn run_single_account(
             existing_context_text,
             prompt_value,
             execution_config,
-            "Codex 唤醒任务暂不支持 API Key 账号。".to_string(),
-            binary_path,
+            "Codex 官方直连唤醒仅支持 OAuth 账号。".to_string(),
+            None,
         );
     }
 
-    let Some(binary) = binary else {
-        return create_cli_missing_record(
-            run_id,
-            context,
-            account_id,
-            prompt_value,
-            execution_config,
-        );
-    };
-
-    let managed_home = match managed_home_path(account_id) {
-        Ok(path) => path,
-        Err(err) => {
-            return create_failure_record(
-                run_id,
-                &context.trigger_type,
-                context.task_id.as_deref(),
-                context.task_name.as_deref(),
-                account_id,
-                existing.email,
-                existing_context_text,
-                prompt_value,
-                execution_config,
-                err,
-                Some(binary.path.display().to_string()),
-            );
-        }
-    };
-
-    if let Err(err) = fs::create_dir_all(&managed_home) {
-        return create_failure_record(
-            run_id,
-            &context.trigger_type,
-            context.task_id.as_deref(),
-            context.task_name.as_deref(),
-            account_id,
-            existing.email,
-            existing_context_text,
-            prompt_value,
-            execution_config,
-            format!("创建受管 CODEX_HOME 失败: {}", err),
-            Some(binary.path.display().to_string()),
-        );
-    }
-
-    let (account, command_result, sync_error) =
-        match codex_account::execute_with_managed_account_projection(
-            account_id,
-            &managed_home,
-            "Codex 唤醒执行",
-            |_| run_codex_exec_sync(binary, &managed_home, prompt, execution_config, cancel_flag),
-        )
-        .await
-        {
-            Ok(result) => result,
-            Err(err) => {
-                return create_failure_record(
+    let started_at = std::time::Instant::now();
+    match codex_local_access::run_official_wakeup_chat(
+        account_id,
+        execution_config.model.as_deref(),
+        execution_config.model_reasoning_effort.as_deref(),
+        prompt,
+    )
+    .await
+    {
+        Ok(output) => {
+            if is_scope_cancelled(cancel_flag) {
+                return create_cancelled_record(
                     run_id,
-                    &context.trigger_type,
-                    context.task_id.as_deref(),
-                    context.task_name.as_deref(),
+                    context,
                     account_id,
-                    existing.email,
-                    existing_context_text,
                     prompt_value,
                     execution_config,
-                    err,
-                    Some(binary.path.display().to_string()),
-                )
+                    None,
+                );
             }
-        };
-    if let Some(err) = sync_error {
-        logger::log_warn(&format!(
-            "Codex 唤醒执行后同步受管目录 Token 失败: account_id={}, managed_home={}, error={}",
-            account_id,
-            managed_home.display(),
-            err
-        ));
-    }
-
-    match command_result {
-        Ok(output) => {
-            let account_context_text = resolve_account_context_text(&account);
-            let account_email = account.email;
+            let account_context_text = resolve_account_context_text(&output.account);
+            let account_email = output.account.email;
             CodexWakeupHistoryItem {
                 id: uuid::Uuid::new_v4().to_string(),
                 run_id: run_id.to_string(),
@@ -2294,27 +2249,27 @@ async fn run_single_account(
                 error: None,
                 quota_refresh_error: None,
                 duration_ms: Some(output.duration_ms),
-                cli_path: Some(binary.path.display().to_string()),
+                cli_path: None,
                 quota_before: None,
                 quota_after: None,
             }
         }
         Err(err) => {
-            let account_context_text = resolve_account_context_text(&account);
-            let account_email = account.email;
-            create_failure_record(
+            let mut record = create_failure_record(
                 run_id,
                 &context.trigger_type,
                 context.task_id.as_deref(),
                 context.task_name.as_deref(),
                 account_id,
-                account_email,
-                account_context_text,
+                existing.email,
+                existing_context_text,
                 prompt_value,
                 execution_config,
                 err,
-                Some(binary.path.display().to_string()),
-            )
+                None,
+            );
+            record.duration_ms = Some(started_at.elapsed().as_millis() as u64);
+            record
         }
     }
 }
@@ -2343,7 +2298,7 @@ pub async fn run_batch(
         .filter(|item| !item.is_empty())
         .unwrap_or_else(|| DEFAULT_PROMPT.to_string());
     let total = cleaned_ids.len();
-    let runtime = get_cli_status();
+    let runtime = official_chat_runtime_status();
     let run_id = run_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let cancel_flag = resolve_cancel_flag(cancel_scope_id)?;
     emit_progress(
@@ -2359,79 +2314,6 @@ pub async fn run_batch(
         None,
         None,
     );
-    if !runtime.available {
-        let mut records = Vec::with_capacity(cleaned_ids.len());
-        let mut success_count = 0usize;
-        let mut failure_count = 0usize;
-
-        for (index, account_id) in cleaned_ids.iter().enumerate() {
-            emit_progress(
-                app,
-                &run_id,
-                &context,
-                total,
-                index,
-                success_count,
-                failure_count,
-                true,
-                "account_started",
-                Some(account_id),
-                None,
-            );
-
-            let record = create_cli_missing_record(
-                &run_id,
-                &context,
-                account_id,
-                Some(prompt.clone()),
-                &execution_config,
-            );
-            if record.success {
-                success_count += 1;
-            } else {
-                failure_count += 1;
-            }
-            emit_progress(
-                app,
-                &run_id,
-                &context,
-                total,
-                index + 1,
-                success_count,
-                failure_count,
-                index + 1 < total,
-                "account_completed",
-                Some(account_id),
-                Some(record.clone()),
-            );
-            records.push(record);
-        }
-
-        add_history_items(records.clone())?;
-        emit_progress(
-            app,
-            &run_id,
-            &context,
-            records.len(),
-            records.len(),
-            success_count,
-            failure_count,
-            false,
-            "batch_completed",
-            None,
-            None,
-        );
-
-        return Ok(CodexWakeupBatchResult {
-            run_id,
-            runtime,
-            records,
-            success_count,
-            failure_count,
-        });
-    }
-
-    let binary = resolve_binary().ok();
     let mut records = Vec::with_capacity(cleaned_ids.len());
     let mut success_count = 0usize;
     let mut failure_count = 0usize;
@@ -2444,7 +2326,7 @@ pub async fn run_batch(
                 &account_id,
                 Some(prompt.clone()),
                 &execution_config,
-                binary.as_ref().map(|item| item.path.display().to_string()),
+                None,
             );
             failure_count += 1;
             emit_progress(
@@ -2478,7 +2360,6 @@ pub async fn run_batch(
             None,
         );
         let record = run_single_account(
-            binary.as_ref(),
             &run_id,
             &context,
             &account_id,

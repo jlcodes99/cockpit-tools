@@ -1577,7 +1577,11 @@
       "timeWindowFrom": "Od",
       "timeWindowTo": "Do",
       "fallbackTimes": "Náhradní časy",
-      "saveTask": "Uložit úlohu"
+      "saveTask": "Uložit úlohu",
+      "executionMode": "Režim spuštění",
+      "executionModeAuto": "Spustit přímo",
+      "executionModeConfirm": "Vyžadovat potvrzení",
+      "confirmTimeout": "Limit potvrzení"
     },
     "test": {
       "modelsLabel": "Modely k probuzení",
@@ -2288,7 +2292,11 @@
       "runtimeConfigCodexCliPlaceholder": "např. /opt/homebrew/bin/codex",
       "runtimeConfigNodeLabel": "Cesta k node",
       "runtimeConfigNodePlaceholder": "např. /opt/homebrew/bin/node",
-      "runtimeConfigApplyHint": "Po úpravě klikněte na „Znovu zkontrolovat CLI“ a změny se ihned uloží i použijí."
+      "runtimeConfigApplyHint": "Po úpravě klikněte na „Znovu zkontrolovat CLI“ a změny se ihned uloží i použijí.",
+      "officialChatRuntimeTitle": "Přímé oficiální",
+      "officialChatRuntimePath": "Oficiální chat Codex v ChatGPT",
+      "officialChatRuntimeSource": "Přímé oficiální",
+      "officialChatRuntimeMessage": "Přímý chat účtem OAuth"
     },
     "sessionManager": {
       "title": "Správce relací",
@@ -2784,6 +2792,18 @@
         "presetNameRequired": "Zadejte název sady",
         "deletePresetConfirm": "Smazat tuto vlastní sadu?",
         "deletePresetTitle": "Smazat sadu"
+      },
+      "accountModelRules": {
+        "action": "Blokovat modely",
+        "title": "Blokace modelů účtu",
+        "desc": "Účty odpovídající pravidlům se pro daný model přeskočí. Jeden model nebo zástupný vzor na řádek.",
+        "bulkLabel": "Hromadná pravidla",
+        "placeholder": "Příklad:\ngpt-5.4-mini\ngpt-5.3-*",
+        "applySelected": "Použít na vybrané",
+        "selectAll": "Vybrat účty",
+        "clearSelection": "Zrušit výběr",
+        "saveSuccess": "Blokace modelů účtu uložena",
+        "cardCount": "{{count}} blok."
       }
     }
   },

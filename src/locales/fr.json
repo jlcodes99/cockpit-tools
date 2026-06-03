@@ -1577,7 +1577,11 @@
       "timeWindowFrom": "De",
       "timeWindowTo": "À",
       "fallbackTimes": "Heures hors fenêtre",
-      "saveTask": "Enregistrer la tâche"
+      "saveTask": "Enregistrer la tâche",
+      "executionMode": "Mode d'exécution",
+      "executionModeAuto": "Exécuter directement",
+      "executionModeConfirm": "Confirmation requise",
+      "confirmTimeout": "Délai de confirmation"
     },
     "test": {
       "modelsLabel": "Modèles à déclencher",
@@ -2288,7 +2292,11 @@
       "runtimeConfigCodexCliPlaceholder": "ex. : /opt/homebrew/bin/codex",
       "runtimeConfigNodeLabel": "Chemin de node",
       "runtimeConfigNodePlaceholder": "ex. : /opt/homebrew/bin/node",
-      "runtimeConfigApplyHint": "Après modification, cliquez sur « Vérifier à nouveau CLI » pour enregistrer et appliquer immédiatement."
+      "runtimeConfigApplyHint": "Après modification, cliquez sur « Vérifier à nouveau CLI » pour enregistrer et appliquer immédiatement.",
+      "officialChatRuntimeTitle": "Direct officiel",
+      "officialChatRuntimePath": "Chat Codex officiel de ChatGPT",
+      "officialChatRuntimeSource": "Direct officiel",
+      "officialChatRuntimeMessage": "Chat direct avec compte OAuth"
     },
     "sessionManager": {
       "title": "Gestion des sessions",
@@ -2784,6 +2792,18 @@
         "presetNameRequired": "Saisissez un nom de profil",
         "deletePresetConfirm": "Supprimer ce profil personnalisé ?",
         "deletePresetTitle": "Supprimer le profil"
+      },
+      "accountModelRules": {
+        "action": "Bloquer modèles",
+        "title": "Blocage par compte",
+        "desc": "Les comptes correspondant aux règles sont ignorés pour ce modèle. Un modèle ou joker par ligne.",
+        "bulkLabel": "Règles groupées",
+        "placeholder": "Exemple :\ngpt-5.4-mini\ngpt-5.3-*",
+        "applySelected": "Appliquer sélection",
+        "selectAll": "Sélectionner comptes",
+        "clearSelection": "Effacer sélection",
+        "saveSuccess": "Blocages de modèles enregistrés",
+        "cardCount": "{{count}} bloqués"
       }
     }
   },

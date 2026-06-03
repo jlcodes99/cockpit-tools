@@ -1577,7 +1577,11 @@
       "timeWindowFrom": "從",
       "timeWindowTo": "到",
       "fallbackTimes": "時段外觸發時間",
-      "saveTask": "儲存任務"
+      "saveTask": "儲存任務",
+      "executionMode": "執行模式",
+      "executionModeAuto": "直接執行",
+      "executionModeConfirm": "需要確認",
+      "confirmTimeout": "確認逾時"
     },
     "test": {
       "modelsLabel": "選擇要觸發的模型",
@@ -2399,7 +2403,11 @@
       "runtimeConfigCodexCliPlaceholder": "例如：/opt/homebrew/bin/codex",
       "runtimeConfigNodeLabel": "node 路徑",
       "runtimeConfigNodePlaceholder": "例如：/opt/homebrew/bin/node",
-      "runtimeConfigApplyHint": "修改後點擊「重新檢測 CLI」會儲存並立即生效。"
+      "runtimeConfigApplyHint": "修改後點擊「重新檢測 CLI」會儲存並立即生效。",
+      "officialChatRuntimeTitle": "官方直連",
+      "officialChatRuntimePath": "ChatGPT 官方 Codex 對話",
+      "officialChatRuntimeSource": "官方直連",
+      "officialChatRuntimeMessage": "OAuth 帳號直接對話"
     },
     "sessionManager": {
       "title": "會話管理",
@@ -2784,6 +2792,18 @@
         "presetNameRequired": "請輸入方案名稱",
         "deletePresetConfirm": "確定要刪除此自訂方案嗎？",
         "deletePresetTitle": "刪除方案"
+      },
+      "accountModelRules": {
+        "action": "停用模型",
+        "title": "帳號停用模型",
+        "desc": "符合規則的帳號不會參與該模型請求；每行一個模型或萬用字元。",
+        "bulkLabel": "批次規則",
+        "placeholder": "範例：\ngpt-5.4-mini\ngpt-5.3-*",
+        "applySelected": "套用到已選",
+        "selectAll": "全選帳號",
+        "clearSelection": "清除選取",
+        "saveSuccess": "帳號模型停用規則已儲存",
+        "cardCount": "停用 {{count}}"
       }
     }
   },

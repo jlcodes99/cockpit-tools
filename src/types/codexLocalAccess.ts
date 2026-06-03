@@ -32,6 +32,11 @@ export interface CodexLocalAccessCustomRoutingRule {
   weight: number;
 }
 
+export interface CodexLocalAccessAccountModelRule {
+  accountId: string;
+  excludedModels: string[];
+}
+
 export interface CodexLocalAccessModelAlias {
   sourceModel: string;
   alias: string;
@@ -102,6 +107,7 @@ export interface CodexLocalAccessCollection {
   upstreamProxyUrl?: string | null;
   routingStrategy: CodexLocalAccessRoutingStrategy;
   customRoutingRules: CodexLocalAccessCustomRoutingRule[];
+  accountModelRules: CodexLocalAccessAccountModelRule[];
   modelAliases: CodexLocalAccessModelAlias[];
   modelPricings: CodexLocalAccessModelPricing[];
   debugLogs: boolean;

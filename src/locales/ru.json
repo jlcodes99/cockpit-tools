@@ -1577,7 +1577,11 @@
       "timeWindowFrom": "С",
       "timeWindowTo": "По",
       "fallbackTimes": "Времена по умолчанию",
-      "saveTask": "Сохранить задачу"
+      "saveTask": "Сохранить задачу",
+      "executionMode": "Режим выполнения",
+      "executionModeAuto": "Выполнить сразу",
+      "executionModeConfirm": "Требовать подтверждение",
+      "confirmTimeout": "Тайм-аут подтверждения"
     },
     "test": {
       "modelsLabel": "Модели для запуска",
@@ -2288,7 +2292,11 @@
       "runtimeConfigCodexCliPlaceholder": "например: /opt/homebrew/bin/codex",
       "runtimeConfigNodeLabel": "Путь к node",
       "runtimeConfigNodePlaceholder": "например: /opt/homebrew/bin/node",
-      "runtimeConfigApplyHint": "После изменения нажмите «Проверить CLI снова», чтобы сразу сохранить и применить."
+      "runtimeConfigApplyHint": "После изменения нажмите «Проверить CLI снова», чтобы сразу сохранить и применить.",
+      "officialChatRuntimeTitle": "Официально напрямую",
+      "officialChatRuntimePath": "Официальный чат Codex в ChatGPT",
+      "officialChatRuntimeSource": "Официально напрямую",
+      "officialChatRuntimeMessage": "Прямой чат через OAuth-аккаунт"
     },
     "sessionManager": {
       "title": "Управление сессиями",
@@ -2784,6 +2792,18 @@
         "presetNameRequired": "Введите название профиля",
         "deletePresetConfirm": "Удалить этот пользовательский профиль?",
         "deletePresetTitle": "Удалить профиль"
+      },
+      "accountModelRules": {
+        "action": "Блок моделей",
+        "title": "Блокировка моделей аккаунта",
+        "desc": "Аккаунты, подходящие под правила, пропускаются для запроса этой модели. Одна модель или шаблон на строку.",
+        "bulkLabel": "Массовые правила",
+        "placeholder": "Пример:\ngpt-5.4-mini\ngpt-5.3-*",
+        "applySelected": "Применить к выбранным",
+        "selectAll": "Выбрать аккаунты",
+        "clearSelection": "Снять выбор",
+        "saveSuccess": "Блокировки моделей сохранены",
+        "cardCount": "{{count}} заблок."
       }
     }
   },

@@ -7,6 +7,43 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [0.24.12] - 2026-06-03
+
+### 新增
+- **Codex API 服务现更贴近官方 Codex 客户端流量行为**：Sidecar 请求增强了客户端指纹、reasoning/signature replay、清理后的请求签名，以及 Responses/WebSocket 处理；Legacy/WebSocket 网关也会补齐 Codex client metadata、turn metadata，并清理非法 reasoning signature，让账号池请求更接近官方客户端流程。
+- **Codex 唤醒任务现支持执行模式**：每个 Codex 唤醒任务可选择直接执行，或在执行前要求确认并设置确认超时时间。感谢 @Ac-spider。
+
+### 变更
+- **Codex API 服务错误现保留更完整的诊断信息**：本地 API 服务测试、请求日志与上游失败会保留更完整的错误详情，便于区分鉴权失败、额度失败、代理问题和上游响应异常。
+- **Codex API 服务账号池健康状态不再把单纯额度刷新失败当作异常账号**：非鉴权类额度刷新失败不会再按 401 类认证失败处理，减少不必要的账号排除。
+- **Codex API 服务网关兼容性现覆盖 Legacy、Sidecar 与 WebSocket 路径**：路由、用量捕获、图片处理、reasoning 输出和流式完成行为会在维护中的多网关之间保持一致，而不是只偏向单一路径。
+- **账号级刷新设置现与平台级刷新控件保持一致**：账号覆盖项使用与平台默认值相同的预设集合，并支持自定义分钟数，不再提供不一致的 30/60 分钟预设。感谢 @Ac-spider。
+- **Windows Antigravity Desktop 版本检测更可靠**：可执行文件元数据探测改为通过进程环境传递目标路径，增加卸载注册表 `DisplayVersion` 兜底，并在选择 Desktop 认证模式前复用缓存版本信息。感谢 @insane66613。
+
+### 修复
+- **Codex API 服务认证投影不再为 API Key 绑定写出无效 OAuth 认证文件**：API Key 账号绑定到缺少 `id_token` 的 OAuth 快照时，会保留 API Key auth 形态，而不是生成无效的 OAuth `auth.json`。感谢 @luoyanglang。
+- **外部导入 Deep Link 不再把可执行文件名当作导入参数**：single-instance 和 startup 导入处理会跳过 `argv0`，避免误导性诊断和 WSL 导入处理失败。感谢 @Disaster-Terminator。
+- **Dashboard Antigravity 配额卡片现优先展示分组配额数据，再回退到规范模型**：仅能通过 display group 映射到配额的账号不再显示为“暂无数据”。感谢 @Hao-Wu。
+- **Codex 唤醒任务执行模式控件现使用标准表单样式**：执行模式下拉框与唤醒任务表单里的其它控件保持一致的高度、内边距、边框、焦点态和字体。
+- **Codex 更新后启动路径失效时会自动重探测并写回路径**：保存的 Codex 启动路径不可用时，启动链路会重新检测当前安装位置并更新配置，减少升级后需要手动修路径的情况。
+
+---
+## [0.24.11] - 2026-06-01
+
+### 新增
+- **Codex API 服务账号池现支持账号级禁用模型规则**：每个账号可配置禁用模型、批量应用规则，并让 Legacy、WebSocket 与 Sidecar 调度避开无法处理目标模型的账号。
+- **Codex 唤醒任务现改为官方直连对话**：唤醒会通过所选 OAuth 账号直接请求官方 Codex 对话，无需 Codex CLI 或本地 API 服务处于运行状态，并沿用已保存的上游代理和超时配置，解析官方流式响应后以官方直连结果展示。
+
+### 变更
+- **Codex API 服务账号池控件视觉更统一**：Codex API/Cockpit API 文案、调度选项、复选框、表单控件高度和字体排版现使用更协调的布局。
+- **Codex OAuth 绑定现允许任意带 `refresh_token` 的 OAuth 账号**：绑定筛选不再要求账号命中正常账号快捷过滤，绑定说明也与实际可选规则一致。
+- **Codex 启动在切换启动凭据时会先修复会话可见性**：默认实例与受管实例在涉及启动凭据切换时，会先执行会话可见性修复再启动。
+
+### 修复
+- **Codex config.toml 受管写入会保留更多用户配置**：API 账号切换不再重建整个模型供应商表，API 服务接管恢复会保留当前插件设置，并在写入当前配置时自动压缩连续空行。
+- **Windows Antigravity 本地账号导入现读取当前系统凭据路径**：本地导入会使用 Windows Credential Manager 中的 `gemini:antigravity` 凭据，并复用 refresh-token 导入流程；非 Windows 平台继续使用 state 数据库路径。
+
+---
 ## [0.24.10] - 2026-05-31
 
 ### 新增

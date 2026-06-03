@@ -458,27 +458,16 @@ fn find_antigravity_windows_exe(root: &Path) -> Option<PathBuf> {
 }
 
 #[cfg(target_os = "windows")]
-fn read_antigravity_windows_exe_metadata(root: &Path) -> Option<AntigravityInstalledVersionInfo> {
-    let exe_path = find_antigravity_windows_exe(root)?;
-    let script = r#"
-param([Parameter(Mandatory=$true)][string]$p)
-$ErrorActionPreference = 'Stop'
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding = [System.Text.Encoding]::UTF8
-if (-not (Test-Path -LiteralPath $p -PathType Leaf)) { exit 2 }
-$v = (Get-Item -LiteralPath $p).VersionInfo
-if ([string]::IsNullOrWhiteSpace($v.ProductVersion) -and [string]::IsNullOrWhiteSpace($v.FileVersion)) { exit 3 }
-[pscustomobject]@{
-  ProductName = $v.ProductName
-  ProductVersion = $v.ProductVersion
-  FileVersion = $v.FileVersion
-} | ConvertTo-Json -Compress
-"#;
+fn read_powershell_json_for_antigravity_exe(
+    exe_path: &Path,
+    script: &str,
+) -> Option<serde_json::Value> {
     let mut command = std::process::Command::new("powershell");
     {
         use std::os::windows::process::CommandExt;
         command.creation_flags(CREATE_NO_WINDOW);
     }
+
     let output = command
         .args([
             "-NoProfile",
@@ -488,24 +477,110 @@ if ([string]::IsNullOrWhiteSpace($v.ProductVersion) -and [string]::IsNullOrWhite
             "-Command",
             script,
         ])
-        .arg(&exe_path)
+        .env("COCKPIT_ANTIGRAVITY_EXE_PATH", exe_path.as_os_str())
         .output()
         .ok()?;
     if !output.status.success() {
+        modules::logger::log_warn(&format!(
+            "[Antigravity] Windows version metadata PowerShell probe failed: status={}",
+            output.status
+        ));
         return None;
     }
 
-    let value = serde_json::from_slice::<serde_json::Value>(&output.stdout).ok()?;
-    let version = json_string_field(&value, &["ProductVersion", "FileVersion"])?;
-    let product_name =
-        json_string_field(&value, &["ProductName"]).unwrap_or_else(|| "Antigravity".to_string());
+    serde_json::from_slice::<serde_json::Value>(&output.stdout).ok()
+}
+
+#[cfg(target_os = "windows")]
+fn build_antigravity_windows_version_info(
+    value: serde_json::Value,
+    exe_path: &Path,
+    source: &str,
+) -> Option<AntigravityInstalledVersionInfo> {
+    let version = json_string_field(&value, &["ProductVersion", "FileVersion", "DisplayVersion"])?;
+    let product_name = json_string_field(&value, &["ProductName", "DisplayName"])
+        .unwrap_or_else(|| "Antigravity".to_string());
 
     Some(AntigravityInstalledVersionInfo {
         product_name,
         version,
         app_path: exe_path.to_string_lossy().to_string(),
-        source: "VersionInfo".to_string(),
+        source: source.to_string(),
     })
+}
+
+#[cfg(target_os = "windows")]
+fn read_antigravity_windows_uninstall_metadata(
+    exe_path: &Path,
+) -> Option<AntigravityInstalledVersionInfo> {
+    let script = r#"
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
+function Normalize-RegistryPath([string]$value) {
+  if ([string]::IsNullOrWhiteSpace($value)) { return $null }
+  $clean = $value.Trim().Trim('"')
+  $clean = $clean -replace ',\d+$',''
+  try { return [System.IO.Path]::GetFullPath($clean) } catch { return $clean }
+}
+
+$exe = [Environment]::GetEnvironmentVariable('COCKPIT_ANTIGRAVITY_EXE_PATH', 'Process')
+if ([string]::IsNullOrWhiteSpace($exe)) { exit 3 }
+$exe = [System.IO.Path]::GetFullPath($exe)
+
+$roots = @(
+  'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+  'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+  'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+)
+
+$match = Get-ItemProperty -Path $roots -ErrorAction SilentlyContinue |
+  Where-Object {
+    $_.DisplayName -like 'Antigravity*' -and (
+      ((Normalize-RegistryPath $_.DisplayIcon) -ieq $exe) -or
+      ($_.InstallLocation -and $exe.StartsWith(
+        (Normalize-RegistryPath $_.InstallLocation).TrimEnd('\') + '\',
+        [System.StringComparison]::OrdinalIgnoreCase
+      ))
+    )
+  } |
+  Select-Object -First 1
+
+if (-not $match) { exit 4 }
+
+[pscustomobject]@{
+  DisplayName = $match.DisplayName
+  DisplayVersion = $match.DisplayVersion
+} | ConvertTo-Json -Compress
+"#;
+
+    let value = read_powershell_json_for_antigravity_exe(exe_path, script)?;
+    build_antigravity_windows_version_info(value, exe_path, "UninstallRegistry")
+}
+
+#[cfg(target_os = "windows")]
+fn read_antigravity_windows_exe_metadata(root: &Path) -> Option<AntigravityInstalledVersionInfo> {
+    let exe_path = find_antigravity_windows_exe(root)?;
+    let script = r#"
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+$p = [Environment]::GetEnvironmentVariable('COCKPIT_ANTIGRAVITY_EXE_PATH', 'Process')
+if ([string]::IsNullOrWhiteSpace($p)) { exit 3 }
+if (-not (Test-Path -LiteralPath $p -PathType Leaf)) { exit 2 }
+$v = (Get-Item -LiteralPath $p).VersionInfo
+if ([string]::IsNullOrWhiteSpace($v.ProductVersion) -and [string]::IsNullOrWhiteSpace($v.FileVersion)) { exit 4 }
+[pscustomobject]@{
+  ProductName = $v.ProductName
+  ProductVersion = $v.ProductVersion
+  FileVersion = $v.FileVersion
+} | ConvertTo-Json -Compress
+"#;
+
+    read_powershell_json_for_antigravity_exe(&exe_path, script)
+        .and_then(|value| build_antigravity_windows_version_info(value, &exe_path, "VersionInfo"))
+        .or_else(|| read_antigravity_windows_uninstall_metadata(&exe_path))
 }
 
 fn normalize_antigravity_metadata_root(path: &Path) -> Option<PathBuf> {

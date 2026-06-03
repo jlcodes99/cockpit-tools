@@ -713,7 +713,8 @@ fn write_quick_config_to_config_toml(
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("创建 config.toml 目录失败: {}", e))?;
     }
-    let content = doc.to_string();
+    let content =
+        crate::modules::codex_config_format::normalize_config_toml_spacing(&doc.to_string());
     crate::modules::atomic_write::write_string_atomic(&config_path, &content)
         .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
 
@@ -874,7 +875,8 @@ fn write_api_provider_to_config_toml(
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("创建 config.toml 目录失败: {}", e))?;
     }
-    let content = doc.to_string();
+    let content =
+        crate::modules::codex_config_format::normalize_config_toml_spacing(&doc.to_string());
     crate::modules::atomic_write::write_string_atomic(&config_path, &content)
         .map_err(|e| format!("写入 config.toml 失败: {}", e))
 }
@@ -945,7 +947,10 @@ fn write_api_key_provider_to_config_toml(
 
     let _ = doc.remove(CODEX_CONFIG_OPENAI_BASE_URL_KEY);
     doc[CODEX_CONFIG_MODEL_PROVIDER_KEY] = value(CODEX_RUNTIME_MODEL_PROVIDER_ID);
-    doc[CODEX_CONFIG_MODEL_PROVIDERS_KEY] = toml_edit::table();
+    remove_managed_api_key_model_providers_from_doc(&mut doc);
+    if doc.get(CODEX_CONFIG_MODEL_PROVIDERS_KEY).is_none() {
+        doc[CODEX_CONFIG_MODEL_PROVIDERS_KEY] = toml_edit::table();
+    }
     let model_providers = doc[CODEX_CONFIG_MODEL_PROVIDERS_KEY]
         .as_table_mut()
         .ok_or("config.toml 中 model_providers 不是合法表结构")?;
@@ -963,7 +968,8 @@ fn write_api_key_provider_to_config_toml(
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("创建 config.toml 目录失败: {}", e))?;
     }
-    let content = doc.to_string();
+    let content =
+        crate::modules::codex_config_format::normalize_config_toml_spacing(&doc.to_string());
     crate::modules::atomic_write::write_string_atomic(&config_path, &content)
         .map_err(|e| format!("写入 config.toml 失败: {}", e))
 }
@@ -3306,6 +3312,17 @@ fn write_api_key_account_bundle_with_oauth_to_dir(
         return Err("API Key 账号绑定的 OAuth 账号不匹配".to_string());
     }
 
+    if oauth_account.tokens.id_token.trim().is_empty() {
+        write_prepared_account_bundle_to_dir(base_dir, api_key_account)?;
+        logger::log_info(&format!(
+            "[Codex切号] 已写入 API Key 账号配置，绑定 OAuth 缺少 id_token，跳过 OAuth 登录态投影: api_account_id={}, oauth_account_id={}, target_dir={}",
+            api_key_account.id,
+            oauth_account.id,
+            base_dir.display()
+        ));
+        return Ok(());
+    }
+
     write_prepared_account_bundle_to_dir(base_dir, oauth_account)?;
     let provider_config =
         write_api_key_provider_override_to_config_toml(base_dir, api_key_account)?;
@@ -4739,7 +4756,7 @@ mod tests {
         resolve_api_provider_config, save_account, save_account_index,
         should_accept_authority_snapshot, sync_account_from_auth_dir,
         sync_managed_projection_from_auth_dir, upsert_account, upsert_account_from_access_token,
-        upsert_account_from_auth_tokens, validate_api_key_credentials,
+        upsert_account_from_auth_tokens, validate_api_key_credentials, write_account_bundle_to_dir,
         write_api_key_provider_to_config_toml, write_api_provider_to_config_toml,
         write_managed_projection_to_dir, write_quick_config_to_config_toml, ApiProviderConfig,
         CodexAccountIndex, CodexAccountSummary, CodexAuthFile, CodexAuthTokens,
@@ -6015,7 +6032,109 @@ requires_openai_auth = false
     }
 
     #[test]
-    fn api_key_config_toml_cleans_legacy_model_provider_sections() {
+    fn api_key_bundle_bound_to_empty_id_token_oauth_writes_api_key_auth_file() {
+        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let env = TestEnvGuard::new("codex-api-key-bound-oauth-auth-file-test");
+        let mut oauth_tokens = make_codex_tokens(
+            "demo@example.com",
+            "acc-current",
+            "org-current",
+            "empty-id-token",
+            "rt-empty-id-token",
+        );
+        oauth_tokens.id_token = String::new();
+        let oauth_account = seed_oauth_account(oauth_tokens);
+
+        let mut api_key_account = CodexAccount::new_api_key(
+            "local-access-runtime".to_string(),
+            "api-service-local".to_string(),
+            "local-service-key".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("http://127.0.0.1:14998/v1".to_string()),
+            Some("codex_local_access".to_string()),
+            Some("Codex API Service".to_string()),
+        );
+        api_key_account.bound_oauth_account_id = Some(oauth_account.id.clone());
+        let profile_dir = env.home_dir.join("managed-profile");
+
+        write_account_bundle_to_dir(&profile_dir, &api_key_account).expect("write account bundle");
+
+        let auth_file: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(profile_dir.join("auth.json")).expect("read auth file"),
+        )
+        .expect("parse auth file");
+        assert_eq!(
+            auth_file.get("auth_mode").and_then(|value| value.as_str()),
+            Some("apikey")
+        );
+        assert_eq!(
+            auth_file
+                .get("OPENAI_API_KEY")
+                .and_then(|value| value.as_str()),
+            Some("local-service-key")
+        );
+        assert!(
+            auth_file.get("tokens").is_none(),
+            "API-key local access profile should not write OAuth tokens: {}",
+            auth_file
+        );
+
+        let config = fs::read_to_string(profile_dir.join("config.toml")).expect("read config");
+        assert!(config.contains("model_provider = \"codex_local_access\""));
+        assert!(config.contains("base_url = \"http://127.0.0.1:14998/v1\""));
+        assert!(config.contains("experimental_bearer_token = \"local-service-key\""));
+    }
+
+    #[test]
+    fn api_key_bundle_bound_to_full_oauth_keeps_oauth_auth_file() {
+        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let env = TestEnvGuard::new("codex-api-key-bound-full-oauth-auth-file-test");
+        let oauth_account = seed_oauth_account(make_codex_tokens(
+            "demo@example.com",
+            "acc-current",
+            "org-current",
+            "full",
+            "rt-full",
+        ));
+
+        let mut api_key_account = CodexAccount::new_api_key(
+            "local-access-runtime".to_string(),
+            "api-service-local".to_string(),
+            "local-service-key".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("http://127.0.0.1:14998/v1".to_string()),
+            Some("codex_local_access".to_string()),
+            Some("Codex API Service".to_string()),
+        );
+        api_key_account.bound_oauth_account_id = Some(oauth_account.id.clone());
+        let profile_dir = env.home_dir.join("managed-profile");
+
+        write_account_bundle_to_dir(&profile_dir, &api_key_account).expect("write account bundle");
+
+        let auth_file: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(profile_dir.join("auth.json")).expect("read auth file"),
+        )
+        .expect("parse auth file");
+        assert!(auth_file.get("auth_mode").is_none());
+        assert_eq!(
+            auth_file.get("OPENAI_API_KEY"),
+            Some(&serde_json::Value::Null)
+        );
+        assert_eq!(
+            auth_file
+                .get("tokens")
+                .and_then(|value| value.get("id_token"))
+                .and_then(|value| value.as_str()),
+            Some(oauth_account.tokens.id_token.as_str())
+        );
+
+        let config = fs::read_to_string(profile_dir.join("config.toml")).expect("read config");
+        assert!(config.contains("model_provider = \"codex_local_access\""));
+        assert!(config.contains("experimental_bearer_token = \"local-service-key\""));
+    }
+
+    #[test]
+    fn api_key_config_toml_preserves_unmanaged_model_provider_sections() {
         let base_dir = make_temp_dir("codex-config-clean-provider-test");
         let config_path = base_dir.join("config.toml");
         fs::write(
@@ -6052,8 +6171,8 @@ requires_openai_auth = true
         let content = fs::read_to_string(&config_path).expect("read config");
         assert!(content.contains("model_provider = \"codex_local_access\""));
         assert!(content.contains("[model_providers.codex_local_access]"));
-        assert!(!content.contains("[model_providers.mimo]"));
-        assert!(!content.contains("[model_providers.relay]"));
+        assert!(content.contains("[model_providers.mimo]"));
+        assert!(content.contains("[model_providers.relay]"));
         assert!(!content.contains("openai_base_url"));
         assert!(content.contains("model_context_window = 1000000"));
 

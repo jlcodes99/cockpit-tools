@@ -63,6 +63,20 @@ func codexIsImagesEndpointPath(path string) bool {
 	return strings.HasSuffix(path, codexImagesGenerationsPath) || strings.HasSuffix(path, codexImagesEditsPath)
 }
 
+func (e *CodexExecutor) resolveGPTImage2BaseModel() string {
+	if e == nil || e.cfg == nil {
+		return codexOpenAIImagesMainModel
+	}
+	model := strings.TrimSpace(e.cfg.GPTImage2BaseModel)
+	if model == "" {
+		return codexOpenAIImagesMainModel
+	}
+	if strings.HasPrefix(strings.ToLower(model), "gpt-") {
+		return model
+	}
+	return codexOpenAIImagesMainModel
+}
+
 func (e *CodexExecutor) executeOpenAIImage(ctx context.Context, auth *cliproxyauth.Auth, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (resp cliproxyexecutor.Response, err error) {
 	prepared, errPrepare := codexPrepareOpenAIImageRequest(req, opts)
 	if errPrepare != nil {
@@ -74,23 +88,28 @@ func (e *CodexExecutor) executeOpenAIImage(ctx context.Context, auth *cliproxyau
 		baseURL = "https://chatgpt.com/backend-api/codex"
 	}
 
-	reporter := helps.NewUsageReporter(ctx, e.Identifier(), codexOpenAIImagesMainModel, auth)
+	mainModel := e.resolveGPTImage2BaseModel()
+	reporter := helps.NewExecutorUsageReporter(ctx, e, mainModel, auth)
 	defer reporter.TrackFailure(ctx, &err)
 
-	body, errBuild := e.prepareCodexOpenAIImageBody(prepared.Body, req, opts)
+	body, errBuild := e.prepareCodexOpenAIImageBody(prepared.Body, req, opts, mainModel)
 	if errBuild != nil {
 		return resp, errBuild
 	}
+	reporter.SetTranslatedReasoningEffort(body, "codex")
 
 	url := strings.TrimSuffix(baseURL, "/") + "/responses"
-	httpReq, errCache := e.cacheHelper(ctx, sdktranslator.FromString(codexOpenAIImageSourceFormat), url, req, body)
+	var identityState codexIdentityConfuseState
+	httpReq, body, identityState, errCache := e.cacheHelper(ctx, sdktranslator.FromString(codexOpenAIImageSourceFormat), url, auth, req, req.Payload, body)
 	if errCache != nil {
 		return resp, errCache
 	}
 	applyCodexHeaders(httpReq, auth, apiKey, true, e.cfg)
+	applyCodexIdentityConfuseHeaders(httpReq.Header, &identityState)
 	recordCodexOpenAIImageRequest(ctx, e.cfg, e.Identifier(), auth, url, httpReq.Header.Clone(), body)
 
-	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
+	httpClient := helps.NewUtlsHTTPClient(ctx, e.cfg, auth, 0)
+	httpClient = reporter.TrackHTTPClient(httpClient)
 	httpResp, errDo := httpClient.Do(httpReq)
 	if errDo != nil {
 		helps.RecordAPIResponseError(ctx, e.cfg, errDo)
@@ -108,6 +127,7 @@ func (e *CodexExecutor) executeOpenAIImage(ctx context.Context, auth *cliproxyau
 		helps.RecordAPIResponseError(ctx, e.cfg, errRead)
 		return resp, errRead
 	}
+	data = applyCodexIdentityConfuseResponsePayload(data, identityState)
 	helps.AppendAPIResponseChunk(ctx, e.cfg, data)
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
 		helps.LogWithRequestID(ctx).Debugf("request error, error status: %d, error message: %s", httpResp.StatusCode, helps.SummarizeErrorBody(httpResp.Header.Get("Content-Type"), data))
@@ -117,33 +137,24 @@ func (e *CodexExecutor) executeOpenAIImage(ctx context.Context, auth *cliproxyau
 
 	outputItemsByIndex := make(map[int64][]byte)
 	var outputItemsFallback [][]byte
-	lastEventType := "unknown"
 	for _, line := range bytes.Split(data, []byte("\n")) {
 		if !bytes.HasPrefix(line, dataTag) {
 			continue
 		}
 		eventData := bytes.TrimSpace(line[len(dataTag):])
-		eventType := strings.TrimSpace(gjson.GetBytes(eventData, "type").String())
-		if eventType != "" {
-			lastEventType = eventType
-		}
-		if streamErr, ok := codexTerminalStreamErr(eventData); ok {
+		if streamErr, _, ok := codexTerminalStreamErr(eventData); ok {
 			err = streamErr
 			return resp, err
 		}
-		switch eventType {
+		switch gjson.GetBytes(eventData, "type").String() {
 		case "response.output_item.done":
 			collectCodexOutputItemDone(eventData, outputItemsByIndex, &outputItemsFallback)
-		default:
-			completedData, ok := codexCompletionEventData(eventData)
-			if !ok {
-				continue
-			}
-			if detail, ok := helps.ParseCodexUsage(completedData); ok {
+		case "response.completed", "response.done":
+			if detail, ok := helps.ParseCodexUsage(eventData); ok {
 				reporter.Publish(ctx, detail)
 			}
-			publishCodexImageToolUsage(ctx, reporter, body, completedData)
-			completedData = patchCodexCompletedOutput(completedData, outputItemsByIndex, outputItemsFallback)
+			publishCodexImageToolUsage(ctx, reporter, body, eventData)
+			completedData := patchCodexCompletedOutput(eventData, outputItemsByIndex, outputItemsFallback)
 			results, createdAt, usageRaw, firstMeta, errExtract := codexExtractImagesFromResponsesCompleted(completedData)
 			if errExtract != nil {
 				return resp, errExtract
@@ -159,7 +170,7 @@ func (e *CodexExecutor) executeOpenAIImage(ctx context.Context, auth *cliproxyau
 		}
 	}
 
-	err = codexIncompleteStreamErr(lastEventType)
+	err = statusErr{code: http.StatusGatewayTimeout, msg: "stream error: stream disconnected before completion"}
 	return resp, err
 }
 
@@ -174,23 +185,28 @@ func (e *CodexExecutor) executeOpenAIImageStream(ctx context.Context, auth *clip
 		baseURL = "https://chatgpt.com/backend-api/codex"
 	}
 
-	reporter := helps.NewUsageReporter(ctx, e.Identifier(), codexOpenAIImagesMainModel, auth)
+	mainModel := e.resolveGPTImage2BaseModel()
+	reporter := helps.NewExecutorUsageReporter(ctx, e, mainModel, auth)
 	defer reporter.TrackFailure(ctx, &err)
 
-	body, errBuild := e.prepareCodexOpenAIImageBody(prepared.Body, req, opts)
+	body, errBuild := e.prepareCodexOpenAIImageBody(prepared.Body, req, opts, mainModel)
 	if errBuild != nil {
 		return nil, errBuild
 	}
+	reporter.SetTranslatedReasoningEffort(body, "codex")
 
 	url := strings.TrimSuffix(baseURL, "/") + "/responses"
-	httpReq, errCache := e.cacheHelper(ctx, sdktranslator.FromString(codexOpenAIImageSourceFormat), url, req, body)
+	var identityState codexIdentityConfuseState
+	httpReq, body, identityState, errCache := e.cacheHelper(ctx, sdktranslator.FromString(codexOpenAIImageSourceFormat), url, auth, req, req.Payload, body)
 	if errCache != nil {
 		return nil, errCache
 	}
 	applyCodexHeaders(httpReq, auth, apiKey, true, e.cfg)
+	applyCodexIdentityConfuseHeaders(httpReq.Header, &identityState)
 	recordCodexOpenAIImageRequest(ctx, e.cfg, e.Identifier(), auth, url, httpReq.Header.Clone(), body)
 
-	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
+	httpClient := helps.NewUtlsHTTPClient(ctx, e.cfg, auth, 0)
+	httpClient = reporter.TrackHTTPClient(httpClient)
 	httpResp, errDo := httpClient.Do(httpReq)
 	if errDo != nil {
 		helps.RecordAPIResponseError(ctx, e.cfg, errDo)
@@ -206,6 +222,7 @@ func (e *CodexExecutor) executeOpenAIImageStream(ctx context.Context, auth *clip
 			helps.RecordAPIResponseError(ctx, e.cfg, errRead)
 			return nil, errRead
 		}
+		data = applyCodexIdentityConfuseResponsePayload(data, identityState)
 		helps.AppendAPIResponseChunk(ctx, e.cfg, data)
 		helps.LogWithRequestID(ctx).Debugf("request error, error status: %d, error message: %s", httpResp.StatusCode, helps.SummarizeErrorBody(httpResp.Header.Get("Content-Type"), data))
 		err = newCodexStatusErr(httpResp.StatusCode, data)
@@ -243,25 +260,20 @@ func (e *CodexExecutor) executeOpenAIImageStream(ctx context.Context, auth *clip
 		outputItemsByIndex := make(map[int64][]byte)
 		var outputItemsFallback [][]byte
 		sawCompleted := false
-		lastEventType := "unknown"
 		for scanner.Scan() {
-			line := scanner.Bytes()
+			line := applyCodexIdentityConfuseResponsePayload(scanner.Bytes(), identityState)
 			helps.AppendAPIResponseChunk(ctx, e.cfg, line)
 			if !bytes.HasPrefix(line, dataTag) {
 				continue
 			}
 			eventData := bytes.TrimSpace(line[len(dataTag):])
-			eventType := strings.TrimSpace(gjson.GetBytes(eventData, "type").String())
-			if eventType != "" {
-				lastEventType = eventType
-			}
-			if streamErr, ok := codexTerminalStreamErr(eventData); ok {
+			if streamErr, _, ok := codexTerminalStreamErr(eventData); ok {
 				helps.RecordAPIResponseError(ctx, e.cfg, streamErr)
 				reporter.PublishFailure(ctx, streamErr)
 				sendError(streamErr)
 				return
 			}
-			switch eventType {
+			switch gjson.GetBytes(eventData, "type").String() {
 			case "response.output_item.done":
 				collectCodexOutputItemDone(eventData, outputItemsByIndex, &outputItemsFallback)
 			case "response.image_generation_call.partial_image":
@@ -269,17 +281,13 @@ func (e *CodexExecutor) executeOpenAIImageStream(ctx context.Context, auth *clip
 				if len(frame) > 0 && !sendPayload(frame) {
 					return
 				}
-			default:
-				completedData, ok := codexCompletionEventData(eventData)
-				if !ok {
-					continue
-				}
+			case "response.completed", "response.done":
 				sawCompleted = true
-				if detail, ok := helps.ParseCodexUsage(completedData); ok {
+				if detail, ok := helps.ParseCodexUsage(eventData); ok {
 					reporter.Publish(ctx, detail)
 				}
-				publishCodexImageToolUsage(ctx, reporter, body, completedData)
-				completedData = patchCodexCompletedOutput(completedData, outputItemsByIndex, outputItemsFallback)
+				publishCodexImageToolUsage(ctx, reporter, body, eventData)
+				completedData := patchCodexCompletedOutput(eventData, outputItemsByIndex, outputItemsFallback)
 				results, _, usageRaw, _, errExtract := codexExtractImagesFromResponsesCompleted(completedData)
 				if errExtract != nil {
 					sendError(errExtract)
@@ -305,7 +313,7 @@ func (e *CodexExecutor) executeOpenAIImageStream(ctx context.Context, auth *clip
 			return
 		}
 		if !sawCompleted && ctx.Err() == nil {
-			errIncomplete := codexIncompleteStreamErr(lastEventType)
+			errIncomplete := statusErr{code: http.StatusGatewayTimeout, msg: "stream error: stream disconnected before completion"}
 			helps.RecordAPIResponseError(ctx, e.cfg, errIncomplete)
 			reporter.PublishFailure(ctx, errIncomplete)
 			sendError(errIncomplete)
@@ -314,18 +322,22 @@ func (e *CodexExecutor) executeOpenAIImageStream(ctx context.Context, auth *clip
 	return &cliproxyexecutor.StreamResult{Headers: httpResp.Header.Clone(), Chunks: out}, nil
 }
 
-func (e *CodexExecutor) prepareCodexOpenAIImageBody(body []byte, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) ([]byte, error) {
+func (e *CodexExecutor) prepareCodexOpenAIImageBody(body []byte, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, mainModel string) ([]byte, error) {
 	out := body
+	mainModel = strings.TrimSpace(mainModel)
+	if mainModel == "" {
+		mainModel = codexOpenAIImagesMainModel
+	}
 	var errThinking error
-	out, errThinking = thinking.ApplyThinking(out, codexOpenAIImagesMainModel, codexOpenAIImageSourceFormat, "codex", e.Identifier())
+	out, errThinking = thinking.ApplyThinking(out, mainModel, codexOpenAIImageSourceFormat, "codex", e.Identifier())
 	if errThinking != nil {
 		return nil, errThinking
 	}
 
 	requestedModel := helps.PayloadRequestedModel(opts, req.Model)
 	requestPath := helps.PayloadRequestPath(opts)
-	out = helps.ApplyPayloadConfigWithRequest(e.cfg, codexOpenAIImagesMainModel, "codex", codexOpenAIImageSourceFormat, "", out, body, requestedModel, requestPath, opts.Headers)
-	out, _ = sjson.SetBytes(out, "model", codexOpenAIImagesMainModel)
+	out = helps.ApplyPayloadConfigWithRequest(e.cfg, mainModel, "codex", codexOpenAIImageSourceFormat, "", out, body, requestedModel, requestPath, opts.Headers)
+	out, _ = sjson.SetBytes(out, "model", mainModel)
 	out, _ = sjson.SetBytes(out, "stream", true)
 	out, _ = sjson.DeleteBytes(out, "previous_response_id")
 	out, _ = sjson.DeleteBytes(out, "prompt_cache_retention")
@@ -586,8 +598,8 @@ func codexMultipartFileToDataURL(fileHeader *multipart.FileHeader) (string, erro
 }
 
 func codexExtractImagesFromResponsesCompleted(payload []byte) (results []codexImageCallResult, createdAt int64, usageRaw []byte, firstMeta codexImageCallResult, err error) {
-	payload, ok := codexCompletionEventData(payload)
-	if !ok {
+	eventType := gjson.GetBytes(payload, "type").String()
+	if eventType != "response.completed" && eventType != "response.done" {
 		return nil, 0, nil, codexImageCallResult{}, fmt.Errorf("unexpected event type")
 	}
 	createdAt = gjson.GetBytes(payload, "response.created_at").Int()

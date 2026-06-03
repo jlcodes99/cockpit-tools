@@ -1577,7 +1577,11 @@
       "timeWindowFrom": "Từ",
       "timeWindowTo": "Đến",
       "fallbackTimes": "Thời gian ngoài khung giờ",
-      "saveTask": "Lưu nhiệm vụ"
+      "saveTask": "Lưu nhiệm vụ",
+      "executionMode": "Chế độ thực thi",
+      "executionModeAuto": "Chạy trực tiếp",
+      "executionModeConfirm": "Cần xác nhận",
+      "confirmTimeout": "Hết hạn xác nhận"
     },
     "test": {
       "modelsLabel": "Mô hình kích hoạt",
@@ -2288,7 +2292,11 @@
       "runtimeConfigCodexCliPlaceholder": "ví dụ: /opt/homebrew/bin/codex",
       "runtimeConfigNodeLabel": "Đường dẫn node",
       "runtimeConfigNodePlaceholder": "ví dụ: /opt/homebrew/bin/node",
-      "runtimeConfigApplyHint": "Sau khi chỉnh sửa, bấm \"Kiểm tra lại CLI\" để lưu và áp dụng ngay."
+      "runtimeConfigApplyHint": "Sau khi chỉnh sửa, bấm \"Kiểm tra lại CLI\" để lưu và áp dụng ngay.",
+      "officialChatRuntimeTitle": "Trực tiếp chính thức",
+      "officialChatRuntimePath": "Trò chuyện Codex chính thức của ChatGPT",
+      "officialChatRuntimeSource": "Trực tiếp chính thức",
+      "officialChatRuntimeMessage": "Trò chuyện trực tiếp bằng tài khoản OAuth"
     },
     "sessionManager": {
       "title": "Quản lý phiên",
@@ -2784,6 +2792,18 @@
         "presetNameRequired": "Nhập tên mẫu",
         "deletePresetConfirm": "Xóa mẫu tùy chỉnh này?",
         "deletePresetTitle": "Xóa mẫu"
+      },
+      "accountModelRules": {
+        "action": "Chặn mô hình",
+        "title": "Chặn mô hình theo tài khoản",
+        "desc": "Tài khoản khớp quy tắc sẽ bị bỏ qua với yêu cầu mô hình đó. Mỗi dòng một mô hình hoặc ký tự đại diện.",
+        "bulkLabel": "Quy tắc hàng loạt",
+        "placeholder": "Ví dụ:\ngpt-5.4-mini\ngpt-5.3-*",
+        "applySelected": "Áp dụng đã chọn",
+        "selectAll": "Chọn tài khoản",
+        "clearSelection": "Bỏ chọn",
+        "saveSuccess": "Đã lưu chặn mô hình tài khoản",
+        "cardCount": "Chặn {{count}}"
       }
     }
   },

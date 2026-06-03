@@ -1577,7 +1577,11 @@
       "timeWindowFrom": "시작",
       "timeWindowTo": "종료",
       "fallbackTimes": "대체 시간",
-      "saveTask": "작업 저장"
+      "saveTask": "작업 저장",
+      "executionMode": "실행 모드",
+      "executionModeAuto": "바로 실행",
+      "executionModeConfirm": "확인 필요",
+      "confirmTimeout": "확인 시간 초과"
     },
     "test": {
       "modelsLabel": "트리거할 모델",
@@ -2288,7 +2292,11 @@
       "runtimeConfigCodexCliPlaceholder": "예: /opt/homebrew/bin/codex",
       "runtimeConfigNodeLabel": "node 경로",
       "runtimeConfigNodePlaceholder": "예: /opt/homebrew/bin/node",
-      "runtimeConfigApplyHint": "변경 후 \"CLI 다시 확인\"을 누르면 저장되고 즉시 적용됩니다."
+      "runtimeConfigApplyHint": "변경 후 \"CLI 다시 확인\"을 누르면 저장되고 즉시 적용됩니다.",
+      "officialChatRuntimeTitle": "공식 직접 연결",
+      "officialChatRuntimePath": "ChatGPT 공식 Codex 채팅",
+      "officialChatRuntimeSource": "공식 직접 연결",
+      "officialChatRuntimeMessage": "OAuth 계정 직접 대화"
     },
     "sessionManager": {
       "title": "세션 관리",
@@ -2784,6 +2792,18 @@
         "presetNameRequired": "프리셋 이름을 입력하세요",
         "deletePresetConfirm": "이 사용자 프리셋을 삭제할까요?",
         "deletePresetTitle": "프리셋 삭제"
+      },
+      "accountModelRules": {
+        "action": "모델 차단",
+        "title": "계정별 모델 차단",
+        "desc": "규칙에 맞는 계정은 해당 모델 요청에서 제외됩니다. 줄마다 모델 또는 와일드카드를 입력하세요.",
+        "bulkLabel": "일괄 규칙",
+        "placeholder": "예:\ngpt-5.4-mini\ngpt-5.3-*",
+        "applySelected": "선택 항목에 적용",
+        "selectAll": "계정 선택",
+        "clearSelection": "선택 해제",
+        "saveSuccess": "계정 모델 차단 규칙이 저장되었습니다",
+        "cardCount": "{{count}}개 차단"
       }
     }
   },

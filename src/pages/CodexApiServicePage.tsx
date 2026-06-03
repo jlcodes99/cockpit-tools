@@ -53,6 +53,7 @@ import {
 import type { CodexAccount } from "../types/codex";
 import type {
   CodexLocalAccessAddressKind,
+  CodexLocalAccessAccountModelRule,
   CodexLocalAccessChatMessage,
   CodexLocalAccessChatStreamEvent,
   CodexLocalAccessClientBaseUrlHost,
@@ -548,6 +549,14 @@ export function CodexApiServicePage() {
   >(() => new Set());
   const [modelAliasesText, setModelAliasesText] = useState("");
   const [excludedModelsText, setExcludedModelsText] = useState("");
+  const [accountModelRulesOpen, setAccountModelRulesOpen] = useState(false);
+  const [accountModelRuleDrafts, setAccountModelRuleDrafts] = useState<
+    Record<string, string>
+  >({});
+  const [accountModelRuleSelected, setAccountModelRuleSelected] = useState<
+    Set<string>
+  >(() => new Set());
+  const [accountModelRuleBulkText, setAccountModelRuleBulkText] = useState("");
   const [pricingModalOpen, setPricingModalOpen] = useState(false);
   const [pricingDrafts, setPricingDrafts] = useState<ModelPricingDraft[]>([]);
   const [pricingError, setPricingError] = useState("");
@@ -638,6 +647,10 @@ export function CodexApiServicePage() {
         .filter((account): account is CodexAccount => Boolean(account)),
     [memberIds, localAccessAccounts],
   );
+  const accountModelRuleCount = collection?.accountModelRules.length ?? 0;
+  const accountModelRuleAllSelected =
+    memberAccounts.length > 0 &&
+    memberAccounts.every((account) => accountModelRuleSelected.has(account.id));
   const healthByAccountId = useMemo(() => {
     const next = new Map<
       string,
@@ -917,6 +930,16 @@ export function CodexApiServicePage() {
   useEffect(() => {
     setModelAliasesText(serializeModelAliases(collection?.modelAliases));
     setExcludedModelsText(serializeModelRules(collection?.excludedModels));
+    setAccountModelRuleDrafts(
+      Object.fromEntries(
+        (collection?.accountModelRules ?? []).map((rule) => [
+          rule.accountId,
+          serializeModelRules(rule.excludedModels),
+        ]),
+      ),
+    );
+    setAccountModelRuleSelected(new Set());
+    setAccountModelRuleBulkText("");
     setSessionAffinityDraft(collection?.sessionAffinity ?? false);
     setSessionAffinityTtlDraft(
       formatSeconds(collection?.sessionAffinityTtlMs ?? 3600000),
@@ -933,6 +956,7 @@ export function CodexApiServicePage() {
   }, [
     collection?.modelAliases,
     collection?.excludedModels,
+    collection?.accountModelRules,
     collection?.sessionAffinity,
     collection?.sessionAffinityTtlMs,
     collection?.maxRetryCredentials,
@@ -1509,6 +1533,66 @@ export function CodexApiServicePage() {
         setState(next);
       },
       t("codex.apiService.models.rulesSaved", "模型规则已保存"),
+    );
+  };
+
+  const resetAccountModelRuleDraftsFromCollection = () => {
+    setAccountModelRuleDrafts(
+      Object.fromEntries(
+        (collection?.accountModelRules ?? []).map((rule) => [
+          rule.accountId,
+          serializeModelRules(rule.excludedModels),
+        ]),
+      ),
+    );
+    setAccountModelRuleSelected(new Set());
+    setAccountModelRuleBulkText("");
+  };
+
+  const handleOpenAccountModelRules = () => {
+    resetAccountModelRuleDraftsFromCollection();
+    setAccountModelRulesOpen(true);
+  };
+
+  const handleCloseAccountModelRules = () => {
+    resetAccountModelRuleDraftsFromCollection();
+    setAccountModelRulesOpen(false);
+  };
+
+  const handleApplyAccountModelRuleBulk = () => {
+    if (accountModelRuleSelected.size === 0) return;
+    setAccountModelRuleDrafts((drafts) => {
+      const next = { ...drafts };
+      accountModelRuleSelected.forEach((accountId) => {
+        next[accountId] = accountModelRuleBulkText;
+      });
+      return next;
+    });
+  };
+
+  const handleSaveAccountModelRules = async () => {
+    const rules: CodexLocalAccessAccountModelRule[] = memberAccounts
+      .map((account) => ({
+        accountId: account.id,
+        excludedModels: parseModelRuleText(
+          accountModelRuleDrafts[account.id] ?? "",
+        ),
+      }))
+      .filter((rule) => rule.excludedModels.length > 0);
+
+    await runAction(
+      async () => {
+        const next =
+          await codexLocalAccessService.updateCodexLocalAccessAccountModelRules(
+            rules,
+          );
+        setState(next);
+        setAccountModelRulesOpen(false);
+      },
+      t(
+        "codex.apiService.accountModelRules.saveSuccess",
+        "账号模型禁用规则已保存",
+      ),
     );
   };
 
@@ -2946,15 +3030,30 @@ export function CodexApiServicePage() {
                 <h2>
                   {t("codex.localAccess.accountStatsTitle", "按账号统计")}
                 </h2>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  onClick={() => setMemberModalOpen(true)}
-                  disabled={busy || !collection}
-                >
-                  <FolderPlus size={14} />
-                  {t("codex.localAccess.modal.manageMembers", "管理成员")}
-                </button>
+                <div className="codex-api-service-head-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleOpenAccountModelRules}
+                    disabled={busy || !collection || memberAccounts.length === 0}
+                  >
+                    <Wrench size={14} />
+                    {t(
+                      "codex.apiService.accountModelRules.action",
+                      "禁用模型",
+                    )}
+                    {accountModelRuleCount > 0 ? ` ${accountModelRuleCount}` : ""}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => setMemberModalOpen(true)}
+                    disabled={busy || !collection}
+                  >
+                    <FolderPlus size={14} />
+                    {t("codex.localAccess.modal.manageMembers", "管理成员")}
+                  </button>
+                </div>
               </div>
               <div className="codex-api-service-account-grid">
                 {memberAccounts.length === 0 ? (
@@ -2971,6 +3070,10 @@ export function CodexApiServicePage() {
                     const stat = selectedStatsWindow?.accounts.find(
                       (item) => item.accountId === account.id,
                     );
+                    const disabledModelCount =
+                      parseModelRuleText(
+                        accountModelRuleDrafts[account.id] ?? "",
+                      ).length;
                     return (
                       <div
                         key={account.id}
@@ -3021,6 +3124,17 @@ export function CodexApiServicePage() {
                               defaultValue: "图片 {{status}}",
                             })}
                           </span>
+                          {disabledModelCount > 0 && (
+                            <span>
+                              {t(
+                                "codex.apiService.accountModelRules.cardCount",
+                                {
+                                  count: disabledModelCount,
+                                  defaultValue: "禁用 {{count}}",
+                                },
+                              )}
+                            </span>
+                          )}
                         </div>
                         <button
                           type="button"
@@ -3053,7 +3167,7 @@ export function CodexApiServicePage() {
                   {t("codex.apiService.routing.saveOptions", "保存选项")}
                 </button>
               </div>
-              <div className="codex-api-service-config-list">
+              <div className="codex-api-service-config-list codex-api-service-routing-form">
                 <label>
                   <span>{t("codex.localAccess.routingLabel", "调度策略")}</span>
                   <SingleSelectDropdown
@@ -4279,6 +4393,170 @@ export function CodexApiServicePage() {
                 type="button"
                 className="btn btn-primary"
                 onClick={() => void handleSaveTimeouts()}
+                disabled={busy}
+              >
+                <Check size={15} />
+                {t("common.save", "保存")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {accountModelRulesOpen && (
+        <div
+          className="modal-overlay codex-api-service-pricing-overlay"
+          role="presentation"
+        >
+          <div
+            className="modal codex-api-service-pricing-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="codex-api-service-account-model-rules-title"
+          >
+            <div className="modal-header">
+              <div>
+                <h2 id="codex-api-service-account-model-rules-title">
+                  {t(
+                    "codex.apiService.accountModelRules.title",
+                    "账号禁用模型",
+                  )}
+                </h2>
+                <p className="codex-api-service-pricing-desc">
+                  {t(
+                    "codex.apiService.accountModelRules.desc",
+                    "命中规则的账号不会参与该模型请求；每行一个模型或通配符。",
+                  )}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={handleCloseAccountModelRules}
+                aria-label={t("common.close", "关闭")}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body codex-api-service-pricing-body">
+              <div className="codex-api-service-policy-actions">
+                <label className="codex-api-service-account-model-bulk">
+                  <span>
+                    {t(
+                      "codex.apiService.accountModelRules.bulkLabel",
+                      "批量规则",
+                    )}
+                  </span>
+                  <textarea
+                    value={accountModelRuleBulkText}
+                    onChange={(event) =>
+                      setAccountModelRuleBulkText(event.target.value)
+                    }
+                    placeholder={t(
+                      "codex.apiService.accountModelRules.placeholder",
+                      "gpt-5.4-mini\ngpt-5.3-*",
+                    )}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleApplyAccountModelRuleBulk}
+                  disabled={busy || accountModelRuleSelected.size === 0}
+                >
+                  {t(
+                    "codex.apiService.accountModelRules.applySelected",
+                    "应用到已选",
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() =>
+                    setAccountModelRuleSelected(
+                      accountModelRuleAllSelected
+                        ? new Set()
+                        : new Set(memberAccounts.map((account) => account.id)),
+                    )
+                  }
+                  disabled={memberAccounts.length === 0}
+                >
+                  {accountModelRuleAllSelected
+                    ? t(
+                        "codex.apiService.accountModelRules.clearSelection",
+                        "清除选择",
+                      )
+                    : t(
+                        "codex.apiService.accountModelRules.selectAll",
+                        "全选账号",
+                      )}
+                </button>
+              </div>
+              <div className="codex-api-service-pricing-table">
+                {memberAccounts.map((account) => {
+                  const presentation = buildCodexAccountPresentation(
+                    account,
+                    t,
+                  );
+                  return (
+                    <div
+                      key={account.id}
+                      className="codex-api-service-account-model-row"
+                    >
+                      <label className="codex-api-service-account-model-check">
+                        <input
+                          type="checkbox"
+                          checked={accountModelRuleSelected.has(account.id)}
+                          onChange={(event) => {
+                            setAccountModelRuleSelected((selected) => {
+                              const next = new Set(selected);
+                              if (event.target.checked) {
+                                next.add(account.id);
+                              } else {
+                                next.delete(account.id);
+                              }
+                              return next;
+                            });
+                          }}
+                        />
+                        <span>
+                          <strong title={presentation.displayName}>
+                            {maskAccountText(presentation.displayName)}
+                          </strong>
+                          <small>{presentation.planLabel}</small>
+                        </span>
+                      </label>
+                      <textarea
+                        value={accountModelRuleDrafts[account.id] ?? ""}
+                        onChange={(event) =>
+                          setAccountModelRuleDrafts((drafts) => ({
+                            ...drafts,
+                            [account.id]: event.target.value,
+                          }))
+                        }
+                        placeholder={t(
+                          "codex.apiService.accountModelRules.placeholder",
+                          "gpt-5.4-mini\ngpt-5.3-*",
+                        )}
+                        disabled={busy}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleCloseAccountModelRules}
+              >
+                {t("common.cancel", "取消")}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void handleSaveAccountModelRules()}
                 disabled={busy}
               >
                 <Check size={15} />

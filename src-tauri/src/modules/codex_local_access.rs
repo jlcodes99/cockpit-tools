@@ -1,8 +1,9 @@
 use crate::models::codex::{CodexAccount, CodexApiProviderMode};
 use crate::models::codex_local_access::{
-    CodexLocalAccessAccountCooldown, CodexLocalAccessAccountHealth, CodexLocalAccessAccountStats,
-    CodexLocalAccessApiKey, CodexLocalAccessApiKeyStats, CodexLocalAccessChatMessage,
-    CodexLocalAccessChatResult, CodexLocalAccessClientBaseUrlHost, CodexLocalAccessCollection,
+    CodexLocalAccessAccountCooldown, CodexLocalAccessAccountHealth,
+    CodexLocalAccessAccountModelRule, CodexLocalAccessAccountStats, CodexLocalAccessApiKey,
+    CodexLocalAccessApiKeyStats, CodexLocalAccessChatMessage, CodexLocalAccessChatResult,
+    CodexLocalAccessClientBaseUrlHost, CodexLocalAccessCollection,
     CodexLocalAccessCustomRoutingRule, CodexLocalAccessGatewayMode,
     CodexLocalAccessImageGenerationMode, CodexLocalAccessImageGenerationStatus,
     CodexLocalAccessModelAlias, CodexLocalAccessModelPricing, CodexLocalAccessModelStats,
@@ -122,9 +123,10 @@ const SIDECAR_READY_TIMEOUT: Duration = Duration::from_secs(8);
 const UPSTREAM_CODEX_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
 const DEFAULT_OPENAI_RESPONSES_BASE_URL: &str = "https://api.openai.com/v1";
 const DEFAULT_CODEX_USER_AGENT: &str =
-    "codex_cli_rs/0.118.0 (Mac OS 26.3.1; arm64) iTerm.app/3.6.9";
-const DEFAULT_CODEX_ORIGINATOR: &str = "codex_cli_rs";
+    "codex-tui/0.135.0 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.135.0)";
+const DEFAULT_CODEX_ORIGINATOR: &str = "codex-tui";
 const CODEX_RESPONSES_WEBSOCKET_BETA_HEADER_VALUE: &str = "responses_websockets=2026-02-06";
+const MAX_GPT_REASONING_SIGNATURE_LEN: usize = 32 * 1024 * 1024;
 const CODEX_WEBSOCKET_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 const CODEX_WEBSOCKET_INITIAL_MESSAGE_TIMEOUT: Duration = Duration::from_secs(30);
 #[cfg(not(test))]
@@ -772,6 +774,154 @@ async fn get_prepared_account(account_id: &str) -> Result<CodexAccount, String> 
     let account = codex_account::prepare_account_for_injection(account_id).await?;
     cache_prepared_account(&account).await;
     Ok(account)
+}
+
+pub struct CodexOfficialWakeupChatResult {
+    pub account: CodexAccount,
+    pub reply: String,
+    pub duration_ms: u64,
+}
+
+async fn official_wakeup_network_config() -> (Option<String>, CodexLocalAccessTimeouts) {
+    if let Err(err) = ensure_runtime_loaded_without_start().await {
+        logger::log_warn(&format!(
+            "[CodexWakeup] 加载官方直连网络配置失败，使用默认网络配置: {}",
+            err
+        ));
+        return (None, CodexLocalAccessTimeouts::default());
+    }
+
+    let runtime = gateway_runtime().lock().await;
+    runtime
+        .collection
+        .as_ref()
+        .map(|collection| {
+            (
+                collection.upstream_proxy_url.clone(),
+                collection_timeouts(collection),
+            )
+        })
+        .unwrap_or_else(|| (None, CodexLocalAccessTimeouts::default()))
+}
+
+pub async fn run_official_wakeup_chat(
+    account_id: &str,
+    model: Option<&str>,
+    reasoning_effort: Option<&str>,
+    prompt: &str,
+) -> Result<CodexOfficialWakeupChatResult, String> {
+    let account = get_prepared_account(account_id).await?;
+    if account.is_api_key_auth() {
+        return Err("Codex 官方直连唤醒仅支持 OAuth 账号。".to_string());
+    }
+
+    let model = model
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("gpt-5-codex");
+    let reasoning_effort = reasoning_effort
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("medium");
+    let prompt = prompt.trim();
+    if prompt.is_empty() {
+        return Err("唤醒提示词不能为空".to_string());
+    }
+
+    let request_body = json!({
+        "model": model,
+        "input": [
+            {
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": prompt,
+                    }
+                ],
+            }
+        ],
+        "instructions": "",
+        "reasoning": {
+            "effort": reasoning_effort,
+            "summary": "auto",
+        },
+        "include": ["reasoning.encrypted_content"],
+        "parallel_tool_calls": true,
+        "store": false,
+        "stream": true,
+    });
+    let body = serde_json::to_vec(&request_body)
+        .map_err(|e| format!("序列化官方直连唤醒请求失败: {}", e))?;
+    let mut headers = HashMap::new();
+    headers.insert("accept".to_string(), "text/event-stream".to_string());
+    headers.insert("content-type".to_string(), "application/json".to_string());
+    for header in CODEX_OFFICIAL_EMPTY_HEADERS {
+        headers
+            .entry((*header).to_string())
+            .or_insert_with(String::new);
+    }
+
+    let (upstream_proxy_url, timeouts) = official_wakeup_network_config().await;
+    let upstream_connect_timeout = duration_from_millis(
+        timeouts.legacy_upstream_connect_timeout_ms,
+        DEFAULT_UPSTREAM_CONNECT_TIMEOUT,
+    );
+    let upstream_target = resolve_upstream_target(RESPONSES_PATH)?;
+    let started_at = Instant::now();
+    let response = send_upstream_request(
+        "POST",
+        &upstream_target,
+        &headers,
+        &body,
+        &account,
+        upstream_proxy_url.as_deref(),
+        upstream_connect_timeout,
+        &timeouts,
+        CodexLocalAccessImageGenerationMode::Disabled,
+        CodexLocalAccessRequestKind::Text,
+    )
+    .await
+    .map_err(|err| {
+        let detail = err
+            .split_once("技术细节:")
+            .map(|(_, detail)| detail.trim())
+            .filter(|detail| !detail.is_empty())
+            .unwrap_or(err.as_str());
+        format!(
+            "Codex 官方服务暂时不可用，未能连接到所选账号的官方对话服务。请检查网络和代理配置。技术细节: {}",
+            detail
+        )
+    })?;
+    let status = response.status();
+    let body_text = response
+        .text()
+        .await
+        .map_err(|e| format!("读取官方直连唤醒响应失败: {}", e))?;
+
+    if !status.is_success() {
+        let message = extract_upstream_error_message(&body_text)
+            .unwrap_or_else(|| truncate_diagnostic_text(body_text.trim(), 4000));
+        return Err(format!(
+            "官方直连唤醒失败({}): {}",
+            status.as_u16(),
+            message
+        ));
+    }
+
+    let response_body = parse_responses_payload_from_upstream(body_text.as_bytes())
+        .map_err(|e| format!("解析官方直连唤醒响应失败: {}", e))?;
+    let reply = extract_output_text_from_response(&response_body);
+    if reply.trim().is_empty() {
+        return Err("官方直连唤醒未返回可读回复。".to_string());
+    }
+
+    Ok(CodexOfficialWakeupChatResult {
+        account,
+        reply,
+        duration_ms: started_at.elapsed().as_millis() as u64,
+    })
 }
 
 async fn schedule_stats_flush_if_needed() {
@@ -3549,6 +3699,96 @@ fn normalize_custom_routing_rules(
     normalized
 }
 
+fn normalize_account_model_rule(
+    rule: CodexLocalAccessAccountModelRule,
+) -> Option<CodexLocalAccessAccountModelRule> {
+    let account_id = rule.account_id.trim().to_string();
+    if account_id.is_empty() {
+        return None;
+    }
+    let excluded_models = normalize_model_rule_list(rule.excluded_models);
+    if excluded_models.is_empty() {
+        return None;
+    }
+    Some(CodexLocalAccessAccountModelRule {
+        account_id,
+        excluded_models,
+    })
+}
+
+fn normalize_account_model_rules(
+    rules: Vec<CodexLocalAccessAccountModelRule>,
+    account_ids: &[String],
+) -> Vec<CodexLocalAccessAccountModelRule> {
+    let valid_account_ids: HashSet<&str> = account_ids.iter().map(String::as_str).collect();
+    let mut merged: HashMap<String, Vec<String>> = HashMap::new();
+
+    for rule in rules {
+        let Some(rule) = normalize_account_model_rule(rule) else {
+            continue;
+        };
+        if !valid_account_ids.contains(rule.account_id.as_str()) {
+            continue;
+        }
+        merged
+            .entry(rule.account_id)
+            .or_default()
+            .extend(rule.excluded_models);
+    }
+
+    let mut normalized = Vec::new();
+    for account_id in account_ids {
+        let Some(excluded_models) = merged.remove(account_id) else {
+            continue;
+        };
+        let excluded_models = normalize_model_rule_list(excluded_models);
+        if excluded_models.is_empty() {
+            continue;
+        }
+        normalized.push(CodexLocalAccessAccountModelRule {
+            account_id: account_id.clone(),
+            excluded_models,
+        });
+    }
+    normalized
+}
+
+fn account_excluded_models<'a>(
+    collection: &'a CodexLocalAccessCollection,
+    account_id: &str,
+) -> Option<&'a [String]> {
+    collection
+        .account_model_rules
+        .iter()
+        .find(|rule| rule.account_id == account_id)
+        .map(|rule| rule.excluded_models.as_slice())
+}
+
+fn account_model_rule_blocks_model(
+    collection: &CodexLocalAccessCollection,
+    account_id: &str,
+    model_key: &str,
+) -> bool {
+    let model_key = model_key.trim();
+    if model_key.is_empty() {
+        return false;
+    }
+    account_excluded_models(collection, account_id)
+        .map(|rules| model_matches_any_rule(model_key, rules))
+        .unwrap_or(false)
+}
+
+fn merge_collection_and_account_excluded_models(
+    collection: &CodexLocalAccessCollection,
+    account_id: &str,
+) -> Vec<String> {
+    let mut rules = collection.excluded_models.clone();
+    if let Some(account_rules) = account_excluded_models(collection, account_id) {
+        rules.extend(account_rules.iter().cloned());
+    }
+    normalize_model_rule_list(rules)
+}
+
 fn custom_rule_map(rules: &[CodexLocalAccessCustomRoutingRule]) -> HashMap<&str, (i32, u32)> {
     rules
         .iter()
@@ -4861,7 +5101,16 @@ fn read_optional_profile_file(path: &Path) -> Result<Option<String>, String> {
 
 fn write_optional_profile_file(path: &Path, content: Option<&str>) -> Result<(), String> {
     match content {
-        Some(content) => write_string_atomic(path, content),
+        Some(content) => {
+            let content = if path.file_name().and_then(|item| item.to_str())
+                == Some(CODEX_PROFILE_CONFIG_FILE)
+            {
+                crate::modules::codex_config_format::normalize_config_toml_spacing(content)
+            } else {
+                content.to_string()
+            };
+            write_string_atomic(path, &content)
+        }
         None => {
             if path.exists() {
                 std::fs::remove_file(path).map_err(|e| {
@@ -4877,14 +5126,27 @@ fn write_optional_profile_file(path: &Path, content: Option<&str>) -> Result<(),
     }
 }
 
-fn is_codex_local_access_config(config_text: &str) -> bool {
+fn is_codex_local_access_config_for_api_key(config_text: &str, api_key: &str) -> bool {
     let Ok(doc) = config_text.parse::<Document>() else {
         return false;
     };
-    doc.get("model_provider")
+    let provider_selected = doc
+        .get("model_provider")
         .and_then(|item| item.as_str())
         .map(str::trim)
-        == Some(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID)
+        == Some(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID);
+    if !provider_selected {
+        return false;
+    }
+
+    doc.get("model_providers")
+        .and_then(|item| item.as_table())
+        .and_then(|providers| providers.get(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID))
+        .and_then(|item| item.as_table())
+        .and_then(|provider| provider.get("experimental_bearer_token"))
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        == Some(api_key.trim())
 }
 
 fn normalize_profile_base_url_for_match(raw: Option<&str>) -> Option<String> {
@@ -5074,7 +5336,43 @@ fn remove_codex_local_access_config(config_text: &str) -> Result<String, String>
         let _ = doc.remove("model_providers");
     }
 
-    Ok(doc.to_string())
+    Ok(crate::modules::codex_config_format::normalize_config_toml_spacing(&doc.to_string()))
+}
+
+fn restore_config_toml_from_takeover_backup(
+    current_config: Option<&str>,
+    backup_config: Option<&str>,
+) -> Result<Option<String>, String> {
+    let Some(backup_config) = backup_config else {
+        return Ok(None);
+    };
+    if backup_config.trim().is_empty() {
+        return Ok(None);
+    }
+
+    let mut backup_doc = backup_config
+        .parse::<Document>()
+        .map_err(|e| format!("解析 Codex API 服务接管备份 config.toml 失败: {}", e))?;
+
+    if let Some(current_config) = current_config.filter(|content| !content.trim().is_empty()) {
+        let current_without_takeover = remove_codex_local_access_config(current_config)?;
+        if !current_without_takeover.trim().is_empty() {
+            let current_doc = current_without_takeover
+                .parse::<Document>()
+                .map_err(|e| format!("解析当前 Codex config.toml 失败: {}", e))?;
+            if let Some(plugins) = current_doc.get("plugins") {
+                backup_doc["plugins"] = plugins.clone();
+            }
+        }
+    }
+
+    let content =
+        crate::modules::codex_config_format::normalize_config_toml_spacing(&backup_doc.to_string());
+    if content.trim().is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(content))
+    }
 }
 
 fn is_codex_local_access_auth_text(auth_text: &str, api_key: &str) -> bool {
@@ -5162,7 +5460,7 @@ fn save_takeover_backups(backups: &CodexLocalAccessTakeoverBackups) -> Result<()
         .map_err(|e| format!("写入 Codex API 服务接管备份失败: {}", e))
 }
 
-fn save_profile_takeover_backup(profile_dir: &Path) -> Result<(), String> {
+fn save_profile_takeover_backup(profile_dir: &Path, api_key: &str) -> Result<(), String> {
     let profile_key = normalize_profile_dir_key(profile_dir);
     if profile_key.is_empty() {
         return Err("Codex API 服务接管目录为空".to_string());
@@ -5177,7 +5475,7 @@ fn save_profile_takeover_backup(profile_dir: &Path) -> Result<(), String> {
 
     if config_toml
         .as_deref()
-        .map(is_codex_local_access_config)
+        .map(|content| is_codex_local_access_config_for_api_key(content, api_key))
         .unwrap_or(false)
     {
         if existing_backup.is_none() {
@@ -5223,7 +5521,7 @@ fn restore_profile_takeover_backup(
     let current_auth = read_optional_profile_file(&auth_path)?;
     let config_is_managed = current_config
         .as_deref()
-        .map(is_codex_local_access_config)
+        .map(|content| is_codex_local_access_config_for_api_key(content, api_key))
         .unwrap_or(false);
     let auth_is_managed = current_auth
         .as_deref()
@@ -5234,8 +5532,12 @@ fn restore_profile_takeover_backup(
         return Ok(false);
     }
 
+    let restored_config = restore_config_toml_from_takeover_backup(
+        current_config.as_deref(),
+        backup.config_toml.as_deref(),
+    )?;
     write_optional_profile_file(&auth_path, backup.auth_json.as_deref())?;
-    write_optional_profile_file(&config_path, backup.config_toml.as_deref())?;
+    write_optional_profile_file(&config_path, restored_config.as_deref())?;
     Ok(true)
 }
 
@@ -5248,7 +5550,7 @@ fn cleanup_profile_takeover_without_backup(
     let mut changed = false;
 
     if let Some(config_text) = read_optional_profile_file(&config_path)? {
-        if is_codex_local_access_config(&config_text) {
+        if is_codex_local_access_config_for_api_key(&config_text, api_key) {
             let cleaned = remove_codex_local_access_config(&config_text)?;
             let cleaned_content = if cleaned.trim().is_empty() {
                 None
@@ -5597,6 +5899,7 @@ fn sidecar_auth_json_for_account(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or(account.id.as_str());
+    let excluded_models = merge_collection_and_account_excluded_models(collection, &account.id);
     let mut value = json!({
         "type": "codex",
         "id_token": account.tokens.id_token.clone(),
@@ -5606,7 +5909,7 @@ fn sidecar_auth_json_for_account(
         "last_refresh": now_ms().to_string(),
         "email": account.email.clone(),
         "plan_type": account.plan_type.clone(),
-        "excluded_models": collection.excluded_models.clone(),
+        "excluded_models": excluded_models,
         "disable_cooling": collection.disable_cooling,
     });
     if let Some(proxy_url) = proxy_url {
@@ -5642,12 +5945,13 @@ fn sidecar_codex_key_config_value(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or(DEFAULT_OPENAI_RESPONSES_BASE_URL);
+    let excluded_models = merge_collection_and_account_excluded_models(collection, &account.id);
     let mut value = json!({
         "api-key": api_key,
         "base-url": base_url,
         "proxy-url": proxy_url,
         "models": sidecar_codex_key_model_values(collection),
-        "excluded-models": collection.excluded_models.clone(),
+        "excluded-models": excluded_models,
         "disable-cooling": collection.disable_cooling,
     });
     if proxy_url.is_none() {
@@ -6011,6 +6315,10 @@ async fn prepare_sidecar_launch_config(
             "accountId": rule.account_id.clone(),
             "priority": rule.priority,
             "weight": rule.weight,
+        })).collect::<Vec<_>>(),
+        "accountModelRules": collection.account_model_rules.iter().map(|rule| json!({
+            "accountId": rule.account_id.clone(),
+            "excludedModels": rule.excluded_models.clone(),
         })).collect::<Vec<_>>(),
         "debugLogs": collection.debug_logs,
     });
@@ -6883,7 +7191,7 @@ async fn ensure_profile_takeover(
         return Ok(());
     }
 
-    save_profile_takeover_backup(profile_dir)?;
+    save_profile_takeover_backup(profile_dir, &collection.api_key)?;
     write_local_access_profile_takeover(profile_dir, collection).await?;
 
     let next = inspect_local_access_profile_attachment(profile_dir, Some(collection));
@@ -7470,6 +7778,14 @@ fn stable_prompt_cache_key(api_key: &ResolvedLocalApiKey) -> String {
     stable_uuid_from_text(&format!("agtools:codex:prompt-cache:{}", api_key.id))
 }
 
+fn stable_codex_installation_id(api_key: &ResolvedLocalApiKey) -> String {
+    stable_uuid_from_text(&format!("agtools:codex:installation:{}", api_key.id))
+}
+
+fn stable_codex_turn_id(api_key: &ResolvedLocalApiKey, session_id: &str) -> String {
+    stable_uuid_from_text(&format!("agtools:codex:turn:{}:{}", api_key.id, session_id))
+}
+
 fn extract_prompt_cache_key_from_value(value: &Value) -> Option<String> {
     value
         .get("prompt_cache_key")
@@ -7488,6 +7804,110 @@ fn resolve_prompt_cache_key(
         .and_then(extract_prompt_cache_key_from_value)
         .or_else(|| header_value(headers, "session_id").map(str::to_string))
         .unwrap_or_else(|| stable_prompt_cache_key(api_key))
+}
+
+fn is_valid_gpt_reasoning_signature(raw_signature: &str) -> bool {
+    if raw_signature.is_empty()
+        || raw_signature.len() > MAX_GPT_REASONING_SIGNATURE_LEN
+        || raw_signature != raw_signature.trim()
+        || !raw_signature.starts_with("gAAAA")
+        || raw_signature
+            .chars()
+            .any(|ch| !ch.is_ascii_alphanumeric() && ch != '-' && ch != '_' && ch != '=')
+    {
+        return false;
+    }
+
+    let decoded = general_purpose::URL_SAFE_NO_PAD
+        .decode(raw_signature)
+        .or_else(|_| general_purpose::URL_SAFE.decode(raw_signature));
+    let Ok(decoded) = decoded else {
+        return false;
+    };
+    if decoded.len() < 73 || decoded.first().copied() != Some(0x80) {
+        return false;
+    }
+    let ciphertext_len = decoded.len().saturating_sub(1 + 8 + 16 + 32);
+    ciphertext_len > 0 && ciphertext_len % 16 == 0
+}
+
+fn sanitize_codex_reasoning_encrypted_content(body_value: &mut Value) -> bool {
+    let Some(input_items) = body_value.get_mut("input").and_then(Value::as_array_mut) else {
+        return false;
+    };
+
+    let mut changed = false;
+    for item in input_items {
+        let Some(item_obj) = item.as_object_mut() else {
+            continue;
+        };
+        if item_obj.get("type").and_then(Value::as_str).map(str::trim) != Some("reasoning") {
+            continue;
+        }
+
+        let should_remove = match item_obj.get("encrypted_content") {
+            Some(Value::String(value)) => !is_valid_gpt_reasoning_signature(value),
+            Some(_) => true,
+            None => false,
+        };
+        if should_remove {
+            item_obj.remove("encrypted_content");
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn build_codex_turn_metadata(session_id: &str, turn_id: &str) -> String {
+    let window_id = format!("{}:0", session_id);
+    serde_json::to_string(&json!({
+        "prompt_cache_key": session_id,
+        "turn_id": turn_id,
+        "window_id": window_id,
+    }))
+    .unwrap_or_else(|_| "{}".to_string())
+}
+
+fn apply_codex_client_metadata(
+    body_obj: &mut Map<String, Value>,
+    request: &mut ParsedRequest,
+    api_key: &ResolvedLocalApiKey,
+    session_id: &str,
+) {
+    let installation_id = stable_codex_installation_id(api_key);
+    let turn_id = stable_codex_turn_id(api_key, session_id);
+    let window_id = format!("{}:0", session_id);
+    let turn_metadata = build_codex_turn_metadata(session_id, &turn_id);
+
+    let client_metadata = body_obj
+        .entry("client_metadata".to_string())
+        .or_insert_with(|| Value::Object(Map::new()));
+    if !client_metadata.is_object() {
+        *client_metadata = Value::Object(Map::new());
+    }
+    if let Some(metadata_obj) = client_metadata.as_object_mut() {
+        metadata_obj
+            .entry("x-codex-installation-id".to_string())
+            .or_insert_with(|| Value::String(installation_id));
+        metadata_obj.insert(
+            "x-codex-window-id".to_string(),
+            Value::String(window_id.clone()),
+        );
+        metadata_obj.insert(
+            "x-codex-turn-metadata".to_string(),
+            Value::String(turn_metadata.clone()),
+        );
+    }
+
+    request
+        .headers
+        .insert("x-client-request-id".to_string(), session_id.to_string());
+    request
+        .headers
+        .insert("x-codex-window-id".to_string(), window_id);
+    request
+        .headers
+        .insert("x-codex-turn-metadata".to_string(), turn_metadata);
 }
 
 fn ensure_request_header(headers: &mut HashMap<String, String>, name: &str, value: &str) {
@@ -7528,7 +7948,11 @@ fn align_codex_prompt_cache(
             "prompt_cache_key".to_string(),
             Value::String(session_id.clone()),
         );
-        request.body = serde_json::to_vec(body_value.as_ref().unwrap())
+        apply_codex_client_metadata(body_obj, request, api_key, &session_id);
+    }
+    if let Some(body_value) = body_value.as_mut() {
+        sanitize_codex_reasoning_encrypted_content(body_value);
+        request.body = serde_json::to_vec(body_value)
             .map_err(|e| format!("序列化 prompt_cache_key 请求体失败: {}", e))?;
     }
 
@@ -8066,6 +8490,16 @@ fn sanitize_collection(
     }
     collection.custom_routing_rules = normalized_custom_routing_rules;
 
+    let original_account_model_rules = std::mem::take(&mut collection.account_model_rules);
+    let normalized_account_model_rules = normalize_account_model_rules(
+        original_account_model_rules.clone(),
+        &collection.account_ids,
+    );
+    if normalized_account_model_rules != original_account_model_rules {
+        changed = true;
+    }
+    collection.account_model_rules = normalized_account_model_rules;
+
     let original_model_aliases = std::mem::take(&mut collection.model_aliases);
     let normalized_model_aliases = normalize_model_aliases(original_model_aliases.clone());
     if normalized_model_aliases != original_model_aliases {
@@ -8141,6 +8575,7 @@ async fn ensure_runtime_loaded_without_start() -> Result<(), String> {
             upstream_proxy_url: None,
             routing_strategy: CodexLocalAccessRoutingStrategy::default(),
             custom_routing_rules: Vec::new(),
+            account_model_rules: Vec::new(),
             model_aliases: Vec::new(),
             model_pricings: Vec::new(),
             excluded_models: Vec::new(),
@@ -9143,7 +9578,15 @@ pub async fn activate_local_access_for_dir(
     profile_dir: &Path,
 ) -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded_without_start().await?;
-    save_profile_takeover_backup(profile_dir)?;
+    let api_key = {
+        let runtime = gateway_runtime().lock().await;
+        runtime
+            .collection
+            .as_ref()
+            .map(|collection| collection.api_key.clone())
+            .ok_or_else(|| "API 服务集合尚未创建".to_string())?
+    };
+    save_profile_takeover_backup(profile_dir, &api_key)?;
     let state = set_local_access_enabled(true).await?;
     let collection = state
         .collection
@@ -10063,6 +10506,7 @@ pub async fn save_local_access_accounts(
                 upstream_proxy_url: None,
                 routing_strategy: CodexLocalAccessRoutingStrategy::default(),
                 custom_routing_rules: Vec::new(),
+                account_model_rules: Vec::new(),
                 model_aliases: Vec::new(),
                 model_pricings: Vec::new(),
                 excluded_models: Vec::new(),
@@ -10166,6 +10610,33 @@ pub async fn update_local_access_custom_routing(
     collection.custom_routing_rules =
         normalize_custom_routing_rules(rules, &collection.account_ids);
     collection.routing_strategy = CodexLocalAccessRoutingStrategy::Custom;
+    collection.updated_at = now_ms();
+    save_collection_to_disk(&collection)?;
+
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        sync_runtime_collection(&mut runtime, collection);
+    }
+
+    ensure_gateway_matches_runtime().await?;
+    snapshot_state().await
+}
+
+pub async fn update_local_access_account_model_rules(
+    rules: Vec<CodexLocalAccessAccountModelRule>,
+) -> Result<CodexLocalAccessState, String> {
+    ensure_runtime_loaded().await?;
+
+    let maybe_collection = {
+        let runtime = gateway_runtime().lock().await;
+        runtime.collection.clone()
+    };
+
+    let Some(mut collection) = maybe_collection else {
+        return Err("本地接入集合尚未创建".to_string());
+    };
+
+    collection.account_model_rules = normalize_account_model_rules(rules, &collection.account_ids);
     collection.updated_at = now_ms();
     save_collection_to_disk(&collection)?;
 
@@ -13014,6 +13485,16 @@ async fn send_upstream_request(
         if !account.is_api_key_auth() && !headers.contains_key("user-agent") {
             request = request.header(USER_AGENT, DEFAULT_CODEX_USER_AGENT);
         }
+        if !account.is_api_key_auth()
+            && !headers.contains_key("session_id")
+            && !headers.contains_key("session-id")
+        {
+            let user_agent =
+                header_value(headers, "user-agent").unwrap_or(DEFAULT_CODEX_USER_AGENT);
+            if user_agent.contains("Mac OS") {
+                request = request.header("Session_id", uuid::Uuid::new_v4().to_string());
+            }
+        }
         if !account.is_api_key_auth() && !headers.contains_key("originator") {
             request = request.header("Originator", DEFAULT_CODEX_ORIGINATOR);
         }
@@ -13148,6 +13629,19 @@ async fn proxy_request_with_account_pool(
         for account_id in strategy_account_ids {
             if attempts >= max_credential_attempts {
                 break;
+            }
+
+            if account_model_rule_blocks_model(collection, &account_id, &routing_hint.model_key) {
+                last_error = if routing_hint.model_key.trim().is_empty() {
+                    "账号模型规则已跳过该账号".to_string()
+                } else {
+                    format!(
+                        "模型 {} 在部分账号上已被禁用，已跳过这些账号",
+                        routing_hint.model_key
+                    )
+                };
+                last_error_category = Some("account_model_disabled".to_string());
+                continue;
             }
 
             if account_id_blocked_by_health(&account_id).await {
@@ -14106,14 +14600,6 @@ async fn connect_upstream_websocket(
                 .map_err(WebSocketConnectError::upstream)?,
         );
     }
-    let beta_header = header_value(&request.headers, "openai-beta").unwrap_or_default();
-    if !beta_header.contains("responses_websockets=") {
-        upstream_request.headers_mut().insert(
-            "OpenAI-Beta",
-            websocket_header_value(CODEX_RESPONSES_WEBSOCKET_BETA_HEADER_VALUE)
-                .map_err(WebSocketConnectError::upstream)?,
-        );
-    }
     if !account.is_api_key_auth() {
         if let Some(account_id) = resolve_upstream_account_id(account) {
             upstream_request.headers_mut().insert(
@@ -14122,7 +14608,14 @@ async fn connect_upstream_websocket(
             );
         }
     }
-
+    let beta_header = header_value(&request.headers, "openai-beta").unwrap_or_default();
+    if !beta_header.contains("responses_websockets=") {
+        upstream_request.headers_mut().insert(
+            "OpenAI-Beta",
+            websocket_header_value(CODEX_RESPONSES_WEBSOCKET_BETA_HEADER_VALUE)
+                .map_err(WebSocketConnectError::upstream)?,
+        );
+    }
     connect_upstream_websocket_request(upstream_request, upstream_proxy_url, connect_timeout).await
 }
 
@@ -14205,6 +14698,19 @@ async fn proxy_websocket_with_account_pool(
     for account_id in strategy_account_ids {
         if attempts >= max_credential_attempts {
             break;
+        }
+        if account_model_rule_blocks_model(collection, &account_id, &routing_hint.model_key) {
+            last_status = StatusCode::SERVICE_UNAVAILABLE.as_u16();
+            last_error = if routing_hint.model_key.trim().is_empty() {
+                "账号模型规则已跳过该账号".to_string()
+            } else {
+                format!(
+                    "模型 {} 在部分账号上已被禁用，已跳过这些账号",
+                    routing_hint.model_key
+                )
+            };
+            last_error_category = Some("account_model_disabled".to_string());
+            continue;
         }
         if account_id_blocked_by_health(&account_id).await {
             last_error = "账号连续鉴权或预处理失败，已暂时跳过".to_string();
@@ -15343,37 +15849,45 @@ async fn handle_connection(
 
 #[cfg(test)]
 mod tests {
+    use base64::{engine::general_purpose, Engine as _};
+
     use super::{
-        account_upstream_base_url, align_codex_prompt_cache, apply_codex_official_headers,
-        apply_routing_strategy, bridge_websocket_streams, build_account_scoped_upstream_body,
-        build_base_url_with_host, build_chat_completion_payload, build_chat_completion_stream_body,
+        account_model_rule_blocks_model, account_upstream_base_url, align_codex_prompt_cache,
+        apply_codex_official_headers, apply_routing_strategy, bridge_websocket_streams,
+        build_account_scoped_upstream_body, build_base_url_with_host,
+        build_chat_completion_payload, build_chat_completion_stream_body,
         build_codex_client_models_response, build_collection_base_url, build_images_api_payload,
         build_local_models_response, build_ordered_account_ids, build_request_routing_hint,
         build_upstream_websocket_url, calculate_usage_cost_usd, canonical_model_for_client_model,
-        classify_upstream_error_category, collect_local_access_profile_takeover_dirs_from_store,
-        compare_routing_candidates, extract_usage_capture, inspect_local_access_profile_config,
-        is_codex_local_access_auth_text, is_image_generation_capability_error,
-        is_local_access_eligible_account, is_responses_completion_event,
-        is_stream_incomplete_error_message, is_upstream_response_failed_error_message,
-        legacy_stream_error_category, local_access_chat_completions_url, model_pricing,
-        normalize_custom_routing_rules, normalized_sidecar_error_category, parse_codex_retry_after,
+        classify_upstream_error_category, cleanup_profile_takeover_without_backup,
+        collect_local_access_profile_takeover_dirs_from_store, compare_routing_candidates,
+        extract_usage_capture, inspect_local_access_profile_config,
+        is_codex_local_access_auth_text, is_codex_local_access_config_for_api_key,
+        is_image_generation_capability_error, is_local_access_eligible_account,
+        is_responses_completion_event, is_stream_incomplete_error_message,
+        is_upstream_response_failed_error_message, legacy_stream_error_category,
+        local_access_chat_completions_url, merge_collection_and_account_excluded_models,
+        model_pricing, normalize_account_model_rules, normalize_custom_routing_rules,
+        normalized_sidecar_error_category, parse_codex_retry_after,
         parse_responses_payload_from_upstream, parse_websocket_upstream_error,
         prepare_gateway_request, profile_base_url_matches, recover_invalid_stats_file,
         remove_codex_local_access_config, resolve_plan_rank, resolve_supported_model_alias,
-        resolve_upstream_target, should_retry_single_account_upstream_status,
-        should_treat_response_as_stream, should_try_next_account, validate_client_model_visible,
+        resolve_upstream_target, restore_config_toml_from_takeover_backup,
+        should_retry_single_account_upstream_status, should_treat_response_as_stream,
+        should_try_next_account, validate_client_model_visible,
         visible_codex_model_ids_for_api_key, websocket_accept_value,
         websocket_connect_error_from_http_response, CodexLocalAccessCollection,
         CodexLocalAccessGatewayMode, CodexLocalAccessScope, GatewayResponseAdapter, ParsedRequest,
         ResolvedLocalApiKey, ResponseUsageCollector, RoutingCandidate, SidecarUsageDetails,
-        SidecarUsageEvent, UsageCapture, CODEX_AUTO_REVIEW_MODEL_ID, DEFAULT_MAX_RETRY_INTERVAL_MS,
-        DEFAULT_SESSION_AFFINITY_TTL_MS,
+        SidecarUsageEvent, UsageCapture, CODEX_AUTO_REVIEW_MODEL_ID, CODEX_PROFILE_AUTH_FILE,
+        CODEX_PROFILE_CONFIG_FILE, DEFAULT_MAX_RETRY_INTERVAL_MS, DEFAULT_SESSION_AFFINITY_TTL_MS,
     };
     use crate::models::codex::{CodexAccount, CodexApiProviderMode, CodexAppSpeed, CodexTokens};
     use crate::models::codex_local_access::{
-        CodexLocalAccessClientBaseUrlHost, CodexLocalAccessCustomRoutingRule,
-        CodexLocalAccessImageGenerationMode, CodexLocalAccessRequestKind,
-        CodexLocalAccessRoutingStrategy, CodexLocalAccessStats, CodexLocalAccessTimeouts,
+        CodexLocalAccessAccountModelRule, CodexLocalAccessClientBaseUrlHost,
+        CodexLocalAccessCustomRoutingRule, CodexLocalAccessImageGenerationMode,
+        CodexLocalAccessRequestKind, CodexLocalAccessRoutingStrategy, CodexLocalAccessStats,
+        CodexLocalAccessTimeouts,
     };
     use crate::models::{
         DefaultInstanceSettings, InstanceLaunchMode, InstanceProfile, InstanceStore,
@@ -15402,6 +15916,7 @@ mod tests {
             upstream_proxy_url: None,
             routing_strategy: CodexLocalAccessRoutingStrategy::default(),
             custom_routing_rules: Vec::new(),
+            account_model_rules: Vec::new(),
             model_aliases: Vec::new(),
             model_pricings: Vec::new(),
             excluded_models: Vec::new(),
@@ -15420,6 +15935,74 @@ mod tests {
             created_at: 0,
             updated_at: 0,
         }
+    }
+
+    #[test]
+    fn normalizes_account_model_rules_for_collection_accounts() {
+        let rules = normalize_account_model_rules(
+            vec![
+                CodexLocalAccessAccountModelRule {
+                    account_id: " account-a ".to_string(),
+                    excluded_models: vec!["gpt-5.4-mini".to_string(), "GPT-5.4-MINI".to_string()],
+                },
+                CodexLocalAccessAccountModelRule {
+                    account_id: "account-b".to_string(),
+                    excluded_models: vec!["".to_string(), "gpt-5.3-*".to_string()],
+                },
+                CodexLocalAccessAccountModelRule {
+                    account_id: "missing".to_string(),
+                    excluded_models: vec!["gpt-5.2".to_string()],
+                },
+            ],
+            &["account-a".to_string(), "account-b".to_string()],
+        );
+
+        assert_eq!(rules.len(), 2);
+        assert_eq!(rules[0].account_id, "account-a");
+        assert_eq!(rules[0].excluded_models, vec!["gpt-5.4-mini"]);
+        assert_eq!(rules[1].account_id, "account-b");
+        assert_eq!(rules[1].excluded_models, vec!["gpt-5.3-*"]);
+    }
+
+    #[test]
+    fn account_model_rules_block_matching_model_only() {
+        let mut collection =
+            test_local_access_collection(vec!["account-a".to_string(), "account-b".to_string()]);
+        collection.account_model_rules = vec![CodexLocalAccessAccountModelRule {
+            account_id: "account-a".to_string(),
+            excluded_models: vec!["gpt-5.4-*".to_string()],
+        }];
+
+        assert!(account_model_rule_blocks_model(
+            &collection,
+            "account-a",
+            "gpt-5.4-mini"
+        ));
+        assert!(!account_model_rule_blocks_model(
+            &collection,
+            "account-a",
+            "gpt-5.3-codex"
+        ));
+        assert!(!account_model_rule_blocks_model(
+            &collection,
+            "account-b",
+            "gpt-5.4-mini"
+        ));
+    }
+
+    #[test]
+    fn sidecar_account_excluded_models_merge_global_and_account_rules() {
+        let mut collection = test_local_access_collection(vec!["account-a".to_string()]);
+        collection.excluded_models = vec!["gpt-5.2".to_string()];
+        collection.account_model_rules = vec![CodexLocalAccessAccountModelRule {
+            account_id: "account-a".to_string(),
+            excluded_models: vec!["gpt-5.4-mini".to_string(), "GPT-5.4-MINI".to_string()],
+        }];
+
+        assert_eq!(
+            merge_collection_and_account_excluded_models(&collection, "account-a"),
+            vec!["gpt-5.2".to_string(), "gpt-5.4-mini".to_string()]
+        );
     }
 
     fn make_temp_dir(prefix: &str) -> PathBuf {
@@ -15801,6 +16384,105 @@ wire_api = "responses"
             .expect("model_providers should remain");
         assert!(providers.get("codex_local_access").is_none());
         assert!(providers.get("manual").is_some());
+    }
+
+    #[test]
+    fn local_access_config_detection_requires_matching_api_key() {
+        let input = r#"model_provider = "codex_local_access"
+
+[model_providers.codex_local_access]
+name = "Custom API Provider"
+base_url = "https://custom.example.com/v1"
+wire_api = "responses"
+requires_openai_auth = true
+experimental_bearer_token = "sk-user-custom"
+"#;
+
+        assert!(is_codex_local_access_config_for_api_key(
+            input,
+            "sk-user-custom"
+        ));
+        assert!(!is_codex_local_access_config_for_api_key(
+            input,
+            "local-api-key"
+        ));
+    }
+
+    #[test]
+    fn takeover_cleanup_keeps_non_matching_codex_local_access_provider() {
+        let dir = make_temp_dir("codex-local-access-custom-provider");
+        let config_path = dir.join(CODEX_PROFILE_CONFIG_FILE);
+        let auth_path = dir.join(CODEX_PROFILE_AUTH_FILE);
+        let config = r#"model_provider = "codex_local_access"
+
+[model_providers.codex_local_access]
+name = "Custom API Provider"
+base_url = "https://custom.example.com/v1"
+wire_api = "responses"
+requires_openai_auth = true
+experimental_bearer_token = "sk-user-custom"
+"#;
+
+        fs::write(&config_path, config).expect("write config");
+        fs::write(
+            &auth_path,
+            r#"{"auth_mode":"apikey","OPENAI_API_KEY":"sk-user-custom"}"#,
+        )
+        .expect("write auth");
+
+        let changed =
+            cleanup_profile_takeover_without_backup(&dir, "local-api-key").expect("cleanup");
+        let next_config = fs::read_to_string(&config_path).expect("read config");
+        let next_auth = fs::read_to_string(&auth_path).expect("read auth");
+
+        assert!(!changed);
+        assert_eq!(next_config, config);
+        assert!(next_auth.contains("sk-user-custom"));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn takeover_backup_restore_preserves_current_plugin_config() {
+        let current = r#"model_provider = "codex_local_access"
+
+[plugins."browser@openai-bundled"]
+enabled = true
+
+[plugins."chrome@openai-bundled"]
+enabled = true
+
+[plugins."hyperframes@openai-curated"]
+enabled = true
+
+[model_providers.codex_local_access]
+name = "Codex API Service"
+base_url = "http://localhost:14998/v1"
+wire_api = "responses"
+requires_openai_auth = true
+experimental_bearer_token = "agt_codex_test"
+"#;
+        let backup = r#"model = "gpt-5"
+
+[plugins."browser@openai-bundled"]
+enabled = true
+"#;
+
+        let output = restore_config_toml_from_takeover_backup(Some(current), Some(backup))
+            .expect("restore config")
+            .expect("restored content");
+        let parsed = output
+            .parse::<toml_edit::Document>()
+            .expect("parse restored toml");
+        let plugins = parsed
+            .get("plugins")
+            .and_then(|item| item.as_table())
+            .expect("plugins should remain");
+
+        assert!(parsed.get("model_provider").is_none());
+        assert!(plugins.get("browser@openai-bundled").is_some());
+        assert!(plugins.get("chrome@openai-bundled").is_some());
+        assert!(plugins.get("hyperframes@openai-curated").is_some());
     }
 
     #[test]
@@ -17478,6 +18160,137 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
     }
 
     #[test]
+    fn legacy_codex_metadata_aligns_with_prompt_cache_key() {
+        let api_key = ResolvedLocalApiKey {
+            id: "client-key-1".to_string(),
+            label: "Client".to_string(),
+            model_prefix: None,
+            allowed_models: Vec::new(),
+            excluded_models: Vec::new(),
+        };
+        let mut request = ParsedRequest {
+            method: "POST".to_string(),
+            target: "/v1/responses".to_string(),
+            headers: HashMap::new(),
+            body: serde_json::to_vec(&json!({
+                "model": "gpt-5.4",
+                "input": "hello",
+                "prompt_cache_key": "cache-123",
+            }))
+            .unwrap(),
+        };
+
+        align_codex_prompt_cache(&mut request, &api_key).unwrap();
+        let body = serde_json::from_slice::<Value>(&request.body).unwrap();
+        let metadata = body
+            .get("client_metadata")
+            .and_then(Value::as_object)
+            .expect("client_metadata should be present");
+        assert_eq!(
+            metadata.get("x-codex-window-id").and_then(Value::as_str),
+            Some("cache-123:0")
+        );
+        assert!(metadata
+            .get("x-codex-installation-id")
+            .and_then(Value::as_str)
+            .is_some());
+        let turn_metadata = metadata
+            .get("x-codex-turn-metadata")
+            .and_then(Value::as_str)
+            .and_then(|value| serde_json::from_str::<Value>(value).ok())
+            .expect("turn metadata should be json");
+        assert_eq!(
+            turn_metadata
+                .get("prompt_cache_key")
+                .and_then(Value::as_str),
+            Some("cache-123")
+        );
+        assert_eq!(
+            turn_metadata.get("window_id").and_then(Value::as_str),
+            Some("cache-123:0")
+        );
+        assert_eq!(
+            request
+                .headers
+                .get("x-client-request-id")
+                .map(String::as_str),
+            Some("cache-123")
+        );
+        assert_eq!(
+            request
+                .headers
+                .get("x-codex-turn-metadata")
+                .and_then(|value| serde_json::from_str::<Value>(value).ok())
+                .and_then(|value| {
+                    value
+                        .get("prompt_cache_key")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })
+                .as_deref(),
+            Some("cache-123")
+        );
+    }
+
+    #[test]
+    fn legacy_codex_sanitizes_invalid_reasoning_encrypted_content() {
+        let api_key = ResolvedLocalApiKey {
+            id: "client-key-1".to_string(),
+            label: "Client".to_string(),
+            model_prefix: None,
+            allowed_models: Vec::new(),
+            excluded_models: Vec::new(),
+        };
+        let mut valid_signature_bytes = vec![0x80];
+        valid_signature_bytes.extend([0u8; 8]);
+        valid_signature_bytes.extend([1u8; 16]);
+        valid_signature_bytes.extend([2u8; 16]);
+        valid_signature_bytes.extend([3u8; 32]);
+        let valid_signature = general_purpose::URL_SAFE_NO_PAD.encode(valid_signature_bytes);
+        let mut request = ParsedRequest {
+            method: "POST".to_string(),
+            target: "/v1/responses".to_string(),
+            headers: HashMap::new(),
+            body: serde_json::to_vec(&json!({
+                "model": "gpt-5.4",
+                "input": [
+                    {
+                        "id": "rs_bad",
+                        "type": "reasoning",
+                        "encrypted_content": " not-a-valid-signature "
+                    },
+                    {
+                        "id": "rs_null",
+                        "type": "reasoning",
+                        "encrypted_content": null
+                    },
+                    {
+                        "id": "rs_good",
+                        "type": "reasoning",
+                        "encrypted_content": valid_signature
+                    },
+                    {
+                        "role": "user",
+                        "content": "hello"
+                    }
+                ],
+                "prompt_cache_key": "cache-123"
+            }))
+            .unwrap(),
+        };
+
+        align_codex_prompt_cache(&mut request, &api_key).unwrap();
+        let body = serde_json::from_slice::<Value>(&request.body).unwrap();
+        let input = body.get("input").and_then(Value::as_array).unwrap();
+        assert!(input[0].get("encrypted_content").is_none());
+        assert!(input[1].get("encrypted_content").is_none());
+        assert_eq!(
+            input[2].get("encrypted_content").and_then(Value::as_str),
+            Some(valid_signature.as_str())
+        );
+    }
+
+    #[test]
     fn applies_codex_official_empty_headers() {
         let mut request = ParsedRequest {
             method: "POST".to_string(),
@@ -17497,6 +18310,13 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         ] {
             assert_eq!(request.headers.get(key).map(String::as_str), Some(""));
         }
+    }
+
+    #[test]
+    fn default_codex_identity_headers_match_official_tui() {
+        assert!(super::DEFAULT_CODEX_USER_AGENT.starts_with("codex-tui/"));
+        assert_eq!(super::DEFAULT_CODEX_ORIGINATOR, "codex-tui");
+        assert!(!super::DEFAULT_CODEX_USER_AGENT.contains("codex_cli_rs"));
     }
 
     #[test]

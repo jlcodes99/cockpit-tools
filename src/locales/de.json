@@ -1577,7 +1577,11 @@
       "timeWindowFrom": "Von",
       "timeWindowTo": "Bis",
       "fallbackTimes": "Zeiten außerhalb des Fensters",
-      "saveTask": "Aufgabe speichern"
+      "saveTask": "Aufgabe speichern",
+      "executionMode": "Ausführungsmodus",
+      "executionModeAuto": "Direkt ausführen",
+      "executionModeConfirm": "Bestätigung nötig",
+      "confirmTimeout": "Bestätigungs-Timeout"
     },
     "test": {
       "modelsLabel": "Zu auslösende Modelle",
@@ -2288,7 +2292,11 @@
       "runtimeConfigCodexCliPlaceholder": "z. B. /opt/homebrew/bin/codex",
       "runtimeConfigNodeLabel": "node-Pfad",
       "runtimeConfigNodePlaceholder": "z. B. /opt/homebrew/bin/node",
-      "runtimeConfigApplyHint": "Klicken Sie nach Änderungen auf „CLI erneut prüfen“, um sie zu speichern und sofort anzuwenden."
+      "runtimeConfigApplyHint": "Klicken Sie nach Änderungen auf „CLI erneut prüfen“, um sie zu speichern und sofort anzuwenden.",
+      "officialChatRuntimeTitle": "Offiziell direkt",
+      "officialChatRuntimePath": "Offizieller ChatGPT-Codex-Chat",
+      "officialChatRuntimeSource": "Offiziell direkt",
+      "officialChatRuntimeMessage": "Direkter Chat mit OAuth-Konto"
     },
     "sessionManager": {
       "title": "Sitzungsverwaltung",
@@ -2784,6 +2792,18 @@
         "presetNameRequired": "Profilnamen eingeben",
         "deletePresetConfirm": "Dieses eigene Profil löschen?",
         "deletePresetTitle": "Profil löschen"
+      },
+      "accountModelRules": {
+        "action": "Modelle sperren",
+        "title": "Kontomodelle sperren",
+        "desc": "Passende Konten werden für diese Modellanfrage übersprungen. Ein Modell oder Platzhalter pro Zeile.",
+        "bulkLabel": "Stapelregeln",
+        "placeholder": "Beispiel:\ngpt-5.4-mini\ngpt-5.3-*",
+        "applySelected": "Auf Auswahl anwenden",
+        "selectAll": "Konten wählen",
+        "clearSelection": "Auswahl leeren",
+        "saveSuccess": "Kontomodell-Sperren gespeichert",
+        "cardCount": "{{count}} gesperrt"
       }
     }
   },

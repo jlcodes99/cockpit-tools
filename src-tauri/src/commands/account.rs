@@ -53,31 +53,48 @@ fn compare_versions(left: &str, right: &str) -> Option<std::cmp::Ordering> {
 }
 
 #[allow(dead_code)]
-fn resolve_antigravity_desktop_auth_mode() -> Result<AntigravityDesktopAuthMode, String> {
-    let Some(info) = crate::commands::system::resolve_antigravity_installed_version_info_for_target(
-        Some("antigravity"),
-    ) else {
-        modules::logger::log_warn(
-            "[Antigravity] 无法确认 Antigravity 安装版本，将默认采用 LegacyStateDb 认证模式",
-        );
-        return Ok(AntigravityDesktopAuthMode::LegacyStateDb);
-    };
-
+fn resolve_antigravity_desktop_auth_mode_from_info(
+    info: crate::commands::system::AntigravityInstalledVersionInfo,
+) -> AntigravityDesktopAuthMode {
     modules::logger::log_info(&format!(
         "[Antigravity] 检测到桌面版版本: version={}, path={}, source={}",
         info.version, info.app_path, info.source
     ));
     match compare_versions(&info.version, "2.0.0") {
-        Some(std::cmp::Ordering::Less) => Ok(AntigravityDesktopAuthMode::LegacyStateDb),
-        Some(_) => Ok(AntigravityDesktopAuthMode::SystemCredential),
+        Some(std::cmp::Ordering::Less) => AntigravityDesktopAuthMode::LegacyStateDb,
+        Some(_) => AntigravityDesktopAuthMode::SystemCredential,
         None => {
             modules::logger::log_warn(&format!(
                 "[Antigravity] 无法解析 Antigravity 安装版本: {}，默认采用 LegacyStateDb",
                 info.version
             ));
-            Ok(AntigravityDesktopAuthMode::LegacyStateDb)
+            AntigravityDesktopAuthMode::LegacyStateDb
         }
     }
+}
+
+#[allow(dead_code)]
+fn resolve_antigravity_desktop_auth_mode() -> Result<AntigravityDesktopAuthMode, String> {
+    if let Some(info) =
+        crate::commands::system::resolve_antigravity_installed_version_info_for_target(Some(
+            "antigravity",
+        ))
+    {
+        return Ok(resolve_antigravity_desktop_auth_mode_from_info(info));
+    }
+
+    if let Some(info) =
+        crate::commands::system::get_cached_antigravity_installed_version_info_for_target(Some(
+            "antigravity",
+        ))
+    {
+        return Ok(resolve_antigravity_desktop_auth_mode_from_info(info));
+    }
+
+    modules::logger::log_warn(
+        "[Antigravity] 无法确认 Antigravity 安装版本，将默认采用 LegacyStateDb 认证模式",
+    );
+    Ok(AntigravityDesktopAuthMode::LegacyStateDb)
 }
 
 fn legacy_antigravity_user_data_dir() -> Result<PathBuf, String> {

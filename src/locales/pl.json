@@ -1577,7 +1577,11 @@
       "timeWindowFrom": "Od",
       "timeWindowTo": "Do",
       "fallbackTimes": "Zastępcze godziny",
-      "saveTask": "Zapisz zadanie"
+      "saveTask": "Zapisz zadanie",
+      "executionMode": "Tryb wykonania",
+      "executionModeAuto": "Uruchom bezpośrednio",
+      "executionModeConfirm": "Wymagaj potwierdzenia",
+      "confirmTimeout": "Limit potwierdzenia"
     },
     "test": {
       "modelsLabel": "Modele do wywołania",
@@ -2288,7 +2292,11 @@
       "runtimeConfigCodexCliPlaceholder": "np. /opt/homebrew/bin/codex",
       "runtimeConfigNodeLabel": "Ścieżka node",
       "runtimeConfigNodePlaceholder": "np. /opt/homebrew/bin/node",
-      "runtimeConfigApplyHint": "Po zmianie kliknij „Sprawdź CLI ponownie”, aby zapisać i natychmiast zastosować."
+      "runtimeConfigApplyHint": "Po zmianie kliknij „Sprawdź CLI ponownie”, aby zapisać i natychmiast zastosować.",
+      "officialChatRuntimeTitle": "Oficjalnie bezpośrednio",
+      "officialChatRuntimePath": "Oficjalny czat Codex w ChatGPT",
+      "officialChatRuntimeSource": "Oficjalnie bezpośrednio",
+      "officialChatRuntimeMessage": "Bezpośredni czat kontem OAuth"
     },
     "sessionManager": {
       "title": "Menedżer sesji",
@@ -2784,6 +2792,18 @@
         "presetNameRequired": "Podaj nazwę profilu",
         "deletePresetConfirm": "Usunąć ten własny profil?",
         "deletePresetTitle": "Usuń profil"
+      },
+      "accountModelRules": {
+        "action": "Blokuj modele",
+        "title": "Blokady modeli konta",
+        "desc": "Konta pasujące do reguł są pomijane dla tego modelu. Jeden model lub wzorzec w wierszu.",
+        "bulkLabel": "Reguły zbiorcze",
+        "placeholder": "Przykład:\ngpt-5.4-mini\ngpt-5.3-*",
+        "applySelected": "Zastosuj do wybranych",
+        "selectAll": "Wybierz konta",
+        "clearSelection": "Wyczyść wybór",
+        "saveSuccess": "Blokady modeli kont zapisane",
+        "cardCount": "{{count}} zabl."
       }
     }
   },
