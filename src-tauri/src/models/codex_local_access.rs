@@ -9,6 +9,7 @@ pub enum CodexLocalAccessRoutingStrategy {
     PlanHighFirst,
     PlanLowFirst,
     ExpirySoonFirst,
+    AccountFixedOrder,
     Custom,
 }
 

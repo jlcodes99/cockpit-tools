@@ -1889,7 +1889,8 @@
         "planHighFirst": "Ưu tiên gói cao",
         "planLowFirst": "Ưu tiên gói thấp",
         "expirySoonFirst": "Sắp hết hạn trước",
-        "custom": "Tùy chỉnh"
+        "custom": "Tùy chỉnh",
+        "accountFixedOrder": "Thứ tự tài khoản cố định"
       },
       "statusUnconfigured": "Chưa cấu hình",
       "expandDetails": "Mở chi tiết",
@@ -2034,7 +2035,8 @@
       "testChatSend": "Gửi",
       "testChatInputRequired": "Nhập tin nhắn thử",
       "testChatModelRequired": "Chọn ID mô hình",
-      "testChatEmptyResponse": "Phản hồi trống"
+      "testChatEmptyResponse": "Phản hồi trống",
+      "routingDescriptionAccountFixedOrder": "Dùng thứ tự cố định theo ID tài khoản cục bộ."
     },
     "local": {
       "desc": "Nhập tài khoản hiện tại từ ~/.codex/auth.json",

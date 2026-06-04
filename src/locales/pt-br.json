@@ -1889,7 +1889,8 @@
         "planHighFirst": "Plano alto primeiro",
         "planLowFirst": "Plano baixo primeiro",
         "expirySoonFirst": "Vence antes primeiro",
-        "custom": "Personalizado"
+        "custom": "Personalizado",
+        "accountFixedOrder": "Ordem fixa por conta"
       },
       "statusUnconfigured": "Não configurado",
       "expandDetails": "Expandir detalhes",
@@ -2034,7 +2035,8 @@
       "testChatSend": "Enviar",
       "testChatInputRequired": "Digite uma mensagem de teste",
       "testChatModelRequired": "Selecione um ID de modelo",
-      "testChatEmptyResponse": "Resposta vazia"
+      "testChatEmptyResponse": "Resposta vazia",
+      "routingDescriptionAccountFixedOrder": "Usa uma ordem fixa pelo ID local da conta."
     },
     "local": {
       "desc": "Importe a conta atual de ~/.codex/auth.json",

@@ -1889,7 +1889,8 @@
         "planHighFirst": "Hohes Abo zuerst",
         "planLowFirst": "Niedriges Abo zuerst",
         "expirySoonFirst": "Bald ablaufend zuerst",
-        "custom": "Benutzerdefiniert"
+        "custom": "Benutzerdefiniert",
+        "accountFixedOrder": "Feste Kontoreihenfolge"
       },
       "statusUnconfigured": "Nicht konfiguriert",
       "expandDetails": "Details aufklappen",
@@ -2034,7 +2035,8 @@
       "testChatSend": "Senden",
       "testChatInputRequired": "Testnachricht eingeben",
       "testChatModelRequired": "Modell-ID wählen",
-      "testChatEmptyResponse": "Leere Antwort"
+      "testChatEmptyResponse": "Leere Antwort",
+      "routingDescriptionAccountFixedOrder": "Verwendet eine feste Reihenfolge nach lokaler Konto-ID."
     },
     "local": {
       "desc": "Aktuell eingeloggtes Konto aus ~/.codex/auth.json importieren",

@@ -2004,7 +2004,8 @@
         "planHighFirst": "High Plan First",
         "planLowFirst": "Low Plan First",
         "expirySoonFirst": "Expiry Soon First",
-        "custom": "Custom"
+        "custom": "Custom",
+        "accountFixedOrder": "Fixed Account Order"
       },
       "requestKind": {
         "text": "Text",
@@ -2106,7 +2107,8 @@
       "testChatSend": "Send",
       "testChatInputRequired": "Enter a test message",
       "testChatModelRequired": "Select a model ID",
-      "testChatEmptyResponse": "Empty response"
+      "testChatEmptyResponse": "Empty response",
+      "routingDescriptionAccountFixedOrder": "Use a fixed order sorted by the local account ID."
     },
     "api": {
       "baseUrl": "Base URL",

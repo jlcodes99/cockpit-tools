@@ -2004,7 +2004,8 @@
         "planHighFirst": "优先高订阅",
         "planLowFirst": "优先低订阅",
         "expirySoonFirst": "优先近到期",
-        "custom": "自定义"
+        "custom": "自定义",
+        "accountFixedOrder": "固定顺序（账户）"
       },
       "requestKind": {
         "text": "文本",
@@ -2106,7 +2107,8 @@
       "testChatSend": "发送",
       "testChatInputRequired": "请输入测试消息",
       "testChatModelRequired": "请选择模型 ID",
-      "testChatEmptyResponse": "响应为空"
+      "testChatEmptyResponse": "响应为空",
+      "routingDescriptionAccountFixedOrder": "按本地账户 ID 升序固定调度。"
     },
     "api": {
       "baseUrl": "基础地址",

@@ -1935,7 +1935,8 @@
         "planHighFirst": "الأعلى باقة أولاً",
         "planLowFirst": "الأقل باقة أولاً",
         "expirySoonFirst": "الأقرب انتهاءً أولاً",
-        "custom": "مخصص"
+        "custom": "مخصص",
+        "accountFixedOrder": "ترتيب حساب ثابت"
       },
       "statusUnconfigured": "غير مُعدّ",
       "expandDetails": "توسيع التفاصيل",
@@ -2080,7 +2081,8 @@
       "testChatSend": "إرسال",
       "testChatInputRequired": "أدخل رسالة اختبار",
       "testChatModelRequired": "اختر معرّف النموذج",
-      "testChatEmptyResponse": "استجابة فارغة"
+      "testChatEmptyResponse": "استجابة فارغة",
+      "routingDescriptionAccountFixedOrder": "يستخدم ترتيبًا ثابتًا حسب معرف الحساب المحلي."
     },
     "local": {
       "desc": "استيراد الحساب الحالي من ~/.codex/auth.json",

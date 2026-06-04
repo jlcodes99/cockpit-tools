@@ -1889,7 +1889,8 @@
         "planHighFirst": "上位プラン優先",
         "planLowFirst": "下位プラン優先",
         "expirySoonFirst": "期限が近い順",
-        "custom": "カスタム"
+        "custom": "カスタム",
+        "accountFixedOrder": "アカウント固定順"
       },
       "statusUnconfigured": "未設定",
       "expandDetails": "詳細を開く",
@@ -2034,7 +2035,8 @@
       "testChatSend": "送信",
       "testChatInputRequired": "テストメッセージを入力してください",
       "testChatModelRequired": "モデル ID を選択してください",
-      "testChatEmptyResponse": "空の応答"
+      "testChatEmptyResponse": "空の応答",
+      "routingDescriptionAccountFixedOrder": "ローカルのアカウント ID に基づく固定順序を使います。"
     },
     "local": {
       "desc": "~/.codex/auth.json から現在ログイン中のアカウントをインポート",

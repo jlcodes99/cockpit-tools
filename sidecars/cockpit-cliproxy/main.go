@@ -1130,6 +1130,8 @@ func compareAccountSpecs(left, right *accountSpec, strategy string) int {
 			return cmp
 		}
 		return compareIntPtrDesc(valueInt(left, "quota"), valueInt(right, "quota"))
+	case "account_fixed_order":
+		return compareStringPtrAsc(valueAccountID(left), valueAccountID(right))
 	case "plan_high_first":
 		fallthrough
 	case "auto":
@@ -1157,6 +1159,30 @@ func valueInt64(account *accountSpec) *int64 {
 		return nil
 	}
 	return account.SubscriptionExpiryMS
+}
+
+func valueAccountID(account *accountSpec) *string {
+	if account == nil {
+		return nil
+	}
+	value := strings.TrimSpace(strings.ToLower(account.ID))
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func compareStringPtrAsc(left, right *string) int {
+	switch {
+	case left != nil && right != nil:
+		return strings.Compare(*left, *right)
+	case left != nil:
+		return -1
+	case right != nil:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func compareIntPtrDesc(left, right *int) int {

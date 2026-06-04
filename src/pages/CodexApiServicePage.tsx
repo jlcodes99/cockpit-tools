@@ -2187,6 +2187,13 @@ export function CodexApiServicePage() {
       ),
     },
     {
+      value: "account_fixed_order",
+      label: t(
+        "codex.localAccess.routingStrategy.accountFixedOrder",
+        "固定顺序（账户）",
+      ),
+    },
+    {
       value: "custom",
       label: t("codex.localAccess.routingStrategy.custom", "自定义"),
     },

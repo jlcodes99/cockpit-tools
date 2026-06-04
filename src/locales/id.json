@@ -1938,7 +1938,8 @@
         "planHighFirst": "Paket Tinggi Dulu",
         "planLowFirst": "Paket Rendah Dulu",
         "expirySoonFirst": "Kedaluwarsa Cepat Dulu",
-        "custom": "Kustom"
+        "custom": "Kustom",
+        "accountFixedOrder": "Urutan akun tetap"
       },
       "statusUnconfigured": "Belum dikonfigurasi",
       "expandDetails": "Buka detail",
@@ -2083,7 +2084,8 @@
       "testChatSend": "Kirim",
       "testChatInputRequired": "Masukkan pesan uji",
       "testChatModelRequired": "Pilih ID model",
-      "testChatEmptyResponse": "Respons kosong"
+      "testChatEmptyResponse": "Respons kosong",
+      "routingDescriptionAccountFixedOrder": "Gunakan urutan tetap berdasarkan ID akun lokal."
     },
     "api": {
       "baseUrl": "URL Dasar",

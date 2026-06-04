@@ -1889,7 +1889,8 @@
         "planHighFirst": "Forfait élevé d'abord",
         "planLowFirst": "Forfait faible d'abord",
         "expirySoonFirst": "Expiration proche d'abord",
-        "custom": "Personnalisé"
+        "custom": "Personnalisé",
+        "accountFixedOrder": "Ordre fixe par compte"
       },
       "statusUnconfigured": "Non configuré",
       "expandDetails": "Développer",
@@ -2034,7 +2035,8 @@
       "testChatSend": "Envoyer",
       "testChatInputRequired": "Saisissez un message de test",
       "testChatModelRequired": "Choisissez un ID de modèle",
-      "testChatEmptyResponse": "Réponse vide"
+      "testChatEmptyResponse": "Réponse vide",
+      "routingDescriptionAccountFixedOrder": "Utilise un ordre fixe basé sur l’ID local du compte."
     },
     "local": {
       "desc": "Importer le compte connecté depuis ~/.codex/auth.json",

@@ -1889,7 +1889,8 @@
         "planHighFirst": "상위 요금제 우선",
         "planLowFirst": "하위 요금제 우선",
         "expirySoonFirst": "만료 임박 우선",
-        "custom": "사용자 지정"
+        "custom": "사용자 지정",
+        "accountFixedOrder": "계정 고정 순서"
       },
       "statusUnconfigured": "미설정",
       "expandDetails": "세부 정보 펼치기",
@@ -2034,7 +2035,8 @@
       "testChatSend": "전송",
       "testChatInputRequired": "테스트 메시지를 입력하세요",
       "testChatModelRequired": "모델 ID를 선택하세요",
-      "testChatEmptyResponse": "빈 응답"
+      "testChatEmptyResponse": "빈 응답",
+      "routingDescriptionAccountFixedOrder": "로컬 계정 ID 기준의 고정 순서를 사용합니다."
     },
     "local": {
       "desc": "~/.codex/auth.json에서 현재 로그인된 계정 가져오기",

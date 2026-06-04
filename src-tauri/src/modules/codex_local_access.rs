@@ -3641,6 +3641,10 @@ fn compare_routing_candidates(
                 .then_with(|| compare_option_desc(left.plan_rank, right.plan_rank))
                 .then_with(|| compare_option_desc(left.remaining_quota, right.remaining_quota))
         }
+        CodexLocalAccessRoutingStrategy::AccountFixedOrder => left
+            .account_id
+            .to_ascii_lowercase()
+            .cmp(&right.account_id.to_ascii_lowercase()),
         CodexLocalAccessRoutingStrategy::Custom => Ordering::Equal,
     };
 
@@ -5828,6 +5832,7 @@ fn sidecar_routing_strategy_value(strategy: CodexLocalAccessRoutingStrategy) -> 
         CodexLocalAccessRoutingStrategy::PlanHighFirst => "plan_high_first",
         CodexLocalAccessRoutingStrategy::PlanLowFirst => "plan_low_first",
         CodexLocalAccessRoutingStrategy::ExpirySoonFirst => "expiry_soon_first",
+        CodexLocalAccessRoutingStrategy::AccountFixedOrder => "account_fixed_order",
         CodexLocalAccessRoutingStrategy::Custom => "custom",
     }
 }
@@ -16991,6 +16996,57 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                 "acc-edu",
             ]
         );
+    }
+
+    #[test]
+    fn account_fixed_order_uses_normalized_account_id() {
+        let mut candidates = vec![
+            RoutingCandidate {
+                account_id: "codex_c".to_string(),
+                plan_rank: Some(700),
+                remaining_quota: Some(100),
+                subscription_expiry_ms: None,
+            },
+            RoutingCandidate {
+                account_id: "CODEX_A".to_string(),
+                plan_rank: Some(700),
+                remaining_quota: Some(100),
+                subscription_expiry_ms: None,
+            },
+            RoutingCandidate {
+                account_id: "codex_b".to_string(),
+                plan_rank: Some(100),
+                remaining_quota: Some(10),
+                subscription_expiry_ms: None,
+            },
+            RoutingCandidate {
+                account_id: "codex_d".to_string(),
+                plan_rank: Some(300),
+                remaining_quota: Some(20),
+                subscription_expiry_ms: None,
+            },
+        ];
+        let original_index = candidates
+            .iter()
+            .enumerate()
+            .map(|(index, candidate)| (candidate.account_id.clone(), index))
+            .collect::<HashMap<_, _>>();
+
+        candidates.sort_by(|left, right| {
+            compare_routing_candidates(
+                left,
+                right,
+                CodexLocalAccessRoutingStrategy::AccountFixedOrder,
+                &original_index,
+            )
+        });
+
+        let ordered = candidates
+            .into_iter()
+            .map(|candidate| candidate.account_id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(ordered, vec!["CODEX_A", "codex_b", "codex_c", "codex_d"]);
     }
 
     #[test]

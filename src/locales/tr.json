@@ -1889,7 +1889,8 @@
         "planHighFirst": "Önce yüksek plan",
         "planLowFirst": "Önce düşük plan",
         "expirySoonFirst": "Yakında Biten Önce",
-        "custom": "Özel"
+        "custom": "Özel",
+        "accountFixedOrder": "Sabit hesap sırası"
       },
       "statusUnconfigured": "Yapılandırılmadı",
       "expandDetails": "Ayrıntıları aç",
@@ -2034,7 +2035,8 @@
       "testChatSend": "Gönder",
       "testChatInputRequired": "Test mesajı girin",
       "testChatModelRequired": "Model ID seçin",
-      "testChatEmptyResponse": "Boş yanıt"
+      "testChatEmptyResponse": "Boş yanıt",
+      "routingDescriptionAccountFixedOrder": "Yerel hesap ID’sine göre sabit sıra kullanır."
     },
     "local": {
       "desc": "~/.codex/auth.json'dan mevcut hesabı içe aktar",

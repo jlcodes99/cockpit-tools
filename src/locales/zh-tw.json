@@ -1889,7 +1889,8 @@
         "planHighFirst": "優先高訂閱",
         "planLowFirst": "優先低訂閱",
         "expirySoonFirst": "優先近到期",
-        "custom": "自訂"
+        "custom": "自訂",
+        "accountFixedOrder": "固定順序（帳號）"
       },
       "statusUnconfigured": "未設定",
       "expandDetails": "展開詳情",
@@ -2034,7 +2035,8 @@
       "testChatSend": "傳送",
       "testChatInputRequired": "請輸入測試訊息",
       "testChatModelRequired": "請選擇模型 ID",
-      "testChatEmptyResponse": "回應為空"
+      "testChatEmptyResponse": "回應為空",
+      "routingDescriptionAccountFixedOrder": "按本地帳號 ID 升序固定調度。"
     },
     "api": {
       "baseUrl": "基礎網址",

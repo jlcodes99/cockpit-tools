@@ -24,6 +24,7 @@ export type CodexLocalAccessRoutingStrategy =
   | "plan_high_first"
   | "plan_low_first"
   | "expiry_soon_first"
+  | "account_fixed_order"
   | "custom";
 
 export interface CodexLocalAccessCustomRoutingRule {
