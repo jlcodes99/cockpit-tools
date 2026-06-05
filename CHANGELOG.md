@@ -7,6 +7,16 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [0.24.14] - 2026-06-05
+
+### Changed
+- **Top banner now shows a fork notice instead of remote ads**: the top-center promo banner across Dashboard, account, and platform pages displays "This repository is a fork and continues to be developed by Malik" with a link to the fork author, replacing the backend-driven advertisement.
+- **About page credits a fork maintainer**: added a "Forked by" entry linking to the fork author's GitHub profile.
+
+### Fixed
+- **Top header account label no longer falls back to Chinese**: the page header used a missing translation key and always rendered the Chinese fallback; it now uses the localized account-management label.
+
+---
 ## [0.24.13] - 2026-06-05
 
 ### Changed

@@ -14,11 +14,11 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { openUrl } from '@tauri-apps/plugin-opener';
 import { useTranslation } from 'react-i18next';
 import { FileText, FolderOpen, RefreshCw, X } from 'lucide-react';
 import { SideNav } from './components/layout/SideNav';
 import { GlobalModal } from './components/GlobalModal';
+import { TopCenterPromoBanner } from './components/TopCenterPromoBanner';
 import type { QuickSettingsType } from './components/QuickSettingsPopover';
 import { Page } from './types/navigation';
 import { useAutoRefresh } from './hooks/useAutoRefresh';
@@ -533,24 +533,12 @@ function MainApp() {
   const updateCheckRequestIdRef = useRef(0);
   const externalImportHandledAtRef = useRef<Map<string, number>>(new Map());
   const { showModal, closeModal } = useGlobalModal();
-  const topRightAdState = useTopRightAdStore((state) => state.state);
   const fetchTopRightAdState = useTopRightAdStore((state) => state.fetchState);
   const trayRefreshInFlightRef = useRef(false);
   const openPlatformLayoutModal = useCallback(() => {
     setPlatformLayoutRequestedGroupId(null);
     setShowPlatformLayoutModal(true);
   }, []);
-  const handleTopRightAdClick = useCallback(async () => {
-    const target = topRightAdState.ad?.ctaUrl?.trim();
-    if (!target || !/^https?:\/\//i.test(target)) {
-      return;
-    }
-    try {
-      await openUrl(target);
-    } catch {
-      window.open(target, '_blank', 'noopener,noreferrer');
-    }
-  }, [topRightAdState.ad?.ctaUrl]);
   const openBreakout = useCallback(() => {
     setHasBreakoutSession(true);
     setShowBreakout(true);
@@ -3181,29 +3169,7 @@ function MainApp() {
               onNavigate={setPage}
               onOpenPlatformLayout={openPlatformLayoutModal}
               onEasterEggTriggerClick={handleBreakoutEntryTriggerClick}
-              topCenterBanner={
-                topRightAdState.ad ? (
-                  <div
-                    className="global-promo-center"
-                    role="complementary"
-                    aria-label={t('common.topRightAd.ariaLabel', '全局右上角广告位')}
-                  >
-                    <div className="global-promo-slot">
-                      <span className="global-ad-slot-badge">
-                        {topRightAdState.ad.badge || t('common.topRightAd.badge', '广告')}
-                      </span>
-                      <div className="global-promo-main">
-                        <p className="global-promo-text">{topRightAdState.ad.text}</p>
-                      </div>
-                      {topRightAdState.ad.ctaUrl ? (
-                        <button className="global-ad-slot-action" onClick={handleTopRightAdClick}>
-                          {topRightAdState.ad.ctaLabel || t('common.topRightAd.action', '查看详情')}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null
-              }
+              topCenterBanner={<TopCenterPromoBanner reserveWhenEmpty={false} />}
             />
           )}
           {page === 'overview' && <AccountsPage onNavigate={setPage} />}

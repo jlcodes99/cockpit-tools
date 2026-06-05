@@ -5625,7 +5625,13 @@ export function SettingsPage() {
                 <h3>{t('settings.about.author')}</h3>
                 <p>jlcodes99</p>
               </button>
-              
+
+              <button className="credit-item" onClick={() => openLink('https://github.com/malikdoksoz')}>
+                <div className="credit-icon" style={{ color: '#6366f1' }}><Github size={24} /></div>
+                <h3>{t('settings.about.forkedBy', 'Forked by')}</h3>
+                <p>malikdoksoz</p>
+              </button>
+
               
               <button className="credit-item" onClick={() => openLink('https://github.com/jlcodes99/cockpit-tools')}>
                 <div className="credit-icon" style={{ color: '#0f172a' }}><Github size={24} /></div>

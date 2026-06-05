@@ -134,6 +134,24 @@
   text-overflow: ellipsis;
 }
 
+.global-promo-author-link {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font-size: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.global-promo-author-link:hover {
+  opacity: 0.8;
+}
+
 .global-ad-slot-action {
   flex: 0 0 auto;
   width: fit-content;

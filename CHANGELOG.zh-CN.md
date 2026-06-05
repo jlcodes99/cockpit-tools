@@ -7,6 +7,16 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [0.24.14] - 2026-06-05
+
+### 变更
+- **顶部横幅改为显示 Fork 提示而非远程广告**：Dashboard、账号与平台页面顶部中间的推广横幅改为显示 “This repository is a fork and continues to be developed by Malik” 并附上 Fork 作者链接，替换了后端驱动的广告。
+- **关于页面新增 Fork 维护者署名**：新增 “Forked by” 条目，链接到 Fork 作者的 GitHub 主页。
+
+### 修复
+- **顶部页眉的账号标签不再回退为中文**：页眉使用了不存在的翻译键，导致始终显示中文兜底文案；现已改用本地化的账号管理标签。
+
+---
 ## [0.24.13] - 2026-06-05
 
 ### 变更
