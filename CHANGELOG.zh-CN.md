@@ -7,6 +7,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [0.24.13] - 2026-06-05
+
+### 变更
+- **Fork 构建**：将应用更名为 “Cockpit Tools Forked”，并将自动更新切换为本 Fork 自己的签名密钥与发布地址。
+
+---
 ## [0.24.12] - 2026-06-03
 
 ### 新增

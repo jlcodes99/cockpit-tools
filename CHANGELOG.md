@@ -7,6 +7,12 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [0.24.13] - 2026-06-05
+
+### Changed
+- **Forked build**: renamed the application to "Cockpit Tools Forked" and updated the auto-updater to use this fork's own signing key and release endpoint.
+
+---
 ## [0.24.12] - 2026-06-03
 
 ### Added
