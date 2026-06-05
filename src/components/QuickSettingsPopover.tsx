@@ -1055,7 +1055,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         case 'github_copilot':
           return 'GitHub Copilot';
         case 'windsurf':
-          return 'Windsurf';
+          return 'Devin (Windsurf)';
         case 'kiro':
           return 'Kiro';
         case 'cursor':

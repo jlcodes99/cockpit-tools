@@ -2292,7 +2292,7 @@ export function DashboardPage({
           <div className="main-card-header">
             <div className="header-title">
               <WindsurfIcon className="" style={{ width: 18, height: 18 }} />
-              <h3>Windsurf</h3>
+              <h3>Devin (Windsurf)</h3>
             </div>
             <div className="header-action-group">
               <button

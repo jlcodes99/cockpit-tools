@@ -27,7 +27,7 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
     case 'github-copilot':
       return 'GitHub Copilot';
     case 'windsurf':
-      return 'Windsurf';
+      return 'Devin (Windsurf)';
     case 'kiro':
       return 'Kiro';
     case 'cursor':

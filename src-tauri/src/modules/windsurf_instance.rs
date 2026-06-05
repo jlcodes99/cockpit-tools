@@ -1552,18 +1552,48 @@ fn normalize_macos_app_root(path: &Path) -> Option<String> {
 fn resolve_macos_exec_path(path_str: &str) -> Option<PathBuf> {
     let path = PathBuf::from(path_str);
     if let Some(app_root) = normalize_macos_app_root(&path) {
-        let exec_path = PathBuf::from(app_root)
-            .join("Contents")
-            .join("MacOS")
-            .join("Electron");
-        if exec_path.exists() {
-            return Some(exec_path);
+        let macos_dir = PathBuf::from(&app_root).join("Contents").join("MacOS");
+        // Windsurf 已被 Devin 收购并改名，可执行文件可能是 Electron / Windsurf / Devin。
+        // 优先读取 Info.plist 中声明的 CFBundleExecutable，再回退到已知候选名。
+        if let Some(exec_name) = read_macos_bundle_executable(&app_root) {
+            let exec_path = macos_dir.join(&exec_name);
+            if exec_path.exists() {
+                return Some(exec_path);
+            }
+        }
+        for exec_name in ["Electron", "Windsurf", "Devin"] {
+            let exec_path = macos_dir.join(exec_name);
+            if exec_path.exists() {
+                return Some(exec_path);
+            }
         }
     }
     if path.exists() {
         return Some(path);
     }
     None
+}
+
+#[cfg(target_os = "macos")]
+fn read_macos_bundle_executable(app_root: &str) -> Option<String> {
+    let plist_path = PathBuf::from(app_root).join("Contents").join("Info.plist");
+    let output = Command::new("/usr/libexec/PlistBuddy")
+        .args([
+            "-c",
+            "Print CFBundleExecutable",
+            &plist_path.to_string_lossy(),
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -1579,10 +1609,16 @@ fn resolve_macos_exec_path(path_str: &str) -> Option<PathBuf> {
 fn detect_windsurf_exec_path() -> Option<PathBuf> {
     #[cfg(target_os = "macos")]
     {
-        // On macOS, check well-known path first to avoid sysinfo TCC dialogs
-        let path = PathBuf::from("/Applications/Windsurf.app/Contents/MacOS/Electron");
-        if path.exists() {
-            return Some(path);
+        // On macOS, check well-known paths first to avoid sysinfo TCC dialogs.
+        // Windsurf 已被 Devin 收购并改名，应用包可能是 Windsurf.app 或 Devin.app，
+        // 可执行文件可能为 Electron / Windsurf / Devin。
+        let app_candidates = ["/Applications/Windsurf.app", "/Applications/Devin.app"];
+        for app_root in app_candidates {
+            if PathBuf::from(app_root).exists() {
+                if let Some(exec) = resolve_macos_exec_path(app_root) {
+                    return Some(exec);
+                }
+            }
         }
         // Fallback: try to find from running processes via ps
         for (pid, _) in collect_windsurf_process_entries() {
@@ -1622,18 +1658,17 @@ fn detect_windsurf_exec_path() -> Option<PathBuf> {
         {
             let mut candidates: Vec<PathBuf> = Vec::new();
             if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
-                candidates.push(
-                    Path::new(&local_appdata)
-                        .join("Programs")
-                        .join("Windsurf")
-                        .join("Windsurf.exe"),
-                );
-                candidates.push(
-                    Path::new(&local_appdata)
-                        .join("Programs")
-                        .join("Windsurf")
-                        .join("Electron.exe"),
-                );
+                // Windsurf 已被 Devin 收购并改名，目录与可执行文件名可能为 Windsurf 或 Devin。
+                for dir in ["Windsurf", "Devin"] {
+                    for exe in ["Windsurf.exe", "Devin.exe", "Electron.exe"] {
+                        candidates.push(
+                            Path::new(&local_appdata)
+                                .join("Programs")
+                                .join(dir)
+                                .join(exe),
+                        );
+                    }
+                }
             }
             for candidate in candidates {
                 if candidate.exists() {
@@ -1642,10 +1677,10 @@ fn detect_windsurf_exec_path() -> Option<PathBuf> {
             }
             if let Some(path) = modules::process::detect_windows_exec_path_by_signatures(
                 "windsurf",
-                &["Windsurf.exe", "Electron.exe"],
-                &["windsurf"],
-                &["windsurf", "codeium"],
-                &["windsurf", "codeium"],
+                &["Windsurf.exe", "Devin.exe", "Electron.exe"],
+                &["windsurf", "devin"],
+                &["windsurf", "devin", "codeium", "exafunction"],
+                &["windsurf", "devin", "codeium", "exafunction"],
             ) {
                 return Some(path);
             }
@@ -1653,7 +1688,12 @@ fn detect_windsurf_exec_path() -> Option<PathBuf> {
 
         #[cfg(target_os = "linux")]
         {
-            let candidates = ["/usr/bin/windsurf", "/opt/windsurf/windsurf"];
+            let candidates = [
+                "/usr/bin/windsurf",
+                "/opt/windsurf/windsurf",
+                "/usr/bin/devin",
+                "/opt/devin/devin",
+            ];
             for candidate in candidates {
                 let path = PathBuf::from(candidate);
                 if path.exists() {
@@ -1668,7 +1708,45 @@ fn detect_windsurf_exec_path() -> Option<PathBuf> {
 
 fn path_looks_like_windsurf(path: &Path) -> bool {
     let text = path.to_string_lossy().to_lowercase();
-    text.contains("windsurf")
+    // Windsurf 已被 Devin 收购并改名，安装路径可能含 "windsurf" 或 "devin"。
+    if text.contains("windsurf") || text.contains("devin") {
+        return true;
+    }
+    // 最后回退：通过 Bundle Identifier 确认确实是 Windsurf（com.exafunction.windsurf）。
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(app_root) = normalize_macos_app_root(path) {
+            if let Some(identifier) = read_macos_bundle_identifier(&app_root) {
+                let id = identifier.to_lowercase();
+                return id.contains("windsurf")
+                    || id.contains("codeium")
+                    || id.contains("exafunction");
+            }
+        }
+    }
+    false
+}
+
+#[cfg(target_os = "macos")]
+fn read_macos_bundle_identifier(app_root: &str) -> Option<String> {
+    let plist_path = PathBuf::from(app_root).join("Contents").join("Info.plist");
+    let output = Command::new("/usr/libexec/PlistBuddy")
+        .args([
+            "-c",
+            "Print CFBundleIdentifier",
+            &plist_path.to_string_lossy(),
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
 }
 
 fn normalize_windsurf_path_for_config(path: &Path) -> String {
