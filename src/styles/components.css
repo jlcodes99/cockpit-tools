@@ -1098,13 +1098,6 @@
   background: rgba(29, 78, 216, 0.06);
 }
 
-.account-table.fingerprint-table tr.current {
-  background: transparent;
-}
-
-.account-table.fingerprint-table tr.current:hover {
-  background: var(--bg-hover);
-}
 
 /* Account Row - Dashboard Style */
 .account-cell {

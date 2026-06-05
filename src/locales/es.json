@@ -231,7 +231,6 @@
     "overview": "Antigravity IDE",
     "accounts": "Cuentas",
     "wakeup": "Tareas de activación",
-    "fingerprints": "Huellas",
     "settings": "Ajustes",
     "codex": "Codex",
     "githubCopilot": "GitHub Copilot",
@@ -254,12 +253,24 @@
     "expandSidebar": "Expandir barra lateral",
     "collapseSidebar": "Contraer barra lateral",
     "logs": "Registros",
+    "sponsors": "Patrocinadores",
+    "sponsorAppreciation": "Patrocinar",
     "switchClassicLayoutEntry": "Cambiar al diseño clásico",
     "switchClassicLayoutTitle": "Cambiar al diseño clásico de la barra lateral",
     "switchClassicLayoutDesc": "El diseño clásico muestra toda la navegación de plataformas y permite contraer la barra lateral. Puedes volver en cualquier momento en Configuración > General > Diseño de la barra lateral.",
     "switchClassicLayoutDontAskAgain": "No volver a mostrar este aviso",
     "switchClassicLayoutConfirm": "Cambiar ahora",
     "2faManager": "Gestión 2FA"
+  },
+  "sponsors": {
+    "pageTitle": "Patrocinadores",
+    "pageDesc": "Gracias a estos patrocinadores por apoyar Cockpit Tools.",
+    "loading": "Cargando patrocinadores...",
+    "emptyTitle": "Aún no hay patrocinadores",
+    "emptyDesc": "El módulo remoto de patrocinadores está desactivado.",
+    "listAriaLabel": "Lista de patrocinadores",
+    "defaultDescription": "Gracias por apoyar Cockpit Tools.",
+    "openSponsor": "Abrir"
   },
   "platformLayout": {
     "title": "Diseño de plataformas",
@@ -272,7 +283,7 @@
     "hiddenBadge": "Oculto",
     "openFromMore": "Gestionar diseño de plataformas",
     "dragHandleLabel": "Arrastrar para reordenar",
-    "tipWithGroups": "Arrastra para ordenar. Se pueden mostrar como máximo tres entradas en la barra lateral. Los subelementos del grupo no tienen interruptores de barra lateral/panel y solo se usan para la barra de menú y el cambio de plataforma predeterminada.",
+    "tipWithGroups": "Arrastra para ordenar. Pueden mostrarse hasta {{max}} entradas en la barra lateral. Los elementos secundarios de grupos no tienen interruptores de barra lateral/panel y solo se usan para la barra de menú y la plataforma predeterminada.",
     "addGroup": "Agregar grupo",
     "editGroup": "Editar grupo",
     "deleteGroup": "Eliminar grupo",
@@ -549,7 +560,8 @@
     "tabs": {
       "general": "General",
       "network": "Red",
-      "about": "Acerca de"
+      "about": "Acerca de",
+      "data": "Gestión de datos"
     },
     "general": {
       "appearance": "Apariencia",
@@ -600,8 +612,8 @@
       "floatingCardShowNowAction": "Mostrar la tarjeta flotante",
       "dataDir": "Directorio de datos",
       "dataDirDesc": "Ubicación de almacenamiento para cuentas y archivos de configuración.",
-      "fpDir": "Almacenamiento de Antigravity IDE",
-      "fpDirDesc": "Ubicación de los archivos de datos de Antigravity IDE.",
+      "topRightAdVisible": "Mostrar promo superior",
+      "topRightAdVisibleDesc": "Oculta el espacio promocional superior de la app. La página de patrocinadores no se ve afectada.",
       "opencodeTitle": "Integración de OpenCode",
       "opencodeRestart": "Reiniciar OpenCode al cambiar Codex",
       "opencodeRestartDesc": "Sincronizar la información de la cuenta de Codex en OpenCode",
@@ -928,6 +940,61 @@
         "unsupportedLegacyFile": "No se reconoce este formato heredado de copia de cuentas",
         "unsupportedVersion": "Esta versión de la app no admite esa versión del paquete"
       }
+    },
+    "webdav": {
+      "groupTitle": "Sincronización WebDAV",
+      "enabledTitle": "Sincronización de copia de seguridad WebDAV",
+      "enabledDesc": "Por defecto Jianguoyun, se puede cambiar a cualquier servicio WebDAV.",
+      "urlTitle": "Dirección del servicio",
+      "urlDesc": "Dirección por defecto de Jianguoyun: https://dav.jianguoyun.com/dav/",
+      "usernameTitle": "Cuenta",
+      "usernameDesc": "Jianguoyun utiliza el correo electrónico de su cuenta.",
+      "usernamePlaceholder": "Correo electrónico o nombre de usuario",
+      "passwordTitle": "Contraseña de la aplicación",
+      "passwordDesc": "Guardada localmente; dejar en blanco para mantener la contraseña existente.",
+      "passwordPlaceholder": "Contraseña de aplicación de terceros de Jianguoyun",
+      "passwordSavedPlaceholder": "Guardada; dejar en blanco para mantenerla",
+      "clearPassword": "Limpiar",
+      "remoteDirTitle": "Carpeta remota",
+      "remoteDirDesc": "Solo se gestionan los archivos de copia de seguridad de Cockpit en esta carpeta.",
+      "statusTitle": "Estado de sincronización",
+      "statusDesc": "La restauración remota requiere una selección manual y nunca sobrescribe silenciosamente los datos locales.",
+      "lastUpload": "Última subida: {{time}}",
+      "lastDownload": "Última restauración: {{time}}",
+      "never": "No sincronizado todavía",
+      "testAction": "Probar/Guardar configuración",
+      "uploadAction": "Crear y subir",
+      "syncAction": "Sincronizar configuración",
+      "syncLatestConfirm": "¿Está seguro de que desea descargar la última copia de seguridad remota {{name}} y sincronizarla localmente? Esto sobrescribirá los datos locales existentes.",
+      "remoteListTitle": "Copias de seguridad remotas",
+      "remoteListDesc": "Solo se muestran los archivos JSON y ZIP que coinciden con los nombres de copias de seguridad automáticas/manuales de Cockpit.",
+      "emptyTitle": "No hay copias de seguridad remotas",
+      "emptyDesc": "Guarde la configuración, luego cree y suba una copia de seguridad.",
+      "unknownTime": "Desconocido",
+      "restoreAction": "Restaurar",
+      "restoreConfirm": "¿Restaurar datos de la copia de seguridad remota {{name}}?",
+      "deleteConfirm": "¿Eliminar copia de seguridad remota {{name}}?",
+      "feedback": {
+        "testingAndSaving": "Guardando y probando la conexión WebDAV...",
+        "saveAndTestSuccess": "¡Configuración guardada y prueba de conexión exitosa!",
+        "saveSuccessTestFailed": "Configuración guardada, pero la prueba de conexión falló: {{message}}",
+        "saveAndTestFailed": "Error al guardar y probar la conexión: {{error}}",
+        "uploading": "Creando y subiendo copia de seguridad...",
+        "uploadSuccess": "Subido(s) {{count}} archivo(s), limpiada(s) {{deleted}} copia(s) de seguridad remota(s) expirada(s)",
+        "uploadFailed": "La subida a WebDAV falló: {{error}}",
+        "listFailed": "Error al cargar las copias de seguridad remotas: {{error}}",
+        "loadSettingsFailed": "Error al cargar la configuración de WebDAV: {{error}}",
+        "restoring": "Leyendo copia de seguridad remota e importando...",
+        "restoreEmpty": "No se restauró ningún dato de la copia de seguridad remota",
+        "deleteSuccess": "Copia de seguridad remota eliminada",
+        "deleteFailed": "Error al eliminar la copia de seguridad remota: {{error}}",
+        "syncingLatest": "Sincronizando la última configuración remota...",
+        "syncFailed": "Error al sincronizar la última configuración: {{error}}",
+        "noRemoteBackup": "No se encontraron archivos de copia de seguridad restaurables en el control remoto"
+      },
+      "errors": {
+        "notEnabled": "Primero active la sincronización WebDAV"
+      }
     }
   },
   "appPath": {
@@ -959,7 +1026,6 @@
       "email": "Correo",
       "subscription": "Suscripción",
       "quota": "Estado de Cuota",
-      "fingerprint": "Huella",
       "lastUsed": "Último Uso",
       "actions": "Acciones"
     },
@@ -1045,10 +1111,8 @@
     "actions": {
       "viewDetails": "Ver detalles",
       "viewError": "Ver error",
-      "fingerprint": "Huella",
       "switch": "Cambiar cuenta",
       "switchTo": "Cambiar a esta cuenta",
-      "selectFingerprint": "Seleccionar huella",
       "delete": "Eliminar",
       "deleteSelected": "Eliminar seleccionados",
       "export": "Exportar",
@@ -1197,106 +1261,8 @@
     "currentAccount": "En uso actualmente",
     "switchTo": "Cambiar a esta cuenta",
     "switching": "Cambiando...",
-    "fingerprint": "Huella",
     "bound": "Vinculado",
     "brandTitle": "Gestión de cuenta Antigravity IDE"
-  },
-  "fingerprints": {
-    "title": "Huellas de Dispositivo",
-    "subtitle": "Gestiona las huellas de dispositivo vinculadas a las cuentas.",
-    "toolbar": {
-      "generate": "Generar Nueva",
-      "capture": "Capturar Actual",
-      "import": "Importar",
-      "folder": "Carpeta",
-      "delete": "Eliminar",
-      "deleteUnbound": "Eliminar no vinculadas"
-    },
-    "table": {
-      "name": "Nombre de Huella",
-      "machineId": "ID de Máquina",
-      "accounts": "Cuentas Vinculadas",
-      "actions": "Acciones",
-      "accountCount": "{{count}} cuentas",
-      "apply": "Aplicar",
-      "noData": "No hay datos de huellas",
-      "preview": "Vista previa",
-      "rename": "Renombrar"
-    },
-    "modals": {
-      "generate": {
-        "title": "Generar Huella",
-        "btn": "Generar"
-      },
-      "capture": {
-        "title": "Capturar Huella",
-        "btn": "Capturar"
-      },
-      "rename": {
-        "title": "Renombrar Huella",
-        "label": "Nombre de Huella"
-      },
-      "import": {
-        "title": "Importar Huellas",
-        "fromTools": "Importar de Antigravity Tools",
-        "desc": "Importar del directorio ~/.antigravity_tools/",
-        "fromJsonBtn": "Importar desde JSON",
-        "jsonExample": "Ejemplo de formato:",
-        "jsonPlaceholder": "Huella de trabajo",
-        "orPasteJson": "O pegar JSON"
-      },
-      "bound": {
-        "title": "Cuentas Vinculadas",
-        "add": "Añadir Cuentas",
-        "empty": "No hay cuentas vinculadas",
-        "emptyAll": "Todas las cuentas están vinculadas",
-        "select": "Selecciona cuentas para añadir",
-        "from": "Desde: {{name}}",
-        "back": "Volver"
-      },
-      "detail": {
-        "title": "Detalles de Huella",
-        "created": "Creado en {{time}}"
-      }
-    },
-    "messages": {
-      "deleteConfirm": "¿Eliminar esta huella? Las cuentas vinculadas volverán a la original.",
-      "batchDeleteConfirm": "¿Eliminar {{count}} huellas? Las cuentas vinculadas volverán a la original.",
-      "generated": "Nueva huella generada",
-      "captured": "Huella actual capturada",
-      "renamed": "Renombrado",
-      "deleted": "Huella eliminada",
-      "imported": "Importadas {{count}} huellas",
-      "addedAccounts": "Añadidas {{count}} cuentas",
-      "enterName": "Introduce el nombre de la huella",
-      "previewNotReady": "Vista previa no lista, por favor espera",
-      "duplicate": "Ya existe una huella idéntica: {{name}}",
-      "autoGeneratedSuffix": "(No encontrado, generado automáticamente)",
-      "readOnly": "Solo lectura",
-      "current": "Actual",
-      "addCount": "Se agregaron {{count}} cuentas",
-      "addFailed": "Error al agregar",
-      "adding": "Agregando...",
-      "applyFailed": "Error al aplicar",
-      "boundCount": "{{count}} cuentas vinculadas",
-      "captureFailed": "Error al capturar",
-      "count": "{{count}}",
-      "deleteFailed": "Error al eliminar",
-      "fpLabel": "Huella:",
-      "generateFailed": "Error al generar",
-      "importFailed": "Error al importar",
-      "importPartialFailed": "{{failCount}} fallaron: {{failList}}",
-      "refreshingQuota": "Actualizando cuota {{done}}/{{total}} (puedes cerrar este cuadro)",
-      "quotaRefreshDone": "Actualización de cuota completada",
-      "importing": "Importando...",
-      "loadFailed": "Error al cargar la lista de huellas",
-      "processing": "Procesando...",
-      "renameFailed": "Error al renombrar",
-      "serviceMachineIdEmpty": "Vacío",
-      "deleteUnboundConfirm": "¿Eliminar {{count}} huellas sin cuentas vinculadas?",
-      "deletedUnbound": "Se eliminaron {{count}} huellas no vinculadas",
-      "noUnboundToDelete": "No hay huellas no vinculadas para eliminar"
-    }
   },
   "modals": {
     "addAccount": {
@@ -1331,15 +1297,6 @@
       "fromFiles": "Importar desde archivos locales",
       "fromFilesDesc": "Seleccione archivos JSON para importar cuentas (múltiples formatos soportados)",
       "importingFiles": "Importando {{count}} archivo(s)..."
-    },
-    "fingerprint": {
-      "title": "Seleccionar Huella",
-      "desc": "Selecciona huella para la cuenta <1>{{email}}</1>",
-      "original": "Huella Original",
-      "new": "Añadir Nueva Huella",
-      "bind": "Confirmar Vinculación",
-      "selectLabel": "Seleccionar Huella",
-      "boundCount": "cuentas"
     },
     "quota": {
       "title": "Detalles de Cuota",
@@ -2488,7 +2445,12 @@
         "website": "Sitio web (opcional)",
         "apiKeyUrl": "Página de clave API (opcional)",
         "newApiKeyName": "Nombre de la nueva clave (opcional)",
-        "newApiKey": "Nueva clave API"
+        "newApiKey": "Nueva clave API",
+        "wireApi": "Protocolo",
+        "enableMode": "Modo",
+        "modelCatalog": "Catálogo de modelos",
+        "visionCapability": "Entrada de imagen",
+        "visionModels": "Modelos con visión"
       },
       "validation": {
         "nameRequired": "El nombre del proveedor es obligatorio.",
@@ -2503,6 +2465,19 @@
       "confirmDelete": "¿Eliminar el proveedor \"{{name}}\"?",
       "deleteFailed": "No se pudo eliminar el proveedor: {{error}}",
       "deleteApiKeyFailed": "No se pudo eliminar la clave API: {{error}}",
+      "enableAsBackend": "Usar como backend de Codex",
+      "enabling": "Activando...",
+      "enableSuccess": "{{name}} activado y {{instance}} iniciado.",
+      "enableFailed": "No se pudo activar el proveedor: {{error}}",
+      "status": {
+        "active": "Backend actual",
+        "available": "Listo"
+      },
+      "enableMode": {
+        "label": "Modo de conexión",
+        "gatewayMode": "Modo de pasarela",
+        "directMode": "Modo directo"
+      },
       "selectSavedProvider": "Proveedores guardados",
       "selectSavedApiKey": "Claves API guardadas",
       "noSavedProviders": "Aún no hay proveedores guardados. Puedes rellenar los campos directamente y se guardará automáticamente.",
@@ -2561,7 +2536,107 @@
         "partialDetected": "Actualmente, solo hay un campo administrado configurado: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. Al guardar se reescribirán ambos campos utilizando el esquema actual.",
         "notSet": "No establecido"
       },
-      "managePresets": "Preajustes de modelo"
+      "managePresets": "Preajustes de modelo",
+      "wireApi": {
+        "responses": "Responses nativo",
+        "chatCompletions": "Protocolo Chat Completions",
+        "help": "Usa Responses para la mayoría de proveedores. Cambia a Chat Completions solo cuando el proveedor indique explícitamente que solo admite ese protocolo. Si tienes dudas, elige Responses primero.",
+        "helpAria": "Ver ayuda del protocolo"
+      },
+      "testing": "Probando...",
+      "testSuccess": "La conexión del proveedor es correcta: {{protocol}}, {{model}}, {{latency}}.",
+      "testFailed": "Error al probar el proveedor: {{error}}",
+      "testFailure": {
+        "credential": "API Key no disponible",
+        "url": "Base URL no válida",
+        "network": "Conexión de red fallida",
+        "models": "Error en endpoint de modelos",
+        "parse": "Error al analizar respuesta",
+        "httpStatus": "Estado {{status}}",
+        "message": "{{title}}: {{detail}}. {{suggestion}}"
+      },
+      "testSuggestion": {
+        "addApiKey": "Añade una API Key para este proveedor antes de probar.",
+        "checkBaseUrl": "Comprueba que la Base URL incluya la ruta de versión correcta, por ejemplo /v1.",
+        "checkNetwork": "Comprueba la URL del proveedor, proxy, firewall o estado del servicio upstream.",
+        "checkApiKey": "Comprueba si la API Key es válida y puede acceder al endpoint de modelos.",
+        "checkProviderStatus": "Comprueba el estado del proveedor, proxy o compatibilidad de API.",
+        "checkModelsApi": "Confirma que el proveedor devuelve una lista de modelos compatible con OpenAI."
+      },
+      "enableAndStart": "Iniciar",
+      "instance": {
+        "label": "Instancia",
+        "default": "Instancia predeterminada",
+        "running": "En ejecución",
+        "targetHint": "Destino: {{instance}}",
+        "uninitializedHint": "La instancia de destino no está inicializada. Iníciala una vez desde Multiinstancia.",
+        "shortLabel": "Instancia",
+        "saveFailed": "No se pudo guardar la vinculación de instancia: {{error}}"
+      },
+      "modelCatalog": "Modelos",
+      "modelCatalogEmpty": "Sin catálogo de modelos",
+      "gatewayHint": "Los proveedores de terceros se inician mediante la puerta de enlace local para aislar la instancia y convertir el protocolo. Los proveedores oficiales de OpenAI siguen directos.",
+      "vision": {
+        "providerDefault": "Este proveedor admite imágenes por defecto",
+        "providerDefaultHint": "Si está desactivado, solo los modelos de abajo aceptarán imágenes; los demás serán rechazados por la puerta local.",
+        "modelsHint": "Un modelo por línea. Úsalo cuando solo algunos modelos del proveedor admitan imágenes pegadas.",
+        "allModels": "Imágenes",
+        "partialModels": "Algunas imágenes",
+        "textOnly": "Solo texto"
+      },
+      "sponsorRecommended": "Sponsors recomendados",
+      "builtinProviders": "Proveedores integrados",
+      "sponsorHint": "Se completó la URL del servicio compatible recomendada por el patrocinador. Tras ingresar la API Key, la tarjeta consultará saldo y uso automáticamente.",
+      "integration": {
+        "sub2api": "Compatible con Sub2API",
+        "newApi": "Compatible con New API"
+      },
+      "usage": {
+        "title": "Resumen de cuota",
+        "remaining": "Restante",
+        "today": "Hoy",
+        "total": "Acumulado",
+        "requests": "Solicitudes de hoy",
+        "loading": "Consultando cuota...",
+        "failed": "Error al consultar la cuota: {{error}}",
+        "pending": "Esperando consulta de cuota",
+        "noKey": "Sin cuota consultable",
+        "used": "Usado",
+        "limit": "Límite",
+        "viewDetail": "Detalles",
+        "detailTitle": "Panel de servicio",
+        "rawFields": "Datos del servicio",
+        "fields": {
+          "status": "Estado",
+          "planName": "Suscripción",
+          "remaining": "Crédito restante",
+          "balance": "Saldo",
+          "todayRequests": "Solicitudes de hoy",
+          "todayTokens": "Tokens de hoy",
+          "todayCost": "Coste de hoy",
+          "totalRequests": "Solicitudes totales",
+          "totalTokens": "Tokens totales",
+          "totalCost": "Coste total",
+          "hardLimitUsd": "Límite duro",
+          "softLimitUsd": "Límite flexible",
+          "systemHardLimitUsd": "Límite del sistema",
+          "accessUntil": "Acceso hasta",
+          "totalUsage": "Uso total",
+          "quotaUnlimited": "Ilimitado",
+          "expiresAt": "Caduca el",
+          "totalGranted": "Concedido",
+          "totalAvailable": "Disponible",
+          "modelLimitsEnabled": "Límites de modelo"
+        },
+        "accountBalance": "Saldo de cuenta",
+        "unlimitedQuota": "Ilimitado",
+        "booleanTrue": "Sí",
+        "booleanFalse": "Desactivado"
+      },
+      "oauthBinding": {
+        "desc": "Opcional. Se puede vincular cualquier cuenta OAuth con refresh_token. Sin vinculación, el proveedor sigue usando su flujo original de API Key.",
+        "currentProvider": "Proveedor: {{name}}"
+      }
     },
     "quickSwitch": {
       "action": "Cambio rápido de proveedor",
@@ -2807,6 +2882,10 @@
         "saveSuccess": "Bloqueos de modelo guardados",
         "cardCount": "{{count}} bloqueados"
       }
+    },
+    "apiKey": {
+      "renameSuccess": "Renombrado",
+      "renameFailed": "Error al renombrar"
     }
   },
   "githubCopilot": {
@@ -3369,7 +3448,6 @@
       "goAntigravity": "Ir a Antigravity IDE",
       "goCodex": "Ir a Codex",
       "goDashboard": "Ir al panel",
-      "goFingerprints": "Ir a huellas del dispositivo",
       "goGitHubCopilot": "Ir a GitHub Copilot",
       "goInstances": "Ir a múltiples instancias",
       "goKiro": "Ir a Kiro",
@@ -3464,28 +3542,6 @@
     "empty": {
       "desc": "Prueba palabras como instancia, cambio, ajustes, exportar.",
       "title": "No hay contenido coincidente"
-    },
-    "fingerprints": {
-      "cautions": {
-        "0": "Haz copia de seguridad antes de acciones riesgosas o masivas en Huellas del dispositivo."
-      },
-      "keywords": {
-        "0": "Huellas del dispositivo",
-        "1": "guía",
-        "2": "flujo",
-        "3": "cuenta"
-      },
-      "outcomes": {
-        "0": "Entiende qué puede resolver Huellas del dispositivo.",
-        "1": "Usa el flujo recomendado en Huellas del dispositivo para reducir errores."
-      },
-      "steps": {
-        "0": "Abre la página de Huellas del dispositivo.",
-        "1": "Completa la configuración base y los enlaces requeridos en Huellas del dispositivo.",
-        "2": "Ejecuta una operación manual en Huellas del dispositivo para verificar el resultado."
-      },
-      "summary": "Esta sección explica cómo usar Huellas del dispositivo en el flujo diario.",
-      "title": "Huellas del dispositivo"
     },
     "instances": {
       "cautions": {

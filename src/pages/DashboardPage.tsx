@@ -61,6 +61,10 @@ import {
   getGeminiTierQuotaSummary,
 } from '../types/gemini';
 import { ZedAccount, getZedUsage } from '../types/zed';
+import {
+  isCodexApiKeyAccount,
+  isCodexNewApiAccount,
+} from '../types/codex';
 import './DashboardPage.css';
 import { RobotIcon } from '../components/icons/RobotIcon';
 import { CodexIcon } from '../components/icons/CodexIcon';
@@ -95,6 +99,10 @@ import {
   buildWindsurfAccountPresentation,
   UnifiedQuotaMetric,
 } from '../presentation/platformAccountPresentation';
+import {
+  queryCodexModelProviderUsage,
+  type CodexModelProviderUsageSummary,
+} from '../services/codexModelProviderService';
 
 interface DashboardPageProps {
   onNavigate: (page: Page) => void;
@@ -114,6 +122,37 @@ function normalizeDashboardCardPlatformId(platformId: PlatformId): PlatformId {
 
 function toFiniteNumber(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function resolveDashboardCodexApiUsageMode(
+  summary?: CodexModelProviderUsageSummary | null,
+): 'new_api' | 'sub2api' | null {
+  if (!summary) return null;
+  if (summary.mode === 'new_api' || summary.mode === 'sub2api') {
+    return summary.mode;
+  }
+  if (
+    typeof summary.todayRequests === 'number' ||
+    typeof summary.todayTotalTokens === 'number'
+  ) {
+    return 'sub2api';
+  }
+  const detailKeys = new Set((summary.details ?? []).map((item) => item.key));
+  if (
+    detailKeys.has('todayRequests') ||
+    detailKeys.has('todayTokens') ||
+    detailKeys.has('remaining')
+  ) {
+    return 'sub2api';
+  }
+  if (
+    detailKeys.has('totalGranted') ||
+    detailKeys.has('totalAvailable') ||
+    detailKeys.has('expiresAt')
+  ) {
+    return 'new_api';
+  }
+  return null;
 }
 
 function resolveDashboardCurrentAccount<T extends { id: string }>(
@@ -537,6 +576,11 @@ export function DashboardPage({
   // Refresh States
   const [refreshing, setRefreshing] = React.useState<Set<string>>(new Set());
   const [switching, setSwitching] = React.useState<Set<string>>(new Set());
+  const [codexApiUsageMap, setCodexApiUsageMap] = React.useState<Record<string, {
+    loading: boolean;
+    summary?: CodexModelProviderUsageSummary;
+    error?: string;
+  }>>({});
   const [cardRefreshing, setCardRefreshing] = React.useState<{
     ag: boolean;
     codex: boolean;
@@ -616,6 +660,41 @@ export function DashboardPage({
     }
   };
 
+  const refreshCodexApiUsage = useCallback(async (account: CodexAccount) => {
+    const apiKey = (account.openai_api_key || '').trim();
+    const baseUrl = (account.api_base_url || '').trim();
+    if (!apiKey || !baseUrl) return;
+    setCodexApiUsageMap((prev) => ({
+      ...prev,
+      [account.id]: {
+        ...prev[account.id],
+        loading: true,
+        error: undefined,
+      },
+    }));
+    try {
+      const summary = await queryCodexModelProviderUsage({
+        baseUrl,
+        apiKey,
+      });
+      setCodexApiUsageMap((prev) => ({
+        ...prev,
+        [account.id]: {
+          loading: false,
+          summary,
+        },
+      }));
+    } catch (error) {
+      setCodexApiUsageMap((prev) => ({
+        ...prev,
+        [account.id]: {
+          loading: false,
+          summary: prev[account.id]?.summary,
+          error: String(error).replace(/^Error:\s*/, ''),
+        },
+      }));
+    }
+  }, []);
   const handleRefreshGitHubCopilot = async (accountId: string) => {
     if (refreshing.has(accountId)) return;
     setRefreshing(prev => new Set(prev).add(accountId));
@@ -1809,6 +1888,106 @@ export function DashboardPage({
   const renderCodexAccountContent = (account: CodexAccount | null) => {
     if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
 
+    if (isCodexApiKeyAccount(account) && !isCodexNewApiAccount(account)) {
+      const usageState = codexApiUsageMap[account.id];
+      const usageSummary = usageState?.summary;
+      const usageMode = resolveDashboardCodexApiUsageMode(usageSummary);
+      const newApiGranted = Number(
+        usageSummary?.details?.find((item) => item.key === 'totalGranted')?.value ?? NaN,
+      );
+      const newApiAvailable = Number(
+        usageSummary?.details?.find((item) => item.key === 'totalAvailable')?.value ?? NaN,
+      );
+      const newApiExpiresAt = Number(
+        usageSummary?.details?.find((item) => item.key === 'expiresAt')?.value ?? NaN,
+      );
+      const isUnlimited = usageSummary?.quotaUnlimited === true;
+      const progressPercent =
+        usageMode === 'new_api' && Number.isFinite(newApiGranted) && Number.isFinite(newApiAvailable) && newApiGranted > 0
+          ? Math.max(0, Math.min(100, Math.round(((newApiGranted - newApiAvailable) / newApiGranted) * 100)))
+          : isUnlimited
+            ? 100
+            : 0;
+
+      return (
+        <div className={`account-mini-card codex-api-mini-card ${account.api_provider_id ? "sponsor-api-account" : ""}`}>
+          <div className="account-mini-header">
+            <div className="account-info-row">
+              <span className="account-email" title={account.account_name || account.email || account.id}>
+                {account.account_name || account.email || account.id}
+              </span>
+              <span className="tier-badge sponsor-api">
+                {(account.api_provider_name || 'API_KEY').toUpperCase()}
+              </span>
+            </div>
+          </div>
+
+          <div className="account-mini-quotas codex-api-mini-quotas">
+            {usageMode === 'new_api' ? (
+              <div className="mini-quota-row-stacked">
+                <div className="mini-quota-header">
+                  <span className="model-name">{t('codex.cockpitApi.balance', '额度')}</span>
+                  <span className="model-pct high">
+                    {isUnlimited
+                      ? t('codex.newApi.quota.unlimited', '不限量')
+                      : Number.isFinite(newApiAvailable) && Number.isFinite(newApiGranted)
+                        ? `$${newApiAvailable.toFixed(2)} / $${newApiGranted.toFixed(2)}`
+                        : '-'}
+                  </span>
+                </div>
+                <div className="mini-progress-track">
+                  <div
+                    className="mini-progress-bar high"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <div className="mini-reset-time">
+                  {Number.isFinite(newApiExpiresAt) && newApiExpiresAt > 0
+                    ? `${t('codex.modelProviders.usage.fields.expiresAt', '过期时间')} ${new Date(newApiExpiresAt * 1000).toLocaleDateString()}`
+                    : t('dashboard.noData', '暂无数据')}
+                </div>
+              </div>
+            ) : usageMode === 'sub2api' ? (
+              <div className="codex-api-mini-stats">
+                <div className="codex-api-mini-stat">
+                  <span>{t('codex.modelProviders.usage.accountBalance', '账户余额')}</span>
+                  <strong>{typeof usageSummary?.balance === 'number' || typeof usageSummary?.remaining === 'number' ? `$${(usageSummary?.remaining ?? usageSummary?.balance ?? 0).toFixed(2)}` : '-'}</strong>
+                </div>
+                <div className="codex-api-mini-stat">
+                  <span>{t('codex.modelProviders.usage.fields.todayRequests', '今日请求')}</span>
+                  <strong>{usageSummary?.todayRequests ?? '-'}</strong>
+                </div>
+                <div className="codex-api-mini-stat">
+                  <span>{t('codex.modelProviders.usage.fields.todayTokens', '今日 Token')}</span>
+                  <strong>{typeof usageSummary?.todayTotalTokens === 'number' ? usageSummary.todayTotalTokens.toLocaleString('en-US') : '-'}</strong>
+                </div>
+              </div>
+            ) : (
+              <span className="no-data-text">{t('dashboard.noData', '暂无数据')}</span>
+            )}
+          </div>
+
+          <div className="account-mini-actions icon-only-row">
+            <button
+              className="mini-icon-btn"
+              onClick={() => void refreshCodexApiUsage(account)}
+              title={t('common.refresh', '刷新')}
+              disabled={refreshing.has(account.id) || usageState?.loading}
+            >
+              <RotateCw size={14} className={refreshing.has(account.id) || usageState?.loading ? 'loading-spinner' : ''} />
+            </button>
+            <button
+              className="mini-icon-btn"
+              onClick={() => switchCodexAccount(account.id)}
+              title={t('dashboard.switch', '切换')}
+            >
+              <Play size={14} />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     const presentation = buildCodexAccountPresentation(account, t);
     return renderUnifiedAccountCard({
       presentation,
@@ -1820,6 +1999,19 @@ export function DashboardPage({
       onEditTags: () => setTagModalState({ accountId: account.id, platform: 'codex', tags: account.tags || [] }),
     });
   };
+
+  React.useEffect(() => {
+    const targetAccounts = [codexCurrentAccount, codexRecommended].filter(
+      (account): account is CodexAccount =>
+        Boolean(account) && isCodexApiKeyAccount(account!) && !isCodexNewApiAccount(account!),
+    );
+    targetAccounts.forEach((account) => {
+      if (codexApiUsageMap[account.id]?.loading || codexApiUsageMap[account.id]?.summary) {
+        return;
+      }
+      void refreshCodexApiUsage(account);
+    });
+  }, [codexApiUsageMap, codexCurrentAccount, codexRecommended, refreshCodexApiUsage]);
 
   const renderZedAccountContent = (account: ZedAccount | null) => {
     if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;

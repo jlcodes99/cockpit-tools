@@ -74,7 +74,7 @@ export function WindsurfInstancesContent({
       unsupportedTitleKey="common.shared.instances.unsupported.title"
       unsupportedTitleDefault="暂不支持当前系统"
       unsupportedDescKey="windsurf.instances.unsupported.descPlatform"
-      unsupportedDescDefault="Windsurf 多开实例仅支持 macOS、Windows 和 Linux。"
+      unsupportedDescDefault="Devin 多开实例仅支持 macOS、Windows 和 Linux。"
     />
   );
 }

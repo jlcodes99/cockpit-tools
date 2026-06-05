@@ -231,7 +231,6 @@
     "overview": "Antigravity IDE",
     "accounts": "Hesaplar",
     "wakeup": "Uyandırma Görevleri",
-    "fingerprints": "Parmak İzleri",
     "settings": "Ayarlar",
     "codex": "Codex",
     "githubCopilot": "GitHub Copilot",
@@ -254,12 +253,24 @@
     "expandSidebar": "Kenar çubuğunu genişlet",
     "collapseSidebar": "Kenar çubuğunu daralt",
     "logs": "Günlükler",
+    "sponsors": "Sponsorlar",
+    "sponsorAppreciation": "Destekle",
     "switchClassicLayoutEntry": "Klasik düzene geç",
     "switchClassicLayoutTitle": "Klasik kenar çubuğu düzenine geç",
     "switchClassicLayoutDesc": "Klasik düzen, platform gezinmesinin tamamını gösterir ve kenar çubuğunu daraltmayı destekler. Ayarlar > Genel > Kenar Çubuğu Düzeni bölümünden istediğiniz zaman geri dönebilirsiniz.",
     "switchClassicLayoutDontAskAgain": "Bu uyarıyı tekrar gösterme",
     "switchClassicLayoutConfirm": "Şimdi geç",
     "2faManager": "2FA Yönetimi"
+  },
+  "sponsors": {
+    "pageTitle": "Sponsorlar",
+    "pageDesc": "Cockpit Tools'u destekleyen sponsorlara teşekkür ederiz.",
+    "loading": "Sponsorlar yükleniyor...",
+    "emptyTitle": "Henüz sponsor yok",
+    "emptyDesc": "Uzak sponsor modülü şu anda devre dışı.",
+    "listAriaLabel": "Sponsor listesi",
+    "defaultDescription": "Cockpit Tools'u desteklediğiniz için teşekkürler.",
+    "openSponsor": "Aç"
   },
   "platformLayout": {
     "title": "Platform Düzeni",
@@ -272,7 +283,7 @@
     "hiddenBadge": "Gizli",
     "openFromMore": "Platform düzenini yönet",
     "dragHandleLabel": "Sürükleyerek sırala",
-    "tipWithGroups": "Sürükleyerek sıralayın. Kenar çubuğunda en fazla üç giriş gösterilebilir. Grup alt platformlarında kenar çubuğu/pano anahtarı yoktur; yalnızca menü çubuğu görünürlüğü ve varsayılan platform geçişi için kullanılır.",
+    "tipWithGroups": "Sıralamak için sürükleyin. Kenar çubuğunda en fazla {{max}} giriş gösterilebilir. Grup alt öğelerinde kenar çubuğu/pano anahtarı yoktur; yalnızca menü çubuğu ve varsayılan platform seçimi için kullanılır.",
     "addGroup": "Grup ekle",
     "editGroup": "Grubu düzenle",
     "deleteGroup": "Grubu sil",
@@ -549,7 +560,8 @@
     "tabs": {
       "general": "Genel",
       "network": "Ağ",
-      "about": "Hakkında"
+      "about": "Hakkında",
+      "data": "Veri Yönetimi"
     },
     "general": {
       "appearance": "Görünüm",
@@ -603,8 +615,8 @@
       "floatingCardShowNowAction": "Yüzen kartı göster",
       "dataDir": "Veri dizini",
       "dataDirDesc": "Hesaplar ve yapılandırma dosyaları için depolama konumu.",
-      "fpDir": "Antigravity IDE Depolama",
-      "fpDirDesc": "Antigravity IDE veri dosyalarının depolandığı konum.",
+      "topRightAdVisible": "Üst tanıtımı göster",
+      "topRightAdVisibleDesc": "Uygulamadaki üst tanıtım alanını gizler. Sponsorlar sayfası etkilenmez.",
       "opencodeTitle": "OpenCode Entegrasyonu",
       "opencodeRestart": "Codex değiştirildiğinde OpenCode'u yeniden başlat",
       "opencodeRestartDesc": "OpenCode içinde Codex hesap bilgisini senkronize et",
@@ -928,6 +940,61 @@
         "unsupportedLegacyFile": "Bu eski hesap yedeği biçimi tanınmadı",
         "unsupportedVersion": "Bu uygulama sürümü bu paket sürümünü desteklemiyor"
       }
+    },
+    "webdav": {
+      "groupTitle": "WebDAV Senkronizasyonu",
+      "enabledTitle": "WebDAV Yedekleme Senkronizasyonu",
+      "enabledDesc": "Varsayılan olarak Jianguoyun'dur ve herhangi bir WebDAV servisiyle değiştirilebilir.",
+      "urlTitle": "Servis Adresi",
+      "urlDesc": "Jianguoyun varsayılan adresi: https://dav.jianguoyun.com/dav/",
+      "usernameTitle": "Hesap",
+      "usernameDesc": "Jianguoyun hesap e-postanızı kullanır.",
+      "usernamePlaceholder": "E-posta veya kullanıcı adı",
+      "passwordTitle": "Uygulama Şifresi",
+      "passwordDesc": "Yerel olarak kaydedilir; mevcut şifreyi korumak için boş bırakın.",
+      "passwordPlaceholder": "Jianguoyun üçüncü taraf uygulama şifresi",
+      "passwordSavedPlaceholder": "Kaydedildi; korumak için boş bırakın",
+      "clearPassword": "Temizle",
+      "remoteDirTitle": "Uzak Klasör",
+      "remoteDirDesc": "Sadece bu klasördeki Cockpit yedekleme dosyaları yönetilir.",
+      "statusTitle": "Senkronizasyon Durumu",
+      "statusDesc": "Uzak yedekten geri yükleme manuel seçim gerektirir ve yerel verileri asla sessizce üzerine yazmaz.",
+      "lastUpload": "Son yükleme: {{time}}",
+      "lastDownload": "Son geri yükleme: {{time}}",
+      "never": "Henüz senkronize edilmedi",
+      "testAction": "Test Et/Kaydet",
+      "uploadAction": "Oluştur & Yükle",
+      "syncAction": "Ayarları Senkronize Et",
+      "syncLatestConfirm": "En son uzak yedeği {{name}} çekmek ve yerel verilerle senkronize etmek istediğinizden emin misiniz? Bu işlem mevcut yerel verilerin üzerine yazacaktır.",
+      "remoteListTitle": "Uzak Yedekler",
+      "remoteListDesc": "Sadece Cockpit otomatik/manuel yedekleme adlarıyla eşleşen JSON ve ZIP dosyaları gösterilir.",
+      "emptyTitle": "Uzak yedek yok",
+      "emptyDesc": "Ayarları kaydedin, ardından bir yedek oluşturup yükleyin.",
+      "unknownTime": "Bilinmeyen",
+      "restoreAction": "Geri Yükle",
+      "restoreConfirm": "{{name}} uzak yedeğinden veriler geri yüklensin mi?",
+      "deleteConfirm": "{{name}} uzak yedeği silinsin mi?",
+      "feedback": {
+        "testingAndSaving": "WebDAV bağlantısı kaydediliyor ve test ediliyor...",
+        "saveAndTestSuccess": "Ayarlar kaydedildi ve bağlantı testi başarılı oldu!",
+        "saveSuccessTestFailed": "Ayarlar kaydedildi, ancak bağlantı testi başarısız oldu: {{message}}",
+        "saveAndTestFailed": "Ayarları kaydetme ve bağlantı testi başarısız oldu: {{error}}",
+        "uploading": "Yedek oluşturuluyor ve yükleniyor...",
+        "uploadSuccess": "{{count}} dosya yüklendi, {{deleted}} süresi dolmuş uzak yedek temizlendi",
+        "uploadFailed": "WebDAV yüklemesi başarısız oldu: {{error}}",
+        "listFailed": "Uzak yedekler yüklenemedi: {{error}}",
+        "loadSettingsFailed": "WebDAV ayarları yüklenemedi: {{error}}",
+        "restoring": "Uzak yedek okunuyor ve içe aktarılıyor...",
+        "restoreEmpty": "Uzak yedekten hiçbir veri geri yüklenmedi",
+        "deleteSuccess": "Uzak yedek silindi",
+        "deleteFailed": "Uzak yedeği silme başarısız oldu: {{error}}",
+        "syncingLatest": "En son uzak ayarlar senkronize ediliyor...",
+        "syncFailed": "En son ayarları senkronize etme başarısız oldu: {{error}}",
+        "noRemoteBackup": "Uzak sunucuda geri yüklenebilir yedekleme dosyası bulunamadı"
+      },
+      "errors": {
+        "notEnabled": "Önce WebDAV senkronizasyonunu etkinleştirin"
+      }
     }
   },
   "appPath": {
@@ -959,7 +1026,6 @@
       "email": "E-posta",
       "subscription": "Abonelik",
       "quota": "Kota Durumu",
-      "fingerprint": "Parmak İzi",
       "lastUsed": "Son Kullanım",
       "actions": "İşlemler"
     },
@@ -1045,10 +1111,8 @@
     "actions": {
       "viewDetails": "Detayları görüntüle",
       "viewError": "Hata görüntüle",
-      "fingerprint": "Parmak izi",
       "switch": "Hesap değiştir",
       "switchTo": "Bu hesaba geç",
-      "selectFingerprint": "Parmak izi seç",
       "delete": "Sil",
       "deleteSelected": "Seçilenleri Sil",
       "export": "Dışa Aktar",
@@ -1197,106 +1261,8 @@
     "currentAccount": "Şu an kullanımda",
     "switchTo": "Bu hesaba geç",
     "switching": "Geçiliyor...",
-    "fingerprint": "Parmak İzi",
     "bound": "Bağlı",
     "brandTitle": "Antigravity IDE Hesap Yönetimi"
-  },
-  "fingerprints": {
-    "title": "Cihaz Parmak İzleri",
-    "subtitle": "Hesaplara bağlı cihaz parmak izlerini yönetin.",
-    "toolbar": {
-      "generate": "Yeni Oluştur",
-      "capture": "Mevcudu Yakala",
-      "import": "İçe Aktar",
-      "folder": "Klasör",
-      "delete": "Sil",
-      "deleteUnbound": "Bağsızları sil"
-    },
-    "table": {
-      "name": "Parmak İzi Adı",
-      "machineId": "Makine ID",
-      "accounts": "Bağlı Hesaplar",
-      "actions": "İşlemler",
-      "accountCount": "{{count}} hesap",
-      "apply": "Uygula",
-      "noData": "Parmak izi verisi yok",
-      "preview": "Önizleme",
-      "rename": "Yeniden adlandır"
-    },
-    "modals": {
-      "generate": {
-        "title": "Parmak İzi Oluştur",
-        "btn": "Oluştur"
-      },
-      "capture": {
-        "title": "Parmak İzini Yakala",
-        "btn": "Yakala"
-      },
-      "rename": {
-        "title": "Parmak İzini Yeniden Adlandır",
-        "label": "Parmak İzi Adı"
-      },
-      "import": {
-        "title": "Parmak İzlerini İçe Aktar",
-        "fromTools": "Antigravity Tools'tan İçe Aktar",
-        "desc": "~/.antigravity_tools/ dizininden içe aktar",
-        "fromJsonBtn": "JSON'dan içe aktar",
-        "jsonExample": "Biçim örneği:",
-        "jsonPlaceholder": "İş parmak izi",
-        "orPasteJson": "Veya JSON yapıştır"
-      },
-      "bound": {
-        "title": "Bağlı Hesaplar",
-        "add": "Hesap Ekle",
-        "empty": "Bağlı hesap yok",
-        "emptyAll": "Tüm hesaplar bağlı",
-        "select": "Eklenecek hesapları seçin",
-        "from": "Kaynağı: {{name}}",
-        "back": "Geri"
-      },
-      "detail": {
-        "title": "Parmak İzi Detayları",
-        "created": "{{time}} tarihinde oluşturuldu"
-      }
-    },
-    "messages": {
-      "deleteConfirm": "Bu parmak izini silmek istiyor musunuz? Bağlı hesaplar orijinal haline dönecektir.",
-      "batchDeleteConfirm": "{{count}} parmak izini silmek istiyor musunuz? Bağlı hesaplar orijinal haline dönecektir.",
-      "generated": "Yeni parmak izi oluşturuldu",
-      "captured": "Mevcut parmak izi yakalandı",
-      "renamed": "Yeniden adlandırıldı",
-      "deleted": "Parmak izi silindi",
-      "imported": "{{count}} parmak izi içe aktarıldı",
-      "addedAccounts": "{{count}} hesap eklendi",
-      "enterName": "Parmak izi adını girin",
-      "previewNotReady": "Önizleme hazır değil, lütfen bekleyin",
-      "duplicate": "Aynı parmak izi zaten var: {{name}}",
-      "autoGeneratedSuffix": "(Bulunamadı, otomatik oluşturuldu)",
-      "readOnly": "Salt Okunur",
-      "current": "Mevcut",
-      "addCount": "{{count}} hesap eklendi",
-      "addFailed": "Ekleme başarısız",
-      "adding": "Ekleniyor...",
-      "applyFailed": "Uygulama başarısız",
-      "boundCount": "{{count}} hesap bağlandı",
-      "captureFailed": "Yakalama başarısız",
-      "count": "{{count}}",
-      "deleteFailed": "Silme başarısız",
-      "fpLabel": "Parmak izi:",
-      "generateFailed": "Oluşturma başarısız",
-      "importFailed": "İçe aktarma başarısız",
-      "importPartialFailed": "{{failCount}} başarısız oldu: {{failList}}",
-      "refreshingQuota": "Kota yenileniyor {{done}}/{{total}} (bu iletişim kutusunu kapatabilirsiniz)",
-      "quotaRefreshDone": "Kota yenileme tamamlandı",
-      "importing": "İçe aktarılıyor...",
-      "loadFailed": "Parmak izi listesi yüklenemedi",
-      "processing": "İşleniyor...",
-      "renameFailed": "Yeniden adlandırma başarısız",
-      "serviceMachineIdEmpty": "Boş",
-      "deleteUnboundConfirm": "Bağlı hesabı olmayan {{count}} parmak izi silinsin mi?",
-      "deletedUnbound": "{{count}} bağsız parmak izi silindi",
-      "noUnboundToDelete": "Silinecek bağsız parmak izi yok"
-    }
   },
   "modals": {
     "addAccount": {
@@ -1331,15 +1297,6 @@
       "fromFiles": "Yerel dosyalardan içe aktar",
       "fromFilesDesc": "Hesapları içe aktarmak için JSON dosyalarını seçin (birden fazla format desteklenir)",
       "importingFiles": "{{count}} dosya içe aktarılıyor..."
-    },
-    "fingerprint": {
-      "title": "Parmak İzini Seç",
-      "desc": "<1>{{email}}</1> hesabı için parmak izi seçin",
-      "original": "Orijinal Parmak İzi",
-      "new": "Yeni Parmak İzi Ekle",
-      "bind": "Bağlamayı Onayla",
-      "selectLabel": "Parmak İzini Seç",
-      "boundCount": "hesap"
     },
     "quota": {
       "title": "Kota Detayları",
@@ -2488,7 +2445,12 @@
         "website": "Web sitesi (isteğe bağlı)",
         "apiKeyUrl": "API anahtarı sayfası (isteğe bağlı)",
         "newApiKeyName": "Yeni anahtar adı (isteğe bağlı)",
-        "newApiKey": "Yeni API anahtarı"
+        "newApiKey": "Yeni API anahtarı",
+        "wireApi": "Protokol",
+        "enableMode": "Mod",
+        "modelCatalog": "Model Kataloğu",
+        "visionCapability": "Görsel girişi",
+        "visionModels": "Görsel modeller"
       },
       "validation": {
         "nameRequired": "Sağlayıcı adı gerekli.",
@@ -2503,6 +2465,19 @@
       "confirmDelete": "\"{{name}}\" sağlayıcısı silinsin mi?",
       "deleteFailed": "Sağlayıcı silinemedi: {{error}}",
       "deleteApiKeyFailed": "API anahtarı silinemedi: {{error}}",
+      "enableAsBackend": "Codex backend olarak kullan",
+      "enabling": "Etkinleştiriliyor...",
+      "enableSuccess": "{{name}} etkinleştirildi ve {{instance}} başlatıldı.",
+      "enableFailed": "Sağlayıcı etkinleştirilemedi: {{error}}",
+      "status": {
+        "active": "Geçerli backend",
+        "available": "Hazır"
+      },
+      "enableMode": {
+        "label": "Bağlantı modu",
+        "gatewayMode": "Ağ geçidi modu",
+        "directMode": "Doğrudan mod"
+      },
       "selectSavedProvider": "Kayıtlı sağlayıcılar",
       "selectSavedApiKey": "Kayıtlı API anahtarları",
       "noSavedProviders": "Henüz kayıtlı sağlayıcı yok. Alanları doğrudan doldurabilirsiniz; otomatik olarak kaydedilir.",
@@ -2561,7 +2536,107 @@
         "partialDetected": "Şu anda yalnızca bir yönetilen alan ayarlanmıştır: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. Kaydetme, mevcut şemayı kullanarak her iki alanı da yeniden yazacaktır.",
         "notSet": "Ayarlanmadı"
       },
-      "managePresets": "Model ön ayarları"
+      "managePresets": "Model ön ayarları",
+      "wireApi": {
+        "responses": "Responses yerel",
+        "chatCompletions": "Chat Completions protokolü",
+        "help": "Çoğu sağlayıcı için Responses seçin. Yalnızca sağlayıcı açıkça sadece Chat Completions protokolünü destekliyorsa geçiş yapın. Emin değilseniz önce Responses seçin.",
+        "helpAria": "Protokol yardımını görüntüle"
+      },
+      "testing": "Test ediliyor...",
+      "testSuccess": "Sağlayıcı bağlantısı sağlıklı: {{protocol}}, {{model}}, {{latency}}.",
+      "testFailed": "Sağlayıcı testi başarısız: {{error}}",
+      "testFailure": {
+        "credential": "API Key kullanılamıyor",
+        "url": "Geçersiz Base URL",
+        "network": "Ağ bağlantısı başarısız",
+        "models": "Model uç noktası hatalı",
+        "parse": "Yanıt ayrıştırılamadı",
+        "httpStatus": "Durum {{status}}",
+        "message": "{{title}}: {{detail}}. {{suggestion}}"
+      },
+      "testSuggestion": {
+        "addApiKey": "Testten önce bu sağlayıcı için API Key ekleyin.",
+        "checkBaseUrl": "Base URL içinde /v1 gibi doğru sürüm yolunun bulunduğunu kontrol edin.",
+        "checkNetwork": "Sağlayıcı adresini, proxy’yi, güvenlik duvarını veya upstream servis durumunu kontrol edin.",
+        "checkApiKey": "API Key geçerli mi ve model uç noktasına erişim izni var mı kontrol edin.",
+        "checkProviderStatus": "Sağlayıcı servis durumunu, proxy’yi veya API uyumluluğunu kontrol edin.",
+        "checkModelsApi": "Sağlayıcının OpenAI uyumlu model listesi yanıtı döndürdüğünü doğrulayın."
+      },
+      "enableAndStart": "Başlat",
+      "instance": {
+        "label": "Başlatılacak örnek",
+        "default": "Varsayılan örnek",
+        "running": "Çalışıyor",
+        "targetHint": "Hedef: {{instance}}",
+        "uninitializedHint": "Hedef örnek başlatılmamış. Önce Çoklu Örnek sayfasından bir kez başlatın.",
+        "shortLabel": "Instans",
+        "saveFailed": "Örnek bağlaması kaydedilemedi: {{error}}"
+      },
+      "modelCatalog": "Modeller",
+      "modelCatalogEmpty": "Model kataloğu yok",
+      "gatewayHint": "Üçüncü taraf sağlayıcılar, örnek yalıtımı ve protokol dönüştürme için yerel ağ geçidi üzerinden başlar. Resmi OpenAI sağlayıcıları doğrudan kalır.",
+      "vision": {
+        "providerDefault": "Bu sağlayıcı varsayılan olarak görsel girişini destekler",
+        "providerDefaultHint": "Kapalıyken yalnızca aşağıdaki modeller görsel alır; diğerleri yerel ağ geçidi tarafından reddedilir.",
+        "modelsHint": "Her satıra bir model yazın. Sağlayıcıdaki yalnızca bazı modeller yapıştırılan görselleri destekliyorsa kullanın.",
+        "allModels": "Görsel",
+        "partialModels": "Bazı görseller",
+        "textOnly": "Yalnızca metin"
+      },
+      "sponsorRecommended": "Sponsor Önerileri",
+      "builtinProviders": "Yerleşik Sağlayıcılar",
+      "sponsorHint": "Sponsorun önerdiği uyumlu servis adresi dolduruldu. API Key girdikten sonra kart bakiye ve kullanımı otomatik sorgular.",
+      "integration": {
+        "sub2api": "Sub2API uyumlu",
+        "newApi": "New API uyumlu"
+      },
+      "usage": {
+        "title": "Kota Özeti",
+        "remaining": "Kalan",
+        "today": "Bugün",
+        "total": "Toplam",
+        "requests": "Bugünkü istekler",
+        "loading": "Kota sorgulanıyor...",
+        "failed": "Kota sorgusu başarısız: {{error}}",
+        "pending": "Kota sorgusu bekleniyor",
+        "noKey": "Sorgulanabilir kota yok",
+        "used": "Kullanılan",
+        "limit": "Kota sınırı",
+        "viewDetail": "Ayrıntılar",
+        "detailTitle": "Servis paneli",
+        "rawFields": "Servis verileri",
+        "fields": {
+          "status": "Durum",
+          "planName": "Paket",
+          "remaining": "Kalan kota",
+          "balance": "Bakiye",
+          "todayRequests": "Bugünkü istek",
+          "todayTokens": "Bugünkü Token",
+          "todayCost": "Bugünkü maliyet",
+          "totalRequests": "Toplam istek",
+          "totalTokens": "Toplam Token",
+          "totalCost": "Toplam maliyet",
+          "hardLimitUsd": "Katı sınır",
+          "softLimitUsd": "Yumuşak sınır",
+          "systemHardLimitUsd": "Sistem sınırı",
+          "accessUntil": "Erişim bitişi",
+          "totalUsage": "Toplam kullanım",
+          "quotaUnlimited": "Sınırsız",
+          "expiresAt": "Bitiş",
+          "totalGranted": "Tanımlanan",
+          "totalAvailable": "Kullanılabilir",
+          "modelLimitsEnabled": "Model limitleri"
+        },
+        "accountBalance": "Hesap bakiyesi",
+        "unlimitedQuota": "Sınırsız",
+        "booleanTrue": "Evet",
+        "booleanFalse": "Hayır"
+      },
+      "oauthBinding": {
+        "desc": "İsteğe bağlı. refresh_token içeren herhangi bir OAuth hesabı bağlanabilir. Bağlantı yoksa sağlayıcı özgün API Key akışıyla çalışmaya devam eder.",
+        "currentProvider": "Sağlayıcı: {{name}}"
+      }
     },
     "quickSwitch": {
       "action": "Sağlayıcıyı hızlı değiştir",
@@ -2807,6 +2882,10 @@
         "saveSuccess": "Hesap model engelleri kaydedildi",
         "cardCount": "{{count}} engelli"
       }
+    },
+    "apiKey": {
+      "renameSuccess": "Yeniden adlandırıldı",
+      "renameFailed": "Yeniden adlandırılamadı"
     }
   },
   "githubCopilot": {
@@ -3369,7 +3448,6 @@
       "goAntigravity": "Antigravity IDE sayfasına git",
       "goCodex": "Codex sayfasına git",
       "goDashboard": "Gösterge paneline git",
-      "goFingerprints": "Cihaz parmak izi sayfasına git",
       "goGitHubCopilot": "GitHub Copilot sayfasına git",
       "goInstances": "Çoklu instance sayfasına git",
       "goKiro": "Kiro sayfasına git",
@@ -3465,28 +3543,6 @@
       "desc": "instance, switch, ayarlar, export gibi kelimeleri deneyin.",
       "title": "Eşleşen içerik yok"
     },
-    "fingerprints": {
-      "cautions": {
-        "0": "Cihaz parmak izi içinde riskli veya toplu işlemden önce veri yedeği alın."
-      },
-      "keywords": {
-        "0": "Cihaz parmak izi",
-        "1": "rehber",
-        "2": "akış",
-        "3": "hesap"
-      },
-      "outcomes": {
-        "0": "Cihaz parmak izi ile nelerin çözüldüğünü anlayın.",
-        "1": "Cihaz parmak izi içinde önerilen akışı kullanarak hataları azaltın."
-      },
-      "steps": {
-        "0": "Cihaz parmak izi sayfasını açın.",
-        "1": "Cihaz parmak izi için temel kurulum ve gerekli bağları tamamlayın.",
-        "2": "Beklenen sonucu doğrulamak için Cihaz parmak izi içinde bir manuel işlem çalıştırın."
-      },
-      "summary": "Bu bölüm, günlük akışta Cihaz parmak izi kullanımını açıklar.",
-      "title": "Cihaz parmak izi"
-    },
     "instances": {
       "cautions": {
         "0": "Çoklu instance (kritik) içinde riskli veya toplu işlemden önce veri yedeği alın.",
@@ -3566,7 +3622,7 @@
     },
     "resultCount": "Toplam {{count}} bölüm",
     "searchAria": "Kılavuzda ara",
-    "searchPlaceholder": "Özellik, senaryo veya anahtar kelime ara (örn: instance, inject, wakeup, fingerprint)",
+    "searchPlaceholder": "Özellik, senaryo veya anahtar kelime ara (örn: instance, inject, wakeup)",
     "settings": {
       "cautions": {
         "0": "Ayarlar ve sistem yetenekleri içinde riskli veya toplu işlemden önce veri yedeği alın.",

@@ -231,7 +231,6 @@
     "overview": "Antigravity IDE",
     "accounts": "Konten",
     "wakeup": "Weckaufgaben",
-    "fingerprints": "Fingerabdrücke",
     "settings": "Einstellungen",
     "codex": "Codex",
     "githubCopilot": "GitHub Copilot",
@@ -254,12 +253,24 @@
     "expandSidebar": "Seitenleiste erweitern",
     "collapseSidebar": "Seitenleiste einklappen",
     "logs": "Protokolle",
+    "sponsors": "Sponsoren",
+    "sponsorAppreciation": "Unterstützen",
     "switchClassicLayoutEntry": "Zur klassischen Ansicht wechseln",
     "switchClassicLayoutTitle": "Zur klassischen Seitenleisten-Ansicht wechseln",
     "switchClassicLayoutDesc": "Die klassische Ansicht zeigt die vollständige Plattform-Navigation und unterstützt das Einklappen der Seitenleiste. Du kannst jederzeit unter Einstellungen > Allgemein > Seitenleisten-Layout zurückwechseln.",
     "switchClassicLayoutDontAskAgain": "Diesen Hinweis nicht erneut anzeigen",
     "switchClassicLayoutConfirm": "Jetzt wechseln",
     "2faManager": "2FA-Verwaltung"
+  },
+  "sponsors": {
+    "pageTitle": "Sponsoren",
+    "pageDesc": "Vielen Dank an diese Sponsoren für die Unterstützung von Cockpit Tools.",
+    "loading": "Sponsoren werden geladen...",
+    "emptyTitle": "Noch keine Sponsoren",
+    "emptyDesc": "Das Remote-Sponsorenmodul ist derzeit deaktiviert.",
+    "listAriaLabel": "Sponsorenliste",
+    "defaultDescription": "Danke für die Unterstützung von Cockpit Tools.",
+    "openSponsor": "Öffnen"
   },
   "platformLayout": {
     "title": "Plattformlayout",
@@ -272,7 +283,7 @@
     "hiddenBadge": "Ausgeblendet",
     "openFromMore": "Plattformlayout verwalten",
     "dragHandleLabel": "Zum Neuanordnen ziehen",
-    "tipWithGroups": "Zum Sortieren ziehen. In der Seitenleiste können höchstens drei Einträge angezeigt werden. Unterplattformen einer Gruppe haben keine Seitenleisten-/Dashboard-Schalter und dienen nur für Menüleiste und Standardplattform-Wechsel.",
+    "tipWithGroups": "Zum Sortieren ziehen. In der Seitenleiste können höchstens {{max}} Einträge angezeigt werden. Gruppenunterelemente haben keine Seitenleisten-/Dashboard-Schalter und dienen nur der Menüleistenanzeige und dem Wechsel der Standardplattform.",
     "addGroup": "Gruppe hinzufügen",
     "editGroup": "Gruppe bearbeiten",
     "deleteGroup": "Gruppe löschen",
@@ -549,7 +560,8 @@
     "tabs": {
       "general": "Allgemein",
       "network": "Netzwerk",
-      "about": "Über"
+      "about": "Über",
+      "data": "Datenverwaltung"
     },
     "general": {
       "appearance": "Erscheinungsbild",
@@ -603,8 +615,8 @@
       "floatingCardShowNowAction": "Schwebende Karte anzeigen",
       "dataDir": "Datenverzeichnis",
       "dataDirDesc": "Speicherort für Konten und Konfigurationsdateien.",
-      "fpDir": "Antigravity IDE-Speicher",
-      "fpDirDesc": "Speicherort für Antigravity IDE-Datendateien.",
+      "topRightAdVisible": "Top-Promo anzeigen",
+      "topRightAdVisibleDesc": "Blendet den oberen Promo-Bereich in der App aus. Die Sponsorenseite bleibt unverändert.",
       "opencodeTitle": "OpenCode-Integration",
       "opencodeRestart": "OpenCode beim Codex-Wechsel neu starten",
       "opencodeRestartDesc": "Codex-Kontoinformationen in OpenCode synchronisieren",
@@ -928,6 +940,61 @@
         "unsupportedLegacyFile": "Dieses Legacy-Konto-Backup-Format wird nicht erkannt",
         "unsupportedVersion": "Diese App-Version unterstützt diese Bundle-Version nicht"
       }
+    },
+    "webdav": {
+      "groupTitle": "WebDAV-Synchronisierung",
+      "enabledTitle": "WebDAV-Backup-Synchronisierung",
+      "enabledDesc": "Standardmäßig Jianguoyun, kann in jeden WebDAV-Dienst geändert werden.",
+      "urlTitle": "Dienstadresse",
+      "urlDesc": "Standardadresse von Jianguoyun: https://dav.jianguoyun.com/dav/",
+      "usernameTitle": "Konto",
+      "usernameDesc": "Jianguoyun verwendet Ihre E-Mail-Adresse.",
+      "usernamePlaceholder": "E-Mail oder Benutzername",
+      "passwordTitle": "App-Passwort",
+      "passwordDesc": "Lokal gespeichert; leer lassen, um das bestehende Passwort zu behalten.",
+      "passwordPlaceholder": "Jianguoyun-Drittanbieter-App-Passwort",
+      "passwordSavedPlaceholder": "Gespeichert; leer lassen, um es zu behalten",
+      "clearPassword": "Löschen",
+      "remoteDirTitle": "Remote-Ordner",
+      "remoteDirDesc": "Es werden nur Cockpit-Backup-Dateien in diesem Ordner verwaltet.",
+      "statusTitle": "Synchronisationsstatus",
+      "statusDesc": "Die Remote-Wiederherstellung erfordert eine manuelle Auswahl und überschreibt lokale Daten niemals stillschweigend.",
+      "lastUpload": "Letzter Upload: {{time}}",
+      "lastDownload": "Letzte Wiederherstellung: {{time}}",
+      "never": "Noch nicht synchronisiert",
+      "testAction": "Testen/Einstellungen speichern",
+      "uploadAction": "Erstellen & Hochladen",
+      "syncAction": "Einstellungen synchronisieren",
+      "syncLatestConfirm": "Möchten Sie wirklich das neueste Remote-Backup {{name}} herunterladen und lokal synchronisieren? Dadurch werden bestehende lokale Daten überschrieben.",
+      "remoteListTitle": "Remote-Backups",
+      "remoteListDesc": "Es werden nur JSON- und ZIP-Dateien angezeigt, die den Namen der automatischen/manuellen Cockpit-Backups entsprechen.",
+      "emptyTitle": "Keine Remote-Backups",
+      "emptyDesc": "Einstellungen speichern, dann ein Backup erstellen und hochladen.",
+      "unknownTime": "Unbekannt",
+      "restoreAction": "Wiederherstellen",
+      "restoreConfirm": "Daten aus dem Remote-Backup {{name}} wiederherstellen?",
+      "deleteConfirm": "Remote-Backup {{name}} löschen?",
+      "feedback": {
+        "testingAndSaving": "Speichern und Testen der WebDAV-Verbindung...",
+        "saveAndTestSuccess": "Einstellungen gespeichert und Verbindungstest erfolgreich!",
+        "saveSuccessTestFailed": "Einstellungen gespeichert, aber Verbindungstest fehlgeschlagen: {{message}}",
+        "saveAndTestFailed": "Speichern und Testen der Verbindung fehlgeschlagen: {{error}}",
+        "uploading": "Backup wird erstellt und hochgeladen...",
+        "uploadSuccess": "{{count}} Datei(en) hochgeladen, {{deleted}} abgelaufene Remote-Backup(s) bereinigt",
+        "uploadFailed": "WebDAV-Upload fehlgeschlagen: {{error}}",
+        "listFailed": "Laden der Remote-Backups fehlgeschlagen: {{error}}",
+        "loadSettingsFailed": "Laden der WebDAV-Einstellungen fehlgeschlagen: {{error}}",
+        "restoring": "Remote-Backup wird gelesen und importiert...",
+        "restoreEmpty": "Es wurden keine Daten aus dem Remote-Backup wiederhergestellt",
+        "deleteSuccess": "Remote-Backup gelöscht",
+        "deleteFailed": "Löschen des Remote-Backups fehlgeschlagen: {{error}}",
+        "syncingLatest": "Synchronisierung der neuesten Remote-Konfiguration...",
+        "syncFailed": "Synchronisierung der neuesten Konfiguration fehlgeschlagen: {{error}}",
+        "noRemoteBackup": "Keine wiederherstellbaren Backup-Dateien auf Remote gefunden"
+      },
+      "errors": {
+        "notEnabled": "Aktivieren Sie zuerst die WebDAV-Synchronisierung"
+      }
     }
   },
   "appPath": {
@@ -959,7 +1026,6 @@
       "email": "E-Mail",
       "subscription": "Abonnement",
       "quota": "Kontingentstatus",
-      "fingerprint": "Fingerabdruck",
       "lastUsed": "Zuletzt verwendet",
       "actions": "Aktionen"
     },
@@ -1045,10 +1111,8 @@
     "actions": {
       "viewDetails": "Details anzeigen",
       "viewError": "Fehler anzeigen",
-      "fingerprint": "Fingerabdruck",
       "switch": "Konto wechseln",
       "switchTo": "Zu diesem Konto wechseln",
-      "selectFingerprint": "Fingerabdruck auswählen",
       "delete": "Löschen",
       "deleteSelected": "Ausgewählte löschen",
       "export": "Exportieren",
@@ -1197,106 +1261,8 @@
     "currentAccount": "Derzeit in Gebrauch",
     "switchTo": "Zu diesem Konto wechseln",
     "switching": "Wechselt...",
-    "fingerprint": "Fingerabdruck",
     "bound": "Gebunden",
     "brandTitle": "Antigravity IDE Kontoverwaltung"
-  },
-  "fingerprints": {
-    "title": "Geräte-Fingerabdrücke",
-    "subtitle": "Verwalten Sie Fingerabdrücke, die Konten zugeordnet sind.",
-    "toolbar": {
-      "generate": "Neu generieren",
-      "capture": "Aktuelle erfassen",
-      "import": "Importieren",
-      "folder": "Ordner",
-      "delete": "Löschen",
-      "deleteUnbound": "Ungebundene löschen"
-    },
-    "table": {
-      "name": "Fingerabdruck-Name",
-      "machineId": "Maschinen-ID",
-      "accounts": "Gebundene Konten",
-      "actions": "Aktionen",
-      "accountCount": "{{count}} Konten",
-      "apply": "Anwenden",
-      "noData": "Keine Fingerabdruckdaten",
-      "preview": "Vorschau",
-      "rename": "Umbenennen"
-    },
-    "modals": {
-      "generate": {
-        "title": "Fingerabdruck generieren",
-        "btn": "Generieren"
-      },
-      "capture": {
-        "title": "Fingerabdruck erfassen",
-        "btn": "Erfassen"
-      },
-      "rename": {
-        "title": "Fingerabdruck umbenennen",
-        "label": "Fingerabdruck-Name"
-      },
-      "import": {
-        "title": "Fingerabdrücke importieren",
-        "fromTools": "Von Antigravity Tools importieren",
-        "desc": "Import aus dem Verzeichnis ~/.antigravity_tools/",
-        "fromJsonBtn": "Aus JSON importieren",
-        "jsonExample": "Beispielformat:",
-        "jsonPlaceholder": "Arbeits-Fingerabdruck",
-        "orPasteJson": "Oder JSON einfügen"
-      },
-      "bound": {
-        "title": "Gebundene Konten",
-        "add": "Konten hinzufügen",
-        "empty": "Keine Konten gebunden",
-        "emptyAll": "Alle Konten sind gebunden",
-        "select": "Wählen Sie Konten zum Hinzufügen aus",
-        "from": "Von: {{name}}",
-        "back": "Zurück"
-      },
-      "detail": {
-        "title": "Fingerabdruck-Details",
-        "created": "Erstellt am {{time}}"
-      }
-    },
-    "messages": {
-      "deleteConfirm": "Diesen Fingerabdruck löschen? Gebundene Konten werden zum Original zurückkehren.",
-      "batchDeleteConfirm": "{{count}} Fingerabdrücke löschen? Gebundene Konten werden zum Original zurückkehren.",
-      "generated": "Neuer Fingerabdruck generiert",
-      "captured": "Aktueller Fingerabdruck erfasst",
-      "renamed": "Umbenannt",
-      "deleted": "Fingerabdruck gelöscht",
-      "imported": "{{count}} Fingerabdrücke importiert",
-      "addedAccounts": "{{count}} Konten hinzugefügt",
-      "enterName": "Geben Sie einen Namen für den Fingerabdruck ein",
-      "previewNotReady": "Vorschau noch nicht bereit, bitte warten",
-      "duplicate": "Gleicher Fingerabdruck existiert bereits: {{name}}",
-      "autoGeneratedSuffix": "(Nicht gefunden, automatisch generiert)",
-      "readOnly": "Schreibgeschützt",
-      "current": "Aktuell",
-      "addCount": "{{count}} Konten hinzugefügt",
-      "addFailed": "Hinzufügen fehlgeschlagen",
-      "adding": "Wird hinzugefügt...",
-      "applyFailed": "Anwenden fehlgeschlagen",
-      "boundCount": "{{count}} Konten gebunden",
-      "captureFailed": "Erfassung fehlgeschlagen",
-      "count": "{{count}}",
-      "deleteFailed": "Löschen fehlgeschlagen",
-      "fpLabel": "Fingerabdruck:",
-      "generateFailed": "Erstellung fehlgeschlagen",
-      "importFailed": "Import fehlgeschlagen",
-      "importPartialFailed": "{{failCount}} fehlgeschlagen: {{failList}}",
-      "refreshingQuota": "Kontingent wird aktualisiert {{done}}/{{total}} (dieses Fenster kann geschlossen werden)",
-      "quotaRefreshDone": "Kontingentaktualisierung abgeschlossen",
-      "importing": "Importieren...",
-      "loadFailed": "Fingerabdruckliste konnte nicht geladen werden",
-      "processing": "Wird verarbeitet...",
-      "renameFailed": "Umbenennen fehlgeschlagen",
-      "serviceMachineIdEmpty": "Leer",
-      "deleteUnboundConfirm": "{{count}} Fingerabdrücke ohne verknüpftes Konto löschen?",
-      "deletedUnbound": "{{count}} ungebundene Fingerabdrücke gelöscht",
-      "noUnboundToDelete": "Keine ungebundenen Fingerabdrücke zum Löschen"
-    }
   },
   "modals": {
     "addAccount": {
@@ -1331,15 +1297,6 @@
       "fromFiles": "Aus lokalen Dateien importieren",
       "fromFilesDesc": "JSON-Dateien zum Importieren von Konten auswählen (mehrere Formate unterstützt)",
       "importingFiles": "{{count}} Datei(en) werden importiert..."
-    },
-    "fingerprint": {
-      "title": "Fingerabdruck wählen",
-      "desc": "Fingerabdruck für Konto <1>{{email}}</1> auswählen",
-      "original": "Originaler Fingerabdruck",
-      "new": "Neuen Fingerabdruck hinzufügen",
-      "bind": "Bindung bestätigen",
-      "selectLabel": "Fingerabdruck wählen",
-      "boundCount": "Konten"
     },
     "quota": {
       "title": "Kontingentdetails",
@@ -2488,7 +2445,12 @@
         "website": "Website (optional)",
         "apiKeyUrl": "API-Key-Seite (optional)",
         "newApiKeyName": "Name des neuen Keys (optional)",
-        "newApiKey": "Neuer API-Key"
+        "newApiKey": "Neuer API-Key",
+        "wireApi": "Protokoll",
+        "enableMode": "Aktivierung",
+        "modelCatalog": "Modellkatalog",
+        "visionCapability": "Bildeingabe",
+        "visionModels": "Vision-Modelle"
       },
       "validation": {
         "nameRequired": "Der Name des Anbieters ist erforderlich.",
@@ -2503,6 +2465,19 @@
       "confirmDelete": "Anbieter „{{name}}“ löschen?",
       "deleteFailed": "Anbieter konnte nicht gelöscht werden: {{error}}",
       "deleteApiKeyFailed": "API-Key konnte nicht gelöscht werden: {{error}}",
+      "enableAsBackend": "Als Codex-Backend nutzen",
+      "enabling": "Wird aktiviert...",
+      "enableSuccess": "{{name}} aktiviert und {{instance}} gestartet.",
+      "enableFailed": "Anbieter konnte nicht aktiviert werden: {{error}}",
+      "status": {
+        "active": "Aktuelles Backend",
+        "available": "Bereit"
+      },
+      "enableMode": {
+        "label": "Verbindungsmodus",
+        "gatewayMode": "Gateway-Modus",
+        "directMode": "Direktmodus"
+      },
       "selectSavedProvider": "Gespeicherte Anbieter",
       "selectSavedApiKey": "Gespeicherte API-Keys",
       "noSavedProviders": "Es sind noch keine Anbieter gespeichert. Sie können die Felder direkt ausfüllen; der Eintrag wird automatisch gespeichert.",
@@ -2561,7 +2536,107 @@
         "partialDetected": "Derzeit ist nur ein verwaltetes Feld festgelegt: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. Beim Speichern werden beide Felder mit dem aktuellen Schema neu geschrieben.",
         "notSet": "Nicht festgelegt"
       },
-      "managePresets": "Modellvorgaben"
+      "managePresets": "Modellvorgaben",
+      "wireApi": {
+        "responses": "Responses nativ",
+        "chatCompletions": "Chat-Completions-Protokoll",
+        "help": "Wähle für die meisten Anbieter Responses. Wechsle nur dann zu Chat Completions, wenn der Anbieter ausdrücklich nur dieses Protokoll unterstützt. Wenn du unsicher bist, wähle zuerst Responses.",
+        "helpAria": "Protokollhilfe anzeigen"
+      },
+      "testing": "Test läuft...",
+      "testSuccess": "Anbieter-Verbindung ist in Ordnung: {{protocol}}, {{model}}, {{latency}}.",
+      "testFailed": "Anbietertest fehlgeschlagen: {{error}}",
+      "testFailure": {
+        "credential": "API-Key nicht verfügbar",
+        "url": "Ungültige Base URL",
+        "network": "Netzwerkverbindung fehlgeschlagen",
+        "models": "Models-Endpunkt fehlerhaft",
+        "parse": "Antwort konnte nicht gelesen werden",
+        "httpStatus": "Status {{status}}",
+        "message": "{{title}}: {{detail}}. {{suggestion}}"
+      },
+      "testSuggestion": {
+        "addApiKey": "Füge vor dem Test einen API-Key für diesen Anbieter hinzu.",
+        "checkBaseUrl": "Prüfe, ob die Base URL den richtigen Versionspfad enthält, zum Beispiel /v1.",
+        "checkNetwork": "Prüfe Anbieteradresse, Proxy, Firewall oder den Status des Upstream-Dienstes.",
+        "checkApiKey": "Prüfe, ob der API-Key gültig ist und den Models-Endpunkt nutzen darf.",
+        "checkProviderStatus": "Prüfe Dienststatus, Proxy oder API-Kompatibilität des Anbieters.",
+        "checkModelsApi": "Bestätige, dass der Anbieter eine OpenAI-kompatible Modellliste zurückgibt."
+      },
+      "enableAndStart": "Starten",
+      "instance": {
+        "label": "Instanz starten",
+        "default": "Standardinstanz",
+        "running": "Läuft",
+        "targetHint": "Ziel: {{instance}}",
+        "uninitializedHint": "Die Zielinstanz ist nicht initialisiert. Starte sie zuerst einmal unter Mehrfachinstanzen.",
+        "shortLabel": "Instanz",
+        "saveFailed": "Instanzbindung konnte nicht gespeichert werden: {{error}}"
+      },
+      "modelCatalog": "Modelle",
+      "modelCatalogEmpty": "Kein Modellkatalog",
+      "gatewayHint": "Drittanbieter starten über das lokale Gateway zur Instanztrennung und Protokollumwandlung. Offizielle OpenAI-Anbieter bleiben direkt.",
+      "vision": {
+        "providerDefault": "Dieser Anbieter unterstützt Bildeingaben standardmäßig",
+        "providerDefaultHint": "Wenn deaktiviert, dürfen nur die unten gelisteten Modelle Bilder erhalten; andere weist das lokale Gateway ab.",
+        "modelsHint": "Ein Modell pro Zeile. Nützlich, wenn nur einige Modelle dieses Anbieters eingefügte Bilder unterstützen.",
+        "allModels": "Bilder",
+        "partialModels": "Teilweise Bilder",
+        "textOnly": "Nur Text"
+      },
+      "sponsorRecommended": "Sponsor-Empfehlungen",
+      "builtinProviders": "Integrierte Anbieter",
+      "sponsorHint": "Die vom Sponsor empfohlene kompatible Service-URL wurde eingetragen. Nach Eingabe des API Key fragt die Karte Guthaben und Nutzung automatisch ab.",
+      "integration": {
+        "sub2api": "Sub2API-kompatibel",
+        "newApi": "New-API-kompatibel"
+      },
+      "usage": {
+        "title": "Kontingentübersicht",
+        "remaining": "Verbleibend",
+        "today": "Heute",
+        "total": "Gesamt",
+        "requests": "Anfragen heute",
+        "loading": "Kontingent wird abgefragt...",
+        "failed": "Kontingentabfrage fehlgeschlagen: {{error}}",
+        "pending": "Warten auf Kontingentabfrage",
+        "noKey": "Kein abfragbares Kontingent",
+        "used": "Verbraucht",
+        "limit": "Grenze",
+        "viewDetail": "Details",
+        "detailTitle": "Servicepanel",
+        "rawFields": "Servicedaten",
+        "fields": {
+          "status": "Zustand",
+          "planName": "Tarif",
+          "remaining": "Restguthaben",
+          "balance": "Guthaben",
+          "todayRequests": "Anfragen heute",
+          "todayTokens": "Token heute",
+          "todayCost": "Kosten heute",
+          "totalRequests": "Anfragen gesamt",
+          "totalTokens": "Token gesamt",
+          "totalCost": "Kosten gesamt",
+          "hardLimitUsd": "Harte Grenze",
+          "softLimitUsd": "Weiche Grenze",
+          "systemHardLimitUsd": "Systemgrenze",
+          "accessUntil": "Zugriff bis",
+          "totalUsage": "Nutzung gesamt",
+          "quotaUnlimited": "Unbegrenzt",
+          "expiresAt": "Läuft ab",
+          "totalGranted": "Gewährt",
+          "totalAvailable": "Verfügbar",
+          "modelLimitsEnabled": "Modelllimits"
+        },
+        "accountBalance": "Kontostand",
+        "unlimitedQuota": "Unbegrenzt",
+        "booleanTrue": "Ja",
+        "booleanFalse": "Nein"
+      },
+      "oauthBinding": {
+        "desc": "Optional. Jedes OAuth-Konto mit refresh_token kann verknüpft werden. Ohne Verknüpfung nutzt der Anbieter weiter den ursprünglichen API-Key-Ablauf.",
+        "currentProvider": "Anbieter: {{name}}"
+      }
     },
     "quickSwitch": {
       "action": "Anbieter schnell wechseln",
@@ -2807,6 +2882,10 @@
         "saveSuccess": "Kontomodell-Sperren gespeichert",
         "cardCount": "{{count}} gesperrt"
       }
+    },
+    "apiKey": {
+      "renameSuccess": "Umbenannt",
+      "renameFailed": "Umbenennen fehlgeschlagen"
     }
   },
   "githubCopilot": {
@@ -3369,7 +3448,6 @@
       "goAntigravity": "Zu Antigravity IDE",
       "goCodex": "Zu Codex",
       "goDashboard": "Zum Dashboard",
-      "goFingerprints": "Zu Geräte-Fingerprints",
       "goGitHubCopilot": "Zu GitHub Copilot",
       "goInstances": "Zu Mehrfachinstanzen",
       "goKiro": "Zu Kiro",
@@ -3464,28 +3542,6 @@
     "empty": {
       "desc": "Versuche Stichwörter wie Instanz, Wechsel, Einstellungen, Export.",
       "title": "Keine passenden Inhalte"
-    },
-    "fingerprints": {
-      "cautions": {
-        "0": "Vor riskanten oder Batch-Aktionen in Geräte-Fingerprints Daten sichern."
-      },
-      "keywords": {
-        "0": "Geräte-Fingerprints",
-        "1": "Leitfaden",
-        "2": "Workflow",
-        "3": "Konto"
-      },
-      "outcomes": {
-        "0": "Verstehe, was dir Geräte-Fingerprints bringt.",
-        "1": "Nutze den empfohlenen Ablauf in Geräte-Fingerprints, um Fehler zu vermeiden."
-      },
-      "steps": {
-        "0": "Öffne die Seite für Geräte-Fingerprints.",
-        "1": "Schließe Grundkonfiguration und erforderliche Bindungen für Geräte-Fingerprints ab.",
-        "2": "Führe eine manuelle Aktion in Geräte-Fingerprints aus und prüfe das Ergebnis."
-      },
-      "summary": "Dieser Abschnitt erklärt die Nutzung von Geräte-Fingerprints im täglichen Workflow.",
-      "title": "Geräte-Fingerprints"
     },
     "instances": {
       "cautions": {

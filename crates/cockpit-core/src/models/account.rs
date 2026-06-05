@@ -14,9 +14,6 @@ pub struct Account {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
     pub token: TokenData,
-    /// 绑定的指纹ID（必须绑定，默认为 "original"）
-    #[serde(default = "default_fingerprint_id")]
-    pub fingerprint_id: Option<String>,
     pub quota: Option<QuotaData>,
     /// Disabled accounts are ignored by the proxy token pool (e.g. revoked refresh_token -> invalid_grant).
     #[serde(default)]
@@ -39,9 +36,6 @@ pub struct Account {
     pub last_used: i64,
 }
 
-fn default_fingerprint_id() -> Option<String> {
-    Some("original".to_string())
-}
 
 impl Account {
     pub fn new(id: String, email: String, token: TokenData) -> Self {
@@ -53,7 +47,6 @@ impl Account {
             tags: Vec::new(),
             notes: None,
             token,
-            fingerprint_id: Some("original".to_string()),
             quota: None,
             disabled: false,
             disabled_reason: None,
@@ -132,26 +125,4 @@ impl Default for AccountIndex {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// 设备指纹（storage.json 中 telemetry 相关字段）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeviceProfile {
-    pub machine_id: String,
-    pub mac_machine_id: String,
-    pub dev_device_id: String,
-    pub sqm_id: String,
-    #[serde(default)]
-    pub service_machine_id: String,
-}
-
-/// 指纹历史版本
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeviceProfileVersion {
-    pub id: String,
-    pub created_at: i64,
-    pub label: String,
-    pub profile: DeviceProfile,
-    #[serde(default)]
-    pub is_current: bool,
 }

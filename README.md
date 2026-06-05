@@ -12,7 +12,7 @@
 
 > 本工具旨在帮助用户高效管理多个 AI IDE 账号，支持一键切换、配额监控、自动唤醒与多开实例并行运行，助您充分利用不同账号的资源。
 
-**功能**：一键切号 · 多账号管理 · 多开实例 · 配额监控 · 唤醒任务 · 设备指纹 · 插件联动 · GitHub Copilot 管理 · Windsurf 管理 · Kiro 管理 · Cursor 管理 · Gemini Cli 管理 · CodeBuddy 管理 · CodeBuddy CN 管理 · Qoder 管理 · Trae 管理 · Zed 管理
+**功能**：一键切号 · 多账号管理 · 多开实例 · 配额监控 · 唤醒任务 · 插件联动 · GitHub Copilot 管理 · Windsurf 管理 · Kiro 管理 · Cursor 管理 · Gemini Cli 管理 · CodeBuddy 管理 · CodeBuddy CN 管理 · Qoder 管理 · Trae 管理 · Zed 管理
 
 **语言**：支持 18 种语言
 
@@ -40,13 +40,11 @@
 - **一键切号**：一键切换当前使用的账号，无需手动登录登出
 - **多种导入**：支持 OAuth 授权、Refresh Token、插件同步
 - **唤醒任务**：定时唤醒 AI 模型，提前触发配额重置周期
-- **设备指纹**：生成、管理、绑定设备指纹，降低风控风险
 
 > ![Antigravity IDE Accounts](docs/images/antigravity_list.png)
 >
-> *(唤醒任务与设备指纹管理)*
+> *(唤醒任务)*
 > ![Wakeup Tasks](docs/images/wakeup_detail.png)
-> ![Device Fingerprints](docs/images/fingerprint_detail.png)
 
 #### 2.1 Antigravity IDE 多开实例
 
@@ -396,8 +394,10 @@ QQ 交流群、微信群或新建的 Telegram 畅聊群都可以加入。
 
 ## 致谢
 
-- Antigravity IDE 账号切号逻辑参考：[Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager)
-- Codex API 服务由内置 sidecar 集成：[router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
+- Antigravity 账号切号逻辑参考：[Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager)
+- Codex API 服务参考并集成：[router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
+- Codex 第三方供应商预设参考：[CC Switch](https://github.com/farion1231/cc-switch)
+- Codex 模型目录与前端模型显示思路参考：[CodexPlusPlus](https://github.com/BigPizzaV3/CodexPlusPlus)
 
 感谢项目作者的开源贡献！如果这些项目对你有帮助，也请给他们点个 ⭐ Star 支持一下！
 

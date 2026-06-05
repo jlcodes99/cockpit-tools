@@ -13,4 +13,5 @@ export interface TopRightAd {
 
 export interface TopRightAdState {
   ad: TopRightAd | null;
+  ads: TopRightAd[];
 }

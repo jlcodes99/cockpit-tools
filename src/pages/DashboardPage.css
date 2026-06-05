@@ -406,6 +406,14 @@
   overflow: hidden;
 }
 
+.codex-api-mini-card .account-info-row {
+  align-items: center;
+}
+
+.codex-api-mini-card .account-info-row .tier-badge {
+  margin-left: auto;
+}
+
 .account-email {
   font-size: 15px;
   font-weight: 600;
@@ -796,6 +804,50 @@
   text-align: center;
   padding: 20px 0;
   margin: auto 0;
+}
+
+.codex-api-mini-card .tier-badge.sponsor-api {
+  text-transform: uppercase;
+}
+
+.codex-api-mini-card.sponsor-api-account {
+  border-color: rgba(217, 119, 6, 0.36);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 247, 237, 0.96) 0%,
+      rgba(254, 240, 138, 0.28) 44%,
+      rgba(255, 255, 255, 0.96) 100%
+    ),
+    var(--bg-card);
+  box-shadow: 0 12px 28px rgba(180, 83, 9, 0.1);
+}
+
+.codex-api-mini-quotas {
+  min-height: 120px;
+}
+
+.codex-api-mini-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.codex-api-mini-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.codex-api-mini-stat span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.codex-api-mini-stat strong {
+  font-size: 16px;
+  color: var(--text-primary);
+  font-weight: 700;
 }
 
 /* Card Bottom Action - Rounded Floating Style */

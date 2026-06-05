@@ -138,6 +138,169 @@ func TestConvertOpenAIChatCompletionsResponseToOpenAIResponses_ResponseCompleted
 	}
 }
 
+func TestConvertOpenAIChatCompletionsResponseToOpenAIResponses_UsageDefaultsReasoningTokens(t *testing.T) {
+	request := []byte(`{"model":"gpt-5.4"}`)
+	in := []string{
+		`data: {"id":"resp_usage","object":"chat.completion.chunk","created":1773896263,"model":"model","choices":[{"index":0,"delta":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}`,
+		`data: [DONE]`,
+	}
+
+	var param any
+	var completed gjson.Result
+	for _, line := range in {
+		for _, chunk := range ConvertOpenAIChatCompletionsResponseToOpenAIResponses(context.Background(), "model", request, request, []byte(line), &param) {
+			event, data := parseOpenAIResponsesSSEEvent(t, chunk)
+			if event == "response.completed" {
+				completed = data
+			}
+		}
+	}
+
+	if got := completed.Get("response.usage.output_tokens_details.reasoning_tokens"); !got.Exists() || got.Int() != 0 {
+		t.Fatalf("reasoning_tokens = %s, want 0", got.Raw)
+	}
+}
+
+func TestConvertOpenAIChatCompletionsResponseToOpenAIResponses_CompletedOnDoneWithoutFinishReason(t *testing.T) {
+	request := []byte(`{"model":"gpt-5.4"}`)
+	in := []string{
+		`data: {"id":"resp_no_finish_reason","object":"chat.completion.chunk","created":1773896263,"model":"model","choices":[{"index":0,"delta":{"role":"assistant","content":"ok"},"finish_reason":null}]}`,
+		`data: [DONE]`,
+	}
+
+	var param any
+	completedCount := 0
+	for _, line := range in {
+		for _, chunk := range ConvertOpenAIChatCompletionsResponseToOpenAIResponses(context.Background(), "model", request, request, []byte(line), &param) {
+			event, data := parseOpenAIResponsesSSEEvent(t, chunk)
+			if event != "response.completed" {
+				continue
+			}
+			completedCount++
+			if got := data.Get("response.id").String(); got != "resp_no_finish_reason" {
+				t.Fatalf("unexpected response id: got %q want resp_no_finish_reason", got)
+			}
+			if got := data.Get("response.output.0.content.0.text").String(); got != "ok" {
+				t.Fatalf("unexpected completed output text: got %q want ok", got)
+			}
+		}
+	}
+	if completedCount != 1 {
+		t.Fatalf("expected exactly one response.completed, got %d", completedCount)
+	}
+}
+
+func TestCompleteOpenAIChatCompletionsResponseToOpenAIResponses_EmitsCompletedOnEOF(t *testing.T) {
+	request := []byte(`{"model":"gpt-5.4"}`)
+	var param any
+
+	for _, chunk := range ConvertOpenAIChatCompletionsResponseToOpenAIResponses(
+		context.Background(),
+		"model",
+		request,
+		request,
+		[]byte(`data: {"id":"resp_eof","object":"chat.completion.chunk","created":1773896263,"model":"model","choices":[{"index":0,"delta":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`),
+		&param,
+	) {
+		event, _ := parseOpenAIResponsesSSEEvent(t, chunk)
+		if event == "response.completed" {
+			t.Fatalf("response.completed should wait for terminal stream close")
+		}
+	}
+
+	events := CompleteOpenAIChatCompletionsResponseToOpenAIResponses(context.Background(), request, &param)
+	completedCount := 0
+	for _, chunk := range events {
+		event, data := parseOpenAIResponsesSSEEvent(t, chunk)
+		if event != "response.completed" {
+			continue
+		}
+		completedCount++
+		if got := data.Get("response.id").String(); got != "resp_eof" {
+			t.Fatalf("unexpected response id: got %q want resp_eof", got)
+		}
+	}
+	if completedCount != 1 {
+		t.Fatalf("expected exactly one synthesized response.completed, got %d", completedCount)
+	}
+
+	if events := CompleteOpenAIChatCompletionsResponseToOpenAIResponses(context.Background(), request, &param); len(events) != 0 {
+		t.Fatalf("second completion call should be idempotent, got %d events", len(events))
+	}
+}
+
+func TestConvertOpenAIChatCompletionsResponseToOpenAIResponses_CustomToolUsesNativeInputEvents(t *testing.T) {
+	request := []byte(`{"model":"gpt-5.4","tools":[{"type":"custom","name":"exec"}]}`)
+	in := []string{
+		`data: {"id":"resp_custom","object":"chat.completion.chunk","created":1773896263,"model":"model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_custom","type":"function","function":{"name":"exec","arguments":""}}]},"finish_reason":null}]}`,
+		`data: {"id":"resp_custom","object":"chat.completion.chunk","created":1773896263,"model":"model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"input\":\"ls -la\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}`,
+		`data: [DONE]`,
+	}
+
+	var param any
+	events := map[string]gjson.Result{}
+	for _, line := range in {
+		for _, chunk := range ConvertOpenAIChatCompletionsResponseToOpenAIResponses(context.Background(), "model", request, request, []byte(line), &param) {
+			event, data := parseOpenAIResponsesSSEEvent(t, chunk)
+			events[event] = data
+			if event == "response.function_call_arguments.done" || event == "response.function_call_arguments.delta" {
+				t.Fatalf("custom tool should not emit %s", event)
+			}
+		}
+	}
+
+	if got := events["response.custom_tool_call_input.done"].Get("input").String(); got != "ls -la" {
+		t.Fatalf("custom input done = %q, want ls -la", got)
+	}
+	if got := events["response.output_item.done"].Get("item.type").String(); got != "custom_tool_call" {
+		t.Fatalf("output item type = %q, want custom_tool_call", got)
+	}
+	if got := events["response.output_item.done"].Get("item.id").String(); got != "ctc_call_custom" {
+		t.Fatalf("custom item id = %q, want ctc_call_custom", got)
+	}
+}
+
+func TestConvertOpenAIChatCompletionsResponseToOpenAIResponsesNonStream_RestoresToolSearchAndNamespace(t *testing.T) {
+	request := []byte(`{
+		"model":"gpt-5.4",
+		"tools":[{"type":"tool_search"}],
+		"input":[{"type":"tool_search_output","call_id":"call_search","tools":[{
+			"type":"namespace",
+			"name":"mcp__codex_apps__gmail",
+			"tools":[{"type":"function","name":"_search_emails"}]
+		}]}]
+	}`)
+	raw := []byte(`{
+		"id":"chatcmpl_tools",
+		"object":"chat.completion",
+		"created":1773896263,
+		"model":"model",
+		"choices":[{"index":0,"message":{"role":"assistant","tool_calls":[
+			{"id":"call_search_2","type":"function","function":{"name":"tool_search","arguments":"{\"query\":\"gmail\",\"limit\":5}"}},
+			{"id":"call_gmail","type":"function","function":{"name":"mcp__codex_apps__gmail___search_emails","arguments":"{\"query\":\"hello\"}"}}
+		]},"finish_reason":"tool_calls"}],
+		"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}
+	}`)
+
+	out := ConvertOpenAIChatCompletionsResponseToOpenAIResponsesNonStream(context.Background(), "model", request, request, raw, nil)
+
+	if got := gjson.GetBytes(out, "output.0.type").String(); got != "tool_search_call" {
+		t.Fatalf("output.0.type = %q, want tool_search_call; out=%s", got, out)
+	}
+	if got := gjson.GetBytes(out, "output.0.arguments.query").String(); got != "gmail" {
+		t.Fatalf("tool_search query = %q, want gmail", got)
+	}
+	if got := gjson.GetBytes(out, "output.1.type").String(); got != "function_call" {
+		t.Fatalf("output.1.type = %q, want function_call", got)
+	}
+	if got := gjson.GetBytes(out, "output.1.namespace").String(); got != "mcp__codex_apps__gmail" {
+		t.Fatalf("namespace = %q, want mcp__codex_apps__gmail", got)
+	}
+	if got := gjson.GetBytes(out, "output.1.name").String(); got != "_search_emails" {
+		t.Fatalf("name = %q, want _search_emails", got)
+	}
+}
+
 func TestConvertOpenAIChatCompletionsResponseToOpenAIResponses_MultipleToolCallsRemainSeparate(t *testing.T) {
 	in := []string{
 		`data: {"id":"resp_test","object":"chat.completion.chunk","created":1773896263,"model":"model","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":null,"tool_calls":[{"index":0,"id":"call_read","type":"function","function":{"name":"read","arguments":""}}]},"finish_reason":null}]}`,

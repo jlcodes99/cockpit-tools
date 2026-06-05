@@ -88,11 +88,12 @@ type DataTransferWarningCode = 'accounts_section_missing' | 'config_section_miss
 interface RawUserConfig extends Record<string, unknown> {
   auto_switch_selected_account_ids?: string[];
   codex_auto_switch_selected_account_ids?: string[];
+  webdav_sync_password?: string;
 }
 
 interface ExportedUserConfig extends Omit<
   RawUserConfig,
-  'auto_switch_selected_account_ids' | 'codex_auto_switch_selected_account_ids'
+  'auto_switch_selected_account_ids' | 'codex_auto_switch_selected_account_ids' | 'webdav_sync_password'
 > {
   auto_switch_selected_account_refs: DataTransferAccountRef[];
   codex_auto_switch_selected_account_refs: DataTransferAccountRef[];
@@ -594,7 +595,12 @@ function resolveAccountRefsToIds(
 }
 
 function exportUserConfig(config: RawUserConfig, registry: AccountRegistry): ExportedUserConfig {
-  const { auto_switch_selected_account_ids, codex_auto_switch_selected_account_ids, ...rest } = config;
+  const {
+    auto_switch_selected_account_ids,
+    codex_auto_switch_selected_account_ids,
+    webdav_sync_password: _webdavSyncPassword,
+    ...rest
+  } = config;
 
   return {
     ...rest,

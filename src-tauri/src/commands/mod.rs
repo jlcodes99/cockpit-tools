@@ -9,7 +9,6 @@ pub mod codex_instance;
 pub mod cursor;
 pub mod cursor_instance;
 pub mod data_transfer;
-pub mod device;
 pub mod gemini;
 pub mod gemini_instance;
 pub mod github_copilot;

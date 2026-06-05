@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { DataTransferSelection, exportDataTransferJson } from './dataTransferService';
 import { ALL_PLATFORM_IDS, PlatformId } from '../types/platform';
+import { getWebdavSyncSettings, uploadAutoBackupToWebdav } from './webdavSyncService';
 
 export type AutoBackupMode = 'full' | 'accounts' | 'config';
 export type AutoBackupTrigger = 'auto' | 'manual';
@@ -282,10 +283,21 @@ export async function runAutoBackupCycle(): Promise<ManagedBackupResult | null> 
     return null;
   }
 
-  return createManagedBackup({
+  const result = await createManagedBackup({
     trigger: 'auto',
     selection,
     retentionDays: settings.retention_days,
     markAsLastRun: true,
   });
+
+  try {
+    const webdavSettings = await getWebdavSyncSettings();
+    if (webdavSettings.enabled) {
+      await uploadAutoBackupToWebdav(result.file_name);
+    }
+  } catch (error) {
+    console.warn('[WebDAV] Auto backup upload failed', error);
+  }
+
+  return result;
 }

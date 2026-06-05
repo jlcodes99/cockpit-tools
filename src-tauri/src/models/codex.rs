@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 fn default_token_source_mode() -> String {
     "managed".to_string()
@@ -86,6 +87,12 @@ pub struct CodexAccount {
     pub api_provider_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_provider_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub api_model_catalog: Vec<String>,
+    #[serde(default)]
+    pub api_supports_vision: bool,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub api_model_vision_support: HashMap<String, bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bound_oauth_account_id: Option<String>,
     pub user_id: Option<String>,
@@ -293,6 +300,9 @@ impl CodexAccount {
             api_provider_mode: CodexApiProviderMode::OpenaiBuiltin,
             api_provider_id: None,
             api_provider_name: None,
+            api_model_catalog: Vec::new(),
+            api_supports_vision: false,
+            api_model_vision_support: HashMap::new(),
             bound_oauth_account_id: None,
             user_id: None,
             plan_type: None,
@@ -331,6 +341,7 @@ impl CodexAccount {
         api_base_url: Option<String>,
         api_provider_id: Option<String>,
         api_provider_name: Option<String>,
+        api_model_catalog: Vec<String>,
     ) -> Self {
         let mut account = Self::new(
             id,
@@ -347,6 +358,9 @@ impl CodexAccount {
         account.api_base_url = api_base_url;
         account.api_provider_id = api_provider_id;
         account.api_provider_name = api_provider_name;
+        account.api_model_catalog = api_model_catalog;
+        account.api_supports_vision = false;
+        account.api_model_vision_support = HashMap::new();
         account.plan_type = Some("API_KEY".to_string());
         account
     }

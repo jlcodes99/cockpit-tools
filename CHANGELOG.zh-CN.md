@@ -7,6 +7,26 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [0.25.0] - 2026-06-06
+
+### 新增
+- **Codex 模型供应商现支持完整管理工作流**：Codex 模型供应商页新增单供应商多 API Key、可搜索的 API Key 与实例选择弹框、供应商搜索/筛选/排序、批量选择与删除、供应商服务面板、OAuth 绑定，以及与账号页卡片交互对齐的快速启用操作。
+- **Codex 第三方 API Key 额度查询现支持 `new-api` 与 `sub2api`**：Cockpit 会探测支持的额度接口，缓存已识别的供应商类型，保留历史额度数据，跟随现有配额刷新策略，并在账号卡片、首页卡片、模型供应商卡片、服务面板和 macOS 菜单栏中按供应商类型展示核心字段。
+- **Codex 供应商协议选择改为显式配置**：供应商添加默认使用 Responses 原生模式，仅已知 Chat Completions 供应商默认选择 Chat Completions；界面提供带说明的样式化协议选择器，并且只有 Chat Completions 供应商会走本地网关。
+- **WebDAV 备份同步**：设置页新增 WebDAV 备份同步配置，并补齐服务调用、翻译和数据传输支持，可用于同步 Cockpit 备份数据。感谢 @xdd666t。
+- **Codex 唤醒与会话修复吸收社区 PR 改进**：唤醒请求现在会注入官方 `StartCascadeRequest.source` 字段，Codex 可见性修复会在修复前协调 `session_index.jsonl`。感谢 @Slone123c 和 @andrew05060414。
+
+### 变更
+- **Codex 模型供应商现可接入 `deepseek-v4-pro` 等国产 Chat Completions 模型**：Responses 原生供应商保持直连，Chat Completions 供应商通过本地网关完成协议转换，并且模型目录与图片输入等网关相关配置只在选择该协议时显示。
+- **Codex 模型供应商卡片与服务面板复用账号页配额展示风格**：供应商卡片会保留历史额度数据，提供手动刷新入口，按 `new-api` 与 `sub2api` 分别展示关键字段，并把供应商详情收敛到单个可滚动服务面板中。
+- **Codex Linux OAuth 登录更稳定**：OAuth 回调处理避免重复完成，改善 Linux 登录流程。
+
+### 修复
+- **Codex 模型供应商 OAuth 绑定现在会在启用供应商时生效**：模型供应商的 OAuth 绑定会同步到实际用于启动的 API Key 账号，与账号页行为保持一致。
+- **通过官方 Language Server 执行 Codex 唤醒不再因缺少请求来源失败**：唤醒请求现在会注入上游服务需要的官方 `StartCascadeRequest.source` 字段。感谢 @Slone123c。
+- **Codex 会话可见性修复现在会先协调 `session_index.jsonl`**：修复流程会更新 session index，让隐藏或过期会话能够更可靠地修复。感谢 @andrew05060414。
+
+---
 ## [0.24.12] - 2026-06-03
 
 ### 新增
@@ -168,7 +188,7 @@
 - **Codex API 服务调度现加入会话亲和、可配置重试行为与账号健康跟踪**：连续轮次可保持在同一账号上，冷却中、额度耗尽或图片能力不可用的账号会在下次选号前被跳过。
 - **Codex 官方 App 速度选择现写入当前官方 `config.toml` 桌面服务档位键**：“标准”会移除受管档位，“快速”会写入 `priority`，与当前 Codex 客户端落盘位置保持一致。
 - **Cockpit 共享数据文件现统一通过同一数据目录解析**：账号分组、设备状态、配置状态与 Codex API 服务状态都会跟随同一配置目录或 profile 专属目录。
-- **文档现补充葡萄牙语 README/赞助页面与 WSL2 Ubuntu 24 构建说明**：项目本地化文档与 Linux 构建指引已与现有中英文文档并列提供。
+- **文档现补充葡萄牙语 README 与 WSL2 Ubuntu 24 构建说明**：项目本地化文档与 Linux 构建指引已与现有中英文文档并列提供。
 
 ### 修复
 - **Codex 仅 access token 与 session token 导入不再因为缺少 `refresh_token` 被强制要求重新授权**：导入会识别 `session_token`/`sessionToken`，受管投影会保留预期的 `refresh_token` 字段，且无法刷新的账号会跳过主动续期。
@@ -2090,7 +2110,6 @@
   - 自动识别账号订阅计划 (Basic, Plus, Team, Enterprise)。
   - 独立的账号列表和卡片视图。
 - **品牌重塑**: 项目正式更名为 **Cockpit Tools**。
-- **赞助与反馈**: 在 设置 -> 关于 页面新增 "赞助支持" 和 "意见反馈" 入口，加强社区互动。
 
 ### 变更
 - **字体优化**: 默认字体切换为 **Inter**，提升阅读体验。

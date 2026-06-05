@@ -187,12 +187,21 @@ async fn start_official_ls_cascade_session(
     let mut ls = start_official_ls_process(&prepared.account_id, &token).await?;
     let client = build_official_ls_local_client(30)?;
     let base_url = format!("https://127.0.0.1:{}", ls.started.https_port);
+    // 新版官方 LS（≥1.21.6）要求 StartCascadeRequest.source（枚举 CortexTrajectorySource）非空，
+    // 否则返回 "invalid_argument: CortexTrajectorySource is unspecified"。
+    // 唤醒等价于 IDE 前台交互式 cascade，故默认注入 INTERACTIVE_CASCADE；
+    // 若调用方已显式传入 source 则保留，不覆盖。
+    let mut start_body = start_body.clone();
+    if let Some(obj) = start_body.as_object_mut() {
+        obj.entry("source")
+            .or_insert_with(|| json!("CORTEX_TRAJECTORY_SOURCE_INTERACTIVE_CASCADE"));
+    }
     let start_resp = match post_json_to_official_ls(
         &client,
         &base_url,
         &ls.ls_csrf_token,
         START_CASCADE_PATH,
-        start_body,
+        &start_body,
     )
     .await
     {
@@ -1033,6 +1042,14 @@ async fn post_json_to_official_ls(
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
+        let preview: String = text.chars().take(512).collect();
+        crate::modules::logger::log_error(&format!(
+            "[WakeupGateway] 官方 LS 返回错误: status={}, path={}, body_len={}, body={}",
+            status,
+            path,
+            text.len(),
+            preview
+        ));
         return Err(format!(
             "官方 LS 返回错误: {} - {} ({})",
             status, text, path

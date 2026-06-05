@@ -16,7 +16,7 @@ pub mod workbuddy;
 pub mod zed;
 
 pub use account::{
-    Account, AccountIndex, AccountSummary, DeviceProfile, DeviceProfileVersion, QuotaErrorInfo,
+    Account, AccountIndex, AccountSummary, QuotaErrorInfo,
 };
 pub use instance::{
     DefaultInstanceSettings, InstanceLaunchMode, InstanceProfile, InstanceProfileView,

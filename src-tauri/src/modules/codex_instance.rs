@@ -18,6 +18,7 @@ static CODEX_INSTANCE_STORE_LOCK: std::sync::LazyLock<Mutex<()>> =
 
 const CODEX_INSTANCES_FILE: &str = "codex_instances.json";
 pub const CODEX_API_SERVICE_BIND_ACCOUNT_ID: &str = "__api_service__";
+const CODEX_PROVIDER_GATEWAY_BIND_ACCOUNT_PREFIX: &str = "__provider_gateway__:";
 const CODEX_SHARED_SKILLS_DIR_NAME: &str = "skills";
 const CODEX_SHARED_RULES_DIR_NAME: &str = "rules";
 const CODEX_SHARED_AGENTS_FILE_NAME: &str = "AGENTS.md";
@@ -33,6 +34,15 @@ const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
 
 pub fn is_api_service_bind_account_id(account_id: &str) -> bool {
     account_id.trim() == CODEX_API_SERVICE_BIND_ACCOUNT_ID
+}
+
+pub fn parse_provider_gateway_bind_account_id(account_id: &str) -> Option<String> {
+    account_id
+        .trim()
+        .strip_prefix(CODEX_PROVIDER_GATEWAY_BIND_ACCOUNT_PREFIX)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 #[derive(Debug, Clone)]

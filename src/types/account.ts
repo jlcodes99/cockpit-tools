@@ -5,7 +5,6 @@ export interface Account {
     tags?: string[];
     notes?: string;
     token: TokenData;
-    fingerprint_id?: string;
     quota?: QuotaData;
     quota_error?: QuotaErrorInfo;
     disabled?: boolean;
@@ -56,46 +55,9 @@ export interface ModelQuota {
     reset_time: string;
 }
 
-export interface DeviceProfile {
-    machine_id: string;
-    mac_machine_id: string;
-    dev_device_id: string;
-    sqm_id: string;
-    service_machine_id?: string;
-}
-
-export interface DeviceProfileVersion {
-    id: string;
-    created_at: number;
-    label: string;
-    profile: DeviceProfile;
-    is_current?: boolean;
-}
-
-export interface DeviceProfiles {
-    current_storage?: DeviceProfile;
-    bound_profile?: DeviceProfile;
-    history: DeviceProfileVersion[];
-    baseline?: DeviceProfile;
-}
-
 export interface RefreshStats {
     total: number;
     success: number;
     failed: number;
     details: string[];
-}
-
-// 指纹类型
-export interface Fingerprint {
-    id: string;
-    name: string;
-    profile: DeviceProfile;
-    created_at: number;
-}
-
-export interface FingerprintWithStats extends Fingerprint {
-    is_original: boolean;
-    is_current: boolean;
-    bound_account_count: number;
 }

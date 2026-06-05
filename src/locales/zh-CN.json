@@ -277,7 +277,6 @@
     "overview": "Antigravity IDE",
     "accounts": "账号管理",
     "wakeup": "唤醒任务",
-    "fingerprints": "设备指纹",
     "settings": "设置",
     "codex": "Codex",
     "zed": "Zed 平台",
@@ -290,6 +289,8 @@
     "collapseSidebar": "收起侧边栏",
     "expandSidebar": "展开侧边栏",
     "logs": "日志",
+    "sponsors": "赞助商",
+    "sponsorAppreciation": "赞赏",
     "instances": "多开实例",
     "manual": "使用手册",
     "quickUpdate": {
@@ -307,13 +308,23 @@
     "switchClassicLayoutConfirm": "立即切换",
     "2faManager": "2FA 管理"
   },
+  "sponsors": {
+    "pageTitle": "赞助商",
+    "pageDesc": "感谢以下赞助商支持 Cockpit Tools。",
+    "loading": "正在加载赞助商...",
+    "emptyTitle": "暂无赞助商",
+    "emptyDesc": "当前远端未开启赞助商模块。",
+    "listAriaLabel": "赞助商列表",
+    "defaultDescription": "感谢支持 Cockpit Tools。",
+    "openSponsor": "查看"
+  },
   "platformLayout": {
     "title": "平台布局",
     "sidebarSelected": "侧边栏已选择 {{count}}/{{max}}",
     "sidebarSelectedUnlimited": "侧边栏已选择 {{count}}",
     "reset": "恢复默认",
     "tip": "拖拽可排序；最多选择三个平台显示在侧边栏。若只选择一个，侧边栏只显示一个。",
-    "tipWithGroups": "拖拽可排序；最多选择三个入口显示在侧边栏。分组子级不参与侧边栏/仪表盘开关，仅用于菜单栏与默认平台切换。",
+    "tipWithGroups": "拖拽可排序；最多选择 {{max}} 个入口显示在侧边栏。分组子级不参与侧边栏/仪表盘开关，仅用于菜单栏与默认平台切换。",
     "tipWithGroupsUnlimited": "拖拽可排序；可选择任意数量入口显示在侧边栏。分组子级不参与侧边栏/仪表盘开关，仅用于菜单栏与默认平台切换。",
     "addGroup": "新建分组",
     "editGroup": "编辑",
@@ -595,6 +606,7 @@
     "tabs": {
       "general": "通用",
       "network": "网络服务",
+      "data": "数据管理",
       "about": "关于"
     },
     "transfer": {
@@ -695,6 +707,61 @@
         "unsupportedVersion": "当前版本暂不支持该数据包版本"
       }
     },
+    "webdav": {
+      "groupTitle": "WebDAV 同步",
+      "enabledTitle": "WebDAV 备份同步",
+      "enabledDesc": "默认使用坚果云，也可改为任意 WebDAV 服务。",
+      "urlTitle": "服务地址",
+      "urlDesc": "坚果云默认地址：https://dav.jianguoyun.com/dav/",
+      "usernameTitle": "账号",
+      "usernameDesc": "坚果云使用账号邮箱。",
+      "usernamePlaceholder": "邮箱或用户名",
+      "passwordTitle": "应用密码",
+      "passwordDesc": "保存到本地配置；留空会保留已保存密码。",
+      "passwordPlaceholder": "坚果云第三方应用密码",
+      "passwordSavedPlaceholder": "已保存，留空保持不变",
+      "clearPassword": "清除",
+      "remoteDirTitle": "远端目录",
+      "remoteDirDesc": "只管理该目录下的 Cockpit 备份文件。",
+      "statusTitle": "同步状态",
+      "statusDesc": "远端恢复需要手动选择备份，不会静默覆盖本地数据。",
+      "lastUpload": "最近上传：{{time}}",
+      "lastDownload": "最近恢复：{{time}}",
+      "never": "尚未同步",
+      "testAction": "测试/保存配置",
+      "uploadAction": "生成并上传",
+      "syncAction": "同步配置",
+      "syncLatestConfirm": "确认拉取最新的远端备份 {{name}} 并同步到本地？此操作将覆盖本地现有数据。",
+      "remoteListTitle": "远端备份",
+      "remoteListDesc": "仅显示匹配 Cockpit 自动/手动备份命名的 JSON 与 ZIP 文件。",
+      "emptyTitle": "暂无远端备份",
+      "emptyDesc": "保存设置后可以生成并上传一份备份。",
+      "unknownTime": "未知",
+      "restoreAction": "恢复",
+      "restoreConfirm": "确认从远端备份 {{name}} 恢复数据？",
+      "deleteConfirm": "确认删除远端备份 {{name}}？",
+      "feedback": {
+        "testingAndSaving": "正在保存并测试 WebDAV 连接...",
+        "saveAndTestSuccess": "配置已保存，连接测试成功！",
+        "saveSuccessTestFailed": "配置已保存，但连接测试失败：{{message}}",
+        "saveAndTestFailed": "保存并测试连接失败：{{error}}",
+        "uploading": "正在生成并上传备份...",
+        "uploadSuccess": "已上传 {{count}} 个文件，清理 {{deleted}} 个远端过期备份",
+        "uploadFailed": "WebDAV 上传失败：{{error}}",
+        "listFailed": "加载远端备份失败：{{error}}",
+        "loadSettingsFailed": "加载 WebDAV 设置失败：{{error}}",
+        "restoring": "正在读取远端备份并导入...",
+        "restoreEmpty": "远端备份未恢复任何数据",
+        "deleteSuccess": "远端备份已删除",
+        "deleteFailed": "删除远端备份失败：{{error}}",
+        "syncingLatest": "正在同步远端最新配置...",
+        "syncFailed": "同步最新配置失败：{{error}}",
+        "noRemoteBackup": "远端未发现可同步的备份文件"
+      },
+      "errors": {
+        "notEnabled": "请先启用 WebDAV 同步"
+      }
+    },
     "general": {
       "appearance": "界面外观",
       "language": "显示语言",
@@ -759,8 +826,8 @@
       "floatingCardShowNowAction": "显示悬浮卡片",
       "dataDir": "数据目录",
       "dataDirDesc": "账号与配置文件的存储位置。",
-      "fpDir": "Antigravity IDE 存储目录",
-      "fpDirDesc": "Antigravity IDE 数据文件的存储位置。",
+      "topRightAdVisible": "显示顶部推广",
+      "topRightAdVisibleDesc": "关闭后隐藏应用顶部推广位。",
       "opencodeTitle": "OpenCode 联动",
       "opencodeAuthOverwrite": "切换 Codex 时覆盖 OpenCode 登录信息",
       "opencodeAuthOverwriteDesc": "关闭后仅切换 Codex，不会改写 OpenCode 当前登录态",
@@ -1005,7 +1072,6 @@
       "email": "邮箱",
       "subscription": "订阅类型",
       "quota": "配额状态",
-      "fingerprint": "指纹",
       "lastUsed": "最后使用",
       "actions": "操作"
     },
@@ -1091,10 +1157,8 @@
     "actions": {
       "viewDetails": "查看详情",
       "viewError": "查看错误",
-      "fingerprint": "指纹",
       "switch": "切换账号",
       "switchTo": "切换到此账号",
-      "selectFingerprint": "点击选择指纹",
       "delete": "删除",
       "deleteSelected": "删除选中",
       "export": "导出",
@@ -1243,106 +1307,8 @@
     "currentAccount": "当前使用中",
     "switchTo": "切换至该账号",
     "switching": "切换中...",
-    "fingerprint": "指纹",
     "bound": "已绑定",
     "brandTitle": "Antigravity IDE 账号管理"
-  },
-  "fingerprints": {
-    "title": "设备指纹",
-    "subtitle": "管理绑定到账号的设备指纹。",
-    "toolbar": {
-      "generate": "生成新指纹",
-      "capture": "捕获当前",
-      "import": "导入",
-      "deleteUnbound": "清理未绑定",
-      "folder": "目录",
-      "delete": "删除"
-    },
-    "table": {
-      "name": "指纹名称",
-      "machineId": "设备 ID",
-      "accounts": "绑定账号",
-      "actions": "操作",
-      "accountCount": "{{count}} 个账号",
-      "apply": "应用",
-      "noData": "暂无指纹数据",
-      "preview": "预览",
-      "rename": "重命名"
-    },
-    "modals": {
-      "generate": {
-        "title": "生成新指纹",
-        "btn": "生成"
-      },
-      "capture": {
-        "title": "捕获当前指纹",
-        "btn": "捕获"
-      },
-      "rename": {
-        "title": "重命名指纹",
-        "label": "指纹名称"
-      },
-      "import": {
-        "title": "导入指纹",
-        "fromTools": "导入 Antigravity Tools指纹",
-        "desc": "从 ~/.antigravity_tools/ 目录导入",
-        "fromJsonBtn": "从 JSON 导入",
-        "jsonExample": "格式示例：",
-        "jsonPlaceholder": "工作指纹",
-        "orPasteJson": "或粘贴 JSON"
-      },
-      "bound": {
-        "title": "绑定账号管理",
-        "add": "添加账号",
-        "empty": "暂无账号绑定此指纹",
-        "emptyAll": "所有账号都已绑定此指纹",
-        "select": "选择要添加的账号",
-        "from": "来自: {{name}}",
-        "back": "返回"
-      },
-      "detail": {
-        "title": "指纹详细信息",
-        "created": "创建于 {{time}}"
-      }
-    },
-    "messages": {
-      "deleteConfirm": "确定要删除这个指纹吗？绑定此指纹的账号将自动改为原始指纹。",
-      "batchDeleteConfirm": "确定要删除选中的 {{count}} 个指纹吗？绑定此指纹的账号将自动改为原始指纹。",
-      "deleteUnboundConfirm": "确定要删除 {{count}} 个未绑定账号的指纹吗？",
-      "generated": "已生成新指纹",
-      "captured": "已捕获当前指纹",
-      "renamed": "已重命名",
-      "deleted": "已删除指纹",
-      "deletedUnbound": "已删除 {{count}} 个未绑定指纹",
-      "imported": "已导入 {{count}} 个指纹",
-      "noUnboundToDelete": "没有可删除的未绑定指纹",
-      "addedAccounts": "已添加 {{count}} 个账号",
-      "enterName": "请输入指纹名称",
-      "previewNotReady": "预览未就绪，请稍后重试",
-      "duplicate": "已存在相同指纹：{{name}}，无需重复添加。",
-      "autoGeneratedSuffix": "（未找到，已自动生成）",
-      "readOnly": "只读",
-      "current": "当前",
-      "addCount": "添加 {{count}} 个账号",
-      "addFailed": "添加失败",
-      "adding": "添加中...",
-      "applyFailed": "应用失败",
-      "boundCount": "已绑定 {{count}} 个账号",
-      "captureFailed": "捕获失败",
-      "count": "{{count}} 个",
-      "deleteFailed": "删除失败",
-      "fpLabel": "指纹:",
-      "generateFailed": "生成失败",
-      "importFailed": "导入失败",
-      "importing": "导入中...",
-      "loadFailed": "加载指纹列表失败",
-      "processing": "处理中...",
-      "renameFailed": "重命名失败",
-      "serviceMachineIdEmpty": "空",
-      "importPartialFailed": "{{failCount}} 个失败: {{failList}}",
-      "refreshingQuota": "刷新配额中 {{done}}/{{total}}（可关闭此弹窗，后台继续刷新）",
-      "quotaRefreshDone": "配额刷新完成"
-    }
   },
   "modals": {
     "addAccount": {
@@ -1377,15 +1343,6 @@
       "fromFiles": "从本地文件导入",
       "fromFilesDesc": "选择 JSON 文件导入账号（支持多种格式）",
       "importingFiles": "正在导入 {{count}} 个文件..."
-    },
-    "fingerprint": {
-      "title": "选择指纹",
-      "desc": "为账号 <1>{{email}}</1> 选择指纹",
-      "original": "原始指纹",
-      "new": "添加新指纹",
-      "bind": "确认绑定",
-      "selectLabel": "选择指纹",
-      "boundCount": "个账号"
     },
     "quota": {
       "title": "配额详细信息",
@@ -2229,7 +2186,7 @@
       "total": "总计",
       "today": "今日",
       "periods": "周期",
-      "tokens": "token",
+      "tokens": "令牌",
       "quotaUsed": "消耗",
       "modelStats": "模型统计",
       "noStats": "暂无统计",
@@ -2245,6 +2202,9 @@
       "emptyTitle": "暂无模型供应商",
       "emptyDesc": "点击右上角“新增供应商”开始维护。",
       "baseUrl": "Base URL",
+      "modelCatalog": "模型",
+      "modelCatalogEmpty": "未配置模型目录",
+      "gatewayHint": "第三方供应商启动时会使用本地网关隔离实例并完成协议转换；OpenAI 官方供应商保持直连。",
       "website": "官网",
       "apiKeyPage": "API Key 页面",
       "apiKeysCount": "API Key {{count}} 个",
@@ -2256,10 +2216,15 @@
       "fields": {
         "name": "供应商名称",
         "baseUrl": "Base URL",
+        "modelCatalog": "模型目录",
         "website": "官网（可选）",
         "apiKeyUrl": "API Key 页面（可选）",
+        "wireApi": "协议能力",
+        "enableMode": "启用策略",
         "newApiKeyName": "新增 Key 名称（可选）",
-        "newApiKey": "新增 API Key"
+        "newApiKey": "新增 API Key",
+        "visionCapability": "图片输入能力",
+        "visionModels": "支持图片的模型"
       },
       "validation": {
         "nameRequired": "供应商名称不能为空",
@@ -2274,6 +2239,25 @@
       "confirmDelete": "确认删除供应商「{{name}}」吗？",
       "deleteFailed": "删除供应商失败：{{error}}",
       "deleteApiKeyFailed": "删除 API Key 失败：{{error}}",
+      "enableAsBackend": "启用为 Codex 后端",
+      "enabling": "启用中...",
+      "enableSuccess": "已启用 {{name}}，并启动 {{instance}}。",
+      "enableFailed": "启用供应商失败：{{error}}",
+      "status": {
+        "active": "当前后端",
+        "available": "可启用"
+      },
+      "enableMode": {
+        "label": "接入方式",
+        "gatewayMode": "网关模式",
+        "directMode": "直连模式"
+      },
+      "wireApi": {
+        "help": "大多数供应商请选择 Responses；仅当供应商明确只支持 Chat Completions 时再切换。如果不确定，优先选 Responses。",
+        "helpAria": "查看协议说明",
+        "responses": "Responses 原生",
+        "chatCompletions": "Chat Completions 协议"
+      },
       "selectSavedProvider": "已保存供应商",
       "selectSavedApiKey": "已保存 API Key",
       "noSavedProviders": "暂无已保存供应商，可直接填写后自动保存。",
@@ -2331,6 +2315,97 @@
           "contextWindowInvalid": "上下文窗口必须是大于 0 的整数",
           "autoCompactInvalid": "自动压缩阈值必须是大于 0 的整数"
         }
+      },
+      "testing": "测试中...",
+      "testSuccess": "供应商连接正常：{{protocol}}，{{model}}，{{latency}}。",
+      "testFailed": "测试供应商失败：{{error}}",
+      "testFailure": {
+        "credential": "API Key 不可用",
+        "url": "Base URL 无效",
+        "network": "网络连接失败",
+        "models": "模型列表接口异常",
+        "parse": "响应解析失败",
+        "httpStatus": "状态 {{status}}",
+        "message": "{{title}}：{{detail}}。{{suggestion}}"
+      },
+      "testSuggestion": {
+        "addApiKey": "请先为该供应商添加 API Key，然后再测试连接。",
+        "checkBaseUrl": "请检查 Base URL 是否包含正确版本路径，例如 /v1。",
+        "checkNetwork": "请检查供应商地址、网络代理、防火墙或上游服务状态。",
+        "checkApiKey": "请检查 API Key 是否有效、权限是否包含模型列表接口。",
+        "checkProviderStatus": "请检查供应商服务状态、网络代理或供应商接口兼容性。",
+        "checkModelsApi": "请确认该供应商提供 OpenAI 兼容的模型列表响应。"
+      },
+      "enableAndStart": "启动",
+      "instance": {
+        "label": "启动实例",
+        "default": "默认实例",
+        "running": "运行中",
+        "targetHint": "目标：{{instance}}",
+        "uninitializedHint": "目标实例尚未初始化，请先到多开实例页启动一次。",
+        "shortLabel": "实例",
+        "saveFailed": "保存实例绑定失败：{{error}}"
+      },
+      "vision": {
+        "providerDefault": "该供应商默认支持图片输入",
+        "providerDefaultHint": "关闭时，只有下方列出的模型会允许图片输入；其他模型会在本地网关直接提示不支持。",
+        "modelsHint": "每行一个模型名。适合同一供应商里只有部分视觉模型支持粘贴图片的情况。",
+        "allModels": "图片输入",
+        "partialModels": "部分图片",
+        "textOnly": "仅文本"
+      },
+      "sponsorRecommended": "赞助商推荐",
+      "builtinProviders": "内置供应商",
+      "sponsorHint": "已按赞助商推荐自动填写兼容服务地址。输入 API Key 后，卡片会自动查询余额和用量。",
+      "integration": {
+        "sub2api": "Sub2API 兼容",
+        "newApi": "New API 兼容"
+      },
+      "usage": {
+        "title": "额度概览",
+        "remaining": "剩余额度",
+        "today": "今日用量",
+        "total": "累计用量",
+        "requests": "今日请求",
+        "loading": "正在查询额度...",
+        "failed": "额度查询失败：{{error}}",
+        "pending": "等待查询额度",
+        "noKey": "暂无可查询额度",
+        "used": "已用额度",
+        "limit": "总额度",
+        "viewDetail": "查看详情",
+        "detailTitle": "服务面板",
+        "rawFields": "服务数据",
+        "fields": {
+          "status": "状态",
+          "planName": "订阅",
+          "remaining": "剩余额度",
+          "balance": "余额",
+          "todayRequests": "今日请求",
+          "todayTokens": "今日 Token",
+          "todayCost": "今日消耗",
+          "totalRequests": "累计请求",
+          "totalTokens": "累计 Token",
+          "totalCost": "累计消耗",
+          "hardLimitUsd": "硬额度",
+          "softLimitUsd": "软额度",
+          "systemHardLimitUsd": "系统额度",
+          "accessUntil": "可用至",
+          "totalUsage": "累计消耗",
+          "quotaUnlimited": "无限额度",
+          "expiresAt": "过期时间",
+          "totalGranted": "授予额度",
+          "totalAvailable": "可用额度",
+          "modelLimitsEnabled": "模型限制"
+        },
+        "accountBalance": "账户余额",
+        "unlimitedQuota": "无限额度",
+        "booleanTrue": "是",
+        "booleanFalse": "否"
+      },
+      "oauthBinding": {
+        "desc": "可选绑定。只要 OAuth 账号带 refresh_token 即可选择；未绑定时供应商仍按原 API Key 逻辑运行。",
+        "currentProvider": "供应商：{{name}}"
       }
     },
     "quickSwitch": {
@@ -2853,6 +2928,10 @@
         "loading": "正在加载请求日志",
         "gatewayModeUnknown": "模式未知"
       }
+    },
+    "apiKey": {
+      "renameSuccess": "已重命名",
+      "renameFailed": "重命名失败"
     }
   },
   "codebuddy": {
@@ -3604,7 +3683,6 @@
       "goAntigravity": "前往 Antigravity IDE",
       "goCodex": "前往 Codex",
       "goDashboard": "前往仪表盘",
-      "goFingerprints": "前往设备指纹",
       "goGitHubCopilot": "前往 GitHub Copilot",
       "goInstances": "前往多开实例",
       "goKiro": "前往 Kiro",
@@ -3700,28 +3778,6 @@
       "desc": "尝试更换关键词，例如“实例”“切换”“设置”“导出”。",
       "title": "没有匹配内容"
     },
-    "fingerprints": {
-      "cautions": {
-        "0": "删除指纹前先看绑定账号数量，避免误操作影响生产账号。"
-      },
-      "keywords": {
-        "0": "指纹",
-        "1": "绑定",
-        "2": "导入",
-        "3": "采集"
-      },
-      "outcomes": {
-        "0": "生成/捕获新指纹并维护元数据。",
-        "1": "查看某指纹已绑定账号并增删绑定关系。"
-      },
-      "steps": {
-        "0": "先创建或导入指纹。",
-        "1": "进入详情确认指纹信息是否正确。",
-        "2": "在绑定管理中将账号关联到目标指纹。"
-      },
-      "summary": "管理指纹模板与账号绑定关系，支持生成、捕获、导入和绑定账号维护。",
-      "title": "设备指纹"
-    },
     "instances": {
       "cautions": {
         "0": "复制来源实例前，建议先关闭来源实例，避免数据不一致。",
@@ -3801,7 +3857,7 @@
     },
     "resultCount": "共 {{count}} 个章节",
     "searchAria": "搜索手册",
-    "searchPlaceholder": "搜索功能、场景或关键词（如：多开、注入、唤醒、指纹）",
+    "searchPlaceholder": "搜索功能、场景或关键词（如：多开、注入、唤醒）",
     "settings": {
       "cautions": {
         "0": "路径探测失败时，手动选择可执行文件路径最稳妥。",

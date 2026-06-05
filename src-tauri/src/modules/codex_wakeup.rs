@@ -1829,6 +1829,9 @@ fn run_codex_exec_sync(
     if is_scope_cancelled(cancel_flag) {
         return Err(cancelled_error());
     }
+    crate::modules::codex_config_format::sanitize_codex_config_toml_file(
+        &codex_home.join("config.toml"),
+    )?;
     let workspace_dir = codex_home.join("workspace");
     fs::create_dir_all(&workspace_dir).map_err(|e| format!("创建唤醒工作目录失败: {}", e))?;
     let last_message_path = codex_home.join("last_message.txt");
@@ -1916,6 +1919,17 @@ fn run_codex_exec_sync_detailed(
     prompt: &str,
     execution_config: &CodexWakeupExecutionConfig,
 ) -> Result<CommandOutput, CodexWakeupCliConversationDetailedError> {
+    crate::modules::codex_config_format::sanitize_codex_config_toml_file(
+        &codex_home.join("config.toml"),
+    )
+    .map_err(|message| CodexWakeupCliConversationDetailedError {
+        message,
+        status: None,
+        stdout: None,
+        stderr: None,
+        last_message: None,
+        duration_ms: None,
+    })?;
     let workspace_dir = codex_home.join("workspace");
     fs::create_dir_all(&workspace_dir).map_err(|e| CodexWakeupCliConversationDetailedError {
         message: format!("创建唤醒工作目录失败: {}", e),

@@ -809,7 +809,7 @@ fn append_windsurf_rows(rows: &mut Vec<ReportRow>) {
         if let Some(snapshots) = account.copilot_quota_snapshots.as_ref() {
             pushed = append_copilot_snapshot_rows(
                 rows,
-                "Windsurf",
+                "Devin",
                 &account_name,
                 snapshots,
                 &reset,
@@ -831,7 +831,7 @@ fn append_windsurf_rows(rows: &mut Vec<ReportRow>) {
 
         if pushed == 0 {
             rows.push(make_row(
-                "Windsurf",
+                "Devin",
                 &account_name,
                 "Quota",
                 "-",
@@ -954,7 +954,7 @@ fn append_windsurf_plan_status_candidate_rows(
             status,
         );
         rows.push(make_row(
-            "Windsurf",
+            "Devin",
             account,
             "Extra usage balance",
             "-",
@@ -1081,7 +1081,7 @@ fn push_windsurf_quota_percent_row(
     };
 
     rows.push(make_row(
-        "Windsurf",
+        "Devin",
         account,
         metric,
         &percent_text(used),
@@ -1114,7 +1114,7 @@ fn push_windsurf_credit_row(
         let remaining = (total - used_normalized).max(0.0);
         let used_percent = clamp_percent((used_normalized / total) * 100.0);
         rows.push(make_row(
-            "Windsurf",
+            "Devin",
             account,
             metric,
             &format!(
@@ -1130,7 +1130,7 @@ fn push_windsurf_credit_row(
         ));
     } else {
         rows.push(make_row(
-            "Windsurf",
+            "Devin",
             account,
             metric,
             "-",

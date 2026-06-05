@@ -1,6 +1,6 @@
 import { ReactNode, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlarmClock, Fingerprint, Layers, ShieldCheck } from 'lucide-react';
+import { AlarmClock, Layers, ShieldCheck } from 'lucide-react';
 import { Page } from '../types/navigation';
 import { RobotIcon } from './icons/RobotIcon';
 import { ManualHelpIconButton } from './ManualHelpIconButton';
@@ -76,11 +76,6 @@ export function OverviewTabsHeader({
       key: 'instances',
       label: t('instances.title', '多开实例'),
       icon: <Layers className="tab-icon" />,
-    },
-    {
-      key: 'fingerprints',
-      label: t('fingerprints.title'),
-      icon: <Fingerprint className="tab-icon" />,
     },
     {
       key: 'wakeup',

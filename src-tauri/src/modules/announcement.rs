@@ -131,6 +131,103 @@ pub struct TopRightAd {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SponsorLocale {
+    #[serde(default)]
+    pub badge: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SponsorIntegration {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(rename = "type")]
+    pub integration_type: String,
+    #[serde(default)]
+    pub base_url: String,
+    #[serde(default)]
+    pub wire_api: Option<String>,
+    #[serde(default)]
+    pub quick_configure: bool,
+    #[serde(default)]
+    pub dashboard_card: bool,
+    #[serde(default)]
+    pub models: Vec<String>,
+    #[serde(default)]
+    pub supports_vision: bool,
+    #[serde(default)]
+    pub website: Option<String>,
+    #[serde(default)]
+    pub api_key_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sponsor {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub priority: i64,
+    #[serde(default)]
+    pub logo_url: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub badge: Option<String>,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub integration: Option<SponsorIntegration>,
+    #[serde(default = "default_target_versions")]
+    pub target_versions: String,
+    #[serde(default)]
+    pub target_languages: Option<Vec<String>>,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub expires_at: Option<String>,
+    #[serde(default)]
+    pub locales: Option<HashMap<String, SponsorLocale>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SponsorModuleLocale {
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub subtitle: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SponsorModule {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_true")]
+    pub entry_visible: bool,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub subtitle: String,
+    #[serde(default = "default_target_versions")]
+    pub target_versions: String,
+    #[serde(default)]
+    pub target_languages: Option<Vec<String>>,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub expires_at: Option<String>,
+    #[serde(default)]
+    pub locales: Option<HashMap<String, SponsorModuleLocale>>,
+    #[serde(default)]
+    pub sponsors: Vec<Sponsor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct AnnouncementResponse {
     #[serde(default)]
     pub version: String,
@@ -138,6 +235,10 @@ struct AnnouncementResponse {
     pub announcements: Vec<Announcement>,
     #[serde(default)]
     pub top_right_ad: Option<TopRightAd>,
+    #[serde(default)]
+    pub top_right_ads: Vec<TopRightAd>,
+    #[serde(default)]
+    pub sponsor_module: Option<SponsorModule>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,10 +267,21 @@ pub struct AnnouncementState {
 #[serde(rename_all = "camelCase")]
 pub struct TopRightAdState {
     pub ad: Option<TopRightAd>,
+    pub ads: Vec<TopRightAd>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SponsorModuleState {
+    pub sponsor_module: Option<SponsorModule>,
 }
 
 fn default_target_versions() -> String {
     "*".to_string()
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn get_shared_dir() -> Result<PathBuf, String> {
@@ -251,6 +363,8 @@ fn load_cache() -> Result<Option<AnnouncementCache>, String> {
                 version: String::new(),
                 announcements: legacy.data,
                 top_right_ad: None,
+                top_right_ads: Vec::new(),
+                sponsor_module: None,
             },
         }));
     }
@@ -537,12 +651,11 @@ fn apply_localized_top_right_ad(ad: &TopRightAd, locale: &str) -> TopRightAd {
     localized
 }
 
-fn filter_top_right_ad(
-    ad: Option<TopRightAd>,
+fn filter_top_right_ad_item(
+    mut item: TopRightAd,
     current_version: &str,
     locale: &str,
 ) -> Option<TopRightAd> {
-    let mut item = ad?;
     let target_versions = if item.target_versions.trim().is_empty() {
         "*"
     } else {
@@ -567,6 +680,157 @@ fn filter_top_right_ad(
 
     item = apply_localized_top_right_ad(&item, locale);
     Some(item)
+}
+
+fn filter_top_right_ad(
+    ad: Option<TopRightAd>,
+    current_version: &str,
+    locale: &str,
+) -> Option<TopRightAd> {
+    filter_top_right_ad_item(ad?, current_version, locale)
+}
+
+fn filter_top_right_ads(
+    ads: Vec<TopRightAd>,
+    current_version: &str,
+    locale: &str,
+) -> Vec<TopRightAd> {
+    let mut filtered: Vec<TopRightAd> = ads
+        .into_iter()
+        .filter_map(|item| filter_top_right_ad_item(item, current_version, locale))
+        .collect();
+
+    filtered.sort_by(|a, b| {
+        let a_time = parse_datetime_millis(&a.created_at).unwrap_or(0);
+        let b_time = parse_datetime_millis(&b.created_at).unwrap_or(0);
+        b.priority.cmp(&a.priority).then(b_time.cmp(&a_time))
+    });
+
+    filtered
+}
+
+fn apply_localized_sponsor_module(module: &SponsorModule, locale: &str) -> SponsorModule {
+    let mut localized = module.clone();
+    if let Some(locales) = &module.locales {
+        let lower_locale = locale.to_lowercase();
+        let matched_key = locales.keys().find(|key| {
+            let normalized_key = key.to_lowercase();
+            normalized_key == lower_locale || lower_locale.starts_with(&(normalized_key + "-"))
+        });
+
+        if let Some(key) = matched_key {
+            if let Some(localized_data) = locales.get(key) {
+                if let Some(title) = &localized_data.title {
+                    localized.title = title.clone();
+                }
+                if let Some(subtitle) = &localized_data.subtitle {
+                    localized.subtitle = subtitle.clone();
+                }
+            }
+        }
+    }
+
+    localized
+}
+
+fn apply_localized_sponsor(sponsor: &Sponsor, locale: &str) -> Sponsor {
+    let mut localized = sponsor.clone();
+    if let Some(locales) = &sponsor.locales {
+        let lower_locale = locale.to_lowercase();
+        let matched_key = locales.keys().find(|key| {
+            let normalized_key = key.to_lowercase();
+            normalized_key == lower_locale || lower_locale.starts_with(&(normalized_key + "-"))
+        });
+
+        if let Some(key) = matched_key {
+            if let Some(localized_data) = locales.get(key) {
+                if let Some(badge) = &localized_data.badge {
+                    localized.badge = Some(badge.clone());
+                }
+                if let Some(description) = &localized_data.description {
+                    localized.description = description.clone();
+                }
+            }
+        }
+    }
+
+    localized
+}
+
+fn is_visible_for_current_context(
+    target_versions: &str,
+    target_languages: &Option<Vec<String>>,
+    expires_at: &Option<String>,
+    current_version: &str,
+    locale: &str,
+) -> bool {
+    let target_versions = if target_versions.trim().is_empty() {
+        "*"
+    } else {
+        target_versions
+    };
+    if !match_version(current_version, target_versions) {
+        return false;
+    }
+    if let Some(languages) = target_languages {
+        if !is_language_match(locale, languages) {
+            return false;
+        }
+    }
+    if let Some(expires_at) = expires_at {
+        if let Some(expire_ms) = parse_datetime_millis(expires_at) {
+            if expire_ms < Utc::now().timestamp_millis() {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn filter_sponsor_module(
+    module: Option<SponsorModule>,
+    current_version: &str,
+    locale: &str,
+) -> Option<SponsorModule> {
+    let mut module = module?;
+    if !module.enabled || !module.entry_visible {
+        return None;
+    }
+    if !is_visible_for_current_context(
+        &module.target_versions,
+        &module.target_languages,
+        &module.expires_at,
+        current_version,
+        locale,
+    ) {
+        return None;
+    }
+
+    module = apply_localized_sponsor_module(&module, locale);
+    module.sponsors = module
+        .sponsors
+        .into_iter()
+        .filter(|sponsor| {
+            !sponsor.id.trim().is_empty()
+                && !sponsor.name.trim().is_empty()
+                && is_visible_for_current_context(
+                    &sponsor.target_versions,
+                    &sponsor.target_languages,
+                    &sponsor.expires_at,
+                    current_version,
+                    locale,
+                )
+        })
+        .map(|sponsor| apply_localized_sponsor(&sponsor, locale))
+        .collect();
+
+    module.sponsors.sort_by(|a, b| {
+        let a_time = parse_datetime_millis(&a.created_at).unwrap_or(0);
+        let b_time = parse_datetime_millis(&b.created_at).unwrap_or(0);
+        b.priority.cmp(&a.priority).then(b_time.cmp(&a_time))
+    });
+
+    Some(module)
 }
 
 async fn fetch_remote_announcements() -> Result<AnnouncementResponse, String> {
@@ -661,7 +925,22 @@ pub async fn get_top_right_ad_state() -> Result<TopRightAdState, String> {
     let locale = config::get_user_config().language.to_lowercase();
     let raw_payload = load_announcements_raw().await?;
     let ad = filter_top_right_ad(raw_payload.top_right_ad, current_version, &locale);
-    Ok(TopRightAdState { ad })
+    let ads = filter_top_right_ads(raw_payload.top_right_ads, current_version, &locale);
+    Ok(TopRightAdState { ad, ads })
+}
+
+pub async fn get_sponsor_module_state() -> Result<SponsorModuleState, String> {
+    let current_version = env!("CARGO_PKG_VERSION");
+    let locale = config::get_user_config().language.to_lowercase();
+    let raw_payload = load_announcements_raw().await?;
+    let sponsor_module =
+        filter_sponsor_module(raw_payload.sponsor_module, current_version, &locale);
+    Ok(SponsorModuleState { sponsor_module })
+}
+
+pub async fn force_refresh_sponsor_module() -> Result<SponsorModuleState, String> {
+    remove_cache()?;
+    get_sponsor_module_state().await
 }
 
 pub async fn mark_announcement_as_read(id: &str) -> Result<(), String> {

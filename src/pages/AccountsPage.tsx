@@ -16,8 +16,6 @@ import {
   LayoutGrid,
   List,
   Search,
-  Fingerprint,
-  Link,
   Lock,
   AlertTriangle,
   CircleAlert,
@@ -39,10 +37,10 @@ import {
   LogOut,
   Pencil
 } from 'lucide-react'
-import { useTranslation, Trans } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
 import { useAccountStore } from '../stores/useAccountStore'
 import * as accountService from '../services/accountService'
-import { FingerprintWithStats, Account } from '../types/account'
+import { Account } from '../types/account'
 import { Page } from '../types/navigation'
 import {
   getAntigravityTierBadge,
@@ -450,19 +448,6 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     set: setTagDeleteConfirmError,
   } = useModalErrorState()
   const [deletingTag, setDeletingTag] = useState(false)
-  // 指纹选择弹框
-  const [fingerprints, setFingerprints] = useState<FingerprintWithStats[]>([])
-  const [showFpSelectModal, setShowFpSelectModal] = useState<string | null>(
-    null
-  )
-  const [selectedFpId, setSelectedFpId] = useState<string | null>(null)
-  const {
-    message: fpSelectError,
-    scrollKey: fpSelectErrorScrollKey,
-    set: setFpSelectError,
-  } = useModalErrorState()
-  const originalFingerprint = fingerprints.find((fp) => fp.is_original)
-  const selectableFingerprints = fingerprints.filter((fp) => !fp.is_original)
 
   // Quota Detail Modal
   const [showQuotaModal, setShowQuotaModal] = useState<string | null>(null)
@@ -978,15 +963,6 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     ]
   )
 
-  const loadFingerprints = async () => {
-    try {
-      const list = await accountService.listFingerprints()
-      setFingerprints(list)
-    } catch (e) {
-      console.error(e)
-    }
-  }
-
   // 加载显示用分组配置
   const loadDisplayGroups = async () => {
     try {
@@ -1137,7 +1113,6 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
   useEffect(() => {
     fetchAccounts()
     fetchCurrentAccount()
-    loadFingerprints()
     loadDisplayGroups()
     loadVerificationHistory()
 
@@ -1622,7 +1597,6 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     try {
       const imported = await accountService.importFromOldTools()
       await fetchAccounts()
-      await loadFingerprints()
       await Promise.allSettled(imported.map((acc) => refreshQuota(acc.id)))
       await fetchAccounts()
       if (imported.length === 0) {
@@ -2135,34 +2109,6 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     await reloadAccountGroups()
   }
 
-  const openFpSelectModal = (accountId: string) => {
-    const account = accounts.find((a) => a.id === accountId)
-    setSelectedFpId(account?.fingerprint_id || 'original')
-    setFpSelectError(null)
-    setShowFpSelectModal(accountId)
-  }
-
-  const handleBindFingerprint = async () => {
-    if (!showFpSelectModal || !selectedFpId) return
-    try {
-      setFpSelectError(null)
-      await accountService.bindAccountFingerprint(
-        showFpSelectModal,
-        selectedFpId
-      )
-      await fetchAccounts()
-      setShowFpSelectModal(null)
-    } catch (e) {
-      setFpSelectError(t('messages.bindFailed', { error: String(e) }))
-    }
-  }
-
-  const getFingerprintName = (fpId?: string) => {
-    if (!fpId || fpId === 'original') return t('modals.fingerprint.original')
-    const fp = fingerprints.find((f) => f.id === fpId)
-    return fp?.name || fpId
-  }
-
   const formatDate = (timestamp: number) => {
     const d = new Date(timestamp * 1000)
     return (
@@ -2442,13 +2388,6 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                 title={t('accounts.actions.viewDetails')}
               >
                 <CircleAlert size={14} />
-              </button>
-              <button
-                className="card-action-btn"
-                onClick={() => openFpSelectModal(account.id)}
-                title={t('accounts.actions.fingerprint')}
-              >
-                <Fingerprint size={14} />
               </button>
               <button
                 className="card-action-btn"
@@ -3012,19 +2951,6 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
             </div>
           </td>
           <td>
-            <button
-              className="fp-select-btn"
-              onClick={() => openFpSelectModal(account.id)}
-              title={t('accounts.actions.selectFingerprint')}
-            >
-              <Fingerprint size={14} />
-              <span className="fp-select-name">
-                {getFingerprintName(account.fingerprint_id)}
-              </span>
-              <Link size={12} />
-            </button>
-          </td>
-          <td>
             <div className="quota-grid">
               {isForbidden ? (
                 <div className="quota-forbidden" title={forbiddenTitle}>
@@ -3170,7 +3096,6 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
               />
             </th>
             <th style={{ width: 220 }}>{t('accounts.columns.email')}</th>
-            <th style={{ width: 130 }}>{t('accounts.columns.fingerprint')}</th>
             <th>{t('accounts.columns.quota')}</th>
             <th className="sticky-action-header table-action-header">
               {t('accounts.columns.actions')}
@@ -4232,119 +4157,6 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
               >
                 {deletingTag ? '处理中...' : t('common.confirm')}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Fingerprint Selection Modal */}
-      {showFpSelectModal && (
-        <div
-          className="modal-overlay"
-          onClick={() => {
-            setShowFpSelectModal(null)
-            setFpSelectError(null)
-          }}
-        >
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{t('modals.fingerprint.title')}</h2>
-              <button
-                className="close-btn"
-                onClick={() => {
-                  setShowFpSelectModal(null)
-                  setFpSelectError(null)
-                }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="modal-body">
-              <ModalErrorMessage message={fpSelectError} scrollKey={fpSelectErrorScrollKey} />
-              <p>
-                <Trans
-                  i18nKey="modals.fingerprint.desc"
-                  values={{
-                    email: maskAccountText(
-                      accounts.find((a) => a.id === showFpSelectModal)?.email
-                    )
-                  }}
-                  components={{ 1: <strong></strong> }}
-                />
-              </p>
-              <div className="form-group">
-                <label>{t('modals.fingerprint.selectLabel')}</label>
-                <div className="fp-select-list">
-                  <label
-                    className={`fp-select-item ${selectedFpId === 'original' ? 'selected' : ''}`}
-                  >
-                    <input
-                      type="radio"
-                      name="fingerprint"
-                      checked={selectedFpId === 'original'}
-                      onChange={() => setSelectedFpId('original')}
-                    />
-                    <div className="fp-select-info">
-                      <span className="fp-select-item-name">
-                        📌 {t('modals.fingerprint.original')}
-                      </span>
-                      <span className="fp-select-item-id">
-                        {t('modals.fingerprint.original')} ·{' '}
-                        {originalFingerprint?.bound_account_count ?? 0}{' '}
-                        {t('modals.fingerprint.boundCount')}
-                      </span>
-                    </div>
-                  </label>
-                  {selectableFingerprints.map((fp) => (
-                    <label
-                      key={fp.id}
-                      className={`fp-select-item ${selectedFpId === fp.id ? 'selected' : ''}`}
-                    >
-                      <input
-                        type="radio"
-                        name="fingerprint"
-                        checked={selectedFpId === fp.id}
-                        onChange={() => setSelectedFpId(fp.id)}
-                      />
-                      <div className="fp-select-info">
-                        <span className="fp-select-item-name">{fp.name}</span>
-                        <span className="fp-select-item-id">
-                          {fp.id.substring(0, 8)} · {fp.bound_account_count}{' '}
-                          {t('modals.fingerprint.boundCount')}
-                        </span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="modal-actions">
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setShowFpSelectModal(null)
-                    setFpSelectError(null)
-                    onNavigate?.('fingerprints')
-                  }}
-                >
-                  <Plus size={14} /> {t('modals.fingerprint.new')}
-                </button>
-                <div style={{ flex: 1 }}></div>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setShowFpSelectModal(null)
-                    setFpSelectError(null)
-                  }}
-                >
-                  {t('common.cancel')}
-                </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleBindFingerprint}
-                >
-                  {t('common.confirm')}
-                </button>
-              </div>
             </div>
           </div>
         </div>

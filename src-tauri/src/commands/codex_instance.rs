@@ -115,6 +115,18 @@ async fn inject_bound_account_to_profile(
         return Ok(());
     }
 
+    if let Some(provider_gateway_account_id) =
+        modules::codex_instance::parse_provider_gateway_bind_account_id(bind_account_id)
+    {
+        modules::codex_local_access::activate_provider_gateway_for_dir(
+            profile_dir,
+            &provider_gateway_account_id,
+        )
+        .await?;
+        return Ok(());
+    }
+
+    modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(profile_dir)?;
     modules::codex_instance::inject_account_to_profile(profile_dir, bind_account_id).await
 }
 
@@ -261,6 +273,15 @@ fn repair_session_visibility_before_launch(
     Ok(())
 }
 
+fn sanitize_codex_config_before_launch(data_dir: &Path) -> Result<(), String> {
+    modules::logger::log_info(&format!(
+        "[Codex Config] sanitize before launch: data_dir={}",
+        data_dir.display()
+    ));
+    modules::codex_config_format::sanitize_codex_config_toml_file(&data_dir.join("config.toml"))
+        .map(|_| ())
+}
+
 fn read_launch_credential_kind_for_dir(data_dir: &Path) -> Option<String> {
     match modules::codex_session_visibility::read_history_visibility_provider_for_dir(data_dir) {
         Ok(provider) => {
@@ -318,6 +339,7 @@ fn powershell_quote(value: &str) -> String {
 }
 
 fn build_launch_command(context: &CodexLaunchContext) -> Result<String, String> {
+    sanitize_codex_config_before_launch(Path::new(&context.user_data_dir))?;
     let runtime = modules::codex_wakeup::resolve_cli_runtime()?;
     let parsed_args = modules::process::parse_extra_args(&context.extra_args);
 
@@ -435,7 +457,7 @@ pub async fn codex_list_instances() -> Result<Vec<CodexInstanceProfileView>, Str
 
     let default_pid = modules::process::resolve_codex_pid_from_entries(
         default_settings.last_pid,
-        None,
+        Some(default_dir.to_string_lossy().as_ref()),
         &process_entries,
     );
     let default_running = default_pid.is_some();
@@ -599,10 +621,11 @@ pub async fn codex_update_instance(
             updated = modules::codex_instance::update_default_app_speed(speed.clone())?;
             modules::codex_speed::write_app_speed_for_dir(&default_dir, speed)?;
         }
-        let running = updated
-            .last_pid
-            .map(modules::process::is_pid_running)
-            .unwrap_or(false);
+        let resolved_pid = modules::process::resolve_codex_pid(
+            updated.last_pid,
+            Some(default_dir.to_string_lossy().as_ref()),
+        );
+        let running = resolved_pid.is_some();
         let default_bind_account_id = resolve_default_account_id(&updated);
         let _ = working_dir;
         return Ok(default_instance_view(
@@ -610,7 +633,7 @@ pub async fn codex_update_instance(
             &updated,
             default_bind_account_id,
             running,
-            updated.last_pid,
+            resolved_pid,
         ));
     }
 
@@ -710,6 +733,10 @@ async fn codex_start_instance_internal(
             } else {
                 inject_bound_account_to_profile(&default_dir, account_id).await?;
             }
+        } else {
+            modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(
+                &default_dir,
+            )?;
         }
         let launch_credential_change = build_launch_credential_change(
             previous_credential_kind,
@@ -723,6 +750,7 @@ async fn codex_start_instance_internal(
         } else {
             sync_codex_threads_across_idle_instances("before-start-default");
         }
+        sanitize_codex_config_before_launch(&default_dir)?;
 
         if default_settings.launch_mode == InstanceLaunchMode::Cli {
             let context = resolve_instance_launch_context(DEFAULT_INSTANCE_ID)?;
@@ -751,6 +779,7 @@ async fn codex_start_instance_internal(
             launch_started.elapsed().as_millis(),
             flow_started.elapsed().as_millis()
         ));
+        modules::codex_model_injector::inject_for_codex_home_later(default_dir.clone());
         let updated = modules::codex_instance::update_default_pid(Some(pid))?;
         let running = modules::process::is_pid_running(pid);
         return Ok(default_instance_view(
@@ -783,6 +812,10 @@ async fn codex_start_instance_internal(
 
     if let Some(ref account_id) = instance.bind_account_id {
         inject_bound_account_to_profile(instance_dir, account_id).await?;
+    } else {
+        modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(
+            instance_dir,
+        )?;
     }
     let launch_credential_change = build_launch_credential_change(
         previous_credential_kind,
@@ -791,6 +824,7 @@ async fn codex_start_instance_internal(
     modules::codex_speed::write_app_speed_for_dir(instance_dir, instance.app_speed.clone())?;
     repair_session_visibility_before_launch("before-start-instance", &launch_credential_change)?;
     sync_codex_threads_across_idle_instances("before-start-instance");
+    sanitize_codex_config_before_launch(instance_dir)?;
 
     if instance.launch_mode == InstanceLaunchMode::Cli {
         let context = resolve_instance_launch_context(&instance.id)?;
@@ -806,6 +840,9 @@ async fn codex_start_instance_internal(
     modules::process::ensure_codex_launch_path_configured()?;
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);
     let pid = modules::process::start_codex_with_args(&instance.user_data_dir, &extra_args)?;
+    modules::codex_model_injector::inject_for_codex_home_later(PathBuf::from(
+        &instance.user_data_dir,
+    ));
     let updated = modules::codex_instance::update_instance_after_start(&instance.id, pid)?;
     let running = modules::process::is_pid_running(pid);
     let initialized = is_profile_initialized(&updated.user_data_dir);
@@ -890,8 +927,12 @@ pub async fn codex_open_instance_window(instance_id: String) -> Result<(), Strin
         if default_settings.launch_mode == InstanceLaunchMode::Cli {
             return Err("CLI 模式实例不支持窗口定位，请改用终端执行。".to_string());
         }
-        modules::process::focus_codex_instance(default_settings.last_pid, None)
-            .map_err(|err| format!("定位 Codex 默认实例窗口失败: {}", err))?;
+        let default_dir = modules::codex_instance::get_default_codex_home()?;
+        modules::process::focus_codex_instance(
+            default_settings.last_pid,
+            Some(default_dir.to_string_lossy().as_ref()),
+        )
+        .map_err(|err| format!("定位 Codex 默认实例窗口失败: {}", err))?;
         return Ok(());
     }
 

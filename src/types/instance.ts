@@ -3,6 +3,11 @@ import type { CodexAppSpeed } from "./codex";
 export type InstanceLaunchMode = "app" | "cli";
 
 export const CODEX_API_SERVICE_BIND_ID = "__api_service__";
+export const CODEX_PROVIDER_GATEWAY_BIND_PREFIX = "__provider_gateway__:";
+
+export function buildCodexProviderGatewayBindId(accountId: string): string {
+  return `${CODEX_PROVIDER_GATEWAY_BIND_PREFIX}${accountId}`;
+}
 
 export type CodexLaunchCredentialType = "api" | "account";
 

@@ -1580,9 +1580,15 @@ fn detect_windsurf_exec_path() -> Option<PathBuf> {
     #[cfg(target_os = "macos")]
     {
         // On macOS, check well-known path first to avoid sysinfo TCC dialogs
-        let path = PathBuf::from("/Applications/Windsurf.app/Contents/MacOS/Electron");
-        if path.exists() {
-            return Some(path);
+        let candidates = [
+            "/Applications/Devin.app/Contents/MacOS/Devin",
+            "/Applications/Windsurf.app/Contents/MacOS/Electron",
+        ];
+        for candidate in candidates {
+            let path = PathBuf::from(candidate);
+            if path.exists() {
+                return Some(path);
+            }
         }
         // Fallback: try to find from running processes via ps
         for (pid, _) in collect_windsurf_process_entries() {
@@ -1668,7 +1674,7 @@ fn detect_windsurf_exec_path() -> Option<PathBuf> {
 
 fn path_looks_like_windsurf(path: &Path) -> bool {
     let text = path.to_string_lossy().to_lowercase();
-    text.contains("windsurf")
+    text.contains("devin") || text.contains("windsurf")
 }
 
 fn normalize_windsurf_path_for_config(path: &Path) -> String {

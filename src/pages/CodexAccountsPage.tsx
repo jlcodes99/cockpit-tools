@@ -166,9 +166,14 @@ import {
   findCodexModelProviderById,
   findCodexModelProviderByBaseUrl,
   listCodexModelProviders,
+  queryCodexModelProviderUsage,
+  saveCodexModelProviderDetectedIntegrationType,
   type CodexModelProvider,
+  type CodexModelProviderUsageSummary,
   upsertCodexModelProviderFromCredential,
 } from "../services/codexModelProviderService";
+import { useSponsorStore } from "../stores/useSponsorStore";
+import type { Sponsor } from "../types/sponsor";
 import {
   buildValidAccountsFilterOption,
   splitValidityFilterValues,
@@ -281,6 +286,80 @@ const OAUTH_BINDING_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 type CodexOverviewLayoutMode = "compact" | "list" | "grid";
 type OAuthBindingSortBy = "account" | "created_at" | "last_used" | "plan";
 type OAuthBindingTargetKind = "api_key_account" | "local_access";
+type CodexApiKeyUsageState = {
+  loading: boolean;
+  summary?: CodexModelProviderUsageSummary;
+  error?: string;
+  unavailable?: boolean;
+};
+
+const CODEX_API_KEY_USAGE_CACHE_KEY = "agtools.codex.apiKeyUsage.cache.v1";
+
+function readCodexApiKeyUsageCache(): Record<string, CodexApiKeyUsageState> {
+  try {
+    const raw = localStorage.getItem(CODEX_API_KEY_USAGE_CACHE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object") return {};
+    const next: Record<string, CodexApiKeyUsageState> = {};
+    Object.entries(parsed).forEach(([accountId, value]) => {
+      if (!value || typeof value !== "object") return;
+      const item = value as {
+        summary?: CodexModelProviderUsageSummary;
+        error?: string;
+        unavailable?: boolean;
+      };
+      next[accountId] = {
+        loading: false,
+        summary: item.summary,
+        error: typeof item.error === "string" ? item.error : undefined,
+        unavailable: item.unavailable === true,
+      };
+    });
+    return next;
+  } catch {
+    return {};
+  }
+}
+
+function writeCodexApiKeyUsageCache(
+  value: Record<string, CodexApiKeyUsageState>,
+): void {
+  try {
+    localStorage.setItem(
+      CODEX_API_KEY_USAGE_CACHE_KEY,
+      JSON.stringify(
+        Object.fromEntries(
+          Object.entries(value).map(([accountId, item]) => [
+            accountId,
+            {
+              summary: item.summary,
+              error: item.error,
+              unavailable: item.unavailable === true,
+            },
+          ]),
+        ),
+      ),
+    );
+  } catch {
+    // ignore persistence failures
+  }
+}
+
+function isSponsorModelProvider(
+  provider: CodexModelProvider | null | undefined,
+  sponsorTemplates: SponsorApiProviderTemplate[],
+): boolean {
+  if (!provider) return false;
+  if (provider.sourceTag?.startsWith("sponsor:")) {
+    return sponsorTemplates.some((template) => template.id === provider.sourceTag);
+  }
+  const normalizedBaseUrl = normalizeHttpBaseUrl(provider.baseUrl);
+  if (!normalizedBaseUrl) return false;
+  return sponsorTemplates.some(
+    (template) => normalizeHttpBaseUrl(template.baseUrl) === normalizedBaseUrl,
+  );
+}
 
 interface LocalAccessAccountPoolHealthSummary {
   total: number;
@@ -394,6 +473,23 @@ function readCockpitApiNumber(
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function readCockpitApiOptionalNumber(
+  record: CockpitApiJsonRecord | null,
+  key: string,
+): number | null {
+  const value = record?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function isProviderUsageUnavailableError(error: unknown): boolean {
+  const message = String(error).replace(/^Error:\s*/, "");
+  return (
+    message.includes("PROVIDER_USAGE_DETECT_FAILED") ||
+    message.includes("PROVIDER_USAGE_HTTP_404") ||
+    message.includes("PROVIDER_USAGE_TYPE_UNSUPPORTED")
+  );
+}
+
 function formatCockpitApiInteger(value: number): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
     Math.max(0, value),
@@ -402,10 +498,15 @@ function formatCockpitApiInteger(value: number): string {
 
 function formatCockpitApiTokenCount(value: number): string {
   const normalized = Math.max(0, value);
-  return new Intl.NumberFormat("en", {
-    notation: normalized >= 1000 ? "compact" : "standard",
-    maximumFractionDigits: normalized >= 1000 ? 1 : 0,
-  }).format(normalized);
+  if (normalized >= 100_000_000) {
+    return `${(normalized / 100_000_000).toFixed(normalized >= 1_000_000_000 ? 1 : 2).replace(/\.?0+$/, "")}亿`;
+  }
+  if (normalized >= 10_000) {
+    return `${(normalized / 10_000).toFixed(normalized >= 100_000 ? 1 : 2).replace(/\.?0+$/, "")}万`;
+  }
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
+    normalized,
+  );
 }
 
 function getCockpitApiUsageRecord(
@@ -421,6 +522,37 @@ function getCockpitApiStatsRecord(
 ): CockpitApiJsonRecord | null {
   const usage = getCockpitApiUsageRecord(account);
   return toCockpitApiRecord(usage?.stats);
+}
+
+function resolveApiKeyUsageMode(
+  summary?: CodexModelProviderUsageSummary,
+): "new_api" | "sub2api" | null {
+  if (!summary) return null;
+  if (summary.mode === "new_api" || summary.mode === "sub2api") {
+    return summary.mode;
+  }
+  if (
+    typeof summary.todayRequests === "number" ||
+    typeof summary.todayTotalTokens === "number"
+  ) {
+    return "sub2api";
+  }
+  const detailKeys = new Set((summary.details ?? []).map((item) => item.key));
+  if (
+    detailKeys.has("todayRequests") ||
+    detailKeys.has("todayTokens") ||
+    detailKeys.has("remaining")
+  ) {
+    return "sub2api";
+  }
+  if (
+    detailKeys.has("totalGranted") ||
+    detailKeys.has("totalAvailable") ||
+    detailKeys.has("expiresAt")
+  ) {
+    return "new_api";
+  }
+  return null;
 }
 
 function readCodexCustomSortOrder(): string[] {
@@ -529,7 +661,61 @@ function maskCodexApiKey(value: string): string {
   return "••••••••••••••••";
 }
 
+interface SponsorApiProviderTemplate {
+  id: string;
+  sponsor: Sponsor;
+  name: string;
+  baseUrl: string;
+  modelCatalog: string[];
+  supportsVision: boolean;
+  website: string;
+  apiKeyUrl: string;
+  wireApi?: "responses" | "chat_completions" | null;
+  integrationType?: "sub2api" | "new_api" | null;
+}
+
+function normalizeSponsorApiProviderTemplates(
+  sponsors: Sponsor[] | undefined,
+): SponsorApiProviderTemplate[] {
+  const templates: SponsorApiProviderTemplate[] = [];
+  for (const sponsor of sponsors ?? []) {
+    const integration = sponsor.integration;
+    if (
+      !integration?.enabled ||
+      !integration.quickConfigure ||
+      !integration.baseUrl?.trim()
+    ) {
+      continue;
+    }
+    templates.push({
+      id: `sponsor:${sponsor.id}`,
+      sponsor,
+      name: sponsor.name,
+      baseUrl: integration.baseUrl.trim(),
+      modelCatalog: integration.models ?? [],
+      supportsVision: integration.supportsVision === true,
+      website: integration.website?.trim() || sponsor.url?.trim() || "",
+      apiKeyUrl: integration.apiKeyUrl?.trim() || sponsor.url?.trim() || "",
+      wireApi: integration.wireApi ?? null,
+      integrationType: integration.type ?? null,
+    });
+  }
+  return templates.sort((a, b) => {
+    const priority = a.sponsor.priority - b.sponsor.priority;
+    if (priority !== 0) return priority;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function getDefaultApiProviderPresetId(
+  sponsorTemplates: SponsorApiProviderTemplate[],
+): string {
+  return sponsorTemplates[0]?.id ?? DEFAULT_CODEX_API_PROVIDER_ID;
+}
+
 export function CodexAccountsPage() {
+  const sponsorModule = useSponsorStore((state) => state.state.sponsorModule);
+  const fetchSponsorState = useSponsorStore((state) => state.fetchState);
   const [activeTab, setActiveTab] = useState<CodexTab>("overview");
   const [wakeupPresetManagerSignal, setWakeupPresetManagerSignal] = useState(0);
   const untaggedKey = "__untagged__";
@@ -761,6 +947,9 @@ export function CodexAccountsPage() {
     string | null
   >(null);
   const [cockpitApiPanelAccountId, setCockpitApiPanelAccountId] = useState<
+    string | null
+  >(null);
+  const [apiKeyUsageDetailAccountId, setApiKeyUsageDetailAccountId] = useState<
     string | null
   >(null);
   const [editingAccountNoteId, setEditingAccountNoteId] = useState<
@@ -1841,6 +2030,9 @@ export function CodexAccountsPage() {
     CodexModelProvider[]
   >([]);
   const [managedProvidersLoading, setManagedProvidersLoading] = useState(false);
+  const [apiKeyUsageMap, setApiKeyUsageMap] = useState<
+    Record<string, CodexApiKeyUsageState>
+  >(() => readCodexApiKeyUsageCache());
   const [managedProviderId, setManagedProviderId] = useState<string>("");
   const [managedProviderApiKeyId, setManagedProviderApiKeyId] =
     useState<string>("");
@@ -1956,6 +2148,21 @@ export function CodexAccountsPage() {
     () => findCodexApiProviderPresetById(apiProviderPresetId),
     [apiProviderPresetId],
   );
+  const sponsorApiProviderTemplates = useMemo(
+    () => normalizeSponsorApiProviderTemplates(sponsorModule?.sponsors),
+    [sponsorModule?.sponsors],
+  );
+  const selectedSponsorApiProviderTemplate = useMemo(
+    () =>
+      sponsorApiProviderTemplates.find(
+        (template) => template.id === apiProviderPresetId,
+      ) ?? null,
+    [apiProviderPresetId, sponsorApiProviderTemplates],
+  );
+  const defaultApiProviderPresetId = useMemo(
+    () => getDefaultApiProviderPresetId(sponsorApiProviderTemplates),
+    [sponsorApiProviderTemplates],
+  );
   const selectedEditingApiProviderPreset = useMemo(
     () => findCodexApiProviderPresetById(editingApiProviderPresetId),
     [editingApiProviderPresetId],
@@ -2064,12 +2271,26 @@ export function CodexAccountsPage() {
         : null,
     [accounts, cockpitApiPanelAccountId],
   );
+  const apiKeyUsageDetailAccount = useMemo(
+    () =>
+      apiKeyUsageDetailAccountId
+        ? (accounts.find((item) => item.id === apiKeyUsageDetailAccountId) ??
+          null)
+        : null,
+    [accounts, apiKeyUsageDetailAccountId],
+  );
 
   useEffect(() => {
     if (cockpitApiPanelAccountId && !cockpitApiPanelAccount) {
       setCockpitApiPanelAccountId(null);
     }
   }, [cockpitApiPanelAccount, cockpitApiPanelAccountId]);
+
+  useEffect(() => {
+    if (apiKeyUsageDetailAccountId && !apiKeyUsageDetailAccount) {
+      setApiKeyUsageDetailAccountId(null);
+    }
+  }, [apiKeyUsageDetailAccount, apiKeyUsageDetailAccountId]);
 
   useEffect(() => {
     if (
@@ -2130,6 +2351,10 @@ export function CodexAccountsPage() {
       apiProviderMode: CodexApiProviderMode;
       apiProviderId?: string;
       apiProviderName?: string;
+      apiModelCatalog?: string[];
+      apiSupportsVision?: boolean;
+      accountName?: string;
+      sponsorTemplate?: SponsorApiProviderTemplate;
     } => {
       const normalizedBaseUrl = normalizeHttpBaseUrl(apiBaseUrl);
       if (!normalizedBaseUrl) {
@@ -2146,6 +2371,21 @@ export function CodexAccountsPage() {
         return { apiProviderMode: "openai_builtin" };
       }
 
+      const sponsorTemplate = sponsorApiProviderTemplates.find(
+        (template) => template.id === providerPresetId,
+      );
+      if (sponsorTemplate) {
+        return {
+          apiProviderMode: "custom",
+          apiProviderId: sponsorTemplate.id,
+          apiProviderName: sponsorTemplate.name,
+          apiModelCatalog: sponsorTemplate.modelCatalog,
+          apiSupportsVision: sponsorTemplate.supportsVision,
+          accountName: sponsorTemplate.name,
+          sponsorTemplate,
+        };
+      }
+
       const managedProvider = findCodexModelProviderById(
         managedProviders,
         providerId,
@@ -2155,6 +2395,9 @@ export function CodexAccountsPage() {
           apiProviderMode: "custom",
           apiProviderId: managedProvider.id,
           apiProviderName: managedProvider.name,
+          apiModelCatalog: managedProvider.modelCatalog,
+          apiSupportsVision: managedProvider.supportsVision,
+          accountName: managedProvider.name,
         };
       }
 
@@ -2164,6 +2407,8 @@ export function CodexAccountsPage() {
           apiProviderMode: "custom",
           apiProviderId: preset.id,
           apiProviderName: preset.name,
+          apiModelCatalog: preset.modelCatalog,
+          accountName: preset.name,
         };
       }
 
@@ -2171,9 +2416,10 @@ export function CodexAccountsPage() {
       return {
         apiProviderMode: "custom",
         apiProviderName: trimmedName || undefined,
+        accountName: trimmedName || undefined,
       };
     },
-    [managedProviders],
+    [managedProviders, sponsorApiProviderTemplates],
   );
 
   useEffect(() => {
@@ -2248,22 +2494,49 @@ export function CodexAccountsPage() {
   }, [reloadManagedProviders]);
 
   useEffect(() => {
+    void fetchSponsorState();
+  }, [fetchSponsorState]);
+
+  useEffect(() => {
     if (!showAddModal) {
       setApiKeyInput("");
       setApiKeyInputVisible(false);
       setApiBaseUrlInput(DEFAULT_CODEX_API_BASE_URL);
-      setApiProviderPresetId(DEFAULT_CODEX_API_PROVIDER_ID);
+      setApiProviderPresetId(defaultApiProviderPresetId);
       setManagedProviderId("");
       setManagedProviderApiKeyId("");
       setNewManagedProviderNameInput("");
     }
-  }, [showAddModal]);
+  }, [defaultApiProviderPresetId, showAddModal]);
 
   useEffect(() => {
     if (showAddModal && addTab === "apikey") {
       setApiKeyInputVisible(false);
     }
   }, [addTab, showAddModal]);
+
+  useEffect(() => {
+    if (!showAddModal || addTab !== "apikey") {
+      return;
+    }
+    setApiProviderPresetId((current) => {
+      if (sponsorApiProviderTemplates.length === 0) {
+        return current;
+      }
+      if (
+        current === DEFAULT_CODEX_API_PROVIDER_ID ||
+        !current.trim()
+      ) {
+        return defaultApiProviderPresetId;
+      }
+      return current;
+    });
+  }, [
+    addTab,
+    defaultApiProviderPresetId,
+    showAddModal,
+    sponsorApiProviderTemplates.length,
+  ]);
 
   useEffect(() => {
     if (apiProviderPresetId === OPENAI_OFFICIAL_PRESET_ID) {
@@ -3437,12 +3710,24 @@ export function CodexAccountsPage() {
     }
   };
 
-  const handleSelectApiProviderPreset = useCallback((providerId: string) => {
-    setApiProviderPresetId(providerId);
-    const preset = findCodexApiProviderPresetById(providerId);
-    if (!preset || preset.baseUrls.length === 0) return;
-    setApiBaseUrlInput(preset.baseUrls[0]);
-  }, []);
+  const handleSelectApiProviderPreset = useCallback(
+    (providerId: string) => {
+      setApiProviderPresetId(providerId);
+      const sponsorTemplate = sponsorApiProviderTemplates.find(
+        (template) => template.id === providerId,
+      );
+      if (sponsorTemplate) {
+        setApiBaseUrlInput(sponsorTemplate.baseUrl);
+        setNewManagedProviderNameInput(sponsorTemplate.name);
+        return;
+      }
+      const preset = findCodexApiProviderPresetById(providerId);
+      if (!preset || preset.baseUrls.length === 0) return;
+      setApiBaseUrlInput(preset.baseUrls[0]);
+      setNewManagedProviderNameInput("");
+    },
+    [sponsorApiProviderTemplates],
+  );
 
   const handleSelectManagedProvider = useCallback(
     (providerId: string) => {
@@ -3600,6 +3885,11 @@ export function CodexAccountsPage() {
           provider: selectedQuickSwitchProvider.name,
         }),
       });
+      setApiKeyUsageMap((previous) => {
+        const next = { ...previous };
+        delete next[quickSwitchAccount.id];
+        return next;
+      });
       setQuickSwitchAccountId(null);
       setQuickSwitchProviderId("");
       setQuickSwitchApiKeyId("");
@@ -3651,33 +3941,76 @@ export function CodexAccountsPage() {
     page.setAddStatus("loading");
     page.setAddMessage(t("common.shared.token.importing", "正在导入..."));
     try {
-      const account = await codexService.addCodexAccountWithApiKey(
-        validation.apiKey,
-        validation.apiBaseUrl,
-        providerPayload.apiProviderMode,
-        providerPayload.apiProviderId,
-        providerPayload.apiProviderName,
-      );
+      let finalProviderPayload = providerPayload;
       if (
         validation.apiBaseUrl &&
         providerPayload.apiProviderMode === "custom" &&
         providerPayload.apiProviderId !== COCKPIT_API_PROVIDER_ID
       ) {
         try {
-          await upsertCodexModelProviderFromCredential({
-            providerId: providerPayload.apiProviderId ?? null,
+          const savedProvider = await upsertCodexModelProviderFromCredential({
+            providerId: providerPayload.apiProviderId?.startsWith("sponsor:")
+              ? null
+              : (providerPayload.apiProviderId ?? null),
             providerName: providerPayload.apiProviderName ?? null,
             apiBaseUrl: validation.apiBaseUrl,
             apiKey: validation.apiKey,
+            apiKeyName: providerPayload.accountName,
+            sourceTag: providerPayload.sponsorTemplate?.id ?? null,
+            modelCatalog: providerPayload.sponsorTemplate?.modelCatalog,
+            supportsVision: providerPayload.sponsorTemplate?.supportsVision,
+            website: providerPayload.sponsorTemplate?.website,
+            apiKeyUrl: providerPayload.sponsorTemplate?.apiKeyUrl,
+            wireApi: providerPayload.sponsorTemplate?.wireApi,
+            integrationType: providerPayload.sponsorTemplate?.integrationType,
           });
+          finalProviderPayload = {
+            ...providerPayload,
+            apiProviderId: savedProvider.id,
+            apiProviderName: savedProvider.name,
+            apiModelCatalog: savedProvider.modelCatalog,
+            apiSupportsVision: savedProvider.supportsVision,
+            accountName: savedProvider.name,
+          };
+          try {
+            const usageSummary = await queryCodexModelProviderUsage({
+              baseUrl: savedProvider.baseUrl,
+              apiKey: validation.apiKey,
+              integrationType: savedProvider.integrationType ?? null,
+            });
+            if (
+              (usageSummary.mode === "sub2api" ||
+                usageSummary.mode === "new_api") &&
+              usageSummary.mode !== savedProvider.integrationType
+            ) {
+              await saveCodexModelProviderDetectedIntegrationType(
+                savedProvider.id,
+                usageSummary.mode,
+              );
+            }
+          } catch (usageErr) {
+            console.warn("[CodexModelProviders] 额度类型探测失败", usageErr);
+          }
           await reloadManagedProviders();
         } catch (providerErr) {
           console.warn(
-            "[CodexModelProviders] 添加账号后写入供应商失败",
+            "[CodexModelProviders] 添加账号前写入供应商失败",
             providerErr,
           );
+          throw providerErr;
         }
       }
+      const account = await codexService.addCodexAccountWithApiKey(
+        validation.apiKey,
+        validation.apiBaseUrl,
+        finalProviderPayload.apiProviderMode,
+        finalProviderPayload.apiProviderId,
+        finalProviderPayload.apiProviderName,
+        finalProviderPayload.apiModelCatalog,
+        finalProviderPayload.apiSupportsVision,
+        undefined,
+        finalProviderPayload.accountName,
+      );
       await fetchAccounts();
       await fetchCurrentAccount();
       await emitAccountsChanged({
@@ -3693,7 +4026,7 @@ export function CodexAccountsPage() {
       );
       setApiKeyInput("");
       setApiBaseUrlInput(DEFAULT_CODEX_API_BASE_URL);
-      setApiProviderPresetId(DEFAULT_CODEX_API_PROVIDER_ID);
+      setApiProviderPresetId(defaultApiProviderPresetId);
       setManagedProviderId("");
       setManagedProviderApiKeyId("");
       setNewManagedProviderNameInput("");
@@ -3788,10 +4121,10 @@ export function CodexAccountsPage() {
       setSavingApiKeyNameId(account.id);
       try {
         await updateAccountName(account.id, nextName);
-        setMessage({ text: t("fingerprints.messages.renamed", "已重命名") });
+        setMessage({ text: t("codex.apiKey.renameSuccess", "已重命名") });
       } catch (e) {
         setMessage({
-          text: `${t("fingerprints.messages.renameFailed", "重命名失败")}: ${String(e)}`,
+          text: `${t("codex.apiKey.renameFailed", "重命名失败")}: ${String(e)}`,
           tone: "error",
         });
       } finally {
@@ -3927,6 +4260,600 @@ export function CodexAccountsPage() {
     [managedProviders, t],
   );
 
+  const resolveUsageProviderForApiKeyAccount = useCallback(
+    (account: CodexAccount): CodexModelProvider | null => {
+      if (!isCodexApiKeyAccount(account) || isCodexNewApiAccount(account)) {
+        return null;
+      }
+      const provider =
+        findCodexModelProviderById(managedProviders, account.api_provider_id) ??
+        findCodexModelProviderByBaseUrl(
+          managedProviders,
+          (account.api_base_url || "").trim(),
+        );
+      return provider ?? null;
+    },
+    [managedProviders],
+  );
+
+  const refreshApiKeyUsage = useCallback(
+    async (account: CodexAccount, provider?: CodexModelProvider | null) => {
+      const targetProvider = provider ?? resolveUsageProviderForApiKeyAccount(account);
+      const apiKey = (account.openai_api_key || "").trim();
+      const baseUrl =
+        targetProvider?.baseUrl.trim() || (account.api_base_url || "").trim();
+      if (!baseUrl || !apiKey) return;
+      setApiKeyUsageMap((previous) => ({
+        ...previous,
+        [account.id]: {
+          ...previous[account.id],
+          loading: true,
+          error: undefined,
+          unavailable: false,
+        },
+      }));
+      try {
+        const summary = await queryCodexModelProviderUsage({
+          baseUrl,
+          apiKey,
+          integrationType: targetProvider?.integrationType ?? null,
+        });
+        if (
+          targetProvider &&
+          (summary.mode === "sub2api" || summary.mode === "new_api") &&
+          summary.mode !== targetProvider.integrationType
+        ) {
+          await saveCodexModelProviderDetectedIntegrationType(
+            targetProvider.id,
+            summary.mode,
+          );
+          await reloadManagedProviders();
+        }
+        setApiKeyUsageMap((previous) => ({
+          ...previous,
+          [account.id]: { loading: false, summary },
+        }));
+      } catch (error) {
+        setApiKeyUsageMap((previous) => ({
+          ...previous,
+          [account.id]: {
+            loading: false,
+            summary: previous[account.id]?.summary,
+            error: isProviderUsageUnavailableError(error)
+              ? undefined
+              : String(error).replace(/^Error:\s*/, ""),
+            unavailable: isProviderUsageUnavailableError(error),
+          },
+        }));
+      }
+    },
+    [reloadManagedProviders, resolveUsageProviderForApiKeyAccount],
+  );
+
+  const refreshApiKeyUsageByAccountId = useCallback(
+    async (accountId: string) => {
+      const account = accounts.find((item) => item.id === accountId);
+      if (!account) return;
+      const provider = resolveUsageProviderForApiKeyAccount(account);
+      await refreshApiKeyUsage(account, provider);
+    },
+    [accounts, refreshApiKeyUsage, resolveUsageProviderForApiKeyAccount],
+  );
+
+  const canRefreshApiKeyUsage = useCallback(
+    (account: CodexAccount, provider?: CodexModelProvider | null): boolean => {
+      if (!isCodexApiKeyAccount(account) || isCodexNewApiAccount(account)) {
+        return false;
+      }
+      const targetProvider =
+        provider ?? resolveUsageProviderForApiKeyAccount(account);
+      const apiKey = (account.openai_api_key || "").trim();
+      const baseUrl =
+        targetProvider?.baseUrl.trim() || (account.api_base_url || "").trim();
+      return Boolean(apiKey && baseUrl);
+    },
+    [resolveUsageProviderForApiKeyAccount],
+  );
+
+  const refreshApiKeyUsageForAccounts = useCallback(
+    async (targetAccounts: CodexAccount[]) => {
+      const apiKeyAccounts = targetAccounts.filter((account) => {
+        const provider = resolveUsageProviderForApiKeyAccount(account);
+        const baseUrl =
+          provider?.baseUrl.trim() || (account.api_base_url || "").trim();
+        return Boolean(baseUrl && (account.openai_api_key || "").trim());
+      });
+      await Promise.all(
+        apiKeyAccounts.map((account) =>
+          refreshApiKeyUsage(
+            account,
+            resolveUsageProviderForApiKeyAccount(account),
+          ),
+        ),
+      );
+    },
+    [refreshApiKeyUsage, resolveUsageProviderForApiKeyAccount],
+  );
+
+  useEffect(() => {
+    writeCodexApiKeyUsageCache(apiKeyUsageMap);
+  }, [apiKeyUsageMap]);
+
+  useEffect(() => {
+    const accountIds = new Set(accounts.map((account) => account.id));
+    setApiKeyUsageMap((previous) => {
+      let changed = false;
+      const next: Record<string, CodexApiKeyUsageState> = {};
+      for (const [accountId, state] of Object.entries(previous)) {
+        if (accountIds.has(accountId)) {
+          next[accountId] = state;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : previous;
+    });
+  }, [accounts]);
+
+  useEffect(() => {
+    const refreshOnQuotaChanged = async () => {
+      await refreshApiKeyUsageForAccounts(accounts);
+    };
+    const refreshOnAccountsChanged = async () => {
+      await refreshApiKeyUsageForAccounts(accounts);
+    };
+
+    let unlistenAccountsChanged: UnlistenFn | null = null;
+    let unlistenCurrentChanged: UnlistenFn | null = null;
+
+    void listen("accounts:changed", async (event) => {
+      const payload = event.payload as {
+        platformId?: string;
+        accountId?: string | null;
+        reason?: string;
+      } | null;
+      if (payload?.platformId !== "codex") return;
+      if (payload.accountId) {
+        await refreshApiKeyUsageByAccountId(payload.accountId);
+        return;
+      }
+      await refreshOnAccountsChanged();
+    }).then((fn) => {
+      unlistenAccountsChanged = fn;
+    });
+
+    void listen("accounts:current-changed", async (event) => {
+      const payload = event.payload as {
+        platformId?: string;
+        accountId?: string | null;
+      } | null;
+      if (payload?.platformId !== "codex") return;
+      if (payload.accountId) {
+        await refreshApiKeyUsageByAccountId(payload.accountId);
+      }
+    }).then((fn) => {
+      unlistenCurrentChanged = fn;
+    });
+
+    void refreshOnQuotaChanged();
+
+    return () => {
+      unlistenAccountsChanged?.();
+      unlistenCurrentChanged?.();
+    };
+  }, [accounts, refreshApiKeyUsageByAccountId, refreshApiKeyUsageForAccounts]);
+
+  const formatApiKeyUsageMoney = useCallback(
+    (value?: number | null, unit?: string | null): string => {
+      if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+      const normalizedUnit = unit?.trim() || "USD";
+      const formatted = value.toFixed(value >= 100 ? 0 : 2);
+      return normalizedUnit === "USD" ? `$${formatted}` : `${formatted} ${normalizedUnit}`;
+    },
+    [],
+  );
+
+  const formatApiKeyUsageBalance = useCallback(
+    (summary?: CodexModelProviderUsageSummary): string | null => {
+      if (typeof summary?.balance !== "number" || !Number.isFinite(summary.balance)) {
+        return null;
+      }
+      return formatApiKeyUsageMoney(summary.balance, summary.unit);
+    },
+    [formatApiKeyUsageMoney],
+  );
+
+  const formatApiKeyUsageQuotaValue = useCallback(
+    (
+      summary: CodexModelProviderUsageSummary | undefined,
+      value?: number | null,
+    ): string => {
+      if (summary?.quotaUnlimited === true) {
+        return t("codex.modelProviders.usage.unlimitedQuota", "无限额度");
+      }
+      return formatApiKeyUsageMoney(value, summary?.unit);
+    },
+    [formatApiKeyUsageMoney, t],
+  );
+
+  const resolveCockpitApiAccountBalanceText = useCallback(
+    (account: CodexAccount): string | null => {
+      const usage = getCockpitApiUsageRecord(account);
+      const stats = getCockpitApiStatsRecord(account);
+      const total = toCockpitApiRecord(stats?.total);
+      const profile = toCockpitApiRecord(
+        toCockpitApiRecord(account.quota?.raw_data)?.profile,
+      );
+      const records = [usage, total, profile].filter(
+        (record): record is CockpitApiJsonRecord => Boolean(record),
+      );
+      const displayKeys = [
+        "balance_display",
+        "account_balance_display",
+        "wallet_balance_display",
+      ];
+      for (const record of records) {
+        for (const key of displayKeys) {
+          const value = readCockpitApiString(record, key);
+          if (value) return value;
+        }
+      }
+      const numberKeys = ["balance", "account_balance", "wallet_balance"];
+      for (const record of records) {
+        for (const key of numberKeys) {
+          const value = readCockpitApiOptionalNumber(record, key);
+          if (value != null) return formatApiKeyUsageMoney(value, "USD");
+        }
+      }
+      return null;
+    },
+    [formatApiKeyUsageMoney],
+  );
+
+  const formatApiKeyUsagePercent = useCallback(
+    (summary?: CodexModelProviderUsageSummary): number => {
+      if (summary?.mode === "new_api") {
+        const granted = Number(
+          summary.details?.find((item) => item.key === "totalGranted")?.value,
+        );
+        const available = Number(
+          summary.details?.find((item) => item.key === "totalAvailable")
+            ?.value,
+        );
+        if (
+          Number.isFinite(granted) &&
+          Number.isFinite(available) &&
+          granted > 0
+        ) {
+          return Math.max(
+            0,
+            Math.min(100, Math.round(((granted - available) / granted) * 100)),
+          );
+        }
+      }
+      const used = summary?.quotaUsed ?? summary?.totalCost;
+      const limit = summary?.quotaLimit;
+      if (
+        typeof used !== "number" ||
+        typeof limit !== "number" ||
+        !Number.isFinite(used) ||
+        !Number.isFinite(limit) ||
+        limit <= 0
+      ) {
+        return 0;
+      }
+      return Math.max(0, Math.min(100, Math.round((used / limit) * 100)));
+    },
+    [],
+  );
+
+  const formatApiKeyUsageDetailLabel = useCallback(
+    (key: string, fallback: string): string => {
+      const labels: Record<string, string> = {
+        status: t("codex.modelProviders.usage.fields.status", "状态"),
+        planName: t("codex.modelProviders.usage.fields.planName", "订阅"),
+        remaining: t("codex.modelProviders.usage.fields.remaining", "剩余额度"),
+        balance: t("codex.modelProviders.usage.fields.balance", "余额"),
+        quotaUnlimited: t("codex.modelProviders.usage.fields.quotaUnlimited", "无限额度"),
+        todayRequests: t("codex.modelProviders.usage.fields.todayRequests", "今日请求"),
+        todayTokens: t("codex.modelProviders.usage.fields.todayTokens", "今日 Token"),
+        todayCost: t("codex.modelProviders.usage.fields.todayCost", "今日消耗"),
+        totalRequests: t("codex.modelProviders.usage.fields.totalRequests", "累计请求"),
+        totalTokens: t("codex.modelProviders.usage.fields.totalTokens", "累计 Token"),
+        totalCost: t("codex.modelProviders.usage.fields.totalCost", "累计消耗"),
+        hardLimitUsd: t("codex.modelProviders.usage.fields.hardLimitUsd", "硬额度"),
+        softLimitUsd: t("codex.modelProviders.usage.fields.softLimitUsd", "软额度"),
+        systemHardLimitUsd: t("codex.modelProviders.usage.fields.systemHardLimitUsd", "系统额度"),
+        accessUntil: t("codex.modelProviders.usage.fields.accessUntil", "可用至"),
+        expiresAt: t("codex.modelProviders.usage.fields.expiresAt", "过期时间"),
+        totalGranted: t("codex.modelProviders.usage.fields.totalGranted", "授予额度"),
+        totalAvailable: t("codex.modelProviders.usage.fields.totalAvailable", "可用额度"),
+        modelLimitsEnabled: t("codex.modelProviders.usage.fields.modelLimitsEnabled", "模型限制"),
+        totalUsage: t("codex.modelProviders.usage.fields.totalUsage", "累计消耗"),
+      };
+      return labels[key] ?? fallback;
+    },
+    [t],
+  );
+
+  const formatApiKeyUsageDetailValue = useCallback(
+    (item: { key: string; value: string }, unit?: string | null): string => {
+      const raw = item.value.trim();
+      const numeric = Number(raw);
+      if (
+        Number.isFinite(numeric) &&
+        (item.key.includes("Tokens") || item.key === "todayTokens" || item.key === "totalTokens")
+      ) {
+        return formatCockpitApiTokenCount(numeric);
+      }
+      if (Number.isFinite(numeric) && item.key === "accessUntil") {
+        return numeric > 0 ? formatDate(numeric * 1000) : "-";
+      }
+      if (Number.isFinite(numeric) && item.key === "expiresAt") {
+        return numeric > 0 ? formatDate(numeric * 1000) : "-";
+      }
+      if (item.key === "quotaUnlimited" || item.key === "modelLimitsEnabled") {
+        if (raw === "true") return t("codex.modelProviders.usage.booleanTrue", "是");
+        if (raw === "false") return t("codex.modelProviders.usage.booleanFalse", "否");
+      }
+      if (
+        Number.isFinite(numeric) &&
+        [
+          "remaining",
+          "balance",
+          "todayCost",
+          "totalCost",
+          "hardLimitUsd",
+          "softLimitUsd",
+          "systemHardLimitUsd",
+        ].includes(item.key)
+      ) {
+        return formatApiKeyUsageMoney(numeric, unit);
+      }
+      if (Number.isFinite(numeric) && ["totalGranted", "totalAvailable"].includes(item.key)) {
+        return formatCockpitApiInteger(numeric);
+      }
+      if (Number.isFinite(numeric) && item.key === "totalUsage") {
+        return formatApiKeyUsageMoney(numeric / 100, unit);
+      }
+      if (
+        Number.isFinite(numeric) &&
+        (item.key.includes("Requests") || item.key === "todayRequests" || item.key === "totalRequests")
+      ) {
+        return formatCockpitApiInteger(numeric);
+      }
+      return raw || "-";
+    },
+    [formatApiKeyUsageMoney, t],
+  );
+
+  const findApiKeyUsageDetail = useCallback(
+    (summary: CodexModelProviderUsageSummary | undefined, key: string) =>
+      summary?.details?.find((item) => item.key === key),
+    [],
+  );
+
+  const formatApiKeyUsageDetailByKey = useCallback(
+    (
+      summary: CodexModelProviderUsageSummary | undefined,
+      key: string,
+    ): string => {
+      const detail = findApiKeyUsageDetail(summary, key);
+      if (!detail) return "-";
+      return formatApiKeyUsageDetailValue(detail, summary?.unit);
+    },
+    [findApiKeyUsageDetail, formatApiKeyUsageDetailValue],
+  );
+
+  const renderApiKeyUsagePanel = useCallback(
+    (
+      account: CodexAccount,
+      provider: CodexModelProvider | null,
+      variant: "card" | "table" = "card",
+    ): ReactElement => {
+      const usageState = apiKeyUsageMap[account.id];
+      const summary = usageState?.summary;
+      const loading = usageState?.loading === true;
+      const apiKey = (account.openai_api_key || "").trim();
+      const baseUrl = provider?.baseUrl.trim() || (account.api_base_url || "").trim();
+      const canRefresh = Boolean(apiKey && baseUrl);
+      const usageMode = resolveApiKeyUsageMode(summary);
+      const isNewApiUsage = usageMode === "new_api";
+      const isSub2ApiUsage = usageMode === "sub2api";
+      const usedPercent = formatApiKeyUsagePercent(summary);
+      if (variant === "card" && summary && isNewApiUsage) {
+        const grantedRaw = Number(
+          findApiKeyUsageDetail(summary, "totalGranted")?.value ?? NaN,
+        );
+        const availableRaw = Number(
+          findApiKeyUsageDetail(summary, "totalAvailable")?.value ?? NaN,
+        );
+        const grantedText = Number.isFinite(grantedRaw)
+          ? formatApiKeyUsageMoney(grantedRaw, summary.unit)
+          : formatApiKeyUsageDetailByKey(summary, "totalGranted");
+        const availableText = Number.isFinite(availableRaw)
+          ? formatApiKeyUsageMoney(availableRaw, summary.unit)
+          : formatApiKeyUsageDetailByKey(summary, "totalAvailable");
+        const expiresText = formatApiKeyUsageDetailByKey(summary, "expiresAt");
+        const unlimitedText = t("codex.newApi.quota.unlimited", "不限量");
+        const quotaValueText =
+          summary.quotaUnlimited === true
+            ? unlimitedText
+            : `${availableText} / ${grantedText}`;
+        const quotaBarWidth = summary.quotaUnlimited === true ? 100 : usedPercent;
+        return (
+          <div
+            className="quota-item codex-api-key-quota-item new-api"
+            title={`${t("codex.cockpitApi.balance", "额度")}：${quotaValueText}`}
+          >
+            <div className="quota-header">
+              <Database size={14} />
+              <span className="quota-label">
+                {t("codex.cockpitApi.balance", "额度")}
+              </span>
+              <span className="quota-pct high">
+                {quotaValueText}
+              </span>
+            </div>
+            <div className="quota-bar-track">
+              <div
+                className="quota-bar high"
+                style={{ width: `${quotaBarWidth}%` }}
+              />
+            </div>
+            {expiresText !== "-" && (
+              <span className="quota-reset">
+                {t("codex.modelProviders.usage.fields.expiresAt", "过期时间")}：
+                {expiresText}
+              </span>
+            )}
+          </div>
+        );
+      }
+      if (variant === "card" && summary && isSub2ApiUsage) {
+        return (
+          <div className="codex-api-key-usage-panel sub2api">
+            <div className="codex-api-key-usage-grid">
+              <div>
+                <span>{t("codex.modelProviders.usage.accountBalance", "账户余额")}</span>
+                <strong>
+                  {formatApiKeyUsageQuotaValue(
+                    summary,
+                    summary.remaining ?? summary.balance ?? summary.quotaRemaining,
+                  )}
+                </strong>
+              </div>
+              <div>
+                <span>{t("codex.modelProviders.usage.fields.todayRequests", "今日请求")}</span>
+                <strong>{formatCockpitApiInteger(summary.todayRequests ?? 0)}</strong>
+              </div>
+              <div>
+                <span>{t("codex.modelProviders.usage.fields.todayTokens", "今日 Token")}</span>
+                <strong>
+                  {formatCockpitApiTokenCount(summary.todayTotalTokens ?? 0)}
+                </strong>
+              </div>
+            </div>
+          </div>
+        );
+      }
+      if (summary && !usageMode) {
+        return <></>;
+      }
+      return (
+        <div className={`codex-api-key-usage-panel ${variant} ${summary ? "" : "empty"}`}>
+          {summary ? (
+            <>
+              <div className="codex-api-key-usage-grid">
+                {isNewApiUsage ? (
+                  <>
+                    <div>
+                      <span>{t("codex.modelProviders.usage.fields.totalGranted", "授予额度")}</span>
+                      <strong>
+                        {(() => {
+                          const raw = Number(
+                            findApiKeyUsageDetail(summary, "totalGranted")
+                              ?.value ?? NaN,
+                          );
+                          return Number.isFinite(raw)
+                            ? formatApiKeyUsageMoney(raw, summary.unit)
+                            : formatApiKeyUsageDetailByKey(
+                                summary,
+                                "totalGranted",
+                              );
+                        })()}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>{t("codex.modelProviders.usage.fields.totalAvailable", "可用额度")}</span>
+                      <strong>
+                        {(() => {
+                          const raw = Number(
+                            findApiKeyUsageDetail(summary, "totalAvailable")
+                              ?.value ?? NaN,
+                          );
+                          return Number.isFinite(raw)
+                            ? formatApiKeyUsageMoney(raw, summary.unit)
+                            : formatApiKeyUsageDetailByKey(
+                                summary,
+                                "totalAvailable",
+                              );
+                        })()}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>{t("codex.modelProviders.usage.fields.expiresAt", "过期时间")}</span>
+                      <strong>
+                        {formatApiKeyUsageDetailByKey(summary, "expiresAt")}
+                      </strong>
+                    </div>
+                  </>
+                ) : isSub2ApiUsage ? (
+                  <>
+                    <div>
+                      <span>{t("codex.modelProviders.usage.accountBalance", "账户余额")}</span>
+                      <strong>
+                        {formatApiKeyUsageQuotaValue(
+                          summary,
+                          summary.remaining ?? summary.balance ?? summary.quotaRemaining,
+                        )}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>{t("codex.modelProviders.usage.fields.todayRequests", "今日请求")}</span>
+                      <strong>
+                        {formatCockpitApiInteger(summary.todayRequests ?? 0)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>{t("codex.modelProviders.usage.fields.todayTokens", "今日 Token")}</span>
+                      <strong>
+                        {formatCockpitApiTokenCount(summary.todayTotalTokens ?? 0)}
+                      </strong>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+              {isNewApiUsage ? (
+                <div className="codex-api-key-usage-progress">
+                  <div className="cockpit-api-progress-track">
+                    <div
+                      className="cockpit-api-progress-bar"
+                      style={{ width: `${usedPercent}%` }}
+                    />
+                  </div>
+                  <span>{usedPercent}%</span>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className="codex-api-key-usage-empty">
+              {loading
+                ? t("codex.modelProviders.usage.loading", "正在查询额度...")
+                : usageState?.error
+                  ? null
+                  : canRefresh
+                    ? t("codex.modelProviders.usage.pending", "等待查询额度")
+                    : t("codex.modelProviders.usage.noKey", "暂无可查询额度")}
+            </div>
+          )}
+        </div>
+      );
+    },
+    [
+      apiKeyUsageMap,
+      formatApiKeyUsagePercent,
+      formatApiKeyUsageMoney,
+      formatApiKeyUsageBalance,
+      formatApiKeyUsageQuotaValue,
+      formatApiKeyUsageDetailByKey,
+      canRefreshApiKeyUsage,
+      refreshApiKeyUsage,
+      setApiKeyUsageDetailAccountId,
+      t,
+    ],
+  );
+
   const closeApiKeyCredentialsModal = useCallback(() => {
     if (savingApiKeyCredentials) return;
     setEditingApiKeyCredentialsId(null);
@@ -4001,6 +4928,7 @@ export function CodexAccountsPage() {
         providerPayload.apiProviderMode,
         providerPayload.apiProviderId,
         providerPayload.apiProviderName,
+        providerPayload.apiModelCatalog,
       );
       if (
         validation.apiBaseUrl &&
@@ -4008,12 +4936,39 @@ export function CodexAccountsPage() {
         providerPayload.apiProviderId !== COCKPIT_API_PROVIDER_ID
       ) {
         try {
-          await upsertCodexModelProviderFromCredential({
+          const savedProvider = await upsertCodexModelProviderFromCredential({
             providerId: providerPayload.apiProviderId ?? null,
             providerName: providerPayload.apiProviderName ?? null,
             apiBaseUrl: validation.apiBaseUrl,
             apiKey: validation.apiKey,
+            apiKeyName: providerPayload.accountName,
+            sourceTag: providerPayload.sponsorTemplate?.id ?? null,
+            modelCatalog: providerPayload.sponsorTemplate?.modelCatalog,
+            supportsVision: providerPayload.sponsorTemplate?.supportsVision,
+            website: providerPayload.sponsorTemplate?.website,
+            apiKeyUrl: providerPayload.sponsorTemplate?.apiKeyUrl,
+            wireApi: providerPayload.sponsorTemplate?.wireApi,
+            integrationType: providerPayload.sponsorTemplate?.integrationType,
           });
+          try {
+            const usageSummary = await queryCodexModelProviderUsage({
+              baseUrl: savedProvider.baseUrl,
+              apiKey: validation.apiKey,
+              integrationType: savedProvider.integrationType ?? null,
+            });
+            if (
+              (usageSummary.mode === "sub2api" ||
+                usageSummary.mode === "new_api") &&
+              usageSummary.mode !== savedProvider.integrationType
+            ) {
+              await saveCodexModelProviderDetectedIntegrationType(
+                savedProvider.id,
+                usageSummary.mode,
+              );
+            }
+          } catch (usageErr) {
+            console.warn("[CodexModelProviders] 额度类型探测失败", usageErr);
+          }
           await reloadManagedProviders();
         } catch (providerErr) {
           console.warn(
@@ -4023,6 +4978,11 @@ export function CodexAccountsPage() {
         }
       }
       setMessage({ text: t("instances.messages.updated", "实例已更新") });
+      setApiKeyUsageMap((previous) => {
+        const next = { ...previous };
+        delete next[accountId];
+        return next;
+      });
       setEditingApiKeyCredentialsId(null);
       setEditingApiKeyCredentialsValue("");
       setEditingApiKeyCredentialsVisible(false);
@@ -5905,17 +6865,19 @@ export function CodexAccountsPage() {
             )}
           </div>
           {renderAccountSpeedSelect(account, true)}
-          <button
-            className={`codex-compact-note-btn ${account.account_note?.trim() ? "has-note" : ""}`}
-            onClick={() => openAccountNoteModal(account)}
-            title={
-              account.account_note?.trim() ||
-              t("codex.accountNote.emptyTitle", "填写账号备注")
-            }
-            aria-label={t("codex.accountNote.title", "账号备注")}
-          >
-            <FileText size={13} />
-          </button>
+          {!isApiKeyAccount && (
+            <button
+              className={`codex-compact-note-btn ${account.account_note?.trim() ? "has-note" : ""}`}
+              onClick={() => openAccountNoteModal(account)}
+              title={
+                account.account_note?.trim() ||
+                t("codex.accountNote.emptyTitle", "填写账号备注")
+              }
+              aria-label={t("codex.accountNote.title", "账号备注")}
+            >
+              <FileText size={13} />
+            </button>
+          )}
           <button
             className={`codex-compact-switch-btn ${!isCurrent ? "success" : ""}`}
             onClick={() => handleSwitch(account.id)}
@@ -5990,6 +6952,31 @@ export function CodexAccountsPage() {
       const apiProviderLine = `${t("codex.api.provider.label", "供应商")}：${apiProviderName}`;
       const apiBaseUrlText = (account.api_base_url || "").trim() || "-";
       const apiBaseUrlLine = `${t("codex.api.baseUrl", "Base URL")}：${apiBaseUrlText}`;
+      const apiKeyUsageProvider = resolveUsageProviderForApiKeyAccount(account);
+      const isSponsorApiKeyAccount =
+        isApiKeyAccount &&
+        isSponsorModelProvider(apiKeyUsageProvider, sponsorApiProviderTemplates);
+      const apiKeyUsageMode = resolveApiKeyUsageMode(
+        apiKeyUsageMap[account.id]?.summary,
+      );
+      const isQuotaAwareApiKeyAccount =
+        isApiKeyAccount &&
+        !isNewApiAccount &&
+        !isSponsorApiKeyAccount &&
+        (apiKeyUsageMode !== null ||
+          apiKeyUsageProvider?.integrationType === "new_api" ||
+          apiKeyUsageProvider?.integrationType === "sub2api");
+      const displayPlanClass = isSponsorApiKeyAccount
+        ? "sponsor-api"
+        : isQuotaAwareApiKeyAccount
+          ? "new-api-exclusive"
+        : planClass;
+      const displayPlanLabel = isSponsorApiKeyAccount
+        ? apiProviderName
+        : presentation.planLabel;
+      const cockpitApiAccountBalanceText = isNewApiAccount
+        ? resolveCockpitApiAccountBalanceText(account)
+        : null;
       const accountTags = (account.tags || [])
         .map((tag) => tag.trim())
         .filter(Boolean);
@@ -6008,7 +6995,7 @@ export function CodexAccountsPage() {
       return (
         <div
           key={groupKey ? `${groupKey}-${account.id}` : account.id}
-          className={`codex-account-card ${isCurrent ? "current" : ""} ${isSelected ? "selected" : ""} ${isNewApiAccount ? "new-api-exclusive" : ""}`}
+          className={`codex-account-card ${isCurrent ? "current" : ""} ${isSelected ? "selected" : ""} ${isNewApiAccount ? "new-api-exclusive" : ""} ${isQuotaAwareApiKeyAccount ? "api-key-usage-account" : ""} ${isSponsorApiKeyAccount ? "sponsor-api-account" : ""}`}
         >
           <div className="card-top">
             <div className="card-select">
@@ -6064,13 +7051,13 @@ export function CodexAccountsPage() {
                 {accountIssueBadge}
               </span>
             )}
-            <span className={`tier-badge ${planClass}`}>
-              {presentation.planLabel}
+            <span className={`tier-badge ${displayPlanClass}`}>
+              {displayPlanLabel}
             </span>
           </div>
           {(meta.accountContextText ||
             isInLocalAccess ||
-            account.account_note?.trim()) && (
+            (!isApiKeyAccount && account.account_note?.trim())) && (
             <div className="account-sub-line">
               {meta.accountContextText && (
                 <span
@@ -6085,7 +7072,7 @@ export function CodexAccountsPage() {
                   {t("codex.localAccess.modal.selected", "已加入 API 服务")}
                 </span>
               )}
-              {renderAccountNoteButton(account)}
+              {!isApiKeyAccount && renderAccountNoteButton(account)}
             </div>
           )}
           {!isApiKeyAccount && (
@@ -6141,9 +7128,7 @@ export function CodexAccountsPage() {
           )}
           <div className="codex-quota-section">
             {isApiKeyAccount && !isNewApiAccount ? (
-              <div className="quota-empty">
-                <span>{t("common.shared.quota.noData", "暂无配额数据")}</span>
-              </div>
+              renderApiKeyUsagePanel(account, apiKeyUsageProvider)
             ) : (
               <>
                 {hasQuotaError && (
@@ -6166,6 +7151,14 @@ export function CodexAccountsPage() {
                         {t("common.shared.addModal.oauth", "OAuth 授权")}
                       </button>
                     )}
+                  </div>
+                )}
+                {cockpitApiAccountBalanceText && (
+                  <div className="codex-account-balance-line">
+                    <span>
+                      {t("codex.modelProviders.usage.accountBalance", "账户余额")}：
+                    </span>
+                    <strong>{cockpitApiAccountBalanceText}</strong>
                   </div>
                 )}
                 {quotaItems.map((item) => {
@@ -6202,7 +7195,7 @@ export function CodexAccountsPage() {
                     </div>
                   );
                 })}
-                {quotaItems.length === 0 && (
+                {quotaItems.length === 0 && !cockpitApiAccountBalanceText && (
                   <div className="quota-empty">
                     {t("common.shared.quota.noData", "暂无配额数据")}
                   </div>
@@ -6278,7 +7271,16 @@ export function CodexAccountsPage() {
                     <Database size={14} />
                   </button>
                 )}
-                {!isNewApiAccount && (
+                {isSponsorApiKeyAccount && (
+                  <button
+                    className="card-action-btn"
+                    onClick={() => setApiKeyUsageDetailAccountId(account.id)}
+                    title={t("codex.cockpitApi.servicePanel", "服务面板")}
+                  >
+                    <Database size={14} />
+                  </button>
+                )}
+                {!isApiKeyAccount && !isNewApiAccount && (
                   <button
                     className="card-action-btn"
                     onClick={() => openTagModal(account.id)}
@@ -6287,7 +7289,7 @@ export function CodexAccountsPage() {
                     <Tag size={14} />
                   </button>
                 )}
-                {!isNewApiAccount && (
+                {!isApiKeyAccount && !isNewApiAccount && (
                   <button
                     className={`card-action-btn ${account.account_note?.trim() ? "active" : ""}`}
                     onClick={() => openAccountNoteModal(account)}
@@ -6300,31 +7302,13 @@ export function CodexAccountsPage() {
                     <FileText size={14} />
                   </button>
                 )}
-                {isApiKeyAccount && (
-                  <button
-                    className={`card-action-btn ${resolveBoundOAuthAccount(account) ? "active" : ""}`}
-                    onClick={() => openOAuthBindingModal(account)}
-                    title={t("codex.api.oauthBinding.action", "绑定 OAuth")}
-                  >
-                    <Link2 size={14} />
-                  </button>
-                )}
-                {isApiKeyAccount && !isNewApiAccount && (
+                {isSponsorApiKeyAccount && (
                   <button
                     className="card-action-btn"
                     onClick={() => openQuickSwitchProviderModal(account)}
                     title={t("codex.quickSwitch.action", "快速切换供应商")}
                   >
                     <Repeat size={14} />
-                  </button>
-                )}
-                {isApiKeyAccount && !isNewApiAccount && (
-                  <button
-                    className="card-action-btn"
-                    onClick={() => openApiKeyCredentialsModal(account)}
-                    title={t("instances.actions.edit", "编辑")}
-                  >
-                    <Pencil size={14} />
                   </button>
                 )}
                 <button
@@ -6339,35 +7323,48 @@ export function CodexAccountsPage() {
                     <Play size={14} />
                   )}
                 </button>
-                {(!isApiKeyAccount || isNewApiAccount) && (
+                {((!isApiKeyAccount || isNewApiAccount) ||
+                  canRefreshApiKeyUsage(account, apiKeyUsageProvider)) && (
                   <button
                     className="card-action-btn"
-                    onClick={() => handleRefresh(account.id)}
-                    disabled={refreshing === account.id}
+                    onClick={() =>
+                      canRefreshApiKeyUsage(account, apiKeyUsageProvider)
+                        ? void refreshApiKeyUsage(account, apiKeyUsageProvider)
+                        : handleRefresh(account.id)
+                    }
+                    disabled={
+                      canRefreshApiKeyUsage(account, apiKeyUsageProvider)
+                        ? apiKeyUsageMap[account.id]?.loading === true
+                        : refreshing === account.id
+                    }
                     title={t("common.shared.refreshQuota", "刷新配额")}
                   >
                     <RotateCw
                       size={14}
                       className={
-                        refreshing === account.id ? "loading-spinner" : ""
+                        canRefreshApiKeyUsage(account, apiKeyUsageProvider)
+                          ? apiKeyUsageMap[account.id]?.loading === true
+                            ? "loading-spinner"
+                            : ""
+                          : refreshing === account.id
+                            ? "loading-spinner"
+                            : ""
                       }
                     />
                   </button>
                 )}
-                {!isNewApiAccount && (
-                  <button
-                    className="card-action-btn export-btn"
-                    onClick={() =>
-                      handleExportByIds(
-                        [account.id],
-                        resolveSingleExportBaseName(account),
-                      )
-                    }
-                    title={t("common.shared.export.title", "导出")}
-                  >
-                    <Upload size={14} />
-                  </button>
-                )}
+                <button
+                  className="card-action-btn export-btn"
+                  onClick={() =>
+                    handleExportByIds(
+                      [account.id],
+                      resolveSingleExportBaseName(account),
+                    )
+                  }
+                  title={t("common.shared.export.title", "导出")}
+                >
+                  <Upload size={14} />
+                </button>
                 <button
                   className="card-action-btn danger"
                   onClick={() => handleDelete(account.id)}
@@ -7242,6 +8239,31 @@ export function CodexAccountsPage() {
       const apiProviderLine = `${t("codex.api.provider.label", "供应商")}：${apiProviderName}`;
       const apiBaseUrlText = (account.api_base_url || "").trim() || "-";
       const apiBaseUrlLine = `${t("codex.api.baseUrl", "Base URL")}：${apiBaseUrlText}`;
+      const apiKeyUsageProvider = resolveUsageProviderForApiKeyAccount(account);
+      const isSponsorApiKeyAccount =
+        isApiKeyAccount &&
+        isSponsorModelProvider(apiKeyUsageProvider, sponsorApiProviderTemplates);
+      const apiKeyUsageMode = resolveApiKeyUsageMode(
+        apiKeyUsageMap[account.id]?.summary,
+      );
+      const isQuotaAwareApiKeyAccount =
+        isApiKeyAccount &&
+        !isNewApiAccount &&
+        !isSponsorApiKeyAccount &&
+        (apiKeyUsageMode !== null ||
+          apiKeyUsageProvider?.integrationType === "new_api" ||
+          apiKeyUsageProvider?.integrationType === "sub2api");
+      const displayPlanClass = isSponsorApiKeyAccount
+        ? "sponsor-api"
+        : isQuotaAwareApiKeyAccount
+          ? "new-api-exclusive"
+        : planClass;
+      const displayPlanLabel = isSponsorApiKeyAccount
+        ? apiProviderName
+        : presentation.planLabel;
+      const cockpitApiAccountBalanceText = isNewApiAccount
+        ? resolveCockpitApiAccountBalanceText(account)
+        : null;
       const isInLocalAccess = localAccessAccountIdSet.has(account.id);
       const subscriptionInfo = resolveSubscriptionPresentation(account);
       const showSubscriptionRefreshAction =
@@ -7254,7 +8276,7 @@ export function CodexAccountsPage() {
       return (
         <tr
           key={groupKey ? `${groupKey}-${account.id}` : account.id}
-          className={`${isCurrent ? "current" : ""} ${isNewApiAccount ? "new-api-exclusive" : ""}`}
+          className={`${isCurrent ? "current" : ""} ${isNewApiAccount ? "new-api-exclusive" : ""} ${isQuotaAwareApiKeyAccount ? "api-key-usage-account" : ""} ${isSponsorApiKeyAccount ? "sponsor-api-account" : ""}`}
         >
           <td>
             <input
@@ -7305,7 +8327,7 @@ export function CodexAccountsPage() {
               </div>
               {(meta.accountContextText ||
                 isInLocalAccess ||
-                account.account_note?.trim()) && (
+                (!isApiKeyAccount && account.account_note?.trim())) && (
                 <div className="account-sub-line codex-account-meta-inline">
                   {meta.accountContextText && (
                     <span
@@ -7320,7 +8342,7 @@ export function CodexAccountsPage() {
                       {t("codex.localAccess.modal.selected", "已加入 API 服务")}
                     </span>
                   )}
-                  {renderAccountNoteButton(account)}
+                  {!isApiKeyAccount && renderAccountNoteButton(account)}
                 </div>
               )}
               {!isApiKeyAccount && (
@@ -7383,8 +8405,8 @@ export function CodexAccountsPage() {
             </div>
           </td>
           <td>
-            <span className={`tier-badge ${planClass}`}>
-              {presentation.planLabel}
+            <span className={`tier-badge ${displayPlanClass}`}>
+              {displayPlanLabel}
             </span>
           </td>
           <td>
@@ -7437,10 +8459,18 @@ export function CodexAccountsPage() {
           </td>
           <td>
             {isApiKeyAccount && !isNewApiAccount ? (
-              <span className="codex-subscription-table-empty">-</span>
+              renderApiKeyUsagePanel(account, apiKeyUsageProvider, "table")
             ) : (
               <>
                 <div className="quota-grid">
+                  {cockpitApiAccountBalanceText && (
+                    <div className="codex-account-balance-line table">
+                      <span>
+                        {t("codex.modelProviders.usage.accountBalance", "账户余额")}：
+                      </span>
+                      <strong>{cockpitApiAccountBalanceText}</strong>
+                    </div>
+                  )}
                   {quotaItems.map((item) => (
                     <div
                       key={item.key}
@@ -7466,7 +8496,7 @@ export function CodexAccountsPage() {
                       )}
                     </div>
                   ))}
-                  {quotaItems.length === 0 && (
+                  {quotaItems.length === 0 && !cockpitApiAccountBalanceText && (
                     <span style={{ color: "var(--text-muted)", fontSize: 13 }}>
                       {t("common.shared.quota.noData", "暂无配额数据")}
                     </span>
@@ -7520,7 +8550,16 @@ export function CodexAccountsPage() {
                   <Database size={14} />
                 </button>
               )}
-              {!isNewApiAccount && (
+              {isSponsorApiKeyAccount && (
+                <button
+                  className="action-btn"
+                  onClick={() => setApiKeyUsageDetailAccountId(account.id)}
+                  title={t("codex.cockpitApi.servicePanel", "服务面板")}
+                >
+                  <Database size={14} />
+                </button>
+              )}
+              {!isApiKeyAccount && !isNewApiAccount && (
                 <button
                   className="action-btn"
                   onClick={() => openTagModal(account.id)}
@@ -7529,7 +8568,7 @@ export function CodexAccountsPage() {
                   <Tag size={14} />
                 </button>
               )}
-              {!isNewApiAccount && (
+              {!isApiKeyAccount && !isNewApiAccount && (
                 <button
                   className={`action-btn ${account.account_note?.trim() ? "active" : ""}`}
                   onClick={() => openAccountNoteModal(account)}
@@ -7542,31 +8581,13 @@ export function CodexAccountsPage() {
                   <FileText size={14} />
                 </button>
               )}
-              {isApiKeyAccount && (
-                <button
-                  className={`action-btn ${resolveBoundOAuthAccount(account) ? "active" : ""}`}
-                  onClick={() => openOAuthBindingModal(account)}
-                  title={t("codex.api.oauthBinding.action", "绑定 OAuth")}
-                >
-                  <Link2 size={14} />
-                </button>
-              )}
-              {isApiKeyAccount && !isNewApiAccount && (
+              {isSponsorApiKeyAccount && (
                 <button
                   className="action-btn"
                   onClick={() => openQuickSwitchProviderModal(account)}
                   title={t("codex.quickSwitch.action", "快速切换供应商")}
                 >
                   <Repeat size={14} />
-                </button>
-              )}
-              {isApiKeyAccount && !isNewApiAccount && (
-                <button
-                  className="action-btn"
-                  onClick={() => openApiKeyCredentialsModal(account)}
-                  title={t("instances.actions.edit", "编辑")}
-                >
-                  <Pencil size={14} />
                 </button>
               )}
               <button
@@ -7581,35 +8602,48 @@ export function CodexAccountsPage() {
                   <Play size={14} />
                 )}
               </button>
-              {(!isApiKeyAccount || isNewApiAccount) && (
+              {((!isApiKeyAccount || isNewApiAccount) ||
+                canRefreshApiKeyUsage(account, apiKeyUsageProvider)) && (
                 <button
                   className="action-btn"
-                  onClick={() => handleRefresh(account.id)}
-                  disabled={refreshing === account.id}
+                  onClick={() =>
+                    canRefreshApiKeyUsage(account, apiKeyUsageProvider)
+                      ? void refreshApiKeyUsage(account, apiKeyUsageProvider)
+                      : handleRefresh(account.id)
+                  }
+                  disabled={
+                    canRefreshApiKeyUsage(account, apiKeyUsageProvider)
+                      ? apiKeyUsageMap[account.id]?.loading === true
+                      : refreshing === account.id
+                  }
                   title={t("common.shared.refreshQuota", "刷新配额")}
                 >
                   <RotateCw
                     size={14}
                     className={
-                      refreshing === account.id ? "loading-spinner" : ""
+                      canRefreshApiKeyUsage(account, apiKeyUsageProvider)
+                        ? apiKeyUsageMap[account.id]?.loading === true
+                          ? "loading-spinner"
+                          : ""
+                        : refreshing === account.id
+                          ? "loading-spinner"
+                          : ""
                     }
                   />
                 </button>
               )}
-              {!isNewApiAccount && (
-                <button
-                  className="action-btn"
-                  onClick={() =>
-                    handleExportByIds(
-                      [account.id],
-                      resolveSingleExportBaseName(account),
-                    )
-                  }
-                  title={t("common.shared.export.title", "导出")}
-                >
-                  <Upload size={14} />
-                </button>
-              )}
+              <button
+                className="action-btn"
+                onClick={() =>
+                  handleExportByIds(
+                    [account.id],
+                    resolveSingleExportBaseName(account),
+                  )
+                }
+                title={t("common.shared.export.title", "导出")}
+              >
+                <Upload size={14} />
+              </button>
               <button
                 className="action-btn danger"
                 onClick={() => handleDelete(account.id)}
@@ -7777,6 +8811,253 @@ export function CodexAccountsPage() {
     closeExternalImportProgressModal();
   };
 
+  const renderApiKeyUsageDetailModal = () => {
+    const account = apiKeyUsageDetailAccount;
+    if (!account) return null;
+    const state = apiKeyUsageMap[account.id];
+    const summary = state?.summary;
+    if (!summary) return null;
+    const usageMode = resolveApiKeyUsageMode(summary);
+    if (!usageMode) return null;
+    const provider = resolveUsageProviderForApiKeyAccount(account);
+    const coreDetailKeys =
+      usageMode === "new_api"
+        ? new Set(["mode", "totalGranted", "totalAvailable", "expiresAt"])
+        : usageMode === "sub2api"
+          ? new Set(["mode", "remaining", "todayRequests", "todayTokens"])
+          : new Set<string>();
+    const details = (summary.details ?? []).filter(
+      (item) => !coreDetailKeys.has(item.key),
+    );
+    const visible = visibleApiKeyAccountIds.has(account.id);
+    const apiKeyDisplay = resolveApiKeyDisplayText(account, visible);
+    const baseUrl = provider?.baseUrl.trim() || (account.api_base_url || "").trim() || "-";
+    const usedPercent = formatApiKeyUsagePercent(summary);
+    const summaryDetails =
+      usageMode === "new_api"
+        ? [
+            {
+              key: "totalGranted",
+              label: t("codex.modelProviders.usage.fields.totalGranted", "授予额度"),
+              value: (() => {
+                const raw = Number(
+                  findApiKeyUsageDetail(summary, "totalGranted")?.value ?? NaN,
+                );
+                return Number.isFinite(raw)
+                  ? formatApiKeyUsageMoney(raw, summary.unit)
+                  : formatApiKeyUsageDetailByKey(summary, "totalGranted");
+              })(),
+            },
+            {
+              key: "totalAvailable",
+              label: t("codex.modelProviders.usage.fields.totalAvailable", "可用额度"),
+              value: (() => {
+                const raw = Number(
+                  findApiKeyUsageDetail(summary, "totalAvailable")?.value ?? NaN,
+                );
+                return Number.isFinite(raw)
+                  ? formatApiKeyUsageMoney(raw, summary.unit)
+                  : formatApiKeyUsageDetailByKey(summary, "totalAvailable");
+              })(),
+            },
+            {
+              key: "expiresAt",
+              label: t("codex.modelProviders.usage.fields.expiresAt", "过期时间"),
+              value: formatApiKeyUsageDetailByKey(summary, "expiresAt"),
+            },
+          ]
+        : usageMode === "sub2api"
+          ? [
+              {
+                key: "accountBalance",
+                label: t("codex.modelProviders.usage.accountBalance", "账户余额"),
+                value: formatApiKeyUsageQuotaValue(
+                  summary,
+                  summary.remaining ?? summary.balance ?? summary.quotaRemaining,
+                ),
+              },
+              {
+                key: "todayRequests",
+                label: t("codex.modelProviders.usage.fields.todayRequests", "今日请求"),
+                value: formatCockpitApiInteger(summary.todayRequests ?? 0),
+              },
+            {
+              key: "todayTokens",
+              label: t("codex.modelProviders.usage.fields.todayTokens", "今日 Token"),
+              value: formatCockpitApiTokenCount(summary.todayTotalTokens ?? 0),
+            },
+            ]
+          : [];
+    const summaryGridClassName =
+      usageMode === "sub2api" || usageMode === "new_api"
+        ? "cockpit-api-summary-grid compact"
+        : "cockpit-api-summary-grid";
+
+    return (
+      <div
+        className="modal-overlay"
+        onClick={() => setApiKeyUsageDetailAccountId(null)}
+      >
+        <div
+          className="modal-content cockpit-api-panel-modal codex-api-key-usage-detail-modal"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="modal-header cockpit-api-panel-header">
+            <div>
+              <h2>
+                {t("codex.modelProviders.usage.detailTitle", "服务面板")}
+              </h2>
+              <span className="cockpit-api-panel-subtitle">
+                {maskAccountText(resolvePresentation(account).displayName)}
+                {provider ? ` · ${provider.name}` : ""}
+              </span>
+            </div>
+            <button
+              className="modal-close"
+              onClick={() => setApiKeyUsageDetailAccountId(null)}
+              aria-label={t("common.close", "关闭")}
+            >
+              <X />
+            </button>
+          </div>
+          <div className="cockpit-api-panel-body">
+            <section className="cockpit-api-connection-card">
+              <div className="cockpit-api-connection-row">
+                <span>{t("codex.localAccess.baseUrl", "地址")}</span>
+                <code title={baseUrl}>{baseUrl}</code>
+                <button
+                  type="button"
+                  className="folder-icon-btn cockpit-api-icon-btn"
+                  onClick={() =>
+                    void navigator.clipboard.writeText(baseUrl).catch(() => {})
+                  }
+                  title={t("common.copy", "复制")}
+                >
+                  <Copy size={14} />
+                </button>
+              </div>
+              <div className="cockpit-api-connection-row">
+                <span>{t("codex.localAccess.apiKey", "密钥")}</span>
+                <code title={visible ? account.openai_api_key || "" : ""}>
+                  {apiKeyDisplay}
+                </code>
+                <div className="cockpit-api-connection-actions">
+                  <button
+                    type="button"
+                    className="folder-icon-btn cockpit-api-icon-btn"
+                    onClick={() => toggleAccountApiKeyVisible(account.id)}
+                    title={
+                      visible
+                        ? t("codex.localAccess.hideKey", "隐藏密钥")
+                        : t("codex.localAccess.showKey", "显示密钥")
+                    }
+                  >
+                    {visible ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="folder-icon-btn cockpit-api-icon-btn"
+                    onClick={() =>
+                      void navigator.clipboard
+                        .writeText(account.openai_api_key || "")
+                        .catch(() => {})
+                    }
+                    title={t("common.copy", "复制")}
+                    disabled={!account.openai_api_key}
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
+              </div>
+            </section>
+            <section className={summaryGridClassName}>
+              {summaryDetails.map((item) => (
+                <div
+                  className="cockpit-api-stat-card cockpit-api-stat-card-center"
+                  key={item.key}
+                >
+                  <span className="cockpit-api-card-label">{item.label}</span>
+                  <strong>{item.value}</strong>
+                  {(item.key === "remaining" || item.key === "totalAvailable") &&
+                    usageMode !== "new_api" &&
+                    usageMode !== "sub2api" && (
+                    <div>
+                      <div className="cockpit-api-progress-row">
+                        <div className="cockpit-api-progress-track">
+                          <div
+                            className="cockpit-api-progress-bar"
+                            style={{ width: `${usedPercent}%` }}
+                          />
+                        </div>
+                        <span>{usedPercent}%</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </section>
+            <section className="cockpit-api-panel-section">
+              <div className="cockpit-api-section-head">
+                <strong>
+                  {t("codex.modelProviders.usage.rawFields", "服务数据")}
+                </strong>
+              </div>
+              <div className="cockpit-api-usage-card-grid">
+                {details.length > 0 ? (
+                  details.map((item) => (
+                    <div className="cockpit-api-usage-card" key={item.key}>
+                      <span className="cockpit-api-card-label">
+                        {formatApiKeyUsageDetailLabel(item.key, item.label)}
+                      </span>
+                      <strong>{formatApiKeyUsageDetailValue(item, summary.unit)}</strong>
+                      <small>{item.key}</small>
+                    </div>
+                  ))
+                ) : (
+                  <div className="cockpit-api-empty-row">
+                    {t("codex.cockpitApi.noStats", "暂无统计")}
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+          <div className="modal-footer cockpit-api-panel-footer">
+            <button
+              className="btn btn-secondary"
+              onClick={() => void refreshApiKeyUsageByAccountId(account.id)}
+              disabled={state?.loading}
+            >
+              <RotateCw
+                size={14}
+                className={state?.loading ? "loading-spinner" : ""}
+              />
+              {t("common.shared.refreshQuota", "刷新配额")}
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => openApiKeyCredentialsModal(account)}
+            >
+              <Pencil size={14} />
+              {t("instances.actions.edit", "编辑")}
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => void handleLaunchCodexCli(account)}
+              disabled={cliLaunchingAccountId === account.id}
+            >
+              {cliLaunchingAccountId === account.id ? (
+                <RefreshCw size={14} className="loading-spinner" />
+              ) : (
+                <Terminal size={14} />
+              )}
+              {t("codex.cli.quickLaunch", "CLI 快速启动")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderCockpitApiServicePanel = () => {
     const account = cockpitApiPanelAccount;
     if (!account) return null;
@@ -7797,6 +9078,8 @@ export function CodexAccountsPage() {
     const apiKeyDisplay = resolveApiKeyDisplayText(account, visible);
     const baseUrl = (account.api_base_url || "").trim() || COCKPIT_API_BASE_URL;
     const quotaText = readCockpitApiString(usage, "summary_display") || "-";
+    const cockpitApiAccountBalanceText =
+      resolveCockpitApiAccountBalanceText(account);
     const usedPercent = readCockpitApiNumber(usage, "used_percent");
     const requestCount = readCockpitApiNumber(requests, "total");
     const todayCount = readCockpitApiNumber(requests, "today");
@@ -7912,6 +9195,12 @@ export function CodexAccountsPage() {
                   {t("codex.cockpitApi.balance", "额度")}
                 </span>
                 <strong>{quotaText}</strong>
+                {cockpitApiAccountBalanceText && (
+                  <small className="cockpit-api-balance-meta">
+                    {t("codex.modelProviders.usage.accountBalance", "账户余额")}：
+                    {cockpitApiAccountBalanceText}
+                  </small>
+                )}
                 <div className="cockpit-api-progress-row">
                   <div className="cockpit-api-progress-track">
                     <div
@@ -8245,6 +9534,7 @@ export function CodexAccountsPage() {
       )}
 
       {renderCockpitApiServicePanel()}
+      {renderApiKeyUsageDetailModal()}
 
       {activeTab === "overview" && (
         <>
@@ -8854,7 +10144,7 @@ export function CodexAccountsPage() {
           {showAddModal && (
             <div className="modal-overlay">
               <div
-                className="modal-content codex-add-modal"
+                className="modal-content codex-add-modal codex-account-add-modal"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="modal-header">
@@ -9179,6 +10469,22 @@ export function CodexAccountsPage() {
                               {t("codex.api.provider.custom", "自定义")}
                             </span>
                           </button>
+                          {sponsorApiProviderTemplates.map((template) => (
+                            <button
+                              key={template.id}
+                              className={`api-provider-chip sponsor ${apiProviderPresetId === template.id ? "active" : ""}`}
+                              onClick={() =>
+                                handleSelectApiProviderPreset(template.id)
+                              }
+                              type="button"
+                            >
+                              <span>{template.name}</span>
+                              <Star
+                                size={12}
+                                className="api-provider-chip-badge"
+                              />
+                            </button>
+                          ))}
                           {CODEX_API_PROVIDER_PRESETS.map((preset) => (
                             <button
                               key={preset.id}
@@ -9204,6 +10510,44 @@ export function CodexAccountsPage() {
                           ))}
                         </div>
                       </div>
+                      {selectedSponsorApiProviderTemplate && (
+                        <div className="api-provider-hint-block sponsor">
+                          <p className="api-provider-hint">
+                            {t(
+                              "codex.modelProviders.sponsorHint",
+                              "已按赞助商推荐自动填写兼容服务地址。输入 API Key 后，卡片会自动查询余额和用量。",
+                            )}
+                          </p>
+                          <div className="api-provider-links">
+                            {selectedSponsorApiProviderTemplate.website && (
+                              <button
+                                className="btn btn-secondary"
+                                onClick={() =>
+                                  void handleOpenProviderLink(
+                                    selectedSponsorApiProviderTemplate.website,
+                                  )
+                                }
+                              >
+                                <ExternalLink size={14} />
+                                {t("codex.api.provider.website", "官网")}
+                              </button>
+                            )}
+                            {selectedSponsorApiProviderTemplate.apiKeyUrl && (
+                              <button
+                                className="btn btn-secondary"
+                                onClick={() =>
+                                  void handleOpenProviderLink(
+                                    selectedSponsorApiProviderTemplate.apiKeyUrl,
+                                  )
+                                }
+                              >
+                                <KeyRound size={14} />
+                                {t("codex.api.provider.apiKeyPage", "API Key 页面")}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                       {selectedApiProviderPreset &&
                         selectedApiProviderPreset.baseUrls.length > 1 && (
                           <div className="oauth-link">
@@ -9520,7 +10864,7 @@ export function CodexAccountsPage() {
           {quickSwitchAccountId && (
             <div className="modal-overlay" onClick={closeQuickSwitchModal}>
               <div
-                className="modal-content codex-add-modal"
+                className="modal-content codex-add-modal codex-api-key-edit-modal"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="modal-header">

@@ -11,7 +11,7 @@ A **universal AI IDE account management tool**, currently supporting **Antigravi
 
 > Designed to help users efficiently manage multiple AI IDE accounts, this tool supports one-click switching, quota monitoring, wake-up tasks, and multi-instance parallel runs, helping you fully utilize resources from different accounts.
 
-**Features**: One-click Switch · Multi-account Management · Multi-instance · Quota Monitoring · Wake-up Tasks · Device Fingerprints · Plugin Integration · GitHub Copilot Management · Windsurf Management · Kiro Management · Cursor Management · Gemini Cli Management · CodeBuddy Management · CodeBuddy CN Management · Qoder Management · Trae Management · Zed Management
+**Features**: One-click Switch · Multi-account Management · Multi-instance · Quota Monitoring · Wake-up Tasks · Plugin Integration · GitHub Copilot Management · Windsurf Management · Kiro Management · Cursor Management · Gemini Cli Management · CodeBuddy Management · CodeBuddy CN Management · Qoder Management · Trae Management · Zed Management
 
 **Languages**: Supports 18 languages
 
@@ -39,13 +39,11 @@ A brand new visual dashboard providing a one-stop status overview:
 - **One-Click Switch**: Switch the currently active account instantly without manual login/logout
 - **Multiple Import Methods**: OAuth, Refresh Token, Plugin Sync
 - **Wake-up Tasks**: Schedule AI model wake-ups to trigger quota reset cycles in advance
-- **Device Fingerprints**: Generate, manage, and bind device fingerprints to reduce risk
 
 > ![Antigravity IDE Accounts](docs/images/antigravity_list.png)
 >
-> *(Wakeup Tasks & Device Fingerprints)*
+> *(Wakeup Tasks)*
 > ![Wakeup Tasks](docs/images/wakeup_detail.png)
-> ![Device Fingerprints](docs/images/fingerprint_detail.png)
 
 #### 2.1 Antigravity IDE Multi-Instance
 
@@ -393,8 +391,10 @@ Every bit of support helps sustain open-source development. Thank you!
 
 ## Acknowledgments
 
-- Antigravity IDE account switching logic based on: [Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager)
-- Codex API service sidecar integration: [router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
+- Antigravity account switching logic references: [Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager)
+- Codex API service references and integrates: [router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
+- Codex third-party provider presets reference: [CC Switch](https://github.com/farion1231/cc-switch)
+- Codex model catalog and frontend model display ideas reference: [CodexPlusPlus](https://github.com/BigPizzaV3/CodexPlusPlus)
 
 Thanks to the project author for their open-source contributions! If these projects have helped you, please give them a ⭐ Star to show your support!
 

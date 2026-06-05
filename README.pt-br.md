@@ -11,7 +11,7 @@ Uma **ferramenta universal de gerenciamento de contas para IDEs de IA**, atualme
 
 > Projetada para ajudar os usuários a gerenciar com eficiência múltiplas contas de IDE com IA, esta ferramenta oferece suporte à troca com um clique, monitoramento de cota, tarefas de ativação e execuções paralelas em múltiplas instâncias, ajudando você a utilizar totalmente os recursos de diferentes contas.
 
-**Recursos**: Alternância com um clique · Gerenciamento de múltiplas contas · Múltiplas instâncias · Monitoramento de cotas · Tarefas de ativação · Impressões digitais de dispositivos · Integração de plugins · Gerenciamento do GitHub Copilot · Gerenciamento do Windsurf · Gerenciamento do Kiro · Gerenciamento do Cursor · Gerenciamento do Gemini Cli · Gerenciamento do CodeBuddy · Gerenciamento do CodeBuddy CN · Gerenciamento do Qoder · Gerenciamento do Trae · Gerenciamento do Zed
+**Recursos**: Alternância com um clique · Gerenciamento de múltiplas contas · Múltiplas instâncias · Monitoramento de cotas · Tarefas de ativação · Integração de plugins · Gerenciamento do GitHub Copilot · Gerenciamento do Windsurf · Gerenciamento do Kiro · Gerenciamento do Cursor · Gerenciamento do Gemini Cli · Gerenciamento do CodeBuddy · Gerenciamento do CodeBuddy CN · Gerenciamento do Qoder · Gerenciamento do Trae · Gerenciamento do Zed
 
 **Idiomas**: Suporta 18 idiomas
 
@@ -39,13 +39,11 @@ Um painel visual totalmente novo que oferece uma visão geral do status em um ú
 - **Troca com Um Clique**: Altere instantaneamente a conta ativa no momento sem login/logout manual
 - **Múltiplos Métodos de Importação**: OAuth, Token de Atualização (Refresh Token), Sincronização de Plugin
 - **Tarefas de Ativação**: Agende ativações de modelos de IA para acionar ciclos de redefinição de cota com antecedência
-- **Impressões Digitais de Dispositivo**: Gere, gerencie e vincule impressões digitais de dispositivo para reduzir riscos
 
 > ![Contas do Antigravity IDE](docs/images/antigravity_list.png)
 >
-> *(Tarefas de Despertar & Impressões Digitais do Dispositivo)*
+> *(Tarefas de Despertar)*
 > ![Tarefas de Despertar](docs/images/wakeup_detail.png)
-> ![Impressões Digitais do Dispositivo](docs/images/fingerprint_detail.png)
 
 #### 2.1 Múltiplas Instâncias do Antigravity IDE
 

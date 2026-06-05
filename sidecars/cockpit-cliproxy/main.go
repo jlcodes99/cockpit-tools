@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -26,7 +27,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	internallogging "github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
+	responsesconverter "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/openai/openai/responses"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/watcher/synthesizer"
+	sdkopenai "github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers/openai"
 	sdkauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/auth"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
@@ -83,13 +86,28 @@ type manifest struct {
 }
 
 type apiKeySpec struct {
-	ID             string   `json:"id"`
-	Label          string   `json:"label"`
-	Key            string   `json:"key"`
-	ModelPrefix    string   `json:"modelPrefix,omitempty"`
-	AllowedModels  []string `json:"allowedModels"`
-	ExcludedModels []string `json:"excludedModels"`
-	Enabled        bool     `json:"enabled"`
+	ID              string               `json:"id"`
+	Label           string               `json:"label"`
+	Key             string               `json:"key"`
+	ProviderGateway *providerGatewaySpec `json:"providerGateway,omitempty"`
+	ModelPrefix     string               `json:"modelPrefix,omitempty"`
+	AllowedModels   []string             `json:"allowedModels"`
+	ExcludedModels  []string             `json:"excludedModels"`
+	Enabled         bool                 `json:"enabled"`
+}
+
+type providerGatewaySpec struct {
+	BaseURL           string                                    `json:"baseUrl"`
+	APIKey            string                                    `json:"apiKey"`
+	UpstreamModel     string                                    `json:"upstreamModel"`
+	UpstreamModels    []string                                  `json:"upstreamModels,omitempty"`
+	WireAPI           string                                    `json:"wireApi,omitempty"`
+	SupportsVision    bool                                      `json:"supportsVision,omitempty"`
+	ModelCapabilities map[string]providerGatewayModelCapability `json:"modelCapabilities,omitempty"`
+}
+
+type providerGatewayModelCapability struct {
+	SupportsVision bool `json:"supportsVision,omitempty"`
 }
 
 type accountSpec struct {
@@ -354,6 +372,20 @@ func loadManifest(path string) (*manifest, error) {
 			continue
 		}
 		m.APIKeys[i].Key = key
+		if gateway := m.APIKeys[i].ProviderGateway; gateway != nil {
+			gateway.BaseURL = strings.TrimSpace(gateway.BaseURL)
+			gateway.APIKey = strings.TrimSpace(gateway.APIKey)
+			gateway.UpstreamModel = strings.TrimSpace(gateway.UpstreamModel)
+			gateway.UpstreamModels = normalizeStringList(gateway.UpstreamModels)
+			if len(gateway.UpstreamModels) == 0 && gateway.UpstreamModel != "" {
+				gateway.UpstreamModels = []string{gateway.UpstreamModel}
+			}
+			gateway.WireAPI = normalizeProviderGatewayWireAPI(gateway.WireAPI)
+			gateway.ModelCapabilities = normalizeProviderGatewayModelCapabilities(gateway.ModelCapabilities)
+			if gateway.BaseURL == "" || gateway.APIKey == "" {
+				m.APIKeys[i].ProviderGateway = nil
+			}
+		}
 		m.apiKeyByValue[key] = &m.APIKeys[i]
 	}
 	m.accountByID = make(map[string]*accountSpec)
@@ -407,6 +439,37 @@ func normalizeStringList(values []string) []string {
 		out = append(out, trimmed)
 	}
 	return out
+}
+
+func normalizeProviderGatewayWireAPI(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "chat_completions", "chat-completions", "openai_chat", "openai-chat", "chat":
+		return "chat_completions"
+	default:
+		return "responses"
+	}
+}
+
+func normalizeProviderGatewayModelCapabilities(value map[string]providerGatewayModelCapability) map[string]providerGatewayModelCapability {
+	if len(value) == 0 {
+		return nil
+	}
+	out := make(map[string]providerGatewayModelCapability, len(value))
+	for model, capability := range value {
+		key := strings.ToLower(strings.TrimSpace(model))
+		if key == "" {
+			continue
+		}
+		out[key] = capability
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func sourceFormatEqual(from, want sdktranslator.Format) bool {
+	return strings.EqualFold(strings.TrimSpace(from.String()), strings.TrimSpace(want.String()))
 }
 
 func extractClientAPIKey(r *http.Request) string {
@@ -703,27 +766,32 @@ func buildModelsResponse(models []string) gin.H {
 }
 
 func buildCodexClientModelsResponse(models []string) gin.H {
-	data := make([]gin.H, 0, len(models))
+	sourceModels := make([]map[string]any, 0, len(models))
 	for _, model := range models {
 		displayName := displayNameForModel(model)
-		visibility := "show"
-		switch model {
-		case codexAutoReviewModel, "gpt-image-2", "grok-imagine-image", "grok-imagine-video", "grok-imagine-image-quality":
-			visibility = "hide"
-		}
-		data = append(data, gin.H{
-			"slug":                       model,
-			"display_name":               displayName,
-			"description":                displayName,
-			"context_window":             272000,
-			"max_context_window":         1000000,
-			"default_reasoning_level":    "medium",
-			"supported_reasoning_levels": reasoningLevels(),
-			"prefer_websockets":          true,
-			"visibility":                 visibility,
+		sourceModels = append(sourceModels, map[string]any{
+			"id":             model,
+			"display_name":   displayName,
+			"description":    displayName,
+			"context_length": 272000,
 		})
 	}
-	return gin.H{"models": data}
+	response := gin.H(sdkopenai.CodexClientModelsResponse(sourceModels))
+	if data, ok := response["models"].([]map[string]any); ok {
+		for index, model := range data {
+			slug, _ := model["slug"].(string)
+			if isHiddenCodexClientModel(slug) {
+				model["visibility"] = "hide"
+			}
+			model["max_context_window"] = 1000000
+			model["priority"] = 1000 + index
+			model["additional_speed_tiers"] = []any{}
+			model["service_tiers"] = []any{}
+			model["availability_nux"] = nil
+			model["upgrade"] = nil
+		}
+	}
+	return response
 }
 
 func displayNameForModel(model string) string {
@@ -757,13 +825,12 @@ func displayNameForModel(model string) string {
 	}
 }
 
-func reasoningLevels() []gin.H {
-	return []gin.H{
-		{"effort": "minimal", "description": "Fastest responses with minimal reasoning"},
-		{"effort": "low", "description": "Fast responses with lighter reasoning"},
-		{"effort": "medium", "description": "Balances speed and reasoning depth for everyday tasks"},
-		{"effort": "high", "description": "Greater reasoning depth for complex problems"},
-		{"effort": "xhigh", "description": "Extra high reasoning depth for complex problems"},
+func isHiddenCodexClientModel(model string) bool {
+	switch model {
+	case codexAutoReviewModel, "gpt-image-2", "grok-imagine-image", "grok-imagine-video", "grok-imagine-image-quality":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -817,6 +884,9 @@ func visibleModelsForAPIKey(m *manifest, spec *apiKeySpec) []string {
 	if m == nil {
 		return nil
 	}
+	if spec != nil && spec.ProviderGateway != nil {
+		return append([]string(nil), spec.ProviderGateway.UpstreamModels...)
+	}
 	models := applyModelFilters(m.ModelIDs, nil, m.ExcludedModels)
 	if spec != nil {
 		models = applyModelFilters(models, spec.AllowedModels, spec.ExcludedModels)
@@ -852,12 +922,156 @@ func canonicalModelForClientModel(m *manifest, spec *apiKeySpec, model string) s
 	if isCodexInternalModel(withoutPrefix) {
 		return codexAutoReviewModel
 	}
+	if spec != nil && spec.ProviderGateway != nil {
+		return providerGatewayCanonicalModel(spec.ProviderGateway, withoutPrefix)
+	}
 	if m != nil {
 		if source := m.aliasToSource[strings.ToLower(withoutPrefix)]; source != "" {
 			return source
 		}
 	}
 	return resolveSupportedModelAlias(m, withoutPrefix)
+}
+
+func providerGatewayCanonicalModel(gateway *providerGatewaySpec, model string) string {
+	if gateway == nil {
+		return strings.TrimSpace(model)
+	}
+	model = strings.TrimSpace(model)
+	if len(gateway.UpstreamModels) == 0 && strings.TrimSpace(gateway.UpstreamModel) == "" {
+		return model
+	}
+	for _, upstreamModel := range gateway.UpstreamModels {
+		if strings.EqualFold(model, upstreamModel) {
+			return upstreamModel
+		}
+	}
+	return strings.TrimSpace(gateway.UpstreamModel)
+}
+
+func providerGatewayModelSupportsVision(gateway *providerGatewaySpec, model string) bool {
+	if gateway == nil {
+		return false
+	}
+	key := strings.ToLower(strings.TrimSpace(model))
+	if key != "" && gateway.ModelCapabilities != nil {
+		if capability, ok := gateway.ModelCapabilities[key]; ok {
+			return capability.SupportsVision
+		}
+	}
+	return gateway.SupportsVision
+}
+
+func providerGatewayModelCapabilityOverridesVision(gateway *providerGatewaySpec, model string) (bool, bool) {
+	if gateway == nil {
+		return false, false
+	}
+	key := strings.ToLower(strings.TrimSpace(model))
+	if key == "" || gateway.ModelCapabilities == nil {
+		return false, false
+	}
+	capability, ok := gateway.ModelCapabilities[key]
+	if !ok {
+		return false, false
+	}
+	return capability.SupportsVision, true
+}
+
+func providerGatewayRequestHasVisionInput(body []byte) bool {
+	if len(body) == 0 || !json.Valid(body) {
+		return false
+	}
+	var payload any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return false
+	}
+	return providerGatewayValueHasVisionInput(payload)
+}
+
+func providerGatewayValueHasVisionInput(value any) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		if typ, _ := typed["type"].(string); strings.EqualFold(strings.TrimSpace(typ), "input_image") || strings.EqualFold(strings.TrimSpace(typ), "image_url") {
+			return true
+		}
+		if _, ok := typed["image_url"]; ok {
+			return true
+		}
+		for _, child := range typed {
+			if providerGatewayValueHasVisionInput(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if providerGatewayValueHasVisionInput(child) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func providerGatewayUnsupportedVisionPlaceholder(model string) string {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		model = "current model"
+	}
+	return fmt.Sprintf("[Image omitted: %s does not support image input.]", model)
+}
+
+func providerGatewayOmitUnsupportedVisionInput(body []byte, model string) ([]byte, int) {
+	if len(body) == 0 || !json.Valid(body) {
+		return body, 0
+	}
+	var payload any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return body, 0
+	}
+	next, count := providerGatewayOmitUnsupportedVisionValue(payload, providerGatewayUnsupportedVisionPlaceholder(model))
+	if count == 0 {
+		return body, 0
+	}
+	encoded, err := json.Marshal(next)
+	if err != nil {
+		return body, 0
+	}
+	return encoded, count
+}
+
+func providerGatewayOmitUnsupportedVisionValue(value any, placeholder string) (any, int) {
+	switch typed := value.(type) {
+	case map[string]any:
+		if typ, _ := typed["type"].(string); strings.EqualFold(strings.TrimSpace(typ), "input_image") {
+			return map[string]any{"type": "input_text", "text": placeholder}, 1
+		} else if strings.EqualFold(strings.TrimSpace(typ), "image_url") {
+			return map[string]any{"type": "text", "text": placeholder}, 1
+		}
+		if _, ok := typed["image_url"]; ok {
+			return map[string]any{"type": "input_text", "text": placeholder}, 1
+		}
+		count := 0
+		for key, child := range typed {
+			nextChild, childCount := providerGatewayOmitUnsupportedVisionValue(child, placeholder)
+			if childCount > 0 {
+				typed[key] = nextChild
+				count += childCount
+			}
+		}
+		return typed, count
+	case []any:
+		count := 0
+		for index, child := range typed {
+			nextChild, childCount := providerGatewayOmitUnsupportedVisionValue(child, placeholder)
+			if childCount > 0 {
+				typed[index] = nextChild
+				count += childCount
+			}
+		}
+		return typed, count
+	default:
+		return value, 0
+	}
 }
 
 func stripModelPrefix(model string, spec *apiKeySpec) string {
@@ -916,6 +1130,17 @@ func validateClientModelVisible(m *manifest, spec *apiKeySpec, model, canonical 
 	withoutPrefix := stripModelPrefix(model, spec)
 	if isCodexInternalModel(withoutPrefix) || isCodexInternalModel(canonical) {
 		return true
+	}
+	if spec != nil && spec.ProviderGateway != nil {
+		if len(spec.ProviderGateway.UpstreamModels) == 0 {
+			return true
+		}
+		for _, upstreamModel := range spec.ProviderGateway.UpstreamModels {
+			if strings.EqualFold(canonical, upstreamModel) {
+				return true
+			}
+		}
+		return false
 	}
 	visible := visibleModelsForAPIKey(m, nil)
 	visibleMatch := false
@@ -2712,7 +2937,8 @@ func (s *relayServer) requireAPIKey(c *gin.Context) (*apiKeySpec, bool) {
 }
 
 func (s *relayServer) handleExecutorRequest(c *gin.Context, sourceFormat sdktranslator.Format, fixedAlt string) {
-	if _, ok := s.requireAPIKey(c); !ok {
+	spec, ok := s.requireAPIKey(c)
+	if !ok {
 		return
 	}
 	body, err := readAndRestoreBody(c.Request)
@@ -2730,6 +2956,11 @@ func (s *relayServer) handleExecutorRequest(c *gin.Context, sourceFormat sdktran
 		return
 	}
 
+	if spec.ProviderGateway != nil {
+		s.handleProviderGatewayRequest(c, spec.ProviderGateway, body, model, sourceFormat, fixedAlt)
+		return
+	}
+
 	alt := fixedAlt
 	if alt == "" {
 		alt = requestAlt(c)
@@ -2740,6 +2971,299 @@ func (s *relayServer) handleExecutorRequest(c *gin.Context, sourceFormat sdktran
 		return
 	}
 	s.handleNonStream(c, body, model, sourceFormat, alt)
+}
+
+func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *providerGatewaySpec, body []byte, model string, sourceFormat sdktranslator.Format, fixedAlt string) {
+	if gateway == nil {
+		writeAPIError(c, http.StatusBadGateway, "provider gateway is not configured", "bad_gateway")
+		return
+	}
+	if fixedAlt == "responses/compact" {
+		writeAPIError(c, http.StatusNotFound, "provider gateway does not support responses/compact", "not_found")
+		return
+	}
+	stream := requestBodyStream(body)
+	wireAPI := normalizeProviderGatewayWireAPI(gateway.WireAPI)
+	upstreamModel := providerGatewayCanonicalModel(gateway, model)
+	if strings.TrimSpace(upstreamModel) == "" {
+		writeAPIError(c, http.StatusNotFound, fmt.Sprintf("model %s is not available for this provider gateway", model), "model_not_available")
+		return
+	}
+	supportsVision := providerGatewayModelSupportsVision(gateway, upstreamModel)
+	if wireAPI == "chat_completions" {
+		if modelSupportsVision, ok := providerGatewayModelCapabilityOverridesVision(gateway, upstreamModel); ok {
+			supportsVision = modelSupportsVision
+		}
+	}
+	if providerGatewayRequestHasVisionInput(body) && !supportsVision {
+		var omitted int
+		body, omitted = providerGatewayOmitUnsupportedVisionInput(body, upstreamModel)
+		if s.emitter != nil {
+			s.emitter.emit(requestDiagnosticPayload{
+				Type:         "provider_gateway_vision_omitted",
+				RequestID:    internallogging.GetRequestID(c.Request.Context()),
+				Method:       c.Request.Method,
+				Path:         requestPath(c.Request),
+				RequestKind:  requestKindFromPath(requestPath(c.Request)),
+				Model:        upstreamModel,
+				Transport:    diagnosticTransport(c.Request),
+				ErrorMessage: fmt.Sprintf("omitted %d image input(s) because model %s does not support image input", omitted, upstreamModel),
+			})
+		}
+	}
+	upstreamBody := rewriteProviderGatewayBodyModel(body, upstreamModel)
+	upstreamPath := "/v1/responses"
+	if wireAPI == "chat_completions" {
+		upstreamBody = responsesconverter.ConvertOpenAIResponsesRequestToOpenAIChatCompletions(upstreamModel, body, stream)
+		upstreamPath = "/v1/chat/completions"
+	} else if !sourceFormatEqual(sourceFormat, sdktranslator.FormatOpenAIResponse) {
+		writeAPIError(c, http.StatusBadRequest, "provider gateway only accepts responses requests", "invalid_request")
+		return
+	}
+
+	upstreamURL, err := providerGatewayURL(gateway.BaseURL, upstreamPath)
+	if err != nil {
+		writeAPIError(c, http.StatusBadGateway, err.Error(), "bad_gateway")
+		return
+	}
+	req, err := http.NewRequestWithContext(relayContext(c), http.MethodPost, upstreamURL, bytes.NewReader(upstreamBody))
+	if err != nil {
+		writeAPIError(c, http.StatusBadGateway, err.Error(), "bad_gateway")
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+gateway.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	if stream {
+		req.Header.Set("Accept", "text/event-stream")
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		writeAPIError(c, http.StatusBadGateway, err.Error(), "bad_gateway")
+		return
+	}
+	defer resp.Body.Close()
+	writeUpstreamHeaders(c.Writer.Header(), resp.Header)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		payload, _ := io.ReadAll(resp.Body)
+		contentType := resp.Header.Get("Content-Type")
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		c.Data(resp.StatusCode, contentType, payload)
+		return
+	}
+
+	if stream {
+		if wireAPI == "chat_completions" {
+			s.writeProviderGatewayChatStream(c, resp.Body, upstreamModel, body, upstreamBody)
+			return
+		}
+		c.Status(http.StatusOK)
+		c.Stream(func(w io.Writer) bool {
+			_, _ = io.Copy(w, resp.Body)
+			return false
+		})
+		return
+	}
+
+	payload, err := io.ReadAll(resp.Body)
+	if err != nil {
+		writeAPIError(c, http.StatusBadGateway, err.Error(), "bad_gateway")
+		return
+	}
+	if wireAPI == "chat_completions" {
+		payload = responsesconverter.ConvertOpenAIChatCompletionsResponseToOpenAIResponsesNonStream(relayContext(c), upstreamModel, body, upstreamBody, payload, nil)
+	}
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" || wireAPI == "chat_completions" {
+		contentType = "application/json"
+	}
+	c.Data(http.StatusOK, contentType, payload)
+}
+
+func rewriteProviderGatewayBodyModel(body []byte, model string) []byte {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return body
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return body
+	}
+	payload["model"] = model
+	next, err := json.Marshal(payload)
+	if err != nil {
+		return body
+	}
+	return next
+}
+
+func (s *relayServer) writeProviderGatewayChatStream(c *gin.Context, body io.Reader, model string, originalBody []byte, chatBody []byte) {
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		writeAPIError(c, http.StatusInternalServerError, "streaming not supported", "streaming_not_supported")
+		return
+	}
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Status(http.StatusOK)
+	var state any
+	startedAt := time.Now()
+	doneSeen := false
+	completedSynthesized := false
+	completedEventSeen := false
+	convertedEventCount := 0
+	rawLineCount := 0
+	eventCounts := make(map[string]int)
+	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		rawLineCount++
+		if providerGatewayStreamLineIsDone(line) {
+			doneSeen = true
+		}
+		events := responsesconverter.ConvertOpenAIChatCompletionsResponseToOpenAIResponses(relayContext(c), model, originalBody, chatBody, line, &state)
+		for _, event := range events {
+			if len(event) == 0 {
+				continue
+			}
+			eventName := providerGatewayResponseSSEEventName(event)
+			if eventName != "" {
+				eventCounts[eventName]++
+				if eventName == "response.completed" {
+					completedEventSeen = true
+				}
+			}
+			convertedEventCount++
+			if _, err := c.Writer.Write(providerGatewaySSEFrame(event)); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		s.emitExecutorDiagnostic(c, "provider_gateway_stream_scan_failed", model, "provider_gateway_chat_stream", startedAt, err.Error())
+		writeStreamTerminalError(c, err)
+		flusher.Flush()
+		return
+	}
+	if !doneSeen {
+		events := responsesconverter.CompleteOpenAIChatCompletionsResponseToOpenAIResponses(relayContext(c), chatBody, &state)
+		for _, event := range events {
+			if len(event) == 0 {
+				continue
+			}
+			completedSynthesized = true
+			eventName := providerGatewayResponseSSEEventName(event)
+			if eventName != "" {
+				eventCounts[eventName]++
+				if eventName == "response.completed" {
+					completedEventSeen = true
+				}
+			}
+			convertedEventCount++
+			if _, err := c.Writer.Write(providerGatewaySSEFrame(event)); err != nil {
+				s.emitExecutorDiagnostic(c, "provider_gateway_stream_write_failed", model, "provider_gateway_chat_stream", startedAt, err.Error())
+				return
+			}
+			flusher.Flush()
+		}
+	}
+	s.emitExecutorDiagnostic(
+		c,
+		"provider_gateway_stream_completed",
+		model,
+		"provider_gateway_chat_stream",
+		startedAt,
+		fmt.Sprintf(
+			"done_seen=%t completed_event_seen=%t completed_synthesized=%t raw_line_count=%d converted_event_count=%d event_counts=%s",
+			doneSeen,
+			completedEventSeen,
+			completedSynthesized,
+			rawLineCount,
+			convertedEventCount,
+			providerGatewayFormatEventCounts(eventCounts),
+		),
+	)
+}
+
+func providerGatewaySSEFrame(event []byte) []byte {
+	if len(event) == 0 || bytes.HasSuffix(event, []byte("\n\n")) || bytes.HasSuffix(event, []byte("\r\n\r\n")) {
+		return event
+	}
+	out := make([]byte, 0, len(event)+2)
+	out = append(out, event...)
+	if bytes.HasSuffix(event, []byte("\n")) {
+		out = append(out, '\n')
+	} else {
+		out = append(out, '\n', '\n')
+	}
+	return out
+}
+
+func providerGatewayResponseSSEEventName(event []byte) string {
+	for _, line := range bytes.Split(event, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, []byte("event:")) {
+			continue
+		}
+		return strings.TrimSpace(string(bytes.TrimSpace(line[len("event:"):])))
+	}
+	return ""
+}
+
+func providerGatewayFormatEventCounts(counts map[string]int) string {
+	if len(counts) == 0 {
+		return "none"
+	}
+	names := make([]string, 0, len(counts))
+	for name := range counts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	parts := make([]string, 0, len(names))
+	for _, name := range names {
+		parts = append(parts, fmt.Sprintf("%s:%d", name, counts[name]))
+	}
+	return strings.Join(parts, ",")
+}
+
+func providerGatewayStreamLineIsDone(line []byte) bool {
+	line = bytes.TrimSpace(line)
+	if bytes.HasPrefix(line, []byte("data:")) {
+		line = bytes.TrimSpace(line[len("data:"):])
+	}
+	return bytes.Equal(line, []byte("[DONE]"))
+}
+
+func providerGatewayURL(baseURL string, path string) (string, error) {
+	trimmedBase := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if trimmedBase == "" {
+		return "", fmt.Errorf("provider gateway base URL is empty")
+	}
+	parsed, err := url.Parse(trimmedBase)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("provider gateway base URL is invalid")
+	}
+	cleanPath := "/" + strings.TrimLeft(path, "/")
+	basePath := strings.TrimRight(parsed.Path, "/")
+	if strings.HasSuffix(basePath, strings.TrimSuffix(cleanPath, "/")) {
+		parsed.Path = basePath
+	} else if strings.HasSuffix(basePath, "/v1") && strings.HasPrefix(cleanPath, "/v1/") {
+		parsed.Path = basePath + strings.TrimPrefix(cleanPath, "/v1")
+	} else {
+		parsed.Path = basePath + cleanPath
+	}
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), nil
 }
 
 func (s *relayServer) handleNonStream(c *gin.Context, body []byte, model string, sourceFormat sdktranslator.Format, alt string) {

@@ -159,6 +159,8 @@ pub struct GeneralConfig {
     pub codex_restart_specified_app_on_switch: bool,
     /// 是否在 Codex 总览中显示 API 服务入口
     pub codex_local_access_entry_visible: bool,
+    /// 是否显示顶部推广位
+    pub top_right_ad_visible: bool,
     /// Antigravity 切号是否启用“本地落盘 + 扩展无感”且不重启
     pub antigravity_dual_switch_no_restart_enabled: bool,
     /// 是否启用自动切号
@@ -306,6 +308,29 @@ pub struct AutoBackupPlatformEntry {
     pub platform: String,
     /// 账号数量
     pub account_count: u64,
+}
+
+/// WebDAV 备份同步设置（前端使用）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebdavSyncSettings {
+    /// 是否启用自动同步
+    pub enabled: bool,
+    /// WebDAV 服务地址
+    pub url: String,
+    /// WebDAV 用户名
+    pub username: String,
+    /// 本地配置中是否已保存密码
+    pub has_password: bool,
+    /// WebDAV 远端备份目录
+    pub remote_dir: String,
+    /// 最近一次上传时间
+    pub last_upload_at: Option<String>,
+    /// 最近一次上传文件名
+    pub last_upload_file_name: Option<String>,
+    /// 最近一次下载时间
+    pub last_download_at: Option<String>,
+    /// 最近一次下载文件名
+    pub last_download_file_name: Option<String>,
 }
 
 const DEFAULT_UI_SCALE: f64 = 1.0;
@@ -960,6 +985,62 @@ fn build_auto_backup_settings(config: &UserConfig) -> Result<AutoBackupSettings,
     })
 }
 
+fn build_webdav_sync_settings(config: &UserConfig) -> WebdavSyncSettings {
+    let url = modules::webdav_sync::normalize_base_url(&config.webdav_sync_url)
+        .unwrap_or_else(|_| config::default_webdav_sync_url());
+    let remote_dir = modules::webdav_sync::normalize_remote_dir(&config.webdav_sync_remote_dir)
+        .unwrap_or_else(|_| config::default_webdav_sync_remote_dir());
+
+    WebdavSyncSettings {
+        enabled: config.webdav_sync_enabled,
+        url,
+        username: config.webdav_sync_username.clone(),
+        has_password: !config.webdav_sync_password.is_empty(),
+        remote_dir,
+        last_upload_at: config.webdav_sync_last_upload_at.clone(),
+        last_upload_file_name: config.webdav_sync_last_upload_file_name.clone(),
+        last_download_at: config.webdav_sync_last_download_at.clone(),
+        last_download_file_name: config.webdav_sync_last_download_file_name.clone(),
+    }
+}
+
+fn resolve_webdav_password_update(
+    current_password: &str,
+    password: Option<String>,
+    clear_password: Option<bool>,
+) -> String {
+    if clear_password.unwrap_or(false) {
+        return String::new();
+    }
+    password
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| current_password.to_string())
+}
+
+fn validate_webdav_sync_config(
+    enabled: bool,
+    url: &str,
+    username: &str,
+    password: &str,
+    remote_dir: &str,
+) -> Result<(String, String, String), String> {
+    let normalized_url = modules::webdav_sync::normalize_base_url(url)?;
+    let normalized_remote_dir = modules::webdav_sync::normalize_remote_dir(remote_dir)?;
+    let normalized_username = username.trim().to_string();
+
+    if enabled {
+        if normalized_username.is_empty() {
+            return Err("启用 WebDAV 同步时账号不能为空".to_string());
+        }
+        if password.is_empty() {
+            return Err("启用 WebDAV 同步时应用密码不能为空".to_string());
+        }
+    }
+
+    Ok((normalized_url, normalized_username, normalized_remote_dir))
+}
+
 fn sanitize_auto_backup_file_name(file_name: &str) -> Result<String, String> {
     let trimmed = file_name.trim();
     if trimmed.is_empty() {
@@ -1604,6 +1685,154 @@ pub fn open_auto_backup_dir() -> Result<(), String> {
     open_path_in_system(path.as_path())
 }
 
+#[tauri::command]
+pub fn get_webdav_sync_settings() -> Result<WebdavSyncSettings, String> {
+    let config = config::get_user_config();
+    Ok(build_webdav_sync_settings(&config))
+}
+
+#[tauri::command]
+pub fn save_webdav_sync_settings(
+    enabled: bool,
+    url: String,
+    username: String,
+    password: Option<String>,
+    clear_password: Option<bool>,
+    remote_dir: String,
+) -> Result<WebdavSyncSettings, String> {
+    let current = config::get_user_config();
+    let next_password =
+        resolve_webdav_password_update(&current.webdav_sync_password, password, clear_password);
+    let (next_url, next_username, next_remote_dir) =
+        validate_webdav_sync_config(enabled, &url, &username, &next_password, &remote_dir)?;
+
+    let new_config = UserConfig {
+        webdav_sync_enabled: enabled,
+        webdav_sync_url: next_url,
+        webdav_sync_username: next_username,
+        webdav_sync_password: next_password,
+        webdav_sync_remote_dir: next_remote_dir,
+        ..current
+    };
+    config::save_user_config(&new_config)?;
+    Ok(build_webdav_sync_settings(&new_config))
+}
+
+#[tauri::command]
+pub async fn test_webdav_sync_connection(
+    url: String,
+    username: String,
+    password: Option<String>,
+    clear_password: Option<bool>,
+    remote_dir: String,
+) -> Result<modules::webdav_sync::WebdavTestResult, String> {
+    let current = config::get_user_config();
+    let next_password =
+        resolve_webdav_password_update(&current.webdav_sync_password, password, clear_password);
+    let connection =
+        modules::webdav_sync::connection_from_parts(&url, &username, &next_password, &remote_dir)?;
+    modules::webdav_sync::test_connection(&connection).await
+}
+
+#[tauri::command]
+pub async fn upload_auto_backup_to_webdav(
+    file_name: String,
+) -> Result<modules::webdav_sync::WebdavUploadResult, String> {
+    let config = config::get_user_config();
+    if !config.webdav_sync_enabled {
+        return Err("WebDAV 同步未启用".to_string());
+    }
+
+    let connection = modules::webdav_sync::connection_from_config(&config)?;
+    let safe_name = sanitize_auto_backup_file_name(&file_name)?;
+    if !safe_name.ends_with(".json") {
+        return Err("WebDAV 同步入口文件必须为 JSON 备份".to_string());
+    }
+    let path = resolve_auto_backup_file_path(&safe_name)?;
+    if !path.exists() {
+        return Err("本地备份文件不存在".to_string());
+    }
+
+    let mut uploaded_files = Vec::new();
+    let bytes = fs::read(&path).map_err(|err| format!("读取本地备份失败: {}", err))?;
+    uploaded_files.push(
+        modules::webdav_sync::upload_backup_bytes(&connection, &safe_name, bytes).await?,
+    );
+
+    if let Some(archive_name) = auto_backup_archive_file_name(&safe_name) {
+        let archive_path = resolve_auto_backup_file_path(&archive_name)?;
+        if archive_path.exists() {
+            let archive_bytes =
+                fs::read(&archive_path).map_err(|err| format!("读取本地备份压缩包失败: {}", err))?;
+            uploaded_files.push(
+                modules::webdav_sync::upload_backup_bytes(
+                    &connection,
+                    &archive_name,
+                    archive_bytes,
+                )
+                .await?,
+            );
+        }
+    }
+
+    let deleted_files = modules::webdav_sync::cleanup_remote_backups(
+        &connection,
+        config::sanitize_auto_backup_retention_days(config.auto_backup_retention_days),
+    )
+    .await?;
+    let uploaded_at = chrono::Utc::now().to_rfc3339();
+    let remote_dir = connection.remote_dir.clone();
+
+    let new_config = UserConfig {
+        webdav_sync_last_upload_at: Some(uploaded_at.clone()),
+        webdav_sync_last_upload_file_name: Some(safe_name),
+        ..config
+    };
+    config::save_user_config(&new_config)?;
+
+    Ok(modules::webdav_sync::WebdavUploadResult {
+        uploaded_files,
+        deleted_files,
+        uploaded_at,
+        remote_dir,
+    })
+}
+
+#[tauri::command]
+pub async fn list_webdav_backup_files(
+) -> Result<Vec<modules::webdav_sync::WebdavBackupFileEntry>, String> {
+    let config = config::get_user_config();
+    let connection = modules::webdav_sync::connection_from_config(&config)?;
+    modules::webdav_sync::list_remote_backups(&connection).await
+}
+
+#[tauri::command]
+pub async fn read_webdav_backup_file(file_name: String) -> Result<String, String> {
+    let config = config::get_user_config();
+    let safe_name = sanitize_auto_backup_file_name(&file_name)?;
+    if !safe_name.ends_with(".json") {
+        return Err("只能从 WebDAV 恢复 JSON 备份文件".to_string());
+    }
+    let connection = modules::webdav_sync::connection_from_config(&config)?;
+    let content = modules::webdav_sync::read_remote_backup(&connection, &safe_name).await?;
+    let downloaded_at = chrono::Utc::now().to_rfc3339();
+    let new_config = UserConfig {
+        webdav_sync_last_download_at: Some(downloaded_at),
+        webdav_sync_last_download_file_name: Some(safe_name),
+        ..config
+    };
+    config::save_user_config(&new_config)?;
+    Ok(content)
+}
+
+#[tauri::command]
+pub async fn delete_webdav_backup_file(file_name: String) -> Result<(), String> {
+    let config = config::get_user_config();
+    let safe_name = sanitize_auto_backup_file_name(&file_name)?;
+    let connection = modules::webdav_sync::connection_from_config(&config)?;
+    modules::webdav_sync::delete_remote_backup(&connection, &safe_name).await
+}
+
 /// 获取网络服务配置
 #[tauri::command]
 pub fn get_network_config() -> Result<NetworkConfig, String> {
@@ -1715,6 +1944,15 @@ pub fn save_network_config(
         auto_backup_retention_days: current.auto_backup_retention_days,
         auto_backup_retention_days_migrated: current.auto_backup_retention_days_migrated,
         auto_backup_last_backup_at: current.auto_backup_last_backup_at,
+        webdav_sync_enabled: current.webdav_sync_enabled,
+        webdav_sync_url: current.webdav_sync_url,
+        webdav_sync_username: current.webdav_sync_username,
+        webdav_sync_password: current.webdav_sync_password,
+        webdav_sync_remote_dir: current.webdav_sync_remote_dir,
+        webdav_sync_last_upload_at: current.webdav_sync_last_upload_at,
+        webdav_sync_last_upload_file_name: current.webdav_sync_last_upload_file_name,
+        webdav_sync_last_download_at: current.webdav_sync_last_download_at,
+        webdav_sync_last_download_file_name: current.webdav_sync_last_download_file_name,
         floating_card_position_x: current.floating_card_position_x,
         floating_card_position_y: current.floating_card_position_y,
         opencode_app_path: current.opencode_app_path,
@@ -1740,6 +1978,7 @@ pub fn save_network_config(
         codex_launch_on_switch: current.codex_launch_on_switch,
         codex_restart_specified_app_on_switch: current.codex_restart_specified_app_on_switch,
         codex_local_access_entry_visible: current.codex_local_access_entry_visible,
+        top_right_ad_visible: current.top_right_ad_visible,
         antigravity_dual_switch_no_restart_enabled: current
             .antigravity_dual_switch_no_restart_enabled,
         auto_switch_enabled: current.auto_switch_enabled,
@@ -2002,6 +2241,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         codex_launch_on_switch: user_config.codex_launch_on_switch,
         codex_restart_specified_app_on_switch: user_config.codex_restart_specified_app_on_switch,
         codex_local_access_entry_visible: user_config.codex_local_access_entry_visible,
+        top_right_ad_visible: user_config.top_right_ad_visible,
         antigravity_dual_switch_no_restart_enabled: user_config
             .antigravity_dual_switch_no_restart_enabled,
         auto_switch_enabled: user_config.auto_switch_enabled,
@@ -2126,6 +2366,7 @@ pub fn save_general_config(
     codex_launch_on_switch: bool,
     codex_restart_specified_app_on_switch: Option<bool>,
     codex_local_access_entry_visible: Option<bool>,
+    top_right_ad_visible: Option<bool>,
     antigravity_dual_switch_no_restart_enabled: Option<bool>,
     auto_switch_enabled: Option<bool>,
     auto_switch_threshold: Option<i32>,
@@ -2347,6 +2588,7 @@ pub fn save_general_config(
             .unwrap_or(current.codex_restart_specified_app_on_switch),
         codex_local_access_entry_visible: codex_local_access_entry_visible
             .unwrap_or(current.codex_local_access_entry_visible),
+        top_right_ad_visible: top_right_ad_visible.unwrap_or(current.top_right_ad_visible),
         antigravity_dual_switch_no_restart_enabled: antigravity_dual_switch_no_restart_enabled
             .unwrap_or(current.antigravity_dual_switch_no_restart_enabled),
         auto_switch_enabled: auto_switch_enabled.unwrap_or(current.auto_switch_enabled),
@@ -2445,6 +2687,15 @@ pub fn save_general_config(
         auto_backup_retention_days: current.auto_backup_retention_days,
         auto_backup_retention_days_migrated: current.auto_backup_retention_days_migrated,
         auto_backup_last_backup_at: current.auto_backup_last_backup_at,
+        webdav_sync_enabled: current.webdav_sync_enabled,
+        webdav_sync_url: current.webdav_sync_url,
+        webdav_sync_username: current.webdav_sync_username,
+        webdav_sync_password: current.webdav_sync_password,
+        webdav_sync_remote_dir: current.webdav_sync_remote_dir,
+        webdav_sync_last_upload_at: current.webdav_sync_last_upload_at,
+        webdav_sync_last_upload_file_name: current.webdav_sync_last_upload_file_name,
+        webdav_sync_last_download_at: current.webdav_sync_last_download_at,
+        webdav_sync_last_download_file_name: current.webdav_sync_last_download_file_name,
     };
 
     config::save_user_config(&new_config)?;

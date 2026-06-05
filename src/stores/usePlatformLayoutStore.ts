@@ -768,13 +768,11 @@ function normalizeHiddenEntryIds(
 function normalizeSidebarEntryIds(
   rawSidebarEntryIds: unknown,
   orderedEntryIds: PlatformLayoutEntryId[],
-  hiddenEntryIds: PlatformLayoutEntryId[],
+  _hiddenEntryIds: PlatformLayoutEntryId[],
   groups: PlatformLayoutGroup[],
   legacySidebarPlatformIds: PlatformId[],
 ): PlatformLayoutEntryId[] {
-  const hiddenSet = new Set(hiddenEntryIds);
-  const normalized = normalizeEntryVisibilityList(rawSidebarEntryIds, orderedEntryIds)
-    .filter((entryId) => !hiddenSet.has(entryId));
+  const normalized = normalizeEntryVisibilityList(rawSidebarEntryIds, orderedEntryIds);
   if (normalized.length > 0) {
     return normalized;
   }
@@ -803,13 +801,13 @@ function normalizeSidebarEntryIds(
     legacySidebarPlatformIds,
     orderedEntryIds,
     groups,
-  ).filter((entryId) => !hiddenSet.has(entryId));
+  );
 
   if (fallback.length > 0) {
     return fallback;
   }
 
-  return orderedEntryIds.filter((entryId) => !hiddenSet.has(entryId));
+  return orderedEntryIds;
 }
 
 function derivePlatformOrderFromEntryOrder(
@@ -876,15 +874,11 @@ function deriveHiddenPlatformIds(
 
 function deriveSidebarPlatformIds(
   sidebarEntryIds: PlatformLayoutEntryId[],
-  hiddenEntryIds: PlatformLayoutEntryId[],
+  _hiddenEntryIds: PlatformLayoutEntryId[],
   groups: PlatformLayoutGroup[],
 ): PlatformId[] {
-  const hiddenSet = new Set(hiddenEntryIds);
   const result: PlatformId[] = [];
   for (const entryId of sidebarEntryIds) {
-    if (hiddenSet.has(entryId)) {
-      continue;
-    }
     const platformId = resolveEntryDefaultPlatformId(entryId, groups);
     if (!platformId || result.includes(platformId)) {
       continue;
@@ -1308,10 +1302,6 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
   },
 
   toggleSidebarEntry: (id) => {
-    if (get().hiddenEntryIds.includes(id)) {
-      return;
-    }
-
     const current = [...get().sidebarEntryIds];
     let nextSidebar: PlatformLayoutEntryId[] = [];
 

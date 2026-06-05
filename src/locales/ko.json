@@ -231,7 +231,6 @@
     "overview": "Antigravity IDE",
     "accounts": "계정 관리",
     "wakeup": "깨우기 작업",
-    "fingerprints": "기기 지문",
     "settings": "설정",
     "codex": "Codex",
     "githubCopilot": "GitHub Copilot",
@@ -254,12 +253,24 @@
     "expandSidebar": "사이드바 확장",
     "collapseSidebar": "사이드바 축소",
     "logs": "로그",
+    "sponsors": "스폰서",
+    "sponsorAppreciation": "후원",
     "switchClassicLayoutEntry": "클래식 레이아웃으로 전환",
     "switchClassicLayoutTitle": "클래식 사이드바 레이아웃으로 전환",
     "switchClassicLayoutDesc": "클래식 레이아웃은 플랫폼 내비게이션을 모두 표시하고 사이드바 접기를 지원합니다. 설정 > 일반 > 사이드바 레이아웃에서 언제든 다시 변경할 수 있습니다.",
     "switchClassicLayoutDontAskAgain": "이 안내를 다시 표시하지 않기",
     "switchClassicLayoutConfirm": "지금 전환",
     "2faManager": "2FA 관리"
+  },
+  "sponsors": {
+    "pageTitle": "스폰서",
+    "pageDesc": "Cockpit Tools를 지원해 주시는 스폰서에게 감사드립니다.",
+    "loading": "스폰서 불러오는 중...",
+    "emptyTitle": "아직 스폰서가 없습니다",
+    "emptyDesc": "원격 스폰서 모듈이 현재 비활성화되어 있습니다.",
+    "listAriaLabel": "스폰서 목록",
+    "defaultDescription": "Cockpit Tools를 지원해 주셔서 감사합니다.",
+    "openSponsor": "열기"
   },
   "platformLayout": {
     "title": "플랫폼 레이아웃",
@@ -272,7 +283,7 @@
     "hiddenBadge": "숨김",
     "openFromMore": "플랫폼 레이아웃 관리",
     "dragHandleLabel": "드래그하여 순서 변경",
-    "tipWithGroups": "드래그로 정렬할 수 있습니다. 사이드바에는 최대 3개의 항목만 표시할 수 있습니다. 그룹 하위 플랫폼은 사이드바/대시보드 토글을 제공하지 않으며 메뉴바 표시와 기본 플랫폼 전환에만 사용됩니다.",
+    "tipWithGroups": "드래그하여 순서를 바꿀 수 있습니다. 사이드바에는 최대 {{max}}개 항목을 표시할 수 있습니다. 그룹 하위 항목은 사이드바/대시보드 토글에 포함되지 않으며 메뉴 표시줄과 기본 플랫폼 전환에만 사용됩니다.",
     "addGroup": "그룹 추가",
     "editGroup": "그룹 편집",
     "deleteGroup": "그룹 삭제",
@@ -549,7 +560,8 @@
     "tabs": {
       "general": "일반",
       "network": "네트워크",
-      "about": "정보"
+      "about": "정보",
+      "data": "데이터 관리"
     },
     "general": {
       "appearance": "디자인",
@@ -603,8 +615,8 @@
       "floatingCardShowNowAction": "플로팅 카드 표시",
       "dataDir": "데이터 디렉터리",
       "dataDirDesc": "계정 및 구성 파일 저장 위치.",
-      "fpDir": "Antigravity IDE 저장소",
-      "fpDirDesc": "Antigravity IDE 데이터 파일 저장 위치.",
+      "topRightAdVisible": "상단 프로모션 표시",
+      "topRightAdVisibleDesc": "앱 상단 프로모션 영역을 숨깁니다. 스폰서 페이지에는 영향을 주지 않습니다.",
       "opencodeTitle": "OpenCode 연동",
       "opencodeRestart": "Codex 전환 시 OpenCode 재시작",
       "opencodeRestartDesc": "OpenCode에서 Codex 계정 정보를 동기화하여 전환",
@@ -928,6 +940,61 @@
         "unsupportedLegacyFile": "이 구버전 계정 백업 형식은 인식할 수 없습니다",
         "unsupportedVersion": "현재 앱 버전은 해당 묶음 버전을 지원하지 않습니다"
       }
+    },
+    "webdav": {
+      "groupTitle": "WebDAV 동기화",
+      "enabledTitle": "WebDAV 백업 동기화",
+      "enabledDesc": "기본값은 Jianguoyun이며 모든 WebDAV 서비스로 변경할 수 있습니다.",
+      "urlTitle": "서비스 주소",
+      "urlDesc": "Jianguoyun 기본 주소: https://dav.jianguoyun.com/dav/",
+      "usernameTitle": "계정",
+      "usernameDesc": "Jianguoyun은 계정 이메일을 사용합니다.",
+      "usernamePlaceholder": "이메일 또는 사용자 이름",
+      "passwordTitle": "앱 비밀번호",
+      "passwordDesc": "로컬에 저장됩니다. 기존 비밀번호를 유지하려면 비워 두십시오.",
+      "passwordPlaceholder": "Jianguoyun 제3자 앱 비밀번호",
+      "passwordSavedPlaceholder": "저장됨; 유지하려면 비워 두십시오",
+      "clearPassword": "지우기",
+      "remoteDirTitle": "원격 디렉토리",
+      "remoteDirDesc": "이 디렉토리 내의 Cockpit 백업 파일만 관리됩니다.",
+      "statusTitle": "동기화 상태",
+      "statusDesc": "원격 복구는 수동 선택이 필요하며 로컬 데이터를 자동으로 덮어쓰지 않습니다.",
+      "lastUpload": "최근 업로드: {{time}}",
+      "lastDownload": "최근 복구: {{time}}",
+      "never": "아직 동기화되지 않음",
+      "testAction": "테스트/설정 저장",
+      "uploadAction": "생성 및 업로드",
+      "syncAction": "설정 동기화",
+      "syncLatestConfirm": "최신 원격 백업 {{name}}을 가져와 로컬로 동기화하시겠습니까? 이렇게 하면 기존 로컬 데이터가 덮어씌워집니다.",
+      "remoteListTitle": "원격 백업",
+      "remoteListDesc": "Cockpit 자동/수동 백업 이름과 일치하는 JSON 및 ZIP 파일만 표시됩니다.",
+      "emptyTitle": "원격 백업 없음",
+      "emptyDesc": "설정을 저장한 다음 백업을 생성하고 업로드하십시오.",
+      "unknownTime": "미상",
+      "restoreAction": "복구",
+      "restoreConfirm": "원격 백업 {{name}}에서 데이터를 복구하시겠습니까?",
+      "deleteConfirm": "원격 백업 {{name}}을(를) 삭제하시겠습니까?",
+      "feedback": {
+        "testingAndSaving": "WebDAV 연결을 저장하고 테스트하는 중...",
+        "saveAndTestSuccess": "설정이 저장되고 연결 테스트에 성공했습니다!",
+        "saveSuccessTestFailed": "설정은 저장되었으나 연결 테스트에 실패했습니다: {{message}}",
+        "saveAndTestFailed": "연결 저장 및 테스트 실패: {{error}}",
+        "uploading": "백업 생성 및 업로드 중...",
+        "uploadSuccess": "{{count}}개 파일 업로드 완료, 만료된 원격 백업 {{deleted}}개 정리됨",
+        "uploadFailed": "WebDAV 업로드 실패: {{error}}",
+        "listFailed": "원격 백업 로드 실패: {{error}}",
+        "loadSettingsFailed": "WebDAV 설정 로드 실패: {{error}}",
+        "restoring": "원격 백업을 읽고 가져오는 중...",
+        "restoreEmpty": "원격 백업에서 복구된 데이터가 없습니다",
+        "deleteSuccess": "원격 백업이 삭제되었습니다",
+        "deleteFailed": "원격 백업 삭제 실패: {{error}}",
+        "syncingLatest": "최신 원격 구성 동기화 중...",
+        "syncFailed": "최신 구성 동기화 실패: {{error}}",
+        "noRemoteBackup": "원격에서 복구 가능한 백업 파일을 찾을 수 없습니다"
+      },
+      "errors": {
+        "notEnabled": "먼저 WebDAV 동기화를 활성화하십시오"
+      }
     }
   },
   "appPath": {
@@ -959,7 +1026,6 @@
       "email": "이메일",
       "subscription": "구독 유형",
       "quota": "할당량 상태",
-      "fingerprint": "지문",
       "lastUsed": "마지막 사용",
       "actions": "작업"
     },
@@ -1045,10 +1111,8 @@
     "actions": {
       "viewDetails": "상세 보기",
       "viewError": "오류 보기",
-      "fingerprint": "지문",
       "switch": "계정 전환",
       "switchTo": "이 계정으로 전환",
-      "selectFingerprint": "지문 선택",
       "delete": "삭제",
       "deleteSelected": "선택 항목 삭제",
       "export": "내보내기",
@@ -1197,106 +1261,8 @@
     "currentAccount": "현재 사용 중",
     "switchTo": "이 계정으로 전환",
     "switching": "전환 중...",
-    "fingerprint": "지문",
     "bound": "연결됨",
     "brandTitle": "Antigravity IDE 계정 관리"
-  },
-  "fingerprints": {
-    "title": "기기 지문",
-    "subtitle": "계정에 연결된 기기 지문을 관리합니다.",
-    "toolbar": {
-      "generate": "새로 생성",
-      "capture": "현재 지문 캡처",
-      "import": "가져오기",
-      "folder": "폴더",
-      "delete": "삭제",
-      "deleteUnbound": "미연결 삭제"
-    },
-    "table": {
-      "name": "지문 이름",
-      "machineId": "기기 ID",
-      "accounts": "연결된 계정",
-      "actions": "작업",
-      "accountCount": "{{count}}개 계정",
-      "apply": "적용",
-      "noData": "지문 데이터 없음",
-      "preview": "미리보기",
-      "rename": "이름 변경"
-    },
-    "modals": {
-      "generate": {
-        "title": "지문 생성",
-        "btn": "생성"
-      },
-      "capture": {
-        "title": "현재 지문 캡처",
-        "btn": "캡처"
-      },
-      "rename": {
-        "title": "이름 변경",
-        "label": "지문 이름"
-      },
-      "import": {
-        "title": "지문 가져오기",
-        "fromTools": "Antigravity Tools에서 가져오기",
-        "desc": "~/.antigravity_tools/ 디렉토리에서 가져옵니다",
-        "fromJsonBtn": "JSON에서 가져오기",
-        "jsonExample": "형식 예시:",
-        "jsonPlaceholder": "업무 지문",
-        "orPasteJson": "또는 JSON 붙여넣기"
-      },
-      "bound": {
-        "title": "연결된 계정 관리",
-        "add": "계정 추가",
-        "empty": "연결된 계정 없음",
-        "emptyAll": "모든 계정이 이미 연결되었습니다",
-        "select": "추가할 계정 선택",
-        "from": "소스: {{name}}",
-        "back": "뒤로"
-      },
-      "detail": {
-        "title": "지문 상세 정보",
-        "created": "생성일: {{time}}"
-      }
-    },
-    "messages": {
-      "deleteConfirm": "이 지문을 삭제하시겠습니까? 연결된 계정들은 기본 지문으로 돌아갑니다.",
-      "batchDeleteConfirm": "{{count}}개의 지문을 삭제하시겠습니까? 연결된 계정들은 기본 지문으로 돌아갑니다.",
-      "generated": "새 지문이 생성되었습니다",
-      "captured": "현재 지문이 캡처되었습니다",
-      "renamed": "이름이 변경되었습니다",
-      "deleted": "지문이 삭제되었습니다",
-      "imported": "{{count}}개의 지문을 가져왔습니다",
-      "addedAccounts": "{{count}}개 계정 추가됨",
-      "enterName": "지문 이름을 입력하십시오",
-      "previewNotReady": "미리보기가 준비되지 않았습니다. 잠시 후 다시 시도하십시오",
-      "duplicate": "중복된 지문이 존재합니다: {{name}}",
-      "autoGeneratedSuffix": "(찾을 수 없어 자동 생성됨)",
-      "readOnly": "읽기 전용",
-      "current": "현재",
-      "addCount": "계정 {{count}}개 추가됨",
-      "addFailed": "추가 실패",
-      "adding": "추가 중...",
-      "applyFailed": "적용 실패",
-      "boundCount": "{{count}}개 계정이 연결됨",
-      "captureFailed": "캡처 실패",
-      "count": "{{count}}개",
-      "deleteFailed": "삭제 실패",
-      "fpLabel": "지문:",
-      "generateFailed": "생성 실패",
-      "importFailed": "가져오기 실패",
-      "importPartialFailed": "{{failCount}}개 실패: {{failList}}",
-      "refreshingQuota": "할당량 갱신 중 {{done}}/{{total}} (이 창은 닫아도 됩니다)",
-      "quotaRefreshDone": "할당량 갱신 완료",
-      "importing": "가져오는 중...",
-      "loadFailed": "지문 목록 불러오기 실패",
-      "processing": "처리 중...",
-      "renameFailed": "이름 변경 실패",
-      "serviceMachineIdEmpty": "비어 있음",
-      "deleteUnboundConfirm": "연결된 계정이 없는 지문 {{count}}개를 삭제할까요?",
-      "deletedUnbound": "연결되지 않은 지문 {{count}}개를 삭제했습니다",
-      "noUnboundToDelete": "삭제할 미연결 지문이 없습니다"
-    }
   },
   "modals": {
     "addAccount": {
@@ -1331,15 +1297,6 @@
       "fromFiles": "로컬 파일에서 가져오기",
       "fromFilesDesc": "JSON 파일을 선택하여 계정 가져오기 (다양한 형식 지원)",
       "importingFiles": "{{count}}개 파일 가져오는 중..."
-    },
-    "fingerprint": {
-      "title": "지문 선택",
-      "desc": "<1>{{email}}</1> 계정의 지문을 선택하십시오",
-      "original": "기본 지문",
-      "new": "새 지문 추가",
-      "bind": "연결 확인",
-      "selectLabel": "지문 선택",
-      "boundCount": "개 계정"
     },
     "quota": {
       "title": "할당량 상세",
@@ -2488,7 +2445,12 @@
         "website": "웹사이트 (선택 사항)",
         "apiKeyUrl": "API 키 페이지 (선택 사항)",
         "newApiKeyName": "새 키 이름 (선택 사항)",
-        "newApiKey": "새 API 키"
+        "newApiKey": "새 API 키",
+        "wireApi": "프로토콜",
+        "enableMode": "활성화 방식",
+        "modelCatalog": "모델 카탈로그",
+        "visionCapability": "이미지 입력",
+        "visionModels": "비전 모델"
       },
       "validation": {
         "nameRequired": "공급자 이름은 필수입니다.",
@@ -2503,6 +2465,19 @@
       "confirmDelete": "공급자 \"{{name}}\"을(를) 삭제할까요?",
       "deleteFailed": "공급자 삭제 실패: {{error}}",
       "deleteApiKeyFailed": "API 키 삭제 실패: {{error}}",
+      "enableAsBackend": "Codex 백엔드로 사용",
+      "enabling": "활성화 중...",
+      "enableSuccess": "{{name}} 활성화 후 {{instance}} 인스턴스를 시작했습니다.",
+      "enableFailed": "공급자 활성화 실패: {{error}}",
+      "status": {
+        "active": "현재 백엔드",
+        "available": "준비됨"
+      },
+      "enableMode": {
+        "label": "연결 모드",
+        "gatewayMode": "게이트웨이 모드",
+        "directMode": "직접 모드"
+      },
       "selectSavedProvider": "저장된 공급자",
       "selectSavedApiKey": "저장된 API 키",
       "noSavedProviders": "아직 저장된 공급자가 없습니다. 필드를 바로 입력하면 자동으로 저장됩니다.",
@@ -2561,7 +2536,107 @@
         "partialDetected": "현재 하나의 관리 필드(model_context_window={{context}}, model_auto_compact_token_limit={{compact}})만 설정되어 있습니다. 저장하면 현재 구성표를 사용하여 두 필드가 모두 다시 작성됩니다.",
         "notSet": "설정되지 않음"
       },
-      "managePresets": "모델 프리셋"
+      "managePresets": "모델 프리셋",
+      "wireApi": {
+        "responses": "Responses 네이티브",
+        "chatCompletions": "Chat Completions 프로토콜",
+        "help": "대부분의 공급자는 Responses를 선택하세요. 공급자가 Chat Completions만 지원한다고 명시한 경우에만 전환하세요. 확실하지 않으면 Responses를 먼저 선택하세요.",
+        "helpAria": "프로토콜 도움말 보기"
+      },
+      "testing": "테스트 중...",
+      "testSuccess": "공급자 연결이 정상입니다: {{protocol}}, {{model}}, {{latency}}.",
+      "testFailed": "공급자 테스트 실패: {{error}}",
+      "testFailure": {
+        "credential": "API Key를 사용할 수 없음",
+        "url": "Base URL이 올바르지 않음",
+        "network": "네트워크 연결 실패",
+        "models": "모델 목록 API 오류",
+        "parse": "응답 파싱 실패",
+        "httpStatus": "상태 {{status}}",
+        "message": "{{title}}: {{detail}}. {{suggestion}}"
+      },
+      "testSuggestion": {
+        "addApiKey": "테스트 전에 이 공급자에 API Key를 추가하세요.",
+        "checkBaseUrl": "Base URL에 /v1 같은 올바른 버전 경로가 포함되어 있는지 확인하세요.",
+        "checkNetwork": "공급자 주소, 프록시, 방화벽 또는 업스트림 서비스 상태를 확인하세요.",
+        "checkApiKey": "API Key가 유효하고 모델 목록 API 권한이 있는지 확인하세요.",
+        "checkProviderStatus": "공급자 서비스 상태, 프록시 또는 API 호환성을 확인하세요.",
+        "checkModelsApi": "이 공급자가 OpenAI 호환 모델 목록 응답을 반환하는지 확인하세요."
+      },
+      "enableAndStart": "시작",
+      "instance": {
+        "label": "시작 인스턴스",
+        "default": "기본 인스턴스",
+        "running": "실행 중",
+        "targetHint": "대상: {{instance}}",
+        "uninitializedHint": "대상 인스턴스가 초기화되지 않았습니다. 다중 인스턴스 화면에서 먼저 한 번 시작하세요.",
+        "shortLabel": "인스턴스",
+        "saveFailed": "인스턴스 바인딩 저장 실패: {{error}}"
+      },
+      "modelCatalog": "모델",
+      "modelCatalogEmpty": "모델 카탈로그 없음",
+      "gatewayHint": "타사 공급자는 인스턴스 격리와 프로토콜 변환을 위해 로컬 게이트웨이로 시작됩니다. 공식 OpenAI 공급자는 직접 연결을 유지합니다.",
+      "vision": {
+        "providerDefault": "이 공급자는 기본적으로 이미지 입력을 지원합니다",
+        "providerDefaultHint": "끄면 아래에 적은 모델만 이미지를 받을 수 있고, 나머지는 로컬 게이트웨이에서 거부됩니다.",
+        "modelsHint": "한 줄에 모델 하나씩 입력하세요. 공급자 안 일부 모델만 붙여넣은 이미지를 지원할 때 사용합니다.",
+        "allModels": "이미지",
+        "partialModels": "일부 이미지",
+        "textOnly": "텍스트만"
+      },
+      "sponsorRecommended": "스폰서 추천",
+      "builtinProviders": "기본 공급자",
+      "sponsorHint": "스폰서가 추천한 호환 서비스 주소를 자동으로 채웠습니다. API Key를 입력하면 카드에서 잔액과 사용량을 자동 조회합니다.",
+      "integration": {
+        "sub2api": "Sub2API 호환",
+        "newApi": "New API 호환"
+      },
+      "usage": {
+        "title": "한도 개요",
+        "remaining": "남은 한도",
+        "today": "오늘 사용량",
+        "total": "누적 사용량",
+        "requests": "오늘 요청",
+        "loading": "한도 조회 중...",
+        "failed": "한도 조회 실패: {{error}}",
+        "pending": "한도 조회 대기 중",
+        "noKey": "조회 가능한 한도가 없습니다",
+        "used": "사용됨",
+        "limit": "총 한도",
+        "viewDetail": "상세",
+        "detailTitle": "서비스 패널",
+        "rawFields": "서비스 데이터",
+        "fields": {
+          "status": "상태",
+          "planName": "구독",
+          "remaining": "잔여 한도",
+          "balance": "잔액",
+          "todayRequests": "오늘 요청",
+          "todayTokens": "오늘 Token",
+          "todayCost": "오늘 사용액",
+          "totalRequests": "누적 요청",
+          "totalTokens": "누적 Token",
+          "totalCost": "누적 사용액",
+          "hardLimitUsd": "하드 한도",
+          "softLimitUsd": "소프트 한도",
+          "systemHardLimitUsd": "시스템 한도",
+          "accessUntil": "사용 가능 기한",
+          "totalUsage": "누적 사용액",
+          "quotaUnlimited": "무제한",
+          "expiresAt": "만료 시각",
+          "totalGranted": "부여 한도",
+          "totalAvailable": "사용 가능",
+          "modelLimitsEnabled": "모델 제한"
+        },
+        "accountBalance": "계정 잔액",
+        "unlimitedQuota": "무제한",
+        "booleanTrue": "예",
+        "booleanFalse": "아니요"
+      },
+      "oauthBinding": {
+        "desc": "선택 사항입니다. refresh_token 이 있는 OAuth 계정을 연결할 수 있습니다. 연결하지 않으면 공급자는 기존 API Key 흐름으로 계속 실행됩니다.",
+        "currentProvider": "공급자: {{name}}"
+      }
     },
     "quickSwitch": {
       "action": "공급자 빠른 전환",
@@ -2807,6 +2882,10 @@
         "saveSuccess": "계정 모델 차단 규칙이 저장되었습니다",
         "cardCount": "{{count}}개 차단"
       }
+    },
+    "apiKey": {
+      "renameSuccess": "이름이 변경되었습니다",
+      "renameFailed": "이름 변경 실패"
     }
   },
   "githubCopilot": {
@@ -3369,7 +3448,6 @@
       "goAntigravity": "Antigravity IDE로 이동",
       "goCodex": "Codex로 이동",
       "goDashboard": "대시보드로 이동",
-      "goFingerprints": "디바이스 지문으로 이동",
       "goGitHubCopilot": "GitHub Copilot로 이동",
       "goInstances": "다중 인스턴스로 이동",
       "goKiro": "Kiro로 이동",
@@ -3464,28 +3542,6 @@
     "empty": {
       "desc": "인스턴스, 전환, 설정, 내보내기 같은 키워드를 시도하세요.",
       "title": "일치하는 내용이 없습니다"
-    },
-    "fingerprints": {
-      "cautions": {
-        "0": "디바이스 지문에서 대량/고위험 작업 전에는 반드시 백업하세요."
-      },
-      "keywords": {
-        "0": "디바이스 지문",
-        "1": "가이드",
-        "2": "흐름",
-        "3": "계정"
-      },
-      "outcomes": {
-        "0": "디바이스 지문가 어떤 문제를 해결하는지 이해합니다.",
-        "1": "디바이스 지문의 권장 흐름으로 실수를 줄입니다."
-      },
-      "steps": {
-        "0": "디바이스 지문 페이지를 엽니다.",
-        "1": "디바이스 지문의 기본 설정과 필요한 바인딩을 완료합니다.",
-        "2": "디바이스 지문에서 수동 작업을 1회 실행해 결과를 확인합니다."
-      },
-      "summary": "이 섹션은 일상 워크플로우에서 디바이스 지문 사용 방법을 설명합니다.",
-      "title": "디바이스 지문"
     },
     "instances": {
       "cautions": {

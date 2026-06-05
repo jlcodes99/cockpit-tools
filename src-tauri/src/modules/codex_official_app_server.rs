@@ -14,7 +14,15 @@ const CODEX_APP_SERVER_EXECUTABLE_ENV: &str = "CODEX_APP_SERVER_EXECUTABLE";
 const APP_SERVER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub fn rebuild_thread_metadata(codex_home: &Path) -> Result<(), String> {
+    crate::modules::codex_config_format::sanitize_codex_config_toml_file(
+        &codex_home.join("config.toml"),
+    )?;
     let executable = official_app_server_executable()?;
+    crate::modules::logger::log_info(&format!(
+        "[Codex Official AppServer] starting rebuild_thread_metadata: executable={}, codex_home={}",
+        executable.display(),
+        codex_home.display()
+    ));
     let mut child = build_app_server_command(&executable, codex_home)
         .spawn()
         .map_err(|error| {
@@ -30,12 +38,25 @@ pub fn rebuild_thread_metadata(codex_home: &Path) -> Result<(), String> {
         .stdout
         .take()
         .ok_or("无法读取官方 app-server stdout")?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or("无法读取官方 app-server stderr")?;
     let mut stdin = child.stdin.take().ok_or("无法写入官方 app-server stdin")?;
     let (sender, receiver) = mpsc::channel::<String>();
     let reader = std::thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines().map_while(Result::ok) {
             let _ = sender.send(line);
+        }
+    });
+    let stderr_reader = std::thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines().map_while(Result::ok) {
+            crate::modules::logger::log_warn(&format!(
+                "[Codex Official AppServer][stderr] {}",
+                line
+            ));
         }
     });
 
@@ -78,6 +99,19 @@ pub fn rebuild_thread_metadata(codex_home: &Path) -> Result<(), String> {
 
     finish_child(&mut child);
     let _ = reader.join();
+    let _ = stderr_reader.join();
+    if let Err(error) = &result {
+        crate::modules::logger::log_warn(&format!(
+            "[Codex Official AppServer] rebuild_thread_metadata failed: codex_home={}, error={}",
+            codex_home.display(),
+            error
+        ));
+    } else {
+        crate::modules::logger::log_info(&format!(
+            "[Codex Official AppServer] rebuild_thread_metadata completed: codex_home={}",
+            codex_home.display()
+        ));
+    }
     result
 }
 
@@ -115,7 +149,7 @@ fn build_app_server_command(executable: &Path, codex_home: &Path) -> Command {
         .env("CODEX_HOME", codex_home)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(Stdio::piped());
 
     #[cfg(windows)]
     {
@@ -148,6 +182,10 @@ fn wait_for_response(receiver: &mpsc::Receiver<String>, request_id: i64) -> Resu
             continue;
         }
         if let Some(error) = value.get("error") {
+            crate::modules::logger::log_warn(&format!(
+                "[Codex Official AppServer] response error: id={}, error={}",
+                request_id, error
+            ));
             return Err(format!(
                 "官方 app-server 返回错误 (id={}): {}",
                 request_id, error

@@ -138,6 +138,8 @@ struct AnnouncementResponse {
     pub announcements: Vec<Announcement>,
     #[serde(default)]
     pub top_right_ad: Option<TopRightAd>,
+    #[serde(default)]
+    pub top_right_ads: Vec<TopRightAd>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,6 +168,7 @@ pub struct AnnouncementState {
 #[serde(rename_all = "camelCase")]
 pub struct TopRightAdState {
     pub ad: Option<TopRightAd>,
+    pub ads: Vec<TopRightAd>,
 }
 
 fn default_target_versions() -> String {
@@ -251,6 +254,7 @@ fn load_cache() -> Result<Option<AnnouncementCache>, String> {
                 version: String::new(),
                 announcements: legacy.data,
                 top_right_ad: None,
+                top_right_ads: Vec::new(),
             },
         }));
     }
@@ -537,12 +541,11 @@ fn apply_localized_top_right_ad(ad: &TopRightAd, locale: &str) -> TopRightAd {
     localized
 }
 
-fn filter_top_right_ad(
-    ad: Option<TopRightAd>,
+fn filter_top_right_ad_item(
+    mut item: TopRightAd,
     current_version: &str,
     locale: &str,
 ) -> Option<TopRightAd> {
-    let mut item = ad?;
     let target_versions = if item.target_versions.trim().is_empty() {
         "*"
     } else {
@@ -567,6 +570,33 @@ fn filter_top_right_ad(
 
     item = apply_localized_top_right_ad(&item, locale);
     Some(item)
+}
+
+fn filter_top_right_ad(
+    ad: Option<TopRightAd>,
+    current_version: &str,
+    locale: &str,
+) -> Option<TopRightAd> {
+    filter_top_right_ad_item(ad?, current_version, locale)
+}
+
+fn filter_top_right_ads(
+    ads: Vec<TopRightAd>,
+    current_version: &str,
+    locale: &str,
+) -> Vec<TopRightAd> {
+    let mut filtered: Vec<TopRightAd> = ads
+        .into_iter()
+        .filter_map(|item| filter_top_right_ad_item(item, current_version, locale))
+        .collect();
+
+    filtered.sort_by(|a, b| {
+        let a_time = parse_datetime_millis(&a.created_at).unwrap_or(0);
+        let b_time = parse_datetime_millis(&b.created_at).unwrap_or(0);
+        b.priority.cmp(&a.priority).then(b_time.cmp(&a_time))
+    });
+
+    filtered
 }
 
 async fn fetch_remote_announcements() -> Result<AnnouncementResponse, String> {
@@ -661,7 +691,8 @@ pub async fn get_top_right_ad_state() -> Result<TopRightAdState, String> {
     let locale = config::get_user_config().language.to_lowercase();
     let raw_payload = load_announcements_raw().await?;
     let ad = filter_top_right_ad(raw_payload.top_right_ad, current_version, &locale);
-    Ok(TopRightAdState { ad })
+    let ads = filter_top_right_ads(raw_payload.top_right_ads, current_version, &locale);
+    Ok(TopRightAdState { ad, ads })
 }
 
 pub async fn mark_announcement_as_read(id: &str) -> Result<(), String> {

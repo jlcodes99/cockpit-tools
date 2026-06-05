@@ -8,16 +8,6 @@ pub async fn import_from_old_tools() -> Result<Vec<models::Account>, String> {
 }
 
 #[tauri::command]
-pub async fn import_fingerprints_from_old_tools() -> Result<usize, String> {
-    modules::import::import_fingerprints_from_old_tools_logic().await
-}
-
-#[tauri::command]
-pub async fn import_fingerprints_from_json(json_content: String) -> Result<usize, String> {
-    modules::import::import_fingerprints_from_json_logic(json_content).await
-}
-
-#[tauri::command]
 pub async fn import_from_local(app: AppHandle) -> Result<models::Account, String> {
     let account = modules::import::import_from_local_logic().await?;
     let _ = crate::modules::tray::update_tray_menu(&app);

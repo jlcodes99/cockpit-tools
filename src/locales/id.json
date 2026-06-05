@@ -277,7 +277,6 @@
     "overview": "Antigravity IDE",
     "accounts": "Akun",
     "wakeup": "Tugas Bangun",
-    "fingerprints": "Sidik Jari",
     "settings": "Pengaturan",
     "codex": "Codex",
     "zed": "Zed",
@@ -290,6 +289,8 @@
     "collapseSidebar": "Ciutkan bilah sisi",
     "expandSidebar": "Perluas bilah sisi",
     "logs": "Log",
+    "sponsors": "Sponsor",
+    "sponsorAppreciation": "Dukung",
     "instances": "Multi-Instansi",
     "manual": "Panduan Pengguna",
     "quickUpdate": {
@@ -307,13 +308,23 @@
     "switchClassicLayoutConfirm": "Beralih sekarang",
     "2faManager": "2FA"
   },
+  "sponsors": {
+    "pageTitle": "Sponsor",
+    "pageDesc": "Terima kasih kepada sponsor berikut yang mendukung Cockpit Tools.",
+    "loading": "Memuat sponsor...",
+    "emptyTitle": "Belum ada sponsor",
+    "emptyDesc": "Modul sponsor jarak jauh saat ini dinonaktifkan.",
+    "listAriaLabel": "Daftar sponsor",
+    "defaultDescription": "Terima kasih telah mendukung Cockpit Tools.",
+    "openSponsor": "Buka"
+  },
   "platformLayout": {
     "title": "Tata Letak Platform",
     "sidebarSelected": "Bilah sisi dipilih {{count}}/{{max}}",
     "sidebarSelectedUnlimited": "Bilah sisi dipilih {{count}}",
     "reset": "Atur ulang ke bawaan",
     "tip": "Seret untuk mengurutkan ulang. Maksimal tiga platform dapat ditampilkan di bilah sisi. Jika hanya satu yang dipilih, hanya satu yang ditampilkan.",
-    "tipWithGroups": "Seret untuk mengurutkan ulang. Maksimal tiga entri dapat muncul di bilah sisi. Anak grup tidak memiliki toggle bilah sisi/dasbor dan hanya digunakan untuk visibilitas tray dan pengalihan platform bawaan.",
+    "tipWithGroups": "Seret untuk mengurutkan. Maksimal {{max}} entri dapat ditampilkan di bilah sisi. Anak grup tidak memiliki sakelar bilah sisi/dasbor dan hanya digunakan untuk bilah menu serta pemilihan platform default.",
     "tipWithGroupsUnlimited": "Seret untuk mengurutkan ulang. Jumlah entri di bilah sisi tidak dibatasi. Anak grup tidak memiliki toggle bilah sisi/dasbor dan hanya digunakan untuk visibilitas tray dan pengalihan platform bawaan.",
     "addGroup": "Tambah grup",
     "editGroup": "Edit",
@@ -595,7 +606,8 @@
     "tabs": {
       "general": "Umum",
       "network": "Jaringan",
-      "about": "Tentang"
+      "about": "Tentang",
+      "data": "Manajemen Data"
     },
     "general": {
       "appearance": "Tampilan",
@@ -657,8 +669,8 @@
       "floatingCardShowNowAction": "Tampilkan kartu mengambang",
       "dataDir": "Direktori Data",
       "dataDirDesc": "Lokasi penyimpanan akun dan berkas konfigurasi.",
-      "fpDir": "Penyimpanan Antigravity IDE",
-      "fpDirDesc": "Lokasi penyimpanan berkas data Antigravity IDE.",
+      "topRightAdVisible": "Tampilkan promo atas",
+      "topRightAdVisibleDesc": "Sembunyikan slot promo atas di aplikasi. Halaman Sponsor tidak terpengaruh.",
       "opencodeTitle": "Integrasi OpenCode",
       "opencodeAuthOverwrite": "Timpa login OpenCode saat mengganti Codex",
       "opencodeAuthOverwriteDesc": "Jika dinonaktifkan, hanya Codex yang diganti dan OpenCode mempertahankan status login saat ini",
@@ -974,6 +986,61 @@
         "unsupportedLegacyFile": "Format cadangan akun lama ini tidak dikenali",
         "unsupportedVersion": "Versi aplikasi ini tidak mendukung versi bundel tersebut"
       }
+    },
+    "webdav": {
+      "groupTitle": "Sinkronisasi WebDAV",
+      "enabledTitle": "Sinkronisasi Cadangan WebDAV",
+      "enabledDesc": "Default Jianguoyun, dapat diubah ke layanan WebDAV apa pun.",
+      "urlTitle": "Alamat Layanan",
+      "urlDesc": "Alamat default Jianguoyun: https://dav.jianguoyun.com/dav/",
+      "usernameTitle": "Akun",
+      "usernameDesc": "Jianguoyun menggunakan email akun Anda.",
+      "usernamePlaceholder": "Email atau nama pengguna",
+      "passwordTitle": "Kata Sandi Aplikasi",
+      "passwordDesc": "Disimpan secara lokal; biarkan kosong untuk mempertahankan kata sandi saat ini.",
+      "passwordPlaceholder": "Kata sandi aplikasi pihak ketiga Jianguoyun",
+      "passwordSavedPlaceholder": "Disimpan; biarkan kosong untuk mempertahankan",
+      "clearPassword": "Bersihkan",
+      "remoteDirTitle": "Folder Jarak Jauh",
+      "remoteDirDesc": "Hanya file cadangan Cockpit di folder ini yang dikelola.",
+      "statusTitle": "Status Sinkronisasi",
+      "statusDesc": "Pemulihan jarak jauh memerlukan pemilihan manual dan tidak pernah menimpa data lokal secara diam-diam.",
+      "lastUpload": "Unggahan terakhir: {{time}}",
+      "lastDownload": "Pemulihan terakhir: {{time}}",
+      "never": "Belum disinkronkan",
+      "testAction": "Uji/Simpan Konfigurasi",
+      "uploadAction": "Buat & Unggah",
+      "syncAction": "Sinkronisasi Konfigurasi",
+      "syncLatestConfirm": "Apakah Anda yakin ingin mengunduh cadangan jarak jauh terbaru {{name}} dan menyinkronkannya secara lokal? Ini akan menimpa data lokal yang ada.",
+      "remoteListTitle": "Cadangan Jarak Jauh",
+      "remoteListDesc": "Hanya file JSON dan ZIP yang cocok dengan nama cadangan otomatis/manual Cockpit yang ditampilkan.",
+      "emptyTitle": "Tidak ada cadangan jarak jauh",
+      "emptyDesc": "Simpan pengaturan, lalu buat dan unggah cadangan.",
+      "unknownTime": "Tidak diketahui",
+      "restoreAction": "Pulihkan",
+      "restoreConfirm": "Pulihkan data dari cadangan jarak jauh {{name}}?",
+      "deleteConfirm": "Hapus cadangan jarak jauh {{name}}?",
+      "feedback": {
+        "testingAndSaving": "Menyimpan dan menguji koneksi WebDAV...",
+        "saveAndTestSuccess": "Konfigurasi disimpan dan uji koneksi berhasil!",
+        "saveSuccessTestFailed": "Konfigurasi disimpan, tetapi uji koneksi gagal: {{message}}",
+        "saveAndTestFailed": "Gagal menyimpan dan menguji koneksi: {{error}}",
+        "uploading": "Membuat dan mengunggah cadangan...",
+        "uploadSuccess": "Berhasil mengunggah {{count}} file, membersihkan {{deleted}} cadangan jarak jauh yang kedaluwarsa",
+        "uploadFailed": "Unggahan WebDAV gagal: {{error}}",
+        "listFailed": "Gagal memuat cadangan jarak jauh: {{error}}",
+        "loadSettingsFailed": "Gagal memuat pengaturan WebDAV: {{error}}",
+        "restoring": "Membaca cadangan jarak jauh dan mengimpor...",
+        "restoreEmpty": "Tidak ada data yang dipulihkan dari cadangan jarak jauh",
+        "deleteSuccess": "Cadangan jarak jauh dihapus",
+        "deleteFailed": "Gagal menghapus cadangan jarak jauh: {{error}}",
+        "syncingLatest": "Menyinkronkan konfigurasi jarak jauh terbaru...",
+        "syncFailed": "Gagal menyinkronkan konfigurasi terbaru: {{error}}",
+        "noRemoteBackup": "Tidak ada file cadangan yang dapat dipulihkan di remote"
+      },
+      "errors": {
+        "notEnabled": "Aktifkan sinkronisasi WebDAV terlebih dahulu"
+      }
     }
   },
   "appPath": {
@@ -1005,7 +1072,6 @@
       "email": "Email",
       "subscription": "Langganan",
       "quota": "Status Kuota",
-      "fingerprint": "Sidik Jari",
       "lastUsed": "Terakhir Digunakan",
       "actions": "Tindakan"
     },
@@ -1091,10 +1157,8 @@
     "actions": {
       "viewDetails": "Lihat detail",
       "viewError": "Lihat kesalahan",
-      "fingerprint": "Sidik Jari",
       "switch": "Ganti akun",
       "switchTo": "Ganti ke akun ini",
-      "selectFingerprint": "Pilih sidik jari",
       "delete": "Hapus",
       "deleteSelected": "Hapus yang Dipilih",
       "export": "Ekspor",
@@ -1243,106 +1307,8 @@
     "currentAccount": "Sedang digunakan",
     "switchTo": "Ganti ke akun ini",
     "switching": "Mengganti...",
-    "fingerprint": "Sidik Jari",
     "bound": "Tertaut",
     "brandTitle": "Akun Antigravity IDE"
-  },
-  "fingerprints": {
-    "title": "Sidik Jari",
-    "subtitle": "Kelola sidik jari perangkat yang ditautkan ke akun.",
-    "toolbar": {
-      "generate": "Buat Baru",
-      "capture": "Tangkap Saat Ini",
-      "import": "Impor",
-      "deleteUnbound": "Hapus yang Tidak Tertaut",
-      "folder": "Folder kerja",
-      "delete": "Hapus"
-    },
-    "table": {
-      "name": "Nama Sidik Jari",
-      "machineId": "ID Mesin",
-      "accounts": "Akun Tertaut",
-      "actions": "Tindakan",
-      "accountCount": "{{count}} akun",
-      "apply": "Terapkan",
-      "noData": "Tidak ada data sidik jari",
-      "preview": "Pratinjau",
-      "rename": "Ubah Nama"
-    },
-    "modals": {
-      "generate": {
-        "title": "Buat Sidik Jari",
-        "btn": "Buat"
-      },
-      "capture": {
-        "title": "Tangkap Sidik Jari",
-        "btn": "Tangkap"
-      },
-      "rename": {
-        "title": "Ubah Nama Sidik Jari",
-        "label": "Nama Sidik Jari"
-      },
-      "import": {
-        "title": "Impor Sidik Jari",
-        "fromTools": "Impor dari Antigravity Tools",
-        "desc": "Impor dari ~/.antigravity_tools/",
-        "fromJsonBtn": "Impor dari JSON",
-        "jsonExample": "Contoh format:",
-        "jsonPlaceholder": "Sidik jari kerja",
-        "orPasteJson": "Atau tempel JSON"
-      },
-      "bound": {
-        "title": "Akun Tertaut",
-        "add": "Tambah Akun",
-        "empty": "Tidak ada akun yang tertaut",
-        "emptyAll": "Semua akun sudah tertaut",
-        "select": "Pilih akun untuk ditambahkan",
-        "from": "Dari: {{name}}",
-        "back": "Kembali"
-      },
-      "detail": {
-        "title": "Detail Sidik Jari",
-        "created": "Dibuat pada {{time}}"
-      }
-    },
-    "messages": {
-      "deleteConfirm": "Hapus sidik jari ini? Akun yang tertaut akan dikembalikan ke semula.",
-      "batchDeleteConfirm": "Hapus {{count}} sidik jari? Akun yang tertaut akan dikembalikan ke semula.",
-      "deleteUnboundConfirm": "Hapus {{count}} sidik jari yang tidak memiliki akun tertaut?",
-      "generated": "Sidik jari baru berhasil dibuat",
-      "captured": "Sidik jari saat ini berhasil ditangkap",
-      "renamed": "Berhasil diubah namanya",
-      "deleted": "Sidik jari berhasil dihapus",
-      "deletedUnbound": "{{count}} sidik jari tidak tertaut berhasil dihapus",
-      "imported": "{{count}} sidik jari berhasil diimpor",
-      "noUnboundToDelete": "Tidak ada sidik jari tidak tertaut untuk dihapus",
-      "addedAccounts": "{{count}} akun berhasil ditambahkan",
-      "enterName": "Masukkan nama sidik jari",
-      "previewNotReady": "Pratinjau belum siap, silakan tunggu",
-      "duplicate": "Sidik jari duplikat ditemukan: {{name}}",
-      "autoGeneratedSuffix": "(Tidak ditemukan di sumber, dibuat otomatis)",
-      "readOnly": "Hanya-baca",
-      "current": "Saat Ini",
-      "addCount": "{{count}} akun berhasil ditambahkan",
-      "addFailed": "Gagal menambahkan",
-      "adding": "Menambahkan...",
-      "applyFailed": "Gagal menerapkan",
-      "boundCount": "{{count}} akun tertaut",
-      "captureFailed": "Gagal menangkap",
-      "count": "{{count}}",
-      "deleteFailed": "Gagal menghapus",
-      "fpLabel": "Sidik Jari:",
-      "generateFailed": "Gagal membuat",
-      "importFailed": "Gagal mengimpor",
-      "importing": "Mengimpor...",
-      "loadFailed": "Gagal memuat daftar sidik jari",
-      "processing": "Memproses...",
-      "renameFailed": "Gagal mengubah nama",
-      "serviceMachineIdEmpty": "Kosong",
-      "importPartialFailed": "{{failCount}} gagal: {{failList}}",
-      "refreshingQuota": "Menyegarkan kuota {{done}}/{{total}} (Anda dapat menutup dialog ini)",
-      "quotaRefreshDone": "Penyegaran kuota selesai"
-    }
   },
   "modals": {
     "addAccount": {
@@ -1377,15 +1343,6 @@
       "fromFiles": "Impor dari Berkas Lokal",
       "fromFilesDesc": "Pilih berkas JSON untuk mengimpor akun (berbagai format didukung)",
       "importingFiles": "Mengimpor {{count}} berkas..."
-    },
-    "fingerprint": {
-      "title": "Pilih Sidik Jari",
-      "desc": "Pilih sidik jari untuk akun <1>{{email}}</1>",
-      "original": "Sidik Jari Asli",
-      "new": "Tambah Sidik Jari Baru",
-      "bind": "Konfirmasi Tautan",
-      "selectLabel": "Pilih Sidik Jari",
-      "boundCount": "akun"
     },
     "quota": {
       "title": "Detail Kuota",
@@ -2534,7 +2491,12 @@
         "website": "Situs web (opsional)",
         "apiKeyUrl": "Halaman API Key (opsional)",
         "newApiKeyName": "Nama key baru (opsional)",
-        "newApiKey": "API Key baru"
+        "newApiKey": "API Key baru",
+        "wireApi": "Protokol",
+        "enableMode": "Mode aktif",
+        "modelCatalog": "Katalog Model",
+        "visionCapability": "Input gambar",
+        "visionModels": "Model visual"
       },
       "validation": {
         "nameRequired": "Nama penyedia wajib diisi.",
@@ -2549,6 +2511,19 @@
       "confirmDelete": "Hapus penyedia \"{{name}}\"?",
       "deleteFailed": "Gagal menghapus penyedia: {{error}}",
       "deleteApiKeyFailed": "Gagal menghapus API Key: {{error}}",
+      "enableAsBackend": "Pakai sebagai backend Codex",
+      "enabling": "Mengaktifkan...",
+      "enableSuccess": "{{name}} diaktifkan dan {{instance}} dimulai.",
+      "enableFailed": "Gagal mengaktifkan penyedia: {{error}}",
+      "status": {
+        "active": "Backend saat ini",
+        "available": "Siap"
+      },
+      "enableMode": {
+        "label": "Mode koneksi",
+        "gatewayMode": "Mode gateway",
+        "directMode": "Mode langsung"
+      },
       "selectSavedProvider": "Penyedia tersimpan",
       "selectSavedApiKey": "API Key tersimpan",
       "noSavedProviders": "Belum ada penyedia tersimpan. Anda bisa mengisi field secara langsung dan data akan disimpan otomatis.",
@@ -2607,7 +2582,107 @@
         "partialDetected": "Hanya satu bidang terkelola yang saat ini disetel: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. Menyimpan akan menulis ulang kedua bidang menggunakan skema saat ini.",
         "notSet": "Tidak disetel"
       },
-      "managePresets": "Preset model"
+      "managePresets": "Preset model",
+      "wireApi": {
+        "responses": "Responses native",
+        "chatCompletions": "Protokol Chat Completions",
+        "help": "Gunakan Responses untuk sebagian besar penyedia. Beralih ke Chat Completions hanya jika penyedia secara jelas hanya mendukung protokol itu. Jika ragu, pilih Responses terlebih dahulu.",
+        "helpAria": "Lihat bantuan protokol"
+      },
+      "testing": "Menguji...",
+      "testSuccess": "Koneksi penyedia normal: {{protocol}}, {{model}}, {{latency}}.",
+      "testFailed": "Gagal menguji penyedia: {{error}}",
+      "testFailure": {
+        "credential": "API Key tidak tersedia",
+        "url": "Base URL tidak valid",
+        "network": "Koneksi jaringan gagal",
+        "models": "Endpoint model bermasalah",
+        "parse": "Gagal membaca respons",
+        "httpStatus": "Status {{status}}",
+        "message": "{{title}}: {{detail}}. {{suggestion}}"
+      },
+      "testSuggestion": {
+        "addApiKey": "Tambahkan API Key untuk penyedia ini sebelum menguji.",
+        "checkBaseUrl": "Pastikan Base URL memuat jalur versi yang benar, misalnya /v1.",
+        "checkNetwork": "Periksa URL penyedia, proxy, firewall, atau status layanan upstream.",
+        "checkApiKey": "Periksa apakah API Key valid dan memiliki akses ke endpoint model.",
+        "checkProviderStatus": "Periksa status layanan penyedia, proxy, atau kompatibilitas API.",
+        "checkModelsApi": "Pastikan penyedia mengembalikan daftar model yang kompatibel dengan OpenAI."
+      },
+      "enableAndStart": "Mulai",
+      "instance": {
+        "label": "Instans",
+        "default": "Instans default",
+        "running": "Berjalan",
+        "targetHint": "Target: {{instance}}",
+        "uninitializedHint": "Instans target belum diinisialisasi. Jalankan sekali dari halaman Multi-Instance terlebih dahulu.",
+        "shortLabel": "Instans",
+        "saveFailed": "Gagal menyimpan ikatan instans: {{error}}"
+      },
+      "modelCatalog": "Model",
+      "modelCatalogEmpty": "Tidak ada katalog model",
+      "gatewayHint": "Penyedia pihak ketiga dimulai melalui gateway lokal untuk isolasi instans dan konversi protokol. Penyedia resmi OpenAI tetap langsung.",
+      "vision": {
+        "providerDefault": "Provider ini mendukung input gambar secara default",
+        "providerDefaultHint": "Jika mati, hanya model di bawah yang boleh menerima gambar; model lain ditolak oleh gateway lokal.",
+        "modelsHint": "Satu model per baris. Cocok jika hanya sebagian model provider mendukung gambar tempel.",
+        "allModels": "Gambar",
+        "partialModels": "Sebagian gambar",
+        "textOnly": "Teks saja"
+      },
+      "sponsorRecommended": "Rekomendasi Sponsor",
+      "builtinProviders": "Penyedia Bawaan",
+      "sponsorHint": "URL layanan kompatibel dari sponsor sudah diisi. Setelah API Key dimasukkan, kartu akan otomatis membaca saldo dan penggunaan.",
+      "integration": {
+        "sub2api": "Kompatibel Sub2API",
+        "newApi": "Kompatibel New API"
+      },
+      "usage": {
+        "title": "Ringkasan Kuota",
+        "remaining": "Sisa",
+        "today": "Hari ini",
+        "total": "Keseluruhan",
+        "requests": "Permintaan hari ini",
+        "loading": "Membaca kuota...",
+        "failed": "Gagal membaca kuota: {{error}}",
+        "pending": "Menunggu pembacaan kuota",
+        "noKey": "Tidak ada kuota yang dapat dicek",
+        "used": "Terpakai",
+        "limit": "Batas",
+        "viewDetail": "Detail",
+        "detailTitle": "Panel layanan",
+        "rawFields": "Data layanan",
+        "fields": {
+          "status": "Keadaan",
+          "planName": "Paket",
+          "remaining": "Sisa kuota",
+          "balance": "Saldo",
+          "todayRequests": "Permintaan hari ini",
+          "todayTokens": "Token hari ini",
+          "todayCost": "Biaya hari ini",
+          "totalRequests": "Total permintaan",
+          "totalTokens": "Total Token",
+          "totalCost": "Total biaya",
+          "hardLimitUsd": "Batas keras",
+          "softLimitUsd": "Batas lunak",
+          "systemHardLimitUsd": "Batas sistem",
+          "accessUntil": "Akses hingga",
+          "totalUsage": "Total penggunaan",
+          "quotaUnlimited": "Tak terbatas",
+          "expiresAt": "Kedaluwarsa",
+          "totalGranted": "Diberikan",
+          "totalAvailable": "Tersedia",
+          "modelLimitsEnabled": "Batas model"
+        },
+        "accountBalance": "Saldo akun",
+        "unlimitedQuota": "Tak terbatas",
+        "booleanTrue": "Ya",
+        "booleanFalse": "Tidak"
+      },
+      "oauthBinding": {
+        "desc": "Opsional. Akun OAuth apa pun yang memiliki refresh_token dapat ditautkan. Tanpa tautan, penyedia tetap memakai alur API Key aslinya.",
+        "currentProvider": "Penyedia: {{name}}"
+      }
     },
     "quickSwitch": {
       "action": "Alih cepat penyedia",
@@ -2853,6 +2928,10 @@
         "saveSuccess": "Blokir model akun tersimpan",
         "cardCount": "{{count}} diblokir"
       }
+    },
+    "apiKey": {
+      "renameSuccess": "Berhasil diganti nama",
+      "renameFailed": "Gagal mengganti nama"
     }
   },
   "codebuddy": {
@@ -3604,7 +3683,6 @@
       "goAntigravity": "Go to Antigravity IDE",
       "goCodex": "Go to Codex",
       "goDashboard": "Go to Dashboard",
-      "goFingerprints": "Go to Device Fingerprints",
       "goGitHubCopilot": "Go to GitHub Copilot",
       "goInstances": "Go to Multi-Instance",
       "goKiro": "Go to Kiro",
@@ -3699,28 +3777,6 @@
     "empty": {
       "desc": "Coba kata kunci yang berbeda, misalnya \"instansi\", \"ganti\", \"pengaturan\", \"ekspor\".",
       "title": "Tidak ada konten yang cocok"
-    },
-    "fingerprints": {
-      "cautions": {
-        "0": "Sebelum menghapus sidik jari, periksa jumlah akun yang terikat terlebih dahulu untuk menghindari mempengaruhi akun produksi secara tidak sengaja."
-      },
-      "keywords": {
-        "0": "fingerprint",
-        "1": "binding",
-        "2": "import",
-        "3": "capture"
-      },
-      "outcomes": {
-        "0": "Buat/tangkap sidik jari baru dan pertahankan metadata.",
-        "1": "Lihat akun yang terikat ke sidik jari dan tambah/hapus ikatan."
-      },
-      "steps": {
-        "0": "Buat atau impor sidik jari terlebih dahulu.",
-        "1": "Buka detail dan konfirmasi info sidik jari sudah benar.",
-        "2": "Dalam manajemen ikatan, ikat akun ke sidik jari target."
-      },
-      "summary": "Kelola template sidik jari dan ikatan akun. Mendukung pembuatan, penangkapan, impor, dan pemeliharaan ikatan.",
-      "title": "Sidik Jari Perangkat"
     },
     "instances": {
       "cautions": {

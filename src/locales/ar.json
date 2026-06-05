@@ -277,7 +277,6 @@
     "overview": "Antigravity IDE",
     "accounts": "إدارة الحسابات",
     "wakeup": "مهام الاستيقاظ",
-    "fingerprints": "بصمات الجهاز",
     "settings": "الإعدادات",
     "codex": "Codex",
     "githubCopilot": "GitHub Copilot",
@@ -300,12 +299,24 @@
     "expandSidebar": "توسيع الشريط الجانبي",
     "collapseSidebar": "طي الشريط الجانبي",
     "logs": "السجلات",
+    "sponsors": "الرعاة",
+    "sponsorAppreciation": "ادعم",
     "switchClassicLayoutEntry": "التبديل إلى التخطيط الكلاسيكي",
     "switchClassicLayoutTitle": "التبديل إلى تخطيط الشريط الجانبي الكلاسيكي",
     "switchClassicLayoutDesc": "يعرض التخطيط الكلاسيكي جميع عناصر التنقل الخاصة بالمنصات ويدعم طي الشريط الجانبي. يمكنك الرجوع في أي وقت من الإعدادات > عام > تخطيط الشريط الجانبي.",
     "switchClassicLayoutDontAskAgain": "عدم إظهار هذا التنبيه مرة أخرى",
     "switchClassicLayoutConfirm": "التبديل الآن",
     "2faManager": "إدارة 2FA"
+  },
+  "sponsors": {
+    "pageTitle": "الرعاة",
+    "pageDesc": "شكرًا للرعاة التاليين على دعم Cockpit Tools.",
+    "loading": "جارٍ تحميل الرعاة...",
+    "emptyTitle": "لا يوجد رعاة حاليًا",
+    "emptyDesc": "وحدة الرعاة البعيدة معطّلة حاليًا.",
+    "listAriaLabel": "قائمة الرعاة",
+    "defaultDescription": "شكرًا لدعم Cockpit Tools.",
+    "openSponsor": "فتح"
   },
   "platformLayout": {
     "title": "تخطيط المنصات",
@@ -318,7 +329,7 @@
     "hiddenBadge": "مخفي",
     "openFromMore": "إدارة تخطيط المنصات",
     "dragHandleLabel": "اسحب لإعادة الترتيب",
-    "tipWithGroups": "اسحب لإعادة الترتيب. يمكن عرض ثلاثة مداخل كحد أقصى في الشريط الجانبي. عناصر المجموعة الفرعية لا تدعم تبديل الشريط الجانبي/لوحة المعلومات وتُستخدم فقط لعرض شريط القوائم وتبديل المنصة الافتراضية.",
+    "tipWithGroups": "اسحب لإعادة الترتيب. يمكن عرض ما يصل إلى {{max}} مداخل في الشريط الجانبي. لا تحتوي عناصر المجموعات الفرعية على مفاتيح للشريط الجانبي/لوحة المعلومات، وتُستخدم فقط لإظهار شريط القوائم وتبديل المنصة الافتراضية.",
     "addGroup": "إضافة مجموعة",
     "editGroup": "تحرير المجموعة",
     "deleteGroup": "حذف المجموعة",
@@ -595,7 +606,8 @@
     "tabs": {
       "general": "عام",
       "network": "خدمات الشبكة",
-      "about": "حول"
+      "about": "حول",
+      "data": "إدارة البيانات"
     },
     "general": {
       "appearance": "المظهر",
@@ -646,8 +658,8 @@
       "floatingCardShowNowAction": "إظهار البطاقة العائمة",
       "dataDir": "مجلد البيانات",
       "dataDirDesc": "موقع تخزين الحسابات وملفات التكوين.",
-      "fpDir": "مجلد تخزين Antigravity IDE",
-      "fpDirDesc": "موقع تخزين ملفات بيانات Antigravity IDE.",
+      "topRightAdVisible": "إظهار الترويج العلوي",
+      "topRightAdVisibleDesc": "إخفاء موضع الترويج العلوي داخل التطبيق. لا تتأثر صفحة الرعاة.",
       "opencodeTitle": "تكامل OpenCode",
       "opencodeRestart": "إعادة تشغيل OpenCode عند تبديل Codex",
       "opencodeRestartDesc": "مزامنة معلومات حساب Codex في OpenCode",
@@ -974,6 +986,61 @@
         "unsupportedLegacyFile": "تعذر التعرف على تنسيق نسخة الحسابات الاحتياطية القديمة",
         "unsupportedVersion": "إصدار التطبيق الحالي لا يدعم إصدار الحزمة هذا"
       }
+    },
+    "webdav": {
+      "groupTitle": "مزامنة WebDAV",
+      "enabledTitle": "مزامنة نسخ WebDAV الاحتياطي",
+      "enabledDesc": "الافتراضي هو Jianguoyun ويمكن تغييره إلى أي خدمة WebDAV.",
+      "urlTitle": "عنوان الخدمة",
+      "urlDesc": "عنوان Jianguoyun الافتراضي: https://dav.jianguoyun.com/dav/",
+      "usernameTitle": "الحساب",
+      "usernameDesc": "يستخدم Jianguoyun البريد الإلكتروني لحسابك.",
+      "usernamePlaceholder": "البريد الإلكتروني أو اسم المستخدم",
+      "passwordTitle": "كلمة مرور التطبيق",
+      "passwordDesc": "يتم حفظها محلياً؛ اتركها فارغة للاحتفاظ بكلمة المرور الحالية.",
+      "passwordPlaceholder": "كلمة مرور تطبيق Jianguoyun الخارجي",
+      "passwordSavedPlaceholder": "تم الحفظ؛ اتركها فارغة للاحتفاظ بها",
+      "clearPassword": "مسح",
+      "remoteDirTitle": "المجلد البعيد",
+      "remoteDirDesc": "يتم إدارة ملفات نسخ Cockpit الاحتياطي في هذا المجلد فقط.",
+      "statusTitle": "حالة المزامنة",
+      "statusDesc": "يتطلب الاسترداد البعيد اختياراً يدوياً ولا يستبدل البيانات المحلية بصمت أبداً.",
+      "lastUpload": "آخر رفع: {{time}}",
+      "lastDownload": "آخر استرداد: {{time}}",
+      "never": "لم تتم المزامنة بعد",
+      "testAction": "اختبار/حفظ الإعدادات",
+      "uploadAction": "إنشاء ورفع",
+      "syncAction": "مزامنة الإعدادات",
+      "syncLatestConfirm": "هل أنت متأكد من رغبتك في سحب آخر نسخة احتياطية بعيدة {{name}} ومزامنتها محلياً؟ سيؤدي هذا إلى استبدال البيانات المحلية الحالية.",
+      "remoteListTitle": "النسخ الاحتياطي البعيد",
+      "remoteListDesc": "يتم عرض ملفات JSON وZIP المطابقة لأسماء نسخ Cockpit الاحتياطي التلقائي/اليدوي فقط.",
+      "emptyTitle": "لا توجد نسخ احتياطية عن بعد",
+      "emptyDesc": "احفظ الإعدادات، ثم أنشئ نسخة احتياطية وارفعها.",
+      "unknownTime": "غير معروف",
+      "restoreAction": "استرداد",
+      "restoreConfirm": "استرداد البيانات من النسخة الاحتياطية البعيدة {{name}}؟",
+      "deleteConfirm": "هل تريد حذف النسخة الاحتياطية البعيدة {{name}}؟",
+      "feedback": {
+        "testingAndSaving": "جاري حفظ واختبار اتصال WebDAV...",
+        "saveAndTestSuccess": "تم حفظ الإعدادات ونجح اختبار الاتصال!",
+        "saveSuccessTestFailed": "تم حفظ الإعدادات، ولكن فشل اختبار الاتصال: {{message}}",
+        "saveAndTestFailed": "فشل حفظ واختبار الاتصال: {{error}}",
+        "uploading": "جاري إنشاء ورفع النسخة الاحتياطية...",
+        "uploadSuccess": "تم رفع {{count}} ملف(ألف)، وتم تنظيف {{deleted}} نسخة بعيدة منتهية الصلاحية",
+        "uploadFailed": "فشل رفع WebDAV: {{error}}",
+        "listFailed": "فشل تحميل النسخ الاحتياطية البعيدة: {{error}}",
+        "loadSettingsFailed": "فشل تحميل إعدادات WebDAV: {{error}}",
+        "restoring": "جاري قراءة النسخة الاحتياطية البعيدة واستيرادها...",
+        "restoreEmpty": "لم يتم استرداد أي بيانات من النسخة الاحتياطية البعيدة",
+        "deleteSuccess": "تم حذف النسخة الاحتياطية البعيدة",
+        "deleteFailed": "فشل حذف النسخة الاحتياطية البعيدة: {{error}}",
+        "syncingLatest": "جاري مزامنة أحدث إعدادات بعيدة...",
+        "syncFailed": "فشل مزامنة أحدث إعدادات: {{error}}",
+        "noRemoteBackup": "لم يتم العثور على ملفات نسخ احتياطي قابلة للاسترداد عن بعد"
+      },
+      "errors": {
+        "notEnabled": "يرجى تمكين مزامنة WebDAV أولاً"
+      }
     }
   },
   "appPath": {
@@ -1005,7 +1072,6 @@
       "email": "البريد الإلكتروني",
       "subscription": "نوع الاشتراك",
       "quota": "حالة الحصة",
-      "fingerprint": "البصمة",
       "lastUsed": "آخر استخدام",
       "actions": "الإجراءات"
     },
@@ -1091,10 +1157,8 @@
     "actions": {
       "viewDetails": "عرض التفاصيل",
       "viewError": "عرض الخطأ",
-      "fingerprint": "البصمة",
       "switch": "تبديل الحساب",
       "switchTo": "التبديل إلى هذا الحساب",
-      "selectFingerprint": "اختيار البصمة",
       "delete": "حذف",
       "deleteSelected": "حذف المحدد",
       "export": "تصدير",
@@ -1243,106 +1307,8 @@
     "currentAccount": "قيد الاستخدام حالياً",
     "switchTo": "التبديل إلى هذا الحساب",
     "switching": "جارِ التبديل...",
-    "fingerprint": "البصمة",
     "bound": "مرتبط",
     "brandTitle": "إدارة حساب Antigravity IDE"
-  },
-  "fingerprints": {
-    "title": "بصمات الجهاز",
-    "subtitle": "إدارة بصمات الأجهزة المرتبطة بالحسابات.",
-    "toolbar": {
-      "generate": "توليد بصمة جديدة",
-      "capture": "التقاط البصمة الحالية",
-      "import": "استيراد",
-      "folder": "مجلد",
-      "delete": "حذف",
-      "deleteUnbound": "حذف غير المرتبط"
-    },
-    "table": {
-      "name": "اسم البصمة",
-      "machineId": "معرف الجهاز",
-      "accounts": "الحسابات المرتبطة",
-      "actions": "الإجراءات",
-      "accountCount": "{{count}} حساب",
-      "apply": "تطبيق",
-      "noData": "لا توجد بيانات للبصمات",
-      "preview": "معاينة",
-      "rename": "إعادة تسمية"
-    },
-    "modals": {
-      "generate": {
-        "title": "توليد بصمة جديدة",
-        "btn": "توليد"
-      },
-      "capture": {
-        "title": "التقاط البصمة الحالية",
-        "btn": "التقاط"
-      },
-      "rename": {
-        "title": "إعادة تسمية البصمة",
-        "label": "اسم البصمة"
-      },
-      "import": {
-        "title": "استيراد بصمات",
-        "fromTools": "استيراد بصمات Antigravity Tools",
-        "desc": "الاستيراد من مجلد ~/.antigravity_tools/",
-        "fromJsonBtn": "استيراد من JSON",
-        "jsonExample": "مثال التنسيق:",
-        "jsonPlaceholder": "بصمة العمل",
-        "orPasteJson": "أو لصق JSON"
-      },
-      "bound": {
-        "title": "إدارة الحسابات المرتبطة",
-        "add": "إضافة حساب",
-        "empty": "لا توجد حسابات مرتبطة بهذه البصمة",
-        "emptyAll": "جميع الحسابات مرتبطة بالفعل بهذه البصمة",
-        "select": "اختر الحساب المراد إضافته",
-        "from": "من: {{name}}",
-        "back": "رجوع"
-      },
-      "detail": {
-        "title": "تفاصيل البصمة",
-        "created": "تم الإنشاء في {{time}}"
-      }
-    },
-    "messages": {
-      "deleteConfirm": "هل أنت متأكد من حذف هذه البصمة؟ الحسابات المرتبطة بها ستعود تلقائياً إلى البصمة الأصلية.",
-      "batchDeleteConfirm": "هل أنت متأكد من حذف {{count}} بصمات مختارة؟ الحسابات المرتبطة ستعود تلقائياً إلى البصمة الأصلية.",
-      "generated": "تم توليد بصمة جديدة",
-      "captured": "تم التقاط البصمة الحالية",
-      "renamed": "تمت إعادة التسمية",
-      "deleted": "تم حذف البصمة",
-      "imported": "تم استيراد {{count}} بصمات",
-      "addedAccounts": "تمت إضافة {{count}} حسابات",
-      "enterName": "يرجى إدخال اسم البصمة",
-      "previewNotReady": "المعاينة غير جاهزة، يرجى المحاولة لاحقاً",
-      "duplicate": "البصمة موجودة بالفعل: {{name}}، لا حاجة للإضافة مجدداً.",
-      "autoGeneratedSuffix": "（غير موجود، تم إنشاؤه تلقائياً）",
-      "readOnly": "للقراءة فقط",
-      "current": "الحالي",
-      "addCount": "تمت إضافة {{count}} حساب",
-      "addFailed": "فشل الإضافة",
-      "adding": "جارٍ الإضافة...",
-      "applyFailed": "فشل التطبيق",
-      "boundCount": "تم ربط {{count}} حساب",
-      "captureFailed": "فشل الالتقاط",
-      "count": "{{count}}",
-      "deleteFailed": "فشل الحذف",
-      "fpLabel": "البصمة:",
-      "generateFailed": "فشل الإنشاء",
-      "importFailed": "فشل الاستيراد",
-      "importPartialFailed": "{{failCount}} فشل: {{failList}}",
-      "refreshingQuota": "جارٍ تحديث الحصة {{done}}/{{total}} (يمكنك إغلاق هذا الحوار)",
-      "quotaRefreshDone": "اكتمل تحديث الحصة",
-      "importing": "جارٍ الاستيراد...",
-      "loadFailed": "فشل تحميل قائمة البصمات",
-      "processing": "جارٍ المعالجة...",
-      "renameFailed": "فشل إعادة التسمية",
-      "serviceMachineIdEmpty": "فارغ",
-      "deleteUnboundConfirm": "حذف {{count}} بصمة غير مرتبطة بأي حساب؟",
-      "deletedUnbound": "تم حذف {{count}} بصمة غير مرتبطة",
-      "noUnboundToDelete": "لا توجد بصمات غير مرتبطة للحذف"
-    }
   },
   "modals": {
     "addAccount": {
@@ -1377,15 +1343,6 @@
       "fromFiles": "استيراد من ملفات محلية",
       "fromFilesDesc": "اختر ملفات JSON لاستيراد الحسابات (تنسيقات متعددة مدعومة)",
       "importingFiles": "جاري استيراد {{count}} ملف(ات)..."
-    },
-    "fingerprint": {
-      "title": "اختر البصمة",
-      "desc": "اختر بصمة للحساب <1>{{email}}</1>",
-      "original": "البصمة الأصلية",
-      "new": "إضافة بصمة جديدة",
-      "bind": "تأكيد الربط",
-      "selectLabel": "اختر البصمة",
-      "boundCount": "حسابات"
     },
     "quota": {
       "title": "تفاصيل الحصة",
@@ -2534,7 +2491,12 @@
         "website": "الموقع الإلكتروني (اختياري)",
         "apiKeyUrl": "صفحة مفتاح API (اختياري)",
         "newApiKeyName": "اسم المفتاح الجديد (اختياري)",
-        "newApiKey": "مفتاح API جديد"
+        "newApiKey": "مفتاح API جديد",
+        "wireApi": "البروتوكول",
+        "enableMode": "وضع التفعيل",
+        "modelCatalog": "كتالوج النماذج",
+        "visionCapability": "إدخال الصور",
+        "visionModels": "نماذج الصور"
       },
       "validation": {
         "nameRequired": "اسم المزوّد مطلوب.",
@@ -2549,6 +2511,19 @@
       "confirmDelete": "هل تريد حذف المزوّد \"{{name}}\"؟",
       "deleteFailed": "فشل حذف المزوّد: {{error}}",
       "deleteApiKeyFailed": "فشل حذف مفتاح API: {{error}}",
+      "enableAsBackend": "استخدامه كخلفية Codex",
+      "enabling": "جارٍ التفعيل...",
+      "enableSuccess": "تم تفعيل {{name}} وتشغيل {{instance}}.",
+      "enableFailed": "فشل تفعيل المزوّد: {{error}}",
+      "status": {
+        "active": "الخلفية الحالية",
+        "available": "جاهز"
+      },
+      "enableMode": {
+        "label": "وضع الاتصال",
+        "gatewayMode": "وضع البوابة",
+        "directMode": "الوضع المباشر"
+      },
       "selectSavedProvider": "المزوّدون المحفوظون",
       "selectSavedApiKey": "مفاتيح API المحفوظة",
       "noSavedProviders": "لا يوجد مزوّدون محفوظون بعد. يمكنك تعبئة الحقول مباشرةً وسيتم الحفظ تلقائيًا.",
@@ -2607,7 +2582,107 @@
         "partialDetected": "تم حاليًا تعيين حقل مُدار واحد فقط: model_context_window={{context}}، model_auto_compact_token_limit={{compact}}. سيؤدي الحفظ إلى إعادة كتابة كلا الحقلين باستخدام المخطط الحالي.",
         "notSet": "لم يتم ضبطه"
       },
-      "managePresets": "النماذج المسبقة"
+      "managePresets": "النماذج المسبقة",
+      "wireApi": {
+        "responses": "Responses أصلي",
+        "chatCompletions": "بروتوكول Chat Completions",
+        "help": "استخدم Responses لمعظم المزوّدين. انتقل إلى Chat Completions فقط عندما يوضح المزوّد أنه يدعم هذا البروتوكول وحده. إذا لم تكن متأكدًا، فاختر Responses أولًا.",
+        "helpAria": "عرض مساعدة البروتوكول"
+      },
+      "testing": "جار الاختبار...",
+      "testSuccess": "اتصال المزوّد سليم: {{protocol}}، {{model}}، {{latency}}.",
+      "testFailed": "فشل اختبار المزوّد: {{error}}",
+      "testFailure": {
+        "credential": "مفتاح API غير متاح",
+        "url": "Base URL غير صالح",
+        "network": "فشل اتصال الشبكة",
+        "models": "خلل في واجهة النماذج",
+        "parse": "فشل تحليل الاستجابة",
+        "httpStatus": "الحالة {{status}}",
+        "message": "{{title}}: {{detail}}. {{suggestion}}"
+      },
+      "testSuggestion": {
+        "addApiKey": "أضف مفتاح API لهذا المزوّد قبل الاختبار.",
+        "checkBaseUrl": "تحقق من أن Base URL يحتوي مسار الإصدار الصحيح مثل /v1.",
+        "checkNetwork": "تحقق من عنوان المزوّد أو الوكيل أو الجدار الناري أو حالة الخدمة العليا.",
+        "checkApiKey": "تحقق من صلاحية مفتاح API وإذن الوصول إلى واجهة النماذج.",
+        "checkProviderStatus": "تحقق من حالة خدمة المزوّد أو الوكيل أو توافق API.",
+        "checkModelsApi": "تأكد أن المزوّد يعيد قائمة نماذج متوافقة مع OpenAI."
+      },
+      "enableAndStart": "تشغيل",
+      "instance": {
+        "label": "مثيل التشغيل",
+        "default": "المثيل الافتراضي",
+        "running": "قيد التشغيل",
+        "targetHint": "الهدف: {{instance}}",
+        "uninitializedHint": "المثيل الهدف غير مهيأ. شغّله مرة واحدة أولاً من صفحة المثيلات المتعددة.",
+        "shortLabel": "مثيل",
+        "saveFailed": "فشل حفظ ربط المثيل: {{error}}"
+      },
+      "modelCatalog": "النماذج",
+      "modelCatalogEmpty": "لا يوجد كتالوج نماذج",
+      "gatewayHint": "تبدأ موفرو الطرف الثالث عبر البوابة المحلية لعزل المثيل وتحويل البروتوكول. يبقى موفرو OpenAI الرسميون باتصال مباشر.",
+      "vision": {
+        "providerDefault": "يدعم هذا المزوّد إدخال الصور افتراضيًا",
+        "providerDefaultHint": "عند الإيقاف، يسمح فقط للنماذج المذكورة أدناه باستقبال الصور؛ وترفض البوابة المحلية باقي النماذج.",
+        "modelsHint": "اكتب نموذجًا واحدًا في كل سطر. مناسب عندما تدعم بعض نماذج المزوّد الصور فقط.",
+        "allModels": "صور",
+        "partialModels": "صور جزئية",
+        "textOnly": "نص فقط"
+      },
+      "sponsorRecommended": "ترشيحات الرعاة",
+      "builtinProviders": "المزوّدون المدمجون",
+      "sponsorHint": "تم ملء عنوان الخدمة المتوافقة الموصى بها من الراعي. بعد إدخال API Key ستستعلم البطاقة تلقائياً عن الرصيد والاستخدام.",
+      "integration": {
+        "sub2api": "متوافق مع Sub2API",
+        "newApi": "متوافق مع New API"
+      },
+      "usage": {
+        "title": "نظرة على الحصة",
+        "remaining": "المتبقي",
+        "today": "اليوم",
+        "total": "الإجمالي",
+        "requests": "طلبات اليوم",
+        "loading": "جارٍ الاستعلام عن الحصة...",
+        "failed": "فشل الاستعلام عن الحصة: {{error}}",
+        "pending": "بانتظار الاستعلام عن الحصة",
+        "noKey": "لا توجد حصة قابلة للاستعلام",
+        "used": "المستخدم",
+        "limit": "الحد",
+        "viewDetail": "التفاصيل",
+        "detailTitle": "لوحة الخدمة",
+        "rawFields": "بيانات الخدمة",
+        "fields": {
+          "status": "الحالة",
+          "planName": "الخطة",
+          "remaining": "المتبقي",
+          "balance": "الرصيد",
+          "todayRequests": "طلبات اليوم",
+          "todayTokens": "Token اليوم",
+          "todayCost": "تكلفة اليوم",
+          "totalRequests": "إجمالي الطلبات",
+          "totalTokens": "إجمالي Token",
+          "totalCost": "إجمالي التكلفة",
+          "hardLimitUsd": "الحد الصارم",
+          "softLimitUsd": "الحد المرن",
+          "systemHardLimitUsd": "حد النظام",
+          "accessUntil": "الوصول حتى",
+          "totalUsage": "إجمالي الاستخدام",
+          "quotaUnlimited": "غير محدود",
+          "expiresAt": "ينتهي في",
+          "totalGranted": "الممنوح",
+          "totalAvailable": "المتاح",
+          "modelLimitsEnabled": "قيود النماذج"
+        },
+        "accountBalance": "رصيد الحساب",
+        "unlimitedQuota": "غير محدود",
+        "booleanTrue": "نعم",
+        "booleanFalse": "لا"
+      },
+      "oauthBinding": {
+        "desc": "اختياري. يمكن ربط أي حساب OAuth يحتوي على refresh_token. بدون ربط، يستمر المزوّد في استخدام تدفق API Key الأصلي.",
+        "currentProvider": "المزوّد: {{name}}"
+      }
     },
     "quickSwitch": {
       "action": "تبديل المزوّد سريعًا",
@@ -2853,6 +2928,10 @@
         "saveSuccess": "تم حفظ حظر نماذج الحساب",
         "cardCount": "{{count}} محظور"
       }
+    },
+    "apiKey": {
+      "renameSuccess": "تمت إعادة التسمية",
+      "renameFailed": "فشلت إعادة التسمية"
     }
   },
   "githubCopilot": {
@@ -3415,7 +3494,6 @@
       "goAntigravity": "اذهب إلى Antigravity IDE",
       "goCodex": "اذهب إلى Codex",
       "goDashboard": "اذهب إلى لوحة المعلومات",
-      "goFingerprints": "اذهب إلى بصمات الجهاز",
       "goGitHubCopilot": "اذهب إلى GitHub Copilot",
       "goInstances": "اذهب إلى المثيلات المتعددة",
       "goKiro": "اذهب إلى Kiro",
@@ -3510,28 +3588,6 @@
     "empty": {
       "desc": "جرّب كلمات مثل: مثيل، تبديل، إعدادات، تصدير.",
       "title": "لا يوجد محتوى مطابق"
-    },
-    "fingerprints": {
-      "cautions": {
-        "0": "انسخ البيانات احتياطيًا قبل الإجراءات الخطرة أو المجمعة في بصمات الجهاز."
-      },
-      "keywords": {
-        "0": "بصمات الجهاز",
-        "1": "دليل",
-        "2": "سير عمل",
-        "3": "حساب"
-      },
-      "outcomes": {
-        "0": "افهم ما الذي يمكن أن يقدمه بصمات الجهاز.",
-        "1": "استخدم التدفق المقترح في بصمات الجهاز لتقليل الأخطاء."
-      },
-      "steps": {
-        "0": "افتح صفحة بصمات الجهاز.",
-        "1": "أكمل الإعداد الأساسي والربط المطلوب في بصمات الجهاز.",
-        "2": "نفّذ عملية يدوية واحدة في بصمات الجهاز للتحقق من النتيجة."
-      },
-      "summary": "يوضح هذا القسم كيفية استخدام بصمات الجهاز ضمن سير العمل اليومي.",
-      "title": "بصمات الجهاز"
     },
     "instances": {
       "cautions": {

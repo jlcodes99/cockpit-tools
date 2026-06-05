@@ -1,6 +1,6 @@
 [package]
 name = "cockpit-tools"
-version = "0.24.12"
+version = "0.25.0"
 description = "Cockpit Tools"
 authors = ["jlcodes"]
 license = "CC-BY-NC-SA-4.0"
@@ -30,6 +30,7 @@ uuid = { version = "1.10", features = ["v4", "serde"] }
 chrono = "0.4"
 dirs = "5.0"
 reqwest = { version = "0.12", features = ["json", "gzip", "brotli", "deflate", "zstd", "stream", "socks"] }
+quick-xml = "0.40"
 # 为 tauri-plugin-updater 所依赖的 reqwest 0.13 合并 socks 特性，
 # 使 updater 链路在全局代理配置为 socks5:// 时可正常发起请求。
 reqwest_updater_socks = { package = "reqwest", version = "0.13", default-features = false, features = ["socks"] }
@@ -62,6 +63,7 @@ tiny_http = "0.12"
 urlencoding = "2.1"
 lazy_static = "1.5"
 trash = "5"
+reqwest_dav = "0.3.3"
 
 # VS Code Copilot token injection (Windows only)
 aes-gcm = "0.10"

@@ -231,7 +231,6 @@
     "overview": "Antigravity IDE",
     "accounts": "Contas",
     "wakeup": "Tarefas de despertar",
-    "fingerprints": "Impressões",
     "settings": "Configurações",
     "codex": "Codex",
     "githubCopilot": "GitHub Copilot",
@@ -254,12 +253,24 @@
     "expandSidebar": "Expandir barra lateral",
     "collapseSidebar": "Recolher barra lateral",
     "logs": "Registros",
+    "sponsors": "Patrocinadores",
+    "sponsorAppreciation": "Apoiar",
     "switchClassicLayoutEntry": "Mudar para o layout clássico",
     "switchClassicLayoutTitle": "Mudar para o layout clássico da barra lateral",
     "switchClassicLayoutDesc": "O layout clássico exibe toda a navegação de plataformas e permite recolher a barra lateral. Você pode voltar a qualquer momento em Configurações > Geral > Layout da barra lateral.",
     "switchClassicLayoutDontAskAgain": "Não mostrar este aviso novamente",
     "switchClassicLayoutConfirm": "Mudar agora",
     "2faManager": "Gerenciar 2FA"
+  },
+  "sponsors": {
+    "pageTitle": "Patrocinadores",
+    "pageDesc": "Agradecemos a estes patrocinadores pelo apoio ao Cockpit Tools.",
+    "loading": "Carregando patrocinadores...",
+    "emptyTitle": "Nenhum patrocinador ainda",
+    "emptyDesc": "O módulo remoto de patrocinadores está desativado no momento.",
+    "listAriaLabel": "Lista de patrocinadores",
+    "defaultDescription": "Obrigado por apoiar o Cockpit Tools.",
+    "openSponsor": "Abrir"
   },
   "platformLayout": {
     "title": "Layout de plataformas",
@@ -272,7 +283,7 @@
     "hiddenBadge": "Oculto",
     "openFromMore": "Gerenciar layout de plataformas",
     "dragHandleLabel": "Arrastar para reordenar",
-    "tipWithGroups": "Arraste para reordenar. No máximo três entradas podem aparecer na barra lateral. Itens filhos do grupo não têm alternância de barra lateral/painel e são usados apenas para a barra de menu e troca da plataforma padrão.",
+    "tipWithGroups": "Arraste para reordenar. Até {{max}} entradas podem aparecer na barra lateral. Itens filhos de grupos não têm alternância de barra lateral/painel e são usados apenas para a barra de menus e a plataforma padrão.",
     "addGroup": "Adicionar grupo",
     "editGroup": "Editar grupo",
     "deleteGroup": "Excluir grupo",
@@ -549,7 +560,8 @@
     "tabs": {
       "general": "Geral",
       "network": "Rede",
-      "about": "Sobre"
+      "about": "Sobre",
+      "data": "Gerenciamento de Dados"
     },
     "general": {
       "appearance": "Aparência",
@@ -603,8 +615,8 @@
       "floatingCardShowNowAction": "Mostrar cartão flutuante",
       "dataDir": "Diretório de dados",
       "dataDirDesc": "Local de armazenamento de contas e arquivos de configuração.",
-      "fpDir": "Armazenamento do Antigravity IDE",
-      "fpDirDesc": "Local de armazenamento dos arquivos de dados do Antigravity IDE.",
+      "topRightAdVisible": "Mostrar promoção superior",
+      "topRightAdVisibleDesc": "Oculta o espaço de promoção superior no app. A página de patrocinadores não é afetada.",
       "opencodeTitle": "Integração OpenCode",
       "opencodeRestart": "Reiniciar o OpenCode ao trocar o Codex",
       "opencodeRestartDesc": "Sincronizar informações da conta Codex no OpenCode",
@@ -928,6 +940,61 @@
         "unsupportedLegacyFile": "Este formato legado de backup de contas não foi reconhecido",
         "unsupportedVersion": "Esta versão do app não oferece suporte a essa versão do pacote"
       }
+    },
+    "webdav": {
+      "groupTitle": "Sincronização WebDAV",
+      "enabledTitle": "Sincronização de backup WebDAV",
+      "enabledDesc": "O padrão é Jianguoyun e pode ser alterado para qualquer serviço WebDAV.",
+      "urlTitle": "Endereço do serviço",
+      "urlDesc": "Endereço padrão do Jianguoyun: https://dav.jianguoyun.com/dav/",
+      "usernameTitle": "Conta",
+      "usernameDesc": "O Jianguoyun usa o e-mail da sua conta.",
+      "usernamePlaceholder": "E-mail ou nome de usuário",
+      "passwordTitle": "Senha do aplicativo",
+      "passwordDesc": "Salva localmente; deixe em branco para manter a senha existente.",
+      "passwordPlaceholder": "Senha do aplicativo de terceiros Jianguoyun",
+      "passwordSavedPlaceholder": "Salva; deixe em branco para manter",
+      "clearPassword": "Limpar",
+      "remoteDirTitle": "Pasta remota",
+      "remoteDirDesc": "Somente os arquivos de backup do Cockpit nesta pasta são gerenciados.",
+      "statusTitle": "Status de sincronização",
+      "statusDesc": "A restauração remota requer uma seleção manual e nunca sobrescreve silenciosamente os dados locais.",
+      "lastUpload": "Último envio: {{time}}",
+      "lastDownload": "Última restauração: {{time}}",
+      "never": "Ainda não sincronizado",
+      "testAction": "Testar/Salvar configuração",
+      "uploadAction": "Criar & Enviar",
+      "syncAction": "Sincronizar configuração",
+      "syncLatestConfirm": "Tem certeza de que deseja baixar o backup remoto mais recente {{name}} e sincronizá-lo localmente? Isso substituirá os dados locais existentes.",
+      "remoteListTitle": "Backups remotos",
+      "remoteListDesc": "Somente arquivos JSON e ZIP que correspondem aos nomes dos backups automáticos/manuais do Cockpit são exibidos.",
+      "emptyTitle": "Nenhum backup remoto",
+      "emptyDesc": "Salve as configurações, crie e faça o upload de um backup.",
+      "unknownTime": "Desconhecido",
+      "restoreAction": "Restaurar",
+      "restoreConfirm": "Restaurar dados do backup remoto {{name}}?",
+      "deleteConfirm": "Excluir o backup remoto {{name}}?",
+      "feedback": {
+        "testingAndSaving": "Salvando e testando a conexão WebDAV...",
+        "saveAndTestSuccess": "Configuração salva e teste de conexão bem-sucedido!",
+        "saveSuccessTestFailed": "Configuração salva, mas o teste de conexão falhou: {{message}}",
+        "saveAndTestFailed": "Falha ao salvar e testar a conexão: {{error}}",
+        "uploading": "Criando e enviando backup...",
+        "uploadSuccess": "Enviado(s) {{count}} arquivo(s), limpo(s) {{deleted}} backup(s) remoto(s) expirado(s)",
+        "uploadFailed": "Falha no envio do WebDAV: {{error}}",
+        "listFailed": "Falha ao carregar os backups remotos: {{error}}",
+        "loadSettingsFailed": "Falha ao carregar as configurações do WebDAV: {{error}}",
+        "restoring": "Lendo backup remoto e importando...",
+        "restoreEmpty": "Nenhum dado foi restaurado do backup remoto",
+        "deleteSuccess": "Backup remoto excluído",
+        "deleteFailed": "Falha ao excluir o backup remoto: {{error}}",
+        "syncingLatest": "Sincronizando a configuração remota mais recente...",
+        "syncFailed": "Falha ao sincronizar a configuração mais recente: {{error}}",
+        "noRemoteBackup": "Nenhum arquivo de backup restaurável encontrado no controle remoto"
+      },
+      "errors": {
+        "notEnabled": "Ative a sincronização WebDAV primeiro"
+      }
     }
   },
   "appPath": {
@@ -959,7 +1026,6 @@
       "email": "E-mail",
       "subscription": "Assinatura",
       "quota": "Status da Cota",
-      "fingerprint": "Impressão",
       "lastUsed": "Último Uso",
       "actions": "Ações"
     },
@@ -1045,10 +1111,8 @@
     "actions": {
       "viewDetails": "Ver detalhes",
       "viewError": "Ver erro",
-      "fingerprint": "Impressão digital",
       "switch": "Trocar conta",
       "switchTo": "Trocar para esta conta",
-      "selectFingerprint": "Selecionar impressão digital",
       "delete": "Excluir",
       "deleteSelected": "Excluir selecionados",
       "export": "Exportar",
@@ -1197,106 +1261,8 @@
     "currentAccount": "Atualmente em uso",
     "switchTo": "Trocar para esta conta",
     "switching": "Trocando...",
-    "fingerprint": "Impressão",
     "bound": "Vinculado",
     "brandTitle": "Gerenciamento de conta Antigravity IDE"
-  },
-  "fingerprints": {
-    "title": "Impressões de Dispositivo",
-    "subtitle": "Gerencie impressões de dispositivo vinculadas às contas.",
-    "toolbar": {
-      "generate": "Gerar Nova",
-      "capture": "Capturar Atual",
-      "import": "Importar",
-      "folder": "Pasta",
-      "delete": "Excluir",
-      "deleteUnbound": "Excluir não vinculadas"
-    },
-    "table": {
-      "name": "Nome da Impressão",
-      "machineId": "ID da Máquina",
-      "accounts": "Contas Vinculadas",
-      "actions": "Ações",
-      "accountCount": "{{count}} contas",
-      "apply": "Aplicar",
-      "noData": "Sem dados de impressão digital",
-      "preview": "Prévia",
-      "rename": "Renomear"
-    },
-    "modals": {
-      "generate": {
-        "title": "Gerar Impressão",
-        "btn": "Gerar"
-      },
-      "capture": {
-        "title": "Capturar Impressão",
-        "btn": "Capturar"
-      },
-      "rename": {
-        "title": "Renomear Impressão",
-        "label": "Nome da Impressão"
-      },
-      "import": {
-        "title": "Importar Impressões",
-        "fromTools": "Importar do Antigravity Tools",
-        "desc": "Importar do diretório ~/.antigravity_tools/",
-        "fromJsonBtn": "Importar de JSON",
-        "jsonExample": "Exemplo de formato:",
-        "jsonPlaceholder": "Impressão de trabalho",
-        "orPasteJson": "Ou colar JSON"
-      },
-      "bound": {
-        "title": "Contas Vinculadas",
-        "add": "Adicionar Contas",
-        "empty": "Nenhuma conta vinculada",
-        "emptyAll": "Todas as contas estão vinculadas",
-        "select": "Selecione as contas para adicionar",
-        "from": "De: {{name}}",
-        "back": "Voltar"
-      },
-      "detail": {
-        "title": "Detalhes da Impressão",
-        "created": "Criado em {{time}}"
-      }
-    },
-    "messages": {
-      "deleteConfirm": "Excluir esta impressão? Contas vinculadas a ela retornarão ao original.",
-      "batchDeleteConfirm": "Excluir {{count}} impressões? Contas vinculadas a elas retornarão ao original.",
-      "generated": "Nova impressão gerada",
-      "captured": "Impressão atual capturada",
-      "renamed": "Renomeado",
-      "deleted": "Impressão excluída",
-      "imported": "Importadas {{count}} impressões",
-      "addedAccounts": "{{count}} contas adicionadas",
-      "enterName": "Digite o nome da impressão",
-      "previewNotReady": "Visualização não pronta, aguarde",
-      "duplicate": "Impressão idêntica já existe: {{name}}",
-      "autoGeneratedSuffix": "(Não encontrado, gerado automaticamente)",
-      "readOnly": "Somente leitura",
-      "current": "Atual",
-      "addCount": "{{count}} contas adicionadas",
-      "addFailed": "Falha ao adicionar",
-      "adding": "Adicionando...",
-      "applyFailed": "Falha ao aplicar",
-      "boundCount": "{{count}} contas vinculadas",
-      "captureFailed": "Falha na captura",
-      "count": "{{count}}",
-      "deleteFailed": "Falha ao excluir",
-      "fpLabel": "Impressão digital:",
-      "generateFailed": "Falha ao gerar",
-      "importFailed": "Falha ao importar",
-      "importPartialFailed": "{{failCount}} falhou: {{failList}}",
-      "refreshingQuota": "Atualizando cota {{done}}/{{total}} (você pode fechar esta caixa de diálogo)",
-      "quotaRefreshDone": "Atualização de cota concluída",
-      "importing": "Importando...",
-      "loadFailed": "Falha ao carregar a lista de impressões digitais",
-      "processing": "Processando...",
-      "renameFailed": "Falha ao renomear",
-      "serviceMachineIdEmpty": "Vazio",
-      "deleteUnboundConfirm": "Excluir {{count}} impressões sem contas vinculadas?",
-      "deletedUnbound": "Foram excluídas {{count}} impressões não vinculadas",
-      "noUnboundToDelete": "Não há impressões não vinculadas para excluir"
-    }
   },
   "modals": {
     "addAccount": {
@@ -1331,15 +1297,6 @@
       "fromFiles": "Importar de arquivos locais",
       "fromFilesDesc": "Selecione arquivos JSON para importar contas (múltiplos formatos suportados)",
       "importingFiles": "Importando {{count}} arquivo(s)..."
-    },
-    "fingerprint": {
-      "title": "Selecionar Impressão",
-      "desc": "Selecionar impressão para a conta <1>{{email}}</1>",
-      "original": "Impressão Original",
-      "new": "Adicionar Nova Impressão",
-      "bind": "Confirmar Vinculação",
-      "selectLabel": "Selecionar Impressão",
-      "boundCount": "contas"
     },
     "quota": {
       "title": "Detalhes da Cota",
@@ -2488,7 +2445,12 @@
         "website": "Site (opcional)",
         "apiKeyUrl": "Página da chave API (opcional)",
         "newApiKeyName": "Nome da nova chave (opcional)",
-        "newApiKey": "Nova chave API"
+        "newApiKey": "Nova chave API",
+        "wireApi": "Protocolo",
+        "enableMode": "Modo",
+        "modelCatalog": "Catálogo de modelos",
+        "visionCapability": "Entrada de imagem",
+        "visionModels": "Modelos visuais"
       },
       "validation": {
         "nameRequired": "O nome do provedor é obrigatório.",
@@ -2503,6 +2465,19 @@
       "confirmDelete": "Excluir o provedor \"{{name}}\"?",
       "deleteFailed": "Falha ao excluir o provedor: {{error}}",
       "deleteApiKeyFailed": "Falha ao excluir a chave API: {{error}}",
+      "enableAsBackend": "Usar como backend Codex",
+      "enabling": "Ativando...",
+      "enableSuccess": "{{name}} ativado e {{instance}} iniciado.",
+      "enableFailed": "Falha ao ativar o provedor: {{error}}",
+      "status": {
+        "active": "Backend atual",
+        "available": "Pronto"
+      },
+      "enableMode": {
+        "label": "Modo de conexão",
+        "gatewayMode": "Modo gateway",
+        "directMode": "Modo direto"
+      },
       "selectSavedProvider": "Provedores salvos",
       "selectSavedApiKey": "Chaves API salvas",
       "noSavedProviders": "Ainda não há provedores salvos. Você pode preencher os campos diretamente e eles serão salvos automaticamente.",
@@ -2561,7 +2536,107 @@
         "partialDetected": "Apenas um campo gerenciado está definido atualmente: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. Salvar irá reescrever ambos os campos usando o esquema atual.",
         "notSet": "Não definido"
       },
-      "managePresets": "Predefinições de modelo"
+      "managePresets": "Predefinições de modelo",
+      "wireApi": {
+        "responses": "Responses nativo",
+        "chatCompletions": "Protocolo Chat Completions",
+        "help": "Use Responses para a maioria dos provedores. Mude para Chat Completions somente quando o provedor informar claramente que aceita apenas esse protocolo. Em dúvida, escolha Responses primeiro.",
+        "helpAria": "Ver ajuda do protocolo"
+      },
+      "testing": "Testando...",
+      "testSuccess": "Conexão do provedor saudável: {{protocol}}, {{model}}, {{latency}}.",
+      "testFailed": "Falha ao testar o provedor: {{error}}",
+      "testFailure": {
+        "credential": "API Key indisponível",
+        "url": "Base URL inválida",
+        "network": "Falha na conexão de rede",
+        "models": "Endpoint de modelos falhou",
+        "parse": "Falha ao ler resposta",
+        "httpStatus": "Status {{status}}",
+        "message": "{{title}}: {{detail}}. {{suggestion}}"
+      },
+      "testSuggestion": {
+        "addApiKey": "Adicione uma API Key para este provedor antes de testar.",
+        "checkBaseUrl": "Verifique se a Base URL inclui o caminho de versão correto, como /v1.",
+        "checkNetwork": "Verifique a URL do provedor, proxy, firewall ou status do serviço upstream.",
+        "checkApiKey": "Verifique se a API Key é válida e tem acesso ao endpoint de modelos.",
+        "checkProviderStatus": "Verifique o status do provedor, proxy ou compatibilidade da API.",
+        "checkModelsApi": "Confirme que o provedor retorna uma lista de modelos compatível com OpenAI."
+      },
+      "enableAndStart": "Iniciar",
+      "instance": {
+        "label": "Instância",
+        "default": "Instância padrão",
+        "running": "Em execução",
+        "targetHint": "Destino: {{instance}}",
+        "uninitializedHint": "A instância de destino não foi inicializada. Inicie-a uma vez na página Multi-instância.",
+        "shortLabel": "Instância",
+        "saveFailed": "Falha ao salvar o vínculo da instância: {{error}}"
+      },
+      "modelCatalog": "Modelos",
+      "modelCatalogEmpty": "Sem catálogo de modelos",
+      "gatewayHint": "Provedores de terceiros iniciam pelo gateway local para isolar a instância e converter o protocolo. Provedores oficiais da OpenAI continuam diretos.",
+      "vision": {
+        "providerDefault": "Este provedor aceita imagens por padrão",
+        "providerDefaultHint": "Quando desativado, só os modelos listados abaixo recebem imagens; os demais são barrados pelo gateway local.",
+        "modelsHint": "Um modelo por linha. Use quando apenas alguns modelos do provedor aceitam imagens coladas.",
+        "allModels": "Imagens",
+        "partialModels": "Algumas imagens",
+        "textOnly": "Só texto"
+      },
+      "sponsorRecommended": "Patrocinadores indicados",
+      "builtinProviders": "Provedores integrados",
+      "sponsorHint": "A URL do serviço compatível indicada pelo patrocinador foi preenchida. Depois de informar a API Key, o cartão consultará saldo e uso automaticamente.",
+      "integration": {
+        "sub2api": "Compatível com Sub2API",
+        "newApi": "Compatível com New API"
+      },
+      "usage": {
+        "title": "Resumo de cota",
+        "remaining": "Restante",
+        "today": "Hoje",
+        "total": "Acumulado",
+        "requests": "Solicitações hoje",
+        "loading": "Consultando cota...",
+        "failed": "Falha ao consultar cota: {{error}}",
+        "pending": "Aguardando consulta de cota",
+        "noKey": "Sem cota consultável",
+        "used": "Usado",
+        "limit": "Limite",
+        "viewDetail": "Detalhes",
+        "detailTitle": "Painel do serviço",
+        "rawFields": "Dados do serviço",
+        "fields": {
+          "status": "Situação",
+          "planName": "Plano",
+          "remaining": "Crédito restante",
+          "balance": "Saldo",
+          "todayRequests": "Requisições hoje",
+          "todayTokens": "Tokens hoje",
+          "todayCost": "Custo hoje",
+          "totalRequests": "Requisições totais",
+          "totalTokens": "Tokens totais",
+          "totalCost": "Custo total",
+          "hardLimitUsd": "Limite rígido",
+          "softLimitUsd": "Limite flexível",
+          "systemHardLimitUsd": "Limite do sistema",
+          "accessUntil": "Acesso até",
+          "totalUsage": "Uso total",
+          "quotaUnlimited": "Ilimitado",
+          "expiresAt": "Expira em",
+          "totalGranted": "Concedido",
+          "totalAvailable": "Disponível",
+          "modelLimitsEnabled": "Limites de modelo"
+        },
+        "accountBalance": "Saldo da conta",
+        "unlimitedQuota": "Ilimitado",
+        "booleanTrue": "Sim",
+        "booleanFalse": "Não"
+      },
+      "oauthBinding": {
+        "desc": "Opcional. Qualquer conta OAuth com refresh_token pode ser vinculada. Sem vínculo, o provedor continua usando o fluxo original de API Key.",
+        "currentProvider": "Provedor: {{name}}"
+      }
     },
     "quickSwitch": {
       "action": "Troca rápida de provedor",
@@ -2807,6 +2882,10 @@
         "saveSuccess": "Bloqueios de modelo salvos",
         "cardCount": "{{count}} bloqueados"
       }
+    },
+    "apiKey": {
+      "renameSuccess": "Renomeado",
+      "renameFailed": "Falha ao renomear"
     }
   },
   "githubCopilot": {
@@ -3369,7 +3448,6 @@
       "goAntigravity": "Ir para Antigravity IDE",
       "goCodex": "Ir para Codex",
       "goDashboard": "Ir para o painel",
-      "goFingerprints": "Ir para impressões do dispositivo",
       "goGitHubCopilot": "Ir para GitHub Copilot",
       "goInstances": "Ir para múltiplas instâncias",
       "goKiro": "Ir para Kiro",
@@ -3464,28 +3542,6 @@
     "empty": {
       "desc": "Tente palavras como instância, troca, configurações, exportar.",
       "title": "Nenhum conteúdo correspondente"
-    },
-    "fingerprints": {
-      "cautions": {
-        "0": "Faça backup antes de ações arriscadas ou em lote em Impressões do dispositivo."
-      },
-      "keywords": {
-        "0": "Impressões do dispositivo",
-        "1": "guia",
-        "2": "fluxo",
-        "3": "conta"
-      },
-      "outcomes": {
-        "0": "Entenda o que Impressões do dispositivo ajuda a resolver.",
-        "1": "Use o fluxo recomendado em Impressões do dispositivo para reduzir erros."
-      },
-      "steps": {
-        "0": "Abra a página de Impressões do dispositivo.",
-        "1": "Conclua configuração básica e vínculos necessários em Impressões do dispositivo.",
-        "2": "Execute uma operação manual em Impressões do dispositivo para verificar o resultado."
-      },
-      "summary": "Esta seção explica como usar Impressões do dispositivo no fluxo diário.",
-      "title": "Impressões do dispositivo"
     },
     "instances": {
       "cautions": {

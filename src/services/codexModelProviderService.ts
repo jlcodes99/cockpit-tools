@@ -1,5 +1,14 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { CodexAccount } from '../types/codex';
+import type {
+  CodexProviderEnableModePreference,
+  CodexProviderWireApi,
+} from '../utils/codexProviderGateway';
+import type { CodexLocalAccessTestResult } from '../types/codexLocalAccess';
+import {
+  findCodexApiProviderPresetById,
+  resolveCodexApiProviderPresetId,
+} from '../utils/codexProviderPresets';
 
 export interface CodexModelProviderApiKey {
   id: string;
@@ -13,11 +22,47 @@ export interface CodexModelProvider {
   id: string;
   name: string;
   baseUrl: string;
+  sourceTag?: string;
+  integrationType?: 'sub2api' | 'new_api';
+  modelCatalog?: string[];
+  supportsVision?: boolean;
+  modelCapabilities?: Record<string, { supportsVision?: boolean }>;
+  boundInstanceId?: string;
   website?: string;
   apiKeyUrl?: string;
+  wireApi?: CodexProviderWireApi | null;
+  enableModePreference?: CodexProviderEnableModePreference;
+  boundOauthAccountId?: string | null;
   apiKeys: CodexModelProviderApiKey[];
   createdAt: number;
   updatedAt: number;
+}
+
+export interface CodexModelProviderUsageSummary {
+  mode?: string | null;
+  isValid?: boolean | null;
+  status?: string | null;
+  planName?: string | null;
+  remaining?: number | null;
+  balance?: number | null;
+  unit?: string | null;
+  quotaUnlimited?: boolean | null;
+  quotaLimit?: number | null;
+  quotaUsed?: number | null;
+  quotaRemaining?: number | null;
+  todayRequests?: number | null;
+  todayTotalTokens?: number | null;
+  todayCost?: number | null;
+  totalRequests?: number | null;
+  totalTotalTokens?: number | null;
+  totalCost?: number | null;
+  modelStatsCount: number;
+  latencyMs: number;
+  details?: Array<{
+    key: string;
+    label: string;
+    value: string;
+  }>;
 }
 
 interface UpsertFromCredentialInput {
@@ -26,6 +71,14 @@ interface UpsertFromCredentialInput {
   apiBaseUrl: string;
   apiKey: string;
   apiKeyName?: string | null;
+  sourceTag?: string | null;
+  modelCatalog?: string[];
+  supportsVision?: boolean;
+  modelCapabilities?: Record<string, { supportsVision?: boolean }>;
+  website?: string | null;
+  apiKeyUrl?: string | null;
+  wireApi?: CodexProviderWireApi | null;
+  integrationType?: 'sub2api' | 'new_api' | null;
 }
 
 let providerIdCounter = 0;
@@ -46,6 +99,67 @@ function sanitizeName(value: string): string {
 
 function sanitizeApiKey(value: string): string {
   return value.trim();
+}
+
+function normalizeWireApi(value: unknown): CodexProviderWireApi | undefined {
+  return value === 'responses' || value === 'chat_completions' ? value : undefined;
+}
+
+function normalizeEnableModePreference(
+  value: unknown,
+): CodexProviderEnableModePreference | undefined {
+  return value === 'auto' || value === 'direct' || value === 'gateway' ? value : undefined;
+}
+
+function normalizeModelCatalog(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const seen = new Set<string>();
+  const models: string[] = [];
+  for (const item of value) {
+    const model = String(item ?? '').trim();
+    const key = model.toLowerCase();
+    if (!model || seen.has(key)) continue;
+    seen.add(key);
+    models.push(model);
+  }
+  return models.length > 0 ? models : undefined;
+}
+
+function normalizeModelCapabilities(
+  value: unknown,
+): Record<string, { supportsVision?: boolean }> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const result: Record<string, { supportsVision?: boolean }> = {};
+  for (const [rawModel, rawCapability] of Object.entries(value as Record<string, unknown>)) {
+    const model = rawModel.trim().toLowerCase();
+    if (!model || !rawCapability || typeof rawCapability !== 'object') continue;
+    const supportsVision = (rawCapability as { supportsVision?: unknown }).supportsVision;
+    if (typeof supportsVision === 'boolean') {
+      result[model] = { supportsVision };
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function normalizeBoundInstanceId(value: unknown): string | undefined {
+  const id = String(value ?? '').trim();
+  return id || undefined;
+}
+
+function normalizeBoundOauthAccountId(value: unknown): string | undefined {
+  const id = String(value ?? '').trim();
+  return id || undefined;
+}
+
+function normalizeIntegrationType(value: unknown): 'sub2api' | 'new_api' | undefined {
+  return value === 'sub2api' || value === 'new_api' ? value : undefined;
+}
+
+function presetModelCatalogForBaseUrl(baseUrl: string): string[] | undefined {
+  return normalizeModelCatalog(
+    findCodexApiProviderPresetById(resolveCodexApiProviderPresetId(baseUrl))
+      ?.modelCatalog,
+  );
 }
 
 export function normalizeCodexModelProviderBaseUrl(value: string): string | null {
@@ -84,6 +198,14 @@ function deriveProviderNameFromBaseUrl(baseUrl: string): string {
 function cloneProviders(providers: CodexModelProvider[]): CodexModelProvider[] {
   return providers.map((provider) => ({
     ...provider,
+    modelCapabilities: provider.modelCapabilities
+      ? Object.fromEntries(
+          Object.entries(provider.modelCapabilities).map(([model, capability]) => [
+            model,
+            { ...capability },
+          ]),
+        )
+      : undefined,
     apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey })),
   }));
 }
@@ -123,8 +245,29 @@ function toValidProviderList(raw: unknown): CodexModelProvider[] {
       id: String((item as { id?: unknown }).id ?? createProviderId()),
       name,
       baseUrl,
+      sourceTag: sanitizeName(String((item as { sourceTag?: unknown }).sourceTag ?? '')) || undefined,
+      integrationType: normalizeIntegrationType(
+        (item as { integrationType?: unknown }).integrationType,
+      ),
+      modelCatalog:
+        normalizeModelCatalog((item as { modelCatalog?: unknown }).modelCatalog) ??
+        presetModelCatalogForBaseUrl(baseUrl),
+      supportsVision: (item as { supportsVision?: unknown }).supportsVision === true,
+      modelCapabilities: normalizeModelCapabilities(
+        (item as { modelCapabilities?: unknown }).modelCapabilities,
+      ),
+      boundInstanceId: normalizeBoundInstanceId(
+        (item as { boundInstanceId?: unknown }).boundInstanceId,
+      ),
       website: sanitizeName(String((item as { website?: unknown }).website ?? '')) || undefined,
       apiKeyUrl: sanitizeName(String((item as { apiKeyUrl?: unknown }).apiKeyUrl ?? '')) || undefined,
+      wireApi: normalizeWireApi((item as { wireApi?: unknown }).wireApi),
+      enableModePreference: normalizeEnableModePreference(
+        (item as { enableModePreference?: unknown }).enableModePreference,
+      ),
+      boundOauthAccountId: normalizeBoundOauthAccountId(
+        (item as { boundOauthAccountId?: unknown }).boundOauthAccountId,
+      ),
       apiKeys: toValidApiKeys((item as { apiKeys?: unknown }).apiKeys, now),
       createdAt: Number((item as { createdAt?: unknown }).createdAt ?? now),
       updatedAt: Number((item as { updatedAt?: unknown }).updatedAt ?? now),
@@ -225,8 +368,17 @@ function ensureApiKeyOnProvider(
 export async function createCodexModelProvider(input: {
   name: string;
   baseUrl: string;
+  sourceTag?: string;
+  modelCatalog?: string[];
+  supportsVision?: boolean;
+  modelCapabilities?: Record<string, { supportsVision?: boolean }>;
+  boundInstanceId?: string;
   website?: string;
   apiKeyUrl?: string;
+  wireApi?: CodexProviderWireApi;
+  enableModePreference?: CodexProviderEnableModePreference;
+  integrationType?: 'sub2api' | 'new_api';
+  boundOauthAccountId?: string | null;
   initialApiKey?: string;
   initialApiKeyName?: string;
 }): Promise<CodexModelProvider> {
@@ -244,8 +396,19 @@ export async function createCodexModelProvider(input: {
     id: createProviderId(),
     name,
     baseUrl,
+    sourceTag: sanitizeName(input.sourceTag ?? '') || undefined,
+    integrationType: normalizeIntegrationType(input.integrationType),
+    modelCatalog:
+      normalizeModelCatalog(input.modelCatalog) ??
+      presetModelCatalogForBaseUrl(baseUrl),
+    supportsVision: input.supportsVision === true,
+    modelCapabilities: normalizeModelCapabilities(input.modelCapabilities),
+    boundInstanceId: normalizeBoundInstanceId(input.boundInstanceId),
     website: sanitizeName(input.website ?? '') || undefined,
     apiKeyUrl: sanitizeName(input.apiKeyUrl ?? '') || undefined,
+    wireApi: normalizeWireApi(input.wireApi),
+    enableModePreference: normalizeEnableModePreference(input.enableModePreference),
+    boundOauthAccountId: normalizeBoundOauthAccountId(input.boundOauthAccountId),
     apiKeys: [],
     createdAt: now,
     updatedAt: now,
@@ -263,8 +426,17 @@ export async function updateCodexModelProvider(
   patch: {
     name?: string;
     baseUrl?: string;
+    sourceTag?: string | null;
+    modelCatalog?: string[] | null;
+    supportsVision?: boolean;
+    modelCapabilities?: Record<string, { supportsVision?: boolean }> | null;
+    boundInstanceId?: string | null;
     website?: string;
     apiKeyUrl?: string;
+    wireApi?: CodexProviderWireApi | null;
+    enableModePreference?: CodexProviderEnableModePreference | null;
+    integrationType?: 'sub2api' | 'new_api' | null;
+    boundOauthAccountId?: string | null;
   },
 ): Promise<CodexModelProvider> {
   const providers = await ensureProvidersLoaded();
@@ -289,11 +461,57 @@ export async function updateCodexModelProvider(
 
   provider.name = nextName;
   provider.baseUrl = nextBaseUrl;
+  if (patch.sourceTag !== undefined) {
+    provider.sourceTag =
+      patch.sourceTag === null ? undefined : sanitizeName(patch.sourceTag) || undefined;
+  }
+  if (patch.modelCatalog !== undefined) {
+    provider.modelCatalog =
+      patch.modelCatalog === null
+        ? presetModelCatalogForBaseUrl(nextBaseUrl)
+        : normalizeModelCatalog(patch.modelCatalog);
+  } else if (!provider.modelCatalog || provider.modelCatalog.length === 0) {
+    provider.modelCatalog = presetModelCatalogForBaseUrl(nextBaseUrl);
+  }
+  if (patch.supportsVision !== undefined) {
+    provider.supportsVision = patch.supportsVision === true;
+  }
+  if (patch.modelCapabilities !== undefined) {
+    provider.modelCapabilities =
+      patch.modelCapabilities === null
+        ? undefined
+        : normalizeModelCapabilities(patch.modelCapabilities);
+  }
+  if (patch.boundInstanceId !== undefined) {
+    provider.boundInstanceId =
+      patch.boundInstanceId === null
+        ? undefined
+        : normalizeBoundInstanceId(patch.boundInstanceId);
+  }
   if (patch.website !== undefined) {
     provider.website = sanitizeName(patch.website) || undefined;
   }
   if (patch.apiKeyUrl !== undefined) {
     provider.apiKeyUrl = sanitizeName(patch.apiKeyUrl) || undefined;
+  }
+  if (patch.wireApi !== undefined) {
+    provider.wireApi =
+      patch.wireApi === null ? undefined : normalizeWireApi(patch.wireApi);
+  }
+  if (patch.enableModePreference !== undefined) {
+    provider.enableModePreference =
+      patch.enableModePreference === null
+        ? undefined
+        : normalizeEnableModePreference(patch.enableModePreference);
+  }
+  if (patch.integrationType !== undefined) {
+    provider.integrationType = normalizeIntegrationType(patch.integrationType);
+  }
+  if (patch.boundOauthAccountId !== undefined) {
+    provider.boundOauthAccountId =
+      patch.boundOauthAccountId === null
+        ? undefined
+        : normalizeBoundOauthAccountId(patch.boundOauthAccountId);
   }
   provider.updatedAt = Date.now();
   await writeProviders(providers);
@@ -331,6 +549,37 @@ export async function removeApiKeyFromCodexModelProvider(
   return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
 }
 
+export async function testCodexModelProviderConnection(input: {
+  baseUrl: string;
+  apiKey: string;
+  wireApi?: CodexProviderWireApi | null;
+}): Promise<CodexLocalAccessTestResult> {
+  return await invoke('codex_test_model_provider_connection', {
+    baseUrl: input.baseUrl,
+    apiKey: input.apiKey,
+    wireApi: input.wireApi ?? null,
+  });
+}
+
+export async function queryCodexModelProviderUsage(input: {
+  baseUrl: string;
+  apiKey: string;
+  integrationType?: 'sub2api' | 'new_api' | null;
+}): Promise<CodexModelProviderUsageSummary> {
+  return await invoke('codex_query_model_provider_usage', {
+    baseUrl: input.baseUrl,
+    apiKey: input.apiKey,
+    integrationType: input.integrationType ?? null,
+  });
+}
+
+export async function saveCodexModelProviderDetectedIntegrationType(
+  providerId: string,
+  integrationType: 'sub2api' | 'new_api',
+): Promise<CodexModelProvider> {
+  return updateCodexModelProvider(providerId, { integrationType });
+}
+
 export async function deleteCodexModelProvider(providerId: string): Promise<void> {
   const providers = await ensureProvidersLoaded();
   const next = providers.filter((item) => item.id !== providerId);
@@ -361,6 +610,18 @@ export async function upsertCodexModelProviderFromCredential(
         sanitizeName(input.providerName ?? '') ||
         deriveProviderNameFromBaseUrl(apiBaseUrl),
       baseUrl: apiBaseUrl,
+      sourceTag: sanitizeName(input.sourceTag ?? '') || undefined,
+      modelCatalog:
+        normalizeModelCatalog(input.modelCatalog) ??
+        presetModelCatalogForBaseUrl(apiBaseUrl),
+      supportsVision: input.supportsVision === true,
+      modelCapabilities: normalizeModelCapabilities(input.modelCapabilities),
+      integrationType: normalizeIntegrationType(input.integrationType),
+      website: sanitizeName(input.website ?? '') || undefined,
+      apiKeyUrl: sanitizeName(input.apiKeyUrl ?? '') || undefined,
+      wireApi: normalizeWireApi(input.wireApi),
+      enableModePreference: 'auto',
+      boundOauthAccountId: undefined,
       apiKeys: [],
       createdAt: now,
       updatedAt: now,
@@ -371,8 +632,34 @@ export async function upsertCodexModelProviderFromCredential(
     provider.updatedAt = Date.now();
   }
 
+  if (input.sourceTag !== undefined) {
+    provider.sourceTag = sanitizeName(input.sourceTag ?? '') || undefined;
+  }
+
   ensureApiKeyOnProvider(provider, apiKey, input.apiKeyName);
   provider.baseUrl = apiBaseUrl;
+  provider.modelCatalog =
+    normalizeModelCatalog(input.modelCatalog) ??
+    provider.modelCatalog ??
+    presetModelCatalogForBaseUrl(apiBaseUrl);
+  if (input.supportsVision !== undefined) {
+    provider.supportsVision = input.supportsVision === true;
+  }
+  if (input.modelCapabilities !== undefined) {
+    provider.modelCapabilities = normalizeModelCapabilities(input.modelCapabilities);
+  }
+  if (input.website !== undefined) {
+    provider.website = sanitizeName(input.website ?? '') || undefined;
+  }
+  if (input.apiKeyUrl !== undefined) {
+    provider.apiKeyUrl = sanitizeName(input.apiKeyUrl ?? '') || undefined;
+  }
+  if (input.wireApi !== undefined) {
+    provider.wireApi = normalizeWireApi(input.wireApi);
+  }
+  if (input.integrationType !== undefined) {
+    provider.integrationType = normalizeIntegrationType(input.integrationType);
+  }
   provider.updatedAt = Date.now();
   await writeProviders(providers);
   return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };

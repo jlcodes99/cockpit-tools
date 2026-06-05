@@ -24,25 +24,30 @@ func Register(cfg *sdkconfig.SDKConfig) {
 
 	sdkaccess.RegisterProvider(
 		sdkaccess.AccessProviderTypeConfigAPIKey,
-		newProvider(sdkaccess.DefaultAccessProviderName, keys),
+		newProvider(sdkaccess.DefaultAccessProviderName, keys, cfg.APIKeyAccountIDs),
 	)
 }
 
 type provider struct {
-	name string
-	keys map[string]struct{}
+	name          string
+	keys          map[string]struct{}
+	keyAccountIDs map[string]string
 }
 
-func newProvider(name string, keys []string) *provider {
+func newProvider(name string, keys []string, scopes map[string][]string) *provider {
 	providerName := strings.TrimSpace(name)
 	if providerName == "" {
 		providerName = sdkaccess.DefaultAccessProviderName
 	}
 	keySet := make(map[string]struct{}, len(keys))
+	keyAccountIDs := make(map[string]string, len(scopes))
 	for _, key := range keys {
 		keySet[key] = struct{}{}
+		if accountIDs := normalizeKeys(scopes[key]); len(accountIDs) > 0 {
+			keyAccountIDs[key] = strings.Join(accountIDs, ",")
+		}
 	}
-	return &provider{name: providerName, keys: keySet}
+	return &provider{name: providerName, keys: keySet, keyAccountIDs: keyAccountIDs}
 }
 
 func (p *provider) Identifier() string {
@@ -90,12 +95,16 @@ func (p *provider) Authenticate(_ context.Context, r *http.Request) (*sdkaccess.
 			continue
 		}
 		if _, ok := p.keys[candidate.value]; ok {
+			metadata := map[string]string{
+				"source": candidate.source,
+			}
+			if accountIDs := p.keyAccountIDs[candidate.value]; accountIDs != "" {
+				metadata["account_ids"] = accountIDs
+			}
 			return &sdkaccess.Result{
 				Provider:  p.Identifier(),
 				Principal: candidate.value,
-				Metadata: map[string]string{
-					"source": candidate.source,
-				},
+				Metadata:  metadata,
 			}, nil
 		}
 	}

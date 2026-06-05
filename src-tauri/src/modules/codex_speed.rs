@@ -272,8 +272,7 @@ fn write_app_speed_for_config_toml_path(
         }
     }
 
-    let content =
-        crate::modules::codex_config_format::normalize_config_toml_spacing(&doc.to_string());
+    let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| format!("创建 Codex 配置目录失败: {}", err))?;
     }

@@ -1,5 +1,6 @@
 use crate::modules::announcement;
 use crate::modules::announcement::AnnouncementState;
+use crate::modules::announcement::SponsorModuleState;
 use crate::modules::announcement::TopRightAdState;
 
 #[tauri::command]
@@ -25,4 +26,14 @@ pub async fn announcement_force_refresh() -> Result<AnnouncementState, String> {
 #[tauri::command]
 pub async fn announcement_get_top_right_ad() -> Result<TopRightAdState, String> {
     announcement::get_top_right_ad_state().await
+}
+
+#[tauri::command]
+pub async fn announcement_get_sponsor_module() -> Result<SponsorModuleState, String> {
+    announcement::get_sponsor_module_state().await
+}
+
+#[tauri::command]
+pub async fn announcement_force_refresh_sponsor_module() -> Result<SponsorModuleState, String> {
+    announcement::force_refresh_sponsor_module().await
 }

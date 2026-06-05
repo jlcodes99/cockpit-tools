@@ -231,7 +231,6 @@
     "overview": "Antigravity IDE",
     "accounts": "Účty",
     "wakeup": "Úlohy probuzení",
-    "fingerprints": "Otisky",
     "settings": "Nastavení",
     "codex": "Codex",
     "githubCopilot": "GitHub Copilot",
@@ -254,12 +253,24 @@
     "expandSidebar": "Rozbalit postranní panel",
     "collapseSidebar": "Sbalit postranní panel",
     "logs": "Protokoly",
+    "sponsors": "Sponzoři",
+    "sponsorAppreciation": "Podpořit",
     "switchClassicLayoutEntry": "Přepnout na klasické rozvržení",
     "switchClassicLayoutTitle": "Přepnout na klasické rozvržení postranního panelu",
     "switchClassicLayoutDesc": "Klasické rozvržení zobrazuje celou navigaci platforem a podporuje sbalení postranního panelu. Kdykoli se můžete vrátit v Nastavení > Obecné > Rozvržení postranního panelu.",
     "switchClassicLayoutDontAskAgain": "Toto upozornění už nezobrazovat",
     "switchClassicLayoutConfirm": "Přepnout nyní",
     "2faManager": "Správa 2FA"
+  },
+  "sponsors": {
+    "pageTitle": "Sponzoři",
+    "pageDesc": "Děkujeme těmto sponzorům za podporu Cockpit Tools.",
+    "loading": "Načítání sponzorů...",
+    "emptyTitle": "Zatím žádní sponzoři",
+    "emptyDesc": "Vzdálený modul sponzorů je aktuálně vypnutý.",
+    "listAriaLabel": "Seznam sponzorů",
+    "defaultDescription": "Děkujeme za podporu Cockpit Tools.",
+    "openSponsor": "Otevřít"
   },
   "platformLayout": {
     "title": "Rozložení platforem",
@@ -272,7 +283,7 @@
     "hiddenBadge": "Skryto",
     "openFromMore": "Spravovat rozložení platforem",
     "dragHandleLabel": "Přetažením změnit pořadí",
-    "tipWithGroups": "Přetažením změňte pořadí. V postranním panelu mohou být nejvýše tři položky. Podřízené platformy skupiny nelze zobrazit v postranním panelu/přehledu; slouží jen pro lištu a přepnutí výchozí platformy.",
+    "tipWithGroups": "Přetažením změníte pořadí. V postranním panelu může být nejvýše {{max}} položek. Podřízené položky skupin nemají přepínače postranního panelu ani přehledu a slouží jen pro zobrazení v nabídce a výběr výchozí platformy.",
     "addGroup": "Přidat skupinu",
     "editGroup": "Upravit skupinu",
     "deleteGroup": "Smazat skupinu",
@@ -549,7 +560,8 @@
     "tabs": {
       "general": "Obecné",
       "network": "Síť",
-      "about": "O aplikaci"
+      "about": "O aplikaci",
+      "data": "Správa dat"
     },
     "general": {
       "appearance": "Vzhled",
@@ -600,8 +612,8 @@
       "floatingCardShowNowAction": "Zobrazit plovoucí kartu",
       "dataDir": "Datový adresář",
       "dataDirDesc": "Umístění pro uložení účtů a konfiguračních souborů.",
-      "fpDir": "Úložiště Antigravity IDE",
-      "fpDirDesc": "Umístění datových souborů Antigravity IDE.",
+      "topRightAdVisible": "Zobrazit horní promo",
+      "topRightAdVisibleDesc": "Skryje horní promo pozici v aplikaci. Stránka sponzorů zůstane beze změny.",
       "opencodeTitle": "Integrace OpenCode",
       "opencodeRestart": "Restartovat OpenCode při přepnutí Codex",
       "opencodeRestartDesc": "Synchronizovat informace o účtu Codex v OpenCode",
@@ -928,6 +940,61 @@
         "unsupportedLegacyFile": "Tento starší formát zálohy účtů nebyl rozpoznán",
         "unsupportedVersion": "Tato verze aplikace tuto verzi balíčku nepodporuje"
       }
+    },
+    "webdav": {
+      "groupTitle": "Synchronizace WebDAV",
+      "enabledTitle": "Synchronizace záloh WebDAV",
+      "enabledDesc": "Výchozí je Jianguoyun, lze jej změnit na jakoukoli službu WebDAV.",
+      "urlTitle": "Adresa služby",
+      "urlDesc": "Výchozí adresa Jianguoyun: https://dav.jianguoyun.com/dav/",
+      "usernameTitle": "Účet",
+      "usernameDesc": "Jianguoyun používá e-mail vašeho účtu.",
+      "usernamePlaceholder": "E-mail nebo uživatelské jméno",
+      "passwordTitle": "Heslo aplikace",
+      "passwordDesc": "Uloženo lokálně; ponechte prázdné pro zachování stávajícího hesla.",
+      "passwordPlaceholder": "Heslo pro aplikaci třetí strany Jianguoyun",
+      "passwordSavedPlaceholder": "Uloženo; ponechte prázdné pro zachování",
+      "clearPassword": "Vymazat",
+      "remoteDirTitle": "Vzdálený adresář",
+      "remoteDirDesc": "Spravují se pouze záložní soubory Cockpit v tomto adresáři.",
+      "statusTitle": "Stav synchronizace",
+      "statusDesc": "Vzdálená obnova vyžaduje ruční výběr a nikdy tiše nepřepíše lokální data.",
+      "lastUpload": "Poslední nahrání: {{time}}",
+      "lastDownload": "Poslední obnova: {{time}}",
+      "never": "Zatím nesynchronizováno",
+      "testAction": "Testovat/Uložit nastavení",
+      "uploadAction": "Vytvořit a nahrát",
+      "syncAction": "Synchronizovat nastavení",
+      "syncLatestConfirm": "Opravdu chcete stáhnout nejnovější vzdálenou zálohu {{name}} a synchronizovat ji lokálně? Tím dojde k přepsání stávajících lokálních dat.",
+      "remoteListTitle": "Vzdálené zálohy",
+      "remoteListDesc": "Zobrazují se pouze soubory JSON a ZIP odpovídající názvům automatických/ručních záloh Cockpit.",
+      "emptyTitle": "Žádné vzdálené zálohy",
+      "emptyDesc": "Uložte nastavení, poté vytvořte a nahrajte zálohu.",
+      "unknownTime": "Neznámé",
+      "restoreAction": "Obnovit",
+      "restoreConfirm": "Obnovit data ze vzdálené zálohy {{name}}?",
+      "deleteConfirm": "Smazat vzdálenou zálohu {{name}}?",
+      "feedback": {
+        "testingAndSaving": "Ukládání a testování připojení WebDAV...",
+        "saveAndTestSuccess": "Nastavení uloženo a test připojení byl úspěšný!",
+        "saveSuccessTestFailed": "Nastavení uloženo, ale test připojení selhal: {{message}}",
+        "saveAndTestFailed": "Uložení a testování připojení selhalo: {{error}}",
+        "uploading": "Vytváření a nahrávání zálohy...",
+        "uploadSuccess": "Nahráno {{count}} souborů, smazáno {{deleted}} expirovaných vzdálených záloh",
+        "uploadFailed": "Nahrávání na WebDAV selhalo: {{error}}",
+        "listFailed": "Načtení vzdálených záloh selhalo: {{error}}",
+        "loadSettingsFailed": "Načtení nastavení WebDAV selhalo: {{error}}",
+        "restoring": "Čtení vzdálené zálohy a importování...",
+        "restoreEmpty": "Ze vzdálené zálohy nebyla obnovena žádná data",
+        "deleteSuccess": "Vzdálená záloha byla smazána",
+        "deleteFailed": "Smazání vzdálené zálohy selhalo: {{error}}",
+        "syncingLatest": "Synchronizace nejnovější vzdálené konfigurace...",
+        "syncFailed": "Synchronizace nejnovější konfigurace selhala: {{error}}",
+        "noRemoteBackup": "Na vzdáleném serveru nebyly nalezeny žádné obnovitelné záložní soubory"
+      },
+      "errors": {
+        "notEnabled": "Nejprve povolte synchronizaci WebDAV"
+      }
     }
   },
   "appPath": {
@@ -959,7 +1026,6 @@
       "email": "E-mail",
       "subscription": "Předplatné",
       "quota": "Stav kvóty",
-      "fingerprint": "Otisk",
       "lastUsed": "Naposledy použito",
       "actions": "Akce"
     },
@@ -1045,10 +1111,8 @@
     "actions": {
       "viewDetails": "Zobrazit detaily",
       "viewError": "Zobrazit chybu",
-      "fingerprint": "Otisk",
       "switch": "Přepnout účet",
       "switchTo": "Přepnout na tento účet",
-      "selectFingerprint": "Vybrat otisk",
       "delete": "Smazat",
       "deleteSelected": "Smazat vybrané",
       "export": "Exportovat",
@@ -1197,106 +1261,8 @@
     "currentAccount": "Právě se používá",
     "switchTo": "Přepnout na tento účet",
     "switching": "Přepínání...",
-    "fingerprint": "Otisk",
     "bound": "Vázáno",
     "brandTitle": "Správa účtu Antigravity IDE"
-  },
-  "fingerprints": {
-    "title": "Otisky zařízení",
-    "subtitle": "Správa otisků zařízení vázaných k účtům.",
-    "toolbar": {
-      "generate": "Generovat nový",
-      "capture": "Zachytit aktuální",
-      "import": "Importovat",
-      "folder": "Složka",
-      "delete": "Smazat",
-      "deleteUnbound": "Odstranit nepřiřazené"
-    },
-    "table": {
-      "name": "Název otisku",
-      "machineId": "ID stroje",
-      "accounts": "Vázané účty",
-      "actions": "Akce",
-      "accountCount": "{{count}} účtů",
-      "apply": "Použít",
-      "noData": "Žádná data otisků",
-      "preview": "Náhled",
-      "rename": "Přejmenovat"
-    },
-    "modals": {
-      "generate": {
-        "title": "Generovat otisk",
-        "btn": "Generovat"
-      },
-      "capture": {
-        "title": "Zachytit otisk",
-        "btn": "Zachytit"
-      },
-      "rename": {
-        "title": "Přejmenovat otisk",
-        "label": "Název otisku"
-      },
-      "import": {
-        "title": "Importovat otisky",
-        "fromTools": "Importovat z Antigravity Tools",
-        "desc": "Importovat z adresáře ~/.antigravity_tools/",
-        "fromJsonBtn": "Importovat z JSON",
-        "jsonExample": "Příklad formátu:",
-        "jsonPlaceholder": "Pracovní otisk",
-        "orPasteJson": "Nebo vložte JSON"
-      },
-      "bound": {
-        "title": "Vázané účty",
-        "add": "Přidat účty",
-        "empty": "Žádné vázané účty",
-        "emptyAll": "Všechny účty jsou již vázány",
-        "select": "Vyberte účty k přidání",
-        "from": "Zdroj: {{name}}",
-        "back": "Zpět"
-      },
-      "detail": {
-        "title": "Detaily otisku",
-        "created": "Vytvořeno {{time}}"
-      }
-    },
-    "messages": {
-      "deleteConfirm": "Smazat tento otisk? Účty na něj vázané se vrátí k původnímu otisku.",
-      "batchDeleteConfirm": "Smazat {{count}} otisků? Účty na ně vázané se vrátí k původnímu otisku.",
-      "generated": "Nový otisk byl vygenerován",
-      "captured": "Aktuální otisk byl zachycen",
-      "renamed": "Přejmenováno",
-      "deleted": "Otisk byl smazán",
-      "imported": "Bylo importováno {{count}} otisků",
-      "addedAccounts": "Přidány {{count}} účty",
-      "enterName": "Zadejte název otisku",
-      "previewNotReady": "Náhled není připraven, čekejte prosím",
-      "duplicate": "Tento otisk již existuje: {{name}}",
-      "autoGeneratedSuffix": "(Nenalezeno, vygenerováno automaticky)",
-      "readOnly": "Pouze pro čtení",
-      "current": "Aktuální",
-      "addCount": "Přidáno {{count}} účtů",
-      "addFailed": "Přidání se nezdařilo",
-      "adding": "Přidávání...",
-      "applyFailed": "Použití se nezdařilo",
-      "boundCount": "Přiřazeno {{count}} účtů",
-      "captureFailed": "Zachycení se nezdařilo",
-      "count": "{{count}}",
-      "deleteFailed": "Smazání se nezdařilo",
-      "fpLabel": "Otisk:",
-      "generateFailed": "Vytvoření se nezdařilo",
-      "importFailed": "Import se nezdařil",
-      "importPartialFailed": "{{failCount}} selhalo: {{failList}}",
-      "refreshingQuota": "Obnovuji kvótu {{done}}/{{total}} (toto okno můžete zavřít)",
-      "quotaRefreshDone": "Obnovení kvóty dokončeno",
-      "importing": "Probíhá import...",
-      "loadFailed": "Nepodařilo se načíst seznam otisků",
-      "processing": "Zpracování...",
-      "renameFailed": "Přejmenování se nezdařilo",
-      "serviceMachineIdEmpty": "Prázdné",
-      "deleteUnboundConfirm": "Odstranit {{count}} otisků bez přiřazeného účtu?",
-      "deletedUnbound": "Odstraněno {{count}} nepřiřazených otisků",
-      "noUnboundToDelete": "Žádné nepřiřazené otisky k odstranění"
-    }
   },
   "modals": {
     "addAccount": {
@@ -1331,15 +1297,6 @@
       "fromFiles": "Import z lokálních souborů",
       "fromFilesDesc": "Vyberte soubory JSON pro import účtů (podporováno více formátů)",
       "importingFiles": "Importuje se {{count}} soubor(ů)..."
-    },
-    "fingerprint": {
-      "title": "Vybrat otisk",
-      "desc": "Vyberte otisk pro účet <1>{{email}}</1>",
-      "original": "Původní otisk",
-      "new": "Přidat nový otisk",
-      "bind": "Potvrdit vazbu",
-      "selectLabel": "Vybrat otisk",
-      "boundCount": "účtů"
     },
     "quota": {
       "title": "Detaily kvóty",
@@ -2488,7 +2445,12 @@
         "website": "Web (volitelné)",
         "apiKeyUrl": "Stránka API klíče (volitelné)",
         "newApiKeyName": "Název nového klíče (volitelné)",
-        "newApiKey": "Nový API klíč"
+        "newApiKey": "Nový API klíč",
+        "wireApi": "Protokol",
+        "enableMode": "Režim zapnutí",
+        "modelCatalog": "Katalog modelů",
+        "visionCapability": "Vstup obrázků",
+        "visionModels": "Vizuální modely"
       },
       "validation": {
         "nameRequired": "Název poskytovatele je povinný.",
@@ -2503,6 +2465,19 @@
       "confirmDelete": "Smazat poskytovatele „{{name}}“?",
       "deleteFailed": "Nepodařilo se smazat poskytovatele: {{error}}",
       "deleteApiKeyFailed": "Nepodařilo se smazat API klíč: {{error}}",
+      "enableAsBackend": "Použít jako backend Codex",
+      "enabling": "Zapínání...",
+      "enableSuccess": "{{name}} povolen a {{instance}} spuštěna.",
+      "enableFailed": "Nepodařilo se zapnout poskytovatele: {{error}}",
+      "status": {
+        "active": "Aktuální backend",
+        "available": "Připraveno"
+      },
+      "enableMode": {
+        "label": "Režim připojení",
+        "gatewayMode": "Režim brány",
+        "directMode": "Přímý režim"
+      },
       "selectSavedProvider": "Uložení poskytovatelé",
       "selectSavedApiKey": "Uložené API klíče",
       "noSavedProviders": "Zatím nejsou uloženi žádní poskytovatelé. Pole můžete vyplnit přímo a vše se uloží automaticky.",
@@ -2561,7 +2536,107 @@
         "partialDetected": "Aktuálně je nastaveno pouze jedno spravované pole: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. Uložením se přepíší obě pole podle aktuálního schématu.",
         "notSet": "Nenastaveno"
       },
-      "managePresets": "Předvolby modelů"
+      "managePresets": "Předvolby modelů",
+      "wireApi": {
+        "responses": "Nativní Responses",
+        "chatCompletions": "Protokol Chat Completions",
+        "help": "Pro většinu poskytovatelů zvolte Responses. Na Chat Completions přepněte jen tehdy, když poskytovatel výslovně podporuje pouze tento protokol. Pokud si nejste jistí, zvolte nejdříve Responses.",
+        "helpAria": "Zobrazit nápovědu k protokolu"
+      },
+      "testing": "Testování...",
+      "testSuccess": "Připojení poskytovatele je v pořádku: {{protocol}}, {{model}}, {{latency}}.",
+      "testFailed": "Test poskytovatele selhal: {{error}}",
+      "testFailure": {
+        "credential": "API Key není dostupný",
+        "url": "Neplatná Base URL",
+        "network": "Síťové připojení selhalo",
+        "models": "Chyba endpointu modelů",
+        "parse": "Zpracování odpovědi selhalo",
+        "httpStatus": "Stav {{status}}",
+        "message": "{{title}}: {{detail}}. {{suggestion}}"
+      },
+      "testSuggestion": {
+        "addApiKey": "Před testem přidejte pro tohoto poskytovatele API Key.",
+        "checkBaseUrl": "Zkontrolujte, že Base URL obsahuje správnou cestu verze, například /v1.",
+        "checkNetwork": "Zkontrolujte adresu poskytovatele, proxy, firewall nebo stav upstream služby.",
+        "checkApiKey": "Zkontrolujte platnost API Key a oprávnění k endpointu modelů.",
+        "checkProviderStatus": "Zkontrolujte stav služby poskytovatele, proxy nebo kompatibilitu API.",
+        "checkModelsApi": "Ověřte, že poskytovatel vrací seznam modelů kompatibilní s OpenAI."
+      },
+      "enableAndStart": "Spustit",
+      "instance": {
+        "label": "Spustit instanci",
+        "default": "Výchozí instance",
+        "running": "Běží",
+        "targetHint": "Cíl: {{instance}}",
+        "uninitializedHint": "Cílová instance není inicializovaná. Nejprve ji jednou spusťte na stránce více instancí.",
+        "shortLabel": "Inst.",
+        "saveFailed": "Nepodařilo se uložit vazbu instance: {{error}}"
+      },
+      "modelCatalog": "Modely",
+      "modelCatalogEmpty": "Žádný katalog modelů",
+      "gatewayHint": "Poskytovatelé třetích stran se spouštějí přes místní bránu kvůli izolaci instance a převodu protokolu. Oficiální poskytovatelé OpenAI zůstávají přímí.",
+      "vision": {
+        "providerDefault": "Tento poskytovatel ve výchozím stavu podporuje obrázky",
+        "providerDefaultHint": "Když je vypnuto, obrázky přijmou jen níže uvedené modely; ostatní místní brána odmítne.",
+        "modelsHint": "Jeden model na řádek. Hodí se, když obrázky podporuje jen část modelů poskytovatele.",
+        "allModels": "Obrázky",
+        "partialModels": "Část obrázků",
+        "textOnly": "Jen text"
+      },
+      "sponsorRecommended": "Doporučení sponzorů",
+      "builtinProviders": "Vestavění poskytovatelé",
+      "sponsorHint": "Byla vyplněna adresa kompatibilní služby doporučená sponzorem. Po zadání API Key bude karta automaticky načítat zůstatek a využití.",
+      "integration": {
+        "sub2api": "Kompatibilní se Sub2API",
+        "newApi": "Kompatibilní s New API"
+      },
+      "usage": {
+        "title": "Přehled kvóty",
+        "remaining": "Zbývá",
+        "today": "Dnes",
+        "total": "Celkem",
+        "requests": "Dnešní požadavky",
+        "loading": "Načítání kvóty...",
+        "failed": "Načtení kvóty selhalo: {{error}}",
+        "pending": "Čeká na načtení kvóty",
+        "noKey": "Žádná dostupná kvóta",
+        "used": "Využito",
+        "limit": "Mez",
+        "viewDetail": "Detaily",
+        "detailTitle": "Panel služby",
+        "rawFields": "Data služby",
+        "fields": {
+          "status": "Stav",
+          "planName": "Tarif",
+          "remaining": "Zbývá",
+          "balance": "Zůstatek",
+          "todayRequests": "Dnešní požadavky",
+          "todayTokens": "Dnešní tokeny",
+          "todayCost": "Dnešní náklady",
+          "totalRequests": "Požadavky celkem",
+          "totalTokens": "Tokeny celkem",
+          "totalCost": "Náklady celkem",
+          "hardLimitUsd": "Pevná mez",
+          "softLimitUsd": "Měkká mez",
+          "systemHardLimitUsd": "Systémová mez",
+          "accessUntil": "Přístup do",
+          "totalUsage": "Využití celkem",
+          "quotaUnlimited": "Neomezeno",
+          "expiresAt": "Platí do",
+          "totalGranted": "Přiděleno",
+          "totalAvailable": "Dostupné",
+          "modelLimitsEnabled": "Limity modelů"
+        },
+        "accountBalance": "Zůstatek účtu",
+        "unlimitedQuota": "Neomezeno",
+        "booleanTrue": "Ano",
+        "booleanFalse": "Ne"
+      },
+      "oauthBinding": {
+        "desc": "Volitelné. Lze připojit libovolný OAuth účet s refresh_token. Bez propojení poskytovatel dál používá původní tok API Key.",
+        "currentProvider": "Poskytovatel: {{name}}"
+      }
     },
     "quickSwitch": {
       "action": "Rychle přepnout poskytovatele",
@@ -2807,6 +2882,10 @@
         "saveSuccess": "Blokace modelů účtu uložena",
         "cardCount": "{{count}} blok."
       }
+    },
+    "apiKey": {
+      "renameSuccess": "Přejmenováno",
+      "renameFailed": "Přejmenování selhalo"
     }
   },
   "githubCopilot": {
@@ -3369,7 +3448,6 @@
       "goAntigravity": "Přejít na Antigravity IDE",
       "goCodex": "Přejít na Codex",
       "goDashboard": "Přejít na Dashboard",
-      "goFingerprints": "Přejít na otisky zařízení",
       "goGitHubCopilot": "Přejít na GitHub Copilot",
       "goInstances": "Přejít na více instancí",
       "goKiro": "Přejít na Kiro",
@@ -3465,28 +3543,6 @@
       "desc": "Zkuste klíčová slova: instance, přepnutí, nastavení, export.",
       "title": "Žádný odpovídající obsah"
     },
-    "fingerprints": {
-      "cautions": {
-        "0": "Před rizikovými nebo hromadnými akcemi v Otisky zařízení zálohujte data."
-      },
-      "keywords": {
-        "0": "Otisky zařízení",
-        "1": "návod",
-        "2": "postup",
-        "3": "účet"
-      },
-      "outcomes": {
-        "0": "Pochopte, co vám Otisky zařízení přináší.",
-        "1": "Použijte doporučený postup v Otisky zařízení a snižte chyby."
-      },
-      "steps": {
-        "0": "Otevřete stránku Otisky zařízení.",
-        "1": "Dokončete základní nastavení a potřebné vazby pro Otisky zařízení.",
-        "2": "Proveďte jednu ruční operaci v Otisky zařízení a ověřte výsledek."
-      },
-      "summary": "Tato sekce vysvětluje, jak používat Otisky zařízení v běžném workflow.",
-      "title": "Otisky zařízení"
-    },
     "instances": {
       "cautions": {
         "0": "Před rizikovými nebo hromadnými akcemi v Více instancí (klíčové) zálohujte data.",
@@ -3566,7 +3622,7 @@
     },
     "resultCount": "Celkem {{count}} sekcí",
     "searchAria": "Hledat v příručce",
-    "searchPlaceholder": "Hledat funkce, scénáře nebo klíčová slova (např. instance, inject, wakeup, fingerprint)",
+    "searchPlaceholder": "Hledat funkce, scénáře nebo klíčová slova (např. instance, inject, wakeup)",
     "settings": {
       "cautions": {
         "0": "Před rizikovými nebo hromadnými akcemi v Nastavení a systémové možnosti zálohujte data.",

@@ -121,18 +121,6 @@ fn legacy_antigravity_user_data_dir() -> Result<PathBuf, String> {
     Err("无法确定 Antigravity 默认目录".to_string())
 }
 
-fn legacy_antigravity_storage_path() -> Result<PathBuf, String> {
-    let path = legacy_antigravity_user_data_dir()?
-        .join("User")
-        .join("globalStorage")
-        .join("storage.json");
-    if path.exists() {
-        Ok(path)
-    } else {
-        Err("未找到 storage.json，请确认 Antigravity 已运行过".to_string())
-    }
-}
-
 fn legacy_antigravity_state_db_path() -> Result<PathBuf, String> {
     let path = legacy_antigravity_user_data_dir()?
         .join("User")
@@ -150,18 +138,6 @@ fn legacy_antigravity_state_db_path() -> Result<PathBuf, String> {
         }
     }
     Ok(path)
-}
-
-fn write_legacy_service_machine_id(service_machine_id: &str) -> Result<(), String> {
-    let db_path = legacy_antigravity_state_db_path()?;
-    let conn =
-        rusqlite::Connection::open(&db_path).map_err(|e| format!("打开数据库失败: {}", e))?;
-    conn.execute(
-        "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
-        ["storage.serviceMachineId", service_machine_id],
-    )
-    .map_err(|e| format!("写入 serviceMachineId 失败: {}", e))?;
-    Ok(())
 }
 
 #[tauri::command]
@@ -361,17 +337,6 @@ async fn switch_account_legacy_antigravity(
     )?;
     let _ = modules::instance::update_default_pid(None);
 
-    if let Some(ref fp_id) = account.fingerprint_id {
-        if let Ok(fingerprint) = modules::fingerprint::get_fingerprint(fp_id) {
-            if let Ok(storage_path) = legacy_antigravity_storage_path() {
-                modules::logger::log_info("写入 Antigravity 旧版设备指纹");
-                let _ = modules::device::write_profile(&storage_path, &fingerprint.profile);
-                let _ = write_legacy_service_machine_id(&fingerprint.profile.service_machine_id);
-                let _ = modules::fingerprint::set_current_fingerprint_id(fp_id);
-            }
-        }
-    }
-
     let mut write_success = false;
 
     // 1. 尝试写入系统凭据 (Windows Credential Manager / macOS Keychain / Linux Secret Service)
@@ -467,7 +432,7 @@ async fn switch_account_legacy_antigravity(
     Ok(account)
 }
 
-/// 切换账号（完整流程：Token刷新 + 关闭程序 + 注入 + 指纹同步 + 重启）
+/// 切换账号（完整流程：Token刷新 + 关闭程序 + 注入 + 重启）
 #[tauri::command]
 pub async fn switch_account(
     app: AppHandle,
@@ -563,25 +528,7 @@ pub async fn switch_account(
     let _ = modules::instance::update_default_pid(None);
 
     // 6. 进程完全退出后，执行磁盘级别的文件注入
-    // 6.1 写入设备指纹到 storage.json 和 state.vscdb
-    if let Ok(storage_path) = modules::device::get_storage_path() {
-        if let Some(ref fp_id) = account.fingerprint_id {
-            // 优先使用绑定的指纹
-            if let Ok(fingerprint) = modules::fingerprint::get_fingerprint(fp_id) {
-                modules::logger::log_info(&format!(
-                    "写入设备指纹: machineId={}, serviceMachineId={}",
-                    fingerprint.profile.machine_id, fingerprint.profile.service_machine_id
-                ));
-                let _ = modules::device::write_profile(&storage_path, &fingerprint.profile);
-                let _ =
-                    modules::db::write_service_machine_id(&fingerprint.profile.service_machine_id);
-                // 更新当前应用的指纹ID
-                let _ = modules::fingerprint::set_current_fingerprint_id(fp_id);
-            }
-        }
-    }
-
-    // 6.2 将账号 Token 注入默认实例目录
+    // 6.1 将账号 Token 注入默认实例目录
     modules::instance::inject_account_to_profile(&default_dir, &account_id)?;
 
     // 7. 启动 Antigravity IDE（带默认实例自定义启动参数；启动失败不阻断切号，保持原行为）
@@ -641,18 +588,6 @@ pub fn clear_antigravity_switch_history() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn bind_account_fingerprint(
-    account_id: String,
-    fingerprint_id: String,
-) -> Result<(), String> {
-    let mut account = modules::load_account(&account_id)?;
-    // 验证指纹存在
-    let _ = modules::fingerprint::get_fingerprint(&fingerprint_id)?;
-    account.fingerprint_id = Some(fingerprint_id);
-    modules::save_account(&account)
-}
-
-#[tauri::command]
 pub async fn update_account_tags(
     account_id: String,
     tags: Vec<String>,
@@ -669,11 +604,6 @@ pub async fn update_account_notes(
 ) -> Result<models::Account, String> {
     let account = modules::account::update_account_notes(&account_id, notes)?;
     Ok(account)
-}
-
-#[tauri::command]
-pub async fn get_bound_accounts(fingerprint_id: String) -> Result<Vec<models::Account>, String> {
-    modules::fingerprint::get_bound_accounts(&fingerprint_id)
 }
 
 /// 从本地客户端同步当前账号状态

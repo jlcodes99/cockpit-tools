@@ -447,11 +447,7 @@ fn is_instance_running(
     instance: &CodexSyncInstance,
     process_entries: &[(u32, Option<String>)],
 ) -> bool {
-    let codex_home = if instance.id == DEFAULT_INSTANCE_ID {
-        None
-    } else {
-        instance.data_dir.to_str()
-    };
+    let codex_home = instance.data_dir.to_str();
     modules::process::resolve_codex_pid_from_entries(instance.last_pid, codex_home, process_entries)
         .is_some()
 }

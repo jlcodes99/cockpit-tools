@@ -4,6 +4,7 @@ import { getTopRightAdState } from '../services/topRightAdService';
 
 const EMPTY_STATE: TopRightAdState = {
   ad: null,
+  ads: [],
 };
 
 interface TopRightAdStoreState {

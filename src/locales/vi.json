@@ -231,7 +231,6 @@
     "overview": "Antigravity IDE",
     "accounts": "Quản lý tài khoản",
     "wakeup": "Wakeup Tasks",
-    "fingerprints": "Vân tay thiết bị",
     "settings": "Cài đặt",
     "codex": "Codex",
     "githubCopilot": "GitHub Copilot",
@@ -254,12 +253,24 @@
     "expandSidebar": "Mở rộng thanh bên",
     "collapseSidebar": "Thu gọn thanh bên",
     "logs": "Nhật ký",
+    "sponsors": "Nhà tài trợ",
+    "sponsorAppreciation": "Tài trợ",
     "switchClassicLayoutEntry": "Chuyển sang bố cục cổ điển",
     "switchClassicLayoutTitle": "Chuyển sang bố cục thanh bên cổ điển",
     "switchClassicLayoutDesc": "Bố cục cổ điển hiển thị đầy đủ điều hướng nền tảng và hỗ trợ thu gọn thanh bên. Bạn có thể chuyển lại bất cứ lúc nào tại Cài đặt > Chung > Bố cục thanh bên.",
     "switchClassicLayoutDontAskAgain": "Không hiển thị lại thông báo này",
     "switchClassicLayoutConfirm": "Chuyển ngay",
     "2faManager": "Quản lý 2FA"
+  },
+  "sponsors": {
+    "pageTitle": "Nhà tài trợ",
+    "pageDesc": "Cảm ơn các nhà tài trợ đã hỗ trợ Cockpit Tools.",
+    "loading": "Đang tải nhà tài trợ...",
+    "emptyTitle": "Chưa có nhà tài trợ",
+    "emptyDesc": "Mô-đun nhà tài trợ từ xa hiện đang tắt.",
+    "listAriaLabel": "Danh sách nhà tài trợ",
+    "defaultDescription": "Cảm ơn bạn đã hỗ trợ Cockpit Tools.",
+    "openSponsor": "Mở"
   },
   "platformLayout": {
     "title": "Bố cục nền tảng",
@@ -272,7 +283,7 @@
     "hiddenBadge": "Ẩn",
     "openFromMore": "Quản lý bố cục nền tảng",
     "dragHandleLabel": "Kéo để sắp xếp lại",
-    "tipWithGroups": "Kéo để sắp xếp lại. Tối đa chỉ hiển thị 3 mục ở thanh bên. Nền tảng con trong nhóm không có công tắc thanh bên/bảng điều khiển và chỉ dùng cho thanh menu cùng chuyển nền tảng mặc định.",
+    "tipWithGroups": "Kéo để sắp xếp. Thanh bên có thể hiển thị tối đa {{max}} mục. Các mục con của nhóm không có công tắc thanh bên/bảng điều khiển và chỉ dùng cho thanh menu cùng nền tảng mặc định.",
     "addGroup": "Thêm nhóm",
     "editGroup": "Sửa nhóm",
     "deleteGroup": "Xóa nhóm",
@@ -549,7 +560,8 @@
     "tabs": {
       "general": "Chung",
       "network": "Dịch vụ mạng",
-      "about": "Giới thiệu"
+      "about": "Giới thiệu",
+      "data": "Quản lý dữ liệu"
     },
     "general": {
       "appearance": "Giao diện",
@@ -603,8 +615,8 @@
       "floatingCardShowNowAction": "Hiển thị thẻ nổi",
       "dataDir": "Thư mục dữ liệu",
       "dataDirDesc": "Vị trí lưu trữ tài khoản và cấu hình.",
-      "fpDir": "Thư mục lưu trữ Antigravity IDE",
-      "fpDirDesc": "Vị trí lưu trữ tệp dữ liệu Antigravity IDE.",
+      "topRightAdVisible": "Hiện quảng bá trên cùng",
+      "topRightAdVisibleDesc": "Ẩn vị trí quảng bá trên cùng trong ứng dụng. Trang Nhà tài trợ không bị ảnh hưởng.",
       "opencodeTitle": "Tích hợp OpenCode",
       "opencodeRestart": "Khởi động lại OpenCode khi chuyển Codex",
       "opencodeRestartDesc": "Đồng bộ thông tin tài khoản Codex trong OpenCode",
@@ -928,6 +940,61 @@
         "unsupportedLegacyFile": "Không nhận ra định dạng bản sao lưu tài khoản kiểu cũ này",
         "unsupportedVersion": "Phiên bản ứng dụng này không hỗ trợ phiên bản gói đó"
       }
+    },
+    "webdav": {
+      "groupTitle": "Đồng bộ hóa WebDAV",
+      "enabledTitle": "Đồng bộ hóa sao lưu WebDAV",
+      "enabledDesc": "Mặc định là Jianguoyun và có thể thay đổi thành bất kỳ dịch vụ WebDAV nào.",
+      "urlTitle": "Địa chỉ dịch vụ",
+      "urlDesc": "Địa chỉ mặc định của Jianguoyun: https://dav.jianguoyun.com/dav/",
+      "usernameTitle": "Tài khoản",
+      "usernameDesc": "Jianguoyun sử dụng email tài khoản của bạn.",
+      "usernamePlaceholder": "Email hoặc tên người dùng",
+      "passwordTitle": "Mật khẩu ứng dụng",
+      "passwordDesc": "Được lưu cục bộ; để trống để giữ mật khẩu hiện có.",
+      "passwordPlaceholder": "Mật khẩu ứng dụng bên thứ ba Jianguoyun",
+      "passwordSavedPlaceholder": "Đã lưu; để trống để giữ lại",
+      "clearPassword": "Xóa",
+      "remoteDirTitle": "Thư mục từ xa",
+      "remoteDirDesc": "Chỉ các tệp sao lưu Cockpit trong thư mục này mới được quản lý.",
+      "statusTitle": "Trạng thái đồng bộ",
+      "statusDesc": "Khôi phục từ xa yêu cầu chọn thủ công và không bao giờ âm thầm ghi đè lên dữ liệu cục bộ.",
+      "lastUpload": "Tải lên cuối: {{time}}",
+      "lastDownload": "Khôi phục cuối: {{time}}",
+      "never": "Chưa đồng bộ hóa",
+      "testAction": "Kiểm tra/Lưu cấu hình",
+      "uploadAction": "Tạo & Tải lên",
+      "syncAction": "Đồng bộ cấu hình",
+      "syncLatestConfirm": "Bạn có chắc chắn muốn tải bản sao lưu từ xa mới nhất {{name}} và đồng bộ hóa cục bộ không? Việc này sẽ ghi đè lên dữ liệu cục bộ hiện có.",
+      "remoteListTitle": "Bản sao lưu từ xa",
+      "remoteListDesc": "Chỉ hiển thị các tệp JSON và ZIP khớp với tên sao lưu tự động/thủ công của Cockpit.",
+      "emptyTitle": "Không có bản sao lưu từ xa",
+      "emptyDesc": "Lưu cài đặt, sau đó tạo và tải bản sao lưu lên.",
+      "unknownTime": "Không xác định",
+      "restoreAction": "Khôi phục",
+      "restoreConfirm": "Khôi phục dữ liệu từ bản sao lưu từ xa {{name}}?",
+      "deleteConfirm": "Xóa bản sao lưu từ xa {{name}}?",
+      "feedback": {
+        "testingAndSaving": "Đang lưu và kiểm tra kết nối WebDAV...",
+        "saveAndTestSuccess": "Đã lưu cấu hình và kiểm tra kết nối thành công!",
+        "saveSuccessTestFailed": "Đã lưu cấu hình, nhưng kiểm tra kết nối thất bại: {{message}}",
+        "saveAndTestFailed": "Lưu và kiểm tra kết nối thất bại: {{error}}",
+        "uploading": "Đang tạo và tải bản sao lưu lên...",
+        "uploadSuccess": "Đã tải lên {{count}} tệp, dọn dẹp {{deleted}} bản sao lưu từ xa hết hạn",
+        "uploadFailed": "Tải lên WebDAV thất bại: {{error}}",
+        "listFailed": "Tải bản sao lưu từ xa thất bại: {{error}}",
+        "loadSettingsFailed": "Tải cài đặt WebDAV thất bại: {{error}}",
+        "restoring": "Đang đọc bản sao lưu từ xa và nhập...",
+        "restoreEmpty": "Không có dữ liệu nào được khôi phục từ bản sao lưu từ xa",
+        "deleteSuccess": "Đã xóa bản sao lưu từ xa",
+        "deleteFailed": "Xóa bản sao lưu từ xa thất bại: {{error}}",
+        "syncingLatest": "Đang đồng bộ cấu hình từ xa mới nhất...",
+        "syncFailed": "Đồng bộ cấu hình mới nhất thất bại: {{error}}",
+        "noRemoteBackup": "Không tìm thấy tệp sao lưu nào có thể khôi phục từ xa"
+      },
+      "errors": {
+        "notEnabled": "Hãy bật đồng bộ hóa WebDAV trước"
+      }
     }
   },
   "appPath": {
@@ -959,7 +1026,6 @@
       "email": "E-mail",
       "subscription": "Loại đăng ký",
       "quota": "Trạng thái hạn mức",
-      "fingerprint": "Vân tay",
       "lastUsed": "Sử dụng lần cuối",
       "actions": "Thao tác"
     },
@@ -1045,10 +1111,8 @@
     "actions": {
       "viewDetails": "Xem chi tiết",
       "viewError": "Xem lỗi",
-      "fingerprint": "Vân tay",
       "switch": "Chuyển tài khoản",
       "switchTo": "Chuyển sang tài khoản này",
-      "selectFingerprint": "Chọn vân tay",
       "delete": "Xóa",
       "deleteSelected": "Xóa mục đã chọn",
       "export": "Xuất",
@@ -1197,106 +1261,8 @@
     "currentAccount": "Đang trong phiên sử dụng",
     "switchTo": "Chuyển sang tài khoản này",
     "switching": "Đang chuyển...",
-    "fingerprint": "Vân tay",
     "bound": "Đã liên kết",
     "brandTitle": "Quản lý tài khoản Antigravity IDE"
-  },
-  "fingerprints": {
-    "title": "Vân tay thiết bị",
-    "subtitle": "Quản lý các vân tay thiết bị được liên kết với tài khoản.",
-    "toolbar": {
-      "generate": "Tạo vân tay mới",
-      "capture": "Chụp vân tay hiện tại",
-      "import": "Nhập",
-      "folder": "Thư mục",
-      "delete": "Xóa",
-      "deleteUnbound": "Xóa chưa liên kết"
-    },
-    "table": {
-      "name": "Tên vân tay",
-      "machineId": "ID thiết bị",
-      "accounts": "Tài khoản liên kết",
-      "actions": "Thao tác",
-      "accountCount": "{{count}} tài khoản",
-      "apply": "Áp dụng",
-      "noData": "Không có dữ liệu vân tay",
-      "preview": "Xem trước",
-      "rename": "Đổi tên"
-    },
-    "modals": {
-      "generate": {
-        "title": "Tạo vân tay mới",
-        "btn": "Tạo"
-      },
-      "capture": {
-        "title": "Chụp vân tay hiện tại",
-        "btn": "Chụp"
-      },
-      "rename": {
-        "title": "Đổi tên vân tay",
-        "label": "Tên vân tay"
-      },
-      "import": {
-        "title": "Nhập vân tay",
-        "fromTools": "Nhập vân tay Antigravity Tools",
-        "desc": "Nhập từ thư mục ~/.antigravity_tools/",
-        "fromJsonBtn": "Nhập từ JSON",
-        "jsonExample": "Ví dụ định dạng:",
-        "jsonPlaceholder": "Dấu vân tay công việc",
-        "orPasteJson": "Hoặc dán JSON"
-      },
-      "bound": {
-        "title": "Quản lý tài khoản liên kết",
-        "add": "Thêm tài khoản",
-        "empty": "Chưa có tài khoản nào liên kết với vân tay này",
-        "emptyAll": "Tất cả tài khoản đều đã liên kết với vân tay này",
-        "select": "Chọn tài khoản muốn thêm",
-        "from": "Từ: {{name}}",
-        "back": "Quay lại"
-      },
-      "detail": {
-        "title": "Thông tin chi tiết vân tay",
-        "created": "Được tạo lúc {{time}}"
-      }
-    },
-    "messages": {
-      "deleteConfirm": "Bạn có chắc chắn muốn xóa vân tay này không? Các tài khoản liên kết với vân tay này sẽ tự động chuyển về vân tay gốc.",
-      "batchDeleteConfirm": "Bạn có chắc chắn muốn xóa {{count}} vân tay đã chọn không? Các tài khoản liên kết sẽ tự động chuyển về vân tay gốc.",
-      "generated": "Đã tạo vân tay mới",
-      "captured": "Đã chụp vân tay hiện tại",
-      "renamed": "Đã đổi tên",
-      "deleted": "Đã xóa vân tay",
-      "imported": "Đã nhập {{count}} vân tay",
-      "addedAccounts": "Đã thêm {{count}} tài khoản",
-      "enterName": "Vui lòng nhập tên vân tay",
-      "previewNotReady": "Bản xem trước chưa sẵn sàng, vui lòng thử lại sau",
-      "duplicate": "Đã tồn tại vân tay tương tự: {{name}}, không cần thêm lại.",
-      "autoGeneratedSuffix": "(Không tìm thấy, đã tự động tạo)",
-      "readOnly": "Chỉ đọc",
-      "current": "Hiện tại",
-      "addCount": "Đã thêm {{count}} tài khoản",
-      "addFailed": "Thêm thất bại",
-      "adding": "Đang thêm...",
-      "applyFailed": "Áp dụng thất bại",
-      "boundCount": "Đã liên kết {{count}} tài khoản",
-      "captureFailed": "Chụp thất bại",
-      "count": "{{count}}",
-      "deleteFailed": "Xóa thất bại",
-      "fpLabel": "Dấu vân tay:",
-      "generateFailed": "Tạo thất bại",
-      "importFailed": "Nhập thất bại",
-      "importPartialFailed": "{{failCount}} thất bại: {{failList}}",
-      "refreshingQuota": "Đang làm mới hạn ngạch {{done}}/{{total}} (bạn có thể đóng hộp thoại này)",
-      "quotaRefreshDone": "Làm mới hạn ngạch hoàn tất",
-      "importing": "Đang nhập...",
-      "loadFailed": "Không thể tải danh sách vân tay",
-      "processing": "Đang xử lý...",
-      "renameFailed": "Đổi tên thất bại",
-      "serviceMachineIdEmpty": "Trống",
-      "deleteUnboundConfirm": "Xóa {{count}} vân tay chưa liên kết tài khoản?",
-      "deletedUnbound": "Đã xóa {{count}} vân tay chưa liên kết",
-      "noUnboundToDelete": "Không có vân tay chưa liên kết để xóa"
-    }
   },
   "modals": {
     "addAccount": {
@@ -1331,15 +1297,6 @@
       "fromFiles": "Nhập từ tệp cục bộ",
       "fromFilesDesc": "Chọn tệp JSON để nhập tài khoản (hỗ trợ nhiều định dạng)",
       "importingFiles": "Đang nhập {{count}} tệp..."
-    },
-    "fingerprint": {
-      "title": "Chọn vân tay",
-      "desc": "Chọn vân tay cho tài khoản <1>{{email}}</1>",
-      "original": "Vân tay gốc",
-      "new": "Thêm vân tay mới",
-      "bind": "Xác nhận liên kết",
-      "selectLabel": "Chọn vân tay",
-      "boundCount": "tài khoản"
     },
     "quota": {
       "title": "Thông tin chi tiết hạn mức",
@@ -2488,7 +2445,12 @@
         "website": "Trang web (tùy chọn)",
         "apiKeyUrl": "Trang API Key (tùy chọn)",
         "newApiKeyName": "Tên key mới (tùy chọn)",
-        "newApiKey": "API Key mới"
+        "newApiKey": "API Key mới",
+        "wireApi": "Giao thức",
+        "enableMode": "Chế độ",
+        "modelCatalog": "Danh mục mô hình",
+        "visionCapability": "Nhập ảnh",
+        "visionModels": "Mẫu hỗ trợ ảnh"
       },
       "validation": {
         "nameRequired": "Tên nhà cung cấp là bắt buộc.",
@@ -2503,6 +2465,19 @@
       "confirmDelete": "Xóa nhà cung cấp \"{{name}}\"?",
       "deleteFailed": "Không thể xóa nhà cung cấp: {{error}}",
       "deleteApiKeyFailed": "Không thể xóa API Key: {{error}}",
+      "enableAsBackend": "Dùng làm backend Codex",
+      "enabling": "Đang bật...",
+      "enableSuccess": "Đã bật {{name}} và khởi chạy {{instance}}.",
+      "enableFailed": "Không thể bật nhà cung cấp: {{error}}",
+      "status": {
+        "active": "Backend hiện tại",
+        "available": "Sẵn sàng"
+      },
+      "enableMode": {
+        "label": "Chế độ kết nối",
+        "gatewayMode": "Chế độ gateway",
+        "directMode": "Chế độ trực tiếp"
+      },
       "selectSavedProvider": "Nhà cung cấp đã lưu",
       "selectSavedApiKey": "API Key đã lưu",
       "noSavedProviders": "Chưa có nhà cung cấp nào được lưu. Bạn có thể điền trực tiếp các trường và hệ thống sẽ tự động lưu.",
@@ -2561,7 +2536,107 @@
         "partialDetected": "Hiện chỉ có một trường được quản lý được đặt: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. Việc lưu sẽ ghi lại cả hai trường bằng cách sử dụng lược đồ hiện tại.",
         "notSet": "Chưa đặt"
       },
-      "managePresets": "Mẫu mô hình"
+      "managePresets": "Mẫu mô hình",
+      "wireApi": {
+        "responses": "Responses gốc",
+        "chatCompletions": "Giao thức Chat Completions",
+        "help": "Hãy dùng Responses cho hầu hết nhà cung cấp. Chỉ chuyển sang Chat Completions khi nhà cung cấp nói rõ chỉ hỗ trợ giao thức đó. Nếu chưa chắc, hãy chọn Responses trước.",
+        "helpAria": "Xem trợ giúp giao thức"
+      },
+      "testing": "Đang kiểm tra...",
+      "testSuccess": "Kết nối nhà cung cấp ổn định: {{protocol}}, {{model}}, {{latency}}.",
+      "testFailed": "Kiểm tra nhà cung cấp thất bại: {{error}}",
+      "testFailure": {
+        "credential": "API Key không khả dụng",
+        "url": "Base URL không hợp lệ",
+        "network": "Kết nối mạng thất bại",
+        "models": "Endpoint mô hình lỗi",
+        "parse": "Không đọc được phản hồi",
+        "httpStatus": "Trạng thái {{status}}",
+        "message": "{{title}}: {{detail}}. {{suggestion}}"
+      },
+      "testSuggestion": {
+        "addApiKey": "Hãy thêm API Key cho nhà cung cấp này trước khi kiểm tra.",
+        "checkBaseUrl": "Kiểm tra Base URL có chứa đúng đường dẫn phiên bản, ví dụ /v1.",
+        "checkNetwork": "Kiểm tra URL nhà cung cấp, proxy, tường lửa hoặc trạng thái dịch vụ upstream.",
+        "checkApiKey": "Kiểm tra API Key có hợp lệ và có quyền truy cập endpoint mô hình không.",
+        "checkProviderStatus": "Kiểm tra trạng thái dịch vụ nhà cung cấp, proxy hoặc khả năng tương thích API.",
+        "checkModelsApi": "Xác nhận nhà cung cấp trả về danh sách mô hình tương thích OpenAI."
+      },
+      "enableAndStart": "Chạy",
+      "instance": {
+        "label": "Phiên bản",
+        "default": "Phiên bản mặc định",
+        "running": "Đang chạy",
+        "targetHint": "Đích: {{instance}}",
+        "uninitializedHint": "Phiên bản đích chưa được khởi tạo. Hãy khởi chạy một lần từ trang đa phiên bản trước.",
+        "shortLabel": "Phiên",
+        "saveFailed": "Không thể lưu liên kết phiên bản: {{error}}"
+      },
+      "modelCatalog": "Mô hình",
+      "modelCatalogEmpty": "Chưa có danh mục mô hình",
+      "gatewayHint": "Nhà cung cấp bên thứ ba khởi động qua cổng cục bộ để tách phiên bản và chuyển đổi giao thức. Nhà cung cấp OpenAI chính thức vẫn dùng kết nối trực tiếp.",
+      "vision": {
+        "providerDefault": "Nhà cung cấp này mặc định hỗ trợ nhập ảnh",
+        "providerDefaultHint": "Khi tắt, chỉ các mẫu bên dưới được nhận ảnh; các mẫu khác sẽ bị gateway cục bộ từ chối.",
+        "modelsHint": "Mỗi dòng một mẫu. Dùng khi chỉ một số mẫu của nhà cung cấp hỗ trợ ảnh dán vào.",
+        "allModels": "Ảnh",
+        "partialModels": "Một số ảnh",
+        "textOnly": "Chỉ văn bản"
+      },
+      "sponsorRecommended": "Nhà tài trợ đề xuất",
+      "builtinProviders": "Nhà cung cấp có sẵn",
+      "sponsorHint": "URL dịch vụ tương thích do nhà tài trợ đề xuất đã được điền. Sau khi nhập API Key, thẻ sẽ tự động truy vấn số dư và mức dùng.",
+      "integration": {
+        "sub2api": "Tương thích Sub2API",
+        "newApi": "Tương thích New API"
+      },
+      "usage": {
+        "title": "Tổng quan hạn mức",
+        "remaining": "Còn lại",
+        "today": "Hôm nay",
+        "total": "Tổng cộng",
+        "requests": "Yêu cầu hôm nay",
+        "loading": "Đang truy vấn hạn mức...",
+        "failed": "Truy vấn hạn mức thất bại: {{error}}",
+        "pending": "Đang chờ truy vấn hạn mức",
+        "noKey": "Chưa có hạn mức để truy vấn",
+        "used": "Đã dùng",
+        "limit": "Giới hạn",
+        "viewDetail": "Chi tiết",
+        "detailTitle": "Bảng dịch vụ",
+        "rawFields": "Dữ liệu dịch vụ",
+        "fields": {
+          "status": "Trạng thái",
+          "planName": "Gói",
+          "remaining": "Còn lại",
+          "balance": "Số dư",
+          "todayRequests": "Yêu cầu hôm nay",
+          "todayTokens": "Token hôm nay",
+          "todayCost": "Chi phí hôm nay",
+          "totalRequests": "Tổng yêu cầu",
+          "totalTokens": "Tổng Token",
+          "totalCost": "Tổng chi phí",
+          "hardLimitUsd": "Giới hạn cứng",
+          "softLimitUsd": "Giới hạn mềm",
+          "systemHardLimitUsd": "Giới hạn hệ thống",
+          "accessUntil": "Truy cập đến",
+          "totalUsage": "Tổng sử dụng",
+          "quotaUnlimited": "Không giới hạn",
+          "expiresAt": "Hết hạn",
+          "totalGranted": "Đã cấp",
+          "totalAvailable": "Khả dụng",
+          "modelLimitsEnabled": "Giới hạn mô hình"
+        },
+        "accountBalance": "Số dư tài khoản",
+        "unlimitedQuota": "Không giới hạn",
+        "booleanTrue": "Có",
+        "booleanFalse": "Không"
+      },
+      "oauthBinding": {
+        "desc": "Tùy chọn. Có thể liên kết bất kỳ tài khoản OAuth nào có refresh_token. Nếu không liên kết, nhà cung cấp tiếp tục dùng luồng API Key gốc.",
+        "currentProvider": "Nhà cung cấp: {{name}}"
+      }
     },
     "quickSwitch": {
       "action": "Chuyển nhanh nhà cung cấp",
@@ -2807,6 +2882,10 @@
         "saveSuccess": "Đã lưu chặn mô hình tài khoản",
         "cardCount": "Chặn {{count}}"
       }
+    },
+    "apiKey": {
+      "renameSuccess": "Đã đổi tên",
+      "renameFailed": "Đổi tên thất bại"
     }
   },
   "githubCopilot": {
@@ -3369,7 +3448,6 @@
       "goAntigravity": "Đi tới Antigravity IDE",
       "goCodex": "Đi tới Codex",
       "goDashboard": "Đi tới bảng điều khiển",
-      "goFingerprints": "Đi tới dấu vân tay thiết bị",
       "goGitHubCopilot": "Đi tới GitHub Copilot",
       "goInstances": "Đi tới đa instance",
       "goKiro": "Đi tới Kiro",
@@ -3465,28 +3543,6 @@
       "desc": "Thử từ khóa: instance, chuyển đổi, cài đặt, xuất dữ liệu.",
       "title": "Không có nội dung phù hợp"
     },
-    "fingerprints": {
-      "cautions": {
-        "0": "Sao lưu dữ liệu trước thao tác rủi ro hoặc hàng loạt trong Dấu vân tay thiết bị."
-      },
-      "keywords": {
-        "0": "Dấu vân tay thiết bị",
-        "1": "hướng dẫn",
-        "2": "quy trình",
-        "3": "tài khoản"
-      },
-      "outcomes": {
-        "0": "Hiểu Dấu vân tay thiết bị giúp giải quyết điều gì.",
-        "1": "Dùng quy trình đề xuất trong Dấu vân tay thiết bị để giảm lỗi thao tác."
-      },
-      "steps": {
-        "0": "Mở trang Dấu vân tay thiết bị.",
-        "1": "Hoàn tất cấu hình cơ bản và liên kết bắt buộc cho Dấu vân tay thiết bị.",
-        "2": "Chạy một thao tác thủ công trong Dấu vân tay thiết bị để xác minh kết quả."
-      },
-      "summary": "Mục này giải thích cách dùng Dấu vân tay thiết bị trong quy trình hàng ngày.",
-      "title": "Dấu vân tay thiết bị"
-    },
     "instances": {
       "cautions": {
         "0": "Sao lưu dữ liệu trước thao tác rủi ro hoặc hàng loạt trong Đa instance (trọng tâm).",
@@ -3566,7 +3622,7 @@
     },
     "resultCount": "Tổng {{count}} mục",
     "searchAria": "Tìm trong sổ tay",
-    "searchPlaceholder": "Tìm tính năng, kịch bản hoặc từ khóa (vd: instance, inject, wakeup, fingerprint)",
+    "searchPlaceholder": "Tìm tính năng, kịch bản hoặc từ khóa (vd: instance, inject, wakeup)",
     "settings": {
       "cautions": {
         "0": "Sao lưu dữ liệu trước thao tác rủi ro hoặc hàng loạt trong Cài đặt và năng lực hệ thống.",

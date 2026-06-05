@@ -3014,6 +3014,52 @@ func (m *Manager) routeAwareSelectionRequired(auth *Auth, routeModel string) boo
 	return m.selectionModelKeyForAuth(auth, routeModel) != canonicalModelKey(routeModel)
 }
 
+func scopedAccountIDSetFromContext(ctx context.Context) map[string]struct{} {
+	if ctx == nil {
+		return nil
+	}
+	ginCtx, ok := ctx.Value("gin").(interface{ Get(string) (any, bool) })
+	if !ok || ginCtx == nil {
+		return nil
+	}
+	rawMetadata, ok := ginCtx.Get("accessMetadata")
+	if !ok {
+		return nil
+	}
+	var accountIDs string
+	switch v := rawMetadata.(type) {
+	case map[string]string:
+		accountIDs = strings.TrimSpace(v["account_ids"])
+	case map[string]any:
+		accountIDs = contextStringValue(v["account_ids"])
+	}
+	if accountIDs == "" {
+		return nil
+	}
+	out := make(map[string]struct{})
+	for _, item := range strings.Split(accountIDs, ",") {
+		accountID := strings.TrimSpace(item)
+		if accountID != "" {
+			out[accountID] = struct{}{}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func authAllowedByScope(auth *Auth, scopedAccountIDs map[string]struct{}) bool {
+	if len(scopedAccountIDs) == 0 {
+		return true
+	}
+	if auth == nil {
+		return false
+	}
+	_, ok := scopedAccountIDs[auth.ID]
+	return ok
+}
+
 func (m *Manager) pickNextLegacy(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, tried map[string]struct{}) (*Auth, ProviderExecutor, error) {
 	if m.HomeEnabled() {
 		auth, exec, _, err := m.pickNextViaHome(ctx, model, opts, tried)
@@ -3022,6 +3068,7 @@ func (m *Manager) pickNextLegacy(ctx context.Context, provider, model string, op
 
 	pinnedAuthID := pinnedAuthIDFromMetadata(opts.Metadata)
 	disallowFreeAuth := disallowFreeAuthFromMetadata(opts.Metadata)
+	scopedAccountIDs := scopedAccountIDSetFromContext(ctx)
 
 	m.mu.RLock()
 	executor, okExecutor := m.executors[provider]
@@ -3041,6 +3088,9 @@ func (m *Manager) pickNextLegacy(ctx context.Context, provider, model string, op
 	registryRef := registry.GetGlobalRegistry()
 	for _, candidate := range m.auths {
 		if candidate.Provider != provider || candidate.Disabled {
+			continue
+		}
+		if !authAllowedByScope(candidate, scopedAccountIDs) {
 			continue
 		}
 		if pinnedAuthID != "" && candidate.ID != pinnedAuthID {
@@ -3095,6 +3145,9 @@ func (m *Manager) pickNext(ctx context.Context, provider, model string, opts cli
 	}
 
 	if !m.useSchedulerFastPath() {
+		return m.pickNextLegacy(ctx, provider, model, opts, tried)
+	}
+	if len(scopedAccountIDSetFromContext(ctx)) > 0 {
 		return m.pickNextLegacy(ctx, provider, model, opts, tried)
 	}
 	if strings.TrimSpace(model) != "" {
@@ -3157,6 +3210,7 @@ func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, m
 
 	pinnedAuthID := pinnedAuthIDFromMetadata(opts.Metadata)
 	disallowFreeAuth := disallowFreeAuthFromMetadata(opts.Metadata)
+	scopedAccountIDs := scopedAccountIDSetFromContext(ctx)
 
 	providerSet := make(map[string]struct{}, len(providers))
 	for _, provider := range providers {
@@ -3183,6 +3237,9 @@ func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, m
 	registryRef := registry.GetGlobalRegistry()
 	for _, candidate := range m.auths {
 		if candidate == nil || candidate.Disabled {
+			continue
+		}
+		if !authAllowedByScope(candidate, scopedAccountIDs) {
 			continue
 		}
 		if pinnedAuthID != "" && candidate.ID != pinnedAuthID {
@@ -3252,6 +3309,9 @@ func (m *Manager) pickNextMixed(ctx context.Context, providers []string, model s
 	}
 
 	if !m.useSchedulerFastPath() {
+		return m.pickNextMixedLegacy(ctx, providers, model, opts, tried)
+	}
+	if len(scopedAccountIDSetFromContext(ctx)) > 0 {
 		return m.pickNextMixedLegacy(ctx, providers, model, opts, tried)
 	}
 

@@ -231,7 +231,6 @@
     "overview": "Antigravity IDE",
     "accounts": "帳號管理",
     "wakeup": "喚醒任務",
-    "fingerprints": "裝置指纹",
     "settings": "設定",
     "codex": "Codex",
     "githubCopilot": "GitHub Copilot",
@@ -254,12 +253,24 @@
     "expandSidebar": "展開側邊欄",
     "collapseSidebar": "收起側邊欄",
     "logs": "日誌",
+    "sponsors": "贊助商",
+    "sponsorAppreciation": "贊賞",
     "switchClassicLayoutEntry": "切換到經典佈局",
     "switchClassicLayoutTitle": "切換到經典側邊欄佈局",
     "switchClassicLayoutDesc": "經典佈局會完整顯示平台導覽，並支援側邊欄收合。你可以隨時在「設定 > 一般 > 側邊欄佈局」切回。",
     "switchClassicLayoutDontAskAgain": "不再顯示此提示",
     "switchClassicLayoutConfirm": "立即切換",
     "2faManager": "2FA 管理"
+  },
+  "sponsors": {
+    "pageTitle": "贊助商",
+    "pageDesc": "感謝以下贊助商支持 Cockpit Tools。",
+    "loading": "正在載入贊助商...",
+    "emptyTitle": "暫無贊助商",
+    "emptyDesc": "目前遠端未開啟贊助商模組。",
+    "listAriaLabel": "贊助商列表",
+    "defaultDescription": "感謝支持 Cockpit Tools。",
+    "openSponsor": "查看"
   },
   "platformLayout": {
     "title": "平台佈局",
@@ -272,7 +283,7 @@
     "hiddenBadge": "已隱藏",
     "openFromMore": "管理平台佈局",
     "dragHandleLabel": "拖曳排序",
-    "tipWithGroups": "可拖曳排序；側邊欄最多顯示三個入口。分組子項不參與側邊欄/儀表板開關，僅用於選單列顯示與預設平台切換。",
+    "tipWithGroups": "拖曳可排序；最多選擇 {{max}} 個入口顯示在側邊欄。分組子級不參與側邊欄/儀表板開關，僅用於選單列與預設平台切換。",
     "addGroup": "新增分組",
     "editGroup": "編輯分組",
     "deleteGroup": "刪除分組",
@@ -549,7 +560,8 @@
     "tabs": {
       "general": "通用",
       "network": "網路服務",
-      "about": "關於"
+      "about": "關於",
+      "data": "數據管理"
     },
     "general": {
       "appearance": "介面外觀",
@@ -600,8 +612,8 @@
       "floatingCardShowNowAction": "顯示懸浮卡片",
       "dataDir": "資料目錄",
       "dataDirDesc": "帳號與設定檔的儲存位置。",
-      "fpDir": "Antigravity IDE 儲存目錄",
-      "fpDirDesc": "Antigravity IDE 資料檔案的儲存位置。",
+      "topRightAdVisible": "顯示頂部推廣",
+      "topRightAdVisibleDesc": "關閉後隱藏應用頂部推廣位，不影響贊助商頁面。",
       "opencodeTitle": "OpenCode 連動",
       "opencodeRestart": "切換 Codex 時自動重新啟動 OpenCode",
       "opencodeRestartDesc": "同步切換 OpenCode 裡的 Codex 帳號資訊",
@@ -928,6 +940,61 @@
         "unsupportedLegacyFile": "無法識別此舊版帳號備份格式",
         "unsupportedVersion": "目前版本暫不支援此資料包版本"
       }
+    },
+    "webdav": {
+      "groupTitle": "WebDAV 同步",
+      "enabledTitle": "WebDAV 備份同步",
+      "enabledDesc": "默認使用堅果雲，也可改為任意 WebDAV 服務。",
+      "urlTitle": "服務地址",
+      "urlDesc": "堅果雲默認地址：https://dav.jianguoyun.com/dav/",
+      "usernameTitle": "帳號",
+      "usernameDesc": "堅果雲使用帳號電子郵件。",
+      "usernamePlaceholder": "電子郵件或使用者名稱",
+      "passwordTitle": "應用密碼",
+      "passwordDesc": "保存到本地設定；留空會保留已保存密碼。",
+      "passwordPlaceholder": "堅果雲第三方應用密碼",
+      "passwordSavedPlaceholder": "已保存，留空保持不變",
+      "clearPassword": "清除",
+      "remoteDirTitle": "遠端目錄",
+      "remoteDirDesc": "只管理該目錄下的 Cockpit 備份檔案。",
+      "statusTitle": "同步狀態",
+      "statusDesc": "遠端復原需要手動選擇備份，不會靜默覆蓋本地數據。",
+      "lastUpload": "最近上傳：{{time}}",
+      "lastDownload": "最近復原：{{time}}",
+      "never": "尚未同步",
+      "testAction": "測試/保存設定",
+      "uploadAction": "生成並上傳",
+      "syncAction": "同步設定",
+      "syncLatestConfirm": "確認拉取最新的遠端備份 {{name}} 並同步到本地？此操作將覆蓋本地現有數據。",
+      "remoteListTitle": "遠端備份",
+      "remoteListDesc": "僅顯示匹配 Cockpit 自動/手動備份命名的 JSON 與 ZIP 檔案。",
+      "emptyTitle": "暫無遠端備份",
+      "emptyDesc": "保存設定後可以生成並上傳一份備份。",
+      "unknownTime": "未知",
+      "restoreAction": "復原",
+      "restoreConfirm": "確認從遠端備份 {{name}} 復原數據？",
+      "deleteConfirm": "確認刪除遠端備份 {{name}}？",
+      "feedback": {
+        "testingAndSaving": "正在保存並測試 WebDAV 連線...",
+        "saveAndTestSuccess": "設定已保存，連線測試成功！",
+        "saveSuccessTestFailed": "設定已保存，但連線測試失敗：{{message}}",
+        "saveAndTestFailed": "保存並測試連線失敗：{{error}}",
+        "uploading": "正在生成並上傳備份...",
+        "uploadSuccess": "已上傳 {{count}} 個檔案，清理 {{deleted}} 個遠端過期備份",
+        "uploadFailed": "WebDAV 上傳失敗：{{error}}",
+        "listFailed": "載入遠端備份失敗：{{error}}",
+        "loadSettingsFailed": "載入 WebDAV 設定失敗：{{error}}",
+        "restoring": "正在讀取遠端備份並匯入...",
+        "restoreEmpty": "遠端備份未復原任何數據",
+        "deleteSuccess": "遠端備份已刪除",
+        "deleteFailed": "刪除遠端備份失敗：{{error}}",
+        "syncingLatest": "正在同步遠端最新設定...",
+        "syncFailed": "同步最新設定失敗：{{error}}",
+        "noRemoteBackup": "遠端未發現可同步的備份文件"
+      },
+      "errors": {
+        "notEnabled": "請先啟用 WebDAV 同步"
+      }
     }
   },
   "appPath": {
@@ -959,7 +1026,6 @@
       "email": "電子郵件",
       "subscription": "訂閱類型",
       "quota": "配額狀態",
-      "fingerprint": "指紋",
       "lastUsed": "最後使用",
       "actions": "操作"
     },
@@ -1045,10 +1111,8 @@
     "actions": {
       "viewDetails": "查看詳情",
       "viewError": "查看錯誤",
-      "fingerprint": "指紋",
       "switch": "切換帳號",
       "switchTo": "切換到此帳號",
-      "selectFingerprint": "點擊選擇指紋",
       "delete": "刪除",
       "deleteSelected": "刪除所選",
       "export": "匯出",
@@ -1197,106 +1261,8 @@
     "currentAccount": "目前使用中",
     "switchTo": "切換至該帳號",
     "switching": "切換中...",
-    "fingerprint": "指紋",
     "bound": "已綁定",
     "brandTitle": "Antigravity IDE 帳號管理"
-  },
-  "fingerprints": {
-    "title": "裝置指紋",
-    "subtitle": "管理綁定到帳號的裝置指紋。",
-    "toolbar": {
-      "generate": "產生新指紋",
-      "capture": "擷取目前",
-      "import": "匯入",
-      "folder": "目錄",
-      "delete": "刪除",
-      "deleteUnbound": "清理未綁定"
-    },
-    "table": {
-      "name": "指紋名稱",
-      "machineId": "裝置 ID",
-      "accounts": "綁定帳號",
-      "actions": "操作",
-      "accountCount": "{{count}} 個帳號",
-      "apply": "套用",
-      "noData": "暫無指紋資料",
-      "preview": "預覽",
-      "rename": "重新命名"
-    },
-    "modals": {
-      "generate": {
-        "title": "產生新指紋",
-        "btn": "產生"
-      },
-      "capture": {
-        "title": "擷取目前指紋",
-        "btn": "擷取"
-      },
-      "rename": {
-        "title": "重新命名指紋",
-        "label": "指紋名稱"
-      },
-      "import": {
-        "title": "匯入指紋",
-        "fromTools": "匯入 Antigravity Tools 指紋",
-        "desc": "從 ~/.antigravity_tools/ 目錄匯入",
-        "fromJsonBtn": "從 JSON 匯入",
-        "jsonExample": "格式範例：",
-        "jsonPlaceholder": "工作指紋",
-        "orPasteJson": "或貼上 JSON"
-      },
-      "bound": {
-        "title": "綁定帳號管理",
-        "add": "新增帳號",
-        "empty": "暫無帳號綁定此指紋",
-        "emptyAll": "所有帳號都已綁定此指紋",
-        "select": "選擇要新增的帳號",
-        "from": "來自: {{name}}",
-        "back": "返回"
-      },
-      "detail": {
-        "title": "指紋詳細資訊",
-        "created": "建立於 {{time}}"
-      }
-    },
-    "messages": {
-      "deleteConfirm": "確定要刪除這個指紋嗎？綁定此指紋的帳號將自動改為原始指紋。",
-      "batchDeleteConfirm": "確定要刪除選中的 {{count}} 個指紋嗎？綁定此指紋的帳號將自動改為原始指紋。",
-      "generated": "已產生新指紋",
-      "captured": "已擷取目前指紋",
-      "renamed": "已重新命名",
-      "deleted": "已刪除指紋",
-      "imported": "已匯入 {{count}} 個指紋",
-      "addedAccounts": "已新增 {{count}} 個帳號",
-      "enterName": "請輸入指紋名稱",
-      "previewNotReady": "預覽未就緒，請稍後重試",
-      "duplicate": "已存在相同指紋：{{name}}，無需重複新增。",
-      "autoGeneratedSuffix": "（未找到，已自動產生）",
-      "readOnly": "唯讀",
-      "current": "目前",
-      "addCount": "新增 {{count}} 個帳號",
-      "addFailed": "新增失敗",
-      "adding": "新增中...",
-      "applyFailed": "套用失敗",
-      "boundCount": "已綁定 {{count}} 個帳號",
-      "captureFailed": "擷取失敗",
-      "count": "{{count}} 個",
-      "deleteFailed": "刪除失敗",
-      "fpLabel": "指紋：",
-      "generateFailed": "產生失敗",
-      "importFailed": "匯入失敗",
-      "importPartialFailed": "{{failCount}} 失敗：{{failList}}",
-      "refreshingQuota": "刷新配額{{done}}/{{total}}（您可以關閉此對話方塊）",
-      "quotaRefreshDone": "配額刷新完成",
-      "importing": "匯入中...",
-      "loadFailed": "載入指紋列表失敗",
-      "processing": "處理中...",
-      "renameFailed": "重新命名失敗",
-      "serviceMachineIdEmpty": "空",
-      "deleteUnboundConfirm": "確定要刪除 {{count}} 個未綁定帳號的指紋嗎？",
-      "deletedUnbound": "已刪除 {{count}} 個未綁定指紋",
-      "noUnboundToDelete": "沒有可刪除的未綁定指紋"
-    }
   },
   "modals": {
     "addAccount": {
@@ -1331,15 +1297,6 @@
       "fromFiles": "從本地檔案匯入",
       "fromFilesDesc": "選擇 JSON 檔案匯入帳號（支援多種格式）",
       "importingFiles": "正在匯入 {{count}} 個檔案..."
-    },
-    "fingerprint": {
-      "title": "選擇指紋",
-      "desc": "為帳號 <1>{{email}}</1> 選擇指纹",
-      "original": "原始指紋",
-      "new": "新增新指紋",
-      "bind": "確認綁定",
-      "selectLabel": "選擇指紋",
-      "boundCount": "個帳號"
     },
     "quota": {
       "title": "配額詳細資訊",
@@ -2487,8 +2444,13 @@
         "baseUrl": "基礎 URL",
         "website": "網站（可選）",
         "apiKeyUrl": "API Key 頁面（可選）",
+        "wireApi": "協定能力",
+        "enableMode": "啟用策略",
         "newApiKeyName": "新 Key 名稱（可選）",
-        "newApiKey": "新 API Key"
+        "newApiKey": "新 API Key",
+        "modelCatalog": "模型目錄",
+        "visionCapability": "圖片輸入能力",
+        "visionModels": "支援圖片的模型"
       },
       "validation": {
         "nameRequired": "供應商名稱不能為空",
@@ -2503,6 +2465,25 @@
       "confirmDelete": "確定刪除供應商「{{name}}」嗎？",
       "deleteFailed": "刪除供應商失敗：{{error}}",
       "deleteApiKeyFailed": "刪除 API Key 失敗：{{error}}",
+      "enableAsBackend": "啟用為 Codex 後端",
+      "enabling": "啟用中...",
+      "enableSuccess": "已啟用 {{name}}，並啟動 {{instance}}。",
+      "enableFailed": "啟用供應商失敗：{{error}}",
+      "status": {
+        "active": "目前後端",
+        "available": "可啟用"
+      },
+      "enableMode": {
+        "label": "連線方式",
+        "gatewayMode": "閘道模式",
+        "directMode": "直連模式"
+      },
+      "wireApi": {
+        "responses": "Responses 原生",
+        "chatCompletions": "Chat Completions 協定",
+        "help": "大多數供應商請選 Responses；只有在供應商明確僅支援 Chat Completions 時才切換。不確定時優先選 Responses。",
+        "helpAria": "查看協定說明"
+      },
       "selectSavedProvider": "已儲存供應商",
       "selectSavedApiKey": "已儲存 API Key",
       "noSavedProviders": "尚無已儲存的供應商，可直接填寫欄位並自動儲存。",
@@ -2561,7 +2542,101 @@
         "partialDetected": "偵測到目前兩個欄位並不完整：model_context_window={{context}}，model_auto_compact_token_limit={{compact}}。儲存後會依照目前方案改寫。",
         "notSet": "未設定"
       },
-      "managePresets": "模型預設"
+      "managePresets": "模型預設",
+      "testing": "測試中...",
+      "testSuccess": "供應商連線正常：{{protocol}}，{{model}}，{{latency}}。",
+      "testFailed": "測試供應商失敗：{{error}}",
+      "testFailure": {
+        "credential": "API Key 不可用",
+        "url": "Base URL 無效",
+        "network": "網路連線失敗",
+        "models": "模型列表介面異常",
+        "parse": "回應解析失敗",
+        "httpStatus": "狀態 {{status}}",
+        "message": "{{title}}：{{detail}}。{{suggestion}}"
+      },
+      "testSuggestion": {
+        "addApiKey": "請先為該供應商新增 API Key，然後再測試連線。",
+        "checkBaseUrl": "請檢查 Base URL 是否包含正確版本路徑，例如 /v1。",
+        "checkNetwork": "請檢查供應商地址、網路代理、防火牆或上游服務狀態。",
+        "checkApiKey": "請檢查 API Key 是否有效，以及權限是否包含模型列表介面。",
+        "checkProviderStatus": "請檢查供應商服務狀態、網路代理或介面相容性。",
+        "checkModelsApi": "請確認該供應商提供 OpenAI 相容的模型列表回應。"
+      },
+      "enableAndStart": "啟動",
+      "instance": {
+        "label": "啟動實例",
+        "default": "預設實例",
+        "running": "執行中",
+        "targetHint": "目標：{{instance}}",
+        "uninitializedHint": "目標實例尚未初始化，請先到多開實例頁啟動一次。",
+        "shortLabel": "實例",
+        "saveFailed": "儲存實例綁定失敗：{{error}}"
+      },
+      "modelCatalog": "模型",
+      "modelCatalogEmpty": "未設定模型目錄",
+      "gatewayHint": "第三方供應商啟動時會透過本機閘道隔離實例並完成協定轉換；OpenAI 官方供應商維持直連。",
+      "vision": {
+        "providerDefault": "此供應商預設支援圖片輸入",
+        "providerDefaultHint": "關閉時，只有下方列出的模型會允許圖片輸入；其他模型會由本機閘道直接提示不支援。",
+        "modelsHint": "每行一個模型名。適合同一供應商只有部分視覺模型支援貼上圖片的情況。",
+        "allModels": "圖片輸入",
+        "partialModels": "部分圖片",
+        "textOnly": "僅文字"
+      },
+      "sponsorRecommended": "贊助商推薦",
+      "builtinProviders": "內建供應商",
+      "sponsorHint": "已依贊助商推薦自動填入相容服務位址。輸入 API Key 後，卡片會自動查詢餘額與用量。",
+      "integration": {
+        "sub2api": "Sub2API 相容",
+        "newApi": "New API 相容"
+      },
+      "usage": {
+        "title": "額度概覽",
+        "remaining": "剩餘額度",
+        "today": "今日用量",
+        "total": "累計用量",
+        "requests": "今日請求",
+        "loading": "正在查詢額度...",
+        "failed": "額度查詢失敗：{{error}}",
+        "pending": "等待查詢額度",
+        "noKey": "暫無可查詢額度",
+        "used": "已用額度",
+        "limit": "總額度",
+        "viewDetail": "查看詳情",
+        "detailTitle": "服務面板",
+        "rawFields": "服務資料",
+        "fields": {
+          "status": "狀態",
+          "planName": "訂閱",
+          "remaining": "剩餘額度",
+          "balance": "餘額",
+          "todayRequests": "今日請求",
+          "todayTokens": "今日 Token",
+          "todayCost": "今日消耗",
+          "totalRequests": "累計請求",
+          "totalTokens": "累計 Token",
+          "totalCost": "累計消耗",
+          "hardLimitUsd": "硬額度",
+          "softLimitUsd": "軟額度",
+          "systemHardLimitUsd": "系統額度",
+          "accessUntil": "可用至",
+          "totalUsage": "累計消耗",
+          "quotaUnlimited": "無限額度",
+          "expiresAt": "過期時間",
+          "totalGranted": "授予額度",
+          "totalAvailable": "可用額度",
+          "modelLimitsEnabled": "模型限制"
+        },
+        "accountBalance": "帳戶餘額",
+        "unlimitedQuota": "無限額度",
+        "booleanTrue": "是",
+        "booleanFalse": "否"
+      },
+      "oauthBinding": {
+        "desc": "可選綁定。只要 OAuth 帳號帶有 refresh_token 即可選擇；未綁定時供應商仍按原 API Key 流程執行。",
+        "currentProvider": "供應商：{{name}}"
+      }
     },
     "quickSwitch": {
       "action": "快速切換供應商",
@@ -2807,6 +2882,10 @@
         "saveSuccess": "帳號模型停用規則已儲存",
         "cardCount": "停用 {{count}}"
       }
+    },
+    "apiKey": {
+      "renameSuccess": "已重新命名",
+      "renameFailed": "重新命名失敗"
     }
   },
   "githubCopilot": {
@@ -3369,7 +3448,6 @@
       "goAntigravity": "前往 Antigravity IDE",
       "goCodex": "前往 Codex",
       "goDashboard": "前往儀表板",
-      "goFingerprints": "前往裝置指紋",
       "goGitHubCopilot": "前往 GitHub Copilot",
       "goInstances": "前往多開實例",
       "goKiro": "前往 Kiro",
@@ -3464,28 +3542,6 @@
     "empty": {
       "desc": "嘗試更換關鍵字，例如「實例」「切換」「設定」「匯出」。",
       "title": "沒有匹配內容"
-    },
-    "fingerprints": {
-      "cautions": {
-        "0": "刪除指紋前先看綁定帳號數量，避免誤操作影響生產帳號。"
-      },
-      "keywords": {
-        "0": "指紋",
-        "1": "綁定",
-        "2": "匯入",
-        "3": "採集"
-      },
-      "outcomes": {
-        "0": "生成/捕獲新指紋並維護元資料。",
-        "1": "查看某指紋已綁定帳號並增刪綁定關係。"
-      },
-      "steps": {
-        "0": "先建立或匯入指紋。",
-        "1": "進入詳情確認指紋資訊是否正確。",
-        "2": "在綁定管理中將帳號關聯到目標指紋。"
-      },
-      "summary": "管理指紋模板與帳號綁定關係，支援生成、捕獲、匯入和綁定帳號維護。",
-      "title": "裝置指紋"
     },
     "instances": {
       "cautions": {

@@ -341,10 +341,38 @@ pub struct CodexLocalAccessTimeoutPreset {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessProviderGatewayModelCapability {
+    #[serde(default)]
+    pub supports_vision: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessProviderGateway {
+    pub base_url: String,
+    pub api_key: String,
+    pub upstream_model: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub upstream_models: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wire_api: Option<String>,
+    #[serde(default)]
+    pub supports_vision: bool,
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub model_capabilities:
+        std::collections::HashMap<String, CodexLocalAccessProviderGatewayModelCapability>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessApiKey {
     pub id: String,
     pub label: String,
     pub key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_gateway: Option<CodexLocalAccessProviderGateway>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub account_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_prefix: Option<String>,
     #[serde(default)]

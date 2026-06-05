@@ -231,7 +231,6 @@
     "overview": "Antigravity IDE",
     "accounts": "アカウント管理",
     "wakeup": "ウェイクアップタスク",
-    "fingerprints": "デバイス指紋",
     "settings": "設定",
     "codex": "Codex",
     "githubCopilot": "GitHub Copilot",
@@ -254,12 +253,24 @@
     "expandSidebar": "サイドバーを展開",
     "collapseSidebar": "サイドバーを折りたたむ",
     "logs": "ログ",
+    "sponsors": "スポンサー",
+    "sponsorAppreciation": "支援",
     "switchClassicLayoutEntry": "クラシックレイアウトに切り替え",
     "switchClassicLayoutTitle": "クラシックサイドバーレイアウトに切り替え",
     "switchClassicLayoutDesc": "クラシックレイアウトでは、プラットフォームナビゲーションをすべて表示し、サイドバーの折りたたみに対応します。設定 > 一般 > サイドバーレイアウト からいつでも戻せます。",
     "switchClassicLayoutDontAskAgain": "この案内を今後表示しない",
     "switchClassicLayoutConfirm": "今すぐ切り替える",
     "2faManager": "2FA管理"
+  },
+  "sponsors": {
+    "pageTitle": "スポンサー",
+    "pageDesc": "Cockpit Tools を支援してくださるスポンサーの皆さまに感謝します。",
+    "loading": "スポンサーを読み込み中...",
+    "emptyTitle": "スポンサーはまだありません",
+    "emptyDesc": "リモートのスポンサーモジュールは現在無効です。",
+    "listAriaLabel": "スポンサー一覧",
+    "defaultDescription": "Cockpit Tools へのご支援ありがとうございます。",
+    "openSponsor": "開く"
   },
   "platformLayout": {
     "title": "プラットフォームレイアウト",
@@ -272,7 +283,7 @@
     "hiddenBadge": "非表示",
     "openFromMore": "プラットフォームレイアウトを管理",
     "dragHandleLabel": "ドラッグして並び替え",
-    "tipWithGroups": "ドラッグで並び替えできます。サイドバーに表示できるのは最大3エントリです。グループ子項目にはサイドバー/ダッシュボード表示の切り替えはなく、メニューバー表示と既定プラットフォーム切替のみに使用されます。",
+    "tipWithGroups": "ドラッグして並べ替えます。サイドバーに表示できる入口は最大 {{max}} 件です。グループ配下の項目にはサイドバー/ダッシュボードの切り替えはなく、メニューバー表示と既定プラットフォームの切り替えにのみ使われます。",
     "addGroup": "グループを追加",
     "editGroup": "グループを編集",
     "deleteGroup": "グループを削除",
@@ -549,7 +560,8 @@
     "tabs": {
       "general": "全般",
       "network": "ネットワーク設定",
-      "about": "本アプリについて"
+      "about": "本アプリについて",
+      "data": "データ管理"
     },
     "general": {
       "appearance": "外観",
@@ -603,8 +615,8 @@
       "floatingCardShowNowAction": "フローティングカードを表示",
       "dataDir": "データディレクトリ",
       "dataDirDesc": "アカウントと設定ファイルの保存場所。",
-      "fpDir": "Antigravity IDEストレージ",
-      "fpDirDesc": "Antigravity IDEデータファイルの保存場所。",
+      "topRightAdVisible": "上部プロモを表示",
+      "topRightAdVisibleDesc": "アプリ上部のプロモ枠を非表示にします。スポンサー画面には影響しません。",
       "opencodeTitle": "OpenCode 連携",
       "opencodeRestart": "Codex 切替時に OpenCode を自動再起動",
       "opencodeRestartDesc": "OpenCode 内の Codex アカウント情報を同期して切り替え",
@@ -928,6 +940,61 @@
         "unsupportedLegacyFile": "この旧形式のアカウントバックアップは認識できません",
         "unsupportedVersion": "このアプリのバージョンではそのパッケージ版をサポートしていません"
       }
+    },
+    "webdav": {
+      "groupTitle": "WebDAV同期",
+      "enabledTitle": "WebDAVバックアップ同期",
+      "enabledDesc": "デフォルトは堅果雲（Jianguoyun）ですが、任意のWebDAVサービスに変更できます。",
+      "urlTitle": "サービスアドレス",
+      "urlDesc": "堅果雲のデフォルトアドレス：https://dav.jianguoyun.com/dav/",
+      "usernameTitle": "アカウント",
+      "usernameDesc": "堅果雲はアカウントのメールアドレスを使用します。",
+      "usernamePlaceholder": "メールアドレスまたはユーザー名",
+      "passwordTitle": "アプリパスワード",
+      "passwordDesc": "ローカルに保存されます。既存のパスワードを保持する場合は空白のままにしてください。",
+      "passwordPlaceholder": "堅果雲のサードパーティ製アプリ用パスワード",
+      "passwordSavedPlaceholder": "保存済み。変更しない場合は空白のままにします",
+      "clearPassword": "消去",
+      "remoteDirTitle": "リモートディレクトリ",
+      "remoteDirDesc": "このディレクトリ内のCockpitバックアップファイルのみが管理されます。",
+      "statusTitle": "同期ステータス",
+      "statusDesc": "リモートからの復元は手動で選択する必要があり、ローカルデータがサイレントに上書きされることはありません。",
+      "lastUpload": "最終アップロード：{{time}}",
+      "lastDownload": "最終復元：{{time}}",
+      "never": "未同期",
+      "testAction": "テスト/設定保存",
+      "uploadAction": "作成してアップロード",
+      "syncAction": "設定同期",
+      "syncLatestConfirm": "最新のリモートバックアップ {{name}} を取得してローカルに同期しますか？これにより、既存のローカルデータが上書きされます。",
+      "remoteListTitle": "リモートバックアップ",
+      "remoteListDesc": "Cockpitの自動/手動バックアップ名に一致するJSONおよびZIPファイルのみが表示されます。",
+      "emptyTitle": "リモートバックアップがありません",
+      "emptyDesc": "設定を保存してから、バックアップを作成してアップロードしてください。",
+      "unknownTime": "不明",
+      "restoreAction": "復元",
+      "restoreConfirm": "リモートバックアップ {{name}} からデータを復元しますか？",
+      "deleteConfirm": "リモートバックアップ {{name}} を削除しますか？",
+      "feedback": {
+        "testingAndSaving": "WebDAV接続を保存し、テスト中...",
+        "saveAndTestSuccess": "設定が保存され、接続テストに成功しました！",
+        "saveSuccessTestFailed": "設定は保存されましたが、接続テストに失敗しました：{{message}}",
+        "saveAndTestFailed": "接続の保存とテストに失敗しました：{{error}}",
+        "uploading": "バックアップを作成してアップロード中...",
+        "uploadSuccess": "{{count}}個のファイルをアップロードし、{{deleted}}個の期限切れリモートバックアップをクリーンアップしました",
+        "uploadFailed": "WebDAVアップロードに失敗しました：{{error}}",
+        "listFailed": "リモートバックアップの読み込みに失敗しました：{{error}}",
+        "loadSettingsFailed": "WebDAV設定の読み込みに失敗しました：{{error}}",
+        "restoring": "リモートバックアップを読み込んでインポート中...",
+        "restoreEmpty": "リモートバックアップから復元されたデータはありません",
+        "deleteSuccess": "リモートバックアップが削除されました",
+        "deleteFailed": "リモートバックアップの削除に失敗しました：{{error}}",
+        "syncingLatest": "最新のリモート設定を同期中...",
+        "syncFailed": "最新の設定同期に失敗しました：{{error}}",
+        "noRemoteBackup": "リモートで復元可能なバックアップファイルが見つかりません"
+      },
+      "errors": {
+        "notEnabled": "先にWebDAV同期を有効にしてください"
+      }
     }
   },
   "appPath": {
@@ -959,7 +1026,6 @@
       "email": "メールアドレス",
       "subscription": "サブスクリプション",
       "quota": "クォータ状況",
-      "fingerprint": "指紋",
       "lastUsed": "最終使用",
       "actions": "操作"
     },
@@ -1045,10 +1111,8 @@
     "actions": {
       "viewDetails": "詳細を見る",
       "viewError": "エラーを表示",
-      "fingerprint": "指紋",
       "switch": "アカウント切替",
       "switchTo": "このアカウントに切替",
-      "selectFingerprint": "指紋を選択",
       "delete": "削除",
       "deleteSelected": "選択項目を削除",
       "export": "エクスポート",
@@ -1197,106 +1261,8 @@
     "currentAccount": "現在使用中",
     "switchTo": "このアカウントに切り替え",
     "switching": "切り替え中...",
-    "fingerprint": "指紋",
     "bound": "紐付け済み",
     "brandTitle": "Antigravity IDE アカウント管理"
-  },
-  "fingerprints": {
-    "title": "デバイス指紋",
-    "subtitle": "アカウントに紐付けられたデバイス指紋を管理します。",
-    "toolbar": {
-      "generate": "新規生成",
-      "capture": "現在をキャプチャ",
-      "import": "インポート",
-      "folder": "フォルダー",
-      "delete": "削除",
-      "deleteUnbound": "未紐付けを削除"
-    },
-    "table": {
-      "name": "指紋名",
-      "machineId": "デバイス ID",
-      "accounts": "紐付けアカウント",
-      "actions": "操作",
-      "accountCount": "{{count}} 件のアカウント",
-      "apply": "適用",
-      "noData": "指紋データがありません",
-      "preview": "プレビュー",
-      "rename": "名前変更"
-    },
-    "modals": {
-      "generate": {
-        "title": "指紋を生成",
-        "btn": "生成"
-      },
-      "capture": {
-        "title": "現在の指紋をキャプチャ",
-        "btn": "キャプチャ"
-      },
-      "rename": {
-        "title": "名前を変更",
-        "label": "指紋名"
-      },
-      "import": {
-        "title": "指紋をインポート",
-        "fromTools": "Antigravity Tools からインポート",
-        "desc": "~/.antigravity_tools/ ディレクトリから読み込みます",
-        "fromJsonBtn": "JSON からインポート",
-        "jsonExample": "形式例：",
-        "jsonPlaceholder": "仕事用指紋",
-        "orPasteJson": "または JSON を貼り付け"
-      },
-      "bound": {
-        "title": "紐付けアカウント管理",
-        "add": "アカウントを追加",
-        "empty": "紐付けられたアカウントはありません",
-        "emptyAll": "すべてのアカウントが紐付けられています",
-        "select": "追加するアカウントを選択",
-        "from": "ソース: {{name}}",
-        "back": "戻る"
-      },
-      "detail": {
-        "title": "指紋の詳細",
-        "created": "作成日時: {{time}}"
-      }
-    },
-    "messages": {
-      "deleteConfirm": "この指紋を削除しますか？紐付けられたアカウントはオリジナルの指紋に戻ります。",
-      "batchDeleteConfirm": "{{count}} 個の指紋を削除しますか？紐付けられたアカウントはオリジナルの指紋に戻ります。",
-      "generated": "新しい指紋が生成されました",
-      "captured": "現在の指紋をキャプチャしました",
-      "renamed": "名前を変更しました",
-      "deleted": "指紋を削除しました",
-      "imported": "{{count}} 個の指紋をインポートしました",
-      "addedAccounts": "{{count}} 件のアカウントを追加しました",
-      "enterName": "指紋名を入力してください",
-      "previewNotReady": "プレビューの準備ができていません。しばらくお待ちください",
-      "duplicate": "重複する指紋が存在します: {{name}}",
-      "autoGeneratedSuffix": "（見つからないため自動生成）",
-      "readOnly": "読み取り専用",
-      "current": "現在",
-      "addCount": "{{count}} 件のアカウントを追加しました",
-      "addFailed": "追加に失敗しました",
-      "adding": "追加中...",
-      "applyFailed": "適用に失敗しました",
-      "boundCount": "{{count}} 件のアカウントを紐付け済み",
-      "captureFailed": "キャプチャに失敗しました",
-      "count": "{{count}} 件",
-      "deleteFailed": "削除に失敗しました",
-      "fpLabel": "指紋:",
-      "generateFailed": "生成に失敗しました",
-      "importFailed": "インポートに失敗しました",
-      "importPartialFailed": "{{failCount}} 件失敗: {{failList}}",
-      "refreshingQuota": "クォータを更新中 {{done}}/{{total}}（このダイアログは閉じても構いません）",
-      "quotaRefreshDone": "クォータの更新が完了しました",
-      "importing": "インポート中...",
-      "loadFailed": "指紋リストの読み込みに失敗しました",
-      "processing": "処理中...",
-      "renameFailed": "名前変更に失敗しました",
-      "serviceMachineIdEmpty": "空",
-      "deleteUnboundConfirm": "紐付けアカウントのない指紋を{{count}}件削除しますか？",
-      "deletedUnbound": "未紐付け指紋を{{count}}件削除しました",
-      "noUnboundToDelete": "削除できる未紐付け指紋はありません"
-    }
   },
   "modals": {
     "addAccount": {
@@ -1331,15 +1297,6 @@
       "fromFiles": "ローカルファイルからインポート",
       "fromFilesDesc": "JSONファイルを選択してアカウントをインポート（複数形式対応）",
       "importingFiles": "{{count}} ファイルをインポート中..."
-    },
-    "fingerprint": {
-      "title": "指紋を選択",
-      "desc": "アカウント <1>{{email}}</1> の指紋を選択してください",
-      "original": "オリジナルの指紋",
-      "new": "新しい指紋を追加",
-      "bind": "紐付けを確定",
-      "selectLabel": "指紋を選択",
-      "boundCount": "個のアカウント"
     },
     "quota": {
       "title": "クォータ詳細",
@@ -2488,7 +2445,12 @@
         "website": "ウェブサイト（任意）",
         "apiKeyUrl": "API キーページ（任意）",
         "newApiKeyName": "新しいキー名（任意）",
-        "newApiKey": "新しい API キー"
+        "newApiKey": "新しい API キー",
+        "wireApi": "プロトコル",
+        "enableMode": "有効化方式",
+        "modelCatalog": "モデルカタログ",
+        "visionCapability": "画像入力",
+        "visionModels": "画像対応モデル"
       },
       "validation": {
         "nameRequired": "プロバイダー名は必須です。",
@@ -2503,6 +2465,19 @@
       "confirmDelete": "プロバイダー「{{name}}」を削除しますか？",
       "deleteFailed": "プロバイダーの削除に失敗しました: {{error}}",
       "deleteApiKeyFailed": "API キーの削除に失敗しました: {{error}}",
+      "enableAsBackend": "Codex バックエンドにする",
+      "enabling": "有効化中...",
+      "enableSuccess": "{{name}} を有効化し、{{instance}} を起動しました。",
+      "enableFailed": "プロバイダーの有効化に失敗しました: {{error}}",
+      "status": {
+        "active": "現在のバックエンド",
+        "available": "準備完了"
+      },
+      "enableMode": {
+        "label": "接続モード",
+        "gatewayMode": "ゲートウェイモード",
+        "directMode": "直接モード"
+      },
       "selectSavedProvider": "保存済みプロバイダー",
       "selectSavedApiKey": "保存済み API キー",
       "noSavedProviders": "保存済みのプロバイダーはまだありません。フィールドを直接入力すると自動で保存されます。",
@@ -2561,7 +2536,107 @@
         "partialDetected": "現在設定されている管理フィールドは、model_context_window={{context}}、model_auto_compact_token_limit={{compact}} の 1 つだけです。保存すると、現在のスキームを使用して両方のフィールドが書き換えられます。",
         "notSet": "未設定"
       },
-      "managePresets": "モデルプリセット"
+      "managePresets": "モデルプリセット",
+      "wireApi": {
+        "responses": "Responses ネイティブ",
+        "chatCompletions": "Chat Completions プロトコル",
+        "help": "ほとんどのプロバイダーでは Responses を選択してください。プロバイダーが Chat Completions のみを明示している場合だけ切り替えます。迷う場合は Responses を優先してください。",
+        "helpAria": "プロトコルのヘルプを表示"
+      },
+      "testing": "テスト中...",
+      "testSuccess": "プロバイダー接続は正常です：{{protocol}}、{{model}}、{{latency}}。",
+      "testFailed": "プロバイダーのテストに失敗しました：{{error}}",
+      "testFailure": {
+        "credential": "API Key を利用できません",
+        "url": "Base URL が無効です",
+        "network": "ネットワーク接続に失敗しました",
+        "models": "モデル一覧 API が異常です",
+        "parse": "レスポンス解析に失敗しました",
+        "httpStatus": "状態 {{status}}",
+        "message": "{{title}}：{{detail}}。{{suggestion}}"
+      },
+      "testSuggestion": {
+        "addApiKey": "テスト前にこのプロバイダーへ API Key を追加してください。",
+        "checkBaseUrl": "Base URL に /v1 など正しいバージョンパスが含まれているか確認してください。",
+        "checkNetwork": "プロバイダー URL、プロキシ、ファイアウォール、上流サービス状態を確認してください。",
+        "checkApiKey": "API Key が有効で、モデル一覧 API への権限があるか確認してください。",
+        "checkProviderStatus": "プロバイダーのサービス状態、プロキシ、API 互換性を確認してください。",
+        "checkModelsApi": "このプロバイダーが OpenAI 互換のモデル一覧レスポンスを返すか確認してください。"
+      },
+      "enableAndStart": "起動",
+      "instance": {
+        "label": "起動インスタンス",
+        "default": "既定インスタンス",
+        "running": "実行中",
+        "targetHint": "対象：{{instance}}",
+        "uninitializedHint": "対象インスタンスは未初期化です。先にマルチインスタンス画面で一度起動してください。",
+        "shortLabel": "インスタンス",
+        "saveFailed": "インスタンスのバインド保存に失敗しました: {{error}}"
+      },
+      "modelCatalog": "モデル",
+      "modelCatalogEmpty": "モデルカタログ未設定",
+      "gatewayHint": "サードパーティプロバイダーは、インスタンス分離とプロトコル変換のためローカルゲートウェイ経由で起動します。公式 OpenAI プロバイダーは直接接続のままです。",
+      "vision": {
+        "providerDefault": "このプロバイダーは既定で画像入力に対応します",
+        "providerDefaultHint": "オフの場合、下に記載したモデルだけが画像入力を受け付け、それ以外はローカルゲートウェイで拒否されます。",
+        "modelsHint": "1 行に 1 モデル。プロバイダー内の一部モデルだけが貼り付け画像に対応する場合に使います。",
+        "allModels": "画像対応",
+        "partialModels": "一部画像",
+        "textOnly": "テキストのみ"
+      },
+      "sponsorRecommended": "スポンサー推奨",
+      "builtinProviders": "組み込みプロバイダー",
+      "sponsorHint": "スポンサー推奨の互換サービス URL を自動入力しました。API Key を入力すると、カードで残高と使用量を自動照会します。",
+      "integration": {
+        "sub2api": "Sub2API 互換",
+        "newApi": "New API 互換"
+      },
+      "usage": {
+        "title": "クォータ概要",
+        "remaining": "残り枠",
+        "today": "今日の使用量",
+        "total": "累計使用量",
+        "requests": "今日のリクエスト",
+        "loading": "クォータを照会中...",
+        "failed": "クォータ照会に失敗しました: {{error}}",
+        "pending": "クォータ照会待ち",
+        "noKey": "照会可能なクォータはありません",
+        "used": "使用済み",
+        "limit": "上限",
+        "viewDetail": "詳細",
+        "detailTitle": "サービスパネル",
+        "rawFields": "サービスデータ",
+        "fields": {
+          "status": "状態",
+          "planName": "プラン",
+          "remaining": "残高",
+          "balance": "残高",
+          "todayRequests": "本日のリクエスト",
+          "todayTokens": "本日の Token",
+          "todayCost": "本日の消費",
+          "totalRequests": "累計リクエスト",
+          "totalTokens": "累計 Token",
+          "totalCost": "累計消費",
+          "hardLimitUsd": "ハード上限",
+          "softLimitUsd": "ソフト上限",
+          "systemHardLimitUsd": "システム上限",
+          "accessUntil": "利用可能期限",
+          "totalUsage": "累計消費",
+          "quotaUnlimited": "無制限",
+          "expiresAt": "有効期限",
+          "totalGranted": "付与枠",
+          "totalAvailable": "利用可能",
+          "modelLimitsEnabled": "モデル制限"
+        },
+        "accountBalance": "アカウント残高",
+        "unlimitedQuota": "無制限",
+        "booleanTrue": "はい",
+        "booleanFalse": "いいえ"
+      },
+      "oauthBinding": {
+        "desc": "任意です。refresh_token を持つ OAuth アカウントを連携できます。未連携の場合、プロバイダーは元の API Key フローで動作します。",
+        "currentProvider": "プロバイダー: {{name}}"
+      }
     },
     "quickSwitch": {
       "action": "プロバイダーをクイック切り替え",
@@ -2807,6 +2882,10 @@
         "saveSuccess": "アカウント別モデル除外を保存しました",
         "cardCount": "{{count}} 件除外"
       }
+    },
+    "apiKey": {
+      "renameSuccess": "名前を変更しました",
+      "renameFailed": "名前の変更に失敗しました"
     }
   },
   "githubCopilot": {
@@ -3369,7 +3448,6 @@
       "goAntigravity": "Antigravity IDEへ",
       "goCodex": "Codexへ",
       "goDashboard": "ダッシュボードへ",
-      "goFingerprints": "デバイス指紋へ",
       "goGitHubCopilot": "GitHub Copilotへ",
       "goInstances": "マルチインスタンスへ",
       "goKiro": "Kiroへ",
@@ -3464,28 +3542,6 @@
     "empty": {
       "desc": "「インスタンス」「切替」「設定」「エクスポート」などを試してください。",
       "title": "一致する内容がありません"
-    },
-    "fingerprints": {
-      "cautions": {
-        "0": "デバイス指紋 で一括・高リスク操作を行う前に必ずバックアップします。"
-      },
-      "keywords": {
-        "0": "デバイス指紋",
-        "1": "ガイド",
-        "2": "手順",
-        "3": "アカウント"
-      },
-      "outcomes": {
-        "0": "デバイス指紋 で何ができるかを理解します。",
-        "1": "デバイス指紋 の推奨フローでミスを減らします。"
-      },
-      "steps": {
-        "0": "デバイス指紋 のページを開きます。",
-        "1": "デバイス指紋 の基本設定と必要な紐付けを完了します。",
-        "2": "デバイス指紋 で手動操作を1回実行し、結果を確認します。"
-      },
-      "summary": "このセクションでは デバイス指紋 の使い方を説明します。",
-      "title": "デバイス指紋"
     },
     "instances": {
       "cautions": {

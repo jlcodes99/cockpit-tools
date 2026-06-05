@@ -13,7 +13,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::models::trae::{TraeImportPayload, TraeOAuthStartResponse};
-use crate::modules::{config, device, logger, trae_account};
+use crate::modules::{config, logger, trae_account};
 
 const OAUTH_TIMEOUT_SECONDS: i64 = 600;
 const OAUTH_POLL_INTERVAL_MS: u64 = 250;
@@ -85,6 +85,10 @@ lazy_static::lazy_static! {
 
 fn now_timestamp() -> i64 {
     chrono::Utc::now().timestamp()
+}
+
+fn generate_service_machine_id() -> String {
+    Uuid::new_v4().to_string()
 }
 
 fn load_pending_login_from_disk() -> Option<PendingOAuthState> {
@@ -656,7 +660,7 @@ fn collect_trae_login_context() -> TraeLoginContext {
         storage_root.as_ref(),
         &["telemetry.machineId", "machine_id", "x_machine_id"],
     )
-    .unwrap_or_else(device::get_service_machine_id);
+    .unwrap_or_else(generate_service_machine_id);
 
     let device_id = pick_storage_string(
         storage_root.as_ref(),

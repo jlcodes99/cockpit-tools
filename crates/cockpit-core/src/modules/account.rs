@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use crate::models::{
-    Account, AccountIndex, AccountSummary, DeviceProfile, DeviceProfileVersion, QuotaData,
+    Account, AccountIndex, AccountSummary, QuotaData,
     QuotaErrorInfo, TokenData,
 };
 use crate::modules;
@@ -29,31 +29,8 @@ const LIST_ACCOUNTS_CACHE_TTL_MS: u64 = 800;
 // 使用与 AntigravityCockpit 插件相同的数据目录
 const DATA_DIR: &str = ".antigravity_cockpit";
 
-/// 对邮箱地址进行脱敏，仅保留首字符和域名，例如 "u***@example.com"
-#[inline]
-fn mask_email(email: &str) -> String {
-    if let Some(at_pos) = email.find('@') {
-        let local = &email[..at_pos];
-        let domain = &email[at_pos..];
-        let first = local
-            .chars()
-            .next()
-            .map(|c| c.to_string())
-            .unwrap_or_default();
-        format!("{}***{}", first, domain)
-    } else {
-        "***".to_string()
-    }
-}
 const ACCOUNTS_INDEX: &str = "accounts.json";
 const ACCOUNTS_DIR: &str = "accounts";
-const DELETED_ACCOUNT_FP_BINDINGS: &str = "deleted_account_fingerprint_bindings.json";
-
-#[derive(Debug, Default, Serialize, Deserialize)]
-struct DeletedAccountFingerprintBindings {
-    #[serde(default)]
-    by_email: HashMap<String, String>,
-}
 
 #[derive(Clone)]
 struct ListAccountsCacheEntry {
@@ -91,125 +68,6 @@ fn write_list_accounts_cache(accounts: &[Account]) {
         });
     }
 }
-
-fn normalize_account_email_key(email: &str) -> String {
-    email.trim().to_lowercase()
-}
-
-fn get_deleted_account_fp_bindings_path() -> Result<PathBuf, String> {
-    Ok(get_data_dir()?.join(DELETED_ACCOUNT_FP_BINDINGS))
-}
-
-fn load_deleted_account_fp_bindings() -> Result<DeletedAccountFingerprintBindings, String> {
-    let path = get_deleted_account_fp_bindings_path()?;
-    if !path.exists() {
-        return Ok(DeletedAccountFingerprintBindings::default());
-    }
-
-    let content = fs::read_to_string(&path).map_err(|e| format!("读取指纹映射失败: {}", e))?;
-    if content.trim().is_empty() {
-        return Ok(DeletedAccountFingerprintBindings::default());
-    }
-
-    match serde_json::from_str::<DeletedAccountFingerprintBindings>(&content) {
-        Ok(bindings) => Ok(bindings),
-        Err(error) => {
-            match modules::atomic_write::quarantine_file(&path, "invalid-json") {
-                Ok(Some(backup_path)) => modules::logger::log_warn(&format!(
-                    "指纹映射文件损坏，已隔离并重置为空: path={}, backup={}, error={}",
-                    path.display(),
-                    backup_path.display(),
-                    error
-                )),
-                Ok(None) => modules::logger::log_warn(&format!(
-                    "指纹映射文件损坏，文件已不存在，重置为空: path={}, error={}",
-                    path.display(),
-                    error
-                )),
-                Err(backup_error) => modules::logger::log_warn(&format!(
-                    "指纹映射文件损坏，隔离失败，重置为空: path={}, parse_error={}, backup_error={}",
-                    path.display(),
-                    error,
-                    backup_error
-                )),
-            }
-            Ok(DeletedAccountFingerprintBindings::default())
-        }
-    }
-}
-
-fn save_deleted_account_fp_bindings(
-    bindings: &DeletedAccountFingerprintBindings,
-) -> Result<(), String> {
-    let path = get_deleted_account_fp_bindings_path()?;
-    let content =
-        serde_json::to_string_pretty(bindings).map_err(|e| format!("序列化指纹映射失败: {}", e))?;
-    crate::modules::atomic_write::write_string_atomic(&path, &content)
-        .map_err(|e| format!("保存指纹映射失败: {}", e))
-}
-
-fn remember_deleted_account_fingerprint(account: &Account) -> Result<(), String> {
-    let key = normalize_account_email_key(&account.email);
-    if key.is_empty() {
-        return Ok(());
-    }
-
-    let Some(fp_id) = account.fingerprint_id.as_ref() else {
-        return Ok(());
-    };
-
-    if crate::modules::fingerprint::get_fingerprint(fp_id).is_err() {
-        modules::logger::log_warn(&format!(
-            "删除账号时发现指纹不存在，跳过映射记录: email={}, fingerprint_id={}",
-            mask_email(&account.email),
-            fp_id
-        ));
-        return Ok(());
-    }
-
-    let mut bindings = load_deleted_account_fp_bindings()?;
-    bindings.by_email.insert(key, fp_id.clone());
-    save_deleted_account_fp_bindings(&bindings)?;
-    Ok(())
-}
-
-fn lookup_deleted_account_fingerprint(email: &str) -> Result<Option<String>, String> {
-    let key = normalize_account_email_key(email);
-    if key.is_empty() {
-        return Ok(None);
-    }
-
-    let bindings = load_deleted_account_fp_bindings()?;
-    let Some(fp_id) = bindings.by_email.get(&key).cloned() else {
-        return Ok(None);
-    };
-
-    if crate::modules::fingerprint::get_fingerprint(&fp_id).is_ok() {
-        Ok(Some(fp_id))
-    } else {
-        modules::logger::log_warn(&format!(
-            "账号重建时命中过期指纹映射，已忽略: email={}, fingerprint_id={}",
-            mask_email(email),
-            fp_id
-        ));
-        let _ = clear_deleted_account_fingerprint(email);
-        Ok(None)
-    }
-}
-
-fn clear_deleted_account_fingerprint(email: &str) -> Result<(), String> {
-    let key = normalize_account_email_key(email);
-    if key.is_empty() {
-        return Ok(());
-    }
-
-    let mut bindings = load_deleted_account_fp_bindings()?;
-    if bindings.by_email.remove(&key).is_some() {
-        save_deleted_account_fp_bindings(&bindings)?;
-    }
-    Ok(())
-}
-
 /// 获取数据目录路径
 pub fn get_data_dir() -> Result<PathBuf, String> {
     let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
@@ -543,30 +401,6 @@ pub fn add_account(
     let mut account = Account::new(account_id.clone(), email.clone(), token);
     account.name = name.clone();
 
-    let reused_fp_id = match lookup_deleted_account_fingerprint(&email) {
-        Ok(fp_id) => fp_id,
-        Err(e) => {
-            modules::logger::log_warn(&format!(
-                "读取已删除账号指纹映射失败，回退为新建指纹: email={}, error={}",
-                mask_email(&email),
-                e
-            ));
-            None
-        }
-    };
-
-    if let Some(ref fp_id) = reused_fp_id {
-        account.fingerprint_id = Some(fp_id.clone());
-        modules::logger::log_info(&format!(
-            "账号复用已删除映射指纹: email={}, fingerprint_id={}",
-            mask_email(&email),
-            fp_id
-        ));
-    } else {
-        let fingerprint = crate::modules::fingerprint::generate_fingerprint(email.clone())?;
-        account.fingerprint_id = Some(fingerprint.id.clone());
-    }
-
     save_account(&account)?;
 
     index.accounts.push(AccountSummary {
@@ -582,16 +416,6 @@ pub fn add_account(
     }
 
     save_account_index(&index)?;
-
-    if reused_fp_id.is_some() {
-        if let Err(e) = clear_deleted_account_fingerprint(&email) {
-            modules::logger::log_warn(&format!(
-                "清理已删除账号指纹映射失败: email={}, error={}",
-                mask_email(&email),
-                e
-            ));
-        }
-    }
 
     Ok(account)
 }
@@ -633,8 +457,6 @@ pub fn upsert_account(
                 modules::logger::log_warn(&format!("账号文件缺失，正在重建: {}", e));
                 let mut account = Account::new(account_id.clone(), email.clone(), token);
                 account.name = name.clone();
-                let fingerprint = crate::modules::fingerprint::generate_fingerprint(email.clone())?;
-                account.fingerprint_id = Some(fingerprint.id.clone());
                 save_account(&account)?;
 
                 if let Some(idx_summary) = index.accounts.iter_mut().find(|s| s.id == account_id) {
@@ -658,16 +480,6 @@ pub fn delete_account(account_id: &str) -> Result<(), String> {
         .map_err(|e| format!("获取锁失败: {}", e))?;
     let mut index = load_account_index()?;
 
-    if let Ok(account) = load_account(account_id) {
-        if let Err(e) = remember_deleted_account_fingerprint(&account) {
-            modules::logger::log_warn(&format!(
-                "记录删除账号指纹映射失败: account_id={}, email={}, error={}",
-                account_id,
-                mask_email(&account.email),
-                e
-            ));
-        }
-    }
 
     let original_len = index.accounts.len();
     index.accounts.retain(|s| s.id != account_id);
@@ -702,17 +514,6 @@ pub fn delete_accounts(account_ids: &[String]) -> Result<(), String> {
     let accounts_dir = get_accounts_dir()?;
 
     for account_id in account_ids {
-        if let Ok(account) = load_account(account_id) {
-            if let Err(e) = remember_deleted_account_fingerprint(&account) {
-                modules::logger::log_warn(&format!(
-                    "批量删除时记录账号指纹映射失败: account_id={}, email={}, error={}",
-                    account_id,
-                    mask_email(&account.email),
-                    e
-                ));
-            }
-        }
-
         index.accounts.retain(|s| &s.id != account_id);
 
         if index.current_account_id.as_deref() == Some(account_id) {
@@ -852,109 +653,6 @@ pub fn update_account_quota(account_id: &str, quota: QuotaData) -> Result<(), St
         let _ = modules::quota_cache::write_quota_cache("authorized", &account.email, quota);
     }
     Ok(())
-}
-
-/// 设备指纹信息（兼容旧 API）
-#[derive(Debug, Serialize)]
-pub struct DeviceProfiles {
-    pub current_storage: Option<DeviceProfile>,
-    pub bound_profile: Option<DeviceProfile>,
-    pub history: Vec<DeviceProfileVersion>,
-    pub baseline: Option<DeviceProfile>,
-}
-
-pub fn get_device_profiles(account_id: &str) -> Result<DeviceProfiles, String> {
-    let storage_path = crate::modules::device::get_storage_path()?;
-    let current = crate::modules::device::read_profile(&storage_path).ok();
-    let account = load_account(account_id)?;
-
-    // 获取账号绑定的指纹
-    let bound = account
-        .fingerprint_id
-        .as_ref()
-        .and_then(|fp_id| crate::modules::fingerprint::get_fingerprint(fp_id).ok())
-        .map(|fp| fp.profile);
-
-    // 获取原始指纹
-    let baseline = crate::modules::fingerprint::load_fingerprint_store()
-        .ok()
-        .and_then(|store| store.original_baseline)
-        .map(|fp| fp.profile);
-
-    Ok(DeviceProfiles {
-        current_storage: current,
-        bound_profile: bound,
-        history: Vec::new(), // 历史功能已移除
-        baseline,
-    })
-}
-
-/// 绑定设备指纹（兼容旧 API，现在会创建新指纹并绑定）
-pub fn bind_device_profile(account_id: &str, mode: &str) -> Result<DeviceProfile, String> {
-    let name = format!("自动生成 {}", chrono::Utc::now().format("%Y-%m-%d %H:%M"));
-
-    let fingerprint = match mode {
-        "capture" => crate::modules::fingerprint::capture_fingerprint(name)?,
-        "generate" => crate::modules::fingerprint::generate_fingerprint(name)?,
-        _ => return Err("mode 只能是 capture 或 generate".to_string()),
-    };
-
-    // 绑定到账号
-    let mut account = load_account(account_id)?;
-    account.fingerprint_id = Some(fingerprint.id.clone());
-    save_account(&account)?;
-
-    Ok(fingerprint.profile)
-}
-
-/// 使用指定的 profile 绑定（创建新指纹并绑定）
-pub fn bind_device_profile_with_profile(
-    account_id: &str,
-    profile: DeviceProfile,
-) -> Result<DeviceProfile, String> {
-    use crate::modules::fingerprint;
-
-    let name = format!("自动生成 {}", chrono::Utc::now().format("%Y-%m-%d %H:%M"));
-
-    // 创建新指纹
-    let mut store = fingerprint::load_fingerprint_store()?;
-    let fp = fingerprint::Fingerprint::new(name, profile.clone());
-    store.fingerprints.push(fp.clone());
-    fingerprint::save_fingerprint_store(&store)?;
-
-    // 绑定到账号
-    let mut account = load_account(account_id)?;
-    account.fingerprint_id = Some(fp.id.clone());
-    save_account(&account)?;
-
-    // 应用到系统
-    if let Ok(storage_path) = crate::modules::device::get_storage_path() {
-        let _ = crate::modules::device::write_profile(&storage_path, &fp.profile);
-    }
-
-    Ok(fp.profile)
-}
-
-/// 列出指纹版本（兼容旧 API）
-pub fn list_device_versions(account_id: &str) -> Result<DeviceProfiles, String> {
-    get_device_profiles(account_id)
-}
-
-/// 恢复指纹版本（兼容旧 API）
-pub fn restore_device_version(
-    _account_id: &str,
-    version_id: &str,
-) -> Result<DeviceProfile, String> {
-    // 直接应用指定的指纹
-    let fingerprint = crate::modules::fingerprint::get_fingerprint(version_id)?;
-    let _ = crate::modules::fingerprint::apply_fingerprint(version_id);
-    Ok(fingerprint.profile)
-}
-
-/// 删除历史指纹（兼容旧 API - 已废弃）
-
-pub fn delete_device_version(_account_id: &str, version_id: &str) -> Result<(), String> {
-    crate::modules::fingerprint::delete_fingerprint(version_id)
 }
 
 #[derive(Serialize)]
@@ -1895,7 +1593,7 @@ pub async fn fetch_quota_with_fresh_token(
 }
 
 /// 内部切换账号函数（供 WebSocket 调用）
-/// 完整流程：Token刷新 + 关闭程序 + 注入 + 指纹同步 + 重启
+/// 完整流程：Token刷新 + 关闭程序 + 注入 + 重启
 pub async fn switch_account_internal(account_id: &str) -> Result<Account, String> {
     modules::logger::log_info("[Switch] 开始切换账号");
 
@@ -1906,20 +1604,7 @@ pub async fn switch_account_internal(account_id: &str) -> Result<Account, String
     let mut account = prepare_account_for_injection(account_id).await?;
     modules::logger::log_info("[Switch] 正在切换到账号");
 
-    // 3. 写入设备指纹到 storage.json
-    if let Ok(storage_path) = modules::device::get_storage_path() {
-        if let Some(ref fp_id) = account.fingerprint_id {
-            // 优先使用绑定的指纹
-            if let Ok(fingerprint) = modules::fingerprint::get_fingerprint(fp_id) {
-                modules::logger::log_info("[Switch] 写入设备指纹");
-                let _ = modules::device::write_profile(&storage_path, &fingerprint.profile);
-                let _ =
-                    modules::db::write_service_machine_id(&fingerprint.profile.service_machine_id);
-            }
-        }
-    }
-
-    // 4. 更新工具内部状态
+    // 3. 更新工具内部状态
     set_current_account_id(account_id)?;
     account.update_last_used();
     save_account(&account)?;
@@ -2220,22 +1905,8 @@ pub async fn switch_account_dual_no_restart(
     }
 }
 
-fn apply_bound_fingerprint_for_switch(account: &Account) {
-    if let Ok(storage_path) = modules::device::get_storage_path() {
-        if let Some(ref fp_id) = account.fingerprint_id {
-            if let Ok(fingerprint) = modules::fingerprint::get_fingerprint(fp_id) {
-                modules::logger::log_info("[Switch] 写入设备指纹");
-                let _ = modules::device::write_profile(&storage_path, &fingerprint.profile);
-                let _ =
-                    modules::db::write_service_machine_id(&fingerprint.profile.service_machine_id);
-                let _ = modules::fingerprint::set_current_fingerprint_id(fp_id);
-            }
-        }
-    }
-}
-
 /// 本地切号（不关闭/不重启 Antigravity IDE）
-/// 流程：Token刷新 + 本地状态更新 + 指纹同步 + 默认实例注入
+/// 流程：Token刷新 + 本地状态更新 + 默认实例注入
 pub async fn switch_account_local_no_restart(account_id: &str) -> Result<Account, String> {
     modules::logger::log_info(&format!(
         "[Switch][NoRestart] 开始本地切号: account_id={}",
@@ -2259,7 +1930,6 @@ pub async fn switch_account_local_no_restart(account_id: &str) -> Result<Account
         ));
     }
 
-    apply_bound_fingerprint_for_switch(&account);
 
     let default_dir = modules::instance::get_default_user_data_dir()?;
     modules::instance::inject_account_to_profile(&default_dir, account_id)?;

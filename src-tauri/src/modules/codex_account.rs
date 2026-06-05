@@ -308,10 +308,26 @@ fn build_api_key_account_id(api_key: &str) -> String {
     format!("codex_apikey_{:x}", md5::compute(api_key.as_bytes()))
 }
 
+fn normalize_api_model_catalog(models: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut values = Vec::new();
+    for model in models {
+        let model = model.trim();
+        if model.is_empty() || !seen.insert(model.to_ascii_lowercase()) {
+            continue;
+        }
+        values.push(model.to_string());
+    }
+    values
+}
+
 fn apply_api_key_fields(
     account: &mut CodexAccount,
     api_key: &str,
     provider_config: ApiProviderConfig,
+    api_model_catalog: Vec<String>,
+    api_supports_vision: bool,
+    api_model_vision_support: std::collections::HashMap<String, bool>,
 ) {
     let is_cockpit_api = provider_config
         .provider_id
@@ -331,6 +347,9 @@ fn apply_api_key_fields(
     account.api_provider_mode = provider_config.mode;
     account.api_provider_id = provider_config.provider_id;
     account.api_provider_name = provider_config.provider_name;
+    account.api_model_catalog = normalize_api_model_catalog(api_model_catalog);
+    account.api_supports_vision = api_supports_vision;
+    account.api_model_vision_support = normalize_api_model_vision_support(api_model_vision_support);
     account.email = build_api_key_email(api_key);
     if is_cockpit_api && normalize_optional_ref(account.account_name.as_deref()).is_none() {
         account.account_name = Some(COCKPIT_API_DEFAULT_ACCOUNT_NAME.to_string());
@@ -348,6 +367,22 @@ fn apply_api_key_fields(
     account.account_structure = None;
     account.quota = None;
     account.quota_error = None;
+}
+
+fn normalize_api_model_vision_support(
+    values: std::collections::HashMap<String, bool>,
+) -> std::collections::HashMap<String, bool> {
+    values
+        .into_iter()
+        .filter_map(|(model, supports)| {
+            let model = model.trim().to_lowercase();
+            if model.is_empty() {
+                None
+            } else {
+                Some((model, supports))
+            }
+        })
+        .collect()
 }
 
 fn extract_api_key_from_auth_file(auth_file: &CodexAuthFile) -> Option<String> {
@@ -713,8 +748,7 @@ fn write_quick_config_to_config_toml(
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("创建 config.toml 目录失败: {}", e))?;
     }
-    let content =
-        crate::modules::codex_config_format::normalize_config_toml_spacing(&doc.to_string());
+    let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
     crate::modules::atomic_write::write_string_atomic(&config_path, &content)
         .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
 
@@ -875,8 +909,7 @@ fn write_api_provider_to_config_toml(
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("创建 config.toml 目录失败: {}", e))?;
     }
-    let content =
-        crate::modules::codex_config_format::normalize_config_toml_spacing(&doc.to_string());
+    let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
     crate::modules::atomic_write::write_string_atomic(&config_path, &content)
         .map_err(|e| format!("写入 config.toml 失败: {}", e))
 }
@@ -968,8 +1001,7 @@ fn write_api_key_provider_to_config_toml(
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("创建 config.toml 目录失败: {}", e))?;
     }
-    let content =
-        crate::modules::codex_config_format::normalize_config_toml_spacing(&doc.to_string());
+    let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
     crate::modules::atomic_write::write_string_atomic(&config_path, &content)
         .map_err(|e| format!("写入 config.toml 失败: {}", e))
 }
@@ -1904,6 +1936,7 @@ fn parse_codex_account_compat(
             provider_config.base_url,
             provider_config.provider_id,
             provider_config.provider_name,
+            Vec::new(),
         );
         apply_compat_account_metadata(&mut account, &value, summary);
         account.plan_type = Some(API_KEY_LOGIN_PLAN_TYPE.to_string());
@@ -2121,6 +2154,10 @@ pub fn upsert_api_key_account(
     api_provider_mode: Option<CodexApiProviderMode>,
     api_provider_id: Option<String>,
     api_provider_name: Option<String>,
+    api_model_catalog: Vec<String>,
+    api_supports_vision: bool,
+    api_model_vision_support: std::collections::HashMap<String, bool>,
+    account_name: Option<String>,
 ) -> Result<CodexAccount, String> {
     let (api_key, api_base_url) = validate_api_key_credentials(&api_key, api_base_url.as_deref())?;
     let provider_config = resolve_api_provider_config(
@@ -2130,6 +2167,7 @@ pub fn upsert_api_key_account(
         api_provider_name.as_deref(),
     )?;
     let account_id = build_api_key_account_id(&api_key);
+    let account_name = normalize_optional_value(account_name);
     let mut index = load_account_index();
     let existing = index.accounts.iter().position(|item| item.id == account_id);
 
@@ -2144,11 +2182,24 @@ pub fn upsert_api_key_account(
                 provider_config.base_url.clone(),
                 provider_config.provider_id.clone(),
                 provider_config.provider_name.clone(),
+                normalize_api_model_catalog(api_model_catalog.clone()),
             )
         });
-        apply_api_key_fields(&mut acc, &api_key, provider_config.clone());
+        apply_api_key_fields(
+            &mut acc,
+            &api_key,
+            provider_config.clone(),
+            api_model_catalog.clone(),
+            api_supports_vision,
+            api_model_vision_support.clone(),
+        );
         if acc.email.trim().is_empty() {
             acc.email = build_api_key_email(&api_key);
+        }
+        if let Some(name) = account_name.clone() {
+            if normalize_optional_ref(acc.account_name.as_deref()).is_none() {
+                acc.account_name = Some(name);
+            }
         }
         acc.update_last_used();
         acc
@@ -2161,8 +2212,12 @@ pub fn upsert_api_key_account(
             provider_config.base_url.clone(),
             provider_config.provider_id.clone(),
             provider_config.provider_name.clone(),
+            normalize_api_model_catalog(api_model_catalog.clone()),
         );
         acc.plan_type = Some(API_KEY_LOGIN_PLAN_TYPE.to_string());
+        acc.account_name = account_name;
+        acc.api_supports_vision = api_supports_vision;
+        acc.api_model_vision_support = normalize_api_model_vision_support(api_model_vision_support);
         index.accounts.push(CodexAccountSummary {
             id: account_id.clone(),
             email: acc.email.clone(),
@@ -3893,6 +3948,10 @@ pub fn import_from_local() -> Result<CodexAccount, String> {
             Some(fallback_provider.mode),
             fallback_provider.provider_id.clone(),
             fallback_provider.provider_name.clone(),
+            Vec::new(),
+            false,
+            std::collections::HashMap::new(),
+            None,
         );
     }
 
@@ -3907,6 +3966,10 @@ pub fn import_from_local() -> Result<CodexAccount, String> {
             Some(fallback_provider.mode),
             fallback_provider.provider_id.clone(),
             fallback_provider.provider_name.clone(),
+            Vec::new(),
+            false,
+            std::collections::HashMap::new(),
+            None,
         );
     }
 
@@ -3923,6 +3986,10 @@ fn import_account_struct(account: CodexAccount) -> Result<CodexAccount, String> 
             Some(account.api_provider_mode),
             account.api_provider_id.clone(),
             account.api_provider_name.clone(),
+            account.api_model_catalog.clone(),
+            account.api_supports_vision,
+            account.api_model_vision_support.clone(),
+            account.account_name.clone(),
         );
     }
 
@@ -4413,6 +4480,10 @@ async fn import_account_from_json_value(
                     .get("api_provider_name")
                     .and_then(|value| value.as_str())
                     .map(|value| value.to_string()),
+                Vec::new(),
+                false,
+                std::collections::HashMap::new(),
+                None,
             )?;
             apply_api_key_import_metadata(&mut account, &value);
             save_account(&account)?;
@@ -4508,6 +4579,10 @@ pub async fn import_from_json(json_content: &str) -> Result<Vec<CodexAccount>, S
                 Some(fallback_provider.mode),
                 fallback_provider.provider_id.clone(),
                 fallback_provider.provider_name.clone(),
+                Vec::new(),
+                false,
+                std::collections::HashMap::new(),
+                None,
             )?;
             if let Some(value) = raw_value.as_ref() {
                 apply_api_key_import_metadata(&mut account, value);
@@ -4533,6 +4608,10 @@ pub async fn import_from_json(json_content: &str) -> Result<Vec<CodexAccount>, S
                 Some(fallback_provider.mode),
                 fallback_provider.provider_id.clone(),
                 fallback_provider.provider_name.clone(),
+                Vec::new(),
+                false,
+                std::collections::HashMap::new(),
+                None,
             )?;
             if let Some(value) = raw_value.as_ref() {
                 apply_api_key_import_metadata(&mut account, value);
@@ -6053,6 +6132,7 @@ requires_openai_auth = false
             Some("http://127.0.0.1:14998/v1".to_string()),
             Some("codex_local_access".to_string()),
             Some("Codex API Service".to_string()),
+            Vec::new(),
         );
         api_key_account.bound_oauth_account_id = Some(oauth_account.id.clone());
         let profile_dir = env.home_dir.join("managed-profile");
@@ -6105,6 +6185,7 @@ requires_openai_auth = false
             Some("http://127.0.0.1:14998/v1".to_string()),
             Some("codex_local_access".to_string()),
             Some("Codex API Service".to_string()),
+            Vec::new(),
         );
         api_key_account.bound_oauth_account_id = Some(oauth_account.id.clone());
         let profile_dir = env.home_dir.join("managed-profile");
@@ -6620,6 +6701,9 @@ pub fn update_api_key_credentials(
     api_provider_mode: Option<CodexApiProviderMode>,
     api_provider_id: Option<String>,
     api_provider_name: Option<String>,
+    api_model_catalog: Vec<String>,
+    api_supports_vision: bool,
+    api_model_vision_support: std::collections::HashMap<String, bool>,
 ) -> Result<CodexAccount, String> {
     let mut account =
         load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
@@ -6651,7 +6735,14 @@ pub fn update_api_key_credentials(
         account.id = new_id.clone();
     }
 
-    apply_api_key_fields(&mut account, &normalized_key, provider_config);
+    apply_api_key_fields(
+        &mut account,
+        &normalized_key,
+        provider_config,
+        api_model_catalog,
+        api_supports_vision,
+        api_model_vision_support,
+    );
     account.update_last_used();
     save_account(&account)?;
 

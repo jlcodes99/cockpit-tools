@@ -3,6 +3,11 @@ use std::collections::HashSet;
 
 const REASONING_ENCRYPTED_CONTENT_INCLUDE: &str = "reasoning.encrypted_content";
 const CODEX_AUTO_REVIEW_MODEL_ID: &str = "codex-auto-review";
+const CODEX_MODEL_CATALOG_TEMPLATE_SLUG: &str = "gpt-5.5";
+const CODEX_CLIENT_MODEL_TEMPLATES_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../sidecars/cockpit-cliproxy/cdk/CLIProxyAPI/internal/registry/models/codex_client_models.json"
+));
 const DEFAULT_CONTEXT_WINDOW: i64 = 272_000;
 const DEFAULT_MAX_CONTEXT_WINDOW: i64 = 1_000_000;
 const LOCAL_PROXY_BYPASS_HOSTS: [&str; 5] =
@@ -47,7 +52,8 @@ pub fn is_codex_client_models_request(target: &str) -> bool {
 pub fn build_codex_client_models_response(model_ids: &[String]) -> Value {
     let models = model_ids
         .iter()
-        .map(|model_id| build_codex_client_model(model_id))
+        .enumerate()
+        .map(|(index, model_id)| build_codex_client_model(model_id, index))
         .collect::<Vec<_>>();
 
     json!({ "models": models })
@@ -71,7 +77,7 @@ pub fn normalize_responses_body_for_codex(body: &mut Value) -> bool {
     changed
 }
 
-fn build_codex_client_model(model_id: &str) -> Value {
+fn build_codex_client_model(model_id: &str, index: usize) -> Value {
     let display_name = display_name_for_model(model_id);
     let visibility = if matches!(
         model_id,
@@ -83,20 +89,53 @@ fn build_codex_client_model(model_id: &str) -> Value {
     ) {
         "hide"
     } else {
-        "show"
+        "list"
     };
 
-    json!({
-        "slug": model_id,
-        "display_name": display_name.clone(),
-        "description": display_name,
-        "context_window": DEFAULT_CONTEXT_WINDOW,
-        "max_context_window": DEFAULT_MAX_CONTEXT_WINDOW,
-        "default_reasoning_level": "medium",
-        "supported_reasoning_levels": reasoning_levels(),
-        "prefer_websockets": true,
-        "visibility": visibility,
-    })
+    let mut model = codex_client_model_template();
+    let object = model
+        .as_object_mut()
+        .expect("Codex client model template should be a JSON object");
+    object.insert("slug".to_string(), Value::String(model_id.to_string()));
+    object.insert(
+        "display_name".to_string(),
+        Value::String(display_name.clone()),
+    );
+    object.insert("description".to_string(), Value::String(display_name));
+    object.insert("context_window".to_string(), json!(DEFAULT_CONTEXT_WINDOW));
+    object.insert(
+        "max_context_window".to_string(),
+        json!(DEFAULT_MAX_CONTEXT_WINDOW),
+    );
+    object.insert(
+        "visibility".to_string(),
+        Value::String(visibility.to_string()),
+    );
+    object.insert("supported_in_api".to_string(), Value::Bool(true));
+    object.insert("priority".to_string(), json!(1000 + index));
+    object.insert(
+        "additional_speed_tiers".to_string(),
+        Value::Array(Vec::new()),
+    );
+    object.insert("service_tiers".to_string(), Value::Array(Vec::new()));
+    object.insert("availability_nux".to_string(), Value::Null);
+    object.insert("upgrade".to_string(), Value::Null);
+    model
+}
+
+fn codex_client_model_template() -> Value {
+    let payload: Value = serde_json::from_str(CODEX_CLIENT_MODEL_TEMPLATES_JSON)
+        .expect("Codex client model templates JSON should be valid");
+    payload
+        .get("models")
+        .and_then(Value::as_array)
+        .and_then(|models| {
+            models.iter().find(|model| {
+                model.get("slug").and_then(Value::as_str) == Some(CODEX_MODEL_CATALOG_TEMPLATE_SLUG)
+            })
+        })
+        .cloned()
+        .expect("Codex client model templates should include gpt-5.5")
 }
 
 fn display_name_for_model(model_id: &str) -> String {
@@ -115,31 +154,6 @@ fn display_name_for_model(model_id: &str) -> String {
         CODEX_AUTO_REVIEW_MODEL_ID => "Codex Auto Review".to_string(),
         other => other.to_string(),
     }
-}
-
-fn reasoning_levels() -> Value {
-    json!([
-        {
-            "effort": "minimal",
-            "description": "Fastest responses with minimal reasoning",
-        },
-        {
-            "effort": "low",
-            "description": "Fast responses with lighter reasoning",
-        },
-        {
-            "effort": "medium",
-            "description": "Balances speed and reasoning depth for everyday tasks",
-        },
-        {
-            "effort": "high",
-            "description": "Greater reasoning depth for complex problems",
-        },
-        {
-            "effort": "xhigh",
-            "description": "Extra high reasoning depth for complex problems",
-        },
-    ])
 }
 
 fn ensure_string_field(obj: &mut Map<String, Value>, key: &str, value: &str) -> bool {
@@ -481,5 +495,21 @@ mod tests {
                 .and_then(Value::as_bool),
             Some(true)
         );
+        assert_eq!(
+            response
+                .pointer("/models/0/shell_type")
+                .and_then(Value::as_str),
+            Some("shell_command")
+        );
+        assert_eq!(
+            response
+                .pointer("/models/0/supported_in_api")
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+        assert!(response
+            .pointer("/models/0/input_modalities")
+            .and_then(Value::as_array)
+            .is_some());
     }
 }

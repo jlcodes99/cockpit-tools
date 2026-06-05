@@ -13,6 +13,7 @@ dist
 dist-ssr
 *.local
 .gemini
+.codegraph/
 # Editor directories and files
 .vscode/*
 .planning

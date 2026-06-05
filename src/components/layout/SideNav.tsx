@@ -1,4 +1,4 @@
-import { Settings, Rocket, GaugeCircle, LayoutGrid, SlidersHorizontal, FileText, ChevronDown, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
+import { Settings, Rocket, GaugeCircle, LayoutGrid, SlidersHorizontal, FileText, ChevronDown, PanelLeftClose, PanelLeftOpen, ShieldCheck, HeartHandshake } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
@@ -15,7 +15,7 @@ import {
   resolveEntryIdForPlatform,
   usePlatformLayoutStore,
 } from '../../stores/usePlatformLayoutStore';
-import { ORIGINAL_SIDEBAR_ENTRY_LIMIT, useSideNavLayoutStore } from '../../stores/useSideNavLayoutStore';
+import { CLASSIC_SIDEBAR_ENTRY_LIMIT, ORIGINAL_SIDEBAR_ENTRY_LIMIT, useSideNavLayoutStore } from '../../stores/useSideNavLayoutStore';
 import { useGlobalModal } from '../../hooks/useGlobalModal';
 import { getPlatformLabel, renderPlatformIcon } from '../../utils/platformMeta';
 import { useAntigravityRuntimeTarget } from '../../hooks/useAntigravityRuntimeTarget';
@@ -32,6 +32,7 @@ interface SideNavProps {
   updateProgress: number;
   onUpdateActionClick: () => void;
   updateRemindersEnabled: boolean;
+  sponsorEntryVisible: boolean;
   onOpenLogViewer: () => void;
 }
 
@@ -104,6 +105,7 @@ export function SideNav({
   updateProgress,
   onUpdateActionClick,
   updateRemindersEnabled,
+  sponsorEntryVisible,
   onOpenLogViewer,
 }: SideNavProps) {
   const { t } = useTranslation();
@@ -211,14 +213,14 @@ export function SideNav({
   }, [orderedEntryIds, platformGroups, hiddenSet, t]);
 
   const sidebarVisibleEntries = useMemo(
-    () => orderedEntries.filter((entry) => sidebarSet.has(entry.id) && !entry.hidden),
+    () => orderedEntries.filter((entry) => sidebarSet.has(entry.id)),
     [orderedEntries, sidebarSet],
   );
 
   const sidebarMenuEntries = useMemo(
     () => (
       isClassicLayout
-        ? sidebarVisibleEntries
+        ? sidebarVisibleEntries.slice(0, CLASSIC_SIDEBAR_ENTRY_LIMIT)
         : sidebarVisibleEntries.slice(0, ORIGINAL_SIDEBAR_ENTRY_LIMIT)
     ),
     [isClassicLayout, sidebarVisibleEntries],
@@ -890,6 +892,19 @@ export function SideNav({
 
       {isClassicLayout && (
         <div className="nav-bottom-actions" ref={bottomActionsRef}>
+          {sponsorEntryVisible ? (
+            <button
+              className={`nav-item ${page === 'sponsors' && !shouldLockActiveOnMore ? 'active' : ''}`}
+              onClick={() => setPage('sponsors')}
+              title={t('nav.sponsors', '赞助商')}
+            >
+              <HeartHandshake size={isClassicLayout ? classicMainIconSize : 20} />
+              {showClassicLabels ? (
+                <span className="nav-item-text">{t('nav.sponsors', '赞助商')}</span>
+              ) : null}
+            </button>
+          ) : null}
+
           <button
             className={`nav-item ${page === '2fa' && !shouldLockActiveOnMore ? 'active' : ''}`}
             onClick={() => setPage('2fa')}

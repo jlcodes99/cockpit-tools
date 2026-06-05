@@ -646,6 +646,23 @@ mod imp {
         format!("${:.2}", value.max(0.0))
     }
 
+    fn format_provider_usage_money(value: f64, unit: Option<&str>) -> String {
+        let normalized_unit = unit
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("USD");
+        let amount = if value >= 100.0 {
+            format!("{:.0}", value)
+        } else {
+            format!("{:.2}", value)
+        };
+        if normalized_unit.eq_ignore_ascii_case("USD") {
+            format!("${amount}")
+        } else {
+            format!("{amount} {normalized_unit}")
+        }
+    }
+
     fn format_currency_cents(value: f64) -> String {
         format!("${:.2}", (value / 100.0).max(0.0))
     }
@@ -760,6 +777,213 @@ mod imp {
             progress_tone: None,
             subtext,
         }
+    }
+
+    fn codex_api_key_provider_usage(
+        account: &crate::models::codex::CodexAccount,
+    ) -> Option<&Value> {
+        account
+            .quota
+            .as_ref()
+            .and_then(|quota| quota.raw_data.as_ref())
+            .and_then(|raw| json_path(Some(raw), &["provider_usage"]))
+    }
+
+    fn codex_api_key_usage_detail<'a>(summary: &'a Value, key: &str) -> Option<&'a Value> {
+        summary
+            .get("details")
+            .and_then(Value::as_array)?
+            .iter()
+            .find(|item| item.get("key").and_then(Value::as_str).map(str::trim) == Some(key))
+    }
+
+    fn codex_api_key_usage_detail_number(summary: &Value, key: &str) -> Option<f64> {
+        codex_api_key_usage_detail(summary, key)?
+            .get("value")
+            .and_then(parse_json_number)
+    }
+
+    fn format_provider_usage_count(value: f64) -> String {
+        format_quota_number(value.max(0.0))
+    }
+
+    fn format_provider_usage_count_opt(value: Option<f64>) -> String {
+        value
+            .map(format_provider_usage_count)
+            .unwrap_or_else(|| "-".to_string())
+    }
+
+    fn build_codex_api_key_usage_rows(
+        lang: &str,
+        account: &crate::models::codex::CodexAccount,
+    ) -> Vec<QuotaRow> {
+        let Some(summary) = codex_api_key_provider_usage(account) else {
+            return vec![make_text_row(
+                translate_or(lang, "common.shared.quota.noData", "No quota data", &[]),
+                "-".to_string(),
+                Some(modules::i18n::translate(lang, "common.refresh", &[])),
+            )];
+        };
+        let mode = json_path(Some(summary), &["mode"])
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or_default();
+        let unit = json_path(Some(summary), &["unit"]).and_then(Value::as_str);
+        let has_new_api_fields = codex_api_key_usage_detail(summary, "totalGranted").is_some()
+            || codex_api_key_usage_detail(summary, "totalAvailable").is_some()
+            || codex_api_key_usage_detail(summary, "expiresAt").is_some();
+        if mode == "new_api" || has_new_api_fields {
+            let total_granted = codex_api_key_usage_detail_number(summary, "totalGranted");
+            let total_available = codex_api_key_usage_detail_number(summary, "totalAvailable");
+            let expires_at = codex_api_key_usage_detail(summary, "expiresAt")
+                .and_then(|item| item.get("value"))
+                .and_then(parse_timestamp_like);
+            let mut rows = Vec::new();
+            rows.push(make_text_row(
+                translate_or(lang, "codex.modelProviders.usage.limit", "Total", &[]),
+                format_provider_usage_count_opt(total_granted),
+                None,
+            ));
+            let used_percent = match (total_granted, total_available) {
+                (Some(granted), Some(available)) if granted > 0.0 => {
+                    clamp_percent(((granted - available).max(0.0) / granted) * 100.0)
+                }
+                _ => 0,
+            };
+            rows.push(QuotaRow {
+                label: translate_or(
+                    lang,
+                    "codex.modelProviders.usage.remaining",
+                    "Remaining",
+                    &[],
+                ),
+                value: format_provider_usage_count_opt(total_available),
+                progress: Some(used_percent),
+                progress_tone: Some(usage_warning_tone(used_percent)),
+                subtext: None,
+            });
+            rows.push(make_text_row(
+                translate_or(
+                    lang,
+                    "codex.modelProviders.usage.fields.expiresAt",
+                    "Expires At",
+                    &[],
+                ),
+                expires_at
+                    .and_then(|value| format_reset_subtext(lang, Some(value)))
+                    .unwrap_or_else(|| "-".to_string()),
+                None,
+            ));
+            return rows;
+        }
+        let sub2api_remaining = json_path(Some(summary), &["quotaRemaining"])
+            .or_else(|| json_path(Some(summary), &["remaining"]))
+            .or_else(|| json_path(Some(summary), &["balance"]))
+            .and_then(parse_json_number);
+        let sub2api_today_requests =
+            json_path(Some(summary), &["todayRequests"]).and_then(parse_json_number);
+        let sub2api_today_tokens =
+            json_path(Some(summary), &["todayTotalTokens"]).and_then(parse_json_number);
+        let has_sub2api_fields = sub2api_remaining.is_some()
+            || sub2api_today_requests.is_some()
+            || sub2api_today_tokens.is_some();
+        if mode == "sub2api" || has_sub2api_fields {
+            return vec![
+                make_text_row(
+                    translate_or(
+                        lang,
+                        "codex.modelProviders.usage.remaining",
+                        "Remaining",
+                        &[],
+                    ),
+                    sub2api_remaining
+                        .map(|value| format_provider_usage_money(value, unit))
+                        .unwrap_or_else(|| "-".to_string()),
+                    None,
+                ),
+                make_text_row(
+                    translate_or(
+                        lang,
+                        "codex.modelProviders.usage.fields.todayRequests",
+                        "Today Requests",
+                        &[],
+                    ),
+                    format_provider_usage_count_opt(sub2api_today_requests),
+                    None,
+                ),
+                make_text_row(
+                    translate_or(
+                        lang,
+                        "codex.modelProviders.usage.fields.todayTokens",
+                        "Today Tokens",
+                        &[],
+                    ),
+                    format_provider_usage_count_opt(sub2api_today_tokens),
+                    None,
+                ),
+            ];
+        }
+        let quota_unlimited = json_path(Some(summary), &["quotaUnlimited"])
+            .and_then(json_bool)
+            .unwrap_or(false);
+        let remaining = json_path(Some(summary), &["quotaRemaining"])
+            .or_else(|| json_path(Some(summary), &["remaining"]))
+            .or_else(|| json_path(Some(summary), &["balance"]))
+            .and_then(parse_json_number);
+        let balance = json_path(Some(summary), &["balance"]).and_then(parse_json_number);
+        let used = json_path(Some(summary), &["quotaUsed"])
+            .or_else(|| json_path(Some(summary), &["totalCost"]))
+            .and_then(parse_json_number);
+        let limit = json_path(Some(summary), &["quotaLimit"]).and_then(parse_json_number);
+        let percent = match (used, limit) {
+            (Some(used), Some(limit)) if limit > 0.0 => Some(clamp_percent((used / limit) * 100.0)),
+            _ => None,
+        };
+        let mut rows = Vec::new();
+        if quota_unlimited || remaining.is_some() || limit.is_some() || used.is_some() {
+            let value = if quota_unlimited {
+                translate_or(
+                    lang,
+                    "codex.modelProviders.usage.unlimitedQuota",
+                    "Unlimited",
+                    &[],
+                )
+            } else {
+                remaining
+                    .or(limit)
+                    .map(|value| format_provider_usage_money(value, unit))
+                    .unwrap_or_else(|| "-".to_string())
+            };
+            let subtext = used.map(|value| {
+                let used_label = translate_or(lang, "codex.modelProviders.usage.used", "Used", &[]);
+                format!("{used_label}: {}", format_provider_usage_money(value, unit))
+            });
+            rows.push(QuotaRow {
+                label: translate_or(
+                    lang,
+                    "codex.modelProviders.usage.remaining",
+                    "Remaining",
+                    &[],
+                ),
+                value,
+                progress: Some(percent.unwrap_or(0)),
+                progress_tone: Some(usage_warning_tone(percent.unwrap_or(0))),
+                subtext,
+            });
+        }
+        if let Some(balance) = balance {
+            rows.push(make_text_row(
+                translate_or(
+                    lang,
+                    "codex.modelProviders.usage.accountBalance",
+                    "Account Balance",
+                    &[],
+                ),
+                format_provider_usage_money(balance, unit),
+                None,
+            ));
+        }
+        rows
     }
 
     fn json_path<'a>(root: Option<&'a Value>, path: &[&str]) -> Option<&'a Value> {
@@ -2717,7 +2941,9 @@ mod imp {
             .into_iter()
             .map(|account| {
                 let mut rows = Vec::new();
-                if let Some(quota) = account.quota.as_ref() {
+                if account.is_api_key_auth() {
+                    rows = build_codex_api_key_usage_rows(lang, &account);
+                } else if let Some(quota) = account.quota.as_ref() {
                     let has_presence_flags = quota.hourly_window_present.is_some()
                         || quota.weekly_window_present.is_some();
                     if !has_presence_flags || quota.hourly_window_present == Some(true) {
@@ -3839,6 +4065,209 @@ mod imp {
         (cards, current_id, recommended)
     }
 
+    fn normalize_provider_base_url(value: &str) -> String {
+        value.trim().trim_end_matches('/').to_ascii_lowercase()
+    }
+
+    fn find_codex_provider_for_account(
+        providers: &[Value],
+        account: &crate::models::codex::CodexAccount,
+    ) -> Option<Value> {
+        let provider_id = account
+            .api_provider_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        if let Some(provider_id) = provider_id {
+            if let Some(provider) = providers.iter().find(|provider| {
+                json_path(Some(provider), &["id"])
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    == Some(provider_id)
+            }) {
+                return Some(provider.clone());
+            }
+        }
+        let account_base = account
+            .api_base_url
+            .as_deref()
+            .map(normalize_provider_base_url)
+            .filter(|value| !value.is_empty())?;
+        providers
+            .iter()
+            .find(|provider| {
+                json_path(Some(provider), &["baseUrl"])
+                    .and_then(Value::as_str)
+                    .map(normalize_provider_base_url)
+                    == Some(account_base.clone())
+            })
+            .cloned()
+    }
+
+    async fn save_detected_codex_provider_integration_type(
+        provider_id: Option<&str>,
+        base_url: &str,
+        mode: &str,
+    ) -> Result<(), String> {
+        if mode != "new_api" && mode != "sub2api" {
+            return Ok(());
+        }
+        let raw = commands::codex::load_codex_model_providers().await?;
+        let mut providers: Value = serde_json::from_str(&raw)
+            .map_err(|err| format!("解析 Codex 模型供应商失败: {}", err))?;
+        let Some(items) = providers.as_array_mut() else {
+            return Ok(());
+        };
+        let normalized_base_url = normalize_provider_base_url(base_url);
+        let mut changed = false;
+        for provider in items {
+            let id_matches = provider_id.is_some_and(|target_id| {
+                json_path(Some(provider), &["id"])
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    == Some(target_id)
+            });
+            let base_matches = json_path(Some(provider), &["baseUrl"])
+                .and_then(Value::as_str)
+                .map(normalize_provider_base_url)
+                == Some(normalized_base_url.clone());
+            if id_matches || base_matches {
+                if provider
+                    .get("integrationType")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    != Some(mode)
+                {
+                    if let Some(object) = provider.as_object_mut() {
+                        object.insert(
+                            "integrationType".to_string(),
+                            Value::String(mode.to_string()),
+                        );
+                        object.insert(
+                            "updatedAt".to_string(),
+                            Value::Number(serde_json::Number::from(
+                                chrono::Utc::now().timestamp_millis(),
+                            )),
+                        );
+                        changed = true;
+                    }
+                }
+                break;
+            }
+        }
+        if changed {
+            let data = serde_json::to_string_pretty(&providers)
+                .map_err(|err| format!("序列化 Codex 模型供应商失败: {}", err))?;
+            commands::codex::save_codex_model_providers(data).await?;
+        }
+        Ok(())
+    }
+
+    async fn refresh_codex_api_key_usage_for_menu(
+        app: AppHandle,
+        account_id: String,
+    ) -> Result<(), String> {
+        let mut account = modules::codex_account::list_accounts()
+            .into_iter()
+            .find(|account| account.id == account_id)
+            .ok_or_else(|| "未找到 Codex API Key 账号".to_string())?;
+        if !account.is_api_key_auth() {
+            commands::codex::refresh_codex_quota(app, account_id).await?;
+            return Ok(());
+        }
+        let api_key = account
+            .openai_api_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "Codex API Key 为空".to_string())?;
+        let providers_raw = commands::codex::load_codex_model_providers().await?;
+        let providers: Vec<Value> = serde_json::from_str(&providers_raw).unwrap_or_default();
+        let provider = find_codex_provider_for_account(&providers, &account);
+        let base_url = provider
+            .as_ref()
+            .and_then(|provider| json_path(Some(provider), &["baseUrl"]))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .or_else(|| {
+                account
+                    .api_base_url
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+            })
+            .ok_or_else(|| "Codex API Base URL 为空".to_string())?
+            .to_string();
+        let integration_type = provider
+            .as_ref()
+            .and_then(|provider| json_path(Some(provider), &["integrationType"]))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        let summary = commands::codex::codex_query_model_provider_usage(
+            base_url.clone(),
+            api_key.to_string(),
+            integration_type,
+        )
+        .await?;
+        let summary_value = serde_json::to_value(&summary)
+            .map_err(|err| format!("序列化 Codex API Key 用量失败: {}", err))?;
+        let now = chrono::Utc::now().timestamp();
+        let mut raw_data = account
+            .quota
+            .as_ref()
+            .and_then(|quota| quota.raw_data.clone())
+            .unwrap_or_else(|| serde_json::json!({}));
+        if !raw_data.is_object() {
+            raw_data = serde_json::json!({});
+        }
+        if let Some(object) = raw_data.as_object_mut() {
+            object.insert("provider_usage".to_string(), summary_value);
+        }
+        account.quota = Some(crate::models::codex::CodexQuota {
+            hourly_percentage: 0,
+            hourly_reset_time: None,
+            hourly_window_minutes: None,
+            hourly_window_present: Some(false),
+            weekly_percentage: 0,
+            weekly_reset_time: None,
+            weekly_window_minutes: None,
+            weekly_window_present: Some(false),
+            raw_data: Some(raw_data),
+        });
+        account.quota_error = None;
+        account.usage_updated_at = Some(now);
+        modules::codex_account::save_account(&account)?;
+        if let Some(mode) = summary.mode.as_deref() {
+            let provider_id = provider
+                .as_ref()
+                .and_then(|provider| json_path(Some(provider), &["id"]))
+                .and_then(Value::as_str);
+            save_detected_codex_provider_integration_type(provider_id, &base_url, mode).await?;
+        }
+        let _ = crate::modules::tray::update_tray_menu(&app);
+        Ok(())
+    }
+
+    async fn refresh_all_codex_usage_for_menu(app: AppHandle) -> Result<i32, String> {
+        let accounts = modules::codex_account::list_accounts();
+        let mut refreshed = 0;
+        let mut last_error: Option<String> = None;
+        for account in accounts {
+            match refresh_codex_api_key_usage_for_menu(app.clone(), account.id.clone()).await {
+                Ok(_) => refreshed += 1,
+                Err(err) => last_error = Some(err),
+            }
+        }
+        if refreshed > 0 {
+            Ok(refreshed)
+        } else {
+            Err(last_error.unwrap_or_else(|| "没有可刷新的 Codex 账号".to_string()))
+        }
+    }
+
     fn spawn_refresh(platform: PlatformId, account_id: Option<String>) {
         let Some(app) = crate::get_app_handle().cloned() else {
             return;
@@ -3858,15 +4287,11 @@ mod imp {
                         .map(|_| 0)
                 }
                 (PlatformId::Codex, Some(account_id)) => {
-                    commands::codex::refresh_codex_quota(app.clone(), account_id)
+                    refresh_codex_api_key_usage_for_menu(app.clone(), account_id)
                         .await
                         .map(|_| 0)
                 }
-                (PlatformId::Codex, None) => {
-                    commands::codex::refresh_current_codex_quota(app.clone())
-                        .await
-                        .map(|_| 0)
-                }
+                (PlatformId::Codex, None) => refresh_all_codex_usage_for_menu(app.clone()).await,
                 (PlatformId::GitHubCopilot, Some(account_id)) => {
                     commands::github_copilot::refresh_github_copilot_token(app.clone(), account_id)
                         .await
