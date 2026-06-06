@@ -398,11 +398,21 @@ fn remove_unsupported_responses_fields(obj: &mut Map<String, Value>) -> bool {
         changed |= obj.remove(key).is_some();
     }
 
-    if obj.get("service_tier").is_some()
-        && obj.get("service_tier").and_then(Value::as_str) != Some("priority")
-    {
-        obj.remove("service_tier");
-        changed = true;
+    if let Some(service_tier) = obj.get("service_tier").and_then(Value::as_str) {
+        match service_tier {
+            "priority" => {}
+            "fast" | "flex" => {
+                obj.insert(
+                    "service_tier".to_string(),
+                    Value::String("priority".to_string()),
+                );
+                changed = true;
+            }
+            _ => {
+                obj.remove("service_tier");
+                changed = true;
+            }
+        }
     }
 
     changed
@@ -511,5 +521,20 @@ mod tests {
             .pointer("/models/0/input_modalities")
             .and_then(Value::as_array)
             .is_some());
+    }
+
+    #[test]
+    fn maps_fast_service_tier_to_priority() {
+        let mut body = json!({
+            "model": "gpt-5.4",
+            "input": "hello",
+            "service_tier": "fast"
+        });
+
+        normalize_responses_body_for_codex(&mut body);
+        assert_eq!(
+            body.get("service_tier").and_then(Value::as_str),
+            Some("priority")
+        );
     }
 }

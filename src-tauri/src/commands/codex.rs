@@ -37,14 +37,28 @@ fn repair_codex_session_visibility_after_provider_change(
     context: &str,
     before_provider: Option<String>,
     after_provider: Option<String>,
+    force_repair: bool,
 ) -> Result<(), String> {
     let (Some(before), Some(after)) = (before_provider, after_provider) else {
+        if force_repair {
+            let started = Instant::now();
+            let summary = codex_session_visibility::repair_session_visibility_across_instances()?;
+            logger::log_info(&format!(
+                "[Codex Session Visibility] {}: forced repair, mutated_instances={}, rollout_files={}, sqlite_rows={}, elapsed_ms={}",
+                context,
+                summary.mutated_instance_count,
+                summary.changed_rollout_file_count,
+                summary.updated_sqlite_row_count,
+                started.elapsed().as_millis()
+            ));
+        }
         return Ok(());
     };
-    if before == after {
+    if !force_repair && before == after {
         return Ok(());
     }
-    if codex_launch_credential_kind_for_provider(&before)
+    if !force_repair
+        && codex_launch_credential_kind_for_provider(&before)
         == codex_launch_credential_kind_for_provider(&after)
     {
         return Ok(());
@@ -213,6 +227,7 @@ pub async fn switch_codex_account(
         "switch-codex-account",
         previous_provider,
         codex_session_visibility::read_history_visibility_provider_for_dir(&codex_home).ok(),
+        false,
     )?;
     let account_speed = account.app_speed.clone();
     codex_speed::write_official_app_speed(account_speed.clone())?;
@@ -1824,6 +1839,12 @@ pub async fn codex_local_access_set_enabled(
 pub async fn codex_local_access_activate(app: AppHandle) -> Result<CodexLocalAccessState, String> {
     let codex_home = codex_account::get_codex_home();
     let state = codex_local_access::activate_local_access_for_dir(&codex_home).await?;
+    repair_codex_session_visibility_after_provider_change(
+        "activate-api-service",
+        codex_session_visibility::read_history_visibility_provider_for_dir(&codex_home).ok(),
+        Some("codex_local_access".to_string()),
+        true,
+    )?;
     let api_service_speed = codex_speed::get_api_service_app_speed_config()?.speed;
     codex_speed::write_official_app_speed(api_service_speed.clone())?;
 

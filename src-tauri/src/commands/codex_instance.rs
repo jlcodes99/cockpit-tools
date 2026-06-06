@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use std::process::Command;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::AppHandle;
@@ -262,24 +262,63 @@ fn sync_codex_threads_across_idle_instances(context: &str) {
 fn repair_session_visibility_before_launch(
     context: &str,
     launch_provider_change: &Option<CodexLaunchProviderChange>,
+    force_repair: bool,
 ) -> Result<(), String> {
-    let Some(change) = launch_provider_change else {
+    if launch_provider_change.is_none() && !force_repair {
         return Ok(());
     };
 
     let started = Instant::now();
     let summary = modules::codex_session_visibility::repair_session_visibility_across_instances()?;
-    modules::logger::log_info(&format!(
-        "[Codex Session Visibility] {}: repaired before launch, from_provider={}, to_provider={}, mutated_instances={}, rollout_files={}, sqlite_rows={}, elapsed_ms={}",
-        context,
-        change.from_provider,
-        change.to_provider,
-        summary.mutated_instance_count,
-        summary.changed_rollout_file_count,
-        summary.updated_sqlite_row_count,
-        started.elapsed().as_millis()
-    ));
+    if let Some(change) = launch_provider_change {
+        modules::logger::log_info(&format!(
+            "[Codex Session Visibility] {}: repaired before launch, from_provider={}, to_provider={}, mutated_instances={}, rollout_files={}, sqlite_rows={}, elapsed_ms={}",
+            context,
+            change.from_provider,
+            change.to_provider,
+            summary.mutated_instance_count,
+            summary.changed_rollout_file_count,
+            summary.updated_sqlite_row_count,
+            started.elapsed().as_millis()
+        ));
+    } else {
+        modules::logger::log_info(&format!(
+            "[Codex Session Visibility] {}: forced repair before launch, mutated_instances={}, rollout_files={}, sqlite_rows={}, elapsed_ms={}",
+            context,
+            summary.mutated_instance_count,
+            summary.changed_rollout_file_count,
+            summary.updated_sqlite_row_count,
+            started.elapsed().as_millis()
+        ));
+    }
     Ok(())
+}
+
+fn schedule_session_visibility_repair_after_launch(context: &'static str) {
+    tokio::spawn(async move {
+        for delay in [Duration::from_secs(2), Duration::from_secs(8)] {
+            tokio::time::sleep(delay).await;
+            let started = Instant::now();
+            match modules::codex_session_visibility::repair_session_visibility_across_instances() {
+                Ok(summary) => {
+                    modules::logger::log_info(&format!(
+                        "[Codex Session Visibility] {}: delayed repair, mutated_instances={}, rollout_files={}, sqlite_rows={}, elapsed_ms={}",
+                        context,
+                        summary.mutated_instance_count,
+                        summary.changed_rollout_file_count,
+                        summary.updated_sqlite_row_count,
+                        started.elapsed().as_millis()
+                    ));
+                }
+                Err(error) => {
+                    modules::logger::log_warn(&format!(
+                        "[Codex Session Visibility] {}: delayed repair skipped: {}",
+                        context, error
+                    ));
+                }
+            }
+        }
+    });
 }
 
 async fn apply_bound_account_to_initialized_profile(
@@ -299,7 +338,9 @@ async fn apply_bound_account_to_initialized_profile(
     }
     let launch_provider_change =
         build_launch_credential_change(previous_provider, read_launch_provider_for_dir(profile_dir));
-    repair_session_visibility_before_launch(context, &launch_provider_change)?;
+    let force_repair =
+        bind_account_id.is_some_and(modules::codex_instance::is_api_service_bind_account_id);
+    repair_session_visibility_before_launch(context, &launch_provider_change, force_repair)?;
     Ok(launch_provider_change.and_then(|change| change.credential_change))
 }
 
@@ -813,6 +854,30 @@ async fn codex_start_instance_internal(
         if default_settings.launch_mode != InstanceLaunchMode::Cli {
             modules::process::ensure_codex_launch_path_configured()?;
         }
+        if skip_default_bind_account_injection {
+            if let Some(pid) = modules::process::resolve_codex_pid(
+                default_settings.last_pid,
+                Some(default_dir.to_string_lossy().as_ref()),
+            ) {
+                modules::logger::log_info(&format!(
+                    "[Codex Start] default instance already running, reusing managed pid={} instead of launching another process",
+                    pid
+                ));
+                let updated = modules::codex_instance::update_default_pid(Some(pid))?;
+                let _ = modules::process::focus_codex_instance(
+                    Some(pid),
+                    Some(default_dir.to_string_lossy().as_ref()),
+                );
+                schedule_session_visibility_repair_after_launch("after-reuse-default");
+                return Ok(default_instance_view(
+                    &default_dir,
+                    &updated,
+                    default_bind_account_id,
+                    true,
+                    Some(pid),
+                ));
+            }
+        }
         let close_started = Instant::now();
         let fast_closed = if skip_default_bind_account_injection {
             modules::process::close_codex_default_fast_by_pid(default_settings.last_pid, 20)?
@@ -854,7 +919,14 @@ async fn codex_start_instance_internal(
             previous_provider,
             read_launch_provider_for_dir(&default_dir),
         );
-        repair_session_visibility_before_launch("before-start-default", &launch_provider_change)?;
+        let force_visibility_repair = default_bind_account_id
+            .as_deref()
+            .is_some_and(modules::codex_instance::is_api_service_bind_account_id);
+        repair_session_visibility_before_launch(
+            "before-start-default",
+            &launch_provider_change,
+            force_visibility_repair,
+        )?;
         let launch_credential_change = launch_provider_change
             .as_ref()
             .and_then(|change| change.credential_change.clone());
@@ -895,6 +967,9 @@ async fn codex_start_instance_internal(
             flow_started.elapsed().as_millis()
         ));
         modules::codex_model_injector::inject_for_codex_home_later(default_dir.clone());
+        if force_visibility_repair {
+            schedule_session_visibility_repair_after_launch("after-start-default");
+        }
         let updated = modules::codex_instance::update_default_pid(Some(pid))?;
         let running = modules::process::is_pid_running(pid);
         return Ok(default_instance_view(
@@ -937,7 +1012,15 @@ async fn codex_start_instance_internal(
         read_launch_provider_for_dir(instance_dir),
     );
     modules::codex_speed::write_app_speed_for_dir(instance_dir, instance.app_speed.clone())?;
-    repair_session_visibility_before_launch("before-start-instance", &launch_provider_change)?;
+    let force_visibility_repair = instance
+        .bind_account_id
+        .as_deref()
+        .is_some_and(modules::codex_instance::is_api_service_bind_account_id);
+    repair_session_visibility_before_launch(
+        "before-start-instance",
+        &launch_provider_change,
+        force_visibility_repair,
+    )?;
     let launch_credential_change = launch_provider_change
         .as_ref()
         .and_then(|change| change.credential_change.clone());
@@ -961,6 +1044,9 @@ async fn codex_start_instance_internal(
     modules::codex_model_injector::inject_for_codex_home_later(PathBuf::from(
         &instance.user_data_dir,
     ));
+    if force_visibility_repair {
+        schedule_session_visibility_repair_after_launch("after-start-instance");
+    }
     let updated = modules::codex_instance::update_instance_after_start(&instance.id, pid)?;
     let running = modules::process::is_pid_running(pid);
     let initialized = is_profile_initialized(&updated.user_data_dir);

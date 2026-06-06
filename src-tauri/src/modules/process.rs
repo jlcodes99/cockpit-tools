@@ -980,6 +980,13 @@ fn should_detach_child() -> bool {
     true
 }
 
+fn spawn_managed_codex_child(cmd: &mut Command) -> Result<Child, String> {
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    spawn_command_with_trace(cmd).map_err(|e| format!("启动 Codex 失败: {}", e))
+}
+
 #[cfg(target_os = "macos")]
 fn sanitize_macos_gui_launch_env(cmd: &mut Command) {
     // Avoid inheriting Cockpit bundle identity into child GUI apps.
@@ -7664,8 +7671,7 @@ pub fn start_codex_with_args(codex_home: &str, extra_args: &[String]) -> Result<
                     "--user-data-dir={}",
                     app_user_data_dir.to_string_lossy()
                 ));
-                let child =
-                    spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 Codex 失败: {}", e))?;
+                let child = spawn_managed_codex_child(&mut cmd)?;
                 crate::modules::logger::log_info(&format!(
                     "[Codex Start] macOS managed instance using --user-data-dir and CODEX_ELECTRON_USER_DATA_PATH; codex_home={} electron_user_data={} launch_path={}",
                     summarize_text_for_process_log(codex_home_trimmed, 96),
@@ -7730,12 +7736,9 @@ pub fn start_codex_with_args(codex_home: &str, extra_args: &[String]) -> Result<
         apply_managed_proxy_env_to_command(&mut cmd);
         cmd.env("CODEX_HOME", codex_home_trimmed);
         cmd.env("CODEX_ELECTRON_USER_DATA_PATH", &app_user_data_dir);
-        if should_detach_child() {
-            cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
-            cmd.stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null());
-        }
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
         for arg in extra_args {
             let trimmed = arg.trim();
             if !trimmed.is_empty() {
