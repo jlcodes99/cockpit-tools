@@ -1383,16 +1383,61 @@ fn selected_accounts_have_image_generation_capacity(
     })
 }
 
+fn selected_api_key_model_catalogs(
+    accounts: &[CodexAccount],
+    collection: &CodexLocalAccessCollection,
+) -> Vec<String> {
+    if collection.account_ids.is_empty() {
+        return Vec::new();
+    }
+    let selected: HashSet<&str> = collection.account_ids.iter().map(String::as_str).collect();
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut values: Vec<String> = Vec::new();
+    for account in accounts
+        .iter()
+        .filter(|account| selected.contains(account.id.as_str()) && account.is_api_key_auth())
+    {
+        for model in normalize_provider_gateway_models(
+            account
+                .api_model_catalog
+                .iter()
+                .map(String::as_str)
+                .collect(),
+        ) {
+            let key = model.to_ascii_lowercase();
+            if seen.insert(key) {
+                values.push(model);
+            }
+        }
+    }
+    values
+}
+
 fn base_codex_model_ids_for_collection(
     collection: &CodexLocalAccessCollection,
     health_by_account_id: Option<&HashMap<String, RuntimeAccountHealth>>,
 ) -> Vec<String> {
     let image_allowed =
         selected_accounts_have_image_generation_capacity(collection, health_by_account_id);
-    supported_codex_model_ids()
+    let accounts = codex_account::list_accounts_checked().unwrap_or_default();
+    let mut seen: HashSet<String> = supported_codex_model_ids()
         .into_iter()
-        .filter(|model| model != CODEX_IMAGE_MODEL_ID || image_allowed)
-        .collect()
+        .map(|model| model.trim().to_ascii_lowercase())
+        .collect();
+    let mut models: Vec<String> = supported_codex_model_ids()
+        .into_iter()
+        .filter(|model| image_allowed || model != CODEX_IMAGE_MODEL_ID)
+        .collect();
+    for model in selected_api_key_model_catalogs(&accounts, collection) {
+        let key = model.trim().to_ascii_lowercase();
+        if key.is_empty() {
+            continue;
+        }
+        if seen.insert(key) {
+            models.push(model);
+        }
+    }
+    models
 }
 
 fn normalize_model_rule_value(value: &str) -> String {
@@ -17479,7 +17524,7 @@ mod tests {
         read_http_request, recover_invalid_stats_file, remove_account_refs_from_collection,
         remove_codex_local_access_config, resolve_plan_rank, resolve_supported_model_alias,
         resolve_upstream_target, restore_config_toml_from_takeover_backup,
-        sanitize_collection_with_accounts, scutil_proxy_map,
+        sanitize_collection_with_accounts, scutil_proxy_map, selected_api_key_model_catalogs,
         should_retry_single_account_upstream_status, should_treat_response_as_stream,
         should_try_next_account, sidecar_codex_api_key_auth_id, sidecar_config_fingerprint,
         sidecar_stable_id, system_proxy_target_scheme, system_proxy_value_url,
@@ -17758,6 +17803,108 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
                 "deepseek-v4-flash".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn selected_api_key_model_catalogs_merges_api_key_accounts() {
+        let collection =
+            test_local_access_collection(vec!["apikey-1".to_string(), "apikey-2".to_string()]);
+        let mut first = CodexAccount::new_api_key(
+            "apikey-1".to_string(),
+            "minimax@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.minimaxi.com/v1".to_string()),
+            Some("minimax".to_string()),
+            Some("MiniMax".to_string()),
+            vec![
+                "MiniMax-M3".to_string(),
+                "MiniMax-M3".to_string(),
+                " ".to_string(),
+            ],
+        );
+        first.api_model_catalog.push("MiniMax-M3-Plus".to_string());
+        let second = CodexAccount::new_api_key(
+            "apikey-2".to_string(),
+            "kimi@example.com".to_string(),
+            "sk-test-2".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.moonshot.cn/v1".to_string()),
+            Some("moonshot".to_string()),
+            Some("Moonshot".to_string()),
+            vec!["kimi-k2.6".to_string()],
+        );
+
+        let catalogs = selected_api_key_model_catalogs(&[first, second], &collection);
+        assert_eq!(
+            catalogs,
+            vec![
+                "MiniMax-M3".to_string(),
+                "MiniMax-M3-Plus".to_string(),
+                "kimi-k2.6".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn selected_api_key_model_catalogs_ignores_unselected_and_non_api_key_accounts() {
+        let collection = test_local_access_collection(vec!["apikey-1".to_string()]);
+        let mut selected = CodexAccount::new_api_key(
+            "apikey-1".to_string(),
+            "minimax@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.minimaxi.com/v1".to_string()),
+            Some("minimax".to_string()),
+            Some("MiniMax".to_string()),
+            vec!["MiniMax-M3".to_string()],
+        );
+        let unselected = CodexAccount::new_api_key(
+            "apikey-other".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-other".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com/v1".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec!["deepseek-v4-pro".to_string()],
+        );
+        let mut oauth = CodexAccount::new_api_key(
+            "oauth-1".to_string(),
+            "oauth@example.com".to_string(),
+            "sk-oauth".to_string(),
+            CodexApiProviderMode::Custom,
+            None,
+            None,
+            None,
+            vec!["MiniMax-M3".to_string()],
+        );
+        // OAuth 账号不算 api key auth
+        oauth.auth_mode = crate::models::codex::CodexAuthMode::OAuth;
+        let _ = &mut selected;
+        let _ = &mut oauth;
+
+        assert_eq!(
+            selected_api_key_model_catalogs(&[selected, unselected, oauth], &collection),
+            vec!["MiniMax-M3".to_string()]
+        );
+    }
+
+    #[test]
+    fn selected_api_key_model_catalogs_returns_empty_when_no_selected_ids() {
+        let collection = test_local_access_collection(Vec::new());
+        let account = CodexAccount::new_api_key(
+            "apikey-1".to_string(),
+            "minimax@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.minimaxi.com/v1".to_string()),
+            Some("minimax".to_string()),
+            Some("MiniMax".to_string()),
+            vec!["MiniMax-M3".to_string()],
+        );
+
+        assert!(selected_api_key_model_catalogs(&[account], &collection).is_empty());
     }
 
     #[test]
