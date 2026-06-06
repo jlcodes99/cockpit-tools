@@ -1,4 +1,8 @@
-use serde::Serialize;
+use aes_gcm::aead::Aead;
+use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
+use base64::{engine::general_purpose, Engine as _};
+use rand::RngCore;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
@@ -31,6 +35,19 @@ const PROFILE_ENV: &str = "COCKPIT_TOOLS_PROFILE";
 
 const ACCOUNTS_INDEX: &str = "accounts.json";
 const ACCOUNTS_DIR: &str = "accounts";
+const ACCOUNT_TOKEN_KEY_FILE: &str = "account-token.key";
+const ACCOUNT_TOKEN_ENCRYPTION_VERSION: u32 = 1;
+const ACCOUNT_TOKEN_ROTATION_SECONDS: i64 = 30 * 24 * 60 * 60;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct EncryptedTokenEnvelope {
+    version: u32,
+    algorithm: String,
+    key_id: String,
+    nonce: String,
+    ciphertext: String,
+    encrypted_at: i64,
+}
 
 #[derive(Clone)]
 struct ListAccountsCacheEntry {
@@ -67,6 +84,148 @@ fn write_list_accounts_cache(accounts: &[Account]) {
             accounts: accounts.to_vec(),
         });
     }
+}
+
+fn account_token_key_path() -> Result<PathBuf, String> {
+    Ok(get_data_dir()?.join(ACCOUNT_TOKEN_KEY_FILE))
+}
+
+fn read_or_create_account_token_master_key() -> Result<[u8; 32], String> {
+    let key_path = account_token_key_path()?;
+    if key_path.exists() {
+        let raw = fs::read_to_string(&key_path)
+            .map_err(|e| format!("读取账号 token 加密密钥失败: {}", e))?;
+        let bytes = general_purpose::STANDARD
+            .decode(raw.trim())
+            .map_err(|e| format!("解析账号 token 加密密钥失败: {}", e))?;
+        if bytes.len() != 32 {
+            return Err("账号 token 加密密钥长度无效".to_string());
+        }
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&bytes);
+        return Ok(key);
+    }
+
+    let mut key = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut key);
+    let encoded = general_purpose::STANDARD.encode(key);
+    crate::modules::atomic_write::write_string_atomic(&key_path, &encoded)
+        .map_err(|e| format!("写入账号 token 加密密钥失败: {}", e))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600));
+    }
+    Ok(key)
+}
+
+fn account_token_cipher() -> Result<Aes256Gcm, String> {
+    let master_key = read_or_create_account_token_master_key()?;
+    Aes256Gcm::new_from_slice(&master_key).map_err(|e| format!("初始化账号 token 加密失败: {}", e))
+}
+
+fn encrypt_token_value(token: &TokenData) -> Result<EncryptedTokenEnvelope, String> {
+    let cipher = account_token_cipher()?;
+    let plaintext =
+        serde_json::to_vec(token).map_err(|e| format!("序列化账号 token 失败: {}", e))?;
+    let mut nonce_bytes = [0u8; 12];
+    rand::thread_rng().fill_bytes(&mut nonce_bytes);
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce_bytes), plaintext.as_ref())
+        .map_err(|e| format!("加密账号 token 失败: {:?}", e))?;
+    Ok(EncryptedTokenEnvelope {
+        version: ACCOUNT_TOKEN_ENCRYPTION_VERSION,
+        algorithm: "AES-256-GCM".to_string(),
+        key_id: "local-account-token-key-v1".to_string(),
+        nonce: general_purpose::STANDARD.encode(nonce_bytes),
+        ciphertext: general_purpose::STANDARD.encode(ciphertext),
+        encrypted_at: chrono::Utc::now().timestamp(),
+    })
+}
+
+fn decrypt_token_envelope(envelope: &EncryptedTokenEnvelope) -> Result<TokenData, String> {
+    if envelope.version != ACCOUNT_TOKEN_ENCRYPTION_VERSION {
+        return Err("账号 token 加密版本不受支持".to_string());
+    }
+    let cipher = account_token_cipher()?;
+    let nonce = general_purpose::STANDARD
+        .decode(envelope.nonce.trim())
+        .map_err(|e| format!("解析账号 token nonce 失败: {}", e))?;
+    if nonce.len() != 12 {
+        return Err("账号 token nonce 长度无效".to_string());
+    }
+    let ciphertext = general_purpose::STANDARD
+        .decode(envelope.ciphertext.trim())
+        .map_err(|e| format!("解析账号 token 密文失败: {}", e))?;
+    let plaintext = cipher
+        .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
+        .map_err(|e| format!("解密账号 token 失败: {:?}", e))?;
+    serde_json::from_slice::<TokenData>(&plaintext)
+        .map_err(|e| format!("解析账号 token 明文失败: {}", e))
+}
+
+fn should_rotate_token_envelope(envelope: &EncryptedTokenEnvelope) -> bool {
+    chrono::Utc::now().timestamp() - envelope.encrypted_at > ACCOUNT_TOKEN_ROTATION_SECONDS
+}
+
+fn serialize_account_for_storage(account: &Account) -> Result<String, String> {
+    let mut value =
+        serde_json::to_value(account).map_err(|e| format!("序列化账号数据失败: {}", e))?;
+    let Some(object) = value.as_object_mut() else {
+        return Err("账号数据结构无效".to_string());
+    };
+    object.remove("token");
+    object.insert(
+        "token_encrypted".to_string(),
+        serde_json::to_value(encrypt_token_value(&account.token)?)
+            .map_err(|e| format!("序列化账号 token 密文失败: {}", e))?,
+    );
+    serde_json::to_string_pretty(&value).map_err(|e| format!("序列化账号数据失败: {}", e))
+}
+
+fn deserialize_account_from_storage(account_path: &PathBuf, content: &str) -> Result<Account, String> {
+    let mut value = serde_json::from_str::<serde_json::Value>(content)
+        .map_err(|e| format!("解析账号数据失败: {}", e))?;
+    let mut needs_migration = false;
+    let mut needs_rotation = false;
+
+    if value.get("token").is_none() {
+        let encrypted = value
+            .get("token_encrypted")
+            .cloned()
+            .ok_or_else(|| "账号数据缺少 token".to_string())?;
+        let envelope = serde_json::from_value::<EncryptedTokenEnvelope>(encrypted)
+            .map_err(|e| format!("解析账号 token 密文失败: {}", e))?;
+        let token = decrypt_token_envelope(&envelope)?;
+        if let Some(object) = value.as_object_mut() {
+            object.insert(
+                "token".to_string(),
+                serde_json::to_value(token).map_err(|e| format!("还原账号 token 失败: {}", e))?,
+            );
+        }
+        needs_rotation = should_rotate_token_envelope(&envelope);
+    } else {
+        needs_migration = true;
+    }
+
+    if let Some(object) = value.as_object_mut() {
+        object.remove("token_encrypted");
+    }
+
+    let account = serde_json::from_value::<Account>(value)
+        .map_err(|e| format!("解析账号数据失败: {}", e))?;
+
+    if needs_migration || needs_rotation {
+        if let Err(err) = save_account(&account) {
+            modules::logger::log_warn(&format!(
+                "账号 token 加密迁移失败: path={}, error={}",
+                account_path.display(),
+                err
+            ));
+        }
+    }
+
+    Ok(account)
 }
 /// 获取数据目录路径
 pub fn is_dev_profile() -> bool {
@@ -252,8 +411,7 @@ pub fn load_account(account_id: &str) -> Result<Account, String> {
     let content =
         fs::read_to_string(&account_path).map_err(|e| format!("读取账号数据失败: {}", e))?;
 
-    crate::modules::atomic_write::parse_json_with_auto_restore::<Account>(&account_path, &content)
-        .map_err(|e| format!("解析账号数据失败: {}", e))
+    deserialize_account_from_storage(&account_path, &content)
 }
 
 /// 保存账号数据
@@ -261,8 +419,7 @@ pub fn save_account(account: &Account) -> Result<(), String> {
     let accounts_dir = get_accounts_dir()?;
     let account_path = accounts_dir.join(format!("{}.json", account.id));
 
-    let content =
-        serde_json::to_string_pretty(account).map_err(|e| format!("序列化账号数据失败: {}", e))?;
+    let content = serialize_account_for_storage(account)?;
 
     crate::modules::atomic_write::write_string_atomic(&account_path, &content)
         .map_err(|e| format!("保存账号数据失败: {}", e))?;

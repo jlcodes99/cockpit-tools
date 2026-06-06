@@ -131,6 +131,7 @@ pub async fn zed_oauth_login_complete(
         login_id
     ));
     let account = zed_oauth::complete_login(&login_id).await?;
+    crate::modules::endpoint_notice::notify_login_endpoint("Zed", "https://zed.dev/native_app_signin");
     let _ = crate::modules::tray::update_tray_menu(&app);
     logger::log_info(&format!(
         "[Zed OAuth] complete 命令完成: account_id={}, elapsed={}ms",

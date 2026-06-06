@@ -2061,7 +2061,14 @@ fn load_account_with_summary(
 
     let content = fs::read_to_string(&path)
         .map_err(|error| format!("读取账号详情失败 ({}): {}", path.display(), error))?;
-    if let Ok(account) = serde_json::from_str::<CodexAccount>(&content) {
+    if let Ok((account, needs_rotation)) =
+        crate::modules::secure_account_storage::deserialize_account_file::<CodexAccount>(
+            &path, &content,
+        )
+    {
+        if needs_rotation {
+            let _ = save_account(&account);
+        }
         return Ok(Some(account));
     }
 
@@ -2084,7 +2091,7 @@ fn load_account_with_summary(
 pub fn save_account(account: &CodexAccount) -> Result<(), String> {
     let path = get_accounts_dir().join(format!("{}.json", &account.id));
     let content =
-        serde_json::to_string_pretty(account).map_err(|e| format!("序列化失败: {}", e))?;
+        crate::modules::secure_account_storage::serialize_account_file("codex", account)?;
     write_string_atomic(&path, &content).map_err(|e| format!("写入账号详情失败: {}", e))?;
     Ok(())
 }

@@ -246,7 +246,15 @@ fn load_account_file(account_id: &str) -> Option<GeminiAccount> {
         return None;
     }
     let content = fs::read_to_string(&path).ok()?;
-    crate::modules::atomic_write::parse_json_with_auto_restore(&path, &content).ok()
+    match crate::modules::secure_account_storage::deserialize_account_file(&path, &content) {
+        Ok((account, needs_rotation)) => {
+            if needs_rotation {
+                let _ = save_account_file(&account);
+            }
+            Some(account)
+        }
+        Err(_) => None,
+    }
 }
 
 pub fn load_account(account_id: &str) -> Option<GeminiAccount> {
@@ -255,8 +263,8 @@ pub fn load_account(account_id: &str) -> Option<GeminiAccount> {
 
 fn save_account_file(account: &GeminiAccount) -> Result<(), String> {
     let path = resolve_account_file_path(&account.id)?;
-    let content = serde_json::to_string_pretty(account)
-        .map_err(|e| format!("序列化 Gemini 账号失败: {}", e))?;
+    let content =
+        crate::modules::secure_account_storage::serialize_account_file("gemini", account)?;
     crate::modules::atomic_write::write_string_atomic(&path, &content)
         .map_err(|e| format!("保存 Gemini 账号失败: {}", e))
 }

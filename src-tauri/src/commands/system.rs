@@ -48,6 +48,8 @@ pub struct NetworkConfig {
     pub global_proxy_url: String,
     /// NO_PROXY 白名单（逗号分隔）
     pub global_proxy_no_proxy: String,
+    /// 是否允许公告、更新、WebDAV 同步等主动外联能力
+    pub external_network_enabled: bool,
 }
 
 /// 通用设置配置（前端使用）
@@ -323,6 +325,10 @@ pub struct WebdavSyncSettings {
     pub has_password: bool,
     /// WebDAV 远端备份目录
     pub remote_dir: String,
+    /// WebDAV 目标域名
+    pub domain: Option<String>,
+    /// 启用/测试时是否需要用户确认目标域名
+    pub confirmation_required: bool,
     /// 最近一次上传时间
     pub last_upload_at: Option<String>,
     /// 最近一次上传文件名
@@ -988,6 +994,7 @@ fn build_auto_backup_settings(config: &UserConfig) -> Result<AutoBackupSettings,
 fn build_webdav_sync_settings(config: &UserConfig) -> WebdavSyncSettings {
     let url = modules::webdav_sync::normalize_base_url(&config.webdav_sync_url)
         .unwrap_or_else(|_| config::default_webdav_sync_url());
+    let domain = modules::webdav_sync::domain_from_url(&url).ok();
     let remote_dir = modules::webdav_sync::normalize_remote_dir(&config.webdav_sync_remote_dir)
         .unwrap_or_else(|_| config::default_webdav_sync_remote_dir());
 
@@ -997,6 +1004,8 @@ fn build_webdav_sync_settings(config: &UserConfig) -> WebdavSyncSettings {
         username: config.webdav_sync_username.clone(),
         has_password: !config.webdav_sync_password.is_empty(),
         remote_dir,
+        domain,
+        confirmation_required: config.webdav_sync_enabled,
         last_upload_at: config.webdav_sync_last_upload_at.clone(),
         last_upload_file_name: config.webdav_sync_last_upload_file_name.clone(),
         last_download_at: config.webdav_sync_last_download_at.clone(),
@@ -1024,8 +1033,10 @@ fn validate_webdav_sync_config(
     username: &str,
     password: &str,
     remote_dir: &str,
+    confirmed_domain: Option<bool>,
 ) -> Result<(String, String, String), String> {
     let normalized_url = modules::webdav_sync::normalize_base_url(url)?;
+    let domain = modules::webdav_sync::domain_from_url(&normalized_url)?;
     let normalized_remote_dir = modules::webdav_sync::normalize_remote_dir(remote_dir)?;
     let normalized_username = username.trim().to_string();
 
@@ -1035,6 +1046,13 @@ fn validate_webdav_sync_config(
         }
         if password.is_empty() {
             return Err("启用 WebDAV 同步时应用密码不能为空".to_string());
+        }
+        modules::webdav_sync::validate_allowed_domain(&normalized_url)?;
+        if confirmed_domain != Some(true) {
+            return Err(format!(
+                "请确认 WebDAV 同步将连接到域名: {}。确认后再保存。",
+                domain
+            ));
         }
     }
 
@@ -1712,12 +1730,20 @@ pub fn save_webdav_sync_settings(
     password: Option<String>,
     clear_password: Option<bool>,
     remote_dir: String,
+    confirmed_domain: Option<bool>,
 ) -> Result<WebdavSyncSettings, String> {
     let current = config::get_user_config();
     let next_password =
         resolve_webdav_password_update(&current.webdav_sync_password, password, clear_password);
     let (next_url, next_username, next_remote_dir) =
-        validate_webdav_sync_config(enabled, &url, &username, &next_password, &remote_dir)?;
+        validate_webdav_sync_config(
+            enabled,
+            &url,
+            &username,
+            &next_password,
+            &remote_dir,
+            confirmed_domain,
+        )?;
 
     let new_config = UserConfig {
         webdav_sync_enabled: enabled,
@@ -1738,12 +1764,29 @@ pub async fn test_webdav_sync_connection(
     password: Option<String>,
     clear_password: Option<bool>,
     remote_dir: String,
+    confirmed_domain: Option<bool>,
 ) -> Result<modules::webdav_sync::WebdavTestResult, String> {
+    if !config::get_user_config().external_network_enabled {
+        return Err("外联能力已停用，无法测试 WebDAV 连接".to_string());
+    }
     let current = config::get_user_config();
     let next_password =
         resolve_webdav_password_update(&current.webdav_sync_password, password, clear_password);
-    let connection =
-        modules::webdav_sync::connection_from_parts(&url, &username, &next_password, &remote_dir)?;
+    let (normalized_url, normalized_username, normalized_remote_dir) =
+        validate_webdav_sync_config(
+            true,
+            &url,
+            &username,
+            &next_password,
+            &remote_dir,
+            confirmed_domain,
+        )?;
+    let connection = modules::webdav_sync::connection_from_parts(
+        &normalized_url,
+        &normalized_username,
+        &next_password,
+        &normalized_remote_dir,
+    )?;
     modules::webdav_sync::test_connection(&connection).await
 }
 
@@ -1754,6 +1797,9 @@ pub async fn upload_auto_backup_to_webdav(
     let config = config::get_user_config();
     if !config.webdav_sync_enabled {
         return Err("WebDAV 同步未启用".to_string());
+    }
+    if !config.external_network_enabled {
+        return Err("外联能力已停用，无法上传 WebDAV 备份".to_string());
     }
 
     let connection = modules::webdav_sync::connection_from_config(&config)?;
@@ -1814,6 +1860,9 @@ pub async fn upload_auto_backup_to_webdav(
 pub async fn list_webdav_backup_files(
 ) -> Result<Vec<modules::webdav_sync::WebdavBackupFileEntry>, String> {
     let config = config::get_user_config();
+    if !config.external_network_enabled {
+        return Err("外联能力已停用，无法读取 WebDAV 备份列表".to_string());
+    }
     let connection = modules::webdav_sync::connection_from_config(&config)?;
     modules::webdav_sync::list_remote_backups(&connection).await
 }
@@ -1821,6 +1870,9 @@ pub async fn list_webdav_backup_files(
 #[tauri::command]
 pub async fn read_webdav_backup_file(file_name: String) -> Result<String, String> {
     let config = config::get_user_config();
+    if !config.external_network_enabled {
+        return Err("外联能力已停用，无法下载 WebDAV 备份".to_string());
+    }
     let safe_name = sanitize_auto_backup_file_name(&file_name)?;
     if !safe_name.ends_with(".json") {
         return Err("只能从 WebDAV 恢复 JSON 备份文件".to_string());
@@ -1840,6 +1892,9 @@ pub async fn read_webdav_backup_file(file_name: String) -> Result<String, String
 #[tauri::command]
 pub async fn delete_webdav_backup_file(file_name: String) -> Result<(), String> {
     let config = config::get_user_config();
+    if !config.external_network_enabled {
+        return Err("外联能力已停用，无法删除 WebDAV 备份".to_string());
+    }
     let safe_name = sanitize_auto_backup_file_name(&file_name)?;
     let connection = modules::webdav_sync::connection_from_config(&config)?;
     modules::webdav_sync::delete_remote_backup(&connection, &safe_name).await
@@ -1865,6 +1920,7 @@ pub fn get_network_config() -> Result<NetworkConfig, String> {
         global_proxy_enabled: user_config.global_proxy_enabled,
         global_proxy_url: user_config.global_proxy_url,
         global_proxy_no_proxy: user_config.global_proxy_no_proxy,
+        external_network_enabled: user_config.external_network_enabled,
     })
 }
 
@@ -1879,6 +1935,7 @@ pub fn save_network_config(
     global_proxy_enabled: Option<bool>,
     global_proxy_url: Option<String>,
     global_proxy_no_proxy: Option<String>,
+    external_network_enabled: Option<bool>,
 ) -> Result<bool, String> {
     let current = config::get_user_config();
     let next_report_enabled = report_enabled.unwrap_or(current.report_enabled);
@@ -1896,6 +1953,8 @@ pub fn save_network_config(
         .unwrap_or_else(|| current.global_proxy_no_proxy.clone())
         .trim()
         .to_string();
+    let next_external_network_enabled =
+        external_network_enabled.unwrap_or(current.external_network_enabled);
 
     if next_report_enabled && next_report_token.is_empty() {
         return Err("网页查询服务 token 不能为空".to_string());
@@ -1919,6 +1978,7 @@ pub fn save_network_config(
         global_proxy_enabled: next_global_proxy_enabled,
         global_proxy_url: next_global_proxy_url,
         global_proxy_no_proxy: next_global_proxy_no_proxy,
+        external_network_enabled: next_external_network_enabled,
         // 保留其他设置不变
         language: current.language,
         default_terminal: current.default_terminal,
@@ -2530,6 +2590,7 @@ pub fn save_general_config(
         global_proxy_enabled: current.global_proxy_enabled,
         global_proxy_url: current.global_proxy_url,
         global_proxy_no_proxy: current.global_proxy_no_proxy,
+        external_network_enabled: current.external_network_enabled,
         // 更新通用设置
         language: normalized_language.clone(),
         default_terminal: default_terminal.unwrap_or(current.default_terminal),

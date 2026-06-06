@@ -123,6 +123,7 @@ pub async fn github_copilot_oauth_login_complete(
         login_id
     ));
     let payload = github_copilot_oauth::complete_login(&login_id).await?;
+    crate::modules::endpoint_notice::notify_login_endpoint("GitHub Copilot", "https://api.github.com/copilot_internal/user");
     let account = github_copilot_account::upsert_account(payload)?;
     let account = refresh_github_copilot_account_after_login(account).await;
     logger::log_info(&format!(

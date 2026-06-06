@@ -157,6 +157,7 @@ pub async fn cursor_oauth_login_complete(
         login_id
     ));
     let payload = cursor_oauth::complete_login(&login_id).await?;
+    crate::modules::endpoint_notice::notify_login_endpoint("Cursor", "https://api2.cursor.sh/auth/poll");
     let mut account = cursor_account::upsert_account(payload)?;
 
     match cursor_account::refresh_account_async(&account.id).await {

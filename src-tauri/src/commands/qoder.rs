@@ -94,6 +94,7 @@ pub async fn qoder_oauth_login_complete(
             return Err(err);
         }
     };
+    crate::modules::endpoint_notice::notify_login_endpoint("Qoder", "https://openapi.qoder.sh");
     let _ = crate::modules::tray::update_tray_menu(&app);
     logger::log_info(&format!(
         "[Qoder OAuth] complete 命令完成: login_id={}, account_id={}, elapsed={}ms",

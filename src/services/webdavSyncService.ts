@@ -8,6 +8,8 @@ export interface WebdavSyncSettings {
   username: string;
   has_password: boolean;
   remote_dir: string;
+  domain?: string | null;
+  confirmation_required?: boolean;
   last_upload_at: string | null;
   last_upload_file_name: string | null;
   last_download_at: string | null;
@@ -40,6 +42,7 @@ export interface SaveWebdavSyncSettingsParams {
   password?: string | null;
   clearPassword?: boolean;
   remoteDir: string;
+  confirmedDomain?: boolean;
 }
 
 export function dispatchWebdavSyncStateChanged() {
@@ -61,6 +64,7 @@ export async function saveWebdavSyncSettings(
     password: params.password ?? null,
     clearPassword: params.clearPassword ?? false,
     remoteDir: params.remoteDir,
+    confirmedDomain: params.confirmedDomain ?? false,
   });
   dispatchWebdavSyncStateChanged();
   return next;
@@ -75,6 +79,7 @@ export async function testWebdavSyncConnection(
     password: params.password ?? null,
     clearPassword: params.clearPassword ?? false,
     remoteDir: params.remoteDir,
+    confirmedDomain: params.confirmedDomain ?? false,
   });
 }
 

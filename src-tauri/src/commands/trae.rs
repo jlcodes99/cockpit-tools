@@ -68,6 +68,7 @@ pub async fn trae_oauth_login_complete(
     ));
 
     let payload = trae_oauth::complete_login(login_id.as_str()).await?;
+    crate::modules::endpoint_notice::notify_login_endpoint("Trae", "https://api.trae.ai");
     let mut account = trae_account::upsert_account(payload)?;
 
     match trae_account::refresh_account_async(account.id.as_str()).await {

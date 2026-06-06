@@ -69,6 +69,10 @@ pub async fn start_oauth_login(app_handle: AppHandle) -> Result<models::Account,
             modules::logger::log_error(&format!("获取用户信息失败: {}", e));
             e
         })?;
+    modules::endpoint_notice::notify_login_endpoint(
+        "Google OAuth",
+        "https://www.googleapis.com/oauth2/v2/userinfo",
+    );
 
     modules::logger::log_info(&format!(
         "用户: {} ({})",
@@ -137,6 +141,10 @@ pub async fn complete_oauth_login(app_handle: AppHandle) -> Result<models::Accou
             modules::logger::log_error(&format!("获取用户信息失败: {}", e));
             e
         })?;
+    modules::endpoint_notice::notify_login_endpoint(
+        "Google OAuth",
+        "https://www.googleapis.com/oauth2/v2/userinfo",
+    );
 
     modules::logger::log_info(&format!(
         "用户: {} ({})",

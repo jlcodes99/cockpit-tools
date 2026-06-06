@@ -146,6 +146,7 @@ pub async fn gemini_oauth_login_complete(
     ));
 
     let payload = gemini_oauth::complete_login(&login_id).await?;
+    crate::modules::endpoint_notice::notify_login_endpoint("Gemini", "https://oauth2.googleapis.com/token");
     let mut account = gemini_account::upsert_account(payload)?;
 
     match gemini_account::refresh_account_token(&account.id).await {

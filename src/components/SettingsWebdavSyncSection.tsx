@@ -52,6 +52,15 @@ function formatRemoteTime(value: string | null | undefined, fallback: string): s
   return date.toLocaleString();
 }
 
+function getWebdavTargetDomain(rawUrl: string): string | null {
+  try {
+    const parsed = new URL(rawUrl);
+    return parsed.hostname || null;
+  } catch {
+    return null;
+  }
+}
+
 function buildImportFeedback(
   result: DataTransferImportResult,
   t: (key: string, options?: Record<string, unknown>) => string,
@@ -85,7 +94,7 @@ export function SettingsWebdavSyncSection() {
 
   const [settings, setSettings] = useState<WebdavSyncSettings | null>(null);
   const [enabled, setEnabled] = useState(false);
-  const [url, setUrl] = useState('https://dav.jianguoyun.com/dav/');
+  const [url, setUrl] = useState('');
   const [username, setUsername] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [clearPassword, setClearPassword] = useState(false);
@@ -168,7 +177,16 @@ export function SettingsWebdavSyncSection() {
     return () => window.removeEventListener(WEBDAV_SYNC_STATE_CHANGED_EVENT, handleStateChanged);
   }, [loadSettings]);
 
-  const persistSettings = useCallback(async () => {
+  const confirmTargetDomain = useCallback((): boolean => {
+    if (!enabled) return true;
+    const domain = getWebdavTargetDomain(url) ?? url.trim();
+    return window.confirm(t('settings.webdav.confirmDomain', {
+      domain,
+      defaultValue: 'WebDAV 将连接到域名：{{domain}}。确认这是你信任的同步服务？',
+    }));
+  }, [enabled, t, url]);
+
+  const persistSettings = useCallback(async (confirmedDomain = false) => {
     const next = await saveWebdavSyncSettings({
       enabled,
       url,
@@ -176,6 +194,7 @@ export function SettingsWebdavSyncSection() {
       password: passwordInput.trim() ? passwordInput : null,
       clearPassword,
       remoteDir,
+      confirmedDomain,
     });
     applySettings(next);
     return next;
@@ -190,13 +209,18 @@ export function SettingsWebdavSyncSection() {
       }),
     });
     try {
-      const next = await persistSettings();
+      if (!confirmTargetDomain()) {
+        setFeedback(null);
+        return;
+      }
+      const next = await persistSettings(true);
       const result = await testWebdavSyncConnection({
         url,
         username,
         password: passwordInput.trim() ? passwordInput : null,
         clearPassword,
         remoteDir,
+        confirmedDomain: true,
       });
       if (result.ok) {
         setFeedback({
@@ -228,7 +252,7 @@ export function SettingsWebdavSyncSection() {
     } finally {
       setTesting(false);
     }
-  }, [clearPassword, passwordInput, remoteDir, url, username, persistSettings, loadRemoteFiles, t]);
+  }, [clearPassword, passwordInput, remoteDir, url, username, persistSettings, loadRemoteFiles, confirmTargetDomain, t]);
 
   const handleUploadNow = useCallback(async () => {
     setUploading(true);
@@ -239,7 +263,11 @@ export function SettingsWebdavSyncSection() {
       }),
     });
     try {
-      const savedSettings = await persistSettings();
+      if (!confirmTargetDomain()) {
+        setFeedback(null);
+        return;
+      }
+      const savedSettings = await persistSettings(true);
       if (!savedSettings.enabled) {
         throw new Error(t('settings.webdav.errors.notEnabled', {
           defaultValue: '请先启用 WebDAV 同步',

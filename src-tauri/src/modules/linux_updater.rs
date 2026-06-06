@@ -93,6 +93,9 @@ mod imp {
         app: AppHandle,
         expected_version: Option<String>,
     ) -> Result<(), String> {
+        if !crate::modules::config::get_user_config().external_network_enabled {
+            return Err("External network capability is disabled; update check/download is blocked".to_string());
+        }
         let install_kind = detect_linux_install_kind();
         if !matches!(install_kind, LinuxInstallKind::Deb | LinuxInstallKind::Rpm) {
             return Err(format!(
@@ -205,6 +208,9 @@ mod imp {
     }
 
     async fn fetch_latest_manifest(endpoint: &str) -> Result<LatestManifest, String> {
+        if !crate::modules::config::get_user_config().external_network_enabled {
+            return Err("External network capability is disabled; latest manifest fetch is blocked".to_string());
+        }
         let response = reqwest::get(endpoint)
             .await
             .map_err(|error| format!("Failed to fetch latest manifest: {}", error))?;
@@ -225,6 +231,9 @@ mod imp {
         signature: &str,
         pubkey: &str,
     ) -> Result<PathBuf, String> {
+        if !crate::modules::config::get_user_config().external_network_enabled {
+            return Err("External network capability is disabled; package download is blocked".to_string());
+        }
         let client = reqwest::Client::new();
         let response = client
             .get(url)

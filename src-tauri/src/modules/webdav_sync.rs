@@ -5,6 +5,18 @@ use url::Url;
 
 use crate::modules::config::UserConfig;
 
+const DEFAULT_ALLOWED_WEBDAV_DOMAINS: &[&str] = &[
+    "localhost",
+    "127.0.0.1",
+    "::1",
+    "dav.jianguoyun.com",
+    "jianguoyun.com",
+    "dav.box.com",
+    "box.com",
+    "nextcloud.com",
+    "owncloud.com",
+];
+
 #[derive(Debug, Clone)]
 pub struct WebdavConnectionSettings {
     pub base_url: String,
@@ -54,6 +66,69 @@ pub fn normalize_base_url(raw: &str) -> Result<String, String> {
         value.push('/');
     }
     Ok(value)
+}
+
+pub fn domain_from_url(raw: &str) -> Result<String, String> {
+    let url = Url::parse(raw).map_err(|err| format!("WebDAV 地址无效: {}", err))?;
+    url.host_str()
+        .map(|value| value.trim_matches(['[', ']']).to_lowercase())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "WebDAV 地址缺少域名".to_string())
+}
+
+fn configured_allowed_domains() -> Vec<String> {
+    let mut domains: Vec<String> = DEFAULT_ALLOWED_WEBDAV_DOMAINS
+        .iter()
+        .map(|value| value.to_string())
+        .collect();
+    if let Ok(raw) = std::env::var("COCKPIT_WEBDAV_ALLOWED_DOMAINS") {
+        domains.extend(
+            raw.split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(|value| value.trim_start_matches('.').to_lowercase()),
+        );
+    }
+    domains.sort();
+    domains.dedup();
+    domains
+}
+
+fn is_private_or_loopback_host(host: &str) -> bool {
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        return match ip {
+            std::net::IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
+            std::net::IpAddr::V6(v6) => v6.is_loopback(),
+        };
+    }
+    false
+}
+
+fn domain_matches_allowed(host: &str, allowed: &str) -> bool {
+    host == allowed || host.ends_with(&format!(".{}", allowed))
+}
+
+pub fn validate_allowed_domain(raw_url: &str) -> Result<(), String> {
+    let host = domain_from_url(raw_url)?;
+    if is_private_or_loopback_host(&host) {
+        return Ok(());
+    }
+
+    let allowed_domains = configured_allowed_domains();
+    if allowed_domains
+        .iter()
+        .any(|allowed| domain_matches_allowed(&host, allowed))
+    {
+        return Ok(());
+    }
+
+    Err(format!(
+        "WebDAV 域名 {} 不在白名单中。可通过 COCKPIT_WEBDAV_ALLOWED_DOMAINS 显式加入可信域名。",
+        host
+    ))
 }
 
 pub fn normalize_remote_dir(raw: &str) -> Result<String, String> {
@@ -109,6 +184,7 @@ pub fn connection_from_parts(
     remote_dir: &str,
 ) -> Result<WebdavConnectionSettings, String> {
     let normalized_base_url = normalize_base_url(base_url)?;
+    validate_allowed_domain(&normalized_base_url)?;
     let normalized_remote_dir = normalize_remote_dir(remote_dir)?;
     let normalized_username = username.trim().to_string();
     if normalized_username.is_empty() {

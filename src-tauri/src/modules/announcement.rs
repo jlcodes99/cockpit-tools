@@ -834,6 +834,9 @@ fn filter_sponsor_module(
 }
 
 async fn fetch_remote_announcements() -> Result<AnnouncementResponse, String> {
+    if !config::get_user_config().external_network_enabled {
+        return Err("外联能力已停用，跳过远端公告拉取".to_string());
+    }
     logger::log_info("[Announcement] 从远端拉取公告");
 
     let client = reqwest::Client::builder()

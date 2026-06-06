@@ -32,6 +32,9 @@ pub struct ServerStatus {
     pub pid: u32,
     /// 启动时间戳
     pub started_at: i64,
+    /// 本次进程内 WebSocket 高危操作鉴权令牌
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub auth_token: String,
 }
 
 /// 用户配置（持久化存储）
@@ -61,6 +64,9 @@ pub struct UserConfig {
     /// NO_PROXY 白名单（逗号分隔）
     #[serde(default = "default_global_proxy_no_proxy")]
     pub global_proxy_no_proxy: String,
+    /// 是否允许公告、更新、WebDAV 同步等主动外联能力
+    #[serde(default = "default_external_network_enabled")]
+    pub external_network_enabled: bool,
     /// 界面语言
     #[serde(default = "default_language")]
     pub language: String,
@@ -616,8 +622,13 @@ pub fn normalize_auto_backup_selection(
 pub fn default_webdav_sync_enabled() -> bool {
     false
 }
+
+pub fn default_external_network_enabled() -> bool {
+    true
+}
+
 pub fn default_webdav_sync_url() -> String {
-    "https://dav.jianguoyun.com/dav/".to_string()
+    String::new()
 }
 pub fn default_webdav_sync_username() -> String {
     String::new()
@@ -838,6 +849,7 @@ impl Default for UserConfig {
             global_proxy_enabled: default_global_proxy_enabled(),
             global_proxy_url: default_global_proxy_url(),
             global_proxy_no_proxy: default_global_proxy_no_proxy(),
+            external_network_enabled: default_external_network_enabled(),
             language: default_language(),
             default_terminal: default_default_terminal(),
             theme: default_theme(),
@@ -1839,7 +1851,7 @@ pub fn save_server_status(status: &ServerStatus) -> Result<(), String> {
 }
 
 /// 初始化服务状态（WebSocket 启动后调用）
-pub fn init_server_status(actual_port: u16) -> Result<(), String> {
+pub fn init_server_status(actual_port: u16, auth_token: String) -> Result<(), String> {
     // 更新运行时状态
     if let Ok(mut state) = get_runtime_state().write() {
         state.actual_port = Some(actual_port);
@@ -1850,6 +1862,7 @@ pub fn init_server_status(actual_port: u16) -> Result<(), String> {
         version: env!("CARGO_PKG_VERSION").to_string(),
         pid: std::process::id(),
         started_at: chrono::Utc::now().timestamp(),
+        auth_token,
     };
 
     save_server_status(&status)?;
@@ -1875,10 +1888,10 @@ mod tests {
     }
 
     #[test]
-    fn webdav_sync_defaults_are_safe_for_jianguoyun_backup_sync() {
+    fn webdav_sync_defaults_are_safe_for_webdav_backup_sync() {
         let cfg = UserConfig::default();
         assert!(!cfg.webdav_sync_enabled);
-        assert_eq!(cfg.webdav_sync_url, "https://dav.jianguoyun.com/dav/");
+        assert_eq!(cfg.webdav_sync_url, "");
         assert_eq!(cfg.webdav_sync_username, "");
         assert_eq!(cfg.webdav_sync_password, "");
         assert_eq!(cfg.webdav_sync_remote_dir, "cockpit-tools");
@@ -1893,7 +1906,7 @@ mod tests {
         let cfg: UserConfig =
             serde_json::from_value(serde_json::json!({})).expect("反序列化默认配置应成功");
         assert!(!cfg.webdav_sync_enabled);
-        assert_eq!(cfg.webdav_sync_url, "https://dav.jianguoyun.com/dav/");
+        assert_eq!(cfg.webdav_sync_url, "");
         assert_eq!(cfg.webdav_sync_remote_dir, "cockpit-tools");
     }
 }

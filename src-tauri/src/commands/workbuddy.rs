@@ -206,6 +206,7 @@ pub async fn workbuddy_oauth_login_complete(
 
     let result: Result<WorkbuddyAccount, String> = async {
         let payload = workbuddy_oauth::complete_login(&login_id).await?;
+        crate::modules::endpoint_notice::notify_login_endpoint("WorkBuddy", "https://www.codebuddy.cn");
         let mut account = workbuddy_account::upsert_account(payload)?;
         account = refresh_workbuddy_account_after_login(account).await;
         Ok(account)

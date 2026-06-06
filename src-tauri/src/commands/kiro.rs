@@ -128,6 +128,7 @@ pub async fn kiro_oauth_login_complete(
         login_id
     ));
     let payload = kiro_oauth::complete_login(&login_id).await?;
+    crate::modules::endpoint_notice::notify_login_endpoint("Kiro", "https://prod.us-east-1.auth.desktop.kiro.dev/oauth/token");
     let account = kiro_account::upsert_account(payload)?;
     let account = refresh_kiro_account_after_login(account).await;
     logger::log_info(&format!(

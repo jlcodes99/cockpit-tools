@@ -254,6 +254,7 @@ pub async fn codebuddy_cn_oauth_login_complete(
 
     let result: Result<CodebuddyAccount, String> = async {
         let payload = codebuddy_cn_oauth::complete_login(&login_id).await?;
+        crate::modules::endpoint_notice::notify_login_endpoint("CodeBuddy CN", "https://www.codebuddy.cn");
         let mut account = codebuddy_cn_account::upsert_account(payload)?;
         account = refresh_codebuddy_cn_account_after_login(account).await;
         Ok(account)

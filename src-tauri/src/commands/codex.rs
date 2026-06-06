@@ -556,6 +556,10 @@ pub async fn codex_oauth_login_completed(login_id: String) -> Result<CodexAccoun
             return Err(e);
         }
     };
+    crate::modules::endpoint_notice::notify_login_endpoint(
+        "Codex",
+        "https://auth.openai.com/oauth/token",
+    );
     let account = save_codex_oauth_tokens(tokens).await?;
     logger::log_info(&format!(
         "Codex OAuth completed 命令成功: login_id={}, duration_ms={}, account_id={}, account_email={}",

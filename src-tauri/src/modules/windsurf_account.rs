@@ -52,13 +52,21 @@ pub fn load_account(account_id: &str) -> Option<WindsurfAccount> {
         return None;
     }
     let content = fs::read_to_string(&account_path).ok()?;
-    crate::modules::atomic_write::parse_json_with_auto_restore(&account_path, &content).ok()
+    match crate::modules::secure_account_storage::deserialize_account_file(&account_path, &content) {
+        Ok((account, needs_rotation)) => {
+            if needs_rotation {
+                let _ = save_account_file(&account);
+            }
+            Some(account)
+        }
+        Err(_) => None,
+    }
 }
 
 fn save_account_file(account: &WindsurfAccount) -> Result<(), String> {
     let path = get_accounts_dir()?.join(format!("{}.json", account.id));
     let content =
-        serde_json::to_string_pretty(account).map_err(|e| format!("序列化账号失败: {}", e))?;
+        crate::modules::secure_account_storage::serialize_account_file("windsurf", account)?;
     crate::modules::atomic_write::write_string_atomic(&path, &content)
         .map_err(|e| format!("保存账号失败: {}", e))
 }

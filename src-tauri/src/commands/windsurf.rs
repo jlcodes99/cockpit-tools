@@ -180,6 +180,7 @@ pub async fn windsurf_oauth_login_complete(
         login_id
     ));
     let payload = windsurf_oauth::complete_login(&login_id).await?;
+    crate::modules::endpoint_notice::notify_login_endpoint("Windsurf", "https://windsurf.com/_backend");
     let account = windsurf_account::upsert_account(payload)?;
     let account = refresh_windsurf_account_after_login(account).await;
     logger::log_info(&format!(
