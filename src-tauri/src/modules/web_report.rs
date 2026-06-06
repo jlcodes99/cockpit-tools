@@ -20,6 +20,7 @@ const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(5);
 const AUTH_REFRESH_STALE_THRESHOLD_SECONDS: i64 = 10 * 60;
 const NEXT_AUTH_REFRESH_TRIGGER_LABEL: &str =
     "Next AuthRefresh trigger time (only trigger if access to this page )";
+const WEB_REPORT_BIND_HOST: &str = "127.0.0.1";
 
 static ACTUAL_REPORT_PORT: OnceLock<RwLock<Option<u16>>> = OnceLock::new();
 static REPORT_REFRESH_STATE: OnceLock<RwLock<ReportRefreshState>> = OnceLock::new();
@@ -342,7 +343,7 @@ pub async fn start_server() {
     let mut listener = None;
 
     for attempt in 0..PORT_RANGE {
-        let addr = format!("0.0.0.0:{}", port);
+        let addr = format!("{}:{}", WEB_REPORT_BIND_HOST, port);
         match TcpListener::bind(&addr).await {
             Ok(bound) => {
                 listener = Some(bound);
@@ -381,7 +382,7 @@ pub async fn start_server() {
 
     set_actual_port(Some(port));
     super::logger::log_info(&format!(
-        "[WebReport] 网页查询服务已启动: http://0.0.0.0:{}/report?token=***",
+        "[WebReport] 网页查询服务已启动: http://127.0.0.1:{}/report?token=***",
         port
     ));
 

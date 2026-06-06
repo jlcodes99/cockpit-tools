@@ -204,6 +204,12 @@ fn parse_callback_url(callback_url: &str, port: u16) -> Result<Url, String> {
 
     let parsed =
         Url::parse(&normalized).map_err(|e| format!("解析 Zed OAuth 回调 URL 失败: {}", e))?;
+    if !parsed.has_host() {
+        return Err("回调地址缺少主机".to_string());
+    }
+    if parsed.scheme() != "http" && parsed.scheme() != "https" {
+        return Err("回调地址协议无效".to_string());
+    }
     let parsed_port = parsed
         .port_or_known_default()
         .ok_or_else(|| "回调地址缺少端口".to_string())?;

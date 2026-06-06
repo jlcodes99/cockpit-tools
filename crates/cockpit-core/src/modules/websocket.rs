@@ -12,6 +12,8 @@ use tokio_tungstenite::tungstenite::Message;
 
 use super::config::{get_preferred_port, init_server_status, PORT_RANGE};
 
+const LOCALHOST_BIND_HOST: &str = "127.0.0.1";
+
 /// 消息类型
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload")]
@@ -456,7 +458,7 @@ pub async fn start_server() {
     let mut listener = None;
 
     for attempt in 0..PORT_RANGE {
-        let addr = format!("0.0.0.0:{}", port);
+        let addr = format!("{}:{}", LOCALHOST_BIND_HOST, port);
         match TcpListener::bind(&addr).await {
             Ok(l) => {
                 listener = Some(l);

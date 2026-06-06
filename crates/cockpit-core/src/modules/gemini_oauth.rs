@@ -226,7 +226,24 @@ fn parse_callback_url(raw_callback_url: &str, callback_port: u16) -> Result<Url,
     }
 
     if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-        return Url::parse(trimmed).map_err(|e| format!("回调链接格式无效: {}", e));
+        let parsed = Url::parse(trimmed).map_err(|e| format!("回调链接格式无效: {}", e))?;
+        let callback_host = parsed.host_str().unwrap_or_default();
+        if callback_host != "127.0.0.1" && callback_host != "localhost" {
+            return Err("回调链接主机必须为 127.0.0.1 或 localhost".to_string());
+        }
+        let parsed_port = parsed
+            .port_or_known_default()
+            .ok_or_else(|| "回调链接缺少端口".to_string())?;
+        if parsed_port != callback_port {
+            return Err(format!(
+                "回调链接端口不匹配，期望 {}",
+                callback_port
+            ));
+        }
+        if parsed.scheme() != "http" && parsed.scheme() != "https" {
+            return Err("回调链接协议无效".to_string());
+        }
+        return Ok(parsed);
     }
 
     if trimmed.starts_with('/') {

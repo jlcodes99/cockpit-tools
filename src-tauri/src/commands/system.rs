@@ -1381,11 +1381,24 @@ fn system_time_to_unix_ms(value: SystemTime) -> Option<i64> {
         .and_then(|duration| i64::try_from(duration.as_millis()).ok())
 }
 
+fn canonicalize_open_path(path: &Path) -> Result<PathBuf, String> {
+    if path.as_os_str().is_empty() {
+        return Err("打开路径不能为空".to_string());
+    }
+    let path_text = path.to_string_lossy();
+    if path_text.starts_with("http://") || path_text.starts_with("https://") {
+        return Err("打开路径必须为本地文件路径".to_string());
+    }
+    path.canonicalize().map_err(|e| format!("解析打开路径失败: {}", e))
+}
+
 fn open_path_in_system(path: &Path) -> Result<(), String> {
+    let canonical_path = canonicalize_open_path(path)?;
+
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
-            .arg(path)
+            .arg(&canonical_path)
             .spawn()
             .map_err(|e| format!("打开目录失败: {}", e))?;
     }
@@ -1393,7 +1406,7 @@ fn open_path_in_system(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("explorer")
-            .arg(path)
+            .arg(&canonical_path)
             .spawn()
             .map_err(|e| format!("打开目录失败: {}", e))?;
     }
@@ -1401,7 +1414,7 @@ fn open_path_in_system(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         std::process::Command::new("xdg-open")
-            .arg(path)
+            .arg(&canonical_path)
             .spawn()
             .map_err(|e| format!("打开目录失败: {}", e))?;
     }
@@ -3060,11 +3073,12 @@ pub async fn open_folder(path: String) -> Result<(), String> {
     if !folder_path.exists() {
         std::fs::create_dir_all(folder_path).map_err(|e| format!("创建文件夹失败: {}", e))?;
     }
+    let canonical_path = canonicalize_open_path(folder_path)?;
 
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
-            .arg(&path)
+            .arg(&canonical_path)
             .spawn()
             .map_err(|e| format!("打开文件夹失败: {}", e))?;
     }
@@ -3072,7 +3086,7 @@ pub async fn open_folder(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("explorer")
-            .arg(&path)
+            .arg(&canonical_path)
             .spawn()
             .map_err(|e| format!("打开文件夹失败: {}", e))?;
     }
@@ -3080,7 +3094,7 @@ pub async fn open_folder(path: String) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         std::process::Command::new("xdg-open")
-            .arg(&path)
+            .arg(&canonical_path)
             .spawn()
             .map_err(|e| format!("打开文件夹失败: {}", e))?;
     }
