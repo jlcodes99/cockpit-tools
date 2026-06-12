@@ -688,6 +688,7 @@ pub fn run() {
             commands::codebuddy_cn::get_codebuddy_cn_accounts_index_path,
             commands::codebuddy_cn::inject_codebuddy_cn_to_vscode,
             commands::codebuddy_cn::sync_codebuddy_cn_to_workbuddy,
+            commands::codebuddy_session::codebuddy_list_sessions,
             // WorkBuddy Commands
             commands::workbuddy::list_workbuddy_accounts,
             commands::workbuddy::delete_workbuddy_account,

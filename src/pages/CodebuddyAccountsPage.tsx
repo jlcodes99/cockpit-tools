@@ -24,6 +24,7 @@ import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
 import { PlatformOverviewTabsHeader, PlatformOverviewTab } from '../components/platform/PlatformOverviewTabsHeader';
 import { CodebuddyInstancesContent } from './CodebuddyInstancesPage';
+import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessionManager';
 import { DosageNotifyUsageStatus } from '../components/platform/DosageNotifyUsageStatus';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
@@ -562,9 +563,12 @@ export function CodebuddyAccountsPage() {
         platform="codebuddy"
         active={activeTab}
         onTabChange={setActiveTab}
+        tabs={['overview', 'sessions', 'instances']}
       />
       {activeTab === 'instances' ? (
         <CodebuddyInstancesContent accountsForSelect={filteredAccounts} />
+      ) : activeTab === 'sessions' ? (
+        <CodebuddySessionManager platform="intl" accounts={store.accounts} />
       ) : (
         <>
       <div className={`ghcp-flow-notice ${isFlowNoticeCollapsed ? 'collapsed' : ''}`} role="note">

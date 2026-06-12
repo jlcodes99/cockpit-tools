@@ -2,6 +2,7 @@ pub mod account;
 pub mod announcement;
 pub mod codebuddy;
 pub mod codebuddy_cn;
+pub mod codebuddy_session;
 pub mod codebuddy_cn_instance;
 pub mod codebuddy_instance;
 pub mod codex;

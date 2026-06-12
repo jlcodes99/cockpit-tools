@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { PlatformOverviewTabsHeader, PlatformOverviewTab } from '../components/platform/PlatformOverviewTabsHeader';
 import { CodebuddyCnInstancesContent } from './CodebuddyCnInstancesPage';
+import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessionManager';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
 import * as codebuddyCnService from '../services/codebuddyCnService';
 import {
@@ -133,9 +134,12 @@ export function CodebuddyCnAccountsPage() {
         platform="codebuddy_cn"
         active={activeTab}
         onTabChange={setActiveTab}
+        tabs={['overview', 'sessions', 'instances']}
       />
       {activeTab === 'instances' ? (
         <CodebuddyCnInstancesContent accountsForSelect={accountsForInstances} />
+      ) : activeTab === 'sessions' ? (
+        <CodebuddySessionManager platform="cn" accounts={store.accounts} />
       ) : (
         <CodebuddySuiteAccountsSharedView
           accounts={store.accounts}
