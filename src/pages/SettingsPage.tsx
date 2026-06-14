@@ -17,6 +17,7 @@ import { showFloatingCardWindow } from '../services/floatingCardService';
 import { usePlatformRuntimeSupport } from '../hooks/usePlatformRuntimeSupport';
 import { usePlatformLayoutStore } from '../stores/usePlatformLayoutStore';
 import { SideNavLayoutMode, useSideNavLayoutStore } from '../stores/useSideNavLayoutStore';
+import { useSponsorStore } from '../stores/useSponsorStore';
 import { UnlockFireworksOverlay } from '../components/UnlockFireworksOverlay';
 import {
   AutoSwitchAccountScopeSelector,
@@ -71,6 +72,13 @@ import { getQoderAccountDisplayEmail } from '../types/qoder';
 import { getTraeAccountDisplayEmail } from '../types/trae';
 import { getZedAccountDisplayEmail } from '../types/zed';
 import { ALL_PLATFORM_IDS, PlatformId } from '../types/platform';
+import {
+  buildStartupPageOptions,
+  DEFAULT_STARTUP_PAGE,
+  LAST_CLOSED_STARTUP_PAGE,
+  normalizeStartupPageValue,
+  type StartupPageValue,
+} from '../utils/startupPage';
 import { SettingsAccountTransferSection } from '../components/SettingsAccountTransferSection';
 import { SettingsWebdavSyncSection } from '../components/SettingsWebdavSyncSection';
 import { useEscClose } from '../hooks/useEscClose';
@@ -118,6 +126,7 @@ interface GeneralConfig {
   minimize_behavior?: 'dock_and_tray' | 'tray_only';
   hide_dock_icon?: boolean;
   tray_icon_style?: 'template' | 'color';
+  startup_page?: string;
   floating_card_show_on_startup?: boolean;
   floating_card_always_on_top?: boolean;
   app_auto_launch_enabled?: boolean;
@@ -327,6 +336,10 @@ export function SettingsPage() {
   }, [isMacOS, isWindows, isLinux, availableTerminals, t]);
 
   const orderedPlatformIds = usePlatformLayoutStore((state) => state.orderedPlatformIds);
+  const sidebarEntryIds = usePlatformLayoutStore((state) => state.sidebarEntryIds);
+  const platformGroups = usePlatformLayoutStore((state) => state.platformGroups);
+  const apiRelaySidebarVisible = usePlatformLayoutStore((state) => state.apiRelaySidebarVisible);
+  const sponsorEntryVisible = useSponsorStore((state) => Boolean(state.state.sponsorModule));
   const platformSettingsOrder = useMemo<Record<PlatformId, number>>(() => {
     const next: Record<PlatformId, number> = { ...FALLBACK_PLATFORM_SETTINGS_ORDER };
     let order = 0;
@@ -337,6 +350,23 @@ export function SettingsPage() {
     }
     return next;
   }, [orderedPlatformIds]);
+
+  const startupPageOptions = useMemo(
+    () => buildStartupPageOptions(
+      {
+        sidebarEntryIds,
+        platformGroups,
+        apiRelayVisible: sponsorEntryVisible && apiRelaySidebarVisible,
+      },
+      t,
+    ),
+    [apiRelaySidebarVisible, platformGroups, sidebarEntryIds, sponsorEntryVisible, t],
+  );
+
+  const startupPageOptionValues = useMemo(
+    () => new Set(startupPageOptions.map((option) => option.value)),
+    [startupPageOptions],
+  );
 
   const languageOptions = [
     { value: 'zh-cn', label: '简体中文' },
@@ -377,6 +407,7 @@ export function SettingsPage() {
   const [minimizeBehavior, setMinimizeBehavior] = useState<'dock_and_tray' | 'tray_only'>('dock_and_tray');
   const [hideDockIcon, setHideDockIcon] = useState(false);
   const [trayIconStyle, setTrayIconStyle] = useState<'template' | 'color'>('template');
+  const [startupPage, setStartupPage] = useState<StartupPageValue>(DEFAULT_STARTUP_PAGE);
   const [floatingCardShowOnStartup, setFloatingCardShowOnStartup] = useState(false);
   const [floatingCardAlwaysOnTop, setFloatingCardAlwaysOnTop] = useState(false);
   const [appAutoLaunchEnabled, setAppAutoLaunchEnabled] = useState(false);
@@ -733,6 +764,15 @@ export function SettingsPage() {
   }, [generalLoaded, uiScale]);
 
   useEffect(() => {
+    if (!generalLoaded || startupPage === LAST_CLOSED_STARTUP_PAGE) {
+      return;
+    }
+    if (!startupPageOptionValues.has(startupPage)) {
+      setStartupPage(DEFAULT_STARTUP_PAGE);
+    }
+  }, [generalLoaded, startupPage, startupPageOptionValues]);
+
+  useEffect(() => {
     if (!generalLoaded) {
       return;
     }
@@ -823,6 +863,7 @@ export function SettingsPage() {
           minimizeBehavior,
           hideDockIcon,
           trayIconStyle: isMacOS ? trayIconStyle : undefined,
+          startupPage,
           floatingCardShowOnStartup,
           floatingCardAlwaysOnTop,
           appAutoLaunchEnabled,
@@ -939,6 +980,7 @@ export function SettingsPage() {
     minimizeBehavior,
     hideDockIcon,
     trayIconStyle,
+    startupPage,
     isMacOS,
     floatingCardShowOnStartup,
     floatingCardAlwaysOnTop,
@@ -1233,6 +1275,7 @@ export function SettingsPage() {
       setMinimizeBehavior(config.minimize_behavior || 'dock_and_tray');
       setHideDockIcon(Boolean(config.hide_dock_icon));
       setTrayIconStyle(config.tray_icon_style === 'color' ? 'color' : 'template');
+      setStartupPage(normalizeStartupPageValue(config.startup_page));
       setFloatingCardShowOnStartup(config.floating_card_show_on_startup ?? false);
       setFloatingCardAlwaysOnTop(config.floating_card_always_on_top ?? false);
       setAppAutoLaunchEnabled(config.app_auto_launch_enabled ?? false);
@@ -2159,6 +2202,26 @@ export function SettingsPage() {
                   >
                     <option value="original">{t('settings.general.sideNavLayoutOriginal', '原始布局')}</option>
                     <option value="classic">{t('settings.general.sideNavLayoutClassic', '经典布局')}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="row-label">
+                  <div className="row-title">{t('settings.general.startupPage', '启动页面')}</div>
+                  <div className="row-desc">
+                    {t('settings.general.startupPageDesc', '设置应用冷启动后默认打开的页面')}
+                  </div>
+                </div>
+                <div className="row-control">
+                  <select
+                    className="settings-select"
+                    value={startupPage}
+                    onChange={(e) => setStartupPage(normalizeStartupPageValue(e.target.value))}
+                  >
+                    {startupPageOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>

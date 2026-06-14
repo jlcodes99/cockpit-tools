@@ -344,23 +344,18 @@ pub fn run() {
                     return;
                 }
                 let config = modules::config::get_user_config();
+                let behavior = match config.close_behavior {
+                    CloseWindowBehavior::Minimize => "minimize",
+                    CloseWindowBehavior::Quit => "quit",
+                    CloseWindowBehavior::Ask => "ask",
+                };
 
-                match config.close_behavior {
-                    CloseWindowBehavior::Minimize => {
-                        api.prevent_close();
-                        let _ = window.hide();
-                        info!("[Window] 窗口已最小化到托盘");
-                    }
-                    CloseWindowBehavior::Quit => {
-                        info!("[Window] 用户选择退出应用");
-                        window.app_handle().exit(0);
-                    }
-                    CloseWindowBehavior::Ask => {
-                        api.prevent_close();
-                        let _ = window.emit("window:close_requested", ());
-                        info!("[Window] 等待用户选择关闭行为");
-                    }
-                }
+                api.prevent_close();
+                let _ = window.emit(
+                    "window:close_requested",
+                    serde_json::json!({ "behavior": behavior }),
+                );
+                info!("[Window] 已转交前端处理关闭请求: behavior={}", behavior);
             }
             _ => {}
         })
@@ -429,6 +424,8 @@ pub fn run() {
             commands::system::get_general_config,
             commands::system::get_available_terminals,
             commands::system::save_general_config,
+            commands::system::save_last_closed_page,
+            commands::system::save_startup_page,
             commands::system::save_tray_platform_layout,
             commands::system::set_app_path,
             commands::system::set_codex_launch_on_switch,

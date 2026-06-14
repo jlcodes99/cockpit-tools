@@ -64,6 +64,13 @@ import {
 } from './utils/externalProviderImport';
 import { runAutoBackupCycle } from './services/scheduledBackupService';
 import { prepareCodexLocalAccessForRestart } from './services/codexLocalAccessService';
+import {
+  buildStartupPageCandidates,
+  LAST_CLOSED_STARTUP_PAGE,
+  normalizePageValue,
+  normalizeStartupPageValue,
+  resolveStartupPage,
+} from './utils/startupPage';
 
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })),
@@ -163,6 +170,8 @@ interface GeneralConfigTheme {
 }
 
 interface GeneralConfig extends GeneralConfigTheme {
+  startup_page?: string;
+  last_closed_page?: string;
   opencode_app_path: string;
   antigravity_app_path: string;
   codex_app_path: string;
@@ -178,6 +187,12 @@ interface GeneralConfig extends GeneralConfigTheme {
   trae_app_path: string;
   zed_app_path: string;
 }
+
+type StartupPageConfig = Pick<GeneralConfig, 'startup_page' | 'last_closed_page'>;
+
+type WindowCloseRequestedPayload = {
+  behavior?: 'ask' | 'minimize' | 'quit';
+};
 
 type AppPathMissingDetail = {
   app:
@@ -489,6 +504,9 @@ function MainApp() {
   const sideNavClassicFirstSyncDone = useSideNavLayoutStore((state) => state.classicFirstSyncDone);
   const markSideNavClassicFirstSyncDone = useSideNavLayoutStore((state) => state.markClassicFirstSyncDone);
   const syncSidebarEntriesFromDashboard = usePlatformLayoutStore((state) => state.syncSidebarEntriesFromDashboard);
+  const sidebarEntryIds = usePlatformLayoutStore((state) => state.sidebarEntryIds);
+  const platformGroups = usePlatformLayoutStore((state) => state.platformGroups);
+  const apiRelaySidebarVisible = usePlatformLayoutStore((state) => state.apiRelaySidebarVisible);
   const [page, setPage] = useState<Page>('dashboard');
   const [showUpdateNotification, setShowUpdateNotification] = useState(false);
   const [updateNotificationKey, setUpdateNotificationKey] = useState(0);
@@ -534,6 +552,11 @@ function MainApp() {
   const updateDownloadOwnerRef = useRef<'none' | 'shared' | 'silent'>('none');
   const updateCheckRequestIdRef = useRef(0);
   const externalImportHandledAtRef = useRef<Map<string, number>>(new Map());
+  const pageRef = useRef<Page>('dashboard');
+  const startupConfigRef = useRef<StartupPageConfig | null>(null);
+  const startupConfigLoadedRef = useRef(false);
+  const startupConfigAppliedRef = useRef(false);
+  const explicitNavigationBeforeStartupRef = useRef(false);
   const { showModal, closeModal } = useGlobalModal();
   const topRightAdState = useTopRightAdStore((state) => state.state);
   const fetchTopRightAdState = useTopRightAdStore((state) => state.fetchState);
@@ -543,6 +566,115 @@ function MainApp() {
   const sponsorEntryVisible = Boolean(sponsorModuleState.sponsorModule);
   const [topRightAdVisible, setTopRightAdVisible] = useState(true);
   const trayRefreshInFlightRef = useRef(false);
+  const apiRelayStartupVisible = sponsorEntryVisible && apiRelaySidebarVisible;
+  const applyPage = useCallback((targetPage: Page, explicit = true) => {
+    if (explicit && !startupConfigAppliedRef.current) {
+      explicitNavigationBeforeStartupRef.current = true;
+    }
+    pageRef.current = targetPage;
+    setPage(targetPage);
+  }, []);
+  const applyStartupPageConfig = useCallback(async () => {
+    const config = startupConfigRef.current;
+    if (!config || startupConfigAppliedRef.current) {
+      return;
+    }
+    if (explicitNavigationBeforeStartupRef.current) {
+      startupConfigAppliedRef.current = true;
+      return;
+    }
+
+    const requestedStartupPage = normalizeStartupPageValue(config.startup_page);
+    const requestedPage =
+      requestedStartupPage === LAST_CLOSED_STARTUP_PAGE
+        ? normalizePageValue(config.last_closed_page)
+        : requestedStartupPage;
+    if (requestedPage === 'api-relay' && !sponsorModuleInitialized) {
+      return;
+    }
+
+    const candidates = buildStartupPageCandidates({
+      sidebarEntryIds,
+      platformGroups,
+      apiRelayVisible: apiRelayStartupVisible,
+    });
+    const resolution = resolveStartupPage(config.startup_page, config.last_closed_page, candidates);
+    startupConfigAppliedRef.current = true;
+    applyPage(resolution.page, false);
+
+    try {
+      if (resolution.correctedStartupPage) {
+        await invoke('save_startup_page', { page: resolution.correctedStartupPage });
+      }
+      if (resolution.correctedLastClosedPage) {
+        await invoke('save_last_closed_page', { page: resolution.correctedLastClosedPage });
+      }
+    } catch (error) {
+      console.warn('[StartupPage] 自动修正启动页配置失败:', error);
+    }
+  }, [
+    applyPage,
+    apiRelayStartupVisible,
+    platformGroups,
+    sidebarEntryIds,
+    sponsorModuleInitialized,
+  ]);
+
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+
+  useEffect(() => {
+    if (startupConfigLoadedRef.current) {
+      return;
+    }
+    startupConfigLoadedRef.current = true;
+    let canceled = false;
+
+    invoke<GeneralConfig>('get_general_config')
+      .then((config) => {
+        if (canceled) {
+          return;
+        }
+        startupConfigRef.current = {
+          startup_page: config.startup_page,
+          last_closed_page: config.last_closed_page,
+        };
+        void applyStartupPageConfig();
+      })
+      .catch((error) => {
+        console.error('[StartupPage] 读取启动页配置失败:', error);
+        startupConfigAppliedRef.current = true;
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [applyStartupPageConfig]);
+
+  useEffect(() => {
+    void applyStartupPageConfig();
+  }, [applyStartupPageConfig]);
+
+  const persistLastClosedPage = useCallback(async () => {
+    try {
+      await invoke('save_last_closed_page', { page: pageRef.current });
+    } catch (error) {
+      console.warn('[Window] 保存最近关闭页面失败:', error);
+    }
+  }, []);
+
+  const handleWindowCloseAction = useCallback(
+    async (action: 'minimize' | 'quit', remember = false) => {
+      await persistLastClosedPage();
+      await invoke('handle_window_close', {
+        action,
+        remember,
+      });
+    },
+    [persistLastClosedPage],
+  );
+
   const openPlatformLayoutModal = useCallback(() => {
     setPlatformLayoutRequestedGroupId(null);
     setShowPlatformLayoutModal(true);
@@ -636,12 +768,12 @@ function MainApp() {
       minAppVersion: normalized.minAppVersion ?? null,
       source: normalized.source ?? null,
     });
-    setPage(normalized.page);
+    applyPage(normalized.page);
     window.setTimeout(() => {
       console.info('[ExternalImport][App] 分发前端外部导入事件');
       dispatchExternalProviderImportEvent(normalized);
     }, 0);
-  }, [ensureExternalImportVersionCompatible]);
+  }, [applyPage, ensureExternalImportVersionCompatible]);
   const handleBreakoutMinimize = useCallback(() => {
     setShowBreakout(false);
   }, []);
@@ -750,9 +882,9 @@ function MainApp() {
 
   useEffect(() => {
     if (sponsorModuleInitialized && page === 'api-relay' && !sponsorEntryVisible) {
-      setPage('dashboard');
+      applyPage('dashboard', false);
     }
-  }, [page, sponsorEntryVisible, sponsorModuleInitialized]);
+  }, [applyPage, page, sponsorEntryVisible, sponsorModuleInitialized]);
 
   useEffect(() => {
     if (sideNavLayoutMode !== 'classic' || sideNavClassicFirstSyncDone) {
@@ -1559,13 +1691,13 @@ function MainApp() {
     const targetPage = getQuotaAlertTargetPage(platform);
     const targetType = getQuotaAlertQuickSettingsType(platform);
     closeModal();
-    setPage(targetPage);
+    applyPage(targetPage);
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
         window.dispatchEvent(new CustomEvent('quick-settings:open', { detail: { type: targetType } }));
       });
     });
-  }, [closeModal]);
+  }, [applyPage, closeModal]);
 
   useEffect(() => {
     let cleanup: (() => void) | null = null;
@@ -2278,43 +2410,43 @@ function MainApp() {
                     const targetAccountId = payload.recommended_account_id as string;
                     if (platform === 'codex') {
                       await useCodexAccountStore.getState().switchAccount(targetAccountId);
-                      setPage('codex');
+                      applyPage('codex');
                     } else if (platform === 'github_copilot') {
                       await useGitHubCopilotAccountStore.getState().switchAccount(targetAccountId);
-                      setPage('github-copilot');
+                      applyPage('github-copilot');
                     } else if (platform === 'windsurf') {
                       await useWindsurfAccountStore.getState().switchAccount(targetAccountId);
-                      setPage('windsurf');
+                      applyPage('windsurf');
                     } else if (platform === 'kiro') {
                       await useKiroAccountStore.getState().switchAccount(targetAccountId);
-                      setPage('kiro');
+                      applyPage('kiro');
                     } else if (platform === 'cursor') {
                       await useCursorAccountStore.getState().switchAccount(targetAccountId);
-                      setPage('cursor');
+                      applyPage('cursor');
                     } else if (platform === 'gemini') {
                       await useGeminiAccountStore.getState().switchAccount(targetAccountId);
-                      setPage('gemini');
+                      applyPage('gemini');
                     } else if (platform === 'codebuddy') {
                       await useCodebuddyAccountStore.getState().switchAccount(targetAccountId);
-                      setPage('codebuddy');
+                      applyPage('codebuddy');
                     } else if (platform === 'codebuddy_cn') {
                       await useCodebuddyCnAccountStore.getState().switchAccount(targetAccountId);
-                      setPage('codebuddy-cn');
+                      applyPage('codebuddy-cn');
                     } else if (platform === 'qoder') {
                       await useQoderAccountStore.getState().switchAccount(targetAccountId);
-                      setPage('qoder');
+                      applyPage('qoder');
                     } else if (platform === 'trae') {
                       await useTraeAccountStore.getState().switchAccount(targetAccountId);
-                      setPage('trae');
+                      applyPage('trae');
                     } else if (platform === 'workbuddy') {
                       await useWorkbuddyAccountStore.getState().switchAccount(targetAccountId);
-                      setPage('workbuddy');
+                      applyPage('workbuddy');
                     } else if (platform === 'zed') {
                       await useZedAccountStore.getState().switchAccount(targetAccountId);
-                      setPage('zed');
+                      applyPage('zed');
                     } else {
                       await useAccountStore.getState().switchAccount(targetAccountId);
-                      setPage('overview');
+                      applyPage('overview');
                     }
                     closeModal();
                   } catch (error) {
@@ -2681,7 +2813,7 @@ function MainApp() {
       await invoke('set_app_path', { app, path });
       if (retry?.kind === 'switchAccount' && retry.accountId && app === 'zed') {
         await useZedAccountStore.getState().switchAccount(retry.accountId);
-        setPage('zed');
+        applyPage('zed');
       } else if (retry?.kind === 'switchAccount' && retry.accountId) {
         await invoke('switch_account', {
           accountId: retry.accountId,
@@ -2789,7 +2921,15 @@ function MainApp() {
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
 
-    listen('window:close_requested', () => {
+    listen<WindowCloseRequestedPayload>('window:close_requested', (event) => {
+      const behavior = event.payload?.behavior ?? 'ask';
+      if (behavior === 'minimize' || behavior === 'quit') {
+        void handleWindowCloseAction(behavior, false).catch((error) => {
+          console.error('[Window] 处理关闭请求失败:', error);
+        });
+        return;
+      }
+      void persistLastClosedPage();
       setShowCloseDialog(true);
     }).then((fn) => { unlisten = fn; });
 
@@ -2798,44 +2938,44 @@ function MainApp() {
         unlisten();
       }
     };
-  }, []);
+  }, [handleWindowCloseAction, persistLastClosedPage]);
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
 
-        listen<string>('tray:navigate', (event) => {
-          const target = String(event.payload || '');
-          switch (target) {
-            case 'overview':
-            case 'api-relay':
-            case 'codex':
-            case 'codex-api-service':
-            case 'github-copilot':
-            case 'windsurf':
-            case 'kiro':
-            case 'cursor':
-            case 'gemini':
-            case 'codebuddy':
-            case 'codebuddy-cn':
-            case 'qoder':
-            case 'trae':
-            case 'workbuddy':
-            case 'zed':
-            case 'manual':
-            case 'settings':
-              setPage(target as Page);
-              break;
-            default:
-              break;
-          }
-        }).then((fn) => { unlisten = fn; });
+    listen<string>('tray:navigate', (event) => {
+      const target = String(event.payload || '');
+      switch (target) {
+        case 'overview':
+        case 'api-relay':
+        case 'codex':
+        case 'codex-api-service':
+        case 'github-copilot':
+        case 'windsurf':
+        case 'kiro':
+        case 'cursor':
+        case 'gemini':
+        case 'codebuddy':
+        case 'codebuddy-cn':
+        case 'qoder':
+        case 'trae':
+        case 'workbuddy':
+        case 'zed':
+        case 'manual':
+        case 'settings':
+          applyPage(target as Page);
+          break;
+        default:
+          break;
+      }
+    }).then((fn) => { unlisten = fn; });
 
     return () => {
       if (unlisten) {
         unlisten();
       }
     };
-  }, []);
+  }, [applyPage]);
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
@@ -2887,14 +3027,14 @@ function MainApp() {
     const handleRequestNavigate = (e: Event) => {
       const custom = e as CustomEvent<Page>;
       if (custom.detail) {
-        setPage(custom.detail);
+        applyPage(custom.detail);
       }
     };
     window.addEventListener('app-request-navigate', handleRequestNavigate as EventListener);
     return () => {
       window.removeEventListener('app-request-navigate', handleRequestNavigate as EventListener);
     };
-  }, []);
+  }, [applyPage]);
 
   useEffect(() => {
     const handleOpenPlatformLayout = (e: Event) => {
@@ -3007,7 +3147,10 @@ function MainApp() {
       {/* 关闭确认对话框 */}
       {showCloseDialog && (
         <Suspense fallback={null}>
-          <CloseConfirmDialog onClose={() => setShowCloseDialog(false)} />
+          <CloseConfirmDialog
+            onClose={() => setShowCloseDialog(false)}
+            onAction={handleWindowCloseAction}
+          />
         </Suspense>
       )}
 

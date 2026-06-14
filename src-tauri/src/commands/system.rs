@@ -101,6 +101,10 @@ pub struct GeneralConfig {
     pub hide_dock_icon: bool,
     /// 菜单栏图标样式（macOS）: "template", "color"
     pub tray_icon_style: String,
+    /// 冷启动启动页面：页面 ID 或 last_closed
+    pub startup_page: String,
+    /// 上次主窗口关闭/隐藏时所在页面
+    pub last_closed_page: String,
     /// 是否在启动时显示悬浮卡片
     pub floating_card_show_on_startup: bool,
     /// 悬浮卡片是否默认置顶
@@ -904,6 +908,12 @@ fn resolve_antigravity_installed_version_info_quick_for_target(
 
 fn sanitize_startup_wakeup_delay_seconds(raw: i32) -> i32 {
     raw.clamp(0, MAX_STARTUP_WAKEUP_DELAY_SECONDS)
+}
+
+fn normalize_page_config_value(raw: Option<String>, fallback: &str) -> String {
+    raw.map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| fallback.to_string())
 }
 
 fn normalize_auto_switch_account_scope_mode(raw: &str) -> String {
@@ -1941,6 +1951,8 @@ pub fn save_network_config(
         minimize_behavior: current.minimize_behavior,
         hide_dock_icon: current.hide_dock_icon,
         tray_icon_style: current.tray_icon_style,
+        startup_page: current.startup_page,
+        last_closed_page: current.last_closed_page,
         floating_card_show_on_startup: current.floating_card_show_on_startup,
         floating_card_always_on_top: current.floating_card_always_on_top,
         app_auto_launch_enabled: current.app_auto_launch_enabled,
@@ -2220,6 +2232,8 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         minimize_behavior: minimize_behavior_str.to_string(),
         hide_dock_icon: user_config.hide_dock_icon,
         tray_icon_style: user_config.tray_icon_style.as_str().to_string(),
+        startup_page: user_config.startup_page,
+        last_closed_page: user_config.last_closed_page,
         floating_card_show_on_startup: user_config.floating_card_show_on_startup,
         floating_card_always_on_top: user_config.floating_card_always_on_top,
         app_auto_launch_enabled,
@@ -2351,6 +2365,8 @@ pub fn save_general_config(
     minimize_behavior: Option<String>,
     hide_dock_icon: Option<bool>,
     tray_icon_style: Option<String>,
+    startup_page: Option<String>,
+    last_closed_page: Option<String>,
     floating_card_show_on_startup: Option<bool>,
     floating_card_always_on_top: Option<bool>,
     app_auto_launch_enabled: Option<bool>,
@@ -2486,6 +2502,9 @@ pub fn save_general_config(
         .as_deref()
         .map(TrayIconStyle::from_str)
         .unwrap_or(current.tray_icon_style);
+    let startup_page_value = normalize_page_config_value(startup_page, &current.startup_page);
+    let last_closed_page_value =
+        normalize_page_config_value(last_closed_page, &current.last_closed_page);
     let floating_card_show_on_startup_value =
         floating_card_show_on_startup.unwrap_or(current.floating_card_show_on_startup);
     let floating_card_always_on_top_value =
@@ -2573,6 +2592,8 @@ pub fn save_general_config(
         minimize_behavior: minimize_behavior_enum,
         hide_dock_icon: hide_dock_icon_value,
         tray_icon_style: tray_icon_style_value,
+        startup_page: startup_page_value,
+        last_closed_page: last_closed_page_value,
         floating_card_show_on_startup: floating_card_show_on_startup_value,
         floating_card_always_on_top: floating_card_always_on_top_value,
         app_auto_launch_enabled: app_auto_launch_enabled_value,
@@ -2885,6 +2906,36 @@ pub async fn get_antigravity_installed_version_info(
 pub fn set_wakeup_override(enabled: bool) -> Result<(), String> {
     websocket::broadcast_wakeup_override(enabled);
     Ok(())
+}
+
+#[tauri::command]
+pub fn save_last_closed_page(page: String) -> Result<(), String> {
+    let current = config::get_user_config();
+    let normalized_page = normalize_page_config_value(Some(page), "dashboard");
+    if current.last_closed_page == normalized_page {
+        return Ok(());
+    }
+
+    let new_config = UserConfig {
+        last_closed_page: normalized_page,
+        ..current
+    };
+    config::save_user_config(&new_config)
+}
+
+#[tauri::command]
+pub fn save_startup_page(page: String) -> Result<(), String> {
+    let current = config::get_user_config();
+    let normalized_page = normalize_page_config_value(Some(page), "dashboard");
+    if current.startup_page == normalized_page {
+        return Ok(());
+    }
+
+    let new_config = UserConfig {
+        startup_page: normalized_page,
+        ..current
+    };
+    config::save_user_config(&new_config)
 }
 
 /// 执行窗口关闭操作

@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
 import { X, Minimize2, LogOut } from 'lucide-react';
 import { useEscClose } from '../hooks/useEscClose';
 import './CloseConfirmDialog.css';
 
 interface CloseConfirmDialogProps {
   onClose: () => void;
+  onAction: (action: 'minimize' | 'quit', remember: boolean) => Promise<void>;
 }
 
-export function CloseConfirmDialog({ onClose }: CloseConfirmDialogProps) {
+export function CloseConfirmDialog({ onClose, onAction }: CloseConfirmDialogProps) {
   const { t } = useTranslation();
   const [rememberChoice, setRememberChoice] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -19,10 +19,7 @@ export function CloseConfirmDialog({ onClose }: CloseConfirmDialogProps) {
   const handleAction = async (action: 'minimize' | 'quit') => {
     setLoading(true);
     try {
-      await invoke('handle_window_close', {
-        action,
-        remember: rememberChoice,
-      });
+      await onAction(action, rememberChoice);
       onClose();
     } catch (err) {
       console.error('Failed to handle window close:', err);

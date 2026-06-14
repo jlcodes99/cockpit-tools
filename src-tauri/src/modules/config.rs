@@ -133,6 +133,12 @@ pub struct UserConfig {
     /// 菜单栏图标样式（macOS）
     #[serde(default = "default_tray_icon_style")]
     pub tray_icon_style: TrayIconStyle,
+    /// 冷启动启动页面：页面 ID 或 last_closed
+    #[serde(default = "default_startup_page")]
+    pub startup_page: String,
+    /// 上次主窗口关闭/隐藏时所在页面
+    #[serde(default = "default_last_closed_page")]
+    pub last_closed_page: String,
     /// 是否在启动后自动显示悬浮卡片
     #[serde(default = "default_floating_card_show_on_startup")]
     pub floating_card_show_on_startup: bool,
@@ -573,6 +579,12 @@ fn default_hide_dock_icon() -> bool {
 fn default_tray_icon_style() -> TrayIconStyle {
     TrayIconStyle::Template
 }
+fn default_startup_page() -> String {
+    "dashboard".to_string()
+}
+fn default_last_closed_page() -> String {
+    "dashboard".to_string()
+}
 fn default_floating_card_show_on_startup() -> bool {
     false
 }
@@ -883,6 +895,8 @@ impl Default for UserConfig {
             minimize_behavior: default_minimize_behavior(),
             hide_dock_icon: default_hide_dock_icon(),
             tray_icon_style: default_tray_icon_style(),
+            startup_page: default_startup_page(),
+            last_closed_page: default_last_closed_page(),
             floating_card_show_on_startup: default_floating_card_show_on_startup(),
             floating_card_always_on_top: default_floating_card_always_on_top(),
             app_auto_launch_enabled: default_app_auto_launch_enabled(),
@@ -1301,6 +1315,17 @@ pub fn load_user_config() -> Result<UserConfig, String> {
             obj.insert(
                 "tray_icon_style".to_string(),
                 json!(default_tray_icon_style()),
+            );
+        }
+
+        if !obj.contains_key("startup_page") {
+            obj.insert("startup_page".to_string(), json!(default_startup_page()));
+        }
+
+        if !obj.contains_key("last_closed_page") {
+            obj.insert(
+                "last_closed_page".to_string(),
+                json!(default_last_closed_page()),
             );
         }
 
@@ -1918,6 +1943,21 @@ mod tests {
         let cfg: UserConfig =
             serde_json::from_value(serde_json::json!({})).expect("反序列化默认配置应成功");
         assert!(!cfg.openclaw_auth_overwrite_on_switch);
+    }
+
+    #[test]
+    fn startup_page_defaults_to_dashboard() {
+        let cfg = UserConfig::default();
+        assert_eq!(cfg.startup_page, "dashboard");
+        assert_eq!(cfg.last_closed_page, "dashboard");
+    }
+
+    #[test]
+    fn startup_page_missing_fields_fall_back_to_dashboard() {
+        let cfg: UserConfig =
+            serde_json::from_value(serde_json::json!({})).expect("反序列化默认配置应成功");
+        assert_eq!(cfg.startup_page, "dashboard");
+        assert_eq!(cfg.last_closed_page, "dashboard");
     }
 
     #[test]
