@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "prebuild": "npm run typecheck",
     "build": "npm run sync-version && tsc && vite build",
+    "package:branch-app": "node scripts/package-branch-app.cjs",
     "release:preflight": "node scripts/release/preflight.cjs",
     "preview": "vite preview",
     "pretauri:dev": "npm run typecheck",
