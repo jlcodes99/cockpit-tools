@@ -51,7 +51,7 @@ fn repair_codex_session_visibility_after_provider_change(
     }
 
     let started = Instant::now();
-    let summary = codex_session_visibility::repair_session_visibility_across_instances()?;
+    let summary = codex_session_visibility::repair_session_visibility_across_instances(false)?;
     logger::log_info(&format!(
         "[Codex Session Visibility] {}: repaired after account switch, from_provider={}, to_provider={}, mutated_instances={}, rollout_files={}, sqlite_rows={}, elapsed_ms={}",
         context,

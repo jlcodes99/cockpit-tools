@@ -2292,7 +2292,12 @@
         "title": "Déplacer vers la corbeille",
         "message": "Les sessions sélectionnées seront déplacées vers la corbeille depuis leurs instances afin de pouvoir être restaurées plus tard. Les instances en cours d’exécution peuvent nécessiter un redémarrage avant que la modification apparaisse. Continuer ?",
         "syncMessage": "Les threads manquants et leurs données de session seront synchronisés vers toutes les instances. Le contenu existant ne sera pas réécrit et les fichiers de l’instance cible seront sauvegardés avant toute écriture. Continuer ?",
-        "repairVisibilityMessage": "Cette action réparera les métadonnées du fournisseur dans les fichiers de rollout et dans state_5.sqlite en utilisant la valeur model_provider du config.toml racine de chaque instance (avec openai par défaut si elle est absente). Les fichiers à modifier sont sauvegardés avant l'écriture. Les instances en cours d'exécution peuvent nécessiter un redémarrage avant que le changement n'apparaisse. Continuer ?"
+        "repairVisibilityMessage": "Répare les métadonnées provider dans les fichiers rollout et state_5.sqlite avec le model_provider du config.toml racine de chaque instance (openai par défaut si absent). Si des sources de session masquent les projets dans la barre latérale Codex, une liste de sessions est d’abord affichée pour confirmation. Les fichiers modifiés sont sauvegardés avant écriture. Continuer ?",
+        "sourceRepairTitle": "Restaurer la visibilité dans la barre Codex",
+        "sourceRepairMessage": "{{count}} session(s) non archivées ont une source différente de cli et peuvent rester masquées dans les projets/sessions de la barre latérale Codex. Après confirmation, ces sources seront remises à cli :\n{{items}}\n\nRéparer la visibilité de ces sessions ?",
+        "restoreSourceRepairMessage": "Les sessions sélectionnées dans la corbeille contiennent {{count}} fichier(s) rollout non archivés dont la source n’est pas cli. Les restaurer telles quelles peut encore les masquer dans la barre Codex. Après confirmation, ces sources seront changées en cli pendant la restauration :\n{{items}}\n\nRestaurer et réparer la visibilité ?",
+        "forceRestoreTitle": "Confirmer la restauration forcée",
+        "forceRestoreMessage": "{{count}} conflit(s) de fichiers rollout homonymes avec un contenu différent ont été trouvés. Continuer sauvegardera ces fichiers rollout en conflit depuis Codex sessions et le session_index.jsonl correspondant, puis les remplacera depuis la corbeille et reconstruira l’index. La liste des sauvegardes compte ces {{count}} fichiers rollout en conflit ; cette prévisualisation peut restaurer {{restorable}} session(s) / {{rollouts}} fichier(s) rollout au total. Continuer ?"
       },
       "empty": {
         "title": "Aucune session à gérer",
@@ -2302,23 +2307,38 @@
         "pickOne": "Veuillez sélectionner au moins une session",
         "syncNeedTwo": "Au moins deux instances sont nécessaires pour synchroniser les sessions",
         "pickRestoreOne": "Veuillez sélectionner au moins une session à restaurer",
-        "repairVisibilitySkippedOnly": "Aucune différence de fournisseur inscriptible n’a été trouvée ; {{count}} fichier(s) state_5.sqlite invalides ou corrompus ont été ignorés. Codex doit les régénérer avant que leurs enregistrements SQLite puissent être réparés.",
-        "repairVisibilitySkippedWithBase": "{{message}} ; {{count}} fichier(s) state_5.sqlite invalides ou corrompus ont été ignorés. Codex doit les régénérer avant que leurs enregistrements SQLite puissent être réparés."
+        "repairVisibilitySkippedOnly": "Aucune différence provider inscriptible trouvée ; {{count}} fichier(s) state_5.sqlite invalides ou corrompus ont été ignorés. Codex doit les régénérer avant que leurs enregistrements SQLite puissent être réparés ; {{restartInstruction}}",
+        "repairVisibilitySkippedWithBase": "{{message}} ; {{count}} fichier(s) state_5.sqlite invalides ou corrompus ont été ignorés. Codex doit les régénérer avant que leurs enregistrements SQLite puissent être réparés ; {{restartInstruction}}",
+        "restartAfterRestore": "Attendez {{seconds}} secondes, puis quittez complètement le processus Codex et relancez-le",
+        "repairVisibilityRestartInstruction": "Attendez 10 secondes, puis quittez complètement le processus Codex et relancez-le"
       },
       "groupCount": "{{count}} sessions​",
       "updatedAt": "Mis à jour",
       "labels": {
         "sessionId": "ID de session",
-        "tokenUsage": "Utilisation des tokens"
+        "tokenUsage": "Utilisation des tokens",
+        "unknownCwd": "Dossier de travail inconnu",
+        "moreHidden": "{{count}} autres non affichés",
+        "archived": "Archivé",
+        "removed": "Supprimé",
+        "projectless": "Chat",
+        "projectlessGroup": "Chats",
+        "projectlessHint": "Chat sans projet"
       },
       "locationRunning": " (en cours d’exécution)",
       "untitled": "Session sans titre",
       "restoreModal": {
         "title": "Restaurer les sessions",
-        "hint": "La restauration remet ensemble le fichier rollout, la ligne de thread SQLite et l'entrée session_index dans l'instance d'origine.",
+        "hint": "La restauration replace les fichiers rollout, les entrées session_index et les dates de fichiers dans l’instance d’origine. Si une source masque les projets dans la barre latérale Codex, une liste de sessions est d’abord demandée pour confirmation avant la reconstruction officielle de l’index Codex.",
         "emptyTitle": "La corbeille est vide",
         "emptyDesc": "Les sessions déplacées dans la corbeille apparaîtront ici.",
-        "restoreAction": "Restaurer les sessions sélectionnées"
+        "restoreAction": "Restaurer les sessions sélectionnées",
+        "rolloutBackupsTitle": "Sauvegardes de restauration rollout",
+        "rolloutBackupsCount": "{{count}} lot(s)",
+        "noRolloutBackups": "Aucune sauvegarde rollout restaurable.",
+        "rolloutBackupSummary": "{{sessions}} session(s) / {{rollouts}} sauvegarde(s) rollout en conflit / {{instances}} instance(s)",
+        "restoreRolloutBackup": "Restaurer la sauvegarde rollout",
+        "rolloutBackupConfirm": "Ces sauvegardes rollout existaient déjà dans le dossier Codex sessions et entraient en conflit avec la corbeille pendant la restauration. Ce ne sont pas des sauvegardes de la corbeille Cockpit Tools. Les restaurer ?"
       },
       "targetModal": {
         "title": "Copier vers instance",

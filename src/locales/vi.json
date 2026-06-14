@@ -2292,7 +2292,12 @@
         "title": "Chuyển vào thùng rác",
         "message": "Các phiên đã chọn sẽ được chuyển vào thùng rác từ các phiên bản tương ứng để có thể khôi phục sau này. Các phiên bản đang chạy có thể cần khởi động lại trước khi thay đổi xuất hiện. Tiếp tục chứ?",
         "syncMessage": "Các luồng còn thiếu và dữ liệu phiên của chúng sẽ được đồng bộ tới tất cả phiên bản. Nội dung hiện có sẽ không bị ghi lại, và các tệp của phiên bản đích sẽ được sao lưu trước khi ghi. Tiếp tục chứ?",
-        "repairVisibilityMessage": "Thao tác này sẽ sửa metadata nhà cung cấp trong các tệp rollout và state_5.sqlite bằng giá trị model_provider từ config.toml gốc của từng instance (nếu thiếu thì dùng openai mặc định). Các tệp sắp thay đổi sẽ được sao lưu trước khi ghi. Có thể cần khởi động lại các instance đang chạy trước khi thay đổi xuất hiện. Tiếp tục?"
+        "repairVisibilityMessage": "Sửa metadata provider trong các tệp rollout và state_5.sqlite bằng model_provider từ config.toml gốc của từng instance (thiếu thì dùng openai). Nếu nguồn phiên làm ẩn dự án ở thanh bên trái Codex, danh sách phiên sẽ được hiển thị trước để xác nhận. Các tệp thay đổi được sao lưu trước khi ghi. Tiếp tục?",
+        "sourceRepairTitle": "Khôi phục hiển thị ở thanh bên Codex",
+        "sourceRepairMessage": "Phát hiện {{count}} phiên chưa lưu trữ có nguồn không phải cli; chúng có thể bị ẩn trong dự án/phiên ở thanh bên trái Codex. Xác nhận để đổi các nguồn phiên sau về cli:\n{{items}}\n\nSửa hiển thị thanh bên cho các phiên này?",
+        "restoreSourceRepairMessage": "Các phiên thùng rác đã chọn có {{count}} rollout chưa lưu trữ với nguồn không phải cli. Nếu khôi phục nguyên trạng, chúng vẫn có thể bị ẩn trong thanh bên Codex. Xác nhận để đổi các nguồn sau thành cli khi khôi phục:\n{{items}}\n\nKhôi phục và sửa hiển thị thanh bên?",
+        "forceRestoreTitle": "Xác nhận khôi phục ghi đè",
+        "forceRestoreMessage": "Phát hiện {{count}} xung đột tệp rollout trùng tên nhưng nội dung khác. Tiếp tục sẽ sao lưu các rollout xung đột này từ Codex sessions và session_index.jsonl tương ứng, sau đó ghi đè bằng tệp trong thùng rác và xây lại chỉ mục. Danh sách sao lưu được tính theo {{count}} rollout xung đột này; bản xem trước có thể khôi phục tổng cộng {{restorable}} phiên / {{rollouts}} tệp rollout. Tiếp tục?"
       },
       "empty": {
         "title": "Chưa có phiên nào để quản lý",
@@ -2302,23 +2307,38 @@
         "pickOne": "Vui lòng chọn ít nhất một phiên",
         "syncNeedTwo": "Cần ít nhất hai phiên bản để đồng bộ phiên",
         "pickRestoreOne": "Hãy chọn ít nhất một phiên để khôi phục",
-        "repairVisibilitySkippedOnly": "Không tìm thấy khác biệt provider có thể ghi; đã bỏ qua {{count}} tệp state_5.sqlite không hợp lệ hoặc bị hỏng. Codex phải tạo lại chúng trước khi có thể sửa các bản ghi SQLite bên trong.",
-        "repairVisibilitySkippedWithBase": "{{message}}; đã bỏ qua {{count}} tệp state_5.sqlite không hợp lệ hoặc bị hỏng. Codex phải tạo lại chúng trước khi có thể sửa các bản ghi SQLite bên trong."
+        "repairVisibilitySkippedOnly": "Không tìm thấy khác biệt provider có thể ghi; đã bỏ qua {{count}} tệp state_5.sqlite không hợp lệ hoặc bị hỏng. Codex phải tạo lại chúng trước khi có thể sửa bản ghi SQLite; {{restartInstruction}}",
+        "repairVisibilitySkippedWithBase": "{{message}}; đã bỏ qua {{count}} tệp state_5.sqlite không hợp lệ hoặc bị hỏng. Codex phải tạo lại chúng trước khi có thể sửa bản ghi SQLite; {{restartInstruction}}",
+        "restartAfterRestore": "Chờ {{seconds}} giây, sau đó thoát hoàn toàn tiến trình Codex rồi khởi động lại",
+        "repairVisibilityRestartInstruction": "Chờ 10 giây, sau đó thoát hoàn toàn tiến trình Codex rồi khởi động lại"
       },
       "groupCount": "{{count}} phiên",
       "updatedAt": "Đã cập nhật",
       "labels": {
         "sessionId": "ID phiên",
-        "tokenUsage": "Mức dùng token"
+        "tokenUsage": "Mức dùng token",
+        "unknownCwd": "Thư mục làm việc không xác định",
+        "moreHidden": "còn {{count}} mục chưa hiển thị",
+        "archived": "Đã lưu trữ",
+        "removed": "Đã xóa",
+        "projectless": "Trò chuyện",
+        "projectlessGroup": "Trò chuyện",
+        "projectlessHint": "Trò chuyện không dự án"
       },
       "locationRunning": " (đang chạy)",
       "untitled": "Phiên chưa đặt tên",
       "restoreModal": {
         "title": "Khôi phục phiên",
-        "hint": "Khi khôi phục, tệp rollout, dòng thread trong SQLite và mục session_index sẽ được trả lại cùng nhau về instance gốc.",
+        "hint": "Khôi phục sẽ đưa tệp rollout, mục session_index và thời gian tệp về instance gốc. Nếu nguồn làm ẩn dự án ở thanh bên trái Codex, danh sách phiên sẽ được xác nhận trước rồi Codex chính thức sẽ xây lại chỉ mục phiên.",
         "emptyTitle": "Thùng rác trống",
         "emptyDesc": "Các phiên đã chuyển vào thùng rác sẽ xuất hiện ở đây.",
-        "restoreAction": "Khôi phục các phiên đã chọn"
+        "restoreAction": "Khôi phục các phiên đã chọn",
+        "rolloutBackupsTitle": "Bản sao lưu khôi phục rollout",
+        "rolloutBackupsCount": "{{count}} lô",
+        "noRolloutBackups": "Không có bản sao lưu rollout có thể khôi phục.",
+        "rolloutBackupSummary": "{{sessions}} phiên / {{rollouts}} bản sao rollout xung đột / {{instances}} instance",
+        "restoreRolloutBackup": "Khôi phục bản sao rollout",
+        "rolloutBackupConfirm": "Đây là các bản sao rollout đã tồn tại trong thư mục Codex sessions và xung đột với thùng rác khi khôi phục phiên. Chúng không phải bản sao trong thùng rác Cockpit Tools. Khôi phục?"
       },
       "targetModal": {
         "title": "Sao chép sang phiên bản",

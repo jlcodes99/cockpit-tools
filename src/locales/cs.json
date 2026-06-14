@@ -2292,7 +2292,12 @@
         "title": "Přesunout do koše",
         "message": "Vybrané relace budou přesunuty do koše z odpovídajících instancí, aby je bylo možné později obnovit; běžící instance mohou vyžadovat restart, než se změna projeví. Pokračovat?",
         "syncMessage": "Chybějící vlákna a jejich data relací budou synchronizována do všech instancí. Existující obsah se nebude zapisovat znovu a soubory cílové instance budou před zápisem zazálohovány. Pokračovat?",
-        "repairVisibilityMessage": "Tato akce opraví metadata poskytovatele v rollout souborech a v databázi state_5.sqlite podle hodnoty model_provider z kořenového souboru config.toml každé instance (pokud chybí, použije se openai). Soubory, které budou změněny, se před zápisem zálohují. Běžící instance mohou vyžadovat restart, než se změna projeví. Pokračovat?"
+        "repairVisibilityMessage": "Opraví metadata provider v souborech rollout a state_5.sqlite pomocí model_provider z kořenového config.toml každé instance (pokud chybí, použije se openai). Pokud zdroj relace skrývá projekty v levém panelu Codex, nejdřív se zobrazí seznam relací k potvrzení. Měněné soubory se před zápisem zálohují. Pokračovat?",
+        "sourceRepairTitle": "Obnovit viditelnost v panelu Codex",
+        "sourceRepairMessage": "Nalezeno {{count}} nearchivovaných relací se zdrojem jiným než cli; mohou zůstat skryté v projektech/relacích levého panelu Codex. Po potvrzení budou tyto zdroje vráceny na cli:\n{{items}}\n\nOpravit viditelnost těchto relací?",
+        "restoreSourceRepairMessage": "Vybrané relace v koši obsahují {{count}} nearchivovaných rollout souborů se zdrojem jiným než cli. Obnovení beze změny je může dál skrývat v panelu Codex. Po potvrzení budou tyto zdroje při obnově změněny na cli:\n{{items}}\n\nObnovit a opravit viditelnost?",
+        "forceRestoreTitle": "Potvrdit vynucenou obnovu",
+        "forceRestoreMessage": "Nalezeno {{count}} konfliktů rollout souborů se stejným názvem a odlišným obsahem. Pokračování nejdřív zálohuje tyto konfliktní rollout soubory z Codex sessions a odpovídající session_index.jsonl, potom je přepíše z koše a znovu sestaví index. Seznam záloh se počítá podle těchto {{count}} konfliktních rollout souborů; tento náhled může celkem obnovit {{restorable}} relací / {{rollouts}} rollout souborů. Pokračovat?"
       },
       "empty": {
         "title": "Žádné relace ke správě",
@@ -2302,23 +2307,38 @@
         "pickOne": "Vyberte prosím alespoň jednu relaci",
         "syncNeedTwo": "Pro synchronizaci relací jsou potřeba alespoň dvě instance",
         "pickRestoreOne": "Vyberte prosím alespoň jednu relaci k obnovení",
-        "repairVisibilitySkippedOnly": "Nebyly nalezeny žádné zapisovatelné rozdíly provideru; přeskočeno {{count}} neplatných nebo poškozených souborů state_5.sqlite. Codex je musí znovu vygenerovat, než bude možné opravit jejich záznamy SQLite.",
-        "repairVisibilitySkippedWithBase": "{{message}}; přeskočeno {{count}} neplatných nebo poškozených souborů state_5.sqlite. Codex je musí znovu vygenerovat, než bude možné opravit jejich záznamy SQLite."
+        "repairVisibilitySkippedOnly": "Nebyly nalezeny žádné zapisovatelné rozdíly provider; přeskočeno {{count}} neplatných nebo poškozených souborů state_5.sqlite. Codex je musí znovu vytvořit, než půjde opravit jejich záznamy SQLite; {{restartInstruction}}",
+        "repairVisibilitySkippedWithBase": "{{message}}; přeskočeno {{count}} neplatných nebo poškozených souborů state_5.sqlite. Codex je musí znovu vytvořit, než půjde opravit jejich záznamy SQLite; {{restartInstruction}}",
+        "restartAfterRestore": "Počkejte {{seconds}} sekund, poté úplně ukončete proces Codex a znovu jej spusťte",
+        "repairVisibilityRestartInstruction": "Počkejte 10 sekund, poté úplně ukončete proces Codex a znovu jej spusťte"
       },
       "groupCount": "{{count}} relací",
       "updatedAt": "Aktualizováno",
       "labels": {
         "sessionId": "ID relace",
-        "tokenUsage": "Využití tokenů"
+        "tokenUsage": "Využití tokenů",
+        "unknownCwd": "Neznámý pracovní adresář",
+        "moreHidden": "{{count}} dalších nezobrazeno",
+        "archived": "Archivováno",
+        "removed": "Odebráno",
+        "projectless": "Chat",
+        "projectlessGroup": "Chaty",
+        "projectlessHint": "Chat bez projektu"
       },
       "locationRunning": " (spuštěno)",
       "untitled": "Nepojmenovaná relace",
       "restoreModal": {
         "title": "Obnovit relace",
-        "hint": "Při obnovení se soubor rollout, řádek vlákna v SQLite a záznam session_index vrátí společně do původní instance.",
+        "hint": "Obnova vrátí rollout soubory, položky session_index a časy souborů do původní instance. Pokud zdroj skrývá projekty v levém panelu Codex, nejprve se vyžádá potvrzení seznamu relací a poté oficiální Codex znovu sestaví index.",
         "emptyTitle": "Koš je prázdný",
         "emptyDesc": "Relace přesunuté do koše se zobrazí zde.",
-        "restoreAction": "Obnovit vybrané relace"
+        "restoreAction": "Obnovit vybrané relace",
+        "rolloutBackupsTitle": "Zálohy obnovy rollout",
+        "rolloutBackupsCount": "{{count}} dávek",
+        "noRolloutBackups": "Nejsou dostupné žádné obnovitelné zálohy rollout.",
+        "rolloutBackupSummary": "{{sessions}} relací / {{rollouts}} konfliktních záloh rollout / {{instances}} instancí",
+        "restoreRolloutBackup": "Obnovit zálohu rollout",
+        "rolloutBackupConfirm": "Toto jsou zálohy rollout, které už existovaly v adresáři Codex sessions a při obnově byly v konfliktu s košem. Nejde o zálohy koše Cockpit Tools. Obnovit?"
       },
       "targetModal": {
         "title": "Kopírovat do instance",

@@ -287,7 +287,8 @@ fn repair_session_visibility_before_launch(
     };
 
     let started = Instant::now();
-    let summary = modules::codex_session_visibility::repair_session_visibility_across_instances()?;
+    let summary =
+        modules::codex_session_visibility::repair_session_visibility_across_instances(false)?;
     modules::logger::log_info(&format!(
         "[Codex Session Visibility] {}: repaired before launch, from_provider={}, to_provider={}, mutated_instances={}, rollout_files={}, sqlite_rows={}, elapsed_ms={}",
         context,
@@ -638,8 +639,17 @@ pub async fn codex_sync_sessions_to_instance(
 
 #[tauri::command]
 pub async fn codex_repair_session_visibility_across_instances(
+    normalize_sources: Option<bool>,
 ) -> Result<modules::codex_session_visibility::CodexSessionVisibilityRepairSummary, String> {
-    modules::codex_session_visibility::repair_session_visibility_across_instances()
+    modules::codex_session_visibility::repair_session_visibility_across_instances(
+        normalize_sources.unwrap_or(false),
+    )
+}
+
+#[tauri::command]
+pub async fn codex_preview_session_visibility_source_repairs(
+) -> Result<modules::codex_session_visibility::CodexSessionSourceRepairPreviewSummary, String> {
+    modules::codex_session_visibility::preview_session_visibility_source_repairs()
 }
 
 #[tauri::command]
@@ -669,10 +679,38 @@ pub async fn codex_list_trashed_sessions_across_instances(
 }
 
 #[tauri::command]
+pub async fn codex_preview_restore_sessions_from_trash_across_instances(
+    session_ids: Vec<String>,
+) -> Result<modules::codex_session_manager::CodexSessionRestorePreviewSummary, String> {
+    modules::codex_session_manager::preview_restore_sessions_from_trash_across_instances(
+        session_ids,
+    )
+}
+
+#[tauri::command]
 pub async fn codex_restore_sessions_from_trash_across_instances(
     session_ids: Vec<String>,
+    force_overwrite: Option<bool>,
+    normalize_sources: Option<bool>,
 ) -> Result<modules::codex_session_manager::CodexSessionRestoreSummary, String> {
-    modules::codex_session_manager::restore_sessions_from_trash_across_instances(session_ids)
+    modules::codex_session_manager::restore_sessions_from_trash_across_instances(
+        session_ids,
+        force_overwrite.unwrap_or(false),
+        normalize_sources.unwrap_or(false),
+    )
+}
+
+#[tauri::command]
+pub async fn codex_list_session_restore_rollout_backups(
+) -> Result<Vec<modules::codex_session_manager::CodexSessionRolloutBackupBatch>, String> {
+    modules::codex_session_manager::list_session_restore_rollout_backups()
+}
+
+#[tauri::command]
+pub async fn codex_restore_session_restore_rollout_backup(
+    batch_id: String,
+) -> Result<modules::codex_session_manager::CodexSessionRestoreSummary, String> {
+    modules::codex_session_manager::restore_session_restore_rollout_backup(batch_id)
 }
 
 #[tauri::command]

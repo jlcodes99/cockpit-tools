@@ -2866,7 +2866,12 @@
         "title": "移到废纸篓",
         "message": "会将所选会话从对应实例中移到废纸篓，便于后续恢复；运行中的实例可能需要重启后才会反映。确认继续？",
         "syncMessage": "会将缺失的 rollout、session_index 条目和会话文件时间同步到所有实例，并触发官方 Codex 重建会话索引；已有内容不会重复写入，写入前会先备份目标文件。确认继续？",
-        "repairVisibilityMessage": "会按各实例 config.toml 根级 model_provider（缺失时按 openai）修复 rollout 文件与 state_5.sqlite 中的 provider 元数据，写入前会先备份将要修改的文件。运行中的实例可能需要重启后显示。确认继续？"
+        "repairVisibilityMessage": "会按各实例 config.toml 根级 model_provider（缺失时按 openai）修复 rollout 文件和 state_5.sqlite 中的 provider 元数据；如发现会话来源导致 Codex 左侧项目不可见，会先弹出会话列表并要求确认。写入前会先备份将要修改的文件。确认继续？",
+        "sourceRepairTitle": "恢复 Codex 左侧可见性",
+        "sourceRepairMessage": "发现 {{count}} 条非归档会话的来源不是 cli，这会导致 Codex 左侧项目/会话不显示。确认后会把下列会话来源恢复为 cli：\n{{items}}\n\n是否继续修复这些会话的左侧可见性？",
+        "restoreSourceRepairMessage": "所选废纸篓会话中有 {{count}} 个非归档 rollout 的来源不是 cli，直接恢复后仍可能不在 Codex 左侧显示。确认后会在恢复时把下列会话来源改为 cli：\n{{items}}\n\n是否继续恢复并修复左侧可见性？",
+        "forceRestoreTitle": "确认强制覆盖恢复",
+        "forceRestoreMessage": "发现 {{count}} 个同名不同内容 rollout 文件冲突。继续会先备份 Codex sessions 目录中这些冲突 rollout 文件和对应 session_index.jsonl，再用废纸篓中的文件覆盖并重建索引。备份列表按这 {{count}} 个冲突 rollout 文件统计；本次预检共可恢复 {{restorable}} 条会话 / {{rollouts}} 个 rollout 文件。确认继续？"
       },
       "empty": {
         "title": "还没有可管理的会话",
@@ -2876,23 +2881,38 @@
         "pickOne": "请至少选择一条会话",
         "pickRestoreOne": "请至少选择一条待恢复会话",
         "syncNeedTwo": "至少需要两个实例才能同步会话",
-        "repairVisibilitySkippedOnly": "未发现需要写入的 provider 差异；已跳过 {{count}} 个无效或损坏的 state_5.sqlite，需由 Codex 重新生成后才能修复其中的 SQLite 记录",
-        "repairVisibilitySkippedWithBase": "{{message}}；已跳过 {{count}} 个无效或损坏的 state_5.sqlite，需由 Codex 重新生成后才能修复其中的 SQLite 记录"
+        "repairVisibilitySkippedOnly": "未发现需要写入的 provider 差异；已跳过 {{count}} 个无效或损坏的 state_5.sqlite，需由 Codex 重新生成后才能修复其中的 SQLite 记录；{{restartInstruction}}",
+        "repairVisibilitySkippedWithBase": "{{message}}；已跳过 {{count}} 个无效或损坏的 state_5.sqlite，需由 Codex 重新生成后才能修复其中的 SQLite 记录；{{restartInstruction}}",
+        "restartAfterRestore": "稍等 {{seconds}} 秒钟后，你必须手动彻底退出Codex进程后再启动",
+        "repairVisibilityRestartInstruction": "稍等 10 秒钟后，你必须手动彻底退出Codex进程后再启动"
       },
       "groupCount": "{{count}} 条会话",
       "updatedAt": "最近更新",
       "labels": {
         "sessionId": "会话 ID",
-        "tokenUsage": "Token使用"
+        "tokenUsage": "Token使用",
+        "unknownCwd": "未知工作目录",
+        "moreHidden": "另有 {{count}} 条未显示",
+        "archived": "「归档」",
+        "removed": "「移除」",
+        "projectless": "「对话」",
+        "projectlessGroup": "对话",
+        "projectlessHint": "无目录对话"
       },
       "locationRunning": "（运行中）",
       "untitled": "未命名会话",
       "restoreModal": {
         "title": "恢复会话",
-        "hint": "恢复会把 rollout 文件、session_index 条目和会话文件时间放回原实例，并触发官方 Codex 重建会话索引。",
+        "hint": "恢复会把 rollout 文件、session_index 条目和会话文件时间放回原实例；如检测到来源会导致 Codex 左侧项目不可见，会先弹出会话列表要求确认，再触发官方 Codex 重建会话索引。",
         "emptyTitle": "废纸篓里还没有会话",
         "emptyDesc": "已移到废纸篓的会话会显示在这里。",
-        "restoreAction": "恢复选中会话"
+        "restoreAction": "恢复选中会话",
+        "rolloutBackupsTitle": "rollout 恢复备份",
+        "rolloutBackupsCount": "{{count}} 个批次",
+        "noRolloutBackups": "暂无可恢复的 rollout 备份。",
+        "rolloutBackupSummary": "{{sessions}} 条会话 / {{rollouts}} 个冲突 rollout 备份 / {{instances}} 个实例",
+        "restoreRolloutBackup": "恢复 rollout 备份",
+        "rolloutBackupConfirm": "这里是恢复会话时Codex sessions目录原本存在且与废纸篓内产生冲突的rollout备份，不是cockpit tools内废纸篓的备份，确定要恢复吗"
       },
       "targetModal": {
         "title": "复制到实例",

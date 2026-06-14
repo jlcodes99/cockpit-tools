@@ -2338,7 +2338,12 @@
         "title": "نقل إلى المهملات",
         "message": "سيتم نقل الجلسات المحددة إلى سلة المهملات من المثيلات المقابلة لتسهيل استعادتها لاحقًا؛ قد تحتاج المثيلات قيد التشغيل إلى إعادة تشغيل قبل ظهور التغييرات. هل تريد المتابعة؟",
         "syncMessage": "ستتم مزامنة السلاسل والجلسات المفقودة إلى جميع المثيلات. لن تتم كتابة المحتوى الموجود مرة أخرى، وسيتم نسخ ملفات المثيل الهدف احتياطيًا قبل أي كتابة. هل تريد المتابعة؟",
-        "repairVisibilityMessage": "سيؤدي هذا إلى إصلاح بيانات تعريف المزوّد في ملفات rollout وملف state_5.sqlite باستخدام قيمة model_provider من ملف config.toml الجذري لكل مثيل (وسيُستخدم openai افتراضيًا إذا كانت مفقودة). ستؤخذ نسخة احتياطية من الملفات التي سيجري تعديلها قبل الكتابة. قد تحتاج المثيلات قيد التشغيل إلى إعادة التشغيل قبل ظهور التغيير. هل تريد المتابعة؟"
+        "repairVisibilityMessage": "يصلح بيانات provider في ملفات rollout و state_5.sqlite باستخدام model_provider من ملف config.toml الجذري لكل مثيل (ويستخدم openai عند غيابه). إذا كانت مصادر الجلسات ستخفي مشاريع Codex في الشريط الجانبي الأيسر، فسيتم عرض قائمة جلسات للتأكيد أولًا. يتم نسخ الملفات المتغيرة احتياطيًا قبل الكتابة. هل تريد المتابعة؟",
+        "sourceRepairTitle": "استعادة ظهور الشريط الجانبي في Codex",
+        "sourceRepairMessage": "تم العثور على {{count}} جلسة غير مؤرشفة مصدرها ليس cli؛ قد تبقى مخفية من مشاريع/جلسات الشريط الجانبي في Codex. عند التأكيد سيتم إرجاع مصادر الجلسات التالية إلى cli:\n{{items}}\n\nهل تريد إصلاح ظهور هذه الجلسات في الشريط الجانبي؟",
+        "restoreSourceRepairMessage": "تحتوي جلسات سلة المهملات المحددة على {{count}} ملف rollout غير مؤرشف مصدره ليس cli. قد تبقى مخفية في الشريط الجانبي لـ Codex إذا تمت استعادتها كما هي. عند التأكيد سيتم تغيير المصادر التالية إلى cli أثناء الاستعادة:\n{{items}}\n\nهل تريد الاستعادة وإصلاح الظهور؟",
+        "forceRestoreTitle": "تأكيد الاستعادة القسرية",
+        "forceRestoreMessage": "تم العثور على {{count}} تعارض في ملفات rollout بنفس الاسم وبمحتوى مختلف. عند المتابعة سيتم نسخ ملفات rollout المتعارضة من Codex sessions وملف session_index.jsonl المطابق احتياطيًا، ثم الكتابة فوقها من سلة المهملات وإعادة بناء الفهرس. يتم عد قائمة النسخ الاحتياطية حسب ملفات rollout المتعارضة هذه وعددها {{count}}؛ يمكن لهذه المعاينة استعادة {{restorable}} جلسة / {{rollouts}} ملف rollout إجمالًا. هل تريد المتابعة؟"
       },
       "empty": {
         "title": "لا توجد جلسات لإدارتها",
@@ -2348,23 +2353,38 @@
         "pickOne": "يرجى تحديد جلسة واحدة على الأقل",
         "syncNeedTwo": "يلزم وجود مثيلين على الأقل لمزامنة الجلسات",
         "pickRestoreOne": "يرجى تحديد جلسة واحدة على الأقل لاستعادتها",
-        "repairVisibilitySkippedOnly": "لم يتم العثور على اختلافات provider قابلة للكتابة؛ تم تخطي {{count}} ملف state_5.sqlite غير صالح أو تالف. يجب أن يعيد Codex إنشاءها قبل إصلاح سجلات SQLite فيها.",
-        "repairVisibilitySkippedWithBase": "{{message}}؛ تم تخطي {{count}} ملف state_5.sqlite غير صالح أو تالف. يجب أن يعيد Codex إنشاءها قبل إصلاح سجلات SQLite فيها."
+        "repairVisibilitySkippedOnly": "لم يتم العثور على فروقات provider قابلة للكتابة؛ تم تخطي {{count}} ملف state_5.sqlite غير صالح أو تالف. يجب أن يعيد Codex إنشاءها قبل إصلاح سجلات SQLite؛ {{restartInstruction}}",
+        "repairVisibilitySkippedWithBase": "{{message}}؛ تم تخطي {{count}} ملف state_5.sqlite غير صالح أو تالف. يجب أن يعيد Codex إنشاءها قبل إصلاح سجلات SQLite؛ {{restartInstruction}}",
+        "restartAfterRestore": "انتظر {{seconds}} ثانية، ثم أغلق عملية Codex بالكامل وشغّلها من جديد",
+        "repairVisibilityRestartInstruction": "انتظر 10 ثوانٍ، ثم أغلق عملية Codex بالكامل وشغّلها من جديد"
       },
       "groupCount": "{{count}} جلسة",
       "updatedAt": "تم التحديث",
       "labels": {
         "sessionId": "معرّف الجلسة",
-        "tokenUsage": "استخدام الرموز"
+        "tokenUsage": "استخدام الرموز",
+        "unknownCwd": "مجلد عمل غير معروف",
+        "moreHidden": "{{count}} عناصر أخرى غير معروضة",
+        "archived": "مؤرشف",
+        "removed": "محذوف",
+        "projectless": "محادثة",
+        "projectlessGroup": "المحادثات",
+        "projectlessHint": "محادثة بلا مشروع"
       },
       "locationRunning": " (قيد التشغيل)",
       "untitled": "جلسة بدون عنوان",
       "restoreModal": {
         "title": "استعادة الجلسات",
-        "hint": "عند الاستعادة ستعود ملف rollout وسطر الخيط في SQLite ومدخل session_index معًا إلى المثيل الأصلي.",
+        "hint": "تُعيد الاستعادة ملفات rollout وإدخالات session_index وأوقات ملفات الجلسة إلى المثيل الأصلي. إذا كان المصدر سيخفي مشاريع Codex في الشريط الجانبي الأيسر، فسيتم طلب تأكيد قائمة الجلسات أولًا ثم يعيد Codex الرسمي بناء فهرس الجلسات.",
         "emptyTitle": "سلة المهملات فارغة",
         "emptyDesc": "ستظهر هنا الجلسات المنقولة إلى سلة المهملات.",
-        "restoreAction": "استعادة الجلسات المحددة"
+        "restoreAction": "استعادة الجلسات المحددة",
+        "rolloutBackupsTitle": "نسخ استعادة rollout الاحتياطية",
+        "rolloutBackupsCount": "{{count}} دفعة",
+        "noRolloutBackups": "لا توجد نسخ rollout احتياطية قابلة للاستعادة.",
+        "rolloutBackupSummary": "{{sessions}} جلسة / {{rollouts}} نسخة rollout متعارضة / {{instances}} مثيل",
+        "restoreRolloutBackup": "استعادة نسخة rollout الاحتياطية",
+        "rolloutBackupConfirm": "هذه نسخ rollout احتياطية كانت موجودة مسبقًا في مجلد Codex sessions وتعارضت مع سلة المهملات أثناء استعادة الجلسة. ليست نسخًا احتياطية من سلة مهملات Cockpit Tools. هل تريد استعادتها؟"
       },
       "targetModal": {
         "title": "نسخ إلى المثيل",

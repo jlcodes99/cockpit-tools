@@ -2292,7 +2292,12 @@
         "title": "휴지통으로 이동",
         "message": "선택한 세션은 각 인스턴스에서 휴지통으로 이동되어 나중에 복원할 수 있습니다. 실행 중인 인스턴스는 변경 사항이 보이기 전에 재시작이 필요할 수 있습니다. 계속하시겠습니까?",
         "syncMessage": "누락된 스레드와 해당 세션 데이터가 모든 인스턴스로 동기화됩니다. 기존 내용은 다시 기록되지 않으며, 쓰기 전에 대상 인스턴스 파일을 백업합니다. 계속하시겠습니까?",
-        "repairVisibilityMessage": "각 인스턴스의 루트 config.toml에 있는 model_provider 값을 사용해 rollout 파일과 state_5.sqlite의 공급자 메타데이터를 복구합니다(없으면 openai를 기본값으로 사용). 변경될 파일은 쓰기 전에 백업됩니다. 변경 사항이 반영되기 전에 실행 중인 인스턴스를 다시 시작해야 할 수 있습니다. 계속할까요?"
+        "repairVisibilityMessage": "각 인스턴스의 루트 config.toml model_provider(없으면 openai)를 사용해 rollout 파일과 state_5.sqlite의 provider 메타데이터를 복구합니다. Codex 왼쪽 사이드바 프로젝트를 숨기게 만드는 세션 source가 발견되면 먼저 세션 목록을 표시하고 확인을 요청합니다. 변경될 파일은 쓰기 전에 백업됩니다. 계속할까요?",
+        "sourceRepairTitle": "Codex 사이드바 표시 복구",
+        "sourceRepairMessage": "source가 cli가 아닌 비보관 세션 {{count}}개를 발견했습니다. 이 경우 Codex 왼쪽 사이드바의 프로젝트/세션이 보이지 않을 수 있습니다. 확인하면 다음 세션 source를 cli로 되돌립니다:\n{{items}}\n\n이 세션들의 사이드바 표시를 복구할까요?",
+        "restoreSourceRepairMessage": "선택한 휴지통 세션에 source가 cli가 아닌 비보관 rollout {{count}}개가 있습니다. 그대로 복원하면 Codex 사이드바에 여전히 보이지 않을 수 있습니다. 확인하면 복원 중 다음 세션 source를 cli로 변경합니다:\n{{items}}\n\n복원하고 사이드바 표시도 복구할까요?",
+        "forceRestoreTitle": "강제 덮어쓰기 복원 확인",
+        "forceRestoreMessage": "같은 이름이지만 내용이 다른 rollout 파일 충돌 {{count}}개를 발견했습니다. 계속하면 Codex sessions 디렉터리의 해당 충돌 rollout 파일과 관련 session_index.jsonl을 먼저 백업한 뒤, 휴지통 파일로 덮어쓰고 인덱스를 다시 빌드합니다. 백업 목록은 이 {{count}}개의 충돌 rollout 파일 기준으로 집계됩니다. 이번 사전 확인에서는 총 {{restorable}}개 세션 / {{rollouts}}개 rollout 파일을 복원할 수 있습니다. 계속할까요?"
       },
       "empty": {
         "title": "관리할 세션이 없습니다",
@@ -2302,23 +2307,38 @@
         "pickOne": "세션을 하나 이상 선택해 주세요",
         "syncNeedTwo": "세션을 동기화하려면 인스턴스가 두 개 이상 필요합니다",
         "pickRestoreOne": "복원할 세션을 하나 이상 선택하세요",
-        "repairVisibilitySkippedOnly": "쓸 수 있는 provider 차이가 발견되지 않았습니다. 유효하지 않거나 손상된 state_5.sqlite 파일 {{count}}개를 건너뛰었습니다. 해당 SQLite 레코드를 복구하려면 먼저 Codex가 이 파일들을 다시 생성해야 합니다.",
-        "repairVisibilitySkippedWithBase": "{{message}}; 유효하지 않거나 손상된 state_5.sqlite 파일 {{count}}개를 건너뛰었습니다. 해당 SQLite 레코드를 복구하려면 먼저 Codex가 이 파일들을 다시 생성해야 합니다."
+        "repairVisibilitySkippedOnly": "쓸 provider 차이가 없습니다. 유효하지 않거나 손상된 state_5.sqlite {{count}}개를 건너뛰었습니다. SQLite 레코드를 복구하려면 Codex가 다시 생성해야 합니다; {{restartInstruction}}",
+        "repairVisibilitySkippedWithBase": "{{message}}; 유효하지 않거나 손상된 state_5.sqlite {{count}}개를 건너뛰었습니다. SQLite 레코드를 복구하려면 Codex가 다시 생성해야 합니다; {{restartInstruction}}",
+        "restartAfterRestore": "{{seconds}}초 후 Codex 프로세스를 완전히 종료한 다음 다시 시작해야 합니다",
+        "repairVisibilityRestartInstruction": "10초 후 Codex 프로세스를 완전히 종료한 다음 다시 시작하세요"
       },
       "groupCount": "{{count}}개 세션",
       "updatedAt": "업데이트됨",
       "labels": {
         "sessionId": "세션 ID",
-        "tokenUsage": "토큰 사용량"
+        "tokenUsage": "토큰 사용량",
+        "unknownCwd": "알 수 없는 작업 디렉터리",
+        "moreHidden": "{{count}}개 더 숨김",
+        "archived": "보관됨",
+        "removed": "제거됨",
+        "projectless": "채팅",
+        "projectlessGroup": "채팅",
+        "projectlessHint": "프로젝트 없는 채팅"
       },
       "locationRunning": " (실행 중)",
       "untitled": "제목 없는 세션",
       "restoreModal": {
         "title": "세션 복원",
-        "hint": "복원하면 rollout 파일, SQLite 스레드 행, session_index 항목이 함께 원래 인스턴스로 돌아갑니다.",
+        "hint": "복원은 rollout 파일, session_index 항목, 세션 파일 시간을 원래 인스턴스로 되돌립니다. source 때문에 Codex 왼쪽 사이드바 프로젝트가 숨겨질 수 있으면 먼저 세션 목록 확인을 받은 뒤 공식 Codex 세션 인덱스 재빌드를 실행합니다.",
         "emptyTitle": "휴지통이 비어 있습니다",
         "emptyDesc": "휴지통으로 이동한 세션이 여기에 표시됩니다.",
-        "restoreAction": "선택한 세션 복원"
+        "restoreAction": "선택한 세션 복원",
+        "rolloutBackupsTitle": "rollout 복원 백업",
+        "rolloutBackupsCount": "{{count}}개 배치",
+        "noRolloutBackups": "복원 가능한 rollout 백업이 없습니다.",
+        "rolloutBackupSummary": "{{sessions}}개 세션 / {{rollouts}}개 충돌 rollout 백업 / {{instances}}개 인스턴스",
+        "restoreRolloutBackup": "rollout 백업 복원",
+        "rolloutBackupConfirm": "이 항목은 세션 복원 시 Codex sessions 디렉터리에 이미 존재했고 휴지통 내용과 충돌한 rollout 백업입니다. Cockpit Tools 휴지통 백업이 아닙니다. 복원할까요?"
       },
       "targetModal": {
         "title": "인스턴스에 복사",

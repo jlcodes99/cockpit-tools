@@ -2292,7 +2292,12 @@
         "title": "Çöp kutusuna taşı",
         "message": "Seçilen oturumlar daha sonra geri yüklenebilmesi için ilgili örneklerden çöp kutusuna taşınacaktır. Çalışan örneklerin değişikliğin görünmesi için yeniden başlatılması gerekebilir. Devam edilsin mi?",
         "syncMessage": "Eksik iş parçacıkları ve bunlara ait oturum verileri tüm örneklerle eşitlenecektir. Mevcut içerik yeniden yazılmayacak ve hedef örnek dosyaları herhangi bir yazma işleminden önce yedeklenecektir. Devam edilsin mi?",
-        "repairVisibilityMessage": "Bu işlem, her örneğin kök config.toml dosyasındaki model_provider değerini kullanarak rollout dosyaları ve state_5.sqlite içindeki sağlayıcı meta verilerini onarır (eksikse varsayılan olarak openai kullanılır). Değiştirilecek dosyalar yazılmadan önce yedeklenir. Değişikliğin görünmesi için çalışan örneklerin yeniden başlatılması gerekebilir. Devam edilsin mi?"
+        "repairVisibilityMessage": "Her örneğin kök config.toml model_provider değerini kullanarak (yoksa openai) rollout dosyaları ve state_5.sqlite içindeki provider meta verilerini onarır. Oturum kaynakları Codex sol kenar çubuğu projelerini gizleyecekse önce onay için oturum listesi gösterilir. Değişecek dosyalar yazmadan önce yedeklenir. Devam edilsin mi?",
+        "sourceRepairTitle": "Codex kenar çubuğu görünürlüğünü geri getir",
+        "sourceRepairMessage": "Kaynağı cli olmayan {{count}} arşivlenmemiş oturum bulundu; bunlar Codex sol kenar çubuğundaki proje/oturumlarda gizli kalabilir. Onaylarsanız aşağıdaki oturum kaynakları cli olarak geri alınır:\n{{items}}\n\nBu oturumların kenar çubuğu görünürlüğü onarılsın mı?",
+        "restoreSourceRepairMessage": "Seçilen çöp kutusu oturumlarında kaynağı cli olmayan {{count}} arşivlenmemiş rollout var. Olduğu gibi geri yüklenirse Codex kenar çubuğunda yine gizli kalabilir. Onaylarsanız geri yükleme sırasında aşağıdaki kaynaklar cli yapılır:\n{{items}}\n\nGeri yüklenip görünürlük onarılsın mı?",
+        "forceRestoreTitle": "Zorunlu geri yüklemeyi onayla",
+        "forceRestoreMessage": "Aynı adlı ama içeriği farklı {{count}} rollout dosyası çakışması bulundu. Devam edilirse Codex sessions içindeki bu çakışan rollout dosyaları ve ilgili session_index.jsonl önce yedeklenir, sonra çöp kutusundan üzerine yazılır ve indeks yeniden oluşturulur. Yedek listesi bu {{count}} çakışan rollout dosyasına göre sayılır; bu önizleme toplam {{restorable}} oturum / {{rollouts}} rollout dosyası geri yükleyebilir. Devam edilsin mi?"
       },
       "empty": {
         "title": "Yönetilecek oturum yok",
@@ -2302,23 +2307,38 @@
         "pickOne": "Lütfen en az bir oturum seçin",
         "syncNeedTwo": "Oturumları eşitlemek için en az iki örnek gerekir",
         "pickRestoreOne": "Lütfen geri yüklenecek en az bir oturum seçin",
-        "repairVisibilitySkippedOnly": "Yazılabilir provider farkı bulunamadı; geçersiz veya bozuk {{count}} state_5.sqlite dosyası atlandı. Bu SQLite kayıtları onarılmadan önce Codex bu dosyaları yeniden oluşturmalıdır.",
-        "repairVisibilitySkippedWithBase": "{{message}}; geçersiz veya bozuk {{count}} state_5.sqlite dosyası atlandı. Bu SQLite kayıtları onarılmadan önce Codex bu dosyaları yeniden oluşturmalıdır."
+        "repairVisibilitySkippedOnly": "Yazılabilir provider farkı bulunmadı; {{count}} geçersiz veya bozuk state_5.sqlite dosyası atlandı. SQLite kayıtları onarılmadan önce Codex bunları yeniden oluşturmalıdır; {{restartInstruction}}",
+        "repairVisibilitySkippedWithBase": "{{message}}; {{count}} geçersiz veya bozuk state_5.sqlite dosyası atlandı. SQLite kayıtları onarılmadan önce Codex bunları yeniden oluşturmalıdır; {{restartInstruction}}",
+        "restartAfterRestore": "{{seconds}} saniye bekleyin, ardından Codex sürecini tamamen kapatıp yeniden başlatın",
+        "repairVisibilityRestartInstruction": "10 saniye bekleyin, ardından Codex sürecini tamamen kapatıp yeniden başlatın"
       },
       "groupCount": "{{count}} oturum",
       "updatedAt": "Güncellendi",
       "labels": {
         "sessionId": "Oturum kimliği",
-        "tokenUsage": "Token kullanımı"
+        "tokenUsage": "Token kullanımı",
+        "unknownCwd": "Bilinmeyen çalışma dizini",
+        "moreHidden": "{{count}} tane daha gösterilmedi",
+        "archived": "Arşivlendi",
+        "removed": "Kaldırıldı",
+        "projectless": "Sohbet",
+        "projectlessGroup": "Sohbetler",
+        "projectlessHint": "Projesiz sohbet"
       },
       "locationRunning": " (çalışıyor)",
       "untitled": "Adsız oturum",
       "restoreModal": {
         "title": "Oturumları geri yükle",
-        "hint": "Geri yükleme sırasında rollout dosyası, SQLite ileti satırı ve session_index girdisi birlikte özgün örneğe geri konur.",
+        "hint": "Geri yükleme rollout dosyalarını, session_index girdilerini ve dosya zamanlarını özgün örneğe koyar. Bir kaynak Codex sol kenar çubuğu projelerini gizleyecekse önce oturum listesiyle onay alınır, ardından resmi Codex oturum indeksini yeniden oluşturur.",
         "emptyTitle": "Çöp kutusu boş",
         "emptyDesc": "Çöp kutusuna taşınan oturumlar burada görünür.",
-        "restoreAction": "Seçili oturumları geri yükle"
+        "restoreAction": "Seçili oturumları geri yükle",
+        "rolloutBackupsTitle": "rollout geri yükleme yedekleri",
+        "rolloutBackupsCount": "{{count}} parti",
+        "noRolloutBackups": "Geri yüklenebilir rollout yedeği yok.",
+        "rolloutBackupSummary": "{{sessions}} oturum / {{rollouts}} çakışan rollout yedeği / {{instances}} örnek",
+        "restoreRolloutBackup": "rollout yedeğini geri yükle",
+        "rolloutBackupConfirm": "Bunlar oturum geri yükleme sırasında Codex sessions dizininde zaten bulunan ve çöp kutusuyla çakışan rollout yedekleridir. Cockpit Tools çöp kutusu yedekleri değildir. Geri yüklensin mi?"
       },
       "targetModal": {
         "title": "Örneğe kopyala",

@@ -159,8 +159,12 @@ export interface CodexSessionVisibilityRepairItem {
   instanceName: string;
   targetProvider: string;
   changedRolloutFileCount: number;
+  normalizedSourceCount: number;
   updatedSqliteRowCount: number;
+  missingSqliteThreadCount: number;
   addedSessionIndexEntryCount: number;
+  repairedProjectIndexWorkspaceCount: number;
+  metadataRebuildFailed: boolean;
   skippedSqliteFile: boolean;
   backupDir?: string | null;
   running: boolean;
@@ -170,11 +174,32 @@ export interface CodexSessionVisibilityRepairSummary {
   instanceCount: number;
   mutatedInstanceCount: number;
   changedRolloutFileCount: number;
+  normalizedSourceCount: number;
   updatedSqliteRowCount: number;
+  missingSqliteThreadCount: number;
   addedSessionIndexEntryCount: number;
+  repairedProjectIndexWorkspaceCount: number;
+  metadataRebuildFailedInstanceCount: number;
   skippedSqliteFileCount: number;
   items: CodexSessionVisibilityRepairItem[];
   backupDirs: string[];
+  message: string;
+}
+
+export interface CodexSessionSourceRepairCandidate {
+  sessionId: string;
+  title: string;
+  cwd: string;
+  instanceId: string;
+  instanceName: string;
+  currentSource: string;
+  targetSource: string;
+  rolloutPath: string;
+}
+
+export interface CodexSessionSourceRepairPreviewSummary {
+  sourceRepairCount: number;
+  candidates: CodexSessionSourceRepairCandidate[];
   message: string;
 }
 
@@ -182,6 +207,9 @@ export interface CodexSessionLocation {
   instanceId: string;
   instanceName: string;
   running: boolean;
+  sourceKind: 'sessions' | 'archived_sessions';
+  projectless: boolean;
+  removed: boolean;
 }
 
 export interface CodexSessionRecord {
@@ -189,6 +217,11 @@ export interface CodexSessionRecord {
   title: string;
   cwd: string;
   updatedAt?: number | null;
+  archived: boolean;
+  hasArchivedLocation: boolean;
+  projectless: boolean;
+  removed: boolean;
+  hasRemovedLocation: boolean;
   locationCount: number;
   locations: CodexSessionLocation[];
 }
@@ -238,7 +271,50 @@ export interface CodexSessionRestoreSummary {
   requestedSessionCount: number;
   restoredSessionCount: number;
   restoredInstanceCount: number;
+  backupBatchId?: string | null;
   message: string;
+}
+
+export interface CodexSessionRestoreConflict {
+  sessionId: string;
+  title: string;
+  cwd: string;
+  instanceId: string;
+  instanceName: string;
+  targetRolloutPath: string;
+  trashedRolloutPath: string;
+}
+
+export interface CodexSessionRestorePreviewSummary {
+  requestedSessionCount: number;
+  restorableSessionCount: number;
+  restorableInstanceCount: number;
+  restorableRolloutFileCount: number;
+  conflictCount: number;
+  conflictRolloutFileCount: number;
+  sourceRepairCount: number;
+  conflicts: CodexSessionRestoreConflict[];
+  sourceRepairCandidates: CodexSessionSourceRepairCandidate[];
+  message: string;
+}
+
+export interface CodexSessionRolloutBackupItem {
+  sessionId: string;
+  title: string;
+  cwd: string;
+  instanceId: string;
+  instanceName: string;
+  targetRolloutPath: string;
+}
+
+export interface CodexSessionRolloutBackupBatch {
+  batchId: string;
+  createdAt?: number | null;
+  backupDir: string;
+  sessionCount: number;
+  rolloutFileCount: number;
+  instanceCount: number;
+  items: CodexSessionRolloutBackupItem[];
 }
 
 type JsonRecord = Record<string, unknown>;

@@ -2292,7 +2292,12 @@
         "title": "In den Papierkorb verschieben",
         "message": "Ausgewählte Sitzungen werden aus den jeweiligen Instanzen in den Papierkorb verschoben, damit sie später wiederhergestellt werden können. Laufende Instanzen müssen möglicherweise neu gestartet werden, bevor die Änderung sichtbar wird. Fortfahren?",
         "syncMessage": "Fehlende Threads und ihre Sitzungsdaten werden in alle Instanzen synchronisiert. Vorhandene Inhalte werden nicht erneut geschrieben, und die Dateien der Zielinstanz werden vor jedem Schreibvorgang gesichert. Fortfahren?",
-        "repairVisibilityMessage": "Dadurch werden die Anbieter-Metadaten in Rollout-Dateien und in state_5.sqlite anhand des model_provider aus der jeweiligen root-config.toml der Instanz repariert (wenn er fehlt, wird standardmäßig openai verwendet). Dateien, die geändert werden, werden vor dem Schreiben gesichert. Bei laufenden Instanzen kann ein Neustart nötig sein, bevor die Änderung sichtbar wird. Fortfahren?"
+        "repairVisibilityMessage": "Repariert provider-Metadaten in rollout-Dateien und state_5.sqlite anhand des model_provider aus der root config.toml jeder Instanz (bei Fehlen openai). Wenn Session-Quellen Codex-Projekte in der linken Seitenleiste ausblenden würden, wird zuerst eine Sitzungslisten-Bestätigung angezeigt. Geänderte Dateien werden vor dem Schreiben gesichert. Fortfahren?",
+        "sourceRepairTitle": "Codex-Sidebar-Sichtbarkeit wiederherstellen",
+        "sourceRepairMessage": "{{count}} nicht archivierte Sitzung(en) haben eine Quelle ungleich cli und können dadurch in Codex-Projekten/Sitzungen der linken Seitenleiste verborgen bleiben. Nach Bestätigung werden diese Quellen auf cli zurückgesetzt:\n{{items}}\n\nSichtbarkeit für diese Sitzungen reparieren?",
+        "restoreSourceRepairMessage": "Die ausgewählten Papierkorb-Sitzungen enthalten {{count}} nicht archivierte rollout-Datei(en) mit einer Quelle ungleich cli. Eine unveränderte Wiederherstellung könnte sie weiterhin in der Codex-Seitenleiste verbergen. Nach Bestätigung werden diese Quellen während der Wiederherstellung auf cli gesetzt:\n{{items}}\n\nWiederherstellen und Sichtbarkeit reparieren?",
+        "forceRestoreTitle": "Erzwungene Wiederherstellung bestätigen",
+        "forceRestoreMessage": "{{count}} gleichnamige rollout-Dateikonflikt(e) mit unterschiedlichem Inhalt gefunden. Beim Fortfahren werden diese Konflikt-rollout-Dateien aus Codex sessions und die passende session_index.jsonl gesichert, danach aus dem Papierkorb überschrieben und der Index neu aufgebaut. Die Backup-Liste zählt diese {{count}} Konflikt-rollout-Dateien; diese Vorschau kann insgesamt {{restorable}} Sitzung(en) / {{rollouts}} rollout-Datei(en) wiederherstellen. Fortfahren?"
       },
       "empty": {
         "title": "Keine Sitzungen zur Verwaltung",
@@ -2302,23 +2307,38 @@
         "pickOne": "Bitte wähle mindestens eine Sitzung aus",
         "syncNeedTwo": "Mindestens zwei Instanzen sind erforderlich, um Sitzungen zu synchronisieren",
         "pickRestoreOne": "Bitte wählen Sie mindestens eine Sitzung zur Wiederherstellung aus",
-        "repairVisibilitySkippedOnly": "Es wurden keine schreibbaren Provider-Unterschiede gefunden; {{count}} ungültige oder beschädigte state_5.sqlite-Datei(en) wurden übersprungen. Codex muss sie neu erstellen, bevor ihre SQLite-Einträge repariert werden können.",
-        "repairVisibilitySkippedWithBase": "{{message}}; {{count}} ungültige oder beschädigte state_5.sqlite-Datei(en) wurden übersprungen. Codex muss sie neu erstellen, bevor ihre SQLite-Einträge repariert werden können."
+        "repairVisibilitySkippedOnly": "Keine schreibbaren provider-Unterschiede gefunden; {{count}} ungültige oder beschädigte state_5.sqlite-Datei(en) übersprungen. Codex muss sie neu erzeugen, bevor SQLite-Einträge repariert werden können; {{restartInstruction}}",
+        "repairVisibilitySkippedWithBase": "{{message}}; {{count}} ungültige oder beschädigte state_5.sqlite-Datei(en) übersprungen. Codex muss sie neu erzeugen, bevor SQLite-Einträge repariert werden können; {{restartInstruction}}",
+        "restartAfterRestore": "{{seconds}} Sekunden warten, dann den Codex-Prozess vollständig beenden und erneut starten",
+        "repairVisibilityRestartInstruction": "10 Sekunden warten, dann den Codex-Prozess vollständig beenden und erneut starten"
       },
       "groupCount": "{{count}} Sitzungen",
       "updatedAt": "Aktualisiert",
       "labels": {
         "sessionId": "Sitzungs-ID",
-        "tokenUsage": "Token-Nutzung"
+        "tokenUsage": "Token-Nutzung",
+        "unknownCwd": "Unbekanntes Arbeitsverzeichnis",
+        "moreHidden": "{{count}} weitere nicht angezeigt",
+        "archived": "Archiviert",
+        "removed": "Entfernt",
+        "projectless": "Chat",
+        "projectlessGroup": "Chats",
+        "projectlessHint": "Projektloser Chat"
       },
       "locationRunning": " (wird ausgeführt)",
       "untitled": "Unbenannte Sitzung",
       "restoreModal": {
         "title": "Sitzungen wiederherstellen",
-        "hint": "Bei der Wiederherstellung werden die Rollout-Datei, die SQLite-Thread-Zeile und der session_index-Eintrag gemeinsam in die ursprüngliche Instanz zurückgelegt.",
+        "hint": "Die Wiederherstellung legt rollout-Dateien, session_index-Einträge und Dateizeiten in die ursprüngliche Instanz zurück. Wenn eine Quelle Codex-Projekte in der linken Seitenleiste ausblenden würde, wird zuerst eine Sitzungslisten-Bestätigung angezeigt und danach der offizielle Codex-Index neu aufgebaut.",
         "emptyTitle": "Papierkorb ist leer",
         "emptyDesc": "In den Papierkorb verschobene Sitzungen erscheinen hier.",
-        "restoreAction": "Ausgewählte Sitzungen wiederherstellen"
+        "restoreAction": "Ausgewählte Sitzungen wiederherstellen",
+        "rolloutBackupsTitle": "rollout-Wiederherstellungsbackups",
+        "rolloutBackupsCount": "{{count}} Batch(es)",
+        "noRolloutBackups": "Keine wiederherstellbaren rollout-Backups vorhanden.",
+        "rolloutBackupSummary": "{{sessions}} Sitzung(en) / {{rollouts}} Konflikt-rollout-Backup(s) / {{instances}} Instanz(en)",
+        "restoreRolloutBackup": "rollout-Backup wiederherstellen",
+        "rolloutBackupConfirm": "Dies sind rollout-Backups, die beim Wiederherstellen bereits im Codex sessions-Verzeichnis vorhanden waren und mit dem Papierkorb kollidierten. Es sind keine Cockpit Tools Papierkorb-Backups. Wiederherstellen?"
       },
       "targetModal": {
         "title": "In Instanz kopieren",

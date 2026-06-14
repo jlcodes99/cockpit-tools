@@ -2292,7 +2292,12 @@
         "title": "Mover para a lixeira",
         "message": "As sessões selecionadas serão movidas para a lixeira de suas instâncias para que possam ser restauradas depois. Instâncias em execução podem precisar ser reiniciadas antes que a mudança apareça. Continuar?",
         "syncMessage": "Os threads ausentes e seus dados de sessão serão sincronizados com todas as instâncias. O conteúdo existente não será gravado novamente, e os arquivos da instância de destino serão copiados antes de qualquer gravação. Continuar?",
-        "repairVisibilityMessage": "Isto vai reparar os metadados do provedor nos arquivos rollout e em state_5.sqlite usando o model_provider do config.toml raiz de cada instância (se estiver ausente, o padrão será openai). Os arquivos que serão alterados recebem backup antes da gravação. Instâncias em execução podem precisar ser reiniciadas antes que a mudança apareça. Continuar?"
+        "repairVisibilityMessage": "Repara os metadados provider nos arquivos rollout e em state_5.sqlite usando o model_provider do config.toml raiz de cada instância (openai se ausente). Se fontes de sessão ocultarem projetos na barra lateral do Codex, uma lista de sessões será mostrada primeiro para confirmação. Os arquivos alterados são salvos antes da gravação. Continuar?",
+        "sourceRepairTitle": "Restaurar visibilidade na barra do Codex",
+        "sourceRepairMessage": "{{count}} sessão(ões) não arquivadas têm fonte diferente de cli e podem ficar ocultas nos projetos/sessões da barra lateral do Codex. Ao confirmar, estas fontes voltarão para cli:\n{{items}}\n\nReparar a visibilidade dessas sessões?",
+        "restoreSourceRepairMessage": "As sessões selecionadas da lixeira incluem {{count}} arquivo(s) rollout não arquivados cuja fonte não é cli. Restaurá-los assim ainda pode deixá-los ocultos na barra do Codex. Ao confirmar, estas fontes serão alteradas para cli durante a restauração:\n{{items}}\n\nRestaurar e reparar a visibilidade?",
+        "forceRestoreTitle": "Confirmar restauração forçada",
+        "forceRestoreMessage": "Encontrados {{count}} conflito(s) de arquivos rollout com mesmo nome e conteúdo diferente. Continuar fará backup desses rollout conflitantes de Codex sessions e do session_index.jsonl correspondente, depois sobrescreverá a partir da lixeira e reconstruirá o índice. A lista de backups conta esses {{count}} rollout conflitantes; esta prévia pode restaurar {{restorable}} sessão(ões) / {{rollouts}} arquivo(s) rollout no total. Continuar?"
       },
       "empty": {
         "title": "Nenhuma sessão para gerenciar",
@@ -2302,23 +2307,38 @@
         "pickOne": "Selecione pelo menos uma sessão",
         "syncNeedTwo": "Pelo menos duas instâncias são necessárias para sincronizar sessões",
         "pickRestoreOne": "Selecione pelo menos uma sessão para restaurar",
-        "repairVisibilitySkippedOnly": "Nenhuma diferença de provider gravável foi encontrada; {{count}} arquivo(s) state_5.sqlite inválidos ou corrompidos foram ignorados. O Codex precisa recriá-los antes que seus registros SQLite possam ser reparados.",
-        "repairVisibilitySkippedWithBase": "{{message}}; {{count}} arquivo(s) state_5.sqlite inválidos ou corrompidos foram ignorados. O Codex precisa recriá-los antes que seus registros SQLite possam ser reparados."
+        "repairVisibilitySkippedOnly": "Nenhuma diferença provider gravável encontrada; {{count}} arquivo(s) state_5.sqlite inválidos ou corrompidos foram ignorados. O Codex deve regenerá-los antes que os registros SQLite possam ser reparados; {{restartInstruction}}",
+        "repairVisibilitySkippedWithBase": "{{message}}; {{count}} arquivo(s) state_5.sqlite inválidos ou corrompidos foram ignorados. O Codex deve regenerá-los antes que os registros SQLite possam ser reparados; {{restartInstruction}}",
+        "restartAfterRestore": "Aguarde {{seconds}} segundos, depois encerre completamente o processo Codex e inicie novamente",
+        "repairVisibilityRestartInstruction": "Aguarde 10 segundos, depois encerre completamente o processo Codex e inicie novamente"
       },
       "groupCount": "{{count}} sessões",
       "updatedAt": "Atualizado",
       "labels": {
         "sessionId": "ID da sessão",
-        "tokenUsage": "Uso de tokens"
+        "tokenUsage": "Uso de tokens",
+        "unknownCwd": "Diretório de trabalho desconhecido",
+        "moreHidden": "{{count}} mais não exibido(s)",
+        "archived": "Arquivado",
+        "removed": "Removido",
+        "projectless": "Chat",
+        "projectlessGroup": "Chats",
+        "projectlessHint": "Chat sem projeto"
       },
       "locationRunning": " (em execução)",
       "untitled": "Sessão sem título",
       "restoreModal": {
         "title": "Restaurar sessões",
-        "hint": "Ao restaurar, o arquivo rollout, a linha da thread no SQLite e a entrada de session_index voltam juntos para a instância original.",
+        "hint": "A restauração coloca arquivos rollout, entradas session_index e horários dos arquivos de volta na instância original. Se uma fonte ocultar projetos na barra lateral do Codex, uma lista de sessões será confirmada primeiro e então o Codex oficial reconstruirá o índice.",
         "emptyTitle": "A lixeira está vazia",
         "emptyDesc": "As sessões movidas para a lixeira aparecerão aqui.",
-        "restoreAction": "Restaurar sessões selecionadas"
+        "restoreAction": "Restaurar sessões selecionadas",
+        "rolloutBackupsTitle": "Backups de restauração rollout",
+        "rolloutBackupsCount": "{{count}} lote(s)",
+        "noRolloutBackups": "Nenhum backup rollout restaurável.",
+        "rolloutBackupSummary": "{{sessions}} sessão(ões) / {{rollouts}} backup(s) rollout conflitantes / {{instances}} instância(s)",
+        "restoreRolloutBackup": "Restaurar backup rollout",
+        "rolloutBackupConfirm": "Estes são backups rollout que já existiam no diretório Codex sessions e entraram em conflito com a lixeira durante a restauração. Não são backups da lixeira do Cockpit Tools. Restaurar?"
       },
       "targetModal": {
         "title": "Copiar para instância",

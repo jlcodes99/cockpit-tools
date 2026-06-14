@@ -14,6 +14,14 @@ const DEFAULT_INSTANCE_ID: &str = "__default__";
 const DEFAULT_INSTANCE_NAME: &str = "默认实例";
 const SESSION_INDEX_FILE: &str = "session_index.jsonl";
 const GLOBAL_STATE_FILE: &str = ".codex-global-state.json";
+const ELECTRON_PERSISTED_ATOM_STATE_KEY: &str = "electron-persisted-atom-state";
+const PROJECT_ORDER_KEY: &str = "project-order";
+const SAVED_WORKSPACE_ROOTS_KEY: &str = "electron-saved-workspace-roots";
+const PROJECTLESS_THREAD_IDS_KEY: &str = "projectless-thread-ids";
+const SIDEBAR_CHAT_THREAD_ORDER_KEY: &str = "sidebar-chat-thread-order";
+const SIDEBAR_PROJECT_THREAD_ORDERS_KEY: &str = "sidebar-project-thread-orders";
+const THREAD_WORKSPACE_ROOT_HINTS_KEY: &str = "thread-workspace-root-hints";
+const THREAD_PROJECTLESS_OUTPUT_DIRECTORIES_KEY: &str = "thread-projectless-output-directories";
 const BACKUP_FILE_NAMES: [&str; 2] = [SESSION_INDEX_FILE, GLOBAL_STATE_FILE];
 const SESSION_DIRS: [&str; 2] = ["sessions", "archived_sessions"];
 
@@ -73,7 +81,15 @@ struct ThreadSnapshot {
     session_index_entry: JsonValue,
     workspace_root: Option<String>,
     source_root: PathBuf,
+    archived: bool,
     freshness: ThreadFreshness,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CodexSidebarThreadEntry {
+    pub session_id: String,
+    pub workspace_root: Option<String>,
+    pub archived: bool,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
@@ -191,9 +207,11 @@ pub fn sync_threads_across_instances() -> Result<CodexInstanceThreadSyncSummary,
             }
         }
 
-        let missing_workspace_roots =
-            find_missing_thread_workspace_roots(&instance.data_dir, &expected_snapshots)?;
-        let repairs_project_index = !missing_workspace_roots.is_empty();
+        let sidebar_state_repair_count = count_sidebar_global_state_repairs_for_snapshots(
+            &instance.data_dir,
+            &expected_snapshots,
+        )?;
+        let repairs_project_index = sidebar_state_repair_count > 0;
 
         if plan_items.is_empty() && !repairs_project_index {
             items.push(CodexInstanceThreadSyncItem {
@@ -238,7 +256,7 @@ pub fn sync_threads_across_instances() -> Result<CodexInstanceThreadSyncSummary,
         "所有 Codex 实例会话已是最新，无需同步".to_string()
     } else if total_synced_thread_count == 0 {
         format!(
-            "会话内容已是最新，已修复 {} 个实例的项目索引",
+            "会话内容已是最新，已修复 {} 个实例的 Codex 侧栏状态",
             project_index_repaired_instance_count
         )
     } else if mutated_running_instance_count > 0 {
@@ -262,7 +280,7 @@ pub fn sync_threads_across_instances() -> Result<CodexInstanceThreadSyncSummary,
     let message = append_metadata_rebuild_warning(
         message,
         metadata_rebuild_failed_instance_count,
-        total_synced_thread_count,
+        mutated_instance_count,
     );
 
     Ok(CodexInstanceThreadSyncSummary {
@@ -497,6 +515,7 @@ fn load_thread_snapshots(instance: &CodexSyncInstance) -> Result<Vec<ThreadSnaps
                 session_index_entry,
                 workspace_root,
                 source_root: instance.data_dir.clone(),
+                archived: dir_name == "archived_sessions",
                 freshness,
             });
         }
@@ -612,16 +631,19 @@ fn sync_thread_plan_to_instance(
         rewrite_rollout_provider_for_target(&target_rollout_path, &target_provider)?;
     }
 
-    let mut metadata_rebuild_failed = false;
+    let mut should_rebuild_metadata = false;
     if !plan_items.is_empty() {
         let snapshots = plan_items
             .iter()
             .map(|item| item.snapshot.clone())
             .collect::<Vec<_>>();
         upsert_session_index_entries(&target.data_dir, &snapshots)?;
-        metadata_rebuild_failed = !try_rebuild_thread_metadata(target);
+        should_rebuild_metadata = true;
     }
-    update_global_state_thread_workspaces(&target.data_dir, workspace_snapshots)?;
+    if update_global_state_thread_workspaces(&target.data_dir, workspace_snapshots)? {
+        should_rebuild_metadata = true;
+    }
+    let metadata_rebuild_failed = should_rebuild_metadata && !try_rebuild_thread_metadata(target);
     Ok(ThreadSyncWriteResult {
         backup_dir,
         metadata_rebuild_failed,
@@ -646,9 +668,9 @@ fn try_rebuild_thread_metadata(target: &CodexSyncInstance) -> bool {
 fn append_metadata_rebuild_warning(
     message: String,
     failed_instance_count: usize,
-    synced_thread_count: usize,
+    repaired_instance_count: usize,
 ) -> String {
-    if failed_instance_count == 0 || synced_thread_count == 0 {
+    if failed_instance_count == 0 || repaired_instance_count == 0 {
         return message;
     }
 
@@ -1093,6 +1115,36 @@ fn collect_thread_workspace_roots(snapshots: &[ThreadSnapshot]) -> Vec<String> {
     roots
 }
 
+fn normalize_workspace_roots(values: &[String]) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut roots = Vec::new();
+    for value in values {
+        let Some(root) = normalize_workspace_root(value) else {
+            continue;
+        };
+        if seen.insert(root.clone()) {
+            roots.push(root);
+        }
+    }
+    roots
+}
+
+pub(crate) fn count_missing_project_index_workspace_roots(
+    root_dir: &Path,
+    workspace_roots: &[String],
+) -> Result<usize, String> {
+    let roots = normalize_workspace_roots(workspace_roots);
+    Ok(find_missing_workspace_roots(root_dir, &roots)?.len())
+}
+
+pub(crate) fn repair_project_index_workspace_roots(
+    root_dir: &Path,
+    workspace_roots: &[String],
+) -> Result<bool, String> {
+    let roots = normalize_workspace_roots(workspace_roots);
+    update_global_state_workspace_roots(root_dir, &roots)
+}
+
 fn snapshot_workspace_root(snapshot: &ThreadSnapshot) -> Option<String> {
     snapshot
         .workspace_root
@@ -1141,6 +1193,15 @@ fn normalize_workspace_root(value: &str) -> Option<String> {
     if normalized.trim().is_empty() {
         None
     } else {
+        if is_windows_path
+            && normalized
+                .as_bytes()
+                .get(1)
+                .is_some_and(|separator| *separator == b':')
+        {
+            let drive = normalized[..1].to_ascii_uppercase();
+            normalized.replace_range(0..1, &drive);
+        }
         Some(normalized)
     }
 }
@@ -1154,6 +1215,48 @@ fn read_global_state(root_dir: &Path) -> Result<JsonValue, String> {
     let raw = fs::read_to_string(&path)
         .map_err(|error| format!("读取全局状态失败 ({}): {}", path.display(), error))?;
     Ok(serde_json::from_str::<JsonValue>(&raw).unwrap_or_else(|_| json!({})))
+}
+
+fn read_global_state_file(path: &Path) -> Option<JsonValue> {
+    let raw = fs::read_to_string(path).ok()?;
+    serde_json::from_str::<JsonValue>(&raw).ok()
+}
+
+fn read_global_state_history(root_dir: &Path, current: &JsonValue) -> Vec<JsonValue> {
+    let mut candidates = Vec::<(SystemTime, JsonValue)>::new();
+    let entries = match fs::read_dir(root_dir) {
+        Ok(entries) => entries,
+        Err(_) => return vec![current.clone()],
+    };
+
+    for entry in entries.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if !file_type.is_dir() {
+            continue;
+        }
+        let path = entry.path();
+        let direct = path.join(GLOBAL_STATE_FILE);
+        let nested = path.join("files").join(GLOBAL_STATE_FILE);
+        for state_path in [direct, nested] {
+            let Some(value) = read_global_state_file(&state_path) else {
+                continue;
+            };
+            let modified = fs::metadata(&state_path)
+                .and_then(|metadata| metadata.modified())
+                .unwrap_or(UNIX_EPOCH);
+            candidates.push((modified, value));
+        }
+    }
+
+    candidates.sort_by(|left, right| right.0.cmp(&left.0));
+    let mut values = candidates
+        .into_iter()
+        .map(|(_, value)| value)
+        .collect::<Vec<_>>();
+    values.push(current.clone());
+    values
 }
 
 fn global_state_array_contains(
@@ -1172,26 +1275,45 @@ fn global_state_array_contains(
         .unwrap_or(false)
 }
 
+fn global_state_workspace_array_contains(
+    object: &serde_json::Map<String, JsonValue>,
+    key: &str,
+    workspace: &str,
+) -> bool {
+    if let Some(atom_state) = object
+        .get(ELECTRON_PERSISTED_ATOM_STATE_KEY)
+        .and_then(JsonValue::as_object)
+    {
+        return global_state_array_contains(atom_state, key, workspace);
+    }
+    global_state_array_contains(object, key, workspace)
+}
+
 fn find_missing_thread_workspace_roots(
     root_dir: &Path,
     snapshots: &[ThreadSnapshot],
 ) -> Result<Vec<String>, String> {
     let roots = collect_thread_workspace_roots(snapshots);
+    find_missing_workspace_roots(root_dir, &roots)
+}
+
+fn find_missing_workspace_roots(root_dir: &Path, roots: &[String]) -> Result<Vec<String>, String> {
     if roots.is_empty() {
         return Ok(Vec::new());
     }
 
     let value = read_global_state(root_dir)?;
     let Some(object) = value.as_object() else {
-        return Ok(roots);
+        return Ok(roots.to_vec());
     };
 
     Ok(roots
-        .into_iter()
+        .iter()
         .filter(|root| {
-            !global_state_array_contains(object, "project-order", root)
-                || !global_state_array_contains(object, "electron-saved-workspace-roots", root)
+            !global_state_workspace_array_contains(object, PROJECT_ORDER_KEY, root)
+                || !global_state_workspace_array_contains(object, SAVED_WORKSPACE_ROOTS_KEY, root)
         })
+        .cloned()
         .collect())
 }
 
@@ -1199,7 +1321,30 @@ fn update_global_state_thread_workspaces(
     root_dir: &Path,
     snapshots: &[ThreadSnapshot],
 ) -> Result<bool, String> {
-    let roots = collect_thread_workspace_roots(snapshots);
+    let entries = sidebar_entries_from_snapshots(snapshots);
+    repair_sidebar_global_state_for_threads(root_dir, &entries).map(|changed| changed > 0)
+}
+
+fn count_sidebar_global_state_repairs_for_snapshots(
+    root_dir: &Path,
+    snapshots: &[ThreadSnapshot],
+) -> Result<usize, String> {
+    let entries = sidebar_entries_from_snapshots(snapshots);
+    count_missing_sidebar_global_state_for_threads(root_dir, &entries)
+}
+
+fn sidebar_entries_from_snapshots(snapshots: &[ThreadSnapshot]) -> Vec<CodexSidebarThreadEntry> {
+    snapshots
+        .iter()
+        .map(|snapshot| CodexSidebarThreadEntry {
+            session_id: snapshot.id.clone(),
+            workspace_root: snapshot_workspace_root(snapshot),
+            archived: snapshot.archived,
+        })
+        .collect::<Vec<_>>()
+}
+
+fn update_global_state_workspace_roots(root_dir: &Path, roots: &[String]) -> Result<bool, String> {
     if roots.is_empty() {
         return Ok(false);
     }
@@ -1214,8 +1359,11 @@ fn update_global_state_thread_workspaces(
     };
 
     let mut changed = false;
-    changed |= merge_string_array(object, "project-order", &roots);
-    changed |= merge_string_array(object, "electron-saved-workspace-roots", &roots);
+    changed |= merge_string_array(object, PROJECT_ORDER_KEY, &roots);
+    changed |= merge_string_array(object, SAVED_WORKSPACE_ROOTS_KEY, &roots);
+    let atom_state = ensure_object_child(object, ELECTRON_PERSISTED_ATOM_STATE_KEY)?;
+    changed |= merge_string_array(atom_state, PROJECT_ORDER_KEY, &roots);
+    changed |= merge_string_array(atom_state, SAVED_WORKSPACE_ROOTS_KEY, &roots);
 
     if changed {
         let serialized = serde_json::to_string_pretty(&value)
@@ -1225,6 +1373,20 @@ fn update_global_state_thread_workspaces(
     }
 
     Ok(changed)
+}
+
+fn ensure_object_child<'a>(
+    object: &'a mut serde_json::Map<String, JsonValue>,
+    key: &str,
+) -> Result<&'a mut serde_json::Map<String, JsonValue>, String> {
+    let needs_object = !object.get(key).is_some_and(JsonValue::is_object);
+    if needs_object {
+        object.insert(key.to_string(), json!({}));
+    }
+    object
+        .get_mut(key)
+        .and_then(JsonValue::as_object_mut)
+        .ok_or_else(|| format!("全局状态字段 {} 格式无效", key))
 }
 
 fn merge_string_array(
@@ -1264,6 +1426,516 @@ fn merge_string_array(
     }
 
     changed
+}
+
+fn json_string_array(value: &JsonValue, key: &str) -> Vec<String> {
+    value
+        .get(key)
+        .and_then(JsonValue::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(JsonValue::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn normalized_project_roots_from_state(value: &JsonValue) -> Vec<String> {
+    normalize_workspace_roots(&json_string_array(value, PROJECT_ORDER_KEY))
+}
+
+fn projectless_output_parent_roots(value: &JsonValue) -> HashSet<String> {
+    value
+        .get(THREAD_PROJECTLESS_OUTPUT_DIRECTORIES_KEY)
+        .and_then(JsonValue::as_object)
+        .map(|object| {
+            object
+                .values()
+                .filter_map(JsonValue::as_str)
+                .filter_map(|output_dir| {
+                    let output_path = Path::new(output_dir);
+                    let parent = match output_path.file_name().and_then(|name| name.to_str()) {
+                        Some(name) if name.eq_ignore_ascii_case("outputs") => output_path.parent(),
+                        _ => Some(output_path),
+                    }?;
+                    normalize_workspace_root(&parent.to_string_lossy())
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn removed_project_roots_from_semantic_state(value: &JsonValue) -> HashSet<String> {
+    let visible_roots = normalized_project_roots_from_state(value)
+        .into_iter()
+        .collect::<HashSet<_>>();
+    value
+        .get(SIDEBAR_PROJECT_THREAD_ORDERS_KEY)
+        .and_then(JsonValue::as_object)
+        .map(|object| {
+            object
+                .keys()
+                .filter_map(|root| normalize_workspace_root(root))
+                .filter(|root| !visible_roots.contains(root))
+                .collect::<HashSet<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn state_sidebar_semantic_score(value: &JsonValue) -> usize {
+    [
+        PROJECTLESS_THREAD_IDS_KEY,
+        SIDEBAR_CHAT_THREAD_ORDER_KEY,
+        SIDEBAR_PROJECT_THREAD_ORDERS_KEY,
+        THREAD_WORKSPACE_ROOT_HINTS_KEY,
+        THREAD_PROJECTLESS_OUTPUT_DIRECTORIES_KEY,
+    ]
+    .iter()
+    .filter(|key| value.get(**key).is_some())
+    .count()
+}
+
+fn projectless_project_order_pollution_count(value: &JsonValue) -> usize {
+    let projectless_roots = projectless_output_parent_roots(value);
+    if projectless_roots.is_empty() {
+        return 0;
+    }
+    normalized_project_roots_from_state(value)
+        .iter()
+        .filter(|root| projectless_roots.contains(*root))
+        .count()
+}
+
+fn select_sidebar_semantic_state(history: &[JsonValue]) -> Option<&JsonValue> {
+    history
+        .iter()
+        .filter(|value| state_sidebar_semantic_score(value) > 0)
+        .max_by(|left, right| {
+            let left_pollution = projectless_project_order_pollution_count(left);
+            let right_pollution = projectless_project_order_pollution_count(right);
+            right_pollution.cmp(&left_pollution).then_with(|| {
+                state_sidebar_semantic_score(left).cmp(&state_sidebar_semantic_score(right))
+            })
+        })
+}
+
+fn normalized_root_key(value: &str) -> String {
+    normalize_workspace_root(value).unwrap_or_else(|| value.trim().to_string())
+}
+
+fn active_sidebar_entries(entries: &[CodexSidebarThreadEntry]) -> Vec<CodexSidebarThreadEntry> {
+    entries
+        .iter()
+        .filter(|entry| !entry.archived && !entry.session_id.trim().is_empty())
+        .cloned()
+        .collect()
+}
+
+fn filtered_active_id_array(values: Vec<String>, active_ids: &HashSet<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut result = Vec::new();
+    for value in values {
+        if !active_ids.contains(&value) || !seen.insert(value.clone()) {
+            continue;
+        }
+        result.push(value);
+    }
+    result
+}
+
+fn visible_project_roots_for_sidebar_repair(
+    current: &JsonValue,
+    semantic_state: Option<&JsonValue>,
+    entries: &[CodexSidebarThreadEntry],
+    projectless_roots: &HashSet<String>,
+    projectless_ids: &HashSet<String>,
+) -> Vec<String> {
+    let semantic_roots = semantic_state
+        .map(normalized_project_roots_from_state)
+        .unwrap_or_default();
+    let removed_roots = semantic_state
+        .map(removed_project_roots_from_semantic_state)
+        .unwrap_or_default();
+    let current_roots = normalized_project_roots_from_state(current);
+    let mut roots = if current_roots.is_empty() {
+        semantic_roots.clone()
+    } else {
+        current_roots
+    };
+
+    roots.retain(|root| !projectless_roots.contains(root) && !removed_roots.contains(root));
+    roots = normalize_workspace_roots(&roots);
+    let mut seen = roots.iter().cloned().collect::<HashSet<_>>();
+    for root in semantic_roots {
+        if projectless_roots.contains(&root) || removed_roots.contains(&root) {
+            continue;
+        }
+        if seen.insert(root.clone()) {
+            roots.push(root);
+        }
+    }
+    if !roots.is_empty() {
+        return roots;
+    }
+
+    let mut seen = HashSet::new();
+    let mut fallback = Vec::new();
+    for entry in entries {
+        if projectless_ids.contains(&entry.session_id) {
+            continue;
+        }
+        let Some(root) = entry
+            .workspace_root
+            .as_deref()
+            .and_then(normalize_workspace_root)
+        else {
+            continue;
+        };
+        if projectless_roots.contains(&root) {
+            continue;
+        }
+        if seen.insert(root.clone()) {
+            fallback.push(root);
+        }
+    }
+    fallback
+}
+
+fn set_json_string_array(
+    object: &mut serde_json::Map<String, JsonValue>,
+    key: &str,
+    values: &[String],
+) -> bool {
+    let next = JsonValue::Array(values.iter().cloned().map(JsonValue::String).collect());
+    if object.get(key) == Some(&next) {
+        return false;
+    }
+    object.insert(key.to_string(), next);
+    true
+}
+
+fn set_project_root_arrays(
+    object: &mut serde_json::Map<String, JsonValue>,
+    roots: &[String],
+) -> Result<usize, String> {
+    let mut changed = 0usize;
+    if set_json_string_array(object, PROJECT_ORDER_KEY, roots) {
+        changed += 1;
+    }
+    if set_json_string_array(object, SAVED_WORKSPACE_ROOTS_KEY, roots) {
+        changed += 1;
+    }
+    let atom_state = ensure_object_child(object, ELECTRON_PERSISTED_ATOM_STATE_KEY)?;
+    if set_json_string_array(atom_state, PROJECT_ORDER_KEY, roots) {
+        changed += 1;
+    }
+    if set_json_string_array(atom_state, SAVED_WORKSPACE_ROOTS_KEY, roots) {
+        changed += 1;
+    }
+    Ok(changed)
+}
+
+fn set_string_map(
+    object: &mut serde_json::Map<String, JsonValue>,
+    key: &str,
+    values: &HashMap<String, String>,
+) -> bool {
+    let mut keys = values.keys().cloned().collect::<Vec<_>>();
+    keys.sort();
+    let mut next = serde_json::Map::new();
+    for map_key in keys {
+        if let Some(value) = values.get(&map_key) {
+            next.insert(map_key, JsonValue::String(value.clone()));
+        }
+    }
+    let next = JsonValue::Object(next);
+    if object.get(key) == Some(&next) {
+        return false;
+    }
+    object.insert(key.to_string(), next);
+    true
+}
+
+fn set_project_thread_orders(
+    object: &mut serde_json::Map<String, JsonValue>,
+    orders: &HashMap<String, Vec<String>>,
+) -> bool {
+    let mut roots = orders.keys().cloned().collect::<Vec<_>>();
+    roots.sort();
+    let mut next = serde_json::Map::new();
+    for root in roots {
+        if let Some(ids) = orders.get(&root) {
+            if ids.is_empty() {
+                continue;
+            }
+            next.insert(
+                root,
+                JsonValue::Array(ids.iter().cloned().map(JsonValue::String).collect()),
+            );
+        }
+    }
+    let next = JsonValue::Object(next);
+    if object.get(SIDEBAR_PROJECT_THREAD_ORDERS_KEY) == Some(&next) {
+        return false;
+    }
+    object.insert(SIDEBAR_PROJECT_THREAD_ORDERS_KEY.to_string(), next);
+    true
+}
+
+fn sidebar_state_string_map(
+    value: Option<&JsonValue>,
+    key: &str,
+    active_ids: &HashSet<String>,
+    allowed_ids: Option<&HashSet<String>>,
+) -> HashMap<String, String> {
+    value
+        .and_then(|state| state.get(key))
+        .and_then(JsonValue::as_object)
+        .map(|object| {
+            object
+                .iter()
+                .filter_map(|(item_key, item_value)| {
+                    if !active_ids.contains(item_key) {
+                        return None;
+                    }
+                    if allowed_ids.is_some_and(|ids| !ids.contains(item_key)) {
+                        return None;
+                    }
+                    item_value
+                        .as_str()
+                        .map(|value| (item_key.clone(), value.to_string()))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn sidebar_project_thread_orders(
+    semantic_state: Option<&JsonValue>,
+    entries: &[CodexSidebarThreadEntry],
+    active_ids: &HashSet<String>,
+    projectless_ids: &HashSet<String>,
+    visible_roots: &[String],
+) -> HashMap<String, Vec<String>> {
+    let mut orders = HashMap::<String, Vec<String>>::new();
+    if let Some(object) = semantic_state
+        .and_then(|state| state.get(SIDEBAR_PROJECT_THREAD_ORDERS_KEY))
+        .and_then(JsonValue::as_object)
+    {
+        for (root, ids) in object {
+            let Some(root) = normalize_workspace_root(root) else {
+                continue;
+            };
+            let filtered = filtered_active_id_array(
+                ids.as_array()
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(JsonValue::as_str)
+                            .map(str::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                active_ids,
+            )
+            .into_iter()
+            .filter(|id| !projectless_ids.contains(id))
+            .collect::<Vec<_>>();
+            if !filtered.is_empty() {
+                orders.insert(root, filtered);
+            }
+        }
+    }
+
+    let visible_root_set = visible_roots.iter().cloned().collect::<HashSet<_>>();
+    for entry in entries {
+        if projectless_ids.contains(&entry.session_id) {
+            continue;
+        }
+        let Some(root) = entry
+            .workspace_root
+            .as_deref()
+            .and_then(normalize_workspace_root)
+        else {
+            continue;
+        };
+        if !visible_root_set.contains(&root) && !orders.contains_key(&root) {
+            continue;
+        }
+        let ids = orders.entry(root).or_default();
+        if !ids.contains(&entry.session_id) {
+            ids.push(entry.session_id.clone());
+        }
+    }
+
+    orders
+}
+
+fn build_repaired_sidebar_global_state(
+    root_dir: &Path,
+    entries: &[CodexSidebarThreadEntry],
+) -> Result<(JsonValue, usize), String> {
+    let active_entries = active_sidebar_entries(entries);
+    if active_entries.is_empty() {
+        return Ok((read_global_state(root_dir)?, 0));
+    }
+
+    let mut current = read_global_state(root_dir)?;
+    if !current.is_object() {
+        current = json!({});
+    }
+    let history = read_global_state_history(root_dir, &current);
+    let semantic_state = select_sidebar_semantic_state(&history);
+    let active_ids = active_entries
+        .iter()
+        .map(|entry| entry.session_id.clone())
+        .collect::<HashSet<_>>();
+
+    let mut projectless_ids = filtered_active_id_array(
+        semantic_state
+            .map(|state| json_string_array(state, PROJECTLESS_THREAD_IDS_KEY))
+            .unwrap_or_default(),
+        &active_ids,
+    )
+    .into_iter()
+    .collect::<HashSet<_>>();
+    let output_dirs = sidebar_state_string_map(
+        semantic_state,
+        THREAD_PROJECTLESS_OUTPUT_DIRECTORIES_KEY,
+        &active_ids,
+        None,
+    );
+    projectless_ids.extend(output_dirs.keys().cloned());
+    let projectless_roots = semantic_state
+        .map(projectless_output_parent_roots)
+        .unwrap_or_default();
+    for entry in &active_entries {
+        let Some(root) = entry
+            .workspace_root
+            .as_deref()
+            .and_then(normalize_workspace_root)
+        else {
+            continue;
+        };
+        if projectless_roots.contains(&root) {
+            projectless_ids.insert(entry.session_id.clone());
+        }
+    }
+
+    let projectless_ids_vec = {
+        let preferred = semantic_state
+            .map(|state| json_string_array(state, PROJECTLESS_THREAD_IDS_KEY))
+            .unwrap_or_default();
+        let mut values = filtered_active_id_array(preferred, &active_ids);
+        for id in &projectless_ids {
+            if !values.contains(id) {
+                values.push(id.clone());
+            }
+        }
+        values
+    };
+    let projectless_id_set = projectless_ids_vec.iter().cloned().collect::<HashSet<_>>();
+    let output_dirs = sidebar_state_string_map(
+        semantic_state,
+        THREAD_PROJECTLESS_OUTPUT_DIRECTORIES_KEY,
+        &active_ids,
+        Some(&projectless_id_set),
+    );
+    let workspace_hints = sidebar_state_string_map(
+        semantic_state,
+        THREAD_WORKSPACE_ROOT_HINTS_KEY,
+        &active_ids,
+        Some(&projectless_id_set),
+    );
+    let mut projectless_roots = semantic_state
+        .map(projectless_output_parent_roots)
+        .unwrap_or_default();
+    projectless_roots.extend(output_dirs.values().filter_map(|output_dir| {
+        let output_path = Path::new(output_dir);
+        let parent = match output_path.file_name().and_then(|name| name.to_str()) {
+            Some(name) if name.eq_ignore_ascii_case("outputs") => output_path.parent(),
+            _ => Some(output_path),
+        }?;
+        normalize_workspace_root(&parent.to_string_lossy())
+    }));
+
+    let visible_roots = visible_project_roots_for_sidebar_repair(
+        &current,
+        semantic_state,
+        &active_entries,
+        &projectless_roots,
+        &projectless_id_set,
+    );
+    let mut chat_order = filtered_active_id_array(
+        semantic_state
+            .map(|state| json_string_array(state, SIDEBAR_CHAT_THREAD_ORDER_KEY))
+            .unwrap_or_default(),
+        &active_ids,
+    );
+    for entry in &active_entries {
+        if !chat_order.contains(&entry.session_id) {
+            chat_order.push(entry.session_id.clone());
+        }
+    }
+    let project_thread_orders = sidebar_project_thread_orders(
+        semantic_state,
+        &active_entries,
+        &active_ids,
+        &projectless_id_set,
+        &visible_roots,
+    );
+
+    let Some(object) = current.as_object_mut() else {
+        return Err("全局状态文件格式无效".to_string());
+    };
+    let mut changed = set_project_root_arrays(object, &visible_roots)?;
+    if set_json_string_array(object, PROJECTLESS_THREAD_IDS_KEY, &projectless_ids_vec) {
+        changed += 1;
+    }
+    if set_json_string_array(object, SIDEBAR_CHAT_THREAD_ORDER_KEY, &chat_order) {
+        changed += 1;
+    }
+    if set_project_thread_orders(object, &project_thread_orders) {
+        changed += 1;
+    }
+    if set_string_map(object, THREAD_WORKSPACE_ROOT_HINTS_KEY, &workspace_hints) {
+        changed += 1;
+    }
+    if set_string_map(
+        object,
+        THREAD_PROJECTLESS_OUTPUT_DIRECTORIES_KEY,
+        &output_dirs,
+    ) {
+        changed += 1;
+    }
+
+    Ok((current, changed))
+}
+
+pub(crate) fn count_missing_sidebar_global_state_for_threads(
+    root_dir: &Path,
+    entries: &[CodexSidebarThreadEntry],
+) -> Result<usize, String> {
+    build_repaired_sidebar_global_state(root_dir, entries).map(|(_, changed)| changed)
+}
+
+pub(crate) fn repair_sidebar_global_state_for_threads(
+    root_dir: &Path,
+    entries: &[CodexSidebarThreadEntry],
+) -> Result<usize, String> {
+    let (value, changed) = build_repaired_sidebar_global_state(root_dir, entries)?;
+    if changed == 0 {
+        return Ok(0);
+    }
+
+    let path = root_dir.join(GLOBAL_STATE_FILE);
+    let serialized = serde_json::to_string_pretty(&value)
+        .map_err(|error| format!("序列化全局状态失败: {}", error))?;
+    fs::write(&path, format!("{}\n", serialized))
+        .map_err(|error| format!("写入全局状态失败 ({}): {}", path.display(), error))?;
+    Ok(changed)
 }
 
 fn copy_rollout_file_for_plan(
@@ -1547,6 +2219,7 @@ mod tests {
             session_index_entry: json!({"id":"s1"}),
             workspace_root: None,
             source_root: source_root.clone(),
+            archived: false,
             freshness: ThreadFreshness {
                 activity_ms: 0,
                 rollout_len: 0,
@@ -1614,5 +2287,336 @@ mod tests {
             normalize_workspace_root("C:/Users/demo/project/").as_deref(),
             Some(r"C:\Users\demo\project")
         );
+    }
+
+    #[test]
+    fn project_index_scan_accepts_official_atom_state_workspaces() {
+        let data_dir = make_temp_dir("codex-thread-project-index-scan-test");
+        fs::write(
+            data_dir.join(GLOBAL_STATE_FILE),
+            r#"{"electron-persisted-atom-state":{"project-order":["C:\\Users\\demo\\project"],"electron-saved-workspace-roots":["C:\\Users\\demo\\project"]}}"#,
+        )
+        .expect("write global state");
+        let snapshots = vec![ThreadSnapshot {
+            id: "thread-1".to_string(),
+            rollout_path: data_dir.join("sessions/rollout-test.jsonl"),
+            rollout_actual_modified_at: None,
+            rollout_modified_at: None,
+            merged_rollout_content: None,
+            session_index_entry: json!({"id":"thread-1"}),
+            workspace_root: Some(r"\\?\C:\Users\demo\project\".to_string()),
+            source_root: data_dir.clone(),
+            archived: false,
+            freshness: ThreadFreshness {
+                activity_ms: 0,
+                rollout_len: 0,
+                rollout_modified_ms: 0,
+            },
+        }];
+
+        let missing =
+            find_missing_thread_workspace_roots(&data_dir, &snapshots).expect("scan project index");
+
+        assert!(missing.is_empty());
+        fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn project_index_repair_writes_official_atom_state_workspaces() {
+        let data_dir = make_temp_dir("codex-thread-project-index-write-test");
+        fs::write(
+            data_dir.join(GLOBAL_STATE_FILE),
+            r#"{"electron-persisted-atom-state":{"sidebar-collapsed-sections-v1":{"threads":false}},"other":1}"#,
+        )
+        .expect("write global state");
+        let snapshots = vec![ThreadSnapshot {
+            id: "thread-1".to_string(),
+            rollout_path: data_dir.join("sessions/rollout-test.jsonl"),
+            rollout_actual_modified_at: None,
+            rollout_modified_at: None,
+            merged_rollout_content: None,
+            session_index_entry: json!({"id":"thread-1"}),
+            workspace_root: Some(r"\\?\C:\Users\demo\project\".to_string()),
+            source_root: data_dir.clone(),
+            archived: false,
+            freshness: ThreadFreshness {
+                activity_ms: 0,
+                rollout_len: 0,
+                rollout_modified_ms: 0,
+            },
+        }];
+
+        let changed = update_global_state_thread_workspaces(&data_dir, &snapshots)
+            .expect("repair project index");
+
+        assert!(changed);
+        let state: JsonValue = serde_json::from_str(
+            &fs::read_to_string(data_dir.join(GLOBAL_STATE_FILE)).expect("read global state"),
+        )
+        .expect("parse global state");
+        assert_eq!(state["other"], 1);
+        assert_eq!(
+            state["electron-persisted-atom-state"]["sidebar-collapsed-sections-v1"]["threads"],
+            false
+        );
+        assert_eq!(
+            state["electron-persisted-atom-state"]["project-order"][0],
+            r"C:\Users\demo\project"
+        );
+        assert_eq!(
+            state["electron-persisted-atom-state"]["electron-saved-workspace-roots"][0],
+            r"C:\Users\demo\project"
+        );
+        fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn project_index_scan_treats_top_level_only_as_missing_when_atom_state_exists() {
+        let data_dir = make_temp_dir("codex-thread-project-index-legacy-only-test");
+        fs::write(
+            data_dir.join(GLOBAL_STATE_FILE),
+            r#"{"project-order":["C:\\Users\\demo\\project"],"electron-saved-workspace-roots":["C:\\Users\\demo\\project"],"electron-persisted-atom-state":{"sidebar-collapsed-sections-v1":{"threads":false}}}"#,
+        )
+        .expect("write global state");
+        let snapshots = vec![ThreadSnapshot {
+            id: "thread-1".to_string(),
+            rollout_path: data_dir.join("sessions/rollout-test.jsonl"),
+            rollout_actual_modified_at: None,
+            rollout_modified_at: None,
+            merged_rollout_content: None,
+            session_index_entry: json!({"id":"thread-1"}),
+            workspace_root: Some(r"C:\Users\demo\project".to_string()),
+            source_root: data_dir.clone(),
+            archived: false,
+            freshness: ThreadFreshness {
+                activity_ms: 0,
+                rollout_len: 0,
+                rollout_modified_ms: 0,
+            },
+        }];
+
+        let missing =
+            find_missing_thread_workspace_roots(&data_dir, &snapshots).expect("scan project index");
+
+        assert_eq!(missing, vec![r"C:\Users\demo\project".to_string()]);
+        fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn sidebar_state_scan_detects_missing_semantics_when_roots_are_already_present() {
+        let data_dir = make_temp_dir("codex-thread-sidebar-scan-missing-semantics-test");
+        fs::write(
+            data_dir.join(GLOBAL_STATE_FILE),
+            r#"{"project-order":["C:\\Users\\demo\\real","C:\\Users\\demo\\Documents\\Codex\\2026-06-13\\new-chat"],"electron-saved-workspace-roots":["C:\\Users\\demo\\real","C:\\Users\\demo\\Documents\\Codex\\2026-06-13\\new-chat"],"electron-persisted-atom-state":{"project-order":["C:\\Users\\demo\\real","C:\\Users\\demo\\Documents\\Codex\\2026-06-13\\new-chat"],"electron-saved-workspace-roots":["C:\\Users\\demo\\real","C:\\Users\\demo\\Documents\\Codex\\2026-06-13\\new-chat"]}}"#,
+        )
+        .expect("write over-restored global state");
+        let backup_dir = data_dir.join("backup-20260613-170559-global-state-sidebar-repair");
+        fs::create_dir_all(&backup_dir).expect("create backup dir");
+        fs::write(
+            backup_dir.join(GLOBAL_STATE_FILE),
+            r#"{"project-order":["C:\\Users\\demo\\real"],"electron-saved-workspace-roots":["C:\\Users\\demo\\real"],"projectless-thread-ids":["projectless-thread"],"sidebar-chat-thread-order":["projectless-thread"],"sidebar-project-thread-orders":{"C:\\Users\\demo\\real":["project-thread"]},"thread-workspace-root-hints":{"projectless-thread":"C:\\Users\\demo\\Documents\\Codex"},"thread-projectless-output-directories":{"projectless-thread":"C:\\Users\\demo\\Documents\\Codex\\2026-06-13\\new-chat\\outputs"},"electron-persisted-atom-state":{"project-order":["C:\\Users\\demo\\real"],"electron-saved-workspace-roots":["C:\\Users\\demo\\real"]}}"#,
+        )
+        .expect("write sidebar backup state");
+        let snapshots = vec![
+            ThreadSnapshot {
+                id: "project-thread".to_string(),
+                rollout_path: data_dir.join("sessions/rollout-project.jsonl"),
+                rollout_actual_modified_at: None,
+                rollout_modified_at: None,
+                merged_rollout_content: None,
+                session_index_entry: json!({"id":"project-thread"}),
+                workspace_root: Some(r"C:\Users\demo\real".to_string()),
+                source_root: data_dir.clone(),
+                archived: false,
+                freshness: ThreadFreshness {
+                    activity_ms: 0,
+                    rollout_len: 0,
+                    rollout_modified_ms: 0,
+                },
+            },
+            ThreadSnapshot {
+                id: "projectless-thread".to_string(),
+                rollout_path: data_dir.join("sessions/rollout-projectless.jsonl"),
+                rollout_actual_modified_at: None,
+                rollout_modified_at: None,
+                merged_rollout_content: None,
+                session_index_entry: json!({"id":"projectless-thread"}),
+                workspace_root: Some(
+                    r"C:\Users\demo\Documents\Codex\2026-06-13\new-chat".to_string(),
+                ),
+                source_root: data_dir.clone(),
+                archived: false,
+                freshness: ThreadFreshness {
+                    activity_ms: 0,
+                    rollout_len: 0,
+                    rollout_modified_ms: 0,
+                },
+            },
+        ];
+
+        let legacy_missing =
+            find_missing_thread_workspace_roots(&data_dir, &snapshots).expect("legacy scan");
+        let semantic_missing =
+            count_sidebar_global_state_repairs_for_snapshots(&data_dir, &snapshots)
+                .expect("semantic scan");
+
+        assert!(legacy_missing.is_empty());
+        assert!(semantic_missing > 0);
+        fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn sidebar_state_repair_restores_projectless_state_without_showing_generated_roots() {
+        let data_dir = make_temp_dir("codex-thread-sidebar-projectless-test");
+        fs::write(
+            data_dir.join(GLOBAL_STATE_FILE),
+            r#"{"project-order":["C:\\Users\\demo\\real","C:\\Users\\demo\\Documents\\Codex\\2026-06-13\\new-chat"],"electron-saved-workspace-roots":["C:\\Users\\demo\\real","C:\\Users\\demo\\Documents\\Codex\\2026-06-13\\new-chat"],"electron-persisted-atom-state":{"project-order":["C:\\Users\\demo\\real","C:\\Users\\demo\\Documents\\Codex\\2026-06-13\\new-chat"],"electron-saved-workspace-roots":["C:\\Users\\demo\\real","C:\\Users\\demo\\Documents\\Codex\\2026-06-13\\new-chat"]}}"#,
+        )
+        .expect("write over-restored global state");
+        let backup_dir = data_dir.join("backup-20260613-170559-global-state-sidebar-repair");
+        fs::create_dir_all(&backup_dir).expect("create backup dir");
+        fs::write(
+            backup_dir.join(GLOBAL_STATE_FILE),
+            r#"{"project-order":["C:\\Users\\demo\\real"],"electron-saved-workspace-roots":["C:\\Users\\demo\\real"],"projectless-thread-ids":["projectless-thread"],"sidebar-chat-thread-order":["projectless-thread"],"sidebar-project-thread-orders":{"C:\\Users\\demo\\real":["project-thread"]},"thread-workspace-root-hints":{"projectless-thread":"C:\\Users\\demo\\Documents\\Codex"},"thread-projectless-output-directories":{"projectless-thread":"C:\\Users\\demo\\Documents\\Codex\\2026-06-13\\new-chat\\outputs"},"electron-persisted-atom-state":{"project-order":["C:\\Users\\demo\\real"],"electron-saved-workspace-roots":["C:\\Users\\demo\\real"]}}"#,
+        )
+        .expect("write sidebar backup state");
+        let entries = vec![
+            CodexSidebarThreadEntry {
+                session_id: "project-thread".to_string(),
+                workspace_root: Some(r"C:\Users\demo\real".to_string()),
+                archived: false,
+            },
+            CodexSidebarThreadEntry {
+                session_id: "projectless-thread".to_string(),
+                workspace_root: Some(
+                    r"C:\Users\demo\Documents\Codex\2026-06-13\new-chat".to_string(),
+                ),
+                archived: false,
+            },
+        ];
+
+        let repaired =
+            repair_sidebar_global_state_for_threads(&data_dir, &entries).expect("repair sidebar");
+
+        assert!(repaired > 0);
+        let state: JsonValue = serde_json::from_str(
+            &fs::read_to_string(data_dir.join(GLOBAL_STATE_FILE)).expect("read repaired state"),
+        )
+        .expect("parse repaired state");
+        assert_eq!(state[PROJECT_ORDER_KEY], json!([r"C:\Users\demo\real"]));
+        assert_eq!(
+            state["electron-persisted-atom-state"][PROJECT_ORDER_KEY],
+            json!([r"C:\Users\demo\real"])
+        );
+        assert_eq!(
+            state["projectless-thread-ids"],
+            json!(["projectless-thread"])
+        );
+        assert_eq!(
+            state["thread-projectless-output-directories"]["projectless-thread"],
+            r"C:\Users\demo\Documents\Codex\2026-06-13\new-chat\outputs"
+        );
+        fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn sidebar_state_repair_preserves_removed_project_order_without_readding_project_root() {
+        let data_dir = make_temp_dir("codex-thread-sidebar-removed-project-test");
+        fs::write(
+            data_dir.join(GLOBAL_STATE_FILE),
+            r#"{"project-order":["C:\\Users\\demo\\visible","C:\\Users\\demo\\removed"],"electron-saved-workspace-roots":["C:\\Users\\demo\\visible","C:\\Users\\demo\\removed"],"electron-persisted-atom-state":{"project-order":["C:\\Users\\demo\\visible","C:\\Users\\demo\\removed"],"electron-saved-workspace-roots":["C:\\Users\\demo\\visible","C:\\Users\\demo\\removed"]}}"#,
+        )
+        .expect("write over-restored global state");
+        let backup_dir = data_dir.join("backup-20260613-170559-global-state-sidebar-repair");
+        fs::create_dir_all(&backup_dir).expect("create backup dir");
+        fs::write(
+            backup_dir.join(GLOBAL_STATE_FILE),
+            r#"{"project-order":["C:\\Users\\demo\\visible"],"electron-saved-workspace-roots":["C:\\Users\\demo\\visible"],"sidebar-project-thread-orders":{"C:\\Users\\demo\\visible":["visible-thread"],"C:\\Users\\demo\\removed":["removed-thread"]},"sidebar-chat-thread-order":["visible-thread","removed-thread"],"electron-persisted-atom-state":{"project-order":["C:\\Users\\demo\\visible"],"electron-saved-workspace-roots":["C:\\Users\\demo\\visible"]}}"#,
+        )
+        .expect("write sidebar backup state");
+        let entries = vec![
+            CodexSidebarThreadEntry {
+                session_id: "visible-thread".to_string(),
+                workspace_root: Some(r"C:\Users\demo\visible".to_string()),
+                archived: false,
+            },
+            CodexSidebarThreadEntry {
+                session_id: "removed-thread".to_string(),
+                workspace_root: Some(r"C:\Users\demo\removed".to_string()),
+                archived: false,
+            },
+        ];
+
+        repair_sidebar_global_state_for_threads(&data_dir, &entries).expect("repair sidebar");
+
+        let state: JsonValue = serde_json::from_str(
+            &fs::read_to_string(data_dir.join(GLOBAL_STATE_FILE)).expect("read repaired state"),
+        )
+        .expect("parse repaired state");
+        assert_eq!(state[PROJECT_ORDER_KEY], json!([r"C:\Users\demo\visible"]));
+        assert_eq!(
+            state["sidebar-project-thread-orders"][r"C:\Users\demo\removed"],
+            json!(["removed-thread"])
+        );
+        fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn sidebar_state_repair_preserves_current_roots_not_known_removed_or_projectless() {
+        let data_dir = make_temp_dir("codex-thread-sidebar-preserve-current-roots-test");
+        fs::write(
+            data_dir.join(GLOBAL_STATE_FILE),
+            r#"{"project-order":["C:\\Users\\demo\\visible","C:\\Users\\demo\\new-visible","C:\\Users\\demo\\generated-chat","C:\\Users\\demo\\removed"],"electron-saved-workspace-roots":["C:\\Users\\demo\\visible","C:\\Users\\demo\\new-visible","C:\\Users\\demo\\generated-chat","C:\\Users\\demo\\removed"],"electron-persisted-atom-state":{"project-order":["C:\\Users\\demo\\visible","C:\\Users\\demo\\new-visible","C:\\Users\\demo\\generated-chat","C:\\Users\\demo\\removed"],"electron-saved-workspace-roots":["C:\\Users\\demo\\visible","C:\\Users\\demo\\new-visible","C:\\Users\\demo\\generated-chat","C:\\Users\\demo\\removed"]}}"#,
+        )
+        .expect("write current state with restored roots");
+        let backup_dir = data_dir.join("backup-20260613-170559-global-state-sidebar-repair");
+        fs::create_dir_all(&backup_dir).expect("create backup dir");
+        fs::write(
+            backup_dir.join(GLOBAL_STATE_FILE),
+            r#"{"project-order":["C:\\Users\\demo\\visible"],"electron-saved-workspace-roots":["C:\\Users\\demo\\visible"],"projectless-thread-ids":["projectless-thread"],"sidebar-project-thread-orders":{"C:\\Users\\demo\\visible":["visible-thread"],"C:\\Users\\demo\\removed":["removed-thread"]},"thread-projectless-output-directories":{"projectless-thread":"C:\\Users\\demo\\generated-chat\\outputs"},"electron-persisted-atom-state":{"project-order":["C:\\Users\\demo\\visible"],"electron-saved-workspace-roots":["C:\\Users\\demo\\visible"]}}"#,
+        )
+        .expect("write semantic backup state");
+        let entries = vec![
+            CodexSidebarThreadEntry {
+                session_id: "visible-thread".to_string(),
+                workspace_root: Some(r"C:\Users\demo\visible".to_string()),
+                archived: false,
+            },
+            CodexSidebarThreadEntry {
+                session_id: "new-visible-thread".to_string(),
+                workspace_root: Some(r"C:\Users\demo\new-visible".to_string()),
+                archived: false,
+            },
+            CodexSidebarThreadEntry {
+                session_id: "projectless-thread".to_string(),
+                workspace_root: Some(r"C:\Users\demo\generated-chat".to_string()),
+                archived: false,
+            },
+            CodexSidebarThreadEntry {
+                session_id: "removed-thread".to_string(),
+                workspace_root: Some(r"C:\Users\demo\removed".to_string()),
+                archived: false,
+            },
+        ];
+
+        repair_sidebar_global_state_for_threads(&data_dir, &entries).expect("repair sidebar");
+
+        let state: JsonValue = serde_json::from_str(
+            &fs::read_to_string(data_dir.join(GLOBAL_STATE_FILE)).expect("read repaired state"),
+        )
+        .expect("parse repaired state");
+        assert_eq!(
+            state[PROJECT_ORDER_KEY],
+            json!([r"C:\Users\demo\visible", r"C:\Users\demo\new-visible"])
+        );
+        assert_eq!(
+            state[SIDEBAR_PROJECT_THREAD_ORDERS_KEY][r"C:\Users\demo\new-visible"],
+            json!(["new-visible-thread"])
+        );
+        assert_eq!(
+            state[SIDEBAR_PROJECT_THREAD_ORDERS_KEY][r"C:\Users\demo\removed"],
+            json!(["removed-thread"])
+        );
+        fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
 }

@@ -2292,7 +2292,12 @@
         "title": "ゴミ箱へ移動",
         "message": "選択したセッションは対応するインスタンスからゴミ箱へ移動され、後で復元できます。実行中のインスタンスでは、変更が反映されるまで再起動が必要な場合があります。続行しますか？",
         "syncMessage": "不足しているスレッドとそのセッションデータをすべてのインスタンスに同期します。既存の内容は再書き込みされず、書き込み前に対象インスタンスのファイルをバックアップします。続行しますか？",
-        "repairVisibilityMessage": "この操作では、各インスタンスのルート config.toml にある model_provider を使って、rollout ファイルと state_5.sqlite 内のプロバイダーメタデータを修復します（値がない場合は openai を使用します）。変更対象のファイルは書き込み前にバックアップされます。変更が反映されるまで、実行中のインスタンスを再起動する必要がある場合があります。続行しますか？"
+        "repairVisibilityMessage": "各インスタンスのルート config.toml の model_provider（ない場合は openai）を使って、rollout ファイルと state_5.sqlite の provider メタデータを修復します。Codex 左サイドバーのプロジェクトが非表示になる source が見つかった場合は、先にセッション一覧を表示して確認します。変更対象ファイルは書き込み前にバックアップします。続行しますか？",
+        "sourceRepairTitle": "Codex サイドバー表示を復元",
+        "sourceRepairMessage": "{{count}} 件の非アーカイブセッションの source が cli ではないため、Codex 左サイドバーのプロジェクト/セッションに表示されない可能性があります。確認すると次のセッション source を cli に戻します：\n{{items}}\n\nこれらのセッションのサイドバー表示を修復しますか？",
+        "restoreSourceRepairMessage": "選択したゴミ箱セッションには、source が cli ではない非アーカイブ rollout が {{count}} 個あります。そのまま復元すると Codex サイドバーに表示されない可能性があります。確認すると復元時に次のセッション source を cli に変更します：\n{{items}}\n\n復元してサイドバー表示も修復しますか？",
+        "forceRestoreTitle": "強制上書き復元を確認",
+        "forceRestoreMessage": "同名で内容が異なる rollout ファイル競合が {{count}} 個見つかりました。続行すると、Codex sessions 内のこれらの競合 rollout ファイルと対応する session_index.jsonl をバックアップしてから、ゴミ箱のファイルで上書きし、インデックスを再構築します。バックアップ一覧はこの {{count}} 個の競合 rollout ファイル数で集計されます。この事前確認では合計 {{restorable}} 件のセッション / {{rollouts}} 個の rollout ファイルを復元できます。続行しますか？"
       },
       "empty": {
         "title": "管理できるセッションはまだありません",
@@ -2302,23 +2307,38 @@
         "pickOne": "少なくとも1件のセッションを選択してください",
         "syncNeedTwo": "セッションを同期するには少なくとも2つのインスタンスが必要です",
         "pickRestoreOne": "復元するセッションを 1 つ以上選択してください",
-        "repairVisibilitySkippedOnly": "書き込み可能な provider 差分は見つかりませんでした。無効または破損した state_5.sqlite ファイル {{count}} 件をスキップしました。SQLite レコードを修復するには、先に Codex がそれらを再生成する必要があります。",
-        "repairVisibilitySkippedWithBase": "{{message}}。無効または破損した state_5.sqlite ファイル {{count}} 件をスキップしました。SQLite レコードを修復するには、先に Codex がそれらを再生成する必要があります。"
+        "repairVisibilitySkippedOnly": "書き込みが必要な provider 差分はありません。無効または破損した state_5.sqlite を {{count}} 個スキップしました。SQLite レコードを修復するには Codex に再生成させる必要があります；{{restartInstruction}}",
+        "repairVisibilitySkippedWithBase": "{{message}}；無効または破損した state_5.sqlite を {{count}} 個スキップしました。SQLite レコードを修復するには Codex に再生成させる必要があります；{{restartInstruction}}",
+        "restartAfterRestore": "{{seconds}} 秒待ってから、Codex プロセスを完全に終了して再起動してください",
+        "repairVisibilityRestartInstruction": "10 秒待ってから、Codex プロセスを完全に終了して再起動してください"
       },
       "groupCount": "{{count}} 件のセッション",
       "updatedAt": "更新済み",
       "labels": {
         "sessionId": "セッション ID",
-        "tokenUsage": "Token 使用量"
+        "tokenUsage": "Token 使用量",
+        "unknownCwd": "不明な作業ディレクトリ",
+        "moreHidden": "ほか {{count}} 件は未表示",
+        "archived": "アーカイブ",
+        "removed": "削除済み",
+        "projectless": "チャット",
+        "projectlessGroup": "チャット",
+        "projectlessHint": "プロジェクトなしチャット"
       },
       "locationRunning": "（実行中）",
       "untitled": "無題のセッション",
       "restoreModal": {
         "title": "セッションを復元",
-        "hint": "復元すると、rollout ファイル、SQLite のスレッド行、session_index の項目が元のインスタンスへまとめて戻されます。",
+        "hint": "復元では rollout ファイル、session_index エントリ、セッションファイルの時刻を元のインスタンスへ戻します。source により Codex 左サイドバーのプロジェクトが非表示になる場合は、先にセッション一覧で確認してから公式 Codex のセッションインデックス再構築を実行します。",
         "emptyTitle": "ゴミ箱は空です",
         "emptyDesc": "ゴミ箱へ移動したセッションはここに表示されます。",
-        "restoreAction": "選択したセッションを復元"
+        "restoreAction": "選択したセッションを復元",
+        "rolloutBackupsTitle": "rollout 復元バックアップ",
+        "rolloutBackupsCount": "{{count}} バッチ",
+        "noRolloutBackups": "復元可能な rollout バックアップはありません。",
+        "rolloutBackupSummary": "{{sessions}} 件のセッション / {{rollouts}} 個の競合 rollout バックアップ / {{instances}} 個のインスタンス",
+        "restoreRolloutBackup": "rollout バックアップを復元",
+        "rolloutBackupConfirm": "これはセッション復元時に Codex sessions ディレクトリに既に存在し、ゴミ箱の内容と競合した rollout のバックアップです。Cockpit Tools のゴミ箱バックアップではありません。復元しますか？"
       },
       "targetModal": {
         "title": "インスタンスへコピー",

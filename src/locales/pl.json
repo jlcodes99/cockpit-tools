@@ -2292,7 +2292,12 @@
         "title": "Przenieś do kosza",
         "message": "Wybrane sesje zostaną przeniesione do kosza z odpowiednich instancji, aby można je było później przywrócić. Uruchomione instancje mogą wymagać ponownego uruchomienia, zanim zmiana będzie widoczna. Kontynuować?",
         "syncMessage": "Brakujące wątki i ich dane sesji zostaną zsynchronizowane ze wszystkimi instancjami. Istniejąca zawartość nie zostanie zapisana ponownie, a pliki instancji docelowej zostaną zarchiwizowane przed każdym zapisem. Kontynuować?",
-        "repairVisibilityMessage": "To naprawi metadane dostawcy w plikach rollout i w state_5.sqlite, używając wartości model_provider z głównego pliku config.toml każdej instancji (gdy jej brakuje, zostanie użyte openai). Pliki, które zostaną zmienione, są archiwizowane przed zapisem. Działające instancje mogą wymagać ponownego uruchomienia, zanim zmiana będzie widoczna. Kontynuować?"
+        "repairVisibilityMessage": "Naprawia metadane provider w plikach rollout i state_5.sqlite, używając model_provider z głównego config.toml każdej instancji (openai, gdy brakuje). Jeśli źródła sesji ukrywałyby projekty w lewym panelu Codex, najpierw zostanie pokazana lista sesji do potwierdzenia. Zmieniane pliki są archiwizowane przed zapisem. Kontynuować?",
+        "sourceRepairTitle": "Przywróć widoczność w panelu Codex",
+        "sourceRepairMessage": "Znaleziono {{count}} niearchiwalnych sesji ze źródłem innym niż cli; mogą przez to nie być widoczne w projektach/sesjach lewego panelu Codex. Po potwierdzeniu źródła zostaną przywrócone do cli:\n{{items}}\n\nNaprawić widoczność tych sesji?",
+        "restoreSourceRepairMessage": "Wybrane sesje z kosza zawierają {{count}} niearchiwalnych plików rollout ze źródłem innym niż cli. Przywrócenie bez zmian może nadal ukrywać je w panelu Codex. Po potwierdzeniu źródła zostaną zmienione na cli podczas przywracania:\n{{items}}\n\nPrzywrócić i naprawić widoczność?",
+        "forceRestoreTitle": "Potwierdź wymuszone przywracanie",
+        "forceRestoreMessage": "Znaleziono {{count}} konfliktów plików rollout o tej samej nazwie i różnej treści. Kontynuacja najpierw wykona kopię tych konfliktujących plików rollout z Codex sessions oraz odpowiedniego session_index.jsonl, potem nadpisze je z kosza i przebuduje indeks. Lista kopii jest liczona według tych {{count}} konfliktujących plików rollout; podgląd może łącznie przywrócić {{restorable}} sesji / {{rollouts}} plików rollout. Kontynuować?"
       },
       "empty": {
         "title": "Brak sesji do zarządzania",
@@ -2302,23 +2307,38 @@
         "pickOne": "Wybierz co najmniej jedną sesję",
         "syncNeedTwo": "Do synchronizacji sesji wymagane są co najmniej dwie instancje",
         "pickRestoreOne": "Wybierz co najmniej jedną sesję do przywrócenia",
-        "repairVisibilitySkippedOnly": "Nie znaleziono zapisywalnych różnic provider; pominięto {{count}} nieprawidłowych lub uszkodzonych plików state_5.sqlite. Codex musi je ponownie wygenerować, zanim będzie można naprawić ich rekordy SQLite.",
-        "repairVisibilitySkippedWithBase": "{{message}}; pominięto {{count}} nieprawidłowych lub uszkodzonych plików state_5.sqlite. Codex musi je ponownie wygenerować, zanim będzie można naprawić ich rekordy SQLite."
+        "repairVisibilitySkippedOnly": "Nie znaleziono zapisywalnych różnic provider; pominięto {{count}} nieprawidłowych lub uszkodzonych plików state_5.sqlite. Codex musi je odtworzyć, zanim będzie można naprawić rekordy SQLite; {{restartInstruction}}",
+        "repairVisibilitySkippedWithBase": "{{message}}; pominięto {{count}} nieprawidłowych lub uszkodzonych plików state_5.sqlite. Codex musi je odtworzyć, zanim będzie można naprawić rekordy SQLite; {{restartInstruction}}",
+        "restartAfterRestore": "Odczekaj {{seconds}} s, a potem całkowicie zamknij proces Codex i uruchom go ponownie",
+        "repairVisibilityRestartInstruction": "Odczekaj 10 s, a potem całkowicie zamknij proces Codex i uruchom go ponownie"
       },
       "groupCount": "{{count}} sesji",
       "updatedAt": "Zaktualizowano",
       "labels": {
         "sessionId": "ID sesji",
-        "tokenUsage": "Zużycie tokenów"
+        "tokenUsage": "Zużycie tokenów",
+        "unknownCwd": "Nieznany katalog roboczy",
+        "moreHidden": "{{count}} więcej ukryto",
+        "archived": "Zarchiwizowane",
+        "removed": "Usunięto",
+        "projectless": "Czat",
+        "projectlessGroup": "Czaty",
+        "projectlessHint": "Czat bez projektu"
       },
       "locationRunning": " (uruchomiona)",
       "untitled": "Sesja bez tytułu",
       "restoreModal": {
         "title": "Przywróć sesje",
-        "hint": "Przywrócenie umieszcza plik rollout, wiersz wątku SQLite i wpis session_index z powrotem razem w oryginalnej instancji.",
+        "hint": "Przywracanie odkłada pliki rollout, wpisy session_index i czasy plików do pierwotnej instancji. Jeśli źródło ukrywałoby projekty w lewym panelu Codex, najpierw pojawi się lista sesji do potwierdzenia, a potem oficjalny Codex przebuduje indeks.",
         "emptyTitle": "Kosz jest pusty",
         "emptyDesc": "Sesje przeniesione do kosza pojawią się tutaj.",
-        "restoreAction": "Przywróć wybrane sesje"
+        "restoreAction": "Przywróć wybrane sesje",
+        "rolloutBackupsTitle": "Kopie przywracania rollout",
+        "rolloutBackupsCount": "{{count}} partii",
+        "noRolloutBackups": "Brak kopii rollout do przywrócenia.",
+        "rolloutBackupSummary": "{{sessions}} sesji / {{rollouts}} konfliktujących kopii rollout / {{instances}} instancji",
+        "restoreRolloutBackup": "Przywróć kopię rollout",
+        "rolloutBackupConfirm": "To są kopie rollout, które istniały już w katalogu Codex sessions i konfliktowały z koszem podczas przywracania. Nie są to kopie kosza Cockpit Tools. Przywrócić?"
       },
       "targetModal": {
         "title": "Kopiuj do instancji",

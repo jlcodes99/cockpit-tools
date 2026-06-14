@@ -2866,7 +2866,12 @@
         "title": "Move to Trash",
         "message": "Selected sessions will be moved to Trash from their instances so they can be restored later. Running instances may need a restart before the change appears. Continue?",
         "syncMessage": "Missing rollout files, session_index entries, and session file times will be synced to all instances, then official Codex will rebuild the session index. Existing content will not be written again, and target files are backed up before writing. Continue?",
-        "repairVisibilityMessage": "This will repair provider metadata in rollout files and state_5.sqlite using each instance's root config.toml model_provider (defaulting to openai when missing). Files that will be changed are backed up before writing. Running instances may need a restart before the change appears. Continue?"
+        "repairVisibilityMessage": "This repairs provider metadata in rollout files and state_5.sqlite using each instance's root config.toml model_provider (defaults to openai when missing). If session sources would keep Codex sidebar projects hidden, a session list is shown for confirmation first. Changed files are backed up before writing. Continue?",
+        "sourceRepairTitle": "Restore Codex Sidebar Visibility",
+        "sourceRepairMessage": "Found {{count}} non-archived session(s) whose source is not cli; these can stay hidden from Codex sidebar projects/sessions. Confirm to change the following session sources back to cli:\n{{items}}\n\nContinue repairing sidebar visibility for these sessions?",
+        "restoreSourceRepairMessage": "The selected trash sessions include {{count}} non-archived rollout file(s) whose source is not cli; restoring them as-is may still keep them hidden in the Codex sidebar. Confirm to change the following session sources to cli during restore:\n{{items}}\n\nContinue restoring and repairing sidebar visibility?",
+        "forceRestoreTitle": "Confirm Forced Restore",
+        "forceRestoreMessage": "Found {{count}} same-name rollout file conflict(s) with different content. Continuing backs up those conflicting rollout files from Codex sessions and the matching session_index.jsonl, then overwrites them from Trash and rebuilds the index. The backup list is counted by these {{count}} conflicting rollout files; this preview can restore {{restorable}} session(s) / {{rollouts}} rollout file(s) total. Continue?"
       },
       "empty": {
         "title": "No sessions to manage",
@@ -2876,23 +2881,38 @@
         "pickOne": "Please select at least one session",
         "pickRestoreOne": "Please select at least one session to restore",
         "syncNeedTwo": "At least two instances are required to sync sessions",
-        "repairVisibilitySkippedOnly": "No writable provider differences were found; skipped {{count}} invalid or corrupted state_5.sqlite file(s). Codex must regenerate them before their SQLite records can be repaired.",
-        "repairVisibilitySkippedWithBase": "{{message}}; skipped {{count}} invalid or corrupted state_5.sqlite file(s). Codex must regenerate them before their SQLite records can be repaired."
+        "repairVisibilitySkippedOnly": "No writable provider differences were found; skipped {{count}} invalid or corrupted state_5.sqlite file(s). Codex must regenerate them before their SQLite records can be repaired; {{restartInstruction}}",
+        "repairVisibilitySkippedWithBase": "{{message}}; skipped {{count}} invalid or corrupted state_5.sqlite file(s). Codex must regenerate them before their SQLite records can be repaired; {{restartInstruction}}",
+        "restartAfterRestore": "Wait {{seconds}} seconds, then manually fully quit the Codex process and start it again",
+        "repairVisibilityRestartInstruction": "Wait 10 seconds, then manually fully quit the Codex process and start it again"
       },
       "groupCount": "{{count}} sessions",
       "updatedAt": "Updated",
       "labels": {
         "sessionId": "Session ID",
-        "tokenUsage": "Token Usage"
+        "tokenUsage": "Token Usage",
+        "unknownCwd": "Unknown working directory",
+        "moreHidden": "{{count}} more not shown",
+        "archived": "Archived",
+        "removed": "Removed",
+        "projectless": "Chat",
+        "projectlessGroup": "Chats",
+        "projectlessHint": "Projectless chat"
       },
       "locationRunning": " (running)",
       "untitled": "Untitled session",
       "restoreModal": {
         "title": "Restore Sessions",
-        "hint": "Restoring puts the rollout file, session_index entry, and session file time back into the original instance, then asks official Codex to rebuild the session index.",
+        "hint": "Restoring puts rollout files, session_index entries, and session file times back into the original instance. If a source would keep Codex sidebar projects hidden, a session list is shown for confirmation before official Codex rebuilds the session index.",
         "emptyTitle": "Trash is empty",
         "emptyDesc": "Sessions moved to Trash will appear here.",
-        "restoreAction": "Restore Selected Sessions"
+        "restoreAction": "Restore Selected Sessions",
+        "rolloutBackupsTitle": "Rollout Restore Backups",
+        "rolloutBackupsCount": "{{count}} batch(es)",
+        "noRolloutBackups": "No rollout restore backups are available.",
+        "rolloutBackupSummary": "{{sessions}} session(s) / {{rollouts}} conflicting rollout backup(s) / {{instances}} instance(s)",
+        "restoreRolloutBackup": "Restore rollout backup",
+        "rolloutBackupConfirm": "These are rollout backups that already existed in the Codex sessions directory and conflicted with Trash during session restore. They are not Cockpit Tools Trash backups. Restore them?"
       },
       "targetModal": {
         "title": "Copy to Instance",

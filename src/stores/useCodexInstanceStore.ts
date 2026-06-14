@@ -8,6 +8,9 @@ import type {
   CodexSessionTrashSummary,
   CodexTrashedSessionRecord,
   CodexSessionRestoreSummary,
+  CodexSessionRestorePreviewSummary,
+  CodexSessionSourceRepairPreviewSummary,
+  CodexSessionRolloutBackupBatch,
 } from '../types/codex';
 import { createInstanceStore, type InstanceStoreState } from './createInstanceStore';
 
@@ -17,12 +20,20 @@ type CodexInstanceStoreState = InstanceStoreState & {
     sessionIds: string[],
     targetInstanceId: string,
   ) => Promise<CodexInstanceTargetThreadSyncSummary>;
-  repairSessionVisibilityAcrossInstances: () => Promise<CodexSessionVisibilityRepairSummary>;
+  repairSessionVisibilityAcrossInstances: (normalizeSources?: boolean) => Promise<CodexSessionVisibilityRepairSummary>;
+  previewSessionVisibilitySourceRepairs: () => Promise<CodexSessionSourceRepairPreviewSummary>;
   listSessionsAcrossInstances: () => Promise<CodexSessionRecord[]>;
   getSessionTokenStatsAcrossInstances: (sessionIds: string[]) => Promise<CodexSessionTokenStats[]>;
   moveSessionsToTrashAcrossInstances: (sessionIds: string[]) => Promise<CodexSessionTrashSummary>;
   listTrashedSessionsAcrossInstances: () => Promise<CodexTrashedSessionRecord[]>;
-  restoreSessionsFromTrashAcrossInstances: (sessionIds: string[]) => Promise<CodexSessionRestoreSummary>;
+  previewRestoreSessionsFromTrashAcrossInstances: (sessionIds: string[]) => Promise<CodexSessionRestorePreviewSummary>;
+  restoreSessionsFromTrashAcrossInstances: (
+    sessionIds: string[],
+    forceOverwrite?: boolean,
+    normalizeSources?: boolean,
+  ) => Promise<CodexSessionRestoreSummary>;
+  listSessionRestoreRolloutBackups: () => Promise<CodexSessionRolloutBackupBatch[]>;
+  restoreSessionRestoreRolloutBackup: (batchId: string) => Promise<CodexSessionRestoreSummary>;
 };
 
 type CodexInstanceStoreHook = {
@@ -50,10 +61,16 @@ const syncSessionsToInstance = async (
   return summary;
 };
 
-const repairSessionVisibilityAcrossInstances = async (): Promise<CodexSessionVisibilityRepairSummary> => {
-  const summary = await codexInstanceService.repairSessionVisibilityAcrossInstances();
+const repairSessionVisibilityAcrossInstances = async (
+  normalizeSources = false,
+): Promise<CodexSessionVisibilityRepairSummary> => {
+  const summary = await codexInstanceService.repairSessionVisibilityAcrossInstances(normalizeSources);
   await typedBaseStore.getState().fetchInstances();
   return summary;
+};
+
+const previewSessionVisibilitySourceRepairs = async (): Promise<CodexSessionSourceRepairPreviewSummary> => {
+  return await codexInstanceService.previewSessionVisibilitySourceRepairs();
 };
 
 const listSessionsAcrossInstances = async (): Promise<CodexSessionRecord[]> => {
@@ -78,10 +95,32 @@ const listTrashedSessionsAcrossInstances = async (): Promise<CodexTrashedSession
   return await codexInstanceService.listTrashedSessionsAcrossInstances();
 };
 
+const previewRestoreSessionsFromTrashAcrossInstances = async (
+  sessionIds: string[],
+): Promise<CodexSessionRestorePreviewSummary> => {
+  return await codexInstanceService.previewRestoreSessionsFromTrashAcrossInstances(sessionIds);
+};
+
 const restoreSessionsFromTrashAcrossInstances = async (
   sessionIds: string[],
+  forceOverwrite = false,
+  normalizeSources = false,
 ): Promise<CodexSessionRestoreSummary> => {
-  const summary = await codexInstanceService.restoreSessionsFromTrashAcrossInstances(sessionIds);
+  const summary = await codexInstanceService.restoreSessionsFromTrashAcrossInstances(
+    sessionIds,
+    forceOverwrite,
+    normalizeSources,
+  );
+  await typedBaseStore.getState().fetchInstances();
+  return summary;
+};
+
+const listSessionRestoreRolloutBackups = async (): Promise<CodexSessionRolloutBackupBatch[]> => {
+  return await codexInstanceService.listSessionRestoreRolloutBackups();
+};
+
+const restoreSessionRestoreRolloutBackup = async (batchId: string): Promise<CodexSessionRestoreSummary> => {
+  const summary = await codexInstanceService.restoreSessionRestoreRolloutBackup(batchId);
   await typedBaseStore.getState().fetchInstances();
   return summary;
 };
@@ -90,11 +129,15 @@ typedBaseStore.setState({
   syncThreadsAcrossInstances,
   syncSessionsToInstance,
   repairSessionVisibilityAcrossInstances,
+  previewSessionVisibilitySourceRepairs,
   listSessionsAcrossInstances,
   getSessionTokenStatsAcrossInstances,
   moveSessionsToTrashAcrossInstances,
   listTrashedSessionsAcrossInstances,
+  previewRestoreSessionsFromTrashAcrossInstances,
   restoreSessionsFromTrashAcrossInstances,
+  listSessionRestoreRolloutBackups,
+  restoreSessionRestoreRolloutBackup,
 });
 
 export const useCodexInstanceStore = typedBaseStore;

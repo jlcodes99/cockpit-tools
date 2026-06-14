@@ -2292,7 +2292,12 @@
         "title": "Mover a la papelera",
         "message": "Las sesiones seleccionadas se moverán a la papelera desde sus instancias para que puedan restaurarse más tarde. Es posible que las instancias en ejecución necesiten reiniciarse antes de que aparezcan los cambios. ¿Continuar?",
         "syncMessage": "Los hilos faltantes y sus datos de sesión se sincronizarán con todas las instancias. El contenido existente no se volverá a escribir y los archivos de la instancia de destino se respaldarán antes de cualquier escritura. ¿Continuar?",
-        "repairVisibilityMessage": "Esto reparará los metadatos del proveedor en los archivos de rollout y en state_5.sqlite usando el model_provider del config.toml raíz de cada instancia (si falta, se usará openai por defecto). Los archivos que se vayan a modificar se respaldarán antes de escribirlos. Puede que las instancias en ejecución necesiten reiniciarse antes de que aparezca el cambio. ¿Continuar?"
+        "repairVisibilityMessage": "Repara los metadatos provider en archivos rollout y state_5.sqlite usando el model_provider del config.toml raíz de cada instancia (openai si falta). Si alguna fuente de sesión ocultaría proyectos en la barra lateral de Codex, primero se mostrará una lista de sesiones para confirmar. Los archivos modificados se respaldan antes de escribir. ¿Continuar?",
+        "sourceRepairTitle": "Restaurar visibilidad en la barra de Codex",
+        "sourceRepairMessage": "{{count}} sesión(es) no archivadas tienen una fuente distinta de cli y pueden quedar ocultas en proyectos/sesiones de la barra lateral de Codex. Al confirmar, estas fuentes se restaurarán a cli:\n{{items}}\n\n¿Reparar la visibilidad de estas sesiones?",
+        "restoreSourceRepairMessage": "Las sesiones seleccionadas de la papelera incluyen {{count}} archivo(s) rollout no archivados cuya fuente no es cli. Restaurarlos sin cambios puede mantenerlos ocultos en la barra de Codex. Al confirmar, estas fuentes se cambiarán a cli durante la restauración:\n{{items}}\n\n¿Restaurar y reparar la visibilidad?",
+        "forceRestoreTitle": "Confirmar restauración forzada",
+        "forceRestoreMessage": "Se encontraron {{count}} conflicto(s) de archivos rollout con el mismo nombre y contenido diferente. Al continuar se respaldarán esos rollout en conflicto de Codex sessions y el session_index.jsonl correspondiente, luego se sobrescribirán desde la papelera y se reconstruirá el índice. La lista de respaldos cuenta estos {{count}} rollout en conflicto; esta vista previa puede restaurar {{restorable}} sesión(es) / {{rollouts}} archivo(s) rollout en total. ¿Continuar?"
       },
       "empty": {
         "title": "No hay sesiones para gestionar",
@@ -2302,23 +2307,38 @@
         "pickOne": "Selecciona al menos una sesión",
         "syncNeedTwo": "Se requieren al menos dos instancias para sincronizar sesiones",
         "pickRestoreOne": "Selecciona al menos una sesión para restaurar",
-        "repairVisibilitySkippedOnly": "No se encontraron diferencias de proveedor que se puedan escribir; se omitieron {{count}} archivo(s) state_5.sqlite no válidos o dañados. Codex debe regenerarlos antes de poder reparar sus registros SQLite.",
-        "repairVisibilitySkippedWithBase": "{{message}}; se omitieron {{count}} archivo(s) state_5.sqlite no válidos o dañados. Codex debe regenerarlos antes de poder reparar sus registros SQLite."
+        "repairVisibilitySkippedOnly": "No se encontraron diferencias provider escribibles; se omitieron {{count}} archivo(s) state_5.sqlite inválidos o dañados. Codex debe regenerarlos antes de reparar sus registros SQLite; {{restartInstruction}}",
+        "repairVisibilitySkippedWithBase": "{{message}}; se omitieron {{count}} archivo(s) state_5.sqlite inválidos o dañados. Codex debe regenerarlos antes de reparar sus registros SQLite; {{restartInstruction}}",
+        "restartAfterRestore": "Espera {{seconds}} segundos, luego cierra por completo el proceso Codex y vuelve a iniciarlo",
+        "repairVisibilityRestartInstruction": "Espera 10 segundos, luego cierra por completo el proceso Codex y vuelve a iniciarlo"
       },
       "groupCount": "{{count}} sesiones",
       "updatedAt": "Actualizado",
       "labels": {
         "sessionId": "ID de sesión",
-        "tokenUsage": "Uso de tokens"
+        "tokenUsage": "Uso de tokens",
+        "unknownCwd": "Directorio de trabajo desconocido",
+        "moreHidden": "{{count}} más sin mostrar",
+        "archived": "Archivado",
+        "removed": "Eliminado",
+        "projectless": "Chat",
+        "projectlessGroup": "Chats",
+        "projectlessHint": "Chat sin proyecto"
       },
       "locationRunning": " (en ejecución)",
       "untitled": "Sesión sin título",
       "restoreModal": {
         "title": "Restaurar sesiones",
-        "hint": "Al restaurar, el archivo rollout, la fila del hilo en SQLite y la entrada de session_index vuelven juntos a la instancia original.",
+        "hint": "La restauración devuelve archivos rollout, entradas session_index y tiempos de archivo a la instancia original. Si una fuente ocultaría proyectos en la barra lateral de Codex, primero se pedirá confirmación con una lista de sesiones y luego Codex oficial reconstruirá el índice.",
         "emptyTitle": "La papelera está vacía",
         "emptyDesc": "Las sesiones movidas a la papelera aparecerán aquí.",
-        "restoreAction": "Restaurar sesiones seleccionadas"
+        "restoreAction": "Restaurar sesiones seleccionadas",
+        "rolloutBackupsTitle": "Respaldos de restauración rollout",
+        "rolloutBackupsCount": "{{count}} lote(s)",
+        "noRolloutBackups": "No hay respaldos rollout restaurables.",
+        "rolloutBackupSummary": "{{sessions}} sesión(es) / {{rollouts}} respaldo(s) rollout en conflicto / {{instances}} instancia(s)",
+        "restoreRolloutBackup": "Restaurar respaldo rollout",
+        "rolloutBackupConfirm": "Estos son respaldos rollout que ya existían en el directorio Codex sessions y entraron en conflicto con la papelera durante la restauración. No son respaldos de la papelera de Cockpit Tools. ¿Restaurarlos?"
       },
       "targetModal": {
         "title": "Copiar a instancia",

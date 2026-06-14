@@ -3220,7 +3220,7 @@ fn resolve_workbuddy_launch_path() -> Result<std::path::PathBuf, String> {
 }
 
 #[cfg(target_os = "macos")]
-fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
+pub(crate) fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
     if let Some(custom) = normalize_custom_path(Some(&config::get_user_config().codex_app_path)) {
         if let Some(exec) = resolve_macos_exec_path(&custom, "Codex") {
             return Ok(exec);
@@ -3239,7 +3239,7 @@ fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
+pub(crate) fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
     if let Some(custom) = normalize_custom_path(Some(&config::get_user_config().codex_app_path)) {
         if let Some(exec) = resolve_macos_exec_path(&custom, "Codex") {
             return Ok(exec);
@@ -8555,8 +8555,7 @@ pub fn close_codex_instances(codex_homes: &[String], timeout_secs: u64) -> Resul
                     let normalized = normalize_path_for_compare(value);
                     !normalized.is_empty()
                         && (target_app_dirs.contains(&normalized)
-                            || (includes_default
-                                && current_default_app_dirs.contains(&normalized)))
+                            || (includes_default && current_default_app_dirs.contains(&normalized)))
                 }
                 None => includes_default,
             }

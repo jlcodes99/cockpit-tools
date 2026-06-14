@@ -2449,7 +2449,12 @@
         "title": "Pindahkan ke Sampah",
         "message": "Sesi yang dipilih akan dipindahkan ke Sampah dari instansinya sehingga dapat dipulihkan nanti. Instansi yang berjalan mungkin perlu dimulai ulang sebelum perubahan muncul. Lanjutkan?",
         "syncMessage": "Thread yang hilang dan data sesinya akan disinkronkan ke semua instansi. Konten yang ada tidak akan ditulis lagi, dan berkas instansi target akan dicadangkan sebelum penulisan terjadi. Lanjutkan?",
-        "repairVisibilityMessage": "Tindakan ini akan memperbaiki metadata penyedia di file rollout dan state_5.sqlite menggunakan model_provider dari config.toml root setiap instance (jika tidak ada, default-nya openai). File yang akan diubah akan dicadangkan sebelum ditulis. Instance yang sedang berjalan mungkin perlu dimulai ulang sebelum perubahan terlihat. Lanjutkan?"
+        "repairVisibilityMessage": "Memperbaiki metadata provider di file rollout dan state_5.sqlite memakai model_provider dari config.toml root tiap instance (openai bila tidak ada). Jika sumber sesi membuat proyek di sidebar kiri Codex tersembunyi, daftar sesi akan ditampilkan dulu untuk konfirmasi. File yang berubah dicadangkan sebelum ditulis. Lanjut?",
+        "sourceRepairTitle": "Pulihkan visibilitas sidebar Codex",
+        "sourceRepairMessage": "Ditemukan {{count}} sesi non-arsip dengan sumber bukan cli; sesi ini dapat tetap tersembunyi dari proyek/sesi sidebar kiri Codex. Konfirmasi untuk mengubah sumber sesi berikut kembali ke cli:\n{{items}}\n\nPerbaiki visibilitas sidebar untuk sesi ini?",
+        "restoreSourceRepairMessage": "Sesi tempat sampah yang dipilih berisi {{count}} rollout non-arsip dengan sumber bukan cli. Jika dipulihkan apa adanya, sesi masih bisa tersembunyi di sidebar Codex. Konfirmasi untuk mengubah sumber berikut menjadi cli saat pemulihan:\n{{items}}\n\nPulihkan dan perbaiki visibilitas sidebar?",
+        "forceRestoreTitle": "Konfirmasi pemulihan paksa",
+        "forceRestoreMessage": "Ditemukan {{count}} konflik file rollout bernama sama dengan isi berbeda. Jika lanjut, file rollout konflik dari Codex sessions dan session_index.jsonl terkait akan dicadangkan, lalu ditimpa dari tempat sampah dan indeks dibangun ulang. Daftar cadangan dihitung berdasarkan {{count}} file rollout konflik ini; pratinjau ini dapat memulihkan total {{restorable}} sesi / {{rollouts}} file rollout. Lanjut?"
       },
       "empty": {
         "title": "Tidak ada sesi untuk dikelola",
@@ -2459,23 +2464,38 @@
         "pickOne": "Silakan pilih setidaknya satu sesi",
         "syncNeedTwo": "Setidaknya dua instansi diperlukan untuk menyinkronkan sesi",
         "pickRestoreOne": "Pilih setidaknya satu sesi untuk dipulihkan",
-        "repairVisibilitySkippedOnly": "Tidak ditemukan perbedaan provider yang dapat ditulis; {{count}} file state_5.sqlite yang tidak valid atau rusak dilewati. Codex harus membuatnya ulang sebelum catatan SQLite di dalamnya dapat diperbaiki.",
-        "repairVisibilitySkippedWithBase": "{{message}}; {{count}} file state_5.sqlite yang tidak valid atau rusak dilewati. Codex harus membuatnya ulang sebelum catatan SQLite di dalamnya dapat diperbaiki."
+        "repairVisibilitySkippedOnly": "Tidak ada perbedaan provider yang dapat ditulis; {{count}} file state_5.sqlite tidak valid atau rusak dilewati. Codex harus membuatnya ulang sebelum record SQLite dapat diperbaiki; {{restartInstruction}}",
+        "repairVisibilitySkippedWithBase": "{{message}}; {{count}} file state_5.sqlite tidak valid atau rusak dilewati. Codex harus membuatnya ulang sebelum record SQLite dapat diperbaiki; {{restartInstruction}}",
+        "restartAfterRestore": "Tunggu {{seconds}} detik, lalu tutup sepenuhnya proses Codex dan jalankan lagi",
+        "repairVisibilityRestartInstruction": "Tunggu 10 detik, lalu tutup sepenuhnya proses Codex dan jalankan lagi"
       },
       "groupCount": "{{count}} sesi",
       "updatedAt": "Diperbarui",
       "labels": {
         "sessionId": "ID sesi",
-        "tokenUsage": "Penggunaan token"
+        "tokenUsage": "Penggunaan token",
+        "unknownCwd": "Direktori kerja tidak diketahui",
+        "moreHidden": "{{count}} lainnya tidak ditampilkan",
+        "archived": "Diarsipkan",
+        "removed": "Dihapus",
+        "projectless": "Chat",
+        "projectlessGroup": "Chat",
+        "projectlessHint": "Chat tanpa proyek"
       },
       "locationRunning": " (berjalan)",
       "untitled": "Sesi tanpa judul",
       "restoreModal": {
         "title": "Pulihkan sesi",
-        "hint": "Saat dipulihkan, file rollout, baris thread SQLite, dan entri session_index akan dikembalikan bersama ke instance asal.",
+        "hint": "Pemulihan mengembalikan file rollout, entri session_index, dan waktu file sesi ke instance asal. Jika sumber membuat proyek di sidebar kiri Codex tersembunyi, daftar sesi akan dikonfirmasi dulu lalu Codex resmi membangun ulang indeks sesi.",
         "emptyTitle": "Trash kosong",
         "emptyDesc": "Sesi yang dipindahkan ke Trash akan muncul di sini.",
-        "restoreAction": "Pulihkan sesi terpilih"
+        "restoreAction": "Pulihkan sesi terpilih",
+        "rolloutBackupsTitle": "Cadangan pemulihan rollout",
+        "rolloutBackupsCount": "{{count}} batch",
+        "noRolloutBackups": "Tidak ada cadangan rollout yang dapat dipulihkan.",
+        "rolloutBackupSummary": "{{sessions}} sesi / {{rollouts}} cadangan rollout konflik / {{instances}} instance",
+        "restoreRolloutBackup": "Pulihkan cadangan rollout",
+        "rolloutBackupConfirm": "Ini adalah cadangan rollout yang sudah ada di direktori Codex sessions dan bentrok dengan tempat sampah saat pemulihan sesi. Ini bukan cadangan tempat sampah Cockpit Tools. Pulihkan?"
       },
       "targetModal": {
         "title": "Salin ke instans",

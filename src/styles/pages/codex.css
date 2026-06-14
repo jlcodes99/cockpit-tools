@@ -9447,6 +9447,9 @@
 }
 
 .codex-session-folder__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 15px;
   font-weight: 500;
   color: var(--text-primary);
@@ -9508,6 +9511,42 @@
 
 .codex-session-row__session-id {
   font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-all;
+}
+
+.codex-session-archive-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: max-content;
+  margin-right: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--danger) 18%, var(--border));
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-card));
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.codex-session-projectless-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: max-content;
+  margin-right: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border));
+  background: color-mix(in srgb, var(--primary) 9%, var(--bg-card));
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
 .codex-session-row__copy-button {
@@ -9547,6 +9586,71 @@
   opacity: 0.85;
 }
 
+.codex-source-repair-modal {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.codex-source-repair-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: min(62vh, 620px);
+  overflow: hidden;
+}
+
+.codex-source-repair-modal__summary {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.codex-source-repair-modal__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  max-height: min(46vh, 480px);
+  overflow: auto;
+  padding-right: 4px;
+  user-select: text;
+}
+
+.codex-source-repair-row {
+  flex: 0 0 auto;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  user-select: text;
+}
+
+.codex-source-repair-row .codex-session-row__content {
+  flex: 1;
+  width: 100%;
+}
+
+.codex-source-repair-row .codex-session-row__title {
+  display: block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.5;
+  user-select: text;
+}
+
+.codex-source-repair-row--more {
+  border-style: dashed;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.codex-source-repair-row--more .codex-session-row__title {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
 .codex-session-restore-modal {
   width: min(760px, calc(100vw - 32px));
 }
@@ -9557,6 +9661,18 @@
   gap: 14px;
   max-height: 60vh;
   overflow: auto;
+}
+
+.codex-session-restore-modal .modal-footer {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.codex-session-restore-modal__footer-left,
+.codex-session-restore-modal__footer-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .codex-session-restore-modal__hint {
@@ -9692,6 +9808,68 @@
 .codex-session-restore-row__cwd {
   font-family: var(--font-mono);
   color: var(--text-tertiary);
+}
+
+.codex-session-rollout-backups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 14%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--danger) 6%, var(--bg-card));
+}
+
+.codex-session-rollout-backups__header,
+.codex-session-rollout-backup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.codex-session-rollout-backups__header strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.codex-session-rollout-backups__header span,
+.codex-session-rollout-backups__empty,
+.codex-session-rollout-backup-row__meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.codex-session-rollout-backups__empty {
+  margin: 0;
+}
+
+.codex-session-rollout-backups__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.codex-session-rollout-backup-row {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+
+.codex-session-rollout-backup-row__content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.codex-session-rollout-backup-row__title {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  word-break: break-all;
 }
 
 @media (max-width: 860px) {

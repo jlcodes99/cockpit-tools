@@ -1,28 +1,43 @@
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { confirm as confirmDialog } from '@tauri-apps/plugin-dialog';
+import { confirm as nativeConfirmDialog } from '@tauri-apps/plugin-dialog';
 import { Check, ChevronDown, ChevronRight, Copy, Eye, Folder, RefreshCw, RotateCcw, Trash2, X } from 'lucide-react';
 import { ModalErrorMessage, useModalErrorState } from '../ModalErrorMessage';
 import { useEscClose } from '../../hooks/useEscClose';
-import type { CodexSessionRecord, CodexSessionTokenStats, CodexTrashedSessionRecord } from '../../types/codex';
+import type {
+  CodexSessionRecord,
+  CodexSessionRolloutBackupBatch,
+  CodexSessionRestorePreviewSummary,
+  CodexSessionSourceRepairCandidate,
+  CodexSessionTokenStats,
+  CodexTrashedSessionRecord,
+} from '../../types/codex';
 import { useCodexInstanceStore } from '../../stores/useCodexInstanceStore';
 import { formatCodexSessionVisibilityRepairMessage } from '../../utils/codexSessionVisibility';
 
 type MessageState = { text: string; tone?: 'error' };
 type SessionTokenStatsMap = Record<string, CodexSessionTokenStats>;
+const SOURCE_REPAIR_PREVIEW_LIMIT = 20;
+const SOURCE_REPAIR_TITLE_PREVIEW_LENGTH = 30;
 
 type SessionGroup = {
   cwd: string;
   sessions: CodexSessionRecord[];
   latestUpdatedAt: number;
+  archived: boolean;
+  hasArchivedLocation: boolean;
+  projectless: boolean;
+  removed: boolean;
+  hasRemovedLocation: boolean;
 };
 
 function buildGroups(sessions: CodexSessionRecord[]): SessionGroup[] {
   const groups = new Map<string, CodexSessionRecord[]>();
   sessions.forEach((session) => {
-    const bucket = groups.get(session.cwd) ?? [];
+    const groupKey = session.projectless ? '__codex_projectless__' : session.cwd;
+    const bucket = groups.get(groupKey) ?? [];
     bucket.push(session);
-    groups.set(session.cwd, bucket);
+    groups.set(groupKey, bucket);
   });
 
   return Array.from(groups.entries())
@@ -32,6 +47,11 @@ function buildGroups(sessions: CodexSessionRecord[]): SessionGroup[] {
         (left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0) || left.title.localeCompare(right.title),
       ),
       latestUpdatedAt: Math.max(...groupSessions.map((item) => item.updatedAt ?? 0), 0),
+      archived: groupSessions.every((item) => item.archived),
+      hasArchivedLocation: groupSessions.some((item) => item.hasArchivedLocation || item.archived),
+      projectless: groupSessions.every((item) => item.projectless),
+      removed: groupSessions.every((item) => item.removed),
+      hasRemovedLocation: groupSessions.some((item) => item.hasRemovedLocation || item.removed),
     }))
     .sort(
       (left, right) =>
@@ -73,11 +93,6 @@ function resolveGroupLabel(cwd: string): string {
   return parts[parts.length - 1] || cwd;
 }
 
-function formatSessionId(sessionId: string): string {
-  if (sessionId.length <= 18) return sessionId;
-  return `${sessionId.slice(0, 8)}...${sessionId.slice(-6)}`;
-}
-
 function formatLargeNumber(value: number): string {
   if (value >= 1_000_000) {
     return `${(value / 1_000_000).toFixed(1)}M`;
@@ -86,6 +101,32 @@ function formatLargeNumber(value: number): string {
     return `${(value / 1_000).toFixed(1)}K`;
   }
   return value.toLocaleString();
+}
+
+function truncateSourceRepairTitle(title: string, maxLength = SOURCE_REPAIR_TITLE_PREVIEW_LENGTH): string {
+  const normalizedTitle = title.trim();
+  const chars = Array.from(normalizedTitle);
+  if (chars.length <= maxLength) {
+    return normalizedTitle;
+  }
+  return `${chars.slice(0, Math.max(0, maxLength - 3)).join('')}...`;
+}
+
+function buildSourceRepairCandidatePreview(
+  candidates: CodexSessionSourceRepairCandidate[],
+  limit = SOURCE_REPAIR_PREVIEW_LIMIT,
+): {
+  visible: Array<{ key: string; title: string }>;
+  hiddenCount: number;
+} {
+  const visible = candidates.slice(0, limit);
+  return {
+    visible: visible.map((candidate, index) => ({
+      key: `${candidate.instanceId}:${candidate.sessionId}:${index}`,
+      title: truncateSourceRepairTitle(candidate.title?.trim() || candidate.sessionId),
+    })),
+    hiddenCount: Math.max(0, candidates.length - limit),
+  };
 }
 
 function formatTokenStats(stats?: CodexSessionTokenStats): string {
@@ -105,6 +146,9 @@ export function CodexSessionManager() {
   const repairSessionVisibilityAcrossInstances = useCodexInstanceStore(
     (state) => state.repairSessionVisibilityAcrossInstances,
   );
+  const previewSessionVisibilitySourceRepairs = useCodexInstanceStore(
+    (state) => state.previewSessionVisibilitySourceRepairs,
+  );
   const listSessionsAcrossInstances = useCodexInstanceStore((state) => state.listSessionsAcrossInstances);
   const getSessionTokenStatsAcrossInstances = useCodexInstanceStore(
     (state) => state.getSessionTokenStatsAcrossInstances,
@@ -115,8 +159,17 @@ export function CodexSessionManager() {
   const listTrashedSessionsAcrossInstances = useCodexInstanceStore(
     (state) => state.listTrashedSessionsAcrossInstances,
   );
+  const previewRestoreSessionsFromTrashAcrossInstances = useCodexInstanceStore(
+    (state) => state.previewRestoreSessionsFromTrashAcrossInstances,
+  );
   const restoreSessionsFromTrashAcrossInstances = useCodexInstanceStore(
     (state) => state.restoreSessionsFromTrashAcrossInstances,
+  );
+  const listSessionRestoreRolloutBackups = useCodexInstanceStore(
+    (state) => state.listSessionRestoreRolloutBackups,
+  );
+  const restoreSessionRestoreRolloutBackup = useCodexInstanceStore(
+    (state) => state.restoreSessionRestoreRolloutBackup,
   );
   const [sessions, setSessions] = useState<CodexSessionRecord[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -126,12 +179,18 @@ export function CodexSessionManager() {
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [trashedSessions, setTrashedSessions] = useState<CodexTrashedSessionRecord[]>([]);
   const [selectedTrashIds, setSelectedTrashIds] = useState<string[]>([]);
+  const [rolloutBackupBatches, setRolloutBackupBatches] = useState<CodexSessionRolloutBackupBatch[]>([]);
+  const [showRolloutBackups, setShowRolloutBackups] = useState(false);
+  const [sourceRepairCandidates, setSourceRepairCandidates] = useState<CodexSessionSourceRepairCandidate[] | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncingToInstance, setSyncingToInstance] = useState(false);
   const [repairingVisibility, setRepairingVisibility] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [loadingTrash, setLoadingTrash] = useState(false);
+  const [loadingRolloutBackups, setLoadingRolloutBackups] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [message, setMessage] = useState<MessageState | null>(null);
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
@@ -152,6 +211,7 @@ export function CodexSessionManager() {
   const loadSessionsPromiseRef = useRef<Promise<void> | null>(null);
   const copyResetTimerRef = useRef<number | null>(null);
   const tokenStatsVersionRef = useRef(0);
+  const sourceRepairConfirmationResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const isZh = i18n.resolvedLanguage?.toLowerCase().startsWith('zh') ?? true;
 
   const groupedSessions = useMemo(() => buildGroups(sessions), [sessions]);
@@ -173,6 +233,10 @@ export function CodexSessionManager() {
       session.locations.some((location) => location.instanceId === syncTargetInstance.id),
     ).length;
   }, [selectedSessions, syncTargetInstance]);
+  const sourceRepairPreview = useMemo(
+    () => buildSourceRepairCandidatePreview(sourceRepairCandidates ?? []),
+    [sourceRepairCandidates],
+  );
   const instanceCount = instances.length;
 
   const loadSessions = useCallback(async () => {
@@ -280,6 +344,30 @@ export function CodexSessionManager() {
     }
   }, [listTrashedSessionsAcrossInstances, setRestoreModalError]);
 
+  const loadRolloutBackupBatches = useCallback(async () => {
+    setLoadingRolloutBackups(true);
+    try {
+      const batches = await listSessionRestoreRolloutBackups();
+      setRolloutBackupBatches(batches);
+      return batches;
+    } catch (error) {
+      setRestoreModalError(String(error));
+      return [];
+    } finally {
+      setLoadingRolloutBackups(false);
+    }
+  }, [listSessionRestoreRolloutBackups, setRestoreModalError]);
+
+  const showRestoreRestartMessage = useCallback((baseMessage: string) => {
+    setMessage({
+      text: `${baseMessage}；${t(
+        'codex.sessionManager.messages.restartAfterRestore',
+        '稍等 {{seconds}} 秒钟后，你必须手动彻底退出Codex进程后再启动',
+        { seconds: 10 },
+      )}`,
+    });
+  }, [t]);
+
   useEffect(() => {
     void loadSessions();
   }, [loadSessions]);
@@ -338,7 +426,8 @@ export function CodexSessionManager() {
   const handleOpenRestoreModal = async () => {
     setShowRestoreModal(true);
     setSelectedTrashIds([]);
-    await loadTrashedSessions();
+    setShowRolloutBackups(false);
+    await Promise.all([loadTrashedSessions(), loadRolloutBackupBatches()]);
   };
 
   const handleOpenSyncTargetModal = async () => {
@@ -368,16 +457,64 @@ export function CodexSessionManager() {
     setShowSyncTargetModal(false);
   };
 
-  useEscClose(showSyncTargetModal, handleCloseSyncTargetModal);
+  useEscClose(showSyncTargetModal && sourceRepairCandidates === null, handleCloseSyncTargetModal);
 
   const handleCloseRestoreModal = () => {
     if (restoring) return;
     setShowRestoreModal(false);
     setSelectedTrashIds([]);
+    setShowRolloutBackups(false);
     setRestoreModalError(null);
   };
 
-  useEscClose(showRestoreModal, handleCloseRestoreModal);
+  useEscClose(showRestoreModal && sourceRepairCandidates === null, handleCloseRestoreModal);
+
+  const resolveSourceRepairConfirmation = useCallback((confirmed: boolean) => {
+    const resolver = sourceRepairConfirmationResolverRef.current;
+    sourceRepairConfirmationResolverRef.current = null;
+    setSourceRepairCandidates(null);
+    resolver?.(confirmed);
+  }, []);
+
+  const requestSourceRepairConfirmation = useCallback(
+    async (candidates: CodexSessionSourceRepairCandidate[]) => {
+      if (candidates.length === 0) {
+        return true;
+      }
+      sourceRepairConfirmationResolverRef.current?.(false);
+      setSourceRepairCandidates(candidates);
+      return await new Promise<boolean>((resolve) => {
+        sourceRepairConfirmationResolverRef.current = resolve;
+      });
+    },
+    [],
+  );
+
+  const requestForceRestoreConfirmation = useCallback(
+    async (preview: CodexSessionRestorePreviewSummary) => {
+      if (preview.conflictRolloutFileCount <= 0) {
+        return true;
+      }
+
+      return await nativeConfirmDialog(
+        t('codex.sessionManager.confirm.forceRestoreMessage', {
+          defaultValue:
+            '发现 {{count}} 个同名不同内容 rollout 文件冲突。继续会先备份 Codex sessions 目录中这些冲突 rollout 文件和对应 session_index.jsonl，再用废纸篓中的文件覆盖并重建索引。备份列表按这 {{count}} 个冲突 rollout 文件统计；本次预检共可恢复 {{restorable}} 条会话 / {{rollouts}} 个 rollout 文件。确认继续？',
+          count: preview.conflictRolloutFileCount,
+          restorable: preview.restorableSessionCount,
+          rollouts: preview.restorableRolloutFileCount,
+        }),
+        {
+          title: t('codex.sessionManager.confirm.forceRestoreTitle', '确认强制覆盖恢复'),
+          okLabel: t('common.confirm', '确认'),
+          cancelLabel: t('common.cancel', '取消'),
+        },
+      );
+    },
+    [t],
+  );
+
+  useEscClose(sourceRepairCandidates !== null, () => resolveSourceRepairConfirmation(false));
 
   const handleSyncSessions = async () => {
     setMessage(null);
@@ -391,7 +528,7 @@ export function CodexSessionManager() {
         return;
       }
 
-      const confirmed = await confirmDialog(
+      const confirmed = await nativeConfirmDialog(
         t(
           'codex.sessionManager.confirm.syncMessage',
           '会将缺失会话的 rollout、session_index 条目和会话文件时间同步到所有实例，并对同 ID 会话做事件级合并，随后触发官方 Codex 重建会话索引；写入前会备份目标文件。确认继续？',
@@ -456,22 +593,17 @@ export function CodexSessionManager() {
 
   const handleRepairVisibility = async () => {
     setMessage(null);
-    const confirmed = await confirmDialog(
-      t(
-        'codex.sessionManager.confirm.repairVisibilityMessage',
-        '会按各实例 config.toml 根级 model_provider（缺失时按 openai）修复 rollout 文件与 state_5.sqlite 中的 provider 元数据，写入前会先备份将要修改的文件。运行中的实例可能需要重启后显示。确认继续？',
-      ),
-      {
-        title: t('codex.sessionManager.actions.repairVisibility', '修复可见性'),
-        okLabel: t('common.confirm', '确认'),
-        cancelLabel: t('common.cancel', '取消'),
-      },
-    );
-    if (!confirmed) return;
-
     setRepairingVisibility(true);
     try {
-      const summary = await repairSessionVisibilityAcrossInstances();
+      const sourcePreview = await previewSessionVisibilitySourceRepairs();
+      let normalizeSources = false;
+      if (sourcePreview.sourceRepairCount > 0) {
+        const sourceConfirmed = await requestSourceRepairConfirmation(sourcePreview.candidates);
+        if (!sourceConfirmed) return;
+        normalizeSources = true;
+      }
+
+      const summary = await repairSessionVisibilityAcrossInstances(normalizeSources);
       setMessage({ text: formatCodexSessionVisibilityRepairMessage(summary, t) });
       await loadSessions();
     } catch (error) {
@@ -487,7 +619,7 @@ export function CodexSessionManager() {
       return;
     }
 
-    const confirmed = await confirmDialog(
+    const confirmed = await nativeConfirmDialog(
       t(
         'codex.sessionManager.confirm.message',
         '会将所选会话从对应实例中移到废纸篓，便于后续恢复；运行中的实例可能需要重启后才会反映。确认继续？',
@@ -527,13 +659,62 @@ export function CodexSessionManager() {
     setRestoring(true);
     setRestoreModalError(null);
     try {
-      const summary = await restoreSessionsFromTrashAcrossInstances(selectedTrashIds);
-      setMessage({ text: summary.message });
+      const preview = await previewRestoreSessionsFromTrashAcrossInstances(selectedTrashIds);
+      let forceOverwrite = false;
+      let normalizeSources = false;
+      if (preview.sourceRepairCount > 0) {
+        const sourceConfirmed = await requestSourceRepairConfirmation(preview.sourceRepairCandidates);
+        if (!sourceConfirmed) return;
+        normalizeSources = true;
+      }
+      if (preview.conflictRolloutFileCount > 0) {
+        const confirmed = await requestForceRestoreConfirmation(preview);
+        if (!confirmed) return;
+        forceOverwrite = true;
+      }
+
+      const summary = await restoreSessionsFromTrashAcrossInstances(
+        selectedTrashIds,
+        forceOverwrite,
+        normalizeSources,
+      );
+      showRestoreRestartMessage(summary.message);
       setSelectedTrashIds([]);
-      const [nextTrashedSessions] = await Promise.all([loadTrashedSessions(), loadSessions()]);
+      const [nextTrashedSessions] = await Promise.all([
+        loadTrashedSessions(),
+        loadRolloutBackupBatches(),
+        loadSessions(),
+      ]);
       if (nextTrashedSessions.length === 0) {
         setShowRestoreModal(false);
       }
+    } catch (error) {
+      setRestoreModalError(String(error));
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  const handleRestoreRolloutBackup = async (batchId: string) => {
+    const confirmed = await nativeConfirmDialog(
+      t(
+        'codex.sessionManager.restoreModal.rolloutBackupConfirm',
+        '这里是恢复会话时Codex sessions目录原本存在且与废纸篓内产生冲突的rollout备份，不是cockpit tools内废纸篓的备份，确定要恢复吗',
+      ),
+      {
+        title: t('codex.sessionManager.restoreModal.restoreRolloutBackup', '恢复 rollout 备份'),
+        okLabel: t('common.confirm', '确认'),
+        cancelLabel: t('common.cancel', '取消'),
+      },
+    );
+    if (!confirmed) return;
+
+    setRestoring(true);
+    setRestoreModalError(null);
+    try {
+      const summary = await restoreSessionRestoreRolloutBackup(batchId);
+      showRestoreRestartMessage(summary.message);
+      await Promise.all([loadRolloutBackupBatches(), loadTrashedSessions(), loadSessions()]);
     } catch (error) {
       setRestoreModalError(String(error));
     } finally {
@@ -682,9 +863,26 @@ export function CodexSessionManager() {
                       className="codex-session-folder__label"
                       type="button"
                       onClick={() => toggleGroupExpanded(group.cwd)}
-                      title={group.cwd}
+                      title={group.projectless ? t('codex.sessionManager.labels.projectlessHint', '无目录对话') : group.cwd}
                     >
-                      {resolveGroupLabel(group.cwd)}
+                      {group.archived ? (
+                        <span className="codex-session-archive-badge">
+                          {t('codex.sessionManager.labels.archived', '「归档」')}
+                        </span>
+                      ) : null}
+                      {!group.archived && group.removed ? (
+                        <span className="codex-session-archive-badge">
+                          {t('codex.sessionManager.labels.removed', '「移除」')}
+                        </span>
+                      ) : null}
+                      {group.projectless ? (
+                        <span className="codex-session-projectless-badge">
+                          {t('codex.sessionManager.labels.projectless', '「对话」')}
+                        </span>
+                      ) : null}
+                      {group.projectless
+                        ? t('codex.sessionManager.labels.projectlessGroup', '对话')
+                        : resolveGroupLabel(group.cwd)}
                     </button>
                   </div>
                   <span className="codex-session-folder__time">
@@ -707,6 +905,21 @@ export function CodexSessionManager() {
                             />
                             <div className="codex-session-row__content">
                               <span className="codex-session-row__title" title={session.title}>
+                                {session.archived ? (
+                                  <span className="codex-session-archive-badge">
+                                    {t('codex.sessionManager.labels.archived', '「归档」')}
+                                  </span>
+                                ) : null}
+                                {!session.archived && session.removed ? (
+                                  <span className="codex-session-archive-badge">
+                                    {t('codex.sessionManager.labels.removed', '「移除」')}
+                                  </span>
+                                ) : null}
+                                {session.projectless ? (
+                                  <span className="codex-session-projectless-badge">
+                                    {t('codex.sessionManager.labels.projectless', '「对话」')}
+                                  </span>
+                                ) : null}
                                 {session.title || t('codex.sessionManager.untitled', '未命名会话')}
                               </span>
                               <span className="codex-session-row__meta">
@@ -715,8 +928,8 @@ export function CodexSessionManager() {
                                   ? t('codex.sessionManager.locationRunning', '（运行中）')
                                   : ''}
                               </span>
-                              <span className="codex-session-row__meta codex-session-row__session-id" title={session.sessionId}>
-                                {t('codex.sessionManager.labels.sessionId', '会话 ID')}: {formatSessionId(session.sessionId)}
+                              <span className="codex-session-row__meta codex-session-row__session-id">
+                                {t('codex.sessionManager.labels.sessionId', '会话 ID')}: {session.sessionId}
                               </span>
                             </div>
                           </label>
@@ -838,6 +1051,71 @@ export function CodexSessionManager() {
         </div>
       ) : null}
 
+      {sourceRepairCandidates ? (
+        <div className="modal-overlay" onClick={() => resolveSourceRepairConfirmation(false)}>
+          <div
+            className="modal codex-source-repair-modal"
+            onClick={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2>{t('codex.sessionManager.confirm.sourceRepairTitle', '恢复 Codex 左侧可见性')}</h2>
+              <button
+                className="modal-close"
+                type="button"
+                onClick={() => resolveSourceRepairConfirmation(false)}
+                aria-label={t('common.close', '关闭')}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="codex-source-repair-modal__summary">
+                {t('codex.sessionManager.groupCount', '{{count}} 条会话', {
+                  count: sourceRepairCandidates.length,
+                })}
+              </p>
+              <div className="codex-source-repair-modal__list">
+                {sourceRepairPreview.visible.map((candidate) => (
+                  <div className="codex-session-row codex-source-repair-row" key={candidate.key}>
+                    <div className="codex-session-row__content">
+                      <span className="codex-session-row__title">{candidate.title}</span>
+                    </div>
+                  </div>
+                ))}
+                {sourceRepairPreview.hiddenCount > 0 ? (
+                  <div className="codex-session-row codex-source-repair-row codex-source-repair-row--more">
+                    <div className="codex-session-row__content">
+                      <span className="codex-session-row__title">
+                        {t('codex.sessionManager.labels.moreHidden', '另有 {{count}} 条未显示', {
+                          count: sourceRepairPreview.hiddenCount,
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => resolveSourceRepairConfirmation(false)}
+              >
+                {t('common.cancel', '取消')}
+              </button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => resolveSourceRepairConfirmation(true)}
+              >
+                {t('common.confirm', '确认')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {showRestoreModal ? (
         <div className="modal-overlay" onClick={handleCloseRestoreModal}>
           <div className="modal codex-session-restore-modal" onClick={(event) => event.stopPropagation()}>
@@ -872,7 +1150,7 @@ export function CodexSessionManager() {
                   <p className="codex-session-restore-modal__hint">
                     {t(
                       'codex.sessionManager.restoreModal.hint',
-                      '恢复会把 rollout 文件、session_index 条目和会话文件时间放回原实例，并触发官方 Codex 重建会话索引。',
+                      '恢复会把 rollout 文件、session_index 条目和会话文件时间放回原实例；如检测到来源会导致 Codex 左侧项目不可见，会先弹出会话列表要求确认，再触发官方 Codex 重建会话索引。',
                     )}
                   </p>
                   <div className="codex-session-restore-list">
@@ -905,25 +1183,96 @@ export function CodexSessionManager() {
                   </div>
                 </>
               ) : null}
+              {showRolloutBackups ? (
+                <div className="codex-session-rollout-backups">
+                  <div className="codex-session-rollout-backups__header">
+                    <strong>{t('codex.sessionManager.restoreModal.rolloutBackupsTitle', 'rollout 恢复备份')}</strong>
+                    <span>
+                      {loadingRolloutBackups
+                        ? t('common.loading', '加载中...')
+                        : t('codex.sessionManager.restoreModal.rolloutBackupsCount', {
+                            defaultValue: '{{count}} 个批次',
+                            count: rolloutBackupBatches.length,
+                          })}
+                    </span>
+                  </div>
+                  {!loadingRolloutBackups && rolloutBackupBatches.length === 0 ? (
+                    <p className="codex-session-rollout-backups__empty">
+                      {t('codex.sessionManager.restoreModal.noRolloutBackups', '暂无可恢复的 rollout 备份。')}
+                    </p>
+                  ) : null}
+                  {!loadingRolloutBackups && rolloutBackupBatches.length > 0 ? (
+                    <div className="codex-session-rollout-backups__list">
+                      {rolloutBackupBatches.map((batch) => (
+                        <div className="codex-session-rollout-backup-row" key={batch.batchId}>
+                          <div className="codex-session-rollout-backup-row__content">
+                            <span className="codex-session-rollout-backup-row__title">
+                              {batch.batchId}
+                            </span>
+                            <span className="codex-session-rollout-backup-row__meta">
+                              {t('codex.sessionManager.restoreModal.rolloutBackupSummary', {
+                                defaultValue: '{{sessions}} 条会话 / {{rollouts}} 个冲突 rollout 备份 / {{instances}} 个实例',
+                                sessions: batch.sessionCount,
+                                rollouts: batch.rolloutFileCount,
+                                instances: batch.instanceCount,
+                              })}
+                            </span>
+                            <span className="codex-session-rollout-backup-row__meta">
+                              {batch.items.map((item) => item.instanceName).join(' / ')}
+                            </span>
+                          </div>
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            onClick={() => void handleRestoreRolloutBackup(batch.batchId)}
+                            disabled={restoring}
+                          >
+                            <RotateCcw size={14} className={restoring ? 'icon-spin' : undefined} />
+                            {t('codex.sessionManager.restoreModal.restoreRolloutBackup', '恢复 rollout 备份')}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             <div className="modal-footer">
-              <button
-                className="btn btn-secondary"
-                type="button"
-                onClick={handleCloseRestoreModal}
-                disabled={restoring}
-              >
-                {t('common.cancel', '取消')}
-              </button>
-              <button
-                className="btn btn-primary"
-                type="button"
-                onClick={() => void handleRestoreFromTrash()}
-                disabled={restoring || loadingTrash || selectedTrashIds.length === 0}
-              >
-                <RotateCcw size={14} className={restoring ? 'icon-spin' : undefined} />
-                {t('codex.sessionManager.restoreModal.restoreAction', '恢复选中会话')} ({selectedTrashIds.length})
-              </button>
+              <div className="codex-session-restore-modal__footer-left">
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  onClick={() => {
+                    setShowRolloutBackups((prev) => !prev);
+                    if (!showRolloutBackups) {
+                      void loadRolloutBackupBatches();
+                    }
+                  }}
+                  disabled={restoring || loadingRolloutBackups}
+                >
+                  <RotateCcw size={14} className={loadingRolloutBackups ? 'icon-spin' : undefined} />
+                  {t('codex.sessionManager.restoreModal.restoreRolloutBackup', '恢复 rollout 备份')}
+                </button>
+              </div>
+              <div className="codex-session-restore-modal__footer-right">
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  onClick={handleCloseRestoreModal}
+                  disabled={restoring}
+                >
+                  {t('common.cancel', '取消')}
+                </button>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  onClick={() => void handleRestoreFromTrash()}
+                  disabled={restoring || loadingTrash || selectedTrashIds.length === 0}
+                >
+                  <RotateCcw size={14} className={restoring ? 'icon-spin' : undefined} />
+                  {t('codex.sessionManager.restoreModal.restoreAction', '恢复选中会话')} ({selectedTrashIds.length})
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -2292,7 +2292,12 @@
         "title": "Sposta nel cestino",
         "message": "Le sessioni selezionate verranno spostate nel cestino dalle rispettive istanze, così potranno essere ripristinate in seguito. Le istanze in esecuzione potrebbero richiedere un riavvio prima che la modifica sia visibile. Continuare?",
         "syncMessage": "I thread mancanti e i relativi dati di sessione verranno sincronizzati in tutte le istanze. Il contenuto esistente non verrà riscritto e i file dell’istanza di destinazione verranno salvati prima di qualsiasi scrittura. Continuare?",
-        "repairVisibilityMessage": "Questa operazione riparerà i metadati del provider nei file di rollout e in state_5.sqlite usando il model_provider del config.toml radice di ciascuna istanza (se manca, verrà usato openai come predefinito). I file che verranno modificati vengono sottoposti a backup prima della scrittura. Le istanze in esecuzione potrebbero dover essere riavviate prima che la modifica compaia. Continuare?"
+        "repairVisibilityMessage": "Ripara i metadati provider nei file rollout e in state_5.sqlite usando il model_provider del config.toml radice di ogni istanza (openai se mancante). Se alcune sorgenti di sessione nascondono i progetti nella barra laterale Codex, verrà prima mostrato un elenco di sessioni per conferma. I file modificati vengono salvati prima della scrittura. Continuare?",
+        "sourceRepairTitle": "Ripristina visibilità nella barra Codex",
+        "sourceRepairMessage": "{{count}} sessioni non archiviate hanno una sorgente diversa da cli e possono restare nascoste nei progetti/sessioni della barra laterale Codex. Confermando, queste sorgenti saranno riportate a cli:\n{{items}}\n\nRiparare la visibilità di queste sessioni?",
+        "restoreSourceRepairMessage": "Le sessioni selezionate nel cestino includono {{count}} file rollout non archiviati con sorgente diversa da cli. Ripristinarli così può mantenerli nascosti nella barra Codex. Confermando, queste sorgenti saranno cambiate in cli durante il ripristino:\n{{items}}\n\nRipristinare e riparare la visibilità?",
+        "forceRestoreTitle": "Conferma ripristino forzato",
+        "forceRestoreMessage": "Trovati {{count}} conflitti di file rollout con lo stesso nome e contenuto diverso. Continuando verranno salvati quei rollout in conflitto da Codex sessions e il relativo session_index.jsonl, poi saranno sovrascritti dal cestino e l’indice verrà ricostruito. L’elenco backup conta questi {{count}} rollout in conflitto; questa anteprima può ripristinare in totale {{restorable}} sessioni / {{rollouts}} file rollout. Continuare?"
       },
       "empty": {
         "title": "Nessuna sessione da gestire",
@@ -2302,23 +2307,38 @@
         "pickOne": "Seleziona almeno una sessione",
         "syncNeedTwo": "Sono necessarie almeno due istanze per sincronizzare le sessioni",
         "pickRestoreOne": "Seleziona almeno una sessione da ripristinare",
-        "repairVisibilitySkippedOnly": "Non sono state trovate differenze provider scrivibili; sono stati ignorati {{count}} file state_5.sqlite non validi o danneggiati. Codex deve rigenerarli prima di poter riparare i relativi record SQLite.",
-        "repairVisibilitySkippedWithBase": "{{message}}; sono stati ignorati {{count}} file state_5.sqlite non validi o danneggiati. Codex deve rigenerarli prima di poter riparare i relativi record SQLite."
+        "repairVisibilitySkippedOnly": "Nessuna differenza provider scrivibile trovata; ignorati {{count}} file state_5.sqlite non validi o danneggiati. Codex deve rigenerarli prima di poter riparare i record SQLite; {{restartInstruction}}",
+        "repairVisibilitySkippedWithBase": "{{message}}; ignorati {{count}} file state_5.sqlite non validi o danneggiati. Codex deve rigenerarli prima di poter riparare i record SQLite; {{restartInstruction}}",
+        "restartAfterRestore": "Attendi {{seconds}} secondi, poi chiudi completamente il processo Codex e riavvialo",
+        "repairVisibilityRestartInstruction": "Attendi 10 secondi, poi chiudi completamente il processo Codex e riavvialo"
       },
       "groupCount": "{{count}} sessioni",
       "updatedAt": "Aggiornato",
       "labels": {
         "sessionId": "ID sessione",
-        "tokenUsage": "Utilizzo token"
+        "tokenUsage": "Utilizzo token",
+        "unknownCwd": "Directory di lavoro sconosciuta",
+        "moreHidden": "{{count}} altri non mostrati",
+        "archived": "Archiviato",
+        "removed": "Rimosso",
+        "projectless": "Chat",
+        "projectlessGroup": "Chat",
+        "projectlessHint": "Chat senza progetto"
       },
       "locationRunning": " (in esecuzione)",
       "untitled": "Sessione senza titolo",
       "restoreModal": {
         "title": "Ripristina sessioni",
-        "hint": "Con il ripristino, il file rollout, la riga del thread SQLite e la voce session_index tornano insieme nell'istanza originale.",
+        "hint": "Il ripristino rimette file rollout, voci session_index e tempi dei file nell’istanza originale. Se una sorgente nasconde i progetti nella barra laterale Codex, viene prima richiesta conferma con l’elenco sessioni, poi Codex ufficiale ricostruisce l’indice.",
         "emptyTitle": "Il cestino è vuoto",
         "emptyDesc": "Le sessioni spostate nel cestino appariranno qui.",
-        "restoreAction": "Ripristina le sessioni selezionate"
+        "restoreAction": "Ripristina le sessioni selezionate",
+        "rolloutBackupsTitle": "Backup di ripristino rollout",
+        "rolloutBackupsCount": "{{count}} batch",
+        "noRolloutBackups": "Nessun backup rollout ripristinabile.",
+        "rolloutBackupSummary": "{{sessions}} sessioni / {{rollouts}} backup rollout in conflitto / {{instances}} istanze",
+        "restoreRolloutBackup": "Ripristina backup rollout",
+        "rolloutBackupConfirm": "Questi sono backup rollout già presenti nella directory Codex sessions e in conflitto con il cestino durante il ripristino. Non sono backup del cestino di Cockpit Tools. Ripristinarli?"
       },
       "targetModal": {
         "title": "Copia in istanza",

@@ -9,6 +9,9 @@ import type {
   CodexSessionTrashSummary,
   CodexTrashedSessionRecord,
   CodexSessionRestoreSummary,
+  CodexSessionRestorePreviewSummary,
+  CodexSessionSourceRepairPreviewSummary,
+  CodexSessionRolloutBackupBatch,
   CodexQuickConfig,
   CodexAppSpeed,
 } from "../types/codex";
@@ -153,8 +156,18 @@ export async function syncSessionsToInstance(
   });
 }
 
-export async function repairSessionVisibilityAcrossInstances(): Promise<CodexSessionVisibilityRepairSummary> {
-  return await invoke("codex_repair_session_visibility_across_instances");
+export async function repairSessionVisibilityAcrossInstances(
+  normalizeSources = false,
+): Promise<CodexSessionVisibilityRepairSummary> {
+  return await invoke("codex_repair_session_visibility_across_instances", {
+    normalizeSources,
+  });
+}
+
+export async function previewSessionVisibilitySourceRepairs(): Promise<
+  CodexSessionSourceRepairPreviewSummary
+> {
+  return await invoke("codex_preview_session_visibility_source_repairs");
 }
 
 export async function listSessionsAcrossInstances(): Promise<
@@ -185,10 +198,36 @@ export async function listTrashedSessionsAcrossInstances(): Promise<
   return await invoke("codex_list_trashed_sessions_across_instances");
 }
 
+export async function previewRestoreSessionsFromTrashAcrossInstances(
+  sessionIds: string[],
+): Promise<CodexSessionRestorePreviewSummary> {
+  return await invoke("codex_preview_restore_sessions_from_trash_across_instances", {
+    sessionIds,
+  });
+}
+
 export async function restoreSessionsFromTrashAcrossInstances(
   sessionIds: string[],
+  forceOverwrite = false,
+  normalizeSources = false,
 ): Promise<CodexSessionRestoreSummary> {
   return await invoke("codex_restore_sessions_from_trash_across_instances", {
     sessionIds,
+    forceOverwrite,
+    normalizeSources,
+  });
+}
+
+export async function listSessionRestoreRolloutBackups(): Promise<
+  CodexSessionRolloutBackupBatch[]
+> {
+  return await invoke("codex_list_session_restore_rollout_backups");
+}
+
+export async function restoreSessionRestoreRolloutBackup(
+  batchId: string,
+): Promise<CodexSessionRestoreSummary> {
+  return await invoke("codex_restore_session_restore_rollout_backup", {
+    batchId,
   });
 }
