@@ -282,22 +282,53 @@ fn repair_session_visibility_before_launch(
     context: &str,
     launch_provider_change: &Option<CodexLaunchProviderChange>,
 ) -> Result<(), String> {
-    let Some(change) = launch_provider_change else {
-        return Ok(());
-    };
+    repair_session_visibility_before_launch_with_runner(context, launch_provider_change, || {
+        modules::codex_session_visibility::repair_session_visibility_across_instances()
+    })
+}
 
+fn repair_session_visibility_before_launch_with_runner<F>(
+    context: &str,
+    launch_provider_change: &Option<CodexLaunchProviderChange>,
+    repair_visibility: F,
+) -> Result<(), String>
+where
+    F: FnOnce() -> Result<
+        modules::codex_session_visibility::CodexSessionVisibilityRepairSummary,
+        String,
+    >,
+{
     let started = Instant::now();
-    let summary = modules::codex_session_visibility::repair_session_visibility_across_instances()?;
-    modules::logger::log_info(&format!(
-        "[Codex Session Visibility] {}: repaired before launch, from_provider={}, to_provider={}, mutated_instances={}, rollout_files={}, sqlite_rows={}, elapsed_ms={}",
-        context,
-        change.from_provider,
-        change.to_provider,
-        summary.mutated_instance_count,
-        summary.changed_rollout_file_count,
-        summary.updated_sqlite_row_count,
-        started.elapsed().as_millis()
-    ));
+    let summary = repair_visibility()?;
+    if let Some(change) = launch_provider_change {
+        modules::logger::log_info(&format!(
+            "[Codex Session Visibility] {}: repaired before launch, from_provider={}, to_provider={}, mutated_instances={}, rollout_files={}, sqlite_rows={}, session_index_entries={}, elapsed_ms={}",
+            context,
+            change.from_provider,
+            change.to_provider,
+            summary.mutated_instance_count,
+            summary.changed_rollout_file_count,
+            summary.updated_sqlite_row_count,
+            summary.added_session_index_entry_count,
+            started.elapsed().as_millis()
+        ));
+    } else {
+        let action = if summary.mutated_instance_count > 0 {
+            "repaired before launch"
+        } else {
+            "verified before launch"
+        };
+        modules::logger::log_info(&format!(
+            "[Codex Session Visibility] {}: {}, mutated_instances={}, rollout_files={}, sqlite_rows={}, session_index_entries={}, elapsed_ms={}",
+            context,
+            action,
+            summary.mutated_instance_count,
+            summary.changed_rollout_file_count,
+            summary.updated_sqlite_row_count,
+            summary.added_session_index_entry_count,
+            started.elapsed().as_millis()
+        ));
+    }
     Ok(())
 }
 
@@ -424,6 +455,33 @@ mod tests {
         );
 
         assert!(change.is_none());
+    }
+
+    #[test]
+    fn repair_session_visibility_before_launch_runs_without_provider_change() {
+        let mut called = false;
+        repair_session_visibility_before_launch_with_runner("test", &None, || {
+            called = true;
+            Ok(
+                modules::codex_session_visibility::CodexSessionVisibilityRepairSummary {
+                    instance_count: 0,
+                    mutated_instance_count: 0,
+                    changed_rollout_file_count: 0,
+                    updated_sqlite_row_count: 0,
+                    added_session_index_entry_count: 0,
+                    skipped_sqlite_file_count: 0,
+                    items: Vec::new(),
+                    backup_dirs: Vec::new(),
+                    message: String::new(),
+                },
+            )
+        })
+        .expect("startup repair check should succeed");
+
+        assert!(
+            called,
+            "startup repair should run even without provider change"
+        );
     }
 }
 

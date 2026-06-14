@@ -16,12 +16,14 @@ const DEFAULT_INSTANCE_ID: &str = "__default__";
 const DEFAULT_INSTANCE_NAME: &str = "默认实例";
 const DEFAULT_PROVIDER_ID: &str = "openai";
 const STATE_DB_FILE: &str = "state_5.sqlite";
+const STATE_DB_NESTED_DIR: &str = "sqlite";
 const CONFIG_FILE_NAME: &str = "config.toml";
 const SESSION_INDEX_FILE: &str = "session_index.jsonl";
 const SESSION_DIRS: [&str; 2] = ["sessions", "archived_sessions"];
 const SESSION_VISIBILITY_REPAIR_BACKUP_PREFIX: &str = "backup-";
 const SESSION_VISIBILITY_REPAIR_BACKUP_SUFFIX: &str = "-session-visibility-repair";
 const MAX_SESSION_VISIBILITY_REPAIR_BACKUPS: usize = 1;
+#[cfg(test)]
 const SESSION_INDEX_ACTIVITY_DRIFT_MS: i128 = 3_600_000;
 
 #[derive(Debug, Clone, Serialize)]
@@ -387,12 +389,11 @@ fn collect_rollout_provider_changes(
                 continue;
             };
             let session_id = session_meta_id(&parsed);
-            let fallback_modified_ms = modules::codex_session_file_time::read_modified_time(
-                &rollout_path,
-            )
-            .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
-            .map(|value| value.as_millis() as i128);
-            let target_modified_at = resolve_target_modified_at_ms(
+            let fallback_modified_ms =
+                modules::codex_session_file_time::read_modified_time(&rollout_path)
+                    .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+                    .map(|value| value.as_millis() as i128);
+            let target_modified_at = resolve_rollout_modified_at_ms(
                 session_id.as_deref(),
                 &session_index_map,
                 &rollout_path,
@@ -576,8 +577,36 @@ fn count_missing_session_index_entries(data_dir: &Path) -> Result<usize, String>
         .count())
 }
 
+fn sqlite_state_db_relative_paths() -> Vec<PathBuf> {
+    vec![
+        PathBuf::from(STATE_DB_FILE),
+        PathBuf::from(STATE_DB_NESTED_DIR).join(STATE_DB_FILE),
+    ]
+}
+
+fn sqlite_state_db_paths(data_dir: &Path) -> Vec<PathBuf> {
+    sqlite_state_db_relative_paths()
+        .into_iter()
+        .map(|relative_path| data_dir.join(relative_path))
+        .collect()
+}
+
 fn load_sqlite_thread_index_rows(data_dir: &Path) -> Result<Vec<SqliteThreadIndexRow>, String> {
-    let db_path = data_dir.join(STATE_DB_FILE);
+    let mut rows = Vec::new();
+    let mut seen = HashSet::new();
+    for db_path in sqlite_state_db_paths(data_dir) {
+        for row in load_sqlite_thread_index_rows_from_path(&db_path)? {
+            if seen.insert(row.id.clone()) {
+                rows.push(row);
+            }
+        }
+    }
+    Ok(rows)
+}
+
+fn load_sqlite_thread_index_rows_from_path(
+    db_path: &Path,
+) -> Result<Vec<SqliteThreadIndexRow>, String> {
     if !db_path.exists() {
         return Ok(Vec::new());
     }
@@ -832,6 +861,7 @@ fn rollout_file_activity_ms(path: &Path) -> Option<i128> {
         .max()
 }
 
+#[cfg(test)]
 fn resolve_target_modified_at_ms(
     session_id: Option<&str>,
     session_index_map: &HashMap<String, JsonValue>,
@@ -854,6 +884,19 @@ fn resolve_target_modified_at_ms(
     }
 }
 
+fn resolve_rollout_modified_at_ms(
+    session_id: Option<&str>,
+    session_index_map: &HashMap<String, JsonValue>,
+    rollout_path: &Path,
+    fallback_ms: Option<i128>,
+) -> Option<i128> {
+    let indexed = session_id
+        .and_then(|id| session_index_map.get(id))
+        .and_then(parse_session_index_updated_at_ms);
+    let activity = rollout_file_activity_ms(rollout_path);
+    indexed.or(activity).or(fallback_ms)
+}
+
 fn resolve_rollout_path(data_dir: &Path, rollout_path: &str) -> PathBuf {
     let trimmed = rollout_path.trim();
     let stripped = trimmed.strip_prefix(r"\\?\").unwrap_or(trimmed);
@@ -866,7 +909,17 @@ fn resolve_rollout_path(data_dir: &Path, rollout_path: &str) -> PathBuf {
 }
 
 fn repair_sqlite_thread_timestamps(data_dir: &Path) -> Result<usize, String> {
-    let db_path = data_dir.join(STATE_DB_FILE);
+    let mut updated = 0usize;
+    for db_path in sqlite_state_db_paths(data_dir) {
+        updated += repair_sqlite_thread_timestamps_at_path(data_dir, &db_path)?;
+    }
+    Ok(updated)
+}
+
+fn repair_sqlite_thread_timestamps_at_path(
+    data_dir: &Path,
+    db_path: &Path,
+) -> Result<usize, String> {
     if !db_path.exists() {
         return Ok(0);
     }
@@ -908,9 +961,7 @@ fn repair_sqlite_thread_timestamps(data_dir: &Path) -> Result<usize, String> {
                 row.get::<_, Option<i64>>(2)?,
             ))
         })
-        .map_err(|error| {
-            format_sqlite_read_error(&db_path, "查询 SQLite 会话时间失败", &error)
-        })?;
+        .map_err(|error| format_sqlite_read_error(&db_path, "查询 SQLite 会话时间失败", &error))?;
 
     let mut updates = Vec::new();
     for row in rows {
@@ -944,7 +995,11 @@ fn repair_sqlite_thread_timestamps(data_dir: &Path) -> Result<usize, String> {
         transaction
             .execute(
                 "UPDATE threads SET updated_at = ?1, updated_at_ms = ?2 WHERE id = ?3",
-                (*activity_seconds, *activity_seconds * 1000, thread_id.as_str()),
+                (
+                    *activity_seconds,
+                    *activity_seconds * 1000,
+                    thread_id.as_str(),
+                ),
             )
             .map_err(|error| format_sqlite_write_error(&db_path, &error))?;
     }
@@ -973,7 +1028,23 @@ fn count_sqlite_rows_to_update(
     data_dir: &Path,
     target_provider: &str,
 ) -> Result<SqliteProviderScan, String> {
-    let db_path = data_dir.join(STATE_DB_FILE);
+    let mut rows_to_update = 0usize;
+    let mut skipped_unusable_database = false;
+    for db_path in sqlite_state_db_paths(data_dir) {
+        let scan = count_sqlite_rows_to_update_at_path(&db_path, target_provider)?;
+        rows_to_update += scan.rows_to_update;
+        skipped_unusable_database |= scan.skipped_unusable_database;
+    }
+    Ok(SqliteProviderScan {
+        rows_to_update,
+        skipped_unusable_database,
+    })
+}
+
+fn count_sqlite_rows_to_update_at_path(
+    db_path: &Path,
+    target_provider: &str,
+) -> Result<SqliteProviderScan, String> {
     if !db_path.exists() {
         return Ok(SqliteProviderScan {
             rows_to_update: 0,
@@ -1065,7 +1136,14 @@ fn count_sqlite_rows_to_update(
 }
 
 fn update_sqlite_provider(data_dir: &Path, target_provider: &str) -> Result<usize, String> {
-    let db_path = data_dir.join(STATE_DB_FILE);
+    let mut updated_rows = 0usize;
+    for db_path in sqlite_state_db_paths(data_dir) {
+        updated_rows += update_sqlite_provider_at_path(&db_path, target_provider)?;
+    }
+    Ok(updated_rows)
+}
+
+fn update_sqlite_provider_at_path(db_path: &Path, target_provider: &str) -> Result<usize, String> {
     if !db_path.exists() {
         return Ok(0);
     }
@@ -1310,12 +1388,30 @@ fn remove_sqlite_sidecar_files(db_path: &Path) -> Result<(), String> {
 }
 
 fn backup_sqlite_database(data_dir: &Path, backup_dir: &Path) -> Result<bool, String> {
-    let db_path = data_dir.join(STATE_DB_FILE);
+    let mut backed_up = false;
+    for relative_path in sqlite_state_db_relative_paths() {
+        let db_path = data_dir.join(&relative_path);
+        if backup_sqlite_database_at_path(&db_path, &backup_dir.join(&relative_path))? {
+            backed_up = true;
+        }
+    }
+    Ok(backed_up)
+}
+
+fn backup_sqlite_database_at_path(db_path: &Path, backup_db_path: &Path) -> Result<bool, String> {
     if !db_path.exists() {
         return Ok(false);
     }
 
-    let backup_db_path = backup_dir.join(STATE_DB_FILE);
+    if let Some(parent) = backup_db_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "创建 state_5.sqlite 备份目录失败 ({}): {}",
+                parent.display(),
+                error
+            )
+        })?;
+    }
     let connection = Connection::open(&db_path).map_err(|error| {
         format!(
             "打开 state_5.sqlite 以创建一致备份失败 ({}): {}",
@@ -1357,19 +1453,35 @@ fn backup_sqlite_database(data_dir: &Path, backup_dir: &Path) -> Result<bool, St
 }
 
 fn restore_sqlite_database_from_backup(data_dir: &Path, backup_dir: &Path) -> Result<bool, String> {
-    let backup_db_path = backup_dir.join(STATE_DB_FILE);
+    let mut restored = false;
+    for relative_path in sqlite_state_db_relative_paths() {
+        if restore_sqlite_database_from_backup_path(
+            &data_dir.join(&relative_path),
+            &backup_dir.join(&relative_path),
+        )? {
+            restored = true;
+        }
+    }
+    Ok(restored)
+}
+
+fn restore_sqlite_database_from_backup_path(
+    target_db_path: &Path,
+    backup_db_path: &Path,
+) -> Result<bool, String> {
     if !backup_db_path.exists() {
         return Ok(false);
     }
 
-    let target_db_path = data_dir.join(STATE_DB_FILE);
-    fs::create_dir_all(data_dir).map_err(|error| {
-        format!(
-            "创建 state_5.sqlite 恢复目录失败 ({}): {}",
-            data_dir.display(),
-            error
-        )
-    })?;
+    if let Some(parent) = target_db_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "创建 state_5.sqlite 恢复目录失败 ({}): {}",
+                parent.display(),
+                error
+            )
+        })?;
+    }
     remove_sqlite_sidecar_files(&target_db_path)?;
     fs::copy(&backup_db_path, &target_db_path).map_err(|error| {
         format!(
@@ -1817,6 +1929,59 @@ mod tests {
     }
 
     #[test]
+    fn sqlite_repair_covers_nested_state_database() {
+        let data_dir = make_temp_dir("codex-session-visibility-nested-sqlite-test");
+        let sqlite_dir = data_dir.join("sqlite");
+        fs::create_dir_all(&sqlite_dir).expect("create nested sqlite dir");
+        let db_path = sqlite_dir.join(STATE_DB_FILE);
+        let connection = Connection::open(&db_path).expect("open nested sqlite");
+        connection
+            .execute(
+                "CREATE TABLE threads (
+                    id TEXT PRIMARY KEY,
+                    model_provider TEXT,
+                    has_user_event INTEGER,
+                    first_user_message TEXT,
+                    thread_source TEXT
+                )",
+                [],
+            )
+            .expect("create threads table");
+        connection
+            .execute(
+                "INSERT INTO threads (id, model_provider, has_user_event, first_user_message, thread_source)
+                 VALUES ('nested-invisible', 'codex_local_access', 0, 'hello', '')",
+                [],
+            )
+            .expect("insert nested row");
+        drop(connection);
+
+        let scan = count_sqlite_rows_to_update(&data_dir, "openai").expect("scan nested sqlite");
+        assert_eq!(scan.rows_to_update, 1);
+
+        let updated_rows =
+            update_sqlite_provider(&data_dir, "openai").expect("update nested sqlite");
+        assert_eq!(updated_rows, 1);
+
+        let connection = Connection::open(&db_path).expect("reopen nested sqlite");
+        let repaired = connection
+            .query_row(
+                "SELECT model_provider, has_user_event, thread_source FROM threads WHERE id = 'nested-invisible'",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<usize, String>(0)?,
+                        row.get::<usize, i64>(1)?,
+                        row.get::<usize, String>(2)?,
+                    ))
+                },
+            )
+            .expect("read repaired nested row");
+        assert_eq!(repaired, ("openai".to_string(), 1, "user".to_string()));
+        fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
     fn sqlite_repair_keeps_provider_only_schema_working() {
         let data_dir = make_temp_dir("codex-session-provider-only-sqlite-test");
         let db_path = data_dir.join(STATE_DB_FILE);
@@ -1927,13 +2092,9 @@ mod tests {
         .expect("write session index");
 
         let session_index_map = read_session_index_map(&data_dir).expect("read session index");
-        let target = resolve_target_modified_at_ms(
-            Some("s1"),
-            &session_index_map,
-            &rollout_path,
-            None,
-        )
-        .expect("resolve target modified");
+        let target =
+            resolve_target_modified_at_ms(Some("s1"), &session_index_map, &rollout_path, None)
+                .expect("resolve target modified");
 
         assert_eq!(target, 1_704_067_200_000);
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
