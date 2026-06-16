@@ -93,7 +93,8 @@ import { QuickSettingsPopover } from '../components/QuickSettingsPopover'
 import {
   isPrivacyModeEnabledByDefault,
   maskSensitiveValue,
-  persistPrivacyModeEnabled
+  persistPrivacyModeEnabled,
+  PRIVACY_MODE_CHANGED_EVENT
 } from '../utils/privacy'
 import { useExportJsonModal } from '../hooks/useExportJsonModal'
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown'
@@ -129,13 +130,9 @@ import {
   normalizeAntigravityExternalImportToken,
 } from '../utils/externalProviderImport'
 import {
-  ACCOUNTS_OVERVIEW_FILTER_PERSISTENCE_CHANGED_EVENT,
-  type AccountsOverviewFilterPersistenceChangedDetail,
   normalizeAccountsOverviewScope,
   readAccountsOverviewFilterField,
-  readAccountsOverviewFilterPersistenceEnabled,
   readAccountsOverviewFilterStringArray,
-  removeAccountsOverviewFilterField,
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence'
 import { useAntigravityRuntimeTarget } from '../hooks/useAntigravityRuntimeTarget'
@@ -288,18 +285,10 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     }
   }, [storeError])
 
-  const initialFilterPersistenceEnabled = readAccountsOverviewFilterPersistenceEnabled(
-    ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-  )
-  const [filterPersistenceEnabled, setFilterPersistenceEnabled] = useState<boolean>(
-    initialFilterPersistenceEnabled,
-  )
+
 
   // View mode
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    if (!initialFilterPersistenceEnabled) {
-      return 'grid'
-    }
     const saved = readAccountsOverviewFilterField<unknown>(
       ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
       ANTIGRAVITY_FILTER_FIELD_VIEW_MODE,
@@ -333,31 +322,25 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
   // 筛选
   const [searchQuery, setSearchQuery] = useState('')
   const [filterTypes, setFilterTypes] = useState<AccountsFilterType[]>(() =>
-    initialFilterPersistenceEnabled
-      ? (readAccountsOverviewFilterStringArray(
-          ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-          ANTIGRAVITY_FILTER_FIELD_FILTER_TYPES,
-        ) as AccountsFilterType[])
-      : [],
+    (readAccountsOverviewFilterStringArray(
+      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+      ANTIGRAVITY_FILTER_FIELD_FILTER_TYPES,
+    ) as AccountsFilterType[])
   )
   const [tagFilter, setTagFilter] = useState<string[]>(() =>
-    initialFilterPersistenceEnabled
-      ? readAccountsOverviewFilterStringArray(
-          ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-          ANTIGRAVITY_FILTER_FIELD_TAG_FILTER,
-        )
-      : [],
+    readAccountsOverviewFilterStringArray(
+      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+      ANTIGRAVITY_FILTER_FIELD_TAG_FILTER,
+    )
   )
   const [groupByTag, setGroupByTag] = useState<boolean>(() =>
-    initialFilterPersistenceEnabled
-      ? Boolean(
-          readAccountsOverviewFilterField<unknown>(
-            ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-            ANTIGRAVITY_FILTER_FIELD_GROUP_BY_TAG,
-            false,
-          ),
-        )
-      : false,
+    Boolean(
+      readAccountsOverviewFilterField<unknown>(
+        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+        ANTIGRAVITY_FILTER_FIELD_GROUP_BY_TAG,
+        false,
+      ),
+    )
   )
 
   const toggleFilterTypeValue = useCallback((value: AccountsFilterType) => {
@@ -463,9 +446,6 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
   // ─── 账号分组（文件夹）────────────────────────────────────
   const [accountGroups, setAccountGroups] = useState<AccountGroup[]>([])
   const [activeGroupId, setActiveGroupId] = useState<string | null>(() => {
-    if (!initialFilterPersistenceEnabled) {
-      return null
-    }
     const saved = readAccountsOverviewFilterField<string | null>(
       ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
       ANTIGRAVITY_FILTER_FIELD_ACTIVE_GROUP_ID,
@@ -514,9 +494,6 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     }
   }, [accountGroups, groupQuickAddGroupId])
   const [sortBy, setSortBy] = useState<string>(() => {
-    if (!initialFilterPersistenceEnabled) {
-      return DEFAULT_ANTIGRAVITY_SORT_BY
-    }
     return normalizeAntigravitySortBy(
       readAccountsOverviewFilterField<unknown>(
         ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
@@ -526,9 +503,6 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     )
   })
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(() => {
-    if (!initialFilterPersistenceEnabled) {
-      return 'desc'
-    }
     return normalizeAntigravitySortDirection(
       readAccountsOverviewFilterField<unknown>(
         ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
@@ -640,130 +614,142 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     return total.toFixed(2).replace(/\.?0+$/, '')
   }
 
+
+
   useEffect(() => {
-    const handleFilterPersistenceChanged = (event: Event) => {
-      const detail = (event as CustomEvent<AccountsOverviewFilterPersistenceChangedDetail>).detail
-      if (!detail || detail.scope !== ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE) {
-        return
-      }
-      setFilterPersistenceEnabled(Boolean(detail.enabled))
-    }
-    window.addEventListener(
-      ACCOUNTS_OVERVIEW_FILTER_PERSISTENCE_CHANGED_EVENT,
-      handleFilterPersistenceChanged as EventListener,
-    )
-    return () => {
-      window.removeEventListener(
-        ACCOUNTS_OVERVIEW_FILTER_PERSISTENCE_CHANGED_EVENT,
-        handleFilterPersistenceChanged as EventListener,
+    const handleConfigUpdated = () => {
+      const savedViewMode = readAccountsOverviewFilterField<unknown>(
+        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+        ANTIGRAVITY_FILTER_FIELD_VIEW_MODE,
+        'grid',
       )
+      if (savedViewMode === 'grid' || savedViewMode === 'list' || savedViewMode === 'compact') {
+        setViewMode(savedViewMode)
+      }
+
+      setFilterTypes(
+        readAccountsOverviewFilterStringArray(
+          ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+          ANTIGRAVITY_FILTER_FIELD_FILTER_TYPES,
+        ) as AccountsFilterType[]
+      )
+
+      setTagFilter(
+        readAccountsOverviewFilterStringArray(
+          ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+          ANTIGRAVITY_FILTER_FIELD_TAG_FILTER,
+        )
+      )
+
+      setGroupByTag(
+        Boolean(
+          readAccountsOverviewFilterField<unknown>(
+            ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+            ANTIGRAVITY_FILTER_FIELD_GROUP_BY_TAG,
+            false,
+          ),
+        )
+      )
+
+      const savedActiveGroupId = readAccountsOverviewFilterField<string | null>(
+        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+        ANTIGRAVITY_FILTER_FIELD_ACTIVE_GROUP_ID,
+        null,
+      )
+      setActiveGroupId(typeof savedActiveGroupId === 'string' && savedActiveGroupId.trim() ? savedActiveGroupId : null)
+
+      setSortBy(
+        normalizeAntigravitySortBy(
+          readAccountsOverviewFilterField<unknown>(
+            ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+            ANTIGRAVITY_FILTER_FIELD_SORT_BY,
+            DEFAULT_ANTIGRAVITY_SORT_BY,
+          ) as string,
+        )
+      )
+
+      setSortDirection(
+        normalizeAntigravitySortDirection(
+          readAccountsOverviewFilterField<unknown>(
+            ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+            ANTIGRAVITY_FILTER_FIELD_SORT_DIRECTION,
+            'desc',
+          ) as string | null,
+        )
+      )
+
+      setPrivacyModeEnabled(isPrivacyModeEnabledByDefault())
+    }
+
+    const handlePrivacyModeChanged = (event: Event) => {
+      const isEnabled = (event as CustomEvent<boolean>).detail
+      setPrivacyModeEnabled(isEnabled)
+    }
+
+    window.addEventListener('config-updated', handleConfigUpdated)
+    window.addEventListener(PRIVACY_MODE_CHANGED_EVENT, handlePrivacyModeChanged as EventListener)
+
+    return () => {
+      window.removeEventListener('config-updated', handleConfigUpdated)
+      window.removeEventListener(PRIVACY_MODE_CHANGED_EVENT, handlePrivacyModeChanged as EventListener)
     }
   }, [])
 
   useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_VIEW_MODE,
-      )
-      return
-    }
     writeAccountsOverviewFilterField(
       ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
       ANTIGRAVITY_FILTER_FIELD_VIEW_MODE,
       viewMode,
     )
-  }, [filterPersistenceEnabled, viewMode])
+  }, [viewMode])
 
   useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_SORT_BY,
-      )
-      return
-    }
     writeAccountsOverviewFilterField(
       ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
       ANTIGRAVITY_FILTER_FIELD_SORT_BY,
       sortBy,
     )
-  }, [filterPersistenceEnabled, sortBy])
+  }, [sortBy])
 
   useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_SORT_DIRECTION,
-      )
-      return
-    }
     writeAccountsOverviewFilterField(
       ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
       ANTIGRAVITY_FILTER_FIELD_SORT_DIRECTION,
       sortDirection,
     )
-  }, [filterPersistenceEnabled, sortDirection])
+  }, [sortDirection])
 
   useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_FILTER_TYPES,
-      )
-      return
-    }
     writeAccountsOverviewFilterField(
       ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
       ANTIGRAVITY_FILTER_FIELD_FILTER_TYPES,
       filterTypes,
     )
-  }, [filterPersistenceEnabled, filterTypes])
+  }, [filterTypes])
 
   useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_TAG_FILTER,
-      )
-      return
-    }
     writeAccountsOverviewFilterField(
       ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
       ANTIGRAVITY_FILTER_FIELD_TAG_FILTER,
       tagFilter,
     )
-  }, [filterPersistenceEnabled, tagFilter])
+  }, [tagFilter])
 
   useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_GROUP_BY_TAG,
-      )
-      return
-    }
     writeAccountsOverviewFilterField(
       ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
       ANTIGRAVITY_FILTER_FIELD_GROUP_BY_TAG,
       groupByTag,
     )
-  }, [filterPersistenceEnabled, groupByTag])
+  }, [groupByTag])
 
   useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_ACTIVE_GROUP_ID,
-      )
-      return
-    }
     writeAccountsOverviewFilterField(
       ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
       ANTIGRAVITY_FILTER_FIELD_ACTIVE_GROUP_ID,
       activeGroupId,
     )
-  }, [activeGroupId, filterPersistenceEnabled])
+  }, [activeGroupId])
 
   useEffect(() => {
     if (!displayGroupsLoaded) {
