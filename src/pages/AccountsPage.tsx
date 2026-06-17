@@ -1141,6 +1141,10 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     }
   }, [fetchAccounts, fetchCurrentAccount, loadVerificationHistory, refreshQuota])
 
+  useEffect(() => {
+    fetchCurrentAccount()
+  }, [antigravityRuntimeTarget, fetchCurrentAccount])
+
   // Click outside to close color picker
   useEffect(() => {
     if (!showColorPicker) return

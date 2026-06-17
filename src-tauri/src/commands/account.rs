@@ -196,8 +196,53 @@ pub async fn reorder_accounts(account_ids: Vec<String>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn get_current_account() -> Result<Option<models::Account>, String> {
-    modules::get_current_account()
+pub async fn get_current_account(
+    runtime_target: Option<String>,
+) -> Result<Option<models::Account>, String> {
+    let target = normalize_antigravity_runtime_target(runtime_target.as_deref());
+    match target {
+        AntigravityRuntimeTarget::Legacy => {
+            #[cfg(target_os = "windows")]
+            {
+                if let Ok(Some(system_credential)) = crate::modules::antigravity_credential::read_antigravity_system_credential() {
+                    let accounts = modules::list_accounts()?;
+                    for account in accounts {
+                        if account.token.refresh_token == system_credential.refresh_token {
+                            return Ok(Some(account));
+                        }
+                    }
+                }
+            }
+            Ok(None)
+        }
+        AntigravityRuntimeTarget::Ide => {
+            if let Ok(db_path) = crate::modules::db::get_db_path() {
+                if db_path.exists() {
+                    if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+                        let state_data: Result<String, _> = conn.query_row(
+                            "SELECT value FROM ItemTable WHERE key = ?",
+                            ["antigravityUnifiedStateSync.oauthToken"],
+                            |row| row.get(0),
+                        );
+                        if let Ok(state_data) = state_data {
+                            use base64::{engine::general_purpose, Engine as _};
+                            if let Ok(blob) = general_purpose::STANDARD.decode(&state_data) {
+                                if let Some(refresh_token) = crate::utils::protobuf::extract_refresh_token_from_unified_oauth_token(&blob) {
+                                    let accounts = modules::list_accounts()?;
+                                    for account in accounts {
+                                        if account.token.refresh_token == refresh_token {
+                                            return Ok(Some(account));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(None)
+        }
+    }
 }
 
 #[tauri::command]

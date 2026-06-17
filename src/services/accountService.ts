@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { Account, RefreshStats } from '../types/account';
-import { AntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget';
+import { AntigravityRuntimeTarget, getAntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget';
 
 
 export async function listAccounts(): Promise<Account[]> {
@@ -28,7 +28,8 @@ export async function reorderAccounts(accountIds: string[]): Promise<void> {
 }
 
 export async function getCurrentAccount(): Promise<Account | null> {
-    return await invoke('get_current_account');
+    const runtimeTarget = getAntigravityRuntimeTarget();
+    return await invoke('get_current_account', { runtimeTarget });
 }
 
 export async function setCurrentAccount(accountId: string): Promise<void> {
