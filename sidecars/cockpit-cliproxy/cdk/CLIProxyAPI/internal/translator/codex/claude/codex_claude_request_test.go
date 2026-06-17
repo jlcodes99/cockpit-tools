@@ -198,6 +198,84 @@ func TestConvertClaudeRequestToCodex_ShortenLongToolUseIDs(t *testing.T) {
 	}
 }
 
+func TestConvertClaudeRequestToCodex_DropsUnansweredToolUse(t *testing.T) {
+	inputJSON := `{
+		"model": "claude-3-opus",
+		"messages": [
+			{"role": "user", "content": "run pwd"},
+			{"role": "assistant", "content": [
+				{"type":"tool_use","id":"toolu_unanswered","name":"Bash","input":{"cmd":"pwd"}}
+			]}
+		]
+	}`
+
+	result := ConvertClaudeRequestToCodex("test-model", []byte(inputJSON), false)
+	callIDs, outputIDs := collectRequestToolCallIDs(result)
+
+	assertStringSliceEqual(t, callIDs, nil)
+	assertStringSliceEqual(t, outputIDs, nil)
+}
+
+func TestConvertClaudeRequestToCodex_PreservesAnsweredToolUsePair(t *testing.T) {
+	inputJSON := `{
+		"model": "claude-3-opus",
+		"messages": [
+			{"role": "user", "content": "run pwd"},
+			{"role": "assistant", "content": [
+				{"type":"tool_use","id":"toolu_done","name":"Bash","input":{"cmd":"pwd"}}
+			]},
+			{"role": "user", "content": [
+				{"type":"tool_result","tool_use_id":"toolu_done","content":"ok"}
+			]}
+		]
+	}`
+
+	result := ConvertClaudeRequestToCodex("test-model", []byte(inputJSON), false)
+	callIDs, outputIDs := collectRequestToolCallIDs(result)
+
+	assertStringSliceEqual(t, callIDs, []string{"toolu_done"})
+	assertStringSliceEqual(t, outputIDs, []string{"toolu_done"})
+}
+
+func TestConvertClaudeRequestToCodex_DropsOnlyUnansweredParallelToolUse(t *testing.T) {
+	inputJSON := `{
+		"model": "claude-3-opus",
+		"messages": [
+			{"role": "user", "content": "run two commands"},
+			{"role": "assistant", "content": [
+				{"type":"tool_use","id":"toolu_done","name":"Bash","input":{"cmd":"pwd"}},
+				{"type":"tool_use","id":"toolu_pending","name":"Bash","input":{"cmd":"ls"}}
+			]},
+			{"role": "user", "content": [
+				{"type":"tool_result","tool_use_id":"toolu_done","content":"ok"}
+			]}
+		]
+	}`
+
+	result := ConvertClaudeRequestToCodex("test-model", []byte(inputJSON), false)
+	callIDs, outputIDs := collectRequestToolCallIDs(result)
+
+	assertStringSliceEqual(t, callIDs, []string{"toolu_done"})
+	assertStringSliceEqual(t, outputIDs, []string{"toolu_done"})
+}
+
+func TestConvertClaudeRequestToCodex_PreservesOrphanToolResultForReplayCache(t *testing.T) {
+	inputJSON := `{
+		"model": "claude-3-opus",
+		"messages": [
+			{"role": "user", "content": [
+				{"type":"tool_result","tool_use_id":"toolu_orphan","content":"ok"}
+			]}
+		]
+	}`
+
+	result := ConvertClaudeRequestToCodex("test-model", []byte(inputJSON), false)
+	callIDs, outputIDs := collectRequestToolCallIDs(result)
+
+	assertStringSliceEqual(t, callIDs, nil)
+	assertStringSliceEqual(t, outputIDs, []string{"toolu_orphan"})
+}
+
 func TestConvertClaudeRequestToCodex_ToolChoiceModeMapping(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -464,6 +542,33 @@ func countRequestInputItemsByType(result []byte, itemType string) int {
 		return true
 	})
 	return count
+}
+
+func collectRequestToolCallIDs(result []byte) ([]string, []string) {
+	var callIDs []string
+	var outputIDs []string
+	gjson.GetBytes(result, "input").ForEach(func(_, item gjson.Result) bool {
+		switch item.Get("type").String() {
+		case "function_call":
+			callIDs = append(callIDs, item.Get("call_id").String())
+		case "function_call_output":
+			outputIDs = append(outputIDs, item.Get("call_id").String())
+		}
+		return true
+	})
+	return callIDs, outputIDs
+}
+
+func assertStringSliceEqual(t *testing.T, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
 }
 
 func validCodexReasoningSignature() string {

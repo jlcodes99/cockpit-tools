@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -513,6 +514,88 @@ func insertCodexReasoningReplayItems(body []byte, replayItems [][]byte) ([]byte,
 	return updated, true
 }
 
+func normalizeCodexInputToolCallPairs(body []byte) []byte {
+	input := gjson.GetBytes(body, "input")
+	if !input.IsArray() {
+		return body
+	}
+
+	callIDs := map[string]struct{}{}
+	outputIDs := map[string]struct{}{}
+	input.ForEach(func(_, item gjson.Result) bool {
+		callID := strings.TrimSpace(item.Get("call_id").String())
+		itemType := strings.TrimSpace(item.Get("type").String())
+		switch itemType {
+		case "function_call", "custom_tool_call":
+			if callID != "" {
+				callIDs[itemType+"\x00"+callID] = struct{}{}
+			}
+		case "function_call_output":
+			if callID != "" {
+				outputIDs["function_call\x00"+callID] = struct{}{}
+			}
+		case "custom_tool_call_output":
+			if callID != "" {
+				outputIDs["custom_tool_call\x00"+callID] = struct{}{}
+			}
+		}
+		return true
+	})
+	if len(callIDs) == 0 && len(outputIDs) == 0 {
+		return body
+	}
+
+	changed := false
+	filtered := make([]json.RawMessage, 0, len(input.Array()))
+	input.ForEach(func(_, item gjson.Result) bool {
+		itemType := strings.TrimSpace(item.Get("type").String())
+		callID := strings.TrimSpace(item.Get("call_id").String())
+		switch itemType {
+		case "function_call", "custom_tool_call":
+			if callID == "" {
+				changed = true
+				return true
+			}
+			if _, ok := outputIDs[itemType+"\x00"+callID]; !ok {
+				changed = true
+				return true
+			}
+		case "function_call_output":
+			if callID == "" {
+				changed = true
+				return true
+			}
+			if _, ok := callIDs["function_call\x00"+callID]; !ok {
+				changed = true
+				return true
+			}
+		case "custom_tool_call_output":
+			if callID == "" {
+				changed = true
+				return true
+			}
+			if _, ok := callIDs["custom_tool_call\x00"+callID]; !ok {
+				changed = true
+				return true
+			}
+		}
+		filtered = append(filtered, json.RawMessage(item.Raw))
+		return true
+	})
+	if !changed {
+		return body
+	}
+	inputRaw, err := json.Marshal(filtered)
+	if err != nil {
+		return body
+	}
+	updated, err := sjson.SetRawBytes(body, "input", inputRaw)
+	if err != nil {
+		return body
+	}
+	return updated
+}
+
 func codexReasoningReplayInsertIndex(inputItems []gjson.Result, replayItems [][]byte) int {
 	replayCallIDs := make(map[string]bool)
 	for _, replayItem := range replayItems {
@@ -783,6 +866,7 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 	}
 	body = sanitizeOpenAIResponsesReasoningEncryptedContent(ctx, "codex executor", body)
 	body, replayScope := applyCodexReasoningReplayCache(ctx, from, req, opts, body)
+	body = normalizeCodexInputToolCallPairs(body)
 	reporter.SetTranslatedReasoningEffort(body, to.String())
 
 	url := strings.TrimSuffix(baseURL, "/") + "/responses"
@@ -1058,6 +1142,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 	}
 	body = sanitizeOpenAIResponsesReasoningEncryptedContent(ctx, "codex executor", body)
 	body, replayScope := applyCodexReasoningReplayCache(ctx, from, req, opts, body)
+	body = normalizeCodexInputToolCallPairs(body)
 	reporter.SetTranslatedReasoningEffort(body, to.String())
 
 	url := strings.TrimSuffix(baseURL, "/") + "/responses"

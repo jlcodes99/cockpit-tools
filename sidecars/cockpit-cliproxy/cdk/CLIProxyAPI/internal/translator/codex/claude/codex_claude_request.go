@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -330,6 +331,7 @@ func ConvertClaudeRequestToCodex(modelName string, inputRawJSON []byte, _ bool) 
 	template, _ = sjson.SetBytes(template, "stream", true)
 	template, _ = sjson.SetBytes(template, "store", false)
 	template, _ = sjson.SetBytes(template, "include", []string{"reasoning.encrypted_content"})
+	template = normalizeCodexToolCallPairs(template)
 
 	return template
 }
@@ -570,4 +572,61 @@ func normalizeToolParameters(raw string) string {
 		schema, _ = sjson.SetRawBytes(schema, "properties", []byte(`{}`))
 	}
 	return string(schema)
+}
+
+func normalizeCodexToolCallPairs(payload []byte) []byte {
+	input := gjson.GetBytes(payload, "input")
+	if !input.IsArray() {
+		return payload
+	}
+
+	hasFunctionCall := false
+	outputIDs := map[string]struct{}{}
+	input.ForEach(func(_, item gjson.Result) bool {
+		callID := strings.TrimSpace(item.Get("call_id").String())
+		switch item.Get("type").String() {
+		case "function_call":
+			hasFunctionCall = true
+		case "function_call_output":
+			if callID != "" {
+				outputIDs[callID] = struct{}{}
+			}
+		}
+		return true
+	})
+	if !hasFunctionCall {
+		return payload
+	}
+
+	changed := false
+	filtered := make([]json.RawMessage, 0, len(input.Array()))
+	input.ForEach(func(_, item gjson.Result) bool {
+		itemType := item.Get("type").String()
+		callID := strings.TrimSpace(item.Get("call_id").String())
+		if itemType == "function_call" {
+			if callID == "" {
+				changed = true
+				return true
+			}
+			if _, ok := outputIDs[callID]; !ok {
+				changed = true
+				return true
+			}
+		}
+		filtered = append(filtered, json.RawMessage(item.Raw))
+		return true
+	})
+	if !changed {
+		return payload
+	}
+
+	inputRaw, err := json.Marshal(filtered)
+	if err != nil {
+		return payload
+	}
+	updated, err := sjson.SetRawBytes(payload, "input", inputRaw)
+	if err != nil {
+		return payload
+	}
+	return updated
 }

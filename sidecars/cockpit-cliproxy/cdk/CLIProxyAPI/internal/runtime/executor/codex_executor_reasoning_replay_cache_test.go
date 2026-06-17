@@ -141,6 +141,77 @@ func TestCodexExecutorReasoningReplayCacheSharesSameSessionAcrossClientKeys(t *t
 	}
 }
 
+func TestCodexExecutorReasoningReplayCacheDropsUnpairedFunctionCallBeforeUpstream(t *testing.T) {
+	internalcache.ClearCodexReasoningReplayCache()
+	t.Cleanup(internalcache.ClearCodexReasoningReplayCache)
+
+	if !internalcache.CacheCodexReasoningReplayItems("gpt-5.4", "claude:session-unpaired-tool", [][]byte{
+		[]byte(`{"type":"function_call","call_id":"call_unanswered","name":"Agent","arguments":"{}"}`),
+	}) {
+		t.Fatal("replay function_call was not cached")
+	}
+
+	var gotBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, errRead := io.ReadAll(r.Body)
+		if errRead != nil {
+			t.Fatalf("read body: %v", errRead)
+		}
+		gotBody = body
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(`data: {"type":"response.completed","response":{"id":"resp_1","object":"response","created_at":0,"status":"completed","model":"gpt-5.4","output":[]}}` + "\n\n"))
+	}))
+	defer server.Close()
+
+	executor := NewCodexExecutor(&config.Config{})
+	_, err := executor.Execute(context.Background(), &cliproxyauth.Auth{
+		ID: "auth-replay-unpaired-tool",
+		Attributes: map[string]string{
+			"base_url": server.URL,
+			"api_key":  "test",
+		},
+	}, cliproxyexecutor.Request{
+		Model:   "gpt-5.4",
+		Payload: []byte(`{"model":"gpt-5.4","metadata":{"user_id":"{\"device_id\":\"device-test\",\"account_uuid\":\"\",\"session_id\":\"session-unpaired-tool\"}"},"messages":[{"role":"user","content":[{"type":"text","text":"next"}]}]}`),
+	}, cliproxyexecutor.Options{
+		SourceFormat: sdktranslator.FromString("claude"),
+		Stream:       false,
+	})
+	if err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+
+	if got := countCodexInputItemsByType(gotBody, "function_call"); got != 0 {
+		t.Fatalf("function_call item count = %d, want 0; body=%s", got, string(gotBody))
+	}
+	if got := countCodexInputItemsByType(gotBody, "function_call_output"); got != 0 {
+		t.Fatalf("function_call_output item count = %d, want 0; body=%s", got, string(gotBody))
+	}
+	if got := gjson.GetBytes(gotBody, "input.0.role").String(); got != "user" {
+		t.Fatalf("input.0.role = %q, want user; body=%s", got, string(gotBody))
+	}
+}
+
+func TestNormalizeCodexInputToolCallPairsPreservesAnsweredPairs(t *testing.T) {
+	body := []byte(`{
+		"input": [
+			{"type":"function_call","call_id":"call_done","name":"Bash","arguments":"{}"},
+			{"type":"function_call_output","call_id":"call_done","output":"ok"},
+			{"type":"custom_tool_call","call_id":"call_custom","name":"custom","input":{}},
+			{"type":"custom_tool_call_output","call_id":"call_custom","output":"ok"},
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"next"}]}
+		]
+	}`)
+
+	gotBody := normalizeCodexInputToolCallPairs(body)
+
+	for _, itemType := range []string{"function_call", "function_call_output", "custom_tool_call", "custom_tool_call_output"} {
+		if got := countCodexInputItemsByType(gotBody, itemType); got != 1 {
+			t.Fatalf("%s item count = %d, want 1; body=%s", itemType, got, string(gotBody))
+		}
+	}
+}
+
 func TestCodexExecutorReasoningReplaySessionKeyUsesClaudeCodeJSONSessionID(t *testing.T) {
 	from := sdktranslator.FromString("claude")
 	req := cliproxyexecutor.Request{
@@ -270,6 +341,17 @@ func TestCodexExecutorReasoningReplayCacheSharesSameSessionAcrossCodexAuths(t *t
 	if got := gjson.GetBytes(secondBody, "input.0.encrypted_content").String(); got != encryptedContent {
 		t.Fatalf("injected encrypted_content = %q, want cached value", got)
 	}
+}
+
+func countCodexInputItemsByType(body []byte, itemType string) int {
+	count := 0
+	gjson.GetBytes(body, "input").ForEach(func(_, item gjson.Result) bool {
+		if item.Get("type").String() == itemType {
+			count++
+		}
+		return true
+	})
+	return count
 }
 
 func codexReplaySessionOnlyContext(apiKey string) context.Context {
