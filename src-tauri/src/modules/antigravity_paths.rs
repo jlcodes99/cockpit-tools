@@ -44,6 +44,10 @@ fn windows_user_data_candidates(roaming_dir: &std::path::Path) -> Vec<PathBuf> {
     let antigravity_dir = roaming_dir.join("Antigravity");
     let antigravity_ide_dir = roaming_dir.join("Antigravity IDE");
 
+    if windows_app_root_exists("Antigravity IDE", &["Antigravity IDE.exe", "antigravity-ide.exe"]) {
+        return vec![antigravity_ide_dir, antigravity_dir];
+    }
+
     if windows_app_root_exists("Antigravity", &["Antigravity.exe", "antigravity.exe"]) {
         return vec![antigravity_dir, antigravity_ide_dir];
     }
