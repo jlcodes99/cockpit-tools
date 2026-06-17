@@ -204,11 +204,69 @@ pub async fn get_current_account(
         AntigravityRuntimeTarget::Legacy => {
             #[cfg(target_os = "windows")]
             {
-                if let Ok(Some(system_credential)) = crate::modules::antigravity_credential::read_antigravity_system_credential() {
-                    let accounts = modules::list_accounts()?;
-                    for account in accounts {
-                        if account.token.refresh_token == system_credential.refresh_token {
-                            return Ok(Some(account));
+                use crate::modules::antigravity_legacy_instance::{resolve_auth_mode, AntigravityDesktopAuthMode};
+                match resolve_auth_mode() {
+                    AntigravityDesktopAuthMode::SystemCredential => {
+                        if let Ok(Some(system_credential)) = crate::modules::antigravity_credential::read_antigravity_system_credential() {
+                            let accounts = modules::list_accounts()?;
+                            for account in accounts {
+                                if account.token.refresh_token == system_credential.refresh_token {
+                                    return Ok(Some(account));
+                                }
+                            }
+                        }
+                    }
+                    AntigravityDesktopAuthMode::LegacyStateDb => {
+                        if let Ok(db_path) = crate::modules::antigravity_paths::legacy_state_db_path() {
+                            if db_path.exists() {
+                                if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+                                    let state_data: Result<String, _> = conn.query_row(
+                                        "SELECT value FROM ItemTable WHERE key = ?",
+                                        ["antigravityUnifiedStateSync.oauthToken"],
+                                        |row| row.get(0),
+                                    );
+                                    if let Ok(state_data) = state_data {
+                                        use base64::{engine::general_purpose, Engine as _};
+                                        if let Ok(blob) = general_purpose::STANDARD.decode(&state_data) {
+                                            if let Some(refresh_token) = crate::utils::protobuf::extract_refresh_token_from_unified_oauth_token(&blob) {
+                                                let accounts = modules::list_accounts()?;
+                                                for account in accounts {
+                                                    if account.token.refresh_token == refresh_token {
+                                                        return Ok(Some(account));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                if let Ok(db_path) = crate::modules::antigravity_paths::legacy_state_db_path() {
+                    if db_path.exists() {
+                        if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+                            let state_data: Result<String, _> = conn.query_row(
+                                "SELECT value FROM ItemTable WHERE key = ?",
+                                ["antigravityUnifiedStateSync.oauthToken"],
+                                |row| row.get(0),
+                            );
+                            if let Ok(state_data) = state_data {
+                                use base64::{engine::general_purpose, Engine as _};
+                                if let Ok(blob) = general_purpose::STANDARD.decode(&state_data) {
+                                    if let Some(refresh_token) = crate::utils::protobuf::extract_refresh_token_from_unified_oauth_token(&blob) {
+                                        let accounts = modules::list_accounts()?;
+                                        for account in accounts {
+                                            if account.token.refresh_token == refresh_token {
+                                                return Ok(Some(account));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

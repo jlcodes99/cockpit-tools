@@ -26,7 +26,7 @@ pub struct InstanceDefaults {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum AntigravityDesktopAuthMode {
+pub enum AntigravityDesktopAuthMode {
     LegacyStateDb,
     SystemCredential,
 }
@@ -166,7 +166,7 @@ fn compare_versions(left: &str, right: &str) -> Option<std::cmp::Ordering> {
     Some(std::cmp::Ordering::Equal)
 }
 
-fn resolve_auth_mode() -> AntigravityDesktopAuthMode {
+pub fn resolve_auth_mode() -> AntigravityDesktopAuthMode {
     let info = crate::commands::system::resolve_antigravity_installed_version_info_for_target(
         Some("antigravity"),
     )
