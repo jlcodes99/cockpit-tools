@@ -1,11 +1,15 @@
 use crate::models::codex::{CodexAccount, CodexQuota, CodexQuotaErrorInfo};
 use crate::modules::{codex_account, logger};
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, REFERER, USER_AGENT};
+use reqwest::header::{
+    HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, REFERER, USER_AGENT,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 // 使用 wham/usage 端点（Quotio 使用的）
 const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
+const RESET_CREDIT_CONSUME_URL: &str =
+    "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume";
 const SUBSCRIPTION_ACCOUNTS_CHECK_URL: &str =
     "https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27";
 const SUBSCRIPTIONS_URL: &str = "https://chatgpt.com/backend-api/subscriptions";
@@ -137,15 +141,72 @@ struct RateLimitInfo {
     secondary_window: Option<WindowInfo>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodexRateLimitResetCredits {
+    #[serde(default)]
+    pub available_count: i32,
+}
+
 /// 使用率响应
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct UsageResponse {
+    #[serde(rename = "user_id")]
+    user_id: Option<String>,
+    #[serde(rename = "account_id")]
+    account_id: Option<String>,
+    email: Option<String>,
     #[serde(rename = "plan_type")]
     plan_type: Option<String>,
     #[serde(rename = "rate_limit")]
     rate_limit: Option<RateLimitInfo>,
     #[serde(rename = "code_review_rate_limit")]
     code_review_rate_limit: Option<RateLimitInfo>,
+    #[serde(rename = "rate_limit_reset_credits")]
+    rate_limit_reset_credits: Option<CodexRateLimitResetCredits>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodexResetCreditUsage {
+    pub available_count: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_type: Option<String>,
+    pub fetched_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodexResetCredit {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reset_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub granted_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub redeem_started_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub redeemed_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodexResetCreditResult {
+    #[serde(default)]
+    pub code: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credit: Option<CodexResetCredit>,
+    #[serde(default)]
+    pub windows_reset: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_refresh_error: Option<String>,
 }
 
 fn normalize_remaining_percentage(window: &WindowInfo) -> i32 {
@@ -218,6 +279,63 @@ fn normalize_optional_ref(raw: Option<&str>) -> Option<String> {
     } else {
         Some(trimmed.to_string())
     }
+}
+
+fn resolve_chatgpt_account_id(account: &CodexAccount) -> Option<String> {
+    normalize_optional_ref(account.account_id.as_deref())
+        .or_else(|| normalize_optional_ref(account.organization_id.as_deref()))
+        .or_else(|| {
+            codex_account::extract_chatgpt_account_id_from_access_token(
+                &account.tokens.access_token,
+            )
+        })
+}
+
+fn build_chatgpt_json_headers(
+    account: &CodexAccount,
+    chatgpt_account_id: Option<&str>,
+) -> Result<HeaderMap, String> {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&format!("Bearer {}", account.tokens.access_token))
+            .map_err(|e| format!("构建 Authorization 头失败: {}", e))?,
+    );
+    headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
+    headers.insert(REFERER, HeaderValue::from_static(CHATGPT_WEB_REFERER));
+    headers.insert(USER_AGENT, HeaderValue::from_static(CHATGPT_WEB_USER_AGENT));
+    headers.insert("oai-language", HeaderValue::from_static("zh-CN"));
+    headers.insert("originator", HeaderValue::from_static("Codex Desktop"));
+    headers.insert("sec-fetch-site", HeaderValue::from_static("none"));
+    headers.insert("sec-fetch-mode", HeaderValue::from_static("no-cors"));
+    headers.insert("sec-fetch-dest", HeaderValue::from_static("empty"));
+    headers.insert("priority", HeaderValue::from_static("u=4, i"));
+
+    if let Some(account_id) = normalize_optional_ref(chatgpt_account_id) {
+        headers.insert(
+            "ChatGPT-Account-Id",
+            HeaderValue::from_str(&account_id)
+                .map_err(|e| format!("构建 ChatGPT-Account-Id 头失败: {}", e))?,
+        );
+    }
+
+    Ok(headers)
+}
+
+fn build_upstream_error_message(
+    context: &str,
+    status: reqwest::StatusCode,
+    headers: &HeaderMap,
+    body: &str,
+) -> String {
+    let detail_code = extract_detail_code_from_body(body);
+    let mut error_message = format!("{}接口返回错误 {}", context, status);
+    if let Some(code) = detail_code {
+        error_message.push_str(&format!(" [error_code:{}]", code));
+    }
+    error_message.push_str(&format!(" [body_len:{}]", body.len()));
+    append_http_error_diagnostics(&mut error_message, headers, body);
+    error_message
 }
 
 fn normalize_optional_json_scalar(value: Option<&serde_json::Value>) -> Option<String> {
@@ -676,28 +794,8 @@ async fn refresh_account_tokens(account: &mut CodexAccount, reason: &str) -> Res
 pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, String> {
     let client = reqwest::Client::new();
 
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&format!("Bearer {}", account.tokens.access_token))
-            .map_err(|e| format!("构建 Authorization 头失败: {}", e))?,
-    );
-    headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-
-    // 添加 ChatGPT-Account-Id 头（关键！）
-    let account_id = account.account_id.clone().or_else(|| {
-        codex_account::extract_chatgpt_account_id_from_access_token(&account.tokens.access_token)
-    });
-
-    if let Some(ref acc_id) = account_id {
-        if !acc_id.is_empty() {
-            headers.insert(
-                "ChatGPT-Account-Id",
-                HeaderValue::from_str(acc_id)
-                    .map_err(|e| format!("构建 Account-Id 头失败: {}", e))?,
-            );
-        }
-    }
+    let account_id = resolve_chatgpt_account_id(account);
+    let headers = build_chatgpt_json_headers(account, account_id.as_deref())?;
 
     logger::log_info(&format!(
         "Codex 配额请求: {} (account_id: {:?})",
@@ -760,6 +858,139 @@ pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, Str
     let plan_type = usage.plan_type.clone();
 
     Ok(FetchQuotaResult { quota, plan_type })
+}
+
+fn parse_reset_credit_usage_from_body(body: &str) -> Result<CodexResetCreditUsage, String> {
+    let usage: UsageResponse = serde_json::from_str(body)
+        .map_err(|e| format!("解析 ChatGPT reset credit JSON 失败: {}", e))?;
+    let available_count = usage
+        .rate_limit_reset_credits
+        .as_ref()
+        .map(|credits| credits.available_count)
+        .unwrap_or(0)
+        .max(0);
+
+    Ok(CodexResetCreditUsage {
+        available_count,
+        user_id: usage.user_id,
+        account_id: usage.account_id,
+        email: usage.email,
+        plan_type: usage.plan_type,
+        fetched_at: now_timestamp(),
+    })
+}
+
+fn parse_reset_credit_result_from_body(body: &str) -> Result<CodexResetCreditResult, String> {
+    serde_json::from_str(body)
+        .map_err(|e| format!("解析 ChatGPT reset credit 重置 JSON 失败: {}", e))
+}
+
+pub async fn query_reset_credits(account_id: &str) -> Result<CodexResetCreditUsage, String> {
+    let account = codex_account::prepare_account_for_injection(account_id).await?;
+    if account.is_api_key_auth() {
+        return Err("API Key 账号不支持查询 ChatGPT reset credit。".to_string());
+    }
+
+    let chatgpt_account_id = resolve_chatgpt_account_id(&account)
+        .ok_or_else(|| "未获取到 ChatGPT Account ID，请重新授权该账号。".to_string())?;
+    let headers = build_chatgpt_json_headers(&account, Some(&chatgpt_account_id))?;
+    let client = reqwest::Client::new();
+
+    logger::log_info(&format!(
+        "Codex reset credit 查询请求: {} (account_id: {})",
+        USAGE_URL, chatgpt_account_id
+    ));
+
+    let response = client
+        .get(USAGE_URL)
+        .headers(headers)
+        .send()
+        .await
+        .map_err(|e| format!("请求 ChatGPT reset credit 失败: {}", e))?;
+
+    let status = response.status();
+    let headers = response.headers().clone();
+    let body = response
+        .text()
+        .await
+        .map_err(|e| format!("读取 ChatGPT reset credit 响应失败: {}", e))?;
+
+    logger::log_info(&format!(
+        "Codex reset credit 查询响应: url={}, status={}, request-id={}, x-request-id={}, cf-ray={}, body_len={}",
+        USAGE_URL,
+        status,
+        get_header_value(&headers, "request-id"),
+        get_header_value(&headers, "x-request-id"),
+        get_header_value(&headers, "cf-ray"),
+        body.len()
+    ));
+
+    if !status.is_success() {
+        return Err(build_upstream_error_message(
+            "ChatGPT reset credit 查询",
+            status,
+            &headers,
+            &body,
+        ));
+    }
+
+    parse_reset_credit_usage_from_body(&body)
+}
+
+pub async fn consume_reset_credit(account_id: &str) -> Result<CodexResetCreditResult, String> {
+    let account = codex_account::prepare_account_for_injection(account_id).await?;
+    if account.is_api_key_auth() {
+        return Err("API Key 账号不支持执行 ChatGPT reset credit 重置。".to_string());
+    }
+
+    let chatgpt_account_id = resolve_chatgpt_account_id(&account)
+        .ok_or_else(|| "未获取到 ChatGPT Account ID，请重新授权该账号。".to_string())?;
+    let mut headers = build_chatgpt_json_headers(&account, Some(&chatgpt_account_id))?;
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+    let redeem_request_id = uuid::Uuid::new_v4().to_string();
+    let client = reqwest::Client::new();
+
+    logger::log_info(&format!(
+        "Codex reset credit 执行请求: {} (account_id: {})",
+        RESET_CREDIT_CONSUME_URL, chatgpt_account_id
+    ));
+
+    let response = client
+        .post(RESET_CREDIT_CONSUME_URL)
+        .headers(headers)
+        .json(&json!({ "redeem_request_id": redeem_request_id }))
+        .send()
+        .await
+        .map_err(|e| format!("执行 ChatGPT reset credit 重置失败: {}", e))?;
+
+    let status = response.status();
+    let headers = response.headers().clone();
+    let body = response
+        .text()
+        .await
+        .map_err(|e| format!("读取 ChatGPT reset credit 重置响应失败: {}", e))?;
+
+    logger::log_info(&format!(
+        "Codex reset credit 执行响应: url={}, status={}, request-id={}, x-request-id={}, cf-ray={}, body_len={}",
+        RESET_CREDIT_CONSUME_URL,
+        status,
+        get_header_value(&headers, "request-id"),
+        get_header_value(&headers, "x-request-id"),
+        get_header_value(&headers, "cf-ray"),
+        body.len()
+    ));
+
+    if !status.is_success() {
+        return Err(build_upstream_error_message(
+            "ChatGPT reset credit 重置",
+            status,
+            &headers,
+            &body,
+        ));
+    }
+
+    parse_reset_credit_result_from_body(&body)
 }
 
 /// 从使用率响应中解析配额信息
@@ -1225,7 +1456,10 @@ pub async fn refresh_all_quotas() -> Result<Vec<(String, Result<CodexQuota, Stri
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_http_error_body_for_display, HTTP_ERROR_BODY_DISPLAY_MAX_CHARS};
+    use super::{
+        normalize_http_error_body_for_display, parse_reset_credit_result_from_body,
+        parse_reset_credit_usage_from_body, HTTP_ERROR_BODY_DISPLAY_MAX_CHARS,
+    };
 
     #[test]
     fn displays_empty_http_error_body_explicitly() {
@@ -1243,5 +1477,74 @@ mod tests {
         assert!(display.starts_with("first second "));
         assert!(display.ends_with("...(truncated)"));
         assert!(display.chars().count() <= HTTP_ERROR_BODY_DISPLAY_MAX_CHARS + 14);
+    }
+
+    #[test]
+    fn parses_reset_credit_count_from_usage_response() {
+        let usage = parse_reset_credit_usage_from_body(
+            r#"{
+                "user_id": "user-1",
+                "account_id": "account-1",
+                "email": "user@example.com",
+                "plan_type": "plus",
+                "rate_limit_reset_credits": {
+                    "available_count": 2
+                }
+            }"#,
+        )
+        .expect("usage response should deserialize");
+
+        assert_eq!(usage.available_count, 2);
+        assert_eq!(usage.user_id.as_deref(), Some("user-1"));
+        assert_eq!(usage.account_id.as_deref(), Some("account-1"));
+        assert_eq!(usage.email.as_deref(), Some("user@example.com"));
+        assert_eq!(usage.plan_type.as_deref(), Some("plus"));
+        assert!(usage.fetched_at > 0);
+    }
+
+    #[test]
+    fn treats_missing_reset_credit_count_as_zero() {
+        let usage = parse_reset_credit_usage_from_body(r#"{"plan_type":"free"}"#)
+            .expect("usage response should deserialize");
+
+        assert_eq!(usage.available_count, 0);
+    }
+
+    #[test]
+    fn clamps_negative_reset_credit_count_to_zero() {
+        let usage = parse_reset_credit_usage_from_body(
+            r#"{"rate_limit_reset_credits":{"available_count":-3}}"#,
+        )
+        .expect("usage response should deserialize");
+
+        assert_eq!(usage.available_count, 0);
+    }
+
+    #[test]
+    fn parses_reset_credit_consume_response() {
+        let result = parse_reset_credit_result_from_body(
+            r#"{
+                "code": "success",
+                "windows_reset": 2,
+                "credit": {
+                    "id": "credit-1",
+                    "reset_type": "rate_limit_reset_credit",
+                    "status": "redeemed",
+                    "redeemed_at": "2026-06-18T08:00:00Z"
+                }
+            }"#,
+        )
+        .expect("reset response should deserialize");
+
+        assert_eq!(result.code, "success");
+        assert_eq!(result.windows_reset, 2);
+        let credit = result.credit.expect("credit should be present");
+        assert_eq!(credit.id.as_deref(), Some("credit-1"));
+        assert_eq!(credit.status.as_deref(), Some("redeemed"));
+        assert_eq!(
+            credit.reset_type.as_deref(),
+            Some("rate_limit_reset_credit")
+        );
+        assert_eq!(credit.redeemed_at.as_deref(), Some("2026-06-18T08:00:00Z"));
     }
 }

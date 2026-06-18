@@ -122,6 +122,7 @@ import {
 import { CodexWakeupContent } from "../components/codex/CodexWakeupContent";
 import { CodexModelProviderManager } from "../components/codex/CodexModelProviderManager";
 import { CodexSpeedSelect } from "../components/codex/CodexSpeedSelect";
+import { CodexResetCreditControl } from "../components/codex/CodexResetCreditControl";
 import { QuickSettingsPopover } from "../components/QuickSettingsPopover";
 import { useProviderAccountsPage } from "../hooks/useProviderAccountsPage";
 import {
@@ -137,6 +138,7 @@ import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import type {
   CodexAccount,
   CodexAppSpeed,
+  CodexResetCreditUsage,
   CodexSessionVisibilityRepairProgress,
 } from "../types/codex";
 import type {
@@ -881,6 +883,9 @@ export function CodexAccountsPage() {
   );
   const [refreshingSubscriptionAccountId, setRefreshingSubscriptionAccountId] =
     useState<string | null>(null);
+  const [resetCreditUsageMap, setResetCreditUsageMap] = useState<
+    Record<string, CodexResetCreditUsage>
+  >({});
   const [removingGroupAccountIds, setRemovingGroupAccountIds] = useState<
     Set<string>
   >(new Set());
@@ -7581,6 +7586,21 @@ export function CodexAccountsPage() {
     [fetchAccounts, fetchCurrentAccount, resolveGroupAccounts, setMessage, t],
   );
 
+  const handleResetCreditChanged = useCallback(async () => {
+    await fetchAccounts();
+    await fetchCurrentAccount();
+  }, [fetchAccounts, fetchCurrentAccount]);
+
+  const handleResetCreditUsageChange = useCallback(
+    (accountId: string, usage: CodexResetCreditUsage) => {
+      setResetCreditUsageMap((prev) => ({
+        ...prev,
+        [accountId]: usage,
+      }));
+    },
+    [],
+  );
+
   useEffect(() => {
     const teamAccountIds = paginatedAccounts
       .filter(
@@ -7987,81 +8007,92 @@ export function CodexAccountsPage() {
               {showApiKeyUsagePanel ? (
                 renderApiKeyUsagePanel(account, apiKeyUsageProvider)
               ) : (
-              <>
-                {hasQuotaError && (
-                  <div
-                    className={`quota-error-inline ${isQuotaRefreshNotice ? "quota-refresh-notice" : ""}`}
-                    title={accountIssueMeta.rawMessage}
-                  >
-                    {isQuotaRefreshNotice ? (
-                      <Info size={14} />
-                    ) : (
-                      <CircleAlert size={14} />
-                    )}
-                    <span>{accountIssueMeta.displayText}</span>
-                    {showReauthorizeAction && (
-                      <button
-                        className="btn btn-sm btn-outline"
-                        onClick={() => openCodexAddModal("oauth", account)}
-                        title={t("common.shared.addModal.oauth", "OAuth 授权")}
-                      >
-                        {t("common.shared.addModal.oauth", "OAuth 授权")}
-                      </button>
-                    )}
-                  </div>
-                )}
-                {cockpitApiAccountBalanceText && (
-                  <div className="codex-account-balance-line">
-                    <span>
-                      {t(
-                        "codex.modelProviders.usage.accountBalance",
-                        "账户余额",
-                      )}
-                      ：
-                    </span>
-                    <strong>{cockpitApiAccountBalanceText}</strong>
-                  </div>
-                )}
-                {quotaItems.map((item) => {
-                  const QuotaIcon =
-                    item.key === "secondary"
-                      ? Calendar
-                      : item.key === "code_review"
-                        ? BookOpen
-                        : item.key === "new_api_quota"
-                          ? Database
-                          : Clock;
-                  return (
+                <>
+                  {hasQuotaError && (
                     <div
-                      key={item.key}
-                      className="quota-item"
-                      title={item.hintText}
+                      className={`quota-error-inline ${isQuotaRefreshNotice ? "quota-refresh-notice" : ""}`}
+                      title={accountIssueMeta.rawMessage}
                     >
-                      <div className="quota-header">
-                        <QuotaIcon size={14} />
-                        <span className="quota-label">{item.label}</span>
-                        <span className={`quota-pct ${item.quotaClass}`}>
-                          {item.valueText}
-                        </span>
-                      </div>
-                      <div className="quota-bar-track">
-                        <div
-                          className={`quota-bar ${item.quotaClass}`}
-                          style={{ width: `${item.percentage}%` }}
-                        />
-                      </div>
-                      {item.resetText && (
-                        <span className="quota-reset">{item.resetText}</span>
+                      {isQuotaRefreshNotice ? (
+                        <Info size={14} />
+                      ) : (
+                        <CircleAlert size={14} />
+                      )}
+                      <span>{accountIssueMeta.displayText}</span>
+                      {showReauthorizeAction && (
+                        <button
+                          className="btn btn-sm btn-outline"
+                          onClick={() => openCodexAddModal("oauth", account)}
+                          title={t(
+                            "common.shared.addModal.oauth",
+                            "OAuth 授权",
+                          )}
+                        >
+                          {t("common.shared.addModal.oauth", "OAuth 授权")}
+                        </button>
                       )}
                     </div>
-                  );
-                })}
-                {quotaItems.length === 0 && !cockpitApiAccountBalanceText && (
-                  <div className="quota-empty">
-                    {t("common.shared.quota.noData", "暂无配额数据")}
-                  </div>
-                )}
-              </>
+                  )}
+                  {cockpitApiAccountBalanceText && (
+                    <div className="codex-account-balance-line">
+                      <span>
+                        {t(
+                          "codex.modelProviders.usage.accountBalance",
+                          "账户余额",
+                        )}
+                        ：
+                      </span>
+                      <strong>{cockpitApiAccountBalanceText}</strong>
+                    </div>
+                  )}
+                  {quotaItems.map((item) => {
+                    const QuotaIcon =
+                      item.key === "secondary"
+                        ? Calendar
+                        : item.key === "code_review"
+                          ? BookOpen
+                          : item.key === "new_api_quota"
+                            ? Database
+                            : Clock;
+                    return (
+                      <div
+                        key={item.key}
+                        className="quota-item"
+                        title={item.hintText}
+                      >
+                        <div className="quota-header">
+                          <QuotaIcon size={14} />
+                          <span className="quota-label">{item.label}</span>
+                          <span className={`quota-pct ${item.quotaClass}`}>
+                            {item.valueText}
+                          </span>
+                        </div>
+                        <div className="quota-bar-track">
+                          <div
+                            className={`quota-bar ${item.quotaClass}`}
+                            style={{ width: `${item.percentage}%` }}
+                          />
+                        </div>
+                        {item.resetText && (
+                          <span className="quota-reset">{item.resetText}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {quotaItems.length === 0 && !cockpitApiAccountBalanceText && (
+                    <div className="quota-empty">
+                      {t("common.shared.quota.noData", "暂无配额数据")}
+                    </div>
+                  )}
+                  {!isApiKeyAccount && (
+                    <CodexResetCreditControl
+                      accountId={account.id}
+                      usage={resetCreditUsageMap[account.id] ?? null}
+                      onUsageChange={handleResetCreditUsageChange}
+                      onChanged={handleResetCreditChanged}
+                    />
+                  )}
+                </>
               )}
             </div>
           )}
@@ -9395,6 +9426,15 @@ export function CodexAccountsPage() {
                     </span>
                   )}
                 </div>
+                {!isApiKeyAccount && (
+                  <CodexResetCreditControl
+                    accountId={account.id}
+                    variant="table"
+                    usage={resetCreditUsageMap[account.id] ?? null}
+                    onUsageChange={handleResetCreditUsageChange}
+                    onChanged={handleResetCreditChanged}
+                  />
+                )}
                 {hasQuotaError && (
                   <div
                     className={`quota-error-inline table ${isQuotaRefreshNotice ? "quota-refresh-notice" : ""}`}

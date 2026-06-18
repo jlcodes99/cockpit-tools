@@ -2127,6 +2127,111 @@
   border-radius: var(--radius-sm);
 }
 
+.codex-reset-credit-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 32px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+.codex-reset-credit-control.table {
+  width: max-content;
+  max-width: 100%;
+  margin-top: 8px;
+  padding: 6px 8px;
+}
+
+.codex-reset-credit-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.codex-reset-credit-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.codex-reset-credit-main strong {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.codex-reset-credit-main strong.available {
+  color: var(--success);
+}
+
+.codex-reset-credit-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.codex-reset-credit-control.table .codex-reset-credit-actions {
+  margin-left: 0;
+}
+
+.codex-reset-credit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0 7px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.codex-reset-credit-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--primary);
+  background: var(--bg-secondary);
+}
+
+.codex-reset-credit-btn.primary {
+  color: var(--primary);
+}
+
+.codex-reset-credit-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.codex-reset-credit-notice {
+  flex-basis: 100%;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.codex-reset-credit-notice.success {
+  color: var(--success);
+}
+
+.codex-reset-credit-notice.error {
+  color: var(--danger);
+}
+
 .codex-api-key-usage-panel {
   display: flex;
   flex-direction: column;

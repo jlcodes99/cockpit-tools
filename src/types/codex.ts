@@ -89,6 +89,32 @@ export interface CodexQuota {
   raw_data?: unknown;
 }
 
+export interface CodexResetCreditUsage {
+  available_count: number;
+  user_id?: string;
+  account_id?: string;
+  email?: string;
+  plan_type?: string;
+  fetched_at: number;
+}
+
+export interface CodexResetCredit {
+  id?: string;
+  reset_type?: string;
+  status?: string;
+  granted_at?: string;
+  expires_at?: string;
+  redeem_started_at?: string;
+  redeemed_at?: string;
+}
+
+export interface CodexResetCreditResult {
+  code: string;
+  credit?: CodexResetCredit;
+  windows_reset: number;
+  quota_refresh_error?: string;
+}
+
 const COCKPIT_API_BASE_URL = "https://chongcodex.cn/v1";
 
 function normalizeCodexApiBaseUrlForMatch(rawValue?: string | null): string {

@@ -569,6 +569,8 @@ pub fn run() {
             commands::codex::confirm_codex_batch_import,
             commands::codex::refresh_codex_quota,
             commands::codex::refresh_codex_subscription_info,
+            commands::codex::query_codex_reset_credits,
+            commands::codex::consume_codex_reset_credit,
             commands::codex::refresh_all_codex_quotas,
             commands::codex::refresh_current_codex_quota,
             commands::codex::codex_oauth_login_start,

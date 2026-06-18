@@ -7,6 +7,8 @@ import {
   CodexProviderWireApi,
   CodexQuickConfig,
   CodexQuota,
+  CodexResetCreditResult,
+  CodexResetCreditUsage,
 } from '../types/codex';
 
 export interface CodexOAuthLoginStartResponse {
@@ -219,6 +221,16 @@ export async function refreshCodexQuota(accountId: string): Promise<CodexQuota> 
 /** 强制刷新单个账号的订阅信息 */
 export async function refreshCodexSubscriptionInfo(accountId: string): Promise<CodexAccount> {
   return await invoke('refresh_codex_subscription_info', { accountId });
+}
+
+/** 查询 ChatGPT reset credit 剩余次数 */
+export async function queryCodexResetCredits(accountId: string): Promise<CodexResetCreditUsage> {
+  return await invoke('query_codex_reset_credits', { accountId });
+}
+
+/** 消耗一次 ChatGPT reset credit 执行重置 */
+export async function consumeCodexResetCredit(accountId: string): Promise<CodexResetCreditResult> {
+  return await invoke('consume_codex_reset_credit', { accountId });
 }
 
 /** 刷新所有账号配额 */

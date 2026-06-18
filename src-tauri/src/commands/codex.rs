@@ -665,6 +665,32 @@ pub async fn refresh_codex_subscription_info(
 }
 
 #[tauri::command]
+pub async fn query_codex_reset_credits(
+    account_id: String,
+) -> Result<codex_quota::CodexResetCreditUsage, String> {
+    codex_quota::query_reset_credits(&account_id).await
+}
+
+#[tauri::command]
+pub async fn consume_codex_reset_credit(
+    app: AppHandle,
+    account_id: String,
+) -> Result<codex_quota::CodexResetCreditResult, String> {
+    let mut result = codex_quota::consume_reset_credit(&account_id).await?;
+    if let Err(error) = codex_quota::refresh_account_quota(&account_id).await {
+        logger::log_warn(&format!(
+            "ChatGPT reset credit 已执行，但刷新 Codex 配额失败: {}",
+            error
+        ));
+        result.quota_refresh_error = Some(error);
+    } else {
+        run_codex_post_refresh_checks(&app).await;
+        let _ = crate::modules::tray::update_tray_menu(&app);
+    }
+    Ok(result)
+}
+
+#[tauri::command]
 pub async fn refresh_current_codex_quota(app: AppHandle) -> Result<(), String> {
     let Some(account) = codex_account::get_current_account() else {
         return Err("未找到当前 Codex 账号".to_string());
