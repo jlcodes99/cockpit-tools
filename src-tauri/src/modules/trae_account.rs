@@ -2466,7 +2466,7 @@ fn ensure_entitlement_raw_for_inject(account: &TraeAccount) -> Option<Value> {
     account.trae_entitlement_raw.clone()
 }
 
-fn read_local_trae_auth_from_storage_path(
+pub(crate) fn read_local_trae_auth_from_storage_path(
     storage_path: &Path,
 ) -> Result<Option<TraeImportPayload>, String> {
     if !storage_path.exists() {
@@ -2548,6 +2548,13 @@ pub fn inject_to_trae(account_id: &str) -> Result<(), String> {
 pub fn inject_to_trae_at_path(storage_path: &Path, account_id: &str) -> Result<(), String> {
     let account =
         load_account(account_id).ok_or_else(|| format!("Trae 账号不存在: {}", account_id))?;
+    inject_account_to_trae_at_path(storage_path, &account)
+}
+
+pub fn inject_account_to_trae_at_path(
+    storage_path: &Path,
+    account: &TraeAccount,
+) -> Result<(), String> {
     let mut root = if storage_path.exists() {
         read_storage_json(storage_path)?
     } else {

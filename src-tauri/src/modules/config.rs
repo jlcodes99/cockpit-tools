@@ -288,6 +288,9 @@ pub struct UserConfig {
     /// 切换 Codex 时是否自动重启指定应用
     #[serde(default = "default_codex_restart_specified_app_on_switch")]
     pub codex_restart_specified_app_on_switch: bool,
+    /// 切换 Trae CN 时是否自动启动/重启 Trae CN
+    #[serde(default = "default_trae_cn_launch_on_switch")]
+    pub trae_cn_launch_on_switch: bool,
     /// 是否在 Codex 总览中显示 API 服务入口
     #[serde(default = "default_codex_local_access_entry_visible")]
     pub codex_local_access_entry_visible: bool,
@@ -744,6 +747,9 @@ fn default_codex_launch_on_switch() -> bool {
 fn default_codex_restart_specified_app_on_switch() -> bool {
     false
 }
+fn default_trae_cn_launch_on_switch() -> bool {
+    false
+}
 fn default_codex_local_access_entry_visible() -> bool {
     true
 }
@@ -972,6 +978,7 @@ impl Default for UserConfig {
             openclaw_auth_overwrite_on_switch: default_openclaw_auth_overwrite_on_switch(),
             codex_launch_on_switch: default_codex_launch_on_switch(),
             codex_restart_specified_app_on_switch: default_codex_restart_specified_app_on_switch(),
+            trae_cn_launch_on_switch: default_trae_cn_launch_on_switch(),
             codex_local_access_entry_visible: default_codex_local_access_entry_visible(),
             top_right_ad_visible: default_top_right_ad_visible(),
             antigravity_dual_switch_no_restart_enabled:

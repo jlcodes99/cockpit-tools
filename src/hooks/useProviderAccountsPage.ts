@@ -157,6 +157,8 @@ export interface ProviderPageConfig<TAccount extends ProviderAccountBase> {
   dataService: ProviderDataService;
   /** 获取展示用 email/displayName */
   getDisplayEmail: (account: TAccount) => string;
+  /** 切号成功提示展示文本（可选，默认使用 getDisplayEmail） */
+  resolveInjectSuccessDisplayText?: (account: TAccount) => string;
   /** 切号注入成功后的扩展回调（可选） */
   onInjectSuccess?: (params: {
     accountId: string;
@@ -1245,7 +1247,9 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
       setMessage(null);
       setInjecting(accountId);
       const account = accounts.find((item) => item.id === accountId);
-      const displayEmail = account ? config.getDisplayEmail(account) : accountId;
+      const displayEmail = account
+        ? config.resolveInjectSuccessDisplayText?.(account) ?? config.getDisplayEmail(account)
+        : accountId;
       try {
         await injectFn(accountId);
         setCurrentAccountId(accountId);

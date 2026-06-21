@@ -11,6 +11,7 @@ import * as codebuddyService from './codebuddyService';
 import * as codebuddyCnService from './codebuddyCnService';
 import * as qoderService from './qoderService';
 import * as traeService from './traeService';
+import * as traeCnService from './traeCnService';
 import * as workbuddyService from './workbuddyService';
 import * as zedService from './zedService';
 import type { ClaudeAccount } from '../types/claude';
@@ -105,6 +106,11 @@ const PLATFORM_ADAPTERS: Record<PlatformId, TransferAdapter> = {
     listAccounts: traeService.listTraeAccounts,
     exportAccounts: traeService.exportTraeAccounts,
     importFromJson: traeService.importTraeFromJson,
+  },
+  trae_cn: {
+    listAccounts: traeCnService.listTraeCnAccounts,
+    exportAccounts: traeCnService.exportTraeCnAccounts,
+    importFromJson: traeCnService.importTraeCnFromJson,
   },
   workbuddy: {
     listAccounts: workbuddyService.listWorkbuddyAccounts,

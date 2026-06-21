@@ -190,6 +190,8 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useQoderInstanceStore.getState();
     case 'trae':
       return useTraeInstanceStore.getState();
+    case 'trae_cn':
+      return null;
     case 'workbuddy':
       return useWorkbuddyInstanceStore.getState();
     case 'zed':
@@ -445,6 +447,8 @@ export function FloatingCardWindow() {
           break;
         case 'trae':
           await useTraeAccountStore.getState().fetchAccounts();
+          break;
+        case 'trae_cn':
           break;
         case 'workbuddy':
           await useWorkbuddyAccountStore.getState().fetchAccounts();
@@ -779,6 +783,11 @@ export function FloatingCardWindow() {
           accounts: traeAccounts,
           actualCurrentAccount: traeCurrent,
         };
+      case 'trae_cn':
+        return {
+          accounts: [],
+          actualCurrentAccount: null,
+        };
       case 'workbuddy':
         return {
           accounts: workbuddyAccounts,
@@ -860,6 +869,8 @@ export function FloatingCardWindow() {
         return getRecommendedQoderAccount(qoderAccounts, effectiveCurrentId);
       case 'trae':
         return getRecommendedTraeAccount(traeAccounts, effectiveCurrentId);
+      case 'trae_cn':
+        return null;
       case 'workbuddy':
         return getRecommendedWorkbuddyAccount(workbuddyAccounts, effectiveCurrentId);
       case 'zed':
@@ -948,11 +959,14 @@ export function FloatingCardWindow() {
         return buildQoderAccountPresentation(viewedAccount as typeof qoderAccounts[number], t);
       case 'trae':
         return buildTraeAccountPresentation(viewedAccount as typeof traeAccounts[number], t);
+      case 'trae_cn':
+        return null;
       case 'workbuddy':
         return buildWorkbuddyAccountPresentation(viewedAccount as typeof workbuddyAccounts[number], t);
       case 'zed':
         return buildZedAccountPresentation(viewedAccount as typeof zedAccounts[number], t);
     }
+    return null;
   }, [
     agAccounts,
     claudeAccounts,
@@ -1161,6 +1175,8 @@ export function FloatingCardWindow() {
             break;
           case 'trae':
             await useTraeAccountStore.getState().switchAccount(viewedAccount.id);
+            break;
+          case 'trae_cn':
             break;
           case 'workbuddy':
             await useWorkbuddyAccountStore.getState().switchAccount(viewedAccount.id);

@@ -46,6 +46,8 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
       return _t('nav.qoder', 'Qoder');
     case 'trae':
       return _t('nav.trae', 'Trae');
+    case 'trae_cn':
+      return _t('nav.traeCn', 'Trae CN');
     case 'workbuddy':
       return 'WorkBuddy';
     default:
@@ -82,6 +84,7 @@ export function renderPlatformIcon(platformId: PlatformId, size = 20): ReactNode
     case 'qoder':
       return <QoderIcon style={{ width: size, height: size }} />;
     case 'trae':
+    case 'trae_cn':
       return <TraeIcon style={{ width: size, height: size }} />;
     case 'workbuddy':
       return <WorkbuddyIcon style={{ width: size, height: size }} />;

@@ -242,8 +242,9 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   codebuddy_cn: 10,
   qoder: 11,
   trae: 12,
-  workbuddy: 13,
-  zed: 14,
+  trae_cn: 13,
+  workbuddy: 14,
+  zed: 15,
 };
 type UpdateCheckSource = 'auto' | 'manual';
 type UpdateCheckFinishedDetail = {

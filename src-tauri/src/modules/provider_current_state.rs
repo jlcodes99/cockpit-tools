@@ -38,6 +38,7 @@ fn normalize_platform(platform: &str) -> Result<&'static str, String> {
         "codebuddy_cn" | "codebuddy-cn" => Ok("codebuddy_cn"),
         "qoder" => Ok("qoder"),
         "trae" => Ok("trae"),
+        "trae_cn" | "trae-cn" => Ok("trae_cn"),
         "workbuddy" => Ok("workbuddy"),
         "github_copilot" | "github-copilot" | "ghcp" => Ok("github_copilot"),
         other => Err(format!("不支持的平台: {}", other)),

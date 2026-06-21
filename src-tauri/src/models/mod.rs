@@ -12,6 +12,7 @@ pub mod qoder;
 pub mod quota;
 pub mod token;
 pub mod trae;
+pub mod trae_cn;
 pub mod windsurf;
 pub mod workbuddy;
 pub mod zed;

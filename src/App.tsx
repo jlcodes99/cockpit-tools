@@ -111,6 +111,9 @@ const QoderAccountsPage = lazy(() =>
 const TraeAccountsPage = lazy(() =>
   import('./pages/TraeAccountsPage').then((module) => ({ default: module.TraeAccountsPage })),
 );
+const TraeCnAccountsPage = lazy(() =>
+  import('./pages/TraeCnAccountsPage').then((module) => ({ default: module.TraeCnAccountsPage })),
+);
 const WorkbuddyAccountsPage = lazy(() =>
   import('./pages/WorkbuddyAccountsPage').then((module) => ({ default: module.WorkbuddyAccountsPage })),
 );
@@ -276,6 +279,7 @@ type QuotaAlertPlatform =
   | 'codebuddy_cn'
   | 'qoder'
   | 'trae'
+  | 'trae_cn'
   | 'workbuddy'
   | 'zed';
 type UpdateCheckSource = 'auto' | 'manual';
@@ -381,6 +385,8 @@ function normalizeQuotaAlertPlatform(platform: string | undefined): QuotaAlertPl
       return 'qoder';
     case 'trae':
       return 'trae';
+    case 'trae_cn':
+      return 'trae';
     case 'zed':
       return 'zed';
     default:
@@ -415,6 +421,8 @@ function getQuotaAlertPlatformLabel(
       return t('nav.qoder', 'Qoder');
     case 'trae':
       return t('nav.trae', 'Trae');
+    case 'trae_cn':
+      return t('nav.traeCn', 'Trae CN');
     case 'zed':
       return t('nav.zed', 'Zed');
     default:
@@ -446,6 +454,8 @@ function getQuotaAlertTargetPage(platform: QuotaAlertPlatform): Page {
       return 'qoder';
     case 'trae':
       return 'trae';
+    case 'trae_cn':
+      return 'trae-cn';
     case 'workbuddy':
       return 'workbuddy';
     case 'zed':
@@ -478,6 +488,8 @@ function getQuotaAlertQuickSettingsType(platform: QuotaAlertPlatform): QuickSett
     case 'qoder':
       return 'qoder';
     case 'trae':
+      return 'trae';
+    case 'trae_cn':
       return 'trae';
     case 'workbuddy':
       return 'workbuddy';
@@ -3069,6 +3081,7 @@ function MainApp() {
             case 'codebuddy-cn':
             case 'qoder':
             case 'trae':
+            case 'trae-cn':
             case 'workbuddy':
             case 'zed':
             case 'manual':
@@ -3591,6 +3604,7 @@ function MainApp() {
           {page === 'codebuddy-cn' && <CodebuddyCnAccountsPage />}
           {page === 'qoder' && <QoderAccountsPage />}
           {page === 'trae' && <TraeAccountsPage />}
+          {page === 'trae-cn' && <TraeCnAccountsPage />}
           {page === 'workbuddy' && <WorkbuddyAccountsPage />}
           {page === 'zed' && <ZedAccountsPage />}
           {page === 'instances' && <InstancesPage onNavigate={setPage} />}

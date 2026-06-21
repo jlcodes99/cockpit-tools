@@ -45,6 +45,12 @@ fn resolve_provider_current_account_id(platform: &str) -> Result<Option<String>,
                 &accounts,
             ))
         }
+        "trae_cn" | "trae-cn" => {
+            let accounts = crate::modules::trae_cn_account::list_accounts();
+            Ok(crate::modules::trae_cn_account::resolve_current_account_id(
+                &accounts,
+            ))
+        }
         "workbuddy" => {
             let accounts = crate::modules::workbuddy_account::list_accounts();
             Ok(crate::modules::workbuddy_account::resolve_current_account_id(&accounts))

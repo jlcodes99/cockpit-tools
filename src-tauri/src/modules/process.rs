@@ -12,6 +12,8 @@ const OPENCODE_APP_NAME: &str = "OpenCode";
 #[cfg(target_os = "macos")]
 const TRAE_APP_NAME: &str = "Trae";
 #[cfg(target_os = "macos")]
+const TRAE_CN_APP_NAME: &str = "Trae CN";
+#[cfg(target_os = "macos")]
 const CODEX_APP_PATH: &str = "/Applications/Codex.app/Contents/MacOS/Codex";
 #[cfg(target_os = "macos")]
 const ANTIGRAVITY_APP_PATH: &str = "/Applications/Antigravity IDE.app/Contents/MacOS/Electron";
@@ -2112,6 +2114,25 @@ fn detect_trae_exec_path() -> Option<std::path::PathBuf> {
     None
 }
 
+fn detect_trae_cn_exec_path() -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        let candidates = [
+            "/Applications/Trae CN.app/Contents/MacOS/Trae CN",
+            "/Applications/Trae CN.app/Contents/MacOS/Electron",
+            "/Applications/Trae CN.app",
+        ];
+        for candidate in candidates {
+            let path = std::path::PathBuf::from(candidate);
+            if path.exists() {
+                return Some(path);
+            }
+        }
+    }
+
+    None
+}
+
 fn detect_workbuddy_exec_path() -> Option<std::path::PathBuf> {
     #[cfg(target_os = "macos")]
     {
@@ -2412,6 +2433,54 @@ fn resolve_trae_macos_exec_path(path_str: &str) -> Option<std::path::PathBuf> {
 }
 
 #[cfg(target_os = "macos")]
+fn resolve_trae_cn_macos_exec_path(path_str: &str) -> Option<std::path::PathBuf> {
+    let path = std::path::PathBuf::from(path_str);
+    if let Some(app_root) = normalize_macos_app_root(&path) {
+        let app_root_path = std::path::PathBuf::from(&app_root);
+        let macos_dir = app_root_path.join("Contents").join("MacOS");
+
+        for binary_name in ["Trae CN", "Electron"] {
+            let candidate = macos_dir.join(binary_name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+
+        if let Ok(entries) = std::fs::read_dir(&macos_dir) {
+            let mut fallback: Option<std::path::PathBuf> = None;
+            for entry in entries.flatten() {
+                let candidate = entry.path();
+                if !candidate.is_file() {
+                    continue;
+                }
+                let file_name = candidate
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                if file_name.contains("crashpad") || file_name.contains("helper") {
+                    continue;
+                }
+                if file_name.contains("trae cn") || file_name == "electron" {
+                    return Some(candidate);
+                }
+                if fallback.is_none() {
+                    fallback = Some(candidate);
+                }
+            }
+            if let Some(candidate) = fallback {
+                return Some(candidate);
+            }
+        }
+    }
+
+    if path.is_file() {
+        return Some(path);
+    }
+    None
+}
+
+#[cfg(target_os = "macos")]
 fn resolve_workbuddy_macos_exec_path(path_str: &str) -> Option<std::path::PathBuf> {
     let path = std::path::PathBuf::from(path_str);
     if let Some(app_root) = normalize_macos_app_root(&path) {
@@ -2472,6 +2541,11 @@ fn resolve_zed_macos_exec_path(path_str: &str) -> Option<std::path::PathBuf> {
 #[cfg(not(target_os = "macos"))]
 fn resolve_trae_macos_exec_path(path_str: &str) -> Option<std::path::PathBuf> {
     resolve_macos_exec_path(path_str, "Trae")
+}
+
+#[cfg(not(target_os = "macos"))]
+fn resolve_trae_cn_macos_exec_path(path_str: &str) -> Option<std::path::PathBuf> {
+    resolve_macos_exec_path(path_str, "Trae CN")
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -3190,6 +3264,21 @@ fn resolve_trae_launch_path() -> Result<std::path::PathBuf, String> {
     }
 
     Err(app_path_missing_error("trae"))
+}
+
+fn resolve_trae_cn_launch_path() -> Result<std::path::PathBuf, String> {
+    if let Some(detected) = detect_trae_cn_exec_path() {
+        let detected_str = detected.to_string_lossy();
+        if let Some(exec) = resolve_trae_cn_macos_exec_path(&detected_str) {
+            return Ok(exec);
+        }
+        #[cfg(target_os = "macos")]
+        if detected.is_file() {
+            return Ok(detected);
+        }
+    }
+
+    Err(app_path_missing_error("trae_cn"))
 }
 
 fn resolve_workbuddy_launch_path() -> Result<std::path::PathBuf, String> {
@@ -9004,6 +9093,83 @@ pub fn close_trae(timeout_secs: u64) -> Result<(), String> {
     Ok(())
 }
 
+fn get_trae_cn_pids() -> Vec<u32> {
+    let mut pids = Vec::new();
+
+    #[cfg(target_os = "macos")]
+    {
+        let bundle_pattern = format!("{}.app/contents/", TRAE_CN_APP_NAME.to_lowercase());
+        if let Ok(output) = Command::new("ps")
+            .args(["-axww", "-o", "pid=,command="])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                let mut parts = line.splitn(2, |ch: char| ch.is_whitespace());
+                let pid_str = parts.next().unwrap_or("").trim();
+                let cmdline = parts.next().unwrap_or("").trim();
+                let pid = match pid_str.parse::<u32>() {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                let lower = cmdline.to_lowercase();
+                if lower.contains(&bundle_pattern)
+                    && !lower.contains("--type=")
+                    && !lower.contains("crashpad_handler")
+                {
+                    pids.push(pid);
+                }
+            }
+        }
+    }
+
+    if !pids.is_empty() {
+        crate::modules::logger::log_info(&format!(
+            "找到 {} 个 Trae CN 进程: {}",
+            pids.len(),
+            summarize_pid_list_for_log(&pids)
+        ));
+    }
+
+    pids
+}
+
+pub fn is_trae_cn_running() -> bool {
+    !get_trae_cn_pids().is_empty()
+}
+
+pub fn close_trae_cn(timeout_secs: u64) -> Result<(), String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = timeout_secs;
+        return Err("Trae CN 自动重启暂仅支持 macOS".to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        crate::modules::logger::log_info("正在关闭 Trae CN...");
+        let pids = get_trae_cn_pids();
+        if pids.is_empty() {
+            crate::modules::logger::log_info("Trae CN 未在运行，无需关闭");
+            return Ok(());
+        }
+
+        crate::modules::logger::log_info(&format!("准备关闭 {} 个 Trae CN 进程...", pids.len()));
+        let _ = close_pids(&pids, timeout_secs);
+
+        if !get_trae_cn_pids().is_empty() {
+            return Err("无法关闭 Trae CN 进程，请手动关闭后重试".to_string());
+        }
+
+        crate::modules::logger::log_info("Trae CN 已成功关闭");
+        Ok(())
+    }
+}
+
 /// 检查 OpenCode（桌面端）是否在运行
 pub fn is_opencode_running() -> bool {
     #[cfg(target_os = "macos")]
@@ -10765,6 +10931,38 @@ pub fn start_trae_default_with_args_with_new_window(
     {
         let _ = (extra_args, use_new_window);
         Err("Trae 多开实例仅支持 macOS、Windows 和 Linux".to_string())
+    }
+}
+
+pub fn start_trae_cn_default() -> Result<u32, String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Trae CN 自动启动暂仅支持 macOS".to_string())
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let launch_path = resolve_trae_cn_launch_path()?;
+        let app_root = resolve_macos_app_root_from_launch_path(&launch_path)
+            .ok_or_else(|| app_path_missing_error("trae_cn"))?;
+        let args: Vec<String> = vec!["--new-window".to_string()];
+        let open_pid = spawn_open_app_with_options(&app_root, &args, true)
+            .map_err(|e| format!("启动 Trae CN 失败: {}", e))?;
+        crate::modules::logger::log_info("Trae CN 默认实例启动命令已发送（open -n -a）");
+        let probe_started = Instant::now();
+        let timeout = Duration::from_secs(6);
+        while probe_started.elapsed() < timeout {
+            let pids = get_trae_cn_pids();
+            if let Some(pid) = pids.first() {
+                return Ok(*pid);
+            }
+            thread::sleep(Duration::from_millis(200));
+        }
+        crate::modules::logger::log_warn(&format!(
+            "[Trae CN Start] 启动后 6s 内未匹配到默认实例 PID，回退 open pid={}",
+            open_pid
+        ));
+        Ok(open_pid)
     }
 }
 

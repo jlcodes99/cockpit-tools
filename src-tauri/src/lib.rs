@@ -238,6 +238,7 @@ pub fn run() {
                     modules::windsurf_oauth::restore_pending_oauth_listener();
                     modules::kiro_oauth::restore_pending_oauth_listener();
                     modules::trae_oauth::restore_pending_oauth_listener();
+                    modules::trae_cn_oauth::restore_pending_oauth_listener();
                     modules::gemini_oauth::restore_pending_oauth_state();
                     modules::zed_oauth::restore_pending_oauth_listener();
                 });
@@ -870,6 +871,25 @@ pub fn run() {
             commands::trae::update_trae_account_tags,
             commands::trae::get_trae_accounts_index_path,
             commands::trae::inject_trae_account,
+            // Trae CN Commands
+            commands::trae_cn::list_trae_cn_accounts,
+            commands::trae_cn::delete_trae_cn_account,
+            commands::trae_cn::delete_trae_cn_accounts,
+            commands::trae_cn::import_trae_cn_from_json,
+            commands::trae_cn::import_trae_cn_from_local,
+            commands::trae_cn::trae_cn_oauth_login_start,
+            commands::trae_cn::trae_cn_oauth_login_complete,
+            commands::trae_cn::trae_cn_oauth_submit_callback_url,
+            commands::trae_cn::trae_cn_oauth_login_cancel,
+            commands::trae_cn::export_trae_cn_accounts,
+            commands::trae_cn::refresh_trae_cn_token,
+            commands::trae_cn::refresh_all_trae_cn_tokens,
+            commands::trae_cn::add_trae_cn_account_with_token,
+            commands::trae_cn::update_trae_cn_account_tags,
+            commands::trae_cn::get_trae_cn_accounts_index_path,
+            commands::trae_cn::get_trae_cn_launch_on_switch,
+            commands::trae_cn::set_trae_cn_launch_on_switch,
+            commands::trae_cn::inject_trae_cn_account,
             // Trae Instance Commands
             commands::trae_instance::trae_get_instance_defaults,
             commands::trae_instance::trae_list_instances,

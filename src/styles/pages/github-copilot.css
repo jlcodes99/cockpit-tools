@@ -234,6 +234,88 @@
   line-height: 1.55;
 }
 
+.trae-cn-switch-config {
+  margin-top: -6px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: rgba(15, 23, 42, 0.03);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.trae-cn-switch-config-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.trae-cn-switch-config-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.trae-cn-switch-config-desc {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.trae-cn-switch-toggle {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.trae-cn-switch-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.trae-cn-switch-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: rgba(148, 163, 184, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.trae-cn-switch-slider::before {
+  position: absolute;
+  content: "";
+  width: 18px;
+  height: 18px;
+  left: 2px;
+  top: 2px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.22);
+  transition: transform 0.2s ease;
+}
+
+.trae-cn-switch-toggle input:checked + .trae-cn-switch-slider {
+  background: linear-gradient(135deg, #2563eb, #14b8a6);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.trae-cn-switch-toggle input:checked + .trae-cn-switch-slider::before {
+  transform: translateX(20px);
+}
+
+.trae-cn-switch-toggle input:disabled + .trae-cn-switch-slider {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 /* GitHub Copilot 账号网格 */
 .ghcp-accounts-grid {
   display: grid;
@@ -2815,6 +2897,11 @@
 }
 
 @media (max-width: 640px) {
+  .trae-cn-switch-config {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .ghcp-add-modal .add-method-card {
     grid-template-columns: auto minmax(0, 1fr);
   }
@@ -3039,6 +3126,11 @@
 
 [data-theme="dark"] .ghcp-flow-notice-title {
   color: #93c5fd;
+}
+
+[data-theme="dark"] .trae-cn-switch-config {
+  background: rgba(15, 23, 42, 0.4);
+  border-color: rgba(96, 165, 250, 0.22);
 }
 
 [data-theme="dark"] .qoder-accounts-page .qoder-usage-section .quota-bar-track {

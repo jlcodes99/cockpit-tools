@@ -2004,6 +2004,7 @@ pub fn save_network_config(
         openclaw_auth_overwrite_on_switch: current.openclaw_auth_overwrite_on_switch,
         codex_launch_on_switch: current.codex_launch_on_switch,
         codex_restart_specified_app_on_switch: current.codex_restart_specified_app_on_switch,
+        trae_cn_launch_on_switch: current.trae_cn_launch_on_switch,
         codex_local_access_entry_visible: current.codex_local_access_entry_visible,
         top_right_ad_visible: current.top_right_ad_visible,
         antigravity_dual_switch_no_restart_enabled: current
@@ -2648,6 +2649,7 @@ pub fn save_general_config(
         codex_launch_on_switch,
         codex_restart_specified_app_on_switch: codex_restart_specified_app_on_switch
             .unwrap_or(current.codex_restart_specified_app_on_switch),
+        trae_cn_launch_on_switch: current.trae_cn_launch_on_switch,
         codex_local_access_entry_visible: codex_local_access_entry_visible
             .unwrap_or(current.codex_local_access_entry_visible),
         top_right_ad_visible: top_right_ad_visible.unwrap_or(current.top_right_ad_visible),

@@ -9,7 +9,7 @@ export interface TraeOAuthStartResponse {
   callbackUrl?: string | null;
 }
 
-type TraeOAuthStartResponseRaw = Partial<TraeOAuthStartResponse> & {
+export type TraeOAuthStartResponseRaw = Partial<TraeOAuthStartResponse> & {
   login_id?: string;
   verification_uri?: string;
   expires_in?: number;
@@ -17,7 +17,7 @@ type TraeOAuthStartResponseRaw = Partial<TraeOAuthStartResponse> & {
   callback_url?: string | null;
 };
 
-function normalizeTraeOAuthStartResponse(raw: TraeOAuthStartResponseRaw): TraeOAuthStartResponse {
+export function normalizeTraeOAuthStartResponse(raw: TraeOAuthStartResponseRaw): TraeOAuthStartResponse {
   const loginId = raw.loginId ?? raw.login_id ?? '';
   const verificationUri = raw.verificationUri ?? raw.verification_uri ?? '';
   const expiresIn = Number(raw.expiresIn ?? raw.expires_in ?? 0);

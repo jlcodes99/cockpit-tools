@@ -2416,6 +2416,7 @@ export function DashboardPage({
     codebuddy_cn: stats.codebuddy_cn,
     qoder: stats.qoder,
     trae: stats.trae,
+    trae_cn: 0,
     workbuddy: stats.workbuddy,
   };
 

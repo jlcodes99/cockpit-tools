@@ -37,6 +37,7 @@ export type PlatformOverviewHeaderId =
   | 'codebuddy_cn'
   | 'qoder'
   | 'trae'
+  | 'trae_cn'
   | 'workbuddy';
 
 interface PlatformOverviewTabsHeaderProps {
@@ -104,6 +105,10 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
   },
   trae: {
     platformLabel: 'Trae',
+    overviewIcon: <Bot className="tab-icon" />,
+  },
+  trae_cn: {
+    platformLabel: 'Trae CN',
     overviewIcon: <Bot className="tab-icon" />,
   },
   workbuddy: {

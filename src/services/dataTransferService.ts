@@ -57,6 +57,7 @@ import * as codebuddyService from './codebuddyService';
 import * as codebuddyCnService from './codebuddyCnService';
 import * as qoderService from './qoderService';
 import * as traeService from './traeService';
+import * as traeCnService from './traeCnService';
 import * as workbuddyService from './workbuddyService';
 import type { InstanceLaunchMode } from '../types/instance';
 import type { ClaudeAccount } from '../types/claude';
@@ -290,6 +291,7 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
     (await codebuddyCnService.listCodebuddyCnAccounts()) as unknown as TransferAccountRecord[],
   qoder: async () => (await qoderService.listQoderAccounts()) as unknown as TransferAccountRecord[],
   trae: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
+  trae_cn: async () => (await traeCnService.listTraeCnAccounts()) as unknown as TransferAccountRecord[],
   workbuddy: async () => (await workbuddyService.listWorkbuddyAccounts()) as unknown as TransferAccountRecord[],
 };
 
@@ -308,6 +310,7 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   codebuddy_cn: codebuddyCnService.importCodebuddyCnFromJson,
   qoder: qoderService.importQoderFromJson,
   trae: traeService.importTraeFromJson,
+  trae_cn: traeCnService.importTraeCnFromJson,
   workbuddy: workbuddyService.importWorkbuddyFromJson,
 };
 
@@ -469,6 +472,7 @@ function buildAccountRef(platform: PlatformId, account: TransferAccountRecord): 
       break;
     case 'qoder':
     case 'trae':
+    case 'trae_cn':
       ref.email = normalizeString(account.email) ?? undefined;
       ref.userId = normalizeString(account.user_id) ?? undefined;
       break;
@@ -538,6 +542,7 @@ function scoreAccountRef(ref: DataTransferAccountRef, account: TransferAccountRe
       break;
     case 'qoder':
     case 'trae':
+    case 'trae_cn':
       addStringScore(ref.userId, account.user_id, 24);
       addStringScore(ref.email, account.email, 10);
       break;

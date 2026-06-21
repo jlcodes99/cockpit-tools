@@ -29,6 +29,7 @@ pub mod qoder_instance;
 pub mod remote_config;
 pub mod system;
 pub mod trae;
+pub mod trae_cn;
 pub mod trae_instance;
 pub mod update;
 pub mod wakeup;
