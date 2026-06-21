@@ -505,7 +505,7 @@ export function TraeCnAccountsPage() {
 
       return {
         percentage,
-        percentageText: percentage == null ? '--' : `${percentage}%`,
+        percentageText: percentage == null ? '' : `${percentage}%`,
         quotaClass: computeQuotaClass(percentage),
         costText: usage.usageText,
         statusText: usage.statusText,
@@ -566,7 +566,9 @@ export function TraeCnAccountsPage() {
       const valueClass = variant === 'table' ? 'quota-value' : 'quota-pct';
       const trackClass = variant === 'table' ? 'quota-progress-track' : 'quota-bar-track';
       const barClass = variant === 'table' ? 'quota-progress-bar' : 'quota-bar';
-      const metaPills = [quota.bonusText, quota.packageText, quota.payAsYouGoText];
+      const metaPills = [quota.bonusText, quota.packageText, quota.payAsYouGoText].filter(
+        (text) => text && !text.endsWith(': --'),
+      );
 
       return (
         <div className={`quota-item trae-compact-quota ${variant === 'table' ? 'is-table windsurf-table-credit-item' : 'is-card'}`}>
@@ -576,7 +578,9 @@ export function TraeCnAccountsPage() {
               <span className="trae-compact-quota-total" title={quota.costText}>
                 {quota.costText}
               </span>
-              <span className={`${valueClass} ${quota.quotaClass}`}>{quota.percentageText}</span>
+              {quota.percentageText ? (
+                <span className={`${valueClass} ${quota.quotaClass}`}>{quota.percentageText}</span>
+              ) : null}
             </div>
           </div>
           <div className={trackClass}>

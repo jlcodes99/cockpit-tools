@@ -14,6 +14,8 @@ const ACCOUNTS_DIR: &str = "trae_cn_accounts";
 const TRAE_CN_ACCOUNT_API_ORIGIN: &str = "https://api.trae.cn";
 const TRAE_CN_PAY_STATUS_PATH: &str = "/trae/api/v2/pay/ide_user_pay_status";
 const TRAE_CN_ENT_USAGE_PATH: &str = "/trae/api/v2/pay/ide_user_ent_usage";
+const TRAE_CN_CURRENT_ENTITLEMENT_LIST_PATH: &str =
+    "/trae/api/v2/pay/user_current_entitlement_list";
 const TRAE_CN_GET_USER_INFO_PATH: &str = "/cloudide/api/v3/trae/GetUserInfo";
 
 lazy_static::lazy_static! {
@@ -61,6 +63,24 @@ fn extract_response_data(raw: &Value) -> Option<&Value> {
         .or_else(|| raw.get("Result"))
         .or_else(|| raw.get("result"))
         .or_else(|| raw.get("payload"))
+}
+
+fn mark_trae_cn_usage_source(response: &mut Value, source: &str) {
+    if let Some(object) = response.as_object_mut() {
+        object.insert(
+            "_cockpit_source".to_string(),
+            Value::String(source.to_string()),
+        );
+
+        for key in ["data", "Result", "result", "payload"] {
+            if let Some(inner) = object.get_mut(key).and_then(|value| value.as_object_mut()) {
+                inner.insert(
+                    "_cockpit_source".to_string(),
+                    Value::String(source.to_string()),
+                );
+            }
+        }
+    }
 }
 
 fn build_api_urls(path: &str) -> Vec<String> {
@@ -647,7 +667,9 @@ fn account_from_import_payload(payload: TraeImportPayload) -> Result<TraeAccount
 
 fn usage_identity_from_product_type(product_type: i64) -> Option<&'static str> {
     match product_type {
+        100 => Some("CNExpress"),
         6 => Some("Ultra"),
+        5 => Some("Pro+"),
         4 => Some("Pro+"),
         1 => Some("Pro"),
         9 => Some("Pro"),
@@ -767,7 +789,9 @@ fn apply_usage_response(account: &mut TraeAccount, response: &Value) {
                 .copied()
                 .find(|pack| usage_pack_product_type(pack) == Some(product_type))
         };
-        let pack = find_pack(6)
+        let pack = find_pack(100)
+            .or_else(|| find_pack(6))
+            .or_else(|| find_pack(5))
             .or_else(|| find_pack(4))
             .or_else(|| find_pack(1))
             .or_else(|| find_pack(9))
@@ -830,6 +854,32 @@ async fn refresh_quota_snapshot(account: &mut TraeAccount, client: &reqwest::Cli
         Err(err) => {
             logger::log_warn(&format!(
                 "[Trae CN Refresh] ide_user_ent_usage 失败: {}",
+                err
+            ));
+            quota_query_errors.push(err);
+        }
+    }
+
+    match request_trae_cn_json_with_candidates(
+        client,
+        Method::POST,
+        build_api_urls(TRAE_CN_CURRENT_ENTITLEMENT_LIST_PATH).as_slice(),
+        account.access_token.as_str(),
+        Some(serde_json::json!({
+            "require_usage": true,
+        })),
+        true,
+    )
+    .await
+    {
+        Ok(mut response) => {
+            mark_trae_cn_usage_source(&mut response, "user_current_entitlement_list");
+            apply_usage_response(account, &response);
+            usage_refreshed = true;
+        }
+        Err(err) => {
+            logger::log_warn(&format!(
+                "[Trae CN Refresh] user_current_entitlement_list 失败: {}",
                 err
             ));
             quota_query_errors.push(err);
