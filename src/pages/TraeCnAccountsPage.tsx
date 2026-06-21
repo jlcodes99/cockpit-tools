@@ -48,10 +48,9 @@ import {
   getTraePlanBadge,
   getTraePlanBadgeClass,
   getTraePlanDisplayName,
-  getTraeUsage,
   hasTraeQuotaData,
-  TRAE_PRODUCT_TYPE,
 } from '../types/trae';
+import { getTraeCnUsageSummary } from '../types/traeCnUsage';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 import {
   buildValidAccountsFilterOption,
@@ -91,14 +90,6 @@ type TraeQuotaSummary = {
   payAsYouGoText: string;
 };
 
-function formatNumber(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '--';
-  const hasDecimal = Math.abs(value - Math.trunc(value)) > 0.001;
-  return new Intl.NumberFormat('en-US', {
-    maximumFractionDigits: hasDecimal ? 2 : 0,
-  }).format(value);
-}
-
 function computeQuotaClass(percent: number | null): 'high' | 'medium' | 'critical' {
   if (percent == null) return 'high';
   if (percent >= 90) return 'critical';
@@ -112,10 +103,6 @@ function formatTraeResetAt(timestamp: number): string {
   return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(
     date.getHours(),
   )}:${pad(date.getMinutes())}`;
-}
-
-function formatTraeMoney(value: number | null | undefined): string {
-  return `$${formatNumber(value)}`;
 }
 
 export function TraeCnAccountsPage() {
@@ -393,8 +380,8 @@ export function TraeCnAccountsPage() {
       }
 
       if (sortBy === 'quota') {
-        const leftPercent = getTraeUsage(left).usedPercent ?? -1;
-        const rightPercent = getTraeUsage(right).usedPercent ?? -1;
+        const leftPercent = getTraeCnUsageSummary(left).usagePercent ?? -1;
+        const rightPercent = getTraeCnUsageSummary(right).usagePercent ?? -1;
         const diff = leftPercent - rightPercent;
         return sortDirection === 'desc' ? -diff : diff;
       }
@@ -510,81 +497,29 @@ export function TraeCnAccountsPage() {
 
   const resolveQuotaSummary = useCallback(
     (account: TraeAccount): TraeQuotaSummary => {
-      const usage = getTraeUsage(account);
+      const usage = getTraeCnUsageSummary(account);
       const percentage =
-        typeof usage.usedPercent === 'number' && Number.isFinite(usage.usedPercent)
-          ? Math.max(0, Math.min(100, Math.round(usage.usedPercent)))
+        typeof usage.usagePercent === 'number' && Number.isFinite(usage.usagePercent)
+          ? Math.max(0, Math.min(100, Math.round(usage.usagePercent)))
           : null;
-
-      const isFreePlan = (usage.identityStr ?? account.plan_type ?? '')
-        .trim()
-        .toLowerCase()
-        .includes('free');
-
-      const statusTone: TraeQuotaSummary['statusTone'] = !account.trae_usage_raw
-        ? 'unknown'
-        : usage.usageExhausted
-          ? usage.payAsYouGoOpen && !isFreePlan
-            ? 'normal'
-            : 'warning'
-          : 'normal';
-
-      const statusText = !account.trae_usage_raw
-        ? t('trae.quota.statusUnknown', 'Status: --')
-        : usage.usageExhausted
-          ? isFreePlan
-            ? t(
-                'trae.quota.statusExhaustedFree',
-                'Status: Usage exhausted, upgrade recommended',
-              )
-            : usage.payAsYouGoOpen
-              ? t('trae.quota.statusNormal', 'Status: Normal')
-              : t(
-                  'trae.quota.statusExhaustedPro',
-                  'Status: Usage exhausted, upgrade or enable on-demand usage',
-                )
-          : t('trae.quota.statusNormal', 'Status: Normal');
 
       return {
         percentage,
         percentageText: percentage == null ? '--' : `${percentage}%`,
         quotaClass: computeQuotaClass(percentage),
-        costText:
-          usage.spentUsd != null && usage.totalUsd != null
-            ? t('trae.quota.usedOfTotal', {
-                used: formatNumber(usage.spentUsd),
-                total: formatNumber(usage.totalUsd),
-                defaultValue: '${{used}} / ${{total}}',
-              })
-            : t('trae.quota.usageUnknown', 'Usage: --'),
-        statusText,
-        statusTone,
-        bonusText:
-          (usage.bonusUsage ?? 0) > 0
-            ? t('trae.quota.bonusUsed', {
-                amount: formatTraeMoney(usage.bonusUsage),
-                defaultValue: 'Bonus: +{{amount}}',
-              })
-            : (usage.bonusQuota ?? 0) > 0
-              ? t('trae.quota.bonusIncluded', 'Bonus: Included')
-              : t('trae.quota.bonusEmpty', 'Bonus: --'),
+        costText: usage.usageText,
+        statusText: usage.statusText,
+        statusTone: usage.statusTone,
+        bonusText: usage.fastRequestText,
         resetText:
-          (usage.resetAt ?? account.plan_reset_at ?? null) != null
+          usage.resetAt != null
             ? t('trae.quota.resetAt', {
-                date: formatTraeResetAt(usage.resetAt ?? account.plan_reset_at ?? 0),
+                date: formatTraeResetAt(usage.resetAt),
                 defaultValue: '重置时间：{{date}}',
               })
             : t('trae.quota.resetUnknown', '重置时间未知'),
-        packageText: usage.hasPackage
-          ? usage.consumingProductType === TRAE_PRODUCT_TYPE.PACKAGE
-            ? t('trae.quota.packageConsuming', 'Package: Consuming')
-            : t('trae.quota.packageAvailable', 'Package: Available')
-          : t('trae.quota.packageEmpty', 'Package: --'),
-        payAsYouGoText: usage.payAsYouGoOpen
-          ? usage.consumingProductType === TRAE_PRODUCT_TYPE.PAY_GO
-            ? t('trae.quota.payAsYouGoConsuming', 'On-Demand Usage: Consuming')
-            : t('trae.quota.payAsYouGoEnabled', 'On-Demand Usage: Enabled')
-          : t('trae.quota.payAsYouGoEmpty', 'On-Demand Usage: --'),
+        packageText: usage.packageText,
+        payAsYouGoText: usage.payAsYouGoText,
       };
     },
     [t],

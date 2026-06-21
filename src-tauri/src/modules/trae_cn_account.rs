@@ -12,8 +12,8 @@ use crate::modules::{account, logger};
 const ACCOUNTS_INDEX_FILE: &str = "trae_cn_accounts.json";
 const ACCOUNTS_DIR: &str = "trae_cn_accounts";
 const TRAE_CN_ACCOUNT_API_ORIGIN: &str = "https://api.trae.cn";
-const TRAE_CN_PAY_STATUS_PATH: &str = "/trae/api/v1/pay/ide_user_pay_status";
-const TRAE_CN_ENT_USAGE_PATH: &str = "/trae/api/v1/pay/ide_user_ent_usage";
+const TRAE_CN_PAY_STATUS_PATH: &str = "/trae/api/v2/pay/ide_user_pay_status";
+const TRAE_CN_ENT_USAGE_PATH: &str = "/trae/api/v2/pay/ide_user_ent_usage";
 const TRAE_CN_GET_USER_INFO_PATH: &str = "/cloudide/api/v3/trae/GetUserInfo";
 
 lazy_static::lazy_static! {
