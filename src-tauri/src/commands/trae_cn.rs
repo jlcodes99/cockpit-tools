@@ -123,9 +123,9 @@ pub async fn refresh_all_trae_cn_tokens(_app: AppHandle) -> Result<i32, String> 
 #[tauri::command]
 pub async fn add_trae_cn_account_with_token(
     _app: AppHandle,
-    _access_token: String,
+    access_token: String,
 ) -> Result<TraeCnAccount, String> {
-    Err("Trae CN Token 添加尚未支持：请先使用 JSON 导入".to_string())
+    trae_cn_account::add_account_with_token(access_token.as_str())
 }
 
 #[tauri::command]

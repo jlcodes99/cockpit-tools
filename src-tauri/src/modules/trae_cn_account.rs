@@ -590,6 +590,39 @@ pub fn import_from_local() -> Result<Option<TraeAccount>, String> {
     Ok(Some(account))
 }
 
+pub fn add_account_with_token(access_token: &str) -> Result<TraeAccount, String> {
+    let access_token = normalize_non_empty(Some(access_token))
+        .ok_or_else(|| "Trae CN access token 不能为空".to_string())?;
+    let payload = TraeImportPayload {
+        email: "unknown".to_string(),
+        user_id: None,
+        nickname: Some("Trae CN Token".to_string()),
+        access_token,
+        refresh_token: None,
+        token_type: Some("Bearer".to_string()),
+        expires_at: None,
+        plan_type: None,
+        plan_reset_at: None,
+        trae_auth_raw: None,
+        trae_profile_raw: None,
+        trae_entitlement_raw: None,
+        trae_usage_raw: None,
+        trae_server_raw: None,
+        trae_usertag_raw: None,
+        status: Some("token_only".to_string()),
+        status_reason: Some(
+            "仅包含 access token；不能刷新 token 或查询完整套餐信息".to_string(),
+        ),
+    };
+    let account = account_from_import_payload(payload)?;
+    let account = upsert_account_record(account)?;
+    logger::log_info(&format!(
+        "[Trae CN Account] Token 导入成功: id={}, email={}",
+        account.id, account.email
+    ));
+    Ok(account)
+}
+
 pub fn upsert_import_payload(payload: TraeImportPayload) -> Result<TraeAccount, String> {
     let account = account_from_import_payload(payload)?;
     upsert_account_record(account)

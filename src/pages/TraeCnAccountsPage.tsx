@@ -177,6 +177,7 @@ export function TraeCnAccountsPage() {
     dataService: {
       importFromJson: traeCnService.importTraeCnFromJson,
       importFromLocal: traeCnService.importTraeCnFromLocal,
+      addWithToken: traeCnService.addTraeCnAccountWithToken,
       exportAccounts: traeCnService.exportTraeCnAccounts,
       injectToVSCode: traeCnService.injectTraeCnAccount,
     },
@@ -1470,7 +1471,7 @@ export function TraeCnAccountsPage() {
                     onClick={() => openAddModal('token')}
                   >
                     <KeyRound size={14} />
-                    {t('common.shared.addModal.token', 'Token / JSON')}
+                    {t('traeCn.addModal.token', 'JSON / Token')}
                   </button>
                   <button
                     className={`modal-tab ${addTab === 'import' ? 'active' : ''}`}
@@ -1581,13 +1582,16 @@ export function TraeCnAccountsPage() {
                   ) : addTab === 'token' ? (
                     <div className="add-section">
                       <p className="section-desc">
-                        {t('accounts.importJsonHint', '导入由本工具导出的 Trae CN JSON 文件。')}
+                        {t(
+                          'traeCn.importJsonHint',
+                          '粘贴 Trae CN JSON 或 access token。裸 token 可用于基础注入，但不能刷新 token 或读取完整套餐信息。',
+                        )}
                       </p>
                       <textarea
                         className="token-input"
                         value={tokenInput}
                         onChange={(event) => setTokenInput(event.target.value)}
-                        placeholder={t('common.shared.token.placeholder', '粘贴 Token 或 JSON...')}
+                        placeholder={t('traeCn.token.placeholder', '粘贴 Trae CN JSON 或 access token...')}
                       />
                       <button
                         className="btn btn-primary btn-full"
