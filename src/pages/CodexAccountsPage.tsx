@@ -8354,7 +8354,7 @@ export function CodexAccountsPage() {
             isInLocalAccess ||
             (!isApiKeyAccount && account.account_note?.trim()) ||
             resetCreditControls) && (
-            <div className="account-sub-line">
+            <div className="account-sub-line codex-account-context-line">
               {meta.accountContextText && (
                 <span
                   className="codex-login-subline"
@@ -8373,7 +8373,7 @@ export function CodexAccountsPage() {
             </div>
           )}
           {!isApiKeyAccount && (
-            <div className="account-sub-line">
+            <div className="account-sub-line codex-account-identity-line">
               <span className="codex-login-subline" title={signInLine}>
                 {meta.signedInWithText} | {accountIdLabel}:{" "}
                 {maskAccountText(accountIdText)}
@@ -8382,11 +8382,11 @@ export function CodexAccountsPage() {
           )}
           {isApiKeyAccount && (
             <>
-              <div className="account-sub-line">
+              <div className="account-sub-line codex-api-card-meta-line">
                 {renderApiKeyRevealLine(account)}
               </div>
               {renderOAuthBindingLine(account)}
-              <div className="account-sub-line codex-provider-inline-line">
+              <div className="account-sub-line codex-api-card-meta-line codex-provider-inline-line">
                 <span
                   className="codex-login-subline codex-provider-inline-text"
                   title={apiProviderLine}
@@ -8404,7 +8404,7 @@ export function CodexAccountsPage() {
                   </button>
                 )}
               </div>
-              <div className="account-sub-line">
+              <div className="account-sub-line codex-api-card-meta-line">
                 <span className="codex-login-subline" title={apiBaseUrlLine}>
                   {apiBaseUrlLine}
                 </span>
@@ -8549,8 +8549,10 @@ export function CodexAccountsPage() {
             </div>
           )}
           <div className="codex-card-bottom">
-            <span className="card-date">{formatDate(account.created_at)}</span>
-            {renderAccountSpeedSelect(account)}
+            <div className="codex-card-bottom-meta">
+              <span className="card-date">{formatDate(account.created_at)}</span>
+              {renderAccountSpeedSelect(account)}
+            </div>
             <div className="card-footer">
               <div className="card-actions">
                 <button
@@ -8613,7 +8615,7 @@ export function CodexAccountsPage() {
                   </button>
                 )}
                 <button
-                  className={`card-action-btn ${!isCurrent ? "success" : ""}`}
+                  className={`card-action-btn codex-card-primary-action ${!isCurrent ? "success" : ""}`}
                   onClick={() => handleSwitch(account.id)}
                   disabled={!!switching}
                   title={t("codex.switch", "切换")}

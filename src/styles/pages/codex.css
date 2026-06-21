@@ -14,8 +14,8 @@
 /* Codex 账号网格 */
 .codex-accounts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 18px;
 }
 
 .codex-group-entry-grid {
@@ -1531,13 +1531,13 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  padding: 18px;
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(10px);
   transition: all 0.25s ease;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   min-height: 260px;
 }
 
@@ -1564,11 +1564,11 @@
   background:
     linear-gradient(
       180deg,
-      rgba(240, 253, 250, 0.92) 0%,
-      rgba(236, 254, 255, 0.52) 100%
+      rgba(240, 253, 250, 0.9) 0%,
+      rgba(248, 250, 252, 0.74) 100%
     ),
     var(--bg-card);
-  box-shadow: 0 14px 34px rgba(15, 118, 110, 0.12);
+  box-shadow: 0 12px 28px rgba(15, 118, 110, 0.1);
 }
 
 .codex-account-card.sponsor-api-account {
@@ -1596,7 +1596,8 @@
 .codex-account-card .card-top {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .codex-account-card .card-select {
@@ -1613,7 +1614,7 @@
 .codex-account-card .account-email {
   flex: 1;
   min-width: 0;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 14px;
   color: var(--text-primary);
   background: transparent;
@@ -1640,7 +1641,7 @@
 
 .codex-account-card .current-tag {
   flex-shrink: 0;
-  padding: 3px 10px;
+  padding: 3px 9px;
   background: var(--success);
   color: white;
   font-size: 11px;
@@ -1786,17 +1787,18 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 3px 8px;
   border-radius: 999px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .codex-accounts-page .codex-status-pill.quota-error {
-  background: rgba(239, 68, 68, 0.12);
-  color: #b91c1c;
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.14);
+  color: #991b1b;
+  border: 1px solid rgba(220, 38, 38, 0.34);
 }
 
 .codex-accounts-page .codex-status-pill.quota-refresh {
@@ -1863,9 +1865,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 10px;
   min-width: 0;
-  padding: 9px 11px;
+  padding: 10px 11px;
   border: 1px solid rgba(100, 116, 139, 0.18);
   border-radius: 8px;
   background: rgba(100, 116, 139, 0.06);
@@ -1874,6 +1877,7 @@
 .codex-accounts-page .codex-subscription-footer-main {
   display: inline-flex;
   align-items: center;
+  flex: 1 1 150px;
   gap: 6px;
   min-width: 0;
   font-size: 12px;
@@ -1896,22 +1900,26 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
-  border: none;
-  background: transparent;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
   color: inherit;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
-  opacity: 0.72;
+  opacity: 0.82;
   transition:
     opacity 0.18s ease,
-    color 0.18s ease;
+    color 0.18s ease,
+    background 0.18s ease;
 }
 
 .codex-accounts-page .codex-subscription-refresh-btn:hover {
+  background: color-mix(in srgb, currentColor 13%, transparent);
   opacity: 1;
 }
 
@@ -1924,6 +1932,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
+  flex: 1 1 148px;
   gap: 10px;
   min-width: 0;
 }
@@ -2024,7 +2033,11 @@
 .codex-quota-section {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--bg-secondary) 82%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--border-light) 84%, var(--bg-card));
+  border-radius: var(--radius-md);
 }
 
 .codex-quota-section .quota-item {
@@ -2744,23 +2757,36 @@
 }
 
 .codex-accounts-page .quota-error-inline {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
   border-radius: 8px;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.28);
+  color: #991b1b;
   font-size: 12px;
-  line-height: 1.3;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.codex-accounts-page .quota-error-inline svg {
+  flex-shrink: 0;
+}
+
+.codex-accounts-page .quota-error-inline span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .codex-accounts-page .quota-error-inline.quota-refresh-notice {
-  padding: 6px 8px;
+  padding: 7px 9px;
   background: color-mix(in srgb, var(--primary) 4%, var(--bg-secondary));
   border-color: color-mix(in srgb, var(--primary) 12%, var(--border));
   color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .codex-accounts-page .quota-error-inline.quota-refresh-notice svg {
@@ -2769,6 +2795,8 @@
 }
 
 .codex-accounts-page .quota-error-inline.table {
+  display: inline-grid;
+  width: auto;
   margin-top: 8px;
 }
 
@@ -2782,28 +2810,47 @@
   white-space: nowrap;
 }
 
+@media (max-width: 520px) {
+  .codex-accounts-page .quota-error-inline {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: flex-start;
+  }
+
+  .codex-accounts-page .quota-error-inline button {
+    grid-column: 2;
+    justify-self: start;
+    margin-top: 2px;
+  }
+}
+
 /* 卡片底部 */
 .codex-account-card .codex-card-bottom {
   margin-top: auto;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  column-gap: 12px;
-  row-gap: 8px;
+  gap: 8px;
 }
 
-.codex-account-card .codex-card-bottom > .codex-speed-select {
-  justify-self: end;
+.codex-account-card .codex-card-bottom-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.codex-account-card .codex-card-bottom-meta > .codex-speed-select {
+  flex-shrink: 0;
 }
 
 .codex-account-card .card-footer {
-  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   min-width: 0;
   overflow: hidden;
-  padding-top: 12px;
+  padding-top: 10px;
   border-top: 1px solid var(--border-light);
 }
 
@@ -2821,7 +2868,7 @@
 
 .codex-account-card .card-actions {
   display: flex;
-  gap: 6px;
+  gap: 5px;
   max-width: 100%;
   min-width: 0;
   overflow-x: auto;
@@ -2833,11 +2880,11 @@
 }
 
 .codex-account-card .card-action-btn {
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: var(--bg-tertiary);
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border: 1px solid color-mix(in srgb, var(--border-light) 64%, transparent);
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, var(--bg-card));
   color: var(--text-secondary);
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -2849,6 +2896,7 @@
 
 .codex-account-card .card-action-btn:hover {
   background: var(--bg-hover);
+  border-color: color-mix(in srgb, var(--primary) 18%, var(--border));
   color: var(--text-primary);
 }
 
@@ -2863,13 +2911,21 @@
   cursor: not-allowed;
 }
 
+.codex-account-card .codex-card-primary-action {
+  border-color: color-mix(in srgb, var(--success) 32%, var(--border));
+  background: color-mix(in srgb, var(--success) 11%, var(--bg-card));
+  color: color-mix(in srgb, var(--success) 76%, #065f46);
+}
+
 .codex-account-card .card-action-btn.success:hover {
   background: var(--success);
+  border-color: var(--success);
   color: white;
 }
 
 .codex-account-card .card-action-btn.danger:hover {
   background: var(--danger);
+  border-color: var(--danger);
   color: white;
 }
 
@@ -3585,6 +3641,32 @@
   gap: 4px;
 }
 
+.codex-account-card .codex-account-context-line,
+.codex-account-card .codex-account-identity-line,
+.codex-account-card .codex-api-card-meta-line {
+  min-height: 26px;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--border-light) 72%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-card) 78%, var(--bg-tertiary));
+}
+
+.codex-account-card .codex-account-context-line {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.codex-account-card .codex-account-identity-line {
+  background: transparent;
+  border-color: transparent;
+  padding-inline: 2px;
+}
+
+.codex-account-card .codex-api-card-meta-line + .codex-api-card-meta-line,
+.codex-account-card .codex-api-card-meta-line + .codex-provider-inline-line {
+  margin-top: -6px;
+}
+
 .codex-accounts-page .codex-login-subline {
   display: block;
   min-width: 0;
@@ -3666,11 +3748,12 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .codex-accounts-page .codex-provider-inline-text {
-  flex: 1;
+  flex: 1 1 190px;
+  min-width: 0;
 }
 
 .codex-accounts-page .codex-provider-inline-switch {
@@ -7181,6 +7264,29 @@
   border-color: rgba(251, 191, 36, 0.22);
 }
 
+[data-theme="dark"] .codex-account-card .codex-account-context-line,
+[data-theme="dark"] .codex-account-card .codex-api-card-meta-line,
+[data-theme="dark"] .codex-quota-section {
+  background: rgba(15, 23, 42, 0.42);
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+[data-theme="dark"] .codex-account-card .codex-account-identity-line {
+  background: transparent;
+  border-color: transparent;
+}
+
+[data-theme="dark"] .codex-account-card .card-action-btn {
+  background: rgba(30, 41, 59, 0.72);
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+[data-theme="dark"] .codex-account-card .codex-card-primary-action {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.28);
+  color: #86efac;
+}
+
 [data-theme="dark"]
   .codex-accounts-page
   .codex-subscription-badge.new-api-exclusive {
@@ -7216,6 +7322,8 @@
 [data-theme="dark"] .codex-accounts-page .codex-status-pill.quota-error,
 [data-theme="dark"] .codex-accounts-page .quota-error-inline {
   color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.28);
+  background: rgba(127, 29, 29, 0.18);
 }
 
 [data-theme="dark"] .codex-accounts-page .codex-status-pill.quota-refresh,
