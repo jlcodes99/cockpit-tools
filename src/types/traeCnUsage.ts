@@ -191,14 +191,14 @@ export function getTraeCnUsageSummary(account: TraeAccount): TraeCnUsageSummary 
   const usageText = (() => {
     if (!hasData) return '用量：--';
     if (fastRequestPer != null && fastRequestPer > 0) return `快请求/月：${fastRequestPer}`;
-    if (planLabel?.toLowerCase() === 'free') return '免费额度：官方未返回剩余次数';
-    return '额度：官方未返回剩余次数';
+    if (planLabel?.toLowerCase() === 'free') return '免费剩余：--';
+    return '剩余次数：--';
   })();
 
   const fastRequestText = (() => {
     if (!hasData) return '快通道: --';
     if (fastRequestPer != null && fastRequestPer > 0) return `快通道: ${fastRequestPer}/月`;
-    if (canGetExpressStatus != null) return `快通道状态: ${canGetExpressStatus}`;
+    if (canGetExpressStatus != null) return `快通道: ${canGetExpressStatus}`;
     return '快通道: --';
   })();
 
@@ -213,7 +213,7 @@ export function getTraeCnUsageSummary(account: TraeAccount): TraeCnUsageSummary 
     ].some((value) => toBoolean(value) === true);
     if (enabled && parallelLimit != null) return `权益包: Solo 并发 ${parallelLimit}`;
     if (enabled) return '权益包: 可用';
-    return '权益包: 官方未返回次数';
+    return '权益包: --';
   })();
 
   return {
@@ -221,7 +221,7 @@ export function getTraeCnUsageSummary(account: TraeAccount): TraeCnUsageSummary 
     planLabel,
     usageText,
     usagePercent: null,
-    statusText: hasData ? '状态：已同步，次数余额待官方字段确认' : '状态：--',
+    statusText: hasData ? '状态：已同步，剩余额待确认' : '状态：--',
     statusTone: hasData ? 'unknown' : 'unknown',
     resetAt,
     fastRequestText,
