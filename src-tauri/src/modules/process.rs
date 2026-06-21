@@ -2130,6 +2130,59 @@ fn detect_trae_cn_exec_path() -> Option<std::path::PathBuf> {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        let mut candidates = Vec::new();
+
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let base = std::path::PathBuf::from(local_app_data);
+            candidates.extend([
+                base.join("Programs").join("Trae CN").join("Trae CN.exe"),
+                base.join("Programs").join("Trae CN").join("Trae.exe"),
+                base.join("Programs").join("trae-cn").join("Trae CN.exe"),
+                base.join("Programs").join("trae-cn").join("Trae.exe"),
+                base.join("Trae CN").join("Trae CN.exe"),
+                base.join("Trae CN").join("Trae.exe"),
+            ]);
+        }
+
+        if let Ok(program_files) = std::env::var("ProgramFiles") {
+            let base = std::path::PathBuf::from(program_files);
+            candidates.extend([
+                base.join("Trae CN").join("Trae CN.exe"),
+                base.join("Trae CN").join("Trae.exe"),
+                base.join("trae-cn").join("Trae CN.exe"),
+                base.join("trae-cn").join("Trae.exe"),
+            ]);
+        }
+
+        if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
+            let base = std::path::PathBuf::from(program_files_x86);
+            candidates.extend([
+                base.join("Trae CN").join("Trae CN.exe"),
+                base.join("Trae CN").join("Trae.exe"),
+                base.join("trae-cn").join("Trae CN.exe"),
+                base.join("trae-cn").join("Trae.exe"),
+            ]);
+        }
+
+        for candidate in candidates {
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+
+        if let Some(detected) = detect_windows_exec_path_by_signatures(
+            "Trae CN",
+            &["Trae CN.exe", "Trae.exe"],
+            &["Trae CN", "trae-cn"],
+            &[],
+            &["Trae CN"],
+        ) {
+            return Some(detected);
+        }
+    }
+
     None
 }
 
@@ -3274,6 +3327,10 @@ fn resolve_trae_cn_launch_path() -> Result<std::path::PathBuf, String> {
         }
         #[cfg(target_os = "macos")]
         if detected.is_file() {
+            return Ok(detected);
+        }
+        #[cfg(not(target_os = "macos"))]
+        if detected.exists() {
             return Ok(detected);
         }
     }
@@ -9127,6 +9184,55 @@ fn get_trae_cn_pids() -> Vec<u32> {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        let mut system = System::new();
+        system.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::All,
+            true,
+            ProcessRefreshKind::nothing()
+                .with_exe(UpdateKind::OnlyIfNotSet)
+                .with_cmd(UpdateKind::OnlyIfNotSet),
+        );
+
+        let current_pid = std::process::id();
+        for (pid, process) in system.processes() {
+            let pid_u32 = pid.as_u32();
+            if pid_u32 == current_pid {
+                continue;
+            }
+
+            let name = process.name().to_string_lossy().to_lowercase();
+            let exe_path = process
+                .exe()
+                .and_then(|p| p.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            let args_str = process
+                .cmd()
+                .iter()
+                .map(|arg| arg.to_string_lossy().to_lowercase())
+                .collect::<Vec<String>>()
+                .join(" ");
+
+            let looks_like_trae_cn = name.contains("trae cn")
+                || exe_path.contains("trae cn")
+                || args_str.contains("trae cn");
+            let is_helper = args_str.contains("--type=")
+                || name.contains("helper")
+                || name.contains("plugin")
+                || name.contains("renderer")
+                || name.contains("gpu")
+                || name.contains("crashpad")
+                || name.contains("utility")
+                || exe_path.contains("crashpad");
+
+            if looks_like_trae_cn && !is_helper {
+                pids.push(pid_u32);
+            }
+        }
+    }
+
     if !pids.is_empty() {
         crate::modules::logger::log_info(&format!(
             "找到 {} 个 Trae CN 进程: {}",
@@ -9143,13 +9249,13 @@ pub fn is_trae_cn_running() -> bool {
 }
 
 pub fn close_trae_cn(timeout_secs: u64) -> Result<(), String> {
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = timeout_secs;
-        return Err("Trae CN 自动重启暂仅支持 macOS".to_string());
+        return Err("Trae CN 自动重启暂仅支持 macOS 和 Windows".to_string());
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
         crate::modules::logger::log_info("正在关闭 Trae CN...");
         let pids = get_trae_cn_pids();
@@ -10935,9 +11041,9 @@ pub fn start_trae_default_with_args_with_new_window(
 }
 
 pub fn start_trae_cn_default() -> Result<u32, String> {
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        Err("Trae CN 自动启动暂仅支持 macOS".to_string())
+        Err("Trae CN 自动启动暂仅支持 macOS 和 Windows".to_string())
     }
 
     #[cfg(target_os = "macos")]
@@ -10963,6 +11069,29 @@ pub fn start_trae_cn_default() -> Result<u32, String> {
             open_pid
         ));
         Ok(open_pid)
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+
+        let launch_path = resolve_trae_cn_launch_path()?;
+        let mut cmd = Command::new(&launch_path);
+        apply_managed_proxy_env_to_command(&mut cmd);
+        if should_detach_child() {
+            cmd.creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+            cmd.stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+        } else {
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        cmd.arg("--new-window");
+
+        let child =
+            spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Trae CN 失败: {}", e))?;
+        crate::modules::logger::log_info("Trae CN 默认实例启动命令已发送");
+        Ok(child.id())
     }
 }
 

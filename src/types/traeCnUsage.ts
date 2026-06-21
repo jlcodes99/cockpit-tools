@@ -296,10 +296,10 @@ export function getTraeCnUsageSummary(account: TraeAccount): TraeCnUsageSummary 
   })();
 
   const fastRequestText = (() => {
-    if (!hasData) return '快通道: --';
+    if (!hasData || fastUsage) return '';
     if (fastRequestPer != null && fastRequestPer > 0) return `快通道: ${fastRequestPer}/月`;
     if (canGetExpressStatus != null) return `快通道: ${canGetExpressStatus}`;
-    return '快通道: --';
+    return '';
   })();
 
   const packageText = (() => {

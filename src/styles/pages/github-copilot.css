@@ -234,6 +234,48 @@
   line-height: 1.55;
 }
 
+.trae-cn-flow-notice {
+  padding: 9px 12px;
+}
+
+.trae-cn-flow-notice .ghcp-flow-notice-toggle {
+  gap: 14px;
+}
+
+.trae-cn-flow-summary {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.trae-cn-flow-summary span {
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.trae-cn-flow-notice:not(.collapsed) .trae-cn-flow-summary {
+  display: none;
+}
+
+.trae-cn-flow-notice .ghcp-flow-notice-desc {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.trae-cn-flow-notice .ghcp-flow-notice-list {
+  margin-top: 6px;
+  gap: 4px;
+}
+
 .trae-cn-switch-config {
   margin-top: -6px;
   border: 1px solid rgba(59, 130, 246, 0.2);
@@ -2897,6 +2939,14 @@
 }
 
 @media (max-width: 640px) {
+  .trae-cn-flow-notice .ghcp-flow-notice-toggle {
+    align-items: flex-start;
+  }
+
+  .trae-cn-flow-summary {
+    justify-content: flex-start;
+  }
+
   .trae-cn-switch-config {
     align-items: flex-start;
     flex-direction: column;
@@ -3131,6 +3181,11 @@
 [data-theme="dark"] .trae-cn-switch-config {
   background: rgba(15, 23, 42, 0.4);
   border-color: rgba(96, 165, 250, 0.22);
+}
+
+[data-theme="dark"] .trae-cn-flow-summary span {
+  background: rgba(37, 99, 235, 0.16);
+  border-color: rgba(147, 197, 253, 0.24);
 }
 
 [data-theme="dark"] .qoder-accounts-page .qoder-usage-section .quota-bar-track {

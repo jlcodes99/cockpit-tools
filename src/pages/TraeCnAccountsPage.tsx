@@ -31,13 +31,11 @@ import { ModalErrorMessage } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import {
-  PlatformOverviewTab,
   PlatformOverviewTabsHeader,
 } from '../components/platform/PlatformOverviewTabsHeader';
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
 import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
-import { TraeInstancesContent } from './TraeInstancesPage';
 import { useTraeCnAccountStore } from '../stores/useTraeCnAccountStore';
 import * as traeCnService from '../services/traeCnService';
 import type { TraeAccount } from '../types/trae';
@@ -106,7 +104,6 @@ function formatTraeResetAt(timestamp: number): string {
 }
 
 export function TraeCnAccountsPage() {
-  const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
   const [launchOnSwitch, setLaunchOnSwitch] = useState(false);
   const [launchOnSwitchSaving, setLaunchOnSwitchSaving] = useState(false);
   const [filterTypes, setFilterTypes] = useState<string[]>(() =>
@@ -390,11 +387,6 @@ export function TraeCnAccountsPage() {
       return sortDirection === 'desc' ? -diff : diff;
     },
     [currentAccountId, sortBy, sortDirection],
-  );
-
-  const sortedAccountsForInstances = useMemo(
-    () => [...accounts].sort(compareAccountsBySort),
-    [accounts, compareAccountsBySort],
   );
 
   const filteredAccounts = useMemo(() => {
@@ -944,10 +936,15 @@ export function TraeCnAccountsPage() {
 
   return (
     <div className="ghcp-accounts-page trae-accounts-page">
-      <PlatformOverviewTabsHeader platform="trae_cn" active={activeTab} onTabChange={setActiveTab} />
+      <PlatformOverviewTabsHeader
+        platform="trae_cn"
+        active="overview"
+        onTabChange={() => undefined}
+        tabs={['overview']}
+      />
 
       <div
-        className={`ghcp-flow-notice ${isFlowNoticeCollapsed ? 'collapsed' : ''}`}
+        className={`ghcp-flow-notice trae-cn-flow-notice ${isFlowNoticeCollapsed ? 'collapsed' : ''}`}
         role="note"
         aria-live="polite"
       >
@@ -959,7 +956,12 @@ export function TraeCnAccountsPage() {
         >
           <div className="ghcp-flow-notice-title">
             <CircleAlert size={16} />
-            <span>{t('traeCn.flowNotice.title', 'Trae CN 账号接入说明（点击展开/收起）')}</span>
+            <span>{t('traeCn.flowNotice.title', '会读取哪些数据？')}</span>
+          </div>
+          <div className="trae-cn-flow-summary" aria-hidden={isFlowNoticeCollapsed ? 'false' : 'true'}>
+            <span>{t('traeCn.flowNotice.summaryLocal', '只在本机处理')}</span>
+            <span>{t('traeCn.flowNotice.summaryOfficial', '只连 Trae CN')}</span>
+            <span>{t('traeCn.flowNotice.summaryPrivate', '不上传账号文件')}</span>
           </div>
           <ChevronDown
             size={16}
@@ -971,20 +973,20 @@ export function TraeCnAccountsPage() {
             <div className="ghcp-flow-notice-desc">
               {t(
                 'traeCn.flowNotice.desc',
-                '支持官方 OAuth 授权、本机导入、JSON 导入与本地注入切号；切号过程按 Trae CN 客户端真实落盘规则写回。',
+                '为了帮你登录、导入账号、切换账号和显示套餐，本工具会读取 Trae CN 在这台电脑上保存的登录信息。',
               )}
             </div>
             <ul className="ghcp-flow-notice-list">
               <li>
                 {t(
                   'traeCn.flowNotice.permission',
-                  '权限范围：读取并写入本机 Trae CN 配置目录中的 storage.json 登录相关字段，用于账号导入、切号注入与套餐信息展示；所有数据仅在本机处理。',
+                  '账号文件只在本机读取和写回，不会上传到其他服务器。',
                 )}
               </li>
               <li>
                 {t(
                   'traeCn.flowNotice.network',
-                  '网络范围：OAuth 登录、令牌刷新和套餐查询会请求 Trae CN 官方接口；不会向第三方服务上传本地账号文件或原始存储内容。',
+                  '联网时只访问 Trae CN 官方登录和套餐接口，用来完成登录、刷新状态和查看套餐。',
                 )}
               </li>
             </ul>
@@ -992,8 +994,7 @@ export function TraeCnAccountsPage() {
         )}
       </div>
 
-      {activeTab === 'overview' && (
-        <>
+      <>
           <div className="trae-cn-switch-config" role="group" aria-label="Trae CN 切号启动配置">
             <div className="trae-cn-switch-config-copy">
               <div className="trae-cn-switch-config-title">
@@ -1708,12 +1709,7 @@ export function TraeCnAccountsPage() {
             onClose={() => setShowTagModal(null)}
             onSave={handleSaveTags}
           />
-        </>
-      )}
-
-      {activeTab === 'instances' && (
-        <TraeInstancesContent accountsForSelect={sortedAccountsForInstances} />
-      )}
+      </>
     </div>
   );
 }

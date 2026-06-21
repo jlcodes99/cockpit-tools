@@ -232,11 +232,39 @@ fn get_accounts_index_path() -> Result<PathBuf, String> {
 }
 
 pub fn get_default_trae_cn_data_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-    Ok(home
-        .join("Library")
-        .join("Application Support")
-        .join("Trae CN"))
+    #[cfg(target_os = "macos")]
+    {
+        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
+        return Ok(home
+            .join("Library")
+            .join("Application Support")
+            .join("Trae CN"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(data_dir) = dirs::data_dir() {
+            return Ok(data_dir.join("Trae CN"));
+        }
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            return Ok(PathBuf::from(appdata).join("Trae CN"));
+        }
+        return Err("无法获取 Windows Trae CN 配置目录".to_string());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(config_dir) = dirs::config_dir() {
+            return Ok(config_dir.join("Trae CN"));
+        }
+        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
+        return Ok(home.join(".config").join("Trae CN"));
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        Err("当前平台暂不支持 Trae CN 默认配置目录".to_string())
+    }
 }
 
 pub fn get_default_trae_cn_storage_path() -> Result<PathBuf, String> {

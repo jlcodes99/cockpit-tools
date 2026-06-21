@@ -39,6 +39,38 @@ fn should_skip_sidecar_build(output: &Path) -> bool {
     std::env::var("COCKPIT_SKIP_CLIPROXY_BUILD").ok().as_deref() == Some("1") && output.exists()
 }
 
+fn env_bool(name: &str) -> Option<bool> {
+    let value = std::env::var(name).ok()?;
+    if value == "1" || value.eq_ignore_ascii_case("true") {
+        return Some(true);
+    }
+
+    if value == "0" || value.eq_ignore_ascii_case("false") {
+        return Some(false);
+    }
+
+    None
+}
+
+fn has_usable_git_worktree(path: &Path) -> bool {
+    Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .is_some_and(|output| output.trim() == "true")
+}
+
+fn should_disable_go_buildvcs(sidecar_dir: &Path) -> bool {
+    match env_bool("COCKPIT_GO_BUILDVCS") {
+        Some(enabled) => !enabled,
+        None => !has_usable_git_worktree(sidecar_dir),
+    }
+}
+
 fn emit_sidecar_rerun_inputs(path: &Path) {
     if path.file_name().and_then(|name| name.to_str()) == Some("bin") {
         return;
@@ -88,6 +120,11 @@ fn build_go_sidecar(
         .env("CGO_ENABLED", "0")
         .arg("build")
         .arg("-trimpath")
+        .args(if should_disable_go_buildvcs(sidecar_dir) {
+            vec!["-buildvcs=false"]
+        } else {
+            Vec::new()
+        })
         .arg("-ldflags")
         .arg("-s -w")
         .arg("-o")
@@ -147,6 +184,7 @@ fn build_cockpit_cliproxy_sidecar() {
     let output_dir = sidecar_dir.join("bin");
 
     println!("cargo:rerun-if-env-changed=COCKPIT_SKIP_CLIPROXY_BUILD");
+    println!("cargo:rerun-if-env-changed=COCKPIT_GO_BUILDVCS");
     emit_sidecar_rerun_inputs(&sidecar_dir);
     std::fs::create_dir_all(&output_dir).expect("failed to create cockpit-cliproxy bin dir");
 
