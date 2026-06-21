@@ -171,7 +171,6 @@ pub async fn add_account(refresh_token: String) -> Result<models::Account, Strin
     modules::logger::log_info(&format!("添加账号成功: {}", account.email));
 
     // 广播通知
-    modules::websocket::broadcast_data_changed("account_added");
 
     Ok(account)
 }
@@ -179,14 +178,12 @@ pub async fn add_account(refresh_token: String) -> Result<models::Account, Strin
 #[tauri::command]
 pub async fn delete_account(account_id: String) -> Result<(), String> {
     modules::delete_account(&account_id)?;
-    modules::websocket::broadcast_data_changed("account_deleted");
     Ok(())
 }
 
 #[tauri::command]
 pub async fn delete_accounts(account_ids: Vec<String>) -> Result<(), String> {
     modules::delete_accounts(&account_ids)?;
-    modules::websocket::broadcast_data_changed("accounts_deleted");
     Ok(())
 }
 
@@ -372,7 +369,6 @@ async fn switch_account_legacy_antigravity(
     };
 
     if let Some(err) = launch_error {
-        modules::websocket::broadcast_account_switched(&account.id, &account.email);
         if err.starts_with("APP_PATH_NOT_FOUND:") {
             return Err(err);
         }
@@ -380,7 +376,6 @@ async fn switch_account_legacy_antigravity(
     }
 
     modules::logger::log_info(&format!("Antigravity 账号切换完成: {}", account.email));
-    modules::websocket::broadcast_account_switched(&account.id, &account.email);
     Ok(account)
 }
 
@@ -394,29 +389,6 @@ pub async fn switch_account(
     let runtime_target = normalize_antigravity_runtime_target(runtime_target.as_deref());
     if runtime_target == AntigravityRuntimeTarget::Legacy {
         return switch_account_legacy_antigravity(app, account_id).await;
-    }
-
-    if modules::config::get_user_config().antigravity_dual_switch_no_restart_enabled {
-        let result = modules::account::switch_account_dual_no_restart(
-            &account_id,
-            "manual",
-            "tools.account.switch",
-            "dual_no_restart",
-            None,
-        )
-        .await;
-        if let Err(error) = &result {
-            if error.starts_with("APP_PATH_NOT_FOUND:") {
-                let _ = app.emit(
-                    "app:path_missing",
-                    serde_json::json!({
-                        "app": "antigravity",
-                        "retry": { "kind": "switchAccount", "accountId": account_id }
-                    }),
-                );
-            }
-        }
-        return result;
     }
 
     modules::logger::log_info(&format!("开始切换账号: {}", account_id));
@@ -513,7 +485,6 @@ pub async fn switch_account(
 
     if let Some(err) = launch_error {
         // 账号状态已经切换成功，仍广播账号切换事件，确保前端状态与本地落盘一致
-        modules::websocket::broadcast_account_switched(&account.id, &account.email);
         if err.starts_with("APP_PATH_NOT_FOUND:") {
             return Err(err);
         }
@@ -523,7 +494,6 @@ pub async fn switch_account(
     modules::logger::log_info(&format!("账号切换完成: {}", account.email));
 
     // 广播切换完成通知
-    modules::websocket::broadcast_account_switched(&account.id, &account.email);
 
     Ok(account)
 }
@@ -545,7 +515,6 @@ pub async fn update_account_tags(
     tags: Vec<String>,
 ) -> Result<models::Account, String> {
     let account = modules::update_account_tags(&account_id, tags)?;
-    modules::websocket::broadcast_data_changed("account_tags_updated");
     Ok(account)
 }
 

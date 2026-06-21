@@ -1113,8 +1113,6 @@
       "ghcpOpencodeAuthOverwrite": "切换 GitHub Copilot 时覆盖 OpenCode 登录信息",
       "ghcpOpencodeRestart": "切换 GitHub Copilot 时自动重启 OpenCode",
       "ghcpLaunchOnSwitch": "切换 GitHub Copilot 时自动启动 GitHub Copilot App",
-      "antigravityDualSwitchNoRestart": "无感双通道切号（不重启）",
-      "antigravityDualSwitchNoRestartDesc": "切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity IDE。",
       "codebuddyCnAppPath": "CodeBuddy CN 启动路径",
       "codebuddyCnAppPathDesc": "留空则使用默认路径",
       "codebuddyCnAppPathPlaceholder": "默认路径",
@@ -1145,9 +1143,6 @@
       "claudeAppPathDesc": "默认实例可使用 Microsoft Store 应用目标；多开实例请选择真实 Claude.exe。"
     },
     "network": {
-      "apiTitle": "反重力驾驶舱 API",
-      "wsService": "WebSocket 服务",
-      "wsServiceDesc": "允许外部程序（如 VS Code 插件）连接控制",
       "preferredPort": "首选端口",
       "preferredPortDesc": "默认为 {{port}}，修改后需重启应用",
       "currentPort": "当前运行端口",

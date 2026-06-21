@@ -101,7 +101,6 @@ pub async fn start_oauth_login(app_handle: AppHandle) -> Result<models::Account,
     modules::logger::log_info(&format!("账号添加成功: {}", account.email));
 
     // 广播数据变更通知
-    modules::websocket::broadcast_data_changed("oauth_login");
 
     Ok(account)
 }
@@ -168,7 +167,6 @@ pub async fn complete_oauth_login(app_handle: AppHandle) -> Result<models::Accou
     let account = refresh_account_quota_after_login(account).await;
 
     modules::logger::log_info(&format!("账号添加成功: {}", account.email));
-    modules::websocket::broadcast_data_changed("oauth_login");
 
     Ok(account)
 }

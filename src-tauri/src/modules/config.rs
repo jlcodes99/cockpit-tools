@@ -1,5 +1,5 @@
 //! 配置服务模块
-//! 管理应用配置，包括 WebSocket 端口等
+//! 管理应用配置
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -7,42 +7,18 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{OnceLock, RwLock};
 
-/// 默认 WebSocket 端口
-pub const DEFAULT_WS_PORT: u16 = 19528;
 /// 默认网页查询服务端口
 pub const DEFAULT_REPORT_PORT: u16 = 18081;
 
 /// 端口尝试范围（从配置端口开始，最多尝试 100 个）
 pub const PORT_RANGE: u16 = 100;
 
-/// 服务状态配置文件名（供外部客户端读取）
-const SERVER_STATUS_FILE: &str = "server.json";
-
 /// 用户配置文件名
 const USER_CONFIG_FILE: &str = "config.json";
-
-/// 服务状态（写入共享文件供其他客户端读取）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServerStatus {
-    /// WebSocket 服务端口（实际绑定的端口）
-    pub ws_port: u16,
-    /// 服务版本
-    pub version: String,
-    /// 进程 ID（用于检测服务是否存活）
-    pub pid: u32,
-    /// 启动时间戳
-    pub started_at: i64,
-}
 
 /// 用户配置（持久化存储）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserConfig {
-    /// WebSocket 服务是否启用
-    #[serde(default = "default_ws_enabled")]
-    pub ws_enabled: bool,
-    /// WebSocket 首选端口（用户配置的，实际可能不同）
-    #[serde(default = "default_ws_port")]
-    pub ws_port: u16,
     /// 网页查询服务是否启用
     #[serde(default = "default_report_enabled")]
     pub report_enabled: bool,
@@ -294,9 +270,6 @@ pub struct UserConfig {
     /// 是否显示顶部推广位
     #[serde(default = "default_top_right_ad_visible")]
     pub top_right_ad_visible: bool,
-    /// Antigravity 切号是否启用“本地落盘 + 扩展无感”且不重启
-    #[serde(default = "default_antigravity_dual_switch_no_restart_enabled")]
-    pub antigravity_dual_switch_no_restart_enabled: bool,
     /// 是否启用自动切号
     #[serde(default = "default_auto_switch_enabled")]
     pub auto_switch_enabled: bool,
@@ -492,13 +465,6 @@ impl Default for TrayIconStyle {
     fn default() -> Self {
         TrayIconStyle::Template
     }
-}
-
-fn default_ws_enabled() -> bool {
-    true
-}
-fn default_ws_port() -> u16 {
-    DEFAULT_WS_PORT
 }
 fn default_report_enabled() -> bool {
     false
@@ -750,9 +716,6 @@ fn default_codex_local_access_entry_visible() -> bool {
 fn default_top_right_ad_visible() -> bool {
     true
 }
-fn default_antigravity_dual_switch_no_restart_enabled() -> bool {
-    false
-}
 fn default_auto_switch_enabled() -> bool {
     false
 }
@@ -886,8 +849,6 @@ fn default_workbuddy_quota_alert_threshold() -> i32 {
 impl Default for UserConfig {
     fn default() -> Self {
         Self {
-            ws_enabled: true,
-            ws_port: DEFAULT_WS_PORT,
             report_enabled: default_report_enabled(),
             report_port: default_report_port(),
             report_token: default_report_token(),
@@ -974,8 +935,6 @@ impl Default for UserConfig {
             codex_restart_specified_app_on_switch: default_codex_restart_specified_app_on_switch(),
             codex_local_access_entry_visible: default_codex_local_access_entry_visible(),
             top_right_ad_visible: default_top_right_ad_visible(),
-            antigravity_dual_switch_no_restart_enabled:
-                default_antigravity_dual_switch_no_restart_enabled(),
             auto_switch_enabled: default_auto_switch_enabled(),
             auto_switch_threshold: default_auto_switch_threshold(),
             auto_switch_credits_enabled: default_auto_switch_credits_enabled(),
@@ -1026,8 +985,6 @@ impl Default for UserConfig {
 
 /// 运行时状态
 struct RuntimeState {
-    /// 当前实际使用的端口
-    actual_port: Option<u16>,
     /// 用户配置
     user_config: UserConfig,
 }
@@ -1042,7 +999,6 @@ fn get_runtime_state() -> &'static RwLock<RuntimeState> {
         // 让应用内 reqwest 客户端与用户全局代理设置保持一致。
         sync_global_proxy_env(&initial_config);
         RwLock::new(RuntimeState {
-            actual_port: None,
             user_config: initial_config,
         })
     })
@@ -1159,12 +1115,6 @@ pub fn get_data_dir() -> Result<PathBuf, String> {
 pub fn get_shared_dir() -> PathBuf {
     crate::modules::account::resolve_data_dir()
         .unwrap_or_else(|_| PathBuf::from(".antigravity_cockpit"))
-}
-
-/// 获取服务状态文件路径
-pub fn get_server_status_path() -> Result<PathBuf, String> {
-    let data_dir = get_data_dir()?;
-    Ok(data_dir.join(SERVER_STATUS_FILE))
 }
 
 /// 获取用户配置文件路径
@@ -1904,8 +1854,8 @@ pub fn save_user_config(config: &UserConfig) -> Result<(), String> {
     sync_global_proxy_env(config);
 
     crate::modules::logger::log_info(&format!(
-        "[Config] 用户配置已保存: ws_enabled={}, ws_port={}, report_enabled={}, report_port={}",
-        config.ws_enabled, config.ws_port, config.report_enabled, config.report_port
+        "[Config] 用户配置已保存: report_enabled={}, report_port={}",
+        config.report_enabled, config.report_port
     ));
 
     Ok(())
@@ -1920,62 +1870,6 @@ pub fn get_user_config() -> UserConfig {
 }
 
 /// 获取用户配置的首选端口
-pub fn get_preferred_port() -> u16 {
-    get_user_config().ws_port
-}
-
-/// 获取当前实际使用的端口
-pub fn get_actual_port() -> Option<u16> {
-    get_runtime_state()
-        .read()
-        .ok()
-        .and_then(|state| state.actual_port)
-}
-
-/// 保存服务状态到共享文件
-pub fn save_server_status(status: &ServerStatus) -> Result<(), String> {
-    let status_path = get_server_status_path()?;
-    let data_dir = get_data_dir()?;
-
-    // 确保目录存在
-    if !data_dir.exists() {
-        fs::create_dir_all(&data_dir).map_err(|e| format!("创建配置目录失败: {}", e))?;
-    }
-
-    // 写入状态文件
-    let json =
-        serde_json::to_string_pretty(status).map_err(|e| format!("序列化状态失败: {}", e))?;
-
-    crate::modules::atomic_write::write_string_atomic(&status_path, &json)
-        .map_err(|e| format!("写入状态文件失败: {}", e))?;
-
-    crate::modules::logger::log_info(&format!(
-        "[Config] 服务状态已保存: ws_port={}, pid={}",
-        status.ws_port, status.pid
-    ));
-
-    Ok(())
-}
-
-/// 初始化服务状态（WebSocket 启动后调用）
-pub fn init_server_status(actual_port: u16) -> Result<(), String> {
-    // 更新运行时状态
-    if let Ok(mut state) = get_runtime_state().write() {
-        state.actual_port = Some(actual_port);
-    }
-
-    let status = ServerStatus {
-        ws_port: actual_port,
-        version: env!("CARGO_PKG_VERSION").to_string(),
-        pid: std::process::id(),
-        started_at: chrono::Utc::now().timestamp(),
-    };
-
-    save_server_status(&status)?;
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::UserConfig;

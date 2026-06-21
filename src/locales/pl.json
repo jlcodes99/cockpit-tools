@@ -722,8 +722,6 @@
       "sideNavLayoutDesc": "Przełącz między oryginalnym a klasycznym układem paska bocznego",
       "sideNavLayoutOriginal": "Układ oryginalny",
       "sideNavLayoutClassic": "Układ klasyczny",
-      "antigravityDualSwitchNoRestart": "Podwójne przełączanie bez restartu",
-      "antigravityDualSwitchNoRestartDesc": "Podczas przełączania konta zapis lokalnych danych i płynne przełączenie przez rozszerzenie są wykonywane w jednym przebiegu, bez restartu Antigravity IDE.",
       "appAutoLaunch": "Uruchamiaj Cockpit Tools po zalogowaniu",
       "appAutoLaunchDesc": "Automatycznie uruchamiaj aplikację po zalogowaniu do systemu",
       "startupWakeupDisabled": "Wyłączone",
@@ -789,9 +787,6 @@
       "claudeAppPathDesc": "Profil domyślny może używać celu Microsoft Store; wiele instancji wymaga prawdziwego Claude.exe."
     },
     "network": {
-      "apiTitle": "API kokpitu antygrawitacyjnego",
-      "wsService": "Usługa WebSocket",
-      "wsServiceDesc": "Zezwalaj na połączenie programom zewnętrznym (np. rozszerzenie VS Code)",
       "preferredPort": "Preferowany port",
       "preferredPortDesc": "Domyślnie {{port}}, wymagany restart po zmianie",
       "currentPort": "Aktualny port",

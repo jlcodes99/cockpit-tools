@@ -17,7 +17,6 @@ import { showFloatingCardWindow } from '../services/floatingCardService';
 import { usePlatformRuntimeSupport } from '../hooks/usePlatformRuntimeSupport';
 import { usePlatformLayoutStore } from '../stores/usePlatformLayoutStore';
 import { SideNavLayoutMode, useSideNavLayoutStore } from '../stores/useSideNavLayoutStore';
-import { UnlockFireworksOverlay } from '../components/UnlockFireworksOverlay';
 import {
   AutoSwitchAccountScopeSelector,
   type AutoSwitchAccountScopeMode,
@@ -31,12 +30,6 @@ import { resolveUpdaterDownloadUrl } from '../utils/updaterReleaseNotes';
 import { getSubscriptionTier } from '../utils/account';
 import type { Account } from '../types/account';
 import type { CodexAccount } from '../types/codex';
-import {
-  FEATURE_UNLOCK_CHANGED_EVENT,
-  type FeatureUnlockChangedDetail,
-  isAntigravitySeamlessSwitchFeatureUnlocked,
-  persistAntigravitySeamlessSwitchFeatureUnlocked,
-} from '../utils/featureUnlocks';
 import {
   buildDefaultCurrentAccountRefreshMinutesMap,
   CURRENT_ACCOUNT_REFRESH_PLATFORMS,
@@ -86,10 +79,6 @@ import {
 
 /** 网络配置类型 */
 interface NetworkConfig {
-  ws_enabled: boolean;
-  ws_port: number;
-  actual_port: number | null;
-  default_port: number;
   report_enabled: boolean;
   report_port: number;
   report_actual_port: number | null;
@@ -166,7 +155,6 @@ interface GeneralConfig {
   codex_restart_specified_app_on_switch: boolean;
   codex_local_access_entry_visible: boolean;
   top_right_ad_visible?: boolean;
-  antigravity_dual_switch_no_restart_enabled: boolean;
   auto_switch_enabled: boolean;
   auto_switch_threshold: number;
   auto_switch_credits_enabled?: boolean;
@@ -224,8 +212,6 @@ const CURRENT_ACCOUNT_REFRESH_PRESET_VALUES = ['1', '2', '5', '10', '15'];
 const THRESHOLD_PRESET_VALUES = ['0', '20', '40', '60'];
 const CREDITS_THRESHOLD_PRESET_VALUES = ['0', '5', '10', '20'];
 const UI_SCALE_OPTIONS = ['0.9', '1', '1.1', '1.25', '1.5'] as const;
-const ANTIGRAVITY_SEAMLESS_SWITCH_UNLOCK_REQUIRED_TAPS = 10;
-const UNLOCK_FIREWORKS_VISIBLE_MS = 6000;
 const AUTO_SWITCH_SCOPE_ALL_ACCOUNTS: AutoSwitchAccountScopeMode = 'all_accounts';
 const AUTO_SWITCH_SCOPE_SELECTED_ACCOUNTS: AutoSwitchAccountScopeMode = 'selected_accounts';
 const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
@@ -469,7 +455,6 @@ export function SettingsPage() {
   const [codexRestartSpecifiedAppOnSwitch, setCodexRestartSpecifiedAppOnSwitch] = useState(false);
   const [codexLocalAccessEntryVisible, setCodexLocalAccessEntryVisible] = useState(true);
   const [topRightAdVisible, setTopRightAdVisible] = useState(true);
-  const [antigravityDualSwitchNoRestartEnabled, setAntigravityDualSwitchNoRestartEnabled] = useState(false);
   const [autoSwitchEnabled, setAutoSwitchEnabled] = useState(false);
   const [autoSwitchThreshold, setAutoSwitchThreshold] = useState('20');
   const [autoSwitchCreditsEnabled, setAutoSwitchCreditsEnabled] = useState(false);
@@ -517,12 +502,6 @@ export function SettingsPage() {
   const [kiroQuotaAlertThresholdCustomMode, setKiroQuotaAlertThresholdCustomMode] = useState(false);
   const [cursorQuotaAlertThresholdCustomMode, setCursorQuotaAlertThresholdCustomMode] = useState(false);
   const [geminiQuotaAlertThresholdCustomMode, setGeminiQuotaAlertThresholdCustomMode] = useState(false);
-  const [antigravitySeamlessSwitchUnlocked, setAntigravitySeamlessSwitchUnlocked] = useState(
-    isAntigravitySeamlessSwitchFeatureUnlocked,
-  );
-  const [, setAboutAvatarTapCount] = useState(0);
-  const [showUnlockFireworks, setShowUnlockFireworks] = useState(false);
-  const unlockFireworksTimerRef = useRef<number | null>(null);
   const [generalLoaded, setGeneralLoaded] = useState(false);
   const generalSaveTimerRef = useRef<number | null>(null);
   const suppressGeneralSaveRef = useRef(false);
@@ -689,37 +668,9 @@ export function SettingsPage() {
     };
   }, [t]);
 
-  useEffect(() => {
-    const handleFeatureUnlockChanged = (event: Event) => {
-      const detail = (event as CustomEvent<FeatureUnlockChangedDetail>).detail;
-      if (!detail || detail.feature !== 'antigravity.seamless_switch') {
-        return;
-      }
-      setAntigravitySeamlessSwitchUnlocked(Boolean(detail.unlocked));
-    };
 
-    window.addEventListener(FEATURE_UNLOCK_CHANGED_EVENT, handleFeatureUnlockChanged as EventListener);
-    return () => {
-      window.removeEventListener(
-        FEATURE_UNLOCK_CHANGED_EVENT,
-        handleFeatureUnlockChanged as EventListener,
-      );
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (unlockFireworksTimerRef.current !== null) {
-        window.clearTimeout(unlockFireworksTimerRef.current);
-      }
-    };
-  }, []);
   
   // Network States
-  const [wsEnabled, setWsEnabled] = useState(true);
-  const [wsPort, setWsPort] = useState('19528');
-  const [actualPort, setActualPort] = useState<number | null>(null);
-  const [defaultPort, setDefaultPort] = useState(19528);
   const [reportEnabled, setReportEnabled] = useState(false);
   const [reportPort, setReportPort] = useState('18081');
   const [reportActualPort, setReportActualPort] = useState<number | null>(null);
@@ -881,7 +832,6 @@ export function SettingsPage() {
           codexRestartSpecifiedAppOnSwitch,
           codexLocalAccessEntryVisible,
           topRightAdVisible,
-          antigravityDualSwitchNoRestartEnabled,
           autoSwitchEnabled,
           autoSwitchThreshold: Number.isNaN(parsedAutoSwitchThreshold) ? 20 : parsedAutoSwitchThreshold,
           autoSwitchCreditsEnabled,
@@ -1011,7 +961,6 @@ export function SettingsPage() {
     codexRestartSpecifiedAppOnSwitch,
     codexLocalAccessEntryVisible,
     topRightAdVisible,
-    antigravityDualSwitchNoRestartEnabled,
     autoSwitchEnabled,
     autoSwitchThreshold,
     autoSwitchCreditsEnabled,
@@ -1329,9 +1278,6 @@ export function SettingsPage() {
       );
       setCodexLocalAccessEntryVisible(config.codex_local_access_entry_visible ?? true);
       setTopRightAdVisible(config.top_right_ad_visible ?? true);
-      setAntigravityDualSwitchNoRestartEnabled(
-        config.antigravity_dual_switch_no_restart_enabled ?? false
-      );
       setAutoSwitchEnabled(config.auto_switch_enabled ?? false);
       setAutoSwitchThreshold(String(config.auto_switch_threshold ?? 20));
       setAutoSwitchCreditsEnabled(config.auto_switch_credits_enabled ?? false);
@@ -1405,10 +1351,6 @@ export function SettingsPage() {
   const loadNetworkConfig = async () => {
     try {
       const config = await invoke<NetworkConfig>('get_network_config');
-      setWsEnabled(config.ws_enabled);
-      setWsPort(String(config.ws_port));
-      setActualPort(config.actual_port);
-      setDefaultPort(config.default_port);
       setReportEnabled(config.report_enabled);
       setReportPort(String(config.report_port));
       setReportActualPort(config.report_actual_port);
@@ -1427,7 +1369,6 @@ export function SettingsPage() {
   const handleSaveNetworkConfig = async () => {
     setNetworkSaving(true);
     try {
-      const portNum = parseInt(wsPort, 10) || defaultPort;
       const reportPortNum = parseInt(reportPort, 10) || reportDefaultPort;
       const normalizedToken = reportToken.trim();
 
@@ -1443,8 +1384,6 @@ export function SettingsPage() {
       }
 
       const result = await invoke<boolean>('save_network_config', {
-        wsEnabled,
-        wsPort: portNum,
         reportEnabled,
         reportPort: reportPortNum,
         reportToken: normalizedToken,
@@ -2313,32 +2252,6 @@ export function SettingsPage() {
     );
   };
 
-  const triggerUnlockFireworks = () => {
-    if (unlockFireworksTimerRef.current !== null) {
-      window.clearTimeout(unlockFireworksTimerRef.current);
-      unlockFireworksTimerRef.current = null;
-    }
-    setShowUnlockFireworks(true);
-    unlockFireworksTimerRef.current = window.setTimeout(() => {
-      setShowUnlockFireworks(false);
-      unlockFireworksTimerRef.current = null;
-    }, UNLOCK_FIREWORKS_VISIBLE_MS);
-  };
-
-  const handleAboutAvatarTap = () => {
-    setAboutAvatarTapCount((prev) => {
-      const next = prev + 1;
-      if (next % ANTIGRAVITY_SEAMLESS_SWITCH_UNLOCK_REQUIRED_TAPS === 0) {
-        if (!antigravitySeamlessSwitchUnlocked) {
-          persistAntigravitySeamlessSwitchFeatureUnlocked(true);
-          setAntigravitySeamlessSwitchUnlocked(true);
-        }
-        triggerUnlockFireworks();
-      }
-      return next;
-    });
-  };
-
   return (
     <main className="main-content">
       <div className="page-tabs-row settings-page-tabs-row">
@@ -2836,38 +2749,6 @@ export function SettingsPage() {
                   </div>
                 </div>
               </div>
-
-              {antigravitySeamlessSwitchUnlocked && (
-                <div className="settings-row">
-                  <div className="row-label">
-                    <div className="row-title">
-                      {t(
-                        'settings.general.antigravityDualSwitchNoRestart',
-                        '无感双通道切号（不重启）'
-                      )}
-                    </div>
-                    <div className="row-desc">
-                      {t(
-                        'settings.general.antigravityDualSwitchNoRestartDesc',
-                        '切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity IDE。'
-                      )}
-                    </div>
-                  </div>
-                  <div className="row-control">
-                    <label className="switch">
-                      <input
-                        type="checkbox"
-                        checked={antigravityDualSwitchNoRestartEnabled}
-                        onChange={(e) =>
-                          setAntigravityDualSwitchNoRestartEnabled(e.target.checked)
-                        }
-                      />
-                      <span className="slider"></span>
-                    </label>
-                  </div>
-                </div>
-              )}
-
               <div className="settings-row">
                 <div className="row-label">
                   <div className="row-title">{t('quickSettings.autoSwitch.enable', '自动切号')}</div>
@@ -5815,76 +5696,7 @@ export function SettingsPage() {
 
         {/* === Network Tab === */}
         {activeTab === 'network' && (
-          <>
-            <div className="group-title">Antigravity Cockpit API</div>
-            <div className="settings-group">
-              <div className="settings-row">
-                <div className="row-label">
-                  <div className="row-title">{t('settings.network.wsService')}</div>
-                  <div className="row-desc">{t('settings.network.wsServiceDesc')}</div>
-                </div>
-                <div className="row-control">
-                  <label className="switch">
-                    <input 
-                      type="checkbox" 
-                      checked={wsEnabled} 
-                      onChange={(e) => setWsEnabled(e.target.checked)} 
-                    />
-                    <span className="slider"></span>
-                  </label>
-                </div>
-              </div>
-
-              {wsEnabled && (
-                <>
-                  <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
-                    <div className="row-label">
-                      <div className="row-title">{t('settings.network.preferredPort')}</div>
-                      <div className="row-desc">
-                        {t('settings.network.preferredPortDesc').replace('{port}', String(defaultPort))}
-                      </div>
-                    </div>
-                    <div className="row-control">
-                      <input 
-                        type="number" 
-                        className="settings-input"
-                        value={wsPort}
-                        onChange={(e) => setWsPort(e.target.value)}
-                        placeholder={String(defaultPort)}
-                        min="1024"
-                        max="65535"
-                      />
-                    </div>
-                  </div>
-                  
-                  {actualPort && (
-                    <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
-                      <div className="row-label">
-                        <div className="row-title">{t('settings.network.currentPort')}</div>
-                        <div className="row-desc">
-                          {actualPort === parseInt(wsPort, 10) 
-                            ? t('settings.network.portNormal')
-                            : t('settings.network.portFallback')
-                                .replace('{configured}', wsPort)
-                                .replace('{actual}', String(actualPort))}
-                        </div>
-                      </div>
-                      <div className="row-control">
-                        <span style={{ 
-                          fontFamily: 'var(--font-mono)', 
-                          fontSize: '14px',
-                          color: actualPort === parseInt(wsPort, 10) ? 'var(--accent)' : 'var(--warning, #f59e0b)'
-                        }}>
-                          ws://127.0.0.1:{actualPort}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            <div className="group-title">{t('settings.network.reportTitle')}</div>
+          <>            <div className="group-title">{t('settings.network.reportTitle')}</div>
             <div className="settings-group">
               <div className="settings-row">
                 <div className="row-label">
@@ -6096,8 +5908,7 @@ export function SettingsPage() {
           <div className="about-container">
             <div className="about-logo-section">
               <div
-                className={`app-icon-squircle${showUnlockFireworks ? ' unlock-fireworks-active' : ''}`}
-                onClick={handleAboutAvatarTap}
+                className="app-icon-squircle"
                 onMouseDown={(event) => event.preventDefault()}
               >
                 <Rocket size={40} />
@@ -6270,9 +6081,6 @@ export function SettingsPage() {
             </div>
           </div>
         </div>
-      )}
-      {showUnlockFireworks && (
-        <UnlockFireworksOverlay />
       )}
     </main>
   );

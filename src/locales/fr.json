@@ -719,8 +719,6 @@
       "sideNavLayoutDesc": "Basculer entre la disposition originale et classique de la barre latérale",
       "sideNavLayoutOriginal": "Disposition originale",
       "sideNavLayoutClassic": "Disposition classique",
-      "antigravityDualSwitchNoRestart": "Bascule double sans redémarrage",
-      "antigravityDualSwitchNoRestartDesc": "Lors du changement de compte, les données locales sont écrites et la bascule fluide de l’extension est exécutée dans un seul flux, sans redémarrer Antigravity IDE.",
       "appAutoLaunch": "Lancer Cockpit Tools à la connexion",
       "appAutoLaunchDesc": "Démarrer automatiquement l'application après la connexion au système",
       "startupWakeupDisabled": "Désactivé",
@@ -789,9 +787,6 @@
       "claudeAppPathDesc": "Le profil par défaut peut utiliser une cible Microsoft Store ; les instances multiples nécessitent le vrai Claude.exe."
     },
     "network": {
-      "apiTitle": "API du cockpit antigravité",
-      "wsService": "Service WebSocket",
-      "wsServiceDesc": "Autoriser les programmes externes (ex. extension VS Code) à se connecter",
       "preferredPort": "Port préféré",
       "preferredPortDesc": "Le port par défaut est {{port}}, redémarrage requis après modification",
       "currentPort": "Port actuel",

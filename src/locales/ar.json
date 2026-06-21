@@ -765,8 +765,6 @@
       "sideNavLayoutDesc": "التبديل بين التخطيط الأصلي والكلاسيكي للشريط الجانبي",
       "sideNavLayoutOriginal": "التخطيط الأصلي",
       "sideNavLayoutClassic": "التخطيط الكلاسيكي",
-      "antigravityDualSwitchNoRestart": "تبديل ثنائي بدون إعادة تشغيل",
-      "antigravityDualSwitchNoRestartDesc": "عند تبديل الحساب، يتم تنفيذ كتابة بيانات الحساب محليًا والتبديل السلس عبر الإضافة في تدفق واحد، دون إعادة تشغيل Antigravity IDE.",
       "appAutoLaunch": "تشغيل Cockpit Tools عند تسجيل الدخول",
       "appAutoLaunchDesc": "تشغيل التطبيق تلقائيًا بعد تسجيل الدخول إلى النظام",
       "startupWakeupDisabled": "معطل",
@@ -835,9 +833,6 @@
       "claudeAppPathDesc": "يمكن للملف الافتراضي استخدام هدف Microsoft Store؛ أما الملفات متعددة المثيلات فتحتاج Claude.exe الحقيقي."
     },
     "network": {
-      "apiTitle": "واجهة برمجة تطبيقات قمرة القيادة المضادة للجاذبية",
-      "wsService": "خدمة WebSocket",
-      "wsServiceDesc": "يسمح للبرامج الخارجية (مثل ملحق VS Code) بالاتصال والتحكم",
       "preferredPort": "المنفذ المفضل",
       "preferredPortDesc": "الافتراضي هو {{port}}، التعديل يتطلب إعادة تشغيل التطبيق",
       "currentPort": "المنفذ الحالي",

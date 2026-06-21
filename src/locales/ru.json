@@ -722,8 +722,6 @@
       "sideNavLayoutDesc": "Переключение между оригинальным и классическим макетом боковой панели",
       "sideNavLayoutOriginal": "Оригинальный макет",
       "sideNavLayoutClassic": "Классический макет",
-      "antigravityDualSwitchNoRestart": "Двойное переключение без перезапуска",
-      "antigravityDualSwitchNoRestartDesc": "При переключении аккаунта локальная запись данных и плавное переключение через расширение выполняются в одном потоке без перезапуска Antigravity IDE.",
       "appAutoLaunch": "Запускать Cockpit Tools при входе в систему",
       "appAutoLaunchDesc": "Автоматически запускать приложение после входа в систему",
       "startupWakeupDisabled": "Отключено",
@@ -789,9 +787,6 @@
       "claudeAppPathDesc": "Стандартный профиль может использовать цель Microsoft Store; нескольким экземплярам нужен реальный Claude.exe."
     },
     "network": {
-      "apiTitle": "API антигравитационной кабины",
-      "wsService": "Сервис WebSocket",
-      "wsServiceDesc": "Разрешить внешним программам (например, расширению VS Code) подключаться",
       "preferredPort": "Предпочтительный порт",
       "preferredPortDesc": "По умолчанию {{port}}, после изменения требуется перезагрузка",
       "currentPort": "Текущий порт",

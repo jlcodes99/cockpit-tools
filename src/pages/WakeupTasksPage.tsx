@@ -1081,12 +1081,6 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
   }, []);
 
   useEffect(() => {
-    invoke('set_wakeup_override', { enabled: wakeupEnabled }).catch((error) => {
-      console.error('唤醒互斥通知失败:', error);
-    });
-  }, [wakeupEnabled]);
-
-  useEffect(() => {
     invoke('wakeup_set_official_ls_version_mode', { mode: officialLsVersionMode }).catch((error) => {
       console.error('同步官方 LS 版本模式失败:', error);
     });

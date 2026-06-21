@@ -36,7 +36,6 @@ tauri-plugin-notification.workspace = true
 rand.workspace = true
 sha2.workspace = true
 ring = "0.17"
-tokio-tungstenite.workspace = true
 futures-util.workspace = true
 rustls.workspace = true
 rcgen.workspace = true

@@ -217,11 +217,6 @@ pub fn run() {
                 }
             });
 
-            // 启动 WebSocket 服务（使用 Tauri 的 async runtime）
-            tauri::async_runtime::spawn(async {
-                modules::websocket::start_server().await;
-            });
-
             // 启动网页查询服务（网络服务配置中的独立模块）
             tauri::async_runtime::spawn(async {
                 modules::web_report::start_server().await;
@@ -497,7 +492,6 @@ pub fn run() {
             commands::system::detect_app_path,
             commands::system::scan_claude_desktop_launch_targets,
             commands::system::get_antigravity_installed_version_info,
-            commands::system::set_wakeup_override,
             commands::system::handle_window_close,
             commands::system::show_floating_card_window,
             commands::system::show_instance_floating_card_window,

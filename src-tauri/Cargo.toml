@@ -42,6 +42,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 base64 = "0.22"
 minisign-verify = "0.2"
 tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-native-roots"] }
 tokio-rustls = "0.26"
 rustls = "0.23"
 rcgen = "0.13"
@@ -57,7 +58,6 @@ rand = "0.8"
 futures = "0.3"
 sysinfo = "0.33"
 libc = "0.2"
-tokio-tungstenite = { version = "0.26", features = ["rustls-tls-native-roots"] }
 futures-util = "0.3"
 md5 = "0.7"
 tiny_http = "0.12"

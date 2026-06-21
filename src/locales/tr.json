@@ -722,8 +722,6 @@
       "sideNavLayoutDesc": "Orijinal ve klasik kenar çubuğu düzenleri arasında geçiş yapın",
       "sideNavLayoutOriginal": "Orijinal Düzen",
       "sideNavLayoutClassic": "Klasik Düzen",
-      "antigravityDualSwitchNoRestart": "Yeniden başlatmadan çift geçiş",
-      "antigravityDualSwitchNoRestartDesc": "Hesap değiştirirken yerel hesap verisi yazımı ve eklentinin kesintisiz geçişi tek akışta yürütülür; Antigravity IDE yeniden başlatılmaz.",
       "appAutoLaunch": "Oturum açıldığında Cockpit Tools'u başlat",
       "appAutoLaunchDesc": "Sistem oturumundan sonra uygulamayı otomatik başlat",
       "startupWakeupDisabled": "Devre dışı",
@@ -789,9 +787,6 @@
       "claudeAppPathDesc": "Varsayılan profil Microsoft Store hedefi kullanabilir; çoklu örnekler gerçek Claude.exe ister."
     },
     "network": {
-      "apiTitle": "Yerçekimine Karşı Kokpit API'si",
-      "wsService": "WebSocket Servisi",
-      "wsServiceDesc": "Harici programların (örn. VS Code eklentisi) bağlanmasına izin ver",
       "preferredPort": "Tercih Edilen Port",
       "preferredPortDesc": "Varsayılan {{port}}, değişiklikten sonra yeniden başlatma gerekir",
       "currentPort": "Mevcut Port",

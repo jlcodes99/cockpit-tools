@@ -3,7 +3,6 @@ use tauri_plugin_autostart::ManagerExt as _;
 use crate::models::InstanceStore;
 use crate::modules;
 use crate::modules::config::{self, UserConfig};
-use crate::modules::websocket;
 
 fn get_app_auto_launch_enabled(app: &tauri::AppHandle) -> Result<bool, String> {
     app.autolaunch()
@@ -97,10 +96,7 @@ pub fn data_transfer_apply_user_config(
         current.webdav_sync_last_download_file_name.clone();
     let current_app_auto_launch_enabled =
         get_app_auto_launch_enabled(&app).unwrap_or(current.app_auto_launch_enabled);
-
-    let needs_restart = current.ws_port != next_config.ws_port
-        || current.ws_enabled != next_config.ws_enabled
-        || current.report_enabled != next_config.report_enabled
+    let needs_restart = current.report_enabled != next_config.report_enabled
         || current.report_port != next_config.report_port
         || current.report_token != next_config.report_token;
     let language_changed = current.language != next_config.language;
@@ -139,7 +135,6 @@ pub fn data_transfer_apply_user_config(
 
     if language_changed {
         let normalized_language = next_config.language.clone();
-        websocket::broadcast_language_changed(&normalized_language, "desktop");
         modules::sync_settings::write_sync_setting("language", &normalized_language);
         if let Err(err) = modules::tray::update_tray_menu(&app) {
             modules::logger::log_warn(&format!("[DataTransfer] 语言变更后刷新托盘失败: {}", err));

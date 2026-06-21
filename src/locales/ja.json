@@ -722,8 +722,6 @@
       "sideNavLayoutDesc": "元のサイドバーとクラシックなサイドバーのレイアウトを切り替えます",
       "sideNavLayoutOriginal": "元のレイアウト",
       "sideNavLayoutClassic": "クラシックレイアウト",
-      "antigravityDualSwitchNoRestart": "再起動なしデュアル切替",
-      "antigravityDualSwitchNoRestartDesc": "切替時にローカルのアカウントデータ書き込みと拡張機能のシームレス切替を1つのフローで実行し、Antigravity IDE を再起動しません。",
       "appAutoLaunch": "ログイン時に Cockpit Tools を起動",
       "appAutoLaunchDesc": "システムログイン後にアプリを自動起動します",
       "startupWakeupDisabled": "無効",
@@ -789,9 +787,6 @@
       "claudeAppPathDesc": "既定プロファイルは Microsoft Store ターゲットを使用できます。複数インスタンスには実際の Claude.exe が必要です。"
     },
     "network": {
-      "apiTitle": "反重力コックピット API",
-      "wsService": "WebSocket サービス",
-      "wsServiceDesc": "外部プログラム（VS Code 拡張機能など）からの接続を許可する",
       "preferredPort": "推奨ポート",
       "preferredPortDesc": "デフォルトは {{port}} です。変更後は再起動が必要です。",
       "currentPort": "現在の実行ポート",

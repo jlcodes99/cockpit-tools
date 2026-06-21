@@ -719,8 +719,6 @@
       "sideNavLayoutDesc": "切換原始佈局或經典佈局",
       "sideNavLayoutOriginal": "原始佈局",
       "sideNavLayoutClassic": "經典佈局",
-      "antigravityDualSwitchNoRestart": "無感雙通道切號（不重啟）",
-      "antigravityDualSwitchNoRestartDesc": "切號時同時執行本地落盤與擴充套件無感切號，不再自動重啟 Antigravity IDE。",
       "appAutoLaunch": "開機時啟動 Cockpit Tools",
       "appAutoLaunchDesc": "系統登入後自動啟動應用程式",
       "startupWakeupDisabled": "關閉",
@@ -789,9 +787,6 @@
       "claudeAppPathDesc": "預設實例可使用 Microsoft Store 應用目標；多開實例請選擇真實 Claude.exe。"
     },
     "network": {
-      "apiTitle": "反重力駕駛艙 API",
-      "wsService": "WebSocket 服務",
-      "wsServiceDesc": "允許外部程式 (如 VS Code 擴充功能) 連接控制",
       "preferredPort": "偏好連接埠",
       "preferredPortDesc": "預設為 {{port}}，修改後需重啟應用程式",
       "currentPort": "目前執行連接埠",

@@ -12,10 +12,9 @@ use url::Url;
 use crate::modules;
 use crate::modules::config::{
     self, CloseWindowBehavior, MinimizeWindowBehavior, TrayIconStyle, UserConfig,
-    DEFAULT_REPORT_PORT, DEFAULT_WS_PORT,
+    DEFAULT_REPORT_PORT,
 };
 use crate::modules::web_report;
-use crate::modules::websocket;
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -24,14 +23,6 @@ const AUTO_BACKUP_DIR_NAME: &str = "backups";
 /// 网络服务配置（前端使用）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkConfig {
-    /// WebSocket 是否启用
-    pub ws_enabled: bool,
-    /// 配置的端口
-    pub ws_port: u16,
-    /// 实际运行的端口（可能与配置不同）
-    pub actual_port: Option<u16>,
-    /// 默认端口
-    pub default_port: u16,
     /// 网页查询服务是否启用
     pub report_enabled: bool,
     /// 网页查询服务配置端口
@@ -173,8 +164,6 @@ pub struct GeneralConfig {
     pub codex_local_access_entry_visible: bool,
     /// 是否显示顶部推广位
     pub top_right_ad_visible: bool,
-    /// Antigravity 切号是否启用“本地落盘 + 扩展无感”且不重启
-    pub antigravity_dual_switch_no_restart_enabled: bool,
     /// 是否启用自动切号
     pub auto_switch_enabled: bool,
     /// 自动切号阈值（百分比）
@@ -1857,14 +1846,9 @@ pub async fn delete_webdav_backup_file(file_name: String) -> Result<(), String> 
 #[tauri::command]
 pub fn get_network_config() -> Result<NetworkConfig, String> {
     let user_config = config::get_user_config();
-    let ws_actual_port = config::get_actual_port();
     let report_actual_port = web_report::get_actual_port();
 
     Ok(NetworkConfig {
-        ws_enabled: user_config.ws_enabled,
-        ws_port: user_config.ws_port,
-        actual_port: ws_actual_port,
-        default_port: DEFAULT_WS_PORT,
         report_enabled: user_config.report_enabled,
         report_port: user_config.report_port,
         report_actual_port,
@@ -1879,8 +1863,6 @@ pub fn get_network_config() -> Result<NetworkConfig, String> {
 /// 保存网络服务配置
 #[tauri::command]
 pub fn save_network_config(
-    ws_enabled: bool,
-    ws_port: u16,
     report_enabled: Option<bool>,
     report_port: Option<u16>,
     report_token: Option<String>,
@@ -1911,16 +1893,11 @@ pub fn save_network_config(
     if next_global_proxy_enabled && next_global_proxy_url.is_empty() {
         return Err("启用全局代理时，代理地址不能为空".to_string());
     }
-
-    let needs_restart = current.ws_port != ws_port
-        || current.ws_enabled != ws_enabled
-        || current.report_enabled != next_report_enabled
+    let needs_restart = current.report_enabled != next_report_enabled
         || current.report_port != next_report_port
         || current.report_token != next_report_token;
 
     let new_config = UserConfig {
-        ws_enabled,
-        ws_port,
         report_enabled: next_report_enabled,
         report_port: next_report_port,
         report_token: next_report_token,
@@ -2006,8 +1983,6 @@ pub fn save_network_config(
         codex_restart_specified_app_on_switch: current.codex_restart_specified_app_on_switch,
         codex_local_access_entry_visible: current.codex_local_access_entry_visible,
         top_right_ad_visible: current.top_right_ad_visible,
-        antigravity_dual_switch_no_restart_enabled: current
-            .antigravity_dual_switch_no_restart_enabled,
         auto_switch_enabled: current.auto_switch_enabled,
         auto_switch_threshold: current.auto_switch_threshold,
         auto_switch_credits_enabled: current.auto_switch_credits_enabled,
@@ -2277,8 +2252,6 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         codex_restart_specified_app_on_switch: user_config.codex_restart_specified_app_on_switch,
         codex_local_access_entry_visible: user_config.codex_local_access_entry_visible,
         top_right_ad_visible: user_config.top_right_ad_visible,
-        antigravity_dual_switch_no_restart_enabled: user_config
-            .antigravity_dual_switch_no_restart_enabled,
         auto_switch_enabled: user_config.auto_switch_enabled,
         auto_switch_threshold: user_config.auto_switch_threshold,
         auto_switch_credits_enabled: user_config.auto_switch_credits_enabled,
@@ -2410,7 +2383,6 @@ pub fn save_general_config(
     codex_restart_specified_app_on_switch: Option<bool>,
     codex_local_access_entry_visible: Option<bool>,
     top_right_ad_visible: Option<bool>,
-    antigravity_dual_switch_no_restart_enabled: Option<bool>,
     auto_switch_enabled: Option<bool>,
     auto_switch_threshold: Option<i32>,
     auto_switch_credits_enabled: Option<bool>,
@@ -2503,7 +2475,6 @@ pub fn save_general_config(
     // 标准化语言代码为小写，确保与插件端格式一致
     let normalized_language = language.to_lowercase();
     let language_changed = current.language != normalized_language;
-    let language_for_broadcast = normalized_language.clone();
 
     // 解析关闭行为
     let close_behavior_enum = match close_behavior.as_str() {
@@ -2565,8 +2536,6 @@ pub fn save_general_config(
 
     let new_config = UserConfig {
         // 保留网络设置不变
-        ws_enabled: current.ws_enabled,
-        ws_port: current.ws_port,
         report_enabled: current.report_enabled,
         report_port: current.report_port,
         report_token: current.report_token,
@@ -2651,8 +2620,6 @@ pub fn save_general_config(
         codex_local_access_entry_visible: codex_local_access_entry_visible
             .unwrap_or(current.codex_local_access_entry_visible),
         top_right_ad_visible: top_right_ad_visible.unwrap_or(current.top_right_ad_visible),
-        antigravity_dual_switch_no_restart_enabled: antigravity_dual_switch_no_restart_enabled
-            .unwrap_or(current.antigravity_dual_switch_no_restart_enabled),
         auto_switch_enabled: auto_switch_enabled.unwrap_or(current.auto_switch_enabled),
         auto_switch_threshold: auto_switch_threshold.unwrap_or(current.auto_switch_threshold),
         auto_switch_credits_enabled: auto_switch_credits_enabled
@@ -2791,9 +2758,6 @@ pub fn save_general_config(
     }
 
     if language_changed {
-        // 广播语言变更（如果有客户端连接，会通过 WebSocket 发送）
-        websocket::broadcast_language_changed(&language_for_broadcast, "desktop");
-
         // 同时写入共享文件（供插件端离线时启动读取）
         // 因为无法确定插件端是否收到了 WebSocket 消息，保守策略是总是写入
         // 但为了减少写入，可以检查是否有客户端连接
@@ -2951,13 +2915,6 @@ pub async fn get_antigravity_installed_version_info(
         Ok(Err(error)) => Err(format!("Antigravity 版本检测任务失败: {}", error)),
         Err(_) => Ok(None),
     }
-}
-
-/// 通知插件关闭/开启唤醒功能（互斥）
-#[tauri::command]
-pub fn set_wakeup_override(enabled: bool) -> Result<(), String> {
-    websocket::broadcast_wakeup_override(enabled);
-    Ok(())
 }
 
 /// 执行窗口关闭操作

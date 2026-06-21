@@ -722,8 +722,6 @@
       "sideNavLayoutDesc": "Alternar entre os layouts originais e clássicos da barra lateral",
       "sideNavLayoutOriginal": "Layout original",
       "sideNavLayoutClassic": "Layout clássico",
-      "antigravityDualSwitchNoRestart": "Troca dupla sem reiniciar",
-      "antigravityDualSwitchNoRestartDesc": "Ao trocar de conta, a gravação local dos dados e a troca contínua da extensão são executadas em um único fluxo, sem reiniciar o Antigravity IDE.",
       "appAutoLaunch": "Iniciar o Cockpit Tools ao entrar no sistema",
       "appAutoLaunchDesc": "Iniciar o app automaticamente após o login no sistema",
       "startupWakeupDisabled": "Desativado",
@@ -789,9 +787,6 @@
       "claudeAppPathDesc": "O perfil padrão pode usar um alvo da Microsoft Store; perfis multi-instância precisam do Claude.exe real."
     },
     "network": {
-      "apiTitle": "API de cockpit antigravidade",
-      "wsService": "Serviço WebSocket",
-      "wsServiceDesc": "Permitir que programas externos (ex: extensão do VS Code) se conectem",
       "preferredPort": "Porta Preferida",
       "preferredPortDesc": "O padrão é {{port}}, requer reinicialização após a alteração",
       "currentPort": "Porta Atual",

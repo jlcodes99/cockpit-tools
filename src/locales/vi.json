@@ -722,8 +722,6 @@
       "sideNavLayoutDesc": "Chuyển giữa bố cục thanh bên gốc và cổ điển",
       "sideNavLayoutOriginal": "Bố cục gốc",
       "sideNavLayoutClassic": "Bố cục cổ điển",
-      "antigravityDualSwitchNoRestart": "Chuyển đôi không cần khởi động lại",
-      "antigravityDualSwitchNoRestartDesc": "Khi chuyển tài khoản, việc ghi dữ liệu cục bộ và chuyển đổi liền mạch qua tiện ích mở rộng được thực hiện trong một luồng, không cần khởi động lại Antigravity IDE.",
       "appAutoLaunch": "Khởi chạy Cockpit Tools khi đăng nhập",
       "appAutoLaunchDesc": "Tự động khởi chạy ứng dụng sau khi đăng nhập hệ thống",
       "startupWakeupDisabled": "Tắt",
@@ -789,9 +787,6 @@
       "claudeAppPathDesc": "Hồ sơ mặc định có thể dùng mục tiêu Microsoft Store; hồ sơ đa phiên bản cần Claude.exe thật."
     },
     "network": {
-      "apiTitle": "API Antigravity Cockpit",
-      "wsService": "Dịch vụ WebSocket",
-      "wsServiceDesc": "Cho phép các chương trình bên ngoài (như plugin VS Code) kết nối điều khiển",
       "preferredPort": "Cổng ưu tiên",
       "preferredPortDesc": "Mặc định là {{port}}, yêu cầu khởi động lại ứng dụng sau khi sửa đổi",
       "currentPort": "Cổng đang chạy",

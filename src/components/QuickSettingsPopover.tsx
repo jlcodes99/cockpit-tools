@@ -27,11 +27,6 @@ import {
   persistCodexCodeReviewQuotaVisible,
 } from '../utils/codexPreferences';
 import {
-  FEATURE_UNLOCK_CHANGED_EVENT,
-  type FeatureUnlockChangedDetail,
-  isAntigravitySeamlessSwitchFeatureUnlocked,
-} from '../utils/featureUnlocks';
-import {
   buildDefaultCurrentAccountRefreshMinutesMap,
   type CurrentAccountRefreshMinutesMap,
   type CurrentAccountRefreshPlatform,
@@ -100,7 +95,6 @@ interface GeneralConfig {
   codex_launch_on_switch: boolean;
   codex_restart_specified_app_on_switch: boolean;
   codex_local_access_entry_visible: boolean;
-  antigravity_dual_switch_no_restart_enabled: boolean;
   auto_switch_enabled: boolean;
   auto_switch_threshold: number;
   auto_switch_credits_enabled: boolean;
@@ -367,9 +361,6 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   );
   const [currentAccountRefreshMap, setCurrentAccountRefreshMap] =
     useState<CurrentAccountRefreshMinutesMap>(() => buildDefaultCurrentAccountRefreshMinutesMap());
-  const [antigravitySeamlessSwitchUnlocked, setAntigravitySeamlessSwitchUnlocked] = useState(
-    isAntigravitySeamlessSwitchFeatureUnlocked,
-  );
   const modalRef = useRef<HTMLDivElement>(null);
   const refreshPresets = ['-1', '2', '5', '10', '15'];
   const thresholdPresets = ['0', '20', '40', '60'];
@@ -699,30 +690,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         void loadCodexQuickConfig();
       }
       setCodexShowCodeReviewQuota(isCodexCodeReviewQuotaVisibleByDefault());
-      setAntigravitySeamlessSwitchUnlocked(isAntigravitySeamlessSwitchFeatureUnlocked());
       setOverviewFilterPersistenceEnabledState(
         readAccountsOverviewFilterPersistenceEnabled(overviewFilterScope),
       );
     }
   }, [isOpen, loadCodexQuickConfig, overviewFilterScope, type]);
 
-  useEffect(() => {
-    const handleFeatureUnlockChanged = (event: Event) => {
-      const detail = (event as CustomEvent<FeatureUnlockChangedDetail>).detail;
-      if (!detail || detail.feature !== 'antigravity.seamless_switch') {
-        return;
-      }
-      setAntigravitySeamlessSwitchUnlocked(Boolean(detail.unlocked));
-    };
-
-    window.addEventListener(FEATURE_UNLOCK_CHANGED_EVENT, handleFeatureUnlockChanged as EventListener);
-    return () => {
-      window.removeEventListener(
-        FEATURE_UNLOCK_CHANGED_EVENT,
-        handleFeatureUnlockChanged as EventListener,
-      );
-    };
-  }, []);
 
   useEscClose(isOpen, () => setIsOpen(false));
 
@@ -875,7 +848,6 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           codexLaunchOnSwitch: merged.codex_launch_on_switch,
           codexRestartSpecifiedAppOnSwitch: merged.codex_restart_specified_app_on_switch,
           codexLocalAccessEntryVisible: merged.codex_local_access_entry_visible,
-          antigravityDualSwitchNoRestartEnabled: merged.antigravity_dual_switch_no_restart_enabled,
           autoSwitchEnabled: merged.auto_switch_enabled,
           autoSwitchThreshold: merged.auto_switch_threshold,
           autoSwitchCreditsEnabled: merged.auto_switch_credits_enabled,
@@ -2875,42 +2847,6 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                   <Zap size={15} />
                   <span>{t('quickSettings.autoSwitch.title', '自动切号')}</span>
                 </div>
-
-                {antigravitySeamlessSwitchUnlocked && (
-                  <>
-                    <div className="qs-row">
-                      <div className="qs-row-label">
-                        <span>
-                          {t(
-                            'settings.general.antigravityDualSwitchNoRestart',
-                            '无感双通道切号（不重启）'
-                          )}
-                        </span>
-                      </div>
-                      <div className="qs-row-control">
-                        <label className="qs-switch">
-                          <input
-                            type="checkbox"
-                            checked={config.antigravity_dual_switch_no_restart_enabled}
-                            onChange={(e) =>
-                              saveConfig({
-                                antigravity_dual_switch_no_restart_enabled: e.target.checked,
-                              })
-                            }
-                          />
-                          <span className="qs-switch-slider"></span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="qs-hint">
-                      {t(
-                        'settings.general.antigravityDualSwitchNoRestartDesc',
-                        '切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity IDE。'
-                      )}
-                    </div>
-                  </>
-                )}
 
                 <div className="qs-row">
                   <div className="qs-row-label">

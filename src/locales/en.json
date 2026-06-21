@@ -1113,8 +1113,6 @@
       "ghcpOpencodeAuthOverwrite": "Overwrite OpenCode login when switching GitHub Copilot",
       "ghcpOpencodeRestart": "Restart OpenCode when switching GitHub Copilot",
       "ghcpLaunchOnSwitch": "Launch GitHub Copilot App when switching GitHub Copilot",
-      "antigravityDualSwitchNoRestart": "Dual switch without restart",
-      "antigravityDualSwitchNoRestartDesc": "On switch, write local account data and call extension seamless switch in one flow, without restarting Antigravity IDE.",
       "codebuddyCnAppPath": "CodeBuddy CN App Path",
       "codebuddyCnAppPathDesc": "Leave blank to use the default path",
       "codebuddyCnAppPathPlaceholder": "Default path",
@@ -1145,9 +1143,6 @@
       "claudeAppPathDesc": "The default profile can use a Microsoft Store target; multi-instance profiles need the real Claude.exe."
     },
     "network": {
-      "apiTitle": "Antigravity Cockpit API",
-      "wsService": "WebSocket Service",
-      "wsServiceDesc": "Allow external programs (e.g., VS Code extension) to connect",
       "preferredPort": "Preferred Port",
       "preferredPortDesc": "Default is {{port}}, restart required after change",
       "currentPort": "Current Port",

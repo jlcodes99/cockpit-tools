@@ -778,7 +778,6 @@ dependencies = [
  "tiny_http",
  "tokio",
  "tokio-rustls",
- "tokio-tungstenite",
  "toml_edit 0.20.2",
  "tracing",
  "tracing-appender",

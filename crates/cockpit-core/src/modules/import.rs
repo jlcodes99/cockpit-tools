@@ -322,9 +322,7 @@ pub async fn import_from_old_tools_logic() -> Result<Vec<models::Account>, Strin
     modules::logger::log_info(&format!("导入完成，共导入 {} 个账号", imported.len()));
 
     // 广播数据变更通知
-    if !imported.is_empty() {
-        modules::websocket::broadcast_data_changed("import_from_old_tools");
-    }
+    if !imported.is_empty() {}
 
     Ok(imported)
 }
@@ -391,7 +389,6 @@ pub async fn import_from_local_logic() -> Result<models::Account, String> {
     modules::logger::log_info(&format!("本地账号导入成功: {}", email));
 
     // 广播数据变更通知
-    modules::websocket::broadcast_data_changed("import_from_local");
 
     Ok(account)
 }
@@ -518,9 +515,7 @@ pub async fn import_from_json_logic(json_content: String) -> Result<Vec<models::
     modules::logger::log_info(&format!("JSON 导入完成，共导入 {} 个账号", imported.len()));
 
     // 广播数据变更通知
-    if !imported.is_empty() {
-        modules::websocket::broadcast_data_changed("import_from_json");
-    }
+    if !imported.is_empty() {}
 
     Ok(imported)
 }
@@ -702,9 +697,7 @@ pub async fn import_from_files_logic(file_paths: Vec<String>) -> Result<FileImpo
         failed.len()
     ));
 
-    if !imported.is_empty() {
-        modules::websocket::broadcast_data_changed("import_from_files");
-    }
+    if !imported.is_empty() {}
 
     Ok(FileImportResult { imported, failed })
 }
@@ -868,9 +861,7 @@ pub async fn import_from_extension_credentials(
         }
     }
 
-    if imported_count > 0 {
-        modules::websocket::broadcast_data_changed("extension_sync");
-    }
+    if imported_count > 0 {}
 
     Ok(imported_count)
 }

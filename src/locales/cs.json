@@ -719,8 +719,6 @@
       "sideNavLayoutDesc": "Přepnutí mezi původním a klasickým rozložením postranního panelu",
       "sideNavLayoutOriginal": "Původní rozložení",
       "sideNavLayoutClassic": "Klasické rozložení",
-      "antigravityDualSwitchNoRestart": "Duální přepnutí bez restartu",
-      "antigravityDualSwitchNoRestartDesc": "Při přepnutí účtu se v jednom kroku zapíší lokální data účtu a provede plynulé přepnutí rozšíření bez restartu Antigravity IDE.",
       "appAutoLaunch": "Spustit Cockpit Tools po přihlášení",
       "appAutoLaunchDesc": "Po přihlášení do systému spustit aplikaci automaticky",
       "startupWakeupDisabled": "Vypnuto",
@@ -789,9 +787,6 @@
       "claudeAppPathDesc": "Výchozí profil může použít cíl Microsoft Store; více instancí potřebuje skutečný Claude.exe."
     },
     "network": {
-      "apiTitle": "Antigravity Cockpit API​",
-      "wsService": "Služba WebSocket",
-      "wsServiceDesc": "Povolit připojení externím programům (např. rozšíření VS Code)",
       "preferredPort": "Preferovaný port",
       "preferredPortDesc": "Výchozí je {{port}}, po změně je nutný restart",
       "currentPort": "Aktuální port",

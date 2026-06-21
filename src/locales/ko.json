@@ -722,8 +722,6 @@
       "sideNavLayoutDesc": "원래의 사이드바 레이아웃과 클래식 사이드바 레이아웃 간 전환",
       "sideNavLayoutOriginal": "원래 레이아웃",
       "sideNavLayoutClassic": "클래식 레이아웃",
-      "antigravityDualSwitchNoRestart": "재시작 없이 이중 전환",
-      "antigravityDualSwitchNoRestartDesc": "계정 전환 시 로컬 계정 데이터 기록과 확장 프로그램의 원활한 전환을 한 번에 수행하며, Antigravity IDE를 재시작하지 않습니다.",
       "appAutoLaunch": "로그인 시 Cockpit Tools 시작",
       "appAutoLaunchDesc": "시스템 로그인 후 앱을 자동으로 시작합니다",
       "startupWakeupDisabled": "비활성화",
@@ -789,9 +787,6 @@
       "claudeAppPathDesc": "기본 프로필은 Microsoft Store 대상을 사용할 수 있지만, 다중 인스턴스에는 실제 Claude.exe가 필요합니다."
     },
     "network": {
-      "apiTitle": "반중력 조종석 API",
-      "wsService": "WebSocket 서비스",
-      "wsServiceDesc": "외부 프로그램(예: VS Code 확장 프로그램)의 연결을 허용합니다",
       "preferredPort": "기본 포트",
       "preferredPortDesc": "기본값은 {{port}}이며, 변경 후 재시작이 필요합니다",
       "currentPort": "현재 실행 포트",
