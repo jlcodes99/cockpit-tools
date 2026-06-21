@@ -526,6 +526,7 @@ function MainApp() {
   const markSideNavClassicFirstSyncDone = useSideNavLayoutStore((state) => state.markClassicFirstSyncDone);
   const syncSidebarEntriesFromDashboard = usePlatformLayoutStore((state) => state.syncSidebarEntriesFromDashboard);
   const [page, setPage] = useState<Page>('dashboard');
+  const [codexPageMounted, setCodexPageMounted] = useState(false);
   const [showUpdateNotification, setShowUpdateNotification] = useState(false);
   const [updateNotificationKey, setUpdateNotificationKey] = useState(0);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
@@ -3134,6 +3135,12 @@ function MainApp() {
   };
 
   useEffect(() => {
+    if (page === 'codex') {
+      setCodexPageMounted(true);
+    }
+  }, [page]);
+
+  useEffect(() => {
     const handleRequestNavigate = (e: Event) => {
       const custom = e as CustomEvent<Page>;
       if (custom.detail) {
@@ -3578,7 +3585,14 @@ function MainApp() {
           )}
           {page === 'api-relay' && <ApiKeyFunPage />}
           {page === 'overview' && <AccountsPage onNavigate={setPage} />}
-          {page === 'codex' && <CodexAccountsPage />}
+          {(page === 'codex' || codexPageMounted) && (
+            <div
+              aria-hidden={page === 'codex' ? undefined : true}
+              style={{ display: page === 'codex' ? 'contents' : 'none' }}
+            >
+              <CodexAccountsPage />
+            </div>
+          )}
           {page === 'claude' && <ClaudeAccountsPage subPlatform="desktop" />}
           {page === 'claude-cli' && <ClaudeAccountsPage subPlatform="cli" />}
           {page === 'codex-api-service' && <CodexApiServicePage />}

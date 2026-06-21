@@ -8,6 +8,7 @@ import {
   type ReactElement,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   Plus,
   RefreshCw,
@@ -51,6 +52,7 @@ import {
   Wrench,
   Terminal,
   Link2,
+  Minimize2,
 } from "lucide-react";
 import { useCodexAccountStore } from "../stores/useCodexAccountStore";
 import { useCodexInstanceStore } from "../stores/useCodexInstanceStore";
@@ -205,6 +207,15 @@ import {
   splitValidityFilterValues,
 } from "../utils/accountValidityFilter";
 import {
+  buildCodexBatchImportApiServiceAccountIds,
+  findNextCodexBatchImportTaskId,
+  getCodexBatchImportProgressTone,
+  getCodexBatchImportProgressPercent,
+  mergeCodexBatchImportDefaultSelection,
+  recoverCodexBatchImportStartedTaskFromPreview,
+  type CodexBatchImportQueueTaskStatus,
+} from "../utils/codexBatchImportQueue";
+import {
   buildPaginatedGroups,
   buildPaginationPageSizeStorageKey,
   isEveryIdSelected,
@@ -315,6 +326,20 @@ const OAUTH_BINDING_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 type CodexOverviewLayoutMode = "compact" | "list" | "grid";
 type OAuthBindingSortBy = "account" | "created_at" | "last_used" | "plan";
 type OAuthBindingTargetKind = "api_key_account" | "local_access";
+type CodexBatchImportFilter = "all" | "ready";
+type CodexBatchImportTask = {
+  id: string;
+  filePaths: string[];
+  sessionId: string | null;
+  status: CodexBatchImportQueueTaskStatus;
+  checkQuota: boolean;
+  progress: codexService.CodexBatchImportProgress | null;
+  preview: codexService.CodexBatchImportPreview | null;
+  selectedIds: string[];
+  filter: CodexBatchImportFilter;
+  error: string | null;
+  result: codexService.CodexBatchImportConfirmResult | null;
+};
 type CodexApiKeyUsageState = {
   loading: boolean;
   summary?: CodexModelProviderUsageSummary;
@@ -1195,58 +1220,46 @@ export function CodexAccountsPage() {
   const reauthTargetAccountId = reauthTargetAccount?.id?.trim() ?? "";
   const reauthTargetEmail = reauthTargetAccount?.email?.trim() ?? "";
   const [batchImportOpen, setBatchImportOpen] = useState(false);
-  const [batchImportSessionId, setBatchImportSessionId] = useState<
+  const [activeBatchImportTaskId, setActiveBatchImportTaskId] = useState<
     string | null
   >(null);
-  const [batchImportProgress, setBatchImportProgress] =
-    useState<codexService.CodexBatchImportProgress | null>(null);
-  const [batchImportPreview, setBatchImportPreview] =
-    useState<codexService.CodexBatchImportPreview | null>(null);
-  const [batchImportSelectedIds, setBatchImportSelectedIds] = useState<
-    string[]
+  const [batchImportTasks, setBatchImportTasks] = useState<
+    CodexBatchImportTask[]
   >([]);
-  const [batchImportFilter, setBatchImportFilter] = useState<"all" | "ready">(
-    "all",
+  const batchImportTaskCounterRef = useRef(0);
+  const batchImportStartingTaskIdRef = useRef<string | null>(null);
+
+  const activeBatchImportTask = useMemo(
+    () =>
+      batchImportTasks.find((task) => task.id === activeBatchImportTaskId) ??
+      null,
+    [activeBatchImportTaskId, batchImportTasks],
   );
-  const [batchImportBusy, setBatchImportBusy] = useState(false);
-  const [batchImportError, setBatchImportError] = useState<string | null>(null);
-  const [batchImportResult, setBatchImportResult] =
-    useState<codexService.CodexBatchImportConfirmResult | null>(null);
-  const [batchImportFilePaths, setBatchImportFilePaths] = useState<string[]>(
-    [],
+  const batchImportSessionId = activeBatchImportTask?.sessionId ?? null;
+  const batchImportProgress = activeBatchImportTask?.progress ?? null;
+  const batchImportPreview = activeBatchImportTask?.preview ?? null;
+  const batchImportSelectedIds = activeBatchImportTask?.selectedIds ?? [];
+  const batchImportFilter = activeBatchImportTask?.filter ?? "all";
+  const batchImportError = activeBatchImportTask?.error ?? null;
+  const batchImportResult = activeBatchImportTask?.result ?? null;
+  const batchImportCheckQuota = activeBatchImportTask?.checkQuota ?? false;
+  const batchImportBusy =
+    activeBatchImportTask?.status === "queued" ||
+    activeBatchImportTask?.status === "running" ||
+    activeBatchImportTask?.status === "importing";
+  const batchImportHasQueueWork = batchImportTasks.some(
+    (task) =>
+      task.checkQuota &&
+      (task.status === "queued" || task.status === "running"),
   );
-  const [batchImportCheckQuota, setBatchImportCheckQuota] = useState(false);
-  const batchImportUnlistenersRef = useRef<UnlistenFn[]>([]);
-  const batchImportSessionIdRef = useRef<string | null>(null);
-
-  const cleanupBatchImportListeners = useCallback(() => {
-    for (const unlisten of batchImportUnlistenersRef.current) {
-      try {
-        unlisten();
-      } catch {
-        // ignore listener cleanup failures
-      }
-    }
-    batchImportUnlistenersRef.current = [];
-  }, []);
-
-  useEffect(() => cleanupBatchImportListeners, [cleanupBatchImportListeners]);
-
-  const resetBatchImportState = useCallback(() => {
-    cleanupBatchImportListeners();
-    batchImportSessionIdRef.current = null;
-    setBatchImportOpen(false);
-    setBatchImportSessionId(null);
-    setBatchImportProgress(null);
-    setBatchImportPreview(null);
-    setBatchImportSelectedIds([]);
-    setBatchImportFilter("all");
-    setBatchImportBusy(false);
-    setBatchImportError(null);
-    setBatchImportResult(null);
-    setBatchImportFilePaths([]);
-    setBatchImportCheckQuota(false);
-  }, [cleanupBatchImportListeners]);
+  const batchImportQueueTasks = batchImportTasks.filter(
+    (task) => task.id !== activeBatchImportTaskId,
+  );
+  const showBatchImportFloatingPanel =
+    !batchImportOpen && batchImportTasks.length > 0;
+  const activeBatchImportProgressPercent = activeBatchImportTask
+    ? getCodexBatchImportProgressPercent(activeBatchImportTask)
+    : 0;
 
   const batchImportCounts = useMemo(() => {
     const items = batchImportPreview?.items ?? [];
@@ -1291,6 +1304,218 @@ export function CodexAccountsPage() {
     batchImportProgress?.checkQuota ??
     batchImportPreview?.checkQuota ??
     batchImportCheckQuota;
+
+  const enqueueBatchImportTask = useCallback(
+    (paths: string[], checkQuota: boolean, openModal: boolean) => {
+      const id = `codex-batch-import-${Date.now()}-${++batchImportTaskCounterRef.current}`;
+      const task: CodexBatchImportTask = {
+        id,
+        filePaths: [...paths],
+        sessionId: null,
+        status: "queued",
+        checkQuota,
+        progress: null,
+        preview: null,
+        selectedIds: [],
+        filter: "all",
+        error: null,
+        result: null,
+      };
+      setBatchImportTasks((current) => [...current, task]);
+      setActiveBatchImportTaskId((current) => current ?? id);
+      if (openModal) {
+        setActiveBatchImportTaskId(id);
+        setBatchImportOpen(true);
+      }
+      return id;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (
+      activeBatchImportTaskId &&
+      batchImportTasks.some((task) => task.id === activeBatchImportTaskId)
+    ) {
+      return;
+    }
+    setActiveBatchImportTaskId(batchImportTasks[0]?.id ?? null);
+    if (batchImportTasks.length === 0) {
+      setBatchImportOpen(false);
+    }
+  }, [activeBatchImportTaskId, batchImportTasks]);
+
+  useEffect(() => {
+    let mounted = true;
+    let unlisteners: UnlistenFn[] = [];
+
+    const register = async () => {
+      const progressUnlisten =
+        await listen<codexService.CodexBatchImportProgress>(
+          "codex:batch-import-progress",
+          (event) => {
+            setBatchImportTasks((current) =>
+              current.map((task) =>
+                task.sessionId === event.payload.sessionId
+                  ? {
+                      ...task,
+                      status: "running",
+                      checkQuota: event.payload.checkQuota,
+                      progress: event.payload,
+                      error: null,
+                    }
+                  : task,
+              ),
+            );
+          },
+        );
+      const previewUnlisten =
+        await listen<codexService.CodexBatchImportPreview>(
+          "codex:batch-import-preview",
+          (event) => {
+            setBatchImportTasks((current) =>
+              current.map((task) =>
+                task.sessionId === event.payload.sessionId
+                  ? {
+                      ...task,
+                      checkQuota: event.payload.checkQuota,
+                      preview: event.payload,
+                      selectedIds: mergeCodexBatchImportDefaultSelection(
+                        task.selectedIds,
+                        event.payload.items,
+                      ),
+                    }
+                  : task,
+              ),
+            );
+          },
+        );
+      const completedUnlisten =
+        await listen<codexService.CodexBatchImportPreview>(
+          "codex:batch-import-completed",
+          (event) => {
+            setBatchImportTasks((current) =>
+              current.map((task) =>
+                task.sessionId === event.payload.sessionId
+                  ? {
+                      ...task,
+                      status:
+                        event.payload.status === "cancelled"
+                          ? "cancelled"
+                          : "ready",
+                      checkQuota: event.payload.checkQuota,
+                      preview: event.payload,
+                      progress: task.progress
+                        ? {
+                            ...task.progress,
+                            phase: event.payload.status,
+                            checkQuota: event.payload.checkQuota,
+                            current: event.payload.items.length,
+                            total: event.payload.total,
+                          }
+                        : task.progress,
+                      selectedIds: mergeCodexBatchImportDefaultSelection(
+                        task.selectedIds,
+                        event.payload.items,
+                      ),
+                    }
+                  : task,
+              ),
+            );
+          },
+        );
+
+      const nextUnlisteners = [
+        progressUnlisten,
+        previewUnlisten,
+        completedUnlisten,
+      ];
+      if (!mounted) {
+        nextUnlisteners.forEach((unlisten) => unlisten());
+        return;
+      }
+      unlisteners = nextUnlisteners;
+    };
+
+    void register();
+
+    return () => {
+      mounted = false;
+      unlisteners.forEach((unlisten) => unlisten());
+    };
+  }, []);
+
+  useEffect(() => {
+    const nextTaskId = findNextCodexBatchImportTaskId(batchImportTasks);
+    if (!nextTaskId || batchImportStartingTaskIdRef.current) {
+      return;
+    }
+    const task = batchImportTasks.find((item) => item.id === nextTaskId);
+    if (!task) return;
+
+    batchImportStartingTaskIdRef.current = nextTaskId;
+    setBatchImportTasks((current) =>
+      current.map((item) =>
+        item.id === nextTaskId
+          ? {
+              ...item,
+              status: "running",
+              sessionId: null,
+              progress: null,
+              preview: null,
+              selectedIds: [],
+              filter: "all",
+              error: null,
+              result: null,
+            }
+          : item,
+      ),
+    );
+
+    void codexService
+      .startCodexBatchImportFromFiles(task.filePaths, task.checkQuota)
+      .then(async (started) => {
+        setBatchImportTasks((current) =>
+          current.map((item) =>
+            item.id === nextTaskId
+              ? { ...item, sessionId: started.sessionId }
+              : item,
+          ),
+        );
+        const preview = await codexService.getCodexBatchImportPreview(
+          started.sessionId,
+        );
+        setBatchImportTasks((current) =>
+          current.map((item) =>
+            item.id === nextTaskId
+              ? recoverCodexBatchImportStartedTaskFromPreview(
+                  item,
+                  started.sessionId,
+                  preview,
+                )
+              : item,
+          ),
+        );
+      })
+      .catch((error) => {
+        setBatchImportTasks((current) =>
+          current.map((item) =>
+            item.id === nextTaskId
+              ? {
+                  ...item,
+                  status: "error",
+                  error: String(error).replace(/^Error:\s*/, ""),
+                }
+              : item,
+          ),
+        );
+      })
+      .finally(() => {
+        if (batchImportStartingTaskIdRef.current === nextTaskId) {
+          batchImportStartingTaskIdRef.current = null;
+        }
+      });
+  }, [batchImportTasks]);
 
   const openCodexAddModal = useCallback(
     (tab: string, targetAccount?: CodexAccount | null) => {
@@ -4358,114 +4583,24 @@ export function CodexAccountsPage() {
     }
   };
 
-  const startBatchImportFromPaths = async (
-    paths: string[],
-    checkQuota: boolean,
+  const updateActiveBatchImportTask = (
+    updater: (task: CodexBatchImportTask) => CodexBatchImportTask,
   ) => {
-    cleanupBatchImportListeners();
+    if (!activeBatchImportTaskId) return;
+    setBatchImportTasks((current) =>
+      current.map((task) =>
+        task.id === activeBatchImportTaskId ? updater(task) : task,
+      ),
+    );
+  };
+
+  const removeBatchImportTask = (taskId: string) => {
+    setBatchImportTasks((current) => current.filter((task) => task.id !== taskId));
+  };
+
+  const openBatchImportTask = (taskId: string) => {
+    setActiveBatchImportTaskId(taskId);
     setBatchImportOpen(true);
-    setBatchImportSessionId(null);
-    setBatchImportProgress(null);
-    setBatchImportPreview(null);
-    setBatchImportSelectedIds([]);
-    setBatchImportFilter("all");
-    setBatchImportResult(null);
-    setBatchImportError(null);
-    setBatchImportFilePaths(paths);
-    setBatchImportCheckQuota(checkQuota);
-    setBatchImportBusy(true);
-    batchImportSessionIdRef.current = "__pending__";
-
-    try {
-      const progressUnlisten =
-        await listen<codexService.CodexBatchImportProgress>(
-          "codex:batch-import-progress",
-          (event) => {
-            if (event.payload.sessionId !== batchImportSessionIdRef.current) {
-              return;
-            }
-            setBatchImportProgress(event.payload);
-            setBatchImportCheckQuota(event.payload.checkQuota);
-          },
-        );
-      const completedUnlisten =
-        await listen<codexService.CodexBatchImportPreview>(
-          "codex:batch-import-completed",
-          (event) => {
-            if (event.payload.sessionId !== batchImportSessionIdRef.current) {
-              return;
-            }
-            setBatchImportPreview(event.payload);
-            setBatchImportCheckQuota(event.payload.checkQuota);
-            setBatchImportProgress((current) =>
-              current
-                ? {
-                    ...current,
-                    phase: event.payload.status,
-                    checkQuota: event.payload.checkQuota,
-                    current: event.payload.items.length,
-                    total: event.payload.total,
-                  }
-                : current,
-            );
-            setBatchImportSelectedIds((prev) => {
-              const next = new Set(prev);
-              for (const item of event.payload.items) {
-                if (
-                  item.defaultSelected &&
-                  item.selectable &&
-                  (item.status === "ready" || item.status === "existing")
-                ) {
-                  next.add(item.itemId);
-                }
-              }
-              return Array.from(next);
-            });
-            setBatchImportBusy(false);
-          },
-        );
-      const previewUnlisten =
-        await listen<codexService.CodexBatchImportPreview>(
-          "codex:batch-import-preview",
-          (event) => {
-            if (event.payload.sessionId !== batchImportSessionIdRef.current) {
-              return;
-            }
-            setBatchImportPreview(event.payload);
-            setBatchImportCheckQuota(event.payload.checkQuota);
-            setBatchImportSelectedIds((prev) => {
-              const next = new Set(prev);
-              for (const item of event.payload.items) {
-                if (
-                  item.defaultSelected &&
-                  item.selectable &&
-                  (item.status === "ready" || item.status === "existing")
-                ) {
-                  next.add(item.itemId);
-                }
-              }
-              return Array.from(next);
-            });
-          },
-        );
-      batchImportUnlistenersRef.current = [
-        progressUnlisten,
-        previewUnlisten,
-        completedUnlisten,
-      ];
-
-      const started = await codexService.startCodexBatchImportFromFiles(
-        paths,
-        checkQuota,
-      );
-      batchImportSessionIdRef.current = started.sessionId;
-      setBatchImportSessionId(started.sessionId);
-    } catch (e) {
-      cleanupBatchImportListeners();
-      batchImportSessionIdRef.current = null;
-      setBatchImportBusy(false);
-      setBatchImportError(String(e).replace(/^Error:\s*/, ""));
-    }
   };
 
   const handleImportFromFiles = async () => {
@@ -4478,64 +4613,92 @@ export function CodexAccountsPage() {
         return;
       const paths = Array.isArray(selected) ? selected : [selected];
       closeAddModal();
-      await startBatchImportFromPaths(paths, false);
+      enqueueBatchImportTask(paths, batchImportHasQueueWork, !batchImportHasQueueWork);
     } catch (e) {
-      setBatchImportBusy(false);
-      setBatchImportError(String(e).replace(/^Error:\s*/, ""));
+      setMessage({
+        text: String(e).replace(/^Error:\s*/, ""),
+        tone: "error",
+      });
     }
   };
 
-  const handleBatchImportCheckQuotaChange = async (checkQuota: boolean) => {
-    if (
-      batchImportBusy ||
-      batchImportResult ||
-      checkQuota === batchImportCheckQuota
-    ) {
+  const handleStartBatchImportCheck = () => {
+    if (!activeBatchImportTask || batchImportBusy || batchImportResult) {
       return;
     }
-    setBatchImportCheckQuota(checkQuota);
-    if (batchImportFilePaths.length === 0) {
+    if (activeBatchImportTask.checkQuota || !activeBatchImportTask.preview) {
       return;
     }
-    await startBatchImportFromPaths(batchImportFilePaths, checkQuota);
+    updateActiveBatchImportTask((task) => ({
+      ...task,
+      sessionId: null,
+      status: "queued",
+      checkQuota: true,
+      progress: null,
+      preview: null,
+      selectedIds: [],
+      filter: "all",
+      error: null,
+      result: null,
+    }));
   };
 
   const handleCancelBatchImport = async () => {
-    if (!batchImportSessionId) {
+    if (!activeBatchImportTask) {
       return;
     }
-    if (batchImportBusy) {
+    if (activeBatchImportTask.status === "queued") {
+      removeBatchImportTask(activeBatchImportTask.id);
+      return;
+    }
+    if (activeBatchImportTask.status === "running" && batchImportSessionId) {
       try {
         await codexService.cancelCodexBatchImport(batchImportSessionId);
-        setBatchImportProgress((current) =>
-          current ? { ...current, phase: "cancelling" } : current,
-        );
+        updateActiveBatchImportTask((task) => ({
+          ...task,
+          progress: task.progress
+            ? { ...task.progress, phase: "cancelling" }
+            : task.progress,
+        }));
       } catch (e) {
-        setBatchImportError(String(e).replace(/^Error:\s*/, ""));
+        updateActiveBatchImportTask((task) => ({
+          ...task,
+          error: String(e).replace(/^Error:\s*/, ""),
+        }));
       }
       return;
     }
   };
 
   const handleCloseBatchImport = async () => {
-    const sessionId = batchImportSessionId;
-    if (batchImportBusy && sessionId) {
-      try {
-        await codexService.cancelCodexBatchImport(sessionId);
-      } catch {
-        // Closing is an explicit discard action; ignore cancellation failures.
-      }
+    if (!activeBatchImportTask) {
+      setBatchImportOpen(false);
+      return;
     }
-    resetBatchImportState();
+    if (activeBatchImportTask.status === "queued") {
+      removeBatchImportTask(activeBatchImportTask.id);
+      return;
+    }
+    if (
+      activeBatchImportTask.status === "imported" ||
+      activeBatchImportTask.status === "cancelled" ||
+      activeBatchImportTask.status === "error" ||
+      (activeBatchImportTask.status === "ready" && !activeBatchImportTask.checkQuota)
+    ) {
+      removeBatchImportTask(activeBatchImportTask.id);
+      return;
+    }
+    setBatchImportOpen(false);
   };
 
   const toggleBatchImportItem = (itemId: string) => {
     if (!batchImportSelectableIdSet.has(itemId)) return;
-    setBatchImportSelectedIds((prev) =>
-      prev.includes(itemId)
-        ? prev.filter((id) => id !== itemId)
-        : [...prev, itemId],
-    );
+    updateActiveBatchImportTask((task) => ({
+      ...task,
+      selectedIds: task.selectedIds.includes(itemId)
+        ? task.selectedIds.filter((id) => id !== itemId)
+        : [...task.selectedIds, itemId],
+    }));
   };
 
   const selectAllBatchImportAccounts = () => {
@@ -4543,8 +4706,11 @@ export function CodexAccountsPage() {
     const ids = items
       .filter((item) => item.selectable && item.status !== "invalid")
       .map((item) => item.itemId);
-    setBatchImportFilter("all");
-    setBatchImportSelectedIds(ids);
+    updateActiveBatchImportTask((task) => ({
+      ...task,
+      filter: "all",
+      selectedIds: ids,
+    }));
   };
 
   const selectReadyBatchImportAccounts = () => {
@@ -4556,33 +4722,90 @@ export function CodexAccountsPage() {
           (item.status === "ready" || item.status === "existing"),
       )
       .map((item) => item.itemId);
-    setBatchImportFilter("ready");
-    setBatchImportSelectedIds(ids);
+    updateActiveBatchImportTask((task) => ({
+      ...task,
+      filter: "ready",
+      selectedIds: ids,
+    }));
   };
 
   const clearBatchImportSelection = () => {
-    setBatchImportFilter("all");
-    setBatchImportSelectedIds([]);
+    updateActiveBatchImportTask((task) => ({
+      ...task,
+      filter: "all",
+      selectedIds: [],
+    }));
   };
 
-  const handleConfirmBatchImport = async () => {
+  const handleConfirmBatchImport = async (
+    options: { addToApiService?: boolean } = {},
+  ) => {
     const selectedSelectableIds = batchImportSelectedIds.filter((id) =>
       batchImportSelectableIdSet.has(id),
     );
     if (!batchImportSessionId || selectedSelectableIds.length === 0) {
-      setBatchImportError(
-        t("codex.batchImport.noSelection", "请先选择要导入的账号"),
-      );
+      updateActiveBatchImportTask((task) => ({
+        ...task,
+        error: t("codex.batchImport.noSelection", "请先选择要导入的账号"),
+      }));
       return;
     }
-    setBatchImportBusy(true);
-    setBatchImportError(null);
+    updateActiveBatchImportTask((task) => ({
+      ...task,
+      status: "importing",
+      error: null,
+    }));
     try {
       const result = await codexService.confirmCodexBatchImport(
         batchImportSessionId,
         selectedSelectableIds,
       );
-      setBatchImportResult(result);
+      let apiServiceError: string | null = null;
+      if (options.addToApiService) {
+        const nextLocalAccessAccountIds =
+          buildCodexBatchImportApiServiceAccountIds(
+            localAccessCollection?.accountIds ?? [],
+            selectedSelectableIds,
+            batchImportPreview?.items ?? [],
+            result.imported,
+          );
+        setLocalAccessSaving(true);
+        try {
+          const nextState =
+            await codexLocalAccessService.saveCodexLocalAccessAccounts(
+              nextLocalAccessAccountIds,
+              localAccessCollection?.restrictFreeAccounts ?? true,
+            );
+          setLocalAccessState(nextState);
+          setMessage({
+            text: t(
+              "codex.batchImport.importAndAddToApiServiceSuccess",
+              "已导入并添加到 API 服务",
+            ),
+          });
+          window.dispatchEvent(new Event("codex-local-access-state-updated"));
+        } catch (apiError) {
+          apiServiceError = t(
+            "codex.batchImport.addToApiServiceFailed",
+            "账号已导入，但添加到 API 服务失败: {{error}}",
+          ).replace(
+            "{{error}}",
+            String(apiError).replace(/^Error:\s*/, ""),
+          );
+          setMessage({
+            text: apiServiceError,
+            tone: "error",
+          });
+        } finally {
+          setLocalAccessSaving(false);
+        }
+      }
+      updateActiveBatchImportTask((task) => ({
+        ...task,
+        status: "imported",
+        result,
+        error: apiServiceError,
+      }));
       await fetchAccounts();
       if (result.imported.length > 0) {
         await emitAccountsChanged({
@@ -4590,30 +4813,41 @@ export function CodexAccountsPage() {
           reason: "import",
         });
       }
-      cleanupBatchImportListeners();
     } catch (e) {
-      setBatchImportError(String(e).replace(/^Error:\s*/, ""));
-    } finally {
-      setBatchImportBusy(false);
+      updateActiveBatchImportTask((task) => ({
+        ...task,
+        status: "ready",
+        error: String(e).replace(/^Error:\s*/, ""),
+      }));
     }
   };
 
   const handleResumeBatchImport = async () => {
-    if (!batchImportSessionId || batchImportBusy) return;
-    setBatchImportBusy(true);
-    setBatchImportError(null);
-    setBatchImportResult(null);
+    if (!activeBatchImportTask || !batchImportSessionId || batchImportBusy)
+      return;
+    updateActiveBatchImportTask((task) => ({
+      ...task,
+      status: "running",
+      error: null,
+      result: null,
+    }));
     try {
       await codexService.resumeCodexBatchImport(batchImportSessionId);
-      setBatchImportProgress((current) =>
-        current ? { ...current, phase: "scanning" } : current,
-      );
-      setBatchImportPreview((current) =>
-        current ? { ...current, status: "scanning" } : current,
-      );
+      updateActiveBatchImportTask((task) => ({
+        ...task,
+        progress: task.progress
+          ? { ...task.progress, phase: "scanning" }
+          : task.progress,
+        preview: task.preview
+          ? { ...task.preview, status: "scanning" }
+          : task.preview,
+      }));
     } catch (e) {
-      setBatchImportBusy(false);
-      setBatchImportError(String(e).replace(/^Error:\s*/, ""));
+      updateActiveBatchImportTask((task) => ({
+        ...task,
+        status: "cancelled",
+        error: String(e).replace(/^Error:\s*/, ""),
+      }));
     }
   };
 
@@ -10717,6 +10951,99 @@ export function CodexAccountsPage() {
     );
   };
 
+  const getBatchImportTaskTitle = (
+    task: CodexBatchImportTask,
+    index: number,
+  ) => {
+    const names = task.filePaths
+      .map((path) => path.split(/[\\/]/).pop() || path)
+      .filter(Boolean);
+    if (names.length === 1) return names[0];
+    return t("codex.batchImport.batchLabel", "批次 {{index}}").replace(
+      "{{index}}",
+      String(index + 1),
+    );
+  };
+
+  const getBatchImportTaskStatusLabel = (task: CodexBatchImportTask) => {
+    if (task.status === "queued") {
+      return t("codex.batchImport.queued", "排队中");
+    }
+    if (task.status === "running") {
+      return task.checkQuota
+        ? t("codex.batchImport.scanning", "扫描中")
+        : t("codex.batchImport.parsing", "解析中");
+    }
+    if (task.status === "cancelled") {
+      return t("codex.batchImport.cancelled", "已取消");
+    }
+    if (task.status === "error") {
+      return t("codex.batchImport.failed", "失败");
+    }
+    if (task.status === "importing") {
+      return t("codex.batchImport.importing", "导入中");
+    }
+    if (task.status === "imported") {
+      return t("codex.batchImport.imported", "已导入");
+    }
+    return task.checkQuota
+      ? t("codex.batchImport.scanDone", "扫描完成")
+      : t("codex.batchImport.parseDone", "解析完成");
+  };
+
+  const getBatchImportTaskCountLabel = (task: CodexBatchImportTask) => {
+    const current = task.progress?.current ?? task.preview?.items.length ?? 0;
+    const total = task.progress?.total ?? task.preview?.total ?? 0;
+    return `${current}/${total}`;
+  };
+
+  const batchImportProgressCurrent =
+    batchImportProgress?.current ?? batchImportPreview?.items.length ?? 0;
+  const batchImportProgressTotal =
+    batchImportProgress?.total ?? batchImportPreview?.total ?? 0;
+  const batchImportStatusLabel = activeBatchImportTask
+    ? getBatchImportTaskStatusLabel(activeBatchImportTask)
+    : activeBatchImportCheckQuota
+      ? t("codex.batchImport.scanning", "扫描中")
+      : t("codex.batchImport.parsing", "解析中");
+  const batchImportCanCancel =
+    activeBatchImportTask?.status === "queued" ||
+    activeBatchImportTask?.status === "running";
+  const batchImportCancelling =
+    activeBatchImportTask?.status === "running" &&
+    batchImportProgress?.phase === "cancelling";
+  const batchImportFloatingPanel = showBatchImportFloatingPanel
+    ? createPortal(
+        <div className="codex-batch-import-floating-panel">
+          {batchImportTasks.map((task, index) => (
+            <button
+              type="button"
+              className={`codex-batch-import-floating-task status-${task.status}`}
+              key={task.id}
+              onClick={() => openBatchImportTask(task.id)}
+            >
+              <div className="codex-batch-import-floating-head">
+                <span>{getBatchImportTaskTitle(task, index)}</span>
+                <strong>{getBatchImportTaskCountLabel(task)}</strong>
+              </div>
+              <div className="codex-batch-import-floating-meta">
+                {getBatchImportTaskStatusLabel(task)}
+              </div>
+              <div className="codex-batch-import-progress-track">
+                <div
+                  className={`codex-batch-import-progress-fill tone-${getCodexBatchImportProgressTone(task)}`}
+                  style={{
+                    width: `${getCodexBatchImportProgressPercent(task)}%`,
+                  }}
+                />
+              </div>
+            </button>
+          ))}
+        </div>,
+        document.body,
+      )
+    : null;
+
   return (
     <div
       className={`codex-accounts-page codex-accounts-page--${overviewLayoutMode}`}
@@ -10727,7 +11054,11 @@ export function CodexAccountsPage() {
         tabs={["overview", "providers", "wakeup", "instances", "sessions"]}
       />
 
-      {batchImportOpen && (
+      {batchImportFloatingPanel}
+
+      {batchImportOpen &&
+        activeBatchImportTask &&
+        createPortal(
         <div className="modal-overlay codex-batch-import-overlay">
           <div
             className="modal-content codex-batch-import-modal"
@@ -10765,12 +11096,24 @@ export function CodexAccountsPage() {
                             )}
                 </p>
               </div>
-              <button
-                className="modal-close"
-                onClick={() => void handleCloseBatchImport()}
-              >
-                <X size={18} />
-              </button>
+              <div className="codex-batch-import-header-actions">
+                {batchImportHasQueueWork && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary compact"
+                    onClick={() => setBatchImportOpen(false)}
+                  >
+                    <Minimize2 size={14} />
+                    {t("codex.batchImport.runInBackground", "后台执行")}
+                  </button>
+                )}
+                <button
+                  className="modal-close"
+                  onClick={() => void handleCloseBatchImport()}
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             <div className="codex-batch-import-body">
@@ -10785,45 +11128,19 @@ export function CodexAccountsPage() {
                 <div className="codex-batch-import-progress-panel">
                   <div className="codex-batch-import-progress-head">
                     <span>
-                      {batchImportProgress?.phase === "cancelling"
+                      {batchImportCancelling
                         ? t("codex.batchImport.cancelling", "正在取消...")
-                        : batchImportBusy
-                          ? activeBatchImportCheckQuota
-                            ? t("codex.batchImport.scanning", "扫描中")
-                            : t("codex.batchImport.parsing", "解析中")
-                          : batchImportPreview?.status === "cancelled"
-                            ? t("codex.batchImport.cancelled", "已取消")
-                            : batchImportPreview
-                              ? activeBatchImportCheckQuota
-                                ? t("codex.batchImport.scanDone", "扫描完成")
-                                : t("codex.batchImport.parseDone", "解析完成")
-                              : activeBatchImportCheckQuota
-                                ? t("codex.batchImport.scanning", "扫描中")
-                                : t("codex.batchImport.parsing", "解析中")}
+                        : batchImportStatusLabel}
                     </span>
                     <strong>
-                      {batchImportProgress?.current ?? 0}/
-                      {batchImportProgress?.total ??
-                        batchImportPreview?.total ??
-                        0}
+                      {batchImportProgressCurrent}/{batchImportProgressTotal}
                     </strong>
                   </div>
                   <div className="codex-batch-import-progress-track">
                     <div
-                      className="codex-batch-import-progress-fill"
+                      className={`codex-batch-import-progress-fill tone-${getCodexBatchImportProgressTone(activeBatchImportTask)}`}
                       style={{
-                        width: `${
-                          batchImportProgress?.total
-                            ? Math.min(
-                                100,
-                                Math.round(
-                                  ((batchImportProgress.current || 0) /
-                                    batchImportProgress.total) *
-                                    100,
-                                ),
-                              )
-                            : 0
-                        }%`,
+                        width: `${activeBatchImportProgressPercent}%`,
                       }}
                     />
                   </div>
@@ -10833,6 +11150,37 @@ export function CodexAccountsPage() {
                       {maskAccountText(batchImportProgress.currentLabel)}
                     </div>
                   )}
+                </div>
+              )}
+
+              {batchImportQueueTasks.length > 0 && (
+                <div className="codex-batch-import-queue-list">
+                  {batchImportQueueTasks.map((task, index) => (
+                    <button
+                      type="button"
+                      className={`codex-batch-import-queue-task status-${task.status}`}
+                      key={task.id}
+                      onClick={() => openBatchImportTask(task.id)}
+                    >
+                      <div className="codex-batch-import-queue-main">
+                        <strong>
+                          {getBatchImportTaskTitle(task, index + 1)}
+                        </strong>
+                        <span>{getBatchImportTaskStatusLabel(task)}</span>
+                      </div>
+                      <div className="codex-batch-import-queue-progress">
+                        <span>{getBatchImportTaskCountLabel(task)}</span>
+                        <div className="codex-batch-import-progress-track">
+                          <div
+                            className={`codex-batch-import-progress-fill tone-${getCodexBatchImportProgressTone(task)}`}
+                            style={{
+                              width: `${getCodexBatchImportProgressPercent(task)}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </button>
+                  ))}
                 </div>
               )}
 
@@ -10896,22 +11244,17 @@ export function CodexAccountsPage() {
                   <div className="codex-batch-import-toolbar">
                     <div className="codex-batch-import-toolbar-main">
                       <span>{batchImportSelectedCountLabel}</span>
-                      <label className="codex-batch-import-check-toggle">
-                        <input
-                          type="checkbox"
-                          checked={batchImportCheckQuota}
-                          disabled={batchImportBusy}
-                          onChange={(event) =>
-                            void handleBatchImportCheckQuotaChange(
-                              event.target.checked,
-                            )
-                          }
-                        />
-                        <span className="codex-batch-import-check-switch" />
-                        <span>
-                          {t("codex.batchImport.checkQuotaToggle", "检测账号")}
-                        </span>
-                      </label>
+                      {!activeBatchImportCheckQuota && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary compact"
+                          disabled={batchImportBusy || !batchImportPreview}
+                          onClick={handleStartBatchImportCheck}
+                        >
+                          <RefreshCw size={14} />
+                          {t("codex.batchImport.checkAccounts", "检测账号")}
+                        </button>
+                      )}
                     </div>
                     <div className="codex-batch-import-actions">
                       <button
@@ -11049,19 +11392,18 @@ export function CodexAccountsPage() {
                   <button
                     className="btn btn-secondary"
                     onClick={() =>
-                      batchImportBusy
+                      batchImportCanCancel
                         ? void handleCancelBatchImport()
                         : void handleCloseBatchImport()
                     }
-                    disabled={
-                      batchImportBusy &&
-                      batchImportProgress?.phase === "cancelling"
-                    }
+                    disabled={batchImportCancelling}
                   >
-                    {batchImportBusy
-                      ? activeBatchImportCheckQuota
-                        ? t("codex.batchImport.cancelScan", "取消扫描")
-                        : t("codex.batchImport.cancelParse", "取消解析")
+                    {batchImportCanCancel
+                      ? activeBatchImportTask?.status === "queued"
+                        ? t("codex.batchImport.cancelQueued", "取消排队")
+                        : activeBatchImportCheckQuota
+                          ? t("codex.batchImport.cancelScan", "取消扫描")
+                          : t("codex.batchImport.cancelParse", "取消解析")
                       : t("common.shared.close", "关闭")}
                   </button>
                   {!batchImportBusy &&
@@ -11095,11 +11437,39 @@ export function CodexAccountsPage() {
                       ? ` (${batchImportSelectedSelectableCount})`
                       : ""}
                   </button>
+                  <button
+                    className="btn btn-success"
+                    onClick={() =>
+                      void handleConfirmBatchImport({
+                        addToApiService: true,
+                      })
+                    }
+                    disabled={
+                      batchImportBusy ||
+                      localAccessSaving ||
+                      !batchImportPreview ||
+                      batchImportSelectedSelectableCount === 0
+                    }
+                  >
+                    {batchImportBusy || localAccessSaving ? (
+                      <RefreshCw size={16} className="loading-spinner" />
+                    ) : (
+                      <Database size={16} />
+                    )}
+                    {t(
+                      "codex.batchImport.importAndAddToApiService",
+                      "导入并添加到 API 服务",
+                    )}
+                    {batchImportSelectedSelectableCount > 0
+                      ? ` (${batchImportSelectedSelectableCount})`
+                      : ""}
+                  </button>
                 </>
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {externalImportProgress.visible && (

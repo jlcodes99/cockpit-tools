@@ -29,6 +29,82 @@
   font-size: 13px;
 }
 
+.codex-batch-import-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.codex-batch-import-header-actions .btn {
+  white-space: nowrap;
+}
+
+.codex-batch-import-floating-panel {
+  --codex-batch-import-floating-offset: 24px;
+
+  position: fixed;
+  top: var(--codex-batch-import-floating-offset);
+  right: var(--codex-batch-import-floating-offset);
+  z-index: 1300;
+  display: flex;
+  width: min(340px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: auto;
+}
+
+.codex-batch-import-floating-task,
+.codex-batch-import-queue-task {
+  width: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
+}
+
+.codex-batch-import-floating-task {
+  padding: 10px 12px;
+}
+
+.codex-batch-import-floating-head,
+.codex-batch-import-queue-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.codex-batch-import-floating-head span,
+.codex-batch-import-queue-main strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.codex-batch-import-floating-head strong,
+.codex-batch-import-queue-progress span {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.codex-batch-import-floating-meta,
+.codex-batch-import-queue-main span {
+  margin: 4px 0 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .codex-batch-import-body {
   flex: 1;
   min-height: 0;
@@ -90,6 +166,40 @@
   border-radius: inherit;
   background: linear-gradient(90deg, #2563eb, #0ea5e9);
   transition: width 180ms ease;
+}
+
+.codex-batch-import-progress-fill.tone-success {
+  background: linear-gradient(90deg, #16a34a, #22c55e);
+}
+
+.codex-batch-import-progress-fill.tone-error {
+  background: linear-gradient(90deg, #dc2626, #f97316);
+}
+
+.codex-batch-import-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.codex-batch-import-queue-task {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  box-shadow: none;
+}
+
+.codex-batch-import-queue-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.codex-batch-import-queue-progress .codex-batch-import-progress-track {
+  flex: 1;
 }
 
 .codex-batch-import-current {
@@ -329,6 +439,18 @@
     width: calc(100vw - 20px);
     height: calc(100vh - 24px);
     max-height: calc(100vh - 24px);
+  }
+
+  .codex-batch-import-queue-task {
+    grid-template-columns: 1fr;
+  }
+
+  .codex-batch-import-floating-panel {
+    --codex-batch-import-floating-offset: 12px;
+
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
   }
 }
 
