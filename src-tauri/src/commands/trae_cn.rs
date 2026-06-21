@@ -123,9 +123,9 @@ pub async fn refresh_all_trae_cn_tokens(_app: AppHandle) -> Result<i32, String> 
 #[tauri::command]
 pub async fn add_trae_cn_account_with_token(
     _app: AppHandle,
-    access_token: String,
+    _access_token: String,
 ) -> Result<TraeCnAccount, String> {
-    trae_cn_account::add_account_with_token(access_token.as_str())
+    Err("Trae CN 暂不支持裸 Token 导入：请使用 OAuth、本机导入或完整 JSON 导入".to_string())
 }
 
 #[tauri::command]
