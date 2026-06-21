@@ -87,7 +87,7 @@ pub async fn trae_cn_oauth_login_complete(
         login_id
     ));
     let payload = trae_cn_oauth::complete_login(login_id.as_str()).await?;
-    trae_cn_account::upsert_import_payload(payload)
+    trae_cn_account::upsert_import_payload_with_quota(payload).await
 }
 
 #[tauri::command]
@@ -109,15 +109,28 @@ pub fn trae_cn_oauth_submit_callback_url(
 
 #[tauri::command]
 pub async fn refresh_trae_cn_token(
-    _app: AppHandle,
-    _account_id: String,
+    app: AppHandle,
+    account_id: String,
 ) -> Result<TraeCnAccount, String> {
-    Err("Trae CN Token 刷新尚未支持：需要先确认官方接口和 payload 格式".to_string())
+    let account = trae_cn_account::refresh_account_usage_only_async(account_id.as_str()).await?;
+    let _ = crate::modules::tray::update_tray_menu(&app);
+    Ok(account)
 }
 
 #[tauri::command]
-pub async fn refresh_all_trae_cn_tokens(_app: AppHandle) -> Result<i32, String> {
-    Err("Trae CN 批量刷新尚未支持：需要先确认官方接口和 payload 格式".to_string())
+pub async fn refresh_all_trae_cn_tokens(app: AppHandle) -> Result<i32, String> {
+    let results = trae_cn_account::refresh_all_usage().await?;
+    let success_count = results.iter().filter(|(_, result)| result.is_ok()).count() as i32;
+    for (account_id, result) in results {
+        if let Err(err) = result {
+            logger::log_warn(&format!(
+                "[Trae CN Command] 批量配额刷新失败: account_id={}, error={}",
+                account_id, err
+            ));
+        }
+    }
+    let _ = crate::modules::tray::update_tray_menu(&app);
+    Ok(success_count)
 }
 
 #[tauri::command]
@@ -152,7 +165,10 @@ pub fn inject_trae_cn_account(app: AppHandle, account_id: String) -> Result<Stri
         }
         match process::start_trae_cn_default() {
             Ok(_) => Ok(format!("已切换并启动 Trae CN: {}", account.email)),
-            Err(err) => Ok(format!("已写入 Trae CN 登录态，但启动 Trae CN 失败: {}", err)),
+            Err(err) => Ok(format!(
+                "已写入 Trae CN 登录态，但启动 Trae CN 失败: {}",
+                err
+            )),
         }
     } else {
         Ok(format!(

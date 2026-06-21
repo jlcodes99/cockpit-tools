@@ -216,7 +216,10 @@ fn persist_pending_login(state: Option<&PendingOAuthState>) {
         None => crate::modules::oauth_pending_state::clear(OAUTH_STATE_FILE),
     };
     if let Err(err) = result {
-        logger::log_warn(&format!("[Trae CN OAuth] 持久化登录状态失败，已忽略: {}", err));
+        logger::log_warn(&format!(
+            "[Trae CN OAuth] 持久化登录状态失败，已忽略: {}",
+            err
+        ));
     }
 }
 
@@ -416,7 +419,9 @@ fn trae_product_base_paths() -> Vec<PathBuf> {
     {
         candidates.push(PathBuf::from("/Applications/Trae CN.app"));
         candidates.push(PathBuf::from("/Applications/Trae CN.app/Contents"));
-        candidates.push(PathBuf::from("/Applications/Trae CN.app/Contents/MacOS/Trae"));
+        candidates.push(PathBuf::from(
+            "/Applications/Trae CN.app/Contents/MacOS/Trae",
+        ));
         candidates.push(PathBuf::from(
             "/Applications/Trae CN.app/Contents/MacOS/Electron",
         ));
@@ -1825,7 +1830,10 @@ async fn request_exchange_token(
         errors.push(format!("{} => {}", url, msg));
     }
 
-    Err(format!("Trae CN ExchangeToken 失败: {}", errors.join(" | ")))
+    Err(format!(
+        "Trae CN ExchangeToken 失败: {}",
+        errors.join(" | ")
+    ))
 }
 
 async fn request_user_info(

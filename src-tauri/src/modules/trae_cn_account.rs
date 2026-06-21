@@ -3,12 +3,18 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+use reqwest::Method;
+
 use crate::models::trae::{TraeAccount, TraeImportPayload};
 use crate::models::trae_cn::TraeCnAccountIndex;
 use crate::modules::{account, logger};
 
 const ACCOUNTS_INDEX_FILE: &str = "trae_cn_accounts.json";
 const ACCOUNTS_DIR: &str = "trae_cn_accounts";
+const TRAE_CN_ACCOUNT_API_ORIGIN: &str = "https://api.trae.cn";
+const TRAE_CN_PAY_STATUS_PATH: &str = "/trae/api/v1/pay/ide_user_pay_status";
+const TRAE_CN_ENT_USAGE_PATH: &str = "/trae/api/v1/pay/ide_user_ent_usage";
+const TRAE_CN_GET_USER_INFO_PATH: &str = "/cloudide/api/v3/trae/GetUserInfo";
 
 lazy_static::lazy_static! {
     static ref TRAE_CN_ACCOUNT_INDEX_LOCK: Mutex<()> = Mutex::new(());
@@ -48,6 +54,145 @@ fn normalize_timestamp(raw: Option<i64>) -> Option<i64> {
         return Some(value / 1000);
     }
     Some(value)
+}
+
+fn extract_response_data(raw: &Value) -> Option<&Value> {
+    raw.get("data")
+        .or_else(|| raw.get("Result"))
+        .or_else(|| raw.get("result"))
+        .or_else(|| raw.get("payload"))
+}
+
+fn build_api_urls(path: &str) -> Vec<String> {
+    vec![format!(
+        "{}/{}",
+        TRAE_CN_ACCOUNT_API_ORIGIN.trim_end_matches('/'),
+        path.trim_start_matches('/')
+    )]
+}
+
+fn build_body_preview(body_text: &str, max_chars: usize) -> String {
+    let mut preview = String::new();
+    let mut count = 0usize;
+    for ch in body_text.chars() {
+        if count >= max_chars {
+            preview.push_str("...[truncated]");
+            break;
+        }
+        match ch {
+            '\n' => preview.push_str("\\n"),
+            '\r' => preview.push_str("\\r"),
+            '\t' => preview.push_str("\\t"),
+            _ => preview.push(ch),
+        }
+        count += 1;
+    }
+    if preview.is_empty() {
+        "<empty>".to_string()
+    } else {
+        preview
+    }
+}
+
+async fn parse_trae_cn_response_body(
+    response: reqwest::Response,
+    url: &str,
+) -> Result<Value, String> {
+    let status = response.status();
+    let status_code = status.as_u16();
+    if status_code == 401 || status_code == 403 {
+        return Err("Trae CN 会话已过期或未认证，请重新登录".to_string());
+    }
+
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("-")
+        .to_string();
+    let body_text = response
+        .text()
+        .await
+        .map_err(|e| format!("读取 Trae CN 响应失败({}): {}", url, e))?;
+    let body_trimmed = body_text.trim();
+    if body_trimmed.is_empty() {
+        return Ok(Value::Object(serde_json::Map::new()));
+    }
+
+    serde_json::from_str::<Value>(&body_text).map_err(|e| {
+        format!(
+            "解析 Trae CN 响应 JSON 失败({}): {} | status={} | content-type={} | body_preview={}",
+            url,
+            e,
+            status_code,
+            content_type,
+            build_body_preview(body_trimmed, 200)
+        )
+    })
+}
+
+async fn request_trae_cn_json(
+    client: &reqwest::Client,
+    method: Method,
+    url: &str,
+    access_token: &str,
+    body: Option<Value>,
+    pay_auth: bool,
+) -> Result<Value, String> {
+    let mut request = client
+        .request(method, url)
+        .header("Accept", "application/json")
+        .header("User-Agent", "Trae CN/1.0.0 antigravity-cockpit-tools");
+
+    if pay_auth {
+        request = request.header("Authorization", format!("Cloud-IDE-JWT {}", access_token));
+    } else {
+        request = request
+            .header("Authorization", format!("Bearer {}", access_token))
+            .header("x-cloudide-token", access_token);
+    }
+
+    if let Some(payload) = body {
+        request = request
+            .header("Content-Type", "application/json")
+            .json(&payload);
+    }
+
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("请求 Trae CN 接口失败({}): {}", url, e))?;
+    parse_trae_cn_response_body(response, url).await
+}
+
+async fn request_trae_cn_json_with_candidates(
+    client: &reqwest::Client,
+    method: Method,
+    urls: &[String],
+    access_token: &str,
+    body: Option<Value>,
+    pay_auth: bool,
+) -> Result<Value, String> {
+    let mut errors = Vec::new();
+    for url in urls {
+        match request_trae_cn_json(
+            client,
+            method.clone(),
+            url.as_str(),
+            access_token,
+            body.clone(),
+            pay_auth,
+        )
+        .await
+        {
+            Ok(response) => return Ok(response),
+            Err(err) => errors.push(format!("{} => {}", url, err)),
+        }
+    }
+    if errors.is_empty() {
+        return Err("Trae CN 请求地址为空".to_string());
+    }
+    Err(errors.join(" | "))
 }
 
 fn get_data_dir() -> Result<PathBuf, String> {
@@ -141,8 +286,10 @@ fn load_account_index() -> TraeCnAccountIndex {
             .unwrap_or_else(TraeCnAccountIndex::new);
     }
     match fs::read_to_string(&path) {
-        Ok(content) if content.trim().is_empty() => repair_account_index_from_details("索引文件为空")
-            .unwrap_or_else(TraeCnAccountIndex::new),
+        Ok(content) if content.trim().is_empty() => {
+            repair_account_index_from_details("索引文件为空")
+                .unwrap_or_else(TraeCnAccountIndex::new)
+        }
         Ok(content) => match crate::modules::atomic_write::parse_json_with_auto_restore::<
             TraeCnAccountIndex,
         >(&path, &content)
@@ -327,12 +474,21 @@ fn account_from_import_value(raw: Value) -> Result<TraeAccount, String> {
     let now = now_ts();
     let access_token = pick_string(
         Some(&raw),
-        &[&["access_token"], &["accessToken"], &["token"], &["trae_access_token"]],
+        &[
+            &["access_token"],
+            &["accessToken"],
+            &["token"],
+            &["trae_access_token"],
+        ],
     )
     .ok_or_else(|| "缺少 access_token 字段".to_string())?;
     let user_id = pick_string(Some(&raw), &[&["user_id"], &["userId"], &["uid"], &["id"]]);
     let email = normalize_email(
-        pick_string(Some(&raw), &[&["email"], &["trae_email"], &["user", "email"]]).as_deref(),
+        pick_string(
+            Some(&raw),
+            &[&["email"], &["trae_email"], &["user", "email"]],
+        )
+        .as_deref(),
     )
     .unwrap_or_else(|| "unknown".to_string());
     let identity = user_id
@@ -349,7 +505,12 @@ fn account_from_import_value(raw: Value) -> Result<TraeAccount, String> {
         user_id,
         nickname: pick_string(
             Some(&raw),
-            &[&["nickname"], &["name"], &["displayName"], &["user", "name"]],
+            &[
+                &["nickname"],
+                &["name"],
+                &["displayName"],
+                &["user", "name"],
+            ],
         ),
         tags: None,
         access_token,
@@ -361,7 +522,12 @@ fn account_from_import_value(raw: Value) -> Result<TraeAccount, String> {
         )),
         plan_type: pick_string(
             Some(&raw),
-            &[&["plan_type"], &["planType"], &["identityStr"], &["identity_str"]],
+            &[
+                &["plan_type"],
+                &["planType"],
+                &["identityStr"],
+                &["identity_str"],
+            ],
         ),
         plan_reset_at: normalize_timestamp(pick_i64(
             Some(&raw),
@@ -405,10 +571,7 @@ fn account_from_import_value(raw: Value) -> Result<TraeAccount, String> {
     })
 }
 
-fn merge_auth_raw_for_cn(
-    auth_raw: Option<Value>,
-    payload: &TraeImportPayload,
-) -> Option<Value> {
+fn merge_auth_raw_for_cn(auth_raw: Option<Value>, payload: &TraeImportPayload) -> Option<Value> {
     let mut map = auth_raw
         .and_then(|value| value.as_object().cloned())
         .unwrap_or_default();
@@ -480,6 +643,209 @@ fn account_from_import_payload(payload: TraeImportPayload) -> Result<TraeAccount
         created_at: now,
         last_used: now,
     })
+}
+
+fn usage_identity_from_product_type(product_type: i64) -> Option<&'static str> {
+    match product_type {
+        6 => Some("Ultra"),
+        4 => Some("Pro+"),
+        1 => Some("Pro"),
+        9 => Some("Pro"),
+        8 => Some("Lite"),
+        0 => Some("Free"),
+        _ => None,
+    }
+}
+
+fn usage_pack_product_type(pack: &Value) -> Option<i64> {
+    pick_i64(
+        Some(pack),
+        &[
+            &["entitlement_base_info", "product_type"],
+            &["product_type"],
+        ],
+    )
+}
+
+fn apply_profile_response(account: &mut TraeAccount, response: &Value) {
+    let profile_root = extract_response_data(response).unwrap_or(response);
+    account.trae_profile_raw = Some(response.clone());
+
+    if let Some(email) = normalize_email(
+        pick_string(
+            Some(profile_root),
+            &[
+                &["NonPlainTextEmail"],
+                &["Email"],
+                &["email"],
+                &["user", "email"],
+                &["userInfo", "email"],
+                &["profile", "email"],
+            ],
+        )
+        .as_deref(),
+    ) {
+        account.email = email;
+    }
+
+    if let Some(user_id) = normalize_non_empty(
+        pick_string(
+            Some(profile_root),
+            &[
+                &["UserID"],
+                &["userId"],
+                &["user_id"],
+                &["uid"],
+                &["id"],
+                &["user", "id"],
+            ],
+        )
+        .as_deref(),
+    ) {
+        account.user_id = Some(user_id);
+    }
+
+    if let Some(nickname) = normalize_non_empty(
+        pick_string(
+            Some(profile_root),
+            &[
+                &["ScreenName"],
+                &["Nickname"],
+                &["nickname"],
+                &["name"],
+                &["displayName"],
+                &["user", "name"],
+            ],
+        )
+        .as_deref(),
+    ) {
+        account.nickname = Some(nickname);
+    }
+}
+
+fn apply_entitlement_response(account: &mut TraeAccount, response: &Value) {
+    if let Some(code) = pick_i64(Some(response), &[&["code"]]) {
+        if code != 0 {
+            return;
+        }
+    }
+
+    account.trae_entitlement_raw = Some(response.clone());
+
+    if let Some(plan_type) =
+        normalize_non_empty(pick_string(Some(response), &[&["user_pay_identity_str"]]).as_deref())
+    {
+        account.plan_type = Some(plan_type);
+    }
+
+    account.plan_reset_at = normalize_timestamp(pick_i64(
+        Some(response),
+        &[&["detail", "subscription_renew_time"]],
+    ));
+}
+
+fn apply_usage_response(account: &mut TraeAccount, response: &Value) {
+    if let Some(code) = pick_i64(Some(response), &[&["code"]]) {
+        if code != 0 {
+            return;
+        }
+    }
+
+    account.trae_usage_raw = Some(response.clone());
+
+    if let Some(pack_list) = response
+        .get("user_entitlement_pack_list")
+        .and_then(|value| value.as_array())
+    {
+        let filtered_packs: Vec<&Value> = pack_list
+            .iter()
+            .filter(|pack| usage_pack_product_type(pack) != Some(3))
+            .collect();
+        let find_pack = |product_type: i64| {
+            filtered_packs
+                .iter()
+                .copied()
+                .find(|pack| usage_pack_product_type(pack) == Some(product_type))
+        };
+        let pack = find_pack(6)
+            .or_else(|| find_pack(4))
+            .or_else(|| find_pack(1))
+            .or_else(|| find_pack(9))
+            .or_else(|| find_pack(8))
+            .or_else(|| find_pack(0));
+        if let Some(pack) = pack {
+            if let Some(product_type) = usage_pack_product_type(pack) {
+                if let Some(identity) = usage_identity_from_product_type(product_type) {
+                    account.plan_type = Some(identity.to_string());
+                }
+            }
+
+            let reset_at = pick_i64(Some(pack), &[&["entitlement_base_info", "end_time"]])
+                .and_then(|value| if value > 0 { Some(value + 1) } else { None });
+            account.plan_reset_at = normalize_timestamp(reset_at);
+        }
+    }
+}
+
+async fn refresh_quota_snapshot(account: &mut TraeAccount, client: &reqwest::Client) {
+    let mut quota_query_errors: Vec<String> = Vec::new();
+
+    match request_trae_cn_json_with_candidates(
+        client,
+        Method::POST,
+        build_api_urls(TRAE_CN_PAY_STATUS_PATH).as_slice(),
+        account.access_token.as_str(),
+        Some(serde_json::json!({})),
+        true,
+    )
+    .await
+    {
+        Ok(response) => apply_entitlement_response(account, &response),
+        Err(err) => {
+            logger::log_warn(&format!(
+                "[Trae CN Refresh] ide_user_pay_status 失败: {}",
+                err
+            ));
+            quota_query_errors.push(err);
+        }
+    }
+
+    let mut usage_refreshed = false;
+    match request_trae_cn_json_with_candidates(
+        client,
+        Method::POST,
+        build_api_urls(TRAE_CN_ENT_USAGE_PATH).as_slice(),
+        account.access_token.as_str(),
+        Some(serde_json::json!({
+            "require_usage": true,
+        })),
+        true,
+    )
+    .await
+    {
+        Ok(response) => {
+            apply_usage_response(account, &response);
+            usage_refreshed = true;
+        }
+        Err(err) => {
+            logger::log_warn(&format!(
+                "[Trae CN Refresh] ide_user_ent_usage 失败: {}",
+                err
+            ));
+            quota_query_errors.push(err);
+        }
+    }
+
+    let refreshed_at = now_ts();
+    if usage_refreshed {
+        account.quota_query_last_error = None;
+        account.quota_query_last_error_at = None;
+        account.usage_updated_at = Some(refreshed_at);
+    } else if !quota_query_errors.is_empty() {
+        account.quota_query_last_error = Some(quota_query_errors.join(" | "));
+        account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
+    }
+    account.last_used = refreshed_at;
 }
 
 fn accounts_from_json_value(raw: Value) -> Result<Vec<TraeAccount>, String> {
@@ -563,8 +929,8 @@ pub fn update_account_tags(account_id: &str, tags: Vec<String>) -> Result<TraeAc
 }
 
 pub fn import_from_json(json_content: &str) -> Result<Vec<TraeAccount>, String> {
-    let value =
-        serde_json::from_str::<Value>(json_content).map_err(|e| format!("解析 JSON 失败: {}", e))?;
+    let value = serde_json::from_str::<Value>(json_content)
+        .map_err(|e| format!("解析 JSON 失败: {}", e))?;
     let accounts = accounts_from_json_value(value)?;
     let mut result = Vec::with_capacity(accounts.len());
     for account in accounts {
@@ -593,6 +959,85 @@ pub fn import_from_local() -> Result<Option<TraeAccount>, String> {
 pub fn upsert_import_payload(payload: TraeImportPayload) -> Result<TraeAccount, String> {
     let account = account_from_import_payload(payload)?;
     upsert_account_record(account)
+}
+
+pub async fn upsert_import_payload_with_quota(
+    payload: TraeImportPayload,
+) -> Result<TraeAccount, String> {
+    let account = upsert_import_payload(payload)?;
+    match refresh_account_usage_only_async(account.id.as_str()).await {
+        Ok(refreshed) => Ok(refreshed),
+        Err(err) => {
+            logger::log_warn(&format!(
+                "[Trae CN Account] OAuth 后配额刷新失败，保留已导入账号: id={}, error={}",
+                account.id, err
+            ));
+            Ok(account)
+        }
+    }
+}
+
+async fn refresh_account_usage_only_async_once(account_id: &str) -> Result<TraeAccount, String> {
+    let existing = load_account(account_id).ok_or_else(|| "账号不存在".to_string())?;
+    logger::log_info(&format!(
+        "[Trae CN Refresh] 开始刷新配额: id={}, email={}",
+        existing.id, existing.email
+    ));
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
+
+    let mut account = existing.clone();
+    match request_trae_cn_json_with_candidates(
+        &client,
+        Method::POST,
+        build_api_urls(TRAE_CN_GET_USER_INFO_PATH).as_slice(),
+        account.access_token.as_str(),
+        Some(serde_json::json!({})),
+        false,
+    )
+    .await
+    {
+        Ok(response) => apply_profile_response(&mut account, &response),
+        Err(err) => logger::log_warn(&format!("[Trae CN Refresh] GetUserInfo 失败: {}", err)),
+    }
+
+    refresh_quota_snapshot(&mut account, &client).await;
+    let updated = account.clone();
+    upsert_account_record(account)?;
+    logger::log_info(&format!(
+        "[Trae CN Refresh] 配额刷新完成: id={}, email={}, plan={}",
+        updated.id,
+        updated.email,
+        updated.plan_type.as_deref().unwrap_or("-")
+    ));
+    Ok(updated)
+}
+
+pub async fn refresh_account_usage_only_async(account_id: &str) -> Result<TraeAccount, String> {
+    let result = refresh_account_usage_only_async_once(account_id).await;
+    if let Err(err) = &result {
+        if let Some(mut account) = load_account(account_id) {
+            account.quota_query_last_error = Some(err.clone());
+            account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
+            let _ = upsert_account_record(account);
+        }
+    }
+    result
+}
+
+pub async fn refresh_all_usage() -> Result<Vec<(String, Result<TraeAccount, String>)>, String> {
+    let accounts = list_accounts_checked()?;
+    let mut results = Vec::with_capacity(accounts.len());
+    for account in accounts {
+        results.push((
+            account.id.clone(),
+            refresh_account_usage_only_async(account.id.as_str()).await,
+        ));
+    }
+    Ok(results)
 }
 
 pub fn inject_to_trae_cn(account_id: &str) -> Result<TraeAccount, String> {
