@@ -2506,10 +2506,14 @@ fn compare_windows_store_version(left: &[u32], right: &[u32]) -> std::cmp::Order
 #[cfg(target_os = "windows")]
 fn parse_codex_store_version_from_dir_name(dir_name: &str) -> Option<Vec<u32>> {
     let lower = dir_name.to_ascii_lowercase();
-    if !lower.starts_with("openai.codex_") {
+    let prefix = if lower.starts_with("openai.codex_") {
+        "OpenAI.Codex_"
+    } else if lower.starts_with("openai.codexbeta_") {
+        "OpenAI.CodexBeta_"
+    } else {
         return None;
-    }
-    let suffix = dir_name.get("OpenAI.Codex_".len()..)?;
+    };
+    let suffix = dir_name.get(prefix.len()..)?;
     let version_part = suffix.split('_').next()?.trim();
     if version_part.is_empty() {
         return None;
@@ -2525,6 +2529,65 @@ fn parse_codex_store_version_from_dir_name(dir_name: &str) -> Option<Vec<u32>> {
         return None;
     }
     Some(version)
+}
+
+#[cfg(target_os = "windows")]
+fn is_codex_store_package_dir_name(dir_name: &str) -> bool {
+    let lower = dir_name.to_ascii_lowercase();
+    lower.starts_with("openai.codex_") || lower.starts_with("openai.codexbeta_")
+}
+
+#[cfg(target_os = "windows")]
+fn is_codex_beta_store_package_dir_name(dir_name: &str) -> bool {
+    dir_name
+        .to_ascii_lowercase()
+        .starts_with("openai.codexbeta_")
+}
+
+#[cfg(target_os = "windows")]
+fn codex_gui_exe_name_for_store_package_dir(dir_name: &str) -> &'static str {
+    if is_codex_beta_store_package_dir_name(dir_name) {
+        "Codex (Beta).exe"
+    } else {
+        "Codex.exe"
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn codex_gui_exe_candidate_from_store_package_dir(
+    package_dir: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    let dir_name = package_dir.file_name()?.to_string_lossy();
+    if !is_codex_store_package_dir_name(&dir_name) {
+        return None;
+    }
+    Some(
+        package_dir
+            .join("app")
+            .join(codex_gui_exe_name_for_store_package_dir(&dir_name)),
+    )
+}
+
+#[cfg(target_os = "windows")]
+fn codex_gui_exe_candidate_from_cli_resource_path(
+    cli_path: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    let file_name = cli_path.file_name()?.to_string_lossy();
+    if !file_name.eq_ignore_ascii_case("codex.exe") {
+        return None;
+    }
+    let resources_dir = cli_path.parent()?;
+    let resources_name = resources_dir.file_name()?.to_string_lossy();
+    if !resources_name.eq_ignore_ascii_case("resources") {
+        return None;
+    }
+    let app_dir = resources_dir.parent()?;
+    let app_name = app_dir.file_name()?.to_string_lossy();
+    if !app_name.eq_ignore_ascii_case("app") {
+        return None;
+    }
+    let package_dir = app_dir.parent()?;
+    codex_gui_exe_candidate_from_store_package_dir(package_dir)
 }
 
 #[cfg(target_os = "windows")]
@@ -2562,7 +2625,10 @@ fn detect_codex_exec_path_by_windowsapps_scan() -> Option<std::path::PathBuf> {
                 continue;
             };
 
-            let candidate = entry.path().join("app").join("Codex.exe");
+            let Some(candidate) = codex_gui_exe_candidate_from_store_package_dir(&entry.path())
+            else {
+                continue;
+            };
             if !candidate.exists() {
                 continue;
             }
@@ -2592,8 +2658,9 @@ fn detect_codex_exec_path_by_windowsapps_scan() -> Option<std::path::PathBuf> {
 
 #[cfg(target_os = "windows")]
 fn detect_codex_exec_path_by_appx_install_location() -> Option<std::path::PathBuf> {
-    let script = r#"$pkg = Get-AppxPackage -Name 'OpenAI.Codex' -ErrorAction SilentlyContinue |
-  Sort-Object -Property Version -Descending |
+    let script = r#"$pkg = Get-AppxPackage -Name 'OpenAI.Codex*' -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -eq 'OpenAI.Codex' -or $_.Name -eq 'OpenAI.CodexBeta' } |
+  Sort-Object -Property @{ Expression = { if ($_.Name -eq 'OpenAI.Codex') { 0 } else { 1 } }; Descending = $false }, @{ Expression = { $_.Version }; Descending = $true } |
   Select-Object -First 1
 if ($pkg -and -not [string]::IsNullOrWhiteSpace($pkg.InstallLocation)) {
   Write-Output ([string]$pkg.InstallLocation.Trim())
@@ -2610,9 +2677,10 @@ if ($pkg -and -not [string]::IsNullOrWhiteSpace($pkg.InstallLocation)) {
         if install_location.is_empty() {
             continue;
         }
-        let candidate = std::path::PathBuf::from(install_location)
-            .join("app")
-            .join("Codex.exe");
+        let package_dir = std::path::PathBuf::from(install_location);
+        let Some(candidate) = codex_gui_exe_candidate_from_store_package_dir(&package_dir) else {
+            continue;
+        };
         if candidate.exists() {
             crate::modules::logger::log_info(&format!(
                 "[Path Detect] codex appx install hit: {}",
@@ -2625,8 +2693,105 @@ if ($pkg -and -not [string]::IsNullOrWhiteSpace($pkg.InstallLocation)) {
 }
 
 #[cfg(target_os = "windows")]
+fn detect_codex_exec_path_by_running_process() -> Option<std::path::PathBuf> {
+    let mut stable_candidates: Vec<std::path::PathBuf> = Vec::new();
+    let mut beta_candidates: Vec<std::path::PathBuf> = Vec::new();
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing()
+            .with_exe(UpdateKind::OnlyIfNotSet)
+            .with_cmd(UpdateKind::OnlyIfNotSet),
+    );
+    let current_pid = std::process::id();
+    for (pid, process) in system.processes() {
+        let pid_u32 = pid.as_u32();
+        if pid_u32 == current_pid {
+            continue;
+        }
+        let name = process.name().to_string_lossy().to_ascii_lowercase();
+        let is_gui_name = name == "codex.exe" || name == "codex (beta).exe";
+        let is_cli_name = name == "codex.exe";
+        if !is_gui_name && !is_cli_name {
+            continue;
+        }
+
+        let Some(exe_path) = process.exe() else {
+            continue;
+        };
+        let candidate = if name == "codex.exe" {
+            codex_gui_exe_candidate_from_cli_resource_path(exe_path)
+                .filter(|path| path.exists())
+                .unwrap_or_else(|| exe_path.to_path_buf())
+        } else {
+            exe_path.to_path_buf()
+        };
+        if !candidate.exists() {
+            continue;
+        }
+        let candidate_text = candidate.to_string_lossy().to_ascii_lowercase();
+        if candidate_text.contains("\\openai.codexbeta_") {
+            beta_candidates.push(candidate);
+        } else if candidate_text.contains("\\openai.codex_") {
+            stable_candidates.push(candidate);
+        }
+    }
+
+    stable_candidates.sort();
+    stable_candidates.dedup();
+    beta_candidates.sort();
+    beta_candidates.dedup();
+    let selected = stable_candidates
+        .into_iter()
+        .last()
+        .or_else(|| beta_candidates.into_iter().last())?;
+    crate::modules::logger::log_info(&format!(
+        "[Path Detect] codex running process hit: {}",
+        selected.to_string_lossy()
+    ));
+    Some(selected)
+}
+
+#[cfg(target_os = "windows")]
+fn detect_codex_exec_path_by_command_alias() -> Option<std::path::PathBuf> {
+    let script = r#"$cmd = Get-Command codex -CommandType Application -ErrorAction SilentlyContinue |
+  Select-Object -First 1
+if ($cmd -and -not [string]::IsNullOrWhiteSpace($cmd.Source)) {
+  Write-Output ([string]$cmd.Source.Trim())
+}"#;
+
+    let output = powershell_output(&["-Command", script]).ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        let source = line.trim().trim_matches('"');
+        if source.is_empty() {
+            continue;
+        }
+        let path = std::path::PathBuf::from(source);
+        let Some(candidate) = codex_gui_exe_candidate_from_cli_resource_path(&path) else {
+            continue;
+        };
+        if candidate.exists() {
+            crate::modules::logger::log_info(&format!(
+                "[Path Detect] codex command alias hit: {}",
+                candidate.to_string_lossy()
+            ));
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
 fn detect_codex_store_app_user_model_id_by_startapps() -> Option<String> {
-    let script = r#"$entry = Get-StartApps | Where-Object { $_.AppID -like 'OpenAI.Codex_*' } |
+    let script = r#"$entry = Get-StartApps |
+  Where-Object { $_.AppID -like 'OpenAI.Codex_*' -or $_.AppID -like 'OpenAI.CodexBeta_*' } |
+  Sort-Object -Property @{ Expression = { if ($_.AppID -like 'OpenAI.Codex_*') { 0 } else { 1 } }; Descending = $false } |
   Select-Object -First 1
 if ($entry -and -not [string]::IsNullOrWhiteSpace($entry.AppID)) {
   Write-Output ([string]$entry.AppID.Trim())
@@ -2649,8 +2814,9 @@ if ($entry -and -not [string]::IsNullOrWhiteSpace($entry.AppID)) {
 
 #[cfg(target_os = "windows")]
 fn detect_codex_store_app_user_model_id_by_appx_fallback() -> Option<String> {
-    let script = r#"$pkg = Get-AppxPackage -Name 'OpenAI.Codex' -ErrorAction SilentlyContinue |
-  Sort-Object -Property Version -Descending |
+    let script = r#"$pkg = Get-AppxPackage -Name 'OpenAI.Codex*' -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -eq 'OpenAI.Codex' -or $_.Name -eq 'OpenAI.CodexBeta' } |
+  Sort-Object -Property @{ Expression = { if ($_.Name -eq 'OpenAI.Codex') { 0 } else { 1 } }; Descending = $false }, @{ Expression = { $_.Version }; Descending = $true } |
   Select-Object -First 1
 if ($pkg -and -not [string]::IsNullOrWhiteSpace($pkg.PackageFamilyName)) {
   Write-Output ([string]($pkg.PackageFamilyName.Trim() + '!App'))
@@ -2837,6 +3003,12 @@ pub(crate) fn detect_codex_exec_path() -> Option<std::path::PathBuf> {
 
     #[cfg(target_os = "windows")]
     {
+        if let Some(path) = detect_codex_exec_path_by_running_process() {
+            return Some(path);
+        }
+        if let Some(path) = detect_codex_exec_path_by_command_alias() {
+            return Some(path);
+        }
         if let Some(path) = detect_codex_exec_path_by_windowsapps_scan() {
             return Some(path);
         }
@@ -10962,5 +11134,45 @@ tell application \"System Events\" to keystroke \"q\" using command down",
     #[cfg(not(target_os = "macos"))]
     {
         let _ = pid;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn parses_codex_beta_store_dir_version() {
+        assert_eq!(
+            parse_codex_store_version_from_dir_name(
+                "OpenAI.CodexBeta_26.611.8273.0_x64__2p2nqsd0c76g0"
+            ),
+            Some(vec![26, 611, 8273, 0])
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn derives_codex_gui_exe_from_cli_resource_path() {
+        let stable_cli = std::path::PathBuf::from(
+            r"C:\Program Files\WindowsApps\OpenAI.Codex_26.616.6631.0_x64__2p2nqsd0c76g0\app\resources\codex.exe",
+        );
+        assert_eq!(
+            codex_gui_exe_candidate_from_cli_resource_path(&stable_cli),
+            Some(std::path::PathBuf::from(
+                r"C:\Program Files\WindowsApps\OpenAI.Codex_26.616.6631.0_x64__2p2nqsd0c76g0\app\Codex.exe",
+            ))
+        );
+
+        let beta_cli = std::path::PathBuf::from(
+            r"C:\Program Files\WindowsApps\OpenAI.CodexBeta_26.611.8273.0_x64__2p2nqsd0c76g0\app\resources\codex.exe",
+        );
+        assert_eq!(
+            codex_gui_exe_candidate_from_cli_resource_path(&beta_cli),
+            Some(std::path::PathBuf::from(
+                r"C:\Program Files\WindowsApps\OpenAI.CodexBeta_26.611.8273.0_x64__2p2nqsd0c76g0\app\Codex (Beta).exe",
+            ))
+        );
     }
 }
