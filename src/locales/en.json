@@ -2261,7 +2261,11 @@
       "testChatSend": "Send",
       "testChatInputRequired": "Enter a test message",
       "testChatModelRequired": "Select a model ID",
-      "testChatEmptyResponse": "Empty response"
+      "testChatEmptyResponse": "Empty response",
+      "errors": {
+        "windowsTcpExcludedPort": "API Service port {{port}} is reserved by Windows, so {{bindHost}}:{{port}} cannot be listened on. The port falls in the reserved TCP range {{rangeStart}}-{{rangeEnd}}. This is commonly caused by Hyper-V, WSL, Docker, VPN, or Windows networking components dynamically reserving ports. Use an unreserved port, for example 18080 or 28080.",
+        "windowsPortPermissionDenied": "API Service failed to listen on port {{port}} because Windows denied access to {{bindHost}}:{{port}}. Check Windows reserved ports, antivirus, firewall, VPN, Hyper-V, WSL, or Docker restrictions, or use another port."
+      }
     },
     "api": {
       "baseUrl": "Base URL",

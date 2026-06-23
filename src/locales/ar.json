@@ -2081,7 +2081,11 @@
       "testChatSend": "إرسال",
       "testChatInputRequired": "أدخل رسالة اختبار",
       "testChatModelRequired": "اختر معرّف النموذج",
-      "testChatEmptyResponse": "استجابة فارغة"
+      "testChatEmptyResponse": "استجابة فارغة",
+      "errors": {
+        "windowsTcpExcludedPort": "منفذ خدمة API رقم {{port}} محجوز بواسطة Windows، لذلك لا يمكن الاستماع على {{bindHost}}:{{port}}. يقع هذا المنفذ ضمن نطاق TCP المحجوز {{rangeStart}}-{{rangeEnd}}. يحدث ذلك غالبًا بسبب Hyper-V أو WSL أو Docker أو VPN أو مكوّنات شبكة Windows التي تحجز المنافذ ديناميكيًا. استخدم منفذًا غير محجوز، مثل 18080 أو 28080.",
+        "windowsPortPermissionDenied": "فشلت خدمة API في الاستماع على المنفذ {{port}} لأن Windows رفض الوصول إلى {{bindHost}}:{{port}}. تحقق من المنافذ المحجوزة في Windows أو برنامج الحماية أو الجدار الناري أو VPN أو Hyper-V أو WSL أو Docker، أو استخدم منفذًا آخر."
+      }
     },
     "local": {
       "desc": "استيراد الحساب الحالي من ~/.codex/auth.json",

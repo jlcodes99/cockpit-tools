@@ -2035,7 +2035,11 @@
       "testChatSend": "送信",
       "testChatInputRequired": "テストメッセージを入力してください",
       "testChatModelRequired": "モデル ID を選択してください",
-      "testChatEmptyResponse": "空の応答"
+      "testChatEmptyResponse": "空の応答",
+      "errors": {
+        "windowsTcpExcludedPort": "API サービスのポート {{port}} は Windows によって予約されているため、{{bindHost}}:{{port}} をリッスンできません。このポートは予約済み TCP ポート範囲 {{rangeStart}}-{{rangeEnd}} に含まれています。Hyper-V、WSL、Docker、VPN、または Windows のネットワークコンポーネントが動的に予約していることがよくあります。18080 や 28080 など、予約されていないポートを使用してください。",
+        "windowsPortPermissionDenied": "API サービスはポート {{port}} のリッスンに失敗しました。Windows が {{bindHost}}:{{port}} へのアクセスを拒否しました。Windows の予約済みポート、ウイルス対策ソフト、ファイアウォール、VPN、Hyper-V、WSL、Docker の制限を確認するか、別のポートを使用してください。"
+      }
     },
     "local": {
       "desc": "~/.codex/auth.json から現在ログイン中のアカウントをインポート",

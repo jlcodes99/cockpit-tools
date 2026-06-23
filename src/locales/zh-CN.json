@@ -2261,7 +2261,11 @@
       "testChatSend": "发送",
       "testChatInputRequired": "请输入测试消息",
       "testChatModelRequired": "请选择模型 ID",
-      "testChatEmptyResponse": "响应为空"
+      "testChatEmptyResponse": "响应为空",
+      "errors": {
+        "windowsTcpExcludedPort": "API 服务端口 {{port}} 当前被 Windows 系统保留，无法监听 {{bindHost}}:{{port}}。该端口落在系统保留 TCP 端口段 {{rangeStart}}-{{rangeEnd}}。常见原因是 Hyper-V、WSL、Docker、VPN 或系统网络组件动态保留端口。请改用未保留端口，例如 18080、28080。",
+        "windowsPortPermissionDenied": "API 服务端口 {{port}} 监听失败，Windows 拒绝访问 {{bindHost}}:{{port}}。请检查 Windows 保留端口、杀毒软件、防火墙、VPN、Hyper-V、WSL 或 Docker 是否限制了该端口，也可以直接改用其他端口。"
+      }
     },
     "api": {
       "baseUrl": "基础地址",

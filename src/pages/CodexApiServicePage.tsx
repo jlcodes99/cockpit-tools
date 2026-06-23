@@ -77,6 +77,7 @@ import {
   summarizeCodexQuotaPool,
 } from "../utils/codexQuotaPool";
 import { filterCodexLocalAccessAccountIds } from "../utils/codexLocalAccessAccounts";
+import { formatCodexLocalAccessErrorMessage } from "../utils/codexLocalAccessErrorMessage";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import { CodexLocalAccessModal } from "../components/CodexLocalAccessModal";
 import { PaginationControls } from "../components/PaginationControls";
@@ -885,7 +886,7 @@ export function CodexApiServicePage() {
   useEffect(() => {
     mountedRef.current = true;
     void reloadState().catch((err) =>
-      setError(String(err).replace(/^Error:\s*/, "")),
+      setError(formatCodexLocalAccessErrorMessage(err, t)),
     );
     void fetchAccounts();
     void getCodexAccountGroups()
@@ -899,7 +900,7 @@ export function CodexApiServicePage() {
       mountedRef.current = false;
       window.removeEventListener("codex-local-access-state-updated", onUpdated);
     };
-  }, [fetchAccounts, reloadState]);
+  }, [fetchAccounts, reloadState, t]);
 
   useEffect(() => {
     persistStatsRange(statsRange);
@@ -1096,7 +1097,7 @@ export function CodexApiServicePage() {
       await task();
       setNotice(successText);
     } catch (err) {
-      setError(String(err).replace(/^Error:\s*/, ""));
+      setError(formatCodexLocalAccessErrorMessage(err, t));
     } finally {
       setBusy(false);
     }
@@ -1266,7 +1267,7 @@ export function CodexApiServicePage() {
         apiMessages,
       );
     } catch (err) {
-      setTestDialogError(String(err).replace(/^Error:\s*/, ""));
+      setTestDialogError(formatCodexLocalAccessErrorMessage(err, t));
       setTestChatMessages((current) =>
         current.filter((message) => message.id !== assistantMessage.id),
       );
@@ -1318,7 +1319,7 @@ export function CodexApiServicePage() {
         t("codex.localAccess.killPortSuccessUnknown", "API 服务端口已清理"),
       );
     } catch (err) {
-      setError(String(err).replace(/^Error:\s*/, ""));
+      setError(formatCodexLocalAccessErrorMessage(err, t));
     } finally {
       setPortKilling(false);
     }
@@ -1458,7 +1459,7 @@ export function CodexApiServicePage() {
       await saveMembers(accountIds, restrictFreeAccounts);
       setNotice(t("codex.localAccess.saveSuccess", "API 服务集合已更新"));
     } catch (err) {
-      const message = String(err).replace(/^Error:\s*/, "");
+      const message = formatCodexLocalAccessErrorMessage(err, t);
       setError(message);
       throw new Error(message);
     } finally {
@@ -2612,7 +2613,7 @@ export function CodexApiServicePage() {
             {state?.lastError && (
               <div className="codex-api-service-message error">
                 <CircleAlert size={15} />
-                <span>{state.lastError}</span>
+                <span>{formatCodexLocalAccessErrorMessage(state.lastError, t)}</span>
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"

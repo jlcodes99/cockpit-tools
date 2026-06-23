@@ -2035,7 +2035,11 @@
       "testChatSend": "Enviar",
       "testChatInputRequired": "Escribe un mensaje de prueba",
       "testChatModelRequired": "Selecciona un ID de modelo",
-      "testChatEmptyResponse": "Respuesta vacía"
+      "testChatEmptyResponse": "Respuesta vacía",
+      "errors": {
+        "windowsTcpExcludedPort": "El puerto {{port}} del servicio API está reservado por Windows, por lo que no se puede escuchar en {{bindHost}}:{{port}}. El puerto está dentro del rango TCP reservado {{rangeStart}}-{{rangeEnd}}. Suele deberse a Hyper-V, WSL, Docker, VPN o componentes de red de Windows que reservan puertos dinámicamente. Use un puerto no reservado, por ejemplo 18080 o 28080.",
+        "windowsPortPermissionDenied": "El servicio API no pudo escuchar en el puerto {{port}} porque Windows denegó el acceso a {{bindHost}}:{{port}}. Revise los puertos reservados de Windows, antivirus, firewall, VPN, Hyper-V, WSL o Docker, o use otro puerto."
+      }
     },
     "local": {
       "desc": "Importa la cuenta actual desde ~/.codex/auth.json",

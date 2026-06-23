@@ -2035,7 +2035,11 @@
       "testChatSend": "전송",
       "testChatInputRequired": "테스트 메시지를 입력하세요",
       "testChatModelRequired": "모델 ID를 선택하세요",
-      "testChatEmptyResponse": "빈 응답"
+      "testChatEmptyResponse": "빈 응답",
+      "errors": {
+        "windowsTcpExcludedPort": "API 서비스 포트 {{port}}는 현재 Windows에서 예약되어 {{bindHost}}:{{port}}에서 수신할 수 없습니다. 이 포트는 예약된 TCP 포트 범위 {{rangeStart}}-{{rangeEnd}}에 포함됩니다. 일반적으로 Hyper-V, WSL, Docker, VPN 또는 Windows 네트워크 구성 요소가 동적으로 포트를 예약할 때 발생합니다. 18080, 28080 같은 예약되지 않은 포트를 사용하세요.",
+        "windowsPortPermissionDenied": "API 서비스가 포트 {{port}}에서 수신하지 못했습니다. Windows가 {{bindHost}}:{{port}} 접근을 거부했습니다. Windows 예약 포트, 백신, 방화벽, VPN, Hyper-V, WSL 또는 Docker 제한을 확인하거나 다른 포트를 사용하세요."
+      }
     },
     "local": {
       "desc": "~/.codex/auth.json에서 현재 로그인된 계정 가져오기",

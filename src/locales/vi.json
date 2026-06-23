@@ -2035,7 +2035,11 @@
       "testChatSend": "Gửi",
       "testChatInputRequired": "Nhập tin nhắn thử",
       "testChatModelRequired": "Chọn ID mô hình",
-      "testChatEmptyResponse": "Phản hồi trống"
+      "testChatEmptyResponse": "Phản hồi trống",
+      "errors": {
+        "windowsTcpExcludedPort": "Cổng API Service {{port}} đang được Windows giữ lại nên không thể lắng nghe tại {{bindHost}}:{{port}}. Cổng này nằm trong dải TCP được giữ lại {{rangeStart}}-{{rangeEnd}}. Nguyên nhân thường là Hyper-V, WSL, Docker, VPN hoặc thành phần mạng Windows giữ cổng động. Hãy dùng cổng chưa bị giữ lại, ví dụ 18080 hoặc 28080.",
+        "windowsPortPermissionDenied": "API Service không thể lắng nghe cổng {{port}} vì Windows từ chối truy cập {{bindHost}}:{{port}}. Hãy kiểm tra cổng Windows giữ lại, phần mềm diệt virus, tường lửa, VPN, Hyper-V, WSL hoặc Docker, hoặc đổi sang cổng khác."
+      }
     },
     "local": {
       "desc": "Nhập tài khoản hiện tại từ ~/.codex/auth.json",

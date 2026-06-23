@@ -2084,7 +2084,11 @@
       "testChatSend": "Kirim",
       "testChatInputRequired": "Masukkan pesan uji",
       "testChatModelRequired": "Pilih ID model",
-      "testChatEmptyResponse": "Respons kosong"
+      "testChatEmptyResponse": "Respons kosong",
+      "errors": {
+        "windowsTcpExcludedPort": "Port API Service {{port}} sedang dicadangkan oleh Windows, sehingga {{bindHost}}:{{port}} tidak bisa didengarkan. Port ini berada dalam rentang TCP cadangan {{rangeStart}}-{{rangeEnd}}. Penyebab umum adalah Hyper-V, WSL, Docker, VPN, atau komponen jaringan Windows yang mencadangkan port secara dinamis. Gunakan port yang tidak dicadangkan, misalnya 18080 atau 28080.",
+        "windowsPortPermissionDenied": "API Service gagal mendengarkan port {{port}} karena Windows menolak akses ke {{bindHost}}:{{port}}. Periksa port cadangan Windows, antivirus, firewall, VPN, Hyper-V, WSL, atau Docker, atau gunakan port lain."
+      }
     },
     "api": {
       "baseUrl": "URL Dasar",

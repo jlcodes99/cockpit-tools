@@ -57,6 +57,7 @@ import {
   getCodexLocalAccessAccountIneligibleReason,
   isCodexLocalAccessEligibleAccount,
 } from "../utils/codexLocalAccessAccounts";
+import { formatCodexLocalAccessErrorMessage } from "../utils/codexLocalAccessErrorMessage";
 import { isBlockingCodexQuotaError } from "../utils/codexQuotaError";
 import { AccountTagFilterDropdown } from "./AccountTagFilterDropdown";
 import {
@@ -1319,7 +1320,7 @@ export function CodexLocalAccessModal({
       await task();
       setNotice(successText);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(formatCodexLocalAccessErrorMessage(err, t));
     }
   };
 
@@ -1384,7 +1385,7 @@ export function CodexLocalAccessModal({
       });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(formatCodexLocalAccessErrorMessage(err, t));
     }
   };
 
@@ -2079,7 +2080,7 @@ export function CodexLocalAccessModal({
             {state?.lastError && (
               <div className="codex-local-access-inline-error codex-local-access-inline-error-with-action">
                 <CircleAlert size={14} />
-                <span>{state.lastError}</span>
+                <span>{formatCodexLocalAccessErrorMessage(state.lastError, t)}</span>
                 {collection && (
                   <button
                     type="button"

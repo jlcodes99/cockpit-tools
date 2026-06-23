@@ -2035,7 +2035,11 @@
       "testChatSend": "Gönder",
       "testChatInputRequired": "Test mesajı girin",
       "testChatModelRequired": "Model ID seçin",
-      "testChatEmptyResponse": "Boş yanıt"
+      "testChatEmptyResponse": "Boş yanıt",
+      "errors": {
+        "windowsTcpExcludedPort": "API Hizmeti bağlantı noktası {{port}} Windows tarafından ayrılmış, bu nedenle {{bindHost}}:{{port}} dinlenemiyor. Bu bağlantı noktası ayrılmış TCP aralığı {{rangeStart}}-{{rangeEnd}} içinde. Genellikle Hyper-V, WSL, Docker, VPN veya Windows ağ bileşenlerinin bağlantı noktalarını dinamik olarak ayırmasından kaynaklanır. 18080 veya 28080 gibi ayrılmamış bir bağlantı noktası kullanın.",
+        "windowsPortPermissionDenied": "API Hizmeti {{port}} bağlantı noktasını dinleyemedi çünkü Windows {{bindHost}}:{{port}} erişimini reddetti. Windows ayrılmış bağlantı noktalarını, antivirüs, güvenlik duvarı, VPN, Hyper-V, WSL veya Docker kısıtlamalarını kontrol edin ya da başka bir bağlantı noktası kullanın."
+      }
     },
     "local": {
       "desc": "~/.codex/auth.json'dan mevcut hesabı içe aktar",

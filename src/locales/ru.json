@@ -2035,7 +2035,11 @@
       "testChatSend": "Отправить",
       "testChatInputRequired": "Введите тестовое сообщение",
       "testChatModelRequired": "Выберите ID модели",
-      "testChatEmptyResponse": "Пустой ответ"
+      "testChatEmptyResponse": "Пустой ответ",
+      "errors": {
+        "windowsTcpExcludedPort": "Порт API-сервиса {{port}} зарезервирован Windows, поэтому невозможно слушать {{bindHost}}:{{port}}. Порт входит в зарезервированный TCP-диапазон {{rangeStart}}-{{rangeEnd}}. Частые причины: Hyper-V, WSL, Docker, VPN или сетевые компоненты Windows динамически резервируют порты. Используйте незарезервированный порт, например 18080 или 28080.",
+        "windowsPortPermissionDenied": "API-сервис не смог слушать порт {{port}}, потому что Windows запретила доступ к {{bindHost}}:{{port}}. Проверьте зарезервированные порты Windows, антивирус, брандмауэр, VPN, Hyper-V, WSL или Docker либо используйте другой порт."
+      }
     },
     "local": {
       "desc": "Импортировать текущий аккаунт из ~/.codex/auth.json",

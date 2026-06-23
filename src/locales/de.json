@@ -2035,7 +2035,11 @@
       "testChatSend": "Senden",
       "testChatInputRequired": "Testnachricht eingeben",
       "testChatModelRequired": "Modell-ID wählen",
-      "testChatEmptyResponse": "Leere Antwort"
+      "testChatEmptyResponse": "Leere Antwort",
+      "errors": {
+        "windowsTcpExcludedPort": "Der API-Service-Port {{port}} ist von Windows reserviert, daher kann {{bindHost}}:{{port}} nicht überwacht werden. Der Port liegt im reservierten TCP-Bereich {{rangeStart}}-{{rangeEnd}}. Häufige Ursachen sind Hyper-V, WSL, Docker, VPN oder Windows-Netzwerkkomponenten, die Ports dynamisch reservieren. Verwenden Sie einen nicht reservierten Port, z. B. 18080 oder 28080.",
+        "windowsPortPermissionDenied": "Der API-Service konnte Port {{port}} nicht öffnen, weil Windows den Zugriff auf {{bindHost}}:{{port}} verweigert hat. Prüfen Sie reservierte Windows-Ports, Antivirus, Firewall, VPN, Hyper-V, WSL oder Docker, oder verwenden Sie einen anderen Port."
+      }
     },
     "local": {
       "desc": "Aktuell eingeloggtes Konto aus ~/.codex/auth.json importieren",

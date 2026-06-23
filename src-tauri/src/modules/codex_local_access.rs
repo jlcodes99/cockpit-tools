@@ -6854,9 +6854,26 @@ async fn start_legacy_gateway_locked(
 ) -> Result<(), String> {
     let bind_host = bind_host_for_collection(collection).to_string();
     let port = collection.port;
-    let listener = bind_gateway_listener(&bind_host, port)
-        .await
-        .map_err(|error| format_gateway_bind_error(&bind_host, port, &error))?;
+    if let Err(message) = ensure_local_port_not_windows_excluded(&bind_host, port) {
+        let mut runtime = gateway_runtime().lock().await;
+        runtime.running = false;
+        runtime.actual_port = None;
+        runtime.actual_bind_host = None;
+        runtime.last_error = Some(message.clone());
+        return Err(message);
+    }
+    let listener = match bind_gateway_listener(&bind_host, port).await {
+        Ok(listener) => listener,
+        Err(error) => {
+            let message = format_gateway_bind_error(&bind_host, port, &error);
+            let mut runtime = gateway_runtime().lock().await;
+            runtime.running = false;
+            runtime.actual_port = None;
+            runtime.actual_bind_host = None;
+            runtime.last_error = Some(message.clone());
+            return Err(message);
+        }
+    };
     let (shutdown_sender, mut shutdown_receiver) = watch::channel(false);
     let task = tokio::spawn(async move {
         let listener = listener;
@@ -8903,6 +8920,113 @@ async fn get_model_cooldown_wait(account_id: &str, model_key: &str) -> Option<Du
     Some(Duration::from_millis(wait_ms as u64))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct WindowsTcpExcludedPortRange {
+    start: u16,
+    end: u16,
+}
+
+const WINDOWS_TCP_EXCLUDED_PORT_ERROR_CODE: &str = "COCKPIT_WINDOWS_TCP_EXCLUDED_PORT";
+const WINDOWS_PORT_PERMISSION_DENIED_ERROR_CODE: &str = "COCKPIT_WINDOWS_PORT_PERMISSION_DENIED";
+
+fn parse_windows_tcp_excluded_port_ranges(output: &str) -> Vec<WindowsTcpExcludedPortRange> {
+    output
+        .lines()
+        .filter_map(|line| {
+            // netsh output changes with the Windows display language, so headers
+            // and separators are not stable. Only parse rows whose first two
+            // columns are numeric port bounds.
+            let mut numbers = line
+                .split_whitespace()
+                .filter_map(|part| part.parse::<u32>().ok());
+            let start = numbers.next()?;
+            let end = numbers.next()?;
+            if start == 0 || end == 0 || start > end || end > u16::MAX as u32 {
+                return None;
+            }
+            Some(WindowsTcpExcludedPortRange {
+                start: start as u16,
+                end: end as u16,
+            })
+        })
+        .collect()
+}
+
+#[cfg(target_os = "windows")]
+fn query_windows_tcp_excluded_port_ranges() -> Vec<WindowsTcpExcludedPortRange> {
+    let output = StdCommand::new("netsh")
+        .args([
+            "interface",
+            "ipv4",
+            "show",
+            "excludedportrange",
+            "protocol=tcp",
+        ])
+        .output();
+    let Ok(output) = output else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    parse_windows_tcp_excluded_port_ranges(&String::from_utf8_lossy(&output.stdout))
+}
+
+#[cfg(target_os = "windows")]
+fn windows_tcp_excluded_range_for_port(port: u16) -> Option<WindowsTcpExcludedPortRange> {
+    query_windows_tcp_excluded_port_ranges()
+        .into_iter()
+        .find(|range| port >= range.start && port <= range.end)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_excluded_port_error(bind_host: &str, port: u16) -> Option<String> {
+    let range = windows_tcp_excluded_range_for_port(port)?;
+    Some(format!(
+        "{WINDOWS_TCP_EXCLUDED_PORT_ERROR_CODE}|bindHost={bind_host}|port={port}|rangeStart={}|rangeEnd={}",
+        range.start, range.end
+    ))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn windows_excluded_port_error(_bind_host: &str, _port: u16) -> Option<String> {
+    None
+}
+
+fn ensure_local_port_not_windows_excluded(bind_host: &str, port: u16) -> Result<(), String> {
+    if let Some(message) = windows_excluded_port_error(bind_host, port) {
+        return Err(message);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn is_windows_socket_permission_error_text(message: &str) -> bool {
+    let normalized = message.to_ascii_lowercase();
+    normalized.contains("forbidden by its access permissions")
+        || normalized.contains("access a socket in a way forbidden")
+        || normalized.contains("permission denied")
+        || normalized.contains("access is denied")
+}
+
+fn decorate_local_port_startup_failure(bind_host: &str, port: u16, message: &str) -> String {
+    #[cfg(not(target_os = "windows"))]
+    {
+        return message.to_string();
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if !is_windows_socket_permission_error_text(message) {
+            return message.to_string();
+        }
+        if let Some(error) = windows_excluded_port_error(bind_host, port) {
+            return error;
+        }
+        format!("{WINDOWS_PORT_PERMISSION_DENIED_ERROR_CODE}|bindHost={bind_host}|port={port}")
+    }
+}
+
 fn ensure_local_port_available(
     bind_host: &str,
     port: u16,
@@ -8911,11 +9035,12 @@ fn ensure_local_port_available(
     if port == 0 {
         return Err("端口必须在 1 到 65535 之间".to_string());
     }
+    ensure_local_port_not_windows_excluded(bind_host, port)?;
     if current_port == Some(port) {
         return Ok(());
     }
     let listener = StdTcpListener::bind((bind_host, port))
-        .map_err(|e| format!("端口 {} 不可用: {}", port, e))?;
+        .map_err(|e| decorate_local_port_startup_failure(bind_host, port, &e.to_string()))?;
     drop(listener);
     Ok(())
 }
@@ -8970,6 +9095,9 @@ async fn bind_gateway_listener(bind_host: &str, port: u16) -> Result<TcpListener
 }
 
 fn format_gateway_bind_error(bind_host: &str, port: u16, error: &std::io::Error) -> String {
+    if error.kind() == std::io::ErrorKind::PermissionDenied {
+        return decorate_local_port_startup_failure(bind_host, port, &error.to_string());
+    }
     if error.kind() == std::io::ErrorKind::AddrInUse {
         return format!(
             "启动本地接入服务失败: {}:{} 已被占用，请先清理端口或改用其他端口（{}）",
@@ -9668,6 +9796,16 @@ async fn ensure_gateway_matches_runtime_locked() -> Result<(), String> {
         wait_for_gateway_port_release(&endpoint.bind_host, endpoint.port).await?;
     }
 
+    if let Err(message) = ensure_local_port_not_windows_excluded(bind_host, collection.port) {
+        let mut runtime = gateway_runtime().lock().await;
+        runtime.running = false;
+        runtime.actual_port = None;
+        runtime.actual_bind_host = None;
+        runtime.sidecar_config_fingerprint = None;
+        runtime.last_error = Some(message.clone());
+        return Err(message);
+    }
+
     if probe_sidecar_ready_once(&collection, Duration::from_millis(250))
         .await
         .is_ok()
@@ -9775,7 +9913,11 @@ async fn ensure_gateway_matches_runtime_locked() -> Result<(), String> {
         Ok(signal) => signal,
         Err(error) => {
             let diagnostics = sidecar_startup_diagnostics_text(&startup_diagnostics);
-            let message = format!("{}; {}", error, diagnostics);
+            let message = decorate_local_port_startup_failure(
+                bind_host,
+                collection.port,
+                &format!("{}; {}", error, diagnostics),
+            );
             logger::log_codex_api_warn(&format!(
                 "[CodexLocalAccess][sidecar] sidecar ready 等待失败，将停止进程: {}",
                 message
@@ -11739,7 +11881,6 @@ async fn spawn_provider_gateway_sidecar(
         .stderr(Stdio::piped());
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000);
     }
 
@@ -18571,9 +18712,10 @@ mod tests {
         model_provider_test_uses_provider_gateway, normalize_account_model_rules,
         normalize_custom_routing_rules, normalized_sidecar_error_category, parse_codex_retry_after,
         parse_responses_payload_from_upstream, parse_websocket_upstream_error,
-        prepare_gateway_request, prepare_gateway_request_with_default_service_tier,
-        prepare_sidecar_launch_config_in_dir, prepare_websocket_initial_request,
-        profile_base_url_matches, provider_gateway_bound_oauth_account_id_for_account,
+        parse_windows_tcp_excluded_port_ranges, prepare_gateway_request,
+        prepare_gateway_request_with_default_service_tier, prepare_sidecar_launch_config_in_dir,
+        prepare_websocket_initial_request, profile_base_url_matches,
+        provider_gateway_bound_oauth_account_id_for_account,
         provider_gateway_default_model_for_account,
         provider_gateway_image_generation_mode_for_account, provider_gateway_models_for_account,
         read_http_request, recover_invalid_stats_file, remove_account_refs_from_collection,
@@ -18593,9 +18735,9 @@ mod tests {
         write_string_atomic, CodexLocalAccessCollection, CodexLocalAccessGatewayMode,
         CodexLocalAccessScope, CodexModelProviderGatewayChatTestRequest, GatewayResponseAdapter,
         ParsedRequest, ResolvedLocalApiKey, ResponseUsageCollector, RoutingCandidate,
-        SidecarUsageDetails, SidecarUsageEvent, UsageCapture, CODEX_AUTO_REVIEW_MODEL_ID,
-        CODEX_LOCAL_ACCESS_TEST_DISABLE_IMAGE_GENERATION_HEADER, CODEX_PROFILE_AUTH_FILE,
-        CODEX_PROFILE_CONFIG_FILE, CODEX_PROVIDER_MODEL_BACKUP_FILE,
+        SidecarUsageDetails, SidecarUsageEvent, UsageCapture, WindowsTcpExcludedPortRange,
+        CODEX_AUTO_REVIEW_MODEL_ID, CODEX_LOCAL_ACCESS_TEST_DISABLE_IMAGE_GENERATION_HEADER,
+        CODEX_PROFILE_AUTH_FILE, CODEX_PROFILE_CONFIG_FILE, CODEX_PROVIDER_MODEL_BACKUP_FILE,
         CODEX_PROVIDER_MODEL_CATALOG_FILE, DEFAULT_MAX_RETRY_INTERVAL_MS,
         DEFAULT_SESSION_AFFINITY_TTL_MS, MAX_HTTP_REQUEST_BYTES,
     };
@@ -22563,6 +22705,32 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         assert_eq!(
             build_upstream_websocket_url(&http_account, "/responses").unwrap(),
             "ws://127.0.0.1:8080/v1/responses"
+        );
+    }
+
+    #[test]
+    fn parses_windows_tcp_excluded_port_ranges_from_netsh_output() {
+        let output = r#"
+Protocol tcp Port Exclusion Ranges
+
+Start Port    End Port
+----------    --------
+      50938       51037
+      52000       52099     *
+"#;
+
+        assert_eq!(
+            parse_windows_tcp_excluded_port_ranges(output),
+            vec![
+                WindowsTcpExcludedPortRange {
+                    start: 50938,
+                    end: 51037,
+                },
+                WindowsTcpExcludedPortRange {
+                    start: 52000,
+                    end: 52099,
+                },
+            ]
         );
     }
 }

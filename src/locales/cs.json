@@ -2035,7 +2035,11 @@
       "testChatSend": "Odeslat",
       "testChatInputRequired": "Zadejte testovací zprávu",
       "testChatModelRequired": "Vyberte ID modelu",
-      "testChatEmptyResponse": "Prázdná odpověď"
+      "testChatEmptyResponse": "Prázdná odpověď",
+      "errors": {
+        "windowsTcpExcludedPort": "Port služby API {{port}} je rezervovaný systémem Windows, takže nelze naslouchat na {{bindHost}}:{{port}}. Port spadá do rezervovaného rozsahu TCP {{rangeStart}}-{{rangeEnd}}. Často to způsobuje Hyper-V, WSL, Docker, VPN nebo síťové komponenty Windows, které porty rezervují dynamicky. Použijte nerezervovaný port, například 18080 nebo 28080.",
+        "windowsPortPermissionDenied": "Službě API se nepodařilo naslouchat na portu {{port}}, protože Windows odmítl přístup k {{bindHost}}:{{port}}. Zkontrolujte rezervované porty Windows, antivirus, firewall, VPN, Hyper-V, WSL nebo Docker, případně použijte jiný port."
+      }
     },
     "local": {
       "desc": "Importovat aktuální účet z ~/.codex/auth.json",

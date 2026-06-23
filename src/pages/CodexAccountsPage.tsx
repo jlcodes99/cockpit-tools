@@ -101,6 +101,7 @@ import {
   type CodexResetCreditsSnapshot,
 } from "../types/codex";
 import { filterCodexLocalAccessAccountIds } from "../utils/codexLocalAccessAccounts";
+import { formatCodexLocalAccessErrorMessage } from "../utils/codexLocalAccessErrorMessage";
 import { isBlockingCodexQuotaError } from "../utils/codexQuotaError";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
 
@@ -9220,7 +9221,12 @@ export function CodexAccountsPage() {
             {localAccessState?.lastError && (
               <div className="quota-error-inline">
                 <CircleAlert size={14} />
-                <span>{localAccessState.lastError}</span>
+                <span>
+                  {formatCodexLocalAccessErrorMessage(
+                    localAccessState.lastError,
+                    t,
+                  )}
+                </span>
                 <button
                   type="button"
                   className="folder-icon-btn codex-local-access-error-action"

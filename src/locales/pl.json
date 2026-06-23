@@ -2035,7 +2035,11 @@
       "testChatSend": "Wyślij",
       "testChatInputRequired": "Wpisz wiadomość testową",
       "testChatModelRequired": "Wybierz ID modelu",
-      "testChatEmptyResponse": "Pusta odpowiedź"
+      "testChatEmptyResponse": "Pusta odpowiedź",
+      "errors": {
+        "windowsTcpExcludedPort": "Port {{port}} usługi API jest zarezerwowany przez Windows, więc nie można nasłuchiwać na {{bindHost}}:{{port}}. Port znajduje się w zarezerwowanym zakresie TCP {{rangeStart}}-{{rangeEnd}}. Często powodują to Hyper-V, WSL, Docker, VPN lub składniki sieciowe Windows dynamicznie rezerwujące porty. Użyj niezarezerwowanego portu, np. 18080 lub 28080.",
+        "windowsPortPermissionDenied": "Usługa API nie mogła nasłuchiwać na porcie {{port}}, ponieważ Windows odmówił dostępu do {{bindHost}}:{{port}}. Sprawdź zarezerwowane porty Windows, antywirusa, zaporę, VPN, Hyper-V, WSL lub Docker albo użyj innego portu."
+      }
     },
     "local": {
       "desc": "Importuj bieżące konto z ~/.codex/auth.json",

@@ -2035,7 +2035,11 @@
       "testChatSend": "傳送",
       "testChatInputRequired": "請輸入測試訊息",
       "testChatModelRequired": "請選擇模型 ID",
-      "testChatEmptyResponse": "回應為空"
+      "testChatEmptyResponse": "回應為空",
+      "errors": {
+        "windowsTcpExcludedPort": "API 服務連接埠 {{port}} 目前被 Windows 系統保留，無法監聽 {{bindHost}}:{{port}}。此連接埠落在系統保留 TCP 連接埠區間 {{rangeStart}}-{{rangeEnd}}。常見原因是 Hyper-V、WSL、Docker、VPN 或系統網路元件動態保留連接埠。請改用未保留的連接埠，例如 18080、28080。",
+        "windowsPortPermissionDenied": "API 服務連接埠 {{port}} 監聽失敗，Windows 拒絕存取 {{bindHost}}:{{port}}。請檢查 Windows 保留連接埠、防毒軟體、防火牆、VPN、Hyper-V、WSL 或 Docker 是否限制了此連接埠，也可以直接改用其他連接埠。"
+      }
     },
     "api": {
       "baseUrl": "基礎網址",
