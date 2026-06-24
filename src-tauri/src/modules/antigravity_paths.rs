@@ -61,6 +61,13 @@ pub fn default_user_data_dir() -> Result<PathBuf, String> {
     #[cfg(target_os = "windows")]
     {
         let roaming_dir = roaming_app_data_dir()?;
+        // 优先选择已经生成了 state.vscdb 数据库的用户数据目录
+        for candidate in windows_user_data_candidates(&roaming_dir) {
+            if candidate.join("User").join("globalStorage").join("state.vscdb").exists() {
+                return Ok(candidate);
+            }
+        }
+        // 如果都没生成数据库，退而求其次，只要文件夹存在即可
         for candidate in windows_user_data_candidates(&roaming_dir) {
             if candidate.exists() {
                 return Ok(candidate);
