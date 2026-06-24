@@ -9,6 +9,7 @@
     "prebuild": "npm run typecheck",
     "build": "npm run sync-version && tsc && vite build",
     "release:preflight": "node scripts/release/preflight.cjs",
+    "release:metadata:test": "node --test scripts/release/build_merged_latest_json.test.cjs",
     "preview": "vite preview",
     "pretauri:dev": "npm run typecheck",
     "tauri:dev": "node scripts/tauri-dev.cjs",

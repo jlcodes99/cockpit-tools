@@ -9,6 +9,25 @@ pub struct UpdateRuntimeInfo {
     pub updater_target: Option<String>,
 }
 
+#[cfg(any(target_os = "windows", test))]
+fn windows_updater_target_for_bundle_type(
+    arch: &str,
+    bundle_type: Option<tauri::utils::config::BundleType>,
+) -> String {
+    use tauri::utils::config::BundleType;
+    let arch = match arch {
+        "x86_64" => "x86_64",
+        "aarch64" => "aarch64",
+        _ => "x86_64",
+    };
+    let base = format!("windows-{}", arch);
+    match bundle_type {
+        Some(BundleType::Nsis) => format!("{}-nsis", base),
+        Some(BundleType::Msi) => format!("{}-msi", base),
+        _ => base,
+    }
+}
+
 #[cfg(target_os = "linux")]
 mod imp {
     use super::UpdateRuntimeInfo;
@@ -579,22 +598,13 @@ mod imp {
 
     #[cfg(target_os = "windows")]
     fn windows_updater_target() -> Option<String> {
-        use tauri::utils::config::BundleType;
+        use super::windows_updater_target_for_bundle_type;
         use tauri::utils::platform::bundle_type;
 
-        let arch = match std::env::consts::ARCH {
-            "x86_64" => "x86_64",
-            "aarch64" => "aarch64",
-            _ => "x86_64",
-        };
-        let base = format!("windows-{}", arch);
-        let installer_suffix = match bundle_type() {
-            Some(BundleType::Nsis) => "nsis",
-            Some(BundleType::Msi) => "msi",
-            _ => "nsis",
-        };
-
-        Some(format!("{}-{}", base, installer_suffix))
+        Some(windows_updater_target_for_bundle_type(
+            std::env::consts::ARCH,
+            bundle_type(),
+        ))
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -624,6 +634,40 @@ mod imp {
         _expected_version: Option<String>,
     ) -> Result<(), String> {
         Err("Linux managed package update is only supported on Linux".to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::windows_updater_target_for_bundle_type;
+    use tauri::utils::config::BundleType;
+
+    #[test]
+    fn windows_updater_target_preserves_known_installer_type() {
+        assert_eq!(
+            windows_updater_target_for_bundle_type("x86_64", Some(BundleType::Msi)),
+            "windows-x86_64-msi"
+        );
+        assert_eq!(
+            windows_updater_target_for_bundle_type("x86_64", Some(BundleType::Nsis)),
+            "windows-x86_64-nsis"
+        );
+        assert_eq!(
+            windows_updater_target_for_bundle_type("aarch64", Some(BundleType::Msi)),
+            "windows-aarch64-msi"
+        );
+    }
+
+    #[test]
+    fn windows_updater_target_uses_generic_fallback_for_unknown_installer_type() {
+        assert_eq!(
+            windows_updater_target_for_bundle_type("x86_64", None),
+            "windows-x86_64"
+        );
+        assert_eq!(
+            windows_updater_target_for_bundle_type("powerpc", None),
+            "windows-x86_64"
+        );
     }
 }
 

@@ -183,6 +183,9 @@ jobs:
         with:
           node-version: 20
 
+      - name: Test release metadata builder
+        run: npm run release:metadata:test
+
       - name: Determine version
         shell: bash
         run: |
@@ -245,7 +248,11 @@ jobs:
             .platforms["darwin-aarch64"] and
             .platforms["darwin-x86_64"] and
             .platforms["windows-x86_64"] and
+            .platforms["windows-x86_64-msi"] and
             .platforms["windows-x86_64-nsis"] and
+            (.platforms["windows-x86_64"].url | test("_x64_en-US\\.msi$")) and
+            (.platforms["windows-x86_64-msi"].url | test("_x64_en-US\\.msi$")) and
+            (.platforms["windows-x86_64-nsis"].url | test("_x64-setup\\.exe$")) and
             .platforms["linux-x86_64-appimage"] and
             .platforms["linux-x86_64-deb"] and
             .platforms["linux-x86_64-rpm"] and
