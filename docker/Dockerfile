@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/root/.cargo/bin:/usr/local/go/bin:${PATH}"
 
 # 让 cargo 和 tauri build 使用同一个 target 目录，便于复用缓存。
-ENV CARGO_TARGET_DIR=/src/src-tauri/target
+ENV CARGO_TARGET_DIR=/target
 
 # 网络不稳定时提高成功率。
 ENV CARGO_NET_RETRY=20
@@ -38,11 +38,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Node.js 20
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/*
+
+# node js
+
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+ && apt-get install -y nodejs
 
 # Rust
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal
@@ -74,11 +74,7 @@ WORKDIR /src
 
 COPY package.json package-lock.json* ./
 
-RUN if [ -f package-lock.json ]; then \
-      npm ci || npm install; \
-    else \
-      npm install; \
-    fi
+RUN npm ci
 
 
 # ============================================================
@@ -90,10 +86,14 @@ FROM npm-deps AS rust-deps
 WORKDIR /src
 
 COPY Cargo.toml Cargo.lock ./
+COPY src-tauri/Cargo.toml src-tauri/Cargo.toml
+
+RUN cargo fetch --locked
+
 COPY crates ./crates
-COPY src-tauri ./src-tauri
 COPY sidecars ./sidecars
 COPY scripts ./scripts
+COPY src-tauri ./src-tauri
 
 # Rust 代码 include_str! 编译期会读取这些文件。
 COPY CHANGELOG.md CHANGELOG.zh-CN.md ./
