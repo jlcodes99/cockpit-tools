@@ -1,0 +1,30 @@
+name: sync-upstream
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # 每6小时同步一次
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add upstream
+        run: |
+          git remote add upstream https://github.com/jlcodes99/cockpit-tools.git || true
+          git fetch upstream
+
+      - name: Merge upstream
+        run: |
+          git checkout main
+          git merge upstream/main --no-edit || true
+
+      - name: Push changes
+        run: |
+          git push origin main
