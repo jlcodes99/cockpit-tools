@@ -23,7 +23,7 @@ jobs:
       - name: Merge upstream
         run: |
           git checkout main
-          git merge upstream/main --no-edit || true
+          git merge upstream/main --no-edit || exit 1
 
       - name: Push changes
         run: |
