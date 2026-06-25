@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/root/.cargo/bin:/usr/local/go/bin:${PATH}"
 
 # 让 cargo 和 tauri build 使用同一个 target 目录，便于复用缓存。
-ENV CARGO_TARGET_DIR=/target
+ENV CARGO_TARGET_DIR=/src/src-tauri/target
 
 # 网络不稳定时提高成功率。
 ENV CARGO_NET_RETRY=20
