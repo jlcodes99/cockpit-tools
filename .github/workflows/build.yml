@@ -29,7 +29,7 @@ jobs:
           target: novnc
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/cockpit-tools:nonvc-latest
-            ghcr.io/${{ github.repository_owner }}/cockpit-tools:nonvc-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/cockpit-tools:novnc-latest
+            ghcr.io/${{ github.repository_owner }}/cockpit-tools:novnc-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
