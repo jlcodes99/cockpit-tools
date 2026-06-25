@@ -5062,6 +5062,7 @@ export function CodexAccountsPage() {
       );
       return;
     }
+    const currentAccountIdBeforeImport = currentAccount?.id?.trim() || null;
     page.setAddStatus("loading");
     page.setAddMessage(t("common.shared.token.importing", "正在导入..."));
     try {
@@ -5071,6 +5072,14 @@ export function CodexAccountsPage() {
         await emitAccountsChanged({
           platformId: "codex",
           reason: "import",
+        });
+      }
+      const shouldReactivateCurrentAccount =
+        currentAccountIdBeforeImport != null &&
+        imported.some((account) => account.id === currentAccountIdBeforeImport);
+      if (shouldReactivateCurrentAccount) {
+        await executeCodexAccountSwitch(currentAccountIdBeforeImport, {
+          showSuccessMessage: false,
         });
       }
       page.setAddStatus("success");
