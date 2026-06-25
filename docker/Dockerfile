@@ -86,14 +86,10 @@ FROM npm-deps AS rust-deps
 WORKDIR /src
 
 COPY Cargo.toml Cargo.lock ./
-COPY src-tauri/Cargo.toml src-tauri/Cargo.toml
-
-RUN cargo fetch --locked
-
 COPY crates ./crates
+COPY src-tauri ./src-tauri
 COPY sidecars ./sidecars
 COPY scripts ./scripts
-COPY src-tauri ./src-tauri
 
 # Rust 代码 include_str! 编译期会读取这些文件。
 COPY CHANGELOG.md CHANGELOG.zh-CN.md ./
