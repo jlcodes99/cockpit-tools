@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      pushed: ${{ steps.push.outputs.pushed }}
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -39,6 +41,7 @@ jobs:
           git fetch upstream "${UPSTREAM_BRANCH}"
 
       - name: Sync upstream into main and apply add-novnc customizations
+        id: sync
         run: |
           # 1. 把 main 重置为上游最新
           git reset --hard "upstream/${UPSTREAM_BRANCH}"
@@ -51,8 +54,20 @@ jobs:
           # 3. 有变更才提交
           if ! git diff --cached --quiet; then
             git commit -m "Apply customizations from ${WORK_BRANCH}"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Force push main
+        id: push
+        if: steps.sync.outputs.changed == 'true'
         run: |
           git push --force-with-lease origin "${PUBLISH_BRANCH}"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: sync
+    if: needs.sync.outputs.pushed == 'true'
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
