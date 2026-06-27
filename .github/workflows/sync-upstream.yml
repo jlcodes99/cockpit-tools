@@ -2,29 +2,57 @@ name: sync-upstream
 
 on:
   schedule:
-    - cron: "0 */6 * * *"   # 每6小时同步一次
+    # 每6小时同步一次
+    - cron: "0 */6 * * *"
   workflow_dispatch:
+
+env:
+  # 上游仓库地址（被 fork 的源项目）
+  UPSTREAM_URL: https://github.com/jlcodes99/cockpit-tools.git
+  UPSTREAM_BRANCH: main
+  # 你的改动来源分支（只读取，不修改/不推送）
+  WORK_BRANCH: add-novnc
+  # 最终发布分支
+  PUBLISH_BRANCH: main
 
 jobs:
   sync:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
     steps:
-      - name: Checkout
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ env.PUBLISH_BRANCH }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Add upstream
+      - name: Configure git
         run: |
-          git remote add upstream https://github.com/jlcodes99/cockpit-tools.git || true
-          git fetch upstream
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Merge upstream
+      - name: Add upstream remote and fetch
         run: |
-          git checkout main
-          git merge upstream/main --no-edit || exit 1
+          git remote add upstream "${UPSTREAM_URL}" || true
+          git fetch upstream "${UPSTREAM_BRANCH}"
 
-      - name: Push changes
+      - name: Sync upstream into main and apply add-novnc customizations
         run: |
-          git push origin main
+          # 1. 把 main 重置为上游最新
+          git reset --hard "upstream/${UPSTREAM_BRANCH}"
+
+          # 2. 把 add-novnc 相对上游的改动，作为单个 commit 应用到 main
+          #    --squash 不创建 merge commit，不保留 add-novnc 分支关联
+          #    -X theirs：冲突时保留 add-novnc 的改动
+          git merge --squash -X theirs "origin/${WORK_BRANCH}"
+
+          # 3. 有变更才提交
+          if ! git diff --cached --quiet; then
+            git commit -m "Apply customizations from ${WORK_BRANCH}"
+          fi
+
+      - name: Force push main
+        run: |
+          git push --force-with-lease origin "${PUBLISH_BRANCH}"
