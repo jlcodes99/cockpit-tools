@@ -7437,6 +7437,41 @@ mod tests {
         assert!(!loaded.bound_oauth_use_local_gateway);
     }
 
+    #[test]
+    fn save_account_persists_bound_oauth_image_generation_false() {
+        let _lock = TEST_ENV_LOCK.lock().expect("lock test env");
+        let _env = TestEnvGuard::new("codex-bound-oauth-save-false");
+        let mut account = CodexAccount::new_api_key(
+            "api-bound-oauth-save-false".to_string(),
+            "api-key@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://relay.example/v1".to_string()),
+            Some("relay".to_string()),
+            Some("Relay".to_string()),
+            vec!["gpt-5.5".to_string()],
+        );
+        account.bound_oauth_account_id = Some("oauth-1".to_string());
+        account.bound_oauth_use_local_gateway = false;
+
+        save_account(&account).expect("save account");
+
+        let persisted: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(get_accounts_dir().join(format!("{}.json", account.id)))
+                .expect("read account"),
+        )
+        .expect("parse account");
+        assert_eq!(
+            persisted
+                .get("bound_oauth_use_local_gateway")
+                .and_then(|value| value.as_bool()),
+            Some(false)
+        );
+
+        let loaded = load_account(&account.id).expect("load account");
+        assert!(!loaded.bound_oauth_use_local_gateway);
+    }
+
     fn write_oauth_auth_file(base_dir: &std::path::Path, tokens: &CodexTokens, account_id: &str) {
         let auth_file = CodexAuthFile {
             auth_mode: None,
