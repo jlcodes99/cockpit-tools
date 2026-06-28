@@ -51,11 +51,16 @@ jobs:
           #    -X theirs：冲突时保留 add-novnc 的改动
           git merge --squash -X theirs "origin/${WORK_BRANCH}"
 
-          # 3. 有变更才提交
-          if ! git diff --cached --quiet; then
+          # 3. 排除 .github、docker、.dockerignore 后，检查是否还有需要关注的变更
+          EXCLUDED_PATTERN='^\.github/|^docker/|^\.dockerignore$'
+          OTHER_CHANGES=$(git diff --cached --name-only | grep -Ev "$EXCLUDED_PATTERN" || true)
+
+          if [ -n "$OTHER_CHANGES" ]; then
             git commit -m "Apply customizations from ${WORK_BRANCH}"
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
+            # 没有其它业务文件变更，丢弃仅涉及工作流/docker的暂存改动，保持 main 与上游一致
+            git reset --hard HEAD
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
