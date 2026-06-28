@@ -1,0 +1,59 @@
+services:
+  cockpit-tools:
+    image: ghcr.io/amwsggd/cockpit-tools:novnc-latest
+    container_name: cockpit-tools
+
+    build:
+      context: ..
+      dockerfile: ./docker/Dockerfile
+      target: novnc
+      args:
+        APP_UID: ${APP_UID}
+        APP_GID: ${APP_GID}
+
+    environment:
+      DISPLAY: ":1"
+      XVFB_WHD: "1280x800x24"
+
+      HOME: /home/app
+      XDG_CONFIG_HOME: /home/app/.config
+      XDG_DATA_HOME: /home/app/.local/share
+      XDG_CACHE_HOME: /home/app/.cache
+      XDG_RUNTIME_DIR: /tmp/runtime-app
+
+      NO_AT_BRIDGE: "1"
+      WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+
+    ports:
+      - "${VNC_PORT}:6080"
+
+    volumes:
+      # =========================
+      # 🏠 用户主目录（核心持久化）
+      # =========================
+      - ./data/home:/home/app
+
+      # =========================
+      # 🧠 Cockpit / AI 工具配置
+      # =========================
+      - ./data/config:/home/app/.config
+      - ./data/cache:/home/app/.cache
+      - ./data/runtime:/tmp/runtime-app
+
+      # =========================
+      # 🔌 AI / CLI 工具配置（按需扩展）
+      # =========================
+      - ./data/home/.codex:/home/app/.codex
+      - ./data/home/.gemini:/home/app/.gemini
+      - ./data/home/.antigravity_cockpit:/home/app/.antigravity_cockpit
+
+    shm_size: "1gb"
+
+    security_opt:
+      - seccomp=unconfined
+
+    restart: unless-stopped
+
+    user: "${APP_UID}:${APP_GID}"
+
+volumes: {}

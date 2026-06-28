@@ -1,0 +1,73 @@
+name: sync-upstream
+
+on:
+  schedule:
+    # 每6小时同步一次
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+env:
+  # 上游仓库地址（被 fork 的源项目）
+  UPSTREAM_URL: https://github.com/jlcodes99/cockpit-tools.git
+  UPSTREAM_BRANCH: main
+  # 你的改动来源分支（只读取，不修改/不推送）
+  WORK_BRANCH: add-novnc
+  # 最终发布分支
+  PUBLISH_BRANCH: main
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      pushed: ${{ steps.push.outputs.pushed }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.PUBLISH_BRANCH }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote and fetch
+        run: |
+          git remote add upstream "${UPSTREAM_URL}" || true
+          git fetch upstream "${UPSTREAM_BRANCH}"
+
+      - name: Sync upstream into main and apply add-novnc customizations
+        id: sync
+        run: |
+          # 1. 把 main 重置为上游最新
+          git reset --hard "upstream/${UPSTREAM_BRANCH}"
+
+          # 2. 把 add-novnc 相对上游的改动，作为单个 commit 应用到 main
+          #    --squash 不创建 merge commit，不保留 add-novnc 分支关联
+          #    -X theirs：冲突时保留 add-novnc 的改动
+          git merge --squash -X theirs "origin/${WORK_BRANCH}"
+
+          # 3. 有变更才提交
+          if ! git diff --cached --quiet; then
+            git commit -m "Apply customizations from ${WORK_BRANCH}"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Force push main
+        id: push
+        if: steps.sync.outputs.changed == 'true'
+        run: |
+          git push --force-with-lease origin "${PUBLISH_BRANCH}"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: sync
+    if: needs.sync.outputs.pushed == 'true'
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
