@@ -50,6 +50,7 @@ jobs:
           #    --squash 不创建 merge commit，不保留 add-novnc 分支关联
           #    -X theirs：冲突时保留 add-novnc 的改动
           git merge --squash -X theirs "origin/${WORK_BRANCH}"
+          git add .
 
           # 3. 排除 .github、docker、.dockerignore 后，检查是否还有需要关注的变更
           EXCLUDED_PATTERN='^\.github/|^docker/|^\.dockerignore$'
