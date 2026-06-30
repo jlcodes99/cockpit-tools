@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      workflows: write
+      actions: write
     outputs:
       pushed: ${{ steps.push.outputs.pushed }}
     steps:
