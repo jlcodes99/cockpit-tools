@@ -56,10 +56,9 @@ jobs:
 
           git commit -m "Apply customizations from ${WORK_BRANCH}"
 
-      - name: Force push main
-        id: push
+      - name: Push using PAT  # ⭐关键点
         run: |
-          git push --force-with-lease origin "${PUBLISH_BRANCH}"
+          git push --force-with-lease https://x-access-token:${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git "${PUBLISH_BRANCH}"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 
   build:
