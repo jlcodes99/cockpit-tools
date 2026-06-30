@@ -56,6 +56,7 @@ jobs:
           OTHER_CHANGES=$(git diff --cached --name-only | grep -Ev "$EXCLUDED_PATTERN" || true)
 
           if [ -n "$OTHER_CHANGES" ]; then
+            git add .
             git commit -m "Apply customizations from ${WORK_BRANCH}"
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
