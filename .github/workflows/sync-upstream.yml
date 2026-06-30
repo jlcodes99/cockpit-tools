@@ -46,29 +46,17 @@ jobs:
           # 1. 把 main 重置为上游最新
           git reset --hard "upstream/${UPSTREAM_BRANCH}"
 
-          # 2. 把 add-novnc 相对上游的改动，作为单个 commit 应用到 main
-          #    --squash 不创建 merge commit，不保留 add-novnc 分支关联
-          #    -X theirs：冲突时保留 add-novnc 的改动
-          git merge --squash -X theirs "origin/${WORK_BRANCH}"
-          git add .
+          # 2. 把 add-novnc 相对上游的改动，作用到main
+          git checkout add-novnc -- .github
+          git checkout add-novnc -- docker
+          git checkout add-novnc -- .dockerignore
 
-          # 3. 排除 .github、docker、.dockerignore 后，检查是否还有需要关注的变更
-          EXCLUDED_PATTERN='^\.github/|^docker/|^\.dockerignore$'
-          OTHER_CHANGES=$(git diff --cached --name-only | grep -Ev "$EXCLUDED_PATTERN" || true)
+          git add .github docker .dockerignore
 
-          if [ -n "$OTHER_CHANGES" ]; then
-            git add .
-            git commit -m "Apply customizations from ${WORK_BRANCH}"
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            # 没有其它业务文件变更，丢弃仅涉及工作流/docker的暂存改动，保持 main 与上游一致
-            git reset --hard HEAD
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          fi
+          git commit -m "Apply customizations from ${WORK_BRANCH}"
 
       - name: Force push main
         id: push
-        if: steps.sync.outputs.changed == 'true'
         run: |
           git push --force-with-lease origin "${PUBLISH_BRANCH}"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
