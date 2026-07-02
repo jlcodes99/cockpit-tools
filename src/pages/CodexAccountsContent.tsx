@@ -307,6 +307,7 @@ const CODEX_CUSTOM_SORT_ORDER_KEY =
   "agtools.codex.accounts.custom_sort_order.v1";
 const CODEX_CUSTOM_SORT_ACTIVE_KEY =
   "agtools.codex.accounts.custom_sort_active.v1";
+const CODEX_SORT_PREFERENCE_KEY = "agtools.codex.accounts.sort_preference.v1";
 const DEFAULT_CODEX_API_PROVIDER_ID = OPENAI_OFFICIAL_PRESET_ID;
 const DEFAULT_CODEX_API_BASE_URL = OPENAI_OFFICIAL_BASE_URL;
 const CODEX_LOCAL_ACCESS_FALLBACK_PORT = 54140;
@@ -1293,6 +1294,7 @@ export function CodexAccountsContent() {
     },
     getDisplayEmail: (account) => account.email ?? account.id,
     defaultSortBy: readCodexCustomSortActive() ? "custom" : undefined,
+    sortPreferenceStorageKey: CODEX_SORT_PREFERENCE_KEY,
   });
 
   const {

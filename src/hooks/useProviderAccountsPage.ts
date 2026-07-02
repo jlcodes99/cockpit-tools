@@ -171,6 +171,7 @@ export interface ProviderPageConfig<TAccount extends ProviderAccountBase> {
   /** OAuth 成功后的提示文案（可选） */
   resolveOauthSuccessMessage?: () => string;
   defaultSortBy?: string;
+  sortPreferenceStorageKey?: string;
 }
 
 export interface ProviderAccountBase {
@@ -195,6 +196,43 @@ const FILTER_FIELD_SORT_BY = 'sort_by';
 const FILTER_FIELD_SORT_DIRECTION = 'sort_direction';
 const FILTER_FIELD_TAGS = 'tags';
 const FILTER_FIELD_GROUP_BY_TAG = 'group_by_tag';
+
+interface ProviderSortPreference {
+  sortBy?: string | null;
+  sortDirection?: SortDirection | null;
+}
+
+function readProviderSortPreference(storageKey?: string | null): ProviderSortPreference | null {
+  if (!storageKey) return null;
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const payload = parsed as Record<string, unknown>;
+    return {
+      sortBy: typeof payload.sortBy === 'string' ? payload.sortBy.trim() : null,
+      sortDirection:
+        payload.sortDirection === 'asc' || payload.sortDirection === 'desc'
+          ? payload.sortDirection
+          : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeProviderSortPreference(
+  storageKey: string | undefined,
+  preference: Required<ProviderSortPreference>,
+): void {
+  if (!storageKey) return;
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(preference));
+  } catch {
+    // ignore persistence failures
+  }
+}
 
 const normalizeStringArray = (value: unknown): string[] =>
   Array.isArray(value)
@@ -775,6 +813,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     oauthTabKeys: oauthTabKeysConfig,
     dataService,
     defaultSortBy: defaultSortByConfig,
+    sortPreferenceStorageKey,
   } = config;
   const defaultSortBy = defaultSortByConfig?.trim() || DEFAULT_SORT_BY;
 
@@ -885,6 +924,10 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
 
   // ─── Sort ─────────────────────────────────────────────────────────────
   const [sortBy, setSortBy] = useState<string>(() => {
+    const savedPreference = readProviderSortPreference(sortPreferenceStorageKey);
+    if (savedPreference?.sortBy?.trim()) {
+      return savedPreference.sortBy.trim();
+    }
     if (!readAccountsOverviewFilterPersistenceEnabled(filterPersistenceScope)) {
       return defaultSortBy;
     }
@@ -896,6 +939,10 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     return saved?.trim() ? saved : defaultSortBy;
   });
   const [sortDirection, setSortDirection] = useState<SortDirection>(() => {
+    const savedPreference = readProviderSortPreference(sortPreferenceStorageKey);
+    if (savedPreference?.sortDirection) {
+      return savedPreference.sortDirection;
+    }
     if (!readAccountsOverviewFilterPersistenceEnabled(filterPersistenceScope)) {
       return DEFAULT_SORT_DIRECTION;
     }
@@ -906,6 +953,13 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     );
     return normalizeSortDirection(saved);
   });
+
+  useEffect(() => {
+    writeProviderSortPreference(sortPreferenceStorageKey, {
+      sortBy,
+      sortDirection,
+    });
+  }, [sortBy, sortDirection, sortPreferenceStorageKey]);
 
   useEffect(() => {
     if (!filterPersistenceEnabled) {
