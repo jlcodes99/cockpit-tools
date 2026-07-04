@@ -938,7 +938,7 @@
       "themeLight": "浅色 (Light)",
       "themeDark": "深色 (Dark)",
       "themeSystem": "跟随系统",
-      "themeColor": "主题包",
+      "themeColor": "主题颜色",
       "themeColorDesc": "选择会自动适配浅色和深色模式的色彩主题",
       "uiScale": "界面缩放",
       "uiScaleDesc": "调整界面缩放比例",

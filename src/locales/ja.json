@@ -578,7 +578,7 @@
       "themeLight": "ライト",
       "themeDark": "ダーク",
       "themeSystem": "システム設定に従う",
-      "themeColor": "テーマパック",
+      "themeColor": "テーマカラー",
       "themeColorDesc": "ライトモードとダークモードに適応する配色テーマを選択します",
       "uiScale": "UIスケール",
       "uiScaleDesc": "インターフェースの表示倍率を調整",

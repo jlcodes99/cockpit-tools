@@ -80,7 +80,6 @@ import {
   applyThemeToDocument,
   normalizeThemeColorId,
   THEME_COLOR_PRESETS,
-  type ThemeColorId,
 } from '../themeColors';
 import './settings/Settings.css';
 import { 
@@ -387,7 +386,7 @@ export function SettingsPage() {
   const [language, setLanguage] = useState(getCurrentLanguage());
   const [defaultTerminal, setDefaultTerminal] = useState('system');
   const [theme, setTheme] = useState('system');
-  const [themeColor, setThemeColor] = useState<ThemeColorId>('neutral');
+  const [themeColor, setThemeColor] = useState('neutral');
   const [uiScale, setUiScale] = useState('1');
   const [autoRefresh, setAutoRefresh] = useState('5');
   const [codexAutoRefresh, setCodexAutoRefresh] = useState('10');
@@ -2409,59 +2408,35 @@ export function SettingsPage() {
                   <div className="row-desc">{t('settings.general.themeDesc')}</div>
                 </div>
                 <div className="row-control">
-                  <div className="theme-mode-segment" role="radiogroup" aria-label={t('settings.general.theme')}>
-                    {[
-                      { value: 'system', label: t('settings.general.themeSystem') },
-                      { value: 'light', label: t('settings.general.themeLight') },
-                      { value: 'dark', label: t('settings.general.themeDark') },
-                    ].map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={theme === option.value ? 'active' : ''}
-                        onClick={() => setTheme(option.value)}
-                        role="radio"
-                        aria-checked={theme === option.value}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
+                  <select
+                    className="settings-select"
+                    value={theme}
+                    onChange={(e) => setTheme(e.target.value)}
+                  >
+                    <option value="light">{t('settings.general.themeLight')}</option>
+                    <option value="dark">{t('settings.general.themeDark')}</option>
+                    <option value="system">{t('settings.general.themeSystem')}</option>
+                  </select>
                 </div>
               </div>
 
-              <div className="settings-row settings-row--align-start">
+              <div className="settings-row">
                 <div className="row-label">
                   <div className="row-title">{t('settings.general.themeColor')}</div>
                   <div className="row-desc">{t('settings.general.themeColorDesc')}</div>
                 </div>
-                <div className="row-control theme-color-control">
-                  <div className="theme-color-grid" role="radiogroup" aria-label={t('settings.general.themeColor')}>
-                    {THEME_COLOR_PRESETS.map((preset) => {
-                      const active = themeColor === preset.id;
-                      return (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          className={active ? 'active' : ''}
-                          onClick={() => setThemeColor(preset.id)}
-                          role="radio"
-                          aria-checked={active}
-                          title={`${preset.label} ${preset.lightHex} / ${preset.darkHex}`}
-                        >
-                          <span
-                            className="theme-color-swatch"
-                            style={{
-                              background: `linear-gradient(135deg, ${preset.lightHex} 0%, ${preset.lightHex} 50%, ${preset.darkHex} 50%, ${preset.darkHex} 100%)`,
-                            }}
-                          >
-                            <i style={{ background: preset.accentHex }} />
-                          </span>
-                          <span className="theme-color-name">{preset.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                <div className="row-control">
+                  <select
+                    className="settings-select"
+                    value={themeColor}
+                    onChange={(e) => setThemeColor(normalizeThemeColorId(e.target.value))}
+                  >
+                    {THEME_COLOR_PRESETS.map((preset) => (
+                      <option key={preset.id} value={preset.id}>
+                        {preset.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
