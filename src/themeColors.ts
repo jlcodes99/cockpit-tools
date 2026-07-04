@@ -26,7 +26,7 @@ export const THEME_COLOR_PRESETS: ThemeColorPreset[] = [
   { id: 'everforest', lightHex: '#fff9e8', darkHex: '#2d353b', accentHex: '#a7c080', label: 'Everforest' },
   { id: 'ayu', lightHex: '#fafafa', darkHex: '#0a0e14', accentHex: '#ffb454', label: 'Ayu' },
   { id: 'catppuccin', lightHex: '#eff1f5', darkHex: '#1e1e2e', accentHex: '#cba6f7', label: 'Catppuccin' },
-  { id: 'catppuccin-macchiato', lightHex: '#eff1f5', darkHex: '#24273a', accentHex: '#c6a0f6', label: 'Catppuccin Macchiato' },
+  { id: 'catppuccin-macchiato', lightHex: '#eff1f5', darkHex: '#24273a', accentHex: '#c6a0f6', label: 'Macchiato' },
   { id: 'gruvbox', lightHex: '#fbf1c7', darkHex: '#282828', accentHex: '#fabd2f', label: 'Gruvbox' },
   { id: 'kanagawa', lightHex: '#f2ecbc', darkHex: '#1f1f28', accentHex: '#7e9cd8', label: 'Kanagawa' },
   { id: 'nord', lightHex: '#eceff4', darkHex: '#2e3440', accentHex: '#88c0d0', label: 'Nord' },
