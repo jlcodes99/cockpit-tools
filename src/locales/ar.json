@@ -621,6 +621,8 @@
       "themeLight": "فاتح (Light)",
       "themeDark": "داكن (Dark)",
       "themeSystem": "حسب النظام",
+      "themeColor": "حزمة السمات",
+      "themeColorDesc": "اختر سمة ألوان تتكيف مع الوضع الفاتح والداكن",
       "uiScale": "مقياس الواجهة",
       "uiScaleDesc": "اضبط مقياس الواجهة",
       "accountManagement": "إدارة الحسابات",

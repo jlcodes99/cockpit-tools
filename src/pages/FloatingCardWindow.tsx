@@ -89,6 +89,7 @@ import {
   resolveCurrentOrMostRecentAccount,
 } from '../utils/floatingCardSelectors';
 import { changeLanguage, normalizeLanguage } from '../i18n';
+import { applyThemeToDocument } from '../themeColors';
 import {
   ACCOUNTS_CHANGED_EVENT,
   CURRENT_ACCOUNT_CHANGED_EVENT,
@@ -109,6 +110,7 @@ const FLOATING_CARD_NO_DRAG_SELECTOR =
 type FloatingCardGeneralConfig = {
   language: string;
   theme: string;
+  theme_color?: string;
   ui_scale?: number;
   floating_card_always_on_top?: boolean;
   floating_card_confirm_on_close?: boolean;
@@ -153,13 +155,6 @@ function resolveCurrentAccountById<T extends { id: string }>(
 ): T | null {
   if (!currentId) return null;
   return accounts.find((account) => account.id === currentId) ?? null;
-}
-
-function resolveAppliedTheme(theme: string): 'light' | 'dark' {
-  if (theme === 'system') {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  }
-  return theme === 'dark' ? 'dark' : 'light';
 }
 
 function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceStoreApi | null {
@@ -536,15 +531,13 @@ export function FloatingCardWindow() {
     let disposed = false;
     let cleanupThemeWatcher: (() => void) | null = null;
 
-    const applyTheme = (theme: string) => {
-      const appliedTheme = resolveAppliedTheme(theme);
-      document.documentElement.setAttribute('data-theme', appliedTheme);
-      document.body.setAttribute('data-theme', appliedTheme);
+    const applyTheme = (theme: string, themeColor?: string) => {
+      applyThemeToDocument(theme, themeColor);
     };
 
-    const watchSystemTheme = () => {
+    const watchSystemTheme = (themeColor?: string) => {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      const handleChange = () => applyTheme('system');
+      const handleChange = () => applyTheme('system', themeColor);
 
       if (mediaQuery.addEventListener) {
         mediaQuery.addEventListener('change', handleChange);
@@ -567,9 +560,9 @@ export function FloatingCardWindow() {
         if (disposed) return;
 
         await changeLanguage(normalizeLanguage(config.language));
-        applyTheme(config.theme);
+        applyTheme(config.theme, config.theme_color);
         if (config.theme === 'system') {
-          cleanupThemeWatcher = watchSystemTheme();
+          cleanupThemeWatcher = watchSystemTheme(config.theme_color);
         }
         await getCurrentWebview().setZoom(
           typeof config.ui_scale === 'number' && Number.isFinite(config.ui_scale)

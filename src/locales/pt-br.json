@@ -575,6 +575,8 @@
       "themeLight": "Claro",
       "themeDark": "Escuro",
       "themeSystem": "Sistema",
+      "themeColor": "Pacote de temas",
+      "themeColorDesc": "Escolha um tema de cores que se adapta aos modos claro e escuro",
       "uiScale": "Escala da interface",
       "uiScaleDesc": "Ajuste a escala da interface",
       "defaultTerminal": "Terminal Padrão",

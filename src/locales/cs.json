@@ -575,6 +575,8 @@
       "themeLight": "Světlý",
       "themeDark": "Tmavý",
       "themeSystem": "Systémový",
+      "themeColor": "Balíček motivů",
+      "themeColorDesc": "Vyberte barevný motiv, který se přizpůsobí světlému i tmavému režimu",
       "uiScale": "Měřítko rozhraní",
       "uiScaleDesc": "Upravte měřítko rozhraní",
       "accountManagement": "Správa účtů",

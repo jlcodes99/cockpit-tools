@@ -76,6 +76,12 @@ import { ALL_PLATFORM_IDS, PlatformId } from '../types/platform';
 import { SettingsAccountTransferSection } from '../components/SettingsAccountTransferSection';
 import { SettingsWebdavSyncSection } from '../components/SettingsWebdavSyncSection';
 import { useEscClose } from '../hooks/useEscClose';
+import {
+  applyThemeToDocument,
+  normalizeThemeColorId,
+  THEME_COLOR_PRESETS,
+  type ThemeColorId,
+} from '../themeColors';
 import './settings/Settings.css';
 import { 
   Github, User, Rocket, Save, FolderOpen,
@@ -105,6 +111,7 @@ interface GeneralConfig {
   language: string;
   default_terminal: string;
   theme: string;
+  theme_color?: string;
   ui_scale: number;
   auto_refresh_minutes: number;
   codex_auto_refresh_minutes: number;
@@ -380,6 +387,7 @@ export function SettingsPage() {
   const [language, setLanguage] = useState(getCurrentLanguage());
   const [defaultTerminal, setDefaultTerminal] = useState('system');
   const [theme, setTheme] = useState('system');
+  const [themeColor, setThemeColor] = useState<ThemeColorId>('neutral');
   const [uiScale, setUiScale] = useState('1');
   const [autoRefresh, setAutoRefresh] = useState('5');
   const [codexAutoRefresh, setCodexAutoRefresh] = useState('10');
@@ -749,8 +757,8 @@ export function SettingsPage() {
       return;
     }
     changeLanguage(language);
-    applyTheme(theme);
-  }, [generalLoaded, language, theme]);
+    applyTheme(theme, themeColor);
+  }, [generalLoaded, language, theme, themeColor]);
 
   useEffect(() => {
     if (!generalLoaded) {
@@ -832,6 +840,7 @@ export function SettingsPage() {
           language,
           defaultTerminal,
           theme,
+          themeColor,
           uiScale: normalizedUiScale,
           autoRefreshMinutes: autoRefreshNum,
           codexAutoRefreshMinutes: codexAutoRefreshNum,
@@ -987,6 +996,7 @@ export function SettingsPage() {
     language,
     defaultTerminal,
     theme,
+    themeColor,
     uiScale,
     opencodeAppPath,
     antigravityAppPath,
@@ -1214,13 +1224,8 @@ export function SettingsPage() {
     };
   }, []);
   
-  const applyTheme = (newTheme: string) => {
-    if (newTheme === 'system') {
-      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-    } else {
-      document.documentElement.setAttribute('data-theme', newTheme);
-    }
+  const applyTheme = (newTheme: string, newThemeColor: string = themeColor) => {
+    applyThemeToDocument(newTheme, newThemeColor);
   };
 
   const applyUiScale = async (rawScale: string) => {
@@ -1239,7 +1244,7 @@ export function SettingsPage() {
     }
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = () => applyTheme('system');
+    const handleChange = () => applyTheme('system', themeColor);
 
     if (mediaQuery.addEventListener) {
       mediaQuery.addEventListener('change', handleChange);
@@ -1254,7 +1259,7 @@ export function SettingsPage() {
         mediaQuery.removeListener(handleChange);
       }
     };
-  }, [theme]);
+  }, [theme, themeColor]);
   
   const loadGeneralConfig = async () => {
     try {
@@ -1262,6 +1267,7 @@ export function SettingsPage() {
       setLanguage(normalizeLanguage(config.language));
       setDefaultTerminal(config.default_terminal || 'system');
       setTheme(config.theme);
+      setThemeColor(normalizeThemeColorId(config.theme_color));
       setUiScale(String(config.ui_scale ?? 1));
       setAutoRefresh(String(config.auto_refresh_minutes));
       setCodexAutoRefresh(String(config.codex_auto_refresh_minutes ?? 10));
@@ -1395,7 +1401,7 @@ export function SettingsPage() {
       currentAccountRefreshPersistReadyRef.current = false;
       // 同步语言
       changeLanguage(config.language);
-      applyTheme(config.theme);
+      applyTheme(config.theme, config.theme_color);
       setGeneralLoaded(true);
     } catch (err) {
       console.error('加载通用配置失败:', err);
@@ -2403,15 +2409,59 @@ export function SettingsPage() {
                   <div className="row-desc">{t('settings.general.themeDesc')}</div>
                 </div>
                 <div className="row-control">
-                  <select 
-                    className="settings-select" 
-                    value={theme} 
-                    onChange={(e) => setTheme(e.target.value)}
-                  >
-                    <option value="light">{t('settings.general.themeLight')}</option>
-                    <option value="dark">{t('settings.general.themeDark')}</option>
-                    <option value="system">{t('settings.general.themeSystem')}</option>
-                  </select>
+                  <div className="theme-mode-segment" role="radiogroup" aria-label={t('settings.general.theme')}>
+                    {[
+                      { value: 'system', label: t('settings.general.themeSystem') },
+                      { value: 'light', label: t('settings.general.themeLight') },
+                      { value: 'dark', label: t('settings.general.themeDark') },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={theme === option.value ? 'active' : ''}
+                        onClick={() => setTheme(option.value)}
+                        role="radio"
+                        aria-checked={theme === option.value}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="settings-row settings-row--align-start">
+                <div className="row-label">
+                  <div className="row-title">{t('settings.general.themeColor')}</div>
+                  <div className="row-desc">{t('settings.general.themeColorDesc')}</div>
+                </div>
+                <div className="row-control theme-color-control">
+                  <div className="theme-color-grid" role="radiogroup" aria-label={t('settings.general.themeColor')}>
+                    {THEME_COLOR_PRESETS.map((preset) => {
+                      const active = themeColor === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          className={active ? 'active' : ''}
+                          onClick={() => setThemeColor(preset.id)}
+                          role="radio"
+                          aria-checked={active}
+                          title={`${preset.label} ${preset.lightHex} / ${preset.darkHex}`}
+                        >
+                          <span
+                            className="theme-color-swatch"
+                            style={{
+                              background: `linear-gradient(135deg, ${preset.lightHex} 0%, ${preset.lightHex} 50%, ${preset.darkHex} 50%, ${preset.darkHex} 100%)`,
+                            }}
+                          >
+                            <i style={{ background: preset.accentHex }} />
+                          </span>
+                          <span className="theme-color-name">{preset.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 

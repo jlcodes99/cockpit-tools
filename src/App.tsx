@@ -66,6 +66,7 @@ import {
 } from './utils/externalProviderImport';
 import { runAutoBackupCycle } from './services/scheduledBackupService';
 import { prepareCodexLocalAccessForRestart } from './services/codexLocalAccessService';
+import { applyThemeToDocument } from './themeColors';
 
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })),
@@ -164,6 +165,7 @@ const LogViewerModal = lazy(() =>
 
 interface GeneralConfigTheme {
   theme: string;
+  theme_color?: string;
   ui_scale?: number;
 }
 
@@ -1701,13 +1703,8 @@ function MainApp() {
   useEffect(() => {
     let cleanup: (() => void) | null = null;
 
-    const applyTheme = (newTheme: string) => {
-      if (newTheme === 'system') {
-        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-      } else {
-        document.documentElement.setAttribute('data-theme', newTheme);
-      }
+    const applyTheme = (newTheme: string, themeColor?: string) => {
+      applyThemeToDocument(newTheme, themeColor);
     };
 
     const applyUiScale = async (rawScale?: number) => {
@@ -1720,9 +1717,9 @@ function MainApp() {
       }
     };
 
-    const watchSystemTheme = () => {
+    const watchSystemTheme = (themeColor?: string) => {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      const handleChange = () => applyTheme('system');
+      const handleChange = () => applyTheme('system', themeColor);
 
       if (mediaQuery.addEventListener) {
         mediaQuery.addEventListener('change', handleChange);
@@ -1742,10 +1739,10 @@ function MainApp() {
     const initTheme = async () => {
       try {
         const config = await invoke<GeneralConfigTheme>('get_general_config');
-        applyTheme(config.theme);
+        applyTheme(config.theme, config.theme_color);
         void applyUiScale(config.ui_scale);
         if (config.theme === 'system') {
-          cleanup = watchSystemTheme();
+          cleanup = watchSystemTheme(config.theme_color);
         }
       } catch (error) {
         console.error('Failed to load theme config:', error);

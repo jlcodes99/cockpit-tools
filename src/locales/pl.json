@@ -575,6 +575,8 @@
       "themeLight": "Jasny",
       "themeDark": "Ciemny",
       "themeSystem": "Systemowy",
+      "themeColor": "Pakiet motywów",
+      "themeColorDesc": "Wybierz motyw kolorów dopasowany do trybu jasnego i ciemnego",
       "uiScale": "Skala interfejsu",
       "uiScaleDesc": "Dostosuj skalę interfejsu",
       "defaultTerminal": "Domyślny terminal",

@@ -20,6 +20,19 @@ use crate::modules::websocket;
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const AUTO_BACKUP_DIR_NAME: &str = "backups";
+const DEFAULT_THEME_COLOR: &str = "neutral";
+const THEME_COLOR_IDS: &[&str] = &[
+    "neutral",
+    "tokyonight",
+    "everforest",
+    "ayu",
+    "catppuccin",
+    "catppuccin-macchiato",
+    "gruvbox",
+    "kanagawa",
+    "nord",
+    "one-dark",
+];
 
 /// 网络服务配置（前端使用）
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +72,8 @@ pub struct GeneralConfig {
     pub default_terminal: String,
     /// 应用主题: "light", "dark", "system"
     pub theme: String,
+    /// 应用色彩主题
+    pub theme_color: String,
     /// 界面缩放比例（WebView Zoom）
     pub ui_scale: f64,
     /// 自动刷新间隔（分钟），-1 表示禁用
@@ -962,6 +977,15 @@ fn sanitize_ui_scale(raw: f64) -> f64 {
         return DEFAULT_UI_SCALE;
     }
     raw.clamp(MIN_UI_SCALE, MAX_UI_SCALE)
+}
+
+fn normalize_theme_color(raw: Option<&str>) -> String {
+    let value = raw.unwrap_or(DEFAULT_THEME_COLOR).trim().to_lowercase();
+    if THEME_COLOR_IDS.contains(&value.as_str()) {
+        value
+    } else {
+        DEFAULT_THEME_COLOR.to_string()
+    }
 }
 
 fn resolve_downloads_dir() -> Result<PathBuf, String> {
@@ -1931,6 +1955,7 @@ pub fn save_network_config(
         language: current.language,
         default_terminal: current.default_terminal,
         theme: current.theme,
+        theme_color: current.theme_color,
         ui_scale: current.ui_scale,
         auto_refresh_minutes: current.auto_refresh_minutes,
         codex_auto_refresh_minutes: current.codex_auto_refresh_minutes,
@@ -2211,11 +2236,13 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         MinimizeWindowBehavior::DockAndTray => "dock_and_tray",
         MinimizeWindowBehavior::TrayOnly => "tray_only",
     };
+    let theme_color = normalize_theme_color(Some(&user_config.theme_color));
 
     let result = GeneralConfig {
         language: user_config.language,
         default_terminal: user_config.default_terminal,
         theme: user_config.theme,
+        theme_color,
         ui_scale: user_config.ui_scale,
         auto_refresh_minutes: user_config.auto_refresh_minutes,
         codex_auto_refresh_minutes: user_config.codex_auto_refresh_minutes,
@@ -2353,6 +2380,7 @@ pub fn save_general_config(
     language: String,
     default_terminal: Option<String>,
     theme: String,
+    theme_color: Option<String>,
     ui_scale: Option<f64>,
     auto_refresh_minutes: i32,
     codex_auto_refresh_minutes: i32,
@@ -2476,6 +2504,7 @@ pub fn save_general_config(
         .unwrap_or_else(|| current.zed_app_path.clone());
     let normalized_vscode_path = vscode_app_path.trim().to_string();
     let normalized_ui_scale = sanitize_ui_scale(ui_scale.unwrap_or(current.ui_scale));
+    let normalized_theme_color = normalize_theme_color(theme_color.as_deref());
     let normalized_windsurf_path = windsurf_app_path
         .map(|value| value.trim().to_string())
         .unwrap_or_else(|| current.windsurf_app_path.clone());
@@ -2577,6 +2606,7 @@ pub fn save_general_config(
         language: normalized_language.clone(),
         default_terminal: default_terminal.unwrap_or(current.default_terminal),
         theme,
+        theme_color: normalized_theme_color,
         ui_scale: normalized_ui_scale,
         auto_refresh_minutes,
         codex_auto_refresh_minutes,

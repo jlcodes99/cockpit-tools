@@ -575,6 +575,8 @@
       "themeLight": "Clair",
       "themeDark": "Sombre",
       "themeSystem": "Système",
+      "themeColor": "Pack de thèmes",
+      "themeColorDesc": "Choisissez un thème de couleurs adapté aux modes clair et sombre",
       "uiScale": "Échelle de l'interface",
       "uiScaleDesc": "Ajuster l'échelle de l'interface",
       "accountManagement": "Gestion des comptes",

@@ -575,6 +575,8 @@
       "themeLight": "라이트",
       "themeDark": "다크",
       "themeSystem": "시스템 설정",
+      "themeColor": "테마 팩",
+      "themeColorDesc": "라이트 및 다크 모드에 맞게 조정되는 색상 테마를 선택하세요",
       "uiScale": "UI 배율",
       "uiScaleDesc": "인터페이스 배율 조정",
       "defaultTerminal": "기본 터미널",

@@ -878,6 +878,8 @@
       "themeLight": "Light",
       "themeDark": "Dark",
       "themeSystem": "System",
+      "themeColor": "Theme Pack",
+      "themeColorDesc": "Choose a color theme that adapts to light and dark mode",
       "uiScale": "UI Scale",
       "uiScaleDesc": "Adjust interface scale",
       "accountManagement": "Account",
