@@ -95,6 +95,7 @@ export function CodexSshServersPanel() {
   }, [fetchServers]);
 
   useEffect(() => {
+    let disposed = false;
     let unlisten: UnlistenFn | null = null;
     listen<SshCodexSyncResult>('codex:ssh-sync-result', (event) => {
       applySyncResult(event.payload);
@@ -105,9 +106,14 @@ export function CodexSshServersPanel() {
           : event.payload.error ?? t('codex.ssh.syncFailed', 'Local switch succeeded, but SSH sync failed.'),
       });
     }).then((dispose) => {
+      if (disposed) {
+        dispose();
+        return;
+      }
       unlisten = dispose;
     });
     return () => {
+      disposed = true;
       if (unlisten) unlisten();
     };
   }, [applySyncResult, t]);

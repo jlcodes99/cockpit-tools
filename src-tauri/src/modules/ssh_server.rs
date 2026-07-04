@@ -53,9 +53,72 @@ fn sanitize_error(error: impl ToString) -> String {
         "refresh_token",
         "id_token",
     ] {
-        value = value.replace(marker, "[redacted]");
+        value = redact_secret_values(&value, marker);
     }
     value
+}
+
+fn redact_secret_values(value: &str, marker: &str) -> String {
+    let mut output = String::with_capacity(value.len());
+    let mut remaining = value;
+    while let Some(index) = remaining.find(marker) {
+        let (before, matched_and_after) = remaining.split_at(index);
+        output.push_str(before);
+        output.push_str(marker);
+
+        let after_marker = &matched_and_after[marker.len()..];
+        let Some((delimiter_end, quote)) = secret_value_start(after_marker) else {
+            remaining = after_marker;
+            continue;
+        };
+        output.push_str(&after_marker[..delimiter_end]);
+
+        let value_start = delimiter_end;
+        let value_end = secret_value_end(&after_marker[value_start..], quote);
+        output.push_str("[redacted]");
+        remaining = &after_marker[value_start + value_end..];
+    }
+    output.push_str(remaining);
+    output
+}
+
+fn secret_value_start(value: &str) -> Option<(usize, Option<char>)> {
+    let mut chars = value.char_indices().peekable();
+    let mut end = 0;
+    while let Some((index, ch)) = chars.peek().copied() {
+        if ch.is_whitespace() || ch == '"' || ch == '\'' {
+            end = index + ch.len_utf8();
+            chars.next();
+        } else {
+            break;
+        }
+    }
+    let (_, delimiter) = chars.next()?;
+    if delimiter != '=' && delimiter != ':' {
+        return None;
+    }
+    end += delimiter.len_utf8();
+    while let Some((index, ch)) = chars.peek().copied() {
+        if ch.is_whitespace() {
+            end = index + ch.len_utf8();
+            chars.next();
+        } else {
+            break;
+        }
+    }
+    if let Some((index, quote @ ('"' | '\''))) = chars.peek().copied() {
+        return Some((index + quote.len_utf8(), Some(quote)));
+    }
+    Some((end, None))
+}
+
+fn secret_value_end(value: &str, quote: Option<char>) -> usize {
+    match quote {
+        Some(quote) => value.find(quote).unwrap_or(value.len()),
+        None => value
+            .find(|ch: char| ch.is_whitespace() || ch == ',' || ch == ';' || ch == '}')
+            .unwrap_or(value.len()),
+    }
 }
 
 fn validate_server(server: &SshServer) -> Result<(), String> {
@@ -672,6 +735,20 @@ mod tests {
         assert!(script.contains("codex app-server --listen"));
         assert!(script.contains("codex app-server proxy"));
         assert!(!script.contains("pkill"));
+    }
+
+    #[test]
+    fn sanitize_error_redacts_secret_values() {
+        let error = r#"access_token=abc123 refresh_token: 'def456' {"id_token":"ghi789","OPENAI_API_KEY":"sk-test"}"#;
+        let sanitized = sanitize_error(error);
+        assert!(sanitized.contains("access_token=[redacted]"));
+        assert!(sanitized.contains("refresh_token: '[redacted]'"));
+        assert!(sanitized.contains(r#""id_token":"[redacted]""#));
+        assert!(sanitized.contains(r#""OPENAI_API_KEY":"[redacted]""#));
+        assert!(!sanitized.contains("abc123"));
+        assert!(!sanitized.contains("def456"));
+        assert!(!sanitized.contains("ghi789"));
+        assert!(!sanitized.contains("sk-test"));
     }
 
     #[tokio::test]

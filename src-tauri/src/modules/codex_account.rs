@@ -8,6 +8,8 @@ use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -3464,6 +3466,33 @@ fn write_string_atomic(path: &Path, content: &str) -> Result<(), String> {
     crate::modules::atomic_write::write_string_atomic(path, content)
 }
 
+#[cfg(unix)]
+fn create_secure_dir(path: &Path, mode: u32) -> Result<(), String> {
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true).mode(mode);
+    builder
+        .create(path)
+        .map_err(|e| format!("创建安全目录失败: path={}, error={}", path.display(), e))?;
+    set_path_mode(path, mode)
+}
+
+#[cfg(not(unix))]
+fn create_secure_dir(path: &Path, _mode: u32) -> Result<(), String> {
+    fs::create_dir_all(path)
+        .map_err(|e| format!("创建安全目录失败: path={}, error={}", path.display(), e))
+}
+
+#[cfg(unix)]
+fn set_path_mode(path: &Path, mode: u32) -> Result<(), String> {
+    fs::set_permissions(path, fs::Permissions::from_mode(mode))
+        .map_err(|e| format!("设置文件权限失败: path={}, error={}", path.display(), e))
+}
+
+#[cfg(not(unix))]
+fn set_path_mode(_path: &Path, _mode: u32) -> Result<(), String> {
+    Ok(())
+}
+
 fn build_managed_projection(account: &CodexAccount) -> CodexManagedAuthProjection {
     CodexManagedAuthProjection {
         version: 1,
@@ -3795,11 +3824,13 @@ pub(crate) fn build_projection_bundle_for_remote(
         std::process::id(),
         chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
     ));
-    fs::create_dir_all(&temp_dir).map_err(|e| format!("创建 Codex 远程投影临时目录失败: {}", e))?;
+    create_secure_dir(&temp_dir, 0o700)?;
 
     let build_result = (|| {
         if let Some(existing_config) = existing_config_toml {
-            write_string_atomic(&temp_dir.join(CODEX_CONFIG_FILE_NAME), existing_config)?;
+            let config_path = temp_dir.join(CODEX_CONFIG_FILE_NAME);
+            write_string_atomic(&config_path, existing_config)?;
+            set_path_mode(&config_path, 0o600)?;
         }
 
         write_account_bundle_to_dir_with_options(&temp_dir, account, false)?;
@@ -3812,6 +3843,7 @@ pub(crate) fn build_projection_bundle_for_remote(
         ] {
             let path = temp_dir.join(relative_path);
             let content = if path.exists() {
+                set_path_mode(&path, mode)?;
                 fs::read_to_string(&path)
                     .map_err(|e| format!("读取 Codex 投影文件失败: {}: {}", relative_path, e))?
             } else if relative_path == CODEX_CONFIG_FILE_NAME {

@@ -2,7 +2,6 @@ import { invoke } from '@tauri-apps/api/core';
 import type { SshCodexSyncResult, SshServer, SshServerDraft, SshServerList } from '../types/sshServer';
 
 function toServer(draft: SshServerDraft): SshServer {
-  const now = Math.floor(Date.now() / 1000);
   return {
     id: draft.id ?? '',
     name: draft.name,
@@ -12,8 +11,8 @@ function toServer(draft: SshServerDraft): SshServer {
     codex_home: draft.codex_home?.trim() || '~/.codex',
     auth: draft.auth,
     sync_on_codex_switch: draft.sync_on_codex_switch ?? true,
-    created_at: now,
-    updated_at: now,
+    created_at: 0,
+    updated_at: 0,
     last_sync: null,
   };
 }
