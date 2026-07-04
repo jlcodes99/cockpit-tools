@@ -11084,3 +11084,196 @@
     align-items: flex-start;
   }
 }
+.codex-ssh-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+}
+
+.codex-ssh-toolbar,
+.codex-ssh-form-header,
+.codex-ssh-server-card,
+.codex-ssh-server-title,
+.codex-ssh-server-actions {
+  display: flex;
+  align-items: center;
+}
+
+.codex-ssh-toolbar {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.codex-ssh-toolbar h2,
+.codex-ssh-form h3 {
+  margin: 0;
+}
+
+.codex-ssh-toolbar p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+}
+
+.codex-ssh-message,
+.codex-ssh-footer-status {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.codex-ssh-message.success,
+.codex-ssh-footer-status.verified {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.codex-ssh-message.warning,
+.codex-ssh-footer-status.failed {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.codex-ssh-message.error {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.codex-ssh-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.codex-ssh-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--bg-primary);
+}
+
+.codex-ssh-form-header {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.codex-ssh-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.codex-ssh-form input {
+  min-height: 36px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.codex-ssh-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  gap: 10px;
+}
+
+.codex-ssh-auth-row,
+.codex-ssh-checkbox {
+  display: flex;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 14px;
+}
+
+.codex-ssh-auth-row label,
+.codex-ssh-checkbox {
+  color: var(--text-primary);
+}
+
+.codex-ssh-auth-row input,
+.codex-ssh-checkbox input {
+  min-height: auto;
+}
+
+.codex-ssh-server-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.codex-ssh-server-card {
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--bg-primary);
+}
+
+.codex-ssh-server-card.selected {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.codex-ssh-server-main {
+  min-width: 0;
+}
+
+.codex-ssh-server-title {
+  gap: 8px;
+}
+
+.codex-ssh-server-title span {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: rgb(37, 99, 235);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.codex-ssh-server-meta,
+.codex-ssh-sync-status {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.codex-ssh-sync-status.verified {
+  color: rgb(22, 163, 74);
+}
+
+.codex-ssh-sync-status.failed {
+  color: rgb(217, 119, 6);
+}
+
+.codex-ssh-server-actions {
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+@media (max-width: 900px) {
+  .codex-ssh-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .codex-ssh-toolbar,
+  .codex-ssh-server-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .codex-ssh-server-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}

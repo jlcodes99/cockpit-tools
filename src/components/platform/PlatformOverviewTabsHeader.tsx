@@ -1,6 +1,6 @@
 import { ReactNode, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Clock3, FolderOpen, Github, Layers, Server } from 'lucide-react';
+import { Bot, Clock3, FolderOpen, Github, Layers, Network, Server } from 'lucide-react';
 import { CodexIcon } from '../icons/CodexIcon';
 import { ClaudeIcon } from '../icons/ClaudeIcon';
 import { WindsurfIcon } from '../icons/WindsurfIcon';
@@ -23,7 +23,7 @@ import { getPlatformLabel } from '../../utils/platformMeta';
 import { PlatformGroupSwitcher } from './PlatformGroupSwitcher';
 import { useRemoteConfigStore } from '../../stores/useRemoteConfigStore';
 
-export type PlatformOverviewTab = 'overview' | 'wakeup' | 'instances' | 'sessions' | 'providers';
+export type PlatformOverviewTab = 'overview' | 'wakeup' | 'instances' | 'sessions' | 'providers' | 'ssh';
 export type PlatformOverviewHeaderId =
   | 'codex'
   | 'claude'
@@ -206,6 +206,11 @@ export function PlatformOverviewTabsHeader({
       key: 'providers',
       label: t('codex.modelProviders.tab', '模型供应商'),
       icon: <Server className="tab-icon" />,
+    },
+    ssh: {
+      key: 'ssh',
+      label: t('codex.ssh.tab', 'SSH servers'),
+      icon: <Network className="tab-icon" />,
     },
   };
   const tabSpecs: TabSpec[] = tabOrder.map((tab) => tabLabels[tab]);

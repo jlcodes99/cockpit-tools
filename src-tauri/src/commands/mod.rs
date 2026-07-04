@@ -27,6 +27,7 @@ pub mod provider_current;
 pub mod qoder;
 pub mod qoder_instance;
 pub mod remote_config;
+pub mod ssh_server;
 pub mod system;
 pub mod trae;
 pub mod trae_instance;

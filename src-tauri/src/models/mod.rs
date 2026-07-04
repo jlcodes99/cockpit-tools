@@ -10,6 +10,7 @@ pub mod instance;
 pub mod kiro;
 pub mod qoder;
 pub mod quota;
+pub mod ssh_server;
 pub mod token;
 pub mod trae;
 pub mod windsurf;

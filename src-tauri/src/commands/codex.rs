@@ -14,7 +14,7 @@ use crate::models::codex_local_access::{
 use crate::modules::{
     account, codex_account, codex_local_access, codex_oauth, codex_quota, codex_session_visibility,
     codex_speed, codex_wakeup, codex_wakeup_scheduler, config, logger, openclaw_auth,
-    opencode_auth, process,
+    opencode_auth, process, ssh_server,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -320,6 +320,28 @@ pub async fn switch_codex_account(
         switch_started.elapsed().as_millis(),
         flow_started.elapsed().as_millis()
     ));
+    let ssh_sync_started = Instant::now();
+    if let Some(ssh_sync) = ssh_server::sync_selected_server_after_codex_switch(&account).await {
+        if let Err(err) = app.emit("codex:ssh-sync-result", &ssh_sync) {
+            logger::log_warn(&format!("发送 Codex SSH 同步事件失败: {}", err));
+        }
+        if ssh_sync.verified {
+            logger::log_info(&format!(
+                "[Codex SSH] selected server verified after switch: account_id={}, server_id={}, elapsed_ms={}",
+                account_id,
+                ssh_sync.server_id,
+                ssh_sync_started.elapsed().as_millis()
+            ));
+        } else {
+            logger::log_warn(&format!(
+                "[Codex SSH] selected server sync failed after switch: account_id={}, server_id={}, error={:?}, elapsed_ms={}",
+                account_id,
+                ssh_sync.server_id,
+                ssh_sync.error,
+                ssh_sync_started.elapsed().as_millis()
+            ));
+        }
+    }
     let account_speed = account.app_speed.clone();
     let speed_started = Instant::now();
     codex_speed::write_official_app_speed(account_speed.clone())?;

@@ -670,6 +670,12 @@ pub fn run() {
             commands::codex::codex_local_access_test,
             commands::codex::codex_local_access_chat_test,
             commands::codex::codex_local_access_chat_test_stream,
+            commands::ssh_server::list_ssh_servers,
+            commands::ssh_server::upsert_ssh_server,
+            commands::ssh_server::delete_ssh_server,
+            commands::ssh_server::select_ssh_server,
+            commands::ssh_server::test_ssh_server_connection,
+            commands::ssh_server::sync_current_codex_account_to_ssh_server,
             // GitHub Copilot Commands
             commands::github_copilot::list_github_copilot_accounts,
             commands::github_copilot::delete_github_copilot_account,

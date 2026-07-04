@@ -5,8 +5,6 @@ use crate::models::codex::{
 use crate::modules::{account, codex_oauth, logger};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION};
-#[cfg(target_os = "macos")]
-#[cfg(all(target_os = "macos", not(test)))]
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -75,6 +73,23 @@ struct CodexManagedAuthProjection {
     email: String,
     token_generation: u64,
     written_at: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CodexProjectionFile {
+    pub relative_path: String,
+    pub content: String,
+    pub mode: u32,
+    pub sha256: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CodexAccountProjectionBundle {
+    pub account_id: String,
+    pub account_email: String,
+    pub token_generation: u64,
+    pub files: Vec<CodexProjectionFile>,
+    pub bundle_hash: String,
 }
 
 fn is_auth_mode_apikey(value: Option<&str>) -> bool {
@@ -3581,15 +3596,33 @@ pub(crate) fn write_prepared_account_bundle_to_dir(
     base_dir: &Path,
     account: &CodexAccount,
 ) -> Result<(), String> {
+    write_prepared_account_bundle_to_dir_with_options(base_dir, account, true)
+}
+
+fn write_prepared_account_bundle_to_dir_with_options(
+    base_dir: &Path,
+    account: &CodexAccount,
+    write_keychain: bool,
+) -> Result<(), String> {
     write_auth_file_to_dir(base_dir, account)?;
-    if let Err(err) = write_codex_keychain_to_dir(base_dir, account) {
-        logger::log_warn(&format!(
-            "[Codex切号] 写入 keychain 失败，目标目录可能缺少完整登录快照: {}",
-            err
-        ));
+    if write_keychain {
+        if let Err(err) = write_codex_keychain_to_dir(base_dir, account) {
+            logger::log_warn(&format!(
+                "[Codex切号] 写入 keychain 失败，目标目录可能缺少完整登录快照: {}",
+                err
+            ));
+        }
     }
     write_managed_projection_to_dir(base_dir, account)?;
     Ok(())
+}
+
+#[allow(dead_code)]
+fn write_prepared_account_bundle_to_dir_without_keychain(
+    base_dir: &Path,
+    account: &CodexAccount,
+) -> Result<(), String> {
+    write_prepared_account_bundle_to_dir_with_options(base_dir, account, false)
 }
 
 fn validate_api_key_bound_oauth_account(
@@ -3654,6 +3687,20 @@ fn write_api_key_account_bundle_with_oauth_to_dir(
     api_key_account: &CodexAccount,
     oauth_account: &CodexAccount,
 ) -> Result<(), String> {
+    write_api_key_account_bundle_with_oauth_to_dir_with_options(
+        base_dir,
+        api_key_account,
+        oauth_account,
+        true,
+    )
+}
+
+fn write_api_key_account_bundle_with_oauth_to_dir_with_options(
+    base_dir: &Path,
+    api_key_account: &CodexAccount,
+    oauth_account: &CodexAccount,
+    write_keychain: bool,
+) -> Result<(), String> {
     if !api_key_account.is_api_key_auth() {
         return Err("仅 API Key 账号支持 OAuth 绑定写入".to_string());
     }
@@ -3665,7 +3712,11 @@ fn write_api_key_account_bundle_with_oauth_to_dir(
     }
 
     if oauth_account.tokens.id_token.trim().is_empty() {
-        write_prepared_account_bundle_to_dir(base_dir, api_key_account)?;
+        write_prepared_account_bundle_to_dir_with_options(
+            base_dir,
+            api_key_account,
+            write_keychain,
+        )?;
         logger::log_info(&format!(
             "[Codex切号] 已写入 API Key 账号配置，绑定 OAuth 缺少 id_token，跳过 OAuth 登录态投影: api_account_id={}, oauth_account_id={}, target_dir={}",
             api_key_account.id,
@@ -3675,7 +3726,7 @@ fn write_api_key_account_bundle_with_oauth_to_dir(
         return Ok(());
     }
 
-    write_prepared_account_bundle_to_dir(base_dir, oauth_account)?;
+    write_prepared_account_bundle_to_dir_with_options(base_dir, oauth_account, write_keychain)?;
     let provider_config =
         write_api_key_provider_override_to_config_toml(base_dir, api_key_account)?;
     write_managed_projection_to_dir(base_dir, api_key_account)?;
@@ -3690,19 +3741,112 @@ fn write_api_key_account_bundle_with_oauth_to_dir(
 }
 
 pub fn write_account_bundle_to_dir(base_dir: &Path, account: &CodexAccount) -> Result<(), String> {
+    write_account_bundle_to_dir_with_options(base_dir, account, true)
+}
+
+fn write_account_bundle_to_dir_with_options(
+    base_dir: &Path,
+    account: &CodexAccount,
+    write_keychain: bool,
+) -> Result<(), String> {
     if account.is_api_key_auth() {
         if let Some(oauth_account) = load_optional_bound_oauth_account_for_api_key(account)? {
-            return write_api_key_account_bundle_with_oauth_to_dir(
+            return write_api_key_account_bundle_with_oauth_to_dir_with_options(
                 base_dir,
                 account,
                 &oauth_account,
+                write_keychain,
             );
         }
-        return write_prepared_account_bundle_to_dir(base_dir, account);
+        return write_prepared_account_bundle_to_dir_with_options(
+            base_dir,
+            account,
+            write_keychain,
+        );
     }
 
     let account = resolve_account_for_bundle_write(base_dir, account)?;
-    write_prepared_account_bundle_to_dir(base_dir, &account)
+    write_prepared_account_bundle_to_dir_with_options(base_dir, &account, write_keychain)
+}
+
+fn sha256_hex(content: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(content);
+    format!("{:x}", hasher.finalize())
+}
+
+fn build_bundle_hash(files: &[CodexProjectionFile]) -> String {
+    let mut hasher = Sha256::new();
+    for file in files {
+        hasher.update(file.relative_path.as_bytes());
+        hasher.update(b"\0");
+        hasher.update(file.sha256.as_bytes());
+        hasher.update(b"\0");
+    }
+    format!("{:x}", hasher.finalize())
+}
+
+pub(crate) fn build_projection_bundle_for_remote(
+    account: &CodexAccount,
+    existing_config_toml: Option<&str>,
+) -> Result<CodexAccountProjectionBundle, String> {
+    let temp_dir = std::env::temp_dir().join(format!(
+        "cockpit-codex-remote-bundle-{}-{}",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    ));
+    fs::create_dir_all(&temp_dir).map_err(|e| format!("创建 Codex 远程投影临时目录失败: {}", e))?;
+
+    let build_result = (|| {
+        if let Some(existing_config) = existing_config_toml {
+            write_string_atomic(&temp_dir.join(CODEX_CONFIG_FILE_NAME), existing_config)?;
+        }
+
+        write_account_bundle_to_dir_with_options(&temp_dir, account, false)?;
+
+        let mut files = Vec::new();
+        for (relative_path, mode) in [
+            ("auth.json", 0o600),
+            (CODEX_CONFIG_FILE_NAME, 0o600),
+            (CODEX_AUTH_PROJECTION_FILE_NAME, 0o600),
+        ] {
+            let path = temp_dir.join(relative_path);
+            let content = if path.exists() {
+                fs::read_to_string(&path)
+                    .map_err(|e| format!("读取 Codex 投影文件失败: {}: {}", relative_path, e))?
+            } else if relative_path == CODEX_CONFIG_FILE_NAME {
+                String::new()
+            } else {
+                return Err(format!("Codex 投影缺少必要文件: {}", relative_path));
+            };
+            let sha256 = sha256_hex(content.as_bytes());
+            files.push(CodexProjectionFile {
+                relative_path: relative_path.to_string(),
+                content,
+                mode,
+                sha256,
+            });
+        }
+
+        let bundle_hash = build_bundle_hash(&files);
+        Ok(CodexAccountProjectionBundle {
+            account_id: account.id.clone(),
+            account_email: account.email.clone(),
+            token_generation: account.token_generation,
+            files,
+            bundle_hash,
+        })
+    })();
+
+    if let Err(err) = fs::remove_dir_all(&temp_dir) {
+        logger::log_warn(&format!(
+            "[Codex SSH] 清理远程投影临时目录失败: path={}, error={}",
+            temp_dir.display(),
+            err
+        ));
+    }
+
+    build_result
 }
 
 fn configured_codex_wsl_config_dir() -> Option<PathBuf> {

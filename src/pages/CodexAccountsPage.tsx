@@ -126,6 +126,7 @@ import {
 } from "../components/codex/CodexSessionVisibilityRepairModal";
 import { CodexWakeupContent } from "../components/codex/CodexWakeupContent";
 import { CodexModelProviderManager } from "../components/codex/CodexModelProviderManager";
+import { CodexSshServersPanel } from "../components/codex/CodexSshServersPanel";
 import { CodexSpeedSelect } from "../components/codex/CodexSpeedSelect";
 import { QuickSettingsPopover } from "../components/QuickSettingsPopover";
 import { useProviderAccountsPage } from "../hooks/useProviderAccountsPage";
@@ -11140,7 +11141,7 @@ export function CodexAccountsPage() {
       <CodexOverviewTabsHeader
         active={activeTab}
         onTabChange={setActiveTab}
-        tabs={["overview", "providers", "wakeup", "instances", "sessions"]}
+        tabs={["overview", "providers", "ssh", "wakeup", "instances", "sessions"]}
       />
 
       {batchImportOpen && (
@@ -15191,6 +15192,8 @@ export function CodexAccountsPage() {
           }}
         />
       )}
+
+      {activeTab === "ssh" && <CodexSshServersPanel />}
 
       {activeTab === "wakeup" && (
         <CodexWakeupContent
