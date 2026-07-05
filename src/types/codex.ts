@@ -66,6 +66,26 @@ export interface CodexAccountNoteUpdate {
   phoneNumber?: string;
 }
 
+export interface CodexBatchDeleteError {
+  accountId: string;
+  error: string;
+}
+
+export type CodexBatchDeleteStatusState =
+  | 'running'
+  | 'paused'
+  | 'completed'
+  | 'failed';
+
+export interface CodexBatchDeleteJobStatus {
+  jobId: string;
+  status: CodexBatchDeleteStatusState;
+  total: number;
+  completed: number;
+  failed: number;
+  errors: CodexBatchDeleteError[];
+}
+
 export interface CodexQuotaErrorInfo {
   code?: string;
   message: string;
@@ -238,6 +258,7 @@ export interface CodexSessionVisibilityRepairInstanceList {
 
 export interface CodexSessionVisibilityRepairRequestOptions {
   mode?: CodexSessionVisibilityRepairMode;
+  dryRun?: boolean;
   targetProvider?: string | null;
   targetInstanceId?: string | null;
   repairInstanceIds?: string[] | null;
@@ -327,6 +348,7 @@ export interface CodexTrashedSessionRecord {
   title: string;
   cwd: string;
   deletedAt?: number | null;
+  sizeBytes: number;
   locationCount: number;
   locations: CodexTrashedSessionLocation[];
 }
@@ -336,6 +358,90 @@ export interface CodexSessionRestoreSummary {
   restoredSessionCount: number;
   restoredInstanceCount: number;
   message: string;
+}
+
+export interface CodexSessionTrashDeleteSummary {
+  requestedSessionCount: number;
+  deletedSessionCount: number;
+  deletedEntryCount: number;
+  freedSizeBytes: number;
+  message: string;
+}
+
+export interface CodexSessionExportSummary {
+  requestedSessionCount: number;
+  exportedSessionCount: number;
+  skippedSessionCount: number;
+  exportPath: string;
+  message: string;
+}
+
+export interface CodexSessionExportPreviewItem {
+  sessionId: string;
+  title: string;
+  cwd: string;
+  updatedAt?: number | null;
+  sizeBytes: number;
+  sourceInstanceId: string;
+  sourceInstanceName: string;
+}
+
+export interface CodexSessionExportPreview {
+  requestedSessionCount: number;
+  exportableSessionCount: number;
+  missingSessionCount: number;
+  totalSizeBytes: number;
+  items: CodexSessionExportPreviewItem[];
+}
+
+export type CodexSessionImportPreviewStatus =
+  | 'ready'
+  | 'duplicate'
+  | 'conflict'
+  | 'invalid';
+
+export interface CodexSessionImportPreviewItem {
+  sessionId: string;
+  title: string;
+  cwd: string;
+  updatedAt?: number | null;
+  sizeBytes: number;
+  status: CodexSessionImportPreviewStatus;
+  reason?: string | null;
+  existingInstanceNames: string[];
+}
+
+export interface CodexSessionImportPreview {
+  packageVersion: number;
+  exportedAt?: string | null;
+  importFilePath: string;
+  targetInstanceId: string;
+  targetInstanceName: string;
+  totalSessionCount: number;
+  importableSessionCount: number;
+  items: CodexSessionImportPreviewItem[];
+}
+
+export interface CodexSessionImportSummary {
+  requestedSessionCount: number;
+  importedSessionCount: number;
+  skippedSessionCount: number;
+  targetInstanceId: string;
+  targetInstanceName: string;
+  message: string;
+}
+
+export type CodexSessionTransferOperation = 'export' | 'import';
+
+export interface CodexSessionTransferProgress {
+  transferId: string;
+  operation: CodexSessionTransferOperation;
+  phase: string;
+  current: number;
+  total: number;
+  percent: number;
+  currentLabel?: string | null;
+  running: boolean;
 }
 
 type JsonRecord = Record<string, unknown>;

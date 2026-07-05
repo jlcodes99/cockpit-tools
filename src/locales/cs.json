@@ -788,7 +788,9 @@
       "claudeAppPath": "Cíl spuštění Claude Desktop",
       "claudeAppPathDesc": "Výchozí profil může použít cíl Microsoft Store; více instancí potřebuje skutečný Claude.exe.",
       "antigravityLaunchOnSwitch": "Spustit Antigravity IDE při přepnutí",
-      "antigravityLaunchOnSwitchDesc": "Po vypnutí přepnutí pouze zapíše data výchozího účtu Antigravity IDE a aplikaci nezavře, nespustí ani nerestartuje."
+      "antigravityLaunchOnSwitchDesc": "Po vypnutí přepnutí pouze zapíše data výchozího účtu Antigravity IDE a aplikaci nezavře, nespustí ani nerestartuje.",
+      "tokenKeeper": "Udržení auth",
+      "tokenKeeperDesc": "Obnovuje Tokeny účtů po malých dávkách jen před vypršením autorizace, čímž snižuje požadavky na pozadí u mnoha účtů."
     },
     "network": {
       "apiTitle": "Antigravity Cockpit API​",
@@ -1618,6 +1620,7 @@
     "restartRequiredAfterInstall": "Aktualizace je nainstalována. Dokončete přepnutí ručním restartem aplikace.",
     "stoppingApiService": "Zastavuji službu API...",
     "stopApiServiceFailed": "Službu API se nepodařilo zastavit. Nejprve ji zakažte a zkuste to znovu.",
+    "stopApiServiceFailedContinue": "Služba API se neukončila korektně. Přesto pokračuje restart...",
     "skipThisVersion": "Přeskočit tuto verzi",
     "skipFailed": "Tuto aktualizaci se nepodařilo přeskočit: {{error}}"
   },
@@ -1882,6 +1885,7 @@
       "refreshStatsSuccess": "Statistiky služby API byly obnoveny",
       "routingStrategy": {
         "auto": "Automaticky (doporučeno)",
+        "singleAccount": "Jeden účet",
         "quotaHighFirst": "Nejvyšší kvóta napřed",
         "quotaLowFirst": "Nejnižší kvóta napřed",
         "planHighFirst": "Nejvyšší tarif napřed",
@@ -2220,6 +2224,16 @@
       "accountSearchPlaceholder": "Hledat podle e-mailu...",
       "accountFilterEmpty": "Žádné odpovídající účty",
       "accountFilteredCount": "{{count}} účtů v aktuálním filtru",
+      "fullQuotaAction": "Probudit účty",
+      "fullQuotaActionTitle": "Otevře test probuzení účtů. Účty se výchoze řadí podle 5h kvóty od nejvyšší.",
+      "fullQuotaNoAccounts": "Aktuální seznam neobsahuje žádný OAuth účet vhodný k probuzení.",
+      "fullQuotaAccountsLabel": "Účty k probuzení",
+      "accountSort": {
+        "default": "Výchozí pořadí",
+        "hourly": "Podle 5h kvóty",
+        "weekly": "Podle týdenní kvóty",
+        "email": "Podle e-mailu"
+      },
       "testTitle": "Test probuzení Codexu",
       "testAccountsLabel": "Testovací účty",
       "testAccountsRequired": "Vyberte alespoň jeden testovací účet.",
@@ -2333,10 +2347,14 @@
         "collapse": "Sbalit",
         "repairVisibility": "Opravit viditelnost",
         "restoreSessions": "Obnovit relace",
+        "exportSessions": "Exportovat relace",
+        "importSessions": "Importovat relace",
         "copySessionId": "Kopírovat ID relace",
+        "openLocation": "Otevřít umístění",
         "selectAllSessions": "Vybrat všechny relace",
         "clearSelectedSessions": "Zrušit výběr",
-        "copyToInstance": "Kopírovat do instance"
+        "copyToInstance": "Kopírovat do instance",
+        "trash": "Koš"
       },
       "confirm": {
         "title": "Přesunout do koše",
@@ -2374,11 +2392,25 @@
       "locationRunning": " (spuštěno)",
       "untitled": "Nepojmenovaná relace",
       "restoreModal": {
-        "title": "Obnovit relace",
-        "hint": "Při obnovení se soubor rollout, řádek vlákna v SQLite a záznam session_index vrátí společně do původní instance.",
+        "title": "Koš",
+        "hint": "Relace v koši lze obnovit do původní instance nebo trvale odstranit a uvolnit místo na disku.",
         "emptyTitle": "Koš je prázdný",
         "emptyDesc": "Relace přesunuté do koše se zobrazí zde.",
-        "restoreAction": "Obnovit vybrané relace"
+        "restoreAction": "Obnovit vybrané relace",
+        "summary": "{{count}} položek, {{size}}",
+        "selectedSummary": "Vybráno {{count}}, {{size}}",
+        "selectAll": "Vybrat vše",
+        "clearSelected": "Zrušit výběr",
+        "emptyTrash": "Vysypat koš",
+        "itemSize": "Velikost {{size}}",
+        "deleteOne": "Trvale smazat",
+        "deleteSelected": "Smazat vybrané",
+        "pickDeleteOne": "Vyberte alespoň jednu relaci k trvalému smazání",
+        "deleteOneConfirm": "Trvale smazat tuto relaci? Akci nelze vrátit zpět. Odhad uvolněného místa: {{size}}.",
+        "deleteSelectedConfirm": "Trvale smazat vybraných {{count}} relací? Akci nelze vrátit zpět. Odhad uvolněného místa: {{size}}.",
+        "permanentDeleteTitle": "Trvalé smazání",
+        "permanentDeleteAction": "Trvale smazat",
+        "emptyTrashConfirm": "Vysypat koš? {{count}} relací bude trvale smazáno a nepůjde obnovit. Odhad uvolněného místa: {{size}}."
       },
       "targetModal": {
         "title": "Kopírovat do instance",
@@ -2440,7 +2472,90 @@
         "instanceScopeAll": "Všechny instance",
         "instanceScopeAllDesc": "Opraví všechny instance Codex při obnově více instancí.",
         "progressTitle": "Průběh opravy",
-        "start": "Opravit"
+        "start": "Opravit",
+        "previewing": "Připravuji náhled...",
+        "previewAgain": "Znovu zobrazit náhled",
+        "preview": "Náhled změn",
+        "previewFailedWithError": "Náhled opravy relací selhal: {{error}}",
+        "confirmRepair": "Potvrdit opravu"
+      },
+      "importModal": {
+        "title": "Import relací",
+        "hint": "Balíček relací importuje jen soubory rollout a položky session_index. Neobsahuje účty, tokeny, API klíče ani nastavení aplikace; relace se stejným ID v cílové instanci se přeskočí.",
+        "noTarget": "Není dostupná žádná instance Codex pro import",
+        "noPackage": "Nejprve vyberte balíček relací",
+        "pickOne": "Vyberte alespoň jednu importovatelnou relaci",
+        "totalCount": "{{count}} relací v balíčku",
+        "readyCount": "{{count}} importovatelných",
+        "selectReady": "Vybrat importovatelné",
+        "previewing": "Probíhá náhled balíčku relací...",
+        "existsIn": "Už existuje v: {{names}}",
+        "statusReady": "Připraveno",
+        "statusDuplicate": "Existuje",
+        "statusConflict": "Konflikt",
+        "statusInvalid": "Neplatné",
+        "confirm": "Importovat vybrané relace"
+      },
+      "transferModal": {
+        "exportTitle": "Exportovat relace",
+        "importTitle": "Importovat relace",
+        "minimize": "Minimalizovat",
+        "reopen": "Zobrazit průběh",
+        "clear": "Vyčistit",
+        "runningSummary": "Zpracovává se {{current}} z {{total}}",
+        "completedSummary": "Úloha dokončena",
+        "failedSummary": "Úloha selhala",
+        "current": "{{current}} z {{total}}",
+        "phase": {
+          "exportPrepare": "Příprava exportu...",
+          "exportCollect": "Shromažďování relací...",
+          "exportHash": "Kontrola souborů relací...",
+          "exportWrite": "Zápis balíčku relací...",
+          "importPrepare": "Příprava importu...",
+          "importRead": "Čtení balíčku relací...",
+          "importWrite": "Zápis cílové instance...",
+          "importRebuild": "Obnova oficiálního indexu relací...",
+          "done": "Úloha dokončena"
+        }
+      },
+      "exportModal": {
+        "title": "Exportovat relace",
+        "hint": "Před exportem zkontrolujte seznam relací, zdrojovou instanci a velikost souborů. Balíček obsahuje jen soubory rollout a položky session_index, ne účty, tokeny, API klíče ani nastavení aplikace.",
+        "previewing": "Náhled relací...",
+        "selectedCount": "Vybráno {{count}}",
+        "exportableCount": "K exportu {{count}}",
+        "missingCount": "Chybí {{count}}",
+        "totalSize": "Celkem {{size}}",
+        "exportPath": "Cesta exportu",
+        "pathUnset": "Cesta není vybrána",
+        "choosePath": "Vybrat cestu",
+        "missingNotice": "{{count}} relací už není v aktuální sadě instancí a budou přeskočeny.",
+        "sourceInstance": "Zdroj: {{name}}",
+        "emptyTitle": "Žádné relace k exportu",
+        "noPreview": "Nejprve dokončete náhled",
+        "noExportable": "Žádné relace k exportu",
+        "pickPath": "Vyberte cestu exportu",
+        "confirm": "Exportovat",
+        "selectedExportCount": "Vybráno {{selected}} / exportovatelných {{total}}",
+        "selectedSize": "Velikost výběru {{selected}} / celkem {{total}}",
+        "removedNotice": "{{count}} odebráno z tohoto exportního seznamu",
+        "restoreRemoved": "Obnovit seznam",
+        "sourceLabel": "Zdroj",
+        "allSources": "Všechny zdroje",
+        "selectionLabel": "Výběr",
+        "filterAll": "Vše",
+        "filterSelected": "Vybrané",
+        "filterUnselected": "Nevybrané",
+        "visibleCount": "Zobrazeno {{visible}} / {{total}}",
+        "selectVisible": "Vybrat filtr",
+        "clearVisible": "Zrušit filtr",
+        "keepVisibleOnly": "Ponechat filtr",
+        "removeVisible": "Odebrat filtr",
+        "removeUnchecked": "Odebrat nevybrané",
+        "selectItem": "Vybrat relaci pro export",
+        "removeItem": "Odebrat",
+        "emptyFilteredTitle": "Žádné odpovídající relace",
+        "emptyFilteredDesc": "Upravte hledání, zdroj nebo stav výběru a zkuste to znovu."
       }
     },
     "api": {
@@ -3000,7 +3115,9 @@
         "pricingUnset": "Nenast.",
         "pricingReset": "Obnovit",
         "pricingSaved": "Ceny uloženy",
-        "pricingInvalid": "Ceny musí být čísla větší nebo rovna 0"
+        "pricingInvalid": "Ceny musí být čísla větší nebo rovna 0",
+        "pricingReprice": "Přepočítat historii",
+        "pricingRepriced": "Historie byla přepočítána podle aktuálních cen"
       },
       "keys": {
         "policyTitle": "Zásady modelů",
@@ -3147,7 +3264,11 @@
       "selectedCount": "Vybráno {{count}}/{{total}}",
       "selectAllAccounts": "Vybrat všechny účty",
       "selectReady": "Vybrat účty OK",
-      "clearSelection": "Zrušit výběr"
+      "clearSelection": "Zrušit výběr",
+      "hiddenTask": "Hromadný import Codex",
+      "taskRunning": "Zpracovává se {{current}} / {{total}}",
+      "taskPreview": "Náhledů připraveno: {{total}}",
+      "reopen": "Zobrazit úlohu"
     },
     "autoRepairMode": {
       "label": "Logika auto opravy",
@@ -3167,6 +3288,22 @@
       "saveDraft": "Uložit čekající kartu",
       "authorizeAction": "Autorizovat",
       "cardHint": "Poznámky uloženy. Pro použití dokončete OAuth."
+    },
+    "batchDelete": {
+      "title": "Hromadné mazání Codex",
+      "running": "Maže se",
+      "paused": "Pozastaveno",
+      "failed": "Částečné selhání",
+      "completed": "Mazání dokončeno",
+      "preparing": "Příprava úlohy mazání...",
+      "retryFailed": "Opakovat chyby",
+      "pause": "Pozastavit",
+      "resume": "Pokračovat",
+      "clear": "Vyčistit",
+      "summary": "Zpracováno {{completed}} / {{total}}, selhalo {{failed}}",
+      "started": "Spuštěno mazání {{count}} účtů Codex",
+      "pollFailed": "Nelze obnovit průběh hromadného mazání: {{error}}",
+      "actionFailed": "Akce hromadného mazání selhala: {{error}}"
     }
   },
   "githubCopilot": {

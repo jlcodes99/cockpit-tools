@@ -788,7 +788,9 @@
       "claudeAppPath": "Claude-Desktop-Startziel",
       "claudeAppPathDesc": "Das Standardprofil kann ein Microsoft-Store-Ziel verwenden; Mehrfachinstanzen benötigen die echte Claude.exe.",
       "antigravityLaunchOnSwitch": "Antigravity IDE beim Wechsel starten",
-      "antigravityLaunchOnSwitchDesc": "Wenn deaktiviert, schreibt der Wechsel nur die Standard-Kontodaten von Antigravity IDE und schließt, startet oder startet die App nicht neu."
+      "antigravityLaunchOnSwitchDesc": "Wenn deaktiviert, schreibt der Wechsel nur die Standard-Kontodaten von Antigravity IDE und schließt, startet oder startet die App nicht neu.",
+      "tokenKeeper": "Auth-Erhaltung",
+      "tokenKeeperDesc": "Aktualisiert Konto-Token nur kurz vor Ablauf in kleinen Gruppen und reduziert so Hintergrundanfragen bei vielen Konten."
     },
     "network": {
       "apiTitle": "Antigravity-Cockpit-API",
@@ -1618,6 +1620,7 @@
     "restartRequiredAfterInstall": "Das Update ist installiert. Starten Sie die App manuell neu, um den Wechsel abzuschließen.",
     "stoppingApiService": "API-Dienst wird gestoppt...",
     "stopApiServiceFailed": "Der API-Dienst konnte nicht beendet werden. Deaktivieren Sie ihn zuerst und versuchen Sie es erneut.",
+    "stopApiServiceFailedContinue": "Der API-Dienst wurde nicht sauber beendet. Neustart wird fortgesetzt...",
     "skipThisVersion": "Diese Version überspringen",
     "skipFailed": "Dieses Update konnte nicht übersprungen werden: {{error}}"
   },
@@ -1882,6 +1885,7 @@
       "refreshStatsSuccess": "API-Service-Statistiken wurden aktualisiert",
       "routingStrategy": {
         "auto": "Automatisch (empfohlen)",
+        "singleAccount": "Einzelkonto",
         "quotaHighFirst": "Hohe Quote zuerst",
         "quotaLowFirst": "Niedrige Quote zuerst",
         "planHighFirst": "Hohes Abo zuerst",
@@ -2220,6 +2224,16 @@
       "accountSearchPlaceholder": "E-Mail suchen...",
       "accountFilterEmpty": "Keine passenden Konten",
       "accountFilteredCount": "{{count}} Konten im aktuellen Filter",
+      "fullQuotaAction": "Konten wecken",
+      "fullQuotaActionTitle": "Öffnet den Konto-Wakeup-Test. Konten werden standardmäßig nach 5h-Kontingent absteigend sortiert.",
+      "fullQuotaNoAccounts": "Die aktuelle Liste enthält kein OAuth-Konto für Wakeup.",
+      "fullQuotaAccountsLabel": "Zu weckende Konten",
+      "accountSort": {
+        "default": "Standardreihenfolge",
+        "hourly": "Nach 5h-Kontingent",
+        "weekly": "Nach Wochenkontingent",
+        "email": "Nach E-Mail"
+      },
       "testTitle": "Codex-Wakeup testen",
       "testAccountsLabel": "Testkonten",
       "testAccountsRequired": "Bitte mindestens ein Testkonto auswählen.",
@@ -2333,10 +2347,14 @@
         "collapse": "Einklappen",
         "repairVisibility": "Sichtbarkeit reparieren",
         "restoreSessions": "Sitzungen wiederherstellen",
+        "exportSessions": "Sitzungen exportieren",
+        "importSessions": "Sitzungen importieren",
         "copySessionId": "Sitzungs-ID kopieren",
+        "openLocation": "Speicherort öffnen",
         "selectAllSessions": "Alle Sitzungen wählen",
         "clearSelectedSessions": "Auswahl aufheben",
-        "copyToInstance": "In Instanz kopieren"
+        "copyToInstance": "In Instanz kopieren",
+        "trash": "Papierkorb"
       },
       "confirm": {
         "title": "In den Papierkorb verschieben",
@@ -2374,11 +2392,25 @@
       "locationRunning": " (wird ausgeführt)",
       "untitled": "Unbenannte Sitzung",
       "restoreModal": {
-        "title": "Sitzungen wiederherstellen",
-        "hint": "Bei der Wiederherstellung werden die Rollout-Datei, die SQLite-Thread-Zeile und der session_index-Eintrag gemeinsam in die ursprüngliche Instanz zurückgelegt.",
+        "title": "Papierkorb",
+        "hint": "Sitzungen im Papierkorb können in die ursprüngliche Instanz wiederhergestellt oder endgültig gelöscht werden, um Speicherplatz freizugeben.",
         "emptyTitle": "Papierkorb ist leer",
         "emptyDesc": "In den Papierkorb verschobene Sitzungen erscheinen hier.",
-        "restoreAction": "Ausgewählte Sitzungen wiederherstellen"
+        "restoreAction": "Ausgewählte Sitzungen wiederherstellen",
+        "summary": "{{count}} Einträge, {{size}}",
+        "selectedSummary": "{{count}} ausgewählt, {{size}}",
+        "selectAll": "Alle wählen",
+        "clearSelected": "Abwählen",
+        "emptyTrash": "Papierkorb leeren",
+        "itemSize": "Größe {{size}}",
+        "deleteOne": "Endgültig löschen",
+        "deleteSelected": "Auswahl löschen",
+        "pickDeleteOne": "Wählen Sie mindestens eine Sitzung zum endgültigen Löschen aus",
+        "deleteOneConfirm": "Diese Sitzung endgültig löschen? Dies kann nicht rückgängig gemacht werden. Geschätzter Speichergewinn: {{size}}.",
+        "deleteSelectedConfirm": "Die ausgewählten {{count}} Sitzungen endgültig löschen? Dies kann nicht rückgängig gemacht werden. Geschätzter Speichergewinn: {{size}}.",
+        "permanentDeleteTitle": "Endgültig löschen",
+        "permanentDeleteAction": "Endgültig löschen",
+        "emptyTrashConfirm": "Papierkorb leeren? {{count}} Sitzungen werden endgültig gelöscht und können nicht wiederhergestellt werden. Geschätzter Speichergewinn: {{size}}."
       },
       "targetModal": {
         "title": "In Instanz kopieren",
@@ -2440,7 +2472,90 @@
         "instanceScopeAll": "Alle Instanzen",
         "instanceScopeAllDesc": "Repariert alle Codex-Instanzen bei gemeinsamer Wiederherstellung.",
         "progressTitle": "Reparaturfortschritt",
-        "start": "Reparatur starten"
+        "start": "Reparatur starten",
+        "previewing": "Vorschau wird erstellt...",
+        "previewAgain": "Vorschau erneut anzeigen",
+        "preview": "Änderungen prüfen",
+        "previewFailedWithError": "Vorschau der Sitzungsreparatur fehlgeschlagen: {{error}}",
+        "confirmRepair": "Reparatur bestätigen"
+      },
+      "importModal": {
+        "title": "Sitzungen importieren",
+        "hint": "Sitzungspakete importieren nur rollout-Dateien und session_index-Einträge. Konten, Token, API-Schlüssel und App-Einstellungen sind nicht enthalten; Sitzungen mit derselben ID in der Zielinstanz werden übersprungen.",
+        "noTarget": "Keine Codex-Instanz für den Import verfügbar",
+        "noPackage": "Wähle zuerst ein Sitzungspaket aus",
+        "pickOne": "Wähle mindestens eine importierbare Sitzung aus",
+        "totalCount": "{{count}} Sitzungen im Paket",
+        "readyCount": "{{count}} importierbar",
+        "selectReady": "Importierbare wählen",
+        "previewing": "Sitzungspaket wird geprüft...",
+        "existsIn": "Bereits vorhanden in: {{names}}",
+        "statusReady": "Bereit",
+        "statusDuplicate": "Vorhanden",
+        "statusConflict": "Konflikt",
+        "statusInvalid": "Ungültig",
+        "confirm": "Ausgewählte Sitzungen importieren"
+      },
+      "transferModal": {
+        "exportTitle": "Sitzungen exportieren",
+        "importTitle": "Sitzungen importieren",
+        "minimize": "Minimieren",
+        "reopen": "Fortschritt",
+        "clear": "Leeren",
+        "runningSummary": "{{current}} von {{total}} wird verarbeitet",
+        "completedSummary": "Aufgabe abgeschlossen",
+        "failedSummary": "Aufgabe fehlgeschlagen",
+        "current": "{{current}} von {{total}}",
+        "phase": {
+          "exportPrepare": "Export wird vorbereitet...",
+          "exportCollect": "Sitzungen werden gesammelt...",
+          "exportHash": "Sitzungsdateien werden geprüft...",
+          "exportWrite": "Sitzungspaket wird geschrieben...",
+          "importPrepare": "Import wird vorbereitet...",
+          "importRead": "Sitzungspaket wird gelesen...",
+          "importWrite": "Zielinstanz wird geschrieben...",
+          "importRebuild": "Offizieller Sitzungsindex wird aktualisiert...",
+          "done": "Aufgabe abgeschlossen"
+        }
+      },
+      "exportModal": {
+        "title": "Sitzungen exportieren",
+        "hint": "Prüfe vor dem Export Sitzungsliste, Quellinstanz und Dateigröße. Sitzungspakete enthalten nur rollout-Dateien und session_index-Einträge, keine Konten, Token, API-Schlüssel oder App-Einstellungen.",
+        "previewing": "Sitzungen werden geprüft...",
+        "selectedCount": "{{count}} ausgewählt",
+        "exportableCount": "{{count}} exportierbar",
+        "missingCount": "{{count}} fehlen",
+        "totalSize": "Gesamt {{size}}",
+        "exportPath": "Exportpfad",
+        "pathUnset": "Kein Exportpfad gewählt",
+        "choosePath": "Pfad wählen",
+        "missingNotice": "{{count}} Sitzung(en) sind nicht mehr in der aktuellen Instanzliste und werden übersprungen.",
+        "sourceInstance": "Quelle: {{name}}",
+        "emptyTitle": "Keine exportierbaren Sitzungen",
+        "noPreview": "Exportvorschau zuerst abschließen",
+        "noExportable": "Keine Sitzungen exportierbar",
+        "pickPath": "Exportpfad wählen",
+        "confirm": "Exportieren",
+        "selectedExportCount": "Ausgewählt {{selected}} / exportierbar {{total}}",
+        "selectedSize": "Auswahlgröße {{selected}} / gesamt {{total}}",
+        "removedNotice": "{{count}} aus dieser Exportliste entfernt",
+        "restoreRemoved": "Liste wiederherstellen",
+        "sourceLabel": "Quelle",
+        "allSources": "Alle Quellen",
+        "selectionLabel": "Auswahl",
+        "filterAll": "Alle",
+        "filterSelected": "Gewählt",
+        "filterUnselected": "Nicht gewählt",
+        "visibleCount": "Angezeigt {{visible}} / {{total}}",
+        "selectVisible": "Gefilterte wählen",
+        "clearVisible": "Gefilterte abwählen",
+        "keepVisibleOnly": "Nur Filter behalten",
+        "removeVisible": "Gefilterte entfernen",
+        "removeUnchecked": "Nicht gewählte entfernen",
+        "selectItem": "Sitzung für Export wählen",
+        "removeItem": "Entfernen",
+        "emptyFilteredTitle": "Keine passenden Sitzungen",
+        "emptyFilteredDesc": "Suche, Quelle oder Auswahlstatus anpassen und erneut versuchen."
       }
     },
     "api": {
@@ -3000,7 +3115,9 @@
         "pricingUnset": "Nicht gesetzt",
         "pricingReset": "Zurücksetzen",
         "pricingSaved": "Preise gespeichert",
-        "pricingInvalid": "Preise müssen Zahlen größer oder gleich 0 sein"
+        "pricingInvalid": "Preise müssen Zahlen größer oder gleich 0 sein",
+        "pricingReprice": "Historie neu berechnen",
+        "pricingRepriced": "Historische Werte wurden mit aktuellen Preisen neu berechnet"
       },
       "keys": {
         "policyTitle": "Modellrichtlinie",
@@ -3147,7 +3264,11 @@
       "selectedCount": "Ausgewählt {{count}}/{{total}}",
       "selectAllAccounts": "Alle Konten wählen",
       "selectReady": "OK-Konten wählen",
-      "clearSelection": "Auswahl löschen"
+      "clearSelection": "Auswahl löschen",
+      "hiddenTask": "Codex-Stapelimport",
+      "taskRunning": "{{current}} / {{total}} wird verarbeitet",
+      "taskPreview": "{{total}} Vorschauobjekt(e) bereit",
+      "reopen": "Aufgabe anzeigen"
     },
     "autoRepairMode": {
       "label": "Auto-Reparaturlogik",
@@ -3167,6 +3288,22 @@
       "saveDraft": "Ausstehende Karte speichern",
       "authorizeAction": "Autorisieren",
       "cardHint": "Notizen gespeichert. Nach OAuth ist das Konto nutzbar."
+    },
+    "batchDelete": {
+      "title": "Codex-Massenlöschung",
+      "running": "Löscht",
+      "paused": "Pausiert",
+      "failed": "Teilweise fehlgeschlagen",
+      "completed": "Löschen abgeschlossen",
+      "preparing": "Löschauftrag wird vorbereitet...",
+      "retryFailed": "Fehler erneut versuchen",
+      "pause": "Pausieren",
+      "resume": "Fortsetzen",
+      "clear": "Leeren",
+      "summary": "{{completed}} / {{total}} verarbeitet, {{failed}} fehlgeschlagen",
+      "started": "Löschen von {{count}} Codex-Konto/Konten gestartet",
+      "pollFailed": "Fortschritt der Massenlöschung konnte nicht aktualisiert werden: {{error}}",
+      "actionFailed": "Aktion zur Massenlöschung fehlgeschlagen: {{error}}"
     }
   },
   "githubCopilot": {

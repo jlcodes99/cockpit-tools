@@ -907,11 +907,17 @@ function MainApp() {
         `应用重启前已关闭 Codex API 服务监听: enabled=${Boolean(state.collection?.enabled)}, running=${state.running}`,
       );
     } catch (error) {
+      const compactError = sanitizeUpdaterErrorMessage(error);
       writeUpdateLog(
         'warn',
-        `应用重启前关闭 Codex API 服务监听失败，已中止本次重启: error=${sanitizeUpdaterErrorMessage(error)}`,
+        `应用重启前关闭 Codex API 服务监听失败，将继续重启: error=${compactError}`,
       );
-      throw error;
+      setUpdateRetryStatus(
+        t(
+          'update_notification.stopApiServiceFailedContinue',
+          'API 服务未正常关闭，将继续重启...',
+        ),
+      );
     }
   }, [t, writeUpdateLog]);
 
@@ -2277,11 +2283,16 @@ function MainApp() {
         );
         if (jumpInfo) {
           console.log('[App] Version jump detected:', jumpInfo.previous_version, '->', jumpInfo.current_version);
+          (
+            window as Window & {
+              __agtoolsVersionJumpModalRequestedAt?: number;
+            }
+          ).__agtoolsVersionJumpModalRequestedAt = performance.now();
           setVersionJumpInfo(jumpInfo);
-          setShowVersionJumpNotification(false);
+          setShowVersionJumpNotification(true);
           requestAnimationFrame(() => {
             console.log(
-              `[StartupPerf][VersionJump] first frame after collapsed version jump entry in ${(performance.now() - versionJumpStartedAt).toFixed(2)}ms`,
+              `[StartupPerf][VersionJump] first frame after opening version jump modal in ${(performance.now() - versionJumpStartedAt).toFixed(2)}ms`,
             );
           });
         }
@@ -3555,7 +3566,6 @@ function MainApp() {
         updateActionState={updateAction.state}
         updateProgress={updateAction.progress}
         onUpdateActionClick={handleQuickUpdateActionClick}
-        versionJumpAvailable={Boolean(versionJumpInfo)}
         updateRemindersEnabled={updateRemindersEnabled}
         sponsorEntryVisible={sponsorEntryVisible}
         onOpenLogViewer={() => setShowLogViewer(true)}

@@ -111,6 +111,8 @@ pub struct GeneralConfig {
     pub floating_card_always_on_top: bool,
     /// 是否启用应用开机自启动
     pub app_auto_launch_enabled: bool,
+    /// 是否启用后台账号授权保活
+    pub token_keeper_enabled: bool,
     /// 是否在应用启动后触发 Antigravity IDE 唤醒
     pub antigravity_startup_wakeup_enabled: bool,
     /// Antigravity IDE 启动后唤醒延时（秒）
@@ -1961,6 +1963,7 @@ pub fn save_network_config(
         startup_minimized: current.startup_minimized,
         floating_card_always_on_top: current.floating_card_always_on_top,
         app_auto_launch_enabled: current.app_auto_launch_enabled,
+        token_keeper_enabled: current.token_keeper_enabled,
         antigravity_startup_wakeup_enabled: current.antigravity_startup_wakeup_enabled,
         antigravity_startup_wakeup_delay_seconds: current.antigravity_startup_wakeup_delay_seconds,
         codex_startup_wakeup_enabled: current.codex_startup_wakeup_enabled,
@@ -2280,6 +2283,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         startup_minimized: user_config.startup_minimized,
         floating_card_always_on_top: user_config.floating_card_always_on_top,
         app_auto_launch_enabled,
+        token_keeper_enabled: user_config.token_keeper_enabled,
         antigravity_startup_wakeup_enabled: user_config.antigravity_startup_wakeup_enabled,
         antigravity_startup_wakeup_delay_seconds: sanitize_startup_wakeup_delay_seconds(
             user_config.antigravity_startup_wakeup_delay_seconds,
@@ -2418,6 +2422,7 @@ pub fn save_general_config(
     startup_minimized: Option<bool>,
     floating_card_always_on_top: Option<bool>,
     app_auto_launch_enabled: Option<bool>,
+    token_keeper_enabled: Option<bool>,
     antigravity_startup_wakeup_enabled: Option<bool>,
     antigravity_startup_wakeup_delay_seconds: Option<i32>,
     codex_startup_wakeup_enabled: Option<bool>,
@@ -2568,6 +2573,8 @@ pub fn save_general_config(
         floating_card_always_on_top.unwrap_or(current.floating_card_always_on_top);
     let app_auto_launch_enabled_value =
         app_auto_launch_enabled.unwrap_or(current.app_auto_launch_enabled);
+    let token_keeper_enabled_value = token_keeper_enabled.unwrap_or(current.token_keeper_enabled);
+    let token_keeper_enabled_changed = current.token_keeper_enabled != token_keeper_enabled_value;
     let antigravity_startup_wakeup_enabled_value =
         antigravity_startup_wakeup_enabled.unwrap_or(current.antigravity_startup_wakeup_enabled);
     let antigravity_startup_wakeup_delay_seconds_value = sanitize_startup_wakeup_delay_seconds(
@@ -2657,6 +2664,7 @@ pub fn save_general_config(
         startup_minimized: startup_minimized_value,
         floating_card_always_on_top: floating_card_always_on_top_value,
         app_auto_launch_enabled: app_auto_launch_enabled_value,
+        token_keeper_enabled: token_keeper_enabled_value,
         antigravity_startup_wakeup_enabled: antigravity_startup_wakeup_enabled_value,
         antigravity_startup_wakeup_delay_seconds: antigravity_startup_wakeup_delay_seconds_value,
         codex_startup_wakeup_enabled: codex_startup_wakeup_enabled_value,
@@ -2810,6 +2818,13 @@ pub fn save_general_config(
     };
 
     config::save_user_config(&new_config)?;
+
+    if token_keeper_enabled_changed {
+        modules::provider_token_keeper::notify_config_changed(
+            app.clone(),
+            token_keeper_enabled_value,
+        );
+    }
 
     if current_app_auto_launch_enabled != app_auto_launch_enabled_value {
         apply_app_auto_launch_enabled(&app, app_auto_launch_enabled_value)?;
@@ -2976,8 +2991,8 @@ pub fn scan_app_launch_targets(
 ) -> Result<Vec<modules::process::AppLaunchCandidate>, String> {
     match app.as_str() {
         "antigravity" | "antigravity_ide" | "antigravity_legacy" | "codex" | "claude"
-        | "vscode" | "windsurf" | "kiro" | "cursor" | "codebuddy" | "codebuddy_cn"
-        | "qoder" | "trae" | "workbuddy" | "zed" | "opencode" => {}
+        | "vscode" | "windsurf" | "kiro" | "cursor" | "codebuddy" | "codebuddy_cn" | "qoder"
+        | "trae" | "workbuddy" | "zed" | "opencode" => {}
         _ => return Err("未知应用类型".to_string()),
     }
 
@@ -2987,16 +3002,18 @@ pub fn scan_app_launch_targets(
         .filter(|value| !value.is_empty());
 
     if app == "claude" {
-        return Ok(modules::claude_instance::scan_claude_desktop_launch_targets(roots)
-            .into_iter()
-            .map(|candidate| modules::process::AppLaunchCandidate {
-                target_type: candidate.target_type,
-                label: candidate.label,
-                target: candidate.target,
-                source: candidate.source,
-                supports_multi_instance: candidate.supports_multi_instance,
-            })
-            .collect());
+        return Ok(
+            modules::claude_instance::scan_claude_desktop_launch_targets(roots)
+                .into_iter()
+                .map(|candidate| modules::process::AppLaunchCandidate {
+                    target_type: candidate.target_type,
+                    label: candidate.label,
+                    target: candidate.target,
+                    source: candidate.source,
+                    supports_multi_instance: candidate.supports_multi_instance,
+                })
+                .collect(),
+        );
     }
 
     modules::process::scan_app_launch_targets(app.as_str(), roots)

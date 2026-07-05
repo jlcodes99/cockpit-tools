@@ -788,7 +788,9 @@
       "claudeAppPath": "Destino de inicio de Claude Desktop",
       "claudeAppPathDesc": "El perfil predeterminado puede usar un destino de Microsoft Store; las instancias múltiples necesitan el Claude.exe real.",
       "antigravityLaunchOnSwitch": "Iniciar Antigravity IDE al cambiar",
-      "antigravityLaunchOnSwitchDesc": "Si está desactivado, el cambio solo escribe los datos de la cuenta predeterminada de Antigravity IDE y no cierra, inicia ni reinicia la app."
+      "antigravityLaunchOnSwitchDesc": "Si está desactivado, el cambio solo escribe los datos de la cuenta predeterminada de Antigravity IDE y no cierra, inicia ni reinicia la app.",
+      "tokenKeeper": "Conservar auth",
+      "tokenKeeperDesc": "Actualiza los tokens de cuenta por lotes pequeños solo cuando la autorización está por vencer, reduciendo las solicitudes en segundo plano."
     },
     "network": {
       "apiTitle": "API de cabina antigravedad",
@@ -1618,6 +1620,7 @@
     "restartRequiredAfterInstall": "La actualización ya está instalada. Reinicia la aplicación manualmente para completar el cambio.",
     "stoppingApiService": "Deteniendo servicio API...",
     "stopApiServiceFailed": "No se pudo detener el servicio API. Desactívalo primero e inténtalo de nuevo.",
+    "stopApiServiceFailedContinue": "El servicio API no se cerró correctamente. Reiniciando de todos modos...",
     "skipThisVersion": "Omitir esta versión",
     "skipFailed": "No se pudo omitir esta actualización: {{error}}"
   },
@@ -1882,6 +1885,7 @@
       "refreshStatsSuccess": "Se actualizaron las estadísticas del servicio API",
       "routingStrategy": {
         "auto": "Automático (recomendado)",
+        "singleAccount": "Una cuenta",
         "quotaHighFirst": "Cuota alta primero",
         "quotaLowFirst": "Cuota baja primero",
         "planHighFirst": "Plan alto primero",
@@ -2220,6 +2224,16 @@
       "accountSearchPlaceholder": "Buscar correo...",
       "accountFilterEmpty": "No hay cuentas coincidentes",
       "accountFilteredCount": "{{count}} cuentas en el filtro actual",
+      "fullQuotaAction": "Activar cuentas",
+      "fullQuotaActionTitle": "Abre la prueba de activación de cuentas. Por defecto se ordenan por cuota de 5h de mayor a menor.",
+      "fullQuotaNoAccounts": "La lista actual no tiene cuentas OAuth disponibles para activar.",
+      "fullQuotaAccountsLabel": "Cuentas para activar",
+      "accountSort": {
+        "default": "Orden predeterminado",
+        "hourly": "Por cuota de 5h",
+        "weekly": "Por cuota semanal",
+        "email": "Por correo"
+      },
       "testTitle": "Probar activación de Codex",
       "testAccountsLabel": "Cuentas de prueba",
       "testAccountsRequired": "Selecciona al menos una cuenta de prueba.",
@@ -2333,10 +2347,14 @@
         "collapse": "Contraer",
         "repairVisibility": "Reparar visibilidad",
         "restoreSessions": "Restaurar sesiones",
+        "exportSessions": "Exportar sesiones",
+        "importSessions": "Importar sesiones",
         "copySessionId": "Copiar ID de sesión",
+        "openLocation": "Abrir ubicación",
         "selectAllSessions": "Seleccionar sesiones",
         "clearSelectedSessions": "Deseleccionar",
-        "copyToInstance": "Copiar a instancia"
+        "copyToInstance": "Copiar a instancia",
+        "trash": "Papelera"
       },
       "confirm": {
         "title": "Mover a la papelera",
@@ -2374,11 +2392,25 @@
       "locationRunning": " (en ejecución)",
       "untitled": "Sesión sin título",
       "restoreModal": {
-        "title": "Restaurar sesiones",
-        "hint": "Al restaurar, el archivo rollout, la fila del hilo en SQLite y la entrada de session_index vuelven juntos a la instancia original.",
+        "title": "Papelera",
+        "hint": "Las sesiones de la papelera se pueden restaurar a la instancia original o eliminar definitivamente para liberar espacio.",
         "emptyTitle": "La papelera está vacía",
         "emptyDesc": "Las sesiones movidas a la papelera aparecerán aquí.",
-        "restoreAction": "Restaurar sesiones seleccionadas"
+        "restoreAction": "Restaurar sesiones seleccionadas",
+        "summary": "{{count}} elementos, {{size}}",
+        "selectedSummary": "{{count}} seleccionados, {{size}}",
+        "selectAll": "Seleccionar todo",
+        "clearSelected": "Deseleccionar",
+        "emptyTrash": "Vaciar papelera",
+        "itemSize": "Tamaño {{size}}",
+        "deleteOne": "Eliminar definitivo",
+        "deleteSelected": "Eliminar selección",
+        "pickDeleteOne": "Selecciona al menos una sesión para eliminar definitivamente",
+        "deleteOneConfirm": "¿Eliminar definitivamente esta sesión? No se puede deshacer. Espacio estimado liberado: {{size}}.",
+        "deleteSelectedConfirm": "¿Eliminar definitivamente las {{count}} sesiones seleccionadas? No se puede deshacer. Espacio estimado liberado: {{size}}.",
+        "permanentDeleteTitle": "Eliminar definitivamente",
+        "permanentDeleteAction": "Eliminar definitivo",
+        "emptyTrashConfirm": "¿Vaciar la papelera? {{count}} sesiones se eliminarán definitivamente y no se podrán restaurar. Espacio estimado liberado: {{size}}."
       },
       "targetModal": {
         "title": "Copiar a instancia",
@@ -2440,7 +2472,90 @@
         "instanceScopeAll": "Todas las instancias",
         "instanceScopeAllDesc": "Repara todas las instancias de Codex al restaurarlas juntas.",
         "progressTitle": "Progreso",
-        "start": "Reparar"
+        "start": "Reparar",
+        "previewing": "Generando vista previa...",
+        "previewAgain": "Volver a previsualizar",
+        "preview": "Previsualizar cambios",
+        "previewFailedWithError": "Error al previsualizar la reparación de sesiones: {{error}}",
+        "confirmRepair": "Confirmar reparación"
+      },
+      "importModal": {
+        "title": "Importar sesiones",
+        "hint": "El paquete de sesiones solo importa archivos rollout y entradas session_index. No incluye cuentas, tokens, API keys ni ajustes de la app; las sesiones con el mismo ID en la instancia destino se omiten.",
+        "noTarget": "No hay ninguna instancia Codex disponible para importar",
+        "noPackage": "Selecciona primero un paquete de sesiones",
+        "pickOne": "Selecciona al menos una sesión importable",
+        "totalCount": "{{count}} sesiones en el paquete",
+        "readyCount": "{{count}} importables",
+        "selectReady": "Seleccionar importables",
+        "previewing": "Previsualizando paquete de sesiones...",
+        "existsIn": "Ya existe en: {{names}}",
+        "statusReady": "Lista",
+        "statusDuplicate": "Existe",
+        "statusConflict": "Conflicto",
+        "statusInvalid": "No válida",
+        "confirm": "Importar sesiones seleccionadas"
+      },
+      "transferModal": {
+        "exportTitle": "Exportar sesiones",
+        "importTitle": "Importar sesiones",
+        "minimize": "Minimizar",
+        "reopen": "Ver progreso",
+        "clear": "Limpiar",
+        "runningSummary": "Procesando {{current}} de {{total}}",
+        "completedSummary": "Tarea completada",
+        "failedSummary": "Tarea fallida",
+        "current": "{{current}} de {{total}}",
+        "phase": {
+          "exportPrepare": "Preparando exportación...",
+          "exportCollect": "Recopilando sesiones...",
+          "exportHash": "Comprobando archivos de sesión...",
+          "exportWrite": "Escribiendo paquete de sesiones...",
+          "importPrepare": "Preparando importación...",
+          "importRead": "Leyendo paquete de sesiones...",
+          "importWrite": "Escribiendo instancia destino...",
+          "importRebuild": "Actualizando índice oficial de sesiones...",
+          "done": "Tarea completada"
+        }
+      },
+      "exportModal": {
+        "title": "Exportar sesiones",
+        "hint": "Revisa la lista de sesiones, la instancia de origen y el tamaño antes de exportar. Los paquetes solo incluyen archivos rollout y entradas session_index; no incluyen cuentas, tokens, claves API ni ajustes.",
+        "previewing": "Previsualizando sesiones...",
+        "selectedCount": "{{count}} seleccionadas",
+        "exportableCount": "{{count}} exportables",
+        "missingCount": "{{count}} faltantes",
+        "totalSize": "Tamaño total {{size}}",
+        "exportPath": "Ruta de exportación",
+        "pathUnset": "Ruta no seleccionada",
+        "choosePath": "Elegir ruta",
+        "missingNotice": "{{count}} sesión(es) ya no están en el conjunto de instancias actual y se omitirán.",
+        "sourceInstance": "Origen: {{name}}",
+        "emptyTitle": "No hay sesiones para exportar",
+        "noPreview": "Completa primero la vista previa",
+        "noExportable": "No hay sesiones exportables",
+        "pickPath": "Elige una ruta de exportación",
+        "confirm": "Exportar",
+        "selectedExportCount": "Seleccionadas {{selected}} / exportables {{total}}",
+        "selectedSize": "Tamaño elegido {{selected}} / total {{total}}",
+        "removedNotice": "{{count}} eliminadas de esta lista de exportación",
+        "restoreRemoved": "Restaurar lista",
+        "sourceLabel": "Origen",
+        "allSources": "Todos los orígenes",
+        "selectionLabel": "Selección",
+        "filterAll": "Todo",
+        "filterSelected": "Elegidas",
+        "filterUnselected": "Sin elegir",
+        "visibleCount": "Mostrando {{visible}} / {{total}}",
+        "selectVisible": "Elegir filtradas",
+        "clearVisible": "Quitar filtradas",
+        "keepVisibleOnly": "Conservar filtro",
+        "removeVisible": "Retirar filtro",
+        "removeUnchecked": "Retirar no elegidas",
+        "selectItem": "Elegir sesión para exportar",
+        "removeItem": "Retirar",
+        "emptyFilteredTitle": "Sin sesiones coincidentes",
+        "emptyFilteredDesc": "Ajusta búsqueda, origen o selección e inténtalo de nuevo."
       }
     },
     "api": {
@@ -3000,7 +3115,9 @@
         "pricingUnset": "Sin ajustar",
         "pricingReset": "Restablecer",
         "pricingSaved": "Precios guardados",
-        "pricingInvalid": "Los precios deben ser números mayores o iguales que 0"
+        "pricingInvalid": "Los precios deben ser números mayores o iguales que 0",
+        "pricingReprice": "Recalcular historial",
+        "pricingRepriced": "El historial se recalculó con los precios actuales"
       },
       "keys": {
         "policyTitle": "Política de modelos",
@@ -3147,7 +3264,11 @@
       "selectedCount": "Seleccionadas {{count}}/{{total}}",
       "selectAllAccounts": "Seleccionar todas",
       "selectReady": "Seleccionar correctas",
-      "clearSelection": "Borrar selección"
+      "clearSelection": "Borrar selección",
+      "hiddenTask": "Importación por lote de Codex",
+      "taskRunning": "Procesando {{current}} / {{total}}",
+      "taskPreview": "{{total}} vista(s) previa(s) listas",
+      "reopen": "Ver tarea"
     },
     "autoRepairMode": {
       "label": "Lógica de autorreparación",
@@ -3167,6 +3288,22 @@
       "saveDraft": "Guardar tarjeta pendiente",
       "authorizeAction": "Autorizar",
       "cardHint": "Notas guardadas. Completa OAuth para usar esta cuenta."
+    },
+    "batchDelete": {
+      "title": "Eliminación por lote de Codex",
+      "running": "Eliminando",
+      "paused": "En pausa",
+      "failed": "Fallo parcial",
+      "completed": "Eliminación completa",
+      "preparing": "Preparando tarea de eliminación...",
+      "retryFailed": "Reintentar fallidos",
+      "pause": "Pausar",
+      "resume": "Continuar",
+      "clear": "Limpiar",
+      "summary": "{{completed}} / {{total}} procesados, {{failed}} fallidos",
+      "started": "Se inició la eliminación de {{count}} cuenta(s) Codex",
+      "pollFailed": "No se pudo actualizar el progreso de eliminación: {{error}}",
+      "actionFailed": "Falló la acción de eliminación por lote: {{error}}"
     }
   },
   "githubCopilot": {

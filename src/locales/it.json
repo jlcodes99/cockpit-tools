@@ -788,7 +788,9 @@
       "claudeAppPath": "Destinazione di avvio Claude Desktop",
       "claudeAppPathDesc": "Il profilo predefinito può usare una destinazione Microsoft Store; le istanze multiple richiedono il vero Claude.exe.",
       "antigravityLaunchOnSwitch": "Avvia Antigravity IDE al cambio",
-      "antigravityLaunchOnSwitchDesc": "Se disattivato, il cambio scrive solo i dati dell’account predefinito di Antigravity IDE e non chiude, avvia o riavvia l’app."
+      "antigravityLaunchOnSwitchDesc": "Se disattivato, il cambio scrive solo i dati dell’account predefinito di Antigravity IDE e non chiude, avvia o riavvia l’app.",
+      "tokenKeeper": "Auth sempre attiva",
+      "tokenKeeperDesc": "Aggiorna i token degli account in piccoli gruppi solo quando l’autorizzazione sta per scadere, riducendo le richieste in background."
     },
     "network": {
       "apiTitle": "API della cabina di pilotaggio antigravità",
@@ -1618,6 +1620,7 @@
     "restartRequiredAfterInstall": "L'aggiornamento è installato. Riavvia manualmente l'app per completare il passaggio.",
     "stoppingApiService": "Arresto del servizio API...",
     "stopApiServiceFailed": "Impossibile arrestare il servizio API. Disattivalo prima e riprova.",
+    "stopApiServiceFailedContinue": "Il servizio API non si è chiuso correttamente. Riavvio comunque...",
     "skipThisVersion": "Salta questa versione",
     "skipFailed": "Impossibile saltare questo aggiornamento: {{error}}"
   },
@@ -1882,6 +1885,7 @@
       "refreshStatsSuccess": "Le statistiche del servizio API sono state aggiornate",
       "routingStrategy": {
         "auto": "Automatico (consigliato)",
+        "singleAccount": "Account singolo",
         "quotaHighFirst": "Quota alta prima",
         "quotaLowFirst": "Quota bassa prima",
         "planHighFirst": "Piano alto prima",
@@ -2220,6 +2224,16 @@
       "accountSearchPlaceholder": "Cerca email...",
       "accountFilterEmpty": "Nessun account corrispondente",
       "accountFilteredCount": "{{count}} account nel filtro corrente",
+      "fullQuotaAction": "Risveglia account",
+      "fullQuotaActionTitle": "Apre il test di risveglio account. Gli account sono ordinati per quota 5h decrescente per impostazione predefinita.",
+      "fullQuotaNoAccounts": "L'elenco corrente non contiene account OAuth disponibili per il risveglio.",
+      "fullQuotaAccountsLabel": "Account da risvegliare",
+      "accountSort": {
+        "default": "Ordine predefinito",
+        "hourly": "Per quota 5h",
+        "weekly": "Per quota settimanale",
+        "email": "Per email"
+      },
       "testTitle": "Test risveglio Codex",
       "testAccountsLabel": "Account di test",
       "testAccountsRequired": "Seleziona almeno un account di test.",
@@ -2333,10 +2347,14 @@
         "collapse": "Comprimi",
         "repairVisibility": "Ripara visibilità",
         "restoreSessions": "Ripristina sessioni",
+        "exportSessions": "Esporta sessioni",
+        "importSessions": "Importa sessioni",
         "copySessionId": "Copia ID sessione",
+        "openLocation": "Apri posizione",
         "selectAllSessions": "Seleziona sessioni",
         "clearSelectedSessions": "Deseleziona",
-        "copyToInstance": "Copia in istanza"
+        "copyToInstance": "Copia in istanza",
+        "trash": "Cestino"
       },
       "confirm": {
         "title": "Sposta nel cestino",
@@ -2374,11 +2392,25 @@
       "locationRunning": " (in esecuzione)",
       "untitled": "Sessione senza titolo",
       "restoreModal": {
-        "title": "Ripristina sessioni",
-        "hint": "Con il ripristino, il file rollout, la riga del thread SQLite e la voce session_index tornano insieme nell'istanza originale.",
+        "title": "Cestino",
+        "hint": "Le sessioni nel cestino possono essere ripristinate nell’istanza originale o eliminate definitivamente per liberare spazio su disco.",
         "emptyTitle": "Il cestino è vuoto",
         "emptyDesc": "Le sessioni spostate nel cestino appariranno qui.",
-        "restoreAction": "Ripristina le sessioni selezionate"
+        "restoreAction": "Ripristina le sessioni selezionate",
+        "summary": "{{count}} elementi, {{size}}",
+        "selectedSummary": "{{count}} selezionati, {{size}}",
+        "selectAll": "Seleziona tutto",
+        "clearSelected": "Deseleziona",
+        "emptyTrash": "Svuota cestino",
+        "itemSize": "Dimensione {{size}}",
+        "deleteOne": "Elimina definitivamente",
+        "deleteSelected": "Elimina selezione",
+        "pickDeleteOne": "Seleziona almeno una sessione da eliminare definitivamente",
+        "deleteOneConfirm": "Eliminare definitivamente questa sessione? L’azione non può essere annullata. Spazio stimato liberato: {{size}}.",
+        "deleteSelectedConfirm": "Eliminare definitivamente le {{count}} sessioni selezionate? L’azione non può essere annullata. Spazio stimato liberato: {{size}}.",
+        "permanentDeleteTitle": "Eliminazione definitiva",
+        "permanentDeleteAction": "Elimina definitivamente",
+        "emptyTrashConfirm": "Svuotare il cestino? {{count}} sessioni saranno eliminate definitivamente e non potranno essere ripristinate. Spazio stimato liberato: {{size}}."
       },
       "targetModal": {
         "title": "Copia in istanza",
@@ -2440,7 +2472,90 @@
         "instanceScopeAll": "Tutte le istanze",
         "instanceScopeAllDesc": "Ripara tutte le istanze Codex durante il ripristino condiviso.",
         "progressTitle": "Avanzamento",
-        "start": "Ripara"
+        "start": "Ripara",
+        "previewing": "Anteprima in corso...",
+        "previewAgain": "Ripeti anteprima",
+        "preview": "Anteprima modifiche",
+        "previewFailedWithError": "Anteprima della riparazione sessioni non riuscita: {{error}}",
+        "confirmRepair": "Conferma riparazione"
+      },
+      "importModal": {
+        "title": "Importa sessioni",
+        "hint": "I pacchetti sessione importano solo file rollout e voci session_index. Account, token, API key e impostazioni dell’app non sono inclusi; le sessioni con lo stesso ID già presenti nell’istanza target vengono saltate.",
+        "noTarget": "Nessuna istanza Codex disponibile per l’importazione",
+        "noPackage": "Seleziona prima un pacchetto sessione",
+        "pickOne": "Seleziona almeno una sessione importabile",
+        "totalCount": "{{count}} sessioni nel pacchetto",
+        "readyCount": "{{count}} importabili",
+        "selectReady": "Seleziona importabili",
+        "previewing": "Anteprima del pacchetto sessione...",
+        "existsIn": "Già presente in: {{names}}",
+        "statusReady": "Pronta",
+        "statusDuplicate": "Esiste",
+        "statusConflict": "Conflitto",
+        "statusInvalid": "Non valida",
+        "confirm": "Importa sessioni selezionate"
+      },
+      "transferModal": {
+        "exportTitle": "Esporta sessioni",
+        "importTitle": "Importa sessioni",
+        "minimize": "Riduci",
+        "reopen": "Vedi avanzamento",
+        "clear": "Pulisci",
+        "runningSummary": "Elaborazione {{current}} di {{total}}",
+        "completedSummary": "Attività completata",
+        "failedSummary": "Attività non riuscita",
+        "current": "{{current}} di {{total}}",
+        "phase": {
+          "exportPrepare": "Preparazione esportazione...",
+          "exportCollect": "Raccolta sessioni...",
+          "exportHash": "Controllo file sessione...",
+          "exportWrite": "Scrittura pacchetto sessioni...",
+          "importPrepare": "Preparazione importazione...",
+          "importRead": "Lettura pacchetto sessioni...",
+          "importWrite": "Scrittura istanza di destinazione...",
+          "importRebuild": "Aggiornamento indice ufficiale sessioni...",
+          "done": "Attività completata"
+        }
+      },
+      "exportModal": {
+        "title": "Esporta sessioni",
+        "hint": "Controlla elenco, istanza di origine e dimensione prima di esportare. I pacchetti includono solo file rollout e voci session_index, non account, token, chiavi API o impostazioni.",
+        "previewing": "Anteprima sessioni...",
+        "selectedCount": "{{count}} selezionate",
+        "exportableCount": "{{count}} esportabili",
+        "missingCount": "{{count}} mancanti",
+        "totalSize": "Totale {{size}}",
+        "exportPath": "Percorso export",
+        "pathUnset": "Nessun percorso scelto",
+        "choosePath": "Scegli percorso",
+        "missingNotice": "{{count}} sessione/i non sono più nelle istanze correnti e saranno saltate.",
+        "sourceInstance": "Origine: {{name}}",
+        "emptyTitle": "Nessuna sessione esportabile",
+        "noPreview": "Completa prima l’anteprima",
+        "noExportable": "Nessuna sessione esportabile",
+        "pickPath": "Scegli un percorso",
+        "confirm": "Esporta",
+        "selectedExportCount": "Selezionate {{selected}} / esportabili {{total}}",
+        "selectedSize": "Dimensione scelta {{selected}} / totale {{total}}",
+        "removedNotice": "{{count}} rimosse da questo elenco di esportazione",
+        "restoreRemoved": "Ripristina elenco",
+        "sourceLabel": "Origine",
+        "allSources": "Tutte le origini",
+        "selectionLabel": "Selezione",
+        "filterAll": "Tutte",
+        "filterSelected": "Selezionate",
+        "filterUnselected": "Non selezionate",
+        "visibleCount": "Visibili {{visible}} / {{total}}",
+        "selectVisible": "Seleziona filtro",
+        "clearVisible": "Deseleziona filtro",
+        "keepVisibleOnly": "Tieni filtro",
+        "removeVisible": "Rimuovi filtro",
+        "removeUnchecked": "Rimuovi non scelte",
+        "selectItem": "Seleziona sessione da esportare",
+        "removeItem": "Rimuovi",
+        "emptyFilteredTitle": "Nessuna sessione trovata",
+        "emptyFilteredDesc": "Modifica ricerca, origine o stato di selezione e riprova."
       }
     },
     "api": {
@@ -3000,7 +3115,9 @@
         "pricingUnset": "Non impostato",
         "pricingReset": "Ripristina",
         "pricingSaved": "Prezzi salvati",
-        "pricingInvalid": "I prezzi devono essere numeri maggiori o uguali a 0"
+        "pricingInvalid": "I prezzi devono essere numeri maggiori o uguali a 0",
+        "pricingReprice": "Ricalcola cronologia",
+        "pricingRepriced": "Le stime storiche sono state ricalcolate con i prezzi attuali"
       },
       "keys": {
         "policyTitle": "Criterio modelli",
@@ -3147,7 +3264,11 @@
       "selectedCount": "Selezionati {{count}}/{{total}}",
       "selectAllAccounts": "Seleziona tutti",
       "selectReady": "Seleziona account OK",
-      "clearSelection": "Cancella selezione"
+      "clearSelection": "Cancella selezione",
+      "hiddenTask": "Importazione batch Codex",
+      "taskRunning": "Elaborazione {{current}} / {{total}}",
+      "taskPreview": "{{total}} anteprime pronte",
+      "reopen": "Vedi attività"
     },
     "autoRepairMode": {
       "label": "Logica autoriparazione",
@@ -3167,6 +3288,22 @@
       "saveDraft": "Salva scheda in attesa",
       "authorizeAction": "Autorizza",
       "cardHint": "Note salvate. Completa OAuth per usare questo account."
+    },
+    "batchDelete": {
+      "title": "Eliminazione batch Codex",
+      "running": "Eliminazione",
+      "paused": "In pausa",
+      "failed": "Errore parziale",
+      "completed": "Eliminazione completata",
+      "preparing": "Preparazione attività di eliminazione...",
+      "retryFailed": "Riprova falliti",
+      "pause": "Pausa",
+      "resume": "Riprendi",
+      "clear": "Pulisci",
+      "summary": "{{completed}} / {{total}} elaborati, {{failed}} non riusciti",
+      "started": "Avviata eliminazione di {{count}} account Codex",
+      "pollFailed": "Impossibile aggiornare l’avanzamento eliminazione: {{error}}",
+      "actionFailed": "Azione di eliminazione batch non riuscita: {{error}}"
     }
   },
   "githubCopilot": {

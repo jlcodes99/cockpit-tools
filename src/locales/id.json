@@ -834,7 +834,9 @@
       "claudeAppPath": "Target peluncuran Claude Desktop",
       "claudeAppPathDesc": "Profil default dapat memakai target Microsoft Store; profil multi-instans membutuhkan Claude.exe asli.",
       "antigravityLaunchOnSwitch": "Jalankan Antigravity IDE saat beralih",
-      "antigravityLaunchOnSwitchDesc": "Jika nonaktif, perpindahan hanya menulis data akun default Antigravity IDE dan tidak menutup, menjalankan, atau memulai ulang aplikasi."
+      "antigravityLaunchOnSwitchDesc": "Jika nonaktif, perpindahan hanya menulis data akun default Antigravity IDE dan tidak menutup, menjalankan, atau memulai ulang aplikasi.",
+      "tokenKeeper": "Jaga auth",
+      "tokenKeeperDesc": "Menyegarkan Token akun dalam batch kecil hanya saat otorisasi hampir kedaluwarsa, sehingga mengurangi permintaan latar belakang."
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -1665,7 +1667,8 @@
     "installFailed": "Instalasi sistem gagal. Coba lagi nanti atau unduh secara manual.",
     "restartRequiredAfterInstall": "Pembaruan terpasang. Mulai ulang aplikasi secara manual untuk menyelesaikan peralihan.",
     "stoppingApiService": "Menghentikan layanan API...",
-    "stopApiServiceFailed": "Layanan API tidak dapat dihentikan. Nonaktifkan dulu, lalu coba lagi."
+    "stopApiServiceFailed": "Layanan API tidak dapat dihentikan. Nonaktifkan dulu, lalu coba lagi.",
+    "stopApiServiceFailedContinue": "Layanan API tidak berhenti dengan benar. Tetap melanjutkan mulai ulang..."
   },
   "closeDialog": {
     "title": "Tutup Jendela",
@@ -1931,6 +1934,7 @@
       "refreshStatsSuccess": "Statistik layanan API telah disegarkan",
       "routingStrategy": {
         "auto": "Otomatis (Disarankan)",
+        "singleAccount": "Satu akun",
         "quotaHighFirst": "Kuota Tinggi Dulu",
         "quotaLowFirst": "Kuota Rendah Dulu",
         "planHighFirst": "Paket Tinggi Dulu",
@@ -2400,6 +2404,16 @@
       "accountSearchPlaceholder": "Cari email...",
       "accountFilterEmpty": "Tidak ada akun yang cocok",
       "accountFilteredCount": "{{count}} akun dalam filter saat ini",
+      "fullQuotaAction": "Wake akun",
+      "fullQuotaActionTitle": "Buka tes wakeup akun. Akun diurutkan berdasarkan kuota 5 jam dari tinggi ke rendah secara default.",
+      "fullQuotaNoAccounts": "Daftar saat ini tidak memiliki akun OAuth yang bisa di-wakeup.",
+      "fullQuotaAccountsLabel": "Akun untuk wakeup",
+      "accountSort": {
+        "default": "Urutan default",
+        "hourly": "Menurut kuota 5 jam",
+        "weekly": "Menurut kuota mingguan",
+        "email": "Menurut email"
+      },
       "testTitle": "Tes wakeup Codex",
       "testAccountsLabel": "Akun tes",
       "testAccountsRequired": "Silakan pilih setidaknya satu akun tes.",
@@ -2496,10 +2510,14 @@
         "collapse": "Ciutkan",
         "repairVisibility": "Perbaiki visibilitas",
         "restoreSessions": "Pulihkan sesi",
+        "exportSessions": "Ekspor sesi",
+        "importSessions": "Impor sesi",
         "copySessionId": "Salin ID sesi",
+        "openLocation": "Buka lokasi",
         "selectAllSessions": "Pilih semua sesi",
         "clearSelectedSessions": "Batal pilih",
-        "copyToInstance": "Salin ke instans"
+        "copyToInstance": "Salin ke instans",
+        "trash": "Sampah"
       },
       "confirm": {
         "title": "Pindahkan ke Sampah",
@@ -2537,11 +2555,25 @@
       "locationRunning": " (berjalan)",
       "untitled": "Sesi tanpa judul",
       "restoreModal": {
-        "title": "Pulihkan sesi",
-        "hint": "Saat dipulihkan, file rollout, baris thread SQLite, dan entri session_index akan dikembalikan bersama ke instance asal.",
+        "title": "Sampah",
+        "hint": "Sesi di Sampah dapat dipulihkan ke instans asal atau dihapus permanen untuk mengosongkan ruang disk.",
         "emptyTitle": "Trash kosong",
         "emptyDesc": "Sesi yang dipindahkan ke Trash akan muncul di sini.",
-        "restoreAction": "Pulihkan sesi terpilih"
+        "restoreAction": "Pulihkan sesi terpilih",
+        "summary": "{{count}} item, {{size}}",
+        "selectedSummary": "{{count}} dipilih, {{size}}",
+        "selectAll": "Pilih semua",
+        "clearSelected": "Batal pilih",
+        "emptyTrash": "Kosongkan Sampah",
+        "itemSize": "Ukuran {{size}}",
+        "deleteOne": "Hapus permanen",
+        "deleteSelected": "Hapus pilihan",
+        "pickDeleteOne": "Pilih setidaknya satu sesi untuk dihapus permanen",
+        "deleteOneConfirm": "Hapus permanen sesi ini? Tindakan ini tidak dapat dibatalkan. Perkiraan ruang bebas: {{size}}.",
+        "deleteSelectedConfirm": "Hapus permanen {{count}} sesi yang dipilih? Tindakan ini tidak dapat dibatalkan. Perkiraan ruang bebas: {{size}}.",
+        "permanentDeleteTitle": "Hapus permanen",
+        "permanentDeleteAction": "Hapus permanen",
+        "emptyTrashConfirm": "Kosongkan Sampah? {{count}} sesi akan dihapus permanen dan tidak dapat dipulihkan. Perkiraan ruang bebas: {{size}}."
       },
       "targetModal": {
         "title": "Salin ke instans",
@@ -2603,7 +2635,90 @@
         "instanceScopeAll": "Semua instans",
         "instanceScopeAllDesc": "Memperbaiki semua instans Codex saat pemulihan bersama.",
         "progressTitle": "Progres perbaikan",
-        "start": "Perbaiki"
+        "start": "Perbaiki",
+        "previewing": "Membuat pratinjau...",
+        "previewAgain": "Pratinjau ulang",
+        "preview": "Pratinjau perubahan",
+        "previewFailedWithError": "Pratinjau perbaikan sesi gagal: {{error}}",
+        "confirmRepair": "Konfirmasi perbaikan"
+      },
+      "importModal": {
+        "title": "Impor sesi",
+        "hint": "Paket sesi hanya mengimpor file rollout dan entri session_index. Akun, token, API key, dan pengaturan aplikasi tidak disertakan; sesi dengan ID yang sama di instance target akan dilewati.",
+        "noTarget": "Tidak ada instance Codex yang tersedia untuk impor",
+        "noPackage": "Pilih paket sesi terlebih dahulu",
+        "pickOne": "Pilih setidaknya satu sesi yang dapat diimpor",
+        "totalCount": "{{count}} sesi dalam paket",
+        "readyCount": "{{count}} dapat diimpor",
+        "selectReady": "Pilih yang dapat diimpor",
+        "previewing": "Mempratinjau paket sesi...",
+        "existsIn": "Sudah ada di: {{names}}",
+        "statusReady": "Siap",
+        "statusDuplicate": "Ada",
+        "statusConflict": "Konflik",
+        "statusInvalid": "Tidak valid",
+        "confirm": "Impor sesi terpilih"
+      },
+      "transferModal": {
+        "exportTitle": "Ekspor sesi",
+        "importTitle": "Impor sesi",
+        "minimize": "Minimalkan",
+        "reopen": "Lihat progres",
+        "clear": "Bersihkan",
+        "runningSummary": "Memproses {{current}} dari {{total}}",
+        "completedSummary": "Tugas selesai",
+        "failedSummary": "Tugas gagal",
+        "current": "{{current}} dari {{total}}",
+        "phase": {
+          "exportPrepare": "Menyiapkan ekspor...",
+          "exportCollect": "Mengumpulkan sesi...",
+          "exportHash": "Memeriksa file sesi...",
+          "exportWrite": "Menulis paket sesi...",
+          "importPrepare": "Menyiapkan impor...",
+          "importRead": "Membaca paket sesi...",
+          "importWrite": "Menulis instance tujuan...",
+          "importRebuild": "Memperbarui indeks sesi resmi...",
+          "done": "Tugas selesai"
+        }
+      },
+      "exportModal": {
+        "title": "Ekspor sesi",
+        "hint": "Tinjau daftar sesi, instance sumber, dan ukuran file sebelum mengekspor. Paket hanya berisi file rollout dan entri session_index, bukan akun, token, kunci API, atau pengaturan aplikasi.",
+        "previewing": "Mempratinjau sesi...",
+        "selectedCount": "{{count}} dipilih",
+        "exportableCount": "{{count}} bisa diekspor",
+        "missingCount": "{{count}} hilang",
+        "totalSize": "Ukuran total {{size}}",
+        "exportPath": "Lokasi ekspor",
+        "pathUnset": "Lokasi belum dipilih",
+        "choosePath": "Pilih lokasi",
+        "missingNotice": "{{count}} sesi tidak lagi ada di kumpulan instance saat ini dan akan dilewati.",
+        "sourceInstance": "Sumber: {{name}}",
+        "emptyTitle": "Tidak ada sesi untuk diekspor",
+        "noPreview": "Selesaikan pratinjau dulu",
+        "noExportable": "Tidak ada sesi yang bisa diekspor",
+        "pickPath": "Pilih lokasi ekspor",
+        "confirm": "Ekspor",
+        "selectedExportCount": "Dipilih {{selected}} / bisa diekspor {{total}}",
+        "selectedSize": "Ukuran terpilih {{selected}} / total {{total}}",
+        "removedNotice": "{{count}} dihapus dari daftar ekspor ini",
+        "restoreRemoved": "Pulihkan daftar",
+        "sourceLabel": "Sumber",
+        "allSources": "Semua sumber",
+        "selectionLabel": "Pilihan",
+        "filterAll": "Semua",
+        "filterSelected": "Dipilih",
+        "filterUnselected": "Belum dipilih",
+        "visibleCount": "Tampil {{visible}} / {{total}}",
+        "selectVisible": "Pilih filter",
+        "clearVisible": "Hapus pilihan",
+        "keepVisibleOnly": "Simpan filter",
+        "removeVisible": "Keluarkan filter",
+        "removeUnchecked": "Keluarkan belum dipilih",
+        "selectItem": "Pilih sesi untuk ekspor",
+        "removeItem": "Keluarkan",
+        "emptyFilteredTitle": "Tidak ada sesi cocok",
+        "emptyFilteredDesc": "Ubah pencarian, sumber, atau status pilihan lalu coba lagi."
       }
     },
     "modelProviders": {
@@ -3046,7 +3161,9 @@
         "pricingUnset": "Belum diatur",
         "pricingReset": "Atur ulang",
         "pricingSaved": "Harga tersimpan",
-        "pricingInvalid": "Harga harus berupa angka lebih besar atau sama dengan 0"
+        "pricingInvalid": "Harga harus berupa angka lebih besar atau sama dengan 0",
+        "pricingReprice": "Hitung ulang riwayat",
+        "pricingRepriced": "Estimasi riwayat dihitung ulang dengan harga saat ini"
       },
       "keys": {
         "policyTitle": "Kebijakan Model",
@@ -3193,7 +3310,11 @@
       "selectedCount": "Dipilih {{count}}/{{total}}",
       "selectAllAccounts": "Pilih semua akun",
       "selectReady": "Pilih akun OK",
-      "clearSelection": "Hapus pilihan"
+      "clearSelection": "Hapus pilihan",
+      "hiddenTask": "Tugas impor massal Codex",
+      "taskRunning": "Memproses {{current}} / {{total}}",
+      "taskPreview": "{{total}} pratinjau siap",
+      "reopen": "Lihat tugas"
     },
     "autoRepairMode": {
       "label": "Logika perbaikan otomatis",
@@ -3213,6 +3334,22 @@
       "saveDraft": "Simpan kartu tertunda",
       "authorizeAction": "Otorisasi",
       "cardHint": "Catatan disimpan. Selesaikan OAuth untuk memakai akun ini."
+    },
+    "batchDelete": {
+      "title": "Hapus massal Codex",
+      "running": "Menghapus",
+      "paused": "Dijeda",
+      "failed": "Sebagian gagal",
+      "completed": "Penghapusan selesai",
+      "preparing": "Menyiapkan tugas hapus...",
+      "retryFailed": "Coba gagal",
+      "pause": "Jeda",
+      "resume": "Lanjut",
+      "clear": "Bersihkan",
+      "summary": "{{completed}} / {{total}} diproses, gagal {{failed}}",
+      "started": "Mulai menghapus {{count}} akun Codex",
+      "pollFailed": "Gagal memuat ulang progres hapus massal: {{error}}",
+      "actionFailed": "Aksi hapus massal gagal: {{error}}"
     }
   },
   "codebuddy": {

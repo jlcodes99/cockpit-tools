@@ -283,6 +283,8 @@ pub struct CodexAuthTokens {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexAccountIndex {
     pub version: String,
+    #[serde(default)]
+    pub detail_schema_version: u32,
     pub accounts: Vec<CodexAccountSummary>,
     pub current_account_id: Option<String>,
 }
@@ -303,6 +305,7 @@ impl CodexAccountIndex {
     pub fn new() -> Self {
         Self {
             version: "1.0".to_string(),
+            detail_schema_version: 2,
             accounts: Vec::new(),
             current_account_id: None,
         }

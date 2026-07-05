@@ -129,6 +129,10 @@ export async function updateCodexLocalAccessModelPricings(
   });
 }
 
+export async function repriceCodexLocalAccessRequestLogs(): Promise<CodexLocalAccessState> {
+  return await invoke("codex_local_access_reprice_request_logs");
+}
+
 export async function updateCodexLocalAccessRoutingOptions(payload: {
   sessionAffinity: boolean;
   sessionAffinityTtlMs: number;

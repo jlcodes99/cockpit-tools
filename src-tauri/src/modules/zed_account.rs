@@ -637,6 +637,24 @@ fn build_authorization_header(user_id: &str, access_token: &str) -> String {
     format!("{} {}", user_id.trim(), access_token.trim())
 }
 
+fn summarize_zed_error_body(body: &str) -> String {
+    const MAX_BODY_PREVIEW_CHARS: usize = 240;
+    let collapsed = body.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() {
+        return "<empty>".to_string();
+    }
+    let mut chars = collapsed.chars();
+    let preview = chars
+        .by_ref()
+        .take(MAX_BODY_PREVIEW_CHARS)
+        .collect::<String>();
+    if chars.next().is_some() {
+        format!("{}...", preview)
+    } else {
+        preview
+    }
+}
+
 async fn fetch_json(
     client: &reqwest::Client,
     authorization_header: &str,
@@ -655,10 +673,11 @@ async fn fetch_json(
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
         return Err(format!(
-            "请求 Zed 接口失败 ({}): status={}, body_len={}",
+            "请求 Zed 接口失败 ({}): status={}, body_len={}, body_preview={:?}",
             path,
             status,
-            body.len()
+            body.len(),
+            summarize_zed_error_body(&body)
         ));
     }
 
@@ -1538,4 +1557,31 @@ pub fn run_quota_alert_if_needed(
 
     crate::modules::account::dispatch_quota_alert(&payload);
     Ok(Some(payload))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::summarize_zed_error_body;
+
+    #[test]
+    fn summarize_zed_error_body_preserves_short_message() {
+        assert_eq!(summarize_zed_error_body("Unauthorized"), "Unauthorized");
+    }
+
+    #[test]
+    fn summarize_zed_error_body_collapses_whitespace() {
+        assert_eq!(
+            summarize_zed_error_body("  error:\n  invalid token\tplease retry  "),
+            "error: invalid token please retry"
+        );
+    }
+
+    #[test]
+    fn summarize_zed_error_body_handles_empty_and_long_body() {
+        assert_eq!(summarize_zed_error_body(" \n\t "), "<empty>");
+        let long = "a".repeat(260);
+        let preview = summarize_zed_error_body(&long);
+        assert_eq!(preview.len(), 243);
+        assert!(preview.ends_with("..."));
+    }
 }

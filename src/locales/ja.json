@@ -788,7 +788,9 @@
       "claudeAppPath": "Claude Desktop 起動ターゲット",
       "claudeAppPathDesc": "既定プロファイルは Microsoft Store ターゲットを使用できます。複数インスタンスには実際の Claude.exe が必要です。",
       "antigravityLaunchOnSwitch": "切り替え時に Antigravity IDE を起動",
-      "antigravityLaunchOnSwitchDesc": "オフにすると、切り替え時は Antigravity IDE の既定アカウントデータのみを書き込み、アプリの終了、起動、再起動は行いません。"
+      "antigravityLaunchOnSwitchDesc": "オフにすると、切り替え時は Antigravity IDE の既定アカウントデータのみを書き込み、アプリの終了、起動、再起動は行いません。",
+      "tokenKeeper": "認証の維持",
+      "tokenKeeperDesc": "認証の期限が近い場合だけアカウント Token を小分けに更新し、多数アカウント時のバックグラウンド要求を減らします。"
     },
     "network": {
       "apiTitle": "反重力コックピット API",
@@ -1618,6 +1620,7 @@
     "restartRequiredAfterInstall": "更新はインストール済みです。切り替えを完了するにはアプリを手動で再起動してください。",
     "stoppingApiService": "API サービスを停止中...",
     "stopApiServiceFailed": "API サービスを停止できませんでした。先に無効化してから再試行してください。",
+    "stopApiServiceFailedContinue": "API サービスは正常に停止しませんでした。再起動を続行します...",
     "skipThisVersion": "このバージョンをスキップ",
     "skipFailed": "この更新をスキップできませんでした: {{error}}"
   },
@@ -1882,6 +1885,7 @@
       "refreshStatsSuccess": "API サービスの統計を更新しました",
       "routingStrategy": {
         "auto": "自動（推奨）",
+        "singleAccount": "単一アカウント",
         "quotaHighFirst": "高クォータ優先",
         "quotaLowFirst": "低クォータ優先",
         "planHighFirst": "上位プラン優先",
@@ -2220,6 +2224,16 @@
       "accountSearchPlaceholder": "メールアドレスを検索...",
       "accountFilterEmpty": "一致するアカウントはありません",
       "accountFilteredCount": "現在のフィルター: {{count}} 件",
+      "fullQuotaAction": "アカウントを起動",
+      "fullQuotaActionTitle": "アカウントのウェイクアップテストを開きます。既定では 5h クォータの多い順に並びます。",
+      "fullQuotaNoAccounts": "現在の一覧にはウェイクアップ可能な OAuth アカウントがありません。",
+      "fullQuotaAccountsLabel": "起動するアカウント",
+      "accountSort": {
+        "default": "既定順",
+        "hourly": "5h クォータ順",
+        "weekly": "週クォータ順",
+        "email": "メール順"
+      },
       "testTitle": "Codex ウェイクアップをテスト",
       "testAccountsLabel": "テスト用アカウント",
       "testAccountsRequired": "少なくとも 1 つのテスト用アカウントを選択してください。",
@@ -2333,10 +2347,14 @@
         "collapse": "折りたたむ",
         "repairVisibility": "表示を修復",
         "restoreSessions": "セッションを復元",
+        "exportSessions": "セッションを書き出し",
+        "importSessions": "セッションを読み込み",
         "copySessionId": "セッション ID をコピー",
+        "openLocation": "場所を開く",
         "selectAllSessions": "全セッションを選択",
         "clearSelectedSessions": "選択解除",
-        "copyToInstance": "インスタンスへコピー"
+        "copyToInstance": "インスタンスへコピー",
+        "trash": "ゴミ箱"
       },
       "confirm": {
         "title": "ゴミ箱へ移動",
@@ -2374,11 +2392,25 @@
       "locationRunning": "（実行中）",
       "untitled": "無題のセッション",
       "restoreModal": {
-        "title": "セッションを復元",
-        "hint": "復元すると、rollout ファイル、SQLite のスレッド行、session_index の項目が元のインスタンスへまとめて戻されます。",
+        "title": "ゴミ箱",
+        "hint": "ゴミ箱内のセッションは元のインスタンスへ復元でき、完全に削除してディスク容量を空けることもできます。",
         "emptyTitle": "ゴミ箱は空です",
         "emptyDesc": "ゴミ箱へ移動したセッションはここに表示されます。",
-        "restoreAction": "選択したセッションを復元"
+        "restoreAction": "選択したセッションを復元",
+        "summary": "{{count}} 件、{{size}}",
+        "selectedSummary": "{{count}} 件選択、{{size}}",
+        "selectAll": "すべて選択",
+        "clearSelected": "選択解除",
+        "emptyTrash": "ゴミ箱を空にする",
+        "itemSize": "サイズ {{size}}",
+        "deleteOne": "完全に削除",
+        "deleteSelected": "選択を削除",
+        "pickDeleteOne": "完全に削除するセッションを少なくとも 1 件選択してください",
+        "deleteOneConfirm": "このセッションを完全に削除しますか？元に戻せません。解放予定容量: {{size}}。",
+        "deleteSelectedConfirm": "選択した {{count}} 件のセッションを完全に削除しますか？元に戻せません。解放予定容量: {{size}}。",
+        "permanentDeleteTitle": "完全に削除",
+        "permanentDeleteAction": "完全に削除",
+        "emptyTrashConfirm": "ゴミ箱を空にしますか？{{count}} 件のセッションが完全に削除され、復元できません。解放予定容量: {{size}}。"
       },
       "targetModal": {
         "title": "インスタンスへコピー",
@@ -2440,7 +2472,90 @@
         "instanceScopeAll": "全インスタンス",
         "instanceScopeAllDesc": "複数インスタンスをまとめて復元する場合にすべて修復します。",
         "progressTitle": "修復の進行状況",
-        "start": "修復を開始"
+        "start": "修復を開始",
+        "previewing": "プレビュー中...",
+        "previewAgain": "再プレビュー",
+        "preview": "変更をプレビュー",
+        "previewFailedWithError": "セッション修復のプレビューに失敗しました: {{error}}",
+        "confirmRepair": "修復を確定"
+      },
+      "importModal": {
+        "title": "セッションを読み込み",
+        "hint": "セッションパッケージは rollout ファイルと session_index 項目だけを読み込みます。アカウント、Token、API Key、アプリ設定は含まれません。同じ ID のセッションが対象インスタンスにある場合はスキップします。",
+        "noTarget": "読み込み可能な Codex インスタンスがありません",
+        "noPackage": "先にセッションパッケージを選択してください",
+        "pickOne": "読み込み可能なセッションを少なくとも 1 件選択してください",
+        "totalCount": "パッケージ内 {{count}} 件",
+        "readyCount": "読み込み可能 {{count}} 件",
+        "selectReady": "読み込み可能を選択",
+        "previewing": "セッションパッケージをプレビュー中...",
+        "existsIn": "既存: {{names}}",
+        "statusReady": "可能",
+        "statusDuplicate": "既存",
+        "statusConflict": "競合",
+        "statusInvalid": "無効",
+        "confirm": "選択したセッションを読み込み"
+      },
+      "transferModal": {
+        "exportTitle": "セッションを書き出し",
+        "importTitle": "セッションを読み込み",
+        "minimize": "最小化",
+        "reopen": "進行状況",
+        "clear": "クリア",
+        "runningSummary": "{{total}} 件中 {{current}} 件を処理中",
+        "completedSummary": "タスクが完了しました",
+        "failedSummary": "タスクに失敗しました",
+        "current": "{{total}} 件中 {{current}} 件",
+        "phase": {
+          "exportPrepare": "書き出しを準備中...",
+          "exportCollect": "セッションを収集中...",
+          "exportHash": "セッションファイルを確認中...",
+          "exportWrite": "セッションパッケージを書き込み中...",
+          "importPrepare": "読み込みを準備中...",
+          "importRead": "セッションパッケージを読み込み中...",
+          "importWrite": "対象インスタンスへ書き込み中...",
+          "importRebuild": "公式セッションインデックスを更新中...",
+          "done": "タスクが完了しました"
+        }
+      },
+      "exportModal": {
+        "title": "セッションを書き出し",
+        "hint": "書き出し前にセッション一覧、元インスタンス、ファイルサイズを確認できます。パッケージには rollout ファイルと session_index 項目のみ含まれ、アカウント、Token、API Key、アプリ設定は含まれません。",
+        "previewing": "セッションを確認中...",
+        "selectedCount": "{{count}} 件選択",
+        "exportableCount": "{{count}} 件書き出し可",
+        "missingCount": "{{count}} 件不足",
+        "totalSize": "合計 {{size}}",
+        "exportPath": "書き出し先",
+        "pathUnset": "書き出し先未選択",
+        "choosePath": "場所を選択",
+        "missingNotice": "{{count}} 件のセッションは現在のインスタンス集合にないためスキップされます。",
+        "sourceInstance": "元: {{name}}",
+        "emptyTitle": "書き出せるセッションなし",
+        "noPreview": "先にプレビューを完了してください",
+        "noExportable": "書き出せるセッションがありません",
+        "pickPath": "書き出し先を選択",
+        "confirm": "書き出し",
+        "selectedExportCount": "選択済み {{selected}} / 書き出し可能 {{total}}",
+        "selectedSize": "選択サイズ {{selected}} / 合計 {{total}}",
+        "removedNotice": "{{count}} 件を今回の書き出しリストから外しました",
+        "restoreRemoved": "リストを復元",
+        "sourceLabel": "ソース",
+        "allSources": "すべてのソース",
+        "selectionLabel": "選択",
+        "filterAll": "すべて",
+        "filterSelected": "選択済み",
+        "filterUnselected": "未選択",
+        "visibleCount": "表示中 {{visible}} / {{total}}",
+        "selectVisible": "表示分を選択",
+        "clearVisible": "表示分を解除",
+        "keepVisibleOnly": "表示分のみ残す",
+        "removeVisible": "表示分を外す",
+        "removeUnchecked": "未選択を外す",
+        "selectItem": "書き出す会話を選択",
+        "removeItem": "外す",
+        "emptyFilteredTitle": "一致する会話がありません",
+        "emptyFilteredDesc": "検索、ソース、選択状態を調整してください。"
       }
     },
     "api": {
@@ -3000,7 +3115,9 @@
         "pricingUnset": "未設定",
         "pricingReset": "リセット",
         "pricingSaved": "価格設定を保存しました",
-        "pricingInvalid": "価格は 0 以上の数値で入力してください"
+        "pricingInvalid": "価格は 0 以上の数値で入力してください",
+        "pricingReprice": "履歴を再計算",
+        "pricingRepriced": "履歴の見積もりを現在の価格で再計算しました"
       },
       "keys": {
         "policyTitle": "モデルポリシー",
@@ -3147,7 +3264,11 @@
       "selectedCount": "選択 {{count}}/{{total}}",
       "selectAllAccounts": "全アカウント選択",
       "selectReady": "正常アカウント選択",
-      "clearSelection": "選択解除"
+      "clearSelection": "選択解除",
+      "hiddenTask": "Codex 一括インポートタスク",
+      "taskRunning": "{{current}} / {{total}} 件を処理中",
+      "taskPreview": "{{total}} 件のプレビューを作成済み",
+      "reopen": "タスクを表示"
     },
     "autoRepairMode": {
       "label": "自動修復ロジック",
@@ -3167,6 +3288,22 @@
       "saveDraft": "認証待ちカードを保存",
       "authorizeAction": "認証して追加",
       "cardHint": "メモは保存済みです。OAuth 完了後に使用できます。"
+    },
+    "batchDelete": {
+      "title": "Codex 一括削除",
+      "running": "削除中",
+      "paused": "一時停止",
+      "failed": "一部失敗",
+      "completed": "削除完了",
+      "preparing": "削除タスクを準備中...",
+      "retryFailed": "失敗分を再試行",
+      "pause": "一時停止",
+      "resume": "再開",
+      "clear": "クリア",
+      "summary": "{{completed}} / {{total}} 件処理、失敗 {{failed}} 件",
+      "started": "{{count}} 件の Codex アカウント削除を開始しました",
+      "pollFailed": "一括削除の進行状況を更新できません: {{error}}",
+      "actionFailed": "一括削除操作に失敗しました: {{error}}"
     }
   },
   "githubCopilot": {

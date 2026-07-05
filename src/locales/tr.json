@@ -788,7 +788,9 @@
       "claudeAppPath": "Claude Desktop başlatma hedefi",
       "claudeAppPathDesc": "Varsayılan profil Microsoft Store hedefi kullanabilir; çoklu örnekler gerçek Claude.exe ister.",
       "antigravityLaunchOnSwitch": "Geçişte Antigravity IDE başlat",
-      "antigravityLaunchOnSwitchDesc": "Kapalıyken geçiş yalnızca varsayılan Antigravity IDE hesap verilerini yazar; uygulamayı kapatmaz, başlatmaz veya yeniden başlatmaz."
+      "antigravityLaunchOnSwitchDesc": "Kapalıyken geçiş yalnızca varsayılan Antigravity IDE hesap verilerini yazar; uygulamayı kapatmaz, başlatmaz veya yeniden başlatmaz.",
+      "tokenKeeper": "Auth canlı tutma",
+      "tokenKeeperDesc": "Yetki süresi dolmaya yaklaşınca hesap Tokenlarını küçük gruplar halinde yeniler ve çok hesaplı kullanımda arka plan isteklerini azaltır."
     },
     "network": {
       "apiTitle": "Yerçekimine Karşı Kokpit API'si",
@@ -1618,6 +1620,7 @@
     "restartRequiredAfterInstall": "Güncelleme yüklendi. Geçişi tamamlamak için uygulamayı manuel olarak yeniden başlatın.",
     "stoppingApiService": "API hizmeti durduruluyor...",
     "stopApiServiceFailed": "API hizmeti durdurulamadı. Önce devre dışı bırakıp tekrar deneyin.",
+    "stopApiServiceFailedContinue": "API hizmeti düzgün kapanmadı. Yine de yeniden başlatılıyor...",
     "skipThisVersion": "Bu sürümü atla",
     "skipFailed": "Bu güncelleme atlanamadı: {{error}}"
   },
@@ -1882,6 +1885,7 @@
       "refreshStatsSuccess": "API hizmeti istatistikleri yenilendi",
       "routingStrategy": {
         "auto": "Otomatik (Önerilen)",
+        "singleAccount": "Tek hesap",
         "quotaHighFirst": "Önce yüksek kota",
         "quotaLowFirst": "Önce düşük kota",
         "planHighFirst": "Önce yüksek plan",
@@ -2220,6 +2224,16 @@
       "accountSearchPlaceholder": "E-posta ara...",
       "accountFilterEmpty": "Eşleşen hesap yok",
       "accountFilteredCount": "Geçerli filtrede {{count}} hesap",
+      "fullQuotaAction": "Hesapları uyandır",
+      "fullQuotaActionTitle": "Hesap uyandırma testini açar. Hesaplar varsayılan olarak 5 saat kotasına göre yüksekten düşüğe sıralanır.",
+      "fullQuotaNoAccounts": "Geçerli listede uyandırılabilecek OAuth hesabı yok.",
+      "fullQuotaAccountsLabel": "Uyandırılacak hesaplar",
+      "accountSort": {
+        "default": "Varsayılan sıra",
+        "hourly": "5 saat kotasına göre",
+        "weekly": "Haftalık kotaya göre",
+        "email": "E-postaya göre"
+      },
       "testTitle": "Codex uyandırmasını test et",
       "testAccountsLabel": "Test hesapları",
       "testAccountsRequired": "Lütfen en az bir test hesabı seçin.",
@@ -2333,10 +2347,14 @@
         "collapse": "Daralt",
         "repairVisibility": "Görünürlüğü onar",
         "restoreSessions": "Oturumları geri yükle",
+        "exportSessions": "Oturumları dışa aktar",
+        "importSessions": "Oturumları içe aktar",
         "copySessionId": "Oturum kimliğini kopyala",
+        "openLocation": "Konumu aç",
         "selectAllSessions": "Tüm oturumları seç",
         "clearSelectedSessions": "Seçimi kaldır",
-        "copyToInstance": "Örneğe kopyala"
+        "copyToInstance": "Örneğe kopyala",
+        "trash": "Çöp kutusu"
       },
       "confirm": {
         "title": "Çöp kutusuna taşı",
@@ -2374,11 +2392,25 @@
       "locationRunning": " (çalışıyor)",
       "untitled": "Adsız oturum",
       "restoreModal": {
-        "title": "Oturumları geri yükle",
-        "hint": "Geri yükleme sırasında rollout dosyası, SQLite ileti satırı ve session_index girdisi birlikte özgün örneğe geri konur.",
+        "title": "Çöp kutusu",
+        "hint": "Çöp kutusundaki oturumlar özgün örneğe geri yüklenebilir veya disk alanı açmak için kalıcı olarak silinebilir.",
         "emptyTitle": "Çöp kutusu boş",
         "emptyDesc": "Çöp kutusuna taşınan oturumlar burada görünür.",
-        "restoreAction": "Seçili oturumları geri yükle"
+        "restoreAction": "Seçili oturumları geri yükle",
+        "summary": "{{count}} öğe, {{size}}",
+        "selectedSummary": "{{count}} seçili, {{size}}",
+        "selectAll": "Tümünü seç",
+        "clearSelected": "Seçimi kaldır",
+        "emptyTrash": "Çöpü boşalt",
+        "itemSize": "Boyut {{size}}",
+        "deleteOne": "Kalıcı sil",
+        "deleteSelected": "Seçileni sil",
+        "pickDeleteOne": "Kalıcı silmek için en az bir oturum seçin",
+        "deleteOneConfirm": "Bu oturum kalıcı olarak silinsin mi? Bu işlem geri alınamaz. Tahmini boşalacak alan: {{size}}.",
+        "deleteSelectedConfirm": "Seçili {{count}} oturum kalıcı olarak silinsin mi? Bu işlem geri alınamaz. Tahmini boşalacak alan: {{size}}.",
+        "permanentDeleteTitle": "Kalıcı silme",
+        "permanentDeleteAction": "Kalıcı sil",
+        "emptyTrashConfirm": "Çöp kutusu boşaltılsın mı? {{count}} oturum kalıcı olarak silinecek ve geri yüklenemeyecek. Tahmini boşalacak alan: {{size}}."
       },
       "targetModal": {
         "title": "Örneğe kopyala",
@@ -2440,7 +2472,90 @@
         "instanceScopeAll": "Tüm örnekler",
         "instanceScopeAllDesc": "Çoklu örnek durumunu geri yüklerken tüm Codex örneklerini onarır.",
         "progressTitle": "Onarım ilerlemesi",
-        "start": "Onar"
+        "start": "Onar",
+        "previewing": "Önizleme hazırlanıyor...",
+        "previewAgain": "Tekrar önizle",
+        "preview": "Değişiklikleri önizle",
+        "previewFailedWithError": "Oturum onarımı önizlemesi başarısız: {{error}}",
+        "confirmRepair": "Onarımı onayla"
+      },
+      "importModal": {
+        "title": "Oturumları içe aktar",
+        "hint": "Oturum paketleri yalnızca rollout dosyalarını ve session_index kayıtlarını içe aktarır. Hesaplar, tokenlar, API anahtarları ve uygulama ayarları dahil değildir; hedef örnekte aynı ID’ye sahip oturumlar atlanır.",
+        "noTarget": "İçe aktarma için kullanılabilir Codex örneği yok",
+        "noPackage": "Önce bir oturum paketi seçin",
+        "pickOne": "İçe aktarılabilir en az bir oturum seçin",
+        "totalCount": "Pakette {{count}} oturum",
+        "readyCount": "{{count}} içe aktarılabilir",
+        "selectReady": "Aktarılabilirleri seç",
+        "previewing": "Oturum paketi önizleniyor...",
+        "existsIn": "Zaten şurada: {{names}}",
+        "statusReady": "Hazır",
+        "statusDuplicate": "Var",
+        "statusConflict": "Çakışma",
+        "statusInvalid": "Geçersiz",
+        "confirm": "Seçili oturumları içe aktar"
+      },
+      "transferModal": {
+        "exportTitle": "Oturumları dışa aktar",
+        "importTitle": "Oturumları içe aktar",
+        "minimize": "Küçült",
+        "reopen": "İlerlemeyi gör",
+        "clear": "Temizle",
+        "runningSummary": "{{current}} / {{total}} işleniyor",
+        "completedSummary": "Görev tamamlandı",
+        "failedSummary": "Görev başarısız",
+        "current": "{{current}} / {{total}} tamam",
+        "phase": {
+          "exportPrepare": "Dışa aktarma hazırlanıyor...",
+          "exportCollect": "Oturumlar toplanıyor...",
+          "exportHash": "Oturum dosyaları denetleniyor...",
+          "exportWrite": "Oturum paketi yazılıyor...",
+          "importPrepare": "İçe aktarma hazırlanıyor...",
+          "importRead": "Oturum paketi okunuyor...",
+          "importWrite": "Hedef örnek yazılıyor...",
+          "importRebuild": "Resmi oturum dizini yenileniyor...",
+          "done": "Görev tamamlandı"
+        }
+      },
+      "exportModal": {
+        "title": "Oturumları dışa aktar",
+        "hint": "Dışa aktarmadan önce oturum listesini, kaynak örneği ve dosya boyutunu inceleyin. Paket yalnızca rollout dosyaları ve session_index kayıtlarını içerir; hesap, token, API anahtarı veya uygulama ayarı içermez.",
+        "previewing": "Oturumlar önizleniyor...",
+        "selectedCount": "{{count}} seçildi",
+        "exportableCount": "{{count}} dışa aktarılabilir",
+        "missingCount": "{{count}} eksik",
+        "totalSize": "Toplam {{size}}",
+        "exportPath": "Dışa aktarma yolu",
+        "pathUnset": "Yol seçilmedi",
+        "choosePath": "Yol seç",
+        "missingNotice": "{{count}} oturum artık geçerli örnek kümesinde değil ve atlanacak.",
+        "sourceInstance": "Kaynak: {{name}}",
+        "emptyTitle": "Dışa aktarılacak oturum yok",
+        "noPreview": "Önce önizlemeyi tamamlayın",
+        "noExportable": "Dışa aktarılabilir oturum yok",
+        "pickPath": "Dışa aktarma yolu seçin",
+        "confirm": "Dışa aktar",
+        "selectedExportCount": "Seçili {{selected}} / dışa aktarılabilir {{total}}",
+        "selectedSize": "Seçili boyut {{selected}} / toplam {{total}}",
+        "removedNotice": "{{count}} bu dışa aktarma listesinden çıkarıldı",
+        "restoreRemoved": "Listeyi geri al",
+        "sourceLabel": "Kaynak",
+        "allSources": "Tüm kaynaklar",
+        "selectionLabel": "Seçim",
+        "filterAll": "Tümü",
+        "filterSelected": "Seçili",
+        "filterUnselected": "Seçilmemiş",
+        "visibleCount": "Gösterilen {{visible}} / {{total}}",
+        "selectVisible": "Filtreyi seç",
+        "clearVisible": "Filtreyi kaldır",
+        "keepVisibleOnly": "Filtreyi tut",
+        "removeVisible": "Filtreyi çıkar",
+        "removeUnchecked": "Seçilmemişi çıkar",
+        "selectItem": "Dışa aktarılacak oturumu seç",
+        "removeItem": "Çıkar",
+        "emptyFilteredTitle": "Eşleşen oturum yok",
+        "emptyFilteredDesc": "Arama, kaynak veya seçim durumunu değiştirip tekrar deneyin."
       }
     },
     "api": {
@@ -3000,7 +3115,9 @@
         "pricingUnset": "Ayarsız",
         "pricingReset": "Sıfırla",
         "pricingSaved": "Fiyatlar kaydedildi",
-        "pricingInvalid": "Fiyatlar 0 veya daha büyük sayılar olmalıdır"
+        "pricingInvalid": "Fiyatlar 0 veya daha büyük sayılar olmalıdır",
+        "pricingReprice": "Geçmişi yeniden hesapla",
+        "pricingRepriced": "Geçmiş tahminler güncel fiyatlarla yeniden hesaplandı"
       },
       "keys": {
         "policyTitle": "Model ilkesi",
@@ -3147,7 +3264,11 @@
       "selectedCount": "Seçildi {{count}}/{{total}}",
       "selectAllAccounts": "Tüm hesapları seç",
       "selectReady": "Sağlamları seç",
-      "clearSelection": "Seçimi temizle"
+      "clearSelection": "Seçimi temizle",
+      "hiddenTask": "Codex toplu içe aktarma",
+      "taskRunning": "{{current}} / {{total}} işleniyor",
+      "taskPreview": "{{total}} önizleme hazır",
+      "reopen": "Görevi aç"
     },
     "autoRepairMode": {
       "label": "Otomatik onarım mantığı",
@@ -3167,6 +3288,22 @@
       "saveDraft": "Bekleyen kartı kaydet",
       "authorizeAction": "Yetkilendir",
       "cardHint": "Notlar kaydedildi. Kullanmak için OAuth’u tamamlayın."
+    },
+    "batchDelete": {
+      "title": "Codex toplu silme",
+      "running": "Siliniyor",
+      "paused": "Duraklatıldı",
+      "failed": "Kısmi hata",
+      "completed": "Silme tamamlandı",
+      "preparing": "Silme görevi hazırlanıyor...",
+      "retryFailed": "Hatalıları dene",
+      "pause": "Duraklat",
+      "resume": "Sürdür",
+      "clear": "Temizle",
+      "summary": "{{completed}} / {{total}} işlendi, {{failed}} hata",
+      "started": "{{count}} Codex hesabı için silme başlatıldı",
+      "pollFailed": "Toplu silme ilerlemesi yenilenemedi: {{error}}",
+      "actionFailed": "Toplu silme işlemi başarısız: {{error}}"
     }
   },
   "githubCopilot": {

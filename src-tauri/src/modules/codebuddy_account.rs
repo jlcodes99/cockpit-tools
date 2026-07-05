@@ -1355,28 +1355,6 @@ pub fn sync_account_to_default_client(account_id: &str) -> Result<(), String> {
 }
 
 pub(crate) fn resolve_current_account_id(accounts: &[CodebuddyAccount]) -> Option<String> {
-    if let Ok(Some(payload)) = import_payload_from_local() {
-        let incoming_uid = normalize_identity(payload.uid.as_deref());
-        let incoming_email = normalize_email_identity(Some(payload.email.as_str()));
-
-        if let Some(account_id) = accounts
-            .iter()
-            .find(|account| {
-                let existing_uid = normalize_identity(account.uid.as_deref());
-                let existing_email = normalize_email_identity(Some(account.email.as_str()));
-                account_matches_payload_identity(
-                    existing_uid.as_ref(),
-                    existing_email.as_ref(),
-                    incoming_uid.as_ref(),
-                    incoming_email.as_ref(),
-                )
-            })
-            .map(|account| account.id.clone())
-        {
-            return Some(account_id);
-        }
-    }
-
     crate::modules::provider_current_state::resolve_existing_current_account_id(
         "codebuddy",
         accounts.iter().map(|account| account.id.as_str()),

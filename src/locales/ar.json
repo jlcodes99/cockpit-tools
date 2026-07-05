@@ -834,7 +834,9 @@
       "claudeAppPath": "هدف تشغيل Claude Desktop",
       "claudeAppPathDesc": "يمكن للملف الافتراضي استخدام هدف Microsoft Store؛ أما الملفات متعددة المثيلات فتحتاج Claude.exe الحقيقي.",
       "antigravityLaunchOnSwitch": "تشغيل Antigravity IDE عند التبديل",
-      "antigravityLaunchOnSwitchDesc": "عند الإيقاف، يكتب التبديل بيانات الحساب الافتراضي في Antigravity IDE فقط، ولا يغلق التطبيق أو يشغله أو يعيد تشغيله."
+      "antigravityLaunchOnSwitchDesc": "عند الإيقاف، يكتب التبديل بيانات الحساب الافتراضي في Antigravity IDE فقط، ولا يغلق التطبيق أو يشغله أو يعيد تشغيله.",
+      "tokenKeeper": "إبقاء التفويض",
+      "tokenKeeperDesc": "يحدّث رموز Token للحسابات على دفعات صغيرة فقط عند اقتراب انتهاء التفويض، مما يقلل طلبات الخلفية عند كثرة الحسابات."
     },
     "network": {
       "apiTitle": "واجهة برمجة تطبيقات قمرة القيادة المضادة للجاذبية",
@@ -1664,6 +1666,7 @@
     "restartRequiredAfterInstall": "تم تثبيت التحديث. أعد تشغيل التطبيق يدويًا لإكمال التبديل.",
     "stoppingApiService": "جارٍ إيقاف خدمة API...",
     "stopApiServiceFailed": "تعذّر إيقاف خدمة API. عطّلها أولًا ثم أعد المحاولة.",
+    "stopApiServiceFailedContinue": "لم تتوقف خدمة API بشكل صحيح. ستتم متابعة إعادة التشغيل...",
     "skipThisVersion": "تخطي هذا الإصدار",
     "skipFailed": "تعذر تخطي هذا التحديث: {{error}}"
   },
@@ -1928,6 +1931,7 @@
       "refreshStatsSuccess": "تم تحديث إحصاءات خدمة API",
       "routingStrategy": {
         "auto": "تلقائي (موصى به)",
+        "singleAccount": "حساب واحد",
         "quotaHighFirst": "الأعلى حصة أولاً",
         "quotaLowFirst": "الأقل حصة أولاً",
         "planHighFirst": "الأعلى باقة أولاً",
@@ -2266,6 +2270,16 @@
       "accountSearchPlaceholder": "ابحث بالبريد الإلكتروني...",
       "accountFilterEmpty": "لا توجد حسابات مطابقة",
       "accountFilteredCount": "{{count}} حساباً ضمن التصفية الحالية",
+      "fullQuotaAction": "إيقاظ الحسابات",
+      "fullQuotaActionTitle": "افتح اختبار إيقاظ الحسابات. تُرتّب الحسابات افتراضياً حسب حصة 5 ساعات من الأعلى إلى الأدنى.",
+      "fullQuotaNoAccounts": "لا تحتوي القائمة الحالية على حساب OAuth متاح للإيقاظ.",
+      "fullQuotaAccountsLabel": "الحسابات المراد إيقاظها",
+      "accountSort": {
+        "default": "الترتيب الافتراضي",
+        "hourly": "حسب حصة 5 ساعات",
+        "weekly": "حسب الحصة الأسبوعية",
+        "email": "حسب البريد الإلكتروني"
+      },
       "testTitle": "اختبار إيقاظ Codex",
       "testAccountsLabel": "حسابات الاختبار",
       "testAccountsRequired": "يرجى اختيار حساب اختبار واحد على الأقل.",
@@ -2379,10 +2393,14 @@
         "collapse": "طي",
         "repairVisibility": "إصلاح الظهور",
         "restoreSessions": "استعادة الجلسات",
+        "exportSessions": "تصدير الجلسات",
+        "importSessions": "استيراد الجلسات",
         "copySessionId": "نسخ معرّف الجلسة",
+        "openLocation": "فتح الموقع",
         "selectAllSessions": "تحديد كل الجلسات",
         "clearSelectedSessions": "إلغاء تحديد الكل",
-        "copyToInstance": "نسخ إلى المثيل"
+        "copyToInstance": "نسخ إلى المثيل",
+        "trash": "المهملات"
       },
       "confirm": {
         "title": "نقل إلى المهملات",
@@ -2420,11 +2438,25 @@
       "locationRunning": " (قيد التشغيل)",
       "untitled": "جلسة بدون عنوان",
       "restoreModal": {
-        "title": "استعادة الجلسات",
-        "hint": "عند الاستعادة ستعود ملف rollout وسطر الخيط في SQLite ومدخل session_index معًا إلى المثيل الأصلي.",
+        "title": "المهملات",
+        "hint": "يمكن استعادة الجلسات من المهملات إلى المثيل الأصلي أو حذفها نهائيا لتحرير مساحة القرص.",
         "emptyTitle": "سلة المهملات فارغة",
         "emptyDesc": "ستظهر هنا الجلسات المنقولة إلى سلة المهملات.",
-        "restoreAction": "استعادة الجلسات المحددة"
+        "restoreAction": "استعادة الجلسات المحددة",
+        "summary": "{{count}} عنصر، {{size}}",
+        "selectedSummary": "{{count}} محددة، {{size}}",
+        "selectAll": "تحديد الكل",
+        "clearSelected": "إلغاء التحديد",
+        "emptyTrash": "إفراغ المهملات",
+        "itemSize": "الحجم {{size}}",
+        "deleteOne": "حذف نهائي",
+        "deleteSelected": "حذف المحدد",
+        "pickDeleteOne": "اختر جلسة واحدة على الأقل للحذف النهائي",
+        "deleteOneConfirm": "هل تريد حذف هذه الجلسة نهائيا؟ لا يمكن التراجع. المساحة المتوقعة: {{size}}.",
+        "deleteSelectedConfirm": "هل تريد حذف {{count}} جلسات محددة نهائيا؟ لا يمكن التراجع. المساحة المتوقعة: {{size}}.",
+        "permanentDeleteTitle": "حذف نهائي",
+        "permanentDeleteAction": "حذف نهائي",
+        "emptyTrashConfirm": "هل تريد إفراغ المهملات؟ سيتم حذف {{count}} جلسات نهائيا ولا يمكن استعادتها. المساحة المتوقعة: {{size}}."
       },
       "targetModal": {
         "title": "نسخ إلى المثيل",
@@ -2486,7 +2518,90 @@
         "instanceScopeAll": "كل المثيلات",
         "instanceScopeAllDesc": "إصلاح كل مثيلات Codex عند استعادة عدة مثيلات.",
         "progressTitle": "تقدم الإصلاح",
-        "start": "إصلاح"
+        "start": "إصلاح",
+        "previewing": "جارٍ استعراض التغييرات...",
+        "previewAgain": "استعراض مرة أخرى",
+        "preview": "استعراض التغييرات",
+        "previewFailedWithError": "فشل استعراض إصلاح الجلسات: {{error}}",
+        "confirmRepair": "تأكيد الإصلاح"
+      },
+      "importModal": {
+        "title": "استيراد الجلسات",
+        "hint": "تستورد حزمة الجلسات ملفات rollout ومدخلات session_index فقط، ولا تتضمن الحسابات أو Token أو API Key أو إعدادات التطبيق؛ يتم تخطي الجلسات التي لها نفس ID في المثيل الهدف.",
+        "noTarget": "لا يوجد مثيل Codex متاح للاستيراد",
+        "noPackage": "اختر حزمة جلسات أولا",
+        "pickOne": "حدد جلسة قابلة للاستيراد واحدة على الأقل",
+        "totalCount": "{{count}} جلسة في الحزمة",
+        "readyCount": "{{count}} قابلة للاستيراد",
+        "selectReady": "تحديد القابلة للاستيراد",
+        "previewing": "جارٍ معاينة حزمة الجلسات...",
+        "existsIn": "موجودة في: {{names}}",
+        "statusReady": "جاهزة",
+        "statusDuplicate": "موجودة",
+        "statusConflict": "تعارض",
+        "statusInvalid": "غير صالحة",
+        "confirm": "استيراد الجلسات المحددة"
+      },
+      "transferModal": {
+        "exportTitle": "تصدير الجلسات",
+        "importTitle": "استيراد الجلسات",
+        "minimize": "تصغير",
+        "reopen": "عرض التقدم",
+        "clear": "مسح",
+        "runningSummary": "تتم معالجة {{current}} من {{total}}",
+        "completedSummary": "اكتملت المهمة",
+        "failedSummary": "فشلت المهمة",
+        "current": "{{current}} من {{total}}",
+        "phase": {
+          "exportPrepare": "جارٍ تحضير التصدير...",
+          "exportCollect": "جارٍ جمع الجلسات...",
+          "exportHash": "جارٍ فحص ملفات الجلسة...",
+          "exportWrite": "جارٍ كتابة حزمة الجلسات...",
+          "importPrepare": "جارٍ تحضير الاستيراد...",
+          "importRead": "جارٍ قراءة حزمة الجلسات...",
+          "importWrite": "جارٍ الكتابة إلى المثيل الهدف...",
+          "importRebuild": "جارٍ تحديث فهرس الجلسات الرسمي...",
+          "done": "اكتملت المهمة"
+        }
+      },
+      "exportModal": {
+        "title": "تصدير الجلسات",
+        "hint": "راجع قائمة الجلسات والمثيل المصدر وحجم الملف قبل التصدير. تحتوي الحزمة على ملفات rollout وإدخالات session_index فقط، ولا تحتوي على حسابات أو رموز أو مفاتيح API أو إعدادات التطبيق.",
+        "previewing": "جارٍ معاينة الجلسات...",
+        "selectedCount": "تم تحديد {{count}}",
+        "exportableCount": "{{count}} قابلة للتصدير",
+        "missingCount": "{{count}} مفقودة",
+        "totalSize": "الإجمالي {{size}}",
+        "exportPath": "مسار التصدير",
+        "pathUnset": "لم يتم اختيار مسار",
+        "choosePath": "اختيار المسار",
+        "missingNotice": "{{count}} جلسة لم تعد موجودة في مجموعة المثيلات الحالية وسيتم تخطيها.",
+        "sourceInstance": "المصدر: {{name}}",
+        "emptyTitle": "لا توجد جلسات للتصدير",
+        "noPreview": "أكمل المعاينة أولاً",
+        "noExportable": "لا توجد جلسات قابلة للتصدير",
+        "pickPath": "اختر مسار التصدير",
+        "confirm": "تصدير",
+        "selectedExportCount": "المحدد {{selected}} / قابل للتصدير {{total}}",
+        "selectedSize": "حجم المحدد {{selected}} / الإجمالي {{total}}",
+        "removedNotice": "تمت إزالة {{count}} من قائمة التصدير هذه",
+        "restoreRemoved": "استعادة القائمة",
+        "sourceLabel": "المصدر",
+        "allSources": "كل المصادر",
+        "selectionLabel": "التحديد",
+        "filterAll": "الكل",
+        "filterSelected": "محدد",
+        "filterUnselected": "غير محدد",
+        "visibleCount": "المعروض {{visible}} / {{total}}",
+        "selectVisible": "تحديد المصفى",
+        "clearVisible": "إلغاء المصفى",
+        "keepVisibleOnly": "إبقاء المصفى",
+        "removeVisible": "إزالة المصفى",
+        "removeUnchecked": "إزالة غير المحدد",
+        "selectItem": "تحديد جلسة للتصدير",
+        "removeItem": "إزالة",
+        "emptyFilteredTitle": "لا توجد جلسات مطابقة",
+        "emptyFilteredDesc": "عدّل البحث أو المصدر أو حالة التحديد ثم حاول مرة أخرى."
       }
     },
     "api": {
@@ -3046,7 +3161,9 @@
         "pricingUnset": "غير معين",
         "pricingReset": "إعادة ضبط",
         "pricingSaved": "تم حفظ التسعير",
-        "pricingInvalid": "يجب أن تكون الأسعار أرقامًا أكبر من أو تساوي 0"
+        "pricingInvalid": "يجب أن تكون الأسعار أرقامًا أكبر من أو تساوي 0",
+        "pricingReprice": "إعادة تقييم السجل",
+        "pricingRepriced": "أعيد تقييم السجل بالأسعار الحالية"
       },
       "keys": {
         "policyTitle": "سياسة النماذج",
@@ -3193,7 +3310,11 @@
       "selectedCount": "المحدد {{count}}/{{total}}",
       "selectAllAccounts": "اختيار كل الحسابات",
       "selectReady": "اختيار الحسابات السليمة",
-      "clearSelection": "إلغاء الاختيار"
+      "clearSelection": "إلغاء الاختيار",
+      "hiddenTask": "مهمة استيراد Codex دفعة واحدة",
+      "taskRunning": "جارٍ معالجة {{current}} / {{total}}",
+      "taskPreview": "{{total}} عنصر معاينة جاهز",
+      "reopen": "عرض المهمة"
     },
     "autoRepairMode": {
       "label": "منطق الإصلاح التلقائي",
@@ -3213,6 +3334,22 @@
       "saveDraft": "حفظ بطاقة معلّقة",
       "authorizeAction": "تفويض",
       "cardHint": "تم حفظ الملاحظات. أكمل OAuth لاستخدام الحساب."
+    },
+    "batchDelete": {
+      "title": "حذف Codex دفعة واحدة",
+      "running": "جارٍ الحذف",
+      "paused": "متوقف مؤقتًا",
+      "failed": "فشل جزئي",
+      "completed": "اكتمل الحذف",
+      "preparing": "جارٍ تجهيز مهمة الحذف...",
+      "retryFailed": "إعادة الفاشلة",
+      "pause": "إيقاف مؤقت",
+      "resume": "متابعة",
+      "clear": "مسح",
+      "summary": "تمت معالجة {{completed}} / {{total}}، فشل {{failed}}",
+      "started": "بدأ حذف {{count}} حساب Codex",
+      "pollFailed": "فشل تحديث تقدم الحذف الدفعي: {{error}}",
+      "actionFailed": "فشل إجراء الحذف الدفعي: {{error}}"
     }
   },
   "githubCopilot": {

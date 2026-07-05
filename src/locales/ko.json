@@ -788,7 +788,9 @@
       "claudeAppPath": "Claude Desktop 시작 대상",
       "claudeAppPathDesc": "기본 프로필은 Microsoft Store 대상을 사용할 수 있지만, 다중 인스턴스에는 실제 Claude.exe가 필요합니다.",
       "antigravityLaunchOnSwitch": "전환 시 Antigravity IDE 실행",
-      "antigravityLaunchOnSwitchDesc": "끄면 전환 시 Antigravity IDE 기본 계정 데이터만 쓰고 앱을 닫거나 실행하거나 다시 시작하지 않습니다."
+      "antigravityLaunchOnSwitchDesc": "끄면 전환 시 Antigravity IDE 기본 계정 데이터만 쓰고 앱을 닫거나 실행하거나 다시 시작하지 않습니다.",
+      "tokenKeeper": "인증 유지",
+      "tokenKeeperDesc": "인증 만료가 가까운 경우에만 계정 Token을 작은 묶음으로 갱신해 많은 계정에서 백그라운드 요청 부담을 줄입니다."
     },
     "network": {
       "apiTitle": "반중력 조종석 API",
@@ -1618,6 +1620,7 @@
     "restartRequiredAfterInstall": "업데이트는 설치되었습니다. 전환을 완료하려면 앱을 수동으로 다시 시작하세요.",
     "stoppingApiService": "API 서비스 중지 중...",
     "stopApiServiceFailed": "API 서비스를 중지하지 못했습니다. 먼저 비활성화한 뒤 다시 시도하세요.",
+    "stopApiServiceFailedContinue": "API 서비스가 정상적으로 종료되지 않았습니다. 계속 재시작합니다...",
     "skipThisVersion": "이 버전 건너뛰기",
     "skipFailed": "이 업데이트를 건너뛰지 못했습니다: {{error}}"
   },
@@ -1882,6 +1885,7 @@
       "refreshStatsSuccess": "API 서비스 통계를 새로고침했습니다",
       "routingStrategy": {
         "auto": "자동(권장)",
+        "singleAccount": "단일 계정",
         "quotaHighFirst": "높은 할당량 우선",
         "quotaLowFirst": "낮은 할당량 우선",
         "planHighFirst": "상위 요금제 우선",
@@ -2220,6 +2224,16 @@
       "accountSearchPlaceholder": "이메일 검색...",
       "accountFilterEmpty": "일치하는 계정이 없습니다",
       "accountFilteredCount": "현재 필터에 {{count}}개 계정",
+      "fullQuotaAction": "계정 깨우기",
+      "fullQuotaActionTitle": "계정 깨우기 테스트를 엽니다. 기본적으로 5h 할당량이 높은 순서로 정렬됩니다.",
+      "fullQuotaNoAccounts": "현재 목록에 깨울 수 있는 OAuth 계정이 없습니다.",
+      "fullQuotaAccountsLabel": "깨울 계정",
+      "accountSort": {
+        "default": "기본 순서",
+        "hourly": "5h 할당량순",
+        "weekly": "주간 할당량순",
+        "email": "이메일순"
+      },
       "testTitle": "Codex 깨우기 테스트",
       "testAccountsLabel": "테스트 계정",
       "testAccountsRequired": "최소 한 개의 테스트 계정을 선택하세요.",
@@ -2333,10 +2347,14 @@
         "collapse": "접기",
         "repairVisibility": "표시 복구",
         "restoreSessions": "세션 복원",
+        "exportSessions": "세션 내보내기",
+        "importSessions": "세션 가져오기",
         "copySessionId": "세션 ID 복사",
+        "openLocation": "위치 열기",
         "selectAllSessions": "모든 세션 선택",
         "clearSelectedSessions": "선택 해제",
-        "copyToInstance": "인스턴스에 복사"
+        "copyToInstance": "인스턴스에 복사",
+        "trash": "휴지통"
       },
       "confirm": {
         "title": "휴지통으로 이동",
@@ -2374,11 +2392,25 @@
       "locationRunning": " (실행 중)",
       "untitled": "제목 없는 세션",
       "restoreModal": {
-        "title": "세션 복원",
-        "hint": "복원하면 rollout 파일, SQLite 스레드 행, session_index 항목이 함께 원래 인스턴스로 돌아갑니다.",
+        "title": "휴지통",
+        "hint": "휴지통의 세션은 원래 인스턴스로 복원하거나 영구 삭제하여 디스크 공간을 확보할 수 있습니다.",
         "emptyTitle": "휴지통이 비어 있습니다",
         "emptyDesc": "휴지통으로 이동한 세션이 여기에 표시됩니다.",
-        "restoreAction": "선택한 세션 복원"
+        "restoreAction": "선택한 세션 복원",
+        "summary": "{{count}}개 항목, {{size}}",
+        "selectedSummary": "{{count}}개 선택, {{size}}",
+        "selectAll": "전체 선택",
+        "clearSelected": "선택 해제",
+        "emptyTrash": "휴지통 비우기",
+        "itemSize": "크기 {{size}}",
+        "deleteOne": "영구 삭제",
+        "deleteSelected": "선택 삭제",
+        "pickDeleteOne": "영구 삭제할 세션을 하나 이상 선택하세요",
+        "deleteOneConfirm": "이 세션을 영구 삭제할까요? 되돌릴 수 없습니다. 예상 확보 공간: {{size}}.",
+        "deleteSelectedConfirm": "선택한 {{count}}개 세션을 영구 삭제할까요? 되돌릴 수 없습니다. 예상 확보 공간: {{size}}.",
+        "permanentDeleteTitle": "영구 삭제",
+        "permanentDeleteAction": "영구 삭제",
+        "emptyTrashConfirm": "휴지통을 비울까요? {{count}}개 세션이 영구 삭제되어 복원할 수 없습니다. 예상 확보 공간: {{size}}."
       },
       "targetModal": {
         "title": "인스턴스에 복사",
@@ -2440,7 +2472,90 @@
         "instanceScopeAll": "모든 인스턴스",
         "instanceScopeAllDesc": "여러 Codex 인스턴스를 함께 복구할 때 모두 처리합니다.",
         "progressTitle": "복구 진행률",
-        "start": "복구 시작"
+        "start": "복구 시작",
+        "previewing": "미리보는 중...",
+        "previewAgain": "다시 미리보기",
+        "preview": "변경 미리보기",
+        "previewFailedWithError": "세션 복구 미리보기에 실패했습니다: {{error}}",
+        "confirmRepair": "복구 확인"
+      },
+      "importModal": {
+        "title": "세션 가져오기",
+        "hint": "세션 패키지는 rollout 파일과 session_index 항목만 가져옵니다. 계정, Token, API Key, 앱 설정은 포함되지 않으며 대상 인스턴스에 같은 ID 세션이 있으면 건너뜁니다.",
+        "noTarget": "가져올 수 있는 Codex 인스턴스가 없습니다",
+        "noPackage": "먼저 세션 패키지를 선택하세요",
+        "pickOne": "가져올 수 있는 세션을 하나 이상 선택하세요",
+        "totalCount": "패키지 세션 {{count}}개",
+        "readyCount": "가져오기 가능 {{count}}개",
+        "selectReady": "가능한 항목 선택",
+        "previewing": "세션 패키지 미리 보는 중...",
+        "existsIn": "이미 있음: {{names}}",
+        "statusReady": "가능",
+        "statusDuplicate": "있음",
+        "statusConflict": "충돌",
+        "statusInvalid": "잘못됨",
+        "confirm": "선택한 세션 가져오기"
+      },
+      "transferModal": {
+        "exportTitle": "세션 내보내기",
+        "importTitle": "세션 가져오기",
+        "minimize": "최소화",
+        "reopen": "진행 보기",
+        "clear": "지우기",
+        "runningSummary": "{{total}}개 중 {{current}}개 처리 중",
+        "completedSummary": "작업 완료",
+        "failedSummary": "작업 실패",
+        "current": "{{total}}개 중 {{current}}개",
+        "phase": {
+          "exportPrepare": "내보내기 준비 중...",
+          "exportCollect": "세션 수집 중...",
+          "exportHash": "세션 파일 확인 중...",
+          "exportWrite": "세션 패키지 작성 중...",
+          "importPrepare": "가져오기 준비 중...",
+          "importRead": "세션 패키지 읽는 중...",
+          "importWrite": "대상 인스턴스에 쓰는 중...",
+          "importRebuild": "공식 세션 인덱스 새로 고치는 중...",
+          "done": "작업 완료"
+        }
+      },
+      "exportModal": {
+        "title": "세션 내보내기",
+        "hint": "내보내기 전에 세션 목록, 원본 인스턴스, 파일 크기를 확인할 수 있습니다. 패키지는 rollout 파일과 session_index 항목만 포함하며 계정, 토큰, API 키, 앱 설정은 포함하지 않습니다.",
+        "previewing": "세션 미리 보는 중...",
+        "selectedCount": "{{count}}개 선택됨",
+        "exportableCount": "{{count}}개 내보낼 수 있음",
+        "missingCount": "{{count}}개 없음",
+        "totalSize": "총 {{size}}",
+        "exportPath": "내보내기 위치",
+        "pathUnset": "위치가 선택되지 않음",
+        "choosePath": "위치 선택",
+        "missingNotice": "{{count}}개 세션은 현재 인스턴스 집합에 없어 건너뜁니다.",
+        "sourceInstance": "원본: {{name}}",
+        "emptyTitle": "내보낼 세션 없음",
+        "noPreview": "먼저 미리보기를 완료하세요",
+        "noExportable": "내보낼 수 있는 세션 없음",
+        "pickPath": "내보내기 위치를 선택하세요",
+        "confirm": "내보내기",
+        "selectedExportCount": "선택 {{selected}} / 내보내기 가능 {{total}}",
+        "selectedSize": "선택 크기 {{selected}} / 전체 {{total}}",
+        "removedNotice": "{{count}}개를 이번 내보내기 목록에서 제외했습니다",
+        "restoreRemoved": "목록 복원",
+        "sourceLabel": "출처",
+        "allSources": "모든 출처",
+        "selectionLabel": "선택",
+        "filterAll": "전체",
+        "filterSelected": "선택됨",
+        "filterUnselected": "미선택",
+        "visibleCount": "표시 {{visible}} / {{total}}",
+        "selectVisible": "필터 선택",
+        "clearVisible": "필터 해제",
+        "keepVisibleOnly": "필터만 유지",
+        "removeVisible": "필터 제외",
+        "removeUnchecked": "미선택 제외",
+        "selectItem": "내보낼 세션 선택",
+        "removeItem": "제외",
+        "emptyFilteredTitle": "일치하는 세션 없음",
+        "emptyFilteredDesc": "검색어, 출처 또는 선택 상태를 조정하세요."
       }
     },
     "api": {
@@ -3000,7 +3115,9 @@
         "pricingUnset": "미설정",
         "pricingReset": "재설정",
         "pricingSaved": "가격 저장됨",
-        "pricingInvalid": "가격은 0 이상의 숫자여야 합니다"
+        "pricingInvalid": "가격은 0 이상의 숫자여야 합니다",
+        "pricingReprice": "기록 재계산",
+        "pricingRepriced": "현재 가격으로 기록 추정값을 다시 계산했습니다"
       },
       "keys": {
         "policyTitle": "모델 정책",
@@ -3147,7 +3264,11 @@
       "selectedCount": "선택 {{count}}/{{total}}",
       "selectAllAccounts": "전체 계정 선택",
       "selectReady": "정상 계정 선택",
-      "clearSelection": "선택 해제"
+      "clearSelection": "선택 해제",
+      "hiddenTask": "Codex 일괄 가져오기 작업",
+      "taskRunning": "{{current}} / {{total}} 처리 중",
+      "taskPreview": "미리보기 {{total}}개 준비됨",
+      "reopen": "작업 보기"
     },
     "autoRepairMode": {
       "label": "자동 복구 로직",
@@ -3167,6 +3288,22 @@
       "saveDraft": "인증 대기 카드 저장",
       "authorizeAction": "인증 추가",
       "cardHint": "메모가 저장되었습니다. OAuth 완료 후 사용할 수 있습니다."
+    },
+    "batchDelete": {
+      "title": "Codex 일괄 삭제",
+      "running": "삭제 중",
+      "paused": "일시 중지됨",
+      "failed": "일부 실패",
+      "completed": "삭제 완료",
+      "preparing": "삭제 작업 준비 중...",
+      "retryFailed": "실패 항목 재시도",
+      "pause": "일시 중지",
+      "resume": "계속",
+      "clear": "정리",
+      "summary": "{{completed}} / {{total}} 처리됨, 실패 {{failed}}",
+      "started": "Codex 계정 {{count}}개 삭제를 시작했습니다",
+      "pollFailed": "일괄 삭제 진행 상황을 새로 고치지 못했습니다: {{error}}",
+      "actionFailed": "일괄 삭제 작업 실패: {{error}}"
     }
   },
   "githubCopilot": {

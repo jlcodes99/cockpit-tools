@@ -788,7 +788,9 @@
       "claudeAppPath": "Claude Desktop 啟動目標",
       "claudeAppPathDesc": "預設實例可使用 Microsoft Store 應用目標；多開實例請選擇真實 Claude.exe。",
       "antigravityLaunchOnSwitch": "切換時啟動 Antigravity IDE",
-      "antigravityLaunchOnSwitchDesc": "關閉後切號只寫入 Antigravity IDE 預設帳號資料，不會關閉、啟動或重啟應用程式。"
+      "antigravityLaunchOnSwitchDesc": "關閉後切號只寫入 Antigravity IDE 預設帳號資料，不會關閉、啟動或重啟應用程式。",
+      "tokenKeeper": "背景授權保活",
+      "tokenKeeperDesc": "僅在授權快過期時分批刷新帳號 Token，降低大量帳號場景下的背景請求壓力。"
     },
     "network": {
       "apiTitle": "反重力駕駛艙 API",
@@ -1618,6 +1620,7 @@
     "restartRequiredAfterInstall": "更新已安裝，請手動重新啟動應用程式完成切換。",
     "stoppingApiService": "正在關閉 API 服務...",
     "stopApiServiceFailed": "無法關閉 API 服務，請先停用後重試。",
+    "stopApiServiceFailedContinue": "API 服務未正常關閉，將繼續重新啟動...",
     "skipThisVersion": "跳過此版本",
     "skipFailed": "跳過此更新失敗：{{error}}"
   },
@@ -1882,6 +1885,7 @@
       "refreshStatsSuccess": "API 服務統計已刷新",
       "routingStrategy": {
         "auto": "自動（推薦）",
+        "singleAccount": "固定首個帳號",
         "quotaHighFirst": "優先高配額",
         "quotaLowFirst": "優先低配額",
         "planHighFirst": "優先高訂閱",
@@ -2337,6 +2341,16 @@
       "accountSearchPlaceholder": "搜尋電子郵件...",
       "accountFilterEmpty": "沒有符合條件的帳號",
       "accountFilteredCount": "目前篩選 {{count}} 個帳號",
+      "fullQuotaAction": "喚醒帳號",
+      "fullQuotaActionTitle": "開啟帳號喚醒測試，帳號預設按 5h 額度由高到低排序。",
+      "fullQuotaNoAccounts": "目前列表沒有可喚醒的 OAuth 帳號。",
+      "fullQuotaAccountsLabel": "選擇要喚醒的帳號",
+      "accountSort": {
+        "default": "預設順序",
+        "hourly": "按5h額度",
+        "weekly": "按週額度",
+        "email": "按電子郵件"
+      },
       "testTitle": "測試 Codex 喚醒",
       "testAccountsLabel": "測試帳號",
       "testAccountsRequired": "請至少選擇一個測試帳號。",
@@ -2450,10 +2464,14 @@
         "collapse": "收起",
         "repairVisibility": "修復可見性",
         "restoreSessions": "還原工作階段",
+        "exportSessions": "匯出會話",
+        "importSessions": "匯入會話",
         "copySessionId": "複製會話 ID",
+        "openLocation": "開啟位置",
         "selectAllSessions": "全選全部會話",
         "clearSelectedSessions": "取消全選",
-        "copyToInstance": "複製到實例"
+        "copyToInstance": "複製到實例",
+        "trash": "垃圾桶"
       },
       "confirm": {
         "title": "移到垃圾桶",
@@ -2491,11 +2509,25 @@
       "locationRunning": "（執行中）",
       "untitled": "未命名會話",
       "restoreModal": {
-        "title": "還原工作階段",
-        "hint": "還原時會將 rollout 檔、SQLite 執行緒列與 session_index 項目一起放回原始實例。",
+        "title": "垃圾桶",
+        "hint": "垃圾桶中的工作階段可還原到原實例，也可永久刪除以釋放磁碟空間。",
         "emptyTitle": "回收桶是空的",
         "emptyDesc": "移到回收桶的工作階段會顯示在這裡。",
-        "restoreAction": "還原所選工作階段"
+        "restoreAction": "還原所選工作階段",
+        "summary": "共 {{count}} 筆，{{size}}",
+        "selectedSummary": "已選 {{count}} 筆，{{size}}",
+        "selectAll": "全選",
+        "clearSelected": "取消選取",
+        "emptyTrash": "清空垃圾桶",
+        "itemSize": "大小 {{size}}",
+        "deleteOne": "永久刪除",
+        "deleteSelected": "永久刪除所選",
+        "pickDeleteOne": "請至少選擇一筆要永久刪除的工作階段",
+        "deleteOneConfirm": "確定要永久刪除此工作階段嗎？刪除後無法還原，預計釋放 {{size}}。",
+        "deleteSelectedConfirm": "確定要永久刪除所選 {{count}} 筆工作階段嗎？刪除後無法還原，預計釋放 {{size}}。",
+        "permanentDeleteTitle": "永久刪除",
+        "permanentDeleteAction": "永久刪除",
+        "emptyTrashConfirm": "確定要清空垃圾桶嗎？其中 {{count}} 筆工作階段會被永久刪除且無法還原，預計釋放 {{size}}。"
       },
       "targetModal": {
         "title": "複製到實例",
@@ -2557,7 +2589,90 @@
         "instanceScopeAll": "全部實例",
         "instanceScopeAllDesc": "修復所有 Codex 實例，適合多開實例一起復原。",
         "progressTitle": "修復進度",
-        "start": "開始修復"
+        "start": "開始修復",
+        "previewing": "正在預覽...",
+        "previewAgain": "重新預覽",
+        "preview": "預覽變更",
+        "previewFailedWithError": "預覽會話修復失敗：{{error}}",
+        "confirmRepair": "確認修復"
+      },
+      "importModal": {
+        "title": "匯入會話",
+        "hint": "會話包只會匯入 rollout 檔與 session_index 項目，不包含帳號、Token、API Key 或應用程式設定；目標實例已有相同 ID 的會話時會略過。",
+        "noTarget": "未找到可匯入的 Codex 實例",
+        "noPackage": "請先選擇會話包",
+        "pickOne": "請至少選擇一個可匯入會話",
+        "totalCount": "會話包 {{count}} 個",
+        "readyCount": "可匯入 {{count}} 個",
+        "selectReady": "選擇可匯入",
+        "previewing": "正在預覽會話包...",
+        "existsIn": "已存在於：{{names}}",
+        "statusReady": "可匯入",
+        "statusDuplicate": "已存在",
+        "statusConflict": "衝突",
+        "statusInvalid": "無效",
+        "confirm": "匯入所選會話"
+      },
+      "transferModal": {
+        "exportTitle": "匯出會話",
+        "importTitle": "匯入會話",
+        "minimize": "最小化",
+        "reopen": "查看進度",
+        "clear": "清除",
+        "runningSummary": "正在處理 {{current}}/{{total}}",
+        "completedSummary": "任務已完成",
+        "failedSummary": "任務失敗",
+        "current": "{{current}} / {{total}}",
+        "phase": {
+          "exportPrepare": "正在準備匯出...",
+          "exportCollect": "正在收集會話...",
+          "exportHash": "正在校驗會話檔案...",
+          "exportWrite": "正在寫入會話包...",
+          "importPrepare": "正在準備匯入...",
+          "importRead": "正在讀取會話包...",
+          "importWrite": "正在寫入目標實例...",
+          "importRebuild": "正在重新整理官方會話索引...",
+          "done": "任務已完成"
+        }
+      },
+      "exportModal": {
+        "title": "匯出會話",
+        "hint": "匯出前可先確認會話清單、來源實例和檔案大小；會話包只包含 rollout 檔案和 session_index 條目，不包含帳號、Token、API Key 或應用程式設定。",
+        "previewing": "正在預覽會話...",
+        "selectedCount": "已選 {{count}} 條",
+        "exportableCount": "可匯出 {{count}} 條",
+        "missingCount": "缺少 {{count}} 條",
+        "totalSize": "總大小 {{size}}",
+        "exportPath": "匯出位置",
+        "pathUnset": "尚未選擇匯出位置",
+        "choosePath": "選擇位置",
+        "missingNotice": "{{count}} 條會話已不在目前實例集合中，匯出時會跳過。",
+        "sourceInstance": "來源：{{name}}",
+        "emptyTitle": "沒有可匯出的會話",
+        "noPreview": "請先完成匯出預覽",
+        "noExportable": "沒有可匯出的會話",
+        "pickPath": "請選擇匯出位置",
+        "confirm": "確認匯出",
+        "selectedExportCount": "已選 {{selected}} / 可匯出 {{total}}",
+        "selectedSize": "已選大小 {{selected}} / 總計 {{total}}",
+        "removedNotice": "已從本次匯出清單移出 {{count}} 筆",
+        "restoreRemoved": "還原清單",
+        "sourceLabel": "來源",
+        "allSources": "全部來源",
+        "selectionLabel": "選取",
+        "filterAll": "全部",
+        "filterSelected": "已選",
+        "filterUnselected": "未選",
+        "visibleCount": "目前顯示 {{visible}} / {{total}}",
+        "selectVisible": "選取篩選",
+        "clearVisible": "取消篩選",
+        "keepVisibleOnly": "僅保留篩選",
+        "removeVisible": "移出篩選",
+        "removeUnchecked": "移出未選",
+        "selectItem": "選取匯出會話",
+        "removeItem": "移出",
+        "emptyFilteredTitle": "目前篩選無會話",
+        "emptyFilteredDesc": "調整搜尋、來源或選取狀態後再試。"
       }
     },
     "modelProviders": {
@@ -3000,7 +3115,9 @@
         "pricingUnset": "未設定",
         "pricingReset": "重設",
         "pricingSaved": "價格設定已儲存",
-        "pricingInvalid": "價格必須是大於或等於 0 的數字"
+        "pricingInvalid": "價格必須是大於或等於 0 的數字",
+        "pricingReprice": "重算歷史估值",
+        "pricingRepriced": "歷史估值已按目前價格重算"
       },
       "keys": {
         "policyTitle": "模型策略",
@@ -3147,7 +3264,11 @@
       "selectedCount": "已選 {{count}}/{{total}}",
       "selectAllAccounts": "選擇全部帳號",
       "selectReady": "選擇正常帳號",
-      "clearSelection": "取消選擇"
+      "clearSelection": "取消選擇",
+      "hiddenTask": "Codex 批量匯入任務",
+      "taskRunning": "正在處理 {{current}} / {{total}}",
+      "taskPreview": "已產生 {{total}} 筆預覽",
+      "reopen": "查看任務"
     },
     "autoRepairMode": {
       "label": "自動修復邏輯",
@@ -3167,6 +3288,22 @@
       "saveDraft": "儲存待授權卡片",
       "authorizeAction": "授權新增",
       "cardHint": "備註已儲存，完成 OAuth 後即可使用"
+    },
+    "batchDelete": {
+      "title": "Codex 批量刪除",
+      "running": "刪除中",
+      "paused": "已暫停",
+      "failed": "部分失敗",
+      "completed": "刪除完成",
+      "preparing": "正在準備刪除任務...",
+      "retryFailed": "重試失敗項",
+      "pause": "暫停",
+      "resume": "繼續",
+      "clear": "清理",
+      "summary": "已處理 {{completed}} / {{total}}，失敗 {{failed}}",
+      "started": "已開始刪除 {{count}} 個 Codex 帳號",
+      "pollFailed": "重新整理批量刪除進度失敗：{{error}}",
+      "actionFailed": "批量刪除操作失敗：{{error}}"
     }
   },
   "githubCopilot": {

@@ -788,7 +788,9 @@
       "claudeAppPath": "Alvo de inicialização do Claude Desktop",
       "claudeAppPathDesc": "O perfil padrão pode usar um alvo da Microsoft Store; perfis multi-instância precisam do Claude.exe real.",
       "antigravityLaunchOnSwitch": "Iniciar Antigravity IDE ao alternar",
-      "antigravityLaunchOnSwitchDesc": "Quando desativado, a troca apenas grava os dados da conta padrão do Antigravity IDE e não fecha, inicia nem reinicia o app."
+      "antigravityLaunchOnSwitchDesc": "Quando desativado, a troca apenas grava os dados da conta padrão do Antigravity IDE e não fecha, inicia nem reinicia o app.",
+      "tokenKeeper": "Manter auth",
+      "tokenKeeperDesc": "Atualiza tokens de conta em pequenos lotes somente quando a autorização está perto de expirar, reduzindo requisições em segundo plano."
     },
     "network": {
       "apiTitle": "API de cockpit antigravidade",
@@ -1618,6 +1620,7 @@
     "restartRequiredAfterInstall": "A atualização foi instalada. Reinicie o app manualmente para concluir a troca.",
     "stoppingApiService": "Parando serviço de API...",
     "stopApiServiceFailed": "Não foi possível parar o serviço de API. Desative-o primeiro e tente novamente.",
+    "stopApiServiceFailedContinue": "O serviço de API não foi encerrado corretamente. Reiniciando mesmo assim...",
     "skipThisVersion": "Ignorar esta versão",
     "skipFailed": "Não foi possível ignorar esta atualização: {{error}}"
   },
@@ -1882,6 +1885,7 @@
       "refreshStatsSuccess": "As estatísticas do serviço API foram atualizadas",
       "routingStrategy": {
         "auto": "Automático (recomendado)",
+        "singleAccount": "Conta única",
         "quotaHighFirst": "Cota alta primeiro",
         "quotaLowFirst": "Cota baixa primeiro",
         "planHighFirst": "Plano alto primeiro",
@@ -2220,6 +2224,16 @@
       "accountSearchPlaceholder": "Buscar e-mail...",
       "accountFilterEmpty": "Nenhuma conta correspondente",
       "accountFilteredCount": "{{count}} conta(s) no filtro atual",
+      "fullQuotaAction": "Ativar contas",
+      "fullQuotaActionTitle": "Abre o teste de ativação de contas. Por padrão, ordena pela cota de 5h do maior para o menor.",
+      "fullQuotaNoAccounts": "A lista atual não tem contas OAuth disponíveis para ativação.",
+      "fullQuotaAccountsLabel": "Contas para ativar",
+      "accountSort": {
+        "default": "Ordem padrão",
+        "hourly": "Por cota de 5h",
+        "weekly": "Por cota semanal",
+        "email": "Por e-mail"
+      },
       "testTitle": "Testar ativação do Codex",
       "testAccountsLabel": "Contas de teste",
       "testAccountsRequired": "Selecione pelo menos uma conta de teste.",
@@ -2333,10 +2347,14 @@
         "collapse": "Recolher",
         "repairVisibility": "Reparar visibilidade",
         "restoreSessions": "Restaurar sessões",
+        "exportSessions": "Exportar sessões",
+        "importSessions": "Importar sessões",
         "copySessionId": "Copiar ID da sessão",
+        "openLocation": "Abrir local",
         "selectAllSessions": "Selecionar sessões",
         "clearSelectedSessions": "Desmarcar tudo",
-        "copyToInstance": "Copiar para instância"
+        "copyToInstance": "Copiar para instância",
+        "trash": "Lixeira"
       },
       "confirm": {
         "title": "Mover para a lixeira",
@@ -2374,11 +2392,25 @@
       "locationRunning": " (em execução)",
       "untitled": "Sessão sem título",
       "restoreModal": {
-        "title": "Restaurar sessões",
-        "hint": "Ao restaurar, o arquivo rollout, a linha da thread no SQLite e a entrada de session_index voltam juntos para a instância original.",
+        "title": "Lixeira",
+        "hint": "As sessões na lixeira podem ser restauradas para a instância original ou excluídas permanentemente para liberar espaço em disco.",
         "emptyTitle": "A lixeira está vazia",
         "emptyDesc": "As sessões movidas para a lixeira aparecerão aqui.",
-        "restoreAction": "Restaurar sessões selecionadas"
+        "restoreAction": "Restaurar sessões selecionadas",
+        "summary": "{{count}} itens, {{size}}",
+        "selectedSummary": "{{count}} selecionados, {{size}}",
+        "selectAll": "Selecionar tudo",
+        "clearSelected": "Desmarcar",
+        "emptyTrash": "Esvaziar lixeira",
+        "itemSize": "Tamanho {{size}}",
+        "deleteOne": "Excluir permanentemente",
+        "deleteSelected": "Excluir seleção",
+        "pickDeleteOne": "Selecione ao menos uma sessão para excluir permanentemente",
+        "deleteOneConfirm": "Excluir esta sessão permanentemente? Isso não pode ser desfeito. Espaço estimado liberado: {{size}}.",
+        "deleteSelectedConfirm": "Excluir permanentemente as {{count}} sessões selecionadas? Isso não pode ser desfeito. Espaço estimado liberado: {{size}}.",
+        "permanentDeleteTitle": "Excluir permanentemente",
+        "permanentDeleteAction": "Excluir permanentemente",
+        "emptyTrashConfirm": "Esvaziar a lixeira? {{count}} sessões serão excluídas permanentemente e não poderão ser restauradas. Espaço estimado liberado: {{size}}."
       },
       "targetModal": {
         "title": "Copiar para instância",
@@ -2440,7 +2472,90 @@
         "instanceScopeAll": "Todas as instâncias",
         "instanceScopeAllDesc": "Repara todas as instâncias Codex ao restaurar em conjunto.",
         "progressTitle": "Progresso",
-        "start": "Reparar"
+        "start": "Reparar",
+        "previewing": "Gerando prévia...",
+        "previewAgain": "Ver prévia novamente",
+        "preview": "Prévia das alterações",
+        "previewFailedWithError": "Falha ao gerar prévia do reparo de sessões: {{error}}",
+        "confirmRepair": "Confirmar reparo"
+      },
+      "importModal": {
+        "title": "Importar sessões",
+        "hint": "Pacotes de sessão importam apenas arquivos rollout e entradas session_index. Contas, tokens, API keys e configurações do app não são incluídos; sessões com o mesmo ID na instância de destino são ignoradas.",
+        "noTarget": "Nenhuma instância Codex disponível para importação",
+        "noPackage": "Selecione primeiro um pacote de sessões",
+        "pickOne": "Selecione ao menos uma sessão importável",
+        "totalCount": "{{count}} sessões no pacote",
+        "readyCount": "{{count}} importáveis",
+        "selectReady": "Selecionar importáveis",
+        "previewing": "Pré-visualizando pacote de sessões...",
+        "existsIn": "Já existe em: {{names}}",
+        "statusReady": "Pronta",
+        "statusDuplicate": "Existe",
+        "statusConflict": "Conflito",
+        "statusInvalid": "Inválida",
+        "confirm": "Importar sessões selecionadas"
+      },
+      "transferModal": {
+        "exportTitle": "Exportar sessões",
+        "importTitle": "Importar sessões",
+        "minimize": "Minimizar",
+        "reopen": "Ver progresso",
+        "clear": "Limpar",
+        "runningSummary": "Processando {{current}} de {{total}}",
+        "completedSummary": "Tarefa concluída",
+        "failedSummary": "Tarefa falhou",
+        "current": "{{current}} de {{total}}",
+        "phase": {
+          "exportPrepare": "Preparando exportação...",
+          "exportCollect": "Coletando sessões...",
+          "exportHash": "Verificando arquivos de sessão...",
+          "exportWrite": "Gravando pacote de sessões...",
+          "importPrepare": "Preparando importação...",
+          "importRead": "Lendo pacote de sessões...",
+          "importWrite": "Gravando instância de destino...",
+          "importRebuild": "Atualizando índice oficial de sessões...",
+          "done": "Tarefa concluída"
+        }
+      },
+      "exportModal": {
+        "title": "Exportar sessões",
+        "hint": "Revise a lista, a instância de origem e o tamanho antes de exportar. Pacotes incluem apenas arquivos rollout e entradas session_index, não contas, tokens, chaves API ou configurações.",
+        "previewing": "Pré-visualizando sessões...",
+        "selectedCount": "{{count}} selecionadas",
+        "exportableCount": "{{count}} exportáveis",
+        "missingCount": "{{count}} ausentes",
+        "totalSize": "Tamanho total {{size}}",
+        "exportPath": "Caminho exportação",
+        "pathUnset": "Nenhum caminho escolhido",
+        "choosePath": "Escolher caminho",
+        "missingNotice": "{{count}} sessão(ões) não estão mais nas instâncias atuais e serão ignoradas.",
+        "sourceInstance": "Origem: {{name}}",
+        "emptyTitle": "Nenhuma sessão exportável",
+        "noPreview": "Conclua a prévia primeiro",
+        "noExportable": "Nenhuma sessão exportável",
+        "pickPath": "Escolha um caminho",
+        "confirm": "Exportar",
+        "selectedExportCount": "Selecionadas {{selected}} / exportáveis {{total}}",
+        "selectedSize": "Tamanho escolhido {{selected}} / total {{total}}",
+        "removedNotice": "{{count}} removidas desta lista de exportação",
+        "restoreRemoved": "Restaurar lista",
+        "sourceLabel": "Origem",
+        "allSources": "Todas as origens",
+        "selectionLabel": "Seleção",
+        "filterAll": "Tudo",
+        "filterSelected": "Selecionadas",
+        "filterUnselected": "Não selecionadas",
+        "visibleCount": "Mostrando {{visible}} / {{total}}",
+        "selectVisible": "Selecionar filtro",
+        "clearVisible": "Limpar filtro",
+        "keepVisibleOnly": "Manter filtro",
+        "removeVisible": "Remover filtro",
+        "removeUnchecked": "Remover não selecionadas",
+        "selectItem": "Selecionar sessão para exportar",
+        "removeItem": "Remover",
+        "emptyFilteredTitle": "Nenhuma sessão encontrada",
+        "emptyFilteredDesc": "Ajuste busca, origem ou estado de seleção e tente novamente."
       }
     },
     "api": {
@@ -3000,7 +3115,9 @@
         "pricingUnset": "Não definido",
         "pricingReset": "Redefinir",
         "pricingSaved": "Preços salvos",
-        "pricingInvalid": "Os preços devem ser números maiores ou iguais a 0"
+        "pricingInvalid": "Os preços devem ser números maiores ou iguais a 0",
+        "pricingReprice": "Recalcular histórico",
+        "pricingRepriced": "As estimativas históricas foram recalculadas com os preços atuais"
       },
       "keys": {
         "policyTitle": "Política de modelos",
@@ -3147,7 +3264,11 @@
       "selectedCount": "Selecionadas {{count}}/{{total}}",
       "selectAllAccounts": "Selecionar todas",
       "selectReady": "Selecionar contas OK",
-      "clearSelection": "Limpar seleção"
+      "clearSelection": "Limpar seleção",
+      "hiddenTask": "Importação em lote do Codex",
+      "taskRunning": "Processando {{current}} / {{total}}",
+      "taskPreview": "{{total}} prévia(s) pronta(s)",
+      "reopen": "Ver tarefa"
     },
     "autoRepairMode": {
       "label": "Lógica de reparo automático",
@@ -3167,6 +3288,22 @@
       "saveDraft": "Salvar cartão pendente",
       "authorizeAction": "Autorizar",
       "cardHint": "Notas salvas. Conclua o OAuth para usar esta conta."
+    },
+    "batchDelete": {
+      "title": "Exclusão em lote do Codex",
+      "running": "Excluindo",
+      "paused": "Pausado",
+      "failed": "Falha parcial",
+      "completed": "Exclusão concluída",
+      "preparing": "Preparando tarefa de exclusão...",
+      "retryFailed": "Tentar falhas",
+      "pause": "Pausar",
+      "resume": "Continuar",
+      "clear": "Limpar",
+      "summary": "{{completed}} / {{total}} processados, {{failed}} falharam",
+      "started": "Exclusão de {{count}} conta(s) Codex iniciada",
+      "pollFailed": "Falha ao atualizar progresso da exclusão: {{error}}",
+      "actionFailed": "Ação de exclusão em lote falhou: {{error}}"
     }
   },
   "githubCopilot": {

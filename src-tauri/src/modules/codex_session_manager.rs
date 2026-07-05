@@ -1,13 +1,17 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
+use sha2::{Digest, Sha256};
+use uuid::Uuid;
+use zip::write::SimpleFileOptions;
+use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 use crate::modules;
 
@@ -16,7 +20,13 @@ const DEFAULT_INSTANCE_NAME: &str = "默认实例";
 const SESSION_INDEX_FILE: &str = "session_index.jsonl";
 const SESSION_DIRS: [&str; 2] = ["sessions", "archived_sessions"];
 const SESSION_TRASH_ROOT_DIR: &str = "cockpit-tools-codex-session-trash";
+const SESSION_EXPORT_KIND: &str = "codex-session-export";
+const SESSION_EXPORT_VERSION: u32 = 1;
+pub const SESSION_TRANSFER_PROGRESS_EVENT: &str = "codex:session-transfer-progress";
+const SESSION_INDEX_ACTIVITY_DRIFT_SECONDS: i64 = 3_600;
 const TOKEN_STATS_READ_CHUNK_BYTES: usize = 64 * 1024;
+const ROLLOUT_ACTIVITY_READ_CHUNK_BYTES: usize = 64 * 1024;
+const ROLLOUT_ACTIVITY_MAX_SCAN_BYTES: u64 = 4 * 1024 * 1024;
 const CONTENT_SEARCH_READ_CHUNK_BYTES: usize = 64 * 1024;
 const CONTENT_SEARCH_CACHE_MAX_ENTRIES: usize = 512;
 
@@ -77,6 +87,7 @@ pub struct CodexTrashedSessionRecord {
     pub title: String,
     pub cwd: String,
     pub deleted_at: Option<i64>,
+    pub size_bytes: u64,
     pub location_count: usize,
     pub locations: Vec<CodexTrashedSessionLocation>,
 }
@@ -89,6 +100,100 @@ pub struct CodexSessionRestoreSummary {
     pub restored_instance_count: usize,
     pub message: String,
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexSessionTrashDeleteSummary {
+    pub requested_session_count: usize,
+    pub deleted_session_count: usize,
+    pub deleted_entry_count: usize,
+    pub freed_size_bytes: u64,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexSessionExportSummary {
+    pub requested_session_count: usize,
+    pub exported_session_count: usize,
+    pub skipped_session_count: usize,
+    pub export_path: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexSessionExportPreview {
+    pub requested_session_count: usize,
+    pub exportable_session_count: usize,
+    pub missing_session_count: usize,
+    pub total_size_bytes: u64,
+    pub items: Vec<CodexSessionExportPreviewItem>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexSessionExportPreviewItem {
+    pub session_id: String,
+    pub title: String,
+    pub cwd: String,
+    pub updated_at: Option<i64>,
+    pub size_bytes: u64,
+    pub source_instance_id: String,
+    pub source_instance_name: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexSessionImportPreview {
+    pub package_version: u32,
+    pub exported_at: Option<String>,
+    pub import_file_path: String,
+    pub target_instance_id: String,
+    pub target_instance_name: String,
+    pub total_session_count: usize,
+    pub importable_session_count: usize,
+    pub items: Vec<CodexSessionImportPreviewItem>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexSessionImportPreviewItem {
+    pub session_id: String,
+    pub title: String,
+    pub cwd: String,
+    pub updated_at: Option<i64>,
+    pub size_bytes: u64,
+    pub status: String,
+    pub reason: Option<String>,
+    pub existing_instance_names: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexSessionImportSummary {
+    pub requested_session_count: usize,
+    pub imported_session_count: usize,
+    pub skipped_session_count: usize,
+    pub target_instance_id: String,
+    pub target_instance_name: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexSessionTransferProgress {
+    pub transfer_id: String,
+    pub operation: String,
+    pub phase: String,
+    pub current: usize,
+    pub total: usize,
+    pub percent: u8,
+    pub current_label: Option<String>,
+    pub running: bool,
+}
+
+type SessionTransferProgressReporter<'a> = &'a (dyn Fn(CodexSessionTransferProgress) + Send + Sync);
 
 #[derive(Debug, Clone, Default)]
 pub struct CodexSessionSearchFilter {
@@ -113,6 +218,37 @@ struct ThreadSnapshot {
     rollout_path: PathBuf,
     session_index_entry: JsonValue,
     source_root: PathBuf,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionExportManifest {
+    kind: String,
+    package_version: u32,
+    exported_at: String,
+    sessions: Vec<SessionExportManifestItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionExportManifestItem {
+    session_id: String,
+    title: String,
+    cwd: String,
+    updated_at: Option<i64>,
+    relative_rollout_path: String,
+    file_entry: String,
+    size_bytes: u64,
+    sha256: String,
+    session_index_entry: JsonValue,
+    source_instance: SessionExportInstance,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionExportInstance {
+    id: String,
+    name: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -662,6 +798,7 @@ pub fn list_trashed_sessions_across_instances() -> Result<Vec<CodexTrashedSessio
                 title: entry.manifest.title.clone(),
                 cwd: entry.manifest.cwd.clone(),
                 deleted_at,
+                size_bytes: 0,
                 location_count: 0,
                 locations: Vec::new(),
             });
@@ -681,6 +818,9 @@ pub fn list_trashed_sessions_across_instances() -> Result<Vec<CodexTrashedSessio
             instance_name: entry.manifest.instance_name.clone(),
         });
         record.location_count = record.locations.len();
+        record.size_bytes = record
+            .size_bytes
+            .saturating_add(calculate_path_size(&entry.entry_dir).unwrap_or(0));
     }
 
     let mut sessions = session_map.into_values().collect::<Vec<_>>();
@@ -693,6 +833,104 @@ pub fn list_trashed_sessions_across_instances() -> Result<Vec<CodexTrashedSessio
             .then_with(|| left.title.cmp(&right.title))
     });
     Ok(sessions)
+}
+
+pub fn delete_trashed_sessions_across_instances(
+    session_ids: Vec<String>,
+) -> Result<CodexSessionTrashDeleteSummary, String> {
+    let requested_ids = session_ids
+        .into_iter()
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
+        .collect::<HashSet<_>>();
+    if requested_ids.is_empty() {
+        return Err("请至少选择一条会话".to_string());
+    }
+
+    let entries = load_trash_entries()?
+        .into_iter()
+        .filter(|entry| requested_ids.contains(&entry.manifest.session_id))
+        .collect::<Vec<_>>();
+
+    if entries.is_empty() {
+        return Ok(CodexSessionTrashDeleteSummary {
+            requested_session_count: requested_ids.len(),
+            deleted_session_count: 0,
+            deleted_entry_count: 0,
+            freed_size_bytes: 0,
+            message: "所选会话在废纸篓中不存在，无需删除".to_string(),
+        });
+    }
+
+    let (deleted_session_ids, deleted_entry_count, freed_size_bytes) =
+        delete_trash_entries(&entries)?;
+    Ok(CodexSessionTrashDeleteSummary {
+        requested_session_count: requested_ids.len(),
+        deleted_session_count: deleted_session_ids.len(),
+        deleted_entry_count,
+        freed_size_bytes,
+        message: format!(
+            "已永久删除 {} 条废纸篓会话，释放约 {}",
+            deleted_session_ids.len(),
+            format_bytes(freed_size_bytes)
+        ),
+    })
+}
+
+pub fn empty_session_trash_across_instances() -> Result<CodexSessionTrashDeleteSummary, String> {
+    let entries = match load_trash_entries() {
+        Ok(entries) => entries,
+        Err(error) => {
+            modules::logger::log_warn(&format!(
+                "清空 Codex 会话废纸篓前读取清单失败，将直接清理废纸篓目录: {}",
+                error
+            ));
+            Vec::new()
+        }
+    };
+    let requested_session_ids = entries
+        .iter()
+        .map(|entry| entry.manifest.session_id.clone())
+        .collect::<HashSet<_>>();
+
+    let mut freed_size_bytes = 0u64;
+    let mut removed_root_count = 0usize;
+    for root in get_session_trash_roots_for_read()? {
+        if !root.path.exists() {
+            continue;
+        }
+        freed_size_bytes =
+            freed_size_bytes.saturating_add(calculate_path_size(&root.path).unwrap_or(0));
+        match remove_path_recursively(&root.path) {
+            Ok(()) => {
+                removed_root_count += 1;
+            }
+            Err(error) if root.optional => {
+                modules::logger::log_warn(&format!(
+                    "清理旧 Codex 会话废纸篓失败，已跳过 ({}): {}",
+                    root.path.display(),
+                    error
+                ));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    Ok(CodexSessionTrashDeleteSummary {
+        requested_session_count: requested_session_ids.len(),
+        deleted_session_count: requested_session_ids.len(),
+        deleted_entry_count: entries.len(),
+        freed_size_bytes,
+        message: if removed_root_count == 0 {
+            "废纸篓为空，无需清理".to_string()
+        } else {
+            format!(
+                "已清空 Codex 会话废纸篓，永久删除 {} 条会话，释放约 {}",
+                requested_session_ids.len(),
+                format_bytes(freed_size_bytes)
+            )
+        },
+    })
 }
 
 pub fn restore_sessions_from_trash_across_instances(
@@ -771,6 +1009,425 @@ pub fn restore_sessions_from_trash_across_instances(
     })
 }
 
+pub fn preview_session_export(
+    session_ids: Vec<String>,
+) -> Result<CodexSessionExportPreview, String> {
+    let requested_ids = normalize_session_id_list(session_ids);
+    if requested_ids.is_empty() {
+        return Err("请至少选择一条会话".to_string());
+    }
+
+    let selected_entries = collect_export_session_entries(&requested_ids)?;
+    let mut items = Vec::with_capacity(selected_entries.len());
+    let mut total_size_bytes = 0u64;
+
+    for (instance, snapshot) in &selected_entries {
+        let size_bytes = fs::metadata(&snapshot.rollout_path)
+            .map_err(|error| {
+                format!(
+                    "读取会话文件大小失败 ({}): {}",
+                    snapshot.rollout_path.display(),
+                    error
+                )
+            })?
+            .len();
+        total_size_bytes = total_size_bytes.saturating_add(size_bytes);
+        items.push(CodexSessionExportPreviewItem {
+            session_id: snapshot.id.clone(),
+            title: snapshot.title.clone(),
+            cwd: snapshot.cwd.clone(),
+            updated_at: snapshot.updated_at,
+            size_bytes,
+            source_instance_id: instance.id.clone(),
+            source_instance_name: instance.name.clone(),
+        });
+    }
+
+    Ok(CodexSessionExportPreview {
+        requested_session_count: requested_ids.len(),
+        exportable_session_count: items.len(),
+        missing_session_count: requested_ids.len().saturating_sub(items.len()),
+        total_size_bytes,
+        items,
+    })
+}
+
+pub fn export_sessions(
+    session_ids: Vec<String>,
+    export_path: String,
+    transfer_id: Option<String>,
+    progress_reporter: Option<SessionTransferProgressReporter<'_>>,
+) -> Result<CodexSessionExportSummary, String> {
+    let requested_ids = normalize_session_id_list(session_ids);
+    if requested_ids.is_empty() {
+        return Err("请至少选择一条会话".to_string());
+    }
+    emit_session_transfer_progress(
+        progress_reporter,
+        transfer_id.as_deref(),
+        "export",
+        "collect",
+        0,
+        requested_ids.len(),
+        None,
+        true,
+    );
+    let export_path = PathBuf::from(export_path.trim());
+    if export_path.as_os_str().is_empty() {
+        return Err("请选择会话导出文件".to_string());
+    }
+    if let Some(parent) = export_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|error| {
+                format!("创建会话导出目录失败 ({}): {}", parent.display(), error)
+            })?;
+        }
+    }
+
+    let selected_entries = collect_export_session_entries(&requested_ids)?;
+    if selected_entries.is_empty() {
+        return Ok(CodexSessionExportSummary {
+            requested_session_count: requested_ids.len(),
+            exported_session_count: 0,
+            skipped_session_count: requested_ids.len(),
+            export_path: export_path.to_string_lossy().to_string(),
+            message: "所选会话在当前实例集合中不存在，未导出任何内容".to_string(),
+        });
+    }
+
+    let mut manifest_items = Vec::with_capacity(selected_entries.len());
+    for (index, (instance, snapshot)) in selected_entries.iter().enumerate() {
+        emit_session_transfer_progress(
+            progress_reporter,
+            transfer_id.as_deref(),
+            "export",
+            "hash",
+            index,
+            selected_entries.len(),
+            Some(snapshot.title.clone()),
+            true,
+        );
+        let (size_bytes, sha256) = sha256_file(&snapshot.rollout_path)?;
+        let relative_rollout_path = snapshot_relative_rollout_path(snapshot);
+        let file_entry = format!(
+            "files/{:04}-{}/rollout.jsonl",
+            index + 1,
+            sanitize_for_file_name(&snapshot.id)
+        );
+        manifest_items.push(SessionExportManifestItem {
+            session_id: snapshot.id.clone(),
+            title: snapshot.title.clone(),
+            cwd: snapshot.cwd.clone(),
+            updated_at: snapshot.updated_at,
+            relative_rollout_path,
+            file_entry,
+            size_bytes,
+            sha256,
+            session_index_entry: snapshot.session_index_entry.clone(),
+            source_instance: SessionExportInstance {
+                id: instance.id.clone(),
+                name: instance.name.clone(),
+            },
+        });
+    }
+    emit_session_transfer_progress(
+        progress_reporter,
+        transfer_id.as_deref(),
+        "export",
+        "write",
+        0,
+        manifest_items.len(),
+        None,
+        true,
+    );
+
+    let manifest = SessionExportManifest {
+        kind: SESSION_EXPORT_KIND.to_string(),
+        package_version: SESSION_EXPORT_VERSION,
+        exported_at: Utc::now().to_rfc3339(),
+        sessions: manifest_items,
+    };
+
+    write_session_export_package(
+        &export_path,
+        &manifest,
+        &selected_entries,
+        transfer_id.as_deref(),
+        progress_reporter,
+    )?;
+    emit_session_transfer_progress(
+        progress_reporter,
+        transfer_id.as_deref(),
+        "export",
+        "done",
+        manifest.sessions.len(),
+        manifest.sessions.len(),
+        None,
+        false,
+    );
+
+    Ok(CodexSessionExportSummary {
+        requested_session_count: requested_ids.len(),
+        exported_session_count: manifest.sessions.len(),
+        skipped_session_count: requested_ids.len().saturating_sub(manifest.sessions.len()),
+        export_path: export_path.to_string_lossy().to_string(),
+        message: format!("已导出 {} 条会话", manifest.sessions.len()),
+    })
+}
+
+pub fn preview_session_import(
+    import_file_path: String,
+    target_instance_id: Option<String>,
+) -> Result<CodexSessionImportPreview, String> {
+    let import_file_path = PathBuf::from(import_file_path.trim());
+    if import_file_path.as_os_str().is_empty() {
+        return Err("请选择会话包文件".to_string());
+    }
+    let manifest = read_session_export_manifest_from_path(&import_file_path)?;
+    let target = resolve_session_import_target(target_instance_id)?;
+    let target_snapshots = load_thread_snapshots(&target)?;
+    let target_by_id = target_snapshots
+        .into_iter()
+        .map(|snapshot| (snapshot.id.clone(), snapshot))
+        .collect::<HashMap<_, _>>();
+    let existing_instance_names = collect_existing_session_instance_names()?;
+
+    let mut items = Vec::with_capacity(manifest.sessions.len());
+    for item in &manifest.sessions {
+        let mut status = "ready".to_string();
+        let mut reason = None;
+
+        if validate_manifest_item(item).is_err() {
+            status = "invalid".to_string();
+            reason = Some("会话包条目无效".to_string());
+        } else if let Some(existing) = target_by_id.get(&item.session_id) {
+            let existing_hash = sha256_file(&existing.rollout_path)
+                .map(|(_, hash)| hash)
+                .unwrap_or_default();
+            if existing_hash == item.sha256 {
+                status = "duplicate".to_string();
+                reason = Some("目标实例已存在相同会话".to_string());
+            } else {
+                status = "conflict".to_string();
+                reason = Some("目标实例已存在同 ID 的不同会话，已跳过避免覆盖".to_string());
+            }
+        }
+
+        items.push(CodexSessionImportPreviewItem {
+            session_id: item.session_id.clone(),
+            title: item.title.clone(),
+            cwd: item.cwd.clone(),
+            updated_at: item.updated_at,
+            size_bytes: item.size_bytes,
+            status,
+            reason,
+            existing_instance_names: existing_instance_names
+                .get(&item.session_id)
+                .cloned()
+                .unwrap_or_default(),
+        });
+    }
+
+    let importable_session_count = items.iter().filter(|item| item.status == "ready").count();
+    Ok(CodexSessionImportPreview {
+        package_version: manifest.package_version,
+        exported_at: Some(manifest.exported_at),
+        import_file_path: import_file_path.to_string_lossy().to_string(),
+        target_instance_id: target.id,
+        target_instance_name: target.name,
+        total_session_count: items.len(),
+        importable_session_count,
+        items,
+    })
+}
+
+pub fn import_sessions(
+    import_file_path: String,
+    target_instance_id: Option<String>,
+    session_ids: Vec<String>,
+    transfer_id: Option<String>,
+    progress_reporter: Option<SessionTransferProgressReporter<'_>>,
+) -> Result<CodexSessionImportSummary, String> {
+    let requested_ids = normalize_session_id_list(session_ids);
+    if requested_ids.is_empty() {
+        return Err("请至少选择一条要导入的会话".to_string());
+    }
+    emit_session_transfer_progress(
+        progress_reporter,
+        transfer_id.as_deref(),
+        "import",
+        "read",
+        0,
+        requested_ids.len(),
+        None,
+        true,
+    );
+    let import_file_path = PathBuf::from(import_file_path.trim());
+    if import_file_path.as_os_str().is_empty() {
+        return Err("请选择会话包文件".to_string());
+    }
+    let target = resolve_session_import_target(target_instance_id)?;
+    let manifest = read_session_export_manifest_from_path(&import_file_path)?;
+    let manifest_by_id = manifest
+        .sessions
+        .iter()
+        .map(|item| (item.session_id.clone(), item.clone()))
+        .collect::<HashMap<_, _>>();
+
+    let mut target_session_ids = load_thread_snapshots(&target)?
+        .into_iter()
+        .map(|snapshot| snapshot.id)
+        .collect::<HashSet<_>>();
+    let original_session_index_content = read_session_index_content(&target.data_dir)?;
+    let mut imported_count = 0usize;
+    let mut skipped_count = 0usize;
+    let mut next_session_index_content = original_session_index_content.clone();
+
+    let file = File::open(&import_file_path)
+        .map_err(|error| format!("打开会话包失败 ({}): {}", import_file_path.display(), error))?;
+    let mut archive =
+        ZipArchive::new(file).map_err(|error| format!("读取会话包失败: {}", error))?;
+
+    for (index, session_id) in requested_ids.iter().enumerate() {
+        let Some(item) = manifest_by_id.get(session_id) else {
+            skipped_count += 1;
+            continue;
+        };
+        emit_session_transfer_progress(
+            progress_reporter,
+            transfer_id.as_deref(),
+            "import",
+            "write",
+            index,
+            requested_ids.len(),
+            Some(item.title.clone()),
+            true,
+        );
+        validate_manifest_item(item)?;
+        if target_session_ids.contains(session_id) {
+            skipped_count += 1;
+            continue;
+        }
+
+        let target_rollout_path = resolve_import_target_rollout_path(&target.data_dir, item);
+        let target_rollout_path = uniquify_rollout_path(&target_rollout_path);
+        let written_path =
+            write_imported_rollout_from_archive(&mut archive, item, &target_rollout_path)?;
+        let session_index_entry = build_imported_session_index_entry(item, &written_path);
+        if let Err(error) = upsert_session_index_with_entry(
+            &target.data_dir,
+            &next_session_index_content,
+            session_id,
+            &session_index_entry,
+        ) {
+            let _ = fs::remove_file(&written_path);
+            let _ = restore_session_index_content(
+                &target.data_dir,
+                original_session_index_content.as_deref(),
+            );
+            return Err(error);
+        }
+        next_session_index_content = read_session_index_content(&target.data_dir)?;
+        target_session_ids.insert(session_id.clone());
+        imported_count += 1;
+        emit_session_transfer_progress(
+            progress_reporter,
+            transfer_id.as_deref(),
+            "import",
+            "write",
+            index + 1,
+            requested_ids.len(),
+            Some(item.title.clone()),
+            true,
+        );
+    }
+
+    if imported_count > 0 {
+        emit_session_transfer_progress(
+            progress_reporter,
+            transfer_id.as_deref(),
+            "import",
+            "rebuild",
+            requested_ids.len(),
+            requested_ids.len(),
+            Some(target.name.clone()),
+            true,
+        );
+        if let Err(error) =
+            modules::codex_official_app_server::rebuild_thread_metadata(&target.data_dir)
+        {
+            modules::logger::log_warn(&format!(
+                "会话已导入，但官方 Codex 重建会话索引失败 ({}): {}",
+                target.name, error
+            ));
+        }
+    }
+    emit_session_transfer_progress(
+        progress_reporter,
+        transfer_id.as_deref(),
+        "import",
+        "done",
+        requested_ids.len(),
+        requested_ids.len(),
+        None,
+        false,
+    );
+
+    Ok(CodexSessionImportSummary {
+        requested_session_count: requested_ids.len(),
+        imported_session_count: imported_count,
+        skipped_session_count: skipped_count,
+        target_instance_id: target.id,
+        target_instance_name: target.name.clone(),
+        message: if imported_count > 0 {
+            format!(
+                "已导入 {} 条会话到 {}；已跳过 {} 条",
+                imported_count, target.name, skipped_count
+            )
+        } else {
+            format!("没有导入新会话；已跳过 {} 条", skipped_count)
+        },
+    })
+}
+
+pub fn resolve_session_location_dir(session_id: String) -> Result<PathBuf, String> {
+    let session_id = session_id.trim().to_string();
+    if session_id.is_empty() {
+        return Err("请选择一条会话".to_string());
+    }
+    let instances = collect_instances()?;
+    let mut best_snapshot: Option<ThreadSnapshot> = None;
+    for instance in &instances {
+        for snapshot in load_thread_snapshots(instance)? {
+            if snapshot.id != session_id {
+                continue;
+            }
+            let should_replace = best_snapshot
+                .as_ref()
+                .map(|current| {
+                    snapshot.updated_at.unwrap_or_default() > current.updated_at.unwrap_or_default()
+                })
+                .unwrap_or(true);
+            if should_replace {
+                best_snapshot = Some(snapshot);
+            }
+        }
+    }
+    let Some(snapshot) = best_snapshot else {
+        return Err("未找到该会话文件".to_string());
+    };
+    snapshot
+        .rollout_path
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| {
+            format!(
+                "无法解析会话文件所在目录: {}",
+                snapshot.rollout_path.display()
+            )
+        })
+}
+
 fn collect_instances() -> Result<Vec<CodexSyncInstance>, String> {
     let mut instances = Vec::new();
     let default_dir = modules::codex_instance::get_default_codex_home()?;
@@ -796,6 +1453,458 @@ fn collect_instances() -> Result<Vec<CodexSyncInstance>, String> {
     }
 
     Ok(instances)
+}
+
+fn normalize_session_id_list(session_ids: Vec<String>) -> HashSet<String> {
+    session_ids
+        .into_iter()
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
+        .collect::<HashSet<_>>()
+}
+
+fn collect_export_session_entries(
+    requested_ids: &HashSet<String>,
+) -> Result<Vec<(CodexSyncInstance, ThreadSnapshot)>, String> {
+    let instances = collect_instances()?;
+    let mut selected = HashMap::<String, (CodexSyncInstance, ThreadSnapshot)>::new();
+    for instance in &instances {
+        for snapshot in load_thread_snapshots(instance)? {
+            if !requested_ids.contains(&snapshot.id) {
+                continue;
+            }
+            let should_replace = selected
+                .get(&snapshot.id)
+                .map(|(_, current)| {
+                    snapshot.updated_at.unwrap_or_default() > current.updated_at.unwrap_or_default()
+                })
+                .unwrap_or(true);
+            if should_replace {
+                selected.insert(snapshot.id.clone(), (instance.clone(), snapshot));
+            }
+        }
+    }
+
+    let mut selected_entries = selected.into_values().collect::<Vec<_>>();
+    selected_entries.sort_by(|left, right| {
+        right
+            .1
+            .updated_at
+            .unwrap_or_default()
+            .cmp(&left.1.updated_at.unwrap_or_default())
+            .then_with(|| left.1.title.cmp(&right.1.title))
+    });
+    Ok(selected_entries)
+}
+
+fn emit_session_transfer_progress(
+    progress_reporter: Option<SessionTransferProgressReporter<'_>>,
+    transfer_id: Option<&str>,
+    operation: &str,
+    phase: &str,
+    current: usize,
+    total: usize,
+    current_label: Option<String>,
+    running: bool,
+) {
+    let (Some(progress_reporter), Some(transfer_id)) = (progress_reporter, transfer_id) else {
+        return;
+    };
+    let percent = if total == 0 {
+        0
+    } else {
+        ((current.min(total) * 100) / total).min(100) as u8
+    };
+    progress_reporter(CodexSessionTransferProgress {
+        transfer_id: transfer_id.to_string(),
+        operation: operation.to_string(),
+        phase: phase.to_string(),
+        current: current.min(total),
+        total,
+        percent,
+        current_label,
+        running,
+    });
+}
+
+fn resolve_session_import_target(
+    target_instance_id: Option<String>,
+) -> Result<CodexSyncInstance, String> {
+    let target_id = target_instance_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_INSTANCE_ID)
+        .to_string();
+    collect_instances()?
+        .into_iter()
+        .find(|instance| instance.id == target_id)
+        .ok_or_else(|| "目标实例不存在".to_string())
+}
+
+fn snapshot_relative_rollout_path(snapshot: &ThreadSnapshot) -> String {
+    snapshot
+        .rollout_path
+        .strip_prefix(&snapshot.source_root)
+        .ok()
+        .and_then(path_to_package_path)
+        .unwrap_or_else(|| generated_import_rollout_relative_path(&snapshot.id))
+}
+
+fn path_to_package_path(path: &Path) -> Option<String> {
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::Normal(value) => {
+                let part = value.to_str()?.trim();
+                if part.is_empty() || part == "." || part == ".." || part.contains(':') {
+                    return None;
+                }
+                parts.push(part.to_string());
+            }
+            _ => return None,
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("/"))
+    }
+}
+
+fn normalize_package_entry_path(value: &str) -> Option<String> {
+    let normalized = value.trim().replace('\\', "/");
+    if normalized.is_empty() || normalized.starts_with('/') {
+        return None;
+    }
+    let parts = normalized.split('/').collect::<Vec<_>>();
+    if parts.is_empty() {
+        return None;
+    }
+    for part in &parts {
+        if part.is_empty() || *part == "." || *part == ".." || part.contains(':') {
+            return None;
+        }
+    }
+    Some(parts.join("/"))
+}
+
+fn validate_manifest_item(item: &SessionExportManifestItem) -> Result<(), String> {
+    if item.session_id.trim().is_empty() {
+        return Err("会话包中存在空会话 ID".to_string());
+    }
+    let file_entry = normalize_package_entry_path(&item.file_entry)
+        .ok_or_else(|| format!("会话包文件路径无效: {}", item.file_entry))?;
+    if !file_entry.starts_with("files/") || !file_entry.ends_with(".jsonl") {
+        return Err(format!("会话包文件路径无效: {}", item.file_entry));
+    }
+    if item.sha256.len() != 64 || !item.sha256.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Err(format!("会话包 hash 无效: {}", item.session_id));
+    }
+    Ok(())
+}
+
+fn write_session_export_package(
+    export_path: &Path,
+    manifest: &SessionExportManifest,
+    selected_entries: &[(CodexSyncInstance, ThreadSnapshot)],
+    transfer_id: Option<&str>,
+    progress_reporter: Option<SessionTransferProgressReporter<'_>>,
+) -> Result<(), String> {
+    let file = File::create(export_path).map_err(|error| {
+        format!(
+            "创建会话导出文件失败 ({}): {}",
+            export_path.display(),
+            error
+        )
+    })?;
+    let mut zip = ZipWriter::new(file);
+    let options = SimpleFileOptions::default()
+        .compression_method(CompressionMethod::Deflated)
+        .unix_permissions(0o644);
+
+    zip.start_file("manifest.json", options)
+        .map_err(|error| format!("写入会话包清单失败: {}", error))?;
+    let manifest_content = serde_json::to_vec_pretty(manifest)
+        .map_err(|error| format!("序列化会话包清单失败: {}", error))?;
+    zip.write_all(&manifest_content)
+        .map_err(|error| format!("写入会话包清单失败: {}", error))?;
+
+    for (index, (item, (_, snapshot))) in manifest
+        .sessions
+        .iter()
+        .zip(selected_entries.iter())
+        .enumerate()
+    {
+        emit_session_transfer_progress(
+            progress_reporter,
+            transfer_id,
+            "export",
+            "write",
+            index,
+            manifest.sessions.len(),
+            Some(item.title.clone()),
+            true,
+        );
+        zip.start_file(item.file_entry.as_str(), options)
+            .map_err(|error| format!("写入会话包文件失败 ({}): {}", item.file_entry, error))?;
+        let mut source = File::open(&snapshot.rollout_path).map_err(|error| {
+            format!(
+                "打开会话 rollout 文件失败 ({}): {}",
+                snapshot.rollout_path.display(),
+                error
+            )
+        })?;
+        std::io::copy(&mut source, &mut zip)
+            .map_err(|error| format!("写入会话包文件失败 ({}): {}", item.file_entry, error))?;
+        emit_session_transfer_progress(
+            progress_reporter,
+            transfer_id,
+            "export",
+            "write",
+            index + 1,
+            manifest.sessions.len(),
+            Some(item.title.clone()),
+            true,
+        );
+    }
+
+    zip.finish()
+        .map_err(|error| format!("完成会话导出文件失败: {}", error))?;
+    Ok(())
+}
+
+fn read_session_export_manifest_from_path(
+    import_file_path: &Path,
+) -> Result<SessionExportManifest, String> {
+    let file = File::open(import_file_path)
+        .map_err(|error| format!("打开会话包失败 ({}): {}", import_file_path.display(), error))?;
+    let mut archive =
+        ZipArchive::new(file).map_err(|error| format!("读取会话包失败: {}", error))?;
+    read_session_export_manifest(&mut archive)
+}
+
+fn read_session_export_manifest(
+    archive: &mut ZipArchive<File>,
+) -> Result<SessionExportManifest, String> {
+    let mut manifest_file = archive
+        .by_name("manifest.json")
+        .map_err(|error| format!("会话包缺少 manifest.json: {}", error))?;
+    let mut content = String::new();
+    manifest_file
+        .read_to_string(&mut content)
+        .map_err(|error| format!("读取会话包清单失败: {}", error))?;
+    let manifest = serde_json::from_str::<SessionExportManifest>(&content)
+        .map_err(|error| format!("解析会话包清单失败: {}", error))?;
+    if manifest.kind != SESSION_EXPORT_KIND {
+        return Err("这不是 Cockpit Tools Codex 会话包".to_string());
+    }
+    if manifest.package_version == 0 || manifest.package_version > SESSION_EXPORT_VERSION {
+        return Err(format!("不支持的会话包版本: {}", manifest.package_version));
+    }
+    Ok(manifest)
+}
+
+fn collect_existing_session_instance_names() -> Result<HashMap<String, Vec<String>>, String> {
+    let mut result = HashMap::<String, Vec<String>>::new();
+    for instance in collect_instances()? {
+        for snapshot in load_thread_snapshots(&instance)? {
+            let names = result.entry(snapshot.id).or_default();
+            if !names.iter().any(|name| name == &instance.name) {
+                names.push(instance.name.clone());
+            }
+        }
+    }
+    Ok(result)
+}
+
+fn resolve_import_target_rollout_path(
+    target_root: &Path,
+    item: &SessionExportManifestItem,
+) -> PathBuf {
+    let relative_path = normalize_package_entry_path(&item.relative_rollout_path)
+        .filter(|path| is_safe_rollout_relative_path(path))
+        .unwrap_or_else(|| generated_import_rollout_relative_path(&item.session_id));
+    target_root.join(PathBuf::from(relative_path))
+}
+
+fn is_safe_rollout_relative_path(value: &str) -> bool {
+    let Some(first) = value.split('/').next() else {
+        return false;
+    };
+    if !SESSION_DIRS.contains(&first) {
+        return false;
+    }
+    let Some(file_name) = value.rsplit('/').next() else {
+        return false;
+    };
+    file_name.starts_with("rollout-") && file_name.ends_with(".jsonl")
+}
+
+fn generated_import_rollout_relative_path(session_id: &str) -> String {
+    format!(
+        "sessions/imported/{}/rollout-{}.jsonl",
+        Utc::now().format("%Y/%m/%d"),
+        sanitize_for_file_name(session_id)
+    )
+}
+
+fn uniquify_rollout_path(path: &Path) -> PathBuf {
+    if !path.exists() {
+        return path.to_path_buf();
+    }
+    let parent = path.parent().unwrap_or_else(|| Path::new(""));
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("rollout");
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| format!(".{}", value))
+        .unwrap_or_default();
+    for index in 1..1000 {
+        let candidate = parent.join(format!("{}-import-{}{}", stem, index, extension));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    parent.join(format!("{}-import-{}{}", stem, Uuid::new_v4(), extension))
+}
+
+fn write_imported_rollout_from_archive(
+    archive: &mut ZipArchive<File>,
+    item: &SessionExportManifestItem,
+    target_path: &Path,
+) -> Result<PathBuf, String> {
+    let entry_name = normalize_package_entry_path(&item.file_entry)
+        .ok_or_else(|| format!("会话包文件路径无效: {}", item.file_entry))?;
+    let mut zip_file = archive
+        .by_name(&entry_name)
+        .map_err(|error| format!("会话包缺少会话文件 ({}): {}", item.file_entry, error))?;
+    let parent = target_path
+        .parent()
+        .ok_or_else(|| format!("无法解析目标会话目录: {}", target_path.display()))?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("创建目标会话目录失败 ({}): {}", parent.display(), error))?;
+    let temp_path = parent.join(format!(".cockpit-session-import-{}.tmp", Uuid::new_v4()));
+    let mut output = File::create(&temp_path)
+        .map_err(|error| format!("创建临时会话文件失败 ({}): {}", temp_path.display(), error))?;
+    let mut hasher = Sha256::new();
+    let mut size_bytes = 0u64;
+    let mut buffer = vec![0u8; 64 * 1024];
+
+    let write_result = (|| -> Result<(), String> {
+        loop {
+            let bytes_read = zip_file
+                .read(&mut buffer)
+                .map_err(|error| format!("读取会话包文件失败 ({}): {}", item.file_entry, error))?;
+            if bytes_read == 0 {
+                break;
+            }
+            output.write_all(&buffer[..bytes_read]).map_err(|error| {
+                format!("写入临时会话文件失败 ({}): {}", temp_path.display(), error)
+            })?;
+            hasher.update(&buffer[..bytes_read]);
+            size_bytes += bytes_read as u64;
+        }
+        output.flush().map_err(|error| {
+            format!("写入临时会话文件失败 ({}): {}", temp_path.display(), error)
+        })?;
+        Ok(())
+    })();
+
+    drop(output);
+    if let Err(error) = write_result {
+        let _ = fs::remove_file(&temp_path);
+        return Err(error);
+    }
+
+    let sha256 = hex_lower(hasher.finalize().as_slice());
+    if size_bytes != item.size_bytes || !sha256.eq_ignore_ascii_case(&item.sha256) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!("会话包文件校验失败: {}", item.session_id));
+    }
+    fs::rename(&temp_path, target_path).map_err(|error| {
+        let _ = fs::remove_file(&temp_path);
+        format!(
+            "写入目标会话文件失败 ({}): {}",
+            target_path.display(),
+            error
+        )
+    })?;
+    modules::codex_session_file_time::restore_modified_time(
+        target_path,
+        system_time_from_unix_seconds(item.updated_at),
+    )?;
+    Ok(target_path.to_path_buf())
+}
+
+fn build_imported_session_index_entry(
+    item: &SessionExportManifestItem,
+    rollout_path: &Path,
+) -> JsonValue {
+    let mut imported = item.session_index_entry.clone();
+    if !imported.is_object() {
+        imported = json!({});
+    }
+    let Some(object) = imported.as_object_mut() else {
+        return json!({
+            "id": item.session_id.clone(),
+            "thread_name": item.title.clone(),
+        });
+    };
+    object.insert("id".to_string(), JsonValue::String(item.session_id.clone()));
+    if !item.title.trim().is_empty() {
+        object
+            .entry("thread_name".to_string())
+            .or_insert_with(|| JsonValue::String(item.title.clone()));
+    }
+    if let Some(updated_at) = item
+        .updated_at
+        .or_else(|| rollout_file_activity_seconds(rollout_path))
+        .or_else(|| rollout_file_modified_seconds(rollout_path))
+    {
+        object.insert(
+            "updated_at".to_string(),
+            JsonValue::String(format_session_index_updated_at(updated_at)),
+        );
+    }
+    imported
+}
+
+fn sha256_file(path: &Path) -> Result<(u64, String), String> {
+    let mut file = File::open(path)
+        .map_err(|error| format!("打开文件失败 ({}): {}", path.display(), error))?;
+    let mut hasher = Sha256::new();
+    let mut size_bytes = 0u64;
+    let mut buffer = vec![0u8; 64 * 1024];
+    loop {
+        let bytes_read = file
+            .read(&mut buffer)
+            .map_err(|error| format!("读取文件失败 ({}): {}", path.display(), error))?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+        size_bytes += bytes_read as u64;
+    }
+    Ok((size_bytes, hex_lower(hasher.finalize().as_slice())))
+}
+
+fn hex_lower(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect::<String>()
+}
+
+fn system_time_from_unix_seconds(value: Option<i64>) -> Option<SystemTime> {
+    let seconds = value?;
+    if seconds < 0 {
+        return None;
+    }
+    UNIX_EPOCH.checked_add(Duration::from_secs(seconds as u64))
 }
 
 fn is_instance_running(
@@ -827,11 +1936,10 @@ fn load_thread_snapshots(instance: &CodexSyncInstance) -> Result<Vec<ThreadSnaps
                 .and_then(session_index_title)
                 .unwrap_or_else(|| id.clone());
             let cwd = session_meta_cwd(&session_meta).unwrap_or_else(|| "未知工作目录".to_string());
-            let updated_at = session_index_map
-                .get(&id)
-                .and_then(parse_session_index_updated_at_seconds)
-                .or_else(|| rollout_file_activity_seconds(&rollout_path))
-                .or_else(|| rollout_file_modified_seconds(&rollout_path));
+            let updated_at = resolve_thread_snapshot_updated_at_seconds(
+                session_index_map.get(&id),
+                &rollout_path,
+            );
             let session_index_entry = session_index_map
                 .get(&id)
                 .cloned()
@@ -1184,13 +2292,91 @@ fn parse_session_index_updated_at_seconds(entry: &JsonValue) -> Option<i64> {
     .find_map(parse_json_timestamp_seconds)
 }
 
+fn resolve_thread_snapshot_updated_at_seconds(
+    session_index_entry: Option<&JsonValue>,
+    rollout_path: &Path,
+) -> Option<i64> {
+    let indexed = session_index_entry.and_then(parse_session_index_updated_at_seconds);
+    let activity = rollout_file_activity_seconds(rollout_path);
+    let resolved = match (indexed, activity) {
+        (Some(indexed), Some(activity))
+            if indexed.abs_diff(activity) > SESSION_INDEX_ACTIVITY_DRIFT_SECONDS as u64 =>
+        {
+            Some(activity)
+        }
+        (Some(indexed), _) => Some(indexed),
+        (None, Some(activity)) => Some(activity),
+        (None, None) => None,
+    };
+    resolved.or_else(|| rollout_file_modified_seconds(rollout_path))
+}
+
 fn rollout_file_activity_seconds(path: &Path) -> Option<i64> {
-    let content = fs::read_to_string(path).ok()?;
-    content
-        .lines()
-        .filter_map(|line| serde_json::from_str::<JsonValue>(line.trim()).ok())
-        .filter_map(|value| parse_rollout_line_timestamp_seconds(&value))
-        .max()
+    let metadata = fs::metadata(path).ok()?;
+    let file_len = metadata.len();
+    let mut file = File::open(path).ok()?;
+    let mut offset = file_len;
+    let mut scanned_bytes = 0u64;
+    let mut pending_prefix = Vec::new();
+
+    while offset > 0 && scanned_bytes < ROLLOUT_ACTIVITY_MAX_SCAN_BYTES {
+        let remaining_scan = ROLLOUT_ACTIVITY_MAX_SCAN_BYTES - scanned_bytes;
+        let chunk_len = ROLLOUT_ACTIVITY_READ_CHUNK_BYTES
+            .min(offset as usize)
+            .min(remaining_scan as usize);
+        if chunk_len == 0 {
+            break;
+        }
+        offset -= chunk_len as u64;
+        scanned_bytes += chunk_len as u64;
+
+        file.seek(SeekFrom::Start(offset)).ok()?;
+        let mut chunk = vec![0u8; chunk_len];
+        file.read_exact(&mut chunk).ok()?;
+
+        let starts_on_line_boundary =
+            offset == 0 || byte_before_is_newline(&mut file, offset).ok()?;
+        chunk.extend_from_slice(&pending_prefix);
+
+        let parse_from_index = if starts_on_line_boundary {
+            pending_prefix.clear();
+            0
+        } else if let Some(newline_index) = chunk.iter().position(|byte| *byte == b'\n') {
+            pending_prefix = chunk[..newline_index].to_vec();
+            newline_index + 1
+        } else {
+            pending_prefix = chunk;
+            continue;
+        };
+
+        if let Some(timestamp) = parse_latest_rollout_activity_seconds(&chunk[parse_from_index..]) {
+            return Some(timestamp);
+        }
+    }
+
+    if offset == 0 && !pending_prefix.is_empty() {
+        parse_latest_rollout_activity_seconds(&pending_prefix)
+    } else {
+        None
+    }
+}
+
+fn parse_latest_rollout_activity_seconds(content: &[u8]) -> Option<i64> {
+    for line in content.split(|byte| *byte == b'\n').rev() {
+        let raw = String::from_utf8_lossy(line);
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let Ok(parsed) = serde_json::from_str::<JsonValue>(trimmed) else {
+            continue;
+        };
+        if let Some(timestamp) = parse_rollout_line_timestamp_seconds(&parsed) {
+            return Some(timestamp);
+        }
+    }
+
+    None
 }
 
 fn parse_rollout_line_timestamp_seconds(value: &JsonValue) -> Option<i64> {
@@ -1650,6 +2836,85 @@ fn restore_session_index_content(root_dir: &Path, content: Option<&str>) -> Resu
     Ok(())
 }
 
+fn delete_trash_entries(
+    entries: &[TrashedSessionEntry],
+) -> Result<(HashSet<String>, usize, u64), String> {
+    let mut deleted_session_ids = HashSet::new();
+    let mut deleted_entry_count = 0usize;
+    let mut freed_size_bytes = 0u64;
+
+    for entry in entries {
+        freed_size_bytes =
+            freed_size_bytes.saturating_add(calculate_path_size(&entry.entry_dir).unwrap_or(0));
+        remove_path_recursively(&entry.entry_dir)?;
+        cleanup_empty_trash_ancestors(&entry.entry_dir);
+        deleted_session_ids.insert(entry.manifest.session_id.clone());
+        deleted_entry_count += 1;
+    }
+
+    Ok((deleted_session_ids, deleted_entry_count, freed_size_bytes))
+}
+
+fn calculate_path_size(path: &Path) -> Result<u64, String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("读取路径大小失败 ({}): {}", path.display(), error))?;
+    let file_type = metadata.file_type();
+    if file_type.is_file() || file_type.is_symlink() {
+        return Ok(metadata.len());
+    }
+    if !file_type.is_dir() {
+        return Ok(metadata.len());
+    }
+
+    let mut total = metadata.len();
+    for entry in fs::read_dir(path)
+        .map_err(|error| format!("读取目录大小失败 ({}): {}", path.display(), error))?
+    {
+        let entry =
+            entry.map_err(|error| format!("读取目录项大小失败 ({}): {}", path.display(), error))?;
+        total = total.saturating_add(calculate_path_size(&entry.path())?);
+    }
+    Ok(total)
+}
+
+fn remove_path_recursively(path: &Path) -> Result<(), String> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(format!(
+                "读取待删除路径失败 ({}): {}",
+                path.display(),
+                error
+            ))
+        }
+    };
+    let file_type = metadata.file_type();
+    if file_type.is_dir() && !file_type.is_symlink() {
+        fs::remove_dir_all(path)
+            .map_err(|error| format!("删除目录失败 ({}): {}", path.display(), error))
+    } else {
+        fs::remove_file(path)
+            .map_err(|error| format!("删除文件失败 ({}): {}", path.display(), error))
+    }
+}
+
+fn format_bytes(value: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = 1024.0 * KB;
+    const GB: f64 = 1024.0 * MB;
+    let value = value as f64;
+    if value >= GB {
+        format!("{:.1} GB", value / GB)
+    } else if value >= MB {
+        format!("{:.1} MB", value / MB)
+    } else if value >= KB {
+        format!("{:.1} KB", value / KB)
+    } else {
+        format!("{} B", value as u64)
+    }
+}
+
 fn cleanup_empty_trash_ancestors(entry_dir: &Path) {
     let mut current = entry_dir.parent();
     while let Some(dir) = current {
@@ -1702,6 +2967,44 @@ mod tests {
             ),
         )
         .expect("write rollout");
+    }
+
+    #[test]
+    fn resolve_thread_snapshot_updated_at_prefers_rollout_activity_when_index_is_stale() {
+        let base_dir = make_temp_dir("codex-session-updated-at-drift-test");
+        let rollout_path = base_dir.join("rollout-session-1.jsonl");
+        write_rollout(&rollout_path, "session-1", "activity");
+        let stale_index = json!({
+            "id": "session-1",
+            "thread_name": "Old index",
+            "updated_at": "2024-01-01T00:00:00.000000Z",
+        });
+
+        assert_eq!(
+            resolve_thread_snapshot_updated_at_seconds(Some(&stale_index), &rollout_path),
+            Some(1_780_362_123)
+        );
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn resolve_thread_snapshot_updated_at_keeps_index_when_close_to_rollout_activity() {
+        let base_dir = make_temp_dir("codex-session-updated-at-index-test");
+        let rollout_path = base_dir.join("rollout-session-1.jsonl");
+        write_rollout(&rollout_path, "session-1", "activity");
+        let current_index = json!({
+            "id": "session-1",
+            "thread_name": "Current index",
+            "updated_at": "2026-06-02T01:30:00.000000Z",
+        });
+
+        assert_eq!(
+            resolve_thread_snapshot_updated_at_seconds(Some(&current_index), &rollout_path),
+            Some(1_780_363_800)
+        );
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
 
     #[test]
@@ -1876,6 +3179,67 @@ mod tests {
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
 
+    #[test]
+    fn import_package_path_validation_rejects_unsafe_entries() {
+        assert_eq!(
+            normalize_package_entry_path("files/0001-session/rollout.jsonl").as_deref(),
+            Some("files/0001-session/rollout.jsonl")
+        );
+        assert!(normalize_package_entry_path("../rollout.jsonl").is_none());
+        assert!(normalize_package_entry_path("/tmp/rollout.jsonl").is_none());
+        assert!(normalize_package_entry_path("files/../rollout.jsonl").is_none());
+        assert!(normalize_package_entry_path("C:/tmp/rollout.jsonl").is_none());
+        assert!(is_safe_rollout_relative_path(
+            "sessions/2026/06/02/rollout-session-1.jsonl"
+        ));
+        assert!(!is_safe_rollout_relative_path(
+            "config/2026/06/02/rollout-session-1.jsonl"
+        ));
+    }
+
+    #[test]
+    fn imported_session_index_entry_preserves_existing_fields_and_sets_id() {
+        let base_dir = make_temp_dir("codex-session-import-index-entry-test");
+        let rollout_path = base_dir.join("rollout-session-1.jsonl");
+        write_rollout(&rollout_path, "session-1", "imported");
+        let item = SessionExportManifestItem {
+            session_id: "session-1".to_string(),
+            title: "Imported title".to_string(),
+            cwd: "/tmp/project".to_string(),
+            updated_at: Some(1_780_362_123),
+            relative_rollout_path: "sessions/2026/06/02/rollout-session-1.jsonl".to_string(),
+            file_entry: "files/0001-session-1/rollout.jsonl".to_string(),
+            size_bytes: 10,
+            sha256: "0".repeat(64),
+            session_index_entry: json!({
+                "thread_name": "Original package title",
+                "pinned": true,
+            }),
+            source_instance: SessionExportInstance {
+                id: DEFAULT_INSTANCE_ID.to_string(),
+                name: DEFAULT_INSTANCE_NAME.to_string(),
+            },
+        };
+
+        let entry = build_imported_session_index_entry(&item, &rollout_path);
+
+        assert_eq!(
+            entry.get("id").and_then(JsonValue::as_str),
+            Some("session-1")
+        );
+        assert_eq!(
+            entry.get("thread_name").and_then(JsonValue::as_str),
+            Some("Original package title")
+        );
+        assert_eq!(entry.get("pinned").and_then(JsonValue::as_bool), Some(true));
+        assert_eq!(
+            parse_session_index_updated_at_seconds(&entry),
+            Some(1_780_362_123)
+        );
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
     fn make_trash_entry(
         base_dir: &Path,
         session_id: &str,
@@ -1917,6 +3281,44 @@ mod tests {
             },
             trashed_rollout_path,
         }
+    }
+
+    #[test]
+    fn delete_trash_entries_removes_only_selected_entries() {
+        let base_dir = make_temp_dir("codex-session-trash-delete-test");
+        let instance_root = base_dir.join("codex-home");
+        let first_entry = make_trash_entry(
+            &base_dir,
+            "session-1",
+            instance_root
+                .join("sessions")
+                .join("2026")
+                .join("06")
+                .join("02")
+                .join("rollout-session-1.jsonl"),
+        );
+        let second_entry = make_trash_entry(
+            &base_dir,
+            "session-2",
+            instance_root
+                .join("sessions")
+                .join("2026")
+                .join("06")
+                .join("02")
+                .join("rollout-session-2.jsonl"),
+        );
+
+        let (deleted_session_ids, deleted_entry_count, freed_size_bytes) =
+            delete_trash_entries(std::slice::from_ref(&first_entry)).expect("delete trash entry");
+
+        assert_eq!(deleted_entry_count, 1);
+        assert!(deleted_session_ids.contains("session-1"));
+        assert!(!deleted_session_ids.contains("session-2"));
+        assert!(freed_size_bytes > 0);
+        assert!(!first_entry.entry_dir.exists());
+        assert!(second_entry.entry_dir.exists());
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
 
     #[test]

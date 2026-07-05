@@ -174,6 +174,7 @@ enum RolloutProviderUpdate {
 #[derive(Debug, Clone, Copy)]
 struct CodexSessionVisibilityRepairOptions {
     mode: CodexSessionVisibilityRepairMode,
+    dry_run: bool,
     repair_rollout: bool,
     repair_referenced_rollouts: bool,
     rewrite_all_session_meta: bool,
@@ -273,6 +274,7 @@ impl CodexSessionVisibilityRepairOptions {
     fn official_state_db_only(mode: CodexSessionVisibilityRepairMode) -> Self {
         Self {
             mode,
+            dry_run: false,
             repair_rollout: false,
             repair_referenced_rollouts: true,
             rewrite_all_session_meta: matches!(mode, CodexSessionVisibilityRepairMode::Deep),
@@ -292,6 +294,11 @@ impl CodexSessionVisibilityRepairOptions {
     fn for_auto_repair_mode(mode: CodexSessionVisibilityAutoRepairMode) -> Self {
         let _ = mode;
         Self::official_state_db_only(CodexSessionVisibilityRepairMode::Quick)
+    }
+
+    fn with_dry_run(mut self, dry_run: bool) -> Self {
+        self.dry_run = dry_run;
+        self
     }
 }
 
@@ -425,6 +432,7 @@ pub fn repair_session_visibility_across_instances_with_progress(
         None,
         None,
         None,
+        false,
     )
 }
 
@@ -435,8 +443,9 @@ pub fn repair_session_visibility_across_instances_with_target(
     target_provider: Option<String>,
     session_ids: Option<Vec<String>>,
     instance_ids: Option<Vec<String>>,
+    dry_run: bool,
 ) -> Result<CodexSessionVisibilityRepairSummary, String> {
-    let options = CodexSessionVisibilityRepairOptions::for_mode(mode);
+    let options = CodexSessionVisibilityRepairOptions::for_mode(mode).with_dry_run(dry_run);
     let selection = RepairTargetSelection::from_inputs(target_provider, session_ids, instance_ids)?;
     repair_session_visibility_across_instances_with_options(
         options,
@@ -466,6 +475,22 @@ fn repair_session_visibility_across_instances_with_options(
         .into_iter()
         .filter(|instance| selection.includes_instance_id(&instance.id))
         .collect::<Vec<_>>();
+    repair_session_visibility_for_instances_with_options(
+        options,
+        run_id,
+        progress_reporter,
+        selection,
+        instances,
+    )
+}
+
+fn repair_session_visibility_for_instances_with_options(
+    options: CodexSessionVisibilityRepairOptions,
+    run_id: Option<String>,
+    progress_reporter: ProgressReporter<'_>,
+    selection: RepairTargetSelection,
+    instances: Vec<CodexSyncInstance>,
+) -> Result<CodexSessionVisibilityRepairSummary, String> {
     if instances.is_empty() {
         return Err("未找到要修复的 Codex 实例".to_string());
     }
@@ -554,12 +579,42 @@ fn repair_session_visibility_across_instances_with_options(
             skipped_sqlite_file_count += 1;
         }
 
-        if rollout_changes.is_empty()
-            && sqlite_rows_to_update == 0
-            && sqlite_timestamp_rows_to_update == 0
-            && session_index_scan.entries_to_add == 0
-            && session_index_scan.entries_to_update == 0
-        {
+        let instance_has_planned_changes = !rollout_changes.is_empty()
+            || sqlite_rows_to_update > 0
+            || sqlite_timestamp_rows_to_update > 0
+            || session_index_scan.entries_to_add > 0
+            || session_index_scan.entries_to_update > 0;
+
+        if options.dry_run {
+            if instance_has_planned_changes {
+                mutated_instance_count += 1;
+                if running {
+                    mutated_running_instance_count += 1;
+                }
+            }
+            changed_rollout_file_count += rollout_changes.len();
+            updated_sqlite_row_count += sqlite_rows_to_update;
+            updated_sqlite_timestamp_row_count += sqlite_timestamp_rows_to_update;
+            added_session_index_entry_count += session_index_scan.entries_to_add;
+            updated_session_index_entry_count += session_index_scan.entries_to_update;
+            items.push(CodexSessionVisibilityRepairItem {
+                instance_id: instance.id.clone(),
+                instance_name: instance.name.clone(),
+                target_provider,
+                changed_rollout_file_count: rollout_changes.len(),
+                updated_sqlite_row_count: sqlite_rows_to_update,
+                updated_sqlite_timestamp_row_count: sqlite_timestamp_rows_to_update,
+                added_session_index_entry_count: session_index_scan.entries_to_add,
+                updated_session_index_entry_count: session_index_scan.entries_to_update,
+                skipped_sqlite_file: sqlite_scan.skipped_unusable_database,
+                metadata_rebuild_failed: false,
+                backup_dir: None,
+                running,
+            });
+            continue;
+        }
+
+        if !instance_has_planned_changes {
             let mut metadata_rebuild_failed = false;
             if options.rebuild_metadata {
                 report_repair_progress(
@@ -717,29 +772,43 @@ fn repair_session_visibility_across_instances_with_options(
         });
     }
 
-    report_repair_progress(
-        progress_reporter,
-        &run_id,
-        options,
-        "prune_backups",
-        96,
-        total_instances,
-        total_instances,
-        None,
-    );
-    prune_session_visibility_repair_backups(&instances);
+    if !options.dry_run {
+        report_repair_progress(
+            progress_reporter,
+            &run_id,
+            options,
+            "prune_backups",
+            96,
+            total_instances,
+            total_instances,
+            None,
+        );
+        prune_session_visibility_repair_backups(&instances);
+    }
 
-    let message = build_summary_message(
-        mutated_instance_count,
-        changed_rollout_file_count,
-        updated_sqlite_row_count,
-        updated_sqlite_timestamp_row_count,
-        added_session_index_entry_count,
-        updated_session_index_entry_count,
-        mutated_running_instance_count,
-        skipped_sqlite_file_count,
-        metadata_rebuild_failed_count,
-    );
+    let message = if options.dry_run {
+        build_dry_run_summary_message(
+            mutated_instance_count,
+            changed_rollout_file_count,
+            updated_sqlite_row_count,
+            updated_sqlite_timestamp_row_count,
+            added_session_index_entry_count,
+            updated_session_index_entry_count,
+            mutated_running_instance_count,
+        )
+    } else {
+        build_summary_message(
+            mutated_instance_count,
+            changed_rollout_file_count,
+            updated_sqlite_row_count,
+            updated_sqlite_timestamp_row_count,
+            added_session_index_entry_count,
+            updated_session_index_entry_count,
+            mutated_running_instance_count,
+            skipped_sqlite_file_count,
+            metadata_rebuild_failed_count,
+        )
+    };
 
     let summary = CodexSessionVisibilityRepairSummary {
         instance_count: instances.len(),
@@ -1162,6 +1231,53 @@ fn build_summary_message(
         updated_index_suffix,
         running_suffix,
         metadata_suffix
+    )
+}
+
+fn build_dry_run_summary_message(
+    mutated_instance_count: usize,
+    changed_rollout_file_count: usize,
+    updated_sqlite_row_count: usize,
+    updated_sqlite_timestamp_row_count: usize,
+    added_session_index_entry_count: usize,
+    updated_session_index_entry_count: usize,
+    mutated_running_instance_count: usize,
+) -> String {
+    if mutated_instance_count == 0 {
+        return "预览未发现需要写入的会话可见性差异".to_string();
+    }
+
+    let added_index_suffix = if added_session_index_entry_count > 0 {
+        format!(
+            "，补写 {} 条 session_index 记录",
+            added_session_index_entry_count
+        )
+    } else {
+        String::new()
+    };
+    let updated_index_suffix = if updated_session_index_entry_count > 0 {
+        format!(
+            "，刷新 {} 条 session_index 记录",
+            updated_session_index_entry_count
+        )
+    } else {
+        String::new()
+    };
+    let running_suffix = if mutated_running_instance_count > 0 {
+        "。包含运行中的实例，确认修复后可能需要重启 Codex 才能完全刷新"
+    } else {
+        ""
+    };
+
+    format!(
+        "预览将为 {} 个实例修复会话可见性：校正 {} 个会话文件，更新 {} 条 SQLite 可见性记录，校正 {} 条 SQLite 时间记录{}{}{}",
+        mutated_instance_count,
+        changed_rollout_file_count,
+        updated_sqlite_row_count,
+        updated_sqlite_timestamp_row_count,
+        added_index_suffix,
+        updated_index_suffix,
+        running_suffix
     )
 }
 
@@ -4179,6 +4295,109 @@ mod tests {
             )
             .expect("read restored provider");
         assert_eq!(provider, "old");
+
+        fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn dry_run_reports_planned_changes_without_writing_files_or_backups() {
+        let data_dir = make_temp_dir("codex-session-dry-run-test");
+        let sqlite_dir = data_dir.join(SQLITE_DIR_NAME);
+        fs::create_dir_all(&sqlite_dir).expect("create sqlite dir");
+        let official_db_path = sqlite_dir.join(OFFICIAL_STATE_DB_FILE);
+        let connection = Connection::open(&official_db_path).expect("open sqlite");
+        connection
+            .execute(
+                "CREATE TABLE threads (
+                    id TEXT PRIMARY KEY,
+                    rollout_path TEXT,
+                    model_provider TEXT,
+                    has_user_event INTEGER,
+                    first_user_message TEXT,
+                    thread_source TEXT
+                )",
+                [],
+            )
+            .expect("create threads table");
+
+        let rollout_dir = data_dir.join("sessions").join("2026").join("07").join("03");
+        fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+        let rollout_path = rollout_dir.join("rollout-thread-1.jsonl");
+        let rollout_relative = rollout_path
+            .strip_prefix(&data_dir)
+            .expect("relative rollout")
+            .to_string_lossy()
+            .replace('\\', "/");
+        connection
+            .execute(
+                "INSERT INTO threads (id, rollout_path, model_provider, has_user_event, first_user_message, thread_source)
+                 VALUES ('thread-1', ?1, 'old', 0, 'hello', '')",
+                [rollout_relative.as_str()],
+            )
+            .expect("insert thread");
+        drop(connection);
+
+        let rollout_content =
+            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-1\",\"model_provider\":\"old\"}}\n";
+        fs::write(&rollout_path, rollout_content).expect("write rollout");
+
+        let options = repair_options(CodexSessionVisibilityRepairMode::Quick).with_dry_run(true);
+        let selection = RepairTargetSelection::from_inputs(Some("relay".to_string()), None, None)
+            .expect("selection");
+        let summary = repair_session_visibility_for_instances_with_options(
+            options,
+            None,
+            None,
+            selection,
+            vec![CodexSyncInstance {
+                id: "dry-run-instance".to_string(),
+                name: "Dry run instance".to_string(),
+                data_dir: data_dir.clone(),
+                last_pid: None,
+            }],
+        )
+        .expect("dry run summary");
+
+        assert_eq!(summary.instance_count, 1);
+        assert_eq!(summary.mutated_instance_count, 1);
+        assert_eq!(summary.changed_rollout_file_count, 1);
+        assert_eq!(summary.updated_sqlite_row_count, 1);
+        assert!(summary.backup_dirs.is_empty());
+        assert_eq!(summary.items.len(), 1);
+        assert!(summary.items[0].backup_dir.is_none());
+        assert!(summary.message.contains("预览将"));
+
+        assert_eq!(
+            fs::read_to_string(&rollout_path).expect("read rollout after dry run"),
+            rollout_content
+        );
+        let connection = Connection::open(&official_db_path).expect("reopen sqlite");
+        let row = connection
+            .query_row(
+                "SELECT model_provider, has_user_event, thread_source FROM threads WHERE id = 'thread-1'",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<usize, String>(0)?,
+                        row.get::<usize, i64>(1)?,
+                        row.get::<usize, String>(2)?,
+                    ))
+                },
+            )
+            .expect("read unchanged row");
+        assert_eq!(row, ("old".to_string(), 0, "".to_string()));
+
+        let backup_count = fs::read_dir(&data_dir)
+            .expect("read data dir")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(SESSION_VISIBILITY_REPAIR_BACKUP_PREFIX)
+            })
+            .count();
+        assert_eq!(backup_count, 0);
 
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }

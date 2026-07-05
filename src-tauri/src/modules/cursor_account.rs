@@ -1331,11 +1331,44 @@ struct CursorRefreshTokenResponse {
     should_logout: bool,
 }
 
+fn format_error_chain(error: &(dyn std::error::Error + 'static)) -> String {
+    let mut parts = vec![error.to_string()];
+    let mut source = error.source();
+    while let Some(err) = source {
+        let detail = err.to_string();
+        if !detail.trim().is_empty() && parts.last().map(|item| item != &detail).unwrap_or(true) {
+            parts.push(detail);
+        }
+        source = err.source();
+    }
+    parts.join(" | caused by: ")
+}
+
+fn format_reqwest_error(error: &reqwest::Error) -> String {
+    let mut tags = Vec::new();
+    if error.is_timeout() {
+        tags.push("timeout");
+    }
+    if error.is_connect() {
+        tags.push("connect");
+    }
+    if error.is_request() {
+        tags.push("request");
+    }
+
+    let detail = format_error_chain(error);
+    if tags.is_empty() {
+        detail
+    } else {
+        format!("{} [{}]", detail, tags.join(","))
+    }
+}
+
 fn build_cursor_http_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
-        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
+        .map_err(|e| format!("创建 HTTP 客户端失败: {}", format_reqwest_error(&e)))
 }
 
 fn extract_workos_user_id(jwt: &str) -> Option<String> {
@@ -1389,13 +1422,20 @@ async fn exchange_refresh_token_with_client(
         }))
         .send()
         .await
-        .map_err(|e| format!("请求 Cursor token 刷新接口失败: {}", e))?;
+        .map_err(|e| {
+            format!(
+                "请求 Cursor token 刷新接口失败: {}",
+                format_reqwest_error(&e)
+            )
+        })?;
 
     let status = response.status().as_u16();
-    let body = response
-        .text()
-        .await
-        .map_err(|e| format!("读取 Cursor token 刷新响应失败: {}", e))?;
+    let body = response.text().await.map_err(|e| {
+        format!(
+            "读取 Cursor token 刷新响应失败: {}",
+            format_reqwest_error(&e)
+        )
+    })?;
 
     if status == 401 || status == 403 {
         return Err("Cursor refresh token 已过期或无效，请重新导入账号".to_string());
@@ -1454,7 +1494,7 @@ async fn fetch_user_meta_with_client(
         .json(&serde_json::json!({}))
         .send()
         .await
-        .map_err(|e| format!("请求 Cursor user meta 失败: {}", e))?;
+        .map_err(|e| format!("请求 Cursor user meta 失败: {}", format_reqwest_error(&e)))?;
 
     let status = response.status().as_u16();
     if status == 401 || status == 403 {
@@ -1464,10 +1504,12 @@ async fn fetch_user_meta_with_client(
         return Err(format!("Cursor user meta API 返回异常状态码: {}", status));
     }
 
-    let body = response
-        .text()
-        .await
-        .map_err(|e| format!("读取 Cursor user meta 响应失败: {}", e))?;
+    let body = response.text().await.map_err(|e| {
+        format!(
+            "读取 Cursor user meta 响应失败: {}",
+            format_reqwest_error(&e)
+        )
+    })?;
 
     serde_json::from_str::<CursorUserMetaResponse>(&body)
         .map_err(|e| format!("解析 Cursor user meta JSON 失败: {}", e))
@@ -1483,17 +1525,24 @@ async fn fetch_stripe_profile_with_client(
         .header("Accept", "application/json")
         .send()
         .await
-        .map_err(|e| format!("请求 Cursor full stripe profile 失败: {}", e))?;
+        .map_err(|e| {
+            format!(
+                "请求 Cursor full stripe profile 失败: {}",
+                format_reqwest_error(&e)
+            )
+        })?;
 
     let full_status = full_response.status().as_u16();
     if full_status == 401 || full_status == 403 {
         return Err("Cursor 会话已过期或未认证，请重新导入账号".to_string());
     }
     if full_status == 200 {
-        let body = full_response
-            .text()
-            .await
-            .map_err(|e| format!("读取 Cursor full stripe profile 响应失败: {}", e))?;
+        let body = full_response.text().await.map_err(|e| {
+            format!(
+                "读取 Cursor full stripe profile 响应失败: {}",
+                format_reqwest_error(&e)
+            )
+        })?;
         let profile = serde_json::from_str::<CursorStripeProfileResponse>(&body)
             .map_err(|e| format!("解析 Cursor full stripe profile JSON 失败: {}", e))?;
         return Ok(Some(profile));
@@ -1505,7 +1554,12 @@ async fn fetch_stripe_profile_with_client(
         .header("Accept", "application/json")
         .send()
         .await
-        .map_err(|e| format!("请求 Cursor stripe profile 失败: {}", e))?;
+        .map_err(|e| {
+            format!(
+                "请求 Cursor stripe profile 失败: {}",
+                format_reqwest_error(&e)
+            )
+        })?;
 
     let fallback_status = fallback_response.status().as_u16();
     if fallback_status == 401 || fallback_status == 403 {
@@ -1515,10 +1569,12 @@ async fn fetch_stripe_profile_with_client(
         return Ok(None);
     }
 
-    let body = fallback_response
-        .text()
-        .await
-        .map_err(|e| format!("读取 Cursor stripe profile 响应失败: {}", e))?;
+    let body = fallback_response.text().await.map_err(|e| {
+        format!(
+            "读取 Cursor stripe profile 响应失败: {}",
+            format_reqwest_error(&e)
+        )
+    })?;
 
     let parsed = serde_json::from_str::<serde_json::Value>(&body)
         .map_err(|e| format!("解析 Cursor stripe profile JSON 失败: {}", e))?;
@@ -1562,7 +1618,7 @@ async fn fetch_usage_summary_with_client(
         )
         .send()
         .await
-        .map_err(|e| format!("请求 Cursor usage API 失败: {}", e))?;
+        .map_err(|e| format!("请求 Cursor usage API 失败: {}", format_reqwest_error(&e)))?;
 
     let status = response.status().as_u16();
     if status == 401 || status == 403 {
@@ -1575,7 +1631,7 @@ async fn fetch_usage_summary_with_client(
     let body = response
         .text()
         .await
-        .map_err(|e| format!("读取 Cursor usage 响应失败: {}", e))?;
+        .map_err(|e| format!("读取 Cursor usage 响应失败: {}", format_reqwest_error(&e)))?;
 
     serde_json::from_str::<serde_json::Value>(&body)
         .map_err(|e| format!("解析 Cursor usage JSON 失败: {}", e))

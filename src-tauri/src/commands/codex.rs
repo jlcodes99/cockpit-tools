@@ -17,13 +17,400 @@ use crate::modules::{
     opencode_auth, process, ssh_server,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 use tauri::AppHandle;
 use tauri::Emitter;
 use tauri_plugin_opener::OpenerExt;
 
 static CODEX_POST_REFRESH_CHECK_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+const CODEX_BATCH_DELETE_JOBS_DIR: &str = "codex_batch_delete_jobs";
+static CODEX_BATCH_DELETE_JOBS: LazyLock<Mutex<HashMap<String, CodexBatchDeleteJob>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexBatchDeleteJobStatus {
+    job_id: String,
+    status: String,
+    total: usize,
+    completed: usize,
+    failed: usize,
+    errors: Vec<CodexBatchDeleteError>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexBatchDeleteError {
+    account_id: String,
+    error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexBatchDeleteJob {
+    status: String,
+    total: usize,
+    completed: usize,
+    failed: usize,
+    errors: Vec<CodexBatchDeleteError>,
+    account_ids: Vec<String>,
+    next_index: usize,
+    created_at: i64,
+    updated_at: i64,
+}
+
+fn now_unix_seconds() -> i64 {
+    chrono::Utc::now().timestamp()
+}
+
+fn get_codex_batch_delete_jobs_dir() -> PathBuf {
+    let data_dir = account::get_data_dir()
+        .or_else(|_| account::resolve_data_dir())
+        .unwrap_or_else(|_| PathBuf::from(".antigravity_cockpit"));
+    let dir = data_dir.join(CODEX_BATCH_DELETE_JOBS_DIR);
+    let _ = fs::create_dir_all(&dir);
+    dir
+}
+
+fn sanitize_codex_batch_delete_job_id(job_id: &str) -> Result<String, String> {
+    let trimmed = job_id.trim();
+    if trimmed.is_empty() {
+        return Err("批量删除任务 ID 为空".to_string());
+    }
+    if !trimmed
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+    {
+        return Err("批量删除任务 ID 不合法".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
+fn codex_batch_delete_job_snapshot_path(job_id: &str) -> Result<PathBuf, String> {
+    let safe_id = sanitize_codex_batch_delete_job_id(job_id)?;
+    Ok(get_codex_batch_delete_jobs_dir().join(format!("{}.json", safe_id)))
+}
+
+fn save_codex_batch_delete_job_snapshot(
+    job_id: &str,
+    job: &CodexBatchDeleteJob,
+) -> Result<(), String> {
+    let path = codex_batch_delete_job_snapshot_path(job_id)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("创建 Codex 批量删除任务目录失败: {}", error))?;
+    }
+    let content = serde_json::to_string_pretty(job)
+        .map_err(|error| format!("序列化 Codex 批量删除任务失败: {}", error))?;
+    let tmp_path = path.with_extension("json.tmp");
+    fs::write(&tmp_path, content).map_err(|error| {
+        format!(
+            "写入 Codex 批量删除任务快照失败: path={}, error={}",
+            tmp_path.display(),
+            error
+        )
+    })?;
+    fs::rename(&tmp_path, &path).map_err(|error| {
+        let _ = fs::remove_file(&tmp_path);
+        format!(
+            "更新 Codex 批量删除任务快照失败: path={}, error={}",
+            path.display(),
+            error
+        )
+    })
+}
+
+fn save_codex_batch_delete_job_snapshot_best_effort(job_id: &str, job: &CodexBatchDeleteJob) {
+    if let Err(error) = save_codex_batch_delete_job_snapshot(job_id, job) {
+        logger::log_warn(&format!(
+            "[Codex Batch Delete] 保存任务快照失败: job_id={}, error={}",
+            job_id, error
+        ));
+    }
+}
+
+fn load_codex_batch_delete_job_snapshot(
+    job_id: &str,
+) -> Result<Option<CodexBatchDeleteJob>, String> {
+    let path = codex_batch_delete_job_snapshot_path(job_id)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = fs::read_to_string(&path).map_err(|error| {
+        format!(
+            "读取 Codex 批量删除任务快照失败: path={}, error={}",
+            path.display(),
+            error
+        )
+    })?;
+    let mut job: CodexBatchDeleteJob = serde_json::from_str(&content).map_err(|error| {
+        format!(
+            "解析 Codex 批量删除任务快照失败: path={}, error={}",
+            path.display(),
+            error
+        )
+    })?;
+    if job.status == "running" {
+        job.status = "paused".to_string();
+    }
+    Ok(Some(job))
+}
+
+fn remove_codex_batch_delete_job_snapshot(job_id: &str) {
+    if let Ok(path) = codex_batch_delete_job_snapshot_path(job_id) {
+        let _ = fs::remove_file(path);
+    }
+}
+
+fn ensure_codex_batch_delete_job_loaded(job_id: &str) -> Result<(), String> {
+    {
+        let jobs = CODEX_BATCH_DELETE_JOBS.lock().unwrap();
+        if jobs.contains_key(job_id) {
+            return Ok(());
+        }
+    }
+    let Some(job) = load_codex_batch_delete_job_snapshot(job_id)? else {
+        return Err("批量删除任务不存在".to_string());
+    };
+    let mut jobs = CODEX_BATCH_DELETE_JOBS.lock().unwrap();
+    jobs.entry(job_id.to_string()).or_insert(job);
+    Ok(())
+}
+
+fn codex_batch_delete_status(job_id: &str, job: &CodexBatchDeleteJob) -> CodexBatchDeleteJobStatus {
+    CodexBatchDeleteJobStatus {
+        job_id: job_id.to_string(),
+        status: job.status.clone(),
+        total: job.total,
+        completed: job.completed,
+        failed: job.failed,
+        errors: job.errors.clone(),
+    }
+}
+
+fn get_codex_batch_delete_job_status(job_id: &str) -> Result<CodexBatchDeleteJobStatus, String> {
+    ensure_codex_batch_delete_job_loaded(job_id)?;
+    let jobs = CODEX_BATCH_DELETE_JOBS.lock().unwrap();
+    let job = jobs
+        .get(job_id)
+        .ok_or_else(|| "批量删除任务不存在".to_string())?;
+    Ok(codex_batch_delete_status(job_id, job))
+}
+
+async fn run_codex_batch_delete_job(job_id: String) {
+    loop {
+        let next_account_id = {
+            let mut jobs = CODEX_BATCH_DELETE_JOBS.lock().unwrap();
+            let Some(job) = jobs.get_mut(&job_id) else {
+                return;
+            };
+            if job.status == "paused" {
+                job.updated_at = now_unix_seconds();
+                let snapshot = job.clone();
+                drop(jobs);
+                save_codex_batch_delete_job_snapshot_best_effort(&job_id, &snapshot);
+                return;
+            }
+            if job.next_index >= job.account_ids.len() {
+                job.status = if job.failed > 0 {
+                    "failed".to_string()
+                } else {
+                    "completed".to_string()
+                };
+                job.updated_at = now_unix_seconds();
+                let snapshot = job.clone();
+                drop(jobs);
+                save_codex_batch_delete_job_snapshot_best_effort(&job_id, &snapshot);
+                return;
+            }
+            job.status = "running".to_string();
+            job.account_ids[job.next_index].clone()
+        };
+
+        let remove_account_id = next_account_id.clone();
+        let remove_result = tauri::async_runtime::spawn_blocking(move || {
+            codex_account::remove_account(&remove_account_id)
+        })
+        .await
+        .map_err(|error| format!("批量删除后台任务失败: {}", error))
+        .and_then(|result| result);
+
+        let mut deleted_account_id_for_cleanup = None;
+        let result = match remove_result {
+            Ok(()) => {
+                deleted_account_id_for_cleanup = Some(next_account_id.clone());
+                Ok(())
+            }
+            Err(error) => Err(error),
+        };
+
+        if let Some(account_id) = deleted_account_id_for_cleanup {
+            if let Err(error) =
+                codex_local_access::remove_deleted_accounts_from_local_access_pool(&[account_id])
+                    .await
+            {
+                logger::log_warn(&format!(
+                    "[Codex Batch Delete] 清理 API 服务账号池引用失败: job_id={}, error={}",
+                    job_id, error
+                ));
+            }
+        }
+
+        let snapshot = {
+            let mut jobs = CODEX_BATCH_DELETE_JOBS.lock().unwrap();
+            let Some(job) = jobs.get_mut(&job_id) else {
+                return;
+            };
+            job.completed += 1;
+            job.next_index += 1;
+            if let Err(error) = result {
+                job.failed += 1;
+                job.errors.push(CodexBatchDeleteError {
+                    account_id: next_account_id,
+                    error,
+                });
+            }
+            job.updated_at = now_unix_seconds();
+            job.clone()
+        };
+        save_codex_batch_delete_job_snapshot_best_effort(&job_id, &snapshot);
+    }
+}
+
+fn start_codex_batch_delete_job(
+    account_ids: Vec<String>,
+) -> Result<CodexBatchDeleteJobStatus, String> {
+    let normalized_ids: Vec<String> = account_ids
+        .into_iter()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect();
+    if normalized_ids.is_empty() {
+        return Ok(CodexBatchDeleteJobStatus {
+            job_id: String::new(),
+            status: "completed".to_string(),
+            total: 0,
+            completed: 0,
+            failed: 0,
+            errors: Vec::new(),
+        });
+    }
+
+    let job_id = format!("codex-delete-{}", uuid::Uuid::new_v4());
+    let now = now_unix_seconds();
+    let job = CodexBatchDeleteJob {
+        status: "running".to_string(),
+        total: normalized_ids.len(),
+        completed: 0,
+        failed: 0,
+        errors: Vec::new(),
+        account_ids: normalized_ids,
+        next_index: 0,
+        created_at: now,
+        updated_at: now,
+    };
+    save_codex_batch_delete_job_snapshot(&job_id, &job)?;
+    {
+        let mut jobs = CODEX_BATCH_DELETE_JOBS.lock().unwrap();
+        jobs.insert(job_id.clone(), job);
+    }
+    let task_job_id = job_id.clone();
+    tauri::async_runtime::spawn(async move {
+        run_codex_batch_delete_job(task_job_id).await;
+    });
+
+    get_codex_batch_delete_job_status(&job_id)
+}
+
+fn resume_codex_batch_delete_job(job_id: &str) -> Result<CodexBatchDeleteJobStatus, String> {
+    ensure_codex_batch_delete_job_loaded(job_id)?;
+    let should_spawn = {
+        let mut jobs = CODEX_BATCH_DELETE_JOBS.lock().unwrap();
+        let job = jobs
+            .get_mut(job_id)
+            .ok_or_else(|| "批量删除任务不存在".to_string())?;
+        if matches!(job.status.as_str(), "completed" | "failed" | "running") {
+            return Ok(codex_batch_delete_status(job_id, job));
+        }
+        job.status = "running".to_string();
+        job.updated_at = now_unix_seconds();
+        save_codex_batch_delete_job_snapshot_best_effort(job_id, job);
+        true
+    };
+    if should_spawn {
+        let task_job_id = job_id.to_string();
+        tauri::async_runtime::spawn(async move {
+            run_codex_batch_delete_job(task_job_id).await;
+        });
+    }
+    get_codex_batch_delete_job_status(job_id)
+}
+
+fn pause_codex_batch_delete_job(job_id: &str) -> Result<CodexBatchDeleteJobStatus, String> {
+    ensure_codex_batch_delete_job_loaded(job_id)?;
+    let snapshot = {
+        let mut jobs = CODEX_BATCH_DELETE_JOBS.lock().unwrap();
+        let job = jobs
+            .get_mut(job_id)
+            .ok_or_else(|| "批量删除任务不存在".to_string())?;
+        if job.status == "running" {
+            job.status = "paused".to_string();
+            job.updated_at = now_unix_seconds();
+        }
+        job.clone()
+    };
+    save_codex_batch_delete_job_snapshot_best_effort(job_id, &snapshot);
+    Ok(codex_batch_delete_status(job_id, &snapshot))
+}
+
+fn retry_failed_codex_batch_delete_job(job_id: &str) -> Result<CodexBatchDeleteJobStatus, String> {
+    ensure_codex_batch_delete_job_loaded(job_id)?;
+    let should_spawn = {
+        let mut jobs = CODEX_BATCH_DELETE_JOBS.lock().unwrap();
+        let job = jobs
+            .get_mut(job_id)
+            .ok_or_else(|| "批量删除任务不存在".to_string())?;
+        if job.status == "running" || job.errors.is_empty() {
+            return Ok(codex_batch_delete_status(job_id, job));
+        }
+        let mut retry_ids = Vec::new();
+        for error in &job.errors {
+            if !retry_ids.contains(&error.account_id) {
+                retry_ids.push(error.account_id.clone());
+            }
+        }
+        job.account_ids = retry_ids;
+        job.total = job.account_ids.len();
+        job.completed = 0;
+        job.failed = 0;
+        job.errors = Vec::new();
+        job.next_index = 0;
+        job.status = "running".to_string();
+        job.updated_at = now_unix_seconds();
+        save_codex_batch_delete_job_snapshot_best_effort(job_id, job);
+        !job.account_ids.is_empty()
+    };
+    if should_spawn {
+        let task_job_id = job_id.to_string();
+        tauri::async_runtime::spawn(async move {
+            run_codex_batch_delete_job(task_job_id).await;
+        });
+    }
+    get_codex_batch_delete_job_status(job_id)
+}
+
+fn clear_codex_batch_delete_job(job_id: &str) {
+    {
+        let mut jobs = CODEX_BATCH_DELETE_JOBS.lock().unwrap();
+        jobs.remove(job_id);
+    }
+    remove_codex_batch_delete_job_snapshot(job_id);
+}
 
 #[derive(Clone)]
 struct CodexLaunchCredentialSnapshot {
@@ -546,6 +933,43 @@ pub async fn delete_codex_account(account_id: String) -> Result<(), String> {
 pub async fn delete_codex_accounts(account_ids: Vec<String>) -> Result<(), String> {
     codex_account::remove_accounts(&account_ids)?;
     codex_local_access::remove_deleted_accounts_from_local_access_pool(&account_ids).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn start_codex_batch_delete(
+    account_ids: Vec<String>,
+) -> Result<CodexBatchDeleteJobStatus, String> {
+    start_codex_batch_delete_job(account_ids)
+}
+
+#[tauri::command]
+pub async fn get_codex_batch_delete(job_id: String) -> Result<CodexBatchDeleteJobStatus, String> {
+    get_codex_batch_delete_job_status(&job_id)
+}
+
+#[tauri::command]
+pub async fn resume_codex_batch_delete(
+    job_id: String,
+) -> Result<CodexBatchDeleteJobStatus, String> {
+    resume_codex_batch_delete_job(&job_id)
+}
+
+#[tauri::command]
+pub async fn pause_codex_batch_delete(job_id: String) -> Result<CodexBatchDeleteJobStatus, String> {
+    pause_codex_batch_delete_job(&job_id)
+}
+
+#[tauri::command]
+pub async fn retry_failed_codex_batch_delete(
+    job_id: String,
+) -> Result<CodexBatchDeleteJobStatus, String> {
+    retry_failed_codex_batch_delete_job(&job_id)
+}
+
+#[tauri::command]
+pub async fn clear_codex_batch_delete(job_id: String) -> Result<(), String> {
+    clear_codex_batch_delete_job(&job_id);
     Ok(())
 }
 
@@ -2499,6 +2923,11 @@ pub async fn codex_local_access_update_model_pricings(
     model_pricings: Vec<CodexLocalAccessModelPricing>,
 ) -> Result<CodexLocalAccessState, String> {
     codex_local_access::update_local_access_model_pricings(model_pricings).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_reprice_request_logs() -> Result<CodexLocalAccessState, String> {
+    codex_local_access::reprice_local_access_request_logs().await
 }
 
 #[tauri::command]

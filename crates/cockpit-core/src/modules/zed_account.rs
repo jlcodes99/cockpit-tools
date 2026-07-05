@@ -361,15 +361,6 @@ pub fn resolve_current_account_id() -> Option<String> {
         return None;
     }
 
-    if let Ok(Some(credentials)) = read_credentials_from_keychain() {
-        if let Some(account) = accounts
-            .iter()
-            .find(|item| item.public_account.user_id == credentials.user_id)
-        {
-            return Some(account.public_account.id.clone());
-        }
-    }
-
     if let Some(current_id) = index.current_account_id {
         if accounts
             .iter()

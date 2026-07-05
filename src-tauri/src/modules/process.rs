@@ -843,9 +843,7 @@ fn push_app_launch_candidate(
         return;
     }
 
-    let normalized_path = path
-        .canonicalize()
-        .unwrap_or_else(|_| path.to_path_buf());
+    let normalized_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     let target = normalized_path.to_string_lossy().to_string();
     let dedupe_key = target.to_lowercase();
     if !seen.insert(dedupe_key) {
@@ -969,11 +967,7 @@ fn expand_windows_scan_roots(roots: Vec<std::path::PathBuf>) -> Vec<std::path::P
             let users_dir = root.join("Users");
             if let Ok(entries) = std::fs::read_dir(users_dir) {
                 for entry in entries.flatten() {
-                    let user_programs = entry
-                        .path()
-                        .join("AppData")
-                        .join("Local")
-                        .join("Programs");
+                    let user_programs = entry.path().join("AppData").join("Local").join("Programs");
                     expanded.push(user_programs);
                 }
             }
@@ -1070,22 +1064,10 @@ fn scan_windows_app_launch_targets(
 
     if app == "codex" {
         if let Some(path) = detect_codex_exec_path_by_windowsapps_scan() {
-            push_app_launch_candidate(
-                &mut candidates,
-                &mut seen,
-                &path,
-                signature,
-                "windows_apps",
-            );
+            push_app_launch_candidate(&mut candidates, &mut seen, &path, signature, "windows_apps");
         }
         if let Some(path) = detect_codex_exec_path_by_appx_install_location() {
-            push_app_launch_candidate(
-                &mut candidates,
-                &mut seen,
-                &path,
-                signature,
-                "windows_appx",
-            );
+            push_app_launch_candidate(&mut candidates, &mut seen, &path, signature, "windows_appx");
         }
     }
 
@@ -1107,12 +1089,7 @@ fn scan_windows_app_launch_targets(
 
     let scan_roots = expand_windows_scan_roots(parse_windows_scan_roots(scan_roots));
     for root in scan_roots {
-        scan_windows_app_launch_candidates_under_root(
-            &root,
-            &mut candidates,
-            &mut seen,
-            signature,
-        );
+        scan_windows_app_launch_candidates_under_root(&root, &mut candidates, &mut seen, signature);
     }
 
     Ok(candidates)
@@ -8568,11 +8545,6 @@ pub fn collect_codex_process_entries() -> Vec<(u32, Option<String>)> {
                 "[Codex Instances] pid={} CODEX_HOME={}",
                 pid, home
             ));
-        } else {
-            crate::modules::logger::log_info(&format!(
-                "[Codex Instances] pid={} CODEX_HOME not found",
-                pid
-            ));
         }
         result.push((pid, codex_home));
     }
@@ -11917,5 +11889,57 @@ tell application \"System Events\" to keystroke \"q\" using command down",
     #[cfg(not(target_os = "macos"))]
     {
         let _ = pid;
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod tests {
+    use super::windows_app_launch_signature;
+
+    #[test]
+    fn windows_launch_signatures_cover_provider_apps() {
+        for app in [
+            "antigravity_ide",
+            "cursor",
+            "zed",
+            "codebuddy",
+            "codebuddy_cn",
+            "qoder",
+            "trae",
+            "workbuddy",
+            "windsurf",
+            "kiro",
+            "codex",
+            "vscode",
+        ] {
+            let signature =
+                windows_app_launch_signature(app).unwrap_or_else(|| panic!("missing {app}"));
+            assert!(
+                !signature.exe_names.is_empty(),
+                "{app} must define executable names"
+            );
+            assert!(
+                !signature.common_paths.is_empty(),
+                "{app} must define common install paths"
+            );
+            assert!(
+                !signature.display_keywords.is_empty(),
+                "{app} must define display keywords"
+            );
+        }
+    }
+
+    #[test]
+    fn antigravity_ide_signature_uses_ide_executable_only() {
+        let signature = windows_app_launch_signature("antigravity_ide")
+            .expect("antigravity ide signature must exist");
+        assert!(signature
+            .exe_names
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case("Antigravity IDE.exe")));
+        assert!(!signature
+            .exe_names
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case("Antigravity.exe")));
     }
 }

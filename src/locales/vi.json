@@ -788,7 +788,9 @@
       "claudeAppPath": "Mục tiêu khởi chạy Claude Desktop",
       "claudeAppPathDesc": "Hồ sơ mặc định có thể dùng mục tiêu Microsoft Store; hồ sơ đa phiên bản cần Claude.exe thật.",
       "antigravityLaunchOnSwitch": "Khởi chạy Antigravity IDE khi chuyển",
-      "antigravityLaunchOnSwitchDesc": "Khi tắt, việc chuyển chỉ ghi dữ liệu tài khoản mặc định của Antigravity IDE và không đóng, khởi chạy hoặc khởi động lại ứng dụng."
+      "antigravityLaunchOnSwitchDesc": "Khi tắt, việc chuyển chỉ ghi dữ liệu tài khoản mặc định của Antigravity IDE và không đóng, khởi chạy hoặc khởi động lại ứng dụng.",
+      "tokenKeeper": "Giữ auth",
+      "tokenKeeperDesc": "Chỉ làm mới Token tài khoản theo từng nhóm nhỏ khi ủy quyền sắp hết hạn, giảm áp lực yêu cầu nền khi có nhiều tài khoản."
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -1618,6 +1620,7 @@
     "restartRequiredAfterInstall": "Bản cập nhật đã được cài. Hãy khởi động lại ứng dụng thủ công để hoàn tất chuyển đổi.",
     "stoppingApiService": "Đang dừng dịch vụ API...",
     "stopApiServiceFailed": "Không thể dừng dịch vụ API. Hãy tắt dịch vụ trước rồi thử lại.",
+    "stopApiServiceFailedContinue": "Dịch vụ API chưa dừng đúng cách. Vẫn tiếp tục khởi động lại...",
     "skipThisVersion": "Bỏ qua phiên bản này",
     "skipFailed": "Không thể bỏ qua bản cập nhật này: {{error}}"
   },
@@ -1882,6 +1885,7 @@
       "refreshStatsSuccess": "Đã làm mới thống kê dịch vụ API",
       "routingStrategy": {
         "auto": "Tự động (khuyến nghị)",
+        "singleAccount": "Một tài khoản",
         "quotaHighFirst": "Ưu tiên hạn mức cao",
         "quotaLowFirst": "Ưu tiên hạn mức thấp",
         "planHighFirst": "Ưu tiên gói cao",
@@ -2220,6 +2224,16 @@
       "accountSearchPlaceholder": "Tìm email...",
       "accountFilterEmpty": "Không có tài khoản phù hợp",
       "accountFilteredCount": "{{count}} tài khoản trong bộ lọc hiện tại",
+      "fullQuotaAction": "Đánh thức tài khoản",
+      "fullQuotaActionTitle": "Mở kiểm thử đánh thức tài khoản. Mặc định sắp xếp theo hạn mức 5h từ cao xuống thấp.",
+      "fullQuotaNoAccounts": "Danh sách hiện tại không có tài khoản OAuth có thể đánh thức.",
+      "fullQuotaAccountsLabel": "Tài khoản cần đánh thức",
+      "accountSort": {
+        "default": "Thứ tự mặc định",
+        "hourly": "Theo hạn mức 5h",
+        "weekly": "Theo hạn mức tuần",
+        "email": "Theo email"
+      },
       "testTitle": "Kiểm thử đánh thức Codex",
       "testAccountsLabel": "Tài khoản kiểm thử",
       "testAccountsRequired": "Vui lòng chọn ít nhất một tài khoản kiểm thử.",
@@ -2333,10 +2347,14 @@
         "collapse": "Thu gọn",
         "repairVisibility": "Sửa hiển thị",
         "restoreSessions": "Khôi phục phiên",
+        "exportSessions": "Xuất phiên",
+        "importSessions": "Nhập phiên",
         "copySessionId": "Sao chép ID phiên",
+        "openLocation": "Mở vị trí",
         "selectAllSessions": "Chọn mọi phiên",
         "clearSelectedSessions": "Bỏ chọn",
-        "copyToInstance": "Sao chép sang phiên bản"
+        "copyToInstance": "Sao chép sang phiên bản",
+        "trash": "Thùng rác"
       },
       "confirm": {
         "title": "Chuyển vào thùng rác",
@@ -2374,11 +2392,25 @@
       "locationRunning": " (đang chạy)",
       "untitled": "Phiên chưa đặt tên",
       "restoreModal": {
-        "title": "Khôi phục phiên",
-        "hint": "Khi khôi phục, tệp rollout, dòng thread trong SQLite và mục session_index sẽ được trả lại cùng nhau về instance gốc.",
+        "title": "Thùng rác",
+        "hint": "Phiên trong Thùng rác có thể khôi phục về instance gốc hoặc xóa vĩnh viễn để giải phóng dung lượng đĩa.",
         "emptyTitle": "Thùng rác trống",
         "emptyDesc": "Các phiên đã chuyển vào thùng rác sẽ xuất hiện ở đây.",
-        "restoreAction": "Khôi phục các phiên đã chọn"
+        "restoreAction": "Khôi phục các phiên đã chọn",
+        "summary": "{{count}} mục, {{size}}",
+        "selectedSummary": "Đã chọn {{count}}, {{size}}",
+        "selectAll": "Chọn tất cả",
+        "clearSelected": "Bỏ chọn",
+        "emptyTrash": "Dọn thùng rác",
+        "itemSize": "Dung lượng {{size}}",
+        "deleteOne": "Xóa vĩnh viễn",
+        "deleteSelected": "Xóa đã chọn",
+        "pickDeleteOne": "Chọn ít nhất một phiên để xóa vĩnh viễn",
+        "deleteOneConfirm": "Xóa vĩnh viễn phiên này? Không thể hoàn tác. Dung lượng dự kiến giải phóng: {{size}}.",
+        "deleteSelectedConfirm": "Xóa vĩnh viễn {{count}} phiên đã chọn? Không thể hoàn tác. Dung lượng dự kiến giải phóng: {{size}}.",
+        "permanentDeleteTitle": "Xóa vĩnh viễn",
+        "permanentDeleteAction": "Xóa vĩnh viễn",
+        "emptyTrashConfirm": "Dọn thùng rác? {{count}} phiên sẽ bị xóa vĩnh viễn và không thể khôi phục. Dung lượng dự kiến giải phóng: {{size}}."
       },
       "targetModal": {
         "title": "Sao chép sang phiên bản",
@@ -2440,7 +2472,90 @@
         "instanceScopeAll": "Tất cả phiên bản",
         "instanceScopeAllDesc": "Sửa mọi phiên bản Codex khi khôi phục nhiều phiên bản.",
         "progressTitle": "Tiến trình sửa",
-        "start": "Sửa"
+        "start": "Sửa",
+        "previewing": "Đang xem trước...",
+        "previewAgain": "Xem trước lại",
+        "preview": "Xem trước thay đổi",
+        "previewFailedWithError": "Xem trước sửa phiên thất bại: {{error}}",
+        "confirmRepair": "Xác nhận sửa"
+      },
+      "importModal": {
+        "title": "Nhập phiên",
+        "hint": "Gói phiên chỉ nhập các tệp rollout và mục session_index. Không bao gồm tài khoản, token, API key hoặc cài đặt ứng dụng; phiên có cùng ID trong instance đích sẽ bị bỏ qua.",
+        "noTarget": "Không có instance Codex nào khả dụng để nhập",
+        "noPackage": "Trước tiên hãy chọn gói phiên",
+        "pickOne": "Chọn ít nhất một phiên có thể nhập",
+        "totalCount": "{{count}} phiên trong gói",
+        "readyCount": "{{count}} có thể nhập",
+        "selectReady": "Chọn mục có thể nhập",
+        "previewing": "Đang xem trước gói phiên...",
+        "existsIn": "Đã có trong: {{names}}",
+        "statusReady": "Sẵn sàng",
+        "statusDuplicate": "Đã có",
+        "statusConflict": "Xung đột",
+        "statusInvalid": "Không hợp lệ",
+        "confirm": "Nhập phiên đã chọn"
+      },
+      "transferModal": {
+        "exportTitle": "Xuất phiên",
+        "importTitle": "Nhập phiên",
+        "minimize": "Thu nhỏ",
+        "reopen": "Xem tiến độ",
+        "clear": "Xóa",
+        "runningSummary": "Đang xử lý {{current}}/{{total}}",
+        "completedSummary": "Tác vụ đã hoàn tất",
+        "failedSummary": "Tác vụ thất bại",
+        "current": "{{current}} trên {{total}}",
+        "phase": {
+          "exportPrepare": "Đang chuẩn bị xuất...",
+          "exportCollect": "Đang thu thập phiên...",
+          "exportHash": "Đang kiểm tra tệp phiên...",
+          "exportWrite": "Đang ghi gói phiên...",
+          "importPrepare": "Đang chuẩn bị nhập...",
+          "importRead": "Đang đọc gói phiên...",
+          "importWrite": "Đang ghi vào phiên bản đích...",
+          "importRebuild": "Đang làm mới chỉ mục phiên chính thức...",
+          "done": "Tác vụ đã hoàn tất"
+        }
+      },
+      "exportModal": {
+        "title": "Xuất phiên",
+        "hint": "Xem lại danh sách phiên, phiên bản nguồn và dung lượng trước khi xuất. Gói chỉ chứa tệp rollout và mục session_index, không chứa tài khoản, token, API Key hoặc cấu hình ứng dụng.",
+        "previewing": "Đang xem trước phiên...",
+        "selectedCount": "Đã chọn {{count}}",
+        "exportableCount": "Có thể xuất {{count}}",
+        "missingCount": "Thiếu {{count}}",
+        "totalSize": "Tổng {{size}}",
+        "exportPath": "Vị trí xuất",
+        "pathUnset": "Chưa chọn vị trí xuất",
+        "choosePath": "Chọn vị trí",
+        "missingNotice": "{{count}} phiên không còn trong tập phiên bản hiện tại và sẽ bị bỏ qua.",
+        "sourceInstance": "Nguồn: {{name}}",
+        "emptyTitle": "Không có phiên để xuất",
+        "noPreview": "Hãy hoàn tất xem trước trước",
+        "noExportable": "Không có phiên có thể xuất",
+        "pickPath": "Chọn vị trí xuất",
+        "confirm": "Xuất",
+        "selectedExportCount": "Đã chọn {{selected}} / có thể xuất {{total}}",
+        "selectedSize": "Dung lượng đã chọn {{selected}} / tổng {{total}}",
+        "removedNotice": "Đã bỏ {{count}} khỏi danh sách xuất này",
+        "restoreRemoved": "Khôi phục danh sách",
+        "sourceLabel": "Nguồn",
+        "allSources": "Tất cả nguồn",
+        "selectionLabel": "Chọn",
+        "filterAll": "Tất cả",
+        "filterSelected": "Đã chọn",
+        "filterUnselected": "Chưa chọn",
+        "visibleCount": "Đang hiện {{visible}} / {{total}}",
+        "selectVisible": "Chọn bộ lọc",
+        "clearVisible": "Bỏ bộ lọc",
+        "keepVisibleOnly": "Giữ bộ lọc",
+        "removeVisible": "Bỏ khỏi lọc",
+        "removeUnchecked": "Bỏ chưa chọn",
+        "selectItem": "Chọn phiên để xuất",
+        "removeItem": "Bỏ",
+        "emptyFilteredTitle": "Không có phiên phù hợp",
+        "emptyFilteredDesc": "Điều chỉnh tìm kiếm, nguồn hoặc trạng thái chọn rồi thử lại."
       }
     },
     "api": {
@@ -3000,7 +3115,9 @@
         "pricingUnset": "Chưa đặt",
         "pricingReset": "Đặt lại",
         "pricingSaved": "Đã lưu giá",
-        "pricingInvalid": "Giá phải là số lớn hơn hoặc bằng 0"
+        "pricingInvalid": "Giá phải là số lớn hơn hoặc bằng 0",
+        "pricingReprice": "Tính lại lịch sử",
+        "pricingRepriced": "Ước tính lịch sử đã được tính lại theo giá hiện tại"
       },
       "keys": {
         "policyTitle": "Chính sách mô hình",
@@ -3147,7 +3264,11 @@
       "selectedCount": "Đã chọn {{count}}/{{total}}",
       "selectAllAccounts": "Chọn tất cả",
       "selectReady": "Chọn tài khoản OK",
-      "clearSelection": "Bỏ chọn"
+      "clearSelection": "Bỏ chọn",
+      "hiddenTask": "Tác vụ nhập hàng loạt Codex",
+      "taskRunning": "Đang xử lý {{current}} / {{total}}",
+      "taskPreview": "Đã có {{total}} bản xem trước",
+      "reopen": "Xem tác vụ"
     },
     "autoRepairMode": {
       "label": "Logic tự sửa",
@@ -3167,6 +3288,22 @@
       "saveDraft": "Lưu thẻ chờ xác thực",
       "authorizeAction": "Xác thực",
       "cardHint": "Đã lưu ghi chú. Hoàn tất OAuth để sử dụng tài khoản."
+    },
+    "batchDelete": {
+      "title": "Xóa hàng loạt Codex",
+      "running": "Đang xóa",
+      "paused": "Đã tạm dừng",
+      "failed": "Lỗi một phần",
+      "completed": "Xóa xong",
+      "preparing": "Đang chuẩn bị tác vụ xóa...",
+      "retryFailed": "Thử lại lỗi",
+      "pause": "Tạm dừng",
+      "resume": "Tiếp tục",
+      "clear": "Dọn",
+      "summary": "Đã xử lý {{completed}} / {{total}}, lỗi {{failed}}",
+      "started": "Đã bắt đầu xóa {{count}} tài khoản Codex",
+      "pollFailed": "Không thể làm mới tiến trình xóa hàng loạt: {{error}}",
+      "actionFailed": "Thao tác xóa hàng loạt thất bại: {{error}}"
     }
   },
   "githubCopilot": {

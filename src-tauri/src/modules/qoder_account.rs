@@ -1024,24 +1024,6 @@ pub fn import_from_local() -> Result<Option<QoderAccount>, String> {
 }
 
 pub(crate) fn resolve_current_account_id(accounts: &[QoderAccount]) -> Option<String> {
-    if let Some(db_path) = get_default_qoder_state_db_path() {
-        if let Ok(Some(snapshot)) = read_snapshot_from_state_db_path(db_path.as_path()) {
-            let user_id = extract_snapshot_user_id(&snapshot);
-            let email = extract_snapshot_email(&snapshot);
-            let generated_id = generate_account_id(&snapshot, user_id.as_deref(), email.as_deref());
-
-            if let Some(account_id) = accounts
-                .iter()
-                .find(|account| {
-                    same_identity(account, user_id.as_deref(), email.as_deref(), &generated_id)
-                })
-                .map(|account| account.id.clone())
-            {
-                return Some(account_id);
-            }
-        }
-    }
-
     crate::modules::provider_current_state::resolve_existing_current_account_id(
         "qoder",
         accounts.iter().map(|account| account.id.as_str()),

@@ -32,6 +32,7 @@ import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
+import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
 import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
@@ -2085,19 +2086,30 @@ export function QoderAccountsPage() {
               >
                 <Upload size={14} />
               </button>
-              {selected.size > 0 && (
+              <QuickSettingsPopover type="qoder" />
+            </div>
+          </div>
+
+          {filteredAccounts.length > 0 && (
+            <AccountSelectionToolbar
+              selectedCount={selected.size}
+              allSelected={allSelected}
+              disabled={paginatedIds.length === 0}
+              onToggleSelectAll={toggleSelectAll}
+              onClearSelection={() => setSelected(new Set())}
+              actions={(
                 <button
                   className="btn btn-danger icon-only"
                   onClick={() => void handleDeleteAccounts(Array.from(selected))}
                   disabled={deleting}
-                  title={t('accounts.actions.deleteSelected', '删除选中')}
+                  title={`${t('common.delete', '删除')} (${selected.size})`}
+                  aria-label={`${t('common.delete', '删除')} (${selected.size})`}
                 >
                   <Trash2 size={14} />
                 </button>
               )}
-              <QuickSettingsPopover type="qoder" />
-            </div>
-          </div>
+            />
+          )}
 
           {loading && accounts.length === 0 ? (
             <div className="loading-container">

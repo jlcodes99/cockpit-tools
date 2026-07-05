@@ -644,6 +644,7 @@ pub async fn codex_repair_session_visibility_across_instances(
     target_instance_id: Option<String>,
     repair_instance_ids: Option<Vec<String>>,
     session_ids: Option<Vec<String>>,
+    dry_run: Option<bool>,
 ) -> Result<modules::codex_session_visibility::CodexSessionVisibilityRepairSummary, String> {
     let mode =
         mode.unwrap_or(modules::codex_session_visibility::CodexSessionVisibilityRepairMode::Quick);
@@ -675,6 +676,7 @@ pub async fn codex_repair_session_visibility_across_instances(
             resolved_target_provider,
             session_ids,
             repair_instance_ids,
+            dry_run.unwrap_or(false),
         )
     })
     .await
@@ -734,6 +736,118 @@ pub async fn codex_restore_sessions_from_trash_across_instances(
     session_ids: Vec<String>,
 ) -> Result<modules::codex_session_manager::CodexSessionRestoreSummary, String> {
     modules::codex_session_manager::restore_sessions_from_trash_across_instances(session_ids)
+}
+
+#[tauri::command]
+pub async fn codex_delete_trashed_sessions_across_instances(
+    session_ids: Vec<String>,
+) -> Result<modules::codex_session_manager::CodexSessionTrashDeleteSummary, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        modules::codex_session_manager::delete_trashed_sessions_across_instances(session_ids)
+    })
+    .await
+    .map_err(|error| format!("永久删除 Codex 废纸篓会话失败: {}", error))?
+}
+
+#[tauri::command]
+pub async fn codex_empty_session_trash_across_instances(
+) -> Result<modules::codex_session_manager::CodexSessionTrashDeleteSummary, String> {
+    tauri::async_runtime::spawn_blocking(
+        modules::codex_session_manager::empty_session_trash_across_instances,
+    )
+    .await
+    .map_err(|error| format!("清空 Codex 会话废纸篓失败: {}", error))?
+}
+
+#[tauri::command]
+pub async fn codex_preview_session_export(
+    session_ids: Vec<String>,
+) -> Result<modules::codex_session_manager::CodexSessionExportPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        modules::codex_session_manager::preview_session_export(session_ids)
+    })
+    .await
+    .map_err(|error| format!("预览 Codex 会话导出失败: {}", error))?
+}
+
+#[tauri::command]
+pub async fn codex_export_sessions(
+    app: AppHandle,
+    session_ids: Vec<String>,
+    export_path: String,
+    transfer_id: Option<String>,
+) -> Result<modules::codex_session_manager::CodexSessionExportSummary, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let progress_app = app.clone();
+        let reporter =
+            move |progress: modules::codex_session_manager::CodexSessionTransferProgress| {
+                let _ = progress_app.emit(
+                    modules::codex_session_manager::SESSION_TRANSFER_PROGRESS_EVENT,
+                    progress,
+                );
+            };
+        modules::codex_session_manager::export_sessions(
+            session_ids,
+            export_path,
+            transfer_id,
+            Some(&reporter),
+        )
+    })
+    .await
+    .map_err(|error| format!("导出 Codex 会话失败: {}", error))?
+}
+
+#[tauri::command]
+pub async fn codex_preview_session_import(
+    import_file_path: String,
+    target_instance_id: Option<String>,
+) -> Result<modules::codex_session_manager::CodexSessionImportPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        modules::codex_session_manager::preview_session_import(import_file_path, target_instance_id)
+    })
+    .await
+    .map_err(|error| format!("预览 Codex 会话导入失败: {}", error))?
+}
+
+#[tauri::command]
+pub async fn codex_import_sessions(
+    app: AppHandle,
+    import_file_path: String,
+    target_instance_id: Option<String>,
+    session_ids: Vec<String>,
+    transfer_id: Option<String>,
+) -> Result<modules::codex_session_manager::CodexSessionImportSummary, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let progress_app = app.clone();
+        let reporter =
+            move |progress: modules::codex_session_manager::CodexSessionTransferProgress| {
+                let _ = progress_app.emit(
+                    modules::codex_session_manager::SESSION_TRANSFER_PROGRESS_EVENT,
+                    progress,
+                );
+            };
+        modules::codex_session_manager::import_sessions(
+            import_file_path,
+            target_instance_id,
+            session_ids,
+            transfer_id,
+            Some(&reporter),
+        )
+    })
+    .await
+    .map_err(|error| format!("导入 Codex 会话失败: {}", error))?
+}
+
+#[tauri::command]
+pub async fn codex_open_session_location(app: AppHandle, session_id: String) -> Result<(), String> {
+    let location_dir = tauri::async_runtime::spawn_blocking(move || {
+        modules::codex_session_manager::resolve_session_location_dir(session_id)
+    })
+    .await
+    .map_err(|error| format!("打开 Codex 会话位置失败: {}", error))??;
+    app.opener()
+        .open_path(location_dir.to_string_lossy().to_string(), None::<String>)
+        .map_err(|error| format!("打开 Codex 会话位置失败: {}", error))
 }
 
 #[tauri::command]

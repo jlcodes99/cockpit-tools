@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
@@ -6,21 +7,29 @@ use std::time::Duration;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde_json::Value;
 use tauri::AppHandle;
+use tokio::sync::Notify;
 
 use crate::modules::{
-    codebuddy_account, codebuddy_cn_account, codex_account, cursor_account, gemini_account,
+    codebuddy_account, codebuddy_cn_account, codex_account, config, cursor_account, gemini_account,
     github_copilot_account, kiro_account, kiro_instance, logger, process, trae_account,
     windsurf_account, windsurf_instance, workbuddy_account,
 };
 
 const TOKEN_KEEPER_TICK_SECONDS: u64 = 60;
-const TOKEN_REFRESH_LEAD_SECONDS: i64 = 5 * 60;
+const TOKEN_KEEPER_STARTUP_DELAY_SECONDS: u64 = 5 * 60;
+const TOKEN_KEEPER_MAX_REFRESHES_PER_PLATFORM: usize = 3;
+const TOKEN_KEEPER_IDLE_SCAN_SECONDS: i64 = 10 * 60;
+const TOKEN_KEEPER_ACTIVE_SCAN_SECONDS: i64 = 60;
+const TOKEN_REFRESH_LEAD_SECONDS: i64 = 15 * 60;
 const TOKEN_REFRESH_LEAD_MILLISECONDS: i64 = TOKEN_REFRESH_LEAD_SECONDS * 1000;
 const REFRESH_FAILURE_BACKOFF_SECONDS: i64 = 15 * 60;
 const TRAE_STRICT_CHECK_INTERVAL_SECONDS: i64 = 10 * 60;
 
 static TOKEN_KEEPER_STARTED: AtomicBool = AtomicBool::new(false);
+static TOKEN_KEEPER_CONFIG_CHANGED: LazyLock<Notify> = LazyLock::new(Notify::new);
 static NEXT_ALLOWED_ATTEMPT_AT: LazyLock<Mutex<HashMap<String, i64>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+static NEXT_PLATFORM_SCAN_AT: LazyLock<Mutex<HashMap<&'static str, i64>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static NEXT_TRAE_STRICT_CHECK_AT: LazyLock<Mutex<HashMap<String, i64>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -32,26 +41,50 @@ pub fn ensure_started(app_handle: AppHandle) {
 
     logger::log_info("[TokenKeeper] 后端 OAuth token 保活已启动");
     tauri::async_runtime::spawn(async move {
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(TOKEN_KEEPER_STARTUP_DELAY_SECONDS)) => {}
+            _ = TOKEN_KEEPER_CONFIG_CHANGED.notified() => {}
+        }
+
         loop {
             run_refresh_cycle(&app_handle).await;
-            tokio::time::sleep(Duration::from_secs(TOKEN_KEEPER_TICK_SECONDS)).await;
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(TOKEN_KEEPER_TICK_SECONDS)) => {}
+                _ = TOKEN_KEEPER_CONFIG_CHANGED.notified() => {}
+            }
         }
     });
 }
 
+pub fn notify_config_changed(app_handle: AppHandle, enabled: bool) {
+    ensure_started(app_handle);
+    reset_platform_scan_schedule();
+    logger::log_info(&format!(
+        "[TokenKeeper] 后台 OAuth token 保活设置已{}，已同步运行时状态",
+        if enabled { "启用" } else { "停用" }
+    ));
+    TOKEN_KEEPER_CONFIG_CHANGED.notify_one();
+}
+
 async fn run_refresh_cycle(app_handle: &AppHandle) {
+    if !config::get_user_config().token_keeper_enabled {
+        return;
+    }
+
     let mut refreshed_any = false;
 
-    refreshed_any |= refresh_due_codex_accounts().await;
-    refreshed_any |= refresh_due_cursor_accounts().await;
-    refreshed_any |= refresh_due_gemini_accounts().await;
-    refreshed_any |= refresh_due_github_copilot_accounts().await;
-    refreshed_any |= refresh_due_windsurf_accounts().await;
-    refreshed_any |= refresh_due_kiro_accounts().await;
-    refreshed_any |= refresh_due_codebuddy_accounts().await;
-    refreshed_any |= refresh_due_codebuddy_cn_accounts().await;
-    refreshed_any |= refresh_due_workbuddy_accounts().await;
-    refreshed_any |= refresh_due_trae_accounts().await;
+    refreshed_any |= refresh_platform_if_due("codex", refresh_due_codex_accounts).await;
+    refreshed_any |= refresh_platform_if_due("cursor", refresh_due_cursor_accounts).await;
+    refreshed_any |= refresh_platform_if_due("gemini", refresh_due_gemini_accounts).await;
+    refreshed_any |=
+        refresh_platform_if_due("github_copilot", refresh_due_github_copilot_accounts).await;
+    refreshed_any |= refresh_platform_if_due("windsurf", refresh_due_windsurf_accounts).await;
+    refreshed_any |= refresh_platform_if_due("kiro", refresh_due_kiro_accounts).await;
+    refreshed_any |= refresh_platform_if_due("codebuddy", refresh_due_codebuddy_accounts).await;
+    refreshed_any |=
+        refresh_platform_if_due("codebuddy_cn", refresh_due_codebuddy_cn_accounts).await;
+    refreshed_any |= refresh_platform_if_due("workbuddy", refresh_due_workbuddy_accounts).await;
+    refreshed_any |= refresh_platform_if_due("trae", refresh_due_trae_accounts).await;
 
     if refreshed_any {
         let _ = crate::modules::tray::update_tray_menu(app_handle);
@@ -64,6 +97,49 @@ fn now_ts() -> i64 {
 
 fn now_ts_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
+}
+
+fn allow_platform_scan(platform: &'static str) -> bool {
+    let now = now_ts();
+    let Ok(state) = NEXT_PLATFORM_SCAN_AT.lock() else {
+        return true;
+    };
+    state.get(platform).map(|next| *next <= now).unwrap_or(true)
+}
+
+fn mark_platform_scan(platform: &'static str, refreshed_any: bool) {
+    let next_delay = if refreshed_any {
+        TOKEN_KEEPER_ACTIVE_SCAN_SECONDS
+    } else {
+        TOKEN_KEEPER_IDLE_SCAN_SECONDS
+    };
+    if let Ok(mut state) = NEXT_PLATFORM_SCAN_AT.lock() {
+        state.insert(platform, now_ts() + next_delay);
+    }
+}
+
+fn reset_platform_scan_schedule() {
+    if let Ok(mut state) = NEXT_PLATFORM_SCAN_AT.lock() {
+        state.clear();
+    }
+}
+
+async fn refresh_platform_if_due<F, Fut>(platform: &'static str, refresh: F) -> bool
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = bool>,
+{
+    if !allow_platform_scan(platform) {
+        return false;
+    }
+
+    let refreshed_any = refresh().await;
+    mark_platform_scan(platform, refreshed_any);
+    refreshed_any
+}
+
+fn reached_platform_refresh_limit(attempted_refreshes: usize) -> bool {
+    attempted_refreshes >= TOKEN_KEEPER_MAX_REFRESHES_PER_PLATFORM
 }
 
 fn decode_jwt_exp(token: &str) -> Option<i64> {
@@ -144,10 +220,14 @@ async fn refresh_due_codex_accounts() -> bool {
     };
 
     let mut refreshed_any = false;
+    let mut attempted_refreshes = 0usize;
     for account in accounts
         .into_iter()
         .filter(|account| !account.is_api_key_auth())
     {
+        if reached_platform_refresh_limit(attempted_refreshes) {
+            break;
+        }
         if !account.requires_reauth && !codex_account::is_managed_auth_refresh_due(&account) {
             continue;
         }
@@ -157,6 +237,7 @@ async fn refresh_due_codex_accounts() -> bool {
             continue;
         }
 
+        attempted_refreshes += 1;
         match codex_account::keepalive_managed_account(&account.id, "TokenKeeper 授权保活").await
         {
             Ok(updated) => {
@@ -194,8 +275,12 @@ async fn refresh_due_cursor_accounts() -> bool {
 
     let current_id = cursor_account::resolve_current_account_id(&accounts);
     let mut refreshed_any = false;
+    let mut attempted_refreshes = 0usize;
 
     for account in accounts {
+        if reached_platform_refresh_limit(attempted_refreshes) {
+            break;
+        }
         if !jwt_token_expires_soon(&account.access_token, TOKEN_REFRESH_LEAD_SECONDS) {
             continue;
         }
@@ -205,6 +290,7 @@ async fn refresh_due_cursor_accounts() -> bool {
             continue;
         }
 
+        attempted_refreshes += 1;
         match cursor_account::refresh_account_async(&account.id).await {
             Ok(updated) => {
                 clear_attempt_backoff(&key);
@@ -249,8 +335,12 @@ async fn refresh_due_gemini_accounts() -> bool {
 
     let current_id = gemini_account::resolve_current_account(&accounts).map(|account| account.id);
     let mut refreshed_any = false;
+    let mut attempted_refreshes = 0usize;
 
     for account in accounts {
+        if reached_platform_refresh_limit(attempted_refreshes) {
+            break;
+        }
         if !expires_at_milliseconds_due(account.expiry_date) {
             continue;
         }
@@ -260,6 +350,7 @@ async fn refresh_due_gemini_accounts() -> bool {
             continue;
         }
 
+        attempted_refreshes += 1;
         match gemini_account::refresh_account_token(&account.id).await {
             Ok(updated) => {
                 clear_attempt_backoff(&key);
@@ -303,7 +394,11 @@ async fn refresh_due_github_copilot_accounts() -> bool {
     };
 
     let mut refreshed_any = false;
+    let mut attempted_refreshes = 0usize;
     for account in accounts {
+        if reached_platform_refresh_limit(attempted_refreshes) {
+            break;
+        }
         if !expires_at_seconds_due(account.copilot_expires_at) {
             continue;
         }
@@ -313,6 +408,7 @@ async fn refresh_due_github_copilot_accounts() -> bool {
             continue;
         }
 
+        attempted_refreshes += 1;
         match github_copilot_account::refresh_account_token(&account.id).await {
             Ok(updated) => {
                 clear_attempt_backoff(&key);
@@ -349,8 +445,12 @@ async fn refresh_due_windsurf_accounts() -> bool {
 
     let current_id = windsurf_account::resolve_current_account_id(&accounts);
     let mut refreshed_any = false;
+    let mut attempted_refreshes = 0usize;
 
     for account in accounts {
+        if reached_platform_refresh_limit(attempted_refreshes) {
+            break;
+        }
         if !expires_at_seconds_due(account.copilot_expires_at) {
             continue;
         }
@@ -360,6 +460,7 @@ async fn refresh_due_windsurf_accounts() -> bool {
             continue;
         }
 
+        attempted_refreshes += 1;
         match windsurf_account::refresh_account_token(&account.id).await {
             Ok(updated) => {
                 clear_attempt_backoff(&key);
@@ -417,8 +518,12 @@ async fn refresh_due_kiro_accounts() -> bool {
 
     let current_id = kiro_account::resolve_current_account_id(&accounts);
     let mut refreshed_any = false;
+    let mut attempted_refreshes = 0usize;
 
     for account in accounts {
+        if reached_platform_refresh_limit(attempted_refreshes) {
+            break;
+        }
         if !expires_at_seconds_due(account.expires_at) {
             continue;
         }
@@ -428,6 +533,7 @@ async fn refresh_due_kiro_accounts() -> bool {
             continue;
         }
 
+        attempted_refreshes += 1;
         match kiro_account::refresh_account_token(&account.id).await {
             Ok(updated) => {
                 clear_attempt_backoff(&key);
@@ -485,8 +591,12 @@ async fn refresh_due_codebuddy_accounts() -> bool {
 
     let current_id = codebuddy_account::resolve_current_account_id(&accounts);
     let mut refreshed_any = false;
+    let mut attempted_refreshes = 0usize;
 
     for account in accounts {
+        if reached_platform_refresh_limit(attempted_refreshes) {
+            break;
+        }
         if !expires_at_seconds_due(account.expires_at) {
             continue;
         }
@@ -496,6 +606,7 @@ async fn refresh_due_codebuddy_accounts() -> bool {
             continue;
         }
 
+        attempted_refreshes += 1;
         match codebuddy_account::refresh_account_token(&account.id).await {
             Ok(updated) => {
                 clear_attempt_backoff(&key);
@@ -541,8 +652,12 @@ async fn refresh_due_codebuddy_cn_accounts() -> bool {
 
     let current_id = codebuddy_cn_account::resolve_current_account_id(&accounts);
     let mut refreshed_any = false;
+    let mut attempted_refreshes = 0usize;
 
     for account in accounts {
+        if reached_platform_refresh_limit(attempted_refreshes) {
+            break;
+        }
         if !expires_at_seconds_due(account.expires_at) {
             continue;
         }
@@ -552,6 +667,7 @@ async fn refresh_due_codebuddy_cn_accounts() -> bool {
             continue;
         }
 
+        attempted_refreshes += 1;
         match codebuddy_cn_account::refresh_account_token(&account.id).await {
             Ok(updated) => {
                 clear_attempt_backoff(&key);
@@ -598,8 +714,12 @@ async fn refresh_due_workbuddy_accounts() -> bool {
 
     let current_id = workbuddy_account::resolve_current_account_id(&accounts);
     let mut refreshed_any = false;
+    let mut attempted_refreshes = 0usize;
 
     for account in accounts {
+        if reached_platform_refresh_limit(attempted_refreshes) {
+            break;
+        }
         if !expires_at_seconds_due(account.expires_at) {
             continue;
         }
@@ -609,6 +729,7 @@ async fn refresh_due_workbuddy_accounts() -> bool {
             continue;
         }
 
+        attempted_refreshes += 1;
         match workbuddy_account::refresh_account_token(&account.id).await {
             Ok(updated) => {
                 clear_attempt_backoff(&key);
@@ -655,8 +776,12 @@ async fn refresh_due_trae_accounts() -> bool {
     let current_id = trae_account::resolve_current_account_id(&accounts);
     let protection_map = trae_account::resolve_running_account_refresh_protection_map(&accounts);
     let mut refreshed_any = false;
+    let mut attempted_refreshes = 0usize;
 
     for account in accounts {
+        if reached_platform_refresh_limit(attempted_refreshes) {
+            break;
+        }
         let refresh_due = trae_account::should_refresh_token_by_official_window(&account);
 
         if refresh_due {
@@ -665,6 +790,7 @@ async fn refresh_due_trae_accounts() -> bool {
                 continue;
             }
 
+            attempted_refreshes += 1;
             if let Some(storage_path) = protection_map.get(account.id.as_str()) {
                 logger::log_info(&format!(
                     "[TokenKeeper][Trae] 账号正在运行中的 Trae 客户端实例中使用，改为仅额度刷新: account_id={}, storage_path={}",

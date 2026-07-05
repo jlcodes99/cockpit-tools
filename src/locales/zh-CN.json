@@ -1144,7 +1144,9 @@
       "claudeAppPath": "Claude Desktop 启动目标",
       "claudeAppPathDesc": "默认实例可使用 Microsoft Store 应用目标；多开实例请选择真实 Claude.exe。",
       "antigravityLaunchOnSwitch": "切换时启动 Antigravity",
-      "antigravityLaunchOnSwitchDesc": "关闭后切号只写入 Antigravity 默认账号数据，不会关闭、启动或重启应用。"
+      "antigravityLaunchOnSwitchDesc": "关闭后切号只写入 Antigravity 默认账号数据，不会关闭、启动或重启应用。",
+      "tokenKeeper": "后台授权保活",
+      "tokenKeeperDesc": "仅在授权快过期时分批刷新账号 Token，降低大量账号场景下的后台请求压力。"
     },
     "network": {
       "apiTitle": "反重力驾驶舱 API",
@@ -1817,7 +1819,8 @@
     "installFailed": "系统安装失败，请稍后重试或手动下载安装。",
     "restartRequiredAfterInstall": "更新已安装，请手动重启应用完成切换。",
     "stoppingApiService": "正在关闭 API 服务...",
-    "stopApiServiceFailed": "无法关闭 API 服务，请先停用后重试。"
+    "stopApiServiceFailed": "无法关闭 API 服务，请先停用后重试。",
+    "stopApiServiceFailedContinue": "API 服务未正常关闭，将继续重启..."
   },
   "closeDialog": {
     "title": "关闭窗口",
@@ -2211,6 +2214,7 @@
       "memberTitle": "集合成员",
       "routingStrategy": {
         "auto": "自动（推荐）",
+        "singleAccount": "固定首个账号",
         "quotaHighFirst": "优先高配额",
         "quotaLowFirst": "优先低配额",
         "planHighFirst": "优先高订阅",
@@ -2960,6 +2964,16 @@
       "accountSearchPlaceholder": "搜索邮箱...",
       "accountFilterEmpty": "没有匹配的账号",
       "accountFilteredCount": "当前筛选 {{count}} 个账号",
+      "fullQuotaAction": "唤醒账号",
+      "fullQuotaActionTitle": "打开账号唤醒测试，账号默认按 5h 额度从高到低排序。",
+      "fullQuotaNoAccounts": "当前列表没有可唤醒的 OAuth 账号。",
+      "fullQuotaAccountsLabel": "选择要唤醒的账号",
+      "accountSort": {
+        "default": "默认顺序",
+        "hourly": "按5h额度",
+        "weekly": "按周额度",
+        "email": "按邮箱"
+      },
       "testTitle": "测试 Codex 唤醒",
       "testAccountsLabel": "测试账号",
       "testAccountsRequired": "请至少选择一个测试账号",
@@ -3051,11 +3065,15 @@
         "copyToInstance": "复制到实例",
         "repairVisibility": "修复可见性",
         "restoreSessions": "恢复会话",
+        "exportSessions": "导出会话",
+        "importSessions": "导入会话",
         "copySessionId": "复制会话 ID",
+        "openLocation": "打开位置",
         "selectAllSessions": "全选全部会话",
         "clearSelectedSessions": "取消全选",
         "expand": "展开",
-        "collapse": "收起"
+        "collapse": "收起",
+        "trash": "废纸篓"
       },
       "confirm": {
         "title": "移到废纸篓",
@@ -3093,11 +3111,25 @@
       "locationRunning": "（运行中）",
       "untitled": "未命名会话",
       "restoreModal": {
-        "title": "恢复会话",
-        "hint": "恢复会把 rollout 文件、session_index 条目和会话文件时间放回原实例，并触发官方 Codex 重建会话索引。",
+        "title": "废纸篓",
+        "hint": "废纸篓中的会话可以恢复到原实例，也可以永久删除以释放磁盘空间。",
         "emptyTitle": "废纸篓里还没有会话",
         "emptyDesc": "已移到废纸篓的会话会显示在这里。",
-        "restoreAction": "恢复选中会话"
+        "restoreAction": "恢复选中会话",
+        "summary": "共 {{count}} 条，{{size}}",
+        "selectedSummary": "已选 {{count}} 条，{{size}}",
+        "selectAll": "全选",
+        "clearSelected": "取消选择",
+        "emptyTrash": "清空废纸篓",
+        "itemSize": "大小 {{size}}",
+        "deleteOne": "永久删除",
+        "deleteSelected": "永久删除选中",
+        "pickDeleteOne": "请至少选择一条要永久删除的会话",
+        "deleteOneConfirm": "确定要永久删除这个会话吗？删除后无法恢复，预计释放 {{size}}。",
+        "deleteSelectedConfirm": "确定要永久删除选中的 {{count}} 条会话吗？删除后无法恢复，预计释放 {{size}}。",
+        "permanentDeleteTitle": "永久删除",
+        "permanentDeleteAction": "永久删除",
+        "emptyTrashConfirm": "确定要清空废纸篓吗？其中 {{count}} 条会话将被永久删除且无法恢复，预计释放 {{size}}。"
       },
       "targetModal": {
         "title": "复制到实例",
@@ -3107,6 +3139,23 @@
         "selectedCount": "已选择 {{count}} 条会话",
         "existingCount": "目标已存在 {{count}} 条",
         "confirm": "复制会话"
+      },
+      "importModal": {
+        "title": "导入会话",
+        "hint": "会话包只导入 rollout 文件和 session_index 条目，不包含账号、Token、API Key 或应用配置；目标实例已有同 ID 会话时会跳过。",
+        "noTarget": "未发现可导入的 Codex 实例",
+        "noPackage": "请先选择会话包",
+        "pickOne": "请至少选择一条可导入会话",
+        "totalCount": "会话包 {{count}} 条",
+        "readyCount": "可导入 {{count}} 条",
+        "selectReady": "选择可导入",
+        "previewing": "正在预览会话包...",
+        "existsIn": "已存在于：{{names}}",
+        "statusReady": "可导入",
+        "statusDuplicate": "已存在",
+        "statusConflict": "冲突",
+        "statusInvalid": "无效",
+        "confirm": "导入选中会话"
       },
       "repairModal": {
         "running": "正在修复...",
@@ -3159,7 +3208,73 @@
         "instanceScopeAll": "全部实例",
         "instanceScopeAllDesc": "修复所有 Codex 实例，适合多开实例一起恢复。",
         "progressTitle": "修复进度",
-        "start": "开始修复"
+        "start": "开始修复",
+        "previewing": "正在预览...",
+        "previewAgain": "重新预览",
+        "preview": "预览变更",
+        "previewFailedWithError": "预览会话修复失败：{{error}}",
+        "confirmRepair": "确认修复"
+      },
+      "transferModal": {
+        "exportTitle": "导出会话",
+        "importTitle": "导入会话",
+        "minimize": "最小化",
+        "reopen": "查看进度",
+        "clear": "清除",
+        "runningSummary": "正在处理 {{current}}/{{total}}",
+        "completedSummary": "任务已完成",
+        "failedSummary": "任务失败",
+        "current": "{{current}} / {{total}}",
+        "phase": {
+          "exportPrepare": "正在准备导出...",
+          "exportCollect": "正在收集会话...",
+          "exportHash": "正在校验会话文件...",
+          "exportWrite": "正在写入会话包...",
+          "importPrepare": "正在准备导入...",
+          "importRead": "正在读取会话包...",
+          "importWrite": "正在写入目标实例...",
+          "importRebuild": "正在刷新官方会话索引...",
+          "done": "任务已完成"
+        }
+      },
+      "exportModal": {
+        "title": "导出会话",
+        "hint": "导出前可先确认会话列表、来源实例和文件大小；会话包只包含 rollout 文件和 session_index 条目，不包含账号、Token、API Key 或应用配置。",
+        "previewing": "正在预览会话...",
+        "selectedCount": "已选择 {{count}} 条",
+        "exportableCount": "可导出 {{count}} 条",
+        "missingCount": "缺失 {{count}} 条",
+        "totalSize": "总大小 {{size}}",
+        "exportPath": "导出位置",
+        "pathUnset": "尚未选择导出位置",
+        "choosePath": "选择位置",
+        "missingNotice": "{{count}} 条会话已不在当前实例集合中，导出时会跳过。",
+        "sourceInstance": "来源：{{name}}",
+        "emptyTitle": "没有可导出的会话",
+        "noPreview": "请先完成导出预览",
+        "noExportable": "没有可导出的会话",
+        "pickPath": "请选择导出位置",
+        "confirm": "确认导出",
+        "selectedExportCount": "已选 {{selected}} / 可导出 {{total}}",
+        "selectedSize": "已选大小 {{selected}} / 总计 {{total}}",
+        "removedNotice": "已从本次导出列表移出 {{count}} 条",
+        "restoreRemoved": "恢复列表",
+        "sourceLabel": "来源",
+        "allSources": "全部来源",
+        "selectionLabel": "选择",
+        "filterAll": "全部",
+        "filterSelected": "已选",
+        "filterUnselected": "未选",
+        "visibleCount": "当前显示 {{visible}} / {{total}}",
+        "selectVisible": "选中筛选",
+        "clearVisible": "取消筛选",
+        "keepVisibleOnly": "仅保留筛选",
+        "removeVisible": "移出筛选",
+        "removeUnchecked": "移出未选",
+        "selectItem": "选择导出会话",
+        "removeItem": "移出",
+        "emptyFilteredTitle": "当前筛选无会话",
+        "emptyFilteredDesc": "调整搜索、来源或选择状态后再试。"
       }
     },
     "groups": {
@@ -3250,7 +3365,9 @@
         "pricingUnset": "未设置",
         "pricingReset": "重置",
         "pricingSaved": "价格设置已保存",
-        "pricingInvalid": "价格必须是大于或等于 0 的数字"
+        "pricingInvalid": "价格必须是大于或等于 0 的数字",
+        "pricingReprice": "重算历史估值",
+        "pricingRepriced": "历史估值已按当前价格重算"
       },
       "keys": {
         "policyTitle": "模型策略",
@@ -3385,7 +3502,11 @@
       "selectedCount": "已选 {{count}}/{{total}}",
       "selectAllAccounts": "选择全部账号",
       "selectReady": "选择正常账号",
-      "clearSelection": "取消选择"
+      "clearSelection": "取消选择",
+      "hiddenTask": "Codex 批量导入任务",
+      "taskRunning": "正在处理 {{current}} / {{total}}",
+      "taskPreview": "已生成 {{total}} 条预览",
+      "reopen": "查看任务"
     },
     "autoRepairMode": {
       "label": "自动修复逻辑",
@@ -3393,6 +3514,22 @@
       "legacyBefore4eb75d96": "4eb75d96 前逻辑",
       "legacy4eb75d96": "4eb75d96 逻辑",
       "current": "当前逻辑"
+    },
+    "batchDelete": {
+      "title": "Codex 批量删除",
+      "running": "删除中",
+      "paused": "已暂停",
+      "failed": "部分失败",
+      "completed": "删除完成",
+      "preparing": "正在准备删除任务...",
+      "retryFailed": "重试失败项",
+      "pause": "暂停",
+      "resume": "继续",
+      "clear": "清理",
+      "summary": "已处理 {{completed}} / {{total}}，失败 {{failed}}",
+      "started": "已开始删除 {{count}} 个 Codex 账号",
+      "pollFailed": "刷新批量删除进度失败：{{error}}",
+      "actionFailed": "批量删除操作失败：{{error}}"
     }
   },
   "codebuddy": {

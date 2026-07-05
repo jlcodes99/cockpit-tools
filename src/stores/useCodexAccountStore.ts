@@ -86,6 +86,14 @@ const mergeCodexAccountIntoList = (
   return next;
 };
 
+type FetchCodexAccountsOptions = {
+  allowEmpty?: boolean;
+};
+
+type FetchCodexCurrentAccountOptions = {
+  allowEmpty?: boolean;
+};
+
 interface CodexAccountState {
   accounts: CodexAccount[];
   currentAccount: CodexAccount | null;
@@ -93,8 +101,8 @@ interface CodexAccountState {
   error: string | null;
   
   // Actions
-  fetchAccounts: () => Promise<void>;
-  fetchCurrentAccount: () => Promise<void>;
+  fetchAccounts: (options?: FetchCodexAccountsOptions) => Promise<void>;
+  fetchCurrentAccount: (options?: FetchCodexCurrentAccountOptions) => Promise<void>;
   switchAccount: (accountId: string) => Promise<CodexAccount>;
   deleteAccount: (accountId: string) => Promise<void>;
   deleteAccounts: (accountIds: string[]) => Promise<void>;
@@ -134,7 +142,10 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
   loading: false,
   error: null,
   
-  fetchAccounts: async () => {
+  fetchAccounts: async (options?: FetchCodexAccountsOptions) => {
+    if (options?.allowEmpty) {
+      allowNextEmptyCodexAccountList = true;
+    }
     set({ loading: true, error: null });
     try {
       const accounts = await codexService.listCodexAccounts();
@@ -157,7 +168,10 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     }
   },
   
-  fetchCurrentAccount: async () => {
+  fetchCurrentAccount: async (options?: FetchCodexCurrentAccountOptions) => {
+    if (options?.allowEmpty) {
+      allowNextEmptyCodexCurrentAccount = true;
+    }
     try {
       const currentAccount = await codexService.getCurrentCodexAccount();
       if (

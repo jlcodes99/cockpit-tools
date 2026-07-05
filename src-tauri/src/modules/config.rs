@@ -154,6 +154,9 @@ pub struct UserConfig {
     /// 是否启用应用开机自启动
     #[serde(default = "default_app_auto_launch_enabled")]
     pub app_auto_launch_enabled: bool,
+    /// 是否启用后台账号授权保活
+    #[serde(default = "default_token_keeper_enabled")]
+    pub token_keeper_enabled: bool,
     /// 是否在应用启动后触发 Antigravity IDE 唤醒
     #[serde(default = "default_antigravity_startup_wakeup_enabled")]
     pub antigravity_startup_wakeup_enabled: bool,
@@ -620,6 +623,9 @@ fn default_floating_card_always_on_top() -> bool {
 fn default_app_auto_launch_enabled() -> bool {
     false
 }
+fn default_token_keeper_enabled() -> bool {
+    true
+}
 fn default_antigravity_startup_wakeup_enabled() -> bool {
     false
 }
@@ -943,6 +949,7 @@ impl Default for UserConfig {
             startup_minimized: default_startup_minimized(),
             floating_card_always_on_top: default_floating_card_always_on_top(),
             app_auto_launch_enabled: default_app_auto_launch_enabled(),
+            token_keeper_enabled: default_token_keeper_enabled(),
             antigravity_startup_wakeup_enabled: default_antigravity_startup_wakeup_enabled(),
             antigravity_startup_wakeup_delay_seconds:
                 default_antigravity_startup_wakeup_delay_seconds(),
@@ -1446,6 +1453,13 @@ pub fn load_user_config() -> Result<UserConfig, String> {
             obj.insert(
                 "top_right_ad_visible".to_string(),
                 json!(default_top_right_ad_visible()),
+            );
+        }
+
+        if !obj.contains_key("token_keeper_enabled") {
+            obj.insert(
+                "token_keeper_enabled".to_string(),
+                json!(default_token_keeper_enabled()),
             );
         }
 

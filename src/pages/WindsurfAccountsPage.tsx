@@ -32,6 +32,7 @@ import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
+import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
 import {
   getWindsurfCreditsSummary,
   getWindsurfOfficialUsageMode,
@@ -1421,12 +1422,29 @@ export function WindsurfAccountsPage() {
           <button className="btn btn-secondary icon-only" onClick={() => openAddModal('token')} disabled={importing} title={t('common.shared.import.label', '导入')}><Download size={14} /></button>
           <button className="btn btn-secondary export-btn icon-only" onClick={() => void handleExport(filteredIds)} disabled={exporting || filteredIds.length === 0}
             title={exportSelectionCount > 0 ? `${t('common.shared.export.title', '导出')} (${exportSelectionCount})` : t('common.shared.export.title', '导出')}><Upload size={14} /></button>
-          {selected.size > 0 && (
-            <button className="btn btn-danger icon-only" onClick={handleBatchDelete} title={`${t('common.delete', '删除')} (${selected.size})`}><Trash2 size={14} /></button>
-          )}
           <QuickSettingsPopover type="windsurf" />
         </div>
       </div>
+
+      {filteredAccounts.length > 0 && (
+        <AccountSelectionToolbar
+          selectedCount={selected.size}
+          allSelected={isAllPaginatedSelected}
+          disabled={paginatedIds.length === 0}
+          onToggleSelectAll={() => toggleSelectAll(paginatedIds)}
+          onClearSelection={() => toggleSelectAll(Array.from(selected))}
+          actions={(
+            <button
+              className="btn btn-danger icon-only"
+              onClick={handleBatchDelete}
+              title={`${t('common.delete', '删除')} (${selected.size})`}
+              aria-label={`${t('common.delete', '删除')} (${selected.size})`}
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        />
+      )}
 
       {loading && accounts.length === 0 ? (
         <div className="loading-container"><RefreshCw size={24} className="loading-spinner" /><p>{t('common.loading', '加载中...')}</p></div>

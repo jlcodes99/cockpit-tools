@@ -67,3 +67,87 @@ pub async fn get_provider_current_account_id(
     let _ = crate::modules::tray::update_tray_menu(&app);
     Ok(current_account_id)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    struct DataDirGuard {
+        dir: PathBuf,
+        previous_data_dir: Option<String>,
+    }
+
+    impl DataDirGuard {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!(
+                "cockpit-provider-current-command-{}-{}",
+                name,
+                std::process::id()
+            ));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).expect("create temp data dir");
+            let previous_data_dir = std::env::var("COCKPIT_TOOLS_DATA_DIR").ok();
+            std::env::set_var("COCKPIT_TOOLS_DATA_DIR", &dir);
+            Self {
+                dir,
+                previous_data_dir,
+            }
+        }
+    }
+
+    impl Drop for DataDirGuard {
+        fn drop(&mut self) {
+            match self.previous_data_dir.as_ref() {
+                Some(value) => std::env::set_var("COCKPIT_TOOLS_DATA_DIR", value),
+                None => std::env::remove_var("COCKPIT_TOOLS_DATA_DIR"),
+            }
+            let _ = fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    #[test]
+    fn provider_current_command_supports_all_account_pages() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .expect("lock env");
+        let _guard = DataDirGuard::new("supported-platforms");
+
+        for platform in [
+            "windsurf",
+            "kiro",
+            "cursor",
+            "gemini",
+            "codebuddy",
+            "codebuddy_cn",
+            "codebuddy-cn",
+            "qoder",
+            "trae",
+            "workbuddy",
+            "github_copilot",
+            "github-copilot",
+            "ghcp",
+            "zed",
+        ] {
+            let result = resolve_provider_current_account_id(platform)
+                .unwrap_or_else(|err| panic!("platform {platform} should be supported: {err}"));
+            assert_eq!(
+                result, None,
+                "empty data dir should have no current account"
+            );
+        }
+    }
+
+    #[test]
+    fn provider_current_command_rejects_unknown_platform() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .expect("lock env");
+        let _guard = DataDirGuard::new("unsupported-platform");
+
+        let error = resolve_provider_current_account_id("unknown-platform")
+            .expect_err("unknown platform should be rejected");
+        assert!(error.contains("不支持的平台"));
+    }
+}

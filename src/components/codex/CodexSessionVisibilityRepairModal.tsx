@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, RefreshCw, X } from "lucide-react";
+import { Check, RefreshCw, Search, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { ModalErrorMessage, useModalErrorState } from "../ModalErrorMessage";
@@ -15,7 +15,7 @@ import type {
 } from "../../types/codex";
 import { formatCodexSessionVisibilityRepairMessage } from "../../utils/codexSessionVisibility";
 
-type RepairStatus = "idle" | "running" | "success";
+type RepairStatus = "idle" | "previewing" | "previewed" | "running" | "success";
 type RepairScope = "all" | "selected";
 type InstanceRepairScope = "target" | "all";
 
@@ -223,6 +223,8 @@ export function CodexSessionVisibilityRepairModal({
   const [loadingInstances, setLoadingInstances] = useState(false);
   const [progress, setProgress] =
     useState<CodexSessionVisibilityRepairProgress | null>(null);
+  const [previewSummary, setPreviewSummary] =
+    useState<CodexSessionVisibilityRepairSummary | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const {
     message: error,
@@ -230,7 +232,9 @@ export function CodexSessionVisibilityRepairModal({
     set: setError,
   } = useModalErrorState();
 
-  const running = status === "running";
+  const running = status === "running" || status === "previewing";
+  const repairing = status === "running";
+  const previewing = status === "previewing";
   const uniqueSelectedSessionIds = useMemo(
     () => Array.from(new Set(selectedSessionIds.filter(Boolean))),
     [selectedSessionIds],
@@ -259,6 +263,7 @@ export function CodexSessionVisibilityRepairModal({
     loadingInstances ||
     !selectedInstanceId ||
     (effectiveScope === "selected" && uniqueSelectedSessionIds.length === 0);
+  const hasPreview = previewSummary !== null;
 
   useEffect(() => {
     if (!open) {
@@ -270,6 +275,7 @@ export function CodexSessionVisibilityRepairModal({
       setSelectedInstanceId("");
       setLoadingInstances(false);
       setProgress(null);
+      setPreviewSummary(null);
       setResult(null);
       setError(null);
       runIdRef.current = null;
@@ -355,26 +361,103 @@ export function CodexSessionVisibilityRepairModal({
     onClose();
   }, [onClose, running]);
 
-  const handleRepair = useCallback(async () => {
+  const clearPreview = useCallback(() => {
+    if (running) return;
+    setPreviewSummary(null);
+    if (status === "previewed" || status === "success") {
+      setStatus("idle");
+      setResult(null);
+      setProgress(null);
+    }
+  }, [running, status]);
+
+  const buildRepairOptions = useCallback(
+    (dryRun: boolean) => {
+      const sessionIds =
+        effectiveScope === "selected" ? uniqueSelectedSessionIds : null;
+      const repairInstanceIds =
+        selectedInstanceScope === "target" ? [selectedInstanceId] : null;
+      return {
+        mode: selectedMode,
+        dryRun,
+        targetInstanceId: selectedInstanceId,
+        repairInstanceIds,
+        sessionIds,
+      };
+    },
+    [
+      effectiveScope,
+      selectedInstanceScope,
+      selectedInstanceId,
+      selectedMode,
+      uniqueSelectedSessionIds,
+    ],
+  );
+
+  const handlePreview = useCallback(async () => {
     if (running) return;
     const runId = createRepairRunId();
-    const sessionIds =
-      effectiveScope === "selected" ? uniqueSelectedSessionIds : null;
-    const repairInstanceIds =
-      selectedInstanceScope === "target" ? [selectedInstanceId] : null;
     runIdRef.current = runId;
-    setStatus("running");
+    setStatus("previewing");
     setProgress(buildInitialProgress(runId, selectedMode));
+    setPreviewSummary(null);
     setResult(null);
     setError(null);
     onRunningChange?.(true);
     try {
-      const summary = await repairSessionVisibilityAcrossInstances(runId, {
-        mode: selectedMode,
-        targetInstanceId: selectedInstanceId,
-        repairInstanceIds,
-        sessionIds,
-      });
+      const summary = await repairSessionVisibilityAcrossInstances(
+        runId,
+        buildRepairOptions(true),
+      );
+      setPreviewSummary(summary);
+      setResult(formatCodexSessionVisibilityRepairMessage(summary, t));
+      setStatus("previewed");
+      setProgress((current) =>
+        current
+          ? {
+              ...current,
+              stage: "done",
+              percent: 100,
+            }
+          : null,
+      );
+    } catch (err) {
+      setStatus("idle");
+      setPreviewSummary(null);
+      setError(
+        t("codex.sessionManager.repairModal.previewFailedWithError", {
+          defaultValue: "预览会话修复失败：{{error}}",
+          error: String(err).replace(/^Error:\s*/, ""),
+        }),
+      );
+    } finally {
+      onRunningChange?.(false);
+    }
+  }, [
+    buildRepairOptions,
+    onRunningChange,
+    repairSessionVisibilityAcrossInstances,
+    running,
+    selectedMode,
+    setError,
+    t,
+  ]);
+
+  const handleRepair = useCallback(async () => {
+    if (running) return;
+    const runId = createRepairRunId();
+    runIdRef.current = runId;
+    setStatus("running");
+    setProgress(buildInitialProgress(runId, selectedMode));
+    setPreviewSummary(null);
+    setResult(null);
+    setError(null);
+    onRunningChange?.(true);
+    try {
+      const summary = await repairSessionVisibilityAcrossInstances(
+        runId,
+        buildRepairOptions(false),
+      );
       setResult(formatCodexSessionVisibilityRepairMessage(summary, t));
       setStatus("success");
       setProgress((current) =>
@@ -399,17 +482,14 @@ export function CodexSessionVisibilityRepairModal({
       onRunningChange?.(false);
     }
   }, [
+    buildRepairOptions,
     onRepaired,
     onRunningChange,
     repairSessionVisibilityAcrossInstances,
     running,
-    effectiveScope,
-    selectedInstanceScope,
-    selectedInstanceId,
     selectedMode,
     setError,
     t,
-    uniqueSelectedSessionIds,
   ]);
 
   if (!open) return null;
@@ -453,7 +533,10 @@ export function CodexSessionVisibilityRepairModal({
                   className={`codex-visibility-repair-scope-card${
                     selectedMode === "quick" ? " is-selected" : ""
                   }`}
-                  onClick={() => setSelectedMode("quick")}
+                  onClick={() => {
+                    setSelectedMode("quick");
+                    clearPreview();
+                  }}
                   disabled={running}
                   aria-pressed={selectedMode === "quick"}
                 >
@@ -472,7 +555,10 @@ export function CodexSessionVisibilityRepairModal({
                   className={`codex-visibility-repair-scope-card${
                     selectedMode === "deep" ? " is-selected" : ""
                   }`}
-                  onClick={() => setSelectedMode("deep")}
+                  onClick={() => {
+                    setSelectedMode("deep");
+                    clearPreview();
+                  }}
                   disabled={running}
                   aria-pressed={selectedMode === "deep"}
                 >
@@ -498,6 +584,7 @@ export function CodexSessionVisibilityRepairModal({
                 onChange={(value) => {
                   setSelectedInstanceId(value);
                   setError(null);
+                  clearPreview();
                 }}
                 disabled={running || loadingInstances || instanceOptions.length === 0}
                 placeholder={
@@ -520,7 +607,10 @@ export function CodexSessionVisibilityRepairModal({
                   className={`codex-visibility-repair-scope-card${
                     selectedInstanceScope === "target" ? " is-selected" : ""
                   }`}
-                  onClick={() => setSelectedInstanceScope("target")}
+                  onClick={() => {
+                    setSelectedInstanceScope("target");
+                    clearPreview();
+                  }}
                   disabled={running}
                   aria-pressed={selectedInstanceScope === "target"}
                 >
@@ -539,7 +629,10 @@ export function CodexSessionVisibilityRepairModal({
                   className={`codex-visibility-repair-scope-card${
                     selectedInstanceScope === "all" ? " is-selected" : ""
                   }`}
-                  onClick={() => setSelectedInstanceScope("all")}
+                  onClick={() => {
+                    setSelectedInstanceScope("all");
+                    clearPreview();
+                  }}
                   disabled={running}
                   aria-pressed={selectedInstanceScope === "all"}
                 >
@@ -565,7 +658,10 @@ export function CodexSessionVisibilityRepairModal({
                   className={`codex-visibility-repair-scope-card${
                     effectiveScope === "all" ? " is-selected" : ""
                   }`}
-                  onClick={() => setSelectedScope("all")}
+                  onClick={() => {
+                    setSelectedScope("all");
+                    clearPreview();
+                  }}
                   disabled={running}
                   aria-pressed={effectiveScope === "all"}
                 >
@@ -584,7 +680,10 @@ export function CodexSessionVisibilityRepairModal({
                   className={`codex-visibility-repair-scope-card${
                     effectiveScope === "selected" ? " is-selected" : ""
                   }`}
-                  onClick={() => setSelectedScope("selected")}
+                  onClick={() => {
+                    setSelectedScope("selected");
+                    clearPreview();
+                  }}
                   disabled={running || !canUseSelectedScope}
                   aria-pressed={effectiveScope === "selected"}
                 >
@@ -617,20 +716,40 @@ export function CodexSessionVisibilityRepairModal({
               <span>{result}</span>
             </div>
           )}
+          {status === "previewed" && result && (
+            <div className="codex-api-switch-notice-repair-status is-preview">
+              <Search size={14} />
+              <span>{result}</span>
+            </div>
+          )}
         </div>
         <div className="modal-footer codex-api-switch-notice-footer">
           <button className="btn btn-secondary" onClick={closeModal} disabled={running}>
             {t("common.close", "关闭")}
           </button>
           <button
+            className="btn btn-secondary"
+            onClick={() => void handlePreview()}
+            disabled={startDisabled}
+          >
+            <Search size={14} className={previewing ? "icon-spin" : undefined} />
+            {previewing
+              ? t("codex.sessionManager.repairModal.previewing", "正在预览...")
+              : hasPreview
+                ? t("codex.sessionManager.repairModal.previewAgain", "重新预览")
+                : t("codex.sessionManager.repairModal.preview", "预览变更")}
+          </button>
+          <button
             className="btn btn-primary"
             onClick={() => void handleRepair()}
             disabled={startDisabled}
           >
-            <RefreshCw size={14} className={running ? "icon-spin" : undefined} />
-            {running
+            <RefreshCw size={14} className={repairing ? "icon-spin" : undefined} />
+            {repairing
               ? t("codex.sessionManager.repairModal.running", "正在修复...")
-              : t("codex.sessionManager.repairModal.start", "开始修复")}
+              : hasPreview
+                ? t("codex.sessionManager.repairModal.confirmRepair", "确认修复")
+                : t("codex.sessionManager.repairModal.start", "开始修复")}
           </button>
         </div>
       </div>

@@ -788,7 +788,9 @@
       "claudeAppPath": "Цель запуска Claude Desktop",
       "claudeAppPathDesc": "Стандартный профиль может использовать цель Microsoft Store; нескольким экземплярам нужен реальный Claude.exe.",
       "antigravityLaunchOnSwitch": "Запускать Antigravity IDE при переключении",
-      "antigravityLaunchOnSwitchDesc": "Если выключено, переключение только записывает данные аккаунта по умолчанию Antigravity IDE и не закрывает, не запускает и не перезапускает приложение."
+      "antigravityLaunchOnSwitchDesc": "Если выключено, переключение только записывает данные аккаунта по умолчанию Antigravity IDE и не закрывает, не запускает и не перезапускает приложение.",
+      "tokenKeeper": "Поддержка auth",
+      "tokenKeeperDesc": "Обновляет токены аккаунтов небольшими пакетами только перед истечением авторизации, снижая фоновые запросы при большом числе аккаунтов."
     },
     "network": {
       "apiTitle": "API антигравитационной кабины",
@@ -1618,6 +1620,7 @@
     "restartRequiredAfterInstall": "Обновление установлено. Перезапустите приложение вручную, чтобы завершить переключение.",
     "stoppingApiService": "Остановка API-сервиса...",
     "stopApiServiceFailed": "Не удалось остановить службу API. Сначала отключите её и повторите попытку.",
+    "stopApiServiceFailedContinue": "Служба API не остановилась корректно. Перезапуск продолжается...",
     "skipThisVersion": "Пропустить эту версию",
     "skipFailed": "Не удалось пропустить это обновление: {{error}}"
   },
@@ -1882,6 +1885,7 @@
       "refreshStatsSuccess": "Статистика API-сервиса обновлена",
       "routingStrategy": {
         "auto": "Авто (рекомендуется)",
+        "singleAccount": "Один аккаунт",
         "quotaHighFirst": "Сначала высокая квота",
         "quotaLowFirst": "Сначала низкая квота",
         "planHighFirst": "Сначала высокий тариф",
@@ -2220,6 +2224,16 @@
       "accountSearchPlaceholder": "Поиск по email...",
       "accountFilterEmpty": "Подходящих аккаунтов нет",
       "accountFilteredCount": "В текущем фильтре: {{count}} аккаунт(ов)",
+      "fullQuotaAction": "Разбудить аккаунты",
+      "fullQuotaActionTitle": "Открывает тест пробуждения аккаунтов. По умолчанию сортировка по квоте 5ч от большей к меньшей.",
+      "fullQuotaNoAccounts": "В текущем списке нет OAuth-аккаунтов, доступных для пробуждения.",
+      "fullQuotaAccountsLabel": "Аккаунты для пробуждения",
+      "accountSort": {
+        "default": "Порядок по умолчанию",
+        "hourly": "По квоте 5ч",
+        "weekly": "По недельной квоте",
+        "email": "По email"
+      },
       "testTitle": "Проверка пробуждения Codex",
       "testAccountsLabel": "Тестовые аккаунты",
       "testAccountsRequired": "Выберите хотя бы один тестовый аккаунт.",
@@ -2333,10 +2347,14 @@
         "collapse": "Свернуть",
         "repairVisibility": "Исправить видимость",
         "restoreSessions": "Восстановить сессии",
+        "exportSessions": "Экспорт сессий",
+        "importSessions": "Импорт сессий",
         "copySessionId": "Копировать ID сессии",
+        "openLocation": "Открыть папку",
         "selectAllSessions": "Выбрать все сессии",
         "clearSelectedSessions": "Снять выбор",
-        "copyToInstance": "Копировать в экземпляр"
+        "copyToInstance": "Копировать в экземпляр",
+        "trash": "Корзина"
       },
       "confirm": {
         "title": "Переместить в корзину",
@@ -2374,11 +2392,25 @@
       "locationRunning": " (запущено)",
       "untitled": "Сессия без названия",
       "restoreModal": {
-        "title": "Восстановить сессии",
-        "hint": "При восстановлении файл rollout, строка потока SQLite и запись session_index возвращаются вместе в исходный экземпляр.",
+        "title": "Корзина",
+        "hint": "Сессии в корзине можно восстановить в исходный экземпляр или удалить навсегда, чтобы освободить место на диске.",
         "emptyTitle": "Корзина пуста",
         "emptyDesc": "Сессии, перемещённые в корзину, появятся здесь.",
-        "restoreAction": "Восстановить выбранные сессии"
+        "restoreAction": "Восстановить выбранные сессии",
+        "summary": "{{count}} элементов, {{size}}",
+        "selectedSummary": "Выбрано {{count}}, {{size}}",
+        "selectAll": "Выбрать все",
+        "clearSelected": "Снять выбор",
+        "emptyTrash": "Очистить корзину",
+        "itemSize": "Размер {{size}}",
+        "deleteOne": "Удалить навсегда",
+        "deleteSelected": "Удалить выбранные",
+        "pickDeleteOne": "Выберите хотя бы одну сессию для окончательного удаления",
+        "deleteOneConfirm": "Удалить эту сессию навсегда? Действие нельзя отменить. Будет освобождено примерно: {{size}}.",
+        "deleteSelectedConfirm": "Удалить выбранные сессии ({{count}}) навсегда? Действие нельзя отменить. Будет освобождено примерно: {{size}}.",
+        "permanentDeleteTitle": "Окончательное удаление",
+        "permanentDeleteAction": "Удалить навсегда",
+        "emptyTrashConfirm": "Очистить корзину? {{count}} сессий будут удалены навсегда без возможности восстановления. Будет освобождено примерно: {{size}}."
       },
       "targetModal": {
         "title": "Копировать в экземпляр",
@@ -2440,7 +2472,90 @@
         "instanceScopeAll": "Все экземпляры",
         "instanceScopeAllDesc": "Исправляет все экземпляры Codex при общей восстановлении.",
         "progressTitle": "Ход восстановления",
-        "start": "Восстановить"
+        "start": "Восстановить",
+        "previewing": "Создание предпросмотра...",
+        "previewAgain": "Повторить предпросмотр",
+        "preview": "Предпросмотр изменений",
+        "previewFailedWithError": "Не удалось выполнить предпросмотр восстановления сеансов: {{error}}",
+        "confirmRepair": "Подтвердить исправление"
+      },
+      "importModal": {
+        "title": "Импорт сессий",
+        "hint": "Пакет сессий импортирует только файлы rollout и записи session_index. Аккаунты, токены, API-ключи и настройки приложения не включаются; сессии с тем же ID в целевой инстанции пропускаются.",
+        "noTarget": "Нет доступной инстанции Codex для импорта",
+        "noPackage": "Сначала выберите пакет сессий",
+        "pickOne": "Выберите хотя бы одну сессию для импорта",
+        "totalCount": "{{count}} сессий в пакете",
+        "readyCount": "{{count}} можно импортировать",
+        "selectReady": "Выбрать доступные",
+        "previewing": "Предпросмотр пакета сессий...",
+        "existsIn": "Уже есть в: {{names}}",
+        "statusReady": "Готово",
+        "statusDuplicate": "Есть",
+        "statusConflict": "Конфликт",
+        "statusInvalid": "Недействительно",
+        "confirm": "Импортировать выбранные сессии"
+      },
+      "transferModal": {
+        "exportTitle": "Экспорт сеансов",
+        "importTitle": "Импорт сеансов",
+        "minimize": "Свернуть",
+        "reopen": "Ход выполнения",
+        "clear": "Очистить",
+        "runningSummary": "Обработка {{current}} из {{total}}",
+        "completedSummary": "Задача завершена",
+        "failedSummary": "Задача завершилась ошибкой",
+        "current": "{{current}} из {{total}}",
+        "phase": {
+          "exportPrepare": "Подготовка экспорта...",
+          "exportCollect": "Сбор сеансов...",
+          "exportHash": "Проверка файлов сеансов...",
+          "exportWrite": "Запись пакета сеансов...",
+          "importPrepare": "Подготовка импорта...",
+          "importRead": "Чтение пакета сеансов...",
+          "importWrite": "Запись целевого экземпляра...",
+          "importRebuild": "Обновление официального индекса сеансов...",
+          "done": "Задача завершена"
+        }
+      },
+      "exportModal": {
+        "title": "Экспорт сеансов",
+        "hint": "Перед экспортом проверьте список, исходный экземпляр и размер файлов. Пакет содержит только rollout-файлы и записи session_index, без аккаунтов, токенов, API-ключей и настроек.",
+        "previewing": "Предпросмотр сеансов...",
+        "selectedCount": "Выбрано {{count}}",
+        "exportableCount": "Можно экспортировать {{count}}",
+        "missingCount": "Отсутствует {{count}}",
+        "totalSize": "Всего {{size}}",
+        "exportPath": "Путь экспорта",
+        "pathUnset": "Путь не выбран",
+        "choosePath": "Выбрать путь",
+        "missingNotice": "{{count}} сеанс(ов) больше нет в текущем наборе экземпляров, они будут пропущены.",
+        "sourceInstance": "Источник: {{name}}",
+        "emptyTitle": "Нет сеансов для экспорта",
+        "noPreview": "Сначала завершите предпросмотр",
+        "noExportable": "Нет сеансов для экспорта",
+        "pickPath": "Выберите путь экспорта",
+        "confirm": "Экспорт",
+        "selectedExportCount": "Выбрано {{selected}} / доступно {{total}}",
+        "selectedSize": "Размер выбора {{selected}} / всего {{total}}",
+        "removedNotice": "{{count}} удалено из этого списка экспорта",
+        "restoreRemoved": "Восстановить список",
+        "sourceLabel": "Источник",
+        "allSources": "Все источники",
+        "selectionLabel": "Выбор",
+        "filterAll": "Все",
+        "filterSelected": "Выбранные",
+        "filterUnselected": "Не выбраны",
+        "visibleCount": "Показано {{visible}} / {{total}}",
+        "selectVisible": "Выбрать фильтр",
+        "clearVisible": "Снять фильтр",
+        "keepVisibleOnly": "Оставить фильтр",
+        "removeVisible": "Убрать фильтр",
+        "removeUnchecked": "Убрать невыбранные",
+        "selectItem": "Выбрать сеанс для экспорта",
+        "removeItem": "Убрать",
+        "emptyFilteredTitle": "Подходящих сеансов нет",
+        "emptyFilteredDesc": "Измените поиск, источник или состояние выбора."
       }
     },
     "api": {
@@ -3000,7 +3115,9 @@
         "pricingUnset": "Не задано",
         "pricingReset": "Сброс",
         "pricingSaved": "Цены сохранены",
-        "pricingInvalid": "Цены должны быть числами больше или равны 0"
+        "pricingInvalid": "Цены должны быть числами больше или равны 0",
+        "pricingReprice": "Пересчитать историю",
+        "pricingRepriced": "Исторические оценки пересчитаны по текущим ценам"
       },
       "keys": {
         "policyTitle": "Политика моделей",
@@ -3147,7 +3264,11 @@
       "selectedCount": "Выбрано {{count}}/{{total}}",
       "selectAllAccounts": "Выбрать все",
       "selectReady": "Выбрать исправные",
-      "clearSelection": "Снять выбор"
+      "clearSelection": "Снять выбор",
+      "hiddenTask": "Пакетный импорт Codex",
+      "taskRunning": "Обработка {{current}} / {{total}}",
+      "taskPreview": "Предпросмотр готов: {{total}}",
+      "reopen": "Открыть задачу"
     },
     "autoRepairMode": {
       "label": "Логика автоисправления",
@@ -3167,6 +3288,22 @@
       "saveDraft": "Сохранить карточку",
       "authorizeAction": "Авторизовать",
       "cardHint": "Заметки сохранены. Завершите OAuth, чтобы использовать аккаунт."
+    },
+    "batchDelete": {
+      "title": "Массовое удаление Codex",
+      "running": "Удаление",
+      "paused": "Пауза",
+      "failed": "Частичный сбой",
+      "completed": "Удаление завершено",
+      "preparing": "Подготовка задачи удаления...",
+      "retryFailed": "Повторить сбои",
+      "pause": "Пауза",
+      "resume": "Продолжить",
+      "clear": "Очистить",
+      "summary": "Обработано {{completed}} / {{total}}, ошибок {{failed}}",
+      "started": "Запущено удаление аккаунтов Codex: {{count}}",
+      "pollFailed": "Не удалось обновить ход массового удаления: {{error}}",
+      "actionFailed": "Действие массового удаления завершилось ошибкой: {{error}}"
     }
   },
   "githubCopilot": {

@@ -10,6 +10,7 @@ import { ModalErrorMessage } from '../ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../MfaQuickCodeSelect';
 import { QuickSettingsPopover } from '../QuickSettingsPopover';
 import { PaginationControls } from '../PaginationControls';
+import { AccountSelectionToolbar } from '../AccountSelectionToolbar';
 import { useEscClose } from '../../hooks/useEscClose';
 import { useCodebuddySuitePage, formatQuotaNumber } from '../../hooks/useCodebuddySuitePage';
 import type { UseProviderAccountsPageReturn } from '../../hooks/useProviderAccountsPage';
@@ -513,12 +514,29 @@ export function CodebuddySuiteAccountsSharedView<TAccount extends CodebuddySuite
             title={exportSelectionCount > 0 ? `${t('common.shared.export.title', '导出')} (${exportSelectionCount})` : t('common.shared.export.title', '导出')}>
             <Upload size={14} />
           </button>
-          {selected.size > 0 && (
-            <button className="btn btn-danger icon-only" onClick={handleBatchDelete} title={`${t('common.delete', '删除')} (${selected.size})`}><Trash2 size={14} /></button>
-          )}
           <QuickSettingsPopover type={platformConfig.quickSettingsType} />
         </div>
       </div>
+
+      {filteredAccounts.length > 0 && (
+        <AccountSelectionToolbar
+          selectedCount={selected.size}
+          allSelected={isAllPaginatedSelected}
+          disabled={paginatedIds.length === 0}
+          onToggleSelectAll={() => toggleSelectAll(paginatedIds)}
+          onClearSelection={() => toggleSelectAll(Array.from(selected))}
+          actions={(
+            <button
+              className="btn btn-danger icon-only"
+              onClick={handleBatchDelete}
+              title={`${t('common.delete', '删除')} (${selected.size})`}
+              aria-label={`${t('common.delete', '删除')} (${selected.size})`}
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        />
+      )}
 
       {loading && accounts.length === 0 ? (
         <div className="loading-container"><RefreshCw size={24} className="loading-spinner" /><p>{t('common.loading', '加载中...')}</p></div>

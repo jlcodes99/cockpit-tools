@@ -12,6 +12,14 @@ enum AntigravityRuntimeTarget {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AntigravitySwitchFlow {
+    Legacy,
+    LocalNoLaunch,
+    DualNoRestart,
+    Restart,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AntigravityDesktopAuthMode {
     LegacyStateDb,
     SystemCredential,
@@ -21,6 +29,21 @@ fn normalize_antigravity_runtime_target(raw: Option<&str>) -> AntigravityRuntime
     match raw.unwrap_or("").trim().to_ascii_lowercase().as_str() {
         "antigravity" => AntigravityRuntimeTarget::Legacy,
         _ => AntigravityRuntimeTarget::Ide,
+    }
+}
+
+fn resolve_antigravity_switch_flow(
+    runtime_target: AntigravityRuntimeTarget,
+    launch_on_switch: bool,
+    dual_switch_no_restart_enabled: bool,
+) -> AntigravitySwitchFlow {
+    match runtime_target {
+        AntigravityRuntimeTarget::Legacy => AntigravitySwitchFlow::Legacy,
+        AntigravityRuntimeTarget::Ide if !launch_on_switch => AntigravitySwitchFlow::LocalNoLaunch,
+        AntigravityRuntimeTarget::Ide if dual_switch_no_restart_enabled => {
+            AntigravitySwitchFlow::DualNoRestart
+        }
+        AntigravityRuntimeTarget::Ide => AntigravitySwitchFlow::Restart,
     }
 }
 
@@ -440,41 +463,46 @@ pub async fn switch_account(
     runtime_target: Option<String>,
 ) -> Result<models::Account, String> {
     let runtime_target = normalize_antigravity_runtime_target(runtime_target.as_deref());
-    if runtime_target == AntigravityRuntimeTarget::Legacy {
-        return switch_account_legacy_antigravity(app, account_id).await;
-    }
-
     let user_config = modules::config::get_user_config();
-    if !user_config.antigravity_launch_on_switch {
-        let result = modules::account::switch_account_local_no_restart(&account_id).await;
-        if let Ok(account) = &result {
-            modules::websocket::broadcast_account_switched(&account.id, &account.email);
-            modules::websocket::broadcast_data_changed("switch_account_local_no_launch");
+    match resolve_antigravity_switch_flow(
+        runtime_target,
+        user_config.antigravity_launch_on_switch,
+        user_config.antigravity_dual_switch_no_restart_enabled,
+    ) {
+        AntigravitySwitchFlow::Legacy => {
+            return switch_account_legacy_antigravity(app, account_id).await;
         }
-        return result;
-    }
-
-    if user_config.antigravity_dual_switch_no_restart_enabled {
-        let result = modules::account::switch_account_dual_no_restart(
-            &account_id,
-            "manual",
-            "tools.account.switch",
-            "dual_no_restart",
-            None,
-        )
-        .await;
-        if let Err(error) = &result {
-            if error.starts_with("APP_PATH_NOT_FOUND:") {
-                let _ = app.emit(
-                    "app:path_missing",
-                    serde_json::json!({
-                        "app": "antigravity",
-                        "retry": { "kind": "switchAccount", "accountId": account_id }
-                    }),
-                );
+        AntigravitySwitchFlow::LocalNoLaunch => {
+            let result = modules::account::switch_account_local_no_restart(&account_id).await;
+            if let Ok(account) = &result {
+                modules::websocket::broadcast_account_switched(&account.id, &account.email);
+                modules::websocket::broadcast_data_changed("switch_account_local_no_launch");
             }
+            return result;
         }
-        return result;
+        AntigravitySwitchFlow::DualNoRestart => {
+            let result = modules::account::switch_account_dual_no_restart(
+                &account_id,
+                "manual",
+                "tools.account.switch",
+                "dual_no_restart",
+                None,
+            )
+            .await;
+            if let Err(error) = &result {
+                if error.starts_with("APP_PATH_NOT_FOUND:") {
+                    let _ = app.emit(
+                        "app:path_missing",
+                        serde_json::json!({
+                            "app": "antigravity",
+                            "retry": { "kind": "switchAccount", "accountId": account_id }
+                        }),
+                    );
+                }
+            }
+            return result;
+        }
+        AntigravitySwitchFlow::Restart => {}
     }
 
     modules::logger::log_info(&format!("开始切换账号: {}", account_id));
@@ -644,4 +672,60 @@ pub async fn save_account_groups(data: String) -> Result<(), String> {
     }
     let path = dir.join(GROUPS_FILE);
     std::fs::write(&path, data).map_err(|e| format!("Failed to write groups: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        normalize_antigravity_runtime_target, resolve_antigravity_switch_flow,
+        AntigravityRuntimeTarget, AntigravitySwitchFlow,
+    };
+
+    #[test]
+    fn antigravity_switch_flow_uses_legacy_for_legacy_target() {
+        assert_eq!(
+            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Legacy, false, true),
+            AntigravitySwitchFlow::Legacy
+        );
+    }
+
+    #[test]
+    fn antigravity_switch_flow_prefers_local_no_launch_for_ide_when_launch_disabled() {
+        assert_eq!(
+            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Ide, false, true),
+            AntigravitySwitchFlow::LocalNoLaunch
+        );
+        assert_eq!(
+            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Ide, false, false),
+            AntigravitySwitchFlow::LocalNoLaunch
+        );
+    }
+
+    #[test]
+    fn antigravity_switch_flow_uses_dual_no_restart_only_when_launch_is_enabled() {
+        assert_eq!(
+            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Ide, true, true),
+            AntigravitySwitchFlow::DualNoRestart
+        );
+        assert_eq!(
+            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Ide, true, false),
+            AntigravitySwitchFlow::Restart
+        );
+    }
+
+    #[test]
+    fn antigravity_runtime_target_defaults_to_ide() {
+        assert_eq!(
+            normalize_antigravity_runtime_target(None),
+            AntigravityRuntimeTarget::Ide
+        );
+        assert_eq!(
+            normalize_antigravity_runtime_target(Some("antigravity_ide")),
+            AntigravityRuntimeTarget::Ide
+        );
+        assert_eq!(
+            normalize_antigravity_runtime_target(Some("antigravity")),
+            AntigravityRuntimeTarget::Legacy
+        );
+    }
 }

@@ -22,6 +22,7 @@ import {
   Copy,
   Check,
   Play,
+  Pause,
   RotateCw,
   CircleAlert,
   Info,
@@ -98,6 +99,7 @@ import {
   isCodexPendingOAuthAccount,
   isCodexTeamLikePlan,
   type CodexApiProviderMode,
+  type CodexBatchDeleteJobStatus,
   type CodexQuotaErrorInfo,
   type CodexResetCredit,
   type CodexResetCreditsSnapshot,
@@ -124,7 +126,10 @@ import {
   CodexSessionVisibilityRepairProgressView,
   createCodexSessionVisibilityRepairRunId,
 } from "../components/codex/CodexSessionVisibilityRepairModal";
-import { CodexWakeupContent } from "../components/codex/CodexWakeupContent";
+import {
+  CodexWakeupContent,
+  type CodexWakeupTestOpenRequest,
+} from "../components/codex/CodexWakeupContent";
 import { CodexModelProviderManager } from "../components/codex/CodexModelProviderManager";
 import { CodexSshServersPanel } from "../components/codex/CodexSshServersPanel";
 import { CodexSpeedSelect } from "../components/codex/CodexSpeedSelect";
@@ -279,6 +284,104 @@ const CODEX_TOKEN_BATCH_EXAMPLE = `[
 ]`;
 const OPENAI_OFFICIAL_PRESET_ID = "openai_official";
 const OPENAI_OFFICIAL_BASE_URL = "https://api.openai.com/v1";
+const CODEX_PRIMARY_PLAN_FILTER_KEYS = [
+  "FREE",
+  "PLUS",
+  "PRO",
+  "TEAM",
+  "ENTERPRISE",
+] as const;
+const CODEX_SPECIAL_PLAN_FILTER_KEYS = new Set(["PENDING", "ERROR", "VALID"]);
+
+type CodexPlanFilterCounts = {
+  all: number;
+  VALID: number;
+  ERROR: number;
+  counts: Record<string, number>;
+};
+
+function normalizeCodexPlanFilterValue(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+function createCodexPlanFilterCounts(total: number): CodexPlanFilterCounts {
+  return {
+    all: total,
+    VALID: 0,
+    ERROR: 0,
+    counts: {},
+  };
+}
+
+function incrementCodexPlanFilterCount(
+  counts: CodexPlanFilterCounts,
+  value: string,
+) {
+  const key = normalizeCodexPlanFilterValue(value);
+  if (!key) return;
+  counts.counts[key] = (counts.counts[key] ?? 0) + 1;
+}
+
+function getCodexPlanFilterCount(
+  counts: CodexPlanFilterCounts,
+  value: string,
+): number {
+  return counts.counts[normalizeCodexPlanFilterValue(value)] ?? 0;
+}
+
+function buildCodexPlanFilterOptions(
+  counts: CodexPlanFilterCounts,
+  options?: {
+    includeValid?: boolean;
+    pendingLabel?: string;
+    validOption?: MultiSelectFilterOption;
+  },
+): MultiSelectFilterOption[] {
+  const usedKeys = new Set<string>();
+  const result: MultiSelectFilterOption[] = [];
+
+  for (const key of CODEX_PRIMARY_PLAN_FILTER_KEYS) {
+    usedKeys.add(key);
+    result.push({
+      value: key,
+      label: `${key} (${getCodexPlanFilterCount(counts, key)})`,
+    });
+  }
+
+  Object.keys(counts.counts)
+    .map(normalizeCodexPlanFilterValue)
+    .filter(
+      (key) =>
+        key &&
+        !usedKeys.has(key) &&
+        !CODEX_SPECIAL_PLAN_FILTER_KEYS.has(key),
+    )
+    .sort((left, right) => left.localeCompare(right))
+    .forEach((key) => {
+      usedKeys.add(key);
+      result.push({
+        value: key,
+        label: `${key} (${getCodexPlanFilterCount(counts, key)})`,
+      });
+    });
+
+  result.push({
+    value: "PENDING",
+    label: `${options?.pendingLabel ?? "待授权"} (${getCodexPlanFilterCount(
+      counts,
+      "PENDING",
+    )})`,
+  });
+  result.push({
+    value: "ERROR",
+    label: `ERROR (${counts.ERROR})`,
+  });
+  if (options?.includeValid && options.validOption) {
+    result.push(options.validOption);
+  }
+
+  return result;
+}
 
 function normalizeCodexApiBaseUrl(rawValue?: string | null): string {
   return normalizeHttpBaseUrl(rawValue ?? "") ?? "";
@@ -400,6 +503,13 @@ function formatMfaRecordOption(record: MfaRecord, fallback: string): string {
   if (!secret) return fallback;
   if (secret.length <= 14) return secret;
   return `${secret.slice(0, 6)}...${secret.slice(-4)}`;
+}
+
+function formatMfaSecretPreview(secret: string): string {
+  const trimmed = secret.trim();
+  if (!trimmed) return "";
+  if (trimmed.length <= 12) return trimmed;
+  return `${trimmed.slice(0, 5)}...${trimmed.slice(-4)}`;
 }
 
 function isPendingOAuthCodexAccount(account?: CodexAccount | null): boolean {
@@ -567,6 +677,14 @@ type CodexApiSwitchNoticeContext = {
 
 const CODEX_SESSION_VISIBILITY_REPAIR_PROGRESS_EVENT =
   "codex:session_visibility_repair_progress";
+const CODEX_BATCH_IMPORT_SESSION_STORAGE_KEY =
+  "cockpit.codex.batchImport.sessionId";
+
+function shouldAutoHideBatchDeleteJob(
+  job: CodexBatchDeleteJobStatus | null,
+): job is CodexBatchDeleteJobStatus {
+  return job?.status === "completed" && job.failed === 0;
+}
 
 function getCodexLaunchCredentialKind(
   account: CodexAccount,
@@ -904,6 +1022,9 @@ export function CodexAccountsPage() {
   const fetchSponsorState = useSponsorStore((state) => state.fetchState);
   const [activeTab, setActiveTab] = useState<CodexTab>("overview");
   const [wakeupPresetManagerSignal, setWakeupPresetManagerSignal] = useState(0);
+  const [fullQuotaWakeupOpenRequest, setFullQuotaWakeupOpenRequest] =
+    useState<CodexWakeupTestOpenRequest | null>(null);
+  const fullQuotaWakeupOpenSignalRef = useRef(0);
   const untaggedKey = "__untagged__";
   const [filterTypes, setFilterTypes] = useState<string[]>(() =>
     readAccountsOverviewFilterPersistenceEnabled(CODEX_FILTER_PERSISTENCE_SCOPE)
@@ -1277,8 +1398,6 @@ export function CodexAccountsPage() {
     deleteConfirmError,
     deleteConfirmErrorScrollKey,
     setDeleteConfirm,
-    deleting,
-    confirmDelete,
     message,
     setMessage,
     exporting,
@@ -1335,8 +1454,142 @@ export function CodexAccountsPage() {
     [],
   );
   const [batchImportCheckQuota, setBatchImportCheckQuota] = useState(false);
+  const [batchDeleteJob, setBatchDeleteJob] =
+    useState<CodexBatchDeleteJobStatus | null>(null);
+  const [batchDeleteBusy, setBatchDeleteBusy] = useState(false);
+  const [batchDeleteModalError, setBatchDeleteModalError] = useState<
+    string | null
+  >(null);
   const batchImportUnlistenersRef = useRef<UnlistenFn[]>([]);
   const batchImportSessionIdRef = useRef<string | null>(null);
+  const batchDeleteRemoveIdsRef = useRef<Set<string>>(new Set());
+  const codexAccountsRef = useRef<CodexAccount[]>(store.accounts);
+  const codexCurrentAccountRef = useRef<CodexAccount | null>(
+    store.currentAccount,
+  );
+  const fetchCodexAccounts = store.fetchAccounts;
+  const fetchCodexCurrentAccount = store.fetchCurrentAccount;
+
+  useEffect(() => {
+    codexAccountsRef.current = store.accounts;
+    codexCurrentAccountRef.current = store.currentAccount;
+  }, [store.accounts, store.currentAccount]);
+
+  const getBatchDeleteRefreshOptions = useCallback(() => {
+    const removeIds = batchDeleteRemoveIdsRef.current;
+    const accounts = codexAccountsRef.current;
+    const currentAccount = codexCurrentAccountRef.current;
+    return {
+      allowEmptyAccounts:
+        accounts.length > 0 &&
+        accounts.every((account) => removeIds.has(account.id)),
+      allowEmptyCurrent:
+        !!currentAccount && removeIds.has(currentAccount.id),
+    };
+  }, []);
+
+  const refreshAccountsAfterBatchDelete = useCallback(async () => {
+    const { allowEmptyAccounts, allowEmptyCurrent } =
+      getBatchDeleteRefreshOptions();
+    await fetchCodexAccounts({ allowEmpty: allowEmptyAccounts });
+    await fetchCodexCurrentAccount({ allowEmpty: allowEmptyCurrent });
+    await reloadCodexGroups();
+  }, [
+    fetchCodexAccounts,
+    fetchCodexCurrentAccount,
+    getBatchDeleteRefreshOptions,
+    reloadCodexGroups,
+  ]);
+
+  useEffect(() => {
+    if (!deleteConfirm) {
+      setBatchDeleteModalError(null);
+    }
+  }, [deleteConfirm]);
+
+  useEffect(() => {
+    if (!batchDeleteJob || batchDeleteJob.status !== "running") {
+      return;
+    }
+    let disposed = false;
+    const refreshJob = async () => {
+      try {
+        const next = await codexService.getCodexBatchDelete(
+          batchDeleteJob.jobId,
+        );
+        if (disposed) return;
+        if (next.status !== "running") {
+          await refreshAccountsAfterBatchDelete();
+          if (disposed) return;
+          if (shouldAutoHideBatchDeleteJob(next)) {
+            try {
+              await codexService.clearCodexBatchDelete(next.jobId);
+            } catch (clearError) {
+              console.warn(
+                "[Codex Batch Delete] 自动清理已完成任务失败:",
+                clearError,
+              );
+            }
+            if (!disposed) {
+              setBatchDeleteJob(null);
+            }
+            return;
+          }
+        }
+        setBatchDeleteJob(next);
+      } catch (error) {
+        if (disposed) return;
+        setMessage({
+          text: t("codex.batchDelete.pollFailed", {
+            error: String(error),
+          }),
+          tone: "error",
+        });
+      }
+    };
+    const timer = window.setInterval(() => {
+      void refreshJob();
+    }, 1000);
+    void refreshJob();
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    batchDeleteJob?.jobId,
+    batchDeleteJob?.status,
+    refreshAccountsAfterBatchDelete,
+    setMessage,
+    t,
+  ]);
+
+  useEffect(() => {
+    if (!shouldAutoHideBatchDeleteJob(batchDeleteJob)) {
+      return;
+    }
+    const completedJob = batchDeleteJob;
+    let disposed = false;
+    const clearCompletedJob = async () => {
+      try {
+        await refreshAccountsAfterBatchDelete();
+        if (disposed) return;
+        await codexService.clearCodexBatchDelete(completedJob.jobId);
+      } catch (error) {
+        console.warn(
+          "[Codex Batch Delete] 自动清理已完成任务失败:",
+          error,
+        );
+      } finally {
+        if (!disposed) {
+          setBatchDeleteJob(null);
+        }
+      }
+    };
+    void clearCompletedJob();
+    return () => {
+      disposed = true;
+    };
+  }, [batchDeleteJob, refreshAccountsAfterBatchDelete]);
 
   const cleanupBatchImportListeners = useCallback(() => {
     for (const unlisten of batchImportUnlistenersRef.current) {
@@ -1365,7 +1618,59 @@ export function CodexAccountsPage() {
     setBatchImportResult(null);
     setBatchImportFilePaths([]);
     setBatchImportCheckQuota(false);
+    try {
+      localStorage.removeItem(CODEX_BATCH_IMPORT_SESSION_STORAGE_KEY);
+    } catch {
+      // ignore storage failures
+    }
   }, [cleanupBatchImportListeners]);
+
+  useEffect(() => {
+    let disposed = false;
+    const restoreBatchImportSession = async () => {
+      let savedSessionId: string | null = null;
+      try {
+        savedSessionId = localStorage.getItem(
+          CODEX_BATCH_IMPORT_SESSION_STORAGE_KEY,
+        );
+      } catch {
+        savedSessionId = null;
+      }
+      if (!savedSessionId || batchImportSessionIdRef.current) {
+        return;
+      }
+      try {
+        const preview =
+          await codexService.getCodexBatchImportPreview(savedSessionId);
+        if (disposed) return;
+        batchImportSessionIdRef.current = savedSessionId;
+        setBatchImportSessionId(savedSessionId);
+        setBatchImportPreview(preview);
+        setBatchImportCheckQuota(preview.checkQuota);
+        setBatchImportBusy(false);
+        setBatchImportSelectedIds(
+          preview.items
+            .filter(
+              (item) =>
+                item.defaultSelected &&
+                item.selectable &&
+                (item.status === "ready" || item.status === "existing"),
+            )
+            .map((item) => item.itemId),
+        );
+      } catch {
+        try {
+          localStorage.removeItem(CODEX_BATCH_IMPORT_SESSION_STORAGE_KEY);
+        } catch {
+          // ignore storage failures
+        }
+      }
+    };
+    void restoreBatchImportSession();
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
   const batchImportCounts = useMemo(() => {
     const items = batchImportPreview?.items ?? [];
@@ -2623,6 +2928,10 @@ export function CodexAccountsPage() {
       : editingAccountNoteAccount
       ? buildCodexAccountPresentation(editingAccountNoteAccount, t).displayName
       : "";
+  const activeAccountNoteEmail =
+    activeAccountNoteMode === "pendingOAuth"
+      ? pendingOAuthEmailInput.trim()
+      : editingAccountNoteAccount?.email?.trim() || "";
 
   const refreshSavedMfaRecords = useCallback(() => {
     setSavedMfaRecords(loadSavedMfaRecords());
@@ -4832,6 +5141,14 @@ export function CodexAccountsPage() {
       );
       batchImportSessionIdRef.current = started.sessionId;
       setBatchImportSessionId(started.sessionId);
+      try {
+        localStorage.setItem(
+          CODEX_BATCH_IMPORT_SESSION_STORAGE_KEY,
+          started.sessionId,
+        );
+      } catch {
+        // ignore storage failures
+      }
     } catch (e) {
       cleanupBatchImportListeners();
       batchImportSessionIdRef.current = null;
@@ -4890,15 +5207,11 @@ export function CodexAccountsPage() {
   };
 
   const handleCloseBatchImport = async () => {
-    const sessionId = batchImportSessionId;
-    if (batchImportBusy && sessionId) {
-      try {
-        await codexService.cancelCodexBatchImport(sessionId);
-      } catch {
-        // Closing is an explicit discard action; ignore cancellation failures.
-      }
+    if (batchImportResult) {
+      resetBatchImportState();
+      return;
     }
-    resetBatchImportState();
+    setBatchImportOpen(false);
   };
 
   const toggleBatchImportItem = (itemId: string) => {
@@ -4963,6 +5276,11 @@ export function CodexAccountsPage() {
         });
       }
       cleanupBatchImportListeners();
+      try {
+        localStorage.removeItem(CODEX_BATCH_IMPORT_SESSION_STORAGE_KEY);
+      } catch {
+        // ignore storage failures
+      }
     } catch (e) {
       setBatchImportError(String(e).replace(/^Error:\s*/, ""));
     } finally {
@@ -7080,85 +7398,49 @@ export function CodexAccountsPage() {
   );
 
   const tierCounts = useMemo(() => {
-    const counts = {
-      all: overviewAccounts.length,
-      VALID: 0,
-      FREE: 0,
-      PLUS: 0,
-      PRO: 0,
-      TEAM: 0,
-      ENTERPRISE: 0,
-      PENDING: 0,
-      ERROR: 0,
-    };
+    const counts = createCodexPlanFilterCounts(overviewAccounts.length);
     overviewAccounts.forEach((a) => {
       if (!isAbnormalAccount(a)) {
         counts.VALID += 1;
       }
       const tier = resolvePlanKey(a);
-      if (tier in counts) counts[tier as keyof typeof counts] += 1;
+      incrementCodexPlanFilterCount(counts, tier);
       if (isAbnormalAccount(a)) counts.ERROR += 1;
     });
     return counts;
   }, [isAbnormalAccount, overviewAccounts, resolvePlanKey]);
 
   const tierFilterOptions = useMemo<MultiSelectFilterOption[]>(
-    () => [
-      { value: "FREE", label: `FREE (${tierCounts.FREE})` },
-      { value: "PLUS", label: `PLUS (${tierCounts.PLUS})` },
-      { value: "PRO", label: `PRO (${tierCounts.PRO})` },
-      { value: "TEAM", label: `TEAM (${tierCounts.TEAM})` },
-      { value: "ENTERPRISE", label: `ENTERPRISE (${tierCounts.ENTERPRISE})` },
-      {
-        value: "PENDING",
-        label: `${t("codex.pendingAuth.badge", "待授权")} (${tierCounts.PENDING})`,
-      },
-      { value: "ERROR", label: `ERROR (${tierCounts.ERROR})` },
-      buildValidAccountsFilterOption(t, tierCounts.VALID),
-    ],
+    () =>
+      buildCodexPlanFilterOptions(tierCounts, {
+        includeValid: true,
+        pendingLabel: t("codex.pendingAuth.badge", "待授权"),
+        validOption: buildValidAccountsFilterOption(t, tierCounts.VALID),
+      }),
     [t, tierCounts],
   );
 
   const oauthBindingTierCounts = useMemo(() => {
-    const counts = {
-      all: oauthBindingEligibleAccounts.length,
-      VALID: 0,
-      FREE: 0,
-      PLUS: 0,
-      PRO: 0,
-      TEAM: 0,
-      ENTERPRISE: 0,
-      PENDING: 0,
-      ERROR: 0,
-    };
+    const counts = createCodexPlanFilterCounts(
+      oauthBindingEligibleAccounts.length,
+    );
     oauthBindingEligibleAccounts.forEach((account) => {
       if (!isAbnormalAccount(account)) {
         counts.VALID += 1;
       }
       const tier = resolvePlanKey(account);
-      if (tier in counts) counts[tier as keyof typeof counts] += 1;
+      incrementCodexPlanFilterCount(counts, tier);
       if (isAbnormalAccount(account)) counts.ERROR += 1;
     });
     return counts;
   }, [isAbnormalAccount, oauthBindingEligibleAccounts, resolvePlanKey]);
 
   const oauthBindingTierFilterOptions = useMemo<MultiSelectFilterOption[]>(
-    () => [
-      { value: "FREE", label: `FREE (${oauthBindingTierCounts.FREE})` },
-      { value: "PLUS", label: `PLUS (${oauthBindingTierCounts.PLUS})` },
-      { value: "PRO", label: `PRO (${oauthBindingTierCounts.PRO})` },
-      { value: "TEAM", label: `TEAM (${oauthBindingTierCounts.TEAM})` },
-      {
-        value: "ENTERPRISE",
-        label: `ENTERPRISE (${oauthBindingTierCounts.ENTERPRISE})`,
-      },
-      {
-        value: "PENDING",
-        label: `${t("codex.pendingAuth.badge", "待授权")} (${oauthBindingTierCounts.PENDING})`,
-      },
-      { value: "ERROR", label: `ERROR (${oauthBindingTierCounts.ERROR})` },
-    ],
-    [oauthBindingTierCounts],
+    () =>
+      buildCodexPlanFilterOptions(oauthBindingTierCounts, {
+        pendingLabel: t("codex.pendingAuth.badge", "待授权"),
+      }),
+    [oauthBindingTierCounts, t],
   );
 
   const oauthBindingAvailableTags = useMemo(() => {
@@ -8074,6 +8356,15 @@ export function CodexAccountsPage() {
         .map((account) => account.id),
     [filteredAccounts, isAbnormalAccount],
   );
+  const hasDetectableFullQuotaWakeupAccounts = useMemo(
+    () =>
+      filteredAccounts.some(
+        (account) =>
+          !isCodexApiKeyAccount(account) &&
+          Boolean(account.tokens.refresh_token?.trim()),
+      ),
+    [filteredAccounts],
+  );
   const handleClearErrorAccounts = useCallback(() => {
     if (errorAccountIds.length === 0) return;
     setDeleteConfirm({
@@ -8085,6 +8376,25 @@ export function CodexAccountsPage() {
       }),
     });
   }, [errorAccountIds, setDeleteConfirm, t]);
+  const openFullQuotaWakeupTestModal = useCallback(() => {
+    if (!hasDetectableFullQuotaWakeupAccounts) {
+      setMessage({
+        text: t(
+          "codex.wakeup.fullQuotaNoAccounts",
+          "当前列表没有可唤醒的 OAuth 账号。",
+        ),
+        tone: "error",
+      });
+      return;
+    }
+    fullQuotaWakeupOpenSignalRef.current += 1;
+    setFullQuotaWakeupOpenRequest({
+      signal: fullQuotaWakeupOpenSignalRef.current,
+      variant: "fullQuota",
+      defaultSortBy: "hourly",
+      defaultSortDirection: "desc",
+    });
+  }, [hasDetectableFullQuotaWakeupAccounts, setMessage, t]);
   const exportSelectionCount = getScopedSelectedCount(filteredIds);
   const pagination = usePagination({
     items: filteredAccounts,
@@ -8249,6 +8559,144 @@ export function CodexAccountsPage() {
     isAllFilteredSelectionActive,
     selected,
     setDeleteConfirm,
+    t,
+  ]);
+
+  const confirmCodexDelete = useCallback(async () => {
+    if (!deleteConfirm || batchDeleteBusy) return;
+    setBatchDeleteBusy(true);
+    setBatchDeleteModalError(null);
+    batchDeleteRemoveIdsRef.current = new Set(deleteConfirm.ids);
+    try {
+      const job = await codexService.startCodexBatchDelete(deleteConfirm.ids);
+      if (shouldAutoHideBatchDeleteJob(job)) {
+        await refreshAccountsAfterBatchDelete();
+        try {
+          await codexService.clearCodexBatchDelete(job.jobId);
+        } catch (clearError) {
+          console.warn(
+            "[Codex Batch Delete] 自动清理已完成任务失败:",
+            clearError,
+          );
+        }
+        setBatchDeleteJob(null);
+      } else {
+        setBatchDeleteJob(job);
+      }
+      setSelected((prev) => {
+        const next = new Set(prev);
+        deleteConfirm.ids.forEach((id) => next.delete(id));
+        return next;
+      });
+      setIsAllFilteredSelected(false);
+      setDeleteConfirm(null);
+      setMessage({
+        text: t("codex.batchDelete.started", {
+          count: deleteConfirm.ids.length,
+        }),
+        tone: "success",
+      });
+    } catch (error) {
+      setBatchDeleteModalError(
+        t("messages.actionFailed", {
+          action: t("common.delete"),
+          error: String(error),
+        }),
+      );
+    } finally {
+      setBatchDeleteBusy(false);
+    }
+  }, [
+    batchDeleteBusy,
+    deleteConfirm,
+    refreshAccountsAfterBatchDelete,
+    setDeleteConfirm,
+    setMessage,
+    setSelected,
+    t,
+  ]);
+
+  const handlePauseBatchDelete = useCallback(async () => {
+    if (!batchDeleteJob?.jobId || batchDeleteBusy) return;
+    setBatchDeleteBusy(true);
+    try {
+      setBatchDeleteJob(
+        await codexService.pauseCodexBatchDelete(batchDeleteJob.jobId),
+      );
+    } catch (error) {
+      setMessage({
+        text: t("codex.batchDelete.actionFailed", {
+          error: String(error),
+        }),
+        tone: "error",
+      });
+    } finally {
+      setBatchDeleteBusy(false);
+    }
+  }, [batchDeleteBusy, batchDeleteJob?.jobId, setMessage, t]);
+
+  const handleResumeBatchDelete = useCallback(async () => {
+    if (!batchDeleteJob?.jobId || batchDeleteBusy) return;
+    setBatchDeleteBusy(true);
+    try {
+      setBatchDeleteJob(
+        await codexService.resumeCodexBatchDelete(batchDeleteJob.jobId),
+      );
+    } catch (error) {
+      setMessage({
+        text: t("codex.batchDelete.actionFailed", {
+          error: String(error),
+        }),
+        tone: "error",
+      });
+    } finally {
+      setBatchDeleteBusy(false);
+    }
+  }, [batchDeleteBusy, batchDeleteJob?.jobId, setMessage, t]);
+
+  const handleRetryFailedBatchDelete = useCallback(async () => {
+    if (!batchDeleteJob?.jobId || batchDeleteBusy) return;
+    setBatchDeleteBusy(true);
+    try {
+      setBatchDeleteJob(
+        await codexService.retryFailedCodexBatchDelete(batchDeleteJob.jobId),
+      );
+    } catch (error) {
+      setMessage({
+        text: t("codex.batchDelete.actionFailed", {
+          error: String(error),
+        }),
+        tone: "error",
+      });
+    } finally {
+      setBatchDeleteBusy(false);
+    }
+  }, [batchDeleteBusy, batchDeleteJob?.jobId, setMessage, t]);
+
+  const handleClearBatchDelete = useCallback(async () => {
+    if (!batchDeleteJob?.jobId || batchDeleteBusy) return;
+    setBatchDeleteBusy(true);
+    try {
+      await codexService.clearCodexBatchDelete(batchDeleteJob.jobId);
+      setBatchDeleteJob(null);
+      await store.fetchAccounts();
+      await reloadCodexGroups();
+    } catch (error) {
+      setMessage({
+        text: t("codex.batchDelete.actionFailed", {
+          error: String(error),
+        }),
+        tone: "error",
+      });
+    } finally {
+      setBatchDeleteBusy(false);
+    }
+  }, [
+    batchDeleteBusy,
+    batchDeleteJob?.jobId,
+    reloadCodexGroups,
+    setMessage,
+    store,
     t,
   ]);
 
@@ -12070,8 +12518,25 @@ export function CodexAccountsPage() {
                       </>
                     )}
                   </div>
-                  {(selected.size > 0 || errorAccountIds.length > 0) && (
+                  {(selected.size > 0 ||
+                    errorAccountIds.length > 0 ||
+                    hasDetectableFullQuotaWakeupAccounts) && (
                     <div className="codex-overview-selection-actions">
+                      <button
+                        type="button"
+                        className="btn btn-secondary codex-overview-full-quota-wakeup-btn"
+                        onClick={openFullQuotaWakeupTestModal}
+                        disabled={!hasDetectableFullQuotaWakeupAccounts}
+                        title={t(
+                          "codex.wakeup.fullQuotaActionTitle",
+                          "打开账号唤醒测试，账号默认按 5h 额度从高到低排序。",
+                        )}
+                      >
+                        <Power size={14} />
+                        <span>
+                          {t("codex.wakeup.fullQuotaAction", "唤醒账号")}
+                        </span>
+                      </button>
                       {errorAccountIds.length > 0 && (
                         <button
                           className="btn btn-danger icon-only codex-overview-clear-error-btn"
@@ -12105,6 +12570,120 @@ export function CodexAccountsPage() {
                       )}
                     </div>
                   )}
+                </div>
+              )}
+              {batchDeleteJob && (
+                <div className="codex-batch-delete-job">
+                  <div className="codex-batch-delete-job__head">
+                    <div>
+                      <strong>{t("codex.batchDelete.title")}</strong>
+                      <span>
+                        {t("codex.batchDelete.summary", {
+                          completed: batchDeleteJob.completed,
+                          total: batchDeleteJob.total,
+                          failed: batchDeleteJob.failed,
+                        })}
+                      </span>
+                    </div>
+                    <span className={`codex-batch-delete-job__status ${batchDeleteJob.status}`}>
+                      {t(`codex.batchDelete.${batchDeleteJob.status}`)}
+                    </span>
+                  </div>
+                  <div className="codex-batch-delete-job__progress">
+                    <span
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.round(
+                            (batchDeleteJob.completed /
+                              Math.max(1, batchDeleteJob.total)) *
+                              100,
+                          ),
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  {batchDeleteJob.errors.length > 0 && (
+                    <div className="codex-batch-delete-job__errors">
+                      {batchDeleteJob.errors.slice(0, 5).map((item) => (
+                        <span key={`${item.accountId}-${item.error}`}>
+                          {item.accountId}: {item.error}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="codex-batch-delete-job__actions">
+                    {batchDeleteJob.status === "running" && (
+                      <button
+                        className="btn btn-secondary"
+                        onClick={handlePauseBatchDelete}
+                        disabled={batchDeleteBusy}
+                      >
+                        <Pause size={14} />
+                        <span>{t("codex.batchDelete.pause")}</span>
+                      </button>
+                    )}
+                    {batchDeleteJob.status === "paused" && (
+                      <button
+                        className="btn btn-primary"
+                        onClick={handleResumeBatchDelete}
+                        disabled={batchDeleteBusy}
+                      >
+                        <Play size={14} />
+                        <span>{t("codex.batchDelete.resume")}</span>
+                      </button>
+                    )}
+                    {batchDeleteJob.status === "failed" &&
+                      batchDeleteJob.failed > 0 && (
+                        <button
+                          className="btn btn-secondary"
+                          onClick={handleRetryFailedBatchDelete}
+                          disabled={batchDeleteBusy}
+                        >
+                          <RotateCw size={14} />
+                          <span>{t("codex.batchDelete.retryFailed")}</span>
+                        </button>
+                      )}
+                    {batchDeleteJob.status !== "running" && (
+                      <button
+                        className="btn btn-secondary"
+                        onClick={handleClearBatchDelete}
+                        disabled={batchDeleteBusy}
+                      >
+                        <X size={14} />
+                        <span>{t("codex.batchDelete.clear")}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+              {batchImportSessionId && !batchImportOpen && !batchImportResult && (
+                <div className="codex-batch-import-task">
+                  <div className="codex-batch-import-task__copy">
+                    <strong>{t("codex.batchImport.hiddenTask")}</strong>
+                    <span>
+                      {batchImportBusy
+                        ? t("codex.batchImport.taskRunning", {
+                            current: batchImportProgress?.current ?? 0,
+                            total:
+                              batchImportProgress?.total ??
+                              batchImportPreview?.total ??
+                              0,
+                          })
+                        : batchImportPreview
+                          ? t("codex.batchImport.taskPreview", {
+                              total: batchImportPreview.total,
+                            })
+                          : t("codex.batchImport.preparing")}
+                    </span>
+                  </div>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setBatchImportOpen(true)}
+                  >
+                    <FileText size={14} />
+                    <span>{t("codex.batchImport.reopen")}</span>
+                  </button>
                 </div>
               )}
               {overviewLayoutMode === "compact" ? (
@@ -14594,7 +15173,7 @@ export function CodexAccountsPage() {
                   <h2>{t("common.confirm")}</h2>
                   <button
                     className="modal-close"
-                    onClick={() => !deleting && setDeleteConfirm(null)}
+                    onClick={() => !batchDeleteBusy && setDeleteConfirm(null)}
                     aria-label={t("common.close", "关闭")}
                   >
                     <X />
@@ -14602,7 +15181,7 @@ export function CodexAccountsPage() {
                 </div>
                 <div className="modal-body">
                   <ModalErrorMessage
-                    message={deleteConfirmError}
+                    message={batchDeleteModalError || deleteConfirmError}
                     scrollKey={deleteConfirmErrorScrollKey}
                   />
                   <p>{deleteConfirm.message}</p>
@@ -14611,16 +15190,18 @@ export function CodexAccountsPage() {
                   <button
                     className="btn btn-secondary"
                     onClick={() => setDeleteConfirm(null)}
-                    disabled={deleting}
+                    disabled={batchDeleteBusy}
                   >
                     {t("common.cancel")}
                   </button>
                   <button
                     className="btn btn-danger"
-                    onClick={confirmDelete}
-                    disabled={deleting}
+                    onClick={confirmCodexDelete}
+                    disabled={batchDeleteBusy}
                   >
-                    {t("common.confirm")}
+                    {batchDeleteBusy
+                      ? t("common.processing", "处理中...")
+                      : t("common.confirm")}
                   </button>
                 </div>
               </div>
@@ -14775,6 +15356,38 @@ export function CodexAccountsPage() {
                         "给 {{account}} 填写 2FA、密码、手机号和其他备注。",
                     })}
                   </p>
+                  <div className="codex-account-note-field">
+                    <span>{t("common.shared.columns.email", "邮箱")}</span>
+                    <div className="codex-account-note-readonly-row">
+                      <span
+                        className={`codex-account-note-readonly-value ${
+                          activeAccountNoteEmail ? "" : "is-empty"
+                        }`}
+                        title={activeAccountNoteEmail}
+                      >
+                        {activeAccountNoteEmail || "-"}
+                      </span>
+                      <button
+                        type="button"
+                        className="codex-account-note-icon-btn"
+                        onClick={() =>
+                          void copyAccountNoteValue(
+                            "modal:email",
+                            activeAccountNoteEmail,
+                          )
+                        }
+                        disabled={activeAccountNoteSaving || !activeAccountNoteEmail}
+                        aria-label={t("common.copy", "复制")}
+                        title={t("common.copy", "复制")}
+                      >
+                        {accountNoteCopiedKey === "modal:email" ? (
+                          <Check size={14} />
+                        ) : (
+                          <Copy size={14} />
+                        )}
+                      </button>
+                    </div>
+                  </div>
                   <label className="codex-account-note-field">
                     <span>
                       {t("codex.accountNote.twoFactorSecretLabel", "2FA 秘钥")}
@@ -14866,29 +15479,39 @@ export function CodexAccountsPage() {
                         role="listbox"
                         aria-label={t("mfaQuick.selectLabel", "选择 2FA 秘钥")}
                       >
-                        {savedMfaRecords.map((record) => (
-                          <button
-                            key={record.id}
-                            type="button"
-                            className="codex-account-note-mfa-option"
-                            onClick={() => {
-                              updateActiveAccountNoteForm({
-                                twoFactorSecret: record.secret,
-                              });
-                              setAccountNoteMfaPickerOpen(false);
-                            }}
-                          >
-                            <span>
-                              {formatMfaRecordOption(
-                                record,
-                                t("mfaQuick.unnamedSecret", "未命名秘钥"),
-                              )}
-                            </span>
-                            {record.remark?.trim() ? (
-                              <em>{record.remark.trim()}</em>
-                            ) : null}
-                          </button>
-                        ))}
+                        {savedMfaRecords.map((record) => {
+                          const title = formatMfaRecordOption(
+                            record,
+                            t("mfaQuick.unnamedSecret", "未命名秘钥"),
+                          );
+                          const remark = record.remark?.trim();
+                          const isSelected =
+                            record.secret.trim() ===
+                            activeAccountNoteForm.twoFactorSecret.trim();
+                          const token = getMfaOtpToken(record.secret);
+                          return (
+                            <button
+                              key={record.id}
+                              type="button"
+                              className={`codex-account-note-mfa-option ${isSelected ? "is-selected" : ""}`}
+                              onClick={() => {
+                                updateActiveAccountNoteForm({
+                                  twoFactorSecret: record.secret,
+                                });
+                                setAccountNoteMfaPickerOpen(false);
+                              }}
+                            >
+                              <span className="codex-account-note-mfa-option__main">
+                                <strong title={title}>{title}</strong>
+                                {remark ? <em title={remark}>{remark}</em> : null}
+                              </span>
+                              <span className="codex-account-note-mfa-option__side">
+                                {isSelected ? <Check size={14} /> : null}
+                                {token || formatMfaSecretPreview(record.secret)}
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
                     ) : null}
                     {accountNoteFieldErrors.twoFactorSecret ? (
@@ -15199,6 +15822,18 @@ export function CodexAccountsPage() {
         <CodexWakeupContent
           accounts={accounts}
           openPresetManagerSignal={wakeupPresetManagerSignal}
+          onRefreshAccounts={async () => {
+            await fetchAccounts();
+            await fetchCurrentAccount();
+          }}
+        />
+      )}
+
+      {activeTab !== "wakeup" && fullQuotaWakeupOpenRequest && (
+        <CodexWakeupContent
+          accounts={accounts}
+          openTestRequest={fullQuotaWakeupOpenRequest}
+          modalOnly
           onRefreshAccounts={async () => {
             await fetchAccounts();
             await fetchCurrentAccount();

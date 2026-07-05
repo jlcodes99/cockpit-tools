@@ -1084,7 +1084,9 @@
       "claudeAppPath": "Claude Desktop launch target",
       "claudeAppPathDesc": "The default profile can use a Microsoft Store target; multi-instance profiles need the real Claude.exe.",
       "antigravityLaunchOnSwitch": "Launch Antigravity on switch",
-      "antigravityLaunchOnSwitchDesc": "When off, switching only writes the default Antigravity account data and will not close, launch, or restart the app."
+      "antigravityLaunchOnSwitchDesc": "When off, switching only writes the default Antigravity account data and will not close, launch, or restart the app.",
+      "tokenKeeper": "Auth keep-alive",
+      "tokenKeeperDesc": "Refresh account tokens in small batches only when authorization is close to expiry, reducing background request pressure for large account sets."
     },
     "network": {
       "apiTitle": "Antigravity Cockpit API",
@@ -1817,7 +1819,8 @@
     "installFailed": "System installation failed. Try again later or download manually.",
     "restartRequiredAfterInstall": "The update is installed. Restart the app manually to finish switching.",
     "stoppingApiService": "Stopping API service...",
-    "stopApiServiceFailed": "Couldn't stop the API service. Disable it first and try again."
+    "stopApiServiceFailed": "Couldn't stop the API service. Disable it first and try again.",
+    "stopApiServiceFailedContinue": "The API service did not stop cleanly. Restarting anyway..."
   },
   "closeDialog": {
     "title": "Close Window",
@@ -2211,6 +2214,7 @@
       "memberTitle": "Collection Members",
       "routingStrategy": {
         "auto": "Auto (Recommended)",
+        "singleAccount": "Single Account",
         "quotaHighFirst": "High Quota First",
         "quotaLowFirst": "Low Quota First",
         "planHighFirst": "High Plan First",
@@ -2960,6 +2964,16 @@
       "accountSearchPlaceholder": "Search email...",
       "accountFilterEmpty": "No matching accounts",
       "accountFilteredCount": "{{count}} account(s) in the current filter",
+      "fullQuotaAction": "Wake accounts",
+      "fullQuotaActionTitle": "Open the account wakeup test. Accounts are sorted by 5h quota from high to low by default.",
+      "fullQuotaNoAccounts": "The current list has no OAuth account available for wakeup.",
+      "fullQuotaAccountsLabel": "Accounts to wake",
+      "accountSort": {
+        "default": "Default order",
+        "hourly": "By 5h quota",
+        "weekly": "By weekly quota",
+        "email": "By email"
+      },
       "testTitle": "Test Codex wakeup",
       "testAccountsLabel": "Test accounts",
       "testAccountsRequired": "Please select at least one test account.",
@@ -3051,11 +3065,15 @@
         "copyToInstance": "Copy to Instance",
         "repairVisibility": "Repair Visibility",
         "restoreSessions": "Restore Sessions",
+        "exportSessions": "Export Sessions",
+        "importSessions": "Import Sessions",
         "copySessionId": "Copy Session ID",
+        "openLocation": "Open Location",
         "selectAllSessions": "Select All Sessions",
         "clearSelectedSessions": "Deselect All",
         "expand": "Expand",
-        "collapse": "Collapse"
+        "collapse": "Collapse",
+        "trash": "Trash"
       },
       "confirm": {
         "title": "Move to Trash",
@@ -3093,11 +3111,25 @@
       "locationRunning": " (running)",
       "untitled": "Untitled session",
       "restoreModal": {
-        "title": "Restore Sessions",
-        "hint": "Restoring puts the rollout file, session_index entry, and session file time back into the original instance, then asks official Codex to rebuild the session index.",
+        "title": "Trash",
+        "hint": "Sessions in Trash can be restored to the original instance or permanently deleted to free disk space.",
         "emptyTitle": "Trash is empty",
         "emptyDesc": "Sessions moved to Trash will appear here.",
-        "restoreAction": "Restore Selected Sessions"
+        "restoreAction": "Restore Selected Sessions",
+        "summary": "{{count}} items, {{size}}",
+        "selectedSummary": "{{count}} selected, {{size}}",
+        "selectAll": "Select All",
+        "clearSelected": "Deselect",
+        "emptyTrash": "Empty Trash",
+        "itemSize": "Size {{size}}",
+        "deleteOne": "Delete Permanently",
+        "deleteSelected": "Delete Selected",
+        "pickDeleteOne": "Select at least one session to delete",
+        "deleteOneConfirm": "Permanently delete this session? This cannot be undone. Estimated space freed: {{size}}.",
+        "deleteSelectedConfirm": "Permanently delete the selected {{count}} sessions? This cannot be undone. Estimated space freed: {{size}}.",
+        "permanentDeleteTitle": "Permanent Delete",
+        "permanentDeleteAction": "Delete Permanently",
+        "emptyTrashConfirm": "Empty Trash? {{count}} sessions will be permanently deleted and cannot be restored. Estimated space freed: {{size}}."
       },
       "targetModal": {
         "title": "Copy to Instance",
@@ -3107,6 +3139,23 @@
         "selectedCount": "{{count}} session(s) selected",
         "existingCount": "{{count}} already in target",
         "confirm": "Copy Sessions"
+      },
+      "importModal": {
+        "title": "Import Sessions",
+        "hint": "Session packages only import rollout files and session_index entries. Accounts, tokens, API keys, and app settings are not included. Sessions with the same ID already in the target instance are skipped.",
+        "noTarget": "No Codex instance is available for import",
+        "noPackage": "Select a session package first",
+        "pickOne": "Select at least one importable session",
+        "totalCount": "{{count}} session(s) in package",
+        "readyCount": "{{count}} importable",
+        "selectReady": "Select Importable",
+        "previewing": "Previewing session package...",
+        "existsIn": "Already in: {{names}}",
+        "statusReady": "Ready",
+        "statusDuplicate": "Exists",
+        "statusConflict": "Conflict",
+        "statusInvalid": "Invalid",
+        "confirm": "Import Selected Sessions"
       },
       "repairModal": {
         "running": "Repairing...",
@@ -3159,7 +3208,73 @@
         "instanceScopeAll": "All instances",
         "instanceScopeAllDesc": "Repair every Codex instance when restoring multi-instance state.",
         "progressTitle": "Repair Progress",
-        "start": "Start Repair"
+        "start": "Start Repair",
+        "previewing": "Previewing...",
+        "previewAgain": "Preview Again",
+        "preview": "Preview Changes",
+        "previewFailedWithError": "Session repair preview failed: {{error}}",
+        "confirmRepair": "Confirm Repair"
+      },
+      "transferModal": {
+        "exportTitle": "Export Sessions",
+        "importTitle": "Import Sessions",
+        "minimize": "Minimize",
+        "reopen": "View Progress",
+        "clear": "Clear",
+        "runningSummary": "Processing {{current}} of {{total}}",
+        "completedSummary": "Task completed",
+        "failedSummary": "Task failed",
+        "current": "{{current}} of {{total}}",
+        "phase": {
+          "exportPrepare": "Preparing export...",
+          "exportCollect": "Collecting sessions...",
+          "exportHash": "Checking session files...",
+          "exportWrite": "Writing session package...",
+          "importPrepare": "Preparing import...",
+          "importRead": "Reading session package...",
+          "importWrite": "Writing target instance...",
+          "importRebuild": "Refreshing official session index...",
+          "done": "Task completed"
+        }
+      },
+      "exportModal": {
+        "title": "Export Sessions",
+        "hint": "Review the session list, source instance, and file size before exporting. Session packages only include rollout files and session_index entries, not accounts, tokens, API keys, or app settings.",
+        "previewing": "Previewing sessions...",
+        "selectedCount": "{{count}} selected",
+        "exportableCount": "{{count}} exportable",
+        "missingCount": "{{count}} missing",
+        "totalSize": "Total {{size}}",
+        "exportPath": "Export path",
+        "pathUnset": "No export path selected",
+        "choosePath": "Choose Path",
+        "missingNotice": "{{count}} session(s) are no longer in the current instance set and will be skipped.",
+        "sourceInstance": "Source: {{name}}",
+        "emptyTitle": "No sessions to export",
+        "noPreview": "Finish the export preview first",
+        "noExportable": "No sessions can be exported",
+        "pickPath": "Choose an export path",
+        "confirm": "Export",
+        "selectedExportCount": "Selected {{selected}} / exportable {{total}}",
+        "selectedSize": "Selected {{selected}} / total {{total}}",
+        "removedNotice": "{{count}} removed from this export list",
+        "restoreRemoved": "Restore List",
+        "sourceLabel": "Source",
+        "allSources": "All Sources",
+        "selectionLabel": "Selection",
+        "filterAll": "All",
+        "filterSelected": "Selected",
+        "filterUnselected": "Unselected",
+        "visibleCount": "Showing {{visible}} / {{total}}",
+        "selectVisible": "Select Filtered",
+        "clearVisible": "Clear Filtered",
+        "keepVisibleOnly": "Keep Filtered",
+        "removeVisible": "Remove Filtered",
+        "removeUnchecked": "Remove Unselected",
+        "selectItem": "Select session for export",
+        "removeItem": "Remove",
+        "emptyFilteredTitle": "No sessions match",
+        "emptyFilteredDesc": "Adjust search, source, or selection state and try again."
       }
     },
     "groups": {
@@ -3250,7 +3365,9 @@
         "pricingUnset": "Unset",
         "pricingReset": "Reset",
         "pricingSaved": "Pricing saved",
-        "pricingInvalid": "Prices must be numbers greater than or equal to 0"
+        "pricingInvalid": "Prices must be numbers greater than or equal to 0",
+        "pricingReprice": "Reprice History",
+        "pricingRepriced": "Historical estimates were recalculated with current prices"
       },
       "keys": {
         "policyTitle": "Model Policy",
@@ -3385,7 +3502,11 @@
       "selectedCount": "Selected {{count}}/{{total}}",
       "selectAllAccounts": "Select all accounts",
       "selectReady": "Select OK accounts",
-      "clearSelection": "Clear selection"
+      "clearSelection": "Clear selection",
+      "hiddenTask": "Codex batch import task",
+      "taskRunning": "Processing {{current}} / {{total}}",
+      "taskPreview": "{{total}} preview item(s) ready",
+      "reopen": "View task"
     },
     "autoRepairMode": {
       "label": "Auto Repair Logic",
@@ -3393,6 +3514,22 @@
       "legacyBefore4eb75d96": "Before 4eb75d96",
       "legacy4eb75d96": "4eb75d96 logic",
       "current": "Current logic"
+    },
+    "batchDelete": {
+      "title": "Codex batch delete",
+      "running": "Deleting",
+      "paused": "Paused",
+      "failed": "Partial failure",
+      "completed": "Delete complete",
+      "preparing": "Preparing delete task...",
+      "retryFailed": "Retry failed",
+      "pause": "Pause",
+      "resume": "Resume",
+      "clear": "Clear",
+      "summary": "Processed {{completed}} / {{total}}, failed {{failed}}",
+      "started": "Started deleting {{count}} Codex account(s)",
+      "pollFailed": "Failed to refresh batch delete progress: {{error}}",
+      "actionFailed": "Batch delete action failed: {{error}}"
     }
   },
   "codebuddy": {
