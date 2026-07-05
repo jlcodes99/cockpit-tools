@@ -207,6 +207,10 @@ import {
   splitValidityFilterValues,
 } from "../utils/accountValidityFilter";
 import {
+  buildCodexTierCounts,
+  collectNormalizedCodexAccountTags,
+} from "../utils/codexAccountsOverview";
+import {
   buildPaginatedGroups,
   buildPaginationPageSizeStorageKey,
   isEveryIdSelected,
@@ -7078,28 +7082,15 @@ export function CodexAccountsPage() {
     [handleSaveLocalAccessAccounts, localAccessCollection, setMessage, t],
   );
 
-  const tierCounts = useMemo(() => {
-    const counts = {
-      all: overviewAccounts.length,
-      VALID: 0,
-      FREE: 0,
-      PLUS: 0,
-      PRO: 0,
-      TEAM: 0,
-      ENTERPRISE: 0,
-      PENDING: 0,
-      ERROR: 0,
-    };
-    overviewAccounts.forEach((a) => {
-      if (!isAbnormalAccount(a)) {
-        counts.VALID += 1;
-      }
-      const tier = resolvePlanKey(a);
-      if (tier in counts) counts[tier as keyof typeof counts] += 1;
-      if (isAbnormalAccount(a)) counts.ERROR += 1;
-    });
-    return counts;
-  }, [isAbnormalAccount, overviewAccounts, resolvePlanKey]);
+  const tierCounts = useMemo(
+    () =>
+      buildCodexTierCounts(
+        overviewAccounts,
+        isAbnormalAccount,
+        resolvePlanKey,
+      ),
+    [isAbnormalAccount, overviewAccounts, resolvePlanKey],
+  );
 
   const tierFilterOptions = useMemo<MultiSelectFilterOption[]>(
     () => [
@@ -7118,28 +7109,15 @@ export function CodexAccountsPage() {
     [t, tierCounts],
   );
 
-  const oauthBindingTierCounts = useMemo(() => {
-    const counts = {
-      all: oauthBindingEligibleAccounts.length,
-      VALID: 0,
-      FREE: 0,
-      PLUS: 0,
-      PRO: 0,
-      TEAM: 0,
-      ENTERPRISE: 0,
-      PENDING: 0,
-      ERROR: 0,
-    };
-    oauthBindingEligibleAccounts.forEach((account) => {
-      if (!isAbnormalAccount(account)) {
-        counts.VALID += 1;
-      }
-      const tier = resolvePlanKey(account);
-      if (tier in counts) counts[tier as keyof typeof counts] += 1;
-      if (isAbnormalAccount(account)) counts.ERROR += 1;
-    });
-    return counts;
-  }, [isAbnormalAccount, oauthBindingEligibleAccounts, resolvePlanKey]);
+  const oauthBindingTierCounts = useMemo(
+    () =>
+      buildCodexTierCounts(
+        oauthBindingEligibleAccounts,
+        isAbnormalAccount,
+        resolvePlanKey,
+      ),
+    [isAbnormalAccount, oauthBindingEligibleAccounts, resolvePlanKey],
+  );
 
   const oauthBindingTierFilterOptions = useMemo<MultiSelectFilterOption[]>(
     () => [
@@ -7160,18 +7138,14 @@ export function CodexAccountsPage() {
     [oauthBindingTierCounts],
   );
 
-  const oauthBindingAvailableTags = useMemo(() => {
-    const tagSet = new Set<string>();
-    oauthBindingEligibleAccounts.forEach((account) => {
-      (account.tags || []).forEach((tag) => {
-        const normalized = normalizeTag(tag);
-        if (normalized) {
-          tagSet.add(normalized);
-        }
-      });
-    });
-    return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
-  }, [normalizeTag, oauthBindingEligibleAccounts]);
+  const oauthBindingAvailableTags = useMemo(
+    () =>
+      collectNormalizedCodexAccountTags(
+        oauthBindingEligibleAccounts,
+        normalizeTag,
+      ),
+    [normalizeTag, oauthBindingEligibleAccounts],
+  );
 
   const toggleOAuthBindingFilterTypeValue = useCallback((value: string) => {
     setOauthBindingFilterTypes((prev) =>

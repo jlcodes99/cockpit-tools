@@ -38,6 +38,11 @@
    - 新增 Rust 纯类型模块 `src-tauri/src/modules/codex_provider_contract.rs`，包含 catalog profile、wire API、catalog entry 和 common config snippet。
    - Rust 模块尚未接入运行时，只作为后续 Thread B/C/E 的稳定落点。
 
+5. 补齐 Codex 前端大页面的首个纯工具边界。
+   - 新增 `src/utils/codexAccountsOverview.ts`。
+   - 从 `src/pages/CodexAccountsPage.tsx` 抽出 tier count 和 OAuth 绑定标签收集逻辑。
+   - 页面仍保留原交互、状态流和 JSX；本轮不做大规模组件搬迁。
+
 ## 验证结果
 
 已执行：
@@ -45,7 +50,7 @@
 | 命令 | 结果 |
 |---|---|
 | `npm install` | 通过 |
-| `npm run typecheck` | 通过 |
+| `npm run typecheck` | 通过；前端纯工具拆分后已复跑 |
 | `powershell -ExecutionPolicy Bypass -File .\scripts\refactor\verify-baseline.ps1 -SkipNpmInstall` | 按预期返回非零：TypeScript 通过，Cargo/Go 缺失 |
 
 当前环境阻塞：
@@ -61,7 +66,7 @@
 - 未大规模拆 `commands/codex.rs` 或 `codex_local_access.rs`。
 - 未接入 native Responses catalog generator、`web_search = "disabled"` 哨兵、official auth config-only 保护。
 - 未实现 provider failover/circuit breaker。
-- 未拆 Codex 前端大页面组件/hook；本轮只加前端 catalog 纯工具落点。
+- 未大规模拆 Codex 前端大页面组件/hook；本轮只抽出 catalog 与 overview tier/tag 的纯工具落点。
 - 未做 operation snapshot、transaction rollback、SQLite 迁移或 cloud sync。
 
 ## 下一步建议
