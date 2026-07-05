@@ -22,6 +22,7 @@ pub mod codex_local_access;
 pub mod codex_model_injector;
 pub mod codex_oauth;
 pub mod codex_official_app_server;
+pub mod codex_provider_contract;
 pub mod codex_protocol;
 pub mod codex_quota;
 pub mod codex_session_file_time;

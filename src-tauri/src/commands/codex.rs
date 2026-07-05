@@ -17,6 +17,7 @@ use crate::modules::{
     opencode_auth, process,
 };
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tauri::AppHandle;
@@ -1096,43 +1097,50 @@ const CODEX_GROUPS_FILE: &str = "codex_account_groups.json";
 const CODEX_MODEL_PROVIDERS_FILE: &str = "codex_model_providers.json";
 const CODEX_MODEL_PROVIDER_TEST_TIMEOUT_SECS: u64 = 20;
 
-#[tauri::command]
-pub async fn load_codex_account_groups() -> Result<String, String> {
-    let path = account::get_data_dir()?.join(CODEX_GROUPS_FILE);
+fn load_codex_json_store(path: &Path, label: &str) -> Result<String, String> {
     if !path.exists() {
         return Ok("[]".to_string());
     }
-    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read codex groups: {}", e))
+
+    let content =
+        std::fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {}", label, e))?;
+    crate::modules::atomic_write::parse_json_with_auto_restore::<serde_json::Value>(
+        path, &content,
+    )
+    .map_err(|e| format!("Invalid {} JSON: {}", label, e))?;
+
+    std::fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {}", label, e))
+}
+
+fn save_codex_json_store(path: &Path, data: &str, label: &str) -> Result<(), String> {
+    serde_json::from_str::<serde_json::Value>(data)
+        .map_err(|e| format!("Invalid {} JSON: {}", label, e))?;
+    crate::modules::atomic_write::write_string_atomic(path, data)
+        .map_err(|e| format!("Failed to write {}: {}", label, e))
+}
+
+#[tauri::command]
+pub async fn load_codex_account_groups() -> Result<String, String> {
+    let path = account::get_data_dir()?.join(CODEX_GROUPS_FILE);
+    load_codex_json_store(&path, "codex groups")
 }
 
 #[tauri::command]
 pub async fn save_codex_account_groups(data: String) -> Result<(), String> {
-    let dir = account::get_data_dir()?;
-    if !dir.exists() {
-        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
-    }
-    let path = dir.join(CODEX_GROUPS_FILE);
-    std::fs::write(&path, data).map_err(|e| format!("Failed to write codex groups: {}", e))
+    let path = account::get_data_dir()?.join(CODEX_GROUPS_FILE);
+    save_codex_json_store(&path, &data, "codex groups")
 }
 
 #[tauri::command]
 pub async fn load_codex_model_providers() -> Result<String, String> {
     let path = account::get_data_dir()?.join(CODEX_MODEL_PROVIDERS_FILE);
-    if !path.exists() {
-        return Ok("[]".to_string());
-    }
-    std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read codex model providers: {}", e))
+    load_codex_json_store(&path, "codex model providers")
 }
 
 #[tauri::command]
 pub async fn save_codex_model_providers(data: String) -> Result<(), String> {
-    let dir = account::get_data_dir()?;
-    if !dir.exists() {
-        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
-    }
-    let path = dir.join(CODEX_MODEL_PROVIDERS_FILE);
-    std::fs::write(&path, data).map_err(|e| format!("Failed to write codex model providers: {}", e))
+    let path = account::get_data_dir()?.join(CODEX_MODEL_PROVIDERS_FILE);
+    save_codex_json_store(&path, &data, "codex model providers")
 }
 
 fn codex_model_provider_models_url(base_url: &str) -> Result<String, String> {
@@ -2755,9 +2763,85 @@ pub async fn codex_local_access_chat_test_stream(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::Path;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn models(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_string()).collect()
+    }
+
+    fn make_temp_dir(prefix: &str) -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after unix epoch")
+            .as_nanos();
+        let dir =
+            std::env::temp_dir().join(format!("{}_{}_{}", prefix, std::process::id(), unique));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    fn backup_path(path: &Path) -> std::path::PathBuf {
+        path.with_file_name(format!(
+            "{}.bak",
+            path.file_name()
+                .and_then(|item| item.to_str())
+                .expect("test file should have utf-8 name")
+        ))
+    }
+
+    #[test]
+    fn codex_json_store_rejects_invalid_json_without_overwriting_existing_file() {
+        let dir = make_temp_dir("codex_json_store_invalid");
+        let path = dir.join("codex_model_providers.json");
+        fs::write(&path, r#"[{"id":"provider-a"}]"#).expect("write existing store");
+
+        let result = save_codex_json_store(&path, "{invalid", "codex model providers");
+
+        assert!(result.is_err());
+        assert_eq!(
+            fs::read_to_string(&path).expect("read store after failed save"),
+            r#"[{"id":"provider-a"}]"#
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn codex_json_store_writes_backup_before_replacing_existing_json() {
+        let dir = make_temp_dir("codex_json_store_backup");
+        let path = dir.join("codex_account_groups.json");
+        fs::write(&path, r#"[{"id":"group-a"}]"#).expect("write existing store");
+
+        save_codex_json_store(&path, r#"[{"id":"group-b"}]"#, "codex account groups")
+            .expect("save replacement");
+
+        assert_eq!(
+            fs::read_to_string(&path).expect("read current store"),
+            r#"[{"id":"group-b"}]"#
+        );
+        assert_eq!(
+            fs::read_to_string(backup_path(&path)).expect("read backup store"),
+            r#"[{"id":"group-a"}]"#
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn codex_json_store_load_restores_valid_backup_when_current_is_corrupted() {
+        let dir = make_temp_dir("codex_json_store_restore");
+        let path = dir.join("codex_model_providers.json");
+        fs::write(&path, "{corrupted").expect("write corrupted current");
+        fs::write(backup_path(&path), r#"[{"id":"provider-a"}]"#).expect("write valid backup");
+
+        let loaded = load_codex_json_store(&path, "codex model providers").expect("load store");
+
+        assert_eq!(loaded, r#"[{"id":"provider-a"}]"#);
+        assert_eq!(
+            fs::read_to_string(&path).expect("read restored store"),
+            r#"[{"id":"provider-a"}]"#
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
