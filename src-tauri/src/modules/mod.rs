@@ -65,6 +65,8 @@ pub mod process;
 pub mod provider_current_state;
 pub mod provider_token_keeper;
 pub mod qoder_account;
+pub mod qoderwork_cn_account;
+pub mod qoderwork_cn_oauth;
 pub mod qoder_instance;
 pub mod qoder_oauth;
 pub mod quota;

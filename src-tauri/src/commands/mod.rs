@@ -25,6 +25,7 @@ pub mod logs;
 pub mod oauth;
 pub mod provider_current;
 pub mod qoder;
+pub mod qoderwork_cn;
 pub mod qoder_instance;
 pub mod remote_config;
 pub mod system;

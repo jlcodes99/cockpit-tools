@@ -130,6 +130,10 @@ fn build_service_refresh_policies(cfg: &super::config::UserConfig) -> Vec<Servic
             interval_minutes: cfg.qoder_auto_refresh_minutes,
         },
         ServiceRefreshPolicy {
+            key: "qoderwork_cn",
+            interval_minutes: cfg.qoderwork_cn_auto_refresh_minutes,
+        },
+        ServiceRefreshPolicy {
             key: "trae",
             interval_minutes: cfg.trae_auto_refresh_minutes,
         },
@@ -182,6 +186,11 @@ async fn run_refresh_for_service(policy: ServiceRefreshPolicy) -> Result<(), Str
         "qoder" => super::qoder_oauth::refresh_all_accounts_from_openapi()
             .await
             .map(|_| ()),
+        "qoderwork_cn" => {
+            super::qoderwork_cn_oauth::refresh_all_accounts_from_openapi()
+                .await
+                .map(|_| ())
+        }
         "trae" => super::trae_account::refresh_all_tokens().await.map(|_| ()),
         "zed" => super::zed_account::refresh_all_accounts().await.map(|_| ()),
         _ => Err(format!("未知服务: {}", policy.key)),

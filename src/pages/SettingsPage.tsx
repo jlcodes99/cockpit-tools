@@ -249,9 +249,10 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   codebuddy: 9,
   codebuddy_cn: 10,
   qoder: 11,
-  trae: 12,
-  workbuddy: 13,
-  zed: 14,
+  qoderwork_cn: 12,
+  trae: 13,
+  workbuddy: 14,
+  zed: 15,
 };
 type UpdateCheckSource = 'auto' | 'manual';
 type UpdateCheckFinishedDetail = {
@@ -1741,6 +1742,8 @@ export function SettingsPage() {
         return parseRefresh(workbuddyAutoRefresh) > 0;
       case 'qoder':
         return parseRefresh(qoderAutoRefresh) > 0;
+      case 'qoderwork_cn':
+        return false;
       case 'trae':
         return parseRefresh(traeAutoRefresh) > 0;
       case 'zed':

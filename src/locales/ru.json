@@ -3556,6 +3556,10 @@
       "title": "Настройки Qoder",
       "appPath": "Путь Qoder"
     },
+    "qoderworkCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
+    },
     "trae": {
       "title": "Настройки Trae",
       "appPath": "Путь Trae"
@@ -4535,6 +4539,14 @@
       "streakRewardCountdown": "До бонусной награды осталось {{days}} дней",
       "streakRewardToday": "Бонусная награда доступна сегодня!",
       "recentDates": "Недавние: "
+    }
+  },
+  "qoderworkCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   },
   "zed": {

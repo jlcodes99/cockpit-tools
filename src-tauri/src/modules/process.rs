@@ -776,6 +776,15 @@ fn windows_app_launch_signature(app: &str) -> Option<WindowsAppLaunchSignature> 
             common_paths: &["Qoder\\Qoder.exe"],
             supports_multi_instance: true,
         }),
+        "qoderwork_cn" => Some(WindowsAppLaunchSignature {
+            label: "QoderWork CN",
+            exe_names: &["QoderWork CN.exe"],
+            command_names: &["qoderwork-cn"],
+            protocol_names: &["qoderwork-cn"],
+            display_keywords: &["qoderwork cn"],
+            common_paths: &["QoderWork CN\\QoderWork CN.exe"],
+            supports_multi_instance: true,
+        }),
         "trae" => Some(WindowsAppLaunchSignature {
             label: "Trae",
             exe_names: &["Trae.exe"],
@@ -1701,6 +1710,13 @@ fn update_app_path_in_config(app: &str, path: &Path) {
                 return;
             }
         }
+        "qoderwork_cn" => {
+            if current.qoderwork_cn_app_path != normalized {
+                current.qoderwork_cn_app_path = normalized;
+            } else {
+                return;
+            }
+        }
         "trae" => {
             if current.trae_app_path != normalized {
                 current.trae_app_path = normalized;
@@ -2453,6 +2469,50 @@ fn detect_qoder_exec_path() -> Option<std::path::PathBuf> {
             let path = std::path::PathBuf::from(candidate);
             if path.exists() {
                 return Some(path);
+            }
+        }
+    }
+
+    None
+}
+
+fn detect_qoderwork_cn_exec_path() -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        let candidates = [
+            "/Applications/QoderWork CN.app/Contents/MacOS/QoderWork CN",
+            "/Applications/QoderWork CN.app/Contents/MacOS/Electron",
+            "/Applications/QoderWork CN.app",
+        ];
+        for candidate in candidates {
+            let path = std::path::PathBuf::from(candidate);
+            if path.exists() {
+                return Some(path);
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+        if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
+            candidates.push(
+                std::path::PathBuf::from(&local_appdata)
+                    .join("Programs")
+                    .join("QoderWork CN")
+                    .join("QoderWork CN.exe"),
+            );
+        }
+        if let Ok(program_files) = std::env::var("PROGRAMFILES") {
+            candidates.push(
+                std::path::PathBuf::from(program_files)
+                    .join("QoderWork CN")
+                    .join("QoderWork CN.exe"),
+            );
+        }
+        for candidate in candidates {
+            if candidate.exists() {
+                return Some(candidate);
             }
         }
     }
@@ -3802,6 +3862,15 @@ pub fn detect_and_save_app_path(app: &str, force: bool) -> Option<String> {
             if let Some(detected) = detect_qoder_exec_path() {
                 update_app_path_in_config("qoder", &detected);
                 return Some(config::get_user_config().qoder_app_path);
+            }
+        }
+        "qoderwork_cn" => {
+            if !force && !current.qoderwork_cn_app_path.trim().is_empty() {
+                return Some(current.qoderwork_cn_app_path);
+            }
+            if let Some(detected) = detect_qoderwork_cn_exec_path() {
+                update_app_path_in_config("qoderwork_cn", &detected);
+                return Some(config::get_user_config().qoderwork_cn_app_path);
             }
         }
         "trae" => {

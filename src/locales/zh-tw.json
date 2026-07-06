@@ -247,6 +247,7 @@
     "gemini": "Gemini Cli",
     "codebuddy": "CodeBuddy",
     "qoder": "Qoder",
+    "qoderworkCn": "QoderWork CN",
     "trae": "Trae",
     "codebuddyCn": "CodeBuddy CN",
     "zed": "Zed 平台",
@@ -3556,6 +3557,10 @@
       "title": "Qoder 設定",
       "appPath": "Qoder 路徑"
     },
+    "qoderworkCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
+    },
     "trae": {
       "title": "Trae 設定",
       "appPath": "Trae 路徑"
@@ -4535,6 +4540,14 @@
       "streakRewardCountdown": "再簽 {{days}} 天可得大禮包",
       "streakRewardToday": "今日可獲得大禮包！",
       "recentDates": "近期簽到："
+    }
+  },
+  "qoderworkCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   },
   "zed": {

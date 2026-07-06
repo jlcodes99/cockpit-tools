@@ -39,6 +39,10 @@ fn resolve_provider_current_account_id(platform: &str) -> Result<Option<String>,
                 &accounts,
             ))
         }
+        "qoderwork_cn" | "qoderwork-cn" => {
+            let accounts = crate::modules::qoderwork_cn_account::list_accounts();
+            Ok(crate::modules::qoderwork_cn_account::resolve_current_account_id(&accounts))
+        }
         "trae" => {
             let accounts = crate::modules::trae_account::list_accounts();
             Ok(crate::modules::trae_account::resolve_current_account_id(
@@ -123,6 +127,8 @@ mod tests {
             "codebuddy_cn",
             "codebuddy-cn",
             "qoder",
+            "qoderwork_cn",
+            "qoderwork-cn",
             "trae",
             "workbuddy",
             "github_copilot",

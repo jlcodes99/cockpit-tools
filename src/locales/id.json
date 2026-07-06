@@ -3702,6 +3702,10 @@
       "title": "Qoder Settings​",
       "appPath": "Qoder Path​"
     },
+    "qoderworkCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
+    },
     "zed": {
       "title": "Zed Settings​",
       "appPath": "Zed Path​"
@@ -4385,6 +4389,14 @@
     },
     "empty": {
       "desc": "Klik \"Tambah Akun\" untuk menggunakan login auth, import lokal, atau import JSON."
+    }
+  },
+  "qoderworkCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   },
   "zed": {

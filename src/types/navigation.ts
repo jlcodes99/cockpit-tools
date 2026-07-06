@@ -16,6 +16,7 @@ export type Page =
   | 'codebuddy'
   | 'codebuddy-cn'
   | 'qoder'
+  | 'qoderwork-cn'
   | 'trae'
   | 'workbuddy'
   | 'codex-instances'

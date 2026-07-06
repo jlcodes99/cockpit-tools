@@ -72,6 +72,7 @@ const PAGE_PLATFORM_MAP: Partial<Record<Page, PlatformId>> = {
   codebuddy: 'codebuddy',
   'codebuddy-cn': 'codebuddy_cn',
   qoder: 'qoder',
+  'qoderwork-cn': 'qoderwork_cn',
   trae: 'trae',
   workbuddy: 'workbuddy',
 };

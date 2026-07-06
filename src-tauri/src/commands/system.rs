@@ -93,6 +93,8 @@ pub struct GeneralConfig {
     pub workbuddy_auto_refresh_minutes: i32,
     /// Qoder 自动刷新间隔（分钟），-1 表示禁用
     pub qoder_auto_refresh_minutes: i32,
+    /// QoderWork CN 自动刷新间隔（分钟），-1 表示禁用
+    pub qoderwork_cn_auto_refresh_minutes: i32,
     /// Trae 自动刷新间隔（分钟），-1 表示禁用
     pub trae_auto_refresh_minutes: i32,
     /// 窗口关闭行为: "ask", "minimize", "quit"
@@ -151,6 +153,8 @@ pub struct GeneralConfig {
     pub codebuddy_cn_app_path: String,
     /// Qoder 启动路径（为空则使用默认路径）
     pub qoder_app_path: String,
+    /// QoderWork CN 启动路径（为空则使用默认路径）
+    pub qoderwork_cn_app_path: String,
     /// Trae 启动路径（为空则使用默认路径）
     pub trae_app_path: String,
     /// WorkBuddy 启动路径（为空则使用默认路径）
@@ -257,6 +261,10 @@ pub struct GeneralConfig {
     pub qoder_quota_alert_enabled: bool,
     /// Qoder 配额预警阈值（百分比）
     pub qoder_quota_alert_threshold: i32,
+    /// 是否启用 QoderWork CN 配额预警通知
+    pub qoderwork_cn_quota_alert_enabled: bool,
+    /// QoderWork CN 配额预警阈值（百分比）
+    pub qoderwork_cn_quota_alert_threshold: i32,
     /// 是否启用 Trae 配额预警通知
     pub trae_quota_alert_enabled: bool,
     /// Trae 配额预警阈值（百分比）
@@ -1954,6 +1962,7 @@ pub fn save_network_config(
         codebuddy_cn_auto_refresh_minutes: current.codebuddy_cn_auto_refresh_minutes,
         workbuddy_auto_refresh_minutes: current.workbuddy_auto_refresh_minutes,
         qoder_auto_refresh_minutes: current.qoder_auto_refresh_minutes,
+        qoderwork_cn_auto_refresh_minutes: current.qoderwork_cn_auto_refresh_minutes,
         trae_auto_refresh_minutes: current.trae_auto_refresh_minutes,
         close_behavior: current.close_behavior,
         minimize_behavior: current.minimize_behavior,
@@ -2001,6 +2010,7 @@ pub fn save_network_config(
         codebuddy_app_path: current.codebuddy_app_path,
         codebuddy_cn_app_path: current.codebuddy_cn_app_path,
         qoder_app_path: current.qoder_app_path,
+        qoderwork_cn_app_path: current.qoderwork_cn_app_path,
         trae_app_path: current.trae_app_path,
         workbuddy_app_path: current.workbuddy_app_path,
         opencode_sync_on_switch: current.opencode_sync_on_switch,
@@ -2055,6 +2065,8 @@ pub fn save_network_config(
         codebuddy_cn_quota_alert_threshold: current.codebuddy_cn_quota_alert_threshold,
         qoder_quota_alert_enabled: current.qoder_quota_alert_enabled,
         qoder_quota_alert_threshold: current.qoder_quota_alert_threshold,
+        qoderwork_cn_quota_alert_enabled: current.qoderwork_cn_quota_alert_enabled,
+        qoderwork_cn_quota_alert_threshold: current.qoderwork_cn_quota_alert_threshold,
         trae_quota_alert_enabled: current.trae_quota_alert_enabled,
         trae_quota_alert_threshold: current.trae_quota_alert_threshold,
         workbuddy_quota_alert_enabled: current.workbuddy_quota_alert_enabled,
@@ -2274,6 +2286,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         codebuddy_cn_auto_refresh_minutes: user_config.codebuddy_cn_auto_refresh_minutes,
         workbuddy_auto_refresh_minutes: user_config.workbuddy_auto_refresh_minutes,
         qoder_auto_refresh_minutes: user_config.qoder_auto_refresh_minutes,
+        qoderwork_cn_auto_refresh_minutes: user_config.qoderwork_cn_auto_refresh_minutes,
         trae_auto_refresh_minutes: user_config.trae_auto_refresh_minutes,
         close_behavior: close_behavior_str.to_string(),
         minimize_behavior: minimize_behavior_str.to_string(),
@@ -2307,6 +2320,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         codebuddy_app_path: user_config.codebuddy_app_path,
         codebuddy_cn_app_path: user_config.codebuddy_cn_app_path,
         qoder_app_path: user_config.qoder_app_path,
+        qoderwork_cn_app_path: user_config.qoderwork_cn_app_path,
         trae_app_path: user_config.trae_app_path,
         workbuddy_app_path: user_config.workbuddy_app_path,
         opencode_sync_on_switch: user_config.opencode_sync_on_switch,
@@ -2361,6 +2375,8 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         codebuddy_cn_quota_alert_threshold: user_config.codebuddy_cn_quota_alert_threshold,
         qoder_quota_alert_enabled: user_config.qoder_quota_alert_enabled,
         qoder_quota_alert_threshold: user_config.qoder_quota_alert_threshold,
+        qoderwork_cn_quota_alert_enabled: user_config.qoderwork_cn_quota_alert_enabled,
+        qoderwork_cn_quota_alert_threshold: user_config.qoderwork_cn_quota_alert_threshold,
         trae_quota_alert_enabled: user_config.trae_quota_alert_enabled,
         trae_quota_alert_threshold: user_config.trae_quota_alert_threshold,
         workbuddy_quota_alert_enabled: user_config.workbuddy_quota_alert_enabled,
@@ -2413,6 +2429,7 @@ pub fn save_general_config(
     codebuddy_cn_auto_refresh_minutes: Option<i32>,
     workbuddy_auto_refresh_minutes: Option<i32>,
     qoder_auto_refresh_minutes: Option<i32>,
+    qoderwork_cn_auto_refresh_minutes: Option<i32>,
     trae_auto_refresh_minutes: Option<i32>,
     close_behavior: String,
     minimize_behavior: Option<String>,
@@ -2442,6 +2459,7 @@ pub fn save_general_config(
     codebuddy_app_path: Option<String>,
     codebuddy_cn_app_path: Option<String>,
     qoder_app_path: Option<String>,
+    qoderwork_cn_app_path: Option<String>,
     trae_app_path: Option<String>,
     workbuddy_app_path: Option<String>,
     opencode_sync_on_switch: bool,
@@ -2495,6 +2513,8 @@ pub fn save_general_config(
     codebuddy_cn_quota_alert_threshold: Option<i32>,
     qoder_quota_alert_enabled: Option<bool>,
     qoder_quota_alert_threshold: Option<i32>,
+    qoderwork_cn_quota_alert_enabled: Option<bool>,
+    qoderwork_cn_quota_alert_threshold: Option<i32>,
     trae_quota_alert_enabled: Option<bool>,
     trae_quota_alert_threshold: Option<i32>,
     workbuddy_quota_alert_enabled: Option<bool>,
@@ -2539,6 +2559,9 @@ pub fn save_general_config(
     let normalized_qoder_path = qoder_app_path
         .map(|value| value.trim().to_string())
         .unwrap_or_else(|| current.qoder_app_path.clone());
+    let normalized_qoderwork_cn_path = qoderwork_cn_app_path
+        .map(|value| value.trim().to_string())
+        .unwrap_or_else(|| current.qoderwork_cn_app_path.clone());
     let normalized_trae_path = trae_app_path
         .map(|value| value.trim().to_string())
         .unwrap_or_else(|| current.trae_app_path.clone());
@@ -2654,6 +2677,8 @@ pub fn save_general_config(
             .unwrap_or(current.workbuddy_auto_refresh_minutes),
         qoder_auto_refresh_minutes: qoder_auto_refresh_minutes
             .unwrap_or(current.qoder_auto_refresh_minutes),
+        qoderwork_cn_auto_refresh_minutes: qoderwork_cn_auto_refresh_minutes
+            .unwrap_or(current.qoderwork_cn_auto_refresh_minutes),
         trae_auto_refresh_minutes: trae_auto_refresh_minutes
             .unwrap_or(current.trae_auto_refresh_minutes),
         close_behavior: close_behavior_enum,
@@ -2686,6 +2711,7 @@ pub fn save_general_config(
         codebuddy_app_path: normalized_codebuddy_path,
         codebuddy_cn_app_path: normalized_codebuddy_cn_path,
         qoder_app_path: normalized_qoder_path,
+        qoderwork_cn_app_path: normalized_qoderwork_cn_path,
         trae_app_path: normalized_trae_path,
         workbuddy_app_path: normalized_workbuddy_path,
         opencode_sync_on_switch: next_opencode_sync_on_switch,
@@ -2791,6 +2817,10 @@ pub fn save_general_config(
             .unwrap_or(current.qoder_quota_alert_enabled),
         qoder_quota_alert_threshold: qoder_quota_alert_threshold
             .unwrap_or(current.qoder_quota_alert_threshold),
+        qoderwork_cn_quota_alert_enabled: qoderwork_cn_quota_alert_enabled
+            .unwrap_or(current.qoderwork_cn_quota_alert_enabled),
+        qoderwork_cn_quota_alert_threshold: qoderwork_cn_quota_alert_threshold
+            .unwrap_or(current.qoderwork_cn_quota_alert_threshold),
         trae_quota_alert_enabled: trae_quota_alert_enabled
             .unwrap_or(current.trae_quota_alert_enabled),
         trae_quota_alert_threshold: trae_quota_alert_threshold
@@ -2906,6 +2936,7 @@ pub fn set_app_path(app: String, path: String) -> Result<(), String> {
         "codebuddy" => current.codebuddy_app_path = normalized_path,
         "codebuddy_cn" => current.codebuddy_cn_app_path = normalized_path,
         "qoder" => current.qoder_app_path = normalized_path,
+        "qoderwork_cn" => current.qoderwork_cn_app_path = normalized_path,
         "trae" => current.trae_app_path = normalized_path,
         "workbuddy" => current.workbuddy_app_path = normalized_path,
         "opencode" => current.opencode_app_path = normalized_path,

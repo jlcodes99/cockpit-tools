@@ -3556,6 +3556,10 @@
       "title": "Cài đặt Qoder",
       "appPath": "Đường dẫn Qoder"
     },
+    "qoderworkCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
+    },
     "trae": {
       "title": "Cài đặt Trae",
       "appPath": "Đường dẫn Trae"
@@ -4535,6 +4539,14 @@
       "streakRewardCountdown": "Còn {{days}} ngày nữa để nhận thưởng bonus",
       "streakRewardToday": "Hôm nay có thể nhận thưởng bonus!",
       "recentDates": "Gần đây: "
+    }
+  },
+  "qoderworkCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   },
   "zed": {

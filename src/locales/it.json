@@ -3556,6 +3556,10 @@
       "title": "Impostazioni Qoder",
       "appPath": "Percorso Qoder"
     },
+    "qoderworkCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
+    },
     "trae": {
       "title": "Impostazioni Trae",
       "appPath": "Percorso Trae"
@@ -4535,6 +4539,14 @@
       "streakRewardCountdown": "Mancano {{days}} giorni alla ricompensa bonus",
       "streakRewardToday": "Ricompensa bonus disponibile oggi!",
       "recentDates": "Recenti: "
+    }
+  },
+  "qoderworkCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   },
   "zed": {

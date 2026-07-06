@@ -3556,6 +3556,10 @@
       "title": "Qoder Ayarları",
       "appPath": "Qoder Yolu"
     },
+    "qoderworkCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
+    },
     "trae": {
       "title": "Trae Ayarları",
       "appPath": "Trae Yolu"
@@ -4535,6 +4539,14 @@
       "streakRewardCountdown": "Bonus ödüle {{days}} gün kaldı",
       "streakRewardToday": "Bonus ödül bugün kullanılabilir!",
       "recentDates": "Son: "
+    }
+  },
+  "qoderworkCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   },
   "zed": {

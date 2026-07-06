@@ -300,6 +300,7 @@
       "installing": "Installing"
     },
     "qoder": "Qoder",
+    "qoderworkCn": "QoderWork CN",
     "trae": "Trae",
     "codebuddyCn": "CodeBuddy CN",
     "switchClassicLayoutEntry": "Switch to classic layout",
@@ -3859,6 +3860,10 @@
       "title": "Qoder Settings",
       "appPath": "Qoder Path"
     },
+    "qoderworkCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
+    },
     "zed": {
       "title": "Zed Settings",
       "appPath": "Zed Path"
@@ -4537,6 +4542,14 @@
     },
     "empty": {
       "desc": "Click \"Add Account\" to use auth login, local import, or JSON import."
+    }
+  },
+  "qoderworkCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   },
   "zed": {

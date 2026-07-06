@@ -14,6 +14,7 @@ export type PlatformId =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'qoderwork_cn'
   | 'trae'
   | 'workbuddy';
 
@@ -31,6 +32,7 @@ export const ALL_PLATFORM_IDS: PlatformId[] = [
   'codebuddy',
   'codebuddy_cn',
   'qoder',
+  'qoderwork_cn',
   'trae',
   'workbuddy',
 ];
@@ -59,6 +61,7 @@ export const PLATFORM_PAGE_MAP: Record<PlatformId, Page> = {
   codebuddy: 'codebuddy',
   codebuddy_cn: 'codebuddy-cn',
   qoder: 'qoder',
+  qoderwork_cn: 'qoderwork-cn',
   trae: 'trae',
   workbuddy: 'workbuddy',
 };

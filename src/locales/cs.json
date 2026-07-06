@@ -3556,6 +3556,10 @@
       "title": "Nastavení Qoder",
       "appPath": "Cesta Qoder"
     },
+    "qoderworkCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
+    },
     "trae": {
       "title": "Nastavení Trae",
       "appPath": "Cesta Trae"
@@ -4535,6 +4539,14 @@
       "streakRewardCountdown": "Do bonusové odměny zbývá {{days}} dní",
       "streakRewardToday": "Bonusová odměna je dnes dostupná!",
       "recentDates": "Nedávno: "
+    }
+  },
+  "qoderworkCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   },
   "zed": {

@@ -3556,6 +3556,10 @@
       "title": "Qoder 설정",
       "appPath": "Qoder 경로"
     },
+    "qoderworkCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
+    },
     "trae": {
       "title": "Trae 설정",
       "appPath": "Trae 경로"
@@ -4535,6 +4539,14 @@
       "streakRewardCountdown": "보너스 보상까지 {{days}}일 남음",
       "streakRewardToday": "오늘 보너스 보상을 받을 수 있습니다!",
       "recentDates": "최근: "
+    }
+  },
+  "qoderworkCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   },
   "zed": {

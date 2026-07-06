@@ -9,6 +9,7 @@ import { CursorIcon } from '../icons/CursorIcon';
 import { GeminiIcon } from '../icons/GeminiIcon';
 import { CodebuddyIcon } from '../icons/CodebuddyIcon';
 import { QoderIcon } from '../icons/QoderIcon';
+import { QoderworkCnIcon } from '../icons/QoderworkCnIcon';
 import { WorkbuddyIcon } from '../icons/WorkbuddyIcon';
 import { ZedIcon } from '../icons/ZedIcon';
 import { ManualHelpIconButton } from '../ManualHelpIconButton';
@@ -36,6 +37,7 @@ export type PlatformOverviewHeaderId =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'qoderwork_cn'
   | 'trae'
   | 'workbuddy';
 
@@ -101,6 +103,10 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
   qoder: {
     platformLabel: 'Qoder',
     overviewIcon: <QoderIcon className="tab-icon" />,
+  },
+  qoderwork_cn: {
+    platformLabel: 'QoderWork CN',
+    overviewIcon: <QoderworkCnIcon className="tab-icon" />,
   },
   trae: {
     platformLabel: 'Trae',

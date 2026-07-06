@@ -300,6 +300,7 @@
       "installing": "安装中"
     },
     "qoder": "Qoder",
+    "qoderworkCn": "QoderWork CN",
     "trae": "Trae",
     "codebuddyCn": "CodeBuddy CN",
     "switchClassicLayoutEntry": "切换到经典布局",
@@ -3859,6 +3860,10 @@
       "title": "Qoder 设置",
       "appPath": "Qoder 路径"
     },
+    "qoderworkCn": {
+      "title": "QoderWork CN 设置",
+      "appPath": "QoderWork CN 路径"
+    },
     "zed": {
       "title": "Zed 设置",
       "appPath": "Zed 路径"
@@ -4534,6 +4539,14 @@
       "localDesc": "从本机 Qoder 客户端读取当前登录状态（包含用户信息、套餐与 Credits 使用情况）。",
       "localFailed": "本机导入失败：{{error}}",
       "localSuccess": "已从本机 Qoder 导入账号。"
+    },
+    "empty": {
+      "desc": "点击“添加账号”，可使用授权登录、本机导入或 JSON 导入。"
+    }
+  },
+  "qoderworkCn": {
+    "addModal": {
+      "title": "添加 QoderWork CN 账号"
     },
     "empty": {
       "desc": "点击“添加账号”，可使用授权登录、本机导入或 JSON 导入。"

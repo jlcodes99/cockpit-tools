@@ -127,6 +127,9 @@ pub struct UserConfig {
     /// Qoder 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_qoder_auto_refresh")]
     pub qoder_auto_refresh_minutes: i32,
+    /// QoderWork CN 自动刷新间隔（分钟），-1 表示禁用
+    #[serde(default = "default_qoderwork_cn_auto_refresh")]
+    pub qoderwork_cn_auto_refresh_minutes: i32,
     /// Trae 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_trae_auto_refresh")]
     pub trae_auto_refresh_minutes: i32,
@@ -267,6 +270,9 @@ pub struct UserConfig {
     /// Qoder 启动路径（为空则使用默认路径）
     #[serde(default = "default_qoder_app_path")]
     pub qoder_app_path: String,
+    /// QoderWork CN 启动路径（为空则使用默认路径）
+    #[serde(default = "default_qoderwork_cn_app_path")]
+    pub qoderwork_cn_app_path: String,
     /// Trae 启动路径（为空则使用默认路径）
     #[serde(default = "default_trae_app_path")]
     pub trae_app_path: String,
@@ -426,6 +432,12 @@ pub struct UserConfig {
     /// Qoder 配额预警阈值（百分比）
     #[serde(default = "default_qoder_quota_alert_threshold")]
     pub qoder_quota_alert_threshold: i32,
+    /// 是否启用 QoderWork CN 配额预警通知
+    #[serde(default = "default_qoderwork_cn_quota_alert_enabled")]
+    pub qoderwork_cn_quota_alert_enabled: bool,
+    /// QoderWork CN 配额预警阈值（百分比）
+    #[serde(default = "default_qoderwork_cn_quota_alert_threshold")]
+    pub qoderwork_cn_quota_alert_threshold: i32,
     /// 是否启用 Trae 配额预警通知
     #[serde(default = "default_trae_quota_alert_enabled")]
     pub trae_quota_alert_enabled: bool,
@@ -596,6 +608,9 @@ fn default_workbuddy_auto_refresh() -> i32 {
 fn default_qoder_auto_refresh() -> i32 {
     10
 }
+fn default_qoderwork_cn_auto_refresh() -> i32 {
+    10
+}
 fn default_trae_auto_refresh() -> i32 {
     10
 }
@@ -733,6 +748,9 @@ fn default_codebuddy_cn_app_path() -> String {
     String::new()
 }
 fn default_qoder_app_path() -> String {
+    String::new()
+}
+fn default_qoderwork_cn_app_path() -> String {
     String::new()
 }
 fn default_trae_app_path() -> String {
@@ -894,6 +912,12 @@ fn default_qoder_quota_alert_enabled() -> bool {
 fn default_qoder_quota_alert_threshold() -> i32 {
     20
 }
+fn default_qoderwork_cn_quota_alert_enabled() -> bool {
+    false
+}
+fn default_qoderwork_cn_quota_alert_threshold() -> i32 {
+    20
+}
 fn default_trae_quota_alert_enabled() -> bool {
     false
 }
@@ -940,6 +964,7 @@ impl Default for UserConfig {
             codebuddy_cn_auto_refresh_minutes: default_codebuddy_cn_auto_refresh(),
             workbuddy_auto_refresh_minutes: default_workbuddy_auto_refresh(),
             qoder_auto_refresh_minutes: default_qoder_auto_refresh(),
+            qoderwork_cn_auto_refresh_minutes: default_qoderwork_cn_auto_refresh(),
             trae_auto_refresh_minutes: default_trae_auto_refresh(),
             close_behavior: default_close_behavior(),
             minimize_behavior: default_minimize_behavior(),
@@ -988,6 +1013,7 @@ impl Default for UserConfig {
             codebuddy_app_path: default_codebuddy_app_path(),
             codebuddy_cn_app_path: default_codebuddy_cn_app_path(),
             qoder_app_path: default_qoder_app_path(),
+            qoderwork_cn_app_path: default_qoderwork_cn_app_path(),
             trae_app_path: default_trae_app_path(),
             workbuddy_app_path: default_workbuddy_app_path(),
             opencode_sync_on_switch: default_opencode_sync_on_switch(),
@@ -1044,6 +1070,8 @@ impl Default for UserConfig {
             codebuddy_cn_quota_alert_threshold: default_codebuddy_cn_quota_alert_threshold(),
             qoder_quota_alert_enabled: default_qoder_quota_alert_enabled(),
             qoder_quota_alert_threshold: default_qoder_quota_alert_threshold(),
+            qoderwork_cn_quota_alert_enabled: default_qoderwork_cn_quota_alert_enabled(),
+            qoderwork_cn_quota_alert_threshold: default_qoderwork_cn_quota_alert_threshold(),
             trae_quota_alert_enabled: default_trae_quota_alert_enabled(),
             trae_quota_alert_threshold: default_trae_quota_alert_threshold(),
             workbuddy_quota_alert_enabled: default_workbuddy_quota_alert_enabled(),
