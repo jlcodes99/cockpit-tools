@@ -11,6 +11,7 @@ import { useClaudeAccountStore } from '../stores/useClaudeAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
+import { useQoderworkCnAccountStore } from '../stores/useQoderworkCnAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
@@ -451,6 +452,13 @@ export function DashboardPage({
   } = useQoderAccountStore();
 
   const {
+    accounts: qoderworkCnAccounts,
+    currentAccountId: _qoderworkCnCurrentId,
+    fetchAccounts: _fetchQoderworkCnAccounts,
+    switchAccount: _switchQoderworkCnAccount,
+  } = useQoderworkCnAccountStore();
+
+  const {
     accounts: traeAccounts,
     currentAccountId: traeCurrentId,
     fetchAccounts: fetchTraeAccounts,
@@ -521,6 +529,7 @@ export function DashboardPage({
       fetchCodebuddyAccounts,
       fetchCodebuddyCnAccounts,
       fetchQoderAccounts,
+      _fetchQoderworkCnAccounts,
       fetchTraeAccounts,
       fetchWorkbuddyAccounts,
     ];
@@ -588,6 +597,7 @@ export function DashboardPage({
         codebuddyAccounts.length +
         codebuddyCnAccounts.length +
         qoderAccounts.length +
+        qoderworkCnAccounts.length +
         traeAccounts.length +
         workbuddyAccounts.length,
       antigravity: agAccounts.length,
@@ -602,10 +612,11 @@ export function DashboardPage({
       codebuddy: codebuddyAccounts.length,
       codebuddy_cn: codebuddyCnAccounts.length,
       qoder: qoderAccounts.length,
+      qoderwork_cn: qoderworkCnAccounts.length,
       trae: traeAccounts.length,
       workbuddy: workbuddyAccounts.length,
     };
-  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, traeAccounts, workbuddyAccounts]);
+  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, qoderworkCnAccounts, traeAccounts, workbuddyAccounts]);
 
   const dashboardAvailableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -622,6 +633,7 @@ export function DashboardPage({
       ...codebuddyAccounts,
       ...codebuddyCnAccounts,
       ...qoderAccounts,
+      ...qoderworkCnAccounts,
       ...traeAccounts,
       ...workbuddyAccounts,
     ];
@@ -633,7 +645,7 @@ export function DashboardPage({
       }
     }
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
-  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, traeAccounts, workbuddyAccounts]);
+  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, qoderworkCnAccounts, traeAccounts, workbuddyAccounts]);
 
 
   // Refresh States
@@ -2422,7 +2434,7 @@ export function DashboardPage({
     codebuddy: stats.codebuddy,
     codebuddy_cn: stats.codebuddy_cn,
     qoder: stats.qoder,
-    qoderwork_cn: 0,
+    qoderwork_cn: stats.qoderwork_cn,
     trae: stats.trae,
     workbuddy: stats.workbuddy,
   };
