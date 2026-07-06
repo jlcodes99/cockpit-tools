@@ -91,6 +91,9 @@ pub struct UserConfig {
     /// Codex WSL 配置目录 (Windows Only)
     #[serde(default = "default_codex_wsl_config_dir")]
     pub codex_wsl_config_dir: String,
+    /// 切换第三方 API provider 时是否保留 Codex 官方登录态
+    #[serde(default = "default_codex_preserve_official_auth_on_provider_switch")]
+    pub codex_preserve_official_auth_on_provider_switch: bool,
     /// Zed 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_zed_auto_refresh")]
     pub zed_auto_refresh_minutes: i32,
@@ -557,6 +560,9 @@ fn default_codex_sync_wsl() -> bool {
 fn default_codex_wsl_config_dir() -> String {
     String::new()
 }
+fn default_codex_preserve_official_auth_on_provider_switch() -> bool {
+    false
+}
 fn default_zed_auto_refresh() -> i32 {
     10
 }
@@ -922,6 +928,8 @@ impl Default for UserConfig {
             codex_auto_refresh_minutes: default_codex_auto_refresh(),
             codex_sync_wsl: default_codex_sync_wsl(),
             codex_wsl_config_dir: default_codex_wsl_config_dir(),
+            codex_preserve_official_auth_on_provider_switch:
+                default_codex_preserve_official_auth_on_provider_switch(),
             zed_auto_refresh_minutes: default_zed_auto_refresh(),
             ghcp_auto_refresh_minutes: default_ghcp_auto_refresh(),
             windsurf_auto_refresh_minutes: default_windsurf_auto_refresh(),
@@ -1296,6 +1304,13 @@ pub fn load_user_config() -> Result<UserConfig, String> {
             obj.insert(
                 "codex_wsl_config_dir".to_string(),
                 json!(default_codex_wsl_config_dir()),
+            );
+        }
+
+        if !obj.contains_key("codex_preserve_official_auth_on_provider_switch") {
+            obj.insert(
+                "codex_preserve_official_auth_on_provider_switch".to_string(),
+                json!(default_codex_preserve_official_auth_on_provider_switch()),
             );
         }
 

@@ -3577,10 +3577,91 @@ fn resolve_account_for_bundle_write(
     Ok(account.clone())
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct CodexAccountBundleWriteOptions {
+    pub preserve_official_auth_on_api_key_switch: bool,
+}
+
+fn codex_account_bundle_write_options_from_config() -> CodexAccountBundleWriteOptions {
+    let cfg = crate::modules::config::get_user_config();
+    CodexAccountBundleWriteOptions {
+        preserve_official_auth_on_api_key_switch: cfg
+            .codex_preserve_official_auth_on_provider_switch,
+    }
+}
+
+fn json_string_field_is_non_empty(value: &serde_json::Value, keys: &[&str]) -> bool {
+    keys.iter().any(|key| {
+        value
+            .get(*key)
+            .and_then(|field| field.as_str())
+            .map(|field| !field.trim().is_empty())
+            .unwrap_or(false)
+    })
+}
+
+fn auth_value_looks_like_official_login(value: &serde_json::Value) -> bool {
+    if is_auth_mode_apikey(value.get("auth_mode").and_then(|field| field.as_str())) {
+        return false;
+    }
+
+    let Some(tokens) = value.get("tokens") else {
+        return false;
+    };
+
+    json_string_field_is_non_empty(tokens, &["id_token", "idToken"])
+        && json_string_field_is_non_empty(tokens, &["access_token", "accessToken"])
+}
+
+fn existing_auth_file_looks_like_official_login(base_dir: &Path) -> bool {
+    let auth_path = base_dir.join("auth.json");
+    let Ok(content) = fs::read_to_string(&auth_path) else {
+        return false;
+    };
+    match serde_json::from_str::<serde_json::Value>(&content) {
+        Ok(value) => auth_value_looks_like_official_login(&value),
+        Err(err) => {
+            logger::log_warn(&format!(
+                "[Codex切号] 保留官方登录态检查跳过无效 auth.json: path={}, error={}",
+                auth_path.display(),
+                err
+            ));
+            false
+        }
+    }
+}
+
 pub(crate) fn write_prepared_account_bundle_to_dir(
     base_dir: &Path,
     account: &CodexAccount,
 ) -> Result<(), String> {
+    let options = codex_account_bundle_write_options_from_config();
+    write_prepared_account_bundle_to_dir_with_options(base_dir, account, options)
+}
+
+fn write_prepared_account_bundle_to_dir_with_options(
+    base_dir: &Path,
+    account: &CodexAccount,
+    options: CodexAccountBundleWriteOptions,
+) -> Result<(), String> {
+    if account.is_api_key_auth()
+        && options.preserve_official_auth_on_api_key_switch
+        && existing_auth_file_looks_like_official_login(base_dir)
+    {
+        crate::modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(
+            base_dir,
+        )?;
+        let provider_config = write_api_key_provider_override_to_config_toml(base_dir, account)?;
+        write_managed_projection_to_dir(base_dir, account)?;
+        logger::log_info(&format!(
+            "[Codex切号] 已保留官方登录态并写入第三方 provider 配置: account_id={}, target_dir={}, has_base_url={}",
+            account.id,
+            base_dir.display(),
+            provider_config.base_url.is_some()
+        ));
+        return Ok(());
+    }
+
     write_auth_file_to_dir(base_dir, account)?;
     if let Err(err) = write_codex_keychain_to_dir(base_dir, account) {
         logger::log_warn(&format!(
@@ -3690,6 +3771,15 @@ fn write_api_key_account_bundle_with_oauth_to_dir(
 }
 
 pub fn write_account_bundle_to_dir(base_dir: &Path, account: &CodexAccount) -> Result<(), String> {
+    let options = codex_account_bundle_write_options_from_config();
+    write_account_bundle_to_dir_with_options(base_dir, account, options)
+}
+
+pub(crate) fn write_account_bundle_to_dir_with_options(
+    base_dir: &Path,
+    account: &CodexAccount,
+    options: CodexAccountBundleWriteOptions,
+) -> Result<(), String> {
     if account.is_api_key_auth() {
         if let Some(oauth_account) = load_optional_bound_oauth_account_for_api_key(account)? {
             return write_api_key_account_bundle_with_oauth_to_dir(
@@ -3698,11 +3788,11 @@ pub fn write_account_bundle_to_dir(base_dir: &Path, account: &CodexAccount) -> R
                 &oauth_account,
             );
         }
-        return write_prepared_account_bundle_to_dir(base_dir, account);
+        return write_prepared_account_bundle_to_dir_with_options(base_dir, account, options);
     }
 
     let account = resolve_account_for_bundle_write(base_dir, account)?;
-    write_prepared_account_bundle_to_dir(base_dir, &account)
+    write_prepared_account_bundle_to_dir_with_options(base_dir, &account, options)
 }
 
 fn configured_codex_wsl_config_dir() -> Option<PathBuf> {
@@ -6457,11 +6547,13 @@ mod tests {
         sync_managed_projection_from_auth_dir, upsert_account, upsert_account_for_reauth,
         upsert_account_from_access_token, upsert_account_from_auth_tokens,
         validate_api_key_credentials, write_account_bundle_to_dir,
+        write_account_bundle_to_dir_with_options,
         write_api_key_provider_to_config_toml, write_api_provider_to_config_toml,
         write_managed_projection_to_dir, write_quick_config_to_config_toml, ApiProviderConfig,
-        CodexAccountIndex, CodexAccountSummary, CodexAuthFile, CodexAuthTokens,
-        CodexJsonImportCandidate, LocalCodexOAuthSnapshot, CODEX_AUTHORIZATION_STATUS_PENDING,
-        CODEX_AUTO_COMPACT_DEFAULT_LIMIT, CODEX_CONTEXT_WINDOW_1M_VALUE,
+        CodexAccountBundleWriteOptions, CodexAccountIndex, CodexAccountSummary, CodexAuthFile,
+        CodexAuthTokens, CodexJsonImportCandidate, LocalCodexOAuthSnapshot,
+        CODEX_AUTHORIZATION_STATUS_PENDING, CODEX_AUTO_COMPACT_DEFAULT_LIMIT,
+        CODEX_CONTEXT_WINDOW_1M_VALUE,
     };
     use crate::models::codex::{CodexAccount, CodexApiProviderMode, CodexTokens};
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
@@ -8194,6 +8286,104 @@ multi_agent = true
         let config = fs::read_to_string(profile_dir.join("config.toml")).expect("read config");
         assert!(config.contains("model_provider = \"codex_local_access\""));
         assert!(config.contains("experimental_bearer_token = \"local-service-key\""));
+    }
+
+    #[test]
+    fn preserve_official_auth_keeps_existing_oauth_auth_file_for_api_key_switch() {
+        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let env = TestEnvGuard::new("codex-preserve-official-auth-test");
+        let profile_dir = env.home_dir.join("managed-profile");
+        fs::create_dir_all(&profile_dir).expect("create profile dir");
+        let oauth_account = seed_oauth_account(make_codex_tokens(
+            "official@example.com",
+            "acc-official",
+            "org-official",
+            "preserved",
+            "rt-preserved",
+        ));
+        let oauth_auth = build_auth_file_value(&oauth_account).expect("build oauth auth");
+        fs::write(
+            profile_dir.join("auth.json"),
+            serde_json::to_string_pretty(&oauth_auth).expect("serialize oauth auth"),
+        )
+        .expect("seed auth file");
+        let api_key_account = CodexAccount::new_api_key(
+            "third-party".to_string(),
+            "relay@example.com".to_string(),
+            "sk-third-party".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://relay.example.com/v1".to_string()),
+            Some("relay".to_string()),
+            Some("Relay".to_string()),
+            Vec::new(),
+        );
+
+        write_account_bundle_to_dir_with_options(
+            &profile_dir,
+            &api_key_account,
+            CodexAccountBundleWriteOptions {
+                preserve_official_auth_on_api_key_switch: true,
+            },
+        )
+        .expect("write preserved bundle");
+
+        let auth_file: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(profile_dir.join("auth.json")).expect("read auth file"),
+        )
+        .expect("parse auth file");
+        assert!(auth_file.get("auth_mode").is_none());
+        assert_eq!(
+            auth_file
+                .get("tokens")
+                .and_then(|value| value.get("id_token"))
+                .and_then(|value| value.as_str()),
+            Some(oauth_account.tokens.id_token.as_str())
+        );
+        let config = fs::read_to_string(profile_dir.join("config.toml")).expect("read config");
+        assert!(config.contains("model_provider = \"codex_local_access\""));
+        assert!(config.contains("base_url = \"https://relay.example.com/v1\""));
+        assert!(config.contains("experimental_bearer_token = \"sk-third-party\""));
+    }
+
+    #[test]
+    fn preserve_official_auth_falls_back_to_api_key_auth_without_existing_oauth() {
+        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let env = TestEnvGuard::new("codex-preserve-official-auth-fallback-test");
+        let profile_dir = env.home_dir.join("managed-profile");
+        let api_key_account = CodexAccount::new_api_key(
+            "third-party".to_string(),
+            "relay@example.com".to_string(),
+            "sk-third-party".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://relay.example.com/v1".to_string()),
+            Some("relay".to_string()),
+            Some("Relay".to_string()),
+            Vec::new(),
+        );
+
+        write_account_bundle_to_dir_with_options(
+            &profile_dir,
+            &api_key_account,
+            CodexAccountBundleWriteOptions {
+                preserve_official_auth_on_api_key_switch: true,
+            },
+        )
+        .expect("write fallback bundle");
+
+        let auth_file: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(profile_dir.join("auth.json")).expect("read auth file"),
+        )
+        .expect("parse auth file");
+        assert_eq!(
+            auth_file.get("auth_mode").and_then(|value| value.as_str()),
+            Some("apikey")
+        );
+        assert_eq!(
+            auth_file
+                .get("OPENAI_API_KEY")
+                .and_then(|value| value.as_str()),
+            Some("sk-third-party")
+        );
     }
 
     #[test]

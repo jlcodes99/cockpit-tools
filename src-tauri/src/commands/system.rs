@@ -69,6 +69,8 @@ pub struct GeneralConfig {
     pub codex_sync_wsl: bool,
     /// Codex WSL 配置目录 (Windows Only)
     pub codex_wsl_config_dir: String,
+    /// 切换第三方 API provider 时是否保留 Codex 官方登录态
+    pub codex_preserve_official_auth_on_provider_switch: bool,
     /// Zed 自动刷新间隔（分钟），-1 表示禁用
     pub zed_auto_refresh_minutes: i32,
     /// GitHub Copilot 自动刷新间隔（分钟），-1 表示禁用
@@ -1941,6 +1943,8 @@ pub fn save_network_config(
         claude_auto_refresh_minutes: current.claude_auto_refresh_minutes,
         codex_sync_wsl: current.codex_sync_wsl,
         codex_wsl_config_dir: current.codex_wsl_config_dir,
+        codex_preserve_official_auth_on_provider_switch: current
+            .codex_preserve_official_auth_on_provider_switch,
         zed_auto_refresh_minutes: current.zed_auto_refresh_minutes,
         ghcp_auto_refresh_minutes: current.ghcp_auto_refresh_minutes,
         windsurf_auto_refresh_minutes: current.windsurf_auto_refresh_minutes,
@@ -2259,6 +2263,8 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         codex_auto_refresh_minutes: user_config.codex_auto_refresh_minutes,
         codex_sync_wsl: user_config.codex_sync_wsl,
         codex_wsl_config_dir: user_config.codex_wsl_config_dir,
+        codex_preserve_official_auth_on_provider_switch: user_config
+            .codex_preserve_official_auth_on_provider_switch,
         zed_auto_refresh_minutes: user_config.zed_auto_refresh_minutes,
         ghcp_auto_refresh_minutes: user_config.ghcp_auto_refresh_minutes,
         windsurf_auto_refresh_minutes: user_config.windsurf_auto_refresh_minutes,
@@ -2397,6 +2403,7 @@ pub fn save_general_config(
     codex_auto_refresh_minutes: i32,
     codex_sync_wsl: Option<bool>,
     codex_wsl_config_dir: Option<String>,
+    codex_preserve_official_auth_on_provider_switch: Option<bool>,
     zed_auto_refresh_minutes: Option<i32>,
     ghcp_auto_refresh_minutes: Option<i32>,
     windsurf_auto_refresh_minutes: Option<i32>,
@@ -2624,6 +2631,9 @@ pub fn save_general_config(
         codex_auto_refresh_minutes,
         codex_sync_wsl: codex_sync_wsl.unwrap_or(current.codex_sync_wsl),
         codex_wsl_config_dir: normalized_codex_wsl_config_dir,
+        codex_preserve_official_auth_on_provider_switch:
+            codex_preserve_official_auth_on_provider_switch
+                .unwrap_or(current.codex_preserve_official_auth_on_provider_switch),
         zed_auto_refresh_minutes: zed_auto_refresh_minutes
             .unwrap_or(current.zed_auto_refresh_minutes),
         ghcp_auto_refresh_minutes: ghcp_auto_refresh_minutes

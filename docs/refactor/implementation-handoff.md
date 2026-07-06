@@ -3,6 +3,7 @@
 记录日期：2026-07-06
 实现仓库：`E:\cockpit 重构\cockpit-tools-refactor-impl`
 实现分支：`codex/refactor-ccs-integration`
+Draft PR：`https://github.com/jlcodes99/cockpit-tools/pull/1418`
 基线：Cockpit Tools `v1.0.4` (`20511e4e7ec820cfc93984c62dc0daf33bfd718c`)
 
 ## 输入整合
@@ -43,6 +44,13 @@
    - 从 `src/pages/CodexAccountsPage.tsx` 抽出 tier count 和 OAuth 绑定标签收集逻辑。
    - 页面仍保留原交互、状态流和 JSX；本轮不做大规模组件搬迁。
 
+6. 接入 CC Switch 的“切换第三方时保留官方登录”第一版。
+   - 新增用户配置 `codex_preserve_official_auth_on_provider_switch`，默认关闭，并通过 `get_general_config` / `save_general_config` 暴露。
+   - 设置页 Codex 区域新增开关：`切换第三方时保留官方登录`。
+   - 当开关开启且目标目录已有 OAuth 形态的 `auth.json` 时，切换 API Key/第三方 provider 只更新 `config.toml` 的 provider 和 `experimental_bearer_token`，不覆盖官方登录态。
+   - 当没有可保留的官方登录态时，回退到原 API Key `auth.json` 写入，避免 Codex 因缺少登录文件不可用。
+   - 新增 Rust 单测用例覆盖“保留既有 OAuth auth.json”和“无 OAuth 时回退写 API Key auth.json”两条行为；本机因缺少 Rust 工具链尚未执行。
+
 ## 验证结果
 
 已执行：
@@ -50,8 +58,10 @@
 | 命令 | 结果 |
 |---|---|
 | `npm install` | 通过 |
-| `npm run typecheck` | 通过；前端纯工具拆分后已复跑 |
-| `powershell -ExecutionPolicy Bypass -File .\scripts\refactor\verify-baseline.ps1 -SkipNpmInstall` | 按预期返回非零：TypeScript 通过，Cargo/Go 缺失 |
+| `npm run typecheck` | 通过；CCS 开关接入后已复跑 |
+| `cargo test -p cockpit-tools preserve_official_auth` | 未执行：`cargo` 不在 PATH |
+| `go test ./...` (`sidecars/cockpit-cliproxy`) | 未执行：`go` 不在 PATH |
+| `powershell -ExecutionPolicy Bypass -File .\scripts\refactor\verify-baseline.ps1 -SkipNpmInstall` | 按预期返回非零：TypeScript 通过，Cargo/Rustc/Go 缺失；最新日志 `docs/refactor/verification-logs/20260706-095953-baseline.log` |
 
 当前环境阻塞：
 
@@ -64,7 +74,8 @@
 ## 未做事项
 
 - 未大规模拆 `commands/codex.rs` 或 `codex_local_access.rs`。
-- 未接入 native Responses catalog generator、`web_search = "disabled"` 哨兵、official auth config-only 保护。
+- 未接入 native Responses catalog generator、`web_search = "disabled"` 哨兵。
+- 本次只实现 CC Switch official auth 保护的最小安全路径，未复制 CC Switch proxy、session history 合并或更大范围的 provider gateway 行为。
 - 未实现 provider failover/circuit breaker。
 - 未大规模拆 Codex 前端大页面组件/hook；本轮只抽出 catalog 与 overview tier/tag 的纯工具落点。
 - 未做 operation snapshot、transaction rollback、SQLite 迁移或 cloud sync。
@@ -75,6 +86,7 @@
 
    ```powershell
    cargo test --workspace
+   cargo test -p cockpit-tools preserve_official_auth
    cd sidecars/cockpit-cliproxy
    go test ./...
    ```

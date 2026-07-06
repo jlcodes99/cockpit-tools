@@ -117,6 +117,7 @@ interface GeneralConfig {
   claude_auto_refresh_minutes: number;
   codex_sync_wsl: boolean;
   codex_wsl_config_dir: string;
+  codex_preserve_official_auth_on_provider_switch: boolean;
   ghcp_auto_refresh_minutes: number;
   windsurf_auto_refresh_minutes: number;
   kiro_auto_refresh_minutes: number;
@@ -393,6 +394,10 @@ export function SettingsPage() {
   const [claudeAutoRefresh, setClaudeAutoRefresh] = useState('10');
   const [codexSyncWsl, setCodexSyncWsl] = useState(false);
   const [codexWslConfigDir, setCodexWslConfigDir] = useState('');
+  const [
+    codexPreserveOfficialAuthOnProviderSwitch,
+    setCodexPreserveOfficialAuthOnProviderSwitch,
+  ] = useState(false);
   const [ghcpAutoRefresh, setGhcpAutoRefresh] = useState('10');
   const [windsurfAutoRefresh, setWindsurfAutoRefresh] = useState('10');
   const [kiroAutoRefresh, setKiroAutoRefresh] = useState('10');
@@ -849,6 +854,7 @@ export function SettingsPage() {
           claudeAutoRefreshMinutes: claudeAutoRefreshNum,
           codexSyncWsl,
           codexWslConfigDir,
+          codexPreserveOfficialAuthOnProviderSwitch,
           ghcpAutoRefreshMinutes: ghcpAutoRefreshNum,
           windsurfAutoRefreshMinutes: windsurfAutoRefreshNum,
           kiroAutoRefreshMinutes: kiroAutoRefreshNum,
@@ -977,6 +983,7 @@ export function SettingsPage() {
     claudeAutoRefresh,
     codexSyncWsl,
     codexWslConfigDir,
+    codexPreserveOfficialAuthOnProviderSwitch,
     ghcpAutoRefresh,
     windsurfAutoRefresh,
     kiroAutoRefresh,
@@ -1281,6 +1288,9 @@ export function SettingsPage() {
       setClaudeAutoRefresh(String(config.claude_auto_refresh_minutes ?? 10));
       setCodexSyncWsl(Boolean(config.codex_sync_wsl ?? false));
       setCodexWslConfigDir(config.codex_wsl_config_dir || '');
+      setCodexPreserveOfficialAuthOnProviderSwitch(
+        Boolean(config.codex_preserve_official_auth_on_provider_switch ?? false),
+      );
       setGhcpAutoRefresh(String(config.ghcp_auto_refresh_minutes ?? 10));
       setWindsurfAutoRefresh(String(config.windsurf_auto_refresh_minutes ?? 10));
       setKiroAutoRefresh(String(config.kiro_auto_refresh_minutes ?? 10));
@@ -3253,6 +3263,34 @@ export function SettingsPage() {
                       type="checkbox"
                       checked={codexLocalAccessEntryVisible}
                       onChange={(e) => setCodexLocalAccessEntryVisible(e.target.checked)}
+                    />
+                    <span className="slider"></span>
+                  </label>
+                </div>
+              </div>
+              <div className="settings-row">
+                <div className="row-label">
+                  <div className="row-title">
+                    {t(
+                      'settings.general.codexPreserveOfficialAuthOnProviderSwitch',
+                      '切换第三方时保留官方登录',
+                    )}
+                  </div>
+                  <div className="row-desc">
+                    {t(
+                      'settings.general.codexPreserveOfficialAuthOnProviderSwitchDesc',
+                      '开启后可以在使用第三方 API 的时候使用 Codex 应用的官方插件、手机远程操作等功能',
+                    )}
+                  </div>
+                </div>
+                <div className="row-control">
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={codexPreserveOfficialAuthOnProviderSwitch}
+                      onChange={(e) =>
+                        setCodexPreserveOfficialAuthOnProviderSwitch(e.target.checked)
+                      }
                     />
                     <span className="slider"></span>
                   </label>
