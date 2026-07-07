@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Plataforma Zed",
     "expandSidebar": "Expandir barra lateral",
@@ -2055,6 +2058,7 @@
     "quota": {
       "hourly": "Cuota de 5 horas",
       "weekly": "Cuota semanal",
+      "additional": "Cuota adicional",
       "reset": "Reinicio",
       "weeklyBlocksHourly": "La cuota semanal es 0, por eso la cuota de 5 horas no está disponible",
       "resetCredits": "Reinicios {{count}}",
@@ -3580,6 +3584,15 @@
     "claude": {
       "appPath": "Ruta de Claude",
       "appTargetPlaceholder": "Ruta de Claude.exe o shell:AppsFolder\\..."
+    },
+    "traeSolo": {
+      "appPath": "Ruta de TRAE SOLO"
+    },
+    "traeCn": {
+      "appPath": "Ruta de Trae CN"
+    },
+    "traeSoloCn": {
+      "appPath": "Ruta de TRAE SOLO CN"
     }
   },
   "quotaAlert": {
@@ -4344,17 +4357,21 @@
   "trae": {
     "title": "Gestion de cuentas de Trae",
     "empty": {
-      "description": "Haz clic en \"Agregar cuenta\" para empezar a gestionar tus cuentas de Trae, o importalas desde datos locales de Trae o desde un archivo JSON."
+      "description": "Haz clic en \"Agregar cuenta\" para empezar a gestionar tus cuentas de Trae, o importalas desde datos locales de Trae o desde un archivo JSON.",
+      "descriptionWithPlatform": "Haz clic en \"Agregar cuenta\" para administrar cuentas de {{platform}}, o importa datos locales de {{platform}} o un archivo JSON."
     },
     "addModal": {
-      "title": "Agregar cuenta de Trae"
+      "title": "Agregar cuenta de Trae",
+      "titleWithPlatform": "Agregar cuenta de {{platform}}"
     },
     "oauth": {
-      "desc": "Haz clic en el boton inferior y completa la autorizacion OAuth de Trae en el navegador."
+      "desc": "Haz clic en el boton inferior y completa la autorizacion OAuth de Trae en el navegador.",
+      "descWithPlatform": "Haz clic en el botón inferior y completa la autorización OAuth de {{platform}} en el navegador."
     },
     "import": {
       "localDesc": "Importa la cuenta conectada actualmente, la informacion del plan y los datos de cuota en cache desde el directorio de configuracion local de Trae.",
-      "jsonTab": "Archivo JSON"
+      "jsonTab": "Archivo JSON",
+      "localDescWithPlatform": "Importa la cuenta iniciada, la información del plan y los datos de cuota en caché desde el directorio local de configuración de {{platform}}."
     },
     "quota": {
       "usedOfTotal": "Usado $ {{used}} de $ {{total}}",
@@ -4380,7 +4397,12 @@
       "title": "Guia de cuentas de Trae (haz clic para expandir o contraer)",
       "desc": "Admite inicio de sesion oficial por OAuth, importacion local, importacion JSON y cambio de cuenta mediante inyeccion local. Al cambiar de cuenta, se reescribe siguiendo las reglas reales de almacenamiento del cliente Trae.",
       "permission": "Alcance de permisos: lee y escribe campos relacionados con el inicio de sesion en el storage.json local de Trae para importar cuentas, inyectar el cambio de cuenta y mostrar el plan. Todos los datos se procesan localmente en tu equipo.",
-      "network": "Alcance de red: el inicio de sesion OAuth, la renovacion del token y las consultas del plan llaman a las API oficiales de Trae. Los archivos locales de cuenta y el contenido bruto del almacenamiento no se suben a servicios de terceros."
+      "network": "Alcance de red: el inicio de sesion OAuth, la renovacion del token y las consultas del plan llaman a las API oficiales de Trae. Los archivos locales de cuenta y el contenido bruto del almacenamiento no se suben a servicios de terceros.",
+      "titleWithPlatform": "Guía de cuentas de {{platform}} (clic para expandir/contraer)",
+      "descWithPlatform": "Admite OAuth oficial de {{platform}}, importación local, importación JSON y cambio de cuenta mediante inyección local. El cambio escribe según las reglas reales en disco del cliente {{platform}}.",
+      "permissionWithPlatform": "Alcance de permisos: lee y escribe campos de inicio de sesión en storage.json local de {{platform}} para importar cuentas, inyectar cambios de cuenta y mostrar el plan. Todos los datos se procesan localmente.",
+      "networkGlobal": "Alcance de red: el inicio OAuth, la actualización de tokens y las consultas de plan de {{platform}} llaman a APIs oficiales trae.ai / traeapi.us. No se suben archivos locales de cuenta ni contenido bruto a servicios de terceros.",
+      "networkCn": "Alcance de red: el inicio OAuth, la actualización de tokens y las consultas de plan de {{platform}} llaman a APIs oficiales trae.cn / trae.com.cn. No se suben archivos locales de cuenta ni contenido bruto a servicios de terceros."
     }
   },
   "codebuddyCn": {

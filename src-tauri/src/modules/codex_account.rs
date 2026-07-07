@@ -3714,7 +3714,13 @@ fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, St
         tokens: Some(CodexAuthTokens {
             id_token: account.tokens.id_token.clone(),
             access_token: account.tokens.access_token.clone(),
-            refresh_token: normalize_optional_ref(account.tokens.refresh_token.as_deref()),
+            // Codex CLI's auth.json parser requires the refresh_token key to
+            // exist even for access-token-only accounts. Use an empty string so
+            // Cockpit can switch short-lived opaque `at-...` credentials without
+            // inventing a refresh token that would be sent to OAuth refresh.
+            refresh_token: Some(
+                normalize_optional_ref(account.tokens.refresh_token.as_deref()).unwrap_or_default(),
+            ),
             account_id: account.account_id.clone(),
         }),
         last_refresh: Some(serde_json::Value::String(
@@ -7439,6 +7445,44 @@ mod tests {
 
     #[test]
     fn save_account_persists_bound_oauth_image_generation_false() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .expect("lock test env");
+        let _env = TestEnvGuard::new("codex-bound-oauth-save-false");
+        let mut account = CodexAccount::new_api_key(
+            "api-bound-oauth-save-false".to_string(),
+            "api-key@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://relay.example/v1".to_string()),
+            Some("relay".to_string()),
+            Some("Relay".to_string()),
+            vec!["gpt-5.5".to_string()],
+        );
+        account.bound_oauth_account_id = Some("oauth-1".to_string());
+        account.bound_oauth_use_local_gateway = false;
+
+        save_account(&account).expect("save account");
+
+        let accounts_dir = get_accounts_dir();
+        let persisted: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(accounts_dir.join(format!("{}.json", account.id)))
+                .expect("read persisted account"),
+        )
+        .expect("parse persisted account");
+        assert_eq!(
+            persisted
+                .get("bound_oauth_use_local_gateway")
+                .and_then(|value| value.as_bool()),
+            Some(false)
+        );
+
+        let loaded = load_account(&account.id).expect("load account");
+        assert!(!loaded.bound_oauth_use_local_gateway);
+    }
+
+    #[test]
+    fn save_account_persists_bound_oauth_image_generation_false() {
         let _lock = TEST_ENV_LOCK.lock().expect("lock test env");
         let _env = TestEnvGuard::new("codex-bound-oauth-save-false");
         let mut account = CodexAccount::new_api_key(
@@ -7497,7 +7541,7 @@ mod tests {
     }
 
     #[test]
-    fn build_auth_file_value_omits_refresh_token_when_account_has_none() {
+    fn build_auth_file_value_writes_empty_refresh_token_when_account_has_none() {
         let mut account = CodexAccount::new(
             "codex-cpa-account".to_string(),
             "cpa@example.com".to_string(),
@@ -7515,7 +7559,10 @@ mod tests {
             .and_then(|value| value.as_object())
             .expect("tokens object");
 
-        assert!(!tokens.contains_key("refresh_token"));
+        assert_eq!(
+            tokens.get("refresh_token").and_then(|value| value.as_str()),
+            Some("")
+        );
     }
 
     #[test]

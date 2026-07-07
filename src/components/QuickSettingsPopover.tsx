@@ -160,6 +160,9 @@ export type QuickSettingsType =
   | 'codebuddy_cn'
   | 'qoder'
   | 'trae'
+  | 'trae_solo'
+  | 'trae_cn'
+  | 'trae_solo_cn'
   | 'workbuddy'
   | 'zed';
 
@@ -176,6 +179,9 @@ type AppPathTarget =
   | 'codebuddy_cn'
   | 'qoder'
   | 'trae'
+  | 'trae_solo'
+  | 'trae_cn'
+  | 'trae_solo_cn'
   | 'workbuddy'
   | 'zed';
 
@@ -247,6 +253,9 @@ const getAppPathKeyForTarget = (target: AppPathTarget): keyof GeneralConfig => {
     case 'qoder':
       return 'qoder_app_path';
     case 'trae':
+    case 'trae_solo':
+    case 'trae_cn':
+    case 'trae_solo_cn':
       return 'trae_app_path';
     case 'workbuddy':
       return 'workbuddy_app_path';
@@ -346,6 +355,9 @@ const getCurrentAccountRefreshPlatformForType = (
     case 'qoder':
       return 'qoder';
     case 'trae':
+    case 'trae_solo':
+    case 'trae_cn':
+    case 'trae_solo_cn':
       return 'trae';
     case 'workbuddy':
       return 'workbuddy';
@@ -862,7 +874,11 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'codebuddy': return 'codebuddy_auto_refresh_minutes';
       case 'codebuddy_cn': return 'codebuddy_cn_auto_refresh_minutes';
       case 'qoder': return 'qoder_auto_refresh_minutes';
-      case 'trae': return 'trae_auto_refresh_minutes';
+      case 'trae':
+      case 'trae_solo':
+      case 'trae_cn':
+      case 'trae_solo_cn':
+        return 'trae_auto_refresh_minutes';
       case 'workbuddy': return 'workbuddy_auto_refresh_minutes';
       case 'zed': return 'zed_auto_refresh_minutes';
       default: return 'auto_refresh_minutes';
@@ -1142,6 +1158,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           return 'Qoder';
         case 'trae':
           return 'Trae';
+        case 'trae_solo':
+          return 'TRAE SOLO';
+        case 'trae_cn':
+          return 'Trae CN';
+        case 'trae_solo_cn':
+          return 'TRAE SOLO CN';
         case 'workbuddy':
           return 'WorkBuddy';
         case 'zed':
@@ -1178,6 +1200,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'qoder':
         return 'qoder_quota_alert_enabled';
       case 'trae':
+      case 'trae_solo':
+      case 'trae_cn':
+      case 'trae_solo_cn':
         return 'trae_quota_alert_enabled';
       case 'workbuddy':
         return 'workbuddy_quota_alert_enabled';
@@ -1211,6 +1236,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'qoder':
         return 'qoder_quota_alert_threshold';
       case 'trae':
+      case 'trae_solo':
+      case 'trae_cn':
+      case 'trae_solo_cn':
         return 'trae_quota_alert_threshold';
       case 'workbuddy':
         return 'workbuddy_quota_alert_threshold';
@@ -1246,6 +1274,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'qoder':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'trae':
+      case 'trae_solo':
+      case 'trae_cn':
+      case 'trae_solo_cn':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'workbuddy':
         return t('quickSettings.refreshInterval', '配额自动刷新');
@@ -1254,7 +1285,11 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     }
   };
 
-  const showAppPathSection = type !== 'gemini';
+  const showAppPathSection =
+    type !== 'gemini'
+    && type !== 'trae_solo'
+    && type !== 'trae_cn'
+    && type !== 'trae_solo_cn';
   const antigravityLaunchOnSwitch = config?.antigravity_launch_on_switch ?? true;
 
   const getAppPath = (): string => {
@@ -1283,6 +1318,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'qoder':
         return config.qoder_app_path;
       case 'trae':
+      case 'trae_solo':
+      case 'trae_cn':
+      case 'trae_solo_cn':
         return config.trae_app_path;
       case 'workbuddy':
         return config.workbuddy_app_path;
@@ -1319,6 +1357,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return t('quickSettings.qoder.appPath', 'Qoder 路径');
       case 'trae':
         return t('quickSettings.trae.appPath', 'Trae 路径');
+      case 'trae_solo':
+        return t('quickSettings.traeSolo.appPath', 'TRAE SOLO 路径');
+      case 'trae_cn':
+        return t('quickSettings.traeCn.appPath', 'Trae CN 路径');
+      case 'trae_solo_cn':
+        return t('quickSettings.traeSoloCn.appPath', 'TRAE SOLO CN 路径');
       case 'workbuddy':
         return t('quickSettings.workbuddy.appPath', 'WorkBuddy 路径');
       case 'zed':
@@ -1352,6 +1396,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return 'qoder';
       case 'trae':
         return 'trae';
+      case 'trae_solo':
+        return 'trae_solo';
+      case 'trae_cn':
+        return 'trae_cn';
+      case 'trae_solo_cn':
+        return 'trae_solo_cn';
       case 'workbuddy':
         return 'workbuddy';
       case 'zed':

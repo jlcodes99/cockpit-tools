@@ -220,6 +220,7 @@ import {
 import {
   buildCodexExportContent,
   buildCodexExportFileNameBase,
+  hasCodexExportSensitiveNotes,
   type CodexExportFormat,
 } from "../utils/codexExportFormats";
 import {
@@ -889,6 +890,12 @@ function normalizeHttpBaseUrl(value: string): string | null {
   }
 }
 
+function isSameHttpBaseUrl(left: string, right: string): boolean {
+  const normalizedLeft = normalizeHttpBaseUrl(left)?.toLowerCase();
+  const normalizedRight = normalizeHttpBaseUrl(right)?.toLowerCase();
+  return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
+}
+
 function buildExportFileName(baseName: string): string {
   const date = new Date().toISOString().slice(0, 10);
   return `${baseName}_${date}.json`;
@@ -1035,6 +1042,8 @@ export function CodexAccountsPage() {
   );
   const [exportFormat, setExportFormat] =
     useState<CodexExportFormat>("cockpit_tools");
+  const [includeExportSensitiveNotes, setIncludeExportSensitiveNotes] =
+    useState(false);
   const [exportFileNameBase, setExportFileNameBase] =
     useState("codex_accounts");
   const [formattedExportJsonCopied, setFormattedExportJsonCopied] =
@@ -1990,6 +1999,7 @@ export function CodexAccountsPage() {
     setFormattedExportPathCopied(false);
     setFormattedBatchSavingExportJson(false);
     setFormattedSavingExportDocumentId(null);
+    setIncludeExportSensitiveNotes(false);
     clearExportModalError();
   }, [clearExportModalError, exportJsonContent, showExportModal]);
 
@@ -2007,6 +2017,11 @@ export function CodexAccountsPage() {
   }, [clearExportModalError, exportFormat, showExportModal]);
 
   const formattedExportContent = useMemo(() => {
+    const exportFormatSupportsSensitiveNotes = exportFormat !== "sub2api";
+    const exportOptions = {
+      includeSensitiveNotes:
+        includeExportSensitiveNotes && exportFormatSupportsSensitiveNotes,
+    };
     if (!exportJsonContent) {
       return {
         type: "single" as const,
@@ -2022,6 +2037,7 @@ export function CodexAccountsPage() {
         exportJsonContent,
         exportFormat,
         exportFileNameBase,
+        exportOptions,
       );
     } catch (error) {
       console.error("[CodexExport] transform failed:", error);
@@ -2029,9 +2045,21 @@ export function CodexAccountsPage() {
         exportJsonContent,
         "cockpit_tools",
         exportFileNameBase,
+        exportOptions,
       );
     }
-  }, [exportFileNameBase, exportFormat, exportJsonContent]);
+  }, [
+    exportFileNameBase,
+    exportFormat,
+    exportJsonContent,
+    includeExportSensitiveNotes,
+  ]);
+
+  const exportHasSensitiveNotes = useMemo(() => {
+    return hasCodexExportSensitiveNotes(exportJsonContent);
+  }, [exportJsonContent]);
+  const exportCanIncludeSensitiveNotes =
+    exportHasSensitiveNotes && exportFormat !== "sub2api";
 
   const formattedExportJsonContent = useMemo(() => {
     return formattedExportContent.type === "single"
@@ -2065,6 +2093,7 @@ export function CodexAccountsPage() {
   const handleCloseExportModal = useCallback(() => {
     closeExportModal();
     setExportFormat("cockpit_tools");
+    setIncludeExportSensitiveNotes(false);
     setFormattedExportJsonCopied(false);
     setFormattedSavingExportJson(false);
     setFormattedExportSavedPath(null);
@@ -3350,6 +3379,7 @@ export function CodexAccountsPage() {
   const apiSwitchNoticeRepairSeqRef = useRef(0);
   const apiSwitchNoticeAutoCloseTimerRef = useRef<number | null>(null);
   const skipManagedProviderApiKeyAutofillRef = useRef(false);
+  const apiProviderPresetExplicitlySelectedRef = useRef(false);
   const apiKeyFunPrefillModelCatalogRef = useRef<string[] | null>(null);
   const pendingApiKeyFunCodexPrefillRef =
     useRef<ApiKeyFunPrefillPayload | null>(null);
@@ -3620,7 +3650,16 @@ export function CodexAccountsPage() {
           apiProviderName: COCKPIT_API_PROVIDER_NAME,
         };
       }
-      if (providerPresetId === OPENAI_OFFICIAL_PRESET_ID) {
+      const selectedPreset = findCodexApiProviderPresetById(providerPresetId);
+      const selectedPresetBaseUrlMatches = Boolean(
+        selectedPreset?.baseUrls.some((baseUrl) =>
+          isSameHttpBaseUrl(baseUrl, normalizedBaseUrl),
+        ),
+      );
+      if (
+        providerPresetId === OPENAI_OFFICIAL_PRESET_ID &&
+        selectedPresetBaseUrlMatches
+      ) {
         return { apiProviderMode: "openai_builtin" };
       }
 
@@ -3644,7 +3683,10 @@ export function CodexAccountsPage() {
         managedProviders,
         providerId,
       );
-      if (managedProvider) {
+      if (
+        managedProvider &&
+        isSameHttpBaseUrl(managedProvider.baseUrl, normalizedBaseUrl)
+      ) {
         return {
           apiProviderMode: "custom",
           apiProviderId: managedProvider.id,
@@ -3665,8 +3707,13 @@ export function CodexAccountsPage() {
         };
       }
 
-      const preset = findCodexApiProviderPresetById(providerPresetId);
-      if (preset && providerPresetId !== CODEX_API_PROVIDER_CUSTOM_ID) {
+      const preset = selectedPreset;
+      if (
+        preset &&
+        providerPresetId !== CODEX_API_PROVIDER_CUSTOM_ID &&
+        (providerPresetId !== OPENAI_OFFICIAL_PRESET_ID ||
+          selectedPresetBaseUrlMatches)
+      ) {
         return {
           apiProviderMode: "custom",
           apiProviderId: preset.id,
@@ -3783,6 +3830,7 @@ export function CodexAccountsPage() {
 
   useEffect(() => {
     if (!showAddModal) {
+      apiProviderPresetExplicitlySelectedRef.current = false;
       if (!pendingApiKeyFunCodexPrefillRef.current) {
         apiKeyFunPrefillModelCatalogRef.current = null;
       }
@@ -3811,6 +3859,9 @@ export function CodexAccountsPage() {
       return;
     }
     if (sponsorApiProviderTemplates.length === 0) {
+      return;
+    }
+    if (apiProviderPresetExplicitlySelectedRef.current) {
       return;
     }
     const shouldUseDefaultProvider =
@@ -3848,19 +3899,24 @@ export function CodexAccountsPage() {
 
   useEffect(() => {
     if (apiProviderPresetId === OPENAI_OFFICIAL_PRESET_ID) {
+      skipManagedProviderApiKeyAutofillRef.current = false;
       setManagedProviderId("");
       setManagedProviderApiKeyId("");
       return;
     }
-    const matched = findCodexModelProviderByBaseUrl(
-      managedProviders,
-      apiBaseUrlInput,
-    );
-    setManagedProviderId((prev) =>
-      prev === (matched?.id ?? "") ? prev : (matched?.id ?? ""),
-    );
+    if (!managedProviderId) {
+      skipManagedProviderApiKeyAutofillRef.current = false;
+      setManagedProviderApiKeyId("");
+      return;
+    }
+    const matched = findCodexModelProviderById(managedProviders, managedProviderId);
+    if (!matched || !isSameHttpBaseUrl(matched.baseUrl, apiBaseUrlInput)) {
+      skipManagedProviderApiKeyAutofillRef.current = false;
+      setManagedProviderId("");
+      setManagedProviderApiKeyId("");
+      return;
+    }
     if (
-      !matched ||
       matched.apiKeys.length === 0 ||
       skipManagedProviderApiKeyAutofillRef.current
     ) {
@@ -3872,7 +3928,7 @@ export function CodexAccountsPage() {
       if (matched.apiKeys.some((item) => item.id === prev)) return prev;
       return matched.apiKeys[0]?.id ?? "";
     });
-  }, [apiBaseUrlInput, apiProviderPresetId, managedProviders]);
+  }, [apiBaseUrlInput, apiProviderPresetId, managedProviderId, managedProviders]);
 
   useEffect(() => {
     if (!selectedManagedProviderApiKey) return;
@@ -3886,13 +3942,22 @@ export function CodexAccountsPage() {
       setEditingManagedProviderApiKeyId("");
       return;
     }
-    const matched = findCodexModelProviderByBaseUrl(
+    if (!editingManagedProviderId) {
+      setEditingManagedProviderApiKeyId("");
+      return;
+    }
+    const matched = findCodexModelProviderById(
       managedProviders,
-      editingApiBaseUrlCredentialsValue,
+      editingManagedProviderId,
     );
-    setEditingManagedProviderId((prev) =>
-      prev === (matched?.id ?? "") ? prev : (matched?.id ?? ""),
-    );
+    if (
+      !matched ||
+      !isSameHttpBaseUrl(matched.baseUrl, editingApiBaseUrlCredentialsValue)
+    ) {
+      setEditingManagedProviderId("");
+      setEditingManagedProviderApiKeyId("");
+      return;
+    }
     if (!matched || matched.apiKeys.length === 0) {
       setEditingManagedProviderApiKeyId("");
       return;
@@ -3904,6 +3969,7 @@ export function CodexAccountsPage() {
   }, [
     editingApiBaseUrlCredentialsValue,
     editingApiProviderPresetId,
+    editingManagedProviderId,
     managedProviders,
   ]);
 
@@ -5308,7 +5374,18 @@ export function CodexAccountsPage() {
 
   const handleSelectApiProviderPreset = useCallback(
     (providerId: string) => {
+      apiProviderPresetExplicitlySelectedRef.current = true;
       setApiProviderPresetId(providerId);
+      setManagedProviderId("");
+      setManagedProviderApiKeyId("");
+      if (selectedManagedProviderApiKey) {
+        setApiKeyInput("");
+      }
+      if (providerId === CODEX_API_PROVIDER_CUSTOM_ID) {
+        setApiBaseUrlInput("");
+        setNewManagedProviderNameInput("");
+        return;
+      }
       const sponsorTemplate = sponsorApiProviderTemplates.find(
         (template) => template.id === providerId,
       );
@@ -5322,11 +5399,12 @@ export function CodexAccountsPage() {
       setApiBaseUrlInput(preset.baseUrls[0]);
       setNewManagedProviderNameInput("");
     },
-    [sponsorApiProviderTemplates],
+    [selectedManagedProviderApiKey, sponsorApiProviderTemplates],
   );
 
   const handleSelectManagedProvider = useCallback(
     (providerId: string) => {
+      apiProviderPresetExplicitlySelectedRef.current = true;
       setApiProviderPresetId(CODEX_API_PROVIDER_CUSTOM_ID);
       setManagedProviderId(providerId);
       const provider = managedProviders.find((item) => item.id === providerId);
@@ -5354,6 +5432,33 @@ export function CodexAccountsPage() {
       if (key) {
         setApiKeyInput(key.apiKey);
         setApiKeyInputVisible(false);
+      }
+    },
+    [selectedManagedProvider],
+  );
+
+  const handleApiKeyInputChange = useCallback(
+    (value: string) => {
+      setApiKeyInput(value);
+      if (
+        selectedManagedProviderApiKey &&
+        value.trim() !== selectedManagedProviderApiKey.apiKey.trim()
+      ) {
+        setManagedProviderApiKeyId("");
+      }
+    },
+    [selectedManagedProviderApiKey],
+  );
+
+  const handleApiBaseUrlInputChange = useCallback(
+    (value: string) => {
+      setApiBaseUrlInput(value);
+      if (
+        selectedManagedProvider &&
+        !isSameHttpBaseUrl(selectedManagedProvider.baseUrl, value)
+      ) {
+        setManagedProviderId("");
+        setManagedProviderApiKeyId("");
       }
     },
     [selectedManagedProvider],
@@ -5404,6 +5509,7 @@ export function CodexAccountsPage() {
       }) ?? null;
 
     skipManagedProviderApiKeyAutofillRef.current = true;
+    apiProviderPresetExplicitlySelectedRef.current = true;
     apiKeyFunPrefillModelCatalogRef.current = request.modelCatalog ?? null;
     setApiKeyInput(apiKey);
     setApiKeyInputVisible(false);
@@ -5447,6 +5553,9 @@ export function CodexAccountsPage() {
   const handleSelectEditingApiProviderPreset = useCallback(
     (providerId: string) => {
       setEditingApiProviderPresetId(providerId);
+      setEditingManagedProviderId("");
+      setEditingManagedProviderApiKeyId("");
+      setEditingNewManagedProviderNameInput("");
       const preset = findCodexApiProviderPresetById(providerId);
       if (!preset || preset.baseUrls.length === 0) return;
       setEditingApiBaseUrlCredentialsValue(preset.baseUrls[0]);
@@ -5483,6 +5592,33 @@ export function CodexAccountsPage() {
       if (key) {
         setEditingApiKeyCredentialsValue(key.apiKey);
         setEditingApiKeyCredentialsVisible(false);
+      }
+    },
+    [selectedEditingManagedProvider],
+  );
+
+  const handleEditingApiKeyCredentialsChange = useCallback(
+    (value: string) => {
+      setEditingApiKeyCredentialsValue(value);
+      if (
+        selectedEditingManagedProviderApiKey &&
+        value.trim() !== selectedEditingManagedProviderApiKey.apiKey.trim()
+      ) {
+        setEditingManagedProviderApiKeyId("");
+      }
+    },
+    [selectedEditingManagedProviderApiKey],
+  );
+
+  const handleEditingApiBaseUrlCredentialsChange = useCallback(
+    (value: string) => {
+      setEditingApiBaseUrlCredentialsValue(value);
+      if (
+        selectedEditingManagedProvider &&
+        !isSameHttpBaseUrl(selectedEditingManagedProvider.baseUrl, value)
+      ) {
+        setEditingManagedProviderId("");
+        setEditingManagedProviderApiKeyId("");
       }
     },
     [selectedEditingManagedProvider],
@@ -9299,7 +9435,7 @@ export function CodexAccountsPage() {
                 )}
                 {quotaItems.map((item) => {
                   const QuotaIcon =
-                    item.key === "secondary"
+                    item.key === "secondary" || item.key.endsWith(":secondary")
                       ? Calendar
                       : item.key === "code_review"
                         ? BookOpen
@@ -13400,7 +13536,9 @@ export function CodexAccountsPage() {
                                   <button
                                     key={baseUrl}
                                     className={`api-provider-endpoint-chip ${apiBaseUrlInput === baseUrl ? "active" : ""}`}
-                                    onClick={() => setApiBaseUrlInput(baseUrl)}
+                                    onClick={() =>
+                                      handleApiBaseUrlInputChange(baseUrl)
+                                    }
                                     type="button"
                                   >
                                     {baseUrl}
@@ -13463,7 +13601,9 @@ export function CodexAccountsPage() {
                           <input
                             type={apiKeyInputVisible ? "text" : "password"}
                             value={apiKeyInput}
-                            onChange={(e) => setApiKeyInput(e.target.value)}
+                            onChange={(e) =>
+                              handleApiKeyInputChange(e.target.value)
+                            }
                             autoComplete="off"
                             spellCheck={false}
                           />
@@ -13498,7 +13638,9 @@ export function CodexAccountsPage() {
                           <input
                             type="text"
                             value={apiBaseUrlInput}
-                            onChange={(e) => setApiBaseUrlInput(e.target.value)}
+                            onChange={(e) =>
+                              handleApiBaseUrlInputChange(e.target.value)
+                            }
                             placeholder={t(
                               "codex.api.baseUrlPlaceholder",
                               "不填写则是官方默认",
@@ -14395,7 +14537,7 @@ export function CodexAccountsPage() {
                                   key={baseUrl}
                                   className={`api-provider-endpoint-chip ${editingApiBaseUrlCredentialsValue === baseUrl ? "active" : ""}`}
                                   onClick={() =>
-                                    setEditingApiBaseUrlCredentialsValue(
+                                    handleEditingApiBaseUrlCredentialsChange(
                                       baseUrl,
                                     )
                                   }
@@ -14468,7 +14610,9 @@ export function CodexAccountsPage() {
                           }
                           value={editingApiKeyCredentialsValue}
                           onChange={(e) =>
-                            setEditingApiKeyCredentialsValue(e.target.value)
+                            handleEditingApiKeyCredentialsChange(
+                              e.target.value,
+                            )
                           }
                           disabled={savingApiKeyCredentials}
                           autoComplete="off"
@@ -14509,7 +14653,9 @@ export function CodexAccountsPage() {
                           type="text"
                           value={editingApiBaseUrlCredentialsValue}
                           onChange={(e) =>
-                            setEditingApiBaseUrlCredentialsValue(e.target.value)
+                            handleEditingApiBaseUrlCredentialsChange(
+                              e.target.value,
+                            )
                           }
                           placeholder={t(
                             "codex.api.baseUrlPlaceholder",
@@ -14794,6 +14940,48 @@ export function CodexAccountsPage() {
                     }
                   />
                 </div>
+                {exportCanIncludeSensitiveNotes ? (
+                  <label
+                    className="export-json-sensitive-toggle"
+                    title={t(
+                      "codex.accountNote.exportSensitiveToggleHint",
+                      "控制导出 JSON 是否包含 2FA 秘钥、密码和手机号。",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={includeExportSensitiveNotes}
+                      onChange={(event) =>
+                        setIncludeExportSensitiveNotes(event.target.checked)
+                      }
+                    />
+                    <span className="export-json-sensitive-switch" />
+                    <span>
+                      {includeExportSensitiveNotes
+                        ? t(
+                            "codex.accountNote.exportSensitiveIncluded",
+                            "包含敏感备注",
+                          )
+                        : t(
+                            "codex.accountNote.exportSensitiveExcluded",
+                            "已排除敏感备注",
+                          )}
+                    </span>
+                    <Info size={14} />
+                  </label>
+                ) : null}
+                {exportCanIncludeSensitiveNotes &&
+                includeExportSensitiveNotes ? (
+                  <div className="export-json-sensitive-notice">
+                    <Info size={14} />
+                    <span>
+                      {t(
+                        "codex.accountNote.exportSensitiveNotice",
+                        "导出内容包含 2FA 秘钥、密码或手机号，请只保存到可信位置。",
+                      )}
+                    </span>
+                  </div>
+                ) : null}
               </>
             }
             onClose={handleCloseExportModal}

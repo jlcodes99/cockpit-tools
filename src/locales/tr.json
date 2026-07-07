@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Zed Platformu",
     "expandSidebar": "Kenar çubuğunu genişlet",
@@ -2055,6 +2058,7 @@
     "quota": {
       "hourly": "5 saatlik kota",
       "weekly": "Haftalık kota",
+      "additional": "Ek kota",
       "reset": "Sıfırla",
       "weeklyBlocksHourly": "Haftalık kota 0 olduğu için 5 saatlik kota kullanılamaz",
       "resetCredits": "Sıfırlama {{count}}",
@@ -3580,6 +3584,15 @@
     "claude": {
       "appPath": "Claude yolu",
       "appTargetPlaceholder": "Claude.exe yolu veya shell:AppsFolder\\..."
+    },
+    "traeSolo": {
+      "appPath": "TRAE SOLO Yolu"
+    },
+    "traeCn": {
+      "appPath": "Trae CN Yolu"
+    },
+    "traeSoloCn": {
+      "appPath": "TRAE SOLO CN Yolu"
     }
   },
   "quotaAlert": {
@@ -4344,17 +4357,21 @@
   "trae": {
     "title": "Trae hesap yonetimi",
     "empty": {
-      "description": "Trae hesaplarinizi yonetmeye baslamak icin \"Hesap ekle\" dugmesine tiklayin veya yerel Trae verilerinden ya da bir JSON dosyasindan ice aktarın."
+      "description": "Trae hesaplarinizi yonetmeye baslamak icin \"Hesap ekle\" dugmesine tiklayin veya yerel Trae verilerinden ya da bir JSON dosyasindan ice aktarın.",
+      "descriptionWithPlatform": "“Hesap Ekle” düğmesine tıklayarak {{platform}} hesaplarını yönetin veya yerel {{platform}} verilerini ya da bir JSON dosyasını içe aktarın."
     },
     "addModal": {
-      "title": "Trae hesabi ekle"
+      "title": "Trae hesabi ekle",
+      "titleWithPlatform": "{{platform}} Hesabı Ekle"
     },
     "oauth": {
-      "desc": "Asagidaki dugmeye tiklayin ve tarayicida Trae OAuth yetkilendirmesini tamamlayin."
+      "desc": "Asagidaki dugmeye tiklayin ve tarayicida Trae OAuth yetkilendirmesini tamamlayin.",
+      "descWithPlatform": "Aşağıdaki düğmeye tıklayın ve tarayıcıda {{platform}} OAuth yetkilendirmesini tamamlayın."
     },
     "import": {
       "localDesc": "Yerel Trae yapilandirma dizininden oturum acik hesabi, plan bilgilerini ve onbellekteki kota verilerini ice aktarir.",
-      "jsonTab": "JSON dosyasi"
+      "jsonTab": "JSON dosyasi",
+      "localDescWithPlatform": "Geçerli oturum açmış hesabı, plan bilgilerini ve önbelleğe alınmış kota verilerini yerel {{platform}} yapılandırma dizininden içe aktarır."
     },
     "quota": {
       "usedOfTotal": "Kullanilan $ {{used}} / $ {{total}}",
@@ -4380,7 +4397,12 @@
       "title": "Trae hesap kilavuzu (genisletmek/daraltmak icin tiklayin)",
       "desc": "Resmi OAuth girisini, yerel ice aktarmayi, JSON ice aktarmayi ve yerel enjeksiyonla hesap degistirmeyi destekler. Hesap degisiminde veriler Trae istemcisinin gercek disk kurallarina gore yeniden yazilir.",
       "permission": "Izin kapsami: hesap ice aktarma, hesap degistirme enjeksiyonu ve plan gosterimi icin yerel Trae storage.json icindeki girisle ilgili alanlari okur ve yazar. Tum veriler cihazinizda yerel olarak islenir.",
-      "network": "Ag kapsami: OAuth girisi, belirtec yenileme ve plan sorgulari resmi Trae API'lerini cagirir. Yerel hesap dosyalari ve ham depolama icerigi ucuncu taraf hizmetlere yuklenmez."
+      "network": "Ag kapsami: OAuth girisi, belirtec yenileme ve plan sorgulari resmi Trae API'lerini cagirir. Yerel hesap dosyalari ve ham depolama icerigi ucuncu taraf hizmetlere yuklenmez.",
+      "titleWithPlatform": "{{platform}} hesap kılavuzu (genişlet/daralt için tıklayın)",
+      "descWithPlatform": "Resmi {{platform}} OAuth oturum açma, yerel içe aktarma, JSON içe aktarma ve yerel enjeksiyonla hesap değiştirmeyi destekler. Hesap değiştirme, {{platform}} istemcisinin gerçek disk kurallarına göre yazar.",
+      "permissionWithPlatform": "İzin kapsamı: hesap içe aktarma, hesap değiştirme enjeksiyonu ve plan gösterimi için yerel {{platform}} storage.json içindeki oturum alanlarını okur ve yazar. Tüm veriler yalnızca yerelde işlenir.",
+      "networkGlobal": "Ağ kapsamı: {{platform}} OAuth oturum açma, token yenileme ve plan sorguları resmi trae.ai / traeapi.us API’lerini çağırır. Yerel hesap dosyaları ve ham depolama içerikleri üçüncü taraf hizmetlere yüklenmez.",
+      "networkCn": "Ağ kapsamı: {{platform}} OAuth oturum açma, token yenileme ve plan sorguları resmi trae.cn / trae.com.cn API’lerini çağırır. Yerel hesap dosyaları ve ham depolama içerikleri üçüncü taraf hizmetlere yüklenmez."
     }
   },
   "codebuddyCn": {

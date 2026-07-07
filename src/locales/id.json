@@ -300,6 +300,9 @@
     },
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "switchClassicLayoutEntry": "Beralih ke tata letak klasik",
     "switchClassicLayoutTitle": "Beralih ke tata letak bilah sisi klasik",
@@ -2221,6 +2224,7 @@
     "quota": {
       "hourly": "Kuota 5 jam",
       "weekly": "Kuota mingguan",
+      "additional": "Kuota tambahan",
       "reset": "Setel ulang",
       "weeklyBlocksHourly": "Kuota mingguan 0, jadi kuota 5 jam tidak tersedia",
       "resetCredits": "Reset {{count}}",
@@ -3726,6 +3730,15 @@
     "claude": {
       "appPath": "Jalur Claude",
       "appTargetPlaceholder": "Jalur Claude.exe atau shell:AppsFolder\\..."
+    },
+    "traeSolo": {
+      "appPath": "Path TRAE SOLO"
+    },
+    "traeCn": {
+      "appPath": "Path Trae CN"
+    },
+    "traeSoloCn": {
+      "appPath": "Path TRAE SOLO CN"
     }
   },
   "quotaAlert": {
@@ -4462,17 +4475,21 @@
   "trae": {
     "title": "Akun Trae",
     "empty": {
-      "description": "Klik \"Tambah Akun\" untuk mulai mengelola akun Trae Anda, atau impor dari data Trae lokal atau berkas JSON."
+      "description": "Klik \"Tambah Akun\" untuk mulai mengelola akun Trae Anda, atau impor dari data Trae lokal atau berkas JSON.",
+      "descriptionWithPlatform": "Klik \"Tambah Akun\" untuk mengelola akun {{platform}}, atau impor data {{platform}} lokal maupun file JSON."
     },
     "addModal": {
-      "title": "Tambah Akun Trae"
+      "title": "Tambah Akun Trae",
+      "titleWithPlatform": "Tambah Akun {{platform}}"
     },
     "oauth": {
-      "desc": "Klik tombol di bawah ini dan selesaikan otorisasi OAuth Trae di peramban Anda."
+      "desc": "Klik tombol di bawah ini dan selesaikan otorisasi OAuth Trae di peramban Anda.",
+      "descWithPlatform": "Klik tombol di bawah dan selesaikan otorisasi OAuth {{platform}} di browser."
     },
     "import": {
       "localDesc": "Impor akun yang sedang masuk saat ini, informasi paket, dan data kuota yang di-cache dari direktori konfigurasi Trae lokal.",
-      "jsonTab": "Berkas JSON"
+      "jsonTab": "Berkas JSON",
+      "localDescWithPlatform": "Mengimpor akun yang sedang masuk, informasi paket, dan data kuota cache dari direktori konfigurasi lokal {{platform}}."
     },
     "quota": {
       "usedOfTotal": "${{used}} / ${{total}}​",
@@ -4498,7 +4515,12 @@
       "title": "Panduan akun Trae (klik untuk perluas/ciutkan)",
       "desc": "Mendukung masuk OAuth resmi, impor lokal, impor JSON, dan penggantian akun berbasis injeksi lokal. Penggantian akun menulis kembali menggunakan aturan on-disk klien Trae yang sebenarnya.",
       "permission": "Cakupan izin: baca dan tulis bidang terkait login di storage.json Trae lokal untuk impor akun, injeksi penggantian akun, dan tampilan paket. Semua data diproses secara lokal di mesin Anda.",
-      "network": "Cakupan jaringan: Masuk OAuth, penyegaran token, dan kueri paket memanggil API resmi Trae. Berkas akun lokal dan konten penyimpanan mentah tidak diunggah ke layanan pihak ketiga."
+      "network": "Cakupan jaringan: Masuk OAuth, penyegaran token, dan kueri paket memanggil API resmi Trae. Berkas akun lokal dan konten penyimpanan mentah tidak diunggah ke layanan pihak ketiga.",
+      "titleWithPlatform": "Panduan akun {{platform}} (klik untuk buka/tutup)",
+      "descWithPlatform": "Mendukung OAuth resmi {{platform}}, impor lokal, impor JSON, dan pergantian akun berbasis injeksi lokal. Pergantian akun menulis kembali sesuai aturan penyimpanan nyata klien {{platform}}.",
+      "permissionWithPlatform": "Cakupan izin: membaca dan menulis kolom login di storage.json lokal {{platform}} untuk impor akun, injeksi pergantian akun, dan tampilan paket. Semua data diproses secara lokal.",
+      "networkGlobal": "Cakupan jaringan: login OAuth, penyegaran token, dan kueri paket {{platform}} memanggil API resmi trae.ai / traeapi.us. File akun lokal dan isi penyimpanan mentah tidak diunggah ke layanan pihak ketiga.",
+      "networkCn": "Cakupan jaringan: login OAuth, penyegaran token, dan kueri paket {{platform}} memanggil API resmi trae.cn / trae.com.cn. File akun lokal dan isi penyimpanan mentah tidak diunggah ke layanan pihak ketiga."
     }
   },
   "codebuddyCn": {

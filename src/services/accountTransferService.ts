@@ -106,6 +106,21 @@ const PLATFORM_ADAPTERS: Record<PlatformId, TransferAdapter> = {
     exportAccounts: traeService.exportTraeAccounts,
     importFromJson: traeService.importTraeFromJson,
   },
+  trae_solo: {
+    listAccounts: traeService.listTraeAccounts,
+    exportAccounts: traeService.exportTraeAccounts,
+    importFromJson: traeService.importTraeFromJson,
+  },
+  trae_cn: {
+    listAccounts: traeService.listTraeAccounts,
+    exportAccounts: traeService.exportTraeAccounts,
+    importFromJson: traeService.importTraeFromJson,
+  },
+  trae_solo_cn: {
+    listAccounts: traeService.listTraeAccounts,
+    exportAccounts: traeService.exportTraeAccounts,
+    importFromJson: traeService.importTraeFromJson,
+  },
   workbuddy: {
     listAccounts: workbuddyService.listWorkbuddyAccounts,
     exportAccounts: workbuddyService.exportWorkbuddyAccounts,

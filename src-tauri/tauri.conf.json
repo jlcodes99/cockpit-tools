@@ -76,6 +76,9 @@
       "../src/assets/icons/kiro-menu.png": "native-menu-icons/kiro-menu.png",
       "../src/assets/icons/qoder.png": "native-menu-icons/qoder.png",
       "../src/assets/icons/trae.png": "native-menu-icons/trae.png",
+      "../src/assets/icons/trae-cn.png": "native-menu-icons/trae-cn.png",
+      "../src/assets/icons/trae-solo.png": "native-menu-icons/trae-solo.png",
+      "../src/assets/icons/trae-solo-cn.png": "native-menu-icons/trae-solo-cn.png",
       "../src/assets/icons/windsurf.svg": "native-menu-icons/windsurf.svg",
       "../src/assets/icons/workbuddy.png": "native-menu-icons/workbuddy.png",
       "../src/assets/icons/zed.png": "native-menu-icons/zed.png"

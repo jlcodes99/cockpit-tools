@@ -108,17 +108,23 @@ export interface CheckinStatusResponse {
   today_checked_in: boolean;
   active: boolean;
   streak_days: number;
-  daily_credit: number;
+  daily_credit?: number | null;
   today_credit?: number | null;
   next_streak_day?: number | null;
   is_streak_day?: boolean | null;
   checkin_dates?: string[] | null;
+  streak_bonus_days?: number | null;
+  streak_bonus_credit?: number | null;
 }
 
 export interface CheckinResponse {
   success: boolean;
   message?: string | null;
   reward?: Record<string, unknown> | null;
+  credit?: number | null;
+  streak_days?: number | null;
+  is_streak_day?: boolean | null;
+  next_checkin_in?: number | null;
   nextCheckinIn?: number | null;
 }
 

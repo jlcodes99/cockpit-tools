@@ -1,7 +1,7 @@
 use crate::modules::config;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 #[cfg(not(target_os = "macos"))]
@@ -7287,6 +7287,42 @@ fn get_trae_pids() -> Vec<u32> {
     pids
 }
 
+pub fn is_trae_running() -> bool {
+    !get_trae_pids().is_empty()
+}
+
+pub fn is_trae_running_for_platform(
+    platform: crate::modules::trae_account::TraePlatformKind,
+) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        let bundle_pattern = format!(
+            "{}/contents/",
+            platform.macos_app_name().to_ascii_lowercase()
+        );
+        if let Ok(output) = Command::new("ps")
+            .args(["-axww", "-o", "command="])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            return stdout.lines().any(|line| {
+                let lower = line.to_lowercase();
+                lower.contains(&bundle_pattern)
+                    && !lower.contains("--type=")
+                    && !lower.contains("crashpad_handler")
+                    && !is_helper_command_line(&lower)
+            });
+        }
+        return false;
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = platform;
+        is_trae_running()
+    }
+}
+
 pub fn close_trae(timeout_secs: u64) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     let _ = timeout_secs;
@@ -7700,23 +7736,43 @@ pub fn kill_port_processes(port: u16) -> Result<usize, String> {
         return Ok(0);
     }
 
+    let mut cleaned = 0usize;
     let mut failed = Vec::new();
 
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
         for pid in &pids {
+            if *pid == 0 || !is_pid_running(*pid) {
+                cleaned += 1;
+                continue;
+            }
             let output = Command::new("taskkill")
                 .args(["/F", "/PID", &pid.to_string()])
                 .creation_flags(0x08000000)
                 .output();
             match output {
-                Ok(out) if out.status.success() => {}
+                Ok(out) if out.status.success() => cleaned += 1,
                 Ok(out) => {
-                    let stderr = String::from_utf8_lossy(&out.stderr);
-                    failed.push(format!("pid {}: {}", pid, stderr.trim()));
+                    if !is_pid_running(*pid) {
+                        cleaned += 1;
+                    } else {
+                        failed.push(format_kill_command_failure(
+                            *pid,
+                            "taskkill",
+                            out.status,
+                            &out.stderr,
+                            &out.stdout,
+                        ));
+                    }
                 }
-                Err(e) => failed.push(format!("pid {}: {}", pid, e)),
+                Err(e) => {
+                    if !is_pid_running(*pid) {
+                        cleaned += 1;
+                    } else {
+                        failed.push(format!("pid {}: taskkill failed: {}", pid, e));
+                    }
+                }
             }
         }
     }
@@ -7724,14 +7780,33 @@ pub fn kill_port_processes(port: u16) -> Result<usize, String> {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         for pid in &pids {
+            if *pid == 0 || !is_pid_running(*pid) {
+                cleaned += 1;
+                continue;
+            }
             let output = Command::new("kill").args(["-9", &pid.to_string()]).output();
             match output {
-                Ok(out) if out.status.success() => {}
+                Ok(out) if out.status.success() => cleaned += 1,
                 Ok(out) => {
-                    let stderr = String::from_utf8_lossy(&out.stderr);
-                    failed.push(format!("pid {}: {}", pid, stderr.trim()));
+                    if !is_pid_running(*pid) {
+                        cleaned += 1;
+                    } else {
+                        failed.push(format_kill_command_failure(
+                            *pid,
+                            "kill",
+                            out.status,
+                            &out.stderr,
+                            &out.stdout,
+                        ));
+                    }
                 }
-                Err(e) => failed.push(format!("pid {}: {}", pid, e)),
+                Err(e) => {
+                    if !is_pid_running(*pid) {
+                        cleaned += 1;
+                    } else {
+                        failed.push(format!("pid {}: kill failed: {}", pid, e));
+                    }
+                }
             }
         }
     }
@@ -7740,7 +7815,34 @@ pub fn kill_port_processes(port: u16) -> Result<usize, String> {
         return Err(format!("关闭进程失败: {}", failed.join("; ")));
     }
 
-    Ok(pids.len())
+    Ok(cleaned)
+}
+
+fn utf8_command_output_snippet(bytes: &[u8]) -> Option<String> {
+    let text = std::str::from_utf8(bytes).ok()?.trim();
+    if text.is_empty() {
+        None
+    } else {
+        Some(summarize_text_for_process_log(text, 240))
+    }
+}
+
+fn format_kill_command_failure(
+    pid: u32,
+    command: &str,
+    status: ExitStatus,
+    stderr: &[u8],
+    stdout: &[u8],
+) -> String {
+    let detail =
+        utf8_command_output_snippet(stderr).or_else(|| utf8_command_output_snippet(stdout));
+    match detail {
+        Some(detail) => format!(
+            "pid {}: {} failed with status {}: {}",
+            pid, command, status, detail
+        ),
+        None => format!("pid {}: {} failed with status {}", pid, command, status),
+    }
 }
 
 pub fn start_vscode_with_args_with_new_window(

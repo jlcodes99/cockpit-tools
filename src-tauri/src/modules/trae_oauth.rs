@@ -25,10 +25,9 @@ use crate::modules::{config, logger, trae_account};
 
 const OAUTH_TIMEOUT_SECONDS: i64 = 600;
 const OAUTH_POLL_INTERVAL_MS: u64 = 250;
-const OAUTH_STATE_FILE: &str = "trae_oauth_pending.json";
+const OAUTH_STATE_FILE_LEGACY: &str = "trae_oauth_pending.json";
 const CALLBACK_PATH: &str = "/authorize";
 const TRAE_AUTHORIZATION_PATH: &str = "/authorization";
-const TRAE_AUTH_CLIENT_ID: &str = "ono9krqynydwx5";
 const TRAE_DEFAULT_PLUGIN_VERSION: &str = "local";
 const TRAE_MIN_AUTH_APP_VERSION: &str = "3.5.54";
 const TRAE_DEFAULT_DEVICE_ID: &str = "0";
@@ -39,6 +38,11 @@ const TRAE_LOGIN_GUIDANCE_URLS: [&str; 3] = [
     "https://api.trae.ai/cloudide/api/v3/trae/GetLoginGuidance",
     "https://www.trae.ai/cloudide/api/v3/trae/GetLoginGuidance",
 ];
+const TRAE_CN_LOGIN_GUIDANCE_URLS: [&str; 3] = [
+    "https://api.trae.cn/cloudide/api/v3/trae/GetLoginGuidance",
+    "https://api.trae.com.cn/cloudide/api/v3/trae/GetLoginGuidance",
+    "https://www.trae.cn/cloudide/api/v3/trae/GetLoginGuidance",
+];
 
 const TRAE_EXCHANGE_TOKEN_PATH: &str = "/cloudide/api/v3/trae/oauth/ExchangeToken";
 const TRAE_AUTH_CODE_EXCHANGE_TOKEN_PATH: &str = "/trae/api/v3/oauth/ExchangeToken";
@@ -48,6 +52,8 @@ const TRAE_ACCOUNT_API_ORIGIN_NORMAL: &str = "https://grow-normal.trae.ai";
 const TRAE_ACCOUNT_API_ORIGIN_SG: &str = "https://growsg-normal.trae.ai";
 const TRAE_ACCOUNT_API_ORIGIN_US: &str = "https://growsg-normal.trae.ai";
 const TRAE_ACCOUNT_API_ORIGIN_USTTP: &str = "https://grow-normal.traeapi.us";
+const TRAE_ACCOUNT_API_ORIGIN_CN: &str = "https://api.trae.cn";
+const TRAE_ACCOUNT_API_ORIGIN_CN_ICUBE: &str = "https://api.trae.com.cn";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TraeCallbackPayload {
@@ -64,6 +70,8 @@ struct TraeCallbackPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PendingOAuthState {
     login_id: String,
+    #[serde(default = "default_pending_platform_id")]
+    platform_id: String,
     login_trace_id: String,
     callback_port: u16,
     callback_url: String,
@@ -78,15 +86,26 @@ struct PendingOAuthState {
     callback_result: Option<Result<TraeCallbackPayload, String>>,
 }
 
+#[derive(Debug, Clone)]
+struct TraeAccountApiConfig {
+    normal: String,
+    sg: Option<String>,
+    us: Option<String>,
+    usttp: Option<String>,
+}
+
 #[derive(Debug, Clone, Default)]
 struct TraeProductInfo {
     plugin_version: Option<String>,
     app_version: Option<String>,
     app_type: Option<String>,
+    client_id: Option<String>,
+    account_api: Option<TraeAccountApiConfig>,
 }
 
 #[derive(Debug, Clone)]
 struct TraeLoginContext {
+    client_id: String,
     plugin_version: String,
     machine_id: String,
     device_id: String,
@@ -96,6 +115,7 @@ struct TraeLoginContext {
     x_env: String,
     x_app_version: String,
     x_app_type: String,
+    account_api: TraeAccountApiConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -119,11 +139,45 @@ struct TraeExchangeResult {
 }
 
 lazy_static::lazy_static! {
-    static ref PENDING_OAUTH_STATE: Arc<Mutex<Option<PendingOAuthState>>> = Arc::new(Mutex::new(None));
+    static ref PENDING_OAUTH_STATE: Arc<Mutex<HashMap<String, PendingOAuthState>>> = Arc::new(Mutex::new(HashMap::new()));
 }
 
 fn now_timestamp() -> i64 {
     chrono::Utc::now().timestamp()
+}
+
+fn default_pending_platform_id() -> String {
+    trae_account::TraePlatformKind::Trae
+        .provider_key()
+        .to_string()
+}
+
+fn pending_oauth_platforms() -> [trae_account::TraePlatformKind; 4] {
+    [
+        trae_account::TraePlatformKind::Trae,
+        trae_account::TraePlatformKind::TraeSolo,
+        trae_account::TraePlatformKind::TraeCn,
+        trae_account::TraePlatformKind::TraeSoloCn,
+    ]
+}
+
+fn oauth_state_file_for_platform(platform: trae_account::TraePlatformKind) -> String {
+    format!("trae_oauth_pending_{}.json", platform.provider_key())
+}
+
+fn oauth_state_files_for_platform(platform: trae_account::TraePlatformKind) -> Vec<String> {
+    let mut files = vec![oauth_state_file_for_platform(platform)];
+    if platform == trae_account::TraePlatformKind::Trae {
+        files.push(OAUTH_STATE_FILE_LEGACY.to_string());
+    }
+    files
+}
+
+impl PendingOAuthState {
+    fn platform(&self) -> trae_account::TraePlatformKind {
+        trae_account::TraePlatformKind::parse(Some(self.platform_id.as_str()))
+            .unwrap_or(trae_account::TraePlatformKind::Trae)
+    }
 }
 
 fn generate_service_machine_id() -> String {
@@ -189,51 +243,105 @@ fn generate_device_key_pair() -> Result<TraeDeviceKeyPair, String> {
     })
 }
 
-fn load_pending_login_from_disk() -> Option<PendingOAuthState> {
-    match crate::modules::oauth_pending_state::load::<PendingOAuthState>(OAUTH_STATE_FILE) {
-        Ok(Some(state)) => {
-            if state.cancelled || now_timestamp() > state.expires_at {
-                let _ = crate::modules::oauth_pending_state::clear(OAUTH_STATE_FILE);
-                None
-            } else {
-                Some(state)
+fn load_pending_login_from_disk_for_platform(
+    platform: trae_account::TraePlatformKind,
+) -> Option<PendingOAuthState> {
+    for file_name in oauth_state_files_for_platform(platform) {
+        match crate::modules::oauth_pending_state::load::<PendingOAuthState>(file_name.as_str()) {
+            Ok(Some(mut state)) => {
+                if state.platform_id.trim().is_empty() {
+                    state.platform_id = platform.provider_key().to_string();
+                }
+                if state.cancelled || now_timestamp() > state.expires_at {
+                    let _ = crate::modules::oauth_pending_state::clear(file_name.as_str());
+                    continue;
+                }
+                if state.platform() != platform {
+                    logger::log_warn(&format!(
+                        "[Trae OAuth] pending 平台与文件不匹配，已忽略: file={}, state_platform={}, expected={}",
+                        file_name,
+                        state.platform_id,
+                        platform.provider_key()
+                    ));
+                    let _ = crate::modules::oauth_pending_state::clear(file_name.as_str());
+                    continue;
+                }
+                return Some(state);
+            }
+            Ok(None) => {}
+            Err(err) => {
+                logger::log_warn(&format!(
+                    "[Trae OAuth] 读取持久化登录状态失败，已忽略: file={}, error={}",
+                    file_name, err
+                ));
+                let _ = crate::modules::oauth_pending_state::clear(file_name.as_str());
             }
         }
-        Ok(None) => None,
-        Err(err) => {
-            logger::log_warn(&format!(
-                "[Trae OAuth] 读取持久化登录状态失败，已忽略: {}",
-                err
-            ));
-            let _ = crate::modules::oauth_pending_state::clear(OAUTH_STATE_FILE);
-            None
+    }
+    None
+}
+
+fn load_pending_logins_from_disk() -> HashMap<String, PendingOAuthState> {
+    let mut map = HashMap::new();
+    for platform in pending_oauth_platforms() {
+        if let Some(state) = load_pending_login_from_disk_for_platform(platform) {
+            map.insert(state.login_id.clone(), state);
         }
+    }
+    map
+}
+
+fn persist_pending_login(state: &PendingOAuthState) {
+    let file_name = oauth_state_file_for_platform(state.platform());
+    if let Err(err) = crate::modules::oauth_pending_state::save(file_name.as_str(), state) {
+        logger::log_warn(&format!(
+            "[Trae OAuth] 持久化登录状态失败，已忽略: file={}, error={}",
+            file_name, err
+        ));
     }
 }
 
-fn persist_pending_login(state: Option<&PendingOAuthState>) {
-    let result = match state {
-        Some(value) => crate::modules::oauth_pending_state::save(OAUTH_STATE_FILE, value),
-        None => crate::modules::oauth_pending_state::clear(OAUTH_STATE_FILE),
-    };
-    if let Err(err) = result {
-        logger::log_warn(&format!("[Trae OAuth] 持久化登录状态失败，已忽略: {}", err));
+fn clear_pending_login_file(platform: trae_account::TraePlatformKind) {
+    for file_name in oauth_state_files_for_platform(platform) {
+        if let Err(err) = crate::modules::oauth_pending_state::clear(file_name.as_str()) {
+            logger::log_warn(&format!(
+                "[Trae OAuth] 清理持久化登录状态失败，已忽略: file={}, error={}",
+                file_name, err
+            ));
+        }
     }
 }
 
 fn hydrate_pending_login_if_missing() {
     if let Ok(mut guard) = PENDING_OAUTH_STATE.lock() {
-        if guard.is_none() {
-            *guard = load_pending_login_from_disk();
+        if guard.is_empty() {
+            *guard = load_pending_logins_from_disk();
         }
     }
 }
 
-fn set_pending_login(state: Option<PendingOAuthState>) {
+fn set_pending_login(state: PendingOAuthState) {
     if let Ok(mut guard) = PENDING_OAUTH_STATE.lock() {
-        *guard = state.clone();
+        guard.insert(state.login_id.clone(), state.clone());
     }
-    persist_pending_login(state.as_ref());
+    persist_pending_login(&state);
+}
+
+fn remove_pending_login(login_id: &str) {
+    let removed = PENDING_OAUTH_STATE
+        .lock()
+        .ok()
+        .and_then(|mut guard| guard.remove(login_id));
+    if let Some(state) = removed {
+        clear_pending_login_file(state.platform());
+    }
+}
+
+fn remove_pending_logins_for_platform(platform: trae_account::TraePlatformKind) {
+    if let Ok(mut guard) = PENDING_OAUTH_STATE.lock() {
+        guard.retain(|_, state| state.platform() != platform);
+    }
+    clear_pending_login_file(platform);
 }
 
 fn normalize_non_empty(value: Option<&str>) -> Option<String> {
@@ -270,6 +378,19 @@ fn pick_string(root: &Value, paths: &[&[&str]]) -> Option<String> {
                 return Some(num.to_string());
             }
         }
+    }
+    None
+}
+
+fn json_value_to_string(value: &Value) -> Option<String> {
+    if let Some(text) = value.as_str() {
+        return normalize_non_empty(Some(text));
+    }
+    if let Some(num) = value.as_i64() {
+        return Some(num.to_string());
+    }
+    if let Some(num) = value.as_u64() {
+        return Some(num.to_string());
     }
     None
 }
@@ -406,46 +527,106 @@ fn build_trae_product_file_candidates(base_path: &Path) -> Vec<PathBuf> {
     candidates
 }
 
-fn trae_product_base_paths() -> Vec<PathBuf> {
+#[cfg(target_os = "windows")]
+fn trae_product_exe_names(platform: trae_account::TraePlatformKind) -> &'static [&'static str] {
+    match platform {
+        trae_account::TraePlatformKind::Trae => &["Trae.exe"],
+        trae_account::TraePlatformKind::TraeSolo => &["TRAE SOLO.exe", "Trae.exe", "Electron.exe"],
+        trae_account::TraePlatformKind::TraeCn => &["Trae CN.exe", "Trae.exe", "Electron.exe"],
+        trae_account::TraePlatformKind::TraeSoloCn => {
+            &["TRAE SOLO CN.exe", "Trae.exe", "Electron.exe"]
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn trae_product_linux_base_paths(
+    platform: trae_account::TraePlatformKind,
+) -> &'static [&'static str] {
+    match platform {
+        trae_account::TraePlatformKind::Trae => &[
+            "/usr/bin/trae",
+            "/usr/local/bin/trae",
+            "/opt/trae/trae",
+            "/opt/Trae",
+        ],
+        trae_account::TraePlatformKind::TraeSolo => &[
+            "/usr/bin/trae-solo",
+            "/usr/local/bin/trae-solo",
+            "/opt/trae-solo/trae-solo",
+            "/opt/TRAE SOLO",
+        ],
+        trae_account::TraePlatformKind::TraeCn => &[
+            "/usr/bin/trae-cn",
+            "/usr/local/bin/trae-cn",
+            "/opt/trae-cn/trae-cn",
+            "/opt/Trae CN",
+        ],
+        trae_account::TraePlatformKind::TraeSoloCn => &[
+            "/usr/bin/trae-solo-cn",
+            "/usr/local/bin/trae-solo-cn",
+            "/opt/trae-solo-cn/trae-solo-cn",
+            "/opt/TRAE SOLO CN",
+        ],
+    }
+}
+
+fn trae_product_base_paths(platform: trae_account::TraePlatformKind) -> Vec<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
-    let configured_path = config::get_user_config().trae_app_path.trim().to_string();
-    if !configured_path.is_empty() {
-        candidates.push(PathBuf::from(configured_path));
+    if platform == trae_account::TraePlatformKind::Trae {
+        let configured_path = config::get_user_config().trae_app_path.trim().to_string();
+        if !configured_path.is_empty() {
+            candidates.push(PathBuf::from(configured_path));
+        }
     }
 
     #[cfg(target_os = "macos")]
     {
-        candidates.push(PathBuf::from("/Applications/Trae.app"));
-        candidates.push(PathBuf::from("/Applications/Trae.app/Contents"));
-        candidates.push(PathBuf::from("/Applications/Trae.app/Contents/MacOS/Trae"));
-        candidates.push(PathBuf::from(
-            "/Applications/Trae.app/Contents/MacOS/Electron",
-        ));
+        let app_root = PathBuf::from("/Applications").join(platform.macos_app_name());
+        candidates.push(app_root.clone());
+        candidates.push(app_root.join("Contents"));
+        candidates.push(
+            PathBuf::from("/Applications")
+                .join(platform.macos_app_name())
+                .join("Contents")
+                .join("MacOS")
+                .join("Trae"),
+        );
+        candidates.push(
+            PathBuf::from("/Applications")
+                .join(platform.macos_app_name())
+                .join("Contents")
+                .join("MacOS")
+                .join("Electron"),
+        );
     }
 
     #[cfg(target_os = "windows")]
     {
+        let app_dir = platform.app_support_dir_name();
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-            candidates.push(
-                PathBuf::from(&local_app_data)
-                    .join("Programs")
-                    .join("Trae")
-                    .join("Trae.exe"),
-            );
-            candidates.push(PathBuf::from(local_app_data).join("Programs").join("Trae"));
+            let programs_dir = PathBuf::from(&local_app_data)
+                .join("Programs")
+                .join(app_dir);
+            for exe_name in trae_product_exe_names(platform) {
+                candidates.push(programs_dir.join(exe_name));
+            }
+            candidates.push(programs_dir);
         }
         if let Ok(program_files) = std::env::var("ProgramFiles") {
-            candidates.push(PathBuf::from(&program_files).join("Trae").join("Trae.exe"));
-            candidates.push(PathBuf::from(program_files).join("Trae"));
+            let install_dir = PathBuf::from(&program_files).join(app_dir);
+            for exe_name in trae_product_exe_names(platform) {
+                candidates.push(install_dir.join(exe_name));
+            }
+            candidates.push(install_dir);
         }
     }
 
     #[cfg(target_os = "linux")]
     {
-        candidates.push(PathBuf::from("/usr/bin/trae"));
-        candidates.push(PathBuf::from("/usr/local/bin/trae"));
-        candidates.push(PathBuf::from("/opt/trae/trae"));
-        candidates.push(PathBuf::from("/opt/Trae"));
+        for candidate in trae_product_linux_base_paths(platform) {
+            candidates.push(PathBuf::from(candidate));
+        }
     }
 
     let mut dedup: HashSet<String> = HashSet::new();
@@ -461,7 +642,131 @@ fn trae_product_base_paths() -> Vec<PathBuf> {
     output
 }
 
-fn read_trae_product_info(path: &Path) -> Option<TraeProductInfo> {
+fn product_auth_config_group(platform: trae_account::TraePlatformKind) -> &'static str {
+    if platform.is_solo() {
+        "SOLO"
+    } else {
+        "TRAE"
+    }
+}
+
+fn auth_from_for_platform(platform: trae_account::TraePlatformKind) -> &'static str {
+    if platform.is_solo() {
+        "solo"
+    } else {
+        "trae"
+    }
+}
+
+fn default_account_api_config(platform: trae_account::TraePlatformKind) -> TraeAccountApiConfig {
+    if platform.is_cn() {
+        return TraeAccountApiConfig {
+            normal: TRAE_ACCOUNT_API_ORIGIN_CN.to_string(),
+            sg: None,
+            us: None,
+            usttp: None,
+        };
+    }
+
+    TraeAccountApiConfig {
+        normal: TRAE_ACCOUNT_API_ORIGIN_NORMAL.to_string(),
+        sg: Some(TRAE_ACCOUNT_API_ORIGIN_SG.to_string()),
+        us: Some(TRAE_ACCOUNT_API_ORIGIN_US.to_string()),
+        usttp: Some(TRAE_ACCOUNT_API_ORIGIN_USTTP.to_string()),
+    }
+}
+
+fn read_product_account_api_config(
+    root: &Value,
+    platform: trae_account::TraePlatformKind,
+) -> Option<TraeAccountApiConfig> {
+    let trae = root.get("bootConfig")?.get("account")?.get("trae")?;
+    let normal = pick_string(
+        trae,
+        &[&["normal"], &["NORMAL"], &["prod"], &["production"]],
+    )?;
+
+    let mut config = TraeAccountApiConfig {
+        normal,
+        sg: pick_string(trae, &[&["SG"], &["sg"]]),
+        us: pick_string(trae, &[&["US"], &["us"]]),
+        usttp: pick_string(trae, &[&["USTTP"], &["usttp"]]),
+    };
+
+    if platform.is_cn() {
+        config.sg = None;
+        config.us = None;
+        config.usttp = None;
+    }
+
+    Some(config)
+}
+
+fn is_usttp_user_tag(user_tag: Option<&str>) -> bool {
+    let Some(value) = normalize_non_empty(user_tag) else {
+        return false;
+    };
+    matches!(
+        value.to_ascii_lowercase().as_str(),
+        "usttp" | "us_ttp" | "us-ttp"
+    )
+}
+
+fn official_auth_code_account_origin(
+    platform: trae_account::TraePlatformKind,
+    account_api: &TraeAccountApiConfig,
+    user_tag: Option<&str>,
+) -> String {
+    if platform.is_cn() {
+        return account_api.normal.clone();
+    }
+
+    if is_usttp_user_tag(user_tag) {
+        if let Some(origin) = account_api.usttp.as_ref() {
+            return origin.clone();
+        }
+    }
+
+    account_api
+        .sg
+        .as_ref()
+        .or(account_api.us.as_ref())
+        .cloned()
+        .unwrap_or_else(|| account_api.normal.clone())
+}
+
+fn read_product_auth_client_id(
+    root: &Value,
+    platform: trae_account::TraePlatformKind,
+    app_type: Option<&str>,
+) -> Option<String> {
+    let group = product_auth_config_group(platform);
+    let entries = root
+        .get("iCubeApp")?
+        .get("authConfig")?
+        .get(group)?
+        .as_object()?;
+
+    if let Some(quality) = app_type.and_then(|value| normalize_non_empty(Some(value))) {
+        if let Some(client_id) = entries.get(quality.as_str()).and_then(json_value_to_string) {
+            return Some(client_id);
+        }
+    }
+
+    if let Some(client_id) = entries
+        .get(TRAE_DEFAULT_APP_TYPE)
+        .and_then(json_value_to_string)
+    {
+        return Some(client_id);
+    }
+
+    entries.values().find_map(json_value_to_string)
+}
+
+fn read_trae_product_info(
+    path: &Path,
+    platform: trae_account::TraePlatformKind,
+) -> Option<TraeProductInfo> {
     let root = parse_json_file(path)?;
     let plugin_version = pick_string(
         &root,
@@ -474,8 +779,15 @@ fn read_trae_product_info(path: &Path) -> Option<TraeProductInfo> {
     );
     let app_version = pick_string(&root, &[&["appVersion"], &["productVersion"], &["version"]]);
     let app_type = pick_string(&root, &[&["quality"]]).map(|value| value.to_lowercase());
+    let client_id = read_product_auth_client_id(&root, platform, app_type.as_deref());
+    let account_api = read_product_account_api_config(&root, platform);
 
-    if plugin_version.is_none() && app_version.is_none() && app_type.is_none() {
+    if plugin_version.is_none()
+        && app_version.is_none()
+        && app_type.is_none()
+        && client_id.is_none()
+        && account_api.is_none()
+    {
         return None;
     }
 
@@ -483,13 +795,15 @@ fn read_trae_product_info(path: &Path) -> Option<TraeProductInfo> {
         plugin_version,
         app_version,
         app_type,
+        client_id,
+        account_api,
     })
 }
 
-fn detect_trae_product_info() -> TraeProductInfo {
-    for base_path in trae_product_base_paths() {
+fn detect_trae_product_info(platform: trae_account::TraePlatformKind) -> TraeProductInfo {
+    for base_path in trae_product_base_paths(platform) {
         for candidate in build_trae_product_file_candidates(base_path.as_path()) {
-            if let Some(info) = read_trae_product_info(candidate.as_path()) {
+            if let Some(info) = read_trae_product_info(candidate.as_path(), platform) {
                 return info;
             }
         }
@@ -497,52 +811,20 @@ fn detect_trae_product_info() -> TraeProductInfo {
     TraeProductInfo::default()
 }
 
-fn parse_version_components(value: &str) -> Option<Vec<u64>> {
-    let mut components = Vec::new();
-    for part in value.trim().split('.') {
-        let digits: String = part.chars().take_while(|ch| ch.is_ascii_digit()).collect();
-        if digits.is_empty() {
-            return None;
-        }
-        components.push(digits.parse::<u64>().ok()?);
-    }
-    if components.is_empty() {
-        return None;
-    }
-    Some(components)
-}
-
-fn is_version_less_than(left: &str, right: &str) -> Option<bool> {
-    let left_parts = parse_version_components(left)?;
-    let right_parts = parse_version_components(right)?;
-    let max_len = left_parts.len().max(right_parts.len());
-    for idx in 0..max_len {
-        let left_value = left_parts.get(idx).copied().unwrap_or(0);
-        let right_value = right_parts.get(idx).copied().unwrap_or(0);
-        if left_value != right_value {
-            return Some(left_value < right_value);
-        }
-    }
-    Some(false)
-}
-
 fn normalize_auth_app_version(value: Option<String>) -> String {
     let Some(version) = value.and_then(|raw| normalize_non_empty(Some(raw.as_str()))) else {
         return TRAE_MIN_AUTH_APP_VERSION.to_string();
     };
-    match is_version_less_than(version.as_str(), TRAE_MIN_AUTH_APP_VERSION) {
-        Some(true) | None => TRAE_MIN_AUTH_APP_VERSION.to_string(),
-        Some(false) => version,
-    }
+    version
 }
 
-fn read_trae_storage_root() -> Option<Value> {
-    let path = trae_account::get_default_trae_storage_path().ok()?;
+fn read_trae_storage_root(platform: trae_account::TraePlatformKind) -> Option<Value> {
+    let path = trae_account::get_default_trae_storage_path_for_platform(platform).ok()?;
     parse_json_file(path.as_path())
 }
 
-fn recent_trae_log_files() -> Vec<PathBuf> {
-    let logs_root = match trae_account::get_default_trae_data_dir() {
+fn recent_trae_log_files(platform: trae_account::TraePlatformKind) -> Vec<PathBuf> {
+    let logs_root = match trae_account::get_default_trae_data_dir_for_platform(platform) {
         Ok(path) => path.join("logs"),
         Err(_) => return Vec::new(),
     };
@@ -592,7 +874,7 @@ fn decode_url_component(raw: &str) -> String {
     }
 }
 
-fn extract_device_id_from_logs() -> Option<String> {
+fn extract_device_id_from_logs(platform: trae_account::TraePlatformKind) -> Option<String> {
     let patterns = [
         r"resolve device_id:\s*([0-9]{8,24})",
         r#""device_id"\s*:\s*"([0-9]{8,24})""#,
@@ -600,7 +882,7 @@ fn extract_device_id_from_logs() -> Option<String> {
         r#""X-Device-Id"\s*:\s*"([0-9]{8,24})""#,
     ];
 
-    for file in recent_trae_log_files() {
+    for file in recent_trae_log_files(platform) {
         let bytes = match fs::read(file) {
             Ok(content) => content,
             Err(_) => continue,
@@ -627,14 +909,14 @@ fn extract_device_id_from_logs() -> Option<String> {
     None
 }
 
-fn extract_device_brand_from_logs() -> Option<String> {
+fn extract_device_brand_from_logs(platform: trae_account::TraePlatformKind) -> Option<String> {
     let patterns = [
         r#""device_model"\s*:\s*"([^"]+)""#,
         r#""X-Device-Brand"\s*:\s*"([^"]+)""#,
         r#"device_brand:\s*([A-Za-z0-9,%._+-]+)"#,
     ];
 
-    for file in recent_trae_log_files() {
+    for file in recent_trae_log_files(platform) {
         let bytes = match fs::read(file) {
             Ok(content) => content,
             Err(_) => continue,
@@ -709,7 +991,7 @@ fn detect_os_version(device_type: &str) -> String {
     device_type.to_string()
 }
 
-fn detect_device_brand(device_type: &str) -> String {
+fn detect_device_brand(platform: trae_account::TraePlatformKind, device_type: &str) -> String {
     #[cfg(target_os = "macos")]
     {
         if let Some(model) = run_command_and_read_stdout("sysctl", &["-n", "hw.model"]) {
@@ -717,7 +999,7 @@ fn detect_device_brand(device_type: &str) -> String {
         }
     }
 
-    if let Some(model) = extract_device_brand_from_logs() {
+    if let Some(model) = extract_device_brand_from_logs(platform) {
         return model;
     }
 
@@ -733,9 +1015,17 @@ fn detect_device_brand(device_type: &str) -> String {
     "unknown".to_string()
 }
 
-fn collect_trae_login_context() -> TraeLoginContext {
-    let storage_root = read_trae_storage_root();
-    let product_info = detect_trae_product_info();
+fn collect_trae_login_context(platform: trae_account::TraePlatformKind) -> TraeLoginContext {
+    let storage_root = read_trae_storage_root(platform);
+    let product_info = detect_trae_product_info(platform);
+    let account_api = product_info
+        .account_api
+        .clone()
+        .unwrap_or_else(|| default_account_api_config(platform));
+
+    let client_id = product_info
+        .client_id
+        .unwrap_or_else(|| platform.auth_client_id().to_string());
 
     let plugin_version = product_info
         .plugin_version
@@ -773,11 +1063,11 @@ fn collect_trae_login_context() -> TraeLoginContext {
     )
     .as_deref()
     .and_then(|value| normalize_device_id(Some(value)))
-    .or_else(extract_device_id_from_logs)
+    .or_else(|| extract_device_id_from_logs(platform))
     .unwrap_or_else(|| TRAE_DEFAULT_DEVICE_ID.to_string());
 
     let x_device_type = detect_device_type();
-    let x_device_brand = detect_device_brand(x_device_type.as_str());
+    let x_device_brand = detect_device_brand(platform, x_device_type.as_str());
     let x_os_version = detect_os_version(x_device_type.as_str());
     let x_env = pick_storage_string(
         storage_root.as_ref(),
@@ -786,6 +1076,7 @@ fn collect_trae_login_context() -> TraeLoginContext {
     .unwrap_or_default();
 
     TraeLoginContext {
+        client_id,
         plugin_version,
         machine_id,
         device_id,
@@ -795,6 +1086,7 @@ fn collect_trae_login_context() -> TraeLoginContext {
         x_env,
         x_app_version: app_version,
         x_app_type: app_type,
+        account_api,
     }
 }
 
@@ -995,43 +1287,182 @@ fn escape_html(raw: &str) -> String {
         .replace('\'', "&#39;")
 }
 
-fn callback_success_html() -> &'static str {
-    r#"<!doctype html><html><head><meta charset="utf-8"><title>Trae Login</title></head><body><h2>Trae 登录回调已完成</h2><p>可以返回 Cockpit Tools。</p></body></html>"#
-}
-
-fn callback_pending_html() -> &'static str {
-    r#"<!doctype html><html><head><meta charset="utf-8"><title>Trae Login</title></head><body><h2>正在解析授权结果…</h2><p id="hint">请稍候，页面将自动完成回调。</p><script>(function(){if(window.location.hash&&window.location.hash.length>1){var hash=window.location.hash.slice(1);var target=window.location.origin+window.location.pathname+'?'+hash;window.location.replace(target);return;}document.getElementById('hint').textContent='未检测到授权参数，请完成登录后重试。';})();</script></body></html>"#
-}
-
-fn callback_failure_html(message: &str) -> String {
+fn callback_page_html(
+    tone: &str,
+    badge: &str,
+    title: &str,
+    message: &str,
+    script: Option<&str>,
+) -> String {
     format!(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><title>Trae Login</title></head><body><h2>Trae 登录回调失败</h2><p>{}</p></body></html>",
-        escape_html(message)
+        r#"<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trae OAuth - Cockpit Tools</title>
+  <style>
+    :root {{
+      color-scheme: dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-strong: #172033;
+      --line: rgba(148, 163, 184, 0.24);
+      --text: #e5edf8;
+      --muted: #9aa7bc;
+      --success: #22c55e;
+      --warning: #38bdf8;
+      --danger: #ef4444;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: #0f172a;
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }}
+    .card {{
+      width: min(520px, 100%);
+      padding: 30px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(17, 24, 39, 0.94);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+    }}
+    .brand {{
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      color: #bfdbfe;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }}
+    .mark {{
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      background: #1d4ed8;
+      color: #eff6ff;
+      font-size: 17px;
+    }}
+    .status {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: var(--panel-strong);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+    }}
+    .status.success {{ color: var(--success); }}
+    .status.pending {{ color: var(--warning); }}
+    .status.failure {{ color: var(--danger); }}
+    h1 {{
+      margin: 0 0 10px;
+      font-size: 26px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }}
+    p {{
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+      word-break: break-word;
+    }}
+    .foot {{
+      margin-top: 24px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: #64748b;
+      font-size: 13px;
+    }}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand"><span class="mark">✓</span><span>Cockpit Tools</span></div>
+    <div class="status {tone}">{badge}</div>
+    <h1>{title}</h1>
+    <p id="hint">{message}</p>
+    <div class="foot">完成后可以关闭此页面，回到 Cockpit Tools 继续操作。</div>
+  </main>
+  {script}
+</body>
+</html>"#,
+        tone = tone,
+        badge = escape_html(badge),
+        title = escape_html(title),
+        message = escape_html(message),
+        script = script.unwrap_or("")
     )
 }
 
+fn callback_success_html() -> String {
+    callback_page_html(
+        "success",
+        "授权成功",
+        "Trae 登录回调已完成",
+        "授权结果已经传回本机服务。",
+        None,
+    )
+}
+
+fn callback_pending_html() -> String {
+    callback_page_html(
+        "pending",
+        "正在处理",
+        "正在解析授权结果",
+        "请稍候，页面将自动完成回调。",
+        Some(
+            r#"<script>(function(){if(window.location.hash&&window.location.hash.length>1){var hash=window.location.hash.slice(1);var target=window.location.origin+window.location.pathname+'?'+hash;window.location.replace(target);return;}document.getElementById('hint').textContent='未检测到授权参数，请完成登录后重试。';})();</script>"#,
+        ),
+    )
+}
+
+fn callback_failure_html(message: &str) -> String {
+    callback_page_html("failure", "授权失败", "Trae 登录回调失败", message, None)
+}
+
+fn callback_html_response(body: String, status: StatusCode) -> Response<std::io::Cursor<Vec<u8>>> {
+    let mut response = Response::from_string(body).with_status_code(status);
+    if let Ok(content_type) = Header::from_bytes(
+        "Content-Type".as_bytes(),
+        "text/html; charset=utf-8".as_bytes(),
+    ) {
+        response = response.with_header(content_type);
+    }
+    response
+}
+
 fn clear_pending_if_matches(login_id: &str) {
-    let should_clear = if let Ok(guard) = PENDING_OAUTH_STATE.lock() {
-        guard
-            .as_ref()
-            .map(|state| state.login_id.as_str())
-            .map(|id| id == login_id)
-            .unwrap_or(false)
-    } else {
-        false
-    };
+    let should_clear = PENDING_OAUTH_STATE
+        .lock()
+        .ok()
+        .map(|guard| guard.contains_key(login_id))
+        .unwrap_or(false);
     if should_clear {
-        set_pending_login(None);
+        remove_pending_login(login_id);
     }
 }
 
 fn set_callback_result_if_matches(login_id: &str, result: Result<TraeCallbackPayload, String>) {
     if let Ok(mut guard) = PENDING_OAUTH_STATE.lock() {
-        if let Some(state) = guard.as_mut() {
-            if state.login_id == login_id {
-                state.callback_result = Some(result);
-                persist_pending_login(Some(state));
-            }
+        if let Some(state) = guard.get_mut(login_id) {
+            state.callback_result = Some(result);
+            persist_pending_login(state);
         }
     }
 }
@@ -1049,8 +1480,8 @@ fn run_callback_server(
             let guard = PENDING_OAUTH_STATE
                 .lock()
                 .map_err(|_| "获取 Trae OAuth 状态锁失败".to_string())?;
-            match guard.as_ref() {
-                Some(state) if state.login_id == login_id => {
+            match guard.get(login_id.as_str()) {
+                Some(state) => {
                     let timeout = now_timestamp() > state.expires_at;
                     (state.cancelled, timeout)
                 }
@@ -1086,10 +1517,10 @@ fn run_callback_server(
         let parsed = match Url::parse(&full_url) {
             Ok(url) => url,
             Err(err) => {
-                let _ = request.respond(
-                    Response::from_string(callback_failure_html("回调 URL 解析失败"))
-                        .with_status_code(StatusCode(400)),
-                );
+                let _ = request.respond(callback_html_response(
+                    callback_failure_html("回调 URL 解析失败"),
+                    StatusCode(400),
+                ));
                 set_callback_result_if_matches(
                     &login_id,
                     Err(format!("Trae OAuth 回调 URL 解析失败: {}", err)),
@@ -1124,10 +1555,10 @@ fn run_callback_server(
             } else {
                 format!("授权失败: {}", error_code)
             };
-            let _ = request.respond(
-                Response::from_string(callback_failure_html(message.as_str()))
-                    .with_status_code(StatusCode(400)),
-            );
+            let _ = request.respond(callback_html_response(
+                callback_failure_html(message.as_str()),
+                StatusCode(400),
+            ));
             set_callback_result_if_matches(&login_id, Err(message));
             break;
         }
@@ -1136,10 +1567,10 @@ fn run_callback_server(
             parse_bool_like(pick_query_value(&params, &["isRedirect", "is_redirect"]).as_deref());
         if is_redirect == Some(false) {
             let message = "回调参数 isRedirect=false".to_string();
-            let _ = request.respond(
-                Response::from_string(callback_failure_html(message.as_str()))
-                    .with_status_code(StatusCode(400)),
-            );
+            let _ = request.respond(callback_html_response(
+                callback_failure_html(message.as_str()),
+                StatusCode(400),
+            ));
             set_callback_result_if_matches(&login_id, Err(message));
             break;
         }
@@ -1156,25 +1587,20 @@ fn run_callback_server(
         let auth_code = match extract_callback_auth_code(&params) {
             Ok(value) => value,
             Err(message) => {
-                let _ = request.respond(
-                    Response::from_string(callback_failure_html(message.as_str()))
-                        .with_status_code(StatusCode(400)),
-                );
+                let _ = request.respond(callback_html_response(
+                    callback_failure_html(message.as_str()),
+                    StatusCode(400),
+                ));
                 set_callback_result_if_matches(&login_id, Err(message));
                 break;
             }
         };
 
         if refresh_token.is_none() && auth_code.is_none() {
-            let mut response =
-                Response::from_string(callback_pending_html()).with_status_code(StatusCode(200));
-            if let Ok(content_type) = Header::from_bytes(
-                "Content-Type".as_bytes(),
-                "text/html; charset=utf-8".as_bytes(),
-            ) {
-                response = response.with_header(content_type);
-            }
-            let _ = request.respond(response);
+            let _ = request.respond(callback_html_response(
+                callback_pending_html(),
+                StatusCode(200),
+            ));
 
             if !query_raw.is_empty() {
                 set_callback_result_if_matches(
@@ -1201,10 +1627,10 @@ fn run_callback_server(
             Some(value) => value,
             None => {
                 let message = "回调参数缺少 loginHost".to_string();
-                let _ = request.respond(
-                    Response::from_string(callback_failure_html(message.as_str()))
-                        .with_status_code(StatusCode(400)),
-                );
+                let _ = request.respond(callback_html_response(
+                    callback_failure_html(message.as_str()),
+                    StatusCode(400),
+                ));
                 set_callback_result_if_matches(&login_id, Err(message));
                 break;
             }
@@ -1216,7 +1642,19 @@ fn run_callback_server(
             login_host,
             login_region: pick_query_value(
                 &params,
-                &["loginRegion", "login_region", "region", "Region"],
+                &[
+                    "loginRegion",
+                    "login_region",
+                    "region",
+                    "Region",
+                    "userRegion",
+                    "user_region",
+                    "UserRegion",
+                    "AIRegion",
+                    "aiRegion",
+                    "storeRegion",
+                    "StoreRegion",
+                ],
             ),
             login_trace_id: pick_query_value(
                 &params,
@@ -1227,15 +1665,10 @@ fn run_callback_server(
             raw_query: params,
         };
 
-        let mut response =
-            Response::from_string(callback_success_html()).with_status_code(StatusCode(200));
-        if let Ok(content_type) = Header::from_bytes(
-            "Content-Type".as_bytes(),
-            "text/html; charset=utf-8".as_bytes(),
-        ) {
-            response = response.with_header(content_type);
-        }
-        let _ = request.respond(response);
+        let _ = request.respond(callback_html_response(
+            callback_success_html(),
+            StatusCode(200),
+        ));
         set_callback_result_if_matches(&login_id, Ok(payload));
         break;
     }
@@ -1257,7 +1690,7 @@ fn spawn_callback_server(login_id: String, callback_port: u16, fallback_login_ho
 
 fn ensure_callback_server_for_state(state: &PendingOAuthState) {
     if state.cancelled || now_timestamp() > state.expires_at {
-        set_pending_login(None);
+        remove_pending_login(state.login_id.as_str());
         return;
     }
     if state.callback_result.is_some() {
@@ -1314,20 +1747,28 @@ fn extract_login_guidance_host(response: &Value) -> Option<String> {
     )
 }
 
-async fn request_login_guidance(login_trace_id: &str) -> Result<String, String> {
+async fn request_login_guidance(
+    platform: trae_account::TraePlatformKind,
+    login_trace_id: &str,
+) -> Result<String, String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
 
     let mut errors: Vec<String> = Vec::new();
-    for endpoint in TRAE_LOGIN_GUIDANCE_URLS {
+    let endpoints: &[&str] = if platform.is_cn() {
+        &TRAE_CN_LOGIN_GUIDANCE_URLS
+    } else {
+        &TRAE_LOGIN_GUIDANCE_URLS
+    };
+    for endpoint in endpoints {
         let body = json!({
             "loginTraceID": login_trace_id,
             "login_trace_id": login_trace_id,
         });
         let request = client
-            .post(endpoint)
+            .post(*endpoint)
             .header("Accept", "application/json")
             .header("Content-Type", "application/json")
             .header("User-Agent", "Trae/1.0.0 antigravity-cockpit-tools")
@@ -1378,13 +1819,24 @@ async fn request_login_guidance(login_trace_id: &str) -> Result<String, String> 
         ));
     }
 
+    if platform.is_cn() {
+        logger::log_warn(&format!(
+            "[Trae OAuth] 获取 {} 登录引导地址失败，回退到默认授权域名: {}",
+            platform.display_name(),
+            errors.join(" | ")
+        ));
+        return Ok(platform.default_login_host());
+    }
+
     Err(format!(
-        "获取 Trae 登录引导地址失败: {}",
+        "获取 {} 登录引导地址失败: {}",
+        platform.display_name(),
         errors.join(" | ")
     ))
 }
 
 fn build_verification_uri(
+    platform: trae_account::TraePlatformKind,
     login_host: &str,
     login_trace_id: &str,
     callback_url: &str,
@@ -1408,7 +1860,12 @@ fn build_verification_uri(
         }
     };
     append_pair(&mut query, "login_version", "1", false);
-    append_pair(&mut query, "auth_from", "trae", false);
+    append_pair(
+        &mut query,
+        "auth_from",
+        auth_from_for_platform(platform),
+        false,
+    );
     append_pair(&mut query, "login_channel", "native_ide", false);
     append_pair(
         &mut query,
@@ -1417,7 +1874,12 @@ fn build_verification_uri(
         true,
     );
     append_pair(&mut query, "auth_type", "local", false);
-    append_pair(&mut query, "client_id", TRAE_AUTH_CLIENT_ID, false);
+    append_pair(
+        &mut query,
+        "client_id",
+        login_context.client_id.as_str(),
+        false,
+    );
     append_pair(&mut query, "redirect", "0", false);
     append_pair(&mut query, "login_trace_id", login_trace_id, true);
     append_pair(&mut query, "auth_callback_url", callback_url, false);
@@ -1478,6 +1940,9 @@ fn build_verification_uri(
     );
     append_pair(&mut query, "code_challenge", code_challenge, true);
     append_pair(&mut query, "code_challenge_method", "S256", false);
+    if platform.is_solo() {
+        append_pair(&mut query, "hide_saas_login", "true", false);
+    }
     url.set_query(Some(query.as_str()));
     Ok(url.to_string())
 }
@@ -1514,7 +1979,10 @@ fn dedup_keep_order(values: Vec<String>) -> Vec<String> {
     out
 }
 
-fn candidate_api_origins(login_host: &str) -> Vec<String> {
+fn candidate_api_origins(
+    platform: trae_account::TraePlatformKind,
+    login_host: &str,
+) -> Vec<String> {
     let mut origins: Vec<String> = Vec::new();
 
     if let Ok(url) = ensure_https_url(login_host) {
@@ -1526,46 +1994,55 @@ fn candidate_api_origins(login_host: &str) -> Vec<String> {
         }
     }
 
-    origins.extend([
-        "https://api.marscode.com".to_string(),
-        "https://api.trae.ai".to_string(),
-        "https://www.trae.ai".to_string(),
-        "https://www.marscode.com".to_string(),
-    ]);
+    if platform.is_cn() {
+        origins.extend([
+            TRAE_ACCOUNT_API_ORIGIN_CN.to_string(),
+            TRAE_ACCOUNT_API_ORIGIN_CN_ICUBE.to_string(),
+            "https://www.trae.cn".to_string(),
+        ]);
+    } else {
+        origins.extend([
+            "https://api.marscode.com".to_string(),
+            "https://api.trae.ai".to_string(),
+            "https://www.trae.ai".to_string(),
+            "https://www.marscode.com".to_string(),
+        ]);
+    }
 
     dedup_keep_order(origins)
 }
 
-fn build_api_urls(login_host: &str, path: &str) -> Vec<String> {
-    let urls = candidate_api_origins(login_host)
+fn build_api_urls(
+    platform: trae_account::TraePlatformKind,
+    login_host: &str,
+    path: &str,
+) -> Vec<String> {
+    let urls = candidate_api_origins(platform, login_host)
         .into_iter()
         .map(|origin| format!("{}{}", origin.trim_end_matches('/'), path))
         .collect::<Vec<_>>();
     dedup_keep_order(urls)
 }
 
-fn candidate_account_api_origins(login_region: Option<&str>) -> Vec<String> {
-    let mut origins = vec![TRAE_ACCOUNT_API_ORIGIN_NORMAL.to_string()];
-    match login_region
-        .and_then(|value| normalize_non_empty(Some(value)))
-        .map(|value| value.to_ascii_lowercase())
-        .as_deref()
-    {
-        Some("usttp") => origins.push(TRAE_ACCOUNT_API_ORIGIN_USTTP.to_string()),
-        Some("us") => origins.push(TRAE_ACCOUNT_API_ORIGIN_US.to_string()),
-        Some("sg") => origins.push(TRAE_ACCOUNT_API_ORIGIN_SG.to_string()),
-        _ => {}
-    }
-    origins.extend([
-        TRAE_ACCOUNT_API_ORIGIN_SG.to_string(),
-        TRAE_ACCOUNT_API_ORIGIN_US.to_string(),
-        TRAE_ACCOUNT_API_ORIGIN_USTTP.to_string(),
-    ]);
-    dedup_keep_order(origins)
+fn candidate_account_api_origins(
+    platform: trae_account::TraePlatformKind,
+    account_api: &TraeAccountApiConfig,
+    user_tag: Option<&str>,
+) -> Vec<String> {
+    dedup_keep_order(vec![official_auth_code_account_origin(
+        platform,
+        account_api,
+        user_tag,
+    )])
 }
 
-fn build_account_api_urls(login_region: Option<&str>, path: &str) -> Vec<String> {
-    candidate_account_api_origins(login_region)
+fn build_account_api_urls(
+    platform: trae_account::TraePlatformKind,
+    account_api: &TraeAccountApiConfig,
+    user_tag: Option<&str>,
+    path: &str,
+) -> Vec<String> {
+    candidate_account_api_origins(platform, account_api, user_tag)
         .into_iter()
         .map(|origin| format!("{}{}", origin.trim_end_matches('/'), path))
         .collect()
@@ -1595,11 +2072,20 @@ fn device_brand_for_context(login_context: &TraeLoginContext) -> String {
     }
 }
 
-fn build_official_device_info(login_context: &TraeLoginContext, device_public_key: &str) -> Value {
+fn build_official_device_info(
+    platform: trae_account::TraePlatformKind,
+    login_context: &TraeLoginContext,
+    device_public_key: &str,
+) -> Value {
+    let platform_code = if platform.is_solo() {
+        "SOLO_PC"
+    } else {
+        "IDE_PC"
+    };
     json!({
         "DeviceID": login_context.device_id.as_str(),
         "MachineID": login_context.machine_id.as_str(),
-        "PlatformCode": "IDE_PC",
+        "PlatformCode": platform_code,
         "DeviceType": "PC",
         "DeviceName": device_display_name(),
         "DeviceModel": login_context.x_device_brand.as_str(),
@@ -1694,34 +2180,89 @@ fn extract_error_message(value: &Value) -> Option<String> {
     pick_string(
         value,
         &[
+            &["ResponseMetadata", "Error", "Message"],
+            &["ResponseMetadata", "Error", "Data", "__Message.error"],
             &["message"],
             &["msg"],
             &["error"],
             &["errorMsg"],
             &["error_msg"],
-            &["ResponseMetadata", "Error", "Message"],
             &["Result", "Message"],
             &["result", "message"],
         ],
     )
 }
 
+fn extract_error_code(value: &Value) -> Option<String> {
+    pick_string(
+        value,
+        &[
+            &["ResponseMetadata", "Error", "Code"],
+            &["Error", "Code"],
+            &["error", "code"],
+            &["code"],
+        ],
+    )
+}
+
+fn extract_error_standard_code(value: &Value) -> Option<String> {
+    pick_string(
+        value,
+        &[
+            &["ResponseMetadata", "Error", "StandardCode"],
+            &["Error", "StandardCode"],
+            &["error", "standardCode"],
+            &["standardCode"],
+        ],
+    )
+}
+
+fn format_http_error(status: reqwest::StatusCode, body: &str) -> String {
+    let mut details = Vec::new();
+    if let Ok(value) = serde_json::from_str::<Value>(body) {
+        if let Some(code) = extract_error_code(&value) {
+            details.push(format!("code={}", code));
+        }
+        if let Some(standard_code) = extract_error_standard_code(&value) {
+            details.push(format!("standard_code={}", standard_code));
+        }
+        if let Some(message) = extract_error_message(&value) {
+            details.push(format!("message={}", message));
+        }
+    }
+
+    if details.is_empty() {
+        format!("HTTP {} (body_len={})", status.as_u16(), body.len())
+    } else {
+        format!("HTTP {} ({})", status.as_u16(), details.join(", "))
+    }
+}
+
 async fn request_exchange_token_by_auth_code(
     client: &reqwest::Client,
-    login_region: Option<&str>,
+    platform: trae_account::TraePlatformKind,
+    user_tag: Option<&str>,
     auth_code: &str,
     code_verifier: &str,
     login_context: &TraeLoginContext,
 ) -> Result<TraeExchangeResult, String> {
-    let urls = build_account_api_urls(login_region, TRAE_AUTH_CODE_EXCHANGE_TOKEN_PATH);
+    let urls = build_account_api_urls(
+        platform,
+        &login_context.account_api,
+        user_tag,
+        TRAE_AUTH_CODE_EXCHANGE_TOKEN_PATH,
+    );
     let device_key_pair = generate_device_key_pair()?;
-    let device_info =
-        build_official_device_info(login_context, device_key_pair.public_key_pem.as_str());
+    let device_info = build_official_device_info(
+        platform,
+        login_context,
+        device_key_pair.public_key_pem.as_str(),
+    );
     let mut errors: Vec<String> = Vec::new();
 
     for url in urls {
         let body = json!({
-            "ClientID": TRAE_AUTH_CLIENT_ID,
+            "ClientID": login_context.client_id.as_str(),
             "AuthCode": auth_code,
             "CodeVerifier": code_verifier,
             "DeviceInfo": device_info.clone(),
@@ -1754,12 +2295,7 @@ async fn request_exchange_token_by_auth_code(
         };
 
         if !status.is_success() {
-            errors.push(format!(
-                "{} => HTTP {} (body_len={})",
-                url,
-                status.as_u16(),
-                text.len()
-            ));
+            errors.push(format!("{} => {}", url, format_http_error(status, &text)));
             continue;
         }
 
@@ -1793,16 +2329,18 @@ async fn request_exchange_token_by_auth_code(
 
 async fn request_exchange_token(
     client: &reqwest::Client,
+    platform: trae_account::TraePlatformKind,
     login_host: &str,
     refresh_token: &str,
     cloudide_token: Option<&str>,
+    login_context: &TraeLoginContext,
 ) -> Result<Value, String> {
-    let urls = build_api_urls(login_host, TRAE_EXCHANGE_TOKEN_PATH);
+    let urls = build_api_urls(platform, login_host, TRAE_EXCHANGE_TOKEN_PATH);
     let mut errors: Vec<String> = Vec::new();
 
     for url in urls {
         let body = json!({
-            "ClientID": TRAE_AUTH_CLIENT_ID,
+            "ClientID": login_context.client_id.as_str(),
             "RefreshToken": refresh_token,
             "ClientSecret": TRAE_EXCHANGE_CLIENT_SECRET,
             "UserID": "",
@@ -1835,12 +2373,7 @@ async fn request_exchange_token(
         };
 
         if !status.is_success() {
-            errors.push(format!(
-                "{} => HTTP {} (body_len={})",
-                url,
-                status.as_u16(),
-                text.len()
-            ));
+            errors.push(format!("{} => {}", url, format_http_error(status, &text)));
             continue;
         }
 
@@ -1866,10 +2399,11 @@ async fn request_exchange_token(
 
 async fn request_user_info(
     client: &reqwest::Client,
+    platform: trae_account::TraePlatformKind,
     login_host: &str,
     access_token: &str,
 ) -> Result<Value, String> {
-    let urls = build_api_urls(login_host, TRAE_GET_USER_INFO_PATH);
+    let urls = build_api_urls(platform, login_host, TRAE_GET_USER_INFO_PATH);
     let mut errors: Vec<String> = Vec::new();
 
     for url in urls {
@@ -1922,36 +2456,39 @@ async fn request_user_info(
     Err(format!("Trae GetUserInfo 失败: {}", errors.join(" | ")))
 }
 
-pub async fn start_login() -> Result<TraeOAuthStartResponse, String> {
+pub async fn start_login(
+    platform: trae_account::TraePlatformKind,
+) -> Result<TraeOAuthStartResponse, String> {
     hydrate_pending_login_if_missing();
     if let Ok(guard) = PENDING_OAUTH_STATE.lock() {
-        if let Some(state) = guard.as_ref() {
-            if !state.cancelled
+        if let Some(state) = guard.values().find(|state| {
+            state.platform() == platform
+                && !state.cancelled
                 && now_timestamp() <= state.expires_at
                 && state.code_verifier.is_some()
-            {
-                ensure_callback_server_for_state(state);
-                return Ok(TraeOAuthStartResponse {
-                    login_id: state.login_id.clone(),
-                    verification_uri: state.verification_uri.clone(),
-                    expires_in: (state.expires_at - now_timestamp()).max(0) as u64,
-                    interval_seconds: (OAUTH_POLL_INTERVAL_MS / 1000).max(1),
-                    callback_url: Some(state.callback_url.clone()),
-                });
-            }
+        }) {
+            ensure_callback_server_for_state(state);
+            return Ok(TraeOAuthStartResponse {
+                login_id: state.login_id.clone(),
+                verification_uri: state.verification_uri.clone(),
+                expires_in: (state.expires_at - now_timestamp()).max(0) as u64,
+                interval_seconds: (OAUTH_POLL_INTERVAL_MS / 1000).max(1),
+                callback_url: Some(state.callback_url.clone()),
+            });
         }
     }
-    set_pending_login(None);
+    remove_pending_logins_for_platform(platform);
 
     let login_id = Uuid::new_v4().to_string();
     let login_trace_id = Uuid::new_v4().to_string();
-    let login_context = collect_trae_login_context();
+    let login_context = collect_trae_login_context(platform);
     let pkce_pair = generate_pkce_pair();
     let callback_port = find_available_callback_port()?;
     let callback_url = format!("http://127.0.0.1:{}{}", callback_port, CALLBACK_PATH);
 
-    let login_host = request_login_guidance(login_trace_id.as_str()).await?;
+    let login_host = request_login_guidance(platform, login_trace_id.as_str()).await?;
     let verification_uri = build_verification_uri(
+        platform,
         login_host.as_str(),
         login_trace_id.as_str(),
         callback_url.as_str(),
@@ -1961,6 +2498,7 @@ pub async fn start_login() -> Result<TraeOAuthStartResponse, String> {
 
     let state = PendingOAuthState {
         login_id: login_id.clone(),
+        platform_id: platform.provider_key().to_string(),
         login_trace_id: login_trace_id.clone(),
         callback_port,
         callback_url: callback_url.clone(),
@@ -1973,12 +2511,13 @@ pub async fn start_login() -> Result<TraeOAuthStartResponse, String> {
         callback_result: None,
     };
 
-    set_pending_login(Some(state));
+    set_pending_login(state);
 
     spawn_callback_server(login_id.clone(), callback_port, login_host.clone());
 
     logger::log_info(&format!(
-        "[Trae OAuth] 登录会话已创建: login_id={}, trace_id={}, callback_url={}, plugin_version={}, x_app_version={}, x_app_type={}, machine_id={}, device_id={}",
+        "[Trae OAuth] 登录会话已创建: platform={}, login_id={}, trace_id={}, callback_url={}, plugin_version={}, x_app_version={}, x_app_type={}, machine_id={}, device_id={}",
+        platform.provider_key(),
         login_id,
         login_trace_id,
         callback_url,
@@ -1998,7 +2537,10 @@ pub async fn start_login() -> Result<TraeOAuthStartResponse, String> {
     })
 }
 
-pub async fn complete_login(login_id: &str) -> Result<TraeImportPayload, String> {
+pub async fn complete_login(
+    login_id: &str,
+    platform: trae_account::TraePlatformKind,
+) -> Result<TraeImportPayload, String> {
     hydrate_pending_login_if_missing();
     let result = async {
         let (callback_payload, login_trace_id, code_verifier) = loop {
@@ -2007,11 +2549,15 @@ pub async fn complete_login(login_id: &str) -> Result<TraeImportPayload, String>
                     .lock()
                     .map_err(|_| "获取 Trae OAuth 状态锁失败".to_string())?;
                 let state = guard
-                    .as_ref()
+                    .get(login_id)
                     .ok_or_else(|| "没有进行中的 Trae OAuth 登录会话".to_string())?;
 
-                if state.login_id != login_id {
-                    return Err("Trae OAuth 登录会话已变更，请重新发起".to_string());
+                if state.platform() != platform {
+                    return Err(format!(
+                        "Trae OAuth 登录会话平台不匹配：当前为 {}，请重新发起 {} 授权",
+                        state.platform().display_name(),
+                        platform.display_name()
+                    ));
                 }
                 if state.cancelled {
                     return Err("Trae OAuth 登录已取消".to_string());
@@ -2057,14 +2603,15 @@ pub async fn complete_login(login_id: &str) -> Result<TraeImportPayload, String>
             .build()
             .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
 
-        let login_context = collect_trae_login_context();
+        let login_context = collect_trae_login_context(platform);
         let exchange_result = if let Some(auth_code) = callback_payload.auth_code.as_deref() {
             let verifier = code_verifier
                 .as_deref()
                 .ok_or_else(|| "Trae OAuth 登录会话缺少 code verifier，请重新发起登录".to_string())?;
             request_exchange_token_by_auth_code(
                 &client,
-                Some(login_region.as_str()),
+                platform,
+                callback_payload.user_tag.as_deref(),
                 auth_code,
                 verifier,
                 &login_context,
@@ -2077,9 +2624,11 @@ pub async fn complete_login(login_id: &str) -> Result<TraeImportPayload, String>
                 .ok_or_else(|| "回调参数缺少 authCodeInfo/AuthCode 或 refreshToken".to_string())?;
             let response = request_exchange_token(
                 &client,
+                platform,
                 callback_payload.login_host.as_str(),
                 refresh_token,
                 callback_payload.cloudide_token.as_deref(),
+                &login_context,
             )
             .await?;
             TraeExchangeResult {
@@ -2106,6 +2655,7 @@ pub async fn complete_login(login_id: &str) -> Result<TraeImportPayload, String>
 
         let user_info_response = match request_user_info(
             &client,
+            platform,
             exchange_api_host
                 .as_deref()
                 .unwrap_or_else(|| callback_payload.login_host.as_str()),
@@ -2216,6 +2766,22 @@ pub async fn complete_login(login_id: &str) -> Result<TraeImportPayload, String>
             Value::String(login_trace_id.clone()),
         );
         auth_raw.insert(
+            "platformId".to_string(),
+            Value::String(platform.provider_key().to_string()),
+        );
+        auth_raw.insert(
+            "platformName".to_string(),
+            Value::String(platform.display_name().to_string()),
+        );
+        auth_raw.insert(
+            "authClientId".to_string(),
+            Value::String(login_context.client_id.clone()),
+        );
+        auth_raw.insert(
+            "authDomain".to_string(),
+            Value::String(platform.auth_domain().to_string()),
+        );
+        auth_raw.insert(
             "callbackQuery".to_string(),
             serde_json::to_value(&callback_payload.raw_query).unwrap_or_else(|_| json!({})),
         );
@@ -2245,6 +2811,12 @@ pub async fn complete_login(login_id: &str) -> Result<TraeImportPayload, String>
             "loginHost": callback_payload.login_host,
             "loginRegion": login_region,
             "loginTraceID": login_trace_id,
+            "platform": {
+                "platformId": platform.provider_key(),
+                "platformName": platform.display_name(),
+                "authClientId": login_context.client_id.as_str(),
+                "authDomain": platform.auth_domain(),
+            },
         });
 
         Ok(TraeImportPayload {
@@ -2273,44 +2845,61 @@ pub async fn complete_login(login_id: &str) -> Result<TraeImportPayload, String>
     result
 }
 
-pub fn cancel_login(login_id: Option<&str>) -> Result<(), String> {
+pub fn cancel_login(
+    login_id: Option<&str>,
+    platform: trae_account::TraePlatformKind,
+) -> Result<(), String> {
     hydrate_pending_login_if_missing();
-    let current = PENDING_OAUTH_STATE
-        .lock()
-        .map_err(|_| "获取 Trae OAuth 状态锁失败".to_string())?
-        .as_ref()
-        .cloned();
+    let current = {
+        let guard = PENDING_OAUTH_STATE
+            .lock()
+            .map_err(|_| "获取 Trae OAuth 状态锁失败".to_string())?;
+        match login_id {
+            Some(target) => guard.get(target).cloned(),
+            None => guard
+                .values()
+                .find(|state| state.platform() == platform)
+                .cloned(),
+        }
+    };
 
     let Some(current) = current.as_ref() else {
         return Ok(());
     };
 
-    if let Some(target) = login_id {
-        if current.login_id != target {
-            return Ok(());
-        }
+    if current.platform() != platform {
+        return Ok(());
     }
 
     logger::log_info(&format!(
-        "[Trae OAuth] 取消登录会话: login_id={}",
+        "[Trae OAuth] 取消登录会话: platform={}, login_id={}",
+        platform.provider_key(),
         current.login_id
     ));
 
-    set_pending_login(None);
+    remove_pending_login(current.login_id.as_str());
     Ok(())
 }
 
-pub fn submit_callback_url(login_id: &str, callback_url: &str) -> Result<(), String> {
+pub fn submit_callback_url(
+    login_id: &str,
+    callback_url: &str,
+    platform: trae_account::TraePlatformKind,
+) -> Result<(), String> {
     hydrate_pending_login_if_missing();
     let (expires_at, cancelled, callback_port, fallback_login_host) = {
         let guard = PENDING_OAUTH_STATE
             .lock()
             .map_err(|_| "获取 Trae OAuth 状态锁失败".to_string())?;
         let state = guard
-            .as_ref()
+            .get(login_id)
             .ok_or_else(|| "没有进行中的 Trae OAuth 登录会话".to_string())?;
-        if state.login_id != login_id {
-            return Err("Trae OAuth 登录会话已变更，请重新发起".to_string());
+        if state.platform() != platform {
+            return Err(format!(
+                "Trae OAuth 登录会话平台不匹配：当前为 {}，请重新发起 {} 授权",
+                state.platform().display_name(),
+                platform.display_name()
+            ));
         }
         (
             state.expires_at,
@@ -2393,7 +2982,19 @@ pub fn submit_callback_url(login_id: &str, callback_url: &str) -> Result<(), Str
         login_host,
         login_region: pick_query_value(
             &params,
-            &["loginRegion", "login_region", "region", "Region"],
+            &[
+                "loginRegion",
+                "login_region",
+                "region",
+                "Region",
+                "userRegion",
+                "user_region",
+                "UserRegion",
+                "AIRegion",
+                "aiRegion",
+                "storeRegion",
+                "StoreRegion",
+            ],
         ),
         login_trace_id: pick_query_value(
             &params,
@@ -2406,7 +3007,8 @@ pub fn submit_callback_url(login_id: &str, callback_url: &str) -> Result<(), Str
 
     set_callback_result_if_matches(login_id, Ok(payload));
     logger::log_info(&format!(
-        "[Trae OAuth] 已接收手动回调链接: login_id={}",
+        "[Trae OAuth] 已接收手动回调链接: platform={}, login_id={}",
+        platform.provider_key(),
         login_id
     ));
     Ok(())
@@ -2417,8 +3019,9 @@ pub fn restore_pending_oauth_listener() {
     let pending = PENDING_OAUTH_STATE
         .lock()
         .ok()
-        .and_then(|guard| guard.as_ref().cloned());
-    if let Some(state) = pending {
+        .map(|guard| guard.values().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    for state in pending {
         ensure_callback_server_for_state(&state);
     }
 }
@@ -2437,8 +3040,55 @@ mod tests {
     }
 
     #[test]
+    fn product_auth_client_id_uses_platform_and_quality() {
+        let root = json!({
+            "quality": "stable",
+            "iCubeApp": {
+                "authConfig": {
+                    "TRAE": {
+                        "stable": "trae-stable-client"
+                    },
+                    "SOLO": {
+                        "stable": "solo-stable-client"
+                    }
+                }
+            }
+        });
+
+        assert_eq!(
+            read_product_auth_client_id(
+                &root,
+                trae_account::TraePlatformKind::Trae,
+                Some("stable")
+            )
+            .as_deref(),
+            Some("trae-stable-client")
+        );
+        assert_eq!(
+            read_product_auth_client_id(
+                &root,
+                trae_account::TraePlatformKind::TraeSolo,
+                Some("stable")
+            )
+            .as_deref(),
+            Some("solo-stable-client")
+        );
+    }
+
+    #[test]
+    fn auth_app_version_keeps_official_solo_version() {
+        assert_eq!(
+            normalize_auth_app_version(Some("0.1.29".to_string())),
+            "0.1.29"
+        );
+    }
+
+    #[test]
     fn verification_uri_contains_pkce_parameters() {
         let context = TraeLoginContext {
+            client_id: trae_account::TraePlatformKind::Trae
+                .auth_client_id()
+                .to_string(),
             plugin_version: "2.3.40354".to_string(),
             machine_id: "machine-1".to_string(),
             device_id: "7633793279305631249".to_string(),
@@ -2448,9 +3098,11 @@ mod tests {
             x_env: String::new(),
             x_app_version: "3.5.66".to_string(),
             x_app_type: "stable".to_string(),
+            account_api: default_account_api_config(trae_account::TraePlatformKind::Trae),
         };
 
         let raw = build_verification_uri(
+            trae_account::TraePlatformKind::Trae,
             "https://www.trae.ai",
             "trace-1",
             "http://127.0.0.1:49839/authorize",
@@ -2473,6 +3125,180 @@ mod tests {
             params.get("auth_callback_url").map(String::as_str),
             Some("http://127.0.0.1:49839/authorize")
         );
+        assert_eq!(
+            params.get("client_id").map(String::as_str),
+            Some(trae_account::TraePlatformKind::Trae.auth_client_id())
+        );
+        assert_eq!(params.get("auth_from").map(String::as_str), Some("trae"));
+        assert_eq!(params.get("hide_saas_login"), None);
+    }
+
+    #[test]
+    fn solo_verification_uri_uses_solo_auth_params() {
+        let context = TraeLoginContext {
+            client_id: trae_account::TraePlatformKind::TraeSolo
+                .auth_client_id()
+                .to_string(),
+            plugin_version: "2.3.40354".to_string(),
+            machine_id: "machine-1".to_string(),
+            device_id: "7633793279305631249".to_string(),
+            x_device_brand: "Mac17,9".to_string(),
+            x_device_type: "mac".to_string(),
+            x_os_version: "macOS 26.5.1".to_string(),
+            x_env: String::new(),
+            x_app_version: "3.5.66".to_string(),
+            x_app_type: "stable".to_string(),
+            account_api: default_account_api_config(trae_account::TraePlatformKind::TraeSolo),
+        };
+
+        let raw = build_verification_uri(
+            trae_account::TraePlatformKind::TraeSolo,
+            "https://www.trae.ai",
+            "trace-1",
+            "http://127.0.0.1:49839/authorize",
+            &context,
+            "challenge-1",
+        )
+        .expect("verification uri");
+        let parsed = Url::parse(raw.as_str()).expect("valid url");
+        let params = parse_query_map(parsed.query().unwrap_or_default());
+
+        assert_eq!(
+            params.get("client_id").map(String::as_str),
+            Some(trae_account::TraePlatformKind::TraeSolo.auth_client_id())
+        );
+        assert_eq!(params.get("auth_from").map(String::as_str), Some("solo"));
+        assert_eq!(
+            params.get("hide_saas_login").map(String::as_str),
+            Some("true")
+        );
+    }
+
+    #[test]
+    fn cn_platform_api_candidates_do_not_include_i18n_hosts() {
+        let origins = candidate_api_origins(
+            trae_account::TraePlatformKind::TraeCn,
+            "https://www.trae.cn",
+        );
+        assert!(origins
+            .iter()
+            .any(|origin| origin == TRAE_ACCOUNT_API_ORIGIN_CN));
+        assert!(origins
+            .iter()
+            .any(|origin| origin == TRAE_ACCOUNT_API_ORIGIN_CN_ICUBE));
+        assert!(!origins.iter().any(|origin| origin.contains("trae.ai")));
+        assert!(!origins.iter().any(|origin| origin.contains("marscode.com")));
+    }
+
+    #[test]
+    fn auth_code_account_urls_use_official_cn_normal_host() {
+        let account_api = default_account_api_config(trae_account::TraePlatformKind::TraeCn);
+        let urls = build_account_api_urls(
+            trae_account::TraePlatformKind::TraeCn,
+            &account_api,
+            Some("row"),
+            TRAE_AUTH_CODE_EXCHANGE_TOKEN_PATH,
+        );
+
+        assert_eq!(
+            urls.first().map(String::as_str),
+            Some("https://api.trae.cn/trae/api/v3/oauth/ExchangeToken")
+        );
+        assert_eq!(urls.len(), 1);
+        assert!(!urls.iter().any(|url| url.contains("trae.ai")));
+    }
+
+    #[test]
+    fn auth_code_account_urls_use_official_sg_for_i18n_row_user() {
+        let account_api = default_account_api_config(trae_account::TraePlatformKind::TraeSolo);
+        let urls = build_account_api_urls(
+            trae_account::TraePlatformKind::TraeSolo,
+            &account_api,
+            Some("row"),
+            TRAE_AUTH_CODE_EXCHANGE_TOKEN_PATH,
+        );
+
+        assert_eq!(
+            urls.first().map(String::as_str),
+            Some("https://growsg-normal.trae.ai/trae/api/v3/oauth/ExchangeToken")
+        );
+        assert_eq!(urls.len(), 1);
+    }
+
+    #[test]
+    fn auth_code_account_urls_use_official_usttp_for_usttp_user() {
+        let account_api = default_account_api_config(trae_account::TraePlatformKind::TraeSolo);
+        let urls = build_account_api_urls(
+            trae_account::TraePlatformKind::TraeSolo,
+            &account_api,
+            Some("usttp"),
+            TRAE_AUTH_CODE_EXCHANGE_TOKEN_PATH,
+        );
+
+        assert_eq!(
+            urls.first().map(String::as_str),
+            Some("https://grow-normal.traeapi.us/trae/api/v3/oauth/ExchangeToken")
+        );
+        assert_eq!(urls.len(), 1);
+    }
+
+    #[test]
+    fn official_device_info_uses_solo_platform_code() {
+        let context = TraeLoginContext {
+            client_id: trae_account::TraePlatformKind::TraeSolo
+                .auth_client_id()
+                .to_string(),
+            plugin_version: "2.3.50082".to_string(),
+            machine_id: "machine-1".to_string(),
+            device_id: "7633793279305631249".to_string(),
+            x_device_brand: "Mac17,9".to_string(),
+            x_device_type: "mac".to_string(),
+            x_os_version: "macOS 26.5.1".to_string(),
+            x_env: String::new(),
+            x_app_version: "0.1.29".to_string(),
+            x_app_type: "stable".to_string(),
+            account_api: default_account_api_config(trae_account::TraePlatformKind::TraeSolo),
+        };
+
+        let solo_device = build_official_device_info(
+            trae_account::TraePlatformKind::TraeSolo,
+            &context,
+            "public-key",
+        );
+        assert_eq!(
+            solo_device.get("PlatformCode").and_then(Value::as_str),
+            Some("SOLO_PC")
+        );
+
+        let trae_device = build_official_device_info(
+            trae_account::TraePlatformKind::Trae,
+            &context,
+            "public-key",
+        );
+        assert_eq!(
+            trae_device.get("PlatformCode").and_then(Value::as_str),
+            Some("IDE_PC")
+        );
+    }
+
+    #[test]
+    fn http_error_formatter_includes_backend_error_detail() {
+        let body = json!({
+            "ResponseMetadata": {
+                "Error": {
+                    "Code": "10000",
+                    "StandardCode": "040001",
+                    "Message": "WrongRegion"
+                }
+            }
+        })
+        .to_string();
+        let message = format_http_error(reqwest::StatusCode::INTERNAL_SERVER_ERROR, &body);
+
+        assert!(message.contains("HTTP 500"));
+        assert!(message.contains("code=10000"));
+        assert!(message.contains("standard_code=040001"));
+        assert!(message.contains("message=WrongRegion"));
     }
 
     #[test]

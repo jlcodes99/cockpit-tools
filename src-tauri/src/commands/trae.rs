@@ -32,8 +32,12 @@ pub fn import_trae_from_json(json_content: String) -> Result<Vec<TraeAccount>, S
 }
 
 #[tauri::command]
-pub async fn import_trae_from_local(app: AppHandle) -> Result<Vec<TraeAccount>, String> {
-    match trae_account::import_from_local()? {
+pub async fn import_trae_from_local(
+    app: AppHandle,
+    platform_id: Option<String>,
+) -> Result<Vec<TraeAccount>, String> {
+    let platform = trae_account::TraePlatformKind::parse(platform_id.as_deref())?;
+    match trae_account::import_from_local_for_platform(platform)? {
         Some(mut account) => {
             match trae_account::refresh_account_async(account.id.as_str()).await {
                 Ok(refreshed) => account = refreshed,
@@ -47,27 +51,36 @@ pub async fn import_trae_from_local(app: AppHandle) -> Result<Vec<TraeAccount>, 
             let _ = crate::modules::tray::update_tray_menu(&app);
             Ok(vec![account])
         }
-        None => Err("未找到本地 Trae 登录信息".to_string()),
+        None => Err(format!("未找到本地 {} 登录信息", platform.display_name())),
     }
 }
 
 #[tauri::command]
-pub async fn trae_oauth_login_start() -> Result<TraeOAuthStartResponse, String> {
-    logger::log_info("[Trae OAuth] start 命令触发");
-    trae_oauth::start_login().await
+pub async fn trae_oauth_login_start(
+    platform_id: Option<String>,
+) -> Result<TraeOAuthStartResponse, String> {
+    let platform = trae_account::TraePlatformKind::parse(platform_id.as_deref())?;
+    logger::log_info(&format!(
+        "[Trae OAuth] start 命令触发: platform={}",
+        platform.provider_key()
+    ));
+    trae_oauth::start_login(platform).await
 }
 
 #[tauri::command]
 pub async fn trae_oauth_login_complete(
     app: AppHandle,
     login_id: String,
+    platform_id: Option<String>,
 ) -> Result<TraeAccount, String> {
+    let platform = trae_account::TraePlatformKind::parse(platform_id.as_deref())?;
     logger::log_info(&format!(
-        "[Trae OAuth] complete 命令触发: login_id={}",
+        "[Trae OAuth] complete 命令触发: platform={}, login_id={}",
+        platform.provider_key(),
         login_id
     ));
 
-    let payload = trae_oauth::complete_login(login_id.as_str()).await?;
+    let payload = trae_oauth::complete_login(login_id.as_str(), platform).await?;
     let mut account = trae_account::upsert_account(payload)?;
 
     match trae_account::refresh_account_async(account.id.as_str()).await {
@@ -82,20 +95,27 @@ pub async fn trae_oauth_login_complete(
 }
 
 #[tauri::command]
-pub fn trae_oauth_login_cancel(login_id: Option<String>) -> Result<(), String> {
+pub fn trae_oauth_login_cancel(
+    login_id: Option<String>,
+    platform_id: Option<String>,
+) -> Result<(), String> {
+    let platform = trae_account::TraePlatformKind::parse(platform_id.as_deref())?;
     logger::log_info(&format!(
-        "[Trae OAuth] cancel 命令触发: login_id={}",
+        "[Trae OAuth] cancel 命令触发: platform={}, login_id={}",
+        platform.provider_key(),
         login_id.as_deref().unwrap_or("<none>")
     ));
-    trae_oauth::cancel_login(login_id.as_deref())
+    trae_oauth::cancel_login(login_id.as_deref(), platform)
 }
 
 #[tauri::command]
 pub fn trae_oauth_submit_callback_url(
     login_id: String,
     callback_url: String,
+    platform_id: Option<String>,
 ) -> Result<(), String> {
-    trae_oauth::submit_callback_url(login_id.as_str(), callback_url.as_str())
+    let platform = trae_account::TraePlatformKind::parse(platform_id.as_deref())?;
+    trae_oauth::submit_callback_url(login_id.as_str(), callback_url.as_str(), platform)
 }
 
 #[tauri::command]
@@ -277,11 +297,18 @@ pub fn get_trae_accounts_index_path() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn inject_trae_account(app: AppHandle, account_id: String) -> Result<String, String> {
+pub async fn inject_trae_account(
+    app: AppHandle,
+    account_id: String,
+    platform_id: Option<String>,
+) -> Result<String, String> {
+    let platform = trae_account::TraePlatformKind::parse(platform_id.as_deref())?;
+    let platform_key = platform.provider_key();
+    let platform_label = platform.display_name();
     let started_at = Instant::now();
     logger::log_info(&format!(
-        "[Trae Switch] 开始切换账号: account_id={}",
-        account_id
+        "[Trae Switch] 开始切换账号: platform={}, account_id={}",
+        platform_key, account_id
     ));
 
     let existing = trae_account::load_account(&account_id)
@@ -290,53 +317,86 @@ pub async fn inject_trae_account(app: AppHandle, account_id: String) -> Result<S
         "[Trae Switch] 切号前刷新账号: account_id={}, email={}",
         existing.id, existing.email
     ));
-    let account = trae_account::refresh_account_async(&account_id)
-        .await
-        .map_err(|err| format!("Trae 切号前刷新失败: {}", err))?;
+    let account = if let Ok(accounts) = trae_account::list_accounts_checked() {
+        let protection_map = resolve_trae_refresh_protection_map(&accounts);
+        if let Some(storage_path) = protection_map.get(account_id.as_str()) {
+            logger::log_info(&format!(
+                "[Trae Switch] 切号前命中运行中账号保护，改为仅额度刷新: platform={}, account_id={}, storage_path={}",
+                platform_key,
+                account_id,
+                storage_path
+                    .as_ref()
+                    .map(|path| path.display().to_string())
+                    .unwrap_or_else(|| "-".to_string())
+            ));
+            trae_account::refresh_account_usage_only_async(&account_id, storage_path.as_deref())
+                .await
+                .map_err(|err| format!("Trae 切号前刷新失败: {}", err))?
+        } else {
+            trae_account::refresh_account_async(&account_id)
+                .await
+                .map_err(|err| format!("Trae 切号前刷新失败: {}", err))?
+        }
+    } else {
+        trae_account::refresh_account_async(&account_id)
+            .await
+            .map_err(|err| format!("Trae 切号前刷新失败: {}", err))?
+    };
 
-    if let Err(err) = crate::modules::process::close_trae(20) {
+    if let Err(err) = crate::modules::process::close_trae_platform_default(platform_key, 20) {
         logger::log_warn(&format!(
-            "[Trae Switch] 关闭 Trae 旧进程失败，切号中止: {}",
-            err
+            "[Trae Switch] 关闭 {} 旧进程失败，切号中止: {}",
+            platform_label, err
         ));
         return Err(format!(
-            "Trae 正在运行且未能正常关闭（{}）。请先关闭 Trae 后重试切号。",
-            err
+            "{} 正在运行且未能正常关闭（{}）。请先关闭 {} 后重试切号。",
+            platform_label, err, platform_label
         ));
     }
 
-    trae_account::inject_to_trae(&account_id)?;
+    trae_account::inject_to_trae_for_platform(platform, &account_id)?;
     crate::modules::provider_current_state::set_current_account_id(
-        "trae",
+        platform_key,
         Some(account_id.as_str()),
     )?;
 
-    if let Err(err) = crate::modules::trae_instance::update_default_settings(
-        Some(Some(account_id.clone())),
-        None,
-        Some(false),
-    ) {
-        logger::log_warn(&format!("更新 Trae 默认实例绑定账号失败: {}", err));
-    }
+    let launch_warning = {
+        if let Err(err) = crate::modules::trae_instance::update_default_settings_for_platform(
+            platform,
+            Some(Some(account_id.clone())),
+            None,
+            Some(false),
+        ) {
+            logger::log_warn(&format!(
+                "更新 {} 默认实例绑定账号失败: {}",
+                platform_label, err
+            ));
+        }
 
-    let launch_warning = match crate::commands::trae_instance::trae_start_instance(
-        "__default__".to_string(),
-    )
-    .await
-    {
-        Ok(_) => None,
-        Err(err) => {
-            if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("启动 Trae 失败") {
-                logger::log_warn(&format!("Trae 默认实例启动失败: {}", err));
-                if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("APP_PATH_NOT_FOUND:") {
-                    let _ = app.emit(
-                        "app:path_missing",
-                        serde_json::json!({ "app": "trae", "retry": { "kind": "default" } }),
-                    );
+        match crate::commands::trae_instance::trae_start_instance(
+            Some(platform_key.to_string()),
+            "__default__".to_string(),
+        )
+        .await
+        {
+            Ok(_) => None,
+            Err(err) => {
+                if err.starts_with("APP_PATH_NOT_FOUND:")
+                    || err.contains("启动 Trae 失败")
+                    || (err.contains("启动 ") && err.contains("失败"))
+                {
+                    logger::log_warn(&format!("{} 默认实例启动失败: {}", platform_label, err));
+                    if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("APP_PATH_NOT_FOUND:")
+                    {
+                        let _ = app.emit(
+                            "app:path_missing",
+                            serde_json::json!({ "app": platform_key, "retry": { "kind": "default" } }),
+                        );
+                    }
+                    Some(err)
+                } else {
+                    return Err(err);
                 }
-                Some(err)
-            } else {
-                return Err(err);
             }
         }
     };
@@ -345,16 +405,18 @@ pub async fn inject_trae_account(app: AppHandle, account_id: String) -> Result<S
 
     if let Some(err) = launch_warning {
         logger::log_warn(&format!(
-            "[Trae Switch] 切号完成但启动失败: account_id={}, email={}, elapsed={}ms, error={}",
+            "[Trae Switch] 切号完成但启动失败: platform={}, account_id={}, email={}, elapsed={}ms, error={}",
+            platform_key,
             account.id,
             account.email,
             started_at.elapsed().as_millis(),
             err
         ));
-        Ok(format!("切换完成，但 Trae 启动失败: {}", err))
+        Ok(format!("切换完成，但 {} 启动失败: {}", platform_label, err))
     } else {
         logger::log_info(&format!(
-            "[Trae Switch] 切号成功: account_id={}, email={}, elapsed={}ms",
+            "[Trae Switch] 切号成功: platform={}, account_id={}, email={}, elapsed={}ms",
+            platform_key,
             account.id,
             account.email,
             started_at.elapsed().as_millis()

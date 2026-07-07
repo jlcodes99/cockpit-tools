@@ -28,6 +28,101 @@ const TRAE_STORAGE_ENTITLEMENT_KEY: &str = "iCubeEntitlementInfo://icube.cloudid
 const TRAE_STORAGE_SERVER_KEY: &str = "iCubeServerData://icube.cloudide";
 const TRAE_STORAGE_USERTAG_KEY: &str = "iCubeAuthInfo://usertag";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TraePlatformKind {
+    Trae,
+    TraeSolo,
+    TraeCn,
+    TraeSoloCn,
+}
+
+impl TraePlatformKind {
+    pub fn parse(raw: Option<&str>) -> Result<Self, String> {
+        let normalized = raw
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("trae")
+            .to_ascii_lowercase()
+            .replace('-', "_");
+        match normalized.as_str() {
+            "trae" => Ok(Self::Trae),
+            "trae_solo" => Ok(Self::TraeSolo),
+            "trae_cn" => Ok(Self::TraeCn),
+            "trae_solo_cn" => Ok(Self::TraeSoloCn),
+            other => Err(format!("不支持的 Trae 平台: {}", other)),
+        }
+    }
+
+    pub fn provider_key(self) -> &'static str {
+        match self {
+            Self::Trae => "trae",
+            Self::TraeSolo => "trae_solo",
+            Self::TraeCn => "trae_cn",
+            Self::TraeSoloCn => "trae_solo_cn",
+        }
+    }
+
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Trae => "Trae",
+            Self::TraeSolo => "TRAE SOLO",
+            Self::TraeCn => "Trae CN",
+            Self::TraeSoloCn => "TRAE SOLO CN",
+        }
+    }
+
+    pub fn is_cn(self) -> bool {
+        matches!(self, Self::TraeCn | Self::TraeSoloCn)
+    }
+
+    pub fn is_solo(self) -> bool {
+        matches!(self, Self::TraeSolo | Self::TraeSoloCn)
+    }
+
+    pub fn auth_client_id(self) -> &'static str {
+        if self.is_solo() {
+            TRAE_SOLO_AUTH_CLIENT_ID
+        } else {
+            TRAE_AUTH_CLIENT_ID
+        }
+    }
+
+    pub fn auth_domain(self) -> &'static str {
+        if self.is_cn() {
+            TRAE_CN_AUTH_DOMAIN
+        } else {
+            TRAE_AUTH_DOMAIN
+        }
+    }
+
+    pub fn default_login_host(self) -> String {
+        format!("https://{}", self.auth_domain())
+    }
+
+    pub fn app_support_dir_name(self) -> &'static str {
+        self.display_name()
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn macos_app_name(self) -> &'static str {
+        match self {
+            Self::Trae => "Trae.app",
+            Self::TraeSolo => "TRAE SOLO.app",
+            Self::TraeCn => "Trae CN.app",
+            Self::TraeSoloCn => "TRAE SOLO CN.app",
+        }
+    }
+}
+
+fn all_trae_platform_kinds() -> [TraePlatformKind; 4] {
+    [
+        TraePlatformKind::Trae,
+        TraePlatformKind::TraeSolo,
+        TraePlatformKind::TraeCn,
+        TraePlatformKind::TraeSoloCn,
+    ]
+}
+
 const BYTE_CRYPTO_BLOCK_SIZE: usize = 16;
 const BYTE_CRYPTO_HEADER_LEN: usize = 6;
 const BYTE_CRYPTO_SHA512_LEN: usize = 64;
@@ -67,13 +162,18 @@ const TRAE_ACCOUNT_API_ORIGIN_NORMAL: &str = "https://grow-normal.trae.ai";
 const TRAE_ACCOUNT_API_ORIGIN_SG: &str = "https://growsg-normal.trae.ai";
 const TRAE_ACCOUNT_API_ORIGIN_US: &str = "https://growsg-normal.trae.ai";
 const TRAE_ACCOUNT_API_ORIGIN_USTTP: &str = "https://grow-normal.traeapi.us";
+const TRAE_ACCOUNT_API_ORIGIN_CN: &str = "https://api.trae.cn";
+const TRAE_ACCOUNT_API_ORIGIN_CN_ICUBE: &str = "https://api.trae.com.cn";
 const TRAE_EXCHANGE_TOKEN_PATH: &str = "/cloudide/api/v3/trae/oauth/ExchangeToken";
 const TRAE_AUTH_CODE_EXCHANGE_TOKEN_PATH: &str = "/trae/api/v3/oauth/ExchangeToken";
 const TRAE_GET_USER_INFO_PATH: &str = "/cloudide/api/v3/trae/GetUserInfo";
 const TRAE_CHECK_LOGIN_PATH: &str = "/cloudide/api/v3/trae/CheckLogin";
 const TRAE_PAY_STATUS_PATH: &str = "/trae/api/v1/pay/ide_user_pay_status";
 const TRAE_ENT_USAGE_PATH: &str = "/trae/api/v1/pay/ide_user_ent_usage";
+const TRAE_AUTH_DOMAIN: &str = "www.trae.ai";
+const TRAE_CN_AUTH_DOMAIN: &str = "www.trae.cn";
 const TRAE_AUTH_CLIENT_ID: &str = "ono9krqynydwx5";
+const TRAE_SOLO_AUTH_CLIENT_ID: &str = "en1oxy7wnw8j9n";
 const TRAE_EXCHANGE_CLIENT_SECRET: &str = "-";
 const TRAE_IDE_VERSION: &str = "3.5.66";
 const TRAE_NEED_REFRESH_WINDOW_MILLISECONDS: i64 = 24 * 60 * 60 * 1000;
@@ -84,8 +184,10 @@ lazy_static::lazy_static! {
     static ref TRAE_ACCOUNT_INDEX_LOCK: Mutex<()> = Mutex::new(());
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 struct TraeRefreshRoutingContext {
+    platform: TraePlatformKind,
+    client_id: String,
     login_host: String,
     login_region: Option<String>,
     store_region: Option<String>,
@@ -193,16 +295,23 @@ fn is_official_trae_account_api_origin(origin: &str) -> bool {
         TRAE_ACCOUNT_API_ORIGIN_SG,
         TRAE_ACCOUNT_API_ORIGIN_US,
         TRAE_ACCOUNT_API_ORIGIN_USTTP,
+        TRAE_ACCOUNT_API_ORIGIN_CN,
+        TRAE_ACCOUNT_API_ORIGIN_CN_ICUBE,
     ]
     .iter()
     .any(|candidate| normalized == *candidate)
 }
 
 fn official_trae_account_api_origin_for_region(
+    platform: TraePlatformKind,
     store_region: Option<&str>,
     ai_region: Option<&str>,
     login_region: Option<&str>,
 ) -> String {
+    if platform.is_cn() {
+        return TRAE_ACCOUNT_API_ORIGIN_CN.to_string();
+    }
+
     let normalized_region = store_region
         .or(ai_region)
         .map(|value| to_store_region(value))
@@ -225,6 +334,7 @@ fn official_trae_account_api_origin_for_region(
 }
 
 fn resolve_trae_account_api_origin(
+    platform: TraePlatformKind,
     host: Option<&str>,
     store_region: Option<&str>,
     ai_region: Option<&str>,
@@ -236,17 +346,18 @@ fn resolve_trae_account_api_origin(
         }
     }
 
-    official_trae_account_api_origin_for_region(store_region, ai_region, login_region)
+    official_trae_account_api_origin_for_region(platform, store_region, ai_region, login_region)
 }
 
 fn resolve_trae_auth_storage_origin(
+    platform: TraePlatformKind,
     host: Option<&str>,
     store_region: Option<&str>,
     ai_region: Option<&str>,
     login_region: Option<&str>,
 ) -> String {
     host.and_then(normalize_origin).unwrap_or_else(|| {
-        official_trae_account_api_origin_for_region(store_region, ai_region, login_region)
+        official_trae_account_api_origin_for_region(platform, store_region, ai_region, login_region)
     })
 }
 
@@ -993,6 +1104,29 @@ fn resolve_payload_identity(payload: &TraeImportPayload) -> String {
         .unwrap_or_else(|| "trae_user".to_string())
 }
 
+fn resolve_payload_platform_kind(payload: &TraeImportPayload) -> TraePlatformKind {
+    let profile_root = profile_payload_root(payload.trae_profile_raw.as_ref());
+    let roots = [
+        payload.trae_auth_raw.as_ref(),
+        profile_root,
+        payload.trae_server_raw.as_ref(),
+        payload.trae_entitlement_raw.as_ref(),
+        payload.trae_usage_raw.as_ref(),
+    ];
+    resolve_platform_from_roots(&roots)
+}
+
+fn resolve_platform_scoped_payload_identity(
+    platform: TraePlatformKind,
+    payload: &TraeImportPayload,
+) -> String {
+    format!(
+        "{}:{}",
+        platform.provider_key(),
+        resolve_payload_identity(payload)
+    )
+}
+
 fn apply_payload(account: &mut TraeAccount, payload: TraeImportPayload) {
     let merged_auth_raw = merge_auth_fields(payload.trae_auth_raw.as_ref(), &payload);
     account.email = normalize_email_from_payload(&payload);
@@ -1042,8 +1176,9 @@ pub fn upsert_account(payload: TraeImportPayload) -> Result<TraeAccount, String>
     let mut index = load_account_index();
     let normalized_user_id = normalize_non_empty(payload.user_id.as_deref());
     let normalized_email = normalize_identity_email(Some(payload.email.as_str()));
+    let incoming_platform = resolve_payload_platform_kind(&payload);
 
-    let identity = resolve_payload_identity(&payload);
+    let identity = resolve_platform_scoped_payload_identity(incoming_platform, &payload);
     let generated_id = format!("trae_{:x}", md5::compute(identity.as_bytes()));
 
     let account_id = index
@@ -1051,6 +1186,9 @@ pub fn upsert_account(payload: TraeImportPayload) -> Result<TraeAccount, String>
         .iter()
         .filter_map(|summary| load_account(summary.id.as_str()))
         .find(|account| {
+            if resolve_account_platform_kind(account) != incoming_platform {
+                return false;
+            }
             account_matches_import_identity(
                 account,
                 normalized_user_id.as_deref(),
@@ -1702,35 +1840,49 @@ pub fn export_accounts(account_ids: &[String]) -> Result<String, String> {
     serde_json::to_string_pretty(&accounts).map_err(|e| format!("序列化失败: {}", e))
 }
 
-pub fn get_default_trae_data_dir() -> Result<PathBuf, String> {
+pub fn get_default_trae_data_dir_for_platform(
+    platform: TraePlatformKind,
+) -> Result<PathBuf, String> {
     #[cfg(target_os = "macos")]
     {
         let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join("Library/Application Support/Trae"));
+        return Ok(home
+            .join("Library/Application Support")
+            .join(platform.app_support_dir_name()));
     }
 
     #[cfg(target_os = "windows")]
     {
         let appdata =
             std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
-        return Ok(PathBuf::from(appdata).join("Trae"));
+        return Ok(PathBuf::from(appdata).join(platform.app_support_dir_name()));
     }
 
     #[cfg(target_os = "linux")]
     {
         let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join(".config/Trae"));
+        return Ok(home.join(".config").join(platform.app_support_dir_name()));
     }
 
     #[allow(unreachable_code)]
     Err("Trae 仅支持 macOS、Windows 和 Linux".to_string())
 }
 
-pub fn get_default_trae_storage_path() -> Result<PathBuf, String> {
-    Ok(get_default_trae_data_dir()?
+pub fn get_default_trae_data_dir() -> Result<PathBuf, String> {
+    get_default_trae_data_dir_for_platform(TraePlatformKind::Trae)
+}
+
+pub fn get_default_trae_storage_path_for_platform(
+    platform: TraePlatformKind,
+) -> Result<PathBuf, String> {
+    Ok(get_default_trae_data_dir_for_platform(platform)?
         .join("User")
         .join("globalStorage")
         .join("storage.json"))
+}
+
+pub fn get_default_trae_storage_path() -> Result<PathBuf, String> {
+    get_default_trae_storage_path_for_platform(TraePlatformKind::Trae)
 }
 
 fn read_storage_json(path: &Path) -> Result<Value, String> {
@@ -1793,6 +1945,396 @@ fn pick_i64_multi(roots: &[Option<&Value>], paths: &[&[&str]]) -> Option<i64> {
         }
     }
     None
+}
+
+fn json_value_to_non_empty_string(value: &Value) -> Option<String> {
+    if let Some(text) = value.as_str() {
+        return normalize_non_empty(Some(text));
+    }
+    if let Some(num) = value.as_i64() {
+        return Some(num.to_string());
+    }
+    if let Some(num) = value.as_u64() {
+        return Some(num.to_string());
+    }
+    None
+}
+
+fn parse_json_file(path: &Path) -> Option<Value> {
+    let content = fs::read_to_string(path).ok()?;
+    serde_json::from_str::<Value>(&content).ok()
+}
+
+fn is_probable_executable_path(path: &Path) -> bool {
+    if path.is_file() {
+        return true;
+    }
+    path.extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("exe"))
+        .unwrap_or(false)
+}
+
+fn build_trae_product_file_candidates(base_path: &Path) -> Vec<PathBuf> {
+    let mut app_roots: Vec<PathBuf> = Vec::new();
+    let base_path_string = base_path.to_string_lossy().to_string();
+
+    if let Some(app_idx) = base_path_string.find(".app") {
+        app_roots.push(PathBuf::from(&base_path_string[..app_idx + 4]));
+    }
+    if base_path.is_dir() {
+        app_roots.push(base_path.to_path_buf());
+    }
+    if is_probable_executable_path(base_path) {
+        if let Some(parent) = base_path.parent() {
+            app_roots.push(parent.to_path_buf());
+        }
+    }
+    if app_roots.is_empty() {
+        app_roots.push(base_path.to_path_buf());
+    }
+
+    let mut candidates = Vec::new();
+    for root in app_roots {
+        candidates.extend([
+            root.join("Contents")
+                .join("Resources")
+                .join("app")
+                .join("product.json"),
+            root.join("Contents")
+                .join("Resources")
+                .join("app")
+                .join("package.json"),
+            root.join("resources").join("app").join("product.json"),
+            root.join("resources").join("app").join("package.json"),
+            root.join("product.json"),
+            root.join("package.json"),
+        ]);
+    }
+    candidates
+}
+
+#[cfg(target_os = "windows")]
+fn trae_product_exe_names(platform: TraePlatformKind) -> &'static [&'static str] {
+    match platform {
+        TraePlatformKind::Trae => &["Trae.exe"],
+        TraePlatformKind::TraeSolo => &["TRAE SOLO.exe", "Trae.exe", "Electron.exe"],
+        TraePlatformKind::TraeCn => &["Trae CN.exe", "Trae.exe", "Electron.exe"],
+        TraePlatformKind::TraeSoloCn => &["TRAE SOLO CN.exe", "Trae.exe", "Electron.exe"],
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn trae_product_linux_base_paths(platform: TraePlatformKind) -> &'static [&'static str] {
+    match platform {
+        TraePlatformKind::Trae => &[
+            "/usr/bin/trae",
+            "/usr/local/bin/trae",
+            "/opt/trae/trae",
+            "/opt/Trae",
+        ],
+        TraePlatformKind::TraeSolo => &[
+            "/usr/bin/trae-solo",
+            "/usr/local/bin/trae-solo",
+            "/opt/trae-solo/trae-solo",
+            "/opt/TRAE SOLO",
+        ],
+        TraePlatformKind::TraeCn => &[
+            "/usr/bin/trae-cn",
+            "/usr/local/bin/trae-cn",
+            "/opt/trae-cn/trae-cn",
+            "/opt/Trae CN",
+        ],
+        TraePlatformKind::TraeSoloCn => &[
+            "/usr/bin/trae-solo-cn",
+            "/usr/local/bin/trae-solo-cn",
+            "/opt/trae-solo-cn/trae-solo-cn",
+            "/opt/TRAE SOLO CN",
+        ],
+    }
+}
+
+fn trae_product_base_paths(platform: TraePlatformKind) -> Vec<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    #[cfg(target_os = "macos")]
+    {
+        let app_root = PathBuf::from("/Applications").join(platform.macos_app_name());
+        candidates.push(app_root.clone());
+        candidates.push(app_root.join("Contents"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let app_dir = platform.app_support_dir_name();
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let programs_dir = PathBuf::from(&local_app_data)
+                .join("Programs")
+                .join(app_dir);
+            for exe_name in trae_product_exe_names(platform) {
+                candidates.push(programs_dir.join(exe_name));
+            }
+            candidates.push(programs_dir);
+        }
+        if let Ok(program_files) = std::env::var("ProgramFiles") {
+            let install_dir = PathBuf::from(&program_files).join(app_dir);
+            for exe_name in trae_product_exe_names(platform) {
+                candidates.push(install_dir.join(exe_name));
+            }
+            candidates.push(install_dir);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        for candidate in trae_product_linux_base_paths(platform) {
+            candidates.push(PathBuf::from(candidate));
+        }
+    }
+
+    candidates
+}
+
+fn product_auth_config_group(platform: TraePlatformKind) -> &'static str {
+    if platform.is_solo() {
+        "SOLO"
+    } else {
+        "TRAE"
+    }
+}
+
+fn read_product_auth_client_id(root: &Value, platform: TraePlatformKind) -> Option<String> {
+    let group = product_auth_config_group(platform);
+    let entries = root
+        .get("iCubeApp")?
+        .get("authConfig")?
+        .get(group)?
+        .as_object()?;
+    let app_type = pick_string(Some(root), &[&["quality"]]).map(|value| value.to_lowercase());
+
+    if let Some(quality) = app_type.and_then(|value| normalize_non_empty(Some(value.as_str()))) {
+        if let Some(client_id) = entries
+            .get(quality.as_str())
+            .and_then(json_value_to_non_empty_string)
+        {
+            return Some(client_id);
+        }
+    }
+
+    if let Some(client_id) = entries
+        .get("stable")
+        .and_then(json_value_to_non_empty_string)
+    {
+        return Some(client_id);
+    }
+
+    entries.values().find_map(json_value_to_non_empty_string)
+}
+
+fn detect_product_auth_client_id(platform: TraePlatformKind) -> Option<String> {
+    for base_path in trae_product_base_paths(platform) {
+        for candidate in build_trae_product_file_candidates(base_path.as_path()) {
+            let Some(root) = parse_json_file(candidate.as_path()) else {
+                continue;
+            };
+            if let Some(client_id) = read_product_auth_client_id(&root, platform) {
+                return Some(client_id);
+            }
+        }
+    }
+    None
+}
+
+fn resolve_auth_client_id_from_roots(
+    roots: &[Option<&Value>],
+    platform: TraePlatformKind,
+) -> String {
+    let paths: &[&[&str]] = &[
+        &["authClientId"],
+        &["clientId"],
+        &["ClientID"],
+        &["platform", "authClientId"],
+        &["platform", "clientId"],
+        &["exchangeResponse", "ClientID"],
+        &["exchangeResponse", "Result", "ClientID"],
+        &["Result", "ClientID"],
+        &["data", "ClientID"],
+    ];
+    let fallback = platform.auth_client_id();
+    let mut first: Option<String> = None;
+
+    for root in roots {
+        for path in paths {
+            let Some(candidate) = pick_string(*root, &[*path])
+                .and_then(|value| normalize_non_empty(Some(value.as_str())))
+            else {
+                continue;
+            };
+
+            if first.is_none() {
+                first = Some(candidate.clone());
+            }
+            if candidate != fallback {
+                return candidate;
+            }
+        }
+    }
+
+    if let Some(product_client_id) = detect_product_auth_client_id(platform) {
+        if product_client_id != fallback {
+            return product_client_id;
+        }
+        if first.is_none() {
+            first = Some(product_client_id);
+        }
+    }
+
+    first.unwrap_or_else(|| fallback.to_string())
+}
+
+fn platform_metadata_value(platform: TraePlatformKind) -> Value {
+    serde_json::json!({
+        "platformId": platform.provider_key(),
+        "platformName": platform.display_name(),
+        "authClientId": platform.auth_client_id(),
+        "authDomain": platform.auth_domain(),
+    })
+}
+
+fn insert_platform_metadata(obj: &mut Map<String, Value>, platform: TraePlatformKind) {
+    obj.insert(
+        "platformId".to_string(),
+        Value::String(platform.provider_key().to_string()),
+    );
+    obj.insert(
+        "platformName".to_string(),
+        Value::String(platform.display_name().to_string()),
+    );
+    obj.insert(
+        "authClientId".to_string(),
+        Value::String(platform.auth_client_id().to_string()),
+    );
+    obj.insert(
+        "authDomain".to_string(),
+        Value::String(platform.auth_domain().to_string()),
+    );
+}
+
+fn with_platform_metadata(raw: Option<Value>, platform: TraePlatformKind) -> Value {
+    let mut obj = match raw {
+        Some(Value::Object(value)) => value,
+        Some(value) => {
+            let mut wrapped = Map::new();
+            wrapped.insert("raw".to_string(), value);
+            wrapped
+        }
+        None => Map::new(),
+    };
+    insert_platform_metadata(&mut obj, platform);
+    Value::Object(obj)
+}
+
+fn attach_platform_metadata_to_payload(
+    payload: &mut TraeImportPayload,
+    platform: TraePlatformKind,
+) {
+    payload.trae_auth_raw = Some(with_platform_metadata(
+        payload.trae_auth_raw.take(),
+        platform,
+    ));
+
+    let mut server_obj = match payload.trae_server_raw.take() {
+        Some(Value::Object(value)) => value,
+        Some(value) => {
+            let mut wrapped = Map::new();
+            wrapped.insert("raw".to_string(), value);
+            wrapped
+        }
+        None => Map::new(),
+    };
+    server_obj.insert("platform".to_string(), platform_metadata_value(platform));
+    payload.trae_server_raw = Some(Value::Object(server_obj));
+}
+
+fn resolve_platform_from_roots(roots: &[Option<&Value>]) -> TraePlatformKind {
+    if let Some(platform_id) = pick_string_multi(
+        roots,
+        &[
+            &["platformId"],
+            &["platform_id"],
+            &["platform"],
+            &["platform", "platformId"],
+            &["platform", "platform_id"],
+        ],
+    ) {
+        if let Ok(platform) = TraePlatformKind::parse(Some(platform_id.as_str())) {
+            return platform;
+        }
+    }
+
+    let client_id = pick_string_multi(
+        roots,
+        &[
+            &["authClientId"],
+            &["clientId"],
+            &["ClientID"],
+            &["exchangeResponse", "ClientID"],
+            &["exchangeResponse", "Result", "ClientID"],
+        ],
+    )
+    .map(|value| value.trim().to_string());
+    let is_solo = client_id
+        .as_deref()
+        .map(|value| value == TRAE_SOLO_AUTH_CLIENT_ID)
+        .unwrap_or(false);
+
+    let domain_hint = pick_string_multi(
+        roots,
+        &[
+            &["authDomain"],
+            &["loginHost"],
+            &["apiHost"],
+            &["host"],
+            &["callbackQuery", "host"],
+            &["platform", "authDomain"],
+        ],
+    )
+    .map(|value| value.to_ascii_lowercase())
+    .unwrap_or_default();
+    let provider_hint = pick_string_multi(
+        roots,
+        &[
+            &["providerCode"],
+            &["packageType"],
+            &["platform", "providerCode"],
+            &["platform", "packageType"],
+        ],
+    )
+    .map(|value| value.to_ascii_lowercase())
+    .unwrap_or_default();
+    let is_cn = domain_hint.contains("trae.cn")
+        || domain_hint.contains("trae.com.cn")
+        || provider_hint == "cn"
+        || provider_hint.ends_with("_cn");
+
+    match (is_solo, is_cn) {
+        (true, true) => TraePlatformKind::TraeSoloCn,
+        (true, false) => TraePlatformKind::TraeSolo,
+        (false, true) => TraePlatformKind::TraeCn,
+        (false, false) => TraePlatformKind::Trae,
+    }
+}
+
+fn resolve_account_platform_kind(account: &TraeAccount) -> TraePlatformKind {
+    let profile_root = profile_payload_root(account.trae_profile_raw.as_ref());
+    let roots = [
+        account.trae_auth_raw.as_ref(),
+        profile_root,
+        account.trae_server_raw.as_ref(),
+        account.trae_entitlement_raw.as_ref(),
+        account.trae_usage_raw.as_ref(),
+    ];
+    resolve_platform_from_roots(&roots)
 }
 
 fn profile_payload_root(profile_raw: Option<&Value>) -> Option<&Value> {
@@ -2128,6 +2670,7 @@ fn ensure_auth_raw_for_inject(account: &TraeAccount, existing_auth_raw: Option<&
     let auth_raw = account.trae_auth_raw.as_ref();
     let profile_root = profile_payload_root(account.trae_profile_raw.as_ref());
     let server_raw = account.trae_server_raw.as_ref();
+    let platform = resolve_account_platform_kind(account);
 
     let roots = [auth_raw, profile_root, server_raw];
     let user_tag = resolve_user_tag_for_inject(account);
@@ -2262,6 +2805,7 @@ fn ensure_auth_raw_for_inject(account: &TraeAccount, existing_auth_raw: Option<&
     );
 
     let api_host = resolve_trae_auth_storage_origin(
+        platform,
         pick_string_multi(
             &roots,
             &[
@@ -2279,6 +2823,7 @@ fn ensure_auth_raw_for_inject(account: &TraeAccount, existing_auth_raw: Option<&
         Some(ai_region.as_str()),
         login_region.as_deref(),
     );
+    let client_id = resolve_auth_client_id_from_roots(&roots, platform);
 
     let expires_at = resolve_iso_timestamp(
         account.expires_at,
@@ -2437,6 +2982,8 @@ fn ensure_auth_raw_for_inject(account: &TraeAccount, existing_auth_raw: Option<&
     );
     obj.insert("host".to_string(), Value::String(api_host.clone()));
     obj.insert("loginHost".to_string(), Value::String(api_host));
+    insert_platform_metadata(&mut obj, platform);
+    obj.insert("authClientId".to_string(), Value::String(client_id));
     if had_region_key {
         obj.insert("region".to_string(), Value::String(ai_region.clone()));
     }
@@ -2484,31 +3031,57 @@ fn read_local_trae_auth_from_storage_path(
 }
 
 pub fn read_local_trae_auth() -> Result<Option<TraeImportPayload>, String> {
-    let storage_path = get_default_trae_storage_path()?;
+    read_local_trae_auth_for_platform(TraePlatformKind::Trae)
+}
+
+pub fn read_local_trae_auth_for_platform(
+    platform: TraePlatformKind,
+) -> Result<Option<TraeImportPayload>, String> {
+    let storage_path = get_default_trae_storage_path_for_platform(platform)?;
     read_local_trae_auth_from_storage_path(&storage_path)
 }
 
 pub fn import_from_local() -> Result<Option<TraeAccount>, String> {
-    let payload = match read_local_trae_auth()? {
+    import_from_local_for_platform(TraePlatformKind::Trae)
+}
+
+pub fn import_from_local_for_platform(
+    platform: TraePlatformKind,
+) -> Result<Option<TraeAccount>, String> {
+    let mut payload = match read_local_trae_auth_for_platform(platform)? {
         Some(payload) => payload,
         None => return Ok(None),
     };
+    attach_platform_metadata_to_payload(&mut payload, platform);
     let account = upsert_account(payload)?;
     logger::log_info(&format!(
-        "[Trae Account] 本地导入成功: id={}, email={}",
-        account.id, account.email
+        "[Trae Account] 本地导入成功: platform={}, id={}, email={}",
+        platform.provider_key(),
+        account.id,
+        account.email
     ));
     Ok(Some(account))
 }
 
 pub(crate) fn resolve_current_account_id(accounts: &[TraeAccount]) -> Option<String> {
-    if let Ok(Some(payload)) = read_local_trae_auth() {
+    resolve_current_account_id_for_platform(accounts, TraePlatformKind::Trae)
+}
+
+pub(crate) fn resolve_current_account_id_for_platform(
+    accounts: &[TraeAccount],
+    platform: TraePlatformKind,
+) -> Option<String> {
+    if let Ok(Some(payload)) = read_local_trae_auth_for_platform(platform) {
         let normalized_user_id = normalize_non_empty(payload.user_id.as_deref());
         let normalized_email = normalize_email(Some(payload.email.as_str()));
 
         if let Some(account_id) = accounts
             .iter()
             .find(|account| {
+                if resolve_account_platform_kind(account) != platform {
+                    return false;
+                }
+
                 if let (Some(existing), Some(incoming)) = (
                     normalize_non_empty(account.user_id.as_deref()),
                     normalized_user_id.clone(),
@@ -2534,8 +3107,11 @@ pub(crate) fn resolve_current_account_id(accounts: &[TraeAccount]) -> Option<Str
     }
 
     crate::modules::provider_current_state::resolve_existing_current_account_id(
-        "trae",
-        accounts.iter().map(|account| account.id.as_str()),
+        platform.provider_key(),
+        accounts
+            .iter()
+            .filter(|account| resolve_account_platform_kind(account) == platform)
+            .map(|account| account.id.as_str()),
     )
 }
 
@@ -2544,10 +3120,13 @@ pub(crate) fn resolve_running_account_refresh_protection_map(
 ) -> BTreeMap<String, Option<PathBuf>> {
     let mut protected = BTreeMap::new();
 
-    if crate::modules::process::is_trae_running() {
-        if let Some(current_id) = resolve_current_account_id(accounts) {
-            let default_storage_path = get_default_trae_storage_path().ok();
-            protected.insert(current_id, default_storage_path);
+    for platform in all_trae_platform_kinds() {
+        if crate::modules::process::is_trae_running_for_platform(platform) {
+            if let Some(current_id) = resolve_current_account_id_for_platform(accounts, platform) {
+                let default_storage_path =
+                    get_default_trae_storage_path_for_platform(platform).ok();
+                protected.insert(current_id, default_storage_path);
+            }
         }
     }
 
@@ -2578,7 +3157,14 @@ pub(crate) fn resolve_running_account_refresh_protection_map(
 }
 
 pub fn inject_to_trae(account_id: &str) -> Result<(), String> {
-    let storage_path = get_default_trae_storage_path()?;
+    inject_to_trae_for_platform(TraePlatformKind::Trae, account_id)
+}
+
+pub fn inject_to_trae_for_platform(
+    platform: TraePlatformKind,
+    account_id: &str,
+) -> Result<(), String> {
+    let storage_path = get_default_trae_storage_path_for_platform(platform)?;
     inject_to_trae_at_path(storage_path.as_path(), account_id)
 }
 
@@ -2742,15 +3328,34 @@ fn build_refresh_device_info(account: &TraeAccount, public_key_pem: &str) -> Val
     Value::Object(device_info)
 }
 
-fn sign_trae_device_proof(refresh_token: &str, private_key_pem: &str) -> Result<Value, String> {
+fn build_device_proof_message(
+    client_id: &str,
+    refresh_token: &str,
+    timestamp: i64,
+    nonce: &str,
+) -> String {
+    let timestamp_text = timestamp.to_string();
+    [
+        "POST",
+        TRAE_AUTH_CODE_EXCHANGE_TOKEN_PATH,
+        client_id,
+        refresh_token,
+        timestamp_text.as_str(),
+        nonce,
+    ]
+    .join("\n")
+}
+
+fn sign_trae_device_proof(
+    refresh_token: &str,
+    private_key_pem: &str,
+    client_id: &str,
+) -> Result<Value, String> {
     let mut nonce_bytes = [0u8; 16];
     rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
     let nonce = bytes_to_lower_hex(&nonce_bytes);
     let timestamp = chrono::Utc::now().timestamp();
-    let message = format!(
-        "POST {} {} {} {} {}",
-        TRAE_AUTH_CODE_EXCHANGE_TOKEN_PATH, TRAE_AUTH_CLIENT_ID, refresh_token, timestamp, nonce
-    );
+    let message = build_device_proof_message(client_id, refresh_token, timestamp, nonce.as_str());
     let private_key_der = pem_to_der(private_key_pem)?;
     let rng = SystemRandom::new();
     let key_pair = EcdsaKeyPair::from_pkcs8(
@@ -2780,12 +3385,14 @@ async fn request_exchange_token_by_official_refresh(
     let device_key_pair = resolve_device_key_pair_for_refresh(account)
         .ok_or_else(|| "Trae 设备密钥缺失，无法按官方新版流程刷新登录态".to_string())?;
     let device_info = build_refresh_device_info(account, device_key_pair.public_key_pem.as_str());
+    let client_id = routing_context.client_id.as_str();
     let device_proof = sign_trae_device_proof(
         refresh_token.as_str(),
         device_key_pair.private_key_pem.as_str(),
+        client_id,
     )?;
     let body = serde_json::json!({
-        "ClientID": TRAE_AUTH_CLIENT_ID,
+        "ClientID": client_id,
         "ClientSecret": "",
         "RefreshToken": refresh_token,
         "DeviceInfo": device_info,
@@ -2829,6 +3436,7 @@ fn normalize_login_region(raw: Option<&str>) -> Option<String> {
 }
 
 fn build_refresh_routing_context(account: &TraeAccount) -> TraeRefreshRoutingContext {
+    let platform = resolve_account_platform_kind(account);
     let profile_root = profile_payload_root(account.trae_profile_raw.as_ref());
     let roots = [
         account.trae_auth_raw.as_ref(),
@@ -2877,7 +3485,9 @@ fn build_refresh_routing_context(account: &TraeAccount) -> TraeRefreshRoutingCon
     )
     .map(|value| to_store_region(value.as_str()));
 
+    let client_id = resolve_auth_client_id_from_roots(&roots, platform);
     let login_host = resolve_trae_account_api_origin(
+        platform,
         pick_string_multi(
             &roots,
             &[
@@ -2901,6 +3511,8 @@ fn build_refresh_routing_context(account: &TraeAccount) -> TraeRefreshRoutingCon
     );
 
     TraeRefreshRoutingContext {
+        platform,
+        client_id,
         login_host,
         login_region,
         store_region,
@@ -2946,6 +3558,9 @@ fn merge_refresh_routing_context(response: &Value, context: &TraeRefreshRoutingC
             .entry("AIRegion".to_string())
             .or_insert_with(|| Value::String(ai_region.clone()));
     }
+    merged
+        .entry("authClientId".to_string())
+        .or_insert_with(|| Value::String(context.client_id.clone()));
 
     Value::Object(merged)
 }
@@ -3728,8 +4343,9 @@ async fn refresh_account_async_once(account_id: &str) -> Result<TraeAccount, Str
     let cookie = pick_cookie_from_account(&account);
     let routing_context = build_refresh_routing_context(&account);
     logger::log_info(&format!(
-        "[Trae Refresh] 使用路由: id={}, host={}, login_region={}, store_region={}, ai_region={}",
+        "[Trae Refresh] 使用路由: id={}, platform={}, host={}, login_region={}, store_region={}, ai_region={}",
         account.id,
+        routing_context.platform.provider_key(),
         routing_context.login_host,
         routing_context.login_region.as_deref().unwrap_or("-"),
         routing_context.store_region.as_deref().unwrap_or("-"),
@@ -3755,7 +4371,7 @@ async fn refresh_account_async_once(account_id: &str) -> Result<TraeAccount, Str
                 official_err
             ));
             let exchange_body = serde_json::json!({
-                "ClientID": TRAE_AUTH_CLIENT_ID,
+                "ClientID": routing_context.client_id.as_str(),
                 "RefreshToken": account.refresh_token.clone().unwrap_or_default(),
                 "ClientSecret": TRAE_EXCHANGE_CLIENT_SECRET,
                 "UserID": "",
@@ -4014,6 +4630,8 @@ mod tests {
             }
         });
         let context = TraeRefreshRoutingContext {
+            platform: TraePlatformKind::Trae,
+            client_id: TRAE_AUTH_CLIENT_ID.to_string(),
             login_host: "https://growsg-normal.trae.ai".to_string(),
             login_region: Some("sg".to_string()),
             store_region: Some("SG".to_string()),
@@ -4052,6 +4670,98 @@ mod tests {
                 .and_then(|value| value.get("username"))
                 .and_then(Value::as_str),
             Some("李杰")
+        );
+    }
+
+    #[test]
+    fn product_auth_client_id_uses_platform_and_quality() {
+        let root = serde_json::json!({
+            "quality": "stable",
+            "iCubeApp": {
+                "authConfig": {
+                    "TRAE": {
+                        "stable": "trae-stable-client"
+                    },
+                    "SOLO": {
+                        "stable": "solo-stable-client"
+                    }
+                }
+            }
+        });
+
+        assert_eq!(
+            read_product_auth_client_id(&root, TraePlatformKind::Trae).as_deref(),
+            Some("trae-stable-client")
+        );
+        assert_eq!(
+            read_product_auth_client_id(&root, TraePlatformKind::TraeSolo).as_deref(),
+            Some("solo-stable-client")
+        );
+    }
+
+    #[test]
+    fn refresh_routing_context_prefers_stored_dynamic_auth_client_id() {
+        let mut account = sample_account();
+        account.trae_auth_raw = Some(serde_json::json!({
+            "platformId": "trae_solo",
+            "authClientId": TRAE_SOLO_AUTH_CLIENT_ID
+        }));
+        account.trae_server_raw = Some(serde_json::json!({
+            "platform": {
+                "authClientId": "solo-dynamic-client"
+            }
+        }));
+
+        let context = build_refresh_routing_context(&account);
+
+        assert_eq!(context.platform, TraePlatformKind::TraeSolo);
+        assert_eq!(context.client_id, "solo-dynamic-client");
+    }
+
+    #[test]
+    fn platform_scoped_payload_identity_keeps_cn_and_global_accounts_separate() {
+        let global_payload = TraeImportPayload {
+            email: "same@example.com".to_string(),
+            user_id: Some("user-1".to_string()),
+            nickname: None,
+            access_token: "access-global".to_string(),
+            refresh_token: Some("refresh-global".to_string()),
+            token_type: None,
+            expires_at: None,
+            plan_type: None,
+            plan_reset_at: None,
+            trae_auth_raw: Some(serde_json::json!({
+                "platformId": "trae",
+                "authDomain": "www.trae.ai",
+                "authClientId": TRAE_AUTH_CLIENT_ID
+            })),
+            trae_profile_raw: None,
+            trae_entitlement_raw: None,
+            trae_usage_raw: None,
+            trae_server_raw: None,
+            trae_usertag_raw: None,
+            status: None,
+            status_reason: None,
+        };
+        let cn_payload = TraeImportPayload {
+            trae_auth_raw: Some(serde_json::json!({
+                "platformId": "trae_cn",
+                "authDomain": "www.trae.cn",
+                "authClientId": TRAE_AUTH_CLIENT_ID
+            })),
+            access_token: "access-cn".to_string(),
+            refresh_token: Some("refresh-cn".to_string()),
+            ..global_payload.clone()
+        };
+
+        let global_platform = resolve_payload_platform_kind(&global_payload);
+        let cn_platform = resolve_payload_platform_kind(&cn_payload);
+
+        assert_eq!(global_platform, TraePlatformKind::Trae);
+        assert_eq!(cn_platform, TraePlatformKind::TraeCn);
+        assert_ne!(
+            resolve_platform_scoped_payload_identity(global_platform, &global_payload),
+            resolve_platform_scoped_payload_identity(cn_platform, &cn_payload)
         );
     }
 
@@ -4242,6 +4952,16 @@ mod tests {
         assert_eq!(
             auth_obj.get("loginHost").and_then(Value::as_str),
             Some("https://api-sg-central.trae.ai")
+        );
+    }
+
+    #[test]
+    fn device_proof_message_matches_official_newline_format() {
+        let message = build_device_proof_message("client-1", "refresh-1", 1_783_355_376, "nonce-1");
+
+        assert_eq!(
+            message,
+            "POST\n/trae/api/v3/oauth/ExchangeToken\nclient-1\nrefresh-1\n1783355376\nnonce-1"
         );
     }
 

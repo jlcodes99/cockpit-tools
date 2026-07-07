@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Nền tảng Zed",
     "expandSidebar": "Mở rộng thanh bên",
@@ -2055,6 +2058,7 @@
     "quota": {
       "hourly": "Hạn mức 5 giờ",
       "weekly": "Hạn mức tuần",
+      "additional": "Hạn mức bổ sung",
       "reset": "Đặt lại",
       "weeklyBlocksHourly": "Hạn mức tuần là 0 nên hạn mức 5 giờ không khả dụng",
       "resetCredits": "Lượt đặt lại {{count}}",
@@ -3580,6 +3584,15 @@
     "claude": {
       "appPath": "Đường dẫn Claude",
       "appTargetPlaceholder": "Đường dẫn Claude.exe hoặc shell:AppsFolder\\..."
+    },
+    "traeSolo": {
+      "appPath": "Đường dẫn TRAE SOLO"
+    },
+    "traeCn": {
+      "appPath": "Đường dẫn Trae CN"
+    },
+    "traeSoloCn": {
+      "appPath": "Đường dẫn TRAE SOLO CN"
     }
   },
   "quotaAlert": {
@@ -4344,17 +4357,21 @@
   "trae": {
     "title": "Quan ly tai khoan Trae",
     "empty": {
-      "description": "Nhan \"Them tai khoan\" de bat dau quan ly cac tai khoan Trae, hoac nhap tu du lieu Trae cuc bo hay tep JSON."
+      "description": "Nhan \"Them tai khoan\" de bat dau quan ly cac tai khoan Trae, hoac nhap tu du lieu Trae cuc bo hay tep JSON.",
+      "descriptionWithPlatform": "Nhấp \"Thêm tài khoản\" để quản lý tài khoản {{platform}}, hoặc nhập dữ liệu {{platform}} cục bộ hay tệp JSON."
     },
     "addModal": {
-      "title": "Them tai khoan Trae"
+      "title": "Them tai khoan Trae",
+      "titleWithPlatform": "Thêm tài khoản {{platform}}"
     },
     "oauth": {
-      "desc": "Nhan nut ben duoi va hoan tat uy quyen OAuth cua Trae trong trinh duyet."
+      "desc": "Nhan nut ben duoi va hoan tat uy quyen OAuth cua Trae trong trinh duyet.",
+      "descWithPlatform": "Nhấp nút bên dưới và hoàn tất ủy quyền OAuth của {{platform}} trong trình duyệt."
     },
     "import": {
       "localDesc": "Nhap tai khoan dang dang nhap, thong tin goi va du lieu han muc da luu cache tu thu muc cau hinh Trae cuc bo.",
-      "jsonTab": "Tep JSON"
+      "jsonTab": "Tep JSON",
+      "localDescWithPlatform": "Nhập tài khoản đang đăng nhập, thông tin gói và dữ liệu hạn mức đã lưu cache từ thư mục cấu hình {{platform}} cục bộ."
     },
     "quota": {
       "usedOfTotal": "Da dung $ {{used}} / $ {{total}}",
@@ -4380,7 +4397,12 @@
       "title": "Huong dan tai khoan Trae (nhan de mo rong/thu gon)",
       "desc": "Ho tro dang nhap OAuth chinh thuc, nhap cuc bo, nhap JSON va chuyen tai khoan bang cach tiem du lieu cuc bo. Khi chuyen tai khoan, du lieu duoc ghi lai theo dung quy tac luu tru thuc te cua Trae client.",
       "permission": "Pham vi quyen: doc va ghi cac truong lien quan den dang nhap trong storage.json cuc bo cua Trae de phuc vu viec nhap tai khoan, tiem chuyen tai khoan va hien thi goi. Moi du lieu deu duoc xu ly cuc bo tren may cua ban.",
-      "network": "Pham vi mang: dang nhap OAuth, lam moi token va truy van goi se goi cac API chinh thuc cua Trae. Tep tai khoan cuc bo va noi dung luu tru thuan khong duoc tai len dich vu ben thu ba."
+      "network": "Pham vi mang: dang nhap OAuth, lam moi token va truy van goi se goi cac API chinh thuc cua Trae. Tep tai khoan cuc bo va noi dung luu tru thuan khong duoc tai len dich vu ben thu ba.",
+      "titleWithPlatform": "Hướng dẫn tài khoản {{platform}} (nhấp để mở/thu gọn)",
+      "descWithPlatform": "Hỗ trợ OAuth chính thức của {{platform}}, nhập cục bộ, nhập JSON và chuyển tài khoản bằng ghi cục bộ. Việc chuyển tài khoản ghi lại theo quy tắc lưu trữ thực tế của client {{platform}}.",
+      "permissionWithPlatform": "Phạm vi quyền: đọc và ghi các trường đăng nhập trong storage.json cục bộ của {{platform}} để nhập tài khoản, ghi chuyển tài khoản và hiển thị gói. Tất cả dữ liệu chỉ được xử lý trên máy.",
+      "networkGlobal": "Phạm vi mạng: đăng nhập OAuth, làm mới token và truy vấn gói của {{platform}} gọi API chính thức trae.ai / traeapi.us. Không tải tệp tài khoản cục bộ hoặc nội dung lưu trữ thô lên dịch vụ bên thứ ba.",
+      "networkCn": "Phạm vi mạng: đăng nhập OAuth, làm mới token và truy vấn gói của {{platform}} gọi API chính thức trae.cn / trae.com.cn. Không tải tệp tài khoản cục bộ hoặc nội dung lưu trữ thô lên dịch vụ bên thứ ba."
     }
   },
   "codebuddyCn": {

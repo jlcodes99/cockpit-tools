@@ -161,6 +161,7 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
                 const streakDays = state?.status?.streak_days ?? 0;
                 const dailyCredit = state?.status?.daily_credit ?? 0;
                 const todayCredit = state?.status?.today_credit;
+                const displayCredit = todayCredit ?? dailyCredit;
                 const nextStreakDay = state?.status?.next_streak_day;
                 const isStreakDay = state?.status?.is_streak_day ?? false;
                 const checkinDates = state?.status?.checkin_dates;
@@ -193,10 +194,10 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
                         </span>
                       )}
 
-                      {state?.status && dailyCredit > 0 && (
+                      {state?.status && displayCredit > 0 && (
                         <span className="checkin-credit-badge">
                           <Gift size={12} />
-                          +{todayCredit ?? dailyCredit}
+                          +{displayCredit}
                         </span>
                       )}
 
@@ -244,11 +245,13 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
                       </div>
                     )}
 
-                    {state?.checkinResult?.reward && (
+                    {(state?.checkinResult?.credit != null || state?.checkinResult?.reward) && (
                       <div className="checkin-reward-badge">
                         <Trophy size={12} />
                         <span>
-                          {typeof state.checkinResult.reward === 'object'
+                          {state.checkinResult.credit != null
+                            ? `+${state.checkinResult.credit}`
+                            : typeof state.checkinResult.reward === 'object'
                             ? JSON.stringify(state.checkinResult.reward)
                             : String(state.checkinResult.reward)}
                         </span>
@@ -295,7 +298,7 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
 }
 
 // 便捷导出：WorkBuddy 签到弹窗
-import * as codebuddyCnService from '../../services/codebuddyCnService';
+import * as workbuddyService from '../../services/workbuddyService';
 import { getAccountDisplayEmail } from '../../utils/codebuddy-suite';
 export function WorkbuddyCheckinModal({
   accounts,
@@ -309,8 +312,8 @@ export function WorkbuddyCheckinModal({
   return (
     <CodebuddySuiteCheckinModal
       accounts={accounts}
-      getCheckinStatus={codebuddyCnService.getCheckinStatusWorkbuddy}
-      performCheckin={codebuddyCnService.checkinWorkbuddy}
+      getCheckinStatus={workbuddyService.getCheckinStatusWorkbuddy}
+      performCheckin={workbuddyService.checkinWorkbuddy}
       getDisplayEmail={getAccountDisplayEmail}
       onClose={onClose}
       onCheckinComplete={onCheckinComplete}

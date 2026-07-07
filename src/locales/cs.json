@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Platforma Zed",
     "expandSidebar": "Rozbalit postranní panel",
@@ -2055,6 +2058,7 @@
     "quota": {
       "hourly": "Kvóta 5 hodin",
       "weekly": "Týdenní kvóta",
+      "additional": "Dodatečná kvóta",
       "reset": "Reset​",
       "weeklyBlocksHourly": "Týdenní kvóta je 0, proto není 5hodinová kvóta dostupná",
       "resetCredits": "Resety {{count}}",
@@ -3580,6 +3584,15 @@
     "claude": {
       "appPath": "Cesta Claude",
       "appTargetPlaceholder": "Cesta Claude.exe nebo shell:AppsFolder\\..."
+    },
+    "traeSolo": {
+      "appPath": "Cesta TRAE SOLO"
+    },
+    "traeCn": {
+      "appPath": "Cesta Trae CN"
+    },
+    "traeSoloCn": {
+      "appPath": "Cesta TRAE SOLO CN"
     }
   },
   "quotaAlert": {
@@ -4344,17 +4357,21 @@
   "trae": {
     "title": "Sprava uctu Trae",
     "empty": {
-      "description": "Kliknete na „Pridat ucet“ a zacnete spravovat ucty Trae, nebo je importujte z mistnich dat Trae ci ze souboru JSON."
+      "description": "Kliknete na „Pridat ucet“ a zacnete spravovat ucty Trae, nebo je importujte z mistnich dat Trae ci ze souboru JSON.",
+      "descriptionWithPlatform": "Kliknutím na „Přidat účet“ začnete spravovat účty {{platform}}, případně importujte místní data {{platform}} nebo soubor JSON."
     },
     "addModal": {
-      "title": "Pridat ucet Trae"
+      "title": "Pridat ucet Trae",
+      "titleWithPlatform": "Přidat účet {{platform}}"
     },
     "oauth": {
-      "desc": "Kliknete na tlacitko nize a dokoncete autorizaci Trae OAuth v prohlizeci."
+      "desc": "Kliknete na tlacitko nize a dokoncete autorizaci Trae OAuth v prohlizeci.",
+      "descWithPlatform": "Klikněte na tlačítko níže a dokončete autorizaci OAuth pro {{platform}} v prohlížeči."
     },
     "import": {
       "localDesc": "Importuje aktualne prihlaseny ucet, informace o tarifu a cache kvoty z mistniho konfiguracniho adresare Trae.",
-      "jsonTab": "Soubor JSON"
+      "jsonTab": "Soubor JSON",
+      "localDescWithPlatform": "Importuje aktuálně přihlášený účet, informace o plánu a uložená data kvóty z místního konfiguračního adresáře {{platform}}."
     },
     "quota": {
       "usedOfTotal": "Vyuzito $ {{used}} z $ {{total}}",
@@ -4380,7 +4397,12 @@
       "title": "Prirucka k uctu Trae (kliknutim rozbalit/sbalit)",
       "desc": "Podporuje oficialni prihlaseni OAuth, mistni import, import JSON a prepinani uctu pomoci lokalni injekce. Pri prepnuti zapisuje data podle skutecnych pravidel klienta Trae.",
       "permission": "Rozsah opravneni: cte a zapisuje prihlasovaci pole v mistnim souboru Trae storage.json pro import uctu, injekci prepnuti uctu a zobrazeni tarifu. Vsechna data se zpracovavaji pouze lokalne na vasem zarizeni.",
-      "network": "Sitovy rozsah: prihlaseni OAuth, obnoveni tokenu a dotazy na tarif volaji oficialni API Trae. Mistni soubory uctu ani puvodni obsah uloziste se neodesilaji sluzbam tretich stran."
+      "network": "Sitovy rozsah: prihlaseni OAuth, obnoveni tokenu a dotazy na tarif volaji oficialni API Trae. Mistni soubory uctu ani puvodni obsah uloziste se neodesilaji sluzbam tretich stran.",
+      "titleWithPlatform": "Průvodce účty {{platform}} (kliknutím rozbalit/sbalit)",
+      "descWithPlatform": "Podporuje oficiální OAuth {{platform}}, místní import, import JSON a místní přepínání účtů přes injekci. Přepínání zapisuje podle skutečných pravidel klienta {{platform}} na disku.",
+      "permissionWithPlatform": "Rozsah oprávnění: čte a zapisuje pole přihlášení v místním storage.json {{platform}} pro import účtů, injekci přepnutí účtu a zobrazení plánu. Všechna data se zpracovávají pouze místně.",
+      "networkGlobal": "Rozsah sítě: OAuth přihlášení, obnova tokenů a dotazy plánu {{platform}} volají oficiální API trae.ai / traeapi.us. Místní soubory účtů ani surový obsah úložiště se nenahrávají třetím stranám.",
+      "networkCn": "Rozsah sítě: OAuth přihlášení, obnova tokenů a dotazy plánu {{platform}} volají oficiální API trae.cn / trae.com.cn. Místní soubory účtů ani surový obsah úložiště se nenahrávají třetím stranám."
     }
   },
   "codebuddyCn": {

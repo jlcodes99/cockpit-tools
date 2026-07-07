@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Zed プラットフォーム",
     "expandSidebar": "サイドバーを展開",
@@ -2055,6 +2058,7 @@
     "quota": {
       "hourly": "5 時間クォータ",
       "weekly": "週次クォータ",
+      "additional": "追加クォータ",
       "reset": "リセット",
       "weeklyBlocksHourly": "週クォータが 0 のため、5時間クォータは利用できません",
       "resetCredits": "リセット {{count}}",
@@ -3580,6 +3584,15 @@
     "claude": {
       "appPath": "Claude パス",
       "appTargetPlaceholder": "Claude.exe のパスまたは shell:AppsFolder\\..."
+    },
+    "traeSolo": {
+      "appPath": "TRAE SOLO パス"
+    },
+    "traeCn": {
+      "appPath": "Trae CN パス"
+    },
+    "traeSoloCn": {
+      "appPath": "TRAE SOLO CN パス"
     }
   },
   "quotaAlert": {
@@ -4344,17 +4357,21 @@
   "trae": {
     "title": "Trae アカウント管理",
     "empty": {
-      "description": "「アカウント追加」をクリックして Trae アカウント管理を開始するか、ローカル Trae データまたは JSON ファイルからインポートできます。"
+      "description": "「アカウント追加」をクリックして Trae アカウント管理を開始するか、ローカル Trae データまたは JSON ファイルからインポートできます。",
+      "descriptionWithPlatform": "「アカウントを追加」をクリックして {{platform}} アカウントを管理するか、ローカルの {{platform}} データまたは JSON ファイルからインポートします。"
     },
     "addModal": {
-      "title": "Trae アカウントを追加"
+      "title": "Trae アカウントを追加",
+      "titleWithPlatform": "{{platform}} アカウントを追加"
     },
     "oauth": {
-      "desc": "下のボタンをクリックし、ブラウザで Trae OAuth 認証を完了してください。"
+      "desc": "下のボタンをクリックし、ブラウザで Trae OAuth 認証を完了してください。",
+      "descWithPlatform": "下のボタンをクリックし、ブラウザーで {{platform}} OAuth 認可を完了してください。"
     },
     "import": {
       "localDesc": "ローカルの Trae 設定ディレクトリから、現在ログイン中のアカウント、プラン情報、キャッシュ済みクォーターデータを読み込みます。",
-      "jsonTab": "JSON ファイル"
+      "jsonTab": "JSON ファイル",
+      "localDescWithPlatform": "ローカルの {{platform}} 設定ディレクトリから、現在ログイン中のアカウント、プラン情報、キャッシュ済みクォータデータをインポートします。"
     },
     "quota": {
       "usedOfTotal": "使用済み $ {{used}} / $ {{total}}",
@@ -4380,7 +4397,12 @@
       "title": "Trae アカウントガイド（クリックで展開/折りたたみ）",
       "desc": "公式 OAuth ログイン、ローカルインポート、JSON インポート、ローカル注入によるアカウント切り替えに対応しています。切り替え時は Trae クライアントの実際の保存ルールに従って書き戻します。",
       "permission": "権限範囲: ローカルの Trae storage.json 内のログイン関連フィールドを読み書きし、アカウントのインポート、切り替え注入、プラン表示に使用します。すべてのデータはローカル端末上で処理されます。",
-      "network": "ネットワーク範囲: OAuth ログイン、トークン更新、プラン照会では Trae 公式 API を呼び出します。ローカルのアカウントファイルや生の保存内容を第三者サービスへアップロードすることはありません。"
+      "network": "ネットワーク範囲: OAuth ログイン、トークン更新、プラン照会では Trae 公式 API を呼び出します。ローカルのアカウントファイルや生の保存内容を第三者サービスへアップロードすることはありません。",
+      "titleWithPlatform": "{{platform}} アカウント接続ガイド（クリックで展開/折りたたみ）",
+      "descWithPlatform": "{{platform}} 公式 OAuth 認可、ローカルインポート、JSON インポート、ローカル注入によるアカウント切り替えに対応します。切り替え時は {{platform}} クライアントの実際の保存ルールに従って書き戻します。",
+      "permissionWithPlatform": "権限範囲：アカウントインポート、切り替え注入、プラン表示のため、ローカル {{platform}} の storage.json 内のログイン関連フィールドを読み書きします。すべてのデータはローカルで処理されます。",
+      "networkGlobal": "ネットワーク範囲：{{platform}} OAuth ログイン、トークン更新、プラン照会では公式 trae.ai / traeapi.us API を呼び出します。ローカルのアカウントファイルや生の保存内容を第三者サービスへアップロードしません。",
+      "networkCn": "ネットワーク範囲：{{platform}} OAuth ログイン、トークン更新、プラン照会では公式 trae.cn / trae.com.cn API を呼び出します。ローカルのアカウントファイルや生の保存内容を第三者サービスへアップロードしません。"
     }
   },
   "codebuddyCn": {

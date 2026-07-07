@@ -2966,7 +2966,8 @@ pub fn detect_app_path(app: String, force: Option<bool>) -> Result<Option<String
         "cursor" => Ok(modules::cursor_instance::detect_and_save_cursor_launch_path(force)),
         "claude" => Ok(modules::claude_instance::detect_and_save_claude_launch_path(force)),
         "antigravity" | "antigravity_ide" | "antigravity_legacy" | "codex" | "zed" | "vscode"
-        | "codebuddy" | "codebuddy_cn" | "qoder" | "trae" | "opencode" | "workbuddy" => Ok(
+        | "codebuddy" | "codebuddy_cn" | "qoder" | "trae" | "trae_solo" | "trae_cn"
+        | "trae_solo_cn" | "opencode" | "workbuddy" => Ok(
             modules::process::detect_and_save_app_path(app.as_str(), force),
         ),
         _ => Err("未知应用类型".to_string()),
@@ -2992,7 +2993,7 @@ pub fn scan_app_launch_targets(
     match app.as_str() {
         "antigravity" | "antigravity_ide" | "antigravity_legacy" | "codex" | "claude"
         | "vscode" | "windsurf" | "kiro" | "cursor" | "codebuddy" | "codebuddy_cn" | "qoder"
-        | "trae" | "workbuddy" | "zed" | "opencode" => {}
+        | "trae" | "trae_solo" | "trae_cn" | "trae_solo_cn" | "workbuddy" | "zed" | "opencode" => {}
         _ => return Err("未知应用类型".to_string()),
     }
 

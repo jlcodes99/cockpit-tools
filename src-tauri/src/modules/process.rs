@@ -2,7 +2,7 @@ use crate::modules::config;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 #[cfg(not(target_os = "macos"))]
@@ -783,6 +783,45 @@ fn windows_app_launch_signature(app: &str) -> Option<WindowsAppLaunchSignature> 
             protocol_names: &["trae"],
             display_keywords: &["trae"],
             common_paths: &["Trae\\Trae.exe"],
+            supports_multi_instance: true,
+        }),
+        "trae_solo" => Some(WindowsAppLaunchSignature {
+            label: "TRAE SOLO",
+            exe_names: &["TRAE SOLO.exe", "Trae.exe", "Electron.exe"],
+            command_names: &["trae-solo", "solo"],
+            protocol_names: &["solo"],
+            display_keywords: &["trae solo", "solo"],
+            common_paths: &[
+                "TRAE SOLO\\TRAE SOLO.exe",
+                "TRAE SOLO\\Trae.exe",
+                "TRAE SOLO\\Electron.exe",
+            ],
+            supports_multi_instance: true,
+        }),
+        "trae_cn" => Some(WindowsAppLaunchSignature {
+            label: "Trae CN",
+            exe_names: &["Trae CN.exe", "Trae.exe", "Electron.exe"],
+            command_names: &["trae-cn"],
+            protocol_names: &["trae-cn"],
+            display_keywords: &["trae cn"],
+            common_paths: &[
+                "Trae CN\\Trae CN.exe",
+                "Trae CN\\Trae.exe",
+                "Trae CN\\Electron.exe",
+            ],
+            supports_multi_instance: true,
+        }),
+        "trae_solo_cn" => Some(WindowsAppLaunchSignature {
+            label: "TRAE SOLO CN",
+            exe_names: &["TRAE SOLO CN.exe", "Trae.exe", "Electron.exe"],
+            command_names: &["trae-solo-cn", "solo-cn"],
+            protocol_names: &["solo-cn"],
+            display_keywords: &["trae solo cn", "solo cn"],
+            common_paths: &[
+                "TRAE SOLO CN\\TRAE SOLO CN.exe",
+                "TRAE SOLO CN\\Trae.exe",
+                "TRAE SOLO CN\\Electron.exe",
+            ],
             supports_multi_instance: true,
         }),
         "workbuddy" => Some(WindowsAppLaunchSignature {
@@ -1708,6 +1747,9 @@ fn update_app_path_in_config(app: &str, path: &Path) {
                 return;
             }
         }
+        "trae_solo" | "trae_cn" | "trae_solo_cn" => {
+            return;
+        }
         "workbuddy" => {
             if current.workbuddy_app_path != normalized {
                 current.workbuddy_app_path = normalized;
@@ -2516,12 +2558,19 @@ fn detect_zed_exec_path() -> Option<std::path::PathBuf> {
 }
 
 fn detect_trae_exec_path() -> Option<std::path::PathBuf> {
+    detect_trae_exec_path_for_platform(crate::modules::trae_account::TraePlatformKind::Trae)
+}
+
+fn detect_trae_exec_path_for_platform(
+    platform: crate::modules::trae_account::TraePlatformKind,
+) -> Option<std::path::PathBuf> {
     #[cfg(target_os = "macos")]
     {
+        let app_root = format!("/Applications/{}", platform.macos_app_name());
         let candidates = [
-            "/Applications/Trae.app/Contents/MacOS/Trae",
-            "/Applications/Trae.app/Contents/MacOS/Electron",
-            "/Applications/Trae.app",
+            format!("{}/Contents/MacOS/Trae", app_root),
+            format!("{}/Contents/MacOS/Electron", app_root),
+            app_root,
         ];
         for candidate in candidates {
             let path = std::path::PathBuf::from(candidate);
@@ -2534,20 +2583,37 @@ fn detect_trae_exec_path() -> Option<std::path::PathBuf> {
     #[cfg(target_os = "windows")]
     {
         let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+        let app_dir = platform.app_support_dir_name();
+        let exe_names: &[&str] = match platform {
+            crate::modules::trae_account::TraePlatformKind::Trae => &["Trae.exe"],
+            crate::modules::trae_account::TraePlatformKind::TraeSolo => {
+                &["TRAE SOLO.exe", "Trae.exe", "Electron.exe"]
+            }
+            crate::modules::trae_account::TraePlatformKind::TraeCn => {
+                &["Trae CN.exe", "Trae.exe", "Electron.exe"]
+            }
+            crate::modules::trae_account::TraePlatformKind::TraeSoloCn => {
+                &["TRAE SOLO CN.exe", "Trae.exe", "Electron.exe"]
+            }
+        };
         if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
-            candidates.push(
-                std::path::PathBuf::from(&local_appdata)
-                    .join("Programs")
-                    .join("Trae")
-                    .join("Trae.exe"),
-            );
+            for exe_name in exe_names {
+                candidates.push(
+                    std::path::PathBuf::from(&local_appdata)
+                        .join("Programs")
+                        .join(app_dir)
+                        .join(exe_name),
+                );
+            }
         }
         if let Ok(program_files) = std::env::var("PROGRAMFILES") {
-            candidates.push(
-                std::path::PathBuf::from(program_files)
-                    .join("Trae")
-                    .join("Trae.exe"),
-            );
+            for exe_name in exe_names {
+                candidates.push(
+                    std::path::PathBuf::from(&program_files)
+                        .join(app_dir)
+                        .join(exe_name),
+                );
+            }
         }
         for candidate in candidates {
             if candidate.exists() {
@@ -2558,7 +2624,26 @@ fn detect_trae_exec_path() -> Option<std::path::PathBuf> {
 
     #[cfg(target_os = "linux")]
     {
-        let candidates = ["/usr/bin/trae", "/usr/local/bin/trae", "/opt/trae/trae"];
+        let candidates: &[&str] = match platform {
+            crate::modules::trae_account::TraePlatformKind::Trae => {
+                &["/usr/bin/trae", "/usr/local/bin/trae", "/opt/trae/trae"]
+            }
+            crate::modules::trae_account::TraePlatformKind::TraeSolo => &[
+                "/usr/bin/trae-solo",
+                "/usr/local/bin/trae-solo",
+                "/opt/trae-solo/trae-solo",
+            ],
+            crate::modules::trae_account::TraePlatformKind::TraeCn => &[
+                "/usr/bin/trae-cn",
+                "/usr/local/bin/trae-cn",
+                "/opt/trae-cn/trae-cn",
+            ],
+            crate::modules::trae_account::TraePlatformKind::TraeSoloCn => &[
+                "/usr/bin/trae-solo-cn",
+                "/usr/local/bin/trae-solo-cn",
+                "/opt/trae-solo-cn/trae-solo-cn",
+            ],
+        };
         for candidate in candidates {
             let path = std::path::PathBuf::from(candidate);
             if path.exists() {
@@ -3636,14 +3721,23 @@ pub fn resolve_zed_launch_path() -> Result<std::path::PathBuf, String> {
 }
 
 fn resolve_trae_launch_path() -> Result<std::path::PathBuf, String> {
-    if let Some(custom) = normalize_custom_path(Some(&config::get_user_config().trae_app_path)) {
-        if let Some(exec) = resolve_trae_macos_exec_path(&custom) {
-            return Ok(exec);
+    resolve_trae_launch_path_for_platform(crate::modules::trae_account::TraePlatformKind::Trae)
+}
+
+fn resolve_trae_launch_path_for_platform(
+    platform: crate::modules::trae_account::TraePlatformKind,
+) -> Result<std::path::PathBuf, String> {
+    if platform == crate::modules::trae_account::TraePlatformKind::Trae {
+        if let Some(custom) = normalize_custom_path(Some(&config::get_user_config().trae_app_path))
+        {
+            if let Some(exec) = resolve_trae_macos_exec_path(&custom) {
+                return Ok(exec);
+            }
+            return Err(app_path_missing_error(platform.provider_key()));
         }
-        return Err(app_path_missing_error("trae"));
     }
 
-    if let Some(detected) = detect_trae_exec_path() {
+    if let Some(detected) = detect_trae_exec_path_for_platform(platform) {
         let detected_str = detected.to_string_lossy();
         if let Some(exec) = resolve_trae_macos_exec_path(&detected_str) {
             return Ok(exec);
@@ -3658,7 +3752,7 @@ fn resolve_trae_launch_path() -> Result<std::path::PathBuf, String> {
         }
     }
 
-    Err(app_path_missing_error("trae"))
+    Err(app_path_missing_error(platform.provider_key()))
 }
 
 fn resolve_workbuddy_launch_path() -> Result<std::path::PathBuf, String> {
@@ -3811,6 +3905,13 @@ pub fn detect_and_save_app_path(app: &str, force: bool) -> Option<String> {
             if let Some(detected) = detect_trae_exec_path() {
                 update_app_path_in_config("trae", &detected);
                 return Some(config::get_user_config().trae_app_path);
+            }
+        }
+        "trae_solo" | "trae_cn" | "trae_solo_cn" => {
+            if let Ok(platform) = crate::modules::trae_account::TraePlatformKind::parse(Some(app)) {
+                if let Some(detected) = detect_trae_exec_path_for_platform(platform) {
+                    return Some(detected.to_string_lossy().to_string());
+                }
             }
         }
         "opencode" => {
@@ -4502,12 +4603,15 @@ fn resolve_expected_qoder_launch_path_for_match() -> Option<String> {
     Some(normalized)
 }
 
-fn resolve_expected_trae_launch_path_for_match() -> Option<String> {
-    let launch_path = match resolve_trae_launch_path() {
+fn resolve_expected_trae_launch_path_for_platform_match(
+    platform: crate::modules::trae_account::TraePlatformKind,
+) -> Option<String> {
+    let launch_path = match resolve_trae_launch_path_for_platform(platform) {
         Ok(path) => path,
         Err(err) => {
             crate::modules::logger::log_warn(&format!(
-                "[Trae Resolve] launch path missing or invalid, skip PID match: {}",
+                "[Trae Resolve] platform={} launch path missing or invalid, skip PID match: {}",
+                platform.provider_key(),
                 err
             ));
             return None;
@@ -5169,9 +5273,19 @@ fn resolve_qoder_target_and_fallback(user_data_dir: Option<&str>) -> Option<(Str
 }
 
 fn resolve_trae_target_and_fallback(user_data_dir: Option<&str>) -> Option<(String, bool)> {
+    resolve_trae_target_and_fallback_for_platform(
+        user_data_dir,
+        crate::modules::trae_account::TraePlatformKind::Trae,
+    )
+}
+
+fn resolve_trae_target_and_fallback_for_platform(
+    user_data_dir: Option<&str>,
+    platform: crate::modules::trae_account::TraePlatformKind,
+) -> Option<(String, bool)> {
     build_user_data_dir_match_target(
         user_data_dir,
-        get_default_trae_user_data_dir_for_os(),
+        get_default_trae_user_data_dir_for_platform_for_os(platform),
         !strict_process_detect_enabled(),
     )
 }
@@ -5375,8 +5489,14 @@ fn collect_qoder_process_entries_macos() -> Vec<(u32, Option<String>)> {
 }
 
 #[cfg(target_os = "macos")]
-fn collect_trae_process_entries_macos() -> Vec<(u32, Option<String>)> {
+fn collect_trae_process_entries_macos_for_platform(
+    platform: crate::modules::trae_account::TraePlatformKind,
+) -> Vec<(u32, Option<String>)> {
     let mut entries = Vec::new();
+    let bundle_pattern = format!(
+        "{}/contents/macos/",
+        platform.macos_app_name().to_ascii_lowercase()
+    );
     let output = Command::new("ps").args(["-axo", "pid,command"]).output();
     if let Ok(output) = output {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -5393,7 +5513,7 @@ fn collect_trae_process_entries_macos() -> Vec<(u32, Option<String>)> {
                 Err(_) => continue,
             };
             let lower = cmdline.to_lowercase();
-            let is_trae = lower.contains("trae.app/contents/macos/");
+            let is_trae = lower.contains(&bundle_pattern);
             if !is_trae {
                 continue;
             }
@@ -5430,9 +5550,29 @@ pub fn resolve_trae_pid_from_entries(
     resolve_pid_from_entries_by_user_data_dir(last_pid, &target, allow_none_for_target, entries)
 }
 
+fn resolve_trae_pid_from_entries_for_platform(
+    last_pid: Option<u32>,
+    user_data_dir: Option<&str>,
+    entries: &[(u32, Option<String>)],
+    platform: crate::modules::trae_account::TraePlatformKind,
+) -> Option<u32> {
+    let (target, allow_none_for_target) =
+        resolve_trae_target_and_fallback_for_platform(user_data_dir, platform)?;
+    resolve_pid_from_entries_by_user_data_dir(last_pid, &target, allow_none_for_target, entries)
+}
+
 pub fn resolve_trae_pid(last_pid: Option<u32>, user_data_dir: Option<&str>) -> Option<u32> {
     let entries = collect_trae_process_entries();
     resolve_trae_pid_from_entries(last_pid, user_data_dir, &entries)
+}
+
+pub fn resolve_trae_pid_for_platform(
+    last_pid: Option<u32>,
+    user_data_dir: Option<&str>,
+    platform: crate::modules::trae_account::TraePlatformKind,
+) -> Option<u32> {
+    let entries = collect_trae_process_entries_for_platform(platform);
+    resolve_trae_pid_from_entries_for_platform(last_pid, user_data_dir, &entries, platform)
 }
 
 pub fn resolve_antigravity_pid_from_entries(
@@ -6875,7 +7015,13 @@ pub fn collect_qoder_process_entries() -> Vec<(u32, Option<String>)> {
 }
 
 pub fn collect_trae_process_entries() -> Vec<(u32, Option<String>)> {
-    let expected_launch = resolve_expected_trae_launch_path_for_match();
+    collect_trae_process_entries_for_platform(crate::modules::trae_account::TraePlatformKind::Trae)
+}
+
+pub fn collect_trae_process_entries_for_platform(
+    platform: crate::modules::trae_account::TraePlatformKind,
+) -> Vec<(u32, Option<String>)> {
+    let expected_launch = resolve_expected_trae_launch_path_for_platform_match(platform);
     if expected_launch.is_none() {
         return Vec::new();
     }
@@ -6885,8 +7031,11 @@ pub fn collect_trae_process_entries() -> Vec<(u32, Option<String>)> {
         let expected = expected_launch
             .as_deref()
             .expect("expected launch path must exist");
-        let entries =
-            collect_named_electron_process_entries_from_powershell(expected, "Trae.exe", "Trae");
+        let entries = collect_named_electron_process_entries_from_powershell(
+            expected,
+            "Trae.exe",
+            platform.display_name(),
+        );
         if !entries.is_empty() {
             return entries;
         }
@@ -6894,15 +7043,22 @@ pub fn collect_trae_process_entries() -> Vec<(u32, Option<String>)> {
             "[Trae Probe] PowerShell returned empty; fallback to sysinfo probe",
         );
         return collect_named_electron_process_entries_from_sysinfo_fallback(
-            expected, "trae", "Trae.exe", "Trae",
+            expected,
+            "trae",
+            "Trae.exe",
+            platform.display_name(),
         );
     }
 
     #[cfg(target_os = "macos")]
     {
-        let entries = collect_trae_process_entries_macos();
+        let entries = collect_trae_process_entries_macos_for_platform(platform);
         if !entries.is_empty() {
-            return filter_entries_by_expected_launch_path("Trae", entries, expected_launch);
+            return filter_entries_by_expected_launch_path(
+                platform.display_name(),
+                entries,
+                expected_launch,
+            );
         }
         return Vec::new();
     }
@@ -6911,7 +7067,11 @@ pub fn collect_trae_process_entries() -> Vec<(u32, Option<String>)> {
     {
         let entries = collect_named_electron_process_entries_from_proc("trae");
         if !entries.is_empty() {
-            return filter_entries_by_expected_launch_path("Trae", entries, expected_launch);
+            return filter_entries_by_expected_launch_path(
+                platform.display_name(),
+                entries,
+                expected_launch,
+            );
         }
         return Vec::new();
     }
@@ -7112,7 +7272,15 @@ fn get_default_qoder_user_data_dir_for_os() -> Option<String> {
 }
 
 fn get_default_trae_user_data_dir_for_os() -> Option<String> {
-    crate::modules::trae_instance::get_default_trae_user_data_dir()
+    get_default_trae_user_data_dir_for_platform_for_os(
+        crate::modules::trae_account::TraePlatformKind::Trae,
+    )
+}
+
+fn get_default_trae_user_data_dir_for_platform_for_os(
+    platform: crate::modules::trae_account::TraePlatformKind,
+) -> Option<String> {
+    crate::modules::trae_account::get_default_trae_data_dir_for_platform(platform)
         .ok()
         .map(|value| value.to_string_lossy().to_string())
 }
@@ -7616,6 +7784,57 @@ pub fn close_trae_instances(user_data_dirs: &[String], timeout_secs: u64) -> Res
     )
 }
 
+pub fn close_trae_platform_default(platform_id: &str, timeout_secs: u64) -> Result<(), String> {
+    let platform = crate::modules::trae_account::TraePlatformKind::parse(Some(platform_id))?;
+    let default_dir = get_default_trae_user_data_dir_for_platform_for_os(platform)
+        .ok_or_else(|| format!("无法获取 {} 默认数据目录", platform.display_name()))?;
+    close_trae_platform_instances(platform, &[default_dir], timeout_secs)
+}
+
+pub fn close_trae_platform_instances(
+    platform: crate::modules::trae_account::TraePlatformKind,
+    user_data_dirs: &[String],
+    timeout_secs: u64,
+) -> Result<(), String> {
+    let default_dir = get_default_trae_user_data_dir_for_platform_for_os(platform)
+        .map(|value| normalize_path_for_compare(&value))
+        .filter(|value| !value.is_empty());
+    let log_prefix = format!("{} Close", platform.display_name());
+    close_managed_instances_common(
+        &log_prefix,
+        &format!("Closing {} instances...", platform.display_name()),
+        &format!(
+            "No {} instance directories provided",
+            platform.display_name()
+        ),
+        &format!(
+            "Managed {} instances are not running",
+            platform.display_name()
+        ),
+        platform.display_name(),
+        &format!(
+            "Unable to close managed {} instances; please close them manually and retry",
+            platform.display_name()
+        ),
+        user_data_dirs,
+        timeout_secs,
+        || collect_trae_process_entries_for_platform(platform),
+        |entries, target_dirs| {
+            select_main_pids_by_target_dirs(entries, target_dirs, default_dir.as_deref())
+        },
+        |target_dirs| {
+            filter_entries_by_target_dirs(
+                collect_trae_process_entries_for_platform(platform),
+                target_dirs,
+                default_dir.as_deref(),
+            )
+        },
+        None,
+        None,
+        None,
+    )
+}
+
 pub fn close_workbuddy_instances(
     user_data_dirs: &[String],
     timeout_secs: u64,
@@ -7945,6 +8164,80 @@ fn close_pids(pids: &[u32], timeout_secs: u64) -> Result<(), String> {
             summarize_pid_list_for_log(&remaining)
         ));
         Err("无法关闭实例进程，请手动关闭后重试".to_string())
+    }
+}
+
+fn is_legacy_platform_adapter_executable(executable: &str) -> bool {
+    let executable = executable.trim();
+    if executable.is_empty()
+        || !executable.contains("/platform-packages/")
+        || !executable.contains("/current/adapter/")
+    {
+        return false;
+    }
+
+    let Some(file_name) = Path::new(executable)
+        .file_name()
+        .map(|value| value.to_string_lossy())
+    else {
+        return false;
+    };
+
+    file_name.starts_with("cockpit-") && file_name.ends_with("-adapter")
+}
+
+fn orphaned_legacy_platform_adapter_pid_from_ps_line(line: &str, current_pid: u32) -> Option<u32> {
+    let mut parts = line.split_whitespace();
+    let pid = parts.next()?.parse::<u32>().ok()?;
+    let ppid = parts.next()?.parse::<u32>().ok()?;
+    let executable = parts.next()?;
+
+    if pid == 0 || pid == current_pid || ppid != 1 {
+        return None;
+    }
+    is_legacy_platform_adapter_executable(executable).then_some(pid)
+}
+
+pub fn close_orphaned_legacy_platform_adapter_processes(
+    timeout_secs: u64,
+) -> Result<usize, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let output = Command::new("ps")
+            .args(["-axo", "pid=,ppid=,command="])
+            .output()
+            .map_err(|err| format!("扫描旧平台 adapter 进程失败: {}", err))?;
+        if !output.status.success() {
+            return Err(format!(
+                "扫描旧平台 adapter 进程失败: status={}, stderr={}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+        }
+
+        let current_pid = std::process::id();
+        let mut pids: Vec<u32> = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(|line| orphaned_legacy_platform_adapter_pid_from_ps_line(line, current_pid))
+            .collect();
+        pids.sort();
+        pids.dedup();
+        if pids.is_empty() {
+            return Ok(0);
+        }
+
+        crate::modules::logger::log_info(&format!(
+            "[LegacyAdapterCleanup] closing orphaned legacy platform adapters: {}",
+            summarize_pid_list_for_log(&pids)
+        ));
+        close_pids(&pids, timeout_secs)?;
+        Ok(pids.len())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = timeout_secs;
+        Ok(0)
     }
 }
 
@@ -9909,6 +10202,12 @@ pub fn is_trae_running() -> bool {
     !get_trae_pids().is_empty()
 }
 
+pub fn is_trae_running_for_platform(
+    platform: crate::modules::trae_account::TraePlatformKind,
+) -> bool {
+    !collect_trae_process_entries_for_platform(platform).is_empty()
+}
+
 pub fn close_trae(timeout_secs: u64) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     let _ = timeout_secs;
@@ -10322,23 +10621,43 @@ pub fn kill_port_processes(port: u16) -> Result<usize, String> {
         return Ok(0);
     }
 
+    let mut cleaned = 0usize;
     let mut failed = Vec::new();
 
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
         for pid in &pids {
+            if *pid == 0 || !is_pid_running(*pid) {
+                cleaned += 1;
+                continue;
+            }
             let output = Command::new("taskkill")
                 .args(["/F", "/PID", &pid.to_string()])
                 .creation_flags(0x08000000)
                 .output();
             match output {
-                Ok(out) if out.status.success() => {}
+                Ok(out) if out.status.success() => cleaned += 1,
                 Ok(out) => {
-                    let stderr = String::from_utf8_lossy(&out.stderr);
-                    failed.push(format!("pid {}: {}", pid, stderr.trim()));
+                    if !is_pid_running(*pid) {
+                        cleaned += 1;
+                    } else {
+                        failed.push(format_kill_command_failure(
+                            *pid,
+                            "taskkill",
+                            out.status,
+                            &out.stderr,
+                            &out.stdout,
+                        ));
+                    }
                 }
-                Err(e) => failed.push(format!("pid {}: {}", pid, e)),
+                Err(e) => {
+                    if !is_pid_running(*pid) {
+                        cleaned += 1;
+                    } else {
+                        failed.push(format!("pid {}: taskkill failed: {}", pid, e));
+                    }
+                }
             }
         }
     }
@@ -10346,14 +10665,33 @@ pub fn kill_port_processes(port: u16) -> Result<usize, String> {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         for pid in &pids {
+            if *pid == 0 || !is_pid_running(*pid) {
+                cleaned += 1;
+                continue;
+            }
             let output = Command::new("kill").args(["-9", &pid.to_string()]).output();
             match output {
-                Ok(out) if out.status.success() => {}
+                Ok(out) if out.status.success() => cleaned += 1,
                 Ok(out) => {
-                    let stderr = String::from_utf8_lossy(&out.stderr);
-                    failed.push(format!("pid {}: {}", pid, stderr.trim()));
+                    if !is_pid_running(*pid) {
+                        cleaned += 1;
+                    } else {
+                        failed.push(format_kill_command_failure(
+                            *pid,
+                            "kill",
+                            out.status,
+                            &out.stderr,
+                            &out.stdout,
+                        ));
+                    }
                 }
-                Err(e) => failed.push(format!("pid {}: {}", pid, e)),
+                Err(e) => {
+                    if !is_pid_running(*pid) {
+                        cleaned += 1;
+                    } else {
+                        failed.push(format!("pid {}: kill failed: {}", pid, e));
+                    }
+                }
             }
         }
     }
@@ -10362,7 +10700,34 @@ pub fn kill_port_processes(port: u16) -> Result<usize, String> {
         return Err(format!("关闭进程失败: {}", failed.join("; ")));
     }
 
-    Ok(pids.len())
+    Ok(cleaned)
+}
+
+fn utf8_command_output_snippet(bytes: &[u8]) -> Option<String> {
+    let text = std::str::from_utf8(bytes).ok()?.trim();
+    if text.is_empty() {
+        None
+    } else {
+        Some(summarize_text_for_process_log(text, 240))
+    }
+}
+
+fn format_kill_command_failure(
+    pid: u32,
+    command: &str,
+    status: ExitStatus,
+    stderr: &[u8],
+    stdout: &[u8],
+) -> String {
+    let detail =
+        utf8_command_output_snippet(stderr).or_else(|| utf8_command_output_snippet(stdout));
+    match detail {
+        Some(detail) => format!(
+            "pid {}: {} failed with status {}: {}",
+            pid, command, status, detail
+        ),
+        None => format!("pid {}: {} failed with status {}", pid, command, status),
+    }
 }
 
 pub fn start_vscode_with_args_with_new_window(
@@ -11589,6 +11954,142 @@ pub fn start_trae_with_args_with_new_window(
     }
 }
 
+pub fn start_trae_platform_with_args_with_new_window(
+    platform_id: &str,
+    user_data_dir: &str,
+    extra_args: &[String],
+    use_new_window: bool,
+) -> Result<u32, String> {
+    let platform = crate::modules::trae_account::TraePlatformKind::parse(Some(platform_id))?;
+
+    #[cfg(target_os = "macos")]
+    {
+        let target = user_data_dir.trim();
+        if target.is_empty() {
+            return Err("实例目录为空，无法启动".to_string());
+        }
+        let launch_path = resolve_trae_launch_path_for_platform(platform)?;
+        let app_root = resolve_macos_app_root_from_launch_path(&launch_path)
+            .ok_or_else(|| app_path_missing_error(platform.provider_key()))?;
+
+        let mut args: Vec<String> = Vec::new();
+        args.push("--user-data-dir".to_string());
+        args.push(target.to_string());
+        if use_new_window {
+            args.push("--new-window".to_string());
+        } else {
+            args.push("--reuse-window".to_string());
+        }
+        for arg in extra_args {
+            let trimmed = arg.trim();
+            if !trimmed.is_empty() {
+                args.push(trimmed.to_string());
+            }
+        }
+
+        let open_pid = spawn_open_app_with_options(&app_root, &args, true)
+            .map_err(|e| format!("启动 {} 失败: {}", platform.display_name(), e))?;
+        crate::modules::logger::log_info(&format!(
+            "{} 启动命令已发送（open -n -a）",
+            platform.display_name()
+        ));
+        let probe_started = Instant::now();
+        let timeout = Duration::from_secs(6);
+        while probe_started.elapsed() < timeout {
+            if let Some(resolved_pid) = resolve_trae_pid_for_platform(None, Some(target), platform)
+            {
+                return Ok(resolved_pid);
+            }
+            thread::sleep(Duration::from_millis(200));
+        }
+        crate::modules::logger::log_warn(&format!(
+            "[Trae Start] platform={} 启动后 6s 内未匹配到实例 PID，回退 open pid={}",
+            platform.provider_key(),
+            open_pid
+        ));
+        return Ok(open_pid);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+
+        let target = user_data_dir.trim();
+        if target.is_empty() {
+            return Err("实例目录为空，无法启动".to_string());
+        }
+        let launch_path = resolve_trae_launch_path_for_platform(platform)?;
+
+        let mut cmd = Command::new(&launch_path);
+        apply_managed_proxy_env_to_command(&mut cmd);
+        if should_detach_child() {
+            cmd.creation_flags(0x08000000 | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+            cmd.stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+        } else {
+            cmd.creation_flags(0x08000000);
+        }
+        cmd.arg("--user-data-dir").arg(target);
+        if use_new_window {
+            cmd.arg("--new-window");
+        } else {
+            cmd.arg("--reuse-window");
+        }
+        for arg in extra_args {
+            let trimmed = arg.trim();
+            if !trimmed.is_empty() {
+                cmd.arg(trimmed);
+            }
+        }
+
+        let child = spawn_command_with_trace(&mut cmd)
+            .map_err(|e| format!("启动 {} 失败: {}", platform.display_name(), e))?;
+        crate::modules::logger::log_info(&format!("{} 启动命令已发送", platform.display_name()));
+        return Ok(child.id());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let target = user_data_dir.trim();
+        if target.is_empty() {
+            return Err("实例目录为空，无法启动".to_string());
+        }
+        let launch_path = resolve_trae_launch_path_for_platform(platform)?;
+
+        let mut cmd = Command::new(&launch_path);
+        apply_managed_proxy_env_to_command(&mut cmd);
+        if should_detach_child() {
+            cmd.stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+        }
+        cmd.arg("--user-data-dir").arg(target);
+        if use_new_window {
+            cmd.arg("--new-window");
+        } else {
+            cmd.arg("--reuse-window");
+        }
+        for arg in extra_args {
+            let trimmed = arg.trim();
+            if !trimmed.is_empty() {
+                cmd.arg(trimmed);
+            }
+        }
+
+        let child = spawn_detached_unix(&mut cmd)
+            .map_err(|e| format!("启动 {} 失败: {}", platform.display_name(), e))?;
+        crate::modules::logger::log_info(&format!("{} 启动命令已发送", platform.display_name()));
+        return Ok(child.id());
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        let _ = (platform, user_data_dir, extra_args, use_new_window);
+        Err("Trae 多开实例仅支持 macOS、Windows 和 Linux".to_string())
+    }
+}
+
 pub fn start_trae_default_with_args_with_new_window(
     extra_args: &[String],
     use_new_window: bool,
@@ -11692,6 +12193,126 @@ pub fn start_trae_default_with_args_with_new_window(
     {
         let _ = (extra_args, use_new_window);
         Err("Trae 多开实例仅支持 macOS、Windows 和 Linux".to_string())
+    }
+}
+
+pub fn start_trae_platform_default_with_args_with_new_window(
+    platform_id: &str,
+    extra_args: &[String],
+    use_new_window: bool,
+) -> Result<u32, String> {
+    let platform = crate::modules::trae_account::TraePlatformKind::parse(Some(platform_id))?;
+
+    #[cfg(target_os = "macos")]
+    {
+        let launch_path = resolve_trae_launch_path_for_platform(platform)?;
+        let app_root = resolve_macos_app_root_from_launch_path(&launch_path)
+            .ok_or_else(|| app_path_missing_error(platform.provider_key()))?;
+
+        let mut args: Vec<String> = Vec::new();
+        if use_new_window {
+            args.push("--new-window".to_string());
+        } else {
+            args.push("--reuse-window".to_string());
+        }
+        for arg in extra_args {
+            let trimmed = arg.trim();
+            if !trimmed.is_empty() {
+                args.push(trimmed.to_string());
+            }
+        }
+
+        let open_pid = spawn_open_app_with_options(&app_root, &args, true)
+            .map_err(|e| format!("启动 {} 失败: {}", platform.display_name(), e))?;
+        crate::modules::logger::log_info(&format!(
+            "{} 默认实例启动命令已发送（open -n -a）",
+            platform.display_name()
+        ));
+        let probe_started = Instant::now();
+        let timeout = Duration::from_secs(6);
+        while probe_started.elapsed() < timeout {
+            if let Some(resolved_pid) = resolve_trae_pid_for_platform(None, None, platform) {
+                return Ok(resolved_pid);
+            }
+            thread::sleep(Duration::from_millis(200));
+        }
+        crate::modules::logger::log_warn(&format!(
+            "[Trae Start] platform={} 启动后 6s 内未匹配到默认实例 PID，回退 open pid={}",
+            platform.provider_key(),
+            open_pid
+        ));
+        return Ok(open_pid);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+
+        let launch_path = resolve_trae_launch_path_for_platform(platform)?;
+        let mut cmd = Command::new(&launch_path);
+        apply_managed_proxy_env_to_command(&mut cmd);
+        if should_detach_child() {
+            cmd.creation_flags(0x08000000 | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+            cmd.stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+        } else {
+            cmd.creation_flags(0x08000000);
+        }
+        if use_new_window {
+            cmd.arg("--new-window");
+        } else {
+            cmd.arg("--reuse-window");
+        }
+        for arg in extra_args {
+            let trimmed = arg.trim();
+            if !trimmed.is_empty() {
+                cmd.arg(trimmed);
+            }
+        }
+        let child = spawn_command_with_trace(&mut cmd)
+            .map_err(|e| format!("启动 {} 失败: {}", platform.display_name(), e))?;
+        crate::modules::logger::log_info(&format!(
+            "{} 默认实例启动命令已发送",
+            platform.display_name()
+        ));
+        return Ok(child.id());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let launch_path = resolve_trae_launch_path_for_platform(platform)?;
+        let mut cmd = Command::new(&launch_path);
+        apply_managed_proxy_env_to_command(&mut cmd);
+        if should_detach_child() {
+            cmd.stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+        }
+        if use_new_window {
+            cmd.arg("--new-window");
+        } else {
+            cmd.arg("--reuse-window");
+        }
+        for arg in extra_args {
+            let trimmed = arg.trim();
+            if !trimmed.is_empty() {
+                cmd.arg(trimmed);
+            }
+        }
+        let child = spawn_detached_unix(&mut cmd)
+            .map_err(|e| format!("启动 {} 失败: {}", platform.display_name(), e))?;
+        crate::modules::logger::log_info(&format!(
+            "{} 默认实例启动命令已发送",
+            platform.display_name()
+        ));
+        return Ok(child.id());
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        let _ = (platform, extra_args, use_new_window);
+        Err("Trae 默认实例仅支持 macOS、Windows 和 Linux".to_string())
     }
 }
 
@@ -11889,6 +12510,65 @@ tell application \"System Events\" to keystroke \"q\" using command down",
     #[cfg(not(target_os = "macos"))]
     {
         let _ = pid;
+    }
+}
+
+#[cfg(test)]
+mod legacy_platform_adapter_cleanup_tests {
+    use super::{orphaned_legacy_platform_adapter_pid_from_ps_line, utf8_command_output_snippet};
+
+    #[test]
+    fn matches_orphaned_legacy_platform_adapter() {
+        let line = " 1359     1 /Users/jieli/.antigravity_cockpit/platform-packages/codex/current/adapter/macos/cockpit-codex-adapter";
+        assert_eq!(
+            orphaned_legacy_platform_adapter_pid_from_ps_line(line, 99999),
+            Some(1359)
+        );
+    }
+
+    #[test]
+    fn ignores_non_orphaned_or_current_processes() {
+        let line = " 1359 1805 /Users/jieli/.antigravity_cockpit/platform-packages/codex/current/adapter/macos/cockpit-codex-adapter";
+        assert_eq!(
+            orphaned_legacy_platform_adapter_pid_from_ps_line(line, 99999),
+            None
+        );
+
+        let current_line = " 1359 1 /Users/jieli/.antigravity_cockpit/platform-packages/codex/current/adapter/macos/cockpit-codex-adapter";
+        assert_eq!(
+            orphaned_legacy_platform_adapter_pid_from_ps_line(current_line, 1359),
+            None
+        );
+    }
+
+    #[test]
+    fn ignores_current_sidecar_and_official_apps() {
+        let sidecar =
+            " 64680 1805 /Applications/Cockpit Tools.app/Contents/MacOS/cockpit-cliproxy --parent-pid 1805";
+        assert_eq!(
+            orphaned_legacy_platform_adapter_pid_from_ps_line(sidecar, 99999),
+            None
+        );
+
+        let official_codex =
+            " 9300 1 /Applications/Codex.app/Contents/Frameworks/Codex Framework.framework/Helpers/browser_crashpad_handler";
+        assert_eq!(
+            orphaned_legacy_platform_adapter_pid_from_ps_line(official_codex, 99999),
+            None
+        );
+    }
+
+    #[test]
+    fn command_output_snippet_drops_non_utf8_bytes() {
+        assert_eq!(utf8_command_output_snippet(&[0xb4, 0xed, 0xce, 0xf3]), None);
+    }
+
+    #[test]
+    fn command_output_snippet_keeps_utf8_text() {
+        assert_eq!(
+            utf8_command_output_snippet("No such process\n".as_bytes()).as_deref(),
+            Some("No such process")
+        );
     }
 }
 

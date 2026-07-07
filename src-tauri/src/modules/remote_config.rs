@@ -335,6 +335,9 @@ fn normalize_platform_id(value: &str) -> Option<String> {
         "codebuddy-cn" => Some("codebuddy_cn".to_string()),
         "qoder" => Some("qoder".to_string()),
         "trae" => Some("trae".to_string()),
+        "trae-solo" => Some("trae_solo".to_string()),
+        "trae-cn" => Some("trae_cn".to_string()),
+        "trae-solo-cn" => Some("trae_solo_cn".to_string()),
         "workbuddy" => Some("workbuddy".to_string()),
         _ => None,
     }

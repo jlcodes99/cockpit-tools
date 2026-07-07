@@ -31,6 +31,9 @@ export const CODEBUDDY_CURRENT_ACCOUNT_ID_KEY = 'agtools.codebuddy.current_accou
 export const CODEBUDDY_CN_CURRENT_ACCOUNT_ID_KEY = 'agtools.codebuddycn.current_account_id';
 export const QODER_CURRENT_ACCOUNT_ID_KEY = 'agtools.qoder.current_account_id';
 export const TRAE_CURRENT_ACCOUNT_ID_KEY = 'agtools.trae.current_account_id';
+export const TRAE_SOLO_CURRENT_ACCOUNT_ID_KEY = 'agtools.trae_solo.current_account_id';
+export const TRAE_CN_CURRENT_ACCOUNT_ID_KEY = 'agtools.trae_cn.current_account_id';
+export const TRAE_SOLO_CN_CURRENT_ACCOUNT_ID_KEY = 'agtools.trae_solo_cn.current_account_id';
 export const WORKBUDDY_CURRENT_ACCOUNT_ID_KEY = 'agtools.workbuddy.current_account_id';
 export const ZED_CURRENT_ACCOUNT_ID_KEY = 'agtools.zed.current_account_id';
 
@@ -50,6 +53,9 @@ export type StoredCurrentPlatformId =
   | 'codebuddy_cn'
   | 'qoder'
   | 'trae'
+  | 'trae_solo'
+  | 'trae_cn'
+  | 'trae_solo_cn'
   | 'workbuddy'
   | 'zed';
 
@@ -63,6 +69,9 @@ const CURRENT_ACCOUNT_STORAGE_KEYS: Record<StoredCurrentPlatformId, string> = {
   codebuddy_cn: CODEBUDDY_CN_CURRENT_ACCOUNT_ID_KEY,
   qoder: QODER_CURRENT_ACCOUNT_ID_KEY,
   trae: TRAE_CURRENT_ACCOUNT_ID_KEY,
+  trae_solo: TRAE_SOLO_CURRENT_ACCOUNT_ID_KEY,
+  trae_cn: TRAE_CN_CURRENT_ACCOUNT_ID_KEY,
+  trae_solo_cn: TRAE_SOLO_CN_CURRENT_ACCOUNT_ID_KEY,
   workbuddy: WORKBUDDY_CURRENT_ACCOUNT_ID_KEY,
   zed: ZED_CURRENT_ACCOUNT_ID_KEY,
 };

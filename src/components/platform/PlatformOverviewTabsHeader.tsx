@@ -1,6 +1,6 @@
 import { ReactNode, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Clock3, FolderOpen, Github, Layers, Server } from 'lucide-react';
+import { Clock3, FolderOpen, Github, Layers, Server } from 'lucide-react';
 import { CodexIcon } from '../icons/CodexIcon';
 import { ClaudeIcon } from '../icons/ClaudeIcon';
 import { WindsurfIcon } from '../icons/WindsurfIcon';
@@ -9,6 +9,7 @@ import { CursorIcon } from '../icons/CursorIcon';
 import { GeminiIcon } from '../icons/GeminiIcon';
 import { CodebuddyIcon } from '../icons/CodebuddyIcon';
 import { QoderIcon } from '../icons/QoderIcon';
+import { TraeCnIcon, TraeIcon, TraeSoloCnIcon, TraeSoloIcon } from '../icons/TraeIcon';
 import { WorkbuddyIcon } from '../icons/WorkbuddyIcon';
 import { ZedIcon } from '../icons/ZedIcon';
 import { ManualHelpIconButton } from '../ManualHelpIconButton';
@@ -37,6 +38,9 @@ export type PlatformOverviewHeaderId =
   | 'codebuddy_cn'
   | 'qoder'
   | 'trae'
+  | 'trae_solo'
+  | 'trae_cn'
+  | 'trae_solo_cn'
   | 'workbuddy';
 
 interface PlatformOverviewTabsHeaderProps {
@@ -104,7 +108,19 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
   },
   trae: {
     platformLabel: 'Trae',
-    overviewIcon: <Bot className="tab-icon" />,
+    overviewIcon: <TraeIcon className="tab-icon" />,
+  },
+  trae_solo: {
+    platformLabel: 'TRAE SOLO',
+    overviewIcon: <TraeSoloIcon className="tab-icon" />,
+  },
+  trae_cn: {
+    platformLabel: 'Trae CN',
+    overviewIcon: <TraeCnIcon className="tab-icon" />,
+  },
+  trae_solo_cn: {
+    platformLabel: 'TRAE SOLO CN',
+    overviewIcon: <TraeSoloCnIcon className="tab-icon" />,
   },
   workbuddy: {
     platformLabel: 'WorkBuddy',

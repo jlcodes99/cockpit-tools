@@ -39,11 +39,15 @@ fn resolve_provider_current_account_id(platform: &str) -> Result<Option<String>,
                 &accounts,
             ))
         }
-        "trae" => {
+        "trae" | "trae_solo" | "trae-solo" | "trae_cn" | "trae-cn" | "trae_solo_cn"
+        | "trae-solo-cn" => {
+            let platform = crate::modules::trae_account::TraePlatformKind::parse(Some(platform))?;
             let accounts = crate::modules::trae_account::list_accounts();
-            Ok(crate::modules::trae_account::resolve_current_account_id(
-                &accounts,
-            ))
+            Ok(
+                crate::modules::trae_account::resolve_current_account_id_for_platform(
+                    &accounts, platform,
+                ),
+            )
         }
         "workbuddy" => {
             let accounts = crate::modules::workbuddy_account::list_accounts();
@@ -124,6 +128,9 @@ mod tests {
             "codebuddy-cn",
             "qoder",
             "trae",
+            "trae_solo",
+            "trae_cn",
+            "trae_solo_cn",
             "workbuddy",
             "github_copilot",
             "github-copilot",

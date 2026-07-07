@@ -55,6 +55,12 @@ enum ProviderIconRegistry {
             return ProviderIconResource(name: "qoder", ext: "png", renderingMode: .original)
         case "trae":
             return ProviderIconResource(name: "trae", ext: "png", renderingMode: .original)
+        case "trae_solo", "trae-solo":
+            return ProviderIconResource(name: "trae-solo", ext: "png", renderingMode: .original)
+        case "trae_cn", "trae-cn":
+            return ProviderIconResource(name: "trae-cn", ext: "png", renderingMode: .original)
+        case "trae_solo_cn", "trae-solo-cn":
+            return ProviderIconResource(name: "trae-solo-cn", ext: "png", renderingMode: .original)
         case "workbuddy":
             return ProviderIconResource(name: "workbuddy", ext: "png", renderingMode: .original)
         default:

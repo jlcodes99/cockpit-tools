@@ -24,6 +24,9 @@ type InstancesAppType =
   | 'codebuddy_cn'
   | 'qoder'
   | 'trae'
+  | 'trae_solo'
+  | 'trae_cn'
+  | 'trae_solo_cn'
   | 'workbuddy';
 
 interface PlatformInstancesContentProps<TAccount extends AccountLike> {

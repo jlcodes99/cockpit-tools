@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Zed 플랫폼",
     "expandSidebar": "사이드바 확장",
@@ -2055,6 +2058,7 @@
     "quota": {
       "hourly": "5시간 쿼터",
       "weekly": "주간 쿼터",
+      "additional": "추가 할당량",
       "reset": "재설정",
       "weeklyBlocksHourly": "주간 할당량이 0이라 5시간 할당량을 사용할 수 없습니다",
       "resetCredits": "재설정 {{count}}",
@@ -3580,6 +3584,15 @@
     "claude": {
       "appPath": "Claude 경로",
       "appTargetPlaceholder": "Claude.exe 경로 또는 shell:AppsFolder\\..."
+    },
+    "traeSolo": {
+      "appPath": "TRAE SOLO 경로"
+    },
+    "traeCn": {
+      "appPath": "Trae CN 경로"
+    },
+    "traeSoloCn": {
+      "appPath": "TRAE SOLO CN 경로"
     }
   },
   "quotaAlert": {
@@ -4344,17 +4357,21 @@
   "trae": {
     "title": "Trae 계정 관리",
     "empty": {
-      "description": "\"계정 추가\"를 클릭해 Trae 계정 관리를 시작하거나 로컬 Trae 데이터 또는 JSON 파일에서 가져올 수 있습니다."
+      "description": "\"계정 추가\"를 클릭해 Trae 계정 관리를 시작하거나 로컬 Trae 데이터 또는 JSON 파일에서 가져올 수 있습니다.",
+      "descriptionWithPlatform": "\"계정 추가\"를 클릭해 {{platform}} 계정을 관리하거나 로컬 {{platform}} 데이터 또는 JSON 파일에서 가져오세요."
     },
     "addModal": {
-      "title": "Trae 계정 추가"
+      "title": "Trae 계정 추가",
+      "titleWithPlatform": "{{platform}} 계정 추가"
     },
     "oauth": {
-      "desc": "아래 버튼을 눌러 브라우저에서 Trae OAuth 인증을 완료하세요."
+      "desc": "아래 버튼을 눌러 브라우저에서 Trae OAuth 인증을 완료하세요.",
+      "descWithPlatform": "아래 버튼을 클릭하고 브라우저에서 {{platform}} OAuth 인증을 완료하세요."
     },
     "import": {
       "localDesc": "로컬 Trae 설정 디렉터리에서 현재 로그인된 계정, 요금제 정보, 캐시된 할당량 데이터를 가져옵니다.",
-      "jsonTab": "JSON 파일"
+      "jsonTab": "JSON 파일",
+      "localDescWithPlatform": "로컬 {{platform}} 설정 디렉터리에서 현재 로그인된 계정, 플랜 정보, 캐시된 할당량 데이터를 가져옵니다."
     },
     "quota": {
       "usedOfTotal": "사용량 $ {{used}} / $ {{total}}",
@@ -4380,7 +4397,12 @@
       "title": "Trae 계정 안내 (클릭하여 펼치기/접기)",
       "desc": "공식 OAuth 로그인, 로컬 가져오기, JSON 가져오기, 로컬 주입 방식의 계정 전환을 지원합니다. 계정 전환 시 Trae 클라이언트의 실제 디스크 기록 규칙에 따라 다시 저장합니다.",
       "permission": "권한 범위: 로컬 Trae storage.json 의 로그인 관련 필드를 읽고 써서 계정 가져오기, 계정 전환 주입, 요금제 표시에 사용합니다. 모든 데이터는 사용자 기기에서만 처리됩니다.",
-      "network": "네트워크 범위: OAuth 로그인, 토큰 갱신, 요금제 조회는 Trae 공식 API 를 호출합니다. 로컬 계정 파일이나 원본 저장 데이터는 제3자 서비스로 업로드되지 않습니다."
+      "network": "네트워크 범위: OAuth 로그인, 토큰 갱신, 요금제 조회는 Trae 공식 API 를 호출합니다. 로컬 계정 파일이나 원본 저장 데이터는 제3자 서비스로 업로드되지 않습니다.",
+      "titleWithPlatform": "{{platform}} 계정 연결 안내(클릭해 펼치기/접기)",
+      "descWithPlatform": "{{platform}} 공식 OAuth 로그인, 로컬 가져오기, JSON 가져오기, 로컬 주입 기반 계정 전환을 지원합니다. 계정 전환은 {{platform}} 클라이언트의 실제 디스크 저장 규칙에 따라 기록됩니다.",
+      "permissionWithPlatform": "권한 범위: 계정 가져오기, 계정 전환 주입, 플랜 표시를 위해 로컬 {{platform}} storage.json의 로그인 관련 필드를 읽고 씁니다. 모든 데이터는 로컬에서만 처리됩니다.",
+      "networkGlobal": "네트워크 범위: {{platform}} OAuth 로그인, 토큰 갱신, 플랜 조회는 공식 trae.ai / traeapi.us API를 호출합니다. 로컬 계정 파일과 원본 저장 내용은 타사 서비스로 업로드되지 않습니다.",
+      "networkCn": "네트워크 범위: {{platform}} OAuth 로그인, 토큰 갱신, 플랜 조회는 공식 trae.cn / trae.com.cn API를 호출합니다. 로컬 계정 파일과 원본 저장 내용은 타사 서비스로 업로드되지 않습니다."
     }
   },
   "codebuddyCn": {

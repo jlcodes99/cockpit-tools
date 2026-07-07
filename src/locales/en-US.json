@@ -301,6 +301,9 @@
     },
     "qoder": "Qoder",
     "trae": "Trae",
+    "traeSolo": "TRAE SOLO",
+    "traeCn": "Trae CN",
+    "traeSoloCn": "TRAE SOLO CN",
     "codebuddyCn": "CodeBuddy CN",
     "switchClassicLayoutEntry": "Switch to classic layout",
     "switchClassicLayoutTitle": "Switch to the classic sidebar layout",
@@ -2729,6 +2732,7 @@
     "quota": {
       "hourly": "5-hour quota",
       "weekly": "Weekly quota",
+      "additional": "Additional quota",
       "weeklyBlocksHourly": "Weekly quota is 0, so the 5-hour quota is unavailable",
       "reset": "Reset",
       "resetCredits": "Resets {{count}}",
@@ -3878,6 +3882,15 @@
     "claude": {
       "appPath": "Claude path",
       "appTargetPlaceholder": "Claude.exe path or shell:AppsFolder\\..."
+    },
+    "traeSolo": {
+      "appPath": "TRAE SOLO Path"
+    },
+    "traeCn": {
+      "appPath": "Trae CN Path"
+    },
+    "traeSoloCn": {
+      "appPath": "TRAE SOLO CN Path"
     }
   },
   "quotaAlert": {
@@ -4614,17 +4627,21 @@
   "trae": {
     "title": "Trae Account",
     "empty": {
-      "description": "Click \"Add Account\" to start managing your Trae accounts, or import from local Trae data or a JSON file."
+      "description": "Click \"Add Account\" to start managing your Trae accounts, or import from local Trae data or a JSON file.",
+      "descriptionWithPlatform": "Click \"Add Account\" to manage {{platform}} accounts, or import from local {{platform}} data or a JSON file."
     },
     "addModal": {
-      "title": "Add Trae Account"
+      "title": "Add Trae Account",
+      "titleWithPlatform": "Add {{platform}} Account"
     },
     "oauth": {
-      "desc": "Click the button below and complete Trae OAuth authorization in your browser."
+      "desc": "Click the button below and complete Trae OAuth authorization in your browser.",
+      "descWithPlatform": "Click the button below and complete {{platform}} OAuth authorization in your browser."
     },
     "import": {
       "localDesc": "Import the current signed-in account, plan information, and cached quota data from the local Trae configuration directory.",
-      "jsonTab": "JSON File"
+      "jsonTab": "JSON File",
+      "localDescWithPlatform": "Import the current signed-in account, plan information, and cached quota data from the local {{platform}} configuration directory."
     },
     "quota": {
       "usedOfTotal": "${{used}} / ${{total}}",
@@ -4650,7 +4667,12 @@
       "title": "Trae account guide (click to expand/collapse)",
       "desc": "Supports official OAuth sign-in, local import, JSON import, and local injection-based account switching. Account switching writes back using Trae client's actual on-disk rules.",
       "permission": "Permission scope: read and write login-related fields in the local Trae storage.json for account import, account switching injection, and plan display. All data is processed locally on your machine.",
-      "network": "Network scope: OAuth sign-in, token refresh, and plan queries call official Trae APIs. Local account files and raw storage contents are not uploaded to third-party services."
+      "network": "Network scope: OAuth sign-in, token refresh, and plan queries call official Trae APIs. Local account files and raw storage contents are not uploaded to third-party services.",
+      "titleWithPlatform": "{{platform}} account guide (click to expand/collapse)",
+      "descWithPlatform": "Supports official {{platform}} OAuth sign-in, local import, JSON import, and local injection-based account switching. Account switching writes back using the actual {{platform}} client on-disk rules.",
+      "permissionWithPlatform": "Permission scope: read and write login-related fields in the local {{platform}} storage.json for account import, account switching injection, and plan display. All data is processed locally on your machine.",
+      "networkGlobal": "Network scope: {{platform}} OAuth sign-in, token refresh, and plan queries call official trae.ai / traeapi.us APIs. Local account files and raw storage contents are not uploaded to third-party services.",
+      "networkCn": "Network scope: {{platform}} OAuth sign-in, token refresh, and plan queries call official trae.cn / trae.com.cn APIs. Local account files and raw storage contents are not uploaded to third-party services."
     }
   },
   "codebuddyCn": {

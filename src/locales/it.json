@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Piattaforma Zed",
     "expandSidebar": "Espandi la barra laterale",
@@ -2055,6 +2058,7 @@
     "quota": {
       "hourly": "Quota di 5 ore",
       "weekly": "Quota settimanale",
+      "additional": "Quota aggiuntiva",
       "reset": "Reimposta",
       "weeklyBlocksHourly": "La quota settimanale è 0, quindi la quota di 5 ore non è disponibile",
       "resetCredits": "Reset {{count}}",
@@ -3580,6 +3584,15 @@
     "claude": {
       "appPath": "Percorso Claude",
       "appTargetPlaceholder": "Percorso Claude.exe o shell:AppsFolder\\..."
+    },
+    "traeSolo": {
+      "appPath": "Percorso TRAE SOLO"
+    },
+    "traeCn": {
+      "appPath": "Percorso Trae CN"
+    },
+    "traeSoloCn": {
+      "appPath": "Percorso TRAE SOLO CN"
     }
   },
   "quotaAlert": {
@@ -4344,17 +4357,21 @@
   "trae": {
     "title": "Gestione account Trae",
     "empty": {
-      "description": "Fai clic su \"Aggiungi account\" per iniziare a gestire i tuoi account Trae, oppure importali dai dati locali di Trae o da un file JSON."
+      "description": "Fai clic su \"Aggiungi account\" per iniziare a gestire i tuoi account Trae, oppure importali dai dati locali di Trae o da un file JSON.",
+      "descriptionWithPlatform": "Fai clic su \"Aggiungi account\" per gestire gli account {{platform}}, oppure importa dati locali di {{platform}} o un file JSON."
     },
     "addModal": {
-      "title": "Aggiungi account Trae"
+      "title": "Aggiungi account Trae",
+      "titleWithPlatform": "Aggiungi account {{platform}}"
     },
     "oauth": {
-      "desc": "Fai clic sul pulsante qui sotto e completa l'autorizzazione OAuth di Trae nel browser."
+      "desc": "Fai clic sul pulsante qui sotto e completa l'autorizzazione OAuth di Trae nel browser.",
+      "descWithPlatform": "Fai clic sul pulsante qui sotto e completa l’autorizzazione OAuth di {{platform}} nel browser."
     },
     "import": {
       "localDesc": "Importa l'account attualmente connesso, le informazioni del piano e i dati di quota in cache dalla directory di configurazione locale di Trae.",
-      "jsonTab": "File JSON"
+      "jsonTab": "File JSON",
+      "localDescWithPlatform": "Importa l’account attualmente connesso, le informazioni del piano e i dati quota in cache dalla directory di configurazione locale di {{platform}}."
     },
     "quota": {
       "usedOfTotal": "Utilizzati $ {{used}} di $ {{total}}",
@@ -4380,7 +4397,12 @@
       "title": "Guida account Trae (clicca per espandere/ridurre)",
       "desc": "Supporta accesso OAuth ufficiale, importazione locale, importazione JSON e cambio account tramite iniezione locale. Durante il cambio, i dati vengono riscritti seguendo le regole reali di persistenza del client Trae.",
       "permission": "Ambito permessi: legge e scrive i campi relativi al login nel file locale Trae storage.json per importazione account, iniezione del cambio account e visualizzazione del piano. Tutti i dati vengono elaborati localmente sul dispositivo.",
-      "network": "Ambito rete: accesso OAuth, refresh del token e query del piano chiamano le API ufficiali di Trae. I file account locali e il contenuto grezzo dello storage non vengono caricati verso servizi di terze parti."
+      "network": "Ambito rete: accesso OAuth, refresh del token e query del piano chiamano le API ufficiali di Trae. I file account locali e il contenuto grezzo dello storage non vengono caricati verso servizi di terze parti.",
+      "titleWithPlatform": "Guida account {{platform}} (clic per espandere/comprimere)",
+      "descWithPlatform": "Supporta OAuth ufficiale di {{platform}}, importazione locale, importazione JSON e cambio account tramite iniezione locale. Il cambio account scrive secondo le regole reali su disco del client {{platform}}.",
+      "permissionWithPlatform": "Ambito permessi: legge e scrive i campi di accesso nello storage.json locale di {{platform}} per import account, iniezione del cambio account e visualizzazione del piano. Tutti i dati vengono elaborati localmente.",
+      "networkGlobal": "Ambito rete: accesso OAuth, aggiornamento token e query piano di {{platform}} chiamano le API ufficiali trae.ai / traeapi.us. I file account locali e il contenuto grezzo non vengono caricati su servizi terzi.",
+      "networkCn": "Ambito rete: accesso OAuth, aggiornamento token e query piano di {{platform}} chiamano le API ufficiali trae.cn / trae.com.cn. I file account locali e il contenuto grezzo non vengono caricati su servizi terzi."
     }
   },
   "codebuddyCn": {

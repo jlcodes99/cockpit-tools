@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy",
     "qoder": "Qoder",
     "trae": "Trae",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN",
     "zed": "Zed 平台",
     "expandSidebar": "展開側邊欄",
@@ -2172,6 +2175,7 @@
     "quota": {
       "hourly": "5 小時配額",
       "weekly": "週配額",
+      "additional": "額外額度",
       "reset": "重置",
       "weeklyBlocksHourly": "週額度為 0，因此 5 小時額度已不可用",
       "resetCredits": "重置 {{count}}",
@@ -3580,6 +3584,15 @@
     "claude": {
       "appPath": "Claude 路徑",
       "appTargetPlaceholder": "Claude.exe 路徑或 shell:AppsFolder\\..."
+    },
+    "traeSolo": {
+      "appPath": "TRAE SOLO 路徑"
+    },
+    "traeCn": {
+      "appPath": "Trae CN 路徑"
+    },
+    "traeSoloCn": {
+      "appPath": "TRAE SOLO CN 路徑"
     }
   },
   "quotaAlert": {
@@ -4344,17 +4357,21 @@
   "trae": {
     "title": "Trae 帳號管理",
     "empty": {
-      "description": "點擊「新增帳號」開始管理您的 Trae 帳號，也可以從本機 Trae 資料或 JSON 檔案匯入。"
+      "description": "點擊「新增帳號」開始管理您的 Trae 帳號，也可以從本機 Trae 資料或 JSON 檔案匯入。",
+      "descriptionWithPlatform": "點擊「新增帳號」開始管理您的 {{platform}} 帳號，也可以從本機 {{platform}} 資料或 JSON 檔匯入。"
     },
     "addModal": {
-      "title": "新增 Trae 帳號"
+      "title": "新增 Trae 帳號",
+      "titleWithPlatform": "新增 {{platform}} 帳號"
     },
     "oauth": {
-      "desc": "點擊下方按鈕，在瀏覽器中完成 Trae OAuth 授權登入。"
+      "desc": "點擊下方按鈕，在瀏覽器中完成 Trae OAuth 授權登入。",
+      "descWithPlatform": "點擊下方按鈕，在瀏覽器中完成 {{platform}} OAuth 授權登入。"
     },
     "import": {
       "localDesc": "支援從本機 Trae 設定目錄讀取目前登入帳號、方案資訊與配額快取資料。",
-      "jsonTab": "JSON 檔案"
+      "jsonTab": "JSON 檔案",
+      "localDescWithPlatform": "支援從本機 {{platform}} 設定目錄讀取目前登入帳號、方案資訊與額度快取。"
     },
     "quota": {
       "usedOfTotal": "已用 $ {{used}} / $ {{total}}",
@@ -4380,7 +4397,12 @@
       "title": "Trae 帳號接入說明（點擊展開/收起）",
       "desc": "支援官方 OAuth 授權、本機匯入、JSON 匯入與本地注入切號；切號流程會依 Trae 用戶端的實際落盤規則寫回。",
       "permission": "權限範圍：讀取並寫入本機 Trae 設定目錄中的 storage.json 登入相關欄位，用於帳號匯入、切號注入與方案資訊顯示；所有資料僅在本機處理。",
-      "network": "網路範圍：OAuth 登入、權杖刷新與方案查詢會請求 Trae 官方 API；不會將本機帳號檔案或原始儲存內容上傳到第三方服務。"
+      "network": "網路範圍：OAuth 登入、權杖刷新與方案查詢會請求 Trae 官方 API；不會將本機帳號檔案或原始儲存內容上傳到第三方服務。",
+      "titleWithPlatform": "{{platform}} 帳號接入說明（點擊展開/收合）",
+      "descWithPlatform": "支援 {{platform}} 官方 OAuth 授權、本機匯入、JSON 匯入與本機注入切換帳號；切換時會依 {{platform}} 用戶端實際落盤規則寫回。",
+      "permissionWithPlatform": "權限範圍：讀寫本機 {{platform}} 設定目錄中的 storage.json 登入相關欄位，用於帳號匯入、切換注入與方案資訊顯示；所有資料僅在本機處理。",
+      "networkGlobal": "網路範圍：{{platform}} OAuth 登入、權杖刷新與方案查詢會請求 trae.ai / traeapi.us 官方介面；不會向第三方服務上傳本機帳號檔或原始儲存內容。",
+      "networkCn": "網路範圍：{{platform}} OAuth 登入、權杖刷新與方案查詢會請求 trae.cn / trae.com.cn 官方介面；不會向第三方服務上傳本機帳號檔或原始儲存內容。"
     }
   },
   "codebuddyCn": {

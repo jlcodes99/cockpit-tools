@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Zed-Plattform",
     "expandSidebar": "Seitenleiste erweitern",
@@ -2055,6 +2058,7 @@
     "quota": {
       "hourly": "5-Stunden-Kontingent",
       "weekly": "Wöchentliches Kontingent",
+      "additional": "Zusätzliches Kontingent",
       "reset": "Zurücksetzen",
       "weeklyBlocksHourly": "Das Wochenkontingent ist 0, daher ist das 5-Stunden-Kontingent nicht verfügbar",
       "resetCredits": "Rücksetz. {{count}}",
@@ -3580,6 +3584,15 @@
     "claude": {
       "appPath": "Claude-Pfad",
       "appTargetPlaceholder": "Claude.exe-Pfad oder shell:AppsFolder\\..."
+    },
+    "traeSolo": {
+      "appPath": "TRAE SOLO Pfad"
+    },
+    "traeCn": {
+      "appPath": "Trae CN Pfad"
+    },
+    "traeSoloCn": {
+      "appPath": "TRAE SOLO CN Pfad"
     }
   },
   "quotaAlert": {
@@ -4344,17 +4357,21 @@
   "trae": {
     "title": "Trae-Kontenverwaltung",
     "empty": {
-      "description": "Klicken Sie auf „Konto hinzufugen“, um Ihre Trae-Konten zu verwalten, oder importieren Sie sie aus lokalen Trae-Daten oder einer JSON-Datei."
+      "description": "Klicken Sie auf „Konto hinzufugen“, um Ihre Trae-Konten zu verwalten, oder importieren Sie sie aus lokalen Trae-Daten oder einer JSON-Datei.",
+      "descriptionWithPlatform": "Klicken Sie auf „Konto hinzufügen“, um {{platform}}-Konten zu verwalten, oder importieren Sie lokale {{platform}}-Daten bzw. eine JSON-Datei."
     },
     "addModal": {
-      "title": "Trae-Konto hinzufugen"
+      "title": "Trae-Konto hinzufugen",
+      "titleWithPlatform": "{{platform}}-Konto hinzufügen"
     },
     "oauth": {
-      "desc": "Klicken Sie unten auf die Schaltflache und schliessen Sie die Trae-OAuth-Anmeldung im Browser ab."
+      "desc": "Klicken Sie unten auf die Schaltflache und schliessen Sie die Trae-OAuth-Anmeldung im Browser ab.",
+      "descWithPlatform": "Klicken Sie auf die Schaltfläche unten und schließen Sie die {{platform}} OAuth-Autorisierung im Browser ab."
     },
     "import": {
       "localDesc": "Importiert das aktuell angemeldete Konto, Tarifinformationen und zwischengespeicherte Kontingentdaten aus dem lokalen Trae-Konfigurationsverzeichnis.",
-      "jsonTab": "JSON-Datei"
+      "jsonTab": "JSON-Datei",
+      "localDescWithPlatform": "Importiert das aktuell angemeldete Konto, Planinformationen und zwischengespeicherte Kontingentdaten aus dem lokalen {{platform}}-Konfigurationsverzeichnis."
     },
     "quota": {
       "usedOfTotal": "Verbraucht $ {{used}} von $ {{total}}",
@@ -4380,7 +4397,12 @@
       "title": "Trae-Kontoleitfaden (zum Auf- und Zuklappen klicken)",
       "desc": "Unterstutzt offizielle OAuth-Anmeldung, lokalen Import, JSON-Import und kontowechsel per lokaler Injektion. Beim Wechsel wird gemaess den realen Speicherregeln des Trae-Clients zuruckgeschrieben.",
       "permission": "Berechtigungsumfang: liest und schreibt anmeldungsbezogene Felder in der lokalen Trae-storage.json fur Kontoimport, Kontowechsel-Injektion und Tarifanzeige. Alle Daten werden ausschliesslich lokal auf Ihrem Gerat verarbeitet.",
-      "network": "Netzwerkumfang: OAuth-Anmeldung, Token-Aktualisierung und Tarifabfragen rufen offizielle Trae-APIs auf. Lokale Kontodateien und rohe Speicherinhalte werden nicht an Drittanbieter hochgeladen."
+      "network": "Netzwerkumfang: OAuth-Anmeldung, Token-Aktualisierung und Tarifabfragen rufen offizielle Trae-APIs auf. Lokale Kontodateien und rohe Speicherinhalte werden nicht an Drittanbieter hochgeladen.",
+      "titleWithPlatform": "{{platform}}-Kontoleitfaden (zum Ein-/Ausklappen klicken)",
+      "descWithPlatform": "Unterstützt offizielle {{platform}} OAuth-Anmeldung, lokalen Import, JSON-Import und lokales injektionsbasiertes Kontowechseln. Der Kontowechsel schreibt nach den tatsächlichen Speicherregeln des {{platform}}-Clients zurück.",
+      "permissionWithPlatform": "Berechtigungsumfang: Liest und schreibt anmeldebezogene Felder in der lokalen {{platform}} storage.json für Kontoimport, Kontowechsel-Injektion und Plananzeige. Alle Daten werden nur lokal verarbeitet.",
+      "networkGlobal": "Netzwerkumfang: {{platform}} OAuth-Anmeldung, Token-Aktualisierung und Planabfragen verwenden offizielle trae.ai / traeapi.us APIs. Lokale Kontodateien und rohe Speicherinhalte werden nicht an Drittanbieter hochgeladen.",
+      "networkCn": "Netzwerkumfang: {{platform}} OAuth-Anmeldung, Token-Aktualisierung und Planabfragen verwenden offizielle trae.cn / trae.com.cn APIs. Lokale Kontodateien und rohe Speicherinhalte werden nicht an Drittanbieter hochgeladen."
     }
   },
   "codebuddyCn": {

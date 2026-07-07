@@ -83,7 +83,6 @@ import { GeminiIcon } from '../components/icons/GeminiIcon';
 import { ClaudeIcon } from '../components/icons/ClaudeIcon';
 import { CodebuddyIcon } from '../components/icons/CodebuddyIcon';
 import { QoderIcon } from '../components/icons/QoderIcon';
-import { TraeIcon } from '../components/icons/TraeIcon';
 import { WorkbuddyIcon } from '../components/icons/WorkbuddyIcon';
 import { PlatformId, PLATFORM_PAGE_MAP } from '../types/platform';
 import { getPlatformLabel, renderPlatformIcon } from '../utils/platformMeta';
@@ -114,6 +113,8 @@ import {
   queryModelProviderUsage,
   type ModelProviderUsageSummary,
 } from '../services/modelProviderUsageService';
+import * as traeService from '../services/traeService';
+import type { TraePlatformId } from '../services/traeService';
 
 interface DashboardPageProps {
   onNavigate: (page: Page) => void;
@@ -129,6 +130,55 @@ let dashboardStartupPrefetched = false;
 
 function normalizeDashboardCardPlatformId(platformId: PlatformId): PlatformId {
   return platformId === 'antigravity_ide' ? 'antigravity' : platformId;
+}
+
+function isTraeSuitePlatform(platformId: PlatformId): boolean {
+  return (
+    platformId === 'trae' ||
+    platformId === 'trae_solo' ||
+    platformId === 'trae_cn' ||
+    platformId === 'trae_solo_cn'
+  );
+}
+
+const TRAE_SUITE_DASHBOARD_PLATFORM_IDS: TraePlatformId[] = [
+  'trae',
+  'trae_solo',
+  'trae_cn',
+  'trae_solo_cn',
+];
+
+function buildEmptyTraeCurrentIdsByPlatform(): Record<TraePlatformId, string | null> {
+  return {
+    trae: null,
+    trae_solo: null,
+    trae_cn: null,
+    trae_solo_cn: null,
+  };
+}
+
+function pickRecommendedTraeAccount(accounts: TraeAccount[], currentId?: string | null): TraeAccount | null {
+  if (accounts.length <= 1) return null;
+  const others = accounts.filter((account) => account.id !== currentId);
+  if (others.length === 0) return null;
+
+  const getScore = (account: TraeAccount) => {
+    const usage = getTraeUsage(account);
+    const usedPercent = usage.usedPercent ?? 101;
+    return {
+      remaining: 100 - usedPercent,
+      freshness: account.last_used || account.created_at || 0,
+    };
+  };
+
+  return others.reduce((best, candidate) => {
+    const bestScore = getScore(best);
+    const candidateScore = getScore(candidate);
+    if (candidateScore.remaining !== bestScore.remaining) {
+      return candidateScore.remaining > bestScore.remaining ? candidate : best;
+    }
+    return candidateScore.freshness > bestScore.freshness ? candidate : best;
+  });
 }
 
 function toFiniteNumber(value: number | null | undefined): number | null {
@@ -454,8 +504,38 @@ export function DashboardPage({
     accounts: traeAccounts,
     currentAccountId: traeCurrentId,
     fetchAccounts: fetchTraeAccounts,
-    switchAccount: switchTraeAccount,
   } = useTraeAccountStore();
+  const [traeCurrentIdsByPlatform, setTraeCurrentIdsByPlatform] = React.useState<
+    Record<TraePlatformId, string | null>
+  >(buildEmptyTraeCurrentIdsByPlatform);
+
+  const refreshTraeCurrentIdsByPlatform = React.useCallback(async () => {
+    try {
+      const entries = await Promise.all(
+        TRAE_SUITE_DASHBOARD_PLATFORM_IDS.map(async (platformId) => [
+          platformId,
+          await traeService.getTraeCurrentAccountId(platformId),
+        ] as const),
+      );
+      setTraeCurrentIdsByPlatform((prev) => ({
+        ...prev,
+        ...Object.fromEntries(entries),
+      }) as Record<TraePlatformId, string | null>);
+    } catch (error) {
+      console.error('Failed to refresh Trae current ids:', error);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void refreshTraeCurrentIdsByPlatform();
+  }, [refreshTraeCurrentIdsByPlatform, traeAccounts.length]);
+
+  React.useEffect(() => {
+    setTraeCurrentIdsByPlatform((prev) => ({
+      ...prev,
+      trae: traeCurrentId ?? null,
+    }));
+  }, [traeCurrentId]);
 
   const {
     accounts: workbuddyAccounts,
@@ -1226,10 +1306,12 @@ export function DashboardPage({
     }
   };
 
-  const handleRefreshTraeCard = async () => {
+  const handleRefreshTraeCard = async (platformId: TraePlatformId = 'trae') => {
     if (cardRefreshing.trae) return;
     setCardRefreshing((prev) => ({ ...prev, trae: true }));
-    const idsToRefresh = [traeCurrent?.id, traeRecommended?.id].filter(Boolean) as string[];
+    const current = getTraeCurrentForPlatform(platformId);
+    const recommended = getTraeRecommendedForPlatform(platformId);
+    const idsToRefresh = [current?.id, recommended?.id].filter(Boolean) as string[];
     try {
       for (const id of idsToRefresh) {
         await useTraeAccountStore.getState().refreshToken(id);
@@ -1304,11 +1386,13 @@ export function DashboardPage({
     }
   };
 
-  const handleSwitchTrae = async (accountId: string) => {
+  const handleSwitchTrae = async (accountId: string, platformId: TraePlatformId = 'trae') => {
     if (switching.has(accountId)) return;
     setSwitching((prev) => new Set(prev).add(accountId));
     try {
-      await switchTraeAccount(accountId);
+      await traeService.injectTraeAccount(accountId, platformId);
+      await useTraeAccountStore.getState().fetchAccounts();
+      await refreshTraeCurrentIdsByPlatform();
     } catch (error) {
       console.error('Switch failed:', error);
     } finally {
@@ -1481,11 +1565,6 @@ export function DashboardPage({
   const qoderCurrent = useMemo(
     () => resolveDashboardCurrentAccount(qoderAccounts, qoderCurrentId),
     [qoderAccounts, qoderCurrentId],
-  );
-
-  const traeCurrent = useMemo(
-    () => resolveDashboardCurrentAccount(traeAccounts, traeCurrentId),
-    [traeAccounts, traeCurrentId],
   );
 
   const workbuddyCurrent = useMemo(
@@ -1767,30 +1846,14 @@ export function DashboardPage({
     });
   }, [qoderAccounts, qoderCurrent?.id]);
 
-  const traeRecommended = useMemo(() => {
-    if (traeAccounts.length <= 1) return null;
-    const currentId = traeCurrent?.id;
-    const others = traeAccounts.filter((a) => a.id !== currentId);
-    if (others.length === 0) return null;
+  const getTraeCurrentForPlatform = (platformId: TraePlatformId): TraeAccount | null => {
+    const currentId = traeCurrentIdsByPlatform[platformId] ?? (platformId === 'trae' ? traeCurrentId : null);
+    return resolveDashboardCurrentAccount(traeAccounts, currentId);
+  };
 
-    const getScore = (account: TraeAccount) => {
-      const usage = getTraeUsage(account);
-      const usedPercent = usage.usedPercent ?? 101;
-      return {
-        remaining: 100 - usedPercent,
-        freshness: account.last_used || account.created_at || 0,
-      };
-    };
-
-    return others.reduce((best, candidate) => {
-      const bestScore = getScore(best);
-      const candidateScore = getScore(candidate);
-      if (candidateScore.remaining !== bestScore.remaining) {
-        return candidateScore.remaining > bestScore.remaining ? candidate : best;
-      }
-      return candidateScore.freshness > bestScore.freshness ? candidate : best;
-    });
-  }, [traeAccounts, traeCurrent?.id]);
+  const getTraeRecommendedForPlatform = (platformId: TraePlatformId): TraeAccount | null => {
+    return pickRecommendedTraeAccount(traeAccounts, getTraeCurrentForPlatform(platformId)?.id);
+  };
 
   const workbuddyRecommended = useMemo(() => {
     if (workbuddyAccounts.length <= 1) return null;
@@ -2380,14 +2443,14 @@ export function DashboardPage({
     });
   };
 
-  const renderTraeAccountContent = (account: TraeAccount | null) => {
+  const renderTraeAccountContent = (account: TraeAccount | null, platformId: TraePlatformId = 'trae') => {
     if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
 
     const presentation = buildTraeAccountPresentation(account, t);
     return renderUnifiedAccountCard({
       presentation,
       onRefresh: () => handleRefreshTrae(account.id),
-      onSwitch: () => handleSwitchTrae(account.id),
+      onSwitch: () => handleSwitchTrae(account.id, platformId),
       isRefreshing: refreshing.has(account.id),
       isSwitching: switching.has(account.id),
       onEditTags: () => setTagModalState({ accountId: account.id, platform: 'trae', tags: account.tags || [] }),
@@ -2423,6 +2486,9 @@ export function DashboardPage({
     codebuddy_cn: stats.codebuddy_cn,
     qoder: stats.qoder,
     trae: stats.trae,
+    trae_solo: stats.trae,
+    trae_cn: stats.trae,
+    trae_solo_cn: stats.trae,
     workbuddy: stats.workbuddy,
   };
 
@@ -3074,18 +3140,22 @@ export function DashboardPage({
       );
     }
 
-    if (platformId === 'trae') {
+    if (isTraeSuitePlatform(platformId)) {
+      const traePlatformId = platformId as TraePlatformId;
+      const current = getTraeCurrentForPlatform(traePlatformId);
+      const recommended = getTraeRecommendedForPlatform(traePlatformId);
+
       return (
         <div className="main-card windsurf-card" key={platformId}>
           <div className="main-card-header">
             <div className="header-title">
-              <TraeIcon style={{ width: 18, height: 18 }} />
+              {renderPlatformIcon(platformId, 18)}
               <h3>{getPlatformLabel(platformId, t)}</h3>
             </div>
             <div className="header-action-group">
               <button
                 className="header-action-btn"
-                onClick={handleRefreshTraeCard}
+                onClick={() => handleRefreshTraeCard(traePlatformId)}
                 disabled={cardRefreshing.trae}
                 title={t('common.refresh', '刷新')}
               >
@@ -3099,22 +3169,22 @@ export function DashboardPage({
           <div className="split-content">
             <div className="split-half current-half">
               <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
-              {renderTraeAccountContent(traeCurrent)}
+              {renderTraeAccountContent(current, traePlatformId)}
             </div>
 
             <div className="split-divider"></div>
 
             <div className="split-half recommend-half">
               <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
-              {traeRecommended ? (
-                renderTraeAccountContent(traeRecommended)
+              {recommended ? (
+                renderTraeAccountContent(recommended, traePlatformId)
               ) : (
                 <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
               )}
             </div>
           </div>
 
-          <button className="card-footer-action" onClick={() => onNavigate('trae')}>
+          <button className="card-footer-action" onClick={() => navigateToPlatform(platformId)}>
             {t('dashboard.viewAllAccounts', '查看所有账号')}
           </button>
         </div>

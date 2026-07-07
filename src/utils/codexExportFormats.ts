@@ -22,7 +22,7 @@ interface Sub2apiCreateAccountItem {
   priority: number;
 }
 
-interface CodexPortableTokenStorage {
+interface CodexPortableTokenStorage extends JsonRecord {
   id_token: string;
   access_token: string;
   refresh_token: string;
@@ -31,6 +31,14 @@ interface CodexPortableTokenStorage {
   email: string;
   type: 'codex';
   expired: string;
+  account_note?: string;
+  two_factor_secret?: string;
+  account_password?: string;
+  phone_number?: string;
+}
+
+interface CodexExportBuildOptions {
+  includeSensitiveNotes?: boolean;
 }
 
 export interface CodexExportDocument {
@@ -65,6 +73,37 @@ function toStringValue(value: unknown): string | undefined {
     return String(value);
   }
   return undefined;
+}
+
+function appendSensitiveNoteFields(target: JsonRecord, account: CodexAccount): void {
+  const accountNote = account.account_note?.trim();
+  if (accountNote) {
+    target.account_note = accountNote;
+  }
+
+  const twoFactorSecret = account.two_factor_secret?.trim();
+  if (twoFactorSecret) {
+    target.two_factor_secret = twoFactorSecret;
+  }
+
+  const accountPassword = account.account_password?.trim();
+  if (accountPassword) {
+    target.account_password = accountPassword;
+  }
+
+  const phoneNumber = account.phone_number?.trim();
+  if (phoneNumber) {
+    target.phone_number = phoneNumber;
+  }
+}
+
+function hasSensitiveNoteFields(account: CodexAccount): boolean {
+  return Boolean(
+    account.account_note?.trim() ||
+      account.two_factor_secret?.trim() ||
+      account.account_password?.trim() ||
+      account.phone_number?.trim(),
+  );
 }
 
 function toNumberValue(value: unknown): number | undefined {
@@ -236,8 +275,11 @@ function toSub2apiAccount(account: CodexAccount): Sub2apiCreateAccountItem {
   };
 }
 
-function toPortableTokenStorage(account: CodexAccount): CodexPortableTokenStorage {
-  return {
+function toPortableTokenStorage(
+  account: CodexAccount,
+  options: CodexExportBuildOptions = {},
+): CodexPortableTokenStorage {
+  const payload: CodexPortableTokenStorage = {
     id_token: account.tokens.id_token || '',
     access_token: account.tokens.access_token || '',
     refresh_token: account.tokens.refresh_token?.trim() || '',
@@ -247,13 +289,22 @@ function toPortableTokenStorage(account: CodexAccount): CodexPortableTokenStorag
     type: 'codex',
     expired: resolveAccessTokenExpiry(account) || '',
   };
+
+  if (options.includeSensitiveNotes) {
+    appendSensitiveNoteFields(payload, account);
+  }
+
+  return payload;
 }
 
 function isCodexApiKeyAccount(account: CodexAccount): boolean {
   return account.auth_mode === 'apikey' || Boolean(account.openai_api_key?.trim());
 }
 
-function toPortableApiKeyStorage(account: CodexAccount): JsonRecord {
+function toPortableApiKeyStorage(
+  account: CodexAccount,
+  options: CodexExportBuildOptions = {},
+): JsonRecord {
   const payload: JsonRecord = {
     auth_mode: 'apikey',
     OPENAI_API_KEY: account.openai_api_key || '',
@@ -270,14 +321,21 @@ function toPortableApiKeyStorage(account: CodexAccount): JsonRecord {
     payload.api_provider_name = account.api_provider_name.trim();
   }
 
+  if (options.includeSensitiveNotes) {
+    appendSensitiveNoteFields(payload, account);
+  }
+
   return payload;
 }
 
-function toCockpitToolsPortableStorage(account: CodexAccount): CodexPortableTokenStorage | JsonRecord {
+function toCockpitToolsPortableStorage(
+  account: CodexAccount,
+  options: CodexExportBuildOptions = {},
+): CodexPortableTokenStorage | JsonRecord {
   if (isCodexApiKeyAccount(account)) {
-    return toPortableApiKeyStorage(account);
+    return toPortableApiKeyStorage(account, options);
   }
-  return toPortableTokenStorage(account);
+  return toPortableTokenStorage(account, options);
 }
 
 export function parseCockpitToolsCodexExport(rawJson: string): CodexAccount[] {
@@ -291,14 +349,27 @@ export function parseCockpitToolsCodexExport(rawJson: string): CodexAccount[] {
   return [];
 }
 
+export function hasCodexExportSensitiveNotes(rawJson: string): boolean {
+  try {
+    return parseCockpitToolsCodexExport(rawJson).some(hasSensitiveNoteFields);
+  } catch {
+    return false;
+  }
+}
+
 export function transformCodexExportJson(
   rawJson: string,
   format: CodexExportFormat,
+  options: CodexExportBuildOptions = {},
 ): string {
   const accounts = parseCockpitToolsCodexExport(rawJson);
 
   if (format === 'cockpit_tools') {
-    return JSON.stringify(accounts.map(toCockpitToolsPortableStorage), null, 2);
+    return JSON.stringify(
+      accounts.map((account) => toCockpitToolsPortableStorage(account, options)),
+      null,
+      2,
+    );
   }
 
   if (format === 'sub2api') {
@@ -312,7 +383,7 @@ export function transformCodexExportJson(
     return JSON.stringify(payload, null, 2);
   }
 
-  const cpaPayload = accounts.map(toPortableTokenStorage);
+  const cpaPayload = accounts.map((account) => toPortableTokenStorage(account, options));
   const normalizedPayload = cpaPayload.length === 1 ? cpaPayload[0] : cpaPayload;
   return JSON.stringify(normalizedPayload, null, 2);
 }
@@ -356,6 +427,7 @@ export function buildCodexExportContent(
   rawJson: string,
   format: CodexExportFormat,
   baseName: string,
+  options: CodexExportBuildOptions = {},
 ): CodexExportContent {
   const fileNameBase = buildCodexExportFileNameBase(baseName, format);
   const accounts = parseCockpitToolsCodexExport(rawJson);
@@ -364,7 +436,7 @@ export function buildCodexExportContent(
     return {
       type: 'single',
       fileNameBase,
-      jsonContent: transformCodexExportJson(rawJson, format),
+      jsonContent: transformCodexExportJson(rawJson, format, options),
     };
   }
 
@@ -375,7 +447,7 @@ export function buildCodexExportContent(
       id: `${account.id || resolveAccountId(account) || 'cpa_account'}_${index}`,
       label: resolveCpaDocumentLabel(account, index),
       fileNameBase: buildCpaDocumentFileNameBase(fileNameBase, account, index),
-      jsonContent: JSON.stringify(toPortableTokenStorage(account), null, 2),
+      jsonContent: JSON.stringify(toPortableTokenStorage(account, options), null, 2),
     })),
   };
 }

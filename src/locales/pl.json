@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Platforma Zed",
     "expandSidebar": "Rozwiń pasek boczny",
@@ -2055,6 +2058,7 @@
     "quota": {
       "hourly": "Limit 5 godzin",
       "weekly": "Limit tygodniowy",
+      "additional": "Dodatkowy limit",
       "reset": "Resetuj",
       "weeklyBlocksHourly": "Limit tygodniowy wynosi 0, więc limit 5-godzinny jest niedostępny",
       "resetCredits": "Resety {{count}}",
@@ -3580,6 +3584,15 @@
     "claude": {
       "appPath": "Ścieżka Claude",
       "appTargetPlaceholder": "Ścieżka Claude.exe albo shell:AppsFolder\\..."
+    },
+    "traeSolo": {
+      "appPath": "Ścieżka TRAE SOLO"
+    },
+    "traeCn": {
+      "appPath": "Ścieżka Trae CN"
+    },
+    "traeSoloCn": {
+      "appPath": "Ścieżka TRAE SOLO CN"
     }
   },
   "quotaAlert": {
@@ -4344,17 +4357,21 @@
   "trae": {
     "title": "Zarzadzanie kontami Trae",
     "empty": {
-      "description": "Kliknij „Dodaj konto”, aby zaczac zarzadzac kontami Trae, albo zaimportuj je z lokalnych danych Trae lub pliku JSON."
+      "description": "Kliknij „Dodaj konto”, aby zaczac zarzadzac kontami Trae, albo zaimportuj je z lokalnych danych Trae lub pliku JSON.",
+      "descriptionWithPlatform": "Kliknij „Dodaj konto”, aby zarządzać kontami {{platform}}, albo zaimportuj lokalne dane {{platform}} lub plik JSON."
     },
     "addModal": {
-      "title": "Dodaj konto Trae"
+      "title": "Dodaj konto Trae",
+      "titleWithPlatform": "Dodaj konto {{platform}}"
     },
     "oauth": {
-      "desc": "Kliknij przycisk ponizej i zakoncz autoryzacje OAuth Trae w przegladarce."
+      "desc": "Kliknij przycisk ponizej i zakoncz autoryzacje OAuth Trae w przegladarce.",
+      "descWithPlatform": "Kliknij przycisk poniżej i zakończ autoryzację OAuth {{platform}} w przeglądarce."
     },
     "import": {
       "localDesc": "Importuje aktualnie zalogowane konto, informacje o planie i dane limitu z pamieci podrecznej z lokalnego katalogu konfiguracji Trae.",
-      "jsonTab": "Plik JSON"
+      "jsonTab": "Plik JSON",
+      "localDescWithPlatform": "Importuje aktualnie zalogowane konto, informacje o planie i dane limitów z pamięci podręcznej z lokalnego katalogu konfiguracji {{platform}}."
     },
     "quota": {
       "usedOfTotal": "Wykorzystano $ {{used}} z $ {{total}}",
@@ -4380,7 +4397,12 @@
       "title": "Przewodnik po kontach Trae (kliknij, aby rozwinac/zwinac)",
       "desc": "Obsluguje oficjalne logowanie OAuth, import lokalny, import JSON oraz przelaczanie kont przez lokalna iniekcje. Podczas przelaczania dane sa zapisywane zgodnie z rzeczywistymi zasadami zapisu klienta Trae.",
       "permission": "Zakres uprawnien: odczytuje i zapisuje pola zwiazane z logowaniem w lokalnym pliku Trae storage.json na potrzeby importu konta, iniekcji przelaczenia konta i wyswietlania planu. Wszystkie dane sa przetwarzane lokalnie na Twoim urzadzeniu.",
-      "network": "Zakres sieci: logowanie OAuth, odswiezanie tokenu i zapytania o plan wywoluja oficjalne API Trae. Lokalne pliki kont i surowa zawartosc magazynu nie sa przesylane do uslug zewnetrznych."
+      "network": "Zakres sieci: logowanie OAuth, odswiezanie tokenu i zapytania o plan wywoluja oficjalne API Trae. Lokalne pliki kont i surowa zawartosc magazynu nie sa przesylane do uslug zewnetrznych.",
+      "titleWithPlatform": "Przewodnik kont {{platform}} (kliknij, aby rozwinąć/zwinąć)",
+      "descWithPlatform": "Obsługuje oficjalny OAuth {{platform}}, import lokalny, import JSON i lokalne przełączanie kont przez zapis danych. Przełączanie zapisuje zgodnie z rzeczywistymi regułami klienta {{platform}}.",
+      "permissionWithPlatform": "Zakres uprawnień: odczyt i zapis pól logowania w lokalnym storage.json {{platform}} na potrzeby importu konta, przełączania kont i wyświetlania planu. Wszystkie dane są przetwarzane lokalnie.",
+      "networkGlobal": "Zakres sieci: logowanie OAuth, odświeżanie tokenów i zapytania planu {{platform}} wywołują oficjalne API trae.ai / traeapi.us. Lokalne pliki kont i surowa zawartość nie są wysyłane do usług zewnętrznych.",
+      "networkCn": "Zakres sieci: logowanie OAuth, odświeżanie tokenów i zapytania planu {{platform}} wywołują oficjalne API trae.cn / trae.com.cn. Lokalne pliki kont i surowa zawartość nie są wysyłane do usług zewnętrznych."
     }
   },
   "codebuddyCn": {

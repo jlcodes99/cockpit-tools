@@ -219,6 +219,9 @@ const ANTIGRAVITY_FILTER_FIELD_TAG_FILTER = 'tag_filter'
 const ANTIGRAVITY_FILTER_FIELD_GROUP_BY_TAG = 'group_by_tag'
 const ANTIGRAVITY_FILTER_FIELD_ACTIVE_GROUP_ID = 'active_group_id'
 
+const DEFAULT_FILTER_TYPES: AccountsFilterType[] = []
+const DEFAULT_TAG_FILTER: string[] = []
+
 export function AccountsPage({ onNavigate }: AccountsPageProps) {
   const { t, i18n } = useTranslation()
   const antigravityRuntimeTarget = useAntigravityRuntimeTarget()
@@ -336,22 +339,38 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
 
   // 筛选
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterTypes, setFilterTypes] = useState<AccountsFilterType[]>(() =>
-    initialFilterPersistenceEnabled
-      ? (readAccountsOverviewFilterStringArray(
+  const [filterTypes, setFilterTypes] = useState<AccountsFilterType[]>(() => {
+    if (initialFilterPersistenceEnabled) {
+      const saved = readAccountsOverviewFilterField<unknown>(
+        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+        ANTIGRAVITY_FILTER_FIELD_FILTER_TYPES,
+        null,
+      )
+      if (saved !== null) {
+        return readAccountsOverviewFilterStringArray(
           ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
           ANTIGRAVITY_FILTER_FIELD_FILTER_TYPES,
-        ) as AccountsFilterType[])
-      : [],
-  )
-  const [tagFilter, setTagFilter] = useState<string[]>(() =>
-    initialFilterPersistenceEnabled
-      ? readAccountsOverviewFilterStringArray(
+        ) as AccountsFilterType[]
+      }
+    }
+    return DEFAULT_FILTER_TYPES
+  })
+  const [tagFilter, setTagFilter] = useState<string[]>(() => {
+    if (initialFilterPersistenceEnabled) {
+      const saved = readAccountsOverviewFilterField<unknown>(
+        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+        ANTIGRAVITY_FILTER_FIELD_TAG_FILTER,
+        null,
+      )
+      if (saved !== null) {
+        return readAccountsOverviewFilterStringArray(
           ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
           ANTIGRAVITY_FILTER_FIELD_TAG_FILTER,
         )
-      : [],
-  )
+      }
+    }
+    return DEFAULT_TAG_FILTER
+  })
   const [groupByTag, setGroupByTag] = useState<boolean>(() =>
     initialFilterPersistenceEnabled
       ? Boolean(
@@ -655,18 +674,32 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
       setViewMode(savedViewMode)
     }
 
+    const savedFilterTypes = readAccountsOverviewFilterField<unknown>(
+      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+      ANTIGRAVITY_FILTER_FIELD_FILTER_TYPES,
+      null,
+    )
     setFilterTypes(
-      readAccountsOverviewFilterStringArray(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_FILTER_TYPES,
-      ) as AccountsFilterType[],
+      savedFilterTypes !== null
+        ? (readAccountsOverviewFilterStringArray(
+            ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+            ANTIGRAVITY_FILTER_FIELD_FILTER_TYPES,
+          ) as AccountsFilterType[])
+        : DEFAULT_FILTER_TYPES
     )
 
+    const savedTagFilter = readAccountsOverviewFilterField<unknown>(
+      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+      ANTIGRAVITY_FILTER_FIELD_TAG_FILTER,
+      null,
+    )
     setTagFilter(
-      readAccountsOverviewFilterStringArray(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_TAG_FILTER,
-      ),
+      savedTagFilter !== null
+        ? readAccountsOverviewFilterStringArray(
+            ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
+            ANTIGRAVITY_FILTER_FIELD_TAG_FILTER,
+          )
+        : DEFAULT_TAG_FILTER
     )
 
     setGroupByTag(

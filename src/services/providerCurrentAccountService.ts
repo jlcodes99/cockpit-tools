@@ -11,6 +11,9 @@ export type ProviderCurrentPlatform =
   | 'codebuddy_cn'
   | 'qoder'
   | 'trae'
+  | 'trae_solo'
+  | 'trae_cn'
+  | 'trae_solo_cn'
   | 'workbuddy'
   | 'github_copilot'
   | 'zed';

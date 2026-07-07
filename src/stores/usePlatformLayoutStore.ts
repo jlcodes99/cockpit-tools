@@ -16,10 +16,15 @@ const TRAY_MIGRATED_PLATFORM_IDS: PlatformId[] = [
   'codebuddy_cn',
   'qoder',
   'trae',
+  'trae_solo',
+  'trae_cn',
+  'trae_solo_cn',
   'workbuddy',
 ];
 const DEFAULT_CODEBUDDY_GROUP_ID = 'codebuddy-suite';
 const DEFAULT_ANTIGRAVITY_GROUP_ID = 'antigravity-suite';
+const DEFAULT_TRAE_GROUP_ID = 'trae-suite';
+const TRAE_SUITE_PLATFORM_IDS: PlatformId[] = ['trae', 'trae_solo', 'trae_cn', 'trae_solo_cn'];
 
 const PLATFORM_ENTRY_PREFIX = 'platform:';
 const GROUP_ENTRY_PREFIX = 'group:';
@@ -277,6 +282,20 @@ function defaultPlatformGroups(): PlatformLayoutGroup[] {
       iconKind: 'platform',
       iconPlatformId: 'codebuddy',
     },
+    {
+      id: DEFAULT_TRAE_GROUP_ID,
+      name: 'Trae',
+      platformIds: TRAE_SUITE_PLATFORM_IDS,
+      defaultPlatformId: 'trae',
+      iconKind: 'platform',
+      iconPlatformId: 'trae',
+      childConfigs: [
+        { platformId: 'trae', name: 'Trae' },
+        { platformId: 'trae_solo', name: 'TRAE SOLO' },
+        { platformId: 'trae_cn', name: 'Trae CN' },
+        { platformId: 'trae_solo_cn', name: 'TRAE SOLO CN' },
+      ],
+    },
   ];
 }
 
@@ -407,6 +426,15 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
   }
   if (fallbackPlatform === 'trae') {
     return 'Trae';
+  }
+  if (fallbackPlatform === 'trae_solo') {
+    return 'TRAE SOLO';
+  }
+  if (fallbackPlatform === 'trae_cn') {
+    return 'Trae CN';
+  }
+  if (fallbackPlatform === 'trae_solo_cn') {
+    return 'TRAE SOLO CN';
   }
   if (fallbackPlatform === 'gemini') {
     return 'Gemini Cli';
@@ -567,6 +595,38 @@ function normalizePlatformGroups(raw: unknown, fallbackToDefault: boolean): Plat
         antigravityGroup.platformIds,
       );
       usedPlatformIds.add('antigravity_ide');
+    }
+  }
+
+  const missingTraeSuiteIds = TRAE_SUITE_PLATFORM_IDS.filter(
+    (platformId) => !usedPlatformIds.has(platformId),
+  );
+  if (missingTraeSuiteIds.length > 0) {
+    const traeGroup =
+      result.find((group) => group.id === DEFAULT_TRAE_GROUP_ID)
+      ?? result.find((group) => group.platformIds.includes('trae'));
+    if (traeGroup) {
+      traeGroup.platformIds = [...traeGroup.platformIds, ...missingTraeSuiteIds];
+      if (!TRAE_SUITE_PLATFORM_IDS.includes(traeGroup.defaultPlatformId)) {
+        traeGroup.defaultPlatformId = 'trae';
+      }
+      if (traeGroup.iconKind !== 'custom') {
+        traeGroup.iconPlatformId = 'trae';
+      }
+      if (traeGroup.name === 'platform-trae' || traeGroup.name === 'Trae') {
+        traeGroup.name = 'Trae';
+      }
+      traeGroup.childConfigs = normalizeGroupChildConfigs(
+        [
+          ...(traeGroup.childConfigs ?? []),
+          { platformId: 'trae', name: 'Trae' },
+          { platformId: 'trae_solo', name: 'TRAE SOLO' },
+          { platformId: 'trae_cn', name: 'Trae CN' },
+          { platformId: 'trae_solo_cn', name: 'TRAE SOLO CN' },
+        ],
+        traeGroup.platformIds,
+      );
+      missingTraeSuiteIds.forEach((platformId) => usedPlatformIds.add(platformId));
     }
   }
 

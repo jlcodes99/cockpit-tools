@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Plataforma Zed",
     "expandSidebar": "Expandir barra lateral",
@@ -2055,6 +2058,7 @@
     "quota": {
       "hourly": "Cota de 5 horas",
       "weekly": "Cota semanal",
+      "additional": "Cota adicional",
       "reset": "Redefinir",
       "weeklyBlocksHourly": "A cota semanal é 0, então a cota de 5 horas está indisponível",
       "resetCredits": "Redef. {{count}}",
@@ -3580,6 +3584,15 @@
     "claude": {
       "appPath": "Caminho do Claude",
       "appTargetPlaceholder": "Caminho do Claude.exe ou shell:AppsFolder\\..."
+    },
+    "traeSolo": {
+      "appPath": "Caminho do TRAE SOLO"
+    },
+    "traeCn": {
+      "appPath": "Caminho do Trae CN"
+    },
+    "traeSoloCn": {
+      "appPath": "Caminho do TRAE SOLO CN"
     }
   },
   "quotaAlert": {
@@ -4344,17 +4357,21 @@
   "trae": {
     "title": "Gerenciamento de contas Trae",
     "empty": {
-      "description": "Clique em \"Adicionar conta\" para comecar a gerenciar suas contas Trae ou importe-as dos dados locais do Trae ou de um arquivo JSON."
+      "description": "Clique em \"Adicionar conta\" para comecar a gerenciar suas contas Trae ou importe-as dos dados locais do Trae ou de um arquivo JSON.",
+      "descriptionWithPlatform": "Clique em \"Adicionar conta\" para gerenciar contas {{platform}}, ou importe dados locais do {{platform}} ou um arquivo JSON."
     },
     "addModal": {
-      "title": "Adicionar conta Trae"
+      "title": "Adicionar conta Trae",
+      "titleWithPlatform": "Adicionar conta {{platform}}"
     },
     "oauth": {
-      "desc": "Clique no botao abaixo e conclua a autorizacao OAuth do Trae no navegador."
+      "desc": "Clique no botao abaixo e conclua a autorizacao OAuth do Trae no navegador.",
+      "descWithPlatform": "Clique no botão abaixo e conclua a autorização OAuth do {{platform}} no navegador."
     },
     "import": {
       "localDesc": "Importa a conta conectada no momento, as informacoes do plano e os dados de cota em cache do diretorio local de configuracao do Trae.",
-      "jsonTab": "Arquivo JSON"
+      "jsonTab": "Arquivo JSON",
+      "localDescWithPlatform": "Importa a conta conectada atual, informações do plano e dados de cota em cache do diretório local de configuração do {{platform}}."
     },
     "quota": {
       "usedOfTotal": "Usado $ {{used}} de $ {{total}}",
@@ -4380,7 +4397,12 @@
       "title": "Guia de contas Trae (clique para expandir/recolher)",
       "desc": "Suporta login oficial via OAuth, importacao local, importacao JSON e troca de conta por injecao local. Ao trocar a conta, os dados sao regravados seguindo as regras reais de persistencia do cliente Trae.",
       "permission": "Escopo de permissao: le e grava campos relacionados ao login no storage.json local do Trae para importacao de conta, injecao de troca de conta e exibicao do plano. Todos os dados sao processados localmente no seu dispositivo.",
-      "network": "Escopo de rede: login OAuth, renovacao de token e consultas de plano chamam as APIs oficiais do Trae. Os arquivos locais de conta e o conteudo bruto do armazenamento nao sao enviados para servicos de terceiros."
+      "network": "Escopo de rede: login OAuth, renovacao de token e consultas de plano chamam as APIs oficiais do Trae. Os arquivos locais de conta e o conteudo bruto do armazenamento nao sao enviados para servicos de terceiros.",
+      "titleWithPlatform": "Guia de contas {{platform}} (clique para expandir/recolher)",
+      "descWithPlatform": "Compatível com OAuth oficial do {{platform}}, importação local, importação JSON e troca de conta por injeção local. A troca grava seguindo as regras reais em disco do cliente {{platform}}.",
+      "permissionWithPlatform": "Escopo de permissões: lê e grava campos de login no storage.json local do {{platform}} para importação de conta, injeção de troca de conta e exibição do plano. Todos os dados são processados localmente.",
+      "networkGlobal": "Escopo de rede: login OAuth, atualização de token e consultas de plano do {{platform}} chamam APIs oficiais trae.ai / traeapi.us. Arquivos locais de conta e conteúdo bruto não são enviados a serviços de terceiros.",
+      "networkCn": "Escopo de rede: login OAuth, atualização de token e consultas de plano do {{platform}} chamam APIs oficiais trae.cn / trae.com.cn. Arquivos locais de conta e conteúdo bruto não são enviados a serviços de terceiros."
     }
   },
   "codebuddyCn": {
