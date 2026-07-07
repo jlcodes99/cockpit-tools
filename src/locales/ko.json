@@ -707,6 +707,8 @@
       "workbuddyPathReset": "기본값으로 재설정",
       "openclawAuthOverwrite": "Codex 전환 시 OpenClaw 로그인 덮어쓰기",
       "openclawAuthOverwriteDesc": "끄면 Codex만 전환되고 OpenClaw는 현재 로그인 상태를 유지합니다",
+      "hermesAuthOverwrite": "Codex 전환 시 Hermes 할당량 동기화",
+      "hermesAuthOverwriteDesc": "Hermes openai-codex 자격 증명과 credential_pool을 업데이트하여 선택한 Codex 계정의 할당량을 Hermes에서 사용합니다.",
       "ghcpOpencodeAuthOverwrite": "GitHub Copilot 전환 시 OpenCode 로그인 덮어쓰기",
       "ghcpOpencodeRestart": "GitHub Copilot 전환 시 OpenCode 재시작",
       "ghcpLaunchOnSwitch": "GitHub Copilot 전환 시 GitHub Copilot App 자동 실행",

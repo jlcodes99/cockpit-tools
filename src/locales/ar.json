@@ -750,6 +750,8 @@
       "workbuddyPathReset": "إعادة إلى الافتراضي",
       "openclawAuthOverwrite": "استبدال تسجيل دخول OpenClaw عند تبديل Codex",
       "openclawAuthOverwriteDesc": "عند التعطيل، يتم تبديل Codex فقط ويحتفظ OpenClaw بحالة تسجيل الدخول الحالية",
+      "hermesAuthOverwrite": "مزامنة حصة Hermes عند تبديل Codex",
+      "hermesAuthOverwriteDesc": "يحدّث بيانات اعتماد Hermes openai-codex و credential_pool ليستخدم Hermes حصة حساب Codex المحدد.",
       "ghcpOpencodeAuthOverwrite": "استبدال تسجيل دخول OpenCode عند تبديل GitHub Copilot",
       "ghcpOpencodeRestart": "إعادة تشغيل OpenCode عند تبديل GitHub Copilot",
       "ghcpLaunchOnSwitch": "تشغيل تطبيق GitHub Copilot App تلقائيًا عند تبديل GitHub Copilot",

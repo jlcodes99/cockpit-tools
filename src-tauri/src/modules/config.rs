@@ -312,6 +312,9 @@ pub struct UserConfig {
     /// 切换 Codex 时是否覆盖 OpenClaw 登录信息
     #[serde(default = "default_openclaw_auth_overwrite_on_switch")]
     pub openclaw_auth_overwrite_on_switch: bool,
+    /// 切换 Codex 时是否同步 Hermes openai-codex 凭证
+    #[serde(default = "default_hermes_auth_overwrite_on_switch")]
+    pub hermes_auth_overwrite_on_switch: bool,
     /// 切换 Codex 时是否自动启动/重启 Codex App
     #[serde(default = "default_codex_launch_on_switch")]
     pub codex_launch_on_switch: bool,
@@ -795,6 +798,9 @@ fn default_ghcp_launch_on_switch() -> bool {
 fn default_openclaw_auth_overwrite_on_switch() -> bool {
     false
 }
+fn default_hermes_auth_overwrite_on_switch() -> bool {
+    false
+}
 fn default_codex_launch_on_switch() -> bool {
     true
 }
@@ -1043,6 +1049,7 @@ impl Default for UserConfig {
             ),
             ghcp_launch_on_switch: default_ghcp_launch_on_switch(),
             openclaw_auth_overwrite_on_switch: default_openclaw_auth_overwrite_on_switch(),
+            hermes_auth_overwrite_on_switch: default_hermes_auth_overwrite_on_switch(),
             codex_launch_on_switch: default_codex_launch_on_switch(),
             antigravity_launch_on_switch: default_antigravity_launch_on_switch(),
             codex_restart_specified_app_on_switch: default_codex_restart_specified_app_on_switch(),
@@ -2131,6 +2138,19 @@ mod tests {
         let cfg: UserConfig =
             serde_json::from_value(serde_json::json!({})).expect("反序列化默认配置应成功");
         assert!(!cfg.openclaw_auth_overwrite_on_switch);
+    }
+
+    #[test]
+    fn hermes_auth_overwrite_default_is_disabled() {
+        let cfg = UserConfig::default();
+        assert!(!cfg.hermes_auth_overwrite_on_switch);
+    }
+
+    #[test]
+    fn hermes_auth_overwrite_missing_field_falls_back_to_disabled() {
+        let cfg: UserConfig =
+            serde_json::from_value(serde_json::json!({})).expect("反序列化默认配置应成功");
+        assert!(!cfg.hermes_auth_overwrite_on_switch);
     }
 
     #[test]

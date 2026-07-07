@@ -707,6 +707,8 @@
       "workbuddyPathReset": "Varsayılana sıfırla",
       "openclawAuthOverwrite": "Codex'i değiştirirken OpenClaw oturum açma bilgilerinin üzerine yazın",
       "openclawAuthOverwriteDesc": "Kapalıyken yalnızca Codex açılır ve OpenClaw mevcut oturum açma durumunu korur",
+      "hermesAuthOverwrite": "Codex değiştirirken Hermes kotasını eşitle",
+      "hermesAuthOverwriteDesc": "Hermes openai-codex kimlik bilgilerini ve credential_pool u günceller; Hermes seçili Codex hesabının kotasını kullanır.",
       "ghcpOpencodeAuthOverwrite": "GitHub Copilot değiştirirken OpenCode oturum açma bilgilerinin üzerine yazın",
       "ghcpOpencodeRestart": "GitHub Copilot değiştirildiğinde OpenCode'u yeniden başlat",
       "ghcpLaunchOnSwitch": "GitHub Copilot değiştirirken GitHub Copilot App'i otomatik başlat",

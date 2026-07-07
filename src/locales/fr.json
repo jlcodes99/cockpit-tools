@@ -704,6 +704,8 @@
       "workbuddyPathReset": "Reinitialiser par defaut",
       "openclawAuthOverwrite": "Écraser la connexion OpenClaw lors du changement de Codex",
       "openclawAuthOverwriteDesc": "Si désactivé, seul Codex est changé et OpenClaw conserve son état de connexion actuel",
+      "hermesAuthOverwrite": "Synchroniser le quota Hermes lors du changement de Codex",
+      "hermesAuthOverwriteDesc": "Met à jour les identifiants openai-codex de Hermes et le credential_pool afin que Hermes utilise le quota du compte Codex sélectionné.",
       "ghcpOpencodeAuthOverwrite": "Écraser la connexion OpenCode lors du changement de GitHub Copilot",
       "ghcpOpencodeRestart": "Redémarrer OpenCode lors du changement de GitHub Copilot",
       "ghcpLaunchOnSwitch": "Lancer GitHub Copilot App lors du changement de GitHub Copilot",

@@ -46,6 +46,7 @@ pub mod github_copilot_account;
 pub mod github_copilot_instance;
 pub mod github_copilot_oauth;
 pub mod group_settings;
+pub mod hermes_auth;
 pub mod i18n;
 pub mod import;
 pub mod instance;

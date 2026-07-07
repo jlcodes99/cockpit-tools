@@ -707,6 +707,8 @@
       "workbuddyPathReset": "Сбросить по умолчанию",
       "openclawAuthOverwrite": "Перезаписать логин OpenClaw при переключении Кодекса",
       "openclawAuthOverwriteDesc": "Если выключено, переключается только Codex, а OpenClaw сохраняет текущее состояние входа в систему.",
+      "hermesAuthOverwrite": "Синхронизировать лимит Hermes при переключении Codex",
+      "hermesAuthOverwriteDesc": "Обновляет учетные данные Hermes openai-codex и credential_pool, чтобы Hermes использовал лимит выбранной учетной записи Codex.",
       "ghcpOpencodeAuthOverwrite": "Перезаписать логин OpenCode при переключении GitHub Copilot",
       "ghcpOpencodeRestart": "Перезапускать OpenCode при переключении GitHub Copilot",
       "ghcpLaunchOnSwitch": "Автоматически запускать GitHub Copilot App при переключении GitHub Copilot",

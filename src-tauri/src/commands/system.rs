@@ -178,6 +178,8 @@ pub struct GeneralConfig {
     pub ghcp_launch_on_switch: bool,
     /// 切换 Codex 时是否覆盖 OpenClaw 登录信息
     pub openclaw_auth_overwrite_on_switch: bool,
+    /// 切换 Codex 时是否同步 Hermes openai-codex 凭证
+    pub hermes_auth_overwrite_on_switch: bool,
     /// 切换 Codex 时是否自动启动/重启 Codex App
     pub codex_launch_on_switch: bool,
     /// 切换 Antigravity IDE 时是否自动启动/重启应用
@@ -2036,6 +2038,7 @@ pub fn save_network_config(
         ghcp_opencode_auth_overwrite_on_switch: current.ghcp_opencode_auth_overwrite_on_switch,
         ghcp_launch_on_switch: current.ghcp_launch_on_switch,
         openclaw_auth_overwrite_on_switch: current.openclaw_auth_overwrite_on_switch,
+        hermes_auth_overwrite_on_switch: current.hermes_auth_overwrite_on_switch,
         codex_launch_on_switch: current.codex_launch_on_switch,
         antigravity_launch_on_switch: current.antigravity_launch_on_switch,
         codex_restart_specified_app_on_switch: current.codex_restart_specified_app_on_switch,
@@ -2358,6 +2361,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         ghcp_opencode_auth_overwrite_on_switch: user_config.ghcp_opencode_auth_overwrite_on_switch,
         ghcp_launch_on_switch: user_config.ghcp_launch_on_switch,
         openclaw_auth_overwrite_on_switch: user_config.openclaw_auth_overwrite_on_switch,
+        hermes_auth_overwrite_on_switch: user_config.hermes_auth_overwrite_on_switch,
         codex_launch_on_switch: user_config.codex_launch_on_switch,
         antigravity_launch_on_switch: user_config.antigravity_launch_on_switch,
         codex_restart_specified_app_on_switch: user_config.codex_restart_specified_app_on_switch,
@@ -2509,6 +2513,7 @@ pub fn save_general_config(
     ghcp_opencode_auth_overwrite_on_switch: Option<bool>,
     ghcp_launch_on_switch: Option<bool>,
     openclaw_auth_overwrite_on_switch: Option<bool>,
+    hermes_auth_overwrite_on_switch: Option<bool>,
     codex_launch_on_switch: bool,
     antigravity_launch_on_switch: Option<bool>,
     codex_restart_specified_app_on_switch: Option<bool>,
@@ -2794,6 +2799,8 @@ pub fn save_general_config(
         ghcp_launch_on_switch: ghcp_launch_on_switch.unwrap_or(current.ghcp_launch_on_switch),
         openclaw_auth_overwrite_on_switch: openclaw_auth_overwrite_on_switch
             .unwrap_or(current.openclaw_auth_overwrite_on_switch),
+        hermes_auth_overwrite_on_switch: hermes_auth_overwrite_on_switch
+            .unwrap_or(current.hermes_auth_overwrite_on_switch),
         codex_launch_on_switch,
         antigravity_launch_on_switch: antigravity_launch_on_switch
             .unwrap_or(current.antigravity_launch_on_switch),

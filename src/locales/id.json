@@ -788,6 +788,8 @@
       "workbuddyPathReset": "Atur ulang ke bawaan",
       "openclawAuthOverwrite": "Timpa login OpenClaw saat mengganti Codex",
       "openclawAuthOverwriteDesc": "Jika dinonaktifkan, hanya Codex yang diganti dan OpenClaw mempertahankan status login saat ini",
+      "hermesAuthOverwrite": "Sinkronkan kuota Hermes saat mengganti Codex",
+      "hermesAuthOverwriteDesc": "Memperbarui kredensial openai-codex Hermes dan credential_pool agar Hermes memakai kuota akun Codex yang dipilih.",
       "ghcpOpencodeAuthOverwrite": "Timpa login OpenCode saat mengganti GitHub Copilot",
       "ghcpOpencodeRestart": "Mulai ulang OpenCode saat mengganti GitHub Copilot",
       "ghcpLaunchOnSwitch": "Luncurkan Aplikasi GitHub Copilot saat mengganti GitHub Copilot",

@@ -704,6 +704,8 @@
       "workbuddyPathReset": "重設預設",
       "openclawAuthOverwrite": "切換 Codex 時覆蓋 OpenClaw 登入",
       "openclawAuthOverwriteDesc": "關閉時，僅切換 Codex，OpenClaw 保持目前登入狀態",
+      "hermesAuthOverwrite": "切換 Codex 時同步 Hermes 額度",
+      "hermesAuthOverwriteDesc": "開啟後會更新 ~/.hermes/auth.json 的 openai-codex 憑證與憑證池，讓 Hermes 使用目前 Codex 帳號額度",
       "ghcpOpencodeAuthOverwrite": "切換 GitHub Copilot 時覆蓋 OpenCode 登入",
       "ghcpOpencodeRestart": "切換 GitHub Copilot 時自動重新啟動 OpenCode",
       "ghcpLaunchOnSwitch": "切換 GitHub Copilot 時自動啟動 GitHub Copilot App",

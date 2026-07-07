@@ -188,6 +188,7 @@ interface GeneralConfig {
   opencode_sync_on_switch: boolean;
   opencode_auth_overwrite_on_switch: boolean;
   openclaw_auth_overwrite_on_switch: boolean;
+  hermes_auth_overwrite_on_switch: boolean;
   codex_launch_on_switch: boolean;
   antigravity_launch_on_switch: boolean;
   codex_restart_specified_app_on_switch: boolean;
@@ -528,6 +529,7 @@ export function SettingsPage() {
   const [opencodeSyncOnSwitch, setOpencodeSyncOnSwitch] = useState(false);
   const [opencodeAuthOverwriteOnSwitch, setOpencodeAuthOverwriteOnSwitch] = useState(false);
   const [openclawAuthOverwriteOnSwitch, setOpenclawAuthOverwriteOnSwitch] = useState(false);
+  const [hermesAuthOverwriteOnSwitch, setHermesAuthOverwriteOnSwitch] = useState(false);
   const [codexLaunchOnSwitch, setCodexLaunchOnSwitch] = useState(true);
   const [antigravityLaunchOnSwitch, setAntigravityLaunchOnSwitch] = useState(true);
   const [codexRestartSpecifiedAppOnSwitch, setCodexRestartSpecifiedAppOnSwitch] = useState(false);
@@ -962,6 +964,7 @@ export function SettingsPage() {
           opencodeSyncOnSwitch,
           opencodeAuthOverwriteOnSwitch,
           openclawAuthOverwriteOnSwitch,
+          hermesAuthOverwriteOnSwitch,
           codexLaunchOnSwitch,
           antigravityLaunchOnSwitch,
           codexRestartSpecifiedAppOnSwitch,
@@ -1116,6 +1119,7 @@ export function SettingsPage() {
     opencodeSyncOnSwitch,
     opencodeAuthOverwriteOnSwitch,
     openclawAuthOverwriteOnSwitch,
+    hermesAuthOverwriteOnSwitch,
     codexLaunchOnSwitch,
     antigravityLaunchOnSwitch,
     codexRestartSpecifiedAppOnSwitch,
@@ -1458,6 +1462,7 @@ export function SettingsPage() {
       setOpencodeSyncOnSwitch(config.opencode_sync_on_switch ?? false);
       setOpencodeAuthOverwriteOnSwitch(config.opencode_auth_overwrite_on_switch ?? false);
       setOpenclawAuthOverwriteOnSwitch(config.openclaw_auth_overwrite_on_switch ?? false);
+      setHermesAuthOverwriteOnSwitch(config.hermes_auth_overwrite_on_switch ?? false);
       setCodexLaunchOnSwitch(config.codex_launch_on_switch ?? true);
       setAntigravityLaunchOnSwitch(config.antigravity_launch_on_switch ?? true);
       setCodexRestartSpecifiedAppOnSwitch(
@@ -4020,6 +4025,23 @@ export function SettingsPage() {
                       type="checkbox"
                       checked={openclawAuthOverwriteOnSwitch}
                       onChange={(e) => setOpenclawAuthOverwriteOnSwitch(e.target.checked)}
+                    />
+                    <span className="slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="row-label">
+                  <div className="row-title">{t('settings.general.hermesAuthOverwrite')}</div>
+                  <div className="row-desc">{t('settings.general.hermesAuthOverwriteDesc')}</div>
+                </div>
+                <div className="row-control">
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={hermesAuthOverwriteOnSwitch}
+                      onChange={(e) => setHermesAuthOverwriteOnSwitch(e.target.checked)}
                     />
                     <span className="slider"></span>
                   </label>

@@ -13,7 +13,7 @@ use crate::models::codex_local_access::{
 };
 use crate::modules::{
     account, codex_account, codex_local_access, codex_oauth, codex_quota, codex_session_visibility,
-    codex_speed, codex_wakeup, codex_wakeup_scheduler, config, logger, openclaw_auth,
+    codex_speed, codex_wakeup, codex_wakeup_scheduler, config, hermes_auth, logger, openclaw_auth,
     opencode_auth, process,
 };
 use serde::{Deserialize, Serialize};
@@ -807,6 +807,17 @@ pub async fn switch_codex_account(
         }
     } else {
         logger::log_info("已关闭切换 Codex 时覆盖 OpenClaw 登录信息");
+    }
+
+    if user_config.hermes_auth_overwrite_on_switch {
+        match hermes_auth::replace_openai_codex_entry_from_codex(&account) {
+            Ok(()) => {}
+            Err(e) => {
+                logger::log_warn(&format!("Hermes auth 同步失败: {}", e));
+            }
+        }
+    } else {
+        logger::log_info("已关闭切换 Codex 时同步 Hermes 额度");
     }
 
     if user_config.codex_launch_on_switch {

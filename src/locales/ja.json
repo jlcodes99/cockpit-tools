@@ -707,6 +707,8 @@
       "workbuddyPathReset": "デフォルトに戻す",
       "openclawAuthOverwrite": "Codex 切り替え時に OpenClaw のログインを上書きする",
       "openclawAuthOverwriteDesc": "オフの場合は Codex のみ切り替え、OpenClaw は現在のログイン状態を維持します",
+      "hermesAuthOverwrite": "Codex 切り替え時に Hermes のクォータを同期",
+      "hermesAuthOverwriteDesc": "Hermes の openai-codex 認証情報と credential_pool を更新し、選択した Codex アカウントのクォータを Hermes で使用します。",
       "ghcpOpencodeAuthOverwrite": "GitHub Copilot 切り替え時に OpenCode のログインを上書きする",
       "ghcpOpencodeRestart": "GitHub Copilot 切替時に OpenCode を自動再起動",
       "ghcpLaunchOnSwitch": "GitHub Copilot 切替時に GitHub Copilot App を自動起動",

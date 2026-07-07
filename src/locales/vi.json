@@ -707,6 +707,8 @@
       "workbuddyPathReset": "Đặt lại mặc định",
       "openclawAuthOverwrite": "Ghi đè đăng nhập OpenClaw khi chuyển đổi Codex",
       "openclawAuthOverwriteDesc": "Khi tắt, chỉ Codex được chuyển đổi và OpenClaw giữ trạng thái đăng nhập hiện tại",
+      "hermesAuthOverwrite": "Đồng bộ hạn mức Hermes khi chuyển Codex",
+      "hermesAuthOverwriteDesc": "Cập nhật thông tin đăng nhập openai-codex và credential_pool của Hermes để Hermes dùng hạn mức của tài khoản Codex đã chọn.",
       "ghcpOpencodeAuthOverwrite": "Ghi đè đăng nhập OpenCode khi chuyển đổi GitHub Copilot",
       "ghcpOpencodeRestart": "Khởi động lại OpenCode khi chuyển GitHub Copilot",
       "ghcpLaunchOnSwitch": "Tự động khởi chạy GitHub Copilot App khi chuyển GitHub Copilot",
