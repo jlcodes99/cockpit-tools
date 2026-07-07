@@ -1502,6 +1502,15 @@ pub fn switch_account(account_id: &str) -> Result<String, String> {
         }
     }
 
+    // 7.5 写入 SharedClientCache/cache/{user,quota}（AES-128-CBC 加密的登录态快照）
+    // Qoder CN 启动时会解密这两个文件恢复登录态，切换账号必须写入目标账号的快照
+    if let Err(err) = write_shared_client_cache_files(&account) {
+        logger::log_warn(&format!(
+            "[QoderCN Switch] 写入 SharedClientCache/cache/{{user,quota}} 失败: {}",
+            err
+        ));
+    }
+
     // 8. 更新当前账号记录
     crate::modules::provider_current_state::set_current_account_id(
         "qoder_cn",
@@ -1752,6 +1761,204 @@ fn build_user_plan_fallback(account: &QoderCnAccount) -> serde_json::Value {
         "errorMessage": "",
         "Result": null
     })
+}
+
+/// 写入 SharedClientCache/cache/{user,quota}：AES-128-CBC 加密的登录态快照。
+///
+/// Qoder CN 启动时会解密这两个文件恢复登录态。加密方案（逆向自 Go sidecar cosy/encrypt）：
+///   - 算法: AES-128-CBC + PKCS7
+///   - 密钥 = IV = cache/id 文件内容的前 16 字节
+///   - 外层: 标准 base64
+///   - 明文: UTF-8 JSON
+fn write_shared_client_cache_files(account: &QoderCnAccount) -> Result<(), String> {
+    let app_dir = get_qoder_cn_app_data_dir()
+        .ok_or_else(|| "未找到 Qoder CN 应用数据目录".to_string())?;
+    let cache_dir = app_dir.join("SharedClientCache").join("cache");
+    fs::create_dir_all(&cache_dir)
+        .map_err(|e| format!("创建 SharedClientCache/cache 目录失败: {}", e))?;
+
+    // 读取 cache/id 取前 16 字节作为 AES-128 密钥（IV 与密钥相同）
+    let id_path = cache_dir.join("id");
+    let cid = fs::read_to_string(&id_path)
+        .map_err(|e| format!("读取 SharedClientCache/cache/id 失败: {}", e))?;
+    let cid = cid.trim();
+    if cid.as_bytes().len() < 16 {
+        return Err(format!("SharedClientCache/cache/id 长度不足 16 字节: {}", cid));
+    }
+    let mut key = [0u8; 16];
+    key.copy_from_slice(&cid.as_bytes()[..16]);
+
+    let uid = account.user_id.clone().unwrap_or_default();
+    let avatar_url = format!("https://qoder.com.cn/users/{}/default/avatars", uid);
+
+    // 生成 key / encrypt_user_info（RSA-1024 PKCS1v15 + AES-128-CBC，逆向自 Go SaveUserInfo）。
+    // 这两个字段是给服务端鉴权的加密 blob，必须正确生成，否则 Qoder CN 启动后额度不显示、消息发送失败。
+    let (key_blob, encrypt_user_info_blob) =
+        generate_key_and_encrypt_user_info(&account)?;
+
+    // cache/user 明文（实测 schema，email 为空字符串匹配 Qoder CN 原生格式）
+    let user_json = serde_json::json!({
+        "name": account.display_name.clone().unwrap_or_default(),
+        "aid": uid,
+        "uid": uid,
+        "yx_uid": "",
+        "organization_id": "",
+        "organization_name": "",
+        "staffId": "",
+        "avatar_url": avatar_url,
+        "security_oauth_token": account.access_token.clone().unwrap_or_default(),
+        "refresh_token": account.refresh_token.clone().unwrap_or_default(),
+        "expire_time": account.token_expires_at.unwrap_or(0),
+        "key": key_blob,
+        "encrypt_user_info": encrypt_user_info_blob,
+        "user_source_channel": "",
+        "account_source": "qodercn_2_0",
+        "login_method": "device_token",
+        "user_type": account.user_type.clone().unwrap_or_else(|| "unknown".to_string()),
+        "data_policy_agreed": true,
+        "email": "",
+        "is_data_policy_modifiable": false,
+        "is_quota_exceeded": account.is_quota_exceeded.unwrap_or(false),
+        "organization_tags": null,
+    });
+
+    // cache/quota 明文（实测 schema）
+    let now_millis = chrono::Utc::now().timestamp_millis();
+    let quota_json = serde_json::json!({
+        "expireTime": now_millis,
+        "userId": uid,
+        "name": account.display_name.clone().unwrap_or_default(),
+        "avatarUrl": avatar_url,
+        "quota": 0,
+        "status": 2,
+        "whitelist": 3,
+        "email": "",
+    });
+
+    let user_pt = serde_json::to_vec(&user_json)
+        .map_err(|e| format!("序列化 cache/user 明文失败: {}", e))?;
+    let quota_pt = serde_json::to_vec(&quota_json)
+        .map_err(|e| format!("序列化 cache/quota 明文失败: {}", e))?;
+
+    let user_ct = aes128_cbc_encrypt_base64(&key, &user_pt)?;
+    let quota_ct = aes128_cbc_encrypt_base64(&key, &quota_pt)?;
+
+    fs::write(cache_dir.join("user"), &user_ct)
+        .map_err(|e| format!("写入 SharedClientCache/cache/user 失败: {}", e))?;
+    fs::write(cache_dir.join("quota"), &quota_ct)
+        .map_err(|e| format!("写入 SharedClientCache/cache/quota 失败: {}", e))?;
+
+    logger::log_info(&format!(
+        "[QoderCN Switch] 已写入 SharedClientCache/cache/{{user,quota}}: user={}B, quota={}B (uid={}, email={})",
+        user_ct.len(),
+        quota_ct.len(),
+        uid,
+        account.email
+    ));
+    Ok(())
+}
+
+/// AES-128-CBC 加密 + 标准 base64 编码（key 与 IV 相同）。
+/// 对应 Qoder CN Go sidecar 的 cosy/encrypt 落盘加密方案。
+fn aes128_cbc_encrypt_base64(key: &[u8; 16], plaintext: &[u8]) -> Result<Vec<u8>, String> {
+    use aes::Aes128;
+    use base64::Engine;
+    use base64::engine::general_purpose::STANDARD;
+    use cbc::cipher::block_padding::Pkcs7;
+    use cbc::cipher::{BlockEncryptMut, KeyIvInit};
+
+    type Aes128CbcEnc = cbc::Encryptor<Aes128>;
+    let cipher = Aes128CbcEnc::new_from_slices(&key[..], &key[..])
+        .map_err(|e| format!("初始化 AES-128-CBC 加密器失败: {}", e))?;
+    let mut buf = plaintext.to_vec();
+    let msg_len = buf.len();
+    let pad_len = 16 - (msg_len % 16);
+    buf.resize(msg_len + pad_len, 0);
+    let ct = cipher
+        .encrypt_padded_mut::<Pkcs7>(&mut buf, msg_len)
+        .map_err(|e| format!("AES-128-CBC 加密失败: {}", e))?;
+    Ok(STANDARD.encode(ct).into_bytes())
+}
+
+/// Qoder CN 内嵌 RSA-1024 公钥（逆向自 Go sidecar 二进制 + JS sharedProcessMain.js）。
+/// 用于加密 cache/user 的 key 字段（RSA-1024 PKCS1v15 加密随机 AES 密钥）。
+const QODER_CN_RSA_PUBLIC_KEY_PEM: &str = "-----BEGIN PUBLIC KEY-----\n\
+MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDA8iMH5c02LilrsERw9t6Pv5Nc\n\
+4k6Pz1EaDicBMpdpxKduSZu5OANqUq8er4GM95omAGIOPOh+Nx0spthYA2BqGz+l\n\
+6HRkPJ7S236FZz73In/KVuLnwI8JJ2CbuJap8kvheCCZpmAWpb/cPx/3Vr/J6I17\n\
+XcW+ML9FoCI6AOvOzwIDAQAB\n\
+-----END PUBLIC KEY-----";
+
+/// 生成 cache/user 的 key / encrypt_user_info 字段。
+///
+/// 逆向自 Qoder CN Go sidecar `cosy/auth/user.SaveUserInfo` → `cosy/encrypt.RsaEncrypt` + `AesEncryptWithBase64`：
+///   1. 生成 UUID v4，去掉横线，取前 16 个 ASCII 字符作为 AES 密钥
+///   2. key               = base64( RSA-1024-PKCS1v15( UUID[:16] ) )
+///   3. encrypt_user_info = base64( AES-128-CBC( 明文JSON, key=IV=UUID[:16] ) )
+///   4. 明文 JSON = 完整 22 字段 CosyUserInfo struct（Go json.Marshal），
+///      其中 11 个 string 字段有值，其余 11 个字段为零值（SaveUserInfo 清零后只填充部分字段）。
+///
+/// 关键：AES 密钥是 UUID 去横线后的前 16 个 ASCII 十六进制字符（如 "550e8400e29b41d4"），
+/// 不是随机二进制字节。IV = key（逆向自 crypto/cipher.NewCBCEncrypter(block, keyBytes)）。
+fn generate_key_and_encrypt_user_info(
+    account: &QoderCnAccount,
+) -> Result<(String, String), String> {
+    use base64::Engine;
+    use base64::engine::general_purpose::STANDARD;
+    use rsa::pkcs8::DecodePublicKey;
+    use rsa::{Pkcs1v15Encrypt, RsaPublicKey};
+
+    let uid = account.user_id.clone().unwrap_or_default();
+
+    // 1. 生成 UUID v4，去掉横线，取前 16 个 ASCII 字符作为 AES 密钥
+    //    逆向自 Go: uuid.NewString() → strings.ReplaceAll(uuid, "-", "") → [:16]
+    let uuid_hex = uuid::Uuid::new_v4().simple().to_string();
+    let mut aes_key = [0u8; 16];
+    aes_key.copy_from_slice(uuid_hex.as_bytes()[..16].as_ref());
+
+    // 2. 明文 JSON：完整 22 字段 CosyUserInfo struct（Go json.Marshal 按 struct 字段顺序输出）
+    //    11 个 string 字段有值，11 个字段为零值（逆向自 Go SaveUserInfo 的栈复制逻辑）
+    let plaintext = serde_json::json!({
+        "name": account.display_name.clone().unwrap_or_default(),
+        "aid": uid,
+        "uid": uid,
+        "yx_uid": "",
+        "organization_id": "",
+        "organization_name": "",
+        "staffId": "",
+        "avatar_url": "",
+        "security_oauth_token": account.access_token.clone().unwrap_or_default(),
+        "refresh_token": account.refresh_token.clone().unwrap_or_default(),
+        "expire_time": 0,
+        "key": "",
+        "encrypt_user_info": "",
+        "user_source_channel": "",
+        "account_source": "qodercn_2_0",
+        "login_method": "device_token",
+        "user_type": account.user_type.clone().unwrap_or_else(|| "unknown".to_string()),
+        "data_policy_agreed": false,
+        "email": "",
+        "is_data_policy_modifiable": false,
+        "is_quota_exceeded": false,
+        "organization_tags": null,
+    })
+    .to_string();
+
+    // 3. encrypt_user_info = AES-128-CBC(明文, key=IV=UUID[:16]) + base64
+    let encrypt_user_info_bytes = aes128_cbc_encrypt_base64(&aes_key, plaintext.as_bytes())?;
+    let encrypt_user_info = String::from_utf8(encrypt_user_info_bytes)
+        .map_err(|e| format!("encrypt_user_info base64 转 String 失败: {}", e))?;
+
+    // 4. key = RSA-1024-PKCS1v15(UUID[:16]) + base64
+    let pub_key = RsaPublicKey::from_public_key_pem(QODER_CN_RSA_PUBLIC_KEY_PEM)
+        .map_err(|e| format!("解析 Qoder CN RSA-1024 公钥失败: {}", e))?;
+    let mut rng = rand::rngs::OsRng;
+    let key_ct = pub_key
+        .encrypt(&mut rng, Pkcs1v15Encrypt, &aes_key)
+        .map_err(|e| format!("RSA-1024 PKCS1v15 加密 AES 密钥失败: {}", e))?;
+    let key = STANDARD.encode(&key_ct);
+
+    Ok((key, encrypt_user_info))
 }
 
 /// Generate and write auth-v2.dat from account tokens using AuthV2Data struct to ensure
