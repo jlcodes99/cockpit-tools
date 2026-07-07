@@ -248,7 +248,6 @@ export function useAutoRefresh() {
   const refreshQoderworkCnToken = useQoderworkCnAccountStore((state) => state.refreshToken);
   const fetchCurrentQoderCnAccountId = useQoderCnAccountStore((state) => state.fetchCurrentAccountId);
   const refreshQoderCnToken = useQoderCnAccountStore((state) => state.refreshToken);
-  const fetchCurrentTraeAccountId = useTraeAccountStore((state) => state.fetchCurrentAccountId);
   const fetchTraeAccounts = useTraeAccountStore((state) => state.fetchAccounts);
   const refreshTraeToken = useTraeAccountStore((state) => state.refreshToken);
   const refreshAllZedTokens = useZedAccountStore((state) => state.refreshAllTokens);
