@@ -4997,6 +4997,125 @@
   white-space: nowrap;
 }
 
+.codex-account-note-mail-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--primary) 5%, var(--bg-secondary));
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.codex-account-note-mail-preview.is-loading {
+  color: var(--text-muted);
+}
+
+.codex-account-note-mail-preview.is-changed {
+  border-color: color-mix(in srgb, var(--success) 48%, var(--primary));
+  background: color-mix(in srgb, var(--success) 12%, var(--bg-secondary));
+  animation: codex-account-note-mail-preview-pulse 1200ms ease-out;
+}
+
+.codex-account-note-mail-preview__code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.codex-account-note-mail-preview__code span {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.codex-account-note-mail-preview__code strong {
+  display: inline-block;
+  color: var(--text-primary);
+  font-family:
+    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.codex-account-note-mail-preview.is-changed
+  .codex-account-note-mail-preview__code
+  strong {
+  color: color-mix(in srgb, var(--success) 70%, var(--text-primary));
+  animation: codex-account-note-mail-code-pop 700ms ease-out;
+}
+
+.codex-account-note-mail-preview__code .codex-account-note-icon-btn {
+  flex-basis: 30px;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+}
+
+.codex-account-note-mail-preview p {
+  display: -webkit-box;
+  max-height: 52px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.codex-account-note-mail-preview em {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.codex-account-note-mail-preview__status {
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-primary) 60%, transparent);
+}
+
+.codex-account-note-mail-preview__status.status-changed {
+  color: color-mix(in srgb, var(--success) 74%, var(--text-primary));
+  background: color-mix(in srgb, var(--success) 14%, var(--bg-primary));
+}
+
+@keyframes codex-account-note-mail-preview-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 34%, transparent);
+    transform: translateY(0);
+  }
+  35% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 18%, transparent);
+    transform: translateY(-1px);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    transform: translateY(0);
+  }
+}
+
+@keyframes codex-account-note-mail-code-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 .codex-account-note-textarea {
   width: 100%;
   min-height: 116px;

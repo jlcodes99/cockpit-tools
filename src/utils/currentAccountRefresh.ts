@@ -19,6 +19,9 @@ export type CurrentAccountRefreshPlatform =
   | 'qoderwork_cn'
   | 'qoder_cn'
   | 'trae'
+  | 'trae_solo'
+  | 'trae_cn'
+  | 'trae_solo_cn'
   | 'zed';
 
 export const CURRENT_ACCOUNT_REFRESH_PLATFORMS: CurrentAccountRefreshPlatform[] = [
@@ -37,6 +40,9 @@ export const CURRENT_ACCOUNT_REFRESH_PLATFORMS: CurrentAccountRefreshPlatform[] 
   'qoderwork_cn',
   'qoder_cn',
   'trae',
+  'trae_solo',
+  'trae_cn',
+  'trae_solo_cn',
   'zed',
 ];
 
@@ -74,6 +80,9 @@ export function buildDefaultCurrentAccountRefreshMinutesMap(): CurrentAccountRef
     qoderwork_cn: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     qoder_cn: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     trae: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
+    trae_solo: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
+    trae_cn: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
+    trae_solo_cn: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     zed: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
   };
 }

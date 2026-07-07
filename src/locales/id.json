@@ -300,6 +300,9 @@
     },
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "switchClassicLayoutEntry": "Beralih ke tata letak klasik",
     "switchClassicLayoutTitle": "Beralih ke tata letak bilah sisi klasik",
@@ -836,7 +839,11 @@
       "antigravityLaunchOnSwitch": "Jalankan Antigravity IDE saat beralih",
       "antigravityLaunchOnSwitchDesc": "Jika nonaktif, perpindahan hanya menulis data akun default Antigravity IDE dan tidak menutup, menjalankan, atau memulai ulang aplikasi.",
       "tokenKeeper": "Jaga auth",
-      "tokenKeeperDesc": "Menyegarkan Token akun dalam batch kecil hanya saat otorisasi hampir kedaluwarsa, sehingga mengurangi permintaan latar belakang."
+      "tokenKeeperDesc": "Menyegarkan Token akun dalam batch kecil hanya saat otorisasi hampir kedaluwarsa, sehingga mengurangi permintaan latar belakang.",
+      "platformAutoRefresh": "Penyegaran otomatis kuota {{platform}}",
+      "traeSoloAppPath": "Jalur peluncuran TRAE SOLO",
+      "traeCnAppPath": "Jalur peluncuran Trae CN",
+      "traeSoloCnAppPath": "Jalur peluncuran TRAE SOLO CN"
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -2221,6 +2228,7 @@
     "quota": {
       "hourly": "Kuota 5 jam",
       "weekly": "Kuota mingguan",
+      "additional": "Kuota tambahan",
       "reset": "Setel ulang",
       "weeklyBlocksHourly": "Kuota mingguan 0, jadi kuota 5 jam tidak tersedia",
       "resetCredits": "Reset {{count}}",
@@ -3025,7 +3033,9 @@
       "filterWithin24h": "24 jam ({{count}})",
       "filterWithin7d": "7 hr ({{count}})",
       "filterWithin30d": "30 hr ({{count}})",
-      "filterMissing": "Tidak diketahui ({{count}})"
+      "filterMissing": "Tidak diketahui ({{count}})",
+      "accessTokenOnlyUsable": "Token dapat digunakan",
+      "accessTokenOnlyUsableDetail": "Endpoint langganan dibatasi, tetapi kuota dan penggunaan Codex berjalan normal"
     },
     "apiSwitchNotice": {
       "title": "Sesi Codex tersembunyi",
@@ -3044,7 +3054,7 @@
     "accountNote": {
       "title": "Catatan Akun",
       "label": "Catatan Akun",
-      "desc": "Tambahkan 2FA, kata sandi, telepon, dan catatan lain untuk {{account}}.",
+      "desc": "Tambahkan kata sandi, 2FA, URL email, telepon, dan catatan lain untuk {{account}}.",
       "twoFactorSecretLabel": "Rahasia 2FA",
       "twoFactorSecretShort": "2FA",
       "twoFactorSecretPlaceholder": "Rahasia Base32 atau URI otpauth://",
@@ -3058,13 +3068,30 @@
       "phoneNumberLabel": "Telepon",
       "phoneShort": "Telepon",
       "phoneNumberPlaceholder": "Nomor telepon tertaut",
+      "mailUrlLabel": "URL email",
+      "mailUrlPlaceholder": "Masukkan URL halaman baca email yang bisa dibuka",
+      "mailPreviewRefresh": "Segarkan email",
+      "mailPreviewOpen": "Buka di browser",
+      "mailPreviewLoading": "Membaca email...",
+      "mailPreviewNoCode": "Kode 6 digit berurutan tidak ditemukan",
+      "mailPreviewFetchFailed": "Gagal membaca email: {{error}}",
+      "mailPreviewUrlRequired": "Masukkan URL email",
+      "mailPreviewUrlInvalid": "URL email tidak valid. Masukkan alamat http:// atau https:// lengkap.",
+      "mailPreviewUnsupportedProtocol": "URL email hanya mendukung http atau https.",
+      "mailPreviewHttpFailed": "Permintaan URL email gagal: HTTP {{status}}",
+      "mailPreviewCode": "Kode email terbaru",
+      "mailPreviewStatusInitial": "Diambil pada {{time}}",
+      "mailPreviewStatusChanged": "Kode baru · {{time}}",
+      "mailPreviewStatusUnchanged": "Tidak berubah · {{time}}",
+      "mailPreviewTruncated": "Konten dipotong",
+      "mailOpenFailed": "Gagal membuka URL email: {{error}}",
       "otherNoteLabel": "Catatan lain",
       "otherNoteShort": "Catatan",
       "placeholder": "Catatan pengiriman, email pemulihan, atau detail akun",
-      "exportSensitiveNotice": "Ekspor berisi rahasia 2FA, kata sandi, atau nomor telepon. Simpan hanya di lokasi tepercaya.",
+      "exportSensitiveNotice": "Ekspor berisi rahasia 2FA, kata sandi, nomor telepon, atau URL email. Simpan hanya di lokasi tepercaya.",
       "exportSensitiveIncluded": "Sertakan catatan sensitif",
       "exportSensitiveExcluded": "Kecualikan catatan sensitif",
-      "exportSensitiveToggleHint": "Mengatur apakah JSON ekspor menyertakan rahasia 2FA, kata sandi, dan nomor telepon.",
+      "exportSensitiveToggleHint": "Mengatur apakah JSON ekspor menyertakan rahasia 2FA, kata sandi, nomor telepon, dan URL email.",
       "show": "Tampilkan",
       "hide": "Sembunyikan",
       "emptyTitle": "Tambah catatan akun",
@@ -3734,6 +3761,18 @@
     "qoderCn": {
       "title": "QoderWork CN Settings",
       "appPath": "QoderWork CN Path"
+    },
+    "traeSolo": {
+      "appPath": "Path TRAE SOLO",
+      "title": "Pengaturan TRAE SOLO"
+    },
+    "traeCn": {
+      "appPath": "Path Trae CN",
+      "title": "Pengaturan Trae CN"
+    },
+    "traeSoloCn": {
+      "appPath": "Path TRAE SOLO CN",
+      "title": "Pengaturan TRAE SOLO CN"
     }
   },
   "quotaAlert": {
@@ -4478,17 +4517,21 @@
   "trae": {
     "title": "Akun Trae",
     "empty": {
-      "description": "Klik \"Tambah Akun\" untuk mulai mengelola akun Trae Anda, atau impor dari data Trae lokal atau berkas JSON."
+      "description": "Klik \"Tambah Akun\" untuk mulai mengelola akun Trae Anda, atau impor dari data Trae lokal atau berkas JSON.",
+      "descriptionWithPlatform": "Klik \"Tambah Akun\" untuk mengelola akun {{platform}}, atau impor data {{platform}} lokal maupun file JSON."
     },
     "addModal": {
-      "title": "Tambah Akun Trae"
+      "title": "Tambah Akun Trae",
+      "titleWithPlatform": "Tambah Akun {{platform}}"
     },
     "oauth": {
-      "desc": "Klik tombol di bawah ini dan selesaikan otorisasi OAuth Trae di peramban Anda."
+      "desc": "Klik tombol di bawah ini dan selesaikan otorisasi OAuth Trae di peramban Anda.",
+      "descWithPlatform": "Klik tombol di bawah dan selesaikan otorisasi OAuth {{platform}} di browser."
     },
     "import": {
       "localDesc": "Impor akun yang sedang masuk saat ini, informasi paket, dan data kuota yang di-cache dari direktori konfigurasi Trae lokal.",
-      "jsonTab": "Berkas JSON"
+      "jsonTab": "Berkas JSON",
+      "localDescWithPlatform": "Mengimpor akun yang sedang masuk, informasi paket, dan data kuota cache dari direktori konfigurasi lokal {{platform}}."
     },
     "quota": {
       "usedOfTotal": "${{used}} / ${{total}}​",
@@ -4514,7 +4557,12 @@
       "title": "Panduan akun Trae (klik untuk perluas/ciutkan)",
       "desc": "Mendukung masuk OAuth resmi, impor lokal, impor JSON, dan penggantian akun berbasis injeksi lokal. Penggantian akun menulis kembali menggunakan aturan on-disk klien Trae yang sebenarnya.",
       "permission": "Cakupan izin: baca dan tulis bidang terkait login di storage.json Trae lokal untuk impor akun, injeksi penggantian akun, dan tampilan paket. Semua data diproses secara lokal di mesin Anda.",
-      "network": "Cakupan jaringan: Masuk OAuth, penyegaran token, dan kueri paket memanggil API resmi Trae. Berkas akun lokal dan konten penyimpanan mentah tidak diunggah ke layanan pihak ketiga."
+      "network": "Cakupan jaringan: Masuk OAuth, penyegaran token, dan kueri paket memanggil API resmi Trae. Berkas akun lokal dan konten penyimpanan mentah tidak diunggah ke layanan pihak ketiga.",
+      "titleWithPlatform": "Panduan akun {{platform}} (klik untuk buka/tutup)",
+      "descWithPlatform": "Mendukung OAuth resmi {{platform}}, impor lokal, impor JSON, dan pergantian akun berbasis injeksi lokal. Pergantian akun menulis kembali sesuai aturan penyimpanan nyata klien {{platform}}.",
+      "permissionWithPlatform": "Cakupan izin: membaca dan menulis kolom login di storage.json lokal {{platform}} untuk impor akun, injeksi pergantian akun, dan tampilan paket. Semua data diproses secara lokal.",
+      "networkGlobal": "Cakupan jaringan: login OAuth, penyegaran token, dan kueri paket {{platform}} memanggil API resmi trae.ai / traeapi.us. File akun lokal dan isi penyimpanan mentah tidak diunggah ke layanan pihak ketiga.",
+      "networkCn": "Cakupan jaringan: login OAuth, penyegaran token, dan kueri paket {{platform}} memanggil API resmi trae.cn / trae.com.cn. File akun lokal dan isi penyimpanan mentah tidak diunggah ke layanan pihak ketiga."
     }
   },
   "codebuddyCn": {

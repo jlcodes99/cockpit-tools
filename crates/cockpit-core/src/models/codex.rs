@@ -64,7 +64,7 @@ pub struct CodexAccount {
     pub api_provider_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_provider_name: Option<String>,
-    #[serde(default, skip_serializing_if = "is_false")]
+    #[serde(default)]
     pub bound_oauth_use_local_gateway: bool,
     pub user_id: Option<String>,
     pub plan_type: Option<String>,

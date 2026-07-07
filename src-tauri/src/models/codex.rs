@@ -99,7 +99,7 @@ pub struct CodexAccount {
     pub api_vision_routing_model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bound_oauth_account_id: Option<String>,
-    #[serde(default, skip_serializing_if = "is_false")]
+    #[serde(default)]
     pub bound_oauth_use_local_gateway: bool,
     pub user_id: Option<String>,
     pub plan_type: Option<String>,
@@ -136,6 +136,16 @@ pub struct CodexAccount {
         skip_serializing_if = "Option::is_none"
     )]
     pub phone_number: Option<String>,
+    #[serde(
+        default,
+        alias = "mailUrl",
+        alias = "mailAddress",
+        alias = "mail_address",
+        alias = "mailQueryUrl",
+        alias = "mail_query_url",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub mail_url: Option<String>,
     #[serde(default)]
     pub app_speed: CodexAppSpeed,
     pub tokens: CodexTokens,
@@ -383,6 +393,7 @@ impl CodexAccount {
             two_factor_secret: None,
             account_password: None,
             phone_number: None,
+            mail_url: None,
             app_speed: CodexAppSpeed::Standard,
             tokens,
             token_generation: 0,

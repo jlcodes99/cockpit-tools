@@ -32,6 +32,7 @@ import {
 } from "../types/codebuddy";
 import {
   formatCodexResetTime,
+  getCodexAdditionalQuotaWindows,
   getCodexCodeReviewQuotaMetric,
   getCodexEffectiveQuotaPercentages,
   getCodexPlanBadgePresentation,
@@ -718,6 +719,29 @@ export function buildCodexAccountPresentation(
               ? weeklyBlocksHourlyHint
               : undefined,
         }));
+  const additionalQuotaItems =
+    !isCodexChatCompletionsApiKeyAccount(account)
+      ? getCodexAdditionalQuotaWindows(account.quota).map((window) => {
+          const hintText = [window.limitName, window.meteredFeature]
+            .filter(Boolean)
+            .join(" · ");
+          const limitLabel =
+            window.limitLabel || t("codex.quota.additional", "额外额度");
+          return {
+            key: window.id,
+            label: `${limitLabel} ${window.label}`,
+            percentage: window.percentage,
+            quotaClass: getCodexQuotaClass(window.percentage),
+            valueText: `${window.percentage}%`,
+            resetText: window.resetTime
+              ? formatCodexResetTime(window.resetTime, t)
+              : "",
+            resetAt: window.resetTime,
+            hintText: hintText || undefined,
+          };
+        })
+      : [];
+  quotaItems.push(...additionalQuotaItems);
   const codeReviewMetric = getCodexCodeReviewQuotaMetric(account.quota);
   if (codeReviewMetric) {
     quotaItems.push({

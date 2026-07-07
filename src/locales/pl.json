@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Platforma Zed",
     "expandSidebar": "Rozwiń pasek boczny",
@@ -790,7 +793,11 @@
       "antigravityLaunchOnSwitch": "Uruchamiaj Antigravity IDE przy przełączaniu",
       "antigravityLaunchOnSwitchDesc": "Po wyłączeniu przełączanie tylko zapisuje dane domyślnego konta Antigravity IDE i nie zamyka, nie uruchamia ani nie restartuje aplikacji.",
       "tokenKeeper": "Podtrzymanie auth",
-      "tokenKeeperDesc": "Odświeża Tokeny kont małymi partiami tylko tuż przed wygaśnięciem autoryzacji, ograniczając żądania w tle przy wielu kontach."
+      "tokenKeeperDesc": "Odświeża Tokeny kont małymi partiami tylko tuż przed wygaśnięciem autoryzacji, ograniczając żądania w tle przy wielu kontach.",
+      "platformAutoRefresh": "Automatyczne odświeżanie limitu {{platform}}",
+      "traeSoloAppPath": "Ścieżka uruchamiania TRAE SOLO",
+      "traeCnAppPath": "Ścieżka uruchamiania Trae CN",
+      "traeSoloCnAppPath": "Ścieżka uruchamiania TRAE SOLO CN"
     },
     "network": {
       "apiTitle": "API kokpitu antygrawitacyjnego",
@@ -2055,6 +2062,7 @@
     "quota": {
       "hourly": "Limit 5 godzin",
       "weekly": "Limit tygodniowy",
+      "additional": "Dodatkowy limit",
       "reset": "Resetuj",
       "weeklyBlocksHourly": "Limit tygodniowy wynosi 0, więc limit 5-godzinny jest niedostępny",
       "resetCredits": "Resety {{count}}",
@@ -2979,7 +2987,9 @@
       "filterWithin24h": "24 godz. ({{count}})",
       "filterWithin7d": "7 dni ({{count}})",
       "filterWithin30d": "30 dni ({{count}})",
-      "filterMissing": "Nieznane ({{count}})"
+      "filterMissing": "Nieznane ({{count}})",
+      "accessTokenOnlyUsable": "Token działa",
+      "accessTokenOnlyUsableDetail": "Endpoint subskrypcji jest ograniczony, ale limit i użycie Codex działają normalnie"
     },
     "apiSwitchNotice": {
       "title": "Sesje Codex są ukryte",
@@ -2998,7 +3008,7 @@
     "accountNote": {
       "title": "Notatka konta",
       "label": "Notatka konta",
-      "desc": "Dodaj 2FA, hasło, telefon i inne notatki dla {{account}}.",
+      "desc": "Dodaj hasło, 2FA, URL poczty, telefon i inne notatki dla {{account}}.",
       "twoFactorSecretLabel": "Sekret 2FA",
       "twoFactorSecretShort": "2FA",
       "twoFactorSecretPlaceholder": "Sekret Base32 lub URI otpauth://",
@@ -3012,13 +3022,30 @@
       "phoneNumberLabel": "Telefon",
       "phoneShort": "Telefon",
       "phoneNumberPlaceholder": "Powiązany numer telefonu",
+      "mailUrlLabel": "URL poczty",
+      "mailUrlPlaceholder": "Wpisz URL otwieralnej strony podglądu poczty",
+      "mailPreviewRefresh": "Odśwież pocztę",
+      "mailPreviewOpen": "Otwórz w przeglądarce",
+      "mailPreviewLoading": "Czytanie poczty...",
+      "mailPreviewNoCode": "Nie znaleziono ciągłego 6-cyfrowego kodu",
+      "mailPreviewFetchFailed": "Nie udało się odczytać poczty: {{error}}",
+      "mailPreviewUrlRequired": "Wpisz URL poczty",
+      "mailPreviewUrlInvalid": "Nieprawidłowy URL poczty. Wpisz pełny adres http:// lub https://.",
+      "mailPreviewUnsupportedProtocol": "URL poczty obsługuje tylko http lub https.",
+      "mailPreviewHttpFailed": "Żądanie URL poczty nie powiodło się: HTTP {{status}}",
+      "mailPreviewCode": "Najnowszy kod e-mail",
+      "mailPreviewStatusInitial": "Pobrano o {{time}}",
+      "mailPreviewStatusChanged": "Nowy kod · {{time}}",
+      "mailPreviewStatusUnchanged": "Bez zmian · {{time}}",
+      "mailPreviewTruncated": "Treść skrócona",
+      "mailOpenFailed": "Nie udało się otworzyć URL poczty: {{error}}",
       "otherNoteLabel": "Inne notatki",
       "otherNoteShort": "Notatka",
       "placeholder": "Notatki przekazania, e-mail odzyskiwania lub szczegóły konta",
-      "exportSensitiveNotice": "Eksport zawiera sekrety 2FA, hasła lub numery telefonu. Zapisuj go tylko w zaufanej lokalizacji.",
+      "exportSensitiveNotice": "Eksport zawiera sekrety 2FA, hasła, numery telefonu lub URL poczty. Zapisuj go tylko w zaufanej lokalizacji.",
       "exportSensitiveIncluded": "Dołącz poufne notatki",
       "exportSensitiveExcluded": "Pomiń poufne notatki",
-      "exportSensitiveToggleHint": "Określa, czy eksportowany JSON zawiera sekrety 2FA, hasła i numery telefonu.",
+      "exportSensitiveToggleHint": "Określa, czy eksportowany JSON zawiera sekrety 2FA, hasła, numery telefonu i URL poczty.",
       "show": "Pokaż",
       "hide": "Ukryj",
       "emptyTitle": "Dodaj notatkę konta",
@@ -3588,6 +3615,18 @@
     "qoderCn": {
       "title": "QoderWork CN Settings",
       "appPath": "QoderWork CN Path"
+    },
+    "traeSolo": {
+      "appPath": "Ścieżka TRAE SOLO",
+      "title": "Ustawienia TRAE SOLO"
+    },
+    "traeCn": {
+      "appPath": "Ścieżka Trae CN",
+      "title": "Ustawienia Trae CN"
+    },
+    "traeSoloCn": {
+      "appPath": "Ścieżka TRAE SOLO CN",
+      "title": "Ustawienia TRAE SOLO CN"
     }
   },
   "quotaAlert": {
@@ -4352,17 +4391,21 @@
   "trae": {
     "title": "Zarzadzanie kontami Trae",
     "empty": {
-      "description": "Kliknij „Dodaj konto”, aby zaczac zarzadzac kontami Trae, albo zaimportuj je z lokalnych danych Trae lub pliku JSON."
+      "description": "Kliknij „Dodaj konto”, aby zaczac zarzadzac kontami Trae, albo zaimportuj je z lokalnych danych Trae lub pliku JSON.",
+      "descriptionWithPlatform": "Kliknij „Dodaj konto”, aby zarządzać kontami {{platform}}, albo zaimportuj lokalne dane {{platform}} lub plik JSON."
     },
     "addModal": {
-      "title": "Dodaj konto Trae"
+      "title": "Dodaj konto Trae",
+      "titleWithPlatform": "Dodaj konto {{platform}}"
     },
     "oauth": {
-      "desc": "Kliknij przycisk ponizej i zakoncz autoryzacje OAuth Trae w przegladarce."
+      "desc": "Kliknij przycisk ponizej i zakoncz autoryzacje OAuth Trae w przegladarce.",
+      "descWithPlatform": "Kliknij przycisk poniżej i zakończ autoryzację OAuth {{platform}} w przeglądarce."
     },
     "import": {
       "localDesc": "Importuje aktualnie zalogowane konto, informacje o planie i dane limitu z pamieci podrecznej z lokalnego katalogu konfiguracji Trae.",
-      "jsonTab": "Plik JSON"
+      "jsonTab": "Plik JSON",
+      "localDescWithPlatform": "Importuje aktualnie zalogowane konto, informacje o planie i dane limitów z pamięci podręcznej z lokalnego katalogu konfiguracji {{platform}}."
     },
     "quota": {
       "usedOfTotal": "Wykorzystano $ {{used}} z $ {{total}}",
@@ -4388,7 +4431,12 @@
       "title": "Przewodnik po kontach Trae (kliknij, aby rozwinac/zwinac)",
       "desc": "Obsluguje oficjalne logowanie OAuth, import lokalny, import JSON oraz przelaczanie kont przez lokalna iniekcje. Podczas przelaczania dane sa zapisywane zgodnie z rzeczywistymi zasadami zapisu klienta Trae.",
       "permission": "Zakres uprawnien: odczytuje i zapisuje pola zwiazane z logowaniem w lokalnym pliku Trae storage.json na potrzeby importu konta, iniekcji przelaczenia konta i wyswietlania planu. Wszystkie dane sa przetwarzane lokalnie na Twoim urzadzeniu.",
-      "network": "Zakres sieci: logowanie OAuth, odswiezanie tokenu i zapytania o plan wywoluja oficjalne API Trae. Lokalne pliki kont i surowa zawartosc magazynu nie sa przesylane do uslug zewnetrznych."
+      "network": "Zakres sieci: logowanie OAuth, odswiezanie tokenu i zapytania o plan wywoluja oficjalne API Trae. Lokalne pliki kont i surowa zawartosc magazynu nie sa przesylane do uslug zewnetrznych.",
+      "titleWithPlatform": "Przewodnik kont {{platform}} (kliknij, aby rozwinąć/zwinąć)",
+      "descWithPlatform": "Obsługuje oficjalny OAuth {{platform}}, import lokalny, import JSON i lokalne przełączanie kont przez zapis danych. Przełączanie zapisuje zgodnie z rzeczywistymi regułami klienta {{platform}}.",
+      "permissionWithPlatform": "Zakres uprawnień: odczyt i zapis pól logowania w lokalnym storage.json {{platform}} na potrzeby importu konta, przełączania kont i wyświetlania planu. Wszystkie dane są przetwarzane lokalnie.",
+      "networkGlobal": "Zakres sieci: logowanie OAuth, odświeżanie tokenów i zapytania planu {{platform}} wywołują oficjalne API trae.ai / traeapi.us. Lokalne pliki kont i surowa zawartość nie są wysyłane do usług zewnętrznych.",
+      "networkCn": "Zakres sieci: logowanie OAuth, odświeżanie tokenów i zapytania planu {{platform}} wywołują oficjalne API trae.cn / trae.com.cn. Lokalne pliki kont i surowa zawartość nie są wysyłane do usług zewnętrznych."
     }
   },
   "codebuddyCn": {

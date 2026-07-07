@@ -1,5 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { TraeAccount } from '../types/trae';
+import { getProviderCurrentAccountId } from './providerCurrentAccountService';
+
+export type TraePlatformId = 'trae' | 'trae_solo' | 'trae_cn' | 'trae_solo_cn';
 
 export interface TraeOAuthStartResponse {
   loginId: string;
@@ -53,28 +56,39 @@ export async function importTraeFromJson(jsonContent: string): Promise<TraeAccou
   return await invoke('import_trae_from_json', { jsonContent });
 }
 
-export async function importTraeFromLocal(): Promise<TraeAccount[]> {
-  return await invoke('import_trae_from_local');
+export async function importTraeFromLocal(
+  platformId: TraePlatformId = 'trae',
+): Promise<TraeAccount[]> {
+  return await invoke('import_trae_from_local', { platformId });
 }
 
-export async function traeOauthLoginStart(): Promise<TraeOAuthStartResponse> {
-  const raw = await invoke<TraeOAuthStartResponseRaw>('trae_oauth_login_start');
+export async function traeOauthLoginStart(
+  platformId: TraePlatformId = 'trae',
+): Promise<TraeOAuthStartResponse> {
+  const raw = await invoke<TraeOAuthStartResponseRaw>('trae_oauth_login_start', { platformId });
   return normalizeTraeOAuthStartResponse(raw);
 }
 
-export async function traeOauthLoginComplete(loginId: string): Promise<TraeAccount> {
-  return await invoke('trae_oauth_login_complete', { loginId });
+export async function traeOauthLoginComplete(
+  loginId: string,
+  platformId: TraePlatformId = 'trae',
+): Promise<TraeAccount> {
+  return await invoke('trae_oauth_login_complete', { loginId, platformId });
 }
 
-export async function traeOauthLoginCancel(loginId?: string): Promise<void> {
-  return await invoke('trae_oauth_login_cancel', { loginId: loginId ?? null });
+export async function traeOauthLoginCancel(
+  loginId?: string,
+  platformId: TraePlatformId = 'trae',
+): Promise<void> {
+  return await invoke('trae_oauth_login_cancel', { loginId: loginId ?? null, platformId });
 }
 
 export async function traeOauthSubmitCallbackUrl(
   loginId: string,
   callbackUrl: string,
+  platformId: TraePlatformId = 'trae',
 ): Promise<void> {
-  return await invoke('trae_oauth_submit_callback_url', { loginId, callbackUrl });
+  return await invoke('trae_oauth_submit_callback_url', { loginId, callbackUrl, platformId });
 }
 
 export async function exportTraeAccounts(accountIds: string[]): Promise<string> {
@@ -85,7 +99,10 @@ export async function refreshTraeToken(accountId: string): Promise<TraeAccount> 
   return await invoke('refresh_trae_token', { accountId });
 }
 
-export async function refreshAllTraeTokens(): Promise<number> {
+export async function refreshAllTraeTokens(platformId?: TraePlatformId): Promise<number> {
+  if (platformId) {
+    return await invoke('refresh_trae_tokens_for_platform', { platformId });
+  }
   return await invoke('refresh_all_trae_tokens');
 }
 
@@ -101,6 +118,15 @@ export async function getTraeAccountsIndexPath(): Promise<string> {
   return await invoke('get_trae_accounts_index_path');
 }
 
-export async function injectTraeAccount(accountId: string): Promise<string> {
-  return await invoke('inject_trae_account', { accountId });
+export async function getTraeCurrentAccountId(
+  platformId: TraePlatformId = 'trae',
+): Promise<string | null> {
+  return await getProviderCurrentAccountId(platformId);
+}
+
+export async function injectTraeAccount(
+  accountId: string,
+  platformId: TraePlatformId = 'trae',
+): Promise<string> {
+  return await invoke('inject_trae_account', { accountId, platformId });
 }

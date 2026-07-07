@@ -75,6 +75,9 @@ const PAGE_PLATFORM_MAP: Partial<Record<Page, PlatformId>> = {
   'qoderwork-cn': 'qoderwork_cn',
   'qoder-cn': 'qoder_cn',
   trae: 'trae',
+  'trae-solo': 'trae_solo',
+  'trae-cn': 'trae_cn',
+  'trae-solo-cn': 'trae_solo_cn',
   workbuddy: 'workbuddy',
 };
 

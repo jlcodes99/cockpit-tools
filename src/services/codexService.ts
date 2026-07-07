@@ -418,3 +418,16 @@ export async function createPendingCodexOAuthAccount(
 ): Promise<CodexAccount> {
   return await invoke('create_pending_codex_oauth_account', { email, ...update });
 }
+
+export interface CodexMailPreviewFetchResult {
+  status: number;
+  contentType?: string | null;
+  body: string;
+  truncated: boolean;
+}
+
+export async function fetchCodexAccountNoteMailUrl(
+  mailUrl: string,
+): Promise<CodexMailPreviewFetchResult> {
+  return await invoke('fetch_codex_account_note_mail_url', { mailUrl });
+}

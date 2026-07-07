@@ -173,11 +173,14 @@ pub(crate) enum PlatformId {
     CodebuddyCn,
     Qoder,
     Trae,
+    TraeSolo,
+    TraeCn,
+    TraeSoloCn,
     Workbuddy,
 }
 
 impl PlatformId {
-    pub(crate) fn default_order() -> [Self; 14] {
+    pub(crate) fn default_order() -> [Self; 17] {
         [
             Self::Claude,
             Self::Codex,
@@ -192,6 +195,9 @@ impl PlatformId {
             Self::CodebuddyCn,
             Self::Qoder,
             Self::Trae,
+            Self::TraeSolo,
+            Self::TraeCn,
+            Self::TraeSoloCn,
             Self::Workbuddy,
         ]
     }
@@ -211,6 +217,9 @@ impl PlatformId {
             crate::modules::tray_layout::PLATFORM_CODEBUDDY_CN => Some(Self::CodebuddyCn),
             crate::modules::tray_layout::PLATFORM_QODER => Some(Self::Qoder),
             crate::modules::tray_layout::PLATFORM_TRAE => Some(Self::Trae),
+            crate::modules::tray_layout::PLATFORM_TRAE_SOLO => Some(Self::TraeSolo),
+            crate::modules::tray_layout::PLATFORM_TRAE_CN => Some(Self::TraeCn),
+            crate::modules::tray_layout::PLATFORM_TRAE_SOLO_CN => Some(Self::TraeSoloCn),
             crate::modules::tray_layout::PLATFORM_WORKBUDDY => Some(Self::Workbuddy),
             _ => None,
         }
@@ -231,6 +240,9 @@ impl PlatformId {
             Self::CodebuddyCn => crate::modules::tray_layout::PLATFORM_CODEBUDDY_CN,
             Self::Qoder => crate::modules::tray_layout::PLATFORM_QODER,
             Self::Trae => crate::modules::tray_layout::PLATFORM_TRAE,
+            Self::TraeSolo => crate::modules::tray_layout::PLATFORM_TRAE_SOLO,
+            Self::TraeCn => crate::modules::tray_layout::PLATFORM_TRAE_CN,
+            Self::TraeSoloCn => crate::modules::tray_layout::PLATFORM_TRAE_SOLO_CN,
             Self::Workbuddy => crate::modules::tray_layout::PLATFORM_WORKBUDDY,
         }
     }
@@ -250,6 +262,9 @@ impl PlatformId {
             Self::CodebuddyCn => "CodeBuddy CN",
             Self::Qoder => "Qoder",
             Self::Trae => "Trae",
+            Self::TraeSolo => "TRAE SOLO",
+            Self::TraeCn => "Trae CN",
+            Self::TraeSoloCn => "TRAE SOLO CN",
             Self::Workbuddy => "WorkBuddy",
         }
     }
@@ -269,6 +284,9 @@ impl PlatformId {
             Self::CodebuddyCn => "codebuddy-cn",
             Self::Qoder => "qoder",
             Self::Trae => "trae",
+            Self::TraeSolo => "trae-solo",
+            Self::TraeCn => "trae-cn",
+            Self::TraeSoloCn => "trae-solo-cn",
             Self::Workbuddy => "workbuddy",
         }
     }
@@ -792,7 +810,9 @@ fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayI
         PlatformId::Codebuddy => build_codebuddy_display_info(lang),
         PlatformId::CodebuddyCn => build_codebuddy_cn_display_info(lang),
         PlatformId::Qoder => build_qoder_display_info(lang),
-        PlatformId::Trae => build_trae_display_info(lang),
+        PlatformId::Trae | PlatformId::TraeSolo | PlatformId::TraeCn | PlatformId::TraeSoloCn => {
+            build_trae_display_info(lang, platform)
+        }
         PlatformId::Workbuddy => build_workbuddy_display_info(lang),
     }
 }
@@ -2048,9 +2068,9 @@ fn json_first_f64(values: &[Option<f64>]) -> Option<f64> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn build_trae_display_info(lang: &str) -> AccountDisplayInfo {
+fn build_trae_display_info(lang: &str, platform: PlatformId) -> AccountDisplayInfo {
     let accounts = crate::modules::trae_account::list_accounts();
-    let Some(account) = resolve_trae_current_account(&accounts) else {
+    let Some(account) = resolve_trae_current_account(&accounts, platform) else {
         return AccountDisplayInfo {
             account: format!("📧 {}", get_text("not_logged_in", lang)),
             quota_lines: vec!["—".to_string()],
@@ -2547,13 +2567,17 @@ fn resolve_cursor_current_account(
 #[cfg(not(target_os = "macos"))]
 fn resolve_trae_current_account(
     accounts: &[crate::models::trae::TraeAccount],
+    platform: PlatformId,
 ) -> Option<crate::models::trae::TraeAccount> {
-    crate::modules::trae_account::resolve_current_account_id(accounts).and_then(|account_id| {
-        accounts
-            .iter()
-            .find(|account| account.id == account_id)
-            .cloned()
-    })
+    let platform_kind =
+        crate::modules::trae_account::TraePlatformKind::parse(Some(platform.as_str())).ok()?;
+    crate::modules::trae_account::resolve_current_account_id_for_platform(accounts, platform_kind)
+        .and_then(|account_id| {
+            accounts
+                .iter()
+                .find(|account| account.id == account_id)
+                .cloned()
+        })
 }
 
 #[cfg(not(target_os = "macos"))]

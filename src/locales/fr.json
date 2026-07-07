@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Plateforme Zed",
     "expandSidebar": "Développer la barre latérale",
@@ -790,7 +793,11 @@
       "antigravityLaunchOnSwitch": "Lancer Antigravity IDE au changement",
       "antigravityLaunchOnSwitchDesc": "Si désactivé, le changement écrit seulement les données du compte par défaut Antigravity IDE et ne ferme, lance ni redémarre l’application.",
       "tokenKeeper": "Maintien auth",
-      "tokenKeeperDesc": "Actualise les jetons des comptes par petits lots uniquement quand l’autorisation arrive à expiration, afin de réduire les requêtes en arrière-plan."
+      "tokenKeeperDesc": "Actualise les jetons des comptes par petits lots uniquement quand l’autorisation arrive à expiration, afin de réduire les requêtes en arrière-plan.",
+      "platformAutoRefresh": "Actualisation automatique du quota {{platform}}",
+      "traeSoloAppPath": "Chemin de lancement TRAE SOLO",
+      "traeCnAppPath": "Chemin de lancement Trae CN",
+      "traeSoloCnAppPath": "Chemin de lancement TRAE SOLO CN"
     },
     "network": {
       "apiTitle": "API du cockpit antigravité",
@@ -2055,6 +2062,7 @@
     "quota": {
       "hourly": "Quota de 5 heures",
       "weekly": "Quota hebdomadaire",
+      "additional": "Quota supplémentaire",
       "reset": "Réinitialiser",
       "weeklyBlocksHourly": "Le quota hebdomadaire est à 0 ; le quota de 5 heures est donc indisponible",
       "resetCredits": "Réinits {{count}}",
@@ -2979,7 +2987,9 @@
       "filterWithin24h": "24 h ({{count}})",
       "filterWithin7d": "7 j ({{count}})",
       "filterWithin30d": "30 j ({{count}})",
-      "filterMissing": "Inconnus ({{count}})"
+      "filterMissing": "Inconnus ({{count}})",
+      "accessTokenOnlyUsable": "Token utilisable",
+      "accessTokenOnlyUsableDetail": "L'interface d'abonnement est limitée, mais le quota et l'utilisation de Codex fonctionnent normalement"
     },
     "apiSwitchNotice": {
       "title": "Sessions Codex masquées",
@@ -2998,7 +3008,7 @@
     "accountNote": {
       "title": "Note de compte",
       "label": "Note de compte",
-      "desc": "Ajoutez 2FA, mot de passe, téléphone et autres notes pour {{account}}.",
+      "desc": "Ajoutez mot de passe, 2FA, URL mail, téléphone et autres notes pour {{account}}.",
       "twoFactorSecretLabel": "Secret 2FA",
       "twoFactorSecretShort": "2FA",
       "twoFactorSecretPlaceholder": "Secret Base32 ou URI otpauth://",
@@ -3012,13 +3022,30 @@
       "phoneNumberLabel": "Téléphone",
       "phoneShort": "Tél.",
       "phoneNumberPlaceholder": "Numéro de téléphone lié",
+      "mailUrlLabel": "URL mail",
+      "mailUrlPlaceholder": "Saisissez l’URL d’une page de consultation mail",
+      "mailPreviewRefresh": "Actualiser mail",
+      "mailPreviewOpen": "Ouvrir navigateur",
+      "mailPreviewLoading": "Lecture du mail...",
+      "mailPreviewNoCode": "Aucun code continu à 6 chiffres trouvé",
+      "mailPreviewFetchFailed": "Échec de lecture du mail : {{error}}",
+      "mailPreviewUrlRequired": "Saisissez l’URL mail",
+      "mailPreviewUrlInvalid": "URL mail invalide. Saisissez une adresse http:// ou https:// complète.",
+      "mailPreviewUnsupportedProtocol": "L’URL mail prend seulement en charge http ou https.",
+      "mailPreviewHttpFailed": "La requête de l’URL mail a échoué : HTTP {{status}}",
+      "mailPreviewCode": "Dernier code e-mail",
+      "mailPreviewStatusInitial": "Récupéré à {{time}}",
+      "mailPreviewStatusChanged": "Nouveau code · {{time}}",
+      "mailPreviewStatusUnchanged": "Inchangé · {{time}}",
+      "mailPreviewTruncated": "Contenu tronqué",
+      "mailOpenFailed": "Échec d’ouverture de l’URL mail : {{error}}",
       "otherNoteLabel": "Autres notes",
       "otherNoteShort": "Note",
       "placeholder": "Notes de livraison, e-mail de récupération ou détails du compte",
-      "exportSensitiveNotice": "L’export contient des secrets 2FA, mots de passe ou numéros de téléphone. Enregistrez-le uniquement dans un emplacement fiable.",
+      "exportSensitiveNotice": "L’export contient des secrets 2FA, mots de passe, numéros de téléphone ou URL mail. Enregistrez-le uniquement dans un emplacement fiable.",
       "exportSensitiveIncluded": "Inclure les notes sensibles",
       "exportSensitiveExcluded": "Exclure les notes sensibles",
-      "exportSensitiveToggleHint": "Contrôle si le JSON exporté contient les secrets 2FA, mots de passe et numéros de téléphone.",
+      "exportSensitiveToggleHint": "Contrôle si le JSON exporté contient les secrets 2FA, mots de passe, numéros de téléphone et URL mail.",
       "show": "Afficher",
       "hide": "Masquer",
       "emptyTitle": "Ajouter une note de compte",
@@ -3588,6 +3615,18 @@
     "qoderCn": {
       "title": "QoderWork CN Settings",
       "appPath": "QoderWork CN Path"
+    },
+    "traeSolo": {
+      "appPath": "Chemin TRAE SOLO",
+      "title": "Paramètres TRAE SOLO"
+    },
+    "traeCn": {
+      "appPath": "Chemin Trae CN",
+      "title": "Paramètres Trae CN"
+    },
+    "traeSoloCn": {
+      "appPath": "Chemin TRAE SOLO CN",
+      "title": "Paramètres TRAE SOLO CN"
     }
   },
   "quotaAlert": {
@@ -4352,17 +4391,21 @@
   "trae": {
     "title": "Gestion des comptes Trae",
     "empty": {
-      "description": "Cliquez sur \"Ajouter un compte\" pour commencer a gerer vos comptes Trae, ou importez-les depuis les donnees locales de Trae ou un fichier JSON."
+      "description": "Cliquez sur \"Ajouter un compte\" pour commencer a gerer vos comptes Trae, ou importez-les depuis les donnees locales de Trae ou un fichier JSON.",
+      "descriptionWithPlatform": "Cliquez sur « Ajouter un compte » pour gérer vos comptes {{platform}}, ou importez des données locales {{platform}} ou un fichier JSON."
     },
     "addModal": {
-      "title": "Ajouter un compte Trae"
+      "title": "Ajouter un compte Trae",
+      "titleWithPlatform": "Ajouter un compte {{platform}}"
     },
     "oauth": {
-      "desc": "Cliquez sur le bouton ci-dessous et terminez l'autorisation OAuth de Trae dans votre navigateur."
+      "desc": "Cliquez sur le bouton ci-dessous et terminez l'autorisation OAuth de Trae dans votre navigateur.",
+      "descWithPlatform": "Cliquez sur le bouton ci-dessous et terminez l’autorisation OAuth {{platform}} dans le navigateur."
     },
     "import": {
       "localDesc": "Importe le compte actuellement connecte, les informations de forfait et les donnees de quota en cache depuis le dossier de configuration local de Trae.",
-      "jsonTab": "Fichier JSON"
+      "jsonTab": "Fichier JSON",
+      "localDescWithPlatform": "Importe le compte connecté, les informations d’abonnement et le cache de quota depuis le dossier de configuration local {{platform}}."
     },
     "quota": {
       "usedOfTotal": "Utilise $ {{used}} sur $ {{total}}",
@@ -4388,7 +4431,12 @@
       "title": "Guide du compte Trae (cliquez pour developper/reduire)",
       "desc": "Prend en charge la connexion OAuth officielle, l'import local, l'import JSON et le changement de compte par injection locale. Lors du changement, les donnees sont reecrites selon les regles reelles de stockage du client Trae.",
       "permission": "Portee des autorisations : lit et ecrit les champs lies a la connexion dans le storage.json local de Trae pour l'import de compte, l'injection de changement de compte et l'affichage du forfait. Toutes les donnees sont traitees localement sur votre machine.",
-      "network": "Portee reseau : la connexion OAuth, l'actualisation du jeton et les requetes de forfait appellent les API officielles de Trae. Les fichiers de compte locaux et le contenu brut du stockage ne sont pas televerses vers des services tiers."
+      "network": "Portee reseau : la connexion OAuth, l'actualisation du jeton et les requetes de forfait appellent les API officielles de Trae. Les fichiers de compte locaux et le contenu brut du stockage ne sont pas televerses vers des services tiers.",
+      "titleWithPlatform": "Guide des comptes {{platform}} (cliquer pour développer/réduire)",
+      "descWithPlatform": "Prend en charge l’OAuth officiel {{platform}}, l’import local, l’import JSON et le changement de compte par injection locale. Le changement écrit selon les règles réelles du client {{platform}}.",
+      "permissionWithPlatform": "Portée des autorisations : lit et écrit les champs de connexion dans le storage.json local de {{platform}} pour l’import de compte, l’injection de changement de compte et l’affichage de l’abonnement. Toutes les données sont traitées localement.",
+      "networkGlobal": "Portée réseau : la connexion OAuth, le rafraîchissement du jeton et les requêtes d’abonnement {{platform}} appellent les APIs officielles trae.ai / traeapi.us. Les fichiers de compte locaux et le contenu brut ne sont pas téléversés vers des services tiers.",
+      "networkCn": "Portée réseau : la connexion OAuth, le rafraîchissement du jeton et les requêtes d’abonnement {{platform}} appellent les APIs officielles trae.cn / trae.com.cn. Les fichiers de compte locaux et le contenu brut ne sont pas téléversés vers des services tiers."
     }
   },
   "codebuddyCn": {

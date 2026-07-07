@@ -136,6 +136,12 @@ pub struct UserConfig {
     /// Trae 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_trae_auto_refresh")]
     pub trae_auto_refresh_minutes: i32,
+    #[serde(default = "default_trae_auto_refresh")]
+    pub trae_solo_auto_refresh_minutes: i32,
+    #[serde(default = "default_trae_auto_refresh")]
+    pub trae_cn_auto_refresh_minutes: i32,
+    #[serde(default = "default_trae_auto_refresh")]
+    pub trae_solo_cn_auto_refresh_minutes: i32,
     /// 窗口关闭行为
     #[serde(default = "default_close_behavior")]
     pub close_behavior: CloseWindowBehavior,
@@ -282,6 +288,21 @@ pub struct UserConfig {
     /// Trae 启动路径（为空则使用默认路径）
     #[serde(default = "default_trae_app_path")]
     pub trae_app_path: String,
+    #[serde(default = "default_trae_app_path")]
+    pub trae_solo_app_path: String,
+    #[serde(default = "default_trae_app_path")]
+    pub trae_cn_app_path: String,
+    #[serde(default = "default_trae_app_path")]
+    pub trae_solo_cn_app_path: String,
+    /// Trae Windows 应用扫描范围（每行一个目录）
+    #[serde(default = "default_trae_app_scan_roots")]
+    pub trae_app_scan_roots: String,
+    #[serde(default = "default_trae_app_scan_roots")]
+    pub trae_solo_app_scan_roots: String,
+    #[serde(default = "default_trae_app_scan_roots")]
+    pub trae_cn_app_scan_roots: String,
+    #[serde(default = "default_trae_app_scan_roots")]
+    pub trae_solo_cn_app_scan_roots: String,
     /// WorkBuddy 启动路径（为空则使用默认路径）
     #[serde(default = "default_workbuddy_app_path")]
     pub workbuddy_app_path: String,
@@ -456,6 +477,18 @@ pub struct UserConfig {
     /// Trae 配额预警阈值（百分比）
     #[serde(default = "default_trae_quota_alert_threshold")]
     pub trae_quota_alert_threshold: i32,
+    #[serde(default = "default_trae_quota_alert_enabled")]
+    pub trae_solo_quota_alert_enabled: bool,
+    #[serde(default = "default_trae_quota_alert_threshold")]
+    pub trae_solo_quota_alert_threshold: i32,
+    #[serde(default = "default_trae_quota_alert_enabled")]
+    pub trae_cn_quota_alert_enabled: bool,
+    #[serde(default = "default_trae_quota_alert_threshold")]
+    pub trae_cn_quota_alert_threshold: i32,
+    #[serde(default = "default_trae_quota_alert_enabled")]
+    pub trae_solo_cn_quota_alert_enabled: bool,
+    #[serde(default = "default_trae_quota_alert_threshold")]
+    pub trae_solo_cn_quota_alert_threshold: i32,
     /// 是否启用 WorkBuddy 配额预警通知
     #[serde(default = "default_workbuddy_quota_alert_enabled")]
     pub workbuddy_quota_alert_enabled: bool,
@@ -774,6 +807,9 @@ fn default_qoder_cn_app_path() -> String {
 fn default_trae_app_path() -> String {
     String::new()
 }
+fn default_trae_app_scan_roots() -> String {
+    String::new()
+}
 fn default_workbuddy_app_path() -> String {
     String::new()
 }
@@ -991,6 +1027,9 @@ impl Default for UserConfig {
             qoderwork_cn_auto_refresh_minutes: default_qoderwork_cn_auto_refresh(),
             qoder_cn_auto_refresh_minutes: default_qoder_cn_auto_refresh(),
             trae_auto_refresh_minutes: default_trae_auto_refresh(),
+            trae_solo_auto_refresh_minutes: default_trae_auto_refresh(),
+            trae_cn_auto_refresh_minutes: default_trae_auto_refresh(),
+            trae_solo_cn_auto_refresh_minutes: default_trae_auto_refresh(),
             close_behavior: default_close_behavior(),
             minimize_behavior: default_minimize_behavior(),
             hide_dock_icon: default_hide_dock_icon(),
@@ -1041,6 +1080,13 @@ impl Default for UserConfig {
             qoderwork_cn_app_path: default_qoderwork_cn_app_path(),
             qoder_cn_app_path: default_qoder_cn_app_path(),
             trae_app_path: default_trae_app_path(),
+            trae_solo_app_path: default_trae_app_path(),
+            trae_cn_app_path: default_trae_app_path(),
+            trae_solo_cn_app_path: default_trae_app_path(),
+            trae_app_scan_roots: default_trae_app_scan_roots(),
+            trae_solo_app_scan_roots: default_trae_app_scan_roots(),
+            trae_cn_app_scan_roots: default_trae_app_scan_roots(),
+            trae_solo_cn_app_scan_roots: default_trae_app_scan_roots(),
             workbuddy_app_path: default_workbuddy_app_path(),
             opencode_sync_on_switch: default_opencode_sync_on_switch(),
             opencode_auth_overwrite_on_switch: default_opencode_auth_overwrite_on_switch(),
@@ -1102,6 +1148,12 @@ impl Default for UserConfig {
             qoder_cn_quota_alert_threshold: default_qoder_cn_quota_alert_threshold(),
             trae_quota_alert_enabled: default_trae_quota_alert_enabled(),
             trae_quota_alert_threshold: default_trae_quota_alert_threshold(),
+            trae_solo_quota_alert_enabled: default_trae_quota_alert_enabled(),
+            trae_solo_quota_alert_threshold: default_trae_quota_alert_threshold(),
+            trae_cn_quota_alert_enabled: default_trae_quota_alert_enabled(),
+            trae_cn_quota_alert_threshold: default_trae_quota_alert_threshold(),
+            trae_solo_cn_quota_alert_enabled: default_trae_quota_alert_enabled(),
+            trae_solo_cn_quota_alert_threshold: default_trae_quota_alert_threshold(),
             workbuddy_quota_alert_enabled: default_workbuddy_quota_alert_enabled(),
             workbuddy_quota_alert_threshold: default_workbuddy_quota_alert_threshold(),
         }
@@ -1421,6 +1473,20 @@ pub fn load_user_config() -> Result<UserConfig, String> {
                 "trae_auto_refresh_minutes".to_string(),
                 json!(inherited_refresh),
             );
+        }
+        let inherited_trae_refresh = obj
+            .get("trae_auto_refresh_minutes")
+            .and_then(|v| v.as_i64())
+            .map(|v| v as i32)
+            .unwrap_or_else(default_trae_auto_refresh);
+        for key in [
+            "trae_solo_auto_refresh_minutes",
+            "trae_cn_auto_refresh_minutes",
+            "trae_solo_cn_auto_refresh_minutes",
+        ] {
+            if !obj.contains_key(key) {
+                obj.insert(key.to_string(), json!(inherited_trae_refresh));
+            }
         }
 
         if !obj.contains_key("hide_dock_icon") {
@@ -1914,6 +1980,33 @@ pub fn load_user_config() -> Result<UserConfig, String> {
                 "trae_quota_alert_threshold".to_string(),
                 json!(legacy_threshold),
             );
+        }
+        let inherited_trae_quota_enabled = obj
+            .get("trae_quota_alert_enabled")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(legacy_enabled);
+        let inherited_trae_quota_threshold = obj
+            .get("trae_quota_alert_threshold")
+            .and_then(|v| v.as_i64())
+            .map(|v| v as i32)
+            .unwrap_or(legacy_threshold);
+        for key in [
+            "trae_solo_quota_alert_enabled",
+            "trae_cn_quota_alert_enabled",
+            "trae_solo_cn_quota_alert_enabled",
+        ] {
+            if !obj.contains_key(key) {
+                obj.insert(key.to_string(), json!(inherited_trae_quota_enabled));
+            }
+        }
+        for key in [
+            "trae_solo_quota_alert_threshold",
+            "trae_cn_quota_alert_threshold",
+            "trae_solo_cn_quota_alert_threshold",
+        ] {
+            if !obj.contains_key(key) {
+                obj.insert(key.to_string(), json!(inherited_trae_quota_threshold));
+            }
         }
         if !obj.contains_key("workbuddy_quota_alert_enabled") {
             obj.insert(

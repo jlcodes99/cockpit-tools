@@ -89,7 +89,7 @@ import {
   formatCodexLoginProvider,
   getCodexAuthMetadata,
   getCodexPlanFilterKey,
-  getCodexSubscriptionPresentation,
+  getCodexSubscriptionPresentationForAccount,
   hasCodexAccountName,
   formatCodexResetTime,
   formatCodexResetTimeAbsolute,
@@ -220,6 +220,7 @@ import {
 import {
   buildCodexExportContent,
   buildCodexExportFileNameBase,
+  hasCodexExportSensitiveNotes,
   type CodexExportFormat,
 } from "../utils/codexExportFormats";
 import {
@@ -245,6 +246,10 @@ import {
   upsertSavedMfaRecord,
   type MfaRecord,
 } from "../utils/mfaVault";
+import {
+  findFirstMailVerificationCode,
+  type MailVerificationCodePreview,
+} from "../utils/mailVerificationCode";
 import md5 from "blueimp-md5";
 
 const CODEX_TOKEN_SINGLE_EXAMPLE = `{
@@ -441,6 +446,18 @@ type CodexAccountNoteFormState = {
   twoFactorSecret: string;
   accountPassword: string;
   phoneNumber: string;
+  mailUrl: string;
+};
+
+type CodexAccountNoteMailPreviewState = MailVerificationCodePreview & {
+  fetchedAt: number;
+  truncated: boolean;
+  status: "initial" | "changed" | "unchanged";
+};
+
+type CodexAccountNoteMailPreviewSnapshot = {
+  mailUrl: string;
+  code: string;
 };
 
 type CodexAccountNoteFieldErrors = {
@@ -452,6 +469,7 @@ const EMPTY_CODEX_ACCOUNT_NOTE_FORM: CodexAccountNoteFormState = {
   twoFactorSecret: "",
   accountPassword: "",
   phoneNumber: "",
+  mailUrl: "",
 };
 
 function buildCodexAccountNoteForm(
@@ -462,6 +480,7 @@ function buildCodexAccountNoteForm(
     twoFactorSecret: account?.two_factor_secret ?? "",
     accountPassword: account?.account_password ?? "",
     phoneNumber: account?.phone_number ?? "",
+    mailUrl: account?.mail_url ?? "",
   };
 }
 
@@ -470,7 +489,8 @@ function hasCodexAccountNoteDetails(account?: CodexAccount | null): boolean {
     account?.account_note?.trim() ||
       account?.two_factor_secret?.trim() ||
       account?.account_password?.trim() ||
-      account?.phone_number?.trim(),
+      account?.phone_number?.trim() ||
+      account?.mail_url?.trim(),
   );
 }
 
@@ -481,7 +501,8 @@ function hasCodexAccountNoteFormDetails(
     form?.note.trim() ||
       form?.twoFactorSecret.trim() ||
       form?.accountPassword.trim() ||
-      form?.phoneNumber.trim(),
+      form?.phoneNumber.trim() ||
+      form?.mailUrl.trim(),
   );
 }
 
@@ -491,8 +512,19 @@ function getCodexAccountNoteTitle(account: CodexAccount, fallback: string): stri
     account.two_factor_secret?.trim() ||
     account.account_password?.trim() ||
     account.phone_number?.trim() ||
+    account.mail_url?.trim() ||
     fallback
   );
+}
+
+function formatCodexAccountNoteMailPreviewTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date);
 }
 
 function formatMfaRecordOption(record: MfaRecord, fallback: string): string {
@@ -889,6 +921,12 @@ function normalizeHttpBaseUrl(value: string): string | null {
   }
 }
 
+function isSameHttpBaseUrl(left: string, right: string): boolean {
+  const normalizedLeft = normalizeHttpBaseUrl(left)?.toLowerCase();
+  const normalizedRight = normalizeHttpBaseUrl(right)?.toLowerCase();
+  return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
+}
+
 function buildExportFileName(baseName: string): string {
   const date = new Date().toISOString().slice(0, 10);
   return `${baseName}_${date}.json`;
@@ -1035,6 +1073,8 @@ export function CodexAccountsPage() {
   );
   const [exportFormat, setExportFormat] =
     useState<CodexExportFormat>("cockpit_tools");
+  const [includeExportSensitiveNotes, setIncludeExportSensitiveNotes] =
+    useState(false);
   const [exportFileNameBase, setExportFileNameBase] =
     useState("codex_accounts");
   const [formattedExportJsonCopied, setFormattedExportJsonCopied] =
@@ -1302,6 +1342,15 @@ export function CodexAccountsPage() {
   const [savedMfaRecords, setSavedMfaRecords] = useState<MfaRecord[]>([]);
   const [accountNoteMfaPickerOpen, setAccountNoteMfaPickerOpen] =
     useState(false);
+  const [accountNoteMailPreview, setAccountNoteMailPreview] =
+    useState<CodexAccountNoteMailPreviewState | null>(null);
+  const [accountNoteMailPreviewLoading, setAccountNoteMailPreviewLoading] =
+    useState(false);
+  const [accountNoteMailPreviewError, setAccountNoteMailPreviewError] =
+    useState<string | null>(null);
+  const accountNoteMailPreviewSeqRef = useRef(0);
+  const accountNoteMailPreviewSnapshotRef =
+    useRef<CodexAccountNoteMailPreviewSnapshot | null>(null);
   const [mfaTimeRemaining, setMfaTimeRemaining] = useState(
     getMfaTimeRemaining,
   );
@@ -1990,6 +2039,7 @@ export function CodexAccountsPage() {
     setFormattedExportPathCopied(false);
     setFormattedBatchSavingExportJson(false);
     setFormattedSavingExportDocumentId(null);
+    setIncludeExportSensitiveNotes(false);
     clearExportModalError();
   }, [clearExportModalError, exportJsonContent, showExportModal]);
 
@@ -2007,6 +2057,11 @@ export function CodexAccountsPage() {
   }, [clearExportModalError, exportFormat, showExportModal]);
 
   const formattedExportContent = useMemo(() => {
+    const exportFormatSupportsSensitiveNotes = exportFormat !== "sub2api";
+    const exportOptions = {
+      includeSensitiveNotes:
+        includeExportSensitiveNotes && exportFormatSupportsSensitiveNotes,
+    };
     if (!exportJsonContent) {
       return {
         type: "single" as const,
@@ -2022,6 +2077,7 @@ export function CodexAccountsPage() {
         exportJsonContent,
         exportFormat,
         exportFileNameBase,
+        exportOptions,
       );
     } catch (error) {
       console.error("[CodexExport] transform failed:", error);
@@ -2029,9 +2085,21 @@ export function CodexAccountsPage() {
         exportJsonContent,
         "cockpit_tools",
         exportFileNameBase,
+        exportOptions,
       );
     }
-  }, [exportFileNameBase, exportFormat, exportJsonContent]);
+  }, [
+    exportFileNameBase,
+    exportFormat,
+    exportJsonContent,
+    includeExportSensitiveNotes,
+  ]);
+
+  const exportHasSensitiveNotes = useMemo(() => {
+    return hasCodexExportSensitiveNotes(exportJsonContent);
+  }, [exportJsonContent]);
+  const exportCanIncludeSensitiveNotes =
+    exportHasSensitiveNotes && exportFormat !== "sub2api";
 
   const formattedExportJsonContent = useMemo(() => {
     return formattedExportContent.type === "single"
@@ -2065,6 +2133,7 @@ export function CodexAccountsPage() {
   const handleCloseExportModal = useCallback(() => {
     closeExportModal();
     setExportFormat("cockpit_tools");
+    setIncludeExportSensitiveNotes(false);
     setFormattedExportJsonCopied(false);
     setFormattedSavingExportJson(false);
     setFormattedExportSavedPath(null);
@@ -2936,6 +3005,96 @@ export function CodexAccountsPage() {
     setSavedMfaRecords(loadSavedMfaRecords());
   }, []);
 
+  const resetAccountNoteMailPreview = useCallback(() => {
+    accountNoteMailPreviewSeqRef.current += 1;
+    accountNoteMailPreviewSnapshotRef.current = null;
+    setAccountNoteMailPreview(null);
+    setAccountNoteMailPreviewError(null);
+    setAccountNoteMailPreviewLoading(false);
+  }, []);
+
+  const fetchAccountNoteMailPreviewForUrl = useCallback(
+    async (rawUrl: string) => {
+      const mailUrl = rawUrl.trim();
+      accountNoteMailPreviewSeqRef.current += 1;
+      const requestSeq = accountNoteMailPreviewSeqRef.current;
+      setAccountNoteMailPreview(null);
+      setAccountNoteMailPreviewError(null);
+      if (!mailUrl) {
+        accountNoteMailPreviewSnapshotRef.current = null;
+        setAccountNoteMailPreviewLoading(false);
+        return;
+      }
+
+      setAccountNoteMailPreviewLoading(true);
+      try {
+        const response = await codexService.fetchCodexAccountNoteMailUrl(mailUrl);
+        if (accountNoteMailPreviewSeqRef.current !== requestSeq) return;
+        const preview = findFirstMailVerificationCode(response.body);
+        if (!preview) {
+          setAccountNoteMailPreviewError(
+            t("codex.accountNote.mailPreviewNoCode", "未匹配到连续 6 位验证码"),
+          );
+          return;
+        }
+        const previousPreview = accountNoteMailPreviewSnapshotRef.current;
+        const status =
+          previousPreview?.mailUrl === mailUrl
+            ? previousPreview.code === preview.code
+              ? "unchanged"
+              : "changed"
+            : "initial";
+        accountNoteMailPreviewSnapshotRef.current = {
+          mailUrl,
+          code: preview.code,
+        };
+        setAccountNoteMailPreview({
+          ...preview,
+          fetchedAt: Date.now(),
+          truncated: response.truncated,
+          status,
+        });
+      } catch (error) {
+        if (accountNoteMailPreviewSeqRef.current !== requestSeq) return;
+        const rawError = String(error).replace(/^Error:\s*/, "");
+        const httpError = rawError.match(/^MAIL_PREVIEW_HTTP_FAILED:(\d+)$/);
+        const errorDetail =
+          rawError === "MAIL_URL_EMPTY"
+            ? t("codex.accountNote.mailPreviewUrlRequired", "请输入邮件地址")
+            : rawError === "MAIL_URL_INVALID"
+              ? t(
+                  "codex.accountNote.mailPreviewUrlInvalid",
+                  "邮件地址格式无效，请输入完整的 http:// 或 https:// 地址",
+                )
+              : rawError === "MAIL_URL_UNSUPPORTED_SCHEME"
+                ? t(
+                    "codex.accountNote.mailPreviewUnsupportedProtocol",
+                    "邮件地址仅支持 http 或 https 协议",
+                  )
+                : httpError
+                  ? t("codex.accountNote.mailPreviewHttpFailed", {
+                      defaultValue: "邮件地址请求失败：HTTP {{status}}",
+                      status: httpError[1],
+                    })
+                  : rawError
+                      .replace(/^MAIL_PREVIEW_CLIENT_FAILED:\s*/, "")
+                      .replace(/^MAIL_PREVIEW_REQUEST_FAILED:\s*/, "")
+                      .replace(/^MAIL_PREVIEW_READ_FAILED:\s*/, "");
+        setAccountNoteMailPreviewError(
+          t("codex.accountNote.mailPreviewFetchFailed", {
+            error: errorDetail,
+            defaultValue: "读取邮件失败：{{error}}",
+          }),
+        );
+      } finally {
+        if (accountNoteMailPreviewSeqRef.current === requestSeq) {
+          setAccountNoteMailPreviewLoading(false);
+        }
+      }
+    },
+    [t],
+  );
+
   const updateActiveAccountNoteForm = useCallback(
     (update: Partial<CodexAccountNoteFormState>) => {
       if (activeAccountNoteMode === "pendingOAuth") {
@@ -2951,9 +3110,12 @@ export function CodexAccountsPage() {
         ...prev,
         twoFactorSecret: undefined,
       }));
+      if (Object.prototype.hasOwnProperty.call(update, "mailUrl")) {
+        resetAccountNoteMailPreview();
+      }
       setAccountNoteError(null);
     },
-    [activeAccountNoteMode, setAccountNoteError],
+    [activeAccountNoteMode, resetAccountNoteMailPreview, setAccountNoteError],
   );
 
   const openAccountNoteModal = useCallback(
@@ -2966,10 +3128,17 @@ export function CodexAccountsPage() {
       setAccountNotePasswordVisible(true);
       setAccountNoteCopiedKey(null);
       setAccountNoteMfaPickerOpen(false);
+      resetAccountNoteMailPreview();
       refreshSavedMfaRecords();
       setAccountNoteError(null);
+      void fetchAccountNoteMailPreviewForUrl(account.mail_url ?? "");
     },
-    [refreshSavedMfaRecords, setAccountNoteError],
+    [
+      fetchAccountNoteMailPreviewForUrl,
+      refreshSavedMfaRecords,
+      resetAccountNoteMailPreview,
+      setAccountNoteError,
+    ],
   );
 
   const openPendingOAuthNoteModal = useCallback(() => {
@@ -2980,9 +3149,17 @@ export function CodexAccountsPage() {
     setAccountNotePasswordVisible(true);
     setAccountNoteCopiedKey(null);
     setAccountNoteMfaPickerOpen(false);
+    resetAccountNoteMailPreview();
     refreshSavedMfaRecords();
     setAccountNoteError(null);
-  }, [refreshSavedMfaRecords, setAccountNoteError]);
+    void fetchAccountNoteMailPreviewForUrl(pendingOAuthNoteForm.mailUrl);
+  }, [
+    fetchAccountNoteMailPreviewForUrl,
+    pendingOAuthNoteForm.mailUrl,
+    refreshSavedMfaRecords,
+    resetAccountNoteMailPreview,
+    setAccountNoteError,
+  ]);
 
   const closeAccountNoteModal = useCallback(() => {
     if (savingAccountNote || savingPendingOAuthAccount) return;
@@ -2994,8 +3171,14 @@ export function CodexAccountsPage() {
     setAccountNotePasswordVisible(true);
     setAccountNoteCopiedKey(null);
     setAccountNoteMfaPickerOpen(false);
+    resetAccountNoteMailPreview();
     setAccountNoteError(null);
-  }, [savingAccountNote, savingPendingOAuthAccount, setAccountNoteError]);
+  }, [
+    resetAccountNoteMailPreview,
+    savingAccountNote,
+    savingPendingOAuthAccount,
+    setAccountNoteError,
+  ]);
 
   const loadApiServiceAppSpeed = useCallback(async () => {
     try {
@@ -3102,6 +3285,7 @@ export function CodexAccountsPage() {
         twoFactorSecret: normalizedTwoFactorSecret,
         accountPassword: activeAccountNoteForm.accountPassword,
         phoneNumber: activeAccountNoteForm.phoneNumber,
+        mailUrl: activeAccountNoteForm.mailUrl,
       };
 
       if (normalizedTwoFactorSecret) {
@@ -3137,6 +3321,7 @@ export function CodexAccountsPage() {
       setPendingOAuthNoteModalOpen(false);
       setAccountNoteCopiedKey(null);
       setAccountNoteMfaPickerOpen(false);
+      resetAccountNoteMailPreview();
     } catch (error) {
       setAccountNoteError(
         t("codex.accountNote.saveFailed", {
@@ -3155,6 +3340,7 @@ export function CodexAccountsPage() {
     editingAccountNoteId,
     setAccountNoteError,
     setMessage,
+    resetAccountNoteMailPreview,
     store,
     t,
   ]);
@@ -3182,6 +3368,25 @@ export function CodexAccountsPage() {
     },
     [setAccountNoteError, t],
   );
+
+  const handleRefreshAccountNoteMailPreview = useCallback(() => {
+    void fetchAccountNoteMailPreviewForUrl(activeAccountNoteForm.mailUrl);
+  }, [activeAccountNoteForm.mailUrl, fetchAccountNoteMailPreviewForUrl]);
+
+  const handleOpenAccountNoteMailUrl = useCallback(async () => {
+    const mailUrl = activeAccountNoteForm.mailUrl.trim();
+    if (!mailUrl) return;
+    try {
+      await openUrl(mailUrl);
+    } catch (error) {
+      setAccountNoteError(
+        t("codex.accountNote.mailOpenFailed", {
+          error: String(error).replace(/^Error:\s*/, ""),
+          defaultValue: "打开邮件地址失败：{{error}}",
+        }),
+      );
+    }
+  }, [activeAccountNoteForm.mailUrl, setAccountNoteError, t]);
 
   const renderAccountNoteButton = useCallback(
     (account: CodexAccount, className = "codex-account-note-chip") => {
@@ -3350,6 +3555,7 @@ export function CodexAccountsPage() {
   const apiSwitchNoticeRepairSeqRef = useRef(0);
   const apiSwitchNoticeAutoCloseTimerRef = useRef<number | null>(null);
   const skipManagedProviderApiKeyAutofillRef = useRef(false);
+  const apiProviderPresetExplicitlySelectedRef = useRef(false);
   const apiKeyFunPrefillModelCatalogRef = useRef<string[] | null>(null);
   const pendingApiKeyFunCodexPrefillRef =
     useRef<ApiKeyFunPrefillPayload | null>(null);
@@ -3620,7 +3826,16 @@ export function CodexAccountsPage() {
           apiProviderName: COCKPIT_API_PROVIDER_NAME,
         };
       }
-      if (providerPresetId === OPENAI_OFFICIAL_PRESET_ID) {
+      const selectedPreset = findCodexApiProviderPresetById(providerPresetId);
+      const selectedPresetBaseUrlMatches = Boolean(
+        selectedPreset?.baseUrls.some((baseUrl) =>
+          isSameHttpBaseUrl(baseUrl, normalizedBaseUrl),
+        ),
+      );
+      if (
+        providerPresetId === OPENAI_OFFICIAL_PRESET_ID &&
+        selectedPresetBaseUrlMatches
+      ) {
         return { apiProviderMode: "openai_builtin" };
       }
 
@@ -3644,7 +3859,10 @@ export function CodexAccountsPage() {
         managedProviders,
         providerId,
       );
-      if (managedProvider) {
+      if (
+        managedProvider &&
+        isSameHttpBaseUrl(managedProvider.baseUrl, normalizedBaseUrl)
+      ) {
         return {
           apiProviderMode: "custom",
           apiProviderId: managedProvider.id,
@@ -3665,8 +3883,13 @@ export function CodexAccountsPage() {
         };
       }
 
-      const preset = findCodexApiProviderPresetById(providerPresetId);
-      if (preset && providerPresetId !== CODEX_API_PROVIDER_CUSTOM_ID) {
+      const preset = selectedPreset;
+      if (
+        preset &&
+        providerPresetId !== CODEX_API_PROVIDER_CUSTOM_ID &&
+        (providerPresetId !== OPENAI_OFFICIAL_PRESET_ID ||
+          selectedPresetBaseUrlMatches)
+      ) {
         return {
           apiProviderMode: "custom",
           apiProviderId: preset.id,
@@ -3783,6 +4006,7 @@ export function CodexAccountsPage() {
 
   useEffect(() => {
     if (!showAddModal) {
+      apiProviderPresetExplicitlySelectedRef.current = false;
       if (!pendingApiKeyFunCodexPrefillRef.current) {
         apiKeyFunPrefillModelCatalogRef.current = null;
       }
@@ -3811,6 +4035,9 @@ export function CodexAccountsPage() {
       return;
     }
     if (sponsorApiProviderTemplates.length === 0) {
+      return;
+    }
+    if (apiProviderPresetExplicitlySelectedRef.current) {
       return;
     }
     const shouldUseDefaultProvider =
@@ -3848,19 +4075,24 @@ export function CodexAccountsPage() {
 
   useEffect(() => {
     if (apiProviderPresetId === OPENAI_OFFICIAL_PRESET_ID) {
+      skipManagedProviderApiKeyAutofillRef.current = false;
       setManagedProviderId("");
       setManagedProviderApiKeyId("");
       return;
     }
-    const matched = findCodexModelProviderByBaseUrl(
-      managedProviders,
-      apiBaseUrlInput,
-    );
-    setManagedProviderId((prev) =>
-      prev === (matched?.id ?? "") ? prev : (matched?.id ?? ""),
-    );
+    if (!managedProviderId) {
+      skipManagedProviderApiKeyAutofillRef.current = false;
+      setManagedProviderApiKeyId("");
+      return;
+    }
+    const matched = findCodexModelProviderById(managedProviders, managedProviderId);
+    if (!matched || !isSameHttpBaseUrl(matched.baseUrl, apiBaseUrlInput)) {
+      skipManagedProviderApiKeyAutofillRef.current = false;
+      setManagedProviderId("");
+      setManagedProviderApiKeyId("");
+      return;
+    }
     if (
-      !matched ||
       matched.apiKeys.length === 0 ||
       skipManagedProviderApiKeyAutofillRef.current
     ) {
@@ -3872,7 +4104,7 @@ export function CodexAccountsPage() {
       if (matched.apiKeys.some((item) => item.id === prev)) return prev;
       return matched.apiKeys[0]?.id ?? "";
     });
-  }, [apiBaseUrlInput, apiProviderPresetId, managedProviders]);
+  }, [apiBaseUrlInput, apiProviderPresetId, managedProviderId, managedProviders]);
 
   useEffect(() => {
     if (!selectedManagedProviderApiKey) return;
@@ -3886,13 +4118,22 @@ export function CodexAccountsPage() {
       setEditingManagedProviderApiKeyId("");
       return;
     }
-    const matched = findCodexModelProviderByBaseUrl(
+    if (!editingManagedProviderId) {
+      setEditingManagedProviderApiKeyId("");
+      return;
+    }
+    const matched = findCodexModelProviderById(
       managedProviders,
-      editingApiBaseUrlCredentialsValue,
+      editingManagedProviderId,
     );
-    setEditingManagedProviderId((prev) =>
-      prev === (matched?.id ?? "") ? prev : (matched?.id ?? ""),
-    );
+    if (
+      !matched ||
+      !isSameHttpBaseUrl(matched.baseUrl, editingApiBaseUrlCredentialsValue)
+    ) {
+      setEditingManagedProviderId("");
+      setEditingManagedProviderApiKeyId("");
+      return;
+    }
     if (!matched || matched.apiKeys.length === 0) {
       setEditingManagedProviderApiKeyId("");
       return;
@@ -3904,6 +4145,7 @@ export function CodexAccountsPage() {
   }, [
     editingApiBaseUrlCredentialsValue,
     editingApiProviderPresetId,
+    editingManagedProviderId,
     managedProviders,
   ]);
 
@@ -3960,6 +4202,20 @@ export function CodexAccountsPage() {
   const { setAddStatus, setAddMessage, resetAddModalState, setShowAddModal } =
     page;
 
+  const handlePendingOAuthEmailInputChange = useCallback(
+    (value: string) => {
+      setPendingOAuthEmailInput(value);
+      setPendingOAuthFieldErrors((prev) => ({
+        ...prev,
+        email: undefined,
+      }));
+      setAccountNoteError(null);
+      setAddStatus("idle");
+      setAddMessage("");
+    },
+    [setAccountNoteError, setAddMessage, setAddStatus],
+  );
+
   const buildPendingOAuthNoteUpdate = useCallback(() => {
     const rawTwoFactorSecret = pendingOAuthNoteForm.twoFactorSecret.trim();
     const parsedTwoFactorSecret = rawTwoFactorSecret
@@ -3982,6 +4238,7 @@ export function CodexAccountsPage() {
       twoFactorSecret: parsedTwoFactorSecret?.secret ?? rawTwoFactorSecret,
       accountPassword: pendingOAuthNoteForm.accountPassword,
       phoneNumber: pendingOAuthNoteForm.phoneNumber,
+      mailUrl: pendingOAuthNoteForm.mailUrl,
     };
   }, [openPendingOAuthNoteModal, pendingOAuthNoteForm, t]);
 
@@ -5308,7 +5565,18 @@ export function CodexAccountsPage() {
 
   const handleSelectApiProviderPreset = useCallback(
     (providerId: string) => {
+      apiProviderPresetExplicitlySelectedRef.current = true;
       setApiProviderPresetId(providerId);
+      setManagedProviderId("");
+      setManagedProviderApiKeyId("");
+      if (selectedManagedProviderApiKey) {
+        setApiKeyInput("");
+      }
+      if (providerId === CODEX_API_PROVIDER_CUSTOM_ID) {
+        setApiBaseUrlInput("");
+        setNewManagedProviderNameInput("");
+        return;
+      }
       const sponsorTemplate = sponsorApiProviderTemplates.find(
         (template) => template.id === providerId,
       );
@@ -5322,11 +5590,12 @@ export function CodexAccountsPage() {
       setApiBaseUrlInput(preset.baseUrls[0]);
       setNewManagedProviderNameInput("");
     },
-    [sponsorApiProviderTemplates],
+    [selectedManagedProviderApiKey, sponsorApiProviderTemplates],
   );
 
   const handleSelectManagedProvider = useCallback(
     (providerId: string) => {
+      apiProviderPresetExplicitlySelectedRef.current = true;
       setApiProviderPresetId(CODEX_API_PROVIDER_CUSTOM_ID);
       setManagedProviderId(providerId);
       const provider = managedProviders.find((item) => item.id === providerId);
@@ -5354,6 +5623,33 @@ export function CodexAccountsPage() {
       if (key) {
         setApiKeyInput(key.apiKey);
         setApiKeyInputVisible(false);
+      }
+    },
+    [selectedManagedProvider],
+  );
+
+  const handleApiKeyInputChange = useCallback(
+    (value: string) => {
+      setApiKeyInput(value);
+      if (
+        selectedManagedProviderApiKey &&
+        value.trim() !== selectedManagedProviderApiKey.apiKey.trim()
+      ) {
+        setManagedProviderApiKeyId("");
+      }
+    },
+    [selectedManagedProviderApiKey],
+  );
+
+  const handleApiBaseUrlInputChange = useCallback(
+    (value: string) => {
+      setApiBaseUrlInput(value);
+      if (
+        selectedManagedProvider &&
+        !isSameHttpBaseUrl(selectedManagedProvider.baseUrl, value)
+      ) {
+        setManagedProviderId("");
+        setManagedProviderApiKeyId("");
       }
     },
     [selectedManagedProvider],
@@ -5404,6 +5700,7 @@ export function CodexAccountsPage() {
       }) ?? null;
 
     skipManagedProviderApiKeyAutofillRef.current = true;
+    apiProviderPresetExplicitlySelectedRef.current = true;
     apiKeyFunPrefillModelCatalogRef.current = request.modelCatalog ?? null;
     setApiKeyInput(apiKey);
     setApiKeyInputVisible(false);
@@ -5447,6 +5744,9 @@ export function CodexAccountsPage() {
   const handleSelectEditingApiProviderPreset = useCallback(
     (providerId: string) => {
       setEditingApiProviderPresetId(providerId);
+      setEditingManagedProviderId("");
+      setEditingManagedProviderApiKeyId("");
+      setEditingNewManagedProviderNameInput("");
       const preset = findCodexApiProviderPresetById(providerId);
       if (!preset || preset.baseUrls.length === 0) return;
       setEditingApiBaseUrlCredentialsValue(preset.baseUrls[0]);
@@ -5483,6 +5783,33 @@ export function CodexAccountsPage() {
       if (key) {
         setEditingApiKeyCredentialsValue(key.apiKey);
         setEditingApiKeyCredentialsVisible(false);
+      }
+    },
+    [selectedEditingManagedProvider],
+  );
+
+  const handleEditingApiKeyCredentialsChange = useCallback(
+    (value: string) => {
+      setEditingApiKeyCredentialsValue(value);
+      if (
+        selectedEditingManagedProviderApiKey &&
+        value.trim() !== selectedEditingManagedProviderApiKey.apiKey.trim()
+      ) {
+        setEditingManagedProviderApiKeyId("");
+      }
+    },
+    [selectedEditingManagedProviderApiKey],
+  );
+
+  const handleEditingApiBaseUrlCredentialsChange = useCallback(
+    (value: string) => {
+      setEditingApiBaseUrlCredentialsValue(value);
+      if (
+        selectedEditingManagedProvider &&
+        !isSameHttpBaseUrl(selectedEditingManagedProvider.baseUrl, value)
+      ) {
+        setEditingManagedProviderId("");
+        setEditingManagedProviderApiKeyId("");
       }
     },
     [selectedEditingManagedProvider],
@@ -6974,7 +7301,7 @@ export function CodexAccountsPage() {
 
   const resolveSubscriptionPresentation = useCallback(
     (account: CodexAccount) =>
-      getCodexSubscriptionPresentation(account.subscription_active_until, t),
+      getCodexSubscriptionPresentationForAccount(account, t),
     [t],
   );
 
@@ -8985,10 +9312,10 @@ export function CodexAccountsPage() {
           {renderAccountSpeedSelect(account, true)}
           {!isApiKeyAccount && (
             <button
-              className={`codex-compact-note-btn ${account.account_note?.trim() ? "has-note" : ""}`}
+              className={`codex-compact-note-btn ${hasCodexAccountNoteDetails(account) ? "has-note" : ""}`}
               onClick={() => openAccountNoteModal(account)}
               title={
-                account.account_note?.trim() ||
+                getCodexAccountNoteTitle(account, "") ||
                 t("codex.accountNote.emptyTitle", "填写账号备注")
               }
               aria-label={t("codex.accountNote.title", "账号备注")}
@@ -9112,6 +9439,8 @@ export function CodexAccountsPage() {
       const isInLocalAccess = localAccessAccountIdSet.has(account.id);
       const subscriptionInfo = resolveSubscriptionPresentation(account);
       const isSubscriptionInfoMissing = subscriptionInfo.bucket === "missing";
+      const isAccessTokenOnlySubscription =
+        subscriptionInfo.bucket === "access_token_only";
       const showSubscriptionRefreshAction =
         !isApiKeyAccount &&
         !isPendingOAuthAccount &&
@@ -9186,7 +9515,7 @@ export function CodexAccountsPage() {
           </div>
           {(meta.accountContextText ||
             isInLocalAccess ||
-            (!isApiKeyAccount && account.account_note?.trim()) ||
+            (!isApiKeyAccount && hasCodexAccountNoteDetails(account)) ||
             resetCreditControls) && (
             <div className="account-sub-line">
               {meta.accountContextText && (
@@ -9299,7 +9628,7 @@ export function CodexAccountsPage() {
                 )}
                 {quotaItems.map((item) => {
                   const QuotaIcon =
-                    item.key === "secondary"
+                    item.key === "secondary" || item.key.endsWith(":secondary")
                       ? Calendar
                       : item.key === "code_review"
                         ? BookOpen
@@ -9358,7 +9687,7 @@ export function CodexAccountsPage() {
             >
               <div className="codex-subscription-footer-main">
                 <Calendar size={14} />
-                {isSubscriptionInfoMissing ? (
+                {isSubscriptionInfoMissing || isAccessTokenOnlySubscription ? (
                   <strong>{subscriptionInfo.valueText}</strong>
                 ) : (
                   <>
@@ -9437,10 +9766,10 @@ export function CodexAccountsPage() {
                 </button>
                 {!isApiKeyAccount && !isNewApiAccount && (
                   <button
-                    className={`card-action-btn ${account.account_note?.trim() ? "active" : ""}`}
+                    className={`card-action-btn ${hasCodexAccountNoteDetails(account) ? "active" : ""}`}
                     onClick={() => openAccountNoteModal(account)}
                     title={
-                      account.account_note?.trim() ||
+                      getCodexAccountNoteTitle(account, "") ||
                       t("codex.accountNote.emptyTitle", "填写账号备注")
                     }
                     aria-label={t("codex.accountNote.title", "账号备注")}
@@ -10495,7 +10824,7 @@ export function CodexAccountsPage() {
               </div>
               {(meta.accountContextText ||
                 isInLocalAccess ||
-                (!isApiKeyAccount && account.account_note?.trim()) ||
+                (!isApiKeyAccount && hasCodexAccountNoteDetails(account)) ||
                 resetCreditControls) && (
                 <div className="account-sub-line codex-account-meta-inline">
                   {meta.accountContextText && (
@@ -10759,10 +11088,10 @@ export function CodexAccountsPage() {
               </button>
               {!isApiKeyAccount && !isNewApiAccount && (
                 <button
-                  className={`action-btn ${account.account_note?.trim() ? "active" : ""}`}
+                  className={`action-btn ${hasCodexAccountNoteDetails(account) ? "active" : ""}`}
                   onClick={() => openAccountNoteModal(account)}
                   title={
-                    account.account_note?.trim() ||
+                    getCodexAccountNoteTitle(account, "") ||
                     t("codex.accountNote.emptyTitle", "填写账号备注")
                   }
                   aria-label={t("codex.accountNote.title", "账号备注")}
@@ -13017,13 +13346,9 @@ export function CodexAccountsPage() {
                                 type="email"
                                 value={pendingOAuthEmailInput}
                                 onChange={(event) => {
-                                  setPendingOAuthEmailInput(event.target.value);
-                                  setPendingOAuthFieldErrors((prev) => ({
-                                    ...prev,
-                                    email: undefined,
-                                  }));
-                                  setAddStatus("idle");
-                                  setAddMessage("");
+                                  handlePendingOAuthEmailInputChange(
+                                    event.target.value,
+                                  );
                                 }}
                                 placeholder={t(
                                   "codex.pendingAuth.emailPlaceholder",
@@ -13400,7 +13725,9 @@ export function CodexAccountsPage() {
                                   <button
                                     key={baseUrl}
                                     className={`api-provider-endpoint-chip ${apiBaseUrlInput === baseUrl ? "active" : ""}`}
-                                    onClick={() => setApiBaseUrlInput(baseUrl)}
+                                    onClick={() =>
+                                      handleApiBaseUrlInputChange(baseUrl)
+                                    }
                                     type="button"
                                   >
                                     {baseUrl}
@@ -13463,7 +13790,9 @@ export function CodexAccountsPage() {
                           <input
                             type={apiKeyInputVisible ? "text" : "password"}
                             value={apiKeyInput}
-                            onChange={(e) => setApiKeyInput(e.target.value)}
+                            onChange={(e) =>
+                              handleApiKeyInputChange(e.target.value)
+                            }
                             autoComplete="off"
                             spellCheck={false}
                           />
@@ -13498,7 +13827,9 @@ export function CodexAccountsPage() {
                           <input
                             type="text"
                             value={apiBaseUrlInput}
-                            onChange={(e) => setApiBaseUrlInput(e.target.value)}
+                            onChange={(e) =>
+                              handleApiBaseUrlInputChange(e.target.value)
+                            }
                             placeholder={t(
                               "codex.api.baseUrlPlaceholder",
                               "不填写则是官方默认",
@@ -14395,7 +14726,7 @@ export function CodexAccountsPage() {
                                   key={baseUrl}
                                   className={`api-provider-endpoint-chip ${editingApiBaseUrlCredentialsValue === baseUrl ? "active" : ""}`}
                                   onClick={() =>
-                                    setEditingApiBaseUrlCredentialsValue(
+                                    handleEditingApiBaseUrlCredentialsChange(
                                       baseUrl,
                                     )
                                   }
@@ -14468,7 +14799,9 @@ export function CodexAccountsPage() {
                           }
                           value={editingApiKeyCredentialsValue}
                           onChange={(e) =>
-                            setEditingApiKeyCredentialsValue(e.target.value)
+                            handleEditingApiKeyCredentialsChange(
+                              e.target.value,
+                            )
                           }
                           disabled={savingApiKeyCredentials}
                           autoComplete="off"
@@ -14509,7 +14842,9 @@ export function CodexAccountsPage() {
                           type="text"
                           value={editingApiBaseUrlCredentialsValue}
                           onChange={(e) =>
-                            setEditingApiBaseUrlCredentialsValue(e.target.value)
+                            handleEditingApiBaseUrlCredentialsChange(
+                              e.target.value,
+                            )
                           }
                           placeholder={t(
                             "codex.api.baseUrlPlaceholder",
@@ -14794,6 +15129,48 @@ export function CodexAccountsPage() {
                     }
                   />
                 </div>
+                {exportCanIncludeSensitiveNotes ? (
+                  <label
+                    className="export-json-sensitive-toggle"
+                    title={t(
+                      "codex.accountNote.exportSensitiveToggleHint",
+                      "控制导出 JSON 是否包含 2FA 秘钥、密码和手机号。",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={includeExportSensitiveNotes}
+                      onChange={(event) =>
+                        setIncludeExportSensitiveNotes(event.target.checked)
+                      }
+                    />
+                    <span className="export-json-sensitive-switch" />
+                    <span>
+                      {includeExportSensitiveNotes
+                        ? t(
+                            "codex.accountNote.exportSensitiveIncluded",
+                            "包含敏感备注",
+                          )
+                        : t(
+                            "codex.accountNote.exportSensitiveExcluded",
+                            "已排除敏感备注",
+                          )}
+                    </span>
+                    <Info size={14} />
+                  </label>
+                ) : null}
+                {exportCanIncludeSensitiveNotes &&
+                includeExportSensitiveNotes ? (
+                  <div className="export-json-sensitive-notice">
+                    <Info size={14} />
+                    <span>
+                      {t(
+                        "codex.accountNote.exportSensitiveNotice",
+                        "导出内容包含 2FA 秘钥、密码或手机号，请只保存到可信位置。",
+                      )}
+                    </span>
+                  </div>
+                ) : null}
               </>
             }
             onClose={handleCloseExportModal}
@@ -15352,41 +15729,163 @@ export function CodexAccountsPage() {
                     {t("codex.accountNote.desc", {
                       account: maskAccountText(activeAccountNoteDisplayName),
                       defaultValue:
-                        "给 {{account}} 填写 2FA、密码、手机号和其他备注。",
+                        "给 {{account}} 填写密码、2FA、邮件地址、手机号和其他备注。",
                     })}
                   </p>
                   <div className="codex-account-note-field">
                     <span>{t("common.shared.columns.email", "邮箱")}</span>
-                    <div className="codex-account-note-readonly-row">
-                      <span
-                        className={`codex-account-note-readonly-value ${
-                          activeAccountNoteEmail ? "" : "is-empty"
-                        }`}
-                        title={activeAccountNoteEmail}
+                    {activeAccountNoteMode === "pendingOAuth" ? (
+                      <>
+                        <div className="codex-account-note-input-row">
+                          <input
+                            className={`codex-account-note-input ${
+                              pendingOAuthFieldErrors.email ? "has-error" : ""
+                            }`}
+                            type="email"
+                            value={pendingOAuthEmailInput}
+                            onChange={(event) => {
+                              handlePendingOAuthEmailInputChange(
+                                event.target.value,
+                              );
+                            }}
+                            placeholder={t(
+                              "codex.pendingAuth.emailPlaceholder",
+                              "输入 OpenAI 账号邮箱",
+                            )}
+                            disabled={activeAccountNoteSaving}
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            className="codex-account-note-icon-btn"
+                            onClick={() =>
+                              void copyAccountNoteValue(
+                                "modal:email",
+                                activeAccountNoteEmail,
+                              )
+                            }
+                            disabled={
+                              activeAccountNoteSaving || !activeAccountNoteEmail
+                            }
+                            aria-label={t("common.copy", "复制")}
+                            title={t("common.copy", "复制")}
+                          >
+                            {accountNoteCopiedKey === "modal:email" ? (
+                              <Check size={14} />
+                            ) : (
+                              <Copy size={14} />
+                            )}
+                          </button>
+                        </div>
+                        {pendingOAuthFieldErrors.email ? (
+                          <span className="codex-account-note-field-error">
+                            {pendingOAuthFieldErrors.email}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <div className="codex-account-note-readonly-row">
+                        <span
+                          className={`codex-account-note-readonly-value ${
+                            activeAccountNoteEmail ? "" : "is-empty"
+                          }`}
+                          title={activeAccountNoteEmail}
+                        >
+                          {activeAccountNoteEmail || "-"}
+                        </span>
+                        <button
+                          type="button"
+                          className="codex-account-note-icon-btn"
+                          onClick={() =>
+                            void copyAccountNoteValue(
+                              "modal:email",
+                              activeAccountNoteEmail,
+                            )
+                          }
+                          disabled={
+                            activeAccountNoteSaving || !activeAccountNoteEmail
+                          }
+                          aria-label={t("common.copy", "复制")}
+                          title={t("common.copy", "复制")}
+                        >
+                          {accountNoteCopiedKey === "modal:email" ? (
+                            <Check size={14} />
+                          ) : (
+                            <Copy size={14} />
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <label className="codex-account-note-field">
+                    <span>
+                      {t("codex.accountNote.passwordLabel", "账号密码")}
+                    </span>
+                    <div className="codex-account-note-input-row">
+                      <input
+                        className="codex-account-note-input"
+                        type={accountNotePasswordVisible ? "text" : "password"}
+                        value={activeAccountNoteForm.accountPassword}
+                        onChange={(event) => {
+                          updateActiveAccountNoteForm({
+                            accountPassword: event.target.value,
+                          });
+                        }}
+                        placeholder={t(
+                          "codex.accountNote.passwordPlaceholder",
+                          "登录密码或临时密码",
+                        )}
+                        disabled={activeAccountNoteSaving}
+                        autoFocus={activeAccountNoteMode !== "pendingOAuth"}
+                      />
+                      <button
+                        type="button"
+                        className="codex-account-note-icon-btn"
+                        onClick={() =>
+                          setAccountNotePasswordVisible((prev) => !prev)
+                        }
+                        disabled={activeAccountNoteSaving}
+                        aria-label={
+                          accountNotePasswordVisible
+                            ? t("codex.accountNote.hide", "隐藏")
+                            : t("codex.accountNote.show", "显示")
+                        }
+                        title={
+                          accountNotePasswordVisible
+                            ? t("codex.accountNote.hide", "隐藏")
+                            : t("codex.accountNote.show", "显示")
+                        }
                       >
-                        {activeAccountNoteEmail || "-"}
-                      </span>
+                        {accountNotePasswordVisible ? (
+                          <EyeOff size={14} />
+                        ) : (
+                          <Eye size={14} />
+                        )}
+                      </button>
                       <button
                         type="button"
                         className="codex-account-note-icon-btn"
                         onClick={() =>
                           void copyAccountNoteValue(
-                            "modal:email",
-                            activeAccountNoteEmail,
+                            "modal:password",
+                            activeAccountNoteForm.accountPassword,
                           )
                         }
-                        disabled={activeAccountNoteSaving || !activeAccountNoteEmail}
+                        disabled={
+                          activeAccountNoteSaving ||
+                          !activeAccountNoteForm.accountPassword.trim()
+                        }
                         aria-label={t("common.copy", "复制")}
                         title={t("common.copy", "复制")}
                       >
-                        {accountNoteCopiedKey === "modal:email" ? (
+                        {accountNoteCopiedKey === "modal:password" ? (
                           <Check size={14} />
                         ) : (
                           <Copy size={14} />
                         )}
                       </button>
                     </div>
-                  </div>
+                  </label>
                   <label className="codex-account-note-field">
                     <span>
                       {t("codex.accountNote.twoFactorSecretLabel", "2FA 秘钥")}
@@ -15410,7 +15909,6 @@ export function CodexAccountsPage() {
                           "Base32 secret 或 otpauth:// 链接",
                         )}
                         disabled={activeAccountNoteSaving}
-                        autoFocus
                       />
                       <button
                         type="button"
@@ -15560,72 +16058,158 @@ export function CodexAccountsPage() {
                     ) : null}
                   </label>
                   <label className="codex-account-note-field">
-                    <span>
-                      {t("codex.accountNote.passwordLabel", "账号密码")}
-                    </span>
+                    <span>{t("codex.accountNote.mailUrlLabel", "邮件地址")}</span>
                     <div className="codex-account-note-input-row">
                       <input
                         className="codex-account-note-input"
-                        type={accountNotePasswordVisible ? "text" : "password"}
-                        value={activeAccountNoteForm.accountPassword}
+                        type="url"
+                        value={activeAccountNoteForm.mailUrl}
                         onChange={(event) => {
                           updateActiveAccountNoteForm({
-                            accountPassword: event.target.value,
+                            mailUrl: event.target.value,
                           });
                         }}
                         placeholder={t(
-                          "codex.accountNote.passwordPlaceholder",
-                          "登录密码或临时密码",
+                          "codex.accountNote.mailUrlPlaceholder",
+                          "填写可打开的邮件查询网页地址",
                         )}
                         disabled={activeAccountNoteSaving}
                       />
                       <button
                         type="button"
                         className="codex-account-note-icon-btn"
-                        onClick={() =>
-                          setAccountNotePasswordVisible((prev) => !prev)
+                        onClick={handleRefreshAccountNoteMailPreview}
+                        disabled={
+                          activeAccountNoteSaving ||
+                          accountNoteMailPreviewLoading ||
+                          !activeAccountNoteForm.mailUrl.trim()
                         }
-                        disabled={activeAccountNoteSaving}
-                        aria-label={
-                          accountNotePasswordVisible
-                            ? t("codex.accountNote.hide", "隐藏")
-                            : t("codex.accountNote.show", "显示")
-                        }
-                        title={
-                          accountNotePasswordVisible
-                            ? t("codex.accountNote.hide", "隐藏")
-                            : t("codex.accountNote.show", "显示")
-                        }
+                        aria-label={t("codex.accountNote.mailPreviewRefresh", "刷新邮件")}
+                        title={t("codex.accountNote.mailPreviewRefresh", "刷新邮件")}
                       >
-                        {accountNotePasswordVisible ? (
-                          <EyeOff size={14} />
-                        ) : (
-                          <Eye size={14} />
-                        )}
+                        <RefreshCw
+                          size={14}
+                          className={
+                            accountNoteMailPreviewLoading ? "loading-spinner" : ""
+                          }
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        className="codex-account-note-icon-btn"
+                        onClick={() => void handleOpenAccountNoteMailUrl()}
+                        disabled={
+                          activeAccountNoteSaving ||
+                          !activeAccountNoteForm.mailUrl.trim()
+                        }
+                        aria-label={t("codex.accountNote.mailPreviewOpen", "浏览器查看")}
+                        title={t("codex.accountNote.mailPreviewOpen", "浏览器查看")}
+                      >
+                        <ExternalLink size={14} />
                       </button>
                       <button
                         type="button"
                         className="codex-account-note-icon-btn"
                         onClick={() =>
                           void copyAccountNoteValue(
-                            "modal:password",
-                            activeAccountNoteForm.accountPassword,
+                            "modal:mailUrl",
+                            activeAccountNoteForm.mailUrl,
                           )
                         }
                         disabled={
                           activeAccountNoteSaving ||
-                          !activeAccountNoteForm.accountPassword.trim()
+                          !activeAccountNoteForm.mailUrl.trim()
                         }
                         aria-label={t("common.copy", "复制")}
                         title={t("common.copy", "复制")}
                       >
-                        {accountNoteCopiedKey === "modal:password" ? (
+                        {accountNoteCopiedKey === "modal:mailUrl" ? (
                           <Check size={14} />
                         ) : (
                           <Copy size={14} />
                         )}
                       </button>
                     </div>
+                    {accountNoteMailPreviewLoading ? (
+                      <div className="codex-account-note-mail-preview is-loading">
+                        {t("codex.accountNote.mailPreviewLoading", "读取邮件中...")}
+                      </div>
+                    ) : accountNoteMailPreviewError ? (
+                      <span className="codex-account-note-field-error">
+                        {accountNoteMailPreviewError}
+                      </span>
+                    ) : accountNoteMailPreview ? (
+                      <div
+                        key={`${accountNoteMailPreview.code}-${accountNoteMailPreview.fetchedAt}`}
+                        className={`codex-account-note-mail-preview ${
+                          accountNoteMailPreview.status === "changed" ? "is-changed" : ""
+                        }`}
+                      >
+                        <div className="codex-account-note-mail-preview__code">
+                          <span>
+                            {t(
+                              "codex.accountNote.mailPreviewCode",
+                              "最近一条邮箱验证码",
+                            )}
+                          </span>
+                          <strong>{accountNoteMailPreview.code}</strong>
+                          <button
+                            type="button"
+                            className="codex-account-note-icon-btn"
+                            onClick={() =>
+                              void copyAccountNoteValue(
+                                "modal:mailCode",
+                                accountNoteMailPreview.code,
+                              )
+                            }
+                            disabled={activeAccountNoteSaving}
+                            aria-label={t("common.copy", "复制")}
+                            title={t("common.copy", "复制")}
+                          >
+                            {accountNoteCopiedKey === "modal:mailCode" ? (
+                              <Check size={14} />
+                            ) : (
+                              <Copy size={14} />
+                            )}
+                          </button>
+                        </div>
+                        <p title={accountNoteMailPreview.snippet}>
+                          {accountNoteMailPreview.snippet}
+                        </p>
+                        <em
+                          className={`codex-account-note-mail-preview__status status-${accountNoteMailPreview.status}`}
+                        >
+                          {accountNoteMailPreview.status === "changed"
+                            ? t("codex.accountNote.mailPreviewStatusChanged", {
+                                defaultValue: "新验证码 · {{time}}",
+                                time: formatCodexAccountNoteMailPreviewTime(
+                                  accountNoteMailPreview.fetchedAt,
+                                ),
+                              })
+                            : accountNoteMailPreview.status === "unchanged"
+                              ? t("codex.accountNote.mailPreviewStatusUnchanged", {
+                                  defaultValue: "未变化 · {{time}}",
+                                  time: formatCodexAccountNoteMailPreviewTime(
+                                    accountNoteMailPreview.fetchedAt,
+                                  ),
+                                })
+                              : t("codex.accountNote.mailPreviewStatusInitial", {
+                                  defaultValue: "获取于 {{time}}",
+                                  time: formatCodexAccountNoteMailPreviewTime(
+                                    accountNoteMailPreview.fetchedAt,
+                                  ),
+                                })}
+                        </em>
+                        {accountNoteMailPreview.truncated ? (
+                          <em>
+                            {t(
+                              "codex.accountNote.mailPreviewTruncated",
+                              "内容已截断",
+                            )}
+                          </em>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </label>
                   <label className="codex-account-note-field">
                     <span>

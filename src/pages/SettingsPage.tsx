@@ -70,14 +70,17 @@ import { getClaudeAccountDisplayEmail } from '../types/claude';
 import { getCodebuddyAccountDisplayEmail } from '../types/codebuddy';
 import { getWorkbuddyAccountDisplayEmail } from '../types/workbuddy';
 import { getQoderAccountDisplayEmail } from '../types/qoder';
-import { getTraeAccountDisplayEmail } from '../types/trae';
+import {
+  getTraeAccountDisplayEmail,
+  getTraeAccountPlatformId,
+} from '../types/trae';
 import { getZedAccountDisplayEmail } from '../types/zed';
 import { ALL_PLATFORM_IDS, PlatformId } from '../types/platform';
 import { SettingsAccountTransferSection } from '../components/SettingsAccountTransferSection';
 import { SettingsWebdavSyncSection } from '../components/SettingsWebdavSyncSection';
 import { useEscClose } from '../hooks/useEscClose';
 import './settings/Settings.css';
-import { 
+import {
   Github, User, Rocket, Save, FolderOpen,
   AlertCircle, RefreshCw, Heart, MessageSquare, FileText, Download, X
 } from 'lucide-react';
@@ -146,6 +149,13 @@ interface GeneralConfig {
   codebuddy_cn_app_path: string;
   qoder_app_path: string;
   trae_app_path: string;
+  trae_solo_app_path: string;
+  trae_cn_app_path: string;
+  trae_solo_cn_app_path: string;
+  trae_app_scan_roots: string;
+  trae_solo_app_scan_roots: string;
+  trae_cn_app_scan_roots: string;
+  trae_solo_cn_app_scan_roots: string;
   workbuddy_app_path: string;
   zed_app_path: string;
   codebuddy_auto_refresh_minutes: number;
@@ -153,6 +163,9 @@ interface GeneralConfig {
   workbuddy_auto_refresh_minutes: number;
   qoder_auto_refresh_minutes: number;
   trae_auto_refresh_minutes: number;
+  trae_solo_auto_refresh_minutes: number;
+  trae_cn_auto_refresh_minutes: number;
+  trae_solo_cn_auto_refresh_minutes: number;
   zed_auto_refresh_minutes: number;
   codebuddy_quota_alert_enabled: boolean;
   codebuddy_quota_alert_threshold: number;
@@ -162,6 +175,12 @@ interface GeneralConfig {
   qoder_quota_alert_threshold: number;
   trae_quota_alert_enabled: boolean;
   trae_quota_alert_threshold: number;
+  trae_solo_quota_alert_enabled: boolean;
+  trae_solo_quota_alert_threshold: number;
+  trae_cn_quota_alert_enabled: boolean;
+  trae_cn_quota_alert_threshold: number;
+  trae_solo_cn_quota_alert_enabled: boolean;
+  trae_solo_cn_quota_alert_threshold: number;
   zed_quota_alert_enabled: boolean;
   zed_quota_alert_threshold: number;
   workbuddy_quota_alert_enabled: boolean;
@@ -217,8 +236,13 @@ type AppPathTarget =
   | 'codebuddy_cn'
   | 'qoder'
   | 'trae'
+  | 'trae_solo'
+  | 'trae_cn'
+  | 'trae_solo_cn'
   | 'workbuddy'
   | 'zed';
+
+type TraeAppPathTarget = 'trae' | 'trae_solo' | 'trae_cn' | 'trae_solo_cn';
 
 type ClaudeDesktopLaunchCandidate = {
   target_type: string;
@@ -227,6 +251,7 @@ type ClaudeDesktopLaunchCandidate = {
   source: string;
   supports_multi_instance: boolean;
 };
+type AppLaunchCandidate = ClaudeDesktopLaunchCandidate;
 const REFRESH_PRESET_VALUES = ['-1', '2', '5', '10', '15'];
 const CURRENT_ACCOUNT_REFRESH_PRESET_VALUES = ['1', '2', '5', '10', '15'];
 const THRESHOLD_PRESET_VALUES = ['0', '20', '40', '60'];
@@ -252,8 +277,11 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   qoderwork_cn: 12,
   qoder_cn: 13,
   trae: 14,
-  workbuddy: 15,
-  zed: 16,
+  trae_solo: 15,
+  trae_cn: 16,
+  trae_solo_cn: 17,
+  workbuddy: 18,
+  zed: 19,
 };
 type UpdateCheckSource = 'auto' | 'manual';
 type UpdateCheckFinishedDetail = {
@@ -385,7 +413,7 @@ export function SettingsPage() {
     { value: 'ar', label: 'العربية' },
     { value: 'id', label: 'Bahasa Indonesia' },
   ];
-  
+
   // General Settings States
   const [language, setLanguage] = useState(getCurrentLanguage());
   const [defaultTerminal, setDefaultTerminal] = useState('system');
@@ -427,6 +455,9 @@ export function SettingsPage() {
   const [codebuddyCnAppPath, setCodebuddyCnAppPath] = useState('');
   const [qoderAppPath, setQoderAppPath] = useState('');
   const [traeAppPath, setTraeAppPath] = useState('');
+  const [traeSoloAppPath, setTraeSoloAppPath] = useState('');
+  const [traeCnAppPath, setTraeCnAppPath] = useState('');
+  const [traeSoloCnAppPath, setTraeSoloCnAppPath] = useState('');
   const [workbuddyAppPath, setWorkbuddyAppPath] = useState('');
   const [zedAppPath, setZedAppPath] = useState('');
   const [codebuddyAutoRefresh, setCodebuddyAutoRefresh] = useState('10');
@@ -434,6 +465,9 @@ export function SettingsPage() {
   const [workbuddyAutoRefresh, setWorkbuddyAutoRefresh] = useState('10');
   const [qoderAutoRefresh, setQoderAutoRefresh] = useState('10');
   const [traeAutoRefresh, setTraeAutoRefresh] = useState('10');
+  const [traeSoloAutoRefresh, setTraeSoloAutoRefresh] = useState('10');
+  const [traeCnAutoRefresh, setTraeCnAutoRefresh] = useState('10');
+  const [traeSoloCnAutoRefresh, setTraeSoloCnAutoRefresh] = useState('10');
   const [zedAutoRefresh, setZedAutoRefresh] = useState('10');
   const [currentAccountRefreshMinutes, setCurrentAccountRefreshMinutes] = useState<
     Record<CurrentAccountRefreshPlatform, string>
@@ -457,6 +491,12 @@ export function SettingsPage() {
   const [qoderQuotaAlertThreshold, setQoderQuotaAlertThreshold] = useState('20');
   const [traeQuotaAlertEnabled, setTraeQuotaAlertEnabled] = useState(false);
   const [traeQuotaAlertThreshold, setTraeQuotaAlertThreshold] = useState('20');
+  const [traeSoloQuotaAlertEnabled, setTraeSoloQuotaAlertEnabled] = useState(false);
+  const [traeSoloQuotaAlertThreshold, setTraeSoloQuotaAlertThreshold] = useState('20');
+  const [traeCnQuotaAlertEnabled, setTraeCnQuotaAlertEnabled] = useState(false);
+  const [traeCnQuotaAlertThreshold, setTraeCnQuotaAlertThreshold] = useState('20');
+  const [traeSoloCnQuotaAlertEnabled, setTraeSoloCnQuotaAlertEnabled] = useState(false);
+  const [traeSoloCnQuotaAlertThreshold, setTraeSoloCnQuotaAlertThreshold] = useState('20');
   const [zedQuotaAlertEnabled, setZedQuotaAlertEnabled] = useState(false);
   const [zedQuotaAlertThreshold, setZedQuotaAlertThreshold] = useState('20');
   const [workbuddyQuotaAlertEnabled, setWorkbuddyQuotaAlertEnabled] = useState(false);
@@ -469,12 +509,24 @@ export function SettingsPage() {
   const [qoderQuotaAlertThresholdCustomMode, setQoderQuotaAlertThresholdCustomMode] = useState(false);
   const [traeAutoRefreshCustomMode, setTraeAutoRefreshCustomMode] = useState(false);
   const [traeQuotaAlertThresholdCustomMode, setTraeQuotaAlertThresholdCustomMode] = useState(false);
+  const [traeSoloAutoRefreshCustomMode, setTraeSoloAutoRefreshCustomMode] = useState(false);
+  const [traeSoloQuotaAlertThresholdCustomMode, setTraeSoloQuotaAlertThresholdCustomMode] = useState(false);
+  const [traeCnAutoRefreshCustomMode, setTraeCnAutoRefreshCustomMode] = useState(false);
+  const [traeCnQuotaAlertThresholdCustomMode, setTraeCnQuotaAlertThresholdCustomMode] = useState(false);
+  const [traeSoloCnAutoRefreshCustomMode, setTraeSoloCnAutoRefreshCustomMode] = useState(false);
+  const [traeSoloCnQuotaAlertThresholdCustomMode, setTraeSoloCnQuotaAlertThresholdCustomMode] = useState(false);
   const [zedAutoRefreshCustomMode, setZedAutoRefreshCustomMode] = useState(false);
   const [zedQuotaAlertThresholdCustomMode, setZedQuotaAlertThresholdCustomMode] = useState(false);
   const [codebuddyCnQuotaAlertThresholdCustomMode, setCodebuddyCnQuotaAlertThresholdCustomMode] = useState(false);
   const [workbuddyQuotaAlertThresholdCustomMode, setWorkbuddyQuotaAlertThresholdCustomMode] = useState(false);
   const [appPathResetDetectingTargets, setAppPathResetDetectingTargets] = useState<Set<AppPathTarget>>(new Set());
   const [claudeLaunchCandidates, setClaudeLaunchCandidates] = useState<ClaudeDesktopLaunchCandidate[]>([]);
+  const [traeAppScanRoots, setTraeAppScanRoots] = useState('');
+  const [traeSoloAppScanRoots, setTraeSoloAppScanRoots] = useState('');
+  const [traeCnAppScanRoots, setTraeCnAppScanRoots] = useState('');
+  const [traeSoloCnAppScanRoots, setTraeSoloCnAppScanRoots] = useState('');
+  const [traeLaunchCandidatesTarget, setTraeLaunchCandidatesTarget] = useState<TraeAppPathTarget>('trae');
+  const [traeLaunchCandidates, setTraeLaunchCandidates] = useState<AppLaunchCandidate[]>([]);
   const [opencodeSyncOnSwitch, setOpencodeSyncOnSwitch] = useState(false);
   const [opencodeAuthOverwriteOnSwitch, setOpencodeAuthOverwriteOnSwitch] = useState(false);
   const [openclawAuthOverwriteOnSwitch, setOpenclawAuthOverwriteOnSwitch] = useState(false);
@@ -541,7 +593,7 @@ export function SettingsPage() {
   const generalSaveTimerRef = useRef<number | null>(null);
   const suppressGeneralSaveRef = useRef(false);
   const currentAccountRefreshPersistReadyRef = useRef(false);
-  
+
   const [appVersion, setAppVersion] = useState('');
   const [updateChecking, setUpdateChecking] = useState(false);
   const [updateCheckMessage, setUpdateCheckMessage] = useState<{
@@ -728,7 +780,7 @@ export function SettingsPage() {
       }
     };
   }, []);
-  
+
   // Network States
   const [wsEnabled, setWsEnabled] = useState(true);
   const [wsPort, setWsPort] = useState('19528');
@@ -748,17 +800,17 @@ export function SettingsPage() {
   const reportRenderedPreviewUrl = `${reportRawPreviewUrl}&render=true`;
   const [needsRestart, setNeedsRestart] = useState(false);
   const [networkSaving, setNetworkSaving] = useState(false);
-  
+
   // 检测配额重置任务状态
   const [hasActiveResetTasks, setHasActiveResetTasks] = useState(false);
-  
+
   // 加载配置
   useEffect(() => {
     loadGeneralConfig();
     loadNetworkConfig();
     loadDiagnosticsConfig();
   }, []);
-  
+
   useEffect(() => {
     if (!generalLoaded) {
       return;
@@ -795,6 +847,9 @@ export function SettingsPage() {
       !workbuddyAutoRefresh.trim() ||
       !qoderAutoRefresh.trim() ||
       !traeAutoRefresh.trim() ||
+      !traeSoloAutoRefresh.trim() ||
+      !traeCnAutoRefresh.trim() ||
+      !traeSoloCnAutoRefresh.trim() ||
       !zedAutoRefresh.trim() ||
       !cursorAutoRefresh.trim() ||
       !geminiAutoRefresh.trim()
@@ -813,6 +868,9 @@ export function SettingsPage() {
     const workbuddyAutoRefreshNum = parseInt(workbuddyAutoRefresh, 10) || -1;
     const qoderAutoRefreshNum = parseInt(qoderAutoRefresh, 10) || -1;
     const traeAutoRefreshNum = parseInt(traeAutoRefresh, 10) || -1;
+    const traeSoloAutoRefreshNum = parseInt(traeSoloAutoRefresh, 10) || -1;
+    const traeCnAutoRefreshNum = parseInt(traeCnAutoRefresh, 10) || -1;
+    const traeSoloCnAutoRefreshNum = parseInt(traeSoloCnAutoRefresh, 10) || -1;
     const zedAutoRefreshNum = parseInt(zedAutoRefresh, 10) || -1;
     const cursorAutoRefreshNum = parseInt(cursorAutoRefresh, 10) || -1;
     const geminiAutoRefreshNum = parseInt(geminiAutoRefresh, 10) || -1;
@@ -833,6 +891,9 @@ export function SettingsPage() {
     const parsedWorkbuddyQuotaAlertThreshold = Number.parseInt(workbuddyQuotaAlertThreshold, 10);
     const parsedQoderQuotaAlertThreshold = Number.parseInt(qoderQuotaAlertThreshold, 10);
     const parsedTraeQuotaAlertThreshold = Number.parseInt(traeQuotaAlertThreshold, 10);
+    const parsedTraeSoloQuotaAlertThreshold = Number.parseInt(traeSoloQuotaAlertThreshold, 10);
+    const parsedTraeCnQuotaAlertThreshold = Number.parseInt(traeCnQuotaAlertThreshold, 10);
+    const parsedTraeSoloCnQuotaAlertThreshold = Number.parseInt(traeSoloCnQuotaAlertThreshold, 10);
     const parsedZedQuotaAlertThreshold = Number.parseInt(zedQuotaAlertThreshold, 10);
     const parsedCursorQuotaAlertThreshold = Number.parseInt(cursorQuotaAlertThreshold, 10);
     const parsedGeminiQuotaAlertThreshold = Number.parseInt(geminiQuotaAlertThreshold, 10);
@@ -861,6 +922,9 @@ export function SettingsPage() {
           workbuddyAutoRefreshMinutes: workbuddyAutoRefreshNum,
           qoderAutoRefreshMinutes: qoderAutoRefreshNum,
           traeAutoRefreshMinutes: traeAutoRefreshNum,
+          traeSoloAutoRefreshMinutes: traeSoloAutoRefreshNum,
+          traeCnAutoRefreshMinutes: traeCnAutoRefreshNum,
+          traeSoloCnAutoRefreshMinutes: traeSoloCnAutoRefreshNum,
           zedAutoRefreshMinutes: zedAutoRefreshNum,
           cursorAutoRefreshMinutes: cursorAutoRefreshNum,
           geminiAutoRefreshMinutes: geminiAutoRefreshNum,
@@ -888,6 +952,13 @@ export function SettingsPage() {
           codebuddyCnAppPath,
           qoderAppPath,
           traeAppPath,
+          traeSoloAppPath,
+          traeCnAppPath,
+          traeSoloCnAppPath,
+          traeAppScanRoots,
+          traeSoloAppScanRoots,
+          traeCnAppScanRoots,
+          traeSoloCnAppScanRoots,
           workbuddyAppPath,
           zedAppPath,
           opencodeSyncOnSwitch,
@@ -951,6 +1022,18 @@ export function SettingsPage() {
           traeQuotaAlertThreshold: Number.isNaN(parsedTraeQuotaAlertThreshold)
             ? 20
             : parsedTraeQuotaAlertThreshold,
+          traeSoloQuotaAlertEnabled,
+          traeSoloQuotaAlertThreshold: Number.isNaN(parsedTraeSoloQuotaAlertThreshold)
+            ? 20
+            : parsedTraeSoloQuotaAlertThreshold,
+          traeCnQuotaAlertEnabled,
+          traeCnQuotaAlertThreshold: Number.isNaN(parsedTraeCnQuotaAlertThreshold)
+            ? 20
+            : parsedTraeCnQuotaAlertThreshold,
+          traeSoloCnQuotaAlertEnabled,
+          traeSoloCnQuotaAlertThreshold: Number.isNaN(parsedTraeSoloCnQuotaAlertThreshold)
+            ? 20
+            : parsedTraeSoloCnQuotaAlertThreshold,
           zedQuotaAlertEnabled,
           zedQuotaAlertThreshold: Number.isNaN(parsedZedQuotaAlertThreshold)
             ? 20
@@ -986,6 +1069,9 @@ export function SettingsPage() {
     windsurfAutoRefresh,
     kiroAutoRefresh,
     traeAutoRefresh,
+    traeSoloAutoRefresh,
+    traeCnAutoRefresh,
+    traeSoloCnAutoRefresh,
     zedAutoRefresh,
     workbuddyAutoRefresh,
     qoderAutoRefresh,
@@ -1020,6 +1106,13 @@ export function SettingsPage() {
     codebuddyCnAppPath,
     qoderAppPath,
     traeAppPath,
+    traeSoloAppPath,
+    traeCnAppPath,
+    traeSoloCnAppPath,
+    traeAppScanRoots,
+    traeSoloAppScanRoots,
+    traeCnAppScanRoots,
+    traeSoloCnAppScanRoots,
     workbuddyAppPath,
     zedAppPath,
     opencodeSyncOnSwitch,
@@ -1063,6 +1156,12 @@ export function SettingsPage() {
     qoderQuotaAlertThreshold,
     traeQuotaAlertEnabled,
     traeQuotaAlertThreshold,
+    traeSoloQuotaAlertEnabled,
+    traeSoloQuotaAlertThreshold,
+    traeCnQuotaAlertEnabled,
+    traeCnQuotaAlertThreshold,
+    traeSoloCnQuotaAlertEnabled,
+    traeSoloCnQuotaAlertThreshold,
     zedQuotaAlertEnabled,
     zedQuotaAlertThreshold,
     cursorQuotaAlertEnabled,
@@ -1178,7 +1277,7 @@ export function SettingsPage() {
       })
       .catch(() => {});
   }, [updateRemindersEnabled, updateRemindersLoaded]);
-  
+
   // 检测配额重置任务状态
   useEffect(() => {
     const checkResetTasks = () => {
@@ -1186,20 +1285,20 @@ export function SettingsPage() {
         // 检查唤醒总开关
         const wakeupEnabledRaw = localStorage.getItem('agtools.wakeup.enabled');
         const wakeupEnabled = wakeupEnabledRaw === 'true';
-        
+
         // 如果总开关关闭，不需要限制
         if (!wakeupEnabled) {
           setHasActiveResetTasks(false);
           return;
         }
-        
+
         // 检查是否有启用的配额重置任务
         const tasksJson = localStorage.getItem('agtools.wakeup.tasks');
         if (!tasksJson) {
           setHasActiveResetTasks(false);
           return;
         }
-        
+
         const tasks = JSON.parse(tasksJson);
         const hasReset = Array.isArray(tasks) && tasks.some(
           (task: any) => task.enabled && task.schedule?.wakeOnReset
@@ -1210,29 +1309,29 @@ export function SettingsPage() {
         setHasActiveResetTasks(false);
       }
     };
-    
+
     // 初始检测
     checkResetTasks();
-    
+
     // 监听存储变化
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'agtools.wakeup.tasks' || e.key === 'agtools.wakeup.enabled') {
         checkResetTasks();
       }
     };
-    
+
     window.addEventListener('storage', handleStorageChange);
-    
+
     // 监听自定义事件（同一窗口内的任务变更）
     const handleTasksUpdated = () => checkResetTasks();
     window.addEventListener('wakeup-tasks-updated', handleTasksUpdated);
-    
+
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('wakeup-tasks-updated', handleTasksUpdated);
     };
   }, []);
-  
+
   const applyTheme = (newTheme: string) => {
     if (newTheme === 'system') {
       const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -1274,7 +1373,7 @@ export function SettingsPage() {
       }
     };
   }, [theme]);
-  
+
   const loadGeneralConfig = async () => {
     try {
       const config = await invoke<GeneralConfig>('get_general_config');
@@ -1317,6 +1416,15 @@ export function SettingsPage() {
       setCodebuddyCnAppPath(config.codebuddy_cn_app_path || '');
       setQoderAppPath(config.qoder_app_path || '');
       setTraeAppPath(config.trae_app_path || '');
+      setTraeSoloAppPath(config.trae_solo_app_path || '');
+      setTraeCnAppPath(config.trae_cn_app_path || '');
+      setTraeSoloCnAppPath(config.trae_solo_cn_app_path || '');
+      setTraeAppScanRoots(config.trae_app_scan_roots || '');
+      setTraeSoloAppScanRoots(config.trae_solo_app_scan_roots || '');
+      setTraeCnAppScanRoots(config.trae_cn_app_scan_roots || '');
+      setTraeSoloCnAppScanRoots(config.trae_solo_cn_app_scan_roots || '');
+      setTraeLaunchCandidatesTarget('trae');
+      setTraeLaunchCandidates([]);
       setWorkbuddyAppPath(config.workbuddy_app_path || '');
       setZedAppPath(config.zed_app_path || '');
       setCodebuddyAutoRefresh(String(config.codebuddy_auto_refresh_minutes ?? 10));
@@ -1324,6 +1432,9 @@ export function SettingsPage() {
       setWorkbuddyAutoRefresh(String(config.workbuddy_auto_refresh_minutes ?? 10));
       setQoderAutoRefresh(String(config.qoder_auto_refresh_minutes ?? 10));
       setTraeAutoRefresh(String(config.trae_auto_refresh_minutes ?? 10));
+      setTraeSoloAutoRefresh(String(config.trae_solo_auto_refresh_minutes ?? 10));
+      setTraeCnAutoRefresh(String(config.trae_cn_auto_refresh_minutes ?? 10));
+      setTraeSoloCnAutoRefresh(String(config.trae_solo_cn_auto_refresh_minutes ?? 10));
       setZedAutoRefresh(String(config.zed_auto_refresh_minutes ?? 10));
       setCurrentAccountRefreshMinutes(
         toCurrentAccountRefreshMinutesStringMap(loadCurrentAccountRefreshMinutesMap()),
@@ -1338,6 +1449,12 @@ export function SettingsPage() {
       setQoderQuotaAlertThreshold(String(config.qoder_quota_alert_threshold ?? 20));
       setTraeQuotaAlertEnabled(config.trae_quota_alert_enabled ?? false);
       setTraeQuotaAlertThreshold(String(config.trae_quota_alert_threshold ?? 20));
+      setTraeSoloQuotaAlertEnabled(config.trae_solo_quota_alert_enabled ?? false);
+      setTraeSoloQuotaAlertThreshold(String(config.trae_solo_quota_alert_threshold ?? 20));
+      setTraeCnQuotaAlertEnabled(config.trae_cn_quota_alert_enabled ?? false);
+      setTraeCnQuotaAlertThreshold(String(config.trae_cn_quota_alert_threshold ?? 20));
+      setTraeSoloCnQuotaAlertEnabled(config.trae_solo_cn_quota_alert_enabled ?? false);
+      setTraeSoloCnQuotaAlertThreshold(String(config.trae_solo_cn_quota_alert_threshold ?? 20));
       setZedQuotaAlertEnabled(config.zed_quota_alert_enabled ?? false);
       setZedQuotaAlertThreshold(String(config.zed_quota_alert_threshold ?? 20));
       setOpencodeSyncOnSwitch(config.opencode_sync_on_switch ?? false);
@@ -1393,6 +1510,9 @@ export function SettingsPage() {
       setWorkbuddyAutoRefreshCustomMode(false);
       setQoderAutoRefreshCustomMode(false);
       setTraeAutoRefreshCustomMode(false);
+      setTraeSoloAutoRefreshCustomMode(false);
+      setTraeCnAutoRefreshCustomMode(false);
+      setTraeSoloCnAutoRefreshCustomMode(false);
       setZedAutoRefreshCustomMode(false);
       setCursorAutoRefreshCustomMode(false);
       setGeminiAutoRefreshCustomMode(false);
@@ -1409,6 +1529,9 @@ export function SettingsPage() {
       setWorkbuddyQuotaAlertThresholdCustomMode(false);
       setQoderQuotaAlertThresholdCustomMode(false);
       setTraeQuotaAlertThresholdCustomMode(false);
+      setTraeSoloQuotaAlertThresholdCustomMode(false);
+      setTraeCnQuotaAlertThresholdCustomMode(false);
+      setTraeSoloCnQuotaAlertThresholdCustomMode(false);
       setZedQuotaAlertThresholdCustomMode(false);
       setCursorQuotaAlertThresholdCustomMode(false);
       setGeminiQuotaAlertThresholdCustomMode(false);
@@ -1469,7 +1592,7 @@ export function SettingsPage() {
       setErrorReportingSaving(false);
     }
   };
-  
+
   // 保存网络配置
   const handleSaveNetworkConfig = async () => {
     setNetworkSaving(true);
@@ -1499,7 +1622,7 @@ export function SettingsPage() {
         globalProxyUrl: normalizedGlobalProxyUrl,
         globalProxyNoProxy: normalizedGlobalProxyNoProxy,
       });
-      
+
       if (result) {
         setNeedsRestart(true);
         alert(t('settings.network.saveSuccessRestart'));
@@ -1518,6 +1641,87 @@ export function SettingsPage() {
   };
 
   const isAppPathResetDetecting = (target: AppPathTarget) => appPathResetDetectingTargets.has(target);
+
+  const isTraeAppPathTarget = (target: AppPathTarget): target is TraeAppPathTarget =>
+    target === 'trae' || target === 'trae_solo' || target === 'trae_cn' || target === 'trae_solo_cn';
+
+  const getTraeAppPathValue = (target: TraeAppPathTarget) => {
+    switch (target) {
+      case 'trae_solo':
+        return traeSoloAppPath;
+      case 'trae_cn':
+        return traeCnAppPath;
+      case 'trae_solo_cn':
+        return traeSoloCnAppPath;
+      case 'trae':
+      default:
+        return traeAppPath;
+    }
+  };
+
+  const setTraeAppPathValue = (target: TraeAppPathTarget, path: string) => {
+    switch (target) {
+      case 'trae_solo':
+        setTraeSoloAppPath(path);
+        break;
+      case 'trae_cn':
+        setTraeCnAppPath(path);
+        break;
+      case 'trae_solo_cn':
+        setTraeSoloCnAppPath(path);
+        break;
+      case 'trae':
+      default:
+        setTraeAppPath(path);
+        break;
+    }
+  };
+
+  const getTraeScanRootsValue = (target: TraeAppPathTarget) => {
+    switch (target) {
+      case 'trae_solo':
+        return traeSoloAppScanRoots;
+      case 'trae_cn':
+        return traeCnAppScanRoots;
+      case 'trae_solo_cn':
+        return traeSoloCnAppScanRoots;
+      case 'trae':
+      default:
+        return traeAppScanRoots;
+    }
+  };
+
+  const setTraeScanRootsValue = (target: TraeAppPathTarget, scanRoots: string) => {
+    switch (target) {
+      case 'trae_solo':
+        setTraeSoloAppScanRoots(scanRoots);
+        break;
+      case 'trae_cn':
+        setTraeCnAppScanRoots(scanRoots);
+        break;
+      case 'trae_solo_cn':
+        setTraeSoloCnAppScanRoots(scanRoots);
+        break;
+      case 'trae':
+      default:
+        setTraeAppScanRoots(scanRoots);
+        break;
+    }
+  };
+
+  const getTraeAppDisplayName = (target: TraeAppPathTarget) => {
+    switch (target) {
+      case 'trae_solo':
+        return 'TRAE SOLO';
+      case 'trae_cn':
+        return 'Trae CN';
+      case 'trae_solo_cn':
+        return 'TRAE SOLO CN';
+      case 'trae':
+      default:
+        return 'Trae';
+    }
+  };
 
   const setAppPathForTarget = (target: AppPathTarget, path: string) => {
     if (target === 'antigravity') {
@@ -1540,8 +1744,10 @@ export function SettingsPage() {
       setCodebuddyCnAppPath(path);
     } else if (target === 'qoder') {
       setQoderAppPath(path);
-    } else if (target === 'trae') {
-      setTraeAppPath(path);
+    } else if (isTraeAppPathTarget(target)) {
+      setTraeAppPathValue(target, path);
+      setTraeLaunchCandidatesTarget(target);
+      setTraeLaunchCandidates([]);
     } else if (target === 'workbuddy') {
       setWorkbuddyAppPath(path);
     } else if (target === 'zed') {
@@ -1573,8 +1779,10 @@ export function SettingsPage() {
     if (target === 'qoder') {
       return t('settings.general.qoderPathReset', '重置默认');
     }
-    if (target === 'trae') {
-      return t('settings.general.traePathReset', '重置默认');
+    if (isTraeAppPathTarget(target)) {
+      return isWindows
+        ? t('appPath.missing.scanApps', '扫描应用')
+        : t('settings.general.traePathReset', '重置默认');
     }
     if (target === 'workbuddy') {
       return t('settings.general.workbuddyPathReset', '重置默认');
@@ -1627,6 +1835,28 @@ export function SettingsPage() {
     setClaudeLaunchCandidates([]);
   };
 
+  const handlePickTraeScanRoot = async (target: TraeAppPathTarget) => {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: true,
+      });
+      const path = Array.isArray(selected) ? selected[0] : selected;
+      if (!path) return;
+      setTraeScanRootsValue(target, path);
+      setTraeLaunchCandidatesTarget(target);
+      setTraeLaunchCandidates([]);
+    } catch (err) {
+      console.error('选择 Trae 扫描范围失败:', err);
+    }
+  };
+
+  const handleClearTraeScanRoot = (target: TraeAppPathTarget) => {
+    setTraeScanRootsValue(target, '');
+    setTraeLaunchCandidatesTarget(target);
+    setTraeLaunchCandidates([]);
+  };
+
   const handlePickCodexSpecifiedAppPath = async () => {
     try {
       const selected = await open({
@@ -1665,6 +1895,22 @@ export function SettingsPage() {
         }
         return;
       }
+      if (isTraeAppPathTarget(target) && isWindows) {
+        const candidates = await invoke<AppLaunchCandidate[]>('scan_app_launch_targets', {
+          app: target,
+          scanRoots: getTraeScanRootsValue(target).trim() || null,
+        });
+        setTraeLaunchCandidatesTarget(target);
+        setTraeLaunchCandidates(candidates);
+        if (candidates.length === 0) {
+          alert(t('appPath.missing.scanEmptyGeneric', '未扫描到 {{app}}，请手动选择路径或调整扫描范围。', {
+            app: getTraeAppDisplayName(target),
+          }));
+        } else {
+          setTraeAppPathValue(target, candidates[0].target);
+        }
+        return;
+      }
       const detected = await invoke<string | null>('detect_app_path', { app: target, force: true });
       setAppPathForTarget(target, detected || '');
     } catch (err) {
@@ -1683,6 +1929,10 @@ export function SettingsPage() {
     setClaudeAppPath(candidate.target);
   };
 
+  const handleSelectTraeLaunchCandidate = (target: TraeAppPathTarget, candidate: AppLaunchCandidate) => {
+    setTraeAppPathValue(target, candidate.target);
+  };
+
   const sanitizeNumberInput = (value: string) => value.replace(/[^\d]/g, '');
 
   const normalizeNumberInput = (value: string, min: number, max?: number): string => {
@@ -1692,6 +1942,108 @@ export function SettingsPage() {
     }
     const bounded = Math.max(min, max ? Math.min(parsed, max) : parsed);
     return String(bounded);
+  };
+
+  const renderTraeAppPathRow = (
+    target: TraeAppPathTarget,
+    titleKey: string,
+    titleDefault: string,
+  ) => {
+    const appPath = getTraeAppPathValue(target);
+    const scanRoots = getTraeScanRootsValue(target);
+    const displayName = getTraeAppDisplayName(target);
+    const showCandidates =
+      isWindows && traeLaunchCandidatesTarget === target && traeLaunchCandidates.length > 0;
+
+    return (
+      <div className="settings-row" key={target}>
+        <div className="row-label">
+          <div className="row-title">{t(titleKey, titleDefault)}</div>
+          <div className="row-desc">{t('settings.general.traeAppPathDesc', '留空则使用默认路径')}</div>
+        </div>
+        <div className="row-control row-control--grow settings-claude-launch-control">
+          {isWindows ? (
+            <div className="settings-claude-scan-roots">
+              <label>{t('appPath.missing.scanRoots', '扫描范围')}</label>
+              <div className="settings-claude-scan-root-row">
+                <input
+                  type="text"
+                  className="settings-input settings-claude-scan-roots-input"
+                  value={scanRoots}
+                  placeholder={t(
+                    'appPath.missing.scanRootsPlaceholder',
+                    '可选，选择一个目录或盘符；留空时按盘符扫描 WindowsApps 并补充开始菜单应用。',
+                  )}
+                  readOnly
+                />
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => handlePickTraeScanRoot(target)}
+                  disabled={isAppPathResetDetecting(target)}
+                >
+                  {t('settings.general.codexPathSelect', '选择')}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => handleClearTraeScanRoot(target)}
+                  disabled={isAppPathResetDetecting(target) || !scanRoots.trim()}
+                >
+                  {t('common.clear', '清除')}
+                </button>
+              </div>
+            </div>
+          ) : null}
+          <div className="settings-claude-launch-row">
+            <input
+              type="text"
+              className="settings-input settings-input--path"
+              value={appPath}
+              placeholder={t('settings.general.traeAppPathPlaceholder', '默认路径')}
+              onChange={(e) => setTraeAppPathValue(target, e.target.value)}
+            />
+            <button
+              className="btn btn-secondary"
+              onClick={() => handlePickAppPath(target)}
+              disabled={isAppPathResetDetecting(target)}
+            >
+              {t('settings.general.traePathSelect', '选择')}
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => handleResetAppPath(target)}
+              disabled={isAppPathResetDetecting(target)}
+            >
+              <RefreshCw size={16} className={isAppPathResetDetecting(target) ? 'spin' : undefined} />
+              {isAppPathResetDetecting(target)
+                ? t('common.loading', '加载中...')
+                : getResetLabelByTarget(target)}
+            </button>
+          </div>
+          {showCandidates ? (
+            <div className="settings-claude-candidate-list">
+              {traeLaunchCandidates.map((candidate) => (
+                <button
+                  key={`${target}:${candidate.target_type}:${candidate.target}`}
+                  type="button"
+                  className={`settings-claude-candidate-item${
+                    appPath.trim() === candidate.target ? ' selected' : ''
+                  }`}
+                  onClick={() => handleSelectTraeLaunchCandidate(target, candidate)}
+                >
+                  <div className="settings-claude-candidate-main">
+                    <span>{candidate.label || displayName}</span>
+                    <span className="settings-claude-candidate-badge">EXE</span>
+                  </div>
+                  <div className="settings-claude-candidate-target">
+                    {candidate.target}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
   };
 
   const setCurrentAccountRefreshValue = (
@@ -1749,6 +2101,12 @@ export function SettingsPage() {
         return false;
       case 'trae':
         return parseRefresh(traeAutoRefresh) > 0;
+      case 'trae_solo':
+        return parseRefresh(traeSoloAutoRefresh) > 0;
+      case 'trae_cn':
+        return parseRefresh(traeCnAutoRefresh) > 0;
+      case 'trae_solo_cn':
+        return parseRefresh(traeSoloCnAutoRefresh) > 0;
       case 'zed':
         return parseRefresh(zedAutoRefresh) > 0;
     }
@@ -1861,6 +2219,14 @@ export function SettingsPage() {
         id: a.id,
         email: a.email ?? getDisplayEmail(a),
       }));
+    const getTraeAccounts = (target: TraeAppPathTarget) =>
+      useTraeAccountStore
+        .getState()
+        .accounts.filter((account) => getTraeAccountPlatformId(account) === target)
+        .map((account) => ({
+          id: account.id,
+          email: account.email || getTraeAccountDisplayEmail(account),
+        }));
 
     switch (platform) {
       case 'antigravity':
@@ -1888,7 +2254,13 @@ export function SettingsPage() {
       case 'qoder':
         return getProviderAccounts(useQoderAccountStore, getQoderAccountDisplayEmail);
       case 'trae':
-        return getProviderAccounts(useTraeAccountStore, getTraeAccountDisplayEmail);
+        return getTraeAccounts('trae');
+      case 'trae_solo':
+        return getTraeAccounts('trae_solo');
+      case 'trae_cn':
+        return getTraeAccounts('trae_cn');
+      case 'trae_solo_cn':
+        return getTraeAccounts('trae_solo_cn');
       case 'zed':
         return getProviderAccounts(useZedAccountStore, getZedAccountDisplayEmail);
       default:
@@ -2251,6 +2623,80 @@ export function SettingsPage() {
     </>
   );
 
+  const renderTraeVariantSettingsGroup = ({
+    target,
+    order,
+    titleKey,
+    titleDefault,
+    appPathTitleKey,
+    appPathTitleDefault,
+    autoRefresh,
+    setAutoRefresh,
+    autoRefreshCustomMode,
+    setAutoRefreshCustomMode,
+    autoRefreshIsPreset,
+    quotaAlertEnabled,
+    setQuotaAlertEnabled,
+    quotaAlertThreshold,
+    setQuotaAlertThreshold,
+    quotaAlertThresholdCustomMode,
+    setQuotaAlertThresholdCustomMode,
+    quotaAlertThresholdIsPreset,
+  }: {
+    target: TraeAppPathTarget;
+    order: number;
+    titleKey: string;
+    titleDefault: string;
+    appPathTitleKey: string;
+    appPathTitleDefault: string;
+    autoRefresh: string;
+    setAutoRefresh: (value: string) => void;
+    autoRefreshCustomMode: boolean;
+    setAutoRefreshCustomMode: (enabled: boolean) => void;
+    autoRefreshIsPreset: boolean;
+    quotaAlertEnabled: boolean;
+    setQuotaAlertEnabled: (enabled: boolean) => void;
+    quotaAlertThreshold: string;
+    setQuotaAlertThreshold: (value: string) => void;
+    quotaAlertThresholdCustomMode: boolean;
+    setQuotaAlertThresholdCustomMode: (enabled: boolean) => void;
+    quotaAlertThresholdIsPreset: boolean;
+  }) => {
+    const displayName = getTraeAppDisplayName(target);
+
+    return (
+      <div style={{ order }}>
+        <div className="group-title">{t(titleKey, titleDefault)}</div>
+        <div className="settings-group">
+          {renderPlatformAutoRefreshRow({
+            title: t('settings.general.platformAutoRefresh', {
+              defaultValue: '{{platform}} Auto Refresh Quota',
+              platform: displayName,
+            }),
+            description: t('settings.general.traeAutoRefreshDesc', 'Background auto-refresh interval'),
+            value: autoRefresh,
+            setValue: setAutoRefresh,
+            customMode: autoRefreshCustomMode,
+            setCustomMode: setAutoRefreshCustomMode,
+            isPreset: autoRefreshIsPreset,
+          })}
+          {renderCurrentAccountRefreshRow(target)}
+          {renderAccountLevelRefreshConfig(target)}
+          {renderTraeAppPathRow(target, appPathTitleKey, appPathTitleDefault)}
+          {renderPlatformQuotaAlertRows({
+            enabled: quotaAlertEnabled,
+            setEnabled: setQuotaAlertEnabled,
+            threshold: quotaAlertThreshold,
+            setThreshold: setQuotaAlertThreshold,
+            customMode: quotaAlertThresholdCustomMode,
+            setCustomMode: setQuotaAlertThresholdCustomMode,
+            isPreset: quotaAlertThresholdIsPreset,
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const autoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(autoRefresh);
   const codexAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(codexAutoRefresh);
   const claudeAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(claudeAutoRefresh);
@@ -2262,6 +2708,9 @@ export function SettingsPage() {
   const workbuddyAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(workbuddyAutoRefresh);
   const qoderAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(qoderAutoRefresh);
   const traeAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(traeAutoRefresh);
+  const traeSoloAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(traeSoloAutoRefresh);
+  const traeCnAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(traeCnAutoRefresh);
+  const traeSoloCnAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(traeSoloCnAutoRefresh);
   const zedAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(zedAutoRefresh);
   const cursorAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(cursorAutoRefresh);
   const geminiAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(geminiAutoRefresh);
@@ -2280,6 +2729,9 @@ export function SettingsPage() {
   const workbuddyQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(workbuddyQuotaAlertThreshold);
   const qoderQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(qoderQuotaAlertThreshold);
   const traeQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(traeQuotaAlertThreshold);
+  const traeSoloQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(traeSoloQuotaAlertThreshold);
+  const traeCnQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(traeCnQuotaAlertThreshold);
+  const traeSoloCnQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(traeSoloCnQuotaAlertThreshold);
   const zedQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(zedQuotaAlertThreshold);
   const cursorQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(cursorQuotaAlertThreshold);
   const geminiQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(geminiQuotaAlertThreshold);
@@ -2395,25 +2847,25 @@ export function SettingsPage() {
       <div className="page-tabs-row settings-page-tabs-row">
         <div className="page-tabs-label">{t('settings.title')}</div>
         <div className="page-tabs filter-tabs">
-          <button 
+          <button
             className={`filter-tab ${activeTab === 'general' ? 'active' : ''}`}
             onClick={() => setActiveTab('general')}
           >
             {t('settings.tabs.general')}
           </button>
-          <button 
+          <button
             className={`filter-tab ${activeTab === 'network' ? 'active' : ''}`}
             onClick={() => setActiveTab('network')}
           >
             {t('settings.tabs.network')}
           </button>
-          <button 
+          <button
             className={`filter-tab ${activeTab === 'data' ? 'active' : ''}`}
             onClick={() => setActiveTab('data')}
           >
             {t('settings.tabs.data', '数据管理')}
           </button>
-          <button 
+          <button
             className={`filter-tab ${activeTab === 'about' ? 'active' : ''}`}
             onClick={() => setActiveTab('about')}
           >
@@ -2436,9 +2888,9 @@ export function SettingsPage() {
                   <div className="row-desc">{t('settings.general.languageDesc')}</div>
                 </div>
                 <div className="row-control">
-                  <select 
-                    className="settings-select" 
-                    value={language} 
+                  <select
+                    className="settings-select"
+                    value={language}
                     onChange={(e) => setLanguage(normalizeLanguage(e.target.value))}
                   >
                     {languageOptions.map((option) => (
@@ -2454,9 +2906,9 @@ export function SettingsPage() {
                   <div className="row-desc">{t('settings.general.themeDesc')}</div>
                 </div>
                 <div className="row-control">
-                  <select 
-                    className="settings-select" 
-                    value={theme} 
+                  <select
+                    className="settings-select"
+                    value={theme}
                     onChange={(e) => setTheme(e.target.value)}
                   >
                     <option value="light">{t('settings.general.themeLight')}</option>
@@ -2472,9 +2924,9 @@ export function SettingsPage() {
                   <div className="row-desc">{t('settings.general.defaultTerminalDesc', 'Gemini CLI 打开时使用的终端')}</div>
                 </div>
                 <div className="row-control">
-                  <select 
-                    className="settings-select" 
-                    value={defaultTerminal} 
+                  <select
+                    className="settings-select"
+                    value={defaultTerminal}
                     onChange={(e) => setDefaultTerminal(e.target.value)}
                   >
                     {terminalOptions.map((option) => (
@@ -2525,9 +2977,9 @@ export function SettingsPage() {
                   <div className="row-desc">{t('settings.general.closeBehaviorDesc')}</div>
                 </div>
                 <div className="row-control">
-                  <select 
-                    className="settings-select" 
-                    value={closeBehavior} 
+                  <select
+                    className="settings-select"
+                    value={closeBehavior}
                     onChange={(e) => setCloseBehavior(e.target.value as 'ask' | 'minimize' | 'quit')}
                   >
                     <option value="ask">{t('settings.general.closeBehaviorAsk')}</option>
@@ -2878,7 +3330,7 @@ export function SettingsPage() {
                       </select>
                     )}
                   </div>
-                  
+
                   {hasActiveResetTasks && (
                     <div style={{
                       display: 'flex',
@@ -5081,8 +5533,39 @@ export function SettingsPage() {
                       <div className="row-title">{t('settings.general.traeAppPath', 'Trae 启动路径')}</div>
                       <div className="row-desc">{t('settings.general.traeAppPathDesc', '留空则使用默认路径')}</div>
                     </div>
-                    <div className="row-control row-control--grow">
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
+                    <div className="row-control row-control--grow settings-claude-launch-control">
+                      {isWindows ? (
+                        <div className="settings-claude-scan-roots">
+                          <label>{t('appPath.missing.scanRoots', '扫描范围')}</label>
+                          <div className="settings-claude-scan-root-row">
+                            <input
+                              type="text"
+                              className="settings-input settings-claude-scan-roots-input"
+                              value={traeAppScanRoots}
+                              placeholder={t(
+                                'appPath.missing.scanRootsPlaceholder',
+                                '可选，选择一个目录或盘符；留空时按盘符扫描 WindowsApps 并补充开始菜单应用。',
+                              )}
+                              readOnly
+                            />
+                            <button
+                              className="btn btn-secondary"
+                              onClick={() => handlePickTraeScanRoot('trae')}
+                              disabled={isAppPathResetDetecting('trae')}
+                            >
+                              {t('settings.general.codexPathSelect', '选择')}
+                            </button>
+                            <button
+                              className="btn btn-secondary"
+                              onClick={() => handleClearTraeScanRoot('trae')}
+                              disabled={isAppPathResetDetecting('trae') || !traeAppScanRoots.trim()}
+                            >
+                              {t('common.clear', '清除')}
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                      <div className="settings-claude-launch-row">
                         <input
                           type="text"
                           className="settings-input settings-input--path"
@@ -5108,6 +5591,28 @@ export function SettingsPage() {
                             : getResetLabelByTarget('trae')}
                         </button>
                       </div>
+                      {isWindows && traeLaunchCandidatesTarget === 'trae' && traeLaunchCandidates.length > 0 ? (
+                        <div className="settings-claude-candidate-list">
+                          {traeLaunchCandidates.map((candidate) => (
+                            <button
+                              key={`${candidate.target_type}:${candidate.target}`}
+                              type="button"
+                              className={`settings-claude-candidate-item${
+                                traeAppPath.trim() === candidate.target ? ' selected' : ''
+                              }`}
+                              onClick={() => handleSelectTraeLaunchCandidate('trae', candidate)}
+                            >
+                              <div className="settings-claude-candidate-main">
+                                <span>{candidate.label || 'Trae'}</span>
+                                <span className="settings-claude-candidate-badge">EXE</span>
+                              </div>
+                              <div className="settings-claude-candidate-target">
+                                {candidate.target}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
@@ -5192,6 +5697,69 @@ export function SettingsPage() {
                   )}
                 </div>
               </div>
+
+              {renderTraeVariantSettingsGroup({
+                target: 'trae_solo',
+                order: platformSettingsOrder.trae_solo,
+                titleKey: 'quickSettings.traeSolo.title',
+                titleDefault: 'TRAE SOLO 设置',
+                appPathTitleKey: 'settings.general.traeSoloAppPath',
+                appPathTitleDefault: 'TRAE SOLO 启动路径',
+                autoRefresh: traeSoloAutoRefresh,
+                setAutoRefresh: setTraeSoloAutoRefresh,
+                autoRefreshCustomMode: traeSoloAutoRefreshCustomMode,
+                setAutoRefreshCustomMode: setTraeSoloAutoRefreshCustomMode,
+                autoRefreshIsPreset: traeSoloAutoRefreshIsPreset,
+                quotaAlertEnabled: traeSoloQuotaAlertEnabled,
+                setQuotaAlertEnabled: setTraeSoloQuotaAlertEnabled,
+                quotaAlertThreshold: traeSoloQuotaAlertThreshold,
+                setQuotaAlertThreshold: setTraeSoloQuotaAlertThreshold,
+                quotaAlertThresholdCustomMode: traeSoloQuotaAlertThresholdCustomMode,
+                setQuotaAlertThresholdCustomMode: setTraeSoloQuotaAlertThresholdCustomMode,
+                quotaAlertThresholdIsPreset: traeSoloQuotaAlertThresholdIsPreset,
+              })}
+
+              {renderTraeVariantSettingsGroup({
+                target: 'trae_cn',
+                order: platformSettingsOrder.trae_cn,
+                titleKey: 'quickSettings.traeCn.title',
+                titleDefault: 'Trae CN 设置',
+                appPathTitleKey: 'settings.general.traeCnAppPath',
+                appPathTitleDefault: 'Trae CN 启动路径',
+                autoRefresh: traeCnAutoRefresh,
+                setAutoRefresh: setTraeCnAutoRefresh,
+                autoRefreshCustomMode: traeCnAutoRefreshCustomMode,
+                setAutoRefreshCustomMode: setTraeCnAutoRefreshCustomMode,
+                autoRefreshIsPreset: traeCnAutoRefreshIsPreset,
+                quotaAlertEnabled: traeCnQuotaAlertEnabled,
+                setQuotaAlertEnabled: setTraeCnQuotaAlertEnabled,
+                quotaAlertThreshold: traeCnQuotaAlertThreshold,
+                setQuotaAlertThreshold: setTraeCnQuotaAlertThreshold,
+                quotaAlertThresholdCustomMode: traeCnQuotaAlertThresholdCustomMode,
+                setQuotaAlertThresholdCustomMode: setTraeCnQuotaAlertThresholdCustomMode,
+                quotaAlertThresholdIsPreset: traeCnQuotaAlertThresholdIsPreset,
+              })}
+
+              {renderTraeVariantSettingsGroup({
+                target: 'trae_solo_cn',
+                order: platformSettingsOrder.trae_solo_cn,
+                titleKey: 'quickSettings.traeSoloCn.title',
+                titleDefault: 'TRAE SOLO CN 设置',
+                appPathTitleKey: 'settings.general.traeSoloCnAppPath',
+                appPathTitleDefault: 'TRAE SOLO CN 启动路径',
+                autoRefresh: traeSoloCnAutoRefresh,
+                setAutoRefresh: setTraeSoloCnAutoRefresh,
+                autoRefreshCustomMode: traeSoloCnAutoRefreshCustomMode,
+                setAutoRefreshCustomMode: setTraeSoloCnAutoRefreshCustomMode,
+                autoRefreshIsPreset: traeSoloCnAutoRefreshIsPreset,
+                quotaAlertEnabled: traeSoloCnQuotaAlertEnabled,
+                setQuotaAlertEnabled: setTraeSoloCnQuotaAlertEnabled,
+                quotaAlertThreshold: traeSoloCnQuotaAlertThreshold,
+                setQuotaAlertThreshold: setTraeSoloCnQuotaAlertThreshold,
+                quotaAlertThresholdCustomMode: traeSoloCnQuotaAlertThresholdCustomMode,
+                setQuotaAlertThresholdCustomMode: setTraeSoloCnQuotaAlertThresholdCustomMode,
+                quotaAlertThresholdIsPreset: traeSoloCnQuotaAlertThresholdIsPreset,
+              })}
 
               <div style={{ order: platformSettingsOrder.workbuddy }}>
                 <div className="group-title">{t('quickSettings.workbuddy.title', 'WorkBuddy 设置')}</div>
@@ -5952,10 +6520,10 @@ export function SettingsPage() {
                 </div>
                 <div className="row-control">
                   <label className="switch">
-                    <input 
-                      type="checkbox" 
-                      checked={wsEnabled} 
-                      onChange={(e) => setWsEnabled(e.target.checked)} 
+                    <input
+                      type="checkbox"
+                      checked={wsEnabled}
+                      onChange={(e) => setWsEnabled(e.target.checked)}
                     />
                     <span className="slider"></span>
                   </label>
@@ -5972,8 +6540,8 @@ export function SettingsPage() {
                       </div>
                     </div>
                     <div className="row-control">
-                      <input 
-                        type="number" 
+                      <input
+                        type="number"
                         className="settings-input"
                         value={wsPort}
                         onChange={(e) => setWsPort(e.target.value)}
@@ -5983,13 +6551,13 @@ export function SettingsPage() {
                       />
                     </div>
                   </div>
-                  
+
                   {actualPort && (
                     <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
                       <div className="row-label">
                         <div className="row-title">{t('settings.network.currentPort')}</div>
                         <div className="row-desc">
-                          {actualPort === parseInt(wsPort, 10) 
+                          {actualPort === parseInt(wsPort, 10)
                             ? t('settings.network.portNormal')
                             : t('settings.network.portFallback')
                                 .replace('{configured}', wsPort)
@@ -5997,8 +6565,8 @@ export function SettingsPage() {
                         </div>
                       </div>
                       <div className="row-control">
-                        <span style={{ 
-                          fontFamily: 'var(--font-mono)', 
+                        <span style={{
+                          fontFamily: 'var(--font-mono)',
                           fontSize: '14px',
                           color: actualPort === parseInt(wsPort, 10) ? 'var(--accent)' : 'var(--warning, #f59e0b)'
                         }}>
@@ -6188,12 +6756,12 @@ export function SettingsPage() {
                 </>
               )}
             </div>
-            
+
             {needsRestart && (
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '8px', 
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
                 padding: '12px 16px',
                 marginTop: '12px',
                 background: 'rgba(245, 158, 11, 0.1)',
@@ -6207,8 +6775,8 @@ export function SettingsPage() {
             )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
-                <button 
-                  className="btn btn-primary" 
+                <button
+                  className="btn btn-primary"
                   onClick={handleSaveNetworkConfig}
                   disabled={networkSaving}
                 >
@@ -6233,12 +6801,12 @@ export function SettingsPage() {
                 <h2>{t('settings.about.appName')}</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div className="version-tag">{appVersion}</div>
-                  <button 
+                  <button
                     className="btn btn-sm btn-ghost"
                     onClick={handleCheckUpdate}
                     disabled={updateChecking}
-                    style={{ 
-                      fontSize: '12px', 
+                    style={{
+                      fontSize: '12px',
                       padding: '4px 10px',
                       display: 'flex',
                       alignItems: 'center',
@@ -6286,8 +6854,8 @@ export function SettingsPage() {
                 <h3>{t('settings.about.author')}</h3>
                 <p>jlcodes99</p>
               </button>
-              
-              
+
+
               <button className="credit-item" onClick={() => openLink('https://github.com/jlcodes99/cockpit-tools')}>
                 <div className="credit-icon" style={{ color: '#0f172a' }}><Github size={24} /></div>
                 <h3>{t('settings.about.github')}</h3>

@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Платформа Zed",
     "expandSidebar": "Развернуть боковую панель",
@@ -790,7 +793,11 @@
       "antigravityLaunchOnSwitch": "Запускать Antigravity IDE при переключении",
       "antigravityLaunchOnSwitchDesc": "Если выключено, переключение только записывает данные аккаунта по умолчанию Antigravity IDE и не закрывает, не запускает и не перезапускает приложение.",
       "tokenKeeper": "Поддержка auth",
-      "tokenKeeperDesc": "Обновляет токены аккаунтов небольшими пакетами только перед истечением авторизации, снижая фоновые запросы при большом числе аккаунтов."
+      "tokenKeeperDesc": "Обновляет токены аккаунтов небольшими пакетами только перед истечением авторизации, снижая фоновые запросы при большом числе аккаунтов.",
+      "platformAutoRefresh": "Автообновление квоты {{platform}}",
+      "traeSoloAppPath": "Путь запуска TRAE SOLO",
+      "traeCnAppPath": "Путь запуска Trae CN",
+      "traeSoloCnAppPath": "Путь запуска TRAE SOLO CN"
     },
     "network": {
       "apiTitle": "API антигравитационной кабины",
@@ -2055,6 +2062,7 @@
     "quota": {
       "hourly": "Квота 5 часов",
       "weekly": "Недельная квота",
+      "additional": "Дополнительная квота",
       "reset": "Сброс",
       "weeklyBlocksHourly": "Недельная квота равна 0, поэтому 5-часовая квота недоступна",
       "resetCredits": "Сбросы {{count}}",
@@ -2979,7 +2987,9 @@
       "filterWithin24h": "24 ч ({{count}})",
       "filterWithin7d": "7 дн. ({{count}})",
       "filterWithin30d": "30 дн. ({{count}})",
-      "filterMissing": "Неизвестно ({{count}})"
+      "filterMissing": "Неизвестно ({{count}})",
+      "accessTokenOnlyUsable": "Токен доступен",
+      "accessTokenOnlyUsableDetail": "Интерфейс подписки ограничен, но квота и использование Codex работают нормально"
     },
     "apiSwitchNotice": {
       "title": "Сеансы Codex скрыты",
@@ -2998,7 +3008,7 @@
     "accountNote": {
       "title": "Заметка аккаунта",
       "label": "Заметка аккаунта",
-      "desc": "Добавьте 2FA, пароль, телефон и другие заметки для {{account}}.",
+      "desc": "Добавьте пароль, 2FA, URL почты, телефон и другие заметки для {{account}}.",
       "twoFactorSecretLabel": "Секрет 2FA",
       "twoFactorSecretShort": "2FA",
       "twoFactorSecretPlaceholder": "Секрет Base32 или URI otpauth://",
@@ -3012,13 +3022,30 @@
       "phoneNumberLabel": "Телефон",
       "phoneShort": "Телефон",
       "phoneNumberPlaceholder": "Привязанный номер телефона",
+      "mailUrlLabel": "URL почты",
+      "mailUrlPlaceholder": "Введите URL открываемой страницы почты",
+      "mailPreviewRefresh": "Обновить почту",
+      "mailPreviewOpen": "Открыть в браузере",
+      "mailPreviewLoading": "Чтение почты...",
+      "mailPreviewNoCode": "Непрерывный 6-значный код не найден",
+      "mailPreviewFetchFailed": "Не удалось прочитать почту: {{error}}",
+      "mailPreviewUrlRequired": "Введите URL почты",
+      "mailPreviewUrlInvalid": "Недопустимый URL почты. Укажите полный адрес http:// или https://.",
+      "mailPreviewUnsupportedProtocol": "URL почты поддерживает только http или https.",
+      "mailPreviewHttpFailed": "Запрос URL почты не выполнен: HTTP {{status}}",
+      "mailPreviewCode": "Последний код из письма",
+      "mailPreviewStatusInitial": "Получено в {{time}}",
+      "mailPreviewStatusChanged": "Новый код · {{time}}",
+      "mailPreviewStatusUnchanged": "Без изменений · {{time}}",
+      "mailPreviewTruncated": "Содержимое обрезано",
+      "mailOpenFailed": "Не удалось открыть URL почты: {{error}}",
       "otherNoteLabel": "Другие заметки",
       "otherNoteShort": "Заметка",
       "placeholder": "Заметки к выдаче, резервная почта или данные аккаунта",
-      "exportSensitiveNotice": "Экспорт содержит секреты 2FA, пароли или номера телефонов. Сохраняйте его только в надежном месте.",
+      "exportSensitiveNotice": "Экспорт содержит секреты 2FA, пароли, номера телефонов или URL почты. Сохраняйте его только в надежном месте.",
       "exportSensitiveIncluded": "Включить чувствительные заметки",
       "exportSensitiveExcluded": "Исключить чувствительные заметки",
-      "exportSensitiveToggleHint": "Определяет, включает ли экспорт JSON секреты 2FA, пароли и номера телефонов.",
+      "exportSensitiveToggleHint": "Определяет, включает ли экспорт JSON секреты 2FA, пароли, номера телефонов и URL почты.",
       "show": "Показать",
       "hide": "Скрыть",
       "emptyTitle": "Добавить заметку аккаунта",
@@ -3588,6 +3615,18 @@
     "qoderCn": {
       "title": "QoderWork CN Settings",
       "appPath": "QoderWork CN Path"
+    },
+    "traeSolo": {
+      "appPath": "Путь TRAE SOLO",
+      "title": "Настройки TRAE SOLO"
+    },
+    "traeCn": {
+      "appPath": "Путь Trae CN",
+      "title": "Настройки Trae CN"
+    },
+    "traeSoloCn": {
+      "appPath": "Путь TRAE SOLO CN",
+      "title": "Настройки TRAE SOLO CN"
     }
   },
   "quotaAlert": {
@@ -4352,17 +4391,21 @@
   "trae": {
     "title": "Управление аккаунтами Trae",
     "empty": {
-      "description": "Нажмите «Добавить аккаунт», чтобы начать управлять аккаунтами Trae, или импортируйте их из локальных данных Trae либо из JSON-файла."
+      "description": "Нажмите «Добавить аккаунт», чтобы начать управлять аккаунтами Trae, или импортируйте их из локальных данных Trae либо из JSON-файла.",
+      "descriptionWithPlatform": "Нажмите «Добавить аккаунт», чтобы управлять аккаунтами {{platform}}, либо импортируйте локальные данные {{platform}} или JSON-файл."
     },
     "addModal": {
-      "title": "Добавить аккаунт Trae"
+      "title": "Добавить аккаунт Trae",
+      "titleWithPlatform": "Добавить аккаунт {{platform}}"
     },
     "oauth": {
-      "desc": "Нажмите кнопку ниже и завершите авторизацию Trae OAuth в браузере."
+      "desc": "Нажмите кнопку ниже и завершите авторизацию Trae OAuth в браузере.",
+      "descWithPlatform": "Нажмите кнопку ниже и завершите OAuth-авторизацию {{platform}} в браузере."
     },
     "import": {
       "localDesc": "Импортирует текущий авторизованный аккаунт, информацию о плане и кэшированные данные квоты из локального каталога конфигурации Trae.",
-      "jsonTab": "JSON-файл"
+      "jsonTab": "JSON-файл",
+      "localDescWithPlatform": "Импортирует текущий вошедший аккаунт, сведения о плане и кэшированные данные квоты из локального каталога настроек {{platform}}."
     },
     "quota": {
       "usedOfTotal": "Использовано $ {{used}} из $ {{total}}",
@@ -4388,7 +4431,12 @@
       "title": "Руководство по аккаунту Trae (нажмите, чтобы развернуть или свернуть)",
       "desc": "Поддерживает официальный вход через OAuth, локальный импорт, импорт JSON и переключение аккаунта через локальную инъекцию. При переключении данные записываются по реальным правилам хранения клиента Trae.",
       "permission": "Область разрешений: читает и записывает поля, связанные со входом, в локальном Trae storage.json для импорта аккаунта, инъекции переключения аккаунта и отображения плана. Все данные обрабатываются только локально на вашем устройстве.",
-      "network": "Сетевой диапазон: вход OAuth, обновление токена и запросы плана вызывают официальные API Trae. Локальные файлы аккаунтов и сырое содержимое хранилища не загружаются в сторонние сервисы."
+      "network": "Сетевой диапазон: вход OAuth, обновление токена и запросы плана вызывают официальные API Trae. Локальные файлы аккаунтов и сырое содержимое хранилища не загружаются в сторонние сервисы.",
+      "titleWithPlatform": "Руководство по аккаунтам {{platform}} (нажмите, чтобы раскрыть/свернуть)",
+      "descWithPlatform": "Поддерживаются официальный OAuth {{platform}}, локальный импорт, импорт JSON и локальное переключение аккаунта через запись данных. Переключение выполняет запись по реальным правилам клиента {{platform}}.",
+      "permissionWithPlatform": "Область разрешений: чтение и запись полей входа в локальном storage.json {{platform}} для импорта аккаунта, переключения и отображения плана. Все данные обрабатываются локально.",
+      "networkGlobal": "Сеть: OAuth-вход {{platform}}, обновление токенов и запросы плана обращаются к официальным API trae.ai / traeapi.us. Локальные файлы аккаунтов и сырые данные не загружаются в сторонние сервисы.",
+      "networkCn": "Сеть: OAuth-вход {{platform}}, обновление токенов и запросы плана обращаются к официальным API trae.cn / trae.com.cn. Локальные файлы аккаунтов и сырые данные не загружаются в сторонние сервисы."
     }
   },
   "codebuddyCn": {

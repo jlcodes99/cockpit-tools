@@ -40,6 +40,9 @@ fn normalize_platform(platform: &str) -> Result<&'static str, String> {
         "qoderwork_cn" | "qoderwork-cn" => Ok("qoderwork_cn"),
         "qoder_cn" | "qoder-cn" => Ok("qoder_cn"),
         "trae" => Ok("trae"),
+        "trae_solo" | "trae-solo" => Ok("trae_solo"),
+        "trae_cn" | "trae-cn" => Ok("trae_cn"),
+        "trae_solo_cn" | "trae-solo-cn" => Ok("trae_solo_cn"),
         "workbuddy" => Ok("workbuddy"),
         "github_copilot" | "github-copilot" | "ghcp" => Ok("github_copilot"),
         other => Err(format!("不支持的平台: {}", other)),
@@ -178,6 +181,19 @@ mod tests {
         assert_eq!(
             get_current_account_id("codebuddy_cn").expect("get cn canonical"),
             Some("cn-account".to_string())
+        );
+
+        set_current_account_id("trae-solo", Some("solo-account")).expect("set trae solo alias");
+        assert_eq!(
+            get_current_account_id("trae_solo").expect("get trae solo canonical"),
+            Some("solo-account".to_string())
+        );
+
+        set_current_account_id("trae-solo-cn", Some("solo-cn-account"))
+            .expect("set trae solo cn alias");
+        assert_eq!(
+            get_current_account_id("trae_solo_cn").expect("get trae solo cn canonical"),
+            Some("solo-cn-account".to_string())
         );
     }
 

@@ -29,6 +29,7 @@ use tauri_plugin_opener::OpenerExt;
 
 static CODEX_POST_REFRESH_CHECK_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 const CODEX_BATCH_DELETE_JOBS_DIR: &str = "codex_batch_delete_jobs";
+const CODEX_MAIL_PREVIEW_MAX_BYTES: usize = 512 * 1024;
 static CODEX_BATCH_DELETE_JOBS: LazyLock<Mutex<HashMap<String, CodexBatchDeleteJob>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -1357,6 +1358,7 @@ pub async fn update_codex_account_note(
     two_factor_secret: Option<String>,
     account_password: Option<String>,
     phone_number: Option<String>,
+    mail_url: Option<String>,
 ) -> Result<CodexAccount, String> {
     codex_account::update_account_note(
         &account_id,
@@ -1365,6 +1367,7 @@ pub async fn update_codex_account_note(
             two_factor_secret,
             account_password,
             phone_number,
+            mail_url,
         },
     )
 }
@@ -1376,6 +1379,7 @@ pub async fn create_pending_codex_oauth_account(
     two_factor_secret: Option<String>,
     account_password: Option<String>,
     phone_number: Option<String>,
+    mail_url: Option<String>,
 ) -> Result<CodexAccount, String> {
     codex_account::create_pending_oauth_account(
         email,
@@ -1384,8 +1388,73 @@ pub async fn create_pending_codex_oauth_account(
             two_factor_secret,
             account_password,
             phone_number,
+            mail_url,
         },
     )
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexMailPreviewFetchResult {
+    pub status: u16,
+    pub content_type: Option<String>,
+    pub body: String,
+    pub truncated: bool,
+}
+
+#[tauri::command]
+pub async fn fetch_codex_account_note_mail_url(
+    mail_url: String,
+) -> Result<CodexMailPreviewFetchResult, String> {
+    let mail_url = mail_url.trim();
+    if mail_url.is_empty() {
+        return Err("MAIL_URL_EMPTY".to_string());
+    }
+    let parsed = reqwest::Url::parse(mail_url)
+        .map_err(|_| "MAIL_URL_INVALID".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("MAIL_URL_UNSUPPORTED_SCHEME".to_string());
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(12))
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .user_agent("CockpitTools-MailPreview/1.0")
+        .build()
+        .map_err(|e| format!("MAIL_PREVIEW_CLIENT_FAILED: {}", e))?;
+    let response = client
+        .get(parsed)
+        .send()
+        .await
+        .map_err(|e| format!("MAIL_PREVIEW_REQUEST_FAILED: {}", e))?;
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.to_string());
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("MAIL_PREVIEW_READ_FAILED: {}", e))?;
+    let truncated = bytes.len() > CODEX_MAIL_PREVIEW_MAX_BYTES;
+    let visible_bytes = if truncated {
+        &bytes[..CODEX_MAIL_PREVIEW_MAX_BYTES]
+    } else {
+        &bytes[..]
+    };
+    let body = String::from_utf8_lossy(visible_bytes).into_owned();
+
+    if !status.is_success() {
+        return Err(format!("MAIL_PREVIEW_HTTP_FAILED:{}", status.as_u16()));
+    }
+
+    Ok(CodexMailPreviewFetchResult {
+        status: status.as_u16(),
+        content_type,
+        body,
+        truncated,
+    })
 }
 
 /// 检查 Codex OAuth 端口是否被占用

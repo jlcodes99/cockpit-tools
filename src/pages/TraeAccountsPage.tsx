@@ -42,10 +42,12 @@ import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDrop
 import { TraeInstancesContent } from './TraeInstancesPage';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import * as traeService from '../services/traeService';
+import type { TraePlatformId } from '../services/traeService';
 import type { TraeAccount } from '../types/trae';
 import {
   getTraeAccountDisplayEmail,
   getTraeAccountDisplayName,
+  getTraeAccountPlatformId,
   getTraeLoginProvider,
   getTraePlanBadge,
   getTraePlanBadgeClass,
@@ -74,11 +76,49 @@ import {
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
 
-const TRAE_CURRENT_ACCOUNT_ID_KEY = 'agtools.trae.current_account_id';
-const TRAE_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.trae.flow_notice_collapsed';
-const TRAE_FILTER_PERSISTENCE_SCOPE = normalizeAccountsOverviewScope('Trae');
 const FILTER_TYPES_FIELD = 'filter_types';
 const TRAE_KNOWN_SORT_KEYS = ['created_at', 'plan', 'quota'] as const;
+
+const TRAE_PLATFORM_PAGE_CONFIG: Record<TraePlatformId, {
+  platformKey: string;
+  currentAccountIdKey: string;
+  flowNoticeCollapsedKey: string;
+  exportFilePrefix: string;
+  networkNoticeKey: string;
+}> = {
+  trae: {
+    platformKey: 'Trae',
+    currentAccountIdKey: 'agtools.trae.current_account_id',
+    flowNoticeCollapsedKey: 'agtools.trae.flow_notice_collapsed',
+    exportFilePrefix: 'trae_accounts',
+    networkNoticeKey: 'trae.flowNotice.networkGlobal',
+  },
+  trae_solo: {
+    platformKey: 'TRAE SOLO',
+    currentAccountIdKey: 'agtools.trae_solo.current_account_id',
+    flowNoticeCollapsedKey: 'agtools.trae_solo.flow_notice_collapsed',
+    exportFilePrefix: 'trae_solo_accounts',
+    networkNoticeKey: 'trae.flowNotice.networkGlobal',
+  },
+  trae_cn: {
+    platformKey: 'Trae CN',
+    currentAccountIdKey: 'agtools.trae_cn.current_account_id',
+    flowNoticeCollapsedKey: 'agtools.trae_cn.flow_notice_collapsed',
+    exportFilePrefix: 'trae_cn_accounts',
+    networkNoticeKey: 'trae.flowNotice.networkCn',
+  },
+  trae_solo_cn: {
+    platformKey: 'TRAE SOLO CN',
+    currentAccountIdKey: 'agtools.trae_solo_cn.current_account_id',
+    flowNoticeCollapsedKey: 'agtools.trae_solo_cn.flow_notice_collapsed',
+    exportFilePrefix: 'trae_solo_cn_accounts',
+    networkNoticeKey: 'trae.flowNotice.networkCn',
+  },
+};
+
+interface TraeAccountsPageProps {
+  platformId?: TraePlatformId;
+}
 
 type TraeQuotaSummary = {
   percentage: number | null;
@@ -120,50 +160,126 @@ function formatTraeMoney(value: number | null | undefined): string {
   return `$${formatNumber(value)}`;
 }
 
-export function TraeAccountsPage() {
+function getTraeAccountSwitchLabel(account: TraeAccount): string {
+  const email = getTraeAccountDisplayEmail(account);
+  const label = email === 'unknown' ? getTraeAccountDisplayName(account) : email;
+  return label === 'unknown' ? (account.user_id || account.id) : label;
+}
+
+export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps) {
+  const platformConfig = TRAE_PLATFORM_PAGE_CONFIG[platformId];
+  const filterPersistenceScopeSeed = platformConfig.platformKey;
+  const targetFilterPersistenceScope = normalizeAccountsOverviewScope(filterPersistenceScopeSeed);
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
   const [filterTypes, setFilterTypes] = useState<string[]>(() =>
-    readAccountsOverviewFilterPersistenceEnabled(TRAE_FILTER_PERSISTENCE_SCOPE)
-      ? readAccountsOverviewFilterStringArray(TRAE_FILTER_PERSISTENCE_SCOPE, FILTER_TYPES_FIELD)
+    readAccountsOverviewFilterPersistenceEnabled(targetFilterPersistenceScope)
+      ? readAccountsOverviewFilterStringArray(targetFilterPersistenceScope, FILTER_TYPES_FIELD)
       : [],
   );
   const untaggedKey = '__untagged__';
 
   const store = useTraeAccountStore();
+  const platformAccounts = useMemo(
+    () => store.accounts.filter((account) => getTraeAccountPlatformId(account) === platformId),
+    [platformId, store.accounts],
+  );
+  const [targetCurrentAccountId, setTargetCurrentAccountIdState] = useState<string | null>(() => {
+    try {
+      const value = localStorage.getItem(platformConfig.currentAccountIdKey);
+      return value && value.trim() ? value : null;
+    } catch {
+      return null;
+    }
+  });
+  const setTargetCurrentAccountId = useCallback(
+    (accountId: string | null) => {
+      const normalized = accountId?.trim() || null;
+      setTargetCurrentAccountIdState(normalized);
+      try {
+        if (normalized) {
+          localStorage.setItem(platformConfig.currentAccountIdKey, normalized);
+        } else {
+          localStorage.removeItem(platformConfig.currentAccountIdKey);
+        }
+      } catch {
+        // ignore local cache failures
+      }
+    },
+    [platformConfig.currentAccountIdKey],
+  );
+  const loadTargetCurrentAccountId = useCallback(async () => {
+    try {
+      setTargetCurrentAccountId(await traeService.getTraeCurrentAccountId(platformId));
+    } catch (error) {
+      console.warn('[Trae Accounts] Failed to load target current account:', error);
+      setTargetCurrentAccountId(null);
+    }
+  }, [platformId, setTargetCurrentAccountId]);
 
-  const page = useProviderAccountsPage<TraeAccount>({
-    platformKey: 'Trae',
-    oauthLogPrefix: 'TraeOAuth',
-    flowNoticeCollapsedKey: TRAE_FLOW_NOTICE_COLLAPSED_KEY,
-    currentAccountIdKey: TRAE_CURRENT_ACCOUNT_ID_KEY,
-    exportFilePrefix: 'trae_accounts',
-    store: {
-      accounts: store.accounts,
-      currentAccountId: store.currentAccountId,
+  useEffect(() => {
+    void loadTargetCurrentAccountId();
+  }, [loadTargetCurrentAccountId, platformAccounts.length]);
+
+  const pageStore = useMemo(
+    () => ({
+      accounts: platformAccounts,
+      currentAccountId: targetCurrentAccountId,
       loading: store.loading,
       error: store.error,
       fetchAccounts: store.fetchAccounts,
-      fetchCurrentAccountId: store.fetchCurrentAccountId,
+      fetchCurrentAccountId: () => traeService.getTraeCurrentAccountId(platformId),
       deleteAccounts: store.deleteAccounts,
       refreshToken: store.refreshToken,
       refreshAllTokens: store.refreshAllTokens,
-      setCurrentAccountId: store.setCurrentAccountId,
+      setCurrentAccountId: setTargetCurrentAccountId,
       updateAccountTags: store.updateAccountTags,
-    },
-    oauthService: {
-      startLogin: traeService.traeOauthLoginStart,
-      completeLogin: (loginId: string) => traeService.traeOauthLoginComplete(loginId),
-      cancelLogin: (loginId?: string) => traeService.traeOauthLoginCancel(loginId),
-      submitCallbackUrl: (loginId: string, callbackUrl: string) =>
-        traeService.traeOauthSubmitCallbackUrl(loginId, callbackUrl),
-    },
-    dataService: {
+    }),
+    [
+      platformId,
+      setTargetCurrentAccountId,
+      store.deleteAccounts,
+      store.error,
+      store.fetchAccounts,
+      store.loading,
+      store.refreshAllTokens,
+      store.refreshToken,
+      store.updateAccountTags,
+      targetCurrentAccountId,
+      platformAccounts,
+    ],
+  );
+  const dataService = useMemo(
+    () => ({
       importFromJson: traeService.importTraeFromJson,
-      importFromLocal: traeService.importTraeFromLocal,
+      importFromLocal: async () => {
+        const imported = await traeService.importTraeFromLocal(platformId);
+        await loadTargetCurrentAccountId();
+        return imported;
+      },
       exportAccounts: traeService.exportTraeAccounts,
-      injectToVSCode: traeService.injectTraeAccount,
+      injectToVSCode: (accountId: string) => traeService.injectTraeAccount(accountId, platformId),
+    }),
+    [loadTargetCurrentAccountId, platformId],
+  );
+
+  const page = useProviderAccountsPage<TraeAccount>({
+    platformKey: platformConfig.platformKey,
+    oauthLogPrefix: 'TraeOAuth',
+    flowNoticeCollapsedKey: platformConfig.flowNoticeCollapsedKey,
+    currentAccountIdKey: platformConfig.currentAccountIdKey,
+    exportFilePrefix: platformConfig.exportFilePrefix,
+    store: pageStore,
+    oauthService: {
+      startLogin: () => traeService.traeOauthLoginStart(platformId),
+      completeLogin: (loginId: string) =>
+        traeService.traeOauthLoginComplete(loginId, platformId),
+      cancelLogin: (loginId?: string) =>
+        traeService.traeOauthLoginCancel(loginId, platformId),
+      submitCallbackUrl: (loginId: string, callbackUrl: string) =>
+        traeService.traeOauthSubmitCallbackUrl(loginId, callbackUrl, platformId),
     },
-    getDisplayEmail: (account) => getTraeAccountDisplayEmail(account),
+    dataService,
+    getDisplayEmail: getTraeAccountSwitchLabel,
   });
 
   const {
@@ -296,7 +412,7 @@ export function TraeAccountsPage() {
     setFilterTypes([]);
   }, []);
 
-  const accounts = store.accounts;
+  const accounts = platformAccounts;
   const loading = store.loading;
 
   const isAbnormalAccount = useCallback(
@@ -418,7 +534,7 @@ export function TraeAccountsPage() {
   const exportSelectionCount = getScopedSelectedCount(filteredIds);
   const pagination = usePagination({
     items: filteredAccounts,
-    storageKey: buildPaginationPageSizeStorageKey('Trae'),
+    storageKey: buildPaginationPageSizeStorageKey(platformConfig.platformKey),
   });
   const paginatedAccounts = pagination.pageItems;
   const paginatedIds = useMemo(() => paginatedAccounts.map((account) => account.id), [paginatedAccounts]);
@@ -967,7 +1083,12 @@ export function TraeAccountsPage() {
 
   return (
     <div className="ghcp-accounts-page trae-accounts-page">
-      <PlatformOverviewTabsHeader platform="trae" active={activeTab} onTabChange={setActiveTab} />
+      <PlatformOverviewTabsHeader
+        platform={platformId}
+        active={activeTab}
+        onTabChange={setActiveTab}
+        tabs={undefined}
+      />
 
       <div
         className={`ghcp-flow-notice ${isFlowNoticeCollapsed ? 'collapsed' : ''}`}
@@ -982,7 +1103,12 @@ export function TraeAccountsPage() {
         >
           <div className="ghcp-flow-notice-title">
             <CircleAlert size={16} />
-            <span>{t('trae.flowNotice.title', 'Trae 账号接入说明（点击展开/收起）')}</span>
+            <span>
+              {t('trae.flowNotice.titleWithPlatform', {
+                platform: platformConfig.platformKey,
+                defaultValue: '{{platform}} 账号接入说明（点击展开/收起）',
+              })}
+            </span>
           </div>
           <ChevronDown
             size={16}
@@ -993,21 +1119,33 @@ export function TraeAccountsPage() {
           <div className="ghcp-flow-notice-body">
             <div className="ghcp-flow-notice-desc">
               {t(
-                'trae.flowNotice.desc',
-                '支持官方 OAuth 授权、本机导入、JSON 导入与本地注入切号；切号过程按 Trae 客户端真实落盘规则写回。',
+                'trae.flowNotice.descWithPlatform',
+                {
+                  platform: platformConfig.platformKey,
+                  defaultValue:
+                    '支持 {{platform}} 官方 OAuth 授权、本机导入、JSON 导入与本地注入切号；切号过程按 {{platform}} 客户端真实落盘规则写回。',
+                },
               )}
             </div>
             <ul className="ghcp-flow-notice-list">
               <li>
                 {t(
-                  'trae.flowNotice.permission',
-                  '权限范围：读取并写入本机 Trae 配置目录中的 storage.json 登录相关字段，用于账号导入、切号注入与套餐信息展示；所有数据仅在本机处理。',
+                  'trae.flowNotice.permissionWithPlatform',
+                  {
+                    platform: platformConfig.platformKey,
+                    defaultValue:
+                      '权限范围：读取并写入本机 {{platform}} 配置目录中的 storage.json 登录相关字段，用于账号导入、切号注入与套餐信息展示；所有数据仅在本机处理。',
+                  },
                 )}
               </li>
               <li>
                 {t(
-                  'trae.flowNotice.network',
-                  '网络范围：OAuth 登录、令牌刷新和套餐查询会请求 Trae 官方接口；不会向第三方服务上传本地账号文件或原始存储内容。',
+                  platformConfig.networkNoticeKey,
+                  {
+                    platform: platformConfig.platformKey,
+                    defaultValue:
+                      '网络范围：{{platform}} OAuth 登录、令牌刷新和套餐查询会请求 Trae 官方接口；不会向第三方服务上传本地账号文件或原始存储内容。',
+                  },
                 )}
               </li>
             </ul>
@@ -1224,7 +1362,7 @@ export function TraeAccountsPage() {
               >
                 <Upload size={14} />
               </button>
-              <QuickSettingsPopover type="trae" />
+              <QuickSettingsPopover type={platformId} />
             </div>
           </div>
 
@@ -1258,10 +1396,11 @@ export function TraeAccountsPage() {
               <Globe size={48} />
               <h3>{t('common.shared.empty.title', '暂无账号')}</h3>
               <p>
-                {t(
-                  'trae.empty.description',
-                  '点击“添加账号”开始管理您的 Trae 账号，也可以从本机或 JSON 文件导入。',
-                )}
+                {t('trae.empty.descriptionWithPlatform', {
+                  platform: platformConfig.platformKey,
+                  defaultValue:
+                    '点击“添加账号”开始管理您的 {{platform}} 账号，也可以从本机 {{platform}} 数据或 JSON 文件导入。',
+                })}
               </p>
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '16px' }}>
                 <button className="btn btn-primary" onClick={() => openAddModal('oauth')}>
@@ -1396,7 +1535,12 @@ export function TraeAccountsPage() {
               <div className="modal-content ghcp-add-modal" onClick={(event) => event.stopPropagation()}>
                 <div className="modal-header">
                   <button className="btn btn-secondary icon-only" onClick={closeAddModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
-                  <h2>{t('trae.addModal.title')}</h2>
+                  <h2>
+                    {t('trae.addModal.titleWithPlatform', {
+                      platform: platformConfig.platformKey,
+                      defaultValue: '添加 {{platform}} 账号',
+                    })}
+                  </h2>
                   <button
                     className="modal-close"
                     onClick={closeAddModal}
@@ -1435,7 +1579,11 @@ export function TraeAccountsPage() {
                   {addTab === 'oauth' ? (
                     <div className="add-section">
                       <p className="section-desc">
-                        {t('trae.oauth.desc', '点击下方按钮，在浏览器中完成 Trae OAuth 授权登录。')}
+                        {t('trae.oauth.descWithPlatform', {
+                          platform: platformConfig.platformKey,
+                          defaultValue:
+                            '点击下方按钮，在浏览器中完成 {{platform}} OAuth 授权登录。',
+                        })}
                       </p>
 
                       {oauthPrepareError ? (
@@ -1554,7 +1702,11 @@ export function TraeAccountsPage() {
                   ) : (
                     <div className="add-section">
                       <p className="section-desc">
-                        {t('trae.import.localDesc')}
+                        {t('trae.import.localDescWithPlatform', {
+                          platform: platformConfig.platformKey,
+                          defaultValue:
+                            '支持从本机 {{platform}} 配置目录读取当前登录账号、套餐信息和配额缓存数据。',
+                        })}
                       </p>
                       <button
                         className="btn btn-secondary btn-full"
@@ -1719,7 +1871,10 @@ export function TraeAccountsPage() {
       )}
 
       {activeTab === 'instances' && (
-        <TraeInstancesContent accountsForSelect={sortedAccountsForInstances} />
+        <TraeInstancesContent
+          platformId={platformId}
+          accountsForSelect={sortedAccountsForInstances}
+        />
       )}
     </div>
   );

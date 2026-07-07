@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Plataforma Zed",
     "expandSidebar": "Expandir barra lateral",
@@ -790,7 +793,11 @@
       "antigravityLaunchOnSwitch": "Iniciar Antigravity IDE al cambiar",
       "antigravityLaunchOnSwitchDesc": "Si está desactivado, el cambio solo escribe los datos de la cuenta predeterminada de Antigravity IDE y no cierra, inicia ni reinicia la app.",
       "tokenKeeper": "Conservar auth",
-      "tokenKeeperDesc": "Actualiza los tokens de cuenta por lotes pequeños solo cuando la autorización está por vencer, reduciendo las solicitudes en segundo plano."
+      "tokenKeeperDesc": "Actualiza los tokens de cuenta por lotes pequeños solo cuando la autorización está por vencer, reduciendo las solicitudes en segundo plano.",
+      "platformAutoRefresh": "Actualización automática de cuota de {{platform}}",
+      "traeSoloAppPath": "Ruta de inicio de TRAE SOLO",
+      "traeCnAppPath": "Ruta de inicio de Trae CN",
+      "traeSoloCnAppPath": "Ruta de inicio de TRAE SOLO CN"
     },
     "network": {
       "apiTitle": "API de cabina antigravedad",
@@ -2055,6 +2062,7 @@
     "quota": {
       "hourly": "Cuota de 5 horas",
       "weekly": "Cuota semanal",
+      "additional": "Cuota adicional",
       "reset": "Reinicio",
       "weeklyBlocksHourly": "La cuota semanal es 0, por eso la cuota de 5 horas no está disponible",
       "resetCredits": "Reinicios {{count}}",
@@ -2979,7 +2987,9 @@
       "filterWithin24h": "24 h ({{count}})",
       "filterWithin7d": "7 d ({{count}})",
       "filterWithin30d": "30 d ({{count}})",
-      "filterMissing": "Desconocidas ({{count}})"
+      "filterMissing": "Desconocidas ({{count}})",
+      "accessTokenOnlyUsable": "Token utilizable",
+      "accessTokenOnlyUsableDetail": "El endpoint de suscripción está limitado, pero la cuota y el uso de Codex funcionan normalmente"
     },
     "apiSwitchNotice": {
       "title": "Sesiones de Codex ocultas",
@@ -2998,7 +3008,7 @@
     "accountNote": {
       "title": "Nota de cuenta",
       "label": "Nota de cuenta",
-      "desc": "Agrega 2FA, contraseña, teléfono y otras notas para {{account}}.",
+      "desc": "Agrega contraseña, 2FA, URL de correo, teléfono y otras notas para {{account}}.",
       "twoFactorSecretLabel": "Secreto 2FA",
       "twoFactorSecretShort": "2FA",
       "twoFactorSecretPlaceholder": "Secreto Base32 o URI otpauth://",
@@ -3012,13 +3022,30 @@
       "phoneNumberLabel": "Teléfono",
       "phoneShort": "Teléfono",
       "phoneNumberPlaceholder": "Número de teléfono vinculado",
+      "mailUrlLabel": "URL de correo",
+      "mailUrlPlaceholder": "Introduce la URL de una página de consulta de correo",
+      "mailPreviewRefresh": "Actualizar correo",
+      "mailPreviewOpen": "Abrir en navegador",
+      "mailPreviewLoading": "Leyendo correo...",
+      "mailPreviewNoCode": "No se encontró un código continuo de 6 dígitos",
+      "mailPreviewFetchFailed": "Error al leer el correo: {{error}}",
+      "mailPreviewUrlRequired": "Introduce la URL de correo",
+      "mailPreviewUrlInvalid": "URL de correo no válida. Introduce una dirección http:// o https:// completa.",
+      "mailPreviewUnsupportedProtocol": "La URL de correo solo admite http o https.",
+      "mailPreviewHttpFailed": "Falló la solicitud de la URL de correo: HTTP {{status}}",
+      "mailPreviewCode": "Código de correo más reciente",
+      "mailPreviewStatusInitial": "Obtenido a las {{time}}",
+      "mailPreviewStatusChanged": "Código nuevo · {{time}}",
+      "mailPreviewStatusUnchanged": "Sin cambios · {{time}}",
+      "mailPreviewTruncated": "Contenido truncado",
+      "mailOpenFailed": "Error al abrir la URL de correo: {{error}}",
       "otherNoteLabel": "Otras notas",
       "otherNoteShort": "Nota",
       "placeholder": "Notas de entrega, correo de recuperación o detalles de cuenta",
-      "exportSensitiveNotice": "La exportación incluye secretos 2FA, contraseñas o teléfonos. Guárdala solo en una ubicación confiable.",
+      "exportSensitiveNotice": "La exportación incluye secretos 2FA, contraseñas, teléfonos o URL de correo. Guárdala solo en una ubicación confiable.",
       "exportSensitiveIncluded": "Incluir notas sensibles",
       "exportSensitiveExcluded": "Excluir notas sensibles",
-      "exportSensitiveToggleHint": "Controla si el JSON exportado incluye secretos 2FA, contraseñas y teléfonos.",
+      "exportSensitiveToggleHint": "Controla si el JSON exportado incluye secretos 2FA, contraseñas, teléfonos y URL de correo.",
       "show": "Mostrar",
       "hide": "Ocultar",
       "emptyTitle": "Agregar nota de cuenta",
@@ -3588,6 +3615,18 @@
     "qoderCn": {
       "title": "QoderWork CN Settings",
       "appPath": "QoderWork CN Path"
+    },
+    "traeSolo": {
+      "appPath": "Ruta de TRAE SOLO",
+      "title": "Configuración de TRAE SOLO"
+    },
+    "traeCn": {
+      "appPath": "Ruta de Trae CN",
+      "title": "Configuración de Trae CN"
+    },
+    "traeSoloCn": {
+      "appPath": "Ruta de TRAE SOLO CN",
+      "title": "Configuración de TRAE SOLO CN"
     }
   },
   "quotaAlert": {
@@ -4352,17 +4391,21 @@
   "trae": {
     "title": "Gestion de cuentas de Trae",
     "empty": {
-      "description": "Haz clic en \"Agregar cuenta\" para empezar a gestionar tus cuentas de Trae, o importalas desde datos locales de Trae o desde un archivo JSON."
+      "description": "Haz clic en \"Agregar cuenta\" para empezar a gestionar tus cuentas de Trae, o importalas desde datos locales de Trae o desde un archivo JSON.",
+      "descriptionWithPlatform": "Haz clic en \"Agregar cuenta\" para administrar cuentas de {{platform}}, o importa datos locales de {{platform}} o un archivo JSON."
     },
     "addModal": {
-      "title": "Agregar cuenta de Trae"
+      "title": "Agregar cuenta de Trae",
+      "titleWithPlatform": "Agregar cuenta de {{platform}}"
     },
     "oauth": {
-      "desc": "Haz clic en el boton inferior y completa la autorizacion OAuth de Trae en el navegador."
+      "desc": "Haz clic en el boton inferior y completa la autorizacion OAuth de Trae en el navegador.",
+      "descWithPlatform": "Haz clic en el botón inferior y completa la autorización OAuth de {{platform}} en el navegador."
     },
     "import": {
       "localDesc": "Importa la cuenta conectada actualmente, la informacion del plan y los datos de cuota en cache desde el directorio de configuracion local de Trae.",
-      "jsonTab": "Archivo JSON"
+      "jsonTab": "Archivo JSON",
+      "localDescWithPlatform": "Importa la cuenta iniciada, la información del plan y los datos de cuota en caché desde el directorio local de configuración de {{platform}}."
     },
     "quota": {
       "usedOfTotal": "Usado $ {{used}} de $ {{total}}",
@@ -4388,7 +4431,12 @@
       "title": "Guia de cuentas de Trae (haz clic para expandir o contraer)",
       "desc": "Admite inicio de sesion oficial por OAuth, importacion local, importacion JSON y cambio de cuenta mediante inyeccion local. Al cambiar de cuenta, se reescribe siguiendo las reglas reales de almacenamiento del cliente Trae.",
       "permission": "Alcance de permisos: lee y escribe campos relacionados con el inicio de sesion en el storage.json local de Trae para importar cuentas, inyectar el cambio de cuenta y mostrar el plan. Todos los datos se procesan localmente en tu equipo.",
-      "network": "Alcance de red: el inicio de sesion OAuth, la renovacion del token y las consultas del plan llaman a las API oficiales de Trae. Los archivos locales de cuenta y el contenido bruto del almacenamiento no se suben a servicios de terceros."
+      "network": "Alcance de red: el inicio de sesion OAuth, la renovacion del token y las consultas del plan llaman a las API oficiales de Trae. Los archivos locales de cuenta y el contenido bruto del almacenamiento no se suben a servicios de terceros.",
+      "titleWithPlatform": "Guía de cuentas de {{platform}} (clic para expandir/contraer)",
+      "descWithPlatform": "Admite OAuth oficial de {{platform}}, importación local, importación JSON y cambio de cuenta mediante inyección local. El cambio escribe según las reglas reales en disco del cliente {{platform}}.",
+      "permissionWithPlatform": "Alcance de permisos: lee y escribe campos de inicio de sesión en storage.json local de {{platform}} para importar cuentas, inyectar cambios de cuenta y mostrar el plan. Todos los datos se procesan localmente.",
+      "networkGlobal": "Alcance de red: el inicio OAuth, la actualización de tokens y las consultas de plan de {{platform}} llaman a APIs oficiales trae.ai / traeapi.us. No se suben archivos locales de cuenta ni contenido bruto a servicios de terceros.",
+      "networkCn": "Alcance de red: el inicio OAuth, la actualización de tokens y las consultas de plan de {{platform}} llaman a APIs oficiales trae.cn / trae.com.cn. No se suben archivos locales de cuenta ni contenido bruto a servicios de terceros."
     }
   },
   "codebuddyCn": {

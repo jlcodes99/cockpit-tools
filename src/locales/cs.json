@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Platforma Zed",
     "expandSidebar": "Rozbalit postranní panel",
@@ -790,7 +793,11 @@
       "antigravityLaunchOnSwitch": "Spustit Antigravity IDE při přepnutí",
       "antigravityLaunchOnSwitchDesc": "Po vypnutí přepnutí pouze zapíše data výchozího účtu Antigravity IDE a aplikaci nezavře, nespustí ani nerestartuje.",
       "tokenKeeper": "Udržení auth",
-      "tokenKeeperDesc": "Obnovuje Tokeny účtů po malých dávkách jen před vypršením autorizace, čímž snižuje požadavky na pozadí u mnoha účtů."
+      "tokenKeeperDesc": "Obnovuje Tokeny účtů po malých dávkách jen před vypršením autorizace, čímž snižuje požadavky na pozadí u mnoha účtů.",
+      "platformAutoRefresh": "Automatické obnovení kvóty {{platform}}",
+      "traeSoloAppPath": "Spouštěcí cesta TRAE SOLO",
+      "traeCnAppPath": "Spouštěcí cesta Trae CN",
+      "traeSoloCnAppPath": "Spouštěcí cesta TRAE SOLO CN"
     },
     "network": {
       "apiTitle": "Antigravity Cockpit API​",
@@ -2055,6 +2062,7 @@
     "quota": {
       "hourly": "Kvóta 5 hodin",
       "weekly": "Týdenní kvóta",
+      "additional": "Dodatečná kvóta",
       "reset": "Reset​",
       "weeklyBlocksHourly": "Týdenní kvóta je 0, proto není 5hodinová kvóta dostupná",
       "resetCredits": "Resety {{count}}",
@@ -2979,7 +2987,9 @@
       "filterWithin24h": "24 h ({{count}})",
       "filterWithin7d": "7 d ({{count}})",
       "filterWithin30d": "30 d ({{count}})",
-      "filterMissing": "Neznámé ({{count}})"
+      "filterMissing": "Neznámé ({{count}})",
+      "accessTokenOnlyUsable": "Token je použitelný",
+      "accessTokenOnlyUsableDetail": "Rozhraní předplatného je omezené, ale kvóta a používání Codexu fungují normálně"
     },
     "apiSwitchNotice": {
       "title": "Relace Codexu jsou skryté",
@@ -2998,7 +3008,7 @@
     "accountNote": {
       "title": "Poznámka účtu",
       "label": "Poznámka účtu",
-      "desc": "Přidejte 2FA, heslo, telefon a další poznámky pro {{account}}.",
+      "desc": "Přidejte heslo, 2FA, URL e-mailu, telefon a další poznámky pro {{account}}.",
       "twoFactorSecretLabel": "2FA tajný klíč",
       "twoFactorSecretShort": "2FA",
       "twoFactorSecretPlaceholder": "Base32 secret nebo otpauth:// URI",
@@ -3012,13 +3022,30 @@
       "phoneNumberLabel": "Telefon",
       "phoneShort": "Telefon",
       "phoneNumberPlaceholder": "Navázané telefonní číslo",
+      "mailUrlLabel": "URL e-mailu",
+      "mailUrlPlaceholder": "Zadejte odkaz na otevřitelnou poštovní stránku",
+      "mailPreviewRefresh": "Obnovit e-mail",
+      "mailPreviewOpen": "Otevřít v prohlížeči",
+      "mailPreviewLoading": "Čtení e-mailu...",
+      "mailPreviewNoCode": "Nebyl nalezen souvislý 6místný kód",
+      "mailPreviewFetchFailed": "Čtení e-mailu selhalo: {{error}}",
+      "mailPreviewUrlRequired": "Zadejte URL e-mailu",
+      "mailPreviewUrlInvalid": "Neplatná URL e-mailu. Zadejte úplnou adresu http:// nebo https://.",
+      "mailPreviewUnsupportedProtocol": "URL e-mailu podporuje pouze protokol http nebo https.",
+      "mailPreviewHttpFailed": "Požadavek na URL e-mailu selhal: HTTP {{status}}",
+      "mailPreviewCode": "Nejnovější e-mailový kód",
+      "mailPreviewStatusInitial": "Načteno v {{time}}",
+      "mailPreviewStatusChanged": "Nový kód · {{time}}",
+      "mailPreviewStatusUnchanged": "Beze změny · {{time}}",
+      "mailPreviewTruncated": "Obsah zkrácen",
+      "mailOpenFailed": "Otevření URL e-mailu selhalo: {{error}}",
       "otherNoteLabel": "Další poznámky",
       "otherNoteShort": "Poznámka",
       "placeholder": "Předávací poznámky, obnovovací e-mail nebo údaje účtu",
-      "exportSensitiveNotice": "Export obsahuje 2FA tajné klíče, hesla nebo telefonní čísla. Uložte jej pouze na důvěryhodné místo.",
+      "exportSensitiveNotice": "Export obsahuje 2FA tajné klíče, hesla, telefonní čísla nebo URL e-mailu. Uložte jej pouze na důvěryhodné místo.",
       "exportSensitiveIncluded": "Včetně citlivých poznámek",
       "exportSensitiveExcluded": "Bez citlivých poznámek",
-      "exportSensitiveToggleHint": "Určuje, zda exportovaný JSON obsahuje 2FA tajné klíče, hesla a telefonní čísla.",
+      "exportSensitiveToggleHint": "Určuje, zda exportovaný JSON obsahuje 2FA tajné klíče, hesla, telefonní čísla a URL e-mailu.",
       "show": "Zobrazit",
       "hide": "Skrýt",
       "emptyTitle": "Přidat poznámku účtu",
@@ -3588,6 +3615,18 @@
     "qoderCn": {
       "title": "QoderWork CN Settings",
       "appPath": "QoderWork CN Path"
+    },
+    "traeSolo": {
+      "appPath": "Cesta TRAE SOLO",
+      "title": "Nastavení TRAE SOLO"
+    },
+    "traeCn": {
+      "appPath": "Cesta Trae CN",
+      "title": "Nastavení Trae CN"
+    },
+    "traeSoloCn": {
+      "appPath": "Cesta TRAE SOLO CN",
+      "title": "Nastavení TRAE SOLO CN"
     }
   },
   "quotaAlert": {
@@ -4352,17 +4391,21 @@
   "trae": {
     "title": "Sprava uctu Trae",
     "empty": {
-      "description": "Kliknete na „Pridat ucet“ a zacnete spravovat ucty Trae, nebo je importujte z mistnich dat Trae ci ze souboru JSON."
+      "description": "Kliknete na „Pridat ucet“ a zacnete spravovat ucty Trae, nebo je importujte z mistnich dat Trae ci ze souboru JSON.",
+      "descriptionWithPlatform": "Kliknutím na „Přidat účet“ začnete spravovat účty {{platform}}, případně importujte místní data {{platform}} nebo soubor JSON."
     },
     "addModal": {
-      "title": "Pridat ucet Trae"
+      "title": "Pridat ucet Trae",
+      "titleWithPlatform": "Přidat účet {{platform}}"
     },
     "oauth": {
-      "desc": "Kliknete na tlacitko nize a dokoncete autorizaci Trae OAuth v prohlizeci."
+      "desc": "Kliknete na tlacitko nize a dokoncete autorizaci Trae OAuth v prohlizeci.",
+      "descWithPlatform": "Klikněte na tlačítko níže a dokončete autorizaci OAuth pro {{platform}} v prohlížeči."
     },
     "import": {
       "localDesc": "Importuje aktualne prihlaseny ucet, informace o tarifu a cache kvoty z mistniho konfiguracniho adresare Trae.",
-      "jsonTab": "Soubor JSON"
+      "jsonTab": "Soubor JSON",
+      "localDescWithPlatform": "Importuje aktuálně přihlášený účet, informace o plánu a uložená data kvóty z místního konfiguračního adresáře {{platform}}."
     },
     "quota": {
       "usedOfTotal": "Vyuzito $ {{used}} z $ {{total}}",
@@ -4388,7 +4431,12 @@
       "title": "Prirucka k uctu Trae (kliknutim rozbalit/sbalit)",
       "desc": "Podporuje oficialni prihlaseni OAuth, mistni import, import JSON a prepinani uctu pomoci lokalni injekce. Pri prepnuti zapisuje data podle skutecnych pravidel klienta Trae.",
       "permission": "Rozsah opravneni: cte a zapisuje prihlasovaci pole v mistnim souboru Trae storage.json pro import uctu, injekci prepnuti uctu a zobrazeni tarifu. Vsechna data se zpracovavaji pouze lokalne na vasem zarizeni.",
-      "network": "Sitovy rozsah: prihlaseni OAuth, obnoveni tokenu a dotazy na tarif volaji oficialni API Trae. Mistni soubory uctu ani puvodni obsah uloziste se neodesilaji sluzbam tretich stran."
+      "network": "Sitovy rozsah: prihlaseni OAuth, obnoveni tokenu a dotazy na tarif volaji oficialni API Trae. Mistni soubory uctu ani puvodni obsah uloziste se neodesilaji sluzbam tretich stran.",
+      "titleWithPlatform": "Průvodce účty {{platform}} (kliknutím rozbalit/sbalit)",
+      "descWithPlatform": "Podporuje oficiální OAuth {{platform}}, místní import, import JSON a místní přepínání účtů přes injekci. Přepínání zapisuje podle skutečných pravidel klienta {{platform}} na disku.",
+      "permissionWithPlatform": "Rozsah oprávnění: čte a zapisuje pole přihlášení v místním storage.json {{platform}} pro import účtů, injekci přepnutí účtu a zobrazení plánu. Všechna data se zpracovávají pouze místně.",
+      "networkGlobal": "Rozsah sítě: OAuth přihlášení, obnova tokenů a dotazy plánu {{platform}} volají oficiální API trae.ai / traeapi.us. Místní soubory účtů ani surový obsah úložiště se nenahrávají třetím stranám.",
+      "networkCn": "Rozsah sítě: OAuth přihlášení, obnova tokenů a dotazy plánu {{platform}} volají oficiální API trae.cn / trae.com.cn. Místní soubory účtů ani surový obsah úložiště se nenahrávají třetím stranám."
     }
   },
   "codebuddyCn": {

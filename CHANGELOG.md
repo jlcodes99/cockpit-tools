@@ -7,6 +7,28 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [1.1.0] - 2026-07-07
+
+### Added
+
+- **Trae suite support**: Trae, TRAE SOLO, Trae CN, and TRAE SOLO CN now support local import, OAuth login, account switching with each client's real on-disk rules, quota refresh, launch-path settings, app icons, dashboard entries, and default grouping under Trae.
+- **Trae suite authorization is separated by client and region**: international and CN clients use their own authorization, callback, token exchange, refresh, and local storage rules so accounts from different Trae clients stay isolated.
+- **Codex account notes now include delivery fields and mail-code preview**: account notes can store password, 2FA secret, mail query URL, phone number, and remarks; mail query URLs can be refreshed, opened in the browser, copied, and preview the first continuous six-digit verification code found outside HTML tags.
+- **Codex pending OAuth drafts, browser imports, and exports support the new note fields**: pending authorization cards can keep the same note details before authorization finishes, and supported export formats can include sensitive note fields only when explicitly enabled.
+- **Codex account cards can show additional rate-limit data**: more locally available plan and rate-limit fields are preserved and displayed. Thanks @iwillwill-ALLWILL for #1405.
+- **Codex API Key account bundles can sync managed model catalogs**: custom Responses API Key bundles write an account-specific model catalog, include the auto-review model when needed, and clean up the managed catalog when it no longer applies. Thanks @usertianziyang for #1429.
+
+### Changed
+
+- **Navigation and account overview state persist more predictably**: the app remembers the selected page, account overview filters, intentionally empty filter values, temporary tab filter state, and selected tabs more consistently. Thanks @xdd666t for #1351.
+
+### Fixed
+
+- **Fixed Codex opaque access-token imports and access-token-only account switching**: `at-...` credentials and access-token-only accounts can be imported, switched, and reported with clearer status without inventing a refresh token. Thanks @iwillwill-ALLWILL for #1412 and #1425.
+- **Fixed macOS startup-minimized behavior**: startup minimized with a hidden Dock icon no longer shows the main window briefly before hiding. Thanks @FateLightX for #1406.
+- **Fixed Windows Antigravity legacy current-account readback**: legacy account detection now handles system credential mode. Thanks @khanra17 for #1370.
+
+---
 ## [1.0.5] - 2026-07-05
 
 ### Added

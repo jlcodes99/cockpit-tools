@@ -24,6 +24,9 @@ type InstancesAppType =
   | 'codebuddy_cn'
   | 'qoder'
   | 'trae'
+  | 'trae_solo'
+  | 'trae_cn'
+  | 'trae_solo_cn'
   | 'workbuddy';
 
 interface PlatformInstancesContentProps<TAccount extends AccountLike> {
@@ -32,6 +35,7 @@ interface PlatformInstancesContentProps<TAccount extends AccountLike> {
   fetchAccounts: () => Promise<void>;
   renderAccountQuotaPreview: (account: TAccount) => ReactNode;
   renderAccountBadge?: (account: TAccount) => ReactNode;
+  getAccountDisplayText?: (account: TAccount) => string;
   getAccountSearchText: (account: TAccount) => string;
   appType: InstancesAppType;
   isSupported: boolean;
@@ -51,6 +55,7 @@ export function PlatformInstancesContent<TAccount extends AccountLike>({
   fetchAccounts,
   renderAccountQuotaPreview,
   renderAccountBadge,
+  getAccountDisplayText,
   getAccountSearchText,
   appType,
   isSupported,
@@ -88,6 +93,7 @@ export function PlatformInstancesContent<TAccount extends AccountLike>({
         fetchAccounts={fetchAccounts}
         renderAccountQuotaPreview={renderAccountQuotaPreview}
         renderAccountBadge={renderAccountBadge}
+        getAccountDisplayText={getAccountDisplayText}
         getAccountSearchText={getAccountSearchText}
         appType={appType}
         onInstanceStarted={onInstanceStarted}

@@ -20,7 +20,7 @@ import { SideNav } from './components/layout/SideNav';
 import { GlobalModal } from './components/GlobalModal';
 import { TopCenterPromoBanner } from './components/TopCenterPromoBanner';
 import type { QuickSettingsType } from './components/QuickSettingsPopover';
-import { Page } from './types/navigation';
+import type { Page } from './types/navigation';
 import { useAutoRefresh } from './hooks/useAutoRefresh';
 import { useEasterEggTrigger } from './hooks/useEasterEggTrigger';
 import { useGlobalModal } from './hooks/useGlobalModal';
@@ -167,6 +167,46 @@ const LogViewerModal = lazy(() =>
   import('./components/LogViewerModal').then((module) => ({ default: module.LogViewerModal })),
 );
 
+const ACTIVE_PAGE_STORAGE_KEY = 'agtools.active_page';
+const RENDERABLE_PAGE_VALUES: readonly Page[] = [
+  'dashboard',
+  'api-relay',
+  'overview',
+  'codex',
+  'claude',
+  'claude-cli',
+  'codex-api-service',
+  'github-copilot',
+  'windsurf',
+  'kiro',
+  'cursor',
+  'gemini',
+  'codebuddy',
+  'codebuddy-cn',
+  'qoder',
+  'trae',
+  'trae-solo',
+  'trae-cn',
+  'trae-solo-cn',
+  'workbuddy',
+  'zed',
+  'instances',
+  'wakeup',
+  'verification',
+  '2fa',
+  'manual',
+  'settings',
+];
+const RENDERABLE_PAGE_SET = new Set<string>(RENDERABLE_PAGE_VALUES);
+
+function normalizeStoredActivePage(value: string | null): Page | null {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return null;
+  }
+  return RENDERABLE_PAGE_SET.has(normalized) ? (normalized as Page) : null;
+}
+
 
 interface GeneralConfigTheme {
   theme: string;
@@ -195,6 +235,13 @@ interface GeneralConfig extends GeneralConfigTheme, GeneralConfigLanguage {
   qoderwork_cn_app_path: string;
   qoder_cn_app_path: string;
   trae_app_path: string;
+  trae_solo_app_path: string;
+  trae_cn_app_path: string;
+  trae_solo_cn_app_path: string;
+  trae_app_scan_roots: string;
+  trae_solo_app_scan_roots: string;
+  trae_cn_app_scan_roots: string;
+  trae_solo_cn_app_scan_roots: string;
   workbuddy_app_path: string;
   zed_app_path: string;
 }
@@ -214,6 +261,9 @@ type AppPathMissingDetail = {
     | 'qoderwork_cn'
     | 'qoder_cn'
     | 'trae'
+    | 'trae_solo'
+    | 'trae_cn'
+    | 'trae_solo_cn'
     | 'workbuddy'
     | 'zed';
   retry?:
@@ -238,6 +288,40 @@ function isClaudeWindowsAppLaunchTarget(value: string): boolean {
 const WAKEUP_ENABLED_KEY = 'agtools.wakeup.enabled';
 const TASKS_STORAGE_KEY = 'agtools.wakeup.tasks';
 const WAKEUP_FORCE_DISABLE_MIGRATION_KEY = 'agtools.wakeup.migration.force_disable_0_8_14';
+
+function isTraePlatformApp(app: string): app is 'trae' | 'trae_solo' | 'trae_cn' | 'trae_solo_cn' {
+  return app === 'trae' || app === 'trae_solo' || app === 'trae_cn' || app === 'trae_solo_cn';
+}
+
+type TraePlatformApp = 'trae' | 'trae_solo' | 'trae_cn' | 'trae_solo_cn';
+
+function getTraeAppPath(config: GeneralConfig, app: TraePlatformApp): string {
+  switch (app) {
+    case 'trae_solo':
+      return config.trae_solo_app_path;
+    case 'trae_cn':
+      return config.trae_cn_app_path;
+    case 'trae_solo_cn':
+      return config.trae_solo_cn_app_path;
+    case 'trae':
+    default:
+      return config.trae_app_path;
+  }
+}
+
+function getTraeAppScanRoots(config: GeneralConfig, app: TraePlatformApp): string {
+  switch (app) {
+    case 'trae_solo':
+      return config.trae_solo_app_scan_roots;
+    case 'trae_cn':
+      return config.trae_cn_app_scan_roots;
+    case 'trae_solo_cn':
+      return config.trae_solo_cn_app_scan_roots;
+    case 'trae':
+    default:
+      return config.trae_app_scan_roots;
+  }
+}
 const TOP_RIGHT_AD_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const REMOTE_CONFIG_FALLBACK_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 const EXTERNAL_IMPORT_DEDUPE_WINDOW_MS = 30 * 1000;
@@ -398,6 +482,12 @@ function normalizeQuotaAlertPlatform(platform: string | undefined): QuotaAlertPl
     case 'qoder_cn':
       return 'qoder_cn';
     case 'trae':
+    case 'trae-solo':
+    case 'trae_solo':
+    case 'trae-cn':
+    case 'trae_cn':
+    case 'trae-solo-cn':
+    case 'trae_solo_cn':
       return 'trae';
     case 'zed':
       return 'zed';
@@ -555,7 +645,30 @@ function MainApp() {
   const sideNavClassicFirstSyncDone = useSideNavLayoutStore((state) => state.classicFirstSyncDone);
   const markSideNavClassicFirstSyncDone = useSideNavLayoutStore((state) => state.markClassicFirstSyncDone);
   const syncSidebarEntriesFromDashboard = usePlatformLayoutStore((state) => state.syncSidebarEntriesFromDashboard);
-  const [page, setPage] = useState<Page>('dashboard');
+  const [page, setPage] = useState<Page>(() => {
+    try {
+      const saved = normalizeStoredActivePage(localStorage.getItem(ACTIVE_PAGE_STORAGE_KEY));
+      if (saved) {
+        return saved;
+      }
+      localStorage.removeItem(ACTIVE_PAGE_STORAGE_KEY);
+    } catch {}
+    return 'dashboard';
+  });
+
+  useEffect(() => {
+    try {
+      const normalized = normalizeStoredActivePage(page);
+      if (normalized) {
+        localStorage.setItem(ACTIVE_PAGE_STORAGE_KEY, normalized);
+      } else {
+        localStorage.removeItem(ACTIVE_PAGE_STORAGE_KEY);
+        setPage('dashboard');
+      }
+    } catch (e) {
+      console.warn('Failed to save active page to localStorage:', e);
+    }
+  }, [page]);
   const [showUpdateNotification, setShowUpdateNotification] = useState(false);
   const [updateNotificationKey, setUpdateNotificationKey] = useState(0);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
@@ -741,7 +854,7 @@ function MainApp() {
     }
     handleEasterEggTriggerClick();
   }, [handleEasterEggTriggerClick, handleResumeBreakout, hasBreakoutSession, resetEasterEggTrigger]);
-  
+
   // 启用自动刷新 hook
   useAutoRefresh();
 
@@ -2754,7 +2867,7 @@ function MainApp() {
         detail.app !== 'codebuddy' &&
         detail.app !== 'codebuddy_cn' &&
         detail.app !== 'qoder' &&
-        detail.app !== 'trae' &&
+        !isTraePlatformApp(detail.app) &&
         detail.app !== 'workbuddy' &&
         detail.app !== 'zed'
       ) {
@@ -2825,6 +2938,8 @@ function MainApp() {
                 ? config.qoder_cn_app_path
               : appPathMissing.app === 'trae'
                 ? config.trae_app_path
+              : isTraePlatformApp(appPathMissing.app)
+                ? getTraeAppPath(config, appPathMissing.app)
               : appPathMissing.app === 'workbuddy'
                 ? config.workbuddy_app_path
               : appPathMissing.app === 'zed'
@@ -2838,7 +2953,11 @@ function MainApp() {
             isClaudeWindowsAppLaunchTarget(normalizedPath);
           setAppPathDraft(shouldClearClaudeDefaultTarget ? '' : normalizedPath);
           setAppPathScanRootsDraft(
-            appPathMissing.app === 'claude' ? config.claude_app_scan_roots || '' : '',
+            appPathMissing.app === 'claude'
+              ? config.claude_app_scan_roots || ''
+              : isTraePlatformApp(appPathMissing.app)
+                ? getTraeAppScanRoots(config, appPathMissing.app) || ''
+                : '',
           );
           setAppPathCodexLaunchOnSwitch(config.codex_launch_on_switch ?? true);
         }
@@ -2925,6 +3044,11 @@ function MainApp() {
         await invoke('set_claude_app_scan_roots', {
           scanRoots: appPathScanRootsDraft.trim(),
         });
+      } else if (isTraePlatformApp(app)) {
+        await invoke('set_trae_app_scan_roots', {
+          app,
+          scanRoots: appPathScanRootsDraft.trim(),
+        });
       }
       if (retry?.kind === 'switchAccount' && retry.accountId && app === 'zed') {
         await useZedAccountStore.getState().switchAccount(retry.accountId);
@@ -2961,8 +3085,8 @@ function MainApp() {
           await invoke('codebuddy_cn_start_instance', { instanceId: retry.instanceId });
         } else if (app === 'qoder') {
           await invoke('qoder_start_instance', { instanceId: retry.instanceId });
-        } else if (app === 'trae') {
-          await invoke('trae_start_instance', { instanceId: retry.instanceId });
+        } else if (isTraePlatformApp(app)) {
+          await invoke('trae_start_instance', { platformId: app, instanceId: retry.instanceId });
         } else if (app === 'workbuddy') {
           await invoke('workbuddy_start_instance', { instanceId: retry.instanceId });
         } else if (app === 'zed') {
@@ -2989,8 +3113,8 @@ function MainApp() {
           await invoke('codebuddy_cn_start_instance', { instanceId: '__default__' });
         } else if (app === 'qoder') {
           await invoke('qoder_start_instance', { instanceId: '__default__' });
-        } else if (app === 'trae') {
-          await invoke('trae_start_instance', { instanceId: '__default__' });
+        } else if (isTraePlatformApp(app)) {
+          await invoke('trae_start_instance', { platformId: app, instanceId: '__default__' });
         } else if (app === 'workbuddy') {
           await invoke('workbuddy_start_instance', { instanceId: '__default__' });
         } else if (app === 'zed') {
@@ -3144,6 +3268,9 @@ function MainApp() {
             case 'qoderwork-cn':
             case 'qoder-cn':
             case 'trae':
+            case 'trae-solo':
+            case 'trae-cn':
+            case 'trae-solo-cn':
             case 'workbuddy':
             case 'zed':
             case 'manual':
@@ -3263,7 +3390,7 @@ function MainApp() {
                 ? 'CodeBuddy CN'
               : appPathMissing.app === 'qoder'
                 ? 'Qoder'
-              : appPathMissing.app === 'trae'
+              : isTraePlatformApp(appPathMissing.app)
                 ? 'Trae'
               : appPathMissing.app === 'workbuddy'
                 ? 'WorkBuddy'
@@ -3291,7 +3418,7 @@ function MainApp() {
                 ? t('quickSettings.codebuddyCn.appPath', 'CodeBuddy CN 路径')
               : appPathMissing.app === 'qoder'
                 ? t('quickSettings.qoder.appPath', 'Qoder 路径')
-              : appPathMissing.app === 'trae'
+              : isTraePlatformApp(appPathMissing.app)
                 ? t('quickSettings.trae.appPath', 'Trae 路径')
               : t('quickSettings.antigravity.appPath', '启动路径')
     : t('quickSettings.antigravity.appPath', '启动路径');
@@ -3506,7 +3633,7 @@ function MainApp() {
                                       ? t('settings.general.codebuddyPathReset', '重置默认')
                                     : appPathMissing.app === 'qoder'
                                       ? t('settings.general.qoderPathReset', '重置默认')
-                                    : appPathMissing.app === 'trae'
+                                    : isTraePlatformApp(appPathMissing.app)
                                       ? t('settings.general.traePathReset', '重置默认')
                                     : t('settings.general.codexPathReset', '重置默认')
                           )
@@ -3589,7 +3716,7 @@ function MainApp() {
           </div>
         </div>
       )}
-      
+
       {/* 顶部固定拖拽区域 */}
       <div
         className="drag-region"
@@ -3670,7 +3797,10 @@ function MainApp() {
           {page === 'qoder' && <QoderAccountsPage />}
           {page === 'qoderwork-cn' && <QoderworkCnAccountsPage />}
           {page === 'qoder-cn' && <QoderCnAccountsPage />}
-          {page === 'trae' && <TraeAccountsPage />}
+          {page === 'trae' && <TraeAccountsPage platformId="trae" />}
+          {page === 'trae-solo' && <TraeAccountsPage platformId="trae_solo" />}
+          {page === 'trae-cn' && <TraeAccountsPage platformId="trae_cn" />}
+          {page === 'trae-solo-cn' && <TraeAccountsPage platformId="trae_solo_cn" />}
           {page === 'workbuddy' && <WorkbuddyAccountsPage />}
           {page === 'zed' && <ZedAccountsPage />}
           {page === 'instances' && <InstancesPage onNavigate={setPage} />}

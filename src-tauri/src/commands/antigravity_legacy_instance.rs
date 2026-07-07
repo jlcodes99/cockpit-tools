@@ -21,6 +21,34 @@ fn resolve_default_account_id(settings: &DefaultInstanceSettings) -> Option<Stri
 }
 
 fn resolve_local_account_id() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        use modules::antigravity_legacy_instance::{resolve_auth_mode, AntigravityDesktopAuthMode};
+        match resolve_auth_mode() {
+            AntigravityDesktopAuthMode::SystemCredential => {
+                if let Ok(Some(system_credential)) = modules::antigravity_credential::read_antigravity_system_credential() {
+                    if let Ok(accounts) = modules::list_accounts() {
+                        for account in accounts {
+                            if account.token.refresh_token == system_credential.refresh_token {
+                                return Some(account.id);
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            AntigravityDesktopAuthMode::LegacyStateDb => {
+                resolve_local_account_id_from_db()
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        resolve_local_account_id_from_db()
+    }
+}
+
+fn resolve_local_account_id_from_db() -> Option<String> {
     let default_dir = modules::antigravity_legacy_instance::get_default_user_data_dir().ok()?;
     let db_path = default_dir
         .join("User")

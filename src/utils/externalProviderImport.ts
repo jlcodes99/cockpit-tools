@@ -73,6 +73,9 @@ const IMPORT_TARGET_PAGES: ReadonlySet<Page> = new Set<Page>([
   'codebuddy-cn',
   'qoder',
   'trae',
+  'trae-solo',
+  'trae-cn',
+  'trae-solo-cn',
   'workbuddy',
   'zed',
 ]);
@@ -96,6 +99,12 @@ const PROVIDER_ALIAS_MAP: Record<string, PlatformId> = {
   codebuddycn: 'codebuddy_cn',
   qoder: 'qoder',
   trae: 'trae',
+  trae_solo: 'trae_solo',
+  traesolo: 'trae_solo',
+  trae_cn: 'trae_cn',
+  traecn: 'trae_cn',
+  trae_solo_cn: 'trae_solo_cn',
+  traesolocn: 'trae_solo_cn',
   workbuddy: 'workbuddy',
 };
 

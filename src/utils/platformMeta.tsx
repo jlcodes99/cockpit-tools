@@ -12,9 +12,9 @@ import { CursorIcon } from '../components/icons/CursorIcon';
 import { GeminiIcon } from '../components/icons/GeminiIcon';
 import { CodebuddyIcon } from '../components/icons/CodebuddyIcon';
 import { QoderIcon } from '../components/icons/QoderIcon';
+import { TraeCnIcon, TraeIcon, TraeSoloCnIcon, TraeSoloIcon } from '../components/icons/TraeIcon';
 import { QoderworkCnIcon } from '../components/icons/QoderworkCnIcon';
 import { QoderCnIcon } from '../components/icons/QoderCnIcon';
-import { TraeIcon } from '../components/icons/TraeIcon';
 import { WorkbuddyIcon } from '../components/icons/WorkbuddyIcon';
 import { ZedIcon } from '../components/icons/ZedIcon';
 
@@ -52,6 +52,12 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
       return _t('nav.qoderCn', 'Qoder CN');
     case 'trae':
       return _t('nav.trae', 'Trae');
+    case 'trae_solo':
+      return _t('nav.traeSolo', 'TRAE SOLO');
+    case 'trae_cn':
+      return _t('nav.traeCn', 'Trae CN');
+    case 'trae_solo_cn':
+      return _t('nav.traeSoloCn', 'TRAE SOLO CN');
     case 'workbuddy':
       return 'WorkBuddy';
     default:
@@ -93,6 +99,12 @@ export function renderPlatformIcon(platformId: PlatformId, size = 20): ReactNode
       return <QoderCnIcon style={{ width: size, height: size }} />;
     case 'trae':
       return <TraeIcon style={{ width: size, height: size }} />;
+    case 'trae_solo':
+      return <TraeSoloIcon style={{ width: size, height: size }} />;
+    case 'trae_cn':
+      return <TraeCnIcon style={{ width: size, height: size }} />;
+    case 'trae_solo_cn':
+      return <TraeSoloCnIcon style={{ width: size, height: size }} />;
     case 'workbuddy':
       return <WorkbuddyIcon style={{ width: size, height: size }} />;
     default:

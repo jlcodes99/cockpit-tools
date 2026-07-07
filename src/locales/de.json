@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Zed-Plattform",
     "expandSidebar": "Seitenleiste erweitern",
@@ -790,7 +793,11 @@
       "antigravityLaunchOnSwitch": "Antigravity IDE beim Wechsel starten",
       "antigravityLaunchOnSwitchDesc": "Wenn deaktiviert, schreibt der Wechsel nur die Standard-Kontodaten von Antigravity IDE und schließt, startet oder startet die App nicht neu.",
       "tokenKeeper": "Auth-Erhaltung",
-      "tokenKeeperDesc": "Aktualisiert Konto-Token nur kurz vor Ablauf in kleinen Gruppen und reduziert so Hintergrundanfragen bei vielen Konten."
+      "tokenKeeperDesc": "Aktualisiert Konto-Token nur kurz vor Ablauf in kleinen Gruppen und reduziert so Hintergrundanfragen bei vielen Konten.",
+      "platformAutoRefresh": "{{platform}}-Kontingent automatisch aktualisieren",
+      "traeSoloAppPath": "TRAE SOLO-Startpfad",
+      "traeCnAppPath": "Trae CN-Startpfad",
+      "traeSoloCnAppPath": "TRAE SOLO CN-Startpfad"
     },
     "network": {
       "apiTitle": "Antigravity-Cockpit-API",
@@ -2055,6 +2062,7 @@
     "quota": {
       "hourly": "5-Stunden-Kontingent",
       "weekly": "Wöchentliches Kontingent",
+      "additional": "Zusätzliches Kontingent",
       "reset": "Zurücksetzen",
       "weeklyBlocksHourly": "Das Wochenkontingent ist 0, daher ist das 5-Stunden-Kontingent nicht verfügbar",
       "resetCredits": "Rücksetz. {{count}}",
@@ -2979,7 +2987,9 @@
       "filterWithin24h": "24 h ({{count}})",
       "filterWithin7d": "7 T. ({{count}})",
       "filterWithin30d": "30 T. ({{count}})",
-      "filterMissing": "Unbekannt ({{count}})"
+      "filterMissing": "Unbekannt ({{count}})",
+      "accessTokenOnlyUsable": "Token nutzbar",
+      "accessTokenOnlyUsableDetail": "Die Abo-Schnittstelle ist eingeschränkt, aber Kontingent und Codex-Nutzung funktionieren normal"
     },
     "apiSwitchNotice": {
       "title": "Codex-Sitzungen ausgeblendet",
@@ -2998,7 +3008,7 @@
     "accountNote": {
       "title": "Kontonotiz",
       "label": "Kontonotiz",
-      "desc": "2FA, Passwort, Telefon und weitere Notizen für {{account}} hinzufügen.",
+      "desc": "Füge Passwort, 2FA, Mail-URL, Telefon und weitere Notizen für {{account}} hinzu.",
       "twoFactorSecretLabel": "2FA-Secret",
       "twoFactorSecretShort": "2FA",
       "twoFactorSecretPlaceholder": "Base32-Secret oder otpauth://-URI",
@@ -3012,13 +3022,30 @@
       "phoneNumberLabel": "Telefon",
       "phoneShort": "Telefon",
       "phoneNumberPlaceholder": "Verknüpfte Telefonnummer",
+      "mailUrlLabel": "Mail-URL",
+      "mailUrlPlaceholder": "Öffnende Mail-Abfrageseite eintragen",
+      "mailPreviewRefresh": "Mail aktualisieren",
+      "mailPreviewOpen": "Im Browser öffnen",
+      "mailPreviewLoading": "Mail wird gelesen...",
+      "mailPreviewNoCode": "Kein fortlaufender 6-stelliger Code gefunden",
+      "mailPreviewFetchFailed": "Mail konnte nicht gelesen werden: {{error}}",
+      "mailPreviewUrlRequired": "Gib die Mail-URL ein",
+      "mailPreviewUrlInvalid": "Ungültige Mail-URL. Gib eine vollständige http://- oder https://-Adresse ein.",
+      "mailPreviewUnsupportedProtocol": "Die Mail-URL unterstützt nur http oder https.",
+      "mailPreviewHttpFailed": "Anfrage an Mail-URL fehlgeschlagen: HTTP {{status}}",
+      "mailPreviewCode": "Neuester E-Mail-Code",
+      "mailPreviewStatusInitial": "Abgerufen um {{time}}",
+      "mailPreviewStatusChanged": "Neuer Code · {{time}}",
+      "mailPreviewStatusUnchanged": "Unverändert · {{time}}",
+      "mailPreviewTruncated": "Inhalt gekürzt",
+      "mailOpenFailed": "Mail-URL konnte nicht geöffnet werden: {{error}}",
       "otherNoteLabel": "Weitere Notizen",
       "otherNoteShort": "Notiz",
       "placeholder": "Lieferhinweise, Wiederherstellungs-E-Mail oder Kontodetails",
-      "exportSensitiveNotice": "Der Export enthält 2FA-Secrets, Passwörter oder Telefonnummern. Nur an einem vertrauenswürdigen Ort speichern.",
+      "exportSensitiveNotice": "Der Export enthält 2FA-Secrets, Passwörter, Telefonnummern oder Mail-URLs. Nur an einem vertrauenswürdigen Ort speichern.",
       "exportSensitiveIncluded": "Sensible Notizen einschließen",
       "exportSensitiveExcluded": "Sensible Notizen ausschließen",
-      "exportSensitiveToggleHint": "Legt fest, ob der exportierte JSON 2FA-Secrets, Passwörter und Telefonnummern enthält.",
+      "exportSensitiveToggleHint": "Legt fest, ob der exportierte JSON 2FA-Secrets, Passwörter, Telefonnummern und Mail-URLs enthält.",
       "show": "Anzeigen",
       "hide": "Ausblenden",
       "emptyTitle": "Kontonotiz hinzufügen",
@@ -3588,6 +3615,18 @@
     "qoderCn": {
       "title": "QoderWork CN Settings",
       "appPath": "QoderWork CN Path"
+    },
+    "traeSolo": {
+      "appPath": "TRAE SOLO Pfad",
+      "title": "TRAE SOLO-Einstellungen"
+    },
+    "traeCn": {
+      "appPath": "Trae CN Pfad",
+      "title": "Trae CN-Einstellungen"
+    },
+    "traeSoloCn": {
+      "appPath": "TRAE SOLO CN Pfad",
+      "title": "TRAE SOLO CN-Einstellungen"
     }
   },
   "quotaAlert": {
@@ -4352,17 +4391,21 @@
   "trae": {
     "title": "Trae-Kontenverwaltung",
     "empty": {
-      "description": "Klicken Sie auf „Konto hinzufugen“, um Ihre Trae-Konten zu verwalten, oder importieren Sie sie aus lokalen Trae-Daten oder einer JSON-Datei."
+      "description": "Klicken Sie auf „Konto hinzufugen“, um Ihre Trae-Konten zu verwalten, oder importieren Sie sie aus lokalen Trae-Daten oder einer JSON-Datei.",
+      "descriptionWithPlatform": "Klicken Sie auf „Konto hinzufügen“, um {{platform}}-Konten zu verwalten, oder importieren Sie lokale {{platform}}-Daten bzw. eine JSON-Datei."
     },
     "addModal": {
-      "title": "Trae-Konto hinzufugen"
+      "title": "Trae-Konto hinzufugen",
+      "titleWithPlatform": "{{platform}}-Konto hinzufügen"
     },
     "oauth": {
-      "desc": "Klicken Sie unten auf die Schaltflache und schliessen Sie die Trae-OAuth-Anmeldung im Browser ab."
+      "desc": "Klicken Sie unten auf die Schaltflache und schliessen Sie die Trae-OAuth-Anmeldung im Browser ab.",
+      "descWithPlatform": "Klicken Sie auf die Schaltfläche unten und schließen Sie die {{platform}} OAuth-Autorisierung im Browser ab."
     },
     "import": {
       "localDesc": "Importiert das aktuell angemeldete Konto, Tarifinformationen und zwischengespeicherte Kontingentdaten aus dem lokalen Trae-Konfigurationsverzeichnis.",
-      "jsonTab": "JSON-Datei"
+      "jsonTab": "JSON-Datei",
+      "localDescWithPlatform": "Importiert das aktuell angemeldete Konto, Planinformationen und zwischengespeicherte Kontingentdaten aus dem lokalen {{platform}}-Konfigurationsverzeichnis."
     },
     "quota": {
       "usedOfTotal": "Verbraucht $ {{used}} von $ {{total}}",
@@ -4388,7 +4431,12 @@
       "title": "Trae-Kontoleitfaden (zum Auf- und Zuklappen klicken)",
       "desc": "Unterstutzt offizielle OAuth-Anmeldung, lokalen Import, JSON-Import und kontowechsel per lokaler Injektion. Beim Wechsel wird gemaess den realen Speicherregeln des Trae-Clients zuruckgeschrieben.",
       "permission": "Berechtigungsumfang: liest und schreibt anmeldungsbezogene Felder in der lokalen Trae-storage.json fur Kontoimport, Kontowechsel-Injektion und Tarifanzeige. Alle Daten werden ausschliesslich lokal auf Ihrem Gerat verarbeitet.",
-      "network": "Netzwerkumfang: OAuth-Anmeldung, Token-Aktualisierung und Tarifabfragen rufen offizielle Trae-APIs auf. Lokale Kontodateien und rohe Speicherinhalte werden nicht an Drittanbieter hochgeladen."
+      "network": "Netzwerkumfang: OAuth-Anmeldung, Token-Aktualisierung und Tarifabfragen rufen offizielle Trae-APIs auf. Lokale Kontodateien und rohe Speicherinhalte werden nicht an Drittanbieter hochgeladen.",
+      "titleWithPlatform": "{{platform}}-Kontoleitfaden (zum Ein-/Ausklappen klicken)",
+      "descWithPlatform": "Unterstützt offizielle {{platform}} OAuth-Anmeldung, lokalen Import, JSON-Import und lokales injektionsbasiertes Kontowechseln. Der Kontowechsel schreibt nach den tatsächlichen Speicherregeln des {{platform}}-Clients zurück.",
+      "permissionWithPlatform": "Berechtigungsumfang: Liest und schreibt anmeldebezogene Felder in der lokalen {{platform}} storage.json für Kontoimport, Kontowechsel-Injektion und Plananzeige. Alle Daten werden nur lokal verarbeitet.",
+      "networkGlobal": "Netzwerkumfang: {{platform}} OAuth-Anmeldung, Token-Aktualisierung und Planabfragen verwenden offizielle trae.ai / traeapi.us APIs. Lokale Kontodateien und rohe Speicherinhalte werden nicht an Drittanbieter hochgeladen.",
+      "networkCn": "Netzwerkumfang: {{platform}} OAuth-Anmeldung, Token-Aktualisierung und Planabfragen verwenden offizielle trae.cn / trae.com.cn APIs. Lokale Kontodateien und rohe Speicherinhalte werden nicht an Drittanbieter hochgeladen."
     }
   },
   "codebuddyCn": {

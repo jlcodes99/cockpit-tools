@@ -248,6 +248,9 @@
     "codebuddy": "CodeBuddy​",
     "qoder": "Qoder​",
     "trae": "Trae​",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
     "zed": "Zed Platformu",
     "expandSidebar": "Kenar çubuğunu genişlet",
@@ -790,7 +793,11 @@
       "antigravityLaunchOnSwitch": "Geçişte Antigravity IDE başlat",
       "antigravityLaunchOnSwitchDesc": "Kapalıyken geçiş yalnızca varsayılan Antigravity IDE hesap verilerini yazar; uygulamayı kapatmaz, başlatmaz veya yeniden başlatmaz.",
       "tokenKeeper": "Auth canlı tutma",
-      "tokenKeeperDesc": "Yetki süresi dolmaya yaklaşınca hesap Tokenlarını küçük gruplar halinde yeniler ve çok hesaplı kullanımda arka plan isteklerini azaltır."
+      "tokenKeeperDesc": "Yetki süresi dolmaya yaklaşınca hesap Tokenlarını küçük gruplar halinde yeniler ve çok hesaplı kullanımda arka plan isteklerini azaltır.",
+      "platformAutoRefresh": "{{platform}} kota otomatik yenileme",
+      "traeSoloAppPath": "TRAE SOLO başlatma yolu",
+      "traeCnAppPath": "Trae CN başlatma yolu",
+      "traeSoloCnAppPath": "TRAE SOLO CN başlatma yolu"
     },
     "network": {
       "apiTitle": "Yerçekimine Karşı Kokpit API'si",
@@ -2055,6 +2062,7 @@
     "quota": {
       "hourly": "5 saatlik kota",
       "weekly": "Haftalık kota",
+      "additional": "Ek kota",
       "reset": "Sıfırla",
       "weeklyBlocksHourly": "Haftalık kota 0 olduğu için 5 saatlik kota kullanılamaz",
       "resetCredits": "Sıfırlama {{count}}",
@@ -2979,7 +2987,9 @@
       "filterWithin24h": "24 sa ({{count}})",
       "filterWithin7d": "7 gün ({{count}})",
       "filterWithin30d": "30 gün ({{count}})",
-      "filterMissing": "Bilinmiyor ({{count}})"
+      "filterMissing": "Bilinmiyor ({{count}})",
+      "accessTokenOnlyUsable": "Token kullanılabilir",
+      "accessTokenOnlyUsableDetail": "Abonelik uç noktası sınırlı, ancak kota ve Codex kullanımı normal çalışıyor"
     },
     "apiSwitchNotice": {
       "title": "Codex oturumları gizli",
@@ -2998,7 +3008,7 @@
     "accountNote": {
       "title": "Hesap Notu",
       "label": "Hesap Notu",
-      "desc": "{{account}} için 2FA, parola, telefon ve diğer notları ekleyin.",
+      "desc": "{{account}} için parola, 2FA, posta URL’si, telefon ve diğer notları ekleyin.",
       "twoFactorSecretLabel": "2FA sırrı",
       "twoFactorSecretShort": "2FA",
       "twoFactorSecretPlaceholder": "Base32 sırrı veya otpauth:// URI",
@@ -3012,13 +3022,30 @@
       "phoneNumberLabel": "Telefon",
       "phoneShort": "Telefon",
       "phoneNumberPlaceholder": "Bağlı telefon numarası",
+      "mailUrlLabel": "Posta URL’si",
+      "mailUrlPlaceholder": "Açılabilir posta sorgu sayfası URL’sini girin",
+      "mailPreviewRefresh": "Postayı yenile",
+      "mailPreviewOpen": "Tarayıcıda aç",
+      "mailPreviewLoading": "Posta okunuyor...",
+      "mailPreviewNoCode": "Kesintisiz 6 haneli kod bulunamadı",
+      "mailPreviewFetchFailed": "Posta okunamadı: {{error}}",
+      "mailPreviewUrlRequired": "Posta URL’si girin",
+      "mailPreviewUrlInvalid": "Posta URL’si geçersiz. Tam bir http:// veya https:// adresi girin.",
+      "mailPreviewUnsupportedProtocol": "Posta URL’si yalnızca http veya https destekler.",
+      "mailPreviewHttpFailed": "Posta URL isteği başarısız: HTTP {{status}}",
+      "mailPreviewCode": "Son e-posta kodu",
+      "mailPreviewStatusInitial": "{{time}} tarihinde alındı",
+      "mailPreviewStatusChanged": "Yeni kod · {{time}}",
+      "mailPreviewStatusUnchanged": "Değişmedi · {{time}}",
+      "mailPreviewTruncated": "İçerik kısaltıldı",
+      "mailOpenFailed": "Posta URL’si açılamadı: {{error}}",
       "otherNoteLabel": "Diğer notlar",
       "otherNoteShort": "Not",
       "placeholder": "Teslim notları, kurtarma e-postası veya hesap ayrıntıları",
-      "exportSensitiveNotice": "Dışa aktarım 2FA sırları, parolalar veya telefon numaraları içerir. Yalnızca güvenilir bir konuma kaydedin.",
+      "exportSensitiveNotice": "Dışa aktarım 2FA sırları, parolalar, telefon numaraları veya posta URL’leri içerir. Yalnızca güvenilir bir konuma kaydedin.",
       "exportSensitiveIncluded": "Hassas notları dahil et",
       "exportSensitiveExcluded": "Hassas notları hariç tut",
-      "exportSensitiveToggleHint": "Dışa aktarılan JSON'un 2FA sırlarını, parolaları ve telefon numaralarını içerip içermeyeceğini kontrol eder.",
+      "exportSensitiveToggleHint": "Dışa aktarılan JSON’un 2FA sırlarını, parolaları, telefon numaralarını ve posta URL’lerini içerip içermeyeceğini kontrol eder.",
       "show": "Göster",
       "hide": "Gizle",
       "emptyTitle": "Hesap notu ekle",
@@ -3588,6 +3615,18 @@
     "qoderCn": {
       "title": "QoderWork CN Settings",
       "appPath": "QoderWork CN Path"
+    },
+    "traeSolo": {
+      "appPath": "TRAE SOLO Yolu",
+      "title": "TRAE SOLO Ayarları"
+    },
+    "traeCn": {
+      "appPath": "Trae CN Yolu",
+      "title": "Trae CN Ayarları"
+    },
+    "traeSoloCn": {
+      "appPath": "TRAE SOLO CN Yolu",
+      "title": "TRAE SOLO CN Ayarları"
     }
   },
   "quotaAlert": {
@@ -4352,17 +4391,21 @@
   "trae": {
     "title": "Trae hesap yonetimi",
     "empty": {
-      "description": "Trae hesaplarinizi yonetmeye baslamak icin \"Hesap ekle\" dugmesine tiklayin veya yerel Trae verilerinden ya da bir JSON dosyasindan ice aktarın."
+      "description": "Trae hesaplarinizi yonetmeye baslamak icin \"Hesap ekle\" dugmesine tiklayin veya yerel Trae verilerinden ya da bir JSON dosyasindan ice aktarın.",
+      "descriptionWithPlatform": "“Hesap Ekle” düğmesine tıklayarak {{platform}} hesaplarını yönetin veya yerel {{platform}} verilerini ya da bir JSON dosyasını içe aktarın."
     },
     "addModal": {
-      "title": "Trae hesabi ekle"
+      "title": "Trae hesabi ekle",
+      "titleWithPlatform": "{{platform}} Hesabı Ekle"
     },
     "oauth": {
-      "desc": "Asagidaki dugmeye tiklayin ve tarayicida Trae OAuth yetkilendirmesini tamamlayin."
+      "desc": "Asagidaki dugmeye tiklayin ve tarayicida Trae OAuth yetkilendirmesini tamamlayin.",
+      "descWithPlatform": "Aşağıdaki düğmeye tıklayın ve tarayıcıda {{platform}} OAuth yetkilendirmesini tamamlayın."
     },
     "import": {
       "localDesc": "Yerel Trae yapilandirma dizininden oturum acik hesabi, plan bilgilerini ve onbellekteki kota verilerini ice aktarir.",
-      "jsonTab": "JSON dosyasi"
+      "jsonTab": "JSON dosyasi",
+      "localDescWithPlatform": "Geçerli oturum açmış hesabı, plan bilgilerini ve önbelleğe alınmış kota verilerini yerel {{platform}} yapılandırma dizininden içe aktarır."
     },
     "quota": {
       "usedOfTotal": "Kullanilan $ {{used}} / $ {{total}}",
@@ -4388,7 +4431,12 @@
       "title": "Trae hesap kilavuzu (genisletmek/daraltmak icin tiklayin)",
       "desc": "Resmi OAuth girisini, yerel ice aktarmayi, JSON ice aktarmayi ve yerel enjeksiyonla hesap degistirmeyi destekler. Hesap degisiminde veriler Trae istemcisinin gercek disk kurallarina gore yeniden yazilir.",
       "permission": "Izin kapsami: hesap ice aktarma, hesap degistirme enjeksiyonu ve plan gosterimi icin yerel Trae storage.json icindeki girisle ilgili alanlari okur ve yazar. Tum veriler cihazinizda yerel olarak islenir.",
-      "network": "Ag kapsami: OAuth girisi, belirtec yenileme ve plan sorgulari resmi Trae API'lerini cagirir. Yerel hesap dosyalari ve ham depolama icerigi ucuncu taraf hizmetlere yuklenmez."
+      "network": "Ag kapsami: OAuth girisi, belirtec yenileme ve plan sorgulari resmi Trae API'lerini cagirir. Yerel hesap dosyalari ve ham depolama icerigi ucuncu taraf hizmetlere yuklenmez.",
+      "titleWithPlatform": "{{platform}} hesap kılavuzu (genişlet/daralt için tıklayın)",
+      "descWithPlatform": "Resmi {{platform}} OAuth oturum açma, yerel içe aktarma, JSON içe aktarma ve yerel enjeksiyonla hesap değiştirmeyi destekler. Hesap değiştirme, {{platform}} istemcisinin gerçek disk kurallarına göre yazar.",
+      "permissionWithPlatform": "İzin kapsamı: hesap içe aktarma, hesap değiştirme enjeksiyonu ve plan gösterimi için yerel {{platform}} storage.json içindeki oturum alanlarını okur ve yazar. Tüm veriler yalnızca yerelde işlenir.",
+      "networkGlobal": "Ağ kapsamı: {{platform}} OAuth oturum açma, token yenileme ve plan sorguları resmi trae.ai / traeapi.us API’lerini çağırır. Yerel hesap dosyaları ve ham depolama içerikleri üçüncü taraf hizmetlere yüklenmez.",
+      "networkCn": "Ağ kapsamı: {{platform}} OAuth oturum açma, token yenileme ve plan sorguları resmi trae.cn / trae.com.cn API’lerini çağırır. Yerel hesap dosyaları ve ham depolama içerikleri üçüncü taraf hizmetlere yüklenmez."
     }
   },
   "codebuddyCn": {

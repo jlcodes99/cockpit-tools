@@ -23,6 +23,8 @@ import {
   UnifiedAccountPresentation,
 } from '../presentation/platformAccountPresentation';
 import { DisplayGroup, getDisplayGroups } from '../services/groupService';
+import * as traeService from '../services/traeService';
+import type { TraePlatformId } from '../services/traeService';
 import {
   getFloatingCardContext,
   hideCurrentFloatingCardWindow,
@@ -63,7 +65,12 @@ import type { InstanceStoreState } from '../stores/createInstanceStore';
 import { useInstanceStore } from '../stores/useInstanceStore';
 import { useKiroInstanceStore } from '../stores/useKiroInstanceStore';
 import { useQoderInstanceStore } from '../stores/useQoderInstanceStore';
-import { useTraeInstanceStore } from '../stores/useTraeInstanceStore';
+import {
+  useTraeCnInstanceStore,
+  useTraeInstanceStore,
+  useTraeSoloCnInstanceStore,
+  useTraeSoloInstanceStore,
+} from '../stores/useTraeInstanceStore';
 import { useWindsurfInstanceStore } from '../stores/useWindsurfInstanceStore';
 import { useWorkbuddyInstanceStore } from '../stores/useWorkbuddyInstanceStore';
 import { ALL_PLATFORM_IDS, PLATFORM_PAGE_MAP, PlatformId } from '../types/platform';
@@ -134,6 +141,15 @@ type FloatingCardInstanceStoreApi = Pick<
   'refreshInstances' | 'updateInstance' | 'startInstance'
 >;
 
+function isTraeSuitePlatform(platformId: PlatformId): platformId is TraePlatformId {
+  return (
+    platformId === 'trae' ||
+    platformId === 'trae_solo' ||
+    platformId === 'trae_cn' ||
+    platformId === 'trae_solo_cn'
+  );
+}
+
 function loadInitialPlatform(): PlatformId {
   try {
     const saved = localStorage.getItem(FLOATING_CARD_PLATFORM_STORAGE_KEY);
@@ -193,6 +209,12 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return null;
     case 'trae':
       return useTraeInstanceStore.getState();
+    case 'trae_solo':
+      return useTraeSoloInstanceStore.getState();
+    case 'trae_cn':
+      return useTraeCnInstanceStore.getState();
+    case 'trae_solo_cn':
+      return useTraeSoloCnInstanceStore.getState();
     case 'workbuddy':
       return useWorkbuddyInstanceStore.getState();
     case 'zed':
@@ -448,6 +470,9 @@ export function FloatingCardWindow() {
           await useQoderAccountStore.getState().fetchAccounts();
           break;
         case 'trae':
+        case 'trae_solo':
+        case 'trae_cn':
+        case 'trae_solo_cn':
           await useTraeAccountStore.getState().fetchAccounts();
           break;
         case 'workbuddy':
@@ -789,6 +814,9 @@ export function FloatingCardWindow() {
           actualCurrentAccount: null,
         };
       case 'trae':
+      case 'trae_solo':
+      case 'trae_cn':
+      case 'trae_solo_cn':
         return {
           accounts: traeAccounts,
           actualCurrentAccount: traeCurrent,
@@ -877,6 +905,9 @@ export function FloatingCardWindow() {
       case 'qoder_cn':
         return null;
       case 'trae':
+      case 'trae_solo':
+      case 'trae_cn':
+      case 'trae_solo_cn':
         return getRecommendedTraeAccount(traeAccounts, effectiveCurrentId);
       case 'workbuddy':
         return getRecommendedWorkbuddyAccount(workbuddyAccounts, effectiveCurrentId);
@@ -969,6 +1000,9 @@ export function FloatingCardWindow() {
       case 'qoder_cn':
         return null;
       case 'trae':
+      case 'trae_solo':
+      case 'trae_cn':
+      case 'trae_solo_cn':
         return buildTraeAccountPresentation(viewedAccount as typeof traeAccounts[number], t);
       case 'workbuddy':
         return buildWorkbuddyAccountPresentation(viewedAccount as typeof workbuddyAccounts[number], t);
@@ -1066,6 +1100,9 @@ export function FloatingCardWindow() {
             await useQoderAccountStore.getState().refreshToken(viewedAccount.id);
             break;
           case 'trae':
+          case 'trae_solo':
+          case 'trae_cn':
+          case 'trae_solo_cn':
             await useTraeAccountStore.getState().refreshToken(viewedAccount.id);
             break;
           case 'workbuddy':
@@ -1178,7 +1215,13 @@ export function FloatingCardWindow() {
             await useQoderAccountStore.getState().switchAccount(viewedAccount.id);
             break;
           case 'trae':
-            await useTraeAccountStore.getState().switchAccount(viewedAccount.id);
+          case 'trae_solo':
+          case 'trae_cn':
+          case 'trae_solo_cn':
+            if (isTraeSuitePlatform(selectedPlatform)) {
+              await traeService.injectTraeAccount(viewedAccount.id, selectedPlatform);
+              await useTraeAccountStore.getState().fetchAccounts();
+            }
             break;
           case 'workbuddy':
             await useWorkbuddyAccountStore.getState().switchAccount(viewedAccount.id);

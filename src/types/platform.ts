@@ -17,6 +17,9 @@ export type PlatformId =
   | 'qoderwork_cn'
   | 'qoder_cn'
   | 'trae'
+  | 'trae_solo'
+  | 'trae_cn'
+  | 'trae_solo_cn'
   | 'workbuddy';
 
 export const ALL_PLATFORM_IDS: PlatformId[] = [
@@ -36,6 +39,9 @@ export const ALL_PLATFORM_IDS: PlatformId[] = [
   'qoderwork_cn',
   'qoder_cn',
   'trae',
+  'trae_solo',
+  'trae_cn',
+  'trae_solo_cn',
   'workbuddy',
 ];
 
@@ -66,5 +72,8 @@ export const PLATFORM_PAGE_MAP: Record<PlatformId, Page> = {
   qoderwork_cn: 'qoderwork-cn',
   qoder_cn: 'qoder-cn',
   trae: 'trae',
+  trae_solo: 'trae-solo',
+  trae_cn: 'trae-cn',
+  trae_solo_cn: 'trae-solo-cn',
   workbuddy: 'workbuddy',
 };

@@ -21,9 +21,12 @@ pub const PLATFORM_CODEBUDDY: &str = "codebuddy";
 pub const PLATFORM_CODEBUDDY_CN: &str = "codebuddy_cn";
 pub const PLATFORM_QODER: &str = "qoder";
 pub const PLATFORM_TRAE: &str = "trae";
+pub const PLATFORM_TRAE_SOLO: &str = "trae_solo";
+pub const PLATFORM_TRAE_CN: &str = "trae_cn";
+pub const PLATFORM_TRAE_SOLO_CN: &str = "trae_solo_cn";
 pub const PLATFORM_WORKBUDDY: &str = "workbuddy";
 
-pub const SUPPORTED_PLATFORM_IDS: [&str; 14] = [
+pub const SUPPORTED_PLATFORM_IDS: [&str; 17] = [
     PLATFORM_CLAUDE_MANAGER,
     PLATFORM_CODEX,
     PLATFORM_ANTIGRAVITY,
@@ -37,6 +40,9 @@ pub const SUPPORTED_PLATFORM_IDS: [&str; 14] = [
     PLATFORM_CODEBUDDY_CN,
     PLATFORM_QODER,
     PLATFORM_TRAE,
+    PLATFORM_TRAE_SOLO,
+    PLATFORM_TRAE_CN,
+    PLATFORM_TRAE_SOLO_CN,
     PLATFORM_WORKBUDDY,
 ];
 
@@ -44,6 +50,7 @@ pub const SORT_MODE_AUTO: &str = "auto";
 pub const SORT_MODE_MANUAL: &str = "manual";
 
 const DEFAULT_CODEBUDDY_GROUP_ID: &str = "codebuddy-suite";
+const DEFAULT_TRAE_GROUP_ID: &str = "trae-suite";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -86,16 +93,29 @@ fn default_tray_platforms() -> Vec<String> {
 }
 
 fn default_platform_groups() -> Vec<TrayLayoutGroup> {
-    vec![TrayLayoutGroup {
-        id: DEFAULT_CODEBUDDY_GROUP_ID.to_string(),
-        name: "CodeBuddy".to_string(),
-        platform_ids: vec![
-            PLATFORM_CODEBUDDY.to_string(),
-            PLATFORM_CODEBUDDY_CN.to_string(),
-            PLATFORM_WORKBUDDY.to_string(),
-        ],
-        default_platform_id: PLATFORM_CODEBUDDY.to_string(),
-    }]
+    vec![
+        TrayLayoutGroup {
+            id: DEFAULT_CODEBUDDY_GROUP_ID.to_string(),
+            name: "CodeBuddy".to_string(),
+            platform_ids: vec![
+                PLATFORM_CODEBUDDY.to_string(),
+                PLATFORM_CODEBUDDY_CN.to_string(),
+                PLATFORM_WORKBUDDY.to_string(),
+            ],
+            default_platform_id: PLATFORM_CODEBUDDY.to_string(),
+        },
+        TrayLayoutGroup {
+            id: DEFAULT_TRAE_GROUP_ID.to_string(),
+            name: "Trae".to_string(),
+            platform_ids: vec![
+                PLATFORM_TRAE.to_string(),
+                PLATFORM_TRAE_SOLO.to_string(),
+                PLATFORM_TRAE_CN.to_string(),
+                PLATFORM_TRAE_SOLO_CN.to_string(),
+            ],
+            default_platform_id: PLATFORM_TRAE.to_string(),
+        },
+    ]
 }
 
 fn default_ordered_entries() -> Vec<String> {
@@ -133,6 +153,9 @@ fn normalize_platform_id(id: &str) -> Option<&'static str> {
         PLATFORM_CODEBUDDY_CN => Some(PLATFORM_CODEBUDDY_CN),
         PLATFORM_QODER => Some(PLATFORM_QODER),
         PLATFORM_TRAE => Some(PLATFORM_TRAE),
+        PLATFORM_TRAE_SOLO | "trae-solo" => Some(PLATFORM_TRAE_SOLO),
+        PLATFORM_TRAE_CN | "trae-cn" => Some(PLATFORM_TRAE_CN),
+        PLATFORM_TRAE_SOLO_CN | "trae-solo-cn" => Some(PLATFORM_TRAE_SOLO_CN),
         PLATFORM_WORKBUDDY => Some(PLATFORM_WORKBUDDY),
         _ => None,
     }
@@ -191,6 +214,9 @@ fn normalize_tray_platforms(
         PLATFORM_CODEBUDDY_CN,
         PLATFORM_QODER,
         PLATFORM_TRAE,
+        PLATFORM_TRAE_SOLO,
+        PLATFORM_TRAE_CN,
+        PLATFORM_TRAE_SOLO_CN,
         PLATFORM_WORKBUDDY,
     ] {
         let already_present = contains_platform(&sanitized, new_platform);
@@ -289,6 +315,49 @@ fn normalize_platform_groups(groups: &[TrayLayoutGroup]) -> Vec<TrayLayoutGroup>
             default_platform_id,
         });
         used_group_ids.insert(group_id);
+    }
+
+    let trae_suite_platforms = [
+        PLATFORM_TRAE,
+        PLATFORM_TRAE_SOLO,
+        PLATFORM_TRAE_CN,
+        PLATFORM_TRAE_SOLO_CN,
+    ];
+    if let Some(group) = normalized.iter_mut().find(|group| {
+        group
+            .platform_ids
+            .iter()
+            .any(|id| trae_suite_platforms.contains(&id.as_str()))
+    }) {
+        for platform in trae_suite_platforms {
+            if used_platforms.insert(platform.to_string()) {
+                group.platform_ids.push(platform.to_string());
+            }
+        }
+        if !group
+            .platform_ids
+            .iter()
+            .any(|id| id == &group.default_platform_id)
+        {
+            group.default_platform_id = PLATFORM_TRAE.to_string();
+        }
+    } else {
+        let platform_ids: Vec<String> = trae_suite_platforms
+            .iter()
+            .filter(|platform| !used_platforms.contains(**platform))
+            .map(|platform| (*platform).to_string())
+            .collect();
+        if !platform_ids.is_empty() {
+            let group_id =
+                normalize_group_id(DEFAULT_TRAE_GROUP_ID, normalized.len(), &used_group_ids);
+            normalized.push(TrayLayoutGroup {
+                id: group_id.clone(),
+                name: "Trae".to_string(),
+                platform_ids,
+                default_platform_id: PLATFORM_TRAE.to_string(),
+            });
+            used_group_ids.insert(group_id);
+        }
     }
 
     normalized
@@ -398,6 +467,9 @@ fn normalize_config(
         PLATFORM_CODEBUDDY_CN,
         PLATFORM_QODER,
         PLATFORM_TRAE,
+        PLATFORM_TRAE_SOLO,
+        PLATFORM_TRAE_CN,
+        PLATFORM_TRAE_SOLO_CN,
         PLATFORM_WORKBUDDY,
     ]
     .iter()

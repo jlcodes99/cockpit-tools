@@ -294,6 +294,9 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   qoderwork_cn: async () => (await qoderworkCnService.listQoderworkCnAccounts()) as unknown as TransferAccountRecord[],
   qoder_cn: async () => (await qoderCnService.listQoderCnAccounts()) as unknown as TransferAccountRecord[],
   trae: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
+  trae_solo: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
+  trae_cn: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
+  trae_solo_cn: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
   workbuddy: async () => (await workbuddyService.listWorkbuddyAccounts()) as unknown as TransferAccountRecord[],
 };
 
@@ -314,6 +317,9 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   qoderwork_cn: qoderworkCnService.importQoderworkCnFromJson,
   qoder_cn: qoderCnService.importQoderCnFromJson,
   trae: traeService.importTraeFromJson,
+  trae_solo: traeService.importTraeFromJson,
+  trae_cn: traeService.importTraeFromJson,
+  trae_solo_cn: traeService.importTraeFromJson,
   workbuddy: workbuddyService.importWorkbuddyFromJson,
 };
 
@@ -474,6 +480,9 @@ function buildAccountRef(platform: PlatformId, account: TransferAccountRecord): 
       break;
     case 'qoder':
     case 'trae':
+    case 'trae_solo':
+    case 'trae_cn':
+    case 'trae_solo_cn':
       ref.email = normalizeString(account.email) ?? undefined;
       ref.userId = normalizeString(account.user_id) ?? undefined;
       break;
@@ -543,6 +552,9 @@ function scoreAccountRef(ref: DataTransferAccountRef, account: TransferAccountRe
       break;
     case 'qoder':
     case 'trae':
+    case 'trae_solo':
+    case 'trae_cn':
+    case 'trae_solo_cn':
       addStringScore(ref.userId, account.user_id, 24);
       addStringScore(ref.email, account.email, 10);
       break;

@@ -302,6 +302,9 @@
     "qoder": "Qoder",
     "qoderworkCn": "QoderWork CN",
     "trae": "Trae",
+    "traeSolo": "TRAE SOLO",
+    "traeCn": "Trae CN",
+    "traeSoloCn": "TRAE SOLO CN",
     "codebuddyCn": "CodeBuddy CN",
     "switchClassicLayoutEntry": "切换到经典布局",
     "switchClassicLayoutTitle": "切换至经典侧边栏布局",
@@ -1099,8 +1102,12 @@
       "zedPathSelect": "选择",
       "zedPathReset": "重置默认",
       "traeAutoRefresh": "Trae 自动刷新配额",
+      "platformAutoRefresh": "{{platform}} 自动刷新配额",
       "traeAutoRefreshDesc": "后台自动更新频率",
       "traeAppPath": "Trae 启动路径",
+      "traeSoloAppPath": "TRAE SOLO 启动路径",
+      "traeCnAppPath": "Trae CN 启动路径",
+      "traeSoloCnAppPath": "TRAE SOLO CN 启动路径",
       "traeAppPathDesc": "留空则使用默认路径",
       "traeAppPathPlaceholder": "默认路径",
       "traePathSelect": "选择",
@@ -1975,7 +1982,7 @@
     "accountNote": {
       "title": "账号备注",
       "label": "账号备注",
-      "desc": "给 {{account}} 填写 2FA、密码、手机号和其他备注。",
+      "desc": "给 {{account}} 填写密码、2FA、邮件地址、手机号和其他备注。",
       "twoFactorSecretLabel": "2FA 秘钥",
       "twoFactorSecretShort": "2FA",
       "twoFactorSecretPlaceholder": "Base32 secret 或 otpauth:// 链接",
@@ -1989,13 +1996,30 @@
       "phoneNumberLabel": "手机号",
       "phoneShort": "手机",
       "phoneNumberPlaceholder": "绑定手机号",
+      "mailUrlLabel": "邮件地址",
+      "mailUrlPlaceholder": "填写可打开的邮件查询网页地址",
+      "mailPreviewRefresh": "刷新邮件",
+      "mailPreviewOpen": "浏览器查看",
+      "mailPreviewLoading": "读取邮件中...",
+      "mailPreviewNoCode": "未匹配到连续 6 位验证码",
+      "mailPreviewFetchFailed": "读取邮件失败：{{error}}",
+      "mailPreviewUrlRequired": "请输入邮件地址",
+      "mailPreviewUrlInvalid": "邮件地址格式无效，请输入完整的 http:// 或 https:// 地址",
+      "mailPreviewUnsupportedProtocol": "邮件地址仅支持 http 或 https 协议",
+      "mailPreviewHttpFailed": "邮件地址请求失败：HTTP {{status}}",
+      "mailPreviewCode": "最近一条邮箱验证码",
+      "mailPreviewStatusInitial": "获取于 {{time}}",
+      "mailPreviewStatusChanged": "新验证码 · {{time}}",
+      "mailPreviewStatusUnchanged": "未变化 · {{time}}",
+      "mailPreviewTruncated": "内容已截断",
+      "mailOpenFailed": "打开邮件地址失败：{{error}}",
       "otherNoteLabel": "其他备注",
       "otherNoteShort": "备注",
       "placeholder": "其他交付备注、辅助邮箱或账号说明",
-      "exportSensitiveNotice": "导出内容包含 2FA 秘钥、密码或手机号，请只保存到可信位置。",
+      "exportSensitiveNotice": "导出内容包含 2FA 秘钥、密码、手机号或邮件地址，请只保存到可信位置。",
       "exportSensitiveIncluded": "包含敏感备注",
       "exportSensitiveExcluded": "已排除敏感备注",
-      "exportSensitiveToggleHint": "控制导出 JSON 是否包含 2FA 秘钥、密码和手机号。",
+      "exportSensitiveToggleHint": "控制导出 JSON 是否包含 2FA 秘钥、密码、手机号和邮件地址。",
       "show": "显示",
       "hide": "隐藏",
       "emptyTitle": "填写账号备注",
@@ -2731,6 +2755,7 @@
     "quota": {
       "hourly": "5小时配额",
       "weekly": "周配额",
+      "additional": "额外额度",
       "weeklyBlocksHourly": "周额度为 0，5小时额度已不可用",
       "reset": "重置",
       "resetCredits": "重置 {{count}}",
@@ -2804,7 +2829,9 @@
       "filterWithin24h": "24小时内 ({{count}})",
       "filterWithin7d": "7天内 ({{count}})",
       "filterWithin30d": "30天内 ({{count}})",
-      "filterMissing": "未获得 ({{count}})"
+      "filterMissing": "未获得 ({{count}})",
+      "accessTokenOnlyUsable": "Token 可用",
+      "accessTokenOnlyUsableDetail": "订阅信息接口受限，但配额与 Codex 使用正常"
     },
     "view": {
       "compact": "紧凑视图"
@@ -3888,6 +3915,18 @@
     "qoderCn": {
       "title": "QoderWork CN 设置",
       "appPath": "QoderWork CN 路径"
+    },
+    "traeSolo": {
+      "title": "TRAE SOLO 设置",
+      "appPath": "TRAE SOLO 路径"
+    },
+    "traeCn": {
+      "title": "Trae CN 设置",
+      "appPath": "Trae CN 路径"
+    },
+    "traeSoloCn": {
+      "title": "TRAE SOLO CN 设置",
+      "appPath": "TRAE SOLO CN 路径"
     }
   },
   "quotaAlert": {
@@ -4632,17 +4671,21 @@
   "trae": {
     "title": "Trae 账号管理",
     "empty": {
-      "description": "点击“添加账号”开始管理您的 Trae 账号，也可以从本机 Trae 数据或 JSON 文件导入。"
+      "description": "点击“添加账号”开始管理您的 Trae 账号，也可以从本机 Trae 数据或 JSON 文件导入。",
+      "descriptionWithPlatform": "点击“添加账号”开始管理您的 {{platform}} 账号，也可以从本机 {{platform}} 数据或 JSON 文件导入。"
     },
     "addModal": {
-      "title": "添加 Trae 账号"
+      "title": "添加 Trae 账号",
+      "titleWithPlatform": "添加 {{platform}} 账号"
     },
     "oauth": {
-      "desc": "点击下方按钮，在浏览器中完成 Trae OAuth 授权登录。"
+      "desc": "点击下方按钮，在浏览器中完成 Trae OAuth 授权登录。",
+      "descWithPlatform": "点击下方按钮，在浏览器中完成 {{platform}} OAuth 授权登录。"
     },
     "import": {
       "localDesc": "支持从本机 Trae 配置目录读取当前登录账号、套餐信息和配额缓存数据。",
-      "jsonTab": "JSON 文件"
+      "jsonTab": "JSON 文件",
+      "localDescWithPlatform": "支持从本机 {{platform}} 配置目录读取当前登录账号、套餐信息和配额缓存数据。"
     },
     "quota": {
       "usedOfTotal": "${{used}} / ${{total}}",
@@ -4668,7 +4711,12 @@
       "title": "Trae 账号接入说明（点击展开/收起）",
       "desc": "支持官方 OAuth 授权、本机导入、JSON 导入与本地注入切号；切号过程按 Trae 客户端真实落盘规则写回。",
       "permission": "权限范围：读取并写入本机 Trae 配置目录中的 storage.json 登录相关字段，用于账号导入、切号注入与套餐信息展示；所有数据仅在本机处理。",
-      "network": "网络范围：OAuth 登录、令牌刷新和套餐查询会请求 Trae 官方接口；不会向第三方服务上传本地账号文件或原始存储内容。"
+      "network": "网络范围：OAuth 登录、令牌刷新和套餐查询会请求 Trae 官方接口；不会向第三方服务上传本地账号文件或原始存储内容。",
+      "titleWithPlatform": "{{platform}} 账号接入说明（点击展开/收起）",
+      "descWithPlatform": "支持 {{platform}} 官方 OAuth 授权、本机导入、JSON 导入与本地注入切号；切号过程按 {{platform}} 客户端真实落盘规则写回。",
+      "permissionWithPlatform": "权限范围：读取并写入本机 {{platform}} 配置目录中的 storage.json 登录相关字段，用于账号导入、切号注入与套餐信息展示；所有数据仅在本机处理。",
+      "networkGlobal": "网络范围：{{platform}} OAuth 登录、令牌刷新和套餐查询会请求 trae.ai / traeapi.us 官方接口；不会向第三方服务上传本地账号文件或原始存储内容。",
+      "networkCn": "网络范围：{{platform}} OAuth 登录、令牌刷新和套餐查询会请求 trae.cn / trae.com.cn 官方接口；不会向第三方服务上传本地账号文件或原始存储内容。"
     }
   },
   "codebuddyCn": {

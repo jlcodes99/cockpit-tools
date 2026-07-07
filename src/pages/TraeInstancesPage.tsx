@@ -1,11 +1,13 @@
 import { useTranslation } from 'react-i18next';
 import { PlatformInstancesContent } from '../components/platform/PlatformInstancesContent';
-import { useTraeInstanceStore } from '../stores/useTraeInstanceStore';
+import { TRAE_INSTANCE_STORES } from '../stores/useTraeInstanceStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import type { TraeAccount } from '../types/trae';
+import type { TraePlatformId } from '../services/traeService';
 import {
   getTraeAccountDisplayEmail,
   getTraeAccountDisplayName,
+  getTraeAccountPlatformId,
   getTraePlanBadgeClass,
   getTraePlanDisplayName,
   getTraeUsage,
@@ -13,6 +15,7 @@ import {
 import { usePlatformRuntimeSupport } from '../hooks/usePlatformRuntimeSupport';
 
 interface TraeInstancesContentProps {
+  platformId?: TraePlatformId;
   accountsForSelect?: TraeAccount[];
 }
 
@@ -22,12 +25,15 @@ function formatUsd(value: number | null): string {
 }
 
 export function TraeInstancesContent({
+  platformId = 'trae',
   accountsForSelect,
 }: TraeInstancesContentProps = {}) {
   const { t } = useTranslation();
-  const instanceStore = useTraeInstanceStore();
+  const instanceStore = TRAE_INSTANCE_STORES[platformId]();
   const { accounts: storeAccounts, fetchAccounts } = useTraeAccountStore();
-  const sourceAccounts = accountsForSelect ?? storeAccounts;
+  const sourceAccounts =
+    accountsForSelect ??
+    storeAccounts.filter((account) => getTraeAccountPlatformId(account) === platformId);
   const isSupportedPlatform = usePlatformRuntimeSupport('desktop');
 
   const renderTraeQuotaPreview = (account: TraeAccount) => {
@@ -69,10 +75,11 @@ export function TraeInstancesContent({
           {getTraePlanDisplayName(account)}
         </span>
       )}
+      getAccountDisplayText={getTraeAccountDisplayName}
       getAccountSearchText={(account) =>
         `${getTraeAccountDisplayName(account)} ${getTraeAccountDisplayEmail(account)} ${getTraePlanDisplayName(account)}`
       }
-      appType="trae"
+      appType={platformId}
       isSupported={isSupportedPlatform}
       unsupportedTitleKey="common.shared.instances.unsupported.title"
       unsupportedTitleDefault="暂不支持当前系统"

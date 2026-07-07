@@ -89,6 +89,7 @@ interface InstancesManagerProps<TAccount extends AccountLike> {
   fetchAccounts: () => Promise<void>;
   renderAccountQuotaPreview: (account: TAccount) => ReactNode;
   renderAccountBadge?: (account: TAccount) => ReactNode;
+  getAccountDisplayText?: (account: TAccount) => string;
   getAccountSearchText?: (account: TAccount) => string;
   appType?:
     | "antigravity"
@@ -104,6 +105,9 @@ interface InstancesManagerProps<TAccount extends AccountLike> {
     | "codebuddy_cn"
     | "qoder"
     | "trae"
+    | "trae_solo"
+    | "trae_cn"
+    | "trae_solo_cn"
     | "workbuddy";
   onInstanceStarted?: (instance: InstanceProfile) => void | Promise<void>;
   resolveStartSuccessMessage?: (instance: InstanceProfile) => string;
@@ -297,6 +301,7 @@ export function InstancesManager<TAccount extends AccountLike>({
   fetchAccounts,
   renderAccountQuotaPreview,
   renderAccountBadge,
+  getAccountDisplayText,
   getAccountSearchText,
   appType = "antigravity",
   onInstanceStarted,
@@ -545,6 +550,14 @@ export function InstancesManager<TAccount extends AccountLike>({
     (value?: string | null) => maskSensitiveValue(value, privacyModeEnabled),
     [privacyModeEnabled],
   );
+  const resolveAccountDisplayText = useCallback(
+    (account?: TAccount | null) => {
+      if (!account) return "";
+      const value = getAccountDisplayText?.(account) ?? account.email;
+      return value.trim() || account.email;
+    },
+    [getAccountDisplayText],
+  );
 
   useEffect(() => {
     fetchDefaults();
@@ -640,7 +653,7 @@ export function InstancesManager<TAccount extends AccountLike>({
         : account
           ? getAccountSearchText
             ? getAccountSearchText(account)
-            : account.email
+            : resolveAccountDisplayText(account)
           : "";
       const haystack = [displayName, accountText, instance.userDataDir || ""]
         .join(" ")
@@ -651,6 +664,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     getAccountSearchText,
     resolveApiServiceLabel,
     resolveBoundAccount,
+    resolveAccountDisplayText,
     searchQuery,
     sortedInstances,
     t,
@@ -1717,6 +1731,7 @@ export function InstancesManager<TAccount extends AccountLike>({
       {visibleAccounts.map((account) => {
         const bindValue = resolveBindAccountValue(account.id) ?? account.id;
         const active = value === bindValue && !isFollowingCurrent;
+        const displayText = resolveAccountDisplayText(account);
         return (
           <button
             type="button"
@@ -1731,9 +1746,9 @@ export function InstancesManager<TAccount extends AccountLike>({
             <span className="account-select-email-row">
               <span
                 className="account-select-email"
-                title={maskAccountText(account.email)}
+                title={maskAccountText(displayText)}
               >
-                {maskAccountText(account.email)}
+                {maskAccountText(displayText)}
               </span>
               {renderAccountBadge?.(account)}
             </span>
@@ -1809,6 +1824,7 @@ export function InstancesManager<TAccount extends AccountLike>({
         }
         if (!normalizedQuery) return true;
         const haystack = [
+          resolveAccountDisplayText(account),
           account.email,
           getAccountSearchText ? getAccountSearchText(account) : "",
           ...(account.tags || []),
@@ -1817,7 +1833,13 @@ export function InstancesManager<TAccount extends AccountLike>({
           .toLowerCase();
         return haystack.includes(normalizedQuery);
       });
-    }, [getAccountSearchText, searchValue, selectableAccounts, tagFilter]);
+    }, [
+      getAccountSearchText,
+      resolveAccountDisplayText,
+      searchValue,
+      selectableAccounts,
+      tagFilter,
+    ]);
 
     const toggleTagFilter = useCallback((tag: string) => {
       setTagFilter((prev) =>
@@ -1905,11 +1927,11 @@ export function InstancesManager<TAccount extends AccountLike>({
     const selectedLabel = missing
       ? t("instances.quota.accountMissing", "账号不存在")
       : isFollowingCurrent
-        ? maskAccountText(selectedAccount?.email) ||
+        ? maskAccountText(resolveAccountDisplayText(selectedAccount)) ||
           t("instances.form.followCurrent", "跟随当前账号")
         : isApiServiceSelected
           ? resolveApiServiceLabel()
-        : maskAccountText(selectedAccount?.email) || basePlaceholder;
+          : maskAccountText(resolveAccountDisplayText(selectedAccount)) || basePlaceholder;
     const selectedBadge =
       !missing && selectedAccount
         ? renderAccountBadge?.(selectedAccount)
@@ -2032,6 +2054,7 @@ export function InstancesManager<TAccount extends AccountLike>({
         }
         if (!normalizedQuery) return true;
         const haystack = [
+          resolveAccountDisplayText(account),
           account.email,
           getAccountSearchText ? getAccountSearchText(account) : "",
           ...(account.tags || []),
@@ -2040,7 +2063,13 @@ export function InstancesManager<TAccount extends AccountLike>({
           .toLowerCase();
         return haystack.includes(normalizedQuery);
       });
-    }, [getAccountSearchText, searchValue, selectableAccounts, tagFilter]);
+    }, [
+      getAccountSearchText,
+      resolveAccountDisplayText,
+      searchValue,
+      selectableAccounts,
+      tagFilter,
+    ]);
 
     const toggleTagFilter = useCallback((tag: string) => {
       setTagFilter((prev) =>
@@ -2120,11 +2149,11 @@ export function InstancesManager<TAccount extends AccountLike>({
     const selectedLabel = missing
       ? t("instances.quota.accountMissing", "账号不存在")
       : isFollowingCurrent
-        ? maskAccountText(selectedAccount?.email) ||
+        ? maskAccountText(resolveAccountDisplayText(selectedAccount)) ||
           t("instances.form.followCurrent", "跟随当前账号")
         : isApiServiceSelected
           ? resolveApiServiceLabel()
-        : maskAccountText(selectedAccount?.email) || basePlaceholder;
+          : maskAccountText(resolveAccountDisplayText(selectedAccount)) || basePlaceholder;
     const selectedBadge =
       !missing && selectedAccount
         ? renderAccountBadge?.(selectedAccount)

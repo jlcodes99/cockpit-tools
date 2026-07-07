@@ -35,6 +35,10 @@ export interface CodexAccount {
   user_id?: string;
   plan_type?: string;
   subscription_active_until?: string;
+  subscription_query_last_attempt_at?: number;
+  subscription_query_last_success_at?: number;
+  subscription_query_next_retry_at?: number;
+  subscription_query_last_error?: string;
   auth_file_plan_type?: string;
   account_id?: string;
   organization_id?: string;
@@ -44,6 +48,7 @@ export interface CodexAccount {
   two_factor_secret?: string;
   account_password?: string;
   phone_number?: string;
+  mail_url?: string;
   app_speed?: CodexAppSpeed;
   tokens: CodexTokens;
   token_generation?: number;
@@ -64,6 +69,7 @@ export interface CodexAccountNoteUpdate {
   twoFactorSecret?: string;
   accountPassword?: string;
   phoneNumber?: string;
+  mailUrl?: string;
 }
 
 export interface CodexBatchDeleteError {
@@ -186,6 +192,21 @@ export interface CodexCodeReviewQuotaMetric {
   percentage: number;
   label: string;
   resetTime?: number;
+}
+
+export interface CodexAdditionalQuotaWindow {
+  id: string;
+  label: string;
+  percentage: number;
+  resetTime?: number;
+  windowMinutes?: number;
+  limitName: string;
+  limitLabel: string;
+  meteredFeature: string;
+  windowKind: "primary" | "secondary";
+  sourceIndex: number;
+  allowed?: boolean;
+  limitReached?: boolean;
 }
 
 export interface CodexInstanceThreadSyncItem {
@@ -629,6 +650,93 @@ export function getCodexCodeReviewQuotaMetric(
   );
 }
 
+function normalizeCodexAdditionalLimitLabel(
+  limitName: string,
+  meteredFeature: string,
+): string {
+  const fallback = limitName || meteredFeature;
+  if (!fallback) return "";
+  return fallback
+    .replace(/^gpt[-\s]*/i, "GPT ")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeCodexUnixSeconds(value: unknown): number | undefined {
+  const timestamp = toFiniteNumber(value);
+  if (timestamp === undefined || timestamp <= 0) return undefined;
+  return Math.floor(timestamp > 10_000_000_000 ? timestamp / 1000 : timestamp);
+}
+
+function normalizeAdditionalRateLimitWindow(
+  window: JsonRecord,
+  fallback: "hourly" | "weekly",
+): Pick<CodexQuotaWindow, "label" | "percentage" | "resetTime" | "windowMinutes"> | null {
+  const usedPercent = toFiniteNumber(window.used_percent);
+  if (usedPercent === undefined) return null;
+  const percentage = Math.max(0, Math.min(100, 100 - Math.round(usedPercent)));
+  const limitWindowSeconds = toFiniteNumber(window.limit_window_seconds);
+  const windowMinutes =
+    limitWindowSeconds !== undefined && limitWindowSeconds > 0
+      ? Math.ceil(limitWindowSeconds / 60)
+      : undefined;
+
+  return {
+    label: getCodexQuotaWindowLabel(windowMinutes, fallback),
+    percentage,
+    resetTime: normalizeCodexUnixSeconds(window.reset_at),
+    windowMinutes,
+  };
+}
+
+export function getCodexAdditionalQuotaWindows(
+  quota: CodexQuota | undefined,
+): CodexAdditionalQuotaWindow[] {
+  const raw = toJsonRecord(quota?.raw_data);
+  const additionalRateLimits = raw?.additional_rate_limits;
+  if (!Array.isArray(additionalRateLimits)) return [];
+
+  return additionalRateLimits.flatMap((entry, sourceIndex) => {
+    const record = toJsonRecord(entry);
+    const rateLimit = toJsonRecord(record?.rate_limit);
+    if (!record || !rateLimit) return [];
+
+    const limitName = toStringValue(record.limit_name) || "";
+    const meteredFeature = toStringValue(record.metered_feature) || "";
+    const limitLabel = normalizeCodexAdditionalLimitLabel(
+      limitName,
+      meteredFeature,
+    );
+    const allowed = toBoolValue(rateLimit.allowed);
+    const limitReached = toBoolValue(rateLimit.limit_reached);
+    const result: CodexAdditionalQuotaWindow[] = [];
+
+    ([
+      ["primary_window", "primary", "hourly"] as const,
+      ["secondary_window", "secondary", "weekly"] as const,
+    ]).forEach(([windowKey, windowKind, fallback]) => {
+      const window = toJsonRecord(rateLimit[windowKey]);
+      if (!window) return;
+      const normalized = normalizeAdditionalRateLimitWindow(window, fallback);
+      if (!normalized) return;
+      result.push({
+        id: `additional:${sourceIndex}:${windowKind}`,
+        sourceIndex,
+        windowKind,
+        limitName,
+        limitLabel,
+        meteredFeature,
+        allowed,
+        limitReached,
+        ...normalized,
+      });
+    });
+
+    return result;
+  });
+}
+
 export function isCodexApiKeyAccount(account: CodexAccount): boolean {
   return (account.auth_mode || "").trim().toLowerCase() === "apikey";
 }
@@ -647,7 +755,8 @@ export function isCodexPendingOAuthAccount(account?: CodexAccount | null): boole
     Boolean((account.account_note || "").trim()) ||
     Boolean((account.two_factor_secret || "").trim()) ||
     Boolean((account.account_password || "").trim()) ||
-    Boolean((account.phone_number || "").trim());
+    Boolean((account.phone_number || "").trim()) ||
+    Boolean((account.mail_url || "").trim());
   return !hasToken && hasSavedNote;
 }
 
@@ -832,6 +941,7 @@ const HOUR_IN_MS = 60 * 60 * 1000;
 
 export type CodexSubscriptionExpiryBucket =
   | "missing"
+  | "access_token_only"
   | "expired"
   | "within_24h"
   | "within_7d"
@@ -944,6 +1054,47 @@ export function getCodexSubscriptionPresentation(
     detailText,
     titleText: t("codex.subscription.titleWithDate", { date: detailText }),
     timestampMs,
+  };
+}
+
+function isCodexOpaqueAccessTokenOnlyAccount(account: CodexAccount): boolean {
+  const accessToken = account.tokens?.access_token?.trim() || "";
+  const refreshToken = account.tokens?.refresh_token?.trim() || "";
+  return accessToken.startsWith("at-") && !refreshToken;
+}
+
+function isCodexAccessTokenOnlySubscriptionLimited(account: CodexAccount): boolean {
+  if (!isCodexTeamLikePlan(account.plan_type)) return false;
+  if (!isCodexOpaqueAccessTokenOnlyAccount(account)) return false;
+  if (!account.quota || account.quota_error) return false;
+  const lastError = account.subscription_query_last_error || "";
+  return /no_matching_rule|rejected_by_access_enforcement|access enforcement/i.test(
+    lastError,
+  );
+}
+
+export function getCodexSubscriptionPresentationForAccount(
+  account: CodexAccount,
+  t: Translate,
+): CodexSubscriptionPresentation {
+  const base = getCodexSubscriptionPresentation(account.subscription_active_until, t);
+  if (base.bucket !== "missing") return base;
+
+  if (!isCodexAccessTokenOnlySubscriptionLimited(account)) return base;
+
+  const valueText = t("codex.subscription.accessTokenOnlyUsable", {
+    defaultValue: "Token 可用",
+  });
+  const detailText = t("codex.subscription.accessTokenOnlyUsableDetail", {
+    defaultValue: "订阅信息接口受限，但配额与 Codex 使用正常",
+  });
+  return {
+    bucket: "access_token_only",
+    tone: "active",
+    valueText,
+    detailText,
+    titleText: detailText,
+    timestampMs: null,
   };
 }
 

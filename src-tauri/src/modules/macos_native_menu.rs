@@ -421,7 +421,10 @@ mod imp {
             PlatformId::Codebuddy => "#4b74ff",
             PlatformId::CodebuddyCn => "#4b74ff",
             PlatformId::Qoder => "#5664ff",
-            PlatformId::Trae => "#4f46e5",
+            PlatformId::Trae
+            | PlatformId::TraeSolo
+            | PlatformId::TraeCn
+            | PlatformId::TraeSoloCn => "#4f46e5",
             PlatformId::Workbuddy => "#2fa36a",
         }
     }
@@ -2899,7 +2902,10 @@ mod imp {
             PlatformId::Cursor => build_cursor_cards(lang),
             PlatformId::Gemini => build_gemini_cards(lang),
             PlatformId::Qoder => build_qoder_cards(lang),
-            PlatformId::Trae => build_trae_cards(lang),
+            PlatformId::Trae
+            | PlatformId::TraeSolo
+            | PlatformId::TraeCn
+            | PlatformId::TraeSoloCn => build_trae_cards(lang, platform),
             PlatformId::Codebuddy => build_codebuddy_cards(lang),
             PlatformId::CodebuddyCn => build_codebuddy_cn_cards(lang),
             PlatformId::Workbuddy => build_workbuddy_cards(lang),
@@ -3837,9 +3843,16 @@ mod imp {
         (cards, current_id, None)
     }
 
-    fn build_trae_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {
+    fn build_trae_cards(
+        lang: &str,
+        platform: PlatformId,
+    ) -> (Vec<AccountCard>, Option<String>, Option<String>) {
         let mut accounts = modules::trae_account::list_accounts();
-        let current_id = modules::trae_account::resolve_current_account_id(&accounts);
+        let current_id = modules::trae_account::TraePlatformKind::parse(Some(platform.as_str()))
+            .ok()
+            .and_then(|kind| {
+                modules::trae_account::resolve_current_account_id_for_platform(&accounts, kind)
+            });
         accounts
             .sort_by_key(|account| std::cmp::Reverse(account.last_used.max(account.created_at)));
         let cards = accounts
@@ -4501,14 +4514,22 @@ mod imp {
                 (PlatformId::Qoder, None) => {
                     commands::qoder::refresh_all_qoder_tokens(app.clone()).await
                 }
-                (PlatformId::Trae, Some(account_id)) => {
-                    commands::trae::refresh_trae_token(app.clone(), account_id)
-                        .await
-                        .map(|_| 0)
-                }
-                (PlatformId::Trae, None) => {
-                    commands::trae::refresh_all_trae_tokens(app.clone()).await
-                }
+                (
+                    PlatformId::Trae
+                    | PlatformId::TraeSolo
+                    | PlatformId::TraeCn
+                    | PlatformId::TraeSoloCn,
+                    Some(account_id),
+                ) => commands::trae::refresh_trae_token(app.clone(), account_id)
+                    .await
+                    .map(|_| 0),
+                (
+                    PlatformId::Trae
+                    | PlatformId::TraeSolo
+                    | PlatformId::TraeCn
+                    | PlatformId::TraeSoloCn,
+                    None,
+                ) => commands::trae::refresh_all_trae_tokens(app.clone()).await,
                 (PlatformId::Workbuddy, Some(account_id)) => {
                     commands::workbuddy::refresh_workbuddy_token(app.clone(), account_id)
                         .await
@@ -4590,9 +4611,16 @@ mod imp {
                 PlatformId::Qoder => commands::qoder::inject_qoder_account(app, account_id)
                     .await
                     .map(|_| ()),
-                PlatformId::Trae => commands::trae::inject_trae_account(app, account_id)
-                    .await
-                    .map(|_| ()),
+                PlatformId::Trae
+                | PlatformId::TraeSolo
+                | PlatformId::TraeCn
+                | PlatformId::TraeSoloCn => commands::trae::inject_trae_account(
+                    app,
+                    account_id,
+                    Some(platform.as_str().to_string()),
+                )
+                .await
+                .map(|_| ()),
                 PlatformId::Workbuddy => {
                     commands::workbuddy::inject_workbuddy_to_vscode(app, account_id)
                         .await

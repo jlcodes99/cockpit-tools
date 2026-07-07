@@ -31,6 +31,8 @@ export interface TraeAccount {
   quota?: TraeQuota;
 }
 
+export type TraeAccountPlatformId = 'trae' | 'trae_solo' | 'trae_cn' | 'trae_solo_cn';
+
 export interface TraeQuota {
   hourly_percentage: number;
   weekly_percentage: number;
@@ -38,6 +40,9 @@ export interface TraeQuota {
   weekly_reset_time?: number | null;
   raw_data?: unknown;
 }
+
+const TRAE_AUTH_CLIENT_ID = 'ono9krqynydwx5';
+const TRAE_SOLO_AUTH_CLIENT_ID = 'en1oxy7wnw8j9n';
 
 export type TraeUsage = {
   usedPercent: number | null;
@@ -428,6 +433,116 @@ function getTraeProfileRoot(account: TraeAccount): Record<string, unknown> | nul
 function getTraeAuthAccountRoot(account: TraeAccount): Record<string, unknown> | null {
   const authRaw = toRecord(account.trae_auth_raw);
   return pickNestedObject(authRaw, ['account']);
+}
+
+function normalizeTraeAccountPlatformId(raw: unknown): TraeAccountPlatformId | null {
+  const value = toNonEmptyString(raw);
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase().replace(/[-\s]+/g, '_');
+  const compact = normalized.replace(/_/g, '');
+
+  switch (compact) {
+    case 'trae':
+      return 'trae';
+    case 'traesolo':
+      return 'trae_solo';
+    case 'traecn':
+      return 'trae_cn';
+    case 'traesolocn':
+      return 'trae_solo_cn';
+    default:
+      return null;
+  }
+}
+
+function pickStringPath(root: Record<string, unknown> | null, path: string[]): string | null {
+  if (!root || path.length === 0) return null;
+  let current: unknown = root;
+  for (const segment of path) {
+    const record = toRecord(current);
+    if (!record) return null;
+    current = record[segment];
+  }
+  return toNonEmptyString(current);
+}
+
+function pickFirstStringPath(
+  roots: Array<Record<string, unknown> | null>,
+  paths: string[][],
+): string | null {
+  for (const root of roots) {
+    for (const path of paths) {
+      const value = pickStringPath(root, path);
+      if (value) return value;
+    }
+  }
+  return null;
+}
+
+export function getTraeAccountPlatformId(account: TraeAccount): TraeAccountPlatformId {
+  const authRaw = toRecord(account.trae_auth_raw);
+  const profileRaw = toRecord(account.trae_profile_raw);
+  const profileRoot = getTraeProfileRoot(account);
+  const serverRaw = toRecord(account.trae_server_raw);
+  const entitlementRaw = toRecord(account.trae_entitlement_raw);
+  const usageRaw = toRecord(account.trae_usage_raw);
+  const roots = [authRaw, profileRaw, profileRoot, serverRaw, entitlementRaw, usageRaw];
+
+  const explicitPlatform = pickFirstStringPath(roots, [
+    ['platformId'],
+    ['platform_id'],
+    ['platform'],
+    ['platform', 'platformId'],
+    ['platform', 'platform_id'],
+  ]);
+  const normalizedPlatform = normalizeTraeAccountPlatformId(explicitPlatform);
+  if (normalizedPlatform) return normalizedPlatform;
+
+  const clientId = pickFirstStringPath(roots, [
+    ['authClientId'],
+    ['clientId'],
+    ['ClientID'],
+    ['exchangeResponse', 'ClientID'],
+    ['exchangeResponse', 'Result', 'ClientID'],
+    ['platform', 'authClientId'],
+  ]);
+  const isSolo = clientId === TRAE_SOLO_AUTH_CLIENT_ID;
+
+  const domainHint = (
+    pickFirstStringPath(roots, [
+      ['authDomain'],
+      ['loginHost'],
+      ['apiHost'],
+      ['host'],
+      ['callbackQuery', 'host'],
+      ['platform', 'authDomain'],
+      ['Result', 'Host'],
+      ['Result', 'AIPayHost'],
+      ['Result', 'AIHost'],
+    ]) ?? ''
+  ).toLowerCase();
+  const providerHint = (
+    pickFirstStringPath(roots, [
+      ['providerCode'],
+      ['packageType'],
+      ['platformName'],
+      ['platform', 'providerCode'],
+      ['platform', 'packageType'],
+      ['platform', 'platformName'],
+    ]) ?? ''
+  ).toLowerCase();
+  const isCn =
+    domainHint.includes('trae.cn') ||
+    domainHint.includes('trae.com.cn') ||
+    providerHint === 'cn' ||
+    providerHint.endsWith('_cn') ||
+    providerHint.includes(' cn');
+
+  if (isSolo && isCn) return 'trae_solo_cn';
+  if (isSolo) return 'trae_solo';
+  if (isCn) return 'trae_cn';
+  if (clientId === TRAE_AUTH_CLIENT_ID) return 'trae';
+  return 'trae';
 }
 
 function normalizeTraeLoginProvider(rawProvider: string | null): string | null {

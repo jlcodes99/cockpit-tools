@@ -99,6 +99,9 @@ pub struct GeneralConfig {
     pub qoder_cn_auto_refresh_minutes: i32,
     /// Trae 自动刷新间隔（分钟），-1 表示禁用
     pub trae_auto_refresh_minutes: i32,
+    pub trae_solo_auto_refresh_minutes: i32,
+    pub trae_cn_auto_refresh_minutes: i32,
+    pub trae_solo_cn_auto_refresh_minutes: i32,
     /// 窗口关闭行为: "ask", "minimize", "quit"
     pub close_behavior: String,
     /// 窗口最小化行为（macOS）: "dock_and_tray", "tray_only"
@@ -161,6 +164,14 @@ pub struct GeneralConfig {
     pub qoder_cn_app_path: String,
     /// Trae 启动路径（为空则使用默认路径）
     pub trae_app_path: String,
+    /// Trae Windows 应用扫描范围（每行一个目录）
+    pub trae_solo_app_path: String,
+    pub trae_cn_app_path: String,
+    pub trae_solo_cn_app_path: String,
+    pub trae_app_scan_roots: String,
+    pub trae_solo_app_scan_roots: String,
+    pub trae_cn_app_scan_roots: String,
+    pub trae_solo_cn_app_scan_roots: String,
     /// WorkBuddy 启动路径（为空则使用默认路径）
     pub workbuddy_app_path: String,
     /// 切换 Codex 时是否自动重启 OpenCode
@@ -277,6 +288,12 @@ pub struct GeneralConfig {
     pub trae_quota_alert_enabled: bool,
     /// Trae 配额预警阈值（百分比）
     pub trae_quota_alert_threshold: i32,
+    pub trae_solo_quota_alert_enabled: bool,
+    pub trae_solo_quota_alert_threshold: i32,
+    pub trae_cn_quota_alert_enabled: bool,
+    pub trae_cn_quota_alert_threshold: i32,
+    pub trae_solo_cn_quota_alert_enabled: bool,
+    pub trae_solo_cn_quota_alert_threshold: i32,
     /// 是否启用 WorkBuddy 配额预警通知
     pub workbuddy_quota_alert_enabled: bool,
     /// WorkBuddy 配额预警阈值（百分比）
@@ -1973,6 +1990,9 @@ pub fn save_network_config(
         qoderwork_cn_auto_refresh_minutes: current.qoderwork_cn_auto_refresh_minutes,
         qoder_cn_auto_refresh_minutes: current.qoder_cn_auto_refresh_minutes,
         trae_auto_refresh_minutes: current.trae_auto_refresh_minutes,
+        trae_solo_auto_refresh_minutes: current.trae_solo_auto_refresh_minutes,
+        trae_cn_auto_refresh_minutes: current.trae_cn_auto_refresh_minutes,
+        trae_solo_cn_auto_refresh_minutes: current.trae_solo_cn_auto_refresh_minutes,
         close_behavior: current.close_behavior,
         minimize_behavior: current.minimize_behavior,
         hide_dock_icon: current.hide_dock_icon,
@@ -2022,6 +2042,13 @@ pub fn save_network_config(
         qoderwork_cn_app_path: current.qoderwork_cn_app_path,
         qoder_cn_app_path: current.qoder_cn_app_path,
         trae_app_path: current.trae_app_path,
+        trae_solo_app_path: current.trae_solo_app_path,
+        trae_cn_app_path: current.trae_cn_app_path,
+        trae_solo_cn_app_path: current.trae_solo_cn_app_path,
+        trae_app_scan_roots: current.trae_app_scan_roots,
+        trae_solo_app_scan_roots: current.trae_solo_app_scan_roots,
+        trae_cn_app_scan_roots: current.trae_cn_app_scan_roots,
+        trae_solo_cn_app_scan_roots: current.trae_solo_cn_app_scan_roots,
         workbuddy_app_path: current.workbuddy_app_path,
         opencode_sync_on_switch: current.opencode_sync_on_switch,
         opencode_auth_overwrite_on_switch: current.opencode_auth_overwrite_on_switch,
@@ -2081,6 +2108,12 @@ pub fn save_network_config(
         qoder_cn_quota_alert_threshold: current.qoder_cn_quota_alert_threshold,
         trae_quota_alert_enabled: current.trae_quota_alert_enabled,
         trae_quota_alert_threshold: current.trae_quota_alert_threshold,
+        trae_solo_quota_alert_enabled: current.trae_solo_quota_alert_enabled,
+        trae_solo_quota_alert_threshold: current.trae_solo_quota_alert_threshold,
+        trae_cn_quota_alert_enabled: current.trae_cn_quota_alert_enabled,
+        trae_cn_quota_alert_threshold: current.trae_cn_quota_alert_threshold,
+        trae_solo_cn_quota_alert_enabled: current.trae_solo_cn_quota_alert_enabled,
+        trae_solo_cn_quota_alert_threshold: current.trae_solo_cn_quota_alert_threshold,
         workbuddy_quota_alert_enabled: current.workbuddy_quota_alert_enabled,
         workbuddy_quota_alert_threshold: current.workbuddy_quota_alert_threshold,
     };
@@ -2301,6 +2334,9 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         qoderwork_cn_auto_refresh_minutes: user_config.qoderwork_cn_auto_refresh_minutes,
         qoder_cn_auto_refresh_minutes: user_config.qoder_cn_auto_refresh_minutes,
         trae_auto_refresh_minutes: user_config.trae_auto_refresh_minutes,
+        trae_solo_auto_refresh_minutes: user_config.trae_solo_auto_refresh_minutes,
+        trae_cn_auto_refresh_minutes: user_config.trae_cn_auto_refresh_minutes,
+        trae_solo_cn_auto_refresh_minutes: user_config.trae_solo_cn_auto_refresh_minutes,
         close_behavior: close_behavior_str.to_string(),
         minimize_behavior: minimize_behavior_str.to_string(),
         hide_dock_icon: user_config.hide_dock_icon,
@@ -2336,6 +2372,13 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         qoderwork_cn_app_path: user_config.qoderwork_cn_app_path,
         qoder_cn_app_path: user_config.qoder_cn_app_path,
         trae_app_path: user_config.trae_app_path,
+        trae_solo_app_path: user_config.trae_solo_app_path,
+        trae_cn_app_path: user_config.trae_cn_app_path,
+        trae_solo_cn_app_path: user_config.trae_solo_cn_app_path,
+        trae_app_scan_roots: user_config.trae_app_scan_roots,
+        trae_solo_app_scan_roots: user_config.trae_solo_app_scan_roots,
+        trae_cn_app_scan_roots: user_config.trae_cn_app_scan_roots,
+        trae_solo_cn_app_scan_roots: user_config.trae_solo_cn_app_scan_roots,
         workbuddy_app_path: user_config.workbuddy_app_path,
         opencode_sync_on_switch: user_config.opencode_sync_on_switch,
         opencode_auth_overwrite_on_switch: user_config.opencode_auth_overwrite_on_switch,
@@ -2395,6 +2438,12 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         qoder_cn_quota_alert_threshold: user_config.qoder_cn_quota_alert_threshold,
         trae_quota_alert_enabled: user_config.trae_quota_alert_enabled,
         trae_quota_alert_threshold: user_config.trae_quota_alert_threshold,
+        trae_solo_quota_alert_enabled: user_config.trae_solo_quota_alert_enabled,
+        trae_solo_quota_alert_threshold: user_config.trae_solo_quota_alert_threshold,
+        trae_cn_quota_alert_enabled: user_config.trae_cn_quota_alert_enabled,
+        trae_cn_quota_alert_threshold: user_config.trae_cn_quota_alert_threshold,
+        trae_solo_cn_quota_alert_enabled: user_config.trae_solo_cn_quota_alert_enabled,
+        trae_solo_cn_quota_alert_threshold: user_config.trae_solo_cn_quota_alert_threshold,
         workbuddy_quota_alert_enabled: user_config.workbuddy_quota_alert_enabled,
         workbuddy_quota_alert_threshold: user_config.workbuddy_quota_alert_threshold,
     };
@@ -2448,6 +2497,9 @@ pub fn save_general_config(
     qoderwork_cn_auto_refresh_minutes: Option<i32>,
     qoder_cn_auto_refresh_minutes: Option<i32>,
     trae_auto_refresh_minutes: Option<i32>,
+    trae_solo_auto_refresh_minutes: Option<i32>,
+    trae_cn_auto_refresh_minutes: Option<i32>,
+    trae_solo_cn_auto_refresh_minutes: Option<i32>,
     close_behavior: String,
     minimize_behavior: Option<String>,
     hide_dock_icon: Option<bool>,
@@ -2479,6 +2531,13 @@ pub fn save_general_config(
     qoderwork_cn_app_path: Option<String>,
     qoder_cn_app_path: Option<String>,
     trae_app_path: Option<String>,
+    trae_solo_app_path: Option<String>,
+    trae_cn_app_path: Option<String>,
+    trae_solo_cn_app_path: Option<String>,
+    trae_app_scan_roots: Option<String>,
+    trae_solo_app_scan_roots: Option<String>,
+    trae_cn_app_scan_roots: Option<String>,
+    trae_solo_cn_app_scan_roots: Option<String>,
     workbuddy_app_path: Option<String>,
     opencode_sync_on_switch: bool,
     opencode_auth_overwrite_on_switch: Option<bool>,
@@ -2537,6 +2596,12 @@ pub fn save_general_config(
     qoder_cn_quota_alert_threshold: Option<i32>,
     trae_quota_alert_enabled: Option<bool>,
     trae_quota_alert_threshold: Option<i32>,
+    trae_solo_quota_alert_enabled: Option<bool>,
+    trae_solo_quota_alert_threshold: Option<i32>,
+    trae_cn_quota_alert_enabled: Option<bool>,
+    trae_cn_quota_alert_threshold: Option<i32>,
+    trae_solo_cn_quota_alert_enabled: Option<bool>,
+    trae_solo_cn_quota_alert_threshold: Option<i32>,
     workbuddy_quota_alert_enabled: Option<bool>,
     workbuddy_quota_alert_threshold: Option<i32>,
 ) -> Result<(), String> {
@@ -2588,6 +2653,27 @@ pub fn save_general_config(
     let normalized_trae_path = trae_app_path
         .map(|value| value.trim().to_string())
         .unwrap_or_else(|| current.trae_app_path.clone());
+    let normalized_trae_solo_path = trae_solo_app_path
+        .map(|value| value.trim().to_string())
+        .unwrap_or_else(|| current.trae_solo_app_path.clone());
+    let normalized_trae_cn_path = trae_cn_app_path
+        .map(|value| value.trim().to_string())
+        .unwrap_or_else(|| current.trae_cn_app_path.clone());
+    let normalized_trae_solo_cn_path = trae_solo_cn_app_path
+        .map(|value| value.trim().to_string())
+        .unwrap_or_else(|| current.trae_solo_cn_app_path.clone());
+    let normalized_trae_app_scan_roots = trae_app_scan_roots
+        .map(|value| value.trim().to_string())
+        .unwrap_or_else(|| current.trae_app_scan_roots.clone());
+    let normalized_trae_solo_app_scan_roots = trae_solo_app_scan_roots
+        .map(|value| value.trim().to_string())
+        .unwrap_or_else(|| current.trae_solo_app_scan_roots.clone());
+    let normalized_trae_cn_app_scan_roots = trae_cn_app_scan_roots
+        .map(|value| value.trim().to_string())
+        .unwrap_or_else(|| current.trae_cn_app_scan_roots.clone());
+    let normalized_trae_solo_cn_app_scan_roots = trae_solo_cn_app_scan_roots
+        .map(|value| value.trim().to_string())
+        .unwrap_or_else(|| current.trae_solo_cn_app_scan_roots.clone());
     let normalized_workbuddy_path = workbuddy_app_path
         .map(|value| value.trim().to_string())
         .unwrap_or_else(|| current.workbuddy_app_path.clone());
@@ -2706,6 +2792,12 @@ pub fn save_general_config(
             .unwrap_or(current.qoder_cn_auto_refresh_minutes),
         trae_auto_refresh_minutes: trae_auto_refresh_minutes
             .unwrap_or(current.trae_auto_refresh_minutes),
+        trae_solo_auto_refresh_minutes: trae_solo_auto_refresh_minutes
+            .unwrap_or(current.trae_solo_auto_refresh_minutes),
+        trae_cn_auto_refresh_minutes: trae_cn_auto_refresh_minutes
+            .unwrap_or(current.trae_cn_auto_refresh_minutes),
+        trae_solo_cn_auto_refresh_minutes: trae_solo_cn_auto_refresh_minutes
+            .unwrap_or(current.trae_solo_cn_auto_refresh_minutes),
         close_behavior: close_behavior_enum,
         minimize_behavior: minimize_behavior_enum,
         hide_dock_icon: hide_dock_icon_value,
@@ -2739,6 +2831,13 @@ pub fn save_general_config(
         qoderwork_cn_app_path: normalized_qoderwork_cn_path,
         qoder_cn_app_path: normalized_qoder_cn_path,
         trae_app_path: normalized_trae_path,
+        trae_solo_app_path: normalized_trae_solo_path,
+        trae_cn_app_path: normalized_trae_cn_path,
+        trae_solo_cn_app_path: normalized_trae_solo_cn_path,
+        trae_app_scan_roots: normalized_trae_app_scan_roots,
+        trae_solo_app_scan_roots: normalized_trae_solo_app_scan_roots,
+        trae_cn_app_scan_roots: normalized_trae_cn_app_scan_roots,
+        trae_solo_cn_app_scan_roots: normalized_trae_solo_cn_app_scan_roots,
         workbuddy_app_path: normalized_workbuddy_path,
         opencode_sync_on_switch: next_opencode_sync_on_switch,
         opencode_auth_overwrite_on_switch: next_opencode_auth_overwrite_on_switch,
@@ -2855,6 +2954,18 @@ pub fn save_general_config(
             .unwrap_or(current.trae_quota_alert_enabled),
         trae_quota_alert_threshold: trae_quota_alert_threshold
             .unwrap_or(current.trae_quota_alert_threshold),
+        trae_solo_quota_alert_enabled: trae_solo_quota_alert_enabled
+            .unwrap_or(current.trae_solo_quota_alert_enabled),
+        trae_solo_quota_alert_threshold: trae_solo_quota_alert_threshold
+            .unwrap_or(current.trae_solo_quota_alert_threshold),
+        trae_cn_quota_alert_enabled: trae_cn_quota_alert_enabled
+            .unwrap_or(current.trae_cn_quota_alert_enabled),
+        trae_cn_quota_alert_threshold: trae_cn_quota_alert_threshold
+            .unwrap_or(current.trae_cn_quota_alert_threshold),
+        trae_solo_cn_quota_alert_enabled: trae_solo_cn_quota_alert_enabled
+            .unwrap_or(current.trae_solo_cn_quota_alert_enabled),
+        trae_solo_cn_quota_alert_threshold: trae_solo_cn_quota_alert_threshold
+            .unwrap_or(current.trae_solo_cn_quota_alert_threshold),
         workbuddy_quota_alert_enabled: workbuddy_quota_alert_enabled
             .unwrap_or(current.workbuddy_quota_alert_enabled),
         workbuddy_quota_alert_threshold: workbuddy_quota_alert_threshold
@@ -2968,6 +3079,9 @@ pub fn set_app_path(app: String, path: String) -> Result<(), String> {
         "qoder" => current.qoder_app_path = normalized_path,
         "qoderwork_cn" => current.qoderwork_cn_app_path = normalized_path,
         "trae" => current.trae_app_path = normalized_path,
+        "trae_solo" => current.trae_solo_app_path = normalized_path,
+        "trae_cn" => current.trae_cn_app_path = normalized_path,
+        "trae_solo_cn" => current.trae_solo_cn_app_path = normalized_path,
         "workbuddy" => current.workbuddy_app_path = normalized_path,
         "opencode" => current.opencode_app_path = normalized_path,
         _ => return Err("未知应用类型".to_string()),
@@ -2986,6 +3100,57 @@ pub fn set_claude_app_scan_roots(scan_roots: String) -> Result<(), String> {
     let new_config = UserConfig {
         claude_app_scan_roots: normalized,
         ..current
+    };
+    config::save_user_config(&new_config)
+}
+
+#[tauri::command]
+pub fn set_trae_app_scan_roots(app: Option<String>, scan_roots: String) -> Result<(), String> {
+    let current = config::get_user_config();
+    let normalized = scan_roots.trim().to_string();
+    let target = app
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("trae");
+    let new_config = match target {
+        "trae" => {
+            if current.trae_app_scan_roots == normalized {
+                return Ok(());
+            }
+            UserConfig {
+                trae_app_scan_roots: normalized,
+                ..current
+            }
+        }
+        "trae_solo" => {
+            if current.trae_solo_app_scan_roots == normalized {
+                return Ok(());
+            }
+            UserConfig {
+                trae_solo_app_scan_roots: normalized,
+                ..current
+            }
+        }
+        "trae_cn" => {
+            if current.trae_cn_app_scan_roots == normalized {
+                return Ok(());
+            }
+            UserConfig {
+                trae_cn_app_scan_roots: normalized,
+                ..current
+            }
+        }
+        "trae_solo_cn" => {
+            if current.trae_solo_cn_app_scan_roots == normalized {
+                return Ok(());
+            }
+            UserConfig {
+                trae_solo_cn_app_scan_roots: normalized,
+                ..current
+            }
+        }
+        _ => return Err("鏈煡搴旂敤绫诲瀷".to_string()),
     };
     config::save_user_config(&new_config)
 }
@@ -3027,7 +3192,8 @@ pub fn detect_app_path(app: String, force: Option<bool>) -> Result<Option<String
         "cursor" => Ok(modules::cursor_instance::detect_and_save_cursor_launch_path(force)),
         "claude" => Ok(modules::claude_instance::detect_and_save_claude_launch_path(force)),
         "antigravity" | "antigravity_ide" | "antigravity_legacy" | "codex" | "zed" | "vscode"
-        | "codebuddy" | "codebuddy_cn" | "qoder" | "trae" | "opencode" | "workbuddy" => Ok(
+        | "codebuddy" | "codebuddy_cn" | "qoder" | "trae" | "trae_solo" | "trae_cn"
+        | "trae_solo_cn" | "opencode" | "workbuddy" => Ok(
             modules::process::detect_and_save_app_path(app.as_str(), force),
         ),
         _ => Err("未知应用类型".to_string()),
@@ -3053,7 +3219,7 @@ pub fn scan_app_launch_targets(
     match app.as_str() {
         "antigravity" | "antigravity_ide" | "antigravity_legacy" | "codex" | "claude"
         | "vscode" | "windsurf" | "kiro" | "cursor" | "codebuddy" | "codebuddy_cn" | "qoder"
-        | "trae" | "workbuddy" | "zed" | "opencode" => {}
+        | "trae" | "trae_solo" | "trae_cn" | "trae_solo_cn" | "workbuddy" | "zed" | "opencode" => {}
         _ => return Err("未知应用类型".to_string()),
     }
 

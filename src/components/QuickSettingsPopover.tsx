@@ -71,6 +71,9 @@ interface GeneralConfig {
   qoderwork_cn_auto_refresh_minutes: number;
   qoder_cn_auto_refresh_minutes: number;
   trae_auto_refresh_minutes: number;
+  trae_solo_auto_refresh_minutes: number;
+  trae_cn_auto_refresh_minutes: number;
+  trae_solo_cn_auto_refresh_minutes: number;
   workbuddy_auto_refresh_minutes: number;
   zed_auto_refresh_minutes: number;
   close_behavior: string;
@@ -93,6 +96,13 @@ interface GeneralConfig {
   qoderwork_cn_app_path: string;
   qoder_cn_app_path: string;
   trae_app_path: string;
+  trae_solo_app_path: string;
+  trae_cn_app_path: string;
+  trae_solo_cn_app_path: string;
+  trae_app_scan_roots: string;
+  trae_solo_app_scan_roots: string;
+  trae_cn_app_scan_roots: string;
+  trae_solo_cn_app_scan_roots: string;
   workbuddy_app_path: string;
   zed_app_path: string;
   opencode_sync_on_switch: boolean;
@@ -149,6 +159,12 @@ interface GeneralConfig {
   qoder_cn_quota_alert_threshold: number;
   trae_quota_alert_enabled: boolean;
   trae_quota_alert_threshold: number;
+  trae_solo_quota_alert_enabled: boolean;
+  trae_solo_quota_alert_threshold: number;
+  trae_cn_quota_alert_enabled: boolean;
+  trae_cn_quota_alert_threshold: number;
+  trae_solo_cn_quota_alert_enabled: boolean;
+  trae_solo_cn_quota_alert_threshold: number;
   workbuddy_quota_alert_enabled: boolean;
   workbuddy_quota_alert_threshold: number;
   zed_quota_alert_enabled: boolean;
@@ -170,6 +186,9 @@ export type QuickSettingsType =
   | 'qoderwork_cn'
   | 'qoder_cn'
   | 'trae'
+  | 'trae_solo'
+  | 'trae_cn'
+  | 'trae_solo_cn'
   | 'workbuddy'
   | 'zed';
 
@@ -188,6 +207,9 @@ type AppPathTarget =
   | 'qoderwork_cn'
   | 'qoder_cn'
   | 'trae'
+  | 'trae_solo'
+  | 'trae_cn'
+  | 'trae_solo_cn'
   | 'workbuddy'
   | 'zed';
 
@@ -206,6 +228,9 @@ type QuotaAlertEnabledKey =
   | 'qoderwork_cn_quota_alert_enabled'
   | 'qoder_cn_quota_alert_enabled'
   | 'trae_quota_alert_enabled'
+  | 'trae_solo_quota_alert_enabled'
+  | 'trae_cn_quota_alert_enabled'
+  | 'trae_solo_cn_quota_alert_enabled'
   | 'workbuddy_quota_alert_enabled'
   | 'zed_quota_alert_enabled';
 type QuotaAlertThresholdKey =
@@ -223,6 +248,9 @@ type QuotaAlertThresholdKey =
   | 'qoderwork_cn_quota_alert_threshold'
   | 'qoder_cn_quota_alert_threshold'
   | 'trae_quota_alert_threshold'
+  | 'trae_solo_quota_alert_threshold'
+  | 'trae_cn_quota_alert_threshold'
+  | 'trae_solo_cn_quota_alert_threshold'
   | 'workbuddy_quota_alert_threshold'
   | 'zed_quota_alert_threshold';
 type CodexWindowThresholdKey =
@@ -268,10 +296,37 @@ const getAppPathKeyForTarget = (target: AppPathTarget): keyof GeneralConfig => {
       return 'qoder_cn_app_path';
     case 'trae':
       return 'trae_app_path';
+    case 'trae_solo':
+      return 'trae_solo_app_path';
+    case 'trae_cn':
+      return 'trae_cn_app_path';
+    case 'trae_solo_cn':
+      return 'trae_solo_cn_app_path';
     case 'workbuddy':
       return 'workbuddy_app_path';
     case 'zed':
       return 'zed_app_path';
+  }
+};
+
+const isTraeQuickSettingsType = (
+  value: QuickSettingsType,
+): value is 'trae' | 'trae_solo' | 'trae_cn' | 'trae_solo_cn' =>
+  value === 'trae' || value === 'trae_solo' || value === 'trae_cn' || value === 'trae_solo_cn';
+
+type TraeQuickSettingsType = 'trae' | 'trae_solo' | 'trae_cn' | 'trae_solo_cn';
+
+const getTraeAppScanRootsKey = (value: TraeQuickSettingsType): keyof GeneralConfig => {
+  switch (value) {
+    case 'trae_solo':
+      return 'trae_solo_app_scan_roots';
+    case 'trae_cn':
+      return 'trae_cn_app_scan_roots';
+    case 'trae_solo_cn':
+      return 'trae_solo_cn_app_scan_roots';
+    case 'trae':
+    default:
+      return 'trae_app_scan_roots';
   }
 };
 
@@ -371,6 +426,12 @@ const getCurrentAccountRefreshPlatformForType = (
       return 'qoder_cn';
     case 'trae':
       return 'trae';
+    case 'trae_solo':
+      return 'trae_solo';
+    case 'trae_cn':
+      return 'trae_cn';
+    case 'trae_solo_cn':
+      return 'trae_solo_cn';
     case 'workbuddy':
       return 'workbuddy';
     case 'zed':
@@ -862,7 +923,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       setCodexAutoSwitchSecondaryCustomThreshold(String(cfg.codex_auto_switch_secondary_threshold));
       setCodexQuotaAlertPrimaryCustomThreshold(String(cfg.codex_quota_alert_primary_threshold));
       setCodexQuotaAlertSecondaryCustomThreshold(String(cfg.codex_quota_alert_secondary_threshold));
-      setAppScanRootsDraft(type === 'claude' ? cfg.claude_app_scan_roots || '' : '');
+      setAppScanRootsDraft(
+        type === 'claude'
+          ? cfg.claude_app_scan_roots || ''
+          : isTraeQuickSettingsType(type)
+            ? String(cfg[getTraeAppScanRootsKey(type)] || '')
+            : '',
+      );
       setAppLaunchCandidates([]);
     } catch (err) {
       console.error('Failed to load config:', err);
@@ -889,6 +956,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'qoderwork_cn': return 'qoderwork_cn_auto_refresh_minutes';
       case 'qoder_cn': return 'qoder_cn_auto_refresh_minutes';
       case 'trae': return 'trae_auto_refresh_minutes';
+      case 'trae_solo': return 'trae_solo_auto_refresh_minutes';
+      case 'trae_cn': return 'trae_cn_auto_refresh_minutes';
+      case 'trae_solo_cn': return 'trae_solo_cn_auto_refresh_minutes';
       case 'workbuddy': return 'workbuddy_auto_refresh_minutes';
       case 'zed': return 'zed_auto_refresh_minutes';
       default: return 'auto_refresh_minutes';
@@ -924,6 +994,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           qoderworkCnAutoRefreshMinutes: merged.qoderwork_cn_auto_refresh_minutes,
           qoderCnAutoRefreshMinutes: merged.qoder_cn_auto_refresh_minutes,
           traeAutoRefreshMinutes: merged.trae_auto_refresh_minutes,
+          traeSoloAutoRefreshMinutes: merged.trae_solo_auto_refresh_minutes,
+          traeCnAutoRefreshMinutes: merged.trae_cn_auto_refresh_minutes,
+          traeSoloCnAutoRefreshMinutes: merged.trae_solo_cn_auto_refresh_minutes,
           zedAutoRefreshMinutes: merged.zed_auto_refresh_minutes,
           closeBehavior: merged.close_behavior,
           minimizeBehavior: merged.minimize_behavior,
@@ -945,6 +1018,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           qoderworkCnAppPath: merged.qoderwork_cn_app_path,
           qoderCnAppPath: merged.qoder_cn_app_path,
           traeAppPath: merged.trae_app_path,
+          traeSoloAppPath: merged.trae_solo_app_path,
+          traeCnAppPath: merged.trae_cn_app_path,
+          traeSoloCnAppPath: merged.trae_solo_cn_app_path,
+          traeAppScanRoots: merged.trae_app_scan_roots,
+          traeSoloAppScanRoots: merged.trae_solo_app_scan_roots,
+          traeCnAppScanRoots: merged.trae_cn_app_scan_roots,
+          traeSoloCnAppScanRoots: merged.trae_solo_cn_app_scan_roots,
           workbuddyAppPath: merged.workbuddy_app_path,
           zedAppPath: merged.zed_app_path,
           opencodeSyncOnSwitch: merged.opencode_sync_on_switch,
@@ -1001,6 +1081,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           qoderCnQuotaAlertThreshold: merged.qoder_cn_quota_alert_threshold,
           traeQuotaAlertEnabled: merged.trae_quota_alert_enabled,
           traeQuotaAlertThreshold: merged.trae_quota_alert_threshold,
+          traeSoloQuotaAlertEnabled: merged.trae_solo_quota_alert_enabled,
+          traeSoloQuotaAlertThreshold: merged.trae_solo_quota_alert_threshold,
+          traeCnQuotaAlertEnabled: merged.trae_cn_quota_alert_enabled,
+          traeCnQuotaAlertThreshold: merged.trae_cn_quota_alert_threshold,
+          traeSoloCnQuotaAlertEnabled: merged.trae_solo_cn_quota_alert_enabled,
+          traeSoloCnQuotaAlertThreshold: merged.trae_solo_cn_quota_alert_threshold,
           workbuddyQuotaAlertEnabled: merged.workbuddy_quota_alert_enabled,
           workbuddyQuotaAlertThreshold: merged.workbuddy_quota_alert_threshold,
           zedQuotaAlertEnabled: merged.zed_quota_alert_enabled,
@@ -1046,6 +1132,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       setAppLaunchCandidates([]);
       if (type === 'claude') {
         saveConfig({ claude_app_scan_roots: path });
+      } else if (isTraeQuickSettingsType(type)) {
+        saveConfig({ [getTraeAppScanRootsKey(type)]: path });
       }
     } catch (err) {
       console.error('Failed to pick app scan root:', err);
@@ -1062,6 +1150,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     setAppLaunchCandidates([]);
     if (type === 'claude') {
       saveConfig({ claude_app_scan_roots: '' });
+    } else if (isTraeQuickSettingsType(type)) {
+      saveConfig({ [getTraeAppScanRootsKey(type)]: '' });
     }
   };
 
@@ -1176,6 +1266,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           return 'Qoder';
         case 'trae':
           return 'Trae';
+        case 'trae_solo':
+          return 'TRAE SOLO';
+        case 'trae_cn':
+          return 'Trae CN';
+        case 'trae_solo_cn':
+          return 'TRAE SOLO CN';
         case 'workbuddy':
           return 'WorkBuddy';
         case 'zed':
@@ -1217,6 +1313,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return 'qoder_cn_quota_alert_enabled';
       case 'trae':
         return 'trae_quota_alert_enabled';
+      case 'trae_solo':
+        return 'trae_solo_quota_alert_enabled';
+      case 'trae_cn':
+        return 'trae_cn_quota_alert_enabled';
+      case 'trae_solo_cn':
+        return 'trae_solo_cn_quota_alert_enabled';
       case 'workbuddy':
         return 'workbuddy_quota_alert_enabled';
       case 'zed':
@@ -1254,6 +1356,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return 'qoder_cn_quota_alert_threshold';
       case 'trae':
         return 'trae_quota_alert_threshold';
+      case 'trae_solo':
+        return 'trae_solo_quota_alert_threshold';
+      case 'trae_cn':
+        return 'trae_cn_quota_alert_threshold';
+      case 'trae_solo_cn':
+        return 'trae_solo_cn_quota_alert_threshold';
       case 'workbuddy':
         return 'workbuddy_quota_alert_threshold';
       case 'zed':
@@ -1290,6 +1398,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'qoderwork_cn':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'trae':
+      case 'trae_solo':
+      case 'trae_cn':
+      case 'trae_solo_cn':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'workbuddy':
         return t('quickSettings.refreshInterval', '配额自动刷新');
@@ -1330,6 +1441,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return config.qoderwork_cn_app_path;
       case 'trae':
         return config.trae_app_path;
+      case 'trae_solo':
+        return config.trae_solo_app_path;
+      case 'trae_cn':
+        return config.trae_cn_app_path;
+      case 'trae_solo_cn':
+        return config.trae_solo_cn_app_path;
       case 'workbuddy':
         return config.workbuddy_app_path;
       case 'zed':
@@ -1369,6 +1486,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return t('quickSettings.qoderCn.appPath', 'Qoder CN 路径');
       case 'trae':
         return t('quickSettings.trae.appPath', 'Trae 路径');
+      case 'trae_solo':
+        return t('quickSettings.traeSolo.appPath', 'TRAE SOLO 路径');
+      case 'trae_cn':
+        return t('quickSettings.traeCn.appPath', 'Trae CN 路径');
+      case 'trae_solo_cn':
+        return t('quickSettings.traeSoloCn.appPath', 'TRAE SOLO CN 路径');
       case 'workbuddy':
         return t('quickSettings.workbuddy.appPath', 'WorkBuddy 路径');
       case 'zed':
@@ -1406,6 +1529,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return 'qoder_cn';
       case 'trae':
         return 'trae';
+      case 'trae_solo':
+        return 'trae_solo';
+      case 'trae_cn':
+        return 'trae_cn';
+      case 'trae_solo_cn':
+        return 'trae_solo_cn';
       case 'workbuddy':
         return 'workbuddy';
       case 'zed':

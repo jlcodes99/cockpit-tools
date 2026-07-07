@@ -249,6 +249,9 @@
     "qoder": "Qoder",
     "qoderworkCn": "QoderWork CN",
     "trae": "Trae",
+    "traeSolo": "TRAE SOLO​",
+    "traeCn": "Trae CN​",
+    "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN",
     "zed": "Zed 平台",
     "expandSidebar": "展開側邊欄",
@@ -792,7 +795,11 @@
       "antigravityLaunchOnSwitch": "切換時啟動 Antigravity IDE",
       "antigravityLaunchOnSwitchDesc": "關閉後切號只寫入 Antigravity IDE 預設帳號資料，不會關閉、啟動或重啟應用程式。",
       "tokenKeeper": "背景授權保活",
-      "tokenKeeperDesc": "僅在授權快過期時分批刷新帳號 Token，降低大量帳號場景下的背景請求壓力。"
+      "tokenKeeperDesc": "僅在授權快過期時分批刷新帳號 Token，降低大量帳號場景下的背景請求壓力。",
+      "platformAutoRefresh": "{{platform}} 自動刷新配額",
+      "traeSoloAppPath": "TRAE SOLO 啟動路徑",
+      "traeCnAppPath": "Trae CN 啟動路徑",
+      "traeSoloCnAppPath": "TRAE SOLO CN 啟動路徑"
     },
     "network": {
       "apiTitle": "反重力駕駛艙 API",
@@ -2174,6 +2181,7 @@
     "quota": {
       "hourly": "5 小時配額",
       "weekly": "週配額",
+      "additional": "額外額度",
       "reset": "重置",
       "weeklyBlocksHourly": "週額度為 0，因此 5 小時額度已不可用",
       "resetCredits": "重置 {{count}}",
@@ -2981,7 +2989,9 @@
       "filterWithin24h": "24 小時 ({{count}})",
       "filterWithin7d": "7 天 ({{count}})",
       "filterWithin30d": "30 天 ({{count}})",
-      "filterMissing": "未知 ({{count}})"
+      "filterMissing": "未知 ({{count}})",
+      "accessTokenOnlyUsable": "Token 可用",
+      "accessTokenOnlyUsableDetail": "訂閱資訊介面受限，但配額與 Codex 使用正常"
     },
     "apiSwitchNotice": {
       "title": "Codex 工作階段不可見",
@@ -3000,7 +3010,7 @@
     "accountNote": {
       "title": "帳號備註",
       "label": "帳號備註",
-      "desc": "為 {{account}} 填寫 2FA、密碼、手機號和其他備註。",
+      "desc": "給 {{account}} 填寫密碼、2FA、郵件地址、手機號和其他備註。",
       "twoFactorSecretLabel": "2FA 秘鑰",
       "twoFactorSecretShort": "2FA",
       "twoFactorSecretPlaceholder": "Base32 secret 或 otpauth:// 連結",
@@ -3014,13 +3024,30 @@
       "phoneNumberLabel": "手機號",
       "phoneShort": "手機",
       "phoneNumberPlaceholder": "綁定手機號",
+      "mailUrlLabel": "郵件地址",
+      "mailUrlPlaceholder": "填寫可開啟的郵件查詢網頁地址",
+      "mailPreviewRefresh": "重新整理郵件",
+      "mailPreviewOpen": "用瀏覽器查看",
+      "mailPreviewLoading": "正在讀取郵件...",
+      "mailPreviewNoCode": "未匹配到連續 6 位驗證碼",
+      "mailPreviewFetchFailed": "讀取郵件失敗：{{error}}",
+      "mailPreviewUrlRequired": "請輸入郵件地址",
+      "mailPreviewUrlInvalid": "郵件地址格式無效，請輸入完整的 http:// 或 https:// 地址",
+      "mailPreviewUnsupportedProtocol": "郵件地址僅支援 http 或 https 協定",
+      "mailPreviewHttpFailed": "郵件地址請求失敗：HTTP {{status}}",
+      "mailPreviewCode": "最近一封郵件驗證碼",
+      "mailPreviewStatusInitial": "取得於 {{time}}",
+      "mailPreviewStatusChanged": "新驗證碼 · {{time}}",
+      "mailPreviewStatusUnchanged": "未變化 · {{time}}",
+      "mailPreviewTruncated": "內容已截斷",
+      "mailOpenFailed": "開啟郵件地址失敗：{{error}}",
       "otherNoteLabel": "其他備註",
       "otherNoteShort": "備註",
       "placeholder": "其他交付備註、輔助信箱或帳號說明",
-      "exportSensitiveNotice": "匯出內容包含 2FA 秘鑰、密碼或手機號，請只儲存到可信位置。",
+      "exportSensitiveNotice": "匯出內容包含 2FA 秘鑰、密碼、手機號或郵件地址，請只儲存到可信位置。",
       "exportSensitiveIncluded": "包含敏感備註",
       "exportSensitiveExcluded": "已排除敏感備註",
-      "exportSensitiveToggleHint": "控制匯出 JSON 是否包含 2FA 秘鑰、密碼和手機號。",
+      "exportSensitiveToggleHint": "控制匯出 JSON 是否包含 2FA 秘鑰、密碼、手機號和郵件地址。",
       "show": "顯示",
       "hide": "隱藏",
       "emptyTitle": "填寫帳號備註",
@@ -3590,6 +3617,18 @@
     "qoderCn": {
       "title": "QoderWork CN Settings",
       "appPath": "QoderWork CN Path"
+    },
+    "traeSolo": {
+      "appPath": "TRAE SOLO 路徑",
+      "title": "TRAE SOLO 設定"
+    },
+    "traeCn": {
+      "appPath": "Trae CN 路徑",
+      "title": "Trae CN 設定"
+    },
+    "traeSoloCn": {
+      "appPath": "TRAE SOLO CN 路徑",
+      "title": "TRAE SOLO CN 設定"
     }
   },
   "quotaAlert": {
@@ -4354,17 +4393,21 @@
   "trae": {
     "title": "Trae 帳號管理",
     "empty": {
-      "description": "點擊「新增帳號」開始管理您的 Trae 帳號，也可以從本機 Trae 資料或 JSON 檔案匯入。"
+      "description": "點擊「新增帳號」開始管理您的 Trae 帳號，也可以從本機 Trae 資料或 JSON 檔案匯入。",
+      "descriptionWithPlatform": "點擊「新增帳號」開始管理您的 {{platform}} 帳號，也可以從本機 {{platform}} 資料或 JSON 檔匯入。"
     },
     "addModal": {
-      "title": "新增 Trae 帳號"
+      "title": "新增 Trae 帳號",
+      "titleWithPlatform": "新增 {{platform}} 帳號"
     },
     "oauth": {
-      "desc": "點擊下方按鈕，在瀏覽器中完成 Trae OAuth 授權登入。"
+      "desc": "點擊下方按鈕，在瀏覽器中完成 Trae OAuth 授權登入。",
+      "descWithPlatform": "點擊下方按鈕，在瀏覽器中完成 {{platform}} OAuth 授權登入。"
     },
     "import": {
       "localDesc": "支援從本機 Trae 設定目錄讀取目前登入帳號、方案資訊與配額快取資料。",
-      "jsonTab": "JSON 檔案"
+      "jsonTab": "JSON 檔案",
+      "localDescWithPlatform": "支援從本機 {{platform}} 設定目錄讀取目前登入帳號、方案資訊與額度快取。"
     },
     "quota": {
       "usedOfTotal": "已用 $ {{used}} / $ {{total}}",
@@ -4390,7 +4433,12 @@
       "title": "Trae 帳號接入說明（點擊展開/收起）",
       "desc": "支援官方 OAuth 授權、本機匯入、JSON 匯入與本地注入切號；切號流程會依 Trae 用戶端的實際落盤規則寫回。",
       "permission": "權限範圍：讀取並寫入本機 Trae 設定目錄中的 storage.json 登入相關欄位，用於帳號匯入、切號注入與方案資訊顯示；所有資料僅在本機處理。",
-      "network": "網路範圍：OAuth 登入、權杖刷新與方案查詢會請求 Trae 官方 API；不會將本機帳號檔案或原始儲存內容上傳到第三方服務。"
+      "network": "網路範圍：OAuth 登入、權杖刷新與方案查詢會請求 Trae 官方 API；不會將本機帳號檔案或原始儲存內容上傳到第三方服務。",
+      "titleWithPlatform": "{{platform}} 帳號接入說明（點擊展開/收合）",
+      "descWithPlatform": "支援 {{platform}} 官方 OAuth 授權、本機匯入、JSON 匯入與本機注入切換帳號；切換時會依 {{platform}} 用戶端實際落盤規則寫回。",
+      "permissionWithPlatform": "權限範圍：讀寫本機 {{platform}} 設定目錄中的 storage.json 登入相關欄位，用於帳號匯入、切換注入與方案資訊顯示；所有資料僅在本機處理。",
+      "networkGlobal": "網路範圍：{{platform}} OAuth 登入、權杖刷新與方案查詢會請求 trae.ai / traeapi.us 官方介面；不會向第三方服務上傳本機帳號檔或原始儲存內容。",
+      "networkCn": "網路範圍：{{platform}} OAuth 登入、權杖刷新與方案查詢會請求 trae.cn / trae.com.cn 官方介面；不會向第三方服務上傳本機帳號檔或原始儲存內容。"
     }
   },
   "codebuddyCn": {

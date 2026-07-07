@@ -23,6 +23,50 @@ pub fn get_app_handle() -> Option<&'static tauri::AppHandle> {
     APP_HANDLE.get()
 }
 
+#[cfg(test)]
+mod tests {
+    use super::should_hide_startup_minimized_window;
+    use crate::modules::config::UserConfig;
+
+    #[test]
+    fn startup_minimized_does_not_hide_when_disabled() {
+        let mut config = UserConfig::default();
+        config.startup_minimized = false;
+        config.hide_dock_icon = true;
+
+        assert!(!should_hide_startup_minimized_window(&config, true));
+    }
+
+    #[test]
+    fn startup_minimized_hides_on_macos_when_dock_icon_is_hidden() {
+        let mut config = UserConfig::default();
+        config.startup_minimized = true;
+        config.hide_dock_icon = true;
+
+        assert!(should_hide_startup_minimized_window(&config, true));
+    }
+
+    #[test]
+    fn startup_minimized_does_not_hide_when_dock_icon_is_available() {
+        let mut config = UserConfig::default();
+        config.startup_minimized = true;
+        config.hide_dock_icon = false;
+
+        assert!(!should_hide_startup_minimized_window(&config, true));
+    }
+
+    #[test]
+    fn startup_minimized_does_not_wait_before_hiding_window() {
+        let source = include_str!("lib.rs");
+        let delayed_startup_hide = concat!(
+            "std::thread::sleep",
+            "(std::time::Duration::from_millis(300))"
+        );
+
+        assert!(!source.contains(delayed_startup_hide));
+    }
+}
+
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn raise_process_file_descriptor_limit() {
     const TARGET_NOFILE_LIMIT: libc::rlim_t = 4096;
@@ -70,19 +114,33 @@ fn raise_process_file_descriptor_limit() {
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn raise_process_file_descriptor_limit() {}
 
+fn should_hide_startup_minimized_window(
+    config: &modules::config::UserConfig,
+    is_macos: bool,
+) -> bool {
+    config.startup_minimized && is_macos && config.hide_dock_icon
+}
+
 fn apply_startup_minimized(app: &tauri::AppHandle) {
     let config = modules::config::get_user_config();
     if !config.startup_minimized {
         return;
     }
 
+    let should_hide = should_hide_startup_minimized_window(&config, cfg!(target_os = "macos"));
     let Some(window) = app.get_webview_window("main") else {
         logger::log_warn("[Window] 启动后自动最小化失败: main window not found");
         return;
     };
 
-    match window.minimize() {
-        Ok(()) => logger::log_info("[Window] 启动后已自动最小化主窗口"),
+    let (result, action_label) = if should_hide {
+        (window.hide(), "隐藏")
+    } else {
+        (window.minimize(), "最小化")
+    };
+
+    match result {
+        Ok(()) => logger::log_info(&format!("[Window] 启动后已自动{}主窗口", action_label)),
         Err(err) => logger::log_warn(&format!("[Window] 启动后自动最小化失败: {}", err)),
     }
 }
@@ -182,6 +240,21 @@ pub fn run() {
             // 启动时清理 WebKit LocalStorage WAL，防止无限膨胀
             std::thread::spawn(|| {
                 modules::webkit_cache_maintenance::checkpoint_webkit_localstorage();
+            });
+
+            // 当前主线不再使用 platform-packages；启动时回收旧版本遗留的孤儿 adapter。
+            std::thread::spawn(|| {
+                match modules::process::close_orphaned_legacy_platform_adapter_processes(5) {
+                    Ok(0) => {}
+                    Ok(count) => logger::log_info(&format!(
+                        "[LegacyAdapterCleanup] 已清理旧平台 adapter 进程: count={}",
+                        count
+                    )),
+                    Err(err) => logger::log_warn(&format!(
+                        "[LegacyAdapterCleanup] 清理旧平台 adapter 进程失败: {}",
+                        err
+                    )),
+                }
             });
 
             // 初始化 Updater 插件
@@ -499,6 +572,7 @@ pub fn run() {
             commands::system::save_tray_platform_layout,
             commands::system::set_app_path,
             commands::system::set_claude_app_scan_roots,
+            commands::system::set_trae_app_scan_roots,
             commands::system::set_codex_launch_on_switch,
             commands::system::set_codex_local_access_entry_visible,
             commands::system::detect_app_path,
@@ -623,6 +697,7 @@ pub fn run() {
             commands::codex::update_codex_account_tags,
             commands::codex::update_codex_account_note,
             commands::codex::create_pending_codex_oauth_account,
+            commands::codex::fetch_codex_account_note_mail_url,
             commands::codex::codex_wakeup_get_cli_status,
             commands::codex::codex_wakeup_update_runtime_config,
             commands::codex::codex_wakeup_get_overview,
@@ -916,6 +991,7 @@ pub fn run() {
             commands::trae::export_trae_accounts,
             commands::trae::refresh_trae_token,
             commands::trae::refresh_all_trae_tokens,
+            commands::trae::refresh_trae_tokens_for_platform,
             commands::trae::add_trae_account_with_token,
             commands::trae::update_trae_account_tags,
             commands::trae::get_trae_accounts_index_path,

@@ -1050,6 +1050,7 @@ pub struct CheckinStatusResponse {
     pub today_checked_in: bool,
     pub active: bool,
     pub streak_days: i64,
+    #[serde(default)]
     pub daily_credit: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub today_credit: Option<i64>,
@@ -1059,6 +1060,10 @@ pub struct CheckinStatusResponse {
     pub is_streak_day: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub checkin_dates: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub streak_bonus_days: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub streak_bonus_credit: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1069,6 +1074,12 @@ pub struct CheckinResponse {
     pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reward: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credit: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub streak_days: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_streak_day: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_checkin_in: Option<i64>,
 }
@@ -1086,6 +1097,7 @@ pub async fn get_checkin_status(
     let mut req = client
         .post(&url)
         .header("Authorization", format!("Bearer {}", access_token))
+        .header("Accept", "application/json")
         .header("Content-Type", "application/json");
 
     if let Some(u) = uid {
@@ -1158,6 +1170,7 @@ pub async fn perform_checkin(
     let mut req = client
         .post(&url)
         .header("Authorization", format!("Bearer {}", access_token))
+        .header("Accept", "application/json")
         .header("Content-Type", "application/json")
         .json(&json!({}));
 
@@ -1210,6 +1223,9 @@ pub async fn perform_checkin(
             success: false,
             message: Some(api_msg),
             reward: None,
+            credit: None,
+            streak_days: None,
+            is_streak_day: None,
             next_checkin_in: None,
         });
     }
@@ -1230,6 +1246,15 @@ pub async fn perform_checkin(
 
     let reward = data.get("reward").cloned();
 
+    let credit = data
+        .get("credit")
+        .or_else(|| data.get("today_credit"))
+        .and_then(|v| v.as_i64());
+
+    let streak_days = data.get("streak_days").and_then(|v| v.as_i64());
+
+    let is_streak_day = data.get("is_streak_day").and_then(|v| v.as_bool());
+
     let next_checkin_in = data
         .get("nextCheckinIn")
         .or_else(|| data.get("next_checkin_in"))
@@ -1239,6 +1264,9 @@ pub async fn perform_checkin(
         success,
         message,
         reward,
+        credit,
+        streak_days,
+        is_streak_day,
         next_checkin_in,
     })
 }

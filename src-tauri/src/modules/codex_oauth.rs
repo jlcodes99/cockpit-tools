@@ -843,7 +843,23 @@ pub fn jwt_token_expiration_timestamp(token: &str) -> Option<i64> {
 }
 
 pub fn is_token_expired(access_token: &str) -> bool {
-    is_jwt_token_expired(access_token)
+    let token = access_token.trim();
+    if token.is_empty() {
+        return true;
+    }
+
+    // Some short-lived Codex credentials are opaque ChatGPT access tokens
+    // (`at-...`) rather than JWTs. They do not carry a local `exp` claim, so
+    // treating them as expired makes Cockpit immediately force an OAuth refresh
+    // and reject access-token-only imports. Let the first real upstream request
+    // decide whether the opaque token is still accepted; 401 handling will mark
+    // it invalid when it actually dies. Other malformed/non-JWT values still
+    // fail closed instead of being treated as valid.
+    if token.split('.').count() != 3 {
+        return !token.starts_with("at-");
+    }
+
+    is_jwt_token_expired(token)
 }
 
 pub async fn refresh_access_token(refresh_token: &str) -> Result<CodexTokens, String> {
@@ -929,4 +945,53 @@ pub async fn refresh_access_token_with_fallback(
         access_token,
         refresh_token: new_refresh_token,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_token_expired, TOKEN_REFRESH_SKEW_SECONDS};
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+
+    fn make_jwt(exp: i64) -> String {
+        let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"none","typ":"JWT"}"#);
+        let payload = URL_SAFE_NO_PAD.encode(serde_json::json!({ "exp": exp }).to_string());
+        format!("{}.{}.sig", header, payload)
+    }
+
+    #[test]
+    fn opaque_access_token_is_not_locally_expired() {
+        assert!(!is_token_expired("at-short-lived-opaque-token"));
+    }
+
+    #[test]
+    fn unknown_non_jwt_access_token_is_expired() {
+        assert!(is_token_expired("opaque-without-known-prefix"));
+    }
+
+    #[test]
+    fn empty_access_token_is_expired() {
+        assert!(is_token_expired("   "));
+    }
+
+    #[test]
+    fn malformed_jwt_access_token_is_expired() {
+        assert!(is_token_expired("not-valid.jwt.token"));
+    }
+
+    #[test]
+    fn jwt_shaped_at_access_token_is_expired_when_malformed() {
+        assert!(is_token_expired("at-not.valid.jwt"));
+    }
+
+    #[test]
+    fn expired_jwt_access_token_is_expired() {
+        let expired = chrono::Utc::now().timestamp() - 3600;
+        assert!(is_token_expired(&make_jwt(expired)));
+    }
+
+    #[test]
+    fn fresh_jwt_access_token_is_not_expired() {
+        let fresh = chrono::Utc::now().timestamp() + TOKEN_REFRESH_SKEW_SECONDS + 3600;
+        assert!(!is_token_expired(&make_jwt(fresh)));
+    }
 }
