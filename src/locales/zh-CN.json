@@ -309,7 +309,8 @@
     "switchClassicLayoutDontAskAgain": "不再提示此引导",
     "switchClassicLayoutConfirm": "立即切换",
     "2faManager": "2FA 管理",
-    "claude": "Claude"
+    "claude": "Claude",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "赞助商",
@@ -3883,6 +3884,10 @@
     "claude": {
       "appPath": "Claude 路径",
       "appTargetPlaceholder": "Claude.exe 路径或 shell:AppsFolder\\..."
+    },
+    "qoderCn": {
+      "title": "QoderWork CN 设置",
+      "appPath": "QoderWork CN 路径"
     }
   },
   "quotaAlert": {
@@ -5165,6 +5170,14 @@
       "labelOverridePlaceholder": "菜单显示名",
       "supports1mLabel": "声明支持 1M",
       "supports1mShort": "1M上下文"
+    }
+  },
+  "qoderCn": {
+    "addModal": {
+      "title": "添加 QoderWork CN 账号"
+    },
+    "empty": {
+      "desc": "点击“添加账号”，可使用授权登录、本机导入或 JSON 导入。"
     }
   }
 }

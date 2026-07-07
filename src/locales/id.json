@@ -3730,6 +3730,10 @@
     "claude": {
       "appPath": "Jalur Claude",
       "appTargetPlaceholder": "Jalur Claude.exe atau shell:AppsFolder\\..."
+    },
+    "qoderCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
     }
   },
   "quotaAlert": {
@@ -5164,6 +5168,14 @@
       "labelOverridePlaceholder": "Nama tampilan menu",
       "supports1mLabel": "Nyatakan dukungan 1M",
       "supports1mShort": "1M konteks"
+    }
+  },
+  "qoderCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   }
 }

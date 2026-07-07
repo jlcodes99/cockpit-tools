@@ -3584,6 +3584,10 @@
     "claude": {
       "appPath": "Cesta Claude",
       "appTargetPlaceholder": "Cesta Claude.exe nebo shell:AppsFolder\\..."
+    },
+    "qoderCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
     }
   },
   "quotaAlert": {
@@ -5164,6 +5168,14 @@
       "labelOverridePlaceholder": "Název v nabídce",
       "supports1mLabel": "Deklarovat 1M",
       "supports1mShort": "1M kontext"
+    }
+  },
+  "qoderCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   }
 }

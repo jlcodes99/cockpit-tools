@@ -3630,6 +3630,10 @@
     "claude": {
       "appPath": "مسار Claude",
       "appTargetPlaceholder": "مسار Claude.exe أو shell:AppsFolder\\..."
+    },
+    "qoderCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
     }
   },
   "quotaAlert": {
@@ -5164,6 +5168,14 @@
       "labelOverridePlaceholder": "اسم العرض في القائمة",
       "supports1mLabel": "إعلان دعم 1M",
       "supports1mShort": "سياق 1M"
+    }
+  },
+  "qoderCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   }
 }

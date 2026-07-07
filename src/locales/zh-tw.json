@@ -263,7 +263,8 @@
     "switchClassicLayoutConfirm": "立即切換",
     "2faManager": "2FA 管理",
     "apiRelay": "中轉站",
-    "claude": "Claude"
+    "claude": "Claude",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "贊助商",
@@ -3585,6 +3586,10 @@
     "claude": {
       "appPath": "Claude 路徑",
       "appTargetPlaceholder": "Claude.exe 路徑或 shell:AppsFolder\\..."
+    },
+    "qoderCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
     }
   },
   "quotaAlert": {
@@ -5165,6 +5170,14 @@
       "labelOverridePlaceholder": "選單顯示名稱",
       "supports1mLabel": "宣告支援 1M",
       "supports1mShort": "1M上下文"
+    }
+  },
+  "qoderCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   }
 }

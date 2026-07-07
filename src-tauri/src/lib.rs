@@ -837,7 +837,7 @@ pub fn run() {
             commands::qoder::inject_qoder_account,
             commands::qoder::update_qoder_account_tags,
             commands::qoder::get_qoder_accounts_index_path,
-            // Qoder CN Commands
+            // QoderWork CN Commands
             commands::qoderwork_cn::list_qoderwork_cn_accounts,
             commands::qoderwork_cn::delete_qoderwork_cn_account,
             commands::qoderwork_cn::delete_qoderwork_cn_accounts,
@@ -854,6 +854,23 @@ pub fn run() {
             commands::qoderwork_cn::add_qoderwork_cn_account_with_token,
             commands::qoderwork_cn::update_qoderwork_cn_account_tags,
             commands::qoderwork_cn::get_qoderwork_cn_accounts_index_path,
+            // Qoder CN Commands
+            commands::qoder_cn::list_qoder_cn_accounts,
+            commands::qoder_cn::delete_qoder_cn_account,
+            commands::qoder_cn::delete_qoder_cn_accounts,
+            commands::qoder_cn::import_qoder_cn_from_json,
+            commands::qoder_cn::import_qoder_cn_from_local,
+            commands::qoder_cn::export_qoder_cn_accounts,
+            commands::qoder_cn::qoder_cn_oauth_login_start,
+            commands::qoder_cn::qoder_cn_oauth_login_peek,
+            commands::qoder_cn::qoder_cn_oauth_login_complete,
+            commands::qoder_cn::qoder_cn_oauth_login_cancel,
+            commands::qoder_cn::refresh_qoder_cn_token,
+            commands::qoder_cn::refresh_all_qoder_cn_tokens,
+            commands::qoder_cn::switch_qoder_cn_account,
+            commands::qoder_cn::add_qoder_cn_account_with_token,
+            commands::qoder_cn::update_qoder_cn_account_tags,
+            commands::qoder_cn::get_qoder_cn_accounts_index_path,
             // Zed Commands
             commands::zed::list_zed_accounts,
             commands::zed::delete_zed_account,

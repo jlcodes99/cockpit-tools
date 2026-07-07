@@ -309,7 +309,8 @@
     "switchClassicLayoutDontAskAgain": "Don't show this prompt again",
     "switchClassicLayoutConfirm": "Switch now",
     "2faManager": "2FA",
-    "claude": "Claude"
+    "claude": "Claude",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsors",
@@ -3883,6 +3884,10 @@
     "claude": {
       "appPath": "Claude path",
       "appTargetPlaceholder": "Claude.exe path or shell:AppsFolder\\..."
+    },
+    "qoderCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
     }
   },
   "quotaAlert": {
@@ -5165,6 +5170,14 @@
       "labelOverridePlaceholder": "Menu display name",
       "supports1mLabel": "Declare 1M",
       "supports1mShort": "1M"
+    }
+  },
+  "qoderCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   }
 }

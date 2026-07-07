@@ -69,6 +69,7 @@ interface GeneralConfig {
   codebuddy_cn_auto_refresh_minutes: number;
   qoder_auto_refresh_minutes: number;
   qoderwork_cn_auto_refresh_minutes: number;
+  qoder_cn_auto_refresh_minutes: number;
   trae_auto_refresh_minutes: number;
   workbuddy_auto_refresh_minutes: number;
   zed_auto_refresh_minutes: number;
@@ -90,6 +91,7 @@ interface GeneralConfig {
   codebuddy_cn_app_path: string;
   qoder_app_path: string;
   qoderwork_cn_app_path: string;
+  qoder_cn_app_path: string;
   trae_app_path: string;
   workbuddy_app_path: string;
   zed_app_path: string;
@@ -143,6 +145,8 @@ interface GeneralConfig {
   qoder_quota_alert_threshold: number;
   qoderwork_cn_quota_alert_enabled: boolean;
   qoderwork_cn_quota_alert_threshold: number;
+  qoder_cn_quota_alert_enabled: boolean;
+  qoder_cn_quota_alert_threshold: number;
   trae_quota_alert_enabled: boolean;
   trae_quota_alert_threshold: number;
   workbuddy_quota_alert_enabled: boolean;
@@ -164,6 +168,7 @@ export type QuickSettingsType =
   | 'codebuddy_cn'
   | 'qoder'
   | 'qoderwork_cn'
+  | 'qoder_cn'
   | 'trae'
   | 'workbuddy'
   | 'zed';
@@ -181,6 +186,7 @@ type AppPathTarget =
   | 'codebuddy_cn'
   | 'qoder'
   | 'qoderwork_cn'
+  | 'qoder_cn'
   | 'trae'
   | 'workbuddy'
   | 'zed';
@@ -198,6 +204,7 @@ type QuotaAlertEnabledKey =
   | 'codebuddy_cn_quota_alert_enabled'
   | 'qoder_quota_alert_enabled'
   | 'qoderwork_cn_quota_alert_enabled'
+  | 'qoder_cn_quota_alert_enabled'
   | 'trae_quota_alert_enabled'
   | 'workbuddy_quota_alert_enabled'
   | 'zed_quota_alert_enabled';
@@ -214,6 +221,7 @@ type QuotaAlertThresholdKey =
   | 'codebuddy_cn_quota_alert_threshold'
   | 'qoder_quota_alert_threshold'
   | 'qoderwork_cn_quota_alert_threshold'
+  | 'qoder_cn_quota_alert_threshold'
   | 'trae_quota_alert_threshold'
   | 'workbuddy_quota_alert_threshold'
   | 'zed_quota_alert_threshold';
@@ -256,6 +264,8 @@ const getAppPathKeyForTarget = (target: AppPathTarget): keyof GeneralConfig => {
       return 'qoder_app_path';
     case 'qoderwork_cn':
       return 'qoderwork_cn_app_path';
+    case 'qoder_cn':
+      return 'qoder_cn_app_path';
     case 'trae':
       return 'trae_app_path';
     case 'workbuddy':
@@ -357,6 +367,8 @@ const getCurrentAccountRefreshPlatformForType = (
       return 'qoder';
     case 'qoderwork_cn':
       return 'qoderwork_cn';
+    case 'qoder_cn':
+      return 'qoder_cn';
     case 'trae':
       return 'trae';
     case 'workbuddy':
@@ -875,6 +887,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'codebuddy_cn': return 'codebuddy_cn_auto_refresh_minutes';
       case 'qoder': return 'qoder_auto_refresh_minutes';
       case 'qoderwork_cn': return 'qoderwork_cn_auto_refresh_minutes';
+      case 'qoder_cn': return 'qoder_cn_auto_refresh_minutes';
       case 'trae': return 'trae_auto_refresh_minutes';
       case 'workbuddy': return 'workbuddy_auto_refresh_minutes';
       case 'zed': return 'zed_auto_refresh_minutes';
@@ -909,6 +922,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           workbuddyAutoRefreshMinutes: merged.workbuddy_auto_refresh_minutes,
           qoderAutoRefreshMinutes: merged.qoder_auto_refresh_minutes,
           qoderworkCnAutoRefreshMinutes: merged.qoderwork_cn_auto_refresh_minutes,
+          qoderCnAutoRefreshMinutes: merged.qoder_cn_auto_refresh_minutes,
           traeAutoRefreshMinutes: merged.trae_auto_refresh_minutes,
           zedAutoRefreshMinutes: merged.zed_auto_refresh_minutes,
           closeBehavior: merged.close_behavior,
@@ -929,6 +943,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           codebuddyCnAppPath: merged.codebuddy_cn_app_path,
           qoderAppPath: merged.qoder_app_path,
           qoderworkCnAppPath: merged.qoderwork_cn_app_path,
+          qoderCnAppPath: merged.qoder_cn_app_path,
           traeAppPath: merged.trae_app_path,
           workbuddyAppPath: merged.workbuddy_app_path,
           zedAppPath: merged.zed_app_path,
@@ -982,6 +997,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           qoderQuotaAlertThreshold: merged.qoder_quota_alert_threshold,
           qoderworkCnQuotaAlertEnabled: merged.qoderwork_cn_quota_alert_enabled,
           qoderworkCnQuotaAlertThreshold: merged.qoderwork_cn_quota_alert_threshold,
+          qoderCnQuotaAlertEnabled: merged.qoder_cn_quota_alert_enabled,
+          qoderCnQuotaAlertThreshold: merged.qoder_cn_quota_alert_threshold,
           traeQuotaAlertEnabled: merged.trae_quota_alert_enabled,
           traeQuotaAlertThreshold: merged.trae_quota_alert_threshold,
           workbuddyQuotaAlertEnabled: merged.workbuddy_quota_alert_enabled,
@@ -1196,6 +1213,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return 'qoder_quota_alert_enabled';
       case 'qoderwork_cn':
         return 'qoderwork_cn_quota_alert_enabled';
+      case 'qoder_cn':
+        return 'qoder_cn_quota_alert_enabled';
       case 'trae':
         return 'trae_quota_alert_enabled';
       case 'workbuddy':
@@ -1231,6 +1250,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return 'qoder_quota_alert_threshold';
       case 'qoderwork_cn':
         return 'qoderwork_cn_quota_alert_threshold';
+      case 'qoder_cn':
+        return 'qoder_cn_quota_alert_threshold';
       case 'trae':
         return 'trae_quota_alert_threshold';
       case 'workbuddy':
@@ -1344,6 +1365,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return t('quickSettings.qoder.appPath', 'Qoder 路径');
       case 'qoderwork_cn':
         return t('quickSettings.qoderworkCn.appPath', 'QoderWork CN 路径');
+      case 'qoder_cn':
+        return t('quickSettings.qoderCn.appPath', 'Qoder CN 路径');
       case 'trae':
         return t('quickSettings.trae.appPath', 'Trae 路径');
       case 'workbuddy':
@@ -1379,6 +1402,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return 'qoder';
       case 'qoderwork_cn':
         return 'qoderwork_cn';
+      case 'qoder_cn':
+        return 'qoder_cn';
       case 'trae':
         return 'trae';
       case 'workbuddy':

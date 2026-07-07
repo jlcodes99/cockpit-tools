@@ -11,6 +11,7 @@ import * as codebuddyService from './codebuddyService';
 import * as codebuddyCnService from './codebuddyCnService';
 import * as qoderService from './qoderService';
 import * as qoderworkCnService from './qoderworkCnService';
+import * as qoderCnService from './qoderCnService';
 import * as traeService from './traeService';
 import * as workbuddyService from './workbuddyService';
 import * as zedService from './zedService';
@@ -106,6 +107,11 @@ const PLATFORM_ADAPTERS: Record<PlatformId, TransferAdapter> = {
     listAccounts: qoderworkCnService.listQoderworkCnAccounts,
     exportAccounts: qoderworkCnService.exportQoderworkCnAccounts,
     importFromJson: qoderworkCnService.importQoderworkCnFromJson,
+  },
+  qoder_cn: {
+    listAccounts: qoderCnService.listQoderCnAccounts,
+    exportAccounts: qoderCnService.exportQoderCnAccounts,
+    importFromJson: qoderCnService.importQoderCnFromJson,
   },
   trae: {
     listAccounts: traeService.listTraeAccounts,

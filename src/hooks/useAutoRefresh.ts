@@ -13,6 +13,7 @@ import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useQoderworkCnAccountStore } from '../stores/useQoderworkCnAccountStore';
+import { useQoderCnAccountStore } from '../stores/useQoderCnAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
 import { getGitHubCopilotAccountDisplayEmail } from '../types/githubCopilot';
@@ -25,6 +26,7 @@ import { getCodebuddyAccountDisplayEmail } from '../types/codebuddy';
 import { getWorkbuddyAccountDisplayEmail } from '../types/workbuddy';
 import { getQoderAccountDisplayEmail } from '../types/qoder';
 import { getQoderworkCnAccountDisplayEmail } from '../types/qoderworkCn';
+import { getQoderCnAccountDisplayEmail } from '../types/qoderCn';
 import { getTraeAccountDisplayEmail } from '../types/trae';
 import { getZedAccountDisplayEmail } from '../types/zed';
 import {
@@ -37,6 +39,8 @@ import {
   type AutoRefreshSchedulerHandle,
   type AutoRefreshSchedulerTask,
 } from '../utils/autoRefreshScheduler';
+
+import * as qoderCnService from '../services/qoderCnService';
 
 interface GeneralConfig {
   language: string;
@@ -57,6 +61,7 @@ interface GeneralConfig {
   workbuddy_auto_refresh_minutes: number;
   qoder_auto_refresh_minutes: number;
   qoderwork_cn_auto_refresh_minutes: number;
+  qoder_cn_auto_refresh_minutes: number;
   trae_auto_refresh_minutes: number;
   zed_auto_refresh_minutes: number;
   auto_switch_enabled: boolean;
@@ -74,6 +79,7 @@ interface GeneralConfig {
   codebuddy_cn_app_path?: string;
   qoder_app_path?: string;
   qoderwork_cn_app_path?: string;
+  qoder_cn_app_path?: string;
   trae_app_path?: string;
   zed_app_path?: string;
   opencode_sync_on_switch?: boolean;
@@ -156,6 +162,7 @@ function getCurrentAccountEmails(): Record<CurrentAccountRefreshPlatform, string
     workbuddy: getProviderEmail(useWorkbuddyAccountStore, getWorkbuddyAccountDisplayEmail),
     qoder: getProviderEmail(useQoderAccountStore, getQoderAccountDisplayEmail),
     qoderwork_cn: getProviderEmail(useQoderworkCnAccountStore, getQoderworkCnAccountDisplayEmail),
+    qoder_cn: getProviderEmail(useQoderCnAccountStore, getQoderCnAccountDisplayEmail),
     trae: getProviderEmail(useTraeAccountStore, getTraeAccountDisplayEmail),
     zed: getProviderEmail(useZedAccountStore, getZedAccountDisplayEmail),
   };
@@ -202,6 +209,8 @@ export function useAutoRefresh() {
   const refreshAllQoderworkCnTokens = useQoderworkCnAccountStore((state) => state.refreshAllTokens);
   const fetchCurrentQoderworkCnAccountId = useQoderworkCnAccountStore((state) => state.fetchCurrentAccountId);
   const refreshQoderworkCnToken = useQoderworkCnAccountStore((state) => state.refreshToken);
+  const fetchCurrentQoderCnAccountId = useQoderCnAccountStore((state) => state.fetchCurrentAccountId);
+  const refreshQoderCnToken = useQoderCnAccountStore((state) => state.refreshToken);
   const refreshAllTraeTokens = useTraeAccountStore((state) => state.refreshAllTokens);
   const fetchCurrentTraeAccountId = useTraeAccountStore((state) => state.fetchCurrentAccountId);
   const refreshTraeToken = useTraeAccountStore((state) => state.refreshToken);
@@ -235,6 +244,8 @@ export function useAutoRefresh() {
   const qoderCurrentRefreshingRef = useRef(false);
   const qoderworkCnRefreshingRef = useRef(false);
   const qoderworkCnCurrentRefreshingRef = useRef(false);
+  const qoderCnRefreshingRef = useRef(false);
+  const qoderCnCurrentRefreshingRef = useRef(false);
   const traeRefreshingRef = useRef(false);
   const traeCurrentRefreshingRef = useRef(false);
   const zedRefreshingRef = useRef(false);
@@ -351,6 +362,7 @@ export function useAutoRefresh() {
                     workbuddyAutoRefreshMinutes: config.workbuddy_auto_refresh_minutes,
                     qoderAutoRefreshMinutes: config.qoder_auto_refresh_minutes,
                     qoderworkCnAutoRefreshMinutes: config.qoderwork_cn_auto_refresh_minutes,
+                    qoderCnAutoRefreshMinutes: config.qoder_cn_auto_refresh_minutes,
                     traeAutoRefreshMinutes: config.trae_auto_refresh_minutes,
                     zedAutoRefreshMinutes: config.zed_auto_refresh_minutes,
                     closeBehavior: config.close_behavior || 'ask',
@@ -365,6 +377,7 @@ export function useAutoRefresh() {
                     codebuddyCnAppPath: config.codebuddy_cn_app_path ?? '',
                     qoderAppPath: config.qoder_app_path ?? '',
                     qoderworkCnAppPath: config.qoderwork_cn_app_path ?? '',
+                    qoderCnAppPath: config.qoder_cn_app_path ?? '',
                     traeAppPath: config.trae_app_path ?? '',
                     zedAppPath: config.zed_app_path ?? '',
                     opencodeSyncOnSwitch: config.opencode_sync_on_switch ?? false,
@@ -619,6 +632,20 @@ export function useAutoRefresh() {
               },
             },
             {
+              key: 'qoder_cn',
+              label: 'Qoder CN',
+              intervalMinutes: config.qoder_cn_auto_refresh_minutes,
+              currentMinutes: resolveCurrentMinutes('qoder_cn', currentAccountEmails.qoder_cn, currentRefreshMinutesMap),
+              fullRefreshingRef: qoderCnRefreshingRef,
+              currentRefreshingRef: qoderCnCurrentRefreshingRef,
+              runFullRefresh: async () => {
+                await qoderCnService.refreshAllQoderCnTokens();
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(fetchCurrentQoderCnAccountId, refreshQoderCnToken);
+              },
+            },
+            {
               key: 'trae',
               label: 'Trae',
               intervalMinutes: config.trae_auto_refresh_minutes,
@@ -729,6 +756,7 @@ export function useAutoRefresh() {
     fetchCurrentKiroAccountId,
     fetchCurrentQoderAccountId,
     fetchCurrentQoderworkCnAccountId,
+    fetchCurrentQoderCnAccountId,
     fetchCurrentTraeAccountId,
     fetchCurrentWindsurfAccountId,
     fetchCurrentWorkbuddyAccountId,
@@ -758,6 +786,7 @@ export function useAutoRefresh() {
     refreshKiroToken,
     refreshQoderToken,
     refreshQoderworkCnToken,
+    refreshQoderCnToken,
     refreshTraeToken,
     refreshWindsurfToken,
     refreshWorkbuddyToken,

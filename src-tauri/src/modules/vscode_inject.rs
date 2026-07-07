@@ -63,6 +63,7 @@ enum SafeStorageReadMode {
     CodeBuddyCnOnly,
     QoderOnly,
     QoderWorkCnOnly,
+    QoderCnOnly,
     WorkBuddyOnly,
 }
 
@@ -438,6 +439,28 @@ fn build_macos_safe_storage_candidates(
         ];
     }
 
+    if matches!(mode, SafeStorageReadMode::QoderCnOnly) {
+        return vec![
+            (
+                "Qoder CN Safe Storage".to_string(),
+                Some("Qoder CN".to_string()),
+            ),
+            (
+                "Qoder CN Safe Storage".to_string(),
+                Some("qoder cn".to_string()),
+            ),
+            (
+                "Qoder CN Safe Storage".to_string(),
+                Some("Qoder CN Key".to_string()),
+            ),
+            ("Qoder CN Safe Storage".to_string(), None),
+            (
+                "Qoder CN Safe Storage".to_string(),
+                Some("Qoder CN Safe Storage".to_string()),
+            ),
+        ];
+    }
+
     if matches!(mode, SafeStorageReadMode::WorkBuddyOnly) {
         return vec![
             (
@@ -564,6 +587,9 @@ fn get_linux_v11_key(mode: SafeStorageReadMode) -> Option<[u8; 16]> {
         SafeStorageReadMode::QoderOnly => &["Qoder", "qoder"],
         SafeStorageReadMode::QoderWorkCnOnly => {
             &["QoderWork CN", "qoderwork cn", "qoderwork-cn", "qoderworkcn"]
+        }
+        SafeStorageReadMode::QoderCnOnly => {
+            &["Qoder CN", "qoder cn", "qoder-cn", "qodercn"]
         }
         SafeStorageReadMode::WorkBuddyOnly => {
             &["WorkBuddy", "workbuddy", "workbuddy-cn", "workbuddycn"]
@@ -1132,6 +1158,13 @@ pub fn read_qoder_secret_storage_value_by_db_path(
     read_secret_storage_value_by_db_path_and_mode(db_path, db_key, SafeStorageReadMode::QoderOnly)
 }
 
+pub fn read_qoder_cn_secret_storage_value_by_db_path(
+    db_path: &Path,
+    db_key: &str,
+) -> Result<Option<String>, String> {
+    read_secret_storage_value_by_db_path_and_mode(db_path, db_key, SafeStorageReadMode::QoderCnOnly)
+}
+
 fn load_existing_sessions(
     existing_encrypted_value: Option<&str>,
     data_root: Option<&Path>,
@@ -1271,6 +1304,14 @@ pub fn inject_secret_to_state_db_for_qoder(
     plaintext: &str,
 ) -> Result<(), String> {
     inject_secret_to_state_db_with_mode(db_path, db_key, plaintext, SafeStorageReadMode::QoderOnly)
+}
+
+pub fn inject_secret_to_state_db_for_qoder_cn(
+    db_path: &std::path::Path,
+    db_key: &str,
+    plaintext: &str,
+) -> Result<(), String> {
+    inject_secret_to_state_db_with_mode(db_path, db_key, plaintext, SafeStorageReadMode::QoderCnOnly)
 }
 
 pub fn inject_secret_to_state_db_for_workbuddy(
@@ -1427,6 +1468,87 @@ pub fn encrypt_qoderwork_cn_safe_storage_data(plaintext: &[u8]) -> Result<Vec<u8
     #[cfg(target_os = "linux")]
     {
         match get_linux_v11_key(SafeStorageReadMode::QoderWorkCnOnly) {
+            Some(key) => encrypt_cbc_prefixed(V11_PREFIX, &key, plaintext),
+            None => encrypt_cbc_prefixed(V10_PREFIX, &LINUX_V10_KEY, plaintext),
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        let _ = plaintext;
+        Err("不支持的平台".to_string())
+    }
+}
+
+/// Decrypt a raw Electron safeStorage encrypted file for Qoder CN.
+/// The file uses v10 prefix + AES-128-CBC (macOS) or AES-256-GCM (Windows).
+pub fn decrypt_qoder_cn_safe_storage_file(
+    file_path: &std::path::Path,
+) -> Result<String, String> {
+    let encrypted = std::fs::read(file_path)
+        .map_err(|e| format!("读取加密文件失败: {}", e))?;
+
+    #[cfg(target_os = "macos")]
+    {
+        let password = get_macos_safe_storage_password(None, SafeStorageReadMode::QoderCnOnly)?;
+        let key = pbkdf2_sha1_key(&password, 1003);
+        let decrypted = decrypt_cbc_prefixed(&encrypted, V10_PREFIX, &key)?;
+        return String::from_utf8(decrypted)
+            .map_err(|e| format!("解密数据不是有效 UTF-8: {}", e));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // TODO: Windows DPAPI decryption for Qoder CN auth-v2.dat
+        return Err("Windows 平台暂不支持解密 Qoder CN 认证文件".to_string());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        match detect_prefix(&encrypted) {
+            Some("v11") => {
+                let key = get_linux_v11_key(SafeStorageReadMode::QoderCnOnly)
+                    .ok_or("无法获取 Linux v11 密钥".to_string())?;
+                let decrypted = decrypt_cbc_prefixed(&encrypted, V11_PREFIX, &key)?;
+                return String::from_utf8(decrypted)
+                    .map_err(|e| format!("解密数据不是有效 UTF-8: {}", e));
+            }
+            Some("v10") => {
+                let decrypted = decrypt_cbc_prefixed(&encrypted, V10_PREFIX, &LINUX_V10_KEY)?;
+                return String::from_utf8(decrypted)
+                    .map_err(|e| format!("解密数据不是有效 UTF-8: {}", e));
+            }
+            _ => {
+                return Err(format!(
+                    "不支持的加密前缀: {:?}",
+                    &encrypted[..encrypted.len().min(3)]
+                ));
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    Err("不支持的平台".to_string())
+}
+
+/// Encrypt data using Qoder CN's Electron safeStorage (macOS: v10 + AES-128-CBC).
+/// Returns the raw encrypted bytes (with v10 prefix).
+pub fn encrypt_qoder_cn_safe_storage_data(plaintext: &[u8]) -> Result<Vec<u8>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let password = get_macos_safe_storage_password(None, SafeStorageReadMode::QoderCnOnly)?;
+        let key = pbkdf2_sha1_key(&password, 1003);
+        return encrypt_cbc_prefixed(V10_PREFIX, &key, plaintext);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        return Err("Windows 平台暂不支持加密 Qoder CN 认证文件".to_string());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        match get_linux_v11_key(SafeStorageReadMode::QoderCnOnly) {
             Some(key) => encrypt_cbc_prefixed(V11_PREFIX, &key, plaintext),
             None => encrypt_cbc_prefixed(V10_PREFIX, &LINUX_V10_KEY, plaintext),
         }

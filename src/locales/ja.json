@@ -3584,6 +3584,10 @@
     "claude": {
       "appPath": "Claude パス",
       "appTargetPlaceholder": "Claude.exe のパスまたは shell:AppsFolder\\..."
+    },
+    "qoderCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
     }
   },
   "quotaAlert": {
@@ -5164,6 +5168,14 @@
       "labelOverridePlaceholder": "メニュー表示名",
       "supports1mLabel": "1M 対応を宣言",
       "supports1mShort": "1M対応"
+    }
+  },
+  "qoderCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   }
 }

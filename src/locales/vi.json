@@ -3584,6 +3584,10 @@
     "claude": {
       "appPath": "Đường dẫn Claude",
       "appTargetPlaceholder": "Đường dẫn Claude.exe hoặc shell:AppsFolder\\..."
+    },
+    "qoderCn": {
+      "title": "QoderWork CN Settings",
+      "appPath": "QoderWork CN Path"
     }
   },
   "quotaAlert": {
@@ -5164,6 +5168,14 @@
       "labelOverridePlaceholder": "Tên hiển thị trong menu",
       "supports1mLabel": "Khai báo hỗ trợ 1M",
       "supports1mShort": "1M ngữ cảnh"
+    }
+  },
+  "qoderCn": {
+    "addModal": {
+      "title": "Add QoderWork CN Account"
+    },
+    "empty": {
+      "desc": "Click \"Add Account\" to get started with OAuth login, local import, or JSON import."
     }
   }
 }

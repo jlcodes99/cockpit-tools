@@ -10,6 +10,7 @@ pub mod instance;
 pub mod kiro;
 pub mod qoder;
 pub mod qoderwork_cn;
+pub mod qoder_cn;
 pub mod quota;
 pub mod token;
 pub mod trae;

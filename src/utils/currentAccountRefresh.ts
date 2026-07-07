@@ -17,6 +17,7 @@ export type CurrentAccountRefreshPlatform =
   | 'workbuddy'
   | 'qoder'
   | 'qoderwork_cn'
+  | 'qoder_cn'
   | 'trae'
   | 'zed';
 
@@ -34,6 +35,7 @@ export const CURRENT_ACCOUNT_REFRESH_PLATFORMS: CurrentAccountRefreshPlatform[] 
   'workbuddy',
   'qoder',
   'qoderwork_cn',
+  'qoder_cn',
   'trae',
   'zed',
 ];
@@ -70,6 +72,7 @@ export function buildDefaultCurrentAccountRefreshMinutesMap(): CurrentAccountRef
     workbuddy: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     qoder: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     qoderwork_cn: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
+    qoder_cn: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     trae: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     zed: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
   };

@@ -189,6 +189,8 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useQoderInstanceStore.getState();
     case 'qoderwork_cn':
       return null;
+    case 'qoder_cn':
+      return null;
     case 'trae':
       return useTraeInstanceStore.getState();
     case 'workbuddy':
@@ -781,6 +783,11 @@ export function FloatingCardWindow() {
           accounts: [],
           actualCurrentAccount: null,
         };
+      case 'qoder_cn':
+        return {
+          accounts: [],
+          actualCurrentAccount: null,
+        };
       case 'trae':
         return {
           accounts: traeAccounts,
@@ -866,6 +873,8 @@ export function FloatingCardWindow() {
       case 'qoder':
         return getRecommendedQoderAccount(qoderAccounts, effectiveCurrentId);
       case 'qoderwork_cn':
+        return null;
+      case 'qoder_cn':
         return null;
       case 'trae':
         return getRecommendedTraeAccount(traeAccounts, effectiveCurrentId);
@@ -956,6 +965,8 @@ export function FloatingCardWindow() {
       case 'qoder':
         return buildQoderAccountPresentation(viewedAccount as typeof qoderAccounts[number], t);
       case 'qoderwork_cn':
+        return null;
+      case 'qoder_cn':
         return null;
       case 'trae':
         return buildTraeAccountPresentation(viewedAccount as typeof traeAccounts[number], t);

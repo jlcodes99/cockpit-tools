@@ -13,6 +13,7 @@ import { GeminiIcon } from '../components/icons/GeminiIcon';
 import { CodebuddyIcon } from '../components/icons/CodebuddyIcon';
 import { QoderIcon } from '../components/icons/QoderIcon';
 import { QoderworkCnIcon } from '../components/icons/QoderworkCnIcon';
+import { QoderCnIcon } from '../components/icons/QoderCnIcon';
 import { TraeIcon } from '../components/icons/TraeIcon';
 import { WorkbuddyIcon } from '../components/icons/WorkbuddyIcon';
 import { ZedIcon } from '../components/icons/ZedIcon';
@@ -47,6 +48,8 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
       return _t('nav.qoder', 'Qoder');
     case 'qoderwork_cn':
       return _t('nav.qoderworkCn', 'QoderWork CN');
+    case 'qoder_cn':
+      return _t('nav.qoderCn', 'Qoder CN');
     case 'trae':
       return _t('nav.trae', 'Trae');
     case 'workbuddy':
@@ -86,6 +89,8 @@ export function renderPlatformIcon(platformId: PlatformId, size = 20): ReactNode
       return <QoderIcon style={{ width: size, height: size }} />;
     case 'qoderwork_cn':
       return <QoderworkCnIcon style={{ width: size, height: size }} />;
+    case 'qoder_cn':
+      return <QoderCnIcon style={{ width: size, height: size }} />;
     case 'trae':
       return <TraeIcon style={{ width: size, height: size }} />;
     case 'workbuddy':

@@ -111,6 +111,9 @@ const QoderAccountsPage = lazy(() =>
 const QoderworkCnAccountsPage = lazy(() =>
   import('./pages/QoderworkCnAccountsPage').then((module) => ({ default: module.QoderworkCnAccountsPage })),
 );
+const QoderCnAccountsPage = lazy(() =>
+  import('./pages/QoderCnAccountsPage').then((module) => ({ default: module.QoderCnAccountsPage })),
+);
 const TraeAccountsPage = lazy(() =>
   import('./pages/TraeAccountsPage').then((module) => ({ default: module.TraeAccountsPage })),
 );
@@ -190,6 +193,7 @@ interface GeneralConfig extends GeneralConfigTheme, GeneralConfigLanguage {
   codebuddy_cn_app_path: string;
   qoder_app_path: string;
   qoderwork_cn_app_path: string;
+  qoder_cn_app_path: string;
   trae_app_path: string;
   workbuddy_app_path: string;
   zed_app_path: string;
@@ -208,6 +212,7 @@ type AppPathMissingDetail = {
     | 'codebuddy_cn'
     | 'qoder'
     | 'qoderwork_cn'
+    | 'qoder_cn'
     | 'trae'
     | 'workbuddy'
     | 'zed';
@@ -283,6 +288,7 @@ type QuotaAlertPlatform =
   | 'codebuddy_cn'
   | 'qoder'
   | 'qoderwork_cn'
+  | 'qoder_cn'
   | 'trae'
   | 'workbuddy'
   | 'zed';
@@ -389,6 +395,8 @@ function normalizeQuotaAlertPlatform(platform: string | undefined): QuotaAlertPl
       return 'qoder';
     case 'qoderwork_cn':
       return 'qoderwork_cn';
+    case 'qoder_cn':
+      return 'qoder_cn';
     case 'trae':
       return 'trae';
     case 'zed':
@@ -425,6 +433,8 @@ function getQuotaAlertPlatformLabel(
       return t('nav.qoder', 'Qoder');
     case 'qoderwork_cn':
       return t('nav.qoderworkCn', 'QoderWork CN');
+    case 'qoder_cn':
+      return t('nav.qoderCn', 'Qoder CN');
     case 'trae':
       return t('nav.trae', 'Trae');
     case 'zed':
@@ -458,6 +468,8 @@ function getQuotaAlertTargetPage(platform: QuotaAlertPlatform): Page {
       return 'qoder';
     case 'qoderwork_cn':
       return 'qoderwork-cn';
+    case 'qoder_cn':
+      return 'qoder-cn';
     case 'trae':
       return 'trae';
     case 'workbuddy':
@@ -493,6 +505,8 @@ function getQuotaAlertQuickSettingsType(platform: QuotaAlertPlatform): QuickSett
       return 'qoder';
     case 'qoderwork_cn':
       return 'qoderwork_cn';
+    case 'qoder_cn':
+      return 'qoder_cn';
     case 'trae':
       return 'trae';
     case 'workbuddy':
@@ -2685,6 +2699,10 @@ function MainApp() {
         errorMessage: 'Failed to refresh QoderWork CN:',
       },
       {
+        command: 'refresh_all_qoder_cn_tokens',
+        errorMessage: 'Failed to refresh Qoder CN:',
+      },
+      {
         command: 'refresh_all_trae_tokens',
         errorMessage: 'Failed to refresh Trae:',
       },
@@ -2803,6 +2821,8 @@ function MainApp() {
                 ? config.qoder_app_path
               : appPathMissing.app === 'qoderwork_cn'
                 ? config.qoderwork_cn_app_path
+              : appPathMissing.app === 'qoder_cn'
+                ? config.qoder_cn_app_path
               : appPathMissing.app === 'trae'
                 ? config.trae_app_path
               : appPathMissing.app === 'workbuddy'
@@ -3122,6 +3142,7 @@ function MainApp() {
             case 'codebuddy-cn':
             case 'qoder':
             case 'qoderwork-cn':
+            case 'qoder-cn':
             case 'trae':
             case 'workbuddy':
             case 'zed':
@@ -3648,6 +3669,7 @@ function MainApp() {
           {page === 'codebuddy-cn' && <CodebuddyCnAccountsPage />}
           {page === 'qoder' && <QoderAccountsPage />}
           {page === 'qoderwork-cn' && <QoderworkCnAccountsPage />}
+          {page === 'qoder-cn' && <QoderCnAccountsPage />}
           {page === 'trae' && <TraeAccountsPage />}
           {page === 'workbuddy' && <WorkbuddyAccountsPage />}
           {page === 'zed' && <ZedAccountsPage />}
