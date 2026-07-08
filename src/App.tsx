@@ -36,6 +36,8 @@ import { useGeminiAccountStore } from './stores/useGeminiAccountStore';
 import { useCodebuddyAccountStore } from './stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from './stores/useCodebuddyCnAccountStore';
 import { useQoderAccountStore } from './stores/useQoderAccountStore';
+import { useQoderCnAccountStore } from './stores/useQoderCnAccountStore';
+import { useQoderworkCnAccountStore } from './stores/useQoderworkCnAccountStore';
 import { useTraeAccountStore } from './stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from './stores/useWorkbuddyAccountStore';
 import { useZedAccountStore } from './stores/useZedAccountStore';
@@ -184,6 +186,8 @@ const RENDERABLE_PAGE_VALUES: readonly Page[] = [
   'codebuddy',
   'codebuddy-cn',
   'qoder',
+  'qoderwork-cn',
+  'qoder-cn',
   'trae',
   'trae-solo',
   'trae-cn',
@@ -2582,6 +2586,12 @@ function MainApp() {
                     } else if (platform === 'qoder') {
                       await useQoderAccountStore.getState().switchAccount(targetAccountId);
                       setPage('qoder');
+                    } else if (platform === 'qoder_cn') {
+                      await useQoderCnAccountStore.getState().switchAccount(targetAccountId);
+                      setPage('qoder-cn');
+                    } else if (platform === 'qoderwork_cn') {
+                      await useQoderworkCnAccountStore.getState().switchAccount(targetAccountId);
+                      setPage('qoderwork-cn');
                     } else if (platform === 'trae') {
                       await useTraeAccountStore.getState().switchAccount(targetAccountId);
                       setPage('trae');
