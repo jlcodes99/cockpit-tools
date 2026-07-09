@@ -48,6 +48,7 @@ import { buildWindsurfAccountPresentation } from '../presentation/platformAccoun
 
 import { WindsurfOverviewTabsHeader, WindsurfTab } from '../components/WindsurfOverviewTabsHeader';
 import { WindsurfInstancesContent } from './WindsurfInstancesPage';
+import { AggregateQuotaProjectionChart } from '../components/AggregateQuotaProjectionChart';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
@@ -1340,6 +1341,9 @@ export function WindsurfAccountsPage() {
           <button onClick={() => setMessage(null)}><X size={14} /></button>
         </div>
       )}
+
+      {/* Aggregate capacity projection panel */}
+      <AggregateQuotaProjectionChart platform="windsurf" accounts={filteredAccounts} />
 
       <div className="toolbar">
         <div className="toolbar-left">

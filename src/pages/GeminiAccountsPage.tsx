@@ -78,6 +78,7 @@ import {
 } from "../components/GeminiOverviewTabsHeader";
 import { GeminiInstancesContent } from "./GeminiInstancesPage";
 import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
+import { AggregateQuotaProjectionChart } from "../components/AggregateQuotaProjectionChart";
 
 const CURSOR_FLOW_NOTICE_COLLAPSED_KEY = "agtools.gemini.flow_notice_collapsed";
 const CURSOR_CURRENT_ACCOUNT_ID_KEY = "agtools.gemini.current_account_id";
@@ -1247,6 +1248,9 @@ export function GeminiAccountsPage() {
               </button>
             </div>
           )}
+
+          {/* Aggregate capacity projection panel */}
+          <AggregateQuotaProjectionChart platform="gemini" accounts={filteredAccounts} />
 
           <div className="toolbar">
             <div className="toolbar-left">

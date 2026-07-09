@@ -71,6 +71,7 @@ import {
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
 import { CursorOverviewTabsHeader, CursorTab } from '../components/CursorOverviewTabsHeader';
 import { CursorInstancesContent } from './CursorInstancesPage';
+import { AggregateQuotaProjectionChart } from '../components/AggregateQuotaProjectionChart';
 
 const CURSOR_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.cursor.flow_notice_collapsed';
 const CURSOR_CURRENT_ACCOUNT_ID_KEY = 'agtools.cursor.current_account_id';
@@ -916,6 +917,9 @@ export function CursorAccountsPage() {
           <button onClick={() => setMessage(null)}><X size={14} /></button>
         </div>
       )}
+
+      {/* Aggregate capacity projection panel */}
+      <AggregateQuotaProjectionChart platform="cursor" accounts={filteredAccounts} />
 
       <div className="toolbar">
         <div className="toolbar-left">
