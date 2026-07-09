@@ -2681,6 +2681,7 @@ export function CodexAccountsPage() {
     refreshQuota,
     refreshSubscriptionInfo,
     hydrateAccountProfilesIfNeeded,
+    importAccessTokenAccount,
     updateAccountName,
     updateApiKeyCredentials,
     updateApiKeyBoundOAuthAccount,
@@ -3438,6 +3439,10 @@ export function CodexAccountsPage() {
   const [oauthTokenExchangeRetryVisible, setOauthTokenExchangeRetryVisible] =
     useState(false);
   const [switching, setSwitching] = useState<string | null>(null);
+  const [accessTokenAccountNameInput, setAccessTokenAccountNameInput] =
+    useState("");
+  const [accessTokenInput, setAccessTokenInput] = useState("");
+  const [accessTokenInputVisible, setAccessTokenInputVisible] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [apiKeyInputVisible, setApiKeyInputVisible] = useState(false);
   const [apiBaseUrlInput, setApiBaseUrlInput] = useState(
@@ -3466,6 +3471,13 @@ export function CodexAccountsPage() {
   const [savingApiKeyNameId, setSavingApiKeyNameId] = useState<string | null>(
     null,
   );
+
+  useEffect(() => {
+    if (showAddModal) return;
+    setAccessTokenAccountNameInput("");
+    setAccessTokenInput("");
+    setAccessTokenInputVisible(false);
+  }, [showAddModal]);
   const [editingApiKeyCredentialsId, setEditingApiKeyCredentialsId] = useState<
     string | null
   >(null);
@@ -6096,6 +6108,55 @@ export function CodexAccountsPage() {
           "成功导入 {{count}} 个账号",
         ).replace("{{count}}", String(imported.length)),
       );
+      setTimeout(() => {
+        closeAddModal();
+      }, 1200);
+    } catch (e) {
+      page.setAddStatus("error");
+      page.setAddMessage(
+        t("common.shared.token.importFailedMsg", "导入失败: {{error}}").replace(
+          "{{error}}",
+          String(e).replace(/^Error:\s*/, ""),
+        ),
+      );
+    }
+  };
+
+  const handleAccessTokenAccountImport = async () => {
+    const name = accessTokenAccountNameInput.trim();
+    const accessToken = accessTokenInput.trim();
+    if (!name) {
+      page.setAddStatus("error");
+      page.setAddMessage(
+        t("codex.accessTokenImport.nameRequired", "请输入账户名"),
+      );
+      return;
+    }
+    if (!accessToken) {
+      page.setAddStatus("error");
+      page.setAddMessage(
+        t(
+          "codex.accessTokenImport.tokenRequired",
+          "请输入 Codex access token",
+        ),
+      );
+      return;
+    }
+
+    page.setAddStatus("loading");
+    page.setAddMessage(t("common.shared.token.importing", "正在导入..."));
+    try {
+      const account = await importAccessTokenAccount(name, accessToken);
+      page.setAddStatus("success");
+      page.setAddMessage(
+        t("codex.accessTokenImport.success", {
+          defaultValue: "访问令牌账号已导入: {{name}}",
+          name: maskAccountText(account.account_name || account.email || name),
+        }),
+      );
+      setAccessTokenAccountNameInput("");
+      setAccessTokenInput("");
+      setAccessTokenInputVisible(false);
       setTimeout(() => {
         closeAddModal();
       }, 1200);
@@ -13255,6 +13316,15 @@ export function CodexAccountsPage() {
                     </span>
                   </button>
                   <button
+                    className={`modal-tab ${addTab === "access_token" ? "active" : ""}`}
+                    onClick={() => openCodexAddModal("access_token")}
+                  >
+                    <Link2 size={14} />
+                    <span className="modal-tab-label">
+                      {t("codex.addModal.accessToken", "访问令牌")}
+                    </span>
+                  </button>
+                  <button
                     className={`modal-tab ${addTab === "token" ? "active" : ""}`}
                     onClick={() => openCodexAddModal("token")}
                   >
@@ -13283,7 +13353,9 @@ export function CodexAccountsPage() {
                   </button>
                 </div>
                 <div className="modal-body">
-                  {addTab !== "oauth" && <MfaQuickCodeSelect />}
+                  {addTab !== "oauth" && addTab !== "access_token" && (
+                    <MfaQuickCodeSelect />
+                  )}
                   {addTab === "oauth" && (
                     <div className="add-section">
                       {reauthTargetEmail && (
@@ -13547,6 +13619,109 @@ export function CodexAccountsPage() {
                           </span>
                         </div>
                       )}
+                    </div>
+                  )}
+                  {addTab === "access_token" && (
+                    <div className="add-section">
+                      <p className="section-desc">
+                        {t(
+                          "codex.accessTokenImport.desc",
+                          "输入账号名和 Codex access token，Cockpit 会按 OAuth 账号保存，并通过实例模式启动 Codex Windows 客户端。",
+                        )}
+                      </p>
+                      <div className="oauth-link">
+                        <label>
+                          {t("codex.accessTokenImport.nameLabel", "账户名")}
+                        </label>
+                        <div className="oauth-url-box oauth-manual-input">
+                          <input
+                            type="text"
+                            value={accessTokenAccountNameInput}
+                            onChange={(event) =>
+                              setAccessTokenAccountNameInput(event.target.value)
+                            }
+                            placeholder={t(
+                              "codex.accessTokenImport.namePlaceholder",
+                              "例如 21798 / guohu / portia",
+                            )}
+                            autoComplete="off"
+                          />
+                        </div>
+                      </div>
+                      <div className="oauth-link">
+                        <label>
+                          {t(
+                            "codex.accessTokenImport.tokenLabel",
+                            "Codex access token",
+                          )}
+                        </label>
+                        <div className="oauth-url-box oauth-manual-input codex-secret-input">
+                          <input
+                            type={accessTokenInputVisible ? "text" : "password"}
+                            value={accessTokenInput}
+                            onChange={(event) =>
+                              setAccessTokenInput(event.target.value)
+                            }
+                            placeholder="eyJ... / at-..."
+                            autoComplete="off"
+                            spellCheck={false}
+                          />
+                          <button
+                            type="button"
+                            className="codex-secret-toggle-btn"
+                            onClick={() =>
+                              setAccessTokenInputVisible((visible) => !visible)
+                            }
+                            title={
+                              accessTokenInputVisible
+                                ? t(
+                                    "codex.accessTokenImport.hideToken",
+                                    "隐藏访问令牌",
+                                  )
+                                : t(
+                                    "codex.accessTokenImport.showToken",
+                                    "显示访问令牌",
+                                  )
+                            }
+                            aria-label={
+                              accessTokenInputVisible
+                                ? t(
+                                    "codex.accessTokenImport.hideToken",
+                                    "隐藏访问令牌",
+                                  )
+                                : t(
+                                    "codex.accessTokenImport.showToken",
+                                    "显示访问令牌",
+                                  )
+                            }
+                          >
+                            {accessTokenInputVisible ? (
+                              <EyeOff size={16} />
+                            ) : (
+                              <Eye size={16} />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      <button
+                        className="btn btn-primary btn-full"
+                        onClick={() => void handleAccessTokenAccountImport()}
+                        disabled={
+                          addStatus === "loading" ||
+                          !accessTokenAccountNameInput.trim() ||
+                          !accessTokenInput.trim()
+                        }
+                      >
+                        {addStatus === "loading" ? (
+                          <RefreshCw size={16} className="loading-spinner" />
+                        ) : (
+                          <Link2 size={16} />
+                        )}
+                        {t(
+                          "codex.accessTokenImport.submit",
+                          "添加访问令牌账号",
+                        )}
+                      </button>
                     </div>
                   )}
                   {addTab === "apikey" && (

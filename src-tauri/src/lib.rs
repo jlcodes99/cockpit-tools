@@ -671,6 +671,7 @@ pub fn run() {
             commands::codex::clear_codex_batch_delete,
             commands::codex::import_codex_from_local,
             commands::codex::import_codex_from_json,
+            commands::codex::import_codex_access_token_account,
             commands::codex::export_codex_accounts,
             commands::codex::import_codex_from_files,
             commands::codex::start_codex_batch_import_from_files,

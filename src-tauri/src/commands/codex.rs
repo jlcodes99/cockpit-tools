@@ -1018,6 +1018,29 @@ pub fn export_codex_accounts(account_ids: Vec<String>) -> Result<String, String>
     codex_account::export_accounts(&account_ids)
 }
 
+#[tauri::command]
+pub async fn import_codex_access_token_account(
+    app: AppHandle,
+    name: String,
+    access_token: String,
+) -> Result<CodexAccount, String> {
+    let account = codex_account::import_access_token_account(name, access_token)?;
+    let account_id = account.id.clone();
+
+    if let Err(error) = codex_account::refresh_account_profile(&account_id).await {
+        logger::log_warn(&format!(
+            "Codex access token account profile refresh failed after import: account_id={}, error={}",
+            account_id, error
+        ));
+    }
+
+    let refreshed = codex_account::load_account(&account_id).unwrap_or(account);
+    let mut accounts = refresh_imported_codex_accounts(&app, vec![refreshed]).await;
+    accounts
+        .pop()
+        .ok_or_else(|| "Account could not be loaded after import".to_string())
+}
+
 /// 从本地文件导入 Codex 账号
 #[tauri::command]
 pub async fn import_codex_from_files(

@@ -67,13 +67,17 @@ pub struct DefaultInstanceSettings {
     pub app_speed: CodexAppSpeed,
     #[serde(default = "default_follow_local_account")]
     pub follow_local_account: bool,
-    #[serde(default)]
+    #[serde(default = "default_auto_sync_threads")]
     pub auto_sync_threads: bool,
     #[serde(default)]
     pub last_pid: Option<u32>,
 }
 
 fn default_follow_local_account() -> bool {
+    true
+}
+
+fn default_auto_sync_threads() -> bool {
     true
 }
 
@@ -86,7 +90,7 @@ impl Default for DefaultInstanceSettings {
             launch_mode: InstanceLaunchMode::App,
             app_speed: CodexAppSpeed::Standard,
             follow_local_account: true,
-            auto_sync_threads: false,
+            auto_sync_threads: true,
             last_pid: None,
         }
     }
@@ -132,4 +136,26 @@ impl InstanceProfileView {
 
 fn is_standard_app_speed(speed: &CodexAppSpeed) -> bool {
     matches!(speed, CodexAppSpeed::Standard)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DefaultInstanceSettings;
+
+    #[test]
+    fn default_settings_enable_thread_sync_by_default() {
+        assert!(DefaultInstanceSettings::default().auto_sync_threads);
+
+        let decoded: DefaultInstanceSettings =
+            serde_json::from_str("{}").expect("decode default settings");
+        assert!(decoded.auto_sync_threads);
+    }
+
+    #[test]
+    fn default_settings_keep_explicit_thread_sync_choice() {
+        let decoded: DefaultInstanceSettings =
+            serde_json::from_str(r#"{"autoSyncThreads":false}"#)
+                .expect("decode default settings");
+        assert!(!decoded.auto_sync_threads);
+    }
 }

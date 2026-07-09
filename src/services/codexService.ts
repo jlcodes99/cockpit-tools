@@ -158,6 +158,13 @@ export async function importCodexFromJson(jsonContent: string): Promise<CodexAcc
   return await invoke('import_codex_from_json', { jsonContent });
 }
 
+export async function importCodexAccessTokenAccount(
+  name: string,
+  accessToken: string,
+): Promise<CodexAccount> {
+  return await invoke('import_codex_access_token_account', { name, accessToken });
+}
+
 /** 导出 Codex 账号 */
 export async function exportCodexAccounts(accountIds: string[]): Promise<string> {
   return await invoke('export_codex_accounts', { accountIds });

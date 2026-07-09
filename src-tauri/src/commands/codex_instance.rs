@@ -385,6 +385,29 @@ fn log_session_visibility_repair_deferred_before_launch(
     ));
 }
 
+fn repair_session_visibility_before_app_launch(context: &str, instance_id: &str) {
+    let started = Instant::now();
+    match modules::codex_session_visibility::repair_session_visibility_for_launch_instance(
+        instance_id,
+    ) {
+        Ok(summary) => modules::logger::log_info(&format!(
+            "[Codex Session Visibility] {}: launch repair finished, instance_id={}, mutated_instances={}, metadata_failed={}, elapsed_ms={}",
+            context,
+            instance_id,
+            summary.mutated_instance_count,
+            summary.metadata_rebuild_failed_count,
+            started.elapsed().as_millis()
+        )),
+        Err(error) => modules::logger::log_warn(&format!(
+            "[Codex Session Visibility] {}: launch repair failed, instance_id={}, elapsed_ms={}, error={}",
+            context,
+            instance_id,
+            started.elapsed().as_millis(),
+            error
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1100,6 +1123,9 @@ async fn codex_start_instance_internal(
                 flow_started.elapsed().as_millis()
             ));
         }
+        if default_settings.launch_mode != InstanceLaunchMode::Cli {
+            repair_session_visibility_before_app_launch("before-start-default", DEFAULT_INSTANCE_ID);
+        }
         let sanitize_started = Instant::now();
         sanitize_codex_config_before_launch(&default_dir)?;
         modules::logger::log_info(&format!(
@@ -1245,6 +1271,9 @@ async fn codex_start_instance_internal(
         thread_sync_started.elapsed().as_millis(),
         flow_started.elapsed().as_millis()
     ));
+    if instance.launch_mode != InstanceLaunchMode::Cli {
+        repair_session_visibility_before_app_launch("before-start-instance", &instance.id);
+    }
     let sanitize_started = Instant::now();
     sanitize_codex_config_before_launch(instance_dir)?;
     modules::logger::log_info(&format!(

@@ -3802,10 +3802,20 @@ fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, St
         return Err("OAuth 账号缺少 access_token，无法写入 auth.json".to_string());
     }
 
+    if account.tokens.id_token.trim().is_empty()
+        && normalize_optional_ref(account.tokens.refresh_token.as_deref()).is_none()
+    {
+        return Ok(serde_json::json!({
+            "OPENAI_API_KEY": null,
+            "personal_access_token": account.tokens.access_token,
+        }));
+    }
+
     serde_json::to_value(CodexAuthFile {
         auth_mode: None,
         openai_api_key: Some(serde_json::Value::Null),
         base_url: None,
+        personal_access_token: None,
         tokens: Some(CodexAuthTokens {
             id_token: account.tokens.id_token.clone(),
             access_token: account.tokens.access_token.clone(),
@@ -4932,6 +4942,12 @@ pub fn import_from_local() -> Result<CodexAccount, String> {
         return upsert_account_from_auth_tokens(tokens);
     }
 
+    if let Some(personal_access_token) =
+        normalize_optional_ref(auth_file.personal_access_token.as_deref())
+    {
+        return upsert_account_from_access_token(personal_access_token, None);
+    }
+
     if let Some(api_key) = fallback_api_key {
         return upsert_api_key_account(
             api_key,
@@ -5725,6 +5741,27 @@ fn upsert_account_from_access_token(
     )
 }
 
+pub fn import_access_token_account(
+    account_name: String,
+    access_token: String,
+) -> Result<CodexAccount, String> {
+    let account_name =
+        normalize_optional_value(Some(account_name)).ok_or("账户名不能为空".to_string())?;
+    let access_token = normalize_optional_value(Some(access_token))
+        .ok_or("Codex access token 不能为空".to_string())?;
+    if !is_importable_access_token(&access_token) {
+        return Err("无效的 Codex access token".to_string());
+    }
+
+    upsert_account_from_access_token_with_hints(
+        access_token,
+        CodexAccessTokenImportHints {
+            account_name: Some(account_name),
+            ..Default::default()
+        },
+    )
+}
+
 fn upsert_account_from_access_token_with_hints(
     access_token: String,
     hints: CodexAccessTokenImportHints,
@@ -6128,6 +6165,19 @@ pub async fn import_from_json(json_content: &str) -> Result<Vec<CodexAccount>, S
 
         if let Some(tokens) = auth_file.tokens {
             let mut account = upsert_account_from_auth_tokens(tokens)?;
+            if let Some(value) = raw_value.as_ref() {
+                save_account_note_update_if_present(
+                    &mut account,
+                    codex_account_note_update_from_value(value),
+                )?;
+            }
+            return Ok(vec![account]);
+        }
+
+        if let Some(personal_access_token) =
+            normalize_optional_ref(auth_file.personal_access_token.as_deref())
+        {
+            let mut account = upsert_account_from_access_token(personal_access_token, None)?;
             if let Some(value) = raw_value.as_ref() {
                 save_account_note_update_if_present(
                     &mut account,
@@ -7543,8 +7593,9 @@ mod tests {
         resolve_api_provider_config, save_account, save_account_index,
         should_accept_authority_snapshot, sync_account_from_auth_dir,
         sync_managed_projection_from_auth_dir, upsert_account, upsert_account_for_reauth,
-        upsert_account_from_access_token, upsert_account_from_access_token_with_hints,
-        upsert_account_from_auth_tokens, validate_api_key_credentials, write_account_bundle_to_dir,
+        import_access_token_account, upsert_account_from_access_token,
+        upsert_account_from_access_token_with_hints, upsert_account_from_auth_tokens,
+        validate_api_key_credentials, write_account_bundle_to_dir,
         write_api_key_provider_to_config_toml, write_api_provider_to_config_toml,
         write_managed_projection_to_dir, write_quick_config_to_config_toml, ApiProviderConfig,
         CodexAccessTokenImportHints, CodexAccountIndex, CodexAccountSummary, CodexAuthFile,
@@ -7552,7 +7603,7 @@ mod tests {
         CODEX_ACCOUNT_DETAIL_SCHEMA_VERSION, CODEX_AUTHORIZATION_STATUS_PENDING,
         CODEX_AUTO_COMPACT_DEFAULT_LIMIT, CODEX_CONTEXT_WINDOW_1M_VALUE,
     };
-    use crate::models::codex::{CodexAccount, CodexApiProviderMode, CodexTokens};
+    use crate::models::codex::{CodexAccount, CodexApiProviderMode, CodexAuthMode, CodexTokens};
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use std::fs;
     use std::path::Path;
@@ -7947,6 +7998,7 @@ mod tests {
             auth_mode: None,
             openai_api_key: Some(serde_json::Value::Null),
             base_url: None,
+            personal_access_token: None,
             tokens: Some(CodexAuthTokens {
                 id_token: tokens.id_token.clone(),
                 access_token: tokens.access_token.clone(),
@@ -8353,6 +8405,56 @@ mod tests {
         let persisted = load_account(&account.id).expect("persisted opaque account");
         assert_eq!(persisted.tokens.access_token, account.tokens.access_token);
         assert_eq!(persisted.account_id.as_deref(), Some("acc-team"));
+    }
+
+    #[test]
+    fn import_access_token_account_saves_named_oauth_account() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let _env = TestEnvGuard::new("codex-access-token-named-import-test");
+        let access_token = make_jwt(serde_json::json!({
+            "email": "token-user@example.com",
+            "sub": "user-token",
+            "https://api.openai.com/auth": {
+                "chatgpt_user_id": "user-token",
+                "chatgpt_plan_type": "plus",
+                "chatgpt_account_id": "acc-token",
+                "organization_id": "org-token"
+            }
+        }));
+
+        let account = import_access_token_account("21798".to_string(), access_token.clone())
+            .expect("import access token account");
+
+        assert_eq!(account.auth_mode, CodexAuthMode::OAuth);
+        assert_eq!(account.email, "token-user@example.com");
+        assert_eq!(account.account_name.as_deref(), Some("21798"));
+        assert_eq!(account.account_id.as_deref(), Some("acc-token"));
+        assert_eq!(account.organization_id.as_deref(), Some("org-token"));
+        assert_eq!(account.tokens.id_token, "");
+        assert_eq!(account.tokens.access_token, access_token);
+        assert_eq!(account.tokens.refresh_token, None);
+        assert_eq!(account.openai_api_key, None);
+
+        let persisted = load_account(&account.id).expect("persisted account");
+        assert_eq!(persisted.auth_mode, CodexAuthMode::OAuth);
+        assert_eq!(persisted.account_name.as_deref(), Some("21798"));
+        assert_eq!(persisted.tokens.access_token, account.tokens.access_token);
+
+        let auth_file = build_auth_file_value(&persisted).expect("build auth file");
+        assert!(auth_file.get("auth_mode").is_none());
+        assert_eq!(
+            auth_file.get("OPENAI_API_KEY"),
+            Some(&serde_json::Value::Null)
+        );
+        assert_eq!(
+            auth_file
+                .get("personal_access_token")
+                .and_then(|value| value.as_str()),
+            Some(account.tokens.access_token.as_str())
+        );
+        assert!(auth_file.get("tokens").is_none());
     }
 
     #[test]

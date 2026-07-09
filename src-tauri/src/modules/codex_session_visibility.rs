@@ -455,6 +455,18 @@ pub fn repair_session_visibility_across_instances_with_target(
     )
 }
 
+pub fn repair_session_visibility_for_launch_instance(
+    instance_id: &str,
+) -> Result<CodexSessionVisibilityRepairSummary, String> {
+    let mut options = CodexSessionVisibilityRepairOptions::for_auto_repair_mode(
+        CodexSessionVisibilityAutoRepairMode::Current,
+    );
+    options.rebuild_metadata = true;
+    let selection =
+        RepairTargetSelection::from_inputs(None, None, Some(vec![instance_id.to_string()]))?;
+    repair_session_visibility_across_instances_with_options(options, None, None, selection)
+}
+
 fn repair_session_visibility_across_instances_with_options(
     options: CodexSessionVisibilityRepairOptions,
     run_id: Option<String>,

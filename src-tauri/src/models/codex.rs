@@ -273,6 +273,8 @@ pub struct CodexAuthFile {
     )]
     pub base_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub personal_access_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<CodexAuthTokens>,
     #[serde(default)]
     pub last_refresh: Option<serde_json::Value>, // 可以是字符串或数字
