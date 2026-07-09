@@ -19,7 +19,7 @@ fn resolve_default_account_id(settings: &DefaultInstanceSettings) -> Option<Stri
     }
 }
 
-fn resolve_local_account_id() -> Option<String> {
+pub fn resolve_local_account_id() -> Option<String> {
     let db_path = modules::db::get_db_path().ok()?;
     let conn = Connection::open(&db_path).ok()?;
     let state_data: String = conn

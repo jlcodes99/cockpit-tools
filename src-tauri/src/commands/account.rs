@@ -223,16 +223,31 @@ pub async fn get_current_account(
     runtime_target: Option<String>,
 ) -> Result<Option<models::Account>, String> {
     let runtime_target = normalize_antigravity_runtime_target(runtime_target.as_deref());
-    let bound_account_id = match runtime_target {
+    let (follow_local, bound_account_id) = match runtime_target {
         AntigravityRuntimeTarget::Legacy => {
             modules::antigravity_legacy_instance::load_default_settings()
                 .ok()
-                .and_then(|settings| settings.bind_account_id)
+                .map(|settings| (settings.follow_local_account, settings.bind_account_id))
+                .unwrap_or((true, None))
         }
         AntigravityRuntimeTarget::Ide => modules::instance::load_default_settings()
             .ok()
-            .and_then(|settings| settings.bind_account_id),
+            .map(|settings| (settings.follow_local_account, settings.bind_account_id))
+            .unwrap_or((true, None)),
     };
+
+    if follow_local {
+        let resolved_id = match runtime_target {
+            AntigravityRuntimeTarget::Legacy => crate::commands::antigravity_legacy_instance::resolve_local_account_id(),
+            AntigravityRuntimeTarget::Ide => crate::commands::instance::resolve_local_account_id(),
+        };
+        if let Some(account_id) = resolved_id.as_deref() {
+            if let Ok(mut account) = modules::load_account(account_id) {
+                let _ = modules::quota_cache::apply_cached_quota(&mut account, "authorized");
+                return Ok(Some(account));
+            }
+        }
+    }
 
     if let Some(account_id) = bound_account_id.as_deref() {
         match modules::load_account(account_id) {

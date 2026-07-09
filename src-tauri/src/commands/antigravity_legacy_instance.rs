@@ -20,7 +20,7 @@ fn resolve_default_account_id(settings: &DefaultInstanceSettings) -> Option<Stri
     }
 }
 
-fn resolve_local_account_id() -> Option<String> {
+pub fn resolve_local_account_id() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
         use modules::antigravity_legacy_instance::{resolve_auth_mode, AntigravityDesktopAuthMode};
