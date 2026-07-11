@@ -2464,20 +2464,20 @@ export function CodexApiServicePage() {
     {
       key: "daily" as const,
       label: t("codex.localAccess.statsRange.daily", "日"),
-      window: "24h",
-      title: t("codex.apiService.statsRange.last24Hours", "近 24 小时"),
+      window: t("codex.apiService.statsRange.today", "Today"),
+      title: t("codex.apiService.statsRange.today", "Today"),
     },
     {
       key: "weekly" as const,
       label: t("codex.localAccess.statsRange.weekly", "周"),
-      window: "7d",
-      title: t("codex.apiService.statsRange.last7Days", "近 7 天"),
+      window: t("codex.apiService.statsRange.thisWeek", "This week"),
+      title: t("codex.apiService.statsRange.thisWeek", "This week"),
     },
     {
       key: "monthly" as const,
       label: t("codex.localAccess.statsRange.monthly", "月"),
-      window: "30d",
-      title: t("codex.apiService.statsRange.last30Days", "近 30 天"),
+      window: t("codex.apiService.statsRange.thisMonth", "This month"),
+      title: t("codex.apiService.statsRange.thisMonth", "This month"),
     },
   ];
   const selectedStatsRangeOption =

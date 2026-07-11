@@ -3311,6 +3311,11 @@
         "models": "模型与能力",
         "logs": "统计与日志"
       },
+      "statsRange": {
+        "today": "今日",
+        "thisWeek": "本周",
+        "thisMonth": "本月"
+      },
       "healthTitle": "服务健康",
       "compat": {
         "title": "协议兼容",

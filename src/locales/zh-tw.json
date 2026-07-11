@@ -3101,6 +3101,11 @@
         "models": "模型與能力",
         "logs": "統計與日誌"
       },
+      "statsRange": {
+        "today": "今日",
+        "thisWeek": "本週",
+        "thisMonth": "本月"
+      },
       "healthTitle": "服務健康",
       "compat": {
         "title": "協議相容",

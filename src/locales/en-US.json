@@ -3311,6 +3311,11 @@
         "models": "Models & Capabilities",
         "logs": "Stats & Logs"
       },
+      "statsRange": {
+        "today": "Today",
+        "thisWeek": "This week",
+        "thisMonth": "This month"
+      },
       "healthTitle": "Service Health",
       "compat": {
         "title": "Protocol Compat",

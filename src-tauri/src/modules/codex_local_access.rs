@@ -20,6 +20,7 @@ use crate::modules::{
     account, codex_account, codex_oauth, codex_protocol, codex_quota, codex_wakeup, logger, process,
 };
 use base64::{engine::general_purpose, Engine as _};
+use chrono::{Datelike, Duration as ChronoDuration, Local, LocalResult, NaiveDate, TimeZone};
 use futures_util::{SinkExt, StreamExt};
 use rand::{distributions::Alphanumeric, Rng};
 use reqwest::header::{HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
@@ -121,9 +122,6 @@ const TIMEOUT_PRESET_NAME_MAX_CHARS: usize = 40;
 const RESPONSE_AFFINITY_TTL_MS: i64 = 24 * 60 * 60 * 1000;
 const MAX_RESPONSE_AFFINITY_BINDINGS: usize = 4096;
 const PREPARED_ACCOUNT_CACHE_TTL_MS: i64 = 30 * 1000;
-const DAY_WINDOW_MS: i64 = 24 * 60 * 60 * 1000;
-const WEEK_WINDOW_MS: i64 = 7 * DAY_WINDOW_MS;
-const MONTH_WINDOW_MS: i64 = 30 * DAY_WINDOW_MS;
 const STATE_RECENT_USAGE_EVENT_LIMIT: usize = 100;
 const DEFAULT_MODEL_PRICING_VERSION: u64 = 1;
 const COOLDOWN_KEY_SEPARATOR: &str = "\u{1f}";
@@ -4828,9 +4826,7 @@ fn parse_codex_retry_after(status: StatusCode, error_body: &str) -> Option<Durat
 
 fn empty_stats_snapshot() -> CodexLocalAccessStats {
     let now = now_ms();
-    let day_since = now.saturating_sub(DAY_WINDOW_MS);
-    let week_since = now.saturating_sub(WEEK_WINDOW_MS);
-    let month_since = now.saturating_sub(MONTH_WINDOW_MS);
+    let window_starts = calendar_stats_window_starts(now);
     CodexLocalAccessStats {
         since: now,
         updated_at: now,
@@ -4839,7 +4835,7 @@ fn empty_stats_snapshot() -> CodexLocalAccessStats {
         models: Vec::new(),
         api_keys: Vec::new(),
         daily: CodexLocalAccessStatsWindow {
-            since: day_since,
+            since: window_starts.day,
             updated_at: now,
             totals: CodexLocalAccessUsageStats::default(),
             accounts: Vec::new(),
@@ -4847,7 +4843,7 @@ fn empty_stats_snapshot() -> CodexLocalAccessStats {
             api_keys: Vec::new(),
         },
         weekly: CodexLocalAccessStatsWindow {
-            since: week_since,
+            since: window_starts.week,
             updated_at: now,
             totals: CodexLocalAccessUsageStats::default(),
             accounts: Vec::new(),
@@ -4855,7 +4851,7 @@ fn empty_stats_snapshot() -> CodexLocalAccessStats {
             api_keys: Vec::new(),
         },
         monthly: CodexLocalAccessStatsWindow {
-            since: month_since,
+            since: window_starts.month,
             updated_at: now,
             totals: CodexLocalAccessUsageStats::default(),
             accounts: Vec::new(),
@@ -4863,6 +4859,52 @@ fn empty_stats_snapshot() -> CodexLocalAccessStats {
             api_keys: Vec::new(),
         },
         events: Vec::new(),
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct StatsWindowStarts {
+    day: i64,
+    week: i64,
+    month: i64,
+}
+
+fn local_date_start_ms(date: NaiveDate) -> i64 {
+    let midnight = date
+        .and_hms_opt(0, 0, 0)
+        .expect("a calendar date must have a midnight");
+    match Local.from_local_datetime(&midnight) {
+        LocalResult::Single(value) => value.timestamp_millis(),
+        LocalResult::Ambiguous(first, second) => {
+            first.timestamp_millis().min(second.timestamp_millis())
+        }
+        LocalResult::None => (1..=24 * 60 * 60)
+            .find_map(|seconds| {
+                let candidate = midnight.checked_add_signed(ChronoDuration::seconds(seconds))?;
+                Local
+                    .from_local_datetime(&candidate)
+                    .earliest()
+                    .map(|value| value.timestamp_millis())
+            })
+            .unwrap_or_else(|| Local.from_utc_datetime(&midnight).timestamp_millis()),
+    }
+}
+
+fn calendar_stats_window_starts(now_ms: i64) -> StatsWindowStarts {
+    let local_now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
+        .unwrap_or_else(chrono::Utc::now)
+        .with_timezone(&Local);
+    let day = local_now.date_naive();
+    let week = day
+        .checked_sub_signed(ChronoDuration::days(
+            day.weekday().num_days_from_monday() as i64
+        ))
+        .unwrap_or(day);
+    let month = NaiveDate::from_ymd_opt(day.year(), day.month(), 1).unwrap_or(day);
+    StatsWindowStarts {
+        day: local_date_start_ms(day),
+        week: local_date_start_ms(week),
+        month: local_date_start_ms(month),
     }
 }
 
@@ -5553,11 +5595,11 @@ fn load_local_access_usage_events_since(
 }
 
 fn stats_range_since(stats_range: Option<&str>) -> Option<i64> {
-    let now = now_ms();
+    let window_starts = calendar_stats_window_starts(now_ms());
     match stats_range.map(str::trim) {
-        Some("daily") => Some(now.saturating_sub(DAY_WINDOW_MS)),
-        Some("weekly") => Some(now.saturating_sub(WEEK_WINDOW_MS)),
-        Some("monthly") => Some(now.saturating_sub(MONTH_WINDOW_MS)),
+        Some("daily") => Some(window_starts.day),
+        Some("weekly") => Some(window_starts.week),
+        Some("monthly") => Some(window_starts.month),
         _ => None,
     }
 }
@@ -6053,9 +6095,10 @@ fn apply_usage_event_to_window(
 }
 
 fn recompute_time_windows(stats: &mut CodexLocalAccessStats, now: i64) {
-    let day_since = now.saturating_sub(DAY_WINDOW_MS);
-    let week_since = now.saturating_sub(WEEK_WINDOW_MS);
-    let month_since = now.saturating_sub(MONTH_WINDOW_MS);
+    let window_starts = calendar_stats_window_starts(now);
+    let day_since = window_starts.day;
+    let week_since = window_starts.week;
+    let month_since = window_starts.month;
 
     trim_recent_events(&mut stats.events, month_since);
 
@@ -9302,7 +9345,7 @@ fn load_stats_from_disk() -> Result<CodexLocalAccessStats, String> {
             error
         ));
     }
-    let month_since = now_ms().saturating_sub(MONTH_WINDOW_MS);
+    let month_since = calendar_stats_window_starts(now_ms()).month;
     parsed.events = match load_local_access_usage_events_since(month_since) {
         Ok(events) => events,
         Err(error) => {
@@ -19873,8 +19916,9 @@ mod tests {
         build_local_access_api_key, build_local_models_response,
         build_model_provider_gateway_test_collection, build_ordered_account_ids,
         build_request_routing_hint, build_upstream_websocket_url, calculate_usage_cost_usd,
-        canonical_model_for_client_model, classify_upstream_error_category,
-        cleanup_profile_takeover_without_backup, cleanup_provider_gateway_profile_model_overrides,
+        calendar_stats_window_starts, canonical_model_for_client_model,
+        classify_upstream_error_category, cleanup_profile_takeover_without_backup,
+        cleanup_provider_gateway_profile_model_overrides,
         collect_local_access_profile_takeover_dirs_from_store, compare_routing_candidates,
         default_codex_model_ids, effective_api_key_account_ids, empty_stats_snapshot,
         extract_usage_capture, filter_bound_oauth_quota_reserve_account,
@@ -19925,7 +19969,7 @@ mod tests {
         CODEX_AUTO_REVIEW_MODEL_ID, CODEX_IMAGE_MODEL_ID,
         CODEX_LOCAL_ACCESS_TEST_DISABLE_IMAGE_GENERATION_HEADER, CODEX_PROFILE_AUTH_FILE,
         CODEX_PROFILE_CONFIG_FILE, CODEX_PROVIDER_MODEL_BACKUP_FILE,
-        CODEX_PROVIDER_MODEL_CATALOG_FILE, DAY_WINDOW_MS, DEFAULT_MAX_RETRY_INTERVAL_MS,
+        CODEX_PROVIDER_MODEL_CATALOG_FILE, DEFAULT_MAX_RETRY_INTERVAL_MS,
         DEFAULT_MODEL_PRICING_VERSION, DEFAULT_SESSION_AFFINITY_TTL_MS, MAX_HTTP_REQUEST_BYTES,
     };
     use crate::models::codex::{
@@ -22135,7 +22179,16 @@ supports_websockets = false
 
     #[test]
     fn api_key_usage_stats_are_isolated_by_time_window() {
-        let now = 20 * DAY_WINDOW_MS;
+        use chrono::{Local, TimeZone};
+
+        let local_timestamp = |year, month, day, hour, minute| {
+            Local
+                .with_ymd_and_hms(year, month, day, hour, minute, 0)
+                .single()
+                .expect("test local datetime should be unambiguous")
+                .timestamp_millis()
+        };
+        let now = local_timestamp(2026, 5, 20, 12, 0);
         let event =
             |timestamp: i64, api_key_id: &str, total_tokens: u64| CodexLocalAccessUsageEvent {
                 timestamp,
@@ -22148,10 +22201,12 @@ supports_websockets = false
             };
         let mut stats = empty_stats_snapshot();
         stats.events = vec![
-            event(now - 10 * DAY_WINDOW_MS, "key-a", 400),
-            event(now - 2 * DAY_WINDOW_MS, "key-a", 200),
-            event(now - DAY_WINDOW_MS / 2, "key-a", 100),
-            event(now - DAY_WINDOW_MS / 2, "key-b", 50),
+            event(local_timestamp(2026, 4, 30, 23, 59), "key-a", 500),
+            event(local_timestamp(2026, 5, 1, 0, 1), "key-a", 400),
+            event(local_timestamp(2026, 5, 17, 23, 59), "key-a", 300),
+            event(local_timestamp(2026, 5, 19, 23, 59), "key-a", 200),
+            event(local_timestamp(2026, 5, 20, 0, 1), "key-a", 100),
+            event(local_timestamp(2026, 5, 20, 0, 1), "key-b", 50),
         ];
 
         recompute_time_windows(&mut stats, now);
@@ -22168,12 +22223,19 @@ supports_websockets = false
         assert_eq!(usage(&stats.daily, "key-a"), (1, 100));
         assert_eq!(usage(&stats.daily, "key-b"), (1, 50));
         assert_eq!(usage(&stats.weekly, "key-a"), (2, 300));
-        assert_eq!(usage(&stats.monthly, "key-a"), (3, 700));
+        assert_eq!(usage(&stats.monthly, "key-a"), (4, 1000));
+        let starts = calendar_stats_window_starts(now);
+        assert_eq!(stats.daily.since, local_timestamp(2026, 5, 20, 0, 0));
+        assert_eq!(stats.weekly.since, local_timestamp(2026, 5, 18, 0, 0));
+        assert_eq!(stats.monthly.since, local_timestamp(2026, 5, 1, 0, 0));
+        assert_eq!(stats.daily.since, starts.day);
+        assert_eq!(stats.weekly.since, starts.week);
+        assert_eq!(stats.monthly.since, starts.month);
 
-        recompute_time_windows(&mut stats, now + 2 * DAY_WINDOW_MS);
+        recompute_time_windows(&mut stats, local_timestamp(2026, 5, 21, 0, 1));
         assert!(stats.daily.api_keys.is_empty());
         assert_eq!(usage(&stats.weekly, "key-a"), (2, 300));
-        assert_eq!(usage(&stats.monthly, "key-a"), (3, 700));
+        assert_eq!(usage(&stats.monthly, "key-a"), (4, 1000));
     }
 
     #[test]
