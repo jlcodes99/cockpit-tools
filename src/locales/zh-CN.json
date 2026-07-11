@@ -3380,8 +3380,21 @@
         "pricingRepriced": "历史估值已按当前价格重算"
       },
       "keys": {
-        "policyTitle": "模型策略",
-        "advancedPolicyTitle": "高级功能：模型策略",
+        "policyTitle": "账号池与模型策略",
+        "advancedPolicyTitle": "账号池与模型策略",
+        "accountScope": "账号轮转范围",
+        "accountScopeInherit": "随服务账号池自动更新",
+        "accountScopeFixed": "此 Key 已固定绑定账号，不能继承服务池",
+        "accountScopeSelected": "已选择 {{count}} 个账号",
+        "accountScopeInheritedCount": "账号池：继承 {{count}} 个",
+        "accountScopeUnavailable": "账号池：无可用账号",
+        "accountScopeCount": "账号池：{{selected}}/{{total}}",
+        "accountScopeRequired": "自定义账号池至少需要选择 1 个账号",
+        "accountScopeModeInherit": "继承服务池",
+        "accountScopeModeCustom": "自定义账号池",
+        "usageRange": "Key 用量统计周期",
+        "unsaved": "未保存",
+        "resetPolicy": "撤销修改",
         "modelPrefix": "模型前缀",
         "modelPrefixPlaceholder": "例如 codex",
         "allowedModels": "允许模型",
@@ -3389,7 +3402,7 @@
         "excludedModels": "排除模型",
         "excludedModelsPlaceholder": "每行一个模型或通配符",
         "savePolicy": "保存策略",
-        "policySaved": "Key 模型策略已保存"
+        "policySaved": "Key 策略已保存"
       },
       "routing": {
         "optionsTitle": "调度选项",

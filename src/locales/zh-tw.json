@@ -3158,8 +3158,21 @@
         "pricingRepriced": "歷史估值已按目前價格重算"
       },
       "keys": {
-        "policyTitle": "模型策略",
-        "advancedPolicyTitle": "進階功能：模型策略",
+        "policyTitle": "帳號池與模型策略",
+        "advancedPolicyTitle": "帳號池與模型策略",
+        "accountScope": "帳號輪轉範圍",
+        "accountScopeInherit": "隨服務帳號池自動更新",
+        "accountScopeFixed": "此 Key 已固定綁定帳號，不能繼承服務池",
+        "accountScopeSelected": "已選擇 {{count}} 個帳號",
+        "accountScopeInheritedCount": "帳號池：繼承 {{count}} 個",
+        "accountScopeUnavailable": "帳號池：無可用帳號",
+        "accountScopeCount": "帳號池：{{selected}}/{{total}}",
+        "accountScopeRequired": "自訂帳號池至少需要選擇 1 個帳號",
+        "accountScopeModeInherit": "繼承服務池",
+        "accountScopeModeCustom": "自訂帳號池",
+        "usageRange": "Key 用量統計週期",
+        "unsaved": "尚未儲存",
+        "resetPolicy": "撤銷修改",
         "modelPrefix": "模型前綴",
         "modelPrefixPlaceholder": "例如 codex",
         "allowedModels": "允許模型",
@@ -3167,7 +3180,7 @@
         "excludedModels": "排除模型",
         "excludedModelsPlaceholder": "每行一個模型或萬用字元",
         "savePolicy": "儲存策略",
-        "policySaved": "Key 模型策略已儲存"
+        "policySaved": "Key 策略已儲存"
       },
       "routing": {
         "optionsTitle": "調度選項",

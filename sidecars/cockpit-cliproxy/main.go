@@ -102,6 +102,7 @@ type apiKeySpec struct {
 	Label           string               `json:"label"`
 	Key             string               `json:"key"`
 	ProviderGateway *providerGatewaySpec `json:"providerGateway,omitempty"`
+	AccountIDs      []string             `json:"accountIds"`
 	ModelPrefix     string               `json:"modelPrefix,omitempty"`
 	AllowedModels   []string             `json:"allowedModels"`
 	ExcludedModels  []string             `json:"excludedModels"`
@@ -1592,6 +1593,7 @@ func (s *quotaReserveSelector) Stop() {
 func (s *cockpitSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*coreauth.Auth) (*coreauth.Auth, error) {
 	_ = provider
 	_ = opts
+	auths = s.filterAuthsForAPIKeyScope(ctx, auths)
 	now := time.Now()
 	available := make([]*coreauth.Auth, 0, len(auths))
 	quotaReserveReasons := make([]string, 0)
@@ -1621,6 +1623,38 @@ func (s *cockpitSelector) Pick(ctx context.Context, provider, model string, opts
 	selected := ordered[0]
 	s.emitAuthSelected(ctx, selected, provider, model, len(auths), len(available))
 	return selected, nil
+}
+
+func (s *cockpitSelector) filterAuthsForAPIKeyScope(ctx context.Context, auths []*coreauth.Auth) []*coreauth.Auth {
+	if s == nil || s.manifest == nil || ctx == nil {
+		return auths
+	}
+	spec, _ := ctx.Value(clientAPIKeyContextKey).(*apiKeySpec)
+	if spec == nil || len(spec.AccountIDs) == 0 {
+		return auths
+	}
+
+	allowedAccountIDs := make(map[string]struct{}, len(spec.AccountIDs))
+	for _, accountID := range spec.AccountIDs {
+		if accountID = strings.TrimSpace(accountID); accountID != "" {
+			allowedAccountIDs[accountID] = struct{}{}
+		}
+	}
+	if len(allowedAccountIDs) == 0 {
+		return nil
+	}
+
+	scoped := make([]*coreauth.Auth, 0, len(auths))
+	for _, auth := range auths {
+		account := s.accountForAuth(auth)
+		if account == nil {
+			continue
+		}
+		if _, allowed := allowedAccountIDs[account.ID]; allowed {
+			scoped = append(scoped, auth)
+		}
+	}
+	return scoped
 }
 
 func quotaReserveBlockReason(account *accountSpec, now time.Time) string {
@@ -2306,6 +2340,7 @@ func buildCoreAuthSelector(cfg *config.Config, selector coreauth.Selector, m *ma
 			Fallback: selector,
 			TTL:      ttl,
 		})
+		selector = &cockpitSessionAffinitySelector{inner: selector}
 	}
 	if m != nil {
 		selector = &quotaReserveSelector{manifest: m, fallback: selector, quota: quota}
@@ -2320,6 +2355,25 @@ func buildCoreAuthManager(cfg *config.Config, selector coreauth.Selector, hook c
 	}
 	selector = buildCoreAuthSelector(cfg, selector, m, quota)
 	return coreauth.NewManager(tokenStore, selector, hook)
+}
+
+type cockpitSessionAffinitySelector struct {
+	inner coreauth.Selector
+}
+
+func (s *cockpitSessionAffinitySelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*coreauth.Auth) (*coreauth.Auth, error) {
+	if s == nil || s.inner == nil {
+		return nil, errors.New("session affinity selector is unavailable")
+	}
+	if spec, _ := ctx.Value(clientAPIKeyContextKey).(*apiKeySpec); spec != nil && strings.TrimSpace(spec.ID) != "" {
+		metadata := make(map[string]any, len(opts.Metadata)+1)
+		for key, value := range opts.Metadata {
+			metadata[key] = value
+		}
+		metadata[cliproxyexecutor.SessionAffinityNamespaceMetadataKey] = spec.ID
+		opts.Metadata = metadata
+	}
+	return s.inner.Pick(ctx, provider, model, opts, auths)
 }
 
 type sidecarRuntime struct {

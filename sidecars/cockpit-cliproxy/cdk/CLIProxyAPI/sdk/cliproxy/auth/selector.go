@@ -478,9 +478,9 @@ func NewSessionAffinitySelectorWithConfig(cfg SessionAffinityConfig) *SessionAff
 //  7. conversation_id field in request body
 //  8. Stable hash from first few messages content (fallback)
 //
-// Note: The cache key includes provider, session ID, and model to handle cases where
-// a session uses multiple models (e.g., gemini-2.5-pro and gemini-3-flash-preview)
-// that may be supported by different auth credentials, and to avoid cross-provider conflicts.
+// Note: The cache key includes provider, an optional caller namespace, session ID, and
+// model to handle cases where a session uses multiple models (e.g., gemini-2.5-pro and
+// gemini-3-flash-preview), and to avoid cross-provider or cross-caller conflicts.
 func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*Auth) (*Auth, error) {
 	entry := selectorLogEntry(ctx)
 	primaryID, fallbackID := extractSessionIDs(opts.Headers, opts.OriginalRequest, opts.Metadata)
@@ -495,7 +495,8 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 		return nil, err
 	}
 
-	cacheKey := provider + "::" + primaryID + "::" + model
+	namespace := sessionAffinityNamespace(opts.Metadata)
+	cacheKey := sessionAffinityCacheKey(provider, namespace, primaryID, model)
 
 	if cachedAuthID, ok := s.cache.GetAndRefresh(cacheKey); ok {
 		for _, auth := range available {
@@ -515,7 +516,7 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 	}
 
 	if fallbackID != "" && fallbackID != primaryID {
-		fallbackKey := provider + "::" + fallbackID + "::" + model
+		fallbackKey := sessionAffinityCacheKey(provider, namespace, fallbackID, model)
 		if cachedAuthID, ok := s.cache.Get(fallbackKey); ok {
 			for _, auth := range available {
 				if auth.ID == cachedAuthID {
@@ -534,6 +535,21 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 	s.cache.Set(cacheKey, auth.ID)
 	entry.Infof("session-affinity: cache miss, new binding | session=%s auth=%s provider=%s model=%s", truncateSessionID(primaryID), auth.ID, provider, model)
 	return auth, nil
+}
+
+func sessionAffinityNamespace(metadata map[string]any) string {
+	if metadata == nil {
+		return ""
+	}
+	value, _ := metadata[cliproxyexecutor.SessionAffinityNamespaceMetadataKey].(string)
+	return strings.TrimSpace(value)
+}
+
+func sessionAffinityCacheKey(provider, namespace, sessionID, model string) string {
+	if namespace == "" {
+		return provider + "::" + sessionID + "::" + model
+	}
+	return provider + "::" + namespace + "::" + sessionID + "::" + model
 }
 
 func selectorLogEntry(ctx context.Context) *log.Entry {

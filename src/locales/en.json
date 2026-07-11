@@ -3380,8 +3380,21 @@
         "pricingRepriced": "Historical estimates were recalculated with current prices"
       },
       "keys": {
-        "policyTitle": "Model Policy",
-        "advancedPolicyTitle": "Advanced: Model Policy",
+        "policyTitle": "Account Pool & Model Policy",
+        "advancedPolicyTitle": "Account Pool & Model Policy",
+        "accountScope": "Account Rotation Scope",
+        "accountScopeInherit": "Follow the service account pool automatically",
+        "accountScopeFixed": "This Key is fixed to its bound account and cannot inherit the service pool",
+        "accountScopeSelected": "{{count}} accounts selected",
+        "accountScopeInheritedCount": "Account pool: inheriting {{count}}",
+        "accountScopeUnavailable": "Account pool: no available accounts",
+        "accountScopeCount": "Account pool: {{selected}}/{{total}}",
+        "accountScopeRequired": "Select at least one account for a custom pool",
+        "accountScopeModeInherit": "Inherit Service Pool",
+        "accountScopeModeCustom": "Custom Account Pool",
+        "usageRange": "API key usage period",
+        "unsaved": "Unsaved",
+        "resetPolicy": "Discard Changes",
         "modelPrefix": "Model Prefix",
         "modelPrefixPlaceholder": "Example: codex",
         "allowedModels": "Allowed Models",
@@ -3389,7 +3402,7 @@
         "excludedModels": "Excluded Models",
         "excludedModelsPlaceholder": "One model or wildcard per line",
         "savePolicy": "Save Policy",
-        "policySaved": "Key model policy saved"
+        "policySaved": "API key policy saved"
       },
       "routing": {
         "optionsTitle": "Routing Options",

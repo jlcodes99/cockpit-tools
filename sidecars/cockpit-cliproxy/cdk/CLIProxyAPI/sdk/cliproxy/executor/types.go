@@ -23,6 +23,10 @@ const ReasoningEffortMetadataKey = "reasoning_effort"
 // ServiceTierMetadataKey stores the client-requested service tier for usage logs.
 const ServiceTierMetadataKey = "service_tier"
 
+// SessionAffinityNamespaceMetadataKey separates session-affinity cache entries
+// for callers that share the same downstream session identifier.
+const SessionAffinityNamespaceMetadataKey = "session_affinity_namespace"
+
 const (
 	// PinnedAuthMetadataKey locks execution to a specific auth ID.
 	PinnedAuthMetadataKey = "pinned_auth_id"

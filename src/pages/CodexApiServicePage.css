@@ -887,6 +887,45 @@
   min-width: 0;
 }
 
+.codex-api-service-usage-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.codex-api-service-usage-context {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.codex-api-service-usage-context > svg {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.codex-api-service-usage-context > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.codex-api-service-usage-context strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.codex-api-service-usage-context span {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .codex-api-service-key-card {
   display: grid;
   gap: 10px;
@@ -900,10 +939,30 @@
 
 .codex-api-service-key-main {
   display: grid;
-  grid-template-columns: minmax(180px, 0.9fr) minmax(260px, 1.25fr) minmax(78px, auto) minmax(56px, auto) minmax(42px, auto) auto;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(260px, 1.25fr) minmax(78px, auto) minmax(122px, auto) auto;
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.codex-api-service-key-last-used {
+  display: grid !important;
+  align-content: center;
+  gap: 2px;
+}
+
+.codex-api-service-key-last-used small {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.codex-api-service-key-last-used strong {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 
 .codex-api-service-key-main > span:not(.codex-api-service-pill) {
@@ -928,6 +987,108 @@
   flex-wrap: nowrap;
   align-self: center;
   height: 34px;
+}
+
+.api-key-details-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.55fr) minmax(500px, 1.45fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.api-key-routing-summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--codex-api-border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-card) 72%, transparent);
+}
+
+.api-key-routing-summary > svg {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.api-key-routing-summary > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.api-key-routing-summary span,
+.api-key-usage-grid span {
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.api-key-routing-summary strong,
+.api-key-usage-grid strong {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-key-routing-summary.warning {
+  border-color: color-mix(in srgb, var(--warning) 32%, var(--codex-api-border-soft));
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+}
+
+.api-key-routing-summary.warning > svg,
+.api-key-routing-summary.warning strong {
+  color: var(--warning);
+}
+
+.api-key-usage-grid {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.9fr) repeat(4, minmax(84px, 1fr));
+  align-items: stretch;
+  min-width: 0;
+  border: 1px solid var(--codex-api-border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-card) 72%, transparent);
+  overflow: hidden;
+}
+
+.api-key-usage-grid > div {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 7px 10px;
+  border-left: 1px solid var(--codex-api-border-soft);
+}
+
+.api-key-usage-grid > div:first-child {
+  border-left: 0;
+}
+
+.api-key-usage-grid .api-key-usage-grid-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+  color: var(--primary);
+}
+
+.api-key-usage-grid-head svg {
+  flex: 0 0 auto;
+}
+
+.api-key-usage-grid-head span {
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .codex-api-service-key-advanced-toggle {
@@ -967,6 +1128,15 @@
   font-weight: 700;
 }
 
+.api-key-policy-dirty {
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--warning) 32%, var(--codex-api-border-soft));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  color: var(--warning);
+  line-height: 1.2;
+}
+
 .codex-api-service-key-advanced-state svg {
   transition: transform 0.16s ease;
 }
@@ -985,9 +1155,147 @@
   background: color-mix(in srgb, var(--bg-card) 78%, transparent);
 }
 
+.api-key-account-scope {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--codex-api-border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-surface) 68%, transparent);
+}
+
+.api-key-account-scope-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.api-key-account-scope-header > span:first-child {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.api-key-account-scope-hint {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-key-account-scope-mode {
+  display: inline-flex;
+  justify-self: start;
+  gap: 3px;
+  max-width: 100%;
+  padding: 3px;
+  border: 1px solid var(--codex-api-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+}
+
+.api-key-account-scope-mode button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.api-key-account-scope-mode button.active {
+  background: color-mix(in srgb, var(--primary) 11%, transparent);
+  color: var(--primary);
+}
+
+.api-key-account-scope-mode button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.api-key-account-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.api-key-account-scope-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 9px;
+  border: 1px solid var(--codex-api-border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-card) 66%, transparent);
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.api-key-account-scope-item:hover {
+  border-color: color-mix(in srgb, var(--primary) 22%, var(--codex-api-border-soft));
+  background: color-mix(in srgb, var(--primary) 5%, var(--bg-card));
+}
+
+.api-key-account-scope-item input {
+  flex: 0 0 15px;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.api-key-account-scope-item input:disabled {
+  cursor: not-allowed;
+}
+
+.api-key-account-scope-item:has(input:disabled) {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.api-key-account-scope-item > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.api-key-account-scope-item strong,
+.api-key-account-scope-item small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-key-account-scope-item strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.api-key-account-scope-item small {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
 .codex-api-service-policy-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 0.75fr) minmax(240px, 1fr) minmax(240px, 1fr) minmax(132px, auto);
+  grid-template-columns: minmax(180px, 0.75fr) minmax(240px, 1fr) minmax(240px, 1fr) minmax(190px, auto);
   align-items: start;
   gap: 10px;
   min-width: 0;
@@ -1033,6 +1341,7 @@
   display: flex;
   justify-content: flex-end;
   align-items: flex-end;
+  gap: 6px;
   height: 96px;
   min-width: 0;
 }
@@ -1183,9 +1492,13 @@
 }
 
 .codex-api-service-range-tabs button {
-  min-width: 34px;
-  height: 24px;
-  padding: 0 8px;
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 54px;
+  height: 30px;
+  padding: 0 9px;
   border: 0;
   border-radius: 9px;
   background: transparent;
@@ -1193,6 +1506,17 @@
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
+}
+
+.codex-api-service-range-tabs button small {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.codex-api-service-range-tabs button.active small {
+  color: currentColor;
+  opacity: 0.72;
 }
 
 .codex-api-service-range-tabs button.active {
@@ -1690,6 +2014,10 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
   }
 
+  .api-key-details-row {
+    grid-template-columns: 1fr;
+  }
+
   .codex-api-service-policy-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -1711,6 +2039,32 @@
 }
 
 @media (max-width: 860px) {
+  .codex-api-service-usage-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .codex-api-service-usage-toolbar .codex-api-service-range-tabs {
+    align-self: flex-start;
+  }
+
+  .api-key-usage-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .api-key-usage-grid > div,
+  .api-key-usage-grid > div:first-child {
+    border-top: 1px solid var(--codex-api-border-soft);
+    border-left: 1px solid var(--codex-api-border-soft);
+  }
+
+  .api-key-usage-grid > div:nth-child(-n + 2) {
+    border-top: 0;
+  }
+
+  .api-key-usage-grid > div:nth-child(odd) {
+    border-left: 0;
+  }
   .codex-api-service-page .page-tabs-row-with-leading {
     grid-template-columns: 1fr;
     justify-items: stretch;
@@ -1842,6 +2196,41 @@
 
   .codex-api-service-key-main {
     grid-template-columns: 1fr;
+  }
+
+  .api-key-usage-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .api-key-usage-grid > div,
+  .api-key-usage-grid > div:first-child,
+  .api-key-usage-grid > div:nth-child(-n + 2) {
+    border-top: 1px solid var(--codex-api-border-soft);
+    border-left: 0;
+  }
+
+  .api-key-usage-grid > div:first-child {
+    border-top: 0;
+  }
+
+  .api-key-account-scope-header,
+  .codex-api-service-policy-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .api-key-account-scope-hint {
+    white-space: normal;
+  }
+
+  .api-key-account-scope-mode,
+  .codex-api-service-range-tabs {
+    width: 100%;
+  }
+
+  .api-key-account-scope-mode button,
+  .codex-api-service-range-tabs button {
+    flex: 1 1 0;
   }
 
   .codex-api-service-policy-actions .btn {

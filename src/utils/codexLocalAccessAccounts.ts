@@ -2,7 +2,7 @@ import {
   isCodexApiKeyAccount,
   isCodexExplicitFreePlanType,
   type CodexAccount,
-} from '../types/codex';
+} from '../types/codex.ts';
 
 const CHAT_COMPLETIONS_PROVIDER_HOSTS = [
   "api.deepseek.com",

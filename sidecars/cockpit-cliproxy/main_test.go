@@ -102,6 +102,130 @@ func TestClientCatalogModelsIncludesAutoReviewWithoutPrefix(t *testing.T) {
 	}
 }
 
+func TestCockpitSelectorRestrictsAuthsToClientAPIKeyAccountScope(t *testing.T) {
+	highQuotaAccount := &accountSpec{
+		ID:       "account-high",
+		AuthID:   "account-high.json",
+		PlanRank: intPtrForTest(500),
+	}
+	scopedAccount := &accountSpec{
+		ID:       "account-scoped",
+		AuthID:   "account-scoped.json",
+		PlanRank: intPtrForTest(300),
+	}
+	selector := &cockpitSelector{
+		manifest: &manifest{
+			RoutingStrategy: "auto",
+			accountByAuthID: map[string]*accountSpec{
+				"account-high.json":   highQuotaAccount,
+				"account-scoped.json": scopedAccount,
+			},
+			accountByID: map[string]*accountSpec{
+				"account-high":   highQuotaAccount,
+				"account-scoped": scopedAccount,
+			},
+		},
+	}
+	apiKey := &apiKeySpec{
+		ID:         "key-scoped",
+		Label:      "Scoped client",
+		AccountIDs: []string{"account-scoped"},
+	}
+	ctx := context.WithValue(context.Background(), clientAPIKeyContextKey, apiKey)
+	auths := []*coreauth.Auth{
+		{ID: "account-high.json", Provider: "codex", Status: coreauth.StatusActive},
+		{ID: "account-scoped.json", Provider: "codex", Status: coreauth.StatusActive},
+	}
+
+	selected, err := selector.Pick(ctx, "codex", "gpt-5.6-sol", cliproxyexecutor.Options{}, auths)
+
+	if err != nil {
+		t.Fatalf("pick scoped auth: %v", err)
+	}
+	if selected.ID != "account-scoped.json" {
+		t.Fatalf("expected only scoped account to be selected, got %q", selected.ID)
+	}
+}
+
+func TestCockpitSessionAffinitySeparatesClientAPIKeyScopes(t *testing.T) {
+	highQuotaAccount := &accountSpec{
+		ID:       "account-high",
+		AuthID:   "account-high.json",
+		PlanRank: intPtrForTest(500),
+	}
+	scopedAccount := &accountSpec{
+		ID:       "account-scoped",
+		AuthID:   "account-scoped.json",
+		PlanRank: intPtrForTest(300),
+	}
+	fallback := &cockpitSelector{
+		manifest: &manifest{
+			RoutingStrategy: "auto",
+			accountByAuthID: map[string]*accountSpec{
+				"account-high.json":   highQuotaAccount,
+				"account-scoped.json": scopedAccount,
+			},
+			accountByID: map[string]*accountSpec{
+				"account-high":   highQuotaAccount,
+				"account-scoped": scopedAccount,
+			},
+		},
+	}
+	selector := &cockpitSessionAffinitySelector{
+		inner: coreauth.NewSessionAffinitySelectorWithConfig(coreauth.SessionAffinityConfig{
+			Fallback: fallback,
+			TTL:      time.Hour,
+		}),
+	}
+	auths := []*coreauth.Auth{
+		{ID: "account-high.json", Provider: "codex", Status: coreauth.StatusActive},
+		{ID: "account-scoped.json", Provider: "codex", Status: coreauth.StatusActive},
+	}
+	opts := cliproxyexecutor.Options{
+		Headers: http.Header{"X-Session-ID": []string{"shared-session"}},
+	}
+	defaultKey := &apiKeySpec{
+		ID:         "default-key",
+		AccountIDs: []string{"account-high", "account-scoped"},
+	}
+	scopedKey := &apiKeySpec{
+		ID:         "scoped-key",
+		AccountIDs: []string{"account-scoped"},
+	}
+
+	first, err := selector.Pick(
+		context.WithValue(context.Background(), clientAPIKeyContextKey, defaultKey),
+		"codex",
+		"gpt-5.4",
+		opts,
+		auths,
+	)
+	if err != nil {
+		t.Fatalf("pick default key auth: %v", err)
+	}
+	if first.ID != "account-high.json" {
+		t.Fatalf("expected default key to select high quota auth, got %q", first.ID)
+	}
+
+	second, err := selector.Pick(
+		context.WithValue(context.Background(), clientAPIKeyContextKey, scopedKey),
+		"codex",
+		"gpt-5.4",
+		opts,
+		auths,
+	)
+	if err != nil {
+		t.Fatalf("pick scoped key auth: %v", err)
+	}
+	if second.ID != "account-scoped.json" {
+		t.Fatalf("expected scoped key not to reuse default key affinity auth, got %q", second.ID)
+	}
+}
+
+func intPtrForTest(value int) *int {
+	return &value
+}
+
 func TestCanonicalModelForClientModelHandlesPrefixAliasAndSnapshot(t *testing.T) {
 	spec := &apiKeySpec{ModelPrefix: "team"}
 	m := &manifest{

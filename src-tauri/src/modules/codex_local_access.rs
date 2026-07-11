@@ -410,6 +410,7 @@ struct ResolvedLocalApiKey {
     id: String,
     label: String,
     provider_gateway: Option<CodexLocalAccessProviderGateway>,
+    inherit_account_pool: bool,
     account_ids: Vec<String>,
     model_prefix: Option<String>,
     allowed_models: Vec<String>,
@@ -1625,13 +1626,28 @@ fn selected_accounts_have_image_generation_capacity(
     collection: &CodexLocalAccessCollection,
     health_by_account_id: Option<&HashMap<String, RuntimeAccountHealth>>,
 ) -> bool {
-    if collection.image_generation_mode == CodexLocalAccessImageGenerationMode::Disabled {
+    let accounts = codex_account::list_accounts_checked().ok();
+    selected_account_ids_have_image_generation_capacity(
+        &collection.account_ids,
+        collection.image_generation_mode,
+        accounts.as_deref(),
+        health_by_account_id,
+    )
+}
+
+fn selected_account_ids_have_image_generation_capacity(
+    account_ids: &[String],
+    image_generation_mode: CodexLocalAccessImageGenerationMode,
+    accounts: Option<&[CodexAccount]>,
+    health_by_account_id: Option<&HashMap<String, RuntimeAccountHealth>>,
+) -> bool {
+    if image_generation_mode == CodexLocalAccessImageGenerationMode::Disabled {
         return false;
     }
-    let Ok(accounts) = codex_account::list_accounts_checked() else {
+    let Some(accounts) = accounts else {
         return true;
     };
-    let selected: HashSet<&str> = collection.account_ids.iter().map(String::as_str).collect();
+    let selected: HashSet<&str> = account_ids.iter().map(String::as_str).collect();
     accounts.into_iter().any(|account| {
         selected.contains(account.id.as_str())
             && !account.is_api_key_auth()
@@ -1833,7 +1849,51 @@ fn visible_codex_model_ids_for_api_key(
     api_key: &ResolvedLocalApiKey,
     health_by_account_id: Option<&HashMap<String, RuntimeAccountHealth>>,
 ) -> Vec<String> {
-    let mut visible = visible_codex_model_ids_for_collection(collection, health_by_account_id);
+    let accounts = codex_account::list_accounts_checked().ok();
+    visible_codex_model_ids_for_api_key_with_optional_accounts(
+        collection,
+        api_key,
+        accounts.as_deref(),
+        health_by_account_id,
+    )
+}
+
+fn visible_codex_model_ids_for_api_key_with_accounts(
+    collection: &CodexLocalAccessCollection,
+    api_key: &ResolvedLocalApiKey,
+    accounts: &[CodexAccount],
+    health_by_account_id: Option<&HashMap<String, RuntimeAccountHealth>>,
+) -> Vec<String> {
+    visible_codex_model_ids_for_api_key_with_optional_accounts(
+        collection,
+        api_key,
+        Some(accounts),
+        health_by_account_id,
+    )
+}
+
+fn visible_codex_model_ids_for_api_key_with_optional_accounts(
+    collection: &CodexLocalAccessCollection,
+    api_key: &ResolvedLocalApiKey,
+    accounts: Option<&[CodexAccount]>,
+    health_by_account_id: Option<&HashMap<String, RuntimeAccountHealth>>,
+) -> Vec<String> {
+    let scoped_account_ids = scoped_collection_account_ids(collection, api_key);
+    let image_allowed = selected_account_ids_have_image_generation_capacity(
+        &scoped_account_ids,
+        collection.image_generation_mode,
+        accounts,
+        health_by_account_id,
+    );
+    let base = supported_codex_model_ids()
+        .into_iter()
+        .filter(|model| model != CODEX_IMAGE_MODEL_ID || image_allowed)
+        .collect();
+    let mut visible = apply_model_filters(
+        apply_model_aliases_to_ids(base, &collection.model_aliases),
+        &[],
+        &collection.excluded_models,
+    );
     if let Some(provider_gateway) = api_key.provider_gateway.as_ref() {
         let mut seen: HashSet<String> = visible
             .iter()
@@ -6966,10 +7026,6 @@ fn sidecar_auth_ids_for_account_ids_with_overrides(
     values
 }
 
-fn sidecar_auth_ids_for_account_ids(account_ids: Vec<String>) -> Vec<String> {
-    sidecar_auth_ids_for_account_ids_with_overrides(account_ids, &HashMap::new())
-}
-
 fn sidecar_duration_ms(value_ms: i64) -> String {
     format!("{}ms", value_ms.max(1))
 }
@@ -7024,9 +7080,19 @@ fn sidecar_codex_key_model_values(collection: &CodexLocalAccessCollection) -> Ve
         .collect()
 }
 
+fn legacy_api_key_is_active(collection: &CodexLocalAccessCollection) -> bool {
+    let key = collection.api_key.trim();
+    !key.is_empty()
+        && !collection.account_ids.is_empty()
+        && !collection
+            .api_keys
+            .iter()
+            .any(|item| item.key.trim() == key)
+}
+
 fn sidecar_api_key_manifest_values(collection: &CodexLocalAccessCollection) -> Vec<Value> {
     let mut values = Vec::new();
-    if !collection.api_key.trim().is_empty() && !collection.account_ids.is_empty() {
+    if legacy_api_key_is_active(collection) {
         values.push(json!({
             "id": "legacy",
             "label": default_local_api_key_label(),
@@ -7060,6 +7126,60 @@ fn sidecar_api_key_manifest_values(collection: &CodexLocalAccessCollection) -> V
     values
 }
 
+fn api_key_inherits_account_pool(api_key: &CodexLocalAccessApiKey) -> bool {
+    if api_key.provider_gateway.is_some() {
+        return false;
+    }
+    api_key
+        .inherit_account_pool
+        .unwrap_or_else(|| api_key.account_ids.is_empty())
+}
+
+fn api_key_has_fixed_account_scope(
+    collection: &CodexLocalAccessCollection,
+    api_key: &CodexLocalAccessApiKey,
+) -> bool {
+    if api_key.provider_gateway.is_some() {
+        return true;
+    }
+
+    collection.bound_oauth_account_id.is_some()
+        && collection.account_ids.is_empty()
+        && api_key.account_ids.len() == 1
+        && api_key.id == provider_gateway_api_key_id(&api_key.account_ids[0])
+}
+
+fn validate_api_key_account_scope_update(
+    collection: &CodexLocalAccessCollection,
+    api_key: &CodexLocalAccessApiKey,
+    account_ids: Option<&[String]>,
+    inherit_account_pool: Option<bool>,
+) -> Result<(), String> {
+    if !api_key_has_fixed_account_scope(collection, api_key) {
+        return Ok(());
+    }
+
+    let requested_inherit = inherit_account_pool.unwrap_or_else(|| {
+        account_ids
+            .map(|ids| ids.is_empty())
+            .unwrap_or_else(|| api_key_inherits_account_pool(api_key))
+    });
+    if requested_inherit {
+        return Err("固定账号 Key 不支持继承服务账号池".to_string());
+    }
+    if account_ids.is_some_and(|ids| ids.is_empty()) {
+        return Err("固定账号 Key 不能清空账号范围".to_string());
+    }
+    if let Some(requested_account_ids) = account_ids {
+        let expected_account_ids = normalize_account_id_list(api_key.account_ids.clone());
+        let requested_account_ids = normalize_account_id_list(requested_account_ids.to_vec());
+        if requested_account_ids != expected_account_ids {
+            return Err("固定账号 Key 不支持修改账号范围".to_string());
+        }
+    }
+    Ok(())
+}
+
 fn codex_app_speed_service_tier(speed: &CodexAppSpeed) -> Option<&'static str> {
     match speed {
         CodexAppSpeed::Fast => Some("priority"),
@@ -7071,10 +7191,7 @@ fn effective_api_key_account_ids(
     collection: &CodexLocalAccessCollection,
     api_key: &CodexLocalAccessApiKey,
 ) -> Vec<String> {
-    if api_key.provider_gateway.is_some() {
-        return api_key.account_ids.clone();
-    }
-    if api_key.account_ids.is_empty() {
+    if api_key_inherits_account_pool(api_key) {
         collection.account_ids.clone()
     } else {
         api_key.account_ids.clone()
@@ -7140,23 +7257,31 @@ fn remove_account_refs_from_collection(
     changed
 }
 
-fn sidecar_client_api_keys(collection: &CodexLocalAccessCollection) -> Vec<String> {
+fn sidecar_client_api_keys(
+    collection: &CodexLocalAccessCollection,
+    account_overrides: &HashMap<String, CodexAccount>,
+) -> Vec<String> {
     let mut keys = Vec::new();
     let mut seen = HashSet::new();
-    if !collection.api_key.trim().is_empty()
-        && !collection.account_ids.is_empty()
+    if legacy_api_key_is_active(collection)
+        && !sidecar_auth_ids_for_account_ids_with_overrides(
+            collection.account_ids.clone(),
+            account_overrides,
+        )
+        .is_empty()
         && seen.insert(collection.api_key.trim().to_string())
     {
         keys.push(collection.api_key.trim().to_string());
     }
     for item in &collection.api_keys {
         let key = item.key.trim();
-        if item.enabled
-            && !key.is_empty()
-            && (item.provider_gateway.is_some()
-                || !effective_api_key_account_ids(collection, item).is_empty())
-            && seen.insert(key.to_string())
-        {
+        let has_resolvable_scope = item.provider_gateway.is_some()
+            || !sidecar_auth_ids_for_account_ids_with_overrides(
+                effective_api_key_account_ids(collection, item),
+                account_overrides,
+            )
+            .is_empty();
+        if item.enabled && !key.is_empty() && has_resolvable_scope && seen.insert(key.to_string()) {
             keys.push(key.to_string());
         }
     }
@@ -7168,7 +7293,7 @@ fn sidecar_api_key_account_scope_values(
     account_overrides: &HashMap<String, CodexAccount>,
 ) -> Value {
     let mut values = Map::new();
-    if !collection.api_key.trim().is_empty() && !collection.account_ids.is_empty() {
+    if legacy_api_key_is_active(collection) {
         let auth_ids = sidecar_auth_ids_for_account_ids_with_overrides(
             collection.account_ids.clone(),
             account_overrides,
@@ -7834,7 +7959,7 @@ async fn prepare_sidecar_launch_config_in_dir(
     config.insert("debug".to_string(), json!(collection.debug_logs));
     config.insert(
         "api-keys".to_string(),
-        json!(sidecar_client_api_keys(collection)),
+        json!(sidecar_client_api_keys(collection, &account_overrides)),
     );
     config.insert(
         "api-key-account-ids".to_string(),
@@ -8817,6 +8942,7 @@ fn build_local_access_api_key(label: Option<&str>) -> CodexLocalAccessApiKey {
         label: normalize_api_key_label(label, &default_local_api_key_label()),
         key: generate_local_api_key(),
         provider_gateway: None,
+        inherit_account_pool: Some(true),
         account_ids: Vec::new(),
         model_prefix: None,
         allowed_models: Vec::new(),
@@ -8843,6 +8969,7 @@ fn normalize_collection_api_keys(collection: &mut CodexLocalAccessCollection) ->
             label: default_local_api_key_label(),
             key,
             provider_gateway: None,
+            inherit_account_pool: Some(true),
             account_ids: Vec::new(),
             model_prefix: None,
             allowed_models: Vec::new(),
@@ -8883,6 +9010,11 @@ fn normalize_collection_api_keys(collection: &mut CodexLocalAccessCollection) ->
             changed = true;
         } else {
             item.account_ids = original_account_ids;
+        }
+        let inherit_account_pool = api_key_inherits_account_pool(&item);
+        if item.inherit_account_pool != Some(inherit_account_pool) {
+            item.inherit_account_pool = Some(inherit_account_pool);
+            changed = true;
         }
         if item.created_at <= 0 {
             item.created_at = now;
@@ -8955,6 +9087,7 @@ fn resolve_collection_api_key(
             id: item.id.clone(),
             label: item.label.clone(),
             provider_gateway: item.provider_gateway.clone(),
+            inherit_account_pool: api_key_inherits_account_pool(item),
             account_ids: item.account_ids.clone(),
             model_prefix: item.model_prefix.clone(),
             allowed_models: item.allowed_models.clone(),
@@ -8966,6 +9099,7 @@ fn resolve_collection_api_key(
                     id: "legacy".to_string(),
                     label: default_local_api_key_label(),
                     provider_gateway: None,
+                    inherit_account_pool: true,
                     account_ids: Vec::new(),
                     model_prefix: None,
                     allowed_models: Vec::new(),
@@ -8981,7 +9115,7 @@ fn scoped_collection_account_ids(
     collection: &CodexLocalAccessCollection,
     api_key: &ResolvedLocalApiKey,
 ) -> Vec<String> {
-    if api_key.account_ids.is_empty() {
+    if api_key.inherit_account_pool {
         collection.account_ids.clone()
     } else {
         api_key.account_ids.clone()
@@ -11366,12 +11500,17 @@ fn build_request_state_snapshot(runtime: &GatewayRuntime) -> CodexLocalAccessSta
     build_state_snapshot_inner(runtime, false)
 }
 
+fn build_fresh_state_snapshot(runtime: &mut GatewayRuntime) -> CodexLocalAccessState {
+    recompute_time_windows(&mut runtime.stats, now_ms());
+    build_state_snapshot(runtime)
+}
+
 async fn snapshot_state() -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded_without_start().await?;
     if let Err(err) = ensure_gateway_matches_runtime().await {
         let mut runtime = gateway_runtime().lock().await;
         runtime.last_error = Some(err);
-        return Ok(build_state_snapshot(&runtime));
+        return Ok(build_fresh_state_snapshot(&mut runtime));
     }
     let mut runtime = gateway_runtime().lock().await;
     if runtime
@@ -11385,13 +11524,13 @@ async fn snapshot_state() -> Result<CodexLocalAccessState, String> {
     {
         runtime.last_error = None;
     }
-    Ok(build_state_snapshot(&runtime))
+    Ok(build_fresh_state_snapshot(&mut runtime))
 }
 
 async fn snapshot_state_without_gateway_reload() -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded_without_start().await?;
-    let runtime = gateway_runtime().lock().await;
-    Ok(build_state_snapshot(&runtime))
+    let mut runtime = gateway_runtime().lock().await;
+    Ok(build_fresh_state_snapshot(&mut runtime))
 }
 
 pub async fn get_local_access_state() -> Result<CodexLocalAccessState, String> {
@@ -11890,6 +12029,7 @@ fn build_provider_gateway_collection_for_profile(
         label: format!("Provider Gateway: {}", account.email),
         key: key.clone(),
         provider_gateway: Some(provider_gateway.clone()),
+        inherit_account_pool: Some(false),
         account_ids: vec![account.id.clone()],
         model_prefix: None,
         allowed_models: Vec::new(),
@@ -11944,6 +12084,7 @@ fn build_bound_oauth_local_gateway_collection_for_profile(
         label: format!("Bound OAuth Local Gateway: {}", account.email),
         key: key.clone(),
         provider_gateway: None,
+        inherit_account_pool: Some(false),
         account_ids: vec![account.id.clone()],
         model_prefix: None,
         allowed_models: Vec::new(),
@@ -12124,6 +12265,7 @@ fn build_model_provider_gateway_test_collection(
         label: provider_gateway_test_api_key_label(request),
         key: collection.api_key.clone(),
         provider_gateway,
+        inherit_account_pool: Some(false),
         account_ids: vec![account.id.clone()],
         model_prefix: None,
         allowed_models: vec![client_model_id.trim().to_string()],
@@ -14646,18 +14788,24 @@ pub async fn remove_deleted_accounts_from_local_access_pool(
         return Ok(());
     };
 
-    let before_account_ids = collection.account_ids.clone();
-    collection.account_ids.retain(|id| !remove_ids.contains(id));
-    if collection.account_ids == before_account_ids {
+    if !remove_account_refs_from_collection(&mut collection, &remove_ids) {
         return Ok(());
     }
 
     collection.updated_at = now_ms();
     save_collection_to_disk(&collection)?;
 
-    let mut runtime = gateway_runtime().lock().await;
-    if runtime.loaded {
-        sync_runtime_collection(&mut runtime, collection);
+    let runtime_loaded = {
+        let mut runtime = gateway_runtime().lock().await;
+        if runtime.loaded {
+            sync_runtime_collection(&mut runtime, collection);
+            true
+        } else {
+            false
+        }
+    };
+    if runtime_loaded {
+        ensure_gateway_matches_runtime().await?;
     }
 
     Ok(())
@@ -14782,6 +14930,8 @@ pub async fn update_local_access_api_key(
     model_prefix: Option<String>,
     allowed_models: Option<Vec<String>>,
     excluded_models: Option<Vec<String>>,
+    account_ids: Option<Vec<String>>,
+    inherit_account_pool: Option<bool>,
 ) -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded().await?;
     let maybe_collection = {
@@ -14800,6 +14950,13 @@ pub async fn update_local_access_api_key(
     else {
         return Err("API Key 不存在".to_string());
     };
+    let normalized_account_ids = account_ids.map(normalize_account_id_list);
+    validate_api_key_account_scope_update(
+        &collection,
+        &collection.api_keys[index],
+        normalized_account_ids.as_deref(),
+        inherit_account_pool,
+    )?;
     if let Some(label) = label {
         collection.api_keys[index].label = normalize_api_key_label(Some(label.as_str()), "API Key");
     }
@@ -14815,11 +14972,21 @@ pub async fn update_local_access_api_key(
     if let Some(excluded_models) = excluded_models {
         collection.api_keys[index].excluded_models = normalize_model_rule_list(excluded_models);
     }
+    if let Some(account_ids) = normalized_account_ids {
+        if inherit_account_pool.is_none() {
+            collection.api_keys[index].inherit_account_pool = Some(account_ids.is_empty());
+        }
+        collection.api_keys[index].account_ids = account_ids;
+    }
+    if let Some(inherit_account_pool) = inherit_account_pool {
+        collection.api_keys[index].inherit_account_pool = Some(inherit_account_pool);
+    }
     collection.api_keys[index].updated_at = now_ms();
     if !collection.api_keys.iter().any(|item| item.enabled) {
         collection.api_keys[index].enabled = true;
     }
     normalize_collection_api_keys(&mut collection);
+    let _ = sanitize_collection(&mut collection)?;
     collection.updated_at = now_ms();
     save_collection_to_disk(&collection)?;
     {
@@ -19697,10 +19864,10 @@ mod tests {
     use super::{
         account_model_rule_blocks_model, account_requires_bound_oauth_local_gateway,
         account_requires_provider_gateway, account_upstream_base_url, align_codex_prompt_cache,
-        append_usage_event, apply_codex_official_headers, apply_routing_strategy,
-        backup_current_profile_model_before_provider_gateway, bound_oauth_quota_refresh_failures,
-        bound_oauth_quota_reserve_blocks_account, bridge_websocket_streams,
-        build_account_scoped_upstream_body, build_base_url_with_host,
+        api_key_inherits_account_pool, append_usage_event, apply_codex_official_headers,
+        apply_routing_strategy, backup_current_profile_model_before_provider_gateway,
+        bound_oauth_quota_refresh_failures, bound_oauth_quota_reserve_blocks_account,
+        bridge_websocket_streams, build_account_scoped_upstream_body, build_base_url_with_host,
         build_chat_completion_payload, build_chat_completion_stream_body,
         build_codex_client_models_response, build_collection_base_url, build_images_api_payload,
         build_local_access_api_key, build_local_models_response,
@@ -19709,7 +19876,8 @@ mod tests {
         canonical_model_for_client_model, classify_upstream_error_category,
         cleanup_profile_takeover_without_backup, cleanup_provider_gateway_profile_model_overrides,
         collect_local_access_profile_takeover_dirs_from_store, compare_routing_candidates,
-        default_codex_model_ids, extract_usage_capture, filter_bound_oauth_quota_reserve_account,
+        default_codex_model_ids, effective_api_key_account_ids, empty_stats_snapshot,
+        extract_usage_capture, filter_bound_oauth_quota_reserve_account,
         insert_local_access_usage_event, inspect_local_access_profile_config,
         is_codex_local_access_auth_text, is_codex_local_access_config_for_api_key,
         is_image_generation_capability_error, is_local_access_eligible_account,
@@ -19719,28 +19887,33 @@ mod tests {
         macos_proxy_url_from_scutil_map, max_credential_attempts_for_strategy,
         merge_collection_and_account_excluded_models, model_pricing,
         model_provider_direct_test_client_model, model_provider_test_uses_provider_gateway,
-        normalize_account_model_rules, normalize_custom_routing_rules,
-        normalized_sidecar_error_category, open_local_access_logs_db_once, parse_codex_retry_after,
+        normalize_account_id_list, normalize_account_model_rules, normalize_collection_api_keys,
+        normalize_custom_routing_rules, normalized_sidecar_error_category,
+        open_local_access_logs_db_once, parse_codex_retry_after,
         parse_responses_payload_from_upstream, parse_websocket_upstream_error,
         prepare_gateway_request, prepare_gateway_request_with_default_service_tier,
         prepare_sidecar_launch_config_in_dir, prepare_websocket_initial_request,
-        profile_base_url_matches, provider_gateway_bound_oauth_account_id_for_account,
+        profile_base_url_matches, provider_gateway_api_key_id,
+        provider_gateway_bound_oauth_account_id_for_account,
         provider_gateway_default_model_for_account,
         provider_gateway_image_generation_mode_for_account, provider_gateway_model_slots,
-        provider_gateway_models_for_account, read_http_request, recover_invalid_stats_file,
-        remove_account_refs_from_collection, remove_codex_local_access_config,
-        reprice_request_logs_for_collection, request_image_generation_mode, resolve_plan_rank,
-        resolve_supported_model_alias, resolve_upstream_target,
-        restore_config_toml_from_takeover_backup, sanitize_collection_with_accounts,
-        scutil_proxy_map, should_retry_single_account_upstream_status,
-        should_treat_response_as_stream, should_try_next_account, sidecar_account_manifest_value,
-        sidecar_api_key_account_scope_values, sidecar_auth_file_name,
-        sidecar_auth_json_for_account, sidecar_auths_dir,
-        sidecar_cached_account_usable_after_prepare_error, sidecar_codex_api_key_auth_id,
-        sidecar_config_fingerprint, sidecar_payload_default_service_tier,
-        sidecar_quota_reserve_snapshot_value, sidecar_routing_strategy_value, sidecar_stable_id,
-        supported_codex_model_ids, system_proxy_target_scheme, system_proxy_value_url,
-        validate_client_model_visible, visible_codex_model_ids_for_api_key, websocket_accept_value,
+        provider_gateway_models_for_account, read_http_request, recompute_time_windows,
+        recover_invalid_stats_file, remove_account_refs_from_collection,
+        remove_codex_local_access_config, reprice_request_logs_for_collection,
+        request_image_generation_mode, resolve_plan_rank, resolve_supported_model_alias,
+        resolve_upstream_target, restore_config_toml_from_takeover_backup,
+        sanitize_collection_with_accounts, scutil_proxy_map,
+        should_retry_single_account_upstream_status, should_treat_response_as_stream,
+        should_try_next_account, sidecar_account_manifest_value,
+        sidecar_api_key_account_scope_values, sidecar_api_key_manifest_values,
+        sidecar_auth_file_name, sidecar_auth_json_for_account, sidecar_auths_dir,
+        sidecar_cached_account_usable_after_prepare_error, sidecar_client_api_keys,
+        sidecar_codex_api_key_auth_id, sidecar_config_fingerprint,
+        sidecar_payload_default_service_tier, sidecar_quota_reserve_snapshot_value,
+        sidecar_routing_strategy_value, sidecar_stable_id, supported_codex_model_ids,
+        system_proxy_target_scheme, system_proxy_value_url, validate_api_key_account_scope_update,
+        validate_client_model_visible, visible_codex_model_ids_for_api_key,
+        visible_codex_model_ids_for_api_key_with_accounts, websocket_accept_value,
         websocket_connect_error_from_http_response, windows_proxy_url_from_server,
         windows_reg_dword_enabled, windows_reg_query_map,
         write_local_access_profile_model_override, write_local_access_profile_takeover,
@@ -19749,9 +19922,10 @@ mod tests {
         CodexModelProviderGatewayChatTestRequest, GatewayResponseAdapter, ParsedRequest,
         ResolvedLocalApiKey, ResponseUsageCollector, RoutingCandidate, SidecarUsageDetails,
         SidecarUsageEvent, UsageCapture, BOUND_OAUTH_QUOTA_RESERVE_MAX_SNAPSHOT_AGE_SECONDS,
-        CODEX_AUTO_REVIEW_MODEL_ID, CODEX_LOCAL_ACCESS_TEST_DISABLE_IMAGE_GENERATION_HEADER,
-        CODEX_PROFILE_AUTH_FILE, CODEX_PROFILE_CONFIG_FILE, CODEX_PROVIDER_MODEL_BACKUP_FILE,
-        CODEX_PROVIDER_MODEL_CATALOG_FILE, DEFAULT_MAX_RETRY_INTERVAL_MS,
+        CODEX_AUTO_REVIEW_MODEL_ID, CODEX_IMAGE_MODEL_ID,
+        CODEX_LOCAL_ACCESS_TEST_DISABLE_IMAGE_GENERATION_HEADER, CODEX_PROFILE_AUTH_FILE,
+        CODEX_PROFILE_CONFIG_FILE, CODEX_PROVIDER_MODEL_BACKUP_FILE,
+        CODEX_PROVIDER_MODEL_CATALOG_FILE, DAY_WINDOW_MS, DEFAULT_MAX_RETRY_INTERVAL_MS,
         DEFAULT_MODEL_PRICING_VERSION, DEFAULT_SESSION_AFFINITY_TTL_MS, MAX_HTTP_REQUEST_BYTES,
     };
     use crate::models::codex::{
@@ -19762,7 +19936,8 @@ mod tests {
         CodexLocalAccessAccountModelRule, CodexLocalAccessClientBaseUrlHost,
         CodexLocalAccessCustomRoutingRule, CodexLocalAccessImageGenerationMode,
         CodexLocalAccessProviderGateway, CodexLocalAccessQuotaReserve, CodexLocalAccessRequestKind,
-        CodexLocalAccessRoutingStrategy, CodexLocalAccessStats, CodexLocalAccessTimeouts,
+        CodexLocalAccessRoutingStrategy, CodexLocalAccessStats, CodexLocalAccessStatsWindow,
+        CodexLocalAccessTimeouts, CodexLocalAccessUsageEvent,
     };
     use crate::models::{
         DefaultInstanceSettings, InstanceLaunchMode, InstanceProfile, InstanceStore,
@@ -19872,6 +20047,67 @@ mod tests {
         });
         account.usage_updated_at = Some(chrono::Utc::now().timestamp());
         account
+    }
+
+    #[test]
+    fn custom_api_key_scope_filters_duplicates_and_updates_manifest_scope() {
+        let mut collection = test_local_access_collection(vec![
+            "account-a".to_string(),
+            "account-b".to_string(),
+            "account-c".to_string(),
+        ]);
+        let mut api_key = build_local_access_api_key(Some("Team A"));
+        api_key.key = "team-a-key".to_string();
+        api_key.inherit_account_pool = Some(false);
+        api_key.account_ids = normalize_account_id_list(vec![
+            "account-b".to_string(),
+            "account-b".to_string(),
+            " account-c ".to_string(),
+            "".to_string(),
+        ]);
+        collection.api_keys = vec![api_key];
+
+        let manifest_values = sidecar_api_key_manifest_values(&collection);
+        let scoped = manifest_values
+            .iter()
+            .find(|value| value.get("key").and_then(Value::as_str) == Some("team-a-key"))
+            .expect("scoped key should be emitted");
+
+        let account_ids = scoped
+            .get("accountIds")
+            .and_then(Value::as_array)
+            .expect("accountIds should be an array")
+            .iter()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>();
+
+        assert_eq!(account_ids, vec!["account-b", "account-c"]);
+    }
+
+    #[test]
+    fn legacy_api_key_scope_migrates_from_account_ids() {
+        let mut collection =
+            test_local_access_collection(vec!["account-a".to_string(), "account-b".to_string()]);
+        let mut inherited_key = build_local_access_api_key(Some("Inherited"));
+        inherited_key.inherit_account_pool = None;
+        inherited_key.account_ids.clear();
+        let mut scoped_key = build_local_access_api_key(Some("Scoped"));
+        scoped_key.inherit_account_pool = None;
+        scoped_key.account_ids = vec!["account-b".to_string()];
+        collection.api_keys = vec![inherited_key, scoped_key];
+
+        assert!(normalize_collection_api_keys(&mut collection));
+
+        assert_eq!(collection.api_keys[0].inherit_account_pool, Some(true));
+        assert_eq!(collection.api_keys[1].inherit_account_pool, Some(false));
+        assert_eq!(
+            effective_api_key_account_ids(&collection, &collection.api_keys[0]),
+            vec!["account-a", "account-b"]
+        );
+        assert_eq!(
+            effective_api_key_account_ids(&collection, &collection.api_keys[1]),
+            vec!["account-b"]
+        );
     }
 
     #[test]
@@ -20429,6 +20665,7 @@ wire_api = "responses"
             "account-c".to_string(),
         ]);
         let mut scoped_key = build_local_access_api_key(Some("scoped"));
+        scoped_key.inherit_account_pool = Some(false);
         scoped_key.account_ids = vec!["account-b".to_string(), "account-c".to_string()];
         collection.api_keys = vec![scoped_key];
         collection.custom_routing_rules = vec![
@@ -20469,6 +20706,167 @@ wire_api = "responses"
         assert!(collection.account_model_rules.is_empty());
         assert!(collection.bound_oauth_account_id.is_none());
         assert!(collection.bound_oauth_quota_reserve.is_none());
+    }
+
+    #[test]
+    fn custom_scope_does_not_broaden_when_last_account_is_removed() {
+        let mut collection =
+            test_local_access_collection(vec!["account-a".to_string(), "account-b".to_string()]);
+        let mut scoped_key = build_local_access_api_key(Some("scoped"));
+        scoped_key.key = "scoped-key".to_string();
+        scoped_key.inherit_account_pool = Some(false);
+        scoped_key.account_ids = vec!["account-b".to_string()];
+        collection.api_keys = vec![scoped_key];
+
+        assert!(remove_account_refs_from_collection(
+            &mut collection,
+            &HashSet::from(["account-b".to_string()]),
+        ));
+
+        let api_key = &collection.api_keys[0];
+        assert!(!api_key_inherits_account_pool(api_key));
+        assert!(api_key.account_ids.is_empty());
+        assert!(effective_api_key_account_ids(&collection, api_key).is_empty());
+        assert!(sidecar_api_key_manifest_values(&collection)
+            .iter()
+            .all(|value| value.get("key").and_then(Value::as_str) != Some("scoped-key")));
+    }
+
+    #[test]
+    fn deleted_scoped_account_does_not_fall_back_to_legacy_sidecar_pool() {
+        let mut collection = test_local_access_collection(vec!["account-a".to_string()]);
+        let mut scoped_key = build_local_access_api_key(Some("Scoped"));
+        scoped_key.key = collection.api_key.clone();
+        scoped_key.inherit_account_pool = Some(false);
+        scoped_key.account_ids = vec!["account-b".to_string()];
+        collection.api_keys = vec![scoped_key];
+
+        assert!(remove_account_refs_from_collection(
+            &mut collection,
+            &HashSet::from(["account-b".to_string()]),
+        ));
+
+        assert!(collection.api_keys[0].account_ids.is_empty());
+        assert!(sidecar_api_key_manifest_values(&collection)
+            .iter()
+            .all(|value| value.get("key").and_then(Value::as_str) != Some("local-api-key")));
+        assert!(!sidecar_client_api_keys(&collection, &HashMap::new())
+            .iter()
+            .any(|key| key == "local-api-key"));
+        assert!(
+            sidecar_api_key_account_scope_values(&collection, &HashMap::new())
+                .get("local-api-key")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn sidecar_excludes_key_with_unresolved_custom_scope() {
+        let mut collection = test_local_access_collection(vec!["account-a".to_string()]);
+        let mut scoped_key = build_local_access_api_key(Some("Scoped"));
+        scoped_key.key = "scoped-key".to_string();
+        scoped_key.inherit_account_pool = Some(false);
+        scoped_key.account_ids = vec!["missing-account".to_string()];
+        collection.api_keys = vec![scoped_key];
+
+        assert!(!sidecar_client_api_keys(&collection, &HashMap::new())
+            .iter()
+            .any(|key| key == "scoped-key"));
+        assert!(
+            sidecar_api_key_account_scope_values(&collection, &HashMap::new())
+                .get("scoped-key")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn bound_oauth_gateway_key_rejects_inherited_or_empty_scope_updates() {
+        let account_id = "api-bound-oauth-1".to_string();
+        let mut collection = test_local_access_collection(Vec::new());
+        collection.bound_oauth_account_id = Some("oauth-1".to_string());
+
+        let mut api_key = build_local_access_api_key(Some("Bound OAuth Local Gateway"));
+        api_key.id = provider_gateway_api_key_id(&account_id);
+        api_key.inherit_account_pool = Some(false);
+        api_key.account_ids = vec![account_id.clone()];
+
+        assert!(validate_api_key_account_scope_update(
+            &collection,
+            &api_key,
+            Some(&[]),
+            Some(true),
+        )
+        .is_err());
+        assert!(validate_api_key_account_scope_update(
+            &collection,
+            &api_key,
+            Some(&[]),
+            Some(false),
+        )
+        .is_err());
+        assert!(
+            validate_api_key_account_scope_update(&collection, &api_key, None, Some(true),)
+                .is_err()
+        );
+        assert!(validate_api_key_account_scope_update(
+            &collection,
+            &api_key,
+            Some(&[account_id.clone()]),
+            Some(false),
+        )
+        .is_ok());
+        assert!(validate_api_key_account_scope_update(
+            &collection,
+            &api_key,
+            Some(&["api-bound-oauth-2".to_string()]),
+            Some(false),
+        )
+        .is_err());
+        assert!(validate_api_key_account_scope_update(
+            &collection,
+            &api_key,
+            Some(&[account_id.clone(), "api-bound-oauth-2".to_string()]),
+            Some(false),
+        )
+        .is_err());
+
+        let regular_collection = test_local_access_collection(vec!["account-a".to_string()]);
+        let regular_key = build_local_access_api_key(Some("Regular Key"));
+        assert!(validate_api_key_account_scope_update(
+            &regular_collection,
+            &regular_key,
+            None,
+            Some(true),
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn custom_scope_model_visibility_uses_scoped_accounts_for_image_capacity() {
+        let mut paid_account = test_account_with_plan("pro");
+        paid_account.id = "account-paid".to_string();
+        let mut free_account = test_account_with_plan("free");
+        free_account.id = "account-free".to_string();
+        let collection = test_local_access_collection(vec![paid_account.id.clone()]);
+        let api_key = ResolvedLocalApiKey {
+            id: "key-scoped".to_string(),
+            label: "Scoped".to_string(),
+            provider_gateway: None,
+            inherit_account_pool: false,
+            account_ids: vec![free_account.id.clone()],
+            model_prefix: None,
+            allowed_models: Vec::new(),
+            excluded_models: Vec::new(),
+        };
+
+        let models = visible_codex_model_ids_for_api_key_with_accounts(
+            &collection,
+            &api_key,
+            &[paid_account, free_account],
+            None,
+        );
+
+        assert!(!models.iter().any(|model| model == CODEX_IMAGE_MODEL_ID));
     }
 
     #[test]
@@ -21736,6 +22134,49 @@ supports_websockets = false
     }
 
     #[test]
+    fn api_key_usage_stats_are_isolated_by_time_window() {
+        let now = 20 * DAY_WINDOW_MS;
+        let event =
+            |timestamp: i64, api_key_id: &str, total_tokens: u64| CodexLocalAccessUsageEvent {
+                timestamp,
+                api_key_id: api_key_id.to_string(),
+                api_key_label: api_key_id.to_string(),
+                request_kind: CodexLocalAccessRequestKind::Text,
+                success: true,
+                total_tokens,
+                ..Default::default()
+            };
+        let mut stats = empty_stats_snapshot();
+        stats.events = vec![
+            event(now - 10 * DAY_WINDOW_MS, "key-a", 400),
+            event(now - 2 * DAY_WINDOW_MS, "key-a", 200),
+            event(now - DAY_WINDOW_MS / 2, "key-a", 100),
+            event(now - DAY_WINDOW_MS / 2, "key-b", 50),
+        ];
+
+        recompute_time_windows(&mut stats, now);
+
+        let usage = |window: &CodexLocalAccessStatsWindow, api_key_id: &str| {
+            let usage = &window
+                .api_keys
+                .iter()
+                .find(|item| item.api_key_id == api_key_id)
+                .expect("API key stats should exist")
+                .usage;
+            (usage.request_count, usage.total_tokens)
+        };
+        assert_eq!(usage(&stats.daily, "key-a"), (1, 100));
+        assert_eq!(usage(&stats.daily, "key-b"), (1, 50));
+        assert_eq!(usage(&stats.weekly, "key-a"), (2, 300));
+        assert_eq!(usage(&stats.monthly, "key-a"), (3, 700));
+
+        recompute_time_windows(&mut stats, now + 2 * DAY_WINDOW_MS);
+        assert!(stats.daily.api_keys.is_empty());
+        assert_eq!(usage(&stats.weekly, "key-a"), (2, 300));
+        assert_eq!(usage(&stats.monthly, "key-a"), (3, 700));
+    }
+
+    #[test]
     fn extracts_usage_from_codex_response_completed_payload() {
         let payload = json!({
             "type": "response.completed",
@@ -22342,6 +22783,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             id: "key-1".to_string(),
             label: "Key".to_string(),
             provider_gateway: None,
+            inherit_account_pool: true,
             account_ids: Vec::new(),
             model_prefix: Some("team".to_string()),
             allowed_models: vec!["gpt-*".to_string()],
@@ -22372,6 +22814,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             id: "key-1".to_string(),
             label: "Key".to_string(),
             provider_gateway: None,
+            inherit_account_pool: true,
             account_ids: Vec::new(),
             model_prefix: None,
             allowed_models: Vec::new(),
@@ -22408,6 +22851,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                 model_capabilities: HashMap::new(),
                 vision_routing_model: None,
             }),
+            inherit_account_pool: false,
             account_ids: vec!["account-1".to_string()],
             model_prefix: None,
             allowed_models: Vec::new(),
@@ -23620,6 +24064,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             id: "client-key-1".to_string(),
             label: "Client".to_string(),
             provider_gateway: None,
+            inherit_account_pool: true,
             account_ids: Vec::new(),
             model_prefix: None,
             allowed_models: Vec::new(),
@@ -23659,6 +24104,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             id: "client-key-1".to_string(),
             label: "Client".to_string(),
             provider_gateway: None,
+            inherit_account_pool: true,
             account_ids: Vec::new(),
             model_prefix: None,
             allowed_models: Vec::new(),
@@ -23734,6 +24180,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             id: "client-key-1".to_string(),
             label: "Client".to_string(),
             provider_gateway: None,
+            inherit_account_pool: true,
             account_ids: Vec::new(),
             model_prefix: None,
             allowed_models: Vec::new(),
@@ -23795,6 +24242,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             id: "client-key-1".to_string(),
             label: "Client".to_string(),
             provider_gateway: None,
+            inherit_account_pool: true,
             account_ids: Vec::new(),
             model_prefix: None,
             allowed_models: Vec::new(),
@@ -24211,6 +24659,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             provider_gateway_bound_oauth_account_id_for_account(&account);
         let mut api_key = build_local_access_api_key(Some("Bound OAuth Local Gateway"));
         api_key.key = collection.api_key.clone();
+        api_key.inherit_account_pool = Some(false);
         api_key.account_ids = vec![account.id.clone()];
         collection.api_keys = vec![api_key];
 
@@ -24283,6 +24732,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         collection.api_keys.clear();
         let mut api_key = build_local_access_api_key(Some("Temporary"));
         api_key.key = "local-test-key".to_string();
+        api_key.inherit_account_pool = Some(false);
         api_key.account_ids = vec![account.id.clone()];
         collection.api_keys.push(api_key);
 
@@ -24412,6 +24862,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
 
         let mut collection = test_local_access_collection(vec![account_id.clone()]);
         let mut api_key = build_local_access_api_key(Some("Provider Gateway"));
+        api_key.inherit_account_pool = Some(false);
         api_key.provider_gateway = Some(CodexLocalAccessProviderGateway {
             base_url: "https://api.deepseek.com/v1".to_string(),
             api_key: "sk-test".to_string(),
@@ -24462,6 +24913,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         collection.bound_oauth_account_id =
             provider_gateway_bound_oauth_account_id_for_account(&account);
         let mut api_key = build_local_access_api_key(Some("Provider Gateway"));
+        api_key.inherit_account_pool = Some(false);
         api_key.provider_gateway = Some(CodexLocalAccessProviderGateway {
             base_url: "https://api.deepseek.com/v1".to_string(),
             api_key: "sk-test".to_string(),

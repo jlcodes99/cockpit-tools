@@ -3073,6 +3073,8 @@ pub async fn codex_local_access_update_api_key(
     model_prefix: Option<String>,
     allowed_models: Option<Vec<String>>,
     excluded_models: Option<Vec<String>>,
+    account_ids: Option<Vec<String>>,
+    inherit_account_pool: Option<bool>,
 ) -> Result<CodexLocalAccessState, String> {
     codex_local_access::update_local_access_api_key(
         api_key_id,
@@ -3081,6 +3083,8 @@ pub async fn codex_local_access_update_api_key(
         model_prefix,
         allowed_models,
         excluded_models,
+        account_ids,
+        inherit_account_pool,
     )
     .await
 }

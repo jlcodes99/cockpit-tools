@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test:codex-api-key-scope": "node --test src/utils/codexApiKeyAccountScope.test.ts",
     "typecheck": "tsc --noEmit",
     "prebuild": "npm run typecheck",
     "build": "npm run sync-version && tsc && vite build",
