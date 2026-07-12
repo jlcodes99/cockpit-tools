@@ -54,7 +54,8 @@ import {
 } from '../utils/accountsOverviewFilterPersistence';
 import {
   readAccountsViewMode,
-  writeAccountsViewMode,
+  readCodexOverviewLayoutMode,
+  writeAccountsViewModeSafeForCodex,
   type AccountsViewMode,
 } from '../utils/accountsViewModePersistence';
 
@@ -856,12 +857,24 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
 
   // ─── View Mode（列表 / 卡片平铺）──────────────────────────────────────
   // 与「筛选持久化」开关解耦：布局偏好始终从专用键恢复，更新后不丢
-  const [viewMode, setViewMode] = useState<ViewMode>(() =>
-    readAccountsViewMode(filterPersistenceScope, {
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (filterPersistenceScope === 'codex') {
+      // Codex 优先读 overview（含历史 overview_layout_mode），避免首屏闪回 grid
+      const overview = readCodexOverviewLayoutMode();
+      if (overview === 'list' || overview === 'grid') {
+        return overview;
+      }
+      // compact 时 viewMode 仅作退出 compact 后的 list/grid 记忆
+      return readAccountsViewMode('codex', {
+        allowCompact: false,
+        fallback: DEFAULT_VIEW_MODE,
+      });
+    }
+    return readAccountsViewMode(filterPersistenceScope, {
       allowCompact: false,
       fallback: DEFAULT_VIEW_MODE,
-    }),
-  );
+    });
+  });
 
   // ─── Search & Filter ──────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState(
@@ -905,7 +918,8 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
 
   useEffect(() => {
     // 始终写入专用 view mode 键；筛选持久化开启时再同步旧 filter 字段（兼容备份/迁移）
-    writeAccountsViewMode(filterPersistenceScope, viewMode, {
+    // Codex 在 compact 时不会被 list/grid 写回覆盖 overview 键
+    writeAccountsViewModeSafeForCodex(filterPersistenceScope, viewMode, {
       syncFilterField: filterPersistenceEnabled,
     });
   }, [filterPersistenceEnabled, filterPersistenceScope, viewMode]);

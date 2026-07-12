@@ -717,14 +717,13 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
   }
 
   const loadPersistedOverviewFilters = useCallback(() => {
-    const savedViewMode = readAccountsOverviewFilterField<unknown>(
-      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-      ANTIGRAVITY_FILTER_FIELD_VIEW_MODE,
-      'grid',
+    // 视图模式始终从专用键恢复（含 list/平铺/紧凑），不依赖筛选开关
+    setViewMode(
+      readAccountsViewMode(ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE, {
+        allowCompact: true,
+        fallback: 'grid',
+      }),
     )
-    if (savedViewMode === 'grid' || savedViewMode === 'list' || savedViewMode === 'compact') {
-      setViewMode(savedViewMode)
-    }
 
     const savedFilterTypes = readAccountsOverviewFilterField<unknown>(
       ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
@@ -797,7 +796,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
   }, [])
 
   const resetOverviewFilters = useCallback(() => {
-    setViewMode('grid')
+    // 只重置筛选/排序，不碰列表/平铺视图偏好
     setFilterTypes([])
     setTagFilter([])
     setGroupByTag(false)
@@ -815,7 +814,14 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
       if (nextFilterPersistenceEnabled) {
         loadPersistedOverviewFilters()
       } else {
+        // 关闭筛选持久化：清筛选条件，但保留视图模式
         resetOverviewFilters()
+        setViewMode(
+          readAccountsViewMode(ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE, {
+            allowCompact: true,
+            fallback: 'grid',
+          }),
+        )
       }
       setPrivacyModeEnabled(isPrivacyModeEnabledByDefault())
     }

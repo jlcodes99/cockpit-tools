@@ -116,16 +116,24 @@ export function writeAccountsViewMode(
   }
 }
 
-/** Codex 专用：合并所有历史键解析布局模式 */
+/**
+ * Codex 专用读取：优先 overview_layout_mode（含 compact），
+ * 再读专用 accounts_view_mode / 筛选字段，避免 hook 写入的 list/grid 盖住 compact。
+ */
 export function readCodexOverviewLayoutMode(): AccountsViewMode {
-  return readAccountsViewMode('codex', {
-    allowCompact: true,
-    fallback: 'grid',
-    extraLegacyKeys: [
-      CODEX_OVERVIEW_LAYOUT_MODE_KEY,
-      'agtools.codex.accounts_view_mode',
-    ],
-  });
+  const allowCompact = true;
+  const candidates: unknown[] = [
+    safeGet(CODEX_OVERVIEW_LAYOUT_MODE_KEY),
+    safeGet(getAccountsViewModeStorageKey('codex')),
+    readAccountsOverviewFilterField<unknown>('codex', FILTER_FIELD_VIEW_MODE, null),
+    // 与专用键同名历史路径（兼容旧数据）
+    safeGet('agtools.codex.accounts_view_mode'),
+  ];
+  for (const raw of candidates) {
+    const mode = normalizeAccountsViewMode(raw, { allowCompact });
+    if (mode) return mode;
+  }
+  return 'grid';
 }
 
 export function writeCodexOverviewLayoutMode(mode: AccountsViewMode): void {
@@ -133,6 +141,39 @@ export function writeCodexOverviewLayoutMode(mode: AccountsViewMode): void {
     normalizeAccountsViewMode(mode, { allowCompact: true }) ?? 'grid';
   writeAccountsViewMode('codex', normalized, {
     syncFilterField: true,
-    extraKeys: [CODEX_OVERVIEW_LAYOUT_MODE_KEY, 'agtools.codex.accounts_view_mode'],
+    extraKeys: [CODEX_OVERVIEW_LAYOUT_MODE_KEY],
   });
+}
+
+/**
+ * 通用平台写入 list/grid 时：若 Codex 当前为 compact，不要用 list/grid 覆盖 overview 键。
+ *（Codex 页 hook 与 overviewLayoutMode 双写时的保护）
+ */
+export function writeAccountsViewModeSafeForCodex(
+  rawScope: string,
+  mode: AccountsViewMode,
+  options: { syncFilterField?: boolean } = {},
+): void {
+  const scope = normalizeAccountsOverviewScope(rawScope);
+  if (scope === 'codex') {
+    const currentOverview = normalizeAccountsViewMode(
+      safeGet(CODEX_OVERVIEW_LAYOUT_MODE_KEY),
+      { allowCompact: true },
+    );
+    if (currentOverview === 'compact' && mode !== 'compact') {
+      // 仅更新 list/grid 备用键，保留 compact 作为当前布局
+      safeSet(getAccountsViewModeStorageKey(scope), mode === 'list' ? 'list' : 'grid');
+      if (options.syncFilterField) {
+        writeAccountsOverviewFilterField(
+          scope,
+          FILTER_FIELD_VIEW_MODE,
+          mode === 'list' ? 'list' : 'grid',
+        );
+      }
+      return;
+    }
+    writeCodexOverviewLayoutMode(mode);
+    return;
+  }
+  writeAccountsViewMode(rawScope, mode, options);
 }

@@ -27,6 +27,7 @@ async function main() {
     writeAccountsViewMode,
     readCodexOverviewLayoutMode,
     writeCodexOverviewLayoutMode,
+    writeAccountsViewModeSafeForCodex,
     getAccountsViewModeStorageKey,
     CODEX_OVERVIEW_LAYOUT_MODE_KEY,
     normalizeAccountsViewMode,
@@ -93,6 +94,28 @@ async function main() {
   writeAccountsViewMode('gemini', 'list', { syncFilterField: false });
   assert(readAccountsViewMode('gemini') === 'list', 'must not wipe list');
 
+  // --- Codex compact not clobbered by list/grid write from shared hook ---
+  store.clear();
+  writeCodexOverviewLayoutMode('compact');
+  assert(readCodexOverviewLayoutMode() === 'compact', 'compact written');
+  writeAccountsViewModeSafeForCodex('codex', 'list', { syncFilterField: true });
+  assert(
+    readCodexOverviewLayoutMode() === 'compact',
+    'compact must survive list write from provider hook',
+  );
+  assert(
+    store.get(CODEX_OVERVIEW_LAYOUT_MODE_KEY) === 'compact',
+    'overview key still compact',
+  );
+
+  // --- only overview key has list (legacy after update) ---
+  store.clear();
+  store.set(CODEX_OVERVIEW_LAYOUT_MODE_KEY, 'list');
+  assert(
+    readCodexOverviewLayoutMode() === 'list',
+    'list from overview key alone must restore',
+  );
+
   console.log('PASS accounts view mode persistence tests');
   console.log(
     JSON.stringify(
@@ -100,6 +123,8 @@ async function main() {
         listPreserved: true,
         codexLegacyMerge: true,
         defaultGridWhenEmpty: true,
+        compactNotClobbered: true,
+        overviewKeyOnlyList: true,
       },
       null,
       2,
