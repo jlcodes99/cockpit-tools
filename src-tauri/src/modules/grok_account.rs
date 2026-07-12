@@ -785,16 +785,34 @@ fn build_auth_entry_for_export(account: &GrokAccount) -> (String, Map<String, Va
 }
 
 /// 构造官方 CLI 可识别的 auth.json entry
+///
+/// 字段以本机 `~/.grok/auth.json` 实测为准（2026 官方 OIDC 槽）：
+/// `key`(access), `refresh_token`, `expires_at`, `auth_mode`, `create_time`,
+/// `user_id`, `email`, `first_name`, `last_name`, `principal_id`, `principal_type`,
+/// `team_id`, `coding_data_retention_opt_out`, `oidc_issuer`, `oidc_client_id`,
+/// 可选 `profile_image_asset_id`。
+///
+/// 写入策略：先保留 `auth_raw` 中未知/未来字段，再用账号当前凭据覆盖官方已知字段，
+/// 避免切号时丢字段或把旧 token 写回。
 fn build_auth_entry(account: &GrokAccount) -> (String, Map<String, Value>) {
     let client_id = account
         .oidc_client_id
         .as_deref()
         .filter(|s| !s.is_empty())
         .unwrap_or(GROK_OIDC_CLIENT_ID);
-    // 官方 Grok CLI 单槽 key：issuer::client_id
+    // 官方 Grok CLI 单槽 key：issuer::client_id（切号只替换此槽，不改 map 结构名）
     let key = format!("{}{}", GROK_OIDC_SCOPE_PREFIX, client_id);
 
-    let mut entry = Map::new();
+    // 1) 以导入时的原始 entry 为底，保留官方可能新增的未知字段
+    let mut entry = match &account.auth_raw {
+        Some(Value::Object(raw)) => raw.clone(),
+        _ => Map::new(),
+    };
+    // 官方 access 字段名是 `key`，不是 access_token；清掉易混淆别名
+    entry.remove("access_token");
+    entry.remove("token");
+
+    // 2) 用账号当前态覆盖已知字段（token 刷新后必须用新值）
     entry.insert("key".into(), Value::String(account.access_token.clone()));
     entry.insert(
         "auth_mode".into(),
@@ -807,7 +825,8 @@ fn build_auth_entry(account: &GrokAccount) -> (String, Map<String, Value>) {
     );
     if let Some(v) = &account.create_time {
         entry.insert("create_time".into(), Value::String(v.clone()));
-    } else {
+    } else if !entry.contains_key("create_time") {
+        // 仅当原始 entry 也没有时才补，避免无意义改写 create_time
         entry.insert(
             "create_time".into(),
             Value::String(
@@ -820,7 +839,9 @@ fn build_auth_entry(account: &GrokAccount) -> (String, Map<String, Value>) {
     if let Some(v) = &account.user_id {
         entry.insert("user_id".into(), Value::String(v.clone()));
     }
-    entry.insert("email".into(), Value::String(account.email.clone()));
+    if !account.email.is_empty() && !account.email.starts_with("unknown@") {
+        entry.insert("email".into(), Value::String(account.email.clone()));
+    }
     if let Some(v) = &account.first_name {
         entry.insert("first_name".into(), Value::String(v.clone()));
     }
@@ -830,35 +851,34 @@ fn build_auth_entry(account: &GrokAccount) -> (String, Map<String, Value>) {
     if let Some(v) = &account.profile_image_asset_id {
         entry.insert("profile_image_asset_id".into(), Value::String(v.clone()));
     }
-    entry.insert(
-        "principal_type".into(),
-        Value::String("User".into()),
-    );
+    // 本机官方文件固定 principal_type = "User"
+    if !entry.contains_key("principal_type") {
+        entry.insert("principal_type".into(), Value::String("User".into()));
+    }
     if let Some(v) = account.principal_id.as_ref().or(account.user_id.as_ref()) {
         entry.insert("principal_id".into(), Value::String(v.clone()));
     }
     if let Some(v) = &account.team_id {
         entry.insert("team_id".into(), Value::String(v.clone()));
     }
-    entry.insert(
-        "coding_data_retention_opt_out".into(),
-        Value::Bool(account.coding_data_retention_opt_out.unwrap_or(false)),
-    );
+    if let Some(flag) = account.coding_data_retention_opt_out {
+        entry.insert("coding_data_retention_opt_out".into(), Value::Bool(flag));
+    } else if !entry.contains_key("coding_data_retention_opt_out") {
+        entry.insert("coding_data_retention_opt_out".into(), Value::Bool(false));
+    }
     if let Some(v) = &account.refresh_token {
         entry.insert("refresh_token".into(), Value::String(v.clone()));
     }
-    if let Some(ts) = account.expires_at {
-        entry.insert(
-            "expires_at".into(),
-            Value::String(
-                account
-                    .expires_at_raw
-                    .clone()
-                    .unwrap_or_else(|| expires_at_to_iso(ts)),
-            ),
-        );
-    } else if let Some(raw) = &account.expires_at_raw {
-        entry.insert("expires_at".into(), Value::String(raw.clone()));
+    // 优先保留官方原始 expires_at 字符串（如 2026-07-12T09:37:17.769Z），避免改写小数位
+    if let Some(raw) = account
+        .expires_at_raw
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        entry.insert("expires_at".into(), Value::String(raw.to_string()));
+    } else if let Some(ts) = account.expires_at {
+        entry.insert("expires_at".into(), Value::String(expires_at_to_iso(ts)));
     }
     entry.insert(
         "oidc_issuer".into(),
@@ -895,6 +915,9 @@ pub fn inject_account(account_id: &str) -> Result<GrokAccount, String> {
     account.update_last_used();
     account.status = Some("active".into());
     account.status_reason = None;
+    // 与刚写入的 entry 对齐，避免 cockpit 内 auth_raw 仍是旧 token
+    let (_, written) = build_auth_entry(&account);
+    account.auth_raw = Some(Value::Object(written));
     save_account(&account)?;
     set_current_account_id(Some(&account.id))?;
 
@@ -1391,6 +1414,9 @@ pub async fn refresh_account_token(account_id: &str) -> Result<GrokAccount, Stri
                 account.reauth_reason = None;
                 account.status = Some("active".into());
                 enrich_from_token(&mut account);
+                // 同步 auth_raw，保证后续 build_auth_entry 覆盖的是新 token
+                let (_, fresh_entry) = build_auth_entry(&account);
+                account.auth_raw = Some(Value::Object(fresh_entry));
 
                 // refresh_token 单次有效：当前注入账号必须同步写回 auth.json
                 if resolve_current_account_id().as_deref() == Some(account_id) {
@@ -1872,7 +1898,7 @@ mod tests {
 
     #[test]
     fn auth_entry_roundtrip_key() {
-        let mut account = GrokAccount {
+        let account = GrokAccount {
             id: "grok_test".into(),
             email: "a@b.com".into(),
             name: None,
@@ -1880,7 +1906,7 @@ mod tests {
             last_name: Some("B".into()),
             user_id: Some("uid".into()),
             principal_id: Some("uid".into()),
-            team_id: None,
+            team_id: Some("team".into()),
             profile_image_asset_id: None,
             tier: Some(4),
             plan_type: Some("SUPERGROK".into()),
@@ -1889,14 +1915,113 @@ mod tests {
             refresh_token: Some("rt".into()),
             scope: None,
             expires_at: Some(now_ts() + 3600),
-            expires_at_raw: None,
+            expires_at_raw: Some("2026-07-12T09:37:17.769Z".into()),
             oidc_issuer: Some(GROK_OIDC_ISSUER.into()),
             oidc_client_id: Some(GROK_OIDC_CLIENT_ID.into()),
             auth_entry_key: None,
             auth_mode_raw: Some("oidc".into()),
-            create_time: None,
+            create_time: Some("2026-07-12T03:34:46.853976Z".into()),
             coding_data_retention_opt_out: Some(false),
             has_grok_code_access: Some(true),
+            quota: None,
+            usage_updated_at: None,
+            token_updated_at: None,
+            status: None,
+            status_reason: None,
+            requires_reauth: None,
+            reauth_reason: None,
+            quota_query_last_error: None,
+            quota_query_last_error_at: None,
+            subscription_query_last_success_at: None,
+            // 模拟官方未来可能多出的字段
+            auth_raw: Some(json!({
+                "key": "old_tok",
+                "refresh_token": "old_rt",
+                "future_field": "keep-me",
+                "auth_mode": "oidc"
+            })),
+            userinfo_raw: None,
+            billing_raw: None,
+            user_raw: None,
+            tags: None,
+            account_note: None,
+            created_at: now_ts(),
+            last_used: now_ts(),
+        };
+        let (key, entry) = build_auth_entry(&account);
+        assert_eq!(
+            key,
+            format!("{}{}", GROK_OIDC_SCOPE_PREFIX, GROK_OIDC_CLIENT_ID)
+        );
+        // 新 token 覆盖 auth_raw 旧值
+        assert_eq!(entry.get("key").and_then(|v| v.as_str()), Some("tok"));
+        assert_eq!(
+            entry.get("refresh_token").and_then(|v| v.as_str()),
+            Some("rt")
+        );
+        // 未知字段保留
+        assert_eq!(
+            entry.get("future_field").and_then(|v| v.as_str()),
+            Some("keep-me")
+        );
+        // 官方 expires 原始串优先，避免改写成 .769000Z
+        assert_eq!(
+            entry.get("expires_at").and_then(|v| v.as_str()),
+            Some("2026-07-12T09:37:17.769Z")
+        );
+        assert_eq!(entry.get("team_id").and_then(|v| v.as_str()), Some("team"));
+        assert_eq!(
+            entry.get("principal_type").and_then(|v| v.as_str()),
+            Some("User")
+        );
+        assert!(!entry.contains_key("access_token"));
+    }
+
+    #[test]
+    fn local_auth_json_field_set_parity() {
+        // 与本机官方登录产物字段集对齐（不含密钥内容）
+        let local_fields = [
+            "auth_mode",
+            "coding_data_retention_opt_out",
+            "create_time",
+            "email",
+            "expires_at",
+            "first_name",
+            "key",
+            "last_name",
+            "oidc_client_id",
+            "oidc_issuer",
+            "principal_id",
+            "principal_type",
+            "refresh_token",
+            "team_id",
+            "user_id",
+        ];
+        let account = GrokAccount {
+            id: "grok_uid".into(),
+            email: "flor@example.com".into(),
+            name: None,
+            first_name: Some("Baker".into()),
+            last_name: Some("David".into()),
+            user_id: Some("7f619ed9-4bf2-45aa-ab6a-53e13b48f767".into()),
+            principal_id: Some("7f619ed9-4bf2-45aa-ab6a-53e13b48f767".into()),
+            team_id: Some("15612afe-df6e-49c6-bae9-c6698c9ae1cf".into()),
+            profile_image_asset_id: None,
+            tier: Some(4),
+            plan_type: None,
+            plan_label: None,
+            access_token: "access".into(),
+            refresh_token: Some("refresh".into()),
+            scope: None,
+            expires_at: Some(1),
+            expires_at_raw: Some("2026-07-12T09:37:17.769Z".into()),
+            oidc_issuer: Some(GROK_OIDC_ISSUER.into()),
+            oidc_client_id: Some(GROK_OIDC_CLIENT_ID.into()),
+            auth_entry_key: None,
+            auth_mode_raw: Some("oidc".into()),
+            create_time: Some("2026-07-12T03:34:46.853976Z".into()),
+            coding_data_retention_opt_out: Some(false),
+            has_grok_code_access: None,
             quota: None,
             usage_updated_at: None,
             token_updated_at: None,
@@ -1916,12 +2041,13 @@ mod tests {
             created_at: now_ts(),
             last_used: now_ts(),
         };
-        let (key, entry) = build_auth_entry(&account);
+        let (map_key, entry) = build_auth_entry(&account);
         assert_eq!(
-            key,
-            format!("{}{}", GROK_OIDC_SCOPE_PREFIX, GROK_OIDC_CLIENT_ID)
+            map_key,
+            "https://auth.x.ai::b1a00492-073a-47ea-816f-4c329264a828"
         );
-        assert_eq!(entry.get("key").and_then(|v| v.as_str()), Some("tok"));
-        assert!(entry.get("refresh_token").is_some());
+        for f in local_fields {
+            assert!(entry.contains_key(f), "missing official field: {}", f);
+        }
     }
 }
