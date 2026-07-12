@@ -52,6 +52,11 @@ import {
   setAccountsOverviewFilterPersistenceEnabled,
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
+import {
+  readAccountsViewMode,
+  writeAccountsViewMode,
+  type AccountsViewMode,
+} from '../utils/accountsViewModePersistence';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -86,7 +91,7 @@ export type ExternalImportProgressState = {
   message: string;
   failures: ExternalImportProgressFailure[];
 };
-export type ViewMode = 'grid' | 'list';
+export type ViewMode = AccountsViewMode;
 export type SortDirection = 'asc' | 'desc';
 
 /** 各平台需要提供的 OAuth 服务函数 */
@@ -183,10 +188,6 @@ const DEFAULT_VIEW_MODE: ViewMode = 'grid';
 const normalizeSortDirection = (value: string | null): SortDirection =>
   value === 'asc' ? 'asc' : DEFAULT_SORT_DIRECTION;
 
-const normalizeViewMode = (value: string | null): ViewMode =>
-  value === 'list' ? 'list' : DEFAULT_VIEW_MODE;
-
-const FILTER_FIELD_VIEW_MODE = 'view_mode';
 const FILTER_FIELD_FILTER_TYPE = 'filter_type';
 const FILTER_FIELD_SORT_BY = 'sort_by';
 const FILTER_FIELD_SORT_DIRECTION = 'sort_direction';
@@ -853,18 +854,14 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     [privacyModeEnabled],
   );
 
-  // ─── View Mode ────────────────────────────────────────────────────────
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    if (!readAccountsOverviewFilterPersistenceEnabled(filterPersistenceScope)) {
-      return DEFAULT_VIEW_MODE;
-    }
-    const saved = readAccountsOverviewFilterField<string | null>(
-      filterPersistenceScope,
-      FILTER_FIELD_VIEW_MODE,
-      null,
-    );
-    return normalizeViewMode(saved);
-  });
+  // ─── View Mode（列表 / 卡片平铺）──────────────────────────────────────
+  // 与「筛选持久化」开关解耦：布局偏好始终从专用键恢复，更新后不丢
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    readAccountsViewMode(filterPersistenceScope, {
+      allowCompact: false,
+      fallback: DEFAULT_VIEW_MODE,
+    }),
+  );
 
   // ─── Search & Filter ──────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState(
@@ -907,11 +904,10 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   });
 
   useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(filterPersistenceScope, FILTER_FIELD_VIEW_MODE);
-      return;
-    }
-    writeAccountsOverviewFilterField(filterPersistenceScope, FILTER_FIELD_VIEW_MODE, viewMode);
+    // 始终写入专用 view mode 键；筛选持久化开启时再同步旧 filter 字段（兼容备份/迁移）
+    writeAccountsViewMode(filterPersistenceScope, viewMode, {
+      syncFilterField: filterPersistenceEnabled,
+    });
   }, [filterPersistenceEnabled, filterPersistenceScope, viewMode]);
 
   useEffect(() => {

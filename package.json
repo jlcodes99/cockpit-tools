@@ -15,7 +15,8 @@
     "pretauri": "npm run typecheck",
     "tauri": "node scripts/tauri.cjs",
     "sync-version": "node scripts/sync-version.js",
-    "test:platform-layout": "node scripts/test-platform-layout-persist.mjs"
+    "test:platform-layout": "node scripts/test-platform-layout-persist.mjs",
+    "test:accounts-view-mode": "node scripts/test-accounts-view-mode-persist.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

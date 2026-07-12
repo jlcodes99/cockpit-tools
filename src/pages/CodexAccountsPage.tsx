@@ -135,6 +135,11 @@ import { CodexModelProviderManager } from "../components/codex/CodexModelProvide
 import { CodexSpeedSelect } from "../components/codex/CodexSpeedSelect";
 import { QuickSettingsPopover } from "../components/QuickSettingsPopover";
 import { useProviderAccountsPage } from "../hooks/useProviderAccountsPage";
+import {
+  readCodexOverviewLayoutMode,
+  writeCodexOverviewLayoutMode,
+  type AccountsViewMode,
+} from "../utils/accountsViewModePersistence";
 import { usePlatformRuntimeSupport } from "../hooks/usePlatformRuntimeSupport";
 import {
   MultiSelectFilterDropdown,
@@ -336,8 +341,6 @@ function inferCodexAccountProviderMode(
   }
   return "custom";
 }
-const CODEX_OVERVIEW_LAYOUT_MODE_KEY =
-  "agtools.codex.accounts.overview_layout_mode";
 const CODEX_LOCAL_ACCESS_EXPANDED_KEY =
   "agtools.codex.local_access_entry_expanded.v1";
 const CODEX_LOCAL_ACCESS_ADDRESS_KIND_KEY =
@@ -357,7 +360,7 @@ const GROUP_FILTER_FIELD = CODEX_OVERVIEW_FILTER_FIELDS.groupFilter;
 const ACTIVE_GROUP_ID_FIELD = CODEX_OVERVIEW_FILTER_FIELDS.activeGroupId;
 const OAUTH_BINDING_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
-type CodexOverviewLayoutMode = "compact" | "list" | "grid";
+type CodexOverviewLayoutMode = AccountsViewMode;
 type OAuthBindingTargetKind = "api_key_account" | "local_access";
 type OAuthBindingQuotaReserveFieldErrors = {
   hourlyPercent?: string;
@@ -699,13 +702,6 @@ function resolveApiKeyUsageMode(
 
 interface CodexOverviewGeneralConfig {
   codex_local_access_entry_visible?: boolean;
-}
-
-function normalizeCodexOverviewLayoutMode(
-  value: string | null,
-): CodexOverviewLayoutMode | null {
-  if (value === "compact" || value === "list" || value === "grid") return value;
-  return null;
 }
 
 function isHttpLikeUrl(value: string): boolean {
@@ -1097,22 +1093,9 @@ export function CodexAccountsPage() {
     setGroupFilter([]);
   }, []);
 
+  // 列表 / 平铺(网格) / 紧凑：合并全部历史键，避免更新后默认 grid 覆盖用户选择
   const [overviewLayoutMode, setOverviewLayoutMode] =
-    useState<CodexOverviewLayoutMode>(() => {
-      try {
-        const saved = normalizeCodexOverviewLayoutMode(
-          localStorage.getItem(CODEX_OVERVIEW_LAYOUT_MODE_KEY),
-        );
-        if (saved) return saved;
-        const legacy = normalizeCodexOverviewLayoutMode(
-          localStorage.getItem("agtools.codex.accounts_view_mode"),
-        );
-        if (legacy === "list" || legacy === "grid") return legacy;
-      } catch {
-        // ignore persistence failures
-      }
-      return "grid";
-    });
+    useState<CodexOverviewLayoutMode>(() => readCodexOverviewLayoutMode());
   const [
     localAccessGatewayGuideDismissed,
     setLocalAccessGatewayGuideDismissed,
@@ -2337,16 +2320,13 @@ export function CodexAccountsPage() {
   ]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CODEX_OVERVIEW_LAYOUT_MODE_KEY, overviewLayoutMode);
-    } catch {
-      // ignore persistence failures
-    }
+    writeCodexOverviewLayoutMode(overviewLayoutMode);
   }, [overviewLayoutMode]);
 
   const handleChangeOverviewLayoutMode = useCallback(
     (mode: CodexOverviewLayoutMode) => {
       setOverviewLayoutMode(mode);
+      // list/grid 与 hook 内 viewMode 同步；compact 仅概览模式
       if (mode === "list" || mode === "grid") {
         setViewMode(mode);
       }
@@ -2354,10 +2334,12 @@ export function CodexAccountsPage() {
     [setViewMode],
   );
 
+  // 仅在 overview 为 list/grid 时把 viewMode 对齐到 overview；
+  // 禁止用默认 grid 覆盖用户已持久化的 list（旧逻辑会在键迁移时打回原始布局）
   useEffect(() => {
-    if (overviewLayoutMode !== "compact" && viewMode !== overviewLayoutMode) {
-      setViewMode(overviewLayoutMode);
-    }
+    if (overviewLayoutMode === "compact") return;
+    if (viewMode === overviewLayoutMode) return;
+    setViewMode(overviewLayoutMode);
   }, [overviewLayoutMode, setViewMode, viewMode]);
 
   const toggleFilterTypeValue = useCallback((value: string) => {

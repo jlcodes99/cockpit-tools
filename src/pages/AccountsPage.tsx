@@ -144,6 +144,10 @@ import {
   removeAccountsOverviewFilterField,
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence'
+import {
+  readAccountsViewMode,
+  writeAccountsViewMode,
+} from '../utils/accountsViewModePersistence'
 import { useAntigravityRuntimeTarget } from '../hooks/useAntigravityRuntimeTarget'
 
 interface AccountsPageProps {
@@ -347,20 +351,13 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     initialFilterPersistenceEnabled,
   )
 
-  // View mode
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    if (!initialFilterPersistenceEnabled) {
-      return 'grid'
-    }
-    const saved = readAccountsOverviewFilterField<unknown>(
-      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-      ANTIGRAVITY_FILTER_FIELD_VIEW_MODE,
-      'grid',
-    )
-    return saved === 'grid' || saved === 'list' || saved === 'compact'
-      ? saved
-      : 'grid'
-  })
+  // View mode（列表 / 平铺 / 紧凑）：始终恢复，不依赖筛选持久化开关
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    readAccountsViewMode(ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE, {
+      allowCompact: true,
+      fallback: 'grid',
+    }),
+  )
   const [privacyModeEnabled, setPrivacyModeEnabled] = useState<boolean>(() =>
     isPrivacyModeEnabledByDefault()
   )
@@ -852,18 +849,9 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
   }, [loadPersistedOverviewFilters, resetOverviewFilters])
 
   useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_VIEW_MODE,
-      )
-      return
-    }
-    writeAccountsOverviewFilterField(
-      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-      ANTIGRAVITY_FILTER_FIELD_VIEW_MODE,
-      viewMode,
-    )
+    writeAccountsViewMode(ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE, viewMode, {
+      syncFilterField: filterPersistenceEnabled,
+    })
   }, [filterPersistenceEnabled, viewMode])
 
   useEffect(() => {

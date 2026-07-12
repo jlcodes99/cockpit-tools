@@ -87,10 +87,13 @@ import {
   removeAccountsOverviewFilterField,
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
+import {
+  readAccountsViewMode,
+  writeAccountsViewMode,
+} from '../utils/accountsViewModePersistence';
 
 const QODER_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.qoder.flow_notice_collapsed';
 const QODER_FILTER_PERSISTENCE_SCOPE = normalizeAccountsOverviewScope('qoder');
-const QODER_FILTER_FIELD_VIEW_MODE = 'view_mode';
 const QODER_FILTER_FIELD_SORT_BY = 'sort_by';
 const QODER_FILTER_FIELD_SORT_DIRECTION = 'sort_direction';
 const QODER_FILTER_FIELD_FILTER_TYPES = 'filter_types';
@@ -255,15 +258,12 @@ export function QoderAccountsPage() {
     initialFilterPersistenceEnabled,
   );
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
-    initialFilterPersistenceEnabled
-      ? normalizeQoderViewMode(
-          readAccountsOverviewFilterField<unknown>(
-            QODER_FILTER_PERSISTENCE_SCOPE,
-            QODER_FILTER_FIELD_VIEW_MODE,
-            'grid',
-          ),
-        )
-      : 'grid',
+    normalizeQoderViewMode(
+      readAccountsViewMode(QODER_FILTER_PERSISTENCE_SCOPE, {
+        allowCompact: false,
+        fallback: 'grid',
+      }),
+    ),
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTypes, setFilterTypes] = useState<string[]>(() =>
@@ -376,18 +376,9 @@ export function QoderAccountsPage() {
   }, []);
 
   useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(
-        QODER_FILTER_PERSISTENCE_SCOPE,
-        QODER_FILTER_FIELD_VIEW_MODE,
-      );
-      return;
-    }
-    writeAccountsOverviewFilterField(
-      QODER_FILTER_PERSISTENCE_SCOPE,
-      QODER_FILTER_FIELD_VIEW_MODE,
-      viewMode,
-    );
+    writeAccountsViewMode(QODER_FILTER_PERSISTENCE_SCOPE, viewMode, {
+      syncFilterField: filterPersistenceEnabled,
+    });
   }, [filterPersistenceEnabled, viewMode]);
 
   useEffect(() => {
