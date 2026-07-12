@@ -5286,15 +5286,17 @@
     "title": "Grok CLI 账号",
     "subtitle": "管理 SuperGrok 账号，一键切号写入 ~/.grok/auth.json，并实时刷新额度",
     "empty": "暂无 Grok 账号。可从本机 auth.json 导入，或 Device OAuth 登录。",
-    "flowNotice": "切号原子写入 ~/.grok/auth.json（支持 GROK_HOME；兼容 Windows / macOS / Linux）。额度来自 cli-chat-proxy /v1/billing。refresh_token 单次有效，刷新后自动回写。",
+    "flowNotice": "切号原子写入 ~/.grok/auth.json（支持 GROK_HOME；兼容 Windows / macOS / Linux）。额度来自 cli-chat-proxy /v1/billing?format=credits（及 /v1/user?include=subscription）。refresh_token 单次有效，刷新后自动回写。",
     "quota": {
       "noData": "暂无额度数据，请刷新",
       "periodEnd": "账期结束",
-      "exhausted": "额度已用尽"
+      "exhausted": "额度已用尽",
+      "monthly": "月额度"
     },
     "codeAccess": {
       "yes": "Grok Code 可用",
-      "no": "无 Code 权限"
+      "no": "无 Code 权限",
+      "label": "Grok Code"
     },
     "oauth": {
       "success": "授权成功，账号已导入并可切换到 Grok CLI",

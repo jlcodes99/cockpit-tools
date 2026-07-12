@@ -267,7 +267,8 @@
     "switchClassicLayoutConfirm": "Přepnout nyní",
     "2faManager": "Správa 2FA",
     "apiRelay": "API relay",
-    "claude": "Claude"
+    "claude": "Claude",
+    "grok": "Grok CLI"
   },
   "sponsors": {
     "pageTitle": "Sponzoři",
@@ -5279,6 +5280,37 @@
       "labelOverridePlaceholder": "Název v nabídce",
       "supports1mLabel": "Deklarovat 1M",
       "supports1mShort": "1M kontext"
+    }
+  },
+  "grok": {
+    "title": "Grok CLI Accounts",
+    "subtitle": "Manage SuperGrok accounts, switch into ~/.grok/auth.json, refresh live billing quota",
+    "empty": "No Grok accounts yet. Import local auth.json or sign in via device OAuth.",
+    "flowNotice": "Switch writes official auth.json (GROK_HOME aware; Windows/macOS/Linux). Quota from cli-chat-proxy /v1/billing?format=credits. refresh_token is single-use and persisted after refresh.",
+    "quota": {
+      "noData": "No quota data yet",
+      "periodEnd": "Period ends",
+      "exhausted": "Quota exhausted",
+      "monthly": "Monthly / credits"
+    },
+    "codeAccess": {
+      "label": "Grok Code",
+      "yes": "Grok Code enabled",
+      "no": "No code access"
+    },
+    "oauth": {
+      "success": "Signed in. Account imported and ready to switch.",
+      "hint": "Complete SuperGrok sign-in with xAI device code",
+      "start": "Start login",
+      "open": "Open auth page",
+      "polling": "Waiting for authorization…"
+    },
+    "addModal": {
+      "title": "Add Grok account",
+      "local": "Import local",
+      "localDesc": "Read ~/.grok/auth.json (or GROK_HOME)",
+      "importLocal": "Import local session",
+      "pickJson": "Choose JSON file"
     }
   }
 }

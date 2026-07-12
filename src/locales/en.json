@@ -5286,15 +5286,17 @@
     "title": "Grok CLI Accounts",
     "subtitle": "Manage SuperGrok accounts, switch into ~/.grok/auth.json, refresh live billing quota",
     "empty": "No Grok accounts yet. Import local auth.json or sign in via device OAuth.",
-    "flowNotice": "Switch writes official auth.json (GROK_HOME aware; Windows/macOS/Linux). Quota from cli-chat-proxy /v1/billing. refresh_token is single-use and persisted after refresh.",
+    "flowNotice": "Switch writes official auth.json (GROK_HOME aware; Windows/macOS/Linux). Quota from cli-chat-proxy /v1/billing?format=credits (+ /v1/user?include=subscription). refresh_token is single-use and persisted after refresh.",
     "quota": {
       "noData": "No quota data yet",
       "periodEnd": "Period ends",
-      "exhausted": "Quota exhausted"
+      "exhausted": "Quota exhausted",
+      "monthly": "Monthly / credits"
     },
     "codeAccess": {
       "yes": "Grok Code enabled",
-      "no": "No code access"
+      "no": "No code access",
+      "label": "Grok Code"
     },
     "oauth": {
       "success": "Signed in. Account imported and ready to switch.",

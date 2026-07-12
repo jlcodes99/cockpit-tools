@@ -4,7 +4,7 @@
 //! - 配置目录：`GROK_HOME` 或 `~/.grok`（Windows 为 `%USERPROFILE%\.grok`）
 //! - 登录态：`auth.json`，顶层 key 为 `https://auth.x.ai::<client_id>`
 //! - 切号：原子写回官方格式（CLI 会自动热加载，无需重启）
-//! - 额度：`https://cli-chat-proxy.grok.com/v1/billing` + `/v1/user`
+//! - 额度：`https://cli-chat-proxy.grok.com/v1/billing?format=credits` + `/v1/user?include=subscription`
 //! - refresh_token 单次有效：刷新后必须同时回写 cockpit 存储与当前 auth.json
 
 use crate::models::grok::{
@@ -42,7 +42,10 @@ const OIDC_SCOPES: &str =
 
 /// 实时额度（与 grokcli-2api / CLIProxyAPI 一致）
 const CLI_CHAT_PROXY_BASE: &str = "https://cli-chat-proxy.grok.com/v1";
+/// 与官方 grok-cli / 社区客户端请求头版本对齐（额度接口会校验 surface/version）
 const CLI_VERSION: &str = "0.2.97";
+const BILLING_URL_PATH: &str = "/billing?format=credits";
+const USER_URL_PATH: &str = "/user?include=subscription";
 const TOKEN_REFRESH_SKEW_SECONDS: i64 = 5 * 60;
 
 lazy_static::lazy_static! {
@@ -937,8 +940,18 @@ fn write_auth_json_for_account(account: &GrokAccount) -> Result<(), String> {
     }
 
     let (key, entry) = build_auth_entry(account);
-    let root = json!({ key: entry });
-    let content = serde_json::to_string_pretty(&root)
+    // 合并写入：只替换官方 OIDC 槽，保留其它无关 key（legacy / 手工条目）
+    let mut root_map = if auth_path.exists() {
+        fs::read_to_string(&auth_path)
+            .ok()
+            .and_then(|c| serde_json::from_str::<Value>(&c).ok())
+            .and_then(|v| v.as_object().cloned())
+            .unwrap_or_default()
+    } else {
+        Map::new()
+    };
+    root_map.insert(key, Value::Object(entry));
+    let content = serde_json::to_string_pretty(&Value::Object(root_map))
         .map_err(|e| format!("序列化 auth.json 失败: {}", e))?;
     atomic_write::write_string_atomic(&auth_path, &format!("{}\n", content))
         .map_err(|e| format!("写入 auth.json 失败: {}", e))?;
@@ -1109,22 +1122,137 @@ fn cli_proxy_headers(token: &str) -> reqwest::header::HeaderMap {
     headers
 }
 
+/// 从 credits bag / 任意对象里取 total/used/remaining
+fn credits_bag_usage(bag: &Value) -> Option<(f64, f64)> {
+    if !bag.is_object() {
+        return None;
+    }
+    let total = money_val(
+        bag.get("total")
+            .or_else(|| bag.get("limit"))
+            .or_else(|| bag.get("cap"))
+            .or_else(|| bag.get("allocation"))
+            .or_else(|| bag.get("amount")),
+    );
+    let remaining = money_val(
+        bag.get("remaining")
+            .or_else(|| bag.get("balance"))
+            .or_else(|| bag.get("left")),
+    );
+    let used = money_val(
+        bag.get("used")
+            .or_else(|| bag.get("spent"))
+            .or_else(|| bag.get("consumed")),
+    );
+    if let Some(t) = total {
+        if t > 0.0 {
+            let u = used.unwrap_or_else(|| {
+                remaining
+                    .map(|r| (t - r).max(0.0))
+                    .unwrap_or(0.0)
+            });
+            return Some((t, u.max(0.0)));
+        }
+    }
+    if let Some(r) = remaining {
+        if r >= 0.0 {
+            // 仅知剩余：把 remaining 当 total、used=0，便于展示剩余百分比
+            let t = if r > 0.0 { r } else { 1.0 };
+            let u = if r > 0.0 { 0.0 } else { 1.0 };
+            return Some((t, u));
+        }
+    }
+    None
+}
+
+fn period_str(cfg: &Value, keys: &[&str]) -> Option<String> {
+    for k in keys {
+        if let Some(s) = cfg.get(*k).and_then(|v| v.as_str()) {
+            if !s.is_empty() {
+                return Some(s.to_string());
+            }
+        }
+    }
+    // currentPeriod: { start, end }
+    if let Some(period) = cfg.get("currentPeriod").and_then(|v| v.as_object()) {
+        for k in keys {
+            // keys may be billingPeriodEnd -> try "end"
+            let alt = if k.contains("End") || k.ends_with("end") {
+                "end"
+            } else if k.contains("Start") || k.ends_with("start") {
+                "start"
+            } else {
+                continue;
+            };
+            if let Some(s) = period.get(alt).and_then(|v| v.as_str()) {
+                if !s.is_empty() {
+                    return Some(s.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
 fn normalize_billing(raw: &Value) -> GrokQuota {
     let cfg = raw
         .get("config")
         .filter(|v| v.is_object())
         .unwrap_or(raw);
 
-    let monthly_limit = money_val(cfg.get("monthlyLimit").or_else(|| cfg.get("monthly_limit")));
-    let used = money_val(cfg.get("used"));
+    let mut monthly_limit = money_val(cfg.get("monthlyLimit").or_else(|| cfg.get("monthly_limit")));
+    let mut used = money_val(cfg.get("used"));
     let on_demand_cap = money_val(cfg.get("onDemandCap").or_else(|| cfg.get("on_demand_cap")));
     let on_demand_used =
         money_val(cfg.get("onDemandUsed").or_else(|| cfg.get("on_demand_used")));
     let prepaid =
         money_val(cfg.get("prepaidBalance").or_else(|| cfg.get("prepaid_balance")));
 
+    // format=credits：统一账期常以 onDemand / credits bag 为主（无 monthlyLimit）
+    if monthly_limit.is_none() || monthly_limit == Some(0.0) {
+        if let Some(cap) = on_demand_cap {
+            if cap > 0.0 {
+                monthly_limit = Some(cap);
+                used = Some(on_demand_used.unwrap_or(0.0).max(0.0));
+            } else if cap == 0.0 {
+                // cap=0 常表示免费/促销额度已尽（chat 可能 402 spending-limit）
+                monthly_limit = Some(1.0);
+                used = Some(1.0);
+            }
+        }
+    }
+
+    if monthly_limit.is_none() || monthly_limit == Some(0.0) {
+        let credit_bags = [
+            raw.get("credits"),
+            raw.get("creditBalance"),
+            raw.get("usage"),
+            cfg.get("credits"),
+            cfg.get("includedCredits"),
+            cfg.get("subscriptionCredits"),
+            cfg.get("weeklyCredits"),
+            cfg.get("sharedPool"),
+        ];
+        for bag in credit_bags.into_iter().flatten() {
+            if let Some((t, u)) = credits_bag_usage(bag) {
+                monthly_limit = Some(t);
+                used = Some(u);
+                break;
+            }
+        }
+    }
+
+    // prepaid 仅剩余：无 total 时作为「可用余额」展示
+    if (monthly_limit.is_none() || monthly_limit == Some(0.0))
+        && prepaid.is_some_and(|p| p > 0.0)
+    {
+        monthly_limit = prepaid;
+        used = Some(0.0);
+    }
+
     let remaining = match (monthly_limit, used) {
         (Some(limit), Some(u)) => Some((limit - u).max(0.0)),
+        (Some(limit), None) => Some(limit),
         _ => None,
     };
     let usage_percent = match (monthly_limit, used) {
@@ -1134,27 +1262,23 @@ fn normalize_billing(raw: &Value) -> GrokQuota {
     let remaining_percent = usage_percent.map(|p| (100.0 - p).clamp(0.0, 100.0));
 
     let unlimited = (monthly_limit.is_none() || monthly_limit == Some(0.0))
-        && (on_demand_cap.is_none() || on_demand_cap == Some(0.0));
+        && (on_demand_cap.is_none() || on_demand_cap == Some(0.0))
+        && prepaid.unwrap_or(0.0) <= 0.0
+        && !cfg
+            .get("isUnifiedBillingUser")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
     let mut exhausted = false;
     let mut exhaust_reason = None;
     if !unlimited {
         if let (Some(limit), Some(u)) = (monthly_limit, used) {
             if limit > 0.0 && u >= limit {
-                if let Some(cap) = on_demand_cap {
-                    if cap > 0.0 {
-                        let od = on_demand_used.unwrap_or(0.0);
-                        if od >= cap {
-                            exhausted = true;
-                            exhaust_reason = Some("月限额与按需额度均已用尽".into());
-                        }
-                    } else {
-                        exhausted = true;
-                        exhaust_reason = Some(format!("月限额已用尽（{:.0} / {:.0}）", u, limit));
-                    }
+                exhausted = true;
+                if on_demand_cap == Some(0.0) {
+                    exhaust_reason = Some("按需/周额度已用尽（spending-limit）".into());
                 } else {
-                    exhausted = true;
-                    exhaust_reason = Some(format!("月限额已用尽（{:.0} / {:.0}）", u, limit));
+                    exhaust_reason = Some(format!("额度已用尽（{:.0} / {:.0}）", u, limit));
                 }
             }
         }
@@ -1168,16 +1292,11 @@ fn normalize_billing(raw: &Value) -> GrokQuota {
         on_demand_cap,
         on_demand_used,
         prepaid_balance: prepaid,
-        billing_period_start: cfg
-            .get("billingPeriodStart")
-            .or_else(|| cfg.get("billing_period_start"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-        billing_period_end: cfg
-            .get("billingPeriodEnd")
-            .or_else(|| cfg.get("billing_period_end"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
+        billing_period_start: period_str(
+            cfg,
+            &["billingPeriodStart", "billing_period_start"],
+        ),
+        billing_period_end: period_str(cfg, &["billingPeriodEnd", "billing_period_end"]),
         unlimited_or_free: Some(unlimited),
         exhausted: Some(exhausted),
         exhaust_reason,
@@ -1192,8 +1311,8 @@ async fn fetch_billing_and_user(token: &str) -> Result<(GrokQuota, Value, Value)
         .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
     let headers = cli_proxy_headers(token);
 
-    let billing_url = format!("{}/billing", CLI_CHAT_PROXY_BASE);
-    let user_url = format!("{}/user", CLI_CHAT_PROXY_BASE);
+    let billing_url = format!("{}{}", CLI_CHAT_PROXY_BASE, BILLING_URL_PATH);
+    let user_url = format!("{}{}", CLI_CHAT_PROXY_BASE, USER_URL_PATH);
 
     let billing_resp = client
         .get(&billing_url)
@@ -1708,6 +1827,47 @@ mod tests {
         assert_eq!(q.used, Some(3909.0));
         assert!((q.remaining.unwrap() - 16091.0).abs() < 0.01);
         assert!(q.usage_percent.unwrap() > 19.0 && q.usage_percent.unwrap() < 20.0);
+    }
+
+    #[test]
+    fn billing_normalize_format_credits_ondemand() {
+        // format=credits 统一账期：常无 monthlyLimit，以 onDemandCap/used 为主
+        let raw = json!({
+            "config": {
+                "currentPeriod": {
+                    "type": "USAGE_PERIOD_TYPE_WEEKLY",
+                    "start": "2026-07-07T00:00:00+00:00",
+                    "end": "2026-07-14T00:00:00+00:00"
+                },
+                "onDemandCap": {"val": 100},
+                "onDemandUsed": {"val": 25},
+                "prepaidBalance": {"val": 0},
+                "isUnifiedBillingUser": true
+            }
+        });
+        let q = normalize_billing(&raw);
+        assert_eq!(q.monthly_limit, Some(100.0));
+        assert_eq!(q.used, Some(25.0));
+        assert!((q.remaining.unwrap() - 75.0).abs() < 0.01);
+        assert_eq!(
+            q.billing_period_end.as_deref(),
+            Some("2026-07-14T00:00:00+00:00")
+        );
+        assert_eq!(q.exhausted, Some(false));
+    }
+
+    #[test]
+    fn billing_normalize_credits_exhausted_cap_zero() {
+        let raw = json!({
+            "config": {
+                "onDemandCap": {"val": 0},
+                "onDemandUsed": {"val": 0},
+                "isUnifiedBillingUser": true
+            }
+        });
+        let q = normalize_billing(&raw);
+        assert_eq!(q.exhausted, Some(true));
+        assert!(q.usage_percent.unwrap_or(0.0) >= 99.0);
     }
 
     #[test]

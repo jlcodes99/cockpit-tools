@@ -184,10 +184,10 @@ pub async fn switch_grok_account(
     Ok(account)
 }
 
+/// 兼容旧调用：与 switch 相同，必须先 refresh 再写 auth.json（禁止裸写过期凭据）
 #[tauri::command]
-pub fn inject_grok_account(app: AppHandle, account_id: String) -> Result<String, String> {
-    let account = grok_account::inject_account(&account_id)?;
-    let _ = crate::modules::tray::update_tray_menu(&app);
+pub async fn inject_grok_account(app: AppHandle, account_id: String) -> Result<String, String> {
+    let account = switch_grok_account(app, account_id).await?;
     Ok(format!("切换完成: {}", account.email))
 }
 
