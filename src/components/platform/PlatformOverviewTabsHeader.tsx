@@ -7,6 +7,7 @@ import { WindsurfIcon } from '../icons/WindsurfIcon';
 import { KiroIcon } from '../icons/KiroIcon';
 import { CursorIcon } from '../icons/CursorIcon';
 import { GeminiIcon } from '../icons/GeminiIcon';
+import { GrokIcon } from '../icons/GrokIcon';
 import { CodebuddyIcon } from '../icons/CodebuddyIcon';
 import { QoderIcon } from '../icons/QoderIcon';
 import { TraeCnIcon, TraeIcon, TraeSoloCnIcon, TraeSoloIcon } from '../icons/TraeIcon';
@@ -34,6 +35,7 @@ export type PlatformOverviewHeaderId =
   | 'kiro'
   | 'cursor'
   | 'gemini'
+  | 'grok'
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
@@ -94,6 +96,10 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
   gemini: {
     platformLabel: 'Gemini Cli',
     overviewIcon: <GeminiIcon className="tab-icon" />,
+  },
+  grok: {
+    platformLabel: 'Grok CLI',
+    overviewIcon: <GrokIcon className="tab-icon" />,
   },
   codebuddy: {
     platformLabel: 'CodeBuddy',

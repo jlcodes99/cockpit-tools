@@ -9,6 +9,7 @@ import type { GitHubCopilotAccount } from "../types/githubCopilot";
 import type { WindsurfAccount } from "../types/windsurf";
 import type { CursorAccount } from "../types/cursor";
 import type { GeminiAccount } from "../types/gemini";
+import type { GrokAccount } from "../types/grok";
 import type { KiroAccount, KiroAccountStatus } from "../types/kiro";
 import type { QoderAccount, QoderSubscriptionInfo } from "../types/qoder";
 import type { TraeAccount } from "../types/trae";
@@ -85,6 +86,13 @@ import {
   getGeminiPlanBadgeClass,
   getGeminiTierQuotaSummary,
 } from "../types/gemini";
+import {
+  formatGrokQuotaSummary,
+  getGrokAccountDisplayEmail,
+  getGrokPlanBadge,
+  getGrokPlanBadgeClass,
+  getGrokUsage,
+} from "../types/grok";
 import {
   formatKiroResetTime,
   getKiroAccountDisplayEmail,
@@ -1775,6 +1783,61 @@ export function buildZedAccountPresentation(
     planClass: resolveSimplePlanClass(planLabel),
     quotaItems,
     sublineText: account.subscription_status?.trim() || undefined,
+  };
+}
+
+export function buildGrokAccountPresentation(
+  account: GrokAccount,
+  t: Translate,
+): UnifiedAccountPresentation {
+  const planLabel = getGrokPlanBadge(account);
+  const usage = getGrokUsage(account);
+  const usedPercent =
+    typeof usage.totalPercentUsed === "number" && Number.isFinite(usage.totalPercentUsed)
+      ? Math.max(0, Math.min(100, usage.totalPercentUsed))
+      : null;
+  const remainingPercent =
+    usedPercent == null ? null : Math.max(0, Math.min(100, 100 - usedPercent));
+  const quotaItems: UnifiedQuotaMetric[] = [];
+
+  if (usedPercent != null) {
+    quotaItems.push({
+      key: "monthly_usage",
+      label: t("grok.quota.monthly", "月额度"),
+      percentage: usedPercent,
+      progressPercent: usedPercent,
+      quotaClass: getRemainingQuotaClass(remainingPercent),
+      valueText: formatGrokQuotaSummary(account),
+      showProgress: true,
+      hintText: account.quota?.billing_period_end
+        ? `${t("grok.quota.periodEnd", "账期结束")}: ${account.quota.billing_period_end}`
+        : undefined,
+    });
+  }
+
+  if (account.has_grok_code_access != null) {
+    quotaItems.push({
+      key: "code_access",
+      label: t("grok.codeAccess.label", "Grok Code"),
+      percentage: 0,
+      progressPercent: 0,
+      quotaClass: account.has_grok_code_access ? "high" : "low",
+      valueText: account.has_grok_code_access
+        ? t("grok.codeAccess.yes", "Grok Code 可用")
+        : t("grok.codeAccess.no", "无 Code 权限"),
+      showProgress: false,
+    });
+  }
+
+  return {
+    id: account.id,
+    displayName: getGrokAccountDisplayEmail(account),
+    planLabel,
+    planClass: getGrokPlanBadgeClass(account) || resolveSimplePlanClass(planLabel),
+    quotaItems,
+    sublineText:
+      account.plan_label ||
+      (account.tier != null ? `Tier ${account.tier}` : undefined),
   };
 }
 

@@ -10,6 +10,7 @@ import { WindsurfIcon } from '../components/icons/WindsurfIcon';
 import { KiroIcon } from '../components/icons/KiroIcon';
 import { CursorIcon } from '../components/icons/CursorIcon';
 import { GeminiIcon } from '../components/icons/GeminiIcon';
+import { GrokIcon } from '../components/icons/GrokIcon';
 import { CodebuddyIcon } from '../components/icons/CodebuddyIcon';
 import { QoderIcon } from '../components/icons/QoderIcon';
 import { TraeCnIcon, TraeIcon, TraeSoloCnIcon, TraeSoloIcon } from '../components/icons/TraeIcon';
@@ -39,6 +40,8 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
       return 'Cursor';
     case 'gemini':
       return 'Gemini Cli';
+    case 'grok':
+      return 'Grok CLI';
     case 'codebuddy':
       return 'CodeBuddy';
     case 'codebuddy_cn':
@@ -84,6 +87,8 @@ export function renderPlatformIcon(platformId: PlatformId, size = 20): ReactNode
       return <CursorIcon style={{ width: size, height: size }} />;
     case 'gemini':
       return <GeminiIcon style={{ width: size, height: size }} />;
+    case 'grok':
+      return <GrokIcon size={size} className="nav-item-icon platform-icon-grok" />;
     case 'codebuddy':
       return <CodebuddyIcon style={{ width: size, height: size }} />;
     case 'codebuddy_cn':

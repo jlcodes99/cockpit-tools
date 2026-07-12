@@ -99,3 +99,36 @@
   height: 100vh;
 }
 
+
+/* Grok CLI：紧邻 Codex，侧栏更醒目 */
+.nav-item.nav-item-grok {
+  position: relative;
+}
+
+.nav-item.nav-item-grok .nav-item-icon,
+.nav-item.nav-item-grok img.platform-icon-grok,
+.nav-item.nav-item-grok img.nav-item-icon {
+  filter: drop-shadow(0 0 4px rgba(250, 250, 250, 0.35));
+  border-radius: 50%;
+}
+
+.nav-item.nav-item-grok.active {
+  box-shadow: inset 0 0 0 1px rgba(250, 250, 250, 0.18);
+}
+
+.nav-item.nav-item-grok::after {
+  content: '';
+  position: absolute;
+  right: 6px;
+  top: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #a1a1aa;
+  box-shadow: 0 0 6px rgba(250, 250, 250, 0.55);
+}
+
+[data-theme='light'] .nav-item.nav-item-grok::after {
+  background: #27272a;
+  box-shadow: 0 0 6px rgba(24, 24, 27, 0.35);
+}

@@ -1,0 +1,121 @@
+.grok-accounts-page .ghcp-account-card {
+  min-height: 0;
+}
+
+.grok-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.grok-accounts-page .status-pill.normal {
+  color: #15803d;
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.24);
+}
+
+.grok-accounts-page .status-pill.neutral {
+  color: var(--text-secondary);
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.24);
+}
+
+.grok-accounts-page .zed-usage-metric-item {
+  gap: 6px;
+}
+
+.grok-accounts-page .zed-usage-metric-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.grok-accounts-page .zed-usage-metric-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.grok-accounts-page .zed-usage-metric-value {
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: -0.2px;
+}
+
+.grok-accounts-page .zed-usage-metric-value.high {
+  color: var(--success);
+}
+
+.grok-accounts-page .zed-usage-metric-value.medium {
+  color: #f59e0b;
+}
+
+.grok-accounts-page .zed-usage-metric-value.low {
+  color: #f97316;
+}
+
+.grok-accounts-page .zed-usage-metric-track {
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.grok-accounts-page .zed-usage-metric-track.compact {
+  height: 4px;
+}
+
+.grok-accounts-page .zed-usage-metric-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--success);
+  transition: width 0.2s ease;
+}
+
+.grok-accounts-page .zed-usage-metric-bar.medium {
+  background: #f59e0b;
+}
+
+.grok-accounts-page .zed-usage-metric-bar.low {
+  background: #f97316;
+}
+
+.grok-accounts-page .zed-usage-metric-bar.critical {
+  background: #ef4444;
+}
+
+.grok-accounts-page .windsurf-credit-meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.grok-brand-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(24, 24, 27, 0.08);
+  border: 1px solid rgba(24, 24, 27, 0.12);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+
+[data-theme='dark'] .grok-brand-chip {
+  background: rgba(250, 250, 250, 0.06);
+  border-color: rgba(250, 250, 250, 0.12);
+  color: var(--text-secondary);
+}
+
+.grok-brand-chip img {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}

@@ -41,6 +41,7 @@ pub mod floating_card_window;
 pub mod gemini_account;
 pub mod gemini_instance;
 pub mod gemini_oauth;
+pub mod grok_account;
 pub mod github_copilot_account;
 pub mod github_copilot_instance;
 pub mod github_copilot_oauth;

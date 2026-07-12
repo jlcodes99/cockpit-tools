@@ -69,6 +69,7 @@ const PAGE_PLATFORM_MAP: Partial<Record<Page, PlatformId>> = {
   kiro: 'kiro',
   cursor: 'cursor',
   gemini: 'gemini',
+  grok: 'grok',
   codebuddy: 'codebuddy',
   'codebuddy-cn': 'codebuddy_cn',
   qoder: 'qoder',
@@ -954,14 +955,18 @@ export function SideNav({
 
         {sidebarMenuEntries.map((entry) => {
           const active = currentEntryId === entry.id && !shouldLockActiveOnMore;
+          const isGrok =
+            entry.targetPlatformId === 'grok' ||
+            entry.platformIds?.includes('grok');
           return (
             <button
               key={entry.id}
-              className={`nav-item ${active ? 'active' : ''}`}
+              className={`nav-item ${active ? 'active' : ''}${isGrok ? ' nav-item-grok' : ''}`}
               onClick={() => navigateToEntry(entry)}
               title={entry.label}
+              data-platform={entry.targetPlatformId || undefined}
             >
-              {renderEntryIcon(entry, isClassicLayout ? classicMainIconSize : 20)}
+              {renderEntryIcon(entry, isClassicLayout ? classicMainIconSize : isGrok ? 22 : 20)}
               {showClassicLabels ? (
                 <span className="nav-item-text">{entry.label}</span>
               ) : !isClassicLayout ? (

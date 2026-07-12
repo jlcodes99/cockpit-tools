@@ -109,6 +109,9 @@ pub struct UserConfig {
     /// Gemini 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_gemini_auto_refresh")]
     pub gemini_auto_refresh_minutes: i32,
+    /// Grok CLI 自动刷新间隔（分钟），-1 表示禁用
+    #[serde(default = "default_grok_auto_refresh")]
+    pub grok_auto_refresh_minutes: i32,
     /// Claude 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_claude_auto_refresh")]
     pub claude_auto_refresh_minutes: i32,
@@ -982,6 +985,7 @@ impl Default for UserConfig {
             kiro_auto_refresh_minutes: default_kiro_auto_refresh(),
             cursor_auto_refresh_minutes: default_cursor_auto_refresh(),
             gemini_auto_refresh_minutes: default_gemini_auto_refresh(),
+            grok_auto_refresh_minutes: default_grok_auto_refresh(),
             claude_auto_refresh_minutes: default_claude_auto_refresh(),
             gemini_sync_wsl: default_gemini_sync_wsl(),
             codebuddy_auto_refresh_minutes: default_codebuddy_auto_refresh(),
@@ -1342,6 +1346,14 @@ pub fn load_user_config() -> Result<UserConfig, String> {
             obj.insert(
                 "gemini_auto_refresh_minutes".to_string(),
                 json!(inherited_refresh),
+            );
+        }
+
+        
+        if !obj.contains_key("grok_auto_refresh_minutes") {
+            obj.insert(
+                "grok_auto_refresh_minutes".to_string(),
+                serde_json::json!(default_grok_auto_refresh()),
             );
         }
 

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <radialGradient id="grokGlow" cx="32" cy="28" r="30" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3F3F46"/>
+      <stop offset="0.55" stop-color="#18181B"/>
+      <stop offset="1" stop-color="#09090B"/>
+    </radialGradient>
+    <linearGradient id="grokRing" x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="0.35" stop-color="#E4E4E7"/>
+      <stop offset="0.75" stop-color="#A1A1AA"/>
+      <stop offset="1" stop-color="#71717A"/>
+    </linearGradient>
+    <linearGradient id="grokMark" x1="18" y1="16" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#D4D4D8"/>
+    </linearGradient>
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- outer halo for sidebar prominence -->
+  <circle cx="32" cy="32" r="31" fill="#000000" opacity="0.35"/>
+  <circle cx="32" cy="32" r="28.5" fill="url(#grokGlow)" stroke="url(#grokRing)" stroke-width="2.75"/>
+  <!-- orbital G mark -->
+  <g filter="url(#softGlow)">
+    <path
+      d="M42.6 23.8c-2.2-3.7-6.2-6.1-10.8-6.1-7.1 0-12.9 5.8-12.9 12.9s5.8 12.9 12.9 12.9c4.7 0 8.8-2.5 11.1-6.3"
+      stroke="url(#grokMark)"
+      stroke-width="4.6"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M32.2 30.6h11.2v3.5c0 2.6-1.2 4.8-3.1 6.3"
+      stroke="url(#grokMark)"
+      stroke-width="4.6"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <circle cx="44.2" cy="23.4" r="2.6" fill="#FFFFFF"/>
+  </g>
+</svg>

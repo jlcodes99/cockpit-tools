@@ -174,6 +174,7 @@ export type QuickSettingsType =
   | 'kiro'
   | 'cursor'
   | 'gemini'
+  | 'grok'
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
@@ -400,6 +401,8 @@ const getCurrentAccountRefreshPlatformForType = (
       return 'cursor';
     case 'gemini':
       return 'gemini';
+    case 'grok':
+      return 'grok';
     case 'codebuddy':
       return 'codebuddy';
     case 'codebuddy_cn':
@@ -934,6 +937,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'kiro': return 'kiro_auto_refresh_minutes';
       case 'cursor': return 'cursor_auto_refresh_minutes';
       case 'gemini': return 'gemini_auto_refresh_minutes';
+      case 'grok': return 'grok_auto_refresh_minutes';
       case 'codebuddy': return 'codebuddy_auto_refresh_minutes';
       case 'codebuddy_cn': return 'codebuddy_cn_auto_refresh_minutes';
       case 'qoder': return 'qoder_auto_refresh_minutes';
@@ -969,6 +973,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           kiroAutoRefreshMinutes: merged.kiro_auto_refresh_minutes,
           cursorAutoRefreshMinutes: merged.cursor_auto_refresh_minutes,
           geminiAutoRefreshMinutes: merged.gemini_auto_refresh_minutes,
+          grokAutoRefreshMinutes: merged.grok_auto_refresh_minutes,
           geminiSyncWsl: merged.gemini_sync_wsl,
           codebuddyAutoRefreshMinutes: merged.codebuddy_auto_refresh_minutes,
           codebuddyCnAutoRefreshMinutes: merged.codebuddy_cn_auto_refresh_minutes,

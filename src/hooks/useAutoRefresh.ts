@@ -8,6 +8,7 @@ import { useWindsurfAccountStore } from '../stores/useWindsurfAccountStore';
 import { useKiroAccountStore } from '../stores/useKiroAccountStore';
 import { useCursorAccountStore } from '../stores/useCursorAccountStore';
 import { useGeminiAccountStore } from '../stores/useGeminiAccountStore';
+import { useGrokAccountStore } from '../stores/useGrokAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
@@ -20,6 +21,7 @@ import { getWindsurfAccountDisplayEmail } from '../types/windsurf';
 import { getKiroAccountDisplayEmail } from '../types/kiro';
 import { getCursorAccountDisplayEmail } from '../types/cursor';
 import { getGeminiAccountDisplayEmail } from '../types/gemini';
+import { getGrokAccountDisplayEmail } from '../types/grok';
 import { getClaudeAccountDisplayEmail } from '../types/claude';
 import { getCodebuddyAccountDisplayEmail } from '../types/codebuddy';
 import { getWorkbuddyAccountDisplayEmail } from '../types/workbuddy';
@@ -56,6 +58,7 @@ interface GeneralConfig {
   kiro_auto_refresh_minutes: number;
   cursor_auto_refresh_minutes: number;
   gemini_auto_refresh_minutes: number;
+  grok_auto_refresh_minutes: number;
   gemini_sync_wsl: boolean;
   codebuddy_auto_refresh_minutes: number;
   codebuddy_cn_auto_refresh_minutes: number;
@@ -186,6 +189,7 @@ function getCurrentAccountEmails(): Record<CurrentAccountRefreshPlatform, string
     kiro: getProviderEmail(useKiroAccountStore, getKiroAccountDisplayEmail),
     cursor: getProviderEmail(useCursorAccountStore, getCursorAccountDisplayEmail),
     gemini: getProviderEmail(useGeminiAccountStore, getGeminiAccountDisplayEmail),
+    grok: getProviderEmail(useGrokAccountStore, getGrokAccountDisplayEmail),
     codebuddy: getProviderEmail(useCodebuddyAccountStore, getCodebuddyAccountDisplayEmail),
     codebuddy_cn: getProviderEmail(useCodebuddyCnAccountStore, getCodebuddyAccountDisplayEmail),
     workbuddy: getProviderEmail(useWorkbuddyAccountStore, getWorkbuddyAccountDisplayEmail),
@@ -225,6 +229,9 @@ export function useAutoRefresh() {
   const refreshAllGeminiTokens = useGeminiAccountStore((state) => state.refreshAllTokens);
   const fetchCurrentGeminiAccountId = useGeminiAccountStore((state) => state.fetchCurrentAccountId);
   const refreshGeminiToken = useGeminiAccountStore((state) => state.refreshToken);
+  const refreshAllGrokTokens = useGrokAccountStore((state) => state.refreshAllTokens);
+  const fetchCurrentGrokAccountId = useGrokAccountStore((state) => state.fetchCurrentAccountId);
+  const refreshGrokToken = useGrokAccountStore((state) => state.refreshToken);
   const refreshAllCodebuddyTokens = useCodebuddyAccountStore((state) => state.refreshAllTokens);
   const fetchCurrentCodebuddyAccountId = useCodebuddyAccountStore((state) => state.fetchCurrentAccountId);
   const refreshCodebuddyToken = useCodebuddyAccountStore((state) => state.refreshToken);
@@ -262,6 +269,8 @@ export function useAutoRefresh() {
   const cursorCurrentRefreshingRef = useRef(false);
   const geminiRefreshingRef = useRef(false);
   const geminiCurrentRefreshingRef = useRef(false);
+  const grokRefreshingRef = useRef(false);
+  const grokCurrentRefreshingRef = useRef(false);
   const codebuddyRefreshingRef = useRef(false);
   const codebuddyCurrentRefreshingRef = useRef(false);
   const codebuddyCnRefreshingRef = useRef(false);
@@ -596,7 +605,8 @@ export function useAutoRefresh() {
                 await refreshAllGeminiTokens();
               },
               runCurrentRefresh: async () => {
-                await runProviderCurrentRefresh(fetchCurrentGeminiAccountId, refreshGeminiToken);
+                await runProviderCurrentRefresh(fetchCurrentGeminiAccountId,
+    fetchCurrentGrokAccountId, refreshGeminiToken);
               },
             },
             {
@@ -843,6 +853,7 @@ export function useAutoRefresh() {
     fetchCurrentCodexAccount,
     fetchCurrentCursorAccountId,
     fetchCurrentGeminiAccountId,
+    fetchCurrentGrokAccountId,
     fetchCurrentGhcpAccountId,
     fetchCurrentKiroAccountId,
     fetchCurrentQoderAccountId,
@@ -858,6 +869,7 @@ export function useAutoRefresh() {
     refreshAllClaudeQuotas,
     refreshAllCursorTokens,
     refreshAllGeminiTokens,
+    refreshAllGrokTokens,
     refreshAllGhcpTokens,
     refreshAllKiroTokens,
     refreshAllQuotas,
@@ -871,6 +883,7 @@ export function useAutoRefresh() {
     refreshClaudeQuota,
     refreshCursorToken,
     refreshGeminiToken,
+    refreshGrokToken,
     refreshGhcpToken,
     refreshKiroToken,
     refreshQoderToken,

@@ -36,6 +36,7 @@ import { useWindsurfAccountStore } from './stores/useWindsurfAccountStore';
 import { useKiroAccountStore } from './stores/useKiroAccountStore';
 import { useCursorAccountStore } from './stores/useCursorAccountStore';
 import { useGeminiAccountStore } from './stores/useGeminiAccountStore';
+import { useGrokAccountStore } from './stores/useGrokAccountStore';
 import { useCodebuddyAccountStore } from './stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from './stores/useCodebuddyCnAccountStore';
 import { useQoderAccountStore } from './stores/useQoderAccountStore';
@@ -102,6 +103,9 @@ const CursorAccountsPage = lazy(() =>
 );
 const GeminiAccountsPage = lazy(() =>
   import('./pages/GeminiAccountsPage').then((module) => ({ default: module.GeminiAccountsPage })),
+);
+const GrokAccountsPage = lazy(() =>
+  import('./pages/GrokAccountsPage').then((module) => ({ default: module.GrokAccountsPage })),
 );
 const CodebuddyAccountsPage = lazy(() =>
   import('./pages/CodebuddyAccountsPage').then((module) => ({ default: module.CodebuddyAccountsPage })),
@@ -182,6 +186,7 @@ const RENDERABLE_PAGE_VALUES: readonly Page[] = [
   'kiro',
   'cursor',
   'gemini',
+  'grok',
   'codebuddy',
   'codebuddy-cn',
   'qoder',
@@ -218,6 +223,7 @@ const TOP_PROMO_PAGE_PLATFORM_TARGETS: Partial<Record<Page, readonly string[]>> 
   kiro: ['kiro'],
   cursor: ['cursor'],
   gemini: ['gemini'],
+  grok: ['grok'],
   codebuddy: ['codebuddy'],
   'codebuddy-cn': ['codebuddy-cn'],
   qoder: ['qoder'],
@@ -463,6 +469,7 @@ type QuotaAlertPlatform =
   | 'kiro'
   | 'cursor'
   | 'gemini'
+  | 'grok'
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
@@ -564,6 +571,8 @@ function normalizeQuotaAlertPlatform(platform: string | undefined): QuotaAlertPl
       return 'cursor';
     case 'gemini':
       return 'gemini';
+    case 'grok':
+      return 'grok';
     case 'codebuddy':
       return 'codebuddy';
     case 'codebuddy_cn':
@@ -604,6 +613,8 @@ function getQuotaAlertPlatformLabel(
       return 'Cursor';
     case 'gemini':
       return 'Gemini Cli';
+    case 'grok':
+      return 'Grok CLI';
     case 'codebuddy':
       return 'CodeBuddy';
     case 'codebuddy_cn':
@@ -635,6 +646,8 @@ function getQuotaAlertTargetPage(platform: QuotaAlertPlatform): Page {
       return 'cursor';
     case 'gemini':
       return 'gemini';
+    case 'grok':
+      return 'grok';
     case 'codebuddy':
       return 'codebuddy';
     case 'codebuddy_cn':
@@ -668,6 +681,8 @@ function getQuotaAlertQuickSettingsType(platform: QuotaAlertPlatform): QuickSett
       return 'cursor';
     case 'gemini':
       return 'gemini';
+    case 'grok':
+      return 'grok';
     case 'codebuddy':
       return 'codebuddy';
     case 'codebuddy_cn':
@@ -2694,6 +2709,9 @@ function MainApp() {
                     } else if (platform === 'gemini') {
                       await useGeminiAccountStore.getState().switchAccount(targetAccountId);
                       setPage('gemini');
+                    } else if (platform === 'grok') {
+                      await useGrokAccountStore.getState().switchAccount(targetAccountId);
+                      setPage('grok');
                     } else if (platform === 'codebuddy') {
                       await useCodebuddyAccountStore.getState().switchAccount(targetAccountId);
                       setPage('codebuddy');
@@ -2915,6 +2933,10 @@ function MainApp() {
       {
         command: 'refresh_all_gemini_tokens',
         errorMessage: 'Failed to refresh Gemini:',
+      },
+      {
+        command: 'refresh_all_grok_tokens',
+        errorMessage: 'Failed to refresh Grok:',
       },
       {
         command: 'refresh_all_codebuddy_tokens',
@@ -3922,6 +3944,11 @@ function MainApp() {
               onNavigate={setPage}
               onOpenPlatformLayout={openPlatformLayoutModal}
             />
+          )}
+          {page === 'grok' && (
+            <Suspense fallback={<div className="page-loading" />}>
+              <GrokAccountsPage />
+            </Suspense>
           )}
           {page === 'settings' && <SettingsPage />}
         </Suspense>

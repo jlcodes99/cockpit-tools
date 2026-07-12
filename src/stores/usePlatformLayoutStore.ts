@@ -12,6 +12,7 @@ const TRAY_MIGRATED_PLATFORM_IDS: PlatformId[] = [
   'kiro',
   'cursor',
   'gemini',
+  'grok',
   'codebuddy',
   'codebuddy_cn',
   'qoder',
@@ -333,7 +334,7 @@ function normalizeOrder(order: PlatformId[]): PlatformId[] {
 }
 
 function defaultPlatformOrder(): PlatformId[] {
-  return [...ALL_PLATFORM_IDS];
+  return ensureGrokBesideCodex([...ALL_PLATFORM_IDS]);
 }
 
 function defaultSidebarEntryIds(
@@ -344,15 +345,34 @@ function defaultSidebarEntryIds(
 }
 
 function defaultSidebarPlatformIds(): PlatformId[] {
-  return ['claude_manager', 'codex', 'antigravity', 'zed', 'github-copilot'];
+  // Grok CLI 紧挨 Codex，默认进侧栏更显眼
+  return ['claude_manager', 'codex', 'grok', 'antigravity', 'zed', 'github-copilot'];
 }
 
 function normalizeHidden(hidden: PlatformId[]): PlatformId[] {
   return sanitizePlatformIds(hidden);
 }
 
+function ensureGrokBesideCodex(order: PlatformId[]): PlatformId[] {
+  const list = [...order];
+  const grokIdx = list.indexOf('grok');
+  const codexIdx = list.indexOf('codex');
+  if (codexIdx < 0) return list;
+  if (grokIdx >= 0) {
+    if (grokIdx === codexIdx + 1) return list;
+    list.splice(grokIdx, 1);
+    const nextCodex = list.indexOf('codex');
+    list.splice(nextCodex + 1, 0, 'grok');
+    return list;
+  }
+  list.splice(codexIdx + 1, 0, 'grok');
+  return list;
+}
+
 function normalizeSidebar(sidebar: PlatformId[], hidden: PlatformId[]): PlatformId[] {
-  return sanitizePlatformIds(sidebar).filter((id) => !hidden.includes(id));
+  return ensureGrokBesideCodex(
+    sanitizePlatformIds(sidebar).filter((id) => !hidden.includes(id)),
+  );
 }
 
 function normalizeTray(
@@ -449,6 +469,9 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
   }
   if (fallbackPlatform === 'gemini') {
     return 'Gemini Cli';
+  }
+  if (fallbackPlatform === 'grok') {
+    return 'Grok CLI';
   }
   return fallbackPlatform.charAt(0).toUpperCase() + fallbackPlatform.slice(1);
 }

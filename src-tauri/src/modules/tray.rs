@@ -169,6 +169,7 @@ pub(crate) enum PlatformId {
     Kiro,
     Cursor,
     Gemini,
+    Grok,
     Codebuddy,
     CodebuddyCn,
     Qoder,
@@ -181,10 +182,11 @@ pub(crate) enum PlatformId {
 }
 
 impl PlatformId {
-    pub(crate) fn default_order() -> [Self; 18] {
+    pub(crate) fn default_order() -> [Self; 19] {
         [
             Self::Claude,
             Self::Codex,
+            Self::Grok,
             Self::Antigravity,
             Self::Zed,
             Self::GitHubCopilot,
@@ -215,6 +217,7 @@ impl PlatformId {
             crate::modules::tray_layout::PLATFORM_KIRO => Some(Self::Kiro),
             crate::modules::tray_layout::PLATFORM_CURSOR => Some(Self::Cursor),
             crate::modules::tray_layout::PLATFORM_GEMINI => Some(Self::Gemini),
+            crate::modules::tray_layout::PLATFORM_GROK => Some(Self::Grok),
             crate::modules::tray_layout::PLATFORM_CODEBUDDY => Some(Self::Codebuddy),
             crate::modules::tray_layout::PLATFORM_CODEBUDDY_CN => Some(Self::CodebuddyCn),
             crate::modules::tray_layout::PLATFORM_QODER => Some(Self::Qoder),
@@ -239,6 +242,7 @@ impl PlatformId {
             Self::Kiro => crate::modules::tray_layout::PLATFORM_KIRO,
             Self::Cursor => crate::modules::tray_layout::PLATFORM_CURSOR,
             Self::Gemini => crate::modules::tray_layout::PLATFORM_GEMINI,
+            Self::Grok => crate::modules::tray_layout::PLATFORM_GROK,
             Self::Codebuddy => crate::modules::tray_layout::PLATFORM_CODEBUDDY,
             Self::CodebuddyCn => crate::modules::tray_layout::PLATFORM_CODEBUDDY_CN,
             Self::Qoder => crate::modules::tray_layout::PLATFORM_QODER,
@@ -262,6 +266,7 @@ impl PlatformId {
             Self::Kiro => "Kiro",
             Self::Cursor => "Cursor",
             Self::Gemini => "Gemini Cli",
+            Self::Grok => "Grok CLI",
             Self::Codebuddy => "CodeBuddy",
             Self::CodebuddyCn => "CodeBuddy CN",
             Self::Qoder => "Qoder",
@@ -285,6 +290,7 @@ impl PlatformId {
             Self::Kiro => "kiro",
             Self::Cursor => "cursor",
             Self::Gemini => "gemini",
+            Self::Grok => "grok",
             Self::Codebuddy => "codebuddy",
             Self::CodebuddyCn => "codebuddy-cn",
             Self::Qoder => "qoder",
@@ -813,6 +819,7 @@ fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayI
         PlatformId::Kiro => build_kiro_display_info(lang),
         PlatformId::Cursor => build_cursor_display_info(lang),
         PlatformId::Gemini => build_gemini_display_info(lang),
+        PlatformId::Grok => build_grok_display_info(lang),
         PlatformId::Codebuddy => build_codebuddy_display_info(lang),
         PlatformId::CodebuddyCn => build_codebuddy_cn_display_info(lang),
         PlatformId::Qoder => build_qoder_display_info(lang),
@@ -1497,6 +1504,53 @@ fn build_gemini_display_info(lang: &str) -> AccountDisplayInfo {
 }
 
 #[cfg(not(target_os = "macos"))]
+
+fn build_grok_display_info(lang: &str) -> AccountDisplayInfo {
+    let accounts = crate::modules::grok_account::list_accounts();
+    let current_id = crate::modules::grok_account::resolve_current_account_id();
+    let account = current_id
+        .as_ref()
+        .and_then(|id| accounts.iter().find(|a| &a.id == id))
+        .cloned()
+        .or_else(|| accounts.into_iter().next());
+
+    let Some(account) = account else {
+        return AccountDisplayInfo {
+            account: format!("📧 {}", get_text("not_logged_in", lang)),
+            quota_lines: vec!["—".to_string()],
+        };
+    };
+
+    let mut quota_lines = Vec::new();
+    if let Some(plan) = account
+        .plan_label
+        .as_deref()
+        .or(account.plan_type.as_deref())
+        .filter(|s| !s.is_empty())
+    {
+        quota_lines.push(format!("Plan: {}", plan));
+    }
+    if let Some(q) = account.quota.as_ref() {
+        if let (Some(used), Some(limit)) = (q.used, q.monthly_limit) {
+            if limit > 0.0 {
+                let pct = q.usage_percent.unwrap_or_else(|| (used / limit) * 100.0);
+                quota_lines.push(format!("Usage: {:.0}% ({:.0}/{:.0})", pct, used, limit));
+            }
+        }
+        if let Some(end) = q.billing_period_end.as_deref() {
+            quota_lines.push(format!("Reset: {}", end));
+        }
+    }
+    if quota_lines.is_empty() {
+        quota_lines.push(get_text("loading", lang));
+    }
+
+    AccountDisplayInfo {
+        account: format!("📧 {}", account.email),
+        quota_lines,
+    }
+}
+
 fn build_codebuddy_display_info(lang: &str) -> AccountDisplayInfo {
     let accounts = crate::modules::codebuddy_account::list_accounts();
     build_codebuddy_family_display_info(lang, resolve_codebuddy_current_account(&accounts))
