@@ -7,6 +7,7 @@ import { useWindsurfAccountStore } from '../stores/useWindsurfAccountStore';
 import { useKiroAccountStore } from '../stores/useKiroAccountStore';
 import { useCursorAccountStore } from '../stores/useCursorAccountStore';
 import { useGeminiAccountStore } from '../stores/useGeminiAccountStore';
+import { useGrokAccountStore } from '../stores/useGrokAccountStore';
 import { useClaudeAccountStore } from '../stores/useClaudeAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
@@ -68,6 +69,7 @@ import {
   GeminiAccount,
   getGeminiTierQuotaSummary,
 } from '../types/gemini';
+import type { GrokAccount } from '../types/grok';
 import { ClaudeAccount } from '../types/claude';
 import { ZedAccount, getZedUsage } from '../types/zed';
 import {
@@ -83,6 +85,7 @@ import { WindsurfIcon } from '../components/icons/WindsurfIcon';
 import { KiroIcon } from '../components/icons/KiroIcon';
 import { CursorIcon } from '../components/icons/CursorIcon';
 import { GeminiIcon } from '../components/icons/GeminiIcon';
+import { GrokIcon } from '../components/icons/GrokIcon';
 import { ClaudeIcon } from '../components/icons/ClaudeIcon';
 import { CodebuddyIcon } from '../components/icons/CodebuddyIcon';
 import { QoderIcon } from '../components/icons/QoderIcon';
@@ -103,6 +106,7 @@ import {
   buildCodexAccountPresentation,
   buildCursorAccountPresentation,
   buildGeminiAccountPresentation,
+  buildGrokAccountPresentation,
   buildGitHubCopilotAccountPresentation,
   buildKiroAccountPresentation,
   buildQoderAccountPresentation,
@@ -125,6 +129,7 @@ import {
 } from '../services/modelProviderUsageService';
 import * as traeService from '../services/traeService';
 import type { TraePlatformId } from '../services/traeService';
+import { getRecommendedGrokAccount } from '../utils/floatingCardSelectors';
 
 interface DashboardPageProps {
   onNavigate: (page: Page) => void;
@@ -323,6 +328,9 @@ export function DashboardPage({
         case 'gemini':
           await useGeminiAccountStore.getState().updateAccountTags(accountId, newTags);
           break;
+        case 'grok':
+          await useGrokAccountStore.getState().updateAccountTags(accountId, newTags);
+          break;
         case 'codebuddy':
           await useCodebuddyAccountStore.getState().updateAccountTags(accountId, newTags);
           break;
@@ -490,6 +498,15 @@ export function DashboardPage({
     switchAccount: switchGeminiAccount,
   } = useGeminiAccountStore();
 
+  // Grok CLI Data
+  const {
+    accounts: grokAccounts,
+    currentAccountId: grokCurrentId,
+    fetchAccounts: fetchGrokAccounts,
+    fetchCurrentAccountId: fetchGrokCurrentAccountId,
+    switchAccount: switchGrokAccount,
+  } = useGrokAccountStore();
+
   const {
     accounts: codebuddyAccounts,
     currentAccountId: codebuddyCurrentId,
@@ -616,6 +633,8 @@ export function DashboardPage({
       fetchKiroAccounts,
       fetchCursorAccounts,
       fetchGeminiAccounts,
+      fetchGrokAccounts,
+      fetchGrokCurrentAccountId,
       fetchCodebuddyAccounts,
       fetchCodebuddyCnAccounts,
       fetchQoderAccounts,
@@ -697,6 +716,7 @@ export function DashboardPage({
         kiroAccounts.length +
         cursorAccounts.length +
         geminiAccounts.length +
+        grokAccounts.length +
         codebuddyAccounts.length +
         codebuddyCnAccounts.length +
         qoderAccounts.length +
@@ -712,6 +732,7 @@ export function DashboardPage({
       kiro: kiroAccounts.length,
       cursor: cursorAccounts.length,
       gemini: geminiAccounts.length,
+      grok: grokAccounts.length,
       codebuddy: codebuddyAccounts.length,
       codebuddy_cn: codebuddyCnAccounts.length,
       qoder: qoderAccounts.length,
@@ -722,7 +743,7 @@ export function DashboardPage({
       trae_solo_cn: traeAccountsByPlatform.trae_solo_cn.length,
       workbuddy: workbuddyAccounts.length,
     };
-  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, zcodeAccounts, traeAccounts, traeAccountsByPlatform, workbuddyAccounts]);
+  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, grokAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, zcodeAccounts, traeAccounts, traeAccountsByPlatform, workbuddyAccounts]);
 
   const dashboardAvailableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -736,6 +757,7 @@ export function DashboardPage({
       ...kiroAccounts,
       ...cursorAccounts,
       ...geminiAccounts,
+      ...grokAccounts,
       ...codebuddyAccounts,
       ...codebuddyCnAccounts,
       ...qoderAccounts,
@@ -751,7 +773,7 @@ export function DashboardPage({
       }
     }
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
-  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, zcodeAccounts, traeAccounts, workbuddyAccounts]);
+  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, grokAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, zcodeAccounts, traeAccounts, workbuddyAccounts]);
 
 
   // Refresh States
@@ -774,6 +796,7 @@ export function DashboardPage({
     kiro: boolean;
     cursor: boolean;
     gemini: boolean;
+    grok: boolean;
     codebuddy: boolean;
     codebuddyCn: boolean;
     qoder: boolean;
@@ -790,6 +813,7 @@ export function DashboardPage({
     kiro: false,
     cursor: false,
     gemini: false,
+    grok: false,
     codebuddy: false,
     codebuddyCn: false,
     qoder: false,
@@ -1121,6 +1145,37 @@ export function DashboardPage({
     }
   };
 
+  const handleRefreshGrok = async (accountId: string) => {
+    if (refreshing.has(accountId)) return;
+    setRefreshing((prev) => new Set(prev).add(accountId));
+    try {
+      await useGrokAccountStore.getState().refreshToken(accountId);
+    } catch (error) {
+      console.error('Refresh failed:', error);
+    } finally {
+      setRefreshing((prev) => {
+        const next = new Set(prev);
+        next.delete(accountId);
+        return next;
+      });
+    }
+  };
+
+  const handleRefreshGrokCard = async () => {
+    if (cardRefreshing.grok) return;
+    setCardRefreshing((prev) => ({ ...prev, grok: true }));
+    const idsToRefresh = [grokCurrent?.id, grokRecommended?.id].filter(Boolean) as string[];
+    try {
+      for (const id of idsToRefresh) {
+        await useGrokAccountStore.getState().refreshToken(id);
+      }
+    } catch (error) {
+      console.error('Card refresh failed:', error);
+    } finally {
+      setCardRefreshing((prev) => ({ ...prev, grok: false }));
+    }
+  };
+
   const handleSwitchGitHubCopilot = async (accountId: string) => {
     if (switching.has(accountId)) return;
     setSwitching((prev) => new Set(prev).add(accountId));
@@ -1233,6 +1288,23 @@ export function DashboardPage({
     setSwitching((prev) => new Set(prev).add(accountId));
     try {
       await switchGeminiAccount(accountId);
+    } catch (error) {
+      console.error('Switch failed:', error);
+    } finally {
+      setSwitching((prev) => {
+        const next = new Set(prev);
+        next.delete(accountId);
+        return next;
+      });
+    }
+  };
+
+  const handleSwitchGrok = async (accountId: string) => {
+    if (switching.has(accountId)) return;
+    setSwitching((prev) => new Set(prev).add(accountId));
+    try {
+      await switchGrokAccount(accountId);
+      await fetchGrokCurrentAccountId();
     } catch (error) {
       console.error('Switch failed:', error);
     } finally {
@@ -1664,6 +1736,11 @@ export function DashboardPage({
     [geminiAccounts, geminiCurrentId],
   );
 
+  const grokCurrent = useMemo(
+    () => resolveDashboardCurrentAccount(grokAccounts, grokCurrentId),
+    [grokAccounts, grokCurrentId],
+  );
+
   const codebuddyCurrent = useMemo(
     () => resolveDashboardCurrentAccount(codebuddyAccounts, codebuddyCurrentId),
     [codebuddyAccounts, codebuddyCurrentId],
@@ -1873,6 +1950,11 @@ export function DashboardPage({
       return candidateScore.freshness > bestScore.freshness ? candidate : best;
     });
   }, [geminiAccounts, geminiCurrent?.id]);
+
+  const grokRecommended = useMemo(
+    () => getRecommendedGrokAccount(grokAccounts, grokCurrent?.id),
+    [grokAccounts, grokCurrent?.id],
+  );
 
   const codebuddyRecommended = useMemo(() => {
     if (codebuddyAccounts.length <= 1) return null;
@@ -2545,6 +2627,21 @@ export function DashboardPage({
     });
   };
 
+  const renderGrokAccountContent = (account: GrokAccount | null) => {
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+
+    const presentation = buildGrokAccountPresentation(account, t);
+    return renderUnifiedAccountCard({
+      presentation,
+      onRefresh: () => handleRefreshGrok(account.id),
+      onSwitch: () => handleSwitchGrok(account.id),
+      isRefreshing: refreshing.has(account.id),
+      isSwitching: switching.has(account.id),
+      switchDisabled: Boolean(account.requires_reauth),
+      onEditTags: () => setTagModalState({ accountId: account.id, platform: 'grok', tags: account.tags || [] }),
+    });
+  };
+
   const renderCodebuddyAccountContent = (account: CodebuddyAccount | null) => {
     if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
 
@@ -2648,6 +2745,7 @@ export function DashboardPage({
     kiro: stats.kiro,
     cursor: stats.cursor,
     gemini: stats.gemini,
+    grok: stats.grok,
     codebuddy: stats.codebuddy,
     codebuddy_cn: stats.codebuddy_cn,
     qoder: stats.qoder,
@@ -2831,6 +2929,53 @@ export function DashboardPage({
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('codex')}>
+            {t('dashboard.viewAllAccounts', '查看所有账号')}
+          </button>
+        </div>
+      );
+    }
+
+    if (platformId === 'grok') {
+      return (
+        <div className="main-card codex-card" key={platformId}>
+          <div className="main-card-header">
+            <div className="header-title">
+              <GrokIcon size={18} />
+              <h3>{getPlatformLabel(platformId, t)}</h3>
+            </div>
+            <div className="header-action-group">
+              <button
+                className="header-action-btn"
+                onClick={handleRefreshGrokCard}
+                disabled={cardRefreshing.grok}
+                title={t('common.refresh', '刷新')}
+              >
+                <RotateCw size={14} className={cardRefreshing.grok ? 'loading-spinner' : ''} />
+                <span>{t('common.refresh', '刷新')}</span>
+              </button>
+              {renderHideCardButton(platformId)}
+            </div>
+          </div>
+
+          <div className="split-content">
+            <div className="split-half current-half">
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              {renderGrokAccountContent(grokCurrent)}
+            </div>
+
+            <div className="split-divider"></div>
+
+            <div className="split-half recommend-half">
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              {grokRecommended ? (
+                renderGrokAccountContent(grokRecommended)
+              ) : (
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+              )}
+            </div>
+          </div>
+
+          <button className="card-footer-action" onClick={() => onNavigate('grok')}>
             {t('dashboard.viewAllAccounts', '查看所有账号')}
           </button>
         </div>
