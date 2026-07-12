@@ -116,7 +116,8 @@ interface PlatformLayoutState {
   resetPlatformLayout: () => void;
 }
 
-interface NormalizedLayoutStateData {
+/** 布局 hydrate 结果（生产 store 与单测共用） */
+export interface NormalizedLayoutStateData {
   orderedPlatformIds: PlatformId[];
   hiddenPlatformIds: PlatformId[];
   sidebarPlatformIds: PlatformId[];
@@ -333,26 +334,10 @@ function normalizeOrder(order: PlatformId[]): PlatformId[] {
   return next;
 }
 
-function defaultPlatformOrder(): PlatformId[] {
-  return ensureGrokBesideCodex([...ALL_PLATFORM_IDS]);
-}
-
-function defaultSidebarEntryIds(
-  groups: PlatformLayoutGroup[],
-  orderedEntryIds = buildEntryOrderFromPlatformOrder(defaultPlatformOrder(), groups),
-): PlatformLayoutEntryId[] {
-  return orderedEntryIds.slice(0, CLASSIC_SIDEBAR_ENTRY_LIMIT - 1);
-}
-
-function defaultSidebarPlatformIds(): PlatformId[] {
-  // Grok CLI 紧挨 Codex，默认进侧栏更显眼
-  return ['claude_manager', 'codex', 'grok', 'antigravity', 'zed', 'github-copilot'];
-}
-
-function normalizeHidden(hidden: PlatformId[]): PlatformId[] {
-  return sanitizePlatformIds(hidden);
-}
-
+/**
+ * 仅用于「无本地布局」时的出厂默认顺序：Grok 紧挨 Codex。
+ * 禁止在已有自定义布局的 normalize/hydrate 路径里调用，否则会每次更新/重载打乱用户顺序。
+ */
 function ensureGrokBesideCodex(order: PlatformId[]): PlatformId[] {
   const list = [...order];
   const grokIdx = list.indexOf('grok');
@@ -369,10 +354,32 @@ function ensureGrokBesideCodex(order: PlatformId[]): PlatformId[] {
   return list;
 }
 
+function defaultPlatformOrder(): PlatformId[] {
+  return ensureGrokBesideCodex([...ALL_PLATFORM_IDS]);
+}
+
+function defaultSidebarEntryIds(
+  groups: PlatformLayoutGroup[],
+  orderedEntryIds = buildEntryOrderFromPlatformOrder(defaultPlatformOrder(), groups),
+): PlatformLayoutEntryId[] {
+  return orderedEntryIds.slice(0, CLASSIC_SIDEBAR_ENTRY_LIMIT - 1);
+}
+
+function defaultSidebarPlatformIds(): PlatformId[] {
+  // 仅默认侧栏：Grok 紧挨 Codex（用户自定义后不再强制）
+  return ['claude_manager', 'codex', 'grok', 'antigravity', 'zed', 'github-copilot'];
+}
+
+function normalizeHidden(hidden: PlatformId[]): PlatformId[] {
+  return sanitizePlatformIds(hidden);
+}
+
+/**
+ * 保留用户侧栏顺序：只做合法 id 过滤与 hidden 剔除。
+ * 新平台不会自动插入侧栏；总排序由 normalizeOrder 在末尾补全缺失平台。
+ */
 function normalizeSidebar(sidebar: PlatformId[], hidden: PlatformId[]): PlatformId[] {
-  return ensureGrokBesideCodex(
-    sanitizePlatformIds(sidebar).filter((id) => !hidden.includes(id)),
-  );
+  return sanitizePlatformIds(sidebar).filter((id) => !hidden.includes(id));
 }
 
 function normalizeTray(
@@ -876,9 +883,14 @@ function normalizeEntryOrder(
   return entries;
 }
 
+/**
+ * 保留用户保存的 entry 顺序；将 `platform:x` 解析为当前 groups 下的真实 entry
+ *（可能是 `group:…`），避免因 id 形态变化导致 list 被清空并回退到「按总序过滤」而打乱侧栏。
+ */
 function normalizeEntryVisibilityList(
   rawEntryIds: unknown,
   orderedEntryIds: PlatformLayoutEntryId[],
+  groups: PlatformLayoutGroup[] = [],
 ): PlatformLayoutEntryId[] {
   if (!Array.isArray(rawEntryIds)) {
     return [];
@@ -888,7 +900,11 @@ function normalizeEntryVisibilityList(
   const entries: PlatformLayoutEntryId[] = [];
   for (const item of rawEntryIds) {
     if (typeof item !== 'string') continue;
-    const entryId = item as PlatformLayoutEntryId;
+    let entryId = item as PlatformLayoutEntryId;
+    const platformId = parsePlatformEntryId(entryId);
+    if (platformId && groups.length > 0) {
+      entryId = resolveEntryIdForPlatform(platformId, groups);
+    }
     if (!orderSet.has(entryId) || seen.has(entryId)) {
       continue;
     }
@@ -916,7 +932,7 @@ function normalizeHiddenEntryIds(
   groups: PlatformLayoutGroup[],
   legacyHiddenPlatformIds: PlatformId[],
 ): PlatformLayoutEntryId[] {
-  const normalized = normalizeEntryVisibilityList(rawHiddenEntryIds, orderedEntryIds);
+  const normalized = normalizeEntryVisibilityList(rawHiddenEntryIds, orderedEntryIds, groups);
   if (normalized.length > 0) {
     return normalized;
   }
@@ -955,9 +971,25 @@ function normalizeSidebarEntryIds(
   groups: PlatformLayoutGroup[],
   legacySidebarPlatformIds: PlatformId[],
 ): PlatformLayoutEntryId[] {
-  const normalized = normalizeEntryVisibilityList(rawSidebarEntryIds, orderedEntryIds);
+  const normalized = normalizeEntryVisibilityList(rawSidebarEntryIds, orderedEntryIds, groups);
   if (normalized.length > 0) {
     return normalized;
+  }
+
+  // 仅有 legacy sidebarPlatformIds 时，按用户侧栏数组顺序解析，而不是按总平台序过滤
+  if (legacySidebarPlatformIds.length > 0) {
+    const fromLegacy: PlatformLayoutEntryId[] = [];
+    const seen = new Set<PlatformLayoutEntryId>();
+    const orderSet = new Set(orderedEntryIds);
+    for (const platformId of legacySidebarPlatformIds) {
+      const entryId = resolveEntryIdForPlatform(platformId, groups);
+      if (!orderSet.has(entryId) || seen.has(entryId)) continue;
+      seen.add(entryId);
+      fromLegacy.push(entryId);
+    }
+    if (fromLegacy.length > 0) {
+      return fromLegacy;
+    }
   }
 
   if (Array.isArray(rawSidebarEntryIds)) {
@@ -1189,89 +1221,15 @@ function normalizeStateData(
   };
 }
 
-function loadPersistedState(): NormalizedLayoutStateData {
-  try {
-    const raw = localStorage.getItem(PLATFORM_LAYOUT_STORAGE_KEY);
-    if (!raw) {
-      const defaultGroups = defaultPlatformGroups();
-      const defaultOrder = defaultPlatformOrder();
-      const defaults = normalizeStateData({
-        orderedPlatformIds: defaultOrder,
-        hiddenPlatformIds: [],
-        sidebarPlatformIds: defaultSidebarPlatformIds(),
-        trayPlatformIds: defaultOrder,
-        traySortMode: 'auto',
-        platformGroups: defaultGroups,
-        orderedEntryIds: buildEntryOrderFromPlatformOrder(defaultOrder, defaultGroups),
-        hiddenEntryIds: [],
-        sidebarEntryIds: defaultSidebarEntryIds(defaultGroups),
-        antigravityGroupFirstMigrated: true,
-        traeSuiteDefaultGroupRestored: true,
-        apiRelaySidebarVisible: true,
-        apiRelayDashboardVisible: true,
-        apiRelayEntryOrder: 0,
-      });
-      return defaults;
-    }
-
-    const parsed = JSON.parse(raw) as PersistedPlatformLayout;
-    const antigravityGroupFirstMigrated = parsed.antigravityGroupFirstMigrated === true;
-    const traeSuiteDefaultGroupRestored = parsed.traeSuiteDefaultGroupRestored === true;
-    const orderedPlatformIds = normalizeOrder(parsed.orderedPlatformIds ?? defaultPlatformOrder());
-    const hiddenPlatformIds = normalizeHidden(parsed.hiddenPlatformIds ?? []);
-    const sidebarPlatformIds = normalizeSidebar(
-      parsed.sidebarPlatformIds ?? defaultSidebarPlatformIds(),
-      hiddenPlatformIds,
-    );
-
-    const platformGroups = normalizePlatformGroups(
-      parsed.platformGroups,
-      parsed.platformGroups === undefined,
-      { restoreDefaultTraeSuiteGroup: !traeSuiteDefaultGroupRestored },
-    ).map((group) => sortGroupPlatformsByOrder(group, orderedPlatformIds));
-
-    const orderedEntryIds = normalizeEntryOrder(parsed.orderedEntryIds, platformGroups, orderedPlatformIds);
-    const hiddenEntryIds = normalizeHiddenEntryIds(
-      parsed.hiddenEntryIds,
-      orderedEntryIds,
-      platformGroups,
-      hiddenPlatformIds,
-    );
-    const sidebarEntryIds = normalizeSidebarEntryIds(
-      parsed.sidebarEntryIds,
-      orderedEntryIds,
-      hiddenEntryIds,
-      platformGroups,
-      sidebarPlatformIds,
-    );
-
-    const normalized = normalizeStateData({
-      orderedPlatformIds,
-      hiddenPlatformIds,
-      sidebarPlatformIds,
-      trayPlatformIds: normalizeTray(
-        parsed.trayPlatformIds ?? defaultPlatformOrder(),
-        sanitizePlatformIds(parsed.orderedPlatformIds ?? []),
-        true,
-      ),
-      traySortMode: normalizeTraySortMode(parsed.traySortMode),
-      platformGroups,
-      orderedEntryIds,
-      hiddenEntryIds,
-      sidebarEntryIds,
-      antigravityGroupFirstMigrated,
-      traeSuiteDefaultGroupRestored: true,
-      apiRelaySidebarVisible: parsed.apiRelaySidebarVisible,
-      apiRelayDashboardVisible: parsed.apiRelayDashboardVisible,
-      apiRelayEntryOrder: parsed.apiRelayEntryOrder,
-    }, {
-      promoteAntigravityGroupEntry: !antigravityGroupFirstMigrated,
-    });
-    if (!antigravityGroupFirstMigrated || !traeSuiteDefaultGroupRestored) {
-      persist(normalized);
-    }
-    return normalized;
-  } catch {
+/**
+ * 生产路径与单测共用的 hydrate 入口。
+ * - `parsed == null`：出厂默认（Grok 可紧挨 Codex）
+ * - 有持久化数据：保留用户顺序，仅合并目录中新增的平台 id（追加到末尾）
+ */
+export function hydratePlatformLayoutFromPersisted(
+  parsed: PersistedPlatformLayout | null | undefined,
+): NormalizedLayoutStateData {
+  if (!parsed) {
     const defaultGroups = defaultPlatformGroups();
     const defaultOrder = defaultPlatformOrder();
     return normalizeStateData({
@@ -1290,6 +1248,99 @@ function loadPersistedState(): NormalizedLayoutStateData {
       apiRelayDashboardVisible: true,
       apiRelayEntryOrder: 0,
     });
+  }
+
+  const antigravityGroupFirstMigrated = parsed.antigravityGroupFirstMigrated === true;
+  const traeSuiteDefaultGroupRestored = parsed.traeSuiteDefaultGroupRestored === true;
+  // 有已存顺序时只做 sanitize + 末尾补全新平台，绝不 ensureGrokBesideCodex
+  const orderedPlatformIds = normalizeOrder(
+    Array.isArray(parsed.orderedPlatformIds) && parsed.orderedPlatformIds.length > 0
+      ? parsed.orderedPlatformIds
+      : defaultPlatformOrder(),
+  );
+  const hiddenPlatformIds = normalizeHidden(parsed.hiddenPlatformIds ?? []);
+  // 侧栏：有用户配置则保留顺序；仅当字段缺失时用默认侧栏（默认仍可 Grok 靠 Codex）
+  const hasSavedSidebar =
+    (Array.isArray(parsed.sidebarEntryIds) && parsed.sidebarEntryIds.length > 0)
+    || (Array.isArray(parsed.sidebarPlatformIds) && parsed.sidebarPlatformIds.length > 0);
+  const sidebarPlatformIds = normalizeSidebar(
+    hasSavedSidebar
+      ? (parsed.sidebarPlatformIds ?? [])
+      : defaultSidebarPlatformIds(),
+    hiddenPlatformIds,
+  );
+
+  const platformGroups = normalizePlatformGroups(
+    parsed.platformGroups,
+    parsed.platformGroups === undefined,
+    { restoreDefaultTraeSuiteGroup: !traeSuiteDefaultGroupRestored },
+  ).map((group) => sortGroupPlatformsByOrder(group, orderedPlatformIds));
+
+  const orderedEntryIds = normalizeEntryOrder(parsed.orderedEntryIds, platformGroups, orderedPlatformIds);
+  const hiddenEntryIds = normalizeHiddenEntryIds(
+    parsed.hiddenEntryIds,
+    orderedEntryIds,
+    platformGroups,
+    hiddenPlatformIds,
+  );
+  const sidebarEntryIds = normalizeSidebarEntryIds(
+    parsed.sidebarEntryIds,
+    orderedEntryIds,
+    hiddenEntryIds,
+    platformGroups,
+    sidebarPlatformIds,
+  );
+
+  return normalizeStateData({
+    orderedPlatformIds,
+    hiddenPlatformIds,
+    sidebarPlatformIds,
+    trayPlatformIds: normalizeTray(
+      Array.isArray(parsed.trayPlatformIds) ? parsed.trayPlatformIds : defaultPlatformOrder(),
+      sanitizePlatformIds(parsed.orderedPlatformIds ?? []),
+      true,
+    ),
+    traySortMode: normalizeTraySortMode(parsed.traySortMode),
+    platformGroups,
+    orderedEntryIds,
+    hiddenEntryIds,
+    sidebarEntryIds,
+    antigravityGroupFirstMigrated,
+    traeSuiteDefaultGroupRestored: true,
+    apiRelaySidebarVisible: parsed.apiRelaySidebarVisible,
+    apiRelayDashboardVisible: parsed.apiRelayDashboardVisible,
+    apiRelayEntryOrder: parsed.apiRelayEntryOrder,
+  }, {
+    promoteAntigravityGroupEntry: !antigravityGroupFirstMigrated,
+  });
+}
+
+/** 出厂默认平台顺序（含 Grok 靠 Codex），供测试与 reset 对照 */
+export function getDefaultPlatformOrder(): PlatformId[] {
+  return defaultPlatformOrder();
+}
+
+export function getPlatformLayoutStorageKey(): string {
+  return PLATFORM_LAYOUT_STORAGE_KEY;
+}
+
+function loadPersistedState(): NormalizedLayoutStateData {
+  try {
+    const raw = localStorage.getItem(PLATFORM_LAYOUT_STORAGE_KEY);
+    if (!raw) {
+      return hydratePlatformLayoutFromPersisted(null);
+    }
+
+    const parsed = JSON.parse(raw) as PersistedPlatformLayout;
+    const antigravityGroupFirstMigrated = parsed.antigravityGroupFirstMigrated === true;
+    const traeSuiteDefaultGroupRestored = parsed.traeSuiteDefaultGroupRestored === true;
+    const normalized = hydratePlatformLayoutFromPersisted(parsed);
+    if (!antigravityGroupFirstMigrated || !traeSuiteDefaultGroupRestored) {
+      persist(normalized);
+    }
+    return normalized;
+  } catch {
+    return hydratePlatformLayoutFromPersisted(null);
   }
 }
 

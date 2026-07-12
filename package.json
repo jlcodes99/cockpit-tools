@@ -14,7 +14,8 @@
     "tauri:dev": "node scripts/tauri-dev.cjs",
     "pretauri": "npm run typecheck",
     "tauri": "node scripts/tauri.cjs",
-    "sync-version": "node scripts/sync-version.js"
+    "sync-version": "node scripts/sync-version.js",
+    "test:platform-layout": "node scripts/test-platform-layout-persist.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
