@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 use std::process::Command;
 use std::time::Instant;
 
@@ -1533,6 +1533,63 @@ pub async fn codex_execute_instance_launch_command(
         return Ok("已在终端执行 Codex CLI 命令".to_string());
     }
 
+    #[cfg(target_os = "linux")]
+    {
+        let config = crate::modules::config::get_user_config();
+        let terminal = terminal
+            .unwrap_or(config.default_terminal)
+            .trim()
+            .to_string();
+        let shell_command = format!("{}; exec bash", command);
+
+        let mut cmd = if terminal == "system" || terminal.is_empty() {
+            Command::new("x-terminal-emulator")
+        } else {
+            Command::new(&terminal)
+        };
+
+        cmd.args(["-e", "bash", "-lc", &shell_command])
+            .spawn()
+            .or_else(|_| {
+                if terminal == "system" || terminal.is_empty() {
+                    Command::new("gnome-terminal")
+                        .args(["--", "bash", "-lc", &shell_command])
+                        .spawn()
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "指定终端未找到",
+                    ))
+                }
+            })
+            .or_else(|_| {
+                if terminal == "system" || terminal.is_empty() {
+                    Command::new("konsole")
+                        .args(["-e", "bash", "-lc", &shell_command])
+                        .spawn()
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "指定终端未找到",
+                    ))
+                }
+            })
+            .or_else(|_| {
+                if terminal == "system" || terminal.is_empty() {
+                    Command::new("xfce4-terminal")
+                        .args(["-e", "bash", "-lc", &shell_command])
+                        .spawn()
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "指定终端未找到",
+                    ))
+                }
+            })
+            .map_err(|e| format!("打开终端失败: {}", e))?;
+        return Ok("已在终端执行 Codex CLI 命令".to_string());
+    }
+
     #[allow(unreachable_code)]
-    Err("Codex CLI 终端执行仅支持 macOS 和 Windows".to_string())
+    Err("Codex CLI 终端执行仅支持 macOS、Windows 和 Linux".to_string())
 }
