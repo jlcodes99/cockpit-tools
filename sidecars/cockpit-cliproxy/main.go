@@ -2895,7 +2895,7 @@ func buildCoreAuthSelector(cfg *config.Config, selector coreauth.Selector, m *ma
 		})
 		selector = &imageRequestSelector{
 			imageFallback: imageFallback,
-			fallback:      &cockpitSessionAffinitySelector{inner: selector},
+			fallback:      &cockpitSessionAffinitySelector{inner: affinitySelector},
 		}
 	}
 	if m != nil {
