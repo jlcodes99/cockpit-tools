@@ -10581,7 +10581,7 @@ async fn prepare_sidecar_launch_config_in_dir(
         "streaming".to_string(),
         json!({
             "keepalive-seconds": timeouts.sidecar_stream_keepalive_seconds,
-            "bootstrap-retries": timeouts.single_account_status_retry_attempts,
+            "bootstrap-retries": timeouts.sidecar_streaming_bootstrap_retries,
             "bootstrap-retry-base-delay-ms": timeouts.single_account_status_retry_base_delay_ms,
             "bootstrap-retry-max-delay-ms": timeouts.single_account_status_retry_max_delay_ms,
             "stream-open-timeout-ms": timeouts.sidecar_stream_open_timeout_ms,
@@ -29314,6 +29314,46 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             &fs::read_to_string(&launch_config.config_path).expect("read sidecar config"),
         )
         .expect("parse sidecar config");
+
+        fs::remove_dir_all(&dir).expect("cleanup temp dir");
+    }
+
+    #[tokio::test]
+    async fn sidecar_config_uses_streaming_bootstrap_retry_setting() {
+        let dir = make_temp_dir("codex-sidecar-streaming-bootstrap-retries");
+        let account = CodexAccount::new(
+            "oauth-streaming-retries-1".to_string(),
+            "oauth@example.com".to_string(),
+            CodexTokens {
+                id_token: String::new(),
+                access_token: "access-token".to_string(),
+                refresh_token: Some("refresh-token".to_string()),
+            },
+        );
+        let mut collection = test_local_access_collection(vec![account.id.clone()]);
+        collection.timeouts.single_account_status_retry_attempts = 4;
+        collection.timeouts.sidecar_streaming_bootstrap_retries = 2;
+
+        let launch_config = prepare_sidecar_launch_config_in_dir(
+            &collection,
+            dir.clone(),
+            HashMap::new(),
+            None,
+            HashMap::from([(account.id.clone(), account)]),
+        )
+        .await
+        .expect("sidecar config should build");
+        let config: Value = serde_json::from_str(
+            &fs::read_to_string(&launch_config.config_path).expect("read sidecar config"),
+        )
+        .expect("parse sidecar config");
+
+        assert_eq!(
+            config
+                .get("streaming")
+                .and_then(|streaming| streaming.get("bootstrap-retries")),
+            Some(&json!(2))
+        );
 
         fs::remove_dir_all(&dir).expect("cleanup temp dir");
     }
