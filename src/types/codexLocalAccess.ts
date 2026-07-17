@@ -111,6 +111,9 @@ export interface CodexLocalAccessTimeoutPreset {
 
 export interface CodexLocalAccessCollection {
   enabled: boolean;
+  manageAuthJson: boolean;
+  manageConfigToml: boolean;
+  manageModelCatalog: boolean;
   port: number;
   apiKey: string;
   apiKeys: CodexLocalAccessApiKey[];

@@ -4488,7 +4488,10 @@ fn ensure_storage_writable_for_import() -> Result<(), String> {
     Ok(())
 }
 
-pub fn write_auth_file_to_dir(base_dir: &Path, account: &CodexAccount) -> Result<(), String> {
+pub(crate) fn write_auth_json_only_to_dir(
+    base_dir: &Path,
+    account: &CodexAccount,
+) -> Result<(), String> {
     let auth_path = base_dir.join("auth.json");
     logger::log_info(&format!(
         "[Codex切号] 准备写入登录信息: account_id={}, email={}, target_dir={}, target_file={}",
@@ -4497,8 +4500,6 @@ pub fn write_auth_file_to_dir(base_dir: &Path, account: &CodexAccount) -> Result
         base_dir.display(),
         auth_path.display()
     ));
-
-    crate::modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(base_dir)?;
 
     let auth_file = build_auth_file_value(account)?;
     let content =
@@ -4511,7 +4512,21 @@ pub fn write_auth_file_to_dir(base_dir: &Path, account: &CodexAccount) -> Result
         )
     })?;
 
-    let provider_config = if account.is_api_key_auth() {
+    logger::log_info(&format!(
+        "[Codex切号] 已写入登录信息: account_id={}, target_file={}",
+        account.id,
+        auth_path.display()
+    ));
+    Ok(())
+}
+
+pub(crate) fn write_account_config_only_to_dir(
+    base_dir: &Path,
+    account: &CodexAccount,
+) -> Result<(), String> {
+    crate::modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(base_dir)?;
+
+    if account.is_api_key_auth() {
         let api_key = normalize_api_key(account.openai_api_key.as_deref().unwrap_or_default())
             .ok_or_else(|| "API Key 账号缺少 OPENAI_API_KEY".to_string())?;
         let provider_config = infer_api_provider_config(
@@ -4531,7 +4546,7 @@ pub fn write_auth_file_to_dir(base_dir: &Path, account: &CodexAccount) -> Result
             // 纯 API Key：有生图时关闭 openai auth 门，走 bearer + actor。
             !supports_image,
         )?;
-        provider_config
+        Ok(())
     } else {
         let provider_config = ApiProviderConfig {
             mode: CodexApiProviderMode::OpenaiBuiltin,
@@ -4539,17 +4554,13 @@ pub fn write_auth_file_to_dir(base_dir: &Path, account: &CodexAccount) -> Result
             provider_id: None,
             provider_name: None,
         };
-        write_api_provider_to_config_toml(base_dir, &provider_config)?;
-        provider_config
-    };
+        write_api_provider_to_config_toml(base_dir, &provider_config)
+    }
+}
 
-    logger::log_info(&format!(
-        "[Codex切号] 已写入登录信息: account_id={}, target_file={}, has_base_url={}",
-        account.id,
-        auth_path.display(),
-        provider_config.base_url.is_some()
-    ));
-
+pub fn write_auth_file_to_dir(base_dir: &Path, account: &CodexAccount) -> Result<(), String> {
+    write_auth_json_only_to_dir(base_dir, account)?;
+    write_account_config_only_to_dir(base_dir, account)?;
     Ok(())
 }
 
@@ -8568,10 +8579,11 @@ mod tests {
         upsert_account_from_access_token_with_hints, upsert_account_from_auth_tokens,
         upsert_api_key_account, validate_api_key_credentials, write_account_bundle_to_dir,
         write_api_key_provider_to_config_toml, write_api_provider_to_config_toml,
-        write_managed_projection_to_dir, write_quick_config_to_config_toml, ApiProviderConfig,
-        CodexAccessTokenImportHints, CodexAccountGroupRecord, CodexAccountIndex,
-        CodexAccountSummary, CodexAuthFile, CodexAuthTokens, CodexGroupQuotaRefreshPolicy,
-        CodexJsonImportCandidate, LocalCodexOAuthSnapshot, CODEX_ACCOUNT_DETAIL_SCHEMA_VERSION,
+        write_auth_json_only_to_dir, write_managed_projection_to_dir,
+        write_quick_config_to_config_toml, ApiProviderConfig, CodexAccessTokenImportHints,
+        CodexAccountGroupRecord, CodexAccountIndex, CodexAccountSummary, CodexAuthFile,
+        CodexAuthTokens, CodexGroupQuotaRefreshPolicy, CodexJsonImportCandidate,
+        LocalCodexOAuthSnapshot, CODEX_ACCOUNT_DETAIL_SCHEMA_VERSION,
         CODEX_AUTHORIZATION_STATUS_PENDING, CODEX_AUTO_COMPACT_DEFAULT_LIMIT,
         CODEX_CONTEXT_WINDOW_1M_VALUE, CODEX_DISABLE_HOSTED_IMAGE_GENERATION_HEADER,
         CODEX_DISABLE_HOSTED_IMAGE_GENERATION_HEADER_VALUE, CODEX_IMAGEGEN_ACTOR_HEADER,
@@ -10976,6 +10988,32 @@ http_headers = { "x-openai-actor-authorization" = "legacy", "X-Custom" = "keep-m
         assert!(content.contains(CODEX_IMAGEGEN_ACTOR_HEADER));
         assert!(content.contains(CODEX_IMAGEGEN_ACTOR_HEADER_VALUE));
 
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn auth_json_only_write_preserves_config_toml() {
+        let base_dir = make_temp_dir("codex-auth-json-only-test");
+        let config_path = base_dir.join("config.toml");
+        fs::write(&config_path, "model = \"gpt-5.4\"\n").expect("seed config");
+        let account = CodexAccount::new_api_key(
+            "local-access-runtime".to_string(),
+            "api-service-local".to_string(),
+            "agt_codex_test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("http://127.0.0.1:14998/v1".to_string()),
+            Some("codex_local_access".to_string()),
+            Some("Codex API Service".to_string()),
+            vec![CODEX_IMAGE_MODEL_ID.to_string()],
+        );
+
+        write_auth_json_only_to_dir(&base_dir, &account).expect("write auth only");
+
+        assert!(base_dir.join("auth.json").exists());
+        assert_eq!(
+            fs::read_to_string(&config_path).expect("read config"),
+            "model = \"gpt-5.4\"\n"
+        );
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
 

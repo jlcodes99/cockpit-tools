@@ -3446,6 +3446,25 @@ pub async fn codex_local_access_set_enabled(
 }
 
 #[tauri::command]
+pub async fn codex_local_access_update_profile_file_management(
+    manage_auth_json: bool,
+    manage_config_toml: bool,
+    manage_model_catalog: bool,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_profile_file_management(
+        manage_auth_json,
+        manage_config_toml,
+        manage_model_catalog,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_restore_profile_files() -> Result<CodexLocalAccessState, String> {
+    codex_local_access::restore_local_access_profile_files().await
+}
+
+#[tauri::command]
 pub async fn codex_local_access_activate(
     app: AppHandle,
     auto_repair_mode: Option<codex_session_visibility::CodexSessionVisibilityAutoRepairMode>,

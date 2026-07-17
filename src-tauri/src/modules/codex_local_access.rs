@@ -8698,7 +8698,8 @@ fn inspect_local_access_profile_attachment(
         }
     }
 
-    attachment.attached = attachment.config_attached;
+    attachment.attached = (!collection.manage_auth_json || attachment.auth_attached)
+        && (!collection.manage_config_toml || attachment.config_attached);
     attachment
 }
 
@@ -8919,6 +8920,9 @@ fn save_profile_takeover_backup(profile_dir: &Path, api_key: &str) -> Result<(),
 fn restore_profile_takeover_backup(
     backup: &CodexLocalAccessProfileTakeoverBackup,
     api_key: &str,
+    manage_auth_json: bool,
+    manage_config_toml: bool,
+    manage_model_catalog: bool,
 ) -> Result<bool, String> {
     let profile_dir = PathBuf::from(&backup.profile_dir);
     let config_path = profile_config_path(&profile_dir);
@@ -8934,20 +8938,31 @@ fn restore_profile_takeover_backup(
         .map(|content| is_codex_local_access_auth_text(content, api_key))
         .unwrap_or(false);
 
-    if !config_is_managed && !auth_is_managed {
+    let restore_auth = manage_auth_json && auth_is_managed;
+    let restore_config = manage_config_toml && config_is_managed;
+    if !restore_auth && !restore_config && !manage_model_catalog {
         return Ok(false);
     }
 
-    let restored_config = restore_config_toml_from_takeover_backup(
-        current_config.as_deref(),
-        backup.config_toml.as_deref(),
-    )?;
-    write_optional_profile_file(&auth_path, backup.auth_json.as_deref())?;
-    write_optional_profile_file(&config_path, restored_config.as_deref())?;
-    let catalog_path = profile_dir.join(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE);
-    if catalog_path.exists() {
-        std::fs::remove_file(&catalog_path)
-            .map_err(|e| format!("删除 Codex API 服务模型目录失败: {}", e))?;
+    if restore_auth {
+        write_optional_profile_file(&auth_path, backup.auth_json.as_deref())?;
+    }
+    if restore_config {
+        let restored_config = restore_config_toml_from_takeover_backup(
+            current_config.as_deref(),
+            backup.config_toml.as_deref(),
+        )?;
+        write_optional_profile_file(&config_path, restored_config.as_deref())?;
+    }
+    if manage_model_catalog {
+        let catalog_path = profile_dir.join(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE);
+        if catalog_path.exists() {
+            std::fs::remove_file(&catalog_path)
+                .map_err(|e| format!("删除 Codex API 服务模型目录失败: {}", e))?;
+        }
+        if !manage_config_toml {
+            remove_local_access_model_catalog_reference(&profile_dir)?;
+        }
     }
     Ok(true)
 }
@@ -8955,43 +8970,59 @@ fn restore_profile_takeover_backup(
 fn cleanup_profile_takeover_without_backup(
     profile_dir: &Path,
     api_key: &str,
+    manage_auth_json: bool,
+    manage_config_toml: bool,
+    manage_model_catalog: bool,
 ) -> Result<bool, String> {
     let config_path = profile_config_path(profile_dir);
     let auth_path = profile_auth_path(profile_dir);
     let mut changed = false;
 
-    if let Some(config_text) = read_optional_profile_file(&config_path)? {
-        if is_codex_local_access_config_for_api_key(&config_text, api_key) {
-            let cleaned = remove_codex_local_access_config(&config_text)?;
-            let cleaned_content = if cleaned.trim().is_empty() {
-                None
-            } else {
-                Some(cleaned)
-            };
-            write_optional_profile_file(&config_path, cleaned_content.as_deref())?;
-            changed = true;
+    if manage_config_toml {
+        if let Some(config_text) = read_optional_profile_file(&config_path)? {
+            if is_codex_local_access_config_for_api_key(&config_text, api_key) {
+                let cleaned = remove_codex_local_access_config(&config_text)?;
+                let cleaned_content = if cleaned.trim().is_empty() {
+                    None
+                } else {
+                    Some(cleaned)
+                };
+                write_optional_profile_file(&config_path, cleaned_content.as_deref())?;
+                changed = true;
+            }
         }
     }
 
-    if let Some(auth_text) = read_optional_profile_file(&auth_path)? {
-        if is_codex_local_access_auth_text(&auth_text, api_key) {
-            write_optional_profile_file(&auth_path, None)?;
-            changed = true;
+    if manage_auth_json {
+        if let Some(auth_text) = read_optional_profile_file(&auth_path)? {
+            if is_codex_local_access_auth_text(&auth_text, api_key) {
+                write_optional_profile_file(&auth_path, None)?;
+                changed = true;
+            }
         }
     }
 
-    let catalog_path = profile_dir.join(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE);
-    if catalog_path.exists() {
-        std::fs::remove_file(&catalog_path)
-            .map_err(|e| format!("删除 Codex API 服务模型目录失败: {}", e))?;
-        changed = true;
+    if manage_model_catalog {
+        let catalog_path = profile_dir.join(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE);
+        if catalog_path.exists() {
+            std::fs::remove_file(&catalog_path)
+                .map_err(|e| format!("删除 Codex API 服务模型目录失败: {}", e))?;
+            changed = true;
+        }
+        if !manage_config_toml {
+            remove_local_access_model_catalog_reference(profile_dir)?;
+        }
     }
 
     Ok(changed)
 }
 
-fn restore_takeover_profiles_after_disable(
+fn restore_takeover_profiles(
     collection: &CodexLocalAccessCollection,
+    manage_auth_json: bool,
+    manage_config_toml: bool,
+    manage_model_catalog: bool,
+    clear_backups: bool,
 ) -> Result<(), String> {
     let backups = load_takeover_backups()?;
     let default_profile = codex_account::get_codex_home();
@@ -9002,15 +9033,23 @@ fn restore_takeover_profiles_after_disable(
         if protect_default_profile && backup.profile_dir == default_key {
             continue;
         }
-        if restore_profile_takeover_backup(backup, &collection.api_key)? {
+        if restore_profile_takeover_backup(
+            backup,
+            &collection.api_key,
+            manage_auth_json,
+            manage_config_toml,
+            manage_model_catalog,
+        )? {
             restored_count += 1;
         }
     }
 
-    save_takeover_backups(&CodexLocalAccessTakeoverBackups {
-        version: CODEX_LOCAL_ACCESS_TAKEOVER_BACKUP_VERSION,
-        profiles: Vec::new(),
-    })?;
+    if clear_backups {
+        save_takeover_backups(&CodexLocalAccessTakeoverBackups {
+            version: CODEX_LOCAL_ACCESS_TAKEOVER_BACKUP_VERSION,
+            profiles: Vec::new(),
+        })?;
+    }
 
     let default_had_backup = backups
         .profiles
@@ -9019,12 +9058,18 @@ fn restore_takeover_profiles_after_disable(
     let cleaned_default_without_backup = if protect_default_profile || default_had_backup {
         false
     } else {
-        cleanup_profile_takeover_without_backup(&default_profile, &collection.api_key)?
+        cleanup_profile_takeover_without_backup(
+            &default_profile,
+            &collection.api_key,
+            manage_auth_json,
+            manage_config_toml,
+            manage_model_catalog,
+        )?
     };
 
     if restored_count > 0 || cleaned_default_without_backup {
         logger::log_codex_api_info(&format!(
-            "Codex API 服务停用后已恢复 Live 配置: restored_profiles={}, cleaned_default_without_backup={}",
+            "Codex API 服务已恢复受管配置: restored_profiles={}, cleaned_default_without_backup={}",
             restored_count, cleaned_default_without_backup
         ));
     }
@@ -11650,11 +11695,33 @@ fn invalidate_codex_model_cache(profile_dir: &Path) -> Result<(), String> {
     }
 }
 
+fn remove_local_access_model_catalog_reference(profile_dir: &Path) -> Result<(), String> {
+    let config_path = profile_config_path(profile_dir);
+    let Some(existing) = read_optional_profile_file(&config_path)? else {
+        return Ok(());
+    };
+    let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&existing)
+        .map_err(|e| format!("解析 Codex config.toml 失败: {}", e))?;
+    if doc.get("model_catalog_json").and_then(|item| item.as_str())
+        != Some(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE)
+    {
+        return Ok(());
+    }
+    let _ = doc.remove("model_catalog_json");
+    let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
+    crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
+}
+
 async fn write_local_access_profile_takeover(
     profile_dir: &Path,
     collection: &CodexLocalAccessCollection,
     api_key: Option<&str>,
 ) -> Result<(), String> {
+    validate_profile_file_management(
+        collection.manage_auth_json,
+        collection.manage_config_toml,
+        collection.manage_model_catalog,
+    )?;
     let bound_oauth_account_id =
         normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref());
     if let Some(bound_id) = bound_oauth_account_id.as_deref() {
@@ -11673,8 +11740,16 @@ async fn write_local_access_profile_takeover(
         bound_oauth_account_id,
         supports_websockets,
     );
-    codex_account::write_account_bundle_to_dir(profile_dir, &runtime_account)?;
-    write_local_access_profile_model_catalog(profile_dir, supports_websockets)
+    if collection.manage_auth_json {
+        codex_account::write_auth_json_only_to_dir(profile_dir, &runtime_account)?;
+    }
+    if collection.manage_config_toml {
+        codex_account::write_account_config_only_to_dir(profile_dir, &runtime_account)?;
+    }
+    if collection.manage_model_catalog {
+        write_local_access_profile_model_catalog(profile_dir, supports_websockets)?;
+    }
+    Ok(())
 }
 
 fn push_local_access_takeover_dir(
@@ -13662,9 +13737,7 @@ fn sanitize_collection_with_accounts(
     Ok((changed, valid_account_ids))
 }
 
-async fn ensure_runtime_loaded_without_start_with_profile_restore(
-    restore_disabled_profiles: bool,
-) -> Result<(), String> {
+async fn ensure_runtime_loaded_without_start_with_profile_restore() -> Result<(), String> {
     loop {
         {
             let runtime = gateway_runtime().lock().await;
@@ -13699,6 +13772,9 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
         if next_collection.is_none() {
             next_collection = Some(CodexLocalAccessCollection {
                 enabled: false,
+                manage_auth_json: true,
+                manage_config_toml: false,
+                manage_model_catalog: false,
                 port: allocate_initial_local_port(CODEX_LOCAL_ACCESS_LOCALHOST_BIND_HOST)?,
                 api_key: generate_local_api_key(),
                 api_keys: Vec::new(),
@@ -13781,25 +13857,6 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
         // After the base runtime is visible, prune stale account membership in background.
         ensure_collection_account_sanitize_started();
 
-        if restore_disabled_profiles
-            && next_collection
-                .as_ref()
-                .is_some_and(|collection| !collection.enabled)
-        {
-            if let Some(collection) = next_collection.clone() {
-                let _ = std::thread::Builder::new()
-                    .name("codex-api-profile-restore".to_string())
-                    .spawn(move || {
-                        if let Err(error) = restore_takeover_profiles_after_disable(&collection) {
-                            logger::log_codex_api_warn(&format!(
-                                "Codex API 服务处于停用状态，但后台恢复 Live 配置失败: {}",
-                                error
-                            ));
-                        }
-                    });
-            }
-        }
-
         ensure_stats_maintenance_started();
         if let (Some(collection), Some(app)) = (next_collection, crate::get_app_handle().cloned()) {
             tauri::async_runtime::spawn(async move {
@@ -13826,7 +13883,7 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
 }
 
 async fn ensure_runtime_loaded_without_start() -> Result<(), String> {
-    ensure_runtime_loaded_without_start_with_profile_restore(true).await
+    ensure_runtime_loaded_without_start_with_profile_restore().await
 }
 
 async fn ensure_runtime_loaded() -> Result<(), String> {
@@ -13855,7 +13912,7 @@ async fn ensure_runtime_loaded() -> Result<(), String> {
 }
 
 async fn ensure_runtime_loaded_for_app_startup() -> Result<(), String> {
-    ensure_runtime_loaded_without_start_with_profile_restore(false).await?;
+    ensure_runtime_loaded_without_start_with_profile_restore().await?;
     ensure_bound_oauth_quota_monitor_started();
 
     let should_start = {
@@ -15008,6 +15065,9 @@ pub async fn activate_local_access_for_dir(
 fn new_empty_local_access_collection() -> Result<CodexLocalAccessCollection, String> {
     Ok(CodexLocalAccessCollection {
         enabled: false,
+        manage_auth_json: true,
+        manage_config_toml: false,
+        manage_model_catalog: false,
         port: allocate_initial_local_port(CODEX_LOCAL_ACCESS_LOCALHOST_BIND_HOST)?,
         api_key: generate_local_api_key(),
         api_keys: Vec::new(),
@@ -15043,6 +15103,17 @@ fn new_empty_local_access_collection() -> Result<CodexLocalAccessCollection, Str
         created_at: now_ms(),
         updated_at: now_ms(),
     })
+}
+
+fn validate_profile_file_management(
+    _manage_auth_json: bool,
+    manage_config_toml: bool,
+    manage_model_catalog: bool,
+) -> Result<(), String> {
+    if manage_model_catalog && !manage_config_toml {
+        return Err("使用 Cockpit model catalog 前必须允许管理 config.toml".to_string());
+    }
+    Ok(())
 }
 
 fn provider_gateway_api_key_id(account_id: &str) -> String {
@@ -17649,6 +17720,9 @@ fn new_local_access_collection() -> Result<CodexLocalAccessCollection, String> {
     let now = now_ms();
     Ok(CodexLocalAccessCollection {
         enabled: false,
+        manage_auth_json: true,
+        manage_config_toml: false,
+        manage_model_catalog: false,
         port: allocate_initial_local_port(CODEX_LOCAL_ACCESS_LOCALHOST_BIND_HOST)?,
         api_key: generate_local_api_key(),
         api_keys: Vec::new(),
@@ -18911,9 +18985,79 @@ pub async fn set_local_access_enabled(enabled: bool) -> Result<CodexLocalAccessS
         snapshot_state().await
     } else {
         stop_gateway().await;
-        restore_takeover_profiles_after_disable(&next_collection)?;
         snapshot_state_without_gateway_reload().await
     }
+}
+
+pub async fn update_local_access_profile_file_management(
+    manage_auth_json: bool,
+    manage_config_toml: bool,
+    manage_model_catalog: bool,
+) -> Result<CodexLocalAccessState, String> {
+    validate_profile_file_management(manage_auth_json, manage_config_toml, manage_model_catalog)?;
+    ensure_runtime_loaded_without_start().await?;
+
+    let mut collection = {
+        let runtime = gateway_runtime().lock().await;
+        runtime
+            .collection
+            .clone()
+            .ok_or_else(|| "本地接入集合尚未创建".to_string())?
+    };
+    let restore_auth = collection.manage_auth_json && !manage_auth_json;
+    let restore_config = collection.manage_config_toml && !manage_config_toml;
+    let restore_catalog = collection.manage_model_catalog && !manage_model_catalog;
+    if restore_auth || restore_config || restore_catalog {
+        restore_takeover_profiles(
+            &collection,
+            restore_auth,
+            restore_config,
+            restore_catalog,
+            false,
+        )?;
+    }
+
+    collection.manage_auth_json = manage_auth_json;
+    collection.manage_config_toml = manage_config_toml;
+    collection.manage_model_catalog = manage_model_catalog;
+    collection.updated_at = now_ms();
+    save_collection_to_disk(&collection)?;
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        sync_runtime_collection(&mut runtime, collection.clone());
+    }
+    if collection.enabled {
+        ensure_local_access_profile_takeovers(&collection).await?;
+    }
+    snapshot_state_without_gateway_reload().await
+}
+
+pub async fn restore_local_access_profile_files() -> Result<CodexLocalAccessState, String> {
+    ensure_runtime_loaded_without_start().await?;
+    let mut collection = {
+        let runtime = gateway_runtime().lock().await;
+        runtime
+            .collection
+            .clone()
+            .ok_or_else(|| "本地接入集合尚未创建".to_string())?
+    };
+    restore_takeover_profiles(
+        &collection,
+        collection.manage_auth_json,
+        collection.manage_config_toml,
+        collection.manage_model_catalog,
+        true,
+    )?;
+    collection.manage_auth_json = false;
+    collection.manage_config_toml = false;
+    collection.manage_model_catalog = false;
+    collection.updated_at = now_ms();
+    save_collection_to_disk(&collection)?;
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        sync_runtime_collection(&mut runtime, collection);
+    }
+    snapshot_state_without_gateway_reload().await
 }
 
 pub async fn restore_local_access_gateway() {
@@ -23945,7 +24089,8 @@ mod tests {
         macos_proxy_url_from_scutil_map, max_credential_attempts_for_strategy,
         merge_collection_and_account_excluded_models, model_pricing,
         model_provider_direct_test_client_model, model_provider_test_uses_provider_gateway,
-        normalize_account_id_list, normalize_account_model_rules, normalize_collection_api_keys,
+        new_empty_local_access_collection, normalize_account_id_list,
+        normalize_account_model_rules, normalize_collection_api_keys,
         normalize_custom_routing_rules, normalized_sidecar_error_category,
         open_local_access_logs_db_once, parse_codex_retry_after,
         parse_responses_payload_from_upstream, parse_websocket_upstream_error,
@@ -23963,7 +24108,7 @@ mod tests {
         resolve_effective_model_pricing, resolve_plan_rank, resolve_sidecar_upstream_base_url,
         resolve_sidecar_upstream_base_url_with, resolve_supported_model_alias,
         resolve_upstream_target, restore_config_toml_from_takeover_backup,
-        sanitize_collection_with_accounts, scutil_proxy_map,
+        restore_profile_takeover_backup, sanitize_collection_with_accounts, scutil_proxy_map,
         selected_account_ids_have_image_generation_capacity,
         should_retry_single_account_upstream_status, should_treat_response_as_stream,
         should_try_next_account, sidecar_account_manifest_value,
@@ -23976,23 +24121,24 @@ mod tests {
         sidecar_routing_strategy_value, sidecar_stable_id, supported_codex_model_ids,
         system_proxy_target_scheme, system_proxy_value_url,
         tool_declares_image_generation_capability, validate_api_key_account_scope_update,
-        validate_client_model_visible, visible_codex_model_ids_for_api_key,
-        visible_codex_model_ids_for_api_key_with_accounts, websocket_accept_value,
-        websocket_connect_error_from_http_response, windows_proxy_url_from_server,
-        windows_reg_dword_enabled, windows_reg_query_map,
+        validate_client_model_visible, validate_profile_file_management,
+        visible_codex_model_ids_for_api_key, visible_codex_model_ids_for_api_key_with_accounts,
+        websocket_accept_value, websocket_connect_error_from_http_response,
+        windows_proxy_url_from_server, windows_reg_dword_enabled, windows_reg_query_map,
         write_local_access_profile_model_override, write_local_access_profile_takeover,
         write_provider_gateway_model_catalog, write_string_atomic, write_string_atomic_if_changed,
-        CodexLocalAccessCollection, CodexLocalAccessGatewayMode, CodexLocalAccessScope,
+        CodexLocalAccessCollection, CodexLocalAccessGatewayMode,
+        CodexLocalAccessProfileTakeoverBackup, CodexLocalAccessScope,
         CodexModelProviderGatewayChatTestRequest, GatewayResponseAdapter, ParsedRequest,
         ResolvedLocalApiKey, ResponseUsageCollector, RoutingCandidate, SidecarUsageDetails,
         SidecarUsageEvent, UsageCapture, BOUND_OAUTH_QUOTA_RESERVE_MAX_SNAPSHOT_AGE_SECONDS,
         CODEX_AUTO_REVIEW_MODEL_ID, CODEX_IMAGEGEN_ACTOR_HEADER, CODEX_IMAGE_MODEL_ID,
         CODEX_LOCAL_ACCESS_DISABLE_HOSTED_IMAGE_GENERATION_HEADER,
         CODEX_LOCAL_ACCESS_DISABLE_HOSTED_IMAGE_GENERATION_HEADER_VALUE,
-        CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE, CODEX_PROFILE_AUTH_FILE, CODEX_PROFILE_CONFIG_FILE,
-        CODEX_PROVIDER_MODEL_BACKUP_FILE, CODEX_PROVIDER_MODEL_CATALOG_FILE,
-        DEFAULT_MAX_RETRY_INTERVAL_MS, DEFAULT_MODEL_PRICING_VERSION,
-        DEFAULT_SESSION_AFFINITY_TTL_MS, MAX_HTTP_REQUEST_BYTES,
+        CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE, CODEX_MODEL_CACHE_FILE, CODEX_PROFILE_AUTH_FILE,
+        CODEX_PROFILE_CONFIG_FILE, CODEX_PROVIDER_MODEL_BACKUP_FILE,
+        CODEX_PROVIDER_MODEL_CATALOG_FILE, DEFAULT_MAX_RETRY_INTERVAL_MS,
+        DEFAULT_MODEL_PRICING_VERSION, DEFAULT_SESSION_AFFINITY_TTL_MS, MAX_HTTP_REQUEST_BYTES,
     };
     use crate::models::codex::{
         CodexAccount, CodexApiProviderMode, CodexAppSpeed, CodexQuota, CodexQuotaErrorInfo,
@@ -24048,6 +24194,9 @@ mod tests {
     fn test_local_access_collection(account_ids: Vec<String>) -> CodexLocalAccessCollection {
         CodexLocalAccessCollection {
             enabled: true,
+            manage_auth_json: true,
+            manage_config_toml: true,
+            manage_model_catalog: true,
             port: 14998,
             api_key: "local-api-key".to_string(),
             api_keys: Vec::new(),
@@ -24083,6 +24232,43 @@ mod tests {
             created_at: 0,
             updated_at: 0,
         }
+    }
+
+    #[test]
+    fn legacy_collection_keeps_existing_profile_management_behavior() {
+        let mut legacy = serde_json::to_value(test_local_access_collection(Vec::new()))
+            .expect("serialize collection");
+        let object = legacy.as_object_mut().expect("collection object");
+        object.remove("manageAuthJson");
+        object.remove("manageConfigToml");
+        object.remove("manageModelCatalog");
+
+        let collection: CodexLocalAccessCollection =
+            serde_json::from_value(legacy).expect("deserialize legacy collection");
+
+        assert!(collection.manage_auth_json);
+        assert!(collection.manage_config_toml);
+        assert!(collection.manage_model_catalog);
+    }
+
+    #[test]
+    fn new_collection_defaults_to_manual_config_without_catalog() {
+        let collection = new_empty_local_access_collection().expect("new collection");
+
+        assert!(collection.manage_auth_json);
+        assert!(!collection.manage_config_toml);
+        assert!(!collection.manage_model_catalog);
+    }
+
+    #[test]
+    fn model_catalog_management_requires_config_management() {
+        let error = validate_profile_file_management(true, false, true)
+            .expect_err("catalog without config must fail");
+
+        assert_eq!(
+            error,
+            "使用 Cockpit model catalog 前必须允许管理 config.toml"
+        );
     }
 
     #[test]
@@ -26673,7 +26859,8 @@ experimental_bearer_token = "sk-user-custom"
         .expect("write auth");
 
         let changed =
-            cleanup_profile_takeover_without_backup(&dir, "local-api-key").expect("cleanup");
+            cleanup_profile_takeover_without_backup(&dir, "local-api-key", true, true, true)
+                .expect("cleanup");
         let next_config = fs::read_to_string(&config_path).expect("read config");
         let next_auth = fs::read_to_string(&auth_path).expect("read auth");
 
@@ -29773,6 +29960,79 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         );
         assert!(!profile_dir.join(CODEX_PROVIDER_MODEL_CATALOG_FILE).exists());
 
+        fs::remove_dir_all(&profile_dir).expect("cleanup temp dir");
+    }
+
+    #[tokio::test]
+    async fn local_access_takeover_respects_profile_file_management() {
+        let profile_dir = make_temp_dir("codex-local-access-managed-files-test");
+        let config_path = profile_dir.join(CODEX_PROFILE_CONFIG_FILE);
+        let cache_path = profile_dir.join(CODEX_MODEL_CACHE_FILE);
+        fs::write(&config_path, "model = \"gpt-5.4\"\n").expect("seed config");
+        fs::write(&cache_path, "keep-cache").expect("seed cache");
+        let mut collection = test_local_access_collection(Vec::new());
+        collection.api_key = "local-service-key".to_string();
+        collection.manage_config_toml = false;
+        collection.manage_model_catalog = false;
+
+        write_local_access_profile_takeover(&profile_dir, &collection, None)
+            .await
+            .expect("write selected local access files");
+
+        assert!(profile_dir.join(CODEX_PROFILE_AUTH_FILE).exists());
+        assert_eq!(
+            fs::read_to_string(&config_path).expect("read config"),
+            "model = \"gpt-5.4\"\n"
+        );
+        assert_eq!(
+            fs::read_to_string(&cache_path).expect("read cache"),
+            "keep-cache"
+        );
+        assert!(!profile_dir
+            .join(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE)
+            .exists());
+        fs::remove_dir_all(&profile_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn profile_restore_only_touches_selected_files() {
+        let profile_dir = make_temp_dir("codex-local-access-selected-restore-test");
+        let auth_path = profile_dir.join(CODEX_PROFILE_AUTH_FILE);
+        let config_path = profile_dir.join(CODEX_PROFILE_CONFIG_FILE);
+        let catalog_path = profile_dir.join(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE);
+        fs::write(
+            &auth_path,
+            r#"{"auth_mode":"apikey","OPENAI_API_KEY":"local-service-key"}"#,
+        )
+        .expect("seed managed auth");
+        fs::write(
+            &config_path,
+            "model_provider = \"codex_local_access\"\n[model_providers.codex_local_access]\nexperimental_bearer_token = \"local-service-key\"\n",
+        )
+        .expect("seed managed config");
+        fs::write(&catalog_path, "managed-catalog").expect("seed catalog");
+        let backup = CodexLocalAccessProfileTakeoverBackup {
+            profile_dir: profile_dir.to_string_lossy().to_string(),
+            auth_json: Some("previous-auth".to_string()),
+            config_toml: Some("model = \"gpt-5.4\"\n".to_string()),
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        restore_profile_takeover_backup(&backup, "local-service-key", true, false, false)
+            .expect("restore selected files");
+
+        assert_eq!(
+            fs::read_to_string(&auth_path).expect("read auth"),
+            "previous-auth"
+        );
+        assert!(fs::read_to_string(&config_path)
+            .expect("read config")
+            .contains("codex_local_access"));
+        assert_eq!(
+            fs::read_to_string(&catalog_path).expect("read catalog"),
+            "managed-catalog"
+        );
         fs::remove_dir_all(&profile_dir).expect("cleanup temp dir");
     }
 

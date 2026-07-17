@@ -1608,6 +1608,45 @@ export function CodexApiServicePage() {
     );
   };
 
+  const handleProfileFileManagementChange = async (next: {
+    manageAuthJson: boolean;
+    manageConfigToml: boolean;
+    manageModelCatalog: boolean;
+  }) => {
+    await runAction(async () => {
+      const updated =
+        await codexLocalAccessService.updateCodexLocalAccessProfileFileManagement(
+          next,
+        );
+      setState(updated);
+    }, t("codex.apiService.profileManagement.saved", "Codex 配置管理已更新"));
+  };
+
+  const handleRestoreProfileFiles = async () => {
+    if (!collection) return;
+    const confirmed = await confirmDialog(
+      t(
+        "codex.apiService.profileManagement.restoreConfirm",
+        "将按当前勾选项恢复接管前的 Codex 配置，并关闭这些文件的自动管理。是否继续？",
+      ),
+      {
+        title: t(
+          "codex.apiService.profileManagement.restoreTitle",
+          "恢复接管前配置",
+        ),
+        kind: "warning",
+        okLabel: t("common.confirm", "确认"),
+        cancelLabel: t("common.cancel", "取消"),
+      },
+    );
+    if (!confirmed) return;
+    await runAction(async () => {
+      const updated =
+        await codexLocalAccessService.restoreCodexLocalAccessProfileFiles();
+      setState(updated);
+    }, t("codex.apiService.profileManagement.restored", "已恢复接管前配置"));
+  };
+
   const refreshApiServiceCurrent = useCallback(async () => {
     try {
       const instances = await codexInstanceService.listInstances();
@@ -3630,6 +3669,82 @@ export function CodexApiServicePage() {
                         <Check size={14} />
                       ) : (
                         <Copy size={14} />
+                      )}
+                    </button>
+                  </div>
+                </label>
+                <label>
+                  <span>{t("codex.apiService.profileManagement.auth", "管理 auth.json")}</span>
+                  <input
+                    type="checkbox"
+                    checked={collection?.manageAuthJson ?? false}
+                    onChange={(event) =>
+                      void handleProfileFileManagementChange({
+                        manageAuthJson: event.target.checked,
+                        manageConfigToml: collection?.manageConfigToml ?? false,
+                        manageModelCatalog: collection?.manageModelCatalog ?? false,
+                      })
+                    }
+                    disabled={busy || !collection}
+                  />
+                </label>
+                <label>
+                  <span>{t("codex.apiService.profileManagement.config", "管理 config.toml")}</span>
+                  <input
+                    type="checkbox"
+                    checked={collection?.manageConfigToml ?? false}
+                    onChange={(event) =>
+                      void handleProfileFileManagementChange({
+                        manageAuthJson: collection?.manageAuthJson ?? false,
+                        manageConfigToml: event.target.checked,
+                        manageModelCatalog: event.target.checked
+                          ? (collection?.manageModelCatalog ?? false)
+                          : false,
+                      })
+                    }
+                    disabled={busy || !collection}
+                  />
+                </label>
+                <label>
+                  <span>{t("codex.apiService.profileManagement.catalog", "使用 Cockpit model catalog")}</span>
+                  <input
+                    type="checkbox"
+                    checked={collection?.manageModelCatalog ?? false}
+                    onChange={(event) =>
+                      void handleProfileFileManagementChange({
+                        manageAuthJson: collection?.manageAuthJson ?? false,
+                        manageConfigToml: collection?.manageConfigToml ?? false,
+                        manageModelCatalog: event.target.checked,
+                      })
+                    }
+                    disabled={busy || !collection || !collection.manageConfigToml}
+                  />
+                </label>
+                <label>
+                  <span>{t("codex.apiService.profileManagement.manual", "手工配置")}</span>
+                  <div className="codex-api-service-input-row codex-api-service-stacked-control">
+                    <small className="codex-api-service-field-hint">
+                      {t(
+                        "codex.apiService.profileManagement.manualHint",
+                        "关闭 config.toml 或 catalog 管理后，Cockpit 不会修改它们。可复制上方 Base URL 与密钥自行配置 Codex。",
+                      )}
+                    </small>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => void handleRestoreProfileFiles()}
+                      disabled={
+                        busy ||
+                        !collection ||
+                        (!collection.manageAuthJson &&
+                          !collection.manageConfigToml &&
+                          !collection.manageModelCatalog)
+                      }
+                    >
+                      <Undo2 size={14} />
+                      {t(
+                        "codex.apiService.profileManagement.restoreAction",
+                        "恢复接管前配置",
                       )}
                     </button>
                   </div>
