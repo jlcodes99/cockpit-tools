@@ -997,15 +997,23 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
 }
 
 .btn-primary {
-  background: var(--gradient-primary);
+  background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
   color: white;
-  box-shadow: 0 12px 20px rgba(29, 78, 216, 0.24);
-  border-color: rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 12px rgba(138, 43, 226, 0.2);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 16px 28px rgba(29, 78, 216, 0.32);
+  background: linear-gradient(135deg, #a855f7 0%, #4f46e5 100%);
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 6px 20px rgba(168, 85, 247, 0.38);
+  filter: brightness(1.1);
+}
+
+.btn-primary:active:not(:disabled) {
+  filter: brightness(0.92);
+  box-shadow: 0 2px 6px rgba(138, 43, 226, 0.16);
 }
 
 .btn-secondary {

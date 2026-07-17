@@ -493,8 +493,8 @@ input:checked + .slider:before {
 }
 
 .credit-item:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  transform: none;
+  box-shadow: var(--shadow-sm);
   border-color: var(--primary);
 }
 

@@ -2734,8 +2734,9 @@
 }
 
 .codex-account-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+  transform: none;
+  border-color: var(--primary);
 }
 
 .codex-account-card.current {
