@@ -8749,6 +8749,15 @@ fn restore_config_toml_from_takeover_backup(
         crate::modules::codex_config_format::read_codex_config_doc_from_str(backup_config)
             .map_err(|e| format!("解析 Codex API 服务接管备份 config.toml 失败: {}", e))?;
 
+    let backup_uses_local_access_catalog = backup_doc
+        .get("model_catalog_json")
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        == Some(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE);
+    if backup_uses_local_access_catalog {
+        backup_doc.remove("model_catalog_json");
+    }
+
     if let Some(current_config) = current_config.filter(|content| !content.trim().is_empty()) {
         let current_without_takeover = remove_codex_local_access_config(current_config)?;
         if !current_without_takeover.trim().is_empty() {
@@ -26708,6 +26717,7 @@ requires_openai_auth = true
 experimental_bearer_token = "agt_codex_test"
 "#;
         let backup = r#"model = "gpt-5"
+model_catalog_json = "cockpit-local-access-model-catalog.json"
 
 [plugins."browser@openai-bundled"]
 enabled = true
@@ -26725,6 +26735,7 @@ enabled = true
             .expect("plugins should remain");
 
         assert!(parsed.get("model_provider").is_none());
+        assert!(parsed.get("model_catalog_json").is_none());
         assert!(plugins.get("browser@openai-bundled").is_some());
         assert!(plugins.get("chrome@openai-bundled").is_some());
         assert!(plugins.get("hyperframes@openai-curated").is_some());
