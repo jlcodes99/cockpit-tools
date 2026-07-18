@@ -42,6 +42,8 @@ const CODEX_CONFIG_HTTP_HEADERS_KEY: &str = "http_headers";
 const CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY: &str = "model_context_window";
 const CODEX_CONFIG_MODEL_AUTO_COMPACT_TOKEN_LIMIT_KEY: &str = "model_auto_compact_token_limit";
 const CODEX_MANAGED_MODEL_CATALOG_FILE: &str = "cockpit-provider-model-catalog.json";
+const CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE: &str =
+    "cockpit-local-access-model-catalog.json";
 const CODEX_AUTO_REVIEW_MODEL_ID: &str = "codex-auto-review";
 const CODEX_IMAGE_MODEL_ID: &str = "gpt-image-2";
 const CODEX_IMAGEGEN_ACTOR_HEADER: &str = "x-openai-actor-authorization";
@@ -1000,11 +1002,15 @@ fn write_api_provider_to_config_toml(
 }
 
 fn remove_managed_model_catalog_from_doc(doc: &mut Document) -> bool {
-    let uses_managed_catalog = doc
+    let managed_catalog = doc
         .get(CODEX_CONFIG_MODEL_CATALOG_JSON_KEY)
         .and_then(|item| item.as_str())
-        .map(str::trim)
-        == Some(CODEX_MANAGED_MODEL_CATALOG_FILE);
+        .map(str::trim);
+    let uses_managed_catalog = matches!(
+        managed_catalog,
+        Some(CODEX_MANAGED_MODEL_CATALOG_FILE)
+            | Some(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE)
+    );
     if uses_managed_catalog {
         let _ = doc.remove(CODEX_CONFIG_MODEL_CATALOG_JSON_KEY);
         return true;
@@ -10626,6 +10632,35 @@ multi_agent = true
         assert!(content.contains("[model_providers.user_manual_provider]"));
         assert!(content.contains("model_context_window = 1000000"));
         assert!(content.contains("[features]"));
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn config_toml_removes_local_access_catalog_when_switching_to_builtin_openai() {
+        let base_dir = make_temp_dir("codex-config-clean-local-access-catalog-test");
+        let config_path = base_dir.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "model_provider = \"openai\"\nmodel_catalog_json = \"{}\"\n",
+                super::CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE
+            ),
+        )
+        .expect("write stale local access config");
+        let provider_config = resolve_api_provider_config(
+            None,
+            Some(CodexApiProviderMode::OpenaiBuiltin),
+            None,
+            None,
+        )
+        .expect("resolve provider config");
+
+        write_api_provider_to_config_toml(&base_dir, &provider_config).expect("write config");
+
+        let content = fs::read_to_string(&config_path).expect("read config");
+        assert!(!content.contains("model_catalog_json"));
+        assert!(!content.contains("model_provider = "));
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
