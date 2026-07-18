@@ -66,6 +66,39 @@ func TestApplyPayloadConfigWithRequestResponsesLiteRegistryModelFiltersWithoutHe
 	assertResponsesLiteToolTypes(t, out, "tools", []string{"function"})
 }
 
+func TestApplyPayloadConfigWithRequestKeepsCollaborationNamespaceForFullUpgrade(t *testing.T) {
+	payload := []byte(`{
+		"model":"gpt-5.6-sol",
+		"input":[{
+			"type":"additional_tools",
+			"role":"developer",
+			"tools":[{
+				"type":"namespace",
+				"name":"collaboration",
+				"tools":[{"type":"function","name":"spawn_agent"}]
+			}]
+		}]
+	}`)
+	headers := http.Header{CodexResponsesLiteHeader: {"true"}}
+
+	out := ApplyPayloadConfigWithRequest(nil, "gpt-5.6-sol", "codex", "openai-response", "", payload, nil, "gpt-5.6-sol", "/v1/responses", headers)
+
+	if got := gjson.GetBytes(out, "input.0.tools.0.name").String(); got != "collaboration" {
+		t.Fatalf("collaboration namespace was stripped before full Responses upgrade: %s", out)
+	}
+}
+
+func TestApplyPayloadConfigWithRequestFiltersCollaborationNamespaceForCompact(t *testing.T) {
+	payload := []byte(`{"input":[{"type":"additional_tools","tools":[{"type":"namespace","name":"collaboration"}]}]}`)
+	headers := http.Header{CodexResponsesLiteHeader: {"true"}}
+
+	out := ApplyPayloadConfigWithRequest(nil, "gpt-5.6-sol", "codex", "openai-response", "", payload, nil, "gpt-5.6-sol", "/v1/responses/compact", headers)
+
+	if got := gjson.GetBytes(out, "input.#").Int(); got != 0 {
+		t.Fatalf("compact request kept unsupported collaboration namespace: %s", out)
+	}
+}
+
 func TestApplyPayloadConfigWithRequestResponsesLiteFiltersAllToolDeclarations(t *testing.T) {
 	cfg := &config.Config{
 		Payload: config.PayloadConfig{

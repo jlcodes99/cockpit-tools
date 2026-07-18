@@ -279,6 +279,10 @@ func applyFinalPayloadGuards(payload []byte, cfg *config.Config, root, model, re
 	// those tools survive until the executor decides. Hosted injection for Lite
 	// is blocked separately by ShouldInjectImageGenerationToolForModel.
 	if IsCodexResponsesLiteRequest(headers, model, requestedModel) {
+		compactRequest := strings.HasSuffix(strings.ToLower(strings.TrimRight(requestPath, "/")), "/responses/compact")
+		if !compactRequest && PayloadDeclaresCollaborationNamespaceWithRoot(out, root) {
+			return out
+		}
 		catalogLite := registry.CodexClientModelUsesResponsesLite(model) ||
 			registry.CodexClientModelUsesResponsesLite(requestedModel)
 		if catalogLite || !payloadDeclaresImageGenerationToolsWithRoot(out, root) {
@@ -286,6 +290,47 @@ func applyFinalPayloadGuards(payload []byte, cfg *config.Config, root, model, re
 		}
 	}
 	return out
+}
+
+// PayloadDeclaresCollaborationNamespaceWithRoot reports whether Codex declared
+// its client-side multi-agent tools in a collaboration namespace.
+func PayloadDeclaresCollaborationNamespaceWithRoot(payload []byte, root string) bool {
+	if len(payload) == 0 {
+		return false
+	}
+	object := gjson.ParseBytes(payload)
+	if root = strings.TrimSpace(root); root != "" {
+		object = gjson.GetBytes(payload, root)
+	}
+	return objectDeclaresCollaborationNamespace(object)
+}
+
+func objectDeclaresCollaborationNamespace(object gjson.Result) bool {
+	if !object.IsObject() {
+		return false
+	}
+	if tools := object.Get("tools"); tools.IsArray() {
+		for _, tool := range tools.Array() {
+			if strings.EqualFold(strings.TrimSpace(tool.Get("type").String()), "namespace") &&
+				strings.EqualFold(strings.TrimSpace(tool.Get("name").String()), "collaboration") {
+				return true
+			}
+		}
+	}
+	if input := object.Get("input"); input.IsArray() {
+		for _, item := range input.Array() {
+			if strings.EqualFold(strings.TrimSpace(item.Get("type").String()), "additional_tools") &&
+				objectDeclaresCollaborationNamespace(item) {
+				return true
+			}
+		}
+	}
+	for _, field := range []string{"request", "response"} {
+		if objectDeclaresCollaborationNamespace(object.Get(field)) {
+			return true
+		}
+	}
+	return false
 }
 
 // payloadDeclaresImageGenerationToolsWithRoot reports whether the payload

@@ -1797,13 +1797,16 @@ func normalizeCodexInstructions(body []byte) []byte {
 	return body
 }
 
-func normalizeCodexResponsesLiteRequest(body []byte, headers http.Header, auth *cliproxyauth.Auth, allowFullResponsesForImage bool) ([]byte, bool) {
+func normalizeCodexResponsesLiteRequest(body []byte, headers http.Header, auth *cliproxyauth.Auth, allowFullResponses bool) ([]byte, bool) {
 	if !codexResponsesLiteEnabled(headers) || codexAuthUsesAPIKey(auth) {
 		return body, false
 	}
 
+	if allowFullResponses && helps.PayloadDeclaresCollaborationNamespaceWithRoot(body, "") {
+		return body, true
+	}
 	body, _ = sjson.SetBytes(body, "parallel_tool_calls", false)
-	if allowFullResponsesForImage && codexRequestUsesImageGeneration(body) {
+	if allowFullResponses && codexRequestUsesImageGeneration(body) {
 		return body, true
 	}
 

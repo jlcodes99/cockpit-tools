@@ -58,6 +58,35 @@ func TestNormalizeCodexResponsesLiteRequestFiltersUnsupportedTools(t *testing.T)
 	}
 }
 
+func TestNormalizeCodexResponsesLiteRequestUsesFullResponsesForCollaborationNamespace(t *testing.T) {
+	body := []byte(`{
+		"parallel_tool_calls":true,
+		"input":[{
+			"type":"additional_tools",
+			"role":"developer",
+			"tools":[{
+				"type":"namespace",
+				"name":"collaboration",
+				"tools":[{"type":"function","name":"spawn_agent"}]
+			}]
+		}]
+	}`)
+	headers := http.Header{codexResponsesLiteHeaderName: []string{"true"}}
+	oauth := &cliproxyauth.Auth{Metadata: map[string]any{"access_token": "oauth-token"}}
+
+	result, useFullResponses := normalizeCodexResponsesLiteRequest(body, headers, oauth, true)
+
+	if !useFullResponses {
+		t.Fatal("collaboration namespace should switch to full Responses")
+	}
+	if !gjson.GetBytes(result, "parallel_tool_calls").Bool() {
+		t.Fatalf("full Responses collaboration should preserve parallel tool calls: %s", result)
+	}
+	if got := gjson.GetBytes(result, "input.0.tools.0.name").String(); got != "collaboration" {
+		t.Fatalf("collaboration namespace was not preserved: %s", result)
+	}
+}
+
 func TestNormalizeCodexResponsesLiteRequestRemovesEmptyTools(t *testing.T) {
 	body := []byte(`{"tools":[{"type":"image_generation"}],"tool_choice":"image_generation"}`)
 	headers := http.Header{codexResponsesLiteHeaderName: []string{"true"}}
