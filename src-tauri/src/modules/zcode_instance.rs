@@ -96,7 +96,8 @@ pub fn get_default_user_data_dir() -> Result<PathBuf, String> {
 pub fn get_instances_root_dir() -> Result<PathBuf, String> {
     Ok(dirs::home_dir()
         .ok_or_else(|| "无法获取用户主目录".to_string())?
-        .join(".antigravity_cockpit/instances/zcode"))
+        .join(modules::account::data_dir_name())
+        .join("instances/zcode"))
 }
 
 pub fn get_instance_defaults() -> Result<modules::instance::InstanceDefaults, String> {

@@ -13,7 +13,6 @@ use url::Url;
 use crate::modules;
 use crate::modules::config::{
     self, CloseWindowBehavior, MinimizeWindowBehavior, TrayIconStyle, UserConfig,
-    DEFAULT_REPORT_PORT, DEFAULT_WS_PORT,
 };
 use crate::modules::web_report;
 use crate::modules::websocket;
@@ -2233,11 +2232,11 @@ pub fn get_network_config() -> Result<NetworkConfig, String> {
         ws_enabled: user_config.ws_enabled,
         ws_port: user_config.ws_port,
         actual_port: ws_actual_port,
-        default_port: DEFAULT_WS_PORT,
+        default_port: config::default_ws_port(),
         report_enabled: user_config.report_enabled,
         report_port: user_config.report_port,
         report_actual_port,
-        report_default_port: DEFAULT_REPORT_PORT,
+        report_default_port: config::default_report_port(),
         report_token: user_config.report_token,
         global_proxy_enabled: user_config.global_proxy_enabled,
         global_proxy_url: user_config.global_proxy_url,

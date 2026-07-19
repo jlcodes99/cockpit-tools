@@ -81,7 +81,11 @@ const PAGE_PLATFORM_MAP: Partial<Record<Page, PlatformId>> = {
 };
 
 const APP_DISPLAY_NAME =
-  import.meta.env.VITE_COCKPIT_TOOLS_PROFILE === 'dev' ? 'Cockpit Tools Dev' : 'Cockpit Tools';
+  import.meta.env.VITE_COCKPIT_TOOLS_PROFILE === 'test'
+    ? 'Cockpit Tools Test'
+    : import.meta.env.VITE_COCKPIT_TOOLS_PROFILE === 'dev'
+      ? 'Cockpit Tools Dev'
+      : 'Cockpit Tools';
 
 const CLASSIC_NAV_MIN_SCALE = 0.5;
 const CLASSIC_NAV_SCALE_EPSILON = 0.004;

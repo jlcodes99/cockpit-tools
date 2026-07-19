@@ -39,6 +39,13 @@ fn should_skip_sidecar_build(output: &Path) -> bool {
     std::env::var("COCKPIT_SKIP_CLIPROXY_BUILD").ok().as_deref() == Some("1") && output.exists()
 }
 
+fn sidecar_binary_name() -> &'static str {
+    match std::env::var("COCKPIT_TOOLS_BUILD_PROFILE") {
+        Ok(profile) if profile.trim().eq_ignore_ascii_case("test") => "cockpit-cliproxy-test",
+        _ => "cockpit-cliproxy",
+    }
+}
+
 fn emit_sidecar_rerun_inputs(path: &Path) {
     if path.file_name().and_then(|name| name.to_str()) == Some("bin") {
         return;
@@ -76,7 +83,10 @@ fn build_go_sidecar(
     goarch: &str,
 ) -> PathBuf {
     let extension = if goos == "windows" { ".exe" } else { "" };
-    let output = output_dir.join(format!("cockpit-cliproxy-{rust_target}{extension}"));
+    let output = output_dir.join(format!(
+        "{}-{rust_target}{extension}",
+        sidecar_binary_name()
+    ));
     if should_skip_sidecar_build(&output) {
         return output;
     }
@@ -104,7 +114,7 @@ fn build_go_sidecar(
 }
 
 fn build_macos_universal_sidecar(sidecar_dir: &Path, output_dir: &Path) {
-    let output = output_dir.join("cockpit-cliproxy-universal-apple-darwin");
+    let output = output_dir.join(format!("{}-universal-apple-darwin", sidecar_binary_name()));
     if should_skip_sidecar_build(&output) {
         return;
     }
@@ -147,6 +157,7 @@ fn build_cockpit_cliproxy_sidecar() {
     let output_dir = sidecar_dir.join("bin");
 
     println!("cargo:rerun-if-env-changed=COCKPIT_SKIP_CLIPROXY_BUILD");
+    println!("cargo:rerun-if-env-changed=COCKPIT_TOOLS_BUILD_PROFILE");
     emit_sidecar_rerun_inputs(&sidecar_dir);
     std::fs::create_dir_all(&output_dir).expect("failed to create cockpit-cliproxy bin dir");
 

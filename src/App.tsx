@@ -87,6 +87,9 @@ import {
   resolvePlatformIdFromPage,
 } from './utils/accountSyncEvents';
 
+const APP_PROFILE = (import.meta.env.VITE_COCKPIT_TOOLS_PROFILE || '').trim().toLowerCase();
+const IS_ISOLATED_BUILD = APP_PROFILE === 'dev' || APP_PROFILE === 'test';
+
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })),
 );
@@ -1470,6 +1473,9 @@ function MainApp() {
   }, [updateRuntimeInfo]);
 
   const runUpdaterCheck = useCallback(async () => {
+    if (IS_ISOLATED_BUILD) {
+      return null;
+    }
     const { check } = await import('@tauri-apps/plugin-updater');
     const target = getUpdaterCheckTarget();
     return target ? check({ target }) : check();
@@ -2245,6 +2251,9 @@ function MainApp() {
 
   // Check for updates on startup
   useEffect(() => {
+    if (IS_ISOLATED_BUILD) {
+      return;
+    }
     if (!updateRuntimeInfoLoaded) {
       return;
     }

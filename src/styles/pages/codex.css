@@ -4923,7 +4923,8 @@
   white-space: nowrap;
 }
 
-.codex-accounts-page .codex-account-note-chip {
+.codex-accounts-page .codex-account-note-chip,
+.codex-add-modal .codex-account-note-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -4942,11 +4943,13 @@
   transition: all 0.15s ease;
 }
 
-.codex-accounts-page .codex-account-note-chip svg {
+.codex-accounts-page .codex-account-note-chip svg,
+.codex-add-modal .codex-account-note-chip svg {
   flex-shrink: 0;
 }
 
-.codex-accounts-page .codex-account-note-chip span {
+.codex-accounts-page .codex-account-note-chip span,
+.codex-add-modal .codex-account-note-chip span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4954,7 +4957,9 @@
 }
 
 .codex-accounts-page .codex-account-note-chip:hover,
-.codex-accounts-page .codex-account-note-chip.has-note {
+.codex-accounts-page .codex-account-note-chip.has-note,
+.codex-add-modal .codex-account-note-chip:hover,
+.codex-add-modal .codex-account-note-chip.has-note {
   color: var(--primary);
   border-color: rgba(37, 99, 235, 0.28);
   background: rgba(37, 99, 235, 0.08);

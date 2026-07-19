@@ -135,6 +135,7 @@ import {
   getCodexPlanBadgeStyle,
   type CodexPlanBadgeStyle,
 } from "../utils/codexPreferences";
+import { resolveCodexBatchDeleteRefreshOptions } from "../utils/codexBatchDelete";
 
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
@@ -1500,31 +1501,28 @@ export function CodexAccountsPage() {
     codexCurrentAccountRef.current = store.currentAccount;
   }, [store.accounts, store.currentAccount]);
 
-  const getBatchDeleteRefreshOptions = useCallback(() => {
-    const removeIds = batchDeleteRemoveIdsRef.current;
-    const accounts = codexAccountsRef.current;
-    const currentAccount = codexCurrentAccountRef.current;
-    return {
-      allowEmptyAccounts:
-        accounts.length > 0 &&
-        accounts.every((account) => removeIds.has(account.id)),
-      allowEmptyCurrent:
-        !!currentAccount && removeIds.has(currentAccount.id),
-    };
-  }, []);
-
-  const refreshAccountsAfterBatchDelete = useCallback(async () => {
-    const { allowEmptyAccounts, allowEmptyCurrent } =
-      getBatchDeleteRefreshOptions();
-    await fetchCodexAccounts({ allowEmpty: allowEmptyAccounts });
-    await fetchCodexCurrentAccount({ allowEmpty: allowEmptyCurrent });
-    await reloadCodexGroups();
-  }, [
-    fetchCodexAccounts,
-    fetchCodexCurrentAccount,
-    getBatchDeleteRefreshOptions,
-    reloadCodexGroups,
-  ]);
+  const refreshAccountsAfterBatchDelete = useCallback(
+    async (removeIds: ReadonlySet<string>) => {
+      // Resolve from a captured ID set. The completed-job cleanup clears the
+      // mutable ref, but that must not re-enable stale-cache preservation.
+      const { allowEmptyAccounts, allowEmptyCurrent } =
+        resolveCodexBatchDeleteRefreshOptions({
+          accounts: codexAccountsRef.current,
+          currentAccount: codexCurrentAccountRef.current,
+          removeIds,
+        });
+      await fetchCodexAccounts({ allowEmpty: allowEmptyAccounts });
+      await fetchCodexCurrentAccount({ allowEmpty: allowEmptyCurrent });
+      try {
+        await reloadCodexGroups();
+      } catch (error) {
+        // Account state has already refreshed. A secondary group refresh must
+        // not leave a completed deletion card stuck on screen.
+        console.warn("[Codex Batch Delete] 刷新账号分组失败:", error);
+      }
+    },
+    [fetchCodexAccounts, fetchCodexCurrentAccount, reloadCodexGroups],
+  );
 
   useEffect(() => {
     const jobId = batchDeleteJob?.jobId;
@@ -1560,17 +1558,17 @@ export function CodexAccountsPage() {
     if (!shouldAutoHideBatchDeleteJob(batchDeleteJob)) return;
     let disposed = false;
     const clearCompletedJob = async () => {
+      const removeIds = new Set(batchDeleteRemoveIdsRef.current);
+      await refreshAccountsAfterBatchDelete(removeIds);
+      if (disposed) return;
       try {
-        await invoke("clear_codex_batch_delete_job", {
-          jobId: batchDeleteJob.jobId,
-        });
+        await codexService.clearCodexBatchDelete(batchDeleteJob.jobId);
       } catch {
         // ignore cleanup failures
       }
       if (disposed) return;
       batchDeleteRemoveIdsRef.current = new Set();
       setBatchDeleteJob(null);
-      await refreshAccountsAfterBatchDelete();
     };
     void clearCompletedJob();
     return () => {
@@ -9517,7 +9515,8 @@ export function CodexAccountsPage() {
     try {
       const job = await codexService.startCodexBatchDelete(deleteConfirm.ids);
       if (shouldAutoHideBatchDeleteJob(job)) {
-        await refreshAccountsAfterBatchDelete();
+        const removeIds = new Set(batchDeleteRemoveIdsRef.current);
+        await refreshAccountsAfterBatchDelete(removeIds);
         try {
           await codexService.clearCodexBatchDelete(job.jobId);
         } catch (clearError) {
@@ -9526,6 +9525,7 @@ export function CodexAccountsPage() {
             clearError,
           );
         }
+        batchDeleteRemoveIdsRef.current = new Set();
         setBatchDeleteJob(null);
       } else {
         setBatchDeleteJob(job);

@@ -80,6 +80,7 @@ const CODEX_LOCAL_ACCESS_SIDECAR_API_KEY_PRIORITY_FILE: &str = "api-key-prioriti
 const CODEX_LOCAL_ACCESS_SIDECAR_QUOTA_RESERVE_FILE: &str = "quota-reserve.json";
 const CODEX_LOCAL_ACCESS_SIDECAR_AUTHS_DIR: &str = "auths";
 const CODEX_LOCAL_ACCESS_SIDECAR_BIN_NAME: &str = "cockpit-cliproxy";
+const CODEX_LOCAL_ACCESS_TEST_SIDECAR_BIN_NAME: &str = "cockpit-cliproxy-test";
 const SIDECAR_SERVICE_TIER_SUPPORTED_MODEL_PATTERN: &str = "*";
 const SIDECAR_SERVICE_TIER_SUPPORTED_PAYLOAD_FORMATS: &[&str] =
     &["codex", "openai", "openai-response"];
@@ -88,6 +89,7 @@ const CODEX_LOCAL_ACCESS_LAN_BIND_HOST: &str = "0.0.0.0";
 const CODEX_LOCAL_ACCESS_DEFAULT_CLIENT_URL_HOST: &str = "localhost";
 const CODEX_LOCAL_ACCESS_API_PORT_ENV: &str = "COCKPIT_TOOLS_API_PORT";
 const CODEX_LOCAL_ACCESS_DEV_DEFAULT_PORT: u16 = 1456;
+const CODEX_LOCAL_ACCESS_TEST_DEFAULT_PORT: u16 = 24556;
 const CODEX_LOCAL_ACCESS_TAKEOVER_BACKUP_VERSION: u32 = 1;
 const CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID: &str = "codex_local_access";
 const CODEX_LOCAL_ACCESS_RUNTIME_ACCOUNT_ID: &str = "codex_local_access_runtime";
@@ -9241,16 +9243,18 @@ fn provider_gateway_lifecycle_lock() -> &'static TokioMutex<()> {
 
 fn sidecar_binary_file_names() -> Vec<String> {
     let target = env!("COCKPIT_RUST_TARGET");
+    let binary_name = if account::profile_name() == "test" {
+        CODEX_LOCAL_ACCESS_TEST_SIDECAR_BIN_NAME
+    } else {
+        CODEX_LOCAL_ACCESS_SIDECAR_BIN_NAME
+    };
     if cfg!(target_os = "windows") {
         vec![
-            format!("{CODEX_LOCAL_ACCESS_SIDECAR_BIN_NAME}.exe"),
-            format!("{CODEX_LOCAL_ACCESS_SIDECAR_BIN_NAME}-{target}.exe"),
+            format!("{binary_name}.exe"),
+            format!("{binary_name}-{target}.exe"),
         ]
     } else {
-        vec![
-            CODEX_LOCAL_ACCESS_SIDECAR_BIN_NAME.to_string(),
-            format!("{CODEX_LOCAL_ACCESS_SIDECAR_BIN_NAME}-{target}"),
-        ]
+        vec![binary_name.to_string(), format!("{binary_name}-{target}")]
     }
 }
 
@@ -12133,8 +12137,10 @@ fn configured_initial_local_access_port() -> Option<u16> {
         }
     }
 
-    if account::is_dev_profile() {
-        return Some(CODEX_LOCAL_ACCESS_DEV_DEFAULT_PORT);
+    match account::profile_name().as_str() {
+        "test" => return Some(CODEX_LOCAL_ACCESS_TEST_DEFAULT_PORT),
+        "dev" => return Some(CODEX_LOCAL_ACCESS_DEV_DEFAULT_PORT),
+        _ => {}
     }
 
     None

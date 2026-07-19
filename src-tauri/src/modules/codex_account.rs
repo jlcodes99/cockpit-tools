@@ -1496,7 +1496,7 @@ fn get_accounts_storage_path() -> PathBuf {
     let data_dir = account::get_data_dir().unwrap_or_else(|_| {
         dirs::home_dir()
             .expect("无法获取用户目录")
-            .join(".antigravity_cockpit")
+            .join(account::data_dir_name())
     });
     fs::create_dir_all(&data_dir).ok();
     migrate_codex_data_if_needed(&data_dir);
@@ -1508,7 +1508,7 @@ fn get_accounts_dir() -> PathBuf {
     let data_dir = account::get_data_dir().unwrap_or_else(|_| {
         dirs::home_dir()
             .expect("无法获取用户目录")
-            .join(".antigravity_cockpit")
+            .join(account::data_dir_name())
     });
     let accounts_dir = data_dir.join("codex_accounts");
     fs::create_dir_all(&accounts_dir).ok();
@@ -3578,6 +3578,32 @@ pub fn update_account_plan_type_in_index(
 /// 删除账号
 pub fn remove_account(account_id: &str) -> Result<(), String> {
     remove_accounts(&[account_id.to_string()])
+}
+
+/// 返回既不在索引、也没有详情文件的账号 ID。
+///
+/// 用户发起删除时用它区分“确实删除了”与“重复删除了一个早已不存在的账号”；
+/// 底层 remove_accounts 仍保持幂等，确保崩溃恢复任务可以安全重放。
+pub fn missing_account_record_ids(account_ids: &[String]) -> Vec<String> {
+    let index = load_account_index();
+    let indexed_ids: HashSet<&str> = index
+        .accounts
+        .iter()
+        .map(|account| account.id.as_str())
+        .collect();
+    let accounts_dir = get_accounts_dir();
+    let mut seen = HashSet::new();
+
+    account_ids
+        .iter()
+        .map(|id| id.trim())
+        .filter(|id| !id.is_empty())
+        .filter(|id| seen.insert((*id).to_string()))
+        .filter(|id| {
+            !indexed_ids.contains(*id) && !accounts_dir.join(format!("{}.json", id)).is_file()
+        })
+        .map(str::to_string)
+        .collect()
 }
 
 /// 批量删除账号
@@ -7289,7 +7315,7 @@ fn next_codex_batch_import_session_id() -> String {
 fn get_codex_batch_import_sessions_dir() -> PathBuf {
     let data_dir = account::get_data_dir()
         .or_else(|_| account::resolve_data_dir())
-        .unwrap_or_else(|_| PathBuf::from(".antigravity_cockpit"));
+        .unwrap_or_else(|_| PathBuf::from(account::data_dir_name()));
     data_dir.join(CODEX_BATCH_IMPORT_SESSIONS_DIR)
 }
 
@@ -8557,8 +8583,8 @@ mod tests {
         format_refresh_error_for_user, get_accounts_dir, get_accounts_storage_path,
         get_current_account_from_loaded, import_from_json, is_loopback_http_base_url,
         is_managed_auth_refresh_due, is_pending_oauth_account, list_accounts_checked, load_account,
-        load_account_index, looks_like_sub2api_export, now_timestamp, parse_auth_file_last_refresh,
-        parse_codex_account_compat, parse_line_delimited_json_values,
+        load_account_index, looks_like_sub2api_export, missing_account_record_ids, now_timestamp,
+        parse_auth_file_last_refresh, parse_codex_account_compat, parse_line_delimited_json_values,
         read_api_provider_from_config_toml, read_quick_config_from_config_toml, remove_accounts,
         resolve_api_provider_config, save_account, save_account_index,
         should_accept_authority_snapshot, sync_account_from_auth_dir,
@@ -9818,6 +9844,28 @@ mod tests {
         assert!(index.current_account_id.is_none());
         let accounts = list_accounts_checked().expect("empty index should be valid");
         assert!(accounts.is_empty());
+    }
+
+    #[test]
+    fn missing_account_record_ids_distinguishes_existing_and_deleted_accounts() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let _env = TestEnvGuard::new("codex-missing-delete-record-test");
+        let account = seed_oauth_account(make_codex_tokens(
+            "delete-check@example.com",
+            "acc-delete-check",
+            "org-delete-check",
+            "seed",
+            "rt-existing",
+        ));
+
+        assert!(missing_account_record_ids(&[account.id.clone()]).is_empty());
+        remove_accounts(&[account.id.clone()]).expect("remove existing account");
+        assert_eq!(
+            missing_account_record_ids(&[account.id.clone(), account.id.clone()]),
+            vec![account.id]
+        );
     }
 
     #[test]

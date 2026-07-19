@@ -462,8 +462,15 @@ function resolveProviderApiKeyLabel(
   return `${label}：${maskApiKey(apiKey.apiKey)}`;
 }
 
+const APP_DATA_DIR_NAME =
+  import.meta.env.VITE_COCKPIT_TOOLS_PROFILE === "test"
+    ? ".antigravity_cockpit_test"
+    : import.meta.env.VITE_COCKPIT_TOOLS_PROFILE === "dev"
+      ? ".antigravity_cockpit_dev"
+      : ".antigravity_cockpit";
+
 const DEFAULT_PROVIDER_PREVIEW_PATHS: ProviderPreviewPaths = {
-  providerStorePath: "~/.antigravity_cockpit/codex_model_providers.json",
+  providerStorePath: `~/${APP_DATA_DIR_NAME}/codex_model_providers.json`,
   codexConfigPath: "~/.codex/config.toml",
   codexAuthPath: "~/.codex/auth.json",
 };
@@ -1026,7 +1033,7 @@ export function CodexModelProviderManager({
         const home = await homeDir();
         const [providerStorePath, codexConfigPath, codexAuthPath] =
           await Promise.all([
-            join(home, ".antigravity_cockpit", "codex_model_providers.json"),
+            join(home, APP_DATA_DIR_NAME, "codex_model_providers.json"),
             join(home, ".codex", "config.toml"),
             join(home, ".codex", "auth.json"),
           ]);

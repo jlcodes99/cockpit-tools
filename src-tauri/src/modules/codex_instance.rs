@@ -168,6 +168,10 @@ pub fn get_default_instances_root_dir() -> Result<PathBuf, String> {
 }
 
 fn legacy_hardcoded_instances_root_dir() -> Result<Option<PathBuf>, String> {
+    if modules::account::profile_name() != "prod" {
+        return Ok(None);
+    }
+
     #[cfg(target_os = "macos")]
     {
         let home = dirs::home_dir().ok_or("无法获取用户主目录")?;

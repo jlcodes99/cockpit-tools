@@ -17,7 +17,7 @@ use crate::modules::{
     opencode_auth, process,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -74,7 +74,7 @@ fn now_unix_seconds() -> i64 {
 fn get_codex_batch_delete_jobs_dir() -> PathBuf {
     let data_dir = account::get_data_dir()
         .or_else(|_| account::resolve_data_dir())
-        .unwrap_or_else(|_| PathBuf::from(".antigravity_cockpit"));
+        .unwrap_or_else(|_| PathBuf::from(account::data_dir_name()));
     data_dir.join(CODEX_BATCH_DELETE_JOBS_DIR)
 }
 
@@ -364,10 +364,12 @@ async fn run_codex_batch_delete_job(job_id: String) {
 fn start_codex_batch_delete_job(
     account_ids: Vec<String>,
 ) -> Result<CodexBatchDeleteJobStatus, String> {
+    let mut seen_ids = HashSet::new();
     let normalized_ids: Vec<String> = account_ids
         .into_iter()
         .map(|id| id.trim().to_string())
         .filter(|id| !id.is_empty())
+        .filter(|id| seen_ids.insert(id.clone()))
         .collect();
     if normalized_ids.is_empty() {
         return Ok(CodexBatchDeleteJobStatus {
@@ -379,6 +381,7 @@ fn start_codex_batch_delete_job(
             errors: Vec::new(),
         });
     }
+    ensure_requested_codex_accounts_exist(&normalized_ids)?;
 
     let job_id = format!("codex-delete-{}", uuid::Uuid::new_v4());
     let now = now_unix_seconds();
@@ -407,6 +410,17 @@ fn start_codex_batch_delete_job(
     });
 
     get_codex_batch_delete_job_status(&job_id)
+}
+
+fn ensure_requested_codex_accounts_exist(account_ids: &[String]) -> Result<(), String> {
+    let missing_ids = codex_account::missing_account_record_ids(account_ids);
+    if missing_ids.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "Codex 账号已不存在，请刷新账号列表后重试: {}",
+        missing_ids.join(", ")
+    ))
 }
 
 fn resume_codex_batch_delete_job(job_id: &str) -> Result<CodexBatchDeleteJobStatus, String> {
@@ -956,6 +970,7 @@ async fn run_codex_post_refresh_checks(app: &AppHandle) {
 /// 删除 Codex 账号
 #[tauri::command]
 pub async fn delete_codex_account(account_id: String) -> Result<(), String> {
+    ensure_requested_codex_accounts_exist(std::slice::from_ref(&account_id))?;
     // Persist API Service pool cleanup first, but never let gateway reconciliation
     // prevent the user from deleting the local credential.
     cleanup_accounts_from_api_service_best_effort(
@@ -976,6 +991,7 @@ pub async fn delete_codex_account(account_id: String) -> Result<(), String> {
 /// 批量删除 Codex 账号
 #[tauri::command]
 pub async fn delete_codex_accounts(account_ids: Vec<String>) -> Result<(), String> {
+    ensure_requested_codex_accounts_exist(&account_ids)?;
     cleanup_accounts_from_api_service_best_effort("multi_delete", &account_ids).await;
     codex_account::remove_accounts(&account_ids)?;
     if let Err(error) = codex_wakeup::remove_deleted_accounts_from_tasks(&account_ids) {

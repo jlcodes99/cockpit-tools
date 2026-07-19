@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Cockpit Tools Test",
+  "mainBinaryName": "cockpit-tools-test",
+  "version": "1.3.9-test.2",
+  "identifier": "com.jlcodes.cockpit-tools.test",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Cockpit Tools Test",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "center": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "transparent": false,
+        "resizable": true
+      },
+      {
+        "label": "floating-card",
+        "title": "Cockpit Tools Test",
+        "create": false,
+        "width": 250,
+        "height": 290,
+        "minWidth": 250,
+        "minHeight": 290,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "resizable": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": false,
+        "visible": false
+      }
+    ]
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "externalBin": [
+      "../sidecars/cockpit-cliproxy/bin/cockpit-cliproxy-test"
+    ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "cockpit-tools-test",
+          "cockpittools-test",
+          "zcode-test"
+        ]
+      }
+    }
+  }
+}

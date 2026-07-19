@@ -30,8 +30,10 @@ const LIST_ACCOUNTS_CACHE_TTL_MS: u64 = 800;
 // 使用与 AntigravityCockpit 插件相同的数据目录
 const DATA_DIR: &str = ".antigravity_cockpit";
 const DEV_DATA_DIR: &str = ".antigravity_cockpit_dev";
+const TEST_DATA_DIR: &str = ".antigravity_cockpit_test";
 const DATA_DIR_ENV: &str = "COCKPIT_TOOLS_DATA_DIR";
 const PROFILE_ENV: &str = "COCKPIT_TOOLS_PROFILE";
+const BUILD_PROFILE: Option<&str> = option_env!("COCKPIT_TOOLS_BUILD_PROFILE");
 
 const ACCOUNTS_INDEX: &str = "accounts.json";
 const ACCOUNTS_DIR: &str = "accounts";
@@ -233,10 +235,30 @@ fn deserialize_account_from_storage(
 }
 
 /// 获取数据目录路径
+pub fn profile_name() -> String {
+    BUILD_PROFILE
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && !value.eq_ignore_ascii_case("prod"))
+        .map(str::to_ascii_lowercase)
+        .or_else(|| {
+            std::env::var(PROFILE_ENV)
+                .ok()
+                .map(|value| value.trim().to_ascii_lowercase())
+                .filter(|value| !value.is_empty())
+        })
+        .unwrap_or_else(|| "prod".to_string())
+}
+
+pub fn data_dir_name() -> &'static str {
+    match profile_name().as_str() {
+        "test" => TEST_DATA_DIR,
+        "dev" => DEV_DATA_DIR,
+        _ => DATA_DIR,
+    }
+}
+
 pub fn is_dev_profile() -> bool {
-    std::env::var(PROFILE_ENV)
-        .map(|value| value.trim().eq_ignore_ascii_case("dev"))
-        .unwrap_or(false)
+    matches!(profile_name().as_str(), "dev" | "test")
 }
 
 pub fn resolve_data_dir() -> Result<PathBuf, String> {
@@ -248,12 +270,7 @@ pub fn resolve_data_dir() -> Result<PathBuf, String> {
     }
 
     let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-    let dir_name = if is_dev_profile() {
-        DEV_DATA_DIR
-    } else {
-        DATA_DIR
-    };
-    Ok(home.join(dir_name))
+    Ok(home.join(data_dir_name()))
 }
 
 pub fn get_data_dir() -> Result<PathBuf, String> {

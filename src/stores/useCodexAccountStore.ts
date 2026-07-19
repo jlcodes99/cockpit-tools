@@ -17,7 +17,9 @@ import { emitAccountsChanged, emitCurrentAccountChanged } from '../utils/account
 const APP_PROFILE = (import.meta.env.VITE_COCKPIT_TOOLS_PROFILE || '').trim();
 const STORAGE_PROFILE_SUFFIX =
   APP_PROFILE && APP_PROFILE !== 'prod' ? `.${APP_PROFILE}` : '';
-const SHOULD_PRESERVE_CACHE_ON_EMPTY_LIST = !STORAGE_PROFILE_SUFFIX;
+// Test builds must exercise the same empty-response protection as production;
+// only the live dev profile opts out for faster iteration.
+const SHOULD_PRESERVE_CACHE_ON_EMPTY_LIST = APP_PROFILE !== 'dev';
 const CODEX_ACCOUNTS_CACHE_KEY = `agtools.codex.accounts.cache${STORAGE_PROFILE_SUFFIX}`;
 const CODEX_CURRENT_ACCOUNT_CACHE_KEY = `agtools.codex.accounts.current${STORAGE_PROFILE_SUFFIX}`;
 const CODEX_PROFILE_SYNC_IN_FLIGHT = new Set<string>();

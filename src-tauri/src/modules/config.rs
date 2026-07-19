@@ -11,6 +11,10 @@ use std::sync::{OnceLock, RwLock};
 pub const DEFAULT_WS_PORT: u16 = 19528;
 /// 默认网页查询服务端口
 pub const DEFAULT_REPORT_PORT: u16 = 18081;
+const DEV_DEFAULT_WS_PORT: u16 = 29529;
+const DEV_DEFAULT_REPORT_PORT: u16 = 28082;
+const TEST_DEFAULT_WS_PORT: u16 = 29528;
+const TEST_DEFAULT_REPORT_PORT: u16 = 28081;
 
 /// 端口尝试范围（从配置端口开始，最多尝试 100 个）
 pub const PORT_RANGE: u16 = 100;
@@ -579,14 +583,22 @@ impl Default for TrayIconStyle {
 fn default_ws_enabled() -> bool {
     true
 }
-fn default_ws_port() -> u16 {
-    DEFAULT_WS_PORT
+pub fn default_ws_port() -> u16 {
+    match crate::modules::account::profile_name().as_str() {
+        "test" => TEST_DEFAULT_WS_PORT,
+        "dev" => DEV_DEFAULT_WS_PORT,
+        _ => DEFAULT_WS_PORT,
+    }
 }
 fn default_report_enabled() -> bool {
     false
 }
-fn default_report_port() -> u16 {
-    DEFAULT_REPORT_PORT
+pub fn default_report_port() -> u16 {
+    match crate::modules::account::profile_name().as_str() {
+        "test" => TEST_DEFAULT_REPORT_PORT,
+        "dev" => DEV_DEFAULT_REPORT_PORT,
+        _ => DEFAULT_REPORT_PORT,
+    }
 }
 fn default_report_token() -> String {
     "change-this-token".to_string()
@@ -1077,7 +1089,7 @@ impl Default for UserConfig {
     fn default() -> Self {
         Self {
             ws_enabled: true,
-            ws_port: DEFAULT_WS_PORT,
+            ws_port: default_ws_port(),
             report_enabled: default_report_enabled(),
             report_port: default_report_port(),
             report_token: default_report_token(),
@@ -1379,7 +1391,7 @@ pub fn get_data_dir() -> Result<PathBuf, String> {
 /// 与 get_data_dir 相同，但不返回 Result
 pub fn get_shared_dir() -> PathBuf {
     crate::modules::account::resolve_data_dir()
-        .unwrap_or_else(|_| PathBuf::from(".antigravity_cockpit"))
+        .unwrap_or_else(|_| PathBuf::from(crate::modules::account::data_dir_name()))
 }
 
 /// 获取服务状态文件路径

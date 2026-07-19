@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "test:codex-api-key-scope": "node --test src/utils/codexApiKeyAccountScope.test.ts",
+    "test:codex-batch-delete": "node --test src/utils/codexBatchDelete.test.ts",
     "typecheck": "tsc --noEmit",
     "prebuild": "npm run typecheck",
     "build": "npm run sync-version && tsc && vite build",
@@ -13,6 +14,7 @@
     "preview": "vite preview",
     "pretauri:dev": "npm run typecheck",
     "tauri:dev": "node scripts/tauri-dev.cjs",
+    "tauri:build:test": "node scripts/tauri-test-build.cjs",
     "pretauri": "npm run typecheck",
     "tauri": "node scripts/tauri.cjs",
     "sync-version": "node scripts/sync-version.js"
