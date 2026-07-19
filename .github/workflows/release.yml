@@ -1,4 +1,4 @@
-name: Release
+name: 📦 Release
 
 on:
   push:
@@ -6,10 +6,13 @@ on:
       - "v*"
   workflow_dispatch:
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   prepare-release:
-    name: Prepare staged release
-    if: startsWith(github.ref, 'refs/tags/v')
+    name: 📝 Prepare Staged Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -18,15 +21,22 @@ jobs:
     env:
       GH_REPO: ${{ github.repository }}
     steps:
-      - name: Checkout repository
+      - name: 🔍 Validate release ref
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        shell: bash
+        run: |
+          echo "Release runs must target a v* tag; received ${GITHUB_REF}."
+          exit 1
+
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Node.js setup
+      - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Read app version
+      - name: 📖 Read app version
         id: app_version
         shell: bash
         run: |
@@ -34,7 +44,7 @@ jobs:
           VERSION="$(node -e "console.log(require(require('path').join(process.env.GITHUB_WORKSPACE, 'package.json')).version)")"
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Validate tag matches version
+      - name: 🔍 Validate tag matches version
         shell: bash
         run: |
           set -euo pipefail
@@ -44,7 +54,7 @@ jobs:
             exit 1
           fi
 
-      - name: Build bilingual release notes from changelog
+      - name: 📝 Build bilingual release notes from changelog
         shell: bash
         run: |
           set -euo pipefail
@@ -107,7 +117,7 @@ jobs:
 
           date -u +"%Y-%m-%dT%H:%M:%SZ" > published-at.txt
 
-      - name: Preserve previous legacy latest.json
+      - name: 💾 Preserve previous legacy latest.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -137,7 +147,7 @@ jobs:
       # platform jobs can verify assets via public tag download URLs without
       # waiting for Windows, and without reading the previous release's
       # same-named target manifests through /releases/latest/.
-      - name: Create or update staged release
+      - name: 🚀 Create or update staged release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -168,7 +178,7 @@ jobs:
             gh release edit "${TAG}" --prerelease=false --latest
           fi
 
-      - name: Upload release metadata artifact
+      - name: 📤 Upload release metadata artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-metadata
@@ -180,7 +190,7 @@ jobs:
             legacy-latest.json
 
   build-windows:
-    name: Build Windows
+    name: "🏗️ Build: Windows"
     needs: prepare-release
     runs-on: windows-latest
     permissions:
@@ -189,31 +199,44 @@ jobs:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.prepare-release.outputs.version }}
     steps:
-      - name: Checkout repository
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Rust setup
+      - name: 🦀 Rust setup
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Go setup
+      - name: 🦀 Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          key: windows-release
+
+      - name: 🐹 Go setup
         uses: actions/setup-go@v5
         with:
           go-version-file: sidecars/cockpit-cliproxy/go.mod
           cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
 
-      - name: Node.js setup
+      - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: "npm"
 
-      - name: Install frontend dependencies
+      - name: 📦 Install frontend dependencies
         run: npm install
 
-      - name: Sync versions
+      - name: 🔄 Sync versions
         run: npm run sync-version
 
-      - name: Build Windows app
+      - name: 💾 Cache Tauri tooling
+        uses: actions/cache@v4
+        with:
+          path: C:\Users\runneradmin\AppData\Local\tauri
+          key: tauri-deps-windows-latest-${{ hashFiles('package-lock.json', '**/Cargo.toml') }}
+          restore-keys: |
+            tauri-deps-windows-latest-
+
+      - name: 🏗️ Build Windows app
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -223,13 +246,13 @@ jobs:
           set -euo pipefail
           npx tauri build --ci
 
-      - name: Download release metadata
+      - name: 📥 Download release metadata
         uses: actions/download-artifact@v4
         with:
           name: release-metadata
           path: release-metadata
 
-      - name: Stage Windows release assets
+      - name: 📦 Stage Windows release assets
         shell: bash
         run: |
           set -euo pipefail
@@ -238,7 +261,7 @@ jobs:
             --assets-dir "target/release/bundle" \
             --output-dir "release-assets"
 
-      - name: Upload Windows release assets
+      - name: 📤 Upload Windows release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -251,7 +274,7 @@ jobs:
           gh release upload "${TAG}" "${ASSETS[@]}" --clobber
           echo "Uploaded ${#ASSETS[@]} Windows assets"
 
-      - name: Build and upload Windows updater manifests
+      - name: 📤 Build and upload Windows updater manifests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -268,7 +291,7 @@ jobs:
           gh release upload "v${VERSION}" target-manifests/*.json --clobber
 
       # Fallback only: prepare should already have published with legacy latest.json.
-      - name: Ensure staged release is published
+      - name: 🚀 Ensure staged release is published
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -288,7 +311,7 @@ jobs:
       # Mid-stage verify uses the tag download URL so parallel jobs do not race
       # on /releases/latest/ before this release is marked latest (or before
       # other platforms finish). Public /latest/ is checked in finalize.
-      - name: Verify published Windows updater manifests
+      - name: 🔍 Verify published Windows updater manifests
         shell: bash
         run: |
           set -euo pipefail
@@ -299,7 +322,7 @@ jobs:
             --latest-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}"
 
   build-macos-aarch64:
-    name: Build macOS Apple Silicon
+    name: "🏗️ Build: macOS Apple Silicon"
     # Parallel with Windows / macOS Intel after prepare (no hard platform deps).
     needs:
       - prepare-release
@@ -310,33 +333,46 @@ jobs:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.prepare-release.outputs.version }}
     steps:
-      - name: Checkout repository
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Rust setup
+      - name: 🦀 Rust setup
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin
 
-      - name: Go setup
+      - name: 🦀 Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          key: macos-aarch64-release
+
+      - name: 🐹 Go setup
         uses: actions/setup-go@v5
         with:
           go-version-file: sidecars/cockpit-cliproxy/go.mod
           cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
 
-      - name: Node.js setup
+      - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: "npm"
 
-      - name: Install frontend dependencies
+      - name: 📦 Install frontend dependencies
         run: npm install
 
-      - name: Sync versions
+      - name: 🔄 Sync versions
         run: npm run sync-version
 
-      - name: Build macOS Apple Silicon app
+      - name: 💾 Cache Tauri tooling
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/tauri
+          key: tauri-deps-macos-latest-aarch64-${{ hashFiles('package-lock.json', '**/Cargo.toml') }}
+          restore-keys: |
+            tauri-deps-macos-latest-aarch64-
+
+      - name: 🏗️ Build macOS Apple Silicon app
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -346,13 +382,13 @@ jobs:
           set -euo pipefail
           npx tauri build --ci --target aarch64-apple-darwin
 
-      - name: Download release metadata
+      - name: 📥 Download release metadata
         uses: actions/download-artifact@v4
         with:
           name: release-metadata
           path: release-metadata
 
-      - name: Stage macOS Apple Silicon assets
+      - name: 📦 Stage macOS Apple Silicon assets
         shell: bash
         run: |
           set -euo pipefail
@@ -362,7 +398,7 @@ jobs:
             --assets-dir "target/aarch64-apple-darwin/release/bundle" \
             --output-dir "release-assets"
 
-      - name: Upload macOS Apple Silicon assets
+      - name: 📤 Upload macOS Apple Silicon assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -375,7 +411,7 @@ jobs:
           gh release upload "${TAG}" "${ASSETS[@]}" --clobber
           echo "Uploaded ${#ASSETS[@]} macOS Apple Silicon assets"
 
-      - name: Build and upload macOS Apple Silicon updater manifest
+      - name: 📤 Build and upload macOS Apple Silicon updater manifest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -392,7 +428,7 @@ jobs:
           gh release upload "v${VERSION}" target-manifests/*.json --clobber
 
       # Tag URL (not /releases/latest/) — see Windows verify comment.
-      - name: Verify published macOS Apple Silicon updater manifest
+      - name: 🔍 Verify published macOS Apple Silicon updater manifest
         shell: bash
         run: |
           set -euo pipefail
@@ -403,7 +439,7 @@ jobs:
             --latest-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}"
 
   build-macos-x86_64:
-    name: Build macOS Intel
+    name: "🏗️ Build: macOS Intel"
     # Parallel with Windows / macOS Apple Silicon after prepare.
     needs:
       - prepare-release
@@ -414,33 +450,46 @@ jobs:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.prepare-release.outputs.version }}
     steps:
-      - name: Checkout repository
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Rust setup
+      - name: 🦀 Rust setup
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-apple-darwin
 
-      - name: Go setup
+      - name: 🦀 Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          key: macos-x86_64-release
+
+      - name: 🐹 Go setup
         uses: actions/setup-go@v5
         with:
           go-version-file: sidecars/cockpit-cliproxy/go.mod
           cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
 
-      - name: Node.js setup
+      - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: "npm"
 
-      - name: Install frontend dependencies
+      - name: 📦 Install frontend dependencies
         run: npm install
 
-      - name: Sync versions
+      - name: 🔄 Sync versions
         run: npm run sync-version
 
-      - name: Build macOS Intel app
+      - name: 💾 Cache Tauri tooling
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/tauri
+          key: tauri-deps-macos-latest-x86_64-${{ hashFiles('package-lock.json', '**/Cargo.toml') }}
+          restore-keys: |
+            tauri-deps-macos-latest-x86_64-
+
+      - name: 🏗️ Build macOS Intel app
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -450,13 +499,13 @@ jobs:
           set -euo pipefail
           npx tauri build --ci --target x86_64-apple-darwin
 
-      - name: Download release metadata
+      - name: 📥 Download release metadata
         uses: actions/download-artifact@v4
         with:
           name: release-metadata
           path: release-metadata
 
-      - name: Stage macOS Intel assets
+      - name: 📦 Stage macOS Intel assets
         shell: bash
         run: |
           set -euo pipefail
@@ -466,7 +515,7 @@ jobs:
             --assets-dir "target/x86_64-apple-darwin/release/bundle" \
             --output-dir "release-assets"
 
-      - name: Upload macOS Intel assets
+      - name: 📤 Upload macOS Intel assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -479,7 +528,7 @@ jobs:
           gh release upload "${TAG}" "${ASSETS[@]}" --clobber
           echo "Uploaded ${#ASSETS[@]} macOS Intel assets"
 
-      - name: Build and upload macOS Intel updater manifest
+      - name: 📤 Build and upload macOS Intel updater manifest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -496,7 +545,7 @@ jobs:
           gh release upload "v${VERSION}" target-manifests/*.json --clobber
 
       # Tag URL (not /releases/latest/) — see Windows verify comment.
-      - name: Verify published macOS Intel updater manifest
+      - name: 🔍 Verify published macOS Intel updater manifest
         shell: bash
         run: |
           set -euo pipefail
@@ -507,7 +556,7 @@ jobs:
             --latest-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}"
 
   build-macos-universal:
-    name: Build macOS Universal
+    name: "🏗️ Build: macOS Universal"
     # Still sequential after both arch builds (needs arm + x64 artifacts).
     needs:
       - prepare-release
@@ -520,33 +569,46 @@ jobs:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.prepare-release.outputs.version }}
     steps:
-      - name: Checkout repository
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Rust setup
+      - name: 🦀 Rust setup
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
-      - name: Go setup
+      - name: 🦀 Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          key: macos-universal-release
+
+      - name: 🐹 Go setup
         uses: actions/setup-go@v5
         with:
           go-version-file: sidecars/cockpit-cliproxy/go.mod
           cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
 
-      - name: Node.js setup
+      - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: "npm"
 
-      - name: Install frontend dependencies
+      - name: 📦 Install frontend dependencies
         run: npm install
 
-      - name: Sync versions
+      - name: 🔄 Sync versions
         run: npm run sync-version
 
-      - name: Build macOS Universal app
+      - name: 💾 Cache Tauri tooling
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/tauri
+          key: tauri-deps-macos-latest-universal-${{ hashFiles('package-lock.json', '**/Cargo.toml') }}
+          restore-keys: |
+            tauri-deps-macos-latest-universal-
+
+      - name: 🏗️ Build macOS Universal app
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -556,7 +618,7 @@ jobs:
           set -euo pipefail
           npx tauri build --ci --target universal-apple-darwin
 
-      - name: Stage macOS Universal assets
+      - name: 📦 Stage macOS Universal assets
         shell: bash
         run: |
           set -euo pipefail
@@ -566,7 +628,7 @@ jobs:
             --assets-dir "target/universal-apple-darwin/release/bundle" \
             --output-dir "release-assets"
 
-      - name: Upload macOS Universal assets
+      - name: 📤 Upload macOS Universal assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -580,7 +642,7 @@ jobs:
           echo "Uploaded ${#ASSETS[@]} macOS Universal assets"
 
   build-linux:
-    name: Build Linux (${{ matrix.label }})
+    name: "🏗️ Build: Linux (${{ matrix.label }})"
     # Parallel with Windows / macOS after prepare; matrix arches run in parallel.
     needs:
       - prepare-release
@@ -601,37 +663,50 @@ jobs:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.prepare-release.outputs.version }}
     steps:
-      - name: Checkout repository
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: 🐧 Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf pkg-config libsoup-3.0-dev javascriptcoregtk-4.1 libjavascriptcoregtk-4.1-dev
           sudo apt-get install -y libnm-dev xdg-utils
 
-      - name: Rust setup
+      - name: 🦀 Rust setup
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Go setup
+      - name: 🦀 Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          key: linux-${{ matrix.label }}-release
+
+      - name: 🐹 Go setup
         uses: actions/setup-go@v5
         with:
           go-version-file: sidecars/cockpit-cliproxy/go.mod
           cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
 
-      - name: Node.js setup
+      - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: "npm"
 
-      - name: Install frontend dependencies
+      - name: 📦 Install frontend dependencies
         run: npm install
 
-      - name: Sync versions
+      - name: 🔄 Sync versions
         run: npm run sync-version
 
-      - name: Build Linux app
+      - name: 💾 Cache Tauri tooling
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/tauri
+          key: tauri-deps-${{ matrix.platform }}-${{ hashFiles('package-lock.json', '**/Cargo.toml') }}
+          restore-keys: |
+            tauri-deps-${{ matrix.platform }}-
+
+      - name: 🏗️ Build Linux app
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -641,13 +716,13 @@ jobs:
           set -euo pipefail
           npx tauri build --ci
 
-      - name: Download release metadata
+      - name: 📥 Download release metadata
         uses: actions/download-artifact@v4
         with:
           name: release-metadata
           path: release-metadata
 
-      - name: Stage Linux assets
+      - name: 📦 Stage Linux assets
         shell: bash
         run: |
           set -euo pipefail
@@ -656,7 +731,7 @@ jobs:
             --assets-dir "target/release/bundle" \
             --output-dir "release-assets"
 
-      - name: Upload Linux assets
+      - name: 📤 Upload Linux assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -669,7 +744,7 @@ jobs:
           gh release upload "${TAG}" "${ASSETS[@]}" --clobber
           echo "Uploaded ${#ASSETS[@]} Linux assets"
 
-      - name: Build and upload Linux updater manifests
+      - name: 📤 Build and upload Linux updater manifests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -686,7 +761,7 @@ jobs:
           gh release upload "v${VERSION}" target-manifests/*.json --clobber
 
       # Tag URL (not /releases/latest/) — see Windows verify comment.
-      - name: Verify published Linux updater manifests
+      - name: 🔍 Verify published Linux updater manifests
         shell: bash
         run: |
           set -euo pipefail
@@ -697,7 +772,7 @@ jobs:
             --latest-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}"
 
   finalize-legacy-latest:
-    name: Finalize legacy latest.json
+    name: 🏁 Finalize Legacy Updater Manifest
     # Wait for every platform build so latest.json is complete.
     needs:
       - prepare-release
@@ -711,21 +786,21 @@ jobs:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.prepare-release.outputs.version }}
     steps:
-      - name: Checkout repository
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Node.js setup
+      - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Download release metadata
+      - name: 📥 Download release metadata
         uses: actions/download-artifact@v4
         with:
           name: release-metadata
           path: release-metadata
 
-      - name: Download all release assets
+      - name: 📥 Download all release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -747,7 +822,7 @@ jobs:
             exit 1
           fi
 
-      - name: Build complete legacy latest.json
+      - name: 🏗️ Build complete legacy latest.json
         shell: bash
         run: |
           set -euo pipefail
@@ -759,7 +834,7 @@ jobs:
             --published-at "$(cat release-metadata/published-at.txt)" \
             --output "latest.json"
 
-      - name: Validate complete legacy latest.json
+      - name: 🔍 Validate complete legacy latest.json
         shell: bash
         run: |
           set -euo pipefail
@@ -777,7 +852,7 @@ jobs:
           ' latest.json > /dev/null
           jq -r '.platforms | keys[]' latest.json
 
-      - name: Publish complete legacy latest.json
+      - name: 📤 Publish complete legacy latest.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -787,7 +862,7 @@ jobs:
           gh release edit "v${VERSION}" --draft=false --prerelease=false --latest
 
       # End-to-end: user-facing /releases/latest/download (do not use tag URL here).
-      - name: Verify complete published updater state
+      - name: 🔍 Verify complete published updater state
         shell: bash
         run: |
           set -euo pipefail
@@ -798,7 +873,7 @@ jobs:
             --legacy
 
   upload-checksums:
-    name: Upload SHA256SUMS
+    name: 🔗 Publish SHA256SUMS
     needs:
       - prepare-release
       - finalize-legacy-latest
@@ -809,7 +884,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.prepare-release.outputs.version }}
     steps:
-      - name: Download release assets
+      - name: 📥 Download release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -818,7 +893,7 @@ jobs:
           mkdir -p release-assets
           gh release download "v${VERSION}" --dir release-assets --pattern "*" --clobber
 
-      - name: Generate SHA256SUMS.txt from release assets
+      - name: ⚙️ Generate SHA256SUMS.txt from release assets
         shell: bash
         run: |
           set -euo pipefail
@@ -835,7 +910,7 @@ jobs:
           test -s SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      - name: Upload SHA256SUMS.txt to release
+      - name: 📤 Upload SHA256SUMS.txt to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -844,7 +919,7 @@ jobs:
           gh release upload "v${VERSION}" SHA256SUMS.txt --clobber
 
   update-homebrew-cask:
-    name: Update Homebrew Cask
+    name: 🍺 Update Homebrew Cask
     needs:
       - prepare-release
       - finalize-legacy-latest
@@ -856,12 +931,12 @@ jobs:
     env:
       VERSION: ${{ needs.prepare-release.outputs.version }}
     steps:
-      - name: Checkout main
+      - name: 📥 Checkout main branch
         uses: actions/checkout@v4
         with:
           ref: main
 
-      - name: Download universal DMG from GitHub Releases
+      - name: 📥 Download universal DMG from GitHub Releases
         shell: bash
         run: |
           set -euo pipefail
@@ -877,14 +952,14 @@ jobs:
           echo "Failed to download release asset after retries."
           exit 1
 
-      - name: Compute sha256
+      - name: ⚙️ Compute SHA-256
         shell: bash
         run: |
           set -euo pipefail
           SHA256="$(sha256sum cockpit-tools.dmg | awk '{print $1}')"
           echo "SHA256=${SHA256}" >> "$GITHUB_ENV"
 
-      - name: Update Cask file
+      - name: 📝 Update Cask file
         shell: bash
         run: |
           set -euo pipefail
@@ -900,7 +975,7 @@ jobs:
 
           git diff -- "${FILE}"
 
-      - name: Create pull request
+      - name: 🚀 Create pull request
         id: create_cask_pr
         uses: peter-evans/create-pull-request@v6
         with:
@@ -915,7 +990,7 @@ jobs:
           base: main
           delete-branch: true
 
-      - name: Enable auto-merge for cask PR
+      - name: 🚀 Enable auto-merge for cask PR
         if: ${{ steps.create_cask_pr.outputs.pull-request-number != '' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

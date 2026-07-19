@@ -1,4 +1,4 @@
-name: Build Matrix
+name: 🚀 Build Matrix
 
 on:
   workflow_dispatch:
@@ -15,36 +15,57 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  preflight:
-    name: Preflight
+  preflight-locales:
+    name: "🔍 Preflight: Check Locales"
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: Checkout repository
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Node.js setup
+      - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: "npm"
 
-      - name: Install frontend dependencies
+      - name: 📦 Install frontend dependencies
         run: npm install
 
-      - name: Sync versions
+      - name: 🔄 Sync versions
         run: npm run sync-version
 
-      - name: Check locales
+      - name: 🌐 Check locales
         run: node scripts/check_locales.cjs
 
-      - name: Typecheck
+  preflight-typecheck:
+    name: "🔍 Preflight: Typecheck"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Node.js setup
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: 📦 Install frontend dependencies
+        run: npm install
+
+      - name: 🔄 Sync versions
+        run: npm run sync-version
+
+      - name: 🛡️ Typecheck
         run: npm run typecheck
 
   build:
-    name: Build (${{ matrix.label }})
-    needs: preflight
+    name: "🏗️ Build: ${{ matrix.label }}"
+    needs: [preflight-locales, preflight-typecheck]
     runs-on: ${{ matrix.platform }}
     permissions:
       contents: read
@@ -78,52 +99,71 @@ jobs:
             release_dir: "target/release"
 
     steps:
-      - name: Checkout repository
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies (Linux)
+      - name: 🐧 Install system dependencies (Linux)
         if: startsWith(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf pkg-config libsoup-3.0-dev javascriptcoregtk-4.1 libjavascriptcoregtk-4.1-dev
           sudo apt-get install -y libnm-dev xdg-utils
 
-      - name: Rust setup
+      - name: 🦀 Rust setup
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: Go setup
+      - name: 🦀 Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.platform }}-${{ matrix.label }}
+
+      - name: 🐹 Go setup
         uses: actions/setup-go@v5
         with:
           go-version-file: sidecars/cockpit-cliproxy/go.mod
           cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
 
-      - name: Node.js setup
+      - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: "npm"
 
-      - name: Install frontend dependencies
+      - name: 📦 Install frontend dependencies
         run: npm install
 
-      - name: Sync versions
+      - name: 🔄 Sync versions
         run: npm run sync-version
 
-      - name: Cache Tauri binary dependencies
+      - name: 💾 Cache Tauri tooling
         uses: actions/cache@v4
         with:
           path: |
             ${{ matrix.platform == 'windows-latest' && 'C:\Users\runneradmin\AppData\Local\tauri' || '' }}
             ${{ startsWith(matrix.platform, 'ubuntu') && '~/.cache/tauri' || '' }}
             ${{ matrix.platform == 'macos-latest' && '~/Library/Caches/tauri' || '' }}
-          key: tauri-deps-${{ matrix.platform }}-${{ hashFiles('**/Cargo.toml') }}
+          key: tauri-deps-${{ matrix.platform }}-${{ hashFiles('package-lock.json', '**/Cargo.toml') }}
           restore-keys: |
             tauri-deps-${{ matrix.platform }}-
 
-      - name: Build app (pull request)
-        if: github.event_name == 'pull_request'
+      # Keep the private key out of PR code, dependency scripts, and third-party actions.
+      - name: 🔐 Check signing availability
+        if: github.event_name != 'pull_request'
+        id: signing
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 🏗️ Build app (Unsigned CI)
+        if: github.event_name == 'pull_request' || steps.signing.outputs.available != 'true'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -131,19 +171,19 @@ jobs:
           set -euo pipefail
           npx tauri build --ci --config src-tauri/tauri.ci.conf.json ${{ matrix.args }} 2>&1 | tee "build-${{ matrix.label }}.log"
 
-      - name: Print build logs on failure (PR)
-        if: failure() && github.event_name == 'pull_request'
+      - name: 📜 Print unsigned build logs on failure
+        if: failure() && (github.event_name == 'pull_request' || steps.signing.outputs.available != 'true')
         shell: bash
         run: |
-          echo "=== BUILD LOG (PR) ==="
+          echo "=== UNSIGNED BUILD LOG ==="
           if [ -f "build-${{ matrix.label }}.log" ]; then
             tail -n 200 "build-${{ matrix.label }}.log"
           else
             echo "Log file not found"
           fi
 
-      - name: Build app (signed)
-        if: github.event_name != 'pull_request'
+      - name: 🏗️ Build app (Signed)
+        if: github.event_name != 'pull_request' && steps.signing.outputs.available == 'true'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -153,8 +193,8 @@ jobs:
           set -euo pipefail
           npx tauri build --ci ${{ matrix.args }} 2>&1 | tee "build-${{ matrix.label }}.log"
 
-      - name: Print build logs on failure (Signed)
-        if: failure() && github.event_name != 'pull_request'
+      - name: 📜 Print signed build logs on failure
+        if: failure() && github.event_name != 'pull_request' && steps.signing.outputs.available == 'true'
         shell: bash
         run: |
           echo "=== BUILD LOG (SIGNED) ==="
@@ -164,14 +204,30 @@ jobs:
             echo "Log file not found"
           fi
 
-      - name: Summarize warnings
+      - name: 📊 Summarize build warnings
         if: always()
         shell: bash
+        env:
+          JOB_STATUS: ${{ job.status }}
         run: |
           set -euo pipefail
           log_file="build-${{ matrix.label }}.log"
           warnings_file="warnings-${{ matrix.label }}.txt"
-          if grep -n "^warning:" "$log_file" > "$warnings_file"; then
+
+          if [ ! -f "$log_file" ]; then
+            : > "$warnings_file"
+            {
+              echo "### 🏗️ Build Summary: ${{ matrix.label }}"
+              echo
+              echo "❌ **The build did not produce a log; warning analysis is unavailable.**"
+              echo
+              echo "---"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Cargo emits ANSI color codes in CI, so normalize the log before matching.
+          if sed $'s/\033\\[[0-9;]*m//g' "$log_file" | grep -n "^warning:" > "$warnings_file"; then
             warning_count="$(wc -l < "$warnings_file" | tr -d ' ')"
           else
             : > "$warnings_file"
@@ -179,30 +235,42 @@ jobs:
           fi
 
           {
-            echo "## ${{ matrix.label }}"
+            echo "### 🏗️ Build Summary: ${{ matrix.label }}"
             echo
-            echo "- warnings: ${warning_count}"
-            echo "- log: build-${{ matrix.label }}.log"
+            if [ "$JOB_STATUS" != "success" ]; then
+              echo "❌ **Build failed with ${warning_count} warning(s).**"
+            elif [ "${warning_count}" -eq "0" ]; then
+              echo "✅ **Build completed with 0 warnings.**"
+            else
+              echo "⚠️ **Build completed with ${warning_count} warning(s).**"
+            fi
+
             if [ -s "$warnings_file" ]; then
+              echo
+              echo "<details>"
+              echo "<summary>🔍 Show warning logs (up to 200 lines)</summary>"
               echo
               echo '```text'
               sed -n '1,200p' "$warnings_file"
               echo '```'
+              echo "</details>"
             fi
+            echo
+            echo "---"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload build logs
+      - name: 📤 Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: logs-${{ matrix.label }}
           retention-days: 7
-          if-no-files-found: error
+          if-no-files-found: warn
           path: |
             build-${{ matrix.label }}.log
             warnings-${{ matrix.label }}.txt
 
-      - name: Upload bundles
+      - name: 📤 Upload build bundles
         if: success()
         uses: actions/upload-artifact@v4
         with:
