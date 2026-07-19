@@ -844,6 +844,8 @@ pub fn run() {
             commands::codex::codex_local_access_rotate_named_api_key,
             commands::codex::codex_local_access_delete_api_key,
             commands::codex::codex_local_access_set_enabled,
+            commands::codex::codex_local_access_update_profile_file_management,
+            commands::codex::codex_local_access_restore_profile_files,
             commands::codex::codex_local_access_activate,
             commands::codex::codex_local_access_test,
             commands::codex::codex_local_access_chat_test,

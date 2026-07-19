@@ -294,6 +294,21 @@ export async function setCodexLocalAccessEnabled(
   return await invoke("codex_local_access_set_enabled", { enabled });
 }
 
+export async function updateCodexLocalAccessProfileFileManagement(payload: {
+  manageAuthJson: boolean;
+  manageConfigToml: boolean;
+  manageModelCatalog: boolean;
+}): Promise<CodexLocalAccessState> {
+  return await invoke(
+    "codex_local_access_update_profile_file_management",
+    payload,
+  );
+}
+
+export async function restoreCodexLocalAccessProfileFiles(): Promise<CodexLocalAccessState> {
+  return await invoke("codex_local_access_restore_profile_files");
+}
+
 export async function activateCodexLocalAccess(): Promise<CodexLocalAccessState> {
   const startedAt = performance.now();
   console.info("[Codex API Service Switch][Service] invoke codex_local_access_activate started");

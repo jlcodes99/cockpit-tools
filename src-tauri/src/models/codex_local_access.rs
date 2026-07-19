@@ -443,6 +443,12 @@ pub struct CodexLocalAccessQuotaReserve {
 #[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessCollection {
     pub enabled: bool,
+    #[serde(default = "default_true")]
+    pub manage_auth_json: bool,
+    #[serde(default = "default_true")]
+    pub manage_config_toml: bool,
+    #[serde(default = "default_true")]
+    pub manage_model_catalog: bool,
     pub port: u16,
     pub api_key: String,
     #[serde(default)]
