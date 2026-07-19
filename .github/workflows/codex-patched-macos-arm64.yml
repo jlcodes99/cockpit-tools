@@ -1,0 +1,95 @@
+name: Codex Patched macOS arm64 Build
+
+"on":
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos-arm64:
+    name: Build macOS arm64
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: "1"
+    steps:
+      - name: Checkout patch ref
+        uses: actions/checkout@v4
+
+      - name: Inspect runner and source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sw_vers
+          uname -a
+          df -h .
+          git status --short --branch
+          git rev-parse HEAD
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Go setup
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sidecars/cockpit-cliproxy/go.mod
+          cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
+
+      - name: Node.js setup
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Verify toolchains
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rustc --version
+          cargo --version
+          go version
+          node --version
+          npm --version
+          xcodebuild -version
+          rustup target list --installed
+
+      - name: Install frontend dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          npm install --no-audit --no-fund
+
+      - name: Sync versions
+        shell: bash
+        run: |
+          set -euxo pipefail
+          npm run sync-version
+
+      - name: Build unsigned arm64 app
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          npx tauri build --ci --config src-tauri/tauri.ci.conf.json --target aarch64-apple-darwin
+
+      - name: Inspect arm64 bundles
+        if: always()
+        shell: bash
+        run: |
+          set -euxo pipefail
+          find target/aarch64-apple-darwin/release/bundle -maxdepth 3 -type f -print -exec du -h {} \; || true
+
+      - name: Upload arm64 app and dmg bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-patched-macos-arm64-${{ github.sha }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            target/aarch64-apple-darwin/release/bundle/**/*.app
+            target/aarch64-apple-darwin/release/bundle/**/*.dmg

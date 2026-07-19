@@ -3740,9 +3740,7 @@ fn is_codex_keychain_item_not_found(status: std::process::ExitStatus, stderr: &s
 }
 
 #[cfg(all(target_os = "macos", not(test)))]
-fn read_codex_keychain_auth_file_from_dir(
-    base_dir: &Path,
-) -> Result<Option<CodexAuthFile>, String> {
+fn read_codex_keychain_secret_from_dir(base_dir: &Path) -> Result<Option<Vec<u8>>, String> {
     let keychain_account = build_codex_keychain_account(base_dir);
     let output = std::process::Command::new("security")
         .arg("find-generic-password")
@@ -3759,38 +3757,75 @@ fn read_codex_keychain_auth_file_from_dir(
         if is_codex_keychain_item_not_found(output.status, &stderr) {
             return Ok(None);
         }
-        let stdout = String::from_utf8_lossy(&output.stdout);
         return Err(format!(
-            "读取 Codex keychain 失败: status={}, stderr={}, stdout={}",
+            "读取 Codex keychain 失败: status={}, stderr={}",
             output.status,
             if stderr.trim().is_empty() {
                 "<empty>"
             } else {
                 stderr.trim()
-            },
-            if stdout.trim().is_empty() {
-                "<empty>"
-            } else {
-                stdout.trim()
             }
         ));
     }
 
-    let secret = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let mut secret = output.stdout;
+    while matches!(secret.last(), Some(b'\n' | b'\r')) {
+        secret.pop();
+    }
     if secret.is_empty() {
         return Ok(None);
     }
+    Ok(Some(secret))
+}
 
+#[cfg(all(target_os = "macos", not(test)))]
+fn read_codex_keychain_auth_file_from_dir(
+    base_dir: &Path,
+) -> Result<Option<CodexAuthFile>, String> {
+    let Some(secret) = read_codex_keychain_secret_from_dir(base_dir)? else {
+        return Ok(None);
+    };
+    let secret = String::from_utf8(secret)
+        .map_err(|e| format!("解析 Codex keychain 数据失败: {}", e))?;
     let auth_file: CodexAuthFile = serde_json::from_str(&secret)
         .map_err(|e| format!("解析 Codex keychain JSON 失败: {}", e))?;
     Ok(Some(auth_file))
 }
 
 #[cfg(all(target_os = "macos", test))]
+static CODEX_TEST_KEYCHAIN_VALUES: std::sync::LazyLock<Mutex<HashMap<String, Option<Vec<u8>>>>>
+    = std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+#[cfg(all(target_os = "macos", test))]
+fn test_codex_keychain_key(base_dir: &Path) -> String {
+    base_dir.to_string_lossy().into_owned()
+}
+
+#[cfg(all(target_os = "macos", test))]
+fn read_codex_keychain_secret_from_dir(base_dir: &Path) -> Result<Option<Vec<u8>>, String> {
+    if std::env::var_os("COCKPIT_TEST_FAIL_CODEX_KEYCHAIN_READ").is_some() {
+        return Err("模拟 Codex keychain 读取失败".to_string());
+    }
+    Ok(CODEX_TEST_KEYCHAIN_VALUES
+        .lock()
+        .unwrap_or_else(|err| err.into_inner())
+        .get(&test_codex_keychain_key(base_dir))
+        .cloned()
+        .flatten())
+}
+
+#[cfg(all(target_os = "macos", test))]
 fn read_codex_keychain_auth_file_from_dir(
-    _base_dir: &Path,
+    base_dir: &Path,
 ) -> Result<Option<CodexAuthFile>, String> {
-    Ok(None)
+    let Some(secret) = read_codex_keychain_secret_from_dir(base_dir)? else {
+        return Ok(None);
+    };
+    let secret = String::from_utf8(secret)
+        .map_err(|e| format!("解析 Codex keychain 数据失败: {}", e))?;
+    serde_json::from_str(&secret)
+        .map(Some)
+        .map_err(|e| format!("解析 Codex keychain JSON 失败: {}", e))
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -4316,14 +4351,9 @@ fn build_codex_keychain_account(base_dir: &Path) -> String {
 }
 
 #[cfg(all(target_os = "macos", not(test)))]
-fn write_codex_keychain_to_dir(base_dir: &Path, account: &CodexAccount) -> Result<(), String> {
-    if account.is_api_key_auth() {
-        return Ok(());
-    }
-
-    let payload = build_auth_file_value(account)?;
-    let secret = serde_json::to_string(&payload)
-        .map_err(|e| format!("序列化 Codex keychain 数据失败: {}", e))?;
+fn write_codex_keychain_secret_to_dir(base_dir: &Path, secret: &[u8]) -> Result<(), String> {
+    let secret = String::from_utf8(secret.to_vec())
+        .map_err(|e| format!("Codex keychain 数据不是 UTF-8: {}", e))?;
     let keychain_account = build_codex_keychain_account(base_dir);
 
     let output = std::process::Command::new("security")
@@ -4340,19 +4370,13 @@ fn write_codex_keychain_to_dir(base_dir: &Path, account: &CodexAccount) -> Resul
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
         return Err(format!(
-            "写入 Codex keychain 失败: status={}, stderr={}, stdout={}",
+            "写入 Codex keychain 失败: status={}, stderr={}",
             output.status,
             if stderr.trim().is_empty() {
                 "<empty>"
             } else {
                 stderr.trim()
-            },
-            if stdout.trim().is_empty() {
-                "<empty>"
-            } else {
-                stdout.trim()
             }
         ));
     }
@@ -4364,8 +4388,30 @@ fn write_codex_keychain_to_dir(base_dir: &Path, account: &CodexAccount) -> Resul
     Ok(())
 }
 
+#[cfg(all(target_os = "macos", not(test)))]
+fn write_codex_keychain_to_dir(base_dir: &Path, account: &CodexAccount) -> Result<(), String> {
+    if account.is_api_key_auth() {
+        return Ok(());
+    }
+
+    let payload = build_auth_file_value(account)?;
+    let secret = serde_json::to_string(&payload)
+        .map_err(|e| format!("序列化 Codex keychain 数据失败: {}", e))?;
+    write_codex_keychain_secret_to_dir(base_dir, secret.as_bytes())
+}
+
 #[cfg(all(target_os = "macos", test))]
 fn write_codex_keychain_to_dir(_base_dir: &Path, _account: &CodexAccount) -> Result<(), String> {
+    if std::env::var_os("COCKPIT_TEST_FAIL_CODEX_KEYCHAIN").is_some() {
+        return Err("模拟 Codex keychain 写入失败".to_string());
+    }
+    let payload = build_auth_file_value(_account)?;
+    let secret = serde_json::to_vec(&payload)
+        .map_err(|e| format!("序列化 Codex keychain 数据失败: {}", e))?;
+    CODEX_TEST_KEYCHAIN_VALUES
+        .lock()
+        .unwrap_or_else(|err| err.into_inner())
+        .insert(test_codex_keychain_key(_base_dir), Some(secret));
     Ok(())
 }
 
@@ -4561,19 +4607,275 @@ fn resolve_account_for_bundle_write(
     Ok(account.clone())
 }
 
+#[derive(Debug, Clone)]
+struct CodexBundleFileSnapshot {
+    path: PathBuf,
+    content: Option<Vec<u8>>,
+}
+
+fn snapshot_codex_bundle_files(base_dir: &Path) -> Result<Vec<CodexBundleFileSnapshot>, String> {
+    let mut snapshots = Vec::new();
+    for path in [
+        base_dir.join("auth.json"),
+        base_dir.join(CODEX_CONFIG_FILE_NAME),
+        base_dir.join(CODEX_MANAGED_MODEL_CATALOG_FILE),
+        base_dir.join(CODEX_AUTH_PROJECTION_FILE_NAME),
+    ] {
+        let content = match fs::read(&path) {
+            Ok(content) => Some(content),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => {
+                return Err(format!(
+                    "读取认证文件快照失败: path={}, error={}",
+                    path.display(), error
+                ));
+            }
+        };
+        snapshots.push(CodexBundleFileSnapshot { path, content });
+    }
+    Ok(snapshots)
+}
+
+#[derive(Debug, Clone)]
+struct CodexKeychainSnapshot {
+    base_dir: PathBuf,
+    secret: Option<Vec<u8>>,
+}
+
+#[cfg(all(target_os = "macos", not(test)))]
+fn snapshot_codex_keychain_for_dir(
+    base_dir: &Path,
+) -> Result<Option<CodexKeychainSnapshot>, String> {
+    Ok(Some(CodexKeychainSnapshot {
+        base_dir: base_dir.to_path_buf(),
+        secret: read_codex_keychain_secret_from_dir(base_dir)?,
+    }))
+}
+
+#[cfg(all(target_os = "macos", test))]
+fn snapshot_codex_keychain_for_dir(
+    base_dir: &Path,
+) -> Result<Option<CodexKeychainSnapshot>, String> {
+    Ok(Some(CodexKeychainSnapshot {
+        base_dir: base_dir.to_path_buf(),
+        secret: read_codex_keychain_secret_from_dir(base_dir)?,
+    }))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn snapshot_codex_keychain_for_dir(
+    _base_dir: &Path,
+) -> Result<Option<CodexKeychainSnapshot>, String> {
+    Ok(None)
+}
+
+#[cfg(all(target_os = "macos", not(test)))]
+fn restore_codex_keychain_snapshot(snapshot: &CodexKeychainSnapshot) -> Result<(), String> {
+    let keychain_account = build_codex_keychain_account(&snapshot.base_dir);
+    let Some(secret) = snapshot.secret.as_deref() else {
+        let output = std::process::Command::new("security")
+            .arg("delete-generic-password")
+            .arg("-s")
+            .arg(CODEX_KEYCHAIN_SERVICE)
+            .arg("-a")
+            .arg(&keychain_account)
+            .output()
+            .map_err(|e| format!("执行 security 命令失败: {}", e))?;
+        if output.status.success() {
+            return Ok(());
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if is_codex_keychain_item_not_found(output.status, &stderr) {
+            return Ok(());
+        }
+        return Err(format!(
+            "恢复 Codex keychain 不存在状态失败: status={}, stderr={}",
+            output.status,
+            if stderr.trim().is_empty() {
+                "<empty>"
+            } else {
+                stderr.trim()
+            }
+        ));
+    };
+
+    write_codex_keychain_secret_to_dir(&snapshot.base_dir, secret)
+}
+
+#[cfg(all(target_os = "macos", test))]
+fn restore_codex_keychain_snapshot(snapshot: &CodexKeychainSnapshot) -> Result<(), String> {
+    CODEX_TEST_KEYCHAIN_VALUES
+        .lock()
+        .unwrap_or_else(|err| err.into_inner())
+        .insert(
+            test_codex_keychain_key(&snapshot.base_dir),
+            snapshot.secret.clone(),
+        );
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn restore_codex_keychain_snapshot(_snapshot: &CodexKeychainSnapshot) -> Result<(), String> {
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct CodexBundleSnapshot {
+    files: Vec<CodexBundleFileSnapshot>,
+    keychain: Option<CodexKeychainSnapshot>,
+}
+
+fn snapshot_codex_bundle(
+    base_dir: &Path,
+    account: &CodexAccount,
+) -> Result<CodexBundleSnapshot, String> {
+    let files = snapshot_codex_bundle_files(base_dir)?;
+    let keychain = if account.is_api_key_auth() {
+        None
+    } else {
+        snapshot_codex_keychain_for_dir(base_dir)?
+    };
+    Ok(CodexBundleSnapshot { files, keychain })
+}
+
+fn restore_codex_bundle_files(snapshots: &[CodexBundleFileSnapshot]) -> Result<(), String> {
+    let mut errors = Vec::new();
+    for snapshot in snapshots {
+        let result = match snapshot.content.as_deref() {
+            Some(content) => {
+                crate::modules::atomic_write::write_bytes_atomic(&snapshot.path, content)
+            }
+            None => crate::modules::atomic_write::remove_file_locked(&snapshot.path).map(|_| ()),
+        };
+        if let Err(error) = result {
+            errors.push(format!("{}: {}", snapshot.path.display(), error));
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+fn restore_codex_bundle(snapshot: &CodexBundleSnapshot) -> Result<(), String> {
+    let mut errors = Vec::new();
+    if let Err(error) = restore_codex_bundle_files(&snapshot.files) {
+        errors.push(format!("认证文件: {}", error));
+    }
+    if let Some(keychain) = snapshot.keychain.as_ref() {
+        if let Err(error) = restore_codex_keychain_snapshot(keychain) {
+            errors.push(format!("Keychain: {}", error));
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+fn codex_bundle_error_with_rollback(reason: String, snapshot: &CodexBundleSnapshot) -> String {
+    match restore_codex_bundle(snapshot) {
+        Ok(()) => reason,
+        Err(rollback_error) => format!(
+            "{}；切号事务回滚失败，请勿继续启动 Codex: {}",
+            reason, rollback_error
+        ),
+    }
+}
+
+#[derive(Debug, Clone)]
+struct CodexAccountStoreSnapshot {
+    files: Vec<CodexBundleFileSnapshot>,
+}
+
+fn snapshot_codex_account_store(
+    index: &CodexAccountIndex,
+    target_account_id: &str,
+) -> Result<CodexAccountStoreSnapshot, String> {
+    let mut paths = vec![get_accounts_storage_path()];
+    let mut account_ids = Vec::new();
+    if let Some(current_account_id) = index.current_account_id.as_deref() {
+        account_ids.push(current_account_id);
+    }
+    if !account_ids.contains(&target_account_id) {
+        account_ids.push(target_account_id);
+    }
+    for account_id in account_ids {
+        paths.push(get_accounts_dir().join(format!("{}.json", account_id)));
+    }
+
+    let mut files = Vec::new();
+    for path in paths {
+        if files.iter().any(|snapshot: &CodexBundleFileSnapshot| snapshot.path == path) {
+            continue;
+        }
+        let content = match fs::read(&path) {
+            Ok(content) => Some(content),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => {
+                return Err(format!(
+                    "读取账号库快照失败: path={}, error={}",
+                    path.display(), error
+                ));
+            }
+        };
+        files.push(CodexBundleFileSnapshot { path, content });
+    }
+    Ok(CodexAccountStoreSnapshot { files })
+}
+
+fn restore_codex_account_store(snapshot: &CodexAccountStoreSnapshot) -> Result<(), String> {
+    restore_codex_bundle_files(&snapshot.files)
+}
+
+fn codex_switch_error_with_rollback(
+    reason: String,
+    bundle_snapshot: &CodexBundleSnapshot,
+    store_snapshot: &CodexAccountStoreSnapshot,
+) -> String {
+    let mut errors = Vec::new();
+    if let Err(error) = restore_codex_bundle(bundle_snapshot) {
+        errors.push(format!("认证状态: {}", error));
+    }
+    if let Err(error) = restore_codex_account_store(store_snapshot) {
+        errors.push(format!("账号库: {}", error));
+    }
+    if errors.is_empty() {
+        reason
+    } else {
+        format!("{}；切号事务回滚失败，请勿继续启动 Codex: {}", reason, errors.join("; "))
+    }
+}
+
 pub(crate) fn write_prepared_account_bundle_to_dir(
     base_dir: &Path,
     account: &CodexAccount,
 ) -> Result<(), String> {
-    write_auth_file_to_dir(base_dir, account)?;
-    if let Err(err) = write_codex_keychain_to_dir(base_dir, account) {
-        logger::log_warn(&format!(
-            "[Codex切号] 写入 keychain 失败，目标目录可能缺少完整登录快照: {}",
-            err
+    let snapshot = snapshot_codex_bundle(base_dir, account)?;
+    let disk_result = (|| -> Result<(), String> {
+        write_auth_file_to_dir(base_dir, account)?;
+        write_managed_projection_to_dir(base_dir, account)?;
+        sync_or_cleanup_managed_model_catalog_for_dir(base_dir, account)?;
+        Ok(())
+    })();
+    if let Err(error) = disk_result {
+        return Err(codex_bundle_error_with_rollback(
+            format!("写入 Codex 登录文件失败，已回滚认证文件: {}", error),
+            &snapshot,
         ));
     }
-    write_managed_projection_to_dir(base_dir, account)?;
-    sync_or_cleanup_managed_model_catalog_for_dir(base_dir, account)?;
+
+    if let Err(error) = write_codex_keychain_to_dir(base_dir, account) {
+        return Err(codex_bundle_error_with_rollback(
+            format!(
+                "写入 Codex keychain 失败，已回滚认证文件并阻止向上报告切号成功，以避免 ChatGPT/Codex 继续读取旧登录态: {}",
+                error
+            ),
+            &snapshot,
+        ));
+    }
     Ok(())
 }
 
@@ -4694,30 +4996,40 @@ fn write_api_key_account_bundle_with_oauth_to_dir(
         return Err("API Key 账号绑定的 OAuth 账号不匹配".to_string());
     }
 
-    if oauth_account.tokens.id_token.trim().is_empty() {
-        write_prepared_account_bundle_to_dir(base_dir, api_key_account)?;
+    let snapshot = snapshot_codex_bundle(base_dir, oauth_account)?;
+    let result = (|| -> Result<(), String> {
+        if oauth_account.tokens.id_token.trim().is_empty() {
+            write_prepared_account_bundle_to_dir(base_dir, api_key_account)?;
+            logger::log_info(&format!(
+                "[Codex切号] 已写入 API Key 账号配置，绑定 OAuth 缺少 id_token，跳过 OAuth 登录态投影: api_account_id={}, oauth_account_id={}, target_dir={}",
+                api_key_account.id,
+                oauth_account.id,
+                base_dir.display()
+            ));
+            return Ok(());
+        }
+
+        write_prepared_account_bundle_to_dir(base_dir, oauth_account)?;
+        let provider_config =
+            write_api_key_provider_override_to_config_toml(base_dir, api_key_account)?;
+        write_managed_projection_to_dir(base_dir, api_key_account)?;
+        sync_or_cleanup_managed_model_catalog_for_dir(base_dir, api_key_account)?;
         logger::log_info(&format!(
-            "[Codex切号] 已写入 API Key 账号配置，绑定 OAuth 缺少 id_token，跳过 OAuth 登录态投影: api_account_id={}, oauth_account_id={}, target_dir={}",
+            "[Codex切号] 已写入 API Key 账号绑定 OAuth 的组合配置: api_account_id={}, oauth_account_id={}, target_dir={}, has_base_url={}",
             api_key_account.id,
             oauth_account.id,
-            base_dir.display()
+            base_dir.display(),
+            provider_config.base_url.is_some()
         ));
-        return Ok(());
-    }
+        Ok(())
+    })();
 
-    write_prepared_account_bundle_to_dir(base_dir, oauth_account)?;
-    let provider_config =
-        write_api_key_provider_override_to_config_toml(base_dir, api_key_account)?;
-    write_managed_projection_to_dir(base_dir, api_key_account)?;
-    sync_or_cleanup_managed_model_catalog_for_dir(base_dir, api_key_account)?;
-    logger::log_info(&format!(
-        "[Codex切号] 已写入 API Key 账号绑定 OAuth 的组合配置: api_account_id={}, oauth_account_id={}, target_dir={}, has_base_url={}",
-        api_key_account.id,
-        oauth_account.id,
-        base_dir.display(),
-        provider_config.base_url.is_some()
-    ));
-    Ok(())
+    result.map_err(|error| {
+        codex_bundle_error_with_rollback(
+            format!("写入 API Key 绑定 OAuth 组合配置失败: {}", error),
+            &snapshot,
+        )
+    })
 }
 
 pub fn write_account_bundle_to_dir(base_dir: &Path, account: &CodexAccount) -> Result<(), String> {
@@ -5467,6 +5779,10 @@ fn switch_account_with_prepared(
     account_for_write: CodexAccount,
 ) -> Result<CodexAccount, String> {
     let codex_home = get_codex_home();
+    let index_before_switch = load_account_index();
+    let bundle_snapshot = snapshot_codex_bundle(&codex_home, &account_for_write)?;
+    let store_snapshot =
+        snapshot_codex_account_store(&index_before_switch, &account_for_write.id)?;
     let auth_path = codex_home.join("auth.json");
     logger::log_info(&format!(
         "[Codex切号] 开始切换账号: account_id={}, email={}, target_dir={}",
@@ -5480,19 +5796,31 @@ fn switch_account_with_prepared(
         codex_home.display(),
         auth_path.display()
     ));
-    sync_default_codex_account_to_wsl(&account_for_write.id, |wsl_dir| {
-        write_prepared_account_bundle_to_dir(wsl_dir, &account_for_write)
-    });
-
     // 更新索引中的 current_account_id
-    let mut index = load_account_index();
+    let mut index = index_before_switch;
     index.current_account_id = Some(account_id.to_string());
-    save_account_index(&index)?;
+    if let Err(error) = save_account_index(&index) {
+        return Err(codex_switch_error_with_rollback(
+            format!("保存当前账号索引失败: {}", error),
+            &bundle_snapshot,
+            &store_snapshot,
+        ));
+    }
 
     // 更新账号的 last_used
     let mut updated_account = account_for_write.clone();
     updated_account.update_last_used();
-    save_account(&updated_account)?;
+    if let Err(error) = save_account(&updated_account) {
+        return Err(codex_switch_error_with_rollback(
+            format!("保存账号详情失败: {}", error),
+            &bundle_snapshot,
+            &store_snapshot,
+        ));
+    }
+
+    sync_default_codex_account_to_wsl(&account_for_write.id, |wsl_dir| {
+        write_prepared_account_bundle_to_dir(wsl_dir, &account_for_write)
+    });
 
     logger::log_info(&format!("已切换到 Codex 账号: {}", updated_account.email));
 
@@ -5565,18 +5893,32 @@ pub async fn reactivate_if_imported_matches_current(
 }
 
 pub async fn switch_account_managed(account_id: &str) -> Result<CodexAccount, String> {
+    crate::modules::process::ensure_codex_app_server_not_running()?;
+
     let account = load_account_after_index_repair(account_id)
         .ok_or_else(|| format!("账号不存在: {}", account_id))?;
     if account.is_api_key_auth() {
         if normalize_optional_ref(account.bound_oauth_account_id.as_deref()).is_none() {
             let updated_account = switch_account_with_prepared(account_id, account)?;
             let codex_home = get_codex_home();
-            activate_provider_gateway_after_switch_if_needed(&codex_home, &updated_account).await?;
+            if let Err(error) =
+                activate_provider_gateway_after_switch_if_needed(&codex_home, &updated_account)
+                    .await
+            {
+                logger::log_warn(&format!(
+                    "[Codex切号] 核心切号已完成，但 provider gateway 激活失败，继续返回成功并等待下次重试: account_id={}, error={}",
+                    updated_account.id, error
+                ));
+            }
             return Ok(updated_account);
         }
         let oauth_account = refresh_bound_oauth_account_for_api_key(&account, "switch").await?;
         let codex_home = get_codex_home();
         let auth_path = codex_home.join("auth.json");
+        let index_before_switch = load_account_index();
+        let bundle_snapshot = snapshot_codex_bundle(&codex_home, &oauth_account)?;
+        let store_snapshot =
+            snapshot_codex_account_store(&index_before_switch, &account.id)?;
         logger::log_info(&format!(
             "[Codex切号] 开始切换 API Key 账号绑定 OAuth: api_account_id={}, oauth_account_id={}, target_dir={}",
             account.id,
@@ -5589,24 +5931,43 @@ pub async fn switch_account_managed(account_id: &str) -> Result<CodexAccount, St
             codex_home.display(),
             auth_path.display()
         ));
-        sync_default_codex_account_to_wsl(&account.id, |wsl_dir| {
-            write_api_key_account_bundle_with_oauth_to_dir(wsl_dir, &account, &oauth_account)
-        });
-
-        let mut index = load_account_index();
+        let mut index = index_before_switch;
         index.current_account_id = Some(account_id.to_string());
-        save_account_index(&index)?;
+        if let Err(error) = save_account_index(&index) {
+            return Err(codex_switch_error_with_rollback(
+                format!("保存当前账号索引失败: {}", error),
+                &bundle_snapshot,
+                &store_snapshot,
+            ));
+        }
 
         let mut updated_account = account.clone();
         updated_account.update_last_used();
-        save_account(&updated_account)?;
+        if let Err(error) = save_account(&updated_account) {
+            return Err(codex_switch_error_with_rollback(
+                format!("保存账号详情失败: {}", error),
+                &bundle_snapshot,
+                &store_snapshot,
+            ));
+        }
+
+        sync_default_codex_account_to_wsl(&account.id, |wsl_dir| {
+            write_api_key_account_bundle_with_oauth_to_dir(wsl_dir, &account, &oauth_account)
+        });
 
         logger::log_info(&format!(
             "已切换到 Codex API Key 账号: {}，登录态绑定 OAuth: {}",
             updated_account.email, oauth_account.email
         ));
 
-        activate_provider_gateway_after_switch_if_needed(&codex_home, &updated_account).await?;
+        if let Err(error) =
+            activate_provider_gateway_after_switch_if_needed(&codex_home, &updated_account).await
+        {
+            logger::log_warn(&format!(
+                "[Codex切号] 核心切号已完成，但 provider gateway 激活失败，继续返回成功并等待下次重试: account_id={}, error={}",
+                updated_account.id, error
+            ));
+        }
 
         return Ok(updated_account);
     }
@@ -8568,10 +8929,12 @@ mod tests {
         upsert_account_from_access_token_with_hints, upsert_account_from_auth_tokens,
         upsert_api_key_account, validate_api_key_credentials, write_account_bundle_to_dir,
         write_api_key_provider_to_config_toml, write_api_provider_to_config_toml,
-        write_managed_projection_to_dir, write_quick_config_to_config_toml, ApiProviderConfig,
-        CodexAccessTokenImportHints, CodexAccountGroupRecord, CodexAccountIndex,
-        CodexAccountSummary, CodexAuthFile, CodexAuthTokens, CodexGroupQuotaRefreshPolicy,
-        CodexJsonImportCandidate, LocalCodexOAuthSnapshot, CODEX_ACCOUNT_DETAIL_SCHEMA_VERSION,
+        write_managed_projection_to_dir, write_prepared_account_bundle_to_dir,
+        snapshot_codex_account_store, codex_switch_error_with_rollback,
+        write_quick_config_to_config_toml, ApiProviderConfig, CodexAccessTokenImportHints,
+        CodexAccountGroupRecord, CodexAccountIndex, CodexAccountSummary, CodexAuthFile,
+        CodexAuthTokens, CodexGroupQuotaRefreshPolicy, CodexJsonImportCandidate,
+        LocalCodexOAuthSnapshot, CODEX_ACCOUNT_DETAIL_SCHEMA_VERSION,
         CODEX_AUTHORIZATION_STATUS_PENDING, CODEX_AUTO_COMPACT_DEFAULT_LIMIT,
         CODEX_CONTEXT_WINDOW_1M_VALUE, CODEX_DISABLE_HOSTED_IMAGE_GENERATION_HEADER,
         CODEX_DISABLE_HOSTED_IMAGE_GENERATION_HEADER_VALUE, CODEX_IMAGEGEN_ACTOR_HEADER,
@@ -8998,6 +9361,163 @@ mod tests {
             tokens.get("refresh_token").and_then(|value| value.as_str()),
             Some("")
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn prepared_oauth_bundle_returns_error_when_keychain_write_fails() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let _env = TestEnvGuard::new("codex-keychain-write-failure-test");
+        let base_dir = make_temp_dir("codex-keychain-write-failure-target");
+        let account = build_test_oauth_account(make_codex_tokens(
+            "demo@example.com",
+            "acc-keychain-failure",
+            "org-keychain-failure",
+            "keychain-failure",
+            "rt-keychain-failure",
+        ));
+
+        std::env::set_var("COCKPIT_TEST_FAIL_CODEX_KEYCHAIN", "1");
+        fs::write(base_dir.join("auth.json"), b"{\"previous\":true}").expect("seed previous auth");
+        fs::write(base_dir.join("config.toml"), b"model = \"gpt-5.5\"\n")
+            .expect("seed previous config");
+        let previous_auth = fs::read(base_dir.join("auth.json")).expect("read previous auth");
+        let previous_config = fs::read(base_dir.join("config.toml")).expect("read previous config");
+        let result = write_prepared_account_bundle_to_dir(&base_dir, &account);
+        std::env::remove_var("COCKPIT_TEST_FAIL_CODEX_KEYCHAIN");
+
+        let error = result.expect_err("keychain failure must not report success");
+        assert!(error.contains("keychain"));
+        assert_eq!(
+            fs::read(base_dir.join("auth.json")).expect("read restored auth"),
+            previous_auth
+        );
+        assert_eq!(
+            fs::read(base_dir.join("config.toml")).expect("read restored config"),
+            previous_config
+        );
+        assert!(!base_dir
+            .join(super::CODEX_AUTH_PROJECTION_FILE_NAME)
+            .exists());
+
+        fs::remove_dir_all(&base_dir).expect("cleanup keychain failure target");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn restores_previous_keychain_after_later_persistence_failure() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let _env = TestEnvGuard::new("codex-keychain-later-persistence-failure-test");
+        let base_dir = make_temp_dir("codex-keychain-later-persistence-failure-target");
+        let previous_account = build_test_oauth_account(make_codex_tokens(
+            "previous@example.com",
+            "acc-previous-keychain",
+            "org-previous-keychain",
+            "previous-keychain",
+            "rt-previous-keychain",
+        ));
+        let next_account = build_test_oauth_account(make_codex_tokens(
+            "next@example.com",
+            "acc-next-keychain",
+            "org-next-keychain",
+            "next-keychain",
+            "rt-next-keychain",
+        ));
+
+        super::write_codex_keychain_to_dir(&base_dir, &previous_account)
+            .expect("seed test keychain");
+        let snapshot = super::snapshot_codex_bundle(&base_dir, &next_account)
+            .expect("snapshot should read test keychain");
+        let previous_keychain = super::read_codex_keychain_secret_from_dir(&base_dir)
+            .expect("read test keychain")
+            .expect("previous keychain should exist");
+
+        super::write_prepared_account_bundle_to_dir(&base_dir, &next_account)
+            .expect("new account bundle should write");
+        let next_keychain = super::read_codex_keychain_secret_from_dir(&base_dir)
+            .expect("read updated test keychain")
+            .expect("new keychain should exist");
+        assert_ne!(next_keychain, previous_keychain);
+
+        let error = super::codex_bundle_error_with_rollback(
+            "模拟后续保存账号索引失败".to_string(),
+            &snapshot,
+        );
+        assert!(error.contains("模拟后续保存账号索引失败"));
+        assert_eq!(
+            super::read_codex_keychain_secret_from_dir(&base_dir)
+                .expect("read restored test keychain")
+                .expect("restored keychain should exist"),
+            previous_keychain
+        );
+
+        fs::remove_dir_all(&base_dir).expect("cleanup later persistence failure target");
+    }
+
+    #[test]
+    fn restores_account_store_index_and_details_after_later_persistence_failure() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let _env = TestEnvGuard::new("codex-account-store-later-failure-test");
+        let current_id = "codex-store-current";
+        let target_id = "codex-store-target";
+        let accounts_dir = get_accounts_dir();
+        fs::create_dir_all(&accounts_dir).expect("create account store");
+
+        let mut previous_index = CodexAccountIndex::new();
+        previous_index.current_account_id = Some(current_id.to_string());
+        let previous_index_content = serde_json::to_vec_pretty(&previous_index)
+            .expect("serialize previous account index");
+        let previous_detail_content = b"previous-current-detail".to_vec();
+        fs::write(get_accounts_storage_path(), &previous_index_content)
+            .expect("write previous account index");
+        fs::write(accounts_dir.join(format!("{}.json", current_id)), &previous_detail_content)
+            .expect("write previous current detail");
+
+        let snapshot = snapshot_codex_account_store(&previous_index, target_id)
+            .expect("snapshot account store");
+        fs::write(
+            get_accounts_storage_path(),
+            b"{\"current_account_id\":\"codex-store-target\"}",
+        )
+        .expect("write changed account index");
+        fs::write(
+            accounts_dir.join(format!("{}.json", current_id)),
+            b"changed-current-detail",
+        )
+        .expect("write changed current detail");
+        fs::write(
+            accounts_dir.join(format!("{}.json", target_id)),
+            b"new-target-detail",
+        )
+        .expect("write changed target detail");
+
+        let error = codex_switch_error_with_rollback(
+            "模拟后续保存账号详情失败".to_string(),
+            &super::CodexBundleSnapshot {
+                files: Vec::new(),
+                keychain: None,
+            },
+            &snapshot,
+        );
+        assert!(error.contains("模拟后续保存账号详情失败"));
+        assert_eq!(
+            fs::read(get_accounts_storage_path()).expect("read restored account index"),
+            previous_index_content
+        );
+        assert_eq!(
+            fs::read(accounts_dir.join(format!("{}.json", current_id)))
+                .expect("read restored current detail"),
+            previous_detail_content
+        );
+        assert!(!accounts_dir.join(format!("{}.json", target_id)).exists());
+
+        fs::remove_dir_all(accounts_dir).expect("cleanup account store failure target");
     }
 
     #[test]

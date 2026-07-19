@@ -10291,6 +10291,116 @@ pub fn restart_codex_default(extra_args: &[String], timeout_secs: u64) -> Result
     start_codex_default(extra_args)
 }
 
+#[cfg(target_os = "macos")]
+fn is_macos_codex_app_server_command_line(command: &str) -> bool {
+    let lower = command.trim().to_ascii_lowercase();
+    lower.contains(".app/contents/resources/codex")
+        && lower.contains(" app-server")
+        && !lower.contains("cockpit-tools")
+}
+
+#[cfg(target_os = "macos")]
+fn parse_macos_codex_app_server_pid_line(line: &str) -> Result<Option<u32>, String> {
+    let line = line.trim();
+    if line.is_empty() {
+        return Ok(None);
+    }
+    let mut parts = line.splitn(2, |ch: char| ch.is_whitespace());
+    let pid_text = parts
+        .next()
+        .ok_or_else(|| "ps 输出缺少 PID".to_string())?
+        .trim();
+    let pid = pid_text
+        .parse::<u32>()
+        .map_err(|_| format!("ps 输出包含无效 PID: {}", pid_text))?;
+    let command = parts
+        .next()
+        .ok_or_else(|| format!("ps 输出缺少命令行: PID={}", pid))?
+        .trim();
+    Ok(is_macos_codex_app_server_command_line(command).then_some(pid))
+}
+
+#[cfg(target_os = "macos")]
+fn parse_macos_codex_app_server_ps_output(
+    command_succeeded: bool,
+    stdout: &[u8],
+    stderr: &[u8],
+) -> Result<Vec<u32>, String> {
+    if !command_succeeded {
+        let stderr = String::from_utf8_lossy(stderr).trim().to_string();
+        return Err(format!(
+            "执行 ps 失败: {}",
+            if stderr.is_empty() {
+                "命令返回非零状态"
+            } else {
+                &stderr
+            }
+        ));
+    }
+
+    let stdout = std::str::from_utf8(stdout)
+        .map_err(|error| format!("解析 ps 输出失败：不是有效 UTF-8: {}", error))?;
+    let mut pids = Vec::new();
+    for line in stdout.lines() {
+        if let Some(pid) = parse_macos_codex_app_server_pid_line(line)? {
+            pids.push(pid);
+        }
+    }
+    pids.sort_unstable();
+    pids.dedup();
+    Ok(pids)
+}
+
+#[cfg(target_os = "macos")]
+fn collect_codex_app_server_pids() -> Result<Vec<u32>, String> {
+    let output = Command::new("ps")
+        .args(["-axww", "-o", "pid=,command="])
+        .output()
+        .map_err(|error| format!("执行 ps 命令失败: {}", error))?;
+    parse_macos_codex_app_server_ps_output(output.status.success(), &output.stdout, &output.stderr)
+}
+
+#[cfg(target_os = "macos")]
+fn codex_app_server_switch_preflight_for_pids(pids: &[u32]) -> Result<(), String> {
+    if pids.is_empty() {
+        return Ok(());
+    }
+
+    let instance_hint = if pids.len() > 1 {
+        "检测到多个官方 ChatGPT/Codex app-server 实例"
+    } else {
+        "检测到官方 ChatGPT/Codex app-server 正在运行"
+    };
+    Err(format!(
+        "{}（{}）。为避免中断当前会话，先关闭 ChatGPT/Codex 后再切换。",
+        instance_hint,
+        summarize_pid_list_for_log(pids)
+    ))
+}
+
+#[cfg(target_os = "macos")]
+pub fn ensure_codex_app_server_not_running() -> Result<(), String> {
+    let pids = collect_codex_app_server_pids()?;
+    codex_app_server_switch_preflight_for_pids(&pids)
+}
+
+#[cfg(target_os = "windows")]
+pub fn ensure_codex_app_server_not_running() -> Result<(), String> {
+    let pids = collect_codex_windows_resource_process_pids();
+    if pids.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "检测到官方 ChatGPT/Codex app-server 正在运行（{}）。为避免中断当前会话，先关闭 ChatGPT/Codex 后再切换。",
+        summarize_pid_list_for_log(&pids)
+    ))
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub fn ensure_codex_app_server_not_running() -> Result<(), String> {
+    Ok(())
+}
+
 /// 关闭受管 Codex 实例（按 CODEX_HOME 匹配，包含默认实例目录）
 pub fn close_codex_instances(codex_homes: &[String], timeout_secs: u64) -> Result<(), String> {
     #[cfg(target_os = "macos")]
@@ -13055,7 +13165,10 @@ mod legacy_platform_adapter_cleanup_tests {
 
 #[cfg(all(test, target_os = "macos"))]
 mod codex_macos_launch_tests {
-    use super::is_codex_macos_main_process_command_line;
+    use super::{
+        is_codex_macos_main_process_command_line, is_macos_codex_app_server_command_line,
+        parse_macos_codex_app_server_pid_line,
+    };
 
     #[test]
     fn matches_chatgpt_and_legacy_codex_main_processes() {
@@ -13068,6 +13181,81 @@ mod codex_macos_launch_tests {
         assert!(!is_codex_macos_main_process_command_line(
             "/applications/chatgpt.app/contents/resources/codex app-server"
         ));
+    }
+
+    #[test]
+    fn matches_official_chatgpt_codex_app_server_process() {
+        assert!(is_macos_codex_app_server_command_line(
+            "/Applications/ChatGPT.app/Contents/Resources/codex -c features.code_mode_host=true app-server"
+        ));
+        assert!(is_macos_codex_app_server_command_line(
+            "/Applications/Codex.app/Contents/Resources/codex app-server --listen stdio://"
+        ));
+    }
+
+    #[test]
+    fn rejects_non_app_server_and_cockpit_processes() {
+        assert!(!is_macos_codex_app_server_command_line(
+            "/Applications/ChatGPT.app/Contents/Resources/codex --version"
+        ));
+        assert!(!is_macos_codex_app_server_command_line(
+            "/Applications/Cockpit Tools.app/Contents/MacOS/cockpit-tools app-server"
+        ));
+    }
+
+    #[test]
+    fn switch_preflight_allows_idle_and_rejects_single_or_multiple_servers() {
+        assert!(super::codex_app_server_switch_preflight_for_pids(&[]).is_ok());
+
+        let single = super::codex_app_server_switch_preflight_for_pids(&[4242])
+            .expect_err("a running app-server must block switching");
+        assert!(single.contains("先关闭 ChatGPT/Codex 后再切换"));
+        assert!(single.contains("count=1"));
+
+        let multiple = super::codex_app_server_switch_preflight_for_pids(&[4242, 4243])
+            .expect_err("multiple app-servers must block switching");
+        assert!(multiple.contains("多个官方 ChatGPT/Codex app-server"));
+        assert!(multiple.contains("count=2"));
+    }
+
+    #[test]
+    fn parses_pid_only_for_matching_app_server_lines() {
+        assert_eq!(
+            parse_macos_codex_app_server_pid_line(
+                " 4242 /Applications/ChatGPT.app/Contents/Resources/codex app-server"
+            )
+            .expect("valid ps line"),
+            Some(4242)
+        );
+        assert_eq!(
+            parse_macos_codex_app_server_pid_line(
+                " 4242 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT"
+            )
+            .expect("valid ps line"),
+            None
+        );
+        assert!(parse_macos_codex_app_server_pid_line("not-a-process").is_err());
+    }
+
+    #[test]
+    fn ps_output_parser_fails_closed_on_command_or_output_errors() {
+        let output = b" 4242 /Applications/ChatGPT.app/Contents/Resources/codex app-server\n 99 /usr/bin/other\n";
+        assert_eq!(
+            super::parse_macos_codex_app_server_ps_output(true, output, b"")
+                .expect("valid ps output"),
+            vec![4242]
+        );
+        assert!(super::parse_macos_codex_app_server_ps_output(
+            false,
+            b"",
+            b"ps: permission denied"
+        )
+        .is_err());
+        assert!(
+            super::parse_macos_codex_app_server_ps_output(true, b"not-a-process\n", b"")
+                .is_err()
+        );
+        assert!(super::parse_macos_codex_app_server_ps_output(true, &[0xff], b"").is_err());
     }
 }
 
