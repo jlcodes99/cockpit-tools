@@ -83,3 +83,70 @@ public func macos_native_menu_update_snapshot(
         NativeMenuPopoverController.shared.update(snapshotJSON: snapshotJSON)
     }
 }
+
+@_cdecl("macos_native_menu_update_status_item")
+public func macos_native_menu_update_status_item(
+    accountPrefixPointer: UnsafePointer<CChar>?,
+    remainingPercent: Int32,
+    enabled: Int32,
+    statusItemPointer: UnsafeMutableRawPointer?
+) {
+    guard let statusItemPointer else { return }
+    let accountPrefix = accountPrefixPointer.map(String.init(cString:)) ?? ""
+
+    runNativeMenuController(label: "update_status_item") {
+        let statusItem = Unmanaged<NSStatusItem>
+            .fromOpaque(statusItemPointer)
+            .takeUnretainedValue()
+        guard let button = statusItem.button else { return }
+
+        statusItem.length = NSStatusItem.variableLength
+        guard enabled != 0 else {
+            button.attributedTitle = NSAttributedString(string: "")
+            button.title = ""
+            button.imagePosition = .imageOnly
+            return
+        }
+
+        let percentageText = remainingPercent >= 0 ? "\(remainingPercent)%" : "--"
+        let prefixText = accountPrefix.isEmpty ? "" : "\(accountPrefix) "
+        let fullText = prefixText + percentageText
+        let font = NSFont.monospacedDigitSystemFont(
+            ofSize: NSFont.systemFontSize,
+            weight: .medium
+        )
+        let attributedTitle = NSMutableAttributedString(
+            string: fullText,
+            attributes: [
+                .font: font,
+                .foregroundColor: NSColor.labelColor,
+            ]
+        )
+
+        if remainingPercent >= 0 {
+            let percentageColor: NSColor
+            if remainingPercent <= 30 {
+                percentageColor = .systemRed
+            } else if remainingPercent <= 60 {
+                percentageColor = .systemOrange
+            } else {
+                percentageColor = .systemGreen
+            }
+            attributedTitle.addAttribute(
+                .foregroundColor,
+                value: percentageColor,
+                range: NSRange(location: prefixText.utf16.count, length: percentageText.utf16.count)
+            )
+        } else {
+            attributedTitle.addAttribute(
+                .foregroundColor,
+                value: NSColor.secondaryLabelColor,
+                range: NSRange(location: prefixText.utf16.count, length: percentageText.utf16.count)
+            )
+        }
+
+        button.imagePosition = .imageLeading
+        button.attributedTitle = attributedTitle
+        button.needsDisplay = true
+    }
+}

@@ -22,6 +22,12 @@ mod imp {
     unsafe extern "C" {
         fn macos_native_menu_toggle(snapshot_json: *const c_char, status_item_ptr: *mut c_void);
         fn macos_native_menu_update_snapshot(snapshot_json: *const c_char);
+        fn macos_native_menu_update_status_item(
+            account_prefix: *const c_char,
+            remaining_percent: i32,
+            enabled: i32,
+            status_item_ptr: *mut c_void,
+        );
     }
 
     #[derive(Debug, Clone, Serialize)]
@@ -65,6 +71,7 @@ mod imp {
         plan: Option<String>,
         updated_at: Option<i64>,
         quota_rows: Vec<QuotaRow>,
+        remaining_percent: Option<i32>,
     }
 
     #[derive(Debug, Clone, Serialize)]
@@ -188,6 +195,87 @@ mod imp {
         reset_at: Option<i64>,
         pay_as_you_go_open: Option<bool>,
         pay_as_you_go_usd: Option<f64>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct MenuBarStatus {
+        account_prefix: String,
+        remaining_percent: Option<i32>,
+    }
+
+    fn menu_bar_account_prefix(label: &str) -> String {
+        let local_part = label.trim().split('@').next().unwrap_or_default().trim();
+        local_part.chars().take(4).collect()
+    }
+
+    fn build_menu_bar_status() -> Option<MenuBarStatus> {
+        let config = modules::config::get_user_config();
+        if !config.menu_bar_quota_enabled {
+            return None;
+        }
+
+        let platform = PlatformId::from_str(config.menu_bar_quota_platform.trim())
+            .unwrap_or(PlatformId::Codex);
+        let lang = normalize_lang(&config.language);
+        let (cards, current_account_id, _) = build_platform_cards(platform, &lang);
+        let card = current_account_id
+            .as_deref()
+            .and_then(|id| cards.iter().find(|card| card.id == id))
+            .or_else(|| cards.first());
+
+        Some(MenuBarStatus {
+            account_prefix: if config.menu_bar_show_account_prefix {
+                card.map(|card| menu_bar_account_prefix(&card.title))
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            },
+            remaining_percent: card.and_then(|card| card.remaining_percent),
+        })
+    }
+
+    pub(crate) fn update_status_item<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+        let status = build_menu_bar_status();
+        let enabled = status.is_some();
+        let account_prefix = to_cstring(
+            status
+                .as_ref()
+                .map(|value| value.account_prefix.as_str())
+                .unwrap_or_default(),
+        );
+        let remaining_percent = status
+            .as_ref()
+            .and_then(|value| value.remaining_percent)
+            .unwrap_or(-1);
+        let app = app.clone();
+
+        app.clone()
+            .run_on_main_thread(move || {
+                let Some(tray) = app.tray_by_id(TRAY_ID) else {
+                    return;
+                };
+                let status_item_ptr = tray
+                    .with_inner_tray_icon(|tray_icon| {
+                        tray_icon
+                            .ns_status_item()
+                            .map(|status_item| Retained::as_ptr(&status_item) as usize)
+                    })
+                    .ok()
+                    .flatten();
+                let Some(status_item_ptr) = status_item_ptr else {
+                    return;
+                };
+
+                unsafe {
+                    macos_native_menu_update_status_item(
+                        account_prefix.as_ptr(),
+                        remaining_percent,
+                        i32::from(enabled),
+                        status_item_ptr as *mut c_void,
+                    );
+                }
+            })
+            .map_err(|error| error.to_string())
     }
 
     pub(crate) fn toggle_tray_menu<R: Runtime>(app: &AppHandle<R>, _rect: Rect) {
@@ -775,6 +863,19 @@ mod imp {
             progress_tone: None,
             subtext,
         }
+    }
+
+    fn min_quota_progress(rows: &[QuotaRow], progress_is_remaining: bool) -> Option<i32> {
+        rows.iter()
+            .filter_map(|row| row.progress)
+            .map(|value| {
+                if progress_is_remaining {
+                    value.clamp(0, 100)
+                } else {
+                    (100 - value).clamp(0, 100)
+                }
+            })
+            .min()
     }
 
     fn codex_api_key_provider_usage(
@@ -2859,6 +2960,7 @@ mod imp {
             .into_iter()
             .map(|account| {
                 let quota = account.quota.as_ref();
+                let quota_rows = build_antigravity_quota_rows(lang, quota);
                 AccountCard {
                     id: account.id,
                     title: account.email,
@@ -2868,7 +2970,8 @@ mod imp {
                         account.last_used,
                         account.created_at,
                     ),
-                    quota_rows: build_antigravity_quota_rows(lang, quota),
+                    remaining_percent: min_quota_progress(&quota_rows, true),
+                    quota_rows,
                 }
             })
             .collect();
@@ -2961,6 +3064,7 @@ mod imp {
                         rows.push(code_review);
                     }
                 }
+                let remaining_percent = min_quota_progress(&rows, !account.is_api_key_auth());
                 AccountCard {
                     id: account.id,
                     title: if matches!(
@@ -2984,6 +3088,7 @@ mod imp {
                         account.created_at,
                     ),
                     quota_rows: rows,
+                    remaining_percent,
                 }
             })
             .collect();
@@ -3075,6 +3180,7 @@ mod imp {
                     ));
                 }
 
+                let remaining_percent = min_quota_progress(&rows, false);
                 AccountCard {
                     id: account.id,
                     title: first_non_empty(&[
@@ -3094,6 +3200,7 @@ mod imp {
                         account.created_at,
                     ),
                     quota_rows: rows,
+                    remaining_percent,
                 }
             })
             .collect();
@@ -3173,6 +3280,7 @@ mod imp {
                         None,
                     ),
                 ];
+                let remaining_percent = min_quota_progress(&rows, false);
                 AccountCard {
                     id: account.id,
                     title: account
@@ -3187,6 +3295,7 @@ mod imp {
                         account.created_at,
                     ),
                     quota_rows: rows,
+                    remaining_percent,
                 }
             })
             .collect();
@@ -3368,6 +3477,7 @@ mod imp {
                         rows
                     }
                 };
+                let remaining_percent = min_quota_progress(&rows, false);
                 AccountCard {
                     id: account.id,
                     title: account
@@ -3382,6 +3492,7 @@ mod imp {
                         account.created_at,
                     ),
                     quota_rows: rows,
+                    remaining_percent,
                 }
             })
             .collect();
@@ -3458,6 +3569,7 @@ mod imp {
                     }
                 }
                 let account_id = account.id.clone();
+                let remaining_percent = min_quota_progress(&rows, false);
                 AccountCard {
                     id: account_id.clone(),
                     title: if account.email.trim().is_empty() {
@@ -3472,6 +3584,7 @@ mod imp {
                         account.created_at,
                     ),
                     quota_rows: rows,
+                    remaining_percent,
                 }
             })
             .collect();
@@ -3558,6 +3671,7 @@ mod imp {
                     });
                 }
                 let account_id = account.id.clone();
+                let remaining_percent = min_quota_progress(&rows, false);
                 AccountCard {
                     id: account_id.clone(),
                     title: if account.email.trim().is_empty() {
@@ -3572,6 +3686,7 @@ mod imp {
                         account.created_at,
                     ),
                     quota_rows: rows,
+                    remaining_percent,
                 }
             })
             .collect();
@@ -3696,6 +3811,7 @@ mod imp {
                     }
                 }
 
+                let remaining_percent = min_quota_progress(&rows, true);
                 AccountCard {
                     id: account.id,
                     title: account.email,
@@ -3711,6 +3827,7 @@ mod imp {
                         account.created_at,
                     ),
                     quota_rows: rows,
+                    remaining_percent,
                 }
             })
             .collect();
@@ -3806,7 +3923,7 @@ mod imp {
                                 ("total", total_text.as_str()),
                             ],
                         ),
-                        remaining_percent,
+                        (100 - remaining_percent).clamp(0, 100),
                         None,
                         cursor_usage_tone((100 - remaining_percent).clamp(0, 100)),
                     ));
@@ -3824,6 +3941,7 @@ mod imp {
                         None,
                     ));
                 }
+                let remaining_percent = min_quota_progress(&rows, false);
                 AccountCard {
                     id: account.id.clone(),
                     title: account
@@ -3838,6 +3956,7 @@ mod imp {
                         account.created_at,
                     ),
                     quota_rows: rows,
+                    remaining_percent,
                 }
             })
             .collect();
@@ -3927,6 +4046,7 @@ mod imp {
                 } else {
                     account.email.clone()
                 };
+                let remaining_percent = min_quota_progress(&rows, false);
                 AccountCard {
                     id: account.id,
                     title,
@@ -3937,6 +4057,7 @@ mod imp {
                         account.created_at,
                     ),
                     quota_rows: rows,
+                    remaining_percent,
                 }
             })
             .collect();
@@ -4013,6 +4134,7 @@ mod imp {
                         None,
                     ));
                 }
+                let remaining_percent = min_quota_progress(&rows, false);
                 AccountCard {
                     id: account.id.clone(),
                     title: account
@@ -4027,6 +4149,7 @@ mod imp {
                         account.created_at,
                     ),
                     quota_rows: rows,
+                    remaining_percent,
                 }
             })
             .collect();
@@ -4049,7 +4172,7 @@ mod imp {
                 if model.extra.total > 0.0 || model.extra.remain > 0.0 || model.extra.used > 0.0 {
                     resources.push(model.extra);
                 }
-                let rows = resources
+                let rows: Vec<QuotaRow> = resources
                     .into_iter()
                     .filter(|resource| resource.total > 0.0 || resource.remain > 0.0)
                     .map(|resource| {
@@ -4079,6 +4202,7 @@ mod imp {
                     .clone()
                     .filter(|text| !text.trim().is_empty())
                     .unwrap_or_else(|| account.email.clone());
+                let remaining_percent = min_quota_progress(&rows, false);
                 AccountCard {
                     id: account.id.clone(),
                     title,
@@ -4089,6 +4213,7 @@ mod imp {
                         account.created_at,
                     ),
                     quota_rows: rows,
+                    remaining_percent,
                 }
             })
             .collect();
@@ -4111,7 +4236,7 @@ mod imp {
                 if model.extra.total > 0.0 || model.extra.remain > 0.0 || model.extra.used > 0.0 {
                     resources.push(model.extra);
                 }
-                let rows = resources
+                let rows: Vec<QuotaRow> = resources
                     .into_iter()
                     .filter(|resource| resource.total > 0.0 || resource.remain > 0.0)
                     .map(|resource| {
@@ -4141,6 +4266,7 @@ mod imp {
                     .clone()
                     .filter(|text| !text.trim().is_empty())
                     .unwrap_or_else(|| account.email.clone());
+                let remaining_percent = min_quota_progress(&rows, false);
                 AccountCard {
                     id: account.id.clone(),
                     title,
@@ -4151,6 +4277,7 @@ mod imp {
                         account.created_at,
                     ),
                     quota_rows: rows,
+                    remaining_percent,
                 }
             })
             .collect();
@@ -4173,7 +4300,7 @@ mod imp {
                 if model.extra.total > 0.0 || model.extra.remain > 0.0 || model.extra.used > 0.0 {
                     resources.push(model.extra);
                 }
-                let rows = resources
+                let rows: Vec<QuotaRow> = resources
                     .into_iter()
                     .filter(|resource| resource.total > 0.0 || resource.remain > 0.0)
                     .map(|resource| {
@@ -4203,6 +4330,7 @@ mod imp {
                     .clone()
                     .filter(|text| !text.trim().is_empty())
                     .unwrap_or_else(|| account.email.clone());
+                let remaining_percent = min_quota_progress(&rows, false);
                 AccountCard {
                     id: account.id.clone(),
                     title,
@@ -4213,6 +4341,7 @@ mod imp {
                         account.created_at,
                     ),
                     quota_rows: rows,
+                    remaining_percent,
                 }
             })
             .collect();
@@ -4288,6 +4417,7 @@ mod imp {
                         None,
                     ));
                 }
+                let remaining_percent = min_quota_progress(&rows, false);
                 AccountCard {
                     id: account.id.clone(),
                     title: account
@@ -4306,6 +4436,7 @@ mod imp {
                         account.created_at,
                     ),
                     quota_rows: rows,
+                    remaining_percent,
                 }
             })
             .collect();
@@ -4669,6 +4800,9 @@ mod imp {
         unsafe {
             macos_native_menu_update_snapshot(snapshot_json.as_ptr());
         }
+        if let Some(app) = crate::get_app_handle() {
+            let _ = update_status_item(app);
+        }
     }
 
     fn spawn_switch_account(platform: PlatformId, account_id: String) {
@@ -4677,6 +4811,7 @@ mod imp {
         };
 
         tauri::async_runtime::spawn(async move {
+            let status_app = app.clone();
             let _ = match platform {
                 PlatformId::Antigravity => commands::account::switch_account(app, account_id, None)
                     .await
@@ -4741,6 +4876,7 @@ mod imp {
                     .await
                     .map(|_| ()),
             };
+            let _ = update_status_item(&status_app);
         });
     }
 
@@ -4758,4 +4894,4 @@ mod imp {
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) use imp::toggle_tray_menu;
+pub(crate) use imp::{toggle_tray_menu, update_status_item};

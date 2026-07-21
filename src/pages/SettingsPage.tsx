@@ -152,6 +152,9 @@ interface GeneralConfig {
   minimize_behavior?: 'dock_and_tray' | 'tray_only';
   hide_dock_icon?: boolean;
   tray_icon_style?: 'template' | 'color';
+  menu_bar_quota_enabled?: boolean;
+  menu_bar_show_account_prefix?: boolean;
+  menu_bar_quota_platform?: PlatformId;
   floating_card_show_on_startup?: boolean;
   startup_minimized?: boolean;
   remember_main_window_state?: boolean;
@@ -477,6 +480,27 @@ export function SettingsPage() {
     { value: 'ar', label: 'العربية' },
     { value: 'id', label: 'Bahasa Indonesia' },
   ];
+
+  const menuBarQuotaPlatformOptions: Array<{ value: PlatformId; label: string }> = [
+    { value: 'codex', label: 'Codex' },
+    { value: 'claude_manager', label: 'Claude' },
+    { value: 'antigravity', label: 'Antigravity' },
+    { value: 'github-copilot', label: 'GitHub Copilot' },
+    { value: 'windsurf', label: 'Windsurf' },
+    { value: 'kiro', label: 'Kiro' },
+    { value: 'cursor', label: 'Cursor' },
+    { value: 'grok', label: 'Grok' },
+    { value: 'codebuddy', label: 'CodeBuddy' },
+    { value: 'codebuddy_cn', label: 'CodeBuddy CN' },
+    { value: 'qoder', label: 'Qoder' },
+    { value: 'zcode', label: 'ZCode' },
+    { value: 'trae', label: 'Trae' },
+    { value: 'trae_solo', label: 'TRAE SOLO' },
+    { value: 'trae_cn', label: 'Trae CN' },
+    { value: 'trae_solo_cn', label: 'TRAE SOLO CN' },
+    { value: 'workbuddy', label: 'WorkBuddy' },
+    { value: 'zed', label: 'Zed' },
+  ];
   
   // General Settings States
   const [language, setLanguage] = useState(getCurrentLanguage());
@@ -507,6 +531,9 @@ export function SettingsPage() {
   const [minimizeBehavior, setMinimizeBehavior] = useState<'dock_and_tray' | 'tray_only'>('dock_and_tray');
   const [hideDockIcon, setHideDockIcon] = useState(false);
   const [trayIconStyle, setTrayIconStyle] = useState<'template' | 'color'>('template');
+  const [menuBarQuotaEnabled, setMenuBarQuotaEnabled] = useState(false);
+  const [menuBarShowAccountPrefix, setMenuBarShowAccountPrefix] = useState(true);
+  const [menuBarQuotaPlatform, setMenuBarQuotaPlatform] = useState<PlatformId>('codex');
   const [floatingCardShowOnStartup, setFloatingCardShowOnStartup] = useState(false);
   const [startupMinimized, setStartupMinimized] = useState(false);
   const [rememberMainWindowState, setRememberMainWindowState] = useState(false);
@@ -1050,6 +1077,9 @@ export function SettingsPage() {
       minimize_behavior: minimizeBehavior,
       hide_dock_icon: hideDockIcon,
       tray_icon_style: isMacOS ? trayIconStyle : undefined,
+      menu_bar_quota_enabled: isMacOS ? menuBarQuotaEnabled : undefined,
+      menu_bar_show_account_prefix: isMacOS ? menuBarShowAccountPrefix : undefined,
+      menu_bar_quota_platform: isMacOS ? menuBarQuotaPlatform : undefined,
       floating_card_show_on_startup: floatingCardShowOnStartup,
       startup_minimized: startupMinimized,
       remember_main_window_state: rememberMainWindowState,
@@ -1260,6 +1290,9 @@ export function SettingsPage() {
     minimizeBehavior,
     hideDockIcon,
     trayIconStyle,
+    menuBarQuotaEnabled,
+    menuBarShowAccountPrefix,
+    menuBarQuotaPlatform,
     isMacOS,
     floatingCardShowOnStartup,
     startupMinimized,
@@ -1611,6 +1644,9 @@ export function SettingsPage() {
       setMinimizeBehavior(config.minimize_behavior || 'dock_and_tray');
       setHideDockIcon(Boolean(config.hide_dock_icon));
       setTrayIconStyle(config.tray_icon_style === 'color' ? 'color' : 'template');
+      setMenuBarQuotaEnabled(config.menu_bar_quota_enabled ?? false);
+      setMenuBarShowAccountPrefix(config.menu_bar_show_account_prefix ?? true);
+      setMenuBarQuotaPlatform(config.menu_bar_quota_platform ?? 'codex');
       setFloatingCardShowOnStartup(config.floating_card_show_on_startup ?? false);
       setStartupMinimized(config.startup_minimized ?? false);
       setRememberMainWindowState(config.remember_main_window_state ?? false);
@@ -3409,6 +3445,87 @@ export function SettingsPage() {
                       </select>
                     </div>
                   </div>
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">
+                        {t('settings.general.menuBarQuota', '菜单栏显示实时额度')}
+                      </div>
+                      <div className="row-desc">
+                        {t(
+                          'settings.general.menuBarQuotaDesc',
+                          '在图标旁显示当前账号的剩余额度；低额度红色、中等橙色、充足绿色'
+                        )}
+                      </div>
+                    </div>
+                    <div className="row-control">
+                      <select
+                        className="settings-select"
+                        value={menuBarQuotaEnabled ? 'true' : 'false'}
+                        onChange={(e) => setMenuBarQuotaEnabled(e.target.value === 'true')}
+                      >
+                        <option value="false">{t('common.disable', '停用')}</option>
+                        <option value="true">{t('common.enable', '启用')}</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {menuBarQuotaEnabled && (
+                    <>
+                      <div className="settings-row">
+                        <div className="row-label">
+                          <div className="row-title">
+                            {t('settings.general.menuBarQuotaPlatform', '菜单栏额度账号平台')}
+                          </div>
+                          <div className="row-desc">
+                            {t(
+                              'settings.general.menuBarQuotaPlatformDesc',
+                              '跟随所选平台当前正在使用的账号，刷新或切换账号后自动更新'
+                            )}
+                          </div>
+                        </div>
+                        <div className="row-control">
+                          <select
+                            className="settings-select"
+                            value={menuBarQuotaPlatform}
+                            onChange={(e) => setMenuBarQuotaPlatform(e.target.value as PlatformId)}
+                          >
+                            {menuBarQuotaPlatformOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="settings-row">
+                        <div className="row-label">
+                          <div className="row-title">
+                            {t('settings.general.menuBarAccountPrefix', '显示账号邮箱前 4 位')}
+                          </div>
+                          <div className="row-desc">
+                            {t(
+                              'settings.general.menuBarAccountPrefixDesc',
+                              '关闭后菜单栏只显示图标和百分比数字'
+                            )}
+                          </div>
+                        </div>
+                        <div className="row-control">
+                          <select
+                            className="settings-select"
+                            value={menuBarShowAccountPrefix ? 'true' : 'false'}
+                            onChange={(e) =>
+                              setMenuBarShowAccountPrefix(e.target.value === 'true')
+                            }
+                          >
+                            <option value="true">{t('common.enable', '启用')}</option>
+                            <option value="false">{t('common.disable', '停用')}</option>
+                          </select>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
 

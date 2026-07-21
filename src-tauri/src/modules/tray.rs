@@ -3589,9 +3589,9 @@ fn handle_tray_event<R: Runtime>(tray: &TrayIcon<R>, event: TrayIconEvent) {
 pub fn update_tray_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        let _ = app;
+        crate::modules::macos_native_menu::update_status_item(app)?;
         if !MACOS_TRAY_SKIP_LOGGED.swap(true, Ordering::Relaxed) {
-            logger::log_info("[Tray] macOS 原生菜单模式，跳过 Tauri 托盘菜单更新");
+            logger::log_info("[Tray] macOS 原生菜单模式，已更新菜单栏状态");
         }
     }
 

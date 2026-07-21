@@ -129,6 +129,12 @@ pub struct GeneralConfig {
     pub hide_dock_icon: bool,
     /// 菜单栏图标样式（macOS）: "template", "color"
     pub tray_icon_style: String,
+    /// 是否在 macOS 菜单栏显示当前账号剩余额度
+    pub menu_bar_quota_enabled: bool,
+    /// 是否显示账号标识前 4 位
+    pub menu_bar_show_account_prefix: bool,
+    /// 菜单栏额度监控平台
+    pub menu_bar_quota_platform: String,
     /// 是否在启动时显示悬浮卡片
     pub floating_card_show_on_startup: bool,
     /// 是否在启动后自动最小化主窗口
@@ -1054,6 +1060,9 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "minimize_behavior"
             | "hide_dock_icon"
             | "tray_icon_style"
+            | "menu_bar_quota_enabled"
+            | "menu_bar_show_account_prefix"
+            | "menu_bar_quota_platform"
             | "floating_card_show_on_startup"
             | "startup_minimized"
             | "remember_main_window_state"
@@ -1209,6 +1218,12 @@ fn apply_general_config_updates(
     }
     if updates.contains_key("theme_color") {
         next.theme_color = config::normalize_theme_color(&next.theme_color);
+    }
+    if updates.contains_key("menu_bar_quota_platform") {
+        let platform = next.menu_bar_quota_platform.trim();
+        next.menu_bar_quota_platform = modules::tray::PlatformId::from_str(platform)
+            .map(|value| value.as_str().to_string())
+            .unwrap_or_else(|| "codex".to_string());
     }
     if updates.contains_key("webdav_allowed_domains") {
         next.webdav_allowed_domains = next
@@ -2526,6 +2541,9 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         minimize_behavior: minimize_behavior_str.to_string(),
         hide_dock_icon: user_config.hide_dock_icon,
         tray_icon_style: user_config.tray_icon_style.as_str().to_string(),
+        menu_bar_quota_enabled: user_config.menu_bar_quota_enabled,
+        menu_bar_show_account_prefix: user_config.menu_bar_show_account_prefix,
+        menu_bar_quota_platform: user_config.menu_bar_quota_platform,
         floating_card_show_on_startup: user_config.floating_card_show_on_startup,
         startup_minimized: user_config.startup_minimized,
         remember_main_window_state: user_config.remember_main_window_state,
@@ -2740,6 +2758,8 @@ pub fn patch_general_config(
     let mut hide_dock_icon_changed = false;
     #[cfg(target_os = "macos")]
     let mut tray_icon_style_changed = false;
+    #[cfg(target_os = "macos")]
+    let mut menu_bar_quota_changed = false;
 
     let patch_result = config::patch_user_config(|current| {
         let previous_language = current.language.clone();
@@ -2750,6 +2770,12 @@ pub fn patch_general_config(
         let previous_hide_dock_icon = current.hide_dock_icon;
         #[cfg(target_os = "macos")]
         let previous_tray_icon_style = current.tray_icon_style;
+        #[cfg(target_os = "macos")]
+        let previous_menu_bar_quota = (
+            current.menu_bar_quota_enabled,
+            current.menu_bar_show_account_prefix,
+            current.menu_bar_quota_platform.clone(),
+        );
 
         apply_general_config_updates(current, &updates)?;
 
@@ -2764,6 +2790,12 @@ pub fn patch_general_config(
         {
             hide_dock_icon_changed = previous_hide_dock_icon != current.hide_dock_icon;
             tray_icon_style_changed = previous_tray_icon_style != current.tray_icon_style;
+            menu_bar_quota_changed = previous_menu_bar_quota
+                != (
+                    current.menu_bar_quota_enabled,
+                    current.menu_bar_show_account_prefix,
+                    current.menu_bar_quota_platform.clone(),
+                );
         }
         Ok(())
     });
@@ -2816,6 +2848,13 @@ pub fn patch_general_config(
     if tray_icon_style_changed {
         if let Err(err) = modules::tray::apply_tray_icon_style(&app) {
             modules::logger::log_warn(&format!("[Tray] 保存通用设置后应用图标样式失败: {}", err));
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    if menu_bar_quota_changed {
+        if let Err(err) = modules::tray::update_tray_menu(&app) {
+            modules::logger::log_warn(&format!("[Tray] 保存菜单栏额度设置后刷新失败: {}", err));
         }
     }
 
