@@ -3265,6 +3265,7 @@
         "tokenUsage": "Token使用"
       },
       "locationRunning": "（运行中）",
+      "locationSshReadOnly": "SSH 只读",
       "untitled": "未命名会话",
       "restoreModal": {
         "title": "废纸篓",
@@ -3830,6 +3831,24 @@
       "syncNow": "立即同步",
       "connectionOk": "连接成功",
       "syncVerified": "SSH 已校验同步成功",
+      "syncVerifiedDetail": "Provider {{provider}} 已校验 · {{state}} · {{quiesce}} / {{restore}} / {{reload}}",
+      "syncPartialFailure": "{{error}} · 已完成：{{stages}}",
+      "stageBundle": "鉴权包哈希",
+      "stageProvider": "Provider 配置",
+      "stageState": "状态库",
+      "stateRepaired": "状态库已对齐 {{rows}} 行（provider {{providerRows}}，可见性 {{visibilityRows}}），rollout 已修复 {{rolloutFiles}} 个，备份已校验",
+      "reconciliationSummary": "路径 {{rolloutPaths}} · 用户事件 {{userEvents}} · 工作目录 {{cwdRows}} · 孤立 rollout {{orphanRollouts}} · 已恢复会话 {{orphanThreads}}",
+      "stateDatabaseMissing": "远端尚无状态库，无历史需要对齐",
+      "reloadStatus": {
+        "daemon-restarted": "app-server daemon 已重启",
+        "app-server-terminated": "app-server 已停止并等待重连",
+        "no-app-server": "没有运行中的 app-server",
+        "not-required": "无需恢复",
+        "restore-failed": "app-server 恢复失败",
+        "unknown": "app-server 状态未知",
+        "app-server-paused": "app-server 已暂停以执行同步",
+        "app-server-resumed": "app-server 已恢复运行"
+      },
       "syncFailed": "SSH 同步失败",
       "syncedAs": "已同步 {{email}} · {{time}}",
       "neverSynced": "尚未同步",

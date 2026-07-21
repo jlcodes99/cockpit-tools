@@ -2530,6 +2530,7 @@
         "tokenUsage": "Využití tokenů"
       },
       "locationRunning": " (spuštěno)",
+      "locationSshReadOnly": "SSH jen pro čtení",
       "untitled": "Nepojmenovaná relace",
       "restoreModal": {
         "title": "Koš",
@@ -3641,6 +3642,24 @@
       "syncNow": "Synchronizovat nyní",
       "connectionOk": "Připojeno",
       "syncVerified": "Synchronizace SSH ověřena",
+      "syncVerifiedDetail": "Poskytovatel {{provider}} ověřen · {{state}} · {{quiesce}} / {{restore}} / {{reload}}",
+      "syncPartialFailure": "{{error}} · Dokončeno: {{stages}}",
+      "stageBundle": "otisky ověřovacího balíčku",
+      "stageProvider": "konfigurace poskytovatele",
+      "stageState": "stavová databáze",
+      "stateRepaired": "Ve stavové databázi zarovnáno {{rows}} řádků (poskytovatel {{providerRows}}, viditelnost {{visibilityRows}}); opraveno {{rolloutFiles}} rolloutů; záloha ověřena",
+      "reconciliationSummary": "cesty {{rolloutPaths}} · uživatelské události {{userEvents}} · pracovní adresáře {{cwdRows}} · osiřelé rollouty {{orphanRollouts}} · obnovená vlákna {{orphanThreads}}",
+      "stateDatabaseMissing": "Vzdálená stavová databáze neexistuje; není co zarovnat",
+      "reloadStatus": {
+        "daemon-restarted": "služba app-server restartována",
+        "app-server-terminated": "app-server zastaven kvůli opětovnému připojení",
+        "no-app-server": "app-server není spuštěn",
+        "not-required": "obnovení není potřeba",
+        "restore-failed": "obnovení app-serveru selhalo",
+        "unknown": "stav app-server není znám",
+        "app-server-paused": "app-server pozastaven kvůli synchronizaci",
+        "app-server-resumed": "app-server obnoven"
+      },
       "syncFailed": "Synchronizace SSH se nezdařila",
       "syncedAs": "Synchronizováno {{email}} · {{time}}",
       "neverSynced": "Dosud nesynchronizováno",

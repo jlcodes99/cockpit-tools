@@ -2530,6 +2530,7 @@
         "tokenUsage": "토큰 사용량"
       },
       "locationRunning": " (실행 중)",
+      "locationSshReadOnly": "SSH 읽기 전용",
       "untitled": "제목 없는 세션",
       "restoreModal": {
         "title": "휴지통",
@@ -3641,6 +3642,24 @@
       "syncNow": "지금 동기화",
       "connectionOk": "연결됨",
       "syncVerified": "SSH 동기화가 확인되었습니다.",
+      "syncVerifiedDetail": "공급자 {{provider}} 확인됨 · {{state}} · {{quiesce}} / {{restore}} / {{reload}}",
+      "syncPartialFailure": "{{error}} · 완료됨: {{stages}}",
+      "stageBundle": "인증 번들 해시",
+      "stageProvider": "공급자 구성",
+      "stageState": "상태 데이터베이스",
+      "stateRepaired": "상태 데이터베이스 {{rows}}개 행 정렬(공급자 {{providerRows}}, 표시 여부 {{visibilityRows}}), rollout {{rolloutFiles}}개 복구, 백업 확인 완료",
+      "reconciliationSummary": "경로 {{rolloutPaths}} · 사용자 이벤트 {{userEvents}} · 작업 디렉터리 {{cwdRows}} · 고립된 rollout {{orphanRollouts}} · 복구된 스레드 {{orphanThreads}}",
+      "stateDatabaseMissing": "원격 상태 데이터베이스가 없어 정렬할 기록이 없습니다",
+      "reloadStatus": {
+        "daemon-restarted": "app-server 데몬 다시 시작됨",
+        "app-server-terminated": "재연결을 위해 app-server 중지됨",
+        "no-app-server": "실행 중인 app-server 없음",
+        "not-required": "재개할 필요 없음",
+        "restore-failed": "app-server 복원 실패",
+        "unknown": "app-server 상태 알 수 없음",
+        "app-server-paused": "동기화를 위해 app-server 일시 중지",
+        "app-server-resumed": "app-server 재개됨"
+      },
       "syncFailed": "SSH 동기화 실패",
       "syncedAs": "동기화된 {{email}} · {{time}}",
       "neverSynced": "아직 동기화되지 않음",

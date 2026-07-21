@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import {
   Check,
@@ -15,6 +16,7 @@ import { useSshServerStore } from '../../stores/useSshServerStore';
 import type {
   SshAuthConfig,
   SshCodexSyncResult,
+  SshCodexSyncStatus,
   SshServer,
   SshServerDraft,
 } from '../../types/sshServer';
@@ -78,6 +80,73 @@ function formatSyncTime(timestamp?: number) {
   return new Date(timestamp * 1000).toLocaleString();
 }
 
+function describeSyncStatus(t: TFunction, sync: SshCodexSyncStatus) {
+  if (!sync.verified) {
+    const completedStages = [
+      sync.bundle_verified
+        ? t('codex.ssh.stageBundle', '鉴权包哈希')
+        : null,
+      sync.model_provider_verified
+        ? t('codex.ssh.stageProvider', 'Provider 配置')
+        : null,
+      sync.state_repair ? t('codex.ssh.stageState', '状态库') : null,
+    ].filter((stage): stage is string => Boolean(stage));
+    const error = sync.error ?? t('codex.ssh.syncFailed', 'SSH 同步失败');
+    return completedStages.length > 0
+      ? t(
+          'codex.ssh.syncPartialFailure',
+          '{{error}} · 已完成：{{stages}}',
+          { error, stages: completedStages.join(' / ') },
+        )
+      : error;
+  }
+  const provider = sync.model_provider ?? 'openai';
+  const state = sync.state_repair?.database_found
+    ? `${t(
+        'codex.ssh.stateRepaired',
+        '状态库已对齐 {{rows}} 行（provider {{providerRows}}，可见性 {{visibilityRows}}），rollout 已修复 {{rolloutFiles}} 个，备份已校验',
+        {
+          rows: sync.state_repair.rows_repaired,
+          providerRows: sync.state_repair.provider_rows_to_repair,
+          visibilityRows: sync.state_repair.visibility_rows_to_repair,
+          rolloutFiles: sync.state_repair.rollout_files_repaired,
+          rolloutPaths: sync.state_repair.rollout_paths_repaired,
+          userEvents: sync.state_repair.user_events_recovered,
+          cwdRows: sync.state_repair.cwd_rows_repaired,
+          orphanRollouts: sync.state_repair.orphan_rollouts_found,
+          orphanThreads: sync.state_repair.orphan_threads_recovered,
+        },
+      )} · ${t(
+        'codex.ssh.reconciliationSummary',
+        '路径 {{rolloutPaths}} · 用户事件 {{userEvents}} · 工作目录 {{cwdRows}} · 孤立 rollout {{orphanRollouts}} / 已恢复 {{orphanThreads}}',
+        {
+          rolloutPaths: sync.state_repair.rollout_paths_repaired,
+          userEvents: sync.state_repair.user_events_recovered,
+          cwdRows: sync.state_repair.cwd_rows_repaired,
+          orphanRollouts: sync.state_repair.orphan_rollouts_found,
+          orphanThreads: sync.state_repair.orphan_threads_recovered,
+        },
+      )}`
+    : t('codex.ssh.stateDatabaseMissing', '远端尚无状态库，无历史需要对齐');
+  const quiesce = t(
+    `codex.ssh.reloadStatus.${sync.app_server_quiesce_status ?? 'unknown'}`,
+    sync.app_server_quiesce_status ?? 'unknown',
+  );
+  const restore = t(
+    `codex.ssh.reloadStatus.${sync.app_server_restore_status ?? 'unknown'}`,
+    sync.app_server_restore_status ?? 'unknown',
+  );
+  const reload = t(
+    `codex.ssh.reloadStatus.${sync.app_server_reload_status ?? 'unknown'}`,
+    sync.app_server_reload_status ?? 'unknown',
+  );
+  return t(
+    'codex.ssh.syncVerifiedDetail',
+    'Provider {{provider}} 已校验 · {{state}} · {{quiesce}} / {{restore}} / {{reload}}',
+    { provider, state, quiesce, restore, reload },
+  );
+}
+
 interface CodexSshServersPanelProps {
   /** 嵌入设置弹框时隐藏顶部大标题区 */
   embedded?: boolean;
@@ -123,10 +192,7 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
       applySyncResult(event.payload);
       setLocalMessage({
         kind: event.payload.verified ? 'success' : 'warning',
-        text: event.payload.verified
-          ? t('codex.ssh.syncVerified', 'SSH 已校验同步成功')
-          : event.payload.error ??
-            t('codex.ssh.syncFailed', '本地切号成功，但 SSH 同步失败'),
+        text: describeSyncStatus(t, event.payload),
       });
     }).then((dispose) => {
       if (disposed) {
@@ -193,9 +259,7 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
       const result = await syncNow(serverId);
       setLocalMessage({
         kind: result.verified ? 'success' : 'warning',
-        text: result.verified
-          ? t('codex.ssh.syncVerified', 'SSH 已校验同步成功')
-          : result.error ?? t('codex.ssh.syncFailed', 'SSH 同步失败'),
+        text: describeSyncStatus(t, result),
       });
     } catch (err) {
       setLocalMessage({ kind: 'error', text: String(err) });
@@ -518,12 +582,11 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
                     >
                       {sync
                         ? sync.verified
-                          ? t('codex.ssh.syncedAs', '已同步 {{email}} · {{time}}', {
+                          ? `${t('codex.ssh.syncedAs', '已同步 {{email}} · {{time}}', {
                               email: sync.account_email,
                               time: formatSyncTime(sync.synced_at),
-                            })
-                          : sync.error ??
-                            t('codex.ssh.syncFailed', 'SSH 同步失败')
+                            })} · ${describeSyncStatus(t, sync)}`
+                          : describeSyncStatus(t, sync)
                         : t('codex.ssh.neverSynced', '尚未同步')}
                     </div>
                   </button>
@@ -594,10 +657,7 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
             lastSyncResult.verified ? ' is-ok' : ' is-fail'
           }`}
         >
-          {lastSyncResult.verified
-            ? t('codex.ssh.latestVerified', '最近一次 SSH 同步已校验通过')
-            : lastSyncResult.error ??
-              t('codex.ssh.syncFailed', 'SSH 同步失败')}
+          {describeSyncStatus(t, lastSyncResult)}
         </div>
       )}
     </div>

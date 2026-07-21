@@ -848,7 +848,7 @@ pub async fn codex_list_sessions_across_instances(
     title_query: Option<String>,
     content_query: Option<String>,
 ) -> Result<Vec<modules::codex_session_manager::CodexSessionRecord>, String> {
-    modules::codex_session_manager::list_sessions_across_instances(title_query, content_query)
+    modules::codex_session_manager::list_sessions_across_instances(title_query, content_query).await
 }
 
 #[tauri::command]
@@ -1157,12 +1157,15 @@ pub async fn codex_delete_instance(instance_id: String) -> Result<(), String> {
 async fn codex_start_instance_internal(
     instance_id: String,
     skip_default_bind_account_injection: bool,
+    remote_launch_context: Option<modules::codex_thread_sync::CodexRemoteLaunchContext>,
 ) -> Result<CodexInstanceProfileView, String> {
     let _start_guard = CodexInstanceStartGuard::acquire(&instance_id)?;
     let flow_started = Instant::now();
     modules::logger::log_info(&format!(
-        "[Codex Start] start_instance_internal started: instance_id={}, skip_default_bind_account_injection={}",
-        instance_id, skip_default_bind_account_injection
+        "[Codex Start] start_instance_internal started: instance_id={}, skip_default_bind_account_injection={}, restore_remote_context={}",
+        instance_id,
+        skip_default_bind_account_injection,
+        remote_launch_context.is_some()
     ));
     if instance_id == DEFAULT_INSTANCE_ID {
         let prepare_started = Instant::now();
@@ -1191,6 +1194,21 @@ async fn codex_start_instance_internal(
             modules::process::close_codex_default(20)?;
         }
         modules::codex_local_access::stop_provider_gateways_for_profile(&default_dir).await;
+        if let Some(context) = remote_launch_context.as_ref() {
+            match modules::codex_thread_sync::restore_remote_launch_context(&default_dir, context) {
+                Ok(changed) => modules::logger::log_info(&format!(
+                    "[Codex Start] remote launch context restored: host_id={}, project_id={:?}, reachable_hosts={}, changed={}",
+                    context.host_id,
+                    context.project_id,
+                    context.reachable_host_ids.len(),
+                    changed
+                )),
+                Err(error) => modules::logger::log_warn(&format!(
+                    "[Codex Start] remote launch context restore failed; continuing launch: {}",
+                    error
+                )),
+            }
+        }
         modules::logger::log_info(&format!(
             "[Codex Start] default close phase finished, mode={}, elapsed_ms={}",
             if fast_closed {
@@ -1502,13 +1520,15 @@ async fn codex_start_instance_internal(
 }
 
 pub(crate) async fn codex_start_default_with_prepared_profile(
+    remote_launch_context: Option<modules::codex_thread_sync::CodexRemoteLaunchContext>,
 ) -> Result<CodexInstanceProfileView, String> {
-    codex_start_instance_internal(DEFAULT_INSTANCE_ID.to_string(), true).await
+    codex_start_instance_internal(DEFAULT_INSTANCE_ID.to_string(), true, remote_launch_context)
+        .await
 }
 
 #[tauri::command]
 pub async fn codex_start_instance(instance_id: String) -> Result<CodexInstanceProfileView, String> {
-    codex_start_instance_internal(instance_id, false).await
+    codex_start_instance_internal(instance_id, false, None).await
 }
 
 #[tauri::command]

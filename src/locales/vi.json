@@ -2530,6 +2530,7 @@
         "tokenUsage": "Mức dùng token"
       },
       "locationRunning": " (đang chạy)",
+      "locationSshReadOnly": "SSH chỉ đọc",
       "untitled": "Phiên chưa đặt tên",
       "restoreModal": {
         "title": "Thùng rác",
@@ -3641,6 +3642,24 @@
       "syncNow": "Đồng bộ hóa ngay bây giờ",
       "connectionOk": "Đã kết nối",
       "syncVerified": "Đã xác minh đồng bộ hóa SSH",
+      "syncVerifiedDetail": "Đã xác minh nhà cung cấp {{provider}} · {{state}} · {{quiesce}} / {{restore}} / {{reload}}",
+      "syncPartialFailure": "{{error}} · Đã hoàn tất: {{stages}}",
+      "stageBundle": "mã băm gói xác thực",
+      "stageProvider": "cấu hình nhà cung cấp",
+      "stageState": "cơ sở dữ liệu trạng thái",
+      "stateRepaired": "Đã căn chỉnh {{rows}} hàng trong cơ sở dữ liệu trạng thái (nhà cung cấp {{providerRows}}, hiển thị {{visibilityRows}}); sửa {{rolloutFiles}} rollout; đã xác minh bản sao lưu",
+      "reconciliationSummary": "đường dẫn {{rolloutPaths}} · sự kiện người dùng {{userEvents}} · thư mục làm việc {{cwdRows}} · rollout mồ côi {{orphanRollouts}} · cuộc trò chuyện đã khôi phục {{orphanThreads}}",
+      "stateDatabaseMissing": "Không có cơ sở dữ liệu trạng thái từ xa; không có lịch sử cần căn chỉnh",
+      "reloadStatus": {
+        "daemon-restarted": "đã khởi động lại dịch vụ app-server",
+        "app-server-terminated": "đã dừng app-server để kết nối lại",
+        "no-app-server": "không có app-server đang chạy",
+        "not-required": "không cần tiếp tục",
+        "restore-failed": "khôi phục app-server thất bại",
+        "unknown": "không rõ trạng thái app-server",
+        "app-server-paused": "đã tạm dừng app-server để đồng bộ",
+        "app-server-resumed": "đã tiếp tục app-server"
+      },
       "syncFailed": "Đồng bộ hóa SSH không thành công",
       "syncedAs": "Đã đồng bộ hóa {{email}} · {{time}}",
       "neverSynced": "Chưa được đồng bộ hóa",

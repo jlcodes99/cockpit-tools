@@ -2530,6 +2530,7 @@
         "tokenUsage": "Utilizzo token"
       },
       "locationRunning": " (in esecuzione)",
+      "locationSshReadOnly": "SSH sola lettura",
       "untitled": "Sessione senza titolo",
       "restoreModal": {
         "title": "Cestino",
@@ -3641,6 +3642,24 @@
       "syncNow": "Sincronizza ora",
       "connectionOk": "Collegato",
       "syncVerified": "Sincronizzazione SSH verificata",
+      "syncVerifiedDetail": "Provider {{provider}} verificato · {{state}} · {{quiesce}} / {{restore}} / {{reload}}",
+      "syncPartialFailure": "{{error}} · Completato: {{stages}}",
+      "stageBundle": "hash del pacchetto di autenticazione",
+      "stageProvider": "configurazione del provider",
+      "stageState": "database di stato",
+      "stateRepaired": "Database di stato allineato: {{rows}} righe (provider {{providerRows}}, visibilità {{visibilityRows}}); {{rolloutFiles}} rollout riparati; backup verificato",
+      "reconciliationSummary": "percorsi {{rolloutPaths}} · eventi utente {{userEvents}} · directory di lavoro {{cwdRows}} · rollout orfani {{orphanRollouts}} · conversazioni ripristinate {{orphanThreads}}",
+      "stateDatabaseMissing": "Nessun database di stato remoto; nessuna cronologia da allineare",
+      "reloadStatus": {
+        "daemon-restarted": "servizio app-server riavviato",
+        "app-server-terminated": "app-server arrestato per la riconnessione",
+        "no-app-server": "nessun app-server in esecuzione",
+        "not-required": "ripresa non necessaria",
+        "restore-failed": "ripristino di app-server non riuscito",
+        "unknown": "stato di app-server sconosciuto",
+        "app-server-paused": "app-server sospeso per la sincronizzazione",
+        "app-server-resumed": "app-server ripreso"
+      },
       "syncFailed": "Sincronizzazione SSH non riuscita",
       "syncedAs": "{{email}} sincronizzato · {{time}}",
       "neverSynced": "Non ancora sincronizzato",

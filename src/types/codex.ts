@@ -317,6 +317,7 @@ export interface CodexSessionLocation {
   instanceId: string;
   instanceName: string;
   running: boolean;
+  readOnly?: boolean;
 }
 
 export interface CodexSessionRecord {

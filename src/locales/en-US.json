@@ -3265,6 +3265,7 @@
         "tokenUsage": "Token Usage"
       },
       "locationRunning": " (running)",
+      "locationSshReadOnly": "SSH read-only",
       "untitled": "Untitled session",
       "restoreModal": {
         "title": "Trash",
@@ -3830,6 +3831,24 @@
       "syncNow": "Sync now",
       "connectionOk": "Connected",
       "syncVerified": "SSH sync verified",
+      "syncVerifiedDetail": "Provider {{provider}} verified · {{state}} · {{quiesce}} / {{restore}} / {{reload}}",
+      "syncPartialFailure": "{{error}} · Completed: {{stages}}",
+      "stageBundle": "auth bundle hashes",
+      "stageProvider": "provider config",
+      "stageState": "state DB",
+      "stateRepaired": "State DB aligned {{rows}} rows (provider {{providerRows}}, visibility {{visibilityRows}}); repaired {{rolloutFiles}} rollouts; backup verified",
+      "reconciliationSummary": "paths {{rolloutPaths}} · user events {{userEvents}} · working directories {{cwdRows}} · orphan rollouts {{orphanRollouts}} · recovered threads {{orphanThreads}}",
+      "stateDatabaseMissing": "No remote state DB; no history to align",
+      "reloadStatus": {
+        "daemon-restarted": "app-server daemon restarted",
+        "app-server-terminated": "app-server stopped for reconnect",
+        "no-app-server": "no running app-server",
+        "not-required": "resume not required",
+        "restore-failed": "app-server restore failed",
+        "unknown": "app-server status unknown",
+        "app-server-paused": "app-server paused for sync",
+        "app-server-resumed": "app-server resumed"
+      },
       "syncFailed": "SSH sync failed",
       "syncedAs": "Synced {{email}} · {{time}}",
       "neverSynced": "Not synced yet",

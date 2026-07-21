@@ -2708,6 +2708,7 @@
         "tokenUsage": "Penggunaan token"
       },
       "locationRunning": " (berjalan)",
+      "locationSshReadOnly": "SSH hanya-baca",
       "untitled": "Sesi tanpa judul",
       "restoreModal": {
         "title": "Sampah",
@@ -3688,6 +3689,24 @@
       "syncNow": "Sinkronkan sekarang",
       "connectionOk": "Terhubung",
       "syncVerified": "Sinkronisasi SSH diverifikasi",
+      "syncVerifiedDetail": "Penyedia {{provider}} terverifikasi · {{state}} · {{quiesce}} / {{restore}} / {{reload}}",
+      "syncPartialFailure": "{{error}} · Selesai: {{stages}}",
+      "stageBundle": "hash bundel autentikasi",
+      "stageProvider": "konfigurasi penyedia",
+      "stageState": "basis data status",
+      "stateRepaired": "Basis data status menyelaraskan {{rows}} baris (penyedia {{providerRows}}, visibilitas {{visibilityRows}}); memperbaiki {{rolloutFiles}} rollout; cadangan terverifikasi",
+      "reconciliationSummary": "jalur {{rolloutPaths}} · peristiwa pengguna {{userEvents}} · direktori kerja {{cwdRows}} · rollout tanpa induk {{orphanRollouts}} · utas dipulihkan {{orphanThreads}}",
+      "stateDatabaseMissing": "Tidak ada basis data status jarak jauh; tidak ada riwayat untuk diselaraskan",
+      "reloadStatus": {
+        "daemon-restarted": "layanan app-server dimulai ulang",
+        "app-server-terminated": "app-server dihentikan untuk menyambung kembali",
+        "no-app-server": "tidak ada app-server yang berjalan",
+        "not-required": "tidak perlu dilanjutkan",
+        "restore-failed": "pemulihan app-server gagal",
+        "unknown": "status app-server tidak diketahui",
+        "app-server-paused": "app-server dijeda untuk sinkronisasi",
+        "app-server-resumed": "app-server dilanjutkan"
+      },
       "syncFailed": "Sinkronisasi SSH gagal",
       "syncedAs": "{{email}} · {{time}} yang disinkronkan",
       "neverSynced": "Belum disinkronkan",

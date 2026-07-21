@@ -2530,6 +2530,7 @@
         "tokenUsage": "Использование токенов"
       },
       "locationRunning": " (запущено)",
+      "locationSshReadOnly": "SSH только для чтения",
       "untitled": "Сессия без названия",
       "restoreModal": {
         "title": "Корзина",
@@ -3641,6 +3642,24 @@
       "syncNow": "Синхронизировать сейчас",
       "connectionOk": "Подключено",
       "syncVerified": "Синхронизация по SSH проверена",
+      "syncVerifiedDetail": "Провайдер {{provider}} проверен · {{state}} · {{quiesce}} / {{restore}} / {{reload}}",
+      "syncPartialFailure": "{{error}} · Завершено: {{stages}}",
+      "stageBundle": "хеши пакета аутентификации",
+      "stageProvider": "конфигурация провайдера",
+      "stageState": "база данных состояния",
+      "stateRepaired": "В базе состояния выровнено строк: {{rows}} (провайдер: {{providerRows}}, видимость: {{visibilityRows}}); исправлено rollout-файлов: {{rolloutFiles}}; резервная копия проверена",
+      "reconciliationSummary": "пути: {{rolloutPaths}} · события пользователя: {{userEvents}} · рабочие каталоги: {{cwdRows}} · потерянные rollout-файлы: {{orphanRollouts}} · восстановлено бесед: {{orphanThreads}}",
+      "stateDatabaseMissing": "Удалённая база состояния отсутствует; историю выравнивать не нужно",
+      "reloadStatus": {
+        "daemon-restarted": "служба app-server перезапущена",
+        "app-server-terminated": "app-server остановлен для переподключения",
+        "no-app-server": "app-server не запущен",
+        "not-required": "возобновление не требуется",
+        "restore-failed": "не удалось восстановить app-server",
+        "unknown": "состояние app-server неизвестно",
+        "app-server-paused": "app-server приостановлен для синхронизации",
+        "app-server-resumed": "app-server возобновлён"
+      },
       "syncFailed": "SSH-синхронизация не удалась",
       "syncedAs": "Синхронизировано {{email}} · {{time}}",
       "neverSynced": "Еще не синхронизировано",

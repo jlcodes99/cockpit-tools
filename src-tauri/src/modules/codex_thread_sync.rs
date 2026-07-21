@@ -17,6 +17,18 @@ const GLOBAL_STATE_FILE: &str = ".codex-global-state.json";
 const BACKUP_FILE_NAMES: [&str; 2] = [SESSION_INDEX_FILE, GLOBAL_STATE_FILE];
 const SESSION_DIRS: [&str; 2] = ["sessions", "archived_sessions"];
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodexRemoteLaunchCandidate {
+    pub identifiers: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodexRemoteLaunchContext {
+    pub host_id: String,
+    pub project_id: Option<String>,
+    pub reachable_host_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexInstanceThreadSyncItem {
@@ -1156,6 +1168,226 @@ fn read_global_state(root_dir: &Path) -> Result<JsonValue, String> {
     Ok(serde_json::from_str::<JsonValue>(&raw).unwrap_or_else(|_| json!({})))
 }
 
+fn normalized_remote_identifier(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+fn remote_connection_matches_candidate(
+    connection: &serde_json::Map<String, JsonValue>,
+    candidate: &CodexRemoteLaunchCandidate,
+) -> bool {
+    let identifiers = candidate
+        .identifiers
+        .iter()
+        .map(|value| normalized_remote_identifier(value))
+        .filter(|value| !value.is_empty())
+        .collect::<HashSet<_>>();
+    if identifiers.is_empty() {
+        return false;
+    }
+
+    ["hostId", "alias", "hostname", "displayName"]
+        .into_iter()
+        .filter_map(|key| connection.get(key).and_then(JsonValue::as_str))
+        .map(normalized_remote_identifier)
+        .any(|value| identifiers.contains(&value))
+}
+
+fn remote_project_matches(
+    project: &serde_json::Map<String, JsonValue>,
+    host_id: &str,
+    project_id: Option<&str>,
+) -> bool {
+    project.get("hostId").and_then(JsonValue::as_str) == Some(host_id)
+        && project_id
+            .is_none_or(|expected| project.get("id").and_then(JsonValue::as_str) == Some(expected))
+}
+
+fn selected_remote_project_id(object: &serde_json::Map<String, JsonValue>) -> Option<&str> {
+    object
+        .get("selected-project")
+        .and_then(JsonValue::as_object)
+        .filter(|selected| selected.get("type").and_then(JsonValue::as_str) == Some("remote"))
+        .and_then(|selected| selected.get("projectId"))
+        .and_then(JsonValue::as_str)
+}
+
+pub fn capture_remote_launch_context(
+    root_dir: &Path,
+    candidates: &[CodexRemoteLaunchCandidate],
+) -> Result<Option<CodexRemoteLaunchContext>, String> {
+    if candidates.is_empty() {
+        return Ok(None);
+    }
+    let value = read_global_state(root_dir)?;
+    let Some(object) = value.as_object() else {
+        return Ok(None);
+    };
+    let connections = object
+        .get("codex-managed-remote-connections")
+        .and_then(JsonValue::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let mut reachable_host_ids = Vec::new();
+    for candidate in candidates {
+        let host_id = connections.iter().find_map(|connection| {
+            let connection = connection.as_object()?;
+            if !remote_connection_matches_candidate(connection, candidate) {
+                return None;
+            }
+            connection
+                .get("hostId")
+                .and_then(JsonValue::as_str)
+                .map(str::to_string)
+        });
+        if let Some(host_id) = host_id {
+            if !reachable_host_ids.contains(&host_id) {
+                reachable_host_ids.push(host_id);
+            }
+        }
+    }
+    if reachable_host_ids.is_empty() {
+        return Ok(None);
+    }
+
+    let remote_projects = object
+        .get("remote-projects")
+        .and_then(JsonValue::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let selected_project = selected_remote_project_id(object);
+    let selected_project_host = selected_project.and_then(|project_id| {
+        remote_projects.iter().find_map(|project| {
+            let project = project.as_object()?;
+            let host_id = project.get("hostId").and_then(JsonValue::as_str)?;
+            (project.get("id").and_then(JsonValue::as_str) == Some(project_id)
+                && reachable_host_ids.iter().any(|value| value == host_id))
+            .then(|| host_id.to_string())
+        })
+    });
+    let selected_host = selected_project_host.unwrap_or_else(|| {
+        object
+            .get("selected-remote-host-id")
+            .and_then(JsonValue::as_str)
+            .filter(|host_id| reachable_host_ids.iter().any(|value| value == host_id))
+            .map(str::to_string)
+            .unwrap_or_else(|| reachable_host_ids[0].clone())
+    });
+    let active_project = object
+        .get("active-remote-project-id")
+        .and_then(JsonValue::as_str);
+    let project_id = selected_project
+        .filter(|project_id| {
+            remote_projects.iter().any(|project| {
+                project.as_object().is_some_and(|project| {
+                    remote_project_matches(project, &selected_host, Some(project_id))
+                })
+            })
+        })
+        .map(str::to_string)
+        .or_else(|| {
+            active_project
+                .filter(|project_id| {
+                    remote_projects.iter().any(|project| {
+                        project.as_object().is_some_and(|project| {
+                            remote_project_matches(project, &selected_host, Some(project_id))
+                        })
+                    })
+                })
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            remote_projects.iter().find_map(|project| {
+                let project = project.as_object()?;
+                remote_project_matches(project, &selected_host, None)
+                    .then(|| project.get("id").and_then(JsonValue::as_str))
+                    .flatten()
+                    .map(str::to_string)
+            })
+        });
+
+    Ok(Some(CodexRemoteLaunchContext {
+        host_id: selected_host,
+        project_id,
+        reachable_host_ids,
+    }))
+}
+
+pub fn restore_remote_launch_context(
+    root_dir: &Path,
+    context: &CodexRemoteLaunchContext,
+) -> Result<bool, String> {
+    let path = root_dir.join(GLOBAL_STATE_FILE);
+    let mut value = read_global_state(root_dir)?;
+    let Some(object) = value.as_object_mut() else {
+        return Err("全局状态文件格式无效".to_string());
+    };
+
+    let mut changed = object
+        .get("selected-remote-host-id")
+        .and_then(JsonValue::as_str)
+        != Some(context.host_id.as_str());
+    object.insert(
+        "selected-remote-host-id".to_string(),
+        JsonValue::String(context.host_id.clone()),
+    );
+
+    if let Some(project_id) = context.project_id.as_deref() {
+        let project_is_valid = object
+            .get("remote-projects")
+            .and_then(JsonValue::as_array)
+            .is_some_and(|projects| {
+                projects.iter().any(|project| {
+                    project.as_object().is_some_and(|project| {
+                        remote_project_matches(project, &context.host_id, Some(project_id))
+                    })
+                })
+            });
+        if project_is_valid {
+            let selected_project = json!({
+                "type": "remote",
+                "projectId": project_id,
+            });
+            changed |= object.get("selected-project") != Some(&selected_project);
+            object.insert("selected-project".to_string(), selected_project);
+            changed |= object
+                .get("active-remote-project-id")
+                .and_then(JsonValue::as_str)
+                != Some(project_id);
+            object.insert(
+                "active-remote-project-id".to_string(),
+                JsonValue::String(project_id.to_string()),
+            );
+        }
+    }
+
+    let auto_connect = object
+        .entry("remote-connection-auto-connect-by-host-id".to_string())
+        .or_insert_with(|| JsonValue::Object(serde_json::Map::new()));
+    if !auto_connect.is_object() {
+        *auto_connect = JsonValue::Object(serde_json::Map::new());
+        changed = true;
+    }
+    let auto_connect = auto_connect
+        .as_object_mut()
+        .ok_or_else(|| "远端自动连接状态格式无效".to_string())?;
+    for host_id in &context.reachable_host_ids {
+        if auto_connect.get(host_id).and_then(JsonValue::as_bool) != Some(true) {
+            auto_connect.insert(host_id.clone(), JsonValue::Bool(true));
+            changed = true;
+        }
+    }
+
+    if changed {
+        let serialized = serde_json::to_string_pretty(&value)
+            .map_err(|error| format!("序列化全局状态失败: {}", error))?;
+        modules::atomic_write::write_string_atomic(&path, &format!("{}\n", serialized))
+            .map_err(|error| format!("写入全局状态失败 ({}): {}", path.display(), error))?;
+    }
+    Ok(changed)
+}
+
 fn global_state_array_contains(
     object: &serde_json::Map<String, JsonValue>,
     key: &str,
@@ -1513,6 +1745,186 @@ mod tests {
         }
         fs::create_dir_all(&base_dir).expect("create temp dir");
         base_dir
+    }
+
+    #[test]
+    fn remote_launch_context_restores_selected_reachable_project() {
+        let temp_dir = make_temp_dir("codex-remote-launch-context-test");
+        let state_path = temp_dir.join(GLOBAL_STATE_FILE);
+        fs::write(
+            &state_path,
+            serde_json::to_string_pretty(&json!({
+                "selected-remote-host-id": "remote-ssh-discovered:server-b",
+                "active-remote-project-id": null,
+                "selected-project": {
+                    "type": "local",
+                    "projectId": "local-project"
+                },
+                "codex-managed-remote-connections": [
+                    {
+                        "alias": "server-a",
+                        "hostId": "remote-ssh-discovered:server-a"
+                    },
+                    {
+                        "alias": "server-b",
+                        "hostId": "remote-ssh-discovered:server-b"
+                    }
+                ],
+                "remote-projects": [
+                    {
+                        "id": "project-a",
+                        "hostId": "remote-ssh-discovered:server-a",
+                        "remotePath": "/srv/a"
+                    },
+                    {
+                        "id": "project-b",
+                        "hostId": "remote-ssh-discovered:server-b",
+                        "remotePath": "/srv/b"
+                    }
+                ],
+                "remote-connection-auto-connect-by-host-id": {
+                    "remote-ssh-discovered:server-a": false
+                },
+                "unrelated": "preserved"
+            }))
+            .expect("serialize state"),
+        )
+        .expect("write state");
+
+        let context = capture_remote_launch_context(
+            &temp_dir,
+            &[
+                CodexRemoteLaunchCandidate {
+                    identifiers: vec!["server-a".to_string()],
+                },
+                CodexRemoteLaunchCandidate {
+                    identifiers: vec!["server-b".to_string()],
+                },
+            ],
+        )
+        .expect("capture context")
+        .expect("remote context");
+        assert_eq!(context.host_id, "remote-ssh-discovered:server-b");
+        assert_eq!(context.project_id.as_deref(), Some("project-b"));
+        assert_eq!(context.reachable_host_ids.len(), 2);
+
+        assert!(restore_remote_launch_context(&temp_dir, &context).expect("restore context"));
+        let restored: JsonValue =
+            serde_json::from_str(&fs::read_to_string(&state_path).expect("read restored state"))
+                .expect("parse restored state");
+        assert_eq!(
+            restored["selected-remote-host-id"],
+            "remote-ssh-discovered:server-b"
+        );
+        assert_eq!(restored["active-remote-project-id"], "project-b");
+        assert_eq!(restored["selected-project"]["type"], "remote");
+        assert_eq!(restored["selected-project"]["projectId"], "project-b");
+        assert_eq!(
+            restored["remote-connection-auto-connect-by-host-id"]["remote-ssh-discovered:server-a"],
+            true
+        );
+        assert_eq!(
+            restored["remote-connection-auto-connect-by-host-id"]["remote-ssh-discovered:server-b"],
+            true
+        );
+        assert_eq!(restored["unrelated"], "preserved");
+        fs::remove_dir_all(&temp_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn remote_launch_context_prefers_selected_remote_project_host() {
+        let temp_dir = make_temp_dir("codex-selected-remote-project-context-test");
+        fs::write(
+            temp_dir.join(GLOBAL_STATE_FILE),
+            serde_json::to_string(&json!({
+                "selected-remote-host-id": "remote-ssh-discovered:server-a",
+                "selected-project": {
+                    "type": "remote",
+                    "projectId": "project-b"
+                },
+                "active-remote-project-id": "project-a",
+                "codex-managed-remote-connections": [
+                    {
+                        "alias": "server-a",
+                        "hostId": "remote-ssh-discovered:server-a"
+                    },
+                    {
+                        "alias": "server-b",
+                        "hostId": "remote-ssh-discovered:server-b"
+                    }
+                ],
+                "remote-projects": [
+                    {
+                        "id": "project-a",
+                        "hostId": "remote-ssh-discovered:server-a",
+                        "remotePath": "/srv/a"
+                    },
+                    {
+                        "id": "project-b",
+                        "hostId": "remote-ssh-discovered:server-b",
+                        "remotePath": "/srv/b"
+                    }
+                ]
+            }))
+            .expect("serialize state"),
+        )
+        .expect("write state");
+
+        let context = capture_remote_launch_context(
+            &temp_dir,
+            &[
+                CodexRemoteLaunchCandidate {
+                    identifiers: vec!["server-a".to_string()],
+                },
+                CodexRemoteLaunchCandidate {
+                    identifiers: vec!["server-b".to_string()],
+                },
+            ],
+        )
+        .expect("capture context")
+        .expect("remote context");
+
+        assert_eq!(context.host_id, "remote-ssh-discovered:server-b");
+        assert_eq!(context.project_id.as_deref(), Some("project-b"));
+        fs::remove_dir_all(&temp_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn remote_launch_context_falls_back_to_first_reachable_host() {
+        let temp_dir = make_temp_dir("codex-remote-launch-fallback-test");
+        fs::write(
+            temp_dir.join(GLOBAL_STATE_FILE),
+            serde_json::to_string(&json!({
+                "selected-remote-host-id": "remote-ssh-discovered:offline",
+                "codex-managed-remote-connections": [
+                    {
+                        "alias": "server-a",
+                        "hostId": "remote-ssh-discovered:server-a"
+                    }
+                ],
+                "remote-projects": [
+                    {
+                        "id": "project-a",
+                        "hostId": "remote-ssh-discovered:server-a",
+                        "remotePath": "/srv/a"
+                    }
+                ]
+            }))
+            .expect("serialize state"),
+        )
+        .expect("write state");
+
+        let context = capture_remote_launch_context(
+            &temp_dir,
+            &[CodexRemoteLaunchCandidate {
+                identifiers: vec!["server-a".to_string()],
+            }],
+        )
+        .expect("capture context")
+        .expect("remote context");
+        assert_eq!(context.host_id, "remote-ssh-discovered:server-a");
+        assert_eq!(context.project_id.as_deref(), Some("project-a"));
+        fs::remove_dir_all(&temp_dir).expect("cleanup temp dir");
     }
 
     #[test]

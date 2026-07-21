@@ -2530,6 +2530,7 @@
         "tokenUsage": "Uso de tokens"
       },
       "locationRunning": " (en ejecución)",
+      "locationSshReadOnly": "SSH de solo lectura",
       "untitled": "Sesión sin título",
       "restoreModal": {
         "title": "Papelera",
@@ -3641,6 +3642,24 @@
       "syncNow": "Sincronizar ahora",
       "connectionOk": "Conectado",
       "syncVerified": "Sincronización SSH verificada",
+      "syncVerifiedDetail": "Proveedor {{provider}} verificado · {{state}} · {{quiesce}} / {{restore}} / {{reload}}",
+      "syncPartialFailure": "{{error}} · Completado: {{stages}}",
+      "stageBundle": "hashes del paquete de autenticación",
+      "stageProvider": "configuración del proveedor",
+      "stageState": "base de datos de estado",
+      "stateRepaired": "Base de estado alineada: {{rows}} filas (proveedor {{providerRows}}, visibilidad {{visibilityRows}}); {{rolloutFiles}} rollouts reparados; copia verificada",
+      "reconciliationSummary": "rutas {{rolloutPaths}} · eventos de usuario {{userEvents}} · directorios de trabajo {{cwdRows}} · rollouts huérfanos {{orphanRollouts}} · hilos recuperados {{orphanThreads}}",
+      "stateDatabaseMissing": "No hay base de estado remota; no hay historial que alinear",
+      "reloadStatus": {
+        "daemon-restarted": "servicio app-server reiniciado",
+        "app-server-terminated": "app-server detenido para reconectar",
+        "no-app-server": "no hay ningún app-server en ejecución",
+        "not-required": "no es necesario reanudar",
+        "restore-failed": "falló la restauración de app-server",
+        "unknown": "estado de app-server desconocido",
+        "app-server-paused": "app-server pausado para sincronizar",
+        "app-server-resumed": "app-server reanudado"
+      },
       "syncFailed": "Error de sincronización SSH",
       "syncedAs": "Sincronizado {{email}} · {{time}}",
       "neverSynced": "Aún no sincronizado",

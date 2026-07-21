@@ -2530,6 +2530,7 @@
         "tokenUsage": "Zużycie tokenów"
       },
       "locationRunning": " (uruchomiona)",
+      "locationSshReadOnly": "SSH tylko do odczytu",
       "untitled": "Sesja bez tytułu",
       "restoreModal": {
         "title": "Kosz",
@@ -3641,6 +3642,24 @@
       "syncNow": "Zsynchronizuj teraz",
       "connectionOk": "Połączony",
       "syncVerified": "Synchronizacja SSH zweryfikowana",
+      "syncVerifiedDetail": "Dostawca {{provider}} zweryfikowany · {{state}} · {{quiesce}} / {{restore}} / {{reload}}",
+      "syncPartialFailure": "{{error}} · Ukończono: {{stages}}",
+      "stageBundle": "skróty pakietu uwierzytelniania",
+      "stageProvider": "konfiguracja dostawcy",
+      "stageState": "baza danych stanu",
+      "stateRepaired": "W bazie stanu wyrównano {{rows}} wierszy (dostawca {{providerRows}}, widoczność {{visibilityRows}}); naprawiono {{rolloutFiles}} wdrożeń; kopia zapasowa zweryfikowana",
+      "reconciliationSummary": "ścieżki {{rolloutPaths}} · zdarzenia użytkownika {{userEvents}} · katalogi robocze {{cwdRows}} · osierocone rollouty {{orphanRollouts}} · odzyskane wątki {{orphanThreads}}",
+      "stateDatabaseMissing": "Brak zdalnej bazy stanu; brak historii do wyrównania",
+      "reloadStatus": {
+        "daemon-restarted": "usługa app-server uruchomiona ponownie",
+        "app-server-terminated": "app-server zatrzymany w celu ponownego połączenia",
+        "no-app-server": "app-server nie jest uruchomiony",
+        "not-required": "wznowienie nie jest wymagane",
+        "restore-failed": "nie udało się przywrócić app-server",
+        "unknown": "stan app-server jest nieznany",
+        "app-server-paused": "app-server wstrzymany na czas synchronizacji",
+        "app-server-resumed": "app-server wznowiony"
+      },
       "syncFailed": "Synchronizacja SSH nie powiodła się",
       "syncedAs": "Zsynchronizowane {{email}} · {{time}}",
       "neverSynced": "Jeszcze nie zsynchronizowane",

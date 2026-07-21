@@ -41,6 +41,8 @@ pub struct CodexSessionLocation {
     pub instance_id: String,
     pub instance_name: String,
     pub running: bool,
+    #[serde(default)]
+    pub read_only: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -475,7 +477,7 @@ fn parse_token_stats_lines(content: &[u8]) -> Option<(u64, u64, u64)> {
     None
 }
 
-pub fn list_sessions_across_instances(
+pub async fn list_sessions_across_instances(
     title_query: Option<String>,
     content_query: Option<String>,
 ) -> Result<Vec<CodexSessionRecord>, String> {
@@ -526,8 +528,55 @@ pub fn list_sessions_across_instances(
                 instance_id: instance.id.clone(),
                 instance_name: instance.name.clone(),
                 running,
+                read_only: false,
             });
             entry.location_count = entry.locations.len();
+        }
+    }
+
+    if filter.content_query.is_none() {
+        match modules::ssh_server::list_codex_sessions_from_servers().await {
+            Ok(remote_sessions) => {
+                for snapshot in remote_sessions {
+                    if let Some(query) = filter.title_query.as_deref() {
+                        if !snapshot.title.to_lowercase().contains(query) {
+                            continue;
+                        }
+                    }
+
+                    matched_session_ids.insert(snapshot.session_id.clone());
+                    let entry = session_map
+                        .entry(snapshot.session_id.clone())
+                        .or_insert_with(|| CodexSessionRecord {
+                            session_id: snapshot.session_id.clone(),
+                            title: snapshot.title.clone(),
+                            cwd: snapshot.cwd.clone(),
+                            updated_at: snapshot.updated_at,
+                            location_count: 0,
+                            locations: Vec::new(),
+                            session_kind: classify_session_kind(&snapshot.title, &snapshot.cwd),
+                        });
+
+                    if snapshot.updated_at.unwrap_or_default()
+                        > entry.updated_at.unwrap_or_default()
+                    {
+                        entry.title = snapshot.title.clone();
+                        entry.cwd = snapshot.cwd.clone();
+                        entry.updated_at = snapshot.updated_at;
+                        entry.session_kind = classify_session_kind(&snapshot.title, &snapshot.cwd);
+                    }
+                    entry.locations.push(CodexSessionLocation {
+                        instance_id: format!("ssh:{}", snapshot.server_id),
+                        instance_name: snapshot.server_name,
+                        running: true,
+                        read_only: true,
+                    });
+                    entry.location_count = entry.locations.len();
+                }
+            }
+            Err(error) => {
+                eprintln!("[SSH Session List] failed to load server store: {}", error);
+            }
         }
     }
 

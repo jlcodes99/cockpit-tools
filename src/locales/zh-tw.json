@@ -2661,6 +2661,7 @@
         "tokenUsage": "Token 使用"
       },
       "locationRunning": "（執行中）",
+      "locationSshReadOnly": "SSH 唯讀",
       "untitled": "未命名會話",
       "restoreModal": {
         "title": "垃圾桶",
@@ -3641,6 +3642,24 @@
       "syncNow": "立即同步",
       "connectionOk": "已連接",
       "syncVerified": "SSH 同步已驗證",
+      "syncVerifiedDetail": "Provider {{provider}} 已驗證 · {{state}} · {{quiesce}} / {{restore}} / {{reload}}",
+      "syncPartialFailure": "{{error}} · 已完成：{{stages}}",
+      "stageBundle": "驗證套件雜湊",
+      "stageProvider": "Provider 設定",
+      "stageState": "狀態資料庫",
+      "stateRepaired": "狀態資料庫已對齊 {{rows}} 行（provider {{providerRows}}，可見性 {{visibilityRows}}），rollout 已修復 {{rolloutFiles}} 個，備份已驗證",
+      "reconciliationSummary": "路徑 {{rolloutPaths}} · 使用者事件 {{userEvents}} · 工作目錄 {{cwdRows}} · 孤立 rollout {{orphanRollouts}} · 已復原工作階段 {{orphanThreads}}",
+      "stateDatabaseMissing": "遠端尚無狀態資料庫，無歷史需要對齊",
+      "reloadStatus": {
+        "daemon-restarted": "app-server daemon 已重新啟動",
+        "app-server-terminated": "app-server 已停止並等待重新連線",
+        "no-app-server": "沒有執行中的 app-server",
+        "not-required": "無需恢復",
+        "restore-failed": "app-server 恢復失敗",
+        "unknown": "app-server 狀態未知",
+        "app-server-paused": "app-server 已暫停以執行同步",
+        "app-server-resumed": "app-server 已恢復執行"
+      },
       "syncFailed": "SSH 同步失敗",
       "syncedAs": "已同步 {{email}} · {{time}}",
       "neverSynced": "尚未同步",

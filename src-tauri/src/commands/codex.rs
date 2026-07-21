@@ -854,10 +854,9 @@ pub async fn switch_codex_account(
     let user_config = config::get_user_config();
     apply_codex_switch_auth_projections(&account, &user_config);
 
-    // Full #1404: optional auto SSH sync after switch (hash-verified remote projection + app-server reload).
-    if let Some(ssh_sync) =
-        crate::modules::ssh_server::sync_selected_server_after_codex_switch(&account).await
-    {
+    // Full #1404: probe and sync every enabled SSH host before restarting Codex.
+    let ssh_sync = crate::modules::ssh_server::sync_servers_after_codex_switch(&account).await;
+    for ssh_sync in &ssh_sync.results {
         if ssh_sync.verified {
             logger::log_info(&format!(
                 "[Codex SSH] 切号后同步成功: server_id={}, account={}, verified={}",
@@ -870,8 +869,61 @@ pub async fn switch_codex_account(
                 ssh_sync.error.clone().unwrap_or_default()
             ));
         }
-        let _ = app.emit("codex:ssh-sync-result", &ssh_sync);
+        let _ = app.emit("codex:ssh-sync-result", ssh_sync);
     }
+
+    let remote_launch_context = if user_config.codex_launch_on_switch {
+        let reachable_server_ids = ssh_sync
+            .reachable_server_ids
+            .iter()
+            .map(String::as_str)
+            .collect::<std::collections::HashSet<_>>();
+        let candidates = crate::modules::ssh_server::list_servers()
+            .map(|list| {
+                let selected_id = list.selected_server_id;
+                let mut servers = list
+                    .servers
+                    .into_iter()
+                    .filter(|server| reachable_server_ids.contains(server.id.as_str()))
+                    .collect::<Vec<_>>();
+                servers.sort_by_key(|server| {
+                    (
+                        selected_id.as_deref() != Some(server.id.as_str()),
+                        server.name.clone(),
+                    )
+                });
+                servers
+                    .into_iter()
+                    .map(
+                        |server| crate::modules::codex_thread_sync::CodexRemoteLaunchCandidate {
+                            identifiers: vec![
+                                server.name,
+                                server.host.clone(),
+                                format!("{}@{}", server.username, server.host),
+                            ],
+                        },
+                    )
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        match crate::modules::codex_instance::get_default_codex_home().and_then(|codex_home| {
+            crate::modules::codex_thread_sync::capture_remote_launch_context(
+                &codex_home,
+                &candidates,
+            )
+        }) {
+            Ok(context) => context,
+            Err(error) => {
+                logger::log_warn(&format!(
+                    "[Codex SSH] 捕获远端启动上下文失败，将按默认上下文重启: {}",
+                    error
+                ));
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     if user_config.codex_launch_on_switch {
         let launch_started = Instant::now();
@@ -879,7 +931,11 @@ pub async fn switch_codex_account(
         if process::is_codex_running() {
             logger::log_info("检测到 Codex 正在运行，将按默认实例 PID 逻辑重启");
         }
-        match crate::commands::codex_instance::codex_start_default_with_prepared_profile().await {
+        match crate::commands::codex_instance::codex_start_default_with_prepared_profile(
+            remote_launch_context,
+        )
+        .await
+        {
             Ok(_) => {}
             Err(e) => {
                 logger::log_warn(&format!("Codex 启动失败: {}", e));
@@ -3560,7 +3616,8 @@ pub async fn codex_local_access_activate(
         if process::is_codex_running() {
             logger::log_info("检测到 Codex 正在运行，将按默认实例 PID 逻辑重启");
         }
-        match crate::commands::codex_instance::codex_start_default_with_prepared_profile().await {
+        match crate::commands::codex_instance::codex_start_default_with_prepared_profile(None).await
+        {
             Ok(_) => {}
             Err(e) => {
                 logger::log_warn(&format!("Codex 启动失败: {}", e));
