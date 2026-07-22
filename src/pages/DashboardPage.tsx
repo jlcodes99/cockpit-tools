@@ -117,6 +117,7 @@ import {
 } from '../services/codexApiKeyUsageRefreshService';
 import {
   isModelProviderUsageUnavailableError,
+  resolveNewApiQuotaSnapshot,
   type ModelProviderUsageSummary,
 } from '../services/modelProviderUsageService';
 import * as traeService from '../services/traeService';
@@ -2283,18 +2284,13 @@ export function DashboardPage({
       const usageState = codexApiUsageMap[account.id];
       const usageSummary = usageState?.summary;
       const usageMode = resolveDashboardCodexApiUsageMode(usageSummary);
-      const newApiGranted = Number(
-        usageSummary?.details?.find((item) => item.key === 'totalGranted')?.value ?? NaN,
-      );
-      const newApiAvailable = Number(
-        usageSummary?.details?.find((item) => item.key === 'totalAvailable')?.value ?? NaN,
-      );
-      const newApiExpiresAt = Number(
-        usageSummary?.details?.find((item) => item.key === 'expiresAt')?.value ?? NaN,
-      );
+      const newApiQuota = resolveNewApiQuotaSnapshot(usageSummary);
+      const newApiGranted = newApiQuota.granted;
+      const newApiAvailable = newApiQuota.available;
+      const newApiExpiresAt = newApiQuota.expiresAt;
       const isUnlimited = usageSummary?.quotaUnlimited === true;
       const progressPercent =
-        usageMode === 'new_api' && Number.isFinite(newApiGranted) && Number.isFinite(newApiAvailable) && newApiGranted > 0
+        usageMode === 'new_api' && newApiGranted != null && newApiAvailable != null && newApiGranted > 0
           ? Math.max(0, Math.min(100, Math.round(((newApiGranted - newApiAvailable) / newApiGranted) * 100)))
           : isUnlimited
             ? 100
@@ -2322,7 +2318,7 @@ export function DashboardPage({
                     <span className="model-pct high">
                       {isUnlimited
                         ? t('codex.newApi.quota.unlimited', '不限量')
-                        : Number.isFinite(newApiAvailable) && Number.isFinite(newApiGranted)
+                        : newApiAvailable != null && newApiGranted != null
                           ? `$${newApiAvailable.toFixed(2)} / $${newApiGranted.toFixed(2)}`
                           : '-'}
                     </span>
@@ -2334,7 +2330,7 @@ export function DashboardPage({
                     />
                   </div>
                   <div className="mini-reset-time">
-                    {Number.isFinite(newApiExpiresAt) && newApiExpiresAt > 0
+                    {newApiExpiresAt != null && newApiExpiresAt > 0
                       ? `${t('codex.modelProviders.usage.fields.expiresAt', '过期时间')} ${new Date(newApiExpiresAt * 1000).toLocaleDateString()}`
                       : t('dashboard.noData', '暂无数据')}
                   </div>

@@ -99,6 +99,9 @@ import {
   CODEX_API_KEY_USAGE_REFRESHED_EVENT,
   readCodexApiKeyUsageCache,
 } from "../../services/codexApiKeyUsageRefreshService";
+import {
+  resolveNewApiQuotaSnapshot,
+} from "../../services/modelProviderUsageService";
 import { useSponsorStore } from "../../stores/useSponsorStore";
 import type { Sponsor } from "../../types/sponsor";
 import {
@@ -3342,32 +3345,11 @@ export function CodexModelProviderManager({
               usageSummary?.mode === "new_api" || usageSummary?.mode === "sub2api"
                 ? usageSummary.mode
                 : provider.integrationType ?? null;
-            const detailMap = new Map(
-              (usageSummary?.details ?? []).map((item) => [item.key, item.value]),
-            );
-            const totalGrantedValue = detailMap.get("totalGranted");
-            const totalAvailableValue = detailMap.get("totalAvailable");
-            const expiresAtValue = detailMap.get("expiresAt");
-            const totalGranted =
-              typeof totalGrantedValue === "number"
-                ? totalGrantedValue
-                : typeof totalGrantedValue === "string"
-                  ? Number(totalGrantedValue)
-                  : null;
-            const totalAvailable =
-              typeof totalAvailableValue === "number"
-                ? totalAvailableValue
-                : typeof totalAvailableValue === "string"
-                  ? Number(totalAvailableValue)
-                : typeof usageSummary?.quotaRemaining === "number"
-                  ? usageSummary.quotaRemaining
-                  : null;
-            const expiresAt =
-              typeof expiresAtValue === "number"
-                ? expiresAtValue
-                : typeof expiresAtValue === "string"
-                  ? Number(expiresAtValue)
-                  : null;
+            const {
+              granted: totalGranted,
+              available: totalAvailable,
+              expiresAt,
+            } = resolveNewApiQuotaSnapshot(usageSummary);
             const progressPercent =
               usageMode === "new_api" &&
               totalGranted != null &&
@@ -5510,6 +5492,7 @@ export function CodexModelProviderManager({
             })) as CodexServicePanelMetricItem[]),
         ];
 
+        const newApiQuota = resolveNewApiQuotaSnapshot(usageSummary);
         const coreMetrics: CodexServicePanelMetricItem[] =
           usageMode === "new_api"
             ? [
@@ -5519,11 +5502,7 @@ export function CodexModelProviderManager({
                   value: formatUsageDetailValue(
                     {
                       key: "totalGranted",
-                      value:
-                        String(
-                          usageSummary?.details?.find((item) => item.key === "totalGranted")
-                            ?.value ?? "-",
-                        ),
+                      value: String(newApiQuota.granted ?? "-"),
                     },
                     usageSummary?.unit,
                   ),
@@ -5534,11 +5513,7 @@ export function CodexModelProviderManager({
                   value: formatUsageDetailValue(
                     {
                       key: "totalAvailable",
-                      value:
-                        String(
-                          usageSummary?.details?.find((item) => item.key === "totalAvailable")
-                            ?.value ?? "-",
-                        ),
+                      value: String(newApiQuota.available ?? "-"),
                     },
                     usageSummary?.unit,
                   ),
@@ -5549,11 +5524,7 @@ export function CodexModelProviderManager({
                   value: formatUsageDetailValue(
                     {
                       key: "expiresAt",
-                      value:
-                        String(
-                          usageSummary?.details?.find((item) => item.key === "expiresAt")
-                            ?.value ?? "-",
-                        ),
+                      value: String(newApiQuota.expiresAt ?? "-"),
                     },
                     usageSummary?.unit,
                   ),
