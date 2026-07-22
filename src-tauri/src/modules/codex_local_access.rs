@@ -9220,13 +9220,24 @@ fn restore_config_toml_from_takeover_backup(
         crate::modules::codex_config_format::read_codex_config_doc_from_str(current_config)
             .map_err(|e| format!("解析当前 Codex config.toml 失败: {}", e))?
     };
-    let backup_doc = match backup_config.filter(|content| !content.trim().is_empty()) {
+    let mut backup_doc = match backup_config.filter(|content| !content.trim().is_empty()) {
         Some(content) => Some(
             crate::modules::codex_config_format::read_codex_config_doc_from_str(content)
                 .map_err(|e| format!("解析 Codex API 服务接管备份 config.toml 失败: {}", e))?,
         ),
         None => None,
     };
+    if backup_doc
+        .as_ref()
+        .and_then(|doc| doc.get("model_catalog_json"))
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        == Some(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE)
+    {
+        if let Some(doc) = backup_doc.as_mut() {
+            let _ = doc.remove("model_catalog_json");
+        }
+    }
 
     let current_selected_local_access = current_doc
         .get("model_provider")
@@ -28407,6 +28418,37 @@ wire_api = "responses"
                 .and_then(|value| value.as_str()),
             Some("keep-current")
         );
+    }
+
+    #[test]
+    fn takeover_backup_restore_drops_stale_local_access_catalog() {
+        let current = r#"model_provider = "codex_local_access"
+model_catalog_json = "cockpit-local-access-model-catalog.json"
+
+[model_providers.codex_local_access]
+name = "Codex API Service"
+base_url = "http://localhost:14998/v1"
+wire_api = "responses"
+requires_openai_auth = false
+experimental_bearer_token = "agt_codex_test"
+"#;
+        let stale_backup = r#"model_provider = "openai"
+model_catalog_json = "cockpit-local-access-model-catalog.json"
+model_context_window = 1000000
+"#;
+
+        let output = restore_config_toml_from_takeover_backup(Some(current), Some(stale_backup))
+            .expect("restore config")
+            .expect("restored content");
+        let parsed = output
+            .parse::<toml_edit::Document>()
+            .expect("parse restored toml");
+
+        assert_eq!(
+            parsed.get("model_provider").and_then(|item| item.as_str()),
+            Some("openai")
+        );
+        assert!(parsed.get("model_catalog_json").is_none());
     }
 
     #[test]
