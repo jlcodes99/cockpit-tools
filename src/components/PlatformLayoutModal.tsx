@@ -42,8 +42,10 @@ import {
 import { CLASSIC_SIDEBAR_ENTRY_LIMIT, ORIGINAL_SIDEBAR_ENTRY_LIMIT, useSideNavLayoutStore } from '../stores/useSideNavLayoutStore';
 import { getPlatformLabel, renderPlatformIcon } from '../utils/platformMeta';
 import { useEscClose } from '../hooks/useEscClose';
-
-const PLATFORM_LAYOUT_ICON_STORAGE_KEY = 'agtools.platform_layout.custom_icons.v1';
+import {
+  PLATFORM_LAYOUT_ICON_STORAGE_KEY,
+  persistPlatformLayoutCustomIcons,
+} from '../utils/platformLayoutIconStorage';
 
 interface PlatformLayoutModalProps {
   open: boolean;
@@ -387,6 +389,7 @@ export function PlatformLayoutModal({
   const [dropChildTarget, setDropChildTarget] = useState<{ groupId: string; platformId: PlatformId } | null>(null);
 
   const [customIcons, setCustomIcons] = useState<PlatformLayoutCustomIcon[]>(() => loadCustomIcons());
+  const [customIconStorageFailed, setCustomIconStorageFailed] = useState(false);
 
   const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
   const [addingChildGroupId, setAddingChildGroupId] = useState<string | null>(null);
@@ -522,7 +525,9 @@ export function PlatformLayoutModal({
     if (typeof window === 'undefined') {
       return;
     }
-    localStorage.setItem(PLATFORM_LAYOUT_ICON_STORAGE_KEY, JSON.stringify(customIcons));
+    setCustomIconStorageFailed(
+      !persistPlatformLayoutCustomIcons(localStorage, customIcons),
+    );
   }, [customIcons]);
 
   useEffect(() => {
@@ -1126,6 +1131,15 @@ export function PlatformLayoutModal({
               { max: sidebarSelectionLimit },
             )}
           </div>
+
+          {customIconStorageFailed && (
+            <div className="platform-layout-group-error" role="alert">
+              {t(
+                'platformLayout.customIconStorageFailed',
+                '自定义图标无法保存，本地存储空间可能已满。删除不再使用的自定义图标后重试。',
+              )}
+            </div>
+          )}
 
           <div className="platform-layout-bulk-header">
             <div className="platform-layout-bulk-header-left">
