@@ -350,6 +350,7 @@ struct SqliteTimestampRepairPlan {
 
 #[derive(Debug, Clone, Copy)]
 struct ThreadsTableColumns {
+    id: bool,
     model_provider: bool,
     has_user_event: bool,
     first_user_message: bool,
@@ -2071,19 +2072,60 @@ fn collect_rollout_thread_facts(
     Ok(facts)
 }
 
-fn to_desktop_workspace_path(value: &str) -> Option<String> {
-    let stripped = value.trim();
-    if stripped.is_empty() {
+pub(crate) fn to_desktop_workspace_path(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
         return None;
     }
-    let lower = stripped.to_ascii_lowercase();
+
+    let lower = value.to_ascii_lowercase();
+    let mut normalized = value.to_string();
     if lower.starts_with(r"\\?\unc\") {
-        return Some(format!(r"\\{}", stripped[8..].replace('/', r"\")));
+        normalized = format!(r"\\{}", &value[8..]);
+    } else if lower.starts_with(r"\\?\") {
+        normalized = value[4..].to_string();
     }
-    if stripped.starts_with(r"\\?\") {
-        return Some(stripped[4..].replace('\\', "/"));
+
+    if is_windows_workspace_path(&normalized) {
+        trim_safe_windows_trailing_separators(&mut normalized);
     }
-    Some(stripped.to_string())
+    Some(normalized)
+}
+
+fn is_windows_workspace_path(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    value.starts_with(r"\\")
+        || value.starts_with("//")
+        || bytes.get(1).is_some_and(|separator| *separator == b':')
+}
+
+fn trim_safe_windows_trailing_separators(value: &mut String) {
+    while matches!(value.as_bytes().last(), Some(b'\\' | b'/')) {
+        let bytes = value.as_bytes();
+        let is_drive_root = bytes.len() == 3
+            && bytes.get(1) == Some(&b':')
+            && matches!(bytes.get(2), Some(b'\\' | b'/'));
+        if is_drive_root {
+            break;
+        }
+
+        let starts_with_unc_prefix = bytes.len() >= 2
+            && matches!(bytes.first(), Some(b'\\' | b'/'))
+            && matches!(bytes.get(1), Some(b'\\' | b'/'));
+        if starts_with_unc_prefix {
+            let component_count = value[2..]
+                .split(['\\', '/'])
+                .filter(|component| !component.is_empty())
+                .count();
+            if component_count < 2 {
+                break;
+            }
+        } else if value.len() <= 1 {
+            break;
+        }
+
+        value.pop();
+    }
 }
 
 fn list_rollout_files(root_dir: &Path) -> Result<Vec<PathBuf>, String> {
@@ -2846,6 +2888,119 @@ fn log_skipped_sqlite_database(path: &Path, reason: &str) {
     ));
 }
 
+fn collect_sqlite_cwd_normalizations(
+    connection: &Connection,
+    db_path: &Path,
+    selection: &RepairTargetSelection,
+) -> Result<Vec<(String, String)>, String> {
+    let mut statement = connection
+        .prepare("SELECT id, cwd FROM threads WHERE COALESCE(cwd, '') <> ''")
+        .map_err(|error| format_sqlite_read_error(db_path, "读取 SQLite cwd 失败", &error))?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((row.get::<usize, String>(0)?, row.get::<usize, String>(1)?))
+        })
+        .map_err(|error| format_sqlite_read_error(db_path, "读取 SQLite cwd 失败", &error))?;
+    let mut normalizations = Vec::new();
+    for row in rows {
+        let (thread_id, cwd) =
+            row.map_err(|error| format_sqlite_read_error(db_path, "读取 SQLite cwd 失败", &error))?;
+        if !selection.includes_session_id(&thread_id) || !is_windows_workspace_path(cwd.trim()) {
+            continue;
+        }
+        let Some(normalized) = to_desktop_workspace_path(&cwd) else {
+            continue;
+        };
+        if normalized != cwd {
+            normalizations.push((thread_id, normalized));
+        }
+    }
+    Ok(normalizations)
+}
+
+fn normalize_sqlite_thread_cwds_for_db(
+    db_path: &Path,
+    selection: &RepairTargetSelection,
+) -> Result<usize, String> {
+    if !db_path.exists() {
+        return Ok(0);
+    }
+
+    let mut connection = match Connection::open(db_path) {
+        Ok(connection) => connection,
+        Err(error) if modules::db::is_unusable_sqlite_database_error(&error) => {
+            log_skipped_sqlite_database(db_path, &error.to_string());
+            return Ok(0);
+        }
+        Err(error) => {
+            return Err(format!(
+                "打开实例数据库失败 ({}): {}",
+                db_path.display(),
+                error
+            ));
+        }
+    };
+    connection
+        .busy_timeout(Duration::from_secs(3))
+        .map_err(|error| {
+            format!(
+                "设置 SQLite busy_timeout 失败 ({}): {}",
+                db_path.display(),
+                error
+            )
+        })?;
+    let columns = match read_threads_table_columns(&connection) {
+        Ok(columns) => columns,
+        Err(error) if modules::db::is_unusable_sqlite_database_error(&error) => {
+            log_skipped_sqlite_database(db_path, &error.to_string());
+            return Ok(0);
+        }
+        Err(error) => {
+            return Err(format_sqlite_read_error(
+                db_path,
+                "读取 SQLite threads 表结构失败",
+                &error,
+            ));
+        }
+    };
+    let Some(columns) = columns else {
+        return Ok(0);
+    };
+    if !columns.id || !columns.cwd {
+        return Ok(0);
+    }
+
+    let normalizations = collect_sqlite_cwd_normalizations(&connection, db_path, selection)?;
+    if normalizations.is_empty() {
+        return Ok(0);
+    }
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format_sqlite_write_error(db_path, &error))?;
+    let mut updated_rows = 0usize;
+    for (thread_id, cwd) in normalizations {
+        updated_rows += transaction
+            .execute(
+                "UPDATE threads SET cwd = ?1 WHERE id = ?2 AND COALESCE(cwd, '') <> ?1",
+                (cwd.as_str(), thread_id.as_str()),
+            )
+            .map_err(|error| format_sqlite_write_error(db_path, &error))?;
+    }
+    transaction
+        .commit()
+        .map_err(|error| format_sqlite_write_error(db_path, &error))?;
+    Ok(updated_rows)
+}
+
+pub(crate) fn normalize_official_thread_cwds(data_dir: &Path) -> Result<usize, String> {
+    let selection = RepairTargetSelection::default();
+    let mut total = 0usize;
+    for db_path in official_state_db_candidate_paths(data_dir) {
+        total += normalize_sqlite_thread_cwds_for_db(&db_path, &selection)?;
+    }
+    Ok(total)
+}
+
 fn count_sqlite_rows_to_update(
     data_dir: &Path,
     target_provider: &str,
@@ -3045,6 +3200,9 @@ fn count_sqlite_rows_to_update_for_db(
             }
         }
     }
+    if columns.id && columns.cwd {
+        count += collect_sqlite_cwd_normalizations(&connection, db_path, selection)?.len() as i64;
+    }
     Ok(SqliteProviderScan {
         rows_to_update: count.max(0) as usize,
         skipped_unusable_database: false,
@@ -3129,6 +3287,11 @@ fn update_sqlite_provider_for_db(
     let Some(columns) = columns else {
         return Ok(0);
     };
+    let cwd_normalizations = if columns.id && columns.cwd {
+        collect_sqlite_cwd_normalizations(&connection, db_path, selection)?
+    } else {
+        Vec::new()
+    };
     let transaction = connection
         .transaction()
         .map_err(|error| format_sqlite_write_error(db_path, &error))?;
@@ -3195,6 +3358,14 @@ fn update_sqlite_provider_for_db(
             }
         }
     }
+    for (thread_id, cwd) in cwd_normalizations {
+        updated_rows += transaction
+            .execute(
+                "UPDATE threads SET cwd = ?1 WHERE id = ?2 AND COALESCE(cwd, '') <> ?1",
+                (cwd.as_str(), thread_id.as_str()),
+            )
+            .map_err(|error| format_sqlite_write_error(db_path, &error))?;
+    }
     if let Err(error) = transaction.commit() {
         if modules::db::is_unusable_sqlite_database_error(&error) {
             log_skipped_sqlite_database(db_path, &error.to_string());
@@ -3219,6 +3390,7 @@ fn read_threads_table_columns(
         return Ok(None);
     }
     Ok(Some(ThreadsTableColumns {
+        id: names.contains("id"),
         model_provider: names.contains("model_provider"),
         has_user_event: names.contains("has_user_event"),
         first_user_message: names.contains("first_user_message"),
@@ -3855,6 +4027,106 @@ mod tests {
         mode: CodexSessionVisibilityRepairMode,
     ) -> CodexSessionVisibilityRepairOptions {
         CodexSessionVisibilityRepairOptions::for_mode(mode)
+    }
+
+    #[test]
+    fn desktop_workspace_path_normalizes_windows_extended_paths() {
+        assert_eq!(
+            to_desktop_workspace_path(r"\\?\D:\Andrew\Code\pxread\").as_deref(),
+            Some(r"D:\Andrew\Code\pxread")
+        );
+        assert_eq!(
+            to_desktop_workspace_path(r"\\?\UNC\server\share\repo\").as_deref(),
+            Some(r"\\server\share\repo")
+        );
+        assert_eq!(
+            to_desktop_workspace_path(r"\\?\C:\").as_deref(),
+            Some(r"C:\")
+        );
+        assert_eq!(
+            to_desktop_workspace_path("/Users/demo/project/").as_deref(),
+            Some("/Users/demo/project/")
+        );
+    }
+
+    #[test]
+    fn quick_sqlite_repair_normalizes_existing_windows_extended_cwds() {
+        let data_dir = make_temp_dir("codex-session-cwd-normalization-test");
+        let db_path = data_dir.join(STATE_DB_FILE);
+        let connection = Connection::open(&db_path).expect("open sqlite");
+        connection
+            .execute(
+                "CREATE TABLE threads (
+                    id TEXT PRIMARY KEY,
+                    model_provider TEXT,
+                    cwd TEXT
+                )",
+                [],
+            )
+            .expect("create threads table");
+        connection
+            .execute(
+                "INSERT INTO threads (id, model_provider, cwd) VALUES
+                 ('drive', 'relay', '\\\\?\\D:\\Andrew\\Code\\pxread\\'),
+                 ('unc', 'relay', '\\\\?\\UNC\\server\\share\\repo\\'),
+                 ('posix', 'relay', '/Users/demo/project/')",
+                [],
+            )
+            .expect("insert rows");
+        drop(connection);
+
+        let options = repair_options(CodexSessionVisibilityRepairMode::Quick);
+        let selection = RepairTargetSelection::default();
+        let scan = count_sqlite_rows_to_update_for_options(&data_dir, "relay", options, &selection)
+            .expect("scan sqlite");
+        assert_eq!(scan.rows_to_update, 2);
+
+        let updated_rows =
+            update_sqlite_provider_for_options(&data_dir, "relay", options, &selection)
+                .expect("update sqlite");
+        assert_eq!(updated_rows, 2);
+
+        let connection = Connection::open(&db_path).expect("reopen sqlite");
+        let drive = connection
+            .query_row("SELECT cwd FROM threads WHERE id = 'drive'", [], |row| {
+                row.get::<usize, String>(0)
+            })
+            .expect("read drive cwd");
+        let unc = connection
+            .query_row("SELECT cwd FROM threads WHERE id = 'unc'", [], |row| {
+                row.get::<usize, String>(0)
+            })
+            .expect("read unc cwd");
+        let posix = connection
+            .query_row("SELECT cwd FROM threads WHERE id = 'posix'", [], |row| {
+                row.get::<usize, String>(0)
+            })
+            .expect("read posix cwd");
+        assert_eq!(drive, r"D:\Andrew\Code\pxread");
+        assert_eq!(unc, r"\\server\share\repo");
+        assert_eq!(posix, "/Users/demo/project/");
+        connection
+            .execute(
+                "UPDATE threads SET cwd = '\\\\?\\D:\\Andrew\\Code\\pxread\\' WHERE id = 'drive'",
+                [],
+            )
+            .expect("simulate metadata rebuild");
+        drop(connection);
+
+        assert_eq!(
+            normalize_official_thread_cwds(&data_dir).expect("normalize rebuilt metadata"),
+            1
+        );
+        let connection = Connection::open(&db_path).expect("reopen normalized sqlite");
+        let rebuilt_drive = connection
+            .query_row("SELECT cwd FROM threads WHERE id = 'drive'", [], |row| {
+                row.get::<usize, String>(0)
+            })
+            .expect("read rebuilt drive cwd");
+        assert_eq!(rebuilt_drive, r"D:\Andrew\Code\pxread");
+        drop(connection);
+
+        fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
 
     #[test]

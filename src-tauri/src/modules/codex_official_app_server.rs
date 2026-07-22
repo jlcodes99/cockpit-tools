@@ -152,6 +152,18 @@ pub fn rebuild_thread_metadata(codex_home: &Path) -> Result<(), String> {
         finish_started.elapsed().as_millis(),
         flow_started.elapsed().as_millis()
     ));
+    let result = result.and_then(|()| {
+        let normalized_count =
+            crate::modules::codex_session_visibility::normalize_official_thread_cwds(codex_home)?;
+        if normalized_count > 0 {
+            crate::modules::logger::log_info(&format!(
+                "[Codex Official AppServer] normalized {} Desktop thread cwd row(s): codex_home={}",
+                normalized_count,
+                codex_home.display()
+            ));
+        }
+        Ok(())
+    });
     if let Err(error) = &result {
         crate::modules::logger::log_warn(&format!(
             "[Codex Official AppServer] rebuild_thread_metadata failed: codex_home={}, elapsed_ms={}, error={}",
