@@ -89,19 +89,6 @@ pub fn normalize_config_toml_spacing(content: &str) -> String {
     normalized
 }
 
-pub fn sanitize_codex_config_doc(doc: &mut Document) -> bool {
-    if doc
-        .get(CODEX_FEATURES_KEY)
-        .and_then(|item| item.as_table())
-        .is_none()
-    {
-        return false;
-    }
-
-    let _ = doc.remove(CODEX_FEATURES_KEY);
-    true
-}
-
 pub fn codex_config_doc_to_string(doc: &mut Document) -> String {
     normalize_config_toml_spacing(&doc.to_string())
 }
@@ -289,7 +276,7 @@ fn inspect_codex_config_file(path: &Path) -> Result<String, String> {
     let (doc, sanitized) =
         parse_codex_config_doc(&content).map_err(|error| format!("parse_failed={}", error))?;
     let features = match doc.get(CODEX_FEATURES_KEY) {
-        Some(item) if item.as_table().is_some() => "legacy_table".to_string(),
+        Some(item) if item.as_table().is_some() => "table".to_string(),
         Some(item) if item.as_value().and_then(|value| value.as_bool()).is_some() => format!(
             "bool:{}",
             item.as_value()
@@ -346,15 +333,14 @@ fn sanitize_codex_config_toml_file_once(path: &Path) -> Result<bool, String> {
 
     prepare_codex_config_file_for_write(path)?;
 
-    let (mut doc, input_changed) = parse_codex_config_doc(&content).map_err(|error| {
+    let (doc, input_changed) = parse_codex_config_doc(&content).map_err(|error| {
         format!(
             "解析 Codex config.toml 失败 ({}): {}",
             path.display(),
             error
         )
     })?;
-    let doc_changed = sanitize_codex_config_doc(&mut doc);
-    if !input_changed && !doc_changed {
+    if !input_changed {
         return Ok(false);
     }
 
@@ -377,11 +363,24 @@ fn sanitize_codex_config_toml_file_once(path: &Path) -> Result<bool, String> {
 mod tests {
     use super::{
         codex_config_doc_to_string, normalize_config_toml_spacing, parse_codex_config_doc,
-        sanitize_codex_config_doc, sanitize_codex_config_toml_file,
+        sanitize_codex_config_toml_file,
     };
     use std::fs;
+    use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
     use toml_edit::Document;
+
+    fn unique_temp_dir() -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "cockpit-codex-config-format-{}-{}",
+            std::process::id(),
+            unique
+        ))
+    }
 
     #[test]
     fn collapses_repeated_blank_lines() {
@@ -395,26 +394,34 @@ mod tests {
     }
 
     #[test]
-    fn removes_legacy_features_table() {
-        let mut doc = r#"
+    fn keeps_official_features_table() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let config_path = dir.join("config.toml");
+        let input = r#"
 model = "deepseek-v4-pro"
 
 [features]
+memories = true
 multi_agent = true
 js_repl = false
 
 [desktop]
 default-service-tier = "priority"
-"#
-        .parse::<Document>()
-        .expect("parse config");
+"#;
+        fs::write(&config_path, input).expect("write config");
 
-        assert!(sanitize_codex_config_doc(&mut doc));
+        assert!(!sanitize_codex_config_toml_file(&config_path).expect("sanitize config"));
 
-        let output = doc.to_string();
-        assert!(!output.contains("[features]"));
+        let output = fs::read_to_string(&config_path).expect("read config");
+        assert!(output.contains("[features]"));
+        assert!(output.contains("memories = true"));
+        assert!(output.contains("multi_agent = true"));
+        assert!(output.contains("js_repl = false"));
         assert!(output.contains("model = \"deepseek-v4-pro\""));
         assert!(output.contains("[desktop]"));
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -425,8 +432,6 @@ features = true
 "#
         .parse::<Document>()
         .expect("parse config");
-
-        assert!(!sanitize_codex_config_doc(&mut doc));
 
         let output = codex_config_doc_to_string(&mut doc);
         assert!(output.contains("features = true"));
@@ -493,15 +498,7 @@ features = true
 
     #[test]
     fn sanitizes_backup_file_next_to_config() {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system time should be after unix epoch")
-            .as_nanos();
-        let dir = std::env::temp_dir().join(format!(
-            "cockpit-codex-config-format-{}-{}",
-            std::process::id(),
-            unique
-        ));
+        let dir = unique_temp_dir();
         fs::create_dir_all(&dir).expect("create temp dir");
         let config_path = dir.join("config.toml");
         let backup_path = dir.join("config.toml.bak");
@@ -509,14 +506,16 @@ features = true
         fs::write(&config_path, "model = \"gpt-5\"\n").expect("write config");
         fs::write(
             &backup_path,
-            "model = \"gpt-5\"\n\n[features]\njs_repl = false\n",
+            "\u{feff}model = \"gpt-5\"\n\n[features]\nmemories = true\njs_repl = false\n",
         )
         .expect("write backup");
 
         assert!(sanitize_codex_config_toml_file(&config_path).expect("sanitize config"));
 
         let backup = fs::read_to_string(&backup_path).expect("read backup");
-        assert!(!backup.contains("[features]"));
+        assert!(!backup.starts_with('\u{feff}'));
+        assert!(backup.contains("[features]"));
+        assert!(backup.contains("memories = true"));
         assert!(backup.contains("model = \"gpt-5\""));
 
         let _ = fs::remove_dir_all(&dir);
