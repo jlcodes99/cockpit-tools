@@ -5393,6 +5393,132 @@ fn merge_collection_and_account_excluded_models(
     normalize_model_rule_list(rules)
 }
 
+fn normalize_quota_limit_name_to_model_pattern(limit_name: &str) -> Option<String> {
+    let trimmed = limit_name.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(trimmed.to_ascii_lowercase().replace(' ', "-"))
+}
+
+fn metered_features_in_quota_raw(raw: &Value) -> HashSet<String> {
+    let mut features = HashSet::new();
+    let Some(limits) = raw.get("additional_rate_limits").and_then(Value::as_array) else {
+        return features;
+    };
+    for entry in limits {
+        let Some(feature) = entry
+            .get("metered_feature")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            continue;
+        };
+        features.insert(feature.to_ascii_lowercase());
+    }
+    features
+}
+
+fn quota_disallowed_model_patterns(account: &CodexAccount) -> Vec<String> {
+    let Some(raw) = account.quota.as_ref().and_then(|quota| quota.raw_data.as_ref()) else {
+        return Vec::new();
+    };
+    let Some(limits) = raw.get("additional_rate_limits").and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    let mut patterns = Vec::new();
+    for entry in limits {
+        let allowed = entry
+            .get("rate_limit")
+            .and_then(|value| value.get("allowed"))
+            .and_then(Value::as_bool);
+        if allowed != Some(false) {
+            continue;
+        }
+        let Some(limit_name) = entry.get("limit_name").and_then(Value::as_str) else {
+            continue;
+        };
+        if let Some(pattern) = normalize_quota_limit_name_to_model_pattern(limit_name) {
+            patterns.push(pattern);
+        }
+    }
+    patterns
+}
+
+fn metered_feature_model_patterns_for_pool(
+    collection: &CodexLocalAccessCollection,
+) -> HashMap<String, String> {
+    let accounts = codex_account::list_accounts_checked().ok();
+    let mut patterns = HashMap::new();
+    for account_id in &collection.account_ids {
+        let Some(accounts) = accounts.as_ref() else {
+            break;
+        };
+        let Some(account) = accounts.iter().find(|account| account.id == *account_id) else {
+            continue;
+        };
+        let Some(raw) = account.quota.as_ref().and_then(|quota| quota.raw_data.as_ref()) else {
+            continue;
+        };
+        let Some(limits) = raw.get("additional_rate_limits").and_then(Value::as_array) else {
+            continue;
+        };
+        for entry in limits {
+            let feature = entry
+                .get("metered_feature")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_ascii_lowercase);
+            let limit_name = entry.get("limit_name").and_then(Value::as_str);
+            if let (Some(feature), Some(limit_name)) = (feature, limit_name) {
+                if let Some(pattern) = normalize_quota_limit_name_to_model_pattern(limit_name) {
+                    patterns.entry(feature).or_insert(pattern);
+                }
+            }
+        }
+    }
+    patterns
+}
+
+fn implicit_metered_feature_exclusions(
+    account: &CodexAccount,
+    feature_patterns: &HashMap<String, String>,
+) -> Vec<String> {
+    if feature_patterns.is_empty() {
+        return Vec::new();
+    }
+    let Some(raw) = account.quota.as_ref().and_then(|quota| quota.raw_data.as_ref()) else {
+        return Vec::new();
+    };
+    let present = metered_features_in_quota_raw(raw);
+    feature_patterns
+        .iter()
+        .filter_map(|(feature, pattern)| {
+            if present.contains(feature) {
+                None
+            } else {
+                Some(pattern.clone())
+            }
+        })
+        .collect()
+}
+
+fn sidecar_excluded_models_for_account(
+    account: &CodexAccount,
+    collection: &CodexLocalAccessCollection,
+    metered_feature_patterns: &HashMap<String, String>,
+) -> Vec<String> {
+    let mut excluded = merge_collection_and_account_excluded_models(collection, &account.id);
+    excluded.extend(quota_disallowed_model_patterns(account));
+    excluded.extend(implicit_metered_feature_exclusions(
+        account,
+        metered_feature_patterns,
+    ));
+    normalize_model_rule_list(excluded)
+}
+
 fn custom_rule_map(rules: &[CodexLocalAccessCustomRoutingRule]) -> HashMap<&str, (i32, u32, bool)> {
     rules
         .iter()
@@ -10453,6 +10579,7 @@ fn sidecar_auth_json_for_account(
     account: &CodexAccount,
     collection: &CodexLocalAccessCollection,
     proxy_url: Option<&str>,
+    metered_feature_patterns: &HashMap<String, String>,
 ) -> Value {
     let account_id = account
         .account_id
@@ -10460,7 +10587,8 @@ fn sidecar_auth_json_for_account(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or(account.id.as_str());
-    let excluded_models = merge_collection_and_account_excluded_models(collection, &account.id);
+    let excluded_models =
+        sidecar_excluded_models_for_account(account, collection, metered_feature_patterns);
     if let Some(identity) = account.agent_identity.as_ref() {
         let mut value = json!({
             "type": "codex",
@@ -10625,6 +10753,7 @@ fn sync_sidecar_auth_file_for_account_with_task_source(
         &effective_account,
         &collection,
         proxy_signature.proxy_url.as_deref(),
+        &metered_feature_model_patterns_for_pool(&collection),
     );
     let auth_content = serde_json::to_string_pretty(&auth_json)
         .map_err(|e| format!("序列化 sidecar Codex OAuth 认证失败: {}", e))?;
@@ -11018,7 +11147,9 @@ fn sidecar_codex_key_config_value(
         ));
         return None;
     };
-    let excluded_models = merge_collection_and_account_excluded_models(collection, &account.id);
+    let metered_feature_patterns = metered_feature_model_patterns_for_pool(collection);
+    let excluded_models =
+        sidecar_excluded_models_for_account(account, collection, &metered_feature_patterns);
     let mut value = json!({
         "api-key": api_key,
         "base-url": base_url,
@@ -11372,6 +11503,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
     let mut manifest_accounts = Vec::new();
     let mut codex_keys = Vec::new();
     let mut expected_auth_files = HashSet::new();
+    let metered_feature_patterns = metered_feature_model_patterns_for_pool(collection);
     for (index, account_id) in effective_sidecar_account_ids(collection)
         .into_iter()
         .enumerate()
@@ -11432,8 +11564,12 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         let auth_path = auths_dir.join(&file_name);
         expected_auth_files.insert(file_name.clone());
         adopt_sidecar_agent_identity_task(&mut account, &auth_path)?;
-        let auth_json =
-            sidecar_auth_json_for_account(&account, collection, effective_proxy_url_ref);
+        let auth_json = sidecar_auth_json_for_account(
+            &account,
+            collection,
+            effective_proxy_url_ref,
+            &metered_feature_patterns,
+        );
         let auth_content = serde_json::to_string_pretty(&auth_json)
             .map_err(|e| format!("序列化 sidecar Codex OAuth 认证失败: {}", e))?;
         write_string_atomic_if_changed(&auth_path, &auth_content)?;
@@ -26870,6 +27006,80 @@ wire_api = "responses"
         );
     }
 
+    #[test]
+    fn sidecar_auth_auto_excludes_disallowed_metered_models() {
+        let mut account = test_account_with_plan("plus");
+        account.quota = Some(CodexQuota {
+            hourly_percentage: 0,
+            hourly_reset_time: None,
+            hourly_window_minutes: None,
+            hourly_window_present: None,
+            weekly_percentage: 0,
+            weekly_reset_time: None,
+            weekly_window_minutes: None,
+            weekly_window_present: None,
+            reset_credits_available: None,
+            reset_credits: Vec::new(),
+            reset_credits_next_expires_at: None,
+            raw_data: Some(json!({
+                "additional_rate_limits": [{
+                    "limit_name": "GPT-5.3-Codex-Spark",
+                    "metered_feature": "codex_spark",
+                    "rate_limit": { "allowed": false }
+                }]
+            })),
+        });
+        let collection = test_local_access_collection(vec![account.id.clone()]);
+        let auth_json = sidecar_auth_json_for_account(&account, &collection, None, &HashMap::new());
+        let excluded = auth_json["excluded_models"]
+            .as_array()
+            .expect("excluded_models should be an array");
+        assert!(
+            excluded
+                .iter()
+                .filter_map(Value::as_str)
+                .any(|rule| rule.contains("spark")),
+            "disallowed metered models should be written into sidecar auth exclusions"
+        );
+    }
+
+    #[test]
+    fn sidecar_auth_implicitly_excludes_missing_metered_features_from_pool() {
+        let mut plus = test_account_with_plan("plus");
+        plus.id = "plus-account".to_string();
+        plus.quota = Some(CodexQuota {
+            hourly_percentage: 0,
+            hourly_reset_time: None,
+            hourly_window_minutes: None,
+            hourly_window_present: None,
+            weekly_percentage: 0,
+            weekly_reset_time: None,
+            weekly_window_minutes: None,
+            weekly_window_present: None,
+            reset_credits_available: None,
+            reset_credits: Vec::new(),
+            reset_credits_next_expires_at: None,
+            raw_data: Some(json!({ "additional_rate_limits": [] })),
+        });
+        let mut patterns = HashMap::new();
+        patterns.insert(
+            "codex_spark".to_string(),
+            "gpt-5.3-codex-spark".to_string(),
+        );
+        let collection = test_local_access_collection(vec![plus.id.clone()]);
+        let auth_json = sidecar_auth_json_for_account(&plus, &collection, None, &patterns);
+        let excluded = auth_json["excluded_models"]
+            .as_array()
+            .expect("excluded_models should be an array");
+        assert!(
+            excluded
+                .iter()
+                .filter_map(Value::as_str)
+                .any(|rule| rule == "gpt-5.3-codex-spark"),
+            "accounts without a pool metered feature should inherit that feature's model pattern"
+        );
+    }
+
     fn make_temp_dir(prefix: &str) -> PathBuf {
         for _ in 0..10 {
             let dir = std::env::temp_dir().join(format!(
@@ -27081,7 +27291,7 @@ wire_api = "responses"
         );
         let mut collection = test_local_access_collection(vec![account.id.clone()]);
 
-        let auth_json = sidecar_auth_json_for_account(&account, &collection, None);
+        let auth_json = sidecar_auth_json_for_account(&account, &collection, None, &HashMap::new());
 
         assert_eq!(
             auth_json.get("last_refresh").and_then(Value::as_str),
@@ -27100,7 +27310,8 @@ wire_api = "responses"
         );
 
         collection.responses_websockets_enabled = true;
-        let enabled_auth_json = sidecar_auth_json_for_account(&account, &collection, None);
+        let enabled_auth_json =
+            sidecar_auth_json_for_account(&account, &collection, None, &HashMap::new());
         assert_eq!(
             enabled_auth_json.get("websockets").and_then(Value::as_bool),
             Some(true)
@@ -27132,7 +27343,7 @@ wire_api = "responses"
         account.plan_type = Some("plus".to_string());
         let collection = test_local_access_collection(vec![account.id.clone()]);
 
-        let auth_json = sidecar_auth_json_for_account(&account, &collection, None);
+        let auth_json = sidecar_auth_json_for_account(&account, &collection, None, &HashMap::new());
         assert_eq!(
             auth_json.get("auth_mode").and_then(Value::as_str),
             Some("agentIdentity")
@@ -27299,7 +27510,7 @@ wire_api = "responses"
         );
         let collection = test_local_access_collection(vec![account.id.clone()]);
 
-        let auth_json = sidecar_auth_json_for_account(&account, &collection, None);
+        let auth_json = sidecar_auth_json_for_account(&account, &collection, None, &HashMap::new());
 
         assert_eq!(
             auth_json.get("auth_mode").and_then(Value::as_str),
