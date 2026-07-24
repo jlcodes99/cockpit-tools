@@ -220,6 +220,7 @@ interface GeneralConfig {
   openclaw_auth_overwrite_on_switch: boolean;
   hermes_auth_overwrite_on_switch?: boolean;
   codex_launch_on_switch: boolean;
+  codex_preserve_user_preferences: boolean;
   antigravity_launch_on_switch: boolean;
   codex_restart_specified_app_on_switch: boolean;
   codex_local_access_entry_visible: boolean;
@@ -618,6 +619,7 @@ export function SettingsPage() {
   const [openclawAuthOverwriteOnSwitch, setOpenclawAuthOverwriteOnSwitch] = useState(false);
   const [hermesAuthOverwriteOnSwitch, setHermesAuthOverwriteOnSwitch] = useState(false);
   const [codexLaunchOnSwitch, setCodexLaunchOnSwitch] = useState(true);
+  const [codexPreserveUserPreferences, setCodexPreserveUserPreferences] = useState(true);
   const [antigravityLaunchOnSwitch, setAntigravityLaunchOnSwitch] = useState(true);
   const [codexRestartSpecifiedAppOnSwitch, setCodexRestartSpecifiedAppOnSwitch] = useState(false);
   const [codexLocalAccessEntryVisible, setCodexLocalAccessEntryVisible] = useState(true);
@@ -1089,6 +1091,7 @@ export function SettingsPage() {
       openclaw_auth_overwrite_on_switch: openclawAuthOverwriteOnSwitch,
       hermes_auth_overwrite_on_switch: hermesAuthOverwriteOnSwitch,
       codex_launch_on_switch: codexLaunchOnSwitch,
+      codex_preserve_user_preferences: codexPreserveUserPreferences,
       antigravity_launch_on_switch: antigravityLaunchOnSwitch,
       codex_restart_specified_app_on_switch: codexRestartSpecifiedAppOnSwitch,
       codex_local_access_entry_visible: codexLocalAccessEntryVisible,
@@ -1684,6 +1687,7 @@ export function SettingsPage() {
       setOpenclawAuthOverwriteOnSwitch(config.openclaw_auth_overwrite_on_switch ?? false);
       setHermesAuthOverwriteOnSwitch(config.hermes_auth_overwrite_on_switch ?? false);
       setCodexLaunchOnSwitch(config.codex_launch_on_switch ?? true);
+      setCodexPreserveUserPreferences(config.codex_preserve_user_preferences ?? true);
       setAntigravityLaunchOnSwitch(config.antigravity_launch_on_switch ?? true);
       setCodexRestartSpecifiedAppOnSwitch(
         config.codex_restart_specified_app_on_switch ?? false,
@@ -4506,6 +4510,30 @@ export function SettingsPage() {
                       type="checkbox"
                       checked={codexLaunchOnSwitch}
                       onChange={(e) => setCodexLaunchOnSwitch(e.target.checked)}
+                    />
+                    <span className="slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="row-label">
+                  <div className="row-title">
+                    {t('settings.general.codexPreserveUserPreferences', '保留 Codex 个性化设置')}
+                  </div>
+                  <div className="row-desc">
+                    {t(
+                      'settings.general.codexPreserveUserPreferencesDesc',
+                      '切换账号或启动 Codex 时保留 Memory、思考档位及其他 Codex 设置',
+                    )}
+                  </div>
+                </div>
+                <div className="row-control">
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={codexPreserveUserPreferences}
+                      onChange={(e) => setCodexPreserveUserPreferences(e.target.checked)}
                     />
                     <span className="slider"></span>
                   </label>

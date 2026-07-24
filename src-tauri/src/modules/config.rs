@@ -361,6 +361,9 @@ pub struct UserConfig {
     /// 切换 Codex 时是否自动启动/重启 Codex App
     #[serde(default = "default_codex_launch_on_switch")]
     pub codex_launch_on_switch: bool,
+    /// 启动或切换账号时是否保留 Codex 个性化配置
+    #[serde(default = "default_codex_preserve_user_preferences")]
+    pub codex_preserve_user_preferences: bool,
     /// 切换 Antigravity IDE 时是否自动启动/重启应用
     #[serde(default = "default_antigravity_launch_on_switch")]
     pub antigravity_launch_on_switch: bool,
@@ -946,6 +949,9 @@ fn default_hermes_auth_overwrite_on_switch() -> bool {
 fn default_codex_launch_on_switch() -> bool {
     true
 }
+fn default_codex_preserve_user_preferences() -> bool {
+    true
+}
 fn default_antigravity_launch_on_switch() -> bool {
     true
 }
@@ -1206,6 +1212,7 @@ impl Default for UserConfig {
             openclaw_auth_overwrite_on_switch: default_openclaw_auth_overwrite_on_switch(),
             hermes_auth_overwrite_on_switch: default_hermes_auth_overwrite_on_switch(),
             codex_launch_on_switch: default_codex_launch_on_switch(),
+            codex_preserve_user_preferences: default_codex_preserve_user_preferences(),
             antigravity_launch_on_switch: default_antigravity_launch_on_switch(),
             codex_restart_specified_app_on_switch: default_codex_restart_specified_app_on_switch(),
             codex_local_access_entry_visible: default_codex_local_access_entry_visible(),

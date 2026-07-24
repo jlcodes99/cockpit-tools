@@ -1081,6 +1081,8 @@
       "antigravityStartupWakeupDesc": "应用启动后按此策略触发一次已启用的 Antigravity IDE 唤醒任务",
       "codexLaunchOnSwitch": "切换 Codex 时自动启动 Codex App",
       "codexLaunchOnSwitchDesc": "切换账号后自动启动或重启 Codex App",
+      "codexPreserveUserPreferences": "保留 Codex 个性化设置",
+      "codexPreserveUserPreferencesDesc": "切换账号或启动 Codex 时保留 Memory、思考档位及其他 Codex 设置",
       "codexRestartSpecifiedAppOnSwitch": "切换 Codex 时重启指定应用",
       "codexRestartSpecifiedAppOnSwitchDesc": "开启后按下方路径重启指定应用（适用于依赖插件宿主的场景）",
       "codexSpecifiedAppPath": "指定应用启动路径",

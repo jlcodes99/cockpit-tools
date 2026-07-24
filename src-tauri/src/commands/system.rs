@@ -216,6 +216,8 @@ pub struct GeneralConfig {
     pub hermes_auth_overwrite_on_switch: bool,
     /// 切换 Codex 时是否自动启动/重启 Codex App
     pub codex_launch_on_switch: bool,
+    /// 启动或切换账号时是否保留 Codex 个性化配置
+    pub codex_preserve_user_preferences: bool,
     /// 切换 Antigravity IDE 时是否自动启动/重启应用
     pub antigravity_launch_on_switch: bool,
     /// 切换 Codex 时是否自动重启指定应用
@@ -1101,6 +1103,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "openclaw_auth_overwrite_on_switch"
             | "hermes_auth_overwrite_on_switch"
             | "codex_launch_on_switch"
+            | "codex_preserve_user_preferences"
             | "antigravity_launch_on_switch"
             | "codex_restart_specified_app_on_switch"
             | "codex_local_access_entry_visible"
@@ -2615,6 +2618,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         openclaw_auth_overwrite_on_switch: user_config.openclaw_auth_overwrite_on_switch,
         hermes_auth_overwrite_on_switch: user_config.hermes_auth_overwrite_on_switch,
         codex_launch_on_switch: user_config.codex_launch_on_switch,
+        codex_preserve_user_preferences: user_config.codex_preserve_user_preferences,
         antigravity_launch_on_switch: user_config.antigravity_launch_on_switch,
         codex_restart_specified_app_on_switch: user_config.codex_restart_specified_app_on_switch,
         codex_local_access_entry_visible: user_config.codex_local_access_entry_visible,
@@ -2970,6 +2974,7 @@ pub fn save_general_config(
     openclaw_auth_overwrite_on_switch: Option<bool>,
     hermes_auth_overwrite_on_switch: Option<bool>,
     codex_launch_on_switch: bool,
+    codex_preserve_user_preferences: Option<bool>,
     antigravity_launch_on_switch: Option<bool>,
     codex_restart_specified_app_on_switch: Option<bool>,
     codex_local_access_entry_visible: Option<bool>,
@@ -3335,6 +3340,9 @@ pub fn save_general_config(
             current.hermes_auth_overwrite_on_switch = value;
         }
         current.codex_launch_on_switch = codex_launch_on_switch;
+        if let Some(value) = codex_preserve_user_preferences {
+            current.codex_preserve_user_preferences = value;
+        }
         if let Some(value) = antigravity_launch_on_switch {
             current.antigravity_launch_on_switch = value;
         }

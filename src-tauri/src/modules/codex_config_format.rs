@@ -89,7 +89,14 @@ pub fn normalize_config_toml_spacing(content: &str) -> String {
     normalized
 }
 
-pub fn sanitize_codex_config_doc(doc: &mut Document) -> bool {
+pub fn sanitize_codex_config_doc_with_preferences(
+    doc: &mut Document,
+    preserve_user_preferences: bool,
+) -> bool {
+    if preserve_user_preferences {
+        return false;
+    }
+
     if doc
         .get(CODEX_FEATURES_KEY)
         .and_then(|item| item.as_table())
@@ -100,6 +107,10 @@ pub fn sanitize_codex_config_doc(doc: &mut Document) -> bool {
 
     let _ = doc.remove(CODEX_FEATURES_KEY);
     true
+}
+
+pub fn sanitize_codex_config_doc(doc: &mut Document) -> bool {
+    sanitize_codex_config_doc_with_preferences(doc, false)
 }
 
 pub fn codex_config_doc_to_string(doc: &mut Document) -> String {
@@ -232,15 +243,25 @@ pub fn read_codex_config_doc_from_str(content: &str) -> Result<Document, String>
 }
 
 pub fn sanitize_codex_config_toml_file(path: &Path) -> Result<bool, String> {
+    let preserve_user_preferences =
+        crate::modules::config::get_user_config().codex_preserve_user_preferences;
+    sanitize_codex_config_toml_file_with_preferences(path, preserve_user_preferences)
+}
+
+pub fn sanitize_codex_config_toml_file_with_preferences(
+    path: &Path,
+    preserve_user_preferences: bool,
+) -> Result<bool, String> {
     log_codex_config_audit(path, "before-sanitize");
-    let changed = sanitize_codex_config_toml_file_once(path)?;
+    let changed = sanitize_codex_config_toml_file_once(path, preserve_user_preferences)?;
     let backup_path = path.with_file_name(format!(
         "{}.bak",
         path.file_name()
             .and_then(|item| item.to_str())
             .unwrap_or("config.toml")
     ));
-    let backup_changed = sanitize_codex_config_toml_file_once(&backup_path)?;
+    let backup_changed =
+        sanitize_codex_config_toml_file_once(&backup_path, preserve_user_preferences)?;
     let changed_any = changed || backup_changed;
     log_codex_config_audit(path, "after-sanitize");
     Ok(changed_any)
@@ -328,7 +349,10 @@ fn inspect_codex_config_file(path: &Path) -> Result<String, String> {
     ))
 }
 
-fn sanitize_codex_config_toml_file_once(path: &Path) -> Result<bool, String> {
+fn sanitize_codex_config_toml_file_once(
+    path: &Path,
+    preserve_user_preferences: bool,
+) -> Result<bool, String> {
     let content = match fs::read_to_string(path) {
         Ok(content) => content,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
@@ -353,7 +377,8 @@ fn sanitize_codex_config_toml_file_once(path: &Path) -> Result<bool, String> {
             error
         )
     })?;
-    let doc_changed = sanitize_codex_config_doc(&mut doc);
+    let doc_changed =
+        sanitize_codex_config_doc_with_preferences(&mut doc, preserve_user_preferences);
     if !input_changed && !doc_changed {
         return Ok(false);
     }
@@ -377,7 +402,8 @@ fn sanitize_codex_config_toml_file_once(path: &Path) -> Result<bool, String> {
 mod tests {
     use super::{
         codex_config_doc_to_string, normalize_config_toml_spacing, parse_codex_config_doc,
-        sanitize_codex_config_doc, sanitize_codex_config_toml_file,
+        sanitize_codex_config_doc, sanitize_codex_config_doc_with_preferences,
+        sanitize_codex_config_toml_file_with_preferences,
     };
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -415,6 +441,31 @@ default-service-tier = "priority"
         assert!(!output.contains("[features]"));
         assert!(output.contains("model = \"deepseek-v4-pro\""));
         assert!(output.contains("[desktop]"));
+    }
+
+    #[test]
+    fn preserves_user_preferences_when_enabled() {
+        let mut doc = r#"
+[features]
+memories = true
+js_repl = false
+
+[memories]
+foo = "bar"
+
+[desktop]
+enabled-reasoning-efforts = ["low", "medium", "high", "xhigh", "ultra", "max"]
+"#
+        .parse::<Document>()
+        .expect("parse config");
+
+        assert!(!sanitize_codex_config_doc_with_preferences(&mut doc, true));
+
+        let output = doc.to_string();
+        assert!(output.contains("memories = true"));
+        assert!(output.contains("[memories]"));
+        assert!(output.contains("enabled-reasoning-efforts"));
+        assert!(output.contains("\"max\""));
     }
 
     #[test]
@@ -513,7 +564,10 @@ features = true
         )
         .expect("write backup");
 
-        assert!(sanitize_codex_config_toml_file(&config_path).expect("sanitize config"));
+        assert!(
+            sanitize_codex_config_toml_file_with_preferences(&config_path, false)
+                .expect("sanitize config")
+        );
 
         let backup = fs::read_to_string(&backup_path).expect("read backup");
         assert!(!backup.contains("[features]"));

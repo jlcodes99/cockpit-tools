@@ -1081,6 +1081,8 @@
       "antigravityStartupWakeupDesc": "Run enabled Antigravity IDE wakeup tasks once after app startup",
       "codexLaunchOnSwitch": "Launch Codex App when switching Codex",
       "codexLaunchOnSwitchDesc": "Start or restart Codex App after switching accounts",
+      "codexPreserveUserPreferences": "Preserve Codex personal settings",
+      "codexPreserveUserPreferencesDesc": "Keep Memory, reasoning levels, and other Codex settings when switching accounts or launching Codex",
       "codexRestartSpecifiedAppOnSwitch": "Restart specified app when switching Codex",
       "codexRestartSpecifiedAppOnSwitchDesc": "When enabled, restart the app at the path below (for plugin-host workflows).",
       "codexSpecifiedAppPath": "Specified app path",
