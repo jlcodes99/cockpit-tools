@@ -14,14 +14,20 @@ import {
   loadMfaHistoryRecords,
   loadSavedMfaRecords,
   normalizeMfaRecord,
+  parseGoogleAuthenticatorMigrationBatch,
   parseMfaCredentialInput,
+  parseMfaCredentialInputs,
   toMfaSecretIdentity,
+  type GoogleAuthenticatorMigrationBatch,
   type MfaRecord,
   type ParsedMfaCredential,
 } from '../utils/mfaVault';
 
 type SortDirection = 'asc' | 'desc';
 type ListTab = 'saved' | 'history';
+type MigrationBatchState = GoogleAuthenticatorMigrationBatch & {
+  credentialsByIndex: Record<number, ParsedMfaCredential[]>;
+};
 const MAX_HISTORY = 50;
 
 async function decodeQrTextFromImage(file: Blob): Promise<string | null> {
@@ -67,6 +73,8 @@ export function MfaVaultManager() {
   const [inputValue, setInputValue] = useState('');
   const [inputError, setInputError] = useState('');
   const [recognizingImage, setRecognizingImage] = useState(false);
+  const [migrationBatches, setMigrationBatches] = useState<Record<string, MigrationBatchState>>({});
+  const [activeMigrationBatchId, setActiveMigrationBatchId] = useState<string | null>(null);
 
   const [activeQuery, setActiveQuery] = useState<ParsedMfaCredential | null>(null);
   const [activeListTab, setActiveListTab] = useState<ListTab>('saved');
@@ -81,6 +89,15 @@ export function MfaVaultManager() {
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const [timeRemaining, setTimeRemaining] = useState(() => getMfaTimeRemaining());
+
+  const activeMigrationBatch = activeMigrationBatchId
+    ? migrationBatches[activeMigrationBatchId] || null
+    : null;
+  const activeMigrationPartCount = activeMigrationBatch
+    ? Object.keys(activeMigrationBatch.credentialsByIndex).length
+    : 0;
+  const activeMigrationIsComplete = !!activeMigrationBatch
+    && activeMigrationPartCount >= activeMigrationBatch.batchSize;
 
   useEffect(() => {
     localStorage.setItem(MFA_STORAGE_KEY_SAVED, JSON.stringify(records));
@@ -127,7 +144,42 @@ export function MfaVaultManager() {
     });
   };
 
+  const collectMigrationBatch = (batch: GoogleAuthenticatorMigrationBatch) => {
+    const batchId = String(batch.batchId);
+    setMigrationBatches(prev => {
+      const current = prev[batchId];
+      return {
+        ...prev,
+        [batchId]: {
+          ...batch,
+          batchSize: Math.max(current?.batchSize || 0, batch.batchSize),
+          credentialsByIndex: {
+            ...(current?.credentialsByIndex || {}),
+            [batch.batchIndex]: batch.credentials,
+          },
+        },
+      };
+    });
+    setActiveMigrationBatchId(batchId);
+  };
+
+  const clearActiveMigrationBatch = () => {
+    if (!activeMigrationBatchId) return;
+    setMigrationBatches(prev => {
+      const next = { ...prev };
+      delete next[activeMigrationBatchId];
+      return next;
+    });
+    setActiveMigrationBatchId(null);
+    setInputValue('');
+    setActiveQuery(null);
+    setInputError('');
+  };
+
   const parseAndQuery = (rawInput: string, invalidMessage?: string): ParsedMfaCredential | null => {
+    const migrationBatch = parseGoogleAuthenticatorMigrationBatch(rawInput);
+    if (migrationBatch) collectMigrationBatch(migrationBatch);
+
     const parsed = parseMfaCredentialInput(rawInput);
     if (!parsed) {
       setInputError(invalidMessage || t('mfaVault.invalidOtpAuthInput'));
@@ -143,40 +195,54 @@ export function MfaVaultManager() {
   };
 
   const handleSave = () => {
-    const parsed = parseMfaCredentialInput(inputValue);
+    const migrationBatch = parseGoogleAuthenticatorMigrationBatch(inputValue);
+    const collectedMigrationBatch = migrationBatch
+      ? migrationBatches[String(migrationBatch.batchId)]
+      : null;
+    const parsedCredentials = collectedMigrationBatch
+      ? Object.values(collectedMigrationBatch.credentialsByIndex).flat()
+      : parseMfaCredentialInputs(inputValue);
 
-    if (!parsed) {
+    if (parsedCredentials.length === 0) {
       setInputError(t('mfaVault.invalidOtpAuthInput'));
       return;
     }
 
-    const finalAccountName = parsed.accountName || activeQuery?.accountName || '';
-
     setRecords(prev => {
-      const parsedIdentity = toMfaSecretIdentity(parsed.secret);
-      const existsIndex = prev.findIndex(record => toMfaSecretIdentity(record.secret) === parsedIdentity);
-      if (existsIndex >= 0) {
-        return prev.map((record, idx) => (
-          idx === existsIndex
-            ? {
-                ...record,
-                accountName: record.accountName || finalAccountName,
-              }
-            : record
-        ));
+      let nextRecords = [...prev];
+      for (const parsed of parsedCredentials) {
+        const finalAccountName = parsed.accountName || activeQuery?.accountName || '';
+        const parsedIdentity = toMfaSecretIdentity(parsed.secret);
+        const existsIndex = nextRecords.findIndex(record => toMfaSecretIdentity(record.secret) === parsedIdentity);
+        if (existsIndex >= 0) {
+          nextRecords[existsIndex] = {
+            ...nextRecords[existsIndex],
+            accountName: nextRecords[existsIndex].accountName || finalAccountName,
+          };
+        } else {
+          nextRecords = [{
+            id: createMfaRecordId(),
+            accountName: finalAccountName,
+            secret: parsed.secret,
+            remark: '',
+            time: Date.now(),
+          }, ...nextRecords];
+        }
       }
-
-      const newRecord: MfaRecord = {
-        id: createMfaRecordId(),
-        accountName: finalAccountName,
-        secret: parsed.secret,
-        remark: '',
-        time: Date.now(),
-      };
-      return [newRecord, ...prev];
+      return dedupeMfaRecordsBySecret(nextRecords);
     });
 
     setInputError('');
+
+    if (migrationBatch && collectedMigrationBatch
+      && Object.keys(collectedMigrationBatch.credentialsByIndex).length >= collectedMigrationBatch.batchSize) {
+      setMigrationBatches(prev => {
+        const next = { ...prev };
+        delete next[String(migrationBatch.batchId)];
+        return next;
+      });
+      setActiveMigrationBatchId(current => current === String(migrationBatch.batchId) ? null : current);
+    }
   };
 
   const handleLoadFromHistory = (record: MfaRecord) => {
@@ -612,6 +678,29 @@ export function MfaVaultManager() {
               {' '}
               {t('mfaVault.pasteQrImageHint')}
             </div>
+            {activeMigrationBatch && (
+              <div className="mfa-vault-manual-hint">
+                {t('mfaVault.migrationBatchProgress', 'Google Authenticator 迁移批次：已识别 {{scanned}}/{{total}} 张二维码。')
+                  .replace('{{scanned}}', activeMigrationPartCount.toString())
+                  .replace('{{total}}', activeMigrationBatch.batchSize.toString())}
+                {!activeMigrationIsComplete && (
+                  <> {t('mfaVault.migrationBatchIncomplete', '批次未完成，仍可保存已扫描账号。')}</>
+                )}
+                <div className="query-actions-row">
+                  <button className="btn btn-secondary btn-sm" onClick={openUploadDialog} disabled={recognizingImage}>
+                    <Upload size={14} /> {t('mfaVault.continueMigrationScan', '继续扫描')}
+                  </button>
+                  <button className="btn btn-secondary btn-sm" onClick={handleSave} disabled={recognizingImage}>
+                    {activeMigrationIsComplete
+                      ? t('mfaVault.saveCompleteMigrationBatch', '保存完整批次')
+                      : t('mfaVault.savePartialMigrationBatch', '保存已扫描账号')}
+                  </button>
+                  <button className="btn btn-secondary btn-sm" onClick={clearActiveMigrationBatch}>
+                    {t('mfaVault.clearMigrationBatch', '清空批次')}
+                  </button>
+                </div>
+              </div>
+            )}
             {inputError && <div className="mfa-vault-inline-error">{inputError}</div>}
           </div>
 

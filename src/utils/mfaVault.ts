@@ -1,4 +1,5 @@
 import * as OTPAuth from 'otpauth';
+import { Root } from 'protobufjs/light.js';
 
 export interface MfaRecord {
   id: string;
@@ -13,6 +14,13 @@ export interface ParsedMfaCredential {
   secret: string;
 }
 
+export interface GoogleAuthenticatorMigrationBatch {
+  batchId: number;
+  batchIndex: number;
+  batchSize: number;
+  credentials: ParsedMfaCredential[];
+}
+
 export const MFA_STORAGE_KEY_SAVED = 'agtools.mfa.vault.v2';
 export const MFA_STORAGE_KEY_HISTORY = 'agtools.2fa.query.history.v1';
 
@@ -20,6 +28,75 @@ const LEGACY_STORAGE_KEY_SAVED_MFA = 'agtools.mfa.vault.v1';
 const LEGACY_STORAGE_KEY_SAVED_2FA = 'agtools.two_factor_auth.saved.v2';
 const LEGACY_STORAGE_KEY_HISTORY_2FA = 'agtools.two_factor_auth.history.v2';
 const MAX_HISTORY = 50;
+
+interface GoogleAuthenticatorMigrationOtp {
+  secret?: Uint8Array;
+  name?: string;
+  issuer?: string;
+  type?: number;
+}
+
+interface GoogleAuthenticatorMigrationPayload {
+  otpParameters?: GoogleAuthenticatorMigrationOtp[];
+  batchSize?: number;
+  batchIndex?: number;
+  batchId?: number;
+}
+
+const googleAuthenticatorMigrationPayloadType = Root.fromJSON({
+  nested: {
+    MigrationPayload: {
+      fields: {
+        otpParameters: { rule: 'repeated', type: 'OtpParameters', id: 1 },
+        version: { type: 'int32', id: 2 },
+        batchSize: { type: 'int32', id: 3 },
+        batchIndex: { type: 'int32', id: 4 },
+        batchId: { type: 'int32', id: 5 },
+      },
+    },
+    OtpParameters: {
+      fields: {
+        secret: { type: 'bytes', id: 1 },
+        name: { type: 'string', id: 2 },
+        issuer: { type: 'string', id: 3 },
+        algorithm: { type: 'int32', id: 4 },
+        digits: { type: 'int32', id: 5 },
+        type: { type: 'int32', id: 6 },
+        counter: { type: 'int64', id: 7 },
+      },
+    },
+  },
+}).lookupType('MigrationPayload');
+
+function decodeBase64Url(value: string): Uint8Array | null {
+  try {
+    const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const binary = atob(padded);
+    return Uint8Array.from(binary, char => char.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+function encodeBase32(bytes: Uint8Array): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let buffer = 0;
+  let bits = 0;
+  let result = '';
+
+  for (const byte of bytes) {
+    buffer = (buffer << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      result += alphabet[(buffer >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+
+  if (bits > 0) result += alphabet[(buffer << (5 - bits)) & 31];
+  return result;
+}
 
 export function createMfaRecordId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -61,31 +138,79 @@ export function toMfaSecretIdentity(secret: string): string {
   return normalized || secret.trim().toUpperCase();
 }
 
-export function parseMfaCredentialInput(rawInput: string): ParsedMfaCredential | null {
+export function parseGoogleAuthenticatorMigrationBatch(rawInput: string): GoogleAuthenticatorMigrationBatch | null {
   const input = rawInput.trim();
-  if (!input) return null;
+  if (!input.startsWith('otpauth-migration://')) return null;
+
+  try {
+    const uri = new URL(input);
+    if (uri.protocol !== 'otpauth-migration:' || uri.hostname !== 'offline') return null;
+
+    const encodedPayload = uri.searchParams.get('data');
+    if (!encodedPayload) return null;
+
+    const bytes = decodeBase64Url(encodedPayload);
+    if (!bytes) return null;
+
+    const decoded = googleAuthenticatorMigrationPayloadType.decode(bytes) as unknown as GoogleAuthenticatorMigrationPayload;
+    const credentials = (decoded.otpParameters || [])
+      .filter(item => item.type === 2 && item.secret && item.secret.length > 0)
+      .map(item => ({
+        accountName: buildAccountDisplayName(item.issuer || '', item.name || ''),
+        secret: encodeBase32(item.secret!),
+      }))
+      .filter(item => !!normalizeStrictBase32(item.secret));
+
+    return {
+      batchId: Number(decoded.batchId) || 0,
+      batchIndex: Math.max(0, Number(decoded.batchIndex) || 0),
+      batchSize: Math.max(1, Number(decoded.batchSize) || 1),
+      credentials,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function parseGoogleAuthenticatorMigrationInput(rawInput: string): ParsedMfaCredential[] | null {
+  const isMigrationInput = rawInput.trim().startsWith('otpauth-migration://');
+  const batch = parseGoogleAuthenticatorMigrationBatch(rawInput);
+  if (batch) return batch.credentials;
+  return isMigrationInput ? [] : null;
+}
+
+export function parseMfaCredentialInputs(rawInput: string): ParsedMfaCredential[] {
+  const input = rawInput.trim();
+  if (!input) return [];
+
+  const migrationCredentials = parseGoogleAuthenticatorMigrationInput(input);
+  if (migrationCredentials) return migrationCredentials;
 
   try {
     const parsed = OTPAuth.URI.parse(input);
     if (parsed instanceof OTPAuth.TOTP) {
       const rawSecret = extractSecretFromOtpAuthUri(input) || parsed.secret?.base32 || '';
       const validated = normalizeStrictBase32(rawSecret);
-      if (!validated) return null;
+      if (!validated) return [];
       const accountName = buildAccountDisplayName(parsed.issuer || '', parsed.label || '');
-      return {
+      return [{
         accountName,
         secret: rawSecret,
-      };
+      }];
     }
   } catch {}
 
   const validated = normalizeStrictBase32(input);
-  if (!validated) return null;
+  if (!validated) return [];
 
-  return {
+  return [{
     accountName: '',
     secret: input,
-  };
+  }];
+}
+
+export function parseMfaCredentialInput(rawInput: string): ParsedMfaCredential | null {
+  return parseMfaCredentialInputs(rawInput)[0] || null;
 }
 
 function parseAlgorithm(raw: string): 'SHA1' | 'SHA256' | 'SHA512' | undefined {
