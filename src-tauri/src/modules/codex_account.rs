@@ -9060,6 +9060,7 @@ mod tests {
     use super::{
         build_account_storage_id, build_agent_identity_account_draft, build_auth_file_value,
         build_legacy_agent_identity_account_id, decode_jwt_payload_value,
+        create_pending_oauth_account,
         detect_auth_file_plan_type_from_path, ensure_managed_account_fresh,
         extract_codex_import_candidate_from_value, extract_codex_tokens_from_value,
         extract_user_info, extract_web_session_agent_identity_candidate,
@@ -9081,6 +9082,7 @@ mod tests {
         write_account_bundle_to_dir, write_api_key_provider_to_config_toml,
         write_api_provider_to_config_toml, write_managed_projection_to_dir,
         write_quick_config_to_config_toml, ApiProviderConfig, CodexAccessTokenImportHints,
+        CodexAccountNoteUpdate,
         CodexAccountGroupRecord, CodexAccountIndex, CodexAccountSummary, CodexAuthFile,
         CodexAuthTokens, CodexGroupQuotaRefreshPolicy, CodexJsonImportCandidate,
         LocalCodexOAuthSnapshot, CODEX_ACCOUNT_DETAIL_SCHEMA_VERSION,
@@ -11117,6 +11119,62 @@ mod tests {
         let accounts = list_accounts_checked().expect("list accounts");
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].id, existing.id);
+    }
+
+    #[test]
+    fn pending_oauth_card_allows_a_second_workspace_for_the_same_email() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let _env = TestEnvGuard::new("codex-pending-oauth-same-email-workspace-test");
+        let email = "workspace@example.com";
+        let personal = upsert_account(make_codex_tokens(
+            email,
+            "acc-shared",
+            "org-personal",
+            "personal",
+            "rt-personal",
+        ))
+        .expect("seed personal workspace");
+
+        let pending = create_pending_oauth_account(
+            email.to_string(),
+            CodexAccountNoteUpdate {
+                note: None,
+                two_factor_secret: None,
+                account_password: None,
+                phone_number: None,
+                mail_url: None,
+            },
+        )
+        .expect("save a second pending OAuth card");
+
+        assert_ne!(pending.id, personal.id);
+        assert!(is_pending_oauth_account(&pending));
+        assert_eq!(list_accounts_checked().expect("list accounts").len(), 2);
+
+        let team = upsert_account_for_reauth(
+            make_codex_tokens(
+                email,
+                "acc-shared",
+                "org-team",
+                "team",
+                "rt-team",
+            ),
+            &pending.id,
+        )
+        .expect("authorize the pending Team workspace card");
+
+        assert_eq!(team.id, pending.id);
+        assert_eq!(team.organization_id.as_deref(), Some("org-team"));
+        assert_eq!(
+            load_account(&personal.id)
+                .expect("load personal workspace")
+                .organization_id
+                .as_deref(),
+            Some("org-personal")
+        );
+        assert_eq!(list_accounts_checked().expect("list accounts").len(), 2);
     }
 
     #[test]
@@ -13463,62 +13521,33 @@ pub fn create_pending_oauth_account(
         normalize_optional_value(Some(email)).ok_or_else(|| "账号邮箱不能为空".to_string())?;
     let mut index = load_account_index();
 
-    if let Some(summary) = index
-        .accounts
-        .iter()
-        .find(|item| item.email.eq_ignore_ascii_case(&email))
-        .cloned()
-    {
-        if let Some(mut account) = load_account(&summary.id) {
-            if !is_pending_oauth_account(&account) {
-                return Err(format!("Codex 账号已存在: {}", email));
-            }
-            apply_account_note_update(&mut account, update);
-            account.email = email.clone();
-            account.last_used = chrono::Utc::now().timestamp();
-            save_account(&account)?;
-            if let Some(item) = index.accounts.iter_mut().find(|item| item.id == account.id) {
-                item.email = account.email.clone();
-                item.plan_type = account.plan_type.clone();
-                item.subscription_active_until = account.subscription_active_until.clone();
-                item.last_used = account.last_used;
-            }
-            save_account_index(&index)?;
-            return Ok(account);
-        }
-    }
-
-    let account_id = build_account_storage_id(&email, Some("pending_oauth"), None);
+    // OAuth only identifies the selected ChatGPT workspace after the callback. Keep each
+    // pending card distinct so one email can authorize its personal and Team workspaces.
+    let account_id = format!(
+        "{}-{}",
+        build_account_storage_id(&email, Some("pending_oauth"), None),
+        uuid::Uuid::new_v4()
+    );
     let now = chrono::Utc::now().timestamp();
-    let mut account = if let Some(mut account) = load_account(&account_id) {
-        if !is_pending_oauth_account(&account) {
-            return Err(format!("Codex 账号已存在: {}", email));
-        }
-        account.email = email.clone();
-        account.last_used = now;
-        account
-    } else {
-        let mut account = CodexAccount::new(
-            account_id.clone(),
-            email.clone(),
-            CodexTokens {
-                id_token: String::new(),
-                access_token: String::new(),
-                refresh_token: None,
-            },
-        );
-        account.auth_mode = CodexAuthMode::OAuth;
-        account.authorization_status = Some(CODEX_AUTHORIZATION_STATUS_PENDING.to_string());
-        account.token_updated_at = None;
-        account.token_generation = 0;
-        account.requires_reauth = false;
-        account.reauth_reason = None;
-        account.quota = None;
-        account.quota_error = None;
-        account.created_at = now;
-        account.last_used = now;
-        account
-    };
+    let mut account = CodexAccount::new(
+        account_id.clone(),
+        email.clone(),
+        CodexTokens {
+            id_token: String::new(),
+            access_token: String::new(),
+            refresh_token: None,
+        },
+    );
+    account.auth_mode = CodexAuthMode::OAuth;
+    account.authorization_status = Some(CODEX_AUTHORIZATION_STATUS_PENDING.to_string());
+    account.token_updated_at = None;
+    account.token_generation = 0;
+    account.requires_reauth = false;
+    account.reauth_reason = None;
+    account.quota = None;
+    account.quota_error = None;
+    account.created_at = now;
+    account.last_used = now;
     apply_account_note_update(&mut account, update);
 
     index.accounts.retain(|item| item.id != account_id);
