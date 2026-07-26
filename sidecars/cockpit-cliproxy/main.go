@@ -3507,6 +3507,9 @@ func readManifestCodexTokenAuth(account *accountSpec, authDir, path string) (*co
 	if proxyURL := firstMetadataString(metadata, "proxy_url", "proxy-url"); proxyURL != "" {
 		auth.ProxyURL = proxyURL
 	}
+	if excluded := authExcludedModelRules(auth); len(excluded) > 0 {
+		auth.Attributes["excluded_models"] = strings.Join(excluded, ",")
+	}
 	coreauth.ApplyCustomHeadersFromMetadata(auth)
 	return auth, nil
 }
@@ -3556,6 +3559,37 @@ func metadataString(metadata map[string]any, key string) string {
 		return strings.TrimSpace(raw)
 	}
 	return ""
+}
+
+func authExcludedModelRules(auth *coreauth.Auth) []string {
+	if auth == nil {
+		return nil
+	}
+	rules := make([]string, 0)
+	if auth.Attributes != nil {
+		if raw := strings.TrimSpace(auth.Attributes["excluded_models"]); raw != "" {
+			rules = append(rules, strings.Split(raw, ",")...)
+		}
+	}
+	for _, key := range []string{"excluded_models", "excluded-models"} {
+		raw, ok := auth.Metadata[key]
+		if !ok || raw == nil {
+			continue
+		}
+		switch value := raw.(type) {
+		case string:
+			rules = append(rules, strings.Split(value, ",")...)
+		case []string:
+			rules = append(rules, value...)
+		case []any:
+			for _, item := range value {
+				if rule, ok := item.(string); ok {
+					rules = append(rules, rule)
+				}
+			}
+		}
+	}
+	return normalizeStringList(rules)
 }
 
 func firstMetadataString(metadata map[string]any, keys ...string) string {
@@ -3707,6 +3741,16 @@ func registerManifestModelsForAuth(manager *coreauth.Manager, m *manifest, auth 
 		return
 	}
 	models := manifestRegistryModels(m)
+	if excluded := authExcludedModelRules(auth); len(excluded) > 0 {
+		filtered := make([]*cliproxy.ModelInfo, 0, len(models))
+		for _, model := range models {
+			if model == nil || modelMatchesAnyRule(model.ID, excluded) {
+				continue
+			}
+			filtered = append(filtered, model)
+		}
+		models = filtered
+	}
 	if len(models) == 0 {
 		cliproxy.GlobalModelRegistry().UnregisterClient(auth.ID)
 		manager.RefreshSchedulerEntry(auth.ID)

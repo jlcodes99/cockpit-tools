@@ -1560,8 +1560,9 @@ func TestSidecarRuntimeRegistersConfigCodexAPIKeyAuths(t *testing.T) {
 	cfg := &config.Config{
 		AuthDir: authDir,
 		CodexKey: []config.CodexKey{{
-			APIKey:  "sk-upstream",
-			BaseURL: "http://127.0.0.1:1",
+			APIKey:         "sk-upstream",
+			BaseURL:        "http://127.0.0.1:1",
+			ExcludedModels: []string{"gpt-5.6-luna"},
 		}},
 	}
 	account := &accountSpec{ID: "api-account", Email: "api@example.com", UpstreamAPIKey: "sk-upstream"}
@@ -1570,7 +1571,7 @@ func TestSidecarRuntimeRegistersConfigCodexAPIKeyAuths(t *testing.T) {
 		accountByID:     map[string]*accountSpec{"api-account": account},
 		accountByAuthID: map[string]*accountSpec{},
 		accountByAPIKey: map[string]*accountSpec{"sk-upstream": account},
-		ModelIDs:        []string{"gpt-5.4"},
+		ModelIDs:        []string{"gpt-5.4", "gpt-5.6-luna"},
 	}
 	manager := buildCoreAuthManager(cfg, &cockpitSelector{manifest: m}, &authHook{manifest: m}, m, nil, newRequestUsageTracker())
 
@@ -1596,6 +1597,18 @@ func TestSidecarRuntimeRegistersConfigCodexAPIKeyAuths(t *testing.T) {
 	if got := m.accountByAuthID[strings.ToLower(codexAPIKeyAuth.ID)]; got == nil || got.ID != "api-account" {
 		t.Fatalf("expected auth to be linked to manifest account, got %#v", got)
 	}
+	if info := findModelInfoForTest(
+		registry.GetGlobalRegistry().GetModelsForClient(codexAPIKeyAuth.ID),
+		"gpt-5.6-luna",
+	); info != nil {
+		t.Fatalf("excluded API key model was restored by manifest registration: %#v", info)
+	}
+	if info := findModelInfoForTest(
+		registry.GetGlobalRegistry().GetModelsForClient(codexAPIKeyAuth.ID),
+		"gpt-5.4",
+	); info == nil {
+		t.Fatal("non-excluded API key model was removed")
+	}
 }
 
 func TestSidecarRuntimeRegistersManifestCodexAccessTokenAuths(t *testing.T) {
@@ -1617,7 +1630,8 @@ func TestSidecarRuntimeRegistersManifestCodexAccessTokenAuths(t *testing.T) {
 		"at_token":"at-runtime-token",
 		"account_id":"acct-token",
 		"openai_auth_mode":"personal_access_token",
-		"proxy_url":"http://127.0.0.1:9"
+		"proxy_url":"http://127.0.0.1:9",
+		"excluded_models":["gpt-5.6-luna"]
 	}`), 0o600); err != nil {
 		t.Fatalf("write auth file: %v", err)
 	}
@@ -1638,7 +1652,7 @@ func TestSidecarRuntimeRegistersManifestCodexAccessTokenAuths(t *testing.T) {
 		accountByAPIKey:  map[string]*accountSpec{},
 		accountByChatGPT: map[string]*accountSpec{"acct-token": account},
 		accountByEmail:   map[string]*accountSpec{"token@example.com": account},
-		ModelIDs:         []string{"gpt-5.4"},
+		ModelIDs:         []string{"gpt-5.4", "gpt-5.6-luna"},
 	}
 	manager := buildCoreAuthManager(cfg, &cockpitSelector{manifest: m}, &authHook{manifest: m}, m, nil, newRequestUsageTracker())
 
@@ -1664,6 +1678,9 @@ func TestSidecarRuntimeRegistersManifestCodexAccessTokenAuths(t *testing.T) {
 	if tokenAuth.ProxyURL != "http://127.0.0.1:9" {
 		t.Fatalf("expected proxy url from auth metadata, got %q", tokenAuth.ProxyURL)
 	}
+	if got := tokenAuth.Attributes["excluded_models"]; got != "gpt-5.6-luna" {
+		t.Fatalf("excluded_models attribute = %q, want gpt-5.6-luna", got)
+	}
 	if got := m.accountByAuthID[strings.ToLower(tokenAuth.ID)]; got == nil || got.ID != "token-account" {
 		t.Fatalf("expected token auth to be linked to manifest account, got %#v", got)
 	}
@@ -1672,6 +1689,96 @@ func TestSidecarRuntimeRegistersManifestCodexAccessTokenAuths(t *testing.T) {
 		"gpt-5.4",
 	); info == nil {
 		t.Fatalf("expected manifest models to be registered for token auth")
+	}
+	if info := findModelInfoForTest(
+		registry.GetGlobalRegistry().GetModelsForClient(tokenAuth.ID),
+		"gpt-5.6-luna",
+	); info != nil {
+		t.Fatalf("excluded token model was restored by manifest registration: %#v", info)
+	}
+}
+
+func TestSidecarRuntimeDoesNotSelectAccountWithExcludedModel(t *testing.T) {
+	tempDir := t.TempDir()
+	authDir := filepath.Join(tempDir, "auths")
+	if err := os.MkdirAll(authDir, 0o755); err != nil {
+		t.Fatalf("create auth dir: %v", err)
+	}
+	configPath := filepath.Join(tempDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("write config path: %v", err)
+	}
+
+	blockedFile := "blocked-luna.json"
+	allowedFile := "allowed-luna.json"
+	if err := os.WriteFile(filepath.Join(authDir, blockedFile), []byte(`{
+		"type":"codex",
+		"email":"blocked@example.com",
+		"access_token":"blocked-token",
+		"account_id":"acct-blocked",
+		"excluded_models":["GPT-5.6-LUNA", "gpt-5.7-*"]
+	}`), 0o600); err != nil {
+		t.Fatalf("write blocked auth: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(authDir, allowedFile), []byte(`{
+		"type":"codex",
+		"email":"allowed@example.com",
+		"access_token":"allowed-token",
+		"account_id":"acct-allowed"
+	}`), 0o600); err != nil {
+		t.Fatalf("write allowed auth: %v", err)
+	}
+
+	m := &manifest{
+		Accounts: []accountSpec{
+			{ID: "blocked-account", Email: "blocked@example.com", AuthID: blockedFile, AuthKind: "oauth"},
+			{ID: "allowed-account", Email: "allowed@example.com", AuthID: allowedFile, AuthKind: "oauth"},
+		},
+		ModelIDs:         []string{"gpt-5.6-luna", "gpt-5.7-preview", "gpt-5.4"},
+		accountByID:      make(map[string]*accountSpec),
+		accountByAuthID:  make(map[string]*accountSpec),
+		accountByAPIKey:  make(map[string]*accountSpec),
+		accountByChatGPT: make(map[string]*accountSpec),
+		accountByEmail:   make(map[string]*accountSpec),
+	}
+	for index := range m.Accounts {
+		account := &m.Accounts[index]
+		m.accountByID[account.ID] = account
+		m.accountByAuthID[strings.ToLower(account.AuthID)] = account
+		m.accountByEmail[strings.ToLower(account.Email)] = account
+	}
+
+	cfg := &config.Config{AuthDir: authDir}
+	manager := buildCoreAuthManager(cfg, &cockpitSelector{manifest: m}, &authHook{manifest: m}, m, nil, newRequestUsageTracker())
+	runtime, err := newSidecarRuntime(context.Background(), configPath, cfg, m, manager)
+	if err != nil {
+		t.Fatalf("newSidecarRuntime: %v", err)
+	}
+	defer runtime.Stop()
+
+	for attempt := 0; attempt < 8; attempt++ {
+		selected, errSelect := manager.SelectAuth(context.Background(), "codex", "gpt-5.6-luna", cliproxyexecutor.Options{})
+		if errSelect != nil {
+			t.Fatalf("SelectAuth attempt %d: %v", attempt, errSelect)
+		}
+		if account := accountForAuthInManifest(m, selected); account == nil || account.ID != "allowed-account" {
+			t.Fatalf("SelectAuth attempt %d selected blocked account: auth=%#v account=%#v", attempt, selected, account)
+		}
+	}
+
+	blockedAuth, ok := manager.GetByID(blockedFile)
+	if !ok || blockedAuth == nil {
+		t.Fatalf("blocked auth %q was not registered", blockedFile)
+	}
+	blockedModels := registry.GetGlobalRegistry().GetModelsForClient(blockedAuth.ID)
+	if info := findModelInfoForTest(blockedModels, "gpt-5.6-luna"); info != nil {
+		t.Fatalf("blocked auth still advertises exact excluded model: %#v", info)
+	}
+	if info := findModelInfoForTest(blockedModels, "gpt-5.7-preview"); info != nil {
+		t.Fatalf("blocked auth still advertises wildcard-excluded model: %#v", info)
+	}
+	if info := findModelInfoForTest(blockedModels, "gpt-5.4"); info == nil {
+		t.Fatal("blocked auth lost a non-excluded model")
 	}
 }
 
