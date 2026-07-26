@@ -772,6 +772,9 @@
   "settings": {
     "title": "应用设置",
     "subtitle": "个性化您的 Cockpit Tools 体验。",
+    "general": {
+      "account": "账号"
+    },
     "tabs": {
       "general": "通用",
       "network": "网络服务",
@@ -2367,6 +2370,7 @@
         "imagesDetail": "生成 {{generate}} / 编辑 {{edit}} / 权限 {{blocked}}",
         "avgLatency": "平均延迟",
         "successRate": "成功率 {{rate}}%",
+        "successRateLabel": "成功率",
         "accountRequests": "{{count}} 次请求",
         "accountTokens": "{{count}} Tokens",
         "accountTokensCompact": "{{value}}",
@@ -3489,6 +3493,10 @@
         "thisWeek": "本周",
         "thisMonth": "本月"
       },
+      "usage": {
+        "title": "用量统计",
+        "lastRecorded": "最近入账"
+      },
       "healthTitle": "服务健康",
       "compat": {
         "title": "协议兼容",
@@ -3578,6 +3586,8 @@
         "pricingRepriceSaveBlocked": "历史估算价值更新中，完成后再保存"
       },
       "keys": {
+        "lastUsed": "最近使用",
+        "routingAccounts": "分流账号",
         "policyTitle": "账号池与模型策略",
         "advancedPolicyTitle": "账号池与模型策略",
         "accountScope": "账号轮转范围",
@@ -3675,6 +3685,9 @@
         "allKinds": "全部类型",
         "allStatuses": "全部状态",
         "allGatewayModes": "全部模式",
+        "allInstances": "全部实例",
+        "instanceFilter": "实例",
+        "instanceUnknown": "实例 -",
         "modelFilter": "模型",
         "modelPlaceholder": "模型 ID",
         "accountFilter": "账号",

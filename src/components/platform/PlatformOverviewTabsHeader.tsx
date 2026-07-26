@@ -227,7 +227,7 @@ export function PlatformOverviewTabsHeader({
       <div className="page-top-strip">
         <div className="page-top-strip-left">
           <span className="page-top-strip-label">
-            {t('settings.general.account', '账号')}
+            {t('settings.general.account', 'Accounts')}
           </span>
           <ManualHelpIconButton className="platform-header-help" />
         </div>

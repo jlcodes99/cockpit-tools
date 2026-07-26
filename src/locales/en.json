@@ -772,6 +772,9 @@
   "settings": {
     "title": "Settings",
     "subtitle": "Customize your Cockpit Tools experience.",
+    "general": {
+      "account": "Accounts"
+    },
     "tabs": {
       "general": "General",
       "network": "Network",
@@ -2367,6 +2370,7 @@
         "imagesDetail": "Generate {{generate}} / Edit {{edit}} / Capability {{blocked}}",
         "avgLatency": "Avg Latency",
         "successRate": "Success Rate {{rate}}%",
+        "successRateLabel": "Success Rate",
         "accountRequests": "{{count}} requests",
         "accountTokens": "{{count}} tokens",
         "accountTokensCompact": "{{value}}",
@@ -3489,6 +3493,10 @@
         "thisWeek": "This week",
         "thisMonth": "This month"
       },
+      "usage": {
+        "title": "Usage Stats",
+        "lastRecorded": "Last recorded"
+      },
       "healthTitle": "Service Health",
       "compat": {
         "title": "Protocol Compat",
@@ -3578,6 +3586,8 @@
         "pricingRepriceSaveBlocked": "Historical estimate update in progress; save after it finishes"
       },
       "keys": {
+        "lastUsed": "Last used",
+        "routingAccounts": "Routing Accounts",
         "policyTitle": "Account Pool & Model Policy",
         "advancedPolicyTitle": "Account Pool & Model Policy",
         "accountScope": "Account Rotation Scope",
@@ -3675,6 +3685,9 @@
         "allKinds": "All Types",
         "allStatuses": "All Statuses",
         "allGatewayModes": "All Modes",
+        "allInstances": "All Instances",
+        "instanceFilter": "Instance",
+        "instanceUnknown": "Instance -",
         "modelFilter": "Model",
         "modelPlaceholder": "Model ID",
         "accountFilter": "Account",

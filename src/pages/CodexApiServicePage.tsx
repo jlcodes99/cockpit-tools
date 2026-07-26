@@ -688,7 +688,7 @@ function instanceDisplayName(
   t: ReturnType<typeof useTranslation>["t"],
 ): string {
   if (instance.isDefault) {
-    return t("instances.defaultName", "默认实例");
+    return t("instances.defaultName", "Default Instance");
   }
   const name = instance.name?.trim();
   return name || instance.id;
@@ -701,7 +701,7 @@ function resolveClientInstanceLabel(
 ): string {
   const id = clientInstanceId?.trim() ?? "";
   if (!id) {
-    return t("codex.apiService.logs.instanceUnknown", "实例 -");
+    return t("codex.apiService.logs.instanceUnknown", "Instance -");
   }
   const matched = instances.find((instance) => {
     const dirId = clientInstanceIdFromUserDataDir(instance.userDataDir || "");
@@ -3106,34 +3106,34 @@ export function CodexApiServicePage() {
     value: RequestLogKindFilter;
     label: string;
   }> = [
-    { value: "all", label: t("codex.apiService.logs.allKinds", "全部类型") },
-    { value: "text", label: t("codex.localAccess.requestKind.text", "文本") },
+    { value: "all", label: t("codex.apiService.logs.allKinds", "All Types") },
+    { value: "text", label: t("codex.localAccess.requestKind.text", "Text") },
     {
       value: "image_generation",
-      label: t("codex.localAccess.requestKind.imageGeneration", "生图"),
+      label: t("codex.localAccess.requestKind.imageGeneration", "Image Gen"),
     },
     {
       value: "image_edit",
-      label: t("codex.localAccess.requestKind.imageEdit", "改图"),
+      label: t("codex.localAccess.requestKind.imageEdit", "Image Edit"),
     },
-    { value: "other", label: t("codex.localAccess.requestKind.other", "其他") },
+    { value: "other", label: t("codex.localAccess.requestKind.other", "Other") },
   ];
   const requestLogStatusOptions: Array<{
     value: RequestLogStatusFilter;
     label: string;
   }> = [
-    { value: "all", label: t("codex.apiService.logs.allStatuses", "全部状态") },
+    { value: "all", label: t("codex.apiService.logs.allStatuses", "All Statuses") },
     {
       value: "success",
-      label: t("codex.localAccess.requestLogSuccess", "成功"),
+      label: t("codex.localAccess.requestLogSuccess", "Success"),
     },
-    { value: "failed", label: t("codex.localAccess.requestLogFailed", "失败") },
+    { value: "failed", label: t("codex.localAccess.requestLogFailed", "Failed") },
   ];
   const requestLogInstanceOptions = useMemo(() => {
     const options: Array<{ value: string; label: string }> = [
       {
         value: "all",
-        label: t("codex.apiService.logs.allInstances", "全部实例"),
+        label: t("codex.apiService.logs.allInstances", "All Instances"),
       },
     ];
     const seen = new Set<string>(["all"]);
@@ -3156,15 +3156,15 @@ export function CodexApiServicePage() {
   }> = [
     {
       value: "all",
-      label: t("codex.apiService.logs.allGatewayModes", "全部模式"),
+      label: t("codex.apiService.logs.allGatewayModes", "All Modes"),
     },
     {
       value: "sidecar",
-      label: t("codex.localAccess.gatewayModeNewLabel", "API 服务-新"),
+      label: t("codex.localAccess.gatewayModeNewLabel", "API Service-New"),
     },
     {
       value: "legacy",
-      label: t("codex.localAccess.gatewayModeOldLabel", "API 服务-旧"),
+      label: t("codex.localAccess.gatewayModeOldLabel", "API Service-Old"),
     },
   ];
   const gatewayModeOptions: Array<{
@@ -3314,7 +3314,7 @@ export function CodexApiServicePage() {
       <div className="page-top-strip">
         <div className="page-top-strip-left">
           <span className="page-top-strip-label">
-            {t("settings.general.account", "账号")}
+            {t("settings.general.account", "Accounts")}
           </span>
           <ManualHelpIconButton className="platform-header-help" />
         </div>
@@ -3549,12 +3549,12 @@ export function CodexApiServicePage() {
             <Activity size={16} />
             <div>
               <strong>
-                {t("codex.apiService.usage.title", "用量统计")}
+                {t("codex.apiService.usage.title", "Usage Stats")}
               </strong>
               <span>
                 {selectedStatsRangeTitle}
                 {stats?.updatedAt
-                  ? ` · ${t("codex.apiService.usage.lastRecorded", "最近入账")} ${formatDateTime(stats.updatedAt)}`
+                  ? ` · ${t("codex.apiService.usage.lastRecorded", "Last recorded")} ${formatDateTime(stats.updatedAt)}`
                   : ""}
               </span>
             </div>
@@ -3961,12 +3961,12 @@ export function CodexApiServicePage() {
                         className={`codex-api-service-pill ${apiKey.enabled ? "success" : "muted"}`}
                       >
                         {apiKey.enabled
-                          ? t("common.enabled", "已启用")
-                          : t("common.disabled", "已停用")}
+                          ? t("common.enabled", "Enabled")
+                          : t("common.disabled", "Disabled")}
                       </span>
                       <span className="codex-api-service-key-last-used">
                         <small>
-                          {t("codex.apiService.keys.lastUsed", "最近使用")}
+                          {t("codex.apiService.keys.lastUsed", "Last used")}
                         </small>
                         <strong>{formatDateTime(apiKey.lastUsedAt)}</strong>
                       </span>
@@ -3977,7 +3977,7 @@ export function CodexApiServicePage() {
                           onClick={() =>
                             void handleCopy(`apiKey:${apiKey.id}`, apiKey.key)
                           }
-                          title={t("common.copy", "复制")}
+                          title={t("common.copy", "Copy")}
                         >
                           {copiedField === `apiKey:${apiKey.id}` ? (
                             <Check size={14} />
@@ -3994,8 +3994,8 @@ export function CodexApiServicePage() {
                           disabled={busy}
                           title={
                             apiKey.enabled
-                              ? t("common.disable", "停用")
-                              : t("common.enable", "启用")
+                              ? t("common.disable", "Disable")
+                              : t("common.enable", "Enable")
                           }
                         >
                           <Power size={14} />
@@ -4007,7 +4007,7 @@ export function CodexApiServicePage() {
                           disabled={busy}
                           title={t(
                             "codex.localAccess.apiKeyRotate",
-                            "轮换 Key",
+                            "Rotate Key",
                           )}
                         >
                           <RefreshCw size={14} />
@@ -4019,7 +4019,7 @@ export function CodexApiServicePage() {
                           disabled={
                             busy || (collection?.apiKeys.length ?? 0) <= 1
                           }
-                          title={t("common.delete", "删除")}
+                          title={t("common.delete", "Delete")}
                         >
                           <Trash2 size={14} />
                         </button>
@@ -4037,23 +4037,23 @@ export function CodexApiServicePage() {
                         <Route size={16} />
                         <div>
                           <span>
-                            {t("codex.apiService.keys.routingAccounts", "分流账号")}
+                            {t("codex.apiService.keys.routingAccounts", "Routing Accounts")}
                           </span>
                           <strong>
                             {persistedInheritAccountPool
                               ? t(
                                   "codex.apiService.keys.accountScopeInheritedCount",
-                                  "继承服务池 · {{count}} 个账号",
+                                  "Account pool: inheriting {{count}}",
                                   { count: memberIds.length },
                                 )
                               : persistedAccountIds.length === 0
                                 ? t(
                                     "codex.apiService.keys.accountScopeUnavailable",
-                                    "无可用账号",
+                                    "Account pool: no available accounts",
                                   )
                                 : t(
                                     "codex.apiService.keys.accountScopeCount",
-                                    "自定义 · {{selected}}/{{total}} 个账号",
+                                    "Account pool: {{selected}}/{{total}}",
                                     {
                                       selected: persistedAccountIds.length,
                                       total: keySelectableAccountIds.length,
@@ -4066,7 +4066,7 @@ export function CodexApiServicePage() {
                         key={`${statsRange}:${statsTimeRange.startAt}:${statsTimeRange.endAt}`}
                         className="api-key-usage-grid"
                         aria-live="polite"
-                        aria-label={`${selectedStatsRangeTitle} Key 用量`}
+                        aria-label={`${selectedStatsRangeTitle} Key Usage`}
                       >
                         <div className="api-key-usage-grid-head">
                           <Activity size={14} />
@@ -4074,7 +4074,7 @@ export function CodexApiServicePage() {
                         </div>
                         <div>
                           <span>
-                            {t("codex.localAccess.stats.requests", "请求")}
+                            {t("codex.localAccess.stats.requests", "Requests")}
                           </span>
                           <strong>
                             {formatCompactNumber(keyUsage?.requestCount ?? 0)}
@@ -4086,13 +4086,13 @@ export function CodexApiServicePage() {
                         </div>
                         <div>
                           <span>
-                            {t("codex.localAccess.stats.successRateLabel", "成功率")}
+                            {t("codex.localAccess.stats.successRateLabel", "Success Rate")}
                           </span>
                           <strong>{keySuccessRate}%</strong>
                         </div>
                         <div>
                           <span>
-                            {t("codex.localAccess.stats.estimatedCost", "估算费用")}
+                            {t("codex.localAccess.stats.estimatedCost", "Estimated Cost")}
                           </span>
                           <strong>
                             {formatUsdCost(keyUsage?.estimatedCostUsd ?? 0)}
@@ -5121,13 +5121,13 @@ export function CodexApiServicePage() {
                       }
                       placeholder={t(
                         "codex.apiService.logs.modelPlaceholder",
-                        "模型 ID",
+                        "Model ID",
                       )}
                     />
                   </label>
                   <label>
                     <span>
-                      {t("codex.apiService.logs.accountFilter", "账号")}
+                      {t("codex.apiService.logs.accountFilter", "Account")}
                     </span>
                     <input
                       value={requestLogAccountQuery}
@@ -5136,7 +5136,7 @@ export function CodexApiServicePage() {
                       }
                       placeholder={t(
                         "codex.apiService.logs.accountPlaceholder",
-                        "邮箱或账号 ID",
+                        "Email or account ID",
                       )}
                     />
                   </label>
@@ -5151,13 +5151,13 @@ export function CodexApiServicePage() {
                       }
                       placeholder={t(
                         "codex.apiService.logs.apiKeyPlaceholder",
-                        "名称或 ID",
+                        "Name or ID",
                       )}
                     />
                   </label>
                   <label>
                     <span>
-                      {t("codex.apiService.logs.instanceFilter", "实例")}
+                      {t("codex.apiService.logs.instanceFilter", "Instance")}
                     </span>
                     <SingleSelectDropdown
                       value={requestLogInstanceQuery}
@@ -5165,28 +5165,28 @@ export function CodexApiServicePage() {
                       onChange={setRequestLogInstanceQuery}
                       ariaLabel={t(
                         "codex.apiService.logs.instanceFilter",
-                        "实例",
+                        "Instance",
                       )}
                       placeholder={t(
                         "codex.apiService.logs.allInstances",
-                        "全部实例",
+                        "All Instances",
                       )}
                     />
                   </label>
                   <label>
-                    <span>{t("codex.apiService.logs.kindFilter", "类型")}</span>
+                    <span>{t("codex.apiService.logs.kindFilter", "Type")}</span>
                     <SingleSelectDropdown
                       value={requestLogKindFilter}
                       options={requestLogKindOptions}
                       onChange={(value) =>
                         setRequestLogKindFilter(value as RequestLogKindFilter)
                       }
-                      ariaLabel={t("codex.apiService.logs.kindFilter", "类型")}
+                      ariaLabel={t("codex.apiService.logs.kindFilter", "Type")}
                     />
                   </label>
                   <label>
                     <span>
-                      {t("codex.apiService.logs.statusFilter", "状态")}
+                      {t("codex.apiService.logs.statusFilter", "Status")}
                     </span>
                     <SingleSelectDropdown
                       value={requestLogStatusFilter}
@@ -5198,13 +5198,13 @@ export function CodexApiServicePage() {
                       }
                       ariaLabel={t(
                         "codex.apiService.logs.statusFilter",
-                        "状态",
+                        "Status",
                       )}
                     />
                   </label>
                   <label>
                     <span>
-                      {t("codex.apiService.logs.gatewayModeFilter", "模式")}
+                      {t("codex.apiService.logs.gatewayModeFilter", "Mode")}
                     </span>
                     <SingleSelectDropdown
                       value={requestLogGatewayModeFilter}
@@ -5216,13 +5216,13 @@ export function CodexApiServicePage() {
                       }
                       ariaLabel={t(
                         "codex.apiService.logs.gatewayModeFilter",
-                        "模式",
+                        "Mode",
                       )}
                     />
                   </label>
                   <label>
                     <span>
-                      {t("codex.apiService.logs.errorFilter", "错误")}
+                      {t("codex.apiService.logs.errorFilter", "Error")}
                     </span>
                     <input
                       value={requestLogErrorQuery}
@@ -5231,7 +5231,7 @@ export function CodexApiServicePage() {
                       }
                       placeholder={t(
                         "codex.apiService.logs.errorPlaceholder",
-                        "错误分类",
+                        "Error category",
                       )}
                     />
                   </label>
@@ -5241,7 +5241,7 @@ export function CodexApiServicePage() {
                     onClick={clearRequestLogFilters}
                     disabled={!hasRequestLogFilters}
                   >
-                    {t("codex.apiService.logs.clearFilters", "清除筛选")}
+                    {t("codex.apiService.logs.clearFilters", "Clear Filters")}
                   </button>
                 </div>
                 <div className="codex-api-service-log-list">
