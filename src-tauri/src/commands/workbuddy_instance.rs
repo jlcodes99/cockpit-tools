@@ -5,7 +5,7 @@ use crate::modules;
 
 const DEFAULT_INSTANCE_ID: &str = "__default__";
 
-fn inject_bound_account_for_instance_start(
+async fn inject_bound_account_for_instance_start(
     user_data_dir: &str,
     bind_account_id: Option<&str>,
 ) -> Result<(), String> {
@@ -16,6 +16,19 @@ fn inject_bound_account_for_instance_start(
         return Ok(());
     };
 
+    let user_data_dir = user_data_dir.to_string();
+    let bind_id = bind_id.to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        inject_bound_account_for_instance_start_blocking(&user_data_dir, &bind_id)
+    })
+    .await
+    .map_err(|error| format!("WorkBuddy 账号切换后台任务失败: {}", error))?
+}
+
+fn inject_bound_account_for_instance_start_blocking(
+    user_data_dir: &str,
+    bind_id: &str,
+) -> Result<(), String> {
     let account = modules::workbuddy_account::load_account(bind_id)
         .ok_or_else(|| format!("绑定账号不存在: {}", bind_id))?;
     modules::logger::log_info(&format!(
@@ -23,7 +36,10 @@ fn inject_bound_account_for_instance_start(
         bind_id, account.email, user_data_dir
     ));
 
-    modules::workbuddy_account::write_account_to_default_client(&account)?;
+    modules::workbuddy_session_transfer::prepare_account_switch(
+        Path::new(user_data_dir),
+        &account,
+    )?;
 
     modules::logger::log_info(&format!(
         "[WorkBuddy Instance] 账号注入完成: email={}, user_data_dir={}",
@@ -203,7 +219,8 @@ pub async fn workbuddy_start_instance(instance_id: String) -> Result<InstancePro
         inject_bound_account_for_instance_start(
             &default_dir_str,
             default_settings.bind_account_id.as_deref(),
-        )?;
+        )
+        .await?;
 
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
         let pid =
@@ -245,7 +262,8 @@ pub async fn workbuddy_start_instance(instance_id: String) -> Result<InstancePro
     inject_bound_account_for_instance_start(
         &instance.user_data_dir,
         instance.bind_account_id.as_deref(),
-    )?;
+    )
+    .await?;
 
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);
     let pid = modules::process::start_workbuddy_with_args_with_new_window(

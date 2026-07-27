@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
-import { Settings, RefreshCw, FolderOpen, Zap, X } from 'lucide-react';
+import { Settings, RefreshCw, FolderOpen, Gauge, Terminal, Zap, X } from 'lucide-react';
 import { useEscClose } from '../hooks/useEscClose';
 import * as accountService from '../services/accountService';
 import * as codexService from '../services/codexService';
@@ -97,6 +97,7 @@ interface GeneralConfig {
   kiro_app_path: string;
   cursor_app_path: string;
   codebuddy_app_path: string;
+  codebuddy_share_sessions_on_switch: boolean;
   codebuddy_cn_app_path: string;
   qoder_app_path: string;
   zcode_app_path: string;
@@ -109,6 +110,7 @@ interface GeneralConfig {
   trae_cn_app_scan_roots: string;
   trae_solo_cn_app_scan_roots: string;
   workbuddy_app_path: string;
+  workbuddy_share_sessions_on_switch: boolean;
   zed_app_path: string;
   opencode_sync_on_switch: boolean;
   opencode_auth_overwrite_on_switch: boolean;
@@ -1969,6 +1971,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 </div>
                 <div className="qs-row" style={{ marginTop: 8 }}>
                   <div className="qs-row-label">
+                    <Gauge size={15} />
                     <span>
                       {t(
                         'settings.general.codexAppUiInjection',
@@ -2001,6 +2004,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                   <>
                     <div className="qs-row" style={{ marginTop: 8 }}>
                       <div className="qs-row-label">
+                        <Terminal size={15} />
                         <span>{t('settings.general.codexSyncWsl', '同步 Codex 到 WSL')}</span>
                       </div>
                       <div className="qs-row-control">
@@ -2391,6 +2395,62 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         </div>
                       </div>
                     )}
+              </div>
+            )}
+
+            {type === 'codebuddy' && (
+              <div className="qs-section">
+                <div className="qs-row qs-row--top">
+                  <div className="qs-row-label">
+                    <Zap size={15} />
+                    <span>{t('settings.general.codebuddyShareSessionsOnSwitch')}</span>
+                  </div>
+                  <div className="qs-row-control">
+                    <label className="qs-switch">
+                      <input
+                        type="checkbox"
+                        checked={config.codebuddy_share_sessions_on_switch ?? false}
+                        onChange={(event) =>
+                          saveConfig({
+                            codebuddy_share_sessions_on_switch: event.target.checked,
+                          })
+                        }
+                      />
+                      <span className="qs-switch-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div className="qs-hint">
+                  {t('settings.general.codebuddyShareSessionsOnSwitchDesc')}
+                </div>
+              </div>
+            )}
+
+            {type === 'workbuddy' && (
+              <div className="qs-section">
+                <div className="qs-row qs-row--top">
+                  <div className="qs-row-label">
+                    <Zap size={15} />
+                    <span>{t('settings.general.workbuddyShareSessionsOnSwitch')}</span>
+                  </div>
+                  <div className="qs-row-control">
+                    <label className="qs-switch">
+                      <input
+                        type="checkbox"
+                        checked={config.workbuddy_share_sessions_on_switch ?? false}
+                        onChange={(event) =>
+                          saveConfig({
+                            workbuddy_share_sessions_on_switch: event.target.checked,
+                          })
+                        }
+                      />
+                      <span className="qs-switch-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div className="qs-hint">
+                  {t('settings.general.workbuddyShareSessionsOnSwitchDesc')}
+                </div>
               </div>
             )}
 

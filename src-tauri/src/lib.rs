@@ -268,6 +268,10 @@ pub fn run() {
             // 存储全局 AppHandle
             let _ = APP_HANDLE.set(app.handle().clone());
 
+            if let Err(err) = modules::app_lifecycle::install_system_shutdown_listener() {
+                logger::log_warn(&format!("[Lifecycle] 安装系统关机监听失败: {}", err));
+            }
+
             // 启动时清理 WebKit LocalStorage WAL，防止无限膨胀
             std::thread::spawn(|| {
                 modules::webkit_cache_maintenance::checkpoint_webkit_localstorage();
@@ -1215,6 +1219,7 @@ pub fn run() {
             commands::codex_instance::codex_stop_instance,
             commands::codex_instance::codex_open_instance_window,
             commands::codex_instance::codex_close_all_instances,
+            commands::codex_instance::codex_preview_instance_launch_command,
             commands::codex_instance::codex_get_instance_launch_command,
             commands::codex_instance::codex_execute_instance_launch_command,
             // Instance Commands
@@ -1243,10 +1248,13 @@ pub fn run() {
     app.run(|app_handle, event| {
         match &event {
             RunEvent::ExitRequested { api, .. } => {
-                if modules::floating_card_window::should_keep_alive_after_main_window_destroyed() {
+                if modules::floating_card_window::should_keep_alive_after_main_window_destroyed()
+                    && !modules::app_lifecycle::is_shutdown_started()
+                {
                     api.prevent_exit();
                     modules::logger::log_info("[Window] 主窗口已销毁，应用继续在托盘运行");
                 } else {
+                    modules::app_lifecycle::begin_shutdown();
                     modules::codex_app_injection::stop_all();
                     tauri::async_runtime::spawn(async {
                         modules::codex_local_access::shutdown_local_access_gateway_for_app_exit()
@@ -1255,6 +1263,7 @@ pub fn run() {
                 }
             }
             RunEvent::Exit => {
+                modules::app_lifecycle::begin_shutdown();
                 modules::codex_app_injection::stop_all();
                 tauri::async_runtime::spawn(async {
                     modules::codex_local_access::shutdown_local_access_gateway_for_app_exit().await;

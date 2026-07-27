@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronLeft, Copy, Play, RefreshCw, Settings, X } from "lucide-react";
+import { RefreshCw, Settings, X } from "lucide-react";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import { PlatformInstancesContent } from "../components/platform/PlatformInstancesContent";
-import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
+import { CodexCliLaunchDialog } from "../components/codex/CodexCliLaunchDialog";
 import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
 import { useCodexInstanceStore } from "../stores/useCodexInstanceStore";
 import { useCodexAccountStore } from "../stores/useCodexAccountStore";
@@ -46,7 +46,9 @@ interface CodexLaunchModalState {
   instanceId: string;
   instanceName: string;
   switchMessage: string;
+  baseLaunchCommand: string;
   launchCommand: string;
+  preparing: boolean;
   copied: boolean;
   executing: boolean;
   executeMessage: string | null;
@@ -251,6 +253,7 @@ export function CodexInstancesContent({
 
     const launchInfo = await codexInstanceService.getCodexInstanceLaunchCommand(
       instance.id,
+      selectedTerminal,
     );
     const boundAccountId = instance.bindAccountId?.startsWith(
       CODEX_PROVIDER_GATEWAY_BIND_PREFIX,
@@ -277,7 +280,9 @@ export function CodexInstancesContent({
       switchMessage: accountLabel
         ? t("codex.switched", "已切换至 {{email}}", { email: accountLabel })
         : t("instances.messages.launchPrepared", "启动命令已准备"),
-      launchCommand: launchInfo.launchCommand,
+      baseLaunchCommand: launchInfo.launchCommand,
+      launchCommand: launchInfo.terminalCommand,
+      preparing: false,
       copied: false,
       executing: false,
       executeMessage: null,
@@ -286,9 +291,11 @@ export function CodexInstancesContent({
   };
 
   const handleCopyLaunchCommand = async () => {
-    if (!launchModal) return;
+    if (!launchModal || launchModal.preparing) return;
     try {
-      await navigator.clipboard.writeText(launchModal.launchCommand);
+      await navigator.clipboard.writeText(
+        launchModal.baseLaunchCommand || launchModal.launchCommand,
+      );
       setLaunchModal((prev) => (prev ? { ...prev, copied: true } : prev));
       window.setTimeout(() => {
         setLaunchModal((prev) => (prev ? { ...prev, copied: false } : prev));
@@ -309,7 +316,7 @@ export function CodexInstancesContent({
   };
 
   const handleExecuteInTerminal = async () => {
-    if (!launchModal || launchModal.executing) return;
+    if (!launchModal || launchModal.preparing || launchModal.executing) return;
     setLaunchModal((prev) =>
       prev
         ? { ...prev, executing: true, executeError: null, executeMessage: null }
@@ -342,6 +349,53 @@ export function CodexInstancesContent({
       );
     }
   };
+
+  useEffect(() => {
+    const instanceId = launchModal?.instanceId;
+    if (!instanceId || launchModal.executing) return;
+    let disposed = false;
+    setLaunchModal((prev) =>
+      prev
+        ? {
+            ...prev,
+            preparing: true,
+            copied: false,
+            executeMessage: null,
+            executeError: null,
+          }
+        : prev,
+    );
+    void codexInstanceService
+      .getCodexInstanceLaunchCommand(instanceId, selectedTerminal)
+      .then((launchInfo) => {
+        if (disposed) return;
+        setLaunchModal((prev) =>
+          prev && prev.instanceId === instanceId
+            ? {
+                ...prev,
+                baseLaunchCommand: launchInfo.launchCommand,
+                launchCommand: launchInfo.terminalCommand,
+                preparing: false,
+              }
+            : prev,
+        );
+      })
+      .catch((error) => {
+        if (disposed) return;
+        setLaunchModal((prev) =>
+          prev && prev.instanceId === instanceId
+            ? {
+                ...prev,
+                preparing: false,
+                executeError: String(error).replace(/^Error:\s*/, ""),
+              }
+            : prev,
+        );
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [launchModal?.instanceId, selectedTerminal]);
 
   const handleSyncAllLocalRecords = async () => {
     if (syncingAllRecords) return;
@@ -603,92 +657,24 @@ export function CodexInstancesContent({
       )}
 
       {launchModal && (
-        <div className="modal-overlay">
-          <div
-            className="modal modal-lg"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-header">
-              <button className="btn btn-secondary icon-only" onClick={() => setLaunchModal(null)} title={t("common.back", "返回")} aria-label={t("common.back", "返回")}><ChevronLeft size={14} /></button>
-              <h2>{t("instances.launchDialog.title", "启动实例")}</h2>
-              <button
-                className="modal-close"
-                onClick={() => setLaunchModal(null)}
-                aria-label={t("common.close", "关闭")}
-              >
-                <X />
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="add-status success">
-                <Check size={16} />
-                <span>{launchModal.switchMessage}</span>
-              </div>
-              <div className="form-group">
-                <label>{t("instances.columns.instance", "实例")}</label>
-                <input
-                  className="form-input"
-                  value={launchModal.instanceName}
-                  readOnly
-                />
-              </div>
-              <div className="form-group">
-                <label>{t("instances.launchDialog.command", "启动命令")}</label>
-                <textarea
-                  className="form-input instance-args-input"
-                  value={launchModal.launchCommand}
-                  readOnly
-                />
-                <p className="form-hint">
-                  {t(
-                    "instances.launchDialog.hint",
-                    "可复制命令手动执行，或点击下方按钮直接在终端执行。",
-                  )}
-                </p>
-              </div>
-              <div className="form-group">
-                <label>{t("instances.launchDialog.terminal", "终端")}</label>
-                <SingleSelectDropdown
-                  value={selectedTerminal}
-                  onChange={setSelectedTerminal}
-                  options={terminalOptions}
-                  disabled={launchModal.executing}
-                  ariaLabel={t("instances.launchDialog.terminal", "终端")}
-                />
-              </div>
-              {launchModal.executeMessage && (
-                <div className="add-status success">
-                  <Check size={16} />
-                  <span>{launchModal.executeMessage}</span>
-                </div>
-              )}
-              {launchModal.executeError && (
-                <div className="form-error">{launchModal.executeError}</div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button
-                className="btn btn-secondary"
-                onClick={handleCopyLaunchCommand}
-              >
-                <Copy size={16} />
-                {launchModal.copied
-                  ? t("common.success", "成功")
-                  : t("common.copy", "复制")}
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={handleExecuteInTerminal}
-                disabled={launchModal.executing}
-              >
-                <Play size={16} />
-                {launchModal.executing
-                  ? t("common.loading", "加载中...")
-                  : t("instances.launchDialog.runInTerminal", "终端执行")}
-              </button>
-            </div>
-          </div>
-        </div>
+        <CodexCliLaunchDialog
+          subjectLabel={t("instances.columns.instance", "实例")}
+          subjectValue={launchModal.instanceName}
+          statusMessage={launchModal.switchMessage}
+          terminal={selectedTerminal}
+          terminalOptions={terminalOptions}
+          onTerminalChange={setSelectedTerminal}
+          command={launchModal.launchCommand}
+          preparing={launchModal.preparing}
+          copied={launchModal.copied}
+          executing={launchModal.executing}
+          successMessage={launchModal.executeMessage}
+          errorMessage={launchModal.executeError}
+          onBack={() => setLaunchModal(null)}
+          onClose={() => setLaunchModal(null)}
+          onCopy={() => void handleCopyLaunchCommand()}
+          onExecute={() => void handleExecuteInTerminal()}
+        />
       )}
     </>
   );

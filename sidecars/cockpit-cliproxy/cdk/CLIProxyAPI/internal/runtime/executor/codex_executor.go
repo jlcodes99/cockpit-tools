@@ -818,7 +818,7 @@ func (e *CodexExecutor) HttpRequest(ctx context.Context, auth *cliproxyauth.Auth
 	if err := e.PrepareRequest(httpReq, auth); err != nil {
 		return nil, err
 	}
-	httpClient := helps.NewUtlsHTTPClient(ctx, e.cfg, auth, 0)
+	httpClient := newCodexAuthenticatedHTTPClient(ctx, e.cfg, auth)
 	return httpClient.Do(httpReq)
 }
 
@@ -900,7 +900,7 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 		AuthType:  authType,
 		AuthValue: authValue,
 	})
-	httpClient := helps.NewUtlsHTTPClient(ctx, e.cfg, auth, 0)
+	httpClient := newCodexAuthenticatedHTTPClient(ctx, e.cfg, auth)
 	httpClient = reporter.TrackHTTPClient(httpClient)
 	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
@@ -916,6 +916,7 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
 		b, _ := io.ReadAll(httpResp.Body)
 		b = applyCodexIdentityConfuseResponsePayload(b, identityState)
+		b = redactCodexAgentIdentitySensitiveBody(auth, b)
 		clearCodexReasoningReplayOnInvalidSignature(replayScope, httpResp.StatusCode, b)
 		helps.AppendAPIResponseChunk(ctx, e.cfg, b)
 		helps.LogWithRequestID(ctx).Debugf("request error, error status: %d, error message: %s", httpResp.StatusCode, helps.SummarizeErrorBody(httpResp.Header.Get("Content-Type"), b))
@@ -928,6 +929,7 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 		return resp, err
 	}
 	upstreamData := applyCodexIdentityConfuseResponsePayload(data, identityState)
+	upstreamData = redactCodexAgentIdentitySensitiveBody(auth, upstreamData)
 	helps.AppendAPIResponseChunk(ctx, e.cfg, upstreamData)
 
 	lines := bytes.Split(upstreamData, []byte("\n"))
@@ -1069,7 +1071,7 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 		AuthType:  authType,
 		AuthValue: authValue,
 	})
-	httpClient := helps.NewUtlsHTTPClient(ctx, e.cfg, auth, 0)
+	httpClient := newCodexAuthenticatedHTTPClient(ctx, e.cfg, auth)
 	httpClient = reporter.TrackHTTPClient(httpClient)
 	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
@@ -1085,6 +1087,7 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
 		b, _ := io.ReadAll(httpResp.Body)
 		b = applyCodexIdentityConfuseResponsePayload(b, identityState)
+		b = redactCodexAgentIdentitySensitiveBody(auth, b)
 		helps.AppendAPIResponseChunk(ctx, e.cfg, b)
 		helps.LogWithRequestID(ctx).Debugf("request error, error status: %d, error message: %s", httpResp.StatusCode, helps.SummarizeErrorBody(httpResp.Header.Get("Content-Type"), b))
 		err = newCodexStatusErr(httpResp.StatusCode, b)
@@ -1096,6 +1099,7 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 		return resp, err
 	}
 	upstreamData := applyCodexIdentityConfuseResponsePayload(data, identityState)
+	upstreamData = redactCodexAgentIdentitySensitiveBody(auth, upstreamData)
 	helps.AppendAPIResponseChunk(ctx, e.cfg, upstreamData)
 	reporter.Publish(ctx, helps.ParseOpenAIUsage(upstreamData))
 	reporter.EnsurePublished(ctx)
@@ -1184,7 +1188,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 		AuthValue: authValue,
 	})
 
-	httpClient := helps.NewUtlsHTTPClient(ctx, e.cfg, auth, 0)
+	httpClient := newCodexAuthenticatedHTTPClient(ctx, e.cfg, auth)
 	httpClient = reporter.TrackHTTPClient(httpClient)
 	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
@@ -1202,6 +1206,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 			return nil, readErr
 		}
 		data = applyCodexIdentityConfuseResponsePayload(data, identityState)
+		data = redactCodexAgentIdentitySensitiveBody(auth, data)
 		clearCodexReasoningReplayOnInvalidSignature(replayScope, httpResp.StatusCode, data)
 		helps.AppendAPIResponseChunk(ctx, e.cfg, data)
 		helps.LogWithRequestID(ctx).Debugf("request error, error status: %d, error message: %s", httpResp.StatusCode, helps.SummarizeErrorBody(httpResp.Header.Get("Content-Type"), data))
@@ -1242,6 +1247,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 		}
 		for scanner.Scan() {
 			line := applyCodexIdentityConfuseResponsePayload(scanner.Bytes(), identityState)
+			line = redactCodexAgentIdentitySensitiveBody(auth, line)
 			helps.AppendAPIResponseChunk(ctx, e.cfg, line)
 			translatedLine := bytes.Clone(line)
 			isDataLine := false
@@ -1694,7 +1700,9 @@ func codexIdentityConfuseUUID(authID string, kind string, value string) string {
 
 func applyCodexHeaders(r *http.Request, auth *cliproxyauth.Auth, token string, stream bool, cfg *config.Config) {
 	r.Header.Set("Content-Type", "application/json")
-	r.Header.Set("Authorization", "Bearer "+token)
+	if !isCodexAgentIdentityAuth(auth) {
+		r.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	var ginHeaders http.Header
 	if ginCtx, ok := r.Context().Value("gin").(*gin.Context); ok && ginCtx != nil && ginCtx.Request != nil {

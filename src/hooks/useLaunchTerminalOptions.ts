@@ -42,7 +42,12 @@ export function useLaunchTerminalOptions(enabled = true) {
             ? terminals
             : ["system"],
         );
-        setSelectedTerminal(config.default_terminal || "system");
+        const configuredTerminal = config.default_terminal || "system";
+        setSelectedTerminal(
+          configuredTerminal.toLowerCase() === "powershell"
+            ? "PowerShell"
+            : configuredTerminal,
+        );
       })
       .catch(() => {
         if (disposed) return;
@@ -59,7 +64,12 @@ export function useLaunchTerminalOptions(enabled = true) {
     const common = [
       {
         value: "system",
-        label: t("settings.general.terminalSystem", "跟随系统"),
+        label: isWindows
+          ? t(
+              "settings.general.terminalSystemWindowsCompatibility",
+              "系统兼容（PowerShell）",
+            )
+          : t("settings.general.terminalSystem", "跟随系统"),
       },
     ];
 

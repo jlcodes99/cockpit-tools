@@ -739,6 +739,12 @@ pub struct CodexLocalAccessProfileAttachment {
 pub struct CodexLocalAccessState {
     pub collection: Option<CodexLocalAccessCollection>,
     pub running: bool,
+    pub preparing: bool,
+    pub preparation_total: usize,
+    pub preparation_completed: usize,
+    pub refreshing_accounts: bool,
+    pub account_refresh_total: usize,
+    pub account_refresh_completed: usize,
     pub default_profile: Option<CodexLocalAccessProfileAttachment>,
     pub api_port_url: Option<String>,
     pub base_url: Option<String>,

@@ -282,8 +282,6 @@ pub async fn inject_workbuddy_to_vscode(
     let account = workbuddy_account::load_account(&account_id)
         .ok_or_else(|| format!("WorkBuddy account not found: {}", account_id))?;
 
-    workbuddy_account::write_account_to_default_client(&account)?;
-
     if let Err(err) = crate::modules::workbuddy_instance::update_default_settings(
         Some(Some(account_id.clone())),
         None,
@@ -305,6 +303,9 @@ pub async fn inject_workbuddy_to_vscode(
         Err(err) => {
             if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("启动 WorkBuddy 失败") {
                 logger::log_warn(&format!("WorkBuddy 默认实例启动失败：{}", err));
+                // 保持既有行为：即使应用路径异常，认证切换仍然落盘。由于此时无法
+                // 确认官方进程已退出，不在这里执行可能较慢的会话目录合并。
+                workbuddy_account::write_account_to_default_client(&account)?;
                 if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("APP_PATH_NOT_FOUND:") {
                     let _ = app.emit(
                         "app:path_missing",

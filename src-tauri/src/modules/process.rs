@@ -363,10 +363,13 @@ fn log_command_trace_spawn_result(
 }
 
 fn spawn_command_with_trace(cmd: &mut Command) -> std::io::Result<Child> {
+    let program = cmd.get_program().to_string_lossy().into_owned();
+    let spawn_guard = crate::modules::app_lifecycle::acquire_process_spawn_guard(&program)?;
     let preview = format_command_preview(cmd);
     log_command_trace_exec(&preview);
     let start = Instant::now();
     let result = cmd.spawn();
+    drop(spawn_guard);
     log_command_trace_spawn_result(&preview, &result, start.elapsed());
     result
 }
@@ -414,11 +417,16 @@ fn build_powershell_command(args: &[&str]) -> Command {
 
 #[cfg(target_os = "windows")]
 fn powershell_output(args: &[&str]) -> std::io::Result<std::process::Output> {
+    let spawn_guard =
+        crate::modules::app_lifecycle::acquire_process_spawn_guard("PowerShell")?;
     let mut command = build_powershell_command(args);
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
     let preview = format_command_preview(&command);
     log_command_trace_exec(&preview);
     let start = Instant::now();
-    let result = command.output();
+    let child = command.spawn();
+    drop(spawn_guard);
+    let result = child.and_then(Child::wait_with_output);
     log_command_trace_result(&preview, &result, start.elapsed());
     result
 }
@@ -430,6 +438,8 @@ fn powershell_output_with_timeout(
 ) -> std::io::Result<std::process::Output> {
     use std::io::{Error, ErrorKind, Read};
 
+    let spawn_guard =
+        crate::modules::app_lifecycle::acquire_process_spawn_guard("PowerShell")?;
     let mut command = build_powershell_command(args);
     command
         .stdin(Stdio::null())
@@ -437,7 +447,9 @@ fn powershell_output_with_timeout(
         .stderr(Stdio::piped());
     let preview = format_command_preview(&command);
     log_command_trace_exec(&preview);
-    let mut child = match command.spawn() {
+    let child = command.spawn();
+    drop(spawn_guard);
+    let mut child = match child {
         Ok(child) => child,
         Err(err) => {
             if command_trace_enabled() {
@@ -1667,16 +1679,10 @@ pub fn normalize_windows_user_facing_path(raw: &str) -> String {
 
     let lower = trimmed.to_ascii_lowercase();
     if lower.starts_with(r"\\?\unc\") {
-        let rest: String = trimmed
-            .chars()
-            .skip(r"\\?\UNC\".chars().count())
-            .collect();
+        let rest: String = trimmed.chars().skip(r"\\?\UNC\".chars().count()).collect();
         format!(r"\\{rest}")
     } else if lower.starts_with(r"\\?\") {
-        trimmed
-            .chars()
-            .skip(r"\\?\".chars().count())
-            .collect()
+        trimmed.chars().skip(r"\\?\".chars().count()).collect()
     } else {
         trimmed.to_string()
     }
@@ -1742,9 +1748,8 @@ fn update_app_path_in_config(app: &str, path: &Path, expected_current: &str) {
     let normalized = {
         #[cfg(target_os = "macos")]
         {
-            normalize_macos_app_root(path).unwrap_or_else(|| {
-                normalize_windows_user_facing_path(&path.to_string_lossy())
-            })
+            normalize_macos_app_root(path)
+                .unwrap_or_else(|| normalize_windows_user_facing_path(&path.to_string_lossy()))
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -6116,10 +6121,7 @@ public class Win32FocusHwnd {{
 }}
 '@; $h = [IntPtr]{hwnd}; [Win32FocusHwnd]::ShowWindowAsync($h, 9) | Out-Null; [Win32FocusHwnd]::SetForegroundWindow($h) | Out-Null;"#
     );
-    crate::modules::logger::log_info(&format!(
-        "[Focus] Windows PowerShell focus hwnd={}",
-        hwnd
-    ));
+    crate::modules::logger::log_info(&format!("[Focus] Windows PowerShell focus hwnd={}", hwnd));
     let output = powershell_output(&["-NoProfile", "-Command", &command])
         .map_err(|e| format!("调用 PowerShell 失败: {}", e))?;
     if output.status.success() {

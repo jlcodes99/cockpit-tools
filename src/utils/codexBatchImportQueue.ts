@@ -40,6 +40,13 @@ export interface CodexBatchImportPreviewLike {
   items: CodexBatchImportSelectableItemLike[];
 }
 
+export interface CodexBatchImportStartRecovery<
+  T extends CodexBatchImportPreviewLike = CodexBatchImportPreviewLike,
+> {
+  preview: T;
+  selectedIds: string[];
+}
+
 export interface CodexBatchImportApiServiceImportedAccountLike {
   id?: string | null;
 }
@@ -119,6 +126,31 @@ export function recoverCodexBatchImportStartedTaskFromPreview<
     preview,
     selectedIds: mergeCodexBatchImportDefaultSelection(
       task.selectedIds,
+      preview.items,
+    ),
+  };
+}
+
+export function recoverCodexBatchImportStartFromPreview<
+  T extends CodexBatchImportPreviewLike,
+>(
+  currentSessionId: string | null,
+  sessionId: string,
+  preview: T,
+  selectedIds: string[],
+): CodexBatchImportStartRecovery<T> | null {
+  if (
+    currentSessionId !== sessionId ||
+    preview.sessionId !== sessionId ||
+    (preview.status !== "ready" && preview.status !== "cancelled")
+  ) {
+    return null;
+  }
+
+  return {
+    preview,
+    selectedIds: mergeCodexBatchImportDefaultSelection(
+      selectedIds,
       preview.items,
     ),
   };

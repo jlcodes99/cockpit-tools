@@ -129,6 +129,8 @@ interface CodexLocalAccessModalProps {
     accountIds: string[];
     restrictFreeAccounts: boolean;
     backupAccountIds: string[];
+    sessionAffinity: boolean;
+    sessionAffinityTtlMs: number;
   }) => Promise<unknown> | unknown;
   onClearStats: () => Promise<unknown> | unknown;
   onRefreshStats: () => Promise<unknown> | unknown;
@@ -379,6 +381,10 @@ export function CodexLocalAccessModal({
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [groupFilter, setGroupFilter] = useState<string[]>([]);
   const [restrictFreeAccounts, setRestrictFreeAccounts] = useState(true);
+  const [sessionAffinity, setSessionAffinity] = useState(true);
+  const [sessionAffinityTtlSeconds, setSessionAffinityTtlSeconds] =
+    useState("3600");
+  const [sessionAffinityTtlError, setSessionAffinityTtlError] = useState("");
   const [membersDraftDirty, setMembersDraftDirty] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -433,6 +439,7 @@ export function CodexLocalAccessModal({
   const selectAllCheckboxRef = useRef<HTMLInputElement | null>(null);
   const customRoutingSelectAllRef = useRef<HTMLInputElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const sessionAffinityTtlInputRef = useRef<HTMLInputElement | null>(null);
   const testChatScrollRef = useRef<HTMLDivElement | null>(null);
 
   const collection = state?.collection ?? null;
@@ -614,6 +621,10 @@ export function CodexLocalAccessModal({
     return summary;
   }, [collection?.accountIds, localAccessAccounts, state?.accountHealth]);
   const initialRestrictFreeAccounts = collection?.restrictFreeAccounts ?? true;
+  const initialSessionAffinity = collection?.sessionAffinity ?? true;
+  const initialSessionAffinityTtlSeconds = Math.round(
+    (collection?.sessionAffinityTtlMs ?? 60 * 60 * 1000) / 1000,
+  );
   const normalizedInitialSelectedIds = useMemo(
     () =>
       resolveCodexLocalAccessInitialAccountIds(
@@ -646,7 +657,10 @@ export function CodexLocalAccessModal({
       setTagFilter([]);
       setGroupFilter([]);
       setRestrictFreeAccounts(initialRestrictFreeAccounts);
+      setSessionAffinity(initialSessionAffinity);
+      setSessionAffinityTtlSeconds(String(initialSessionAffinityTtlSeconds));
     }
+    setSessionAffinityTtlError("");
     setError("");
     setNotice("");
     setTestDialogOpen(false);
@@ -700,6 +714,8 @@ export function CodexLocalAccessModal({
     collection?.port,
     collection?.upstreamProxyUrl,
     initialRestrictFreeAccounts,
+    initialSessionAffinity,
+    initialSessionAffinityTtlSeconds,
     isOpen,
     membersDraftDirty,
     mode,
@@ -1062,13 +1078,19 @@ export function CodexLocalAccessModal({
     () =>
       !areSetsEqual(selected, new Set(normalizedInitialSelectedIds)) ||
       restrictFreeAccounts !== (collection?.restrictFreeAccounts ?? true) ||
+      sessionAffinity !== initialSessionAffinity ||
+      sessionAffinityTtlSeconds !== String(initialSessionAffinityTtlSeconds) ||
       !areSetsEqual(currentBackupAccountIds, initialBackupAccountIds),
     [
       collection?.restrictFreeAccounts,
       currentBackupAccountIds,
+      initialSessionAffinity,
+      initialSessionAffinityTtlSeconds,
       initialBackupAccountIds,
       normalizedInitialSelectedIds,
       restrictFreeAccounts,
+      sessionAffinity,
+      sessionAffinityTtlSeconds,
       selected,
     ],
   );
@@ -1431,6 +1453,31 @@ export function CodexLocalAccessModal({
     setRestrictFreeAccounts((prev) => !prev);
   };
 
+  const handleToggleSessionAffinity = async () => {
+    if (membersInteractionDisabled) return;
+    setSessionAffinityTtlError("");
+    if (sessionAffinity) {
+      setMembersDraftDirty(true);
+      setSessionAffinity(false);
+      return;
+    }
+    const confirmed = await confirmDialog(
+      t(
+        "codex.localAccess.modal.sessionAffinityDescription",
+        "开启后，同一个会话会尽量持续使用同一个账号进行对话；账号不可用时仍会按调度策略切换，超过过期时间后会重新选择账号。",
+      ),
+      {
+        title: t(
+          "codex.localAccess.modal.sessionAffinityConfirmTitle",
+          "开启会话亲和？",
+        ),
+      },
+    );
+    if (!confirmed) return;
+    setMembersDraftDirty(true);
+    setSessionAffinity(true);
+  };
+
   const toggleSelect = (accountId: string) => {
     if (membersInteractionDisabled) return;
     const account = localAccessAccountById.get(accountId);
@@ -1457,6 +1504,24 @@ export function CodexLocalAccessModal({
     if (!accountsLoaded) return;
     setError("");
     setNotice("");
+    setSessionAffinityTtlError("");
+    const parsedSessionAffinityTtlSeconds = Number(
+      sessionAffinityTtlSeconds.trim(),
+    );
+    if (
+      !Number.isInteger(parsedSessionAffinityTtlSeconds) ||
+      parsedSessionAffinityTtlSeconds < 60 ||
+      parsedSessionAffinityTtlSeconds > 86400
+    ) {
+      const message = t("codex.apiService.validation.numberRange", {
+        min: 60,
+        max: 86400,
+        defaultValue: "请输入 {{min}} 到 {{max}} 之间的数字",
+      });
+      setSessionAffinityTtlError(message);
+      requestAnimationFrame(() => sessionAffinityTtlInputRef.current?.focus());
+      return;
+    }
     try {
       const filtered = Array.from(selected).filter((accountId) => {
         const account = localAccessAccountById.get(accountId);
@@ -1474,6 +1539,8 @@ export function CodexLocalAccessModal({
         accountIds: filtered,
         restrictFreeAccounts,
         backupAccountIds,
+        sessionAffinity,
+        sessionAffinityTtlMs: parsedSessionAffinityTtlSeconds * 1000,
       });
       onClose();
     } catch (err) {
@@ -2808,6 +2875,51 @@ export function CodexLocalAccessModal({
                         )}
                       </span>
                     </label>
+                    <div className="codex-local-access-session-affinity-settings">
+                      <div className="codex-local-access-session-affinity-row">
+                        <label className="codex-local-access-session-affinity-toggle">
+                          <input
+                            type="checkbox"
+                            checked={sessionAffinity}
+                            onChange={() => void handleToggleSessionAffinity()}
+                            disabled={membersInteractionDisabled}
+                          />
+                          <span>
+                            {t(
+                              "codex.apiService.routing.sessionAffinity",
+                              "会话亲和",
+                            )}
+                          </span>
+                        </label>
+                        <label className="codex-local-access-session-affinity-expiry">
+                          <span>
+                            {t(
+                              "codex.apiService.routing.sessionAffinityTtl",
+                              "过期时间（秒）",
+                            )}
+                          </span>
+                          <input
+                            ref={sessionAffinityTtlInputRef}
+                            type="number"
+                            min={60}
+                            max={86400}
+                            value={sessionAffinityTtlSeconds}
+                            aria-invalid={Boolean(sessionAffinityTtlError)}
+                            onChange={(event) => {
+                              setMembersDraftDirty(true);
+                              setSessionAffinityTtlError("");
+                              setSessionAffinityTtlSeconds(event.target.value);
+                            }}
+                            disabled={membersInteractionDisabled}
+                          />
+                        </label>
+                      </div>
+                      {sessionAffinityTtlError && (
+                        <small className="codex-local-access-session-affinity-error">
+                          {sessionAffinityTtlError}
+                        </small>
+                      )}
+                    </div>
                     {collection && (
                       <>
                         <div className="codex-local-access-member-routing">

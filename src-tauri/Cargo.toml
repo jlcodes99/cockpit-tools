@@ -1,6 +1,6 @@
 [package]
 name = "cockpit-tools"
-version = "1.3.10"
+version = "1.3.14"
 description = "Cockpit Tools"
 authors = ["jlcodes"]
 license = "CC-BY-NC-SA-4.0"
@@ -49,6 +49,8 @@ thiserror = "2"
 anyhow = "1.0"
 sha2 = "0.10"
 ring = "0.17"
+ed25519-dalek = { version = "2.2", features = ["pkcs8", "rand_core"] }
+crypto_box = { version = "0.9.1", features = ["seal", "std"] }
 rsa = "0.9"
 serde_urlencoded = "0.7"
 url = "2.5"
@@ -75,7 +77,7 @@ pbkdf2 = "0.12"
 sha1 = "0.10"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_UI_Shell"] }
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 junction.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]

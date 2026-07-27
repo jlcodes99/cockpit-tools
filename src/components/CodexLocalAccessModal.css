@@ -1537,6 +1537,104 @@
   accent-color: var(--primary);
 }
 
+.codex-local-access-session-affinity-settings {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.codex-local-access-session-affinity-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+
+.codex-local-access-session-affinity-toggle,
+.codex-local-access-session-affinity-expiry {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.codex-local-access-session-affinity-toggle > input[type="checkbox"] {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1.5px solid var(--border-strong, var(--border));
+  border-radius: 5px;
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.codex-local-access-session-affinity-toggle
+  > input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3.5 8.2 6.6 11.2 12.6 4.8' fill='none' stroke='white' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 13px 13px;
+}
+
+.codex-local-access-session-affinity-toggle
+  > input[type="checkbox"]:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.codex-local-access-session-affinity-toggle
+  > input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.codex-local-access-session-affinity-expiry input {
+  width: 82px;
+  height: 28px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--codex-local-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-surface) 90%, transparent);
+  color: var(--text-primary);
+  outline: none;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.codex-local-access-session-affinity-expiry input:focus {
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.codex-local-access-session-affinity-expiry input[aria-invalid="true"] {
+  border-color: var(--danger, #ef4444);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger, #ef4444) 12%, transparent);
+}
+
+.codex-local-access-session-affinity-error {
+  color: var(--danger, #ef4444);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .codex-local-access-member-backup-field {
   display: inline-flex;
   align-items: center;
@@ -2936,7 +3034,8 @@
   );
 }
 
-[data-theme="dark"] .codex-local-access-free-toggle {
+[data-theme="dark"] .codex-local-access-free-toggle,
+[data-theme="dark"] .codex-local-access-session-affinity-settings {
   background: rgba(15, 23, 42, 0.62);
   border-color: rgba(148, 163, 184, 0.2);
   color: color-mix(in srgb, var(--text-secondary) 88%, var(--text-muted));

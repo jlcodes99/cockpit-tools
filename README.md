@@ -455,6 +455,8 @@ QQ 交流群、微信群或新建的 Telegram 畅聊群都可以加入。
 - Grok 图标造型参考：[LobeHub/lobe-icons](https://github.com/lobehub/lobe-icons)（MIT）
 - Grok CLI 任务用量查询与兼容解析方向参考：[junhoyeo/tokscale](https://github.com/junhoyeo/tokscale)（MIT）
 - Codex API 服务协议兼容方向参考：[codex-proxy](https://github.com/icebear0828/codex-proxy)
+- Codex Agent Identity 导入、动态签名与 task 失效恢复方向参考：[sub2api](https://github.com/Wei-Shaw/sub2api)
+- Codex Agent Identity runtime 注册协议与 Ed25519 密钥格式参考官方实现：[openai/codex](https://github.com/openai/codex)（Apache-2.0）
 - Codex、Claude CLI 与 Claude Desktop Gateway 第三方供应商预设和模型映射方向参考：[CC Switch](https://github.com/farion1231/cc-switch)
 - Codex 模型目录与前端模型显示思路参考：[CodexPlusPlus](https://github.com/BigPizzaV3/CodexPlusPlus)
 - Claude 可选登录 helper 运行时基于：[Electron](https://github.com/electron/electron)

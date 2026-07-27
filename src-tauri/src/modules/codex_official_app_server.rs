@@ -169,7 +169,7 @@ pub fn rebuild_thread_metadata(codex_home: &Path) -> Result<(), String> {
     result
 }
 
-fn official_app_server_executable() -> Result<PathBuf, String> {
+pub(crate) fn official_app_server_executable() -> Result<PathBuf, String> {
     let mut candidates = Vec::new();
     if let Some(executable) = std::env::var_os(CODEX_APP_SERVER_EXECUTABLE_ENV) {
         if !executable.as_os_str().is_empty() {

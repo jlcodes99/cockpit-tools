@@ -43,6 +43,7 @@ export interface CodexAccount {
   auth_file_plan_type?: string;
   account_id?: string;
   organization_id?: string;
+  agent_identity?: CodexAgentIdentity;
   account_name?: string;
   account_structure?: string;
   account_note?: string;
@@ -104,6 +105,21 @@ export interface CodexTokens {
   id_token: string;
   access_token: string;
   refresh_token?: string;
+}
+
+export interface CodexAgentIdentity {
+  agent_runtime_id: string;
+  agent_private_key: string;
+  task_id?: string;
+  account_id: string;
+  chatgpt_user_id: string;
+  email?: string;
+  plan_type?: string;
+  chatgpt_account_is_fedramp?: boolean;
+}
+
+export function isCodexAgentIdentityAccount(account?: CodexAccount | null): boolean {
+  return Boolean(account?.agent_identity?.agent_runtime_id?.trim());
 }
 
 /** Codex 配额数据 */
@@ -754,6 +770,7 @@ export function isCodexPendingOAuthAccount(account?: CodexAccount | null): boole
     return true;
   }
   if (isCodexApiKeyAccount(account)) return false;
+  if (isCodexAgentIdentityAccount(account)) return false;
   const hasToken =
     Boolean((account.tokens?.access_token || "").trim()) ||
     Boolean((account.tokens?.refresh_token || "").trim()) ||

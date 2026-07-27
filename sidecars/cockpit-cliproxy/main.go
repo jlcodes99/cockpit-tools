@@ -92,12 +92,18 @@ var (
 	imageStreamIdleTimeout = 60 * time.Second
 )
 
+type accountModelRule struct {
+	AccountID      string   `json:"accountId"`
+	ExcludedModels []string `json:"excludedModels"`
+}
+
 type manifest struct {
 	APIKeys                    []apiKeySpec        `json:"apiKeys"`
 	Accounts                   []accountSpec       `json:"accounts"`
 	ModelIDs                   []string            `json:"modelIds"`
 	ModelAliases               []modelAliasSpec    `json:"modelAliases"`
 	ExcludedModels             []string            `json:"excludedModels"`
+	AccountModelRules          []accountModelRule  `json:"accountModelRules"`
 	RoutingStrategy            string              `json:"routingStrategy"`
 	CustomRoutingRules         []customRoutingRule `json:"customRoutingRules"`
 	ImmediateSSEResponse       bool                `json:"immediateSseResponse"`
@@ -239,6 +245,7 @@ type accountSpec struct {
 	Email                string            `json:"email"`
 	AuthID               string            `json:"authId,omitempty"`
 	AuthKind             string            `json:"authKind,omitempty"`
+	PlanType             string            `json:"planType,omitempty"`
 	AccessTokenOnly      bool              `json:"accessTokenOnly,omitempty"`
 	ChatGPTAccountID     string            `json:"chatgptAccountId,omitempty"`
 	UpstreamAPIKey       string            `json:"upstreamApiKey,omitempty"`
@@ -743,6 +750,10 @@ func loadManifest(path string) (*manifest, error) {
 	}
 	m.ModelIDs = normalizeStringList(m.ModelIDs)
 	m.ExcludedModels = normalizeStringList(m.ExcludedModels)
+	for index := range m.AccountModelRules {
+		m.AccountModelRules[index].AccountID = strings.TrimSpace(m.AccountModelRules[index].AccountID)
+		m.AccountModelRules[index].ExcludedModels = normalizeStringList(m.AccountModelRules[index].ExcludedModels)
+	}
 	return &m, nil
 }
 
@@ -1920,6 +1931,13 @@ type imageRequestSelector struct {
 	fallback      coreauth.Selector
 }
 
+// modelExclusionSelector filters account-level model exclusions before wrappers
+// such as session affinity can reuse a cached account binding.
+type modelExclusionSelector struct {
+	manifest *manifest
+	fallback coreauth.Selector
+}
+
 func (s *imageRequestSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*coreauth.Auth) (*coreauth.Auth, error) {
 	requestKind, _ := ctx.Value(requestKindContextKey).(string)
 	if isImageRequestKind(requestKind) && s.imageFallback != nil {
@@ -1932,6 +1950,35 @@ func (s *imageRequestSelector) Pick(ctx context.Context, provider, model string,
 }
 
 func (s *imageRequestSelector) Stop() {
+	if stoppable, ok := s.fallback.(coreauth.StoppableSelector); ok {
+		stoppable.Stop()
+	}
+}
+
+func (s *modelExclusionSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*coreauth.Auth) (*coreauth.Auth, error) {
+	if s == nil || s.fallback == nil {
+		return nil, fmt.Errorf("model exclusion selector is not initialized")
+	}
+	if strings.TrimSpace(model) == "" {
+		return s.fallback.Pick(ctx, provider, model, opts, auths)
+	}
+	filtered := make([]*coreauth.Auth, 0, len(auths))
+	for _, auth := range auths {
+		if authModelExcluded(s.manifest, auth, model) {
+			continue
+		}
+		filtered = append(filtered, auth)
+	}
+	if len(filtered) == 0 {
+		return nil, noAuthAvailableError(nil)
+	}
+	return s.fallback.Pick(ctx, provider, model, opts, filtered)
+}
+
+func (s *modelExclusionSelector) Stop() {
+	if s == nil || s.fallback == nil {
+		return
+	}
 	if stoppable, ok := s.fallback.(coreauth.StoppableSelector); ok {
 		stoppable.Stop()
 	}
@@ -3053,6 +3100,7 @@ func buildCoreAuthSelector(cfg *config.Config, selector coreauth.Selector, m *ma
 	if m != nil {
 		selector = &backupAccountSelector{manifest: m, fallback: selector}
 		selector = &quotaReserveSelector{manifest: m, fallback: selector, quota: quota}
+		selector = &modelExclusionSelector{manifest: m, fallback: selector}
 	}
 	return selector
 }
@@ -3425,12 +3473,23 @@ func readManifestCodexTokenAuth(account *accountSpec, authDir, path string) (*co
 		"at_token",
 		"access_token",
 	)
-	if accessToken == "" {
+	authMode := firstMetadataString(metadata, "auth_mode", "openai_auth_mode")
+	isAgentIdentity := strings.EqualFold(authMode, "agentIdentity") || manifestAccountAuthKind(account) == "agent_identity"
+	if accessToken == "" && !isAgentIdentity {
 		return nil, fmt.Errorf("codex token auth file %s is missing access_token", path)
 	}
-	metadata["access_token"] = accessToken
-	if strings.TrimSpace(metadataString(metadata, "token_type")) == "" {
-		metadata["token_type"] = "Bearer"
+	if isAgentIdentity {
+		if firstMetadataString(metadata, "agent_runtime_id", "agentRuntimeId") == "" ||
+			firstMetadataString(metadata, "agent_private_key", "agentPrivateKey") == "" {
+			return nil, fmt.Errorf("codex Agent Identity auth file %s is missing runtime or private key", path)
+		}
+		metadata["auth_mode"] = "agentIdentity"
+		metadata["openai_auth_mode"] = "agentIdentity"
+	} else {
+		metadata["access_token"] = accessToken
+		if strings.TrimSpace(metadataString(metadata, "token_type")) == "" {
+			metadata["token_type"] = "Bearer"
+		}
 	}
 	if account != nil &&
 		(account.AccessTokenOnly || manifestAccountAuthKind(account) == "access_token") {
@@ -3459,6 +3518,10 @@ func readManifestCodexTokenAuth(account *accountSpec, authDir, path string) (*co
 	if disabled {
 		status = coreauth.StatusDisabled
 	}
+	runtimeAuthKind := manifestAccountAuthKind(account)
+	if isAgentIdentity {
+		runtimeAuthKind = coreauth.AuthKindOAuth
+	}
 	auth := &coreauth.Auth{
 		ID:       id,
 		Provider: "codex",
@@ -3468,7 +3531,7 @@ func readManifestCodexTokenAuth(account *accountSpec, authDir, path string) (*co
 		Disabled: disabled,
 		Attributes: map[string]string{
 			"path":       path,
-			"auth_kind":  manifestAccountAuthKind(account),
+			"auth_kind":  runtimeAuthKind,
 			"websockets": "true",
 		},
 		Metadata:        metadata,
@@ -3690,7 +3753,7 @@ func registerManifestModelsForAuth(manager *coreauth.Manager, m *manifest, auth 
 	if manager == nil || m == nil || auth == nil || strings.TrimSpace(auth.ID) == "" {
 		return
 	}
-	models := manifestRegistryModels(m)
+	models := filterRegistryModelsByExcluded(manifestRegistryModels(m), excludedModelsForAuth(m, auth))
 	if len(models) == 0 {
 		cliproxy.GlobalModelRegistry().UnregisterClient(auth.ID)
 		manager.RefreshSchedulerEntry(auth.ID)
@@ -3699,6 +3762,115 @@ func registerManifestModelsForAuth(manager *coreauth.Manager, m *manifest, auth 
 	cliproxy.GlobalModelRegistry().RegisterClient(auth.ID, "codex", models)
 	manager.ReconcileRegistryModelStates(context.Background(), auth.ID)
 	manager.RefreshSchedulerEntry(auth.ID)
+}
+
+func excludedModelsForAuth(m *manifest, auth *coreauth.Auth) []string {
+	seen := make(map[string]struct{})
+	add := func(items []string) {
+		for _, item := range items {
+			trimmed := strings.TrimSpace(item)
+			if trimmed == "" {
+				continue
+			}
+			key := strings.ToLower(trimmed)
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+		}
+	}
+	if m != nil {
+		add(m.ExcludedModels)
+		if account := accountForAuthInManifest(m, auth); account != nil {
+			add(accountExcludedModelsFromManifest(m, account.ID))
+		}
+	}
+	if auth != nil {
+		add(extractExcludedModelsFromMetadataMap(auth.Metadata))
+		if auth.Attributes != nil {
+			add(strings.Split(auth.Attributes["excluded_models"], ","))
+		}
+	}
+	if len(seen) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(seen))
+	for item := range seen {
+		out = append(out, item)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func accountExcludedModelsFromManifest(m *manifest, accountID string) []string {
+	if m == nil || strings.TrimSpace(accountID) == "" {
+		return nil
+	}
+	for _, rule := range m.AccountModelRules {
+		if strings.TrimSpace(rule.AccountID) == accountID {
+			return append([]string(nil), rule.ExcludedModels...)
+		}
+	}
+	return nil
+}
+
+func extractExcludedModelsFromMetadataMap(metadata map[string]any) []string {
+	if metadata == nil {
+		return nil
+	}
+	raw, ok := metadata["excluded_models"]
+	if !ok {
+		raw, ok = metadata["excluded-models"]
+	}
+	if !ok || raw == nil {
+		return nil
+	}
+	switch values := raw.(type) {
+	case string:
+		return strings.Split(values, ",")
+	case []string:
+		return append([]string(nil), values...)
+	case []any:
+		out := make([]string, 0, len(values))
+		for _, item := range values {
+			if value, ok := item.(string); ok {
+				out = append(out, value)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func filterRegistryModelsByExcluded(models []*cliproxy.ModelInfo, excluded []string) []*cliproxy.ModelInfo {
+	if len(models) == 0 || len(excluded) == 0 {
+		return models
+	}
+	filtered := make([]*cliproxy.ModelInfo, 0, len(models))
+	for _, model := range models {
+		if model == nil || strings.TrimSpace(model.ID) == "" || modelMatchesAnyRule(model.ID, excluded) {
+			continue
+		}
+		filtered = append(filtered, model)
+	}
+	return filtered
+}
+
+func authModelExcluded(m *manifest, auth *coreauth.Auth, model string) bool {
+	model = strings.TrimSpace(model)
+	if model == "" || auth == nil {
+		return false
+	}
+	excluded := excludedModelsForAuth(m, auth)
+	if len(excluded) == 0 {
+		return false
+	}
+	if modelMatchesAnyRule(model, excluded) {
+		return true
+	}
+	canonical := resolveSupportedModelAlias(m, model)
+	return canonical != "" && modelMatchesAnyRule(canonical, excluded)
 }
 
 func manifestRegistryModels(m *manifest) []*cliproxy.ModelInfo {
@@ -3878,16 +4050,27 @@ type quotaPoolStateFile struct {
 }
 
 type cockpitQuotaResponse struct {
-	Version                  int    `json:"version"`
-	Scope                    string `json:"scope"`
-	RemainingPercent         *int   `json:"remainingPercent,omitempty"`
+	Version                  int                       `json:"version"`
+	Scope                    string                    `json:"scope"`
+	RemainingPercent         *int                      `json:"remainingPercent,omitempty"`
+	WeeklyRemainingPercent   *int                      `json:"weeklyRemainingPercent,omitempty"`
+	FiveHourRemainingPercent *int                      `json:"fiveHourRemainingPercent,omitempty"`
+	AccountCount             int                       `json:"accountCount"`
+	IncludedAccountCount     int                       `json:"includedAccountCount"`
+	MissingAccountCount      int                       `json:"missingAccountCount"`
+	AvailableAccountCount    int                       `json:"availableAccountCount"`
+	AbnormalAccountCount     int                       `json:"abnormalAccountCount"`
+	CooldownAccountCount     int                       `json:"cooldownAccountCount"`
+	Plans                    []cockpitQuotaPlanSummary `json:"plans,omitempty"`
+	UpdatedAt                int64                     `json:"updatedAt,omitempty"`
+	Stale                    bool                      `json:"stale"`
+}
+
+type cockpitQuotaPlanSummary struct {
+	Plan                     string `json:"plan"`
+	Count                    int    `json:"count"`
 	WeeklyRemainingPercent   *int   `json:"weeklyRemainingPercent,omitempty"`
 	FiveHourRemainingPercent *int   `json:"fiveHourRemainingPercent,omitempty"`
-	AccountCount             int    `json:"accountCount"`
-	IncludedAccountCount     int    `json:"includedAccountCount"`
-	MissingAccountCount      int    `json:"missingAccountCount"`
-	UpdatedAt                int64  `json:"updatedAt,omitempty"`
-	Stale                    bool   `json:"stale"`
 }
 
 func readQuotaPoolState(path string) (quotaPoolStateFile, error) {
@@ -3920,15 +4103,66 @@ func quotaWindowValue(window *quotaPoolWindowState) (int, int64, bool) {
 	return *window.RemainingPercent, minutes, true
 }
 
+func quotaPlanLabel(account *accountSpec) string {
+	if account == nil {
+		return "UNKNOWN"
+	}
+	if strings.EqualFold(strings.TrimSpace(account.AuthKind), "api_key") {
+		return "API_KEY"
+	}
+	plan := strings.TrimSpace(account.PlanType)
+	if plan == "" {
+		return "UNKNOWN"
+	}
+	return strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(plan, "-", "_"), " ", "_"))
+}
+
+func addQuotaPercent(current *int, value int) *int {
+	result := value
+	if current != nil {
+		result += *current
+	}
+	return &result
+}
+
 func buildCockpitQuotaResponse(spec *apiKeySpec, state quotaPoolStateFile, now time.Time) cockpitQuotaResponse {
+	return buildCockpitQuotaResponseWithAccounts(spec, state, now, nil)
+}
+
+func buildCockpitQuotaResponseWithAccounts(spec *apiKeySpec, state quotaPoolStateFile, now time.Time, accounts map[string]*accountSpec) cockpitQuotaResponse {
 	accountIDs := make([]string, 0)
 	if spec != nil {
 		accountIDs = normalizeStringList(spec.AccountIDs)
 	}
+	quotaAccountIDs := accountIDs
+	if accounts != nil {
+		quotaAccountIDs = make([]string, 0, len(accountIDs))
+		for _, accountID := range accountIDs {
+			if account := accounts[accountID]; account != nil && strings.EqualFold(strings.TrimSpace(account.AuthKind), "api_key") {
+				continue
+			}
+			quotaAccountIDs = append(quotaAccountIDs, accountID)
+		}
+	}
 	result := cockpitQuotaResponse{
 		Version:      1,
 		Scope:        "api_key_account_pool",
-		AccountCount: len(accountIDs),
+		AccountCount: len(quotaAccountIDs),
+	}
+	planIndex := make(map[string]int)
+	for _, accountID := range accountIDs {
+		var account *accountSpec
+		if accounts != nil {
+			account = accounts[accountID]
+		}
+		plan := quotaPlanLabel(account)
+		index, exists := planIndex[plan]
+		if !exists {
+			index = len(result.Plans)
+			planIndex[plan] = index
+			result.Plans = append(result.Plans, cockpitQuotaPlanSummary{Plan: plan})
+		}
+		result.Plans[index].Count++
 	}
 	total := 0
 	hasValue := false
@@ -3936,10 +4170,11 @@ func buildCockpitQuotaResponse(spec *apiKeySpec, state quotaPoolStateFile, now t
 	fiveHourTotal := 0
 	hasWeekly := false
 	hasFiveHour := false
-	for _, accountID := range accountIDs {
+	for _, accountID := range quotaAccountIDs {
 		item, ok := state.Accounts[accountID]
 		if !ok {
 			result.MissingAccountCount++
+			result.AbnormalAccountCount++
 			continue
 		}
 		primaryValue, primaryMinutes, primaryOK := quotaWindowValue(item.Primary)
@@ -3957,8 +4192,10 @@ func buildCockpitQuotaResponse(spec *apiKeySpec, state quotaPoolStateFile, now t
 		}
 		if !ok {
 			result.MissingAccountCount++
+			result.AbnormalAccountCount++
 			continue
 		}
+		result.AvailableAccountCount++
 		total += value
 		hasValue = true
 		if primaryOK && primaryMinutes >= 5*24*60 {
@@ -3976,6 +4213,25 @@ func buildCockpitQuotaResponse(spec *apiKeySpec, state quotaPoolStateFile, now t
 		if secondaryOK && secondaryMinutes > 0 && secondaryMinutes <= 6*60 {
 			fiveHourTotal += secondaryValue
 			hasFiveHour = true
+		}
+		var account *accountSpec
+		if accounts != nil {
+			account = accounts[accountID]
+		}
+		if index, exists := planIndex[quotaPlanLabel(account)]; exists {
+			planSummary := &result.Plans[index]
+			if primaryOK && primaryMinutes >= 5*24*60 {
+				planSummary.WeeklyRemainingPercent = addQuotaPercent(planSummary.WeeklyRemainingPercent, primaryValue)
+			}
+			if secondaryOK && secondaryMinutes >= 5*24*60 {
+				planSummary.WeeklyRemainingPercent = addQuotaPercent(planSummary.WeeklyRemainingPercent, secondaryValue)
+			}
+			if primaryOK && primaryMinutes > 0 && primaryMinutes <= 6*60 {
+				planSummary.FiveHourRemainingPercent = addQuotaPercent(planSummary.FiveHourRemainingPercent, primaryValue)
+			}
+			if secondaryOK && secondaryMinutes > 0 && secondaryMinutes <= 6*60 {
+				planSummary.FiveHourRemainingPercent = addQuotaPercent(planSummary.FiveHourRemainingPercent, secondaryValue)
+			}
 		}
 		result.IncludedAccountCount++
 		if item.UpdatedAt != nil {
@@ -3999,6 +4255,50 @@ func buildCockpitQuotaResponse(spec *apiKeySpec, state quotaPoolStateFile, now t
 	return result
 }
 
+func applyCockpitQuotaAuthHealth(result *cockpitQuotaResponse, spec *apiKeySpec, state quotaPoolStateFile, auths []*coreauth.Auth, now time.Time) {
+	if result == nil || spec == nil || len(auths) == 0 {
+		return
+	}
+	targets := make(map[string]struct{}, len(spec.AccountIDs))
+	for _, accountID := range normalizeStringList(spec.AccountIDs) {
+		targets[accountID] = struct{}{}
+	}
+	seen := make(map[string]struct{})
+	for _, auth := range auths {
+		if auth == nil || auth.Attributes == nil {
+			continue
+		}
+		accountID := strings.TrimSpace(auth.Attributes["account_id"])
+		if _, ok := targets[accountID]; !ok {
+			continue
+		}
+		if _, ok := seen[accountID]; ok {
+			continue
+		}
+		seen[accountID] = struct{}{}
+		isCooldown := auth.Unavailable && auth.NextRetryAfter.After(now)
+		isAbnormal := auth.Disabled || auth.Status == coreauth.StatusDisabled || (auth.Unavailable && !isCooldown)
+		if !isCooldown && !isAbnormal {
+			continue
+		}
+		item, hasState := state.Accounts[accountID]
+		_, _, primaryOK := quotaWindowValue(item.Primary)
+		_, _, secondaryOK := quotaWindowValue(item.Secondary)
+		wasAvailable := hasState && (primaryOK || secondaryOK)
+		if wasAvailable && result.AvailableAccountCount > 0 {
+			result.AvailableAccountCount--
+		}
+		if isCooldown {
+			result.CooldownAccountCount++
+			if !wasAvailable && result.AbnormalAccountCount > 0 {
+				result.AbnormalAccountCount--
+			}
+		} else if wasAvailable {
+			result.AbnormalAccountCount++
+		}
+	}
+}
+
 func (s *relayServer) handleCockpitQuota(c *gin.Context) {
 	spec, ok := s.requireAPIKey(c)
 	if !ok {
@@ -4017,7 +4317,10 @@ func (s *relayServer) handleCockpitQuota(c *gin.Context) {
 		writeAPIError(c, http.StatusServiceUnavailable, "quota state unavailable", "quota_state_unavailable")
 		return
 	}
-	response := buildCockpitQuotaResponse(spec, state, time.Now())
+	response := buildCockpitQuotaResponseWithAccounts(spec, state, time.Now(), s.manifest.accountByID)
+	if s.authManager != nil {
+		applyCockpitQuotaAuthHealth(&response, spec, state, s.authManager.List(), time.Now())
+	}
 	if response.RemainingPercent == nil && spec != nil && spec.ProviderGateway != nil {
 		upstreamURL, urlErr := providerGatewayURL(spec.ProviderGateway.BaseURL, cockpitQuotaPath)
 		if urlErr == nil {

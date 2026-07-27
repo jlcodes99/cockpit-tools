@@ -100,6 +100,7 @@ import {
   formatCodexResetTime,
   formatCodexResetTimeAbsolute,
   isCodexApiKeyAccount,
+  isCodexAgentIdentityAccount,
   isCodexChatCompletionsApiKeyAccount,
   isCodexNewApiAccount,
   isCodexPendingOAuthAccount,
@@ -113,6 +114,8 @@ import {
 import {
   canAddCodexAccountToLocalAccess,
   filterCodexLocalAccessAccountIds,
+  isCodexOAuthBindingEligibleAccount,
+  resolveImportedCodexAccountIdsForLocalAccess,
 } from "../utils/codexLocalAccessAccounts";
 import {
   extractCodexQuotaErrorCode,
@@ -126,6 +129,7 @@ import {
   readCodexImportSyncApiService,
   writeCodexImportSyncApiService,
 } from "../utils/codexImportPreferences";
+import { recoverCodexBatchImportStartFromPreview } from "../utils/codexBatchImportQueue";
 import {
   CODEX_OPEN_ADD_ACCOUNT_EVENT,
   type CodexOpenAddAccountDetail,
@@ -149,6 +153,7 @@ import {
 } from "../components/CodexOverviewTabsHeader";
 import { CodexInstancesContent } from "./CodexInstancesPage";
 import { CodexSessionManager } from "../components/codex/CodexSessionManager";
+import { CodexCliLaunchDialog } from "../components/codex/CodexCliLaunchDialog";
 import {
   CodexWakeupContent,
   type CodexWakeupTestOpenRequest,
@@ -158,6 +163,8 @@ import { CodexSpeedSelect } from "../components/codex/CodexSpeedSelect";
 import { QuickSettingsPopover } from "../components/QuickSettingsPopover";
 import { useProviderAccountsPage } from "../hooks/useProviderAccountsPage";
 import { usePlatformRuntimeSupport } from "../hooks/usePlatformRuntimeSupport";
+import { useEscClose } from "../hooks/useEscClose";
+import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
 import {
   MultiSelectFilterDropdown,
   type MultiSelectFilterOption,
@@ -184,6 +191,7 @@ import type {
 } from "../types/codexLocalAccess";
 import {
   CODEX_API_SERVICE_BIND_ID,
+  type InstanceDefaults,
   type InstanceProfile,
 } from "../types/instance";
 import {
@@ -192,7 +200,10 @@ import {
   isCodexAdditionalQuotaVisibleByDefault,
   isCodexCodeReviewQuotaVisibleByDefault,
 } from "../utils/codexPreferences";
-import { splitCodexImportPayloads } from "../utils/codexJsonImportProgress";
+import {
+  findCodexWebSessionImports,
+  splitCodexImportPayloads,
+} from "../utils/codexJsonImportProgress";
 import { emitAccountsChanged } from "../utils/accountSyncEvents";
 import {
   CODEX_OVERVIEW_FILTER_FIELDS,
@@ -258,6 +269,7 @@ import {
 import {
   isModelProviderUsageUnavailableError,
   listModelProviderModels,
+  resolveNewApiQuotaSnapshot,
 } from "../services/modelProviderUsageService";
 import { useSponsorStore } from "../stores/useSponsorStore";
 import type { Sponsor } from "../types/sponsor";
@@ -271,6 +283,7 @@ import {
 import {
   buildCodexExportContent,
   buildCodexExportFileNameBase,
+  hasCodexExportAgentIdentity,
   hasCodexExportSensitiveNotes,
   type CodexExportFormat,
 } from "../utils/codexExportFormats";
@@ -784,6 +797,53 @@ function sanitizeCodexCliInstanceName(value: string): string {
     .trim();
 }
 
+interface CodexCliLaunchModalState {
+  target: "account" | "apiService";
+  accountId: string;
+  accountLabel: string;
+  instanceId: string | null;
+  instanceDraft: CodexCliInstanceDraft | null;
+  instanceName: string;
+  workingDir: string;
+  workingDirError: string | null;
+  launchCommand: string;
+  terminalCommand: string;
+  runtimePrepared: boolean;
+  preparing: boolean;
+  copied: boolean;
+  executing: boolean;
+  executeMessage: string | null;
+  executeError: string | null;
+}
+
+interface CodexCliInstanceDraft {
+  name: string;
+  userDataDir: string;
+  workingDir: string;
+  extraArgs: string;
+  bindAccountId: string;
+}
+
+const CODEX_CLI_LAST_WORKING_DIR_KEY = "cockpit.codex.cli.lastWorkingDir";
+
+function readLastCodexCliWorkingDir(): string {
+  try {
+    return localStorage.getItem(CODEX_CLI_LAST_WORKING_DIR_KEY)?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
+function persistLastCodexCliWorkingDir(value: string): void {
+  const workingDir = value.trim();
+  if (!workingDir) return;
+  try {
+    localStorage.setItem(CODEX_CLI_LAST_WORKING_DIR_KEY, workingDir);
+  } catch {
+    // 工作目录记忆失败不影响 CLI 启动。
+  }
+}
+
 function maskCodexApiKey(value: string): string {
   const raw = value.trim();
   if (!raw) return raw;
@@ -892,6 +952,8 @@ function resolveApiProviderPresetDefaults(
 
 export function CodexAccountsPage() {
   const isMacOS = usePlatformRuntimeSupport("macos-only");
+  const isWindows = usePlatformRuntimeSupport("windows-only");
+  const isCliLaunchSupported = isMacOS || isWindows;
   const sponsorModule = useSponsorStore((state) => state.state.sponsorModule);
   const fetchSponsorState = useSponsorStore((state) => state.fetchState);
   const [activeTab, setActiveTab] = useState<CodexTab>("overview");
@@ -1237,6 +1299,16 @@ export function CodexAccountsPage() {
   const [cliLaunchingAccountId, setCliLaunchingAccountId] = useState<
     string | null
   >(null);
+  const [cliLaunchModal, setCliLaunchModal] =
+    useState<CodexCliLaunchModalState | null>(null);
+  const codexCliInstanceDefaultsRef = useRef<InstanceDefaults | null>(null);
+  const { terminalOptions, selectedTerminal, setSelectedTerminal } =
+    useLaunchTerminalOptions(isCliLaunchSupported);
+  const closeCliLaunchModal = useCallback(() => {
+    setCliLaunchModal(null);
+    setCliLaunchingAccountId(null);
+  }, []);
+  useEscClose(Boolean(cliLaunchModal), closeCliLaunchModal);
   const [cockpitApiPanelAccountId, setCockpitApiPanelAccountId] = useState<
     string | null
   >(null);
@@ -1436,8 +1508,9 @@ export function CodexAccountsPage() {
   );
 
   const syncImportedAccountsToApiService = useCallback(
-    async (accountIds: string[]) => {
-      if (!syncImportedToApiService || accountIds.length === 0) return null;
+    async (accountIds: string[], force = false) => {
+      if ((!syncImportedToApiService && !force) || accountIds.length === 0)
+        return null;
       const result =
         await codexLocalAccessService.appendCodexLocalAccessAccounts(
           accountIds,
@@ -1484,6 +1557,10 @@ export function CodexAccountsPage() {
   const [tokenImportProgress, setTokenImportProgress] = useState<{
     current: number;
     total: number;
+  } | null>(null);
+  const [pendingWebSessionImport, setPendingWebSessionImport] = useState<{
+    content: string;
+    accountLabels: string[];
   } | null>(null);
   const [batchDeleteJob, setBatchDeleteJob] =
     useState<CodexBatchDeleteJobStatus | null>(null);
@@ -1778,6 +1855,7 @@ export function CodexAccountsPage() {
       }
       setPendingOAuthFieldErrors({});
       setPendingOAuthNoteModalOpen(false);
+      setPendingWebSessionImport(null);
       openAddModal(tab);
     },
     [activeGroupId, openAddModal, resolveValidCodexGroupId],
@@ -1792,6 +1870,7 @@ export function CodexAccountsPage() {
     setPendingOAuthNoteForm(EMPTY_CODEX_ACCOUNT_NOTE_FORM);
     setPendingOAuthFieldErrors({});
     setPendingOAuthNoteModalOpen(false);
+    setPendingWebSessionImport(null);
     closeAddModal();
   }, [closeAddModal, importing]);
 
@@ -2071,6 +2150,10 @@ export function CodexAccountsPage() {
     setFormattedSavingExportDocumentId(null);
     clearExportModalError();
   }, [clearExportModalError, exportFormat, showExportModal]);
+
+  const exportHasAgentIdentity = useMemo(() => {
+    return hasCodexExportAgentIdentity(exportJsonContent);
+  }, [exportJsonContent]);
 
   const formattedExportContent = useMemo(() => {
     const exportFormatSupportsSensitiveNotes = exportFormat !== "sub2api";
@@ -3622,12 +3705,9 @@ export function CodexAccountsPage() {
     () => accounts.filter((account) => !isCodexApiKeyAccount(account)),
     [accounts],
   );
-  const isOAuthBindingEligibleAccount = useCallback((account: CodexAccount) => {
-    return Boolean(account.tokens.refresh_token?.trim());
-  }, []);
   const oauthBindingEligibleAccounts = useMemo(
-    () => oauthAccounts.filter(isOAuthBindingEligibleAccount),
-    [isOAuthBindingEligibleAccount, oauthAccounts],
+    () => oauthAccounts.filter(isCodexOAuthBindingEligibleAccount),
+    [oauthAccounts],
   );
   const oauthBindingAccount = useMemo(
     () =>
@@ -4781,7 +4861,7 @@ export function CodexAccountsPage() {
       setOauthBindingTargetKind("api_key_account");
       setOauthBindingAccountId(account.id);
       setOauthBindingSelectedAccountId(
-        boundAccount && isOAuthBindingEligibleAccount(boundAccount)
+        boundAccount && isCodexOAuthBindingEligibleAccount(boundAccount)
           ? boundAccount.id
           : "",
       );
@@ -4794,7 +4874,6 @@ export function CodexAccountsPage() {
       setOauthBindingError(null);
     },
     [
-      isOAuthBindingEligibleAccount,
       resolveBoundOAuthAccount,
       setOauthBindingError,
     ],
@@ -4822,7 +4901,7 @@ export function CodexAccountsPage() {
       setOauthBindingAccountId(null);
       setOauthBindingSelectedAccountId(
         boundLocalAccessOAuthAccount &&
-          isOAuthBindingEligibleAccount(boundLocalAccessOAuthAccount)
+          isCodexOAuthBindingEligibleAccount(boundLocalAccessOAuthAccount)
           ? boundLocalAccessOAuthAccount.id
           : "",
       );
@@ -4836,7 +4915,6 @@ export function CodexAccountsPage() {
     },
     [
       boundLocalAccessOAuthAccount,
-      isOAuthBindingEligibleAccount,
       localAccessCollection?.boundOauthQuotaReserve,
       setOauthBindingError,
     ],
@@ -5034,6 +5112,17 @@ export function CodexAccountsPage() {
   );
 
   const handleSwitch = async (accountId: string) => {
+    const account = codexAccountsRef.current.find((item) => item.id === accountId);
+    if (isCodexAgentIdentityAccount(account)) {
+      setMessage({
+        text: t(
+          "codex.agentIdentityRegistration.apiOnlyActionError",
+          "Agent Identity 账号仅支持 API 服务，无法作为普通账号切换或启动。",
+        ),
+        tone: "error",
+      });
+      return;
+    }
     try {
       await executeCodexAccountSwitch(accountId);
     } catch (e) {
@@ -5059,7 +5148,16 @@ export function CodexAccountsPage() {
       );
       return;
     }
-    if (!isOAuthBindingEligibleAccount(selectedOAuthBindingAccount)) {
+    if (isCodexAgentIdentityAccount(selectedOAuthBindingAccount)) {
+      setOauthBindingError(
+        t(
+          "codex.agentIdentityRegistration.oauthBindingUnsupported",
+          "Agent Identity 账号仅用于 API 服务，不能作为 OAuth 绑定账号。",
+        ),
+      );
+      return;
+    }
+    if (!isCodexOAuthBindingEligibleAccount(selectedOAuthBindingAccount)) {
       setOauthBindingError(
         t(
           "codex.api.oauthBinding.validationSubscriptionRequired",
@@ -5115,7 +5213,6 @@ export function CodexAccountsPage() {
     oauthBindingAutoSwitch,
     oauthBindingQuotaReserve,
     oauthBindingTargetKind,
-    isOAuthBindingEligibleAccount,
     selectedOAuthBindingAccount,
     setMessage,
     setOauthBindingError,
@@ -5166,129 +5263,256 @@ export function CodexAccountsPage() {
     updateApiKeyBoundOAuthAccount,
   ]);
 
-  const resolveCodexCliInstanceForAccount = async (
-    account: CodexAccount,
+  const findCachedCodexCliInstance = (
+    bindAccountId: string,
     workingDir: string,
-  ): Promise<InstanceProfile> => {
+  ): InstanceProfile | null => {
     const normalizedWorkingDir = normalizePathForCompare(workingDir);
-    const instances = await codexInstanceService.listInstances();
-    const existing = instances.find(
-      (instance) =>
-        !instance.isDefault &&
-        (instance.launchMode ?? "app") === "cli" &&
-        instance.bindAccountId === account.id &&
-        normalizePathForCompare(instance.workingDir) === normalizedWorkingDir,
+    return (
+      codexInstanceStore.instances.find(
+        (instance) =>
+          !instance.isDefault &&
+          (instance.launchMode ?? "app") === "cli" &&
+          instance.bindAccountId === bindAccountId &&
+          normalizePathForCompare(instance.workingDir) ===
+            normalizedWorkingDir,
+      ) ?? null
     );
-    if (existing) {
-      return existing;
-    }
-
-    const defaults = await codexInstanceService.getInstanceDefaults();
-    const presentation = buildCodexAccountPresentation(account, t);
-    const displayName = presentation.displayName || account.email || account.id;
-    const instanceHash = md5(`${account.id}|${normalizedWorkingDir}`).substring(
-      0,
-      12,
-    );
-    const instanceName = sanitizeCodexCliInstanceName(
-      `${displayName} CLI ${instanceHash.substring(0, 6)}`,
-    );
-    const userDataDir = joinFilePath(defaults.rootDir, `cli-${instanceHash}`);
-
-    return await codexInstanceService.createInstance({
-      name: instanceName,
-      userDataDir,
-      workingDir: normalizedWorkingDir,
-      extraArgs: "",
-      bindAccountId: account.id,
-      launchMode: "cli",
-      copySourceInstanceId: "__default__",
-      initMode: "copy",
-    });
   };
 
-  const resolveCodexCliInstanceForApiService = async (
+  const buildCodexCliInstanceDraft = async (
+    modal: CodexCliLaunchModalState,
     workingDir: string,
-  ): Promise<InstanceProfile> => {
+  ): Promise<{
+    instanceId: string | null;
+    draft: CodexCliInstanceDraft;
+  }> => {
     const normalizedWorkingDir = normalizePathForCompare(workingDir);
-    const instances = await codexInstanceService.listInstances();
-    const existing = instances.find(
-      (instance) =>
-        !instance.isDefault &&
-        (instance.launchMode ?? "app") === "cli" &&
-        instance.bindAccountId === CODEX_API_SERVICE_BIND_ID &&
-        normalizePathForCompare(instance.workingDir) === normalizedWorkingDir,
+    const bindAccountId =
+      modal.target === "apiService"
+        ? CODEX_API_SERVICE_BIND_ID
+        : modal.accountId;
+    const cached = findCachedCodexCliInstance(
+      bindAccountId,
+      normalizedWorkingDir,
     );
-    if (existing) {
-      return existing;
+    if (cached) {
+      return {
+        instanceId: cached.id,
+        draft: {
+          name: cached.name,
+          userDataDir: cached.userDataDir,
+          workingDir:
+            normalizePathForCompare(cached.workingDir) || normalizedWorkingDir,
+          extraArgs: cached.extraArgs || "",
+          bindAccountId,
+        },
+      };
     }
 
-    const defaults = await codexInstanceService.getInstanceDefaults();
+    let defaults = codexCliInstanceDefaultsRef.current;
+    if (!defaults) {
+      defaults = await codexInstanceService.getInstanceDefaults();
+      codexCliInstanceDefaultsRef.current = defaults;
+    }
     const instanceHash = md5(
-      `${CODEX_API_SERVICE_BIND_ID}|${normalizedWorkingDir}`,
+      `${bindAccountId}|${normalizedWorkingDir}`,
     ).substring(0, 12);
     const instanceName = sanitizeCodexCliInstanceName(
-      `${t("codex.localAccess.title", "API 服务")} CLI ${instanceHash.substring(0, 6)}`,
+      `${modal.accountLabel} CLI ${instanceHash.substring(0, 6)}`,
     );
-    const userDataDir = joinFilePath(
-      defaults.rootDir,
-      `cli-api-service-${instanceHash}`,
+    const directoryName =
+      modal.target === "apiService"
+        ? `cli-api-service-${instanceHash}`
+        : `cli-${instanceHash}`;
+    return {
+      instanceId: null,
+      draft: {
+        name: instanceName,
+        userDataDir: joinFilePath(defaults.rootDir, directoryName),
+        workingDir: normalizedWorkingDir,
+        extraArgs: "",
+        bindAccountId,
+      },
+    };
+  };
+
+  const resolveCodexCliInstance = async (
+    draft: CodexCliInstanceDraft,
+  ): Promise<InstanceProfile> => {
+    const cached = findCachedCodexCliInstance(
+      draft.bindAccountId,
+      draft.workingDir,
     );
+    if (cached) return cached;
+
+    const instances = await codexInstanceService.listInstances();
+    const normalizedWorkingDir = normalizePathForCompare(draft.workingDir);
+    const existing = instances.find(
+      (instance) =>
+        !instance.isDefault &&
+        (instance.launchMode ?? "app") === "cli" &&
+        instance.bindAccountId === draft.bindAccountId &&
+        normalizePathForCompare(instance.workingDir) === normalizedWorkingDir,
+    );
+    if (existing) return existing;
 
     return await codexInstanceService.createInstance({
-      name: instanceName,
-      userDataDir,
-      workingDir: normalizedWorkingDir,
-      extraArgs: "",
-      bindAccountId: CODEX_API_SERVICE_BIND_ID,
+      name: draft.name,
+      userDataDir: draft.userDataDir,
+      workingDir: draft.workingDir,
+      extraArgs: draft.extraArgs,
+      bindAccountId: draft.bindAccountId,
       launchMode: "cli",
       copySourceInstanceId: "__default__",
       initMode: "copy",
     });
   };
 
-  const handleLaunchCodexCli = async (account: CodexAccount) => {
-    if (cliLaunchingAccountId) return;
-    setMessage(null);
-    setCliLaunchingAccountId(account.id);
-    try {
-      const selected = await openFileDialog({
-        directory: true,
-        multiple: false,
-        title: t("codex.cli.selectWorkingDir", "选择 Codex CLI 工作目录"),
-      });
-      if (!selected || typeof selected !== "string") {
-        return;
-      }
-
-      const instance = await resolveCodexCliInstanceForAccount(
-        account,
-        selected,
+  const prepareCodexCliLaunch = async (
+    modal: CodexCliLaunchModalState,
+    workingDirOverride?: string,
+  ): Promise<CodexCliLaunchModalState | null> => {
+    const workingDir = (workingDirOverride ?? modal.workingDir).trim();
+    if (!workingDir) {
+      setCliLaunchModal((prev) =>
+        prev
+          ? {
+              ...prev,
+              workingDirError: t(
+                "instances.form.pathRequired",
+                "请选择工作目录",
+              ),
+              executeError: null,
+            }
+          : prev,
       );
-      const prepared = await codexInstanceService.startInstance(instance.id);
-      const result =
-        await codexInstanceService.executeCodexInstanceLaunchCommand(
-          prepared.id,
-        );
-      await codexInstanceStore.refreshInstances();
-      setMessage({
-        text: result || t("codex.cli.launchSuccess", "已启动 Codex CLI"),
-      });
-    } catch (e) {
-      setMessage({
-        text: t(
-          "codex.cli.launchFailed",
-          "启动 Codex CLI 失败: {{error}}",
-        ).replace("{{error}}", String(e).replace(/^Error:\s*/, "")),
-        tone: "error",
-      });
+      return null;
+    }
+
+    setCliLaunchingAccountId(modal.accountId);
+    setCliLaunchModal((prev) =>
+      prev
+        ? {
+            ...prev,
+            workingDir,
+            workingDirError: null,
+            preparing: true,
+            copied: false,
+            executeMessage: null,
+            executeError: null,
+          }
+        : prev,
+    );
+    try {
+      if (
+        modal.target === "account" &&
+        !accounts.some((item) => item.id === modal.accountId)
+      ) {
+        throw new Error(t("instances.quota.accountMissing", "账号不存在"));
+      }
+      const { instanceId, draft } = await buildCodexCliInstanceDraft(
+        modal,
+        workingDir,
+      );
+      const launchInfo =
+        await codexInstanceService.previewCodexInstanceLaunchCommand({
+          userDataDir: draft.userDataDir,
+          workingDir: draft.workingDir,
+          extraArgs: draft.extraArgs,
+          terminal: selectedTerminal,
+        });
+      persistLastCodexCliWorkingDir(workingDir);
+      const next: CodexCliLaunchModalState = {
+        ...modal,
+        instanceId,
+        instanceDraft: draft,
+        instanceName: draft.name,
+        workingDir,
+        workingDirError: null,
+        launchCommand: launchInfo.launchCommand,
+        terminalCommand: launchInfo.terminalCommand,
+        runtimePrepared: false,
+        preparing: false,
+        copied: false,
+        executing: false,
+        executeMessage: null,
+        executeError: null,
+      };
+      setCliLaunchModal((prev) =>
+        prev && prev.accountId === modal.accountId ? next : prev,
+      );
+      return next;
+    } catch (error) {
+      setCliLaunchModal((prev) =>
+        prev && prev.accountId === modal.accountId
+          ? {
+              ...prev,
+              preparing: false,
+              executing: false,
+              executeMessage: null,
+              executeError: String(error).replace(/^Error:\s*/, ""),
+            }
+          : prev,
+      );
+      return null;
     } finally {
       setCliLaunchingAccountId(null);
     }
   };
 
-  const handleLaunchLocalAccessCli = async () => {
-    if (cliLaunchingAccountId) return;
+  const openCodexCliLaunchModal = (
+    target: "account" | "apiService",
+    accountId: string,
+    accountLabel: string,
+  ) => {
+    if (cliLaunchModal || cliLaunchingAccountId) return;
+    setMessage(null);
+    const modal: CodexCliLaunchModalState = {
+      target,
+      accountId,
+      accountLabel,
+      instanceId: null,
+      instanceDraft: null,
+      instanceName: t("common.loading", "加载中..."),
+      workingDir: readLastCodexCliWorkingDir(),
+      workingDirError: null,
+      launchCommand: "",
+      terminalCommand: "",
+      runtimePrepared: false,
+      preparing: false,
+      copied: false,
+      executing: false,
+      executeMessage: null,
+      executeError: null,
+    };
+    setCliLaunchModal(modal);
+    if (modal.workingDir) {
+      void prepareCodexCliLaunch(modal);
+    }
+  };
+
+  const handleLaunchCodexCli = (account: CodexAccount) => {
+    if (isCodexAgentIdentityAccount(account)) {
+      setMessage({
+        text: t(
+          "codex.agentIdentityRegistration.apiOnlyActionError",
+          "Agent Identity 账号仅支持 API 服务，无法作为普通账号切换或启动。",
+        ),
+        tone: "error",
+      });
+      return;
+    }
+    const presentation = buildCodexAccountPresentation(account, t);
+    openCodexCliLaunchModal(
+      "account",
+      account.id,
+      presentation.displayName || account.email || account.id,
+    );
+  };
+
+  const handleLaunchLocalAccessCli = () => {
+    if (cliLaunchModal || cliLaunchingAccountId) return;
     if (!localAccessCollection) {
       setMessage({
         text: t("codex.localAccess.testUnavailable", "当前 API 服务地址不可用"),
@@ -5296,40 +5520,265 @@ export function CodexAccountsPage() {
       });
       return;
     }
-    setMessage(null);
-    setCliLaunchingAccountId(CODEX_API_SERVICE_BIND_ID);
-    try {
-      const selected = await openFileDialog({
-        directory: true,
-        multiple: false,
-        title: t("codex.cli.selectWorkingDir", "选择 Codex CLI 工作目录"),
-      });
-      if (!selected || typeof selected !== "string") {
-        return;
-      }
+    openCodexCliLaunchModal(
+      "apiService",
+      CODEX_API_SERVICE_BIND_ID,
+      t("codex.localAccess.title", "API 服务"),
+    );
+  };
 
-      const instance = await resolveCodexCliInstanceForApiService(selected);
-      const prepared = await codexInstanceService.startInstance(instance.id);
+  const updateCodexCliWorkingDir = (workingDir: string) => {
+    setCliLaunchModal((prev) =>
+      prev
+        ? {
+            ...prev,
+            workingDir,
+            workingDirError: null,
+            instanceId: null,
+            instanceDraft: null,
+            instanceName: t("common.loading", "加载中..."),
+            launchCommand: "",
+            terminalCommand: "",
+            runtimePrepared: false,
+            copied: false,
+            executeMessage: null,
+            executeError: null,
+          }
+        : prev,
+    );
+  };
+
+  const handleChooseCodexCliWorkingDir = async () => {
+    if (!cliLaunchModal || cliLaunchModal.preparing || cliLaunchModal.executing)
+      return;
+    const selected = await openFileDialog({
+      directory: true,
+      multiple: false,
+      title: t("codex.cli.selectWorkingDir", "选择 Codex CLI 工作目录"),
+    });
+    if (!selected || typeof selected !== "string") return;
+    const next = { ...cliLaunchModal, workingDir: selected };
+    updateCodexCliWorkingDir(selected);
+    await prepareCodexCliLaunch(next, selected);
+  };
+
+  const handleCopyCodexCliCommand = async () => {
+    if (!cliLaunchModal || cliLaunchModal.preparing) return;
+    const prepared = cliLaunchModal.terminalCommand
+      ? cliLaunchModal
+      : await prepareCodexCliLaunch(cliLaunchModal);
+    if (!prepared) return;
+    const runtime = prepared.runtimePrepared
+      ? prepared
+      : await prepareCodexCliRuntime(prepared);
+    if (!runtime) return;
+    try {
+      await navigator.clipboard.writeText(
+        runtime.launchCommand || runtime.terminalCommand,
+      );
+      setCliLaunchModal((prev) =>
+        prev ? { ...prev, copied: true, executeError: null } : prev,
+      );
+      window.setTimeout(() => {
+        setCliLaunchModal((prev) =>
+          prev ? { ...prev, copied: false } : prev,
+        );
+      }, 1200);
+    } catch {
+      setCliLaunchModal((prev) =>
+        prev
+          ? {
+              ...prev,
+              executeError: t(
+                "common.shared.export.copyFailed",
+                "复制失败，请手动复制",
+              ),
+            }
+          : prev,
+      );
+    }
+  };
+
+  async function prepareCodexCliRuntime(
+    modal: CodexCliLaunchModalState,
+  ): Promise<CodexCliLaunchModalState | null> {
+    if (modal.runtimePrepared) return modal;
+    setCliLaunchingAccountId(modal.accountId);
+    setCliLaunchModal((prev) =>
+      prev
+        ? {
+            ...prev,
+            preparing: true,
+            copied: false,
+            executeMessage: null,
+            executeError: null,
+          }
+        : prev,
+    );
+    try {
+      if (
+        modal.target === "account" &&
+        !accounts.some((item) => item.id === modal.accountId)
+      ) {
+        throw new Error(t("instances.quota.accountMissing", "账号不存在"));
+      }
+      const draft =
+        modal.instanceDraft ??
+        (await buildCodexCliInstanceDraft(modal, modal.workingDir)).draft;
+      let instanceId = modal.instanceId;
+      if (!instanceId) {
+        const instance = await resolveCodexCliInstance(draft);
+        instanceId = instance.id;
+      }
+      const started = await codexInstanceService.startInstance(instanceId);
+      const launchInfo =
+        await codexInstanceService.getCodexInstanceLaunchCommand(
+          started.id,
+          selectedTerminal,
+        );
+      const next: CodexCliLaunchModalState = {
+        ...modal,
+        instanceId: started.id,
+        instanceDraft: {
+          name: started.name,
+          userDataDir: started.userDataDir,
+          workingDir:
+            normalizePathForCompare(started.workingDir) || draft.workingDir,
+          extraArgs: started.extraArgs || "",
+          bindAccountId: started.bindAccountId || draft.bindAccountId,
+        },
+        instanceName: started.name,
+        launchCommand: launchInfo.launchCommand,
+        terminalCommand: launchInfo.terminalCommand,
+        runtimePrepared: true,
+        preparing: false,
+        copied: false,
+        executing: false,
+        executeMessage: null,
+        executeError: null,
+      };
+      setCliLaunchModal((prev) =>
+        prev && prev.accountId === modal.accountId ? next : prev,
+      );
+      return next;
+    } catch (error) {
+      setCliLaunchModal((prev) =>
+        prev && prev.accountId === modal.accountId
+          ? {
+              ...prev,
+              preparing: false,
+              executing: false,
+              executeMessage: null,
+              executeError: String(error).replace(/^Error:\s*/, ""),
+            }
+          : prev,
+      );
+      return null;
+    } finally {
+      setCliLaunchingAccountId(null);
+    }
+  }
+
+  const handleExecuteCodexCli = async () => {
+    if (!cliLaunchModal || cliLaunchModal.preparing || cliLaunchModal.executing)
+      return;
+    const prepared = cliLaunchModal.terminalCommand
+      ? cliLaunchModal
+      : await prepareCodexCliLaunch(cliLaunchModal);
+    if (!prepared) return;
+    const runtime = prepared.runtimePrepared
+      ? prepared
+      : await prepareCodexCliRuntime(prepared);
+    if (!runtime?.instanceId) return;
+    setCliLaunchingAccountId(runtime.accountId);
+    setCliLaunchModal((prev) =>
+      prev
+        ? {
+            ...prev,
+            executing: true,
+            executeMessage: null,
+            executeError: null,
+          }
+        : prev,
+    );
+    try {
       const result =
         await codexInstanceService.executeCodexInstanceLaunchCommand(
-          prepared.id,
+          runtime.instanceId,
+          selectedTerminal,
         );
       await codexInstanceStore.refreshInstances();
-      setMessage({
-        text: result || t("codex.cli.launchSuccess", "已启动 Codex CLI"),
-      });
-    } catch (e) {
-      setMessage({
-        text: t(
-          "codex.cli.launchFailed",
-          "启动 Codex CLI 失败: {{error}}",
-        ).replace("{{error}}", String(e).replace(/^Error:\s*/, "")),
-        tone: "error",
-      });
+      setCliLaunchModal((prev) =>
+        prev
+          ? {
+              ...prev,
+              executing: false,
+              executeMessage:
+                result || t("codex.cli.launchSuccess", "已启动 Codex CLI"),
+            }
+          : prev,
+      );
+    } catch (error) {
+      setCliLaunchModal((prev) =>
+        prev
+          ? {
+              ...prev,
+              executing: false,
+              executeError: String(error).replace(/^Error:\s*/, ""),
+            }
+          : prev,
+      );
     } finally {
       setCliLaunchingAccountId(null);
     }
   };
+
+  useEffect(() => {
+    const draft = cliLaunchModal?.instanceDraft;
+    if (!draft || cliLaunchModal.preparing || cliLaunchModal.executing) return;
+    let disposed = false;
+    void codexInstanceService
+      .previewCodexInstanceLaunchCommand({
+        userDataDir: draft.userDataDir,
+        workingDir: draft.workingDir,
+        extraArgs: draft.extraArgs,
+        terminal: selectedTerminal,
+        launchCommand: cliLaunchModal.runtimePrepared
+          ? cliLaunchModal.launchCommand
+          : null,
+      })
+      .then((launchInfo) => {
+        if (disposed) return;
+        setCliLaunchModal((prev) =>
+          prev && prev.instanceDraft?.userDataDir === draft.userDataDir
+            ? {
+                ...prev,
+                launchCommand: launchInfo.launchCommand,
+                terminalCommand: launchInfo.terminalCommand,
+                copied: false,
+                executeMessage: null,
+                executeError: null,
+              }
+            : prev,
+        );
+      })
+      .catch((error) => {
+        if (disposed) return;
+        setCliLaunchModal((prev) =>
+          prev && prev.instanceDraft?.userDataDir === draft.userDataDir
+            ? {
+                ...prev,
+                executeError: String(error).replace(/^Error:\s*/, ""),
+              }
+            : prev,
+        );
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [
+    selectedTerminal,
+  ]);
 
   const handleImportFromLocal = async () => {
     page.setAddStatus("loading");
@@ -5486,6 +5935,28 @@ export function CodexAccountsPage() {
         );
       } catch {
         // ignore storage failures
+      }
+      // The backend starts scanning before this invoke resolves. A fast scan can
+      // therefore emit its terminal event while the listener still filters on
+      // __pending__. Re-read the now-addressable session to recover that event.
+      try {
+        const recoveredPreview =
+          await codexService.getCodexBatchImportPreview(started.sessionId);
+        const recovery = recoverCodexBatchImportStartFromPreview(
+          batchImportSessionIdRef.current,
+          started.sessionId,
+          recoveredPreview,
+          batchImportSelectedIds,
+        );
+        if (recovery) {
+          setBatchImportPreview(recovery.preview);
+          setBatchImportCheckQuota(recovery.preview.checkQuota);
+          setBatchImportSelectedIds(recovery.selectedIds);
+          setBatchImportBusy(false);
+        }
+      } catch {
+        // If this read fails, only later listener events follow their normal path;
+        // it cannot recover terminal or error events that were already missed.
       }
     } catch (e) {
       cleanupBatchImportListeners();
@@ -6421,8 +6892,11 @@ export function CodexAccountsPage() {
     }
   };
 
-  const handleTokenImport = async () => {
-    const trimmed = tokenInput.trim();
+  const performTokenImport = async (
+    rawContent: string,
+    forceAgentIdentityApiService = false,
+  ) => {
+    const trimmed = rawContent.trim();
     if (!trimmed) {
       page.setAddStatus("error");
       page.setAddMessage(
@@ -6454,9 +6928,7 @@ export function CodexAccountsPage() {
           }),
         );
         try {
-          imported.push(
-            ...(await codexService.importCodexFromJson(payloads[index])),
-          );
+          imported.push(...(await codexService.importCodexFromJson(payloads[index])));
         } catch (error) {
           failures.push(
             `${current}: ${String(error).replace(/^Error:\s*/, "")}`,
@@ -6487,8 +6959,14 @@ export function CodexAccountsPage() {
         });
       }
       try {
+        const accountIdsToSync = resolveImportedCodexAccountIdsForLocalAccess(
+          imported,
+          syncImportedToApiService,
+          forceAgentIdentityApiService,
+        );
         const syncResult = await syncImportedAccountsToApiService(
-          imported.map((account) => account.id),
+          accountIdsToSync,
+          forceAgentIdentityApiService,
         );
         if (failures.length > 0) {
           page.setAddStatus("error");
@@ -6538,6 +7016,28 @@ export function CodexAccountsPage() {
       setImporting(false);
       setTokenImportProgress(null);
     }
+  };
+
+  const handleTokenImport = async () => {
+    const trimmed = tokenInput.trim();
+    if (!trimmed) {
+      page.setAddStatus("error");
+      page.setAddMessage(
+        t("common.shared.token.empty", "请输入 Token 或 JSON"),
+      );
+      return;
+    }
+    const webSessions = findCodexWebSessionImports(trimmed);
+    if (webSessions.length > 0) {
+      page.setAddStatus("idle");
+      page.setAddMessage("");
+      setPendingWebSessionImport({
+        content: trimmed,
+        accountLabels: webSessions.map((item) => item.label),
+      });
+      return;
+    }
+    await performTokenImport(trimmed);
   };
 
   const clearInlineRename = useCallback(() => {
@@ -7014,17 +7514,8 @@ export function CodexAccountsPage() {
   const formatApiKeyUsagePercent = useCallback(
     (summary?: CodexModelProviderUsageSummary): number => {
       if (summary?.mode === "new_api") {
-        const granted = Number(
-          summary.details?.find((item) => item.key === "totalGranted")?.value,
-        );
-        const available = Number(
-          summary.details?.find((item) => item.key === "totalAvailable")?.value,
-        );
-        if (
-          Number.isFinite(granted) &&
-          Number.isFinite(available) &&
-          granted > 0
-        ) {
+        const { granted, available } = resolveNewApiQuotaSnapshot(summary);
+        if (granted != null && available != null && granted > 0) {
           return Math.max(
             0,
             Math.min(100, Math.round(((granted - available) / granted) * 100)),
@@ -7214,19 +7705,19 @@ export function CodexAccountsPage() {
       const isSub2ApiUsage = usageMode === "sub2api";
       const usedPercent = formatApiKeyUsagePercent(summary);
       if (variant === "card" && summary && isNewApiUsage) {
-        const grantedRaw = Number(
-          findApiKeyUsageDetail(summary, "totalGranted")?.value ?? NaN,
+        const quota = resolveNewApiQuotaSnapshot(summary);
+        const grantedText = formatApiKeyUsageMoney(quota.granted, summary.unit);
+        const availableText = formatApiKeyUsageMoney(
+          quota.available,
+          summary.unit,
         );
-        const availableRaw = Number(
-          findApiKeyUsageDetail(summary, "totalAvailable")?.value ?? NaN,
-        );
-        const grantedText = Number.isFinite(grantedRaw)
-          ? formatApiKeyUsageMoney(grantedRaw, summary.unit)
-          : formatApiKeyUsageDetailByKey(summary, "totalGranted");
-        const availableText = Number.isFinite(availableRaw)
-          ? formatApiKeyUsageMoney(availableRaw, summary.unit)
-          : formatApiKeyUsageDetailByKey(summary, "totalAvailable");
-        const expiresText = formatApiKeyUsageDetailByKey(summary, "expiresAt");
+        const expiresText =
+          quota.expiresAt != null
+            ? formatApiKeyUsageDetailValue({
+                key: "expiresAt",
+                value: String(quota.expiresAt),
+              })
+            : "-";
         const unlimitedText = t("codex.newApi.quota.unlimited", "不限量");
         const quotaValueText =
           summary.quotaUnlimited === true
@@ -8431,6 +8922,8 @@ export function CodexAccountsPage() {
       options?: {
         restrictFreeAccounts?: boolean;
         backupAccountIds?: string[];
+        sessionAffinity?: boolean;
+        sessionAffinityTtlMs?: number;
       },
     ) => {
       setLocalAccessSaving(true);
@@ -8461,6 +8954,8 @@ export function CodexAccountsPage() {
             filteredAccountIds,
             restrictFreeAccounts,
             backupAccountIds,
+            options?.sessionAffinity,
+            options?.sessionAffinityTtlMs,
           );
         setLocalAccessState(nextState);
         setMessage({
@@ -9920,7 +10415,7 @@ export function CodexAccountsPage() {
   );
 
   const renderResetCreditControls = (account: CodexAccount) => {
-    if (isCodexApiKeyAccount(account)) return null;
+    if (isCodexApiKeyAccount(account) || isCodexAgentIdentityAccount(account)) return null;
 
     const creditDetails = getResetCreditDetails(account);
     const availableCount = getResetCreditsAvailable(account);
@@ -9969,14 +10464,16 @@ export function CodexAccountsPage() {
       const isCurrent = overviewCurrentAccountId === account.id;
       const isSelected = selected.has(account.id);
       const isApiKeyAccount = isCodexApiKeyAccount(account);
+      const isAgentIdentityAccount = isCodexAgentIdentityAccount(account);
       const isChatCompletionsApiKey =
         isCodexChatCompletionsApiKeyAccount(account);
       const compactQuotaItems = resolveCompactQuotaItems(presentation);
       const subscriptionInfo = resolveSubscriptionPresentation(account);
       const showCompactExpiry =
-        !isApiKeyAccount && subscriptionInfo.bucket !== "active";
+        !isApiKeyAccount && !isAgentIdentityAccount && subscriptionInfo.bucket !== "active";
       const showSubscriptionRefreshAction =
         !isApiKeyAccount &&
+        !isAgentIdentityAccount &&
         (subscriptionInfo.bucket === "missing" ||
           subscriptionInfo.bucket === "expired");
       const isSubscriptionRefreshPending =
@@ -10063,8 +10560,15 @@ export function CodexAccountsPage() {
           <button
             className={`codex-compact-switch-btn ${!isCurrent ? "success" : ""}`}
             onClick={() => handleSwitch(account.id)}
-            disabled={!!switching}
-            title={t("codex.switch", "切换")}
+            disabled={!!switching || isAgentIdentityAccount}
+            title={
+              isAgentIdentityAccount
+                ? t(
+                    "codex.agentIdentityRegistration.apiOnlyActionError",
+                    "Agent Identity 账号仅支持 API 服务，无法作为普通账号切换或启动。",
+                  )
+                : t("codex.switch", "切换")
+            }
           >
             {switching === account.id ? (
               <RefreshCw size={14} className="loading-spinner" />
@@ -10082,6 +10586,7 @@ export function CodexAccountsPage() {
       const meta = resolveAccountMeta(account);
       const isCurrent = overviewCurrentAccountId === account.id;
       const isApiKeyAccount = isCodexApiKeyAccount(account);
+      const isAgentIdentityAccount = isCodexAgentIdentityAccount(account);
       const isPendingOAuthAccount = isPendingOAuthCodexAccount(account);
       const isNewApiAccount = isCodexNewApiAccount(account);
       const isChatCompletionsApiKey =
@@ -10488,8 +10993,18 @@ export function CodexAccountsPage() {
                 <button
                   className="card-action-btn"
                   onClick={() => void handleLaunchCodexCli(account)}
-                  disabled={cliLaunchingAccountId === account.id}
-                  title={t("codex.cli.quickLaunch", "CLI 快速启动")}
+                  disabled={
+                    cliLaunchingAccountId === account.id ||
+                    isAgentIdentityAccount
+                  }
+                  title={
+                    isAgentIdentityAccount
+                      ? t(
+                          "codex.agentIdentityRegistration.apiOnlyActionError",
+                          "Agent Identity 账号仅支持 API 服务，无法作为普通账号切换或启动。",
+                        )
+                      : t("codex.cli.quickLaunch", "CLI 快速启动")
+                  }
                 >
                   {cliLaunchingAccountId === account.id ? (
                     <RefreshCw size={14} className="loading-spinner" />
@@ -10538,8 +11053,15 @@ export function CodexAccountsPage() {
                 <button
                   className={`card-action-btn ${!isCurrent ? "success" : ""}`}
                   onClick={() => handleSwitch(account.id)}
-                  disabled={!!switching}
-                  title={t("codex.switch", "切换")}
+                  disabled={!!switching || isAgentIdentityAccount}
+                  title={
+                    isAgentIdentityAccount
+                      ? t(
+                          "codex.agentIdentityRegistration.apiOnlyActionError",
+                          "Agent Identity 账号仅支持 API 服务，无法作为普通账号切换或启动。",
+                        )
+                      : t("codex.switch", "切换")
+                  }
                 >
                   {switching === account.id ? (
                     <RefreshCw size={14} className="loading-spinner" />
@@ -11474,6 +11996,7 @@ export function CodexAccountsPage() {
       const meta = resolveAccountMeta(account);
       const isCurrent = overviewCurrentAccountId === account.id;
       const isApiKeyAccount = isCodexApiKeyAccount(account);
+      const isAgentIdentityAccount = isCodexAgentIdentityAccount(account);
       const isPendingOAuthAccount = isPendingOAuthCodexAccount(account);
       const isNewApiAccount = isCodexNewApiAccount(account);
       const isChatCompletionsApiKey =
@@ -11851,8 +12374,18 @@ export function CodexAccountsPage() {
               <button
                 className="action-btn"
                 onClick={() => void handleLaunchCodexCli(account)}
-                disabled={cliLaunchingAccountId === account.id}
-                title={t("codex.cli.quickLaunch", "CLI 快速启动")}
+                disabled={
+                  cliLaunchingAccountId === account.id ||
+                  isAgentIdentityAccount
+                }
+                title={
+                  isAgentIdentityAccount
+                    ? t(
+                        "codex.agentIdentityRegistration.apiOnlyActionError",
+                        "Agent Identity 账号仅支持 API 服务，无法作为普通账号切换或启动。",
+                      )
+                    : t("codex.cli.quickLaunch", "CLI 快速启动")
+                }
               >
                 {cliLaunchingAccountId === account.id ? (
                   <RefreshCw size={14} className="loading-spinner" />
@@ -11902,8 +12435,15 @@ export function CodexAccountsPage() {
               <button
                 className={`action-btn ${!isCurrent ? "success" : ""}`}
                 onClick={() => handleSwitch(account.id)}
-                disabled={!!switching}
-                title={t("codex.switch", "切换")}
+                disabled={!!switching || isAgentIdentityAccount}
+                title={
+                  isAgentIdentityAccount
+                    ? t(
+                        "codex.agentIdentityRegistration.apiOnlyActionError",
+                        "Agent Identity 账号仅支持 API 服务，无法作为普通账号切换或启动。",
+                      )
+                    : t("codex.switch", "切换")
+                }
               >
                 {switching === account.id ? (
                   <RefreshCw size={14} className="loading-spinner" />
@@ -12186,6 +12726,7 @@ export function CodexAccountsPage() {
     const baseUrl =
       provider?.baseUrl.trim() || (account.api_base_url || "").trim() || "-";
     const usedPercent = formatApiKeyUsagePercent(summary);
+    const newApiQuota = resolveNewApiQuotaSnapshot(summary);
     const summaryDetails =
       usageMode === "new_api"
         ? [
@@ -12195,14 +12736,10 @@ export function CodexAccountsPage() {
                 "codex.modelProviders.usage.fields.totalGranted",
                 "授予额度",
               ),
-              value: (() => {
-                const raw = Number(
-                  findApiKeyUsageDetail(summary, "totalGranted")?.value ?? NaN,
-                );
-                return Number.isFinite(raw)
-                  ? formatApiKeyUsageMoney(raw, summary?.unit)
-                  : formatApiKeyUsageDetailByKey(summary, "totalGranted");
-              })(),
+              value: formatApiKeyUsageMoney(
+                newApiQuota.granted,
+                summary?.unit,
+              ),
             },
             {
               key: "totalAvailable",
@@ -12210,15 +12747,10 @@ export function CodexAccountsPage() {
                 "codex.modelProviders.usage.fields.totalAvailable",
                 "可用额度",
               ),
-              value: (() => {
-                const raw = Number(
-                  findApiKeyUsageDetail(summary, "totalAvailable")?.value ??
-                    NaN,
-                );
-                return Number.isFinite(raw)
-                  ? formatApiKeyUsageMoney(raw, summary?.unit)
-                  : formatApiKeyUsageDetailByKey(summary, "totalAvailable");
-              })(),
+              value: formatApiKeyUsageMoney(
+                newApiQuota.available,
+                summary?.unit,
+              ),
             },
             {
               key: "expiresAt",
@@ -12226,7 +12758,13 @@ export function CodexAccountsPage() {
                 "codex.modelProviders.usage.fields.expiresAt",
                 "过期时间",
               ),
-              value: formatApiKeyUsageDetailByKey(summary, "expiresAt"),
+              value:
+                newApiQuota.expiresAt != null
+                  ? formatApiKeyUsageDetailValue({
+                      key: "expiresAt",
+                      value: String(newApiQuota.expiresAt),
+                    })
+                  : "-",
             },
           ]
         : usageMode === "sub2api"
@@ -15672,7 +16210,7 @@ export function CodexAccountsPage() {
                                     oauthBindingSelectedAccountId ===
                                     account.id;
                                   const eligible =
-                                    isOAuthBindingEligibleAccount(account);
+                                    isCodexOAuthBindingEligibleAccount(account);
                                   const rowDisabled =
                                     oauthBindingSaving || !eligible;
                                   const emailText = maskAccountText(
@@ -15690,10 +16228,15 @@ export function CodexAccountsPage() {
                                       title={
                                         eligible
                                           ? emailText
-                                          : t(
-                                              "codex.api.oauthBinding.validationSubscriptionRequired",
-                                              "只能绑定带 refresh_token 的 OAuth 账号",
-                                            )
+                                          : isCodexAgentIdentityAccount(account)
+                                            ? t(
+                                                "codex.agentIdentityRegistration.oauthBindingUnsupported",
+                                                "Agent Identity 账号仅用于 API 服务，不能作为 OAuth 绑定账号。",
+                                              )
+                                            : t(
+                                                "codex.api.oauthBinding.validationSubscriptionRequired",
+                                                "只能绑定带 refresh_token 的 OAuth 账号",
+                                              )
                                       }
                                       onClick={(event) => {
                                         if (rowDisabled) {
@@ -16642,11 +17185,31 @@ export function CodexAccountsPage() {
                     value={exportFormat}
                     options={exportFormatOptions}
                     ariaLabel={t("codex.exportFormat.label", "导出格式")}
-                    onChange={(value) =>
-                      setExportFormat(value as CodexExportFormat)
-                    }
+                    onChange={(value) => {
+                      if (value === "cpa" && exportHasAgentIdentity) {
+                        reportExportModalError(
+                          t(
+                            "codex.exportFormat.agentIdentityCpaUnsupported",
+                            "Agent Identity 账号不支持 cpa 格式，请使用 Cockpit Tools 或 sub2api 格式导出。",
+                          ),
+                        );
+                        return;
+                      }
+                      setExportFormat(value as CodexExportFormat);
+                    }}
                   />
                 </div>
+                {exportHasAgentIdentity ? (
+                  <div className="export-json-sensitive-notice">
+                    <Info size={14} />
+                    <span>
+                      {t(
+                        "codex.exportFormat.agentIdentityPrivateKeyNotice",
+                        "导出内容包含 Agent Identity 私钥，可用于在其他设备恢复账号。请像密码一样妥善保管。",
+                      )}
+                    </span>
+                  </div>
+                ) : null}
                 {exportCanIncludeSensitiveNotes ? (
                   <label
                     className="export-json-sensitive-toggle"
@@ -16849,6 +17412,104 @@ export function CodexAccountsPage() {
                     {localAccessHideSubmitting
                       ? t("common.processing", "处理中...")
                       : t("common.confirm", "确认")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {pendingWebSessionImport && (
+            <div className="modal-overlay codex-local-access-hide-confirm-overlay codex-local-access-risk-notice-overlay">
+              <div
+                className="modal codex-local-access-hide-confirm-modal codex-local-access-risk-notice-modal"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="modal-header">
+                  <h2>
+                    <CircleAlert size={18} />
+                    {t(
+                      "codex.agentIdentityRegistration.noticeTitle",
+                      "Web Session 导入须知",
+                    )}
+                  </h2>
+                  <button
+                    className="modal-close"
+                    onClick={() => setPendingWebSessionImport(null)}
+                    aria-label={t("common.close", "关闭")}
+                  >
+                    <X />
+                  </button>
+                </div>
+                <div className="modal-body">
+                  <p className="codex-local-access-hide-confirm-desc">
+                    {t(
+                      "codex.agentIdentityRegistration.noticeMessage",
+                      "检测到 {{count}} 个 Web Session 账号。继续后将自动注册为 Agent Identity。",
+                      { count: pendingWebSessionImport.accountLabels.length },
+                    )}
+                  </p>
+                  <div className="codex-local-access-hide-confirm-points codex-local-access-risk-notice-points">
+                    {pendingWebSessionImport.accountLabels.map(
+                      (accountLabel, index) => (
+                        <div
+                          className="codex-local-access-hide-confirm-point"
+                          key={`${accountLabel}-${index}`}
+                        >
+                          <span className="codex-local-access-hide-confirm-dot" />
+                          <span>{maskAccountText(accountLabel)}</span>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                  <div className="codex-local-access-hide-confirm-points codex-local-access-risk-notice-points">
+                    <div className="codex-local-access-hide-confirm-point">
+                      <span className="codex-local-access-hide-confirm-dot" />
+                      <span>
+                        {t(
+                          "codex.agentIdentityRegistration.noticeApiOnly",
+                          "这类账号仅用于 API 服务，确认后会自动加入 API 服务账号池。",
+                        )}
+                      </span>
+                    </div>
+                    <div className="codex-local-access-hide-confirm-point">
+                      <span className="codex-local-access-hide-confirm-dot" />
+                      <span>
+                        {t(
+                          "codex.agentIdentityRegistration.noticeNoSwitch",
+                          "无法作为普通 Codex 账号切号，不能直接启动官方客户端或 CLI，也不能作为 OAuth 绑定账号。",
+                        )}
+                      </span>
+                    </div>
+                    <div className="codex-local-access-hide-confirm-point">
+                      <span className="codex-local-access-hide-confirm-dot" />
+                      <span>
+                        {t(
+                          "codex.agentIdentityRegistration.noticeCredential",
+                          "应用会在本机生成并保存 Agent Identity 私钥；导出备份时请像密码一样保护。",
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setPendingWebSessionImport(null)}
+                  >
+                    {t("common.cancel", "取消")}
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => {
+                      const pending = pendingWebSessionImport;
+                      setPendingWebSessionImport(null);
+                      void performTokenImport(pending.content, true);
+                    }}
+                  >
+                    {t(
+                      "codex.agentIdentityRegistration.noticeConfirm",
+                      "已知晓，继续导入",
+                    )}
                   </button>
                 </div>
               </div>
@@ -17887,10 +18548,14 @@ export function CodexAccountsPage() {
               accountIds,
               restrictFreeAccounts,
               backupAccountIds,
+              sessionAffinity,
+              sessionAffinityTtlMs,
             }) =>
               handleSaveLocalAccessAccounts(accountIds, {
                 restrictFreeAccounts,
                 backupAccountIds,
+                sessionAffinity,
+                sessionAffinityTtlMs,
               })
             }
             onClearStats={handleClearLocalAccessStats}
@@ -17944,6 +18609,47 @@ export function CodexAccountsPage() {
             onAdded={reloadCodexGroups}
           />
         </>
+      )}
+
+      {cliLaunchModal && (
+        <CodexCliLaunchDialog
+          subjectLabel={t("instances.columns.account", "账号")}
+          subjectValue={cliLaunchModal.accountLabel}
+          workingDir={{
+            value: cliLaunchModal.workingDir,
+            error: cliLaunchModal.workingDirError,
+            onChange: updateCodexCliWorkingDir,
+            onBlur: () => {
+              if (
+                cliLaunchModal.workingDir.trim() &&
+                !cliLaunchModal.instanceId &&
+                !cliLaunchModal.preparing &&
+                !cliLaunchModal.executing
+              ) {
+                void prepareCodexCliLaunch(cliLaunchModal);
+              }
+            },
+            onChoose: () => void handleChooseCodexCliWorkingDir(),
+          }}
+          terminal={selectedTerminal}
+          terminalOptions={terminalOptions}
+          onTerminalChange={setSelectedTerminal}
+          command={cliLaunchModal.terminalCommand}
+          commandPlaceholder={
+            cliLaunchModal.preparing
+              ? t("common.loading", "加载中...")
+              : t("codex.cli.selectWorkingDir", "选择 Codex CLI 工作目录")
+          }
+          preparing={cliLaunchModal.preparing}
+          copied={cliLaunchModal.copied}
+          executing={cliLaunchModal.executing}
+          successMessage={cliLaunchModal.executeMessage}
+          errorMessage={cliLaunchModal.executeError}
+          onClose={closeCliLaunchModal}
+          onCopy={() => void handleCopyCodexCliCommand()}
+          onExecute={() => void handleExecuteCodexCli()}
+          showCancelButton
+        />
       )}
 
       {activeTab === "instances" && (

@@ -31,6 +31,45 @@ type responsesTerminalEventTestError struct {
 	event []byte
 }
 
+func TestReadManifestCodexTokenAuthAcceptsAgentIdentityWithoutAccessToken(t *testing.T) {
+	authDir := t.TempDir()
+	path := filepath.Join(authDir, "agent.json")
+	payload := map[string]any{
+		"type":              "codex",
+		"auth_mode":         "agentIdentity",
+		"agent_runtime_id":  "runtime-test",
+		"agent_private_key": "private-key-test",
+		"account_id":        "team-test",
+		"chatgpt_user_id":   "user-test",
+		"email":             "agent@example.com",
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal auth: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write auth: %v", err)
+	}
+	auth, err := readManifestCodexTokenAuth(&accountSpec{
+		ID:       "account-test",
+		Email:    "agent@example.com",
+		AuthID:   "agent.json",
+		AuthKind: "agent_identity",
+	}, authDir, path)
+	if err != nil {
+		t.Fatalf("read Agent Identity auth: %v", err)
+	}
+	if auth.Attributes[coreauth.AttributeAuthKind] != coreauth.AuthKindOAuth {
+		t.Fatalf("auth kind = %q", auth.Attributes[coreauth.AttributeAuthKind])
+	}
+	if got, _ := auth.Metadata["auth_mode"].(string); got != "agentIdentity" {
+		t.Fatalf("auth mode = %q", got)
+	}
+	if _, exists := auth.Metadata["access_token"]; exists {
+		t.Fatal("Agent Identity must not fabricate access_token")
+	}
+}
+
 func (e responsesTerminalEventTestError) Error() string { return "server overloaded" }
 func (e responsesTerminalEventTestError) StatusCode() int {
 	return http.StatusServiceUnavailable
@@ -353,6 +392,57 @@ func TestBuildCockpitQuotaResponseAggregatesShortestWindowWithoutClamp(t *testin
 	emptyScope := buildCockpitQuotaResponse(&apiKeySpec{}, state, time.Now())
 	if emptyScope.RemainingPercent != nil || emptyScope.AccountCount != 0 {
 		t.Fatalf("empty API key scope must not expose the full quota pool: %#v", emptyScope)
+	}
+}
+
+func TestBuildCockpitQuotaResponseGroupsPlansAndPoolHealth(t *testing.T) {
+	present := true
+	fiveHourMinutes := int64(300)
+	weeklyMinutes := int64(10080)
+	state := quotaPoolStateFile{Accounts: map[string]quotaPoolAccountState{
+		"plus-1": {
+			Primary:   &quotaPoolWindowState{Present: &present, RemainingPercent: intPtrForTest(80), WindowMinutes: &fiveHourMinutes},
+			Secondary: &quotaPoolWindowState{Present: &present, RemainingPercent: intPtrForTest(40), WindowMinutes: &weeklyMinutes},
+		},
+		"team-1": {
+			Primary: &quotaPoolWindowState{Present: &present, RemainingPercent: intPtrForTest(75), WindowMinutes: &weeklyMinutes},
+		},
+	}}
+	accounts := map[string]*accountSpec{
+		"plus-1":    {ID: "plus-1", PlanType: "plus"},
+		"plus-2":    {ID: "plus-2", PlanType: "plus"},
+		"team-1":    {ID: "team-1", PlanType: "team"},
+		"api-key-1": {ID: "api-key-1", AuthKind: "api_key", PlanType: "custom"},
+	}
+	response := buildCockpitQuotaResponseWithAccounts(
+		&apiKeySpec{AccountIDs: []string{"plus-1", "plus-2", "team-1", "api-key-1"}},
+		state,
+		time.Now(),
+		accounts,
+	)
+	if response.AccountCount != 3 || response.AvailableAccountCount != 2 || response.AbnormalAccountCount != 1 || response.CooldownAccountCount != 0 {
+		t.Fatalf("pool health = available %d, abnormal %d, cooldown %d", response.AvailableAccountCount, response.AbnormalAccountCount, response.CooldownAccountCount)
+	}
+	if len(response.Plans) != 3 {
+		t.Fatalf("plan summaries = %#v, want 3 groups", response.Plans)
+	}
+	if response.Plans[0].Plan != "PLUS" || response.Plans[0].Count != 2 || response.Plans[0].WeeklyRemainingPercent == nil || *response.Plans[0].WeeklyRemainingPercent != 40 || response.Plans[0].FiveHourRemainingPercent == nil || *response.Plans[0].FiveHourRemainingPercent != 80 {
+		t.Fatalf("PLUS summary = %#v", response.Plans[0])
+	}
+	if response.Plans[1].Plan != "TEAM" || response.Plans[1].Count != 1 || response.Plans[1].WeeklyRemainingPercent == nil || *response.Plans[1].WeeklyRemainingPercent != 75 {
+		t.Fatalf("TEAM summary = %#v", response.Plans[1])
+	}
+	if response.Plans[2].Plan != "API_KEY" || response.Plans[2].Count != 1 || response.Plans[2].WeeklyRemainingPercent != nil || response.Plans[2].FiveHourRemainingPercent != nil {
+		t.Fatalf("API_KEY summary = %#v", response.Plans[2])
+	}
+	applyCockpitQuotaAuthHealth(&response, &apiKeySpec{AccountIDs: []string{"plus-1", "plus-2", "team-1", "api-key-1"}}, state, []*coreauth.Auth{{
+		ID:             "team-auth",
+		Unavailable:    true,
+		NextRetryAfter: time.Now().Add(time.Minute),
+		Attributes:     map[string]string{"account_id": "team-1"},
+	}}, time.Now())
+	if response.AvailableAccountCount != 1 || response.AbnormalAccountCount != 1 || response.CooldownAccountCount != 1 {
+		t.Fatalf("runtime pool health = available %d, abnormal %d, cooldown %d", response.AvailableAccountCount, response.AbnormalAccountCount, response.CooldownAccountCount)
 	}
 }
 
@@ -3903,5 +3993,48 @@ func TestResponsesWebsocketRejectsProviderGatewayBeforeCodexAuth(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "websocket_not_supported") {
 		t.Fatalf("body = %s", w.Body.String())
+	}
+}
+
+func TestCoreAuthSelectorFiltersNewModelExclusionsBeforeSessionAffinity(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Routing.SessionAffinity = true
+	cfg.Routing.SessionAffinityTTL = "1h"
+	selector := buildCoreAuthSelector(cfg, &coreauth.RoundRobinSelector{}, &manifest{}, nil)
+	if stoppable, ok := selector.(coreauth.StoppableSelector); ok {
+		t.Cleanup(stoppable.Stop)
+	}
+
+	plus := &coreauth.Auth{
+		ID:       "plus.json",
+		Provider: "codex",
+		Status:   coreauth.StatusActive,
+		Metadata: map[string]any{},
+	}
+	pro := &coreauth.Auth{
+		ID:       "pro.json",
+		Provider: "codex",
+		Status:   coreauth.StatusActive,
+	}
+	auths := []*coreauth.Auth{plus, pro}
+	opts := cliproxyexecutor.Options{
+		Headers: http.Header{"Session_id": []string{"spark-session"}},
+	}
+
+	first, err := selector.Pick(context.Background(), "codex", codexSparkModel, opts, auths)
+	if err != nil {
+		t.Fatalf("initial Pick: %v", err)
+	}
+	if first == nil || first.ID != plus.ID {
+		t.Fatalf("initial Pick = %#v, want %q", first, plus.ID)
+	}
+
+	plus.Metadata["excluded_models"] = []any{codexSparkModel}
+	second, err := selector.Pick(context.Background(), "codex", codexSparkModel, opts, auths)
+	if err != nil {
+		t.Fatalf("Pick after exclusion: %v", err)
+	}
+	if second == nil || second.ID != pro.ID {
+		t.Fatalf("Pick after exclusion = %#v, want %q", second, pro.ID)
 	}
 }

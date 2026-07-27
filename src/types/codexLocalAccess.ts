@@ -314,6 +314,12 @@ export interface CodexLocalAccessQuotaReserveStatus {
 export interface CodexLocalAccessState {
   collection: CodexLocalAccessCollection | null;
   running: boolean;
+  preparing: boolean;
+  preparationTotal: number;
+  preparationCompleted: number;
+  refreshingAccounts: boolean;
+  accountRefreshTotal: number;
+  accountRefreshCompleted: number;
   defaultProfile: CodexLocalAccessProfileAttachment | null;
   apiPortUrl: string | null;
   baseUrl: string | null;

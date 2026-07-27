@@ -30,11 +30,15 @@ export async function saveCodexLocalAccessAccounts(
   accountIds: string[],
   restrictFreeAccounts: boolean,
   backupAccountIds?: string[],
+  sessionAffinity?: boolean,
+  sessionAffinityTtlMs?: number,
 ): Promise<CodexLocalAccessState> {
   return await invoke("codex_local_access_save_accounts", {
     accountIds,
     restrictFreeAccounts,
     backupAccountIds: backupAccountIds ?? null,
+    sessionAffinity: sessionAffinity ?? null,
+    sessionAffinityTtlMs: sessionAffinityTtlMs ?? null,
   });
 }
 

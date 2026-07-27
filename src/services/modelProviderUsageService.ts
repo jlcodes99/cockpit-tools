@@ -40,6 +40,53 @@ export interface ModelProviderUsageSummary {
   }>;
 }
 
+export interface NewApiQuotaSnapshot {
+  granted: number | null;
+  available: number | null;
+  expiresAt: number | null;
+}
+
+function finiteUsageNumber(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function usageDetailNumber(
+  summary: ModelProviderUsageSummary | undefined,
+  key: string,
+): number | null {
+  return finiteUsageNumber(summary?.details?.find((item) => item.key === key)?.value);
+}
+
+export function resolveNewApiQuotaSnapshot(
+  summary?: ModelProviderUsageSummary,
+): NewApiQuotaSnapshot {
+  const used =
+    finiteUsageNumber(summary?.quotaUsed) ??
+    finiteUsageNumber(summary?.totalCost);
+  const granted =
+    usageDetailNumber(summary, 'totalGranted') ??
+    finiteUsageNumber(summary?.quotaLimit) ??
+    usageDetailNumber(summary, 'hardLimitUsd') ??
+    usageDetailNumber(summary, 'softLimitUsd') ??
+    usageDetailNumber(summary, 'systemHardLimitUsd');
+  const available =
+    usageDetailNumber(summary, 'totalAvailable') ??
+    finiteUsageNumber(summary?.quotaRemaining) ??
+    (granted != null && used != null
+      ? Math.max(0, granted - used)
+      : null);
+  const expiresAt =
+    usageDetailNumber(summary, 'expiresAt') ??
+    usageDetailNumber(summary, 'accessUntil');
+
+  return { granted, available, expiresAt };
+}
+
 function buildUsageBaseUrlCandidates(baseUrl: string): string[] {
   const trimmed = baseUrl.trim();
   if (!trimmed) return [];

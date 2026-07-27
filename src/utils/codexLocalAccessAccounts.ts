@@ -1,5 +1,6 @@
 import {
   isCodexApiKeyAccount,
+  isCodexAgentIdentityAccount,
   isCodexExplicitFreePlanType,
   isCodexPendingOAuthAccount,
   type CodexAccount,
@@ -83,7 +84,11 @@ export function getCodexLocalAccessAccountIneligibleReason(
   if (isCodexChatCompletionsApiKeyAccount(account)) {
     return "chat_completions_api_key";
   }
-  if (restrictFreeAccounts && isCodexExplicitFreePlanType(account.plan_type)) {
+  if (
+    restrictFreeAccounts &&
+    !isCodexAgentIdentityAccount(account) &&
+    isCodexExplicitFreePlanType(account.plan_type)
+  ) {
     return "free_restricted";
   }
   return null;
@@ -107,6 +112,16 @@ export function canAddCodexAccountToLocalAccess(
   return (
     !currentAccountIds.has(account.id) &&
     isCodexLocalAccessEligibleAccount(account, restrictFreeAccounts)
+  );
+}
+
+export function isCodexOAuthBindingEligibleAccount(
+  account: CodexAccount,
+): boolean {
+  return (
+    !isCodexApiKeyAccount(account) &&
+    !isCodexAgentIdentityAccount(account) &&
+    Boolean(account.tokens.refresh_token?.trim())
   );
 }
 
@@ -147,4 +162,20 @@ export function resolveCodexLocalAccessInitialAccountIds(
     accounts,
     restrictFreeAccounts,
   );
+}
+
+export function resolveImportedCodexAccountIdsForLocalAccess(
+  accounts: CodexAccount[],
+  syncAllImportedAccounts: boolean,
+  forceAgentIdentityAccounts: boolean,
+): string[] {
+  if (syncAllImportedAccounts) {
+    return accounts.map((account) => account.id);
+  }
+  if (!forceAgentIdentityAccounts) {
+    return [];
+  }
+  return accounts
+    .filter(isCodexAgentIdentityAccount)
+    .map((account) => account.id);
 }

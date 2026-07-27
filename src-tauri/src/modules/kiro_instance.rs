@@ -876,6 +876,8 @@ fn focus_window_by_pid(pid: u32) -> Result<(), String> {
 fn focus_window_by_pid(pid: u32) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
 
+    let _spawn_guard = crate::modules::app_lifecycle::acquire_process_spawn_guard("PowerShell")
+        .map_err(|error| error.to_string())?;
     let command = format!(
         r#"$targetPid={pid};$h=[IntPtr]::Zero;for($i=0;$i -lt 20;$i++){{$p=Get-Process -Id $targetPid -ErrorAction Stop;$h=$p.MainWindowHandle;if ($h -ne 0) {{ break }};Start-Sleep -Milliseconds 150}};if ($h -eq 0) {{ throw 'MAIN_WINDOW_HANDLE_EMPTY' }};Add-Type @'
 using System;

@@ -628,8 +628,10 @@ fn restart_codex_specified_app_if_enabled(user_config: &config::UserConfig) {
 
 /// 列出所有 Codex 账号
 #[tauri::command]
-pub fn list_codex_accounts() -> Result<Vec<CodexAccount>, String> {
-    codex_account::list_accounts_checked()
+pub async fn list_codex_accounts() -> Result<Vec<CodexAccount>, String> {
+    tauri::async_runtime::spawn_blocking(codex_account::list_accounts_checked)
+        .await
+        .map_err(|error| format!("读取 Codex 账号后台任务失败: {}", error))?
 }
 
 /// 获取当前激活的 Codex 账号
@@ -879,7 +881,11 @@ pub async fn switch_codex_account(
         if process::is_codex_running() {
             logger::log_info("检测到 Codex 正在运行，将按默认实例 PID 逻辑重启");
         }
-        match crate::commands::codex_instance::codex_start_default_with_prepared_profile().await {
+        match crate::commands::codex_instance::codex_start_default_with_prepared_profile(
+            app.clone(),
+        )
+        .await
+        {
             Ok(_) => {}
             Err(e) => {
                 logger::log_warn(&format!("Codex 启动失败: {}", e));
@@ -3178,11 +3184,15 @@ pub async fn codex_local_access_save_accounts(
     account_ids: Vec<String>,
     restrict_free_accounts: Option<bool>,
     backup_account_ids: Option<Vec<String>>,
+    session_affinity: Option<bool>,
+    session_affinity_ttl_ms: Option<i64>,
 ) -> Result<CodexLocalAccessState, String> {
     codex_local_access::save_local_access_accounts(
         account_ids,
         restrict_free_accounts.unwrap_or(true),
         backup_account_ids,
+        session_affinity,
+        session_affinity_ttl_ms,
     )
     .await
 }
@@ -3560,7 +3570,11 @@ pub async fn codex_local_access_activate(
         if process::is_codex_running() {
             logger::log_info("检测到 Codex 正在运行，将按默认实例 PID 逻辑重启");
         }
-        match crate::commands::codex_instance::codex_start_default_with_prepared_profile().await {
+        match crate::commands::codex_instance::codex_start_default_with_prepared_profile(
+            app.clone(),
+        )
+        .await
+        {
             Ok(_) => {}
             Err(e) => {
                 logger::log_warn(&format!("Codex 启动失败: {}", e));

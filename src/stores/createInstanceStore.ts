@@ -83,11 +83,13 @@ export function createInstanceStore(
   const loadCachedInstances = () => {
     try {
       const raw = localStorage.getItem(cacheKey);
-      if (!raw) return [];
+      if (!raw) return { instances: [], loaded: false };
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? (parsed as InstanceProfile[]) : [];
+      return Array.isArray(parsed)
+        ? { instances: parsed as InstanceProfile[], loaded: true }
+        : { instances: [], loaded: false };
     } catch {
-      return [];
+      return { instances: [], loaded: false };
     }
   };
 
@@ -99,16 +101,26 @@ export function createInstanceStore(
     }
   };
 
+  const cachedInstances = loadCachedInstances();
+  let hasLoadedInstances = cachedInstances.loaded;
+
   return create<InstanceStoreState>((set, get) => ({
-    instances: loadCachedInstances(),
+    instances: cachedInstances.instances,
     defaults: null,
     loading: false,
     error: null,
 
     fetchInstances: async () => {
-      set({ loading: true, error: null });
+      const showInitialLoading =
+        !hasLoadedInstances && get().instances.length === 0;
+      set(
+        showInitialLoading
+          ? { loading: true, error: null }
+          : { error: null },
+      );
       try {
         const instances = await service.listInstances();
+        hasLoadedInstances = true;
         set({ instances, loading: false });
         persistInstancesCache(instances);
       } catch (e) {
@@ -120,6 +132,7 @@ export function createInstanceStore(
       set({ error: null });
       try {
         const instances = await service.listInstances();
+        hasLoadedInstances = true;
         set({ instances });
         persistInstancesCache(instances);
         return instances;

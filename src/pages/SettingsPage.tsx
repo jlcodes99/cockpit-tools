@@ -172,6 +172,7 @@ interface GeneralConfig {
   kiro_app_path: string;
   cursor_app_path: string;
   codebuddy_app_path: string;
+  codebuddy_share_sessions_on_switch: boolean;
   codebuddy_cn_app_path: string;
   qoder_app_path: string;
   zcode_app_path: string;
@@ -184,6 +185,7 @@ interface GeneralConfig {
   trae_cn_app_scan_roots: string;
   trae_solo_cn_app_scan_roots: string;
   workbuddy_app_path: string;
+  workbuddy_share_sessions_on_switch: boolean;
   zed_app_path: string;
   codebuddy_auto_refresh_minutes: number;
   codebuddy_cn_auto_refresh_minutes: number;
@@ -406,7 +408,15 @@ export function SettingsPage() {
   }, []);
 
   const terminalOptions = useMemo(() => {
-    const common = [{ value: 'system', label: t('settings.general.terminalSystem', '系统默认') }];
+    const common = [{
+      value: 'system',
+      label: isWindows
+        ? t(
+            'settings.general.terminalSystemWindowsCompatibility',
+            '系统兼容（PowerShell）',
+          )
+        : t('settings.general.terminalSystem', '系统默认'),
+    }];
     const allOptions = isMacOS ? [
       { value: 'Terminal', label: 'Terminal.app' },
       { value: 'iTerm2', label: 'iTerm2' },
@@ -523,6 +533,7 @@ export function SettingsPage() {
   const [kiroAppPath, setKiroAppPath] = useState('');
   const [cursorAppPath, setCursorAppPath] = useState('');
   const [codebuddyAppPath, setCodebuddyAppPath] = useState('');
+  const [codebuddyShareSessionsOnSwitch, setCodebuddyShareSessionsOnSwitch] = useState(false);
   const [codebuddyCnAppPath, setCodebuddyCnAppPath] = useState('');
   const [qoderAppPath, setQoderAppPath] = useState('');
   const [zcodeAppPath, setZcodeAppPath] = useState('');
@@ -531,6 +542,7 @@ export function SettingsPage() {
   const [traeCnAppPath, setTraeCnAppPath] = useState('');
   const [traeSoloCnAppPath, setTraeSoloCnAppPath] = useState('');
   const [workbuddyAppPath, setWorkbuddyAppPath] = useState('');
+  const [workbuddyShareSessionsOnSwitch, setWorkbuddyShareSessionsOnSwitch] = useState(false);
   const [zedAppPath, setZedAppPath] = useState('');
   const [codebuddyAutoRefresh, setCodebuddyAutoRefresh] = useState('10');
   const [codebuddyCnAutoRefresh, setCodebuddyCnAutoRefresh] = useState('10');
@@ -1057,6 +1069,7 @@ export function SettingsPage() {
       kiro_app_path: kiroAppPath,
       cursor_app_path: cursorAppPath,
       codebuddy_app_path: codebuddyAppPath,
+      codebuddy_share_sessions_on_switch: codebuddyShareSessionsOnSwitch,
       codebuddy_cn_app_path: codebuddyCnAppPath,
       qoder_app_path: qoderAppPath,
       zcode_app_path: zcodeAppPath,
@@ -1069,6 +1082,7 @@ export function SettingsPage() {
       trae_cn_app_scan_roots: traeCnAppScanRoots,
       trae_solo_cn_app_scan_roots: traeSoloCnAppScanRoots,
       workbuddy_app_path: workbuddyAppPath,
+      workbuddy_share_sessions_on_switch: workbuddyShareSessionsOnSwitch,
       zed_app_path: zedAppPath,
       opencode_sync_on_switch: opencodeSyncOnSwitch,
       opencode_auth_overwrite_on_switch: opencodeAuthOverwriteOnSwitch,
@@ -1276,6 +1290,7 @@ export function SettingsPage() {
     kiroAppPath,
     cursorAppPath,
     codebuddyAppPath,
+    codebuddyShareSessionsOnSwitch,
     codebuddyCnAppPath,
     qoderAppPath,
     zcodeAppPath,
@@ -1288,6 +1303,7 @@ export function SettingsPage() {
     traeCnAppScanRoots,
     traeSoloCnAppScanRoots,
     workbuddyAppPath,
+    workbuddyShareSessionsOnSwitch,
     zedAppPath,
     opencodeSyncOnSwitch,
     opencodeAuthOverwriteOnSwitch,
@@ -1567,7 +1583,12 @@ export function SettingsPage() {
       skipNextGeneralSaveRef.current = true;
       setGeneralConfigHydrationRevision((revision) => revision + 1);
       setLanguage(normalizeLanguage(config.language));
-      setDefaultTerminal(config.default_terminal || 'system');
+      const configuredTerminal = config.default_terminal || 'system';
+      setDefaultTerminal(
+        configuredTerminal.toLowerCase() === 'powershell'
+          ? 'PowerShell'
+          : configuredTerminal,
+      );
       setTheme(config.theme);
       setThemeColor((config.theme_color || 'default').trim() || 'default');
       setExternalNetworkEnabled(config.external_network_enabled ?? true);
@@ -1610,6 +1631,7 @@ export function SettingsPage() {
       setKiroAppPath(config.kiro_app_path || '');
       setCursorAppPath(config.cursor_app_path || '');
       setCodebuddyAppPath(config.codebuddy_app_path || '');
+      setCodebuddyShareSessionsOnSwitch(config.codebuddy_share_sessions_on_switch ?? false);
       setCodebuddyCnAppPath(config.codebuddy_cn_app_path || '');
       setQoderAppPath(config.qoder_app_path || '');
       setZcodeAppPath(config.zcode_app_path || '');
@@ -1624,6 +1646,7 @@ export function SettingsPage() {
       setTraeLaunchCandidatesTarget('trae');
       setTraeLaunchCandidates([]);
       setWorkbuddyAppPath(config.workbuddy_app_path || '');
+      setWorkbuddyShareSessionsOnSwitch(config.workbuddy_share_sessions_on_switch ?? false);
       setZedAppPath(config.zed_app_path || '');
       setCodebuddyAutoRefresh(String(config.codebuddy_auto_refresh_minutes ?? 10));
       setCodebuddyCnAutoRefresh(String(config.codebuddy_cn_auto_refresh_minutes ?? 10));
@@ -5534,6 +5557,27 @@ export function SettingsPage() {
 
               <div className="settings-row">
                 <div className="row-label">
+                  <div className="row-title">
+                    {t('settings.general.codebuddyShareSessionsOnSwitch')}
+                  </div>
+                  <div className="row-desc">
+                    {t('settings.general.codebuddyShareSessionsOnSwitchDesc')}
+                  </div>
+                </div>
+                <div className="row-control">
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={codebuddyShareSessionsOnSwitch}
+                      onChange={(event) => setCodebuddyShareSessionsOnSwitch(event.target.checked)}
+                    />
+                    <span className="slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="row-label">
                   <div className="row-title">{t('settings.general.codebuddyAppPath', 'CodeBuddy 启动路径')}</div>
                   <div className="row-desc">{t('settings.general.codebuddyAppPathDesc', '留空则使用默认路径')}</div>
                 </div>
@@ -6498,6 +6542,29 @@ export function SettingsPage() {
 
                   {renderCurrentAccountRefreshRow('workbuddy')}
                   {renderAccountLevelRefreshConfig('workbuddy')}
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">
+                        {t('settings.general.workbuddyShareSessionsOnSwitch')}
+                      </div>
+                      <div className="row-desc">
+                        {t('settings.general.workbuddyShareSessionsOnSwitchDesc')}
+                      </div>
+                    </div>
+                    <div className="row-control">
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={workbuddyShareSessionsOnSwitch}
+                          onChange={(event) =>
+                            setWorkbuddyShareSessionsOnSwitch(event.target.checked)
+                          }
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+                  </div>
 
                   <div className="settings-row">
                     <div className="row-label">

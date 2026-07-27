@@ -2393,7 +2393,7 @@ export function InstancesManager<TAccount extends AccountLike>({
         </div>
       )}
 
-      {loading ? (
+      {loading && instances.length === 0 ? (
         <div className="loading-state">{t("common.loading", "加载中...")}</div>
       ) : sortedInstances.length === 0 ? (
         <div className="empty-state">

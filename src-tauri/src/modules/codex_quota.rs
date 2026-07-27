@@ -1,9 +1,9 @@
 use crate::models::codex::{CodexAccount, CodexQuota, CodexQuotaErrorInfo, CodexResetCredit};
-use crate::modules::{codex_account, logger};
+use crate::modules::{codex_account, codex_agent_identity, logger};
 use reqwest::header::{
     HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, REFERER, USER_AGENT,
 };
-use reqwest::StatusCode;
+use reqwest::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -868,49 +868,19 @@ async fn refresh_account_tokens(account: &mut CodexAccount, reason: &str) -> Res
 
 /// 查询单个账号的配额
 pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, String> {
-    let client = reqwest::Client::new();
-
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&format!("Bearer {}", account.tokens.access_token))
-            .map_err(|e| format!("构建 Authorization 头失败: {}", e))?,
-    );
-    headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-
-    // 添加 ChatGPT-Account-Id 头（关键！）
     let account_id = account.account_id.clone().or_else(|| {
         codex_account::extract_chatgpt_account_id_from_access_token(&account.tokens.access_token)
     });
-
-    if let Some(ref acc_id) = account_id {
-        if !acc_id.is_empty() {
-            headers.insert(
-                "ChatGPT-Account-Id",
-                HeaderValue::from_str(acc_id)
-                    .map_err(|e| format!("构建 Account-Id 头失败: {}", e))?,
-            );
-        }
-    }
 
     logger::log_info(&format!(
         "Codex 配额请求: {} (account_id: {:?})",
         USAGE_URL, account_id
     ));
 
-    let response = client
-        .get(USAGE_URL)
-        .headers(headers)
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {}", e))?;
-
-    let status = response.status();
-    let headers = response.headers().clone();
-    let body = response
-        .text()
-        .await
-        .map_err(|e| format!("读取响应失败: {}", e))?;
+    let response = send_codex_api_request(account, Method::GET, USAGE_URL, None).await?;
+    let status = response.status;
+    let headers = response.headers;
+    let body = response.body;
 
     let request_id = get_header_value(&headers, "request-id");
     let x_request_id = get_header_value(&headers, "x-request-id");
@@ -1028,6 +998,10 @@ fn is_new_api_account(account: &CodexAccount) -> bool {
                     || value.eq_ignore_ascii_case(LEGACY_NEW_API_EXCLUSIVE_PLAN_TYPE)
             })
             .unwrap_or(false)
+}
+
+pub fn supports_quota_refresh(account: &CodexAccount) -> bool {
+    !account.is_api_key_auth() || is_new_api_account(account)
 }
 
 fn normalize_api_base_url_for_match(raw: Option<&str>) -> Option<String> {
@@ -1187,17 +1161,32 @@ fn build_codex_api_headers(
     account_id: Option<&str>,
 ) -> Result<HeaderMap, String> {
     let mut headers = HeaderMap::new();
-    headers.insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&format!("Bearer {}", account.tokens.access_token))
-            .map_err(|e| format!("构建 Authorization 头失败: {}", e))?,
-    );
+    if !account.is_agent_identity_auth() {
+        headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_str(&format!("Bearer {}", account.tokens.access_token))
+                .map_err(|e| format!("构建 Authorization 头失败: {}", e))?,
+        );
+    }
     headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
     headers.insert(REFERER, HeaderValue::from_static(CHATGPT_WEB_REFERER));
     headers.insert(USER_AGENT, HeaderValue::from_static(CHATGPT_WEB_USER_AGENT));
     headers.insert("OpenAI-Beta", HeaderValue::from_static("codex-1"));
+    headers.insert("oai-language", HeaderValue::from_static("zh-CN"));
     headers.insert("originator", HeaderValue::from_static("Codex Desktop"));
+    headers.insert("sec-fetch-site", HeaderValue::from_static("none"));
+    headers.insert("sec-fetch-mode", HeaderValue::from_static("no-cors"));
+    headers.insert("sec-fetch-dest", HeaderValue::from_static("empty"));
+    headers.insert("priority", HeaderValue::from_static("u=4, i"));
+
+    if account
+        .agent_identity
+        .as_ref()
+        .is_some_and(|identity| identity.chatgpt_account_is_fedramp)
+    {
+        headers.insert("x-openai-fedramp", HeaderValue::from_static("true"));
+    }
 
     if let Some(account_id) = normalize_optional_ref(account_id) {
         headers.insert(
@@ -1210,28 +1199,111 @@ fn build_codex_api_headers(
     Ok(headers)
 }
 
+struct CodexApiResponse {
+    status: StatusCode,
+    headers: HeaderMap,
+    body: String,
+}
+
+async fn send_codex_api_request(
+    account: &CodexAccount,
+    method: Method,
+    url: &str,
+    json_body: Option<&serde_json::Value>,
+) -> Result<CodexApiResponse, String> {
+    send_codex_api_request_with_agent_auth_base_url(
+        account,
+        method,
+        url,
+        json_body,
+        codex_agent_identity::AGENT_IDENTITY_AUTH_API_BASE_URL,
+    )
+    .await
+}
+
+async fn send_codex_api_request_with_agent_auth_base_url(
+    account: &CodexAccount,
+    method: Method,
+    url: &str,
+    json_body: Option<&serde_json::Value>,
+    agent_auth_base_url: &str,
+) -> Result<CodexApiResponse, String> {
+    let account_id = account.account_id.clone().or_else(|| {
+        codex_account::extract_chatgpt_account_id_from_access_token(&account.tokens.access_token)
+    });
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|error| format!("创建 Codex 上游客户端失败: {}", error))?;
+    let mut current = account.clone();
+    let mut expected_task_id: Option<String> = None;
+
+    for attempt in 0..=1 {
+        let mut headers = build_codex_api_headers(&current, account_id.as_deref())?;
+        let mut assertion_task_id = None;
+        if current.is_agent_identity_auth() {
+            let (updated, auth_headers, task_id) =
+                codex_agent_identity::build_authentication_headers_with_base_url(
+                    &current,
+                    expected_task_id.as_deref(),
+                    agent_auth_base_url,
+                )
+                .await?;
+            current = updated;
+            headers.extend(auth_headers);
+            assertion_task_id = Some(task_id);
+        }
+
+        let mut request = client.request(method.clone(), url).headers(headers);
+        if let Some(body) = json_body {
+            request = request.json(body);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|error| format!("请求失败: {}", error))?;
+        let status = response.status();
+        let headers = response.headers().clone();
+        let raw_body = response
+            .text()
+            .await
+            .map_err(|error| format!("读取响应失败: {}", error))?;
+
+        if current.is_agent_identity_auth()
+            && attempt == 0
+            && codex_agent_identity::is_task_invalid_response(status, &raw_body)
+        {
+            expected_task_id = assertion_task_id;
+            continue;
+        }
+
+        let body = if status.is_success() {
+            raw_body
+        } else {
+            codex_agent_identity::redact_sensitive_body(&current, &raw_body)
+        };
+        return Ok(CodexApiResponse {
+            status,
+            headers,
+            body,
+        });
+    }
+
+    Err("Agent Identity task 恢复后请求仍失败".to_string())
+}
+
 async fn fetch_reset_credits(account: &CodexAccount) -> Result<CodexResetCreditsSnapshot, String> {
     if let Some(payload) = mock_reset_credits_payload() {
         logger::log_info("Codex reset credit 查询使用显式 mock JSON");
         return Ok(parse_reset_credits_snapshot(payload));
     }
 
-    let account_id = account.account_id.clone().or_else(|| {
-        codex_account::extract_chatgpt_account_id_from_access_token(&account.tokens.access_token)
-    });
-    let headers = build_codex_api_headers(account, account_id.as_deref())?;
-    let response = reqwest::Client::new()
-        .get(RESET_CREDITS_URL)
-        .headers(headers)
-        .send()
+    let response = send_codex_api_request(account, Method::GET, RESET_CREDITS_URL, None)
         .await
-        .map_err(|e| format!("请求主动重置次数明细失败: {}", e))?;
-    let status = response.status();
-    let headers = response.headers().clone();
-    let body = response
-        .text()
-        .await
-        .map_err(|e| format!("读取主动重置次数明细响应失败: {}", e))?;
+        .map_err(|error| format!("请求主动重置次数明细失败: {}", error))?;
+    let status = response.status;
+    let headers = response.headers;
+    let body = response.body;
 
     logger::log_info(&format!(
         "Codex 主动重置次数明细响应: url={}, status={}, request-id={}, x-request-id={}, cf-ray={}, body_len={}",
@@ -1267,7 +1339,9 @@ pub async fn fetch_account_reset_credits(
         return Err("API Key 账号不支持主动重置额度".to_string());
     }
 
-    if crate::modules::codex_oauth::is_token_expired(&account.tokens.access_token) {
+    if !account.is_agent_identity_auth()
+        && crate::modules::codex_oauth::is_token_expired(&account.tokens.access_token)
+    {
         refresh_account_tokens(&mut account, "查询主动重置记录前 Token 已过期").await?;
         sync_subscription_expiry_from_current_id_token(&mut account);
         normalize_subscription_retry_state(&mut account);
@@ -1276,7 +1350,7 @@ pub async fn fetch_account_reset_credits(
 
     match fetch_reset_credits(&account).await {
         Ok(snapshot) => Ok(snapshot),
-        Err(error) if is_unauthorized_error(&error) => {
+        Err(error) if !account.is_agent_identity_auth() && is_unauthorized_error(&error) => {
             refresh_account_tokens(&mut account, "主动重置记录接口返回 401").await?;
             sync_subscription_expiry_from_current_id_token(&mut account);
             normalize_subscription_retry_state(&mut account);
@@ -1291,23 +1365,18 @@ async fn post_reset_credit_once(
     account: &CodexAccount,
     redeem_request_id: &str,
 ) -> Result<(), String> {
-    let account_id = account.account_id.clone().or_else(|| {
-        codex_account::extract_chatgpt_account_id_from_access_token(&account.tokens.access_token)
-    });
-    let headers = build_codex_api_headers(account, account_id.as_deref())?;
-    let response = reqwest::Client::new()
-        .post(RESET_CREDITS_CONSUME_URL)
-        .headers(headers)
-        .json(&json!({ "redeem_request_id": redeem_request_id }))
-        .send()
-        .await
-        .map_err(|e| format!("请求主动重置失败: {}", e))?;
-    let status = response.status();
-    let headers = response.headers().clone();
-    let body = response
-        .text()
-        .await
-        .map_err(|e| format!("读取主动重置响应失败: {}", e))?;
+    let request_body = json!({ "redeem_request_id": redeem_request_id });
+    let response = send_codex_api_request(
+        account,
+        Method::POST,
+        RESET_CREDITS_CONSUME_URL,
+        Some(&request_body),
+    )
+    .await
+    .map_err(|error| format!("请求主动重置失败: {}", error))?;
+    let status = response.status;
+    let headers = response.headers;
+    let body = response.body;
 
     logger::log_info(&format!(
         "Codex 主动重置响应: url={}, status={}, request-id={}, x-request-id={}, cf-ray={}, body_len={}",
@@ -1350,7 +1419,9 @@ pub async fn consume_reset_credit(account_id: &str) -> Result<(), String> {
         return Ok(());
     }
 
-    if crate::modules::codex_oauth::is_token_expired(&account.tokens.access_token) {
+    if !account.is_agent_identity_auth()
+        && crate::modules::codex_oauth::is_token_expired(&account.tokens.access_token)
+    {
         refresh_account_tokens(&mut account, "主动重置前 Token 已过期").await?;
         sync_subscription_expiry_from_current_id_token(&mut account);
         normalize_subscription_retry_state(&mut account);
@@ -1360,7 +1431,7 @@ pub async fn consume_reset_credit(account_id: &str) -> Result<(), String> {
     let redeem_request_id = uuid::Uuid::new_v4().to_string();
     match post_reset_credit_once(&account, &redeem_request_id).await {
         Ok(()) => Ok(()),
-        Err(error) if is_unauthorized_error(&error) => {
+        Err(error) if !account.is_agent_identity_auth() && is_unauthorized_error(&error) => {
             refresh_account_tokens(&mut account, "主动重置接口返回 401").await?;
             sync_subscription_expiry_from_current_id_token(&mut account);
             normalize_subscription_retry_state(&mut account);
@@ -1464,6 +1535,27 @@ async fn refresh_account_quota_once(
         let _ = codex_account::save_account(&account);
         return Err("API Key 账号不支持刷新配额，请在网页端查看。".to_string());
     }
+    if account.is_agent_identity_auth() {
+        let result = match fetch_quota(&account).await {
+            Ok(result) => result,
+            Err(error) => {
+                write_quota_error(&mut account, error.clone());
+                if let Err(save_error) = codex_account::save_account(&account) {
+                    logger::log_warn(&format!("写入 Agent Identity 配额错误失败: {}", save_error));
+                }
+                return Err(error);
+            }
+        };
+        account = codex_account::load_account(&account.id).unwrap_or(account);
+        if result.plan_type.is_some() {
+            sync_subscription_from_token(&mut account, result.plan_type.clone(), None);
+        }
+        account.quota = Some(result.quota.clone());
+        account.quota_error = None;
+        account.usage_updated_at = Some(now_timestamp());
+        codex_account::save_account(&account)?;
+        return Ok(result.quota);
+    }
 
     // 检查 token 是否过期，如果过期则刷新
     if crate::modules::codex_oauth::is_token_expired(&account.tokens.access_token) {
@@ -1556,6 +1648,9 @@ pub async fn refresh_account_quota_with_options(
 }
 
 pub async fn probe_import_account_quota(account: &CodexAccount) -> Result<CodexQuota, String> {
+    if account.is_agent_identity_auth() {
+        return fetch_quota(account).await.map(|result| result.quota);
+    }
     if account.is_api_key_auth() {
         if is_new_api_account(account) {
             return fetch_new_api_quota(account)
@@ -1579,6 +1674,15 @@ pub async fn refresh_account_subscription_info(
     let mut account = codex_account::prepare_account_for_injection(account_id).await?;
     if account.is_api_key_auth() {
         return Err("API Key 账号不支持刷新订阅信息".to_string());
+    }
+    if account.is_agent_identity_auth() {
+        let quota = fetch_quota(&account).await?;
+        account = codex_account::load_account(&account.id).unwrap_or(account);
+        if quota.plan_type.is_some() {
+            sync_subscription_from_token(&mut account, quota.plan_type, None);
+            codex_account::save_account(&account)?;
+        }
+        return Ok(account);
     }
 
     if crate::modules::codex_oauth::is_token_expired(&account.tokens.access_token) {
@@ -1684,7 +1788,7 @@ pub async fn refresh_all_quotas() -> Result<Vec<(String, Result<CodexQuota, Stri
     let disabled = codex_account::load_quota_refresh_disabled_account_ids();
     let account_ids: Vec<String> = codex_account::list_accounts()
         .into_iter()
-        .filter(|account| !account.is_api_key_auth() || is_new_api_account(account))
+        .filter(supports_quota_refresh)
         .filter(|account| !disabled.contains(&account.id))
         .map(|account| account.id)
         .collect();
@@ -1694,10 +1798,90 @@ pub async fn refresh_all_quotas() -> Result<Vec<(String, Result<CodexQuota, Stri
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_http_error_body_for_display, normalize_remaining_percentage,
-        parse_reset_credits_snapshot, WindowInfo, HTTP_ERROR_BODY_DISPLAY_MAX_CHARS,
+        build_codex_api_headers, normalize_http_error_body_for_display,
+        normalize_remaining_percentage, parse_reset_credits_snapshot,
+        send_codex_api_request_with_agent_auth_base_url, WindowInfo,
+        HTTP_ERROR_BODY_DISPLAY_MAX_CHARS,
     };
+    use crate::models::codex::{CodexAccount, CodexAgentIdentity, CodexTokens};
+    use base64::{engine::general_purpose, Engine as _};
+    use ed25519_dalek::{pkcs8::EncodePrivateKey, SigningKey};
+    use rand::rngs::OsRng;
+    use reqwest::Method;
     use serde_json::json;
+    use std::sync::{Arc, Mutex};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    fn agent_identity_test_account() -> CodexAccount {
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let private_key = signing_key.to_pkcs8_der().expect("encode PKCS#8");
+        let mut account = CodexAccount::new(
+            format!("agent-quota-{}", uuid::Uuid::new_v4()),
+            "agent@example.com".to_string(),
+            CodexTokens {
+                id_token: String::new(),
+                access_token: String::new(),
+                refresh_token: None,
+            },
+        );
+        account.account_id = Some("team-test".to_string());
+        account.agent_identity = Some(CodexAgentIdentity {
+            agent_runtime_id: "runtime-test".to_string(),
+            agent_private_key: general_purpose::STANDARD.encode(private_key.as_bytes()),
+            task_id: Some("task-old".to_string()),
+            account_id: "team-test".to_string(),
+            chatgpt_user_id: "user-test".to_string(),
+            email: Some(account.email.clone()),
+            plan_type: Some("k12".to_string()),
+            chatgpt_account_is_fedramp: true,
+        });
+        account
+    }
+
+    fn assertion_task_id(request: &str) -> Option<String> {
+        let authorization = request.lines().find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("authorization")
+                .then(|| value.trim())
+        })?;
+        let encoded = authorization.strip_prefix("AgentAssertion ")?;
+        let payload = general_purpose::URL_SAFE_NO_PAD.decode(encoded).ok()?;
+        serde_json::from_slice::<serde_json::Value>(&payload)
+            .ok()?
+            .get("task_id")?
+            .as_str()
+            .map(str::to_string)
+    }
+
+    async fn read_test_http_request(stream: &mut tokio::net::TcpStream) -> String {
+        let mut bytes = Vec::new();
+        let mut chunk = [0u8; 2048];
+        let header_end = loop {
+            let read = stream.read(&mut chunk).await.expect("read request");
+            assert!(read > 0, "connection closed before request headers");
+            bytes.extend_from_slice(&chunk[..read]);
+            if let Some(index) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
+                break index + 4;
+            }
+        };
+        let headers = String::from_utf8_lossy(&bytes[..header_end]);
+        let content_length = headers
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse::<usize>().ok())
+                    .flatten()
+            })
+            .unwrap_or(0);
+        while bytes.len() < header_end + content_length {
+            let read = stream.read(&mut chunk).await.expect("read request body");
+            assert!(read > 0, "connection closed before request body");
+            bytes.extend_from_slice(&chunk[..read]);
+        }
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
 
     #[test]
     fn displays_empty_http_error_body_explicitly() {
@@ -1781,5 +1965,93 @@ mod tests {
         assert_eq!(snapshot.available_count, Some(1));
         assert_eq!(snapshot.next_expires_at, Some(future));
         assert_eq!(snapshot.credits[1].status.as_deref(), Some("expired"));
+    }
+
+    #[tokio::test]
+    async fn agent_identity_quota_request_uses_common_headers_and_recovers_task_once() {
+        let account = agent_identity_test_account();
+        let headers = build_codex_api_headers(&account, account.account_id.as_deref())
+            .expect("build common headers");
+        assert!(headers.get("authorization").is_none());
+        assert_eq!(headers.get("openai-beta").unwrap(), "codex-1");
+        assert_eq!(headers.get("originator").unwrap(), "Codex Desktop");
+        assert_eq!(headers.get("chatgpt-account-id").unwrap(), "team-test");
+        assert_eq!(headers.get("x-openai-fedramp").unwrap(), "true");
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock upstream");
+        let base_url = format!("http://{}", listener.local_addr().expect("local address"));
+        let requests = Arc::new(Mutex::new(Vec::<String>::new()));
+        let captured = Arc::clone(&requests);
+        let server = tokio::spawn(async move {
+            let mut usage_calls = 0;
+            for _ in 0..3 {
+                let (mut stream, _) = listener.accept().await.expect("accept request");
+                let request = read_test_http_request(&mut stream).await;
+                let request_line = request.lines().next().unwrap_or_default().to_string();
+                captured.lock().expect("capture request").push(request);
+                let (status, body) = if request_line.contains("/task/register") {
+                    ("200 OK", r#"{"task_id":"task-new"}"#)
+                } else if usage_calls == 0 {
+                    usage_calls += 1;
+                    (
+                        "401 Unauthorized",
+                        r#"{"error":{"code":"invalid_task_id"}}"#,
+                    )
+                } else {
+                    usage_calls += 1;
+                    ("200 OK", r#"{"ok":true}"#)
+                };
+                let response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .await
+                    .expect("write response");
+            }
+        });
+
+        let response = send_codex_api_request_with_agent_auth_base_url(
+            &account,
+            Method::GET,
+            &format!("{base_url}/usage"),
+            None,
+            &base_url,
+        )
+        .await
+        .expect("recover task and retry quota request");
+        assert!(response.status.is_success());
+        server.await.expect("mock server");
+
+        let requests = requests.lock().expect("captured requests");
+        assert_eq!(requests.len(), 3);
+        let usage_requests = requests
+            .iter()
+            .filter(|request| {
+                request
+                    .lines()
+                    .next()
+                    .is_some_and(|line| line.contains("/usage"))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(usage_requests.len(), 2);
+        assert_eq!(
+            assertion_task_id(usage_requests[0]),
+            Some("task-old".to_string())
+        );
+        assert_eq!(
+            assertion_task_id(usage_requests[1]),
+            Some("task-new".to_string())
+        );
+        assert!(usage_requests.iter().all(|request| {
+            let lower = request.to_ascii_lowercase();
+            lower.contains("openai-beta: codex-1")
+                && lower.contains("originator: codex desktop")
+                && lower.contains("chatgpt-account-id: team-test")
+                && lower.contains("x-openai-fedramp: true")
+        }));
     }
 }

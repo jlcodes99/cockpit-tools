@@ -143,12 +143,41 @@ export interface CodexInstanceLaunchInfo {
   instanceId: string;
   userDataDir: string;
   launchCommand: string;
+  terminalCommand: string;
+  terminal: string;
+}
+
+export interface CodexInstanceLaunchPreviewInfo {
+  userDataDir: string;
+  launchCommand: string;
+  terminalCommand: string;
+  terminal: string;
+}
+
+export async function previewCodexInstanceLaunchCommand(payload: {
+  userDataDir: string;
+  workingDir?: string | null;
+  extraArgs?: string;
+  terminal?: string;
+  launchCommand?: string | null;
+}): Promise<CodexInstanceLaunchPreviewInfo> {
+  return await invoke("codex_preview_instance_launch_command", {
+    userDataDir: payload.userDataDir,
+    workingDir: payload.workingDir ?? null,
+    extraArgs: payload.extraArgs ?? "",
+    terminal: payload.terminal ?? null,
+    launchCommand: payload.launchCommand ?? null,
+  });
 }
 
 export async function getCodexInstanceLaunchCommand(
   instanceId: string,
+  terminal?: string,
 ): Promise<CodexInstanceLaunchInfo> {
-  return await invoke("codex_get_instance_launch_command", { instanceId });
+  return await invoke("codex_get_instance_launch_command", {
+    instanceId,
+    terminal: terminal ?? null,
+  });
 }
 
 export async function executeCodexInstanceLaunchCommand(

@@ -2259,6 +2259,7 @@ fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, St
             refresh_token: Some(account.tokens.refresh_token.clone().unwrap_or_default()),
             account_id: account.account_id.clone(),
         }),
+        agent_identity: None,
         last_refresh: Some(serde_json::Value::String(
             chrono::Utc::now()
                 .format("%Y-%m-%dT%H:%M:%S%.6fZ")
@@ -3639,6 +3640,7 @@ mod tests {
                 refresh_token: tokens.refresh_token.clone(),
                 account_id: Some(account_id.to_string()),
             }),
+            agent_identity: None,
             last_refresh: Some(serde_json::Value::String(
                 "2026-04-13T00:00:00.000000Z".to_string(),
             )),

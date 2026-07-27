@@ -7,6 +7,50 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [1.3.14] - 2026-07-22
+
+### 新增
+
+- **支持将 Web Session 自动注册为 Agent Identity**：确认导入后会自动加入 Codex API 服务账号池，并支持跨设备导出与导入；此类账号仅限 API 服务使用，不支持普通切号、客户端或 CLI 启动及 OAuth 绑定。
+
+### 修复
+
+- **修复开启“同步模型目录到 Codex”的自定义 Responses API Key 无法加入 Codex API 服务的问题**：模型目录同步继续只影响单账号切号与实例专属网关，不再改变 API 服务账号池准入；Chat Completions 账号仍保持实例专属网关隔离。
+
+## [1.3.13] - 2026-07-22
+
+### 修复
+
+- **修复 K12 Agent Identity 账号无法使用 Codex 官方直连唤醒的问题**：唤醒请求现在会动态生成 `AgentAssertion`；task 缺失或失效时自动注册、持久化并安全重试一次，普通 OAuth 账号的唤醒行为保持不变。
+
+## [1.3.12] - 2026-07-22
+
+### 修复
+
+- **修复同一 K12 workspace 下的多个 Agent Identity 用户互相覆盖的问题**：账号现在按 ChatGPT account 与 user 的组合身份区分；同一用户重新导入仍会更新原账号并保留已有资料，旧版已保存的账号继续沿用原标识。
+
+## [1.3.11] - 2026-07-22
+
+### 新增
+
+- **Codex 账号与 API 服务支持新版 Agent Identity 认证**：可导入官方 `auth.json`、JSON/JSONL 及 Sub2API 备份中的 Agent Identity 账号，兼容 Sub2API 使用的 PKCS#8 v1 Ed25519 私钥，按 ChatGPT account 区分 Team 并切换到官方 Codex；额度、主动重置、HTTP、Responses 流式、Compact、图片和 WebSocket 请求均会动态生成 `AgentAssertion`，缺少或失效的 task 会自动注册、持久化并恢复，不影响现有 OAuth、Access Token、PAT 与 API Key 账号。
+- **ChatGPT 客户端中的 Codex API 服务额度浮层支持手动刷新与账号池健康信息**：账号与额度标签旁新增紧凑的刷新按钮，点击后刷新 API 服务账号池；刷新期间图标原位旋转，完成后更新账号数、5h 额度、周额度，以及可用、异常、冷却和套餐分组信息，空账号池会立即显示账号数与额度均为 0。
+- **Codex CLI 启动弹框支持快速预览与启动选项**：账号页和实例页可选择最近工作目录、Terminal.app、iTerm2、PowerShell、pwsh、Windows Terminal 或 cmd，并快速生成对应命令；复制或终端执行时才准备实例运行环境，同时会跳过无法实际启动的旧版或损坏 CLI 路径，并继续选择其他可用 CLI，包括官方客户端内置 Codex。
+- **CodeBuddy 与 WorkBuddy 新增“切号共享本地会话”开关**：开关默认关闭；开启后，切换本机账号时会在真实本地会话目录和数据库中合并会话与恢复状态，并在操作前创建本地备份，内容不会上传。
+
+### 变更
+
+- **Codex API 服务支持配置会话亲和与过期时间**：可在 60～86400 秒范围内设置会话亲和 TTL，账号池会按会话键在有效期内保持账号绑定。
+- **Codex API 服务网关准备与账号刷新改为可观测的后台流程**：页面显示启动准备和账号刷新进度；OAuth 凭据刷新在网关可用后后台执行，避免启动过程被整个账号池阻塞。
+- **自定义 Codex Responses 模型目录支持官方展示模型映射**：同步到 Codex 客户端时使用可识别的官方模型展示名，实际请求仍路由到配置的上游模型。
+
+### 修复
+
+- **修复 Windows 重启时偶发 PowerShell `0xc0000142` 弹窗的问题**：Cockpit Tools 会提前监听系统关机通知，在 Windows 结束会话前暂停后台注入并禁止再创建 PowerShell 等后台子进程；若关机被取消则恢复正常运行，同时不改变开机自启动设置。
+- **修复多开实例页面重复进入或操作后闪回加载状态的问题**：实例列表现在优先显示已加载或本地缓存的数据，后台刷新完成后静默替换；仅在首次没有任何可展示数据时显示加载状态。
+- **停用 Codex API 服务时会恢复受管 Codex profile 文件**：Cockpit Tools 仅移除 `config.toml` 中由 API 服务写入的字段，恢复接管前的 `auth.json`，删除注入的 profile 文件和模型缓存，同时保留用户其他设置与其他网关备份；仍绑定 API 服务的实例启动时也不会再静默重新启用已停用的服务。
+
+---
 ## [1.3.10] - 2026-07-19
 
 ### 新增

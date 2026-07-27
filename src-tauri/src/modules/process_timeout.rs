@@ -12,12 +12,16 @@ use std::time::{Duration, Instant};
 /// If a descendant holds an inherited pipe after the parent exits, join is aborted
 /// when `timeout` elapses (reader threads are detached).
 pub fn output_with_timeout(command: &mut Command, timeout: Duration) -> io::Result<Output> {
+    let program = command.get_program().to_string_lossy().into_owned();
+    let spawn_guard = crate::modules::app_lifecycle::acquire_process_spawn_guard(&program)?;
     command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let mut child = command.spawn()?;
+    let child = command.spawn();
+    drop(spawn_guard);
+    let mut child = child?;
     let stdout_reader = child.stdout.take().map(|mut pipe| {
         std::thread::spawn(move || {
             let mut output = Vec::new();

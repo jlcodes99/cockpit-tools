@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Settings2 } from 'lucide-react';
+import { Server, Settings2 } from 'lucide-react';
 import { useSshServerStore } from '../../stores/useSshServerStore';
 import { CodexSshSyncModal } from './CodexSshSyncModal';
 
@@ -74,6 +74,7 @@ export function CodexSshSyncSettingsControl({
       <>
         <div className="qs-row" style={{ marginTop: 8 }}>
           <div className="qs-row-label">
+            <Server size={15} />
             <span>{t('codex.ssh.syncSwitch', '切号同步 SSH')}</span>
           </div>
           <div className="qs-row-control" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

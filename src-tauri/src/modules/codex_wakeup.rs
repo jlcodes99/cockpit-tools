@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 const TASKS_FILE: &str = "codex_wakeup_tasks.json";
@@ -19,6 +20,7 @@ const MAX_HISTORY_ITEMS: usize = 300;
 const MAX_LOGGED_SEARCH_DIRS: usize = 8;
 const REQUIRED_RUNTIME_PATH_CODEX_CLI: &str = "codex_cli_path";
 const REQUIRED_RUNTIME_PATH_NODE: &str = "node_path";
+const CLI_VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 pub const DEFAULT_PROMPT: &str = "hi";
 pub const PROGRESS_EVENT: &str = "codex://wakeup-progress";
 const REASONING_EFFORT_LOW: &str = "low";
@@ -305,6 +307,7 @@ struct ResolvedBinary {
     path: PathBuf,
     source: String,
     node_path: Option<PathBuf>,
+    version: String,
 }
 
 #[derive(Debug, Clone)]
@@ -1113,7 +1116,7 @@ fn parse_node_launch_requirement(path: &Path) -> NodeLaunchRequirement {
     NodeLaunchRequirement::NotNeeded
 }
 
-fn resolve_binary_from_path() -> Option<PathBuf> {
+fn resolve_binary_paths_from_path() -> Vec<PathBuf> {
     let dirs = collect_runtime_search_dirs();
 
     logger::log_info(&format!(
@@ -1122,7 +1125,16 @@ fn resolve_binary_from_path() -> Option<PathBuf> {
         summarize_path_dirs_for_log(&dirs)
     ));
 
-    resolve_binary_in_dirs(&dirs, binary_candidates())
+    let mut paths = Vec::new();
+    for dir in dirs {
+        for candidate in binary_candidates() {
+            let path = dir.join(candidate);
+            if path.is_file() && !paths.iter().any(|existing| existing == &path) {
+                paths.push(path);
+            }
+        }
+    }
+    paths
 }
 
 fn resolve_node_from_binary_path(binary_path: &Path) -> Option<PathBuf> {
@@ -1242,7 +1254,60 @@ fn build_resolved_binary(
         path,
         source,
         node_path,
+        version: String::new(),
     })
+}
+
+fn probe_binary_version(binary: &ResolvedBinary) -> Result<String, String> {
+    let mut command = build_binary_command(binary);
+    command.arg("--version");
+    let output = crate::modules::process_timeout::output_with_timeout(
+        &mut command,
+        CLI_VERSION_PROBE_TIMEOUT,
+    )
+    .map_err(|error| {
+        format!(
+            "Codex CLI 无法启动: path={}, error={}",
+            binary.path.display(),
+            error
+        )
+    })?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if !output.status.success() {
+        let detail = if !stderr.is_empty() { &stderr } else { &stdout };
+        return Err(format!(
+            "Codex CLI 版本探测失败: path={}, status={}, detail={}",
+            binary.path.display(),
+            output.status,
+            truncate_log_text(detail, 240)
+        ));
+    }
+    let version = if !stdout.is_empty() { stdout } else { stderr };
+    if version.is_empty() {
+        return Err(format!(
+            "Codex CLI 版本探测未返回内容: {}",
+            binary.path.display()
+        ));
+    }
+    Ok(version)
+}
+
+fn build_usable_resolved_binary(
+    path: PathBuf,
+    source: String,
+    configured_node_path: Option<&Path>,
+) -> Result<ResolvedBinary, CliResolveError> {
+    let mut binary = build_resolved_binary(path, source, configured_node_path)?;
+    binary.version = probe_binary_version(&binary)
+        .map_err(|error| CliResolveError::new(error, &[REQUIRED_RUNTIME_PATH_CODEX_CLI]))?;
+    Ok(binary)
+}
+
+fn push_runtime_candidate_error(errors: &mut Vec<String>, source: &str, error: &str) {
+    let message = format!("{}: {}", source, truncate_log_text(error, 280));
+    logger::log_warn(&format!("[CodexWakeup][CLI] 跳过不可用候选: {}", message));
+    errors.push(message);
 }
 
 fn resolve_binary_with_runtime_config(
@@ -1266,24 +1331,36 @@ fn resolve_binary_with_runtime_config(
         collect_runtime_search_dirs().len()
     ));
 
+    let mut candidate_errors = Vec::new();
+    let mut checked_paths = HashSet::new();
+
     if let Some(configured_cli_path) = configured_cli_path {
         let configured_path = PathBuf::from(&configured_cli_path);
-        let resolved =
-            resolve_configured_binary_path(&configured_path, binary_candidates(), "Codex CLI")
-                .map_err(|err| {
-                    logger::log_warn(&format!("[CodexWakeup][CLI] {}", err));
-                    CliResolveError::new(err, &[REQUIRED_RUNTIME_PATH_CODEX_CLI])
-                })?;
-        logger::log_info(&format!(
-            "[CodexWakeup][CLI] 命中自定义 Codex CLI 路径: input={}, resolved={}",
-            configured_path.display(),
-            resolved.display()
-        ));
-        return build_resolved_binary(
-            resolved,
-            "runtime_config".to_string(),
-            configured_node_path.as_deref(),
-        );
+        match resolve_configured_binary_path(&configured_path, binary_candidates(), "Codex CLI") {
+            Ok(resolved) => {
+                checked_paths.insert(resolved.clone());
+                logger::log_info(&format!(
+                    "[CodexWakeup][CLI] 命中自定义 Codex CLI 路径: input={}, resolved={}",
+                    configured_path.display(),
+                    resolved.display()
+                ));
+                match build_usable_resolved_binary(
+                    resolved,
+                    "runtime_config".to_string(),
+                    configured_node_path.as_deref(),
+                ) {
+                    Ok(binary) => return Ok(binary),
+                    Err(error) => push_runtime_candidate_error(
+                        &mut candidate_errors,
+                        "runtime_config",
+                        &error.message,
+                    ),
+                }
+            }
+            Err(error) => {
+                push_runtime_candidate_error(&mut candidate_errors, "runtime_config", &error)
+            }
+        }
     }
 
     if let Ok(raw) = std::env::var("CODEX_CLI_PATH") {
@@ -1291,34 +1368,82 @@ fn resolve_binary_with_runtime_config(
         if !trimmed.is_empty() {
             let path = PathBuf::from(trimmed);
             if path.is_file() {
+                checked_paths.insert(path.clone());
                 logger::log_info(&format!(
                     "[CodexWakeup][CLI] 命中 CODEX_CLI_PATH: {}",
                     path.display()
                 ));
-                return build_resolved_binary(
+                match build_usable_resolved_binary(
                     path,
                     "CODEX_CLI_PATH".to_string(),
                     configured_node_path.as_deref(),
+                ) {
+                    Ok(binary) => return Ok(binary),
+                    Err(error) => push_runtime_candidate_error(
+                        &mut candidate_errors,
+                        "CODEX_CLI_PATH",
+                        &error.message,
+                    ),
+                }
+            } else {
+                push_runtime_candidate_error(
+                    &mut candidate_errors,
+                    "CODEX_CLI_PATH",
+                    &format!("指向的文件不存在: {}", trimmed),
                 );
             }
-            let err = format!("CODEX_CLI_PATH 指向的文件不存在: {}", trimmed);
-            logger::log_warn(&format!("[CodexWakeup][CLI] {}", err));
-            return Err(CliResolveError::new(
-                err,
-                &[REQUIRED_RUNTIME_PATH_CODEX_CLI],
-            ));
         }
     }
 
-    if let Some(path) = resolve_binary_from_path() {
+    for path in resolve_binary_paths_from_path() {
+        if !checked_paths.insert(path.clone()) {
+            continue;
+        }
         logger::log_info(&format!(
-            "[CodexWakeup][CLI] 已从 PATH 解析到 codex: {}",
+            "[CodexWakeup][CLI] 从 PATH 检查 codex 候选: {}",
             path.display()
         ));
-        return build_resolved_binary(path, "PATH".to_string(), configured_node_path.as_deref());
+        match build_usable_resolved_binary(
+            path,
+            "PATH".to_string(),
+            configured_node_path.as_deref(),
+        ) {
+            Ok(binary) => return Ok(binary),
+            Err(error) => {
+                push_runtime_candidate_error(&mut candidate_errors, "PATH", &error.message)
+            }
+        }
     }
 
-    let err = "未检测到 Codex CLI，请先安装 `codex` 命令。".to_string();
+    if let Ok(path) = crate::modules::codex_official_app_server::official_app_server_executable() {
+        if checked_paths.insert(path.clone()) {
+            logger::log_info(&format!(
+                "[CodexWakeup][CLI] 检查官方客户端内置 Codex: {}",
+                path.display()
+            ));
+            match build_usable_resolved_binary(
+                path,
+                "official_app".to_string(),
+                configured_node_path.as_deref(),
+            ) {
+                Ok(binary) => return Ok(binary),
+                Err(error) => push_runtime_candidate_error(
+                    &mut candidate_errors,
+                    "official_app",
+                    &error.message,
+                ),
+            }
+        }
+    }
+
+    let err = if candidate_errors.is_empty() {
+        "未检测到 Codex CLI，请先安装 `codex` 命令。".to_string()
+    } else {
+        format!(
+            "未检测到可运行的 Codex CLI，已跳过不可用候选：{}",
+            candidate_errors.join(" | ")
+        )
+    };
     logger::log_warn(&format!("[CodexWakeup][CLI] {}", err));
     Err(CliResolveError::new(
         err,
@@ -1337,49 +1462,11 @@ fn resolve_binary() -> Result<ResolvedBinary, CliResolveError> {
 }
 
 fn fetch_binary_version(binary: &ResolvedBinary) -> Option<String> {
-    logger::log_info(&format!(
-        "[CodexWakeup][CLI] 开始探测版本: codex_path={}, node_path={}",
-        binary.path.display(),
-        format_optional_path_for_log(binary.node_path.as_deref())
-    ));
-    let mut command = build_binary_command(&binary);
-    command.arg("--version");
-    let output = match command.output() {
-        Ok(output) => output,
-        Err(err) => {
-            logger::log_warn(&format!("[CodexWakeup][CLI] 启动版本探测进程失败: {}", err));
-            return None;
-        }
-    };
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        logger::log_warn(&format!(
-            "[CodexWakeup][CLI] 版本探测失败: status={}, stdout={}, stderr={}",
-            output.status,
-            truncate_log_text(&stdout, 200),
-            truncate_log_text(&stderr, 200)
-        ));
-        return None;
+    if binary.version.trim().is_empty() {
+        None
+    } else {
+        Some(binary.version.clone())
     }
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if !stdout.is_empty() {
-        logger::log_info(&format!(
-            "[CodexWakeup][CLI] 版本探测成功: {}",
-            truncate_log_text(&stdout, 200)
-        ));
-        return Some(stdout);
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    if !stderr.is_empty() {
-        logger::log_info(&format!(
-            "[CodexWakeup][CLI] 版本探测成功(stderr): {}",
-            truncate_log_text(&stderr, 200)
-        ));
-        return Some(stderr);
-    }
-    logger::log_info("[CodexWakeup][CLI] 版本探测完成，但未返回输出");
-    None
 }
 
 fn build_binary_command(binary: &ResolvedBinary) -> Command {
@@ -2699,11 +2786,11 @@ pub fn get_task(task_id: &str) -> Result<Option<CodexWakeupTask>, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        append_version_manager_cli_dirs, apply_model_preset_migrations, default_model_presets,
-        prune_missing_accounts_from_state, retain_existing_account_ids, CodexWakeupModelPreset,
-        CodexWakeupSchedule, CodexWakeupState, CodexWakeupTask, GPT_5_5_MODEL_PRESET_MIGRATION_ID,
-        GPT_5_6_MODEL_PRESETS_MIGRATION_ID, PRUNE_LEGACY_MODEL_PRESETS_MIGRATION_ID,
-        REASONING_EFFORT_MEDIUM,
+        append_version_manager_cli_dirs, apply_model_preset_migrations,
+        build_usable_resolved_binary, default_model_presets, prune_missing_accounts_from_state,
+        retain_existing_account_ids, CodexWakeupModelPreset, CodexWakeupSchedule, CodexWakeupState,
+        CodexWakeupTask, GPT_5_5_MODEL_PRESET_MIGRATION_ID, GPT_5_6_MODEL_PRESETS_MIGRATION_ID,
+        PRUNE_LEGACY_MODEL_PRESETS_MIGRATION_ID, REASONING_EFFORT_MEDIUM,
     };
     use std::collections::HashSet;
     use std::fs;
@@ -2907,6 +2994,48 @@ mod tests {
             "expected nvm bin dir in search paths: {:?}",
             dirs
         );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn runtime_candidate_probe_rejects_existing_but_unusable_launcher() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!(
+            "codex-wakeup-probe-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|duration| duration.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create probe root");
+
+        let broken = root.join("broken-codex");
+        fs::write(
+            &broken,
+            "#!/bin/sh\necho missing-native-binary >&2\nexit 1\n",
+        )
+        .expect("write broken launcher");
+        fs::set_permissions(&broken, fs::Permissions::from_mode(0o755))
+            .expect("make broken launcher executable");
+
+        let error = build_usable_resolved_binary(broken, "test".to_string(), None)
+            .expect_err("an existing launcher that cannot run must be rejected");
+        assert!(error.message.contains("missing-native-binary"));
+
+        let working = root.join("working-codex");
+        fs::write(&working, "#!/bin/sh\necho codex-cli-test 1.0\n")
+            .expect("write working launcher");
+        fs::set_permissions(&working, fs::Permissions::from_mode(0o755))
+            .expect("make working launcher executable");
+
+        let resolved = build_usable_resolved_binary(working, "test".to_string(), None)
+            .expect("a runnable launcher should be accepted");
+        assert_eq!(resolved.version, "codex-cli-test 1.0");
+
         let _ = fs::remove_dir_all(&root);
     }
 }

@@ -104,6 +104,25 @@ pub struct CodexInstanceLaunchInfo {
     pub instance_id: String,
     pub user_data_dir: String,
     pub launch_command: String,
+    pub terminal_command: String,
+    pub terminal: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexInstanceLaunchPreviewInfo {
+    pub user_data_dir: String,
+    pub launch_command: String,
+    pub terminal_command: String,
+    pub terminal: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CodexTerminalLaunchPlan {
+    program: String,
+    args: Vec<String>,
+    display_command: String,
+    terminal_name: String,
 }
 
 struct CodexLaunchContext {
@@ -159,7 +178,8 @@ async fn inject_bound_account_to_profile(
     bind_account_id: &str,
 ) -> Result<(), String> {
     if modules::codex_instance::is_api_service_bind_account_id(bind_account_id) {
-        modules::codex_local_access::activate_local_access_for_dir(profile_dir).await?;
+        modules::codex_local_access::prepare_local_access_for_bound_profile_dir(profile_dir)
+            .await?;
         return Ok(());
     }
 
@@ -514,6 +534,70 @@ mod tests {
         );
     }
 
+    #[test]
+    fn windows_system_terminal_keeps_powershell_compatibility_behavior() {
+        let plan = build_windows_codex_terminal_launch_plan("codex", "system");
+
+        assert_eq!(plan.program, "powershell");
+        assert_eq!(plan.args, ["-NoExit", "-Command", "codex"]);
+        assert_eq!(plan.terminal_name, "PowerShell");
+    }
+
+    #[test]
+    fn windows_terminal_launch_plans_match_explicit_user_choice() {
+        let powershell = build_windows_codex_terminal_launch_plan("codex", "PowerShell");
+        assert_eq!(powershell.program, "powershell");
+        assert_eq!(powershell.args, ["-NoExit", "-Command", "codex"]);
+
+        let legacy_powershell = build_windows_codex_terminal_launch_plan("codex", "powershell");
+        assert_eq!(legacy_powershell.program, "powershell");
+        assert_eq!(legacy_powershell.terminal_name, "PowerShell");
+
+        let pwsh = build_windows_codex_terminal_launch_plan("codex", "pwsh");
+        assert_eq!(pwsh.program, "pwsh");
+        assert_eq!(pwsh.args, ["-NoExit", "-Command", "codex"]);
+
+        let windows_terminal = build_windows_codex_terminal_launch_plan("codex", "wt");
+        assert_eq!(windows_terminal.program, "wt");
+        assert_eq!(
+            windows_terminal.args,
+            ["powershell", "-NoExit", "-Command", "codex"]
+        );
+
+        let cmd = build_windows_codex_terminal_launch_plan("codex", "cmd");
+        assert_eq!(cmd.program, "cmd");
+        assert_eq!(
+            cmd.args,
+            [
+                "/C",
+                "start",
+                "",
+                "powershell",
+                "-NoExit",
+                "-Command",
+                "codex",
+            ]
+        );
+    }
+
+    #[test]
+    fn launch_command_preview_does_not_require_an_initialized_profile() {
+        let context = CodexLaunchContext {
+            user_data_dir: "/path/that/does/not/exist/codex-home".to_string(),
+            working_dir: Some("/path/that/does/not/exist/workspace".to_string()),
+            extra_args: "--model gpt-test".to_string(),
+        };
+
+        let command = build_launch_command_preview(&context)
+            .expect("preview should only format the launch command");
+
+        assert!(command.contains("codex-home"));
+        assert!(command.contains("workspace"));
+        assert!(command.contains("codex"));
+        assert!(command.contains("--model"));
+        assert!(command.contains("gpt-test"));
+    }
+
     #[tokio::test]
     async fn created_instance_binding_replaces_copied_source_credentials_before_return() {
         let test_root = std::env::temp_dir().join(format!(
@@ -589,9 +673,11 @@ fn powershell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
 
-fn build_launch_command(context: &CodexLaunchContext) -> Result<String, String> {
-    sanitize_codex_config_before_launch(Path::new(&context.user_data_dir))?;
-    let runtime = modules::codex_wakeup::resolve_cli_runtime()?;
+fn build_launch_command_text(
+    context: &CodexLaunchContext,
+    binary_path: &str,
+    node_path: Option<&str>,
+) -> Result<String, String> {
     let parsed_args = modules::process::parse_extra_args(&context.extra_args);
 
     #[cfg(not(target_os = "windows"))]
@@ -607,11 +693,11 @@ fn build_launch_command(context: &CodexLaunchContext) -> Result<String, String> 
         codex_cmd.push_str("CODEX_HOME=");
         codex_cmd.push_str(&posix_shell_quote(&context.user_data_dir));
         codex_cmd.push(' ');
-        if let Some(node_path) = runtime.node_path.as_deref() {
+        if let Some(node_path) = node_path {
             codex_cmd.push_str(&posix_shell_quote(node_path));
             codex_cmd.push(' ');
         }
-        codex_cmd.push_str(&posix_shell_quote(&runtime.binary_path));
+        codex_cmd.push_str(&posix_shell_quote(binary_path));
 
         for arg in parsed_args {
             let trimmed = arg.trim();
@@ -643,14 +729,14 @@ fn build_launch_command(context: &CodexLaunchContext) -> Result<String, String> 
         }
 
         let mut codex_cmd = String::new();
-        if let Some(node_path) = runtime.node_path.as_deref() {
+        if let Some(node_path) = node_path {
             codex_cmd.push_str("& ");
             codex_cmd.push_str(&powershell_quote(node_path));
             codex_cmd.push(' ');
-            codex_cmd.push_str(&powershell_quote(&runtime.binary_path));
+            codex_cmd.push_str(&powershell_quote(binary_path));
         } else {
             codex_cmd.push_str("& ");
-            codex_cmd.push_str(&powershell_quote(&runtime.binary_path));
+            codex_cmd.push_str(&powershell_quote(binary_path));
         }
 
         for arg in parsed_args {
@@ -669,12 +755,184 @@ fn build_launch_command(context: &CodexLaunchContext) -> Result<String, String> 
     Err("当前系统暂不支持生成 Codex CLI 启动命令".to_string())
 }
 
-#[cfg(target_os = "macos")]
+fn build_launch_command_preview(context: &CodexLaunchContext) -> Result<String, String> {
+    build_launch_command_text(context, "codex", None)
+}
+
+fn build_launch_command(context: &CodexLaunchContext) -> Result<String, String> {
+    sanitize_codex_config_before_launch(Path::new(&context.user_data_dir))?;
+    let runtime = modules::codex_wakeup::resolve_cli_runtime()?;
+    build_launch_command_text(context, &runtime.binary_path, runtime.node_path.as_deref())
+}
+
 fn escape_applescript(value: &str) -> String {
     value
         .replace('\\', "\\\\")
         .replace('"', "\\\"")
         .replace('\n', "\\n")
+}
+
+#[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
+fn format_terminal_display_command(program: &str, args: &[String]) -> String {
+    std::iter::once(program.to_string())
+        .chain(args.iter().map(|arg| {
+            if arg.is_empty() {
+                "\"\"".to_string()
+            } else if arg
+                .chars()
+                .any(|ch| ch.is_whitespace() || matches!(ch, '"' | '&' | '|' | ';'))
+            {
+                format!("\"{}\"", arg.replace('"', "\\\""))
+            } else {
+                arg.clone()
+            }
+        }))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
+fn build_windows_codex_terminal_launch_plan(
+    command: &str,
+    terminal: &str,
+) -> CodexTerminalLaunchPlan {
+    let normalized = terminal.trim().to_ascii_lowercase();
+    let (program, args, terminal_name) = match normalized.as_str() {
+        "pwsh" => (
+            "pwsh",
+            vec!["-NoExit", "-Command", command],
+            "PowerShell Core",
+        ),
+        "powershell" => (
+            "powershell",
+            vec!["-NoExit", "-Command", command],
+            "PowerShell",
+        ),
+        "wt" => (
+            "wt",
+            vec!["powershell", "-NoExit", "-Command", command],
+            "Windows Terminal",
+        ),
+        "cmd" => (
+            "cmd",
+            vec![
+                "/C",
+                "start",
+                "",
+                "powershell",
+                "-NoExit",
+                "-Command",
+                command,
+            ],
+            "Command Prompt",
+        ),
+        _ => (
+            "powershell",
+            vec!["-NoExit", "-Command", command],
+            "PowerShell",
+        ),
+    };
+    let args = args.into_iter().map(str::to_string).collect::<Vec<_>>();
+
+    CodexTerminalLaunchPlan {
+        program: program.to_string(),
+        display_command: format_terminal_display_command(program, &args),
+        args,
+        terminal_name: terminal_name.to_string(),
+    }
+}
+
+fn build_macos_codex_terminal_launch_plan(
+    command: &str,
+    terminal: &str,
+) -> Result<CodexTerminalLaunchPlan, String> {
+    let normalized = terminal.trim();
+    let is_iterm = normalized.to_ascii_lowercase().contains("iterm");
+    let is_terminal_app =
+        normalized.is_empty() || normalized == "system" || normalized == "Terminal";
+    let (terminal_name, script) = if is_iterm {
+        (
+            "iTerm2",
+            format!(
+                "tell application \"iTerm\"
+                    activate
+                    if not (exists window 1) then
+                        create window with default profile
+                        tell current session of current window
+                            write text \"{}\"
+                        end tell
+                    else
+                        tell current window
+                            create tab with default profile
+                            tell current session
+                                write text \"{}\"
+                            end tell
+                        end tell
+                    end if
+                end tell",
+                escape_applescript(command),
+                escape_applescript(command)
+            ),
+        )
+    } else if is_terminal_app {
+        (
+            "Terminal.app",
+            format!(
+                "tell application \"Terminal\"
+                    activate
+                    do script \"{}\"
+                end tell",
+                escape_applescript(command)
+            ),
+        )
+    } else {
+        return Err(format!(
+            "当前终端暂不支持直接执行：{}。请改用 Terminal 或 iTerm2。",
+            normalized
+        ));
+    };
+
+    Ok(CodexTerminalLaunchPlan {
+        program: "osascript".to_string(),
+        args: vec!["-e".to_string(), script],
+        display_command: format!("{} → {}", terminal_name, command),
+        terminal_name: terminal_name.to_string(),
+    })
+}
+
+fn build_codex_terminal_launch_plan(
+    command: &str,
+    terminal: &str,
+) -> Result<CodexTerminalLaunchPlan, String> {
+    #[cfg(target_os = "macos")]
+    {
+        return build_macos_codex_terminal_launch_plan(command, terminal);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        return Ok(build_windows_codex_terminal_launch_plan(command, terminal));
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        return Ok(CodexTerminalLaunchPlan {
+            program: String::new(),
+            args: Vec::new(),
+            display_command: command.to_string(),
+            terminal_name: terminal.to_string(),
+        });
+    }
+
+    #[allow(unreachable_code)]
+    Err("Codex CLI 终端执行仅支持 macOS 和 Windows".to_string())
+}
+
+fn resolve_codex_launch_terminal(terminal: Option<String>) -> String {
+    terminal
+        .unwrap_or_else(|| crate::modules::config::get_user_config().default_terminal)
+        .trim()
+        .to_string()
 }
 
 #[tauri::command]
@@ -1155,6 +1413,7 @@ pub async fn codex_delete_instance(instance_id: String) -> Result<(), String> {
 }
 
 async fn codex_start_instance_internal(
+    app: AppHandle,
     instance_id: String,
     skip_default_bind_account_injection: bool,
 ) -> Result<CodexInstanceProfileView, String> {
@@ -1321,6 +1580,7 @@ async fn codex_start_instance_internal(
         let finalize_started = Instant::now();
         let updated = modules::codex_instance::update_default_pid(Some(pid))?;
         modules::codex_app_injection::start_for_profile(
+            app.clone(),
             DEFAULT_INSTANCE_ID.to_string(),
             default_dir.clone(),
             injection_plan.port,
@@ -1481,6 +1741,7 @@ async fn codex_start_instance_internal(
     let finalize_started = Instant::now();
     let updated = modules::codex_instance::update_instance_after_start(&instance.id, pid)?;
     modules::codex_app_injection::start_for_profile(
+        app.clone(),
         instance.id.clone(),
         instance_dir.to_path_buf(),
         injection_plan.port,
@@ -1502,13 +1763,17 @@ async fn codex_start_instance_internal(
 }
 
 pub(crate) async fn codex_start_default_with_prepared_profile(
+    app: AppHandle,
 ) -> Result<CodexInstanceProfileView, String> {
-    codex_start_instance_internal(DEFAULT_INSTANCE_ID.to_string(), true).await
+    codex_start_instance_internal(app, DEFAULT_INSTANCE_ID.to_string(), true).await
 }
 
 #[tauri::command]
-pub async fn codex_start_instance(instance_id: String) -> Result<CodexInstanceProfileView, String> {
-    codex_start_instance_internal(instance_id, false).await
+pub async fn codex_start_instance(
+    app: AppHandle,
+    instance_id: String,
+) -> Result<CodexInstanceProfileView, String> {
+    codex_start_instance_internal(app, instance_id, false).await
 }
 
 #[tauri::command]
@@ -1618,14 +1883,53 @@ pub async fn codex_open_instance_window(instance_id: String) -> Result<(), Strin
 }
 
 #[tauri::command]
+pub async fn codex_preview_instance_launch_command(
+    user_data_dir: String,
+    working_dir: Option<String>,
+    extra_args: Option<String>,
+    terminal: Option<String>,
+    launch_command: Option<String>,
+) -> Result<CodexInstanceLaunchPreviewInfo, String> {
+    let user_data_dir = user_data_dir.trim().to_string();
+    if user_data_dir.is_empty() {
+        return Err("Codex CLI 实例目录不能为空".to_string());
+    }
+    let context = CodexLaunchContext {
+        user_data_dir: user_data_dir.clone(),
+        working_dir: working_dir.filter(|value| !value.trim().is_empty()),
+        extra_args: extra_args.unwrap_or_default(),
+    };
+    let launch_command = launch_command
+        .filter(|value| !value.trim().is_empty())
+        .map(Ok)
+        .unwrap_or_else(|| build_launch_command_preview(&context))?;
+    let terminal = terminal
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "system".to_string());
+    let terminal_plan = build_codex_terminal_launch_plan(&launch_command, &terminal)?;
+    Ok(CodexInstanceLaunchPreviewInfo {
+        user_data_dir,
+        launch_command,
+        terminal_command: terminal_plan.display_command,
+        terminal,
+    })
+}
+
+#[tauri::command]
 pub async fn codex_get_instance_launch_command(
     instance_id: String,
+    terminal: Option<String>,
 ) -> Result<CodexInstanceLaunchInfo, String> {
     let context = resolve_instance_launch_context(&instance_id)?;
+    let launch_command = build_launch_command(&context)?;
+    let terminal = resolve_codex_launch_terminal(terminal);
+    let terminal_plan = build_codex_terminal_launch_plan(&launch_command, &terminal)?;
     Ok(CodexInstanceLaunchInfo {
         instance_id,
         user_data_dir: context.user_data_dir.clone(),
-        launch_command: build_launch_command(&context)?,
+        launch_command,
+        terminal_command: terminal_plan.display_command,
+        terminal,
     })
 }
 
@@ -1635,109 +1939,31 @@ pub async fn codex_execute_instance_launch_command(
     terminal: Option<String>,
 ) -> Result<String, String> {
     let context = resolve_instance_launch_context(&instance_id)?;
-
     let command = build_launch_command(&context)?;
+    let terminal = resolve_codex_launch_terminal(terminal);
+    let plan = build_codex_terminal_launch_plan(&command, &terminal)?;
 
     #[cfg(target_os = "macos")]
     {
-        let config = crate::modules::config::get_user_config();
-        let terminal = terminal
-            .unwrap_or(config.default_terminal)
-            .trim()
-            .to_string();
-        let is_iterm = terminal.to_lowercase().contains("iterm");
-        let is_terminal_app = terminal == "system" || terminal.is_empty() || terminal == "Terminal";
-        let app_name = if is_terminal_app {
-            "Terminal"
-        } else {
-            &terminal
-        };
-
-        let script = if is_iterm {
-            format!(
-                "tell application \"iTerm\"
-                    activate
-                    if not (exists window 1) then
-                        create window with default profile
-                        tell current session of current window
-                            write text \"{}\"
-                        end tell
-                    else
-                        tell current window
-                            create tab with default profile
-                            tell current session
-                                write text \"{}\"
-                            end tell
-                        end tell
-                    end if
-                end tell",
-                escape_applescript(&command),
-                escape_applescript(&command)
-            )
-        } else if is_terminal_app {
-            format!(
-                "tell application \"Terminal\"
-                    activate
-                    do script \"{}\"
-                end tell",
-                escape_applescript(&command)
-            )
-        } else {
-            return Err(format!(
-                "当前终端暂不支持直接执行：{}。请改用 Terminal 或 iTerm2。",
-                terminal
-            ));
-        };
-
-        let output = Command::new("osascript")
-            .arg("-e")
-            .arg(&script)
+        let output = Command::new(&plan.program)
+            .args(&plan.args)
             .output()
-            .map_err(|e| format!("打开终端失败 ({}): {}", app_name, e))?;
-
+            .map_err(|e| format!("打开终端失败 ({}): {}", plan.terminal_name, e))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!("终端执行失败: {}", stderr.trim()));
         }
-        return Ok(format!("已在 {} 执行 Codex CLI 命令", app_name));
+        return Ok(format!("已在 {} 执行 Codex CLI 命令", plan.terminal_name));
     }
 
     #[cfg(target_os = "windows")]
     {
-        let config = crate::modules::config::get_user_config();
-        let terminal = terminal
-            .unwrap_or(config.default_terminal)
-            .trim()
-            .to_string();
-
-        let mut cmd = if terminal == "pwsh" {
-            let mut command_process = Command::new("pwsh");
-            command_process.args(["-NoExit", "-Command", &command]);
-            command_process
-        } else if terminal == "wt" {
-            let mut command_process = Command::new("wt");
-            command_process.args(["powershell", "-NoExit", "-Command", &command]);
-            command_process
-        } else if terminal == "cmd" {
-            let mut command_process = Command::new("cmd");
-            command_process.args([
-                "/C",
-                "start",
-                "",
-                "powershell",
-                "-NoExit",
-                "-Command",
-                &command,
-            ]);
-            command_process
-        } else {
-            let mut command_process = Command::new("powershell");
-            command_process.args(["-NoExit", "-Command", &command]);
-            command_process
-        };
-
-        cmd.spawn().map_err(|e| format!("打开终端失败: {}", e))?;
-        return Ok("已在终端执行 Codex CLI 命令".to_string());
+        let child = Command::new(&plan.program)
+            .args(&plan.args)
+            .spawn()
+            .map_err(|e| format!("打开终端失败 ({}): {}", plan.terminal_name, e))?;
+        drop(child);
+        return Ok(format!("已在 {} 执行 Codex CLI 命令", plan.terminal_name));
     }
 
     #[allow(unreachable_code)]

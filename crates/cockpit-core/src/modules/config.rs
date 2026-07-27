@@ -215,6 +215,9 @@ pub struct UserConfig {
     /// CodeBuddy 启动路径（为空则使用默认路径）
     #[serde(default = "default_codebuddy_app_path")]
     pub codebuddy_app_path: String,
+    /// 切换 CodeBuddy 账号时是否在本机账号间合并本地会话
+    #[serde(default = "default_codebuddy_share_sessions_on_switch")]
+    pub codebuddy_share_sessions_on_switch: bool,
     /// CodeBuddy CN 启动路径（为空则使用默认路径）
     #[serde(default = "default_codebuddy_cn_app_path")]
     pub codebuddy_cn_app_path: String,
@@ -242,6 +245,9 @@ pub struct UserConfig {
     /// WorkBuddy 启动路径（为空则使用默认路径）
     #[serde(default = "default_workbuddy_app_path")]
     pub workbuddy_app_path: String,
+    /// 切换 WorkBuddy 账号时是否在本机账号间合并本地会话
+    #[serde(default = "default_workbuddy_share_sessions_on_switch")]
+    pub workbuddy_share_sessions_on_switch: bool,
     /// 切换 Codex 时是否自动重启 OpenCode
     #[serde(default = "default_opencode_sync_on_switch")]
     pub opencode_sync_on_switch: bool,
@@ -600,6 +606,9 @@ fn default_cursor_app_path() -> String {
 fn default_codebuddy_app_path() -> String {
     String::new()
 }
+fn default_codebuddy_share_sessions_on_switch() -> bool {
+    false
+}
 fn default_codebuddy_cn_app_path() -> String {
     String::new()
 }
@@ -614,6 +623,9 @@ fn default_trae_app_scan_roots() -> String {
 }
 fn default_workbuddy_app_path() -> String {
     String::new()
+}
+fn default_workbuddy_share_sessions_on_switch() -> bool {
+    false
 }
 fn default_opencode_sync_on_switch() -> bool {
     false
@@ -813,6 +825,7 @@ impl Default for UserConfig {
             kiro_app_path: default_kiro_app_path(),
             cursor_app_path: default_cursor_app_path(),
             codebuddy_app_path: default_codebuddy_app_path(),
+            codebuddy_share_sessions_on_switch: default_codebuddy_share_sessions_on_switch(),
             codebuddy_cn_app_path: default_codebuddy_cn_app_path(),
             qoder_app_path: default_qoder_app_path(),
             trae_app_path: default_trae_app_path(),
@@ -824,6 +837,7 @@ impl Default for UserConfig {
             trae_cn_app_scan_roots: default_trae_app_scan_roots(),
             trae_solo_cn_app_scan_roots: default_trae_app_scan_roots(),
             workbuddy_app_path: default_workbuddy_app_path(),
+            workbuddy_share_sessions_on_switch: default_workbuddy_share_sessions_on_switch(),
             opencode_sync_on_switch: default_opencode_sync_on_switch(),
             opencode_auth_overwrite_on_switch: default_opencode_auth_overwrite_on_switch(),
             ghcp_opencode_sync_on_switch: default_ghcp_opencode_sync_on_switch(),

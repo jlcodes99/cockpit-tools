@@ -1058,7 +1058,11 @@ pub struct CheckinStatusResponse {
     pub streak_days: i64,
     #[serde(default, alias = "dailyCredit")]
     pub daily_credit: i64,
-    #[serde(default, alias = "todayCredit", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        alias = "todayCredit",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub today_credit: Option<i64>,
     #[serde(
         default,
@@ -1215,18 +1219,15 @@ async fn fetch_checkin_status_from(
             .or_else(|| body.get("msg"))
             .and_then(|v| v.as_str())
             .unwrap_or("unknown error");
-        return Err(format!(
-            "请求 {} 失败 (code={}): {}",
-            path, code, message
-        ));
+        return Err(format!("请求 {} 失败 (code={}): {}", path, code, message));
     }
 
     let data = body
         .get("data")
         .ok_or_else(|| format!("{} 响应缺少 data 字段", path))?;
 
-    let status = parse_checkin_status_data(data)
-        .map_err(|e| format!("解析 {} data 失败: {}", path, e))?;
+    let status =
+        parse_checkin_status_data(data).map_err(|e| format!("解析 {} data 失败: {}", path, e))?;
 
     Ok(status)
 }

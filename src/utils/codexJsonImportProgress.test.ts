@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { splitCodexImportPayloads } from "./codexJsonImportProgress.ts";
+import {
+  findCodexWebSessionImports,
+  splitCodexImportPayloads,
+} from "./codexJsonImportProgress.ts";
 
 test("splits a JSON account array into individual payloads", () => {
   const payloads = splitCodexImportPayloads(
@@ -59,4 +62,37 @@ test("keeps malformed multiline JSON together for backend validation", () => {
   assert.deepEqual(splitCodexImportPayloads('{\n"refresh_token":\n}'), [
     '{\n"refresh_token":\n}',
   ]);
+});
+
+test("detects direct and wrapped Web Session imports", () => {
+  const direct = {
+    user: { email: "session@example.com" },
+    account: { id: "account-session" },
+    accessToken: "header.payload.signature",
+    authProvider: "openai",
+  };
+  const wrapped = {
+    session_json: JSON.stringify({
+      user: { name: "Wrapped User" },
+      account: { id: "account-wrapped" },
+      accessToken: "header.payload.signature",
+    }),
+  };
+
+  assert.deepEqual(
+    findCodexWebSessionImports(JSON.stringify([direct, wrapped])),
+    [{ label: "session@example.com" }, { label: "Wrapped User" }],
+  );
+});
+
+test("does not classify regular token JSON as a Web Session", () => {
+  assert.deepEqual(
+    findCodexWebSessionImports(
+      JSON.stringify({
+        access_token: "header.payload.signature",
+        refresh_token: "refresh-token",
+      }),
+    ),
+    [],
+  );
 });

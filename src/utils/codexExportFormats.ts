@@ -38,6 +38,15 @@ interface CodexPortableTokenStorage extends JsonRecord {
   mail_url?: string;
 }
 
+interface CodexPortableAgentIdentityStorage extends JsonRecord {
+  auth_mode: 'agentIdentity';
+  agent_identity: JsonRecord;
+  account_id: string;
+  user_id: string;
+  email: string;
+  type: 'codex';
+}
+
 interface CodexExportBuildOptions {
   includeSensitiveNotes?: boolean;
 }
@@ -223,7 +232,50 @@ function resolveLastRefresh(account: CodexAccount): string {
   return normalizeTimestampToIso(account.token_updated_at) || new Date().toISOString();
 }
 
+function hasAgentIdentity(account: CodexAccount): boolean {
+  return Boolean(account.agent_identity?.agent_runtime_id?.trim());
+}
+
+function buildAgentIdentityCredentials(account: CodexAccount): JsonRecord {
+  const identity = account.agent_identity;
+  const agentRuntimeId = identity?.agent_runtime_id?.trim();
+  const agentPrivateKey = identity?.agent_private_key?.trim();
+  const accountId = identity?.account_id?.trim();
+  const chatgptUserId = identity?.chatgpt_user_id?.trim();
+  if (!agentRuntimeId || !agentPrivateKey || !accountId || !chatgptUserId) {
+    throw new Error('Codex Agent Identity credentials are incomplete');
+  }
+
+  const credentials: JsonRecord = {
+    auth_mode: 'agentIdentity',
+    agent_runtime_id: agentRuntimeId,
+    agent_private_key: agentPrivateKey,
+    account_id: accountId,
+    chatgpt_account_id: accountId,
+    chatgpt_user_id: chatgptUserId,
+    chatgpt_account_is_fedramp:
+      identity?.chatgpt_account_is_fedramp === true,
+  };
+  const taskId = identity?.task_id?.trim();
+  if (taskId) {
+    credentials.task_id = taskId;
+  }
+  const email = identity?.email?.trim() || account.email?.trim();
+  if (email) {
+    credentials.email = email;
+  }
+  const planType = identity?.plan_type?.trim() || account.plan_type?.trim();
+  if (planType) {
+    credentials.plan_type = planType;
+  }
+  return credentials;
+}
+
 function buildSub2apiCredentials(account: CodexAccount): JsonRecord {
+  if (hasAgentIdentity(account)) {
+    return buildAgentIdentityCredentials(account);
+  }
+
   const credentials: JsonRecord = {
     access_token: account.tokens.access_token,
   };
@@ -304,6 +356,36 @@ function toPortableTokenStorage(
   return payload;
 }
 
+function toPortableAgentIdentityStorage(
+  account: CodexAccount,
+  options: CodexExportBuildOptions = {},
+): CodexPortableAgentIdentityStorage {
+  const credentials = buildAgentIdentityCredentials(account);
+  const payload: CodexPortableAgentIdentityStorage = {
+    auth_mode: 'agentIdentity',
+    agent_identity: credentials,
+    account_id: String(credentials.account_id),
+    user_id: String(credentials.chatgpt_user_id),
+    email: String(credentials.email || account.email || ''),
+    type: 'codex',
+  };
+
+  const planType = toStringValue(credentials.plan_type);
+  if (planType) {
+    payload.plan_type = planType;
+  }
+  if (account.account_name?.trim()) {
+    payload.account_name = account.account_name.trim();
+  }
+  if (account.account_structure?.trim()) {
+    payload.account_structure = account.account_structure.trim();
+  }
+  if (options.includeSensitiveNotes) {
+    appendSensitiveNoteFields(payload, account);
+  }
+  return payload;
+}
+
 function isCodexApiKeyAccount(account: CodexAccount): boolean {
   return account.auth_mode === 'apikey' || Boolean(account.openai_api_key?.trim());
 }
@@ -339,6 +421,9 @@ function toCockpitToolsPortableStorage(
   account: CodexAccount,
   options: CodexExportBuildOptions = {},
 ): CodexPortableTokenStorage | JsonRecord {
+  if (hasAgentIdentity(account)) {
+    return toPortableAgentIdentityStorage(account, options);
+  }
   if (isCodexApiKeyAccount(account)) {
     return toPortableApiKeyStorage(account, options);
   }
@@ -359,6 +444,14 @@ export function parseCockpitToolsCodexExport(rawJson: string): CodexAccount[] {
 export function hasCodexExportSensitiveNotes(rawJson: string): boolean {
   try {
     return parseCockpitToolsCodexExport(rawJson).some(hasSensitiveNoteFields);
+  } catch {
+    return false;
+  }
+}
+
+export function hasCodexExportAgentIdentity(rawJson: string): boolean {
+  try {
+    return parseCockpitToolsCodexExport(rawJson).some(hasAgentIdentity);
   } catch {
     return false;
   }
@@ -388,6 +481,10 @@ export function transformCodexExportJson(
       version: 1,
     };
     return JSON.stringify(payload, null, 2);
+  }
+
+  if (accounts.some(hasAgentIdentity)) {
+    throw new Error('CPA format does not support Codex Agent Identity accounts');
   }
 
   const cpaPayload = accounts.map((account) => toPortableTokenStorage(account, options));
