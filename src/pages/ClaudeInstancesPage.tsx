@@ -15,7 +15,8 @@ import {
   getClaudeAccountDisplayEmail,
   getClaudePlanBadge,
   getClaudePlanBadgeClass,
-  getClaudeQuotaClass,
+  getClaudeRemainingPercentage,
+  getClaudeRemainingQuotaClass,
   isClaudeDesktopRuntimeAccount,
 } from '../types/claude';
 import type { InstanceLaunchMode, InstanceProfile } from '../types/instance';
@@ -55,13 +56,13 @@ function renderClaudeQuotaPreview(
     {
       key: 'five-hour',
       label: currentSessionLabel,
-      value: quota.five_hour_percentage,
+      value: getClaudeRemainingPercentage(quota.five_hour_percentage),
       reset: quota.five_hour_reset_time,
     },
     {
       key: 'seven-day',
       label: currentWeekLabel,
-      value: quota.seven_day_percentage,
+      value: getClaudeRemainingPercentage(quota.seven_day_percentage),
       reset: quota.seven_day_reset_time,
     },
   ];
@@ -69,7 +70,7 @@ function renderClaudeQuotaPreview(
   return (
     <div className="account-quota-preview">
       {rows.map((row) => {
-        const quotaClass = getClaudeQuotaClass(row.value);
+        const quotaClass = getClaudeRemainingQuotaClass(row.value);
         const resetText = formatClaudeResetTime(row.reset);
         return (
           <span className="account-quota-item" key={row.key} title={resetText}>

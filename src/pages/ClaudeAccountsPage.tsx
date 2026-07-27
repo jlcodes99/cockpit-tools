@@ -87,7 +87,8 @@ import {
   getClaudeAuthModeLabel,
   getClaudePlanBadge,
   getClaudePlanBadgeClass,
-  getClaudeQuotaClass,
+  getClaudeRemainingPercentage,
+  getClaudeRemainingQuotaClass,
   isClaudeDesktopGatewayAccount,
   isClaudeDesktopOAuthAccount,
   isClaudeDesktopRuntimeAccount,
@@ -705,13 +706,13 @@ function buildClaudeQuotaSummaryItems(account: ClaudeAccount, t: TFunction): Cla
     {
       key: 'five-hour',
       label: t('claude.quota.fiveHour', 'Current session'),
-      percentage: quota.five_hour_percentage,
+      percentage: getClaudeRemainingPercentage(quota.five_hour_percentage),
       resetTime: quota.five_hour_reset_time,
     },
     {
       key: 'seven-day',
       label: t('claude.quota.sevenDay', 'Current week (all models)'),
-      percentage: quota.seven_day_percentage,
+      percentage: getClaudeRemainingPercentage(quota.seven_day_percentage),
       resetTime: quota.seven_day_reset_time,
     },
   ];
@@ -2667,7 +2668,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
       <>
         {items.map((item) => {
           const percentage = clampQuotaPercentage(item.percentage);
-          const quotaClass = getClaudeQuotaClass(percentage);
+          const quotaClass = getClaudeRemainingQuotaClass(percentage);
           const resetText = formatClaudeResetTime(item.resetTime);
           const resetDisplay = resetText || '-';
           const Icon = item.key === 'five-hour' ? Clock3 : CalendarDays;

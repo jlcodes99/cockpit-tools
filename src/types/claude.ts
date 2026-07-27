@@ -325,6 +325,20 @@ export function getClaudeQuotaClass(usedPercent: number): 'high' | 'medium' | 'l
   return 'high';
 }
 
+export function getClaudeRemainingPercentage(usedPercent: number): number {
+  if (!Number.isFinite(usedPercent)) return 0;
+  return 100 - Math.max(0, Math.min(100, Math.round(usedPercent)));
+}
+
+export function getClaudeRemainingQuotaClass(
+  remainingPercent: number,
+): 'high' | 'medium' | 'low' | 'critical' {
+  const normalized = Number.isFinite(remainingPercent)
+    ? Math.max(0, Math.min(100, Math.round(remainingPercent)))
+    : 0;
+  return getClaudeQuotaClass(100 - normalized);
+}
+
 export function hasClaudeQuotaData(account: ClaudeAccount): boolean {
   return Boolean(account.quota);
 }

@@ -3045,16 +3045,18 @@ mod imp {
             .map(|account| {
                 let mut rows = Vec::new();
                 if let Some(quota) = account.quota.as_ref() {
-                    let five_hour = quota.five_hour_percentage.clamp(0, 100);
+                    let five_hour_used = quota.five_hour_percentage.clamp(0, 100);
+                    let five_hour_remaining = (100 - five_hour_used).clamp(0, 100);
                     rows.push(make_progress_row(
                         translate_or(lang, "claude.quota.fiveHour", "Current session", &[]),
-                        format!("{five_hour}%"),
-                        five_hour,
+                        format!("{five_hour_remaining}%"),
+                        five_hour_remaining,
                         format_reset_subtext(lang, quota.five_hour_reset_time),
-                        usage_warning_tone(five_hour),
+                        usage_warning_tone(five_hour_used),
                     ));
 
-                    let seven_day = quota.seven_day_percentage.clamp(0, 100);
+                    let seven_day_used = quota.seven_day_percentage.clamp(0, 100);
+                    let seven_day_remaining = (100 - seven_day_used).clamp(0, 100);
                     rows.push(make_progress_row(
                         translate_or(
                             lang,
@@ -3062,10 +3064,10 @@ mod imp {
                             "Current week (all models)",
                             &[],
                         ),
-                        format!("{seven_day}%"),
-                        seven_day,
+                        format!("{seven_day_remaining}%"),
+                        seven_day_remaining,
                         format_reset_subtext(lang, quota.seven_day_reset_time),
-                        usage_warning_tone(seven_day),
+                        usage_warning_tone(seven_day_used),
                     ));
                 } else if let Some(error) = account.quota_error.as_ref() {
                     rows.push(make_text_row(

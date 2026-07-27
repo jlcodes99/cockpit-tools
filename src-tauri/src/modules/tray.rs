@@ -1092,13 +1092,13 @@ fn build_claude_display_info(lang: &str, desktop: bool) -> AccountDisplayInfo {
         quota_lines.push(format_quota_line(
             lang,
             &get_text("claude_current_session", lang),
-            &format_percent_text(quota.five_hour_percentage),
+            &format_percent_text((100 - quota.five_hour_percentage.clamp(0, 100)).clamp(0, 100)),
             Some(&format_reset_time_from_ts(lang, quota.five_hour_reset_time)),
         ));
         quota_lines.push(format_quota_line(
             lang,
             &get_text("claude_current_week_all_models", lang),
-            &format_percent_text(quota.seven_day_percentage),
+            &format_percent_text((100 - quota.seven_day_percentage.clamp(0, 100)).clamp(0, 100)),
             Some(&format_reset_time_from_ts(lang, quota.seven_day_reset_time)),
         ));
     } else if let Some(error) = &account.quota_error {
