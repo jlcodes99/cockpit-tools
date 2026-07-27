@@ -3995,3 +3995,46 @@ func TestResponsesWebsocketRejectsProviderGatewayBeforeCodexAuth(t *testing.T) {
 		t.Fatalf("body = %s", w.Body.String())
 	}
 }
+
+func TestCoreAuthSelectorFiltersNewModelExclusionsBeforeSessionAffinity(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Routing.SessionAffinity = true
+	cfg.Routing.SessionAffinityTTL = "1h"
+	selector := buildCoreAuthSelector(cfg, &coreauth.RoundRobinSelector{}, &manifest{}, nil)
+	if stoppable, ok := selector.(coreauth.StoppableSelector); ok {
+		t.Cleanup(stoppable.Stop)
+	}
+
+	plus := &coreauth.Auth{
+		ID:       "plus.json",
+		Provider: "codex",
+		Status:   coreauth.StatusActive,
+		Metadata: map[string]any{},
+	}
+	pro := &coreauth.Auth{
+		ID:       "pro.json",
+		Provider: "codex",
+		Status:   coreauth.StatusActive,
+	}
+	auths := []*coreauth.Auth{plus, pro}
+	opts := cliproxyexecutor.Options{
+		Headers: http.Header{"Session_id": []string{"spark-session"}},
+	}
+
+	first, err := selector.Pick(context.Background(), "codex", codexSparkModel, opts, auths)
+	if err != nil {
+		t.Fatalf("initial Pick: %v", err)
+	}
+	if first == nil || first.ID != plus.ID {
+		t.Fatalf("initial Pick = %#v, want %q", first, plus.ID)
+	}
+
+	plus.Metadata["excluded_models"] = []any{codexSparkModel}
+	second, err := selector.Pick(context.Background(), "codex", codexSparkModel, opts, auths)
+	if err != nil {
+		t.Fatalf("Pick after exclusion: %v", err)
+	}
+	if second == nil || second.ID != pro.ID {
+		t.Fatalf("Pick after exclusion = %#v, want %q", second, pro.ID)
+	}
+}
