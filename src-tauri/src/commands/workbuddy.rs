@@ -443,3 +443,39 @@ pub async fn checkin_workbuddy(
 
     Ok(response)
 }
+
+#[tauri::command]
+pub fn get_workbuddy_auto_checkin_config(
+) -> crate::modules::workbuddy_auto_checkin::WorkbuddyAutoCheckinConfig {
+    crate::modules::workbuddy_auto_checkin::get_config()
+}
+
+#[tauri::command]
+pub fn save_workbuddy_auto_checkin_config(
+    config: crate::modules::workbuddy_auto_checkin::WorkbuddyAutoCheckinConfig,
+) -> Result<(), String> {
+    crate::modules::workbuddy_auto_checkin::save_config(&config)
+}
+
+#[tauri::command]
+pub fn get_workbuddy_auto_checkin_logs(
+) -> Vec<crate::modules::workbuddy_auto_checkin::WorkbuddyAutoCheckinLogRecord> {
+    crate::modules::workbuddy_auto_checkin::get_logs()
+}
+
+#[tauri::command]
+pub fn clear_workbuddy_auto_checkin_logs() -> Result<(), String> {
+    crate::modules::workbuddy_auto_checkin::save_logs(&[])
+}
+
+#[tauri::command]
+pub async fn run_workbuddy_auto_checkin_now(
+    app: AppHandle,
+    force: Option<bool>,
+) -> Result<String, String> {
+    crate::modules::workbuddy_auto_checkin::run_workbuddy_auto_checkin_cycle_if_needed(
+        &app,
+        force.unwrap_or(false),
+    )
+    .await
+}

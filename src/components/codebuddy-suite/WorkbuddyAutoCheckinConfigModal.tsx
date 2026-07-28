@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { listen } from '@tauri-apps/api/event';
 import {
   X,
   Clock,
@@ -20,6 +21,7 @@ import {
   WorkbuddyAutoCheckinLogRecord,
   parseTimeToMinutes,
   getWorkbuddyAutoCheckinLogs,
+  getWorkbuddyAutoCheckinLogsAsync,
   clearWorkbuddyAutoCheckinLogs,
   runWorkbuddyAutoCheckinCycleIfNeeded,
   WORKBUDDY_AUTO_CHECKIN_LOGS_CHANGED_EVENT,
@@ -52,11 +54,31 @@ export function WorkbuddyAutoCheckinConfigModal({
   const [expandedLogIds, setExpandedLogIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
     const handleLogsChange = () => {
-      setLogs(getWorkbuddyAutoCheckinLogs());
+      void getWorkbuddyAutoCheckinLogsAsync().then((nextLogs) => {
+        if (!disposed) {
+          setLogs(nextLogs);
+        }
+      });
     };
+    handleLogsChange();
     window.addEventListener(WORKBUDDY_AUTO_CHECKIN_LOGS_CHANGED_EVENT, handleLogsChange);
+    void listen(WORKBUDDY_AUTO_CHECKIN_LOGS_CHANGED_EVENT, handleLogsChange)
+      .then((stopListening) => {
+        if (disposed) {
+          stopListening();
+        } else {
+          unlisten = stopListening;
+        }
+      })
+      .catch((err) => {
+        console.warn('[WorkbuddyAutoCheckin] 监听后端签到日志事件失败:', err);
+      });
     return () => {
+      disposed = true;
+      unlisten?.();
       window.removeEventListener(WORKBUDDY_AUTO_CHECKIN_LOGS_CHANGED_EVENT, handleLogsChange);
     };
   }, []);
@@ -84,7 +106,7 @@ export function WorkbuddyAutoCheckinConfigModal({
     setManualTesting(true);
     try {
       await runWorkbuddyAutoCheckinCycleIfNeeded(true);
-      setLogs(getWorkbuddyAutoCheckinLogs());
+      setLogs(await getWorkbuddyAutoCheckinLogsAsync());
     } catch (err) {
       console.warn('[WorkbuddyAutoCheckin] 手动测试自动签到异常:', err);
     } finally {

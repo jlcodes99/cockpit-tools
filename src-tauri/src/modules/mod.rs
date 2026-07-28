@@ -111,6 +111,7 @@ pub mod windsurf_devin_oauth;
 pub mod windsurf_instance;
 pub mod windsurf_oauth;
 pub mod workbuddy_account;
+pub mod workbuddy_auto_checkin;
 pub mod workbuddy_instance;
 pub mod workbuddy_oauth;
 pub mod workbuddy_session_transfer;

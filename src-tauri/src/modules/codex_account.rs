@@ -8982,7 +8982,7 @@ mod tests {
         upsert_account_from_access_token, upsert_account_from_access_token_with_hints,
         upsert_account_from_auth_tokens, upsert_agent_identity_account, upsert_api_key_account,
         validate_api_key_credentials, write_account_bundle_to_dir,
-        write_api_key_bearer_provider_override_to_config_toml, write_api_key_provider_to_config_toml,
+        write_api_key_bearer_provider_override_to_config_toml,
         write_api_provider_to_config_toml, write_auth_file_to_dir, write_managed_projection_to_dir,
         write_quick_config_to_config_toml, ApiProviderConfig, CodexAccessTokenImportHints,
         CodexAccountGroupRecord, CodexAccountIndex, CodexAccountSummary, CodexAuthFile,
