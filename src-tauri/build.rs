@@ -159,9 +159,6 @@ fn build_cockpit_cliproxy_sidecar() {
         panic!("unsupported sidecar build target: {target}");
     };
     build_go_sidecar(&sidecar_dir, &output_dir, &target, goos, goarch);
-    if cfg!(target_os = "macos") && target.contains("apple-darwin") {
-        build_macos_universal_sidecar(&sidecar_dir, &output_dir);
-    }
 }
 
 fn main() {
