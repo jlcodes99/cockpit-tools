@@ -825,12 +825,12 @@ fn escape_applescript(value: &str) -> String {
 /// Cockpit's `Command::spawn` uses `CreateProcess` directly and bypasses the OS default-terminal
 /// redirection, so for `default_terminal = "system"` we probe for `wt.exe` and route through
 /// Windows Terminal when available.
-#[cfg(any(target_os = "windows", test))]
+#[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
 fn windows_terminal_available() -> bool {
     windows_terminal_available_on_paths(std::env::var_os("PATH"))
 }
 
-#[cfg(any(target_os = "windows", test))]
+#[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
 fn windows_terminal_available_on_paths(path: Option<std::ffi::OsString>) -> bool {
     let candidates = ["wt.exe", "wt"];
     let paths = path.as_deref();
