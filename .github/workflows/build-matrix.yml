@@ -1,4 +1,6 @@
-name: 🚀 Build Matrix
+name: "🚀 PR Build Matrix"
+
+run-name: "🚀 PR build matrix · ${{ github.ref_name }}"
 
 on:
   workflow_dispatch:
@@ -14,275 +16,251 @@ concurrency:
   group: build-matrix-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: always
+  CGO_ENABLED: "0"
+
 jobs:
-  preflight-locales:
-    name: "🔍 Preflight: Check Locales"
+  prepare:
+    name: "🚦 Prepare shared build inputs"
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+      - name: "📥 Checkout repository"
+        uses: actions/checkout@v5
 
-      - name: ⚙️ Node.js setup
-        uses: actions/setup-node@v4
+      - name: "⚡ Restore verified frontend"
+        id: frontend-cache
+        uses: actions/cache@v6
         with:
-          node-version: 20
-          cache: "npm"
+          path: dist
+          key: frontend-v1-${{ hashFiles('package.json', 'package-lock.json', 'index.html', 'vite.config.ts', 'tsconfig*.json', 'src/**', 'public/**', 'announcements.json', 'remote-config.json', 'scripts/check_locales.cjs', 'scripts/sync-version.js', '.github/workflows/build-matrix.yml') }}
 
-      - name: 📦 Install frontend dependencies
-        run: npm install
-
-      - name: 🔄 Sync versions
-        run: npm run sync-version
-
-      - name: 🌐 Check locales
-        run: node scripts/check_locales.cjs
-
-  preflight-typecheck:
-    name: "🔍 Preflight: Typecheck"
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v4
-
-      - name: ⚙️ Node.js setup
-        uses: actions/setup-node@v4
+      - name: "🟢 Set up Node.js"
+        if: steps.frontend-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
-          cache: "npm"
+          node-version: 22
+          cache: npm
 
-      - name: 📦 Install frontend dependencies
-        run: npm install
+      - name: "📦 Install frontend dependencies"
+        if: steps.frontend-cache.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
 
-      - name: 🔄 Sync versions
-        run: npm run sync-version
+      - name: "⚡ Restore incremental typecheck state"
+        if: steps.frontend-cache.outputs.cache-hit != 'true'
+        id: typescript-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .ci-cache/frontend.tsbuildinfo
+          key: typescript-v1-${{ hashFiles('package-lock.json', 'tsconfig*.json') }}-${{ hashFiles('src/**', 'vite.config.ts') }}
+          restore-keys: |
+            typescript-v1-${{ hashFiles('package-lock.json', 'tsconfig*.json') }}-
 
-      - name: 🛡️ Typecheck
-        run: npm run typecheck
+      - name: "🧪 Check and build frontend"
+        if: steps.frontend-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .ci-cache
+          npm run sync-version
+          node scripts/check_locales.cjs
+          npx tsc --incremental --tsBuildInfoFile .ci-cache/frontend.tsbuildinfo --noEmit
+          npx vite build
+
+      - name: "💾 Save incremental typecheck state"
+        if: always() && steps.frontend-cache.outputs.cache-hit != 'true' && steps.typescript-cache.outputs.cache-hit != 'true' && steps.typescript-cache.outputs.cache-primary-key != ''
+        uses: actions/cache/save@v6
+        with:
+          path: .ci-cache/frontend.tsbuildinfo
+          key: ${{ steps.typescript-cache.outputs.cache-primary-key }}
+
+      - name: "⚡ Restore verified sidecars"
+        id: sidecar-cache
+        uses: actions/cache@v6
+        with:
+          path: sidecars/cockpit-cliproxy/bin
+          key: sidecars-v1-${{ hashFiles('sidecars/cockpit-cliproxy/**/*.go', 'sidecars/cockpit-cliproxy/**/go.mod', 'sidecars/cockpit-cliproxy/**/go.sum', 'src-tauri/build.rs', '.github/workflows/build-matrix.yml') }}
+
+      - name: "🐹 Set up Go"
+        if: steps.sidecar-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: sidecars/cockpit-cliproxy/go.mod
+          cache: false
+
+      - name: "⚡ Restore incremental Go build cache"
+        if: steps.sidecar-cache.outputs.cache-hit != 'true'
+        id: go-build-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-build-v1-${{ hashFiles('sidecars/cockpit-cliproxy/**/go.mod', 'sidecars/cockpit-cliproxy/**/go.sum') }}-${{ hashFiles('sidecars/cockpit-cliproxy/**/*.go') }}
+          restore-keys: |
+            go-build-v1-${{ hashFiles('sidecars/cockpit-cliproxy/**/go.mod', 'sidecars/cockpit-cliproxy/**/go.sum') }}-
+
+      - name: "🔧 Build sidecars once"
+        if: steps.sidecar-cache.outputs.cache-hit != 'true'
+        working-directory: sidecars/cockpit-cliproxy
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bin
+
+          build_sidecar() {
+            local goos="$1"
+            local goarch="$2"
+            local target="$3"
+            local extension="$4"
+            GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags="-s -w" \
+              -o "bin/cockpit-cliproxy-${target}${extension}" .
+          }
+
+          build_sidecar darwin arm64 aarch64-apple-darwin ""
+          build_sidecar darwin amd64 x86_64-apple-darwin ""
+          build_sidecar linux amd64 x86_64-unknown-linux-gnu ""
+          build_sidecar linux arm64 aarch64-unknown-linux-gnu ""
+          build_sidecar windows amd64 x86_64-pc-windows-msvc .exe
+
+      - name: "💾 Save incremental Go build cache"
+        if: always() && steps.sidecar-cache.outputs.cache-hit != 'true' && steps.go-build-cache.outputs.cache-hit != 'true' && steps.go-build-cache.outputs.cache-primary-key != ''
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ steps.go-build-cache.outputs.cache-primary-key }}
+
+      - name: "📤 Share build inputs"
+        uses: actions/upload-artifact@v6
+        with:
+          name: build-inputs
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+          path: |
+            dist
+            sidecars/cockpit-cliproxy/bin
+
+      - name: "🧾 Publish preparation summary"
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### 🚦 Shared Build Inputs"
+            echo
+            echo "| Component | Status |"
+            echo "| --- | --- |"
+            echo "| Frontend checks and production assets | ${{ steps.frontend-cache.outputs.cache-hit == 'true' && '⚡ Cache hit' || '🔨 Rebuilt' }} |"
+            echo "| CGO-free sidecars for all targets | ${{ steps.sidecar-cache.outputs.cache-hit == 'true' && '⚡ Cache hit' || '🔨 Rebuilt' }} |"
+            echo "| Reuse strategy | 📦 Downloaded by each native build |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   build:
-    name: "🏗️ Build: ${{ matrix.label }}"
-    needs: [preflight-locales, preflight-typecheck]
+    name: "${{ matrix.icon }} ${{ matrix.label }}"
+    needs: prepare
     runs-on: ${{ matrix.platform }}
     permissions:
       contents: read
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
-          - label: "macos-aarch64"
-            platform: "macos-latest"
-            args: "--target aarch64-apple-darwin"
-            release_dir: "target/aarch64-apple-darwin/release"
-          - label: "macos-x86_64"
-            platform: "macos-latest"
-            args: "--target x86_64-apple-darwin"
-            release_dir: "target/x86_64-apple-darwin/release"
-          - label: "macos-universal"
-            platform: "macos-latest"
-            args: "--target universal-apple-darwin"
-            release_dir: "target/universal-apple-darwin/release"
-          - label: "ubuntu-22.04"
-            platform: "ubuntu-22.04"
-            args: ""
-            release_dir: "target/release"
-          - label: "ubuntu-24.04-arm"
-            platform: "ubuntu-24.04-arm"
-            args: ""
-            release_dir: "target/release"
-          - label: "windows-latest"
-            platform: "windows-latest"
-            args: ""
-            release_dir: "target/release"
+          - label: macOS arm64
+            icon: "🍎"
+            platform: macos-latest
+            target: aarch64-apple-darwin
+            executable: target/aarch64-apple-darwin/ci/cockpit-tools
+          - label: macOS x64
+            icon: "🍎"
+            platform: macos-latest
+            target: x86_64-apple-darwin
+            executable: target/x86_64-apple-darwin/ci/cockpit-tools
+          - label: Ubuntu 22.04 x64
+            icon: "🐧"
+            platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            executable: target/x86_64-unknown-linux-gnu/ci/cockpit-tools
+          - label: Ubuntu 24.04 arm64
+            icon: "🐧"
+            platform: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            executable: target/aarch64-unknown-linux-gnu/ci/cockpit-tools
+          - label: Windows x64
+            icon: "🪟"
+            platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            executable: target/x86_64-pc-windows-msvc/ci/cockpit-tools.exe
 
     steps:
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+      - name: "📥 Checkout repository"
+        uses: actions/checkout@v5
 
-      - name: 🐧 Install system dependencies (Linux)
-        if: startsWith(matrix.platform, 'ubuntu')
+      - name: "🐧 Install Linux build dependencies"
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf pkg-config libsoup-3.0-dev javascriptcoregtk-4.1 libjavascriptcoregtk-4.1-dev
-          sudo apt-get install -y libnm-dev xdg-utils
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libssl-dev libnm-dev patchelf
 
-      - name: 🦀 Rust setup
+      - name: "🦀 Set up Rust"
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.target }}
 
-      - name: 🦀 Rust cache
+      - name: "💾 Restore Rust cache"
         uses: swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.platform }}-${{ matrix.label }}
+          prefix-key: build-matrix-v2
+          key: ${{ matrix.platform }}-${{ matrix.target }}
+          cache-on-failure: true
+          cache-workspace-crates: true
 
-      - name: 🧪 Test Codex context preservation
-        if: matrix.label == 'ubuntu-22.04'
+      - name: "📥 Reuse shared frontend and sidecars"
+        uses: actions/download-artifact@v8
+        with:
+          name: build-inputs
+          path: .
+
+      - name: "🧪 Test Codex context preservation"
+        if: matrix.platform == 'ubuntu-22.04'
         working-directory: src-tauri
+        env:
+          COCKPIT_SKIP_CLIPROXY_BUILD: "1"
         run: |
           cargo test instance_configuration_save --lib
           cargo test quick_config_catalog_only_context_preservation --lib
 
-      - name: 🐹 Go setup
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: sidecars/cockpit-cliproxy/go.mod
-          cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
-
-      - name: ⚙️ Node.js setup
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: "npm"
-
-      - name: 📦 Install frontend dependencies
-        run: npm install
-
-      - name: 🔄 Sync versions
-        run: npm run sync-version
-
-      - name: 💾 Cache Tauri tooling
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ matrix.platform == 'windows-latest' && 'C:\Users\runneradmin\AppData\Local\tauri' || '' }}
-            ${{ startsWith(matrix.platform, 'ubuntu') && '~/.cache/tauri' || '' }}
-            ${{ matrix.platform == 'macos-latest' && '~/Library/Caches/tauri' || '' }}
-          key: tauri-deps-${{ matrix.platform }}-${{ hashFiles('package-lock.json', '**/Cargo.toml') }}
-          restore-keys: |
-            tauri-deps-${{ matrix.platform }}-
-
-      # Keep the private key out of PR code, dependency scripts, and third-party actions.
-      - name: 🔐 Check signing availability
-        if: github.event_name != 'pull_request'
-        id: signing
-        shell: bash
+      - name: "🧱 Compile and link application"
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          COCKPIT_SKIP_CLIPROXY_BUILD: "1"
         run: |
-          if [ -n "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          fi
+          echo "::group::Cargo build (${{ matrix.target }})"
+          cargo build --locked --profile ci -p cockpit-tools --bin cockpit-tools --target ${{ matrix.target }}
+          echo "::endgroup::"
 
-      - name: 🏗️ Build app (Unsigned CI)
-        if: github.event_name == 'pull_request' || steps.signing.outputs.available != 'true'
+      - name: "✅ Verify executable"
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          npx tauri build --ci --config src-tauri/tauri.ci.conf.json ${{ matrix.args }} 2>&1 | tee "build-${{ matrix.label }}.log"
+        run: test -f "${{ matrix.executable }}"
 
-      - name: 📜 Print unsigned build logs on failure
-        if: failure() && (github.event_name == 'pull_request' || steps.signing.outputs.available != 'true')
-        shell: bash
-        run: |
-          echo "=== UNSIGNED BUILD LOG ==="
-          if [ -f "build-${{ matrix.label }}.log" ]; then
-            tail -n 200 "build-${{ matrix.label }}.log"
-          else
-            echo "Log file not found"
-          fi
-
-      - name: 🏗️ Build app (Signed)
-        if: github.event_name != 'pull_request' && steps.signing.outputs.available == 'true'
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          npx tauri build --ci ${{ matrix.args }} 2>&1 | tee "build-${{ matrix.label }}.log"
-
-      - name: 📜 Print signed build logs on failure
-        if: failure() && github.event_name != 'pull_request' && steps.signing.outputs.available == 'true'
-        shell: bash
-        run: |
-          echo "=== BUILD LOG (SIGNED) ==="
-          if [ -f "build-${{ matrix.label }}.log" ]; then
-            tail -n 200 "build-${{ matrix.label }}.log"
-          else
-            echo "Log file not found"
-          fi
-
-      - name: 📊 Summarize build warnings
+      - name: "🧾 Publish build summary"
         if: always()
         shell: bash
         env:
           JOB_STATUS: ${{ job.status }}
         run: |
-          set -euo pipefail
-          log_file="build-${{ matrix.label }}.log"
-          warnings_file="warnings-${{ matrix.label }}.txt"
-
-          if [ ! -f "$log_file" ]; then
-            : > "$warnings_file"
-            {
-              echo "### 🏗️ Build Summary: ${{ matrix.label }}"
-              echo
-              echo "❌ **The build did not produce a log; warning analysis is unavailable.**"
-              echo
-              echo "---"
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          # Cargo emits ANSI color codes in CI, so normalize the log before matching.
-          if sed $'s/\033\\[[0-9;]*m//g' "$log_file" | grep -n "^warning:" > "$warnings_file"; then
-            warning_count="$(wc -l < "$warnings_file" | tr -d ' ')"
-          else
-            : > "$warnings_file"
-            warning_count="0"
-          fi
-
           {
-            echo "### 🏗️ Build Summary: ${{ matrix.label }}"
+            echo "### ${{ matrix.icon }} Build: ${{ matrix.label }}"
             echo
-            if [ "$JOB_STATUS" != "success" ]; then
-              echo "❌ **Build failed with ${warning_count} warning(s).**"
-            elif [ "${warning_count}" -eq "0" ]; then
-              echo "✅ **Build completed with 0 warnings.**"
+            if [ "$JOB_STATUS" = "success" ]; then
+              echo "| Check | Result |"
+              echo "| --- | --- |"
+              printf '| Target | `%s` |\n' "${{ matrix.target }}"
+              echo "| Compile and link | ✅ Complete |"
+              echo "| Executable verification | ✅ Passed |"
             else
-              echo "⚠️ **Build completed with ${warning_count} warning(s).**"
+              printf '❌ Build did not complete for `%s`.\n' "${{ matrix.target }}"
             fi
-
-            if [ -s "$warnings_file" ]; then
-              echo
-              echo "<details>"
-              echo "<summary>🔍 Show warning logs (up to 200 lines)</summary>"
-              echo
-              echo '```text'
-              sed -n '1,200p' "$warnings_file"
-              echo '```'
-              echo "</details>"
-            fi
-            echo
-            echo "---"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: 📤 Upload build logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: logs-${{ matrix.label }}
-          retention-days: 7
-          if-no-files-found: warn
-          path: |
-            build-${{ matrix.label }}.log
-            warnings-${{ matrix.label }}.txt
-
-      - name: 📤 Upload build bundles
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: bundles-${{ matrix.label }}
-          retention-days: 7
-          if-no-files-found: error
-          path: |
-            ${{ matrix.release_dir }}/bundle
