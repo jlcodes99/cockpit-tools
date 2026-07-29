@@ -34,13 +34,25 @@ function isValidTime(time: unknown): time is string {
   return typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
 }
 
+function cacheConfigLocally(config: WorkbuddyAutoCheckinConfig, emitChange = false): void {
+  cachedConfig = config;
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+    if (emitChange) {
+      window.dispatchEvent(new Event(WORKBUDDY_AUTO_CHECKIN_CONFIG_CHANGED_EVENT));
+    }
+  } catch (err) {
+    console.warn('[WorkbuddyAutoCheckin] 本地缓存保存失败:', err);
+  }
+}
+
 export async function getWorkbuddyAutoCheckinConfigAsync(): Promise<WorkbuddyAutoCheckinConfig> {
   try {
     const config = await invoke<WorkbuddyAutoCheckinConfig>('get_workbuddy_auto_checkin_config');
-    cachedConfig = config;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-    }
+    cacheConfigLocally(config);
     return config;
   } catch (err) {
     console.warn('[WorkbuddyAutoCheckin] 从 Rust 端获取配置失败，使用本地缓存或默认值:', err);
@@ -75,27 +87,30 @@ export function getWorkbuddyAutoCheckinConfig(): WorkbuddyAutoCheckinConfig {
   }
 }
 
+export async function migrateWorkbuddyAutoCheckinConfigAsync(
+  legacyConfig: WorkbuddyAutoCheckinConfig,
+): Promise<WorkbuddyAutoCheckinConfig> {
+  const config = await invoke<WorkbuddyAutoCheckinConfig>(
+    'migrate_workbuddy_auto_checkin_config',
+    { legacyConfig },
+  );
+  cacheConfigLocally(config, true);
+  return config;
+}
+
 export async function saveWorkbuddyAutoCheckinConfigAsync(config: WorkbuddyAutoCheckinConfig): Promise<void> {
-  cachedConfig = config;
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-      window.dispatchEvent(new Event(WORKBUDDY_AUTO_CHECKIN_CONFIG_CHANGED_EVENT));
-    } catch (err) {
-      console.warn('[WorkbuddyAutoCheckin] 本地缓存保存失败:', err);
-    }
+  if (typeof window === 'undefined') {
+    cacheConfigLocally(config);
+    return;
   }
-  if (typeof window !== 'undefined') {
-    try {
-      await invoke('save_workbuddy_auto_checkin_config', { config });
-    } catch (err) {
-      console.warn('[WorkbuddyAutoCheckin] 保存配置到 Rust 后端失败:', err);
-    }
-  }
+  await invoke('save_workbuddy_auto_checkin_config', { config });
+  cacheConfigLocally(config, true);
 }
 
 export function saveWorkbuddyAutoCheckinConfig(config: WorkbuddyAutoCheckinConfig): void {
-  void saveWorkbuddyAutoCheckinConfigAsync(config);
+  void saveWorkbuddyAutoCheckinConfigAsync(config).catch((err) => {
+    console.warn('[WorkbuddyAutoCheckin] 保存配置到 Rust 后端失败:', err);
+  });
 }
 
 export function parseTimeToMinutes(timeStr: string): number {
@@ -374,13 +389,11 @@ export function addWorkbuddyAutoCheckinLog(record: WorkbuddyAutoCheckinLogRecord
   saveWorkbuddyAutoCheckinLogs(updatedLogs);
 }
 
-export function clearWorkbuddyAutoCheckinLogs(): void {
-  saveWorkbuddyAutoCheckinLogs([]);
+export async function clearWorkbuddyAutoCheckinLogs(): Promise<void> {
   if (typeof window !== 'undefined') {
-    void invoke('clear_workbuddy_auto_checkin_logs').catch((err) => {
-      console.warn('[WorkbuddyAutoCheckin] 清空 Rust 后端签到日志失败:', err);
-    });
+    await invoke('clear_workbuddy_auto_checkin_logs');
   }
+  saveWorkbuddyAutoCheckinLogs([]);
 }
 
 export function formatFormattedTimestamp(date: Date = new Date()): string {
@@ -393,17 +406,12 @@ export function formatFormattedTimestamp(date: Date = new Date()): string {
 export async function runWorkbuddyAutoCheckinCycleIfNeeded(
   force = false,
 ): Promise<WorkbuddyAutoCheckinCycleResult> {
-  try {
-    const res = await invoke<string>('run_workbuddy_auto_checkin_now', { force });
-    if (res === 'already_running') {
-      return 'waiting';
-    }
-    if (res === 'disabled' || res === 'waiting' || res === 'completed' || res === 'retry') {
-      return res as WorkbuddyAutoCheckinCycleResult;
-    }
-    return 'completed';
-  } catch (err) {
-    console.warn('[WorkbuddyAutoCheckin] 触发 Rust 后端签到异常:', err);
-    return 'retry';
+  const res = await invoke<string>('run_workbuddy_auto_checkin_now', { force });
+  if (res === 'already_running') {
+    return 'waiting';
   }
+  if (res === 'disabled' || res === 'waiting' || res === 'completed' || res === 'retry') {
+    return res as WorkbuddyAutoCheckinCycleResult;
+  }
+  return 'completed';
 }

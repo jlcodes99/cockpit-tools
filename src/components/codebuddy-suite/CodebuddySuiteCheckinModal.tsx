@@ -34,7 +34,7 @@ import { WorkbuddyAutoCheckinConfigModal } from './WorkbuddyAutoCheckinConfigMod
 import {
   getWorkbuddyAutoCheckinConfig,
   getWorkbuddyAutoCheckinConfigAsync,
-  saveWorkbuddyAutoCheckinConfig,
+  saveWorkbuddyAutoCheckinConfigAsync,
   WORKBUDDY_AUTO_CHECKIN_CONFIG_CHANGED_EVENT,
   WorkbuddyAutoCheckinConfig,
 } from '../../services/workbuddyAutoCheckinService';
@@ -666,8 +666,8 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
         {showConfigModal && (
           <WorkbuddyAutoCheckinConfigModal
             config={autoCheckinConfig}
-            onSave={(newConfig) => {
-              saveWorkbuddyAutoCheckinConfig(newConfig);
+            onSave={async (newConfig) => {
+              await saveWorkbuddyAutoCheckinConfigAsync(newConfig);
               setAutoCheckinConfig(newConfig);
             }}
             onClose={() => setShowConfigModal(false)}

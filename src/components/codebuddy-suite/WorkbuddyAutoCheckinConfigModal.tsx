@@ -29,7 +29,7 @@ import {
 
 interface WorkbuddyAutoCheckinConfigModalProps {
   config: WorkbuddyAutoCheckinConfig;
-  onSave: (newConfig: WorkbuddyAutoCheckinConfig) => void;
+  onSave: (newConfig: WorkbuddyAutoCheckinConfig) => Promise<void>;
   onClose: () => void;
 }
 
@@ -50,6 +50,7 @@ export function WorkbuddyAutoCheckinConfigModal({
   const [logs, setLogs] = useState<WorkbuddyAutoCheckinLogRecord[]>(() =>
     getWorkbuddyAutoCheckinLogs(),
   );
+  const [saving, setSaving] = useState(false);
   const [manualTesting, setManualTesting] = useState(false);
   const [expandedLogIds, setExpandedLogIds] = useState<Record<string, boolean>>({});
 
@@ -83,7 +84,7 @@ export function WorkbuddyAutoCheckinConfigModal({
     };
   }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const startMin = parseTimeToMinutes(startTime);
     const endMin = parseTimeToMinutes(endTime);
 
@@ -92,25 +93,66 @@ export function WorkbuddyAutoCheckinConfigModal({
       return;
     }
 
-    onSave({
-      ...config,
-      enabled,
-      startTime,
-      endTime,
-      accountSchedules: undefined,
-    });
-    onClose();
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({
+        ...config,
+        enabled,
+        startTime,
+        endTime,
+        accountSchedules: undefined,
+      });
+      onClose();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(
+        t('workbuddy.checkin.saveFailed', '自动签到设置保存失败：{{message}}', { message }),
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleManualTest = async () => {
     setManualTesting(true);
+    setError(null);
     try {
-      await runWorkbuddyAutoCheckinCycleIfNeeded(true);
+      const result = await runWorkbuddyAutoCheckinCycleIfNeeded(true);
       setLogs(await getWorkbuddyAutoCheckinLogsAsync());
+      if (result === 'retry') {
+        setError(
+          t(
+            'workbuddy.checkin.manualTestPartialFailure',
+            '部分账号签到失败，请查看记录；后台稍后会自动重试。',
+          ),
+        );
+      } else if (result === 'waiting') {
+        setError(
+          t('workbuddy.checkin.manualTestAlreadyRunning', '自动签到任务正在执行，请稍后查看记录。'),
+        );
+      }
     } catch (err) {
       console.warn('[WorkbuddyAutoCheckin] 手动测试自动签到异常:', err);
+      const message = err instanceof Error ? err.message : String(err);
+      setError(
+        t('workbuddy.checkin.manualTestFailed', '测试执行失败：{{message}}', { message }),
+      );
     } finally {
       setManualTesting(false);
+    }
+  };
+
+  const handleClearLogs = async () => {
+    setError(null);
+    try {
+      await clearWorkbuddyAutoCheckinLogs();
+      setLogs([]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(
+        t('workbuddy.checkin.clearLogsFailed', '清空签到记录失败：{{message}}', { message }),
+      );
     }
   };
 
@@ -225,12 +267,6 @@ export function WorkbuddyAutoCheckinConfigModal({
                   )}
                 </p>
               </div>
-
-              {error && (
-                <div className="config-error-message">
-                  <AlertCircle size={14} /> {error}
-                </div>
-              )}
             </>
           ) : (
             <div className="auto-checkin-history-container">
@@ -259,7 +295,7 @@ export function WorkbuddyAutoCheckinConfigModal({
                   {logs.length > 0 && (
                     <button
                       className="btn btn-secondary btn-xs"
-                      onClick={() => clearWorkbuddyAutoCheckinLogs()}
+                      onClick={() => void handleClearLogs()}
                       title={t('workbuddy.checkin.clearLogs', '清空记录')}
                     >
                       <Trash2 size={12} />
@@ -351,6 +387,11 @@ export function WorkbuddyAutoCheckinConfigModal({
               )}
             </div>
           )}
+          {error && (
+            <div className="config-error-message">
+              <AlertCircle size={14} /> {error}
+            </div>
+          )}
         </div>
 
         <div className="modal-footer">
@@ -359,7 +400,12 @@ export function WorkbuddyAutoCheckinConfigModal({
               <button className="btn btn-secondary" onClick={onClose}>
                 {t('common.cancel', '取消')}
               </button>
-              <button className="btn btn-primary" onClick={handleSave}>
+              <button
+                className="btn btn-primary"
+                onClick={() => void handleSave()}
+                disabled={saving}
+              >
+                {saving && <Loader2 size={14} className="animate-spin" />}
                 {t('common.save', '保存')}
               </button>
             </>

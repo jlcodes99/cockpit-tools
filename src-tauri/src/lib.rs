@@ -992,6 +992,7 @@ pub fn run() {
             commands::workbuddy::get_checkin_status_workbuddy,
             commands::workbuddy::checkin_workbuddy,
             commands::workbuddy::get_workbuddy_auto_checkin_config,
+            commands::workbuddy::migrate_workbuddy_auto_checkin_config,
             commands::workbuddy::save_workbuddy_auto_checkin_config,
             commands::workbuddy::get_workbuddy_auto_checkin_logs,
             commands::workbuddy::clear_workbuddy_auto_checkin_logs,

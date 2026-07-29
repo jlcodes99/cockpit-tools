@@ -446,8 +446,15 @@ pub async fn checkin_workbuddy(
 
 #[tauri::command]
 pub fn get_workbuddy_auto_checkin_config(
-) -> crate::modules::workbuddy_auto_checkin::WorkbuddyAutoCheckinConfig {
-    crate::modules::workbuddy_auto_checkin::get_config()
+) -> Result<crate::modules::workbuddy_auto_checkin::WorkbuddyAutoCheckinConfig, String> {
+    crate::modules::workbuddy_auto_checkin::get_config_checked()
+}
+
+#[tauri::command]
+pub fn migrate_workbuddy_auto_checkin_config(
+    legacy_config: crate::modules::workbuddy_auto_checkin::WorkbuddyAutoCheckinConfig,
+) -> Result<crate::modules::workbuddy_auto_checkin::WorkbuddyAutoCheckinConfig, String> {
+    crate::modules::workbuddy_auto_checkin::migrate_config_if_missing(&legacy_config)
 }
 
 #[tauri::command]
@@ -459,8 +466,8 @@ pub fn save_workbuddy_auto_checkin_config(
 
 #[tauri::command]
 pub fn get_workbuddy_auto_checkin_logs(
-) -> Vec<crate::modules::workbuddy_auto_checkin::WorkbuddyAutoCheckinLogRecord> {
-    crate::modules::workbuddy_auto_checkin::get_logs()
+) -> Result<Vec<crate::modules::workbuddy_auto_checkin::WorkbuddyAutoCheckinLogRecord>, String> {
+    crate::modules::workbuddy_auto_checkin::get_logs_checked()
 }
 
 #[tauri::command]

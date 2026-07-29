@@ -73,7 +73,7 @@ import {
 import { runAutoBackupCycle } from './services/scheduledBackupService';
 import {
   getWorkbuddyAutoCheckinConfig,
-  saveWorkbuddyAutoCheckinConfigAsync,
+  migrateWorkbuddyAutoCheckinConfigAsync,
 } from './services/workbuddyAutoCheckinService';
 import { prepareCodexLocalAccessForRestart } from './services/codexLocalAccessService';
 import { applyReducedMotion } from './utils/reducedMotion';
@@ -2249,7 +2249,9 @@ function MainApp() {
 
   // 将旧版本保存在 WebView localStorage 中的设置迁移到 Rust 后台调度器。
   useEffect(() => {
-    void saveWorkbuddyAutoCheckinConfigAsync(getWorkbuddyAutoCheckinConfig());
+    void migrateWorkbuddyAutoCheckinConfigAsync(getWorkbuddyAutoCheckinConfig()).catch((err) => {
+      console.warn('[WorkbuddyAutoCheckin] 迁移旧版自动签到配置失败:', err);
+    });
   }, []);
 
   // Check for updates on startup
