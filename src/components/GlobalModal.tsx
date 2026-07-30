@@ -1,14 +1,36 @@
 import { X } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGlobalModalStore, type GlobalModalAction } from '../stores/useGlobalModalStore';
 import { useEscClose } from '../hooks/useEscClose';
+import { useEnterConfirm } from '../hooks/useEnterConfirm';
 import './GlobalModal.css';
 
 function resolveActionClass(variant: GlobalModalAction['variant']): string {
   if (variant === 'danger') return 'btn btn-danger';
   if (variant === 'secondary') return 'btn btn-secondary';
   return 'btn btn-primary';
+}
+
+/** Prefer danger, then the rightmost primary/default action for Enter confirm. */
+function resolveEnterConfirmAction(actions: GlobalModalAction[]): GlobalModalAction | null {
+  const enabled = actions.filter((action) => !action.disabled);
+  if (enabled.length === 0) return null;
+
+  const danger = [...enabled].reverse().find((action) => action.variant === 'danger');
+  if (danger) return danger;
+
+  const primary = [...enabled]
+    .reverse()
+    .find((action) => action.variant === 'primary' || action.variant == null);
+  if (primary) return primary;
+
+  // Single non-secondary action (e.g. only OK)
+  if (enabled.length === 1 && enabled[0].variant !== 'secondary') {
+    return enabled[0];
+  }
+
+  return null;
 }
 
 export function GlobalModal() {
@@ -39,17 +61,29 @@ export function GlobalModal() {
     }
   }, [closeModal]);
 
-  if (!visible || !modal) return null;
+  const actions = useMemo(() => {
+    if (!modal) return [] as GlobalModalAction[];
+    if (modal.actions && modal.actions.length > 0) return modal.actions;
+    return [
+      {
+        id: 'default-ok',
+        label: t('globalModal.ok', '知道了'),
+        variant: 'primary' as const,
+      },
+    ];
+  }, [modal, t]);
 
-  const actions = modal.actions && modal.actions.length > 0
-    ? modal.actions
-    : [
-        {
-          id: 'default-ok',
-          label: t('globalModal.ok', '知道了'),
-          variant: 'primary' as const,
-        },
-      ];
+  const enterAction = useMemo(
+    () => (visible && modal ? resolveEnterConfirmAction(actions) : null),
+    [visible, modal, actions],
+  );
+
+  useEnterConfirm(Boolean(visible && modal && enterAction), () => {
+    if (!enterAction) return;
+    void handleActionClick(enterAction);
+  });
+
+  if (!visible || !modal) return null;
 
   const modalSizeClass = modal.width === 'lg'
     ? 'modal modal-lg'

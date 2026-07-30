@@ -26,6 +26,11 @@
     "detail": "詳細",
     "editable": "編集可",
     "preview": "プレビュー",
+    "sessionSharing": {
+      "title": "切替時にローカル会話を共有",
+      "fullDesc": "アカウント切替時に、この端末の {{platform}} アカウント間でローカル会話と復元状態を統合します。ファイルは端末内だけで読み書きされ、会話内容はアップロードされません。",
+      "workspaceDesc": "アカウント切替時に、この端末の {{platform}} アカウント間で workspace の会話インデックスと復元状態をコピーして統合します。暗号化された Builder/Agent 会話データベースは変更せず、内容もアップロードしません。"
+    },
     "shared": {
       "addAccount": "アカウントを追加",
       "columns": {
@@ -750,7 +755,7 @@
       "antigravityDualSwitchNoRestart": "再起動なしデュアル切替",
       "antigravityDualSwitchNoRestartDesc": "切替時にローカルのアカウントデータ書き込みと拡張機能のシームレス切替を1つのフローで実行し、Antigravity IDE を再起動しません。",
       "appAutoLaunch": "ログイン時に Cockpit Tools を起動",
-      "appAutoLaunchDesc": "システムログイン後にアプリを自動起動します",
+      "appAutoLaunchDesc": "サインイン後に自動起動。Windows 起動時に PowerShell エラーが出る場合はオフにしてください。",
       "startupWakeupDisabled": "無効",
       "startupWakeupImmediate": "すぐに起動",
       "startupWakeupDelayed": "遅延して起動",
@@ -864,7 +869,9 @@
       "menuBarQuotaPlatformDesc": "そのプラットフォームで使用中のアカウントに追従し、更新や切替後に自動反映",
       "menuBarAccountPrefix": "メール先頭4文字を表示",
       "menuBarAccountPrefixDesc": "通常アカウントのみ：オフでメール先頭を非表示。Codex API サービス / API Key は API ラベルを維持",
-      "menuBarQuotaConfirmEnable": "有効にする"
+      "menuBarQuotaConfirmEnable": "有効にする",
+      "codexHideRelayQuota": "中継クォータを隠す",
+      "codexHideRelayQuotaDesc": "オンにすると、Codex アカウント一覧で中継 / New API 系の残高パネルを非表示にし、表示の重なりを減らします。"
     },
     "network": {
       "apiTitle": "反重力コックピット API",
@@ -3059,7 +3066,12 @@
           "pending": "待機中",
           "completed": "完了"
         },
-        "officialClientOnlyError": "このプロバイダーは Codex 公式クライアントからのリクエストのみ許可します。ワンクリックテストはローカルゲートウェイ経由になりましたが、上流はこのテストリクエストを拒否しました。公式 Codex 起動後の動作を基準にしてください。"
+        "officialClientOnlyError": "このプロバイダーは Codex 公式クライアントからのリクエストのみ許可します。ワンクリックテストはローカルゲートウェイ経由になりましたが、上流はこのテストリクエストを拒否しました。公式 Codex 起動後の動作を基準にしてください。",
+        "modelAuto": "自動（カタログ/検出）",
+        "modelCustom": "カスタムモデル…",
+        "modelLabel": "テストモデル",
+        "modelCustomPlaceholder": "モデル ID（例: gpt-4.1-mini）",
+        "modelHint": "任意：共通テストモデル。空欄時は各プロバイダーの一覧から自動選択します。"
       },
       "enableAndStart": "起動",
       "instance": {
@@ -3153,7 +3165,8 @@
       },
       "renameApiKeyPrompt": "API キー名を変更",
       "renameApiKeySuccess": "API キーを変更しました",
-      "renameApiKeyFailed": "API キー名の変更に失敗：{{error}}"
+      "renameApiKeyFailed": "API キー名の変更に失敗：{{error}}",
+      "existingApiKeysSearch": "既存 API Key を検索…"
     },
     "quickSwitch": {
       "action": "プロバイダーをクイック切り替え",
@@ -3447,7 +3460,11 @@
         "httpStatus": "HTTP状態 {{status}}",
         "allInstances": "全インスタンス",
         "instanceFilter": "インスタンス",
-        "instanceUnknown": "インスタンス -"
+        "instanceUnknown": "インスタンス -",
+        "reasoningEffort": "思考強度",
+        "reasoningEffortValue": "思考 {{effort}}",
+        "serviceTier": "サービス階層",
+        "serviceTierValue": "階層 {{tier}}"
       },
       "timeouts": {
         "entryLabel": "詳細",
@@ -3708,7 +3725,11 @@
       "autoSyncBadge": "自動"
     },
     "exportAuthFailed": "失敗を書き出し",
-    "exportAuthFailedTitle": "認証失敗アカウントをすべて書き出す"
+    "exportAuthFailedTitle": "認証失敗アカウントをすべて書き出す",
+    "accounts": {
+      "showRelayQuota": "中継枠を表示",
+      "hideRelayQuota": "中継枠を非表示"
+    }
   },
   "githubCopilot": {
     "title": "GitHub Copilot アカウント管理",
@@ -5384,9 +5405,20 @@
       "localDesc": "既定の ~/.grok/auth.json から取り込みます。公式 auth.json または本アプリの完全エクスポート JSON も選択できます。",
       "localClient": "ローカルの Grok CLI からインポート",
       "apiKeyTab": "APIキー",
-      "apiKeyDesc": "xAI API キー（公式 XAI_API_KEY / xai-…）を貼り付けます。CLI 起動時に環境変数へ注入し、公式 OAuth ログインは上書きしません。",
+      "apiKeyDesc": "xAI API キー（公式 XAI_API_KEY / xai-…）を貼り付けます。CLI 起動時にアカウント専用 GROK_HOME 経由で注入し、公式 OAuth ログインは上書きしません。",
       "apiKeyPlaceholder": "xai- で始まるキー",
-      "apiKeyAction": "API Key を追加"
+      "apiKeyAction": "API Key を追加",
+      "apiMode": "API の種類",
+      "apiModeOfficial": "xAI 公式",
+      "apiModeCustom": "サードパーティ",
+      "customApiDesc": "OpenAI 互換の Base URL、モデル ID、API キーを設定します。起動時にアカウント専用の config.toml を書き込み、キーはその CLI プロセスにだけ注入します。",
+      "customApiKeyPlaceholder": "サードパーティ API キーを貼り付け",
+      "apiBaseUrl": "接続先 URL",
+      "apiBaseUrlPlaceholder": "例: https://api.example.com/v1",
+      "apiModel": "モデル ID",
+      "apiModelPlaceholder": "例: grok-4.1-fast",
+      "apiFieldRequired": "{{field}}を入力してください",
+      "apiBaseUrlInvalid": "認証情報、クエリパラメータ、フラグメントを含まない完全な http:// または https:// URL を入力してください"
     },
     "instances": {
       "unsupported": "Grok CLI の複数インスタンスは macOS、Windows、Linux のみ対応しています。",

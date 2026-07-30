@@ -43,6 +43,7 @@ import {
   type MultiSelectFilterOption,
 } from "../MultiSelectFilterDropdown";
 import { SingleSelectFilterDropdown } from "../SingleSelectFilterDropdown";
+import { SingleSelectDropdown } from "../SingleSelectDropdown";
 import { AccountTagFilterDropdown } from "../AccountTagFilterDropdown";
 import { PaginationControls } from "../PaginationControls";
 import { useEscClose } from "../../hooks/useEscClose";
@@ -687,6 +688,11 @@ export function CodexModelProviderManager({
   const [batchTestCancelling, setBatchTestCancelling] = useState(false);
   const [batchTestResultSelectedProviderIds, setBatchTestResultSelectedProviderIds] =
     useState<Set<string>>(() => new Set());
+  /** Empty string = auto-pick per provider catalog / discovery. */
+  const [batchTestModelId, setBatchTestModelId] = useState("");
+  const [batchTestModelCustom, setBatchTestModelCustom] = useState("");
+  const [existingApiKeySearchQuery, setExistingApiKeySearchQuery] =
+    useState("");
   const cancelledBatchTestRunIdsRef = useRef<Set<string>>(new Set());
 
   const sponsorProviderTemplates = useMemo<SponsorProviderTemplate[]>(() => {
@@ -1274,6 +1280,45 @@ export function CodexModelProviderManager({
     [batchTestSelectedProviderIds, getSelectedProviderApiKey, providers],
   );
 
+  const batchTestModelOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const models: string[] = [];
+    for (const provider of providers) {
+      if (!batchTestSelectedProviderIds.has(provider.id)) continue;
+      for (const raw of provider.modelCatalog ?? []) {
+        const model = raw.trim();
+        if (!model || isImageGenerationModelId(model)) continue;
+        const key = model.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        models.push(model);
+      }
+    }
+    models.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    return [
+      {
+        value: "",
+        label: t(
+          "codex.modelProviders.batchTest.modelAuto",
+          "自动选择（按目录/探测）",
+        ),
+      },
+      ...models.map((model) => ({ value: model, label: model })),
+      {
+        value: "__custom__",
+        label: t("codex.modelProviders.batchTest.modelCustom", "自定义模型…"),
+      },
+    ];
+  }, [batchTestSelectedProviderIds, providers, t]);
+
+  const resolvedBatchTestModel = useMemo(() => {
+    if (batchTestModelId === "__custom__") {
+      return batchTestModelCustom.trim() || null;
+    }
+    const trimmed = batchTestModelId.trim();
+    return trimmed || null;
+  }, [batchTestModelCustom, batchTestModelId]);
+
   const openBatchTestModal = useCallback(() => {
     const defaultSource =
       selectedProviderIds.size > 0
@@ -1286,6 +1331,8 @@ export function CodexModelProviderManager({
     setBatchTestResultSelectedProviderIds(new Set());
     setBatchTestSearchQuery("");
     setBatchTestFilter("all");
+    setBatchTestModelId("");
+    setBatchTestModelCustom("");
     setBatchTestError(null);
     setBatchTestCancelling(false);
     setBatchTestSession(null);
@@ -1398,8 +1445,12 @@ export function CodexModelProviderManager({
       provider: CodexModelProvider,
       target: CodexModelProviderChatTestTarget,
       runStartedAt: number,
+      explicitModel?: string | null,
     ): ProviderBatchTestRecordView => {
       const wireApi = target.wireApi ?? resolveProviderWireApi(provider);
+      const modelId =
+        explicitModel?.trim() ||
+        selectProviderBatchTestModelId(wireApi, target.modelCatalog);
       return {
         providerId: target.providerId,
         providerName: target.providerName,
@@ -1407,7 +1458,7 @@ export function CodexModelProviderManager({
         apiKeyName: target.apiKeyName,
         wireApi,
         accessMode: "gateway",
-        modelId: selectProviderBatchTestModelId(wireApi, target.modelCatalog),
+        modelId,
         success: false,
         prompt: "",
         reply: null,
@@ -1492,6 +1543,7 @@ export function CodexModelProviderManager({
   const openCreateModal = useCallback(() => {
     setNotice(null);
     setFormError(null);
+    setExistingApiKeySearchQuery("");
     setForm({
       ...EMPTY_FORM,
       wireApi: resolveDefaultProviderWireApi(CODEX_API_PROVIDER_CUSTOM_ID),
@@ -1535,6 +1587,7 @@ export function CodexModelProviderManager({
   const openEditModal = useCallback((provider: CodexModelProvider) => {
     setNotice(null);
     setFormError(null);
+    setExistingApiKeySearchQuery("");
     const resolvedWireApi = resolveProviderWireApi(provider);
     setForm({
       providerId: provider.id,
@@ -1875,7 +1928,14 @@ export function CodexModelProviderManager({
       const target = buildBatchTestTarget(provider);
       if (!target) continue;
       targets.push(target);
-      pendingRecords.push(buildBatchTestPendingRecord(provider, target, startedAt));
+      pendingRecords.push(
+        buildBatchTestPendingRecord(
+          provider,
+          target,
+          startedAt,
+          resolvedBatchTestModel,
+        ),
+      );
     }
     if (targets.length === 0) {
       setBatchTestError(
@@ -1909,6 +1969,7 @@ export function CodexModelProviderManager({
       const result = await testCodexModelProviderChatBatch({
         targets,
         runId,
+        model: resolvedBatchTestModel,
       });
       if (cancelledBatchTestRunIdsRef.current.has(result.runId)) {
         cancelledBatchTestRunIdsRef.current.delete(result.runId);
@@ -1957,6 +2018,7 @@ export function CodexModelProviderManager({
     buildBatchTestTarget,
     parseServiceError,
     providers,
+    resolvedBatchTestModel,
     t,
   ]);
 
@@ -3712,6 +3774,48 @@ export function CodexModelProviderManager({
                       )}
                     </span>
                   </div>
+                  <div className="form-group codex-provider-batch-test-model">
+                    <label>
+                      {t(
+                        "codex.modelProviders.batchTest.modelLabel",
+                        "测试模型",
+                      )}
+                    </label>
+                    <SingleSelectDropdown
+                      value={batchTestModelId}
+                      options={batchTestModelOptions}
+                      onChange={setBatchTestModelId}
+                      ariaLabel={t(
+                        "codex.modelProviders.batchTest.modelLabel",
+                        "测试模型",
+                      )}
+                      placeholder={t(
+                        "codex.modelProviders.batchTest.modelAuto",
+                        "自动选择（按目录/探测）",
+                      )}
+                    />
+                    {batchTestModelId === "__custom__" && (
+                      <input
+                        className="form-input"
+                        type="text"
+                        value={batchTestModelCustom}
+                        onChange={(event) =>
+                          setBatchTestModelCustom(event.target.value)
+                        }
+                        placeholder={t(
+                          "codex.modelProviders.batchTest.modelCustomPlaceholder",
+                          "输入模型 ID，例如 gpt-4.1-mini",
+                        )}
+                        style={{ marginTop: 8 }}
+                      />
+                    )}
+                    <p className="codex-provider-batch-test-model-hint">
+                      {t(
+                        "codex.modelProviders.batchTest.modelHint",
+                        "可选统一模型。留空则按各供应商目录或探测结果自动选择。",
+                      )}
+                    </p>
+                  </div>
                   <div className="search-box codex-provider-batch-test-search">
                     <Search className="search-icon" size={16} />
                     <input
@@ -4771,8 +4875,42 @@ export function CodexModelProviderManager({
                         "现有 API Keys",
                       )}
                     </label>
+                    {currentEditingProvider.apiKeys.length > 5 && (
+                      <div className="search-box codex-provider-key-search">
+                        <Search className="search-icon" size={16} />
+                        <input
+                          type="text"
+                          placeholder={t(
+                            "codex.modelProviders.existingApiKeysSearch",
+                            "搜索已有 API Key…",
+                          )}
+                          value={existingApiKeySearchQuery}
+                          onChange={(event) =>
+                            setExistingApiKeySearchQuery(event.target.value)
+                          }
+                          disabled={saving}
+                        />
+                      </div>
+                    )}
                     <div className="codex-provider-key-list inline">
-                      {currentEditingProvider.apiKeys.map((item) => (
+                      {currentEditingProvider.apiKeys
+                        .filter((item) => {
+                          const query = existingApiKeySearchQuery
+                            .trim()
+                            .toLowerCase();
+                          if (!query) return true;
+                          const label = (
+                            item.name ||
+                            t("codex.modelProviders.unnamedKey", "未命名 Key")
+                          ).toLowerCase();
+                          const masked = maskApiKey(item.apiKey).toLowerCase();
+                          return (
+                            label.includes(query) ||
+                            masked.includes(query) ||
+                            item.apiKey.toLowerCase().includes(query)
+                          );
+                        })
+                        .map((item) => (
                         <div className="codex-provider-key-row" key={item.id}>
                           <div className="codex-provider-key-text">
                             <span className="codex-provider-key-name">

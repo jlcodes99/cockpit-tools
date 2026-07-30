@@ -26,6 +26,11 @@
     "detail": "Detalhes",
     "editable": "Editável",
     "preview": "Prévia",
+    "sessionSharing": {
+      "title": "Compartilhar sessões locais ao trocar",
+      "fullDesc": "Mescla sessões locais e o estado de restauração entre contas {{platform}} neste dispositivo durante a troca. Os arquivos permanecem locais e o conteúdo não é enviado.",
+      "workspaceDesc": "Copia e mescla os índices de sessões do workspace e o estado de restauração entre contas {{platform}} neste dispositivo. O banco criptografado de sessões Builder/Agent não é alterado e nenhum conteúdo é enviado."
+    },
     "shared": {
       "addAccount": "Adicionar conta",
       "columns": {
@@ -750,7 +755,7 @@
       "antigravityDualSwitchNoRestart": "Troca dupla sem reiniciar",
       "antigravityDualSwitchNoRestartDesc": "Ao trocar de conta, a gravação local dos dados e a troca contínua da extensão são executadas em um único fluxo, sem reiniciar o Antigravity IDE.",
       "appAutoLaunch": "Iniciar o Cockpit Tools ao entrar no sistema",
-      "appAutoLaunchDesc": "Iniciar o app automaticamente após o login no sistema",
+      "appAutoLaunchDesc": "Iniciar após o login. Se o PowerShell falhar no boot do Windows, desative.",
       "startupWakeupDisabled": "Desativado",
       "startupWakeupImmediate": "Despertar imediatamente",
       "startupWakeupDelayed": "Despertar com atraso",
@@ -864,7 +869,9 @@
       "menuBarQuotaPlatformDesc": "Usa a conta ativa dessa plataforma; atualiza após atualizar ou trocar",
       "menuBarAccountPrefix": "4 primeiros do e-mail",
       "menuBarAccountPrefixDesc": "Só contas normais: desligado oculta o prefixo do e-mail. Serviço API do Codex / API Key ainda mostram API",
-      "menuBarQuotaConfirmEnable": "Ativar"
+      "menuBarQuotaConfirmEnable": "Ativar",
+      "codexHideRelayQuota": "Ocultar cota relay",
+      "codexHideRelayQuotaDesc": "Oculta painéis de cota relay / New API na visão de contas Codex."
     },
     "network": {
       "apiTitle": "API de cockpit antigravidade",
@@ -3059,7 +3066,12 @@
           "pending": "Pendente",
           "completed": "Concluído"
         },
-        "officialClientOnlyError": "Este provedor só aceita solicitações do cliente oficial do Codex. O teste com um clique agora usa o gateway local, mas o upstream ainda recusou esta solicitação de teste. Use o comportamento após abrir o Codex oficial como referência."
+        "officialClientOnlyError": "Este provedor só aceita solicitações do cliente oficial do Codex. O teste com um clique agora usa o gateway local, mas o upstream ainda recusou esta solicitação de teste. Use o comportamento após abrir o Codex oficial como referência.",
+        "modelAuto": "Auto (catálogo / detectar)",
+        "modelCustom": "Modelo personalizado…",
+        "modelLabel": "Modelo de teste",
+        "modelCustomPlaceholder": "ID do modelo, ex. gpt-4.1-mini",
+        "modelHint": "Opcional: modelo comum. Vazio = auto do catálogo."
       },
       "enableAndStart": "Iniciar",
       "instance": {
@@ -3153,7 +3165,8 @@
       },
       "renameApiKeyPrompt": "Renomear API key",
       "renameApiKeySuccess": "API key renomeada",
-      "renameApiKeyFailed": "Falha ao renomear API key: {{error}}"
+      "renameApiKeyFailed": "Falha ao renomear API key: {{error}}",
+      "existingApiKeysSearch": "Buscar API keys…"
     },
     "quickSwitch": {
       "action": "Troca rápida de provedor",
@@ -3447,7 +3460,11 @@
         "httpStatus": "Status HTTP {{status}}",
         "allInstances": "Todas as instâncias",
         "instanceFilter": "Instância",
-        "instanceUnknown": "Instância -"
+        "instanceUnknown": "Instância -",
+        "reasoningEffort": "Raciocínio",
+        "reasoningEffortValue": "Raz. {{effort}}",
+        "serviceTier": "Nível de serviço",
+        "serviceTierValue": "Nível {{tier}}"
       },
       "timeouts": {
         "entryLabel": "Avançado",
@@ -3708,7 +3725,11 @@
       "autoSyncBadge": "Automático"
     },
     "exportAuthFailed": "Exportar falhas",
-    "exportAuthFailedTitle": "Exportar todas as contas com falha de auth"
+    "exportAuthFailedTitle": "Exportar todas as contas com falha de auth",
+    "accounts": {
+      "showRelayQuota": "Mostrar cota relay",
+      "hideRelayQuota": "Ocultar cota relay"
+    }
   },
   "githubCopilot": {
     "title": "Gerenciamento de contas do GitHub Copilot",
@@ -5384,9 +5405,20 @@
       "localDesc": "Importe de ~/.grok/auth.json ou escolha auth.json oficial / JSON de exportação completa deste app.",
       "localClient": "Importar do Grok CLI local",
       "apiKeyTab": "Chave API",
-      "apiKeyDesc": "Cole uma API key xAI (XAI_API_KEY / xai-… oficial). Injetada como variável de ambiente ao iniciar o CLI; não sobrescreve o login OAuth oficial.",
+      "apiKeyDesc": "Cole uma API key xAI (XAI_API_KEY / xai-… oficial). Ela é injetada por um GROK_HOME específico da conta ao iniciar o CLI, sem sobrescrever o login OAuth oficial.",
       "apiKeyPlaceholder": "colar xai-…",
-      "apiKeyAction": "Adicionar API Key"
+      "apiKeyAction": "Adicionar API Key",
+      "apiMode": "Tipo de API",
+      "apiModeOfficial": "xAI oficial",
+      "apiModeCustom": "Terceiros",
+      "customApiDesc": "Configure uma Base URL compatível com OpenAI, o ID do modelo e a API key. Ao iniciar, um config.toml específico da conta é gravado e a chave é injetada apenas nesse processo CLI.",
+      "customApiKeyPlaceholder": "Cole a API key de terceiros",
+      "apiBaseUrl": "URL base",
+      "apiBaseUrlPlaceholder": "Ex.: https://api.example.com/v1",
+      "apiModel": "ID do modelo",
+      "apiModelPlaceholder": "Por exemplo, grok-4.1-fast",
+      "apiFieldRequired": "Informe {{field}}",
+      "apiBaseUrlInvalid": "Informe uma URL http:// ou https:// completa, sem credenciais, parâmetros de consulta ou fragmentos"
     },
     "instances": {
       "unsupported": "Várias instâncias do Grok CLI são compatíveis apenas com macOS, Windows e Linux.",

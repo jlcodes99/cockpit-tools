@@ -12,6 +12,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use toml_edit::{table, value, Document};
 use uuid::Uuid;
 
 const INDEX_FILE: &str = "grok_accounts.json";
@@ -19,6 +20,8 @@ const ACCOUNTS_DIR: &str = "grok_accounts";
 const PROFILES_DIR: &str = "grok_profiles";
 const DEFAULT_HOME_DIR: &str = ".grok";
 const AUTH_FILE: &str = "auth.json";
+const CONFIG_FILE: &str = "config.toml";
+const COCKPIT_API_MODEL_PROFILE: &str = "cockpit-api";
 const BILLING_URL: &str = "https://cli-chat-proxy.grok.com/v1/billing?format=credits";
 const CLI_USER_URL: &str = "https://cli-chat-proxy.grok.com/v1/user?include=subscription";
 const SUBSCRIPTIONS_URL: &str = "https://grok.com/rest/subscriptions";
@@ -58,6 +61,39 @@ fn normalize_text(value: Option<&str>) -> Option<String> {
         let value = value.trim();
         (!value.is_empty()).then(|| value.to_string())
     })
+}
+
+fn normalize_api_base_url(value: Option<&str>) -> Result<Option<String>, String> {
+    let Some(value) = normalize_text(value) else {
+        return Ok(None);
+    };
+    let parsed = url::Url::parse(&value).map_err(|_| {
+        "第三方 API Base URL 格式无效，请输入完整的 http:// 或 https:// 地址".to_string()
+    })?;
+    if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+        return Err("第三方 API Base URL 仅支持 http:// 或 https:// 地址".to_string());
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("第三方 API Base URL 不能包含用户名或密码".to_string());
+    }
+    if parsed.query().is_some() || parsed.fragment().is_some() {
+        return Err("第三方 API Base URL 不能包含查询参数或片段".to_string());
+    }
+    Ok(Some(value.trim_end_matches('/').to_string()))
+}
+
+fn validate_api_provider_config(
+    api_base_url: Option<&str>,
+    api_model: Option<&str>,
+) -> Result<(Option<String>, Option<String>), String> {
+    let api_base_url = normalize_api_base_url(api_base_url)?;
+    let api_model = normalize_text(api_model);
+    match (api_base_url, api_model) {
+        (None, None) => Ok((None, None)),
+        (Some(base_url), Some(model)) => Ok((Some(base_url), Some(model))),
+        (Some(_), None) => Err("第三方 API 缺少模型 ID".to_string()),
+        (None, Some(_)) => Err("第三方 API 缺少 Base URL".to_string()),
+    }
 }
 
 fn data_dir() -> Result<PathBuf, String> {
@@ -794,6 +830,48 @@ fn write_empty_auth_file(auth_path: &Path) -> Result<(), String> {
     write_secret_atomic(auth_path, "{}")
 }
 
+fn write_api_key_profile_config(account: &GrokAccount, profile_dir: &Path) -> Result<(), String> {
+    let (Some(base_url), Some(model)) = (
+        account.api_base_url.as_deref(),
+        account.api_model.as_deref(),
+    ) else {
+        return Ok(());
+    };
+    let config_path = profile_dir.join(CONFIG_FILE);
+    let mut document = if config_path.exists() {
+        fs::read_to_string(&config_path)
+            .map_err(|error| format!("读取 Grok CLI 配置失败: {}", error))?
+            .parse::<Document>()
+            .map_err(|error| format!("解析 Grok CLI config.toml 失败: {}", error))?
+    } else {
+        Document::new()
+    };
+    if !document
+        .as_table()
+        .get("models")
+        .is_some_and(toml_edit::Item::is_table)
+    {
+        document["models"] = table();
+    }
+    document["models"]["default"] = value(COCKPIT_API_MODEL_PROFILE);
+    if !document
+        .as_table()
+        .get("model")
+        .is_some_and(toml_edit::Item::is_table)
+    {
+        document["model"] = table();
+    }
+    document["model"][COCKPIT_API_MODEL_PROFILE] = table();
+    let model_config = &mut document["model"][COCKPIT_API_MODEL_PROFILE];
+    model_config["model"] = value(model);
+    model_config["base_url"] = value(base_url);
+    model_config["name"] = value(model);
+    // Keep the secret out of config.toml. The launcher injects XAI_API_KEY only
+    // into the selected account process, and Grok resolves it through env_key.
+    model_config["env_key"] = value("XAI_API_KEY");
+    write_secret_atomic(&config_path, &document.to_string())
+}
+
 fn write_account_to_official_auth_path(
     account: &GrokAccount,
     auth_path: &Path,
@@ -825,7 +903,8 @@ pub fn write_account_to_profile(account: &GrokAccount, profile_dir: &Path) -> Re
         if account.resolved_api_key().is_none() {
             return Err("Grok API Key 账号缺少 api_key".to_string());
         }
-        return write_empty_auth_file(&auth_path);
+        write_empty_auth_file(&auth_path)?;
+        return write_api_key_profile_config(account, profile_dir);
     }
     let existing = fs::read_to_string(&auth_path)
         .ok()
@@ -913,6 +992,8 @@ fn account_from_auth_object(value: &Value) -> Result<GrokAccount, String> {
             .and_then(Value::as_bool),
         access_token,
         api_key: None,
+        api_base_url: None,
+        api_model: None,
         refresh_token: string_field(object, "refresh_token"),
         id_token: None,
         token_type: Some("Bearer".to_string()),
@@ -1005,8 +1086,33 @@ fn mask_api_key_email(api_key: &str) -> String {
     }
 }
 
-fn api_key_account_id(api_key: &str) -> String {
-    format!("{:x}", md5::compute(api_key.trim().as_bytes()))
+fn api_key_account_display(
+    api_key: &str,
+    api_base_url: Option<&str>,
+    api_model: Option<&str>,
+) -> String {
+    match (api_base_url, api_model) {
+        (Some(base_url), Some(model)) => url::Url::parse(base_url)
+            .ok()
+            .and_then(|url| url.host_str().map(str::to_string))
+            .map(|host| format!("{} @ {}", model, host))
+            .unwrap_or_else(|| model.to_string()),
+        _ => mask_api_key_email(api_key),
+    }
+}
+
+fn api_key_account_id(
+    api_key: &str,
+    api_base_url: Option<&str>,
+    api_model: Option<&str>,
+) -> String {
+    let identity = match (api_base_url, api_model) {
+        (Some(base_url), Some(model)) => {
+            format!("{}\n{}\n{}", api_key.trim(), base_url.trim(), model.trim())
+        }
+        _ => api_key.trim().to_string(),
+    };
+    format!("{:x}", md5::compute(identity.as_bytes()))
 }
 
 fn accounts_match_for_upsert(candidate: &GrokAccount, existing: &GrokAccount) -> bool {
@@ -1015,7 +1121,11 @@ fn accounts_match_for_upsert(candidate: &GrokAccount, existing: &GrokAccount) ->
     }
     if candidate.is_api_key_auth() {
         return match (candidate.resolved_api_key(), existing.resolved_api_key()) {
-            (Some(left), Some(right)) => left == right,
+            (Some(left), Some(right)) => {
+                left == right
+                    && candidate.api_base_url == existing.api_base_url
+                    && candidate.api_model == existing.api_model
+            }
             _ => false,
         };
     }
@@ -1056,6 +1166,20 @@ fn upsert_candidate(
     mut candidate: GrokAccount,
     reauth_target_account_id: Option<&str>,
 ) -> Result<GrokAccount, String> {
+    if candidate.is_api_key_auth() {
+        let api_key = candidate
+            .resolved_api_key()
+            .ok_or_else(|| "Grok API Key 账号缺少 api_key".to_string())?;
+        if api_key.contains(char::is_whitespace) {
+            return Err("API Key 格式无效".to_string());
+        }
+        let (api_base_url, api_model) = validate_api_provider_config(
+            candidate.api_base_url.as_deref(),
+            candidate.api_model.as_deref(),
+        )?;
+        candidate.api_base_url = api_base_url;
+        candidate.api_model = api_model;
+    }
     let _guard = ACCOUNT_LOCK.lock().map_err(|_| "获取 Grok 账号锁失败")?;
     let _store_guard = acquire_store_lock()?;
     let existing = resolve_reauth_target(&candidate, reauth_target_account_id)?
@@ -1141,6 +1265,8 @@ fn oauth_account_candidate(payload: GrokOAuthCompletePayload) -> GrokAccount {
         coding_data_retention_opt_out: payload.coding_data_retention_opt_out,
         access_token: payload.access_token,
         api_key: None,
+        api_base_url: None,
+        api_model: None,
         refresh_token: payload.refresh_token,
         id_token: payload.id_token,
         token_type: payload.token_type.or_else(|| Some("Bearer".to_string())),
@@ -1179,15 +1305,20 @@ pub fn upsert_oauth_for_reauth(
     upsert_candidate(oauth_account_candidate(payload), Some(target_account_id))
 }
 
-pub fn upsert_api_key(api_key: &str) -> Result<GrokAccountView, String> {
+pub fn upsert_api_key(
+    api_key: &str,
+    api_base_url: Option<&str>,
+    api_model: Option<&str>,
+) -> Result<GrokAccountView, String> {
     let api_key = normalize_text(Some(api_key)).ok_or_else(|| "API Key 不能为空".to_string())?;
     if api_key.contains(char::is_whitespace) {
         return Err("API Key 格式无效".to_string());
     }
+    let (api_base_url, api_model) = validate_api_provider_config(api_base_url, api_model)?;
     let now = now_ms();
     let candidate = GrokAccount {
-        id: api_key_account_id(&api_key),
-        email: mask_api_key_email(&api_key),
+        id: api_key_account_id(&api_key, api_base_url.as_deref(), api_model.as_deref()),
+        email: api_key_account_display(&api_key, api_base_url.as_deref(), api_model.as_deref()),
         auth_mode: GrokAuthMode::ApiKey,
         tags: None,
         first_name: None,
@@ -1200,6 +1331,8 @@ pub fn upsert_api_key(api_key: &str) -> Result<GrokAccountView, String> {
         coding_data_retention_opt_out: None,
         access_token: String::new(),
         api_key: Some(api_key),
+        api_base_url,
+        api_model,
         refresh_token: None,
         id_token: None,
         token_type: None,
@@ -2772,9 +2905,9 @@ mod tests {
         load_account_from_path, load_index_from_paths, parse_auth_registry,
         pick_best_live_credential, quota_from_payload, quota_remaining_metrics, remove_account,
         remove_matching_auth_scope, resolve_account_id_from_registry, save_account_locked,
-        should_retry_quota_after_unauthorized, string_field,
+        should_retry_quota_after_unauthorized, string_field, validate_api_provider_config,
         write_account_to_auth_path_if_token_matches, write_account_to_official_auth_path,
-        GrokCredSource, LiveCredentialCandidate,
+        write_account_to_profile, GrokCredSource, LiveCredentialCandidate,
     };
     use crate::models::grok::{
         GrokAccount, GrokAccountView, GrokAuthMode, GrokProductUsage, GrokQuota,
@@ -2798,6 +2931,8 @@ mod tests {
             coding_data_retention_opt_out: Some(false),
             access_token: "secret-access".to_string(),
             api_key: None,
+            api_base_url: None,
+            api_model: None,
             refresh_token: Some("secret-refresh".to_string()),
             id_token: None,
             token_type: Some("Bearer".to_string()),
@@ -2823,6 +2958,51 @@ mod tests {
             created_at: 1,
             last_used: 1,
         }
+    }
+
+    #[test]
+    fn third_party_api_profile_uses_custom_model_without_persisting_key_in_config() {
+        let temp = TestDir::new();
+        let mut account = sample_account();
+        account.auth_mode = GrokAuthMode::ApiKey;
+        account.access_token.clear();
+        account.refresh_token = None;
+        account.api_key = Some("third-party-secret".to_string());
+        account.api_base_url = Some("https://relay.example.com/v1".to_string());
+        account.api_model = Some("grok-compatible".to_string());
+
+        write_account_to_profile(&account, &temp.0).expect("write third-party profile");
+
+        let config =
+            std::fs::read_to_string(temp.0.join("config.toml")).expect("read generated config");
+        assert!(config.contains("default = \"cockpit-api\""));
+        assert!(config.contains("model = \"grok-compatible\""));
+        assert!(config.contains("base_url = \"https://relay.example.com/v1\""));
+        assert!(config.contains("env_key = \"XAI_API_KEY\""));
+        assert!(!config.contains("third-party-secret"));
+        assert_eq!(
+            std::fs::read_to_string(temp.0.join("auth.json")).expect("read empty auth"),
+            "{}"
+        );
+    }
+
+    #[test]
+    fn third_party_api_requires_valid_base_url_and_model_pair() {
+        assert!(
+            validate_api_provider_config(Some("https://relay.example.com/v1/"), Some("model"))
+                .is_ok()
+        );
+        assert!(validate_api_provider_config(Some("https://relay.example.com/v1"), None).is_err());
+        assert!(validate_api_provider_config(None, Some("model")).is_err());
+        assert!(
+            validate_api_provider_config(Some("ftp://relay.example.com/v1"), Some("model"))
+                .is_err()
+        );
+        assert!(validate_api_provider_config(
+            Some("https://user@relay.example.com/v1"),
+            Some("model")
+        )
+        .is_err());
     }
 
     #[test]

@@ -165,6 +165,7 @@ import { QuickSettingsPopover } from "../components/QuickSettingsPopover";
 import { useProviderAccountsPage } from "../hooks/useProviderAccountsPage";
 import { usePlatformRuntimeSupport } from "../hooks/usePlatformRuntimeSupport";
 import { useEscClose } from "../hooks/useEscClose";
+import { useEnterConfirm } from "../hooks/useEnterConfirm";
 import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
 import {
   MultiSelectFilterDropdown,
@@ -386,6 +387,8 @@ function inferCodexAccountProviderMode(
 }
 const CODEX_OVERVIEW_LAYOUT_MODE_KEY =
   "agtools.codex.accounts.overview_layout_mode";
+const CODEX_HIDE_RELAY_QUOTA_LEGACY_KEY =
+  "agtools.codex.accounts.hide_relay_quota.v1";
 const CODEX_LOCAL_ACCESS_EXPANDED_KEY =
   "agtools.codex.local_access_entry_expanded.v1";
 const CODEX_LOCAL_ACCESS_ADDRESS_KIND_KEY =
@@ -721,6 +724,7 @@ function resolveApiKeyUsageMode(
 
 interface CodexOverviewGeneralConfig {
   codex_local_access_entry_visible?: boolean;
+  codex_hide_relay_quota?: boolean;
 }
 
 function normalizeCodexOverviewLayoutMode(
@@ -1290,6 +1294,7 @@ export function CodexAccountsPage() {
       }
       return "grid";
     });
+  const [hideRelayQuota, setHideRelayQuota] = useState(false);
   const [
     localAccessGatewayGuideDismissed,
     setLocalAccessGatewayGuideDismissed,
@@ -1379,6 +1384,8 @@ export function CodexAccountsPage() {
   }, []);
 
   // Use the common hook WITHOUT oauthService since Codex uses Tauri event-based OAuth
+  // Codex batch-delete confirm is wired after confirmCodexDelete is defined.
+  // Built-in Enter confirm is disabled here so it cannot call generic confirmDelete.
   const page = useProviderAccountsPage<CodexAccount>({
     platformKey: "Codex",
     oauthLogPrefix: "CodexOAuth",
@@ -1411,6 +1418,7 @@ export function CodexAccountsPage() {
     // Prefer custom sort whenever the dedicated flag is set (#1123).
     defaultSortBy: readCodexCustomSortActive() ? "custom" : undefined,
     onExternalImportCompleted: handleExternalImportedAccounts,
+    disableEnterConfirmDelete: true,
   });
 
   const {
@@ -2016,6 +2024,33 @@ export function CodexAccountsPage() {
     }
   }, []);
 
+  const reloadHideRelayQuota = useCallback(async () => {
+    try {
+      const config =
+        await invoke<CodexOverviewGeneralConfig>("get_general_config");
+      let hide = config.codex_hide_relay_quota ?? false;
+      // One-time migrate toolbar preference from localStorage into user config.
+      try {
+        const legacy = localStorage.getItem(CODEX_HIDE_RELAY_QUOTA_LEGACY_KEY);
+        if (legacy === "1" && !hide) {
+          hide = true;
+          await invoke("patch_general_config", {
+            updates: { codex_hide_relay_quota: true },
+          });
+          window.dispatchEvent(new Event("config-updated"));
+        }
+        if (legacy !== null) {
+          localStorage.removeItem(CODEX_HIDE_RELAY_QUOTA_LEGACY_KEY);
+        }
+      } catch {
+        // ignore migration failures
+      }
+      setHideRelayQuota(hide);
+    } catch (error) {
+      console.error("Failed to load codex hide-relay-quota preference:", error);
+    }
+  }, []);
+
   const reloadLocalAccessLaunchCurrent = useCallback(async () => {
     try {
       const instances = await codexInstanceService.listInstances();
@@ -2075,6 +2110,10 @@ export function CodexAccountsPage() {
   }, [reloadLocalAccessEntryVisibility]);
 
   useEffect(() => {
+    void reloadHideRelayQuota();
+  }, [reloadHideRelayQuota]);
+
+  useEffect(() => {
     void reloadLocalAccessLaunchCurrent();
   }, [reloadLocalAccessLaunchCurrent]);
 
@@ -2092,13 +2131,18 @@ export function CodexAccountsPage() {
   useEffect(() => {
     const handleConfigUpdated = () => {
       void reloadLocalAccessEntryVisibility();
+      void reloadHideRelayQuota();
       void reloadLocalAccessLaunchCurrent();
     };
     window.addEventListener("config-updated", handleConfigUpdated);
     return () => {
       window.removeEventListener("config-updated", handleConfigUpdated);
     };
-  }, [reloadLocalAccessEntryVisibility, reloadLocalAccessLaunchCurrent]);
+  }, [
+    reloadLocalAccessEntryVisibility,
+    reloadHideRelayQuota,
+    reloadLocalAccessLaunchCurrent,
+  ]);
 
   useEffect(() => {
     const handleLocalAccessUpdated = () => {
@@ -10189,6 +10233,20 @@ export function CodexAccountsPage() {
     t,
   ]);
 
+  useEscClose(Boolean(deleteConfirm) && !batchDeleteBusy, () => {
+    setDeleteConfirm(null);
+  });
+  useEnterConfirm(Boolean(deleteConfirm) && !batchDeleteBusy, () => {
+    void confirmCodexDelete();
+  });
+  useEscClose(Boolean(groupDeleteConfirm) && !deletingGroup, () => {
+    setGroupDeleteConfirm(null);
+    setGroupDeleteError(null);
+  });
+  useEnterConfirm(Boolean(groupDeleteConfirm) && !deletingGroup, () => {
+    void confirmDeleteGroup();
+  });
+
   const handlePauseBatchDelete = useCallback(async () => {
     if (!batchDeleteJob?.jobId || batchDeleteBusy) return;
     setBatchDeleteBusy(true);
@@ -10693,7 +10751,10 @@ export function CodexAccountsPage() {
         apiKeyUsageMap[account.id]?.summary,
       );
       const showApiKeyUsagePanel =
-        isApiKeyAccount && !isNewApiAccount && !isChatCompletionsApiKey;
+        isApiKeyAccount &&
+        !isNewApiAccount &&
+        !isChatCompletionsApiKey &&
+        !hideRelayQuota;
       const isSub2ApiUsageAccount =
         showApiKeyUsagePanel &&
         (apiKeyUsageMode === "sub2api" ||
@@ -10705,7 +10766,9 @@ export function CodexAccountsPage() {
           apiKeyUsageProvider?.integrationType === "new_api" ||
           apiKeyUsageProvider?.integrationType === "sub2api");
       const shouldRenderQuotaSection =
-        showApiKeyUsagePanel || !isApiKeyAccount || isNewApiAccount;
+        (!hideRelayQuota && showApiKeyUsagePanel) ||
+        !isApiKeyAccount ||
+        (isNewApiAccount && !hideRelayQuota);
       const displayPlanClass = isSponsorApiKeyAccount
         ? "sponsor-api"
         : isQuotaAwareApiKeyAccount
@@ -10714,9 +10777,10 @@ export function CodexAccountsPage() {
       const displayPlanLabel = isSponsorApiKeyAccount
         ? apiProviderName
         : presentation.planLabel;
-      const cockpitApiAccountBalanceText = isNewApiAccount
-        ? resolveCockpitApiAccountBalanceText(account)
-        : null;
+      const cockpitApiAccountBalanceText =
+        isNewApiAccount && !hideRelayQuota
+          ? resolveCockpitApiAccountBalanceText(account)
+          : null;
       const accountTags = (account.tags || [])
         .map((tag) => tag.trim())
         .filter(Boolean);
@@ -12094,7 +12158,10 @@ export function CodexAccountsPage() {
         apiKeyUsageMap[account.id]?.summary,
       );
       const showApiKeyUsagePanel =
-        isApiKeyAccount && !isNewApiAccount && !isChatCompletionsApiKey;
+        isApiKeyAccount &&
+        !isNewApiAccount &&
+        !isChatCompletionsApiKey &&
+        !hideRelayQuota;
       const isSub2ApiUsageAccount =
         showApiKeyUsagePanel &&
         (apiKeyUsageMode === "sub2api" ||
@@ -12113,9 +12180,10 @@ export function CodexAccountsPage() {
       const displayPlanLabel = isSponsorApiKeyAccount
         ? apiProviderName
         : presentation.planLabel;
-      const cockpitApiAccountBalanceText = isNewApiAccount
-        ? resolveCockpitApiAccountBalanceText(account)
-        : null;
+      const cockpitApiAccountBalanceText =
+        isNewApiAccount && !hideRelayQuota
+          ? resolveCockpitApiAccountBalanceText(account)
+          : null;
       const isInLocalAccess = localAccessAccountIdSet.has(account.id);
       const subscriptionInfo = resolveSubscriptionPresentation(account);
       const showSubscriptionRefreshAction =

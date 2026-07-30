@@ -3,6 +3,7 @@ import { X, Tag, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { globalRenameTag, globalDeleteTag } from '../utils/globalTagOperations';
 import { useEscClose } from '../hooks/useEscClose';
+import { useEnterConfirm } from '../hooks/useEnterConfirm';
 import './TagEditModal.css';
 
 interface TagEditModalProps {
@@ -218,6 +219,10 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
       setSaving(false);
     }
   };
+
+  useEnterConfirm(!!globalDeleteConfirm && !saving, () => {
+    void confirmGlobalDelete();
+  });
 
   if (!isOpen) return null;
 

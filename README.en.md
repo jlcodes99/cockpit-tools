@@ -165,6 +165,7 @@ Manage Cursor instances with isolated profiles and lifecycle controls.
 ### 8. Grok CLI Account Management
 
 - **OAuth Authorization**: Supports xAI's official OIDC device flow and saves the account after browser verification completes
+- **API Keys and Third-Party Endpoints**: Supports official xAI API keys plus OpenAI-compatible third-party `Base URL` and model IDs; configuration is written to an account-specific `config.toml`, while the key is injected only into the corresponding CLI process at launch
 - **Import and Redacted Export**: Imports official credentials from the default `~/.grok/auth.json` or supplied JSON; account-page exports and generic account backups omit access/refresh tokens, cannot restore a sign-in, and require a separate official `auth.json` import when migrating
 - **Real Account Switching**: Writes the selected account to the default `~/.grok/auth.json` in Grok CLI's official registry format while preserving other registry scopes in the file
 - **Quota and Plan**: Queries the official billing/user/subscriptions endpoints, displays cycle, usage, product quotas, and the raw plan value, and records Grok Code access
@@ -172,10 +173,10 @@ Manage Cursor instances with isolated profiles and lifecycle controls.
 
 #### 8.1 Grok CLI Multi-Instance
 
-The default Grok CLI instance uses the official `~/.grok` directory directly and starts without setting `GROK_HOME`. Only managed instances use separate directories, with an independent `GROK_HOME` set for each instance.
+The default Grok CLI instance normally uses the official `~/.grok` directory directly and starts without setting `GROK_HOME`; managed instances use separate directories. API-key accounts, including third-party endpoints, always launch with an account-specific `GROK_HOME` so an official OAuth session cannot take credential precedence.
 
 - **Account Binding**: The default instance can follow the current account, while each managed instance can bind a different account
-- **Runtime Isolation**: Managed instances keep their `auth.json`, working directories, and launch arguments separate
+- **Runtime Isolation**: Managed instances keep their `auth.json`, `config.toml`, working directories, and launch arguments separate
 - **Terminal Lifecycle**: Generate or execute terminal launch commands, stop instances, and close all instances
 - **Directory Protection**: Non-default instances are confined to the default managed root and moved to the trash when deleted; external paths from legacy configuration are only unregistered and are never written to or deleted
 
@@ -451,6 +452,7 @@ Every bit of support helps sustain open-source development. Thank you!
 - The Codex API service integrates CLIProxyAPI; its Responses WebSocket state safety, canonical token accounting v2, Multi-Agent V2 compatibility, and open-source account and OAuth handling also informed Cockpit and the Grok CLI implementation: [router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (MIT)
 - Grok icon shape references: [LobeHub/lobe-icons](https://github.com/lobehub/lobe-icons) (MIT)
 - Grok CLI task-usage querying and compatibility parsing direction references: [junhoyeo/tokscale](https://github.com/junhoyeo/tokscale) (MIT)
+- Grok CLI third-party BYOK and custom-model configuration formats follow the upstream implementation and documentation: [xai-org/grok-build](https://github.com/xai-org/grok-build)
 - Codex API service protocol compatibility direction references: [codex-proxy](https://github.com/icebear0828/codex-proxy)
 - Codex Agent Identity import, dynamic signing, task recovery, and explicit rejected-field retry behavior for third-party Responses providers reference: [sub2api](https://github.com/Wei-Shaw/sub2api)
 - Codex Agent Identity runtime registration protocol and Ed25519 key format reference the official implementation: [openai/codex](https://github.com/openai/codex) (Apache-2.0)

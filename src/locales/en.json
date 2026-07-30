@@ -26,6 +26,11 @@
     "detail": "Details",
     "editable": "Editable",
     "preview": "Preview",
+    "sessionSharing": {
+      "title": "Share Local Sessions on Switch",
+      "fullDesc": "Merge local sessions and restore state between {{platform}} accounts on this device when switching. Files stay local and session content is not uploaded.",
+      "workspaceDesc": "Copy and merge workspace session indexes and restore state between {{platform}} accounts on this device when switching. The encrypted Builder/Agent session database is not modified, and no content is uploaded."
+    },
     "topRightAd": {
       "ariaLabel": "Global top-right ad slot",
       "badge": "AD",
@@ -832,7 +837,7 @@
       "floatingCardAlwaysOnTop": "Keep floating card on top by default",
       "floatingCardAlwaysOnTopDesc": "New floating card windows stay on top when opened",
       "appAutoLaunch": "Launch Cockpit Tools at login",
-      "appAutoLaunchDesc": "Automatically start the app after system sign-in",
+      "appAutoLaunchDesc": "Start the app after sign-in. If Windows shows a PowerShell error at boot, turn this off.",
       "startupWakeupDisabled": "Disabled",
       "startupWakeupImmediate": "Wake up immediately",
       "startupWakeupDelayed": "Wake up after delay",
@@ -1057,7 +1062,9 @@
       "menuBarQuotaPlatformDesc": "Uses that platform’s active account; updates after refresh or switch",
       "menuBarAccountPrefix": "Show first 4 email chars",
       "menuBarAccountPrefixDesc": "Normal accounts only: when off, hide email prefix. Codex API Service / API Key still show the API label",
-      "menuBarQuotaConfirmEnable": "Enable"
+      "menuBarQuotaConfirmEnable": "Enable",
+      "codexHideRelayQuota": "Hide relay quota",
+      "codexHideRelayQuotaDesc": "When on, Codex account overview hides mid-relay / New API style balance panels to reduce clutter."
     },
     "tabs": {
       "general": "General",
@@ -2819,7 +2826,12 @@
           "pending": "Pending",
           "completed": "Completed"
         },
-        "officialClientOnlyError": "This provider only accepts requests from official Codex clients. One-click testing now uses the local gateway, but the upstream still rejected this test request. Trust the behavior after launching the official Codex client."
+        "officialClientOnlyError": "This provider only accepts requests from official Codex clients. One-click testing now uses the local gateway, but the upstream still rejected this test request. Trust the behavior after launching the official Codex client.",
+        "modelAuto": "Auto (catalog / discover)",
+        "modelCustom": "Custom model…",
+        "modelLabel": "Test model",
+        "modelCustomPlaceholder": "Model ID, e.g. gpt-4.1-mini",
+        "modelHint": "Optional shared model. Leave empty to auto-pick from each provider’s catalog."
       },
       "enableAndStart": "Start",
       "instance": {
@@ -2910,7 +2922,8 @@
       },
       "renameApiKeyPrompt": "Rename API key",
       "renameApiKeySuccess": "API key renamed",
-      "renameApiKeyFailed": "Failed to rename API key: {{error}}"
+      "renameApiKeyFailed": "Failed to rename API key: {{error}}",
+      "existingApiKeysSearch": "Search existing API keys…"
     },
     "quickSwitch": {
       "action": "Quick Switch Provider",
@@ -3722,7 +3735,11 @@
         "httpStatus": "HTTP {{status}}",
         "clearFilters": "Clear Filters",
         "loading": "Loading request logs",
-        "gatewayModeUnknown": "Unknown Mode"
+        "gatewayModeUnknown": "Unknown Mode",
+        "reasoningEffort": "Reasoning",
+        "reasoningEffortValue": "Think {{effort}}",
+        "serviceTier": "Service tier",
+        "serviceTierValue": "Tier {{tier}}"
       }
     },
     "apiKey": {
@@ -3907,7 +3924,11 @@
       "autoSyncBadge": "Auto"
     },
     "exportAuthFailed": "Export failed",
-    "exportAuthFailedTitle": "Export all auth-failed accounts"
+    "exportAuthFailedTitle": "Export all auth-failed accounts",
+    "accounts": {
+      "showRelayQuota": "Show relay quota",
+      "hideRelayQuota": "Hide relay quota"
+    }
   },
   "codebuddy": {
     "title": "CodeBuddy Account",
@@ -5384,9 +5405,20 @@
       "localDesc": "Import from default ~/.grok/auth.json, or choose an official auth.json / full export JSON file from this app.",
       "localClient": "Import from Local Grok CLI",
       "apiKeyTab": "API Key",
-      "apiKeyDesc": "Paste an xAI API key (official XAI_API_KEY / xai-…). Injected as an env var at CLI launch; does not overwrite official OAuth login.",
+      "apiKeyDesc": "Paste an xAI API key (official XAI_API_KEY / xai-…). It is injected through an account-specific GROK_HOME at CLI launch without overwriting official OAuth login.",
       "apiKeyPlaceholder": "xai-...",
-      "apiKeyAction": "Add API Key"
+      "apiKeyAction": "Add API Key",
+      "apiMode": "API type",
+      "apiModeOfficial": "Official xAI",
+      "apiModeCustom": "Third-party",
+      "customApiDesc": "Configure an OpenAI-compatible Base URL, model ID, and API key. An account-specific config.toml is written at launch, and the key is injected only into that CLI process.",
+      "customApiKeyPlaceholder": "Paste third-party API key",
+      "apiBaseUrl": "Base URL",
+      "apiBaseUrlPlaceholder": "https://api.example.com/v1",
+      "apiModel": "Model ID",
+      "apiModelPlaceholder": "For example, grok-4.1-fast",
+      "apiFieldRequired": "Enter {{field}}",
+      "apiBaseUrlInvalid": "Enter a full http:// or https:// URL without credentials, query parameters, or fragments"
     },
     "instances": {
       "unsupported": "Grok CLI multi-instance is supported on macOS, Windows, and Linux only.",

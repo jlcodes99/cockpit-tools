@@ -26,6 +26,11 @@
     "detail": "詳情",
     "editable": "可編輯",
     "preview": "預覽",
+    "sessionSharing": {
+      "title": "切換帳號時共享本機對話",
+      "fullDesc": "切換帳號時合併此裝置上 {{platform}} 帳號的本機對話與還原狀態；只會在本機讀寫檔案，不會上傳對話內容。",
+      "workspaceDesc": "切換帳號時複製並合併此裝置上 {{platform}} 帳號的 workspace 對話索引與還原狀態；不會修改加密的 Builder/Agent 對話資料庫，也不會上傳內容。"
+    },
     "shared": {
       "addAccount": "新增帳號",
       "columns": {
@@ -746,7 +751,7 @@
       "antigravityDualSwitchNoRestart": "無感雙通道切號（不重啟）",
       "antigravityDualSwitchNoRestartDesc": "切號時同時執行本地落盤與擴充套件無感切號，不再自動重啟 Antigravity IDE。",
       "appAutoLaunch": "開機時啟動 Cockpit Tools",
-      "appAutoLaunchDesc": "系統登入後自動啟動應用程式",
+      "appAutoLaunchDesc": "系統登入後自動啟動應用。若 Windows 開機時出現 PowerShell 錯誤，請先關閉此選項。",
       "startupWakeupDisabled": "關閉",
       "startupWakeupImmediate": "立即喚醒",
       "startupWakeupDelayed": "延遲喚醒",
@@ -864,7 +869,9 @@
       "menuBarQuotaPlatformDesc": "跟隨該平台目前正在使用的帳號，重新整理或切換後自動更新",
       "menuBarAccountPrefix": "顯示帳號信箱前 4 碼",
       "menuBarAccountPrefixDesc": "僅一般帳號：關閉後不顯示信箱前綴。Codex API 服務 / API Key 仍會顯示 API 標籤",
-      "menuBarQuotaConfirmEnable": "啟用"
+      "menuBarQuotaConfirmEnable": "啟用",
+      "codexHideRelayQuota": "隱藏中轉站額度",
+      "codexHideRelayQuotaDesc": "開啟後，Codex 帳號總覽隱藏中轉 / New API 類額度面板，減輕列表重疊與視覺干擾。"
     },
     "network": {
       "apiTitle": "反重力駕駛艙 API",
@@ -3059,7 +3066,12 @@
           "pending": "等待中",
           "completed": "已完成"
         },
-        "officialClientOnlyError": "此供應商限制只允許 Codex 官方用戶端請求；目前一鍵測試已走本地閘道，但上游仍拒絕了這次測試請求。請以官方 Codex 實際啟動後的表現為準。"
+        "officialClientOnlyError": "此供應商限制只允許 Codex 官方用戶端請求；目前一鍵測試已走本地閘道，但上游仍拒絕了這次測試請求。請以官方 Codex 實際啟動後的表現為準。",
+        "modelAuto": "自動選擇（依目錄/探測）",
+        "modelCustom": "自訂模型…",
+        "modelLabel": "測試模型",
+        "modelCustomPlaceholder": "輸入模型 ID，例如 gpt-4.1-mini",
+        "modelHint": "可選統一模型。留空則依各供應商目錄或探測結果自動選擇。"
       },
       "enableAndStart": "啟動",
       "instance": {
@@ -3153,7 +3165,8 @@
       },
       "renameApiKeyPrompt": "重新命名 API Key",
       "renameApiKeySuccess": "API Key 已重新命名",
-      "renameApiKeyFailed": "重新命名 API Key 失敗：{{error}}"
+      "renameApiKeyFailed": "重新命名 API Key 失敗：{{error}}",
+      "existingApiKeysSearch": "搜尋既有 API Key…"
     },
     "quickSwitch": {
       "action": "快速切換供應商",
@@ -3447,7 +3460,11 @@
         "httpStatus": "HTTP 狀態 {{status}}",
         "allInstances": "全部實例",
         "instanceFilter": "實例",
-        "instanceUnknown": "實例 -"
+        "instanceUnknown": "實例 -",
+        "reasoningEffort": "思考強度",
+        "reasoningEffortValue": "思考 {{effort}}",
+        "serviceTier": "服務等級",
+        "serviceTierValue": "等級 {{tier}}"
       },
       "timeouts": {
         "entryLabel": "進階參數",
@@ -3708,7 +3725,11 @@
       "autoSyncBadge": "汽車"
     },
     "exportAuthFailed": "匯出失敗帳號",
-    "exportAuthFailedTitle": "匯出全部授權失敗帳號"
+    "exportAuthFailedTitle": "匯出全部授權失敗帳號",
+    "accounts": {
+      "showRelayQuota": "顯示中轉額度",
+      "hideRelayQuota": "隱藏中轉額度"
+    }
   },
   "githubCopilot": {
     "title": "GitHub Copilot 帳號管理",
@@ -5384,9 +5405,20 @@
       "localDesc": "從預設 ~/.grok/auth.json 匯入；也可選擇官方 auth.json 或本應用匯出的完整帳號 JSON 檔案。",
       "localClient": "從本機 Grok CLI 匯入",
       "apiKeyTab": "API 金鑰",
-      "apiKeyDesc": "貼上 xAI API Key（官方 XAI_API_KEY / xai-…）。啟動 CLI 時注入為環境變數，不會覆蓋官方 OAuth 登入。",
+      "apiKeyDesc": "貼上 xAI API Key（官方 XAI_API_KEY / xai-…）。啟動 CLI 時透過帳號專屬 GROK_HOME 注入，不會覆蓋官方 OAuth 登入。",
       "apiKeyPlaceholder": "貼上 xai- 開頭的金鑰",
-      "apiKeyAction": "新增 API Key"
+      "apiKeyAction": "新增 API Key",
+      "apiMode": "API 類型",
+      "apiModeOfficial": "xAI 官方",
+      "apiModeCustom": "第三方相容",
+      "customApiDesc": "設定 OpenAI 相容的 Base URL、模型 ID 與 API Key。啟動時寫入帳號專屬 config.toml，並只向該 CLI 程序注入金鑰。",
+      "customApiKeyPlaceholder": "貼上第三方 API Key",
+      "apiBaseUrl": "介面位址",
+      "apiBaseUrlPlaceholder": "例如 https://api.example.com/v1",
+      "apiModel": "模型 ID",
+      "apiModelPlaceholder": "例如 grok-4.1-fast",
+      "apiFieldRequired": "請填寫{{field}}",
+      "apiBaseUrlInvalid": "請輸入完整的 http:// 或 https:// 位址，且不要包含使用者名稱、查詢參數或片段"
     },
     "instances": {
       "unsupported": "Grok CLI 多開僅支援 macOS、Windows 與 Linux。",

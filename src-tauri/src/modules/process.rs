@@ -1537,6 +1537,19 @@ fn sanitize_macos_gui_launch_env(cmd: &mut Command) {
     // Avoid inheriting Cockpit bundle identity into child GUI apps.
     cmd.env_remove("__CFBundleIdentifier");
     cmd.env_remove("XPC_SERVICE_NAME");
+    // Electron / Chromium rejects several Node flags. Cockpit dev shells often
+    // set NODE_OPTIONS=--openssl-legacy-provider; if that leaks into `open -a`
+    // or a direct Electron spawn, Trae/VS Code-based apps flash and exit with:
+    //   electron: --openssl-legacy-provider is not allowed in NODE_OPTIONS
+    cmd.env_remove("NODE_OPTIONS");
+    cmd.env_remove("NODE_PATH");
+    cmd.env_remove("NODE_ENV");
+    cmd.env_remove("npm_config_prefix");
+    cmd.env_remove("npm_config_devdir");
+    cmd.env_remove("ELECTRON_RUN_AS_NODE");
+    cmd.env_remove("ELECTRON_NO_ASAR");
+    cmd.env_remove("ELECTRON_FORCE_WINDOW_MENU_BAR");
+    cmd.env_remove("ELECTRON_NO_ATTACH_CONSOLE");
 }
 
 fn managed_proxy_env_pairs() -> Vec<(&'static str, String)> {
@@ -8233,7 +8246,218 @@ pub fn close_trae_platform_default(platform_id: &str, timeout_secs: u64) -> Resu
     let platform = crate::modules::trae_account::TraePlatformKind::parse(Some(platform_id))?;
     let default_dir = get_default_trae_user_data_dir_for_platform_for_os(platform)
         .ok_or_else(|| format!("无法获取 {} 默认数据目录", platform.display_name()))?;
+    // close_trae_platform_instances already waits for idle + settle delay.
     close_trae_platform_instances(platform, &[default_dir], timeout_secs)
+}
+
+/// Wait until no matching Trae main process is visible (best-effort).
+fn wait_trae_platform_idle(
+    platform: crate::modules::trae_account::TraePlatformKind,
+    user_data_dir: Option<&str>,
+    timeout: Duration,
+) {
+    let started = Instant::now();
+    while started.elapsed() < timeout {
+        if resolve_trae_pid_for_platform(None, user_data_dir, platform).is_none() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(150));
+    }
+    crate::modules::logger::log_warn(&format!(
+        "[Trae Close] platform={} 在 {:?} 内仍检测到残留主进程，继续启动流程",
+        platform.provider_key(),
+        timeout
+    ));
+}
+
+/// Launch Trae on macOS with PID verification and cold-start retries.
+#[cfg(target_os = "macos")]
+fn launch_trae_macos_with_verification(
+    platform: crate::modules::trae_account::TraePlatformKind,
+    app_root: &str,
+    args: &[String],
+    user_data_dir: Option<&str>,
+    prefer_new_instance: bool,
+) -> Result<u32, String> {
+    let probe_timeout = Duration::from_secs(10);
+    // Prefer a single clean LaunchServices open. Stacking open -n / open / direct
+    // Electron spawns races the single-instance lock and can leave a "flash then die"
+    // window when NODE_OPTIONS or other env leaks into the child.
+    let attempts: &[(bool, &str)] = if prefer_new_instance {
+        &[(false, "open -a"), (true, "open -n -a")]
+    } else {
+        &[(false, "open -a"), (true, "open -n -a")]
+    };
+
+    let mut last_open_pid: Option<u32> = None;
+    for (force_new, label) in attempts {
+        // Drop any stale singleton locks only when forcing a brand-new process.
+        if *force_new {
+            clear_trae_singleton_locks(user_data_dir, platform);
+        }
+
+        let open_pid = spawn_open_app_with_options(app_root, args, *force_new)
+            .map_err(|e| format!("启动 {} 失败: {}", platform.display_name(), e))?;
+        last_open_pid = Some(open_pid);
+        crate::modules::logger::log_info(&format!(
+            "[Trae Start] platform={} 启动命令已发送（{}） open_pid={} app={} args={:?}",
+            platform.provider_key(),
+            label,
+            open_pid,
+            app_root,
+            args
+        ));
+
+        let probe_started = Instant::now();
+        while probe_started.elapsed() < probe_timeout {
+            if let Some(resolved_pid) =
+                resolve_trae_pid_for_platform(None, user_data_dir, platform)
+            {
+                crate::modules::logger::log_info(&format!(
+                    "[Trae Start] platform={} 已匹配主进程 pid={}（{} 后）",
+                    platform.provider_key(),
+                    resolved_pid,
+                    format_duration_ms(probe_started.elapsed())
+                ));
+                return Ok(resolved_pid);
+            }
+            // Also accept loose matches when strict path filter is too harsh.
+            if let Some(resolved_pid) =
+                resolve_trae_pid_loose_for_platform(None, user_data_dir, platform)
+            {
+                crate::modules::logger::log_info(&format!(
+                    "[Trae Start] platform={} 宽松匹配主进程 pid={}",
+                    platform.provider_key(),
+                    resolved_pid
+                ));
+                return Ok(resolved_pid);
+            }
+            thread::sleep(Duration::from_millis(250));
+        }
+        crate::modules::logger::log_warn(&format!(
+            "[Trae Start] platform={} {} 后 {} 内未匹配到主进程，尝试下一种启动方式",
+            platform.provider_key(),
+            label,
+            format_duration_ms(probe_timeout)
+        ));
+        thread::sleep(Duration::from_millis(400));
+    }
+
+    // Last resort: spawn Electron binary with sanitized env (no NODE_OPTIONS).
+    if let Ok(launch_path) = resolve_trae_launch_path_for_platform(platform) {
+        let mut cmd = Command::new(&launch_path);
+        sanitize_macos_gui_launch_env(&mut cmd);
+        apply_managed_proxy_env_to_command(&mut cmd);
+        for arg in args {
+            let trimmed = arg.trim();
+            if !trimmed.is_empty() {
+                cmd.arg(trimmed);
+            }
+        }
+        match spawn_detached_unix(&mut cmd) {
+            Ok(child) => {
+                let direct_pid = child.id();
+                crate::modules::logger::log_info(&format!(
+                    "[Trae Start] platform={} 直启 Electron 已发送 pid={} path={}",
+                    platform.provider_key(),
+                    direct_pid,
+                    launch_path.display()
+                ));
+                let probe_started = Instant::now();
+                while probe_started.elapsed() < probe_timeout {
+                    if let Some(resolved_pid) =
+                        resolve_trae_pid_for_platform(None, user_data_dir, platform)
+                            .or_else(|| {
+                                resolve_trae_pid_loose_for_platform(None, user_data_dir, platform)
+                            })
+                    {
+                        return Ok(resolved_pid);
+                    }
+                    thread::sleep(Duration::from_millis(250));
+                }
+                last_open_pid = Some(direct_pid);
+            }
+            Err(err) => {
+                crate::modules::logger::log_warn(&format!(
+                    "[Trae Start] platform={} 直启 Electron 失败: {}",
+                    platform.provider_key(),
+                    err
+                ));
+            }
+        }
+    }
+
+    Err(format!(
+        "启动 {} 失败: 已发送启动命令，但未检测到主进程（最后 open_pid={}）。若开发环境设置了 NODE_OPTIONS=--openssl-legacy-provider，请先去掉后再试；也可手动打开一次 {} 确认应用本身正常。",
+        platform.display_name(),
+        last_open_pid
+            .map(|pid| pid.to_string())
+            .unwrap_or_else(|| "-".to_string()),
+        platform.display_name()
+    ))
+}
+
+/// Loose PID match: trust ps cmdline under the platform .app, ignore strict exe-path filter.
+#[cfg(target_os = "macos")]
+fn resolve_trae_pid_loose_for_platform(
+    last_pid: Option<u32>,
+    user_data_dir: Option<&str>,
+    platform: crate::modules::trae_account::TraePlatformKind,
+) -> Option<u32> {
+    let entries = collect_trae_process_entries_macos_for_platform(platform);
+    if entries.is_empty() {
+        return None;
+    }
+    let (target, allow_none_for_target) =
+        resolve_trae_target_and_fallback_for_platform(user_data_dir, platform)?;
+    resolve_pid_from_entries_by_user_data_dir(last_pid, &target, allow_none_for_target, &entries)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn resolve_trae_pid_loose_for_platform(
+    _last_pid: Option<u32>,
+    _user_data_dir: Option<&str>,
+    _platform: crate::modules::trae_account::TraePlatformKind,
+) -> Option<u32> {
+    None
+}
+
+fn clear_trae_singleton_locks(
+    user_data_dir: Option<&str>,
+    platform: crate::modules::trae_account::TraePlatformKind,
+) {
+    let Some(dir) = user_data_dir
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            get_default_trae_user_data_dir_for_platform_for_os(platform)
+                .map(std::path::PathBuf::from)
+        })
+    else {
+        return;
+    };
+    for name in ["SingletonLock", "SingletonCookie", "SingletonSocket"] {
+        let path = dir.join(name);
+        if path.exists() || path.symlink_metadata().is_ok() {
+            match std::fs::remove_file(&path) {
+                Ok(()) => crate::modules::logger::log_info(&format!(
+                    "[Trae Start] 已清理残留锁: {}",
+                    path.display()
+                )),
+                Err(err) => crate::modules::logger::log_warn(&format!(
+                    "[Trae Start] 清理残留锁失败: path={}, err={}",
+                    path.display(),
+                    err
+                )),
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn format_duration_ms(duration: Duration) -> String {
+    format!("{}ms", duration.as_millis())
 }
 
 pub fn close_trae_platform_instances(
@@ -8277,7 +8501,17 @@ pub fn close_trae_platform_instances(
         None,
         None,
         None,
-    )
+    )?;
+    // Wait for the targeted profiles to fully disappear before inject/start.
+    for dir in user_data_dirs {
+        let trimmed = dir.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        wait_trae_platform_idle(platform, Some(trimmed), Duration::from_secs(3));
+    }
+    thread::sleep(Duration::from_millis(350));
+    Ok(())
 }
 
 pub fn close_workbuddy_instances(
@@ -12468,27 +12702,13 @@ pub fn start_trae_platform_with_args_with_new_window(
             }
         }
 
-        let open_pid = spawn_open_app_with_options(&app_root, &args, true)
-            .map_err(|e| format!("启动 {} 失败: {}", platform.display_name(), e))?;
-        crate::modules::logger::log_info(&format!(
-            "{} 启动命令已发送（open -n -a）",
-            platform.display_name()
-        ));
-        let probe_started = Instant::now();
-        let timeout = Duration::from_secs(6);
-        while probe_started.elapsed() < timeout {
-            if let Some(resolved_pid) = resolve_trae_pid_for_platform(None, Some(target), platform)
-            {
-                return Ok(resolved_pid);
-            }
-            thread::sleep(Duration::from_millis(200));
-        }
-        crate::modules::logger::log_warn(&format!(
-            "[Trae Start] platform={} 启动后 6s 内未匹配到实例 PID，回退 open pid={}",
-            platform.provider_key(),
-            open_pid
-        ));
-        return Ok(open_pid);
+        return launch_trae_macos_with_verification(
+            platform,
+            &app_root,
+            &args,
+            Some(target),
+            /* prefer_new_instance */ true,
+        );
     }
 
     #[cfg(target_os = "windows")]
@@ -12594,9 +12814,9 @@ pub fn start_trae_default_with_args_with_new_window(
             }
         }
 
-        let open_pid = spawn_open_app_with_options(&app_root, &args, true)
+        let open_pid = spawn_open_app_with_options(&app_root, &args, false)
             .map_err(|e| format!("启动 Trae 失败: {}", e))?;
-        crate::modules::logger::log_info("Trae 默认实例启动命令已发送（open -n -a）");
+        crate::modules::logger::log_info("Trae 默认实例启动命令已发送（open -a）");
         let probe_started = Instant::now();
         let timeout = Duration::from_secs(6);
         while probe_started.elapsed() < timeout {
@@ -12690,39 +12910,25 @@ pub fn start_trae_platform_default_with_args_with_new_window(
         let app_root = resolve_macos_app_root_from_launch_path(&launch_path)
             .ok_or_else(|| app_path_missing_error(platform.provider_key()))?;
 
+        // After a hard close, cold-start without forcing --new-window/--reuse-window.
+        // Window flags are only useful when an instance is already alive; on cold
+        // start they are unnecessary and extra args make debugging noisier.
         let mut args: Vec<String> = Vec::new();
-        if use_new_window {
-            args.push("--new-window".to_string());
-        } else {
-            args.push("--reuse-window".to_string());
-        }
         for arg in extra_args {
             let trimmed = arg.trim();
             if !trimmed.is_empty() {
                 args.push(trimmed.to_string());
             }
         }
+        let _ = use_new_window;
 
-        let open_pid = spawn_open_app_with_options(&app_root, &args, true)
-            .map_err(|e| format!("启动 {} 失败: {}", platform.display_name(), e))?;
-        crate::modules::logger::log_info(&format!(
-            "{} 默认实例启动命令已发送（open -n -a）",
-            platform.display_name()
-        ));
-        let probe_started = Instant::now();
-        let timeout = Duration::from_secs(6);
-        while probe_started.elapsed() < timeout {
-            if let Some(resolved_pid) = resolve_trae_pid_for_platform(None, None, platform) {
-                return Ok(resolved_pid);
-            }
-            thread::sleep(Duration::from_millis(200));
-        }
-        crate::modules::logger::log_warn(&format!(
-            "[Trae Start] platform={} 启动后 6s 内未匹配到默认实例 PID，回退 open pid={}",
-            platform.provider_key(),
-            open_pid
-        ));
-        return Ok(open_pid);
+        return launch_trae_macos_with_verification(
+            platform,
+            &app_root,
+            &args,
+            None,
+            /* prefer_new_instance */ false,
+        );
     }
 
     #[cfg(target_os = "windows")]

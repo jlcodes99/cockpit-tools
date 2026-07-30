@@ -195,6 +195,39 @@ func TestConvertOpenAIResponsesRequestToOpenAIChatCompletions_AdditionalToolsFro
 	}
 }
 
+func TestConvertOpenAIResponsesRequestToOpenAIChatCompletions_DropsToolChoiceWithoutTools(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{name: "missing tools", raw: `{"input":"hello","tool_choice":"auto"}`},
+		{name: "null tools", raw: `{"input":"hello","tools":null,"tool_choice":"auto"}`},
+		{name: "empty tools", raw: `{"input":"hello","tools":[],"tool_choice":"auto"}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := ConvertOpenAIResponsesRequestToOpenAIChatCompletions("grok-4.5", []byte(tt.raw), false)
+			if got := gjson.GetBytes(out, "tool_choice"); got.Exists() {
+				t.Fatalf("tool_choice should be omitted when tools are unavailable; out=%s", out)
+			}
+		})
+	}
+}
+
+func TestConvertOpenAIResponsesRequestToOpenAIChatCompletions_PreservesToolChoiceWithTools(t *testing.T) {
+	raw := []byte(`{
+		"input":"hello",
+		"tools":[{"type":"function","name":"lookup","parameters":{"type":"object"}}],
+		"tool_choice":"auto"
+	}`)
+	out := ConvertOpenAIResponsesRequestToOpenAIChatCompletions("grok-4.5", raw, false)
+
+	if got := gjson.GetBytes(out, "tool_choice").String(); got != "auto" {
+		t.Fatalf("tool_choice = %q, want auto; out=%s", got, out)
+	}
+}
+
 func TestConvertOpenAIResponsesRequestToOpenAIChatCompletions_IncludesUsageForStreaming(t *testing.T) {
 	out := ConvertOpenAIResponsesRequestToOpenAIChatCompletions("kimi-k2.6", []byte(`{"input":"hello"}`), true)
 

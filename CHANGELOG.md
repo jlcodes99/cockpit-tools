@@ -7,10 +7,16 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
-## [1.3.15] - 2026-07-28
+## [1.3.15] - 2026-07-29
 
 ### Added
 
+- **Grok CLI supports third-party API Key endpoints**: when adding an account, users can choose official xAI or an OpenAI-compatible third-party endpoint and configure its Base URL, model ID, and API key; API-key accounts use an isolated `GROK_HOME`, do not overwrite the official OAuth login, and inject the key only into the corresponding CLI process.
+- **CodeBuddy CN adds optional local-session sharing when switching accounts**: the switch is off by default; when enabled, account switches merge local session content and restore databases, create a local backup before changes, and do not upload session content.
+- **Codex model-provider one-click test supports choosing the model first**: pick a model from selected providers’ catalogs, enter a custom model ID, or keep auto discovery instead of always testing a fixed preferred model. ([#1729](https://github.com/jlcodes99/cockpit-tools/issues/1729))
+- **Codex API Service request logs show reasoning effort and service tier**: when the request carries `reasoning.effort` / `reasoning_effort` or `service_tier`, the log list shows those values so users can verify what was actually called. ([#1690](https://github.com/jlcodes99/cockpit-tools/issues/1690))
+- **Codex can hide relay-station quota**: a setting in Settings and the Codex quick-settings popover hides mid-relay / New API style balance panels to reduce clutter; the preference is stored in user config. ([#1692](https://github.com/jlcodes99/cockpit-tools/issues/1692))
+- **Editing a Codex model provider with many API keys supports searching the existing-key list**. ([#1750](https://github.com/jlcodes99/cockpit-tools/issues/1750))
 - **WorkBuddy supports configurable auto check-in**: off by default; users can set per-account random check-in windows and log retention, and saved accounts are never checked in while the feature is disabled.
 - **macOS menu bar can show live quota**: off by default; users can pick the monitored platform and optionally show an account-prefix badge.
 - **MFA vault supports Google Authenticator migration QR batch import**: `otpauth-migration://` payloads can be scanned and saved into local MFA records in bulk.
@@ -28,6 +34,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Fixed Codex API Service average latency including failed or zero-ms transport errors**: latency averages now count successful requests only. ([#1657](https://github.com/jlcodes99/cockpit-tools/issues/1657))
+- **Fixed Windows NSIS reinstalls/updates leaving duplicate desktop shortcuts**: the installer removes known prior desktop and Start Menu shortcuts for Cockpit Tools before creating the current ones. ([#1656](https://github.com/jlcodes99/cockpit-tools/issues/1656))
+- **Fixed strict Chat Completions providers such as xAI returning HTTP 400 after Codex automatic context compaction**: Responses-to-Chat-Completions conversion now omits `tool_choice` when no effective tools are available, preventing the client from entering a reconnect loop. ([#1727](https://github.com/jlcodes99/cockpit-tools/issues/1727))
 - **Fixed ChatGPT Web Session imports failing when Agent Identity runtime registration returned HTTP 403**: this format no longer attempts runtime registration and is imported as a quota-only account.
 - **Fixed Windows Desktop session working-directory normalization when paths use the `\\?\\` prefix**.
 - **Fixed layout breakage when custom icon localStorage writes hit quota errors**.

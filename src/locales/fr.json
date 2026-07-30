@@ -26,6 +26,11 @@
     "detail": "Détails",
     "editable": "Modifiable",
     "preview": "Aperçu",
+    "sessionSharing": {
+      "title": "Partager les sessions locales au changement",
+      "fullDesc": "Fusionne les sessions locales et l’état de restauration entre les comptes {{platform}} de cet appareil lors d’un changement. Les fichiers restent locaux et le contenu des sessions n’est pas téléversé.",
+      "workspaceDesc": "Copie et fusionne les index de sessions workspace et l’état de restauration entre les comptes {{platform}} de cet appareil. La base chiffrée des sessions Builder/Agent n’est pas modifiée et aucun contenu n’est téléversé."
+    },
     "shared": {
       "addAccount": "Ajouter un compte",
       "columns": {
@@ -746,7 +751,7 @@
       "antigravityDualSwitchNoRestart": "Bascule double sans redémarrage",
       "antigravityDualSwitchNoRestartDesc": "Lors du changement de compte, les données locales sont écrites et la bascule fluide de l’extension est exécutée dans un seul flux, sans redémarrer Antigravity IDE.",
       "appAutoLaunch": "Lancer Cockpit Tools à la connexion",
-      "appAutoLaunchDesc": "Démarrer automatiquement l'application après la connexion au système",
+      "appAutoLaunchDesc": "Démarrer après connexion. Si PowerShell échoue au boot Windows, désactivez.",
       "startupWakeupDisabled": "Désactivé",
       "startupWakeupImmediate": "Réveiller immédiatement",
       "startupWakeupDelayed": "Réveiller avec délai",
@@ -864,7 +869,9 @@
       "menuBarQuotaPlatformDesc": "Suit le compte actif de cette plateforme ; se met à jour après actualisation ou bascule",
       "menuBarAccountPrefix": "4 premiers caractères e-mail",
       "menuBarAccountPrefixDesc": "Comptes normaux uniquement : désactivé masque le préfixe e-mail. Service API Codex / clé API gardent le libellé API",
-      "menuBarQuotaConfirmEnable": "Activer"
+      "menuBarQuotaConfirmEnable": "Activer",
+      "codexHideRelayQuota": "Masquer le quota relais",
+      "codexHideRelayQuotaDesc": "Masque les panneaux de quota relais / New API dans l’aperçu des comptes Codex."
     },
     "network": {
       "apiTitle": "API du cockpit antigravité",
@@ -3059,7 +3066,12 @@
           "pending": "En attente",
           "completed": "Terminé"
         },
-        "officialClientOnlyError": "Ce fournisseur n’accepte que les requêtes du client Codex officiel. Le test en un clic utilise maintenant la passerelle locale, mais l’amont a encore refusé cette requête de test. Fiez-vous au comportement après lancement dans Codex officiel."
+        "officialClientOnlyError": "Ce fournisseur n’accepte que les requêtes du client Codex officiel. Le test en un clic utilise maintenant la passerelle locale, mais l’amont a encore refusé cette requête de test. Fiez-vous au comportement après lancement dans Codex officiel.",
+        "modelAuto": "Auto (catalogue / détection)",
+        "modelCustom": "Modèle perso…",
+        "modelLabel": "Modèle de test",
+        "modelCustomPlaceholder": "ID modèle, ex. gpt-4.1-mini",
+        "modelHint": "Optionnel : modèle commun. Vide = auto via le catalogue."
       },
       "enableAndStart": "Lancer",
       "instance": {
@@ -3153,7 +3165,8 @@
       },
       "renameApiKeyPrompt": "Renommer la clé API",
       "renameApiKeySuccess": "Clé API renommée",
-      "renameApiKeyFailed": "Échec du renommage de la clé API : {{error}}"
+      "renameApiKeyFailed": "Échec du renommage de la clé API : {{error}}",
+      "existingApiKeysSearch": "Rechercher les clés API…"
     },
     "quickSwitch": {
       "action": "Changer rapidement de fournisseur",
@@ -3447,7 +3460,11 @@
         "httpStatus": "Statut HTTP {{status}}",
         "allInstances": "Toutes les instances",
         "instanceFilter": "Environnement",
-        "instanceUnknown": "Env. inconnu"
+        "instanceUnknown": "Env. inconnu",
+        "reasoningEffort": "Raisonnement",
+        "reasoningEffortValue": "Rais. {{effort}}",
+        "serviceTier": "Niveau de service",
+        "serviceTierValue": "Niveau {{tier}}"
       },
       "timeouts": {
         "entryLabel": "Avancé",
@@ -3708,7 +3725,11 @@
       "autoSyncBadge": "Automatique"
     },
     "exportAuthFailed": "Exporter échecs",
-    "exportAuthFailedTitle": "Exporter tous les comptes en échec d’auth"
+    "exportAuthFailedTitle": "Exporter tous les comptes en échec d’auth",
+    "accounts": {
+      "showRelayQuota": "Afficher quota relais",
+      "hideRelayQuota": "Masquer quota relais"
+    }
   },
   "githubCopilot": {
     "title": "Gestion des comptes GitHub Copilot",
@@ -5384,9 +5405,20 @@
       "localDesc": "Importez depuis ~/.grok/auth.json, ou choisissez un auth.json officiel / un JSON d'export complet de cette app.",
       "localClient": "Importer depuis Grok CLI local",
       "apiKeyTab": "Clé API",
-      "apiKeyDesc": "Collez une clé API xAI (XAI_API_KEY / xai-… officiel). Injectée en variable d’environnement au lancement du CLI ; n’écrase pas la connexion OAuth officielle.",
+      "apiKeyDesc": "Collez une clé API xAI (XAI_API_KEY / xai-… officiel). Elle est injectée via un GROK_HOME propre au compte au lancement du CLI, sans écraser la connexion OAuth officielle.",
       "apiKeyPlaceholder": "coller xai-…",
-      "apiKeyAction": "Ajouter la clé"
+      "apiKeyAction": "Ajouter la clé",
+      "apiMode": "Type d’API",
+      "apiModeOfficial": "xAI officiel",
+      "apiModeCustom": "Service tiers",
+      "customApiDesc": "Configurez une Base URL compatible OpenAI, l’ID du modèle et la clé API. Au lancement, un config.toml propre au compte est écrit et la clé n’est injectée que dans ce processus CLI.",
+      "customApiKeyPlaceholder": "Collez la clé API du service tiers",
+      "apiBaseUrl": "URL de base",
+      "apiBaseUrlPlaceholder": "Ex. : https://api.example.com/v1",
+      "apiModel": "ID du modèle",
+      "apiModelPlaceholder": "Par exemple grok-4.1-fast",
+      "apiFieldRequired": "Saisissez {{field}}",
+      "apiBaseUrlInvalid": "Saisissez une URL http:// ou https:// complète, sans identifiants, paramètres de requête ni fragment"
     },
     "instances": {
       "unsupported": "Les instances multiples de Grok CLI sont disponibles uniquement sous macOS, Windows et Linux.",

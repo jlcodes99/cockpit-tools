@@ -553,8 +553,8 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 		}
 	}
 
-	// Convert tool_choice if present
-	if toolChoice := root.Get("tool_choice"); toolChoice.Exists() {
+	// Chat Completions providers reject tool_choice when no tools are present.
+	if toolChoice := root.Get("tool_choice"); toolChoice.Exists() && len(chatCompletionsTools) > 0 {
 		out, _ = sjson.SetBytes(out, "tool_choice", toolChoice.String())
 	}
 

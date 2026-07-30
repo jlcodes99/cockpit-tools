@@ -26,6 +26,11 @@
     "detail": "Einzelheiten",
     "editable": "Bearbeitbar",
     "preview": "Vorschau",
+    "sessionSharing": {
+      "title": "Lokale Sitzungen beim Wechsel teilen",
+      "fullDesc": "Führt beim Kontowechsel lokale Sitzungen und Wiederherstellungsstände zwischen {{platform}}-Konten auf diesem Gerät zusammen. Dateien bleiben lokal und Sitzungsinhalte werden nicht hochgeladen.",
+      "workspaceDesc": "Kopiert und vereint beim Kontowechsel Workspace-Sitzungsindizes und Wiederherstellungsstände zwischen {{platform}}-Konten auf diesem Gerät. Die verschlüsselte Builder/Agent-Sitzungsdatenbank bleibt unverändert und Inhalte werden nicht hochgeladen."
+    },
     "shared": {
       "addAccount": "Konto hinzufügen",
       "columns": {
@@ -750,7 +755,7 @@
       "antigravityDualSwitchNoRestart": "Nahtloser Doppelwechsel (ohne Neustart)",
       "antigravityDualSwitchNoRestartDesc": "Beim Kontowechsel werden lokale Kontodaten geschrieben und der nahtlose Erweiterungswechsel in einem Ablauf ausgeführt, ohne Antigravity IDE neu zu starten.",
       "appAutoLaunch": "Cockpit Tools beim Anmelden starten",
-      "appAutoLaunchDesc": "App nach der Systemanmeldung automatisch starten",
+      "appAutoLaunchDesc": "App nach Anmeldung starten. Bei PowerShell-Fehlern unter Windows bitte deaktivieren.",
       "startupWakeupDisabled": "Deaktiviert",
       "startupWakeupImmediate": "Sofort aufwecken",
       "startupWakeupDelayed": "Mit Verzögerung aufwecken",
@@ -864,7 +869,9 @@
       "menuBarQuotaPlatformDesc": "Nutzt das aktive Konto dieser Plattform; aktualisiert nach Refresh oder Wechsel",
       "menuBarAccountPrefix": "Erste 4 E-Mail-Zeichen",
       "menuBarAccountPrefixDesc": "Nur normale Konten: Aus blendet das E-Mail-Präfix aus. Codex-API-Dienst / API-Key behalten das API-Label",
-      "menuBarQuotaConfirmEnable": "Aktivieren"
+      "menuBarQuotaConfirmEnable": "Aktivieren",
+      "codexHideRelayQuota": "Relay-Kontingent ausblenden",
+      "codexHideRelayQuotaDesc": "Blendet Relay-/New-API-Kontingenttafeln in der Codex-Kontoübersicht aus."
     },
     "network": {
       "apiTitle": "Antigravity-Cockpit-API",
@@ -3059,7 +3066,12 @@
           "pending": "Ausstehend",
           "completed": "Abgeschlossen"
         },
-        "officialClientOnlyError": "Dieser Anbieter erlaubt nur Anfragen vom offiziellen Codex-Client. Der Ein-Klick-Test nutzt jetzt das lokale Gateway, aber der Upstream hat diese Testanfrage weiterhin abgelehnt. Maßgeblich ist das Verhalten nach dem Start im offiziellen Codex."
+        "officialClientOnlyError": "Dieser Anbieter erlaubt nur Anfragen vom offiziellen Codex-Client. Der Ein-Klick-Test nutzt jetzt das lokale Gateway, aber der Upstream hat diese Testanfrage weiterhin abgelehnt. Maßgeblich ist das Verhalten nach dem Start im offiziellen Codex.",
+        "modelAuto": "Auto (Katalog / Erkennung)",
+        "modelCustom": "Eigenes Modell…",
+        "modelLabel": "Testmodell",
+        "modelCustomPlaceholder": "Modell-ID, z. B. gpt-4.1-mini",
+        "modelHint": "Optional: gemeinsames Testmodell. Leer = Auto aus dem Katalog."
       },
       "enableAndStart": "Starten",
       "instance": {
@@ -3153,7 +3165,8 @@
       },
       "renameApiKeyPrompt": "API-Key umbenennen",
       "renameApiKeySuccess": "API-Key umbenannt",
-      "renameApiKeyFailed": "API-Key umbenennen fehlgeschlagen: {{error}}"
+      "renameApiKeyFailed": "API-Key umbenennen fehlgeschlagen: {{error}}",
+      "existingApiKeysSearch": "Vorhandene API-Keys suchen…"
     },
     "quickSwitch": {
       "action": "Anbieter schnell wechseln",
@@ -3447,7 +3460,11 @@
         "httpStatus": "HTTP-Status {{status}}",
         "allInstances": "Alle Instanzen",
         "instanceFilter": "Instanz",
-        "instanceUnknown": "Instanz -"
+        "instanceUnknown": "Instanz -",
+        "reasoningEffort": "Denkstärke",
+        "reasoningEffortValue": "Denk {{effort}}",
+        "serviceTier": "Service-Stufe",
+        "serviceTierValue": "Stufe {{tier}}"
       },
       "timeouts": {
         "entryLabel": "Erweitert",
@@ -3708,7 +3725,11 @@
       "autoSyncBadge": "Automatisch"
     },
     "exportAuthFailed": "Fehler export.",
-    "exportAuthFailedTitle": "Alle Auth-Fehler-Konten exportieren"
+    "exportAuthFailedTitle": "Alle Auth-Fehler-Konten exportieren",
+    "accounts": {
+      "showRelayQuota": "Relay-Kontingent zeigen",
+      "hideRelayQuota": "Relay-Kontingent ausblenden"
+    }
   },
   "githubCopilot": {
     "title": "GitHub Copilot-Konten verwalten",
@@ -5384,9 +5405,20 @@
       "localDesc": "Aus ~/.grok/auth.json importieren oder offizielles auth.json / vollständiges Export-JSON dieser App wählen.",
       "localClient": "Aus lokaler Grok CLI importieren",
       "apiKeyTab": "API-Schlüssel",
-      "apiKeyDesc": "xAI-API-Key einfügen (offiziell XAI_API_KEY / xai-…). Wird beim CLI-Start als Umgebungsvariable gesetzt und überschreibt die offizielle OAuth-Anmeldung nicht.",
+      "apiKeyDesc": "xAI-API-Key einfügen (offiziell XAI_API_KEY / xai-…). Wird beim CLI-Start über ein kontospezifisches GROK_HOME gesetzt und überschreibt die offizielle OAuth-Anmeldung nicht.",
       "apiKeyPlaceholder": "xai-… einfügen",
-      "apiKeyAction": "API-Key hinzufügen"
+      "apiKeyAction": "API-Key hinzufügen",
+      "apiMode": "API-Typ",
+      "apiModeOfficial": "Offizielles xAI",
+      "apiModeCustom": "Drittanbieter",
+      "customApiDesc": "OpenAI-kompatible Base URL, Modell-ID und API-Key konfigurieren. Beim Start wird eine kontospezifische config.toml geschrieben und der Key nur in diesen CLI-Prozess eingefügt.",
+      "customApiKeyPlaceholder": "Drittanbieter-API-Key einfügen",
+      "apiBaseUrl": "Basis-URL",
+      "apiBaseUrlPlaceholder": "Z. B. https://api.example.com/v1",
+      "apiModel": "Modell-ID",
+      "apiModelPlaceholder": "Zum Beispiel grok-4.1-fast",
+      "apiFieldRequired": "{{field}} eingeben",
+      "apiBaseUrlInvalid": "Eine vollständige http://- oder https://-URL ohne Zugangsdaten, Abfrageparameter oder Fragment eingeben"
     },
     "instances": {
       "unsupported": "Grok CLI-Mehrfachinstanzen werden nur unter macOS, Windows und Linux unterstützt.",

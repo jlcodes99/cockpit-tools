@@ -219,6 +219,11 @@
       "loginSuccess": "Đăng nhập thành công",
       "switchAccount": "Chuyển tài khoản"
     },
+    "sessionSharing": {
+      "title": "Chia sẻ phiên cục bộ khi chuyển tài khoản",
+      "fullDesc": "Khi chuyển tài khoản, hợp nhất phiên cục bộ và trạng thái khôi phục giữa các tài khoản {{platform}} trên thiết bị này. Tệp chỉ được xử lý cục bộ và nội dung không được tải lên.",
+      "workspaceDesc": "Khi chuyển tài khoản, sao chép và hợp nhất chỉ mục phiên workspace cùng trạng thái khôi phục giữa các tài khoản {{platform}} trên thiết bị này. Cơ sở dữ liệu phiên Builder/Agent đã mã hóa không bị sửa đổi và nội dung không được tải lên."
+    },
     "topRightAd": {
       "ariaLabel": "Vị trí quảng cáo toàn cục góc trên bên phải",
       "badge": "QUẢNG CÁO",
@@ -750,7 +755,7 @@
       "antigravityDualSwitchNoRestart": "Chuyển đôi không cần khởi động lại",
       "antigravityDualSwitchNoRestartDesc": "Khi chuyển tài khoản, việc ghi dữ liệu cục bộ và chuyển đổi liền mạch qua tiện ích mở rộng được thực hiện trong một luồng, không cần khởi động lại Antigravity IDE.",
       "appAutoLaunch": "Khởi chạy Cockpit Tools khi đăng nhập",
-      "appAutoLaunchDesc": "Tự động khởi chạy ứng dụng sau khi đăng nhập hệ thống",
+      "appAutoLaunchDesc": "Tự khởi động sau đăng nhập. Nếu Windows báo lỗi PowerShell lúc boot, hãy tắt.",
       "startupWakeupDisabled": "Tắt",
       "startupWakeupImmediate": "Đánh thức ngay",
       "startupWakeupDelayed": "Đánh thức sau độ trễ",
@@ -864,7 +869,9 @@
       "menuBarQuotaPlatformDesc": "Dùng tài khoản đang dùng của nền tảng đó; cập nhật sau làm mới hoặc chuyển",
       "menuBarAccountPrefix": "4 ký tự đầu email",
       "menuBarAccountPrefixDesc": "Chỉ tài khoản thường: tắt sẽ ẩn tiền tố email. Dịch vụ API Codex / API Key vẫn hiện nhãn API",
-      "menuBarQuotaConfirmEnable": "Bật"
+      "menuBarQuotaConfirmEnable": "Bật",
+      "codexHideRelayQuota": "Ẩn hạn mức relay",
+      "codexHideRelayQuotaDesc": "Ẩn bảng hạn mức relay / New API trên tổng quan tài khoản Codex."
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -3059,7 +3066,12 @@
           "pending": "Đang chờ",
           "completed": "Hoàn tất"
         },
-        "officialClientOnlyError": "Nhà cung cấp này chỉ nhận yêu cầu từ ứng dụng Codex chính thức. Kiểm thử một lần bấm hiện dùng gateway cục bộ, nhưng upstream vẫn từ chối yêu cầu kiểm thử này. Hãy dựa vào hành vi khi chạy trong Codex chính thức."
+        "officialClientOnlyError": "Nhà cung cấp này chỉ nhận yêu cầu từ ứng dụng Codex chính thức. Kiểm thử một lần bấm hiện dùng gateway cục bộ, nhưng upstream vẫn từ chối yêu cầu kiểm thử này. Hãy dựa vào hành vi khi chạy trong Codex chính thức.",
+        "modelAuto": "Tự động (danh mục / phát hiện)",
+        "modelCustom": "Mô hình tùy chỉnh…",
+        "modelLabel": "Mô hình kiểm tra",
+        "modelCustomPlaceholder": "ID mô hình, vd. gpt-4.1-mini",
+        "modelHint": "Tùy chọn: mô hình chung. Để trống sẽ tự chọn từ danh mục."
       },
       "enableAndStart": "Chạy",
       "instance": {
@@ -3153,7 +3165,8 @@
       },
       "renameApiKeyPrompt": "Đổi tên API key",
       "renameApiKeySuccess": "Đã đổi tên API key",
-      "renameApiKeyFailed": "Đổi tên API key thất bại: {{error}}"
+      "renameApiKeyFailed": "Đổi tên API key thất bại: {{error}}",
+      "existingApiKeysSearch": "Tìm API Key…"
     },
     "quickSwitch": {
       "action": "Chuyển nhanh nhà cung cấp",
@@ -3447,7 +3460,11 @@
         "httpStatus": "Trạng thái HTTP {{status}}",
         "allInstances": "Mọi instance",
         "instanceFilter": "Phiên bản",
-        "instanceUnknown": "Phiên bản không rõ"
+        "instanceUnknown": "Phiên bản không rõ",
+        "reasoningEffort": "Cường độ suy luận",
+        "reasoningEffortValue": "Suy {{effort}}",
+        "serviceTier": "Hạng dịch vụ",
+        "serviceTierValue": "Hạng {{tier}}"
       },
       "timeouts": {
         "entryLabel": "Nâng cao",
@@ -3708,7 +3725,11 @@
       "autoSyncBadge": "Tự động"
     },
     "exportAuthFailed": "Xuất lỗi",
-    "exportAuthFailedTitle": "Xuất tất cả tài khoản auth lỗi"
+    "exportAuthFailedTitle": "Xuất tất cả tài khoản auth lỗi",
+    "accounts": {
+      "showRelayQuota": "Hiện hạn mức relay",
+      "hideRelayQuota": "Ẩn hạn mức relay"
+    }
   },
   "githubCopilot": {
     "title": "Quản lý tài khoản GitHub Copilot",
@@ -5384,9 +5405,20 @@
       "localDesc": "Nhập từ ~/.grok/auth.json, hoặc chọn auth.json chính thức / JSON xuất đầy đủ của ứng dụng này.",
       "localClient": "Nhập từ Grok CLI cục bộ",
       "apiKeyTab": "Khóa API",
-      "apiKeyDesc": "Dán khóa API xAI (XAI_API_KEY / xai-… chính thức). Được inject thành biến môi trường khi khởi chạy CLI; không ghi đè đăng nhập OAuth chính thức.",
+      "apiKeyDesc": "Dán khóa API xAI (XAI_API_KEY / xai-… chính thức). Khóa được đưa vào qua GROK_HOME riêng của tài khoản khi khởi chạy CLI và không ghi đè đăng nhập OAuth chính thức.",
       "apiKeyPlaceholder": "dán xai-…",
-      "apiKeyAction": "Thêm API Key"
+      "apiKeyAction": "Thêm API Key",
+      "apiMode": "Loại API",
+      "apiModeOfficial": "xAI chính thức",
+      "apiModeCustom": "Bên thứ ba",
+      "customApiDesc": "Cấu hình Base URL tương thích OpenAI, ID mô hình và khóa API. Khi khởi chạy, config.toml riêng của tài khoản được ghi và khóa chỉ được đưa vào tiến trình CLI đó.",
+      "customApiKeyPlaceholder": "Dán khóa API bên thứ ba",
+      "apiBaseUrl": "URL cơ sở",
+      "apiBaseUrlPlaceholder": "Ví dụ: https://api.example.com/v1",
+      "apiModel": "ID mô hình",
+      "apiModelPlaceholder": "Ví dụ: grok-4.1-fast",
+      "apiFieldRequired": "Nhập {{field}}",
+      "apiBaseUrlInvalid": "Nhập URL http:// hoặc https:// đầy đủ, không chứa thông tin xác thực, tham số truy vấn hay phân đoạn"
     },
     "instances": {
       "unsupported": "Đa phiên bản Grok CLI chỉ được hỗ trợ trên macOS, Windows và Linux.",

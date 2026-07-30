@@ -423,10 +423,7 @@ mod imp {
                 };
 
                 if let Err(err) = tray.set_title(Some(plain_title)) {
-                    modules::logger::log_warn(&format!(
-                        "[Tray] 同步菜单栏额度标题失败: {}",
-                        err
-                    ));
+                    modules::logger::log_warn(&format!("[Tray] 同步菜单栏额度标题失败: {}", err));
                 }
 
                 let status_item_ptr = tray
@@ -592,11 +589,8 @@ mod imp {
         } else {
             None
         };
-        let prefer_selected_platform = preferred_platform.is_some_and(|platform| {
-            platforms
-                .iter()
-                .any(|item| item.id == platform.as_str())
-        });
+        let prefer_selected_platform = preferred_platform
+            .is_some_and(|platform| platforms.iter().any(|item| item.id == platform.as_str()));
         let selected_platform_id = if prefer_selected_platform {
             preferred_platform
                 .map(|platform| platform.as_str().to_string())
@@ -3177,12 +3171,7 @@ mod imp {
     fn localize_codex_pool_window_label(lang: &str, label: &str) -> String {
         // 与前端 formatCodexQuotaPoolWindowLabel 对齐：Weekly → 周。
         if label.eq_ignore_ascii_case("Weekly") {
-            return translate_or(
-                lang,
-                "codex.localAccess.quotaPool.weeklyShort",
-                "周",
-                &[],
-            );
+            return translate_or(lang, "codex.localAccess.quotaPool.weeklyShort", "周", &[]);
         }
         label.to_string()
     }
@@ -4935,7 +4924,8 @@ mod imp {
             return Err("API 服务账号池暂无可刷新的额度".to_string());
         }
         let success_count =
-            commands::codex::refresh_codex_quotas_batch(app.clone(), target_ids, Some(true)).await?;
+            commands::codex::refresh_codex_quotas_batch(app.clone(), target_ids, Some(true))
+                .await?;
         if success_count <= 0 {
             return Err("API 服务账号池额度刷新失败".to_string());
         }

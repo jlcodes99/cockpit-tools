@@ -23,6 +23,9 @@ const TOKEN_KEEPER_ACTIVE_SCAN_SECONDS: i64 = 60;
 const TOKEN_REFRESH_LEAD_SECONDS: i64 = 15 * 60;
 const TOKEN_REFRESH_LEAD_MILLISECONDS: i64 = TOKEN_REFRESH_LEAD_SECONDS * 1000;
 const REFRESH_FAILURE_BACKOFF_SECONDS: i64 = 15 * 60;
+/// Trae session-expired / mutual-refresh failures need a longer cool-down so we do not
+/// keep hammering ExchangeToken with a rotated-away refresh token.
+const TRAE_SESSION_EXPIRED_BACKOFF_SECONDS: i64 = 60 * 60;
 const TRAE_STRICT_CHECK_INTERVAL_SECONDS: i64 = 10 * 60;
 const TOKEN_KEEPER_LIST_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -225,8 +228,25 @@ fn clear_attempt_backoff(key: &str) {
 }
 
 fn mark_attempt_failure(key: &str) {
+    mark_attempt_failure_with_backoff(key, REFRESH_FAILURE_BACKOFF_SECONDS);
+}
+
+fn mark_attempt_failure_with_backoff(key: &str, backoff_seconds: i64) {
     if let Ok(mut state) = NEXT_ALLOWED_ATTEMPT_AT.lock() {
-        state.insert(key.to_string(), now_ts() + REFRESH_FAILURE_BACKOFF_SECONDS);
+        state.insert(key.to_string(), now_ts() + backoff_seconds);
+    }
+}
+
+fn trae_refresh_failure_backoff_seconds(err: &str) -> i64 {
+    if err.contains("会话已过期")
+        || err.contains("未认证")
+        || err.contains("设备密钥缺失")
+        || err.contains("互刷")
+        || err.contains("ExchangeToken")
+    {
+        TRAE_SESSION_EXPIRED_BACKOFF_SECONDS
+    } else {
+        REFRESH_FAILURE_BACKOFF_SECONDS
     }
 }
 
@@ -789,10 +809,11 @@ async fn refresh_due_trae_accounts() -> bool {
                         ));
                     }
                     Err(err) => {
-                        mark_attempt_failure(&key);
+                        let backoff = trae_refresh_failure_backoff_seconds(err.as_str());
+                        mark_attempt_failure_with_backoff(&key, backoff);
                         logger::log_warn(&format!(
-                            "[TokenKeeper][Trae] 仅额度刷新失败，进入退避: account_id={}, error={}",
-                            account.id, err
+                            "[TokenKeeper][Trae] 仅额度刷新失败，进入退避 {}s: account_id={}, error={}",
+                            backoff, account.id, err
                         ));
                     }
                 }
@@ -804,17 +825,31 @@ async fn refresh_due_trae_accounts() -> bool {
                     clear_attempt_backoff(&key);
                     mark_trae_strict_check_done(updated.id.as_str());
                     refreshed_any = true;
+                    // Never inject while this account is live in a Trae process; inject itself
+                    // also refuses live storage, but skip early for clearer logs.
                     if current_id.as_deref() == Some(updated.id.as_str()) {
-                        if process::is_trae_running() {
+                        if protection_map.contains_key(updated.id.as_str()) {
                             logger::log_info(&format!(
-                                "[TokenKeeper][Trae] Trae 运行中，跳过当前账号本地回写: account_id={}",
+                                "[TokenKeeper][Trae] 账号受运行中保护，跳过本地回写: account_id={}",
                                 updated.id
                             ));
-                        } else if let Err(err) = trae_account::inject_to_trae(&updated.id) {
-                            logger::log_warn(&format!(
-                                "[TokenKeeper][Trae] 当前本地登录回写失败: account_id={}, error={}",
-                                updated.id, err
-                            ));
+                        } else {
+                            let platform =
+                                trae_account::resolve_account_platform_kind(&updated);
+                            if process::is_trae_running_for_platform(platform) {
+                                logger::log_info(&format!(
+                                    "[TokenKeeper][Trae] {} 运行中，跳过当前账号本地回写: account_id={}",
+                                    platform.display_name(),
+                                    updated.id
+                                ));
+                            } else if let Err(err) =
+                                trae_account::inject_to_trae_for_platform(platform, &updated.id)
+                            {
+                                logger::log_warn(&format!(
+                                    "[TokenKeeper][Trae] 当前本地登录回写失败: account_id={}, error={}",
+                                    updated.id, err
+                                ));
+                            }
                         }
                     }
                     logger::log_info(&format!(
@@ -823,10 +858,11 @@ async fn refresh_due_trae_accounts() -> bool {
                     ));
                 }
                 Err(err) => {
-                    mark_attempt_failure(&key);
+                    let backoff = trae_refresh_failure_backoff_seconds(err.as_str());
+                    mark_attempt_failure_with_backoff(&key, backoff);
                     logger::log_warn(&format!(
-                        "[TokenKeeper][Trae] Token 保活失败，进入退避: account_id={}, error={}",
-                        account.id, err
+                        "[TokenKeeper][Trae] Token 保活失败，进入退避 {}s: account_id={}, error={}",
+                        backoff, account.id, err
                     ));
                 }
             }

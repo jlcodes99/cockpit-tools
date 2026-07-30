@@ -316,6 +316,9 @@ pub struct UserConfig {
     /// CodeBuddy CN 启动路径（为空则使用默认路径）
     #[serde(default = "default_codebuddy_cn_app_path")]
     pub codebuddy_cn_app_path: String,
+    /// 切换 CodeBuddy CN 账号时是否在本机账号间合并本地会话
+    #[serde(default = "default_codebuddy_cn_share_sessions_on_switch")]
+    pub codebuddy_cn_share_sessions_on_switch: bool,
     /// Qoder 启动路径（为空则使用默认路径）
     #[serde(default = "default_qoder_app_path")]
     pub qoder_app_path: String,
@@ -331,6 +334,15 @@ pub struct UserConfig {
     pub trae_cn_app_path: String,
     #[serde(default = "default_trae_app_path")]
     pub trae_solo_cn_app_path: String,
+    /// 切换 Trae 系列账号时是否共享本地 workspace 会话状态
+    #[serde(default)]
+    pub trae_share_sessions_on_switch: bool,
+    #[serde(default)]
+    pub trae_solo_share_sessions_on_switch: bool,
+    #[serde(default)]
+    pub trae_cn_share_sessions_on_switch: bool,
+    #[serde(default)]
+    pub trae_solo_cn_share_sessions_on_switch: bool,
     /// Trae Windows 应用扫描范围（每行一个目录）
     #[serde(default = "default_trae_app_scan_roots")]
     pub trae_app_scan_roots: String,
@@ -379,6 +391,9 @@ pub struct UserConfig {
     /// 是否在 Codex 总览中显示 API 服务入口
     #[serde(default = "default_codex_local_access_entry_visible")]
     pub codex_local_access_entry_visible: bool,
+    /// 是否隐藏 Codex 总览中的中转站 / New API 类额度面板
+    #[serde(default = "default_codex_hide_relay_quota")]
+    pub codex_hide_relay_quota: bool,
     /// 是否显示顶部推广位
     #[serde(default = "default_top_right_ad_visible")]
     pub top_right_ad_visible: bool,
@@ -925,6 +940,9 @@ fn default_codebuddy_share_sessions_on_switch() -> bool {
 fn default_codebuddy_cn_app_path() -> String {
     String::new()
 }
+fn default_codebuddy_cn_share_sessions_on_switch() -> bool {
+    false
+}
 fn default_qoder_app_path() -> String {
     String::new()
 }
@@ -975,6 +993,9 @@ fn default_codex_restart_specified_app_on_switch() -> bool {
 }
 fn default_codex_local_access_entry_visible() -> bool {
     true
+}
+fn default_codex_hide_relay_quota() -> bool {
+    false
 }
 fn default_top_right_ad_visible() -> bool {
     true
@@ -1212,12 +1233,17 @@ impl Default for UserConfig {
             codebuddy_app_path: default_codebuddy_app_path(),
             codebuddy_share_sessions_on_switch: default_codebuddy_share_sessions_on_switch(),
             codebuddy_cn_app_path: default_codebuddy_cn_app_path(),
+            codebuddy_cn_share_sessions_on_switch: default_codebuddy_cn_share_sessions_on_switch(),
             qoder_app_path: default_qoder_app_path(),
             zcode_app_path: default_zcode_app_path(),
             trae_app_path: default_trae_app_path(),
             trae_solo_app_path: default_trae_app_path(),
             trae_cn_app_path: default_trae_app_path(),
             trae_solo_cn_app_path: default_trae_app_path(),
+            trae_share_sessions_on_switch: false,
+            trae_solo_share_sessions_on_switch: false,
+            trae_cn_share_sessions_on_switch: false,
+            trae_solo_cn_share_sessions_on_switch: false,
             trae_app_scan_roots: default_trae_app_scan_roots(),
             trae_solo_app_scan_roots: default_trae_app_scan_roots(),
             trae_cn_app_scan_roots: default_trae_app_scan_roots(),
@@ -1236,6 +1262,7 @@ impl Default for UserConfig {
             antigravity_launch_on_switch: default_antigravity_launch_on_switch(),
             codex_restart_specified_app_on_switch: default_codex_restart_specified_app_on_switch(),
             codex_local_access_entry_visible: default_codex_local_access_entry_visible(),
+            codex_hide_relay_quota: default_codex_hide_relay_quota(),
             top_right_ad_visible: default_top_right_ad_visible(),
             antigravity_dual_switch_no_restart_enabled:
                 default_antigravity_dual_switch_no_restart_enabled(),
@@ -1723,6 +1750,13 @@ pub fn load_user_config() -> Result<UserConfig, String> {
             obj.insert(
                 "codex_local_access_entry_visible".to_string(),
                 json!(default_codex_local_access_entry_visible()),
+            );
+        }
+
+        if !obj.contains_key("codex_hide_relay_quota") {
+            obj.insert(
+                "codex_hide_relay_quota".to_string(),
+                json!(default_codex_hide_relay_quota()),
             );
         }
 

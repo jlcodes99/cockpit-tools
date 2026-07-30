@@ -91,6 +91,7 @@ pub mod test_support;
 pub mod trae_account;
 pub mod trae_instance;
 pub mod trae_oauth;
+pub mod trae_session_transfer;
 pub mod tray;
 pub mod tray_layout;
 pub mod update_checker;

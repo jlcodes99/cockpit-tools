@@ -26,6 +26,96 @@
   white-space: nowrap;
 }
 
+.grok-accounts-page-add-modal .grok-api-provider-control {
+  width: 100%;
+}
+
+.grok-accounts-page-add-modal .grok-api-provider-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  width: 100%;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-tertiary);
+}
+
+.grok-accounts-page-add-modal .grok-api-provider-mode {
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.grok-accounts-page-add-modal .grok-api-provider-mode:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.grok-accounts-page-add-modal .grok-api-provider-mode.active {
+  border-color: color-mix(in srgb, var(--primary) 56%, var(--border));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--primary) 18%, var(--bg-secondary)),
+    color-mix(in srgb, #0f9fa8 12%, var(--bg-secondary))
+  );
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+}
+
+.grok-accounts-page-add-modal .grok-api-provider-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.grok-accounts-page-add-modal .grok-api-provider-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.grok-accounts-page-add-modal .grok-api-provider-field > label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.grok-accounts-page-add-modal .grok-api-provider-field .form-input {
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 9px;
+  background: var(--bg-tertiary);
+  font-size: 13px;
+}
+
+.grok-accounts-page-add-modal .grok-api-provider-field .form-input.error {
+  border-color: var(--danger);
+}
+
+.grok-accounts-page-add-modal .grok-api-field-error {
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+@media (max-width: 720px) {
+  .grok-accounts-page-add-modal .grok-api-provider-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Claude-style flat quota bars on account overview */
 .grok-accounts-page .grok-quota-summary {
   display: flex;

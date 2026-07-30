@@ -26,6 +26,11 @@
     "detail": "详情",
     "editable": "可编辑",
     "preview": "预览",
+    "sessionSharing": {
+      "title": "切号共享本地会话",
+      "fullDesc": "切号时在本机 {{platform}} 账号间合并本地会话与恢复状态；仅读写本地文件，不上传会话内容。",
+      "workspaceDesc": "切号时在本机 {{platform}} 账号间复制并合并 workspace 会话索引与恢复状态；不修改加密的 Builder/Agent 会话数据库，也不上传内容。"
+    },
     "topRightAd": {
       "ariaLabel": "全局右上角广告位",
       "badge": "广告",
@@ -832,7 +837,7 @@
       "floatingCardAlwaysOnTop": "悬浮卡片默认置顶",
       "floatingCardAlwaysOnTopDesc": "新打开的悬浮卡片窗口默认保持置顶",
       "appAutoLaunch": "开机自启动 Cockpit Tools",
-      "appAutoLaunchDesc": "系统登录后自动启动应用",
+      "appAutoLaunchDesc": "系统登录后自动启动应用。若 Windows 开机时出现 PowerShell 报错，请先关闭此选项。",
       "startupWakeupDisabled": "关闭",
       "startupWakeupImmediate": "立即唤醒",
       "startupWakeupDelayed": "延时唤醒",
@@ -1057,7 +1062,9 @@
       "menuBarQuotaPlatformDesc": "跟随该平台当前正在使用的账号，刷新或切换后自动更新",
       "menuBarAccountPrefix": "显示账号邮箱前 4 位",
       "menuBarAccountPrefixDesc": "仅普通账号：关闭后不显示邮箱前缀。Codex API 服务 / API Key 仍会显示 API 标签",
-      "menuBarQuotaConfirmEnable": "启用"
+      "menuBarQuotaConfirmEnable": "启用",
+      "codexHideRelayQuota": "隐藏中转站额度",
+      "codexHideRelayQuotaDesc": "开启后，Codex 账号总览隐藏中转 / New API 类额度面板，减轻列表重叠与视觉干扰。"
     },
     "tabs": {
       "general": "通用",
@@ -2819,7 +2826,12 @@
           "pending": "等待中",
           "completed": "已完成"
         },
-        "officialClientOnlyError": "该供应商限制只允许 Codex 官方客户端请求；当前一键测试已走本地网关，但上游仍拒绝了这次测试请求。请以官方 Codex 实际启动后的表现为准。"
+        "officialClientOnlyError": "该供应商限制只允许 Codex 官方客户端请求；当前一键测试已走本地网关，但上游仍拒绝了这次测试请求。请以官方 Codex 实际启动后的表现为准。",
+        "modelAuto": "自动选择（按目录/探测）",
+        "modelCustom": "自定义模型…",
+        "modelLabel": "测试模型",
+        "modelCustomPlaceholder": "输入模型 ID，例如 gpt-4.1-mini",
+        "modelHint": "可选统一模型。留空则按各供应商目录或探测结果自动选择。"
       },
       "enableAndStart": "启动",
       "instance": {
@@ -2910,7 +2922,8 @@
       },
       "renameApiKeyPrompt": "重命名 API Key",
       "renameApiKeySuccess": "API Key 已重命名",
-      "renameApiKeyFailed": "重命名 API Key 失败：{{error}}"
+      "renameApiKeyFailed": "重命名 API Key 失败：{{error}}",
+      "existingApiKeysSearch": "搜索已有 API Key…"
     },
     "quickSwitch": {
       "action": "快速切换供应商",
@@ -3722,7 +3735,11 @@
         "httpStatus": "HTTP {{status}}",
         "clearFilters": "清除筛选",
         "loading": "正在加载请求日志",
-        "gatewayModeUnknown": "模式未知"
+        "gatewayModeUnknown": "模式未知",
+        "reasoningEffort": "思考强度",
+        "reasoningEffortValue": "思考 {{effort}}",
+        "serviceTier": "服务等级",
+        "serviceTierValue": "等级 {{tier}}"
       }
     },
     "apiKey": {
@@ -3907,7 +3924,11 @@
       "autoSyncBadge": "自动同步"
     },
     "exportAuthFailed": "导出失败账号",
-    "exportAuthFailedTitle": "导出全部授权失败账号"
+    "exportAuthFailedTitle": "导出全部授权失败账号",
+    "accounts": {
+      "showRelayQuota": "显示中转额度",
+      "hideRelayQuota": "隐藏中转额度"
+    }
   },
   "codebuddy": {
     "title": "CodeBuddy 账号管理",
@@ -5384,9 +5405,20 @@
       "localDesc": "从默认 ~/.grok/auth.json 导入；也可选择官方 auth.json 或本应用导出的完整账号 JSON 文件。",
       "localClient": "从本机 Grok CLI 导入",
       "apiKeyTab": "API 密钥",
-      "apiKeyDesc": "粘贴 xAI API Key（官方 XAI_API_KEY / xai-…）。启动 CLI 时注入为环境变量，不会覆盖官方 OAuth 登录。",
+      "apiKeyDesc": "粘贴 xAI API Key（官方 XAI_API_KEY / xai-…）。启动 CLI 时通过账号专属 GROK_HOME 注入，不会覆盖官方 OAuth 登录。",
       "apiKeyPlaceholder": "粘贴 xai- 开头的密钥",
-      "apiKeyAction": "添加 API Key"
+      "apiKeyAction": "添加 API Key",
+      "apiMode": "API 类型",
+      "apiModeOfficial": "xAI 官方",
+      "apiModeCustom": "第三方兼容",
+      "customApiDesc": "配置 OpenAI 兼容的 Base URL、模型 ID 与 API Key。启动时写入账号专属 config.toml，并仅向该 CLI 进程注入密钥。",
+      "customApiKeyPlaceholder": "粘贴第三方 API Key",
+      "apiBaseUrl": "接口地址",
+      "apiBaseUrlPlaceholder": "例如 https://api.example.com/v1",
+      "apiModel": "模型 ID",
+      "apiModelPlaceholder": "例如 grok-4.1-fast",
+      "apiFieldRequired": "请填写{{field}}",
+      "apiBaseUrlInvalid": "请输入完整的 http:// 或 https:// 地址，且不要包含用户名、查询参数或片段"
     },
     "instances": {
       "unsupported": "Grok CLI 多开仅支持 macOS、Windows 和 Linux。",

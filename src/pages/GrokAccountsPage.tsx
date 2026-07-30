@@ -61,6 +61,22 @@ function getGrokCliInstallCommand(): string {
     : GROK_CLI_INSTALL_COMMAND_UNIX;
 }
 
+function isValidGrokApiBaseUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value.trim());
+    return (
+      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+      !!parsed.hostname &&
+      !parsed.username &&
+      !parsed.password &&
+      !parsed.search &&
+      !parsed.hash
+    );
+  } catch {
+    return false;
+  }
+}
+
 function getGrokReauthorizationReason(account: GrokAccount): string | null {
   if (isGrokApiKeyAccount(account)) return null;
   const reason = account.status_reason?.trim() || "";
@@ -91,6 +107,8 @@ interface GrokAccountLaunchModalState {
   errorScrollKey: number;
 }
 
+type GrokApiProviderMode = "official" | "custom";
+
 export function GrokAccountsPage() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>("overview");
@@ -104,6 +122,12 @@ export function GrokAccountsPage() {
   const [installOpened, setInstallOpened] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
   const [installErrorScrollKey, setInstallErrorScrollKey] = useState(0);
+  const [apiProviderMode, setApiProviderMode] =
+    useState<GrokApiProviderMode>("official");
+  const [apiBaseUrl, setApiBaseUrl] = useState("");
+  const [apiModel, setApiModel] = useState("");
+  const [apiBaseUrlTouched, setApiBaseUrlTouched] = useState(false);
+  const [apiModelTouched, setApiModelTouched] = useState(false);
   const store = useGrokAccountStore();
   const [reauthTargetAccount, setReauthTargetAccount] =
     useState<GrokAccount | null>(null);
@@ -144,7 +168,11 @@ export function GrokAccountsPage() {
       importFromLocal: grokService.importGrokFromLocal,
       exportAccounts: grokService.exportGrokAccounts,
       injectToVSCode: grokService.switchGrokAccount,
-      addWithToken: grokService.addGrokAccountWithApiKey,
+      addWithToken: (apiKey) =>
+        grokService.addGrokAccountWithApiKey(
+          apiKey,
+          apiProviderMode === "custom" ? { apiBaseUrl, apiModel } : undefined,
+        ),
     },
     getDisplayEmail: getGrokAccountDisplayEmail,
     onInjectSuccess: async ({ accountId, account, displayEmail }) => {
@@ -204,6 +232,11 @@ export function GrokAccountsPage() {
   useEffect(() => {
     if (!page.showAddModal) {
       setReauthTargetAccount(null);
+      setApiProviderMode("official");
+      setApiBaseUrl("");
+      setApiModel("");
+      setApiBaseUrlTouched(false);
+      setApiModelTouched(false);
     }
   }, [page.showAddModal]);
 
@@ -763,6 +796,30 @@ export function GrokAccountsPage() {
     [page.sortDirection, store.accounts],
   );
 
+  const customApiBaseUrlValid = isValidGrokApiBaseUrl(apiBaseUrl);
+  const customApiFieldsIncomplete =
+    apiProviderMode === "custom" &&
+    (!apiBaseUrl.trim() || !apiModel.trim() || !customApiBaseUrlValid);
+  const apiBaseUrlError =
+    apiProviderMode === "custom" && apiBaseUrlTouched
+      ? !apiBaseUrl.trim()
+        ? t("grok.import.apiFieldRequired", "请填写{{field}}", {
+            field: t("grok.import.apiBaseUrl", "接口地址"),
+          })
+        : !customApiBaseUrlValid
+          ? t(
+              "grok.import.apiBaseUrlInvalid",
+              "请输入完整的 http:// 或 https:// 地址，且不要包含用户名、查询参数或片段",
+            )
+          : null
+      : null;
+  const apiModelError =
+    apiProviderMode === "custom" && apiModelTouched && !apiModel.trim()
+      ? t("grok.import.apiFieldRequired", "请填写{{field}}", {
+          field: t("grok.import.apiModel", "模型 ID"),
+        })
+      : null;
+
   const platformConfig: CodebuddySuiteAccountsPlatformConfig<GrokAccount> = {
     pageClassName: "grok-accounts-page",
     quickSettingsType: "grok",
@@ -807,14 +864,138 @@ export function GrokAccountsPage() {
     // 与 Codex 对齐：Token / JSON（粘贴）| API Key
     tokenTabLabelKey: "grok.import.apiKeyTab",
     tokenTabLabelDefault: "API Key",
-    tokenDescKey: "grok.import.apiKeyDesc",
+    tokenDescKey:
+      apiProviderMode === "custom"
+        ? "grok.import.customApiDesc"
+        : "grok.import.apiKeyDesc",
     tokenDescDefault:
-      "粘贴 xAI API Key（官方 XAI_API_KEY / xai-…）。启动 CLI 时注入为环境变量，不会覆盖官方 OAuth 登录。",
-    tokenInputPlaceholderKey: "grok.import.apiKeyPlaceholder",
-    tokenInputPlaceholderDefault: "粘贴 xai- 开头的密钥",
+      apiProviderMode === "custom"
+        ? "配置 OpenAI 兼容的 Base URL、模型 ID 与 API Key。启动时写入账号专属 config.toml，并仅向该 CLI 进程注入密钥。"
+        : "粘贴 xAI API Key（官方 XAI_API_KEY / xai-…）。启动 CLI 时通过账号专属 GROK_HOME 注入，不会覆盖官方 OAuth 登录。",
+    tokenInputPlaceholderKey:
+      apiProviderMode === "custom"
+        ? "grok.import.customApiKeyPlaceholder"
+        : "grok.import.apiKeyPlaceholder",
+    tokenInputPlaceholderDefault:
+      apiProviderMode === "custom"
+        ? "粘贴第三方 API Key"
+        : "粘贴 xai- 开头的密钥",
     tokenSubmitLabelKey: "grok.import.apiKeyAction",
     tokenSubmitLabelDefault: "添加 API Key",
     tokenInputSecret: true,
+    tokenSubmitDisabled: customApiFieldsIncomplete,
+    tokenControl: (
+      <div className="grok-api-provider-control">
+        <div
+          className="grok-api-provider-modes"
+          role="tablist"
+          aria-label={t("grok.import.apiMode", "API 类型")}
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={apiProviderMode === "official"}
+            className={`btn grok-api-provider-mode ${apiProviderMode === "official" ? "active" : ""}`}
+            onClick={() => {
+              setApiProviderMode("official");
+              setApiBaseUrlTouched(false);
+              setApiModelTouched(false);
+              page.setAddStatus("idle");
+              page.setAddMessage(null);
+            }}
+          >
+            {t("grok.import.apiModeOfficial", "xAI 官方")}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={apiProviderMode === "custom"}
+            className={`btn grok-api-provider-mode ${apiProviderMode === "custom" ? "active" : ""}`}
+            onClick={() => {
+              setApiProviderMode("custom");
+              setApiBaseUrlTouched(false);
+              setApiModelTouched(false);
+              page.setAddStatus("idle");
+              page.setAddMessage(null);
+            }}
+          >
+            {t("grok.import.apiModeCustom", "第三方兼容")}
+          </button>
+        </div>
+      </div>
+    ),
+    tokenFields:
+      apiProviderMode === "custom" ? (
+        <div className="grok-api-provider-fields">
+          <div className="grok-api-provider-field">
+            <label htmlFor="grok-api-base-url">
+              {t("grok.import.apiBaseUrl", "Base URL")}
+            </label>
+            <input
+              id="grok-api-base-url"
+              className={`form-input ${apiBaseUrlError ? "error" : ""}`}
+              type="url"
+              value={apiBaseUrl}
+              autoComplete="off"
+              aria-invalid={!!apiBaseUrlError}
+              aria-describedby={
+                apiBaseUrlError ? "grok-api-base-url-error" : undefined
+              }
+              placeholder={t(
+                "grok.import.apiBaseUrlPlaceholder",
+                "https://api.example.com/v1",
+              )}
+              onChange={(event) => {
+                setApiBaseUrl(event.target.value);
+                page.setAddStatus("idle");
+                page.setAddMessage(null);
+              }}
+              onBlur={() => setApiBaseUrlTouched(true)}
+            />
+            {apiBaseUrlError && (
+              <span
+                id="grok-api-base-url-error"
+                className="grok-api-field-error"
+              >
+                {apiBaseUrlError}
+              </span>
+            )}
+          </div>
+          <div className="grok-api-provider-field">
+            <label htmlFor="grok-api-model">
+              {t("grok.import.apiModel", "模型 ID")}
+            </label>
+            <input
+              id="grok-api-model"
+              className={`form-input ${apiModelError ? "error" : ""}`}
+              value={apiModel}
+              autoComplete="off"
+              aria-invalid={!!apiModelError}
+              aria-describedby={
+                apiModelError ? "grok-api-model-error" : undefined
+              }
+              placeholder={t(
+                "grok.import.apiModelPlaceholder",
+                "例如 grok-4.1-fast",
+              )}
+              onChange={(event) => {
+                setApiModel(event.target.value);
+                page.setAddStatus("idle");
+                page.setAddMessage(null);
+              }}
+              onBlur={() => setApiModelTouched(true)}
+            />
+            {apiModelError && (
+              <span
+                id="grok-api-model-error"
+                className="grok-api-field-error"
+              >
+                {apiModelError}
+              </span>
+            )}
+          </div>
+        </div>
+      ) : null,
     showPasteJsonTab: true,
     pasteJsonTabLabelKey: "common.shared.addModal.token",
     pasteJsonTabLabelDefault: "Token / JSON",
@@ -850,6 +1031,8 @@ export function GrokAccountsPage() {
         account.last_name,
         account.principal_id,
         account.team_id,
+        account.api_base_url,
+        account.api_model,
         account.quota?.subscriptionStatus,
         getGrokPlanBadge(account) || t("common.none", "暂无"),
       ]

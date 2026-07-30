@@ -44,6 +44,7 @@ import { QuickSettingsPopover } from "../QuickSettingsPopover";
 import { PaginationControls } from "../PaginationControls";
 import { AccountSelectionToolbar } from "../AccountSelectionToolbar";
 import { useEscClose } from "../../hooks/useEscClose";
+import { useEnterConfirm } from "../../hooks/useEnterConfirm";
 import { useCodebuddySuitePage } from "../../hooks/useCodebuddySuitePage";
 import type { UseProviderAccountsPageReturn } from "../../hooks/useProviderAccountsPage";
 import {
@@ -128,6 +129,8 @@ export interface CodebuddySuiteAccountsPlatformConfig<
   tokenSubmitLabelDefault?: string;
   tokenInputSecret?: boolean;
   tokenControl?: ReactNode;
+  tokenFields?: ReactNode;
+  tokenSubmitDisabled?: boolean;
   /** 是否显示独立的「粘贴 JSON」页签（与 Token/API Key 页签分离） */
   showPasteJsonTab?: boolean;
   pasteJsonTabLabelKey?: string;
@@ -361,8 +364,14 @@ export function CodebuddySuiteAccountsSharedView<
   }, [addTab, showAddModal]);
 
   useEscClose(showAddModal, closeAddModal);
-  useEscClose(!!deleteConfirm, () => setDeleteConfirm(null));
-  useEscClose(!!tagDeleteConfirm, () => setTagDeleteConfirm(null));
+  useEscClose(!!deleteConfirm && !deleting, () => setDeleteConfirm(null));
+  useEnterConfirm(!!deleteConfirm && !deleting, () => {
+    void confirmDelete();
+  });
+  useEscClose(!!tagDeleteConfirm && !deletingTag, () => setTagDeleteConfirm(null));
+  useEnterConfirm(!!tagDeleteConfirm && !deletingTag, () => {
+    void confirmDeleteTag();
+  });
   useEscClose(showCheckinModal, () => setShowCheckinModal(false));
 
   useEffect(() => {
@@ -1632,6 +1641,7 @@ export function CodebuddySuiteAccountsSharedView<
                         platformConfig.tokenDescDefault,
                       )}
                     </p>
+                    {platformConfig.tokenFields}
                     {platformConfig.tokenInputSecret ? (
                       <div className="token-secret-field">
                         <input
@@ -1685,7 +1695,11 @@ export function CodebuddySuiteAccountsSharedView<
                     <button
                       className="btn btn-primary btn-full"
                       onClick={handleTokenImport}
-                      disabled={importing || !tokenInput.trim()}
+                      disabled={
+                        importing ||
+                        !tokenInput.trim() ||
+                        platformConfig.tokenSubmitDisabled
+                      }
                     >
                       {importing ? (
                         <RefreshCw size={16} className="loading-spinner" />

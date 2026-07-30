@@ -1603,10 +1603,13 @@ fn api_key_account_requires_bearer_provider_override(
     let uses_local_runtime = provider_config.provider_id.as_deref()
         == Some(CODEX_RUNTIME_MODEL_PROVIDER_ID)
         && is_loopback_http_base_url(Some(base_url));
+    let requires_immediate_provider_override =
+        crate::modules::codex_local_access::account_requires_provider_gateway(account)
+            && !account_syncs_model_catalog_to_codex(account);
 
     oauth_bound
         || uses_local_runtime
-        || crate::modules::codex_local_access::account_requires_provider_gateway(account)
+        || requires_immediate_provider_override
         || api_key_provider_should_enable_imagegen(account, provider_config)
 }
 
@@ -5757,9 +5760,7 @@ pub async fn prepare_account_for_injection_from_auth_dir(
         return Err("Agent Identity 账号仅支持 API 服务，无法用于客户端或 CLI 启动".to_string());
     }
     if account.is_web_session_auth() {
-        return Err(
-            "Web Session 账号仅支持查看额度，无法用于客户端或 CLI 启动".to_string(),
-        );
+        return Err("Web Session 账号仅支持查看额度，无法用于客户端或 CLI 启动".to_string());
     }
     if account.is_api_key_auth() {
         if let Some(dir) = auth_dir {
@@ -8969,20 +8970,19 @@ mod tests {
         extract_user_info, force_refresh_managed_account_after_observed,
         format_refresh_error_for_user, get_accounts_dir, get_accounts_storage_path,
         get_current_account_from_loaded, import_from_json, is_loopback_http_base_url,
-        is_managed_auth_refresh_due, is_pending_oauth_account,
-        list_accounts_checked, load_account, load_account_index, looks_like_sub2api_export,
-        now_timestamp, parse_agent_identity_from_value, parse_auth_file_last_refresh,
-        parse_codex_account_compat, parse_line_delimited_json_values,
-        read_api_provider_from_config_toml, read_quick_config_from_config_toml, remove_accounts,
-        resolve_api_provider_config, save_account, save_account_index,
-        should_accept_authority_snapshot, sync_account_from_auth_dir,
-        sync_api_key_account_from_local_state, sync_api_key_provider_accounts,
-        sync_managed_projection_from_auth_dir, try_parse_pending_oauth_delimited_line,
-        update_api_key_credentials, upsert_account, upsert_account_for_reauth,
-        upsert_account_from_access_token, upsert_account_from_access_token_with_hints,
-        upsert_account_from_auth_tokens, upsert_agent_identity_account, upsert_api_key_account,
-        validate_api_key_credentials, write_account_bundle_to_dir,
-        write_api_key_bearer_provider_override_to_config_toml,
+        is_managed_auth_refresh_due, is_pending_oauth_account, list_accounts_checked, load_account,
+        load_account_index, looks_like_sub2api_export, now_timestamp,
+        parse_agent_identity_from_value, parse_auth_file_last_refresh, parse_codex_account_compat,
+        parse_line_delimited_json_values, read_api_provider_from_config_toml,
+        read_quick_config_from_config_toml, remove_accounts, resolve_api_provider_config,
+        save_account, save_account_index, should_accept_authority_snapshot,
+        sync_account_from_auth_dir, sync_api_key_account_from_local_state,
+        sync_api_key_provider_accounts, sync_managed_projection_from_auth_dir,
+        try_parse_pending_oauth_delimited_line, update_api_key_credentials, upsert_account,
+        upsert_account_for_reauth, upsert_account_from_access_token,
+        upsert_account_from_access_token_with_hints, upsert_account_from_auth_tokens,
+        upsert_agent_identity_account, upsert_api_key_account, validate_api_key_credentials,
+        write_account_bundle_to_dir, write_api_key_bearer_provider_override_to_config_toml,
         write_api_provider_to_config_toml, write_auth_file_to_dir, write_managed_projection_to_dir,
         write_quick_config_to_config_toml, ApiProviderConfig, CodexAccessTokenImportHints,
         CodexAccountGroupRecord, CodexAccountIndex, CodexAccountSummary, CodexAuthFile,
@@ -9141,11 +9141,10 @@ mod tests {
             "sessionToken": "must-not-become-agent-identity"
         });
 
-        let accounts = import_from_json(
-            &serde_json::to_string(&content).expect("serialize Web Session"),
-        )
-        .await
-        .expect("import Web Session");
+        let accounts =
+            import_from_json(&serde_json::to_string(&content).expect("serialize Web Session"))
+                .await
+                .expect("import Web Session");
 
         assert_eq!(accounts.len(), 1);
         let account = &accounts[0];

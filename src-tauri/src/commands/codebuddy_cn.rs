@@ -6,49 +6,6 @@ use crate::models::codebuddy::{CodebuddyAccount, CodebuddyOAuthStartResponse};
 use crate::modules::codebuddy_cn_oauth;
 use crate::modules::{codebuddy_cn_account, logger};
 
-fn build_session_json(account: &CodebuddyAccount) -> String {
-    let uid = account.uid.as_deref().unwrap_or("");
-    let nickname = account.nickname.as_deref().unwrap_or("");
-    let enterprise_id = account.enterprise_id.as_deref().unwrap_or("");
-    let enterprise_name = account.enterprise_name.as_deref().unwrap_or("");
-    let domain = account.domain.as_deref().unwrap_or("");
-    let refresh_token = account.refresh_token.as_deref().unwrap_or("");
-    let expires_at = account.expires_at.unwrap_or(0);
-
-    let session = serde_json::json!({
-        "id": "Tencent-Cloud.genie-ide-cn",
-        "token": account.access_token,
-        "refreshToken": refresh_token,
-        "expiresAt": expires_at,
-        "domain": domain,
-        "accessToken": format!("{}+{}", uid, account.access_token),
-        "converted": true,
-        "account": {
-            "id": uid,
-            "uid": uid,
-            "label": nickname,
-            "nickname": nickname,
-            "enterpriseId": enterprise_id,
-            "enterpriseName": enterprise_name,
-            "pluginEnabled": true,
-            "lastLogin": true,
-        },
-        "auth": {
-            "accessToken": account.access_token,
-            "refreshToken": refresh_token,
-            "tokenType": account.token_type.as_deref().unwrap_or("Bearer"),
-            "domain": domain,
-            "expiresAt": expires_at,
-            "expiresIn": expires_at,
-            "refreshExpiresIn": 0,
-            "refreshExpiresAt": 0,
-            "lastRefreshTime": chrono::Utc::now().timestamp_millis(),
-        }
-    });
-
-    session.to_string()
-}
-
 async fn refresh_codebuddy_cn_account_after_login(account: CodebuddyAccount) -> CodebuddyAccount {
     let account_id = account.id.clone();
     match codebuddy_cn_account::refresh_account_token(&account_id).await {
@@ -330,42 +287,6 @@ pub async fn inject_codebuddy_cn_to_vscode(
     let account = codebuddy_cn_account::load_account(&account_id)
         .ok_or_else(|| format!("CodeBuddy CN account not found: {}", account_id))?;
 
-    let state_db_path = codebuddy_cn_account::get_default_codebuddy_cn_state_db_path()
-        .ok_or_else(|| "无法获取 CodeBuddy CN state.vscdb 路径".to_string())?;
-
-    if !state_db_path.exists() {
-        return Err(format!(
-            "CodeBuddy CN state.vscdb 不存在: {}",
-            state_db_path.display()
-        ));
-    }
-
-    let session_json = build_session_json(&account);
-    let secret_key = r#"{"extensionId":"tencent-cloud.coding-copilot","key":"planning-genie.new.accessTokencn"}"#;
-    let db_key = format!("secret://{}", secret_key);
-
-    if let Err(err) = crate::modules::vscode_inject::inject_secret_to_state_db_for_codebuddy_cn(
-        &state_db_path,
-        &db_key,
-        &session_json,
-    ) {
-        let friendly_err = if err.contains("Safe Storage password")
-            || err.contains("Keychain")
-            || err.contains("Failed to read")
-        {
-            format!(
-                "注入登录状态失败：{}\n\n可能的原因：\n\
-                1. CodeBuddy CN 从未登录过，请先手动打开 CodeBuddy CN 并登录一次\n\
-                2. macOS Keychain 中缺少加密密钥条目\n\n\
-                请尝试：打开 CodeBuddy CN → 登录任意账号 → 退出 → 再使用切号功能",
-                err
-            )
-        } else {
-            err
-        };
-        return Err(friendly_err);
-    }
-
     if let Err(err) = crate::modules::codebuddy_cn_instance::update_default_settings(
         Some(Some(account_id.clone())),
         None,
@@ -378,28 +299,29 @@ pub async fn inject_codebuddy_cn_to_vscode(
         Some(account_id.as_str()),
     )?;
 
-    let launch_warning = match crate::commands::codebuddy_cn_instance::codebuddy_cn_start_instance(
-        "__default__".to_string(),
-    )
-    .await
-    {
-        Ok(_) => None,
-        Err(err) => {
-            if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("启动 CodeBuddy CN 失败")
-            {
-                logger::log_warn(&format!("CodeBuddy CN 默认实例启动失败: {}", err));
-                if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("APP_PATH_NOT_FOUND:") {
-                    let _ = app.emit(
+    let launch_warning =
+        match crate::commands::codebuddy_cn_instance::codebuddy_cn_switch_default_account_and_start(
+        )
+        .await
+        {
+            Ok(_) => None,
+            Err(err) => {
+                if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("启动 CodeBuddy CN 失败")
+                {
+                    logger::log_warn(&format!("CodeBuddy CN 默认实例启动失败: {}", err));
+                    if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("APP_PATH_NOT_FOUND:")
+                    {
+                        let _ = app.emit(
                         "app:path_missing",
                         serde_json::json!({ "app": "codebuddy_cn", "retry": { "kind": "default" } }),
                     );
+                    }
+                    Some(err)
+                } else {
+                    return Err(err);
                 }
-                Some(err)
-            } else {
-                return Err(err);
             }
-        }
-    };
+        };
 
     let _ = crate::modules::tray::update_tray_menu(&app);
 

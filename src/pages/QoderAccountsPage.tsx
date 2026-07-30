@@ -37,6 +37,7 @@ import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
 import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
 import { useEscClose } from '../hooks/useEscClose';
+import { useEnterConfirm } from '../hooks/useEnterConfirm';
 import {
   PlatformOverviewTab,
   PlatformOverviewTabsHeader,
@@ -990,6 +991,14 @@ export function QoderAccountsPage() {
       setDeletingTag(false);
     }
   }, [accounts, deletingTag, store, t, tagDeleteConfirm]);
+
+  useEscClose(Boolean(tagDeleteConfirm) && !deletingTag, () => {
+    setTagDeleteConfirm(null);
+    setTagDeleteConfirmError(null);
+  });
+  useEnterConfirm(Boolean(tagDeleteConfirm) && !deletingTag, () => {
+    void confirmDeleteTag();
+  });
 
   const handleImportLocal = useCallback(async () => {
     if (addStatus === 'loading') return;

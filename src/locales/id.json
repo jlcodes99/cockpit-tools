@@ -26,6 +26,11 @@
     "detail": "Detail",
     "editable": "Dapat Diedit",
     "preview": "Pratinjau",
+    "sessionSharing": {
+      "title": "Bagikan sesi lokal saat beralih",
+      "fullDesc": "Saat beralih akun, gabungkan sesi lokal dan status pemulihan antar akun {{platform}} di perangkat ini. Berkas tetap lokal dan konten tidak diunggah.",
+      "workspaceDesc": "Saat beralih akun, salin dan gabungkan indeks sesi workspace serta status pemulihan antar akun {{platform}} di perangkat ini. Basis data sesi Builder/Agent yang terenkripsi tidak diubah dan konten tidak diunggah."
+    },
     "topRightAd": {
       "ariaLabel": "Slot iklan kanan atas global",
       "badge": "IKLAN",
@@ -681,7 +686,7 @@
       "floatingCardAlwaysOnTop": "Kartu mengambang selalu di atas secara bawaan",
       "floatingCardAlwaysOnTopDesc": "Jendela kartu mengambang baru tetap di atas saat dibuka",
       "appAutoLaunch": "Jalankan Cockpit Tools saat login",
-      "appAutoLaunchDesc": "Jalankan aplikasi secara otomatis setelah masuk ke sistem",
+      "appAutoLaunchDesc": "Mulai setelah login. Jika Windows menampilkan error PowerShell saat boot, matikan.",
       "startupWakeupDisabled": "Nonaktif",
       "startupWakeupImmediate": "Bangunkan segera",
       "startupWakeupDelayed": "Bangunkan setelah penundaan",
@@ -911,7 +916,9 @@
       "menuBarQuotaPlatformDesc": "Mengikuti akun aktif platform itu; diperbarui setelah muat ulang atau ganti",
       "menuBarAccountPrefix": "4 karakter awal email",
       "menuBarAccountPrefixDesc": "Hanya akun normal: mati menyembunyikan awalan email. Layanan API Codex / API Key tetap menampilkan label API",
-      "menuBarQuotaConfirmEnable": "Aktifkan"
+      "menuBarQuotaConfirmEnable": "Aktifkan",
+      "codexHideRelayQuota": "Sembunyikan kuota relay",
+      "codexHideRelayQuotaDesc": "Menyembunyikan panel kuota relay / New API di ringkasan akun Codex."
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -3106,7 +3113,12 @@
           "pending": "Tertunda",
           "completed": "Selesai"
         },
-        "officialClientOnlyError": "Penyedia ini hanya menerima permintaan dari klien resmi Codex. Tes sekali klik kini memakai gateway lokal, tetapi upstream masih menolak permintaan uji ini. Gunakan perilaku saat dijalankan di Codex resmi sebagai acuan."
+        "officialClientOnlyError": "Penyedia ini hanya menerima permintaan dari klien resmi Codex. Tes sekali klik kini memakai gateway lokal, tetapi upstream masih menolak permintaan uji ini. Gunakan perilaku saat dijalankan di Codex resmi sebagai acuan.",
+        "modelAuto": "Otomatis (katalog / deteksi)",
+        "modelCustom": "Model kustom…",
+        "modelLabel": "Model uji",
+        "modelCustomPlaceholder": "ID model, mis. gpt-4.1-mini",
+        "modelHint": "Opsional: model bersama. Kosong = otomatis dari katalog."
       },
       "enableAndStart": "Mulai",
       "instance": {
@@ -3200,7 +3212,8 @@
       },
       "renameApiKeyPrompt": "Ganti nama API key",
       "renameApiKeySuccess": "API key diganti nama",
-      "renameApiKeyFailed": "Gagal ganti nama API key: {{error}}"
+      "renameApiKeyFailed": "Gagal ganti nama API key: {{error}}",
+      "existingApiKeysSearch": "Cari API Key…"
     },
     "quickSwitch": {
       "action": "Alih cepat penyedia",
@@ -3494,7 +3507,11 @@
         "httpStatus": "Status HTTP {{status}}",
         "allInstances": "Semua instance",
         "instanceFilter": "Instansi",
-        "instanceUnknown": "Instansi tak dikenal"
+        "instanceUnknown": "Instansi tak dikenal",
+        "reasoningEffort": "Intensitas penalaran",
+        "reasoningEffortValue": "Nalar {{effort}}",
+        "serviceTier": "Tingkat layanan",
+        "serviceTierValue": "Tingkat {{tier}}"
       },
       "timeouts": {
         "entryLabel": "Lanjutan",
@@ -3755,7 +3772,11 @@
       "autoSyncBadge": "Mobil"
     },
     "exportAuthFailed": "Ekspor gagal",
-    "exportAuthFailedTitle": "Ekspor semua akun auth gagal"
+    "exportAuthFailedTitle": "Ekspor semua akun auth gagal",
+    "accounts": {
+      "showRelayQuota": "Tampilkan kuota relay",
+      "hideRelayQuota": "Sembunyikan kuota relay"
+    }
   },
   "codebuddy": {
     "title": "Akun CodeBuddy",
@@ -5384,9 +5405,20 @@
       "localDesc": "Impor dari ~/.grok/auth.json, atau pilih auth.json resmi / JSON ekspor lengkap aplikasi ini.",
       "localClient": "Impor dari Grok CLI lokal",
       "apiKeyTab": "Kunci API",
-      "apiKeyDesc": "Tempel kunci API xAI (XAI_API_KEY / xai-… resmi). Diinjeksikan sebagai variabel lingkungan saat CLI diluncurkan; tidak menimpa login OAuth resmi.",
+      "apiKeyDesc": "Tempel kunci API xAI (XAI_API_KEY / xai-… resmi). Kunci diinjeksikan melalui GROK_HOME khusus akun saat CLI diluncurkan tanpa menimpa login OAuth resmi.",
       "apiKeyPlaceholder": "tempel xai-…",
-      "apiKeyAction": "Tambah API Key"
+      "apiKeyAction": "Tambah API Key",
+      "apiMode": "Jenis API",
+      "apiModeOfficial": "xAI resmi",
+      "apiModeCustom": "Pihak ketiga",
+      "customApiDesc": "Atur Base URL yang kompatibel dengan OpenAI, ID model, dan kunci API. Saat diluncurkan, config.toml khusus akun ditulis dan kunci hanya diinjeksikan ke proses CLI tersebut.",
+      "customApiKeyPlaceholder": "Tempel kunci API pihak ketiga",
+      "apiBaseUrl": "URL dasar",
+      "apiBaseUrlPlaceholder": "Contoh: https://api.example.com/v1",
+      "apiModel": "ID model",
+      "apiModelPlaceholder": "Contoh: grok-4.1-fast",
+      "apiFieldRequired": "Masukkan {{field}}",
+      "apiBaseUrlInvalid": "Masukkan URL http:// atau https:// lengkap tanpa kredensial, parameter kueri, atau fragmen"
     },
     "instances": {
       "unsupported": "Multi-instans Grok CLI hanya didukung di macOS, Windows, dan Linux.",

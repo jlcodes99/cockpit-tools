@@ -30,8 +30,16 @@ export async function importGrokFromJson(
 
 export async function addGrokAccountWithApiKey(
   apiKey: string,
+  options?: {
+    apiBaseUrl?: string | null;
+    apiModel?: string | null;
+  },
 ): Promise<GrokAccount> {
-  return await invoke('add_grok_account_with_api_key', { apiKey });
+  return await invoke('add_grok_account_with_api_key', {
+    apiKey,
+    apiBaseUrl: options?.apiBaseUrl?.trim() || null,
+    apiModel: options?.apiModel?.trim() || null,
+  });
 }
 
 export async function importGrokFromLocal(): Promise<GrokAccount[]> {

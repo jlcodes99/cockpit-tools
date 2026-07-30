@@ -166,6 +166,7 @@ Codex 同样支持多账号多实例并行运行。比如同时打开两个 Code
 ### 8. Grok CLI 账号管理
 
 - **OAuth 授权**：支持 xAI 官方 OIDC device flow，在浏览器完成验证后自动保存账号
+- **API Key 与第三方接口**：支持官方 xAI API Key，也支持配置 OpenAI 兼容的第三方 `Base URL` 与模型 ID；配置写入账号专属 `config.toml`，密钥只在启动对应 CLI 进程时通过环境变量注入
 - **导入与脱敏导出**：可从默认 `~/.grok/auth.json` 或指定 JSON 导入官方凭据；账号页导出及通用账号备份均不含 access token/refresh token，不能用于恢复登录，迁移时需单独导入官方 `auth.json`
 - **真实切号**：将选中账号按 Grok CLI 官方 registry 格式写回默认 `~/.grok/auth.json`，并保留文件中其他 registry scope
 - **配额与套餐**：查询官方 billing/user/subscriptions 接口，展示周期、用量、产品配额和套餐原始值，并记录 Grok Code 访问能力
@@ -173,10 +174,10 @@ Codex 同样支持多账号多实例并行运行。比如同时打开两个 Code
 
 #### 8.1 Grok CLI 多实例
 
-Grok CLI 默认实例直接沿用官方 `~/.grok` 目录，启动时不设置 `GROK_HOME`；只有受管实例才使用独立目录并为该实例设置独立 `GROK_HOME`。
+Grok CLI 默认实例通常直接沿用官方 `~/.grok` 目录，启动时不设置 `GROK_HOME`；受管实例使用独立目录。API Key 账号（含第三方接口）为避免被官方 OAuth session 抢占凭据优先级，也始终通过账号专属 `GROK_HOME` 启动。
 
 - **账号绑定**：默认实例可跟随当前账号，每个受管实例可绑定不同账号
-- **运行隔离**：受管实例的 `auth.json`、工作目录与启动参数互相独立
+- **运行隔离**：受管实例的 `auth.json`、`config.toml`、工作目录与启动参数互相独立
 - **终端启停**：支持生成或执行终端启动命令、停止实例与批量关闭
 - **目录保护**：非默认实例目录仅允许位于默认受管根目录；删除时移入回收站，历史配置中的外部目录只解除登记且不会被写入或删除
 
@@ -454,6 +455,7 @@ QQ 交流群、微信群或新建的 Telegram 畅聊群都可以加入。
 - Codex API 服务集成 CLIProxyAPI，Responses WebSocket 状态安全、canonical token accounting v2、Multi-Agent V2 兼容以及 Grok CLI 账号与 OAuth 实现方向亦参考其开源实现：[router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)（MIT）
 - Grok 图标造型参考：[LobeHub/lobe-icons](https://github.com/lobehub/lobe-icons)（MIT）
 - Grok CLI 任务用量查询与兼容解析方向参考：[junhoyeo/tokscale](https://github.com/junhoyeo/tokscale)（MIT）
+- Grok CLI 第三方 BYOK 与 custom model 配置格式对照上游实现及文档：[xai-org/grok-build](https://github.com/xai-org/grok-build)
 - Codex API 服务协议兼容方向参考：[codex-proxy](https://github.com/icebear0828/codex-proxy)
 - Codex Agent Identity 导入、动态签名、task 失效恢复及第三方 Responses 明确拒绝字段重试方向参考：[sub2api](https://github.com/Wei-Shaw/sub2api)
 - Codex Agent Identity runtime 注册协议与 Ed25519 密钥格式参考官方实现：[openai/codex](https://github.com/openai/codex)（Apache-2.0）

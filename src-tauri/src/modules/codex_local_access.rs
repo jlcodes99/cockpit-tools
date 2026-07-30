@@ -4238,6 +4238,36 @@ fn service_tier_from_request_body(body: &[u8]) -> Option<String> {
     })
 }
 
+fn normalize_proxy_reasoning_effort(value: &str) -> Option<&'static str> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "none" | "minimal" | "min" => Some("minimal"),
+        "low" => Some("low"),
+        "medium" | "med" | "default" => Some("medium"),
+        "high" => Some("high"),
+        "xhigh" | "x-high" | "extra_high" | "extrahigh" => Some("xhigh"),
+        _ => None,
+    }
+}
+
+fn reasoning_effort_from_request_body(body: &[u8]) -> Option<String> {
+    let value = parse_request_body_json(body)?;
+    if let Some(effort) = value
+        .get("reasoning_effort")
+        .and_then(Value::as_str)
+        .and_then(normalize_proxy_reasoning_effort)
+    {
+        return Some(effort.to_string());
+    }
+    if let Some(effort) = value
+        .pointer("/reasoning/effort")
+        .and_then(Value::as_str)
+        .and_then(normalize_proxy_reasoning_effort)
+    {
+        return Some(effort.to_string());
+    }
+    None
+}
+
 fn api_service_default_service_tier() -> Result<Option<&'static str>, String> {
     crate::modules::codex_speed::get_api_service_app_speed_config()
         .map(|config| codex_app_speed_service_tier(&config.speed))
@@ -7034,6 +7064,11 @@ fn open_local_access_logs_db_once(
             "service_tier TEXT NOT NULL DEFAULT ''",
         )?;
     }
+    ensure_request_logs_column(
+        &conn,
+        "reasoning_effort",
+        "reasoning_effort TEXT NOT NULL DEFAULT ''",
+    )?;
     ensure_request_logs_column(&conn, "success", "success INTEGER NOT NULL DEFAULT 0")?;
     ensure_request_logs_column(&conn, "http_status", "http_status INTEGER")?;
     ensure_request_logs_column(
@@ -7283,13 +7318,91 @@ fn insert_local_access_usage_event(
 ) -> Result<(), String> {
     let has_service_tier_column = request_logs_has_service_tier_column(conn)
         .map_err(|e| format!("检查 API 服务日志 service_tier 列失败: {}", e))?;
+    let has_reasoning_effort_column = request_logs_has_column(conn, "reasoning_effort")
+        .map_err(|e| format!("检查 API 服务日志 reasoning_effort 列失败: {}", e))?;
     let service_tier = event
         .service_tier
         .as_deref()
         .and_then(normalize_proxy_service_tier)
         .unwrap_or_default();
+    let reasoning_effort = event
+        .reasoning_effort
+        .as_deref()
+        .and_then(normalize_proxy_reasoning_effort)
+        .unwrap_or_default();
     let token_breakdown_json = serialize_token_breakdown_for_db(event.token_breakdown.as_ref());
-    if has_service_tier_column {
+    if has_service_tier_column && has_reasoning_effort_column {
+        conn.execute(
+            r#"
+            INSERT OR IGNORE INTO request_logs (
+                event_key,
+                timestamp,
+                request_id,
+                account_id,
+                email,
+                api_key_id,
+                api_key_label,
+                client_instance_id,
+                model_id,
+                gateway_mode,
+                request_kind,
+                service_tier,
+                reasoning_effort,
+                success,
+                http_status,
+                error_category,
+                error_message,
+                latency_ms,
+                input_tokens,
+                output_tokens,
+                total_tokens,
+                cached_tokens,
+                reasoning_tokens,
+                token_breakdown_json,
+                estimated_cost_usd,
+                model_pricing_version,
+                input_usd_per_million,
+                output_usd_per_million,
+                cached_input_usd_per_million
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29)
+            "#,
+            params![
+                local_access_log_event_key(event),
+                event.timestamp,
+                event.request_id.trim(),
+                event.account_id.trim(),
+                event.email.trim(),
+                event.api_key_id.trim(),
+                event.api_key_label.trim(),
+                event.client_instance_id.trim(),
+                event.model_id.trim(),
+                event
+                    .gateway_mode
+                    .map(gateway_mode_to_db_value)
+                    .unwrap_or_default(),
+                request_kind_to_db_value(event.request_kind),
+                service_tier,
+                reasoning_effort,
+                bool_to_db_value(event.success),
+                event.http_status.map(|value| value as i64),
+                event.error_category.trim(),
+                event.error_message.trim(),
+                event.latency_ms as i64,
+                event.input_tokens as i64,
+                event.output_tokens as i64,
+                event.total_tokens as i64,
+                event.cached_tokens as i64,
+                event.reasoning_tokens as i64,
+                token_breakdown_json,
+                event.estimated_cost_usd,
+                event.model_pricing_version as i64,
+                event.input_usd_per_million,
+                event.output_usd_per_million,
+                event.cached_input_usd_per_million,
+            ],
+        )
+        .map_err(|e| format!("写入 API 服务请求日志失败: {}", e))?;
+    } else if has_service_tier_column {
         conn.execute(
             r#"
             INSERT OR IGNORE INTO request_logs (
@@ -8163,6 +8276,7 @@ fn clear_local_access_usage_events_db() -> Result<(), String> {
 fn usage_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CodexLocalAccessUsageEvent> {
     let request_kind: String = row.get("request_kind")?;
     let service_tier: String = row.get("service_tier")?;
+    let reasoning_effort: String = row.get::<_, String>("reasoning_effort").unwrap_or_default();
     let success: i64 = row.get("success")?;
     let http_status: Option<i64> = row.get("http_status")?;
     let gateway_mode: String = row.get("gateway_mode")?;
@@ -8185,6 +8299,8 @@ fn usage_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CodexLocalA
         gateway_mode: gateway_mode_from_db_value(gateway_mode.as_str()),
         request_kind: request_kind_from_db_value(request_kind.as_str()),
         service_tier: normalize_proxy_service_tier(service_tier.as_str()).map(str::to_string),
+        reasoning_effort: normalize_proxy_reasoning_effort(reasoning_effort.as_str())
+            .map(str::to_string),
         success: success != 0,
         http_status: http_status.and_then(|value| u16::try_from(value).ok()),
         error_category: row.get("error_category")?,
@@ -8215,6 +8331,13 @@ fn load_local_access_usage_events_since(
     } else {
         "'' AS service_tier"
     };
+    let reasoning_effort_select = if request_logs_has_column(&conn, "reasoning_effort")
+        .map_err(|e| format!("检查 API 服务日志 reasoning_effort 列失败: {}", e))?
+    {
+        "reasoning_effort"
+    } else {
+        "'' AS reasoning_effort"
+    };
     let load_sql = format!(
         r#"
             SELECT
@@ -8229,6 +8352,7 @@ fn load_local_access_usage_events_since(
                 gateway_mode,
                 request_kind,
                 {service_tier_select},
+                {reasoning_effort_select},
                 success,
                 http_status,
                 error_category,
@@ -8431,6 +8555,17 @@ fn query_local_access_usage_events_blocking(
             return Ok(empty_usage_event_page(page, page_size));
         }
     };
+    let reasoning_effort_select = match request_logs_has_column(&conn, "reasoning_effort") {
+        Ok(true) => "reasoning_effort",
+        Ok(false) => "'' AS reasoning_effort",
+        Err(error) => {
+            logger::log_codex_api_warn(&format!(
+                "检查 API 服务日志 reasoning_effort 列失败，本次返回空日志列表: {}",
+                error
+            ));
+            return Ok(empty_usage_event_page(page, page_size));
+        }
+    };
     let list_sql = format!(
         r#"
         SELECT
@@ -8445,6 +8580,7 @@ fn query_local_access_usage_events_blocking(
             gateway_mode,
             request_kind,
             {service_tier_select},
+            {reasoning_effort_select},
             success,
             http_status,
             error_category,
@@ -8559,9 +8695,16 @@ fn query_local_access_stats_window_blocking(
     } else {
         "'' AS service_tier"
     };
+    let reasoning_effort_select = if request_logs_has_column(&conn, "reasoning_effort")
+        .map_err(|e| format!("检查 API 服务日志 reasoning_effort 列失败: {}", e))?
+    {
+        "reasoning_effort"
+    } else {
+        "'' AS reasoning_effort"
+    };
     let sql = format!(
         r#"SELECT timestamp, request_id, account_id, email, api_key_id, api_key_label,
-                  client_instance_id, model_id, gateway_mode, request_kind, {service_tier_select}, success,
+                  client_instance_id, model_id, gateway_mode, request_kind, {service_tier_select}, {reasoning_effort_select}, success,
                   http_status, error_category, error_message, latency_ms, input_tokens,
                   output_tokens, total_tokens, cached_tokens, reasoning_tokens, token_breakdown_json,
                   estimated_cost_usd, model_pricing_version, input_usd_per_million,
@@ -8703,6 +8846,7 @@ fn append_usage_event(
     gateway_mode: Option<CodexLocalAccessGatewayMode>,
     request_kind: CodexLocalAccessRequestKind,
     service_tier: Option<&str>,
+    reasoning_effort: Option<&str>,
     success: bool,
     http_status: Option<u16>,
     error_category: Option<&str>,
@@ -8727,6 +8871,9 @@ fn append_usage_event(
         request_kind,
         service_tier: service_tier
             .and_then(normalize_proxy_service_tier)
+            .map(str::to_string),
+        reasoning_effort: reasoning_effort
+            .and_then(normalize_proxy_reasoning_effort)
             .map(str::to_string),
         success,
         http_status,
@@ -10598,21 +10745,20 @@ pub(crate) struct ApiServiceMenuBarQuota {
     pub account_count: usize,
 }
 
-fn api_service_window_bucket(
-    window_minutes: Option<i64>,
-    fallback: &str,
-) -> (String, String, i64) {
+fn api_service_window_bucket(window_minutes: Option<i64>, fallback: &str) -> (String, String, i64) {
     const HOUR_MINUTES: i64 = 60;
     const DAY_MINUTES: i64 = 24 * HOUR_MINUTES;
     const WEEK_MINUTES: i64 = 7 * DAY_MINUTES;
 
-    let minutes = window_minutes.filter(|value| *value > 0).unwrap_or_else(|| {
-        if fallback.eq_ignore_ascii_case("weekly") {
-            WEEK_MINUTES
-        } else {
-            5 * HOUR_MINUTES
-        }
-    });
+    let minutes = window_minutes
+        .filter(|value| *value > 0)
+        .unwrap_or_else(|| {
+            if fallback.eq_ignore_ascii_case("weekly") {
+                WEEK_MINUTES
+            } else {
+                5 * HOUR_MINUTES
+            }
+        });
 
     let (key, label) = if minutes >= WEEK_MINUTES - 1 {
         let weeks = (minutes + WEEK_MINUTES - 1) / WEEK_MINUTES;
@@ -10707,10 +10853,7 @@ pub(crate) fn menu_bar_api_service_quota() -> ApiServiceMenuBarQuota {
             .then_with(|| left.label.cmp(&right.label))
     });
 
-    let remaining_percent = windows
-        .iter()
-        .map(|item| item.percentage)
-        .min();
+    let remaining_percent = windows.iter().map(|item| item.percentage).min();
 
     ApiServiceMenuBarQuota {
         remaining_percent,
@@ -10729,7 +10872,8 @@ pub(crate) fn api_service_refreshable_account_ids() -> Vec<String> {
         .filter(|account_id| {
             codex_account::load_account(account_id)
                 .map(|account| {
-                    !account.is_api_key_auth() && crate::modules::codex_quota::supports_quota_refresh(&account)
+                    !account.is_api_key_auth()
+                        && crate::modules::codex_quota::supports_quota_refresh(&account)
                 })
                 .unwrap_or(false)
         })
@@ -12464,6 +12608,7 @@ async fn record_sidecar_usage_event(event: SidecarUsageEvent) {
             http_status: event.status,
             error_message: event.error_message.as_deref(),
             service_tier: event.service_tier.as_deref(),
+            reasoning_effort: None,
         },
     )
     .await
@@ -15872,7 +16017,11 @@ fn apply_usage_stats(
     {
         target.stream_incomplete_count = target.stream_incomplete_count.saturating_add(1);
     }
-    target.total_latency_ms = target.total_latency_ms.saturating_add(latency_ms);
+    // Average latency should only reflect successful requests. Including
+    // transport/auth failures (often 0ms) pulls the average down misleadingly.
+    if success {
+        target.total_latency_ms = target.total_latency_ms.saturating_add(latency_ms);
+    }
     match request_kind {
         CodexLocalAccessRequestKind::Text => {
             target.text_request_count = target.text_request_count.saturating_add(1);
@@ -16165,6 +16314,7 @@ struct RequestStatsMeta<'a> {
     http_status: Option<u16>,
     error_message: Option<&'a str>,
     service_tier: Option<&'a str>,
+    reasoning_effort: Option<&'a str>,
 }
 
 async fn record_request_stats_with_meta(
@@ -16259,6 +16409,7 @@ async fn record_request_stats_with_meta(
             gateway_mode,
             request_kind,
             meta.service_tier,
+            meta.reasoning_effort,
             success,
             meta.http_status,
             error_category,
@@ -24994,6 +25145,7 @@ async fn handle_websocket_connection(
         api_key_label: resolved_api_key.label.clone(),
     };
     let stats_service_tier = service_tier_from_request_body(&parsed.body);
+    let stats_reasoning_effort = reasoning_effort_from_request_body(&parsed.body);
     let routing_hint = build_request_routing_hint(&parsed);
 
     match proxy_websocket_with_account_pool(
@@ -25065,6 +25217,7 @@ async fn handle_websocket_connection(
                     bridge_result.capture.usage,
                     RequestStatsMeta {
                         service_tier: stats_service_tier.as_deref(),
+                        reasoning_effort: stats_reasoning_effort.as_deref(),
                         ..RequestStatsMeta::default()
                     },
                 )
@@ -25106,6 +25259,7 @@ async fn handle_websocket_connection(
                 bridge_result.capture.usage,
                 RequestStatsMeta {
                     service_tier: stats_service_tier.as_deref(),
+                    reasoning_effort: stats_reasoning_effort.as_deref(),
                     ..RequestStatsMeta::default()
                 },
             )
@@ -25143,6 +25297,7 @@ async fn handle_websocket_connection(
                 None,
                 RequestStatsMeta {
                     service_tier: stats_service_tier.as_deref(),
+                    reasoning_effort: stats_reasoning_effort.as_deref(),
                     ..RequestStatsMeta::default()
                 },
             )
@@ -25400,6 +25555,7 @@ async fn handle_connection(
         )
         .await?;
         let stats_service_tier = service_tier_from_request_body(&parsed.body);
+        let stats_reasoning_effort = reasoning_effort_from_request_body(&parsed.body);
         if let Err(err) = record_request_stats_with_meta(
             None,
             None,
@@ -25413,6 +25569,7 @@ async fn handle_connection(
             None,
             RequestStatsMeta {
                 service_tier: stats_service_tier.as_deref(),
+                reasoning_effort: stats_reasoning_effort.as_deref(),
                 ..RequestStatsMeta::default()
             },
         )
@@ -25449,6 +25606,7 @@ async fn handle_connection(
         )
         .await?;
         let stats_service_tier = service_tier_from_request_body(&parsed.body);
+        let stats_reasoning_effort = reasoning_effort_from_request_body(&parsed.body);
         if let Err(stats_err) = record_request_stats_with_meta(
             None,
             None,
@@ -25462,6 +25620,7 @@ async fn handle_connection(
             None,
             RequestStatsMeta {
                 service_tier: stats_service_tier.as_deref(),
+                reasoning_effort: stats_reasoning_effort.as_deref(),
                 ..RequestStatsMeta::default()
             },
         )
@@ -25530,6 +25689,7 @@ async fn handle_connection(
     let stats_context =
         build_request_stats_context(&prepared_request, &response_adapter, &resolved_api_key);
     let stats_service_tier = service_tier_from_request_body(&prepared_request.body);
+    let stats_reasoning_effort = reasoning_effort_from_request_body(&prepared_request.body);
     legacy_debug_log(
         collection.debug_logs,
         format!(
@@ -25602,6 +25762,7 @@ async fn handle_connection(
                             None,
                             RequestStatsMeta {
                                 service_tier: stats_service_tier.as_deref(),
+                                reasoning_effort: stats_reasoning_effort.as_deref(),
                                 ..RequestStatsMeta::default()
                             },
                         )
@@ -25641,6 +25802,7 @@ async fn handle_connection(
                 response_capture.usage,
                 RequestStatsMeta {
                     service_tier: stats_service_tier.as_deref(),
+                    reasoning_effort: stats_reasoning_effort.as_deref(),
                     ..RequestStatsMeta::default()
                 },
             )
@@ -25719,6 +25881,7 @@ async fn handle_connection(
                 None,
                 RequestStatsMeta {
                     service_tier: stats_service_tier.as_deref(),
+                    reasoning_effort: stats_reasoning_effort.as_deref(),
                     ..RequestStatsMeta::default()
                 },
             )
@@ -28798,6 +28961,7 @@ wire_api = "responses"
             Some(CodexLocalAccessGatewayMode::Sidecar),
             CodexLocalAccessRequestKind::Text,
             None,
+            None,
             false,
             Some(502),
             Some("upstream_bad_gateway"),
@@ -28877,6 +29041,7 @@ wire_api = "responses"
             Some("gpt-5.4"),
             Some(CodexLocalAccessGatewayMode::Sidecar),
             CodexLocalAccessRequestKind::Text,
+            None,
             None,
             true,
             Some(200),
@@ -29008,6 +29173,7 @@ wire_api = "responses"
             Some(CodexLocalAccessGatewayMode::Sidecar),
             CodexLocalAccessRequestKind::Text,
             None,
+            None,
             true,
             Some(200),
             None,
@@ -29106,6 +29272,7 @@ wire_api = "responses"
                 Some("gpt-5.4"),
                 Some(CodexLocalAccessGatewayMode::Sidecar),
                 CodexLocalAccessRequestKind::Text,
+                None,
                 None,
                 true,
                 Some(200),

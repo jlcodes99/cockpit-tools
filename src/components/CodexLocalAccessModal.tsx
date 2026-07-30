@@ -482,8 +482,8 @@ export function CodexLocalAccessModal({
     [modelIds],
   );
   const avgLatencyMs =
-    selectedTotals && selectedTotals.requestCount > 0
-      ? selectedTotals.totalLatencyMs / selectedTotals.requestCount
+    selectedTotals && selectedTotals.successCount > 0
+      ? selectedTotals.totalLatencyMs / selectedTotals.successCount
       : 0;
   const successRate =
     selectedTotals && selectedTotals.requestCount > 0

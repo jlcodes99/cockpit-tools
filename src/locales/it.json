@@ -26,6 +26,11 @@
     "detail": "Dettagli",
     "editable": "Modificabile",
     "preview": "Anteprima",
+    "sessionSharing": {
+      "title": "Condividi sessioni locali al cambio",
+      "fullDesc": "Unisce le sessioni locali e lo stato di ripristino tra gli account {{platform}} su questo dispositivo durante il cambio. I file restano locali e i contenuti non vengono caricati.",
+      "workspaceDesc": "Copia e unisce gli indici delle sessioni workspace e lo stato di ripristino tra gli account {{platform}} su questo dispositivo. Il database cifrato delle sessioni Builder/Agent non viene modificato e nessun contenuto viene caricato."
+    },
     "shared": {
       "addAccount": "Aggiungi account",
       "columns": {
@@ -746,7 +751,7 @@
       "antigravityDualSwitchNoRestart": "Cambio doppio senza riavvio",
       "antigravityDualSwitchNoRestartDesc": "Durante il cambio account, la scrittura dei dati locali e il cambio fluido dell’estensione vengono eseguiti in un unico flusso, senza riavviare Antigravity IDE.",
       "appAutoLaunch": "Avvia Cockpit Tools all'accesso",
-      "appAutoLaunchDesc": "Avvia automaticamente l'app dopo l'accesso al sistema",
+      "appAutoLaunchDesc": "Avvia dopo l’accesso. Se Windows mostra errori PowerShell all’avvio, disattiva.",
       "startupWakeupDisabled": "Disattivato",
       "startupWakeupImmediate": "Riattiva subito",
       "startupWakeupDelayed": "Riattiva con ritardo",
@@ -864,7 +869,9 @@
       "menuBarQuotaPlatformDesc": "Usa l’account attivo di quella piattaforma; si aggiorna dopo refresh o cambio",
       "menuBarAccountPrefix": "Primi 4 dell’e-mail",
       "menuBarAccountPrefixDesc": "Solo account normali: disattivo nasconde il prefisso e-mail. Servizio API Codex / API Key mostrano ancora API",
-      "menuBarQuotaConfirmEnable": "Attiva"
+      "menuBarQuotaConfirmEnable": "Attiva",
+      "codexHideRelayQuota": "Nascondi quota relay",
+      "codexHideRelayQuotaDesc": "Nasconde i pannelli quota relay / New API nella panoramica account Codex."
     },
     "network": {
       "apiTitle": "API della cabina di pilotaggio antigravità",
@@ -3059,7 +3066,12 @@
           "pending": "In attesa",
           "completed": "Completato"
         },
-        "officialClientOnlyError": "Questo provider accetta solo richieste dal client Codex ufficiale. Il test rapido ora usa il gateway locale, ma l’upstream ha comunque rifiutato questa richiesta di test. Fa fede il comportamento dopo l’avvio nel Codex ufficiale."
+        "officialClientOnlyError": "Questo provider accetta solo richieste dal client Codex ufficiale. Il test rapido ora usa il gateway locale, ma l’upstream ha comunque rifiutato questa richiesta di test. Fa fede il comportamento dopo l’avvio nel Codex ufficiale.",
+        "modelAuto": "Auto (catalogo / rilevamento)",
+        "modelCustom": "Modello personalizzato…",
+        "modelLabel": "Modello di test",
+        "modelCustomPlaceholder": "ID modello, es. gpt-4.1-mini",
+        "modelHint": "Opzionale: modello comune. Vuoto = auto dal catalogo."
       },
       "enableAndStart": "Avvia",
       "instance": {
@@ -3153,7 +3165,8 @@
       },
       "renameApiKeyPrompt": "Rinomina API key",
       "renameApiKeySuccess": "API key rinominata",
-      "renameApiKeyFailed": "Rinomina API key non riuscita: {{error}}"
+      "renameApiKeyFailed": "Rinomina API key non riuscita: {{error}}",
+      "existingApiKeysSearch": "Cerca API Key…"
     },
     "quickSwitch": {
       "action": "Cambio rapido provider",
@@ -3447,7 +3460,11 @@
         "httpStatus": "Stato HTTP {{status}}",
         "allInstances": "Tutte le istanze",
         "instanceFilter": "Istanza",
-        "instanceUnknown": "Istanza -"
+        "instanceUnknown": "Istanza -",
+        "reasoningEffort": "Ragionamento",
+        "reasoningEffortValue": "Rag. {{effort}}",
+        "serviceTier": "Livello di servizio",
+        "serviceTierValue": "Livello {{tier}}"
       },
       "timeouts": {
         "entryLabel": "Avanzate",
@@ -3708,7 +3725,11 @@
       "autoSyncBadge": "Automatico"
     },
     "exportAuthFailed": "Esporta errori",
-    "exportAuthFailedTitle": "Esporta tutti gli account con auth non riuscita"
+    "exportAuthFailedTitle": "Esporta tutti gli account con auth non riuscita",
+    "accounts": {
+      "showRelayQuota": "Mostra quota relay",
+      "hideRelayQuota": "Nascondi quota relay"
+    }
   },
   "githubCopilot": {
     "title": "Gestione account GitHub Copilot",
@@ -5384,9 +5405,20 @@
       "localDesc": "Importa da ~/.grok/auth.json oppure scegli auth.json ufficiale / JSON di export completo di questa app.",
       "localClient": "Importa da Grok CLI locale",
       "apiKeyTab": "Chiave API",
-      "apiKeyDesc": "Incolla una API key xAI (XAI_API_KEY / xai-… ufficiale). Iniettata come variabile d’ambiente all’avvio del CLI; non sovrascrive l’accesso OAuth ufficiale.",
+      "apiKeyDesc": "Incolla una API key xAI (XAI_API_KEY / xai-… ufficiale). Viene iniettata tramite un GROK_HOME specifico dell’account all’avvio del CLI, senza sovrascrivere l’accesso OAuth ufficiale.",
       "apiKeyPlaceholder": "incolla xai-…",
-      "apiKeyAction": "Aggiungi API Key"
+      "apiKeyAction": "Aggiungi API Key",
+      "apiMode": "Tipo di API",
+      "apiModeOfficial": "xAI ufficiale",
+      "apiModeCustom": "Terze parti",
+      "customApiDesc": "Configura una Base URL compatibile con OpenAI, l’ID del modello e la API key. All’avvio viene scritto un config.toml specifico dell’account e la chiave viene iniettata solo in quel processo CLI.",
+      "customApiKeyPlaceholder": "Incolla la API key di terze parti",
+      "apiBaseUrl": "URL di base",
+      "apiBaseUrlPlaceholder": "Es.: https://api.example.com/v1",
+      "apiModel": "ID modello",
+      "apiModelPlaceholder": "Ad esempio grok-4.1-fast",
+      "apiFieldRequired": "Inserisci {{field}}",
+      "apiBaseUrlInvalid": "Inserisci un URL http:// o https:// completo senza credenziali, parametri di query o frammenti"
     },
     "instances": {
       "unsupported": "Le istanze multiple di Grok CLI sono supportate solo su macOS, Windows e Linux.",

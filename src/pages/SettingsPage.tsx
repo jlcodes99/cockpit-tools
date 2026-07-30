@@ -180,12 +180,17 @@ interface GeneralConfig {
   codebuddy_app_path: string;
   codebuddy_share_sessions_on_switch: boolean;
   codebuddy_cn_app_path: string;
+  codebuddy_cn_share_sessions_on_switch: boolean;
   qoder_app_path: string;
   zcode_app_path: string;
   trae_app_path: string;
   trae_solo_app_path: string;
   trae_cn_app_path: string;
   trae_solo_cn_app_path: string;
+  trae_share_sessions_on_switch: boolean;
+  trae_solo_share_sessions_on_switch: boolean;
+  trae_cn_share_sessions_on_switch: boolean;
+  trae_solo_cn_share_sessions_on_switch: boolean;
   trae_app_scan_roots: string;
   trae_solo_app_scan_roots: string;
   trae_cn_app_scan_roots: string;
@@ -229,6 +234,7 @@ interface GeneralConfig {
   antigravity_launch_on_switch: boolean;
   codex_restart_specified_app_on_switch: boolean;
   codex_local_access_entry_visible: boolean;
+  codex_hide_relay_quota?: boolean;
   top_right_ad_visible?: boolean;
   antigravity_dual_switch_no_restart_enabled: boolean;
   auto_switch_enabled: boolean;
@@ -571,6 +577,7 @@ export function SettingsPage() {
   const [codebuddyAppPath, setCodebuddyAppPath] = useState('');
   const [codebuddyShareSessionsOnSwitch, setCodebuddyShareSessionsOnSwitch] = useState(false);
   const [codebuddyCnAppPath, setCodebuddyCnAppPath] = useState('');
+  const [codebuddyCnShareSessionsOnSwitch, setCodebuddyCnShareSessionsOnSwitch] = useState(false);
   const [qoderAppPath, setQoderAppPath] = useState('');
   const [zcodeAppPath, setZcodeAppPath] = useState('');
   const [traeAppPath, setTraeAppPath] = useState('');
@@ -657,6 +664,7 @@ export function SettingsPage() {
   const [antigravityLaunchOnSwitch, setAntigravityLaunchOnSwitch] = useState(true);
   const [codexRestartSpecifiedAppOnSwitch, setCodexRestartSpecifiedAppOnSwitch] = useState(false);
   const [codexLocalAccessEntryVisible, setCodexLocalAccessEntryVisible] = useState(true);
+  const [codexHideRelayQuota, setCodexHideRelayQuota] = useState(false);
   const [topRightAdVisible, setTopRightAdVisible] = useState(true);
   const [antigravityDualSwitchNoRestartEnabled, setAntigravityDualSwitchNoRestartEnabled] = useState(false);
   const [autoSwitchEnabled, setAutoSwitchEnabled] = useState(false);
@@ -1111,12 +1119,18 @@ export function SettingsPage() {
       codebuddy_app_path: codebuddyAppPath,
       codebuddy_share_sessions_on_switch: codebuddyShareSessionsOnSwitch,
       codebuddy_cn_app_path: codebuddyCnAppPath,
+      codebuddy_cn_share_sessions_on_switch: codebuddyCnShareSessionsOnSwitch,
       qoder_app_path: qoderAppPath,
       zcode_app_path: zcodeAppPath,
       trae_app_path: traeAppPath,
       trae_solo_app_path: traeSoloAppPath,
       trae_cn_app_path: traeCnAppPath,
       trae_solo_cn_app_path: traeSoloCnAppPath,
+      // Trae session sharing is disabled for this release (no effective cross-account history).
+      trae_share_sessions_on_switch: false,
+      trae_solo_share_sessions_on_switch: false,
+      trae_cn_share_sessions_on_switch: false,
+      trae_solo_cn_share_sessions_on_switch: false,
       trae_app_scan_roots: traeAppScanRoots,
       trae_solo_app_scan_roots: traeSoloAppScanRoots,
       trae_cn_app_scan_roots: traeCnAppScanRoots,
@@ -1132,6 +1146,7 @@ export function SettingsPage() {
       antigravity_launch_on_switch: antigravityLaunchOnSwitch,
       codex_restart_specified_app_on_switch: codexRestartSpecifiedAppOnSwitch,
       codex_local_access_entry_visible: codexLocalAccessEntryVisible,
+      codex_hide_relay_quota: codexHideRelayQuota,
       top_right_ad_visible: topRightAdVisible,
       antigravity_dual_switch_no_restart_enabled: antigravityDualSwitchNoRestartEnabled,
       auto_switch_enabled: autoSwitchEnabled,
@@ -1339,6 +1354,7 @@ export function SettingsPage() {
     codebuddyAppPath,
     codebuddyShareSessionsOnSwitch,
     codebuddyCnAppPath,
+    codebuddyCnShareSessionsOnSwitch,
     qoderAppPath,
     zcodeAppPath,
     traeAppPath,
@@ -1360,6 +1376,7 @@ export function SettingsPage() {
     antigravityLaunchOnSwitch,
     codexRestartSpecifiedAppOnSwitch,
     codexLocalAccessEntryVisible,
+    codexHideRelayQuota,
     topRightAdVisible,
     antigravityDualSwitchNoRestartEnabled,
     autoSwitchEnabled,
@@ -1684,6 +1701,7 @@ export function SettingsPage() {
       setCodebuddyAppPath(config.codebuddy_app_path || '');
       setCodebuddyShareSessionsOnSwitch(config.codebuddy_share_sessions_on_switch ?? false);
       setCodebuddyCnAppPath(config.codebuddy_cn_app_path || '');
+      setCodebuddyCnShareSessionsOnSwitch(config.codebuddy_cn_share_sessions_on_switch ?? false);
       setQoderAppPath(config.qoder_app_path || '');
       setZcodeAppPath(config.zcode_app_path || '');
       setTraeAppPath(config.trae_app_path || '');
@@ -1740,6 +1758,7 @@ export function SettingsPage() {
         config.codex_restart_specified_app_on_switch ?? false,
       );
       setCodexLocalAccessEntryVisible(config.codex_local_access_entry_visible ?? true);
+      setCodexHideRelayQuota(config.codex_hide_relay_quota ?? false);
       setTopRightAdVisible(config.top_right_ad_visible ?? true);
       setAntigravityDualSwitchNoRestartEnabled(
         config.antigravity_dual_switch_no_restart_enabled ?? false
@@ -2895,6 +2914,39 @@ export function SettingsPage() {
         </div>
       )}
     </>
+  );
+
+  const renderSessionSharingRow = (
+    platform: string,
+    enabled: boolean,
+    setEnabled: (enabled: boolean) => void,
+    fullSessionContent: boolean,
+  ) => (
+    <div className="settings-row">
+      <div className="row-label">
+        <div className="row-title">
+          {t('common.sessionSharing.title', { platform })}
+        </div>
+        <div className="row-desc">
+          {t(
+            fullSessionContent
+              ? 'common.sessionSharing.fullDesc'
+              : 'common.sessionSharing.workspaceDesc',
+            { platform },
+          )}
+        </div>
+      </div>
+      <div className="row-control">
+        <label className="switch">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(event) => setEnabled(event.target.checked)}
+          />
+          <span className="slider"></span>
+        </label>
+      </div>
+    </div>
   );
 
   const renderTraeVariantSettingsGroup = ({
@@ -4923,6 +4975,30 @@ export function SettingsPage() {
                   </div>
                 </div>
               )}
+
+              <div className="settings-row">
+                <div className="row-label">
+                  <div className="row-title">
+                    {t('settings.general.codexHideRelayQuota', '隐藏中转站额度')}
+                  </div>
+                  <div className="row-desc">
+                    {t(
+                      'settings.general.codexHideRelayQuotaDesc',
+                      '开启后，Codex 账号总览隐藏中转 / New API 类额度面板，减轻列表重叠与视觉干扰。',
+                    )}
+                  </div>
+                </div>
+                <div className="row-control">
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={codexHideRelayQuota}
+                      onChange={(e) => setCodexHideRelayQuota(e.target.checked)}
+                    />
+                    <span className="slider"></span>
+                  </label>
+                </div>
+              </div>
             </div>
 
               </div>
@@ -5920,6 +5996,12 @@ export function SettingsPage() {
 
                   {renderCurrentAccountRefreshRow('codebuddy_cn')}
                   {renderAccountLevelRefreshConfig('codebuddy_cn')}
+                  {renderSessionSharingRow(
+                    'CodeBuddy CN',
+                    codebuddyCnShareSessionsOnSwitch,
+                    setCodebuddyCnShareSessionsOnSwitch,
+                    true,
+                  )}
 
                   <div className="settings-row">
                     <div className="row-label">

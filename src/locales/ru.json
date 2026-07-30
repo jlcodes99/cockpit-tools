@@ -26,6 +26,11 @@
     "detail": "Детали",
     "editable": "Редактируемо",
     "preview": "Предпросмотр",
+    "sessionSharing": {
+      "title": "Общие локальные сеансы при смене",
+      "fullDesc": "При смене аккаунта объединяет локальные сеансы и состояние восстановления между аккаунтами {{platform}} на этом устройстве. Файлы остаются локальными, содержимое не отправляется.",
+      "workspaceDesc": "При смене аккаунта копирует и объединяет индексы сеансов workspace и состояние восстановления между аккаунтами {{platform}} на этом устройстве. Зашифрованная база сеансов Builder/Agent не изменяется, содержимое не отправляется."
+    },
     "shared": {
       "addAccount": "Добавить аккаунт",
       "columns": {
@@ -750,7 +755,7 @@
       "antigravityDualSwitchNoRestart": "Двойное переключение без перезапуска",
       "antigravityDualSwitchNoRestartDesc": "При переключении аккаунта локальная запись данных и плавное переключение через расширение выполняются в одном потоке без перезапуска Antigravity IDE.",
       "appAutoLaunch": "Запускать Cockpit Tools при входе в систему",
-      "appAutoLaunchDesc": "Автоматически запускать приложение после входа в систему",
+      "appAutoLaunchDesc": "Запуск после входа. Если PowerShell падает при старте Windows — отключите.",
       "startupWakeupDisabled": "Отключено",
       "startupWakeupImmediate": "Разбудить сразу",
       "startupWakeupDelayed": "Разбудить с задержкой",
@@ -864,7 +869,9 @@
       "menuBarQuotaPlatformDesc": "Берёт активный аккаунт этой платформы; обновляется после обновления или смены",
       "menuBarAccountPrefix": "Первые 4 символа почты",
       "menuBarAccountPrefixDesc": "Только обычные аккаунты: выкл. скрывает префикс почты. API-сервис Codex / API Key по-прежнему показывают API",
-      "menuBarQuotaConfirmEnable": "Включить"
+      "menuBarQuotaConfirmEnable": "Включить",
+      "codexHideRelayQuota": "Скрыть квоту ретранслятора",
+      "codexHideRelayQuotaDesc": "Скрывает панели квоты ретранслятора / New API в обзоре аккаунтов Codex."
     },
     "network": {
       "apiTitle": "API антигравитационной кабины",
@@ -3059,7 +3066,12 @@
           "pending": "Ожидает",
           "completed": "Завершено"
         },
-        "officialClientOnlyError": "Этот поставщик принимает запросы только от официального клиента Codex. Тест в один клик теперь использует локальный шлюз, но upstream всё равно отклонил этот тестовый запрос. Ориентируйтесь на поведение после запуска в официальном Codex."
+        "officialClientOnlyError": "Этот поставщик принимает запросы только от официального клиента Codex. Тест в один клик теперь использует локальный шлюз, но upstream всё равно отклонил этот тестовый запрос. Ориентируйтесь на поведение после запуска в официальном Codex.",
+        "modelAuto": "Авто (каталог / поиск)",
+        "modelCustom": "Свой модель…",
+        "modelLabel": "Тестовая модель",
+        "modelCustomPlaceholder": "ID модели, напр. gpt-4.1-mini",
+        "modelHint": "Необязательно: общая модель. Пусто — авто из каталога."
       },
       "enableAndStart": "Запуск",
       "instance": {
@@ -3153,7 +3165,8 @@
       },
       "renameApiKeyPrompt": "Переименовать API key",
       "renameApiKeySuccess": "API key переименован",
-      "renameApiKeyFailed": "Не удалось переименовать API key: {{error}}"
+      "renameApiKeyFailed": "Не удалось переименовать API key: {{error}}",
+      "existingApiKeysSearch": "Поиск API Key…"
     },
     "quickSwitch": {
       "action": "Быстрое переключение провайдера",
@@ -3447,7 +3460,11 @@
         "httpStatus": "Статус HTTP {{status}}",
         "allInstances": "Все инстансы",
         "instanceFilter": "Инстанс",
-        "instanceUnknown": "Инстанс -"
+        "instanceUnknown": "Инстанс -",
+        "reasoningEffort": "Рассуждение",
+        "reasoningEffortValue": "Расс. {{effort}}",
+        "serviceTier": "Уровень сервиса",
+        "serviceTierValue": "Уровень {{tier}}"
       },
       "timeouts": {
         "entryLabel": "Дополнительно",
@@ -3708,7 +3725,11 @@
       "autoSyncBadge": "Авто"
     },
     "exportAuthFailed": "Экспорт сбоев",
-    "exportAuthFailedTitle": "Экспорт всех аккаунтов с ошибкой auth"
+    "exportAuthFailedTitle": "Экспорт всех аккаунтов с ошибкой auth",
+    "accounts": {
+      "showRelayQuota": "Показать квоту relay",
+      "hideRelayQuota": "Скрыть квоту relay"
+    }
   },
   "githubCopilot": {
     "title": "Управление аккаунтами GitHub Copilot",
@@ -5384,9 +5405,20 @@
       "localDesc": "Импорт из ~/.grok/auth.json или выберите официальный auth.json / полный JSON экспорта этого приложения.",
       "localClient": "Импортировать из локального Grok CLI",
       "apiKeyTab": "Ключ API",
-      "apiKeyDesc": "Вставьте ключ xAI API (официальный XAI_API_KEY / xai-…). Подставляется как переменная окружения при запуске CLI и не перезаписывает официальный OAuth-вход.",
+      "apiKeyDesc": "Вставьте ключ xAI API (официальный XAI_API_KEY / xai-…). При запуске CLI он передаётся через отдельный GROK_HOME аккаунта и не перезаписывает официальный OAuth-вход.",
       "apiKeyPlaceholder": "вставьте xai-…",
-      "apiKeyAction": "Добавить API Key"
+      "apiKeyAction": "Добавить API Key",
+      "apiMode": "Тип API",
+      "apiModeOfficial": "Официальный xAI",
+      "apiModeCustom": "Сторонний",
+      "customApiDesc": "Настройте совместимый с OpenAI Base URL, ID модели и ключ API. При запуске записывается отдельный config.toml аккаунта, а ключ передаётся только этому процессу CLI.",
+      "customApiKeyPlaceholder": "Вставьте сторонний ключ API",
+      "apiBaseUrl": "Базовый URL",
+      "apiBaseUrlPlaceholder": "Например: https://api.example.com/v1",
+      "apiModel": "ID модели",
+      "apiModelPlaceholder": "Например, grok-4.1-fast",
+      "apiFieldRequired": "Введите {{field}}",
+      "apiBaseUrlInvalid": "Введите полный URL http:// или https:// без учётных данных, параметров запроса и фрагмента"
     },
     "instances": {
       "unsupported": "Несколько экземпляров Grok CLI поддерживаются только в macOS, Windows и Linux.",

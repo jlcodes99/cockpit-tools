@@ -97,6 +97,12 @@ pub struct GrokAccount {
     /// xAI API key for ApiKey auth mode. Never exposed through GrokAccountView.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
+    /// OpenAI-compatible endpoint for a third-party API-key model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_base_url: Option<String>,
+    /// Model identifier sent to the third-party endpoint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refresh_token: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -190,6 +196,12 @@ pub struct GrokAccountView {
     pub coding_data_retention_opt_out: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<i64>,
+    /// OpenAI-compatible endpoint configured for this API-key account.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_base_url: Option<String>,
+    /// Model identifier configured for this API-key account.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub has_grok_code_access: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -229,6 +241,8 @@ impl From<&GrokAccount> for GrokAccountView {
             profile_image_asset_id: account.profile_image_asset_id.clone(),
             coding_data_retention_opt_out: account.coding_data_retention_opt_out,
             expires_at: account.expires_at,
+            api_base_url: account.api_base_url.clone(),
+            api_model: account.api_model.clone(),
             has_grok_code_access: account.has_grok_code_access,
             plan_type: account.plan_type.clone(),
             quota: account.quota.clone(),

@@ -26,6 +26,11 @@
     "detail": "상세",
     "editable": "편집 가능",
     "preview": "미리보기",
+    "sessionSharing": {
+      "title": "계정 전환 시 로컬 대화 공유",
+      "fullDesc": "계정 전환 시 이 기기의 {{platform}} 계정 간에 로컬 대화와 복원 상태를 병합합니다. 파일은 로컬에서만 읽고 쓰며 대화 내용은 업로드하지 않습니다.",
+      "workspaceDesc": "계정 전환 시 이 기기의 {{platform}} 계정 간에 workspace 대화 인덱스와 복원 상태를 복사하고 병합합니다. 암호화된 Builder/Agent 대화 데이터베이스는 수정하지 않으며 내용을 업로드하지 않습니다."
+    },
     "shared": {
       "addAccount": "계정 추가",
       "columns": {
@@ -750,7 +755,7 @@
       "antigravityDualSwitchNoRestart": "재시작 없이 이중 전환",
       "antigravityDualSwitchNoRestartDesc": "계정 전환 시 로컬 계정 데이터 기록과 확장 프로그램의 원활한 전환을 한 번에 수행하며, Antigravity IDE를 재시작하지 않습니다.",
       "appAutoLaunch": "로그인 시 Cockpit Tools 시작",
-      "appAutoLaunchDesc": "시스템 로그인 후 앱을 자동으로 시작합니다",
+      "appAutoLaunchDesc": "로그인 후 자동 실행. Windows 부팅 시 PowerShell 오류가 나면 끄세요.",
       "startupWakeupDisabled": "비활성화",
       "startupWakeupImmediate": "즉시 깨우기",
       "startupWakeupDelayed": "지연 후 깨우기",
@@ -864,7 +869,9 @@
       "menuBarQuotaPlatformDesc": "해당 플랫폼의 사용 중 계정을 따르며, 새로고침 또는 전환 후 자동 갱신",
       "menuBarAccountPrefix": "이메일 앞 4자 표시",
       "menuBarAccountPrefixDesc": "일반 계정만: 끄면 이메일 접두사 숨김. Codex API 서비스 / API Key는 API 라벨 유지",
-      "menuBarQuotaConfirmEnable": "사용"
+      "menuBarQuotaConfirmEnable": "사용",
+      "codexHideRelayQuota": "중계 한도 숨기기",
+      "codexHideRelayQuotaDesc": "켜면 Codex 계정 개요에서 중계/New API 잔액 패널을 숨겨 겹침을 줄입니다."
     },
     "network": {
       "apiTitle": "반중력 조종석 API",
@@ -3059,7 +3066,12 @@
           "pending": "대기 중",
           "completed": "완료"
         },
-        "officialClientOnlyError": "이 공급자는 공식 Codex 클라이언트의 요청만 허용합니다. 원클릭 테스트는 이제 로컬 게이트웨이를 사용하지만, 업스트림이 이 테스트 요청을 여전히 거부했습니다. 공식 Codex에서 실행한 결과를 기준으로 확인하세요."
+        "officialClientOnlyError": "이 공급자는 공식 Codex 클라이언트의 요청만 허용합니다. 원클릭 테스트는 이제 로컬 게이트웨이를 사용하지만, 업스트림이 이 테스트 요청을 여전히 거부했습니다. 공식 Codex에서 실행한 결과를 기준으로 확인하세요.",
+        "modelAuto": "자동(목록/탐지)",
+        "modelCustom": "사용자 지정 모델…",
+        "modelLabel": "테스트 모델",
+        "modelCustomPlaceholder": "모델 ID (예: gpt-4.1-mini)",
+        "modelHint": "선택: 공통 테스트 모델. 비우면 공급자 목록에서 자동 선택합니다."
       },
       "enableAndStart": "시작",
       "instance": {
@@ -3153,7 +3165,8 @@
       },
       "renameApiKeyPrompt": "API 키 이름 변경",
       "renameApiKeySuccess": "API 키 이름 변경됨",
-      "renameApiKeyFailed": "API 키 이름 변경 실패: {{error}}"
+      "renameApiKeyFailed": "API 키 이름 변경 실패: {{error}}",
+      "existingApiKeysSearch": "기존 API Key 검색…"
     },
     "quickSwitch": {
       "action": "공급자 빠른 전환",
@@ -3447,7 +3460,11 @@
         "httpStatus": "HTTP 상태 {{status}}",
         "allInstances": "전체 인스턴스",
         "instanceFilter": "인스턴스",
-        "instanceUnknown": "인스턴스 -"
+        "instanceUnknown": "인스턴스 -",
+        "reasoningEffort": "추론 강도",
+        "reasoningEffortValue": "추론 {{effort}}",
+        "serviceTier": "서비스 등급",
+        "serviceTierValue": "등급 {{tier}}"
       },
       "timeouts": {
         "entryLabel": "고급",
@@ -3708,7 +3725,11 @@
       "autoSyncBadge": "자동"
     },
     "exportAuthFailed": "실패 내보내기",
-    "exportAuthFailedTitle": "인증 실패 계정 모두 내보내기"
+    "exportAuthFailedTitle": "인증 실패 계정 모두 내보내기",
+    "accounts": {
+      "showRelayQuota": "중계 한도 표시",
+      "hideRelayQuota": "중계 한도 숨기기"
+    }
   },
   "githubCopilot": {
     "title": "GitHub Copilot 계정 관리",
@@ -5384,9 +5405,20 @@
       "localDesc": "기본 ~/.grok/auth.json에서 가져오거나, 공식 auth.json / 이 앱의 전체 내보내기 JSON 파일을 선택하세요.",
       "localClient": "로컬 Grok CLI에서 가져오기",
       "apiKeyTab": "API 키",
-      "apiKeyDesc": "xAI API 키(공식 XAI_API_KEY / xai-…)를 붙여넣으세요. CLI 실행 시 환경 변수로 주입되며 공식 OAuth 로그인을 덮어쓰지 않습니다.",
+      "apiKeyDesc": "xAI API 키(공식 XAI_API_KEY / xai-…)를 붙여넣으세요. CLI 실행 시 계정 전용 GROK_HOME을 통해 주입되며 공식 OAuth 로그인을 덮어쓰지 않습니다.",
       "apiKeyPlaceholder": "xai-로 시작하는 키",
-      "apiKeyAction": "API Key 추가"
+      "apiKeyAction": "API Key 추가",
+      "apiMode": "API 유형",
+      "apiModeOfficial": "xAI 공식",
+      "apiModeCustom": "타사 호환",
+      "customApiDesc": "OpenAI 호환 Base URL, 모델 ID, API 키를 설정합니다. 실행 시 계정 전용 config.toml을 기록하고 키는 해당 CLI 프로세스에만 주입합니다.",
+      "customApiKeyPlaceholder": "타사 API 키 붙여넣기",
+      "apiBaseUrl": "기본 URL",
+      "apiBaseUrlPlaceholder": "예: https://api.example.com/v1",
+      "apiModel": "모델 ID",
+      "apiModelPlaceholder": "예: grok-4.1-fast",
+      "apiFieldRequired": "{{field}}을(를) 입력하세요",
+      "apiBaseUrlInvalid": "인증 정보, 쿼리 매개변수 또는 프래그먼트가 없는 전체 http:// 또는 https:// URL을 입력하세요"
     },
     "instances": {
       "unsupported": "Grok CLI 다중 인스턴스는 macOS, Windows, Linux에서만 지원됩니다.",

@@ -1090,7 +1090,8 @@ fn build_claude_display_info(lang: &str, desktop: bool) -> AccountDisplayInfo {
 
     if let Some(quota) = &account.quota {
         // Default: used%. Remaining% is opt-in via user config (see claude_quota_display_remaining).
-        let show_remaining = crate::modules::config::get_user_config().claude_quota_display_remaining;
+        let show_remaining =
+            crate::modules::config::get_user_config().claude_quota_display_remaining;
         let five_hour = quota.five_hour_percentage.clamp(0, 100);
         let seven_day = quota.seven_day_percentage.clamp(0, 100);
         let five_display = if show_remaining {

@@ -41,6 +41,7 @@ import {
 } from '../utils/externalProviderImport';
 import { useDropdownPanelPlacement } from './useDropdownPanelPlacement';
 import { useEscClose } from './useEscClose';
+import { useEnterConfirm } from './useEnterConfirm';
 import {
   ACCOUNTS_OVERVIEW_FILTER_PERSISTENCE_CHANGED_EVENT,
   type AccountsOverviewFilterPersistenceChangedDetail,
@@ -177,6 +178,15 @@ export interface ProviderPageConfig<TAccount extends ProviderAccountBase> {
   /** 首次渲染时使用的搜索内容 */
   initialSearchQuery?: string;
   defaultSortBy?: string;
+  /**
+   * 自定义删除确认的 Enter 行为（例如 Codex 批量删除）。
+   * 未提供时 Enter 调用内置 confirmDelete。
+   */
+  onEnterConfirmDelete?: () => void | Promise<void>;
+  /** 额外的删除确认忙碌态（与 deleting 叠加，为 true 时禁用 Enter） */
+  isDeleteConfirmBusy?: boolean;
+  /** 关闭内置删除确认的 Enter 绑定（页面自行 useEnterConfirm 时使用） */
+  disableEnterConfirmDelete?: boolean;
 }
 
 export interface ProviderAccountBase {
@@ -1472,6 +1482,23 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   }, [cancelPendingOauthLogin, resetAddModalState]);
 
   useEscClose(showAddModal, closeAddModal);
+  // Delete / tag-delete secondary confirms: Enter = confirm (stack-safe with nested dialogs)
+  const deleteConfirmBusy = deleting || Boolean(config.isDeleteConfirmBusy);
+  useEscClose(Boolean(deleteConfirm) && !deleteConfirmBusy, () => setDeleteConfirm(null));
+  useEnterConfirm(
+    Boolean(deleteConfirm) && !deleteConfirmBusy && !config.disableEnterConfirmDelete,
+    () => {
+      if (config.onEnterConfirmDelete) {
+        void config.onEnterConfirmDelete();
+        return;
+      }
+      void confirmDelete();
+    },
+  );
+  useEscClose(Boolean(tagDeleteConfirm) && !deletingTag, () => setTagDeleteConfirm(null));
+  useEnterConfirm(Boolean(tagDeleteConfirm) && !deletingTag, () => {
+    void confirmDeleteTag();
+  });
 
   const closeExternalImportProgressModal = useCallback(() => {
     setExternalImportProgress((current) => {

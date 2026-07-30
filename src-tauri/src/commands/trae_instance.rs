@@ -31,6 +31,7 @@ fn resolve_running_pid(
 }
 
 async fn inject_bound_account(
+    platform: modules::trae_account::TraePlatformKind,
     user_data_dir: &str,
     bind_account_id: Option<&str>,
 ) -> Result<(), String> {
@@ -41,7 +42,8 @@ async fn inject_bound_account(
         return Ok(());
     };
 
-    if let Ok(accounts) = modules::trae_account::list_accounts_checked() {
+    // Pre-start refresh is best-effort. Expired tokens must not block inject/start.
+    let refresh_result = if let Ok(accounts) = modules::trae_account::list_accounts_checked() {
         let protection_map =
             modules::trae_account::resolve_running_account_refresh_protection_map(&accounts);
         if let Some(storage_path) = protection_map.get(account_id) {
@@ -58,20 +60,28 @@ async fn inject_bound_account(
                 storage_path.as_deref(),
             )
             .await
-            .map_err(|err| format!("Trae 实例启动前刷新账号失败({}): {}", account_id, err))?;
         } else {
-            modules::trae_account::refresh_account_async(account_id)
-                .await
-                .map_err(|err| format!("Trae 实例启动前刷新账号失败({}): {}", account_id, err))?;
+            modules::trae_account::refresh_account_async(account_id).await
         }
     } else {
-        modules::trae_account::refresh_account_async(account_id)
-            .await
-            .map_err(|err| format!("Trae 实例启动前刷新账号失败({}): {}", account_id, err))?;
+        modules::trae_account::refresh_account_async(account_id).await
+    };
+    if let Err(err) = refresh_result {
+        modules::logger::log_warn(&format!(
+            "[Trae Instance] 启动前刷新失败，继续注入本地缓存并启动: account_id={}, error={}",
+            account_id, err
+        ));
     }
 
-    let storage_path = modules::trae_instance::build_storage_json_path(user_data_dir);
-    modules::trae_account::inject_to_trae_at_path(storage_path.as_path(), account_id)
+    let user_data_dir = user_data_dir.to_string();
+    let account_id = account_id.to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        // Trae cross-account session sharing is intentionally disabled this release.
+        let storage_path = modules::trae_instance::build_storage_json_path(&user_data_dir);
+        modules::trae_account::inject_to_trae_at_path(storage_path.as_path(), &account_id)
+    })
+    .await
+    .map_err(|error| format!("Trae 账号切换后台任务失败: {}", error))?
 }
 
 async fn verify_bound_account_after_start(user_data_dir: &str, bind_account_id: Option<&str>) {
@@ -84,19 +94,23 @@ async fn verify_bound_account_after_start(user_data_dir: &str, bind_account_id: 
 
     match modules::trae_account::check_login_then_refresh_if_needed(account_id).await {
         Ok(true) => {
+            // After start the instance is live; inject_to_trae_at_path refuses live storage.
+            // Only attempt write-back when the process is no longer holding this path.
             let storage_path = modules::trae_instance::build_storage_json_path(user_data_dir);
-            if let Err(err) =
-                modules::trae_account::inject_to_trae_at_path(storage_path.as_path(), account_id)
+            match modules::trae_account::inject_to_trae_at_path(storage_path.as_path(), account_id)
             {
-                modules::logger::log_warn(&format!(
-                    "[Trae Instance] 启动后静默刷新成功，但账号回写实例失败: account_id={}, error={}",
-                    account_id, err
-                ));
-            } else {
-                modules::logger::log_info(&format!(
-                    "[Trae Instance] 启动后严格校验触发静默刷新并回写: account_id={}",
-                    account_id
-                ));
+                Ok(()) => {
+                    modules::logger::log_info(&format!(
+                        "[Trae Instance] 启动后严格校验触发静默刷新并回写: account_id={}",
+                        account_id
+                    ));
+                }
+                Err(err) => {
+                    modules::logger::log_warn(&format!(
+                        "[Trae Instance] 启动后静默刷新成功，但账号回写实例失败（运行中拒绝回写属预期）: account_id={}, error={}",
+                        account_id, err
+                    ));
+                }
             }
         }
         Ok(false) => {
@@ -291,6 +305,7 @@ pub async fn trae_start_instance(
         let _ = modules::trae_instance::update_default_pid_for_platform(platform, None)?;
 
         inject_bound_account(
+            platform,
             default_dir_str.as_str(),
             default_settings.bind_account_id.as_deref(),
         )
@@ -348,7 +363,12 @@ pub async fn trae_start_instance(
     )?;
     let _ = modules::trae_instance::update_instance_pid_for_platform(platform, &instance.id, None)?;
 
-    inject_bound_account(&instance.user_data_dir, instance.bind_account_id.as_deref()).await?;
+    inject_bound_account(
+        platform,
+        &instance.user_data_dir,
+        instance.bind_account_id.as_deref(),
+    )
+    .await?;
 
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);
     let pid = modules::process::start_trae_platform_with_args_with_new_window(

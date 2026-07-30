@@ -322,8 +322,12 @@ pub fn import_grok_from_json(json_content: String) -> Result<Vec<GrokAccountView
 }
 
 #[tauri::command]
-pub fn add_grok_account_with_api_key(api_key: String) -> Result<GrokAccountView, String> {
-    grok_account::upsert_api_key(&api_key)
+pub fn add_grok_account_with_api_key(
+    api_key: String,
+    api_base_url: Option<String>,
+    api_model: Option<String>,
+) -> Result<GrokAccountView, String> {
+    grok_account::upsert_api_key(&api_key, api_base_url.as_deref(), api_model.as_deref())
 }
 
 #[tauri::command]

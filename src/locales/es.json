@@ -26,6 +26,11 @@
     "detail": "Detalles",
     "editable": "Editable​",
     "preview": "Vista previa",
+    "sessionSharing": {
+      "title": "Compartir sesiones locales al cambiar",
+      "fullDesc": "Combina las sesiones locales y el estado de restauración entre cuentas de {{platform}} de este dispositivo al cambiar. Los archivos permanecen locales y el contenido no se sube.",
+      "workspaceDesc": "Copia y combina los índices de sesiones del workspace y el estado de restauración entre cuentas de {{platform}} de este dispositivo. No modifica la base cifrada de sesiones Builder/Agent ni sube contenido."
+    },
     "shared": {
       "addAccount": "Agregar cuenta",
       "columns": {
@@ -746,7 +751,7 @@
       "antigravityDualSwitchNoRestart": "Cambio dual sin reinicio",
       "antigravityDualSwitchNoRestartDesc": "Al cambiar cuenta, se escriben los datos locales y se ejecuta el cambio fluido de la extensión en un solo flujo, sin reiniciar Antigravity IDE.",
       "appAutoLaunch": "Iniciar Cockpit Tools al iniciar sesión",
-      "appAutoLaunchDesc": "Iniciar la aplicación automáticamente después de iniciar sesión en el sistema",
+      "appAutoLaunchDesc": "Iniciar tras el inicio de sesión. Si PowerShell falla al arrancar Windows, desactívelo.",
       "startupWakeupDisabled": "Desactivado",
       "startupWakeupImmediate": "Despertar inmediatamente",
       "startupWakeupDelayed": "Despertar con retraso",
@@ -864,7 +869,9 @@
       "menuBarQuotaPlatformDesc": "Usa la cuenta activa de esa plataforma; se actualiza al refrescar o cambiar",
       "menuBarAccountPrefix": "Primeros 4 del correo",
       "menuBarAccountPrefixDesc": "Solo cuentas normales: desactivado oculta el prefijo de correo. El servicio API de Codex / API Key siguen mostrando API",
-      "menuBarQuotaConfirmEnable": "Activar"
+      "menuBarQuotaConfirmEnable": "Activar",
+      "codexHideRelayQuota": "Ocultar cuota relay",
+      "codexHideRelayQuotaDesc": "Oculta los paneles de cuota relay / New API en la vista de cuentas Codex."
     },
     "network": {
       "apiTitle": "API de cabina antigravedad",
@@ -3059,7 +3066,12 @@
           "pending": "Pendiente",
           "completed": "Completado"
         },
-        "officialClientOnlyError": "Este proveedor solo acepta solicitudes del cliente oficial de Codex. La prueba de un clic ahora usa el gateway local, pero el upstream aún rechazó esta solicitud de prueba. Toma como referencia el comportamiento al abrir Codex oficial."
+        "officialClientOnlyError": "Este proveedor solo acepta solicitudes del cliente oficial de Codex. La prueba de un clic ahora usa el gateway local, pero el upstream aún rechazó esta solicitud de prueba. Toma como referencia el comportamiento al abrir Codex oficial.",
+        "modelAuto": "Auto (catálogo / detectar)",
+        "modelCustom": "Modelo personalizado…",
+        "modelLabel": "Modelo de prueba",
+        "modelCustomPlaceholder": "ID de modelo, p. ej. gpt-4.1-mini",
+        "modelHint": "Opcional: modelo común. Vacío = auto del catálogo."
       },
       "enableAndStart": "Iniciar",
       "instance": {
@@ -3153,7 +3165,8 @@
       },
       "renameApiKeyPrompt": "Renombrar API key",
       "renameApiKeySuccess": "API key renombrada",
-      "renameApiKeyFailed": "Error al renombrar API key: {{error}}"
+      "renameApiKeyFailed": "Error al renombrar API key: {{error}}",
+      "existingApiKeysSearch": "Buscar API keys…"
     },
     "quickSwitch": {
       "action": "Cambio rápido de proveedor",
@@ -3447,7 +3460,11 @@
         "httpStatus": "Estado HTTP {{status}}",
         "allInstances": "Todas las instancias",
         "instanceFilter": "Instancia",
-        "instanceUnknown": "Instancia -"
+        "instanceUnknown": "Instancia -",
+        "reasoningEffort": "Razonamiento",
+        "reasoningEffortValue": "Raz. {{effort}}",
+        "serviceTier": "Nivel de servicio",
+        "serviceTierValue": "Nivel {{tier}}"
       },
       "timeouts": {
         "entryLabel": "Avanzado",
@@ -3708,7 +3725,11 @@
       "autoSyncBadge": "Automático"
     },
     "exportAuthFailed": "Exportar fallos",
-    "exportAuthFailedTitle": "Exportar todas las cuentas con fallo de auth"
+    "exportAuthFailedTitle": "Exportar todas las cuentas con fallo de auth",
+    "accounts": {
+      "showRelayQuota": "Mostrar cuota relay",
+      "hideRelayQuota": "Ocultar cuota relay"
+    }
   },
   "githubCopilot": {
     "title": "Gestión de cuentas de GitHub Copilot",
@@ -5384,9 +5405,20 @@
       "localDesc": "Importa desde ~/.grok/auth.json o elige un auth.json oficial / JSON de exportación completa de esta app.",
       "localClient": "Importar desde Grok CLI local",
       "apiKeyTab": "Clave API",
-      "apiKeyDesc": "Pega una API key de xAI (XAI_API_KEY / xai-… oficial). Se inyecta como variable de entorno al iniciar el CLI; no sobrescribe el inicio de sesión OAuth oficial.",
+      "apiKeyDesc": "Pega una API key de xAI (XAI_API_KEY / xai-… oficial). Se inyecta mediante un GROK_HOME específico de la cuenta al iniciar el CLI, sin sobrescribir el inicio de sesión OAuth oficial.",
       "apiKeyPlaceholder": "pegar xai-…",
-      "apiKeyAction": "Añadir API Key"
+      "apiKeyAction": "Añadir API Key",
+      "apiMode": "Tipo de API",
+      "apiModeOfficial": "xAI oficial",
+      "apiModeCustom": "Terceros",
+      "customApiDesc": "Configura una Base URL compatible con OpenAI, el ID del modelo y la API key. Al iniciar se escribe un config.toml específico de la cuenta y la clave solo se inyecta en ese proceso CLI.",
+      "customApiKeyPlaceholder": "Pega la API key de terceros",
+      "apiBaseUrl": "URL base",
+      "apiBaseUrlPlaceholder": "Ej.: https://api.example.com/v1",
+      "apiModel": "ID del modelo",
+      "apiModelPlaceholder": "Por ejemplo, grok-4.1-fast",
+      "apiFieldRequired": "Introduce {{field}}",
+      "apiBaseUrlInvalid": "Introduce una URL http:// o https:// completa sin credenciales, parámetros de consulta ni fragmentos"
     },
     "instances": {
       "unsupported": "Las instancias múltiples de Grok CLI solo están disponibles en macOS, Windows y Linux.",

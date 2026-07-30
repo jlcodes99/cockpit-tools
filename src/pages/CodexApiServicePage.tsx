@@ -1120,8 +1120,8 @@ export function CodexApiServicePage() {
     pricingRepriceProgress?.phase === "running" ||
     pricingRepriceProgress?.phase === "superseded";
   const avgLatency =
-    totals && totals.requestCount > 0
-      ? totals.totalLatencyMs / totals.requestCount
+    totals && totals.successCount > 0
+      ? totals.totalLatencyMs / totals.successCount
       : 0;
   const successRate =
     totals && totals.requestCount > 0
@@ -5361,6 +5361,34 @@ export function CodexApiServicePage() {
                               ? t("codex.localAccess.requestLogSuccess", "成功")
                               : t("codex.localAccess.requestLogFailed", "失败")}
                           </span>
+                          {event.reasoningEffort ? (
+                            <span
+                              className="codex-api-service-pill muted"
+                              title={t(
+                                "codex.apiService.logs.reasoningEffort",
+                                "思考强度",
+                              )}
+                            >
+                              {t("codex.apiService.logs.reasoningEffortValue", {
+                                effort: event.reasoningEffort,
+                                defaultValue: "思考 {{effort}}",
+                              })}
+                            </span>
+                          ) : null}
+                          {event.serviceTier ? (
+                            <span
+                              className="codex-api-service-pill muted"
+                              title={t(
+                                "codex.apiService.logs.serviceTier",
+                                "服务等级",
+                              )}
+                            >
+                              {t("codex.apiService.logs.serviceTierValue", {
+                                tier: event.serviceTier,
+                                defaultValue: "Tier {{tier}}",
+                              })}
+                            </span>
+                          ) : null}
                           <span
                             className={`codex-api-service-pill ${
                               event.gatewayMode === "legacy"

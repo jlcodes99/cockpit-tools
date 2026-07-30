@@ -82,13 +82,18 @@ fn resolve_launch_account_id(
     Ok(instance.bind_account_id)
 }
 
-fn resolve_xai_api_key_for_account(account_id: Option<&str>) -> Result<Option<String>, String> {
+fn resolve_api_key_launch_context(
+    account_id: Option<&str>,
+) -> Result<(Option<String>, bool), String> {
     let Some(account_id) = account_id.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(None);
+        return Ok((None, false));
     };
     let account = grok_account::load_account(account_id)
         .ok_or_else(|| format!("Grok 账号不存在: {}", account_id))?;
-    Ok(account.resolved_api_key().map(|value| value.to_string()))
+    Ok((
+        account.resolved_api_key().map(|value| value.to_string()),
+        account.is_api_key_auth(),
+    ))
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -109,8 +114,12 @@ fn normalize_working_dir_override(working_dir: Option<String>) -> Option<String>
         .map(|value| value.to_string())
 }
 
-fn should_use_managed_home(instance_id: &str, sync_official_auth: bool) -> bool {
-    instance_id != DEFAULT_INSTANCE_ID || !sync_official_auth
+fn should_use_managed_home(
+    instance_id: &str,
+    sync_official_auth: bool,
+    force_managed_home: bool,
+) -> bool {
+    force_managed_home || instance_id != DEFAULT_INSTANCE_ID || !sync_official_auth
 }
 
 fn resolve_context(
@@ -119,7 +128,8 @@ fn resolve_context(
     account_id_override: Option<&str>,
 ) -> Result<GrokLaunchContext, String> {
     let launch_account_id = resolve_launch_account_id(instance_id, account_id_override)?;
-    let xai_api_key = resolve_xai_api_key_for_account(launch_account_id.as_deref())?;
+    let (xai_api_key, force_managed_home) =
+        resolve_api_key_launch_context(launch_account_id.as_deref())?;
 
     if let Some(account_id) = launch_account_id.as_deref() {
         let home = grok_account::managed_profile_dir(account_id)?;
@@ -128,6 +138,7 @@ fn resolve_context(
             let managed = should_use_managed_home(
                 instance_id,
                 config::get_user_config().grok_sync_official_auth_on_switch,
+                force_managed_home,
             );
             return Ok(GrokLaunchContext {
                 user_data_dir: if managed {
@@ -321,6 +332,7 @@ fn write_account_launch_profiles(
 ) -> Result<std::path::PathBuf, String> {
     if instance_id == DEFAULT_INSTANCE_ID
         && config::get_user_config().grok_sync_official_auth_on_switch
+        && !account.is_api_key_auth()
     {
         grok_account::inject_to_default(&account.id)?;
         return grok_account::default_grok_home();
@@ -656,13 +668,14 @@ mod tests {
 
     #[test]
     fn default_instance_home_follows_official_sync_setting() {
-        assert!(should_use_managed_home(DEFAULT_INSTANCE_ID, false));
-        assert!(!should_use_managed_home(DEFAULT_INSTANCE_ID, true));
+        assert!(should_use_managed_home(DEFAULT_INSTANCE_ID, false, false));
+        assert!(!should_use_managed_home(DEFAULT_INSTANCE_ID, true, false));
+        assert!(should_use_managed_home(DEFAULT_INSTANCE_ID, true, true));
     }
 
     #[test]
     fn non_default_instances_always_use_managed_home() {
-        assert!(should_use_managed_home("team-instance", false));
-        assert!(should_use_managed_home("team-instance", true));
+        assert!(should_use_managed_home("team-instance", false, false));
+        assert!(should_use_managed_home("team-instance", true, false));
     }
 }

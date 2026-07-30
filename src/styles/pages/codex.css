@@ -10419,6 +10419,30 @@
   line-height: 1.55;
 }
 
+.codex-provider-batch-test-model {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.codex-provider-batch-test-model > label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.codex-provider-batch-test-model-hint {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
 .codex-provider-batch-test-search {
   width: 100%;
 }

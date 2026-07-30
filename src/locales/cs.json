@@ -219,6 +219,11 @@
       "loginSuccess": "Přihlášení úspěšné",
       "switchAccount": "Přepnout účet"
     },
+    "sessionSharing": {
+      "title": "Sdílet místní relace při přepnutí",
+      "fullDesc": "Při přepnutí účtu sloučí místní relace a stav obnovení mezi účty {{platform}} v tomto zařízení. Soubory zůstávají místní a obsah se neodesílá.",
+      "workspaceDesc": "Při přepnutí účtu zkopíruje a sloučí indexy relací workspace a stav obnovení mezi účty {{platform}} v tomto zařízení. Šifrovaná databáze relací Builder/Agent se nemění a obsah se neodesílá."
+    },
     "topRightAd": {
       "ariaLabel": "Globální reklamní slot vpravo nahoře",
       "badge": "REKLAMA",
@@ -746,7 +751,7 @@
       "antigravityDualSwitchNoRestart": "Duální přepnutí bez restartu",
       "antigravityDualSwitchNoRestartDesc": "Při přepnutí účtu se v jednom kroku zapíší lokální data účtu a provede plynulé přepnutí rozšíření bez restartu Antigravity IDE.",
       "appAutoLaunch": "Spustit Cockpit Tools po přihlášení",
-      "appAutoLaunchDesc": "Po přihlášení do systému spustit aplikaci automaticky",
+      "appAutoLaunchDesc": "Spustit po přihlášení. Při chybě PowerShell při startu Windows vypněte.",
       "startupWakeupDisabled": "Vypnuto",
       "startupWakeupImmediate": "Probudit okamžitě",
       "startupWakeupDelayed": "Probudit se zpožděním",
@@ -864,7 +869,9 @@
       "menuBarQuotaPlatformDesc": "Používá aktivní účet této platformy; aktualizuje po obnovení nebo přepnutí",
       "menuBarAccountPrefix": "První 4 znaky e-mailu",
       "menuBarAccountPrefixDesc": "Jen běžné účty: vypnuto skryje prefix e-mailu. Codex API služba / API Key stále ukazují API",
-      "menuBarQuotaConfirmEnable": "Zapnout"
+      "menuBarQuotaConfirmEnable": "Zapnout",
+      "codexHideRelayQuota": "Skrýt kvótu relay",
+      "codexHideRelayQuotaDesc": "Skryje panely kvóty relay / New API v přehledu účtů Codex."
     },
     "network": {
       "apiTitle": "Antigravity Cockpit API​",
@@ -3059,7 +3066,12 @@
           "pending": "Čeká",
           "completed": "Dokončeno"
         },
-        "officialClientOnlyError": "Tento poskytovatel povoluje jen požadavky z oficiálního klienta Codex. Jednorázový test teď používá místní bránu, ale upstream tento testovací požadavek stále odmítl. Řiďte se skutečným chováním po spuštění v oficiálním Codexu."
+        "officialClientOnlyError": "Tento poskytovatel povoluje jen požadavky z oficiálního klienta Codex. Jednorázový test teď používá místní bránu, ale upstream tento testovací požadavek stále odmítl. Řiďte se skutečným chováním po spuštění v oficiálním Codexu.",
+        "modelAuto": "Auto (katalog / zjištění)",
+        "modelCustom": "Vlastní model…",
+        "modelLabel": "Testovací model",
+        "modelCustomPlaceholder": "ID modelu, např. gpt-4.1-mini",
+        "modelHint": "Volitelné: společný model. Prázdné = auto z katalogu."
       },
       "enableAndStart": "Spustit",
       "instance": {
@@ -3153,7 +3165,8 @@
       },
       "renameApiKeyPrompt": "Přejmenovat API key",
       "renameApiKeySuccess": "API key přejmenován",
-      "renameApiKeyFailed": "Přejmenování API key selhalo: {{error}}"
+      "renameApiKeyFailed": "Přejmenování API key selhalo: {{error}}",
+      "existingApiKeysSearch": "Hledat API Key…"
     },
     "quickSwitch": {
       "action": "Rychle přepnout poskytovatele",
@@ -3447,7 +3460,11 @@
         "httpStatus": "Stav HTTP {{status}}",
         "allInstances": "Všechny instance",
         "instanceFilter": "Instance",
-        "instanceUnknown": "Neznámá instance"
+        "instanceUnknown": "Neznámá instance",
+        "reasoningEffort": "Uvažování",
+        "reasoningEffortValue": "Úvah. {{effort}}",
+        "serviceTier": "Úroveň služby",
+        "serviceTierValue": "Úroveň {{tier}}"
       },
       "timeouts": {
         "entryLabel": "Pokročilé",
@@ -3708,7 +3725,11 @@
       "autoSyncBadge": "Automaticky"
     },
     "exportAuthFailed": "Export chyb",
-    "exportAuthFailedTitle": "Exportovat všechny účty s chybou auth"
+    "exportAuthFailedTitle": "Exportovat všechny účty s chybou auth",
+    "accounts": {
+      "showRelayQuota": "Zobrazit relay kvótu",
+      "hideRelayQuota": "Skrýt relay kvótu"
+    }
   },
   "githubCopilot": {
     "title": "Správa účtů GitHub Copilot",
@@ -5384,9 +5405,20 @@
       "localDesc": "Import z ~/.grok/auth.json, nebo zvolte oficiální auth.json / plný export JSON z této aplikace.",
       "localClient": "Importovat z místního Grok CLI",
       "apiKeyTab": "Klíč API",
-      "apiKeyDesc": "Vložte xAI API klíč (oficiální XAI_API_KEY / xai-…). Při spuštění CLI se injektuje jako proměnná prostředí a nepřepisuje oficiální OAuth přihlášení.",
+      "apiKeyDesc": "Vložte xAI API klíč (oficiální XAI_API_KEY / xai-…). Při spuštění CLI se vloží přes GROK_HOME daného účtu a nepřepíše oficiální OAuth přihlášení.",
       "apiKeyPlaceholder": "vložte xai-…",
-      "apiKeyAction": "Přidat API Key"
+      "apiKeyAction": "Přidat API Key",
+      "apiMode": "Typ API",
+      "apiModeOfficial": "Oficiální xAI",
+      "apiModeCustom": "Třetí strana",
+      "customApiDesc": "Nastavte Base URL kompatibilní s OpenAI, ID modelu a API klíč. Při spuštění se zapíše config.toml daného účtu a klíč se vloží pouze do tohoto procesu CLI.",
+      "customApiKeyPlaceholder": "Vložte API klíč třetí strany",
+      "apiBaseUrl": "Základní URL",
+      "apiBaseUrlPlaceholder": "Např. https://api.example.com/v1",
+      "apiModel": "ID modelu",
+      "apiModelPlaceholder": "Například grok-4.1-fast",
+      "apiFieldRequired": "Zadejte {{field}}",
+      "apiBaseUrlInvalid": "Zadejte úplnou adresu http:// nebo https:// bez přihlašovacích údajů, parametrů dotazu či fragmentu"
     },
     "instances": {
       "unsupported": "Více instancí Grok CLI je podporováno jen v systémech macOS, Windows a Linux.",

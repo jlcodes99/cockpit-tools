@@ -219,6 +219,11 @@
       "loginSuccess": "Logowanie powiodło się",
       "switchAccount": "Przełącz konto"
     },
+    "sessionSharing": {
+      "title": "Udostępniaj sesje lokalne przy zmianie",
+      "fullDesc": "Przy zmianie konta scala lokalne sesje i stan przywracania między kontami {{platform}} na tym urządzeniu. Pliki pozostają lokalne, a treść nie jest wysyłana.",
+      "workspaceDesc": "Przy zmianie konta kopiuje i scala indeksy sesji workspace oraz stan przywracania między kontami {{platform}} na tym urządzeniu. Szyfrowana baza sesji Builder/Agent nie jest modyfikowana, a treść nie jest wysyłana."
+    },
     "topRightAd": {
       "ariaLabel": "Globalne miejsce reklamowe w prawym górnym rogu",
       "badge": "REKLAMA",
@@ -750,7 +755,7 @@
       "antigravityDualSwitchNoRestart": "Podwójne przełączanie bez restartu",
       "antigravityDualSwitchNoRestartDesc": "Podczas przełączania konta zapis lokalnych danych i płynne przełączenie przez rozszerzenie są wykonywane w jednym przebiegu, bez restartu Antigravity IDE.",
       "appAutoLaunch": "Uruchamiaj Cockpit Tools po zalogowaniu",
-      "appAutoLaunchDesc": "Automatycznie uruchamiaj aplikację po zalogowaniu do systemu",
+      "appAutoLaunchDesc": "Uruchom po zalogowaniu. Jeśli Windows zgłasza błąd PowerShell przy starcie, wyłącz.",
       "startupWakeupDisabled": "Wyłączone",
       "startupWakeupImmediate": "Wybudź natychmiast",
       "startupWakeupDelayed": "Wybudź z opóźnieniem",
@@ -864,7 +869,9 @@
       "menuBarQuotaPlatformDesc": "Używa aktywnego konta tej platformy; aktualizuje po odświeżeniu lub przełączeniu",
       "menuBarAccountPrefix": "Pierwsze 4 znaki e-mail",
       "menuBarAccountPrefixDesc": "Tylko zwykłe konta: wył. ukrywa prefiks e-mail. Usługa API Codex / API Key nadal pokazuje API",
-      "menuBarQuotaConfirmEnable": "Włącz"
+      "menuBarQuotaConfirmEnable": "Włącz",
+      "codexHideRelayQuota": "Ukryj limit relay",
+      "codexHideRelayQuotaDesc": "Ukrywa panele limitu relay / New API w przeglądzie kont Codex."
     },
     "network": {
       "apiTitle": "API kokpitu antygrawitacyjnego",
@@ -3059,7 +3066,12 @@
           "pending": "Oczekuje",
           "completed": "Ukończono"
         },
-        "officialClientOnlyError": "Ten dostawca akceptuje tylko żądania z oficjalnego klienta Codex. Test jednym kliknięciem używa teraz lokalnej bramy, ale upstream nadal odrzucił to żądanie testowe. Za miarodajne uznaj działanie po uruchomieniu w oficjalnym Codexie."
+        "officialClientOnlyError": "Ten dostawca akceptuje tylko żądania z oficjalnego klienta Codex. Test jednym kliknięciem używa teraz lokalnej bramy, ale upstream nadal odrzucił to żądanie testowe. Za miarodajne uznaj działanie po uruchomieniu w oficjalnym Codexie.",
+        "modelAuto": "Auto (katalog / wykrywanie)",
+        "modelCustom": "Własny model…",
+        "modelLabel": "Model testowy",
+        "modelCustomPlaceholder": "ID modelu, np. gpt-4.1-mini",
+        "modelHint": "Opcjonalnie: wspólny model. Puste = auto z katalogu."
       },
       "enableAndStart": "Start​",
       "instance": {
@@ -3153,7 +3165,8 @@
       },
       "renameApiKeyPrompt": "Zmień nazwę API key",
       "renameApiKeySuccess": "Zmieniono nazwę API key",
-      "renameApiKeyFailed": "Nie udało się zmienić nazwy API key: {{error}}"
+      "renameApiKeyFailed": "Nie udało się zmienić nazwy API key: {{error}}",
+      "existingApiKeysSearch": "Szukaj API Key…"
     },
     "quickSwitch": {
       "action": "Szybka zmiana dostawcy",
@@ -3447,7 +3460,11 @@
         "httpStatus": "Status HTTP {{status}}",
         "allInstances": "Wszystkie instancje",
         "instanceFilter": "Instancja",
-        "instanceUnknown": "Instancja -"
+        "instanceUnknown": "Instancja -",
+        "reasoningEffort": "Rozumowanie",
+        "reasoningEffortValue": "Roz. {{effort}}",
+        "serviceTier": "Poziom usługi",
+        "serviceTierValue": "Poziom {{tier}}"
       },
       "timeouts": {
         "entryLabel": "Zaawansowane",
@@ -3708,7 +3725,11 @@
       "autoSyncBadge": "Automatyczny"
     },
     "exportAuthFailed": "Eksport błędów",
-    "exportAuthFailedTitle": "Eksportuj konta z błędem auth"
+    "exportAuthFailedTitle": "Eksportuj konta z błędem auth",
+    "accounts": {
+      "showRelayQuota": "Pokaż limit relay",
+      "hideRelayQuota": "Ukryj limit relay"
+    }
   },
   "githubCopilot": {
     "title": "Zarządzanie kontami GitHub Copilot",
@@ -5384,9 +5405,20 @@
       "localDesc": "Import z ~/.grok/auth.json albo wybierz oficjalny auth.json / pełny JSON eksportu z tej aplikacji.",
       "localClient": "Importuj z lokalnego Grok CLI",
       "apiKeyTab": "Klucz API",
-      "apiKeyDesc": "Wklej klucz API xAI (oficjalny XAI_API_KEY / xai-…). Wstrzykiwany jako zmienna środowiskowa przy starcie CLI; nie nadpisuje oficjalnego logowania OAuth.",
+      "apiKeyDesc": "Wklej klucz API xAI (oficjalny XAI_API_KEY / xai-…). Przy starcie CLI jest wstrzykiwany przez GROK_HOME przypisany do konta i nie nadpisuje oficjalnego logowania OAuth.",
       "apiKeyPlaceholder": "wklej xai-…",
-      "apiKeyAction": "Dodaj API Key"
+      "apiKeyAction": "Dodaj API Key",
+      "apiMode": "Typ API",
+      "apiModeOfficial": "Oficjalne xAI",
+      "apiModeCustom": "Zewnętrzne",
+      "customApiDesc": "Skonfiguruj Base URL zgodny z OpenAI, ID modelu i klucz API. Przy starcie zapisywany jest config.toml przypisany do konta, a klucz trafia tylko do tego procesu CLI.",
+      "customApiKeyPlaceholder": "Wklej zewnętrzny klucz API",
+      "apiBaseUrl": "Bazowy URL",
+      "apiBaseUrlPlaceholder": "Np. https://api.example.com/v1",
+      "apiModel": "ID modelu",
+      "apiModelPlaceholder": "Na przykład grok-4.1-fast",
+      "apiFieldRequired": "Wpisz {{field}}",
+      "apiBaseUrlInvalid": "Wpisz pełny adres http:// lub https:// bez danych logowania, parametrów zapytania ani fragmentu"
     },
     "instances": {
       "unsupported": "Wiele instancji Grok CLI jest obsługiwanych tylko w macOS, Windows i Linux.",

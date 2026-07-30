@@ -51,6 +51,7 @@ import { ClaudeIcon } from '../components/icons/ClaudeIcon';
 import { ModelProviderUsagePanel } from '../components/model-provider/ModelProviderUsagePanel';
 import { PlatformGroupSwitcher } from '../components/platform/PlatformGroupSwitcher';
 import { useEscClose } from '../hooks/useEscClose';
+import { useEnterConfirm } from '../hooks/useEnterConfirm';
 import { useExportJsonModal } from '../hooks/useExportJsonModal';
 import { useLaunchTerminalOptions } from '../hooks/useLaunchTerminalOptions';
 import { getProviderCurrentAccountId, type ProviderCurrentPlatform } from '../services/providerCurrentAccountService';
@@ -959,7 +960,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
 
   useEscClose(showAddModal, closeAddModal);
   useEscClose(Boolean(cliLaunchModal), () => setCliLaunchModal(null));
-  useEscClose(Boolean(deleteConfirm), () => setDeleteConfirm(null));
+  useEscClose(Boolean(deleteConfirm) && !deleting, () => setDeleteConfirm(null));
 
   const refreshCurrentAccountId = useCallback(
     async (platform: ClaudeSubPlatform = activeSubPlatform) => {
@@ -2455,6 +2456,10 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
       setDeleting(false);
     }
   };
+
+  useEnterConfirm(Boolean(deleteConfirm) && !deleting, () => {
+    void confirmDelete();
+  });
 
   const openBatchDeleteConfirm = () => {
     if (selectedDeletableIds.length === 0) return;

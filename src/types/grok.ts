@@ -56,6 +56,10 @@ export interface GrokAccount {
   profile_image_asset_id?: string | null;
   coding_data_retention_opt_out?: boolean | null;
   expires_at?: number | null;
+  /** OpenAI-compatible endpoint configured for this API-key account. */
+  api_base_url?: string | null;
+  /** Model identifier configured for this API-key account. */
+  api_model?: string | null;
   has_grok_code_access?: boolean | null;
   plan_type?: string;
   quota?: GrokQuota | null;

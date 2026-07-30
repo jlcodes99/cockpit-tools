@@ -219,6 +219,11 @@
       "loginSuccess": "Giriş başarılı",
       "switchAccount": "Hesap Değiştir"
     },
+    "sessionSharing": {
+      "title": "Geçişte yerel oturumları paylaş",
+      "fullDesc": "Hesap değiştirirken bu cihazdaki {{platform}} hesapları arasında yerel oturumları ve geri yükleme durumunu birleştirir. Dosyalar yerelde kalır ve içerik yüklenmez.",
+      "workspaceDesc": "Hesap değiştirirken bu cihazdaki {{platform}} hesapları arasında workspace oturum dizinlerini ve geri yükleme durumunu kopyalayıp birleştirir. Şifreli Builder/Agent oturum veritabanı değiştirilmez ve içerik yüklenmez."
+    },
     "topRightAd": {
       "ariaLabel": "Genel sağ üst reklam alanı",
       "badge": "REKLAM",
@@ -750,7 +755,7 @@
       "antigravityDualSwitchNoRestart": "Yeniden başlatmadan çift geçiş",
       "antigravityDualSwitchNoRestartDesc": "Hesap değiştirirken yerel hesap verisi yazımı ve eklentinin kesintisiz geçişi tek akışta yürütülür; Antigravity IDE yeniden başlatılmaz.",
       "appAutoLaunch": "Oturum açıldığında Cockpit Tools'u başlat",
-      "appAutoLaunchDesc": "Sistem oturumundan sonra uygulamayı otomatik başlat",
+      "appAutoLaunchDesc": "Oturum açınca başlat. Windows açılışında PowerShell hatası görürseniz kapatın.",
       "startupWakeupDisabled": "Devre dışı",
       "startupWakeupImmediate": "Hemen uyandır",
       "startupWakeupDelayed": "Gecikmeli uyandır",
@@ -864,7 +869,9 @@
       "menuBarQuotaPlatformDesc": "O platformun etkin hesabını kullanır; yenileme veya geçişten sonra güncellenir",
       "menuBarAccountPrefix": "E-postanın ilk 4 karakteri",
       "menuBarAccountPrefixDesc": "Yalnızca normal hesaplar: kapalı e-posta önekini gizler. Codex API hizmeti / API Key yine API etiketini gösterir",
-      "menuBarQuotaConfirmEnable": "Etkinleştir"
+      "menuBarQuotaConfirmEnable": "Etkinleştir",
+      "codexHideRelayQuota": "Relay kotasını gizle",
+      "codexHideRelayQuotaDesc": "Codex hesap özetinde relay / New API kota panellerini gizler."
     },
     "network": {
       "apiTitle": "Yerçekimine Karşı Kokpit API'si",
@@ -3059,7 +3066,12 @@
           "pending": "Bekliyor",
           "completed": "Tamamlandı"
         },
-        "officialClientOnlyError": "Bu sağlayıcı yalnızca resmi Codex istemcisinden gelen istekleri kabul eder. Tek tıkla test artık yerel gateway’i kullanıyor, ancak upstream bu test isteğini yine de reddetti. Esas sonucu resmi Codex istemcisinde başlattıktan sonra kontrol edin."
+        "officialClientOnlyError": "Bu sağlayıcı yalnızca resmi Codex istemcisinden gelen istekleri kabul eder. Tek tıkla test artık yerel gateway’i kullanıyor, ancak upstream bu test isteğini yine de reddetti. Esas sonucu resmi Codex istemcisinde başlattıktan sonra kontrol edin.",
+        "modelAuto": "Otomatik (katalog / keşif)",
+        "modelCustom": "Özel model…",
+        "modelLabel": "Test modeli",
+        "modelCustomPlaceholder": "Model kimliği, örn. gpt-4.1-mini",
+        "modelHint": "İsteğe bağlı ortak model. Boş = katalogdan otomatik."
       },
       "enableAndStart": "Başlat",
       "instance": {
@@ -3153,7 +3165,8 @@
       },
       "renameApiKeyPrompt": "API key yeniden adlandır",
       "renameApiKeySuccess": "API key yeniden adlandırıldı",
-      "renameApiKeyFailed": "API key yeniden adlandırılamadı: {{error}}"
+      "renameApiKeyFailed": "API key yeniden adlandırılamadı: {{error}}",
+      "existingApiKeysSearch": "Mevcut API Key ara…"
     },
     "quickSwitch": {
       "action": "Sağlayıcıyı hızlı değiştir",
@@ -3447,7 +3460,11 @@
         "httpStatus": "HTTP durumu {{status}}",
         "allInstances": "Tüm örnekler",
         "instanceFilter": "Örnek",
-        "instanceUnknown": "Örnek -"
+        "instanceUnknown": "Örnek -",
+        "reasoningEffort": "Akıl yürütme",
+        "reasoningEffortValue": "Akıl {{effort}}",
+        "serviceTier": "Hizmet katmanı",
+        "serviceTierValue": "Katman {{tier}}"
       },
       "timeouts": {
         "entryLabel": "Gelişmiş",
@@ -3708,7 +3725,11 @@
       "autoSyncBadge": "Otomatik"
     },
     "exportAuthFailed": "Hataları dışa aktar",
-    "exportAuthFailedTitle": "Tüm auth hatalı hesapları dışa aktar"
+    "exportAuthFailedTitle": "Tüm auth hatalı hesapları dışa aktar",
+    "accounts": {
+      "showRelayQuota": "Röle kotasını göster",
+      "hideRelayQuota": "Röle kotasını gizle"
+    }
   },
   "githubCopilot": {
     "title": "GitHub Copilot Hesap Yönetimi",
@@ -5384,9 +5405,20 @@
       "localDesc": "~/.grok/auth.json dosyasından içe aktarın veya resmi auth.json / bu uygulamanın tam dışa aktarma JSON’unu seçin.",
       "localClient": "Yerel Grok CLI'dan İçe Aktar",
       "apiKeyTab": "API Anahtarı",
-      "apiKeyDesc": "xAI API anahtarını yapıştırın (resmi XAI_API_KEY / xai-…). CLI başlatılırken ortam değişkeni olarak enjekte edilir; resmi OAuth oturumunu üzerine yazmaz.",
+      "apiKeyDesc": "xAI API anahtarını yapıştırın (resmi XAI_API_KEY / xai-…). CLI başlatılırken hesaba özel GROK_HOME üzerinden enjekte edilir ve resmi OAuth oturumunun üzerine yazmaz.",
       "apiKeyPlaceholder": "xai-… yapıştırın",
-      "apiKeyAction": "API Key ekle"
+      "apiKeyAction": "API Key ekle",
+      "apiMode": "API türü",
+      "apiModeOfficial": "Resmi xAI",
+      "apiModeCustom": "Üçüncü taraf",
+      "customApiDesc": "OpenAI uyumlu Base URL, model kimliği ve API anahtarı yapılandırın. Başlangıçta hesaba özel config.toml yazılır ve anahtar yalnızca bu CLI işlemine enjekte edilir.",
+      "customApiKeyPlaceholder": "Üçüncü taraf API anahtarını yapıştırın",
+      "apiBaseUrl": "Temel URL",
+      "apiBaseUrlPlaceholder": "Örnek: https://api.example.com/v1",
+      "apiModel": "Model kimliği",
+      "apiModelPlaceholder": "Örneğin grok-4.1-fast",
+      "apiFieldRequired": "{{field}} girin",
+      "apiBaseUrlInvalid": "Kimlik bilgileri, sorgu parametreleri veya parça içermeyen tam bir http:// ya da https:// URL girin"
     },
     "instances": {
       "unsupported": "Grok CLI çoklu örnekleri yalnızca macOS, Windows ve Linux'ta desteklenir.",

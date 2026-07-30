@@ -189,6 +189,8 @@ pub struct GeneralConfig {
     pub codebuddy_share_sessions_on_switch: bool,
     /// CodeBuddy CN 启动路径（为空则使用默认路径）
     pub codebuddy_cn_app_path: String,
+    /// 切换 CodeBuddy CN 账号时是否在本机账号间合并本地会话
+    pub codebuddy_cn_share_sessions_on_switch: bool,
     /// Qoder 启动路径（为空则使用默认路径）
     pub qoder_app_path: String,
     /// ZCode 启动路径（为空则使用默认路径）
@@ -199,6 +201,10 @@ pub struct GeneralConfig {
     pub trae_solo_app_path: String,
     pub trae_cn_app_path: String,
     pub trae_solo_cn_app_path: String,
+    pub trae_share_sessions_on_switch: bool,
+    pub trae_solo_share_sessions_on_switch: bool,
+    pub trae_cn_share_sessions_on_switch: bool,
+    pub trae_solo_cn_share_sessions_on_switch: bool,
     pub trae_app_scan_roots: String,
     pub trae_solo_app_scan_roots: String,
     pub trae_cn_app_scan_roots: String,
@@ -228,6 +234,8 @@ pub struct GeneralConfig {
     pub codex_restart_specified_app_on_switch: bool,
     /// 是否在 Codex 总览中显示 API 服务入口
     pub codex_local_access_entry_visible: bool,
+    /// 是否隐藏 Codex 总览中的中转站 / New API 类额度面板
+    pub codex_hide_relay_quota: bool,
     /// 是否显示顶部推广位
     pub top_right_ad_visible: bool,
     /// Antigravity 切号是否启用“本地落盘 + 扩展无感”且不重启
@@ -1092,12 +1100,17 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "codebuddy_app_path"
             | "codebuddy_share_sessions_on_switch"
             | "codebuddy_cn_app_path"
+            | "codebuddy_cn_share_sessions_on_switch"
             | "qoder_app_path"
             | "zcode_app_path"
             | "trae_app_path"
             | "trae_solo_app_path"
             | "trae_cn_app_path"
             | "trae_solo_cn_app_path"
+            | "trae_share_sessions_on_switch"
+            | "trae_solo_share_sessions_on_switch"
+            | "trae_cn_share_sessions_on_switch"
+            | "trae_solo_cn_share_sessions_on_switch"
             | "trae_app_scan_roots"
             | "trae_solo_app_scan_roots"
             | "trae_cn_app_scan_roots"
@@ -1115,6 +1128,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "antigravity_launch_on_switch"
             | "codex_restart_specified_app_on_switch"
             | "codex_local_access_entry_visible"
+            | "codex_hide_relay_quota"
             | "top_right_ad_visible"
             | "antigravity_dual_switch_no_restart_enabled"
             | "auto_switch_enabled"
@@ -2602,6 +2616,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         codebuddy_cn_app_path: modules::process::normalize_windows_user_facing_path(
             &user_config.codebuddy_cn_app_path,
         ),
+        codebuddy_cn_share_sessions_on_switch: user_config.codebuddy_cn_share_sessions_on_switch,
         qoder_app_path: modules::process::normalize_windows_user_facing_path(
             &user_config.qoder_app_path,
         ),
@@ -2620,6 +2635,10 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         trae_solo_cn_app_path: modules::process::normalize_windows_user_facing_path(
             &user_config.trae_solo_cn_app_path,
         ),
+        trae_share_sessions_on_switch: user_config.trae_share_sessions_on_switch,
+        trae_solo_share_sessions_on_switch: user_config.trae_solo_share_sessions_on_switch,
+        trae_cn_share_sessions_on_switch: user_config.trae_cn_share_sessions_on_switch,
+        trae_solo_cn_share_sessions_on_switch: user_config.trae_solo_cn_share_sessions_on_switch,
         trae_app_scan_roots: user_config.trae_app_scan_roots,
         trae_solo_app_scan_roots: user_config.trae_solo_app_scan_roots,
         trae_cn_app_scan_roots: user_config.trae_cn_app_scan_roots,
@@ -2639,6 +2658,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         antigravity_launch_on_switch: user_config.antigravity_launch_on_switch,
         codex_restart_specified_app_on_switch: user_config.codex_restart_specified_app_on_switch,
         codex_local_access_entry_visible: user_config.codex_local_access_entry_visible,
+        codex_hide_relay_quota: user_config.codex_hide_relay_quota,
         top_right_ad_visible: user_config.top_right_ad_visible,
         antigravity_dual_switch_no_restart_enabled: user_config
             .antigravity_dual_switch_no_restart_enabled,
@@ -3016,6 +3036,7 @@ pub fn save_general_config(
     antigravity_launch_on_switch: Option<bool>,
     codex_restart_specified_app_on_switch: Option<bool>,
     codex_local_access_entry_visible: Option<bool>,
+    codex_hide_relay_quota: Option<bool>,
     top_right_ad_visible: Option<bool>,
     antigravity_dual_switch_no_restart_enabled: Option<bool>,
     auto_switch_enabled: Option<bool>,
@@ -3387,6 +3408,9 @@ pub fn save_general_config(
         }
         if let Some(value) = codex_local_access_entry_visible {
             current.codex_local_access_entry_visible = value;
+        }
+        if let Some(value) = codex_hide_relay_quota {
+            current.codex_hide_relay_quota = value;
         }
         if let Some(value) = top_right_ad_visible {
             current.top_right_ad_visible = value;
@@ -4135,6 +4159,11 @@ mod tests {
         let mut config = UserConfig::default();
         let updates = serde_json::json!({
             "codebuddy_share_sessions_on_switch": true,
+            "codebuddy_cn_share_sessions_on_switch": true,
+            "trae_share_sessions_on_switch": true,
+            "trae_solo_share_sessions_on_switch": true,
+            "trae_cn_share_sessions_on_switch": true,
+            "trae_solo_cn_share_sessions_on_switch": true,
             "workbuddy_share_sessions_on_switch": true,
         })
         .as_object()
@@ -4145,6 +4174,11 @@ mod tests {
             .expect("session sharing patch should succeed");
 
         assert!(config.codebuddy_share_sessions_on_switch);
+        assert!(config.codebuddy_cn_share_sessions_on_switch);
+        assert!(config.trae_share_sessions_on_switch);
+        assert!(config.trae_solo_share_sessions_on_switch);
+        assert!(config.trae_cn_share_sessions_on_switch);
+        assert!(config.trae_solo_cn_share_sessions_on_switch);
         assert!(config.workbuddy_share_sessions_on_switch);
     }
 

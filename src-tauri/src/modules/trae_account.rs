@@ -1086,18 +1086,57 @@ fn resolve_usertag_from_storage(
 }
 
 fn resolve_account_user_id_for_inject(account: &TraeAccount) -> Option<String> {
-    normalize_non_empty(account.user_id.as_deref()).or_else(|| {
-        pick_string(
-            account.trae_auth_raw.as_ref(),
-            &[
-                &["userId"],
-                &["user_id"],
-                &["uid"],
-                &["id"],
-                &["account", "uid"],
-            ],
-        )
-    })
+    normalize_non_empty(account.user_id.as_deref())
+        .or_else(|| {
+            pick_string(
+                account.trae_auth_raw.as_ref(),
+                &[
+                    &["userId"],
+                    &["user_id"],
+                    &["uid"],
+                    &["UserID"],
+                    &["id"],
+                    &["account", "uid"],
+                    &["account", "userId"],
+                    &["account", "user_id"],
+                    &["user", "id"],
+                    &["user", "userId"],
+                ],
+            )
+        })
+        .or_else(|| {
+            pick_string(
+                account.trae_profile_raw.as_ref(),
+                &[
+                    &["userId"],
+                    &["user_id"],
+                    &["uid"],
+                    &["id"],
+                    &["user", "id"],
+                    &["user", "userId"],
+                    &["account", "uid"],
+                    &["account", "userId"],
+                ],
+            )
+        })
+        .or_else(|| {
+            // Profile payloads are sometimes nested under data/Result.
+            profile_payload_root(account.trae_profile_raw.as_ref()).and_then(|root| {
+                pick_string(
+                    Some(root),
+                    &[
+                        &["userId"],
+                        &["user_id"],
+                        &["uid"],
+                        &["id"],
+                        &["user", "id"],
+                        &["user", "userId"],
+                        &["account", "uid"],
+                        &["account", "userId"],
+                    ],
+                )
+            })
+        })
 }
 
 fn merge_auth_fields(auth_raw: Option<&Value>, payload: &TraeImportPayload) -> Option<Value> {
@@ -2691,7 +2730,7 @@ fn resolve_platform_from_roots(roots: &[Option<&Value>]) -> TraePlatformKind {
     }
 }
 
-fn resolve_account_platform_kind(account: &TraeAccount) -> TraePlatformKind {
+pub(crate) fn resolve_account_platform_kind(account: &TraeAccount) -> TraePlatformKind {
     let profile_root = profile_payload_root(account.trae_profile_raw.as_ref());
     let roots = [
         account.trae_auth_raw.as_ref(),
@@ -3396,6 +3435,54 @@ fn read_local_trae_auth_from_storage_path(
     Ok(Some(payload))
 }
 
+pub(crate) fn read_local_trae_user_id_from_storage_path(
+    storage_path: &Path,
+) -> Result<Option<String>, String> {
+    Ok(read_local_trae_auth_from_storage_path(storage_path)?
+        .and_then(|payload| normalize_non_empty(payload.user_id.as_deref())))
+}
+
+pub(crate) fn account_user_id_for_local_session(account: &TraeAccount) -> Option<String> {
+    resolve_account_user_id_for_inject(account)
+}
+
+/// Persist a resolved official user id onto the saved account when missing.
+/// Helps later session-share switches without requiring a full re-import.
+pub(crate) fn backfill_account_user_id_if_missing(
+    account_id: &str,
+    user_id: &str,
+) -> Result<bool, String> {
+    let Some(mut account) = load_account(account_id) else {
+        return Ok(false);
+    };
+    if normalize_non_empty(account.user_id.as_deref()).is_some() {
+        return Ok(false);
+    }
+    let Some(uid) = normalize_non_empty(Some(user_id)) else {
+        return Ok(false);
+    };
+    account.user_id = Some(uid.clone());
+    account.last_used = chrono::Utc::now().timestamp_millis();
+    save_account_file(&account)?;
+    // Keep index summary in sync for UI/debug.
+    if let Ok(mut index) = load_account_index_checked() {
+        if let Some(item) = index
+            .accounts
+            .iter_mut()
+            .find(|item| item.id == account.id)
+        {
+            item.user_id = Some(uid.clone());
+            item.last_used = account.last_used;
+            let _ = save_account_index(&index);
+        }
+    }
+    logger::log_info(&format!(
+        "[Trae Account] 回填官方用户 ID: account_id={}, user_id={}",
+        account_id, uid
+    ));
+    Ok(true)
+}
+
 pub fn read_local_trae_auth() -> Result<Option<TraeImportPayload>, String> {
     read_local_trae_auth_for_platform(TraePlatformKind::Trae)
 }
@@ -3534,9 +3621,76 @@ pub fn inject_to_trae_for_platform(
     inject_to_trae_at_path(storage_path.as_path(), account_id)
 }
 
+fn storage_paths_equivalent(left: &Path, right: &Path) -> bool {
+    if left == right {
+        return true;
+    }
+    match (std::fs::canonicalize(left), std::fs::canonicalize(right)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => left.to_string_lossy() == right.to_string_lossy(),
+    }
+}
+
+/// Refuse overwriting a storage.json that is currently owned by a running Trae process.
+/// Mutual refresh/inject while the official client holds the session rotates tokens and
+/// kicks the live login; switch/start paths close Trae first so this guard stays out of the way.
+fn refuse_inject_if_storage_live(storage_path: &Path, account_id: &str) -> Result<(), String> {
+    for platform in all_trae_platform_kinds() {
+        if !crate::modules::process::is_trae_running_for_platform(platform) {
+            continue;
+        }
+        if let Ok(default_path) = get_default_trae_storage_path_for_platform(platform) {
+            if storage_paths_equivalent(default_path.as_path(), storage_path) {
+                return Err(format!(
+                    "账号所在的 {} 正在运行，已拒绝回写 storage 以免互刷顶号。请先关闭客户端后再切号或注入: account_id={}, path={}",
+                    platform.display_name(),
+                    account_id,
+                    storage_path.display()
+                ));
+            }
+        }
+    }
+
+    if let Ok(contexts) =
+        crate::modules::trae_instance::resolve_running_bound_account_contexts()
+    {
+        for context in contexts {
+            if storage_paths_equivalent(context.storage_path.as_path(), storage_path) {
+                return Err(format!(
+                    "目标 storage 对应实例正在运行，已拒绝回写以免互刷顶号: account_id={}, running_account_id={}, path={}",
+                    account_id,
+                    context.account_id,
+                    storage_path.display()
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub fn inject_to_trae_at_path(storage_path: &Path, account_id: &str) -> Result<(), String> {
-    let account =
+    refuse_inject_if_storage_live(storage_path, account_id)?;
+
+    let mut account =
         load_account(account_id).ok_or_else(|| format!("Trae 账号不存在: {}", account_id))?;
+    // If the target storage already holds this account's fresher rotated tokens,
+    // adopt them before rewrite so we never downgrade a live Trae session snapshot.
+    if storage_path.exists()
+        && sync_account_tokens_from_storage_path(
+            &mut account,
+            storage_path,
+            "注入前本地",
+        )
+    {
+        if let Err(err) = save_account_file(&account) {
+            logger::log_warn(&format!(
+                "[Trae Account] 注入前同步 storage 后落盘失败: account_id={}, error={}",
+                account_id, err
+            ));
+        }
+    }
+
     let mut root = if storage_path.exists() {
         read_storage_json(storage_path)?
     } else {
@@ -4664,17 +4818,28 @@ fn apply_runtime_storage_payload_for_usage_refresh(
     let Some(storage_path) = runtime_storage_path else {
         return;
     };
+    sync_account_tokens_from_storage_path(account, storage_path, "运行中实例");
+}
 
+/// Pull fresher tokens from Trae `storage.json` when identity matches.
+/// Critical for avoiding refresh-token races: Trae may have already rotated
+/// refresh tokens on disk while Cockpit still holds a stale copy.
+fn sync_account_tokens_from_storage_path(
+    account: &mut TraeAccount,
+    storage_path: &Path,
+    source_label: &str,
+) -> bool {
     let payload = match read_local_trae_auth_from_storage_path(storage_path) {
         Ok(Some(payload)) => payload,
-        Ok(None) => return,
+        Ok(None) => return false,
         Err(err) => {
             logger::log_warn(&format!(
-                "[Trae Refresh] 读取运行中实例 storage 失败，跳过本地会话同步: path={}, error={}",
+                "[Trae Refresh] 读取{} storage 失败，跳过本地会话同步: path={}, error={}",
+                source_label,
                 storage_path.display(),
                 err
             ));
-            return;
+            return false;
         }
     };
 
@@ -4686,25 +4851,154 @@ fn apply_runtime_storage_payload_for_usage_refresh(
         payload_email.as_deref(),
     ) {
         logger::log_warn(&format!(
-            "[Trae Refresh] 运行中实例 storage 与目标账号不匹配，跳过本地会话同步: account_id={}, path={}",
+            "[Trae Refresh] {} storage 与目标账号不匹配，跳过本地会话同步: account_id={}, path={}",
+            source_label,
             account.id,
             storage_path.display()
         ));
-        return;
+        return false;
     }
 
     let previous_access_token = account.access_token.clone();
+    let previous_refresh_token = account.refresh_token.clone();
     apply_payload(account, payload);
+    let token_changed = previous_access_token != account.access_token
+        || previous_refresh_token != account.refresh_token;
     logger::log_info(&format!(
-        "[Trae Refresh] 已同步运行中实例会话快照: account_id={}, path={}, token_changed={}",
+        "[Trae Refresh] 已从{}同步会话快照: account_id={}, path={}, token_changed={}",
+        source_label,
         account.id,
         storage_path.display(),
-        if previous_access_token == account.access_token {
-            "false"
-        } else {
-            "true"
-        }
+        if token_changed { "true" } else { "false" }
     ));
+    token_changed
+}
+
+/// Collect candidate storage.json paths that may hold a fresher session for this account.
+fn collect_storage_paths_for_account_sync(
+    account: &TraeAccount,
+) -> Vec<(String, PathBuf)> {
+    let platform = resolve_account_platform_kind(account);
+    let mut paths: Vec<(String, PathBuf)> = Vec::new();
+    let mut push_unique = |label: String, path: PathBuf| {
+        if !path.exists() {
+            return;
+        }
+        if paths
+            .iter()
+            .any(|(_, existing)| storage_paths_equivalent(existing.as_path(), path.as_path()))
+        {
+            return;
+        }
+        paths.push((label, path));
+    };
+
+    if let Ok(storage_path) = get_default_trae_storage_path_for_platform(platform) {
+        push_unique("本地默认".to_string(), storage_path);
+    }
+
+    // Bound multi-open instances may hold a newer rotated refresh token.
+    if let Ok(store) =
+        crate::modules::trae_instance::load_instance_store_for_platform(platform)
+    {
+        if store
+            .default_settings
+            .bind_account_id
+            .as_deref()
+            .map(str::trim)
+            == Some(account.id.as_str())
+        {
+            if let Ok(default_dir) =
+                crate::modules::trae_instance::get_default_trae_user_data_dir_for_platform(platform)
+            {
+                push_unique(
+                    "默认实例".to_string(),
+                    crate::modules::trae_instance::build_storage_json_path(
+                        &default_dir.to_string_lossy(),
+                    ),
+                );
+            }
+        }
+        for instance in store.instances {
+            if instance
+                .bind_account_id
+                .as_deref()
+                .map(str::trim)
+                != Some(account.id.as_str())
+            {
+                continue;
+            }
+            let label = if instance.name.trim().is_empty() {
+                format!("实例 {}", instance.id)
+            } else {
+                format!("实例 {}", instance.name.trim())
+            };
+            push_unique(
+                label,
+                crate::modules::trae_instance::build_storage_json_path(&instance.user_data_dir),
+            );
+        }
+    }
+
+    paths
+}
+
+/// Before ExchangeToken, prefer disk tokens written by the official client.
+/// Persist any synced rotation so Cockpit does not keep a stale refresh token
+/// even if the subsequent ExchangeToken call fails.
+fn prepare_account_tokens_before_exchange(account: &mut TraeAccount) -> bool {
+    let mut any_changed = false;
+    for (label, storage_path) in collect_storage_paths_for_account_sync(account) {
+        if sync_account_tokens_from_storage_path(account, storage_path.as_path(), label.as_str()) {
+            any_changed = true;
+        }
+    }
+
+    if any_changed {
+        if let Err(err) = save_account_file(account) {
+            logger::log_warn(&format!(
+                "[Trae Refresh] 同步 storage 后落盘失败: account_id={}, error={}",
+                account.id, err
+            ));
+        } else {
+            logger::log_info(&format!(
+                "[Trae Refresh] 已落盘 storage 同步后的会话，避免互刷使用过期 RefreshToken: account_id={}",
+                account.id
+            ));
+        }
+    }
+
+    any_changed
+}
+
+fn format_exchange_token_failure(official_err: &str, legacy_err: &str) -> String {
+    let combined = format!(
+        "Trae ExchangeToken 失败: official={} | legacy={}",
+        official_err, legacy_err
+    );
+    if combined.contains("会话已过期")
+        || combined.contains("未认证")
+        || combined.contains("设备密钥缺失")
+        || combined.contains("invalid")
+        || combined.contains("401")
+        || combined.contains("403")
+    {
+        format!(
+            "{}。可能原因：官方客户端已刷新并轮换了 RefreshToken，或设备密钥/区域不一致导致互刷顶号。请在 Trae 重新登录后于 Cockpit「从本地导入」，并避免 Trae 运行中对同一账号做登录刷新。",
+            combined
+        )
+    } else {
+        combined
+    }
+}
+
+/// Whether full ExchangeToken is forbidden because Trae currently owns this account.
+pub(crate) fn is_account_protected_from_token_refresh(
+    account_id: &str,
+    accounts: &[TraeAccount],
+) -> Option<Option<PathBuf>> {
+    let map = resolve_running_account_refresh_protection_map(accounts);
+    map.get(account_id).cloned()
 }
 
 async fn refresh_quota_snapshot(
@@ -4843,12 +5137,31 @@ async fn refresh_account_async_once(account_id: &str) -> Result<TraeAccount, Str
         existing.id, existing.email
     ));
 
+    // Single-writer rule: if Trae currently owns this account, never ExchangeToken.
+    // Doing so rotates refresh tokens and logs the official client out.
+    let snapshot = list_accounts_checked().unwrap_or_else(|_| vec![existing.clone()]);
+    if let Some(storage_path) =
+        is_account_protected_from_token_refresh(account_id, snapshot.as_slice())
+    {
+        logger::log_warn(&format!(
+            "[Trae Refresh] 账号正在官方客户端中使用，跳过 ExchangeToken，改为仅额度刷新: account_id={}, storage_path={}",
+            account_id,
+            storage_path
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "-".to_string())
+        ));
+        return refresh_account_usage_only_async_once(account_id, storage_path.as_deref()).await;
+    }
+
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
 
     let mut account = existing.clone();
+    // Align with disk before exchange so we use the latest refresh token Trae may have written.
+    let _ = prepare_account_tokens_before_exchange(&mut account);
 
     let cookie = pick_cookie_from_account(&account);
     let routing_context = build_refresh_routing_context(&account);
@@ -4863,7 +5176,7 @@ async fn refresh_account_async_once(account_id: &str) -> Result<TraeAccount, Str
     ));
 
     if normalize_non_empty(account.refresh_token.as_deref()).is_none() {
-        return Err("Trae refresh token 缺失，无法按官方流程刷新登录态".to_string());
+        return Err("Trae refresh token 缺失，无法按官方流程刷新登录态。请在 Trae 登录后于 Cockpit「从本地导入」。".to_string());
     }
 
     let exchange_response = match request_exchange_token_by_official_refresh(
@@ -4899,12 +5212,7 @@ async fn refresh_account_async_once(account_id: &str) -> Result<TraeAccount, Str
                 Some(exchange_body),
             )
             .await
-            .map_err(|err| {
-                format!(
-                    "Trae ExchangeToken 失败: official={} | legacy={}",
-                    official_err, err
-                )
-            })?
+            .map_err(|err| format_exchange_token_failure(official_err.as_str(), err.as_str()))?
         }
     };
     let exchange_context = build_refresh_routing_context(&account);
@@ -4979,7 +5287,12 @@ async fn refresh_account_usage_only_async_once(
         .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
 
     let mut account = existing.clone();
-    apply_runtime_storage_payload_for_usage_refresh(&mut account, runtime_storage_path);
+    if let Some(path) = runtime_storage_path {
+        apply_runtime_storage_payload_for_usage_refresh(&mut account, Some(path));
+    } else {
+        // No explicit runtime path: still pull fresher tokens from local storages.
+        let _ = prepare_account_tokens_before_exchange(&mut account);
+    }
 
     let cookie = pick_cookie_from_account(&account);
     let routing_context = build_refresh_routing_context(&account);

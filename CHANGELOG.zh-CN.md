@@ -7,10 +7,16 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
-## [1.3.15] - 2026-07-28
+## [1.3.15] - 2026-07-29
 
 ### 新增
 
+- **Grok CLI 支持第三方 API Key 接口**：添加账号时可选择 xAI 官方或 OpenAI 兼容第三方接口，并配置 Base URL、模型 ID 与 API Key；API Key 账号使用独立 `GROK_HOME`，不会覆盖官方 OAuth 登录，密钥只注入对应的 CLI 进程。
+- **CodeBuddy CN 新增可选的切号共享本地会话能力**：开关默认关闭；开启后切换本机账号时会合并本地会话正文与恢复数据库，修改前创建本地备份，内容不会上传。
+- **Codex 模型供应商一键测试支持先选模型再测**：可从已选供应商的模型目录中选择、手动输入模型 ID，或保持自动探测，不再固定只用优先模型测试。([#1729](https://github.com/jlcodes99/cockpit-tools/issues/1729))
+- **Codex API 服务请求日志可展示思考强度与服务等级**：请求带有 `reasoning.effort` / `reasoning_effort` 或 `service_tier` 时，日志列表会显示对应值，便于核对实际调用参数。([#1690](https://github.com/jlcodes99/cockpit-tools/issues/1690))
+- **Codex 可隐藏中转站额度**：在设置与 Codex 快捷设置中提供开关，可隐藏中转 / New API 类额度面板，减轻列表重叠与视觉干扰；偏好写入用户配置。([#1692](https://github.com/jlcodes99/cockpit-tools/issues/1692))
+- **编辑 Codex 模型供应商时，已有 API Key 较多可搜索定位**。([#1750](https://github.com/jlcodes99/cockpit-tools/issues/1750))
 - **WorkBuddy 支持可配置自动签到**：默认关闭；可按账号设置随机签到时间段与日志保留，不会在未开启时对已有账号发起签到。
 - **macOS 菜单栏可显示实时额度**：默认关闭；可在设置中选择监控平台，并可选显示账号标识前缀。
 - **MFA 速查支持 Google Authenticator 迁移二维码批量导入**：可扫描 `otpauth-migration://` 迁移码并批量写入本地 MFA 记录。
@@ -28,6 +34,9 @@
 
 ### 修复
 
+- **修复 Codex API 服务平均延迟把失败或 0ms 通讯错误也算进均值的问题**：平均延迟仅统计成功请求。([#1657](https://github.com/jlcodes99/cockpit-tools/issues/1657))
+- **修复 Windows NSIS 重装/更新时桌面快捷方式重复堆积的问题**：安装前会清理 Cockpit Tools 已知的历史桌面与开始菜单快捷方式，再创建当前版本快捷方式。([#1656](https://github.com/jlcodes99/cockpit-tools/issues/1656))
+- **修复 Codex 自动压缩上下文后，xAI 等严格校验的 Chat Completions 服务商返回 HTTP 400 的问题**：Responses→Chat Completions 转换在没有有效工具时会移除 `tool_choice`，避免客户端进入无限重连。([#1727](https://github.com/jlcodes99/cockpit-tools/issues/1727))
 - **修复导入 ChatGPT Web Session 时因 Agent Identity runtime 注册返回 HTTP 403 导致导入失败的问题**：此类格式不再发起 runtime 注册，按仅查额账号导入。
 - **修复 Windows Desktop 会话路径含 `\\?\\` 前缀时工作目录规范化异常的问题**。
 - **修复自定义图标写入 localStorage 配额失败时可能撑坏布局的问题**。
