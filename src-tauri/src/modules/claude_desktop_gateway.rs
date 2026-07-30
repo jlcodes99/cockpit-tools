@@ -51,6 +51,29 @@ pub fn is_claude_desktop_model(model: &str) -> bool {
     normalized.starts_with("claude-") || normalized.starts_with("anthropic/claude-")
 }
 
+pub fn infer_anthropic_family_tier(model: &str) -> Option<&'static str> {
+    let normalized = model.trim().to_ascii_lowercase();
+    ["haiku", "sonnet", "opus", "fable", "mythos"]
+        .into_iter()
+        .find(|tier| {
+            normalized
+                .split(|ch: char| !ch.is_ascii_alphanumeric())
+                .any(|part| part == *tier)
+        })
+}
+
+fn normalize_anthropic_family_tier(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "haiku" | "sonnet" | "opus" | "fable" | "mythos"
+            )
+        })
+        .map(|value| value.to_ascii_lowercase())
+}
+
 pub fn normalize_connection_mode(value: Option<&str>) -> String {
     match value
         .map(str::trim)
@@ -81,11 +104,16 @@ pub fn normalize_model_mappings(
             .filter(|value| !value.is_empty())
             .map(str::to_string);
         let supports_1m = mapping.supports_1m.filter(|value| *value);
+        let anthropic_family_tier = normalize_anthropic_family_tier(
+            mapping.anthropic_family_tier.as_deref(),
+        )
+        .or_else(|| infer_anthropic_family_tier(&desktop_model).map(str::to_string));
         seen.entry(key)
             .or_insert_with(|| ClaudeDesktopGatewayModelMapping {
                 desktop_model,
                 upstream_model,
                 label_override,
+                anthropic_family_tier,
                 supports_1m,
             });
     }
@@ -112,6 +140,8 @@ pub fn build_default_model_mappings(
                 desktop_model: desktop_model.to_string(),
                 upstream_model: fallback.clone(),
                 label_override: None,
+                anthropic_family_tier: infer_anthropic_family_tier(desktop_model)
+                    .map(str::to_string),
                 supports_1m: None,
             })
         })

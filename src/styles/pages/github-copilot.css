@@ -2398,7 +2398,7 @@
 
 .claude-add-modal .claude-gateway-mapping-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(105px, 0.55fr) auto auto;
   gap: 8px;
   align-items: center;
 }
@@ -2415,6 +2415,10 @@
 }
 
 .claude-add-modal .claude-gateway-mapped-model-field .single-select-dropdown {
+  width: 100%;
+}
+
+.claude-add-modal .claude-gateway-mapping-row > .single-select-dropdown {
   width: 100%;
 }
 
