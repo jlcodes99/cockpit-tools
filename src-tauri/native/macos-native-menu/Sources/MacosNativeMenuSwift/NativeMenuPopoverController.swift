@@ -7,7 +7,9 @@ final class NativeMenuPopoverController: NSObject, ObservableObject, NSMenuDeleg
     static let shared = NativeMenuPopoverController()
 
     @Published private(set) var snapshot: NativeMenuSnapshot?
-    @Published private(set) var selectedPlatformId: String = ""
+    @Published private(set) var selectedPlatformId: String = UserDefaults.standard.string(
+        forKey: "cockpit-tools.native-menu.selected-platform"
+    ) ?? ""
     @Published private(set) var viewedAccountIds: [String: String] = [:]
     @Published private(set) var refreshingPlatformId: String?
     @Published private(set) var refreshingAccountId: String?
@@ -23,8 +25,7 @@ final class NativeMenuPopoverController: NSObject, ObservableObject, NSMenuDeleg
 
         let statusItem = Unmanaged<NSStatusItem>.fromOpaque(statusItemPointer).takeUnretainedValue()
         self.statusItem = statusItem
-        // 右键打开：若配置了菜单栏额度平台，强制选中该平台与当前账号。
-        self.apply(snapshot: snapshot, preferSnapshotSelection: snapshot.shouldPreferSelectedPlatform)
+        self.apply(snapshot: snapshot)
         self.ensureMenu()
         self.rebuildMenu()
         self.presentMenu()
@@ -36,6 +37,7 @@ final class NativeMenuPopoverController: NSObject, ObservableObject, NSMenuDeleg
         }
 
         self.selectedPlatformId = id
+        UserDefaults.standard.set(id, forKey: "cockpit-tools.native-menu.selected-platform")
         if self.viewedAccountIds[id] == nil,
            let platform = snapshot.platforms.first(where: { $0.id == id }),
            let initialAccountId = platform.currentOrFirstAccountId
@@ -205,36 +207,29 @@ final class NativeMenuPopoverController: NSObject, ObservableObject, NSMenuDeleg
     func update(snapshotJSON: String) {
         guard let snapshot = self.decodeSnapshot(from: snapshotJSON) else { return }
         // 菜单已打开时的增量刷新：保留用户正在浏览的平台/账号。
-        self.apply(snapshot: snapshot, preferSnapshotSelection: false)
+        self.apply(snapshot: snapshot)
         self.bumpRenderRevision()
         self.finishRefreshIfNeeded()
         self.rebuildMenu()
         self.refreshVisibleMenuDisplay()
     }
 
-    private func apply(snapshot: NativeMenuSnapshot, preferSnapshotSelection: Bool) {
+    private func apply(snapshot: NativeMenuSnapshot) {
         self.snapshot = snapshot
 
         let validPlatformIds = Set(snapshot.platforms.map(\.id))
-        if preferSnapshotSelection
-            || !validPlatformIds.contains(self.selectedPlatformId)
+        if !validPlatformIds.contains(self.selectedPlatformId)
             || self.selectedPlatformId.isEmpty
         {
             self.selectedPlatformId = snapshot.selected_platform_id
+            UserDefaults.standard.set(
+                self.selectedPlatformId,
+                forKey: "cockpit-tools.native-menu.selected-platform"
+            )
         }
 
         var nextViewedAccountIds = self.viewedAccountIds
         for platform in snapshot.platforms {
-            // 打开菜单且需要跟随菜单栏配置时：该平台强制回到「当前账号」。
-            if preferSnapshotSelection, platform.id == snapshot.selected_platform_id {
-                if let currentId = platform.currentOrFirstAccountId {
-                    nextViewedAccountIds[platform.id] = currentId
-                } else {
-                    nextViewedAccountIds.removeValue(forKey: platform.id)
-                }
-                continue
-            }
-
             let currentViewedId = nextViewedAccountIds[platform.id]
             if let currentViewedId,
                platform.cards.contains(where: { $0.id == currentViewedId })

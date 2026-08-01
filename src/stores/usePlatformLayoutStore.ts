@@ -2,6 +2,10 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { ALL_PLATFORM_IDS, PlatformId } from '../types/platform';
 import { CLASSIC_SIDEBAR_ENTRY_LIMIT } from './useSideNavLayoutStore';
+import {
+  ANTIGRAVITY_RUNTIME_TARGET_CHANGED_EVENT,
+  getAntigravityRuntimeTarget,
+} from '../utils/antigravityRuntimeTarget';
 
 const PLATFORM_LAYOUT_STORAGE_KEY = 'agtools.platform_layout.v1';
 const LEGACY_TRAY_CORE_IDS: PlatformId[] = ['antigravity', 'codex', 'github-copilot', 'windsurf'];
@@ -597,10 +601,12 @@ function normalizePlatformGroups(
   raw: unknown,
   fallbackToDefault: boolean,
   options: {
+    migrateAntigravitySuite?: boolean;
     restoreDefaultTraeSuiteGroup?: boolean;
     attachCodexApiServiceToCodexGroup?: boolean;
   } = {},
 ): PlatformLayoutGroup[] {
+  const shouldMigrateAntigravitySuite = options.migrateAntigravitySuite === true;
   const shouldRestoreDefaultTraeSuiteGroup = options.restoreDefaultTraeSuiteGroup === true;
   const shouldAttachCodexApiService = options.attachCodexApiServiceToCodexGroup === true;
   const source = Array.isArray(raw) ? raw : (fallbackToDefault ? defaultPlatformGroups() : []);
@@ -657,7 +663,7 @@ function normalizePlatformGroups(
     usedGroupIds.add(groupId);
   });
 
-  if (!usedPlatformIds.has('antigravity_ide')) {
+  if (shouldMigrateAntigravitySuite && !usedPlatformIds.has('antigravity_ide')) {
     const antigravityGroup = result.find((group) => group.platformIds.includes('antigravity'));
     if (antigravityGroup) {
       antigravityGroup.platformIds = [...antigravityGroup.platformIds, 'antigravity_ide'];
@@ -679,7 +685,7 @@ function normalizePlatformGroups(
     }
   }
 
-  if (!usedPlatformIds.has('antigravity_cli')) {
+  if (shouldMigrateAntigravitySuite && !usedPlatformIds.has('antigravity_cli')) {
     const antigravityGroup = result.find((group) => group.platformIds.includes('antigravity'));
     if (antigravityGroup) {
       antigravityGroup.platformIds = [...antigravityGroup.platformIds, 'antigravity_cli'];
@@ -1136,6 +1142,7 @@ function syncTrayLayoutToBackend(
     trayPlatformIds: state.trayPlatformIds,
     orderedEntryIds: state.orderedEntryIds,
     platformGroups: toTrayGroupPayload(state.platformGroups),
+    antigravityRuntimeTarget: getAntigravityRuntimeTarget(),
   }).catch((error) => {
     console.error('同步托盘平台布局失败:', error);
   });
@@ -1279,6 +1286,7 @@ function loadPersistedState(): NormalizedLayoutStateData {
       parsed.platformGroups,
       parsed.platformGroups === undefined,
       {
+        migrateAntigravitySuite: !antigravityGroupFirstMigrated,
         restoreDefaultTraeSuiteGroup: !traeSuiteDefaultGroupRestored,
         attachCodexApiServiceToCodexGroup: !codexApiServiceSuiteMigrated,
       },
@@ -1896,6 +1904,9 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
 }));
 
 if (typeof window !== 'undefined') {
+  window.addEventListener(ANTIGRAVITY_RUNTIME_TARGET_CHANGED_EVENT, () => {
+    usePlatformLayoutStore.getState().syncTrayLayout();
+  });
   window.setTimeout(() => {
     usePlatformLayoutStore.getState().syncTrayLayout();
   }, 0);

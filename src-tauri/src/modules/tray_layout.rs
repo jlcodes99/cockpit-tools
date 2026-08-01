@@ -50,6 +50,8 @@ pub const SUPPORTED_PLATFORM_IDS: [&str; 18] = [
 
 pub const SORT_MODE_AUTO: &str = "auto";
 pub const SORT_MODE_MANUAL: &str = "manual";
+pub const ANTIGRAVITY_RUNTIME_IDE: &str = "antigravity_ide";
+pub const ANTIGRAVITY_RUNTIME_CLI: &str = "antigravity_cli";
 
 const DEFAULT_CODEBUDDY_GROUP_ID: &str = "codebuddy-suite";
 const DEFAULT_TRAE_GROUP_ID: &str = "trae-suite";
@@ -77,10 +79,23 @@ pub struct TrayLayoutConfig {
     pub ordered_entry_ids: Vec<String>,
     #[serde(default = "default_platform_groups")]
     pub platform_groups: Vec<TrayLayoutGroup>,
+    #[serde(default = "default_antigravity_runtime_target")]
+    pub antigravity_runtime_target: String,
 }
 
 fn default_sort_mode() -> String {
     SORT_MODE_AUTO.to_string()
+}
+
+fn default_antigravity_runtime_target() -> String {
+    ANTIGRAVITY_RUNTIME_IDE.to_string()
+}
+
+fn normalize_antigravity_runtime_target(raw: &str) -> String {
+    match raw.trim() {
+        ANTIGRAVITY_RUNTIME_CLI => ANTIGRAVITY_RUNTIME_CLI.to_string(),
+        _ => ANTIGRAVITY_RUNTIME_IDE.to_string(),
+    }
 }
 
 fn default_order() -> Vec<String> {
@@ -132,6 +147,7 @@ impl Default for TrayLayoutConfig {
             tray_platform_ids: default_tray_platforms(),
             ordered_entry_ids: default_ordered_entries(),
             platform_groups: default_platform_groups(),
+            antigravity_runtime_target: default_antigravity_runtime_target(),
         }
     }
 }
@@ -496,6 +512,9 @@ fn normalize_config(
         ),
         ordered_entry_ids,
         platform_groups,
+        antigravity_runtime_target: normalize_antigravity_runtime_target(
+            &config.antigravity_runtime_target,
+        ),
     }
 }
 
@@ -547,6 +566,7 @@ pub fn save_tray_layout(
     tray_platform_ids: Vec<String>,
     ordered_entry_ids: Option<Vec<String>>,
     platform_groups: Option<Vec<TrayLayoutGroup>>,
+    antigravity_runtime_target: Option<String>,
 ) -> Result<TrayLayoutConfig, String> {
     let normalized = normalize_config(
         TrayLayoutConfig {
@@ -555,6 +575,8 @@ pub fn save_tray_layout(
             tray_platform_ids,
             ordered_entry_ids: ordered_entry_ids.unwrap_or_default(),
             platform_groups: platform_groups.unwrap_or_else(default_platform_groups),
+            antigravity_runtime_target: antigravity_runtime_target
+                .unwrap_or_else(default_antigravity_runtime_target),
         },
         false,
     );
@@ -565,4 +587,21 @@ pub fn save_tray_layout(
     crate::modules::atomic_write::write_string_atomic(&path, &content)
         .map_err(|e| format!("保存托盘布局配置失败: {}", e))?;
     Ok(normalized)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalizes_antigravity_runtime_target() {
+        assert_eq!(
+            normalize_antigravity_runtime_target(ANTIGRAVITY_RUNTIME_CLI),
+            ANTIGRAVITY_RUNTIME_CLI
+        );
+        assert_eq!(
+            normalize_antigravity_runtime_target("unexpected"),
+            ANTIGRAVITY_RUNTIME_IDE
+        );
+    }
 }

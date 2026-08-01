@@ -3708,6 +3708,7 @@ pub fn save_tray_platform_layout(
     tray_platform_ids: Vec<String>,
     ordered_entry_ids: Option<Vec<String>>,
     platform_groups: Option<Vec<modules::tray_layout::TrayLayoutGroup>>,
+    antigravity_runtime_target: Option<String>,
 ) -> Result<(), String> {
     modules::tray_layout::save_tray_layout(
         sort_mode,
@@ -3715,6 +3716,7 @@ pub fn save_tray_platform_layout(
         tray_platform_ids,
         ordered_entry_ids,
         platform_groups,
+        antigravity_runtime_target,
     )?;
     modules::tray::update_tray_menu(&app)?;
     Ok(())

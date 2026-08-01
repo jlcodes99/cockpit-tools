@@ -50,9 +50,6 @@ mod imp {
         strings: MenuStrings,
         platforms: Vec<PlatformSnapshot>,
         selected_platform_id: String,
-        /// 为 true 时右键打开菜单应强制选中 selected_platform_id（菜单栏额度配置的平台）并展示当前账号。
-        #[serde(default)]
-        prefer_selected_platform: bool,
     }
 
     #[derive(Debug, Clone, Serialize)]
@@ -217,7 +214,7 @@ mod imp {
     ) -> MenuBarStatus {
         MenuBarStatus {
             platform_id: platform.as_str().to_string(),
-            short_title: switcher_title(platform).to_string(),
+            short_title: switcher_title(platform),
             value_text,
             remaining_percent,
         }
@@ -597,7 +594,6 @@ mod imp {
             strings: build_strings(&lang),
             platforms,
             selected_platform_id,
-            prefer_selected_platform,
         })
     }
 
@@ -617,8 +613,8 @@ mod imp {
 
         PlatformSnapshot {
             id: platform.as_str().to_string(),
-            title: platform.title().to_string(),
-            short_title: switcher_title(platform).to_string(),
+            title: platform_title(platform),
+            short_title: switcher_title(platform),
             nav_target: platform.nav_target().to_string(),
             accent_hex: platform_accent_hex(platform).to_string(),
             current_account_id,
@@ -659,12 +655,25 @@ mod imp {
         }
     }
 
-    fn switcher_title(platform: PlatformId) -> &'static str {
+    fn antigravity_is_cli() -> bool {
+        modules::tray_layout::load_tray_layout().antigravity_runtime_target
+            == modules::tray_layout::ANTIGRAVITY_RUNTIME_CLI
+    }
+
+    fn platform_title(platform: PlatformId) -> String {
+        if platform == PlatformId::Antigravity && antigravity_is_cli() {
+            return "Agy CLI".to_string();
+        }
+        platform.title().to_string()
+    }
+
+    fn switcher_title(platform: PlatformId) -> String {
         match platform {
-            PlatformId::Antigravity => "AG IDE",
-            PlatformId::GitHubCopilot => "Copilot",
-            PlatformId::CodebuddyCn => "CodeBuddy CN",
-            _ => platform.title(),
+            PlatformId::Antigravity if antigravity_is_cli() => "Agy CLI".to_string(),
+            PlatformId::Antigravity => "AG IDE".to_string(),
+            PlatformId::GitHubCopilot => "Copilot".to_string(),
+            PlatformId::CodebuddyCn => "CodeBuddy CN".to_string(),
+            _ => platform.title().to_string(),
         }
     }
 
@@ -5077,9 +5086,16 @@ mod imp {
         tauri::async_runtime::spawn(async move {
             let status_app = app.clone();
             let _ = match platform {
-                PlatformId::Antigravity => commands::account::switch_account(app, account_id, None)
-                    .await
-                    .map(|_| ()),
+                PlatformId::Antigravity => commands::account::switch_account(
+                    app,
+                    account_id,
+                    Some(
+                        modules::tray_layout::load_tray_layout()
+                            .antigravity_runtime_target,
+                    ),
+                )
+                .await
+                .map(|_| ()),
                 PlatformId::Codex
                     if modules::codex_instance::is_api_service_bind_account_id(&account_id) =>
                 {
