@@ -48,7 +48,7 @@ type ProviderStoreOptions = {
   platformId: PlatformId;
   currentAccountIdKey?: string;
   resolveCurrentAccountId?: () => Promise<string | null>;
-  /** 后端可能合法返回 null（如关闭「切号同步官方登录」），允许清空当前账号。 */
+  /** 后端可能合法返回 null，允许清空当前账号。 */
   acceptEmptyCurrentAccountId?: boolean;
   persistCurrentAccountId?: boolean;
   hydrateCurrentAccountId?: boolean;
@@ -324,7 +324,7 @@ export function createProviderAccountStore<TAccount extends ProviderAccountAugme
 
     switchAccount: async (accountId: string) => {
       await service.injectAccount(accountId);
-      // acceptEmpty：以后端为准（如 Grok 关闭「切号同步官方登录」时无当前账号）。
+      // acceptEmpty：以后端返回的当前账号为准。
       // 其他平台仍乐观写入当前账号，再拉取列表/状态。
       if (acceptEmptyCurrentAccountId && hasCurrentAccountResolver) {
         allowNextEmptyCurrentAccountId = true;

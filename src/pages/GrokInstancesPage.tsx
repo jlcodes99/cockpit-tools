@@ -56,7 +56,7 @@ function resolveGrokLaunchWorkingDir(
   instance: InstanceProfile,
   accountMap: Map<string, GrokAccount>,
 ): { accountId: string | null; workingDir: string } {
-  // 无全局当前账号：仅使用实例显式绑定的账号。
+  // 显式绑定优先；未绑定时由后端按当前账号启动。
   const boundAccountId = instance.bindAccountId?.trim() || null;
   if (boundAccountId) {
     const bound = accountMap.get(boundAccountId);

@@ -32,9 +32,11 @@ enum ProviderIconRegistry {
     static func resource(for platformId: String) -> ProviderIconResource? {
         switch platformId {
         case "antigravity":
-            return ProviderIconResource(name: "antigravity-menu", ext: "png", renderingMode: .original)
+            return ProviderIconResource(name: "antigravity-menu", ext: "svg", renderingMode: .template)
         case "codex":
             return ProviderIconResource(name: "codex", ext: "svg", renderingMode: .template)
+        case "grok":
+            return ProviderIconResource(name: "grok", ext: "svg", renderingMode: .template)
         case "claude_manager":
             return ProviderIconResource(name: "claude", ext: "png", renderingMode: .original)
         case "cursor":

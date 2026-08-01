@@ -66,3 +66,10 @@ struct NativeMenuSnapshot: Codable {
         self.prefer_selected_platform ?? false
     }
 }
+
+struct NativeMenuBarStatus: Codable {
+    let platform_id: String
+    let short_title: String
+    let value_text: String
+    let remaining_percent: Int?
+}

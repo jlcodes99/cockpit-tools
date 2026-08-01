@@ -133,8 +133,10 @@ pub struct GeneralConfig {
     pub menu_bar_quota_enabled: bool,
     /// 是否显示账号标识前 4 位
     pub menu_bar_show_account_prefix: bool,
-    /// 菜单栏额度监控平台
+    /// 菜单栏额度监控平台（逗号分隔）
     pub menu_bar_quota_platform: String,
+    /// 菜单栏额度是否以单色显示
+    pub menu_bar_quota_monochrome_enabled: bool,
     /// 是否在启动时显示悬浮卡片
     pub floating_card_show_on_startup: bool,
     /// 是否在启动后自动最小化主窗口
@@ -1116,6 +1118,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "menu_bar_quota_enabled"
             | "menu_bar_show_account_prefix"
             | "menu_bar_quota_platform"
+            | "menu_bar_quota_monochrome_enabled"
             | "floating_card_show_on_startup"
             | "startup_minimized"
             | "remember_main_window_state"
@@ -1280,10 +1283,19 @@ fn apply_general_config_updates(
         next.theme_color = config::normalize_theme_color(&next.theme_color);
     }
     if updates.contains_key("menu_bar_quota_platform") {
-        let platform = next.menu_bar_quota_platform.trim();
-        next.menu_bar_quota_platform = modules::tray::PlatformId::from_str(platform)
-            .map(|value| value.as_str().to_string())
-            .unwrap_or_else(|| "codex".to_string());
+        let platforms = modules::tray::PlatformId::parse_list(&next.menu_bar_quota_platform)
+            .into_iter()
+            .take(modules::tray::MAX_MENU_BAR_QUOTA_PLATFORMS)
+            .collect::<Vec<_>>();
+        next.menu_bar_quota_platform = if platforms.is_empty() {
+            "codex".to_string()
+        } else {
+            platforms
+                .into_iter()
+                .map(|platform| platform.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        };
     }
     if updates.contains_key("webdav_allowed_domains") {
         next.webdav_allowed_domains = next
@@ -2604,6 +2616,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         menu_bar_quota_enabled: user_config.menu_bar_quota_enabled,
         menu_bar_show_account_prefix: user_config.menu_bar_show_account_prefix,
         menu_bar_quota_platform: user_config.menu_bar_quota_platform,
+        menu_bar_quota_monochrome_enabled: user_config.menu_bar_quota_monochrome_enabled,
         floating_card_show_on_startup: user_config.floating_card_show_on_startup,
         startup_minimized: user_config.startup_minimized,
         remember_main_window_state: user_config.remember_main_window_state,
@@ -2842,6 +2855,7 @@ pub fn patch_general_config(
             current.menu_bar_quota_enabled,
             current.menu_bar_show_account_prefix,
             current.menu_bar_quota_platform.clone(),
+            current.menu_bar_quota_monochrome_enabled,
         );
 
         apply_general_config_updates(current, &updates)?;
@@ -2862,6 +2876,7 @@ pub fn patch_general_config(
                     current.menu_bar_quota_enabled,
                     current.menu_bar_show_account_prefix,
                     current.menu_bar_quota_platform.clone(),
+                    current.menu_bar_quota_monochrome_enabled,
                 );
         }
         Ok(())
@@ -4195,6 +4210,21 @@ mod tests {
 
         assert_eq!(config.theme, "light");
         assert_eq!(config.auto_refresh_minutes, 10);
+    }
+
+    #[test]
+    fn menu_bar_platform_patch_keeps_three_unique_valid_platforms() {
+        let mut config = UserConfig::default();
+        let updates = serde_json::json!({
+            "menu_bar_quota_platform": "codex,grok,antigravity,codex,claude_manager,unknown"
+        })
+        .as_object()
+        .expect("patch should be an object")
+        .clone();
+
+        apply_general_config_updates(&mut config, &updates).expect("patch should succeed");
+
+        assert_eq!(config.menu_bar_quota_platform, "codex,grok,antigravity");
     }
 
     #[test]

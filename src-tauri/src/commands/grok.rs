@@ -1,5 +1,5 @@
 use crate::models::grok::{GrokAccountView, GrokOAuthStartResponse};
-use crate::modules::{config, grok_account, grok_oauth, logger};
+use crate::modules::{config, grok_account, grok_oauth, logger, provider_current_state};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -430,6 +430,7 @@ pub fn switch_grok_account(app: AppHandle, account_id: String) -> Result<String,
         format!("已同步官方登录: {}", email)
     } else {
         let (email, home) = grok_account::prepare_account_home(&account_id)?;
+        provider_current_state::set_current_account_id("grok", Some(&account_id))?;
         format!("已准备独立目录: {} ({})", email, home.display())
     };
     let _ = crate::modules::tray::update_tray_menu(&app);

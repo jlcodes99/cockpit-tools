@@ -179,6 +179,9 @@ pub struct UserConfig {
     /// macOS 菜单栏额度监控平台
     #[serde(default = "default_menu_bar_quota_platform")]
     pub menu_bar_quota_platform: String,
+    /// 是否以单色显示 macOS 菜单栏额度
+    #[serde(default)]
+    pub menu_bar_quota_monochrome_enabled: bool,
     /// 是否在启动后自动显示悬浮卡片
     #[serde(default = "default_floating_card_show_on_startup")]
     pub floating_card_show_on_startup: bool,
@@ -1186,6 +1189,7 @@ impl Default for UserConfig {
             menu_bar_quota_enabled: default_menu_bar_quota_enabled(),
             menu_bar_show_account_prefix: default_menu_bar_show_account_prefix(),
             menu_bar_quota_platform: default_menu_bar_quota_platform(),
+            menu_bar_quota_monochrome_enabled: false,
             floating_card_show_on_startup: default_floating_card_show_on_startup(),
             startup_minimized: default_startup_minimized(),
             remember_main_window_state: default_remember_main_window_state(),

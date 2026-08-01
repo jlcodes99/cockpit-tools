@@ -175,55 +175,8 @@ export function GrokAccountsPage() {
         ),
     },
     getDisplayEmail: getGrokAccountDisplayEmail,
-    onInjectSuccess: async ({ accountId, account, displayEmail }) => {
-      const accountEmail = account
-        ? getGrokAccountDisplayEmail(account)
-        : displayEmail || accountId;
-      const workingDir = account?.working_dir?.trim() || "";
-      try {
-        const launchInfo =
-          await grokInstanceService.getGrokInstanceLaunchCommand("__default__", {
-            workingDir,
-            applyWorkingDirOverride: true,
-            accountId,
-          });
-        setLaunchModal({
-          instanceId: launchInfo.instanceId || "__default__",
-          accountId,
-          accountEmail,
-          workingDir,
-          launchCommand: launchInfo.launchCommand,
-          regeneratingCommand: false,
-          copied: false,
-          executing: false,
-          executeMessage: null,
-          // 账号授权类问题只体现在账号列表，启动弹框不展示
-          executeError: null,
-          errorScrollKey: 0,
-        });
-        // 后端可能已把 reauth 状态写回账号，刷新列表徽章
-        void store.fetchAccounts();
-      } catch (error) {
-        const message = String(error);
-        setLaunchModal({
-          instanceId: "__default__",
-          accountId,
-          accountEmail,
-          workingDir,
-          launchCommand: "",
-          regeneratingCommand: false,
-          copied: false,
-          executing: false,
-          executeMessage: null,
-          executeError: grokInstanceService.isGrokReauthError(message)
-            ? null
-            : message,
-          errorScrollKey: grokInstanceService.isGrokReauthError(message) ? 0 : 1,
-        });
-        if (grokInstanceService.isGrokReauthError(message)) {
-          void store.fetchAccounts();
-        }
-      }
+    onInjectSuccess: () => {
+      void store.fetchAccounts();
     },
     resolveOauthSuccessMessage: () =>
       t("grok.oauth.success", "Grok OAuth 登录成功"),

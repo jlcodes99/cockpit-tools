@@ -118,17 +118,32 @@ func syncTrayClickTargetFrameSoon(for button: NSStatusBarButton) {
     }
 }
 
+private func adaptiveStatusBarIcon(_ image: NSImage, appearance: NSAppearance) -> NSImage {
+    let size = NSSize(width: 16, height: 16)
+    let tinted = NSImage(size: size)
+    appearance.performAsCurrentDrawingAppearance {
+        tinted.lockFocus()
+        image.draw(in: NSRect(origin: .zero, size: size))
+        NSColor.labelColor.setFill()
+        NSRect(origin: .zero, size: size).fill(using: .sourceIn)
+        tinted.unlockFocus()
+    }
+    return tinted
+}
+
 @_cdecl("macos_native_menu_update_status_item")
 public func macos_native_menu_update_status_item(
-    accountPrefixPointer: UnsafePointer<CChar>?,
-    valueTextPointer: UnsafePointer<CChar>?,
-    remainingPercent: Int32,
+    statusesJSONPointer: UnsafePointer<CChar>?,
     enabled: Int32,
+    monochromeEnabled: Int32,
     statusItemPointer: UnsafeMutableRawPointer?
 ) {
     guard let statusItemPointer else { return }
-    let accountPrefix = accountPrefixPointer.map(String.init(cString:)) ?? ""
-    let valueTextRaw = valueTextPointer.map(String.init(cString:)) ?? ""
+    let statuses: [NativeMenuBarStatus] = statusesJSONPointer
+        .map(String.init(cString:))
+        .flatMap { $0.data(using: .utf8) }
+        .flatMap { try? JSONDecoder().decode([NativeMenuBarStatus].self, from: $0) }
+        ?? []
 
     runNativeMenuController(label: "update_status_item") {
         let statusItem = Unmanaged<NSStatusItem>
@@ -137,7 +152,10 @@ public func macos_native_menu_update_status_item(
         guard let button = statusItem.button else { return }
 
         statusItem.length = NSStatusItem.variableLength
-        guard enabled != 0 else {
+        guard enabled != 0, !statuses.isEmpty else {
+            button.wantsLayer = true
+            button.layer?.backgroundColor = NSColor.clear.cgColor
+            button.layer?.cornerRadius = 0
             button.attributedTitle = NSAttributedString(string: "")
             button.title = ""
             button.imagePosition = .imageOnly
@@ -146,43 +164,67 @@ public func macos_native_menu_update_status_item(
             return
         }
 
-        let valueText = valueTextRaw.isEmpty ? "--" : valueTextRaw
-        let prefixText = accountPrefix.isEmpty ? "" : "\(accountPrefix) "
-        let fullText = prefixText + valueText
         let font = NSFont.monospacedDigitSystemFont(
             ofSize: NSFont.systemFontSize,
             weight: .medium
         )
-        let attributedTitle = NSMutableAttributedString(
-            string: fullText,
-            attributes: [
-                .font: font,
-                .foregroundColor: NSColor.labelColor,
-            ]
-        )
+        let attributedTitle = NSMutableAttributedString(string: "")
 
-        // remainingPercent 仅用于着色：>=0 按剩余额度色阶；池合计可能 >100，按 0–100 夹紧配色。
-        let valueColor: NSColor
-        if remainingPercent >= 0 {
-            let tone = min(max(Int(remainingPercent), 0), 100)
-            if tone <= 30 {
-                valueColor = .systemRed
-            } else if tone <= 60 {
-                valueColor = .systemOrange
-            } else {
-                valueColor = .systemGreen
+        for (index, status) in statuses.enumerated() {
+            if index > 0 {
+                attributedTitle.append(NSAttributedString(string: "  "))
             }
-        } else {
-            valueColor = .secondaryLabelColor
-        }
-        attributedTitle.addAttribute(
-            .foregroundColor,
-            value: valueColor,
-            range: NSRange(location: prefixText.utf16.count, length: valueText.utf16.count)
-        )
 
-        button.imagePosition = .imageLeading
+            let resolvedIcon = ProviderIconRegistry.image(for: status.platform_id)
+            let icon = resolvedIcon.map {
+                $0.resource.renderingMode == .template
+                    ? adaptiveStatusBarIcon($0.image, appearance: button.effectiveAppearance)
+                    : $0.image
+            } ?? NSImage(
+                systemSymbolName: "questionmark.square.dashed",
+                accessibilityDescription: status.short_title
+            ).map { adaptiveStatusBarIcon($0, appearance: button.effectiveAppearance) }
+            if let icon {
+                let attachment = NSTextAttachment()
+                attachment.image = icon
+                attachment.bounds = NSRect(x: 0, y: -3, width: 16, height: 16)
+                attributedTitle.append(NSAttributedString(attachment: attachment))
+            }
+
+            let valueText = status.value_text.isEmpty ? "--" : status.value_text
+            let valueColor: NSColor
+            if monochromeEnabled != 0 {
+                valueColor = .labelColor
+            } else if let remainingPercent = status.remaining_percent {
+                let tone = min(max(remainingPercent, 0), 100)
+                if tone <= 30 {
+                    valueColor = .systemRed
+                } else if tone <= 60 {
+                    valueColor = .systemOrange
+                } else {
+                    valueColor = .systemGreen
+                }
+            } else {
+                valueColor = .secondaryLabelColor
+            }
+            attributedTitle.append(NSAttributedString(
+                string: " \(valueText)",
+                attributes: [
+                    .font: font,
+                    .foregroundColor: valueColor,
+                ]
+            ))
+        }
+
+        button.imagePosition = .noImage
+        button.title = ""
         button.attributedTitle = attributedTitle
+        button.wantsLayer = true
+        button.layer?.backgroundColor = NSColor.clear.cgColor
+        button.layer?.cornerRadius = 0
+        button.invalidateIntrinsicContentSize()
+        button.layoutSubtreeIfNeeded()
+        statusItem.length = ceil(button.fittingSize.width) + 8
         button.needsDisplay = true
         // 标题变宽后必须立刻同步点击层，否则左右键全部失效。
         syncTrayClickTargetFrameSoon(for: button)

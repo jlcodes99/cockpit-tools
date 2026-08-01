@@ -331,9 +331,43 @@
   color: var(--text-secondary);
 }
 
-.settings-menu-bar-quota-modal-select {
-  width: 100%;
+.settings-menu-bar-quota-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.settings-menu-bar-quota-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.settings-menu-bar-quota-option.is-selected {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, var(--bg-tertiary));
+}
+
+.settings-menu-bar-quota-option.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.settings-menu-bar-quota-option-icon {
+  display: inline-flex;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
 }
 
 /* Controls */

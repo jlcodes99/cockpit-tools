@@ -59,6 +59,14 @@ struct GrokLaunchContext {
     xai_api_key: Option<String>,
 }
 
+fn choose_default_launch_account(
+    bound_account_id: Option<String>,
+    follow_current: bool,
+    current_account_id: Option<String>,
+) -> Option<String> {
+    bound_account_id.or_else(|| follow_current.then_some(current_account_id).flatten())
+}
+
 fn resolve_launch_account_id(
     instance_id: &str,
     account_id_override: Option<&str>,
@@ -70,9 +78,19 @@ fn resolve_launch_account_id(
         return Ok(Some(account_id.to_string()));
     }
     if instance_id == DEFAULT_INSTANCE_ID {
-        // 无全局当前账号：默认实例仅在显式绑定时使用绑定账号。
         let settings = grok_instance::load_default_settings()?;
-        return Ok(settings.bind_account_id);
+        let current_account_id = if settings.bind_account_id.is_none()
+            && settings.follow_local_account
+        {
+            grok_account::current_account_id()?
+        } else {
+            None
+        };
+        return Ok(choose_default_launch_account(
+            settings.bind_account_id,
+            settings.follow_local_account,
+            current_account_id,
+        ));
     }
     let instance = grok_instance::load_instance_store()?
         .instances
@@ -588,7 +606,8 @@ pub async fn grok_execute_instance_launch_command(
 mod tests {
     use super::{
         build_launch_command_with_binary, is_grok_cli_missing_error, is_grok_reauth_prepare_error,
-        should_use_managed_home, GrokLaunchContext, DEFAULT_INSTANCE_ID,
+        choose_default_launch_account, should_use_managed_home, GrokLaunchContext,
+        DEFAULT_INSTANCE_ID,
     };
     use std::path::Path;
 
@@ -677,5 +696,21 @@ mod tests {
     fn non_default_instances_always_use_managed_home() {
         assert!(should_use_managed_home("team-instance", false, false));
         assert!(should_use_managed_home("team-instance", true, false));
+    }
+
+    #[test]
+    fn default_instance_follows_current_account_when_unbound() {
+        assert_eq!(
+            choose_default_launch_account(None, true, Some("current".to_string())),
+            Some("current".to_string())
+        );
+        assert_eq!(
+            choose_default_launch_account(
+                Some("bound".to_string()),
+                true,
+                Some("current".to_string())
+            ),
+            Some("bound".to_string())
+        );
     }
 }

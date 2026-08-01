@@ -1285,7 +1285,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
       const displayEmail = account ? config.getDisplayEmail(account) : accountId;
       try {
         await injectFn(accountId);
-        // Grok：以后端为准（关闭「切号同步官方登录」时不应有「当前账号」）。
+        // Grok：以后端为准，确保当前账号与官方或独立目录模式一致。
         // 其他平台仍乐观标记当前账号，避免 resolver 短暂为空导致标识闪烁。
         let resolvedCurrentAccountId: string | null = accountId;
         if (platformKey === 'grok' && storeFetchCurrentAccountId) {

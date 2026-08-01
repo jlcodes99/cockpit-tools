@@ -141,6 +141,7 @@ pub fn apply_tray_icon_style<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<()
         tray.set_icon(Some(icon)).map_err(|err| err.to_string())?;
         tray.set_icon_as_template(icon_as_template)
             .map_err(|err| err.to_string())?;
+        crate::modules::macos_native_menu::update_status_item(app)?;
         let rect_log = match tray.rect() {
             Ok(Some(rect)) => format!("rect={:?}", rect),
             Ok(None) => "rect=none".to_string(),
@@ -180,6 +181,8 @@ pub(crate) enum PlatformId {
     TraeSoloCn,
     Workbuddy,
 }
+
+pub(crate) const MAX_MENU_BAR_QUOTA_PLATFORMS: usize = 3;
 
 impl PlatformId {
     pub(crate) fn default_order() -> [Self; 18] {
@@ -227,6 +230,15 @@ impl PlatformId {
             crate::modules::tray_layout::PLATFORM_WORKBUDDY => Some(Self::Workbuddy),
             _ => None,
         }
+    }
+
+    pub(crate) fn parse_list(value: &str) -> Vec<Self> {
+        let mut seen = std::collections::HashSet::new();
+        value
+            .split(',')
+            .filter_map(|item| Self::from_str(item.trim()))
+            .filter(|platform| seen.insert(*platform))
+            .collect()
     }
 
     pub(crate) fn as_str(self) -> &'static str {
