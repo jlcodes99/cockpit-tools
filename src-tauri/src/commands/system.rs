@@ -731,8 +731,47 @@ fn normalize_antigravity_metadata_target(target: Option<&str>) -> Option<&'stati
     match target.unwrap_or("").trim().to_ascii_lowercase().as_str() {
         "antigravity" => Some("antigravity"),
         "antigravity_ide" | "antigravity-ide" | "ide" => Some("antigravity_ide"),
+        "antigravity_cli" | "antigravity-cli" | "agy" => Some("antigravity_cli"),
         _ => None,
     }
+}
+
+fn resolve_agy_installed_version_info() -> Option<AntigravityInstalledVersionInfo> {
+    let executable_name = if cfg!(target_os = "windows") {
+        "agy.exe"
+    } else {
+        "agy"
+    };
+    let mut candidates = Vec::new();
+    if let Some(home) = dirs::home_dir() {
+        candidates.push(home.join(".local").join("bin").join(executable_name));
+    }
+    if let Some(path) = std::env::var_os("PATH") {
+        candidates.extend(std::env::split_paths(&path).map(|dir| dir.join(executable_name)));
+    }
+
+    for path in candidates {
+        if !path.is_file() {
+            continue;
+        }
+        let Ok(output) = std::process::Command::new(&path).arg("--version").output() else {
+            continue;
+        };
+        if !output.status.success() {
+            continue;
+        }
+        let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if version.is_empty() {
+            continue;
+        }
+        return Some(AntigravityInstalledVersionInfo {
+            product_name: "Antigravity CLI".to_string(),
+            version,
+            app_path: path.to_string_lossy().to_string(),
+            source: "agy --version".to_string(),
+        });
+    }
+    None
 }
 
 fn normalize_antigravity_version_scan_mode(raw: Option<&str>) -> AntigravityVersionScanMode {
@@ -963,7 +1002,11 @@ fn detect_and_cache_antigravity_installed_version_info_for_target(
     target: Option<&str>,
     scan_mode: AntigravityVersionScanMode,
 ) -> Option<AntigravityInstalledVersionInfo> {
-    let info = resolve_antigravity_installed_version_info_for_target_with_mode(target, scan_mode);
+    let info = if normalize_antigravity_metadata_target(target) == Some("antigravity_cli") {
+        resolve_agy_installed_version_info()
+    } else {
+        resolve_antigravity_installed_version_info_for_target_with_mode(target, scan_mode)
+    };
     if let Some(ref value) = info {
         cache_antigravity_installed_version_info(target, value);
     }

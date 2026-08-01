@@ -9,11 +9,13 @@ use tauri::Emitter;
 enum AntigravityRuntimeTarget {
     Legacy,
     Ide,
+    Cli,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AntigravitySwitchFlow {
     Legacy,
+    Cli,
     LocalNoLaunch,
     DualNoRestart,
     Restart,
@@ -28,6 +30,7 @@ enum AntigravityDesktopAuthMode {
 fn normalize_antigravity_runtime_target(raw: Option<&str>) -> AntigravityRuntimeTarget {
     match raw.unwrap_or("").trim().to_ascii_lowercase().as_str() {
         "antigravity" => AntigravityRuntimeTarget::Legacy,
+        "antigravity_cli" | "antigravity-cli" | "agy" => AntigravityRuntimeTarget::Cli,
         _ => AntigravityRuntimeTarget::Ide,
     }
 }
@@ -39,6 +42,7 @@ fn resolve_antigravity_switch_flow(
 ) -> AntigravitySwitchFlow {
     match runtime_target {
         AntigravityRuntimeTarget::Legacy => AntigravitySwitchFlow::Legacy,
+        AntigravityRuntimeTarget::Cli => AntigravitySwitchFlow::Cli,
         AntigravityRuntimeTarget::Ide if !launch_on_switch => AntigravitySwitchFlow::LocalNoLaunch,
         AntigravityRuntimeTarget::Ide if dual_switch_no_restart_enabled => {
             AntigravitySwitchFlow::DualNoRestart
@@ -231,6 +235,9 @@ pub async fn get_current_account(
                 .ok()
                 .and_then(|settings| settings.bind_account_id)
         }
+        AntigravityRuntimeTarget::Cli => {
+            modules::provider_current_state::get_current_account_id("antigravity_cli")?
+        }
         AntigravityRuntimeTarget::Ide => modules::instance::load_default_settings()
             .ok()
             .and_then(|settings| settings.bind_account_id),
@@ -249,6 +256,10 @@ pub async fn get_current_account(
         }
     }
 
+    if runtime_target == AntigravityRuntimeTarget::Cli {
+        return Ok(None);
+    }
+
     modules::get_current_account()
 }
 
@@ -265,6 +276,12 @@ pub async fn set_current_account(
                 Some(Some(account_id.clone())),
                 None,
                 Some(false),
+            )?;
+        }
+        AntigravityRuntimeTarget::Cli => {
+            modules::provider_current_state::set_current_account_id(
+                "antigravity_cli",
+                Some(&account_id),
             )?;
         }
         AntigravityRuntimeTarget::Ide => {
@@ -457,6 +474,18 @@ async fn switch_account_legacy_antigravity(
     Ok(account)
 }
 
+async fn switch_account_antigravity_cli(account_id: String) -> Result<models::Account, String> {
+    let mut account = modules::account::prepare_account_for_injection(&account_id).await?;
+    modules::antigravity_credential::write_antigravity_system_credential(&account)?;
+    modules::provider_current_state::set_current_account_id("antigravity_cli", Some(&account_id))?;
+    modules::set_current_account_id(&account_id)?;
+    account.update_last_used();
+    modules::save_account(&account)?;
+    modules::websocket::broadcast_account_switched(&account.id, &account.email);
+    modules::websocket::broadcast_data_changed("switch_account_antigravity_cli");
+    Ok(account)
+}
+
 /// 切换账号（完整流程：Token刷新 + 关闭程序 + 注入 + 重启）
 #[tauri::command]
 pub async fn switch_account(
@@ -473,6 +502,9 @@ pub async fn switch_account(
     ) {
         AntigravitySwitchFlow::Legacy => {
             return switch_account_legacy_antigravity(app, account_id).await;
+        }
+        AntigravitySwitchFlow::Cli => {
+            return switch_account_antigravity_cli(account_id).await;
         }
         AntigravitySwitchFlow::LocalNoLaunch => {
             let result = modules::account::switch_account_local_no_restart(&account_id).await;
@@ -688,6 +720,22 @@ mod tests {
         assert_eq!(
             resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Legacy, false, true),
             AntigravitySwitchFlow::Legacy
+        );
+    }
+
+    #[test]
+    fn antigravity_switch_flow_uses_keychain_only_for_cli_target() {
+        assert_eq!(
+            resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Cli, true, true),
+            AntigravitySwitchFlow::Cli
+        );
+        assert_eq!(
+            normalize_antigravity_runtime_target(Some("agy")),
+            AntigravityRuntimeTarget::Cli
+        );
+        assert_eq!(
+            normalize_antigravity_runtime_target(Some("antigravity_cli")),
+            AntigravityRuntimeTarget::Cli
         );
     }
 

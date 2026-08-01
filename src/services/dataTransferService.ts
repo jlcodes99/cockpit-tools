@@ -278,6 +278,8 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   antigravity: async () => (await accountService.listAccounts()) as unknown as TransferAccountRecord[],
   antigravity_ide: async () =>
     (await accountService.listAccounts()) as unknown as TransferAccountRecord[],
+  antigravity_cli: async () =>
+    (await accountService.listAccounts()) as unknown as TransferAccountRecord[],
   codex: async () => (await codexService.listCodexAccounts()) as unknown as TransferAccountRecord[],
   codex_api_service: async () => [],
   claude_manager: listClaudeManagerTransferAccounts,
@@ -303,6 +305,7 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
 const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unknown[]>) | undefined> = {
   antigravity: accountService.importFromJson,
   antigravity_ide: accountService.importFromJson,
+  antigravity_cli: accountService.importFromJson,
   codex: codexService.importCodexFromJson,
   codex_api_service: undefined,
   claude_manager: claudeService.importClaudeFromJson,

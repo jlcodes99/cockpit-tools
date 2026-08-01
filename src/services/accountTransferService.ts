@@ -48,6 +48,11 @@ const PLATFORM_ADAPTERS: Partial<Record<PlatformId, TransferAdapter>> = {
     exportAccounts: accountService.exportAccounts,
     importFromJson: accountService.importFromJson,
   },
+  antigravity_cli: {
+    listAccounts: accountService.listAccounts,
+    exportAccounts: accountService.exportAccounts,
+    importFromJson: accountService.importFromJson,
+  },
   codex: {
     listAccounts: codexService.listCodexAccounts,
     exportAccounts: codexService.exportCodexAccounts,

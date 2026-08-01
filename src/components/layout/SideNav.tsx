@@ -122,7 +122,9 @@ function renderEntryIcon(entry: SideNavEntry, size: number) {
 }
 
 function isAntigravitySuitePlatformIds(platformIds: PlatformId[]): boolean {
-  return platformIds.includes('antigravity') && platformIds.includes('antigravity_ide');
+  return platformIds.includes('antigravity')
+    && platformIds.includes('antigravity_ide')
+    && platformIds.includes('antigravity_cli');
 }
 
 function isAntigravitySuitePage(page: Page): boolean {

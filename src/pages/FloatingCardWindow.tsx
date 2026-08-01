@@ -193,6 +193,8 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useAntigravityLegacyInstanceStore.getState();
     case 'antigravity_ide':
       return useInstanceStore.getState();
+    case 'antigravity_cli':
+      return null;
     case 'codex':
       return useCodexInstanceStore.getState();
     case 'codex_api_service':
@@ -462,7 +464,8 @@ export function FloatingCardWindow() {
     try {
       switch (platformId) {
         case 'antigravity':
-        case 'antigravity_ide': {
+        case 'antigravity_ide':
+        case 'antigravity_cli': {
           await Promise.allSettled([
             useAccountStore.getState().fetchAccounts(),
             useAccountStore.getState().fetchCurrentAccount(platformId),
@@ -831,6 +834,7 @@ export function FloatingCardWindow() {
     switch (selectedPlatform) {
       case 'antigravity':
       case 'antigravity_ide':
+      case 'antigravity_cli':
         return {
           accounts: agAccounts,
           actualCurrentAccount: agCurrentAccountsByTarget[selectedPlatform] ?? null,
@@ -969,6 +973,7 @@ export function FloatingCardWindow() {
     switch (selectedPlatform) {
       case 'antigravity':
       case 'antigravity_ide':
+      case 'antigravity_cli':
         return getRecommendedAntigravityAccount(agAccounts, effectiveCurrentId);
       case 'codex':
         return getRecommendedCodexAccount(codexAccounts, effectiveCurrentId);
@@ -1068,6 +1073,7 @@ export function FloatingCardWindow() {
     switch (selectedPlatform) {
       case 'antigravity':
       case 'antigravity_ide':
+      case 'antigravity_cli':
         return buildAntigravityAccountPresentation(viewedAccount as typeof agAccounts[number], displayGroups, t);
       case 'codex':
         return buildCodexAccountPresentation(viewedAccount as typeof codexAccounts[number], t);
@@ -1165,6 +1171,7 @@ export function FloatingCardWindow() {
         switch (selectedPlatform) {
           case 'antigravity':
           case 'antigravity_ide':
+          case 'antigravity_cli':
             await useAccountStore.getState().refreshQuota(viewedAccount.id, selectedPlatform);
             break;
           case 'codex':
@@ -1292,6 +1299,7 @@ export function FloatingCardWindow() {
         switch (selectedPlatform) {
           case 'antigravity':
           case 'antigravity_ide':
+          case 'antigravity_cli':
             await useAccountStore.getState().switchAccount(viewedAccount.id, selectedPlatform);
             await useAccountStore.getState().fetchCurrentAccount(selectedPlatform);
             break;

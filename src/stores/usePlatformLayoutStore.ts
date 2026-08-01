@@ -7,6 +7,7 @@ const PLATFORM_LAYOUT_STORAGE_KEY = 'agtools.platform_layout.v1';
 const LEGACY_TRAY_CORE_IDS: PlatformId[] = ['antigravity', 'codex', 'github-copilot', 'windsurf'];
 const TRAY_MIGRATED_PLATFORM_IDS: PlatformId[] = [
   'antigravity_ide',
+  'antigravity_cli',
   'claude_manager',
   'zed',
   'kiro',
@@ -302,13 +303,14 @@ function defaultPlatformGroups(): PlatformLayoutGroup[] {
     {
       id: DEFAULT_ANTIGRAVITY_GROUP_ID,
       name: 'Antigravity',
-      platformIds: ['antigravity', 'antigravity_ide'],
+      platformIds: ['antigravity', 'antigravity_ide', 'antigravity_cli'],
       defaultPlatformId: 'antigravity_ide',
       iconKind: 'platform',
       iconPlatformId: 'antigravity_ide',
       childConfigs: [
         { platformId: 'antigravity', name: 'Antigravity' },
         { platformId: 'antigravity_ide', name: 'Antigravity IDE' },
+        { platformId: 'antigravity_cli', name: 'Antigravity CLI' },
       ],
     },
     createDefaultCodexSuiteGroup(),
@@ -431,6 +433,9 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
   if (fallbackPlatform === 'antigravity_ide') {
     return 'Antigravity IDE';
   }
+  if (fallbackPlatform === 'antigravity_cli') {
+    return 'Antigravity CLI';
+  }
   if (fallbackPlatform === 'codebuddy_cn') {
     return 'CodeBuddy CN';
   }
@@ -527,6 +532,9 @@ function normalizeGroupChildName(raw: unknown, platformId: PlatformId): string |
   }
   if (platformId === 'antigravity_ide' && value === 'Antigravity') {
     return 'Antigravity IDE';
+  }
+  if (platformId === 'antigravity_cli' && value === 'Antigravity') {
+    return 'Antigravity CLI';
   }
   if (platformId === 'claude_manager' && (value === 'Claude' || value === 'Claude CLI')) {
     return 'Claude';
@@ -668,6 +676,21 @@ function normalizePlatformGroups(
         antigravityGroup.platformIds,
       );
       usedPlatformIds.add('antigravity_ide');
+    }
+  }
+
+  if (!usedPlatformIds.has('antigravity_cli')) {
+    const antigravityGroup = result.find((group) => group.platformIds.includes('antigravity'));
+    if (antigravityGroup) {
+      antigravityGroup.platformIds = [...antigravityGroup.platformIds, 'antigravity_cli'];
+      antigravityGroup.childConfigs = normalizeGroupChildConfigs(
+        [
+          ...(antigravityGroup.childConfigs ?? []),
+          { platformId: 'antigravity_cli', name: 'Antigravity CLI' },
+        ],
+        antigravityGroup.platformIds,
+      );
+      usedPlatformIds.add('antigravity_cli');
     }
   }
 

@@ -22,7 +22,8 @@ export async function getAntigravityInstalledVersionInfo(
 
 function getAlternateAntigravityRuntimeTarget(
   target: AntigravityRuntimeTarget,
-): AntigravityRuntimeTarget {
+): AntigravityRuntimeTarget | null {
+  if (target === 'antigravity_cli') return null;
   return target === 'antigravity_ide' ? 'antigravity' : 'antigravity_ide';
 }
 
@@ -46,6 +47,9 @@ export async function resolvePreferredAntigravityRuntimeTarget(
   currentTarget: AntigravityRuntimeTarget,
 ): Promise<AntigravityRuntimeTarget> {
   const alternateTarget = getAlternateAntigravityRuntimeTarget(currentTarget);
+  if (!alternateTarget) {
+    return currentTarget;
+  }
 
   const [currentQuickAvailable, alternateQuickAvailable] = await Promise.all([
     detectTargetVersion(currentTarget, 'quick'),

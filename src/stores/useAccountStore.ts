@@ -129,6 +129,7 @@ function buildEmptyCurrentAccountsByTarget(): CurrentAccountsByTarget {
     return {
         antigravity: null,
         antigravity_ide: null,
+        antigravity_cli: null,
     };
 }
 
@@ -289,23 +290,27 @@ export const useAccountStore = create<AccountState>()(
             previousCurrentAccounts.antigravity?.id === accountId;
         allowNextEmptyCurrentAccountByTarget.antigravity_ide =
             previousCurrentAccounts.antigravity_ide?.id === accountId;
+        allowNextEmptyCurrentAccountByTarget.antigravity_cli =
+            previousCurrentAccounts.antigravity_cli?.id === accountId;
         try {
             await accountService.deleteAccount(accountId);
             await get().fetchAccounts();
             await Promise.allSettled([
                 get().fetchCurrentAccount('antigravity'),
                 get().fetchCurrentAccount('antigravity_ide'),
+                get().fetchCurrentAccount('antigravity_cli'),
             ]);
         } finally {
             allowNextEmptyAccountList = false;
             allowNextEmptyCurrentAccountByTarget.antigravity = false;
             allowNextEmptyCurrentAccountByTarget.antigravity_ide = false;
+            allowNextEmptyCurrentAccountByTarget.antigravity_cli = false;
         }
         await emitAccountsChanged({
             platformId: 'antigravity',
             reason: 'delete',
         });
-        for (const target of ['antigravity', 'antigravity_ide'] as const) {
+        for (const target of ['antigravity', 'antigravity_ide', 'antigravity_cli'] as const) {
             const previousCurrentAccountId = previousCurrentAccounts[target]?.id ?? null;
             const nextCurrentAccountId = get().currentAccountsByTarget[target]?.id ?? null;
             if (previousCurrentAccountId !== nextCurrentAccountId) {
@@ -330,23 +335,29 @@ export const useAccountStore = create<AccountState>()(
             previousCurrentAccounts.antigravity_ide?.id
                 ? deleteIdSet.has(previousCurrentAccounts.antigravity_ide.id)
                 : false;
+        allowNextEmptyCurrentAccountByTarget.antigravity_cli =
+            previousCurrentAccounts.antigravity_cli?.id
+                ? deleteIdSet.has(previousCurrentAccounts.antigravity_cli.id)
+                : false;
         try {
             await accountService.deleteAccounts(accountIds);
             await get().fetchAccounts();
             await Promise.allSettled([
                 get().fetchCurrentAccount('antigravity'),
                 get().fetchCurrentAccount('antigravity_ide'),
+                get().fetchCurrentAccount('antigravity_cli'),
             ]);
         } finally {
             allowNextEmptyAccountList = false;
             allowNextEmptyCurrentAccountByTarget.antigravity = false;
             allowNextEmptyCurrentAccountByTarget.antigravity_ide = false;
+            allowNextEmptyCurrentAccountByTarget.antigravity_cli = false;
         }
         await emitAccountsChanged({
             platformId: 'antigravity',
             reason: 'delete',
         });
-        for (const target of ['antigravity', 'antigravity_ide'] as const) {
+        for (const target of ['antigravity', 'antigravity_ide', 'antigravity_cli'] as const) {
             const previousCurrentAccountId = previousCurrentAccounts[target]?.id ?? null;
             const nextCurrentAccountId = get().currentAccountsByTarget[target]?.id ?? null;
             if (previousCurrentAccountId !== nextCurrentAccountId) {
@@ -383,7 +394,7 @@ export const useAccountStore = create<AccountState>()(
             
             set((state) => {
                 let nextByTarget = state.currentAccountsByTarget;
-                for (const currentTarget of ['antigravity', 'antigravity_ide'] as const) {
+                for (const currentTarget of ['antigravity', 'antigravity_ide', 'antigravity_cli'] as const) {
                     if (nextByTarget[currentTarget]?.id === accountId) {
                         nextByTarget = updateCurrentAccountsByTarget(
                             nextByTarget,
@@ -432,6 +443,7 @@ export const useAccountStore = create<AccountState>()(
         await Promise.allSettled([
             get().fetchCurrentAccount('antigravity'),
             get().fetchCurrentAccount('antigravity_ide'),
+            get().fetchCurrentAccount('antigravity_cli'),
         ]);
         return stats;
     },

@@ -22,6 +22,8 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
       return 'Antigravity';
     case 'antigravity_ide':
       return 'Antigravity IDE';
+    case 'antigravity_cli':
+      return 'Antigravity CLI';
     case 'codex':
       return 'Codex';
     case 'codex_api_service':
@@ -69,6 +71,8 @@ export function renderPlatformIcon(platformId: PlatformId, size = 20): ReactNode
       return <AntigravityIcon style={{ width: size, height: size }} />;
     case 'antigravity_ide':
       return <AntigravityIdeIcon style={{ width: size, height: size }} />;
+    case 'antigravity_cli':
+      return <AntigravityIcon style={{ width: size, height: size }} />;
     case 'codex':
       return <CodexIcon size={size} />;
     case 'codex_api_service':
