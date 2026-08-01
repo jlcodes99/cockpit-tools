@@ -1,5 +1,6 @@
 import type {
   ClaudeDesktopGatewayConnectionMode,
+  ClaudeDesktopGatewayFamilyTier,
   ClaudeDesktopGatewayModelMapping,
 } from '../types/claude';
 import {
@@ -38,6 +39,21 @@ export const CLAUDE_DESKTOP_GATEWAY_DEFAULT_MODELS = [
   'claude-haiku-4-5',
 ] as const;
 
+export const CLAUDE_DESKTOP_GATEWAY_FAMILY_TIERS = [
+  'haiku',
+  'sonnet',
+  'opus',
+  'fable',
+  'mythos',
+] as const satisfies readonly ClaudeDesktopGatewayFamilyTier[];
+
+export function inferClaudeDesktopGatewayFamilyTier(
+  model: string,
+): ClaudeDesktopGatewayFamilyTier | null {
+  const parts = model.trim().toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  return CLAUDE_DESKTOP_GATEWAY_FAMILY_TIERS.find((tier) => parts.includes(tier)) ?? null;
+}
+
 function uniqueNonEmpty(values: Array<string | null | undefined>): string[] {
   return Array.from(new Set(values.map((value) => value?.trim() ?? '').filter(Boolean)));
 }
@@ -48,13 +64,17 @@ function createRoute(
   options: {
     labelOverride?: string | null;
     supports1m?: boolean;
+    anthropicFamilyTier?: ClaudeDesktopGatewayFamilyTier | null;
   } = {},
 ): ClaudeDesktopGatewayModelMapping {
+  const anthropicFamilyTier = options.anthropicFamilyTier
+    ?? inferClaudeDesktopGatewayFamilyTier(desktopModel);
   return {
     desktopModel,
     upstreamModel,
     ...(options.labelOverride?.trim() ? { labelOverride: options.labelOverride.trim() } : {}),
     ...(options.supports1m ? { supports1m: true } : {}),
+    ...(anthropicFamilyTier ? { anthropicFamilyTier } : {}),
   };
 }
 
@@ -62,11 +82,7 @@ function directRoutes(
   models: readonly string[] = CLAUDE_DESKTOP_GATEWAY_DEFAULT_MODELS,
   options: { supports1m?: boolean } = {},
 ): ClaudeDesktopGatewayModelMapping[] {
-  return uniqueNonEmpty([...models]).map((model) => ({
-    desktopModel: model,
-    upstreamModel: model,
-    ...(options.supports1m ? { supports1m: true } : {}),
-  }));
+  return uniqueNonEmpty([...models]).map((model) => createRoute(model, model, options));
 }
 
 function roleMappedRoutes(

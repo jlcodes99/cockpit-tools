@@ -117,11 +117,14 @@ export interface ClaudeDesktopGatewayModel {
 
 export type ClaudeDesktopGatewayConnectionMode = 'direct' | 'local_mapping';
 
+export type ClaudeDesktopGatewayFamilyTier = 'haiku' | 'sonnet' | 'opus' | 'fable' | 'mythos';
+
 export interface ClaudeDesktopGatewayModelMapping {
   desktopModel: string;
   upstreamModel: string;
   labelOverride?: string | null;
   supports1m?: boolean | null;
+  anthropicFamilyTier?: ClaudeDesktopGatewayFamilyTier | null;
 }
 
 export interface ClaudeDesktopGatewayModelsResult {

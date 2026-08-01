@@ -75,6 +75,7 @@ import { useRemoteConfigStore } from '../stores/useRemoteConfigStore';
 import type {
   ClaudeAccount,
   ClaudeDesktopGatewayConnectionMode,
+  ClaudeDesktopGatewayFamilyTier,
   ClaudeDesktopGatewayModelMapping,
   ClaudeDesktopLoginStartResponse,
   ClaudeDesktopLoginProgressPayload,
@@ -110,11 +111,13 @@ import {
 } from '../utils/claudeProviderPresets';
 import {
   CLAUDE_DESKTOP_GATEWAY_DEFAULT_MODELS,
+  CLAUDE_DESKTOP_GATEWAY_FAMILY_TIERS,
   CLAUDE_DESKTOP_GATEWAY_PROVIDER_CUSTOM_ID,
   CLAUDE_DESKTOP_GATEWAY_PROVIDER_PRESETS,
   findClaudeDesktopGatewayProviderPresetById,
   getDefaultClaudeDesktopGatewayProviderPresetId,
   inferClaudeDesktopGatewayApiKeyField,
+  inferClaudeDesktopGatewayFamilyTier,
 } from '../utils/claudeDesktopProviderPresets';
 import {
   APIKEY_FUN_PREFILL_EVENT,
@@ -592,6 +595,7 @@ function buildClaudeDesktopGatewayMappings(
         desktopModel,
         upstreamModel,
         labelOverride: upstreamModel,
+        anthropicFamilyTier: inferClaudeDesktopGatewayFamilyTier(desktopModel),
       };
     });
   }
@@ -600,6 +604,7 @@ function buildClaudeDesktopGatewayMappings(
     .map((desktopModel, index) => ({
       desktopModel,
       upstreamModel: upstreamModels[index]?.trim() || '',
+      anthropicFamilyTier: inferClaudeDesktopGatewayFamilyTier(desktopModel),
     }));
 }
 
@@ -620,6 +625,8 @@ function normalizeClaudeDesktopGatewayMappings(
       upstreamModel,
       labelOverride: upstreamModel,
       ...(mapping.supports1m === true ? { supports1m: true } : {}),
+      anthropicFamilyTier:
+        mapping.anthropicFamilyTier ?? inferClaudeDesktopGatewayFamilyTier(desktopModel),
     });
   });
   return result;
@@ -633,6 +640,8 @@ function cloneClaudeDesktopGatewayMappings(
     upstreamModel: mapping.upstreamModel,
     labelOverride: mapping.labelOverride ?? null,
     supports1m: mapping.supports1m === true,
+    anthropicFamilyTier:
+      mapping.anthropicFamilyTier ?? inferClaudeDesktopGatewayFamilyTier(mapping.desktopModel),
   }));
 }
 
@@ -683,6 +692,13 @@ function buildClaudeDesktopGatewayDesktopModelOptions(
     ...options,
     { value: CLAUDE_DESKTOP_GATEWAY_CUSTOM_DESKTOP_MODEL, label: customLabel },
   ];
+}
+
+function buildClaudeDesktopGatewayFamilyTierOptions() {
+  return CLAUDE_DESKTOP_GATEWAY_FAMILY_TIERS.map((tier) => ({
+    value: tier,
+    label: tier.charAt(0).toUpperCase() + tier.slice(1),
+  }));
 }
 
 function isClaudeProviderApiKeyAccount(account: ClaudeAccount): boolean {
@@ -1822,6 +1838,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
         desktopModel: mapping.desktopModel.trim(),
         upstreamModel: mapping.upstreamModel.trim(),
         supports1m: mapping.supports1m === true,
+        anthropicFamilyTier: mapping.anthropicFamilyTier ?? null,
       }))
       .filter((mapping) => mapping.desktopModel || mapping.upstreamModel);
     const desktopGatewayMappings = normalizeClaudeDesktopGatewayMappings(desktopGatewayMappingRows);
@@ -1840,6 +1857,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
           desktopModel: mapping.desktopModel,
           upstreamModel: mapping.upstreamModel || mapping.desktopModel,
           supports1m: mapping.supports1m === true,
+          anthropicFamilyTier: mapping.anthropicFamilyTier ?? null,
         })),
     );
     if (addTab === 'desktopGateway') {
@@ -3814,6 +3832,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                                   const desktopModelOptions = buildClaudeDesktopGatewayDesktopModelOptions(
                                     t('claude.apiKey.customProvider', '自定义'),
                                   );
+                                  const familyTierOptions = buildClaudeDesktopGatewayFamilyTierOptions();
                                   const desktopModelInOptions = desktopModelOptions.some((option) => option.value === mapping.desktopModel);
                                   const desktopDropdownValue = desktopModelInOptions && mapping.desktopModel
                                     ? mapping.desktopModel
@@ -3849,6 +3868,10 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                                                     ? ''
                                                     : mapping.desktopModel
                                                   : value,
+                                              anthropicFamilyTier:
+                                                value === CLAUDE_DESKTOP_GATEWAY_CUSTOM_DESKTOP_MODEL
+                                                  ? mapping.anthropicFamilyTier ?? null
+                                                  : inferClaudeDesktopGatewayFamilyTier(value),
                                             };
                                             setDesktopGatewayModelMappings(next);
                                             setDesktopGatewayModelsError(null);
@@ -3874,6 +3897,24 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                                           />
                                         )}
                                       </div>
+                                      <SingleSelectDropdown
+                                        value={mapping.anthropicFamilyTier ?? ''}
+                                        options={familyTierOptions}
+                                        onChange={(value) => {
+                                          const next = [...desktopGatewayModelMappings];
+                                          next[index] = {
+                                            ...mapping,
+                                            anthropicFamilyTier:
+                                              (value || null) as ClaudeDesktopGatewayFamilyTier | null,
+                                          };
+                                          setDesktopGatewayModelMappings(next);
+                                          setDesktopGatewayModelsError(null);
+                                          setAddModalError(null);
+                                        }}
+                                        ariaLabel={t('claude.desktopGateway.familyTierLabel', 'Tier alias')}
+                                        placeholder={t('claude.desktopGateway.familyTierLabel', 'Tier alias')}
+                                        menuWidth={150}
+                                      />
                                       <label
                                         className="claude-gateway-supports1m-toggle"
                                         title={t('claude.desktopGateway.supports1mLabel', '声明支持 1M')}
@@ -3912,16 +3953,20 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                                   type="button"
                                   className="btn btn-secondary"
                                   onClick={() => {
-                                    setDesktopGatewayModelMappings((prev) => [
-                                      ...prev,
-                                      {
-                                        desktopModel: getNextClaudeDesktopGatewaySafeModel(
-                                          prev.map((mapping) => mapping.desktopModel),
-                                        ),
-                                        upstreamModel: '',
-                                        supports1m: false,
-                                      },
-                                    ]);
+                                    setDesktopGatewayModelMappings((prev) => {
+                                      const desktopModel = getNextClaudeDesktopGatewaySafeModel(
+                                        prev.map((mapping) => mapping.desktopModel),
+                                      );
+                                      return [
+                                        ...prev,
+                                        {
+                                          desktopModel,
+                                          upstreamModel: '',
+                                          supports1m: false,
+                                          anthropicFamilyTier: inferClaudeDesktopGatewayFamilyTier(desktopModel),
+                                        },
+                                      ];
+                                    });
                                     setDesktopGatewayMappingsExpanded(true);
                                     setAddModalError(null);
                                   }}

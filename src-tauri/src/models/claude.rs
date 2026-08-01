@@ -226,6 +226,8 @@ pub struct ClaudeDesktopGatewayModelMapping {
     pub upstream_model: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label_override: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anthropic_family_tier: Option<String>,
     #[serde(
         default,
         rename = "supports1m",

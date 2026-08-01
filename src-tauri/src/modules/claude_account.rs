@@ -4066,7 +4066,8 @@ fn build_desktop_gateway_provider_config(account: &ClaudeAccount) -> Result<Valu
                 .filter_map(|model| {
                     let name = normalize_non_empty(Some(model))?;
                     let mut item = json!({ "name": name.clone() });
-                    if let Some(mapping) = mapping_meta.get(&name.to_ascii_lowercase()) {
+                    let mapping = mapping_meta.get(&name.to_ascii_lowercase());
+                    if let Some(mapping) = mapping {
                         if let Some(label_override) = mapping
                             .label_override
                             .as_deref()
@@ -4077,6 +4078,16 @@ fn build_desktop_gateway_provider_config(account: &ClaudeAccount) -> Result<Valu
                         if mapping.supports_1m.unwrap_or(false) {
                             item["supports1m"] = Value::Bool(true);
                         }
+                    }
+                    let family_tier = mapping
+                        .and_then(|mapping| mapping.anthropic_family_tier.as_deref())
+                        .or_else(|| {
+                            crate::modules::claude_desktop_gateway::infer_anthropic_family_tier(
+                                &name,
+                            )
+                        });
+                    if let Some(tier) = family_tier {
+                        item["anthropicFamilyTier"] = Value::String(tier.to_string());
                     }
                     Some(item)
                 })
@@ -5769,6 +5780,11 @@ fn parse_import_item(value: &Value) -> Result<ClaudeAccount, String> {
                                 label_override: item
                                     .get("label_override")
                                     .or_else(|| item.get("labelOverride"))
+                                    .and_then(Value::as_str)
+                                    .and_then(|value| normalize_non_empty(Some(value))),
+                                anthropic_family_tier: item
+                                    .get("anthropic_family_tier")
+                                    .or_else(|| item.get("anthropicFamilyTier"))
                                     .and_then(Value::as_str)
                                     .and_then(|value| normalize_non_empty(Some(value))),
                                 supports_1m: item
@@ -8983,6 +8999,47 @@ mod tests {
             created_at,
             last_used,
         }
+    }
+
+    #[test]
+    fn desktop_gateway_provider_config_pins_model_family_tiers() {
+        let mut account = test_desktop_account(
+            "claude_desktop_gateway_test",
+            "Gateway",
+            None,
+            None,
+            10,
+            20,
+        );
+        account.auth_mode = ClaudeAuthMode::DesktopGateway;
+        account.api_key = Some("test-key".to_string());
+        account.api_base_url = Some("https://gateway.example.test".to_string());
+        account.desktop_gateway_models = Some(vec![
+            "claude-fable-5".to_string(),
+            "claude-haiku-4-5".to_string(),
+            "claude-opus-4-8".to_string(),
+            "claude-sonnet-4-6".to_string(),
+            "claude-custom-route".to_string(),
+        ]);
+        account.desktop_gateway_model_mappings = Some(vec![ClaudeDesktopGatewayModelMapping {
+            desktop_model: "claude-custom-route".to_string(),
+            upstream_model: "custom-upstream-model".to_string(),
+            label_override: None,
+            anthropic_family_tier: Some("haiku".to_string()),
+            supports_1m: None,
+        }]);
+
+        let config = build_desktop_gateway_provider_config(&account)
+            .expect("gateway provider config should build");
+        let models = config["inferenceModels"]
+            .as_array()
+            .expect("inferenceModels should be an array");
+
+        assert_eq!(models[0]["anthropicFamilyTier"], "fable");
+        assert_eq!(models[1]["anthropicFamilyTier"], "haiku");
+        assert_eq!(models[2]["anthropicFamilyTier"], "opus");
+        assert_eq!(models[3]["anthropicFamilyTier"], "sonnet");
+        assert_eq!(models[4]["anthropicFamilyTier"], "haiku");
     }
 
     #[test]
