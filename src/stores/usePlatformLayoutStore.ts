@@ -1268,14 +1268,6 @@ function loadPersistedState(): NormalizedLayoutStateData {
     const antigravityGroupFirstMigrated = parsed.antigravityGroupFirstMigrated === true;
     const traeSuiteDefaultGroupRestored = parsed.traeSuiteDefaultGroupRestored === true;
     const codexApiServiceSuiteMigrated = parsed.codexApiServiceSuiteMigrated === true;
-    const persistedPlatformOrder = sanitizePlatformIds(parsed.orderedPlatformIds ?? []);
-    const persistedTrayPlatformIds = sanitizePlatformIds(parsed.trayPlatformIds ?? []);
-    const shouldAddAntigravityCliToTray =
-      !persistedPlatformOrder.includes('antigravity_cli')
-      && (
-        persistedTrayPlatformIds.includes('antigravity')
-        || persistedTrayPlatformIds.includes('antigravity_ide')
-      );
     const orderedPlatformIds = normalizeOrder(parsed.orderedPlatformIds ?? defaultPlatformOrder());
     const hiddenPlatformIds = normalizeHidden(parsed.hiddenPlatformIds ?? []);
     const sidebarPlatformIds = normalizeSidebar(
@@ -1307,20 +1299,15 @@ function loadPersistedState(): NormalizedLayoutStateData {
       sidebarPlatformIds,
     );
 
-    const migratedTrayPlatformIds = normalizeTray(
-      parsed.trayPlatformIds ?? defaultPlatformOrder(),
-      persistedPlatformOrder,
-      true,
-    );
-    if (shouldAddAntigravityCliToTray && !migratedTrayPlatformIds.includes('antigravity_cli')) {
-      migratedTrayPlatformIds.push('antigravity_cli');
-    }
-
     const normalized = normalizeStateData({
       orderedPlatformIds,
       hiddenPlatformIds,
       sidebarPlatformIds,
-      trayPlatformIds: migratedTrayPlatformIds,
+      trayPlatformIds: normalizeTray(
+        parsed.trayPlatformIds ?? defaultPlatformOrder(),
+        sanitizePlatformIds(parsed.orderedPlatformIds ?? []),
+        true,
+      ),
       traySortMode: normalizeTraySortMode(parsed.traySortMode),
       platformGroups,
       orderedEntryIds,
@@ -1339,7 +1326,6 @@ function loadPersistedState(): NormalizedLayoutStateData {
       !antigravityGroupFirstMigrated
       || !traeSuiteDefaultGroupRestored
       || !codexApiServiceSuiteMigrated
-      || shouldAddAntigravityCliToTray
     ) {
       persist(normalized);
     }
