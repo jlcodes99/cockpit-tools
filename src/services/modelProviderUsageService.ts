@@ -1,14 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 
-import {
-  parseCodexApiKeyUsageCache,
-  serializeCodexApiKeyUsageCache,
-} from './modelProviderUsageHelpers';
 export {
   formatDeepSeekBalanceMoney,
   isOfficialDeepSeekBaseUrl,
   preferredDeepSeekCurrency,
+  readCodexApiKeyUsageCache,
   selectDeepSeekBalanceInfo,
+  writeCodexApiKeyUsageCache,
 } from './modelProviderUsageHelpers';
 export type {
   CodexApiKeyUsageCacheEntry,
@@ -17,7 +15,6 @@ export type {
 } from './modelProviderUsageHelpers';
 import {
   isOfficialDeepSeekBaseUrl,
-  type CodexApiKeyUsageCacheEntry,
   type ModelProviderUsageSummary,
 } from './modelProviderUsageHelpers';
 
@@ -34,30 +31,7 @@ export interface ModelProviderModelsResult {
   latencyMs: number;
 }
 
-const CODEX_API_KEY_USAGE_CACHE_KEY = 'agtools.codex.apiKeyUsage.cache.v1';
 export const CODEX_API_KEY_USAGE_AUTO_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
-
-export function readCodexApiKeyUsageCache(): Record<string, CodexApiKeyUsageCacheEntry> {
-  try {
-    const raw = localStorage.getItem(CODEX_API_KEY_USAGE_CACHE_KEY);
-    return parseCodexApiKeyUsageCache(raw);
-  } catch {
-    return {};
-  }
-}
-
-export function writeCodexApiKeyUsageCache(
-  value: Record<string, CodexApiKeyUsageCacheEntry>,
-): void {
-  try {
-    localStorage.setItem(
-      CODEX_API_KEY_USAGE_CACHE_KEY,
-      serializeCodexApiKeyUsageCache(value),
-    );
-  } catch {
-    // ignore persistence failures
-  }
-}
 
 export interface NewApiQuotaSnapshot {
   granted: number | null;

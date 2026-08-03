@@ -9,73 +9,19 @@ import {
   findCodexModelProviderById,
   listCodexModelProviders,
   queryCodexModelProviderUsage,
-  type CodexModelProviderUsageSummary,
 } from './codexModelProviderService';
 import { isModelProviderUsageUnavailableError } from './modelProviderUsageService';
+import {
+  readCodexApiKeyUsageCache,
+  writeCodexApiKeyUsageCache,
+  type CodexApiKeyUsageCacheEntry,
+} from './modelProviderUsageHelpers';
 
-export const CODEX_API_KEY_USAGE_CACHE_KEY = 'agtools.codex.apiKeyUsage.cache.v1';
+export { readCodexApiKeyUsageCache, writeCodexApiKeyUsageCache } from './modelProviderUsageHelpers';
+
 export const CODEX_API_KEY_USAGE_REFRESHED_EVENT = 'codex-api-key-usage-refreshed';
 
-export type CodexApiKeyUsageState = {
-  loading: boolean;
-  summary?: CodexModelProviderUsageSummary;
-  error?: string;
-  unavailable?: boolean;
-  updatedAt?: number;
-};
-
-export function readCodexApiKeyUsageCache(): Record<string, CodexApiKeyUsageState> {
-  try {
-    const raw = localStorage.getItem(CODEX_API_KEY_USAGE_CACHE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== 'object') return {};
-
-    const next: Record<string, CodexApiKeyUsageState> = {};
-    for (const [accountId, value] of Object.entries(parsed)) {
-      if (!value || typeof value !== 'object') continue;
-      const item = value as Omit<CodexApiKeyUsageState, 'loading'>;
-      next[accountId] = {
-        loading: false,
-        summary: item.summary,
-        error: typeof item.error === 'string' ? item.error : undefined,
-        unavailable: item.unavailable === true,
-        updatedAt:
-          typeof item.updatedAt === 'number' && Number.isFinite(item.updatedAt)
-            ? item.updatedAt
-            : undefined,
-      };
-    }
-    return next;
-  } catch {
-    return {};
-  }
-}
-
-export function writeCodexApiKeyUsageCache(
-  value: Record<string, CodexApiKeyUsageState>,
-): void {
-  try {
-    localStorage.setItem(
-      CODEX_API_KEY_USAGE_CACHE_KEY,
-      JSON.stringify(
-        Object.fromEntries(
-          Object.entries(value).map(([accountId, item]) => [
-            accountId,
-            {
-              summary: item.summary,
-              error: item.error,
-              unavailable: item.unavailable === true,
-              updatedAt: item.updatedAt,
-            },
-          ]),
-        ),
-      ),
-    );
-  } catch {
-    // Ignore cache persistence failures; quota refresh remains available.
-  }
-}
+export type CodexApiKeyUsageState = CodexApiKeyUsageCacheEntry;
 
 function notifyCodexApiKeyUsageRefreshed(): void {
   window.dispatchEvent(new CustomEvent(CODEX_API_KEY_USAGE_REFRESHED_EVENT));

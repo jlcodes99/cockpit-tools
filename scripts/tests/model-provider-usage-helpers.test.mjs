@@ -49,24 +49,23 @@ test('DeepSeek currency selection falls back to the first real currency', () => 
   );
 });
 
-test('DeepSeek cache round-trip preserves balance infos and availability', () => {
-  const cached = helpers.parseCodexApiKeyUsageCache(
-    helpers.serializeCodexApiKeyUsageCache({
-      account: {
-        loading: true,
-        updatedAt: 123,
-        summary: {
-          mode: 'deepseek',
-          isAvailable: false,
-          balanceInfos: balances,
-          modelStatsCount: 0,
-          latencyMs: 19,
-        },
+test('shared in-memory cache preserves balance infos and availability', () => {
+  helpers.writeCodexApiKeyUsageCache({
+    account: {
+      loading: true,
+      updatedAt: 123,
+      summary: {
+        mode: 'deepseek',
+        isAvailable: false,
+        balanceInfos: balances,
+        modelStatsCount: 0,
+        latencyMs: 19,
       },
-    }),
-  );
+    },
+  });
+  const cached = helpers.readCodexApiKeyUsageCache();
 
-  assert.equal(cached.account.loading, false);
+  assert.equal(cached.account.loading, true);
   assert.equal(cached.account.summary.isAvailable, false);
   assert.deepEqual(cached.account.summary.balanceInfos, balances);
 });

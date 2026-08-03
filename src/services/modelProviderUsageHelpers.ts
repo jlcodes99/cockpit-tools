@@ -42,49 +42,22 @@ export interface CodexApiKeyUsageCacheEntry {
   updatedAt?: number;
 }
 
-export function parseCodexApiKeyUsageCache(
-  raw: string | null,
-): Record<string, CodexApiKeyUsageCacheEntry> {
-  if (!raw) return {};
-  const parsed = JSON.parse(raw) as Record<string, unknown>;
-  if (!parsed || typeof parsed !== 'object') return {};
+let codexApiKeyUsageCache: Record<string, CodexApiKeyUsageCacheEntry> = {};
+
+export function readCodexApiKeyUsageCache(): Record<string, CodexApiKeyUsageCacheEntry> {
   return Object.fromEntries(
-    Object.entries(parsed)
-      .filter(([, value]) => Boolean(value) && typeof value === 'object')
-      .map(([accountId, value]) => {
-        const entry = value as Omit<CodexApiKeyUsageCacheEntry, 'loading'>;
-        return [
-          accountId,
-          {
-            loading: false,
-            summary: entry.summary,
-            error: typeof entry.error === 'string' ? entry.error : undefined,
-            unavailable: entry.unavailable === true,
-            updatedAt:
-              typeof entry.updatedAt === 'number' && Number.isFinite(entry.updatedAt)
-                ? entry.updatedAt
-                : undefined,
-          },
-        ];
-      }),
+    Object.entries(codexApiKeyUsageCache).map(([accountId, entry]) => [
+      accountId,
+      { ...entry },
+    ]),
   );
 }
 
-export function serializeCodexApiKeyUsageCache(
+export function writeCodexApiKeyUsageCache(
   value: Record<string, CodexApiKeyUsageCacheEntry>,
-): string {
-  return JSON.stringify(
-    Object.fromEntries(
-      Object.entries(value).map(([accountId, entry]) => [
-        accountId,
-        {
-          summary: entry.summary,
-          error: entry.error,
-          unavailable: entry.unavailable === true,
-          updatedAt: entry.updatedAt,
-        },
-      ]),
-    ),
+): void {
+  codexApiKeyUsageCache = Object.fromEntries(
+    Object.entries(value).map(([accountId, entry]) => [accountId, { ...entry }]),
   );
 }
 
