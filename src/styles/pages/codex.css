@@ -6063,6 +6063,13 @@
   line-height: 1.35;
 }
 
+.codex-account-note-field-hint {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
 .codex-account-note-mfa-picker {
   display: flex;
   flex-direction: column;

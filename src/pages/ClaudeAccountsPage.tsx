@@ -827,6 +827,11 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
   const [editingDesktopGatewayAccountId, setEditingDesktopGatewayAccountId] = useState<string | null>(null);
   const desktopGatewayModelsFetchSignatureRef = useRef('');
   const desktopGatewayModelsFetchRequestRef = useRef(0);
+  // Keep React row identity separate from editable values and the persisted mapping shape.
+  const desktopGatewayMappingRowKeysRef = useRef(
+    new WeakMap<ClaudeDesktopGatewayModelMapping, string>(),
+  );
+  const desktopGatewayMappingRowKeySequenceRef = useRef(0);
   const [desktopLogin, setDesktopLogin] = useState<ClaudeDesktopLoginStartResponse | null>(null);
   const [desktopLoginProgress, setDesktopLoginProgress] = useState<ClaudeDesktopLoginProgressPayload | null>(null);
   const [desktopAccountNameInput, setDesktopAccountNameInput] = useState('');
@@ -877,6 +882,34 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
     scrollKey: accountNoteErrorScrollKey,
     set: setAccountNoteError,
   } = useModalErrorState();
+
+  const getDesktopGatewayMappingRowKey = useCallback((mapping: ClaudeDesktopGatewayModelMapping) => {
+    const existingKey = desktopGatewayMappingRowKeysRef.current.get(mapping);
+    if (existingKey) return existingKey;
+    desktopGatewayMappingRowKeySequenceRef.current += 1;
+    const nextKey = `claude-gateway-mapping-${desktopGatewayMappingRowKeySequenceRef.current}`;
+    desktopGatewayMappingRowKeysRef.current.set(mapping, nextKey);
+    return nextKey;
+  }, []);
+
+  const updateDesktopGatewayModelMapping = useCallback((
+    index: number,
+    updater: (mapping: ClaudeDesktopGatewayModelMapping) => ClaudeDesktopGatewayModelMapping,
+  ) => {
+    setDesktopGatewayModelMappings((previous) => {
+      const current = previous[index];
+      if (!current) return previous;
+      const updated = updater(current);
+      if (updated === current) return previous;
+      desktopGatewayMappingRowKeysRef.current.set(
+        updated,
+        getDesktopGatewayMappingRowKey(current),
+      );
+      const next = [...previous];
+      next[index] = updated;
+      return next;
+    });
+  }, [getDesktopGatewayMappingRowKey]);
 
   const exportModal = useExportJsonModal({
     exportFilePrefix: activeSubPlatform === 'desktop' ? 'claude_desktop_accounts' : 'claude_cli_accounts',
@@ -3821,14 +3854,16 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                                   const showCustomDesktopInput =
                                     desktopDropdownValue === CLAUDE_DESKTOP_GATEWAY_CUSTOM_DESKTOP_MODEL;
                                   return (
-                                    <div className="claude-gateway-mapping-row" key={`${index}-${mapping.upstreamModel}-${mapping.desktopModel}`}>
+                                    <div className="claude-gateway-mapping-row" key={getDesktopGatewayMappingRowKey(mapping)}>
                                       <input
                                         className="form-input"
                                         value={mapping.upstreamModel}
                                         onChange={(event) => {
-                                          const next = [...desktopGatewayModelMappings];
-                                          next[index] = { ...mapping, upstreamModel: event.target.value };
-                                          setDesktopGatewayModelMappings(next);
+                                          const value = event.target.value;
+                                          updateDesktopGatewayModelMapping(index, (current) => ({
+                                            ...current,
+                                            upstreamModel: value,
+                                          }));
                                           setDesktopGatewayModelsError(null);
                                           setAddModalError(null);
                                         }}
@@ -3840,17 +3875,15 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                                           value={desktopDropdownValue}
                                           options={desktopModelOptions}
                                           onChange={(value) => {
-                                            const next = [...desktopGatewayModelMappings];
-                                            next[index] = {
-                                              ...mapping,
+                                            updateDesktopGatewayModelMapping(index, (current) => ({
+                                              ...current,
                                               desktopModel:
                                                 value === CLAUDE_DESKTOP_GATEWAY_CUSTOM_DESKTOP_MODEL
                                                   ? desktopModelInOptions
                                                     ? ''
-                                                    : mapping.desktopModel
+                                                    : current.desktopModel
                                                   : value,
-                                            };
-                                            setDesktopGatewayModelMappings(next);
+                                            }));
                                             setDesktopGatewayModelsError(null);
                                             setAddModalError(null);
                                           }}
@@ -3863,9 +3896,11 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                                             className="form-input"
                                             value={mapping.desktopModel}
                                             onChange={(event) => {
-                                              const next = [...desktopGatewayModelMappings];
-                                              next[index] = { ...mapping, desktopModel: event.target.value };
-                                              setDesktopGatewayModelMappings(next);
+                                              const value = event.target.value;
+                                              updateDesktopGatewayModelMapping(index, (current) => ({
+                                                ...current,
+                                                desktopModel: value,
+                                              }));
                                               setDesktopGatewayModelsError(null);
                                               setAddModalError(null);
                                             }}
@@ -3882,9 +3917,11 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                                           type="checkbox"
                                           checked={mapping.supports1m === true}
                                           onChange={(event) => {
-                                            const next = [...desktopGatewayModelMappings];
-                                            next[index] = { ...mapping, supports1m: event.target.checked };
-                                            setDesktopGatewayModelMappings(next);
+                                            const checked = event.target.checked;
+                                            updateDesktopGatewayModelMapping(index, (current) => ({
+                                              ...current,
+                                              supports1m: checked,
+                                            }));
                                             setDesktopGatewayModelsError(null);
                                             setAddModalError(null);
                                           }}

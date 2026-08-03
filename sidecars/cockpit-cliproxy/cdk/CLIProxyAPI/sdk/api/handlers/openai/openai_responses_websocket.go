@@ -656,57 +656,83 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 		modelName := gjson.GetBytes(requestJSON, "model").String()
 		lastAttemptedAuthID := pinnedAuthID
 		attemptedUpstreamMode := responsesWebsocketUpstreamModeUnknown
-		selectedAuthObserved := false
 		pinnedAuthAttempted := false
-		cliCtx, cliCancel := h.GetContextWithCancel(h, c, executionParent)
-		cliCtx = cliproxyexecutor.WithDownstreamWebsocket(cliCtx)
-		if nativeWebsocketPassthrough && requestRequiresCurrentUpstreamWebsocket {
-			cliCtx = cliproxyexecutor.WithRequiredUpstreamWebsocket(cliCtx)
-		}
-		cliCtx = handlers.WithExecutionSessionID(cliCtx, passthroughSessionID)
-		cliCtx = handlers.WithSelectedAuthIDCallback(cliCtx, func(authID string) {
-			authID = strings.TrimSpace(authID)
-			if authID == "" || h == nil || h.AuthManager == nil {
-				return
-			}
-			lastAttemptedAuthID = authID
-			selectedAuthObserved = true
-			pinnedAuthAttempted = pinnedAuthAttempted || (pinnedAuthID != "" && authID == pinnedAuthID)
-			selectedAuth, ok := sessionAuthByID(authID)
-			if !ok || selectedAuth == nil {
-				return
-			}
-			attemptedUpstreamMode = upstreamModeForAuth(selectedAuth)
-		})
-		if pinnedAuthID != "" && !routeOverridesModelResolution {
-			cliCtx = handlers.WithPinnedAuthID(cliCtx, pinnedAuthID)
-		}
-		dataChan, _, errChan := h.ExecuteStreamWithAuthManager(cliCtx, h.HandlerType(), modelName, requestJSON, "")
-		if !selectedAuthObserved {
-			// Plugin/alternate routes bypass auth selection. Keep canonical HTTP-mode
-			// state instead of inheriting the previous pinned websocket mode.
-			attemptedUpstreamMode = responsesWebsocketUpstreamModeHTTP
-		}
-		// A connection-scoped continuation cannot rotate credentials in place. Suppress
-		// credential errors and make the client replay the full turn on a new socket.
-		replayPinnedAuthFailure := func(errMsg *interfaces.ErrorMessage) bool {
-			return nativeWebsocketPassthrough && requestRequiresCurrentUpstreamWebsocket && pinnedAuthAttempted &&
-				shouldReplayResponsesWebsocketPinnedAuthFailure(errMsg)
-		}
+		retryBody, canRetryInvalidEncryptedContent := sanitizeInvalidEncryptedContentRetryBody(requestJSON)
+		retriedInvalidEncryptedContent := false
+		var completedOutput []byte
+		var completedResponseID string
+		var completedPendingToolCallIDs []string
+		var forwardErrMsg *interfaces.ErrorMessage
+		var errForward error
+		var replayPinnedAuthFailure func(*interfaces.ErrorMessage) bool
 
-		completedOutput, completedResponseID, completedPendingToolCallIDs, forwardErrMsg, errForward := h.forwardResponsesWebsocket(
-			c,
-			writer,
-			cliCancel,
-			dataChan,
-			errChan,
-			wsTimelineLog,
-			passthroughSessionID,
-			responsesWebsocketForwardOptions{
-				toolCacheTurn: toolCacheTurn,
-				suppressError: replayPinnedAuthFailure,
-			},
-		)
+		for {
+			selectedAuthObserved := false
+			cliCtx, cliCancel := h.GetContextWithCancel(h, c, executionParent)
+			cliCtx = cliproxyexecutor.WithDownstreamWebsocket(cliCtx)
+			if nativeWebsocketPassthrough && requestRequiresCurrentUpstreamWebsocket {
+				cliCtx = cliproxyexecutor.WithRequiredUpstreamWebsocket(cliCtx)
+			}
+			cliCtx = handlers.WithExecutionSessionID(cliCtx, passthroughSessionID)
+			cliCtx = handlers.WithSelectedAuthIDCallback(cliCtx, func(authID string) {
+				authID = strings.TrimSpace(authID)
+				if authID == "" || h == nil || h.AuthManager == nil {
+					return
+				}
+				lastAttemptedAuthID = authID
+				selectedAuthObserved = true
+				pinnedAuthAttempted = pinnedAuthAttempted || (pinnedAuthID != "" && authID == pinnedAuthID)
+				selectedAuth, ok := sessionAuthByID(authID)
+				if !ok || selectedAuth == nil {
+					return
+				}
+				attemptedUpstreamMode = upstreamModeForAuth(selectedAuth)
+			})
+			if pinnedAuthID != "" && !routeOverridesModelResolution {
+				cliCtx = handlers.WithPinnedAuthID(cliCtx, pinnedAuthID)
+			}
+			dataChan, _, errChan := h.ExecuteStreamWithAuthManager(cliCtx, h.HandlerType(), modelName, requestJSON, "")
+			if !selectedAuthObserved {
+				// Plugin/alternate routes bypass auth selection. Keep canonical HTTP-mode
+				// state instead of inheriting the previous pinned websocket mode.
+				attemptedUpstreamMode = responsesWebsocketUpstreamModeHTTP
+			}
+			// A connection-scoped continuation cannot rotate credentials in place. Suppress
+			// credential errors and make the client replay the full turn on a new socket.
+			replayPinnedAuthFailure = func(errMsg *interfaces.ErrorMessage) bool {
+				return nativeWebsocketPassthrough && requestRequiresCurrentUpstreamWebsocket && pinnedAuthAttempted &&
+					shouldReplayResponsesWebsocketPinnedAuthFailure(errMsg)
+			}
+			suppressRecoverableError := func(errMsg *interfaces.ErrorMessage) bool {
+				return replayPinnedAuthFailure(errMsg) ||
+					(!retriedInvalidEncryptedContent && canRetryInvalidEncryptedContent && isInvalidEncryptedContentError(errMsg))
+			}
+
+			completedOutput, completedResponseID, completedPendingToolCallIDs, forwardErrMsg, errForward = h.forwardResponsesWebsocket(
+				c,
+				writer,
+				cliCancel,
+				dataChan,
+				errChan,
+				wsTimelineLog,
+				passthroughSessionID,
+				responsesWebsocketForwardOptions{
+					toolCacheTurn: toolCacheTurn,
+					suppressError: suppressRecoverableError,
+				},
+			)
+			if errForward == nil && forwardErrMsg != nil && !retriedInvalidEncryptedContent &&
+				canRetryInvalidEncryptedContent && isInvalidEncryptedContentError(forwardErrMsg) {
+				retriedInvalidEncryptedContent = true
+				requestJSON = retryBody
+				if !nativeWebsocketPassthrough {
+					updatedLastRequest = bytes.Clone(retryBody)
+					lastRequest = updatedLastRequest
+				}
+				continue
+			}
+			break
+		}
 		if errForward != nil {
 			wsTerminateErr = errForward
 			if !errors.Is(errForward, websocket.ErrCloseSent) {

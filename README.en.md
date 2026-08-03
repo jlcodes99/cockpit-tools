@@ -454,7 +454,7 @@ Every bit of support helps sustain open-source development. Thank you!
 - Grok CLI task-usage querying and compatibility parsing direction references: [junhoyeo/tokscale](https://github.com/junhoyeo/tokscale) (MIT)
 - Grok CLI third-party BYOK and custom-model configuration formats follow the upstream implementation and documentation: [xai-org/grok-build](https://github.com/xai-org/grok-build)
 - Codex API service protocol compatibility direction references: [codex-proxy](https://github.com/icebear0828/codex-proxy)
-- Codex Agent Identity import, dynamic signing, task recovery, and explicit rejected-field retry behavior for third-party Responses providers reference: [sub2api](https://github.com/Wei-Shaw/sub2api)
+- Codex Agent Identity import, dynamic signing, task recovery, Responses namespace routing, encrypted-content recovery, tool-output protocol conversion, and model compatibility reference: [sub2api](https://github.com/Wei-Shaw/sub2api)
 - Codex Agent Identity runtime registration protocol and Ed25519 key format reference the official implementation: [openai/codex](https://github.com/openai/codex) (Apache-2.0)
 - Codex, Claude CLI, and Claude Desktop Gateway third-party provider presets and model mapping direction reference: [CC Switch](https://github.com/farion1231/cc-switch)
 - Codex model catalog and frontend model display ideas reference: [CodexPlusPlus](https://github.com/BigPizzaV3/CodexPlusPlus)

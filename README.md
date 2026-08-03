@@ -457,7 +457,7 @@ QQ 交流群、微信群或新建的 Telegram 畅聊群都可以加入。
 - Grok CLI 任务用量查询与兼容解析方向参考：[junhoyeo/tokscale](https://github.com/junhoyeo/tokscale)（MIT）
 - Grok CLI 第三方 BYOK 与 custom model 配置格式对照上游实现及文档：[xai-org/grok-build](https://github.com/xai-org/grok-build)
 - Codex API 服务协议兼容方向参考：[codex-proxy](https://github.com/icebear0828/codex-proxy)
-- Codex Agent Identity 导入、动态签名、task 失效恢复及第三方 Responses 明确拒绝字段重试方向参考：[sub2api](https://github.com/Wei-Shaw/sub2api)
+- Codex Agent Identity 导入、动态签名、task 失效恢复，以及 Responses namespace 分流、加密内容恢复、工具输出协议转换与模型兼容方向参考：[sub2api](https://github.com/Wei-Shaw/sub2api)
 - Codex Agent Identity runtime 注册协议与 Ed25519 密钥格式参考官方实现：[openai/codex](https://github.com/openai/codex)（Apache-2.0）
 - Codex、Claude CLI 与 Claude Desktop Gateway 第三方供应商预设和模型映射方向参考：[CC Switch](https://github.com/farion1231/cc-switch)
 - Codex 模型目录与前端模型显示思路参考：[CodexPlusPlus](https://github.com/BigPizzaV3/CodexPlusPlus)

@@ -7,6 +7,29 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [1.3.16] - 2026-08-02
+
+### 新增
+
+- **Codex `at-*` 个人访问令牌账号支持设置 ChatGPT 工作区 ID**：Token / JSON 导入会识别 `account_id`、camelCase 字段以及 headers / custom headers 中的 `ChatGPT-Account-Id`；账号备注弹框可查看、复制和修改 Team / Workspace UUID，保存后同步到 API 服务 sidecar。未提供真实工作区 ID 时不再使用 Cockpit 本地账号 ID 冒充上游账号 ID。
+- **Codex sub2api 导出支持 API Key 与仅 Access Token 账号**：API Key 账号使用 sub2api 原生 `apikey` credentials；仅 Access Token 账号写入真实 token 到期时间并启用到期自动暂停；OAuth 导出补齐官方 client ID、用户与组织身份、登录提供方、访问令牌及订阅到期时间，并使用默认并发数 3、优先级 50。
+
+### 变更
+
+- **Codex API 服务透明对齐最新 Responses 兼容策略**：官方 Codex OAuth 保留函数、自定义工具、通用工具与 MCP 调用项的 namespace，API Key、自定义上游与 Compact 请求移除不兼容 namespace；缺失、`null` 或空白 instructions 使用对应模型的官方基础指令；GPT-5.6 Sol / Terra / Luna 仅在全部路由均为官方 Codex 时使用 Responses Lite，自定义或混合供应商改用完整 Responses 以保留 `web.run` 等工具。
+
+### 修复
+
+- **修复过期加密推理或压缩内容导致 Codex 对话直接中断的问题**：HTTP、流式 HTTP、Compact 与下游 WebSocket 在尚未输出内容时会移除失效的 `encrypted_content`，保留可复用历史并安全重试一次；同类错误不会无限重试，大整数请求字段保持精确。
+- **修复 `response.failed` 限流事件被误报为 HTTP 400 的问题**：`error.code` 或 `error.type` 包含 `rate_limit` 时映射为 HTTP 429，使 API 服务按既有限流策略重试或切换账号。
+- **修复 Responses 转 Anthropic 时工具结果数组、图片和 namespace 工具丢失的问题**：文本与图片结果转换为 Anthropic content block，空数组提供明确结果；顶层与 `additional_tools` 工具合并，custom tool call、tool use/result 配对以及流式和非流式 namespace 回程保持一致。
+- **修复 Responses 转 Chat Completions 时工具输出图片被丢弃的问题**：data image URL 及嵌套 `input_image` / `image_url` 会移入带调用归属的 user 多模态消息，同时保持 tool call 顺序、回复邻接关系以及无媒体输出的原始 JSON 语义。
+- **修复 Codex Team / Workspace 账号可能显示个人 Free 订阅的问题**：订阅解析优先按 organization ID 匹配，再按 account ID、默认账号及付费套餐回退，避免多工作区响应选中错误记录。
+- **修复 sub2api 账号回导后把 Access Token 有效期显示为订阅有效期的问题**：导入现在只从 `subscription_expires_at` / `subscription_active_until` 读取订阅时间，不再将账号或 credentials 中的通用 `expires_at` 当作 Plus / Team 订阅到期时间。
+- **修复 Codex 导出转换失败时静默回退为 Cockpit Tools 格式的问题**：所选账号类型不受支持或认证信息不完整时，导出弹框现在显示明确错误并保持当前格式，不再生成内容与选择不一致的文件。
+- **修复 Claude Desktop Gateway 模型映射编辑时输入框可能失焦或重置的问题**：映射行使用独立稳定标识，修改上游模型、桌面模型或 1M 支持开关时不再因 React 重建行而中断输入。
+- **修复 Windows 从 `1.3.15` 更新时桌面与开始菜单快捷方式可能同时消失的问题**：更新模式保留现有快捷方式，仅针对 `1.3.15` 两个快捷方式均缺失的升级状态自动恢复；普通手动安装仍清理历史产品名快捷方式，不会恢复用户主动删除的单个快捷方式。
+
 ## [1.3.15] - 2026-07-29
 
 ### 新增

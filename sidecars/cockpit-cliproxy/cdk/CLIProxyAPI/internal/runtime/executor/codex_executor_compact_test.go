@@ -68,8 +68,8 @@ func TestCodexExecutorCompactAddsDefaultInstructions(t *testing.T) {
 			if gjson.GetBytes(gotBody, "instructions").Type != gjson.String {
 				t.Fatalf("instructions type = %v, want string", gjson.GetBytes(gotBody, "instructions").Type)
 			}
-			if gjson.GetBytes(gotBody, "instructions").String() != "" {
-				t.Fatalf("instructions = %q, want empty string", gjson.GetBytes(gotBody, "instructions").String())
+			if instructions := gjson.GetBytes(gotBody, "instructions").String(); len(instructions) < 100 {
+				t.Fatalf("instructions = %q, want model base instructions", instructions)
 			}
 			if string(resp.Payload) != `{"id":"resp_1","object":"response.compaction","usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}` {
 				t.Fatalf("payload = %s", string(resp.Payload))

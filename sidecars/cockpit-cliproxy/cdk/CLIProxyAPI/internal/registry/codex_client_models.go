@@ -19,6 +19,7 @@ type codexClientModelOverride struct {
 	Slug                     string                      `json:"slug"`
 	DisplayName              string                      `json:"display_name"`
 	Description              string                      `json:"description"`
+	BaseInstructions         string                      `json:"base_instructions"`
 	ContextWindow            int                         `json:"context_window"`
 	UseResponsesLite         bool                        `json:"use_responses_lite"`
 	SupportedReasoningLevels []codexClientReasoningLevel `json:"supported_reasoning_levels"`
@@ -32,7 +33,10 @@ var (
 	codexClientBuiltinModelsOnce sync.Once
 	codexClientBuiltinModels     []*ModelInfo
 	codexResponsesLiteModels     map[string]struct{}
+	codexClientBaseInstructions  map[string]string
 )
+
+const codexClientFallbackInstructions = "You are Codex, a coding agent. Help the user complete software engineering tasks accurately and safely."
 
 // GetCodexClientModelsJSON returns the embedded Codex client model catalog.
 func GetCodexClientModelsJSON() []byte {
@@ -46,6 +50,7 @@ func codexClientBuiltinModelInfos() []*ModelInfo {
 			return
 		}
 		codexResponsesLiteModels = make(map[string]struct{})
+		codexClientBaseInstructions = make(map[string]string)
 		seen := make(map[string]struct{})
 
 		register := func(model codexClientModelOverride) {
@@ -55,6 +60,9 @@ func codexClientBuiltinModelInfos() []*ModelInfo {
 			}
 			if model.UseResponsesLite {
 				codexResponsesLiteModels[strings.ToLower(slug)] = struct{}{}
+			}
+			if instructions := strings.TrimSpace(model.BaseInstructions); instructions != "" {
+				codexClientBaseInstructions[strings.ToLower(slug)] = model.BaseInstructions
 			}
 			if _, ok := seen[slug]; ok {
 				return
@@ -108,4 +116,17 @@ func CodexClientModelUsesResponsesLite(modelID string) bool {
 	codexClientBuiltinModelInfos()
 	_, ok := codexResponsesLiteModels[strings.ToLower(strings.TrimSpace(modelID))]
 	return ok
+}
+
+// CodexClientModelBaseInstructions returns the embedded Codex instructions for
+// a model. Unknown models use the current GPT-5.5 instructions when available.
+func CodexClientModelBaseInstructions(modelID string) string {
+	codexClientBuiltinModelInfos()
+	if instructions := codexClientBaseInstructions[strings.ToLower(strings.TrimSpace(modelID))]; strings.TrimSpace(instructions) != "" {
+		return instructions
+	}
+	if instructions := codexClientBaseInstructions["gpt-5.5"]; strings.TrimSpace(instructions) != "" {
+		return instructions
+	}
+	return codexClientFallbackInstructions
 }

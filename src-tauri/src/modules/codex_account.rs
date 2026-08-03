@@ -3595,7 +3595,7 @@ pub fn upsert_account_for_reauth(
     tokens: CodexTokens,
     target_account_id: &str,
 ) -> Result<CodexAccount, String> {
-    upsert_account_with_hints_and_reauth_target(tokens, None, None, Some(target_account_id))
+    upsert_account_with_hints_and_reauth_target(tokens, None, None, None, Some(target_account_id))
 }
 
 pub fn upsert_api_key_account(
@@ -3707,7 +3707,28 @@ fn upsert_account_with_hints(
     account_id_hint: Option<String>,
     organization_id_hint: Option<String>,
 ) -> Result<CodexAccount, String> {
-    upsert_account_with_hints_and_reauth_target(tokens, account_id_hint, organization_id_hint, None)
+    upsert_account_with_hints_and_reauth_target(
+        tokens,
+        account_id_hint,
+        organization_id_hint,
+        None,
+        None,
+    )
+}
+
+fn upsert_account_with_import_hints(
+    tokens: CodexTokens,
+    account_id_hint: Option<String>,
+    organization_id_hint: Option<String>,
+    subscription_active_until_hint: Option<String>,
+) -> Result<CodexAccount, String> {
+    upsert_account_with_hints_and_reauth_target(
+        tokens,
+        account_id_hint,
+        organization_id_hint,
+        subscription_active_until_hint,
+        None,
+    )
 }
 
 fn resolve_reauth_target_account_id(
@@ -3739,16 +3760,20 @@ fn upsert_account_with_hints_and_reauth_target(
     mut tokens: CodexTokens,
     account_id_hint: Option<String>,
     organization_id_hint: Option<String>,
+    subscription_active_until_hint: Option<String>,
     reauth_target_account_id: Option<&str>,
 ) -> Result<CodexAccount, String> {
     let (
         email,
         user_id,
         plan_type,
-        subscription_active_until,
+        token_subscription_active_until,
         id_token_account_id,
         id_token_org_id,
     ) = extract_user_info(&tokens.id_token)?;
+    let subscription_active_until = normalize_optional_value(
+        subscription_active_until_hint.or(token_subscription_active_until),
+    );
     let account_id = normalize_optional_value(
         extract_chatgpt_account_id_from_access_token(&tokens.access_token)
             .or(id_token_account_id)
@@ -6198,6 +6223,7 @@ enum CodexJsonImportCandidate {
     FullToken {
         tokens: CodexTokens,
         account_id_hint: Option<String>,
+        subscription_active_until_hint: Option<String>,
         note_update: CodexAccountNoteUpdate,
     },
     AccessToken {
@@ -6613,14 +6639,16 @@ fn extract_access_token_import_hints_from_value(
             &[
                 &["subscription_active_until"],
                 &["subscriptionActiveUntil"],
-                &["expires_at"],
-                &["expiresAt"],
+                &["subscription_expires_at"],
+                &["subscriptionExpiresAt"],
                 &["account", "subscription_active_until"],
                 &["account", "subscriptionActiveUntil"],
+                &["account", "subscription_expires_at"],
+                &["account", "subscriptionExpiresAt"],
                 &["credentials", "subscription_active_until"],
                 &["credentials", "subscriptionActiveUntil"],
-                &["credentials", "expires_at"],
-                &["credentials", "expiresAt"],
+                &["credentials", "subscription_expires_at"],
+                &["credentials", "subscriptionExpiresAt"],
             ],
         ),
         account_id: first_json_scalar_string(
@@ -6630,6 +6658,12 @@ fn extract_access_token_import_hints_from_value(
                 &["accountId"],
                 &["chatgpt_account_id"],
                 &["workspace_id"],
+                &["chatgptAccountId"],
+                &["workspaceId"],
+                &["headers", "ChatGPT-Account-Id"],
+                &["headers", "Chatgpt-Account-Id"],
+                &["custom_headers", "ChatGPT-Account-Id"],
+                &["customHeaders", "ChatGPT-Account-Id"],
                 &["account", "id"],
                 &["account", "account_id"],
                 &["account", "accountId"],
@@ -6796,6 +6830,7 @@ fn extract_codex_session_candidate_from_value(
                 refresh_token,
             },
             account_id_hint,
+            subscription_active_until_hint: session_hints.subscription_active_until.clone(),
             note_update,
         });
     }
@@ -6809,6 +6844,7 @@ fn extract_codex_session_candidate_from_value(
                 refresh_token,
             },
             account_id_hint,
+            subscription_active_until_hint: session_hints.subscription_active_until.clone(),
             note_update,
         });
     }
@@ -6889,6 +6925,8 @@ fn extract_codex_import_candidate_from_value(
         return Some(CodexJsonImportCandidate::FullToken {
             tokens,
             account_id_hint,
+            subscription_active_until_hint: extract_access_token_import_hints_from_value(value)
+                .subscription_active_until,
             note_update: codex_account_note_update_from_value(value),
         });
     }
@@ -6998,8 +7036,12 @@ fn upsert_account_from_access_token_with_hints(
         .unwrap_or_else(|| format!("codex-access-{}", access_token_fingerprint(&access_token)));
     let user_id = normalize_optional_value(token_user_id.or(hints.user_id.clone()));
     let plan_type = normalize_optional_value(token_plan_type.or(hints.plan_type.clone()));
-    let subscription_active_until =
-        normalize_optional_value(token_subscription.or(hints.subscription_active_until.clone()));
+    let subscription_active_until = normalize_optional_value(
+        hints
+            .subscription_active_until
+            .clone()
+            .or(token_subscription),
+    );
     let mut tokens = CodexTokens {
         id_token: String::new(),
         access_token,
@@ -7112,9 +7154,15 @@ async fn import_codex_candidate(
         CodexJsonImportCandidate::FullToken {
             tokens,
             account_id_hint,
+            subscription_active_until_hint,
             note_update,
         } => {
-            let mut account = upsert_account_with_hints(tokens, account_id_hint, None)?;
+            let mut account = upsert_account_with_import_hints(
+                tokens,
+                account_id_hint,
+                None,
+                subscription_active_until_hint,
+            )?;
             save_account_note_update_if_present(&mut account, note_update)?;
             Ok(account)
         }
@@ -7659,6 +7707,8 @@ enum CodexBatchImportDraft {
         tokens: CodexTokens,
         account_id_hint: Option<String>,
         #[serde(default)]
+        subscription_active_until_hint: Option<String>,
+        #[serde(default)]
         note_update: CodexAccountNoteUpdate,
     },
     AccessToken {
@@ -7922,16 +7972,20 @@ fn codex_batch_import_progress_from_items(
 fn preview_account_from_full_tokens(
     mut tokens: CodexTokens,
     account_id_hint: Option<String>,
+    subscription_active_until_hint: Option<String>,
     note_update: CodexAccountNoteUpdate,
 ) -> Result<CodexAccount, String> {
     let (
         email,
         user_id,
         plan_type,
-        subscription_active_until,
+        token_subscription_active_until,
         id_token_account_id,
         id_token_org_id,
     ) = extract_user_info(&tokens.id_token)?;
+    let subscription_active_until = normalize_optional_value(
+        subscription_active_until_hint.or(token_subscription_active_until),
+    );
     let account_id = normalize_optional_value(
         extract_chatgpt_account_id_from_access_token(&tokens.access_token)
             .or(id_token_account_id)
@@ -8000,7 +8054,7 @@ fn preview_account_from_access_token(
     account.user_id = normalize_optional_value(token_user_id.or(hints.user_id));
     account.plan_type = normalize_optional_value(token_plan_type.or(hints.plan_type));
     account.subscription_active_until =
-        normalize_optional_value(token_subscription.or(hints.subscription_active_until));
+        normalize_optional_value(hints.subscription_active_until.or(token_subscription));
     account.account_id = account_id;
     account.organization_id = organization_id;
     account.account_name = hints.account_name;
@@ -8019,10 +8073,12 @@ fn preview_account_for_draft(draft: &CodexBatchImportDraft) -> Result<CodexAccou
         CodexBatchImportDraft::FullToken {
             tokens,
             account_id_hint,
+            subscription_active_until_hint,
             note_update,
         } => preview_account_from_full_tokens(
             tokens.clone(),
             account_id_hint.clone(),
+            subscription_active_until_hint.clone(),
             note_update.clone(),
         ),
         CodexBatchImportDraft::AccessToken {
@@ -8039,10 +8095,12 @@ fn codex_batch_import_draft_from_candidate(
         CodexJsonImportCandidate::FullToken {
             tokens,
             account_id_hint,
+            subscription_active_until_hint,
             note_update,
         } => CodexBatchImportDraft::FullToken {
             tokens,
             account_id_hint,
+            subscription_active_until_hint,
             note_update,
         },
         CodexJsonImportCandidate::AccessToken {
@@ -8171,6 +8229,10 @@ async fn codex_batch_import_draft_from_value(
             return Ok(Some(CodexBatchImportDraft::FullToken {
                 tokens,
                 account_id_hint,
+                subscription_active_until_hint: extract_access_token_import_hints_from_value(
+                    &value,
+                )
+                .subscription_active_until,
                 note_update: codex_account_note_update_from_value(&value),
             }));
         }
@@ -8204,6 +8266,7 @@ async fn codex_batch_import_draft_from_value(
                 Ok(Some(CodexBatchImportDraft::FullToken {
                     tokens,
                     account_id_hint: None,
+                    subscription_active_until_hint: None,
                     note_update,
                 }))
             }
@@ -8794,9 +8857,15 @@ pub fn confirm_codex_batch_import(
                 CodexBatchImportDraft::FullToken {
                     tokens,
                     account_id_hint,
+                    subscription_active_until_hint,
                     note_update,
                 } => {
-                    let mut account = upsert_account_with_hints(tokens, account_id_hint, None)?;
+                    let mut account = upsert_account_with_import_hints(
+                        tokens,
+                        account_id_hint,
+                        None,
+                        subscription_active_until_hint,
+                    )?;
                     save_account_note_update_if_present(&mut account, note_update)?;
                     account
                 }
@@ -10095,6 +10164,7 @@ mod tests {
                 tokens,
                 account_id_hint,
                 note_update,
+                ..
             } => {
                 assert_eq!(tokens.id_token, tokens.access_token);
                 assert_eq!(tokens.refresh_token, None);
@@ -10160,7 +10230,9 @@ mod tests {
                 "auth_mode": "personal_access_token",
                 "openai_auth_mode": "personal_access_token",
                 "plan_type": "team",
-                "chatgpt_account_id": "acc-sub2api"
+                "chatgpt_account_id": "acc-sub2api",
+                "expires_at": "2026-08-11T16:44:00Z",
+                "subscription_expires_at": "2026-09-20T00:00:00Z"
             }
         });
 
@@ -10176,10 +10248,77 @@ mod tests {
                 assert_eq!(hints.email.as_deref(), Some("sub2api@example.com"));
                 assert_eq!(hints.plan_type.as_deref(), Some("team"));
                 assert_eq!(hints.account_id.as_deref(), Some("acc-sub2api"));
+                assert_eq!(
+                    hints.subscription_active_until.as_deref(),
+                    Some("2026-09-20T00:00:00Z")
+                );
                 assert_eq!(hints.account_note.as_deref(), Some("imported from sub2api"));
             }
             _ => panic!("expected accessToken-only candidate"),
         }
+    }
+
+    #[test]
+    fn extract_candidate_does_not_treat_token_expiry_as_subscription_expiry() {
+        let value = serde_json::json!({
+            "name": "Sub2API access token",
+            "platform": "openai",
+            "type": "oauth",
+            "credentials": {
+                "email": "token-expiry@example.com",
+                "access_token": "at-token-expiry",
+                "expires_at": "2026-08-11T16:44:00Z"
+            },
+            "expires_at": 1786466640,
+            "auto_pause_on_expired": true
+        });
+
+        let candidate = extract_codex_import_candidate_from_value(&value)
+            .expect("Sub2API access token should be accepted");
+
+        match candidate {
+            CodexJsonImportCandidate::AccessToken { hints, .. } => {
+                assert_eq!(hints.subscription_active_until, None);
+            }
+            _ => panic!("expected accessToken-only candidate"),
+        }
+    }
+
+    #[test]
+    fn full_token_sub2api_candidate_preserves_explicit_subscription_expiry() {
+        let access_token = make_jwt(serde_json::json!({
+            "email": "oauth-expiry@example.com",
+            "exp": 1_786_466_640,
+            "https://api.openai.com/auth": {
+                "chatgpt_account_id": "acc-oauth-expiry",
+                "chatgpt_plan_type": "plus",
+                "chatgpt_subscription_active_until": "2090-01-01T00:00:00Z"
+            }
+        }));
+        let value = serde_json::json!({
+            "name": "Sub2API OAuth",
+            "platform": "openai",
+            "type": "oauth",
+            "credentials": {
+                "email": "oauth-expiry@example.com",
+                "id_token": access_token,
+                "access_token": access_token,
+                "refresh_token": "rt-oauth-expiry",
+                "expires_at": "2026-08-11T16:44:00Z",
+                "subscription_expires_at": "2026-09-20T00:00:00Z"
+            }
+        });
+
+        let candidate = extract_codex_import_candidate_from_value(&value)
+            .expect("Sub2API OAuth account should be accepted");
+        let draft = super::codex_batch_import_draft_from_candidate(candidate);
+        let preview = super::preview_account_for_draft(&draft)
+            .expect("Sub2API OAuth preview should be available");
+
+        assert_eq!(
+            preview.subscription_active_until.as_deref(),
+            Some("2026-09-20T00:00:00Z")
+        );
     }
 
     #[test]
@@ -10224,6 +10363,31 @@ mod tests {
                 assert_eq!(hints.account_id.as_deref(), Some("acc-cpa"));
             }
             _ => panic!("expected CPA personal access token candidate"),
+        }
+    }
+
+    #[test]
+    fn extract_candidate_reads_workspace_id_from_custom_headers() {
+        let value = serde_json::json!({
+            "personal_access_token": "at-custom-header-token",
+            "email": "workspace@example.com",
+            "custom_headers": {
+                "ChatGPT-Account-Id": "workspace-from-header"
+            }
+        });
+
+        let candidate = extract_codex_import_candidate_from_value(&value)
+            .expect("custom header workspace id should be accepted");
+
+        match candidate {
+            CodexJsonImportCandidate::AccessToken {
+                access_token,
+                hints,
+            } => {
+                assert_eq!(access_token, "at-custom-header-token");
+                assert_eq!(hints.account_id.as_deref(), Some("workspace-from-header"));
+            }
+            _ => panic!("expected access-token-only candidate"),
         }
     }
 
@@ -10339,6 +10503,38 @@ mod tests {
         let persisted = load_account(&account.id).expect("persisted opaque account");
         assert_eq!(persisted.tokens.access_token, account.tokens.access_token);
         assert_eq!(persisted.account_id.as_deref(), Some("acc-team"));
+    }
+
+    #[test]
+    fn update_account_note_persists_personal_access_token_workspace_id() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let _env = TestEnvGuard::new("codex-workspace-id-update-test");
+        let account = upsert_account_from_access_token_with_hints(
+            "at-workspace-update-token".to_string(),
+            CodexAccessTokenImportHints {
+                email: Some("workspace-update@example.com".to_string()),
+                ..Default::default()
+            },
+        )
+        .expect("create personal access token account");
+
+        let updated = super::update_account_note(
+            &account.id,
+            super::CodexAccountNoteUpdate::default(),
+            Some("  workspace-updated  ".to_string()),
+        )
+        .expect("update workspace id");
+
+        assert_eq!(updated.account_id.as_deref(), Some("workspace-updated"));
+        assert_eq!(
+            load_account(&account.id)
+                .expect("persisted account")
+                .account_id
+                .as_deref(),
+            Some("workspace-updated")
+        );
     }
 
     #[test]
@@ -13533,12 +13729,42 @@ fn apply_account_note_update(account: &mut CodexAccount, update: CodexAccountNot
 pub fn update_account_note(
     account_id: &str,
     update: CodexAccountNoteUpdate,
+    chatgpt_account_id: Option<String>,
 ) -> Result<CodexAccount, String> {
     let mut account =
         load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
 
     apply_account_note_update(&mut account, update);
+    let previous_chatgpt_account_id = account.account_id.clone();
+    if let Some(chatgpt_account_id) = chatgpt_account_id {
+        if !is_opaque_access_token(&account.tokens.access_token)
+            || normalize_optional_ref(account.tokens.refresh_token.as_deref()).is_some()
+        {
+            return Err("仅 at-* 个人访问令牌账号支持手动设置 ChatGPT Workspace ID".to_string());
+        }
+        let normalized_chatgpt_account_id = normalize_optional_value(Some(chatgpt_account_id));
+        if normalized_chatgpt_account_id
+            .as_deref()
+            .is_some_and(|value| {
+                value.len() > 256 || value.chars().any(|character| character.is_control())
+            })
+        {
+            return Err("ChatGPT Workspace ID 格式无效".to_string());
+        }
+        account.account_id = normalized_chatgpt_account_id;
+    }
     save_account(&account)?;
+
+    if account.account_id != previous_chatgpt_account_id {
+        if let Err(error) =
+            crate::modules::codex_local_access::sync_sidecar_auth_file_for_account(&account)
+        {
+            logger::log_warn(&format!(
+                "同步 ChatGPT Workspace ID 到 API Service sidecar 失败: account_id={}, error={}",
+                account.id, error
+            ));
+        }
+    }
 
     Ok(account)
 }

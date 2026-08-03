@@ -11051,8 +11051,7 @@ fn sidecar_auth_json_for_account_with_metered_feature_patterns(
         .account_id
         .as_deref()
         .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(account.id.as_str());
+        .filter(|value| !value.is_empty());
     let excluded_models =
         sidecar_excluded_models_for_account(account, collection, metered_feature_patterns);
     if let Some(identity) = account.agent_identity.as_ref() {
@@ -11082,7 +11081,6 @@ fn sidecar_auth_json_for_account_with_metered_feature_patterns(
         "id_token": account.tokens.id_token.clone(),
         "access_token": account.tokens.access_token.clone(),
         "refresh_token": account.tokens.refresh_token.clone().unwrap_or_default(),
-        "account_id": account_id,
         "last_refresh": sidecar_account_last_refresh(account),
         "email": account.email.clone(),
         "plan_type": account.plan_type.clone(),
@@ -11090,6 +11088,9 @@ fn sidecar_auth_json_for_account_with_metered_feature_patterns(
         "disable_cooling": collection.disable_cooling,
         "websockets": collection.responses_websockets_enabled,
     });
+    if let Some(account_id) = account_id {
+        value["account_id"] = json!(account_id);
+    }
     if account_is_access_token_only(account) {
         value["auth_mode"] = json!("personal_access_token");
         value["openai_auth_mode"] = json!("personal_access_token");
@@ -28403,7 +28404,7 @@ wire_api = "responses"
 
     #[test]
     fn sidecar_auth_json_marks_personal_access_token_accounts() {
-        let account = CodexAccount::new(
+        let mut account = CodexAccount::new(
             "account-at".to_string(),
             "at@example.com".to_string(),
             CodexTokens {
@@ -28441,6 +28442,17 @@ wire_api = "responses"
         assert_eq!(
             auth_json.get("refresh_token").and_then(Value::as_str),
             Some("")
+        );
+        assert!(
+            auth_json.get("account_id").is_none(),
+            "Cockpit storage id must not be used as ChatGPT account id"
+        );
+
+        account.account_id = Some("workspace-at".to_string());
+        let auth_json = sidecar_auth_json_for_account(&account, &collection, None);
+        assert_eq!(
+            auth_json.get("account_id").and_then(Value::as_str),
+            Some("workspace-at")
         );
     }
 

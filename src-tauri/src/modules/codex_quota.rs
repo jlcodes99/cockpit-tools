@@ -545,6 +545,37 @@ fn collect_subscription_account_records(payload: &serde_json::Value) -> Vec<Acco
     records
 }
 
+fn account_check_record_parts(
+    item: &AccountCheckRecord,
+) -> Option<(
+    &serde_json::Map<String, serde_json::Value>,
+    Option<&serde_json::Map<String, serde_json::Value>>,
+)> {
+    let record = item.node.as_object()?;
+    let account_record = record
+        .get("account")
+        .and_then(|value| value.as_object())
+        .unwrap_or(record);
+    let entitlement = record
+        .get("entitlement")
+        .and_then(|value| value.as_object());
+    Some((account_record, entitlement))
+}
+
+fn account_check_record_plan_type(item: &AccountCheckRecord) -> Option<String> {
+    let (account_record, entitlement) = account_check_record_parts(item)?;
+    entitlement
+        .and_then(|value| extract_account_record_field(value, &["subscription_plan"]))
+        .or_else(|| extract_account_record_field(account_record, &["plan_type", "planType"]))
+}
+
+fn account_check_record_is_default(item: &AccountCheckRecord) -> bool {
+    account_check_record_parts(item)
+        .and_then(|(account_record, _)| account_record.get("is_default"))
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+}
+
 fn parse_account_check_snapshot(
     payload: &serde_json::Value,
     account: &CodexAccount,
@@ -554,44 +585,60 @@ fn parse_account_check_snapshot(
         return Err("accounts/check 返回里没有可用账号".to_string());
     }
 
+    let preferred_organization_id = normalize_optional_ref(account.organization_id.as_deref())
+        .or_else(|| {
+            codex_account::extract_chatgpt_organization_id_from_access_token(
+                &account.tokens.access_token,
+            )
+        });
     let preferred_account_id =
         normalize_optional_ref(account.account_id.as_deref()).or_else(|| {
             codex_account::extract_chatgpt_account_id_from_access_token(
                 &account.tokens.access_token,
             )
         });
-    let ordering_first_key = payload
-        .get("account_ordering")
-        .and_then(|value| value.as_array())
-        .and_then(|items| items.first())
-        .and_then(|value| value.as_str())
-        .and_then(|value| normalize_optional_ref(Some(value)));
 
     let selected = records
         .iter()
         .find(|item| {
-            let Some(record) = item.node.as_object() else {
-                return false;
-            };
-            let account_record = record
-                .get("account")
-                .and_then(|value| value.as_object())
-                .unwrap_or(record);
-            let candidate_id = extract_account_record_field(
-                account_record,
-                &["account_id", "id", "chatgpt_account_id", "workspace_id"],
-            );
-            candidate_id == preferred_account_id
+            preferred_organization_id
+                .as_deref()
+                .is_some_and(|preferred| {
+                    item.key
+                        .as_deref()
+                        .and_then(|value| normalize_optional_ref(Some(value)))
+                        .as_deref()
+                        == Some(preferred)
+                })
         })
         .or_else(|| {
             records.iter().find(|item| {
-                item.key
-                    .as_deref()
-                    .and_then(|value| normalize_optional_ref(Some(value)))
-                    == ordering_first_key
+                let Some(preferred) = preferred_account_id.as_deref() else {
+                    return false;
+                };
+                let Some((account_record, _)) = account_check_record_parts(item) else {
+                    return false;
+                };
+                let candidate_id = extract_account_record_field(
+                    account_record,
+                    &["account_id", "id", "chatgpt_account_id", "workspace_id"],
+                );
+                candidate_id.as_deref() == Some(preferred)
             })
         })
-        .unwrap_or(&records[0]);
+        .or_else(|| {
+            records
+                .iter()
+                .find(|item| account_check_record_is_default(item))
+        })
+        .or_else(|| {
+            records.iter().find(|item| {
+                account_check_record_plan_type(item)
+                    .is_some_and(|plan_type| !plan_type.eq_ignore_ascii_case("free"))
+            })
+        })
+        .or_else(|| records.first())
+        .ok_or_else(|| "accounts/check 返回里没有可用账号".to_string())?;
 
     let record = selected
         .node
@@ -1799,7 +1846,7 @@ pub async fn refresh_all_quotas() -> Result<Vec<(String, Result<CodexQuota, Stri
 mod tests {
     use super::{
         build_codex_api_headers, normalize_http_error_body_for_display,
-        normalize_remaining_percentage, parse_reset_credits_snapshot,
+        normalize_remaining_percentage, parse_account_check_snapshot, parse_reset_credits_snapshot,
         send_codex_api_request_with_agent_auth_base_url, WindowInfo,
         HTTP_ERROR_BODY_DISPLAY_MAX_CHARS,
     };
@@ -1837,6 +1884,18 @@ mod tests {
             chatgpt_account_is_fedramp: true,
         });
         account
+    }
+
+    fn subscription_test_account() -> CodexAccount {
+        CodexAccount::new(
+            "subscription-test".to_string(),
+            "subscription@example.com".to_string(),
+            CodexTokens {
+                id_token: String::new(),
+                access_token: String::new(),
+                refresh_token: None,
+            },
+        )
     }
 
     fn assertion_task_id(request: &str) -> Option<String> {
@@ -1965,6 +2024,103 @@ mod tests {
         assert_eq!(snapshot.available_count, Some(1));
         assert_eq!(snapshot.next_expires_at, Some(future));
         assert_eq!(snapshot.credits[1].status.as_deref(), Some("expired"));
+    }
+
+    #[test]
+    fn account_check_prefers_organization_key_for_subscription() {
+        let mut account = subscription_test_account();
+        account.organization_id = Some("org-team".to_string());
+        account.account_id = Some("account-personal".to_string());
+        let snapshot = parse_account_check_snapshot(
+            &json!({
+                "accounts": {
+                    "org-personal": {
+                        "account": {
+                            "account_id": "account-personal",
+                            "plan_type": "free",
+                            "is_default": true
+                        },
+                        "entitlement": {
+                            "subscription_plan": "free",
+                            "expires_at": "2027-01-01T00:00:00Z"
+                        }
+                    },
+                    "org-team": {
+                        "account": {
+                            "account_id": "account-team",
+                            "plan_type": "team"
+                        },
+                        "entitlement": {
+                            "subscription_plan": "team",
+                            "expires_at": "2027-06-01T00:00:00Z"
+                        }
+                    }
+                }
+            }),
+            &account,
+        )
+        .expect("parse accounts/check");
+
+        assert_eq!(snapshot.account_id.as_deref(), Some("account-team"));
+        assert_eq!(snapshot.plan_type.as_deref(), Some("team"));
+        assert_eq!(
+            snapshot.subscription_active_until.as_deref(),
+            Some("2027-06-01T00:00:00Z")
+        );
+    }
+
+    #[test]
+    fn account_check_fallback_prefers_default_then_paid() {
+        let account = subscription_test_account();
+        let default_snapshot = parse_account_check_snapshot(
+            &json!({
+                "accounts": {
+                    "org-paid": {
+                        "account": { "account_id": "paid", "plan_type": "plus" },
+                        "entitlement": {
+                            "subscription_plan": "plus",
+                            "expires_at": "2027-06-01T00:00:00Z"
+                        }
+                    },
+                    "org-default": {
+                        "account": {
+                            "account_id": "default",
+                            "plan_type": "free",
+                            "is_default": true
+                        },
+                        "entitlement": {
+                            "subscription_plan": "free",
+                            "expires_at": "2027-01-01T00:00:00Z"
+                        }
+                    }
+                }
+            }),
+            &account,
+        )
+        .expect("parse default account");
+        assert_eq!(default_snapshot.account_id.as_deref(), Some("default"));
+
+        let paid_snapshot = parse_account_check_snapshot(
+            &json!({
+                "accounts": [
+                    {
+                        "account": { "account_id": "free", "plan_type": "free" },
+                        "entitlement": { "subscription_plan": "free" }
+                    },
+                    {
+                        "account": { "account_id": "paid", "plan_type": "plus" },
+                        "entitlement": {
+                            "subscription_plan": "plus",
+                            "expires_at": "2027-06-01T00:00:00Z"
+                        }
+                    }
+                ]
+            }),
+            &account,
+        )
+        .expect("parse paid account");
+        assert_eq!(paid_snapshot.account_id.as_deref(), Some("paid"));
+        assert_eq!(paid_snapshot.plan_type.as_deref(), Some("plus"));
     }
 
     #[tokio::test]

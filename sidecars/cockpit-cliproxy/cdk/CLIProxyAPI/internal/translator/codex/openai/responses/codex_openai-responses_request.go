@@ -1,6 +1,8 @@
 package responses
 
 import (
+	"strings"
+
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
@@ -51,8 +53,8 @@ func ConvertOpenAIResponsesRequestToCodex(modelName string, inputRawJSON []byte,
 	return rawJSON
 }
 
-// normalizeCodexInputItems strips provider-only metadata and converts unsupported
-// system roles without repeatedly scanning and copying the complete request JSON.
+// normalizeCodexInputItems strips unsupported metadata while preserving tool-call
+// namespaces needed by Codex OAuth, and converts unsupported system roles.
 func normalizeCodexInputItems(rawJSON []byte) []byte {
 	inputResult := gjson.GetBytes(rawJSON, "input")
 	if !inputResult.IsArray() {
@@ -62,7 +64,7 @@ func normalizeCodexInputItems(rawJSON []byte) []byte {
 	inputItems := inputResult.Array()
 	hasChanges := false
 	for _, item := range inputItems {
-		if item.Get("namespace").Exists() || item.Get("role").String() == "system" {
+		if shouldStripCodexInputNamespace(item) || item.Get("role").String() == "system" {
 			hasChanges = true
 			break
 		}
@@ -78,7 +80,7 @@ func normalizeCodexInputItems(rawJSON []byte) []byte {
 			normalizedInput = append(normalizedInput, ',')
 		}
 
-		hasNamespace := item.Get("namespace").Exists()
+		hasNamespace := shouldStripCodexInputNamespace(item)
 		hasSystemRole := item.Get("role").String() == "system"
 		if !hasNamespace && !hasSystemRole {
 			normalizedInput = append(normalizedInput, item.Raw...)
@@ -105,6 +107,18 @@ func normalizeCodexInputItems(rawJSON []byte) []byte {
 		return rawJSON
 	}
 	return updated
+}
+
+func shouldStripCodexInputNamespace(item gjson.Result) bool {
+	if !item.Get("namespace").Exists() {
+		return false
+	}
+	switch strings.TrimSpace(item.Get("type").String()) {
+	case "function_call", "custom_tool_call", "tool_call", "mcp_tool_call":
+		return false
+	default:
+		return true
+	}
 }
 
 // applyResponsesCompactionCompatibility handles OpenAI Responses context_management.compaction

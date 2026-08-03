@@ -72,6 +72,7 @@ export interface CodexAccountNoteUpdate {
   accountPassword?: string;
   phoneNumber?: string;
   mailUrl?: string;
+  chatgptAccountId?: string;
 }
 
 export interface CodexBatchDeleteError {
@@ -1105,7 +1106,9 @@ export function getCodexSubscriptionPresentation(
   };
 }
 
-function isCodexOpaqueAccessTokenOnlyAccount(account: CodexAccount): boolean {
+export function isCodexOpaqueAccessTokenOnlyAccount(
+  account: CodexAccount,
+): boolean {
   const accessToken = account.tokens?.access_token?.trim() || "";
   const refreshToken = account.tokens?.refresh_token?.trim() || "";
   return accessToken.startsWith("at-") && !refreshToken;

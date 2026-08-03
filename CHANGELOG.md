@@ -7,6 +7,29 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [1.3.16] - 2026-08-02
+
+### Added
+
+- **Codex `at-*` personal-access-token accounts can set a ChatGPT Workspace ID**: Token / JSON imports recognize `account_id`, camelCase fields, and `ChatGPT-Account-Id` in headers / custom headers; the account-note dialog can view, copy, and edit the Team / Workspace UUID, then persist it and synchronize it to the API Service sidecar. When no real workspace ID is available, Cockpit no longer substitutes its local account ID as the upstream account ID.
+- **Codex sub2api export supports API Key and access-token-only accounts**: API Key accounts use native sub2api `apikey` credentials; access-token-only accounts carry the real token expiry and enable automatic pause on expiry; OAuth exports include the official client ID, user and organization identity, login provider, access-token and subscription expiry, with default concurrency 3 and priority 50.
+
+### Changed
+
+- **Codex API Service transparently aligns with the latest Responses compatibility strategy**: official Codex OAuth preserves namespaces on function, custom-tool, generic-tool, and MCP call items, while API Key, custom-upstream, and Compact requests remove incompatible namespaces; missing, `null`, or blank instructions use the corresponding model's official base instructions; GPT-5.6 Sol / Terra / Luna use Responses Lite only when every route is official Codex, while custom or mixed providers use full Responses to retain tools such as `web.run`.
+
+### Fixed
+
+- **Fixed expired encrypted reasoning or compaction content terminating Codex conversations**: HTTP, streaming HTTP, Compact, and downstream WebSocket paths remove stale `encrypted_content` before any output, preserve reusable history, and retry safely once; the same error cannot loop indefinitely, and large integer request fields retain exact precision.
+- **Fixed `response.failed` rate limits being reported as HTTP 400**: events whose `error.code` or `error.type` contains `rate_limit` now map to HTTP 429 so API Service can apply its existing retry or account-switch policy.
+- **Fixed tool-result arrays, images, and namespace tools being lost when converting Responses to Anthropic**: text and image results become Anthropic content blocks, empty arrays receive an explicit result, top-level and `additional_tools` definitions are merged, and custom tool calls, tool-use/result pairing, plus streaming and non-streaming namespace restoration remain consistent.
+- **Fixed tool-output images being dropped when converting Responses to Chat Completions**: data image URLs and nested `input_image` / `image_url` parts move into attributed user multimodal messages while preserving tool-call order, reply adjacency, and the original JSON semantics of media-free outputs.
+- **Fixed Codex Team / Workspace accounts sometimes showing the personal Free subscription**: subscription parsing now matches organization ID first, then falls back through account ID, the default account, and a paid plan so multi-workspace responses select the correct record.
+- **Fixed sub2api reimports showing Access Token lifetime as subscription validity**: imports now read subscription time only from `subscription_expires_at` / `subscription_active_until` and no longer treat generic account or credential `expires_at` fields as the Plus / Team subscription expiry.
+- **Fixed failed Codex export conversion silently falling back to Cockpit Tools format**: when selected accounts use an unsupported type or incomplete credentials, the export dialog now shows an explicit error and keeps the selected format instead of generating a mismatched file.
+- **Fixed Claude Desktop Gateway model-mapping inputs sometimes losing focus or resetting while edited**: mapping rows now use stable identities, so changing the upstream model, desktop model, or 1M-support toggle no longer causes React to rebuild the active row.
+- **Fixed desktop and Start Menu shortcuts both disappearing when Windows updates from `1.3.15`**: update mode preserves existing shortcuts and repairs only the exact `1.3.15` upgrade state where both are missing; normal manual installs still remove historical product-name shortcuts without restoring a single shortcut the user intentionally deleted.
+
 ## [1.3.15] - 2026-07-29
 
 ### Added

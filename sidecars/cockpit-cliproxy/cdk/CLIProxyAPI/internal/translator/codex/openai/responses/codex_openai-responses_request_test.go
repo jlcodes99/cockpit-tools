@@ -22,7 +22,7 @@ func TestConvertOpenAIResponsesRequestToCodex_PreservesExplicitParallelToolsSett
 	}
 }
 
-func TestConvertOpenAIResponsesRequestToCodex_RemovesNamespaceFromReplayedInput(t *testing.T) {
+func TestConvertOpenAIResponsesRequestToCodex_PreservesToolCallNamespaceForOAuthRouting(t *testing.T) {
 	inputJSON := []byte(`{
 		"model":"gpt-5.5",
 		"input":[{
@@ -36,8 +36,8 @@ func TestConvertOpenAIResponsesRequestToCodex_RemovesNamespaceFromReplayedInput(
 	}`)
 
 	output := ConvertOpenAIResponsesRequestToCodex("gpt-5.5", inputJSON, false)
-	if got := gjson.GetBytes(output, "input.0.namespace"); got.Exists() {
-		t.Fatalf("input namespace was not removed: %s", got.Raw)
+	if got := gjson.GetBytes(output, "input.0.namespace").String(); got != "mcp__example" {
+		t.Fatalf("input namespace = %q, want mcp__example", got)
 	}
 	if got := gjson.GetBytes(output, "input.0.name").String(); got != "lookup" {
 		t.Fatalf("input name = %q, want lookup", got)
@@ -91,8 +91,8 @@ func TestConvertOpenAIResponsesRequestToCodex_NormalizesReplayedInputInOnePass(t
 	if got := gjson.GetBytes(output, "input.1.content.0.text").String(); got != "hello" {
 		t.Fatalf("input.1 content = %q, want hello", got)
 	}
-	if got := gjson.GetBytes(output, "input.2.namespace"); got.Exists() {
-		t.Fatalf("input.2.namespace was not removed: %s", got.Raw)
+	if got := gjson.GetBytes(output, "input.2.namespace"); !got.Exists() || got.Type != gjson.Null {
+		t.Fatalf("input.2.namespace = %s, want preserved null", got.Raw)
 	}
 }
 

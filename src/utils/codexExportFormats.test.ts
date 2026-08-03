@@ -34,6 +34,12 @@ function agentIdentityAccount(): CodexAccount {
   };
 }
 
+function jwt(payload: Record<string, unknown>): string {
+  const encode = (value: Record<string, unknown>) =>
+    Buffer.from(JSON.stringify(value)).toString('base64url');
+  return `${encode({ alg: 'none', typ: 'JWT' })}.${encode(payload)}.`;
+}
+
 test('Cockpit Tools export preserves portable Agent Identity credentials', () => {
   const raw = JSON.stringify([agentIdentityAccount()]);
   const exported = JSON.parse(
@@ -95,4 +101,112 @@ test('regular token accounts keep their existing Cockpit Tools export shape', ()
   assert.equal(exported[0].access_token, 'access-token-fixture');
   assert.equal(exported[0].refresh_token, 'refresh-token-fixture');
   assert.equal(exported[0].agent_identity, undefined);
+});
+
+test('sub2api OAuth export preserves official expiry and login-provider fields', () => {
+  const accessToken = jwt({
+    exp: 1_800_000_000,
+    'https://api.openai.com/auth': {
+      chatgpt_account_id: 'account-token',
+      chatgpt_user_id: 'user-token',
+      poid: 'org-token',
+      chatgpt_plan_type: 'plus',
+      chatgpt_subscription_active_until: '2090-01-01T00:00:00Z',
+    },
+  });
+  const idToken = jwt({
+    auth_provider: 'google',
+  });
+  const account: CodexAccount = {
+    id: 'codex-token-fixture',
+    email: 'token@example.com',
+    account_id: 'account-token',
+    plan_type: 'plus',
+    subscription_active_until: '2027-01-02T03:04:05+00:00',
+    tokens: {
+      id_token: idToken,
+      access_token: accessToken,
+      refresh_token: 'refresh-token-fixture',
+    },
+    created_at: 1,
+    last_used: 1,
+  };
+
+  const exported = JSON.parse(
+    transformCodexExportJson(JSON.stringify([account]), 'sub2api'),
+  ) as {
+    accounts: Array<{
+      type: string;
+      credentials: Record<string, unknown>;
+      extra?: Record<string, unknown>;
+      expires_at?: number;
+      concurrency: number;
+      priority: number;
+    }>;
+  };
+  const item = exported.accounts[0];
+
+  assert.equal(item.type, 'oauth');
+  assert.equal(item.credentials.client_id, 'app_EMoamEEZ73f0CkXaXp7hrann');
+  assert.equal(item.credentials.expires_at, '2027-01-15T08:00:00.000Z');
+  assert.equal(item.credentials.subscription_expires_at, '2027-01-02T03:04:05.000Z');
+  assert.equal(item.credentials.chatgpt_user_id, 'user-token');
+  assert.equal(item.credentials.organization_id, 'org-token');
+  assert.equal(item.extra?.auth_provider, 'google');
+  assert.equal(item.expires_at, undefined);
+  assert.equal(item.concurrency, 3);
+  assert.equal(item.priority, 50);
+});
+
+test('sub2api access-token-only export auto-pauses at token expiry', () => {
+  const account: CodexAccount = {
+    id: 'codex-at-only',
+    email: 'at-only@example.com',
+    tokens: {
+      id_token: '',
+      access_token: jwt({ exp: 1_800_000_000 }),
+    },
+    created_at: 1,
+    last_used: 1,
+  };
+
+  const exported = JSON.parse(
+    transformCodexExportJson(JSON.stringify([account]), 'sub2api'),
+  ) as {
+    accounts: Array<{
+      expires_at?: number;
+      auto_pause_on_expired?: boolean;
+    }>;
+  };
+
+  assert.equal(exported.accounts[0].expires_at, 1_800_000_000);
+  assert.equal(exported.accounts[0].auto_pause_on_expired, true);
+});
+
+test('sub2api API Key export uses native apikey credentials', () => {
+  const account: CodexAccount = {
+    id: 'codex-api-key',
+    email: 'API Key',
+    auth_mode: 'apikey',
+    openai_api_key: 'sk-test',
+    api_base_url: 'https://relay.example.com/v1',
+    tokens: {
+      id_token: '',
+      access_token: '',
+    },
+    created_at: 1,
+    last_used: 1,
+  };
+
+  const exported = JSON.parse(
+    transformCodexExportJson(JSON.stringify([account]), 'sub2api'),
+  ) as {
+    accounts: Array<{ type: string; credentials: Record<string, unknown> }>;
+  };
+
+  assert.equal(exported.accounts[0].type, 'apikey');
+  assert.deepEqual(exported.accounts[0].credentials, {
+    base_url: 'https://relay.example.com/v1',
+    api_key: 'sk-test',
+  });
 });

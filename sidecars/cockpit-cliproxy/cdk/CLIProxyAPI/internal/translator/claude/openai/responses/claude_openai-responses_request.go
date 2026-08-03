@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"strings"
@@ -300,14 +301,27 @@ func ConvertOpenAIResponsesRequestToClaude(modelName string, inputRawJSON []byte
 					out, _ = sjson.SetRawBytes(out, "messages.-1", msg)
 				}
 
-			case "function_call":
+			case "function_call", "custom_tool_call":
 				// Map to assistant tool_use
 				callID := item.Get("call_id").String()
 				if callID == "" {
 					callID = genToolCallID()
 				}
 				name := item.Get("name").String()
+				if namespace := strings.TrimSpace(item.Get("namespace").String()); namespace != "" {
+					name = qualifyResponsesNamespaceToolName(namespace, name)
+				}
 				argsStr := item.Get("arguments").String()
+				if typ == "custom_tool_call" {
+					input := item.Get("input")
+					if input.IsObject() {
+						argsStr = input.Raw
+					} else {
+						wrapped := []byte(`{"input":""}`)
+						wrapped, _ = sjson.SetBytes(wrapped, "input", input.String())
+						argsStr = string(wrapped)
+					}
+				}
 
 				toolUse := []byte(`{"type":"tool_use","id":"","name":"","input":{}}`)
 				toolUse, _ = sjson.SetBytes(toolUse, "id", callID)
@@ -323,13 +337,12 @@ func ConvertOpenAIResponsesRequestToClaude(modelName string, inputRawJSON []byte
 				asst, _ = sjson.SetRawBytes(asst, "content.-1", toolUse)
 				out, _ = sjson.SetRawBytes(out, "messages.-1", asst)
 
-			case "function_call_output":
+			case "function_call_output", "custom_tool_call_output":
 				// Map to user tool_result
 				callID := item.Get("call_id").String()
-				outputStr := item.Get("output").String()
 				toolResult := []byte(`{"type":"tool_result","tool_use_id":"","content":""}`)
 				toolResult, _ = sjson.SetBytes(toolResult, "tool_use_id", callID)
-				toolResult, _ = sjson.SetBytes(toolResult, "content", outputStr)
+				toolResult, _ = sjson.SetRawBytes(toolResult, "content", responsesToolOutputToClaudeContent(item.Get("output")))
 
 				usr := []byte(`{"role":"user","content":[]}`)
 				usr, _ = sjson.SetRawBytes(usr, "content.-1", toolResult)
@@ -339,26 +352,43 @@ func ConvertOpenAIResponsesRequestToClaude(modelName string, inputRawJSON []byte
 		})
 	}
 
+	out = normalizeClaudeToolPairing(out)
+
 	includedToolNames := map[string]struct{}{}
 	toolNameMap := map[string]string{}
 
 	// tools mapping: parameters -> input_schema
-	if tools := root.Get("tools"); tools.Exists() && tools.IsArray() {
-		toolsJSON := []byte("[]")
+	toolsJSON := []byte("[]")
+	appendTools := func(tools gjson.Result) {
+		if !tools.Exists() || !tools.IsArray() {
+			return
+		}
 		tools.ForEach(func(_, tool gjson.Result) bool {
 			convertedTools := convertResponsesToolToClaudeTools(tool, toolNameMap)
 			for _, tJSON := range convertedTools {
 				toolName := gjson.GetBytes(tJSON, "name").String()
 				if toolName != "" {
+					if _, exists := includedToolNames[toolName]; exists {
+						continue
+					}
 					includedToolNames[toolName] = struct{}{}
 				}
 				toolsJSON, _ = sjson.SetRawBytes(toolsJSON, "-1", tJSON)
 			}
 			return true
 		})
-		if parsedTools := gjson.ParseBytes(toolsJSON); parsedTools.IsArray() && len(parsedTools.Array()) > 0 {
-			out, _ = sjson.SetRawBytes(out, "tools", toolsJSON)
-		}
+	}
+	appendTools(root.Get("tools"))
+	if input := root.Get("input"); input.Exists() && input.IsArray() {
+		input.ForEach(func(_, item gjson.Result) bool {
+			if item.Get("type").String() == "additional_tools" {
+				appendTools(item.Get("tools"))
+			}
+			return true
+		})
+	}
+	if parsedTools := gjson.ParseBytes(toolsJSON); parsedTools.IsArray() && len(parsedTools.Array()) > 0 {
+		out, _ = sjson.SetRawBytes(out, "tools", toolsJSON)
 	}
 
 	// Map tool_choice similar to Chat Completions translator (optional in docs, safe to handle)
@@ -398,11 +428,227 @@ func ConvertOpenAIResponsesRequestToClaude(modelName string, inputRawJSON []byte
 	return out
 }
 
+func responsesToolOutputToClaudeContent(output gjson.Result) []byte {
+	if !output.Exists() || output.Type == gjson.Null {
+		return []byte(`"(empty)"`)
+	}
+	if output.Type == gjson.String {
+		encoded, _ := json.Marshal(output.String())
+		return encoded
+	}
+	if !output.IsArray() {
+		encoded, _ := json.Marshal(output.Raw)
+		return encoded
+	}
+
+	content := []byte("[]")
+	count := 0
+	output.ForEach(func(_, part gjson.Result) bool {
+		if part.Type == gjson.String {
+			block := []byte(`{"type":"text","text":""}`)
+			block, _ = sjson.SetBytes(block, "text", part.String())
+			content, _ = sjson.SetRawBytes(content, "-1", block)
+			count++
+			return true
+		}
+		switch part.Get("type").String() {
+		case "input_text", "output_text", "text":
+			if text := part.Get("text"); text.Exists() {
+				block := []byte(`{"type":"text","text":""}`)
+				block, _ = sjson.SetBytes(block, "text", text.String())
+				content, _ = sjson.SetRawBytes(content, "-1", block)
+				count++
+			}
+		case "input_image", "image_url":
+			if block := responsesImagePartToClaude(part); len(block) > 0 {
+				content, _ = sjson.SetRawBytes(content, "-1", block)
+				count++
+			}
+		}
+		return true
+	})
+	if count == 0 {
+		if len(output.Array()) == 0 {
+			return []byte(`"(empty)"`)
+		}
+		encoded, _ := json.Marshal(output.Raw)
+		return encoded
+	}
+	return content
+}
+
+func responsesImagePartToClaude(part gjson.Result) []byte {
+	imageURL := part.Get("image_url")
+	url := ""
+	if imageURL.Type == gjson.String {
+		url = strings.TrimSpace(imageURL.String())
+	} else if imageURL.IsObject() {
+		url = strings.TrimSpace(imageURL.Get("url").String())
+	}
+	if url == "" {
+		url = strings.TrimSpace(part.Get("url").String())
+	}
+	if url == "" {
+		return nil
+	}
+	if strings.HasPrefix(url, "data:") {
+		mediaAndData := strings.SplitN(strings.TrimPrefix(url, "data:"), ";base64,", 2)
+		if len(mediaAndData) != 2 || mediaAndData[1] == "" {
+			return nil
+		}
+		mediaType := mediaAndData[0]
+		if mediaType == "" {
+			mediaType = "application/octet-stream"
+		}
+		block := []byte(`{"type":"image","source":{"type":"base64","media_type":"","data":""}}`)
+		block, _ = sjson.SetBytes(block, "source.media_type", mediaType)
+		block, _ = sjson.SetBytes(block, "source.data", mediaAndData[1])
+		return block
+	}
+	block := []byte(`{"type":"image","source":{"type":"url","url":""}}`)
+	block, _ = sjson.SetBytes(block, "source.url", url)
+	return block
+}
+
+type claudeRequestMessage struct {
+	role   string
+	blocks [][]byte
+}
+
+func normalizeClaudeToolPairing(request []byte) []byte {
+	messages := gjson.GetBytes(request, "messages")
+	if !messages.IsArray() {
+		return request
+	}
+	parsed := make([]claudeRequestMessage, 0, len(messages.Array()))
+	hasToolBlocks := false
+	messages.ForEach(func(_, message gjson.Result) bool {
+		blocks := claudeRequestContentBlocks(message.Get("content"))
+		if len(blocks) > 0 {
+			for _, block := range blocks {
+				switch gjson.GetBytes(block, "type").String() {
+				case "tool_use", "tool_result":
+					hasToolBlocks = true
+				}
+			}
+			parsed = append(parsed, claudeRequestMessage{role: message.Get("role").String(), blocks: blocks})
+		}
+		return true
+	})
+	if !hasToolBlocks {
+		return request
+	}
+	parsed = mergeClaudeRequestMessages(parsed)
+
+	results := make(map[string][]byte)
+	for _, message := range parsed {
+		if message.role != "user" {
+			continue
+		}
+		for _, block := range message.blocks {
+			if gjson.GetBytes(block, "type").String() == "tool_result" {
+				if id := gjson.GetBytes(block, "tool_use_id").String(); id != "" {
+					results[id] = block
+				}
+			}
+		}
+	}
+
+	normalized := make([]claudeRequestMessage, 0, len(parsed))
+	for _, message := range parsed {
+		switch message.role {
+		case "assistant":
+			other := make([][]byte, 0, len(message.blocks))
+			answered := make([][]byte, 0, len(message.blocks))
+			for _, block := range message.blocks {
+				if gjson.GetBytes(block, "type").String() != "tool_use" {
+					other = append(other, block)
+					continue
+				}
+				if _, ok := results[gjson.GetBytes(block, "id").String()]; ok {
+					answered = append(answered, block)
+				}
+			}
+			if len(other)+len(answered) > 0 {
+				normalized = append(normalized, claudeRequestMessage{role: "assistant", blocks: append(other, answered...)})
+			}
+			if len(answered) > 0 {
+				resultBlocks := make([][]byte, 0, len(answered))
+				for _, block := range answered {
+					resultBlocks = append(resultBlocks, results[gjson.GetBytes(block, "id").String()])
+				}
+				normalized = append(normalized, claudeRequestMessage{role: "user", blocks: resultBlocks})
+			}
+		case "user":
+			nonResults := make([][]byte, 0, len(message.blocks))
+			for _, block := range message.blocks {
+				if gjson.GetBytes(block, "type").String() != "tool_result" {
+					nonResults = append(nonResults, block)
+				}
+			}
+			if len(nonResults) > 0 {
+				normalized = append(normalized, claudeRequestMessage{role: "user", blocks: nonResults})
+			}
+		default:
+			normalized = append(normalized, message)
+		}
+	}
+	normalized = mergeClaudeRequestMessages(normalized)
+
+	messagesJSON := []byte("[]")
+	for _, message := range normalized {
+		messageJSON := []byte(`{"role":"","content":[]}`)
+		messageJSON, _ = sjson.SetBytes(messageJSON, "role", message.role)
+		for _, block := range message.blocks {
+			messageJSON, _ = sjson.SetRawBytes(messageJSON, "content.-1", block)
+		}
+		messagesJSON, _ = sjson.SetRawBytes(messagesJSON, "-1", messageJSON)
+	}
+	updated, err := sjson.SetRawBytes(request, "messages", messagesJSON)
+	if err != nil {
+		return request
+	}
+	return updated
+}
+
+func claudeRequestContentBlocks(content gjson.Result) [][]byte {
+	if content.IsArray() {
+		blocks := make([][]byte, 0, len(content.Array()))
+		content.ForEach(func(_, block gjson.Result) bool {
+			blocks = append(blocks, []byte(block.Raw))
+			return true
+		})
+		return blocks
+	}
+	if content.Type == gjson.String {
+		block := []byte(`{"type":"text","text":""}`)
+		block, _ = sjson.SetBytes(block, "text", content.String())
+		return [][]byte{block}
+	}
+	return nil
+}
+
+func mergeClaudeRequestMessages(messages []claudeRequestMessage) []claudeRequestMessage {
+	merged := make([]claudeRequestMessage, 0, len(messages))
+	for _, message := range messages {
+		if len(merged) > 0 && merged[len(merged)-1].role == message.role {
+			merged[len(merged)-1].blocks = append(merged[len(merged)-1].blocks, message.blocks...)
+			continue
+		}
+		merged = append(merged, message)
+	}
+	return merged
+}
+
 func convertResponsesToolToClaudeTools(tool gjson.Result, toolNameMap map[string]string) [][]byte {
 	toolType := strings.TrimSpace(tool.Get("type").String())
 	switch toolType {
 	case "", "function":
 		if tJSON, ok := convertResponsesFunctionToolToClaude(tool, ""); ok {
+			return [][]byte{tJSON}
+		}
+	case "custom":
+		if tJSON, ok := convertResponsesCustomToolToClaude(tool); ok {
 			return [][]byte{tJSON}
 		}
 	case "namespace":
@@ -423,6 +669,19 @@ func convertResponsesToolToClaudeTools(tool gjson.Result, toolNameMap map[string
 		}
 	}
 	return nil
+}
+
+func convertResponsesCustomToolToClaude(tool gjson.Result) ([]byte, bool) {
+	name := responsesToolName(tool)
+	if name == "" {
+		return nil, false
+	}
+	tJSON := []byte(`{"name":"","description":"","input_schema":{"type":"object","properties":{"input":{"type":"string"}},"required":["input"]}}`)
+	tJSON, _ = sjson.SetBytes(tJSON, "name", name)
+	if description := responsesToolDescription(tool); description != "" {
+		tJSON, _ = sjson.SetBytes(tJSON, "description", description)
+	}
+	return tJSON, true
 }
 
 func convertResponsesNamespaceToolToClaude(tool gjson.Result, toolNameMap map[string]string) [][]byte {

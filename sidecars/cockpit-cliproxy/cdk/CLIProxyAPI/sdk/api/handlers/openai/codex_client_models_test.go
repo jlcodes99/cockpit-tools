@@ -171,6 +171,38 @@ func TestCodexClientModelsResponse_RequiresTemplateAndCodexProvidersForSearchToo
 	}
 }
 
+func TestCodexClientModelsResponse_Gates56ResponsesLiteByProvider(t *testing.T) {
+	providers := map[string][]string{
+		"gpt-5.6-sol":   {"codex"},
+		"gpt-5.6-terra": {"openai-compatibility"},
+		"gpt-5.6-luna":  {"codex", "openai-compatibility"},
+	}
+	response := CodexClientModelsResponseWithProviders([]map[string]any{
+		{"id": "gpt-5.6-sol"},
+		{"id": "gpt-5.6-terra"},
+		{"id": "gpt-5.6-luna"},
+	}, func(id string) []string {
+		return providers[id]
+	})
+	models, ok := response["models"].([]map[string]any)
+	if !ok {
+		t.Fatalf("models type = %T, want []map[string]any", response["models"])
+	}
+	bySlug := make(map[string]map[string]any, len(models))
+	for _, model := range models {
+		bySlug[stringModelValue(model, "slug")] = model
+	}
+
+	if got, ok := bySlug["gpt-5.6-sol"]["use_responses_lite"].(bool); !ok || !got {
+		t.Fatalf("official Codex OAuth use_responses_lite = %#v, want true", bySlug["gpt-5.6-sol"]["use_responses_lite"])
+	}
+	for _, slug := range []string{"gpt-5.6-terra", "gpt-5.6-luna"} {
+		if got, ok := bySlug[slug]["use_responses_lite"].(bool); !ok || got {
+			t.Fatalf("%s custom-provider use_responses_lite = %#v, want false", slug, bySlug[slug]["use_responses_lite"])
+		}
+	}
+}
+
 func TestCodexClientModelsResponseMultiAgentV2FollowsConfig(t *testing.T) {
 	modelID := "codex-client-multi-agent-v2-test"
 	clientID := "codex-client-multi-agent-v2-test-client"

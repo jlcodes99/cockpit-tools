@@ -190,8 +190,90 @@ func TestConvertOpenAIResponsesRequestToOpenAIChatCompletions_AdditionalToolsFro
 	if got := gjson.Get(args, "input").String(); !strings.Contains(got, "Begin Patch") {
 		t.Fatalf("custom history args = %q", args)
 	}
-	if got := gjson.GetBytes(out, "messages.1.content").String(); got != "applied" {
-		t.Fatalf("flattened tool output = %q, want applied", got)
+	if got := gjson.GetBytes(out, "messages.1.content").String(); got != `[{"type":"input_text","text":"applied"}]` {
+		t.Fatalf("tool output = %q, want original array JSON", got)
+	}
+}
+
+func TestConvertOpenAIResponsesRequestToOpenAIChatCompletions_MovesToolOutputMediaToUserMessage(t *testing.T) {
+	raw := []byte(`{
+		"input": [
+			{"type":"function_call","call_id":"call_a","name":"view_image","arguments":"{}"},
+			{"type":"function_call","call_id":"call_b","name":"view_image","arguments":"{}"},
+			{"type":"message","role":"user","content":"continue"},
+			{"type":"function_call_output","call_id":"call_b","output":{"status":"ok","content":[{"type":"image_url","image_url":{"url":"https://example.com/b.png"}}],"large":9007199254740993}},
+			{"type":"function_call_output","call_id":"call_a","output":[{"type":"input_image","image_url":"data:image/png;base64,AQID"}]}
+		]
+	}`)
+
+	out := ConvertOpenAIResponsesRequestToOpenAIChatCompletions("vision-model", raw, false)
+	messages := gjson.GetBytes(out, "messages").Array()
+	if len(messages) != 5 {
+		t.Fatalf("messages count = %d, want 5; out=%s", len(messages), out)
+	}
+	if got := messages[1].Get("tool_call_id").String(); got != "call_a" {
+		t.Fatalf("first tool reply = %q, want call_a; out=%s", got, out)
+	}
+	if got := messages[2].Get("tool_call_id").String(); got != "call_b" {
+		t.Fatalf("second tool reply = %q, want call_b; out=%s", got, out)
+	}
+	for _, imageURL := range []string{"data:image/png;base64,AQID", "https://example.com/b.png"} {
+		if strings.Contains(messages[1].Get("content").String(), imageURL) || strings.Contains(messages[2].Get("content").String(), imageURL) {
+			t.Fatalf("tool messages must not contain extracted image %q; out=%s", imageURL, out)
+		}
+	}
+	if got := messages[2].Get("content").String(); !strings.Contains(got, `"large":9007199254740993`) {
+		t.Fatalf("rewritten tool output lost large integer: %q", got)
+	}
+	if got := messages[3].Get("role").String(); got != "user" {
+		t.Fatalf("media message role = %q, want user; out=%s", got, out)
+	}
+	parts := messages[3].Get("content").Array()
+	if len(parts) != 4 {
+		t.Fatalf("media content parts = %d, want 4; out=%s", len(parts), out)
+	}
+	if got := parts[0].Get("text").String(); got != "[Tool output media for call call_a]" {
+		t.Fatalf("first attribution = %q", got)
+	}
+	if got := parts[1].Get("image_url.url").String(); got != "data:image/png;base64,AQID" {
+		t.Fatalf("first image URL = %q", got)
+	}
+	if got := parts[2].Get("text").String(); got != "[Tool output media for call call_b]" {
+		t.Fatalf("second attribution = %q", got)
+	}
+	if got := parts[3].Get("image_url.url").String(); got != "https://example.com/b.png" {
+		t.Fatalf("second image URL = %q", got)
+	}
+	if got := messages[4].Get("content").String(); got != "continue" {
+		t.Fatalf("deferred message content = %q, want continue", got)
+	}
+}
+
+func TestConvertOpenAIResponsesRequestToOpenAIChatCompletions_MovesBareDataURLToolOutput(t *testing.T) {
+	raw := []byte(`{"input":[
+		{"type":"custom_tool_call","call_id":"call_image","name":"view_image","input":"{}"},
+		{"type":"custom_tool_call_output","call_id":"call_image","output":"data:image/jpeg;base64,BAUG"}
+	]}`)
+
+	out := ConvertOpenAIResponsesRequestToOpenAIChatCompletions("vision-model", raw, false)
+	if got := gjson.GetBytes(out, "messages.1.content").String(); got != toolOutputMediaMarker {
+		t.Fatalf("tool content = %q, want marker; out=%s", got, out)
+	}
+	if got := gjson.GetBytes(out, "messages.2.content.1.image_url.url").String(); got != "data:image/jpeg;base64,BAUG" {
+		t.Fatalf("media URL = %q; out=%s", got, out)
+	}
+}
+
+func TestConvertOpenAIResponsesRequestToOpenAIChatCompletions_PreservesMediaFreeToolOutputJSON(t *testing.T) {
+	raw := []byte(`{"input":[
+		{"type":"function_call","call_id":"call_text","name":"exec","arguments":"{}"},
+		{"type":"function_call_output","call_id":"call_text","output":[ { "type": "input_text", "text": "ok" }, {"unknown":true} ]}
+	]}`)
+
+	out := ConvertOpenAIResponsesRequestToOpenAIChatCompletions("text-model", raw, false)
+	want := `[ { "type": "input_text", "text": "ok" }, {"unknown":true} ]`
+	if got := gjson.GetBytes(out, "messages.1.content").String(); got != want {
+		t.Fatalf("tool content = %q, want original JSON %q; out=%s", got, want, out)
 	}
 }
 

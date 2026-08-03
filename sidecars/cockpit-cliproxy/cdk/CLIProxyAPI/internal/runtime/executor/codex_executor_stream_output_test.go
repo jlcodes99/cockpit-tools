@@ -300,8 +300,8 @@ func TestCodexTerminalStreamErrSurfacesRateLimitTerminalErrors(t *testing.T) {
 	if !ok {
 		t.Fatal("rate limit terminal error should be handled")
 	}
-	if got := statusCodeFromTestError(t, err); got != http.StatusBadRequest {
-		t.Fatalf("status code = %d, want %d; err=%v", got, http.StatusBadRequest, err)
+	if got := statusCodeFromTestError(t, err); got != http.StatusTooManyRequests {
+		t.Fatalf("status code = %d, want %d; err=%v", got, http.StatusTooManyRequests, err)
 	}
 	assertCodexErrorCode(t, err.Error(), "rate_limit_error", "rate_limit_exceeded")
 	if !strings.Contains(err.Error(), "Rate limit reached.") {

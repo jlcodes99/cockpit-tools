@@ -104,6 +104,7 @@ import {
   isCodexWebSessionAccount,
   isCodexChatCompletionsApiKeyAccount,
   isCodexNewApiAccount,
+  isCodexOpaqueAccessTokenOnlyAccount,
   isCodexPendingOAuthAccount,
   isCodexTeamLikePlan,
   type CodexApiProviderMode,
@@ -341,7 +342,8 @@ const CODEX_TOKEN_SESSION_EXAMPLE = `{
 at-your-personal-access-token
 
 {
-  "personal_access_token": "at-..."
+  "personal_access_token": "at-...",
+  "account_id": "workspace-uuid"
 }`;
 const CODEX_TOKEN_BATCH_EXAMPLE = `[
   {
@@ -420,6 +422,7 @@ type CodexAccountNoteFormState = {
   accountPassword: string;
   phoneNumber: string;
   mailUrl: string;
+  chatgptAccountId: string;
 };
 
 type CodexAccountNoteMailPreviewState = MailVerificationCodePreview & {
@@ -443,6 +446,7 @@ const EMPTY_CODEX_ACCOUNT_NOTE_FORM: CodexAccountNoteFormState = {
   accountPassword: "",
   phoneNumber: "",
   mailUrl: "",
+  chatgptAccountId: "",
 };
 
 function buildCodexAccountNoteForm(
@@ -454,6 +458,7 @@ function buildCodexAccountNoteForm(
     accountPassword: account?.account_password ?? "",
     phoneNumber: account?.phone_number ?? "",
     mailUrl: account?.mail_url ?? "",
+    chatgptAccountId: account?.account_id ?? "",
   };
 }
 
@@ -2200,7 +2205,7 @@ export function CodexAccountsPage() {
     return hasCodexExportAgentIdentity(exportJsonContent);
   }, [exportJsonContent]);
 
-  const formattedExportContent = useMemo(() => {
+  const formattedExportResult = useMemo(() => {
     const exportFormatSupportsSensitiveNotes = exportFormat !== "sub2api";
     const exportOptions = {
       includeSensitiveNotes:
@@ -2208,35 +2213,65 @@ export function CodexAccountsPage() {
     };
     if (!exportJsonContent) {
       return {
-        type: "single" as const,
-        fileNameBase: buildCodexExportFileNameBase(
-          exportFileNameBase,
-          exportFormat,
-        ),
-        jsonContent: "",
+        content: {
+          type: "single" as const,
+          fileNameBase: buildCodexExportFileNameBase(
+            exportFileNameBase,
+            exportFormat,
+          ),
+          jsonContent: "",
+        },
+        failed: false,
       };
     }
     try {
-      return buildCodexExportContent(
-        exportJsonContent,
-        exportFormat,
-        exportFileNameBase,
-        exportOptions,
-      );
+      return {
+        content: buildCodexExportContent(
+          exportJsonContent,
+          exportFormat,
+          exportFileNameBase,
+          exportOptions,
+        ),
+        failed: false,
+      };
     } catch (error) {
       console.error("[CodexExport] transform failed:", error);
-      return buildCodexExportContent(
-        exportJsonContent,
-        "cockpit_tools",
-        exportFileNameBase,
-        exportOptions,
-      );
+      return {
+        content: {
+          type: "single" as const,
+          fileNameBase: buildCodexExportFileNameBase(
+            exportFileNameBase,
+            exportFormat,
+          ),
+          jsonContent: "",
+        },
+        failed: true,
+      };
     }
   }, [
     exportFileNameBase,
     exportFormat,
     exportJsonContent,
     includeExportSensitiveNotes,
+  ]);
+
+  const formattedExportContent = formattedExportResult.content;
+
+  useEffect(() => {
+    if (!showExportModal || !formattedExportResult.failed) {
+      return;
+    }
+    reportExportModalError(
+      t(
+        "codex.exportFormat.buildFailed",
+        "无法生成导出内容：所选账号包含不支持的类型或认证信息不完整。",
+      ),
+    );
+  }, [
+    formattedExportResult.failed,
+    reportExportModalError,
+    showExportModal,
+    t,
   ]);
 
   const exportHasSensitiveNotes = useMemo(() => {
@@ -3048,6 +3083,10 @@ export function CodexAccountsPage() {
     activeAccountNoteMode === "pendingOAuth"
       ? pendingOAuthEmailInput.trim()
       : editingAccountNoteAccount?.email?.trim() || "";
+  const activeAccountUsesPersonalAccessToken = Boolean(
+    editingAccountNoteAccount &&
+      isCodexOpaqueAccessTokenOnlyAccount(editingAccountNoteAccount),
+  );
 
   const refreshSavedMfaRecords = useCallback(() => {
     setSavedMfaRecords(loadSavedMfaRecords());
@@ -3334,6 +3373,9 @@ export function CodexAccountsPage() {
         accountPassword: activeAccountNoteForm.accountPassword,
         phoneNumber: activeAccountNoteForm.phoneNumber,
         mailUrl: activeAccountNoteForm.mailUrl,
+        ...(activeAccountUsesPersonalAccessToken
+          ? { chatgptAccountId: activeAccountNoteForm.chatgptAccountId }
+          : {}),
       };
 
       if (normalizedTwoFactorSecret) {
@@ -3350,7 +3392,10 @@ export function CodexAccountsPage() {
       }
 
       if (activeAccountNoteMode === "pendingOAuth") {
-        setPendingOAuthNoteForm(noteUpdate);
+        setPendingOAuthNoteForm({
+          ...activeAccountNoteForm,
+          ...noteUpdate,
+        });
         setPendingOAuthFieldErrors((prev) => ({
           ...prev,
           twoFactorSecret: undefined,
@@ -3385,6 +3430,7 @@ export function CodexAccountsPage() {
     activeAccountNoteForm,
     activeAccountNoteMode,
     activeAccountNoteSaving,
+    activeAccountUsesPersonalAccessToken,
     editingAccountNoteId,
     setAccountNoteError,
     setMessage,
@@ -18088,6 +18134,64 @@ export function CodexAccountsPage() {
                       </div>
                     )}
                   </div>
+                  {activeAccountUsesPersonalAccessToken ? (
+                    <label className="codex-account-note-field">
+                      <span>
+                        {t(
+                          "codex.accountNote.workspaceIdLabel",
+                          "ChatGPT Workspace ID",
+                        )}
+                      </span>
+                      <div className="codex-account-note-input-row">
+                        <input
+                          className="codex-account-note-input"
+                          type="text"
+                          value={activeAccountNoteForm.chatgptAccountId}
+                          onChange={(event) => {
+                            updateActiveAccountNoteForm({
+                              chatgptAccountId: event.target.value,
+                            });
+                          }}
+                          placeholder={t(
+                            "codex.accountNote.workspaceIdPlaceholder",
+                            "输入 Team / Workspace UUID",
+                          )}
+                          autoComplete="off"
+                          spellCheck={false}
+                          disabled={activeAccountNoteSaving}
+                        />
+                        <button
+                          type="button"
+                          className="codex-account-note-icon-btn"
+                          onClick={() =>
+                            void copyAccountNoteValue(
+                              "modal:chatgptAccountId",
+                              activeAccountNoteForm.chatgptAccountId,
+                            )
+                          }
+                          disabled={
+                            activeAccountNoteSaving ||
+                            !activeAccountNoteForm.chatgptAccountId.trim()
+                          }
+                          aria-label={t("common.copy", "复制")}
+                          title={t("common.copy", "复制")}
+                        >
+                          {accountNoteCopiedKey ===
+                          "modal:chatgptAccountId" ? (
+                            <Check size={14} />
+                          ) : (
+                            <Copy size={14} />
+                          )}
+                        </button>
+                      </div>
+                      <small className="codex-account-note-field-hint">
+                        {t(
+                          "codex.accountNote.workspaceIdHint",
+                          "仅用于 at-* 个人访问令牌；API 服务会将其作为 ChatGPT-Account-Id 发送。",
+                        )}
+                      </small>
+                    </label>
+                  ) : null}
                   <label className="codex-account-note-field">
                     <span>
                       {t("codex.accountNote.passwordLabel", "账号密码")}

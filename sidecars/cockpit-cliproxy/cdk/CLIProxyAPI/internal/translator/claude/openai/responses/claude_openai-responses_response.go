@@ -23,8 +23,9 @@ type claudeToResponsesState struct {
 	InFuncBlock  bool
 	FuncArgsBuf  map[int]*strings.Builder // index -> args
 	// function call bookkeeping for output aggregation
-	FuncNames   map[int]string // index -> function name
-	FuncCallIDs map[int]string // index -> call id
+	FuncNames      map[int]string // index -> function name
+	FuncCallIDs    map[int]string // index -> call id
+	FuncNamespaces map[int]string // index -> Responses namespace
 	// message text aggregation
 	TextBuf        strings.Builder
 	CurrentTextBuf strings.Builder
@@ -59,7 +60,7 @@ func emitEvent(event string, payload []byte) []byte {
 // ConvertClaudeResponseToOpenAIResponses converts Claude SSE to OpenAI Responses SSE events.
 func ConvertClaudeResponseToOpenAIResponses(ctx context.Context, modelName string, originalRequestRawJSON, requestRawJSON, rawJSON []byte, param *any) [][]byte {
 	if *param == nil {
-		*param = &claudeToResponsesState{FuncArgsBuf: make(map[int]*strings.Builder), FuncNames: make(map[int]string), FuncCallIDs: make(map[int]string)}
+		*param = &claudeToResponsesState{FuncArgsBuf: make(map[int]*strings.Builder), FuncNames: make(map[int]string), FuncCallIDs: make(map[int]string), FuncNamespaces: make(map[int]string)}
 	}
 	st := (*param).(*claudeToResponsesState)
 
@@ -94,6 +95,7 @@ func ConvertClaudeResponseToOpenAIResponses(ctx context.Context, modelName strin
 			st.FuncArgsBuf = make(map[int]*strings.Builder)
 			st.FuncNames = make(map[int]string)
 			st.FuncCallIDs = make(map[int]string)
+			st.FuncNamespaces = make(map[int]string)
 			st.InputTokens = 0
 			st.OutputTokens = 0
 			st.UsageSeen = false
@@ -145,12 +147,20 @@ func ConvertClaudeResponseToOpenAIResponses(ctx context.Context, modelName strin
 			st.InFuncBlock = true
 			st.CurrentFCID = cb.Get("id").String()
 			name := cb.Get("name").String()
+			namespace := ""
+			if identity, ok := responsesNamespaceToolIdentities(pickRequestJSON(originalRequestRawJSON, requestRawJSON))[name]; ok {
+				name = identity.name
+				namespace = identity.namespace
+			}
 			item := []byte(`{"type":"response.output_item.added","sequence_number":0,"output_index":0,"item":{"id":"","type":"function_call","status":"in_progress","arguments":"","call_id":"","name":""}}`)
 			item, _ = sjson.SetBytes(item, "sequence_number", nextSeq())
 			item, _ = sjson.SetBytes(item, "output_index", idx)
 			item, _ = sjson.SetBytes(item, "item.id", fmt.Sprintf("fc_%s", st.CurrentFCID))
 			item, _ = sjson.SetBytes(item, "item.call_id", st.CurrentFCID)
 			item, _ = sjson.SetBytes(item, "item.name", name)
+			if namespace != "" {
+				item, _ = sjson.SetBytes(item, "item.namespace", namespace)
+			}
 			out = append(out, emitEvent("response.output_item.added", item))
 			if st.FuncArgsBuf[idx] == nil {
 				st.FuncArgsBuf[idx] = &strings.Builder{}
@@ -158,6 +168,7 @@ func ConvertClaudeResponseToOpenAIResponses(ctx context.Context, modelName strin
 			// record function metadata for aggregation
 			st.FuncCallIDs[idx] = st.CurrentFCID
 			st.FuncNames[idx] = name
+			st.FuncNamespaces[idx] = namespace
 		} else if typ == "thinking" {
 			// start reasoning item
 			st.ReasoningActive = true
@@ -261,6 +272,9 @@ func ConvertClaudeResponseToOpenAIResponses(ctx context.Context, modelName strin
 			itemDone, _ = sjson.SetBytes(itemDone, "item.arguments", args)
 			itemDone, _ = sjson.SetBytes(itemDone, "item.call_id", st.CurrentFCID)
 			itemDone, _ = sjson.SetBytes(itemDone, "item.name", st.FuncNames[idx])
+			if namespace := st.FuncNamespaces[idx]; namespace != "" {
+				itemDone, _ = sjson.SetBytes(itemDone, "item.namespace", namespace)
+			}
 			out = append(out, emitEvent("response.output_item.done", itemDone))
 			st.InFuncBlock = false
 		} else if st.ReasoningActive {
@@ -410,6 +424,9 @@ func ConvertClaudeResponseToOpenAIResponses(ctx context.Context, modelName strin
 				item, _ = sjson.SetBytes(item, "arguments", args)
 				item, _ = sjson.SetBytes(item, "call_id", callID)
 				item, _ = sjson.SetBytes(item, "name", name)
+				if namespace := st.FuncNamespaces[idx]; namespace != "" {
+					item, _ = sjson.SetBytes(item, "namespace", namespace)
+				}
 				outputsWrapper, _ = sjson.SetRawBytes(outputsWrapper, "arr.-1", item)
 			}
 		}
@@ -482,11 +499,13 @@ func ConvertClaudeResponseToOpenAIResponsesNonStream(_ context.Context, _ string
 
 	// Per-index tool call aggregation
 	type toolState struct {
-		id   string
-		name string
-		args strings.Builder
+		id        string
+		name      string
+		namespace string
+		args      strings.Builder
 	}
 	toolCalls := make(map[int]*toolState)
+	namespaceTools := responsesNamespaceToolIdentities(pickRequestJSON(originalRequestRawJSON, requestRawJSON))
 
 	// Walk through SSE chunks to fill state
 	for _, ch := range chunks {
@@ -516,11 +535,17 @@ func ConvertClaudeResponseToOpenAIResponsesNonStream(_ context.Context, _ string
 			case "tool_use":
 				currentFCID = cb.Get("id").String()
 				name := cb.Get("name").String()
+				namespace := ""
+				if identity, ok := namespaceTools[name]; ok {
+					name = identity.name
+					namespace = identity.namespace
+				}
 				if toolCalls[idx] == nil {
-					toolCalls[idx] = &toolState{id: currentFCID, name: name}
+					toolCalls[idx] = &toolState{id: currentFCID, name: name, namespace: namespace}
 				} else {
 					toolCalls[idx].id = currentFCID
 					toolCalls[idx].name = name
+					toolCalls[idx].namespace = namespace
 				}
 			case "thinking":
 				reasoningActive = true
@@ -673,6 +698,9 @@ func ConvertClaudeResponseToOpenAIResponsesNonStream(_ context.Context, _ string
 			item, _ = sjson.SetBytes(item, "arguments", args)
 			item, _ = sjson.SetBytes(item, "call_id", st.id)
 			item, _ = sjson.SetBytes(item, "name", st.name)
+			if st.namespace != "" {
+				item, _ = sjson.SetBytes(item, "namespace", st.namespace)
+			}
 			outputsWrapper, _ = sjson.SetRawBytes(outputsWrapper, "arr.-1", item)
 		}
 	}
@@ -694,4 +722,51 @@ func ConvertClaudeResponseToOpenAIResponsesNonStream(_ context.Context, _ string
 	}
 
 	return out
+}
+
+type responsesNamespaceToolIdentity struct {
+	name      string
+	namespace string
+}
+
+func responsesNamespaceToolIdentities(request []byte) map[string]responsesNamespaceToolIdentity {
+	identities := make(map[string]responsesNamespaceToolIdentity)
+	if len(request) == 0 {
+		return identities
+	}
+	root := gjson.ParseBytes(request)
+	collect := func(tools gjson.Result) {
+		if !tools.IsArray() {
+			return
+		}
+		tools.ForEach(func(_, tool gjson.Result) bool {
+			if tool.Get("type").String() != "namespace" {
+				return true
+			}
+			namespace := strings.TrimSpace(tool.Get("name").String())
+			children := tool.Get("tools")
+			if !children.IsArray() {
+				children = tool.Get("children")
+			}
+			children.ForEach(func(_, child gjson.Result) bool {
+				name := responsesToolName(child)
+				qualified := qualifyResponsesNamespaceToolName(namespace, name)
+				if qualified != "" && name != "" {
+					identities[qualified] = responsesNamespaceToolIdentity{name: name, namespace: namespace}
+				}
+				return true
+			})
+			return true
+		})
+	}
+	collect(root.Get("tools"))
+	if input := root.Get("input"); input.IsArray() {
+		input.ForEach(func(_, item gjson.Result) bool {
+			if item.Get("type").String() == "additional_tools" {
+				collect(item.Get("tools"))
+			}
+			return true
+		})
+	}
+	return identities
 }

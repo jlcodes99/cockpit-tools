@@ -77,6 +77,7 @@ func buildCodexClientModels(models []map[string]any, providersForModel codexClie
 			entry := cloneCodexClientModelMap(template)
 			applyCodexClientDisplayName(entry, model)
 			applyCodexClientSearchToolSupport(entry, id, true, providersForModel)
+			applyCodexClientResponsesLite(entry, id, providersForModel)
 			sanitizeCodexClientReasoningMetadata(entry)
 			applyCodexClientVisibilityOverride(entry, id)
 			result = append(result, entry)
@@ -86,6 +87,7 @@ func buildCodexClientModels(models []map[string]any, providersForModel codexClie
 		entry := cloneCodexClientModelMap(defaultTemplate)
 		applyCodexClientModelMetadata(entry, id, model, optimizeMultiAgentV2)
 		applyCodexClientSearchToolSupport(entry, id, false, providersForModel)
+		applyCodexClientResponsesLite(entry, id, providersForModel)
 		sanitizeCodexClientReasoningMetadata(entry)
 		applyCodexClientVisibilityOverride(entry, id)
 		result = append(result, entry)
@@ -98,6 +100,34 @@ func buildCodexClientModels(models []map[string]any, providersForModel codexClie
 	})
 
 	return result
+}
+
+var codexClientModelsWithoutResponsesLiteForCustomProviders = map[string]struct{}{
+	"gpt-5.6-sol":   {},
+	"gpt-5.6-terra": {},
+	"gpt-5.6-luna":  {},
+}
+
+// applyCodexClientResponsesLite prevents custom providers from selecting the
+// Lite path, where Codex clients do not register web.run for these models.
+func applyCodexClientResponsesLite(entry map[string]any, id string, providersForModel codexClientModelProvidersFunc) {
+	if providersForModel == nil {
+		return
+	}
+	if _, targeted := codexClientModelsWithoutResponsesLiteForCustomProviders[id]; !targeted {
+		return
+	}
+
+	providers := providersForModel(id)
+	for _, provider := range providers {
+		if !strings.EqualFold(strings.TrimSpace(provider), "codex") {
+			entry["use_responses_lite"] = false
+			return
+		}
+	}
+	if len(providers) == 0 {
+		entry["use_responses_lite"] = false
+	}
 }
 
 func maxCodexClientTemplatePriority(templates map[string]map[string]any) int {

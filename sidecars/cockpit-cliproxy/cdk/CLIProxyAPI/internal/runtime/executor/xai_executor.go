@@ -514,7 +514,7 @@ func (e *XAIExecutor) prepareResponsesRequest(ctx context.Context, req cliproxye
 	body = helps.RewriteCodexMultiAgentV2Input(ctx, opts.Headers, body, e.cfg)
 	body = normalizeXAITools(body)
 	body = normalizeXAIInputReasoningItems(body)
-	body = normalizeCodexInstructions(body)
+	body = normalizeXAIInstructions(body)
 	body = sanitizeXAIResponsesBody(body, baseModel)
 
 	sessionID := xaiExecutionSessionID(req, opts)
@@ -530,6 +530,14 @@ func (e *XAIExecutor) prepareResponsesRequest(ctx context.Context, req cliproxye
 		body:            body,
 		sessionID:       sessionID,
 	}, nil
+}
+
+func normalizeXAIInstructions(body []byte) []byte {
+	instructions := gjson.GetBytes(body, "instructions")
+	if !instructions.Exists() || instructions.Type == gjson.Null {
+		body, _ = sjson.SetBytes(body, "instructions", "")
+	}
+	return body
 }
 
 func (e *XAIExecutor) recordXAIRequest(ctx context.Context, auth *cliproxyauth.Auth, url string, headers http.Header, body []byte) {

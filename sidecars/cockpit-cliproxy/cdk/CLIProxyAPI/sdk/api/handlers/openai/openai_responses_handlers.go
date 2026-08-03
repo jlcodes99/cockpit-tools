@@ -443,18 +443,31 @@ func (h *OpenAIResponsesAPIHandler) Compact(c *gin.Context) {
 
 	c.Header("Content-Type", "application/json")
 	modelName := gjson.GetBytes(rawJSON, "model").String()
-	cliCtx, cliCancel := h.GetContextWithCancel(h, c, context.Background())
-	stopKeepAlive := h.StartNonStreamingKeepAlive(c, cliCtx)
-	resp, upstreamHeaders, errMsg := h.ExecuteWithAuthManager(cliCtx, h.HandlerType(), modelName, rawJSON, "responses/compact")
-	stopKeepAlive()
-	if errMsg != nil {
-		h.WriteErrorResponse(c, errMsg)
-		cliCancel(errMsg.Error)
+	attemptBody := rawJSON
+	retriedInvalidEncryptedContent := false
+	for {
+		cliCtx, cliCancel := h.GetContextWithCancel(h, c, context.Background())
+		stopKeepAlive := h.StartNonStreamingKeepAlive(c, cliCtx)
+		resp, upstreamHeaders, errMsg := h.ExecuteWithAuthManager(cliCtx, h.HandlerType(), modelName, attemptBody, "responses/compact")
+		stopKeepAlive()
+		if errMsg != nil {
+			if !retriedInvalidEncryptedContent && isInvalidEncryptedContentError(errMsg) {
+				if retryBody, changed := sanitizeInvalidEncryptedContentRetryBody(attemptBody); changed {
+					retriedInvalidEncryptedContent = true
+					attemptBody = retryBody
+					cliCancel(errMsg.Error)
+					continue
+				}
+			}
+			h.WriteErrorResponse(c, errMsg)
+			cliCancel(errMsg.Error)
+			return
+		}
+		handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
+		_, _ = c.Writer.Write(resp)
+		cliCancel()
 		return
 	}
-	handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
-	_, _ = c.Writer.Write(resp)
-	cliCancel()
 }
 
 // handleNonStreamingResponse handles non-streaming chat completion responses
@@ -468,19 +481,32 @@ func (h *OpenAIResponsesAPIHandler) handleNonStreamingResponse(c *gin.Context, r
 	c.Header("Content-Type", "application/json")
 
 	modelName := gjson.GetBytes(rawJSON, "model").String()
-	cliCtx, cliCancel := h.GetContextWithCancel(h, c, context.Background())
-	stopKeepAlive := h.StartNonStreamingKeepAlive(c, cliCtx)
+	attemptBody := rawJSON
+	retriedInvalidEncryptedContent := false
+	for {
+		cliCtx, cliCancel := h.GetContextWithCancel(h, c, context.Background())
+		stopKeepAlive := h.StartNonStreamingKeepAlive(c, cliCtx)
 
-	resp, upstreamHeaders, errMsg := h.ExecuteWithAuthManager(cliCtx, h.HandlerType(), modelName, rawJSON, "")
-	stopKeepAlive()
-	if errMsg != nil {
-		h.WriteErrorResponse(c, errMsg)
-		cliCancel(errMsg.Error)
+		resp, upstreamHeaders, errMsg := h.ExecuteWithAuthManager(cliCtx, h.HandlerType(), modelName, attemptBody, "")
+		stopKeepAlive()
+		if errMsg != nil {
+			if !retriedInvalidEncryptedContent && isInvalidEncryptedContentError(errMsg) {
+				if retryBody, changed := sanitizeInvalidEncryptedContentRetryBody(attemptBody); changed {
+					retriedInvalidEncryptedContent = true
+					attemptBody = retryBody
+					cliCancel(errMsg.Error)
+					continue
+				}
+			}
+			h.WriteErrorResponse(c, errMsg)
+			cliCancel(errMsg.Error)
+			return
+		}
+		handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
+		_, _ = c.Writer.Write(resp)
+		cliCancel()
 		return
 	}
-	handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
-	_, _ = c.Writer.Write(resp)
-	cliCancel()
 }
 
 // handleStreamingResponse handles streaming responses for Gemini models.
@@ -503,11 +529,7 @@ func (h *OpenAIResponsesAPIHandler) handleStreamingResponse(c *gin.Context, rawJ
 		return
 	}
 
-	// New core execution path
 	modelName := gjson.GetBytes(rawJSON, "model").String()
-	cliCtx, cliCancel := h.GetContextWithCancel(h, c, context.Background())
-	dataChan, upstreamHeaders, errChan := h.ExecuteStreamWithAuthManager(cliCtx, h.HandlerType(), modelName, rawJSON, "")
-
 	setSSEHeaders := func() {
 		c.Header("Content-Type", "text/event-stream")
 		c.Header("Cache-Control", "no-cache")
@@ -515,50 +537,98 @@ func (h *OpenAIResponsesAPIHandler) handleStreamingResponse(c *gin.Context, rawJ
 		c.Header("Access-Control-Allow-Origin", "*")
 	}
 	framer := &responsesSSEFramer{}
-
-	// Peek at the first chunk
+	attemptBody := rawJSON
+	retriedInvalidEncryptedContent := false
 	for {
-		select {
-		case <-c.Request.Context().Done():
-			cliCancel(c.Request.Context().Err())
-			return
-		case errMsg, ok := <-errChan:
-			if !ok {
-				// Err channel closed cleanly; wait for data channel.
-				errChan = nil
-				continue
-			}
-			// Upstream failed immediately. Return proper error status and JSON.
-			h.WriteErrorResponse(c, errMsg)
-			if errMsg != nil {
-				cliCancel(errMsg.Error)
-			} else {
-				cliCancel(nil)
-			}
-			return
-		case chunk, ok := <-dataChan:
-			if !ok {
-				// Stream closed without data? Send headers and done.
+		cliCtx, cliCancel := h.GetContextWithCancel(h, c, context.Background())
+		dataChan, upstreamHeaders, errChan := h.ExecuteStreamWithAuthManager(cliCtx, h.HandlerType(), modelName, attemptBody, "")
+
+		// Peek before committing downstream output so an expired encrypted replay
+		// item can be removed and retried exactly once.
+		for {
+			select {
+			case <-c.Request.Context().Done():
+				cliCancel(c.Request.Context().Err())
+				return
+			case errMsg, ok := <-errChan:
+				if !ok {
+					errChan = nil
+					continue
+				}
+				if !retriedInvalidEncryptedContent && isInvalidEncryptedContentError(errMsg) {
+					if retryBody, changed := sanitizeInvalidEncryptedContentRetryBody(attemptBody); changed {
+						retriedInvalidEncryptedContent = true
+						attemptBody = retryBody
+						if errMsg != nil {
+							cliCancel(errMsg.Error)
+						} else {
+							cliCancel(nil)
+						}
+						break
+					}
+				}
+				h.WriteErrorResponse(c, errMsg)
+				if errMsg != nil {
+					cliCancel(errMsg.Error)
+				} else {
+					cliCancel(nil)
+				}
+				return
+			case chunk, ok := <-dataChan:
+				if !ok {
+					if pendingErr, hasPendingErr := pendingResponsesStreamError(errChan); hasPendingErr {
+						if !retriedInvalidEncryptedContent && isInvalidEncryptedContentError(pendingErr) {
+							if retryBody, changed := sanitizeInvalidEncryptedContentRetryBody(attemptBody); changed {
+								retriedInvalidEncryptedContent = true
+								attemptBody = retryBody
+								if pendingErr != nil {
+									cliCancel(pendingErr.Error)
+								} else {
+									cliCancel(nil)
+								}
+								break
+							}
+						}
+						h.WriteErrorResponse(c, pendingErr)
+						if pendingErr != nil {
+							cliCancel(pendingErr.Error)
+						} else {
+							cliCancel(nil)
+						}
+						return
+					}
+					setSSEHeaders()
+					handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
+					_, _ = c.Writer.Write([]byte("\n"))
+					flusher.Flush()
+					cliCancel(nil)
+					return
+				}
+
 				setSSEHeaders()
 				handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
-				_, _ = c.Writer.Write([]byte("\n"))
+				framer.WriteChunk(c.Writer, chunk)
 				flusher.Flush()
-				cliCancel(nil)
+				h.forwardResponsesStream(c, flusher, func(err error) { cliCancel(err) }, dataChan, errChan, framer)
 				return
 			}
-
-			// Success! Set headers.
-			setSSEHeaders()
-			handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
-
-			// Write first chunk logic (matching forwardResponsesStream)
-			framer.WriteChunk(c.Writer, chunk)
-			flusher.Flush()
-
-			// Continue
-			h.forwardResponsesStream(c, flusher, func(err error) { cliCancel(err) }, dataChan, errChan, framer)
-			return
+			break
 		}
+	}
+}
+
+func pendingResponsesStreamError(errs <-chan *interfaces.ErrorMessage) (*interfaces.ErrorMessage, bool) {
+	if errs == nil {
+		return nil, false
+	}
+	select {
+	case errMsg, ok := <-errs:
+		if !ok {
+			return nil, false
+		}
+		return errMsg, true
+	default:
+		return nil, false
 	}
 }
 

@@ -1,6 +1,9 @@
 package registry
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestCodexPlanModelsIncludeManaged56Models(t *testing.T) {
 	for plan, models := range map[string][]*ModelInfo{
@@ -47,6 +50,18 @@ func TestCodexResponsesLiteModels(t *testing.T) {
 	}
 	if CodexClientModelUsesResponsesLite("gpt-5.5") {
 		t.Fatal("gpt-5.5 should not use Responses Lite")
+	}
+}
+
+func TestCodexClientModelBaseInstructions(t *testing.T) {
+	known := CodexClientModelBaseInstructions("gpt-5.6-sol")
+	if len(known) < 100 || !strings.Contains(known, "Codex") {
+		t.Fatalf("gpt-5.6-sol base instructions are missing or incomplete: %q", known)
+	}
+
+	fallback := CodexClientModelBaseInstructions("unknown-model")
+	if fallback != CodexClientModelBaseInstructions("gpt-5.5") {
+		t.Fatal("unknown model should fall back to gpt-5.5 base instructions")
 	}
 }
 
