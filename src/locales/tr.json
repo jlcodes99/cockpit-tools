@@ -3141,6 +3141,11 @@
           "modelLimitsEnabled": "Model limitleri"
         },
         "accountBalance": "Hesap bakiyesi",
+        "totalBalance": "Toplam bakiye",
+        "grantedBalance": "Hediye bakiye",
+        "toppedUpBalance": "Yüklenen bakiye",
+        "balanceUnavailable": "Bakiye kullanılamıyor",
+        "noBalanceData": "Bakiye verisi yok",
         "unlimitedQuota": "Sınırsız",
         "booleanTrue": "Evet",
         "booleanFalse": "Hayır"

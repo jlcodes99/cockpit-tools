@@ -16977,7 +16977,6 @@ fn provider_gateway_wire_api_for_account(account: &CodexAccount) -> String {
         .and_then(|url| url.host_str().map(|host| host.to_ascii_lowercase()))
         .unwrap_or_default();
     let chat_hosts = [
-        "api.deepseek.com",
         "api.moonshot.cn",
         "api.siliconflow.cn",
         "api.siliconflow.com",
@@ -17943,7 +17942,7 @@ fn delete_provider_model_backup(profile_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn backup_current_profile_model_before_provider_gateway(
+pub(crate) fn backup_current_profile_model_before_provider_gateway(
     profile_dir: &Path,
     provider_models: &[String],
 ) -> Result<(), String> {
@@ -18000,22 +17999,22 @@ pub fn cleanup_provider_gateway_profile_model_overrides(profile_dir: &Path) -> R
             doc.remove("model_catalog_json");
             changed = true;
         }
-        if let Some(previous_model) = previous_model.as_deref() {
-            doc["model"] = value(previous_model);
-            changed = true;
-        } else {
-            let current_model = doc
-                .get("model")
-                .and_then(|item| item.as_str())
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(str::to_ascii_lowercase);
-            if let Some(model) = current_model {
-                if managed_models.contains(&model) {
-                    doc.remove("model");
-                    changed = true;
-                }
+        let current_model = doc
+            .get("model")
+            .and_then(|item| item.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_ascii_lowercase);
+        let current_is_managed = current_model
+            .as_ref()
+            .is_some_and(|model| managed_models.contains(model));
+        if current_is_managed || (managed_models.is_empty() && uses_managed_catalog) {
+            if let Some(previous_model) = previous_model.as_deref() {
+                doc["model"] = value(previous_model);
+            } else {
+                doc.remove("model");
             }
+            changed = true;
         }
         if changed {
             let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
@@ -18451,7 +18450,10 @@ pub fn reload_provider_gateway_for_profile_in_background(
             Some(account) if account_requires_bound_oauth_local_gateway(&account) => {
                 ensure_bound_oauth_local_gateway_for_dir(&profile_dir, &account_id).await
             }
-            Some(_) => Ok(()),
+            Some(_) => {
+                stop_provider_gateways_for_profile(&profile_dir).await;
+                Ok(())
+            }
             None => Err(format!("账号不存在: {}", account_id)),
         };
         match result {
@@ -26876,6 +26878,22 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
     }
 
     #[test]
+    fn official_deepseek_defaults_to_responses_without_gateway() {
+        let account = CodexAccount::new_api_key(
+            "local-account-id".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com/v1".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            Vec::new(),
+        );
+
+        assert!(!account_requires_provider_gateway(&account));
+    }
+
+    #[test]
     fn responses_bound_oauth_api_key_uses_local_access_pool() {
         let mut account = CodexAccount::new_api_key(
             "local-account-id".to_string(),
@@ -27139,6 +27157,18 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
                     && model.get("visibility").and_then(Value::as_str) == Some("list")
             }));
         }
+        assert!(models.iter().any(|model| {
+            model.get("slug").and_then(Value::as_str) == Some("deepseek-v4-flash")
+                && model.get("display_name").and_then(Value::as_str) == Some("DeepSeek-V4-Flash")
+                && model.get("visibility").and_then(Value::as_str) == Some("list")
+        }));
+        assert!(models
+            .iter()
+            .any(|model| { model.get("slug").and_then(Value::as_str) == Some("deepseek-v4-pro") }));
+        assert!(models.iter().any(|model| {
+            model.get("slug").and_then(Value::as_str) == Some(CODEX_AUTO_REVIEW_MODEL_ID)
+                && model.get("visibility").and_then(Value::as_str) == Some("hide")
+        }));
         let config =
             fs::read_to_string(profile_dir.join(CODEX_PROFILE_CONFIG_FILE)).expect("read config");
         assert!(config.contains(&format!(

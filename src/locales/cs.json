@@ -3141,6 +3141,11 @@
           "modelLimitsEnabled": "Limity modelů"
         },
         "accountBalance": "Zůstatek účtu",
+        "totalBalance": "Celkový zůstatek",
+        "grantedBalance": "Přidělený zůstatek",
+        "toppedUpBalance": "Dobitý zůstatek",
+        "balanceUnavailable": "Zůstatek není dostupný",
+        "noBalanceData": "Žádné údaje o zůstatku",
         "unlimitedQuota": "Neomezeno",
         "booleanTrue": "Ano",
         "booleanFalse": "Ne"

@@ -3141,6 +3141,11 @@
           "modelLimitsEnabled": "Giới hạn mô hình"
         },
         "accountBalance": "Số dư tài khoản",
+        "totalBalance": "Tổng số dư",
+        "grantedBalance": "Số dư được tặng",
+        "toppedUpBalance": "Số dư đã nạp",
+        "balanceUnavailable": "Số dư không khả dụng",
+        "noBalanceData": "Không có dữ liệu số dư",
         "unlimitedQuota": "Không giới hạn",
         "booleanTrue": "Có",
         "booleanFalse": "Không"

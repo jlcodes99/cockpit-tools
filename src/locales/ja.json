@@ -3141,6 +3141,11 @@
           "modelLimitsEnabled": "モデル制限"
         },
         "accountBalance": "アカウント残高",
+        "totalBalance": "総残高",
+        "grantedBalance": "付与残高",
+        "toppedUpBalance": "チャージ残高",
+        "balanceUnavailable": "残高を利用できません",
+        "noBalanceData": "残高データがありません",
         "unlimitedQuota": "無制限",
         "booleanTrue": "はい",
         "booleanFalse": "いいえ"

@@ -3141,6 +3141,11 @@
           "modelLimitsEnabled": "模型限制"
         },
         "accountBalance": "帳戶餘額",
+        "totalBalance": "總餘額",
+        "grantedBalance": "贈金餘額",
+        "toppedUpBalance": "儲值餘額",
+        "balanceUnavailable": "餘額不可用",
+        "noBalanceData": "暫無餘額資料",
         "unlimitedQuota": "無限額度",
         "booleanTrue": "是",
         "booleanFalse": "否"

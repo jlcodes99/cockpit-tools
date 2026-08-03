@@ -46,6 +46,7 @@ import { SingleSelectFilterDropdown } from "../SingleSelectFilterDropdown";
 import { SingleSelectDropdown } from "../SingleSelectDropdown";
 import { AccountTagFilterDropdown } from "../AccountTagFilterDropdown";
 import { PaginationControls } from "../PaginationControls";
+import { ModelProviderUsagePanel } from "../model-provider/ModelProviderUsagePanel";
 import { useEscClose } from "../../hooks/useEscClose";
 import type { CodexAccount } from "../../types/codex";
 import type { InstanceProfile } from "../../types/instance";
@@ -90,6 +91,7 @@ import {
   testCodexModelProviderChatBatch,
   type CodexModelProvider,
   type CodexModelProviderApiKey,
+  type CodexModelProviderIntegrationType,
   type CodexModelProviderChatTestProgressPayload,
   type CodexModelProviderChatTestRecord,
   type CodexModelProviderChatTestTarget,
@@ -103,6 +105,7 @@ import {
 import {
   resolveNewApiQuotaSnapshot,
 } from "../../services/modelProviderUsageService";
+import { resolveModelProviderUsageMode } from "../../services/modelProviderUsageService";
 import { useSponsorStore } from "../../stores/useSponsorStore";
 import type { Sponsor } from "../../types/sponsor";
 import {
@@ -389,7 +392,7 @@ interface ProviderFormState {
   wireApi: CodexProviderWireApi;
   supportsWebsockets: boolean;
   enableModePreference: CodexProviderEnableModePreference;
-  integrationType: "sub2api" | "new_api" | "";
+  integrationType: CodexModelProviderIntegrationType | "";
   newApiKeyName: string;
   newApiKey: string;
 }
@@ -3404,9 +3407,9 @@ export function CodexModelProviderManager({
               provider.baseUrl
             }`;
             const usageMode =
-              usageSummary?.mode === "new_api" || usageSummary?.mode === "sub2api"
-                ? usageSummary.mode
-                : provider.integrationType ?? null;
+              resolveModelProviderUsageMode(usageSummary) ??
+              provider.integrationType ??
+              null;
             const {
               granted: totalGranted,
               available: totalAvailable,
@@ -3541,7 +3544,14 @@ export function CodexModelProviderManager({
                   </span>
                 </div>
                 <div className="codex-quota-section">
-                  {usageMode === "sub2api" ? (
+                  {usageMode === "deepseek" ? (
+                    <ModelProviderUsagePanel
+                      summary={usageSummary}
+                      loading={usageState?.loading}
+                      error={usageState?.error}
+                      unavailable={usageState?.unavailable}
+                    />
+                  ) : usageMode === "sub2api" ? (
                     <div className="codex-api-key-usage-panel sub2api">
                       <div className="codex-api-key-usage-grid">
                         <div>
@@ -4632,7 +4642,7 @@ export function CodexModelProviderManager({
                   disabled={saving}
                 />
               </div>
-              <div className="form-group">
+              {selectedPresetId !== "deepseek" && <div className="form-group">
                 <label className="codex-provider-label-with-help">
                   <span>{t("codex.modelProviders.fields.wireApi", "协议")}</span>
                   <span
@@ -4689,8 +4699,8 @@ export function CodexModelProviderManager({
                     </span>
                   </button>
                 </div>
-              </div>
-              {form.wireApi === "responses" && (
+              </div>}
+              {selectedPresetId !== "deepseek" && form.wireApi === "responses" && (
                 <div className="form-group">
                   <label>
                     {t(
@@ -5533,9 +5543,9 @@ export function CodexModelProviderManager({
         const usageSummary = usageState?.summary;
         const resolvedWireApi = resolveProviderWireApi(provider);
         const usageMode =
-          usageSummary?.mode === "new_api" || usageSummary?.mode === "sub2api"
-            ? usageSummary.mode
-            : provider.integrationType ?? null;
+          resolveModelProviderUsageMode(usageSummary) ??
+          provider.integrationType ??
+          null;
         const coreDetailKeys =
           usageMode === "new_api"
             ? new Set(["mode", "totalGranted", "totalAvailable", "expiresAt"])

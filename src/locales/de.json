@@ -3141,6 +3141,11 @@
           "modelLimitsEnabled": "Modelllimits"
         },
         "accountBalance": "Kontostand",
+        "totalBalance": "Gesamtguthaben",
+        "grantedBalance": "Gewährtes Guthaben",
+        "toppedUpBalance": "Aufgeladenes Guthaben",
+        "balanceUnavailable": "Guthaben nicht verfügbar",
+        "noBalanceData": "Keine Guthabendaten",
         "unlimitedQuota": "Unbegrenzt",
         "booleanTrue": "Ja",
         "booleanFalse": "Nein"

@@ -2901,6 +2901,11 @@
           "modelLimitsEnabled": "Model Limits"
         },
         "accountBalance": "Account Balance",
+        "totalBalance": "Total Balance",
+        "grantedBalance": "Granted Balance",
+        "toppedUpBalance": "Topped-up Balance",
+        "balanceUnavailable": "Balance unavailable",
+        "noBalanceData": "No balance data",
         "unlimitedQuota": "Unlimited",
         "booleanTrue": "Yes",
         "booleanFalse": "No"

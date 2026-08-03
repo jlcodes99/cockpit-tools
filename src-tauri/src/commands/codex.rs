@@ -1944,6 +1944,20 @@ fn codex_model_provider_usage_url(base_url: &str) -> Result<String, String> {
     Ok(url.to_string())
 }
 
+fn codex_model_provider_deepseek_balance_url(base_url: &str) -> Result<String, String> {
+    let parsed = reqwest::Url::parse(base_url.trim())
+        .map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https")
+        || parsed
+            .host_str()
+            .map(|host| !host.eq_ignore_ascii_case("api.deepseek.com"))
+            .unwrap_or(true)
+    {
+        return Err("PROVIDER_USAGE_DEEPSEEK_HOST_INVALID".to_string());
+    }
+    Ok("https://api.deepseek.com/user/balance".to_string())
+}
+
 fn codex_model_provider_new_api_billing_url(
     base_url: &str,
     endpoint: &str,
@@ -2110,7 +2124,6 @@ fn normalize_model_provider_wire_api(value: Option<&str>, base_url: &str) -> Str
     }
     let lower = base_url.trim().to_ascii_lowercase();
     if lower.contains("/chat/completions")
-        || lower.contains("api.deepseek.com")
         || lower.contains("api.moonshot.cn")
         || lower.contains("api.siliconflow.cn")
         || lower.contains("api.siliconflow.com")
@@ -2457,6 +2470,8 @@ pub struct CodexModelProviderUsageSummary {
     pub remaining: Option<f64>,
     pub balance: Option<f64>,
     pub unit: Option<String>,
+    pub is_available: Option<bool>,
+    pub balance_infos: Vec<CodexDeepSeekBalanceInfo>,
     pub quota_unlimited: Option<bool>,
     pub quota_limit: Option<f64>,
     pub quota_used: Option<f64>,
@@ -2470,6 +2485,18 @@ pub struct CodexModelProviderUsageSummary {
     pub model_stats_count: usize,
     pub latency_ms: u64,
     pub details: Vec<CodexModelProviderUsageDetail>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexDeepSeekBalanceInfo {
+    pub currency: String,
+    #[serde(alias = "total_balance")]
+    pub total_balance: String,
+    #[serde(alias = "granted_balance")]
+    pub granted_balance: String,
+    #[serde(alias = "topped_up_balance")]
+    pub topped_up_balance: String,
 }
 
 fn json_f64_at(value: &serde_json::Value, path: &[&str]) -> Option<f64> {
@@ -2589,6 +2616,8 @@ fn summarize_model_provider_usage(
         remaining: json_f64_at(body, &["remaining"]),
         balance: json_f64_at(body, &["balance"]),
         unit: json_string_at(body, &["unit"]).or_else(|| json_string_at(body, &["quota", "unit"])),
+        is_available: None,
+        balance_infos: Vec::new(),
         quota_unlimited: json_bool_at(body, &["quota", "unlimited"]),
         quota_limit: json_f64_at(body, &["quota", "limit"]),
         quota_used: json_f64_at(body, &["quota", "used"]),
@@ -2741,6 +2770,8 @@ fn summarize_new_api_model_provider_usage(
         remaining: quota_remaining,
         balance: None,
         unit: Some("USD".to_string()),
+        is_available: None,
+        balance_infos: Vec::new(),
         quota_unlimited: Some(quota_unlimited),
         quota_limit,
         quota_used,
@@ -2755,6 +2786,64 @@ fn summarize_new_api_model_provider_usage(
         latency_ms,
         details,
     }
+}
+
+fn summarize_deepseek_model_provider_usage(
+    body: &serde_json::Value,
+    latency_ms: u64,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    let is_available = body
+        .get("is_available")
+        .and_then(serde_json::Value::as_bool)
+        .ok_or_else(|| "PROVIDER_USAGE_PARSE_FAILED: missing is_available".to_string())?;
+    let balance_infos = serde_json::from_value::<Vec<CodexDeepSeekBalanceInfo>>(
+        body.get("balance_infos")
+            .cloned()
+            .ok_or_else(|| "PROVIDER_USAGE_PARSE_FAILED: missing balance_infos".to_string())?,
+    )
+    .map_err(|error| format!("PROVIDER_USAGE_PARSE_FAILED: {}", error))?;
+
+    Ok(CodexModelProviderUsageSummary {
+        mode: Some("deepseek".to_string()),
+        is_valid: None,
+        status: None,
+        plan_name: None,
+        remaining: None,
+        balance: None,
+        unit: None,
+        is_available: Some(is_available),
+        balance_infos,
+        quota_unlimited: None,
+        quota_limit: None,
+        quota_used: None,
+        quota_remaining: None,
+        today_requests: None,
+        today_total_tokens: None,
+        today_cost: None,
+        total_requests: None,
+        total_total_tokens: None,
+        total_cost: None,
+        model_stats_count: 0,
+        latency_ms,
+        details: Vec::new(),
+    })
+}
+
+fn parse_deepseek_balance_response(
+    status: reqwest::StatusCode,
+    text: &str,
+    latency_ms: u64,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    if !status.is_success() {
+        return Err(format!(
+            "PROVIDER_USAGE_HTTP_{}: {}",
+            status.as_u16(),
+            text.chars().take(300).collect::<String>()
+        ));
+    }
+    let parsed = serde_json::from_str::<serde_json::Value>(text)
+        .map_err(|error| format!("PROVIDER_USAGE_PARSE_FAILED: {}", error))?;
+    summarize_deepseek_model_provider_usage(&parsed, latency_ms)
 }
 
 #[tauri::command]
@@ -3058,7 +3147,11 @@ pub async fn codex_query_model_provider_usage(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
+    if codex_model_provider_deepseek_balance_url(&base_url).is_ok() {
+        return query_deepseek_model_provider_usage(&client, &base_url, key).await;
+    }
     match requested_type {
+        Some("deepseek") => query_deepseek_model_provider_usage(&client, &base_url, key).await,
         Some("new_api") => query_new_api_model_provider_usage(&client, &base_url, key).await,
         Some("sub2api") => query_sub2api_model_provider_usage(&client, &base_url, key).await,
         Some(value) => Err(format!("PROVIDER_USAGE_TYPE_UNSUPPORTED: {}", value)),
@@ -3077,6 +3170,26 @@ pub async fn codex_query_model_provider_usage(
             }
         }
     }
+}
+
+async fn query_deepseek_model_provider_usage(
+    client: &reqwest::Client,
+    base_url: &str,
+    key: &str,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    let url = codex_model_provider_deepseek_balance_url(base_url)?;
+    let started = Instant::now();
+    let response = client
+        .get(url)
+        .bearer_auth(key)
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+        .map_err(|error| format!("PROVIDER_USAGE_NETWORK_FAILED: {}", error))?;
+    let latency_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+    let status = response.status();
+    let text = response.text().await.unwrap_or_default();
+    parse_deepseek_balance_response(status, &text, latency_ms)
 }
 
 async fn query_new_api_model_provider_usage(
@@ -3730,5 +3843,62 @@ mod tests {
                 .as_deref(),
             Some("custom-model")
         );
+    }
+
+    #[test]
+    fn deepseek_balance_url_always_uses_the_official_root() {
+        assert_eq!(
+            codex_model_provider_deepseek_balance_url("https://api.deepseek.com/v1/")
+                .expect("deepseek url"),
+            "https://api.deepseek.com/user/balance"
+        );
+        assert!(
+            codex_model_provider_deepseek_balance_url("https://deepseek.example.com/v1").is_err()
+        );
+    }
+
+    #[test]
+    fn deepseek_balance_summary_preserves_decimal_strings_and_availability() {
+        let response = serde_json::json!({
+            "is_available": false,
+            "balance_infos": [
+                {
+                    "currency": "CNY",
+                    "total_balance": "123.4500",
+                    "granted_balance": "3.2500",
+                    "topped_up_balance": "120.2000"
+                },
+                {
+                    "currency": "USD",
+                    "total_balance": "17.64",
+                    "granted_balance": "0.00",
+                    "topped_up_balance": "17.64"
+                }
+            ]
+        });
+
+        let summary =
+            summarize_deepseek_model_provider_usage(&response, 19).expect("deepseek summary");
+        assert_eq!(summary.mode.as_deref(), Some("deepseek"));
+        assert_eq!(summary.is_available, Some(false));
+        assert_eq!(summary.latency_ms, 19);
+        assert_eq!(summary.balance_infos.len(), 2);
+        assert_eq!(summary.balance_infos[0].total_balance, "123.4500");
+        assert_eq!(summary.balance_infos[1].currency, "USD");
+    }
+
+    #[test]
+    fn deepseek_balance_response_reports_http_and_json_failures() {
+        let http_error = parse_deepseek_balance_response(
+            reqwest::StatusCode::UNAUTHORIZED,
+            r#"{"error":"invalid key"}"#,
+            1,
+        )
+        .expect_err("non-success status should fail");
+        assert!(http_error.starts_with("PROVIDER_USAGE_HTTP_401:"));
+
+        let parse_error = parse_deepseek_balance_response(reqwest::StatusCode::OK, "not-json", 1)
+            .expect_err("invalid json should fail");
+        assert!(parse_error.starts_with("PROVIDER_USAGE_PARSE_FAILED:"));
     }
 }
