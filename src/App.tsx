@@ -72,6 +72,7 @@ import {
 } from './utils/externalProviderImport';
 import { runAutoBackupCycle } from './services/scheduledBackupService';
 import {
+  clearLegacyWorkbuddyAutoCheckinLogs,
   getWorkbuddyAutoCheckinConfig,
   migrateWorkbuddyAutoCheckinConfigAsync,
 } from './services/workbuddyAutoCheckinService';
@@ -2249,6 +2250,7 @@ function MainApp() {
 
   // 将旧版本保存在 WebView localStorage 中的设置迁移到 Rust 后台调度器。
   useEffect(() => {
+    clearLegacyWorkbuddyAutoCheckinLogs();
     void migrateWorkbuddyAutoCheckinConfigAsync(getWorkbuddyAutoCheckinConfig()).catch((err) => {
       console.warn('[WorkbuddyAutoCheckin] 迁移旧版自动签到配置失败:', err);
     });

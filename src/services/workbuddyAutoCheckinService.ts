@@ -21,14 +21,29 @@ export const DEFAULT_WORKBUDDY_AUTO_CHECKIN_CONFIG: WorkbuddyAutoCheckinConfig =
 };
 
 const CONFIG_KEY = 'agtools.workbuddy.auto_checkin_config';
+const LEGACY_LOGS_KEY = 'agtools.workbuddy.auto_checkin_logs';
 export const WORKBUDDY_AUTO_CHECKIN_CONFIG_CHANGED_EVENT = 'workbuddy-auto-checkin-config-changed';
 const AUTO_CHECKIN_RETRY_DELAY_MS = 5 * 60 * 1000;
 const AUTO_CHECKIN_IDLE_RECHECK_DELAY_MS = 60 * 60 * 1000;
 
 export type WorkbuddyAutoCheckinCycleResult = 'disabled' | 'waiting' | 'completed' | 'retry';
 
+export function clearLegacyWorkbuddyAutoCheckinLogs(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    if (localStorage.getItem(LEGACY_LOGS_KEY) !== null) {
+      localStorage.removeItem(LEGACY_LOGS_KEY);
+      console.info('[WorkbuddyAutoCheckin] 已清理废弃的 WebView 自动签到日志缓存');
+    }
+  } catch (err) {
+    console.warn('[WorkbuddyAutoCheckin] 清理废弃的自动签到日志缓存失败:', err);
+  }
+}
+
 let cachedConfig: WorkbuddyAutoCheckinConfig | null = null;
-let cachedLogs: WorkbuddyAutoCheckinLogRecord[] | null = null;
 
 function isValidTime(time: unknown): time is string {
   return typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
@@ -259,141 +274,14 @@ export interface WorkbuddyAutoCheckinLogRecord {
   details: WorkbuddyAutoCheckinAccountDetail[];
 }
 
-const LOGS_KEY = 'agtools.workbuddy.auto_checkin_logs';
 export const WORKBUDDY_AUTO_CHECKIN_LOGS_CHANGED_EVENT = 'workbuddy-auto-checkin-logs-changed';
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export async function getWorkbuddyAutoCheckinLogsAsync(): Promise<WorkbuddyAutoCheckinLogRecord[]> {
-  try {
-    const logs = await invoke<WorkbuddyAutoCheckinLogRecord[]>('get_workbuddy_auto_checkin_logs');
-    cachedLogs = logs;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(LOGS_KEY, JSON.stringify(logs));
-    }
-    return logs;
-  } catch (err) {
-    console.warn('[WorkbuddyAutoCheckin] 从 Rust 端获取日志失败:', err);
-    return getWorkbuddyAutoCheckinLogs();
-  }
-}
-
-export function getWorkbuddyAutoCheckinLogs(): WorkbuddyAutoCheckinLogRecord[] {
-  if (cachedLogs) {
-    return cachedLogs;
-  }
-  if (typeof window === 'undefined') {
-    return [];
-  }
-  try {
-    const raw = localStorage.getItem(LOGS_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw) as WorkbuddyAutoCheckinLogRecord[];
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    const now = Date.now();
-    const validLogs = parsed.filter((log) => {
-      const logTime = new Date(log.timestamp.replace(' ', 'T')).getTime();
-      return !isNaN(logTime) && now - logTime <= THIRTY_DAYS_MS;
-    });
-
-    if (validLogs.length !== parsed.length) {
-      localStorage.setItem(LOGS_KEY, JSON.stringify(validLogs));
-    }
-    cachedLogs = validLogs;
-    return validLogs;
-  } catch {
-    return [];
-  }
-}
-
-export function saveWorkbuddyAutoCheckinLogs(logs: WorkbuddyAutoCheckinLogRecord[]): void {
-  cachedLogs = logs;
-  if (typeof window !== 'undefined') {
-    try {
-      const now = Date.now();
-      const validLogs = logs.filter((log) => {
-        const logTime = new Date(log.timestamp.replace(' ', 'T')).getTime();
-        return !isNaN(logTime) && now - logTime <= THIRTY_DAYS_MS;
-      });
-      localStorage.setItem(LOGS_KEY, JSON.stringify(validLogs));
-      window.dispatchEvent(new Event(WORKBUDDY_AUTO_CHECKIN_LOGS_CHANGED_EVENT));
-    } catch (err) {
-      console.warn('[WorkbuddyAutoCheckin] 保存自动签到日志失败:', err);
-    }
-  }
-}
-
-export function addWorkbuddyAutoCheckinLog(record: WorkbuddyAutoCheckinLogRecord): void {
-  const currentLogs = getWorkbuddyAutoCheckinLogs();
-  const existingIndex = currentLogs.findIndex((l) => l.date === record.date);
-
-  if (existingIndex < 0) {
-    saveWorkbuddyAutoCheckinLogs([record, ...currentLogs]);
-    return;
-  }
-
-  const existing = currentLogs[existingIndex];
-  if (!existing) {
-    saveWorkbuddyAutoCheckinLogs([record, ...currentLogs]);
-    return;
-  }
-
-  const mergedDetailsMap = new Map<string, WorkbuddyAutoCheckinAccountDetail>();
-  for (const d of existing.details) {
-    mergedDetailsMap.set(d.accountId, d);
-  }
-  for (const d of record.details) {
-    mergedDetailsMap.set(d.accountId, d);
-  }
-
-  const mergedDetails = Array.from(mergedDetailsMap.values());
-  let successCount = 0;
-  let alreadyCheckedCount = 0;
-  let failedCount = 0;
-
-  for (const d of mergedDetails) {
-    if (d.status === 'success') successCount++;
-    else if (d.status === 'already_checked') alreadyCheckedCount++;
-    else if (d.status === 'failed') failedCount++;
-  }
-
-  const totalAccounts = mergedDetails.length;
-  const overallStatus: WorkbuddyAutoCheckinLogRecord['status'] =
-    totalAccounts === 0
-      ? 'no_accounts'
-      : failedCount === 0
-        ? 'success'
-        : successCount > 0 || alreadyCheckedCount > 0
-          ? 'partial'
-          : 'failed';
-
-  const mergedRecord: WorkbuddyAutoCheckinLogRecord = {
-    id: existing.id,
-    timestamp: record.timestamp,
-    date: record.date,
-    durationMs: existing.durationMs + record.durationMs,
-    totalAccounts,
-    successCount,
-    alreadyCheckedCount,
-    failedCount,
-    status: overallStatus,
-    details: mergedDetails,
-  };
-
-  const updatedLogs = [...currentLogs];
-  updatedLogs[existingIndex] = mergedRecord;
-  saveWorkbuddyAutoCheckinLogs(updatedLogs);
+  return await invoke<WorkbuddyAutoCheckinLogRecord[]>('get_workbuddy_auto_checkin_logs');
 }
 
 export async function clearWorkbuddyAutoCheckinLogs(): Promise<void> {
-  if (typeof window !== 'undefined') {
-    await invoke('clear_workbuddy_auto_checkin_logs');
-  }
-  saveWorkbuddyAutoCheckinLogs([]);
+  await invoke('clear_workbuddy_auto_checkin_logs');
 }
 
 export function formatFormattedTimestamp(date: Date = new Date()): string {

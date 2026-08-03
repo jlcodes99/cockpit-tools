@@ -20,7 +20,6 @@ import {
   WorkbuddyAutoCheckinConfig,
   WorkbuddyAutoCheckinLogRecord,
   parseTimeToMinutes,
-  getWorkbuddyAutoCheckinLogs,
   getWorkbuddyAutoCheckinLogsAsync,
   clearWorkbuddyAutoCheckinLogs,
   runWorkbuddyAutoCheckinCycleIfNeeded,
@@ -47,9 +46,9 @@ export function WorkbuddyAutoCheckinConfigModal({
   const [endTime, setEndTime] = useState(config.endTime || '12:00');
   const [error, setError] = useState<string | null>(null);
 
-  const [logs, setLogs] = useState<WorkbuddyAutoCheckinLogRecord[]>(() =>
-    getWorkbuddyAutoCheckinLogs(),
-  );
+  const [logs, setLogs] = useState<WorkbuddyAutoCheckinLogRecord[]>([]);
+  const [logsLoading, setLogsLoading] = useState(true);
+  const [logsError, setLogsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [manualTesting, setManualTesting] = useState(false);
   const [expandedLogIds, setExpandedLogIds] = useState<Record<string, boolean>>({});
@@ -57,15 +56,34 @@ export function WorkbuddyAutoCheckinConfigModal({
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | undefined;
-    const handleLogsChange = () => {
-      void getWorkbuddyAutoCheckinLogsAsync().then((nextLogs) => {
-        if (!disposed) {
+    let requestId = 0;
+
+    const loadLogs = async () => {
+      const currentRequestId = ++requestId;
+      setLogsLoading(true);
+      setLogsError(null);
+
+      try {
+        const nextLogs = await getWorkbuddyAutoCheckinLogsAsync();
+        if (!disposed && currentRequestId === requestId) {
           setLogs(nextLogs);
         }
-      });
+      } catch (err) {
+        console.warn('[WorkbuddyAutoCheckin] 读取后端签到日志失败:', err);
+        if (!disposed && currentRequestId === requestId) {
+          setLogsError(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        if (!disposed && currentRequestId === requestId) {
+          setLogsLoading(false);
+        }
+      }
     };
-    handleLogsChange();
-    window.addEventListener(WORKBUDDY_AUTO_CHECKIN_LOGS_CHANGED_EVENT, handleLogsChange);
+
+    void loadLogs();
+    const handleLogsChange = () => {
+      void loadLogs();
+    };
     void listen(WORKBUDDY_AUTO_CHECKIN_LOGS_CHANGED_EVENT, handleLogsChange)
       .then((stopListening) => {
         if (disposed) {
@@ -80,7 +98,6 @@ export function WorkbuddyAutoCheckinConfigModal({
     return () => {
       disposed = true;
       unlisten?.();
-      window.removeEventListener(WORKBUDDY_AUTO_CHECKIN_LOGS_CHANGED_EVENT, handleLogsChange);
     };
   }, []);
 
@@ -120,6 +137,7 @@ export function WorkbuddyAutoCheckinConfigModal({
     try {
       const result = await runWorkbuddyAutoCheckinCycleIfNeeded(true);
       setLogs(await getWorkbuddyAutoCheckinLogsAsync());
+      setLogsError(null);
       if (result === 'retry') {
         setError(
           t(
@@ -305,7 +323,21 @@ export function WorkbuddyAutoCheckinConfigModal({
                 </div>
               </div>
 
-              {logs.length === 0 ? (
+              {logsLoading ? (
+                <div className="auto-checkin-empty-history">
+                  <Loader2 size={32} className="animate-spin" />
+                  <span>{t('workbuddy.checkin.historyLoading', '正在读取自动签到记录...')}</span>
+                </div>
+              ) : logsError ? (
+                <div className="auto-checkin-empty-history">
+                  <XCircle size={32} />
+                  <span>
+                    {t('workbuddy.checkin.historyLoadFailed', '读取自动签到记录失败：{{message}}', {
+                      message: logsError,
+                    })}
+                  </span>
+                </div>
+              ) : logs.length === 0 ? (
                 <div className="auto-checkin-empty-history">
                   <Clock size={32} />
                   <span>{t('workbuddy.checkin.noHistory', '暂无近 30 天的自动签到记录')}</span>
