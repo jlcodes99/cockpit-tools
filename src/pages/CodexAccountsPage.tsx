@@ -127,6 +127,7 @@ import {
   summarizeCodexQuotaErrorMessage,
 } from "../utils/codexQuotaError";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
+import { ModelProviderUsagePanel } from "../components/model-provider/ModelProviderUsagePanel";
 import {
   readCodexImportSyncApiService,
   writeCodexImportSyncApiService,
@@ -272,8 +273,12 @@ import {
 import {
   isModelProviderUsageUnavailableError,
   listModelProviderModels,
+  formatDeepSeekBalanceMoney,
+  resolveModelProviderUsageMode,
   resolveNewApiQuotaSnapshot,
+  selectDeepSeekBalanceInfo,
 } from "../services/modelProviderUsageService";
+import { getCurrentLanguage } from "../i18n";
 import { useSponsorStore } from "../stores/useSponsorStore";
 import type { Sponsor } from "../types/sponsor";
 import { buildValidAccountsFilterOption } from "../utils/accountValidityFilter";
@@ -526,7 +531,6 @@ function isPendingOAuthCodexAccount(account?: CodexAccount | null): boolean {
   return isCodexPendingOAuthAccount(account);
 }
 
-
 function isSponsorModelProvider(
   provider: CodexModelProvider | null | undefined,
   sponsorTemplates: SponsorApiProviderTemplate[],
@@ -698,33 +702,8 @@ function getCockpitApiStatsRecord(
 
 function resolveApiKeyUsageMode(
   summary?: CodexModelProviderUsageSummary,
-): "new_api" | "sub2api" | null {
-  if (!summary) return null;
-  if (summary.mode === "new_api" || summary.mode === "sub2api") {
-    return summary.mode;
-  }
-  if (
-    typeof summary.todayRequests === "number" ||
-    typeof summary.todayTotalTokens === "number"
-  ) {
-    return "sub2api";
-  }
-  const detailKeys = new Set((summary.details ?? []).map((item) => item.key));
-  if (
-    detailKeys.has("todayRequests") ||
-    detailKeys.has("todayTokens") ||
-    detailKeys.has("remaining")
-  ) {
-    return "sub2api";
-  }
-  if (
-    detailKeys.has("totalGranted") ||
-    detailKeys.has("totalAvailable") ||
-    detailKeys.has("expiresAt")
-  ) {
-    return "new_api";
-  }
-  return null;
+): "new_api" | "sub2api" | "deepseek" | null {
+  return resolveModelProviderUsageMode(summary);
 }
 
 interface CodexOverviewGeneralConfig {
@@ -6900,6 +6879,7 @@ export function CodexAccountsPage() {
     page.setAddMessage(t("common.shared.token.importing", "正在导入..."));
     try {
       let finalProviderPayload = providerPayload;
+      let initialUsageState: CodexApiKeyUsageState | null = null;
       if (
         validation.apiBaseUrl &&
         providerPayload.apiProviderMode === "custom" &&
@@ -6924,7 +6904,7 @@ export function CodexAccountsPage() {
             supportsVision: providerPayload.sponsorTemplate?.supportsVision,
             website: providerPayload.sponsorTemplate?.website,
             apiKeyUrl: providerPayload.sponsorTemplate?.apiKeyUrl,
-            wireApi: providerPayload.sponsorTemplate?.wireApi,
+            wireApi: providerPayload.apiWireApi,
             integrationType: providerPayload.sponsorTemplate?.integrationType,
           });
           finalProviderPayload = {
@@ -6944,6 +6924,11 @@ export function CodexAccountsPage() {
               apiKey: validation.apiKey,
               integrationType: savedProvider.integrationType ?? null,
             });
+            initialUsageState = {
+              loading: false,
+              summary: usageSummary,
+              updatedAt: Date.now(),
+            };
             if (
               (usageSummary.mode === "sub2api" ||
                 usageSummary.mode === "new_api") &&
@@ -6956,6 +6941,14 @@ export function CodexAccountsPage() {
             }
           } catch (usageErr) {
             console.warn("[CodexModelProviders] 额度类型探测失败", usageErr);
+            initialUsageState = {
+              loading: false,
+              error: isModelProviderUsageUnavailableError(usageErr)
+                ? undefined
+                : String(usageErr).replace(/^Error:\s*/, ""),
+              unavailable: isModelProviderUsageUnavailableError(usageErr),
+              updatedAt: Date.now(),
+            };
           }
           await reloadManagedProviders();
         } catch (providerErr) {
@@ -6981,6 +6974,12 @@ export function CodexAccountsPage() {
         finalProviderPayload.apiSupportsWebsockets,
         apiSyncModelCatalogToCodex,
       );
+      if (initialUsageState) {
+        setApiKeyUsageMap((previous) => ({
+          ...previous,
+          [account.id]: initialUsageState,
+        }));
+      }
       await fetchAccounts();
       await fetchCurrentAccount();
       await assignCodexAccountsToTargetGroup([account]);
@@ -7832,10 +7831,23 @@ export function CodexAccountsPage() {
       const baseUrl =
         provider?.baseUrl.trim() || (account.api_base_url || "").trim();
       const canRefresh = Boolean(apiKey && baseUrl);
-      const usageMode = resolveApiKeyUsageMode(summary);
+      const usageMode = resolveModelProviderUsageMode(summary);
+      const isDeepSeekUsage =
+        usageMode === "deepseek" || provider?.integrationType === "deepseek";
       const isNewApiUsage = usageMode === "new_api";
       const isSub2ApiUsage = usageMode === "sub2api";
       const usedPercent = formatApiKeyUsagePercent(summary);
+      if (isDeepSeekUsage) {
+        return (
+          <ModelProviderUsagePanel
+            summary={summary}
+            loading={loading}
+            error={usageState?.error}
+            unavailable={usageState?.unavailable}
+            variant={variant}
+          />
+        );
+      }
       if (variant === "card" && summary && isNewApiUsage) {
         const quota = resolveNewApiQuotaSnapshot(summary);
         const grantedText = formatApiKeyUsageMoney(quota.granted, summary.unit);
@@ -10793,7 +10805,7 @@ export function CodexAccountsPage() {
           apiKeyUsageProvider,
           sponsorApiProviderTemplates,
         );
-      const apiKeyUsageMode = resolveApiKeyUsageMode(
+      const apiKeyUsageMode = resolveModelProviderUsageMode(
         apiKeyUsageMap[account.id]?.summary,
       );
       const showApiKeyUsagePanel =
@@ -10810,7 +10822,8 @@ export function CodexAccountsPage() {
         !isSponsorApiKeyAccount &&
         (apiKeyUsageMode !== null ||
           apiKeyUsageProvider?.integrationType === "new_api" ||
-          apiKeyUsageProvider?.integrationType === "sub2api");
+          apiKeyUsageProvider?.integrationType === "sub2api" ||
+          apiKeyUsageProvider?.integrationType === "deepseek");
       const shouldRenderQuotaSection =
         (!hideRelayQuota && showApiKeyUsagePanel) ||
         !isApiKeyAccount ||
@@ -12200,7 +12213,7 @@ export function CodexAccountsPage() {
           apiKeyUsageProvider,
           sponsorApiProviderTemplates,
         );
-      const apiKeyUsageMode = resolveApiKeyUsageMode(
+      const apiKeyUsageMode = resolveModelProviderUsageMode(
         apiKeyUsageMap[account.id]?.summary,
       );
       const showApiKeyUsagePanel =
@@ -12217,7 +12230,8 @@ export function CodexAccountsPage() {
         !isSponsorApiKeyAccount &&
         (apiKeyUsageMode !== null ||
           apiKeyUsageProvider?.integrationType === "new_api" ||
-          apiKeyUsageProvider?.integrationType === "sub2api");
+          apiKeyUsageProvider?.integrationType === "sub2api" ||
+          apiKeyUsageProvider?.integrationType === "deepseek");
       const displayPlanClass = isSponsorApiKeyAccount
         ? "sponsor-api"
         : isQuotaAwareApiKeyAccount
@@ -12867,6 +12881,10 @@ export function CodexAccountsPage() {
       provider?.baseUrl.trim() || (account.api_base_url || "").trim() || "-";
     const usedPercent = formatApiKeyUsagePercent(summary);
     const newApiQuota = resolveNewApiQuotaSnapshot(summary);
+    const deepSeekBalance = selectDeepSeekBalanceInfo(
+      summary?.balanceInfos,
+      getCurrentLanguage(),
+    );
     const summaryDetails =
       usageMode === "new_api"
         ? [
@@ -12943,9 +12961,73 @@ export function CodexAccountsPage() {
                   : "-",
               },
             ]
-          : [];
+          : usageMode === "deepseek"
+            ? summary?.isAvailable === false
+              ? [
+                  {
+                    key: "balanceUnavailable",
+                    label: t(
+                      "codex.modelProviders.usage.accountBalance",
+                      "账户余额",
+                    ),
+                    value: t(
+                      "codex.modelProviders.usage.balanceUnavailable",
+                      "余额不可用",
+                    ),
+                  },
+                ]
+              : deepSeekBalance
+                ? [
+                    {
+                      key: "totalBalance",
+                      label: t(
+                        "codex.modelProviders.usage.totalBalance",
+                        "总余额",
+                      ),
+                      value: formatDeepSeekBalanceMoney(
+                        deepSeekBalance.totalBalance,
+                        deepSeekBalance.currency,
+                      ),
+                    },
+                    {
+                      key: "grantedBalance",
+                      label: t(
+                        "codex.modelProviders.usage.grantedBalance",
+                        "赠金余额",
+                      ),
+                      value: formatDeepSeekBalanceMoney(
+                        deepSeekBalance.grantedBalance,
+                        deepSeekBalance.currency,
+                      ),
+                    },
+                    {
+                      key: "toppedUpBalance",
+                      label: t(
+                        "codex.modelProviders.usage.toppedUpBalance",
+                        "充值余额",
+                      ),
+                      value: formatDeepSeekBalanceMoney(
+                        deepSeekBalance.toppedUpBalance,
+                        deepSeekBalance.currency,
+                      ),
+                    },
+                  ]
+                : [
+                    {
+                      key: "noBalanceData",
+                      label: t(
+                        "codex.modelProviders.usage.accountBalance",
+                        "账户余额",
+                      ),
+                      value: t(
+                        "codex.modelProviders.usage.noBalanceData",
+                        "暂无余额数据",
+                      ),
+                    },
+                  ]
+            : [];
     const summaryGridClassName =
-      usageMode === "sub2api" || usageMode === "new_api"
+      usageMode === "sub2api" || usageMode === "new_api" || usageMode === "deepseek"
         ? "cockpit-api-summary-grid compact"
         : "cockpit-api-summary-grid";
 

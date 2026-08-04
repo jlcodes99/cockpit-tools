@@ -14,10 +14,16 @@ import {
   isApiKeyFunProviderBaseUrl,
 } from '../utils/apikeyFunLinks';
 import {
+  isOfficialDeepSeekBaseUrl,
   queryModelProviderUsage,
+  type ModelProviderUsageIntegrationType,
   type ModelProviderUsageSummary,
 } from './modelProviderUsageService';
 import { moveCodexProviderApiKey } from '../utils/codexModelProviderApiKeyMove';
+
+export type CodexModelProviderIntegrationType = ModelProviderUsageIntegrationType;
+
+const DEEPSEEK_MODEL_CATALOG = ['deepseek-v4-pro', 'deepseek-v4-flash'];
 
 export interface CodexModelProviderApiKey {
   id: string;
@@ -32,7 +38,7 @@ export interface CodexModelProvider {
   name: string;
   baseUrl: string;
   sourceTag?: string;
-  integrationType?: 'sub2api' | 'new_api';
+  integrationType?: CodexModelProviderIntegrationType;
   modelCatalog?: string[];
   supportsVision?: boolean;
   modelCapabilities?: Record<string, { supportsVision?: boolean }>;
@@ -67,7 +73,7 @@ interface UpsertFromCredentialInput {
   apiKeyUrl?: string | null;
   wireApi?: CodexProviderWireApi | null;
   supportsWebsockets?: boolean;
-  integrationType?: 'sub2api' | 'new_api' | null;
+  integrationType?: CodexModelProviderIntegrationType | null;
 }
 
 let providerIdCounter = 0;
@@ -156,8 +162,10 @@ function hasOwnProperty(value: object, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
 }
 
-function normalizeIntegrationType(value: unknown): 'sub2api' | 'new_api' | undefined {
-  return value === 'sub2api' || value === 'new_api' ? value : undefined;
+function normalizeIntegrationType(value: unknown): CodexModelProviderIntegrationType | undefined {
+  return value === 'sub2api' || value === 'new_api' || value === 'deepseek'
+    ? value
+    : undefined;
 }
 
 function migrateApiKeyFunProviderWireApi(
@@ -211,10 +219,37 @@ function normalizeBaseUrlForStore(value: string): string {
   try {
     const parsed = new URL(trimmed);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return trimmed;
+    if (parsed.hostname.toLowerCase() === 'api.deepseek.com') {
+      return 'https://api.deepseek.com';
+    }
     return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '');
   } catch {
     return trimmed;
   }
+}
+
+function rawProviderNeedsDeepSeekMigration(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const provider = value as Record<string, unknown>;
+  if (!isOfficialDeepSeekBaseUrl(provider.baseUrl)) return false;
+  const models = normalizeModelCatalog(provider.modelCatalog);
+  const rawBaseUrl = String(provider.baseUrl ?? '').trim().replace(/\/+$/, '');
+  return (
+    rawBaseUrl !== 'https://api.deepseek.com' ||
+    provider.wireApi !== 'responses' ||
+    provider.integrationType !== 'deepseek' ||
+    provider.enableModePreference === 'gateway' ||
+    models?.join('\n') !== 'deepseek-v4-pro\ndeepseek-v4-flash'
+  );
+}
+
+function enforceOfficialDeepSeekProvider(provider: CodexModelProvider): void {
+  if (!isOfficialDeepSeekBaseUrl(provider.baseUrl)) return;
+  provider.baseUrl = 'https://api.deepseek.com';
+  provider.wireApi = 'responses';
+  provider.enableModePreference = 'direct';
+  provider.integrationType = 'deepseek';
+  provider.modelCatalog = [...DEEPSEEK_MODEL_CATALOG];
 }
 
 function deriveProviderNameFromBaseUrl(baseUrl: string): string {
@@ -264,29 +299,44 @@ function toValidProviderList(raw: unknown): CodexModelProvider[] {
   if (!Array.isArray(raw)) return [];
   const now = Date.now();
   const providers: CodexModelProvider[] = [];
-  const seenBaseUrls = new Set<string>();
+  const seenBaseUrls = new Map<string, CodexModelProvider>();
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const name = sanitizeName(String((item as { name?: unknown }).name ?? ''));
     const baseUrl = normalizeBaseUrlForStore(String((item as { baseUrl?: unknown }).baseUrl ?? ''));
     const normalizedBaseUrl = normalizeCodexModelProviderBaseUrl(baseUrl);
     if (!name || !baseUrl || !normalizedBaseUrl) continue;
-    if (seenBaseUrls.has(normalizedBaseUrl)) continue;
-    seenBaseUrls.add(normalizedBaseUrl);
+    const apiKeys = toValidApiKeys((item as { apiKeys?: unknown }).apiKeys, now);
+    const existing = seenBaseUrls.get(normalizedBaseUrl);
+    if (existing) {
+      if (isOfficialDeepSeekBaseUrl(baseUrl)) {
+        for (const apiKey of apiKeys) {
+          if (!existing.apiKeys.some((current) => current.apiKey === apiKey.apiKey)) {
+            existing.apiKeys.push(apiKey);
+          }
+        }
+      }
+      continue;
+    }
     const boundOauthAccountId = normalizeBoundOauthAccountId(
       (item as { boundOauthAccountId?: unknown }).boundOauthAccountId,
     );
-    const wireApi = normalizeWireApi((item as { wireApi?: unknown }).wireApi);
-    providers.push({
+    const isDeepSeek = isOfficialDeepSeekBaseUrl(baseUrl);
+    const wireApi = isDeepSeek
+      ? 'responses'
+      : normalizeWireApi((item as { wireApi?: unknown }).wireApi);
+    const provider: CodexModelProvider = {
       id: String((item as { id?: unknown }).id ?? createProviderId()),
       name,
       baseUrl,
       sourceTag: sanitizeName(String((item as { sourceTag?: unknown }).sourceTag ?? '')) || undefined,
-      integrationType: normalizeIntegrationType(
-        (item as { integrationType?: unknown }).integrationType,
-      ),
+      integrationType: isDeepSeek
+        ? 'deepseek'
+        : normalizeIntegrationType((item as { integrationType?: unknown }).integrationType),
       modelCatalog:
-        normalizeModelCatalog((item as { modelCatalog?: unknown }).modelCatalog) ??
+        (isDeepSeek
+          ? [...DEEPSEEK_MODEL_CATALOG]
+          : normalizeModelCatalog((item as { modelCatalog?: unknown }).modelCatalog)) ??
         presetModelCatalogForBaseUrl(baseUrl),
       supportsVision: (item as { supportsVision?: unknown }).supportsVision === true,
       modelCapabilities: normalizeModelCapabilities(
@@ -310,10 +360,13 @@ function toValidProviderList(raw: unknown): CodexModelProvider[] {
         (item as { enableModePreference?: unknown }).enableModePreference,
       ),
       boundOauthAccountId,
-      apiKeys: toValidApiKeys((item as { apiKeys?: unknown }).apiKeys, now),
+      apiKeys,
       createdAt: Number((item as { createdAt?: unknown }).createdAt ?? now),
       updatedAt: Number((item as { updatedAt?: unknown }).updatedAt ?? now),
-    });
+    };
+    enforceOfficialDeepSeekProvider(provider);
+    providers.push(provider);
+    seenBaseUrls.set(normalizedBaseUrl, provider);
   }
   return providers.sort((a, b) => a.createdAt - b.createdAt);
 }
@@ -340,6 +393,7 @@ async function loadProvidersFromDisk(): Promise<{
   providers: CodexModelProvider[];
   removedImageGenerationSetting: boolean;
   migratedSupportsWebsockets: boolean;
+  migratedDeepSeekProviders: boolean;
 }> {
   const raw = await invoke<string>('load_codex_model_providers');
   const parsed = JSON.parse(raw);
@@ -347,6 +401,14 @@ async function loadProvidersFromDisk(): Promise<{
     providers: toValidProviderList(parsed),
     removedImageGenerationSetting: hasRemovedImageGenerationSetting(parsed),
     migratedSupportsWebsockets: hasLegacySupportsWebsocketsProvider(parsed),
+    migratedDeepSeekProviders:
+      Array.isArray(parsed) &&
+      (parsed.some(rawProviderNeedsDeepSeekMigration) ||
+        parsed.filter((provider) =>
+          isOfficialDeepSeekBaseUrl(
+            (provider as { baseUrl?: unknown } | null)?.baseUrl,
+          ),
+        ).length > 1),
   };
 }
 
@@ -362,6 +424,7 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
     providers: [],
     removedImageGenerationSetting: false,
     migratedSupportsWebsockets: false,
+    migratedDeepSeekProviders: false,
   }));
   const loadedProviders = loadResult.providers;
   let loaded = loadedProviders.filter((provider) => {
@@ -377,9 +440,10 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
     loaded.length !== loadedProviders.length ||
     migration.changed ||
     loadResult.removedImageGenerationSetting ||
-    loadResult.migratedSupportsWebsockets
+    loadResult.migratedSupportsWebsockets ||
+    loadResult.migratedDeepSeekProviders
   ) {
-    await saveProvidersToDisk(loaded).catch(() => { });
+    await saveProvidersToDisk(loaded);
   }
   cachedProviders = loaded;
   return cloneProviders(cachedProviders);
@@ -387,8 +451,8 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
 
 async function writeProviders(providers: CodexModelProvider[]): Promise<void> {
   const next = cloneProviders(providers);
-  cachedProviders = next;
   await saveProvidersToDisk(next);
+  cachedProviders = next;
 }
 
 export async function listCodexModelProviders(): Promise<CodexModelProvider[]> {
@@ -457,7 +521,7 @@ export async function createCodexModelProvider(input: {
   wireApi?: CodexProviderWireApi;
   supportsWebsockets?: boolean;
   enableModePreference?: CodexProviderEnableModePreference;
-  integrationType?: 'sub2api' | 'new_api';
+  integrationType?: CodexModelProviderIntegrationType;
   boundOauthAccountId?: string | null;
   initialApiKey?: string;
   initialApiKeyName?: string;
@@ -499,6 +563,7 @@ export async function createCodexModelProvider(input: {
   if (input.initialApiKey) {
     ensureApiKeyOnProvider(provider, input.initialApiKey, input.initialApiKeyName);
   }
+  enforceOfficialDeepSeekProvider(provider);
   providers.push(provider);
   await writeProviders(providers);
   return { ...provider, apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey })) };
@@ -520,7 +585,7 @@ export async function updateCodexModelProvider(
     wireApi?: CodexProviderWireApi | null;
     supportsWebsockets?: boolean;
     enableModePreference?: CodexProviderEnableModePreference | null;
-    integrationType?: 'sub2api' | 'new_api' | null;
+    integrationType?: CodexModelProviderIntegrationType | null;
     boundOauthAccountId?: string | null;
   },
 ): Promise<CodexModelProvider> {
@@ -612,6 +677,7 @@ export async function updateCodexModelProvider(
         : normalizeBoundOauthAccountId(patch.boundOauthAccountId);
   }
   provider.updatedAt = Date.now();
+  enforceOfficialDeepSeekProvider(provider);
   await writeProviders(providers);
   return { ...provider, apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey })) };
 }
@@ -626,6 +692,7 @@ export async function addApiKeyToCodexModelProvider(
   if (!provider) throw new Error('PROVIDER_NOT_FOUND');
   ensureApiKeyOnProvider(provider, apiKey, apiKeyName);
   provider.updatedAt = Date.now();
+  enforceOfficialDeepSeekProvider(provider);
   await writeProviders(providers);
   return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
 }
@@ -751,14 +818,14 @@ export async function cancelCodexModelProviderChatTest(runId: string): Promise<b
 export async function queryCodexModelProviderUsage(input: {
   baseUrl: string;
   apiKey: string;
-  integrationType?: 'sub2api' | 'new_api' | null;
+  integrationType?: CodexModelProviderIntegrationType | null;
 }): Promise<CodexModelProviderUsageSummary> {
   return await queryModelProviderUsage(input);
 }
 
 export async function saveCodexModelProviderDetectedIntegrationType(
   providerId: string,
-  integrationType: 'sub2api' | 'new_api',
+  integrationType: CodexModelProviderIntegrationType,
 ): Promise<CodexModelProvider> {
   return updateCodexModelProvider(providerId, { integrationType });
 }
@@ -865,6 +932,7 @@ export async function upsertCodexModelProviderFromCredential(
     provider.integrationType = normalizeIntegrationType(input.integrationType);
   }
   provider.updatedAt = Date.now();
+  enforceOfficialDeepSeekProvider(provider);
   await writeProviders(providers);
   return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
 }

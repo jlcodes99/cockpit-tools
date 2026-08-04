@@ -3141,6 +3141,11 @@
           "modelLimitsEnabled": "Лимиты моделей"
         },
         "accountBalance": "Баланс аккаунта",
+        "totalBalance": "Общий баланс",
+        "grantedBalance": "Подарочный баланс",
+        "toppedUpBalance": "Пополненный баланс",
+        "balanceUnavailable": "Баланс недоступен",
+        "noBalanceData": "Нет данных о балансе",
         "unlimitedQuota": "Безлимитно",
         "booleanTrue": "Да",
         "booleanFalse": "Нет"

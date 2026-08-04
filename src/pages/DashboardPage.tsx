@@ -116,12 +116,15 @@ import {
   refreshCodexApiKeyUsageForAccounts,
 } from '../services/codexApiKeyUsageRefreshService';
 import {
+  CODEX_API_KEY_USAGE_AUTO_REFRESH_INTERVAL_MS,
   isModelProviderUsageUnavailableError,
+  resolveModelProviderUsageMode,
   resolveNewApiQuotaSnapshot,
   type ModelProviderUsageSummary,
 } from '../services/modelProviderUsageService';
 import * as traeService from '../services/traeService';
 import type { TraePlatformId } from '../services/traeService';
+import { ModelProviderUsagePanel } from '../components/model-provider/ModelProviderUsagePanel';
 
 interface DashboardPageProps {
   onNavigate: (page: Page) => void;
@@ -189,37 +192,6 @@ function pickRecommendedTraeAccount(accounts: TraeAccount[], currentId?: string 
 
 function toFiniteNumber(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function resolveDashboardCodexApiUsageMode(
-  summary?: ModelProviderUsageSummary | null,
-): 'new_api' | 'sub2api' | null {
-  if (!summary) return null;
-  if (summary.mode === 'new_api' || summary.mode === 'sub2api') {
-    return summary.mode;
-  }
-  if (
-    typeof summary.todayRequests === 'number' ||
-    typeof summary.todayTotalTokens === 'number'
-  ) {
-    return 'sub2api';
-  }
-  const detailKeys = new Set((summary.details ?? []).map((item) => item.key));
-  if (
-    detailKeys.has('todayRequests') ||
-    detailKeys.has('todayTokens') ||
-    detailKeys.has('remaining')
-  ) {
-    return 'sub2api';
-  }
-  if (
-    detailKeys.has('totalGranted') ||
-    detailKeys.has('totalAvailable') ||
-    detailKeys.has('expiresAt')
-  ) {
-    return 'new_api';
-  }
-  return null;
 }
 
 function resolveDashboardCurrentAccount<T extends { id: string }>(
@@ -884,9 +856,9 @@ export function DashboardPage({
       setCodexApiUsageMap((prev) => ({
         ...prev,
         [account.id]: {
-          ...usageState,
-          loading: false,
-        },
+        ...usageState,
+        loading: false,
+      },
       }));
     } catch (error) {
       setCodexApiUsageMap((prev) => ({
@@ -2283,7 +2255,7 @@ export function DashboardPage({
         isCodexChatCompletionsApiKeyAccount(account);
       const usageState = codexApiUsageMap[account.id];
       const usageSummary = usageState?.summary;
-      const usageMode = resolveDashboardCodexApiUsageMode(usageSummary);
+      const usageMode = resolveModelProviderUsageMode(usageSummary);
       const newApiQuota = resolveNewApiQuotaSnapshot(usageSummary);
       const newApiGranted = newApiQuota.granted;
       const newApiAvailable = newApiQuota.available;
@@ -2311,7 +2283,14 @@ export function DashboardPage({
 
           {!isChatCompletionsApiKey && (
             <div className="account-mini-quotas codex-api-mini-quotas">
-              {usageMode === 'new_api' ? (
+              {usageMode === 'deepseek' ? (
+                <ModelProviderUsagePanel
+                  summary={usageSummary}
+                  loading={usageState?.loading}
+                  error={usageState?.error}
+                  unavailable={usageState?.unavailable}
+                />
+              ) : usageMode === 'new_api' ? (
                 <div className="mini-quota-row-stacked">
                   <div className="mini-quota-header">
                     <span className="model-name">{t('codex.cockpitApi.balance', '额度')}</span>
@@ -2400,13 +2379,13 @@ export function DashboardPage({
         !isCodexChatCompletionsApiKeyAccount(account!),
     );
     targetAccounts.forEach((account) => {
-      const usageState = codexApiUsageMap[account.id];
+      const usage = codexApiUsageMap[account.id];
+      if (usage?.loading) {
+        return;
+      }
       if (
-        usageState?.loading ||
-        usageState?.summary ||
-        usageState?.unavailable ||
-        usageState?.error ||
-        usageState?.updatedAt !== undefined
+        (usage?.updatedAt ?? 0) > 0 &&
+        Date.now() - (usage?.updatedAt ?? 0) < CODEX_API_KEY_USAGE_AUTO_REFRESH_INTERVAL_MS
       ) {
         return;
       }

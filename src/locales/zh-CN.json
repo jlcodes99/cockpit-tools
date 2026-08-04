@@ -2901,6 +2901,11 @@
           "modelLimitsEnabled": "模型限制"
         },
         "accountBalance": "账户余额",
+        "totalBalance": "总余额",
+        "grantedBalance": "赠金余额",
+        "toppedUpBalance": "充值余额",
+        "balanceUnavailable": "余额不可用",
+        "noBalanceData": "暂无余额数据",
         "unlimitedQuota": "无限额度",
         "booleanTrue": "是",
         "booleanFalse": "否"

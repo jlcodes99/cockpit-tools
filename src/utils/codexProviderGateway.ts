@@ -36,7 +36,6 @@ export interface CodexProviderCapabilityProfile {
 }
 
 const CHAT_COMPLETIONS_PRESET_IDS = new Set([
-  "deepseek",
   "moonshot",
   "siliconflow",
   "siliconflow_en",

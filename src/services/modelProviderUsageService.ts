@@ -1,6 +1,24 @@
 import { invoke } from '@tauri-apps/api/core';
 
-export type ModelProviderUsageIntegrationType = 'sub2api' | 'new_api';
+export {
+  formatDeepSeekBalanceMoney,
+  isOfficialDeepSeekBaseUrl,
+  preferredDeepSeekCurrency,
+  readCodexApiKeyUsageCache,
+  selectDeepSeekBalanceInfo,
+  writeCodexApiKeyUsageCache,
+} from './modelProviderUsageHelpers';
+export type {
+  CodexApiKeyUsageCacheEntry,
+  DeepSeekBalanceInfo,
+  ModelProviderUsageSummary,
+} from './modelProviderUsageHelpers';
+import {
+  isOfficialDeepSeekBaseUrl,
+  type ModelProviderUsageSummary,
+} from './modelProviderUsageHelpers';
+
+export type ModelProviderUsageIntegrationType = 'sub2api' | 'new_api' | 'deepseek';
 export type ModelProviderUsageMode = ModelProviderUsageIntegrationType;
 
 export interface ModelProviderModel {
@@ -13,32 +31,7 @@ export interface ModelProviderModelsResult {
   latencyMs: number;
 }
 
-export interface ModelProviderUsageSummary {
-  mode?: string | null;
-  isValid?: boolean | null;
-  status?: string | null;
-  planName?: string | null;
-  remaining?: number | null;
-  balance?: number | null;
-  unit?: string | null;
-  quotaUnlimited?: boolean | null;
-  quotaLimit?: number | null;
-  quotaUsed?: number | null;
-  quotaRemaining?: number | null;
-  todayRequests?: number | null;
-  todayTotalTokens?: number | null;
-  todayCost?: number | null;
-  totalRequests?: number | null;
-  totalTotalTokens?: number | null;
-  totalCost?: number | null;
-  modelStatsCount: number;
-  latencyMs: number;
-  details?: Array<{
-    key: string;
-    label: string;
-    value: string;
-  }>;
-}
+export const CODEX_API_KEY_USAGE_AUTO_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
 export interface NewApiQuotaSnapshot {
   granted: number | null;
@@ -120,7 +113,8 @@ export async function queryModelProviderUsage(input: {
       return await invoke('codex_query_model_provider_usage', {
         baseUrl,
         apiKey: input.apiKey,
-        integrationType: input.integrationType ?? null,
+        integrationType:
+          isOfficialDeepSeekBaseUrl(baseUrl) ? 'deepseek' : input.integrationType ?? null,
       });
     } catch (error) {
       lastError = error;
@@ -155,7 +149,11 @@ export function resolveModelProviderUsageMode(
   summary?: ModelProviderUsageSummary,
 ): ModelProviderUsageMode | null {
   if (!summary) return null;
-  if (summary.mode === 'new_api' || summary.mode === 'sub2api') {
+  if (
+    summary.mode === 'new_api' ||
+    summary.mode === 'sub2api' ||
+    summary.mode === 'deepseek'
+  ) {
     return summary.mode;
   }
   if (

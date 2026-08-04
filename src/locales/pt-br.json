@@ -3141,6 +3141,11 @@
           "modelLimitsEnabled": "Limites de modelo"
         },
         "accountBalance": "Saldo da conta",
+        "totalBalance": "Saldo total",
+        "grantedBalance": "Saldo concedido",
+        "toppedUpBalance": "Saldo recarregado",
+        "balanceUnavailable": "Saldo indisponível",
+        "noBalanceData": "Sem dados de saldo",
         "unlimitedQuota": "Ilimitado",
         "booleanTrue": "Sim",
         "booleanFalse": "Não"

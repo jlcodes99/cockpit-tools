@@ -1101,6 +1101,115 @@ mod imp {
             .unwrap_or_else(|| "-".to_string())
     }
 
+    fn format_deepseek_balance_money(value: &str, currency: &str) -> String {
+        let amount = value.trim();
+        let unit = currency.trim().to_ascii_uppercase();
+        if amount.is_empty() {
+            return "-".to_string();
+        }
+        if unit == "USD" {
+            format!("${amount}")
+        } else if unit.is_empty() {
+            amount.to_string()
+        } else {
+            format!("{amount} {unit}")
+        }
+    }
+
+    fn build_deepseek_usage_rows(lang: &str, summary: &Value) -> Option<Vec<QuotaRow>> {
+        if json_path(Some(summary), &["mode"])
+            .and_then(Value::as_str)
+            .map(str::trim)
+            != Some("deepseek")
+        {
+            return None;
+        }
+        if json_path(Some(summary), &["isAvailable"]).and_then(json_bool) == Some(false) {
+            return Some(vec![make_text_row(
+                translate_or(
+                    lang,
+                    "codex.modelProviders.usage.accountBalance",
+                    "Account Balance",
+                    &[],
+                ),
+                translate_or(
+                    lang,
+                    "codex.modelProviders.usage.balanceUnavailable",
+                    "Balance unavailable",
+                    &[],
+                ),
+                None,
+            )]);
+        }
+
+        let infos = json_path(Some(summary), &["balanceInfos"])
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let preferred_currency = if matches!(normalize_lang(lang).as_str(), "zh-cn" | "zh-tw") {
+            "CNY"
+        } else {
+            "USD"
+        };
+        let balance = infos
+            .iter()
+            .find(|info| {
+                json_path(Some(info), &["currency"])
+                    .and_then(Value::as_str)
+                    .is_some_and(|currency| currency.eq_ignore_ascii_case(preferred_currency))
+            })
+            .or_else(|| infos.first());
+        let Some(balance) = balance else {
+            return Some(vec![make_text_row(
+                translate_or(
+                    lang,
+                    "codex.modelProviders.usage.accountBalance",
+                    "Account Balance",
+                    &[],
+                ),
+                translate_or(
+                    lang,
+                    "codex.modelProviders.usage.noBalanceData",
+                    "No balance data",
+                    &[],
+                ),
+                None,
+            )]);
+        };
+        let currency = json_path(Some(balance), &["currency"])
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let row = |key: &str, fallback: &str, field: &str| {
+            make_text_row(
+                translate_or(lang, key, fallback, &[]),
+                format_deepseek_balance_money(
+                    json_path(Some(balance), &[field])
+                        .and_then(Value::as_str)
+                        .unwrap_or_default(),
+                    currency,
+                ),
+                None,
+            )
+        };
+        Some(vec![
+            row(
+                "codex.modelProviders.usage.totalBalance",
+                "Total Balance",
+                "totalBalance",
+            ),
+            row(
+                "codex.modelProviders.usage.grantedBalance",
+                "Granted Balance",
+                "grantedBalance",
+            ),
+            row(
+                "codex.modelProviders.usage.toppedUpBalance",
+                "Topped-up Balance",
+                "toppedUpBalance",
+            ),
+        ])
+    }
+
     fn build_codex_api_key_usage_rows(
         lang: &str,
         account: &crate::models::codex::CodexAccount,
@@ -1112,6 +1221,9 @@ mod imp {
                 Some(modules::i18n::translate(lang, "common.refresh", &[])),
             )];
         };
+        if let Some(rows) = build_deepseek_usage_rows(lang, summary) {
+            return rows;
+        }
         let mode = json_path(Some(summary), &["mode"])
             .and_then(Value::as_str)
             .map(str::trim)
@@ -4756,7 +4868,7 @@ mod imp {
         base_url: &str,
         mode: &str,
     ) -> Result<(), String> {
-        if mode != "new_api" && mode != "sub2api" {
+        if mode != "new_api" && mode != "sub2api" && mode != "deepseek" {
             return Ok(());
         }
         let raw = commands::codex::load_codex_model_providers().await?;
@@ -4796,6 +4908,38 @@ mod imp {
                                 chrono::Utc::now().timestamp_millis(),
                             )),
                         );
+                        changed = true;
+                    }
+                }
+                if mode == "deepseek" {
+                    let expected_models =
+                        serde_json::json!(["deepseek-v4-pro", "deepseek-v4-flash"]);
+                    let needs_normalization = json_path(Some(provider), &["baseUrl"])
+                        .and_then(Value::as_str)
+                        != Some("https://api.deepseek.com")
+                        || json_path(Some(provider), &["wireApi"]).and_then(Value::as_str)
+                            != Some("responses")
+                        || json_path(Some(provider), &["enableModePreference"])
+                            .and_then(Value::as_str)
+                            != Some("direct")
+                        || json_path(Some(provider), &["modelCatalog"]) != Some(&expected_models);
+                    if needs_normalization {
+                        let object = provider
+                            .as_object_mut()
+                            .expect("provider object validated while loading");
+                        object.insert(
+                            "baseUrl".to_string(),
+                            Value::String("https://api.deepseek.com".to_string()),
+                        );
+                        object.insert(
+                            "wireApi".to_string(),
+                            Value::String("responses".to_string()),
+                        );
+                        object.insert(
+                            "enableModePreference".to_string(),
+                            Value::String("direct".to_string()),
+                        );
+                        object.insert("modelCatalog".to_string(), expected_models);
                         changed = true;
                     }
                 }
@@ -5185,6 +5329,70 @@ mod imp {
     fn open_main_window() {
         if let Some(app) = crate::get_app_handle() {
             let _ = modules::floating_card_window::show_main_window(app);
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn deepseek_menu_balance_uses_language_currency_and_fallback() {
+            let summary = serde_json::json!({
+                "mode": "deepseek",
+                "isAvailable": true,
+                "balanceInfos": [
+                    {
+                        "currency": "USD",
+                        "totalBalance": "1.25",
+                        "grantedBalance": "0.25",
+                        "toppedUpBalance": "1.00"
+                    },
+                    {
+                        "currency": "CNY",
+                        "totalBalance": "9.0000",
+                        "grantedBalance": "1.0000",
+                        "toppedUpBalance": "8.0000"
+                    }
+                ]
+            });
+
+            let zh_rows = build_deepseek_usage_rows("zh-tw", &summary).expect("deepseek rows");
+            assert_eq!(zh_rows[0].value, "9.0000 CNY");
+            let en_rows = build_deepseek_usage_rows("en", &summary).expect("deepseek rows");
+            assert_eq!(en_rows[0].value, "$1.25");
+
+            let fallback = serde_json::json!({
+                "mode": "deepseek",
+                "isAvailable": true,
+                "balanceInfos": [{
+                    "currency": "EUR",
+                    "totalBalance": "2.50",
+                    "grantedBalance": "0.00",
+                    "toppedUpBalance": "2.50"
+                }]
+            });
+            let fallback_rows =
+                build_deepseek_usage_rows("zh-cn", &fallback).expect("fallback rows");
+            assert_eq!(fallback_rows[0].value, "2.50 EUR");
+        }
+
+        #[test]
+        fn deepseek_menu_balance_unavailable_hides_amounts() {
+            let summary = serde_json::json!({
+                "mode": "deepseek",
+                "isAvailable": false,
+                "balanceInfos": [{
+                    "currency": "CNY",
+                    "totalBalance": "9.00",
+                    "grantedBalance": "1.00",
+                    "toppedUpBalance": "8.00"
+                }]
+            });
+
+            let rows = build_deepseek_usage_rows("zh-cn", &summary).expect("deepseek rows");
+            assert_eq!(rows.len(), 1);
+            assert!(!rows[0].value.contains("9.00"));
         }
     }
 }

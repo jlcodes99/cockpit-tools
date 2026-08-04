@@ -3141,6 +3141,11 @@
           "modelLimitsEnabled": "모델 제한"
         },
         "accountBalance": "계정 잔액",
+        "totalBalance": "총 잔액",
+        "grantedBalance": "지급 잔액",
+        "toppedUpBalance": "충전 잔액",
+        "balanceUnavailable": "잔액을 사용할 수 없음",
+        "noBalanceData": "잔액 데이터 없음",
         "unlimitedQuota": "무제한",
         "booleanTrue": "예",
         "booleanFalse": "아니요"

@@ -298,6 +298,42 @@ fn build_codex_client_model(model_id: &str, index: usize) -> Value {
     object.insert("supported_in_api".to_string(), Value::Bool(true));
     object.insert("availability_nux".to_string(), Value::Null);
     object.insert("upgrade".to_string(), Value::Null);
+    if matches!(model_id, "deepseek-v4-pro" | "deepseek-v4-flash") {
+        object.insert("prefer_websockets".to_string(), Value::Bool(false));
+        object.insert(
+            "web_search_tool_type".to_string(),
+            Value::String("text".to_string()),
+        );
+        object.insert("input_modalities".to_string(), json!(["text"]));
+        object.insert(
+            "supports_image_detail_original".to_string(),
+            Value::Bool(false),
+        );
+        object.insert(
+            "truncation_policy".to_string(),
+            json!({ "mode": "tokens", "limit": 10_000 }),
+        );
+        object.insert("multi_agent_version".to_string(), json!("v2"));
+        object.insert("use_responses_lite".to_string(), Value::Bool(false));
+        object.insert(
+            "include_skills_usage_instructions".to_string(),
+            Value::Bool(false),
+        );
+        object.insert("context_window".to_string(), json!(1_048_576));
+        object.insert("max_context_window".to_string(), json!(1_048_576));
+        object.insert("effective_context_window_percent".to_string(), json!(95));
+        object.insert("default_reasoning_level".to_string(), json!("high"));
+        object.insert(
+            "supported_reasoning_levels".to_string(),
+            json!([
+                { "effort": "low", "description": "Fast responses with lighter reasoning" },
+                { "effort": "high", "description": "Extra high reasoning depth for complex problems" },
+                { "effort": "max", "description": "Maximum reasoning depth for the hardest problems" }
+            ]),
+        );
+        object.insert("minimal_client_version".to_string(), json!("0.144.0"));
+        object.insert("priority".to_string(), json!(index + 1));
+    }
     model
 }
 
@@ -372,6 +408,8 @@ fn display_name_for_model(model_id: &str) -> String {
         "gpt-5.1-codex-max" => "GPT-5.1 Codex Max".to_string(),
         "gpt-5.1-codex-mini" => "GPT-5.1 Codex Mini".to_string(),
         "gpt-image-2" => "GPT Image 2".to_string(),
+        "deepseek-v4-pro" => "DeepSeek-V4-Pro".to_string(),
+        "deepseek-v4-flash" => "DeepSeek-V4-Flash".to_string(),
         CODEX_AUTO_REVIEW_MODEL_ID => "Codex Auto Review".to_string(),
         other => other.to_string(),
     }
@@ -1034,5 +1072,61 @@ mod tests {
                 .map(Vec::len),
             Some(0)
         );
+    }
+
+    #[test]
+    fn deepseek_models_use_official_codex_metadata() {
+        let response = build_codex_client_models_response(&[
+            "deepseek-v4-pro".to_string(),
+            "deepseek-v4-flash".to_string(),
+        ]);
+
+        for index in 0..2 {
+            let model = response
+                .pointer(&format!("/models/{index}"))
+                .expect("deepseek model");
+            assert_eq!(
+                model.get("context_window").and_then(Value::as_i64),
+                Some(1_048_576)
+            );
+            assert_eq!(
+                model.get("max_context_window").and_then(Value::as_i64),
+                Some(1_048_576)
+            );
+            assert_eq!(
+                model
+                    .get("effective_context_window_percent")
+                    .and_then(Value::as_i64),
+                Some(95)
+            );
+            assert_eq!(
+                model.get("prefer_websockets").and_then(Value::as_bool),
+                Some(false)
+            );
+            assert_eq!(
+                model.get("input_modalities").and_then(Value::as_array),
+                Some(&vec![Value::String("text".to_string())])
+            );
+            assert_eq!(
+                model.get("web_search_tool_type").and_then(Value::as_str),
+                Some("text")
+            );
+            assert_eq!(
+                model.get("default_reasoning_level").and_then(Value::as_str),
+                Some("high")
+            );
+            assert_eq!(
+                model.get("minimal_client_version").and_then(Value::as_str),
+                Some("0.144.0")
+            );
+            let efforts = model
+                .get("supported_reasoning_levels")
+                .and_then(Value::as_array)
+                .expect("reasoning levels")
+                .iter()
+                .filter_map(|level| level.get("effort").and_then(Value::as_str))
+                .collect::<Vec<_>>();
+            assert_eq!(efforts, vec!["low", "high", "max"]);
+        }
     }
 }

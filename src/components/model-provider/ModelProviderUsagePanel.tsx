@@ -3,7 +3,9 @@ import {
   formatModelProviderUsageInteger,
   formatModelProviderUsageMoney,
   formatModelProviderUsageTokenCount,
+  formatDeepSeekBalanceMoney,
   resolveModelProviderUsageMode,
+  selectDeepSeekBalanceInfo,
   type ModelProviderUsageSummary,
 } from '../../services/modelProviderUsageService';
 
@@ -24,9 +26,10 @@ export function ModelProviderUsagePanel({
   className,
   variant,
 }: ModelProviderUsagePanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const usageMode = resolveModelProviderUsageMode(summary ?? undefined);
-  const isSupportedUsage = usageMode === 'sub2api' || usageMode === 'new_api';
+  const isSupportedUsage =
+    usageMode === 'sub2api' || usageMode === 'new_api' || usageMode === 'deepseek';
   const classNames = [
     'codex-api-key-usage-panel',
     usageMode ?? 'sub2api',
@@ -53,6 +56,49 @@ export function ModelProviderUsagePanel({
 
   if (!isSupportedUsage) {
     return null;
+  }
+
+  if (usageMode === 'deepseek') {
+    if (summary.isAvailable === false) {
+      return (
+        <div className={`${classNames} empty`}>
+          <div className="codex-api-key-usage-empty">
+            {t('codex.modelProviders.usage.balanceUnavailable', '余额不可用')}
+          </div>
+        </div>
+      );
+    }
+    const balance = selectDeepSeekBalanceInfo(
+      summary.balanceInfos,
+      i18n.resolvedLanguage || i18n.language,
+    );
+    if (!balance) {
+      return (
+        <div className={`${classNames} empty`}>
+          <div className="codex-api-key-usage-empty">
+            {t('codex.modelProviders.usage.noBalanceData', '暂无余额数据')}
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className={classNames}>
+        <div className="codex-api-key-usage-grid">
+          <div>
+            <span>{t('codex.modelProviders.usage.totalBalance', '总余额')}</span>
+            <strong>{formatDeepSeekBalanceMoney(balance.totalBalance, balance.currency)}</strong>
+          </div>
+          <div>
+            <span>{t('codex.modelProviders.usage.grantedBalance', '赠金余额')}</span>
+            <strong>{formatDeepSeekBalanceMoney(balance.grantedBalance, balance.currency)}</strong>
+          </div>
+          <div>
+            <span>{t('codex.modelProviders.usage.toppedUpBalance', '充值余额')}</span>
+            <strong>{formatDeepSeekBalanceMoney(balance.toppedUpBalance, balance.currency)}</strong>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const balanceText = formatModelProviderUsageMoney(

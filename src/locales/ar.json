@@ -3188,6 +3188,11 @@
           "modelLimitsEnabled": "قيود النماذج"
         },
         "accountBalance": "رصيد الحساب",
+        "totalBalance": "الرصيد الإجمالي",
+        "grantedBalance": "الرصيد الممنوح",
+        "toppedUpBalance": "الرصيد المشحون",
+        "balanceUnavailable": "الرصيد غير متاح",
+        "noBalanceData": "لا توجد بيانات رصيد",
         "unlimitedQuota": "غير محدود",
         "booleanTrue": "نعم",
         "booleanFalse": "لا"

@@ -3188,6 +3188,11 @@
           "modelLimitsEnabled": "Batas model"
         },
         "accountBalance": "Saldo akun",
+        "totalBalance": "Total saldo",
+        "grantedBalance": "Saldo diberikan",
+        "toppedUpBalance": "Saldo isi ulang",
+        "balanceUnavailable": "Saldo tidak tersedia",
+        "noBalanceData": "Tidak ada data saldo",
         "unlimitedQuota": "Tak terbatas",
         "booleanTrue": "Ya",
         "booleanFalse": "Tidak"
