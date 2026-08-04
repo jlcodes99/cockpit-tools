@@ -130,3 +130,48 @@ export async function injectTraeAccount(
 ): Promise<string> {
   return await invoke('inject_trae_account', { accountId, platformId });
 }
+
+// ============ 签到功能 ============
+
+/** 签到状态响应（与 Rust 后端 CheckinStatusResult 对齐） */
+export interface TraeCheckinStatusResult {
+  checked_in: boolean;
+  consecutive_days: number;
+  total_credits: number;
+  credits_earned_today: number;
+  checkin_date: string;
+  message: string;
+}
+
+const TRAE_CHECKIN_DEVICE_ID_KEY = 'agtools.trae.checkin_device_id';
+
+/** 获取或生成 Trae 签到使用的设备 ID */
+export function getTraeCheckinDeviceId(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    let deviceId = localStorage.getItem(TRAE_CHECKIN_DEVICE_ID_KEY);
+    if (!deviceId) {
+      deviceId = `${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      localStorage.setItem(TRAE_CHECKIN_DEVICE_ID_KEY, deviceId);
+    }
+    return deviceId;
+  } catch {
+    return '';
+  }
+}
+
+/** 获取 Trae 账号的今日签到状态 */
+export async function getTraeCheckinStatus(
+  accountId: string,
+): Promise<TraeCheckinStatusResult> {
+  const deviceId = getTraeCheckinDeviceId();
+  return await invoke('get_trae_checkin_status', { accountId, deviceId });
+}
+
+/** 领取 Trae 账号的今日签到积分 */
+export async function claimTraeCheckin(
+  accountId: string,
+): Promise<TraeCheckinStatusResult> {
+  const deviceId = getTraeCheckinDeviceId();
+  return await invoke('claim_trae_checkin', { accountId, deviceId });
+}

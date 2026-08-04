@@ -5369,6 +5369,206 @@ pub async fn refresh_tokens_for_platform(
     refresh_accounts(accounts).await
 }
 
+// ============ 签到功能 API ============
+
+/// 签到状态响应（前端展示用）
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CheckinStatusResult {
+    pub checked_in: bool,
+    pub consecutive_days: i32,
+    pub total_credits: i64,
+    pub credits_earned_today: i64,
+    pub checkin_date: String,
+    pub message: String,
+}
+
+/// Trae API 签到状态响应
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+struct TraeCheckinStatusResponse {
+    #[serde(default)]
+    pub checked_in: bool,
+    #[serde(default)]
+    pub credits: i64,
+    #[serde(default)]
+    pub code: i32,
+    #[serde(default)]
+    pub enable: bool,
+    #[serde(default)]
+    pub message: String,
+}
+
+/// Trae API 签到领取响应
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+struct TraeCheckinClaimResponse {
+    #[serde(default)]
+    pub code: i32,
+    #[serde(default)]
+    pub message: String,
+}
+
+/// 获取 Trae 账号的今日签到状态
+pub async fn get_trae_checkin_status(
+    account_id: &str,
+    device_id: &str,
+) -> Result<CheckinStatusResult, String> {
+    let account = load_account(account_id).ok_or_else(|| "账号不存在".to_string())?;
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
+
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        reqwest::header::CONTENT_TYPE,
+        "application/json".parse().map_err(|e| e.to_string())?,
+    );
+    headers.insert(
+        reqwest::header::ACCEPT,
+        "application/json, text/plain, */*".parse().map_err(|e| e.to_string())?,
+    );
+    headers.insert(
+        reqwest::header::ORIGIN,
+        "https://www.trae.cn".parse().map_err(|e| e.to_string())?,
+    );
+    headers.insert(
+        reqwest::header::REFERER,
+        "https://www.trae.cn/".parse().map_err(|e| e.to_string())?,
+    );
+    headers.insert(
+        "x-app-type",
+        "trae".parse().map_err(|e| e.to_string())?,
+    );
+    headers.insert(
+        reqwest::header::AUTHORIZATION,
+        format!("Bearer {}", account.access_token)
+            .parse()
+            .map_err(|e| e.to_string())?,
+    );
+
+    let mut url = "https://api.trae.cn/trae/api/v2/ug/checkin_credits/status".to_string();
+    if !device_id.is_empty() {
+        url.push_str(&format!("?did={}", device_id));
+        if let Ok(device_header) = reqwest::header::HeaderValue::from_bytes(device_id.as_bytes()) {
+            headers.insert("x-device-id", device_header);
+        }
+    }
+
+    let response = client
+        .get(&url)
+        .headers(headers)
+        .send()
+        .await
+        .map_err(|e| format!("签到状态请求失败: {}", e))?;
+
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        return Err(format!("获取签到状态失败 ({}): {}", status, body));
+    }
+
+    let data: TraeCheckinStatusResponse = serde_json::from_str(&body)
+        .map_err(|e| format!("解析签到状态响应失败: {}", e))?;
+
+    if data.code != 0 {
+        return Err(format!("获取签到状态失败 (code={}): Token 已过期，请重新登录", data.code));
+    }
+
+    let message = if data.checked_in {
+        format!("今日已签到 · 共 {} 积分", data.credits)
+    } else {
+        "今日未签到".to_string()
+    };
+
+    Ok(CheckinStatusResult {
+        checked_in: data.checked_in,
+        consecutive_days: 0,
+        total_credits: data.credits,
+        credits_earned_today: 0,
+        checkin_date: String::new(),
+        message,
+    })
+}
+
+/// 领取 Trae 账号的今日签到积分
+pub async fn claim_trae_checkin(
+    account_id: &str,
+    device_id: &str,
+) -> Result<CheckinStatusResult, String> {
+    let account = load_account(account_id).ok_or_else(|| "账号不存在".to_string())?;
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
+
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        reqwest::header::CONTENT_TYPE,
+        "application/json".parse().map_err(|e| e.to_string())?,
+    );
+    headers.insert(
+        reqwest::header::ACCEPT,
+        "application/json, text/plain, */*".parse().map_err(|e| e.to_string())?,
+    );
+    headers.insert(
+        reqwest::header::ORIGIN,
+        "https://www.trae.cn".parse().map_err(|e| e.to_string())?,
+    );
+    headers.insert(
+        reqwest::header::REFERER,
+        "https://www.trae.cn/".parse().map_err(|e| e.to_string())?,
+    );
+    headers.insert(
+        "x-app-type",
+        "trae".parse().map_err(|e| e.to_string())?,
+    );
+    headers.insert(
+        reqwest::header::AUTHORIZATION,
+        format!("Bearer {}", account.access_token)
+            .parse()
+            .map_err(|e| e.to_string())?,
+    );
+
+    let url = "https://api.trae.cn/trae/api/v2/ug/checkin_credits/claim".to_string();
+    if !device_id.is_empty() {
+        let device_header = reqwest::header::HeaderValue::from_bytes(device_id.as_bytes())
+            .map_err(|e| format!("Device ID 格式错误: {}", e))?;
+        headers.insert("x-device-id", device_header);
+    }
+
+    let response = client
+        .post(&url)
+        .headers(headers)
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .map_err(|e| format!("签到领取请求失败: {}", e))?;
+
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        return Err(format!("签到领取失败 ({}): {}", status, body));
+    }
+
+    let claim_data: TraeCheckinClaimResponse = serde_json::from_str(&body)
+        .map_err(|e| format!("解析签到领取响应失败: {}", e))?;
+
+    if claim_data.code != 0 {
+        return Err(format!("签到领取失败 (code={}): Token 已过期，请重新登录", claim_data.code));
+    }
+
+    // 领取后重新查询状态
+    let status_result = get_trae_checkin_status(account_id, device_id).await?;
+
+    Ok(CheckinStatusResult {
+        message: format!("签到成功！获得 {} 积分", status_result.total_credits),
+        ..status_result
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

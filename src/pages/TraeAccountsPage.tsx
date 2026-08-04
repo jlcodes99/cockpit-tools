@@ -24,6 +24,9 @@ import {
   Eye,
   EyeOff,
   BookOpen,
+  CalendarCheck,
+  Gift,
+  Settings,
 } from 'lucide-react';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
@@ -76,6 +79,13 @@ import {
   removeAccountsOverviewFilterField,
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
+import { TraeCheckinModal } from '../components/codebuddy-suite/TraeCheckinModal';
+import { TraeAutoCheckinConfigModal } from '../components/codebuddy-suite/TraeAutoCheckinConfigModal';
+import {
+  TraeAutoCheckinConfig,
+  getTraeAutoCheckinConfig,
+  saveTraeAutoCheckinConfig,
+} from '../services/traeAutoCheckinService';
 
 const FILTER_TYPES_FIELD = 'filter_types';
 const TRAE_KNOWN_SORT_KEYS = ['created_at', 'plan', 'quota'] as const;
