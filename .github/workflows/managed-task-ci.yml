@@ -82,6 +82,12 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Go setup
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sidecars/cockpit-cliproxy/go.mod
+          cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
+
       - name: Rust setup
         uses: dtolnay/rust-toolchain@stable
 
