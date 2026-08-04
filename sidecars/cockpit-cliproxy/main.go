@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/klauspost/compress/zstd"
 	internallogging "github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 	internalregistry "github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
 	responsesconverter "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/openai/openai/responses"
@@ -1454,10 +1455,90 @@ func readAndRestoreBody(r *http.Request) ([]byte, error) {
 	if r == nil || r.Body == nil {
 		return nil, nil
 	}
-	body, err := io.ReadAll(r.Body)
+
+	raw, err := io.ReadAll(r.Body)
 	_ = r.Body.Close()
+	if err != nil {
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		return raw, err
+	}
+
+	contentEncoding := strings.TrimSpace(r.Header.Get("Content-Encoding"))
+	if contentEncoding == "" || strings.EqualFold(contentEncoding, "identity") {
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		return raw, nil
+	}
+
+	body, err := decodeRelayRequestBody(raw, contentEncoding)
+	if err != nil {
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		return nil, err
+	}
+
+	// 请求体现在是普通 JSON，禁止后续处理器再次按 zstd 解压。
+	r.Header.Del("Content-Encoding")
+	r.Header.Del("Transfer-Encoding")
+	r.TransferEncoding = nil
+
 	r.Body = io.NopCloser(bytes.NewReader(body))
-	return body, err
+	r.ContentLength = int64(len(body))
+	r.Header.Set(
+		"Content-Length",
+		strconv.FormatInt(r.ContentLength, 10),
+	)
+
+	return body, nil
+}
+
+func decodeRelayRequestBody(
+	raw []byte,
+	contentEncoding string,
+) ([]byte, error) {
+	encodings := strings.Split(contentEncoding, ",")
+	body := raw
+
+	// Content-Encoding 必须按编码应用顺序的反方向解码。
+	for i := len(encodings) - 1; i >= 0; i-- {
+		encoding := strings.ToLower(
+			strings.TrimSpace(encodings[i]),
+		)
+
+		switch encoding {
+		case "", "identity":
+			continue
+
+		case "zstd":
+			decoder, err := zstd.NewReader(
+				bytes.NewReader(body),
+			)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to create zstd request decoder: %w",
+					err,
+				)
+			}
+
+			decoded, readErr := io.ReadAll(decoder)
+			decoder.Close()
+
+			if readErr != nil {
+				return nil, fmt.Errorf(
+					"failed to decode zstd request body: %w",
+					readErr,
+				)
+			}
+
+			body = decoded
+
+		default:
+			return nil, fmt.Errorf(
+				"unsupported request content encoding: %s",
+				encoding,
+			)
+		}
+	}
+
+	return body, nil
 }
 
 func rewriteBodyModel(m *manifest, spec *apiKeySpec, body []byte) ([]byte, string, error) {
