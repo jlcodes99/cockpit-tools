@@ -1,0 +1,4 @@
+{"method":"turn/completed","params":{"threadId":"018f0000-0000-7000-8000-000000000002","turn":{"id":"turn-string","status":"failed","error":{"codexErrorInfo":"UsageLimitExceeded","message":"Quota exhausted."}}}}
+{"method":"turn/completed","params":{"threadId":"018f0000-0000-7000-8000-000000000002","turn":{"id":"turn-object","status":"failed","error":{"codexErrorInfo":{"UsageLimitExceeded":{"planType":"plus","resetsAt":1785873600}},"message":"Quota exhausted."}}}}
+{"method":"turn/completed","params":{"threadId":"018f0000-0000-7000-8000-000000000002","turn":{"id":"turn-interrupted","status":"interrupted"}}}
+{"method":"turn/completed","params":{"threadId":"018f0000-0000-7000-8000-000000000002","turn":{"id":"turn-completed","status":"completed"}}}

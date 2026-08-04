@@ -5,6 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "nx": "nx",
+    "nx:graph": "nx graph",
+    "verify": "nx run cockpit-tools:verify",
+    "test:web": "node scripts/run-web-tests.mjs",
+    "test:managed-web": "node scripts/run-web-tests.mjs --match=codexManagedTask",
+    "test:supervisor": "cargo test -p codex-task-supervisor --no-fail-fast",
+    "test:managed-runtime": "cargo test -p cockpit-tools managed_task --lib --no-fail-fast",
+    "verify:upstreams": "node scripts/verify-upstream-contracts.mjs && cargo test -p codex-task-supervisor --test upstream_contracts --no-fail-fast",
     "test:codex-api-key-scope": "node --test src/utils/codexApiKeyAccountScope.test.ts",
     "typecheck": "tsc --noEmit",
     "prebuild": "npm run typecheck",
@@ -49,8 +57,10 @@
     "@vitejs/plugin-react": "^4.6.0",
     "autoprefixer": "^10.4.23",
     "electron": "^42.4.0",
+    "nx": "^23.1.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19",
+    "tsx": "^4.20.5",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
   }

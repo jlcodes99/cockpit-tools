@@ -152,6 +152,7 @@ const TIMEOUT_PRESET_NAME_MAX_CHARS: usize = 40;
 const RESPONSE_AFFINITY_TTL_MS: i64 = 24 * 60 * 60 * 1000;
 const MAX_RESPONSE_AFFINITY_BINDINGS: usize = 4096;
 const PREPARED_ACCOUNT_CACHE_TTL_MS: i64 = 30 * 1000;
+const MANAGED_TASK_QUOTA_FRESH_SECONDS: i64 = 5 * 60;
 const STATE_RECENT_USAGE_EVENT_LIMIT: usize = 100;
 const DEFAULT_MODEL_PRICING_VERSION: u64 = 2;
 const MODEL_PRICING_REPRICE_BATCH_SIZE: i64 = 1_000;
@@ -718,6 +719,23 @@ struct RoutingCandidate {
     plan_rank: Option<i32>,
     remaining_quota: Option<i32>,
     subscription_expiry_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedTaskAccountSkip {
+    pub account_id: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedTaskAccountSelection {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<String>,
+    pub strategy: CodexLocalAccessRoutingStrategy,
+    pub reason: String,
+    pub skipped: Vec<ManagedTaskAccountSkip>,
 }
 
 fn gateway_runtime() -> &'static TokioMutex<GatewayRuntime> {
@@ -5740,6 +5758,235 @@ fn effective_routing_strategy(
         collection.routing_strategy
     } else {
         CodexLocalAccessRoutingStrategy::Auto
+    }
+}
+
+fn managed_task_routing_strategy(
+    collection: &CodexLocalAccessCollection,
+) -> CodexLocalAccessRoutingStrategy {
+    collection.routing_strategy
+}
+
+fn managed_task_account_static_skip_reason(
+    collection: &CodexLocalAccessCollection,
+    account: &CodexAccount,
+    model_key: Option<&str>,
+    now_seconds: i64,
+) -> Option<&'static str> {
+    if account.is_api_key_auth() {
+        return Some("api_key_not_supported");
+    }
+    if account.is_agent_identity_auth() {
+        return Some("agent_identity_not_supported");
+    }
+    if account.is_web_session_auth() {
+        return Some("web_session_not_supported");
+    }
+    if account.requires_reauth {
+        return Some("requires_reauth");
+    }
+    if codex_account::is_pending_oauth_account(account) {
+        return Some("pending_oauth");
+    }
+    if !local_access_account_has_oauth_token(account) {
+        return Some("missing_oauth_credentials");
+    }
+    if model_key.is_some_and(|model_key| {
+        account_model_rule_blocks_model(collection, &account.id, model_key)
+    }) {
+        return Some("model_excluded");
+    }
+    if account
+        .usage_updated_at
+        .is_some_and(|updated_at| updated_at >= now_seconds - MANAGED_TASK_QUOTA_FRESH_SECONDS)
+        && resolve_remaining_quota(account).is_some_and(|quota| quota <= 0)
+    {
+        return Some("fresh_quota_exhausted");
+    }
+    None
+}
+
+/// Selects an OAuth account for a Cockpit-managed Codex CLI task.
+///
+/// This deliberately lives next to the API service router so managed tasks reuse the
+/// same pool order, routing strategy, custom priorities, weights, health state, and
+/// model cooldowns instead of growing a second routing implementation.
+pub async fn select_managed_task_account(
+    selected_account_ids: Option<&[String]>,
+    excluded_account_ids: &[String],
+    preferred_account_id: Option<&str>,
+    model: Option<&str>,
+) -> Result<ManagedTaskAccountSelection, String> {
+    let Some(collection) = load_collection_from_disk()? else {
+        return Ok(ManagedTaskAccountSelection {
+            account_id: None,
+            strategy: CodexLocalAccessRoutingStrategy::Auto,
+            reason: "Cockpit API service account pool is not configured".to_string(),
+            skipped: Vec::new(),
+        });
+    };
+
+    let selected = selected_account_ids.map(|ids| {
+        ids.iter()
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .collect::<HashSet<_>>()
+    });
+    let scoped_account_ids = collection
+        .account_ids
+        .iter()
+        .filter(|account_id| {
+            selected
+                .as_ref()
+                .map(|selected| selected.contains(account_id.as_str()))
+                .unwrap_or(true)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let strategy = managed_task_routing_strategy(&collection);
+    if scoped_account_ids.is_empty() {
+        return Ok(ManagedTaskAccountSelection {
+            account_id: None,
+            strategy,
+            reason: "No accounts from the requested scope are present in the Cockpit pool"
+                .to_string(),
+            skipped: Vec::new(),
+        });
+    }
+
+    static MANAGED_TASK_ROUTING_CURSOR: AtomicUsize = AtomicUsize::new(0);
+    let start = MANAGED_TASK_ROUTING_CURSOR.fetch_add(1, Ordering::Relaxed);
+    let mut ordered = apply_routing_strategy(
+        &scoped_account_ids,
+        strategy,
+        &collection.custom_routing_rules,
+        start,
+    );
+    if let Some(preferred_account_id) = preferred_account_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        ordered = prioritize_account_ids(ordered, &[preferred_account_id.to_string()]);
+    }
+
+    let excluded = excluded_account_ids
+        .iter()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .collect::<HashSet<_>>();
+    let model_key = model.map(str::trim).filter(|value| !value.is_empty());
+    let now_seconds = chrono::Utc::now().timestamp();
+    let mut skipped = Vec::new();
+
+    for account_id in ordered {
+        let skip_reason = if excluded.contains(account_id.as_str()) {
+            Some("already_attempted")
+        } else {
+            match codex_account::load_account(&account_id) {
+                None => Some("missing_account"),
+                Some(account) => {
+                    if let Some(reason) = managed_task_account_static_skip_reason(
+                        &collection,
+                        &account,
+                        model_key,
+                        now_seconds,
+                    ) {
+                        Some(reason)
+                    } else if account_id_blocked_by_health(&account.id).await {
+                        Some("health_blocked")
+                    } else if let Some(model_key) = model_key {
+                        if get_model_cooldown_wait(&account.id, model_key).await.is_some() {
+                            Some("model_cooldown")
+                        } else {
+                            let quota = resolve_remaining_quota(&account);
+                            return Ok(ManagedTaskAccountSelection {
+                                account_id: Some(account.id),
+                                strategy,
+                                reason: format!(
+                                    "selected by {:?} routing; cached remaining quota={}",
+                                    strategy,
+                                    quota
+                                        .map(|value| value.to_string())
+                                        .unwrap_or_else(|| "unknown".to_string())
+                                ),
+                                skipped,
+                            });
+                        }
+                    } else {
+                        let quota = resolve_remaining_quota(&account);
+                        return Ok(ManagedTaskAccountSelection {
+                            account_id: Some(account.id),
+                            strategy,
+                            reason: format!(
+                                "selected by {:?} routing; cached remaining quota={}",
+                                strategy,
+                                quota
+                                    .map(|value| value.to_string())
+                                    .unwrap_or_else(|| "unknown".to_string())
+                            ),
+                            skipped,
+                        });
+                    }
+                }
+            }
+        };
+
+        if let Some(reason) = skip_reason {
+            skipped.push(ManagedTaskAccountSkip {
+                account_id,
+                reason: reason.to_string(),
+            });
+        }
+    }
+
+    Ok(ManagedTaskAccountSelection {
+        account_id: None,
+        strategy,
+        reason: "No eligible, untried OAuth account is currently available".to_string(),
+        skipped,
+    })
+}
+
+pub async fn mark_managed_task_account_quota_exhausted(account_id: &str, model: Option<&str>) {
+    let Some(account) = codex_account::load_account(account_id) else {
+        return;
+    };
+    mark_account_failure(
+        &account,
+        Some(429),
+        Some("usage_limit"),
+        "managed Codex task reached an authoritative usage-limit terminal state",
+        CodexLocalAccessRequestKind::Text,
+    )
+    .await;
+
+    let Some(model_key) = model.map(str::trim).filter(|value| !value.is_empty()) else {
+        return;
+    };
+    let now = chrono::Utc::now().timestamp();
+    let retry_seconds = account
+        .quota
+        .as_ref()
+        .into_iter()
+        .flat_map(|quota| [quota.hourly_reset_time, quota.weekly_reset_time])
+        .flatten()
+        .filter(|reset_at| *reset_at > now)
+        .map(|reset_at| reset_at - now)
+        .min()
+        .unwrap_or(5 * 60)
+        .clamp(30, 7 * 24 * 60 * 60);
+    set_model_cooldown(
+        &account.id,
+        model_key,
+        Duration::from_secs(retry_seconds as u64),
+        "managed_task_usage_limit",
+    )
+    .await;
+}
+
+pub async fn mark_managed_task_account_success(account_id: &str) {
+    if let Some(account) = codex_account::load_account(account_id) {
+        mark_account_success(&account, CodexLocalAccessRequestKind::Text).await;
     }
 }
 
@@ -26096,6 +26343,7 @@ mod tests {
         legacy_stream_error_category, local_access_chat_completions_url,
         local_access_ineligible_reason, lookup_codex_model_provider_base_url_in_dir,
         macos_proxy_url_from_scutil_map, max_credential_attempts_for_strategy,
+        managed_task_account_static_skip_reason, managed_task_routing_strategy,
         merge_collection_and_account_excluded_models, model_pricing,
         model_provider_direct_test_client_model, model_provider_test_uses_provider_gateway,
         normalize_account_id_list, normalize_account_model_rules, normalize_collection_api_keys,
@@ -26150,6 +26398,7 @@ mod tests {
         CODEX_PROVIDER_MODEL_BACKUP_FILE, CODEX_PROVIDER_MODEL_CATALOG_FILE,
         DEFAULT_MAX_RETRY_INTERVAL_MS, DEFAULT_MODEL_PRICING_VERSION,
         DEFAULT_SESSION_AFFINITY_TTL_MS, MAX_HTTP_REQUEST_BYTES,
+        MANAGED_TASK_QUOTA_FRESH_SECONDS,
     };
     use super::{
         is_cockpit_managed_local_access_config, restore_profile_takeover_backup,
@@ -26499,6 +26748,75 @@ mod tests {
         });
         account.usage_updated_at = Some(chrono::Utc::now().timestamp());
         account
+    }
+
+    #[test]
+    fn managed_task_filter_excludes_noninjectable_and_fresh_zero_quota_accounts() {
+        let now = chrono::Utc::now().timestamp();
+        let collection = test_local_access_collection(vec!["account".to_string()]);
+        let ready = test_oauth_account_with_quota("ready", 20, 40, Some(true), Some(true));
+        assert_eq!(
+            managed_task_account_static_skip_reason(&collection, &ready, None, now),
+            None
+        );
+
+        let mut requires_reauth = ready.clone();
+        requires_reauth.requires_reauth = true;
+        assert_eq!(
+            managed_task_account_static_skip_reason(&collection, &requires_reauth, None, now),
+            Some("requires_reauth")
+        );
+
+        let mut pending = ready.clone();
+        pending.authorization_status = Some("pending".to_string());
+        assert_eq!(
+            managed_task_account_static_skip_reason(&collection, &pending, None, now),
+            Some("pending_oauth")
+        );
+
+        let mut missing_tokens = ready.clone();
+        missing_tokens.tokens.id_token.clear();
+        missing_tokens.tokens.access_token.clear();
+        missing_tokens.tokens.refresh_token = None;
+        assert_eq!(
+            managed_task_account_static_skip_reason(&collection, &missing_tokens, None, now),
+            Some("missing_oauth_credentials")
+        );
+
+        let exhausted = test_oauth_account_with_quota("empty", 0, 0, Some(true), Some(true));
+        assert_eq!(
+            managed_task_account_static_skip_reason(&collection, &exhausted, None, now),
+            Some("fresh_quota_exhausted")
+        );
+        let mut stale_exhausted = exhausted;
+        stale_exhausted.usage_updated_at = Some(now - MANAGED_TASK_QUOTA_FRESH_SECONDS - 1);
+        assert_eq!(
+            managed_task_account_static_skip_reason(&collection, &stale_exhausted, None, now),
+            None,
+            "unknown/stale quota remains eligible for a real Codex terminal check"
+        );
+    }
+
+    #[test]
+    fn managed_task_allowlist_keeps_the_configured_pool_strategy() {
+        let mut collection = test_local_access_collection(vec![
+            "account-a".to_string(),
+            "account-b".to_string(),
+        ]);
+        for strategy in [
+            CodexLocalAccessRoutingStrategy::Auto,
+            CodexLocalAccessRoutingStrategy::QuotaHighFirst,
+            CodexLocalAccessRoutingStrategy::QuotaLowFirst,
+            CodexLocalAccessRoutingStrategy::PlanHighFirst,
+            CodexLocalAccessRoutingStrategy::PlanLowFirst,
+            CodexLocalAccessRoutingStrategy::ExpirySoonFirst,
+            CodexLocalAccessRoutingStrategy::Custom,
+            CodexLocalAccessRoutingStrategy::Random,
+            CodexLocalAccessRoutingStrategy::SingleAccount,
+        ] {
+            collection.routing_strategy = strategy;
+            assert_eq!(managed_task_routing_strategy(&collection), strategy);
+        }
     }
 
     #[test]

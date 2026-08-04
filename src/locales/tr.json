@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "Yönetilen görevler",
+    "title": "Yönetilen Codex görevleri",
+    "subtitle": "Cockpit aynı anda tek bir Codex sürecini yönetir ve kota sonu doğrulandıktan sonra aynı ileti dizisini uygun sonraki hesapla sürdürür.",
+    "optIn": "Açıkça etkinleştirilen gözetim",
+    "cliReady": "Codex CLI hazır",
+    "cliUnavailable": "Codex CLI kullanılamıyor",
+    "createTitle": "Yönetilen görev oluştur",
+    "taskList": "Görev kuyruğu ve geçmişi",
+    "emptyTitle": "Henüz yönetilen görev yok",
+    "status": {
+      "queued": "Kuyrukta",
+      "preparing": "Hazırlanıyor",
+      "running": "Çalışıyor",
+      "draining": "Son durum bekleniyor",
+      "switching": "Hesap değiştiriliyor",
+      "resuming": "İleti dizisi sürdürülüyor",
+      "completed": "Tamamlandı",
+      "failed": "Başarısız",
+      "cancelled": "İptal edildi",
+      "needs_attention": "İlgilenilmesi gerekiyor"
+    }
+  },
   "common": {
     "confirm": "Onayla",
     "cancel": "İptal",

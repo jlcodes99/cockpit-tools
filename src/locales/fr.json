@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "Tâches supervisées",
+    "title": "Tâches Codex supervisées",
+    "subtitle": "Cockpit gère un seul processus Codex à la fois et ne reprend le même fil avec un autre compte qu’après confirmation de la fin de quota.",
+    "optIn": "Supervision activée explicitement",
+    "cliReady": "La CLI Codex est prête",
+    "cliUnavailable": "La CLI Codex est indisponible",
+    "createTitle": "Créer une tâche supervisée",
+    "taskList": "File et historique des tâches",
+    "emptyTitle": "Aucune tâche supervisée pour l’instant",
+    "status": {
+      "queued": "En attente",
+      "preparing": "Préparation",
+      "running": "En cours",
+      "draining": "Attente de l’état final",
+      "switching": "Changement de compte",
+      "resuming": "Reprise du fil",
+      "completed": "Terminée",
+      "failed": "Échouée",
+      "cancelled": "Annulée",
+      "needs_attention": "Intervention requise"
+    }
+  },
   "common": {
     "confirm": "Confirmer",
     "cancel": "Annuler",

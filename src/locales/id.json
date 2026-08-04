@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "Tugas terkelola",
+    "title": "Tugas Codex terkelola",
+    "subtitle": "Cockpit mengelola satu proses Codex dan hanya melanjutkan utas yang sama dengan akun berikutnya setelah akhir kuota terkonfirmasi.",
+    "optIn": "Pengawasan yang diaktifkan secara sadar",
+    "cliReady": "CLI Codex siap",
+    "cliUnavailable": "CLI Codex tidak tersedia",
+    "createTitle": "Buat tugas terkelola",
+    "taskList": "Antrean dan riwayat tugas",
+    "emptyTitle": "Belum ada tugas terkelola",
+    "status": {
+      "queued": "Dalam antrean",
+      "preparing": "Menyiapkan",
+      "running": "Berjalan",
+      "draining": "Menunggu status akhir",
+      "switching": "Mengganti akun",
+      "resuming": "Melanjutkan utas",
+      "completed": "Selesai",
+      "failed": "Gagal",
+      "cancelled": "Dibatalkan",
+      "needs_attention": "Perlu perhatian"
+    }
+  },
   "common": {
     "confirm": "Konfirmasi",
     "cancel": "Batal",

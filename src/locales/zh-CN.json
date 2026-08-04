@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "受管任务",
+    "title": "Codex 受管任务",
+    "subtitle": "Cockpit 同时只持有一个 Codex 进程；确认额度终态后，使用下一合格账号恢复同一线程。",
+    "optIn": "明确选择加入的任务监督",
+    "cliReady": "Codex CLI 已就绪",
+    "cliUnavailable": "Codex CLI 不可用",
+    "createTitle": "创建受管任务",
+    "taskList": "任务队列与历史",
+    "emptyTitle": "暂无受管任务",
+    "status": {
+      "queued": "排队中",
+      "preparing": "准备中",
+      "running": "运行中",
+      "draining": "等待终态",
+      "switching": "切换账号中",
+      "resuming": "恢复线程中",
+      "completed": "已完成",
+      "failed": "已失败",
+      "cancelled": "已取消",
+      "needs_attention": "需要处理"
+    }
+  },
   "common": {
     "confirm": "确认",
     "cancel": "取消",

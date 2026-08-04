@@ -12,6 +12,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.nx/
 .gemini
 .codegraph/
 # Editor directories and files

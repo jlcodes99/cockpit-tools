@@ -4834,6 +4834,50 @@ pub fn read_managed_projection_account_id_from_dir(base_dir: &Path) -> Option<St
     read_managed_projection_from_dir(base_dir).map(|projection| projection.account_id)
 }
 
+/// Removes only the credential projection associated with an isolated managed CODEX_HOME.
+/// Thread/session files and non-secret runtime configuration are intentionally preserved.
+pub fn cleanup_managed_auth_dir(base_dir: &Path) -> Result<(), String> {
+    for path in [base_dir.join("auth.json"), projection_path_for_dir(base_dir)] {
+        match fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!(
+                    "清理受管 Codex 凭据失败: path={}, error={}",
+                    path.display(),
+                    error
+                ));
+            }
+        }
+    }
+
+    #[cfg(all(target_os = "macos", not(test)))]
+    {
+        let keychain_account = build_codex_keychain_account(base_dir);
+        let output = std::process::Command::new("security")
+            .arg("delete-generic-password")
+            .arg("-s")
+            .arg(CODEX_KEYCHAIN_SERVICE)
+            .arg("-a")
+            .arg(&keychain_account)
+            .output()
+            .map_err(|error| format!("清理受管 Codex keychain 凭据失败: {error}"))?;
+        // `security` returns a non-zero status when the item is already absent. Treat that
+        // as cleanup success so cancellation/recovery stays idempotent.
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_ascii_lowercase();
+            if !stderr.contains("could not be found") && !stderr.contains("item not found") {
+                return Err(format!(
+                    "清理受管 Codex keychain 凭据失败: status={}",
+                    output.status
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn ensure_directory_writable_for_import(path: &Path) -> Result<(), String> {
     fs::create_dir_all(path).map_err(|e| format_io_error("创建导入目录", path, &e))?;
     let probe_path = build_temp_file_path(path, path, "import-probe");

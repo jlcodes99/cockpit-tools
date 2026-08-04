@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "Spravované úlohy",
+    "title": "Spravované úlohy Codex",
+    "subtitle": "Cockpit řídí vždy jeden proces Codex a stejnou konverzaci obnoví dalším vhodným účtem až po potvrzeném vyčerpání kvóty.",
+    "optIn": "Výslovně zapnutý dohled",
+    "cliReady": "CLI Codex je připravené",
+    "cliUnavailable": "CLI Codex není dostupné",
+    "createTitle": "Vytvořit spravovanou úlohu",
+    "taskList": "Fronta a historie úloh",
+    "emptyTitle": "Zatím nejsou žádné spravované úlohy",
+    "status": {
+      "queued": "Ve frontě",
+      "preparing": "Příprava",
+      "running": "Probíhá",
+      "draining": "Čeká se na konečný stav",
+      "switching": "Přepínání účtu",
+      "resuming": "Obnovování konverzace",
+      "completed": "Dokončeno",
+      "failed": "Selhalo",
+      "cancelled": "Zrušeno",
+      "needs_attention": "Vyžaduje pozornost"
+    }
+  },
   "common": {
     "confirm": "Potvrdit",
     "cancel": "Zrušit",

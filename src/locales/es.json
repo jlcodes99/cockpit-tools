@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "Tareas supervisadas",
+    "title": "Tareas Codex supervisadas",
+    "subtitle": "Cockpit controla un proceso Codex a la vez y solo reanuda el mismo hilo con otra cuenta tras confirmar el fin por cuota.",
+    "optIn": "Supervisión activada de forma explícita",
+    "cliReady": "La CLI de Codex está lista",
+    "cliUnavailable": "La CLI de Codex no está disponible",
+    "createTitle": "Crear una tarea supervisada",
+    "taskList": "Cola e historial de tareas",
+    "emptyTitle": "Aún no hay tareas supervisadas",
+    "status": {
+      "queued": "En cola",
+      "preparing": "Preparando",
+      "running": "En ejecución",
+      "draining": "Esperando estado final",
+      "switching": "Cambiando de cuenta",
+      "resuming": "Reanudando el hilo",
+      "completed": "Completada",
+      "failed": "Fallida",
+      "cancelled": "Cancelada",
+      "needs_attention": "Requiere atención"
+    }
+  },
   "common": {
     "confirm": "Confirmar",
     "cancel": "Cancelar",

@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-08-04T19:00:00.000Z",
+  "policy": {
+    "copyThirdPartySource": false,
+    "authoritativeAutomaticSwitchSources": [
+      "openai_exec_json",
+      "openai_app_server"
+    ],
+    "notes": "The lock records research and compatibility boundaries only. Cockpit does not vendor these projects."
+  },
+  "upstreams": [
+    {
+      "id": "openai-codex",
+      "repo": "openai/codex",
+      "url": "https://github.com/openai/codex",
+      "defaultBranch": "main",
+      "commitSha": "989a0b053e2510ab76ec2033c1a7db5c1e7c8c92",
+      "version": "rust-v0.146.0",
+      "license": "Apache-2.0",
+      "integrationMode": "protocol_contract",
+      "capabilities": [
+        "exec_json",
+        "app_server_thread_read",
+        "thread_resume"
+      ],
+      "contractTests": [
+        "contracts/upstream-contracts/fixtures/openai-exec-json.jsonl",
+        "contracts/upstream-contracts/fixtures/openai-app-server.jsonl"
+      ]
+    },
+    {
+      "id": "cc-switch",
+      "repo": "farion1231/cc-switch",
+      "url": "https://github.com/farion1231/cc-switch",
+      "defaultBranch": "main",
+      "commitSha": "290b65c03bc72787f907a788e4d49673cc604142",
+      "version": "v3.19.1",
+      "license": "MIT",
+      "integrationMode": "capability_boundary",
+      "capabilities": [
+        "session_directory_observation",
+        "proxy_usage_observation"
+      ],
+      "contractTests": [
+        "contracts/upstream-contracts/fixtures/observer-boundaries.json"
+      ]
+    },
+    {
+      "id": "cocoanetics-codex-monitor",
+      "repo": "Cocoanetics/CodexMonitor",
+      "url": "https://github.com/Cocoanetics/CodexMonitor",
+      "defaultBranch": "main",
+      "commitSha": "328aac19f5a4f1b26cfd5b330d574b8eef3aa405",
+      "version": "0.1.0",
+      "license": "NOASSERTION",
+      "integrationMode": "metadata_only",
+      "capabilities": [
+        "session_directory_observation"
+      ],
+      "contractTests": [
+        "contracts/upstream-contracts/fixtures/observer-boundaries.json"
+      ]
+    },
+    {
+      "id": "dimillian-codex-monitor",
+      "repo": "Dimillian/CodexMonitor",
+      "url": "https://github.com/Dimillian/CodexMonitor",
+      "defaultBranch": "main",
+      "commitSha": "dd61b9abd37de5ded86e82b9fe8a83fd49d46fa5",
+      "version": "v0.7.67",
+      "license": "MIT",
+      "integrationMode": "capability_boundary",
+      "capabilities": [
+        "session_and_process_observation"
+      ],
+      "contractTests": [
+        "contracts/upstream-contracts/fixtures/observer-boundaries.json"
+      ]
+    },
+    {
+      "id": "codex-multi-auth",
+      "repo": "ndycode/codex-multi-auth",
+      "url": "https://github.com/ndycode/codex-multi-auth",
+      "defaultBranch": "main",
+      "commitSha": "962c6b4d4a30938d691ad13e85c4255ec75c2f11",
+      "version": "v2.8.1",
+      "license": "MIT",
+      "integrationMode": "capability_boundary",
+      "capabilities": [
+        "account_health_observation",
+        "runtime_rotation_research"
+      ],
+      "contractTests": [
+        "contracts/upstream-contracts/fixtures/observer-boundaries.json"
+      ]
+    },
+    {
+      "id": "codex-account-switch",
+      "repo": "isxlan0/Codex_AccountSwitch",
+      "url": "https://github.com/isxlan0/Codex_AccountSwitch",
+      "defaultBranch": "main",
+      "commitSha": "21ac43ff4c2e222ac61aa56295aa76129249d222",
+      "version": "v1.3.18",
+      "license": "MIT",
+      "integrationMode": "capability_boundary",
+      "capabilities": [
+        "account_switching_research",
+        "proxy_rotation_research"
+      ],
+      "contractTests": [
+        "contracts/upstream-contracts/fixtures/observer-boundaries.json"
+      ]
+    }
+  ]
+}

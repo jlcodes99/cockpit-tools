@@ -1,0 +1,88 @@
+name: Upstream Contract Refresh
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 9 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node.js setup
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          key: upstream-contract-refresh
+
+      - name: Refresh locked SHAs, tags, and licenses
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/check-upstream-updates.mjs --write
+
+      - name: Detect changes
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet -- upstreams.lock.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify updated contracts
+        id: contracts
+        if: steps.changes.outputs.changed == 'true'
+        continue-on-error: true
+        run: npx nx run upstream-contracts:verify
+
+      - name: Create draft upgrade pull request
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTRACT_OUTCOME: ${{ steps.contracts.outcome }}
+        run: |
+          set -euo pipefail
+          branch="codex/upstream-contract-refresh-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add upstreams.lock.json
+          git commit -m "chore: refresh managed-task upstream contracts"
+          git push origin "$branch"
+          body_file="${RUNNER_TEMP}/upstream-contract-refresh.md"
+          {
+            echo "Automated weekly refresh of pinned upstream SHAs, release tags, and license metadata."
+            echo
+            echo "Contract verification outcome: **${CONTRACT_OUTCOME}**."
+            echo
+            echo "This PR is intentionally draft and will not be auto-merged. No third-party source is vendored."
+          } > "$body_file"
+          gh pr create --draft --base main --head "$branch" --title "chore: refresh managed-task upstream contracts" --body-file "$body_file"
+
+      - name: Fail when refreshed contracts need attention
+        if: steps.changes.outputs.changed == 'true' && steps.contracts.outcome != 'success'
+        run: |
+          echo "The draft PR was retained, but one or more upstream contracts require manual review."
+          exit 1

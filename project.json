@@ -1,0 +1,77 @@
+{
+  "$schema": "./node_modules/nx/schemas/project-schema.json",
+  "name": "cockpit-tools",
+  "projectType": "application",
+  "sourceRoot": "src",
+  "targets": {
+    "typecheck": {
+      "command": "npx tsc --noEmit",
+      "cache": true,
+      "inputs": ["web"]
+    },
+    "test-web": {
+      "command": "node scripts/run-web-tests.mjs",
+      "cache": true,
+      "inputs": ["web"]
+    },
+    "test-managed-web": {
+      "command": "node scripts/run-web-tests.mjs --match=codexManagedTask",
+      "cache": true,
+      "inputs": ["web"]
+    },
+    "test-supervisor": {
+      "command": "cargo test -p codex-task-supervisor --no-fail-fast",
+      "cache": true,
+      "inputs": ["rust"]
+    },
+    "test-managed-runtime": {
+      "command": "cargo test -p cockpit-tools managed_task --lib --no-fail-fast",
+      "cache": true,
+      "inputs": ["rust"]
+    },
+    "verify-upstreams": {
+      "command": "node scripts/verify-upstream-contracts.mjs && cargo test -p codex-task-supervisor --test upstream_contracts --no-fail-fast",
+      "cache": true,
+      "inputs": ["upstreamContracts", "rust"]
+    },
+    "check-locales": {
+      "command": "node scripts/check_locales.cjs",
+      "cache": true,
+      "inputs": ["web"]
+    },
+    "format-check": {
+      "command": "node scripts/check-managed-rust-format.mjs",
+      "cache": true,
+      "inputs": ["rust"]
+    },
+    "rust-check": {
+      "command": "cargo check --manifest-path src-tauri/Cargo.toml",
+      "cache": true,
+      "inputs": ["rust"]
+    },
+    "build-web": {
+      "command": "npm run sync-version && npx tsc && npx vite build",
+      "dependsOn": ["typecheck"],
+      "cache": true,
+      "inputs": ["web"],
+      "outputs": ["{projectRoot}/dist"]
+    },
+    "verify": {
+      "command": "node -e \"console.log('Cockpit verification targets completed')\"",
+      "dependsOn": [
+        "typecheck",
+        "test-web",
+        "test-managed-web",
+        "test-supervisor",
+        "test-managed-runtime",
+        "verify-upstreams"
+      ],
+      "cache": false
+    },
+    "ci": {
+      "command": "node -e \"console.log('Cockpit CI target graph completed')\"",
+      "dependsOn": ["verify", "build-web", "rust-check", "format-check", "check-locales"],
+      "cache": false
+    }
+  }
+}

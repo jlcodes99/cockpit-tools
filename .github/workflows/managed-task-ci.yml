@@ -1,0 +1,94 @@
+name: Managed Task CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - "codex/**"
+
+concurrency:
+  group: managed-task-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contracts-and-web:
+    name: Supervisor, web, and upstream contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Node.js setup
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          key: managed-task-contracts
+
+      - name: Check Rust formatting
+        run: node scripts/check-managed-rust-format.mjs
+
+      - name: Typecheck web application
+        run: npx nx run cockpit-tools:typecheck
+
+      - name: Run web unit tests
+        run: npx nx run cockpit-tools:test-web
+
+      - name: Run supervisor unit tests
+        run: npx nx run codex-task-supervisor:test
+
+      - name: Verify pinned upstream contracts
+        run: npx nx run upstream-contracts:verify
+
+  fake-cli-runtime:
+    name: Fake CLI runtime (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Tauri system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf pkg-config libsoup-3.0-dev javascriptcoregtk-4.1 libjavascriptcoregtk-4.1-dev libnm-dev xdg-utils
+
+      - name: Node.js setup
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          key: managed-task-${{ matrix.os }}
+
+      - name: Run fake Codex CLI process, cancellation, and resume tests
+        run: cargo test -p cockpit-tools managed_task --lib --no-fail-fast

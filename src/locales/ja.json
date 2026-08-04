@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "管理タスク",
+    "title": "Codex 管理タスク",
+    "subtitle": "Cockpit は Codex プロセスを一度に一つだけ管理し、利用枠終了が確定した後に同じスレッドを次の適格アカウントで再開します。",
+    "optIn": "明示的に有効化する監視",
+    "cliReady": "Codex CLI は使用可能です",
+    "cliUnavailable": "Codex CLI を使用できません",
+    "createTitle": "管理タスクを作成",
+    "taskList": "タスク待ち行列と履歴",
+    "emptyTitle": "管理タスクはまだありません",
+    "status": {
+      "queued": "待機中",
+      "preparing": "準備中",
+      "running": "実行中",
+      "draining": "終了状態を待機中",
+      "switching": "アカウント切替中",
+      "resuming": "スレッド再開中",
+      "completed": "完了",
+      "failed": "失敗",
+      "cancelled": "キャンセル済み",
+      "needs_attention": "確認が必要"
+    }
+  },
   "common": {
     "confirm": "確認",
     "cancel": "キャンセル",

@@ -1,0 +1,39 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "defaultBase": "main",
+  "namedInputs": {
+    "default": [
+      "{projectRoot}/**/*",
+      "!{projectRoot}/node_modules/**/*",
+      "!{projectRoot}/dist/**/*",
+      "!{workspaceRoot}/target/**/*",
+      "!{workspaceRoot}/.nx/**/*",
+      "!{projectRoot}/.git/**/*"
+    ],
+    "web": [
+      "{projectRoot}/src/**/*",
+      "{projectRoot}/index.html",
+      "{projectRoot}/package.json",
+      "{projectRoot}/package-lock.json",
+      "{projectRoot}/tsconfig*.json",
+      "{projectRoot}/vite.config.ts",
+      "{projectRoot}/tailwind.config.js",
+      "{projectRoot}/postcss.config.js"
+    ],
+    "rust": [
+      "{workspaceRoot}/Cargo.toml",
+      "{workspaceRoot}/Cargo.lock",
+      "{workspaceRoot}/crates/codex-task-supervisor/Cargo.toml",
+      "{workspaceRoot}/crates/codex-task-supervisor/src/**/*.rs",
+      "{workspaceRoot}/crates/codex-task-supervisor/tests/**/*.rs",
+      "{workspaceRoot}/src-tauri/Cargo.toml",
+      "{workspaceRoot}/src-tauri/src/**/*.rs",
+      "{workspaceRoot}/src-tauri/build.rs"
+    ],
+    "upstreamContracts": [
+      "{workspaceRoot}/upstreams.lock.json",
+      "{workspaceRoot}/contracts/upstream-contracts/**/*",
+      "{workspaceRoot}/scripts/verify-upstream-contracts.mjs"
+    ]
+  }
+}

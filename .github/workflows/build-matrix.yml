@@ -31,7 +31,7 @@ jobs:
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
-        run: npm install
+        run: npm ci
 
       - name: 🔄 Sync versions
         run: npm run sync-version
@@ -55,7 +55,7 @@ jobs:
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
-        run: npm install
+        run: npm ci
 
       - name: 🔄 Sync versions
         run: npm run sync-version
@@ -63,9 +63,43 @@ jobs:
       - name: 🛡️ Typecheck
         run: npm run typecheck
 
+  preflight-managed-task-verify:
+    name: "Preflight: Nx managed-task verify"
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf pkg-config libsoup-3.0-dev javascriptcoregtk-4.1 libjavascriptcoregtk-4.1-dev libnm-dev xdg-utils
+
+      - name: Node.js setup
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          key: managed-task-preflight
+
+      - name: Run Nx verification graph
+        run: npx nx run cockpit-tools:verify
+
   build:
     name: "🏗️ Build: ${{ matrix.label }}"
-    needs: [preflight-locales, preflight-typecheck]
+    needs: [preflight-locales, preflight-typecheck, preflight-managed-task-verify]
     runs-on: ${{ matrix.platform }}
     permissions:
       contents: read
@@ -132,7 +166,7 @@ jobs:
           cache: "npm"
 
       - name: 📦 Install frontend dependencies
-        run: npm install
+        run: npm ci
 
       - name: 🔄 Sync versions
         run: npm run sync-version

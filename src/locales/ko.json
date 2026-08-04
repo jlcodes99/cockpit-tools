@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "관리 작업",
+    "title": "Codex 관리 작업",
+    "subtitle": "Cockpit은 한 번에 하나의 Codex 프로세스를 관리하며 할당량 종료가 확인된 뒤 같은 스레드를 다음 적격 계정으로 재개합니다.",
+    "optIn": "명시적으로 켜는 감독",
+    "cliReady": "Codex CLI 준비됨",
+    "cliUnavailable": "Codex CLI를 사용할 수 없음",
+    "createTitle": "관리 작업 만들기",
+    "taskList": "작업 대기열 및 기록",
+    "emptyTitle": "관리 작업이 아직 없음",
+    "status": {
+      "queued": "대기열에 있음",
+      "preparing": "준비 중",
+      "running": "실행 중",
+      "draining": "최종 상태 대기 중",
+      "switching": "계정 전환 중",
+      "resuming": "스레드 재개 중",
+      "completed": "완료됨",
+      "failed": "실패함",
+      "cancelled": "취소됨",
+      "needs_attention": "확인 필요"
+    }
+  },
   "common": {
     "confirm": "확인",
     "cancel": "취소",

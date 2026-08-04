@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "Betreute Aufgaben",
+    "title": "Betreute Codex-Aufgaben",
+    "subtitle": "Cockpit führt jeweils einen Codex-Prozess und setzt denselben Thread erst nach einem bestätigten Kontingent-Endzustand mit einem geeigneten Konto fort.",
+    "optIn": "Ausdrücklich aktivierte Überwachung",
+    "cliReady": "Codex-CLI ist bereit",
+    "cliUnavailable": "Codex-CLI ist nicht verfügbar",
+    "createTitle": "Betreute Aufgabe erstellen",
+    "taskList": "Aufgabenwarteschlange und Verlauf",
+    "emptyTitle": "Noch keine betreuten Aufgaben",
+    "status": {
+      "queued": "Eingereiht",
+      "preparing": "Wird vorbereitet",
+      "running": "Wird ausgeführt",
+      "draining": "Wartet auf Endzustand",
+      "switching": "Konto wird gewechselt",
+      "resuming": "Thread wird fortgesetzt",
+      "completed": "Abgeschlossen",
+      "failed": "Fehlgeschlagen",
+      "cancelled": "Abgebrochen",
+      "needs_attention": "Eingriff erforderlich"
+    }
+  },
   "common": {
     "confirm": "Bestätigen",
     "cancel": "Abbrechen",
