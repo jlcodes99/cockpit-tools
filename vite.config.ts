@@ -59,7 +59,10 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
+    // Keep the default desktop dev server on the same IPv4 loopback address as Tauri's
+    // readiness probe. On Windows, `localhost` can otherwise bind only to `::1`, leaving
+    // the Tauri runner waiting forever even though Vite reports itself as ready.
+    host: host || "127.0.0.1",
     hmr: host
       ? {
           protocol: "ws",
@@ -69,7 +72,8 @@ export default defineConfig(async () => ({
       : undefined,
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // Rust and Nx write locked/generated files below these directories on Windows.
+      ignored: ["**/src-tauri/**", "**/target/**", "**/.nx/**"],
     },
   },
 }));

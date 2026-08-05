@@ -5895,7 +5895,10 @@ pub async fn select_managed_task_account(
                     } else if account_id_blocked_by_health(&account.id).await {
                         Some("health_blocked")
                     } else if let Some(model_key) = model_key {
-                        if get_model_cooldown_wait(&account.id, model_key).await.is_some() {
+                        if get_model_cooldown_wait(&account.id, model_key)
+                            .await
+                            .is_some()
+                        {
                             Some("model_cooldown")
                         } else {
                             let quota = resolve_remaining_quota(&account);
@@ -26342,8 +26345,8 @@ mod tests {
         is_stream_incomplete_error_message, is_upstream_response_failed_error_message,
         legacy_stream_error_category, local_access_chat_completions_url,
         local_access_ineligible_reason, lookup_codex_model_provider_base_url_in_dir,
-        macos_proxy_url_from_scutil_map, max_credential_attempts_for_strategy,
-        managed_task_account_static_skip_reason, managed_task_routing_strategy,
+        macos_proxy_url_from_scutil_map, managed_task_account_static_skip_reason,
+        managed_task_routing_strategy, max_credential_attempts_for_strategy,
         merge_collection_and_account_excluded_models, model_pricing,
         model_provider_direct_test_client_model, model_provider_test_uses_provider_gateway,
         normalize_account_id_list, normalize_account_model_rules, normalize_collection_api_keys,
@@ -26397,8 +26400,7 @@ mod tests {
         CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE, CODEX_PROFILE_AUTH_FILE, CODEX_PROFILE_CONFIG_FILE,
         CODEX_PROVIDER_MODEL_BACKUP_FILE, CODEX_PROVIDER_MODEL_CATALOG_FILE,
         DEFAULT_MAX_RETRY_INTERVAL_MS, DEFAULT_MODEL_PRICING_VERSION,
-        DEFAULT_SESSION_AFFINITY_TTL_MS, MAX_HTTP_REQUEST_BYTES,
-        MANAGED_TASK_QUOTA_FRESH_SECONDS,
+        DEFAULT_SESSION_AFFINITY_TTL_MS, MANAGED_TASK_QUOTA_FRESH_SECONDS, MAX_HTTP_REQUEST_BYTES,
     };
     use super::{
         is_cockpit_managed_local_access_config, restore_profile_takeover_backup,
@@ -26799,10 +26801,8 @@ mod tests {
 
     #[test]
     fn managed_task_allowlist_keeps_the_configured_pool_strategy() {
-        let mut collection = test_local_access_collection(vec![
-            "account-a".to_string(),
-            "account-b".to_string(),
-        ]);
+        let mut collection =
+            test_local_access_collection(vec!["account-a".to_string(), "account-b".to_string()]);
         for strategy in [
             CodexLocalAccessRoutingStrategy::Auto,
             CodexLocalAccessRoutingStrategy::QuotaHighFirst,

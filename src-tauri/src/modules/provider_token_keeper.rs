@@ -834,8 +834,7 @@ async fn refresh_due_trae_accounts() -> bool {
                                 updated.id
                             ));
                         } else {
-                            let platform =
-                                trae_account::resolve_account_platform_kind(&updated);
+                            let platform = trae_account::resolve_account_platform_kind(&updated);
                             if process::is_trae_running_for_platform(platform) {
                                 logger::log_info(&format!(
                                     "[TokenKeeper][Trae] {} 运行中，跳过当前账号本地回写: account_id={}",

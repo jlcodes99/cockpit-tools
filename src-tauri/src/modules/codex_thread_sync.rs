@@ -1529,10 +1529,18 @@ mod tests {
         )
         .expect("write source rollout");
         let source_modified_at = UNIX_EPOCH + Duration::from_secs(1_710_000_000);
-        fs::File::open(&rollout_path)
-            .expect("open source rollout")
-            .set_modified(source_modified_at)
-            .expect("set source mtime");
+        modules::codex_session_file_time::restore_modified_time(
+            &rollout_path,
+            Some(source_modified_at),
+        )
+        .expect("set source mtime");
+        assert_eq!(
+            fs::metadata(&rollout_path)
+                .expect("source metadata")
+                .modified()
+                .expect("source mtime"),
+            source_modified_at
+        );
 
         let snapshot = ThreadSnapshot {
             id: "s1".to_string(),
@@ -1573,10 +1581,18 @@ mod tests {
         )
         .expect("write rollout");
         let original_modified_at = UNIX_EPOCH + Duration::from_secs(1_720_000_000);
-        fs::File::open(&rollout_path)
-            .expect("open rollout")
-            .set_modified(original_modified_at)
-            .expect("set rollout mtime");
+        modules::codex_session_file_time::restore_modified_time(
+            &rollout_path,
+            Some(original_modified_at),
+        )
+        .expect("set rollout mtime");
+        assert_eq!(
+            fs::metadata(&rollout_path)
+                .expect("source metadata")
+                .modified()
+                .expect("source mtime"),
+            original_modified_at
+        );
 
         rewrite_rollout_provider_for_target(&rollout_path, "relay").expect("rewrite provider");
 

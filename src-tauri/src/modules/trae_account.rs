@@ -3466,11 +3466,7 @@ pub(crate) fn backfill_account_user_id_if_missing(
     save_account_file(&account)?;
     // Keep index summary in sync for UI/debug.
     if let Ok(mut index) = load_account_index_checked() {
-        if let Some(item) = index
-            .accounts
-            .iter_mut()
-            .find(|item| item.id == account.id)
-        {
+        if let Some(item) = index.accounts.iter_mut().find(|item| item.id == account.id) {
             item.user_id = Some(uid.clone());
             item.last_used = account.last_used;
             let _ = save_account_index(&index);
@@ -3651,9 +3647,7 @@ fn refuse_inject_if_storage_live(storage_path: &Path, account_id: &str) -> Resul
         }
     }
 
-    if let Ok(contexts) =
-        crate::modules::trae_instance::resolve_running_bound_account_contexts()
-    {
+    if let Ok(contexts) = crate::modules::trae_instance::resolve_running_bound_account_contexts() {
         for context in contexts {
             if storage_paths_equivalent(context.storage_path.as_path(), storage_path) {
                 return Err(format!(
@@ -3677,11 +3671,7 @@ pub fn inject_to_trae_at_path(storage_path: &Path, account_id: &str) -> Result<(
     // If the target storage already holds this account's fresher rotated tokens,
     // adopt them before rewrite so we never downgrade a live Trae session snapshot.
     if storage_path.exists()
-        && sync_account_tokens_from_storage_path(
-            &mut account,
-            storage_path,
-            "注入前本地",
-        )
+        && sync_account_tokens_from_storage_path(&mut account, storage_path, "注入前本地")
     {
         if let Err(err) = save_account_file(&account) {
             logger::log_warn(&format!(
@@ -4875,9 +4865,7 @@ fn sync_account_tokens_from_storage_path(
 }
 
 /// Collect candidate storage.json paths that may hold a fresher session for this account.
-fn collect_storage_paths_for_account_sync(
-    account: &TraeAccount,
-) -> Vec<(String, PathBuf)> {
+fn collect_storage_paths_for_account_sync(account: &TraeAccount) -> Vec<(String, PathBuf)> {
     let platform = resolve_account_platform_kind(account);
     let mut paths: Vec<(String, PathBuf)> = Vec::new();
     let mut push_unique = |label: String, path: PathBuf| {
@@ -4898,9 +4886,7 @@ fn collect_storage_paths_for_account_sync(
     }
 
     // Bound multi-open instances may hold a newer rotated refresh token.
-    if let Ok(store) =
-        crate::modules::trae_instance::load_instance_store_for_platform(platform)
-    {
+    if let Ok(store) = crate::modules::trae_instance::load_instance_store_for_platform(platform) {
         if store
             .default_settings
             .bind_account_id
@@ -4920,12 +4906,7 @@ fn collect_storage_paths_for_account_sync(
             }
         }
         for instance in store.instances {
-            if instance
-                .bind_account_id
-                .as_deref()
-                .map(str::trim)
-                != Some(account.id.as_str())
-            {
+            if instance.bind_account_id.as_deref().map(str::trim) != Some(account.id.as_str()) {
                 continue;
             }
             let label = if instance.name.trim().is_empty() {

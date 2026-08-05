@@ -4837,7 +4837,10 @@ pub fn read_managed_projection_account_id_from_dir(base_dir: &Path) -> Option<St
 /// Removes only the credential projection associated with an isolated managed CODEX_HOME.
 /// Thread/session files and non-secret runtime configuration are intentionally preserved.
 pub fn cleanup_managed_auth_dir(base_dir: &Path) -> Result<(), String> {
-    for path in [base_dir.join("auth.json"), projection_path_for_dir(base_dir)] {
+    for path in [
+        base_dir.join("auth.json"),
+        projection_path_for_dir(base_dir),
+    ] {
         match fs::remove_file(&path) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}

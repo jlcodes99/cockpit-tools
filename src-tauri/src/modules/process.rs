@@ -8310,8 +8310,7 @@ fn launch_trae_macos_with_verification(
 
         let probe_started = Instant::now();
         while probe_started.elapsed() < probe_timeout {
-            if let Some(resolved_pid) =
-                resolve_trae_pid_for_platform(None, user_data_dir, platform)
+            if let Some(resolved_pid) = resolve_trae_pid_for_platform(None, user_data_dir, platform)
             {
                 crate::modules::logger::log_info(&format!(
                     "[Trae Start] platform={} 已匹配主进程 pid={}（{} 后）",
@@ -8366,10 +8365,9 @@ fn launch_trae_macos_with_verification(
                 let probe_started = Instant::now();
                 while probe_started.elapsed() < probe_timeout {
                     if let Some(resolved_pid) =
-                        resolve_trae_pid_for_platform(None, user_data_dir, platform)
-                            .or_else(|| {
-                                resolve_trae_pid_loose_for_platform(None, user_data_dir, platform)
-                            })
+                        resolve_trae_pid_for_platform(None, user_data_dir, platform).or_else(|| {
+                            resolve_trae_pid_loose_for_platform(None, user_data_dir, platform)
+                        })
                     {
                         return Ok(resolved_pid);
                     }
@@ -12923,11 +12921,7 @@ pub fn start_trae_platform_default_with_args_with_new_window(
         let _ = use_new_window;
 
         return launch_trae_macos_with_verification(
-            platform,
-            &app_root,
-            &args,
-            None,
-            /* prefer_new_instance */ false,
+            platform, &app_root, &args, None, /* prefer_new_instance */ false,
         );
     }
 

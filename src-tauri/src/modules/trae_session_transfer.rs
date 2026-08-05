@@ -63,10 +63,7 @@ pub fn take_last_switch_report() -> Option<TraeSessionTransferReport> {
 }
 
 fn remember_switch_report(report: &TraeSessionTransferReport) {
-    if let Ok(mut guard) = LAST_SWITCH_REPORT
-        .get_or_init(|| Mutex::new(None))
-        .lock()
-    {
+    if let Ok(mut guard) = LAST_SWITCH_REPORT.get_or_init(|| Mutex::new(None)).lock() {
         *guard = Some(report.clone());
     }
 }

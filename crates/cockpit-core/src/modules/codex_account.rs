@@ -3531,23 +3531,29 @@ mod tests {
         home_dir: std::path::PathBuf,
         previous_home: Option<String>,
         previous_codex_home: Option<String>,
+        previous_data_dir: Option<String>,
     }
 
     impl TestEnvGuard {
         fn new(prefix: &str) -> Self {
             let home_dir = make_temp_dir(prefix);
             let codex_home = home_dir.join(".codex");
+            let test_data_dir = home_dir.join(".antigravity_cockpit");
             fs::create_dir_all(&codex_home).expect("create codex home");
+            fs::create_dir_all(&test_data_dir).expect("create test data dir");
 
             let previous_home = std::env::var("HOME").ok();
             let previous_codex_home = std::env::var("CODEX_HOME").ok();
+            let previous_data_dir = std::env::var("COCKPIT_TOOLS_DATA_DIR").ok();
             std::env::set_var("HOME", &home_dir);
             std::env::set_var("CODEX_HOME", &codex_home);
+            std::env::set_var("COCKPIT_TOOLS_DATA_DIR", &test_data_dir);
 
             Self {
                 home_dir,
                 previous_home,
                 previous_codex_home,
+                previous_data_dir,
             }
         }
 
@@ -3566,8 +3572,27 @@ mod tests {
                 Some(value) => std::env::set_var("CODEX_HOME", value),
                 None => std::env::remove_var("CODEX_HOME"),
             }
+            match self.previous_data_dir.as_ref() {
+                Some(value) => std::env::set_var("COCKPIT_TOOLS_DATA_DIR", value),
+                None => std::env::remove_var("COCKPIT_TOOLS_DATA_DIR"),
+            }
             let _ = fs::remove_dir_all(&self.home_dir);
         }
+    }
+
+    #[test]
+    fn test_env_guard_redirects_codex_account_storage() {
+        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let env = TestEnvGuard::new("codex-core-account-storage-isolation-test");
+
+        let storage_path = get_accounts_storage_path();
+
+        assert!(
+            storage_path.starts_with(&env.home_dir),
+            "Codex account storage should stay inside the test home, got {} for test home {}",
+            storage_path.display(),
+            env.home_dir.display()
+        );
     }
 
     fn make_jwt(payload: serde_json::Value) -> String {

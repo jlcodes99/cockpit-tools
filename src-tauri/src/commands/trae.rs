@@ -369,11 +369,8 @@ pub async fn inject_trae_account(
                         .map(|path| path.display().to_string())
                         .unwrap_or_else(|| "-".to_string())
                 ));
-                trae_account::refresh_account_usage_only_async(
-                    &account_id,
-                    storage_path.as_deref(),
-                )
-                .await
+                trae_account::refresh_account_usage_only_async(&account_id, storage_path.as_deref())
+                    .await
             } else {
                 trae_account::refresh_account_async(&account_id).await
             }

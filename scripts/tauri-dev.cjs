@@ -1,4 +1,17 @@
 const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+
+const repoRoot = path.resolve(__dirname, '..');
+
+function exitOnFailure(result, label) {
+  if (result.error) {
+    console.error(`${label} failed to start: ${result.error.message}`);
+    process.exit(1);
+  }
+  if (result.status !== 0) {
+    process.exit(typeof result.status === 'number' ? result.status : 1);
+  }
+}
 
 function resolveMacosSdkRoot() {
   if (process.platform !== 'darwin') {
@@ -31,23 +44,28 @@ if (macosSdkRoot) {
   env.SDKROOT = macosSdkRoot;
 }
 const extraArgs = process.argv.slice(2);
+const npmExecPath = process.env.npm_execpath;
+const npmCommand = npmExecPath ? process.execPath : process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const npmArgs = npmExecPath
+  ? [npmExecPath, 'run', 'sync-version']
+  : ['run', 'sync-version'];
 
-const syncResult = spawnSync('npm', ['run', 'sync-version'], {
+const syncResult = spawnSync(npmCommand, npmArgs, {
+  cwd: repoRoot,
   stdio: 'inherit',
   env,
+  shell: !npmExecPath && process.platform === 'win32',
 });
+exitOnFailure(syncResult, 'Version synchronization');
 
-if (syncResult.status !== 0) {
-  process.exit(syncResult.status ?? 1);
-}
-
+const tauriCliPath = require.resolve('@tauri-apps/cli/tauri.js', { paths: [repoRoot] });
 const tauriResult = spawnSync(
-  'tauri',
-  ['dev', '--config', 'src-tauri/tauri.dev.conf.json', ...extraArgs],
+  process.execPath,
+  [tauriCliPath, 'dev', '--config', 'src-tauri/tauri.dev.conf.json', ...extraArgs],
   {
+    cwd: repoRoot,
     stdio: 'inherit',
     env,
   },
 );
-
-process.exit(tauriResult.status ?? 1);
+exitOnFailure(tauriResult, 'Tauri development server');

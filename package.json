@@ -63,5 +63,8 @@
     "tsx": "^4.20.5",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.9"
   }
 }
