@@ -298,7 +298,63 @@ fn build_codex_client_model(model_id: &str, index: usize) -> Value {
     object.insert("supported_in_api".to_string(), Value::Bool(true));
     object.insert("availability_nux".to_string(), Value::Null);
     object.insert("upgrade".to_string(), Value::Null);
+    if matches!(model_id, "deepseek-v4-flash" | "deepseek-v4-pro") {
+        apply_deepseek_codex_model_metadata(object, model_id);
+    }
     model
+}
+
+fn apply_deepseek_codex_model_metadata(object: &mut Map<String, Value>, model_id: &str) {
+    let (display_name, description, priority) = if model_id == "deepseek-v4-pro" {
+        ("DeepSeek-V4-Pro", "Most capable frontier agentic coding model.", 2)
+    } else {
+        ("DeepSeek-V4-Flash", "Latest frontier agentic coding model.", 1)
+    };
+    object.extend([
+        ("prefer_websockets".to_string(), json!(false)),
+        ("support_verbosity".to_string(), json!(true)),
+        ("default_verbosity".to_string(), json!("low")),
+        ("apply_patch_tool_type".to_string(), json!("freeform")),
+        ("web_search_tool_type".to_string(), json!("text")),
+        ("input_modalities".to_string(), json!(["text"])),
+        ("supports_image_detail_original".to_string(), json!(false)),
+        (
+            "truncation_policy".to_string(),
+            json!({ "mode": "tokens", "limit": 10000 }),
+        ),
+        ("supports_parallel_tool_calls".to_string(), json!(true)),
+        ("tool_mode".to_string(), Value::Null),
+        ("multi_agent_version".to_string(), json!("v2")),
+        ("use_responses_lite".to_string(), json!(false)),
+        ("include_skills_usage_instructions".to_string(), json!(false)),
+        ("auto_review_model_override".to_string(), Value::Null),
+        ("context_window".to_string(), json!(1_048_576)),
+        ("max_context_window".to_string(), json!(1_048_576)),
+        ("effective_context_window_percent".to_string(), json!(95)),
+        ("auto_compact_token_limit".to_string(), Value::Null),
+        ("comp_hash".to_string(), json!("3000")),
+        ("reasoning_summary_format".to_string(), json!("experimental")),
+        ("default_reasoning_summary".to_string(), json!("none")),
+        ("display_name".to_string(), json!(display_name)),
+        ("description".to_string(), json!(description)),
+        ("default_reasoning_level".to_string(), json!("high")),
+        (
+            "supported_reasoning_levels".to_string(),
+            json!([
+                { "effort": "low", "description": "Fast responses with lighter reasoning" },
+                { "effort": "high", "description": "Extra high reasoning depth for complex problems" },
+                { "effort": "max", "description": "Maximum reasoning depth for the hardest problems" }
+            ]),
+        ),
+        ("shell_type".to_string(), json!("shell_command")),
+        ("visibility".to_string(), json!("list")),
+        ("minimal_client_version".to_string(), json!("0.144.0")),
+        ("priority".to_string(), json!(priority)),
+        ("experimental_supported_tools".to_string(), Value::Null),
+        ("supports_search_tool".to_string(), json!(true)),
+        ("default_service_tier".to_string(), Value::Null),
+        ("supports_reasoning_summaries".to_string(), json!(true)),
+    ]);
 }
 
 fn codex_client_model_catalog() -> &'static Value {
@@ -1015,6 +1071,24 @@ mod tests {
             priorities,
             vec![Some(1), Some(2), Some(3), Some(7), Some(16), Some(23)]
         );
+    }
+
+    #[test]
+    fn deepseek_models_use_official_codex_metadata() {
+        let response = build_codex_client_models_response(&[
+            "deepseek-v4-flash".to_string(),
+            "deepseek-v4-pro".to_string(),
+        ]);
+        let models = response["models"].as_array().expect("models");
+
+        assert_eq!(models[0]["slug"], "deepseek-v4-flash");
+        assert_eq!(models[0]["context_window"], 1_048_576);
+        assert_eq!(models[0]["prefer_websockets"], false);
+        assert_eq!(models[0]["apply_patch_tool_type"], "freeform");
+        assert_eq!(models[0]["default_reasoning_level"], "high");
+        assert_eq!(models[0]["supported_reasoning_levels"][2]["effort"], "max");
+        assert_eq!(models[1]["slug"], "deepseek-v4-pro");
+        assert_eq!(models[1]["priority"], 2);
     }
 
     #[test]

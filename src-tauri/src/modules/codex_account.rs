@@ -62,6 +62,9 @@ const CODEX_LEGACY_API_KEY_OPENAI_PROVIDER_ID: &str = "openai_api_key";
 const CODEX_DEFAULT_RUNTIME_PROVIDER_NAME: &str = "OpenAI Official";
 const CODEX_PROVIDER_WIRE_API: &str = "responses";
 const APIKEY_FUN_PROVIDER_BASE_URL: &str = "https://api.apikey.fun/v1";
+const DEEPSEEK_API_BASE_URL: &str = "https://api.deepseek.com";
+const DEEPSEEK_PROVIDER_ID: &str = "deepseek";
+const DEEPSEEK_CODEX_MODELS: &[&str] = &["deepseek-v4-flash", "deepseek-v4-pro"];
 const CODEX_CONTEXT_WINDOW_1M_VALUE: i64 = 1_000_000;
 const CODEX_AUTO_COMPACT_DEFAULT_LIMIT: i64 = 900_000;
 #[cfg(target_os = "macos")]
@@ -532,6 +535,53 @@ fn migrate_apikey_fun_wire_api(account: &mut CodexAccount) -> bool {
     true
 }
 
+fn is_deepseek_account(account: &CodexAccount) -> bool {
+    account
+        .api_provider_id
+        .as_deref()
+        .is_some_and(|value| value.eq_ignore_ascii_case(DEEPSEEK_PROVIDER_ID))
+        || account
+            .api_base_url
+            .as_deref()
+            .and_then(|value| reqwest::Url::parse(value.trim()).ok())
+            .and_then(|url| url.host_str().map(str::to_string))
+            .is_some_and(|host| host.eq_ignore_ascii_case("api.deepseek.com"))
+}
+
+fn enforce_deepseek_responses_account(account: &mut CodexAccount) -> bool {
+    if !account.is_api_key_auth() || !is_deepseek_account(account) {
+        return false;
+    }
+    let model_catalog = DEEPSEEK_CODEX_MODELS
+        .iter()
+        .map(|model| model.to_string())
+        .collect::<Vec<_>>();
+    let changed = account.api_base_url.as_deref() != Some(DEEPSEEK_API_BASE_URL)
+        || account.api_provider_id.as_deref() != Some(DEEPSEEK_PROVIDER_ID)
+        || account.api_wire_api.as_deref() != Some(CODEX_PROVIDER_WIRE_API)
+        || account.api_supports_websockets
+        || !account.api_sync_model_catalog_to_codex
+        || account.api_model_catalog != model_catalog
+        || account.api_supports_vision
+        || !account.api_model_vision_support.is_empty()
+        || account.api_vision_routing_model.is_some();
+    if !changed {
+        return false;
+    }
+    account.api_base_url = Some(DEEPSEEK_API_BASE_URL.to_string());
+    account.api_provider_mode = CodexApiProviderMode::Custom;
+    account.api_provider_id = Some(DEEPSEEK_PROVIDER_ID.to_string());
+    account.api_provider_name = Some("DeepSeek".to_string());
+    account.api_wire_api = Some(CODEX_PROVIDER_WIRE_API.to_string());
+    account.api_supports_websockets = false;
+    account.api_sync_model_catalog_to_codex = true;
+    account.api_model_catalog = model_catalog;
+    account.api_supports_vision = false;
+    account.api_model_vision_support.clear();
+    account.api_vision_routing_model = None;
+    true
+}
+
 fn normalize_api_key_websocket_capability(account: &mut CodexAccount) -> bool {
     let normalized = account.is_api_key_auth()
         && account.api_provider_mode == CodexApiProviderMode::Custom
@@ -583,6 +633,7 @@ fn apply_api_key_fields(
     account.api_supports_vision = api_supports_vision;
     account.api_model_vision_support = normalize_api_model_vision_support(api_model_vision_support);
     account.api_vision_routing_model = normalize_optional_value(api_vision_routing_model);
+    let _ = enforce_deepseek_responses_account(account);
     account.email = build_api_key_email(api_key);
     if is_cockpit_api && normalize_optional_ref(account.account_name.as_deref()).is_none() {
         account.account_name = Some(COCKPIT_API_DEFAULT_ACCOUNT_NAME.to_string());
@@ -1607,7 +1658,8 @@ fn api_key_account_requires_bearer_provider_override(
         crate::modules::codex_local_access::account_requires_provider_gateway(account)
             && !account_syncs_model_catalog_to_codex(account);
 
-    oauth_bound
+    is_deepseek_account(account)
+        || oauth_bound
         || uses_local_runtime
         || requires_immediate_provider_override
         || api_key_provider_should_enable_imagegen(account, provider_config)
@@ -1638,7 +1690,11 @@ fn write_api_key_runtime_provider_to_config_toml(
         account.api_provider_mode == CodexApiProviderMode::Custom
             && account.api_supports_websockets,
         supports_image,
-        oauth_bound || !supports_image,
+        if is_deepseek_account(account) {
+            false
+        } else {
+            oauth_bound || !supports_image
+        },
     )
 }
 
@@ -3170,9 +3226,11 @@ fn load_account_with_summary(
         // 绑定 OAuth 时强制关闭本地网关标志，避免误走旧「禁生图 + 本地网关」路径。
         let cleared_bound_oauth_gateway = clear_bound_oauth_local_gateway_flag(&mut account);
         let migrated_wire_api = migrate_apikey_fun_wire_api(&mut account);
+        let migrated_deepseek = enforce_deepseek_responses_account(&mut account);
         let migrated_websocket = normalize_api_key_websocket_capability(&mut account);
         if needs_rotation
             || migrated_wire_api
+            || migrated_deepseek
             || migrated_websocket
             || cleared_bound_oauth_gateway
             || migrated_index_summary
@@ -3199,6 +3257,7 @@ fn load_account_with_summary(
     let mut account = parse_codex_account_compat(value.clone(), account_id, summary)?
         .ok_or_else(|| format!("账号详情缺少可识别凭据 ({})", path.display()))?;
     let _ = migrate_apikey_fun_wire_api(&mut account);
+    let _ = enforce_deepseek_responses_account(&mut account);
     let _ = clear_bound_oauth_local_gateway_flag(&mut account);
 
     let account_for_rewrite = account.clone();
@@ -3673,6 +3732,7 @@ pub fn upsert_api_key_account(
     };
 
     account.auth_mode = CodexAuthMode::Apikey;
+    let _ = enforce_deepseek_responses_account(&mut account);
     save_account(&account)?;
 
     if let Some(summary) = index.accounts.iter_mut().find(|item| item.id == account.id) {
@@ -13038,6 +13098,37 @@ supports_websockets = false
         assert!(fs::read_to_string(codex_home.join("config.toml"))
             .expect("read provider config")
             .contains("model_catalog_json"));
+    }
+
+    #[test]
+    fn deepseek_account_migration_enforces_official_responses_profile() {
+        let mut account = CodexAccount::new_api_key(
+            "deepseek-api-key".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-deepseek".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com/v1".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec!["deepseek-v4-pro".to_string()],
+        );
+        account.api_wire_api = Some("chat_completions".to_string());
+        account.api_supports_websockets = true;
+        account.api_supports_vision = true;
+
+        assert!(super::enforce_deepseek_responses_account(&mut account));
+        assert_eq!(
+            account.api_base_url.as_deref(),
+            Some("https://api.deepseek.com")
+        );
+        assert_eq!(account.api_wire_api.as_deref(), Some("responses"));
+        assert!(account.api_sync_model_catalog_to_codex);
+        assert!(!account.api_supports_websockets);
+        assert!(!account.api_supports_vision);
+        assert_eq!(
+            account.api_model_catalog,
+            vec!["deepseek-v4-flash", "deepseek-v4-pro"]
+        );
     }
 
     #[test]

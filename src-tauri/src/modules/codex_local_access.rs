@@ -16763,7 +16763,7 @@ fn provider_gateway_models_for_account(account: &CodexAccount) -> Vec<String> {
         .trim()
         .to_ascii_lowercase();
     if provider_id == "deepseek" || base_url.contains("api.deepseek.com") {
-        return normalize_provider_gateway_models(vec!["deepseek-v4-pro", "deepseek-v4-flash"]);
+        return normalize_provider_gateway_models(vec!["deepseek-v4-flash", "deepseek-v4-pro"]);
     }
     if provider_id == "moonshot" || base_url.contains("api.moonshot.cn") {
         return normalize_provider_gateway_models(vec!["kimi-k2.6"]);
@@ -16796,7 +16796,9 @@ fn is_provider_model_shell_slug(model: &str) -> bool {
     if model.is_empty() {
         return false;
     }
-    CODEX_PROVIDER_MODEL_SHELL_POOL
+    model.eq_ignore_ascii_case("deepseek-v4-flash")
+        || model.eq_ignore_ascii_case("deepseek-v4-pro")
+        || CODEX_PROVIDER_MODEL_SHELL_POOL
         .iter()
         .any(|shell| shell.eq_ignore_ascii_case(model))
 }
@@ -16977,7 +16979,6 @@ fn provider_gateway_wire_api_for_account(account: &CodexAccount) -> String {
         .and_then(|url| url.host_str().map(|host| host.to_ascii_lowercase()))
         .unwrap_or_default();
     let chat_hosts = [
-        "api.deepseek.com",
         "api.moonshot.cn",
         "api.siliconflow.cn",
         "api.siliconflow.com",
@@ -26944,6 +26945,31 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
     }
 
     #[test]
+    fn deepseek_responses_models_keep_identity_without_gateway() {
+        let mut account = CodexAccount::new_api_key(
+            "deepseek-api-key".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec![
+                "deepseek-v4-flash".to_string(),
+                "deepseek-v4-pro".to_string(),
+            ],
+        );
+        account.api_wire_api = Some("responses".to_string());
+        account.api_sync_model_catalog_to_codex = true;
+
+        let slots = super::allocate_provider_model_slots(&account.api_model_catalog);
+        assert!(slots
+            .iter()
+            .all(|slot| slot.client_model == slot.upstream_model));
+        assert!(!account_requires_provider_gateway(&account));
+    }
+
+    #[test]
     fn provider_gateway_models_prefers_account_catalog() {
         let mut account = CodexAccount::new_api_key(
             "local-account-id".to_string(),
@@ -27009,18 +27035,17 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
                 .map(|slot| (slot.client_model.as_str(), slot.upstream_model.as_str()))
                 .collect::<Vec<_>>(),
             vec![
+                ("deepseek-v4-pro", "deepseek-v4-pro"),
+                ("deepseek-v4-flash", "deepseek-v4-flash"),
                 ("gpt-5.5", "gpt-5.5"),
-                ("gpt-5.6-sol", "deepseek-v4-pro"),
-                ("gpt-5.6-terra", "deepseek-v4-flash"),
-                ("gpt-5.6-luna", "deepseek-v4-lite"),
-                ("gpt-5.4", "deepseek-v4-extra"),
-                ("gpt-5.4-mini", "custom-overflow-a"),
-                ("gpt-5.3-codex", "custom-overflow-b"),
-                ("gpt-5.3-codex-spark", "custom-overflow-c"),
-                ("gpt-5.2", "custom-overflow-d"),
-                // Shell pool exhausted: keep upstream IDs so all models remain listed.
-                ("custom-overflow-e", "custom-overflow-e"),
-                ("custom-overflow-f", "custom-overflow-f"),
+                ("gpt-5.6-sol", "deepseek-v4-lite"),
+                ("gpt-5.6-terra", "deepseek-v4-extra"),
+                ("gpt-5.6-luna", "custom-overflow-a"),
+                ("gpt-5.4", "custom-overflow-b"),
+                ("gpt-5.4-mini", "custom-overflow-c"),
+                ("gpt-5.3-codex", "custom-overflow-d"),
+                ("gpt-5.3-codex-spark", "custom-overflow-e"),
+                ("gpt-5.2", "custom-overflow-f"),
             ]
         );
         assert!(provider_model_slots_need_upstream_rewrite(&slots));

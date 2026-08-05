@@ -6,6 +6,9 @@ import type {
 } from '../utils/codexProviderGateway';
 import type { CodexLocalAccessTestResult } from '../types/codexLocalAccess';
 import {
+  DEEPSEEK_API_BASE_URL,
+  DEEPSEEK_API_PROVIDER_ID,
+  DEEPSEEK_CODEX_MODEL_CATALOG,
   findCodexApiProviderPresetById,
   resolveCodexApiProviderPresetId,
 } from '../utils/codexProviderPresets';
@@ -181,6 +184,35 @@ function migrateApiKeyFunProviderWireApi(
     return provider;
   });
   return { providers: next, changed };
+}
+
+function enforceDeepSeekProvider(provider: CodexModelProvider): boolean {
+  if (resolveCodexApiProviderPresetId(provider.baseUrl) !== DEEPSEEK_API_PROVIDER_ID) {
+    return false;
+  }
+  const modelCatalog = [...DEEPSEEK_CODEX_MODEL_CATALOG];
+  const changed =
+    provider.baseUrl !== DEEPSEEK_API_BASE_URL ||
+    provider.wireApi !== 'responses' ||
+    provider.supportsWebsockets ||
+    provider.enableModePreference !== 'direct' ||
+    provider.supportsVision === true ||
+    provider.visionRoutingModel !== undefined ||
+    provider.modelCapabilities !== undefined ||
+    provider.modelCatalog?.length !== modelCatalog.length ||
+    provider.modelCatalog?.some((model, index) => model !== modelCatalog[index]);
+  if (!changed) return false;
+
+  provider.baseUrl = DEEPSEEK_API_BASE_URL;
+  provider.wireApi = 'responses';
+  provider.supportsWebsockets = false;
+  provider.enableModePreference = 'direct';
+  provider.modelCatalog = modelCatalog;
+  provider.supportsVision = false;
+  provider.modelCapabilities = undefined;
+  provider.visionRoutingModel = undefined;
+  provider.updatedAt = Date.now();
+  return true;
 }
 
 function presetModelCatalogForBaseUrl(baseUrl: string): string[] | undefined {
@@ -373,9 +405,14 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
   });
   const migration = migrateApiKeyFunProviderWireApi(loaded);
   loaded = migration.providers;
+  let migratedDeepSeek = false;
+  for (const provider of loaded) {
+    migratedDeepSeek = enforceDeepSeekProvider(provider) || migratedDeepSeek;
+  }
   if (
     loaded.length !== loadedProviders.length ||
     migration.changed ||
+    migratedDeepSeek ||
     loadResult.removedImageGenerationSetting ||
     loadResult.migratedSupportsWebsockets
   ) {
@@ -496,6 +533,7 @@ export async function createCodexModelProvider(input: {
     createdAt: now,
     updatedAt: now,
   };
+  enforceDeepSeekProvider(provider);
   if (input.initialApiKey) {
     ensureApiKeyOnProvider(provider, input.initialApiKey, input.initialApiKeyName);
   }
@@ -611,6 +649,7 @@ export async function updateCodexModelProvider(
         ? undefined
         : normalizeBoundOauthAccountId(patch.boundOauthAccountId);
   }
+  enforceDeepSeekProvider(provider);
   provider.updatedAt = Date.now();
   await writeProviders(providers);
   return { ...provider, apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey })) };
@@ -864,6 +903,7 @@ export async function upsertCodexModelProviderFromCredential(
   if (input.integrationType !== undefined) {
     provider.integrationType = normalizeIntegrationType(input.integrationType);
   }
+  enforceDeepSeekProvider(provider);
   provider.updatedAt = Date.now();
   await writeProviders(providers);
   return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };

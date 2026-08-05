@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 
 export type ModelProviderUsageIntegrationType = 'sub2api' | 'new_api';
-export type ModelProviderUsageMode = ModelProviderUsageIntegrationType;
+export type ModelProviderUsageMode = ModelProviderUsageIntegrationType | 'deepseek';
 
 export interface ModelProviderModel {
   id: string;
@@ -155,7 +155,11 @@ export function resolveModelProviderUsageMode(
   summary?: ModelProviderUsageSummary,
 ): ModelProviderUsageMode | null {
   if (!summary) return null;
-  if (summary.mode === 'new_api' || summary.mode === 'sub2api') {
+  if (
+    summary.mode === 'new_api' ||
+    summary.mode === 'sub2api' ||
+    summary.mode === 'deepseek'
+  ) {
     return summary.mode;
   }
   if (
@@ -189,7 +193,9 @@ export function formatModelProviderUsageMoney(
   if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
   const normalizedUnit = unit?.trim() || 'USD';
   const formatted = value.toFixed(value >= 100 ? 0 : 2);
-  return normalizedUnit === 'USD' ? `$${formatted}` : `${formatted} ${normalizedUnit}`;
+  if (normalizedUnit === 'USD') return `$${formatted}`;
+  if (normalizedUnit === 'CNY') return `¥${formatted}`;
+  return `${formatted} ${normalizedUnit}`;
 }
 
 export function formatModelProviderUsageInteger(value?: number | null): string {

@@ -1944,6 +1944,21 @@ fn codex_model_provider_usage_url(base_url: &str) -> Result<String, String> {
     Ok(url.to_string())
 }
 
+fn codex_model_provider_deepseek_balance_url(base_url: &str) -> Result<Option<String>, String> {
+    let mut url = reqwest::Url::parse(base_url.trim())
+        .map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())?;
+    if url.scheme() != "https"
+        || !url
+            .host_str()
+            .is_some_and(|host| host.eq_ignore_ascii_case("api.deepseek.com"))
+    {
+        return Ok(None);
+    }
+    url.set_path("/user/balance");
+    url.set_query(None);
+    Ok(Some(url.to_string()))
+}
+
 fn codex_model_provider_new_api_billing_url(
     base_url: &str,
     endpoint: &str,
@@ -2103,6 +2118,13 @@ fn emit_model_provider_chat_test_progress(
 }
 
 fn normalize_model_provider_wire_api(value: Option<&str>, base_url: &str) -> String {
+    if reqwest::Url::parse(base_url.trim())
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_string))
+        .is_some_and(|host| host.eq_ignore_ascii_case("api.deepseek.com"))
+    {
+        return "responses".to_string();
+    }
     match value.map(str::trim) {
         Some("chat_completions") => return "chat_completions".to_string(),
         Some("responses") => return "responses".to_string(),
@@ -2110,7 +2132,6 @@ fn normalize_model_provider_wire_api(value: Option<&str>, base_url: &str) -> Str
     }
     let lower = base_url.trim().to_ascii_lowercase();
     if lower.contains("/chat/completions")
-        || lower.contains("api.deepseek.com")
         || lower.contains("api.moonshot.cn")
         || lower.contains("api.siliconflow.cn")
         || lower.contains("api.siliconflow.com")
@@ -2477,7 +2498,9 @@ fn json_f64_at(value: &serde_json::Value, path: &[&str]) -> Option<f64> {
     for key in path {
         current = current.get(*key)?;
     }
-    current.as_f64()
+    current
+        .as_f64()
+        .or_else(|| current.as_str()?.trim().parse::<f64>().ok())
 }
 
 fn json_i64_at(value: &serde_json::Value, path: &[&str]) -> Option<i64> {
@@ -2600,6 +2623,76 @@ fn summarize_model_provider_usage(
         total_total_tokens: json_i64_at(body, &["usage", "total", "total_tokens"]),
         total_cost: json_f64_at(body, &["usage", "total", "cost"]),
         model_stats_count,
+        latency_ms,
+        details,
+    }
+}
+
+fn summarize_deepseek_balance(
+    body: &serde_json::Value,
+    latency_ms: u64,
+) -> CodexModelProviderUsageSummary {
+    let is_available = json_bool_at(body, &["is_available"]).unwrap_or(false);
+    let balance_info = body
+        .get("balance_infos")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|items| {
+            items
+                .iter()
+                .find(|item| {
+                    json_string_at(item, &["currency"])
+                        .is_some_and(|currency| currency.eq_ignore_ascii_case("CNY"))
+                })
+                .or_else(|| items.first())
+        });
+    let currency = balance_info.and_then(|item| json_string_at(item, &["currency"]));
+    let total_balance = balance_info.and_then(|item| json_f64_at(item, &["total_balance"]));
+    let mut details = Vec::new();
+    push_usage_detail(
+        &mut details,
+        "isAvailable",
+        "Available",
+        Some(is_available.to_string()),
+    );
+    push_usage_detail(&mut details, "currency", "Currency", currency.clone());
+    for (key, label) in [
+        ("total_balance", "Total Balance"),
+        ("granted_balance", "Granted Balance"),
+        ("topped_up_balance", "Topped-up Balance"),
+    ] {
+        push_usage_detail(
+            &mut details,
+            match key {
+                "total_balance" => "totalBalance",
+                "granted_balance" => "grantedBalance",
+                _ => "toppedUpBalance",
+            },
+            label,
+            balance_info
+                .and_then(|item| json_f64_at(item, &[key]))
+                .map(format_usage_number),
+        );
+    }
+
+    CodexModelProviderUsageSummary {
+        mode: Some("deepseek".to_string()),
+        is_valid: Some(is_available),
+        status: Some(if is_available { "available" } else { "unavailable" }.to_string()),
+        plan_name: None,
+        remaining: total_balance,
+        balance: total_balance,
+        unit: currency,
+        quota_unlimited: None,
+        quota_limit: None,
+        quota_used: None,
+        quota_remaining: total_balance,
+        today_requests: None,
+        today_total_tokens: None,
+        today_cost: None,
+        total_requests: None,
+        total_total_tokens: None,
+        total_cost: None,
+        model_stats_count: 0,
         latency_ms,
         details,
     }
@@ -3054,6 +3147,10 @@ pub async fn codex_query_model_provider_usage(
         .build()
         .map_err(|e| format!("CREATE_HTTP_CLIENT_FAILED: {}", e))?;
 
+    if let Some(url) = codex_model_provider_deepseek_balance_url(&base_url)? {
+        return query_deepseek_model_provider_balance(&client, &url, key).await;
+    }
+
     let requested_type = integration_type
         .as_deref()
         .map(str::trim)
@@ -3077,6 +3174,34 @@ pub async fn codex_query_model_provider_usage(
             }
         }
     }
+}
+
+async fn query_deepseek_model_provider_balance(
+    client: &reqwest::Client,
+    url: &str,
+    key: &str,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    let started = Instant::now();
+    let response = client
+        .get(url)
+        .bearer_auth(key)
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+        .map_err(|e| format!("PROVIDER_USAGE_NETWORK_FAILED: {}", e))?;
+    let latency_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+    let status = response.status();
+    let text = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(format!(
+            "PROVIDER_USAGE_HTTP_{}: {}",
+            status.as_u16(),
+            text.chars().take(300).collect::<String>()
+        ));
+    }
+    let parsed = serde_json::from_str::<serde_json::Value>(&text)
+        .map_err(|e| format!("PROVIDER_USAGE_PARSE_FAILED: {}", e))?;
+    Ok(summarize_deepseek_balance(&parsed, latency_ms))
 }
 
 async fn query_new_api_model_provider_usage(
@@ -3730,5 +3855,64 @@ mod tests {
                 .as_deref(),
             Some("custom-model")
         );
+    }
+
+    #[test]
+    fn deepseek_always_uses_native_responses() {
+        assert_eq!(
+            normalize_model_provider_wire_api(
+                Some("chat_completions"),
+                "https://api.deepseek.com/v1",
+            ),
+            "responses"
+        );
+    }
+
+    #[test]
+    fn deepseek_balance_url_ignores_optional_v1_path() {
+        assert_eq!(
+            codex_model_provider_deepseek_balance_url("https://api.deepseek.com/v1")
+                .expect("valid URL")
+                .as_deref(),
+            Some("https://api.deepseek.com/user/balance")
+        );
+        assert_eq!(
+            codex_model_provider_deepseek_balance_url("https://example.com/v1")
+                .expect("valid URL"),
+            None
+        );
+    }
+
+    #[test]
+    fn deepseek_balance_prefers_cny_and_parses_string_amounts() {
+        let summary = summarize_deepseek_balance(
+            &serde_json::json!({
+                "is_available": true,
+                "balance_infos": [
+                    {
+                        "currency": "USD",
+                        "total_balance": "9.00",
+                        "granted_balance": "1.00",
+                        "topped_up_balance": "8.00"
+                    },
+                    {
+                        "currency": "CNY",
+                        "total_balance": "110.00",
+                        "granted_balance": "10.00",
+                        "topped_up_balance": "100.00"
+                    }
+                ]
+            }),
+            12,
+        );
+
+        assert_eq!(summary.mode.as_deref(), Some("deepseek"));
+        assert_eq!(summary.unit.as_deref(), Some("CNY"));
+        assert_eq!(summary.balance, Some(110.0));
+        assert_eq!(summary.is_valid, Some(true));
+        assert!(summary
+            .details
+            .iter()
+            .any(|detail| detail.key == "grantedBalance" && detail.value == "10"));
     }
 }
