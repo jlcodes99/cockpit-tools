@@ -200,7 +200,7 @@ function enforceDeepSeekProvider(provider: CodexModelProvider): boolean {
     provider.visionRoutingModel !== undefined ||
     provider.modelCapabilities !== undefined ||
     provider.modelCatalog?.length !== modelCatalog.length ||
-    provider.modelCatalog?.some((model, index) => model !== modelCatalog[index]);
+    modelCatalog.some((model, index) => provider.modelCatalog?.[index] !== model);
   if (!changed) return false;
 
   provider.baseUrl = DEEPSEEK_API_BASE_URL;

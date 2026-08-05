@@ -633,7 +633,6 @@ fn apply_api_key_fields(
     account.api_supports_vision = api_supports_vision;
     account.api_model_vision_support = normalize_api_model_vision_support(api_model_vision_support);
     account.api_vision_routing_model = normalize_optional_value(api_vision_routing_model);
-    let _ = enforce_deepseek_responses_account(account);
     account.email = build_api_key_email(api_key);
     if is_cockpit_api && normalize_optional_ref(account.account_name.as_deref()).is_none() {
         account.account_name = Some(COCKPIT_API_DEFAULT_ACCOUNT_NAME.to_string());

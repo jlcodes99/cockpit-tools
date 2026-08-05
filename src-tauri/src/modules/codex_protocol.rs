@@ -341,9 +341,10 @@ fn apply_deepseek_codex_model_metadata(object: &mut Map<String, Value>, model_id
         (
             "supported_reasoning_levels".to_string(),
             json!([
-                { "effort": "low", "description": "Fast responses with lighter reasoning" },
-                { "effort": "high", "description": "Extra high reasoning depth for complex problems" },
-                { "effort": "max", "description": "Maximum reasoning depth for the hardest problems" }
+                { "effort": "low",    "description": "Fast responses with lighter reasoning" },
+                { "effort": "medium", "description": "Balances speed and reasoning depth for everyday tasks" },
+                { "effort": "high",   "description": "Extra high reasoning depth for complex problems" },
+                { "effort": "max",    "description": "Maximum reasoning depth for the hardest problems" }
             ]),
         ),
         ("shell_type".to_string(), json!("shell_command")),
@@ -1086,7 +1087,7 @@ mod tests {
         assert_eq!(models[0]["prefer_websockets"], false);
         assert_eq!(models[0]["apply_patch_tool_type"], "freeform");
         assert_eq!(models[0]["default_reasoning_level"], "high");
-        assert_eq!(models[0]["supported_reasoning_levels"][2]["effort"], "max");
+        assert_eq!(models[0]["supported_reasoning_levels"][3]["effort"], "max");
         assert_eq!(models[1]["slug"], "deepseek-v4-pro");
         assert_eq!(models[1]["priority"], 2);
     }

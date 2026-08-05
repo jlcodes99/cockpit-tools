@@ -271,6 +271,7 @@ import {
 } from "../services/codexApiKeyUsageRefreshService";
 import {
   isModelProviderUsageUnavailableError,
+  formatModelProviderUsageMoney,
   listModelProviderModels,
   resolveNewApiQuotaSnapshot,
 } from "../services/modelProviderUsageService";
@@ -7576,14 +7577,8 @@ export function CodexAccountsPage() {
   }, [refreshApiKeyUsageByAccountId]);
 
   const formatApiKeyUsageMoney = useCallback(
-    (value?: number | null, unit?: string | null): string => {
-      if (typeof value !== "number" || !Number.isFinite(value)) return "-";
-      const normalizedUnit = unit?.trim() || "USD";
-      const formatted = value.toFixed(value >= 100 ? 0 : 2);
-      if (normalizedUnit === "USD") return `$${formatted}`;
-      if (normalizedUnit === "CNY") return `¥${formatted}`;
-      return `${formatted} ${normalizedUnit}`;
-    },
+    (value?: number | null, unit?: string | null): string =>
+      formatModelProviderUsageMoney(value ?? undefined, unit ?? undefined),
     [],
   );
 

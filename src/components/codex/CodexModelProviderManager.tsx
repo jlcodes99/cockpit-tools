@@ -101,6 +101,7 @@ import {
   readCodexApiKeyUsageCache,
 } from "../../services/codexApiKeyUsageRefreshService";
 import {
+  formatModelProviderUsageMoney,
   resolveNewApiQuotaSnapshot,
 } from "../../services/modelProviderUsageService";
 import { useSponsorStore } from "../../stores/useSponsorStore";
@@ -3006,14 +3007,11 @@ export function CodexModelProviderManager({
     refreshProviderUsage,
   ]);
 
-  const formatUsageMoney = useCallback((value?: number | null, unit?: string | null): string => {
-    if (typeof value !== "number" || Number.isNaN(value)) return "-";
-    const normalizedUnit = unit?.trim() || "USD";
-    const formatted = value.toFixed(value >= 100 ? 0 : 2);
-    if (normalizedUnit === "USD") return `$${formatted}`;
-    if (normalizedUnit === "CNY") return `¥${formatted}`;
-    return `${formatted} ${normalizedUnit}`;
-  }, []);
+  const formatUsageMoney = useCallback(
+    (value?: number | null, unit?: string | null): string =>
+      formatModelProviderUsageMoney(value ?? undefined, unit ?? undefined),
+    [],
+  );
 
   const formatUsageQuotaValue = useCallback(
     (
