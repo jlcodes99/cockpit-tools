@@ -1657,8 +1657,7 @@ fn api_key_account_requires_bearer_provider_override(
         crate::modules::codex_local_access::account_requires_provider_gateway(account)
             && !account_syncs_model_catalog_to_codex(account);
 
-    is_deepseek_account(account)
-        || oauth_bound
+    oauth_bound
         || uses_local_runtime
         || requires_immediate_provider_override
         || api_key_provider_should_enable_imagegen(account, provider_config)
@@ -1689,11 +1688,7 @@ fn write_api_key_runtime_provider_to_config_toml(
         account.api_provider_mode == CodexApiProviderMode::Custom
             && account.api_supports_websockets,
         supports_image,
-        if is_deepseek_account(account) {
-            false
-        } else {
-            oauth_bound || !supports_image
-        },
+        oauth_bound || !supports_image,
     )
 }
 
