@@ -398,6 +398,11 @@ Due to macOS security mechanisms, apps not downloaded from the App Store may tri
 
 ---
 
+
+## Developer Documentation
+
+- [Windows Desktop Software Development Guide (zh-CN)](docs/windows-desktop-software-guide.zh-CN.md)
+
 ## Development & Build
 
 ### Prerequisites

@@ -488,3 +488,8 @@ QQ 交流群、微信群或新建的 Telegram 畅聊群都可以加入。
 - 遵守相关服务条款和法律法规
 
 项目作者对因使用本项目而产生的任何直接或间接损失不承担责任。
+
+## Developer Docs
+
+- [Windows Desktop Software Guide (zh-CN)](docs/windows-desktop-software-guide.zh-CN.md)
+
