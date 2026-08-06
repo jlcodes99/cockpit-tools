@@ -62,6 +62,12 @@ type Hooks struct {
 	// OnAfterStart is called after the service has started successfully,
 	// providing access to the service instance for additional operations.
 	OnAfterStart func(*Service)
+
+	// OnConfigReload lets an embedding host rebuild custom routing state when
+	// the file watcher adopts a new config. Without this callback the default
+	// service reload replaces the host's scoped selector with a plain round
+	// robin selector, allowing credentials outside an API-key pool to route.
+	OnConfigReload func(*config.Config)
 }
 
 // NewBuilder creates a Builder with default dependencies left unset.

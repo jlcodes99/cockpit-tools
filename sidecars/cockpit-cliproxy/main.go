@@ -137,6 +137,10 @@ type apiKeySpec struct {
 type apiKeyPriorityState struct {
 	PriorityAccountIDs  map[string][]string `json:"priorityAccountIds"`
 	PreferredAccountIDs map[string]string   `json:"preferredAccountIds"`
+	// AccountIDs is the authoritative live scope written by Cockpit's pool
+	// guard. It is separate from priorityAccountIds: an empty scope is valid
+	// and must not fall back to the stale manifest snapshot.
+	AccountIDs map[string][]string `json:"accountIds"`
 }
 
 type apiKeyPriorityStateStore struct {
@@ -144,12 +148,16 @@ type apiKeyPriorityStateStore struct {
 	mu              sync.RWMutex
 	lastModUnixNano int64
 	priorities      map[string][]string
+	scopes          map[string][]string
+	scopeKnown      map[string]bool
 }
 
 func newAPIKeyPriorityStateStore(manifestPath string) *apiKeyPriorityStateStore {
 	store := &apiKeyPriorityStateStore{
 		path:       filepath.Join(filepath.Dir(manifestPath), "api-key-priorities.json"),
 		priorities: make(map[string][]string),
+		scopes:     make(map[string][]string),
+		scopeKnown: make(map[string]bool),
 	}
 	store.reloadIfChanged()
 	return store
@@ -163,6 +171,20 @@ func (s *apiKeyPriorityStateStore) priorityAccountIDs(apiKeyID string) []string 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return append([]string(nil), s.priorities[strings.TrimSpace(apiKeyID)]...)
+}
+
+func (s *apiKeyPriorityStateStore) accountScope(apiKeyID string) ([]string, bool) {
+	if s == nil {
+		return nil, false
+	}
+	s.reloadIfChanged()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	key := strings.TrimSpace(apiKeyID)
+	if !s.scopeKnown[key] {
+		return nil, false
+	}
+	return append([]string(nil), s.scopes[key]...), true
 }
 
 func (s *apiKeyPriorityStateStore) reloadIfChanged() {
@@ -219,9 +241,34 @@ func (s *apiKeyPriorityStateStore) reloadIfChanged() {
 			next[apiKeyID] = []string{accountID}
 		}
 	}
+	nextScopes := make(map[string][]string, len(state.AccountIDs))
+	scopeKnown := make(map[string]bool, len(state.AccountIDs))
+	for apiKeyID, accountIDs := range state.AccountIDs {
+		apiKeyID = strings.TrimSpace(apiKeyID)
+		if apiKeyID == "" {
+			continue
+		}
+		seen := make(map[string]struct{}, len(accountIDs))
+		normalized := make([]string, 0, len(accountIDs))
+		for _, accountID := range accountIDs {
+			accountID = strings.TrimSpace(strings.TrimSuffix(accountID, ".json"))
+			if accountID == "" {
+				continue
+			}
+			if _, exists := seen[accountID]; exists {
+				continue
+			}
+			seen[accountID] = struct{}{}
+			normalized = append(normalized, accountID)
+		}
+		nextScopes[apiKeyID] = normalized
+		scopeKnown[apiKeyID] = true
+	}
 	s.mu.Lock()
 	s.lastModUnixNano = modifiedAt
 	s.priorities = next
+	s.scopes = nextScopes
+	s.scopeKnown = scopeKnown
 	s.mu.Unlock()
 }
 
@@ -885,6 +932,114 @@ type requestPolicy struct {
 	manifest *manifest
 	emitter  *eventEmitter
 	tracker  *requestUsageTracker
+	scopes   *apiKeyAccountScopeStore
+}
+
+// apiKeyAccountScopeStore is deliberately independent from manifest reloads.
+// Cockpit updates config.json and manifest.json as separate atomic files; the
+// config scope is the authoritative API-key membership and can be adopted on
+// the next request without replacing the running HTTP server.
+type apiKeyAccountScopeStore struct {
+	path       string
+	mu         sync.RWMutex
+	modTime    int64
+	scopes     map[string][]string
+	known      map[string]bool
+}
+
+func newAPIKeyAccountScopeStore(path string) *apiKeyAccountScopeStore {
+	return &apiKeyAccountScopeStore{
+		path:  strings.TrimSpace(path),
+		scopes: make(map[string][]string),
+		known:  make(map[string]bool),
+	}
+}
+
+func normalizeScopeAccountID(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.TrimSuffix(value, ".json")
+	return value
+}
+
+func (s *apiKeyAccountScopeStore) reloadIfChanged() {
+	if s == nil || s.path == "" {
+		return
+	}
+	info, err := os.Stat(s.path)
+	if err != nil {
+		return
+	}
+	modTime := info.ModTime().UnixNano()
+	s.mu.RLock()
+	unchanged := modTime == s.modTime
+	s.mu.RUnlock()
+	if unchanged {
+		return
+	}
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		return
+	}
+	var config struct {
+		AccountScopes map[string][]string `json:"api-key-account-ids"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		return
+	}
+	next := make(map[string][]string, len(config.AccountScopes))
+	known := make(map[string]bool, len(config.AccountScopes))
+	for key, values := range config.AccountScopes {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		known[key] = true
+		clean := make([]string, 0, len(values))
+		seen := make(map[string]struct{}, len(values))
+		for _, value := range values {
+			accountID := normalizeScopeAccountID(value)
+			if accountID == "" {
+				continue
+			}
+			if _, exists := seen[accountID]; exists {
+				continue
+			}
+			seen[accountID] = struct{}{}
+			clean = append(clean, accountID)
+		}
+		if len(clean) > 0 {
+			next[key] = clean
+		}
+	}
+	s.mu.Lock()
+	s.modTime = modTime
+	s.scopes = next
+	s.known = known
+	s.mu.Unlock()
+}
+
+func (s *apiKeyAccountScopeStore) accountIDs(apiKeyID string) ([]string, bool) {
+	if s == nil {
+		return nil, false
+	}
+	s.reloadIfChanged()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	key := strings.TrimSpace(apiKeyID)
+	return append([]string(nil), s.scopes[key]...), s.known[key]
+}
+
+func scopedAPIKeySpec(spec *apiKeySpec, scopes *apiKeyAccountScopeStore) *apiKeySpec {
+	if spec == nil || scopes == nil {
+		return spec
+	}
+	accountIDs, known := scopes.accountIDs(spec.ID)
+	if !known {
+		return spec
+	}
+	copySpec := *spec
+	copySpec.AccountIDs = accountIDs
+	return &copySpec
 }
 
 func (p *requestPolicy) middleware() gin.HandlerFunc {
@@ -986,7 +1141,7 @@ func (p *requestPolicy) lookupAPIKey(r *http.Request) *apiKeySpec {
 	if key == "" {
 		return nil
 	}
-	return p.manifest.apiKeyByValue[key]
+	return scopedAPIKeySpec(p.manifest.apiKeyByValue[key], p.scopes)
 }
 
 func ensureRequestID(c *gin.Context) string {
@@ -2348,27 +2503,39 @@ func (s *cockpitSelector) filterAuthsForAPIKeyScope(ctx context.Context, auths [
 		return auths
 	}
 	spec, _ := ctx.Value(clientAPIKeyContextKey).(*apiKeySpec)
-	if spec == nil || len(spec.AccountIDs) == 0 {
+	if spec == nil {
 		return auths
 	}
-
-	allowedAccountIDs := make(map[string]struct{}, len(spec.AccountIDs))
-	for _, accountID := range spec.AccountIDs {
-		if accountID = strings.TrimSpace(accountID); accountID != "" {
-			allowedAccountIDs[accountID] = struct{}{}
+	accountIDs := spec.AccountIDs
+	if s.priorities != nil {
+		if liveAccountIDs, known := s.priorities.accountScope(spec.ID); known {
+			accountIDs = liveAccountIDs
 		}
 	}
-	if len(allowedAccountIDs) == 0 {
+	return filterAuthsForManifestAccountIDs(s.manifest, accountIDs, auths)
+}
+
+func filterAuthsForManifestAccountIDs(m *manifest, accountIDs []string, auths []*coreauth.Auth) []*coreauth.Auth {
+	if m == nil {
+		return auths
+	}
+	allowed := make(map[string]struct{}, len(accountIDs))
+	for _, accountID := range accountIDs {
+		accountID = strings.TrimSpace(strings.TrimSuffix(accountID, ".json"))
+		if accountID != "" {
+			allowed[accountID] = struct{}{}
+		}
+	}
+	if len(allowed) == 0 {
 		return nil
 	}
-
 	scoped := make([]*coreauth.Auth, 0, len(auths))
 	for _, auth := range auths {
-		account := s.accountForAuth(auth)
+		account := accountForAuthInManifest(m, auth)
 		if account == nil {
 			continue
 		}
-		if _, allowed := allowedAccountIDs[account.ID]; allowed {
+		if _, ok := allowed[account.ID]; ok {
 			scoped = append(scoped, auth)
 		}
 	}
@@ -3114,7 +3281,15 @@ func buildCoreAuthSelector(cfg *config.Config, selector coreauth.Selector, m *ma
 			Fallback: selector,
 			TTL:      ttl,
 		})
-		selector = &cockpitSessionAffinitySelector{inner: selector}
+		var priorities *apiKeyPriorityStateStore
+		if cockpit, ok := imageFallback.(*cockpitSelector); ok {
+			priorities = cockpit.priorities
+		}
+		selector = &cockpitSessionAffinitySelector{
+			inner:      selector,
+			manifest:   m,
+			priorities: priorities,
+		}
 		selector = &imageRequestSelector{
 			imageFallback: imageFallback,
 			fallback:      selector,
@@ -3141,7 +3316,9 @@ func buildCoreAuthManager(cfg *config.Config, selector coreauth.Selector, hook c
 }
 
 type cockpitSessionAffinitySelector struct {
-	inner coreauth.Selector
+	inner      coreauth.Selector
+	manifest   *manifest
+	priorities *apiKeyPriorityStateStore
 }
 
 func (s *cockpitSessionAffinitySelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*coreauth.Auth) (*coreauth.Auth, error) {
@@ -3155,6 +3332,15 @@ func (s *cockpitSessionAffinitySelector) Pick(ctx context.Context, provider, mod
 		}
 		metadata[cliproxyexecutor.SessionAffinityNamespaceMetadataKey] = spec.ID
 		opts.Metadata = metadata
+	}
+	// Filter against the live route scope before consulting the affinity cache.
+	// Otherwise a removed account remains eligible from the old sticky binding.
+	if s.manifest != nil && s.priorities != nil {
+		if spec, _ := ctx.Value(clientAPIKeyContextKey).(*apiKeySpec); spec != nil {
+			if accountIDs, known := s.priorities.accountScope(spec.ID); known {
+				auths = filterAuthsForManifestAccountIDs(s.manifest, accountIDs, auths)
+			}
+		}
 	}
 	return s.inner.Pick(ctx, provider, model, opts, auths)
 }
@@ -3329,7 +3515,7 @@ func buildCodexAlphaSearchHeaders(src http.Header, auth *coreauth.Auth) http.Hea
 	return headers
 }
 
-func newSidecarRuntime(ctx context.Context, configPath string, cfg *config.Config, m *manifest, manager *coreauth.Manager) (*sidecarRuntime, error) {
+func newSidecarRuntime(ctx context.Context, configPath string, cfg *config.Config, m *manifest, manager *coreauth.Manager, baseSelector coreauth.Selector, quota *quotaReserveStateStore) (*sidecarRuntime, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config is nil")
 	}
@@ -3358,6 +3544,12 @@ func newSidecarRuntime(ctx context.Context, configPath string, cfg *config.Confi
 		WithHooks(cliproxy.Hooks{
 			OnAfterStart: func(*cliproxy.Service) {
 				readyOnce.Do(func() { close(readyCh) })
+			},
+			OnConfigReload: func(newCfg *config.Config) {
+				// Keep Cockpit's API-key scope, quota, and affinity wrappers when
+				// CLIProxy hot-reloads its config. The stock service rebuilds a
+				// plain round-robin selector on its own.
+				manager.SetSelector(buildCoreAuthSelector(newCfg, baseSelector, m, quota))
 			},
 		}).
 		Build()
@@ -8094,7 +8286,8 @@ func main() {
 	}
 
 	usageTracker := newRequestUsageTracker()
-	policy := &requestPolicy{manifest: m, emitter: emitter, tracker: usageTracker}
+	scopes := newAPIKeyAccountScopeStore(absConfigPath)
+	policy := &requestPolicy{manifest: m, emitter: emitter, tracker: usageTracker, scopes: scopes}
 	hook := &authHook{manifest: m, emitter: emitter}
 	priorityState := newAPIKeyPriorityStateStore(*manifestPath)
 	selector := &cockpitSelector{
@@ -8115,7 +8308,7 @@ func main() {
 
 	coreusage.RegisterPlugin(&usagePlugin{manifest: m, tracker: usageTracker})
 
-	runtime, err := newSidecarRuntime(ctx, absConfigPath, cfg, m, coreManager)
+	runtime, err := newSidecarRuntime(ctx, absConfigPath, cfg, m, coreManager, selector, quotaState)
 	if err != nil {
 		emitter.emit(map[string]any{"type": "error", "message": err.Error()})
 		os.Exit(1)

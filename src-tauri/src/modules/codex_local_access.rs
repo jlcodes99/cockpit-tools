@@ -10606,9 +10606,17 @@ fn sidecar_api_key_manifest_values(collection: &CodexLocalAccessCollection) -> V
 
 fn sidecar_api_key_priority_state_values(collection: &CodexLocalAccessCollection) -> Value {
     let mut priority_account_ids = Map::new();
+    let mut account_ids = Map::new();
     for item in &collection.api_keys {
-        if api_key_inherits_account_pool(item) || api_key_has_fixed_account_scope(collection, item)
-        {
+        if !item.enabled || item.key.trim().is_empty() || item.provider_gateway.is_some() {
+            continue;
+        }
+        let scoped_account_ids = normalize_account_id_list(effective_api_key_account_ids(collection, item));
+        account_ids.insert(
+            item.id.clone(),
+            Value::Array(scoped_account_ids.into_iter().map(Value::String).collect()),
+        );
+        if api_key_inherits_account_pool(item) || api_key_has_fixed_account_scope(collection, item) {
             continue;
         }
         let priorities = normalize_account_id_list(item.priority_account_ids.clone())
@@ -10628,6 +10636,7 @@ fn sidecar_api_key_priority_state_values(collection: &CodexLocalAccessCollection
     }
     json!({
         "priorityAccountIds": priority_account_ids,
+        "accountIds": account_ids,
     })
 }
 

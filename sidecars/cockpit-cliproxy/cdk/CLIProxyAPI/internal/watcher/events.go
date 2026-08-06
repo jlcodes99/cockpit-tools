@@ -27,11 +27,16 @@ func matchProvider(provider string, targets []string) (string, bool) {
 }
 
 func (w *Watcher) start(ctx context.Context) error {
-	if errAddConfig := w.watcher.Add(w.configPath); errAddConfig != nil {
-		log.Errorf("failed to watch config file %s: %v", w.configPath, errAddConfig)
+	// Watch the parent directory instead of the file itself. Cockpit writes
+	// configuration with an atomic temp-file replace; on Windows a file watch
+	// then remains attached to the removed inode and misses every later update.
+	// Directory watching keeps the path observable across replace/rename events.
+	configWatchPath := filepath.Dir(w.configPath)
+	if errAddConfig := w.watcher.Add(configWatchPath); errAddConfig != nil {
+		log.Errorf("failed to watch config directory %s: %v", configWatchPath, errAddConfig)
 		return errAddConfig
 	}
-	log.Debugf("watching config file: %s", w.configPath)
+	log.Debugf("watching config directory for %s: %s", filepath.Base(w.configPath), configWatchPath)
 
 	if errAddAuthDir := w.watcher.Add(w.authDir); errAddAuthDir != nil {
 		log.Errorf("failed to watch auth directory %s: %v", w.authDir, errAddAuthDir)

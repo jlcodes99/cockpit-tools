@@ -522,7 +522,7 @@ func (s *Service) applyConfigUpdate(newCfg *config.Config) {
 		previousSessionAffinity != nextSessionAffinity ||
 		previousSessionAffinityTTL != nextSessionAffinityTTL
 
-	if s.coreManager != nil && selectorChanged {
+	if s.coreManager != nil && selectorChanged && s.hooks.OnConfigReload == nil {
 		var selector coreauth.Selector
 		switch nextStrategy {
 		case "fill-first":
@@ -545,6 +545,9 @@ func (s *Service) applyConfigUpdate(newCfg *config.Config) {
 		}
 
 		s.coreManager.SetSelector(selector)
+	}
+	if selectorChanged && s.hooks.OnConfigReload != nil {
+		s.hooks.OnConfigReload(newCfg)
 	}
 
 	s.applyRetryConfig(newCfg)

@@ -912,6 +912,79 @@ func TestCockpitSessionAffinitySeparatesClientAPIKeyScopes(t *testing.T) {
 	}
 }
 
+func TestCockpitSessionAffinityDropsAccountRemovedFromLiveScope(t *testing.T) {
+	oldAccount := &accountSpec{ID: "account-old", AuthID: "account-old.json"}
+	k12Account := &accountSpec{ID: "account-k12", AuthID: "account-k12.json"}
+	m := &manifest{
+		accountByAuthID: map[string]*accountSpec{
+			oldAccount.AuthID: oldAccount,
+			k12Account.AuthID: k12Account,
+		},
+		accountByID: map[string]*accountSpec{
+			oldAccount.ID: oldAccount,
+			k12Account.ID: k12Account,
+		},
+	}
+	priorityPath := filepath.Join(t.TempDir(), "api-key-priorities.json")
+	if err := os.WriteFile(priorityPath, []byte(`{"accountIds":{"pool-key":["account-old"]}}`), 0o600); err != nil {
+		t.Fatalf("write initial live scope: %v", err)
+	}
+	store := newAPIKeyPriorityStateStore(priorityPath)
+	fallback := &cockpitSelector{manifest: m, priorities: store}
+	affinity := coreauth.NewSessionAffinitySelectorWithConfig(coreauth.SessionAffinityConfig{
+		Fallback: fallback,
+		TTL:      time.Hour,
+	})
+	selector := &cockpitSessionAffinitySelector{inner: affinity, manifest: m, priorities: store}
+	auths := []*coreauth.Auth{
+		{ID: oldAccount.AuthID, Provider: "codex", Status: coreauth.StatusActive},
+		{ID: k12Account.AuthID, Provider: "codex", Status: coreauth.StatusActive},
+	}
+	ctx := context.WithValue(context.Background(), clientAPIKeyContextKey, &apiKeySpec{ID: "pool-key"})
+	opts := cliproxyexecutor.Options{Headers: http.Header{"X-Session-ID": []string{"sticky"}}}
+	first, err := selector.Pick(ctx, "codex", "gpt-5.4", opts, auths)
+	if err != nil || first.ID != oldAccount.AuthID {
+		t.Fatalf("initial live scope should select old account, got=%v err=%v", first, err)
+	}
+	if err := os.WriteFile(priorityPath, []byte(`{"accountIds":{"pool-key":["account-k12"]}}`), 0o600); err != nil {
+		t.Fatalf("write rotated live scope: %v", err)
+	}
+	updatedAt := time.Now().Add(time.Second)
+	if err := os.Chtimes(priorityPath, updatedAt, updatedAt); err != nil {
+		t.Fatalf("advance live scope timestamp: %v", err)
+	}
+	second, err := selector.Pick(ctx, "codex", "gpt-5.4", opts, auths)
+	if err != nil || second.ID != k12Account.AuthID {
+		t.Fatalf("rotated live scope must evict sticky old account, got=%v err=%v", second, err)
+	}
+}
+
+func TestAPIKeyAccountScopeStoreAdoptsAtomicConfigReplacement(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	write := func(value string) {
+		tmp := path + ".tmp"
+		if err := os.WriteFile(tmp, []byte(value), 0o600); err != nil {
+			t.Fatalf("write temporary config: %v", err)
+		}
+		if err := os.Rename(tmp, path); err != nil {
+			t.Fatalf("replace config: %v", err)
+		}
+	}
+	write(`{"api-key-account-ids":{"pool-key":["codex_old.json"]}}`)
+	store := newAPIKeyAccountScopeStore(path)
+	if got, known := store.accountIDs("pool-key"); !known || len(got) != 1 || got[0] != "codex_old" {
+		t.Fatalf("unexpected initial scope: %#v known=%v", got, known)
+	}
+	write(`{"api-key-account-ids":{"pool-key":["codex_k12.json"]}}`)
+	if got, known := store.accountIDs("pool-key"); !known || len(got) != 1 || got[0] != "codex_k12" {
+		t.Fatalf("atomic replacement was not adopted: %#v known=%v", got, known)
+	}
+	write(`{"api-key-account-ids":{"pool-key":[]}}`)
+	if got, known := store.accountIDs("pool-key"); !known || len(got) != 0 {
+		t.Fatalf("empty live scope must remain authoritative: %#v known=%v", got, known)
+	}
+}
+
 func intPtrForTest(value int) *int {
 	return &value
 }
@@ -1640,7 +1713,7 @@ func TestSidecarRuntimeRegistersConfigCodexAPIKeyAuths(t *testing.T) {
 	}
 	manager := buildCoreAuthManager(cfg, &cockpitSelector{manifest: m}, &authHook{manifest: m}, m, nil, newRequestUsageTracker())
 
-	runtime, err := newSidecarRuntime(context.Background(), configPath, cfg, m, manager)
+	runtime, err := newSidecarRuntime(context.Background(), configPath, cfg, m, manager, nil, nil)
 	if err != nil {
 		t.Fatalf("newSidecarRuntime: %v", err)
 	}
@@ -1708,7 +1781,7 @@ func TestSidecarRuntimeRegistersManifestCodexAccessTokenAuths(t *testing.T) {
 	}
 	manager := buildCoreAuthManager(cfg, &cockpitSelector{manifest: m}, &authHook{manifest: m}, m, nil, newRequestUsageTracker())
 
-	runtime, err := newSidecarRuntime(context.Background(), configPath, cfg, m, manager)
+	runtime, err := newSidecarRuntime(context.Background(), configPath, cfg, m, manager, nil, nil)
 	if err != nil {
 		t.Fatalf("newSidecarRuntime: %v", err)
 	}
@@ -4238,7 +4311,7 @@ func TestSidecarRuntimeDoesNotSelectAccountWithExcludedModel(t *testing.T) {
 
 	cfg := &config.Config{AuthDir: authDir}
 	manager := buildCoreAuthManager(cfg, &cockpitSelector{manifest: m}, &authHook{manifest: m}, m, nil, newRequestUsageTracker())
-	runtime, err := newSidecarRuntime(context.Background(), configPath, cfg, m, manager)
+	runtime, err := newSidecarRuntime(context.Background(), configPath, cfg, m, manager, nil, nil)
 	if err != nil {
 		t.Fatalf("newSidecarRuntime: %v", err)
 	}
