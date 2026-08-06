@@ -13829,33 +13829,106 @@ fn collection_content_fingerprint(
         .map_err(|error| format!("序列化 API 服务配置指纹失败: {}", error))
 }
 
-fn collection_disk_snapshot_for_cas(
-    runtime_fingerprint: &[u8],
-) -> Result<Option<(PathBuf, [u8; 32])>, String> {
+type CollectionDiskSnapshot = (PathBuf, CodexLocalAccessCollection, [u8; 32]);
+
+fn collection_disk_snapshot() -> Result<Option<CollectionDiskSnapshot>, String> {
     let path = local_access_file_path()?;
     let content = match std::fs::read(&path) {
         Ok(content) => content,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => {
             return Err(format!(
-                "读取 API 服务配置 CAS 快照失败: path={}, error={}",
+                "读取 API 服务配置快照失败: path={}, error={}",
                 path.display(),
                 error
             ));
         }
     };
-    let disk_collection =
+    let collection =
         serde_json::from_slice::<CodexLocalAccessCollection>(&content).map_err(|error| {
             format!(
-                "解析 API 服务配置 CAS 快照失败: path={}, error={}",
+                "解析 API 服务配置快照失败: path={}, error={}",
                 path.display(),
                 error
             )
         })?;
+    Ok(Some((path, collection, Sha256::digest(&content).into())))
+}
+
+fn collection_disk_snapshot_for_cas(
+    runtime_fingerprint: &[u8],
+) -> Result<Option<(PathBuf, [u8; 32])>, String> {
+    let Some((path, disk_collection, disk_hash)) = collection_disk_snapshot()? else {
+        return Ok(None);
+    };
     if collection_content_fingerprint(&disk_collection)? != runtime_fingerprint {
         return Ok(None);
     }
-    Ok(Some((path, Sha256::digest(&content).into())))
+    Ok(Some((path, disk_hash)))
+}
+
+fn runtime_collection_matches_disk(
+    runtime: &GatewayRuntime,
+    disk_collection: &CodexLocalAccessCollection,
+) -> Result<bool, String> {
+    let Some(runtime_collection) = runtime.collection.as_ref() else {
+        return Ok(false);
+    };
+    Ok(collection_content_fingerprint(runtime_collection)?
+        == collection_content_fingerprint(disk_collection)?)
+}
+
+/// Adopt atomically-written collection changes made by trusted companion tools.
+/// This updates Cockpit's cached membership and page state only; it deliberately
+/// does not stop or restart the active sidecar.
+async fn sync_runtime_collection_from_disk_if_changed() -> Result<bool, String> {
+    let snapshot = tauri::async_runtime::spawn_blocking(collection_disk_snapshot)
+        .await
+        .map_err(|error| format!("读取 API 服务配置快照任务失败: {}", error))??;
+    let Some((path, disk_collection, expected_disk_hash)) = snapshot else {
+        return Ok(false);
+    };
+
+    let (previous_count, next_count) = {
+        let mut runtime = gateway_runtime().lock().await;
+        if !runtime.loaded || runtime_collection_matches_disk(&runtime, &disk_collection)? {
+            return Ok(false);
+        }
+
+        // Recheck the file while holding the runtime lock. An in-app save writes
+        // disk before publishing runtime; this CAS prevents an older snapshot
+        // from overwriting that newer in-memory state.
+        let current_content = std::fs::read(&path).map_err(|error| {
+            format!(
+                "复核 API 服务配置快照失败: path={}, error={}",
+                path.display(),
+                error
+            )
+        })?;
+        let current_disk_hash: [u8; 32] = Sha256::digest(&current_content).into();
+        if current_disk_hash != expected_disk_hash {
+            return Ok(false);
+        }
+
+        let previous_count = runtime
+            .collection
+            .as_ref()
+            .map(|collection| collection.account_ids.len())
+            .unwrap_or(0);
+        let next_count = disk_collection.account_ids.len();
+        let last_error = runtime.last_error.clone();
+        sync_runtime_collection(&mut runtime, disk_collection);
+        runtime.last_error = last_error;
+        (previous_count, next_count)
+    };
+
+    GATEWAY_COLLECTION_ACCOUNT_SANITIZE_COMPLETED.store(false, Ordering::SeqCst);
+    ensure_collection_account_sanitize_started();
+    logger::log_codex_api_info(&format!(
+        "检测到 API 服务磁盘配置已由外部更新，已同步 Cockpit 运行态显示（不重启 Sidecar）: accounts={} -> {}",
+        previous_count, next_count
+    ));
+    Ok(true)
 }
 
 /// Background membership prune. Never writes a stale clone over a newer collection:
@@ -16538,6 +16611,14 @@ fn build_fresh_state_snapshot(runtime: &mut GatewayRuntime) -> CodexLocalAccessS
 
 async fn snapshot_state() -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded_without_start().await?;
+    if let Err(error) = sync_runtime_collection_from_disk_if_changed().await {
+        // A transient external write must not make the API Service page unusable;
+        // keep serving the last valid runtime snapshot and retry on the next read.
+        logger::log_codex_api_warn(&format!(
+            "同步 API 服务外部配置到 Cockpit 运行态失败，暂时保留上次有效状态: {}",
+            error
+        ));
+    }
     let mut runtime = gateway_runtime().lock().await;
     refresh_gateway_process_status(&mut runtime);
     if runtime
@@ -26426,6 +26507,28 @@ mod tests {
             created_at: 0,
             updated_at: 0,
         }
+    }
+
+    #[test]
+    fn runtime_collection_detects_externally_changed_membership() {
+        let mut runtime = super::GatewayRuntime::default();
+        runtime.loaded = true;
+        super::sync_runtime_collection(
+            &mut runtime,
+            test_local_access_collection(vec!["k12-account".to_string()]),
+        );
+        let disk_collection = test_local_access_collection(vec!["pro-account".to_string()]);
+
+        assert!(
+            !super::runtime_collection_matches_disk(&runtime, &disk_collection)
+                .expect("compare changed collection")
+        );
+
+        super::sync_runtime_collection(&mut runtime, disk_collection.clone());
+        assert!(
+            super::runtime_collection_matches_disk(&runtime, &disk_collection)
+                .expect("compare synchronized collection")
+        );
     }
 
     #[test]

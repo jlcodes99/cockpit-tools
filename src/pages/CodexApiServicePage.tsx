@@ -125,6 +125,8 @@ type RequestLogStatusFilter = "all" | "success" | "failed";
 type RequestLogGatewayModeFilter = "all" | CodexLocalAccessGatewayMode;
 type BuiltinTimeoutPresetId = "long_wait" | "short_wait";
 type TimeoutPresetId = BuiltinTimeoutPresetId | string;
+const ACTIVE_STATE_REFRESH_MS = 750;
+const STABLE_STATE_REFRESH_MS = 5_000;
 
 interface ApiKeyPolicyDraft {
   modelPrefix: string;
@@ -823,6 +825,7 @@ export function CodexApiServicePage() {
   const mountedRef = useRef(true);
   const stateRequestSeqRef = useRef(0);
   const statsRequestSeqRef = useRef(0);
+  const pageRootRef = useRef<HTMLDivElement | null>(null);
   const testChatScrollRef = useRef<HTMLDivElement | null>(null);
 
   const collection = state?.collection ?? null;
@@ -1352,17 +1355,26 @@ export function CodexApiServicePage() {
   }, [addressKind]);
 
   useEffect(() => {
-    if (
-      !collection?.enabled ||
-      (!state?.preparing &&
-        !state?.refreshingAccounts &&
-        (state?.running || Boolean(state?.lastError)))
-    ) {
-      return undefined;
-    }
+    const activelyChanging = Boolean(
+      collection?.enabled &&
+        (state?.preparing ||
+          state?.refreshingAccounts ||
+          (!state?.running && !state?.lastError)),
+    );
+    const refreshIntervalMs = activelyChanging
+      ? ACTIVE_STATE_REFRESH_MS
+      : STABLE_STATE_REFRESH_MS;
     const timer = window.setInterval(() => {
+      const root = pageRootRef.current;
+      if (
+        document.visibilityState !== "visible" ||
+        !root ||
+        root.closest("[hidden]")
+      ) {
+        return;
+      }
       void reloadState();
-    }, 750);
+    }, refreshIntervalMs);
     return () => window.clearInterval(timer);
   }, [
     collection?.enabled,
@@ -3355,7 +3367,7 @@ export function CodexApiServicePage() {
   };
 
   return (
-    <div className="codex-api-service-page">
+    <div ref={pageRootRef} className="codex-api-service-page">
       <div className="page-top-strip">
         <div className="page-top-strip-left">
           <span className="page-top-strip-label">
