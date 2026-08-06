@@ -1367,7 +1367,6 @@ export function CodexApiServicePage() {
     const timer = window.setInterval(() => {
       const root = pageRootRef.current;
       if (
-        document.visibilityState !== "visible" ||
         !root ||
         root.closest("[hidden]")
       ) {
