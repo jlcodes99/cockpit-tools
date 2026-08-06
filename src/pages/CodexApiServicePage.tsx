@@ -1373,10 +1373,16 @@ export function CodexApiServicePage() {
         return;
       }
       void reloadState();
+      // The API-service summary is derived from the account list's quota
+      // snapshots, not only from local-access state. Refresh both together so
+      // a live sidecar quota update cannot leave the page showing an old
+      // 4x100% total after traffic has moved to the K12 pool.
+      void fetchAccounts();
     }, refreshIntervalMs);
     return () => window.clearInterval(timer);
   }, [
     collection?.enabled,
+    fetchAccounts,
     reloadState,
     state?.preparing,
     state?.refreshingAccounts,
