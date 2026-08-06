@@ -9020,12 +9020,39 @@ export function CodexAccountsPage() {
           result.state.collection?.accountIds.includes(accountId),
         );
         if (!accountAdded) {
-          throw new Error(
-            t(
-              "codex.localAccess.noEligibleAccountsSelected",
-              "所选账号不在当前环境中，或不符合 API 服务条件。请先在当前环境导入可用 Codex 账号后再添加。",
-            ),
-          );
+          const skippedReason = result.skippedAccounts.find(
+            (item) => item.accountId === accountId,
+          )?.reason;
+          const reasonMessage = (() => {
+            switch (skippedReason) {
+              case "quota_zero":
+                return t(
+                  "codex.localAccess.addRejectedQuotaZero",
+                  "账号真实 5h 额度为 0，已保留账号但未加入 API 服务。",
+                );
+              case "http_401":
+                return t(
+                  "codex.localAccess.addRejectedHttp401",
+                  "账号额度刷新返回 HTTP 401，凭据可能已失效；已保留账号但未加入 API 服务。",
+                );
+              case "http_402":
+                return t(
+                  "codex.localAccess.addRejectedHttp402",
+                  "账号额度刷新返回 HTTP 402，当前订阅不可用；已保留账号但未加入 API 服务。",
+                );
+              case "quota_refresh_failed":
+                return t(
+                  "codex.localAccess.addRejectedQuotaRefreshFailed",
+                  "账号额度刷新失败，未加入 API 服务。请稍后重试。",
+                );
+              default:
+                return t(
+                  "codex.localAccess.noEligibleAccountsSelected",
+                  "所选账号不在当前环境中，或不符合 API 服务条件。请先在当前环境导入可用 Codex 账号后再添加。",
+                );
+            }
+          })();
+          throw new Error(reasonMessage);
         }
         await ensureLocalAccessEntryVisible();
         window.dispatchEvent(new Event("codex-local-access-state-updated"));

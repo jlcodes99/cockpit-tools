@@ -366,7 +366,11 @@ export interface CodexLocalAccessAppendAccountSkipped {
     | "chat_completions_api_key"
     | "free_restricted"
     | "pending_oauth"
-    | "web_session_quota_only";
+    | "web_session_quota_only"
+    | "quota_zero"
+    | "http_401"
+    | "http_402"
+    | "quota_refresh_failed";
 }
 
 export interface CodexLocalAccessAppendAccountsResult {
