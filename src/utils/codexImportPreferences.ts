@@ -1,11 +1,20 @@
 const CODEX_IMPORT_SYNC_API_SERVICE_STORAGE_KEY =
   "agtools.codex.import.sync_api_service.v1";
 
+export const resolveCodexImportSyncApiServicePreference = (
+  storedValue: string | null,
+): boolean => {
+  if (storedValue === null) return true;
+  return storedValue === "true";
+};
+
 export const readCodexImportSyncApiService = (): boolean => {
   try {
-    return localStorage.getItem(CODEX_IMPORT_SYNC_API_SERVICE_STORAGE_KEY) === "true";
+    return resolveCodexImportSyncApiServicePreference(
+      localStorage.getItem(CODEX_IMPORT_SYNC_API_SERVICE_STORAGE_KEY),
+    );
   } catch {
-    return false;
+    return true;
   }
 };
 
