@@ -1084,6 +1084,7 @@ export function CodexAccountsPage() {
   const [localAccessState, setLocalAccessState] =
     useState<CodexLocalAccessState | null>(null);
   const localAccessStateRequestSeqRef = useRef(0);
+  const codexAccountsPageRootRef = useRef<HTMLDivElement | null>(null);
   const [showLocalAccessModal, setShowLocalAccessModal] = useState(false);
   const [showLocalAccessHealthModal, setShowLocalAccessHealthModal] =
     useState(false);
@@ -2092,6 +2093,31 @@ export function CodexAccountsPage() {
   useEffect(() => {
     void reloadLocalAccessState();
   }, [reloadLocalAccessState]);
+
+  useEffect(() => {
+    const activelyChanging = Boolean(
+      localAccessState?.collection?.enabled &&
+        (localAccessState?.preparing ||
+          localAccessState?.refreshingAccounts ||
+          (!localAccessState?.running && !localAccessState?.lastError)),
+    );
+    const refreshIntervalMs = activelyChanging ? 750 : 5_000;
+    const timer = window.setInterval(() => {
+      const root = codexAccountsPageRootRef.current;
+      if (!root || root.closest("[hidden]")) {
+        return;
+      }
+      void reloadLocalAccessState();
+    }, refreshIntervalMs);
+    return () => window.clearInterval(timer);
+  }, [
+    localAccessState?.collection?.enabled,
+    localAccessState?.preparing,
+    localAccessState?.refreshingAccounts,
+    localAccessState?.running,
+    localAccessState?.lastError,
+    reloadLocalAccessState,
+  ]);
 
   useEffect(() => {
     if (
@@ -13425,6 +13451,7 @@ export function CodexAccountsPage() {
 
   return (
     <div
+      ref={codexAccountsPageRootRef}
       className={`codex-accounts-page codex-accounts-page--${overviewLayoutMode}`}
     >
       <CodexOverviewTabsHeader
