@@ -9012,9 +9012,10 @@ export function CodexAccountsPage() {
       setAddingLocalAccessAccountId(accountId);
       try {
         const result =
-          await codexLocalAccessService.appendCodexLocalAccessAccounts([
-            accountId,
-          ]);
+          await codexLocalAccessService.appendCodexLocalAccessAccounts(
+            [accountId],
+            { allowUnready: true },
+          );
         setLocalAccessState(result.state);
         const accountAdded = Boolean(
           result.state.collection?.accountIds.includes(accountId),
@@ -9057,7 +9058,12 @@ export function CodexAccountsPage() {
         await ensureLocalAccessEntryVisible();
         window.dispatchEvent(new Event("codex-local-access-state-updated"));
         setMessage({
-          text: t("codex.localAccess.saveSuccess", "API 服务集合已更新"),
+          text: result.pendingQuotaAccountIds.includes(accountId)
+            ? t(
+                "codex.localAccess.addedPendingQuota",
+                "账号已提前加入 API 服务；当前额度为 0 或暂未刷新，额度恢复后将自动参与路由。",
+              )
+            : t("codex.localAccess.saveSuccess", "API 服务集合已更新"),
         });
       } catch (error) {
         console.error("Failed to add account to API service:", error);

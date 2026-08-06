@@ -377,6 +377,7 @@ export interface CodexLocalAccessAppendAccountsResult {
   state: CodexLocalAccessState;
   syncedAccountIds: string[];
   addedAccountIds: string[];
+  pendingQuotaAccountIds: string[];
   skippedAccounts: CodexLocalAccessAppendAccountSkipped[];
 }
 

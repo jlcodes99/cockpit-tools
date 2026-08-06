@@ -3204,8 +3204,13 @@ pub async fn codex_local_access_save_accounts(
 #[tauri::command]
 pub async fn codex_local_access_append_accounts(
     account_ids: Vec<String>,
+    allow_unready: Option<bool>,
 ) -> Result<CodexLocalAccessAppendAccountsResult, String> {
-    codex_local_access::append_local_access_accounts(account_ids).await
+    codex_local_access::append_local_access_accounts(
+        account_ids,
+        allow_unready.unwrap_or(false),
+    )
+    .await
 }
 
 #[tauri::command]

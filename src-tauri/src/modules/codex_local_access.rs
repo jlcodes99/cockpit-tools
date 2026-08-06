@@ -19565,6 +19565,17 @@ fn quota_refresh_route_skip_reason(
     }
 }
 
+fn quota_refresh_allows_manual_preselection(
+    skip_reason: Option<&str>,
+    allow_unready: bool,
+) -> bool {
+    allow_unready
+        && matches!(
+            skip_reason,
+            Some("quota_zero" | "quota_refresh_failed")
+        )
+}
+
 fn apply_account_usage_priority_ids(
     collection: &mut CodexLocalAccessCollection,
     backup_account_ids: Option<&[String]>,
@@ -19710,6 +19721,7 @@ pub async fn save_local_access_accounts(
 
 pub async fn append_local_access_accounts(
     account_ids: Vec<String>,
+    allow_unready: bool,
 ) -> Result<CodexLocalAccessAppendAccountsResult, String> {
     ensure_runtime_loaded_without_start().await?;
 
@@ -19749,9 +19761,16 @@ pub async fn append_local_access_accounts(
     )
     .await?;
     let mut routable_account_ids = Vec::new();
+    let mut pending_quota_account_ids = Vec::new();
     let mut remove_account_ids = HashSet::new();
     for (account_id, refresh_result) in refresh_results {
-        match quota_refresh_route_skip_reason(&refresh_result) {
+        let skip_reason = quota_refresh_route_skip_reason(&refresh_result);
+        if quota_refresh_allows_manual_preselection(skip_reason, allow_unready) {
+            routable_account_ids.push(account_id.clone());
+            pending_quota_account_ids.push(account_id);
+            continue;
+        }
+        match skip_reason {
             None => routable_account_ids.push(account_id),
             Some(reason) => {
                 if matches!(reason, "quota_zero" | "http_401" | "http_402") {
@@ -19810,6 +19829,7 @@ pub async fn append_local_access_accounts(
         state: snapshot_state_without_gateway_reload().await?,
         synced_account_ids,
         added_account_ids,
+        pending_quota_account_ids,
         skipped_accounts,
     })
 }
@@ -26658,6 +26678,26 @@ mod tests {
             )),
             Some("quota_refresh_failed")
         );
+        assert!(super::quota_refresh_allows_manual_preselection(
+            Some("quota_zero"),
+            true
+        ));
+        assert!(super::quota_refresh_allows_manual_preselection(
+            Some("quota_refresh_failed"),
+            true
+        ));
+        assert!(!super::quota_refresh_allows_manual_preselection(
+            Some("http_401"),
+            true
+        ));
+        assert!(!super::quota_refresh_allows_manual_preselection(
+            Some("http_402"),
+            true
+        ));
+        assert!(!super::quota_refresh_allows_manual_preselection(
+            Some("quota_zero"),
+            false
+        ));
     }
 
     #[test]

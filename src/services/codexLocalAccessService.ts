@@ -46,8 +46,12 @@ export async function saveCodexLocalAccessAccounts(
 
 export async function appendCodexLocalAccessAccounts(
   accountIds: string[],
+  options?: { allowUnready?: boolean },
 ): Promise<CodexLocalAccessAppendAccountsResult> {
-  return await invoke("codex_local_access_append_accounts", { accountIds });
+  return await invoke("codex_local_access_append_accounts", {
+    accountIds,
+    allowUnready: options?.allowUnready ?? false,
+  });
 }
 
 export async function removeCodexLocalAccessAccount(

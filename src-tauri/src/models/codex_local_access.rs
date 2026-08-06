@@ -819,6 +819,7 @@ pub struct CodexLocalAccessAppendAccountsResult {
     pub state: CodexLocalAccessState,
     pub synced_account_ids: Vec<String>,
     pub added_account_ids: Vec<String>,
+    pub pending_quota_account_ids: Vec<String>,
     pub skipped_accounts: Vec<CodexLocalAccessAppendAccountSkipped>,
 }
 
