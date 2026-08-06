@@ -1,4 +1,6 @@
-use crate::models::codex::{CodexAccount, CodexApiProviderMode, CodexAppSpeed, CodexAuthMode};
+use crate::models::codex::{
+    CodexAccount, CodexApiProviderMode, CodexAppSpeed, CodexAuthMode, CodexQuota,
+};
 use crate::models::codex_local_access::{
     CodexLocalAccessAccountCooldown, CodexLocalAccessAccountHealth,
     CodexLocalAccessAccountModelRule, CodexLocalAccessAccountStats, CodexLocalAccessApiKey,
@@ -19538,6 +19540,31 @@ fn append_eligible_local_access_account_ids(
     )
 }
 
+fn quota_refresh_terminal_http_status(error: &str) -> Option<u16> {
+    error
+        .split(|ch: char| !ch.is_ascii_digit())
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.parse::<u16>().ok())
+        .find(|status| matches!(status, 401 | 402))
+}
+
+fn quota_refresh_route_skip_reason(
+    result: &Result<CodexQuota, String>,
+) -> Option<&'static str> {
+    match result {
+        Ok(quota) if quota.hourly_window_present != Some(true) => {
+            Some("quota_refresh_failed")
+        }
+        Ok(quota) if quota.hourly_percentage <= 0 => Some("quota_zero"),
+        Ok(_) => None,
+        Err(error) => match quota_refresh_terminal_http_status(error) {
+            Some(401) => Some("http_401"),
+            Some(402) => Some("http_402"),
+            _ => Some("quota_refresh_failed"),
+        },
+    }
+}
+
 fn apply_account_usage_priority_ids(
     collection: &mut CodexLocalAccessCollection,
     backup_account_ids: Option<&[String]>,
@@ -19686,6 +19713,12 @@ pub async fn append_local_access_accounts(
 ) -> Result<CodexLocalAccessAppendAccountsResult, String> {
     ensure_runtime_loaded_without_start().await?;
 
+    let requested_account_ids = account_ids
+        .into_iter()
+        .map(|account_id| account_id.trim().to_string())
+        .filter(|account_id| !account_id.is_empty())
+        .collect::<Vec<_>>();
+
     let existing_collection = {
         let runtime = gateway_runtime().lock().await;
         runtime.collection.clone()
@@ -19699,34 +19732,77 @@ pub async fn append_local_access_accounts(
         .as_ref()
         .map(|collection| collection.account_ids.as_slice())
         .unwrap_or(&[]);
-    let (next_account_ids, synced_account_ids, added_account_ids, skipped_accounts) =
+    let (_, refresh_candidate_ids, _, mut skipped_accounts) =
         append_eligible_local_access_account_ids(
             current_account_ids,
-            account_ids,
+            requested_account_ids,
             &accounts,
             restrict_free_accounts,
         );
 
-    if !added_account_ids.is_empty() {
+    // Imported/newly selected accounts must have a fresh, successful quota read
+    // before they can receive API traffic. A measured zero or terminal 401/402
+    // also removes an already-routed account, while preserving its vault record.
+    let refresh_results = codex_quota::refresh_quotas_for_account_ids_with_options(
+        &refresh_candidate_ids,
+        false,
+    )
+    .await?;
+    let mut routable_account_ids = Vec::new();
+    let mut remove_account_ids = HashSet::new();
+    for (account_id, refresh_result) in refresh_results {
+        match quota_refresh_route_skip_reason(&refresh_result) {
+            None => routable_account_ids.push(account_id),
+            Some(reason) => {
+                if matches!(reason, "quota_zero" | "http_401" | "http_402") {
+                    remove_account_ids.insert(account_id.clone());
+                }
+                skipped_accounts.push(CodexLocalAccessAppendAccountSkipped {
+                    account_id,
+                    reason: reason.to_string(),
+                });
+            }
+        }
+    }
+
+    // Refresh may update plan/subscription fields used by eligibility checks.
+    let refreshed_accounts = codex_account::list_accounts_checked()?;
+    let (next_account_ids, synced_account_ids, added_account_ids, final_skipped_accounts) =
+        append_eligible_local_access_account_ids(
+            current_account_ids,
+            routable_account_ids,
+            &refreshed_accounts,
+            restrict_free_accounts,
+        );
+    skipped_accounts.extend(final_skipped_accounts);
+
+    if existing_collection.is_some() || !added_account_ids.is_empty() {
         let mut collection = match existing_collection {
             Some(collection) => collection,
             None => new_local_access_collection()?,
         };
+        let previous_account_ids = collection.account_ids.clone();
         collection.account_ids = next_account_ids;
+        let removed_refs =
+            remove_account_refs_from_collection(&mut collection, &remove_account_ids);
         collection.updated_at = now_ms();
-        let (changed, _) = sanitize_collection_with_accounts(&mut collection, &accounts)?;
+        let (changed, _) =
+            sanitize_collection_with_accounts(&mut collection, &refreshed_accounts)?;
         if changed {
             collection.updated_at = now_ms();
         }
-        save_collection_to_disk(&collection)?;
+        let membership_changed = collection.account_ids != previous_account_ids || removed_refs;
+        if membership_changed || changed {
+            save_collection_to_disk(&collection)?;
 
-        let should_reload_gateway = collection.enabled;
-        {
-            let mut runtime = gateway_runtime().lock().await;
-            sync_runtime_collection(&mut runtime, collection);
-        }
-        if should_reload_gateway {
-            trigger_gateway_reload_in_background("导入账号同步加入 API 服务");
+            let should_reload_gateway = collection.enabled;
+            {
+                let mut runtime = gateway_runtime().lock().await;
+                sync_runtime_collection(&mut runtime, collection);
+            }
+            if should_reload_gateway {
+                trigger_gateway_reload_in_background("刷新额度后同步 API 服务账号");
+            }
         }
     }
 
@@ -26528,6 +26604,59 @@ mod tests {
         assert!(
             super::runtime_collection_matches_disk(&runtime, &disk_collection)
                 .expect("compare synchronized collection")
+        );
+    }
+
+    #[test]
+    fn imported_account_routing_requires_fresh_positive_quota() {
+        let positive = Ok(crate::models::codex::CodexQuota {
+            hourly_percentage: 80,
+            hourly_reset_time: None,
+            hourly_window_minutes: Some(300),
+            hourly_window_present: Some(true),
+            weekly_percentage: 50,
+            weekly_reset_time: None,
+            weekly_window_minutes: Some(10_080),
+            weekly_window_present: Some(true),
+            reset_credits_available: None,
+            reset_credits: Vec::new(),
+            reset_credits_next_expires_at: None,
+            raw_data: None,
+        });
+        let mut zero = positive.clone();
+        zero.as_mut().expect("zero quota fixture").hourly_percentage = 0;
+        let mut missing_window = positive.clone();
+        missing_window
+            .as_mut()
+            .expect("missing window fixture")
+            .hourly_window_present = Some(false);
+
+        assert_eq!(super::quota_refresh_route_skip_reason(&positive), None);
+        assert_eq!(
+            super::quota_refresh_route_skip_reason(&zero),
+            Some("quota_zero")
+        );
+        assert_eq!(
+            super::quota_refresh_route_skip_reason(&missing_window),
+            Some("quota_refresh_failed")
+        );
+        assert_eq!(
+            super::quota_refresh_route_skip_reason(&Err(
+                "API 返回错误 401: Unauthorized".to_string()
+            )),
+            Some("http_401")
+        );
+        assert_eq!(
+            super::quota_refresh_route_skip_reason(&Err(
+                "request failed [status=402]".to_string()
+            )),
+            Some("http_402")
+        );
+        assert_eq!(
+            super::quota_refresh_route_skip_reason(&Err(
+                "API 返回错误 429: Too Many Requests".to_string()
+            )),
+            Some("quota_refresh_failed")
         );
     }
 

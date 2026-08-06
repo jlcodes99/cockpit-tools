@@ -6324,23 +6324,25 @@ export function CodexAccountsPage() {
         const importedIds = result.imported
           .map((account) => account.id)
           .filter(Boolean);
-        const nextLocalAccessAccountIds = Array.from(
-          new Set([
-            ...(localAccessCollection?.accountIds ?? []),
-            ...importedIds,
-          ]),
-        );
         setLocalAccessSaving(true);
         try {
-          const nextState =
-            await codexLocalAccessService.saveCodexLocalAccessAccounts(
-              nextLocalAccessAccountIds,
-              localAccessCollection?.restrictFreeAccounts ?? true,
+          const syncResult =
+            await codexLocalAccessService.appendCodexLocalAccessAccounts(
+              importedIds,
             );
-          setLocalAccessState(nextState);
-          if (importedIds.length > 0) {
+          setLocalAccessState(syncResult.state);
+          if (syncResult.syncedAccountIds.length > 0) {
             await ensureLocalAccessEntryVisible();
-            setImportApiServiceGuideCount(importedIds.length);
+            setImportApiServiceGuideCount(syncResult.syncedAccountIds.length);
+          }
+          if (syncResult.skippedAccounts.length > 0) {
+            apiServiceError = t(
+              "codex.importApiService.quotaRejected",
+              "账号已导入，但 {{count}} 个账号因额度为 0、401/402 或额度刷新失败而未加入 API 服务。",
+            ).replace(
+              "{{count}}",
+              String(syncResult.skippedAccounts.length),
+            );
           }
           window.dispatchEvent(new Event("codex-local-access-state-updated"));
         } catch (apiError) {
@@ -9104,16 +9106,37 @@ export function CodexAccountsPage() {
             ),
           );
         }
-        const filteredAccountIdSet = new Set(filteredAccountIds);
+        const currentAccountIdSet = new Set(
+          localAccessCollection?.accountIds ?? [],
+        );
+        const addedAccountIds = filteredAccountIds.filter(
+          (accountId) => !currentAccountIdSet.has(accountId),
+        );
+        let acceptedAccountIds = filteredAccountIds;
+        if (addedAccountIds.length > 0) {
+          const appendResult =
+            await codexLocalAccessService.appendCodexLocalAccessAccounts(
+              addedAccountIds,
+            );
+          const acceptedNewAccountIdSet = new Set(
+            appendResult.syncedAccountIds,
+          );
+          acceptedAccountIds = filteredAccountIds.filter(
+            (accountId) =>
+              currentAccountIdSet.has(accountId) ||
+              acceptedNewAccountIdSet.has(accountId),
+          );
+        }
+        const acceptedAccountIdSet = new Set(acceptedAccountIds);
         const backupAccountIds = (options?.backupAccountIds ?? []).filter((id) =>
-          filteredAccountIdSet.has(id),
+          acceptedAccountIdSet.has(id),
         );
         const preferredAccountIds = (
           options?.preferredAccountIds ?? []
-        ).filter((id) => filteredAccountIdSet.has(id));
+        ).filter((id) => acceptedAccountIdSet.has(id));
         const nextState =
           await codexLocalAccessService.saveCodexLocalAccessAccounts(
-            filteredAccountIds,
+            acceptedAccountIds,
             restrictFreeAccounts,
             backupAccountIds,
             preferredAccountIds,
@@ -9132,7 +9155,7 @@ export function CodexAccountsPage() {
         setLocalAccessSaving(false);
       }
     },
-    [accounts, setMessage, t],
+    [accounts, localAccessCollection?.accountIds, setMessage, t],
   );
 
   const tierCounts = useMemo(() => {
