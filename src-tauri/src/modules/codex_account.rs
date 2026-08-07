@@ -1606,10 +1606,16 @@ fn api_key_account_requires_bearer_provider_override(
     let requires_immediate_provider_override =
         crate::modules::codex_local_access::account_requires_provider_gateway(account)
             && !account_syncs_model_catalog_to_codex(account);
+    let requires_http_only_responses_provider = account.api_provider_mode
+        == CodexApiProviderMode::Custom
+        && account.api_wire_api.as_deref() == Some(CODEX_PROVIDER_WIRE_API)
+        && !account.api_supports_websockets
+        && !account_syncs_model_catalog_to_codex(account);
 
     oauth_bound
         || uses_local_runtime
         || requires_immediate_provider_override
+        || requires_http_only_responses_provider
         || api_key_provider_should_enable_imagegen(account, provider_config)
 }
 
@@ -11890,7 +11896,7 @@ multi_agent = true
     }
 
     #[test]
-    fn api_key_config_toml_uses_builtin_openai_for_responses_relay() {
+    fn api_key_config_toml_uses_http_only_provider_for_relay_without_websocket_support() {
         let base_dir = make_temp_dir("codex-api-key-config-custom-provider-test");
         let mut account = CodexAccount::new_api_key(
             "relay".to_string(),
@@ -11908,14 +11914,12 @@ multi_agent = true
 
         let config_path = base_dir.join("config.toml");
         let content = fs::read_to_string(&config_path).expect("read config");
-        assert!(content.contains("openai_base_url = \"https://relay.example.com/v1\""));
-        assert!(!content.contains("codex_local_access"));
+        assert!(content.contains("model_provider = \"codex_local_access\""));
+        assert!(content.contains("base_url = \"https://relay.example.com/v1\""));
+        assert!(content.contains("supports_websockets = false"));
+        assert!(content.contains("requires_openai_auth = true"));
+        assert!(!content.contains("openai_base_url"));
         assert!(!content.contains("[model_providers.relay]"));
-        assert!(!content.contains("experimental_bearer_token"));
-        #[cfg(target_os = "windows")]
-        assert!(content.contains("model_provider = \"openai\""));
-        #[cfg(not(target_os = "windows"))]
-        assert!(!content.contains("model_provider = "));
         let auth: serde_json::Value = serde_json::from_str(
             &fs::read_to_string(base_dir.join("auth.json")).expect("read relay auth"),
         )
@@ -11924,10 +11928,10 @@ multi_agent = true
         assert_eq!(
             read_api_provider_from_config_toml(&base_dir),
             ApiProviderConfig {
-                mode: CodexApiProviderMode::OpenaiBuiltin,
+                mode: CodexApiProviderMode::Custom,
                 base_url: Some("https://relay.example.com/v1".to_string()),
-                provider_id: None,
-                provider_name: None,
+                provider_id: Some(CODEX_RUNTIME_MODEL_PROVIDER_ID.to_string()),
+                provider_name: Some("Relay".to_string()),
             }
         );
 
@@ -11956,8 +11960,10 @@ multi_agent = true
         .expect("parse first auth");
         assert_eq!(auth["OPENAI_API_KEY"], "sk-relay-a");
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read first config");
-        assert!(config.contains("openai_base_url = \"https://relay-a.example.com/v1\""));
-        assert!(!config.contains("codex_local_access"));
+        assert!(config.contains("model_provider = \"codex_local_access\""));
+        assert!(config.contains("base_url = \"https://relay-a.example.com/v1\""));
+        assert!(config.contains("supports_websockets = false"));
+        assert!(!config.contains("openai_base_url"));
 
         sync_api_key_account_from_local_state(&mut first, &base_dir);
         assert_eq!(first.api_provider_mode, CodexApiProviderMode::Custom);
@@ -11983,9 +11989,11 @@ multi_agent = true
         .expect("parse second auth");
         assert_eq!(auth["OPENAI_API_KEY"], "sk-relay-b");
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read second config");
-        assert!(config.contains("openai_base_url = \"https://relay-b.example.com/v1\""));
+        assert!(config.contains("model_provider = \"codex_local_access\""));
+        assert!(config.contains("base_url = \"https://relay-b.example.com/v1\""));
+        assert!(config.contains("supports_websockets = false"));
         assert!(!config.contains("relay-a.example.com"));
-        assert!(!config.contains("codex_local_access"));
+        assert!(!config.contains("openai_base_url"));
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
@@ -12045,9 +12053,11 @@ multi_agent = true
         assert_eq!(auth["OPENAI_API_KEY"], "sk-after-edit");
         let config =
             fs::read_to_string(env.codex_home().join("config.toml")).expect("read edited config");
-        assert!(config.contains("openai_base_url = \"https://after.example.com/v1\""));
+        assert!(config.contains("model_provider = \"codex_local_access\""));
+        assert!(config.contains("base_url = \"https://after.example.com/v1\""));
+        assert!(config.contains("supports_websockets = false"));
         assert!(!config.contains("before.example.com"));
-        assert!(!config.contains("codex_local_access"));
+        assert!(!config.contains("openai_base_url"));
         assert_eq!(updated.api_provider_mode, CodexApiProviderMode::Custom);
         assert_eq!(updated.api_provider_id.as_deref(), Some("after_relay"));
         assert_eq!(updated.api_provider_name.as_deref(), Some("After Relay"));
@@ -12397,6 +12407,7 @@ supports_websockets = false
             Vec::new(),
         );
         previous_relay.api_wire_api = Some("responses".to_string());
+        previous_relay.api_supports_websockets = true;
         write_account_bundle_to_dir(&base_dir, &previous_relay)
             .expect("write previous built-in relay bundle");
         let previous_config =
