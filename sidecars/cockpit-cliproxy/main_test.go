@@ -837,6 +837,36 @@ func TestAPIKeyPriorityStateOrdersFallbackAccountsWithoutRestart(t *testing.T) {
 	}
 }
 
+func TestAPIKeyEmptyLiveScopeEvictsAllAccountsWithoutRestart(t *testing.T) {
+	tempDir := t.TempDir()
+	priorityPath := filepath.Join(tempDir, "api-key-priorities.json")
+	if err := os.WriteFile(priorityPath, []byte(`{"accountIds":{"key-team":["account-a"]}}`), 0o600); err != nil {
+		t.Fatalf("write live scope: %v", err)
+	}
+	store := newAPIKeyPriorityStateStore(filepath.Join(tempDir, "manifest.json"))
+	accountA := &accountSpec{ID: "account-a"}
+	accountB := &accountSpec{ID: "account-b"}
+	selector := &cockpitSelector{
+		manifest: &manifest{accountByAuthID: map[string]*accountSpec{"auth-a": accountA, "auth-b": accountB}},
+		priorities: store,
+	}
+	ctx := context.WithValue(context.Background(), clientAPIKeyContextKey, &apiKeySpec{ID: "key-team"})
+	auths := []*coreauth.Auth{{ID: "auth-a"}, {ID: "auth-b"}}
+	if got := selector.filterAuthsForAPIKeyScope(ctx, auths); len(got) != 1 || got[0].ID != "auth-a" {
+		t.Fatalf("expected initial live scope to select account-a, got %#v", got)
+	}
+	if err := os.WriteFile(priorityPath, []byte(`{"accountIds":{"key-team":[]}}`), 0o600); err != nil {
+		t.Fatalf("clear live scope: %v", err)
+	}
+	updatedAt := time.Now().Add(time.Second)
+	if err := os.Chtimes(priorityPath, updatedAt, updatedAt); err != nil {
+		t.Fatalf("advance live scope timestamp: %v", err)
+	}
+	if got := selector.filterAuthsForAPIKeyScope(ctx, auths); len(got) != 0 {
+		t.Fatalf("expected empty live scope to evict every account, got %#v", got)
+	}
+}
+
 func TestCockpitSessionAffinitySeparatesClientAPIKeyScopes(t *testing.T) {
 	highQuotaAccount := &accountSpec{
 		ID:       "account-high",

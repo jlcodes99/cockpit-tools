@@ -137,6 +137,9 @@ type apiKeySpec struct {
 type apiKeyPriorityState struct {
 	PriorityAccountIDs  map[string][]string `json:"priorityAccountIds"`
 	PreferredAccountIDs map[string]string   `json:"preferredAccountIds"`
+	// AccountIDs is an authoritative live API-key scope.  Unlike a priority
+	// hint, an explicitly empty slice means this key must route to no account.
+	AccountIDs          map[string][]string `json:"accountIds"`
 }
 
 type apiKeyPriorityStateStore struct {
@@ -144,15 +147,33 @@ type apiKeyPriorityStateStore struct {
 	mu              sync.RWMutex
 	lastModUnixNano int64
 	priorities      map[string][]string
+	scopes          map[string][]string
+	scopeKnown      map[string]bool
 }
 
 func newAPIKeyPriorityStateStore(manifestPath string) *apiKeyPriorityStateStore {
 	store := &apiKeyPriorityStateStore{
 		path:       filepath.Join(filepath.Dir(manifestPath), "api-key-priorities.json"),
 		priorities: make(map[string][]string),
+		scopes:     make(map[string][]string),
+		scopeKnown: make(map[string]bool),
 	}
 	store.reloadIfChanged()
 	return store
+}
+
+func (s *apiKeyPriorityStateStore) scopedAccountIDs(apiKeyID string) ([]string, bool) {
+	if s == nil {
+		return nil, false
+	}
+	s.reloadIfChanged()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	key := strings.TrimSpace(apiKeyID)
+	if !s.scopeKnown[key] {
+		return nil, false
+	}
+	return append([]string(nil), s.scopes[key]...), true
 }
 
 func (s *apiKeyPriorityStateStore) priorityAccountIDs(apiKeyID string) []string {
@@ -190,6 +211,29 @@ func (s *apiKeyPriorityStateStore) reloadIfChanged() {
 		return
 	}
 	next := make(map[string][]string, len(state.PriorityAccountIDs))
+	nextScopes := make(map[string][]string, len(state.AccountIDs))
+	nextScopeKnown := make(map[string]bool, len(state.AccountIDs))
+	for apiKeyID, accountIDs := range state.AccountIDs {
+		apiKeyID = strings.TrimSpace(apiKeyID)
+		if apiKeyID == "" {
+			continue
+		}
+		nextScopeKnown[apiKeyID] = true
+		seen := make(map[string]struct{}, len(accountIDs))
+		scope := make([]string, 0, len(accountIDs))
+		for _, accountID := range accountIDs {
+			accountID = strings.TrimSpace(accountID)
+			if accountID == "" {
+				continue
+			}
+			if _, exists := seen[accountID]; exists {
+				continue
+			}
+			seen[accountID] = struct{}{}
+			scope = append(scope, accountID)
+		}
+		nextScopes[apiKeyID] = scope
+	}
 	for apiKeyID, accountIDs := range state.PriorityAccountIDs {
 		apiKeyID = strings.TrimSpace(apiKeyID)
 		if apiKeyID == "" {
@@ -222,6 +266,8 @@ func (s *apiKeyPriorityStateStore) reloadIfChanged() {
 	s.mu.Lock()
 	s.lastModUnixNano = modifiedAt
 	s.priorities = next
+	s.scopes = nextScopes
+	s.scopeKnown = nextScopeKnown
 	s.mu.Unlock()
 }
 
@@ -2348,12 +2394,27 @@ func (s *cockpitSelector) filterAuthsForAPIKeyScope(ctx context.Context, auths [
 		return auths
 	}
 	spec, _ := ctx.Value(clientAPIKeyContextKey).(*apiKeySpec)
-	if spec == nil || len(spec.AccountIDs) == 0 {
+	if spec == nil {
 		return auths
 	}
+	if s.priorities != nil {
+		if scopedIDs, hasScope := s.priorities.scopedAccountIDs(spec.ID); hasScope {
+			if len(scopedIDs) == 0 {
+				return nil
+			}
+			return s.filterAuthsByAccountIDs(auths, scopedIDs)
+		}
+	}
+	if len(spec.AccountIDs) == 0 {
+		return auths
+	}
+	return s.filterAuthsByAccountIDs(auths, spec.AccountIDs)
+}
 
-	allowedAccountIDs := make(map[string]struct{}, len(spec.AccountIDs))
-	for _, accountID := range spec.AccountIDs {
+func (s *cockpitSelector) filterAuthsByAccountIDs(auths []*coreauth.Auth, accountIDs []string) []*coreauth.Auth {
+
+	allowedAccountIDs := make(map[string]struct{}, len(accountIDs))
+	for _, accountID := range accountIDs {
 		if accountID = strings.TrimSpace(accountID); accountID != "" {
 			allowedAccountIDs[accountID] = struct{}{}
 		}
