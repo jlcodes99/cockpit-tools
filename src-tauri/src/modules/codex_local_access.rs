@@ -13922,10 +13922,8 @@ async fn sync_runtime_collection_from_disk_if_changed() -> Result<bool, String> 
         (previous_count, next_count)
     };
 
-    GATEWAY_COLLECTION_ACCOUNT_SANITIZE_COMPLETED.store(false, Ordering::SeqCst);
-    ensure_collection_account_sanitize_started();
     logger::log_codex_api_info(&format!(
-        "检测到 API 服务磁盘配置已由外部更新，已同步 Cockpit 运行态显示（不重启 Sidecar）: accounts={} -> {}",
+        "检测到 API 服务磁盘配置已由外部更新，已同步 Cockpit 运行态显示: accounts={} -> {}",
         previous_count, next_count
     ));
     Ok(true)
