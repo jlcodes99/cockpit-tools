@@ -16611,13 +16611,24 @@ fn build_fresh_state_snapshot(runtime: &mut GatewayRuntime) -> CodexLocalAccessS
 
 async fn snapshot_state() -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded_without_start().await?;
-    if let Err(error) = sync_runtime_collection_from_disk_if_changed().await {
-        // A transient external write must not make the API Service page unusable;
-        // keep serving the last valid runtime snapshot and retry on the next read.
-        logger::log_codex_api_warn(&format!(
-            "同步 API 服务外部配置到 Cockpit 运行态失败，暂时保留上次有效状态: {}",
-            error
-        ));
+    match sync_runtime_collection_from_disk_if_changed().await {
+        Ok(true) => {
+            // External pool managers update accountIds and the sidecar route
+            // files together.  Adopting only Cockpit's cached collection leaves
+            // the running gateway on the old auth/cooldown catalog until a user
+            // manually saves the same selection.  Use the native background
+            // reload path so newly available credentials can take over traffic.
+            trigger_gateway_reload_in_background("应用外部 API 服务账号集合");
+        }
+        Ok(false) => {}
+        Err(error) => {
+            // A transient external write must not make the API Service page unusable;
+            // keep serving the last valid runtime snapshot and retry on the next read.
+            logger::log_codex_api_warn(&format!(
+                "同步 API 服务外部配置到 Cockpit 运行态失败，暂时保留上次有效状态: {}",
+                error
+            ));
+        }
     }
     let mut runtime = gateway_runtime().lock().await;
     refresh_gateway_process_status(&mut runtime);
