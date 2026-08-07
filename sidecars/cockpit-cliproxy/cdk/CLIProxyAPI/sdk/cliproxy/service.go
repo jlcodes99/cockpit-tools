@@ -559,6 +559,9 @@ func (s *Service) applyConfigUpdate(newCfg *config.Config) {
 		s.coreManager.SetConfig(newCfg)
 		s.coreManager.SetOAuthModelAlias(newCfg.OAuthModelAlias)
 	}
+	if s.hooks.OnConfigReload != nil {
+		s.hooks.OnConfigReload(newCfg)
+	}
 	if newCfg.Home.Enabled {
 		s.registerHomeExecutors()
 	}

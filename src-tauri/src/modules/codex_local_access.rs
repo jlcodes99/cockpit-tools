@@ -10117,6 +10117,12 @@ fn stable_sidecar_config_for_fingerprint(config_content: &str) -> String {
         // requests. Excluding this hot-reloadable field keeps active streams alive
         // when the API service speed changes.
         config.remove("payload");
+        // The pool guard atomically changes these route/scope values while the
+        // running sidecar consumes them on the next request.  They are not a
+        // process identity change and must not cause an SSE-breaking restart.
+        config.remove("api-key-account-ids");
+        config.remove("codex-api-key");
+        config.remove("routing");
     }
     serde_json::to_string(&config).unwrap_or_else(|_| config_content.to_string())
 }
@@ -10126,27 +10132,45 @@ fn stable_sidecar_manifest_for_fingerprint(manifest_content: &str) -> String {
         return manifest_content.to_string();
     };
     if let Some(accounts) = manifest.get_mut("accounts").and_then(Value::as_array_mut) {
-        for account in accounts {
-            if let Some(account) = account.as_object_mut() {
-                account.remove("remainingQuota");
-                if let Some(reserve) = account
-                    .get_mut("quotaReserve")
-                    .and_then(Value::as_object_mut)
-                {
-                    for key in [
-                        "snapshotUpdatedAtUnixSeconds",
-                        "hourlyRemainingPercent",
-                        "weeklyRemainingPercent",
-                        "hourlyWindowPresent",
-                        "weeklyWindowPresent",
-                        "hourlyReserveState",
-                        "weeklyReserveState",
-                    ] {
-                        reserve.remove(key);
+        // Ordinary account membership and quota/plan snapshots are supplied by
+        // the watched auth directory and state files. Retain only the optional
+        // per-account reserve thresholds, which are structural configuration.
+        *accounts = accounts
+            .iter()
+            .filter_map(|account| {
+                let account = account.as_object()?;
+                let reserve = account.get("quotaReserve")?.as_object()?;
+                let mut stable_reserve = Map::new();
+                for key in ["hourlyThresholdPercent", "weeklyThresholdPercent"] {
+                    if let Some(value) = reserve.get(key) {
+                        stable_reserve.insert(key.to_string(), value.clone());
                     }
                 }
+                if stable_reserve.is_empty() {
+                    return None;
+                }
+                let mut stable_account = Map::new();
+                if let Some(id) = account.get("id") {
+                    stable_account.insert("id".to_string(), id.clone());
+                }
+                stable_account.insert("quotaReserve".to_string(), Value::Object(stable_reserve));
+                Some(Value::Object(stable_account))
+            })
+            .collect();
+    }
+    // Account membership and per-key scopes are hot-routed by the sidecar.
+    // Keep structural/API-key settings in the fingerprint, but ignore the
+    // externally managed membership payload so a pool tick cannot restart the
+    // gateway and terminate active SSE streams.
+    if let Some(api_keys) = manifest.get_mut("apiKeys").and_then(Value::as_array_mut) {
+        for api_key in api_keys {
+            if let Some(api_key) = api_key.as_object_mut() {
+                api_key.remove("accountIds");
             }
         }
+    }
+    if let Some(manifest) = manifest.as_object_mut() {
+        manifest.remove("customRoutingRules");
     }
     serde_json::to_string(&manifest).unwrap_or_else(|_| manifest_content.to_string())
 }
@@ -10552,7 +10576,6 @@ fn sidecar_codex_key_model_values(collection: &CodexLocalAccessCollection) -> Ve
 fn legacy_api_key_is_active(collection: &CodexLocalAccessCollection) -> bool {
     let key = collection.api_key.trim();
     !key.is_empty()
-        && !collection.account_ids.is_empty()
         && !collection
             .api_keys
             .iter()
@@ -10581,9 +10604,6 @@ fn sidecar_api_key_manifest_values(collection: &CodexLocalAccessCollection) -> V
             continue;
         }
         let account_ids = effective_api_key_account_ids(collection, item);
-        if account_ids.is_empty() {
-            continue;
-        }
         values.push(json!({
             "id": item.id.clone(),
             "label": item.label.clone(),
@@ -10604,7 +10624,17 @@ fn sidecar_api_key_manifest_values(collection: &CodexLocalAccessCollection) -> V
 
 fn sidecar_api_key_priority_state_values(collection: &CodexLocalAccessCollection) -> Value {
     let mut priority_account_ids = Map::new();
+    let mut account_ids = Map::new();
     for item in &collection.api_keys {
+        if !item.enabled || item.key.trim().is_empty() || item.provider_gateway.is_some() {
+            continue;
+        }
+        let scoped_account_ids =
+            normalize_account_id_list(effective_api_key_account_ids(collection, item));
+        account_ids.insert(
+            item.id.clone(),
+            Value::Array(scoped_account_ids.into_iter().map(Value::String).collect()),
+        );
         if api_key_inherits_account_pool(item) || api_key_has_fixed_account_scope(collection, item)
         {
             continue;
@@ -10626,6 +10656,7 @@ fn sidecar_api_key_priority_state_values(collection: &CodexLocalAccessCollection
     }
     json!({
         "priorityAccountIds": priority_account_ids,
+        "accountIds": account_ids,
     })
 }
 
@@ -10954,29 +10985,18 @@ fn remove_account_refs_from_collection(
 
 fn sidecar_client_api_keys(
     collection: &CodexLocalAccessCollection,
-    account_overrides: &HashMap<String, CodexAccount>,
+    _account_overrides: &HashMap<String, CodexAccount>,
 ) -> Vec<String> {
     let mut keys = Vec::new();
     let mut seen = HashSet::new();
     if legacy_api_key_is_active(collection)
-        && !sidecar_auth_ids_for_account_ids_with_overrides(
-            collection.account_ids.clone(),
-            account_overrides,
-        )
-        .is_empty()
         && seen.insert(collection.api_key.trim().to_string())
     {
         keys.push(collection.api_key.trim().to_string());
     }
     for item in &collection.api_keys {
         let key = item.key.trim();
-        let has_resolvable_scope = item.provider_gateway.is_some()
-            || !sidecar_auth_ids_for_account_ids_with_overrides(
-                effective_api_key_account_ids(collection, item),
-                account_overrides,
-            )
-            .is_empty();
-        if item.enabled && !key.is_empty() && has_resolvable_scope && seen.insert(key.to_string()) {
+        if item.enabled && !key.is_empty() && seen.insert(key.to_string()) {
             keys.push(key.to_string());
         }
     }
@@ -10993,9 +11013,7 @@ fn sidecar_api_key_account_scope_values(
             collection.account_ids.clone(),
             account_overrides,
         );
-        if !auth_ids.is_empty() {
-            values.insert(collection.api_key.trim().to_string(), json!(auth_ids));
-        }
+        values.insert(collection.api_key.trim().to_string(), json!(auth_ids));
     }
     for item in &collection.api_keys {
         let key = item.key.trim();
@@ -11009,9 +11027,6 @@ fn sidecar_api_key_account_scope_values(
             effective_api_key_account_ids(collection, item),
             account_overrides,
         );
-        if auth_ids.is_empty() {
-            continue;
-        }
         values.insert(key.to_string(), json!(auth_ids));
     }
     Value::Object(values)
@@ -13929,6 +13944,14 @@ async fn sync_runtime_collection_from_disk_if_changed() -> Result<bool, String> 
     Ok(true)
 }
 
+fn external_pool_change_requires_sidecar_restart() -> bool {
+    // Kept as a named policy seam for callers/tests: account membership and
+    // API-key scopes are consumed from config.json and
+    // api-key-priorities.json by the running sidecar. Restarting here aborts
+    // active SSE streams and makes every Codex task reconnect at once.
+    false
+}
+
 /// Background membership prune. Never writes a stale clone over a newer collection:
 /// sanitize against a snapshot, then commit only if runtime still matches that snapshot.
 fn run_collection_account_sanitize_once() -> Result<bool, String> {
@@ -16611,12 +16634,14 @@ async fn snapshot_state() -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded_without_start().await?;
     match sync_runtime_collection_from_disk_if_changed().await {
         Ok(true) => {
-            // External pool managers update accountIds and the sidecar route
-            // files together.  Adopting only Cockpit's cached collection leaves
-            // the running gateway on the old auth/cooldown catalog until a user
-            // manually saves the same selection.  Use the native background
-            // reload path so newly available credentials can take over traffic.
-            trigger_gateway_reload_in_background("应用外部 API 服务账号集合");
+            if external_pool_change_requires_sidecar_restart() {
+                // This branch is deliberately disabled. External pool managers
+                // update accountIds and sidecar route files together; the sidecar
+                // watches those files and applies them without replacing the
+                // process. Keep this guard for an explicit future structural
+                // migration only.
+                trigger_gateway_reload_in_background("应用外部 API 服务账号集合");
+            }
         }
         Ok(false) => {}
         Err(error) => {
@@ -26175,7 +26200,8 @@ mod tests {
         cleanup_provider_gateway_profile_model_overrides, codex_price,
         collect_local_access_profile_takeover_dirs_from_store, compare_routing_candidates,
         count_request_logs_for_model_ids, default_codex_model_ids, effective_api_key_account_ids,
-        empty_stats_snapshot, extract_usage_capture, filter_bound_oauth_quota_reserve_account,
+        empty_stats_snapshot, external_pool_change_requires_sidecar_restart,
+        extract_usage_capture, filter_bound_oauth_quota_reserve_account,
         filter_websocket_client_message, insert_local_access_usage_event,
         inspect_local_access_profile_attachment, inspect_local_access_profile_config,
         is_codex_local_access_auth_text, is_codex_local_access_config_for_api_key,
@@ -27513,9 +27539,12 @@ wire_api = "responses"
         assert!(!api_key_inherits_account_pool(api_key));
         assert!(api_key.account_ids.is_empty());
         assert!(effective_api_key_account_ids(&collection, api_key).is_empty());
-        assert!(sidecar_api_key_manifest_values(&collection)
+        let manifest_keys = sidecar_api_key_manifest_values(&collection);
+        let scoped = manifest_keys
             .iter()
-            .all(|value| value.get("key").and_then(Value::as_str) != Some("scoped-key")));
+            .find(|value| value.get("key").and_then(Value::as_str) == Some("scoped-key"))
+            .expect("empty scoped key must remain available to clients");
+        assert_eq!(scoped.get("accountIds"), Some(&json!([])));
     }
 
     #[test]
@@ -27535,19 +27564,19 @@ wire_api = "responses"
         assert!(collection.api_keys[0].account_ids.is_empty());
         assert!(sidecar_api_key_manifest_values(&collection)
             .iter()
-            .all(|value| value.get("key").and_then(Value::as_str) != Some("local-api-key")));
-        assert!(!sidecar_client_api_keys(&collection, &HashMap::new())
+            .any(|value| value.get("key").and_then(Value::as_str) == Some("local-api-key")));
+        assert!(sidecar_client_api_keys(&collection, &HashMap::new())
             .iter()
             .any(|key| key == "local-api-key"));
-        assert!(
+        assert_eq!(
             sidecar_api_key_account_scope_values(&collection, &HashMap::new())
-                .get("local-api-key")
-                .is_none()
+                .get("local-api-key"),
+            Some(&json!([]))
         );
     }
 
     #[test]
-    fn sidecar_excludes_key_with_unresolved_custom_scope() {
+    fn sidecar_keeps_key_with_unresolved_custom_scope_explicitly_empty() {
         let mut collection = test_local_access_collection(vec!["account-a".to_string()]);
         let mut scoped_key = build_local_access_api_key(Some("Scoped"));
         scoped_key.key = "scoped-key".to_string();
@@ -27555,13 +27584,13 @@ wire_api = "responses"
         scoped_key.account_ids = vec!["missing-account".to_string()];
         collection.api_keys = vec![scoped_key];
 
-        assert!(!sidecar_client_api_keys(&collection, &HashMap::new())
+        assert!(sidecar_client_api_keys(&collection, &HashMap::new())
             .iter()
             .any(|key| key == "scoped-key"));
-        assert!(
+        assert_eq!(
             sidecar_api_key_account_scope_values(&collection, &HashMap::new())
-                .get("scoped-key")
-                .is_none()
+                .get("scoped-key"),
+            Some(&json!([]))
         );
     }
 
@@ -27656,7 +27685,7 @@ wire_api = "responses"
     }
 
     #[test]
-    fn sidecar_fingerprint_ignores_remaining_quota() {
+    fn sidecar_fingerprint_ignores_dynamic_account_quota_and_plan_metadata() {
         let config = r#"{"host":"127.0.0.1","port":58393}"#;
         let manifest_a = r#"{
           "accounts": [
@@ -27681,7 +27710,7 @@ wire_api = "responses"
             sidecar_config_fingerprint(config, manifest_a),
             sidecar_config_fingerprint(config, manifest_b)
         );
-        assert_ne!(
+        assert_eq!(
             sidecar_config_fingerprint(config, manifest_b),
             sidecar_config_fingerprint(config, manifest_c)
         );
@@ -27709,6 +27738,55 @@ wire_api = "responses"
         assert_ne!(
             sidecar_config_fingerprint(priority, manifest),
             sidecar_config_fingerprint(other_port, manifest),
+        );
+    }
+
+    #[test]
+    fn sidecar_fingerprint_ignores_external_hot_route_membership() {
+        let config_a = r#"{
+          "host": "127.0.0.1",
+          "port": 58393,
+          "api-keys": ["client-key"],
+          "api-key-account-ids": {"client-key": ["account-a.json"]},
+          "routing": {"strategy": "round-robin", "session-affinity": true},
+          "codex-api-key": [{"api-key": "upstream-a"}]
+        }"#;
+        let config_b = r#"{
+          "host": "127.0.0.1",
+          "port": 58393,
+          "api-keys": ["client-key"],
+          "api-key-account-ids": {"client-key": []},
+          "routing": {"strategy": "round-robin", "session-affinity": false},
+          "codex-api-key": []
+        }"#;
+        let manifest_a = r#"{
+          "apiKeys": [{"id":"key-1","key":"client-key","accountIds":["account-a"]}],
+          "accounts": [{"id":"account-a","authId":"account-a.json"}],
+          "customRoutingRules": [{"accountId":"account-a","priority":100}],
+          "routingStrategy":"auto"
+        }"#;
+        let manifest_b = r#"{
+          "apiKeys": [{"id":"key-1","key":"client-key","accountIds":[]}],
+          "accounts": [],
+          "customRoutingRules": [],
+          "routingStrategy":"auto"
+        }"#;
+        let other_key = r#"{
+          "apiKeys": [{"id":"key-1","key":"different-client-key","accountIds":[]}],
+          "accounts": [],
+          "customRoutingRules": [],
+          "routingStrategy":"auto"
+        }"#;
+
+        assert!(!external_pool_change_requires_sidecar_restart());
+        assert_eq!(
+            sidecar_config_fingerprint(config_a, manifest_a),
+            sidecar_config_fingerprint(config_b, manifest_b),
+        );
+        assert_ne!(
+            sidecar_config_fingerprint(config_b, manifest_b),
+            sidecar_config_fingerprint(config_b, other_key),
+            "a structural client API-key change must still require a reload",
         );
     }
 

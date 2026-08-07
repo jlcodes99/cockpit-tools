@@ -827,7 +827,7 @@ func TestAPIKeyPriorityStateOrdersFallbackAccountsWithoutRestart(t *testing.T) {
 	if err := os.WriteFile(priorityPath, []byte(`{"priorityAccountIds":{"key-team":["account-b","account-a"]}}`), 0o600); err != nil {
 		t.Fatalf("update priority state: %v", err)
 	}
-	updatedAt := time.Now().Add(time.Second)
+	updatedAt := time.Now().Add(5 * time.Second)
 	if err := os.Chtimes(priorityPath, updatedAt, updatedAt); err != nil {
 		t.Fatalf("advance priority state timestamp: %v", err)
 	}
@@ -858,7 +858,7 @@ func TestAPIKeyEmptyLiveScopeEvictsAllAccountsWithoutRestart(t *testing.T) {
 	if err := os.WriteFile(priorityPath, []byte(`{"accountIds":{"key-team":[]}}`), 0o600); err != nil {
 		t.Fatalf("clear live scope: %v", err)
 	}
-	updatedAt := time.Now().Add(time.Second)
+	updatedAt := time.Now().Add(5 * time.Second)
 	if err := os.Chtimes(priorityPath, updatedAt, updatedAt); err != nil {
 		t.Fatalf("advance live scope timestamp: %v", err)
 	}
@@ -940,6 +940,98 @@ func TestCockpitSessionAffinitySeparatesClientAPIKeyScopes(t *testing.T) {
 	if second.ID != "account-scoped.json" {
 		t.Fatalf("expected scoped key not to reuse default key affinity auth, got %q", second.ID)
 	}
+}
+
+func TestAPIKeyAccountScopeStoreUsesClientKeyValueAndKeepsEmptyAuthoritative(t *testing.T) {
+    path := filepath.Join(t.TempDir(), "config.json")
+    updatedAt := time.Now().Add(10 * time.Second)
+    write := func(value string) {
+        if err := os.WriteFile(path, []byte(value), 0o600); err != nil {
+            t.Fatalf("write config: %v", err)
+        }
+        updatedAt = updatedAt.Add(time.Second)
+        if err := os.Chtimes(path, updatedAt, updatedAt); err != nil {
+            t.Fatalf("advance config timestamp: %v", err)
+        }
+    }
+    spec := &apiKeySpec{ID: "key-internal-id", Key: "client-secret", AccountIDs: []string{"stale-account"}}
+    write(`{"api-key-account-ids":{"client-secret":["codex_old.json"]}}`)
+    store := newAPIKeyAccountScopeStore(path)
+    scoped := scopedAPIKeySpec(spec, store)
+    if scoped == spec || len(scoped.AccountIDs) != 1 || scoped.AccountIDs[0] != "codex_old" {
+        t.Fatalf("config key/id mismatch was not hot-scoped: %#v", scoped)
+    }
+
+    write(`{"api-key-account-ids":{"client-secret":[]}}`)
+    if got, known := store.accountIDsForSpec(spec); !known || len(got) != 0 {
+        t.Fatalf("known empty scope must not fall back to manifest: %#v known=%v", got, known)
+    }
+}
+
+func TestPriorityStateUsesSpecKeyWhenManifestIDDiffers(t *testing.T) {
+    tempDir := t.TempDir()
+    if err := os.WriteFile(
+        filepath.Join(tempDir, "api-key-priorities.json"),
+        []byte(`{"priorityAccountIds":{"client-secret":["account-b"]},"accountIds":{"client-secret":["account-b"]}}`),
+        0o600,
+    ); err != nil {
+        t.Fatalf("write priority state: %v", err)
+    }
+    store := newAPIKeyPriorityStateStore(filepath.Join(tempDir, "manifest.json"))
+    spec := &apiKeySpec{ID: "key-internal-id", Key: "client-secret"}
+    if got := store.priorityAccountIDsForSpec(spec); len(got) != 1 || got[0] != "account-b" {
+        t.Fatalf("priority key fallback failed: %#v", got)
+    }
+    if got, known := store.accountScopeForSpec(spec); !known || len(got) != 1 || got[0] != "account-b" {
+        t.Fatalf("live-scope key fallback failed: %#v known=%v", got, known)
+    }
+}
+
+func TestLiveScopeIntersectionFailsClosedDuringAtomicRouteUpdate(t *testing.T) {
+	tempDir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(tempDir, "api-key-priorities.json"),
+		[]byte(`{"accountIds":{"client-secret":["account-b"]}}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write priority state: %v", err)
+	}
+	store := newAPIKeyPriorityStateStore(filepath.Join(tempDir, "manifest.json"))
+	spec := &apiKeySpec{
+		ID:         "key-internal-id",
+		Key:        "client-secret",
+		AccountIDs: []string{"account-a", "account-b"},
+	}
+	if got := liveAccountScopeForSpec(spec, store); len(got) != 1 || got[0] != "account-b" {
+		t.Fatalf("live sources must intersect, got %#v", got)
+	}
+
+	if err := os.WriteFile(
+		filepath.Join(tempDir, "api-key-priorities.json"),
+		[]byte(`{"accountIds":{"client-secret":[]}}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write empty priority state: %v", err)
+	}
+	updatedAt := time.Now().Add(5 * time.Second)
+	if err := os.Chtimes(filepath.Join(tempDir, "api-key-priorities.json"), updatedAt, updatedAt); err != nil {
+		t.Fatalf("advance priority timestamp: %v", err)
+	}
+	if got := liveAccountScopeForSpec(spec, store); len(got) != 0 {
+		t.Fatalf("an explicit empty live scope must block stale manifest ids, got %#v", got)
+	}
+}
+
+func TestLiveScopeAcceptsNewStableAuthBeforeManifestRestart(t *testing.T) {
+    auth := &coreauth.Auth{ID: "codex_new.json", Provider: "codex", Status: coreauth.StatusActive}
+    got := filterAuthsForManifestAccountIDs(
+        &manifest{accountByAuthID: map[string]*accountSpec{}, accountByID: map[string]*accountSpec{}},
+        []string{"codex_new"},
+        []*coreauth.Auth{auth},
+    )
+    if len(got) != 1 || got[0] != auth {
+        t.Fatalf("new auth should be selectable from its stable filename: %#v", got)
+    }
 }
 
 func intPtrForTest(value int) *int {
@@ -4232,7 +4324,7 @@ func TestSidecarRuntimeDoesNotSelectAccountWithExcludedModel(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(authDir, blockedFile), []byte(`{
   "type":"codex",
   "email":"blocked@example.com",
-  "access_token":"blocked-token",
+  "access_token":"eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.",
   "account_id":"acct-blocked",
   "excluded_models":["GPT-5.6-LUNA", "gpt-5.7-*"]
 }`), 0o600); err != nil {
@@ -4241,7 +4333,7 @@ func TestSidecarRuntimeDoesNotSelectAccountWithExcludedModel(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(authDir, allowedFile), []byte(`{
   "type":"codex",
   "email":"allowed@example.com",
-  "access_token":"allowed-token",
+  "access_token":"eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.",
   "account_id":"acct-allowed"
 }`), 0o600); err != nil {
 		t.Fatalf("write allowed auth: %v", err)

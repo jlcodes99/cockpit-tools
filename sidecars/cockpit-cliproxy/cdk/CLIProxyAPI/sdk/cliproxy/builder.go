@@ -62,6 +62,11 @@ type Hooks struct {
 	// OnAfterStart is called after the service has started successfully,
 	// providing access to the service instance for additional operations.
 	OnAfterStart func(*Service)
+
+	// OnConfigReload is called after the service applies a watched config
+	// update. Hosts with a custom selector can restore their selector wrappers
+	// after the stock runtime routing selector has been refreshed.
+	OnConfigReload func(*config.Config)
 }
 
 // NewBuilder creates a Builder with default dependencies left unset.

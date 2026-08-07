@@ -162,9 +162,37 @@ func newAPIKeyPriorityStateStore(manifestPath string) *apiKeyPriorityStateStore 
 	return store
 }
 
-func (s *apiKeyPriorityStateStore) scopedAccountIDs(apiKeyID string) ([]string, bool) {
-	if s == nil {
-		return nil, false
+func (s *apiKeyPriorityStateStore) priorityAccountIDs(apiKeyID string) []string {
+    if s == nil {
+        return nil
+    }
+    s.reloadIfChanged()
+    s.mu.RLock()
+    defer s.mu.RUnlock()
+    return append([]string(nil), s.priorities[strings.TrimSpace(apiKeyID)]...)
+}
+
+// priorityAccountIDsForSpec resolves the route-order map by manifest id first,
+// then by the actual client API-key value used by config.json. Production uses
+// different values for these two fields, so looking up only spec.ID silently
+// disables hot route updates.
+func (s *apiKeyPriorityStateStore) priorityAccountIDsForSpec(spec *apiKeySpec) []string {
+    if s == nil || spec == nil {
+        return nil
+    }
+    if accountIDs := s.priorityAccountIDs(spec.ID); len(accountIDs) > 0 {
+        return accountIDs
+    }
+    key := strings.TrimSpace(spec.Key)
+    if key != "" && key != strings.TrimSpace(spec.ID) {
+        return s.priorityAccountIDs(key)
+    }
+    return nil
+}
+
+func (s *apiKeyPriorityStateStore) accountScope(apiKeyID string) ([]string, bool) {
+    if s == nil {
+        return nil, false
 	}
 	s.reloadIfChanged()
 	s.mu.RLock()
@@ -173,17 +201,23 @@ func (s *apiKeyPriorityStateStore) scopedAccountIDs(apiKeyID string) ([]string, 
 	if !s.scopeKnown[key] {
 		return nil, false
 	}
-	return append([]string(nil), s.scopes[key]...), true
+    return append([]string(nil), s.scopes[key]...), true
 }
 
-func (s *apiKeyPriorityStateStore) priorityAccountIDs(apiKeyID string) []string {
-	if s == nil {
-		return nil
-	}
-	s.reloadIfChanged()
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return append([]string(nil), s.priorities[strings.TrimSpace(apiKeyID)]...)
+// accountScopeForSpec preserves the known/empty distinction: a present empty
+// scope means the key must serve no account and may not fall back to manifest.
+func (s *apiKeyPriorityStateStore) accountScopeForSpec(spec *apiKeySpec) ([]string, bool) {
+    if s == nil || spec == nil {
+        return nil, false
+    }
+    if accountIDs, known := s.accountScope(spec.ID); known {
+        return accountIDs, true
+    }
+    key := strings.TrimSpace(spec.Key)
+    if key != "" && key != strings.TrimSpace(spec.ID) {
+        return s.accountScope(key)
+    }
+    return nil, false
 }
 
 func (s *apiKeyPriorityStateStore) reloadIfChanged() {
@@ -222,7 +256,7 @@ func (s *apiKeyPriorityStateStore) reloadIfChanged() {
 		seen := make(map[string]struct{}, len(accountIDs))
 		scope := make([]string, 0, len(accountIDs))
 		for _, accountID := range accountIDs {
-			accountID = strings.TrimSpace(accountID)
+            accountID = strings.TrimSpace(strings.TrimSuffix(accountID, ".json"))
 			if accountID == "" {
 				continue
 			}
@@ -928,9 +962,180 @@ func withClientInstanceID(ctx context.Context, instanceID string) context.Contex
 }
 
 type requestPolicy struct {
-	manifest *manifest
-	emitter  *eventEmitter
-	tracker  *requestUsageTracker
+    manifest *manifest
+    emitter  *eventEmitter
+    tracker  *requestUsageTracker
+    scopes   *apiKeyAccountScopeStore
+}
+
+// apiKeyAccountScopeStore is independent from manifest reloads. Cockpit can
+// atomically replace config.json while requests are in flight; each new request
+// adopts api-key-account-ids without replacing the HTTP server or active SSEs.
+type apiKeyAccountScopeStore struct {
+    path    string
+    mu      sync.RWMutex
+    modTime int64
+    scopes  map[string][]string
+    known   map[string]bool
+}
+
+func newAPIKeyAccountScopeStore(path string) *apiKeyAccountScopeStore {
+    return &apiKeyAccountScopeStore{
+        path:   strings.TrimSpace(path),
+        scopes: make(map[string][]string),
+        known:  make(map[string]bool),
+    }
+}
+
+func normalizeScopeAccountID(value string) string {
+    value = strings.TrimSpace(value)
+    value = strings.TrimSuffix(value, ".json")
+    return value
+}
+
+func (s *apiKeyAccountScopeStore) reloadIfChanged() {
+    if s == nil || s.path == "" {
+        return
+    }
+    info, err := os.Stat(s.path)
+    if err != nil {
+        return
+    }
+    modTime := info.ModTime().UnixNano()
+    s.mu.RLock()
+    unchanged := modTime == s.modTime
+    s.mu.RUnlock()
+    if unchanged {
+        return
+    }
+    data, err := os.ReadFile(s.path)
+    if err != nil {
+        return
+    }
+    var config struct {
+        AccountScopes map[string][]string `json:"api-key-account-ids"`
+    }
+    if err := json.Unmarshal(data, &config); err != nil {
+        return
+    }
+    next := make(map[string][]string, len(config.AccountScopes))
+    known := make(map[string]bool, len(config.AccountScopes))
+    for key, values := range config.AccountScopes {
+        key = strings.TrimSpace(key)
+        if key == "" {
+            continue
+        }
+        known[key] = true
+        clean := make([]string, 0, len(values))
+        seen := make(map[string]struct{}, len(values))
+        for _, value := range values {
+            accountID := normalizeScopeAccountID(value)
+            if accountID == "" {
+                continue
+            }
+            if _, exists := seen[accountID]; exists {
+                continue
+            }
+            seen[accountID] = struct{}{}
+            clean = append(clean, accountID)
+        }
+        if len(clean) > 0 {
+            next[key] = clean
+        }
+    }
+    s.mu.Lock()
+    s.modTime = modTime
+    s.scopes = next
+    s.known = known
+    s.mu.Unlock()
+}
+
+func (s *apiKeyAccountScopeStore) accountIDs(apiKeyID string) ([]string, bool) {
+    if s == nil {
+        return nil, false
+    }
+    s.reloadIfChanged()
+    s.mu.RLock()
+    defer s.mu.RUnlock()
+    key := strings.TrimSpace(apiKeyID)
+    return append([]string(nil), s.scopes[key]...), s.known[key]
+}
+
+// Production config keys scopes by the client API-key value while manifest
+// uses a separate opaque id. Resolve both and keep a known empty slice final.
+func (s *apiKeyAccountScopeStore) accountIDsForSpec(spec *apiKeySpec) ([]string, bool) {
+    if s == nil || spec == nil {
+        return nil, false
+    }
+    if accountIDs, known := s.accountIDs(spec.ID); known {
+        return accountIDs, true
+    }
+    key := strings.TrimSpace(spec.Key)
+    if key != "" && key != strings.TrimSpace(spec.ID) {
+        return s.accountIDs(key)
+    }
+    return nil, false
+}
+
+func scopedAPIKeySpec(spec *apiKeySpec, scopes *apiKeyAccountScopeStore) *apiKeySpec {
+    if spec == nil || scopes == nil {
+        return spec
+    }
+    accountIDs, known := scopes.accountIDsForSpec(spec)
+    if !known {
+        return spec
+    }
+    copySpec := *spec
+    copySpec.AccountIDs = accountIDs
+	return &copySpec
+}
+
+// intersectAccountScopes is fail-closed while config.json and
+// api-key-priorities.json are being atomically updated. A scope that appears
+// in only one live source must not receive traffic during that tiny window.
+func intersectAccountScopes(primary []string, secondary []string) []string {
+	allowed := make(map[string]struct{}, len(secondary))
+	for _, accountID := range secondary {
+		if accountID = normalizeScopeAccountID(accountID); accountID != "" {
+			allowed[accountID] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(primary))
+	seen := make(map[string]struct{}, len(primary))
+	for _, accountID := range primary {
+		accountID = normalizeScopeAccountID(accountID)
+		if accountID == "" {
+			continue
+		}
+		if _, ok := allowed[accountID]; !ok {
+			continue
+		}
+		if _, duplicate := seen[accountID]; duplicate {
+			continue
+		}
+		seen[accountID] = struct{}{}
+		out = append(out, accountID)
+	}
+	return out
+}
+
+func liveAccountScopeForSpec(spec *apiKeySpec, priorities *apiKeyPriorityStateStore) []string {
+	if spec == nil {
+		return nil
+	}
+	accountIDs := append([]string(nil), spec.AccountIDs...)
+	if priorities == nil {
+		return accountIDs
+	}
+	if priorityScope, known := priorities.accountScopeForSpec(spec); known {
+		// Direct selector callers (including legacy callers) have no config.json
+		// snapshot. In that case the known priority scope is the only live source.
+		if spec.AccountIDs == nil {
+			return priorityScope
+		}
+		return intersectAccountScopes(accountIDs, priorityScope)
+	}
+	return accountIDs
 }
 
 func (p *requestPolicy) middleware() gin.HandlerFunc {
@@ -1032,7 +1237,7 @@ func (p *requestPolicy) lookupAPIKey(r *http.Request) *apiKeySpec {
 	if key == "" {
 		return nil
 	}
-	return p.manifest.apiKeyByValue[key]
+    return scopedAPIKeySpec(p.manifest.apiKeyByValue[key], p.scopes)
 }
 
 func ensureRequestID(c *gin.Context) string {
@@ -2357,7 +2562,7 @@ func (s *cockpitSelector) prioritizeAuthsForAPIKey(ctx context.Context, auths []
 	if spec == nil {
 		return auths
 	}
-	priorityAccountIDs := s.priorities.priorityAccountIDs(spec.ID)
+    priorityAccountIDs := s.priorities.priorityAccountIDsForSpec(spec)
 	if len(priorityAccountIDs) == 0 {
 		return auths
 	}
@@ -2365,9 +2570,9 @@ func (s *cockpitSelector) prioritizeAuthsForAPIKey(ctx context.Context, auths []
 	ordered := make([]*coreauth.Auth, 0, len(auths))
 	selected := make(map[*coreauth.Auth]struct{}, len(priorityAccountIDs))
 	for _, priorityAccountID := range priorityAccountIDs {
+		priorityAccountID = normalizeScopeAccountID(priorityAccountID)
 		for _, auth := range auths {
-			account := s.accountForAuth(auth)
-			if account == nil || account.ID != priorityAccountID {
+			if accountIDForManifestAuth(s.manifest, auth) != priorityAccountID {
 				continue
 			}
 			if _, alreadySelected := selected[auth]; alreadySelected {
@@ -2397,43 +2602,45 @@ func (s *cockpitSelector) filterAuthsForAPIKeyScope(ctx context.Context, auths [
 	if spec == nil {
 		return auths
 	}
-	if s.priorities != nil {
-		if scopedIDs, hasScope := s.priorities.scopedAccountIDs(spec.ID); hasScope {
-			if len(scopedIDs) == 0 {
-				return nil
-			}
-			return s.filterAuthsByAccountIDs(auths, scopedIDs)
-		}
-	}
-	if len(spec.AccountIDs) == 0 {
-		return auths
-	}
-	return s.filterAuthsByAccountIDs(auths, spec.AccountIDs)
+	return filterAuthsForManifestAccountIDs(s.manifest, liveAccountScopeForSpec(spec, s.priorities), auths)
 }
 
-func (s *cockpitSelector) filterAuthsByAccountIDs(auths []*coreauth.Auth, accountIDs []string) []*coreauth.Auth {
-
-	allowedAccountIDs := make(map[string]struct{}, len(accountIDs))
-	for _, accountID := range accountIDs {
-		if accountID = strings.TrimSpace(accountID); accountID != "" {
-			allowedAccountIDs[accountID] = struct{}{}
-		}
+func filterAuthsForManifestAccountIDs(m *manifest, accountIDs []string, auths []*coreauth.Auth) []*coreauth.Auth {
+    if m == nil {
+        return auths
+    }
+    allowedAccountIDs := make(map[string]struct{}, len(accountIDs))
+    for _, accountID := range accountIDs {
+        accountID = normalizeScopeAccountID(accountID)
+        if accountID != "" {
+            allowedAccountIDs[accountID] = struct{}{}
+        }
 	}
 	if len(allowedAccountIDs) == 0 {
 		return nil
 	}
 
-	scoped := make([]*coreauth.Auth, 0, len(auths))
+    scoped := make([]*coreauth.Auth, 0, len(auths))
 	for _, auth := range auths {
-		account := s.accountForAuth(auth)
-		if account == nil {
-			continue
-		}
-		if _, allowed := allowedAccountIDs[account.ID]; allowed {
-			scoped = append(scoped, auth)
-		}
+		accountID := accountIDForManifestAuth(m, auth)
+		if _, allowed := allowedAccountIDs[accountID]; allowed {
+            scoped = append(scoped, auth)
+        }
 	}
 	return scoped
+}
+
+func accountIDForManifestAuth(m *manifest, auth *coreauth.Auth) string {
+	if account := accountForAuthInManifest(m, auth); account != nil {
+		return normalizeScopeAccountID(account.ID)
+	}
+	if auth == nil {
+		return ""
+	}
+	// A newly materialized auth can be observed by CLIProxy's auth-dir watcher
+	// before the static startup manifest knows it. Its stable filename is the
+	// Cockpit account id, so it is still safe to match a live scope.
+	return normalizeScopeAccountID(filepath.Base(auth.ID))
 }
 
 func (s *cockpitSelector) maxConcurrentImageRequests() int {
@@ -3171,11 +3378,19 @@ func buildCoreAuthSelector(cfg *config.Config, selector coreauth.Selector, m *ma
 			ttl = parsed
 		}
 		// Session affinity + per-client-key namespace, with image requests bypassing affinity.
-		selector = coreauth.NewSessionAffinitySelectorWithConfig(coreauth.SessionAffinityConfig{
-			Fallback: selector,
-			TTL:      ttl,
-		})
-		selector = &cockpitSessionAffinitySelector{inner: selector}
+        selector = coreauth.NewSessionAffinitySelectorWithConfig(coreauth.SessionAffinityConfig{
+            Fallback: selector,
+            TTL:      ttl,
+        })
+        var priorities *apiKeyPriorityStateStore
+        if cockpit, ok := imageFallback.(*cockpitSelector); ok {
+            priorities = cockpit.priorities
+        }
+        selector = &cockpitSessionAffinitySelector{
+            inner:      selector,
+            manifest:   m,
+            priorities: priorities,
+        }
 		selector = &imageRequestSelector{
 			imageFallback: imageFallback,
 			fallback:      selector,
@@ -3189,35 +3404,53 @@ func buildCoreAuthSelector(cfg *config.Config, selector coreauth.Selector, m *ma
 	return selector
 }
 
+func buildCockpitSelectorStack(cfg *config.Config, selector coreauth.Selector, m *manifest, quota *quotaReserveStateStore, tracker *requestUsageTracker) coreauth.Selector {
+	selector = buildCoreAuthSelector(cfg, selector, m, quota)
+	if tracker != nil {
+		selector = &recordingSelector{inner: selector, manifest: m, tracker: tracker}
+	}
+	return selector
+}
+
 func buildCoreAuthManager(cfg *config.Config, selector coreauth.Selector, hook coreauth.Hook, m *manifest, quota *quotaReserveStateStore, tracker *requestUsageTracker) *coreauth.Manager {
 	tokenStore := sdkauth.GetTokenStore()
 	if dirSetter, ok := tokenStore.(interface{ SetBaseDir(string) }); ok && cfg != nil {
 		dirSetter.SetBaseDir(cfg.AuthDir)
 	}
-	selector = buildCoreAuthSelector(cfg, selector, m, quota)
-	if tracker != nil {
-		selector = &recordingSelector{inner: selector, manifest: m, tracker: tracker}
-	}
+	selector = buildCockpitSelectorStack(cfg, selector, m, quota, tracker)
 	return coreauth.NewManager(tokenStore, selector, hook)
 }
 
 type cockpitSessionAffinitySelector struct {
-	inner coreauth.Selector
+    inner      coreauth.Selector
+    manifest   *manifest
+    priorities *apiKeyPriorityStateStore
 }
 
 func (s *cockpitSessionAffinitySelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*coreauth.Auth) (*coreauth.Auth, error) {
 	if s == nil || s.inner == nil {
 		return nil, errors.New("session affinity selector is unavailable")
 	}
-	if spec, _ := ctx.Value(clientAPIKeyContextKey).(*apiKeySpec); spec != nil && strings.TrimSpace(spec.ID) != "" {
+    if spec, _ := ctx.Value(clientAPIKeyContextKey).(*apiKeySpec); spec != nil && strings.TrimSpace(spec.ID) != "" {
 		metadata := make(map[string]any, len(opts.Metadata)+1)
 		for key, value := range opts.Metadata {
 			metadata[key] = value
 		}
 		metadata[cliproxyexecutor.SessionAffinityNamespaceMetadataKey] = spec.ID
-		opts.Metadata = metadata
+        opts.Metadata = metadata
+    }
+    // Filter before consulting the affinity cache. Otherwise a binding can keep
+    // selecting an exhausted account after the live scope removes it.
+	if s.manifest != nil {
+		if spec, _ := ctx.Value(clientAPIKeyContextKey).(*apiKeySpec); spec != nil {
+			auths = filterAuthsForManifestAccountIDs(
+				s.manifest,
+				liveAccountScopeForSpec(spec, s.priorities),
+				auths,
+			)
+		}
 	}
-	return s.inner.Pick(ctx, provider, model, opts, auths)
+    return s.inner.Pick(ctx, provider, model, opts, auths)
 }
 
 type sidecarRuntime struct {
@@ -3391,6 +3624,10 @@ func buildCodexAlphaSearchHeaders(src http.Header, auth *coreauth.Auth) http.Hea
 }
 
 func newSidecarRuntime(ctx context.Context, configPath string, cfg *config.Config, m *manifest, manager *coreauth.Manager) (*sidecarRuntime, error) {
+	return newSidecarRuntimeWithSelector(ctx, configPath, cfg, m, manager, nil, nil, nil)
+}
+
+func newSidecarRuntimeWithSelector(ctx context.Context, configPath string, cfg *config.Config, m *manifest, manager *coreauth.Manager, baseSelector coreauth.Selector, quota *quotaReserveStateStore, tracker *requestUsageTracker) (*sidecarRuntime, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config is nil")
 	}
@@ -3416,11 +3653,18 @@ func newSidecarRuntime(ctx context.Context, configPath string, cfg *config.Confi
 		WithConfigPath(configPath).
 		WithAuthManager(authManager).
 		WithCoreAuthManager(manager).
-		WithHooks(cliproxy.Hooks{
-			OnAfterStart: func(*cliproxy.Service) {
-				readyOnce.Do(func() { close(readyCh) })
-			},
-		}).
+        WithHooks(cliproxy.Hooks{
+            OnAfterStart: func(*cliproxy.Service) {
+                readyOnce.Do(func() { close(readyCh) })
+            },
+			OnConfigReload: func(newCfg *config.Config) {
+                // Stock CLIProxy rebuilds a plain selector on config reload.
+                // Reapply Cockpit's live scope, quota and affinity wrappers so
+                // a hot account change cannot widen routing or revive a stale
+                // session binding.
+				manager.SetSelector(buildCockpitSelectorStack(newCfg, baseSelector, m, quota, tracker))
+            },
+        }).
 		Build()
 	if err != nil {
 		return nil, err
@@ -8154,8 +8398,9 @@ func main() {
 		})
 	}
 
-	usageTracker := newRequestUsageTracker()
-	policy := &requestPolicy{manifest: m, emitter: emitter, tracker: usageTracker}
+    usageTracker := newRequestUsageTracker()
+    scopes := newAPIKeyAccountScopeStore(absConfigPath)
+    policy := &requestPolicy{manifest: m, emitter: emitter, tracker: usageTracker, scopes: scopes}
 	hook := &authHook{manifest: m, emitter: emitter}
 	priorityState := newAPIKeyPriorityStateStore(*manifestPath)
 	selector := &cockpitSelector{
@@ -8176,7 +8421,7 @@ func main() {
 
 	coreusage.RegisterPlugin(&usagePlugin{manifest: m, tracker: usageTracker})
 
-	runtime, err := newSidecarRuntime(ctx, absConfigPath, cfg, m, coreManager)
+	runtime, err := newSidecarRuntimeWithSelector(ctx, absConfigPath, cfg, m, coreManager, selector, quotaState, usageTracker)
 	if err != nil {
 		emitter.emit(map[string]any{"type": "error", "message": err.Error()})
 		os.Exit(1)
