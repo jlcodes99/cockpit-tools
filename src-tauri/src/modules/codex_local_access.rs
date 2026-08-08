@@ -377,6 +377,7 @@ struct BoundOauthQuotaRefreshControl {
 struct GatewayRuntime {
     loaded: bool,
     collection: Option<CodexLocalAccessCollection>,
+    collection_dirty: bool,
     stats: CodexLocalAccessStats,
     stats_dirty: bool,
     stats_flush_inflight: bool,
@@ -637,6 +638,8 @@ struct ResolvedLocalApiKey {
     model_prefix: Option<String>,
     allowed_models: Vec<String>,
     excluded_models: Vec<String>,
+    token_limit: Option<u64>,
+    token_used: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -1401,7 +1404,19 @@ fn prune_runtime_account_state(runtime: &mut GatewayRuntime) {
     });
 }
 
-fn sync_runtime_collection(runtime: &mut GatewayRuntime, collection: CodexLocalAccessCollection) {
+fn sync_runtime_collection(
+    runtime: &mut GatewayRuntime,
+    mut collection: CodexLocalAccessCollection,
+) {
+    if let Some(current) = runtime.collection.as_ref() {
+        for api_key in &mut collection.api_keys {
+            if let Some(current_api_key) =
+                current.api_keys.iter().find(|item| item.id == api_key.id)
+            {
+                api_key.token_used = api_key.token_used.max(current_api_key.token_used);
+            }
+        }
+    }
     runtime.collection = Some(collection);
     runtime.loaded = true;
     runtime.last_error = None;
@@ -2092,14 +2107,19 @@ async fn schedule_stats_flush_if_needed() {
         loop {
             tokio::time::sleep(STATS_FLUSH_INTERVAL).await;
 
-            let stats_snapshot = {
+            let (stats_snapshot, collection_snapshot) = {
                 let mut runtime = gateway_runtime().lock().await;
-                if !runtime.stats_dirty {
+                if !runtime.stats_dirty && !runtime.collection_dirty {
                     runtime.stats_flush_inflight = false;
                     return;
                 }
+                let collection_snapshot = runtime
+                    .collection_dirty
+                    .then(|| runtime.collection.clone())
+                    .flatten();
                 runtime.stats_dirty = false;
-                runtime.stats.clone()
+                runtime.collection_dirty = false;
+                (runtime.stats.clone(), collection_snapshot)
             };
 
             if let Err(err) = save_stats_to_disk(&stats_snapshot) {
@@ -2109,8 +2129,21 @@ async fn schedule_stats_flush_if_needed() {
                 ));
                 let mut runtime = gateway_runtime().lock().await;
                 runtime.stats_dirty = true;
+                runtime.collection_dirty |= collection_snapshot.is_some();
                 runtime.stats_flush_inflight = false;
                 return;
+            }
+            if let Some(collection_snapshot) = collection_snapshot.as_ref() {
+                if let Err(err) = save_collection_to_disk(collection_snapshot) {
+                    logger::log_codex_api_warn(&format!(
+                        "[CodexLocalAccess] background API key token usage save failed: {}",
+                        err
+                    ));
+                    let mut runtime = gateway_runtime().lock().await;
+                    runtime.collection_dirty = true;
+                    runtime.stats_flush_inflight = false;
+                    return;
+                }
             }
         }
     });
@@ -10148,6 +10181,15 @@ fn stable_sidecar_manifest_for_fingerprint(manifest_content: &str) -> String {
             }
         }
     }
+    if let Some(api_keys) = manifest.get_mut("apiKeys").and_then(Value::as_array_mut) {
+        for api_key in api_keys {
+            if let Some(api_key) = api_key.as_object_mut() {
+                // Usage is initialized when the process starts and then maintained in memory.
+                // It must not restart active streams when unrelated gateway state is refreshed.
+                api_key.remove("tokenUsed");
+            }
+        }
+    }
     serde_json::to_string(&manifest).unwrap_or_else(|_| manifest_content.to_string())
 }
 
@@ -10574,6 +10616,8 @@ fn sidecar_api_key_manifest_values(collection: &CodexLocalAccessCollection) -> V
             "responsesWebsockets": collection.responses_websockets_enabled,
             "allowedModels": [],
             "excludedModels": [],
+            "tokenLimit": null,
+            "tokenUsed": 0,
         }));
     }
     for item in &collection.api_keys {
@@ -10596,10 +10640,47 @@ fn sidecar_api_key_manifest_values(collection: &CodexLocalAccessCollection) -> V
             "modelPrefix": item.model_prefix.clone(),
             "allowedModels": item.allowed_models.clone(),
             "excludedModels": item.excluded_models.clone(),
+            "tokenLimit": item.token_limit,
+            "tokenUsed": item.token_used,
             "enabled": item.enabled,
         }));
     }
     values
+}
+
+fn api_key_token_limit_exceeded(api_key: &ResolvedLocalApiKey) -> Option<(u64, u64)> {
+    api_key
+        .token_limit
+        .filter(|limit| *limit > 0 && api_key.token_used >= *limit)
+        .map(|limit| (api_key.token_used, limit))
+}
+
+fn add_api_key_token_usage(
+    collection: &mut CodexLocalAccessCollection,
+    api_key_id: &str,
+    total_tokens: u64,
+) -> bool {
+    let api_key_id = api_key_id.trim();
+    if api_key_id.is_empty() || api_key_id == "legacy" || total_tokens == 0 {
+        return false;
+    }
+    let Some(api_key) = collection
+        .api_keys
+        .iter_mut()
+        .find(|item| item.id == api_key_id)
+    else {
+        return false;
+    };
+    api_key.token_used = api_key.token_used.saturating_add(total_tokens);
+    true
+}
+
+fn effective_usage_total_tokens(usage: &UsageCapture) -> u64 {
+    if usage.total_tokens > 0 {
+        usage.total_tokens
+    } else {
+        usage.input_tokens.saturating_add(usage.output_tokens)
+    }
 }
 
 fn sidecar_api_key_priority_state_values(collection: &CodexLocalAccessCollection) -> Value {
@@ -13371,6 +13452,8 @@ fn build_local_access_api_key(label: Option<&str>) -> CodexLocalAccessApiKey {
         model_prefix: None,
         allowed_models: Vec::new(),
         excluded_models: Vec::new(),
+        token_limit: None,
+        token_used: 0,
         enabled: true,
         created_at: now,
         updated_at: now,
@@ -13400,6 +13483,8 @@ fn normalize_collection_api_keys(collection: &mut CodexLocalAccessCollection) ->
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
             enabled: true,
             created_at: now,
             updated_at: now,
@@ -13496,6 +13581,10 @@ fn normalize_collection_api_keys(collection: &mut CodexLocalAccessCollection) ->
         } else {
             item.excluded_models = original_excluded_models;
         }
+        if item.token_limit == Some(0) {
+            item.token_limit = None;
+            changed = true;
+        }
         normalized.push(item);
     }
 
@@ -13542,6 +13631,8 @@ fn resolve_collection_api_key(
             model_prefix: item.model_prefix.clone(),
             allowed_models: item.allowed_models.clone(),
             excluded_models: item.excluded_models.clone(),
+            token_limit: item.token_limit,
+            token_used: item.token_used,
         })
         .or_else(|| {
             if collection.api_key == normalized {
@@ -13554,6 +13645,8 @@ fn resolve_collection_api_key(
                     model_prefix: None,
                     allowed_models: Vec::new(),
                     excluded_models: Vec::new(),
+                    token_limit: None,
+                    token_used: 0,
                 })
             } else {
                 None
@@ -16397,6 +16490,18 @@ async fn record_request_stats_with_meta(
             estimated_cost_usd,
             now,
         );
+        let token_usage_changed = api_key_id
+            .zip(usage_ref)
+            .is_some_and(|(api_key_id, usage)| {
+                runtime.collection.as_mut().is_some_and(|collection| {
+                    add_api_key_token_usage(
+                        collection,
+                        api_key_id,
+                        effective_usage_total_tokens(usage),
+                    )
+                })
+            });
+        runtime.collection_dirty |= token_usage_changed;
         let event = append_usage_event(
             &mut runtime.stats.events,
             now,
@@ -17220,6 +17325,8 @@ fn build_provider_gateway_collection_for_profile(
         model_prefix: None,
         allowed_models: Vec::new(),
         excluded_models: Vec::new(),
+        token_limit: None,
+        token_used: 0,
         enabled: true,
         created_at: now,
         updated_at: now,
@@ -17277,6 +17384,8 @@ fn build_bound_oauth_local_gateway_collection_for_profile(
         model_prefix: None,
         allowed_models: Vec::new(),
         excluded_models: Vec::new(),
+        token_limit: None,
+        token_used: 0,
         enabled: true,
         created_at: now,
         updated_at: now,
@@ -17460,6 +17569,8 @@ fn build_model_provider_gateway_test_collection(
         model_prefix: None,
         allowed_models: vec![client_model_id.trim().to_string()],
         excluded_models: Vec::new(),
+        token_limit: None,
+        token_used: 0,
         enabled: true,
         created_at: now,
         updated_at: now,
@@ -20365,13 +20476,21 @@ pub async fn update_local_access_api_key(
     model_prefix: Option<String>,
     allowed_models: Option<Vec<String>>,
     excluded_models: Option<Vec<String>>,
+    token_limit: Option<u64>,
     account_ids: Option<Vec<String>>,
     inherit_account_pool: Option<bool>,
 ) -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded().await?;
-    let maybe_collection = {
+    let (maybe_collection, historical_token_used) = {
         let runtime = gateway_runtime().lock().await;
-        runtime.collection.clone()
+        let historical_token_used = runtime
+            .stats
+            .api_keys
+            .iter()
+            .find(|item| item.api_key_id == api_key_id.trim())
+            .map(|item| item.usage.total_tokens)
+            .unwrap_or_default();
+        (runtime.collection.clone(), historical_token_used)
     };
     let Some(mut collection) = maybe_collection else {
         return Err("本地接入集合尚未创建".to_string());
@@ -20406,6 +20525,14 @@ pub async fn update_local_access_api_key(
     }
     if let Some(excluded_models) = excluded_models {
         collection.api_keys[index].excluded_models = normalize_model_rule_list(excluded_models);
+    }
+    if let Some(token_limit) = token_limit {
+        if token_limit > 0 && collection.api_keys[index].token_limit.is_none() {
+            collection.api_keys[index].token_used = collection.api_keys[index]
+                .token_used
+                .max(historical_token_used);
+        }
+        collection.api_keys[index].token_limit = (token_limit > 0).then_some(token_limit);
     }
     if let Some(account_ids) = normalized_account_ids {
         if inherit_account_pool.is_none() {
@@ -21537,10 +21664,14 @@ fn gateway_error_body(
         "type".to_string(),
         Value::String("codex_local_access_error".to_string()),
     );
-    error.insert(
-        "code".to_string(),
-        Value::String(gateway_error_code(status).to_string()),
-    );
+    let error_code = if status == StatusCode::TOO_MANY_REQUESTS.as_u16()
+        && message.starts_with("API key token limit exceeded")
+    {
+        "token_limit_exceeded"
+    } else {
+        gateway_error_code(status)
+    };
+    error.insert("code".to_string(), Value::String(error_code.to_string()));
     error.insert("status".to_string(), json!(status));
 
     if let Some(diagnostics) = proxy_diagnostics {
@@ -25480,6 +25611,58 @@ async fn handle_connection(
         return Ok(());
     };
     touch_local_access_api_key(&resolved_api_key.id).await;
+    let started_at = Instant::now();
+
+    if !is_local_models_request(&parsed.target) {
+        if let Some((token_used, token_limit)) = api_key_token_limit_exceeded(&resolved_api_key) {
+            let request_kind = request_kind_from_target(&parsed.target);
+            let model_id = stats_model_id_for_request_kind(&parsed.body, request_kind);
+            let message = format!(
+                "API key token limit exceeded ({} of {} tokens used)",
+                token_used, token_limit
+            );
+            let latency_ms = started_at.elapsed().as_millis() as u64;
+            write_json_error_response(
+                &mut stream,
+                Some(&addr),
+                Some(&parsed),
+                429,
+                "Too Many Requests",
+                message.as_str(),
+                None,
+                None,
+                Some(latency_ms),
+            )
+            .await?;
+            let stats_service_tier = service_tier_from_request_body(&parsed.body);
+            if let Err(err) = record_request_stats_with_meta(
+                None,
+                None,
+                Some(resolved_api_key.id.as_str()),
+                Some(resolved_api_key.label.as_str()),
+                Some(model_id.as_str()),
+                request_kind,
+                false,
+                Some("token_limit_exceeded"),
+                latency_ms,
+                None,
+                RequestStatsMeta {
+                    http_status: Some(429),
+                    error_message: Some(message.as_str()),
+                    service_tier: stats_service_tier.as_deref(),
+                    ..RequestStatsMeta::default()
+                },
+            )
+            .await
+            {
+                logger::log_codex_api_warn(&format!(
+                    "[CodexLocalAccess] failed to record token-limit rejection: {}",
+                    err
+                ));
+            }
+            return Ok(());
+        }
+    }
 
     if is_websocket_upgrade_request(&parsed) {
         if !is_backend_codex_responses_websocket_request(&parsed.target)
@@ -25534,7 +25717,6 @@ async fn handle_connection(
         return Ok(());
     }
 
-    let started_at = Instant::now();
     if collection.image_generation_mode == CodexLocalAccessImageGenerationMode::Disabled
         && (is_images_generations_request(&parsed.target)
             || is_images_edits_request(&parsed.target))
@@ -26069,8 +26251,9 @@ mod tests {
     use super::{
         account_model_rule_blocks_model, account_requires_bound_oauth_local_gateway,
         account_requires_provider_gateway, account_upstream_base_url, account_usage_priority,
+        add_api_key_token_usage,
         align_codex_prompt_cache, api_key_inherits_account_pool, api_key_priority_account_ids,
-        append_eligible_local_access_account_ids, append_usage_event,
+        api_key_token_limit_exceeded, append_eligible_local_access_account_ids, append_usage_event,
         apply_account_usage_priority_ids, apply_codex_official_headers, apply_routing_strategy,
         backup_current_profile_model_before_provider_gateway, bound_oauth_quota_refresh_failures,
         bound_oauth_quota_reserve_blocks_account, bridge_websocket_streams,
@@ -26114,6 +26297,7 @@ mod tests {
         recover_invalid_stats_file, remove_account_refs_from_collection,
         remove_codex_local_access_config, reprice_request_logs_for_collection,
         request_image_generation_mode, request_logs_has_column, request_ordered_account_ids,
+        resolve_collection_api_key,
         resolve_effective_model_pricing, resolve_plan_rank, resolve_sidecar_upstream_base_url,
         resolve_sidecar_upstream_base_url_with, resolve_supported_model_alias,
         resolve_upstream_target, restore_config_toml_from_takeover_backup,
@@ -26467,6 +26651,48 @@ mod tests {
         assert!(!collection.responses_websockets_enabled);
     }
 
+    #[test]
+    fn api_key_token_limit_defaults_and_accumulates_across_requests() {
+        let mut collection = test_local_access_collection(vec!["account-1".to_string()]);
+        let mut api_key = build_local_access_api_key(Some("Limited"));
+        api_key.id = "limited-key".to_string();
+        api_key.token_limit = Some(10_000_000);
+        collection.api_keys = vec![api_key];
+
+        assert!(add_api_key_token_usage(
+            &mut collection,
+            "limited-key",
+            4_000_000
+        ));
+        assert!(add_api_key_token_usage(
+            &mut collection,
+            "limited-key",
+            6_000_000
+        ));
+        let resolved = resolve_collection_api_key(&collection, collection.api_keys[0].key.as_str())
+            .expect("limited key should resolve");
+        assert_eq!(resolved.token_used, 10_000_000);
+        assert_eq!(
+            api_key_token_limit_exceeded(&resolved),
+            Some((10_000_000, 10_000_000))
+        );
+
+        let legacy_value = json!({
+            "id": "legacy-key",
+            "label": "Legacy",
+            "key": "legacy-secret",
+            "allowedModels": [],
+            "excludedModels": [],
+            "enabled": true,
+            "createdAt": 1,
+            "updatedAt": 1
+        });
+        let legacy_key: CodexLocalAccessApiKey =
+            serde_json::from_value(legacy_value).expect("legacy key should deserialize");
+        assert_eq!(legacy_key.token_limit, None);
+        assert_eq!(legacy_key.token_used, 0);
+    }
+
     fn test_oauth_account_with_quota(
         account_id: &str,
         hourly_percentage: i32,
@@ -26543,6 +26769,21 @@ mod tests {
             Some(false)
         );
 
+        collection.api_keys[0].token_limit = Some(10_000_000);
+        collection.api_keys[0].token_used = 2_500_000;
+        let limited = sidecar_api_key_manifest_values(&collection)
+            .into_iter()
+            .find(|value| value.get("key").and_then(Value::as_str) == Some("team-a-key"))
+            .expect("limited key should be emitted");
+        assert_eq!(
+            limited.get("tokenLimit").and_then(Value::as_u64),
+            Some(10_000_000)
+        );
+        assert_eq!(
+            limited.get("tokenUsed").and_then(Value::as_u64),
+            Some(2_500_000)
+        );
+
         collection.bound_oauth_account_id = Some("oauth-account".to_string());
         let oauth_bound = sidecar_api_key_manifest_values(&collection)
             .into_iter()
@@ -26592,6 +26833,8 @@ mod tests {
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
 
         assert_eq!(
@@ -27531,6 +27774,8 @@ wire_api = "responses"
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
 
         let models = visible_codex_model_ids_for_api_key_with_accounts(
@@ -27572,6 +27817,25 @@ wire_api = "responses"
         assert_ne!(
             sidecar_config_fingerprint(config, manifest_b),
             sidecar_config_fingerprint(config, manifest_c)
+        );
+    }
+
+    #[test]
+    fn sidecar_fingerprint_ignores_token_usage_but_tracks_token_limit() {
+        let config = r#"{"host":"127.0.0.1","port":58393}"#;
+        let manifest_a = r#"{"apiKeys":[{"id":"key-1","tokenLimit":1000,"tokenUsed":100}]}"#;
+        let manifest_b = r#"{"apiKeys":[{"id":"key-1","tokenLimit":1000,"tokenUsed":900}]}"#;
+        let manifest_c = r#"{"apiKeys":[{"id":"key-1","tokenLimit":2000,"tokenUsed":900}]}"#;
+
+        assert_eq!(
+            sidecar_config_fingerprint(config, manifest_a),
+            sidecar_config_fingerprint(config, manifest_b),
+            "usage updates must not restart active sidecar streams"
+        );
+        assert_ne!(
+            sidecar_config_fingerprint(config, manifest_a),
+            sidecar_config_fingerprint(config, manifest_c),
+            "limit changes must restart the sidecar to apply the new policy"
         );
     }
 
@@ -28377,6 +28641,8 @@ wire_api = "responses"
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
             enabled: true,
             created_at: 0,
             updated_at: 0,
@@ -30882,6 +31148,8 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             model_prefix: Some("team".to_string()),
             allowed_models: vec!["gpt-*".to_string()],
             excluded_models: vec!["codex-*".to_string()],
+            token_limit: None,
+            token_used: 0,
         };
 
         let models = visible_codex_model_ids_for_api_key(&collection, &api_key, None);
@@ -30913,6 +31181,8 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
 
         let models = visible_codex_model_ids_for_api_key(&collection, &api_key, None);
@@ -30950,6 +31220,8 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
 
         let models = visible_codex_model_ids_for_api_key(&collection, &api_key, None);
@@ -32451,6 +32723,8 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
         let mut request = ParsedRequest {
             method: "POST".to_string(),
@@ -32491,6 +32765,8 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
         let mut request = ParsedRequest {
             method: "POST".to_string(),
@@ -32567,6 +32843,8 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
         let cases = [
             (
@@ -32629,6 +32907,8 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
         let mut valid_signature_bytes = vec![0x80];
         valid_signature_bytes.extend([0u8; 8]);
@@ -32954,6 +33234,8 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
             enabled: true,
             created_at: 0,
             updated_at: 0,

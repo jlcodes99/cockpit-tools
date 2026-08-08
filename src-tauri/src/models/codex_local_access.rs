@@ -420,6 +420,10 @@ pub struct CodexLocalAccessApiKey {
     pub allowed_models: Vec<String>,
     #[serde(default)]
     pub excluded_models: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_limit: Option<u64>,
+    #[serde(default)]
+    pub token_used: u64,
     #[serde(default = "default_true")]
     pub enabled: bool,
     #[serde(default)]

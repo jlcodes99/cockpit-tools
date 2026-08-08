@@ -72,6 +72,8 @@ export interface CodexLocalAccessApiKey {
   modelPrefix?: string | null;
   allowedModels: string[];
   excludedModels: string[];
+  tokenLimit?: number | null;
+  tokenUsed: number;
   enabled: boolean;
   createdAt: number;
   updatedAt: number;

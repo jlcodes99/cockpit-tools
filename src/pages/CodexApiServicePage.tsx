@@ -16,6 +16,7 @@ import {
   Eye,
   EyeOff,
   FolderPlus,
+  Gauge,
   Image,
   KeyRound,
   Pin,
@@ -127,6 +128,7 @@ type BuiltinTimeoutPresetId = "long_wait" | "short_wait";
 type TimeoutPresetId = BuiltinTimeoutPresetId | string;
 
 interface ApiKeyPolicyDraft {
+  tokenLimit: string;
   modelPrefix: string;
   allowedModels: string;
   excludedModels: string;
@@ -421,6 +423,31 @@ function serializeModelRules(values: string[] | null | undefined): string {
   return (values ?? []).join("\n");
 }
 
+function parseTokenLimitDraft(value: string): number {
+  const normalized = value.trim().toLowerCase().replace(/[,_\s]/g, "");
+  if (!normalized) return 0;
+  const match = normalized.match(/^(\d+(?:\.\d+)?)([kmb])?$/);
+  if (!match) return Number.NaN;
+  const amount = Number(match[1]);
+  const multiplier =
+    match[2] === "k"
+      ? 1_000
+      : match[2] === "m"
+        ? 1_000_000
+        : match[2] === "b"
+          ? 1_000_000_000
+          : 1;
+  const tokens = amount * multiplier;
+  if (
+    !Number.isSafeInteger(tokens) ||
+    tokens < 0 ||
+    (tokens > 0 && tokens < 1)
+  ) {
+    return Number.NaN;
+  }
+  return tokens;
+}
+
 function apiKeyInheritsAccountPool(apiKey: CodexLocalAccessApiKey): boolean {
   return (
     apiKey.inheritAccountPool ?? ((apiKey.accountIds?.length ?? 0) === 0)
@@ -445,6 +472,7 @@ function apiKeyPolicyDraftFromValue(
   apiKey: CodexLocalAccessApiKey,
 ): ApiKeyPolicyDraft {
   return {
+    tokenLimit: apiKey.tokenLimit ? String(apiKey.tokenLimit) : "",
     modelPrefix: apiKey.modelPrefix ?? "",
     allowedModels: serializeModelRules(apiKey.allowedModels),
     excludedModels: serializeModelRules(apiKey.excludedModels),
@@ -466,6 +494,7 @@ function apiKeyPolicyDraftIsDirty(
 ): boolean {
   const persisted = apiKeyPolicyDraftFromValue(apiKey);
   return (
+    draft.tokenLimit !== persisted.tokenLimit ||
     draft.modelPrefix !== persisted.modelPrefix ||
     draft.allowedModels !== persisted.allowedModels ||
     draft.excludedModels !== persisted.excludedModels ||
@@ -2119,6 +2148,16 @@ export function CodexApiServicePage() {
     if (!draft) return;
     const apiKey = collection?.apiKeys.find((item) => item.id === apiKeyId);
     if (!apiKey) return;
+    const tokenLimit = parseTokenLimitDraft(draft.tokenLimit);
+    if (!Number.isFinite(tokenLimit)) {
+      setError(
+        t(
+          "codex.apiService.keys.tokenLimitInvalid",
+          "Enter a valid token limit, for example 10m or 10000000",
+        ),
+      );
+      return;
+    }
     const accountIds = reconcileCodexApiKeyScopeAccountIds({
       accounts: localAccessAccounts,
       restrictFreeAccounts: collection?.restrictFreeAccounts ?? true,
@@ -2151,6 +2190,7 @@ export function CodexApiServicePage() {
         const next = await codexLocalAccessService.updateCodexLocalAccessApiKey(
           apiKeyId,
           {
+            tokenLimit,
             modelPrefix: draft.modelPrefix.trim(),
             allowedModels: parseModelRuleText(draft.allowedModels),
             excludedModels: parseModelRuleText(draft.excludedModels),
@@ -3970,6 +4010,14 @@ export function CodexApiServicePage() {
                   policyDraft.accountIds.length === 0;
                 const keyStats = apiKeyStatsById.get(apiKey.id);
                 const keyUsage = keyStats?.usage;
+                const tokenLimit = apiKey.tokenLimit ?? 0;
+                const tokenUsed = apiKey.tokenUsed ?? 0;
+                const tokenLimitReached =
+                  tokenLimit > 0 && tokenUsed >= tokenLimit;
+                const tokenLimitProgress =
+                  tokenLimit > 0
+                    ? Math.min(100, Math.max(0, (tokenUsed / tokenLimit) * 100))
+                    : 0;
                 const keySuccessRate =
                   keyUsage && keyUsage.requestCount > 0
                     ? Math.round(
@@ -4108,6 +4156,39 @@ export function CodexApiServicePage() {
                         </div>
                       </div>
                       <div
+                        className={`api-key-token-limit-summary${
+                          tokenLimitReached ? " limit-reached" : ""
+                        }`}
+                      >
+                        <Gauge size={16} />
+                        <div>
+                          <span>
+                            {t(
+                              "codex.apiService.keys.tokenLimitUsage",
+                              "Token limit",
+                            )}
+                          </span>
+                          <strong>
+                            {tokenLimit > 0
+                              ? `${formatCompactNumber(tokenUsed)} / ${formatCompactNumber(tokenLimit)}`
+                              : t(
+                                  "codex.apiService.keys.tokenLimitUnlimited",
+                                  "Unlimited",
+                                )}
+                          </strong>
+                          {tokenLimit > 0 && (
+                            <span
+                              className="api-key-token-limit-progress"
+                              aria-label={`${Math.round(tokenLimitProgress)}%`}
+                            >
+                              <span
+                                style={{ width: `${tokenLimitProgress}%` }}
+                              />
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div
                         key={`${statsRange}:${statsTimeRange.startAt}:${statsTimeRange.endAt}`}
                         className="api-key-usage-grid"
                         aria-live="polite"
@@ -4177,6 +4258,50 @@ export function CodexApiServicePage() {
                     </button>
                     {policyExpanded && (
                       <div className="codex-api-service-key-policy">
+                        <div className="api-key-token-limit-editor">
+                          <label>
+                            <span>
+                              {t(
+                                "codex.apiService.keys.tokenLimit",
+                                "Total token limit",
+                              )}
+                            </span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={policyDraft.tokenLimit}
+                              onChange={(event) =>
+                                setApiKeyPolicyDrafts((drafts) => ({
+                                  ...drafts,
+                                  [apiKey.id]: {
+                                    ...(drafts[apiKey.id] ?? policyDraft),
+                                    tokenLimit: event.target.value,
+                                  },
+                                }))
+                              }
+                              placeholder={t(
+                                "codex.apiService.keys.tokenLimitPlaceholder",
+                                "Example: 10m",
+                              )}
+                              disabled={busy}
+                            />
+                          </label>
+                          <div>
+                            <strong>
+                              {t(
+                                "codex.apiService.keys.tokenLimitCurrentUsage",
+                                "Used: {{used}} tokens",
+                                { used: formatCompactNumber(tokenUsed) },
+                              )}
+                            </strong>
+                            <small>
+                              {t(
+                                "codex.apiService.keys.tokenLimitHint",
+                                "Leave blank for unlimited. Input and output tokens are combined across all models.",
+                              )}
+                            </small>
+                          </div>
+                        </div>
                         <div className="api-key-account-scope">
                           <div className="api-key-account-scope-header">
                             <span>
