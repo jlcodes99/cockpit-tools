@@ -25,7 +25,7 @@ export interface CodebuddySessionRecord {
 // Service calls
 // ---------------------------------------------------------------------------
 
-export type CodebuddySessionPlatform = 'cn' | 'intl';
+export type CodebuddySessionPlatform = 'cn' | 'intl' | 'workbuddy';
 
 export async function codebuddyListSessions(
   platform: CodebuddySessionPlatform,
