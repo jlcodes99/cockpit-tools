@@ -6549,7 +6549,7 @@ fn merge_access_token_import_hints(
     primary
 }
 
-fn first_personal_access_token_string(value: &serde_json::Value) -> Option<String> {
+fn first_explicit_personal_access_token_string(value: &serde_json::Value) -> Option<String> {
     first_json_scalar_string(
         value,
         &[
@@ -6580,7 +6580,10 @@ fn first_personal_access_token_string(value: &serde_json::Value) -> Option<Strin
         )
         .and_then(|header| extract_bearer_token_from_header(&header))
     })
-    .or_else(|| {
+}
+
+fn first_personal_access_token_string(value: &serde_json::Value) -> Option<String> {
+    first_explicit_personal_access_token_string(value).or_else(|| {
         first_json_scalar_string(
             value,
             &[
@@ -6908,7 +6911,7 @@ fn extract_codex_import_candidate_from_value(
     value: &serde_json::Value,
 ) -> Option<CodexJsonImportCandidate> {
     if value.is_object() {
-        if let Some(access_token) = first_personal_access_token_string(value) {
+        if let Some(access_token) = first_explicit_personal_access_token_string(value) {
             let hints = extract_access_token_import_hints_from_value(value);
             return Some(CodexJsonImportCandidate::AccessToken {
                 access_token,
@@ -6921,7 +6924,9 @@ fn extract_codex_import_candidate_from_value(
         return Some(candidate);
     }
 
-    if let Some((tokens, account_id_hint)) = extract_codex_tokens_from_value(value) {
+    if let Some((tokens, account_id_hint)) = extract_codex_tokens_from_value(value)
+        .or_else(|| extract_codex_tokens_from_credentials_value(value))
+    {
         return Some(CodexJsonImportCandidate::FullToken {
             tokens,
             account_id_hint,
@@ -9029,6 +9034,62 @@ fn extract_codex_tokens_from_value(
     None
 }
 
+fn extract_codex_tokens_from_credentials_value(
+    value: &serde_json::Value,
+) -> Option<(CodexTokens, Option<String>)> {
+    let obj = value.as_object()?;
+    if obj
+        .get("credentials")
+        .and_then(|value| value.as_object())
+        .is_some()
+    {
+        if let (Some(id_token), Some(access_token)) = (
+            first_json_string(
+                value,
+                &[&["credentials", "id_token"], &["credentials", "idToken"]],
+            ),
+            first_json_string(
+                value,
+                &[
+                    &["credentials", "access_token"],
+                    &["credentials", "accessToken"],
+                ],
+            ),
+        ) {
+            let refresh_token = first_json_string(
+                value,
+                &[
+                    &["credentials", "refresh_token"],
+                    &["credentials", "refreshToken"],
+                ],
+            );
+            let account_id_hint = first_json_string(
+                value,
+                &[
+                    &["credentials", "account_id"],
+                    &["credentials", "accountId"],
+                    &["credentials", "chatgpt_account_id"],
+                    &["credentials", "chatgptAccountId"],
+                    &["credentials", "workspace_id"],
+                    &["credentials", "workspaceId"],
+                    &["account_id"],
+                    &["accountId"],
+                ],
+            );
+            return Some((
+                CodexTokens {
+                    id_token,
+                    access_token,
+                    refresh_token,
+                },
+                account_id_hint,
+            ));
+        }
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -10286,6 +10347,12 @@ mod tests {
 
     #[test]
     fn full_token_sub2api_candidate_preserves_explicit_subscription_expiry() {
+        let id_token = make_jwt(serde_json::json!({
+            "email": "oauth-expiry@example.com",
+            "https://api.openai.com/auth": {
+                "chatgpt_account_id": "acc-oauth-expiry"
+            }
+        }));
         let access_token = make_jwt(serde_json::json!({
             "email": "oauth-expiry@example.com",
             "exp": 1_786_466_640,
@@ -10301,9 +10368,10 @@ mod tests {
             "type": "oauth",
             "credentials": {
                 "email": "oauth-expiry@example.com",
-                "id_token": access_token,
-                "access_token": access_token,
+                "id_token": id_token.clone(),
+                "access_token": access_token.clone(),
                 "refresh_token": "rt-oauth-expiry",
+                "chatgpt_account_id": "acc-oauth-expiry",
                 "expires_at": "2026-08-11T16:44:00Z",
                 "subscription_expires_at": "2026-09-20T00:00:00Z"
             }
@@ -10311,6 +10379,46 @@ mod tests {
 
         let candidate = extract_codex_import_candidate_from_value(&value)
             .expect("Sub2API OAuth account should be accepted");
+        match &candidate {
+            CodexJsonImportCandidate::FullToken {
+                tokens,
+                account_id_hint,
+                subscription_active_until_hint,
+                ..
+            } => {
+                assert_eq!(tokens.id_token, id_token);
+                assert_eq!(tokens.access_token, access_token);
+                assert_eq!(tokens.refresh_token.as_deref(), Some("rt-oauth-expiry"));
+                assert_eq!(account_id_hint.as_deref(), Some("acc-oauth-expiry"));
+                assert_eq!(
+                    subscription_active_until_hint.as_deref(),
+                    Some("2026-09-20T00:00:00Z")
+                );
+
+                let mut account = CodexAccount::new(
+                    "codex-sub2api-oauth".to_string(),
+                    "oauth-expiry@example.com".to_string(),
+                    tokens.clone(),
+                );
+                account.account_id = account_id_hint.clone();
+                let auth_file = build_auth_file_value(&account).expect("project auth.json");
+                assert!(auth_file.get("personal_access_token").is_none());
+                assert_eq!(
+                    auth_file
+                        .pointer("/tokens/refresh_token")
+                        .and_then(serde_json::Value::as_str),
+                    Some("rt-oauth-expiry")
+                );
+                assert_eq!(
+                    auth_file
+                        .pointer("/tokens/account_id")
+                        .and_then(serde_json::Value::as_str),
+                    Some("acc-oauth-expiry")
+                );
+            }
+            _ => panic!("expected Sub2API OAuth credentials to become full tokens"),
+        }
+
         let draft = super::codex_batch_import_draft_from_candidate(candidate);
         let preview = super::preview_account_for_draft(&draft)
             .expect("Sub2API OAuth preview should be available");
@@ -10322,7 +10430,47 @@ mod tests {
     }
 
     #[test]
+    fn extract_candidate_prefers_nested_full_oauth_over_opaque_access_token_fallback() {
+        let id_token = make_jwt(serde_json::json!({
+            "email": "opaque-oauth@example.com"
+        }));
+        let value = serde_json::json!({
+            "platform": "openai",
+            "type": "oauth",
+            "credentials": {
+                "idToken": id_token.clone(),
+                "accessToken": "at-opaque-oauth-token",
+                "refreshToken": "rt-opaque-oauth",
+                "chatgptAccountId": "acc-opaque-oauth"
+            }
+        });
+
+        let candidate = extract_codex_import_candidate_from_value(&value)
+            .expect("nested OAuth credentials should be accepted");
+
+        match candidate {
+            CodexJsonImportCandidate::FullToken {
+                tokens,
+                account_id_hint,
+                ..
+            } => {
+                assert_eq!(tokens.id_token, id_token);
+                assert_eq!(tokens.access_token, "at-opaque-oauth-token");
+                assert_eq!(tokens.refresh_token.as_deref(), Some("rt-opaque-oauth"));
+                assert_eq!(account_id_hint.as_deref(), Some("acc-opaque-oauth"));
+            }
+            _ => panic!("expected nested credentials to remain full OAuth tokens"),
+        }
+    }
+
+    #[test]
     fn extract_candidate_prefers_cpa_personal_access_token_over_session_token() {
+        let session_id_token = make_jwt(serde_json::json!({
+            "email": "cpa@example.com",
+            "https://api.openai.com/auth": {
+                "chatgpt_account_id": "acc-cpa-session"
+            }
+        }));
         let session_access_token = make_jwt(serde_json::json!({
             "email": "cpa@example.com",
             "https://api.openai.com/auth": {
@@ -10332,7 +10480,7 @@ mod tests {
         let value = serde_json::json!({
             "type": "codex",
             "provider": "openai",
-            "id_token": "",
+            "id_token": session_id_token,
             "access_token": session_access_token,
             "refresh_token": "",
             "email": "cpa@example.com",
