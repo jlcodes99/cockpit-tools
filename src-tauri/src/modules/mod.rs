@@ -114,6 +114,7 @@ pub mod windsurf_oauth;
 pub mod workbuddy_account;
 pub mod workbuddy_instance;
 pub mod workbuddy_oauth;
+pub mod workbuddy_webview;
 pub mod workbuddy_session_transfer;
 pub mod zcode_account;
 pub mod zcode_instance;

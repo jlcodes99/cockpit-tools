@@ -990,6 +990,11 @@ pub fn run() {
             commands::workbuddy::sync_workbuddy_to_codebuddy_cn,
             commands::workbuddy::get_checkin_status_workbuddy,
             commands::workbuddy::checkin_workbuddy,
+            // WorkBuddy WebView (网页会话) Commands
+            modules::workbuddy_webview::is_workbuddy_webview_supported,
+            modules::workbuddy_webview::open_workbuddy_webview,
+            modules::workbuddy_webview::close_workbuddy_webview,
+            modules::workbuddy_webview::list_workbuddy_webview_sessions,
             // WorkBuddy Instance Commands
             commands::workbuddy_instance::workbuddy_get_instance_defaults,
             commands::workbuddy_instance::workbuddy_list_instances,

@@ -109,6 +109,7 @@ export function WorkbuddyAccountsPage() {
       addWithToken: workbuddyService.addWorkbuddyAccountWithToken,
       exportAccounts: workbuddyService.exportWorkbuddyAccounts,
       injectToVSCode: workbuddyService.injectWorkbuddyToVSCode,
+      openWebview: workbuddyService.openWorkbuddyWebview,
     },
     getDisplayEmail: (account) => getWorkbuddyAccountDisplayEmail(account),
   });
