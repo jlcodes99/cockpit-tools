@@ -379,7 +379,11 @@ pub fn run() {
                     modules::wakeup_scheduler::restore_state_from_disk();
                     modules::wakeup_scheduler::ensure_started(app_handle.clone());
                     modules::codex_wakeup_scheduler::ensure_started(app_handle.clone());
-                    modules::codex_wakeup_scheduler::trigger_startup_tasks_if_needed(app_handle);
+                    modules::codex_wakeup_scheduler::trigger_startup_tasks_if_needed(
+                        app_handle.clone(),
+                    );
+                    modules::kimi_wakeup_scheduler::ensure_started(app_handle.clone());
+                    modules::kimi_wakeup_scheduler::trigger_startup_tasks_if_needed(app_handle);
                 });
             }
 
@@ -1170,6 +1174,33 @@ pub fn run() {
             commands::grok::update_grok_account_working_dir,
             commands::grok::get_grok_current_account_id,
             commands::grok::get_grok_accounts_index_path,
+            commands::kimi::list_kimi_accounts,
+            commands::kimi::delete_kimi_account,
+            commands::kimi::delete_kimi_accounts,
+            commands::kimi::import_kimi_from_json,
+            commands::kimi::import_kimi_from_local,
+            commands::kimi::export_kimi_accounts,
+            commands::kimi::kimi_oauth_login_start,
+            commands::kimi::kimi_oauth_login_complete,
+            commands::kimi::kimi_oauth_login_cancel,
+            commands::kimi::refresh_kimi_account,
+            commands::kimi::refresh_all_kimi_accounts,
+            commands::kimi::switch_kimi_account,
+            commands::kimi::update_kimi_account_tags,
+            commands::kimi::get_kimi_current_account_id,
+            commands::kimi::get_kimi_accounts_index_path,
+            commands::kimi::kimi_wakeup_list_models,
+            commands::kimi::kimi_wakeup_get_cli_status,
+            commands::kimi::kimi_wakeup_detect_cli,
+            commands::kimi::kimi_wakeup_update_runtime_config,
+            commands::kimi::kimi_wakeup_get_overview,
+            commands::kimi::kimi_wakeup_get_state,
+            commands::kimi::kimi_wakeup_save_state,
+            commands::kimi::kimi_wakeup_load_history,
+            commands::kimi::kimi_wakeup_clear_history,
+            commands::kimi::kimi_wakeup_test,
+            commands::kimi::kimi_wakeup_run_task,
+            commands::kimi::kimi_wakeup_run_enabled_tasks,
             // Grok Instance Commands
             commands::grok_instance::grok_get_instance_defaults,
             commands::grok_instance::grok_list_instances,

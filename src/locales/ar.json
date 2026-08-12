@@ -326,7 +326,8 @@
     "apiRelay": "الترحيل",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Kimi Code"
   },
   "sponsors": {
     "pageTitle": "الرعاة",
@@ -5746,5 +5747,94 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "إدارة مفاتيح OpenCode Go/Zen والتصفية حسب المستوى."
+  },
+  "kimi": {
+    "search": "البحث في حسابات Kimi Code...",
+    "empty": "لا توجد حسابات Kimi Code بعد",
+    "addAccount": "إضافة حساب Kimi Code",
+    "accounts": {
+      "title": "حسابات Kimi Code",
+      "desc": "إدارة حسابات Kimi Code CLI: تسجيل OAuth، استيراد محلي، وتبديل بنقرة واحدة إلى ~/.kimi-code."
+    },
+    "flowNotice": {
+      "title": "دليل حسابات Kimi Code",
+      "desc": "يحفظ Cockpit فهرسًا متعدد الحسابات. عند التبديل يُكتب الملف الرسمي ~/.kimi-code/credentials/kimi-code.json ويُضمن managed:kimi-code في config.toml.",
+      "permission": "النطاق المحلي: يمكن قراءة بيانات ~/.kimi-code الافتراضية للاستيراد؛ عند التبديل تُكتب بيانات الاعتماد الرسمية وconfig.toml.",
+      "network": "نطاق الشبكة: تفويض OAuth وتجديد الرمز واستعلامات الحصة /me · /usages. لا تُرفع بيانات الاعتماد إلى خدمات Cockpit."
+    },
+    "oauth": {
+      "tab": "OAuth",
+      "desc": "افتح صفحة تفويض Kimi في متصفح النظام وأكمل تسجيل الدخول برمز الجهاز. يُحفظ الحساب تلقائيًا.",
+      "title": "Kimi Code Device OAuth",
+      "item1": "يستخدم device flow الرسمي في المتصفح دون شغل منفذ رد محلي.",
+      "item2": "يكتب التبديل ~/.kimi-code/credentials/kimi-code.json بصيغة wire الرسمية.",
+      "item3": "الحصة من /usages؛ يسحب تسجيل الدخول /me فقط لتقليل الطلبات.",
+      "urlPlaceholder": "رابط تفويض OAuth لـ Kimi",
+      "waiting": "بانتظار تفويض OAuth لـ Kimi...",
+      "openWindow": "فتح صفحة التفويض",
+      "success": "نجح تسجيل الدخول عبر OAuth لـ Kimi Code"
+    },
+    "import": {
+      "tokenDesc": "يمكنك أيضًا لصق credentials/kimi-code.json الرسمي أو JSON حساب كامل صدّرته هذا التطبيق.",
+      "pasteDesc": "الصق credentials/kimi-code.json الرسمي أو JSON تصدير كامل من Cockpit.",
+      "pastePlaceholder": "الصق JSON حساب Kimi Code",
+      "pasteAction": "استيراد JSON",
+      "localDesc": "استيراد من ~/.kimi-code/credentials/kimi-code.json (يحترم KIMI_CODE_HOME).",
+      "localClient": "استيراد من Kimi Code CLI المحلي"
+    },
+    "quota": {
+      "empty": "لا توجد بيانات حصة",
+      "resetAt": "إعادة تعيين {{label}}: {{time}}"
+    },
+    "wakeup": {
+      "masterSwitch": "المفتاح الرئيسي للإيقاظ",
+      "masterSwitchDesc": "عند الإيقاف لا تُنفَّذ المهام المجدولة / إعادة تعيين الحصة / عند التشغيل؛ الاختبار اليدوي ما زال متاحًا.",
+      "cliPath": "مسار Kimi CLI",
+      "cliOk": "تم اكتشاف {{path}}",
+      "cliMissing": "لم يُعثر على kimi CLI",
+      "cliPathSaved": "تم حفظ مسار CLI",
+      "tasks": "المهام",
+      "addTask": "مهمة جديدة",
+      "editTask": "تحرير المهمة",
+      "noTasks": "لا توجد مهام إيقاظ بعد",
+      "accountsUnit": "حسابات",
+      "run": "تشغيل الآن",
+      "test": "تشغيل تجريبي",
+      "history": "سجل التشغيل",
+      "clearHistory": "مسح السجل",
+      "noHistory": "لا يوجد سجل بعد",
+      "taskName": "الاسم",
+      "nameRequired": "يرجى إدخال اسم المهمة",
+      "accountsRequired": "اختر حسابًا واحدًا على الأقل",
+      "selectAccounts": "الحسابات",
+      "prompt": "Prompt",
+      "model": "النموذج",
+      "scheduleKind": "المُشغِّل",
+      "intervalHours": "الفترة (ساعات)",
+      "dailyTime": "الوقت اليومي",
+      "quotaWindow": "نافذة الحصة",
+      "saved": "تم حفظ المهمة",
+      "runDone": "تم: نجاح {{ok}} / فشل {{fail}}",
+      "testDone": "انتهى الاختبار: نجاح {{ok}} / فشل {{fail}}",
+      "cliSettings": "Kimi CLI settings [ar]",
+      "cliReadyShort": "Detected [ar]",
+      "cliMissingShort": "Not detected [ar]",
+      "cliHint": "Leave empty to search PATH and common install locations, or pick the kimi / kimi-code executable manually. [ar]",
+      "cliPathPlaceholder": "e.g. C:\\…\\kimi.exe or leave empty to auto-detect [ar]",
+      "cliBrowse": "Browse [ar]",
+      "cliBrowseTitle": "Select Kimi CLI executable [ar]",
+      "cliBrowsePicked": "File selected — click Save [ar]",
+      "cliDetect": "Auto-detect [ar]",
+      "cliDetecting": "Detecting… [ar]",
+      "cliDetectOk": "Detected and saved: {{path}} [ar]",
+      "cliDetectFailed": "kimi CLI not found on PATH or common install folders. Pick the executable manually. [ar]",
+      "cliOpenFolder": "Open folder [ar]",
+      "cliNoPath": "No path to open. Detect or pick a file first. [ar]",
+      "cliFolderOpened": "Opened folder: {{path}} [ar]",
+      "cliOpenFolderFailed": "Failed to open folder: {{error}} [ar]",
+      "modelLine": "Model: {{model}} [ar]",
+      "invalidModelId": "Use a Kimi model alias (e.g. kimi-code/kimi-for-coding), not GPT/Codex models [ar]",
+      "builtinPresetReadonly": "Built-in presets cannot be edited — create a new one [ar]"
+    }
   }
 }

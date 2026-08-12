@@ -279,7 +279,8 @@
     "apiRelay": "中轉站",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Kimi Code"
   },
   "sponsors": {
     "pageTitle": "贊助商",
@@ -5746,5 +5747,94 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "管理 OpenCode Go / Zen 檔 API Key，並按檔位篩選列表。金鑰保存在本機應用資料目錄。"
+  },
+  "kimi": {
+    "search": "搜尋 Kimi Code 帳號...",
+    "empty": "尚無 Kimi Code 帳號",
+    "addAccount": "新增 Kimi Code 帳號",
+    "accounts": {
+      "title": "Kimi Code 帳號",
+      "desc": "管理 Kimi Code CLI 多帳號：OAuth 登入、本機匯入、一键切号写入 ~/.kimi-code。"
+    },
+    "flowNotice": {
+      "title": "Kimi Code 帳號管理說明",
+      "desc": "多帳號索引保存在 Cockpit；切号会写入官方 ~/.kimi-code/credentials/kimi-code.json，并确保 config.toml 中有 managed:kimi-code。",
+      "permission": "本機範圍：可读取預設 ~/.kimi-code 凭据用于匯入；切号时写入官方 credentials 与 config.toml。",
+      "network": "網路範圍：OAuth 授權、token 刷新与 /me · /usages 額度查詢；不會把凭据上传到 Cockpit 服務。"
+    },
+    "oauth": {
+      "tab": "OAuth",
+      "desc": "開啟 Kimi 授權頁（系统預設浏览器）完成设备码登入，完成后帳號会自动保存。",
+      "title": "Kimi Code Device OAuth",
+      "item1": "使用官方 device flow，浏览器授權，不占用本機回调端口。",
+      "item2": "切号写入 ~/.kimi-code/credentials/kimi-code.json（官方 wire 格式）。",
+      "item3": "額度来自官方 /usages；登入仅拉 /me 資料，盡量少佔請求。",
+      "urlPlaceholder": "Kimi OAuth 授權地址",
+      "waiting": "等待 Kimi OAuth 授權...",
+      "openWindow": "開啟授權頁",
+      "success": "Kimi Code OAuth 登入成功"
+    },
+    "import": {
+      "tokenDesc": "也可貼上官方 credentials/kimi-code.json，或本應用匯出的完整帳號 JSON。",
+      "pasteDesc": "貼上官方 credentials/kimi-code.json，或本應用匯出的完整帳號 JSON。",
+      "pastePlaceholder": "貼上 Kimi Code 帳號 JSON",
+      "pasteAction": "匯入 JSON",
+      "localDesc": "從預設 ~/.kimi-code/credentials/kimi-code.json 匯入（遵循 KIMI_CODE_HOME）。",
+      "localClient": "從本機 Kimi Code CLI 匯入"
+    },
+    "quota": {
+      "empty": "尚無額度",
+      "resetAt": "{{label}} 重設：{{time}}"
+    },
+    "wakeup": {
+      "masterSwitch": "喚醒總開關",
+      "masterSwitchDesc": "關閉後定時/額度重設/啟動任務不會执行；手動测试仍可用。",
+      "cliPath": "Kimi CLI 路徑",
+      "cliOk": "已偵測 {{path}}",
+      "cliMissing": "未偵測到 kimi CLI",
+      "cliPathSaved": "CLI 路徑已儲存",
+      "cliSettings": "Kimi CLI 设置",
+      "cliReadyShort": "已偵測",
+      "cliMissingShort": "未检测",
+      "cliHint": "可留空以從 PATH 与常见安装目录自动查找；也可手動选择 kimi / kimi-code 可执行文件。",
+      "cliPathPlaceholder": "例如 C:\\…\\kimi.exe 或留空自动检测",
+      "cliBrowse": "选择",
+      "cliBrowseTitle": "选择 Kimi CLI 可执行文件",
+      "cliBrowsePicked": "已选择文件，请点保存",
+      "cliDetect": "自动检测",
+      "cliDetecting": "检测中…",
+      "cliDetectOk": "已自动检测并保存：{{path}}",
+      "cliDetectFailed": "未在本機 PATH / 常见安装目录找到 kimi CLI，请手動选择可执行文件",
+      "cliOpenFolder": "開啟文件夹",
+      "cliNoPath": "没有可開啟的路徑，请先检测或选择文件",
+      "cliFolderOpened": "已開啟文件夹：{{path}}",
+      "cliOpenFolderFailed": "開啟文件夹失敗：{{error}}",
+      "modelLine": "模型：{{model}}",
+      "invalidModelId": "請填寫 Kimi 模型别名（如 kimi-code/kimi-for-coding），不要用 GPT/Codex 模型",
+      "builtinPresetReadonly": "内置预设不可修改，请新增",
+      "tasks": "任務列表",
+      "addTask": "新建任務",
+      "editTask": "編輯任務",
+      "noTasks": "尚無喚醒任務",
+      "accountsUnit": "帳號",
+      "run": "立即執行",
+      "test": "測試執行",
+      "history": "執行歷史",
+      "clearHistory": "清空歷史",
+      "noHistory": "尚無历史",
+      "taskName": "名稱",
+      "nameRequired": "請填寫任務名稱",
+      "accountsRequired": "請至少選擇一個帳號",
+      "selectAccounts": "帳號",
+      "prompt": "Prompt",
+      "model": "模型",
+      "scheduleKind": "觸發方式",
+      "intervalHours": "間隔（小時）",
+      "dailyTime": "每天時間",
+      "quotaWindow": "額度視窗",
+      "saved": "任務已儲存",
+      "runDone": "完成：成功 {{ok}} / 失敗 {{fail}}",
+      "testDone": "測試完成：成功 {{ok}} / 失敗 {{fail}}"
+    }
   }
 }

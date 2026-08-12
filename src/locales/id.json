@@ -326,7 +326,8 @@
     "apiRelay": "Relay API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Kimi Code"
   },
   "sponsors": {
     "pageTitle": "Sponsor",
@@ -5746,5 +5747,94 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Kelola key OpenCode Go/Zen dan filter per tier."
+  },
+  "kimi": {
+    "search": "Cari akun Kimi Code...",
+    "empty": "Belum ada akun Kimi Code",
+    "addAccount": "Tambah akun Kimi Code",
+    "accounts": {
+      "title": "Akun Kimi Code",
+      "desc": "Kelola multi-akun Kimi Code CLI: login OAuth, impor lokal, ganti akun sekali klik ke ~/.kimi-code."
+    },
+    "flowNotice": {
+      "title": "Panduan akun Kimi Code",
+      "desc": "Cockpit menyimpan indeks multi-akun. Peralihan menulis ~/.kimi-code/credentials/kimi-code.json resmi dan memastikan managed:kimi-code di config.toml.",
+      "permission": "Cakupan lokal: kredensial default ~/.kimi-code dapat dibaca untuk impor; peralihan menulis credentials resmi dan config.toml.",
+      "network": "Cakupan jaringan: otorisasi OAuth, penyegaran token, dan kueri kuota /me · /usages. Kredensial tidak diunggah ke layanan Cockpit."
+    },
+    "oauth": {
+      "tab": "OAuth",
+      "desc": "Buka halaman otorisasi Kimi di peramban sistem dan selesaikan login kode perangkat. Akun disimpan otomatis.",
+      "title": "Kimi Code Device OAuth",
+      "item1": "Menggunakan device flow resmi di peramban tanpa menempati port callback lokal.",
+      "item2": "Peralihan menulis ~/.kimi-code/credentials/kimi-code.json dalam format wire resmi.",
+      "item3": "Kuota berasal dari /usages; login hanya memuat /me agar lalu lintas tetap ringan.",
+      "urlPlaceholder": "URL otorisasi OAuth Kimi",
+      "waiting": "Menunggu otorisasi OAuth Kimi...",
+      "openWindow": "Buka halaman otorisasi",
+      "success": "Login OAuth Kimi Code berhasil"
+    },
+    "import": {
+      "tokenDesc": "Anda juga dapat menempel credentials/kimi-code.json resmi atau JSON akun lengkap yang diekspor aplikasi ini.",
+      "pasteDesc": "Tempel credentials/kimi-code.json resmi atau JSON ekspor lengkap Cockpit.",
+      "pastePlaceholder": "Tempel JSON akun Kimi Code",
+      "pasteAction": "Impor JSON",
+      "localDesc": "Impor dari ~/.kimi-code/credentials/kimi-code.json (menghormati KIMI_CODE_HOME).",
+      "localClient": "Impor dari Kimi Code CLI lokal"
+    },
+    "quota": {
+      "empty": "Tidak ada data kuota",
+      "resetAt": "{{label}} direset: {{time}}"
+    },
+    "wakeup": {
+      "masterSwitch": "Sakelar utama bangun",
+      "masterSwitchDesc": "Saat mati, tugas terjadwal / reset kuota / startup tidak berjalan; uji manual tetap tersedia.",
+      "cliPath": "Jalur Kimi CLI",
+      "cliOk": "Terdeteksi {{path}}",
+      "cliMissing": "kimi CLI tidak ditemukan",
+      "cliPathSaved": "Jalur CLI disimpan",
+      "tasks": "Tugas",
+      "addTask": "Tugas baru",
+      "editTask": "Edit tugas",
+      "noTasks": "Belum ada tugas bangun",
+      "accountsUnit": "akun",
+      "run": "Jalankan sekarang",
+      "test": "Uji coba",
+      "history": "Riwayat jalankan",
+      "clearHistory": "Hapus riwayat",
+      "noHistory": "Belum ada riwayat",
+      "taskName": "Nama",
+      "nameRequired": "Masukkan nama tugas",
+      "accountsRequired": "Pilih setidaknya satu akun",
+      "selectAccounts": "Akun",
+      "prompt": "Prompt",
+      "model": "Model",
+      "scheduleKind": "Pemicu",
+      "intervalHours": "Interval (jam)",
+      "dailyTime": "Waktu harian",
+      "quotaWindow": "Jendela kuota",
+      "saved": "Tugas disimpan",
+      "runDone": "Selesai: sukses {{ok}} / gagal {{fail}}",
+      "testDone": "Uji selesai: sukses {{ok}} / gagal {{fail}}",
+      "cliSettings": "Kimi CLI settings [id]",
+      "cliReadyShort": "Detected [id]",
+      "cliMissingShort": "Not detected [id]",
+      "cliHint": "Leave empty to search PATH and common install locations, or pick the kimi / kimi-code executable manually. [id]",
+      "cliPathPlaceholder": "e.g. C:\\…\\kimi.exe or leave empty to auto-detect [id]",
+      "cliBrowse": "Browse [id]",
+      "cliBrowseTitle": "Select Kimi CLI executable [id]",
+      "cliBrowsePicked": "File selected — click Save [id]",
+      "cliDetect": "Auto-detect [id]",
+      "cliDetecting": "Detecting… [id]",
+      "cliDetectOk": "Detected and saved: {{path}} [id]",
+      "cliDetectFailed": "kimi CLI not found on PATH or common install folders. Pick the executable manually. [id]",
+      "cliOpenFolder": "Open folder [id]",
+      "cliNoPath": "No path to open. Detect or pick a file first. [id]",
+      "cliFolderOpened": "Opened folder: {{path}} [id]",
+      "cliOpenFolderFailed": "Failed to open folder: {{error}} [id]",
+      "modelLine": "Model: {{model}} [id]",
+      "invalidModelId": "Use a Kimi model alias (e.g. kimi-code/kimi-for-coding), not GPT/Codex models [id]",
+      "builtinPresetReadonly": "Built-in presets cannot be edited — create a new one [id]"
+    }
   }
 }

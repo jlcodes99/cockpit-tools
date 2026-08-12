@@ -279,7 +279,8 @@
     "apiRelay": "リレー",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Kimi Code"
   },
   "sponsors": {
     "pageTitle": "スポンサー",
@@ -5746,5 +5747,94 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode の Go/Zen API キーを管理し、ティアで絞り込みます。"
+  },
+  "kimi": {
+    "search": "Kimi Code アカウントを検索...",
+    "empty": "Kimi Code アカウントはまだありません",
+    "addAccount": "Kimi Code アカウントを追加",
+    "accounts": {
+      "title": "Kimi Code アカウント",
+      "desc": "Kimi Code CLI の複数アカウント管理：OAuth ログイン、ローカル取り込み、ワンクリックで ~/.kimi-code に切替。"
+    },
+    "flowNotice": {
+      "title": "Kimi Code アカウントの案内",
+      "desc": "Cockpit が複数アカウントの索引を保持します。切替時に公式 ~/.kimi-code/credentials/kimi-code.json を書き込み、config.toml に managed:kimi-code があることを確認します。",
+      "permission": "ローカル範囲：既定の ~/.kimi-code 資格情報を取り込みに利用可能。切替時は公式 credentials と config.toml を書き込みます。",
+      "network": "ネットワーク範囲：OAuth 認可、トークン更新、/me · /usages のクォータ照会。資格情報は Cockpit サービスへアップロードしません。"
+    },
+    "oauth": {
+      "tab": "OAuth",
+      "desc": "システム既定ブラウザで Kimi 認可ページを開き、デバイスコードログインを完了します。完了後にアカウントが自動保存されます。",
+      "title": "Kimi Code Device OAuth",
+      "item1": "公式の device flow をブラウザで使用し、ローカルのコールバックポートを占有しません。",
+      "item2": "切替で ~/.kimi-code/credentials/kimi-code.json を公式 wire 形式で書き込みます。",
+      "item3": "クォータは公式 /usages 由来。ログイン時は /me のみ取得して通信を抑えます。",
+      "urlPlaceholder": "Kimi OAuth 認可 URL",
+      "waiting": "Kimi OAuth 認可を待機中...",
+      "openWindow": "認可ページを開く",
+      "success": "Kimi Code の OAuth ログインに成功しました"
+    },
+    "import": {
+      "tokenDesc": "公式 credentials/kimi-code.json、または本アプリのエクスポート JSON も貼り付けできます。",
+      "pasteDesc": "公式 credentials/kimi-code.json、または Cockpit のエクスポート JSON を貼り付けます。",
+      "pastePlaceholder": "Kimi Code アカウント JSON を貼り付け",
+      "pasteAction": "JSON を取り込む",
+      "localDesc": "既定の ~/.kimi-code/credentials/kimi-code.json から取り込み（KIMI_CODE_HOME を尊重）。",
+      "localClient": "ローカルの Kimi Code CLI から取り込む"
+    },
+    "quota": {
+      "empty": "クォータデータなし",
+      "resetAt": "{{label}} のリセット：{{time}}"
+    },
+    "wakeup": {
+      "masterSwitch": "ウェイクアップ主スイッチ",
+      "masterSwitchDesc": "オフ時は定時 / クォータリセット / 起動タスクは実行されません。手動テストは可能です。",
+      "cliPath": "Kimi CLI パス",
+      "cliOk": "{{path}} を検出済み",
+      "cliMissing": "kimi CLI が見つかりません",
+      "cliPathSaved": "CLI パスを保存しました",
+      "tasks": "タスク一覧",
+      "addTask": "タスクを新規作成",
+      "editTask": "タスクを編集",
+      "noTasks": "ウェイクアップタスクはまだありません",
+      "accountsUnit": "アカウント",
+      "run": "今すぐ実行",
+      "test": "テスト実行",
+      "history": "実行履歴",
+      "clearHistory": "履歴を消去",
+      "noHistory": "履歴はまだありません",
+      "taskName": "名前",
+      "nameRequired": "タスク名を入力してください",
+      "accountsRequired": "アカウントを少なくとも 1 つ選んでください",
+      "selectAccounts": "アカウント",
+      "prompt": "Prompt",
+      "model": "モデル",
+      "scheduleKind": "トリガー",
+      "intervalHours": "間隔（時間）",
+      "dailyTime": "毎日の時刻",
+      "quotaWindow": "クォータ窓",
+      "saved": "タスクを保存しました",
+      "runDone": "完了：成功 {{ok}} / 失敗 {{fail}}",
+      "testDone": "テスト完了：成功 {{ok}} / 失敗 {{fail}}",
+      "cliSettings": "Kimi CLI settings [ja]",
+      "cliReadyShort": "Detected [ja]",
+      "cliMissingShort": "Not detected [ja]",
+      "cliHint": "Leave empty to search PATH and common install locations, or pick the kimi / kimi-code executable manually. [ja]",
+      "cliPathPlaceholder": "e.g. C:\\…\\kimi.exe or leave empty to auto-detect [ja]",
+      "cliBrowse": "Browse [ja]",
+      "cliBrowseTitle": "Select Kimi CLI executable [ja]",
+      "cliBrowsePicked": "File selected — click Save [ja]",
+      "cliDetect": "Auto-detect [ja]",
+      "cliDetecting": "Detecting… [ja]",
+      "cliDetectOk": "Detected and saved: {{path}} [ja]",
+      "cliDetectFailed": "kimi CLI not found on PATH or common install folders. Pick the executable manually. [ja]",
+      "cliOpenFolder": "Open folder [ja]",
+      "cliNoPath": "No path to open. Detect or pick a file first. [ja]",
+      "cliFolderOpened": "Opened folder: {{path}} [ja]",
+      "cliOpenFolderFailed": "Failed to open folder: {{error}} [ja]",
+      "modelLine": "Model: {{model}} [ja]",
+      "invalidModelId": "Use a Kimi model alias (e.g. kimi-code/kimi-for-coding), not GPT/Codex models [ja]",
+      "builtinPresetReadonly": "Built-in presets cannot be edited — create a new one [ja]"
+    }
   }
 }

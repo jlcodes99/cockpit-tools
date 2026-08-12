@@ -279,7 +279,8 @@
     "apiRelay": "Trạm chuyển",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Kimi Code"
   },
   "sponsors": {
     "pageTitle": "Nhà tài trợ",
@@ -5746,5 +5747,94 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Quản lý key OpenCode Go/Zen và lọc theo tier."
+  },
+  "kimi": {
+    "search": "Tìm tài khoản Kimi Code...",
+    "empty": "Chưa có tài khoản Kimi Code",
+    "addAccount": "Thêm tài khoản Kimi Code",
+    "accounts": {
+      "title": "Tài khoản Kimi Code",
+      "desc": "Quản lý nhiều tài khoản Kimi Code CLI: đăng nhập OAuth, nhập cục bộ, chuyển bằng một cú nhấp vào ~/.kimi-code."
+    },
+    "flowNotice": {
+      "title": "Hướng dẫn tài khoản Kimi Code",
+      "desc": "Cockpit giữ chỉ mục nhiều tài khoản. Khi chuyển sẽ ghi ~/.kimi-code/credentials/kimi-code.json chính thức và đảm bảo managed:kimi-code trong config.toml.",
+      "permission": "Phạm vi cục bộ: có thể đọc thông tin xác thực ~/.kimi-code mặc định để nhập; khi chuyển sẽ ghi credentials chính thức và config.toml.",
+      "network": "Phạm vi mạng: ủy quyền OAuth, làm mới token và truy vấn hạn mức /me · /usages. Không tải thông tin xác thực lên dịch vụ Cockpit."
+    },
+    "oauth": {
+      "tab": "OAuth",
+      "desc": "Mở trang ủy quyền Kimi trên trình duyệt hệ thống và hoàn tất đăng nhập mã thiết bị. Tài khoản sẽ được lưu tự động.",
+      "title": "Kimi Code Device OAuth",
+      "item1": "Dùng device flow chính thức trên trình duyệt, không chiếm cổng callback cục bộ.",
+      "item2": "Chuyển tài khoản ghi ~/.kimi-code/credentials/kimi-code.json theo định dạng wire chính thức.",
+      "item3": "Hạn mức lấy từ /usages; đăng nhập chỉ tải /me để giảm lưu lượng.",
+      "urlPlaceholder": "URL ủy quyền OAuth Kimi",
+      "waiting": "Đang chờ ủy quyền OAuth Kimi...",
+      "openWindow": "Mở trang ủy quyền",
+      "success": "Đăng nhập OAuth Kimi Code thành công"
+    },
+    "import": {
+      "tokenDesc": "Bạn cũng có thể dán credentials/kimi-code.json chính thức hoặc JSON tài khoản đầy đủ do ứng dụng xuất.",
+      "pasteDesc": "Dán credentials/kimi-code.json chính thức hoặc JSON xuất đầy đủ từ Cockpit.",
+      "pastePlaceholder": "Dán JSON tài khoản Kimi Code",
+      "pasteAction": "Nhập JSON",
+      "localDesc": "Nhập từ ~/.kimi-code/credentials/kimi-code.json (tôn trọng KIMI_CODE_HOME).",
+      "localClient": "Nhập từ Kimi Code CLI trên máy"
+    },
+    "quota": {
+      "empty": "Không có dữ liệu hạn mức",
+      "resetAt": "{{label}} đặt lại: {{time}}"
+    },
+    "wakeup": {
+      "masterSwitch": "Công tắc chính đánh thức",
+      "masterSwitchDesc": "Khi tắt, tác vụ định kỳ / đặt lại hạn mức / khởi động không chạy; kiểm thử thủ công vẫn dùng được.",
+      "cliPath": "Đường dẫn Kimi CLI",
+      "cliOk": "Đã phát hiện {{path}}",
+      "cliMissing": "Không tìm thấy kimi CLI",
+      "cliPathSaved": "Đã lưu đường dẫn CLI",
+      "tasks": "Tác vụ",
+      "addTask": "Tác vụ mới",
+      "editTask": "Sửa tác vụ",
+      "noTasks": "Chưa có tác vụ đánh thức",
+      "accountsUnit": "tài khoản",
+      "run": "Chạy ngay",
+      "test": "Chạy thử",
+      "history": "Lịch sử chạy",
+      "clearHistory": "Xóa lịch sử",
+      "noHistory": "Chưa có lịch sử",
+      "taskName": "Tên",
+      "nameRequired": "Vui lòng nhập tên tác vụ",
+      "accountsRequired": "Chọn ít nhất một tài khoản",
+      "selectAccounts": "Tài khoản",
+      "prompt": "Prompt",
+      "model": "Mô hình",
+      "scheduleKind": "Bộ kích hoạt",
+      "intervalHours": "Khoảng cách (giờ)",
+      "dailyTime": "Giờ hằng ngày",
+      "quotaWindow": "Cửa sổ hạn mức",
+      "saved": "Đã lưu tác vụ",
+      "runDone": "Xong: thành công {{ok}} / lỗi {{fail}}",
+      "testDone": "Thử xong: thành công {{ok}} / lỗi {{fail}}",
+      "cliSettings": "Kimi CLI settings [vi]",
+      "cliReadyShort": "Detected [vi]",
+      "cliMissingShort": "Not detected [vi]",
+      "cliHint": "Leave empty to search PATH and common install locations, or pick the kimi / kimi-code executable manually. [vi]",
+      "cliPathPlaceholder": "e.g. C:\\…\\kimi.exe or leave empty to auto-detect [vi]",
+      "cliBrowse": "Browse [vi]",
+      "cliBrowseTitle": "Select Kimi CLI executable [vi]",
+      "cliBrowsePicked": "File selected — click Save [vi]",
+      "cliDetect": "Auto-detect [vi]",
+      "cliDetecting": "Detecting… [vi]",
+      "cliDetectOk": "Detected and saved: {{path}} [vi]",
+      "cliDetectFailed": "kimi CLI not found on PATH or common install folders. Pick the executable manually. [vi]",
+      "cliOpenFolder": "Open folder [vi]",
+      "cliNoPath": "No path to open. Detect or pick a file first. [vi]",
+      "cliFolderOpened": "Opened folder: {{path}} [vi]",
+      "cliOpenFolderFailed": "Failed to open folder: {{error}} [vi]",
+      "modelLine": "Model: {{model}} [vi]",
+      "invalidModelId": "Use a Kimi model alias (e.g. kimi-code/kimi-for-coding), not GPT/Codex models [vi]",
+      "builtinPresetReadonly": "Built-in presets cannot be edited — create a new one [vi]"
+    }
   }
 }

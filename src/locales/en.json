@@ -326,7 +326,8 @@
     "2faManager": "2FA",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Kimi Code"
   },
   "sponsors": {
     "pageTitle": "Sponsors",
@@ -5748,5 +5749,94 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Manage OpenCode Go/Zen API keys and filter by tier. Keys stay in local app data."
+  },
+  "kimi": {
+    "search": "Search Kimi Code accounts...",
+    "empty": "No Kimi Code accounts yet",
+    "addAccount": "Add Kimi Code Account",
+    "accounts": {
+      "title": "Kimi Code Accounts",
+      "desc": "Manage Kimi Code CLI accounts: OAuth login, local import, one-click switch into ~/.kimi-code."
+    },
+    "flowNotice": {
+      "title": "Kimi Code account guide",
+      "desc": "Cockpit keeps a multi-account index. Switching writes the official ~/.kimi-code/credentials/kimi-code.json and ensures config.toml has managed:kimi-code.",
+      "permission": "Local scope: default ~/.kimi-code credentials can be read for import; switch writes official credentials and config.toml.",
+      "network": "Network scope: OAuth authorization, token refresh, and /me · /usages quota queries. Credentials are not uploaded to Cockpit services."
+    },
+    "oauth": {
+      "tab": "OAuth",
+      "desc": "Open the Kimi authorization page in the system browser and complete the device-code login. The account is saved automatically.",
+      "title": "Kimi Code Device OAuth",
+      "item1": "Uses the official device flow in the browser without occupying a local callback port.",
+      "item2": "Switching writes ~/.kimi-code/credentials/kimi-code.json in the official wire format.",
+      "item3": "Quota comes from official /usages; login only loads /me to keep traffic light.",
+      "urlPlaceholder": "Kimi OAuth authorization URL",
+      "waiting": "Waiting for Kimi OAuth authorization...",
+      "openWindow": "Open Authorization Page",
+      "success": "Kimi Code OAuth login succeeded"
+    },
+    "import": {
+      "tokenDesc": "You can also paste official credentials/kimi-code.json or a full account JSON exported by this app.",
+      "pasteDesc": "Paste official credentials/kimi-code.json or a full Cockpit export JSON.",
+      "pastePlaceholder": "Paste Kimi Code account JSON",
+      "pasteAction": "Import JSON",
+      "localDesc": "Import from default ~/.kimi-code/credentials/kimi-code.json (honors KIMI_CODE_HOME).",
+      "localClient": "Import from local Kimi Code CLI"
+    },
+    "quota": {
+      "empty": "No quota data",
+      "resetAt": "{{label}} resets: {{time}}"
+    },
+    "wakeup": {
+      "masterSwitch": "Wakeup master switch",
+      "masterSwitchDesc": "When off, scheduled / quota-reset / startup tasks do not run; manual tests still work.",
+      "cliPath": "Kimi CLI path",
+      "cliOk": "Detected {{path}}",
+      "cliMissing": "kimi CLI not found",
+      "cliPathSaved": "CLI path saved",
+      "cliSettings": "Kimi CLI settings",
+      "cliReadyShort": "Detected",
+      "cliMissingShort": "Not detected",
+      "cliHint": "Leave empty to search PATH and common install locations, or pick the kimi / kimi-code executable manually.",
+      "cliPathPlaceholder": "e.g. C:\\…\\kimi.exe or leave empty to auto-detect",
+      "cliBrowse": "Browse",
+      "cliBrowseTitle": "Select Kimi CLI executable",
+      "cliBrowsePicked": "File selected — click Save",
+      "cliDetect": "Auto-detect",
+      "cliDetecting": "Detecting…",
+      "cliDetectOk": "Detected and saved: {{path}}",
+      "cliDetectFailed": "kimi CLI not found on PATH or common install folders. Pick the executable manually.",
+      "cliOpenFolder": "Open folder",
+      "cliNoPath": "No path to open. Detect or pick a file first.",
+      "cliFolderOpened": "Opened folder: {{path}}",
+      "cliOpenFolderFailed": "Failed to open folder: {{error}}",
+      "modelLine": "Model: {{model}}",
+      "invalidModelId": "Use a Kimi model alias (e.g. kimi-code/kimi-for-coding), not GPT/Codex models",
+      "builtinPresetReadonly": "Built-in presets cannot be edited — create a new one",
+      "tasks": "Tasks",
+      "addTask": "New task",
+      "editTask": "Edit task",
+      "noTasks": "No wakeup tasks yet",
+      "accountsUnit": "accounts",
+      "run": "Run now",
+      "test": "Test run",
+      "history": "Run history",
+      "clearHistory": "Clear history",
+      "noHistory": "No history yet",
+      "taskName": "Name",
+      "nameRequired": "Please enter a task name",
+      "accountsRequired": "Select at least one account",
+      "selectAccounts": "Accounts",
+      "prompt": "Prompt",
+      "model": "Model",
+      "scheduleKind": "Trigger",
+      "intervalHours": "Interval (hours)",
+      "dailyTime": "Daily time",
+      "quotaWindow": "Quota window",
+      "saved": "Task saved",
+      "runDone": "Done: success {{ok}} / failed {{fail}}",
+      "testDone": "Test done: success {{ok}} / failed {{fail}}"
+    }
   }
 }

@@ -279,7 +279,8 @@
     "apiRelay": "Релей",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Kimi Code"
   },
   "sponsors": {
     "pageTitle": "Спонсоры",
@@ -5746,5 +5747,94 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Управление ключами OpenCode Go/Zen и фильтр по tier."
+  },
+  "kimi": {
+    "search": "Поиск аккаунтов Kimi Code...",
+    "empty": "Пока нет аккаунтов Kimi Code",
+    "addAccount": "Добавить аккаунт Kimi Code",
+    "accounts": {
+      "title": "Аккаунты Kimi Code",
+      "desc": "Управление аккаунтами Kimi Code CLI: OAuth, локальный импорт, переключение в ~/.kimi-code одним кликом."
+    },
+    "flowNotice": {
+      "title": "Справка по аккаунтам Kimi Code",
+      "desc": "Cockpit хранит индекс нескольких аккаунтов. При переключении записывается официальный ~/.kimi-code/credentials/kimi-code.json и проверяется managed:kimi-code в config.toml.",
+      "permission": "Локально: учётные данные ~/.kimi-code по умолчанию можно читать для импорта; при переключении пишутся официальные credentials и config.toml.",
+      "network": "Сеть: OAuth-авторизация, обновление токена и запросы квоты /me · /usages. Учётные данные не загружаются в сервисы Cockpit."
+    },
+    "oauth": {
+      "tab": "OAuth",
+      "desc": "Откройте страницу авторизации Kimi в системном браузере и завершите вход по коду устройства. Аккаунт сохранится автоматически.",
+      "title": "Kimi Code Device OAuth",
+      "item1": "Использует официальный device flow в браузере и не занимает локальный callback-порт.",
+      "item2": "Переключение записывает ~/.kimi-code/credentials/kimi-code.json в официальном wire-формате.",
+      "item3": "Квота берётся из /usages; при входе загружается только /me, чтобы снизить трафик.",
+      "urlPlaceholder": "URL авторизации OAuth Kimi",
+      "waiting": "Ожидание OAuth-авторизации Kimi...",
+      "openWindow": "Открыть страницу авторизации",
+      "success": "OAuth-вход Kimi Code выполнен"
+    },
+    "import": {
+      "tokenDesc": "Можно также вставить официальный credentials/kimi-code.json или полный JSON экспорта этого приложения.",
+      "pasteDesc": "Вставьте официальный credentials/kimi-code.json или полный JSON экспорта Cockpit.",
+      "pastePlaceholder": "Вставьте JSON аккаунта Kimi Code",
+      "pasteAction": "Импорт JSON",
+      "localDesc": "Импорт из ~/.kimi-code/credentials/kimi-code.json (учитывает KIMI_CODE_HOME).",
+      "localClient": "Импорт из локального Kimi Code CLI"
+    },
+    "quota": {
+      "empty": "Нет данных о квоте",
+      "resetAt": "Сброс {{label}}: {{time}}"
+    },
+    "wakeup": {
+      "masterSwitch": "Главный переключатель пробуждения",
+      "masterSwitchDesc": "Выключено: плановые / сброс квоты / стартовые задачи не выполняются; ручные тесты доступны.",
+      "cliPath": "Путь к Kimi CLI",
+      "cliOk": "Обнаружен {{path}}",
+      "cliMissing": "kimi CLI не найден",
+      "cliPathSaved": "Путь CLI сохранён",
+      "tasks": "Задачи",
+      "addTask": "Новая задача",
+      "editTask": "Изменить задачу",
+      "noTasks": "Пока нет задач пробуждения",
+      "accountsUnit": "аккаунтов",
+      "run": "Выполнить сейчас",
+      "test": "Тестовый запуск",
+      "history": "История запусков",
+      "clearHistory": "Очистить историю",
+      "noHistory": "Истории пока нет",
+      "taskName": "Имя",
+      "nameRequired": "Укажите имя задачи",
+      "accountsRequired": "Выберите хотя бы один аккаунт",
+      "selectAccounts": "Аккаунты",
+      "prompt": "Prompt",
+      "model": "Модель",
+      "scheduleKind": "Триггер",
+      "intervalHours": "Интервал (часы)",
+      "dailyTime": "Ежедневное время",
+      "quotaWindow": "Окно квоты",
+      "saved": "Задача сохранена",
+      "runDone": "Готово: успешно {{ok}} / ошибок {{fail}}",
+      "testDone": "Тест готов: успешно {{ok}} / ошибок {{fail}}",
+      "cliSettings": "Kimi CLI settings [ru]",
+      "cliReadyShort": "Detected [ru]",
+      "cliMissingShort": "Not detected [ru]",
+      "cliHint": "Leave empty to search PATH and common install locations, or pick the kimi / kimi-code executable manually. [ru]",
+      "cliPathPlaceholder": "e.g. C:\\…\\kimi.exe or leave empty to auto-detect [ru]",
+      "cliBrowse": "Browse [ru]",
+      "cliBrowseTitle": "Select Kimi CLI executable [ru]",
+      "cliBrowsePicked": "File selected — click Save [ru]",
+      "cliDetect": "Auto-detect [ru]",
+      "cliDetecting": "Detecting… [ru]",
+      "cliDetectOk": "Detected and saved: {{path}} [ru]",
+      "cliDetectFailed": "kimi CLI not found on PATH or common install folders. Pick the executable manually. [ru]",
+      "cliOpenFolder": "Open folder [ru]",
+      "cliNoPath": "No path to open. Detect or pick a file first. [ru]",
+      "cliFolderOpened": "Opened folder: {{path}} [ru]",
+      "cliOpenFolderFailed": "Failed to open folder: {{error}} [ru]",
+      "modelLine": "Model: {{model}} [ru]",
+      "invalidModelId": "Use a Kimi model alias (e.g. kimi-code/kimi-for-coding), not GPT/Codex models [ru]",
+      "builtinPresetReadonly": "Built-in presets cannot be edited — create a new one [ru]"
+    }
   }
 }

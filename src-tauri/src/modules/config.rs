@@ -128,6 +128,9 @@ pub struct UserConfig {
     /// Grok CLI 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_grok_auto_refresh")]
     pub grok_auto_refresh_minutes: i32,
+    /// Kimi Code 自动刷新间隔（分钟），-1 表示禁用
+    #[serde(default = "default_kimi_auto_refresh")]
+    pub kimi_auto_refresh_minutes: i32,
     /// 默认实例切号时是否同步写入官方 ~/.grok/auth.json
     #[serde(default)]
     pub grok_sync_official_auth_on_switch: bool,
@@ -725,6 +728,9 @@ fn default_cursor_auto_refresh() -> i32 {
 fn default_grok_auto_refresh() -> i32 {
     10
 }
+fn default_kimi_auto_refresh() -> i32 {
+    10
+}
 fn default_claude_auto_refresh() -> i32 {
     10
 }
@@ -1171,6 +1177,7 @@ impl Default for UserConfig {
             kiro_auto_refresh_minutes: default_kiro_auto_refresh(),
             cursor_auto_refresh_minutes: default_cursor_auto_refresh(),
             grok_auto_refresh_minutes: default_grok_auto_refresh(),
+            kimi_auto_refresh_minutes: default_kimi_auto_refresh(),
             grok_sync_official_auth_on_switch: false,
             claude_auto_refresh_minutes: default_claude_auto_refresh(),
             codebuddy_auto_refresh_minutes: default_codebuddy_auto_refresh(),

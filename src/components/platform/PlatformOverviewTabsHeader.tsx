@@ -7,6 +7,7 @@ import { WindsurfIcon } from '../icons/WindsurfIcon';
 import { KiroIcon } from '../icons/KiroIcon';
 import { CursorIcon } from '../icons/CursorIcon';
 import { GrokIcon } from '../icons/GrokIcon';
+import { KimiIcon } from '../icons/KimiIcon';
 import { CodebuddyIcon } from '../icons/CodebuddyIcon';
 import { QoderIcon } from '../icons/QoderIcon';
 import { TraeCnIcon, TraeIcon, TraeSoloCnIcon, TraeSoloIcon } from '../icons/TraeIcon';
@@ -39,6 +40,7 @@ export type PlatformOverviewHeaderId =
   | 'kiro'
   | 'cursor'
   | 'grok'
+  | 'kimi'
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
@@ -99,6 +101,10 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
   grok: {
     platformLabel: 'Grok CLI',
     overviewIcon: <GrokIcon className="tab-icon" />,
+  },
+  kimi: {
+    platformLabel: 'Kimi Code',
+    overviewIcon: <KimiIcon className="tab-icon" />,
   },
   codebuddy: {
     platformLabel: 'CodeBuddy',

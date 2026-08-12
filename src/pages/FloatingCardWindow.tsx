@@ -211,6 +211,8 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useCursorInstanceStore.getState();
     case 'grok':
       return useGrokInstanceStore.getState();
+    case 'kimi':
+      return null;
     case 'codebuddy':
       return useCodebuddyInstanceStore.getState();
     case 'codebuddy_cn':
@@ -506,6 +508,8 @@ export function FloatingCardWindow() {
           break;
         case 'grok':
           await useGrokAccountStore.getState().fetchAccounts();
+          break;
+        case 'kimi':
           break;
         case 'codebuddy':
           await useCodebuddyAccountStore.getState().fetchAccounts();
@@ -879,6 +883,11 @@ export function FloatingCardWindow() {
           accounts: grokAccounts,
           actualCurrentAccount: grokCurrent,
         };
+      case 'kimi':
+        return {
+          accounts: [],
+          actualCurrentAccount: null,
+        };
       case 'codebuddy':
         return {
           accounts: codebuddyAccounts,
@@ -991,6 +1000,8 @@ export function FloatingCardWindow() {
         return getRecommendedCursorAccount(cursorAccounts, effectiveCurrentId);
       case 'grok':
         return getRecommendedGrokAccount(grokAccounts, effectiveCurrentId);
+      case 'kimi':
+        return null;
       case 'codebuddy':
         return getRecommendedCodebuddyAccount(codebuddyAccounts, effectiveCurrentId);
       case 'codebuddy_cn':
@@ -1091,6 +1102,8 @@ export function FloatingCardWindow() {
         return buildCursorAccountPresentation(viewedAccount as typeof cursorAccounts[number], t);
       case 'grok':
         return buildGrokAccountPresentation(viewedAccount as typeof grokAccounts[number], t);
+      case 'kimi':
+        return null;
       case 'codebuddy':
         return buildCodebuddyAccountPresentation(viewedAccount as typeof codebuddyAccounts[number], t);
       case 'codebuddy_cn':
@@ -1194,6 +1207,8 @@ export function FloatingCardWindow() {
             break;
           case 'grok':
             await useGrokAccountStore.getState().refreshToken(viewedAccount.id);
+            break;
+          case 'kimi':
             break;
           case 'codebuddy':
             await useCodebuddyAccountStore.getState().refreshToken(viewedAccount.id);
@@ -1325,6 +1340,8 @@ export function FloatingCardWindow() {
             break;
           case 'grok':
             await useGrokAccountStore.getState().switchAccount(viewedAccount.id);
+            break;
+          case 'kimi':
             break;
           case 'codebuddy':
             await useCodebuddyAccountStore.getState().switchAccount(viewedAccount.id);

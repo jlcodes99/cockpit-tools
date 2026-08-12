@@ -279,7 +279,8 @@
     "apiRelay": "Aktarım",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Kimi Code"
   },
   "sponsors": {
     "pageTitle": "Sponsorlar",
@@ -5746,5 +5747,94 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode Go/Zen anahtarlarını yönetin ve kademeye göre süzün."
+  },
+  "kimi": {
+    "search": "Kimi Code hesaplarını ara...",
+    "empty": "Henüz Kimi Code hesabı yok",
+    "addAccount": "Kimi Code hesabı ekle",
+    "accounts": {
+      "title": "Kimi Code hesapları",
+      "desc": "Kimi Code CLI hesaplarını yönetin: OAuth girişi, yerel içe aktarma, tek tıkla ~/.kimi-code dosyasına geçiş."
+    },
+    "flowNotice": {
+      "title": "Kimi Code hesap rehberi",
+      "desc": "Cockpit çoklu hesap dizinini tutar. Geçiş resmi ~/.kimi-code/credentials/kimi-code.json dosyasını yazar ve config.toml içinde managed:kimi-code olmasını sağlar.",
+      "permission": "Yerel kapsam: varsayılan ~/.kimi-code kimlik bilgileri içe aktarma için okunabilir; geçiş resmi credentials ve config.toml yazar.",
+      "network": "Ağ kapsamı: OAuth yetkilendirme, jeton yenileme ve /me · /usages kota sorguları. Kimlik bilgileri Cockpit hizmetlerine yüklenmez."
+    },
+    "oauth": {
+      "tab": "OAuth",
+      "desc": "Sistem tarayıcısında Kimi yetkilendirme sayfasını açın ve cihaz kodu girişini tamamlayın. Hesap otomatik kaydedilir.",
+      "title": "Kimi Code Device OAuth",
+      "item1": "Tarayıcıda resmi device flow kullanır ve yerel geri çağırma portunu meşgul etmez.",
+      "item2": "Geçiş, ~/.kimi-code/credentials/kimi-code.json dosyasını resmi wire biçiminde yazar.",
+      "item3": "Kota /usages kaynağından gelir; giriş yalnızca /me yükleyerek trafiği azaltır.",
+      "urlPlaceholder": "Kimi OAuth yetkilendirme URL’si",
+      "waiting": "Kimi OAuth yetkilendirmesi bekleniyor...",
+      "openWindow": "Yetkilendirme sayfasını aç",
+      "success": "Kimi Code OAuth girişi başarılı"
+    },
+    "import": {
+      "tokenDesc": "Resmi credentials/kimi-code.json veya bu uygulamanın dışa aktardığı tam hesap JSON’unu da yapıştırabilirsiniz.",
+      "pasteDesc": "Resmi credentials/kimi-code.json veya tam Cockpit dışa aktarma JSON’unu yapıştırın.",
+      "pastePlaceholder": "Kimi Code hesap JSON’unu yapıştırın",
+      "pasteAction": "JSON içe aktar",
+      "localDesc": "~/.kimi-code/credentials/kimi-code.json dosyasından içe aktar (KIMI_CODE_HOME’a uyar).",
+      "localClient": "Yerel Kimi Code CLI’dan içe aktar"
+    },
+    "quota": {
+      "empty": "Kota verisi yok",
+      "resetAt": "{{label}} sıfırlanır: {{time}}"
+    },
+    "wakeup": {
+      "masterSwitch": "Uyandırma ana anahtarı",
+      "masterSwitchDesc": "Kapalıyken zamanlanmış / kota sıfırlama / başlangıç görevleri çalışmaz; elle test hâlâ kullanılabilir.",
+      "cliPath": "Kimi CLI yolu",
+      "cliOk": "{{path}} algılandı",
+      "cliMissing": "kimi CLI bulunamadı",
+      "cliPathSaved": "CLI yolu kaydedildi",
+      "tasks": "Görevler",
+      "addTask": "Yeni görev",
+      "editTask": "Görevi düzenle",
+      "noTasks": "Henüz uyandırma görevi yok",
+      "accountsUnit": "hesap",
+      "run": "Şimdi çalıştır",
+      "test": "Test çalıştırması",
+      "history": "Çalışma geçmişi",
+      "clearHistory": "Geçmişi temizle",
+      "noHistory": "Henüz geçmiş yok",
+      "taskName": "Ad",
+      "nameRequired": "Lütfen bir görev adı girin",
+      "accountsRequired": "En az bir hesap seçin",
+      "selectAccounts": "Hesaplar",
+      "prompt": "Prompt",
+      "model": "Model",
+      "scheduleKind": "Tetikleyici",
+      "intervalHours": "Aralık (saat)",
+      "dailyTime": "Günlük saat",
+      "quotaWindow": "Kota penceresi",
+      "saved": "Görev kaydedildi",
+      "runDone": "Bitti: başarı {{ok}} / hata {{fail}}",
+      "testDone": "Test bitti: başarı {{ok}} / hata {{fail}}",
+      "cliSettings": "Kimi CLI settings [tr]",
+      "cliReadyShort": "Detected [tr]",
+      "cliMissingShort": "Not detected [tr]",
+      "cliHint": "Leave empty to search PATH and common install locations, or pick the kimi / kimi-code executable manually. [tr]",
+      "cliPathPlaceholder": "e.g. C:\\…\\kimi.exe or leave empty to auto-detect [tr]",
+      "cliBrowse": "Browse [tr]",
+      "cliBrowseTitle": "Select Kimi CLI executable [tr]",
+      "cliBrowsePicked": "File selected — click Save [tr]",
+      "cliDetect": "Auto-detect [tr]",
+      "cliDetecting": "Detecting… [tr]",
+      "cliDetectOk": "Detected and saved: {{path}} [tr]",
+      "cliDetectFailed": "kimi CLI not found on PATH or common install folders. Pick the executable manually. [tr]",
+      "cliOpenFolder": "Open folder [tr]",
+      "cliNoPath": "No path to open. Detect or pick a file first. [tr]",
+      "cliFolderOpened": "Opened folder: {{path}} [tr]",
+      "cliOpenFolderFailed": "Failed to open folder: {{error}} [tr]",
+      "modelLine": "Model: {{model}} [tr]",
+      "invalidModelId": "Use a Kimi model alias (e.g. kimi-code/kimi-for-coding), not GPT/Codex models [tr]",
+      "builtinPresetReadonly": "Built-in presets cannot be edited — create a new one [tr]"
+    }
   }
 }

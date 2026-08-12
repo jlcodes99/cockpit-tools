@@ -102,6 +102,8 @@ pub struct GeneralConfig {
     pub cursor_auto_refresh_minutes: i32,
     /// Grok CLI 自动刷新间隔（分钟），-1 表示禁用
     pub grok_auto_refresh_minutes: i32,
+    /// Kimi Code 自动刷新间隔（分钟），-1 表示禁用
+    pub kimi_auto_refresh_minutes: i32,
     /// 默认实例切号时是否同步写入官方 ~/.grok/auth.json
     pub grok_sync_official_auth_on_switch: bool,
     /// Claude 自动刷新间隔（分钟），-1 表示禁用
@@ -1100,6 +1102,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "kiro_auto_refresh_minutes"
             | "cursor_auto_refresh_minutes"
             | "grok_auto_refresh_minutes"
+            | "kimi_auto_refresh_minutes"
             | "grok_sync_official_auth_on_switch"
             | "claude_auto_refresh_minutes"
             | "codebuddy_auto_refresh_minutes"
@@ -2598,6 +2601,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         kiro_auto_refresh_minutes: user_config.kiro_auto_refresh_minutes,
         cursor_auto_refresh_minutes: user_config.cursor_auto_refresh_minutes,
         grok_auto_refresh_minutes: user_config.grok_auto_refresh_minutes,
+        kimi_auto_refresh_minutes: user_config.kimi_auto_refresh_minutes,
         grok_sync_official_auth_on_switch: user_config.grok_sync_official_auth_on_switch,
         claude_auto_refresh_minutes: user_config.claude_auto_refresh_minutes,
         codebuddy_auto_refresh_minutes: user_config.codebuddy_auto_refresh_minutes,
@@ -3032,6 +3036,7 @@ pub fn save_general_config(
     kiro_auto_refresh_minutes: Option<i32>,
     cursor_auto_refresh_minutes: Option<i32>,
     grok_auto_refresh_minutes: Option<i32>,
+    kimi_auto_refresh_minutes: Option<i32>,
     grok_sync_official_auth_on_switch: Option<bool>,
     claude_auto_refresh_minutes: Option<i32>,
     codebuddy_auto_refresh_minutes: Option<i32>,
@@ -3272,6 +3277,9 @@ pub fn save_general_config(
         }
         if let Some(value) = grok_auto_refresh_minutes {
             current.grok_auto_refresh_minutes = value;
+        }
+        if let Some(value) = kimi_auto_refresh_minutes {
+            current.kimi_auto_refresh_minutes = value;
         }
         if let Some(value) = grok_sync_official_auth_on_switch {
             current.grok_sync_official_auth_on_switch = value;

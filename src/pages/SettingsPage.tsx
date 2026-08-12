@@ -63,6 +63,7 @@ import { useWindsurfAccountStore } from '../stores/useWindsurfAccountStore';
 import { useKiroAccountStore } from '../stores/useKiroAccountStore';
 import { useCursorAccountStore } from '../stores/useCursorAccountStore';
 import { useGrokAccountStore } from '../stores/useGrokAccountStore';
+import { useKimiAccountStore } from '../stores/useKimiAccountStore';
 import { useClaudeAccountStore } from '../stores/useClaudeAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
@@ -76,6 +77,7 @@ import { getWindsurfAccountDisplayEmail } from '../types/windsurf';
 import { getKiroAccountDisplayEmail } from '../types/kiro';
 import { getCursorAccountDisplayEmail } from '../types/cursor';
 import { getGrokAccountDisplayEmail } from '../types/grok';
+import { getKimiAccountDisplayEmail } from '../types/kimi';
 import { getClaudeAccountDisplayEmail } from '../types/claude';
 import { getCodebuddyAccountDisplayEmail } from '../types/codebuddy';
 import { getWorkbuddyAccountDisplayEmail } from '../types/workbuddy';
@@ -151,6 +153,7 @@ interface GeneralConfig {
   kiro_auto_refresh_minutes: number;
   cursor_auto_refresh_minutes: number;
   grok_auto_refresh_minutes: number;
+  kimi_auto_refresh_minutes: number;
   grok_sync_official_auth_on_switch: boolean;
   close_behavior: 'ask' | 'minimize' | 'quit';
   minimize_behavior?: 'dock_and_tray' | 'tray_only';
@@ -327,16 +330,17 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   kiro: 8,
   cursor: 9,
   grok: 10,
-  codebuddy: 11,
-  codebuddy_cn: 12,
-  qoder: 13,
-  zcode: 14,
-  trae: 15,
-  trae_solo: 16,
-  trae_cn: 17,
-  trae_solo_cn: 18,
-  workbuddy: 19,
-  zed: 20,
+  kimi: 11,
+  codebuddy: 12,
+  codebuddy_cn: 13,
+  qoder: 14,
+  zcode: 15,
+  trae: 16,
+  trae_solo: 17,
+  trae_cn: 18,
+  trae_solo_cn: 19,
+  workbuddy: 20,
+  zed: 21,
 };
 type ConfigUpdatedEventDetail = {
   source?: string;
@@ -510,6 +514,7 @@ export function SettingsPage() {
     { value: 'kiro', label: 'Kiro' },
     { value: 'cursor', label: 'Cursor' },
     { value: 'grok', label: 'Grok' },
+    { value: 'kimi', label: 'Kimi Code' },
     { value: 'codebuddy', label: 'CodeBuddy' },
     { value: 'codebuddy_cn', label: 'CodeBuddy CN' },
     { value: 'qoder', label: 'Qoder' },
@@ -542,6 +547,7 @@ export function SettingsPage() {
   const [kiroAutoRefresh, setKiroAutoRefresh] = useState('10');
   const [cursorAutoRefresh, setCursorAutoRefresh] = useState('10');
   const [grokAutoRefresh, setGrokAutoRefresh] = useState('10');
+  const [kimiAutoRefresh, setKimiAutoRefresh] = useState('10');
   const [grokSyncOfficialAuthOnSwitch, setGrokSyncOfficialAuthOnSwitch] = useState(false);
   const [grokCliPath, setGrokCliPath] = useState('');
   const [grokCliStatus, setGrokCliStatus] = useState<GrokCliStatus | null>(null);
@@ -1024,7 +1030,8 @@ export function SettingsPage() {
       !traeSoloCnAutoRefresh.trim() ||
       !zedAutoRefresh.trim() ||
       !cursorAutoRefresh.trim() ||
-      !grokAutoRefresh.trim()
+      !grokAutoRefresh.trim() ||
+      !kimiAutoRefresh.trim()
     ) {
       return;
     }
@@ -1047,6 +1054,7 @@ export function SettingsPage() {
     const zedAutoRefreshNum = parseInt(zedAutoRefresh, 10) || -1;
     const cursorAutoRefreshNum = parseInt(cursorAutoRefresh, 10) || -1;
     const grokAutoRefreshNum = parseInt(grokAutoRefresh, 10) || -1;
+    const kimiAutoRefreshNum = parseInt(kimiAutoRefresh, 10) || -1;
     const parsedUiScale = Number.parseFloat(uiScale);
     const normalizedUiScale = Number.isFinite(parsedUiScale)
       ? Math.min(2, Math.max(0.8, parsedUiScale))
@@ -1100,6 +1108,7 @@ export function SettingsPage() {
       zed_auto_refresh_minutes: zedAutoRefreshNum,
       cursor_auto_refresh_minutes: cursorAutoRefreshNum,
       grok_auto_refresh_minutes: grokAutoRefreshNum,
+      kimi_auto_refresh_minutes: kimiAutoRefreshNum,
       grok_sync_official_auth_on_switch: grokSyncOfficialAuthOnSwitch,
       close_behavior: closeBehavior,
       minimize_behavior: minimizeBehavior,
@@ -1324,6 +1333,7 @@ export function SettingsPage() {
     zcodeAutoRefresh,
     cursorAutoRefresh,
     grokAutoRefresh,
+    kimiAutoRefresh,
     grokSyncOfficialAuthOnSwitch,
     closeBehavior,
     minimizeBehavior,
@@ -1681,6 +1691,7 @@ export function SettingsPage() {
       setKiroAutoRefresh(String(config.kiro_auto_refresh_minutes ?? 10));
       setCursorAutoRefresh(String(config.cursor_auto_refresh_minutes ?? 10));
       setGrokAutoRefresh(String(config.grok_auto_refresh_minutes ?? 10));
+      setKimiAutoRefresh(String(config.kimi_auto_refresh_minutes ?? 10));
       setGrokSyncOfficialAuthOnSwitch(Boolean(config.grok_sync_official_auth_on_switch));
       setCloseBehavior(config.close_behavior || 'ask');
       setMinimizeBehavior(config.minimize_behavior || 'dock_and_tray');
@@ -2387,6 +2398,8 @@ export function SettingsPage() {
         return parseRefresh(cursorAutoRefresh) > 0;
       case 'grok':
         return parseRefresh(grokAutoRefresh) > 0;
+      case 'kimi':
+        return parseRefresh(kimiAutoRefresh) > 0;
       case 'codebuddy':
         return parseRefresh(codebuddyAutoRefresh) > 0;
       case 'codebuddy_cn':
@@ -2543,6 +2556,8 @@ export function SettingsPage() {
         return getProviderAccounts(useCursorAccountStore, getCursorAccountDisplayEmail);
       case 'grok':
         return getProviderAccounts(useGrokAccountStore, getGrokAccountDisplayEmail);
+      case 'kimi':
+        return getProviderAccounts(useKimiAccountStore, getKimiAccountDisplayEmail);
       case 'codebuddy':
         return getProviderAccounts(useCodebuddyAccountStore, getCodebuddyAccountDisplayEmail);
       case 'codebuddy_cn':
@@ -7421,6 +7436,39 @@ export function SettingsPage() {
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+
+              <div style={{ order: platformSettingsOrder.kimi }}>
+                <div className="group-title">{t('quickSettings.kimi.title', 'Kimi Code 设置')}</div>
+                <div className="settings-group">
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">{t('quickSettings.kimiRefreshInterval', '配额自动刷新')}</div>
+                      <div className="row-desc">{t('settings.general.windsurfAutoRefreshDesc', '后台自动更新频率')}</div>
+                    </div>
+                    <div className="row-control">
+                      <div className="settings-inline-input">
+                        <input
+                          type="number"
+                          min={-1}
+                          max={999}
+                          className="settings-select settings-select--input-mode settings-select--with-unit"
+                          value={kimiAutoRefresh}
+                          onChange={(event) => {
+                            if (/^-?\d*$/.test(event.target.value)) {
+                              setKimiAutoRefresh(event.target.value);
+                            }
+                          }}
+                          onBlur={() => setKimiAutoRefresh(normalizeNumberInput(kimiAutoRefresh, -1, 999))}
+                        />
+                        <span className="settings-input-unit">{t('settings.general.minutes')}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {renderCurrentAccountRefreshRow('kimi')}
+                  {renderAccountLevelRefreshConfig('kimi')}
                 </div>
               </div>
             </div>

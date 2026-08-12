@@ -279,7 +279,8 @@
     "apiRelay": "중계소",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Kimi Code"
   },
   "sponsors": {
     "pageTitle": "스폰서",
@@ -5746,5 +5747,94 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode Go/Zen API 키를 관리하고 티어로 필터합니다."
+  },
+  "kimi": {
+    "search": "Kimi Code 계정 검색...",
+    "empty": "Kimi Code 계정이 아직 없습니다",
+    "addAccount": "Kimi Code 계정 추가",
+    "accounts": {
+      "title": "Kimi Code 계정",
+      "desc": "Kimi Code CLI 다중 계정 관리: OAuth 로그인, 로컬 가져오기, 원클릭으로 ~/.kimi-code 에 전환."
+    },
+    "flowNotice": {
+      "title": "Kimi Code 계정 안내",
+      "desc": "Cockpit 이 다중 계정 인덱스를 보관합니다. 전환 시 공식 ~/.kimi-code/credentials/kimi-code.json 을 기록하고 config.toml 에 managed:kimi-code 가 있는지 확인합니다.",
+      "permission": "로컬 범위: 기본 ~/.kimi-code 자격 증명을 가져오기에 사용할 수 있으며, 전환 시 공식 credentials 와 config.toml 을 기록합니다.",
+      "network": "네트워크 범위: OAuth 승인, 토큰 갱신, /me · /usages 할당량 조회. 자격 증명은 Cockpit 서비스로 업로드되지 않습니다."
+    },
+    "oauth": {
+      "tab": "OAuth",
+      "desc": "시스템 기본 브라우저에서 Kimi 승인 페이지를 열고 디바이스 코드 로그인을 완료하면 계정이 자동 저장됩니다.",
+      "title": "Kimi Code Device OAuth",
+      "item1": "공식 device flow 를 브라우저에서 사용하며 로컬 콜백 포트를 점유하지 않습니다.",
+      "item2": "전환 시 ~/.kimi-code/credentials/kimi-code.json 을 공식 wire 형식으로 기록합니다.",
+      "item3": "할당량은 공식 /usages 기준이며, 로그인 시 /me 만 조회해 요청을 줄입니다.",
+      "urlPlaceholder": "Kimi OAuth 승인 URL",
+      "waiting": "Kimi OAuth 승인 대기 중...",
+      "openWindow": "승인 페이지 열기",
+      "success": "Kimi Code OAuth 로그인 성공"
+    },
+    "import": {
+      "tokenDesc": "공식 credentials/kimi-code.json 또는 이 앱에서 내보낸 전체 계정 JSON 을 붙여넣을 수도 있습니다.",
+      "pasteDesc": "공식 credentials/kimi-code.json 또는 Cockpit 내보내기 JSON 을 붙여넣으세요.",
+      "pastePlaceholder": "Kimi Code 계정 JSON 붙여넣기",
+      "pasteAction": "JSON 가져오기",
+      "localDesc": "기본 ~/.kimi-code/credentials/kimi-code.json 에서 가져오기(KIMI_CODE_HOME 준수).",
+      "localClient": "로컬 Kimi Code CLI 에서 가져오기"
+    },
+    "quota": {
+      "empty": "할당량 데이터 없음",
+      "resetAt": "{{label}} 재설정: {{time}}"
+    },
+    "wakeup": {
+      "masterSwitch": "웨이크업 마스터 스위치",
+      "masterSwitchDesc": "끄면 예약/할당량 재설정/시작 작업은 실행되지 않습니다. 수동 테스트는 가능합니다.",
+      "cliPath": "Kimi CLI 경로",
+      "cliOk": "{{path}} 감지됨",
+      "cliMissing": "kimi CLI 를 찾을 수 없음",
+      "cliPathSaved": "CLI 경로가 저장됨",
+      "tasks": "작업 목록",
+      "addTask": "새 작업",
+      "editTask": "작업 편집",
+      "noTasks": "웨이크업 작업이 아직 없습니다",
+      "accountsUnit": "계정",
+      "run": "지금 실행",
+      "test": "테스트 실행",
+      "history": "실행 기록",
+      "clearHistory": "기록 지우기",
+      "noHistory": "기록이 아직 없습니다",
+      "taskName": "이름",
+      "nameRequired": "작업 이름을 입력하세요",
+      "accountsRequired": "계정을 하나 이상 선택하세요",
+      "selectAccounts": "계정",
+      "prompt": "Prompt",
+      "model": "모델",
+      "scheduleKind": "트리거",
+      "intervalHours": "간격(시간)",
+      "dailyTime": "매일 시각",
+      "quotaWindow": "할당량 창",
+      "saved": "작업이 저장됨",
+      "runDone": "완료: 성공 {{ok}} / 실패 {{fail}}",
+      "testDone": "테스트 완료: 성공 {{ok}} / 실패 {{fail}}",
+      "cliSettings": "Kimi CLI settings [ko]",
+      "cliReadyShort": "Detected [ko]",
+      "cliMissingShort": "Not detected [ko]",
+      "cliHint": "Leave empty to search PATH and common install locations, or pick the kimi / kimi-code executable manually. [ko]",
+      "cliPathPlaceholder": "e.g. C:\\…\\kimi.exe or leave empty to auto-detect [ko]",
+      "cliBrowse": "Browse [ko]",
+      "cliBrowseTitle": "Select Kimi CLI executable [ko]",
+      "cliBrowsePicked": "File selected — click Save [ko]",
+      "cliDetect": "Auto-detect [ko]",
+      "cliDetecting": "Detecting… [ko]",
+      "cliDetectOk": "Detected and saved: {{path}} [ko]",
+      "cliDetectFailed": "kimi CLI not found on PATH or common install folders. Pick the executable manually. [ko]",
+      "cliOpenFolder": "Open folder [ko]",
+      "cliNoPath": "No path to open. Detect or pick a file first. [ko]",
+      "cliFolderOpened": "Opened folder: {{path}} [ko]",
+      "cliOpenFolderFailed": "Failed to open folder: {{error}} [ko]",
+      "modelLine": "Model: {{model}} [ko]",
+      "invalidModelId": "Use a Kimi model alias (e.g. kimi-code/kimi-for-coding), not GPT/Codex models [ko]",
+      "builtinPresetReadonly": "Built-in presets cannot be edited — create a new one [ko]"
+    }
   }
 }
