@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { listen } from '@tauri-apps/api/event';
 import {
   X,
   Clock,
@@ -19,7 +20,7 @@ import {
   WorkbuddyAutoCheckinConfig,
   WorkbuddyAutoCheckinLogRecord,
   parseTimeToMinutes,
-  getWorkbuddyAutoCheckinLogs,
+  getWorkbuddyAutoCheckinLogsAsync,
   clearWorkbuddyAutoCheckinLogs,
   runWorkbuddyAutoCheckinCycleIfNeeded,
   WORKBUDDY_AUTO_CHECKIN_LOGS_CHANGED_EVENT,
@@ -27,7 +28,7 @@ import {
 
 interface WorkbuddyAutoCheckinConfigModalProps {
   config: WorkbuddyAutoCheckinConfig;
-  onSave: (newConfig: WorkbuddyAutoCheckinConfig) => void;
+  onSave: (newConfig: WorkbuddyAutoCheckinConfig) => Promise<void>;
   onClose: () => void;
 }
 
@@ -45,23 +46,62 @@ export function WorkbuddyAutoCheckinConfigModal({
   const [endTime, setEndTime] = useState(config.endTime || '12:00');
   const [error, setError] = useState<string | null>(null);
 
-  const [logs, setLogs] = useState<WorkbuddyAutoCheckinLogRecord[]>(() =>
-    getWorkbuddyAutoCheckinLogs(),
-  );
+  const [logs, setLogs] = useState<WorkbuddyAutoCheckinLogRecord[]>([]);
+  const [logsLoading, setLogsLoading] = useState(true);
+  const [logsError, setLogsError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [manualTesting, setManualTesting] = useState(false);
   const [expandedLogIds, setExpandedLogIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    const handleLogsChange = () => {
-      setLogs(getWorkbuddyAutoCheckinLogs());
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    let requestId = 0;
+
+    const loadLogs = async () => {
+      const currentRequestId = ++requestId;
+      setLogsLoading(true);
+      setLogsError(null);
+
+      try {
+        const nextLogs = await getWorkbuddyAutoCheckinLogsAsync();
+        if (!disposed && currentRequestId === requestId) {
+          setLogs(nextLogs);
+        }
+      } catch (err) {
+        console.warn('[WorkbuddyAutoCheckin] 读取后端签到日志失败:', err);
+        if (!disposed && currentRequestId === requestId) {
+          setLogsError(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        if (!disposed && currentRequestId === requestId) {
+          setLogsLoading(false);
+        }
+      }
     };
-    window.addEventListener(WORKBUDDY_AUTO_CHECKIN_LOGS_CHANGED_EVENT, handleLogsChange);
+
+    void loadLogs();
+    const handleLogsChange = () => {
+      void loadLogs();
+    };
+    void listen(WORKBUDDY_AUTO_CHECKIN_LOGS_CHANGED_EVENT, handleLogsChange)
+      .then((stopListening) => {
+        if (disposed) {
+          stopListening();
+        } else {
+          unlisten = stopListening;
+        }
+      })
+      .catch((err) => {
+        console.warn('[WorkbuddyAutoCheckin] 监听后端签到日志事件失败:', err);
+      });
     return () => {
-      window.removeEventListener(WORKBUDDY_AUTO_CHECKIN_LOGS_CHANGED_EVENT, handleLogsChange);
+      disposed = true;
+      unlisten?.();
     };
   }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const startMin = parseTimeToMinutes(startTime);
     const endMin = parseTimeToMinutes(endTime);
 
@@ -70,25 +110,67 @@ export function WorkbuddyAutoCheckinConfigModal({
       return;
     }
 
-    onSave({
-      ...config,
-      enabled,
-      startTime,
-      endTime,
-      accountSchedules: undefined,
-    });
-    onClose();
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({
+        ...config,
+        enabled,
+        startTime,
+        endTime,
+        accountSchedules: undefined,
+      });
+      onClose();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(
+        t('workbuddy.checkin.saveFailed', '自动签到设置保存失败：{{message}}', { message }),
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleManualTest = async () => {
     setManualTesting(true);
+    setError(null);
     try {
-      await runWorkbuddyAutoCheckinCycleIfNeeded(true);
-      setLogs(getWorkbuddyAutoCheckinLogs());
+      const result = await runWorkbuddyAutoCheckinCycleIfNeeded(true);
+      setLogs(await getWorkbuddyAutoCheckinLogsAsync());
+      setLogsError(null);
+      if (result === 'retry') {
+        setError(
+          t(
+            'workbuddy.checkin.manualTestPartialFailure',
+            '部分账号签到失败，请查看记录；后台稍后会自动重试。',
+          ),
+        );
+      } else if (result === 'waiting') {
+        setError(
+          t('workbuddy.checkin.manualTestAlreadyRunning', '自动签到任务正在执行，请稍后查看记录。'),
+        );
+      }
     } catch (err) {
       console.warn('[WorkbuddyAutoCheckin] 手动测试自动签到异常:', err);
+      const message = err instanceof Error ? err.message : String(err);
+      setError(
+        t('workbuddy.checkin.manualTestFailed', '测试执行失败：{{message}}', { message }),
+      );
     } finally {
       setManualTesting(false);
+    }
+  };
+
+  const handleClearLogs = async () => {
+    setError(null);
+    try {
+      await clearWorkbuddyAutoCheckinLogs();
+      setLogs([]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(
+        t('workbuddy.checkin.clearLogsFailed', '清空签到记录失败：{{message}}', { message }),
+      );
     }
   };
 
@@ -203,12 +285,6 @@ export function WorkbuddyAutoCheckinConfigModal({
                   )}
                 </p>
               </div>
-
-              {error && (
-                <div className="config-error-message">
-                  <AlertCircle size={14} /> {error}
-                </div>
-              )}
             </>
           ) : (
             <div className="auto-checkin-history-container">
@@ -237,7 +313,7 @@ export function WorkbuddyAutoCheckinConfigModal({
                   {logs.length > 0 && (
                     <button
                       className="btn btn-secondary btn-xs"
-                      onClick={() => clearWorkbuddyAutoCheckinLogs()}
+                      onClick={() => void handleClearLogs()}
                       title={t('workbuddy.checkin.clearLogs', '清空记录')}
                     >
                       <Trash2 size={12} />
@@ -247,7 +323,21 @@ export function WorkbuddyAutoCheckinConfigModal({
                 </div>
               </div>
 
-              {logs.length === 0 ? (
+              {logsLoading ? (
+                <div className="auto-checkin-empty-history">
+                  <Loader2 size={32} className="animate-spin" />
+                  <span>{t('workbuddy.checkin.historyLoading', '正在读取自动签到记录...')}</span>
+                </div>
+              ) : logsError ? (
+                <div className="auto-checkin-empty-history">
+                  <XCircle size={32} />
+                  <span>
+                    {t('workbuddy.checkin.historyLoadFailed', '读取自动签到记录失败：{{message}}', {
+                      message: logsError,
+                    })}
+                  </span>
+                </div>
+              ) : logs.length === 0 ? (
                 <div className="auto-checkin-empty-history">
                   <Clock size={32} />
                   <span>{t('workbuddy.checkin.noHistory', '暂无近 30 天的自动签到记录')}</span>
@@ -329,6 +419,11 @@ export function WorkbuddyAutoCheckinConfigModal({
               )}
             </div>
           )}
+          {error && (
+            <div className="config-error-message">
+              <AlertCircle size={14} /> {error}
+            </div>
+          )}
         </div>
 
         <div className="modal-footer">
@@ -337,7 +432,12 @@ export function WorkbuddyAutoCheckinConfigModal({
               <button className="btn btn-secondary" onClick={onClose}>
                 {t('common.cancel', '取消')}
               </button>
-              <button className="btn btn-primary" onClick={handleSave}>
+              <button
+                className="btn btn-primary"
+                onClick={() => void handleSave()}
+                disabled={saving}
+              >
+                {saving && <Loader2 size={14} className="animate-spin" />}
                 {t('common.save', '保存')}
               </button>
             </>

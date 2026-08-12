@@ -505,6 +505,7 @@ pub fn run() {
             }
 
             apply_startup_minimized(&app.handle());
+            modules::workbuddy_auto_checkin::start_auto_checkin_scheduler(app.handle().clone());
 
             Ok(())
         })
@@ -995,6 +996,12 @@ pub fn run() {
             modules::workbuddy_webview::open_workbuddy_webview,
             modules::workbuddy_webview::close_workbuddy_webview,
             modules::workbuddy_webview::list_workbuddy_webview_sessions,
+            commands::workbuddy::get_workbuddy_auto_checkin_config,
+            commands::workbuddy::migrate_workbuddy_auto_checkin_config,
+            commands::workbuddy::save_workbuddy_auto_checkin_config,
+            commands::workbuddy::get_workbuddy_auto_checkin_logs,
+            commands::workbuddy::clear_workbuddy_auto_checkin_logs,
+            commands::workbuddy::run_workbuddy_auto_checkin_now,
             // WorkBuddy Instance Commands
             commands::workbuddy_instance::workbuddy_get_instance_defaults,
             commands::workbuddy_instance::workbuddy_list_instances,

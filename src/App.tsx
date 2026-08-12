@@ -72,9 +72,9 @@ import {
 } from './utils/externalProviderImport';
 import { runAutoBackupCycle } from './services/scheduledBackupService';
 import {
-  getWorkbuddyAutoCheckinNextDelayMs,
-  runWorkbuddyAutoCheckinCycleIfNeeded,
-  WORKBUDDY_AUTO_CHECKIN_CONFIG_CHANGED_EVENT,
+  clearLegacyWorkbuddyAutoCheckinLogs,
+  getWorkbuddyAutoCheckinConfig,
+  migrateWorkbuddyAutoCheckinConfigAsync,
 } from './services/workbuddyAutoCheckinService';
 import { prepareCodexLocalAccessForRestart } from './services/codexLocalAccessService';
 import { applyReducedMotion } from './utils/reducedMotion';
@@ -2248,51 +2248,12 @@ function MainApp() {
     };
   }, []);
 
-  // WorkBuddy 自动签到：仅在下一个计划时间或失败重试时间唤醒，避免固定轮询。
+  // 将旧版本保存在 WebView localStorage 中的设置迁移到 Rust 后台调度器。
   useEffect(() => {
-    const WORKBUDDY_CHECKIN_STARTUP_DELAY_MS = 5 * 1000;
-    let timerId: number | undefined;
-    let disposed = false;
-
-    const scheduleNextCheck = (delayMs: number) => {
-      if (timerId !== undefined) {
-        window.clearTimeout(timerId);
-      }
-      timerId = window.setTimeout(() => {
-        void checkAutoCheckin();
-      }, delayMs);
-    };
-
-    const checkAutoCheckin = async () => {
-      try {
-        const result = await runWorkbuddyAutoCheckinCycleIfNeeded();
-        if (!disposed) {
-          scheduleNextCheck(getWorkbuddyAutoCheckinNextDelayMs(result));
-        }
-      } catch (error) {
-        console.warn('[WorkbuddyAutoCheckin] 后台自动签到检查失败:', error);
-        if (!disposed) {
-          scheduleNextCheck(getWorkbuddyAutoCheckinNextDelayMs('retry'));
-        }
-      }
-    };
-
-    const handleConfigChange = () => {
-      scheduleNextCheck(0);
-    };
-
-    timerId = window.setTimeout(() => {
-      void checkAutoCheckin();
-    }, WORKBUDDY_CHECKIN_STARTUP_DELAY_MS);
-    window.addEventListener(WORKBUDDY_AUTO_CHECKIN_CONFIG_CHANGED_EVENT, handleConfigChange);
-
-    return () => {
-      disposed = true;
-      if (timerId !== undefined) {
-        window.clearTimeout(timerId);
-      }
-      window.removeEventListener(WORKBUDDY_AUTO_CHECKIN_CONFIG_CHANGED_EVENT, handleConfigChange);
-    };
+    clearLegacyWorkbuddyAutoCheckinLogs();
+    void migrateWorkbuddyAutoCheckinConfigAsync(getWorkbuddyAutoCheckinConfig()).catch((err) => {
+      console.warn('[WorkbuddyAutoCheckin] 迁移旧版自动签到配置失败:', err);
+    });
   }, []);
 
   // Check for updates on startup
