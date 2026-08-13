@@ -46,6 +46,14 @@ src-tauri/resources/electron/*
 src-tauri/native/macos-native-menu/.build/
 .tmp/
 
+# Local account exports contain full account identity data
+/cockpit-account-exports/
+/cockpit-account-export-*/
+
+# Local build/deployment receipts and maintenance rollback copies
+/outputs/
+/backups/
+
 # Rust
 target/
 **/*.rs.bk

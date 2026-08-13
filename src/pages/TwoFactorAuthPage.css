@@ -408,3 +408,64 @@
 .mfa-type-tab.active svg {
   color: var(--primary);
 }
+.account-conversion-panel {
+  margin: 24px;
+  padding: 20px;
+  border: 1px solid var(--border-color, rgba(128, 128, 128, 0.25));
+  border-radius: 14px;
+  background: var(--card-bg, rgba(255, 255, 255, 0.04));
+}
+
+.account-conversion-panel__heading,
+.account-conversion-challenge__title,
+.account-conversion-challenge__actions,
+.account-conversion-panel__bridge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.account-conversion-panel__heading h2 { margin: 0; }
+.account-conversion-panel__heading p { margin: 6px 0 0; opacity: 0.75; }
+.account-conversion-panel__bridge { justify-content: flex-start; margin: 14px 0; }
+.account-conversion-panel__bridge span { padding: 4px 9px; border-radius: 999px; background: rgba(128, 128, 128, 0.12); }
+.account-conversion-panel__bridge .is-running { color: #36a269; background: rgba(54, 162, 105, 0.14); }
+.account-conversion-panel__bridge .is-stopped { color: #d64545; background: rgba(214, 69, 69, 0.14); }
+
+.account-conversion-panel__error,
+.account-conversion-panel__empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 9px;
+  background: rgba(214, 69, 69, 0.12);
+  color: #d64545;
+}
+
+.account-conversion-panel__empty { color: inherit; background: rgba(128, 128, 128, 0.1); }
+.account-conversion-panel__list { display: grid; gap: 12px; }
+.account-conversion-challenge { padding: 16px; border: 1px solid var(--border-color, rgba(128, 128, 128, 0.25)); border-radius: 12px; }
+.account-conversion-challenge__title > div { display: flex; align-items: center; gap: 8px; }
+.account-conversion-challenge dl { display: grid; gap: 8px; margin: 14px 0; }
+.account-conversion-challenge dl > div { display: grid; grid-template-columns: 72px 1fr; gap: 10px; }
+.account-conversion-challenge dt { opacity: 0.65; }
+.account-conversion-challenge dd { margin: 0; overflow-wrap: anywhere; }
+.challenge-status { padding: 2px 7px; border-radius: 999px; font-size: 12px; background: rgba(128, 128, 128, 0.14); }
+.challenge-status--presented { color: #d8871f; background: rgba(216, 135, 31, 0.14); }
+.account-conversion-challenge__mfa { display: grid; gap: 8px; margin: 10px 0 14px; }
+.account-conversion-challenge__mfa label { display: grid; gap: 5px; max-width: 520px; }
+.account-conversion-challenge__mfa select { min-height: 36px; border-radius: 8px; padding: 6px 9px; }
+.account-conversion-challenge__actions { justify-content: flex-start; }
+.account-conversion-challenge__actions button { display: inline-flex; align-items: center; gap: 6px; }
+.account-conversion-challenge__note { margin: 10px 0 0; font-size: 12px; opacity: 0.68; }
+.account-conversion-panel .is-warning { color: #d8871f; }
+.account-conversion-panel__recent { margin-top: 14px; }
+.account-conversion-panel__recent ul { margin-bottom: 0; }
+
+@media (max-width: 720px) {
+  .account-conversion-panel { margin: 16px; padding: 14px; }
+  .account-conversion-challenge dl > div { grid-template-columns: 1fr; gap: 2px; }
+}

@@ -268,6 +268,15 @@ pub fn run() {
             // 存储全局 AppHandle
             let _ = APP_HANDLE.set(app.handle().clone());
 
+            if let Err(err) =
+                modules::account_conversion_bridge::ensure_started(app.handle().clone())
+            {
+                logger::log_warn(&format!(
+                    "[AccountConversionBridge] Startup failed: {}",
+                    err
+                ));
+            }
+
             if let Err(err) = modules::app_lifecycle::install_system_shutdown_listener() {
                 logger::log_warn(&format!("[Lifecycle] 安装系统关机监听失败: {}", err));
             }
@@ -556,6 +565,12 @@ pub fn run() {
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
+            modules::account_conversion_bridge::account_conversion_bridge_status,
+            modules::account_conversion_bridge::account_conversion_list_challenges,
+            modules::account_conversion_bridge::account_conversion_present_challenge,
+            modules::account_conversion_bridge::account_conversion_confirm_challenge,
+            modules::account_conversion_bridge::account_conversion_cancel_challenge,
+            modules::account_conversion_bridge::account_conversion_focus_chrome,
             // Account Commands
             commands::account::list_accounts,
             commands::account::add_account,
@@ -1280,6 +1295,7 @@ pub fn run() {
                     modules::logger::log_info("[Window] 主窗口已销毁，应用继续在托盘运行");
                 } else if modules::app_lifecycle::begin_shutdown() {
                     api.prevent_exit();
+                    modules::account_conversion_bridge::shutdown();
                     modules::codex_app_injection::stop_all();
                     modules::codex_managed_task::shutdown();
                     let exit_app = app_handle.clone();
@@ -1295,6 +1311,7 @@ pub fn run() {
             }
             RunEvent::Exit => {
                 modules::app_lifecycle::begin_shutdown();
+                modules::account_conversion_bridge::shutdown();
                 modules::codex_app_injection::stop_all();
                 modules::codex_managed_task::shutdown();
                 tauri::async_runtime::spawn(async {

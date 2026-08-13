@@ -1,4 +1,5 @@
 pub mod account;
+pub mod account_conversion_bridge;
 pub mod account_index_repair;
 pub mod announcement;
 pub mod antigravity_credential;

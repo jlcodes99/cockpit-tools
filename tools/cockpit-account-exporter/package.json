@@ -1,0 +1,14 @@
+{
+  "name": "@cockpit-tools/account-exporter",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Offline read-only exporter for Cockpit Codex account identity, quota, reset, and gateway usage data.",
+  "scripts": {
+    "test": "node --test test/*.test.cjs",
+    "web": "node cockpit-account-exporter-web.cjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "CC-BY-NC-SA-4.0"
+}
