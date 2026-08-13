@@ -378,6 +378,7 @@ struct BoundOauthQuotaRefreshControl {
 struct GatewayRuntime {
     loaded: bool,
     collection: Option<CodexLocalAccessCollection>,
+    collection_dirty: bool,
     stats: CodexLocalAccessStats,
     stats_dirty: bool,
     stats_flush_inflight: bool,
@@ -494,6 +495,7 @@ struct UsageCapture {
 struct ResponseCapture {
     usage: Option<UsageCapture>,
     response_id: Option<String>,
+    response_model: Option<String>,
     terminal_error: Option<String>,
 }
 
@@ -638,6 +640,8 @@ struct ResolvedLocalApiKey {
     model_prefix: Option<String>,
     allowed_models: Vec<String>,
     excluded_models: Vec<String>,
+    token_limit: Option<u64>,
+    token_used: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -654,6 +658,7 @@ struct ResponseUsageCollector {
     stream_buffer: Vec<u8>,
     usage: Option<UsageCapture>,
     response_id: Option<String>,
+    response_model: Option<String>,
     terminal_error: Option<String>,
 }
 
@@ -1363,6 +1368,13 @@ fn account_uses_personal_access_token(account: &CodexAccount) -> bool {
     account_is_access_token_only(account) && account.tokens.access_token.trim().starts_with("at-")
 }
 
+fn account_uses_codex_fingerprint_convergence(account: &CodexAccount) -> bool {
+    !account.is_api_key_auth()
+        && !account.is_agent_identity_auth()
+        && account.token_source_mode.trim() != "chatgpt_web_session"
+        && !account_is_access_token_only(account)
+}
+
 fn prune_prepared_account_cache(runtime: &mut GatewayRuntime, now: i64) {
     let allowed_account_ids = runtime.collection.as_ref().map(|collection| {
         effective_sidecar_account_ids(collection)
@@ -1419,7 +1431,19 @@ fn prune_runtime_account_state(runtime: &mut GatewayRuntime) {
     });
 }
 
-fn sync_runtime_collection(runtime: &mut GatewayRuntime, collection: CodexLocalAccessCollection) {
+fn sync_runtime_collection(
+    runtime: &mut GatewayRuntime,
+    mut collection: CodexLocalAccessCollection,
+) {
+    if let Some(current) = runtime.collection.as_ref() {
+        for api_key in &mut collection.api_keys {
+            if let Some(current_api_key) =
+                current.api_keys.iter().find(|item| item.id == api_key.id)
+            {
+                api_key.token_used = api_key.token_used.max(current_api_key.token_used);
+            }
+        }
+    }
     runtime.collection = Some(collection);
     runtime.loaded = true;
     runtime.last_error = None;
@@ -2110,14 +2134,19 @@ async fn schedule_stats_flush_if_needed() {
         loop {
             tokio::time::sleep(STATS_FLUSH_INTERVAL).await;
 
-            let stats_snapshot = {
+            let (stats_snapshot, collection_snapshot) = {
                 let mut runtime = gateway_runtime().lock().await;
-                if !runtime.stats_dirty {
+                if !runtime.stats_dirty && !runtime.collection_dirty {
                     runtime.stats_flush_inflight = false;
                     return;
                 }
+                let collection_snapshot = runtime
+                    .collection_dirty
+                    .then(|| runtime.collection.clone())
+                    .flatten();
                 runtime.stats_dirty = false;
-                runtime.stats.clone()
+                runtime.collection_dirty = false;
+                (runtime.stats.clone(), collection_snapshot)
             };
 
             if let Err(err) = save_stats_to_disk(&stats_snapshot) {
@@ -2127,8 +2156,21 @@ async fn schedule_stats_flush_if_needed() {
                 ));
                 let mut runtime = gateway_runtime().lock().await;
                 runtime.stats_dirty = true;
+                runtime.collection_dirty |= collection_snapshot.is_some();
                 runtime.stats_flush_inflight = false;
                 return;
+            }
+            if let Some(collection_snapshot) = collection_snapshot.as_ref() {
+                if let Err(err) = save_collection_to_disk(collection_snapshot) {
+                    logger::log_codex_api_warn(&format!(
+                        "[CodexLocalAccess] background API key token usage save failed: {}",
+                        err
+                    ));
+                    let mut runtime = gateway_runtime().lock().await;
+                    runtime.collection_dirty = true;
+                    runtime.stats_flush_inflight = false;
+                    return;
+                }
             }
         }
     });
@@ -2283,10 +2325,31 @@ fn base_codex_model_ids_for_collection(
 ) -> Vec<String> {
     let image_allowed =
         selected_accounts_have_image_generation_capacity(collection, health_by_account_id);
-    supported_codex_model_ids()
+    let mut model_ids = supported_codex_model_ids()
         .into_iter()
         .filter(|model| model != CODEX_IMAGE_MODEL_ID || image_allowed)
-        .collect()
+        .collect::<Vec<_>>();
+    let mut seen = model_ids
+        .iter()
+        .map(|model| model.to_ascii_lowercase())
+        .collect::<HashSet<_>>();
+    for account_id in &collection.account_ids {
+        let Some(account) = codex_account::load_account(account_id) else {
+            continue;
+        };
+        for mapping in &account.api_model_mappings {
+            for model in [&mapping.client_model, &mapping.upstream_model] {
+                let model = model.trim();
+                if model.is_empty() {
+                    continue;
+                }
+                if seen.insert(model.to_ascii_lowercase()) {
+                    model_ids.push(model.to_string());
+                }
+            }
+        }
+    }
+    model_ids
 }
 
 fn normalize_model_rule_value(value: &str) -> String {
@@ -5578,6 +5641,14 @@ fn sidecar_excluded_models_for_account(
         account,
         metered_feature_patterns,
     ));
+    if !account.api_model_mappings.is_empty() {
+        let mapped = account_api_model_mapping_ids(account);
+        excluded.extend(
+            supported_codex_model_ids()
+                .into_iter()
+                .filter(|model| !mapped.contains(&model.to_ascii_lowercase())),
+        );
+    }
     normalize_model_rule_list(excluded)
 }
 
@@ -10398,6 +10469,15 @@ fn stable_sidecar_manifest_for_fingerprint(manifest_content: &str) -> String {
             }
         }
     }
+    if let Some(api_keys) = manifest.get_mut("apiKeys").and_then(Value::as_array_mut) {
+        for api_key in api_keys {
+            if let Some(api_key) = api_key.as_object_mut() {
+                // Usage is initialized when the process starts and then maintained in memory.
+                // It must not restart active streams when unrelated gateway state is refreshed.
+                api_key.remove("tokenUsed");
+            }
+        }
+    }
     serde_json::to_string(&manifest).unwrap_or_else(|_| manifest_content.to_string())
 }
 
@@ -10448,6 +10528,8 @@ struct SidecarUsageEvent {
     request_id: String,
     #[serde(default)]
     model: String,
+    #[serde(default)]
+    alias: String,
     #[serde(default)]
     account_id: String,
     #[serde(default)]
@@ -10786,7 +10868,22 @@ fn sidecar_model_alias_values(collection: &CodexLocalAccessCollection) -> Vec<Va
         .collect()
 }
 
-fn sidecar_codex_key_model_values(collection: &CodexLocalAccessCollection) -> Vec<Value> {
+fn sidecar_codex_key_model_values(
+    account: &CodexAccount,
+    collection: &CodexLocalAccessCollection,
+) -> Vec<Value> {
+    if !account.api_model_mappings.is_empty() {
+        return account
+            .api_model_mappings
+            .iter()
+            .map(|mapping| {
+                json!({
+                    "name": mapping.upstream_model.clone(),
+                    "alias": mapping.client_model.clone(),
+                })
+            })
+            .collect();
+    }
     collection
         .model_aliases
         .iter()
@@ -10796,6 +10893,21 @@ fn sidecar_codex_key_model_values(collection: &CodexLocalAccessCollection) -> Ve
                 "alias": alias.alias.clone(),
             })
         })
+        .collect()
+}
+
+fn account_api_model_mapping_ids(account: &CodexAccount) -> HashSet<String> {
+    account
+        .api_model_mappings
+        .iter()
+        .flat_map(|mapping| {
+            [
+                mapping.client_model.as_str(),
+                mapping.upstream_model.as_str(),
+            ]
+        })
+        .map(|model| model.trim().to_ascii_lowercase())
+        .filter(|model| !model.is_empty())
         .collect()
 }
 
@@ -10824,6 +10936,8 @@ fn sidecar_api_key_manifest_values(collection: &CodexLocalAccessCollection) -> V
             "responsesWebsockets": collection.responses_websockets_enabled,
             "allowedModels": [],
             "excludedModels": [],
+            "tokenLimit": null,
+            "tokenUsed": 0,
         }));
     }
     for item in &collection.api_keys {
@@ -10846,10 +10960,47 @@ fn sidecar_api_key_manifest_values(collection: &CodexLocalAccessCollection) -> V
             "modelPrefix": item.model_prefix.clone(),
             "allowedModels": item.allowed_models.clone(),
             "excludedModels": item.excluded_models.clone(),
+            "tokenLimit": item.token_limit,
+            "tokenUsed": item.token_used,
             "enabled": item.enabled,
         }));
     }
     values
+}
+
+fn api_key_token_limit_exceeded(api_key: &ResolvedLocalApiKey) -> Option<(u64, u64)> {
+    api_key
+        .token_limit
+        .filter(|limit| *limit > 0 && api_key.token_used >= *limit)
+        .map(|limit| (api_key.token_used, limit))
+}
+
+fn add_api_key_token_usage(
+    collection: &mut CodexLocalAccessCollection,
+    api_key_id: &str,
+    total_tokens: u64,
+) -> bool {
+    let api_key_id = api_key_id.trim();
+    if api_key_id.is_empty() || api_key_id == "legacy" || total_tokens == 0 {
+        return false;
+    }
+    let Some(api_key) = collection
+        .api_keys
+        .iter_mut()
+        .find(|item| item.id == api_key_id)
+    else {
+        return false;
+    };
+    api_key.token_used = api_key.token_used.saturating_add(total_tokens);
+    true
+}
+
+fn effective_usage_total_tokens(usage: &UsageCapture) -> u64 {
+    if usage.total_tokens > 0 {
+        usage.total_tokens
+    } else {
+        usage.input_tokens.saturating_add(usage.output_tokens)
+    }
 }
 
 fn sidecar_api_key_priority_state_values(collection: &CodexLocalAccessCollection) -> Value {
@@ -11338,6 +11489,12 @@ fn sidecar_auth_json_for_account_with_metered_feature_patterns(
         "disable_cooling": collection.disable_cooling,
         "websockets": collection.responses_websockets_enabled,
     });
+    if account_uses_codex_fingerprint_convergence(account) {
+        value["codex_fingerprint_mode"] = json!(account
+            .codex_fingerprint_mode
+            .clone()
+            .unwrap_or_else(|| "session".to_string()));
+    }
     if let Some(account_id) = account_id {
         value["account_id"] = json!(account_id);
     }
@@ -11706,14 +11863,12 @@ fn is_local_access_gateway_base_url(raw: &str, collection: &CodexLocalAccessColl
 }
 
 /// True when `raw` must not be used as a sidecar upstream Base URL.
-/// Rejects the local gateway URL and any loopback host (polluted account sync).
+///
+/// Only rejects the current Cockpit API Service client/gateway URL (same host/port
+/// self-reference). Loopback URLs on a **different** port are allowed so users can
+/// point API Key providers at a separate local OpenAI-compatible process.
 fn is_unsafe_sidecar_upstream_base_url(raw: &str, collection: &CodexLocalAccessCollection) -> bool {
-    if is_local_access_gateway_base_url(raw, collection) {
-        return true;
-    }
-    parse_http_url_host_port(raw)
-        .map(|(host, _)| is_loopback_http_host(&host))
-        .unwrap_or(false)
+    is_local_access_gateway_base_url(raw, collection)
 }
 
 fn normalize_upstream_base_url_string(raw: &str) -> Option<String> {
@@ -11881,13 +12036,17 @@ fn sidecar_codex_key_config_value_with_metered_feature_patterns(
     };
     let excluded_models =
         sidecar_excluded_models_for_account(account, collection, metered_feature_patterns);
+    // Map account/provider supportsWebsockets → cliproxy codex-api-key.websockets so the
+    // second hop (Cockpit → OpenAI-compatible upstream such as Sub2API) can stay on
+    // Responses WebSocket when the client already connected with WebSocket.
     let mut value = json!({
         "api-key": api_key,
         "base-url": base_url,
         "proxy-url": proxy_url,
-        "models": sidecar_codex_key_model_values(collection),
+        "models": sidecar_codex_key_model_values(account, collection),
         "excluded-models": excluded_models,
         "disable-cooling": collection.disable_cooling,
+        "websockets": account.api_supports_websockets,
     });
     if proxy_url.is_none() {
         if let Some(obj) = value.as_object_mut() {
@@ -12287,10 +12446,20 @@ fn prepare_sidecar_launch_config_in_dir_sync(
                 codex_keys.push(config_value);
                 manifest_accounts.push(sidecar_account_manifest_value(&account, None, collection));
             } else {
-                logger::log_codex_api_warn(&format!(
-                    "[CodexLocalAccess][sidecar] 跳过缺少上游 API Key 的 API Key 账号: account_id={}",
-                    account.id
-                ));
+                // Base-URL rejection is already logged inside resolve/config builders.
+                // Only emit the missing-key message when the key itself is empty.
+                let missing_key = account
+                    .openai_api_key
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .is_none();
+                if missing_key {
+                    logger::log_codex_api_warn(&format!(
+                        "[CodexLocalAccess][sidecar] 跳过缺少上游 API Key 的 API Key 账号: account_id={}",
+                        account.id
+                    ));
+                }
             }
             continue;
         }
@@ -12832,6 +13001,29 @@ async fn update_sidecar_account_health_from_values(
     }
 }
 
+fn resolve_recorded_usage_model_id(
+    account_id: Option<&str>,
+    reported_model: &str,
+) -> Option<String> {
+    let reported = reported_model.trim();
+    if reported.is_empty() {
+        return None;
+    }
+    let Some(account_id) = account_id.map(str::trim).filter(|id| !id.is_empty()) else {
+        return Some(reported.to_string());
+    };
+    let Some(account) = codex_account::load_account(account_id) else {
+        return Some(reported.to_string());
+    };
+    let resolved =
+        crate::modules::codex_account::resolve_account_upstream_model(&account, reported);
+    if resolved.is_empty() {
+        Some(reported.to_string())
+    } else {
+        Some(resolved)
+    }
+}
+
 async fn record_sidecar_usage_event(event: SidecarUsageEvent) {
     update_sidecar_account_health(&event).await;
     let account_id = non_empty_sidecar_string(&event.account_id);
@@ -12839,7 +13031,10 @@ async fn record_sidecar_usage_event(event: SidecarUsageEvent) {
     let api_key_id = non_empty_sidecar_string(&event.api_key_id);
     let api_key_label = non_empty_sidecar_string(&event.api_key_label);
     let client_instance_id = non_empty_sidecar_string(&event.client_instance_id);
-    let model = non_empty_sidecar_string(&event.model);
+    let reported_model = non_empty_sidecar_string(&event.model)
+        .or_else(|| non_empty_sidecar_string(&event.alias))
+        .unwrap_or_default();
+    let model = resolve_recorded_usage_model_id(account_id.as_deref(), &reported_model);
     let request_id = non_empty_sidecar_string(&event.request_id);
     let error_category = normalized_sidecar_error_category(&event);
     if let Err(error) = record_request_stats_with_meta(
@@ -13397,7 +13592,7 @@ fn write_local_access_profile_model_catalog(
     crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
 }
 
-fn invalidate_codex_model_cache(profile_dir: &Path) -> Result<(), String> {
+pub(crate) fn invalidate_codex_model_cache(profile_dir: &Path) -> Result<(), String> {
     let cache_path = profile_dir.join(CODEX_MODEL_CACHE_FILE);
     match std::fs::remove_file(&cache_path) {
         Ok(()) => Ok(()),
@@ -13621,6 +13816,8 @@ fn build_local_access_api_key(label: Option<&str>) -> CodexLocalAccessApiKey {
         model_prefix: None,
         allowed_models: Vec::new(),
         excluded_models: Vec::new(),
+        token_limit: None,
+        token_used: 0,
         enabled: true,
         created_at: now,
         updated_at: now,
@@ -13650,6 +13847,8 @@ fn normalize_collection_api_keys(collection: &mut CodexLocalAccessCollection) ->
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
             enabled: true,
             created_at: now,
             updated_at: now,
@@ -13746,6 +13945,10 @@ fn normalize_collection_api_keys(collection: &mut CodexLocalAccessCollection) ->
         } else {
             item.excluded_models = original_excluded_models;
         }
+        if item.token_limit == Some(0) {
+            item.token_limit = None;
+            changed = true;
+        }
         normalized.push(item);
     }
 
@@ -13792,6 +13995,8 @@ fn resolve_collection_api_key(
             model_prefix: item.model_prefix.clone(),
             allowed_models: item.allowed_models.clone(),
             excluded_models: item.excluded_models.clone(),
+            token_limit: item.token_limit,
+            token_used: item.token_used,
         })
         .or_else(|| {
             if collection.api_key == normalized {
@@ -13804,6 +14009,8 @@ fn resolve_collection_api_key(
                     model_prefix: None,
                     allowed_models: Vec::new(),
                     excluded_models: Vec::new(),
+                    token_limit: None,
+                    token_used: 0,
                 })
             } else {
                 None
@@ -14952,6 +15159,9 @@ fn local_access_ineligible_reason(
     if is_chat_completions_api_key_account(account) {
         return Some("chat_completions_api_key");
     }
+    if is_official_deepseek_account(account) {
+        return Some("deepseek_unsupported");
+    }
     if restrict_free_accounts
         && !account.is_agent_identity_auth()
         && is_free_plan_type(account.plan_type.as_deref())
@@ -15692,6 +15902,22 @@ where
 
 pub fn trigger_gateway_reload_in_background(reason: &'static str) {
     reload_gateway_in_background(reason, ensure_runtime_loaded());
+}
+
+pub fn collection_contains_account(account_id: &str) -> bool {
+    let account_id = account_id.trim();
+    if account_id.is_empty() {
+        return false;
+    }
+    load_collection_from_disk()
+        .ok()
+        .flatten()
+        .is_some_and(|collection| {
+            collection
+                .account_ids
+                .iter()
+                .any(|item| item.trim() == account_id)
+        })
 }
 
 fn bound_oauth_quota_refresh_control() -> &'static TokioMutex<BoundOauthQuotaRefreshControl> {
@@ -16647,6 +16873,18 @@ async fn record_request_stats_with_meta(
             estimated_cost_usd,
             now,
         );
+        let token_usage_changed = api_key_id
+            .zip(usage_ref)
+            .is_some_and(|(api_key_id, usage)| {
+                runtime.collection.as_mut().is_some_and(|collection| {
+                    add_api_key_token_usage(
+                        collection,
+                        api_key_id,
+                        effective_usage_total_tokens(usage),
+                    )
+                })
+            });
+        runtime.collection_dirty |= token_usage_changed;
         let event = append_usage_event(
             &mut runtime.stats.events,
             now,
@@ -16696,6 +16934,19 @@ async fn record_request_stats_with_meta(
         }
     }
     Ok(())
+}
+
+fn stats_model_id_from_response_capture(
+    requested_model: &str,
+    response_capture: &ResponseCapture,
+) -> String {
+    response_capture
+        .response_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(requested_model)
+        .to_string()
 }
 
 fn build_state_snapshot_inner(
@@ -17013,7 +17264,7 @@ fn provider_gateway_models_for_account(account: &CodexAccount) -> Vec<String> {
         .trim()
         .to_ascii_lowercase();
     if provider_id == "deepseek" || base_url.contains("api.deepseek.com") {
-        return normalize_provider_gateway_models(vec!["deepseek-v4-pro", "deepseek-v4-flash"]);
+        return normalize_provider_gateway_models(vec!["deepseek-v4-flash", "deepseek-v4-pro"]);
     }
     if provider_id == "moonshot" || base_url.contains("api.moonshot.cn") {
         return normalize_provider_gateway_models(vec!["kimi-k2.6"]);
@@ -17041,6 +17292,26 @@ pub(crate) struct ProviderGatewayModelSlot {
     pub(crate) upstream_model: String,
 }
 
+fn preferred_provider_gateway_slot<'a>(
+    account: &CodexAccount,
+    slots: &'a [ProviderGatewayModelSlot],
+) -> Option<&'a ProviderGatewayModelSlot> {
+    let startup = account
+        .api_startup_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Some(startup) = startup {
+        if let Some(slot) = slots.iter().find(|slot| {
+            slot.upstream_model.eq_ignore_ascii_case(startup)
+                || slot.client_model.eq_ignore_ascii_case(startup)
+        }) {
+            return Some(slot);
+        }
+    }
+    slots.first()
+}
+
 fn is_provider_model_shell_slug(model: &str) -> bool {
     let model = model.trim();
     if model.is_empty() {
@@ -17051,12 +17322,52 @@ fn is_provider_model_shell_slug(model: &str) -> bool {
         .any(|shell| shell.eq_ignore_ascii_case(model))
 }
 
+const DEEPSEEK_OFFICIAL_SHELL_SLOTS: &[(&str, &str)] = &[
+    ("deepseek-v4-flash", "gpt-5.5"),
+    ("deepseek-v4-pro", "gpt-5.4"),
+];
+
+fn allocate_official_deepseek_shell_slots(
+    models: &[String],
+) -> Option<Vec<ProviderGatewayModelSlot>> {
+    let upstream_models =
+        normalize_provider_gateway_models(models.iter().map(String::as_str).collect());
+    if upstream_models.is_empty() {
+        return None;
+    }
+    if !upstream_models.iter().all(|model| {
+        DEEPSEEK_OFFICIAL_SHELL_SLOTS
+            .iter()
+            .any(|(upstream, _)| upstream.eq_ignore_ascii_case(model))
+    }) {
+        return None;
+    }
+    Some(
+        DEEPSEEK_OFFICIAL_SHELL_SLOTS
+            .iter()
+            .filter(|(upstream, _)| {
+                upstream_models
+                    .iter()
+                    .any(|model| model.eq_ignore_ascii_case(upstream))
+            })
+            .map(|(upstream, shell)| ProviderGatewayModelSlot {
+                client_model: (*shell).to_string(),
+                upstream_model: (*upstream).to_string(),
+            })
+            .collect(),
+    )
+}
+
 /// Allocate client-visible model shells for upstream provider models.
 ///
-/// 1. Upstream IDs that already match an official shell keep identity.
-/// 2. Remaining models claim free shells in pool order.
-/// 3. If the shell pool is exhausted, keep the upstream ID so nothing is dropped.
+/// 1. Official DeepSeek Responses models use a fixed 5.5 / 5.4 whitelist.
+/// 2. Upstream IDs that already match an official shell keep identity.
+/// 3. Remaining models claim free shells in pool order.
+/// 4. If the shell pool is exhausted, keep the upstream ID so nothing is dropped.
 pub(crate) fn allocate_provider_model_slots(models: &[String]) -> Vec<ProviderGatewayModelSlot> {
+    if let Some(slots) = allocate_official_deepseek_shell_slots(models) {
+        return slots;
+    }
     let upstream_models =
         normalize_provider_gateway_models(models.iter().map(String::as_str).collect());
     let mut used_shells = HashSet::new();
@@ -17175,6 +17486,91 @@ pub(crate) fn build_provider_model_catalog_json(
     serde_json::to_string_pretty(&catalog).map_err(|e| format!("生成 Codex 模型目录失败: {}", e))
 }
 
+/// Build a Codex client catalog that keeps official shell slugs for display, but copies
+/// upstream official model metadata (tools / shell / apply_patch / instructions).
+/// The gateway still rewrites the request `model` field back to `slot.upstream_model`.
+pub(crate) fn build_official_template_mapped_catalog_json(
+    slots: &[ProviderGatewayModelSlot],
+    official_catalog_json: &str,
+) -> Result<String, String> {
+    if slots.is_empty() {
+        return Err("模型目录为空".to_string());
+    }
+    let official: Value = serde_json::from_str(official_catalog_json)
+        .map_err(|error| format!("解析官方模型目录失败: {}", error))?;
+    let templates: HashMap<String, Value> = official
+        .get("models")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "官方模型目录缺少 models 数组".to_string())?
+        .iter()
+        .filter_map(|model| {
+            let slug = model.get("slug")?.as_str()?.trim();
+            if slug.is_empty() {
+                return None;
+            }
+            Some((slug.to_ascii_lowercase(), model.clone()))
+        })
+        .collect();
+
+    let mut models = Vec::new();
+    let mut missing = Vec::new();
+    for slot in slots {
+        let key = slot.upstream_model.trim().to_ascii_lowercase();
+        if let Some(template) = templates.get(&key) {
+            let mut entry = template.clone();
+            if let Some(object) = entry.as_object_mut() {
+                object.insert("slug".to_string(), Value::String(slot.client_model.clone()));
+                object.insert("visibility".to_string(), Value::String("list".to_string()));
+            }
+            models.push(entry);
+        } else {
+            missing.push(slot.clone());
+        }
+    }
+    if models.is_empty() {
+        return Err("官方模型目录未匹配到任何上游模型".to_string());
+    }
+    if !missing.is_empty() {
+        let fallback: Value = serde_json::from_str(&build_provider_model_catalog_json(&missing)?)
+            .map_err(|error| format!("解析回退模型目录失败: {}", error))?;
+        if let Some(fallback_models) = fallback.get("models").and_then(Value::as_array) {
+            for model in fallback_models {
+                let slug = model
+                    .get("slug")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                if slug.eq_ignore_ascii_case(CODEX_AUTO_REVIEW_MODEL_ID) {
+                    continue;
+                }
+                models.push(model.clone());
+            }
+        }
+    }
+    if !models.iter().any(|model| {
+        model
+            .get("slug")
+            .and_then(Value::as_str)
+            .is_some_and(|slug| slug.eq_ignore_ascii_case(CODEX_AUTO_REVIEW_MODEL_ID))
+    }) {
+        let review_catalog: Value = serde_json::from_str(&build_provider_model_catalog_json(&[])?)
+            .map_err(|error| format!("解析内置自动评审模型失败: {}", error))?;
+        if let Some(review_models) = review_catalog.get("models").and_then(Value::as_array) {
+            for model in review_models {
+                if model
+                    .get("slug")
+                    .and_then(Value::as_str)
+                    .is_some_and(|slug| slug.eq_ignore_ascii_case(CODEX_AUTO_REVIEW_MODEL_ID))
+                {
+                    models.push(model.clone());
+                }
+            }
+        }
+    }
+
+    serde_json::to_string_pretty(&json!({ "models": models }))
+        .map_err(|error| format!("生成 Codex 模型目录失败: {}", error))
+}
+
 fn apply_provider_gateway_model_slots(
     collection: &mut CodexLocalAccessCollection,
     models: &[String],
@@ -17266,6 +17662,19 @@ fn provider_gateway_wire_api_for_account(account: &CodexAccount) -> String {
     }
 }
 
+fn is_official_deepseek_account(account: &CodexAccount) -> bool {
+    account
+        .api_provider_id
+        .as_deref()
+        .is_some_and(|value| value.eq_ignore_ascii_case("deepseek"))
+        || account
+            .api_base_url
+            .as_deref()
+            .and_then(|value| Url::parse(value.trim()).ok())
+            .and_then(|url| url.host_str().map(str::to_string))
+            .is_some_and(|host| host.eq_ignore_ascii_case("api.deepseek.com"))
+}
+
 fn account_uses_synced_model_shell_gateway(account: &CodexAccount) -> bool {
     if !account.is_api_key_auth() {
         return false;
@@ -17276,9 +17685,22 @@ fn account_uses_synced_model_shell_gateway(account: &CodexAccount) -> bool {
     if !account.api_sync_model_catalog_to_codex {
         return false;
     }
+    if is_official_deepseek_account(account)
+        && provider_gateway_wire_api_for_account(account) == "responses"
+        && account
+            .api_instance_access_mode
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|mode| {
+                mode.eq_ignore_ascii_case("direct") || mode.eq_ignore_ascii_case("cdp")
+            })
+    {
+        return false;
+    }
     // Responses path normally talks to upstream directly. When the synced catalog needs
     // official shells for UI display, route through provider gateway so requests can be
-    // rewritten back to the real upstream model IDs.
+    // rewritten back to the real upstream model IDs. DeepSeek official Responses only
+    // uses that rewrite; the sidecar keeps Responses passthrough.
     if provider_gateway_wire_api_for_account(account) != "responses" {
         return false;
     }
@@ -17470,6 +17892,8 @@ fn build_provider_gateway_collection_for_profile(
         model_prefix: None,
         allowed_models: Vec::new(),
         excluded_models: Vec::new(),
+        token_limit: None,
+        token_used: 0,
         enabled: true,
         created_at: now,
         updated_at: now,
@@ -17527,6 +17951,8 @@ fn build_bound_oauth_local_gateway_collection_for_profile(
         model_prefix: None,
         allowed_models: Vec::new(),
         excluded_models: Vec::new(),
+        token_limit: None,
+        token_used: 0,
         enabled: true,
         created_at: now,
         updated_at: now,
@@ -17710,6 +18136,8 @@ fn build_model_provider_gateway_test_collection(
         model_prefix: None,
         allowed_models: vec![client_model_id.trim().to_string()],
         excluded_models: Vec::new(),
+        token_limit: None,
+        token_used: 0,
         enabled: true,
         created_at: now,
         updated_at: now,
@@ -18101,11 +18529,33 @@ fn write_local_access_profile_model_override(
     crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
 }
 
+fn official_catalog_json_for_provider_gateway(account: &CodexAccount) -> Option<&'static str> {
+    if is_official_deepseek_account(account)
+        && provider_gateway_wire_api_for_account(account) == "responses"
+    {
+        Some(codex_account::deepseek_official_models_json())
+    } else {
+        None
+    }
+}
+
 fn write_provider_gateway_model_catalog(
     profile_dir: &Path,
     slots: &[ProviderGatewayModelSlot],
 ) -> Result<(), String> {
-    let content = build_provider_model_catalog_json(slots)?;
+    write_provider_gateway_model_catalog_with_templates(profile_dir, slots, None)
+}
+
+fn write_provider_gateway_model_catalog_with_templates(
+    profile_dir: &Path,
+    slots: &[ProviderGatewayModelSlot],
+    official_catalog_json: Option<&str>,
+) -> Result<(), String> {
+    let content = if let Some(official_catalog_json) = official_catalog_json {
+        build_official_template_mapped_catalog_json(slots, official_catalog_json)?
+    } else {
+        build_provider_model_catalog_json(slots)?
+    };
     write_string_atomic(
         &profile_dir.join(CODEX_PROVIDER_MODEL_CATALOG_FILE),
         &content,
@@ -18309,11 +18759,15 @@ pub async fn activate_provider_gateway_for_dir(
             .map(|slot| slot.client_model.clone())
             .collect::<Vec<_>>(),
     )?;
-    if let Some(default_slot) = model_slots.first() {
+    if let Some(default_slot) = preferred_provider_gateway_slot(&account, &model_slots) {
         write_local_access_profile_model_override(profile_dir, &default_slot.client_model)?;
     }
     if !model_slots.is_empty() {
-        write_provider_gateway_model_catalog(profile_dir, &model_slots)?;
+        write_provider_gateway_model_catalog_with_templates(
+            profile_dir,
+            &model_slots,
+            official_catalog_json_for_provider_gateway(&account),
+        )?;
     }
     ensure_runtime_loaded_without_start().await?;
     let runtime = gateway_runtime().lock().await;
@@ -18557,11 +19011,15 @@ pub async fn ensure_provider_gateway_for_dir(
             .map(|slot| slot.client_model.clone())
             .collect::<Vec<_>>(),
     )?;
-    if let Some(default_slot) = model_slots.first() {
+    if let Some(default_slot) = preferred_provider_gateway_slot(&account, &model_slots) {
         write_local_access_profile_model_override(profile_dir, &default_slot.client_model)?;
     }
     if !model_slots.is_empty() {
-        write_provider_gateway_model_catalog(profile_dir, &model_slots)?;
+        write_provider_gateway_model_catalog_with_templates(
+            profile_dir,
+            &model_slots,
+            official_catalog_json_for_provider_gateway(&account),
+        )?;
     }
 
     let runtime_key = provider_gateway_runtime_key(profile_dir, account_id);
@@ -20615,13 +21073,21 @@ pub async fn update_local_access_api_key(
     model_prefix: Option<String>,
     allowed_models: Option<Vec<String>>,
     excluded_models: Option<Vec<String>>,
+    token_limit: Option<u64>,
     account_ids: Option<Vec<String>>,
     inherit_account_pool: Option<bool>,
 ) -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded().await?;
-    let maybe_collection = {
+    let (maybe_collection, historical_token_used) = {
         let runtime = gateway_runtime().lock().await;
-        runtime.collection.clone()
+        let historical_token_used = runtime
+            .stats
+            .api_keys
+            .iter()
+            .find(|item| item.api_key_id == api_key_id.trim())
+            .map(|item| item.usage.total_tokens)
+            .unwrap_or_default();
+        (runtime.collection.clone(), historical_token_used)
     };
     let Some(mut collection) = maybe_collection else {
         return Err("本地接入集合尚未创建".to_string());
@@ -20656,6 +21122,14 @@ pub async fn update_local_access_api_key(
     }
     if let Some(excluded_models) = excluded_models {
         collection.api_keys[index].excluded_models = normalize_model_rule_list(excluded_models);
+    }
+    if let Some(token_limit) = token_limit {
+        if token_limit > 0 && collection.api_keys[index].token_limit.is_none() {
+            collection.api_keys[index].token_used = collection.api_keys[index]
+                .token_used
+                .max(historical_token_used);
+        }
+        collection.api_keys[index].token_limit = (token_limit > 0).then_some(token_limit);
     }
     if let Some(account_ids) = normalized_account_ids {
         if inherit_account_pool.is_none() {
@@ -21294,6 +21768,23 @@ fn extract_response_id(value: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
+fn extract_response_model(value: &Value) -> Option<String> {
+    for candidate in [
+        value.get("model"),
+        value.pointer("/response/model"),
+        value.pointer("/data/model"),
+    ] {
+        if let Some(model) = candidate
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            return Some(model.to_string());
+        }
+    }
+    None
+}
+
 fn should_treat_response_as_stream(content_type: &str, request_is_stream: bool) -> bool {
     request_is_stream
         || content_type
@@ -21326,6 +21817,7 @@ impl ResponseUsageCollector {
             stream_buffer: Vec::new(),
             usage: None,
             response_id: None,
+            response_model: None,
             terminal_error: None,
         }
     }
@@ -21348,6 +21840,7 @@ impl ResponseUsageCollector {
             ResponseCapture {
                 usage: self.usage,
                 response_id: self.response_id,
+                response_model: self.response_model,
                 terminal_error: self.terminal_error,
             }
         } else {
@@ -21355,6 +21848,7 @@ impl ResponseUsageCollector {
             ResponseCapture {
                 usage: parsed.as_ref().and_then(extract_usage_capture),
                 response_id: parsed.as_ref().and_then(extract_response_id),
+                response_model: parsed.as_ref().and_then(extract_response_model),
                 terminal_error: None,
             }
         }
@@ -21434,6 +21928,9 @@ impl ResponseUsageCollector {
             }
             if self.response_id.is_none() {
                 self.response_id = extract_response_id(&value);
+            }
+            if self.response_model.is_none() {
+                self.response_model = extract_response_model(&value);
             }
         }
     }
@@ -21787,10 +22284,14 @@ fn gateway_error_body(
         "type".to_string(),
         Value::String("codex_local_access_error".to_string()),
     );
-    error.insert(
-        "code".to_string(),
-        Value::String(gateway_error_code(status).to_string()),
-    );
+    let error_code = if status == StatusCode::TOO_MANY_REQUESTS.as_u16()
+        && message.starts_with("API key token limit exceeded")
+    {
+        "token_limit_exceeded"
+    } else {
+        gateway_error_code(status)
+    };
+    error.insert("code".to_string(), Value::String(error_code.to_string()));
     error.insert("status".to_string(), json!(status));
 
     if let Some(diagnostics) = proxy_diagnostics {
@@ -22391,6 +22892,9 @@ impl ImageStreamTransformer {
         if self.response_capture.response_id.is_none() {
             self.response_capture.response_id = extract_response_id(&event);
         }
+        if self.response_capture.response_model.is_none() {
+            self.response_capture.response_model = extract_response_model(&event);
+        }
 
         match event
             .get("type")
@@ -22604,6 +23108,7 @@ async fn write_chat_completions_compatible_response(
     let response_capture = ResponseCapture {
         usage: extract_usage_capture(&parsed),
         response_id: extract_response_id(&parsed),
+        response_model: extract_response_model(&parsed),
         terminal_error: None,
     };
     let chat_payload =
@@ -22760,6 +23265,7 @@ async fn write_images_compatible_response(
     let response_capture = ResponseCapture {
         usage: extract_usage_capture(&parsed),
         response_id: extract_response_id(&parsed),
+        response_model: extract_response_model(&parsed),
         terminal_error: None,
     };
     let images_payload = build_images_api_payload(&parsed, response_format)?;
@@ -25005,6 +25511,9 @@ fn websocket_capture_from_message(message: &Message, capture: &mut ResponseCaptu
     if capture.response_id.is_none() {
         capture.response_id = extract_response_id(&value);
     }
+    if capture.response_model.is_none() {
+        capture.response_model = extract_response_model(&value);
+    }
 }
 
 fn websocket_message_value(message: &Message) -> Option<Value> {
@@ -25424,6 +25933,10 @@ async fn handle_websocket_connection(
                 }),
             )
             .await?;
+            let response_model_id = stats_model_id_from_response_capture(
+                stats_context.model_id.as_str(),
+                &bridge_result.capture,
+            );
             if let Some(upstream_error) = bridge_result.upstream_error {
                 mark_account_failure(
                     &account,
@@ -25460,7 +25973,7 @@ async fn handle_websocket_connection(
                     Some(account_email.as_str()),
                     Some(stats_context.api_key_id.as_str()),
                     Some(stats_context.api_key_label.as_str()),
-                    Some(stats_context.model_id.as_str()),
+                    Some(response_model_id.as_str()),
                     stats_context.request_kind,
                     false,
                     Some(upstream_error.category.as_str()),
@@ -25502,7 +26015,7 @@ async fn handle_websocket_connection(
                 Some(account_email.as_str()),
                 Some(stats_context.api_key_id.as_str()),
                 Some(stats_context.api_key_label.as_str()),
-                Some(stats_context.model_id.as_str()),
+                Some(response_model_id.as_str()),
                 stats_context.request_kind,
                 true,
                 None,
@@ -25730,6 +26243,58 @@ async fn handle_connection(
         return Ok(());
     };
     touch_local_access_api_key(&resolved_api_key.id).await;
+    let started_at = Instant::now();
+
+    if !is_local_models_request(&parsed.target) {
+        if let Some((token_used, token_limit)) = api_key_token_limit_exceeded(&resolved_api_key) {
+            let request_kind = request_kind_from_target(&parsed.target);
+            let model_id = stats_model_id_for_request_kind(&parsed.body, request_kind);
+            let message = format!(
+                "API key token limit exceeded ({} of {} tokens used)",
+                token_used, token_limit
+            );
+            let latency_ms = started_at.elapsed().as_millis() as u64;
+            write_json_error_response(
+                &mut stream,
+                Some(&addr),
+                Some(&parsed),
+                429,
+                "Too Many Requests",
+                message.as_str(),
+                None,
+                None,
+                Some(latency_ms),
+            )
+            .await?;
+            let stats_service_tier = service_tier_from_request_body(&parsed.body);
+            if let Err(err) = record_request_stats_with_meta(
+                None,
+                None,
+                Some(resolved_api_key.id.as_str()),
+                Some(resolved_api_key.label.as_str()),
+                Some(model_id.as_str()),
+                request_kind,
+                false,
+                Some("token_limit_exceeded"),
+                latency_ms,
+                None,
+                RequestStatsMeta {
+                    http_status: Some(429),
+                    error_message: Some(message.as_str()),
+                    service_tier: stats_service_tier.as_deref(),
+                    ..RequestStatsMeta::default()
+                },
+            )
+            .await
+            {
+                logger::log_codex_api_warn(&format!(
+                    "[CodexLocalAccess] failed to record token-limit rejection: {}",
+                    err
+                ));
+            }
+            return Ok(());
+        }
+    }
 
     if is_websocket_upgrade_request(&parsed) {
         if !is_backend_codex_responses_websocket_request(&parsed.target)
@@ -25784,7 +26349,6 @@ async fn handle_connection(
         return Ok(());
     }
 
-    let started_at = Instant::now();
     if collection.image_generation_mode == CodexLocalAccessImageGenerationMode::Disabled
         && (is_images_generations_request(&parsed.target)
             || is_images_edits_request(&parsed.target))
@@ -26028,6 +26592,10 @@ async fn handle_connection(
                     return Err(err);
                 }
             };
+            let response_model_id = stats_model_id_from_response_capture(
+                stats_context.model_id.as_str(),
+                &response_capture,
+            );
             if let Some(response_id) = response_capture.response_id.as_deref() {
                 bind_response_affinity(response_id, &account_id).await;
             }
@@ -26045,7 +26613,7 @@ async fn handle_connection(
                 Some(account_email.as_str()),
                 Some(stats_context.api_key_id.as_str()),
                 Some(stats_context.api_key_label.as_str()),
-                Some(stats_context.model_id.as_str()),
+                Some(response_model_id.as_str()),
                 stats_context.request_kind,
                 true,
                 None,
@@ -26319,7 +26887,8 @@ mod tests {
     use super::{
         account_model_rule_blocks_model, account_requires_bound_oauth_local_gateway,
         account_requires_provider_gateway, account_upstream_base_url, account_usage_priority,
-        align_codex_prompt_cache, api_key_inherits_account_pool, api_key_priority_account_ids,
+        add_api_key_token_usage, align_codex_prompt_cache, api_key_inherits_account_pool,
+        api_key_priority_account_ids, api_key_token_limit_exceeded,
         append_eligible_local_access_account_ids, append_usage_event,
         apply_account_usage_priority_ids, apply_codex_official_headers, apply_routing_strategy,
         backup_current_profile_model_before_provider_gateway, bound_oauth_quota_refresh_failures,
@@ -26365,11 +26934,11 @@ mod tests {
         recover_invalid_stats_file, remove_account_refs_from_collection,
         remove_codex_local_access_config, reprice_request_logs_for_collection,
         request_image_generation_mode, request_logs_has_column, request_ordered_account_ids,
-        resolve_effective_model_pricing, resolve_plan_rank, resolve_sidecar_upstream_base_url,
-        resolve_sidecar_upstream_base_url_with, resolve_supported_model_alias,
-        resolve_upstream_target, restore_config_toml_from_takeover_backup,
-        sanitize_collection_with_accounts, scutil_proxy_map,
-        selected_account_ids_have_image_generation_capacity,
+        resolve_collection_api_key, resolve_effective_model_pricing, resolve_plan_rank,
+        resolve_sidecar_upstream_base_url, resolve_sidecar_upstream_base_url_with,
+        resolve_supported_model_alias, resolve_upstream_target,
+        restore_config_toml_from_takeover_backup, sanitize_collection_with_accounts,
+        scutil_proxy_map, selected_account_ids_have_image_generation_capacity,
         send_agent_identity_wakeup_request_with_base_urls,
         should_retry_single_account_upstream_status, should_treat_response_as_stream,
         should_try_next_account, sidecar_account_manifest_value,
@@ -26718,6 +27287,48 @@ mod tests {
         assert!(!collection.responses_websockets_enabled);
     }
 
+    #[test]
+    fn api_key_token_limit_defaults_and_accumulates_across_requests() {
+        let mut collection = test_local_access_collection(vec!["account-1".to_string()]);
+        let mut api_key = build_local_access_api_key(Some("Limited"));
+        api_key.id = "limited-key".to_string();
+        api_key.token_limit = Some(10_000_000);
+        collection.api_keys = vec![api_key];
+
+        assert!(add_api_key_token_usage(
+            &mut collection,
+            "limited-key",
+            4_000_000
+        ));
+        assert!(add_api_key_token_usage(
+            &mut collection,
+            "limited-key",
+            6_000_000
+        ));
+        let resolved = resolve_collection_api_key(&collection, collection.api_keys[0].key.as_str())
+            .expect("limited key should resolve");
+        assert_eq!(resolved.token_used, 10_000_000);
+        assert_eq!(
+            api_key_token_limit_exceeded(&resolved),
+            Some((10_000_000, 10_000_000))
+        );
+
+        let legacy_value = json!({
+            "id": "legacy-key",
+            "label": "Legacy",
+            "key": "legacy-secret",
+            "allowedModels": [],
+            "excludedModels": [],
+            "enabled": true,
+            "createdAt": 1,
+            "updatedAt": 1
+        });
+        let legacy_key: CodexLocalAccessApiKey =
+            serde_json::from_value(legacy_value).expect("legacy key should deserialize");
+        assert_eq!(legacy_key.token_limit, None);
+        assert_eq!(legacy_key.token_used, 0);
+    }
+
     fn test_oauth_account_with_quota(
         account_id: &str,
         hourly_percentage: i32,
@@ -26861,6 +27472,21 @@ mod tests {
             Some(false)
         );
 
+        collection.api_keys[0].token_limit = Some(10_000_000);
+        collection.api_keys[0].token_used = 2_500_000;
+        let limited = sidecar_api_key_manifest_values(&collection)
+            .into_iter()
+            .find(|value| value.get("key").and_then(Value::as_str) == Some("team-a-key"))
+            .expect("limited key should be emitted");
+        assert_eq!(
+            limited.get("tokenLimit").and_then(Value::as_u64),
+            Some(10_000_000)
+        );
+        assert_eq!(
+            limited.get("tokenUsed").and_then(Value::as_u64),
+            Some(2_500_000)
+        );
+
         collection.bound_oauth_account_id = Some("oauth-account".to_string());
         let oauth_bound = sidecar_api_key_manifest_values(&collection)
             .into_iter()
@@ -26910,6 +27536,8 @@ mod tests {
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
 
         assert_eq!(
@@ -27194,6 +27822,98 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
     }
 
     #[test]
+    fn official_deepseek_responses_uses_shell_remap_gateway() {
+        let mut account = CodexAccount::new_api_key(
+            "local-account-id".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec![
+                "deepseek-v4-flash".to_string(),
+                "deepseek-v4-pro".to_string(),
+            ],
+        );
+        account.api_wire_api = Some("responses".to_string());
+        account.api_sync_model_catalog_to_codex = true;
+
+        assert!(account_requires_provider_gateway(&account));
+        assert_eq!(
+            provider_gateway_model_slots(&provider_gateway_models_for_account(&account))
+                .iter()
+                .map(|slot| (slot.client_model.as_str(), slot.upstream_model.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("gpt-5.5", "deepseek-v4-flash"),
+                ("gpt-5.4", "deepseek-v4-pro"),
+            ]
+        );
+
+        account.api_instance_access_mode = Some("direct".to_string());
+        assert!(!account_requires_provider_gateway(&account));
+
+        account.api_instance_access_mode = Some("cdp".to_string());
+        assert!(!account_requires_provider_gateway(&account));
+    }
+
+    #[test]
+    fn official_template_catalog_keeps_shell_slug_and_upstream_metadata() {
+        let slots = provider_gateway_model_slots(&[
+            "deepseek-v4-flash".to_string(),
+            "deepseek-v4-pro".to_string(),
+        ]);
+        let official = r#"{
+            "models": [
+                {
+                    "slug": "deepseek-v4-flash",
+                    "display_name": "DeepSeek-V4-Flash",
+                    "apply_patch_tool_type": "freeform",
+                    "shell_type": "shell_command",
+                    "base_instructions": "flash-instr"
+                },
+                {
+                    "slug": "deepseek-v4-pro",
+                    "display_name": "DeepSeek-V4-Pro",
+                    "apply_patch_tool_type": "freeform",
+                    "shell_type": "shell_command",
+                    "base_instructions": "pro-instr"
+                }
+            ]
+        }"#;
+        let json = super::build_official_template_mapped_catalog_json(&slots, official)
+            .expect("build mapped catalog");
+        let catalog: Value = serde_json::from_str(&json).expect("parse mapped catalog");
+        let models = catalog
+            .get("models")
+            .and_then(Value::as_array)
+            .expect("models");
+        assert_eq!(
+            models[0].get("slug").and_then(Value::as_str),
+            Some("gpt-5.5")
+        );
+        assert_eq!(
+            models[0].get("display_name").and_then(Value::as_str),
+            Some("DeepSeek-V4-Flash")
+        );
+        assert_eq!(
+            models[0]
+                .get("apply_patch_tool_type")
+                .and_then(Value::as_str),
+            Some("freeform")
+        );
+        assert_eq!(
+            models[1].get("slug").and_then(Value::as_str),
+            Some("gpt-5.4")
+        );
+        assert_eq!(
+            models[1].get("display_name").and_then(Value::as_str),
+            Some("DeepSeek-V4-Pro")
+        );
+    }
+
+    #[test]
     fn responses_bound_oauth_api_key_uses_local_access_pool() {
         let mut account = CodexAccount::new_api_key(
             "local-account-id".to_string(),
@@ -27433,7 +28153,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
             .collect::<Vec<_>>();
         backup_current_profile_model_before_provider_gateway(&profile_dir, &client_models)
             .expect("track provider models");
-        write_local_access_profile_model_override(&profile_dir, "gpt-5.6-sol")
+        write_local_access_profile_model_override(&profile_dir, "gpt-5.5")
             .expect("write model override");
         write_provider_gateway_model_catalog(&profile_dir, &slots)
             .expect("write provider model catalog");
@@ -27448,8 +28168,8 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
             .and_then(Value::as_array)
             .expect("models should be an array");
         for (model_id, display_name) in [
-            ("gpt-5.6-sol", "deepseek-v4-pro"),
-            ("gpt-5.6-terra", "deepseek-v4-flash"),
+            ("gpt-5.5", "deepseek-v4-flash"),
+            ("gpt-5.4", "deepseek-v4-pro"),
         ] {
             assert!(models.iter().any(|model| {
                 model.get("slug").and_then(Value::as_str) == Some(model_id)
@@ -27463,7 +28183,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
             "model_catalog_json = \"{}\"",
             CODEX_PROVIDER_MODEL_CATALOG_FILE
         )));
-        assert!(config.contains("model = \"gpt-5.6-sol\""));
+        assert!(config.contains("model = \"gpt-5.5\""));
 
         cleanup_provider_gateway_profile_model_overrides(&profile_dir).expect("cleanup overrides");
 
@@ -27849,6 +28569,8 @@ wire_api = "responses"
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
 
         let models = visible_codex_model_ids_for_api_key_with_accounts(
@@ -27890,6 +28612,25 @@ wire_api = "responses"
         assert_ne!(
             sidecar_config_fingerprint(config, manifest_b),
             sidecar_config_fingerprint(config, manifest_c)
+        );
+    }
+
+    #[test]
+    fn sidecar_fingerprint_ignores_token_usage_but_tracks_token_limit() {
+        let config = r#"{"host":"127.0.0.1","port":58393}"#;
+        let manifest_a = r#"{"apiKeys":[{"id":"key-1","tokenLimit":1000,"tokenUsed":100}]}"#;
+        let manifest_b = r#"{"apiKeys":[{"id":"key-1","tokenLimit":1000,"tokenUsed":900}]}"#;
+        let manifest_c = r#"{"apiKeys":[{"id":"key-1","tokenLimit":2000,"tokenUsed":900}]}"#;
+
+        assert_eq!(
+            sidecar_config_fingerprint(config, manifest_a),
+            sidecar_config_fingerprint(config, manifest_b),
+            "usage updates must not restart active sidecar streams"
+        );
+        assert_ne!(
+            sidecar_config_fingerprint(config, manifest_a),
+            sidecar_config_fingerprint(config, manifest_c),
+            "limit changes must restart the sidecar to apply the new policy"
         );
     }
 
@@ -28695,6 +29436,8 @@ wire_api = "responses"
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
             enabled: true,
             created_at: 0,
             updated_at: 0,
@@ -30594,6 +31337,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
         let event = SidecarUsageEvent {
             request_id: "req-1".to_string(),
             model: "gpt-5.4".to_string(),
+            alias: String::new(),
             account_id: "account-1".to_string(),
             account_email: "user@example.com".to_string(),
             api_key_id: "key-1".to_string(),
@@ -31200,6 +31944,8 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             model_prefix: Some("team".to_string()),
             allowed_models: vec!["gpt-*".to_string()],
             excluded_models: vec!["codex-*".to_string()],
+            token_limit: None,
+            token_used: 0,
         };
 
         let models = visible_codex_model_ids_for_api_key(&collection, &api_key, None);
@@ -31231,6 +31977,8 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
 
         let models = visible_codex_model_ids_for_api_key(&collection, &api_key, None);
@@ -31268,6 +32016,8 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
 
         let models = visible_codex_model_ids_for_api_key(&collection, &api_key, None);
@@ -32769,6 +33519,8 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
         let mut request = ParsedRequest {
             method: "POST".to_string(),
@@ -32809,6 +33561,8 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
         let mut request = ParsedRequest {
             method: "POST".to_string(),
@@ -32885,6 +33639,8 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
         let cases = [
             (
@@ -32947,6 +33703,8 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
         };
         let mut valid_signature_bytes = vec![0x80];
         valid_signature_bytes.extend([0u8; 8]);
@@ -33085,6 +33843,42 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         assert_eq!(
             account_upstream_base_url(&account),
             "https://relay.example/v1"
+        );
+    }
+
+    #[test]
+    fn deepseek_responses_api_key_accounts_are_not_eligible_for_local_access_pool() {
+        let mut account = CodexAccount::new_api_key(
+            "deepseek-1".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-deepseek".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec!["deepseek-v4-flash".to_string()],
+        );
+        account.api_wire_api = Some("responses".to_string());
+
+        assert!(!is_local_access_eligible_account(&account, false));
+        assert_eq!(
+            local_access_ineligible_reason(&account, false),
+            Some("deepseek_unsupported")
+        );
+        let (_, synced_ids, added_ids, skipped) = append_eligible_local_access_account_ids(
+            &[],
+            vec![account.id.clone()],
+            &[account.clone()],
+            false,
+        );
+        assert!(synced_ids.is_empty());
+        assert!(added_ids.is_empty());
+        assert_eq!(
+            skipped
+                .iter()
+                .map(|item| (item.account_id.as_str(), item.reason.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("deepseek-1", "deepseek_unsupported")]
         );
     }
 
@@ -33272,6 +34066,8 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             model_prefix: None,
             allowed_models: Vec::new(),
             excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
             enabled: true,
             created_at: 0,
             updated_at: 0,
@@ -33614,6 +34410,50 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
     }
 
     #[test]
+    fn sidecar_codex_key_uses_account_model_mappings() {
+        let mut account = CodexAccount::new_api_key(
+            "deepseek-map-1".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec!["deepseek-v4-flash".to_string()],
+        );
+        account.api_wire_api = Some("responses".to_string());
+        account.api_model_mappings = vec![crate::models::codex::CodexApiModelMapping {
+            client_model: "gpt-5.6-sol".to_string(),
+            upstream_model: "deepseek-v4-flash".to_string(),
+        }];
+        let collection = test_local_access_collection(vec![account.id.clone()]);
+        let config =
+            sidecar_codex_key_config_value(&account, &collection, None).expect("sidecar key");
+        let models = config
+            .get("models")
+            .and_then(Value::as_array)
+            .expect("models");
+        assert_eq!(models.len(), 1);
+        assert_eq!(
+            models[0].get("alias").and_then(Value::as_str),
+            Some("gpt-5.6-sol")
+        );
+        assert_eq!(
+            models[0].get("name").and_then(Value::as_str),
+            Some("deepseek-v4-flash")
+        );
+        let excluded = config
+            .get("excluded-models")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert!(excluded.iter().any(|item| item.as_str() == Some("gpt-5.4")));
+        assert!(!excluded
+            .iter()
+            .any(|item| item.as_str() == Some("gpt-5.6-sol")));
+    }
+
+    #[test]
     fn skips_sidecar_key_when_gateway_url_cannot_be_recovered() {
         let mut collection = test_local_access_collection(Vec::new());
         collection.port = 53549;
@@ -33632,9 +34472,11 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
     }
 
     #[test]
-    fn sidecar_codex_key_skips_loopback_base_url_without_provider_recovery() {
+    fn sidecar_codex_key_skips_same_port_gateway_loopback_without_provider_recovery() {
+        let mut collection = test_local_access_collection(Vec::new());
+        collection.port = 53549;
         let account = CodexAccount::new_api_key(
-            "api-loopback-1".to_string(),
+            "api-loopback-self-1".to_string(),
             "api-key@example.com".to_string(),
             "sk-test".to_string(),
             CodexApiProviderMode::Custom,
@@ -33643,8 +34485,133 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             Some("Relay".to_string()),
             Vec::new(),
         );
-        let collection = test_local_access_collection(vec![account.id.clone()]);
+        // Same port as the running API Service ⇒ self-reference, still rejected.
+        assert!(resolve_sidecar_upstream_base_url(&account, &collection).is_none());
         assert!(sidecar_codex_key_config_value(&account, &collection, None).is_none());
+    }
+
+    #[test]
+    fn sidecar_codex_key_allows_loopback_upstream_on_different_port() {
+        let mut collection = test_local_access_collection(Vec::new());
+        collection.port = 63266;
+        let account = CodexAccount::new_api_key(
+            "api-loopback-other-1".to_string(),
+            "local-upstream@example.com".to_string(),
+            "sk-local-upstream".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("http://127.0.0.1:8317/v1".to_string()),
+            Some("local-compat".to_string()),
+            Some("Local Compat".to_string()),
+            Vec::new(),
+        );
+        assert_eq!(
+            resolve_sidecar_upstream_base_url(&account, &collection).as_deref(),
+            Some("http://127.0.0.1:8317/v1")
+        );
+        let config = sidecar_codex_key_config_value(&account, &collection, None)
+            .expect("different-port loopback upstream should be accepted");
+        assert_eq!(
+            config.get("base-url").and_then(Value::as_str),
+            Some("http://127.0.0.1:8317/v1")
+        );
+        assert_eq!(
+            config.get("api-key").and_then(Value::as_str),
+            Some("sk-local-upstream")
+        );
+    }
+
+    #[test]
+    fn sidecar_codex_key_syncs_account_supports_websockets() {
+        let collection = test_local_access_collection(Vec::new());
+        let mut account = CodexAccount::new_api_key(
+            "api-ws-1".to_string(),
+            "ws-upstream@example.com".to_string(),
+            "sk-ws-upstream".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://sub2api.example/v1".to_string()),
+            Some("sub2api".to_string()),
+            Some("Sub2API".to_string()),
+            Vec::new(),
+        );
+
+        // Default API Key accounts do not advertise upstream WebSocket.
+        let disabled =
+            sidecar_codex_key_config_value(&account, &collection, None).expect("api key config");
+        assert_eq!(
+            disabled.get("websockets").and_then(Value::as_bool),
+            Some(false),
+            "missing supportsWebsockets must serialize as websockets=false so cliproxy stays on HTTP"
+        );
+
+        // Provider supportsWebsockets=true must flow into codex-api-key.websockets so the
+        // second hop (Cockpit → OpenAI-compatible upstream) can keep Responses WebSocket.
+        account.api_supports_websockets = true;
+        let enabled = sidecar_codex_key_config_value(&account, &collection, None)
+            .expect("api key config with websockets");
+        assert_eq!(
+            enabled.get("websockets").and_then(Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            enabled.get("base-url").and_then(Value::as_str),
+            Some("https://sub2api.example/v1")
+        );
+    }
+
+    #[test]
+    fn sidecar_codex_key_allows_localhost_upstream_on_different_port() {
+        let mut collection = test_local_access_collection(Vec::new());
+        collection.port = 63266;
+        let account = CodexAccount::new_api_key(
+            "api-loopback-other-2".to_string(),
+            "local-upstream2@example.com".to_string(),
+            "sk-local-upstream-2".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("http://localhost:8317/v1".to_string()),
+            None,
+            None,
+            Vec::new(),
+        );
+        assert_eq!(
+            resolve_sidecar_upstream_base_url(&account, &collection).as_deref(),
+            Some("http://localhost:8317/v1")
+        );
+        let config = sidecar_codex_key_config_value(&account, &collection, None)
+            .expect("localhost different-port upstream should be accepted");
+        assert_eq!(
+            config.get("base-url").and_then(Value::as_str),
+            Some("http://localhost:8317/v1")
+        );
+    }
+
+    #[test]
+    fn resolves_sidecar_upstream_from_provider_when_account_holds_different_port_loopback() {
+        let data_dir = make_temp_dir("codex-sidecar-loopback-provider");
+        fs::write(
+            data_dir.join("codex_model_providers.json"),
+            r#"[{"id":"local","name":"Local","baseUrl":"http://127.0.0.1:8317/v1"}]"#,
+        )
+        .expect("write providers");
+
+        let mut collection = test_local_access_collection(Vec::new());
+        collection.port = 63266;
+        // Account base is polluted to the gateway; provider still has the real local upstream.
+        let account = CodexAccount::new_api_key(
+            "api-polluted-loopback".to_string(),
+            "polluted-local@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("http://127.0.0.1:63266/v1".to_string()),
+            Some("local".to_string()),
+            Some("Local".to_string()),
+            vec![],
+        );
+
+        let resolved = resolve_sidecar_upstream_base_url_with(&account, &collection, |id, name| {
+            lookup_codex_model_provider_base_url_in_dir(&data_dir, id, name)
+        });
+        assert_eq!(resolved.as_deref(), Some("http://127.0.0.1:8317/v1"));
+        fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
 
     #[test]

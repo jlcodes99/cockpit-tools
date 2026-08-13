@@ -29,6 +29,7 @@ interface UseExportJsonModalReturn {
   copySavedPath: () => Promise<void>;
   resolveDefaultExportPath: (fileName: string) => Promise<string>;
   saveJsonFile: (json: string, defaultFileName: string) => Promise<string | null>;
+  replaceJsonContent: (json: string) => void;
 }
 
 const JSON_EXTENSION_REGEX = /\.json$/i;
@@ -144,6 +145,13 @@ export function useExportJsonModal(options: UseExportJsonModalOptions): UseExpor
     setCopied(false);
   }, []);
 
+  const replaceJsonContent = useCallback((json: string) => {
+    setJsonContent(json);
+    setCopied(false);
+    setSavedPath(null);
+    setPathCopied(false);
+  }, []);
+
   const toggleHidden = useCallback(() => {
     setHidden((prev) => !prev);
   }, []);
@@ -226,5 +234,6 @@ export function useExportJsonModal(options: UseExportJsonModalOptions): UseExpor
     copySavedPath,
     resolveDefaultExportPath,
     saveJsonFile,
+    replaceJsonContent,
   };
 }

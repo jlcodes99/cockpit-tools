@@ -460,3 +460,87 @@ func TestConvertOpenAIResponsesRequestToOpenAIChatCompletions_ExposesToolSearchA
 		t.Fatalf("tool call name = %q, want tool_search", got)
 	}
 }
+
+func TestConvertOpenAIResponsesRequestToOpenAIChatCompletions_AttachesReasoningForward(t *testing.T) {
+	raw := []byte(`{
+		"input": [
+			{"type":"reasoning","summary":[{"type":"summary_text","text":"first thought"}]},
+			{"type":"message","role":"assistant","content":"First answer."},
+			{"type":"reasoning","summary":[{"type":"summary_text","text":"second thought"}]},
+			{"type":"message","role":"assistant","content":"Second answer."},
+			{"type":"message","role":"user","content":"Continue"}
+		]
+	}`)
+
+	out := ConvertOpenAIResponsesRequestToOpenAIChatCompletions("kimi-k2-thinking", raw, false)
+	messages := gjson.GetBytes(out, "messages").Array()
+	if len(messages) != 3 {
+		t.Fatalf("messages count = %d, want 3; out=%s", len(messages), out)
+	}
+	if got := messages[0].Get("reasoning_content").String(); got != "first thought" {
+		t.Fatalf("first reasoning_content = %q, want first thought; out=%s", got, out)
+	}
+	if got := messages[1].Get("reasoning_content").String(); got != "second thought" {
+		t.Fatalf("second reasoning_content = %q, want second thought; out=%s", got, out)
+	}
+	if messages[2].Get("reasoning_content").Exists() {
+		t.Fatalf("user message must not receive reasoning_content; out=%s", out)
+	}
+}
+
+func TestConvertOpenAIResponsesRequestToOpenAIChatCompletions_KeepsReasoningAfterToolCall(t *testing.T) {
+	raw := []byte(`{
+		"input": [
+			{"type":"reasoning","summary":[{"type":"summary_text","text":"need a file"}]},
+			{"type":"function_call","call_id":"call_1","name":"read_file","arguments":"{}"},
+			{"type":"function_call_output","call_id":"call_1","output":"hello"},
+			{"type":"reasoning","summary":[{"type":"summary_text","text":"now answer"}]},
+			{"type":"message","role":"assistant","content":"The file says hello."},
+			{"type":"message","role":"user","content":"Continue"}
+		]
+	}`)
+
+	out := ConvertOpenAIResponsesRequestToOpenAIChatCompletions("kimi-k2-thinking", raw, false)
+	messages := gjson.GetBytes(out, "messages").Array()
+	if len(messages) != 4 {
+		t.Fatalf("messages count = %d, want 4; out=%s", len(messages), out)
+	}
+	if got := messages[0].Get("reasoning_content").String(); got != "need a file" {
+		t.Fatalf("tool-call reasoning_content = %q, want need a file; out=%s", got, out)
+	}
+	if got := messages[2].Get("reasoning_content").String(); got != "now answer" {
+		t.Fatalf("answer reasoning_content = %q, want now answer; out=%s", got, out)
+	}
+}
+
+func TestConvertOpenAIResponsesRequestToOpenAIChatCompletions_BackfillsBareToolCallReasoning(t *testing.T) {
+	raw := []byte(`{
+		"input": [
+			{"type":"function_call","call_id":"call_1","name":"read_file","arguments":"{}"},
+			{"type":"function_call_output","call_id":"call_1","output":"hello"}
+		]
+	}`)
+
+	out := ConvertOpenAIResponsesRequestToOpenAIChatCompletions("kimi-k2-thinking", raw, false)
+	if got := gjson.GetBytes(out, "messages.0.reasoning_content").String(); got != "tool call" {
+		t.Fatalf("reasoning_content = %q, want tool call placeholder; out=%s", got, out)
+	}
+}
+
+func TestConvertOpenAIResponsesRequestToOpenAIChatCompletions_PreservesTrailingReasoning(t *testing.T) {
+	raw := []byte(`{
+		"input": [
+			{"type":"message","role":"assistant","reasoning_content":"embedded thought","content":"Done."},
+			{"type":"reasoning","summary":[{"type":"summary_text","text":"trailing thought"}]},
+			{"type":"message","role":"user","content":"Continue"}
+		]
+	}`)
+
+	out := ConvertOpenAIResponsesRequestToOpenAIChatCompletions("kimi-k2-thinking", raw, false)
+	if got := gjson.GetBytes(out, "messages.0.reasoning_content").String(); got != "embedded thought\n\ntrailing thought" {
+		t.Fatalf("reasoning_content = %q, want combined reasoning; out=%s", got, out)
+	}
+	if gjson.GetBytes(out, "messages.1.reasoning_content").Exists() {
+		t.Fatalf("reasoning_content leaked across user boundary; out=%s", out)
+	}
+}

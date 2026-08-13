@@ -350,6 +350,46 @@ func TestOptimizeCodexMultiAgentV2RequestNormalizesAgentMessageContentOnly(t *te
 	}
 }
 
+func TestOptimizeCodexMultiAgentV2RequestPreservesFernetEncryptedAgentMessageContent(t *testing.T) {
+	t.Parallel()
+
+	// Typical Fernet token prefix used by official multi-agent encrypted payloads.
+	const fernetCiphertext = "gAAAAABnhY9exampleFernetTokenThatMustNotBecomeInputText0123456789abcdef"
+	payload := []byte(`{"input":[{"type":"agent_message","id":"amsg_1","author":"/root","recipient":"/root/worker","content":[{"type":"input_text","text":"Payload:\n"},{"type":"encrypted_content","encrypted_content":"` + fernetCiphertext + `"}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn_1"}}]}`)
+	headers := http.Header{"User-Agent": []string{"Codex Desktop/0.146.0-alpha.3"}}
+	cfg := &config.Config{Codex: config.CodexConfig{OptimizeMultiAgentV2: true}}
+
+	got, namespaceOptimized := OptimizeCodexMultiAgentV2Request(context.Background(), headers, payload, cfg)
+	if namespaceOptimized {
+		t.Fatal("payload without spawn_agent unexpectedly optimized a namespace")
+	}
+	message := gjson.GetBytes(got, "input.0")
+	if message.Get("type").String() != "agent_message" {
+		t.Fatalf("outer agent message type changed: %s", got)
+	}
+	if message.Get("content.1.type").String() != "encrypted_content" {
+		t.Fatalf("fernet payload type = %q, want encrypted_content; payload=%s", message.Get("content.1.type").String(), got)
+	}
+	if message.Get("content.1.encrypted_content").String() != fernetCiphertext {
+		t.Fatalf("fernet payload was rewritten: %s", got)
+	}
+	if message.Get("content.1.text").Exists() {
+		t.Fatalf("fernet payload was flattened into input_text: %s", got)
+	}
+
+	// Rewrite path used for non-Codex translation must also keep ciphertext intact.
+	rewritten := RewriteCodexMultiAgentV2Input(context.Background(), headers, payload, cfg)
+	if gjson.GetBytes(rewritten, "input.0.type").String() != "message" {
+		t.Fatalf("rewrite did not promote agent_message to message: %s", rewritten)
+	}
+	if gjson.GetBytes(rewritten, "input.0.content.1.type").String() != "encrypted_content" {
+		t.Fatalf("rewrite flattened fernet ciphertext: %s", rewritten)
+	}
+	if gjson.GetBytes(rewritten, "input.0.content.1.encrypted_content").String() != fernetCiphertext {
+		t.Fatalf("rewrite changed fernet ciphertext: %s", rewritten)
+	}
+}
+
 func TestRestoreCodexMultiAgentV2Response(t *testing.T) {
 	t.Parallel()
 

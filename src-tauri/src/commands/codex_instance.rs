@@ -1675,10 +1675,9 @@ async fn codex_start_instance_internal(
         }
 
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
-        let injection_enabled = modules::codex_app_injection::enabled_for_app()
-            && modules::codex_app_injection::supports_bind_account(
-                default_bind_account_id.as_deref(),
-            );
+        let injection_enabled = modules::codex_app_injection::should_enable_injection(
+            default_bind_account_id.as_deref(),
+        );
         let injection_plan =
             modules::codex_app_injection::build_launch_args(&extra_args, injection_enabled)?;
         let launch_started = Instant::now();
@@ -1840,8 +1839,8 @@ async fn codex_start_instance_internal(
 
     modules::process::ensure_codex_launch_path_configured()?;
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);
-    let injection_enabled = modules::codex_app_injection::enabled_for_app()
-        && modules::codex_app_injection::supports_bind_account(instance.bind_account_id.as_deref());
+    let injection_enabled =
+        modules::codex_app_injection::should_enable_injection(instance.bind_account_id.as_deref());
     let injection_plan =
         modules::codex_app_injection::build_launch_args(&extra_args, injection_enabled)?;
     let launch_started = Instant::now();

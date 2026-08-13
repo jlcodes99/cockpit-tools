@@ -10,7 +10,7 @@ use futures_util::{SinkExt, StreamExt};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
@@ -50,6 +50,24 @@ fn runtimes() -> &'static Mutex<HashMap<String, InjectionRuntime>> {
 fn quota_refresh_lock() -> &'static TokioMutex<()> {
     static LOCK: OnceLock<TokioMutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| TokioMutex::new(()))
+}
+
+fn new_document_scripts() -> &'static Mutex<HashSet<String>> {
+    static INSTALLED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    INSTALLED.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn should_install_new_document_script(websocket_url: &str) -> bool {
+    let Ok(installed) = new_document_scripts().lock() else {
+        return true;
+    };
+    !installed.contains(websocket_url)
+}
+
+fn mark_new_document_script_installed(websocket_url: &str) {
+    if let Ok(mut installed) = new_document_scripts().lock() {
+        installed.insert(websocket_url.to_string());
+    }
 }
 
 fn profile_key(profile_dir: &Path) -> String {
@@ -118,6 +136,41 @@ pub fn supports_bind_account(bind_account_id: Option<&str>) -> bool {
     bind_account_id.is_some_and(crate::modules::codex_instance::is_api_service_bind_account_id)
 }
 
+pub fn bind_uses_deepseek_cdp_injection(bind_account_id: Option<&str>) -> bool {
+    let Some(bind) = bind_account_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return false;
+    };
+    if crate::modules::codex_instance::is_api_service_bind_account_id(bind) {
+        return false;
+    }
+    let account_id = crate::modules::codex_instance::parse_provider_gateway_bind_account_id(bind)
+        .unwrap_or_else(|| bind.to_string());
+    crate::modules::codex_account::load_account(&account_id).is_some_and(|account| {
+        crate::modules::codex_account::account_uses_deepseek_cdp_injection(&account)
+    })
+}
+
+pub fn should_enable_injection(bind_account_id: Option<&str>) -> bool {
+    (enabled_for_app() && supports_bind_account(bind_account_id))
+        || bind_uses_deepseek_cdp_injection(bind_account_id)
+}
+
+fn bind_account_id_value(bind_account_id: Option<&str>) -> Option<String> {
+    let bind = bind_account_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    if crate::modules::codex_instance::is_api_service_bind_account_id(bind) {
+        return None;
+    }
+    Some(
+        crate::modules::codex_instance::parse_provider_gateway_bind_account_id(bind)
+            .unwrap_or_else(|| bind.to_string()),
+    )
+}
+
 fn remote_debugging_port_from_command_line(command_line: &str) -> Option<u16> {
     let mut tokens = command_line.split_whitespace();
     while let Some(token) = tokens.next() {
@@ -172,17 +225,13 @@ fn remote_debugging_port_for_pid(pid: u32) -> Option<u16> {
 }
 
 pub fn restore_running_profiles(app: AppHandle) -> Result<usize, String> {
-    if !enabled_for_app() {
-        return Ok(0);
-    }
-
     let store = crate::modules::codex_instance::load_instance_store()?;
     let default_dir = crate::modules::codex_instance::get_default_codex_home()?;
     let process_entries = crate::modules::process::collect_codex_process_entries();
     let mut candidates = Vec::new();
 
     if store.default_settings.launch_mode == crate::models::InstanceLaunchMode::App
-        && supports_bind_account(store.default_settings.bind_account_id.as_deref())
+        && should_enable_injection(store.default_settings.bind_account_id.as_deref())
     {
         if let Some(pid) = crate::modules::process::resolve_codex_pid_from_entries(
             store.default_settings.last_pid,
@@ -200,7 +249,7 @@ pub fn restore_running_profiles(app: AppHandle) -> Result<usize, String> {
 
     for instance in store.instances {
         if instance.launch_mode != crate::models::InstanceLaunchMode::App
-            || !supports_bind_account(instance.bind_account_id.as_deref())
+            || !should_enable_injection(instance.bind_account_id.as_deref())
         {
             continue;
         }
@@ -270,14 +319,15 @@ pub fn start_for_profile(
     bind_account_id: Option<String>,
 ) {
     let Some(port) = port else { return };
-    if !enabled_for_app() || !supports_bind_account(bind_account_id.as_deref()) {
+    if !should_enable_injection(bind_account_id.as_deref()) {
         return;
     }
     stop_for_profile(&profile_dir);
     let key = profile_key(&profile_dir);
     let task_profile = profile_dir.clone();
+    let task_bind = bind_account_id.clone();
     let task = tauri::async_runtime::spawn(async move {
-        run_injection_loop(app, instance_id, task_profile, port).await;
+        run_injection_loop(app, instance_id, task_profile, port, task_bind).await;
     });
     if let Ok(mut items) = runtimes().lock() {
         items.insert(key, InjectionRuntime { task });
@@ -421,6 +471,246 @@ struct CdpTarget {
     target_type: String,
     #[serde(rename = "webSocketDebuggerUrl")]
     websocket_url: Option<String>,
+}
+
+fn deepseek_model_injection_script(
+    _locale: &str,
+    selected_model: &str,
+    handled_selected_model: Option<&str>,
+) -> String {
+    let selected = serde_json::to_string(selected_model)
+        .unwrap_or_else(|_| "\"deepseek-v4-flash\"".to_string());
+    let handled =
+        serde_json::to_string(&handled_selected_model).unwrap_or_else(|_| "null".to_string());
+    format!(
+        r#"(() => {{
+      const flashId = "deepseek-v4-flash";
+      const proId = "deepseek-v4-pro";
+      const selectedModel = {selected};
+      const handledSelectedModel = {handled};
+      const root = window.__cockpitCodexInjection || (window.__cockpitCodexInjection = {{}});
+      root.hostHeartbeatAt = Date.now();
+      root.hostAvailable = true;
+      root.mode = "deepseek-official-picker";
+      root.selectedModel = selectedModel;
+      const staleBar = document.querySelector("[data-cockpit-deepseek-bar]");
+      if (staleBar) staleBar.remove();
+      if (handledSelectedModel && root.pendingSelectedModel === handledSelectedModel) {{
+        root.pendingSelectedModel = null;
+      }}
+      const shellToUpstream = {{ "gpt-5.5": flashId, "gpt-5.4": proId, "gpt-5.6-sol": flashId, "gpt-5.6-terra": proId }};
+      const displayName = {{
+        [flashId]: "DeepSeek-V4-Flash",
+        [proId]: "DeepSeek-V4-Pro",
+      }};
+      const listMethods = {{ "model/list": true, "list-models-for-host": true }};
+      const writeMethods = {{
+        "thread/start": true,
+        "turn/start": true,
+        "thread/resume": true,
+        "thread/compact/start": true,
+        "set-default-model-config-for-host": true,
+        "config/value/write": true,
+      }};
+      const normalize = (value) => String(value || "").trim().toLowerCase();
+      const toUpstream = (value) => {{
+        const slug = normalize(value);
+        return shellToUpstream[slug] || ((slug === flashId || slug === proId) ? slug : null);
+      }};
+      const keepSlug = (value) => Boolean(toUpstream(value));
+      const reportSelected = (value) => {{
+        const upstream = toUpstream(value);
+        if (!upstream || upstream === selectedModel || upstream === handledSelectedModel) return;
+        root.pendingSelectedModel = upstream;
+      }};
+      const descriptor = (official) => ({{
+        model: official,
+        id: official,
+        slug: official,
+        name: displayName[official] || official,
+        displayName: displayName[official] || official,
+        display_name: displayName[official] || official,
+        description: displayName[official] || official,
+        hidden: false,
+        visibility: "list",
+        isDefault: official === selectedModel,
+        defaultReasoningEffort: "high",
+        supportedReasoningEfforts: ["low", "medium", "high", "xhigh"].map((effort) => ({{
+          reasoningEffort: effort,
+          description: effort,
+        }})),
+      }});
+      const patchItem = (item) => {{
+        if (!item || typeof item !== "object") return false;
+        const official = toUpstream(item.model || item.slug || item.id);
+        if (!official) return false;
+        item.hidden = false;
+        item.visibility = "list";
+        const name = displayName[official];
+        item.displayName = name;
+        item.display_name = name;
+        item.name = name;
+        item.description = name;
+        item.model = official;
+        item.slug = official;
+        item.id = official;
+        return true;
+      }};
+      const isModelArray = (value) => Array.isArray(value) && value.some((item) => item && typeof item === "object" && (typeof item.model === "string" || typeof item.slug === "string"));
+      const patchModelArray = (value) => {{
+        if (!isModelArray(value)) return false;
+        for (let index = value.length - 1; index >= 0; index -= 1) {{
+          const slug = value[index]?.model || value[index]?.slug || value[index]?.id;
+          if (!keepSlug(slug)) {{
+            value.splice(index, 1);
+            continue;
+          }}
+          patchItem(value[index]);
+        }}
+        const have = new Set(value.map((item) => normalize(item.model || item.slug || item.id)));
+        for (const official of [flashId, proId]) {{
+          if (!have.has(official)) value.unshift(descriptor(official));
+        }}
+        return true;
+      }};
+      const patchContainer = (value, depth) => {{
+        if (!value || typeof value !== "object" || depth > 5) return false;
+        let changed = patchModelArray(value);
+        if (patchModelArray(value.models)) changed = true;
+        if (patchModelArray(value.data)) changed = true;
+        if (value.result && patchContainer(value.result, depth + 1)) changed = true;
+        if (value.message?.result && patchContainer(value.message.result, depth + 1)) changed = true;
+        return changed;
+      }};
+      const rewriteOutgoing = (method, params) => {{
+        if (!params || typeof params !== "object") return;
+        if (method === "set-default-model-config-for-host" && params.model) {{
+          reportSelected(params.model);
+          const upstream = toUpstream(params.model);
+          if (upstream) params.model = upstream;
+        }}
+        if (method === "config/value/write") {{
+          const key = String(params.key || params.path || params.name || "");
+          if (key.toLowerCase().includes("model") && params.value != null) {{
+            reportSelected(String(params.value));
+            const upstream = toUpstream(params.value);
+            if (upstream) params.value = upstream;
+          }}
+        }}
+        if (params.model) {{
+          reportSelected(params.model);
+          const upstream = toUpstream(params.model);
+          if (upstream) params.model = upstream;
+        }}
+        if (params.params && typeof params.params === "object" && params.params.model) {{
+          reportSelected(params.params.model);
+          const upstream = toUpstream(params.params.model);
+          if (upstream) params.params.model = upstream;
+        }}
+        if (params.request && typeof params.request === "object") rewriteOutgoing(params.request.method, params.request.params || params.request);
+      }};
+      const wrapResult = (method, result) => {{
+        if (listMethods[method]) {{
+          try {{ patchContainer(result, 0); }} catch {{}}
+        }}
+        return result;
+      }};
+      const wrapInvoke = (method, params, invoke) => {{
+        if (writeMethods[method]) {{
+          try {{ rewriteOutgoing(method, params); }} catch {{}}
+        }}
+        const result = invoke();
+        if (!listMethods[method] || result == null) return result;
+        if (typeof result.then === "function") return result.then((value) => wrapResult(method, value));
+        return wrapResult(method, result);
+      }};
+      const patchStatsigConfig = (name, config) => {{
+        if (String(name || "") !== "107580212" || !config?.value || typeof config.value !== "object") return config;
+        const available = Array.isArray(config.value.available_models) ? [...config.value.available_models] : [];
+        for (const slug of [flashId, proId]) if (!available.includes(slug)) available.push(slug);
+        config.value = {{ ...config.value, available_models: available, use_hidden_models: false }};
+        return config;
+      }};
+      const patchStatsig = () => {{
+        const statsig = window.__STATSIG__ || globalThis.__STATSIG__;
+        if (!statsig || typeof statsig !== "object") return;
+        const clients = [statsig.firstInstance, typeof statsig.instance === "function" ? statsig.instance() : null]
+          .concat(statsig.instances && typeof statsig.instances === "object" ? Object.values(statsig.instances) : [])
+          .filter(Boolean);
+        for (const client of clients) {{
+          if (typeof client.getDynamicConfig !== "function" || client.__cockpitModelPatched) continue;
+          const original = client.getDynamicConfig.bind(client);
+          client.getDynamicConfig = (name, options) => patchStatsigConfig(name, original(name, options));
+          client.__cockpitModelPatched = true;
+        }}
+      }};
+      const wrapFunction = (original) => {{
+        if (typeof original !== "function" || original.__cockpitOfficialPickerWrapped) return original;
+        const wrapped = function(method, params, options) {{
+          return wrapInvoke(String(method || ""), params, () => options == null ? original.call(this, method, params) : original.call(this, method, params, options));
+        }};
+        wrapped.__cockpitOfficialPickerWrapped = true;
+        return wrapped;
+      }};
+      const patchSendRequest = (target) => {{
+        if (!target || typeof target.sendRequest !== "function" || target.__cockpitOfficialPickerPatched) return false;
+        target.sendRequest = wrapFunction(target.sendRequest.bind(target));
+        target.__cockpitOfficialPickerPatched = true;
+        return true;
+      }};
+      const wrapBridge = () => {{
+        const bridge = window.electronBridge;
+        if (!bridge || typeof bridge.sendMessageFromView !== "function" || bridge.__cockpitOfficialPickerPatched) return;
+        const original = bridge.sendMessageFromView.bind(bridge);
+        bridge.sendMessageFromView = function(message) {{
+          try {{
+            const method = message?.type || message?.method;
+            if (method) rewriteOutgoing(String(method), message);
+            if (message?.request) rewriteOutgoing(String(message.request.method || ""), message.request.params || message.request);
+          }} catch {{}}
+          return original(message);
+        }};
+        bridge.__cockpitOfficialPickerPatched = true;
+      }};
+      const installHooks = () => {{
+        if (root.officialPickerInstalled) return;
+        root.officialPickerInstalled = true;
+        const originalParse = JSON.parse;
+        JSON.parse = function(text, reviver) {{
+          const value = originalParse.apply(this, arguments);
+          try {{ patchContainer(value, 0); }} catch {{}}
+          return value;
+        }};
+        const originalDefine = Object.defineProperty;
+        Object.defineProperty = function(obj, prop, desc) {{
+          if (desc && (prop === "sendRequest" || prop === "setMessageHandler") && typeof desc.value === "function") {{
+            if (prop === "sendRequest") {{
+              desc = Object.assign({{}}, desc, {{ value: wrapFunction(desc.value) }});
+            }} else {{
+              const originalSet = desc.value;
+              desc = Object.assign({{}}, desc, {{
+                value: function(handler) {{
+                  return originalSet.call(this, typeof handler === "function" ? wrapFunction(handler) : handler);
+                }},
+              }});
+            }}
+          }}
+          return originalDefine.call(this, obj, prop, desc);
+        }};
+      }};
+      installHooks();
+      wrapBridge();
+      patchStatsig();
+      patchSendRequest(root.appServerClient);
+      const pendingSelectedModel = typeof root.pendingSelectedModel === "string"
+        && (root.pendingSelectedModel === flashId || root.pendingSelectedModel === proId)
+        && root.pendingSelectedModel !== selectedModel
+        && root.pendingSelectedModel !== handledSelectedModel
+        ? root.pendingSelectedModel
+        : null;
+      return {{ selectedModel: pendingSelectedModel }};
+    }})()"#
+    )
 }
 
 fn injection_script(
@@ -690,7 +980,25 @@ fn refresh_request_token_from_cdp_response(value: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
-async fn evaluate_target(target: &CdpTarget, script: &str) -> Option<String> {
+fn selected_model_from_cdp_response(value: &Value) -> Option<String> {
+    value
+        .pointer("/result/result/value/selectedModel")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| {
+            value.eq_ignore_ascii_case("deepseek-v4-flash")
+                || value.eq_ignore_ascii_case("deepseek-v4-pro")
+        })
+        .map(|value| value.to_ascii_lowercase())
+}
+
+#[derive(Debug, Default)]
+struct InjectionEvalResult {
+    refresh_request_token: Option<String>,
+    selected_model: Option<String>,
+}
+
+async fn evaluate_target(target: &CdpTarget, script: &str) -> Option<InjectionEvalResult> {
     if target.target_type != "page" && target.target_type != "webview" {
         return None;
     }
@@ -701,10 +1009,44 @@ async fn evaluate_target(target: &CdpTarget, script: &str) -> Option<String> {
     else {
         return None;
     };
+    let install_on_new_document = should_install_new_document_script(websocket_url);
+    if install_on_new_document {
+        let enable_page = socket
+            .send(Message::Text(
+                json!({
+                    "id": 0,
+                    "method": "Page.enable",
+                    "params": {}
+                })
+                .to_string()
+                .into(),
+            ))
+            .await
+            .is_ok();
+        if !enable_page {
+            return None;
+        }
+        let install = socket
+            .send(Message::Text(
+                json!({
+                    "id": 1,
+                    "method": "Page.addScriptToEvaluateOnNewDocument",
+                    "params": {"source": script}
+                })
+                .to_string()
+                .into(),
+            ))
+            .await
+            .is_ok();
+        if !install {
+            return None;
+        }
+        mark_new_document_script_installed(websocket_url);
+    }
     if !socket
         .send(Message::Text(
             json!({
-                "id": 1,
+                "id": 2,
                 "method": "Runtime.evaluate",
                 "params": {"expression": script, "returnByValue": true, "awaitPromise": false}
             })
@@ -724,8 +1066,11 @@ async fn evaluate_target(target: &CdpTarget, script: &str) -> Option<String> {
             let Ok(value) = serde_json::from_str::<Value>(&text) else {
                 continue;
             };
-            if value.get("id").and_then(Value::as_i64) == Some(1) {
-                return refresh_request_token_from_cdp_response(&value);
+            if value.get("id").and_then(Value::as_i64) == Some(2) {
+                return Some(InjectionEvalResult {
+                    refresh_request_token: refresh_request_token_from_cdp_response(&value),
+                    selected_model: selected_model_from_cdp_response(&value),
+                });
             }
         }
         None
@@ -797,7 +1142,13 @@ async fn run_quota_refresh_singleflight(app: &AppHandle) -> Result<Option<(i32, 
     }
 }
 
-async fn run_injection_loop(app: AppHandle, _instance_id: String, profile_dir: PathBuf, port: u16) {
+async fn run_injection_loop(
+    app: AppHandle,
+    _instance_id: String,
+    profile_dir: PathBuf,
+    port: u16,
+    bind_account_id: Option<String>,
+) {
     let client = Client::new();
     let mut last_quota_at = Instant::now() - QUOTA_REFRESH_INTERVAL;
     let mut quota = QuotaResponse::default();
@@ -842,6 +1193,67 @@ async fn run_injection_loop(app: AppHandle, _instance_id: String, profile_dir: P
                 )),
             }
         }
+        let locale = config::get_user_config().language;
+        let deepseek_cdp = bind_uses_deepseek_cdp_injection(bind_account_id.as_deref());
+        if deepseek_cdp {
+            let account_id = bind_account_id_value(bind_account_id.as_deref());
+            let selected_model = account_id
+                .as_deref()
+                .and_then(crate::modules::codex_account::load_account)
+                .and_then(|account| account.api_startup_model)
+                .filter(|model| {
+                    model.eq_ignore_ascii_case("deepseek-v4-flash")
+                        || model.eq_ignore_ascii_case("deepseek-v4-pro")
+                })
+                .unwrap_or_else(|| "deepseek-v4-flash".to_string());
+            let script = deepseek_model_injection_script(
+                &locale,
+                &selected_model,
+                handled_refresh_token.as_deref(),
+            );
+            let targets = query_targets(&client, port).await;
+            let mut pending_model = None;
+            for target in &targets {
+                if let Some(result) = evaluate_target(target, &script).await {
+                    if let Some(model) = result.selected_model {
+                        if handled_refresh_token.as_deref() != Some(model.as_str()) {
+                            pending_model = Some(model);
+                        }
+                    }
+                }
+            }
+            if let (Some(account_id), Some(model)) = (account_id, pending_model) {
+                let profile_dir = profile_dir.clone();
+                let applied_model = model.clone();
+                match tauri::async_runtime::spawn_blocking(move || {
+                    crate::modules::codex_account::apply_deepseek_cdp_startup_model(
+                        &account_id,
+                        &applied_model,
+                        &profile_dir,
+                    )
+                })
+                .await
+                {
+                    Ok(Ok(_)) => {
+                        handled_refresh_token = Some(model.clone());
+                        logger::log_info(&format!(
+                            "[Codex App Injection] DeepSeek CDP 已切换启动模型: model={}",
+                            model
+                        ));
+                    }
+                    Ok(Err(error)) => logger::log_warn(&format!(
+                        "[Codex App Injection] DeepSeek CDP 切换模型失败: {}",
+                        error
+                    )),
+                    Err(error) => logger::log_warn(&format!(
+                        "[Codex App Injection] DeepSeek CDP 切换模型任务异常: {}",
+                        error
+                    )),
+                }
+            }
+            tokio::time::sleep(INJECTION_INTERVAL).await;
+            continue;
+        }
         if refresh_finished || last_quota_at.elapsed() >= QUOTA_REFRESH_INTERVAL {
             let gateway = read_profile_gateway_config(&profile_dir);
             if let Some(value) = fetch_quota(&client, gateway.as_ref()).await {
@@ -857,7 +1269,6 @@ async fn run_injection_loop(app: AppHandle, _instance_id: String, profile_dir: P
             .as_ref()
             .map(|value| value.provider_name.as_str())
             .unwrap_or("Codex");
-        let locale = config::get_user_config().language;
         let script = injection_script(
             provider_name,
             &quota,
@@ -868,9 +1279,11 @@ async fn run_injection_loop(app: AppHandle, _instance_id: String, profile_dir: P
         let targets = query_targets(&client, port).await;
         let mut refresh_request_token = None;
         for target in &targets {
-            if let Some(token) = evaluate_target(target, &script).await {
-                if handled_refresh_token.as_deref() != Some(token.as_str()) {
-                    refresh_request_token = Some(token);
+            if let Some(result) = evaluate_target(target, &script).await {
+                if let Some(token) = result.refresh_request_token {
+                    if handled_refresh_token.as_deref() != Some(token.as_str()) {
+                        refresh_request_token = Some(token);
+                    }
                 }
             }
         }
@@ -896,9 +1309,9 @@ async fn run_injection_loop(app: AppHandle, _instance_id: String, profile_dir: P
 #[cfg(test)]
 mod tests {
     use super::{
-        build_launch_args, injection_script, refresh_request_token_from_cdp_response,
-        remote_debugging_port_from_command_line, supports_bind_account, QuotaPlanSummary,
-        QuotaResponse,
+        build_launch_args, deepseek_model_injection_script, injection_script,
+        refresh_request_token_from_cdp_response, remote_debugging_port_from_command_line,
+        selected_model_from_cdp_response, supports_bind_account, QuotaPlanSummary, QuotaResponse,
     };
     use serde_json::json;
 
@@ -935,6 +1348,26 @@ mod tests {
             "__provider_gateway__:custom-provider"
         )));
         assert!(!supports_bind_account(None));
+    }
+
+    #[test]
+    fn deepseek_script_controls_official_picker_and_returns_pending_model() {
+        let script = deepseek_model_injection_script("zh-cn", "deepseek-v4-flash", None);
+        assert!(script.contains("deepseek-v4-flash"));
+        assert!(script.contains("deepseek-v4-pro"));
+        assert!(script.contains("gpt-5.5"));
+        assert!(script.contains("gpt-5.4"));
+        assert!(script.contains("item.model = official"));
+        assert!(script.contains("list-models-for-host"));
+        assert!(script.contains("model/list"));
+        assert!(script.contains("deepseek-official-picker"));
+        assert!(script.contains("staleBar"));
+        assert!(!script.contains("data-cockpit-deepseek-model"));
+        assert!(script.contains("pendingSelectedModel"));
+        let parsed = selected_model_from_cdp_response(&json!({
+            "result": { "result": { "value": { "selectedModel": "deepseek-v4-pro" } } }
+        }));
+        assert_eq!(parsed.as_deref(), Some("deepseek-v4-pro"));
     }
 
     #[test]

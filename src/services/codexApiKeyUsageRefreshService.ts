@@ -1,9 +1,8 @@
 import type { CodexAccount } from '../types/codex';
 import {
-  isCodexApiKeyAccount,
-  isCodexChatCompletionsApiKeyAccount,
-  isCodexNewApiAccount,
-} from '../types/codex';
+  isCodexApiKeyUsageQueryEligible,
+  isDeepSeekAccount,
+} from '../utils/codexDeepSeekAccess';
 import {
   findCodexModelProviderByBaseUrl,
   findCodexModelProviderById,
@@ -81,13 +80,8 @@ function notifyCodexApiKeyUsageRefreshed(): void {
   window.dispatchEvent(new CustomEvent(CODEX_API_KEY_USAGE_REFRESHED_EVENT));
 }
 
-function isUsageEligibleApiKey(account: CodexAccount): boolean {
-  return (
-    isCodexApiKeyAccount(account) &&
-    !isCodexNewApiAccount(account) &&
-    !isCodexChatCompletionsApiKeyAccount(account) &&
-    Boolean(account.openai_api_key?.trim())
-  );
+export function isUsageEligibleApiKey(account: CodexAccount): boolean {
+  return isCodexApiKeyUsageQueryEligible(account);
 }
 
 export async function refreshCodexApiKeyUsageForAccounts(
@@ -95,11 +89,11 @@ export async function refreshCodexApiKeyUsageForAccounts(
   options?: { force?: boolean },
 ): Promise<void> {
   const initialCache = readCodexApiKeyUsageCache();
-  const eligibleAccounts = accounts.filter(
-    (account) =>
-      isUsageEligibleApiKey(account) &&
-      (options?.force || !initialCache[account.id]?.unavailable),
-  );
+  const eligibleAccounts = accounts.filter((account) => {
+    if (!isUsageEligibleApiKey(account)) return false;
+    if (options?.force || isDeepSeekAccount(account)) return true;
+    return !initialCache[account.id]?.unavailable;
+  });
   if (eligibleAccounts.length === 0) return;
 
   const providers = await listCodexModelProviders();

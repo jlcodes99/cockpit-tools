@@ -1,4 +1,4 @@
-import type { CodexAppSpeed } from "./codex";
+import type { CodexAppSpeed } from "./codex.ts";
 
 export type InstanceLaunchMode = "app" | "cli";
 

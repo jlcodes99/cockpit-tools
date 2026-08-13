@@ -66,6 +66,10 @@ pub struct WorkbuddyAccount {
 
     pub created_at: i64,
     pub last_used: i64,
+
+    // 网页会话（WebView）相关字段
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web_session_enabled: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

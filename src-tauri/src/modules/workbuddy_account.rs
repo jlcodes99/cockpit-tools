@@ -1,3 +1,5 @@
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -695,6 +697,7 @@ pub fn upsert_account(payload: WorkbuddyOAuthCompletePayload) -> Result<Workbudd
         checkin_rewards: None,
         created_at,
         last_used: now,
+        web_session_enabled: None,
     });
 
     apply_payload(&mut account, payload);
@@ -939,6 +942,7 @@ fn upsert_account_record_from_payload(
         checkin_rewards: None,
         created_at: now,
         last_used: now,
+        web_session_enabled: None,
     };
     upsert_account_record(account)
 }
@@ -1170,6 +1174,26 @@ fn extract_local_workbuddy_token_parts(token: &str) -> Option<(Option<String>, S
         return Some((uid_opt, token_value.to_string()));
     }
     Some((None, trimmed.to_string()))
+}
+
+// 新版 WorkBuddy 本机登录态使用标准 JWT 作为 access token，其 payload 的 `sub`
+// 字段即为客户端账号 uid（与 CodeBuddyExtension/Data/{uid} 目录名一致）。
+// 当 token 前缀/账号字段都无法取出 uid 时，回退到解析 JWT 的 `sub`。
+fn extract_uid_from_jwt(token: &str) -> Option<String> {
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let decoded = URL_SAFE_NO_PAD
+        .decode(parts[1])
+        .or_else(|_| base64::engine::general_purpose::STANDARD.decode(parts[1]))
+        .ok()?;
+    let value: Value = serde_json::from_slice(&decoded).ok()?;
+    value
+        .get("sub")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 fn json_object_string_field(obj: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<String> {
@@ -1501,6 +1525,8 @@ pub fn import_payload_from_local() -> Result<Option<WorkbuddyOAuthCompletePayloa
     else {
         return Err("本地 WorkBuddy 登录信息解析失败: access token 无效".to_string());
     };
+    // 回退：新版 JWT token 无法从前缀得到 uid，改从 sub 声明提取。
+    let uid_from_token = uid_from_token.or_else(|| extract_uid_from_jwt(&raw_token));
     let Some(access_token) = normalize_local_workbuddy_token(&normalized_token) else {
         return Err("本地 WorkBuddy 登录信息解析失败: access token 为空".to_string());
     };

@@ -19,6 +19,7 @@ import {
   Lock,
   AlertTriangle,
   CircleAlert,
+  Info,
   Play,
   RotateCw,
   History,
@@ -38,7 +39,9 @@ import {
   FolderPlus,
   ChevronRight,
   LogOut,
-  Pencil
+  Pencil,
+  FileText,
+  ChevronDown
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAccountStore } from '../stores/useAccountStore'
@@ -146,6 +149,15 @@ import {
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence'
 import { useAntigravityRuntimeTarget } from '../hooks/useAntigravityRuntimeTarget'
+import {
+  getMfaOtpToken,
+  getMfaTimeRemaining,
+  loadSavedMfaRecords,
+  parseMfaCredentialInput,
+  upsertSavedMfaRecord,
+  type MfaRecord,
+} from '../utils/mfaVault'
+import { findFirstMailVerificationCode, type MailVerificationCodePreview } from '../utils/mailVerificationCode'
 
 interface AccountsPageProps {
   onNavigate?: (page: Page) => void
@@ -228,6 +240,96 @@ const DEFAULT_TAG_FILTER: string[] = []
 
 const ANTIGRAVITY_CUSTOM_SORT_ORDER_KEY = 'agtools.antigravity.accounts.custom_sort_order.v1'
 const ANTIGRAVITY_CUSTOM_SORT_ACTIVE_KEY = 'agtools.antigravity.accounts.custom_sort_active.v1'
+const ANTIGRAVITY_ACCOUNT_NOTE_MAX_LENGTH = 200
+
+type AntigravityAccountNoteFormState = {
+  note: string
+  twoFactorSecret: string
+  accountPassword: string
+  phoneNumber: string
+  mailUrl: string
+}
+
+type AntigravityAccountNoteMailPreviewState = MailVerificationCodePreview & {
+  fetchedAt: number
+  truncated: boolean
+  status: 'initial' | 'changed' | 'unchanged'
+}
+
+const EMPTY_ANTIGRAVITY_ACCOUNT_NOTE_FORM: AntigravityAccountNoteFormState = {
+  note: '',
+  twoFactorSecret: '',
+  accountPassword: '',
+  phoneNumber: '',
+  mailUrl: '',
+}
+
+function buildAntigravityAccountNoteForm(account?: Account | null): AntigravityAccountNoteFormState {
+  return {
+    note: account?.notes ?? '',
+    twoFactorSecret: account?.two_factor_secret ?? '',
+    accountPassword: account?.account_password ?? '',
+    phoneNumber: account?.phone_number ?? '',
+    mailUrl: account?.mail_url ?? '',
+  }
+}
+
+function hasAntigravityAccountNoteDetails(account?: Account | null): boolean {
+  return Boolean(
+    account?.notes?.trim() ||
+      account?.two_factor_secret?.trim() ||
+      account?.account_password?.trim() ||
+      account?.phone_number?.trim() ||
+      account?.mail_url?.trim(),
+  )
+}
+
+function hasAntigravityAccountNoteFormDetails(form: AntigravityAccountNoteFormState): boolean {
+  return Boolean(
+    form.note.trim() ||
+      form.twoFactorSecret.trim() ||
+      form.accountPassword.trim() ||
+      form.phoneNumber.trim() ||
+      form.mailUrl.trim(),
+  )
+}
+
+function buildAntigravityAccountNoteUpdate(form: AntigravityAccountNoteFormState) {
+  return {
+    note: form.note,
+    twoFactorSecret: form.twoFactorSecret,
+    accountPassword: form.accountPassword,
+    phoneNumber: form.phoneNumber,
+    mailUrl: form.mailUrl,
+  }
+}
+
+function isPendingAntigravityAccount(account?: Account | null): boolean {
+  return Boolean(account?.pending_oauth)
+}
+
+function formatMfaRecordOption(record: MfaRecord, fallback: string): string {
+  return record.accountName?.trim() || fallback
+}
+
+function getAntigravityAccountNoteTitle(account: Account, fallback: string): string {
+  const values = [
+    account.account_password?.trim(),
+    account.two_factor_secret?.trim(),
+    account.mail_url?.trim(),
+    account.phone_number?.trim(),
+    account.notes?.trim(),
+  ].filter(Boolean)
+  return values.length > 0 ? values.join(' · ') : fallback
+}
+
+function formatAntigravityMailPreviewTime(timestamp: number): string {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).format(date)
+}
 
 function readAntigravityCustomSortOrder(): string[] {
   try {
@@ -285,7 +387,8 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     refreshAllQuotas,
     startOAuthLogin,
     switchAccount,
-    updateAccountTags
+    updateAccountTags,
+    updateAccountNotes
   } = useAccountStore()
   const currentAccount = currentAccountsByTarget[antigravityRuntimeTarget] ?? null
 
@@ -455,6 +558,10 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     text: string
     tone?: 'error'
   } | null>(null)
+  const [includeExportSensitiveNotes, setIncludeExportSensitiveNotes] = useState(false)
+  const includeExportSensitiveNotesRef = useRef(false)
+  const exportAccountIdsRef = useRef<string[]>([])
+  const exportSensitiveRefreshSeqRef = useRef(0)
   const [showSwitchHistoryModal, setShowSwitchHistoryModal] = useState(false)
   const [switchHistoryLoading, setSwitchHistoryLoading] = useState(false)
   const [switchHistoryClearing, setSwitchHistoryClearing] = useState(false)
@@ -465,7 +572,26 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
   )
   const exportModal = useExportJsonModal({
     exportFilePrefix: 'accounts_export',
-    exportJsonByIds: accountService.exportAccounts,
+    exportJsonByIds: async (ids) => {
+      const raw = await accountService.exportAccounts(ids)
+      if (includeExportSensitiveNotesRef.current) return raw
+      try {
+        const parsed = JSON.parse(raw) as unknown
+        const strip = (value: unknown): unknown => {
+          if (Array.isArray(value)) return value.map(strip)
+          if (!value || typeof value !== 'object') return value
+          const copy = { ...(value as Record<string, unknown>) }
+          delete copy.two_factor_secret
+          delete copy.account_password
+          delete copy.phone_number
+          delete copy.mail_url
+          return copy
+        }
+        return JSON.stringify(strip(parsed), null, 2)
+      } catch {
+        return raw
+      }
+    },
     onError: (error) => {
       setMessage({
         text: t('messages.exportFailed', { error: String(error) }),
@@ -523,6 +649,118 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
 
   // 标签编辑弹窗
   const [showTagModal, setShowTagModal] = useState<string | null>(null)
+
+  // 账号备注弹窗
+  const [editingAccountNoteId, setEditingAccountNoteId] = useState<string | null>(null)
+  const [oauthAccountNoteMode, setOauthAccountNoteMode] = useState(false)
+  const [pendingOAuthAccount, setPendingOAuthAccount] = useState<Account | null>(null)
+  const [pendingOAuthEmailInput, setPendingOAuthEmailInput] = useState('')
+  const [savingPendingOAuthAccount, setSavingPendingOAuthAccount] = useState(false)
+  const [pendingOAuthEmailError, setPendingOAuthEmailError] = useState<string | null>(null)
+  const [oauthAccountNoteForm, setOauthAccountNoteForm] = useState<AntigravityAccountNoteFormState>(
+    EMPTY_ANTIGRAVITY_ACCOUNT_NOTE_FORM,
+  )
+  const [editingAccountNoteForm, setEditingAccountNoteForm] = useState<AntigravityAccountNoteFormState>(
+    EMPTY_ANTIGRAVITY_ACCOUNT_NOTE_FORM,
+  )
+  const [savingAccountNote, setSavingAccountNote] = useState(false)
+  const [accountNoteSecretVisible, setAccountNoteSecretVisible] = useState(true)
+  const [accountNotePasswordVisible, setAccountNotePasswordVisible] = useState(true)
+  const [accountNoteCopiedKey, setAccountNoteCopiedKey] = useState<string | null>(null)
+  const [accountNoteFieldError, setAccountNoteFieldError] = useState<string | null>(null)
+  const [savedMfaRecords, setSavedMfaRecords] = useState<MfaRecord[]>([])
+  const [accountNoteMfaPickerOpen, setAccountNoteMfaPickerOpen] = useState(false)
+  const [mfaTimeRemaining, setMfaTimeRemaining] = useState(getMfaTimeRemaining)
+  const [accountNoteMailPreview, setAccountNoteMailPreview] = useState<AntigravityAccountNoteMailPreviewState | null>(null)
+  const [accountNoteMailPreviewLoading, setAccountNoteMailPreviewLoading] = useState(false)
+  const [accountNoteMailPreviewError, setAccountNoteMailPreviewError] = useState<string | null>(null)
+  const accountNoteMailPreviewSeqRef = useRef(0)
+  const accountNoteMailPreviewSnapshotRef = useRef<{ mailUrl: string; code: string } | null>(null)
+  const {
+    message: accountNoteError,
+    scrollKey: accountNoteErrorScrollKey,
+    set: setAccountNoteError,
+  } = useModalErrorState()
+  const editingAccountNoteAccount = useMemo(
+    () => accounts.find((account) => account.id === editingAccountNoteId) || null,
+    [accounts, editingAccountNoteId]
+  )
+  const activeAccountNoteForm = oauthAccountNoteMode || pendingOAuthAccount ? oauthAccountNoteForm : editingAccountNoteForm
+  const activeAccountNoteEmail = oauthAccountNoteMode
+    ? pendingOAuthAccount?.email ?? pendingOAuthEmailInput.trim()
+    : editingAccountNoteAccount?.email ?? ''
+
+  const openPendingOAuthAccount = useCallback((account: Account) => {
+    setPendingOAuthAccount(account)
+    setOauthAccountNoteMode(false)
+    setEditingAccountNoteId(null)
+    setEditingAccountNoteForm(EMPTY_ANTIGRAVITY_ACCOUNT_NOTE_FORM)
+    setAccountNoteError(null)
+    setShowAddModal(true)
+    setAddTab('oauth')
+    setOauthAccountNoteForm(buildAntigravityAccountNoteForm(account))
+    setPendingOAuthEmailInput(account.email)
+    setAddStatus('idle')
+    setAddMessage('')
+  }, [setAccountNoteError])
+
+  const resetAccountNoteMailPreview = useCallback(() => {
+    accountNoteMailPreviewSeqRef.current += 1
+    accountNoteMailPreviewSnapshotRef.current = null
+    setAccountNoteMailPreview(null)
+    setAccountNoteMailPreviewError(null)
+    setAccountNoteMailPreviewLoading(false)
+  }, [])
+
+  const fetchAccountNoteMailPreviewForUrl = useCallback(async (rawUrl: string) => {
+    const mailUrl = rawUrl.trim()
+    accountNoteMailPreviewSeqRef.current += 1
+    const requestSeq = accountNoteMailPreviewSeqRef.current
+    setAccountNoteMailPreview(null)
+    setAccountNoteMailPreviewError(null)
+    if (!mailUrl) {
+      accountNoteMailPreviewSnapshotRef.current = null
+      setAccountNoteMailPreviewLoading(false)
+      return
+    }
+    setAccountNoteMailPreviewLoading(true)
+    try {
+      const response = await accountService.fetchAccountNoteMailUrl(mailUrl)
+      if (accountNoteMailPreviewSeqRef.current !== requestSeq) return
+      const preview = findFirstMailVerificationCode(response.body)
+      if (!preview) {
+        setAccountNoteMailPreviewError(t('accounts.accountNote.mailPreviewNoCode', '未匹配到连续 6 位验证码'))
+        return
+      }
+      const previous = accountNoteMailPreviewSnapshotRef.current
+      const status = previous?.mailUrl === mailUrl
+        ? previous.code === preview.code ? 'unchanged' : 'changed'
+        : 'initial'
+      accountNoteMailPreviewSnapshotRef.current = { mailUrl, code: preview.code }
+      setAccountNoteMailPreview({ ...preview, fetchedAt: Date.now(), truncated: response.truncated, status })
+    } catch (error) {
+      if (accountNoteMailPreviewSeqRef.current !== requestSeq) return
+      const rawError = String(error).replace(/^Error:\s*/, '')
+      const httpError = rawError.match(/^MAIL_PREVIEW_HTTP_FAILED:(\d+)$/)
+      const detail = rawError === 'MAIL_URL_EMPTY'
+        ? t('accounts.accountNote.mailPreviewUrlRequired', '请输入邮件地址')
+        : rawError === 'MAIL_URL_INVALID'
+          ? t('accounts.accountNote.mailPreviewUrlInvalid', '邮件地址格式无效，请输入完整的 http:// 或 https:// 地址')
+          : rawError === 'MAIL_URL_UNSUPPORTED_SCHEME'
+            ? t('accounts.accountNote.mailPreviewUnsupportedProtocol', '邮件地址仅支持 http 或 https 协议')
+            : httpError
+              ? t('accounts.accountNote.mailPreviewHttpFailed', { defaultValue: '邮件地址请求失败：HTTP {{status}}', status: httpError[1] })
+              : rawError.replace(/^MAIL_PREVIEW_[A-Z_]+:\s*/, '')
+      setAccountNoteMailPreviewError(t('accounts.accountNote.mailPreviewFetchFailed', { defaultValue: '读取邮件失败：{{error}}', error: detail }))
+    } finally {
+      if (accountNoteMailPreviewSeqRef.current === requestSeq) setAccountNoteMailPreviewLoading(false)
+    }
+  }, [t])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setMfaTimeRemaining(getMfaTimeRemaining()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const [displayGroups, setDisplayGroups] = useState<DisplayGroup[]>([])
   const [displayGroupsLoaded, setDisplayGroupsLoaded] = useState(false)
@@ -680,6 +918,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
   const addTabRef = useRef(addTab)
   const oauthUrlRef = useRef(oauthUrl)
   const addStatusRef = useRef(addStatus)
+  const oauthAccountNoteFormRef = useRef(oauthAccountNoteForm)
   const addTargetGroupIdRef = useRef<string | null>(null)
   const verificationHistoryRequestIdRef = useRef(0)
   const colorPickerRef = useRef<HTMLDivElement>(null)
@@ -689,8 +928,9 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     addTabRef.current = addTab
     oauthUrlRef.current = oauthUrl
     addStatusRef.current = addStatus
+    oauthAccountNoteFormRef.current = oauthAccountNoteForm
     addTargetGroupIdRef.current = addTargetGroupId
-  }, [showAddModal, addTab, oauthUrl, addStatus, addTargetGroupId])
+  }, [showAddModal, addTab, oauthUrl, addStatus, oauthAccountNoteForm, addTargetGroupId])
 
   useEffect(() => {
     const handleFeatureUnlockChanged = (event: Event) => {
@@ -1497,7 +1737,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
       await fetchCurrentAccount(antigravityRuntimeTarget)
       const latestAccounts = useAccountStore.getState().accounts
       const accountsWithoutQuota = latestAccounts.filter(
-        (acc) => !acc.quota?.models?.length
+        (acc) => !acc.pending_oauth && !acc.quota?.models?.length
       )
       if (accountsWithoutQuota.length > 0) {
         await Promise.allSettled(
@@ -1554,7 +1794,9 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
       setAddStatus('loading')
       setAddMessage(t('accounts.oauth.authorizing'))
       try {
-        const newAccount = await accountService.completeOAuthLogin()
+        const newAccount = await accountService.completeOAuthLogin(
+          buildAntigravityAccountNoteUpdate(oauthAccountNoteFormRef.current),
+        )
         await fetchAccounts()
         await fetchCurrentAccount(antigravityRuntimeTarget)
         await assignAccountsToAddTargetGroup([newAccount], addTargetGroupIdRef.current)
@@ -1757,6 +1999,10 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     setAddTargetGroupId(resolveValidAccountGroupId(activeGroupId))
     setAddTab(tab)
     setShowAddModal(true)
+    setPendingOAuthAccount(null)
+    setPendingOAuthEmailInput('')
+    setOauthAccountNoteForm(EMPTY_ANTIGRAVITY_ACCOUNT_NOTE_FORM)
+    setPendingOAuthEmailError(null)
     resetAddModalState()
   }, [activeGroupId, resetAddModalState, resolveValidAccountGroupId])
 
@@ -1804,6 +2050,10 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     setAddTargetGroupId(null)
     resetAddModalState()
     setOauthUrl('')
+    setPendingOAuthAccount(null)
+    setPendingOAuthEmailInput('')
+    setPendingOAuthEmailError(null)
+    setOauthAccountNoteForm(EMPTY_ANTIGRAVITY_ACCOUNT_NOTE_FORM)
   }
 
   useEscClose(showAddModal, closeAddModal);
@@ -1857,7 +2107,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
 
   const handleOAuthStart = async () => {
     await runModalAction(t('modals.import.oauthAction'), async () => {
-      const account = await startOAuthLogin()
+      const account = await startOAuthLogin(buildAntigravityAccountNoteUpdate(oauthAccountNoteForm))
       await fetchAccounts()
       await fetchCurrentAccount(antigravityRuntimeTarget)
       await assignAccountsToAddTargetGroup([account])
@@ -1866,7 +2116,77 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
 
   const handleOAuthComplete = async () => {
     await runModalAction(t('modals.import.oauthAction'), async () => {
-      const account = await accountService.completeOAuthLogin()
+      const account = await accountService.completeOAuthLogin(
+        buildAntigravityAccountNoteUpdate(oauthAccountNoteForm),
+      )
+      await fetchAccounts()
+      await fetchCurrentAccount(antigravityRuntimeTarget)
+      await assignAccountsToAddTargetGroup([account])
+    })
+  }
+
+  const handleSavePendingOAuthAccount = async () => {
+    if (savingPendingOAuthAccount) return
+    const email = pendingOAuthEmailInput.trim()
+    setPendingOAuthEmailError(null)
+    if (!email || !email.includes('@')) {
+      setPendingOAuthEmailError(t('codex.pendingAuth.emailRequired', '请输入账号邮箱'))
+      return
+    }
+    const rawSecret = oauthAccountNoteForm.twoFactorSecret.trim()
+    const parsedSecret = rawSecret ? parseMfaCredentialInput(rawSecret) : null
+    if (rawSecret && !parsedSecret) {
+      setAccountNoteFieldError(t('accounts.accountNote.twoFactorSecretInvalid', '2FA 秘钥格式无效，请输入 Base32 secret 或 otpauth:// 链接'))
+      openOAuthAccountNoteModal()
+      return
+    }
+    setSavingPendingOAuthAccount(true)
+    setAddStatus('loading')
+    setAddMessage(t('codex.pendingAuth.saving', '正在保存待授权账号...'))
+    try {
+      const account = await accountService.createPendingOAuthAccount(email, {
+        ...buildAntigravityAccountNoteUpdate(oauthAccountNoteForm),
+        twoFactorSecret: parsedSecret?.secret ?? rawSecret,
+      })
+      setOauthAccountNoteForm((previous) => ({
+        ...previous,
+        twoFactorSecret: parsedSecret?.secret ?? rawSecret,
+      }))
+      await fetchAccounts()
+      await assignAccountsToAddTargetGroup([account])
+      setPendingOAuthAccount(account)
+      setAddStatus('success')
+      setAddMessage(t('codex.pendingAuth.saved', '待授权账号已保存'))
+      window.setTimeout(() => {
+        setShowAddModal(false)
+        resetAddModalState()
+        setOauthUrl('')
+        setPendingOAuthAccount(null)
+        setPendingOAuthEmailInput('')
+        setOauthAccountNoteForm(EMPTY_ANTIGRAVITY_ACCOUNT_NOTE_FORM)
+      }, 900)
+    } catch (error) {
+      setAddStatus('error')
+      setAddMessage(t('codex.pendingAuth.saveFailed', { defaultValue: '保存待授权账号失败：{{error}}', error: String(error).replace(/^Error:\s*/, '') }))
+    } finally {
+      setSavingPendingOAuthAccount(false)
+    }
+  }
+
+  const handlePendingOAuthStart = async () => {
+    if (!pendingOAuthAccount) return
+    await runModalAction(t('modals.import.oauthAction'), async () => {
+      const account = await accountService.startOAuthLogin(buildAntigravityAccountNoteUpdate(oauthAccountNoteForm))
+      await fetchAccounts()
+      await fetchCurrentAccount(antigravityRuntimeTarget)
+      await assignAccountsToAddTargetGroup([account])
+    })
+  }
+
+  const handlePendingOAuthComplete = async () => {
+    if (!pendingOAuthAccount) return
+    await runModalAction(t('modals.import.oauthAction'), async () => {
+      const account = await accountService.completeOAuthLogin(buildAntigravityAccountNoteUpdate(oauthAccountNoteForm))
       await fetchAccounts()
       await fetchCurrentAccount(antigravityRuntimeTarget)
       await assignAccountsToAddTargetGroup([account])
@@ -1875,6 +2195,11 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
 
   const handleSwitch = async (accountId: string) => {
     setMessage(null)
+    const targetAccount = accounts.find((account) => account.id === accountId)
+    if (isPendingAntigravityAccount(targetAccount)) {
+      if (targetAccount) openPendingOAuthAccount(targetAccount)
+      return
+    }
     setSwitching(accountId)
     try {
       const account = await switchAccount(accountId, antigravityRuntimeTarget)
@@ -2254,6 +2579,52 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
   }
 
   const handleTokenImport = async () => {
+    const trimmedInput = tokenInput.trim()
+    const quickNoteLines = trimmedInput.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.includes('----'))
+    if (quickNoteLines.length > 0 && !trimmedInput.startsWith('{') && !trimmedInput.startsWith('[')) {
+        setImporting(true)
+        setAddStatus('loading')
+        try {
+          const imported = await accountService.importFromJson(trimmedInput)
+          await fetchAccounts()
+          await assignAccountsToAddTargetGroup(imported)
+          setAddStatus('success')
+          setAddMessage(t('messages.importSuccess', { count: imported.length }))
+        } catch (error) {
+          setAddStatus('error')
+          setAddMessage(t('messages.importFailed', { error: String(error) }))
+        } finally {
+          setImporting(false)
+        }
+        return
+    }
+    if (trimmedInput.startsWith('{') || trimmedInput.startsWith('[')) {
+      setImporting(true)
+      setAddStatus('loading')
+      try {
+        const importedAccounts = await accountService.importFromJson(trimmedInput)
+        await Promise.allSettled(
+        importedAccounts.filter((account) => !account.pending_oauth).map((account) => refreshQuota(account.id, antigravityRuntimeTarget)),
+        )
+        await fetchAccounts()
+        await assignAccountsToAddTargetGroup(importedAccounts)
+        setAddStatus('success')
+        setAddMessage(t('accounts.token.importSuccess', { count: importedAccounts.length }))
+        if (importedAccounts.length > 0) {
+          window.setTimeout(() => {
+            setShowAddModal(false)
+            resetAddModalState()
+          }, 1200)
+        }
+      } catch (error) {
+        setAddStatus('error')
+        setAddMessage(t('messages.importFailed', { error: String(error) }))
+      } finally {
+        setImporting(false)
+      }
+      return
+    }
+
     const tokens = extractRefreshTokens(tokenInput)
     if (tokens.length === 0) {
       setAddStatus('error')
@@ -2287,7 +2658,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
 
     if (importedAccounts.length > 0) {
       await Promise.allSettled(
-        importedAccounts.map((acc) => refreshQuota(acc.id, antigravityRuntimeTarget))
+        importedAccounts.filter((acc) => !acc.pending_oauth).map((acc) => refreshQuota(acc.id, antigravityRuntimeTarget))
       )
       await fetchAccounts()
       await assignAccountsToAddTargetGroup(importedAccounts)
@@ -2341,6 +2712,9 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     const selectedVisibleIds = Array.from(selected).filter((id) => visibleIdSet.has(id))
     const ids = selectedVisibleIds.length > 0 ? selectedVisibleIds : filteredAccounts.map((account) => account.id)
     if (ids.length === 0) return
+    exportAccountIdsRef.current = ids
+    includeExportSensitiveNotesRef.current = false
+    setIncludeExportSensitiveNotes(false)
     await exportModal.startExport(ids)
   }
 
@@ -2507,6 +2881,170 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
   const openTagModal = (accountId: string) => {
     setShowTagModal(accountId);
   };
+
+  const openAccountNoteModal = useCallback((account: Account) => {
+    setOauthAccountNoteMode(false)
+    setEditingAccountNoteId(account.id)
+    setEditingAccountNoteForm(buildAntigravityAccountNoteForm(account))
+    setAccountNoteSecretVisible(true)
+    setAccountNotePasswordVisible(true)
+    setAccountNoteCopiedKey(null)
+    setAccountNoteFieldError(null)
+    setAccountNoteMfaPickerOpen(false)
+    setSavedMfaRecords(loadSavedMfaRecords())
+    setAccountNoteError(null)
+    resetAccountNoteMailPreview()
+  }, [resetAccountNoteMailPreview, setAccountNoteError])
+
+  const openOAuthAccountNoteModal = useCallback(() => {
+    setOauthAccountNoteMode(true)
+    setEditingAccountNoteId(null)
+    setEditingAccountNoteForm(EMPTY_ANTIGRAVITY_ACCOUNT_NOTE_FORM)
+    setAccountNoteSecretVisible(true)
+    setAccountNotePasswordVisible(true)
+    setAccountNoteCopiedKey(null)
+    setAccountNoteFieldError(null)
+    setAccountNoteMfaPickerOpen(false)
+    setSavedMfaRecords(loadSavedMfaRecords())
+    setAccountNoteError(null)
+    resetAccountNoteMailPreview()
+  }, [resetAccountNoteMailPreview, setAccountNoteError])
+
+  useEffect(() => {
+    if (editingAccountNoteId && editingAccountNoteAccount?.mail_url?.trim()) {
+      void fetchAccountNoteMailPreviewForUrl(editingAccountNoteAccount.mail_url)
+    }
+  }, [editingAccountNoteAccount, editingAccountNoteId, fetchAccountNoteMailPreviewForUrl])
+
+  useEffect(() => {
+    if (oauthAccountNoteMode && oauthAccountNoteForm.mailUrl.trim()) {
+      void fetchAccountNoteMailPreviewForUrl(oauthAccountNoteForm.mailUrl)
+    }
+  }, [fetchAccountNoteMailPreviewForUrl, oauthAccountNoteForm.mailUrl, oauthAccountNoteMode])
+
+  const closeAccountNoteModal = useCallback(() => {
+    if (savingAccountNote) return
+    setEditingAccountNoteId(null)
+    setOauthAccountNoteMode(false)
+    setEditingAccountNoteForm(EMPTY_ANTIGRAVITY_ACCOUNT_NOTE_FORM)
+    setAccountNoteCopiedKey(null)
+    setAccountNoteFieldError(null)
+    setAccountNoteMfaPickerOpen(false)
+    setAccountNoteError(null)
+    resetAccountNoteMailPreview()
+  }, [resetAccountNoteMailPreview, savingAccountNote, setAccountNoteError])
+
+  const updateEditingAccountNoteForm = useCallback(
+    (update: Partial<AntigravityAccountNoteFormState>) => {
+      if (oauthAccountNoteMode) {
+        setOauthAccountNoteForm((previous) => ({ ...previous, ...update }))
+      } else {
+        setEditingAccountNoteForm((previous) => ({ ...previous, ...update }))
+      }
+      if (Object.prototype.hasOwnProperty.call(update, 'twoFactorSecret')) {
+        setAccountNoteFieldError(null)
+      }
+      if (Object.prototype.hasOwnProperty.call(update, 'mailUrl')) {
+        setAccountNoteMailPreview(null)
+        setAccountNoteMailPreviewError(null)
+      }
+      setAccountNoteError(null)
+    },
+    [oauthAccountNoteMode, setAccountNoteError],
+  )
+
+  const copyAccountNoteValue = useCallback(async (key: string, value: string) => {
+    const text = value.trim()
+    if (!text) return
+    await navigator.clipboard.writeText(text)
+    setAccountNoteCopiedKey(key)
+    window.setTimeout(() => setAccountNoteCopiedKey((current) => (current === key ? null : current)), 1200)
+  }, [])
+
+  const handleSaveAccountNote = useCallback(async () => {
+    if ((!editingAccountNoteId && !oauthAccountNoteMode) || savingAccountNote) return
+    setSavingAccountNote(true)
+    setAccountNoteError(null)
+    setAccountNoteFieldError(null)
+    try {
+      const rawTwoFactorSecret = activeAccountNoteForm.twoFactorSecret.trim()
+      const parsedTwoFactorSecret = rawTwoFactorSecret
+        ? parseMfaCredentialInput(rawTwoFactorSecret)
+        : null
+      if (rawTwoFactorSecret && !parsedTwoFactorSecret) {
+        setAccountNoteFieldError(
+          t('accounts.accountNote.twoFactorSecretInvalid', '2FA 秘钥格式无效，请输入 Base32 secret 或 otpauth:// 链接'),
+        )
+        return
+      }
+      const normalizedTwoFactorSecret = parsedTwoFactorSecret?.secret ?? rawTwoFactorSecret
+      const noteUpdate = {
+        note: activeAccountNoteForm.note,
+        twoFactorSecret: normalizedTwoFactorSecret,
+        accountPassword: activeAccountNoteForm.accountPassword,
+        phoneNumber: activeAccountNoteForm.phoneNumber,
+        mailUrl: activeAccountNoteForm.mailUrl,
+      }
+      if (oauthAccountNoteMode) {
+        setOauthAccountNoteForm({ ...activeAccountNoteForm, twoFactorSecret: normalizedTwoFactorSecret })
+      } else if (editingAccountNoteId) {
+        await updateAccountNotes(editingAccountNoteId, noteUpdate)
+      }
+      if (normalizedTwoFactorSecret) {
+        setSavedMfaRecords(upsertSavedMfaRecord({
+          secret: normalizedTwoFactorSecret,
+          accountName: editingAccountNoteAccount?.email ?? parsedTwoFactorSecret?.accountName ?? null,
+          remark: activeAccountNoteForm.note,
+        }))
+      }
+      setMessage({ text: t('accounts.accountNote.saved', '账号备注已保存') })
+      setEditingAccountNoteId(null)
+      setOauthAccountNoteMode(false)
+      setEditingAccountNoteForm(EMPTY_ANTIGRAVITY_ACCOUNT_NOTE_FORM)
+    } catch (error) {
+      setAccountNoteError(
+        t('accounts.accountNote.saveFailed', {
+          error: String(error).replace(/^Error:\s*/, ''),
+          defaultValue: '保存账号备注失败：{{error}}',
+        })
+      )
+    } finally {
+      setSavingAccountNote(false)
+    }
+  }, [
+    activeAccountNoteForm,
+    editingAccountNoteId,
+    editingAccountNoteAccount,
+    oauthAccountNoteMode,
+    savingAccountNote,
+    setAccountNoteError,
+    t,
+    updateAccountNotes,
+  ])
+
+  const accountNoteOtpToken = useMemo(() => {
+    const secret = activeAccountNoteForm.twoFactorSecret.trim()
+    return secret ? getMfaOtpToken(secret) : ''
+  }, [activeAccountNoteForm.twoFactorSecret, mfaTimeRemaining])
+
+  const renderAccountNoteChip = useCallback((account: Account) => {
+    const hasNote = hasAntigravityAccountNoteDetails(account)
+    return (
+      <button
+        type="button"
+        className={`codex-account-note-chip ${hasNote ? 'has-note' : 'empty-note'}`}
+        onClick={() => openAccountNoteModal(account)}
+        title={hasNote
+          ? getAntigravityAccountNoteTitle(account, t('accounts.accountNote.short', '账号备注'))
+          : t('accounts.accountNote.emptyTitle', '填写账号备注')}
+      >
+        <FileText size={12} />
+        <span>{hasNote ? t('accounts.accountNote.short', '账号备注') : t('accounts.accountNote.addShort', '加备注')}</span>
+      </button>
+    )
+  }, [openAccountNoteModal, t])
+
+  useEscClose((Boolean(editingAccountNoteId) || oauthAccountNoteMode) && !savingAccountNote, closeAccountNoteModal)
 
   const handleSaveTags = async (tags: string[], notes?: string) => {
     if (!showTagModal) return;
@@ -2810,6 +3348,9 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
             <span className={`tier-badge ${tierBadge.className}`}>
               {tierBadge.label}
             </span>
+            {isPendingAntigravityAccount(account) && (
+              <span className="status-pill warning">{t('codex.pendingAuth.badge', '待授权')}</span>
+            )}
             {(() => {
               const vBadge = getVerificationBadge(account)
               return vBadge ? (
@@ -2818,6 +3359,15 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                 </span>
               ) : null
             })()}
+          </div>
+
+          <div className="account-sub-line antigravity-account-meta-inline">
+            {renderAccountNoteChip(account)}
+            {isPendingAntigravityAccount(account) && (
+              <button type="button" className="btn btn-sm btn-outline" onClick={() => openPendingOAuthAccount(account)}>
+                {t('codex.pendingAuth.authorizeAction', '授权添加')}
+              </button>
+            )}
           </div>
 
           {account.notes && (
@@ -2862,6 +3412,16 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
           <div className="card-footer">
             <span className="card-date">{formatDate(account.created_at)}</span>
             <div className="card-actions">
+              {isPendingAntigravityAccount(account) && (
+                <button
+                  type="button"
+                  className="card-action-btn pending-auth-action"
+                  onClick={() => openPendingOAuthAccount(account)}
+                  title={t('common.shared.addModal.oauth', 'OAuth 授权')}
+                >
+                  <Globe size={14} />
+                </button>
+              )}
               {(hasQuotaError || hasVerificationIssue) && (
                 <button
                   className="card-action-btn is-danger"
@@ -2888,6 +3448,15 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                 title={t('accounts.editTags', '编辑标签')}
               >
                 <Tag size={14} />
+              </button>
+              <button
+                type="button"
+                className={`card-action-btn ${hasAntigravityAccountNoteDetails(account) ? 'active' : ''}`}
+                onClick={() => isPendingAntigravityAccount(account) ? openPendingOAuthAccount(account) : openAccountNoteModal(account)}
+                title={hasAntigravityAccountNoteDetails(account) ? t('accounts.accountNote.short', '账号备注') : t('accounts.accountNote.emptyTitle', '填写账号备注')}
+                aria-label={t('accounts.accountNote.title', '账号备注')}
+              >
+                <FileText size={14} />
               </button>
               <button
                 className={`card-action-btn ${!isCurrent ? 'success' : ''}`}
@@ -3062,6 +3631,9 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     const baseName = account.email.includes('@')
       ? account.email.slice(0, account.email.indexOf('@'))
       : account.email
+    exportAccountIdsRef.current = [account.id]
+    includeExportSensitiveNotesRef.current = false
+    setIncludeExportSensitiveNotes(false)
     await exportModal.startExport([account.id], baseName)
   }
 
@@ -3194,6 +3766,19 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                 </span>
               )}
             </div>
+            <button
+              type="button"
+              className={`${styles.noteBtn} ${hasAntigravityAccountNoteDetails(account) ? styles.noteBtnActive : ''}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                openAccountNoteModal(account)
+              }}
+              title={hasAntigravityAccountNoteDetails(account) ? t('accounts.accountNote.short', '账号备注') : t('accounts.accountNote.emptyTitle', '填写账号备注')}
+              aria-label={t('accounts.accountNote.title', '账号备注')}
+            >
+              <FileText size={12} />
+              <span>{hasAntigravityAccountNoteDetails(account) ? t('accounts.accountNote.short', '账号备注') : t('accounts.accountNote.addShort', '加备注')}</span>
+            </button>
             <button
               type="button"
               className={styles.switchBtn}
@@ -3396,6 +3981,17 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                     {t('accounts.status.current')}
                   </span>
                 )}
+                {isPendingAntigravityAccount(account) && (
+                  <span className="status-pill warning">{t('codex.pendingAuth.badge', '待授权')}</span>
+                )}
+              </div>
+              <div className="account-sub-line antigravity-account-meta-inline">
+                {renderAccountNoteChip(account)}
+                {isPendingAntigravityAccount(account) && (
+                  <button type="button" className="btn btn-sm btn-outline" onClick={() => openPendingOAuthAccount(account)}>
+                    {t('codex.pendingAuth.authorizeAction', '授权添加')}
+                  </button>
+                )}
               </div>
               <div className="account-sub-line">
                 <span className={`tier-badge ${tierBadge.className}`}>
@@ -3456,6 +4052,11 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
           </td>
           <td className="sticky-action-cell table-action-cell">
             <div className="action-buttons">
+              {isPendingAntigravityAccount(account) && (
+                <button type="button" className="action-btn" onClick={() => openPendingOAuthAccount(account)} title={t('common.shared.addModal.oauth', 'OAuth 授权')}>
+                  <Globe size={16} />
+                </button>
+              )}
               {(hasQuotaError || hasVerificationIssue) && (
                 <button
                   className="action-btn is-danger"
@@ -3482,6 +4083,15 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                 title={t('accounts.editTags', '编辑标签')}
               >
                 <Tag size={16} />
+              </button>
+              <button
+                type="button"
+                className={`action-btn ${hasAntigravityAccountNoteDetails(account) ? 'active' : ''}`}
+                onClick={() => isPendingAntigravityAccount(account) ? openPendingOAuthAccount(account) : openAccountNoteModal(account)}
+                title={hasAntigravityAccountNoteDetails(account) ? t('accounts.accountNote.short', '账号备注') : t('accounts.accountNote.emptyTitle', '填写账号备注')}
+                aria-label={t('accounts.accountNote.title', '账号备注')}
+              >
+                <FileText size={16} />
               </button>
               <button
                 className={`action-btn ${!isCurrent ? 'success' : ''}`}
@@ -4085,6 +4695,45 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
 
               {addTab === 'oauth' && (
                 <div className="add-panel">
+                  <div className="codex-pending-oauth-draft antigravity-pending-oauth-draft">
+                    <div className="oauth-link">
+                      <label>{t('codex.pendingAuth.emailLabel', '待授权账号')}</label>
+                      <div className="oauth-link-row oauth-manual-input">
+                        <input
+                          type="email"
+                          value={pendingOAuthEmailInput}
+                          onChange={(event) => {
+                            setPendingOAuthEmailInput(event.target.value)
+                            setPendingOAuthEmailError(null)
+                          }}
+                          placeholder={t('codex.pendingAuth.emailPlaceholder', '输入账号邮箱')}
+                          readOnly={Boolean(pendingOAuthAccount)}
+                          disabled={savingPendingOAuthAccount}
+                        />
+                        {pendingOAuthAccount ? (
+                          <button type="button" className="btn btn-secondary icon-only" onClick={() => void copyAccountNoteValue('pendingEmail', pendingOAuthEmailInput)} aria-label={t('common.copy', '复制')}>
+                            {accountNoteCopiedKey === 'pendingEmail' ? <Check size={14} /> : <Copy size={14} />}
+                          </button>
+                        ) : null}
+                      </div>
+                      {pendingOAuthEmailError ? <span className="codex-account-note-field-error">{pendingOAuthEmailError}</span> : null}
+                    </div>
+                    <button
+                      type="button"
+                      className={`codex-account-note-chip ${hasAntigravityAccountNoteFormDetails(oauthAccountNoteForm) ? 'has-note' : 'empty-note'}`}
+                      onClick={openOAuthAccountNoteModal}
+                      disabled={savingPendingOAuthAccount || addStatus === 'loading'}
+                    >
+                      <FileText size={12} />
+                      <span>{hasAntigravityAccountNoteFormDetails(oauthAccountNoteForm) ? t('accounts.accountNote.short', '账号备注') : t('accounts.accountNote.addShort', '加备注')}</span>
+                    </button>
+                    {!pendingOAuthAccount ? (
+                      <button type="button" className="btn btn-secondary btn-full" onClick={() => void handleSavePendingOAuthAccount()} disabled={savingPendingOAuthAccount || !pendingOAuthEmailInput.trim()}>
+                        {savingPendingOAuthAccount ? <RefreshCw size={16} className="loading-spinner" /> : <FileText size={16} />}
+                        {t('codex.pendingAuth.saveDraft', '保存待授权卡片')}
+                      </button>
+                    ) : null}
+                  </div>
                   <div className="oauth-hint">
                     <Globe size={18} />
                     <span>{t('accounts.oauth.hint')}</span>
@@ -4092,14 +4741,14 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                   <div className="oauth-actions">
                     <button
                       className="btn btn-primary"
-                      onClick={handleOAuthStart}
+                      onClick={pendingOAuthAccount ? handlePendingOAuthStart : handleOAuthStart}
                       disabled={addStatus === 'loading'}
                     >
                       <Globe size={16} /> {t('accounts.oauth.start')}
                     </button>
                     <button
                       className="btn btn-secondary"
-                      onClick={handleOAuthComplete}
+                      onClick={pendingOAuthAccount ? handlePendingOAuthComplete : handleOAuthComplete}
                       disabled={!oauthUrl || addStatus === 'loading'}
                     >
                       <Check size={16} /> {t('accounts.oauth.continue')}
@@ -4293,6 +4942,52 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
         savedPath={exportModal.savedPath}
         canOpenSavedDirectory={exportModal.canOpenSavedDirectory}
         pathCopied={exportModal.pathCopied}
+        toolbarContent={
+          <>
+            <label className="export-json-sensitive-toggle" title={t('accounts.accountNote.exportSensitiveToggleHint', '控制导出 JSON 是否包含 2FA 秘钥、密码、手机号和邮件地址。')}>
+              <input type="checkbox" checked={includeExportSensitiveNotes} onChange={(event) => {
+                includeExportSensitiveNotesRef.current = event.target.checked
+                setIncludeExportSensitiveNotes(event.target.checked)
+                const includeSensitive = event.target.checked
+                const requestSeq = ++exportSensitiveRefreshSeqRef.current
+                void accountService.exportAccounts(exportAccountIdsRef.current).then((raw) => {
+                  if (exportSensitiveRefreshSeqRef.current !== requestSeq) return
+                  if (includeSensitive) {
+                    exportModal.replaceJsonContent(raw)
+                    return
+                  }
+                  try {
+                    const parsed = JSON.parse(raw) as Array<Record<string, unknown>>
+                    parsed.forEach((item) => {
+                      delete item.two_factor_secret
+                      delete item.account_password
+                      delete item.phone_number
+                      delete item.mail_url
+                    })
+                    exportModal.replaceJsonContent(JSON.stringify(parsed, null, 2))
+                  } catch {
+                    exportModal.replaceJsonContent(raw)
+                  }
+                }).catch((error) => {
+                  if (exportSensitiveRefreshSeqRef.current !== requestSeq) return
+                  setMessage({
+                    text: t('messages.exportFailed', { error: String(error) }),
+                    tone: 'error',
+                  })
+                })
+              }} />
+              <span className="export-json-sensitive-switch" />
+              <span>{includeExportSensitiveNotes ? t('accounts.accountNote.exportSensitiveIncluded', '包含敏感备注') : t('accounts.accountNote.exportSensitiveExcluded', '已排除敏感备注')}</span>
+              <Info size={14} />
+            </label>
+            {includeExportSensitiveNotes ? (
+              <div className="export-json-sensitive-notice">
+                <Info size={14} />
+                <span>{t('accounts.accountNote.exportSensitiveNotice', '导出内容包含 2FA 秘钥、密码、手机号或邮件地址，请只保存到可信位置。')}</span>
+              </div>
+            ) : null}
+          </>
+        }
         onClose={exportModal.closeModal}
         onToggleHidden={exportModal.toggleHidden}
         onCopyJson={exportModal.copyJson}
@@ -5109,6 +5804,308 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
         onClose={() => setShowTagModal(null)}
         onSave={handleSaveTags}
       />
+
+      {(editingAccountNoteAccount || oauthAccountNoteMode) && createPortal(
+        <div className="modal-overlay">
+          <div
+            className="modal antigravity-account-note-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="antigravity-account-note-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2 id="antigravity-account-note-title">
+                {t('accounts.accountNote.title', '账号备注')}
+              </h2>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={closeAccountNoteModal}
+                disabled={savingAccountNote}
+                aria-label={t('common.close', '关闭')}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body antigravity-account-note-body">
+              <ModalErrorMessage
+                message={accountNoteError}
+                scrollKey={accountNoteErrorScrollKey}
+              />
+              <p className="antigravity-account-note-desc">
+                {t('accounts.accountNote.desc', {
+                  account: maskAccountText(activeAccountNoteEmail),
+                  defaultValue: '给 {{account}} 填写密码、2FA、邮件地址、手机号和其他备注。',
+                })}
+              </p>
+              <div className="codex-account-note-field">
+                <span>{t('common.shared.columns.email', '邮箱')}</span>
+                <div className="codex-account-note-readonly-row">
+                  {oauthAccountNoteMode && !pendingOAuthAccount ? (
+                    <input
+                      className="codex-account-note-input"
+                      type="email"
+                      value={pendingOAuthEmailInput}
+                      onChange={(event) => {
+                        setPendingOAuthEmailInput(event.target.value)
+                        setPendingOAuthEmailError(null)
+                      }}
+                      placeholder={t('codex.pendingAuth.emailPlaceholder', '输入账号邮箱')}
+                      disabled={savingAccountNote}
+                    />
+                  ) : (
+                    <span className={`codex-account-note-readonly-value ${activeAccountNoteEmail ? '' : 'is-empty'}`} title={activeAccountNoteEmail}>
+                      {activeAccountNoteEmail || '-'}
+                    </span>
+                  )}
+                  <button type="button" className="codex-account-note-icon-btn" onClick={() => void copyAccountNoteValue('email', activeAccountNoteEmail)} disabled={savingAccountNote || !activeAccountNoteEmail} aria-label={t('common.copy', '复制')}>
+                    {accountNoteCopiedKey === 'email' ? <Check size={14} /> : <Copy size={14} />}
+                  </button>
+                </div>
+                {pendingOAuthEmailError ? <span className="codex-account-note-field-error">{pendingOAuthEmailError}</span> : null}
+              </div>
+              <label className="codex-account-note-field">
+                <span>{t('accounts.accountNote.passwordLabel', '账号密码')}</span>
+                <div className="codex-account-note-input-row">
+                  <input
+                    className="codex-account-note-input"
+                    type={accountNotePasswordVisible ? 'text' : 'password'}
+                    value={activeAccountNoteForm.accountPassword}
+                    onChange={(event) => updateEditingAccountNoteForm({ accountPassword: event.target.value })}
+                    placeholder={t('accounts.accountNote.passwordPlaceholder', '登录密码或临时密码')}
+                    disabled={savingAccountNote}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    className="codex-account-note-icon-btn"
+                    onClick={() => setAccountNotePasswordVisible((value) => !value)}
+                    disabled={savingAccountNote}
+                    aria-label={accountNotePasswordVisible ? t('accounts.accountNote.hide', '隐藏') : t('accounts.accountNote.show', '显示')}
+                  >
+                    {accountNotePasswordVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="codex-account-note-icon-btn"
+                    onClick={() => void copyAccountNoteValue('password', activeAccountNoteForm.accountPassword)}
+                    disabled={savingAccountNote || !activeAccountNoteForm.accountPassword.trim()}
+                    aria-label={t('common.copy', '复制')}
+                  >
+                    {accountNoteCopiedKey === 'password' ? <Check size={14} /> : <Copy size={14} />}
+                  </button>
+                </div>
+              </label>
+              <label className="codex-account-note-field">
+                <span>{t('accounts.accountNote.twoFactorSecretLabel', '2FA 秘钥')}</span>
+                <div className="codex-account-note-input-row">
+                  <input
+                    className={`codex-account-note-input ${accountNoteFieldError ? 'has-error' : ''}`}
+                    type={accountNoteSecretVisible ? 'text' : 'password'}
+                    value={activeAccountNoteForm.twoFactorSecret}
+                    onChange={(event) => updateEditingAccountNoteForm({ twoFactorSecret: event.target.value })}
+                    placeholder={t('accounts.accountNote.twoFactorSecretPlaceholder', 'Base32 secret 或 otpauth:// 链接')}
+                    disabled={savingAccountNote}
+                  />
+                  <button
+                    type="button"
+                    className="codex-account-note-icon-btn"
+                    onClick={() => {
+                      setSavedMfaRecords(loadSavedMfaRecords())
+                      setAccountNoteMfaPickerOpen((value) => !value)
+                    }}
+                    disabled={savingAccountNote || savedMfaRecords.length === 0}
+                    aria-label={t('mfaQuick.selectLabel', '选择 2FA 秘钥')}
+                  >
+                    <ChevronDown size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="codex-account-note-icon-btn"
+                    onClick={() => setAccountNoteSecretVisible((value) => !value)}
+                    disabled={savingAccountNote}
+                    aria-label={accountNoteSecretVisible ? t('accounts.accountNote.hide', '隐藏') : t('accounts.accountNote.show', '显示')}
+                  >
+                    {accountNoteSecretVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="codex-account-note-icon-btn"
+                    onClick={() => void copyAccountNoteValue('twoFactorSecret', activeAccountNoteForm.twoFactorSecret)}
+                    disabled={savingAccountNote || !activeAccountNoteForm.twoFactorSecret.trim()}
+                    aria-label={t('common.copy', '复制')}
+                  >
+                    {accountNoteCopiedKey === 'twoFactorSecret' ? <Check size={14} /> : <Copy size={14} />}
+                  </button>
+                </div>
+                {accountNoteMfaPickerOpen && savedMfaRecords.length > 0 ? (
+                  <div className="codex-account-note-mfa-picker" role="listbox">
+                    {savedMfaRecords.map((record) => (
+                      <button
+                        key={record.id}
+                        type="button"
+                        className={`codex-account-note-mfa-option ${record.secret.trim() === activeAccountNoteForm.twoFactorSecret.trim() ? 'is-selected' : ''}`}
+                        onClick={() => {
+                          updateEditingAccountNoteForm({ twoFactorSecret: record.secret })
+                          setAccountNoteMfaPickerOpen(false)
+                        }}
+                      >
+                        <span className="codex-account-note-mfa-option__main">
+                          <strong>{formatMfaRecordOption(record, t('mfaQuick.unnamedSecret', '未命名秘钥'))}</strong>
+                          {record.remark?.trim() ? <em>{record.remark}</em> : null}
+                        </span>
+                        <span className="codex-account-note-mfa-option__side">
+                          {getMfaOtpToken(record.secret) || '••••••'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {accountNoteFieldError ? (
+                  <span className="codex-account-note-field-error">{accountNoteFieldError}</span>
+                ) : activeAccountNoteForm.twoFactorSecret.trim() && accountNoteOtpToken ? (
+                  <div className="codex-account-note-otp-preview">
+                    <span>{t('accounts.accountNote.currentOtp', '当前验证码')}</span>
+                    <strong>{accountNoteOtpToken}</strong>
+                    <button
+                      type="button"
+                      className="codex-account-note-icon-btn"
+                      onClick={() => void copyAccountNoteValue('otp', accountNoteOtpToken)}
+                      aria-label={t('common.copy', '复制')}
+                    >
+                      {accountNoteCopiedKey === 'otp' ? <Check size={14} /> : <Copy size={14} />}
+                    </button>
+                    <em>{t('accounts.accountNote.otpRemaining', { seconds: mfaTimeRemaining, defaultValue: '{{seconds}}秒' })}</em>
+                  </div>
+                ) : null}
+              </label>
+              <label className="codex-account-note-field">
+                <span>{t('accounts.accountNote.mailUrlLabel', '邮件地址')}</span>
+                <div className="codex-account-note-input-row">
+                  <input
+                    className="codex-account-note-input"
+                    type="url"
+                    value={activeAccountNoteForm.mailUrl}
+                    onChange={(event) => updateEditingAccountNoteForm({ mailUrl: event.target.value })}
+                    placeholder={t('accounts.accountNote.mailUrlPlaceholder', '填写可打开的邮件查询网页地址')}
+                    disabled={savingAccountNote}
+                  />
+                  <button
+                    type="button"
+                    className="codex-account-note-icon-btn"
+                    onClick={() => void fetchAccountNoteMailPreviewForUrl(activeAccountNoteForm.mailUrl)}
+                    disabled={savingAccountNote || !activeAccountNoteForm.mailUrl.trim()}
+                    aria-label={t('accounts.accountNote.mailPreviewRefresh', '刷新邮件')}
+                  >
+                    <RefreshCw size={14} className={accountNoteMailPreviewLoading ? 'loading-spinner' : ''} />
+                  </button>
+                  <button
+                    type="button"
+                    className="codex-account-note-icon-btn"
+                    onClick={() => void openUrl(activeAccountNoteForm.mailUrl.trim())}
+                    disabled={savingAccountNote || !activeAccountNoteForm.mailUrl.trim()}
+                    aria-label={t('accounts.accountNote.mailPreviewOpen', '浏览器查看')}
+                  >
+                    <ExternalLink size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="codex-account-note-icon-btn"
+                    onClick={() => void copyAccountNoteValue('mailUrl', activeAccountNoteForm.mailUrl)}
+                    disabled={savingAccountNote || !activeAccountNoteForm.mailUrl.trim()}
+                    aria-label={t('common.copy', '复制')}
+                  >
+                    {accountNoteCopiedKey === 'mailUrl' ? <Check size={14} /> : <Copy size={14} />}
+                  </button>
+                </div>
+                {accountNoteMailPreviewLoading ? (
+                  <div className="codex-account-note-mail-preview is-loading">{t('accounts.accountNote.mailPreviewLoading', '读取邮件中...')}</div>
+                ) : accountNoteMailPreviewError ? (
+                  <span className="codex-account-note-field-error">{accountNoteMailPreviewError}</span>
+                ) : accountNoteMailPreview ? (
+                  <div className={`codex-account-note-mail-preview ${accountNoteMailPreview.status === 'changed' ? 'is-changed' : ''}`}>
+                    <div className="codex-account-note-mail-preview__code">
+                      <span>{t('accounts.accountNote.mailPreviewCode', '最近一条邮箱验证码')}</span>
+                      <strong>{accountNoteMailPreview.code}</strong>
+                      <button type="button" className="codex-account-note-icon-btn" onClick={() => void copyAccountNoteValue('mailCode', accountNoteMailPreview.code)} disabled={savingAccountNote} aria-label={t('common.copy', '复制')}>
+                        {accountNoteCopiedKey === 'mailCode' ? <Check size={14} /> : <Copy size={14} />}
+                      </button>
+                    </div>
+                    <p title={accountNoteMailPreview.snippet}>{accountNoteMailPreview.snippet}</p>
+                    <em className={`codex-account-note-mail-preview__status status-${accountNoteMailPreview.status}`}>
+                      {accountNoteMailPreview.status === 'changed'
+                        ? t('accounts.accountNote.mailPreviewStatusChanged', { defaultValue: '新验证码 · {{time}}', time: formatAntigravityMailPreviewTime(accountNoteMailPreview.fetchedAt) })
+                        : accountNoteMailPreview.status === 'unchanged'
+                          ? t('accounts.accountNote.mailPreviewStatusUnchanged', { defaultValue: '未变化 · {{time}}', time: formatAntigravityMailPreviewTime(accountNoteMailPreview.fetchedAt) })
+                          : t('accounts.accountNote.mailPreviewStatusInitial', { defaultValue: '获取于 {{time}}', time: formatAntigravityMailPreviewTime(accountNoteMailPreview.fetchedAt) })}
+                    </em>
+                    {accountNoteMailPreview.truncated ? <em>{t('accounts.accountNote.mailPreviewTruncated', '内容已截断')}</em> : null}
+                  </div>
+                ) : null}
+              </label>
+              <label className="codex-account-note-field">
+                <span>{t('accounts.accountNote.phoneNumberLabel', '手机号')}</span>
+                <div className="codex-account-note-input-row">
+                  <input
+                    className="codex-account-note-input"
+                    type="tel"
+                    value={activeAccountNoteForm.phoneNumber}
+                    onChange={(event) => updateEditingAccountNoteForm({ phoneNumber: event.target.value })}
+                    placeholder={t('accounts.accountNote.phoneNumberPlaceholder', '绑定手机号')}
+                    disabled={savingAccountNote}
+                  />
+                  <button
+                    type="button"
+                    className="codex-account-note-icon-btn"
+                    onClick={() => void copyAccountNoteValue('phoneNumber', activeAccountNoteForm.phoneNumber)}
+                    disabled={savingAccountNote || !activeAccountNoteForm.phoneNumber.trim()}
+                    aria-label={t('common.copy', '复制')}
+                  >
+                    {accountNoteCopiedKey === 'phoneNumber' ? <Check size={14} /> : <Copy size={14} />}
+                  </button>
+                </div>
+              </label>
+              <label className="antigravity-account-note-field">
+                <span>{t('accounts.accountNote.otherNoteLabel', '其他备注')}</span>
+                <textarea
+                  value={activeAccountNoteForm.note}
+                  onChange={(event) => updateEditingAccountNoteForm({ note: event.target.value })}
+                  placeholder={t('accounts.accountNote.placeholder', '其他交付备注、辅助邮箱或账号说明')}
+                  maxLength={ANTIGRAVITY_ACCOUNT_NOTE_MAX_LENGTH}
+                  rows={4}
+                  disabled={savingAccountNote}
+                  autoFocus
+                />
+                <span className="antigravity-account-note-count">
+                  {activeAccountNoteForm.note.length}/{ANTIGRAVITY_ACCOUNT_NOTE_MAX_LENGTH}
+                </span>
+              </label>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={closeAccountNoteModal}
+                disabled={savingAccountNote}
+              >
+                {t('common.cancel', '取消')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void handleSaveAccountNote()}
+                disabled={savingAccountNote}
+              >
+                {savingAccountNote
+                  ? t('common.saving', '保存中...')
+                  : t('common.save', '保存')}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* 账号分组管理弹窗 */}
       <AccountGroupModal

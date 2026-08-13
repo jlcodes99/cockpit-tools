@@ -1,7 +1,7 @@
 use crate::models::codex::{
-    CodexAccount, CodexAccountIndex, CodexAccountSummary, CodexAgentIdentity, CodexApiProviderMode,
-    CodexAppSpeed, CodexAuthFile, CodexAuthMode, CodexAuthTokens, CodexJwtPayload,
-    CodexQuickConfig, CodexTokens,
+    CodexAccount, CodexAccountIndex, CodexAccountSummary, CodexAgentIdentity, CodexApiModelMapping,
+    CodexApiProviderMode, CodexAppSpeed, CodexAuthFile, CodexAuthMode, CodexAuthTokens,
+    CodexJwtPayload, CodexQuickConfig, CodexTokens,
 };
 use crate::modules::{account, codex_agent_identity, codex_oauth, logger};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
@@ -45,6 +45,9 @@ const CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY: &str = "model_context_window";
 const CODEX_CONFIG_MODEL_AUTO_COMPACT_TOKEN_LIMIT_KEY: &str = "model_auto_compact_token_limit";
 const CODEX_MANAGED_MODEL_CATALOG_FILE: &str = "cockpit-provider-model-catalog.json";
 const CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE: &str = "cockpit-local-access-model-catalog.json";
+/// Official DeepSeek Codex setup writes `models.json` and points `model_catalog_json` at it.
+/// Extra instances must use their own CODEX_HOME copy, not the default `~/.codex/models.json`.
+const DEEPSEEK_OFFICIAL_MODEL_CATALOG_FILE: &str = "models.json";
 const CODEX_AUTO_REVIEW_MODEL_ID: &str = "codex-auto-review";
 const CODEX_IMAGE_MODEL_ID: &str = "gpt-image-2";
 const CODEX_IMAGEGEN_ACTOR_HEADER: &str = "x-openai-actor-authorization";
@@ -62,6 +65,17 @@ const CODEX_LEGACY_API_KEY_OPENAI_PROVIDER_ID: &str = "openai_api_key";
 const CODEX_DEFAULT_RUNTIME_PROVIDER_NAME: &str = "OpenAI Official";
 const CODEX_PROVIDER_WIRE_API: &str = "responses";
 const APIKEY_FUN_PROVIDER_BASE_URL: &str = "https://api.apikey.fun/v1";
+const DEEPSEEK_API_BASE_URL: &str = "https://api.deepseek.com";
+const DEEPSEEK_PROVIDER_ID: &str = "deepseek";
+const DEEPSEEK_CODEX_MODELS: &[&str] = &["deepseek-v4-flash", "deepseek-v4-pro"];
+const DEEPSEEK_DEFAULT_MODEL: &str = "deepseek-v4-flash";
+const DEEPSEEK_ACCESS_MODE_GATEWAY: &str = "gateway";
+const DEEPSEEK_ACCESS_MODE_DIRECT: &str = "direct";
+const DEEPSEEK_ACCESS_MODE_CDP: &str = "cdp";
+const DEEPSEEK_CODEX_MODELS_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/resources/deepseek_codex_models.json"
+));
 const CODEX_CONTEXT_WINDOW_1M_VALUE: i64 = 1_000_000;
 const CODEX_AUTO_COMPACT_DEFAULT_LIMIT: i64 = 900_000;
 #[cfg(target_os = "macos")]
@@ -530,6 +544,881 @@ fn migrate_apikey_fun_wire_api(account: &mut CodexAccount) -> bool {
     }
     account.api_wire_api = Some("responses".to_string());
     true
+}
+
+fn is_deepseek_account(account: &CodexAccount) -> bool {
+    account
+        .api_provider_id
+        .as_deref()
+        .is_some_and(|value| value.eq_ignore_ascii_case(DEEPSEEK_PROVIDER_ID))
+        || account
+            .api_base_url
+            .as_deref()
+            .and_then(|value| reqwest::Url::parse(value.trim()).ok())
+            .and_then(|url| url.host_str().map(str::to_string))
+            .is_some_and(|host| host.eq_ignore_ascii_case("api.deepseek.com"))
+}
+
+fn deepseek_official_model_catalog() -> Vec<String> {
+    DEEPSEEK_CODEX_MODELS
+        .iter()
+        .map(|model| model.to_string())
+        .collect()
+}
+
+fn is_deepseek_responses_account(account: &CodexAccount) -> bool {
+    is_deepseek_account(account)
+        && account
+            .api_wire_api
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(CODEX_PROVIDER_WIRE_API)
+            .eq_ignore_ascii_case(CODEX_PROVIDER_WIRE_API)
+}
+
+/// Normalize DeepSeek API-key accounts without locking users out of Chat Completions.
+/// - Missing wire_api defaults to Responses (official Codex path).
+/// - Explicit `chat_completions` is preserved.
+/// - Responses mode writes official catalog slugs and talks to api.deepseek.com directly.
+fn normalize_deepseek_account(account: &mut CodexAccount) -> bool {
+    if !account.is_api_key_auth() || !is_deepseek_account(account) {
+        return false;
+    }
+
+    let mut changed = false;
+    if account.api_base_url.as_deref() != Some(DEEPSEEK_API_BASE_URL) {
+        account.api_base_url = Some(DEEPSEEK_API_BASE_URL.to_string());
+        changed = true;
+    }
+    if account.api_provider_mode != CodexApiProviderMode::Custom {
+        account.api_provider_mode = CodexApiProviderMode::Custom;
+        changed = true;
+    }
+    if account.api_provider_id.as_deref() != Some(DEEPSEEK_PROVIDER_ID) {
+        account.api_provider_id = Some(DEEPSEEK_PROVIDER_ID.to_string());
+        changed = true;
+    }
+    if account.api_provider_name.as_deref() != Some("DeepSeek") {
+        account.api_provider_name = Some("DeepSeek".to_string());
+        changed = true;
+    }
+
+    let wire = account
+        .api_wire_api
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_ascii_lowercase());
+    match wire.as_deref() {
+        None => {
+            account.api_wire_api = Some(CODEX_PROVIDER_WIRE_API.to_string());
+            changed = true;
+        }
+        Some("chat_completions") => {
+            // Keep Chat Completions when the user explicitly chose it.
+        }
+        Some("responses") => {}
+        Some(other) => {
+            // Unknown values fall back to official Responses.
+            if other != CODEX_PROVIDER_WIRE_API {
+                account.api_wire_api = Some(CODEX_PROVIDER_WIRE_API.to_string());
+                changed = true;
+            }
+        }
+    }
+
+    if is_deepseek_responses_account(account) {
+        let model_catalog = deepseek_official_model_catalog();
+        if account.api_model_catalog != model_catalog {
+            account.api_model_catalog = model_catalog;
+            changed = true;
+        }
+        if !account.api_sync_model_catalog_to_codex {
+            account.api_sync_model_catalog_to_codex = true;
+            changed = true;
+        }
+        if account.api_supports_websockets {
+            account.api_supports_websockets = false;
+            changed = true;
+        }
+        if account.api_supports_vision {
+            account.api_supports_vision = false;
+            changed = true;
+        }
+        if !account.api_model_vision_support.is_empty() {
+            account.api_model_vision_support.clear();
+            changed = true;
+        }
+        if account.api_vision_routing_model.is_some() {
+            account.api_vision_routing_model = None;
+            changed = true;
+        }
+        if account.api_model_mappings.is_empty() {
+            account.api_model_mappings = default_deepseek_api_model_mappings();
+            changed = true;
+        }
+    }
+
+    let access_mode = if is_deepseek_responses_account(account) {
+        normalize_deepseek_instance_access_mode(account.api_instance_access_mode.as_deref())
+    } else {
+        DEEPSEEK_ACCESS_MODE_GATEWAY
+    };
+    if account.api_instance_access_mode.as_deref() != Some(access_mode) {
+        account.api_instance_access_mode = Some(access_mode.to_string());
+        changed = true;
+    }
+    let startup_model = resolve_deepseek_startup_model(account);
+    if account.api_startup_model.as_deref() != Some(startup_model.as_str()) {
+        account.api_startup_model = Some(startup_model);
+        changed = true;
+    }
+
+    changed
+}
+
+fn normalize_deepseek_instance_access_mode(raw: Option<&str>) -> &'static str {
+    match raw.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(value) if value.eq_ignore_ascii_case(DEEPSEEK_ACCESS_MODE_DIRECT) => {
+            DEEPSEEK_ACCESS_MODE_DIRECT
+        }
+        Some(value) if value.eq_ignore_ascii_case(DEEPSEEK_ACCESS_MODE_CDP) => {
+            DEEPSEEK_ACCESS_MODE_CDP
+        }
+        _ => DEEPSEEK_ACCESS_MODE_GATEWAY,
+    }
+}
+
+fn is_deepseek_official_runtime_access(account: &CodexAccount) -> bool {
+    is_deepseek_responses_account(account)
+        && normalize_deepseek_instance_access_mode(account.api_instance_access_mode.as_deref())
+            == DEEPSEEK_ACCESS_MODE_DIRECT
+}
+
+pub fn account_uses_deepseek_cdp_injection(account: &CodexAccount) -> bool {
+    is_deepseek_responses_account(account)
+        && normalize_deepseek_instance_access_mode(account.api_instance_access_mode.as_deref())
+            == DEEPSEEK_ACCESS_MODE_CDP
+}
+
+fn resolve_deepseek_startup_model(account: &CodexAccount) -> String {
+    account
+        .api_startup_model
+        .as_deref()
+        .filter(|model| is_official_deepseek_model_slug(model))
+        .map(|model| model.trim().to_ascii_lowercase())
+        .unwrap_or_else(|| DEEPSEEK_DEFAULT_MODEL.to_string())
+}
+
+fn preferred_deepseek_client_model(
+    account: &CodexAccount,
+    slots: &[crate::modules::codex_local_access::ProviderGatewayModelSlot],
+) -> String {
+    let startup = resolve_deepseek_startup_model(account);
+    slots
+        .iter()
+        .find(|slot| slot.upstream_model.eq_ignore_ascii_case(&startup))
+        .map(|slot| slot.client_model.clone())
+        .or_else(|| slots.first().map(|slot| slot.client_model.clone()))
+        .unwrap_or_else(|| "gpt-5.5".to_string())
+}
+
+pub fn update_account_instance_access(
+    account_id: &str,
+    access_mode: Option<String>,
+    startup_model: Option<String>,
+) -> Result<CodexAccount, String> {
+    let account_id = account_id.trim();
+    if account_id.is_empty() {
+        return Err("账号 ID 不能为空".to_string());
+    }
+    let mut account =
+        load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
+    if !account.is_api_key_auth() {
+        return Err("只有 API Key 账号支持接入方式".to_string());
+    }
+    if !is_deepseek_account(&account) {
+        return Err("仅 DeepSeek 账号支持实例接入方式".to_string());
+    }
+    let requested_non_gateway = access_mode.as_deref().map(str::trim).is_some_and(|value| {
+        value.eq_ignore_ascii_case(DEEPSEEK_ACCESS_MODE_DIRECT)
+            || value.eq_ignore_ascii_case(DEEPSEEK_ACCESS_MODE_CDP)
+    });
+    if requested_non_gateway && !is_deepseek_responses_account(&account) {
+        return Err("Chat Completions 只能走本地网关".to_string());
+    }
+    if access_mode.is_some() {
+        account.api_instance_access_mode = access_mode
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_ascii_lowercase());
+    }
+    if startup_model.is_some() {
+        account.api_startup_model = startup_model
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_ascii_lowercase());
+    }
+    let _ = normalize_deepseek_account(&mut account);
+    save_account(&account)?;
+    Ok(account)
+}
+
+pub fn apply_deepseek_cdp_startup_model(
+    account_id: &str,
+    model: &str,
+    base_dir: &Path,
+) -> Result<CodexAccount, String> {
+    let account = update_account_instance_access(
+        account_id,
+        Some(DEEPSEEK_ACCESS_MODE_CDP.to_string()),
+        Some(model.to_string()),
+    )?;
+    if !account_uses_deepseek_cdp_injection(&account) {
+        return Err("当前账号未启用 DeepSeek CDP 注入".to_string());
+    }
+    write_deepseek_cdp_responses_runtime_to_dir(base_dir, &account)?;
+    Ok(account)
+}
+
+pub(crate) fn default_deepseek_api_model_mappings() -> Vec<CodexApiModelMapping> {
+    vec![
+        CodexApiModelMapping {
+            client_model: "gpt-5.6-sol".to_string(),
+            upstream_model: "deepseek-v4-flash".to_string(),
+        },
+        CodexApiModelMapping {
+            client_model: "gpt-5.6-terra".to_string(),
+            upstream_model: "deepseek-v4-pro".to_string(),
+        },
+        CodexApiModelMapping {
+            client_model: "deepseek-v4-flash".to_string(),
+            upstream_model: "deepseek-v4-flash".to_string(),
+        },
+        CodexApiModelMapping {
+            client_model: "deepseek-v4-pro".to_string(),
+            upstream_model: "deepseek-v4-pro".to_string(),
+        },
+    ]
+}
+
+pub(crate) fn normalize_api_model_mappings(
+    mappings: Vec<CodexApiModelMapping>,
+) -> Result<Vec<CodexApiModelMapping>, String> {
+    let mut seen = HashSet::new();
+    let mut normalized = Vec::new();
+    for mapping in mappings {
+        let client_model = mapping.client_model.trim().to_string();
+        let upstream_model = mapping.upstream_model.trim().to_string();
+        if client_model.is_empty() && upstream_model.is_empty() {
+            continue;
+        }
+        if client_model.is_empty() || upstream_model.is_empty() {
+            return Err("模型映射需要同时填写请求模型和发送模型".to_string());
+        }
+        let key = client_model.to_ascii_lowercase();
+        if !seen.insert(key) {
+            return Err(format!("请求模型 {} 重复", client_model));
+        }
+        normalized.push(CodexApiModelMapping {
+            client_model,
+            upstream_model,
+        });
+    }
+    Ok(normalized)
+}
+
+pub(crate) fn resolve_account_upstream_model(
+    account: &CodexAccount,
+    requested_model: &str,
+) -> String {
+    let requested = requested_model.trim();
+    if requested.is_empty() {
+        return String::new();
+    }
+    for mapping in &account.api_model_mappings {
+        if mapping.client_model.eq_ignore_ascii_case(requested)
+            || mapping.upstream_model.eq_ignore_ascii_case(requested)
+        {
+            return mapping.upstream_model.clone();
+        }
+    }
+    requested.to_string()
+}
+
+pub fn update_account_api_model_mappings(
+    account_id: &str,
+    mappings: Vec<CodexApiModelMapping>,
+) -> Result<CodexAccount, String> {
+    let account_id = account_id.trim();
+    if account_id.is_empty() {
+        return Err("账号 ID 不能为空".to_string());
+    }
+    let mut account =
+        load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
+    if !account.is_api_key_auth() {
+        return Err("只有 API Key 账号支持模型映射".to_string());
+    }
+    account.api_model_mappings = normalize_api_model_mappings(mappings)?;
+    save_account(&account)?;
+    Ok(account)
+}
+
+/// Backward-compatible name used by older call sites / tests.
+fn enforce_deepseek_responses_account(account: &mut CodexAccount) -> bool {
+    normalize_deepseek_account(account)
+}
+
+pub(crate) fn deepseek_official_models_json() -> &'static str {
+    DEEPSEEK_CODEX_MODELS_JSON
+}
+
+fn selected_deepseek_official_models(selected_models: &[String]) -> Vec<String> {
+    let selected: HashSet<String> = selected_models
+        .iter()
+        .map(|model| model.trim().to_ascii_lowercase())
+        .filter(|model| !model.is_empty())
+        .collect();
+    let prefer_all = selected.is_empty();
+    DEEPSEEK_CODEX_MODELS
+        .iter()
+        .filter(|model| prefer_all || selected.contains(&model.to_ascii_lowercase()))
+        .map(|model| model.to_string())
+        .collect()
+}
+
+fn is_official_deepseek_model_slug(model: &str) -> bool {
+    DEEPSEEK_CODEX_MODELS
+        .iter()
+        .any(|item| item.eq_ignore_ascii_case(model.trim()))
+}
+
+fn deepseek_official_model_catalog_path(base_dir: &Path) -> PathBuf {
+    base_dir.join(CODEX_MANAGED_MODEL_CATALOG_FILE)
+}
+
+fn leftover_deepseek_models_json_path(base_dir: &Path) -> PathBuf {
+    base_dir.join(DEEPSEEK_OFFICIAL_MODEL_CATALOG_FILE)
+}
+
+fn expand_user_path(raw: &str) -> PathBuf {
+    let trimmed = raw.trim();
+    if trimmed == "~" {
+        return dirs::home_dir().unwrap_or_else(|| PathBuf::from(trimmed));
+    }
+    if let Some(rest) = trimmed.strip_prefix("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(rest);
+        }
+    }
+    PathBuf::from(trimmed)
+}
+
+fn absolute_path_for_config(path: &Path) -> String {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(path))
+            .unwrap_or_else(|_| path.to_path_buf())
+    };
+    let simplified = absolute.canonicalize().unwrap_or(absolute);
+    simplified.to_string_lossy().replace('\\', "/")
+}
+
+fn catalog_file_name(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn is_deepseek_official_catalog_ref(value: &str, base_dir: &Path) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if trimmed == CODEX_MANAGED_MODEL_CATALOG_FILE
+        || trimmed == DEEPSEEK_OFFICIAL_MODEL_CATALOG_FILE
+    {
+        return true;
+    }
+    let configured = expand_user_path(trimmed);
+    let name = catalog_file_name(&configured);
+    if !name.eq_ignore_ascii_case(CODEX_MANAGED_MODEL_CATALOG_FILE)
+        && !name.eq_ignore_ascii_case(DEEPSEEK_OFFICIAL_MODEL_CATALOG_FILE)
+    {
+        return false;
+    }
+    let configured_abs = if configured.is_absolute() {
+        configured
+    } else {
+        base_dir.join(configured)
+    };
+    let managed = absolute_path_for_config(&deepseek_official_model_catalog_path(base_dir));
+    let leftover = absolute_path_for_config(&leftover_deepseek_models_json_path(base_dir));
+    let configured_abs = absolute_path_for_config(&configured_abs);
+    configured_abs.eq_ignore_ascii_case(&managed) || configured_abs.eq_ignore_ascii_case(&leftover)
+}
+
+fn official_catalog_file_looks_like_deepseek(path: &Path) -> bool {
+    fs::read_to_string(path).ok().is_some_and(|content| {
+        content.contains("deepseek-v4-flash") && content.contains("apply_patch_tool_type")
+    })
+}
+
+fn remove_leftover_deepseek_models_json(base_dir: &Path) {
+    for file_name in [
+        DEEPSEEK_OFFICIAL_MODEL_CATALOG_FILE,
+        CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE,
+    ] {
+        let stale = base_dir.join(file_name);
+        if stale.exists() {
+            if let Err(error) = fs::remove_file(&stale) {
+                logger::log_warn(&format!(
+                    "[Codex切号] 清理旧 DeepSeek 模型目录失败: path={}, error={}",
+                    stale.display(),
+                    error
+                ));
+            }
+        }
+    }
+}
+
+fn write_deepseek_official_model_catalog_file(
+    base_dir: &Path,
+    account: &CodexAccount,
+) -> Result<PathBuf, String> {
+    let content = build_deepseek_direct_provider_catalog_json(&account.api_model_catalog)?;
+    let catalog_path = deepseek_official_model_catalog_path(base_dir);
+    if let Some(parent) = catalog_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| {
+            format!(
+                "创建 DeepSeek 官方模型目录失败: path={}, error={}",
+                parent.display(),
+                e
+            )
+        })?;
+    }
+    write_string_atomic(&catalog_path, &content).map_err(|e| {
+        format!(
+            "写入 DeepSeek 官方模型目录失败: path={}, error={}",
+            catalog_path.display(),
+            e
+        )
+    })?;
+    remove_leftover_deepseek_models_json(base_dir);
+    if let Err(error) = crate::modules::codex_local_access::invalidate_codex_model_cache(base_dir) {
+        logger::log_warn(&format!(
+            "[Codex切号] 清理 Codex 模型缓存失败: path={}, error={}",
+            base_dir.display(),
+            error
+        ));
+    }
+    Ok(catalog_path)
+}
+
+fn apply_deepseek_official_catalog_to_doc(
+    doc: &mut Document,
+    account: &CodexAccount,
+    _catalog_path: &Path,
+) {
+    let preferred = resolve_deepseek_default_model(account);
+    let current_model = doc
+        .get("model")
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+        .unwrap_or_default()
+        .to_string();
+    if !is_official_deepseek_model_slug(&current_model) {
+        doc["model"] = value(preferred.as_str());
+    }
+    doc[CODEX_CONFIG_MODEL_CATALOG_JSON_KEY] = value(CODEX_MANAGED_MODEL_CATALOG_FILE);
+    doc["model_reasoning_effort"] = value("high");
+    if doc
+        .get("model_reasoning_summary")
+        .and_then(|item| item.as_str())
+        .is_some()
+    {
+        let _ = doc.remove("model_reasoning_summary");
+    }
+}
+
+fn cleanup_deepseek_official_model_catalog_for_dir(base_dir: &Path) -> Result<bool, String> {
+    let mut changed = false;
+    let catalog_path = deepseek_official_model_catalog_path(base_dir);
+    if catalog_path.exists() && official_catalog_file_looks_like_deepseek(&catalog_path) {
+        fs::remove_file(&catalog_path).map_err(|e| {
+            format!(
+                "删除 DeepSeek 官方模型目录失败: path={}, error={}",
+                catalog_path.display(),
+                e
+            )
+        })?;
+        changed = true;
+    }
+
+    let config_path = get_config_toml_path(base_dir);
+    if !config_path.exists() {
+        return Ok(changed);
+    }
+    let existing = fs::read_to_string(&config_path).unwrap_or_default();
+    if existing.trim().is_empty() {
+        return Ok(changed);
+    }
+    let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&existing)
+        .map_err(|e| format!("解析 config.toml 失败: {}", e))?;
+    let points_at_official = doc
+        .get(CODEX_CONFIG_MODEL_CATALOG_JSON_KEY)
+        .and_then(|item| item.as_str())
+        .is_some_and(|value| is_deepseek_official_catalog_ref(value, base_dir));
+    if points_at_official {
+        let _ = doc.remove(CODEX_CONFIG_MODEL_CATALOG_JSON_KEY);
+        let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
+        crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
+            .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
+        changed = true;
+    }
+    Ok(changed)
+}
+
+fn resolve_deepseek_default_model(account: &CodexAccount) -> String {
+    resolve_deepseek_startup_model(account)
+}
+
+fn official_deepseek_catalog_models() -> Result<Vec<serde_json::Value>, String> {
+    let catalog: serde_json::Value = serde_json::from_str(DEEPSEEK_CODEX_MODELS_JSON)
+        .map_err(|error| format!("解析官方 DeepSeek models.json 失败: {}", error))?;
+    catalog
+        .get("models")
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .ok_or_else(|| "官方 DeepSeek models.json 缺少 models 数组".to_string())
+}
+
+fn official_deepseek_display_name(upstream_model: &str) -> String {
+    if upstream_model.eq_ignore_ascii_case("deepseek-v4-pro") {
+        "DeepSeek-V4-Pro".to_string()
+    } else {
+        "DeepSeek-V4-Flash".to_string()
+    }
+}
+
+fn overlay_official_deepseek_fields(
+    entry: &mut serde_json::Value,
+    official_model: &serde_json::Value,
+) {
+    let Some(object) = entry.as_object_mut() else {
+        return;
+    };
+    for key in [
+        "apply_patch_tool_type",
+        "shell_type",
+        "web_search_tool_type",
+        "base_instructions",
+        "default_reasoning_level",
+        "supported_reasoning_levels",
+        "reasoning_summary_format",
+        "default_reasoning_summary",
+        "context_window",
+        "max_context_window",
+        "supports_reasoning_summaries",
+        "supports_parallel_tool_calls",
+        "input_modalities",
+        "prefer_websockets",
+        "support_verbosity",
+        "default_verbosity",
+        "model_messages",
+    ] {
+        if let Some(value) = official_model.get(key) {
+            object.insert(key.to_string(), value.clone());
+        }
+    }
+}
+
+/// Codex picker catalog for native DeepSeek Responses (no instance gateway).
+///
+/// Each entry keeps three names:
+/// - `display_name`: picker label (`DeepSeek-V4-Flash`)
+/// - whitelist shell: official Codex client-model template (`gpt-5.6-sol`)
+/// - `slug`: upstream ID actually sent to `api.deepseek.com` (`deepseek-v4-flash`)
+fn build_deepseek_direct_provider_catalog_json(
+    selected_models: &[String],
+) -> Result<String, String> {
+    let selected = selected_deepseek_official_models(selected_models);
+    if selected.is_empty() {
+        return Err("DeepSeek 模型目录为空，请至少保留 deepseek-v4-flash".to_string());
+    }
+    let slots = crate::modules::codex_local_access::allocate_provider_model_slots(&selected);
+    let official_models = official_deepseek_catalog_models()?;
+    let shell_ids = slots
+        .iter()
+        .map(|slot| slot.client_model.clone())
+        .collect::<Vec<_>>();
+    let mut catalog =
+        crate::modules::codex_protocol::build_codex_client_models_response(&shell_ids);
+    let models = catalog
+        .get_mut("models")
+        .and_then(serde_json::Value::as_array_mut)
+        .ok_or_else(|| "生成 Codex 模型目录失败".to_string())?;
+
+    for model in models.iter_mut() {
+        let Some(shell) = model
+            .get("slug")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        let Some(slot) = slots
+            .iter()
+            .find(|slot| slot.client_model.eq_ignore_ascii_case(&shell))
+        else {
+            continue;
+        };
+        if let Some(official_model) = official_models.iter().find(|item| {
+            item.get("slug")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|slug| slug.eq_ignore_ascii_case(&slot.upstream_model))
+        }) {
+            overlay_official_deepseek_fields(model, official_model);
+            if let Some(display_name) = official_model
+                .get("display_name")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                if let Some(object) = model.as_object_mut() {
+                    object.insert(
+                        "display_name".to_string(),
+                        serde_json::Value::String(display_name.to_string()),
+                    );
+                    object.insert(
+                        "description".to_string(),
+                        serde_json::Value::String(slot.upstream_model.clone()),
+                    );
+                }
+            }
+        } else if let Some(object) = model.as_object_mut() {
+            object.insert(
+                "display_name".to_string(),
+                serde_json::Value::String(official_deepseek_display_name(&slot.upstream_model)),
+            );
+            object.insert(
+                "description".to_string(),
+                serde_json::Value::String(slot.upstream_model.clone()),
+            );
+        }
+        if let Some(object) = model.as_object_mut() {
+            object.insert(
+                "slug".to_string(),
+                serde_json::Value::String(slot.upstream_model.clone()),
+            );
+            object.insert(
+                "visibility".to_string(),
+                serde_json::Value::String("list".to_string()),
+            );
+            object.insert(
+                "supported_in_api".to_string(),
+                serde_json::Value::Bool(true),
+            );
+        }
+    }
+
+    models.retain(|model| {
+        model
+            .get("slug")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(is_official_deepseek_model_slug)
+    });
+    models.sort_by(|left, right| {
+        let left_slug = left
+            .get("slug")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        let right_slug = right
+            .get("slug")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        let rank = |slug: &str| -> u8 {
+            if slug.eq_ignore_ascii_case(DEEPSEEK_DEFAULT_MODEL) {
+                0
+            } else if slug.eq_ignore_ascii_case("deepseek-v4-pro") {
+                1
+            } else {
+                2
+            }
+        };
+        rank(left_slug)
+            .cmp(&rank(right_slug))
+            .then_with(|| left_slug.cmp(right_slug))
+    });
+    if models.is_empty() {
+        return Err("DeepSeek 模型目录为空，请至少保留 deepseek-v4-flash".to_string());
+    }
+
+    serde_json::to_string_pretty(&catalog)
+        .map_err(|error| format!("序列化 DeepSeek 模型目录失败: {}", error))
+}
+
+fn build_deepseek_official_model_catalog_json(
+    selected_models: &[String],
+) -> Result<String, String> {
+    let mut catalog: serde_json::Value = serde_json::from_str(DEEPSEEK_CODEX_MODELS_JSON)
+        .map_err(|error| format!("解析官方 DeepSeek models.json 失败: {}", error))?;
+    let selected: HashSet<String> = selected_deepseek_official_models(selected_models)
+        .into_iter()
+        .map(|model| model.to_ascii_lowercase())
+        .collect();
+
+    let models = catalog
+        .get_mut("models")
+        .and_then(serde_json::Value::as_array_mut)
+        .ok_or_else(|| "官方 DeepSeek models.json 缺少 models 数组".to_string())?;
+
+    models.retain(|model| {
+        let slug = model
+            .get("slug")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
+        selected.contains(&slug)
+    });
+
+    models.sort_by(|left, right| {
+        let left_slug = left
+            .get("slug")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        let right_slug = right
+            .get("slug")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        let rank = |slug: &str| -> u8 {
+            if slug.eq_ignore_ascii_case(DEEPSEEK_DEFAULT_MODEL) {
+                0
+            } else if slug.eq_ignore_ascii_case("deepseek-v4-pro") {
+                1
+            } else {
+                2
+            }
+        };
+        rank(left_slug)
+            .cmp(&rank(right_slug))
+            .then_with(|| left_slug.cmp(right_slug))
+    });
+
+    if models.is_empty() {
+        return Err("DeepSeek 模型目录为空，请至少保留 deepseek-v4-flash".to_string());
+    }
+
+    serde_json::to_string_pretty(&catalog)
+        .map_err(|error| format!("序列化官方 DeepSeek models.json 失败: {}", error))
+}
+
+fn sync_deepseek_shell_remap_catalog_to_dir(
+    base_dir: &Path,
+    account: &CodexAccount,
+) -> Result<bool, String> {
+    let selected = if account.api_model_catalog.is_empty() {
+        deepseek_official_model_catalog()
+    } else {
+        selected_deepseek_official_models(&account.api_model_catalog)
+    };
+    let slots = crate::modules::codex_local_access::allocate_provider_model_slots(&selected);
+    let content = crate::modules::codex_local_access::build_official_template_mapped_catalog_json(
+        &slots,
+        deepseek_official_models_json(),
+    )?;
+    let catalog_path = deepseek_official_model_catalog_path(base_dir);
+    if let Some(parent) = catalog_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| {
+            format!(
+                "创建 DeepSeek 模型目录失败: path={}, error={}",
+                parent.display(),
+                e
+            )
+        })?;
+    }
+    write_string_atomic(&catalog_path, &content).map_err(|e| {
+        format!(
+            "写入 DeepSeek 模型目录失败: path={}, error={}",
+            catalog_path.display(),
+            e
+        )
+    })?;
+    remove_leftover_deepseek_models_json(base_dir);
+    if let Err(error) = crate::modules::codex_local_access::invalidate_codex_model_cache(base_dir) {
+        logger::log_warn(&format!(
+            "[Codex切号] 清理 Codex 模型缓存失败: path={}, error={}",
+            base_dir.display(),
+            error
+        ));
+    }
+
+    let config_path = get_config_toml_path(base_dir);
+    let existing = fs::read_to_string(&config_path).unwrap_or_default();
+    let mut doc = if existing.trim().is_empty() {
+        Document::new()
+    } else {
+        crate::modules::codex_config_format::read_codex_config_doc_from_str(&existing)
+            .map_err(|e| format!("解析 config.toml 失败: {}", e))?
+    };
+    let preferred_shell = preferred_deepseek_client_model(account, &slots);
+    doc["model"] = value(preferred_shell.as_str());
+    doc[CODEX_CONFIG_MODEL_CATALOG_JSON_KEY] = value(CODEX_MANAGED_MODEL_CATALOG_FILE);
+    doc["model_reasoning_effort"] = value("high");
+    if doc
+        .get("model_reasoning_summary")
+        .and_then(|item| item.as_str())
+        .is_some()
+    {
+        let _ = doc.remove("model_reasoning_summary");
+    }
+    let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
+    crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
+        .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
+    if let Err(err) = refresh_api_key_provider_projection_in_dir(base_dir, account) {
+        logger::log_warn(&format!(
+            "[Codex切号] 同步 DeepSeek 壳映射目录后刷新 provider 失败: path={}, error={}",
+            base_dir.display(),
+            err
+        ));
+    }
+    Ok(true)
+}
+
+fn sync_deepseek_official_model_catalog_to_dir(
+    base_dir: &Path,
+    account: &CodexAccount,
+) -> Result<bool, String> {
+    let catalog_path = write_deepseek_official_model_catalog_file(base_dir, account)?;
+    let config_path = get_config_toml_path(base_dir);
+    let existing = fs::read_to_string(&config_path).unwrap_or_default();
+    let mut doc = if existing.trim().is_empty() {
+        Document::new()
+    } else {
+        crate::modules::codex_config_format::read_codex_config_doc_from_str(&existing)
+            .map_err(|e| format!("解析 config.toml 失败: {}", e))?
+    };
+    apply_deepseek_official_catalog_to_doc(&mut doc, account, &catalog_path);
+
+    let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
+    crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
+        .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
+    if let Err(err) = refresh_api_key_provider_projection_in_dir(base_dir, account) {
+        logger::log_warn(&format!(
+            "[Codex切号] 同步 DeepSeek 官方模型目录后刷新 provider 失败: path={}, error={}",
+            base_dir.display(),
+            err
+        ));
+    }
+    Ok(true)
 }
 
 fn normalize_api_key_websocket_capability(account: &mut CodexAccount) -> bool {
@@ -1205,6 +2094,9 @@ fn sync_api_key_model_catalog_to_dir(
     if !account_syncs_model_catalog_to_codex(account) {
         return Ok(false);
     }
+    if is_deepseek_responses_account(account) {
+        return sync_deepseek_shell_remap_catalog_to_dir(base_dir, account);
+    }
 
     let config_path = get_config_toml_path(base_dir);
     let existing = fs::read_to_string(&config_path).unwrap_or_default();
@@ -1278,6 +2170,21 @@ fn sync_or_cleanup_managed_model_catalog_for_dir(
     base_dir: &Path,
     account: &CodexAccount,
 ) -> Result<(), String> {
+    let _ = remove_leftover_deepseek_models_json(base_dir);
+    if is_deepseek_responses_account(account) {
+        if account_uses_deepseek_cdp_injection(account) {
+            write_deepseek_cdp_responses_runtime_to_dir(base_dir, account)?;
+            return Ok(());
+        }
+        if is_deepseek_official_runtime_access(account) {
+            write_deepseek_official_responses_runtime_to_dir(base_dir, account)?;
+            let _ = cleanup_managed_model_catalog_for_dir(base_dir)?;
+            return Ok(());
+        }
+        let _ = sync_deepseek_shell_remap_catalog_to_dir(base_dir, account)?;
+        return Ok(());
+    }
+    let _ = cleanup_deepseek_official_model_catalog_for_dir(base_dir)?;
     if account_syncs_model_catalog_to_codex(account) {
         let _ = sync_api_key_model_catalog_to_dir(base_dir, account)?;
     } else {
@@ -1494,6 +2401,7 @@ fn write_api_key_bearer_provider_override_to_config_toml(
     // true → Codex 使用 auth.json/Keychain OAuth 登录态（绑定 OAuth）。
     // false → 纯 API Key，配合 actor 走 bearer 生图。
     require_openai_auth: bool,
+    wire_api: &str,
 ) -> Result<(), String> {
     // This is the compatibility path for runtimes that need a bearer distinct from auth.json or
     // provider-only capabilities that Codex's built-in `openai` entry cannot be configured with.
@@ -1509,6 +2417,10 @@ fn write_api_key_bearer_provider_override_to_config_toml(
         .as_deref()
         .filter(|name| !name.trim().is_empty())
         .unwrap_or(CODEX_DEFAULT_RUNTIME_PROVIDER_NAME);
+    let wire_api = match wire_api.trim().to_ascii_lowercase().as_str() {
+        "chat_completions" | "chat" => "chat_completions",
+        _ => CODEX_PROVIDER_WIRE_API,
+    };
 
     let existing = fs::read_to_string(&config_path).unwrap_or_default();
     let mut doc = if existing.trim().is_empty() {
@@ -1536,7 +2448,7 @@ fn write_api_key_bearer_provider_override_to_config_toml(
         .ok_or("config.toml 中目标 provider 不是合法表结构")?;
     provider_table["name"] = value(provider_name);
     provider_table["base_url"] = value(base_url);
-    provider_table["wire_api"] = value(CODEX_PROVIDER_WIRE_API);
+    provider_table["wire_api"] = value(wire_api);
     // require_openai_auth 与生图 headers 解耦：
     // - 纯 API Key 生图：require=false + actor
     // - 绑定 OAuth 的本地 API：require=true（显示账号）+ actor + chat disable（生图走本地）
@@ -1606,11 +2518,107 @@ fn api_key_account_requires_bearer_provider_override(
     let requires_immediate_provider_override =
         crate::modules::codex_local_access::account_requires_provider_gateway(account)
             && !account_syncs_model_catalog_to_codex(account);
-
+    let requires_http_only_responses_provider = account.api_provider_mode
+        == CodexApiProviderMode::Custom
+        && account.api_wire_api.as_deref() == Some(CODEX_PROVIDER_WIRE_API)
+        && !account.api_supports_websockets
+        && !account_syncs_model_catalog_to_codex(account);
     oauth_bound
         || uses_local_runtime
         || requires_immediate_provider_override
+        || requires_http_only_responses_provider
         || api_key_provider_should_enable_imagegen(account, provider_config)
+}
+
+fn write_deepseek_official_responses_runtime_to_dir(
+    base_dir: &Path,
+    account: &CodexAccount,
+) -> Result<(), String> {
+    let api_key = normalize_api_key(account.openai_api_key.as_deref().unwrap_or_default())
+        .ok_or_else(|| "DeepSeek 账号缺少 API Key".to_string())?;
+    let selected_model = resolve_deepseek_startup_model(account);
+    let _ = cleanup_managed_model_catalog_for_dir(base_dir)?;
+    let _ = remove_leftover_deepseek_models_json(base_dir);
+    if let Err(error) = crate::modules::codex_local_access::invalidate_codex_model_cache(base_dir) {
+        logger::log_warn(&format!(
+            "[Codex切号] 清理 Codex 模型缓存失败: path={}, error={}",
+            base_dir.display(),
+            error
+        ));
+    }
+
+    let config_path = get_config_toml_path(base_dir);
+    let existing = fs::read_to_string(&config_path).unwrap_or_default();
+    let mut doc = if existing.trim().is_empty() {
+        Document::new()
+    } else {
+        crate::modules::codex_config_format::read_codex_config_doc_from_str(&existing)
+            .map_err(|e| format!("解析 config.toml 失败: {}", e))?
+    };
+
+    doc["model"] = value(selected_model.as_str());
+    let _ = doc.remove(CODEX_CONFIG_MODEL_CATALOG_JSON_KEY);
+    doc["model_reasoning_effort"] = value("high");
+    if doc
+        .get("model_reasoning_summary")
+        .and_then(|item| item.as_str())
+        .is_some()
+    {
+        let _ = doc.remove("model_reasoning_summary");
+    }
+    doc[CODEX_CONFIG_MODEL_PROVIDER_KEY] = value(DEEPSEEK_PROVIDER_ID);
+    doc["preferred_auth_method"] = value("apikey");
+    let _ = doc.remove(CODEX_CONFIG_OPENAI_BASE_URL_KEY);
+
+    if doc.get(CODEX_CONFIG_MODEL_PROVIDERS_KEY).is_none() {
+        doc[CODEX_CONFIG_MODEL_PROVIDERS_KEY] = toml_edit::table();
+    }
+    let model_providers = doc[CODEX_CONFIG_MODEL_PROVIDERS_KEY]
+        .as_table_mut()
+        .ok_or("config.toml 中 model_providers 不是合法表结构")?;
+    if !model_providers.contains_key(DEEPSEEK_PROVIDER_ID) {
+        model_providers[DEEPSEEK_PROVIDER_ID] = toml_edit::table();
+    }
+    let provider_table = model_providers[DEEPSEEK_PROVIDER_ID]
+        .as_table_mut()
+        .ok_or("无法写入 DeepSeek provider")?;
+    provider_table["name"] = value("DeepSeek");
+    provider_table["base_url"] = value(DEEPSEEK_API_BASE_URL);
+    provider_table["wire_api"] = value(CODEX_PROVIDER_WIRE_API);
+    provider_table["requires_openai_auth"] = value(false);
+    provider_table["supports_websockets"] = value(false);
+    provider_table[CODEX_CONFIG_EXPERIMENTAL_BEARER_TOKEN_KEY] = value(api_key.as_str());
+    remove_imagegen_headers(provider_table);
+
+    if let Some(parent) = config_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("创建 config.toml 目录失败: {}", e))?;
+    }
+    let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
+    crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
+        .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
+    logger::log_info(&format!(
+        "[Codex切号] 已写入 DeepSeek 官方 Responses 直连配置: model={}, target_dir={}",
+        selected_model,
+        base_dir.display()
+    ));
+    Ok(())
+}
+
+fn write_deepseek_cdp_responses_runtime_to_dir(
+    base_dir: &Path,
+    account: &CodexAccount,
+) -> Result<(), String> {
+    write_deepseek_official_responses_runtime_to_dir(base_dir, account)?;
+    // Keep the official DeepSeek slugs in config/catalog. The app-server talks to
+    // api.deepseek.com directly, so shell IDs like gpt-5.4 cannot leave this machine.
+    // CDP only injects those official slugs into the native picker.
+    sync_deepseek_official_model_catalog_to_dir(base_dir, account)?;
+    logger::log_info(&format!(
+        "[Codex切号] 已写入 DeepSeek CDP 官方列表配置: startup_model={}, target_dir={}",
+        resolve_deepseek_startup_model(account),
+        base_dir.display()
+    ));
+    Ok(())
 }
 
 fn write_api_key_runtime_provider_to_config_toml(
@@ -1620,6 +2628,12 @@ fn write_api_key_runtime_provider_to_config_toml(
     oauth_bound: bool,
     cleanup_managed_model_catalog: bool,
 ) -> Result<(), String> {
+    if account_uses_deepseek_cdp_injection(account) {
+        return write_deepseek_official_responses_runtime_to_dir(base_dir, account);
+    }
+    if is_deepseek_official_runtime_access(account) {
+        return write_deepseek_official_responses_runtime_to_dir(base_dir, account);
+    }
     if !api_key_account_requires_bearer_provider_override(account, provider_config, oauth_bound) {
         return write_api_key_builtin_openai_to_config_toml(
             base_dir,
@@ -1631,6 +2645,12 @@ fn write_api_key_runtime_provider_to_config_toml(
     let api_key = normalize_api_key(account.openai_api_key.as_deref().unwrap_or_default())
         .ok_or_else(|| "API Key 账号缺少 OPENAI_API_KEY".to_string())?;
     let supports_image = api_key_provider_should_enable_imagegen(account, provider_config);
+    let wire_api = account
+        .api_wire_api
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(CODEX_PROVIDER_WIRE_API);
     write_api_key_bearer_provider_override_to_config_toml(
         base_dir,
         provider_config,
@@ -1639,6 +2659,7 @@ fn write_api_key_runtime_provider_to_config_toml(
             && account.api_supports_websockets,
         supports_image,
         oauth_bound || !supports_image,
+        wire_api,
     )
 }
 
@@ -2073,6 +3094,16 @@ pub fn is_pending_oauth_account(account: &CodexAccount) -> bool {
             .map(str::trim)
             .map(|value| value.eq_ignore_ascii_case(CODEX_AUTHORIZATION_STATUS_PENDING))
             .unwrap_or(false)
+}
+
+fn is_standard_oauth_account(account: &CodexAccount) -> bool {
+    !account.is_api_key_auth()
+        && account.agent_identity.is_none()
+        && !is_pending_oauth_account(account)
+        && account.token_source_mode.trim() != CODEX_TOKEN_SOURCE_WEB_SESSION
+        && !account.tokens.access_token.trim().is_empty()
+        && !account.tokens.access_token.trim().starts_with("at-")
+        && (!account.tokens.id_token.trim().is_empty() || account_has_refresh_token(account))
 }
 
 fn clear_stale_missing_refresh_token_reauth(account: &mut CodexAccount) -> Result<(), String> {
@@ -2840,6 +3871,17 @@ fn read_json_string(value: &serde_json::Value, keys: &[&str]) -> Option<String> 
     normalize_optional_ref(Some(raw))
 }
 
+fn read_codex_fingerprint_mode(value: &serde_json::Value) -> Option<String> {
+    read_json_string(value, &["codex_fingerprint_mode", "codexFingerprintMode"])
+        .or_else(|| {
+            value.get("extra").and_then(|extra| {
+                read_json_string(extra, &["codex_fingerprint_mode", "codexFingerprintMode"])
+            })
+        })
+        .map(|mode| mode.trim().to_ascii_lowercase())
+        .filter(|mode| matches!(mode.as_str(), "off" | "device" | "full"))
+}
+
 fn read_json_i64(value: &serde_json::Value, keys: &[&str]) -> Option<i64> {
     keys.iter().find_map(|key| {
         let item = value.get(*key)?;
@@ -2953,6 +3995,8 @@ fn apply_compat_account_metadata(
         .or_else(|| account.account_structure.clone());
     account.account_note = read_json_string(value, &["account_note", "accountNote"])
         .or_else(|| account.account_note.clone());
+    account.codex_fingerprint_mode =
+        read_codex_fingerprint_mode(value).or_else(|| account.codex_fingerprint_mode.clone());
     apply_account_sensitive_note_metadata(account, value);
     account.auth_file_plan_type =
         read_json_string(value, &["auth_file_plan_type", "authFilePlanType"])
@@ -3170,9 +4214,11 @@ fn load_account_with_summary(
         // 绑定 OAuth 时强制关闭本地网关标志，避免误走旧「禁生图 + 本地网关」路径。
         let cleared_bound_oauth_gateway = clear_bound_oauth_local_gateway_flag(&mut account);
         let migrated_wire_api = migrate_apikey_fun_wire_api(&mut account);
+        let migrated_deepseek = enforce_deepseek_responses_account(&mut account);
         let migrated_websocket = normalize_api_key_websocket_capability(&mut account);
         if needs_rotation
             || migrated_wire_api
+            || migrated_deepseek
             || migrated_websocket
             || cleared_bound_oauth_gateway
             || migrated_index_summary
@@ -3199,6 +4245,7 @@ fn load_account_with_summary(
     let mut account = parse_codex_account_compat(value.clone(), account_id, summary)?
         .ok_or_else(|| format!("账号详情缺少可识别凭据 ({})", path.display()))?;
     let _ = migrate_apikey_fun_wire_api(&mut account);
+    let _ = enforce_deepseek_responses_account(&mut account);
     let _ = clear_bound_oauth_local_gateway_flag(&mut account);
 
     let account_for_rewrite = account.clone();
@@ -3673,6 +4720,7 @@ pub fn upsert_api_key_account(
     };
 
     account.auth_mode = CodexAuthMode::Apikey;
+    let _ = enforce_deepseek_responses_account(&mut account);
     save_account(&account)?;
 
     if let Some(summary) = index.accounts.iter_mut().find(|item| item.id == account.id) {
@@ -5058,6 +6106,9 @@ fn refresh_api_key_provider_projection_in_dir(
     if !account.is_api_key_auth() {
         return Ok(());
     }
+    if account_uses_deepseek_cdp_injection(account) {
+        return Ok(());
+    }
     if let Some(oauth) = load_optional_bound_oauth_account_for_api_key(account)? {
         if !oauth.tokens.id_token.trim().is_empty() {
             write_api_key_provider_override_to_config_toml(base_dir, account)?;
@@ -5912,7 +6963,7 @@ async fn activate_provider_gateway_after_switch_if_needed(
 ) -> Result<(), String> {
     if crate::modules::codex_local_access::account_requires_provider_gateway(account) {
         logger::log_info(&format!(
-            "[Codex切号] API Key 账号使用 Chat Completions 协议，启用本地供应商网关: account_id={}, target_dir={}",
+            "[Codex切号] API Key 账号启用本地供应商网关: account_id={}, target_dir={}",
             account.id,
             base_dir.display()
         ));
@@ -6596,7 +7647,7 @@ fn merge_access_token_import_hints(
     primary
 }
 
-fn first_personal_access_token_string(value: &serde_json::Value) -> Option<String> {
+fn first_explicit_personal_access_token_string(value: &serde_json::Value) -> Option<String> {
     first_json_scalar_string(
         value,
         &[
@@ -6627,7 +7678,10 @@ fn first_personal_access_token_string(value: &serde_json::Value) -> Option<Strin
         )
         .and_then(|header| extract_bearer_token_from_header(&header))
     })
-    .or_else(|| {
+}
+
+fn first_personal_access_token_string(value: &serde_json::Value) -> Option<String> {
+    first_explicit_personal_access_token_string(value).or_else(|| {
         first_json_scalar_string(
             value,
             &[
@@ -6955,7 +8009,7 @@ fn extract_codex_import_candidate_from_value(
     value: &serde_json::Value,
 ) -> Option<CodexJsonImportCandidate> {
     if value.is_object() {
-        if let Some(access_token) = first_personal_access_token_string(value) {
+        if let Some(access_token) = first_explicit_personal_access_token_string(value) {
             let hints = extract_access_token_import_hints_from_value(value);
             return Some(CodexJsonImportCandidate::AccessToken {
                 access_token,
@@ -6968,7 +8022,9 @@ fn extract_codex_import_candidate_from_value(
         return Some(candidate);
     }
 
-    if let Some((tokens, account_id_hint)) = extract_codex_tokens_from_value(value) {
+    if let Some((tokens, account_id_hint)) = extract_codex_tokens_from_value(value)
+        .or_else(|| extract_codex_tokens_from_credentials_value(value))
+    {
         return Some(CodexJsonImportCandidate::FullToken {
             tokens,
             account_id_hint,
@@ -7366,7 +8422,10 @@ async fn import_sub2api_export_from_value(
                 index + 1
             )
         })?;
-        imported.push(import_codex_candidate(candidate).await?);
+        let mut account = import_codex_candidate(candidate).await?;
+        account.codex_fingerprint_mode = read_codex_fingerprint_mode(item);
+        save_account(&account)?;
+        imported.push(account);
     }
 
     if imported.is_empty() {
@@ -9076,6 +10135,62 @@ fn extract_codex_tokens_from_value(
     None
 }
 
+fn extract_codex_tokens_from_credentials_value(
+    value: &serde_json::Value,
+) -> Option<(CodexTokens, Option<String>)> {
+    let obj = value.as_object()?;
+    if obj
+        .get("credentials")
+        .and_then(|value| value.as_object())
+        .is_some()
+    {
+        if let (Some(id_token), Some(access_token)) = (
+            first_json_string(
+                value,
+                &[&["credentials", "id_token"], &["credentials", "idToken"]],
+            ),
+            first_json_string(
+                value,
+                &[
+                    &["credentials", "access_token"],
+                    &["credentials", "accessToken"],
+                ],
+            ),
+        ) {
+            let refresh_token = first_json_string(
+                value,
+                &[
+                    &["credentials", "refresh_token"],
+                    &["credentials", "refreshToken"],
+                ],
+            );
+            let account_id_hint = first_json_string(
+                value,
+                &[
+                    &["credentials", "account_id"],
+                    &["credentials", "accountId"],
+                    &["credentials", "chatgpt_account_id"],
+                    &["credentials", "chatgptAccountId"],
+                    &["credentials", "workspace_id"],
+                    &["credentials", "workspaceId"],
+                    &["account_id"],
+                    &["accountId"],
+                ],
+            );
+            return Some((
+                CodexTokens {
+                    id_token,
+                    access_token,
+                    refresh_token,
+                },
+                account_id_hint,
+            ));
+        }
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -9094,23 +10209,23 @@ mod tests {
         save_account, save_account_index, should_accept_authority_snapshot,
         sync_account_from_auth_dir, sync_api_key_account_from_local_state,
         sync_api_key_provider_accounts, sync_managed_projection_from_auth_dir,
-        try_parse_pending_oauth_delimited_line, update_api_key_credentials, upsert_account,
-        upsert_account_for_reauth, upsert_account_from_access_token,
-        upsert_account_from_access_token_with_hints, upsert_account_from_auth_tokens,
-        upsert_agent_identity_account, upsert_api_key_account, validate_api_key_credentials,
-        write_account_bundle_to_dir, write_api_key_bearer_provider_override_to_config_toml,
-        write_api_provider_to_config_toml, write_auth_file_to_dir, write_managed_projection_to_dir,
-        write_quick_config_to_config_toml, ApiProviderConfig, CodexAccessTokenImportHints,
-        CodexAccountGroupRecord, CodexAccountIndex, CodexAccountSummary, CodexAuthFile,
-        CodexAuthTokens, CodexGroupQuotaRefreshPolicy, CodexJsonImportCandidate,
-        LocalCodexOAuthSnapshot, CODEX_ACCOUNT_DETAIL_SCHEMA_VERSION,
+        try_parse_pending_oauth_delimited_line, update_account_instance_access,
+        update_api_key_credentials, upsert_account, upsert_account_for_reauth,
+        upsert_account_from_access_token, upsert_account_from_access_token_with_hints,
+        upsert_account_from_auth_tokens, upsert_agent_identity_account, upsert_api_key_account,
+        validate_api_key_credentials, write_account_bundle_to_dir,
+        write_api_key_bearer_provider_override_to_config_toml, write_api_provider_to_config_toml,
+        write_auth_file_to_dir, write_managed_projection_to_dir, write_quick_config_to_config_toml,
+        ApiProviderConfig, CodexAccessTokenImportHints, CodexAccountGroupRecord, CodexAccountIndex,
+        CodexAccountSummary, CodexAuthFile, CodexAuthTokens, CodexGroupQuotaRefreshPolicy,
+        CodexJsonImportCandidate, LocalCodexOAuthSnapshot, CODEX_ACCOUNT_DETAIL_SCHEMA_VERSION,
         CODEX_AUTHORIZATION_STATUS_PENDING, CODEX_AUTO_COMPACT_DEFAULT_LIMIT,
         CODEX_CONTEXT_WINDOW_1M_VALUE, CODEX_DISABLE_HOSTED_IMAGE_GENERATION_HEADER,
         CODEX_DISABLE_HOSTED_IMAGE_GENERATION_HEADER_VALUE, CODEX_IMAGEGEN_ACTOR_HEADER,
-        CODEX_IMAGEGEN_ACTOR_HEADER_VALUE, CODEX_IMAGE_MODEL_ID,
+        CODEX_IMAGEGEN_ACTOR_HEADER_VALUE, CODEX_IMAGE_MODEL_ID, CODEX_RUNTIME_MODEL_PROVIDER_ID,
     };
     use crate::models::codex::{
-        CodexAccount, CodexAgentIdentity, CodexApiProviderMode, CodexTokens,
+        CodexAccount, CodexAgentIdentity, CodexApiModelMapping, CodexApiProviderMode, CodexTokens,
     };
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use std::fs;
@@ -9886,6 +11001,21 @@ mod tests {
         account
     }
 
+    #[test]
+    fn reads_sub2api_codex_fingerprint_mode_from_extra() {
+        let value = serde_json::json!({
+            "extra": { "codex_fingerprint_mode": " FULL " }
+        });
+        assert_eq!(
+            super::read_codex_fingerprint_mode(&value).as_deref(),
+            Some("full")
+        );
+        assert!(super::read_codex_fingerprint_mode(
+            &serde_json::json!({"extra": {"codex_fingerprint_mode": "session"}})
+        )
+        .is_none());
+    }
+
     fn seed_oauth_account(tokens: CodexTokens) -> CodexAccount {
         let account = build_test_oauth_account(tokens);
         save_account(&account).expect("save account");
@@ -10333,6 +11463,12 @@ mod tests {
 
     #[test]
     fn full_token_sub2api_candidate_preserves_explicit_subscription_expiry() {
+        let id_token = make_jwt(serde_json::json!({
+            "email": "oauth-expiry@example.com",
+            "https://api.openai.com/auth": {
+                "chatgpt_account_id": "acc-oauth-expiry"
+            }
+        }));
         let access_token = make_jwt(serde_json::json!({
             "email": "oauth-expiry@example.com",
             "exp": 1_786_466_640,
@@ -10348,9 +11484,10 @@ mod tests {
             "type": "oauth",
             "credentials": {
                 "email": "oauth-expiry@example.com",
-                "id_token": access_token,
-                "access_token": access_token,
+                "id_token": id_token.clone(),
+                "access_token": access_token.clone(),
                 "refresh_token": "rt-oauth-expiry",
+                "chatgpt_account_id": "acc-oauth-expiry",
                 "expires_at": "2026-08-11T16:44:00Z",
                 "subscription_expires_at": "2026-09-20T00:00:00Z"
             }
@@ -10358,6 +11495,46 @@ mod tests {
 
         let candidate = extract_codex_import_candidate_from_value(&value)
             .expect("Sub2API OAuth account should be accepted");
+        match &candidate {
+            CodexJsonImportCandidate::FullToken {
+                tokens,
+                account_id_hint,
+                subscription_active_until_hint,
+                ..
+            } => {
+                assert_eq!(tokens.id_token, id_token);
+                assert_eq!(tokens.access_token, access_token);
+                assert_eq!(tokens.refresh_token.as_deref(), Some("rt-oauth-expiry"));
+                assert_eq!(account_id_hint.as_deref(), Some("acc-oauth-expiry"));
+                assert_eq!(
+                    subscription_active_until_hint.as_deref(),
+                    Some("2026-09-20T00:00:00Z")
+                );
+
+                let mut account = CodexAccount::new(
+                    "codex-sub2api-oauth".to_string(),
+                    "oauth-expiry@example.com".to_string(),
+                    tokens.clone(),
+                );
+                account.account_id = account_id_hint.clone();
+                let auth_file = build_auth_file_value(&account).expect("project auth.json");
+                assert!(auth_file.get("personal_access_token").is_none());
+                assert_eq!(
+                    auth_file
+                        .pointer("/tokens/refresh_token")
+                        .and_then(serde_json::Value::as_str),
+                    Some("rt-oauth-expiry")
+                );
+                assert_eq!(
+                    auth_file
+                        .pointer("/tokens/account_id")
+                        .and_then(serde_json::Value::as_str),
+                    Some("acc-oauth-expiry")
+                );
+            }
+            _ => panic!("expected Sub2API OAuth credentials to become full tokens"),
+        }
+
         let draft = super::codex_batch_import_draft_from_candidate(candidate);
         let preview = super::preview_account_for_draft(&draft)
             .expect("Sub2API OAuth preview should be available");
@@ -10369,7 +11546,47 @@ mod tests {
     }
 
     #[test]
+    fn extract_candidate_prefers_nested_full_oauth_over_opaque_access_token_fallback() {
+        let id_token = make_jwt(serde_json::json!({
+            "email": "opaque-oauth@example.com"
+        }));
+        let value = serde_json::json!({
+            "platform": "openai",
+            "type": "oauth",
+            "credentials": {
+                "idToken": id_token.clone(),
+                "accessToken": "at-opaque-oauth-token",
+                "refreshToken": "rt-opaque-oauth",
+                "chatgptAccountId": "acc-opaque-oauth"
+            }
+        });
+
+        let candidate = extract_codex_import_candidate_from_value(&value)
+            .expect("nested OAuth credentials should be accepted");
+
+        match candidate {
+            CodexJsonImportCandidate::FullToken {
+                tokens,
+                account_id_hint,
+                ..
+            } => {
+                assert_eq!(tokens.id_token, id_token);
+                assert_eq!(tokens.access_token, "at-opaque-oauth-token");
+                assert_eq!(tokens.refresh_token.as_deref(), Some("rt-opaque-oauth"));
+                assert_eq!(account_id_hint.as_deref(), Some("acc-opaque-oauth"));
+            }
+            _ => panic!("expected nested credentials to remain full OAuth tokens"),
+        }
+    }
+
+    #[test]
     fn extract_candidate_prefers_cpa_personal_access_token_over_session_token() {
+        let session_id_token = make_jwt(serde_json::json!({
+            "email": "cpa@example.com",
+            "https://api.openai.com/auth": {
+                "chatgpt_account_id": "acc-cpa-session"
+            }
+        }));
         let session_access_token = make_jwt(serde_json::json!({
             "email": "cpa@example.com",
             "https://api.openai.com/auth": {
@@ -10379,7 +11596,7 @@ mod tests {
         let value = serde_json::json!({
             "type": "codex",
             "provider": "openai",
-            "id_token": "",
+            "id_token": session_id_token,
             "access_token": session_access_token,
             "refresh_token": "",
             "email": "cpa@example.com",
@@ -11937,7 +13154,7 @@ multi_agent = true
     }
 
     #[test]
-    fn api_key_config_toml_uses_builtin_openai_for_responses_relay() {
+    fn api_key_config_toml_uses_http_only_provider_for_relay_without_websocket_support() {
         let base_dir = make_temp_dir("codex-api-key-config-custom-provider-test");
         let mut account = CodexAccount::new_api_key(
             "relay".to_string(),
@@ -11955,14 +13172,12 @@ multi_agent = true
 
         let config_path = base_dir.join("config.toml");
         let content = fs::read_to_string(&config_path).expect("read config");
-        assert!(content.contains("openai_base_url = \"https://relay.example.com/v1\""));
-        assert!(!content.contains("codex_local_access"));
+        assert!(content.contains("model_provider = \"codex_local_access\""));
+        assert!(content.contains("base_url = \"https://relay.example.com/v1\""));
+        assert!(content.contains("supports_websockets = false"));
+        assert!(content.contains("requires_openai_auth = true"));
+        assert!(!content.contains("openai_base_url"));
         assert!(!content.contains("[model_providers.relay]"));
-        assert!(!content.contains("experimental_bearer_token"));
-        #[cfg(target_os = "windows")]
-        assert!(content.contains("model_provider = \"openai\""));
-        #[cfg(not(target_os = "windows"))]
-        assert!(!content.contains("model_provider = "));
         let auth: serde_json::Value = serde_json::from_str(
             &fs::read_to_string(base_dir.join("auth.json")).expect("read relay auth"),
         )
@@ -11971,10 +13186,10 @@ multi_agent = true
         assert_eq!(
             read_api_provider_from_config_toml(&base_dir),
             ApiProviderConfig {
-                mode: CodexApiProviderMode::OpenaiBuiltin,
+                mode: CodexApiProviderMode::Custom,
                 base_url: Some("https://relay.example.com/v1".to_string()),
-                provider_id: None,
-                provider_name: None,
+                provider_id: Some(CODEX_RUNTIME_MODEL_PROVIDER_ID.to_string()),
+                provider_name: Some("Relay".to_string()),
             }
         );
 
@@ -12003,8 +13218,10 @@ multi_agent = true
         .expect("parse first auth");
         assert_eq!(auth["OPENAI_API_KEY"], "sk-relay-a");
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read first config");
-        assert!(config.contains("openai_base_url = \"https://relay-a.example.com/v1\""));
-        assert!(!config.contains("codex_local_access"));
+        assert!(config.contains("model_provider = \"codex_local_access\""));
+        assert!(config.contains("base_url = \"https://relay-a.example.com/v1\""));
+        assert!(config.contains("supports_websockets = false"));
+        assert!(!config.contains("openai_base_url"));
 
         sync_api_key_account_from_local_state(&mut first, &base_dir);
         assert_eq!(first.api_provider_mode, CodexApiProviderMode::Custom);
@@ -12030,9 +13247,11 @@ multi_agent = true
         .expect("parse second auth");
         assert_eq!(auth["OPENAI_API_KEY"], "sk-relay-b");
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read second config");
-        assert!(config.contains("openai_base_url = \"https://relay-b.example.com/v1\""));
+        assert!(config.contains("model_provider = \"codex_local_access\""));
+        assert!(config.contains("base_url = \"https://relay-b.example.com/v1\""));
+        assert!(config.contains("supports_websockets = false"));
         assert!(!config.contains("relay-a.example.com"));
-        assert!(!config.contains("codex_local_access"));
+        assert!(!config.contains("openai_base_url"));
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
@@ -12082,6 +13301,7 @@ multi_agent = true
             false,
             std::collections::HashMap::new(),
             None,
+            None,
         )
         .expect("update API key account");
 
@@ -12092,9 +13312,11 @@ multi_agent = true
         assert_eq!(auth["OPENAI_API_KEY"], "sk-after-edit");
         let config =
             fs::read_to_string(env.codex_home().join("config.toml")).expect("read edited config");
-        assert!(config.contains("openai_base_url = \"https://after.example.com/v1\""));
+        assert!(config.contains("model_provider = \"codex_local_access\""));
+        assert!(config.contains("base_url = \"https://after.example.com/v1\""));
+        assert!(config.contains("supports_websockets = false"));
         assert!(!config.contains("before.example.com"));
-        assert!(!config.contains("codex_local_access"));
+        assert!(!config.contains("openai_base_url"));
         assert_eq!(updated.api_provider_mode, CodexApiProviderMode::Custom);
         assert_eq!(updated.api_provider_id.as_deref(), Some("after_relay"));
         assert_eq!(updated.api_provider_name.as_deref(), Some("After Relay"));
@@ -12126,6 +13348,7 @@ X-Custom = "keep-me"
             false,
             true,
             false,
+            "responses",
         )
         .expect("write config");
 
@@ -12185,6 +13408,7 @@ X-Custom = "keep-me"
             false,
             true,
             false,
+            "responses",
         )
         .expect("write config");
 
@@ -12221,6 +13445,7 @@ http_headers = { "x-openai-actor-authorization" = "legacy", "X-Custom" = "keep-m
             false,
             false,
             true,
+            "responses",
         )
         .expect("write config");
 
@@ -12345,6 +13570,7 @@ supports_websockets = false
             false,
             true,
             false,
+            "responses",
         )
         .expect("write config");
 
@@ -12444,6 +13670,7 @@ supports_websockets = false
             Vec::new(),
         );
         previous_relay.api_wire_api = Some("responses".to_string());
+        previous_relay.api_supports_websockets = true;
         write_account_bundle_to_dir(&base_dir, &previous_relay)
             .expect("write previous built-in relay bundle");
         let previous_config =
@@ -12511,6 +13738,7 @@ supports_websockets = false
             true,
             false,
             true,
+            "responses",
         )
         .expect("write config");
 
@@ -13088,6 +14316,558 @@ supports_websockets = false
     }
 
     #[test]
+    fn deepseek_account_normalize_defaults_to_official_responses_profile() {
+        let mut account = CodexAccount::new_api_key(
+            "deepseek-api-key".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-deepseek".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com/v1".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec!["deepseek-v4-pro".to_string()],
+        );
+        account.api_wire_api = None;
+        account.api_supports_websockets = true;
+        account.api_supports_vision = true;
+
+        assert!(super::normalize_deepseek_account(&mut account));
+        assert_eq!(
+            account.api_base_url.as_deref(),
+            Some("https://api.deepseek.com")
+        );
+        assert_eq!(account.api_wire_api.as_deref(), Some("responses"));
+        assert!(account.api_sync_model_catalog_to_codex);
+        assert!(!account.api_supports_websockets);
+        assert!(!account.api_supports_vision);
+        assert_eq!(
+            account.api_model_catalog,
+            vec!["deepseek-v4-flash", "deepseek-v4-pro"]
+        );
+        assert_eq!(
+            account.api_model_mappings,
+            super::default_deepseek_api_model_mappings()
+        );
+    }
+
+    #[test]
+    fn api_model_mappings_normalize_and_resolve_upstream() {
+        let mappings = super::normalize_api_model_mappings(vec![
+            CodexApiModelMapping {
+                client_model: " gpt-5.6-sol ".to_string(),
+                upstream_model: " deepseek-v4-flash ".to_string(),
+            },
+            CodexApiModelMapping {
+                client_model: "".to_string(),
+                upstream_model: "".to_string(),
+            },
+        ])
+        .expect("normalize mappings");
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(mappings[0].client_model, "gpt-5.6-sol");
+        assert_eq!(mappings[0].upstream_model, "deepseek-v4-flash");
+
+        let mut account = CodexAccount::new_api_key(
+            "deepseek-api-key".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-deepseek".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec!["deepseek-v4-flash".to_string()],
+        );
+        account.api_model_mappings = mappings;
+        assert_eq!(
+            super::resolve_account_upstream_model(&account, "gpt-5.6-sol"),
+            "deepseek-v4-flash"
+        );
+        assert_eq!(
+            super::resolve_account_upstream_model(&account, "deepseek-v4-flash"),
+            "deepseek-v4-flash"
+        );
+        assert_eq!(
+            super::resolve_account_upstream_model(&account, "gpt-5.4"),
+            "gpt-5.4"
+        );
+    }
+
+    #[test]
+    fn deepseek_account_normalize_preserves_explicit_chat_completions() {
+        let mut account = CodexAccount::new_api_key(
+            "deepseek-api-key".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-deepseek".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com/v1".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec!["deepseek-chat".to_string()],
+        );
+        account.api_wire_api = Some("chat_completions".to_string());
+        account.api_sync_model_catalog_to_codex = false;
+
+        assert!(super::normalize_deepseek_account(&mut account));
+        assert_eq!(
+            account.api_base_url.as_deref(),
+            Some("https://api.deepseek.com")
+        );
+        assert_eq!(account.api_wire_api.as_deref(), Some("chat_completions"));
+        assert!(!account.api_sync_model_catalog_to_codex);
+        assert_eq!(account.api_model_catalog, vec!["deepseek-chat".to_string()]);
+    }
+
+    #[test]
+    fn deepseek_direct_provider_catalog_uses_display_whitelist_and_upstream_names() {
+        let json = super::build_deepseek_direct_provider_catalog_json(&[]).expect("build catalog");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("parse catalog");
+        let models = value
+            .get("models")
+            .and_then(|item| item.as_array())
+            .expect("models array");
+        assert!(models.len() >= 2);
+        assert_eq!(
+            models[0].get("slug").and_then(|item| item.as_str()),
+            Some("deepseek-v4-flash")
+        );
+        assert_eq!(
+            models[0].get("display_name").and_then(|item| item.as_str()),
+            Some("DeepSeek-V4-Flash")
+        );
+        assert_eq!(
+            models[0].get("description").and_then(|item| item.as_str()),
+            Some("deepseek-v4-flash")
+        );
+        assert_eq!(
+            models[0].get("visibility").and_then(|item| item.as_str()),
+            Some("list")
+        );
+        assert_eq!(
+            models[0]
+                .get("apply_patch_tool_type")
+                .and_then(|item| item.as_str()),
+            Some("freeform")
+        );
+        assert_eq!(
+            models[1].get("slug").and_then(|item| item.as_str()),
+            Some("deepseek-v4-pro")
+        );
+        assert_eq!(
+            models[1].get("display_name").and_then(|item| item.as_str()),
+            Some("DeepSeek-V4-Pro")
+        );
+    }
+
+    #[test]
+    fn deepseek_official_catalog_json_prefers_flash_and_keeps_tool_metadata() {
+        let json = super::build_deepseek_official_model_catalog_json(&[]).expect("build catalog");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("parse catalog");
+        let models = value
+            .get("models")
+            .and_then(|item| item.as_array())
+            .expect("models array");
+        assert!(models.len() >= 2);
+        assert_eq!(
+            models[0].get("slug").and_then(|item| item.as_str()),
+            Some("deepseek-v4-flash")
+        );
+        assert_eq!(
+            models[0]
+                .get("apply_patch_tool_type")
+                .and_then(|item| item.as_str()),
+            Some("freeform")
+        );
+        assert_eq!(
+            models[0].get("shell_type").and_then(|item| item.as_str()),
+            Some("shell_command")
+        );
+        assert!(models[0]
+            .get("base_instructions")
+            .and_then(|item| item.as_str())
+            .is_some_and(|text| !text.trim().is_empty()));
+        assert_eq!(
+            models[1].get("slug").and_then(|item| item.as_str()),
+            Some("deepseek-v4-pro")
+        );
+    }
+
+    #[test]
+    fn deepseek_official_runtime_replaces_leftover_shell_model() {
+        let base_dir = make_temp_dir("codex-deepseek-official-runtime-test");
+        fs::write(
+            base_dir.join("config.toml"),
+            r#"model = "gpt-5.6-sol"
+model_provider = "codex_local_access"
+model_catalog_json = "cockpit-local-access-model-catalog.json"
+
+[model_providers.codex_local_access]
+base_url = "http://localhost:58393/v1"
+wire_api = "responses"
+"#,
+        )
+        .expect("write leftover config");
+
+        let mut account = CodexAccount::new_api_key(
+            "deepseek-api-key".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-deepseek".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec![
+                "deepseek-v4-flash".to_string(),
+                "deepseek-v4-pro".to_string(),
+            ],
+        );
+        account.api_wire_api = Some("responses".to_string());
+        account.api_sync_model_catalog_to_codex = true;
+
+        assert!(
+            super::sync_deepseek_shell_remap_catalog_to_dir(&base_dir, &account)
+                .expect("write shell remap catalog")
+        );
+
+        let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
+        assert!(config.contains("model = \"gpt-5.5\""));
+        assert!(!config.contains("model = \"gpt-5.6-sol\""));
+        assert!(config.contains("model_catalog_json = \"cockpit-provider-model-catalog.json\""));
+        let catalog_path = super::deepseek_official_model_catalog_path(&base_dir);
+        let catalog = fs::read_to_string(&catalog_path).expect("read official catalog");
+        assert!(catalog.contains("\"slug\": \"gpt-5.5\""));
+        assert!(catalog.contains("DeepSeek-V4-Flash"));
+        assert!(catalog.contains("apply_patch_tool_type"));
+        assert!(catalog.contains("shell_command"));
+        assert!(!catalog.contains("\"slug\": \"deepseek-v4-flash\""));
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn deepseek_official_catalog_sync_replaces_leftover_shell_model() {
+        let base_dir = make_temp_dir("codex-deepseek-official-catalog-sync-test");
+        fs::write(
+            base_dir.join("config.toml"),
+            r#"model = "gpt-5.6-sol"
+model_provider = "codex_local_access"
+model_catalog_json = "cockpit-local-access-model-catalog.json"
+"#,
+        )
+        .expect("write leftover config");
+
+        let mut account = CodexAccount::new_api_key(
+            "deepseek-api-key".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-deepseek".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec![
+                "deepseek-v4-flash".to_string(),
+                "deepseek-v4-pro".to_string(),
+            ],
+        );
+        account.api_wire_api = Some("responses".to_string());
+        account.api_sync_model_catalog_to_codex = true;
+
+        assert!(
+            super::sync_deepseek_shell_remap_catalog_to_dir(&base_dir, &account)
+                .expect("sync shell remap catalog")
+        );
+
+        let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
+        assert!(config.contains("model = \"gpt-5.5\""));
+        assert!(!config.contains("model = \"gpt-5.6-sol\""));
+        assert!(config.contains("model_catalog_json = \"cockpit-provider-model-catalog.json\""));
+        let catalog_path = super::deepseek_official_model_catalog_path(&base_dir);
+
+        let catalog = fs::read_to_string(&catalog_path).expect("read official catalog");
+        assert!(catalog.contains("\"slug\": \"gpt-5.5\""));
+        assert!(catalog.contains("\"slug\": \"gpt-5.4\""));
+        assert!(catalog.contains("DeepSeek-V4-Flash"));
+        assert!(catalog.contains("apply_patch_tool_type"));
+        assert!(catalog.contains("shell_command"));
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn deepseek_official_runtime_writes_extra_instance_provider_catalog_and_clears_cache() {
+        let instance_dir = make_temp_dir("codex-extra-instance-deepseek-official-catalog");
+        fs::write(
+            instance_dir.join("config.toml"),
+            r#"model = "gpt-5.6-sol"
+model_provider = "codex_local_access"
+model_catalog_json = "cockpit-provider-model-catalog.json"
+"#,
+        )
+        .expect("write leftover extra-instance config");
+        fs::write(
+            instance_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE),
+            r#"{"models":[{"slug":"gpt-5.6-sol","display_name":"deepseek-v4-flash"}]}"#,
+        )
+        .expect("write leftover gateway catalog");
+        fs::write(
+            instance_dir.join("models.json"),
+            r#"{"models":[{"slug":"deepseek-v4-flash"}]}"#,
+        )
+        .expect("write leftover models.json");
+        fs::write(
+            instance_dir.join("models_cache.json"),
+            r#"{"models":[{"slug":"gpt-5.4"}]}"#,
+        )
+        .expect("write stale extra-instance model cache");
+
+        let mut account = CodexAccount::new_api_key(
+            "deepseek-api-key".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-deepseek".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec![
+                "deepseek-v4-flash".to_string(),
+                "deepseek-v4-pro".to_string(),
+            ],
+        );
+        account.api_wire_api = Some("responses".to_string());
+        account.api_sync_model_catalog_to_codex = true;
+
+        write_account_bundle_to_dir(&instance_dir, &account).expect("write extra instance bundle");
+
+        let catalog_path = super::deepseek_official_model_catalog_path(&instance_dir);
+        let config = fs::read_to_string(instance_dir.join("config.toml")).expect("read config");
+        assert!(config.contains("model = \"gpt-5.5\""));
+        assert!(config.contains("model_catalog_json = \"cockpit-provider-model-catalog.json\""));
+        assert_eq!(
+            catalog_path.file_name().and_then(|name| name.to_str()),
+            Some("cockpit-provider-model-catalog.json")
+        );
+        assert!(!instance_dir.join("models.json").exists());
+        assert!(!instance_dir.join("models_cache.json").exists());
+
+        let catalog: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(&catalog_path).expect("read instance provider catalog"),
+        )
+        .expect("parse instance provider catalog");
+        let models = catalog
+            .get("models")
+            .and_then(serde_json::Value::as_array)
+            .expect("models");
+        let flash = models
+            .iter()
+            .find(|model| model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-5.5"))
+            .expect("flash shell slug");
+        assert_eq!(
+            flash
+                .get("display_name")
+                .and_then(serde_json::Value::as_str),
+            Some("DeepSeek-V4-Flash")
+        );
+        assert_eq!(
+            flash.get("visibility").and_then(serde_json::Value::as_str),
+            Some("list")
+        );
+        assert_eq!(
+            flash
+                .get("apply_patch_tool_type")
+                .and_then(serde_json::Value::as_str),
+            Some("freeform")
+        );
+        assert!(models.iter().any(|model| {
+            model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-5.4")
+                && model
+                    .get("display_name")
+                    .and_then(serde_json::Value::as_str)
+                    == Some("DeepSeek-V4-Pro")
+        }));
+
+        fs::remove_dir_all(&instance_dir).expect("cleanup extra instance dir");
+    }
+
+    #[test]
+    fn deepseek_direct_bundle_writes_startup_model_without_shell_catalog() {
+        let instance_dir = make_temp_dir("codex-deepseek-direct-startup-model");
+        let mut account = CodexAccount::new_api_key(
+            "deepseek-api-key".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-deepseek".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec![
+                "deepseek-v4-flash".to_string(),
+                "deepseek-v4-pro".to_string(),
+            ],
+        );
+        account.api_wire_api = Some("responses".to_string());
+        account.api_sync_model_catalog_to_codex = true;
+        account.api_instance_access_mode = Some("direct".to_string());
+        account.api_startup_model = Some("deepseek-v4-pro".to_string());
+
+        write_account_bundle_to_dir(&instance_dir, &account).expect("write direct bundle");
+
+        let config = fs::read_to_string(instance_dir.join("config.toml")).expect("read config");
+        assert!(config.contains("model = \"deepseek-v4-pro\""));
+        assert!(config.contains("model_provider = \"deepseek\""));
+        assert!(config.contains("base_url = \"https://api.deepseek.com\""));
+        assert!(!config.contains("model_catalog_json"));
+        assert!(!instance_dir
+            .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
+            .exists());
+
+        fs::remove_dir_all(&instance_dir).expect("cleanup extra instance dir");
+    }
+
+    #[test]
+    fn deepseek_gateway_bundle_writes_startup_shell_model() {
+        let instance_dir = make_temp_dir("codex-deepseek-gateway-startup-model");
+        let mut account = CodexAccount::new_api_key(
+            "deepseek-api-key".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-deepseek".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec![
+                "deepseek-v4-flash".to_string(),
+                "deepseek-v4-pro".to_string(),
+            ],
+        );
+        account.api_wire_api = Some("responses".to_string());
+        account.api_sync_model_catalog_to_codex = true;
+        account.api_instance_access_mode = Some("gateway".to_string());
+        account.api_startup_model = Some("deepseek-v4-pro".to_string());
+
+        write_account_bundle_to_dir(&instance_dir, &account).expect("write gateway bundle");
+
+        let config = fs::read_to_string(instance_dir.join("config.toml")).expect("read config");
+        assert!(config.contains("model = \"gpt-5.4\""));
+        assert!(config.contains("model_catalog_json"));
+        assert!(instance_dir
+            .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
+            .exists());
+
+        fs::remove_dir_all(&instance_dir).expect("cleanup extra instance dir");
+    }
+
+    #[test]
+    fn deepseek_cdp_bundle_writes_official_provider_and_official_catalog() {
+        let instance_dir = make_temp_dir("codex-deepseek-cdp-official-picker");
+        let mut account = CodexAccount::new_api_key(
+            "deepseek-api-key".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-deepseek".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec![
+                "deepseek-v4-flash".to_string(),
+                "deepseek-v4-pro".to_string(),
+            ],
+        );
+        account.api_wire_api = Some("responses".to_string());
+        account.api_sync_model_catalog_to_codex = true;
+        account.api_instance_access_mode = Some("cdp".to_string());
+        account.api_startup_model = Some("deepseek-v4-pro".to_string());
+
+        write_account_bundle_to_dir(&instance_dir, &account).expect("write cdp bundle");
+
+        let config = fs::read_to_string(instance_dir.join("config.toml")).expect("read config");
+        assert!(config.contains("model = \"deepseek-v4-pro\""));
+        assert!(!config.contains("model = \"gpt-5.4\""));
+        assert!(config.contains("model_provider = \"deepseek\""));
+        assert!(config.contains("base_url = \"https://api.deepseek.com\""));
+        assert!(config.contains("model_catalog_json"));
+        assert!(instance_dir
+            .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
+            .exists());
+        let catalog =
+            fs::read_to_string(instance_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE))
+                .expect("read cdp catalog");
+        assert!(catalog.contains("\"slug\": \"deepseek-v4-pro\""));
+        assert!(!catalog.contains("\"slug\": \"gpt-5.4\""));
+
+        fs::remove_dir_all(&instance_dir).expect("cleanup extra instance dir");
+    }
+
+    #[test]
+    fn update_account_instance_access_saves_deepseek_start_choice() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let _env = TestEnvGuard::new("codex-deepseek-instance-access-test");
+        let mut account = CodexAccount::new_api_key(
+            "deepseek-access".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-deepseek".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec![
+                "deepseek-v4-flash".to_string(),
+                "deepseek-v4-pro".to_string(),
+            ],
+        );
+        account.api_wire_api = Some("responses".to_string());
+        save_account(&account).expect("save account");
+
+        let updated = update_account_instance_access(
+            &account.id,
+            Some("direct".to_string()),
+            Some("deepseek-v4-pro".to_string()),
+        )
+        .expect("update access");
+        assert_eq!(updated.api_instance_access_mode.as_deref(), Some("direct"));
+        assert_eq!(
+            updated.api_startup_model.as_deref(),
+            Some("deepseek-v4-pro")
+        );
+
+        account.api_wire_api = Some("chat_completions".to_string());
+        save_account(&account).expect("save chat account");
+        let chat_error = update_account_instance_access(
+            &account.id,
+            Some("direct".to_string()),
+            Some("deepseek-v4-flash".to_string()),
+        )
+        .expect_err("chat rejects direct");
+        assert!(chat_error.contains("Chat Completions"));
+
+        let chat_updated = update_account_instance_access(
+            &account.id,
+            Some("gateway".to_string()),
+            Some("deepseek-v4-pro".to_string()),
+        )
+        .expect("chat can save startup model");
+        assert_eq!(
+            chat_updated.api_instance_access_mode.as_deref(),
+            Some("gateway")
+        );
+        assert_eq!(
+            chat_updated.api_startup_model.as_deref(),
+            Some("deepseek-v4-pro")
+        );
+
+        account.api_wire_api = Some("responses".to_string());
+        save_account(&account).expect("save responses account");
+        let cdp = update_account_instance_access(
+            &account.id,
+            Some("cdp".to_string()),
+            Some("deepseek-v4-flash".to_string()),
+        )
+        .expect("responses can save cdp");
+        assert_eq!(cdp.api_instance_access_mode.as_deref(), Some("cdp"));
+        assert!(super::account_uses_deepseek_cdp_injection(&cdp));
+    }
+
+    #[test]
     fn responses_api_key_bundle_keeps_external_catalog_without_managed_catalog() {
         let base_dir = make_temp_dir("codex-api-key-user-model-catalog-test");
         fs::write(
@@ -13277,6 +15057,7 @@ multi_agent = true
             false,
             false,
             true,
+            "responses",
         )
         .expect("write config");
 
@@ -13746,6 +15527,45 @@ pub fn update_account_tags(account_id: &str, tags: Vec<String>) -> Result<CodexA
     Ok(account)
 }
 
+pub fn update_accounts_fingerprint_mode(
+    account_ids: &[String],
+    mode: String,
+) -> Result<Vec<CodexAccount>, String> {
+    let normalized = mode.trim().to_ascii_lowercase();
+    if !matches!(normalized.as_str(), "off" | "device" | "session" | "full") {
+        return Err("设备指纹模式无效".to_string());
+    }
+    let mut accounts = Vec::with_capacity(account_ids.len());
+    for account_id in account_ids {
+        let account =
+            load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
+        if !is_standard_oauth_account(&account) {
+            return Err(format!("账号不支持设备指纹设置: {}", account_id));
+        }
+        accounts.push(account);
+    }
+
+    let mut updated = Vec::with_capacity(accounts.len());
+    for mut account in accounts {
+        account.codex_fingerprint_mode = if normalized == "session" {
+            None
+        } else {
+            Some(normalized.clone())
+        };
+        save_account(&account)?;
+        if let Err(error) =
+            crate::modules::codex_local_access::sync_sidecar_auth_file_for_account(&account)
+        {
+            logger::log_warn(&format!(
+                "同步设备指纹模式到 API Service sidecar 失败: account_id={}, error={}",
+                account.id, error
+            ));
+        }
+        updated.push(account);
+    }
+    Ok(updated)
+}
+
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct CodexAccountNoteUpdate {
     pub note: Option<String>,
@@ -13965,6 +15785,7 @@ pub fn update_api_key_credentials(
     api_supports_vision: bool,
     api_model_vision_support: std::collections::HashMap<String, bool>,
     api_vision_routing_model: Option<String>,
+    account_name: Option<String>,
 ) -> Result<CodexAccount, String> {
     let mut account =
         load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
@@ -14010,6 +15831,9 @@ pub fn update_api_key_credentials(
         api_model_vision_support,
         api_vision_routing_model,
     );
+    if let Some(account_name) = normalize_optional_value(account_name) {
+        account.account_name = Some(account_name);
+    }
     account.update_last_used();
     save_account(&account)?;
 

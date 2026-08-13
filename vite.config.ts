@@ -71,8 +71,8 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      // Rust and Nx write locked/generated files below these directories on Windows.
+      // 3. tell Vite to ignore Rust and Nx build output, which can otherwise
+      //    trigger EBUSY on Windows while those tools hold generated files.
       ignored: ["**/src-tauri/**", "**/target/**", "**/.nx/**"],
     },
   },

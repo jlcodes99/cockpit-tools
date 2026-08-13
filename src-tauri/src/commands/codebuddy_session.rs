@@ -17,8 +17,9 @@ fn parse_platform(platform: &str) -> Result<CodebuddySessionPlatform, String> {
     match platform {
         "cn" => Ok(CodebuddySessionPlatform::Cn),
         "intl" => Ok(CodebuddySessionPlatform::Intl),
+        "workbuddy" => Ok(CodebuddySessionPlatform::Workbuddy),
         _ => Err(format!(
-            "Unknown platform: {}. Use 'cn' or 'intl'.",
+            "Unknown platform: {}. Use 'cn', 'intl' or 'workbuddy'.",
             platform
         )),
     }

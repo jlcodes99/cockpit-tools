@@ -162,7 +162,7 @@ func TestCodexExecutorCacheHelper_IdentityConfuseRemapsBodyAndHeaders(t *testing
 		Routing: config.RoutingConfig{Strategy: "fill-first"},
 		Codex:   config.CodexConfig{IdentityConfuse: true},
 	}}
-	auth := &cliproxyauth.Auth{ID: "auth-1", Provider: "codex"}
+	auth := &cliproxyauth.Auth{ID: "auth-1", Provider: "codex", Metadata: map[string]any{"codex_fingerprint_mode": "off"}}
 	rawJSON := []byte(`{"model":"gpt-5-codex","stream":true,"client_metadata":{"x-codex-turn-metadata":"{\"prompt_cache_key\":\"cache-1\",\"turn_id\":\"turn-1\",\"window_id\":\"cache-1:0\"}","x-codex-window-id":"cache-1:0"}}`)
 	req := cliproxyexecutor.Request{
 		Model:   "gpt-5-codex",
@@ -222,6 +222,58 @@ func TestCodexExecutorCacheHelper_IdentityConfuseRemapsBodyAndHeaders(t *testing
 	}
 	if gotMetadataWindowID := gjson.Get(gotHeaderMetadata, "window_id").String(); gotMetadataWindowID != expectedPromptCacheKey+":0" {
 		t.Fatalf("X-Codex-Turn-Metadata.window_id = %q, want %q", gotMetadataWindowID, expectedPromptCacheKey+":0")
+	}
+}
+
+func TestCodexFingerprintConvergenceModes(t *testing.T) {
+	userPayload := []byte(`{"prompt_cache_key":"client-session","thread_id":"client-thread","client_metadata":{"x-codex-installation-id":"client-install","x-codex-window-id":"client-thread:0","x-codex-turn-metadata":"{\"installation_id\":\"client-install\",\"session_id\":\"client-session\",\"thread_id\":\"client-thread\",\"window_id\":\"client-thread:0\"}"}}`)
+	rawJSON := userPayload
+
+	for _, mode := range []string{"device", "session", "full"} {
+		t.Run(mode, func(t *testing.T) {
+			cfg := &config.Config{}
+			auth := &cliproxyauth.Auth{ID: "auth-fingerprint", Provider: "codex", Metadata: map[string]any{"codex_fingerprint_mode": mode}}
+			body, state := applyCodexFingerprintBody(cfg, auth, userPayload, rawJSON, codexIdentityConfuseState{})
+			if !state.enabled && state.fingerprintMode != mode {
+				t.Fatalf("fingerprint mode = %q, want %q", state.fingerprintMode, mode)
+			}
+			if got := gjson.GetBytes(body, "client_metadata.x-codex-installation-id").String(); got == "client-install" || got == "" {
+				t.Fatalf("installation id was not converged: %q", got)
+			}
+			if mode == "device" {
+				return
+			}
+			if got := gjson.GetBytes(body, "client_metadata.session_id").String(); got != state.sessionID {
+				t.Fatalf("session id = %q, want %q", got, state.sessionID)
+			}
+			if mode == "full" && state.threadID != state.sessionID {
+				t.Fatalf("full mode thread id = %q, want session id %q", state.threadID, state.sessionID)
+			}
+		})
+	}
+}
+
+func TestCodexFingerprintModeUsesAccountMetadata(t *testing.T) {
+	cfg := &config.Config{}
+	tests := []struct {
+		name string
+		auth *cliproxyauth.Auth
+		want string
+	}{
+		{name: "unset defaults session", auth: &cliproxyauth.Auth{}, want: "session"},
+		{name: "missing account value defaults session", auth: &cliproxyauth.Auth{Metadata: map[string]any{"codex_fingerprint_mode": nil}}, want: "session"},
+		{name: "invalid account value defaults session", auth: &cliproxyauth.Auth{Metadata: map[string]any{"codex_fingerprint_mode": "invalid"}}, want: "session"},
+		{name: "explicit off", auth: &cliproxyauth.Auth{Metadata: map[string]any{"codex_fingerprint_mode": "off"}}, want: "off"},
+		{name: "device", auth: &cliproxyauth.Auth{Metadata: map[string]any{"codex_fingerprint_mode": "device"}}, want: "device"},
+		{name: "full", auth: &cliproxyauth.Auth{Metadata: map[string]any{"codex_fingerprint_mode": "full"}}, want: "full"},
+		{name: "api key always off", auth: &cliproxyauth.Auth{Metadata: map[string]any{"codex_fingerprint_mode": "full"}, Attributes: map[string]string{"api_key": "sk-test"}}, want: "off"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := codexFingerprintMode(cfg, tt.auth); got != tt.want {
+				t.Fatalf("codexFingerprintMode() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

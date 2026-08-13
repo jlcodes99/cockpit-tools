@@ -6,6 +6,9 @@ import type {
 } from '../utils/codexProviderGateway';
 import type { CodexLocalAccessTestResult } from '../types/codexLocalAccess';
 import {
+  DEEPSEEK_API_BASE_URL,
+  DEEPSEEK_API_PROVIDER_ID,
+  DEEPSEEK_CODEX_MODEL_CATALOG,
   findCodexApiProviderPresetById,
   resolveCodexApiProviderPresetId,
 } from '../utils/codexProviderPresets';
@@ -181,6 +184,72 @@ function migrateApiKeyFunProviderWireApi(
     return provider;
   });
   return { providers: next, changed };
+}
+
+/**
+ * Normalize official DeepSeek providers without locking Chat Completions out.
+ * - Missing wireApi defaults to Responses.
+ * - Explicit chat_completions is preserved.
+ * - Responses mode writes official catalog slugs and talks to the official API directly.
+ */
+function enforceDeepSeekProvider(provider: CodexModelProvider): boolean {
+  if (resolveCodexApiProviderPresetId(provider.baseUrl) !== DEEPSEEK_API_PROVIDER_ID) {
+    return false;
+  }
+  const modelCatalog = [...DEEPSEEK_CODEX_MODEL_CATALOG];
+  let changed = false;
+
+  if (provider.baseUrl !== DEEPSEEK_API_BASE_URL) {
+    provider.baseUrl = DEEPSEEK_API_BASE_URL;
+    changed = true;
+  }
+
+  const wireApi = provider.wireApi;
+  if (wireApi !== 'responses' && wireApi !== 'chat_completions') {
+    provider.wireApi = 'responses';
+    changed = true;
+  }
+
+  if (provider.wireApi === 'responses') {
+    if (provider.supportsWebsockets) {
+      provider.supportsWebsockets = false;
+      changed = true;
+    }
+    if (provider.supportsVision === true) {
+      provider.supportsVision = false;
+      changed = true;
+    }
+    if (provider.visionRoutingModel !== undefined) {
+      provider.visionRoutingModel = undefined;
+      changed = true;
+    }
+    if (provider.modelCapabilities !== undefined) {
+      provider.modelCapabilities = undefined;
+      changed = true;
+    }
+    if (
+      provider.modelCatalog?.length !== modelCatalog.length ||
+      modelCatalog.some((model, index) => provider.modelCatalog?.[index] !== model)
+    ) {
+      provider.modelCatalog = modelCatalog;
+      changed = true;
+    }
+  } else if (provider.wireApi === 'chat_completions') {
+    // Chat Completions stays on gateway path.
+    if (provider.enableModePreference === 'direct') {
+      provider.enableModePreference = 'gateway';
+      changed = true;
+    }
+    if (provider.supportsWebsockets) {
+      provider.supportsWebsockets = false;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    provider.updatedAt = Date.now();
+  }
+  return changed;
 }
 
 function presetModelCatalogForBaseUrl(baseUrl: string): string[] | undefined {
@@ -373,9 +442,14 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
   });
   const migration = migrateApiKeyFunProviderWireApi(loaded);
   loaded = migration.providers;
+  let migratedDeepSeek = false;
+  for (const provider of loaded) {
+    migratedDeepSeek = enforceDeepSeekProvider(provider) || migratedDeepSeek;
+  }
   if (
     loaded.length !== loadedProviders.length ||
     migration.changed ||
+    migratedDeepSeek ||
     loadResult.removedImageGenerationSetting ||
     loadResult.migratedSupportsWebsockets
   ) {
@@ -496,6 +570,7 @@ export async function createCodexModelProvider(input: {
     createdAt: now,
     updatedAt: now,
   };
+  enforceDeepSeekProvider(provider);
   if (input.initialApiKey) {
     ensureApiKeyOnProvider(provider, input.initialApiKey, input.initialApiKeyName);
   }
@@ -611,6 +686,7 @@ export async function updateCodexModelProvider(
         ? undefined
         : normalizeBoundOauthAccountId(patch.boundOauthAccountId);
   }
+  enforceDeepSeekProvider(provider);
   provider.updatedAt = Date.now();
   await writeProviders(providers);
   return { ...provider, apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey })) };
@@ -864,6 +940,7 @@ export async function upsertCodexModelProviderFromCredential(
   if (input.integrationType !== undefined) {
     provider.integrationType = normalizeIntegrationType(input.integrationType);
   }
+  enforceDeepSeekProvider(provider);
   provider.updatedAt = Date.now();
   await writeProviders(providers);
   return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };

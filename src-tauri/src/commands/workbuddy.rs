@@ -443,3 +443,46 @@ pub async fn checkin_workbuddy(
 
     Ok(response)
 }
+
+#[tauri::command]
+pub fn get_workbuddy_auto_checkin_config(
+) -> Result<crate::modules::workbuddy_auto_checkin::WorkbuddyAutoCheckinConfig, String> {
+    crate::modules::workbuddy_auto_checkin::get_config_checked()
+}
+
+#[tauri::command]
+pub fn migrate_workbuddy_auto_checkin_config(
+    legacy_config: crate::modules::workbuddy_auto_checkin::WorkbuddyAutoCheckinConfig,
+) -> Result<crate::modules::workbuddy_auto_checkin::WorkbuddyAutoCheckinConfig, String> {
+    crate::modules::workbuddy_auto_checkin::migrate_config_if_missing(&legacy_config)
+}
+
+#[tauri::command]
+pub fn save_workbuddy_auto_checkin_config(
+    config: crate::modules::workbuddy_auto_checkin::WorkbuddyAutoCheckinConfig,
+) -> Result<(), String> {
+    crate::modules::workbuddy_auto_checkin::save_config(&config)
+}
+
+#[tauri::command]
+pub fn get_workbuddy_auto_checkin_logs(
+) -> Result<Vec<crate::modules::workbuddy_auto_checkin::WorkbuddyAutoCheckinLogRecord>, String> {
+    crate::modules::workbuddy_auto_checkin::get_logs_checked()
+}
+
+#[tauri::command]
+pub fn clear_workbuddy_auto_checkin_logs() -> Result<(), String> {
+    crate::modules::workbuddy_auto_checkin::save_logs(&[])
+}
+
+#[tauri::command]
+pub async fn run_workbuddy_auto_checkin_now(
+    app: AppHandle,
+    force: Option<bool>,
+) -> Result<String, String> {
+    crate::modules::workbuddy_auto_checkin::run_workbuddy_auto_checkin_cycle_if_needed(
+        &app,
+        force.unwrap_or(false),
+    )
+    .await
+}

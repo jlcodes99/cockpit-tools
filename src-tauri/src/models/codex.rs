@@ -70,6 +70,13 @@ pub struct CodexAppSpeedConfig {
     pub global_state_path: String,
 }
 
+/// API 服务账号级模型映射：调用方请求的模型 → 发给上游的模型。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CodexApiModelMapping {
+    pub client_model: String,
+    pub upstream_model: String,
+}
+
 /// Codex 账号数据结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexAccount {
@@ -89,6 +96,9 @@ pub struct CodexAccount {
     pub api_provider_name: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub api_model_catalog: Vec<String>,
+    /// API 服务按账号改写：调用方请求的模型 → 发给上游的模型。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub api_model_mappings: Vec<CodexApiModelMapping>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub api_sync_model_catalog_to_codex: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -101,6 +111,12 @@ pub struct CodexAccount {
     pub api_model_vision_support: HashMap<String, bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_vision_routing_model: Option<String>,
+    /// DeepSeek Responses: `gateway` lists official shells via instance sidecar; `direct` talks to api.deepseek.com.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_instance_access_mode: Option<String>,
+    /// Direct-start model for official DeepSeek Responses (`deepseek-v4-flash` / `deepseek-v4-pro`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_startup_model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bound_oauth_account_id: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -121,6 +137,9 @@ pub struct CodexAccount {
     pub account_structure: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_note: Option<String>,
+    /// Codex OAuth 设备指纹收敛模式。未设置时由 sidecar 按 Sub2API 兼容默认值 `session` 处理。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codex_fingerprint_mode: Option<String>,
     #[serde(
         default,
         alias = "twoFactorSecret",
@@ -411,12 +430,15 @@ impl CodexAccount {
             api_provider_id: None,
             api_provider_name: None,
             api_model_catalog: Vec::new(),
+            api_model_mappings: Vec::new(),
             api_sync_model_catalog_to_codex: false,
             api_wire_api: None,
             api_supports_websockets: false,
             api_supports_vision: false,
             api_model_vision_support: HashMap::new(),
             api_vision_routing_model: None,
+            api_instance_access_mode: None,
+            api_startup_model: None,
             bound_oauth_account_id: None,
             bound_oauth_use_local_gateway: false,
             user_id: None,
@@ -429,6 +451,7 @@ impl CodexAccount {
             account_name: None,
             account_structure: None,
             account_note: None,
+            codex_fingerprint_mode: None,
             two_factor_secret: None,
             account_password: None,
             phone_number: None,

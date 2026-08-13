@@ -15,6 +15,10 @@ use crate::modules::logger;
 pub enum CodebuddySessionPlatform {
     Cn,
     Intl,
+    /// WorkBuddy stores sessions in `~/.workbuddy/workbuddy.db` (a single sqlite
+    /// database, partitioned by `user_id`), unlike CodeBuddy's per-instance
+    /// `codebuddy-sessions.vscdb` files.
+    Workbuddy,
 }
 
 /// A single session location — which instance it came from.
@@ -79,6 +83,11 @@ fn get_default_user_data_dir(platform: &CodebuddySessionPlatform) -> Result<Path
         CodebuddySessionPlatform::Intl => {
             crate::modules::codebuddy_instance::get_default_codebuddy_user_data_dir()
         }
+        // WorkBuddy sessions live in a single `workbuddy.db` and are handled by
+        // `list_sessions` directly; it never reaches the per-instance directory scan.
+        CodebuddySessionPlatform::Workbuddy => {
+            Err("workbuddy sessions are not scanned per-instance".to_string())
+        }
     }
 }
 
@@ -91,6 +100,8 @@ fn load_instance_store(
             crate::modules::codebuddy_cn_instance::load_instance_store()
         }
         CodebuddySessionPlatform::Intl => crate::modules::codebuddy_instance::load_instance_store(),
+        // WorkBuddy uses a single shared database; no per-instance store exists.
+        CodebuddySessionPlatform::Workbuddy => Ok(crate::models::InstanceStore::new()),
     }
 }
 
@@ -120,6 +131,102 @@ fn collect_data_dirs(platform: &CodebuddySessionPlatform) -> Vec<(String, String
 /// Return the path to `codebuddy-sessions.vscdb` inside a user-data dir.
 fn sessions_db_path(user_data_dir: &Path) -> PathBuf {
     user_data_dir.join("codebuddy-sessions.vscdb")
+}
+
+/// Return the path to the WorkBuddy `workbuddy.db` (lives in the config root).
+fn workbuddy_sessions_db_path() -> Result<PathBuf, String> {
+    crate::modules::workbuddy_instance::get_default_workbuddy_config_dir()
+        .map(|p| p.join("workbuddy.db"))
+}
+
+/// Read session records from the WorkBuddy `workbuddy.db` `sessions` table.
+///
+/// Unlike CodeBuddy, WorkBuddy keeps all sessions in a single database and
+/// partitions them by `user_id`. The schema matches
+/// `modules/workbuddy_session_transfer.rs` (`remap_workbuddy_database_user_id`).
+fn read_sessions_from_workbuddy_db(db_path: &Path) -> Vec<RawSession> {
+    if !db_path.exists() {
+        return Vec::new();
+    }
+
+    let conn =
+        match Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY) {
+            Ok(c) => c,
+            Err(e) => {
+                logger::log_warn(&format!(
+                    "[CodebuddySession] Failed to open WorkBuddy db {}: {}",
+                    db_path.display(),
+                    e
+                ));
+                return Vec::new();
+            }
+        };
+
+    let mut stmt = match conn.prepare(
+        "SELECT id, cwd, user_id, title, status, created_at, updated_at, deleted_at, is_playground \
+         FROM sessions",
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            logger::log_warn(&format!(
+                "[CodebuddySession] Failed to prepare WorkBuddy query on {}: {}",
+                db_path.display(),
+                e
+            ));
+            return Vec::new();
+        }
+    };
+
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,          // id
+            row.get::<_, Option<String>>(1)?,  // cwd
+            row.get::<_, Option<String>>(2)?,  // user_id
+            row.get::<_, Option<String>>(3)?,  // title
+            row.get::<_, Option<String>>(4)?,  // status
+            row.get::<_, Option<i64>>(5)?,     // created_at
+            row.get::<_, Option<i64>>(6)?,     // updated_at
+            row.get::<_, Option<i64>>(7)?,     // deleted_at
+            row.get::<_, i64>(8).unwrap_or(0), // is_playground
+        ))
+    });
+
+    let mut sessions = Vec::new();
+    if let Ok(rows) = rows {
+        for row in rows {
+            match row {
+                Ok((
+                    id,
+                    cwd,
+                    user_id,
+                    title,
+                    status,
+                    created_at,
+                    updated_at,
+                    deleted_at,
+                    is_play,
+                )) => {
+                    sessions.push(RawSession {
+                        conversation_id: id,
+                        title: title.unwrap_or_default(),
+                        cwd: cwd.unwrap_or_default(),
+                        user_id: user_id.unwrap_or_default(),
+                        status: status.unwrap_or_default(),
+                        created_at,
+                        updated_at,
+                        is_deleted: deleted_at.is_some(),
+                        is_playground: is_play != 0,
+                    });
+                }
+                Err(e) => logger::log_warn(&format!(
+                    "[CodebuddySession] Failed to read WorkBuddy row: {}",
+                    e
+                )),
+            }
+        }
+    }
+
+    sessions
 }
 
 // ---------------------------------------------------------------------------
@@ -240,6 +347,16 @@ pub fn list_sessions(
     platform: &CodebuddySessionPlatform,
     filter: &CodebuddySessionFilter,
 ) -> Result<Vec<CodebuddySessionRecord>, String> {
+    // WorkBuddy stores everything in a single `workbuddy.db`; no per-instance
+    // directory scanning needed.
+    if let CodebuddySessionPlatform::Workbuddy = platform {
+        let db_path = workbuddy_sessions_db_path()?;
+        return Ok(aggregate_workbuddy_sessions(
+            read_sessions_from_workbuddy_db(&db_path),
+            filter,
+        ));
+    }
+
     let data_dirs = collect_data_dirs(platform);
     let mut aggregated: HashMap<String, CodebuddySessionRecord> = HashMap::new();
 
@@ -314,4 +431,77 @@ pub fn list_sessions(
     records.sort_by(|a, b| b.updated_at.unwrap_or(0).cmp(&a.updated_at.unwrap_or(0)));
 
     Ok(records)
+}
+
+/// Filter + aggregate WorkBuddy raw sessions (single-database variant of the
+/// per-instance aggregation used above).
+fn aggregate_workbuddy_sessions(
+    raw_sessions: Vec<RawSession>,
+    filter: &CodebuddySessionFilter,
+) -> Vec<CodebuddySessionRecord> {
+    let mut aggregated: HashMap<String, CodebuddySessionRecord> = HashMap::new();
+
+    let keyword = filter
+        .keyword
+        .as_deref()
+        .map(|k| k.to_lowercase())
+        .unwrap_or_default();
+    let status_filter = filter.status.as_deref().unwrap_or("");
+
+    for raw in raw_sessions {
+        if raw.is_deleted {
+            continue;
+        }
+
+        if !status_filter.is_empty() && raw.status != status_filter {
+            continue;
+        }
+
+        if !keyword.is_empty() {
+            let title_lower = raw.title.to_lowercase();
+            let cwd_lower = raw.cwd.to_lowercase();
+            if !title_lower.contains(&keyword) && !cwd_lower.contains(&keyword) {
+                continue;
+            }
+        }
+
+        let conversation_id = raw.conversation_id.clone();
+        let location = CodebuddySessionLocation {
+            instance_id: "workbuddy".to_string(),
+            instance_name: "WorkBuddy".to_string(),
+        };
+
+        aggregated
+            .entry(conversation_id.clone())
+            .and_modify(|existing| {
+                if let Some(new_updated) = raw.updated_at {
+                    if existing.updated_at.map_or(true, |old| new_updated > old) {
+                        existing.updated_at = Some(new_updated);
+                    }
+                }
+                if !existing
+                    .locations
+                    .iter()
+                    .any(|l| l.instance_id == "workbuddy")
+                {
+                    existing.locations.push(location.clone());
+                }
+            })
+            .or_insert_with(|| CodebuddySessionRecord {
+                conversation_id: raw.conversation_id,
+                title: raw.title,
+                cwd: raw.cwd,
+                user_id: raw.user_id,
+                status: raw.status,
+                created_at: raw.created_at,
+                updated_at: raw.updated_at,
+                is_playground: raw.is_playground,
+                locations: vec![location],
+            });
+    }
+
+    let mut records: Vec<CodebuddySessionRecord> = aggregated.into_values().collect();
+    records.sort_by(|a, b| b.updated_at.unwrap_or(0).cmp(&a.updated_at.unwrap_or(0)));
+
+    records
 }

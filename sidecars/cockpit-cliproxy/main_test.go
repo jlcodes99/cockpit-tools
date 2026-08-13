@@ -1927,6 +1927,62 @@ func TestRequestPolicyMiddlewareSetsCPAUsageAPIKey(t *testing.T) {
 	}
 }
 
+func TestAPIKeyTokenLimiterAccumulatesAcrossModels(t *testing.T) {
+	m := &manifest{APIKeys: []apiKeySpec{{
+		ID:         "key_1",
+		Key:        "client-key",
+		TokenLimit: 10_000_000,
+		TokenUsed:  9_000_000,
+		Enabled:    true,
+	}}}
+	limiter := newAPIKeyTokenLimiter(m)
+	spec := &m.APIKeys[0]
+	if used, limit, exceeded := limiter.exceeded(spec); used != 9_000_000 || limit != 10_000_000 || exceeded {
+		t.Fatalf("unexpected initial limiter state: used=%d limit=%d exceeded=%v", used, limit, exceeded)
+	}
+	limiter.addUsage(spec, 400_000)
+	limiter.addUsage(spec, 600_000)
+	if used, limit, exceeded := limiter.exceeded(spec); used != 10_000_000 || limit != 10_000_000 || !exceeded {
+		t.Fatalf("expected limit to be reached across requests: used=%d limit=%d exceeded=%v", used, limit, exceeded)
+	}
+}
+
+func TestRequestPolicyBlocksKeyAtTokenLimit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	m := &manifest{APIKeys: []apiKeySpec{{
+		ID:         "key_1",
+		Label:      "Limited key",
+		Key:        "client-key",
+		TokenLimit: 10_000_000,
+		TokenUsed:  10_000_000,
+		Enabled:    true,
+	}}}
+	m.apiKeyByValue = map[string]*apiKeySpec{"client-key": &m.APIKeys[0]}
+	policy := &requestPolicy{
+		manifest:     m,
+		tracker:      newRequestUsageTracker(),
+		tokenLimiter: newAPIKeyTokenLimiter(m),
+	}
+	router := gin.New()
+	router.Use(policy.middleware())
+	router.POST("/v1/responses", func(c *gin.Context) {
+		t.Fatal("limited request should not reach the handler")
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-5.5"}`))
+	req.Header.Set("Authorization", "Bearer client-key")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"code":"token_limit_exceeded"`) {
+		t.Fatalf("expected token_limit_exceeded response: %s", w.Body.String())
+	}
+}
+
 type testExecutorStatusError struct {
 	status int
 }
@@ -2301,7 +2357,7 @@ func TestAuthHookEmitsRequestScopedResultDiagnostics(t *testing.T) {
 	if payload.Type != "auth_result" || payload.RequestID != "req-2" {
 		t.Fatalf("unexpected auth result diagnostic identity: %#v", payload)
 	}
-	if payload.Model != "gpt-5.5" || payload.AccountID != "account_1" || payload.APIKeyID != "key_1" {
+	if payload.Model != "upstream-model" || payload.AccountID != "account_1" || payload.APIKeyID != "key_1" {
 		t.Fatalf("unexpected auth result metadata: %#v", payload)
 	}
 	if payload.Success == nil || *payload.Success || payload.Retryable == nil || !*payload.Retryable {
@@ -4184,7 +4240,6 @@ func TestCoreAuthSelectorFiltersNewModelExclusionsBeforeSessionAffinity(t *testi
 		t.Fatalf("Pick after exclusion = %#v, want %q", second, pro.ID)
 	}
 }
-
 
 func TestSidecarRuntimeDoesNotSelectAccountWithExcludedModel(t *testing.T) {
 	tempDir := t.TempDir()

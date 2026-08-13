@@ -183,6 +183,9 @@ type CodexConfig struct {
 	IdentityConfuse bool `yaml:"identity-confuse" json:"identity-confuse"`
 	// OptimizeMultiAgentV2 optimizes official Codex multi-agent requests.
 	OptimizeMultiAgentV2 bool `yaml:"optimize-multi-agent-v2" json:"optimize-multi-agent-v2"`
+	// DisableCodexCloaking disables forcing official Codex identity headers on
+	// HTTP/SSE and WebSocket requests. Default false keeps cloaking enabled.
+	DisableCodexCloaking bool `yaml:"disable-codex-cloaking" json:"disable-codex-cloaking"`
 }
 
 // TLSConfig holds HTTPS server settings.

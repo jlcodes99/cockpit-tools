@@ -959,7 +959,7 @@ fn default_workbuddy_app_path() -> String {
     String::new()
 }
 fn default_workbuddy_share_sessions_on_switch() -> bool {
-    false
+    true
 }
 fn default_opencode_sync_on_switch() -> bool {
     false

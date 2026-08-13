@@ -13,6 +13,7 @@ import {
 } from '../types/workbuddy';
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
 import { WorkbuddyCheckinModal } from '../components/codebuddy-suite/CodebuddySuiteCheckinModal';
+import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessionManager';
 import { CodebuddySuiteAccountsSharedView, type CodebuddySuiteAccountsPlatformConfig } from '../components/codebuddy-suite/CodebuddySuiteAccountsSharedView';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 
@@ -109,6 +110,7 @@ export function WorkbuddyAccountsPage() {
       addWithToken: workbuddyService.addWorkbuddyAccountWithToken,
       exportAccounts: workbuddyService.exportWorkbuddyAccounts,
       injectToVSCode: workbuddyService.injectWorkbuddyToVSCode,
+      openWebview: workbuddyService.openWorkbuddyWebview,
     },
     getDisplayEmail: (account) => getWorkbuddyAccountDisplayEmail(account),
   });
@@ -132,8 +134,11 @@ export function WorkbuddyAccountsPage() {
         platform="workbuddy"
         active={activeTab}
         onTabChange={setActiveTab}
+        tabs={['overview', 'sessions', 'instances']}
       />
-      {activeTab === 'instances' ? (
+      {activeTab === 'sessions' ? (
+        <CodebuddySessionManager platform="workbuddy" accounts={store.accounts as any} />
+      ) : activeTab === 'instances' ? (
         <WorkbuddyInstancesContent accountsForSelect={accountsForInstances} />
       ) : (
         <CodebuddySuiteAccountsSharedView

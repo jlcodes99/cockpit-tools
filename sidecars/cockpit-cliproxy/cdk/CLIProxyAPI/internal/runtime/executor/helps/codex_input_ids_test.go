@@ -1,11 +1,14 @@
 package helps
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/tidwall/gjson"
 )
+
+var benchmarkSanitizeCodexInputItemIDsOutput []byte
 
 func TestSanitizeCodexInputItemIDsBoundaries(t *testing.T) {
 	id64 := strings.Repeat("a", 64)
@@ -23,6 +26,71 @@ func TestSanitizeCodexInputItemIDsBoundaries(t *testing.T) {
 		if len([]rune(actual)) != 64 {
 			t.Fatalf("%s length = %d, want 64: %q", path, len([]rune(actual)), actual)
 		}
+	}
+}
+
+func TestSanitizeCodexInputItemIDsNormalizesMessageIDs(t *testing.T) {
+	const invalidID = "item_74ec40c883248ebb4885ec84"
+	body := []byte(`{"input":[` +
+		`{"type":"message","id":"` + invalidID + `","role":"user"},` +
+		`{"type":"message","id":"msg-1","role":"assistant"},` +
+		`{"type":"function_call","id":"item_call","call_id":"call-1"}` +
+		`]}`)
+
+	first := SanitizeCodexInputItemIDs(body)
+	second := SanitizeCodexInputItemIDs(body)
+
+	if got := gjson.GetBytes(first, "input.0.id").String(); got != "msg_"+invalidID {
+		t.Fatalf("message ID = %q, want msg-prefixed ID", got)
+	}
+	if got := gjson.GetBytes(first, "input.1.id").String(); got != "msg-1" {
+		t.Fatalf("valid message ID changed: %q", got)
+	}
+	if got := gjson.GetBytes(first, "input.2.id").String(); got != "fc_item_call" {
+		t.Fatalf("function_call ID was not normalized: %q", got)
+	}
+	if string(first) != string(second) {
+		t.Fatalf("message ID normalization is not deterministic: first=%s second=%s", first, second)
+	}
+}
+
+func TestSanitizeCodexInputItemIDsNormalizesResponseItemIDs(t *testing.T) {
+	const (
+		messageID            = "item_message"
+		reasoningID          = "item_reasoning"
+		functionCallID       = "item_function_call"
+		functionCallOutputID = "item_function_call_output"
+	)
+	body := []byte(`{"input":[` +
+		`{"type":"message","id":"` + messageID + `"},` +
+		`{"type":"reasoning","id":"` + reasoningID + `"},` +
+		`{"type":"function_call","id":"` + functionCallID + `","call_id":"call-1"},` +
+		`{"type":"function_call_output","id":"` + functionCallOutputID + `","call_id":"call-1"},` +
+		`{"type":"reasoning","id":"rs-existing"},` +
+		`{"type":"function_call","id":"fc-existing","call_id":"call-2"},` +
+		`{"type":"message","id":"msg-existing"}` +
+		`]}`)
+
+	got := SanitizeCodexInputItemIDs(body)
+	want := []string{
+		"msg_" + messageID,
+		"rs_" + reasoningID,
+		"fc_" + functionCallID,
+		functionCallOutputID,
+		"rs-existing",
+		"fc-existing",
+		"msg-existing",
+	}
+
+	for index, expected := range want {
+		path := fmt.Sprintf("input.%d.id", index)
+		if actual := gjson.GetBytes(got, path).String(); actual != expected {
+			t.Fatalf("%s = %q, want %q; payload=%s", path, actual, expected, got)
+		}
+	}
+
+	if second := SanitizeCodexInputItemIDs(body); string(second) != string(got) {
+		t.Fatalf("normalization is not deterministic: first=%s second=%s", got, second)
 	}
 }
 
@@ -112,5 +180,15 @@ func TestSanitizeCodexInputItemIDsLeavesUnsupportedPayloadsUnchanged(t *testing.
 		if got := string(SanitizeCodexInputItemIDs(body)); got != string(body) {
 			t.Fatalf("payload changed: got=%q want=%q", got, body)
 		}
+	}
+}
+
+func BenchmarkSanitizeCodexInputItemIDsLargeNoopPayload(b *testing.B) {
+	body := []byte(`{"input":[{"type":"message","id":"msg_1","role":"user","content":"` + strings.Repeat("x", 8<<20) + `"}]}`)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(body)))
+	b.ResetTimer()
+	for b.Loop() {
+		benchmarkSanitizeCodexInputItemIDsOutput = SanitizeCodexInputItemIDs(body)
 	}
 }

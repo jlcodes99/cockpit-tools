@@ -123,6 +123,7 @@ export interface ProviderDataService {
   addWithToken?: (token: string) => Promise<unknown>;
   exportAccounts: (ids: string[]) => Promise<string>;
   injectToVSCode?: (accountId: string) => Promise<unknown>;
+  openWebview?: (accountId: string) => Promise<unknown>;
 }
 
 /** 各平台 store 需要提供的操作 */
@@ -756,6 +757,10 @@ export interface UseProviderAccountsPageReturn {
   // Inject / Switch
   handleInjectToVSCode: ((accountId: string) => Promise<void>) | null;
 
+  // WebView（网页会话）
+  handleOpenWebview: ((accountId: string) => Promise<void>) | null;
+  webviewing: string | null;
+
   // Flow notice
   isFlowNoticeCollapsed: boolean;
   setIsFlowNoticeCollapsed: Dispatch<SetStateAction<boolean>>;
@@ -1332,6 +1337,36 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     storeFetchCurrentAccountId,
     t,
   ]);
+
+  // ─── WebView（网页会话） ───────────────────────────────────────────────
+  const [webviewing, setWebviewing] = useState<string | null>(null);
+  const handleOpenWebview = useMemo(() => {
+    if (!dataService.openWebview) return null;
+    const openFn = dataService.openWebview;
+    return async (accountId: string) => {
+      setMessage(null);
+      setWebviewing(accountId);
+      const account = accounts.find((item) => item.id === accountId);
+      const displayEmail = account ? config.getDisplayEmail(account) : accountId;
+      try {
+        await openFn(accountId);
+        setMessage({
+          text: t('workbuddy.webview.opened', '已打开网页会话：{{email}}', {
+            email: maskAccountText(displayEmail),
+          }),
+          tone: 'success',
+        });
+      } catch (e: unknown) {
+        setMessage({
+          text: t('workbuddy.webview.openFailed', '打开网页会话失败：{{error}}', {
+            error: String(e) || t('common.failed', 'Failed'),
+          }),
+          tone: 'error',
+        });
+      }
+      setWebviewing(null);
+    };
+  }, [accounts, config, dataService.openWebview, maskAccountText, t]);
 
   // ─── Export ───────────────────────────────────────────────────────────
   const handleExportError = useCallback(
@@ -2646,6 +2681,8 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     handleOpenOauthUrlWithMode,
     handleSubmitOauthCallbackUrl,
     handleInjectToVSCode,
+    handleOpenWebview,
+    webviewing,
     isFlowNoticeCollapsed,
     setIsFlowNoticeCollapsed,
     currentAccountId,

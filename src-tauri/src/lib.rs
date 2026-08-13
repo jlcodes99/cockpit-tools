@@ -515,6 +515,7 @@ pub fn run() {
             }
 
             apply_startup_minimized(&app.handle());
+            modules::workbuddy_auto_checkin::start_auto_checkin_scheduler(app.handle().clone());
 
             Ok(())
         })
@@ -574,6 +575,7 @@ pub fn run() {
             // Account Commands
             commands::account::list_accounts,
             commands::account::add_account,
+            commands::account::create_pending_oauth_account,
             commands::account::delete_account,
             commands::account::delete_accounts,
             commands::account::reorder_accounts,
@@ -587,6 +589,8 @@ pub fn run() {
             commands::account::clear_antigravity_switch_history,
             commands::account::update_account_tags,
             commands::account::update_account_notes,
+            commands::account::update_account_note,
+            commands::account::fetch_account_note_mail_url,
             commands::account::load_account_groups,
             commands::account::save_account_groups,
             commands::account::sync_current_from_client,
@@ -824,7 +828,10 @@ pub fn run() {
             commands::codex::is_codex_oauth_port_in_use,
             commands::codex::close_codex_oauth_port,
             commands::codex::update_codex_account_tags,
+            commands::codex::update_codex_accounts_fingerprint_mode,
             commands::codex::update_codex_account_note,
+            commands::codex::update_codex_account_api_model_mappings,
+            commands::codex::update_codex_account_instance_access,
             commands::codex::create_pending_codex_oauth_account,
             commands::codex::fetch_codex_account_note_mail_url,
             commands::codex::codex_managed_task_create,
@@ -1013,6 +1020,17 @@ pub fn run() {
             commands::workbuddy::sync_workbuddy_to_codebuddy_cn,
             commands::workbuddy::get_checkin_status_workbuddy,
             commands::workbuddy::checkin_workbuddy,
+            // WorkBuddy WebView (网页会话) Commands
+            modules::workbuddy_webview::is_workbuddy_webview_supported,
+            modules::workbuddy_webview::open_workbuddy_webview,
+            modules::workbuddy_webview::close_workbuddy_webview,
+            modules::workbuddy_webview::list_workbuddy_webview_sessions,
+            commands::workbuddy::get_workbuddy_auto_checkin_config,
+            commands::workbuddy::migrate_workbuddy_auto_checkin_config,
+            commands::workbuddy::save_workbuddy_auto_checkin_config,
+            commands::workbuddy::get_workbuddy_auto_checkin_logs,
+            commands::workbuddy::clear_workbuddy_auto_checkin_logs,
+            commands::workbuddy::run_workbuddy_auto_checkin_now,
             // WorkBuddy Instance Commands
             commands::workbuddy_instance::workbuddy_get_instance_defaults,
             commands::workbuddy_instance::workbuddy_list_instances,
@@ -1138,6 +1156,8 @@ pub fn run() {
             commands::trae::update_trae_account_tags,
             commands::trae::get_trae_accounts_index_path,
             commands::trae::inject_trae_account,
+            commands::trae::get_trae_checkin_status,
+            commands::trae::claim_trae_checkin,
             // Trae Instance Commands
             commands::trae_instance::trae_get_instance_defaults,
             commands::trae_instance::trae_list_instances,

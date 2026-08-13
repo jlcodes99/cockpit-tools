@@ -1,5 +1,6 @@
 import type { CodexApiProviderPreset } from "./codexProviderPresets";
 import {
+  DEEPSEEK_API_PROVIDER_ID,
   findCodexApiProviderPresetById,
   resolveCodexApiProviderPresetId,
 } from "./codexProviderPresets";
@@ -36,7 +37,6 @@ export interface CodexProviderCapabilityProfile {
 }
 
 const CHAT_COMPLETIONS_PRESET_IDS = new Set([
-  "deepseek",
   "moonshot",
   "siliconflow",
   "siliconflow_en",
@@ -75,8 +75,15 @@ export function resolveCodexProviderCapabilityProfile(input: {
   const presetId =
     input.presetId?.trim() || resolveCodexApiProviderPresetId(input.baseUrl);
   const inferredChatCompletions = CHAT_COMPLETIONS_PRESET_IDS.has(presetId);
+  // DeepSeek defaults to Responses for official Codex setup, but explicit Chat Completions remains allowed.
   const wireApi =
-    input.wireApi ?? (inferredChatCompletions ? "chat_completions" : "responses");
+    input.wireApi === "responses" || input.wireApi === "chat_completions"
+      ? input.wireApi
+      : presetId === DEEPSEEK_API_PROVIDER_ID
+        ? "responses"
+        : inferredChatCompletions
+          ? "chat_completions"
+          : "responses";
 
   if (wireApi === "chat_completions") {
     return {

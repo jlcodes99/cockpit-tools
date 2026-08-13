@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { Account, RefreshStats } from '../types/account';
+import { Account, AccountNoteUpdate, RefreshStats } from '../types/account';
 import { AntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget';
 
 
@@ -13,6 +13,13 @@ export async function addAccountWithToken(refreshToken: string): Promise<Account
 
 export async function addAccount(_email: string, refreshToken: string): Promise<Account> {
     return await addAccountWithToken(refreshToken);
+}
+
+export async function createPendingOAuthAccount(
+    email: string,
+    update: AccountNoteUpdate,
+): Promise<Account> {
+    return await invoke('create_pending_oauth_account', { email, ...update });
 }
 
 export async function deleteAccount(accountId: string): Promise<void> {
@@ -48,16 +55,16 @@ export async function refreshAllQuotas(): Promise<RefreshStats> {
     return await invoke('refresh_all_quotas');
 }
 
-export async function startOAuthLogin(): Promise<Account> {
-    return await invoke('start_oauth_login');
+export async function startOAuthLogin(update?: AccountNoteUpdate): Promise<Account> {
+    return await invoke('start_oauth_login', { ...(update ?? {}) });
 }
 
 export async function prepareOAuthUrl(): Promise<string> {
     return await invoke('prepare_oauth_url');
 }
 
-export async function completeOAuthLogin(): Promise<Account> {
-    return await invoke('complete_oauth_login');
+export async function completeOAuthLogin(update?: AccountNoteUpdate): Promise<Account> {
+    return await invoke('complete_oauth_login', { ...(update ?? {}) });
 }
 
 export async function submitOAuthCallbackUrl(callbackUrl: string): Promise<void> {
@@ -140,6 +147,13 @@ export async function updateAccountNotes(accountId: string, notes: string): Prom
     return await invoke('update_account_notes', { accountId, notes });
 }
 
+export async function updateAccountNote(
+    accountId: string,
+    update: AccountNoteUpdate,
+): Promise<Account> {
+    return await invoke('update_account_note', { accountId, ...update });
+}
+
 export async function syncFromExtension(): Promise<number> {
     return await invoke('sync_from_extension');
 }
@@ -168,6 +182,19 @@ export async function importFromFiles(filePaths: string[]): Promise<FileImportRe
 
 export async function exportAccounts(accountIds: string[]): Promise<string> {
     return await invoke('export_accounts', { accountIds });
+}
+
+export interface AccountMailPreviewFetchResult {
+  status: number;
+  contentType?: string | null;
+  body: string;
+  truncated: boolean;
+}
+
+export async function fetchAccountNoteMailUrl(
+  mailUrl: string,
+): Promise<AccountMailPreviewFetchResult> {
+  return await invoke('fetch_account_note_mail_url', { mailUrl });
 }
 
 export async function syncCurrentFromClient(): Promise<string | null> {

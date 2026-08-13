@@ -75,7 +75,11 @@ type AccountLike = {
 type InstanceSortField = "createdAt" | "lastLaunchedAt";
 type SortDirection = "asc" | "desc";
 type StartInstanceOutcome =
-  "started" | "already-running" | "missing-path" | "failed";
+  | "started"
+  | "already-running"
+  | "missing-path"
+  | "failed"
+  | "cancelled";
 type AccountSelectPortalPosition = {
   top: number;
   left: number;
@@ -172,6 +176,7 @@ interface InstancesManagerProps<TAccount extends AccountLike> {
     | "workbuddy"
     | "zcode";
   onInstanceStarted?: (instance: InstanceProfile) => void | Promise<void>;
+  onBeforeStart?: (instance: InstanceProfile) => boolean | Promise<boolean>;
   onInstanceStartError?: (
     error: unknown,
     instance: InstanceProfile,
@@ -646,6 +651,7 @@ export function InstancesManager<TAccount extends AccountLike>({
   getAccountSearchText,
   appType = "antigravity",
   onInstanceStarted,
+  onBeforeStart,
   onInstanceStartError,
   resolveStartSuccessMessage,
   isAccountAllowedForLaunchMode,
@@ -1459,6 +1465,18 @@ export function InstancesManager<TAccount extends AccountLike>({
         return "already-running";
       }
 
+      if (onBeforeStart) {
+        try {
+          const allowed = await onBeforeStart(instance);
+          if (!allowed) {
+            return "cancelled";
+          }
+        } catch (error) {
+          setMessage({ text: String(error), tone: "error" });
+          return "failed";
+        }
+      }
+
       if (!preMarkedStarting) {
         markInstanceStarting(instance.id);
       }
@@ -1521,6 +1539,7 @@ export function InstancesManager<TAccount extends AccountLike>({
       handleMissingPathError,
       handleCodexManagedStoreLaunchError,
       markInstanceStarting,
+      onBeforeStart,
       onInstanceStartError,
       onInstanceStarted,
       resolveStartSuccessMessage,
@@ -1688,7 +1707,7 @@ export function InstancesManager<TAccount extends AccountLike>({
           startedCount += 1;
           continue;
         }
-        if (outcome === "already-running") {
+        if (outcome === "already-running" || outcome === "cancelled") {
           continue;
         }
         return;

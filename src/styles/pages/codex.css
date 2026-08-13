@@ -4165,7 +4165,8 @@
   color: white;
 }
 
-.codex-account-card .codex-local-access-inline-add {
+.codex-account-card .codex-local-access-inline-add,
+.codex-account-card .codex-local-access-inline-remove {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -4178,14 +4179,43 @@
   appearance: none;
 }
 
-.codex-account-card .codex-local-access-inline-add:hover:not(:disabled) {
+.codex-account-card .codex-local-access-inline-add:hover:not(:disabled),
+.codex-account-card .codex-local-access-inline-remove:hover:not(:disabled) {
   border-color: rgba(37, 99, 235, 0.36);
   background: rgba(37, 99, 235, 0.14);
 }
 
-.codex-account-card .codex-local-access-inline-add:disabled {
-  opacity: 1;
-  cursor: default;
+.codex-account-card .codex-local-access-inline-add:disabled,
+.codex-account-card .codex-local-access-inline-remove:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Compact / list rows reuse the same badge classes */
+.codex-accounts-page .codex-local-access-inline-add,
+.codex-accounts-page .codex-local-access-inline-remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--primary);
+  font-family: inherit;
+  line-height: 1.2;
+  cursor: pointer;
+  appearance: none;
+}
+
+.codex-accounts-page .codex-local-access-inline-add:hover:not(:disabled),
+.codex-accounts-page .codex-local-access-inline-remove:hover:not(:disabled) {
+  border-color: rgba(37, 99, 235, 0.36);
+  background: rgba(37, 99, 235, 0.14);
+}
+
+.codex-accounts-page .codex-local-access-inline-add:disabled,
+.codex-accounts-page .codex-local-access-inline-remove:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 /* Compact 布局（新增，不影响原 grid/list） */
@@ -6070,6 +6100,26 @@
   line-height: 1.4;
 }
 
+.codex-oauth-advanced-settings {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+}
+
+.codex-oauth-advanced-settings > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.codex-oauth-advanced-settings[open] > summary {
+  margin-bottom: 12px;
+}
+
+
 .codex-account-note-mfa-picker {
   display: flex;
   flex-direction: column;
@@ -7442,6 +7492,16 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.codex-add-modal .codex-managed-api-key-select,
+.codex-provider-modal .codex-managed-api-key-select {
+  width: 100%;
+}
+
+.codex-add-modal .codex-managed-api-key-select .single-select-dropdown-trigger,
+.codex-provider-modal .codex-managed-api-key-select .single-select-dropdown-trigger {
+  width: 100%;
 }
 
 .codex-add-modal .api-provider-endpoint-chip,
@@ -13711,4 +13771,72 @@ html[data-reduced-motion="true"] .codex-accounts-page .codex-accounts-grid .code
 html[data-reduced-motion="true"] .codex-accounts-page .codex-accounts-grid .codex-account-card.api-key-usage-account,
 html[data-reduced-motion="true"] .codex-accounts-page .codex-accounts-grid .codex-account-card.sponsor-api-account {
   background: var(--bg-surface);
+}
+
+.deepseek-start-modal .deepseek-start-option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.deepseek-start-modal .deepseek-start-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-card) 88%, transparent);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.deepseek-start-modal .deepseek-start-option:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+.deepseek-start-modal .deepseek-start-option.active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--bg-surface) 82%, var(--primary) 18%);
+}
+
+.deepseek-start-modal .deepseek-start-option:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.deepseek-start-modal .deepseek-start-option-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.deepseek-start-modal .deepseek-start-option-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0.78;
+}
+
+.deepseek-start-modal .api-provider-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.deepseek-start-modal .api-provider-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 88%, transparent);
+  color: inherit;
+  cursor: pointer;
+}
+
+.deepseek-start-modal .api-provider-chip.active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--bg-surface) 82%, var(--primary) 18%);
 }

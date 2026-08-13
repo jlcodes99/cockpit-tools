@@ -2,6 +2,7 @@ use crate::error::{AppError, AppResult};
 use crate::models;
 use crate::modules;
 use std::path::PathBuf;
+use std::time::Duration;
 use tauri::AppHandle;
 use tauri::Emitter;
 
@@ -199,6 +200,88 @@ pub async fn add_account(refresh_token: String) -> Result<models::Account, Strin
     modules::websocket::broadcast_data_changed("account_added");
 
     Ok(account)
+}
+
+#[tauri::command]
+pub fn create_pending_oauth_account(
+    email: String,
+    note: Option<String>,
+    two_factor_secret: Option<String>,
+    account_password: Option<String>,
+    phone_number: Option<String>,
+    mail_url: Option<String>,
+) -> Result<models::Account, String> {
+    modules::account::create_pending_oauth_account(
+        email,
+        modules::account::AccountNoteUpdate {
+            note,
+            two_factor_secret,
+            account_password,
+            phone_number,
+            mail_url,
+        },
+    )
+}
+
+const ANTIGRAVITY_MAIL_PREVIEW_MAX_BYTES: usize = 512 * 1024;
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AntigravityMailPreviewFetchResult {
+    pub status: u16,
+    pub content_type: Option<String>,
+    pub body: String,
+    pub truncated: bool,
+}
+
+#[tauri::command]
+pub async fn fetch_account_note_mail_url(
+    mail_url: String,
+) -> Result<AntigravityMailPreviewFetchResult, String> {
+    let mail_url = mail_url.trim();
+    if mail_url.is_empty() {
+        return Err("MAIL_URL_EMPTY".to_string());
+    }
+    let parsed = reqwest::Url::parse(mail_url).map_err(|_| "MAIL_URL_INVALID".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("MAIL_URL_UNSUPPORTED_SCHEME".to_string());
+    }
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(12))
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .user_agent("CockpitTools-MailPreview/1.0")
+        .build()
+        .map_err(|e| format!("MAIL_PREVIEW_CLIENT_FAILED: {}", e))?;
+    let response = client
+        .get(parsed)
+        .send()
+        .await
+        .map_err(|e| format!("MAIL_PREVIEW_REQUEST_FAILED: {}", e))?;
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("MAIL_PREVIEW_READ_FAILED: {}", e))?;
+    let truncated = bytes.len() > ANTIGRAVITY_MAIL_PREVIEW_MAX_BYTES;
+    let visible = if truncated {
+        &bytes[..ANTIGRAVITY_MAIL_PREVIEW_MAX_BYTES]
+    } else {
+        &bytes[..]
+    };
+    if !status.is_success() {
+        return Err(format!("MAIL_PREVIEW_HTTP_FAILED:{}", status.as_u16()));
+    }
+    Ok(AntigravityMailPreviewFetchResult {
+        status: status.as_u16(),
+        content_type,
+        body: String::from_utf8_lossy(visible).into_owned(),
+        truncated,
+    })
 }
 
 #[tauri::command]
@@ -644,6 +727,27 @@ pub async fn update_account_notes(
 ) -> Result<models::Account, String> {
     let account = modules::account::update_account_notes(&account_id, notes)?;
     Ok(account)
+}
+
+#[tauri::command]
+pub async fn update_account_note(
+    account_id: String,
+    note: Option<String>,
+    two_factor_secret: Option<String>,
+    account_password: Option<String>,
+    phone_number: Option<String>,
+    mail_url: Option<String>,
+) -> Result<models::Account, String> {
+    modules::account::update_account_note(
+        &account_id,
+        modules::account::AccountNoteUpdate {
+            note,
+            two_factor_secret,
+            account_password,
+            phone_number,
+            mail_url,
+        },
+    )
 }
 
 /// 从本地客户端同步当前账号状态

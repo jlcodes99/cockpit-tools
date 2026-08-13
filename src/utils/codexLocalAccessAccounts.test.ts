@@ -102,6 +102,26 @@ test("Agent Identity imports are forced into API service without enabling global
   );
 });
 
+test("DeepSeek Responses accounts cannot join API service", () => {
+  const deepseek = account({
+    id: "deepseek",
+    auth_mode: "apikey",
+    api_provider_id: "deepseek",
+    api_base_url: "https://api.deepseek.com",
+    api_wire_api: "responses",
+  });
+  assert.equal(
+    getCodexLocalAccessAccountIneligibleReason(deepseek, false),
+    "deepseek_unsupported",
+  );
+  assert.equal(isCodexLocalAccessEligibleAccount(deepseek, false), false);
+  assert.equal(canAddCodexAccountToLocalAccess(deepseek, new Set(), false), false);
+  assert.deepEqual(
+    resolveImportedCodexAccountIdsForLocalAccess([deepseek], true, false),
+    [],
+  );
+});
+
 test("Web Session imports never join API service even when sync-all is enabled", () => {
   const regular = account({ id: "regular" });
   const webSession = account({

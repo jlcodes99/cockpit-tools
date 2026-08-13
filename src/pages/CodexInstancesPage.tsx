@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, Settings, X } from "lucide-react";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
@@ -33,6 +33,12 @@ import {
   resolveCodexApiProviderPresetId,
 } from "../utils/codexProviderPresets";
 import { useEscClose } from "../hooks/useEscClose";
+import { useDeepSeekDirectModelPrompt } from "../components/codex/DeepSeekDirectModelModal";
+import {
+  isDeepSeekAccount,
+  parseCodexBoundAccountId,
+  resolveDeepSeekBindAccountId,
+} from "../utils/codexDeepSeekAccess";
 
 /**
  * Codex 应用多开内容组件（不包含 header）
@@ -66,7 +72,11 @@ export function CodexInstancesContent({
 }: CodexInstancesContentProps = {}) {
   const { t } = useTranslation();
   const instanceStore = useCodexInstanceStore();
-  const { accounts: storeAccounts, fetchAccounts } = useCodexAccountStore();
+  const {
+    accounts: storeAccounts,
+    fetchAccounts,
+    updateAccountInstanceAccess,
+  } = useCodexAccountStore();
   const accounts = accountsForSelect ?? storeAccounts;
   const isMacOS = usePlatformRuntimeSupport("macos-only");
   const isWindows = usePlatformRuntimeSupport("windows-only");
@@ -90,6 +100,7 @@ export function CodexInstancesContent({
     text: string;
     tone?: "error";
   } | null>(null);
+  const deepSeekStart = useDeepSeekDirectModelPrompt();
 
   useEscClose(!!launchModal, () => setLaunchModal(null));
   useEscClose(showSyncSettingsModal, () => setShowSyncSettingsModal(false));
@@ -191,6 +202,45 @@ export function CodexInstancesContent({
     accounts.forEach((account) => map.set(account.id, account));
     return map;
   }, [accounts]);
+
+  const handleBeforeStart = useCallback(
+    async (instance: InstanceProfile) => {
+      const boundAccountId = parseCodexBoundAccountId(instance.bindAccountId);
+      const account = boundAccountId
+        ? accountMap.get(boundAccountId)
+        : undefined;
+      if (!account || !isDeepSeekAccount(account)) {
+        return true;
+      }
+      const instanceName = instance.isDefault
+        ? t("instances.defaultName", "默认实例")
+        : instance.name || t("instances.defaultName", "默认实例");
+      const updated = await deepSeekStart.confirmStart(
+        account,
+        updateAccountInstanceAccess,
+        instanceName,
+      );
+      if (!updated) {
+        return false;
+      }
+      const nextBindId = resolveDeepSeekBindAccountId(updated);
+      if ((instance.bindAccountId || null) !== nextBindId) {
+        await instanceStore.updateInstance({
+          instanceId: instance.id,
+          bindAccountId: nextBindId,
+          followLocalAccount: false,
+        });
+      }
+      return true;
+    },
+    [
+      accountMap,
+      deepSeekStart.confirmStart,
+      instanceStore,
+      t,
+      updateAccountInstanceAccess,
+    ],
+  );
 
   const defaultInstance = useMemo(
     () => instanceStore.instances.find((instance) => instance.isDefault) ?? null,
@@ -542,6 +592,7 @@ export function CodexInstancesContent({
           unsupportedDescKey="codex.instances.unsupported.desc"
           unsupportedDescDefault="Codex 应用多开仅支持 macOS 和 Windows。"
           onInstanceStarted={handleInstanceStarted}
+          onBeforeStart={handleBeforeStart}
           resolveStartSuccessMessage={(instance) =>
             (instance.launchMode ?? "app") === "cli"
               ? t("instances.messages.launchPrepared", "启动命令已准备")
@@ -676,6 +727,7 @@ export function CodexInstancesContent({
           onExecute={() => void handleExecuteInTerminal()}
         />
       )}
+      {deepSeekStart.modal}
     </>
   );
 }

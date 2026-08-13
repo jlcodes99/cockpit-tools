@@ -7,6 +7,38 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [1.3.17] - 2026-08-13
+
+### Added
+
+- **Codex model providers support native DeepSeek Responses**: use DeepSeek Flash / Pro directly in Codex with the official Responses API by default; Chat Completions is still available when needed, and eligible accounts can view their balance. Thanks @usertianziyang for providing some of the ideas ([#1839](https://github.com/jlcodes99/cockpit-tools/pull/1839)).
+- **Codex OAuth accounts support device fingerprint modes**: choose Session / Device / Full / Off per account or in batch, with Session as the default; other account types such as API Key are unaffected.
+- **Codex API Service client keys support an optional total token budget**: set a total token limit per client key and refuse further calls once it is used up; keys without a limit stay unlimited. Thanks @ndhao164 ([#1870](https://github.com/jlcodes99/cockpit-tools/pull/1870)).
+- **WorkBuddy supports a per-account built-in browser**: open pages like the growth center in a separate window so account logins never mix. Thanks @xhrxgr ([#1896](https://github.com/jlcodes99/cockpit-tools/pull/1896)).
+- **WorkBuddy auto check-in now runs in the background**: scheduled check-ins continue when the main window is closed and only the tray stays running. Thanks @xdd666t ([#1772](https://github.com/jlcodes99/cockpit-tools/pull/1772)).
+- **Trae accounts support optional auto check-in**: set a per-account schedule, off by default, with no impact on normal account use. Thanks @xhrxgr ([#1834](https://github.com/jlcodes99/cockpit-tools/pull/1834)).
+- **Antigravity accounts support local profile details**: save notes, 2FA, password, phone number, and a mail inbox for verification codes; fields can be pre-filled before authorization, and export can include or omit sensitive data.
+- **Adding or editing a Codex API Key can reuse an existing key from the same provider**: a new key can still be entered manually.
+- **Codex API Service accounts can be removed directly from the account list**: members no longer need to be managed inside the service panel.
+
+### Changed
+
+- **WorkBuddy merges existing local sessions when session sharing on switch is enabled**: conversation history is far less likely to disappear after an account switch. Thanks @xhrxgr ([#1880](https://github.com/jlcodes99/cockpit-tools/pull/1880)).
+- **Antigravity local account data is now encrypted as a whole file**: existing accounts migrate automatically on first read, and original data remains intact.
+- **Codex API Service stability improved for multi-turn chats and streaming replies**.
+
+### Fixed
+
+- **Fixed some API Key providers being unable to keep WebSocket connections**: providers with WebSocket enabled can now maintain a stable real-time connection.
+- **Fixed custom relays with WebSocket explicitly disabled being switched back to the official connection path**: the relay setting is now respected. Thanks @yaobii-lab ([#1867](https://github.com/jlcodes99/cockpit-tools/pull/1867)).
+- **Fixed local API services on other ports being rejected as upstreams**: a local API service on any port can now be used as the upstream.
+- **Fixed Sub2API imports turning full OAuth accounts into access-token-only accounts**: the full OAuth login state is preserved after import. Thanks @Jonesxq ([#1886](https://github.com/jlcodes99/cockpit-tools/pull/1886)).
+- **Fixed custom API Key names disappearing in the Codex account overview and related flows**: custom names are now displayed correctly. Thanks @andrew05060414 ([#1817](https://github.com/jlcodes99/cockpit-tools/pull/1817)).
+- **Fixed Codex API Service incorrectly reporting a missing model when request compression is enabled**: compression no longer triggers false missing-model warnings. Thanks @DragonLingLuo ([#1836](https://github.com/jlcodes99/cockpit-tools/pull/1836)).
+- **Fixed Multi-Agent collaboration treating encrypted messages as plain task text**: collaboration messages are now handled correctly.
+- **Fixed namespaced tool calls failing on the second turn of a conversation**: tool calls can now continue across multiple turns. Thanks @Jonesxq ([#1887](https://github.com/jlcodes99/cockpit-tools/pull/1887)).
+- **Fixed thinking Chat providers rejecting multi-turn Codex conversations**: thinking providers can now handle multi-turn conversations normally.
+
 ## [1.3.16] - 2026-08-02
 
 ### Added

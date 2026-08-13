@@ -456,9 +456,17 @@ fn normalize_responses_input_item(item: &mut Value) -> bool {
         return false;
     };
 
-    // Provider adapters use this extension to reconstruct namespaced tool calls,
-    // but the official Codex Responses endpoint rejects it on replayed input items.
-    let mut changed = obj.remove("namespace").is_some();
+    // Keep call namespaces for the sidecar's provider-specific compatibility
+    // handling, while dropping unsupported namespaces from other replayed items.
+    let preserves_namespace = matches!(
+        obj.get("type").and_then(Value::as_str),
+        Some("function_call" | "custom_tool_call" | "tool_call" | "mcp_tool_call")
+    );
+    let mut changed = if preserves_namespace {
+        false
+    } else {
+        obj.remove("namespace").is_some()
+    };
     let role = obj
         .get("role")
         .and_then(Value::as_str)
@@ -845,16 +853,29 @@ mod tests {
     }
 
     #[test]
-    fn removes_provider_namespace_from_replayed_input_items() {
+    fn preserves_namespace_on_replayed_function_calls() {
         let mut body = json!({
             "model": "gpt-5.4",
-            "input": [{
-                "type": "function_call",
-                "call_id": "call_1",
-                "name": "lookup",
-                "namespace": "mcp__example",
-                "arguments": "{}"
-            }],
+            "input": [
+                {
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "lookup",
+                    "namespace": "mcp__example",
+                    "arguments": "{}"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_1",
+                    "output": "result"
+                },
+                {
+                    "type": "function_call",
+                    "call_id": "call_2",
+                    "name": "plain_lookup",
+                    "arguments": "{}"
+                }
+            ],
             "tools": [{
                 "type": "namespace",
                 "name": "mcp__example"
@@ -862,7 +883,10 @@ mod tests {
         });
 
         assert!(normalize_responses_body_for_codex(&mut body));
-        assert!(body.pointer("/input/0/namespace").is_none());
+        assert_eq!(
+            body.pointer("/input/0/namespace").and_then(Value::as_str),
+            Some("mcp__example")
+        );
         assert_eq!(
             body.pointer("/input/0/name").and_then(Value::as_str),
             Some("lookup")
@@ -872,9 +896,66 @@ mod tests {
             Some("call_1")
         );
         assert_eq!(
+            body.pointer("/input/1/call_id").and_then(Value::as_str),
+            Some("call_1")
+        );
+        assert_eq!(
+            body.pointer("/input/1/output").and_then(Value::as_str),
+            Some("result")
+        );
+        assert!(body.pointer("/input/2/namespace").is_none());
+        assert_eq!(
+            body.pointer("/input/2/name").and_then(Value::as_str),
+            Some("plain_lookup")
+        );
+        assert_eq!(
+            body.pointer("/input/2/call_id").and_then(Value::as_str),
+            Some("call_2")
+        );
+        assert_eq!(
             body.pointer("/tools/0/type").and_then(Value::as_str),
             Some("namespace")
         );
+    }
+
+    #[test]
+    fn preserving_supported_call_namespaces_does_not_report_change() {
+        for item_type in [
+            "function_call",
+            "custom_tool_call",
+            "tool_call",
+            "mcp_tool_call",
+        ] {
+            let mut item = json!({
+                "type": item_type,
+                "namespace": "mcp__example"
+            });
+            let expected = item.clone();
+
+            assert!(
+                !normalize_responses_input_item(&mut item),
+                "{item_type} should not report a change"
+            );
+            assert_eq!(item, expected);
+        }
+    }
+
+    #[test]
+    fn removes_namespace_from_non_call_replayed_input_items() {
+        let mut body = json!({
+            "model": "gpt-5.4",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "namespace": "mcp__example",
+                    "content": "hello"
+                }
+            ]
+        });
+
+        assert!(normalize_responses_body_for_codex(&mut body));
+        assert!(body.pointer("/input/0/namespace").is_none());
     }
 
     #[test]

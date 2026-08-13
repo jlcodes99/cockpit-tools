@@ -320,6 +320,8 @@ export function CodebuddySuiteAccountsSharedView<
     oauthSupportsManualCallback,
     handleSubmitOauthCallbackUrl,
     handleInjectToVSCode,
+    handleOpenWebview,
+    webviewing,
     isFlowNoticeCollapsed,
     setIsFlowNoticeCollapsed,
     currentAccountId,
@@ -736,6 +738,20 @@ export function CodebuddySuiteAccountsSharedView<
               >
                 <Upload size={14} />
               </button>
+              {handleOpenWebview && (
+                <button
+                  className="card-action-btn"
+                  onClick={() => handleOpenWebview(account.id)}
+                  disabled={webviewing === account.id}
+                  title={t("workbuddy.webview.open", "打开网页会话")}
+                >
+                  {webviewing === account.id ? (
+                    <RefreshCw size={14} className="loading-spinner" />
+                  ) : (
+                    <Globe size={14} />
+                  )}
+                </button>
+              )}
               <button
                 className="card-action-btn danger"
                 onClick={() => handleDelete(account.id)}
@@ -829,6 +845,20 @@ export function CodebuddySuiteAccountsSharedView<
               >
                 <Upload size={14} />
               </button>
+              {handleOpenWebview && (
+                <button
+                  className="action-btn"
+                  onClick={() => handleOpenWebview(account.id)}
+                  disabled={webviewing === account.id}
+                  title={t("workbuddy.webview.open", "打开网页会话")}
+                >
+                  {webviewing === account.id ? (
+                    <RefreshCw size={14} className="loading-spinner" />
+                  ) : (
+                    <Globe size={14} />
+                  )}
+                </button>
+              )}
               <button
                 className="action-btn danger"
                 onClick={() => handleDelete(account.id)}

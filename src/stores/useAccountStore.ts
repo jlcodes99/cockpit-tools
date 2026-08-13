@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { Account, QuotaData, RefreshStats, TokenData } from '../types/account';
+import { Account, AccountNoteUpdate, QuotaData, RefreshStats, TokenData } from '../types/account';
 import * as accountService from '../services/accountService';
 import { emitAccountsChanged, emitCurrentAccountChanged } from '../utils/accountSyncEvents';
 import {
@@ -108,6 +108,10 @@ function toPersistedQuotaSnapshot(quota?: QuotaData): QuotaData | undefined {
 function toPersistedAccountSnapshot(account: Account): Account {
   return {
     ...account,
+    two_factor_secret: undefined,
+    account_password: undefined,
+    phone_number: undefined,
+    mail_url: undefined,
     token: toPersistedTokenSnapshot(account.token),
     quota: toPersistedQuotaSnapshot(account.quota),
   };
@@ -162,11 +166,12 @@ interface AccountState {
     setCurrentAccount: (accountId: string, runtimeTarget?: AntigravityRuntimeTarget) => Promise<void>;
     refreshQuota: (accountId: string, runtimeTarget?: AntigravityRuntimeTarget) => Promise<void>;
     refreshAllQuotas: () => Promise<RefreshStats>;
-    startOAuthLogin: () => Promise<Account>;
+    startOAuthLogin: (update?: AccountNoteUpdate) => Promise<Account>;
     reorderAccounts: (accountIds: string[]) => Promise<void>;
     switchAccount: (accountId: string, runtimeTarget?: AntigravityRuntimeTarget) => Promise<Account>;
     syncCurrentFromClient: () => Promise<void>;
     updateAccountTags: (accountId: string, tags: string[]) => Promise<Account>;
+    updateAccountNotes: (accountId: string, update: string | AccountNoteUpdate) => Promise<Account>;
 }
 
 export const useAccountStore = create<AccountState>()(
@@ -436,8 +441,8 @@ export const useAccountStore = create<AccountState>()(
         return stats;
     },
 
-    startOAuthLogin: async () => {
-        const account = await accountService.startOAuthLogin();
+    startOAuthLogin: async (update?: AccountNoteUpdate) => {
+        const account = await accountService.startOAuthLogin(update);
         await get().fetchAccounts();
         await emitAccountsChanged({
             platformId: 'antigravity',
@@ -515,6 +520,28 @@ export const useAccountStore = create<AccountState>()(
     updateAccountTags: async (accountId: string, tags: string[]) => {
         const account = await accountService.updateAccountTags(accountId, tags);
         await get().fetchAccounts();
+        return account;
+    },
+
+    updateAccountNotes: async (accountId: string, update: string | AccountNoteUpdate) => {
+        const account = typeof update === 'string'
+            ? await accountService.updateAccountNotes(accountId, update)
+            : await accountService.updateAccountNote(accountId, update);
+        set((state) => ({
+            accounts: state.accounts.map((item) => item.id === account.id ? account : item),
+            currentAccount: state.currentAccount?.id === account.id ? account : state.currentAccount,
+            currentAccountsByTarget: {
+                antigravity:
+                    state.currentAccountsByTarget.antigravity?.id === account.id
+                        ? account
+                        : state.currentAccountsByTarget.antigravity,
+                antigravity_ide:
+                    state.currentAccountsByTarget.antigravity_ide?.id === account.id
+                        ? account
+                        : state.currentAccountsByTarget.antigravity_ide,
+            },
+        }));
+        await emitAccountsChanged({ platformId: 'antigravity', accountId: account.id, reason: 'note' });
         return account;
     },
   }),

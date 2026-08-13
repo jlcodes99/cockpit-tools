@@ -560,6 +560,19 @@ func rewriteCodexAgentMessageInput(payload []byte) []byte {
 	return updated
 }
 
+// looksLikeFernetCiphertext detects Fernet tokens (e.g. official multi-agent
+// encrypted payloads that typically begin with "gAAAAA"). These must stay as
+// encrypted_content parts; flattening them into input_text makes subagents see
+// opaque ciphertext as if it were the task body.
+func looksLikeFernetCiphertext(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	// Fernet token version 0x80 base64-encodes to a leading "gAAAAA..." prefix.
+	return strings.HasPrefix(value, "gAAAAA")
+}
+
 func rewriteCodexAgentMessageContent(payload []byte) []byte {
 	input := gjson.GetBytes(payload, "input")
 	if !input.IsArray() {
@@ -581,6 +594,11 @@ func rewriteCodexAgentMessageContent(payload []byte) []byte {
 			}
 			encryptedContent := part.Get("encrypted_content")
 			if encryptedContent.Type != gjson.String {
+				continue
+			}
+			// Keep real encrypted payloads intact for official multi-agent round-trips.
+			// Only normalize plaintext that some clients still place in this field.
+			if looksLikeFernetCiphertext(encryptedContent.String()) {
 				continue
 			}
 			partPath := fmt.Sprintf("input.%d.content.%d", itemIndex, partIndex)

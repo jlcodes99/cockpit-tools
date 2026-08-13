@@ -13,6 +13,21 @@ pub struct Account {
     /// 用户备注
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+    /// 账号 2FA Base32 秘钥（仅存储在本地账号详情文件中）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub two_factor_secret: Option<String>,
+    /// 账号登录密码（仅存储在本地账号详情文件中）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_password: Option<String>,
+    /// 账号绑定手机号（仅存储在本地账号详情文件中）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phone_number: Option<String>,
+    /// 可打开的邮件查询地址（仅存储在本地账号详情文件中）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mail_url: Option<String>,
+    /// 仅保存了邮箱/备注、尚未完成 OAuth 的待授权卡片。
+    #[serde(default)]
+    pub pending_oauth: bool,
     pub token: TokenData,
     pub quota: Option<QuotaData>,
     /// Disabled accounts are ignored by the proxy token pool (e.g. revoked refresh_token -> invalid_grant).
@@ -45,6 +60,11 @@ impl Account {
             name: None,
             tags: Vec::new(),
             notes: None,
+            two_factor_secret: None,
+            account_password: None,
+            phone_number: None,
+            mail_url: None,
+            pending_oauth: false,
             token,
             quota: None,
             disabled: false,

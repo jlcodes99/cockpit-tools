@@ -14,6 +14,12 @@ export const CODEX_API_PROVIDER_CUSTOM_ID = "custom";
 export const COCKPIT_API_PROVIDER_ID = "cockpit_api";
 export const COCKPIT_API_PROVIDER_NAME = "Cockpit Api";
 export const COCKPIT_API_BASE_URL = "https://chongcodex.cn/v1";
+export const DEEPSEEK_API_PROVIDER_ID = "deepseek";
+export const DEEPSEEK_API_BASE_URL = "https://api.deepseek.com";
+export const DEEPSEEK_CODEX_MODEL_CATALOG = [
+  "deepseek-v4-flash",
+  "deepseek-v4-pro",
+] as const;
 
 const COCKPIT_API_HIDDEN_BASE_URLS = [COCKPIT_API_BASE_URL] as const;
 
@@ -167,10 +173,10 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     isPartner: true,
   },
   {
-    id: "deepseek",
+    id: DEEPSEEK_API_PROVIDER_ID,
     name: "DeepSeek",
-    baseUrls: ["https://api.deepseek.com", "https://api.deepseek.com/v1"],
-    modelCatalog: ["deepseek-v4-pro", "deepseek-v4-flash"],
+    baseUrls: [DEEPSEEK_API_BASE_URL, `${DEEPSEEK_API_BASE_URL}/v1`],
+    modelCatalog: [...DEEPSEEK_CODEX_MODEL_CATALOG],
     website: "https://platform.deepseek.com/",
     apiKeyUrl: "https://platform.deepseek.com/api_keys",
   },

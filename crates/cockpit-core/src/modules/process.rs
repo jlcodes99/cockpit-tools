@@ -6849,11 +6849,17 @@ pub fn collect_codex_process_entries() -> Vec<(u32, Option<String>)> {
         }
     };
     let expected = launch_path.to_string_lossy().to_string();
-    let entries = collect_codex_process_entries_from_powershell(&expected);
+    // Prefer the native sysinfo probe. Some otherwise healthy Windows hosts have a
+    // broken Win32_Process CIM provider; probing CIM first then adds a five-second
+    // delay (and noisy warnings) to every Codex lifecycle operation. The native
+    // probe already supplies executable paths, parent PIDs and command lines, so
+    // PowerShell remains only a compatibility fallback for hosts where sysinfo
+    // cannot see the process metadata.
+    let entries = collect_codex_process_entries_from_sysinfo_fallback(&expected);
     if !entries.is_empty() {
         return entries;
     }
-    collect_codex_process_entries_from_sysinfo_fallback(&expected)
+    collect_codex_process_entries_from_powershell(&expected)
 }
 
 #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]

@@ -4,6 +4,11 @@ export interface Account {
     name?: string;
     tags?: string[];
     notes?: string;
+    two_factor_secret?: string;
+    account_password?: string;
+    phone_number?: string;
+    mail_url?: string;
+    pending_oauth?: boolean;
     token: TokenData;
     quota?: QuotaData;
     quota_error?: QuotaErrorInfo;
@@ -13,6 +18,14 @@ export interface Account {
     protected_models?: string[];
     created_at: number;
     last_used: number;
+}
+
+export interface AccountNoteUpdate {
+    note?: string;
+    twoFactorSecret?: string;
+    accountPassword?: string;
+    phoneNumber?: string;
+    mailUrl?: string;
 }
 
 export interface TokenData {

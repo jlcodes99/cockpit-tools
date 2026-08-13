@@ -2,9 +2,11 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   CodexAccount,
   CodexAccountNoteUpdate,
+  CodexApiModelMapping,
   CodexApiProviderMode,
   CodexAppSpeed,
   CodexAppSpeedConfig,
+  CodexFingerprintMode,
   CodexBatchDeleteJobStatus,
   CodexProviderWireApi,
   CodexQuickConfig,
@@ -399,6 +401,7 @@ export async function updateCodexApiKeyCredentials(
   apiWireApi?: CodexProviderWireApi,
   apiSupportsWebsockets?: boolean,
   apiSyncModelCatalogToCodex?: boolean,
+  accountName?: string,
 ): Promise<CodexAccount> {
   return await invoke('update_codex_api_key_credentials', {
     accountId,
@@ -414,6 +417,7 @@ export async function updateCodexApiKeyCredentials(
     apiSupportsVision: apiSupportsVision ?? false,
     apiModelVisionSupport: apiModelVisionSupport ?? {},
     apiVisionRoutingModel: apiVisionRoutingModel ?? null,
+    accountName: accountName ?? null,
   });
 }
 
@@ -467,6 +471,35 @@ export async function closeCodexOAuthPort(): Promise<number> {
 
 export async function updateCodexAccountTags(accountId: string, tags: string[]): Promise<CodexAccount> {
   return await invoke('update_codex_account_tags', { accountId, tags });
+}
+
+export async function updateCodexAccountsFingerprintMode(
+  accountIds: string[],
+  mode: CodexFingerprintMode,
+): Promise<CodexAccount[]> {
+  return await invoke('update_codex_accounts_fingerprint_mode', { accountIds, mode });
+}
+
+export async function updateCodexAccountInstanceAccess(
+  accountId: string,
+  accessMode?: string | null,
+  startupModel?: string | null,
+): Promise<CodexAccount> {
+  return await invoke("update_codex_account_instance_access", {
+    accountId,
+    accessMode: accessMode ?? null,
+    startupModel: startupModel ?? null,
+  });
+}
+
+export async function updateCodexAccountApiModelMappings(
+  accountId: string,
+  mappings: CodexApiModelMapping[],
+): Promise<CodexAccount> {
+  return await invoke('update_codex_account_api_model_mappings', {
+    accountId,
+    mappings,
+  });
 }
 
 export async function updateCodexAccountNote(

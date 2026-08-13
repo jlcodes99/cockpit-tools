@@ -993,6 +993,7 @@ export function CodexLocalAccessModal({
         // Keep unsupported accounts visible so users know why they cannot join.
         if (
           ineligibleReason === "chat_completions_api_key" ||
+          ineligibleReason === "deepseek_unsupported" ||
           ineligibleReason === "pending_oauth" ||
           ineligibleReason === "web_session_quota_only"
         ) {
@@ -3153,12 +3154,15 @@ export function CodexLocalAccessModal({
                         );
                       const isChatCompletionsApiKeyUnsupported =
                         ineligibleReason === "chat_completions_api_key";
+                      const isDeepSeekUnsupported =
+                        ineligibleReason === "deepseek_unsupported";
                       const isPendingOauthUnsupported =
                         ineligibleReason === "pending_oauth";
                       const isWebSessionUnsupported =
                         ineligibleReason === "web_session_quota_only";
                       const isJoinUnsupported =
                         isChatCompletionsApiKeyUnsupported ||
+                        isDeepSeekUnsupported ||
                         isPendingOauthUnsupported ||
                         isWebSessionUnsupported;
                       const isChecked =
@@ -3259,6 +3263,14 @@ export function CodexLocalAccessModal({
                                     {t(
                                       "codex.localAccess.modal.chatApiKeyUnsupported",
                                       "Chat Completions 协议不支持加入 API 服务",
+                                    )}
+                                  </span>
+                                )}
+                                {isDeepSeekUnsupported && (
+                                  <span className="codex-local-access-member-unsupported">
+                                    {t(
+                                      "codex.localAccess.modal.deepseekUnsupported",
+                                      "DeepSeek 暂不支持加入",
                                     )}
                                   </span>
                                 )}

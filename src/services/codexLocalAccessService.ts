@@ -254,6 +254,7 @@ export async function updateCodexLocalAccessApiKey(
     modelPrefix?: string | null;
     allowedModels?: string[] | null;
     excludedModels?: string[] | null;
+    tokenLimit?: number | null;
     accountIds?: string[] | null;
     inheritAccountPool?: boolean | null;
   },
@@ -265,6 +266,7 @@ export async function updateCodexLocalAccessApiKey(
     modelPrefix: payload.modelPrefix ?? null,
     allowedModels: payload.allowedModels ?? null,
     excludedModels: payload.excludedModels ?? null,
+    tokenLimit: payload.tokenLimit ?? null,
     accountIds: payload.accountIds ?? null,
     inheritAccountPool: payload.inheritAccountPool ?? null,
   });

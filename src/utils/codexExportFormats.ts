@@ -362,7 +362,17 @@ function buildSub2apiApiKeyCredentials(account: CodexAccount): JsonRecord {
 
 function buildSub2apiExtra(account: CodexAccount): JsonRecord | undefined {
   const authProvider = resolveAuthProvider(account);
-  return authProvider ? { auth_provider: authProvider } : undefined;
+  const extra: JsonRecord = {};
+  if (authProvider) {
+    extra.auth_provider = authProvider;
+  }
+  if (
+    account.codex_fingerprint_mode &&
+    account.codex_fingerprint_mode !== 'session'
+  ) {
+    extra.codex_fingerprint_mode = account.codex_fingerprint_mode;
+  }
+  return Object.keys(extra).length > 0 ? extra : undefined;
 }
 
 function toSub2apiAccount(account: CodexAccount): Sub2apiCreateAccountItem {
@@ -427,6 +437,9 @@ function toPortableTokenStorage(
     type: 'codex',
     expired: resolveAccessTokenExpiry(account) || '',
   };
+  if (account.codex_fingerprint_mode) {
+    payload.codex_fingerprint_mode = account.codex_fingerprint_mode;
+  }
 
   if (options.includeSensitiveNotes) {
     appendSensitiveNoteFields(payload, account);

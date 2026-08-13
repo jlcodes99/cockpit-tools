@@ -875,6 +875,11 @@ fn write_api_key_provider_to_config_toml(
 
 /// 旧版数据目录（~/Library/Application Support/com.antigravity.cockpit-tools/）
 fn get_old_codex_data_dir() -> PathBuf {
+    #[cfg(test)]
+    if let Some(data_dir) = std::env::var_os("COCKPIT_TOOLS_DATA_DIR") {
+        return PathBuf::from(data_dir).join("legacy-codex-data");
+    }
+
     dirs::data_local_dir()
         .unwrap_or_else(|| dirs::home_dir().expect("无法获取用户目录"))
         .join("com.antigravity.cockpit-tools")
@@ -882,6 +887,12 @@ fn get_old_codex_data_dir() -> PathBuf {
 
 /// 将旧目录中的 codex 数据迁移到新目录（一次性，迁移成功后删除旧文件）
 fn migrate_codex_data_if_needed(new_data_dir: &PathBuf) {
+    #[cfg(test)]
+    if std::env::var_os("COCKPIT_TOOLS_DATA_DIR").is_some() {
+        // Test guards use an explicit data root; never migrate the user's legacy files.
+        return;
+    }
+
     let old_dir = get_old_codex_data_dir();
     if !old_dir.exists() {
         return;
@@ -3529,9 +3540,9 @@ mod tests {
 
     struct TestEnvGuard {
         home_dir: std::path::PathBuf,
-        previous_home: Option<String>,
-        previous_codex_home: Option<String>,
-        previous_data_dir: Option<String>,
+        previous_home: Option<std::ffi::OsString>,
+        previous_codex_home: Option<std::ffi::OsString>,
+        previous_data_dir: Option<std::ffi::OsString>,
     }
 
     impl TestEnvGuard {
@@ -3542,9 +3553,9 @@ mod tests {
             fs::create_dir_all(&codex_home).expect("create codex home");
             fs::create_dir_all(&test_data_dir).expect("create test data dir");
 
-            let previous_home = std::env::var("HOME").ok();
-            let previous_codex_home = std::env::var("CODEX_HOME").ok();
-            let previous_data_dir = std::env::var("COCKPIT_TOOLS_DATA_DIR").ok();
+            let previous_home = std::env::var_os("HOME");
+            let previous_codex_home = std::env::var_os("CODEX_HOME");
+            let previous_data_dir = std::env::var_os("COCKPIT_TOOLS_DATA_DIR");
             std::env::set_var("HOME", &home_dir);
             std::env::set_var("CODEX_HOME", &codex_home);
             std::env::set_var("COCKPIT_TOOLS_DATA_DIR", &test_data_dir);
@@ -3559,6 +3570,10 @@ mod tests {
 
         fn codex_home(&self) -> std::path::PathBuf {
             self.home_dir.join(".codex")
+        }
+
+        fn data_dir(&self) -> std::path::PathBuf {
+            self.home_dir.join(".antigravity_cockpit")
         }
     }
 
@@ -3587,12 +3602,41 @@ mod tests {
 
         let storage_path = get_accounts_storage_path();
 
-        assert!(
-            storage_path.starts_with(&env.home_dir),
-            "Codex account storage should stay inside the test home, got {} for test home {}",
-            storage_path.display(),
-            env.home_dir.display()
+        assert_eq!(
+            storage_path,
+            env.data_dir().join("codex_accounts.json"),
+            "Codex account storage should stay inside the isolated Cockpit data directory"
         );
+    }
+
+    #[test]
+    fn test_env_guard_isolates_and_restores_cockpit_data_dir() {
+        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let previous_data_dir = std::env::var_os("COCKPIT_TOOLS_DATA_DIR");
+        let isolated_home_dir = {
+            let env = TestEnvGuard::new("codex-core-data-dir-guard-test");
+            let data_dir = env.data_dir();
+            let legacy_data_dir = data_dir.join("legacy-codex-data");
+            fs::create_dir_all(&legacy_data_dir).expect("create isolated legacy data dir");
+            let legacy_index = legacy_data_dir.join("codex_accounts.json");
+            fs::write(&legacy_index, "legacy sentinel").expect("write legacy sentinel");
+
+            assert_eq!(
+                crate::modules::config::get_data_dir().expect("resolve isolated data dir"),
+                data_dir
+            );
+            let accounts_storage_path = get_accounts_storage_path();
+            assert_eq!(accounts_storage_path, data_dir.join("codex_accounts.json"));
+            assert!(legacy_index.exists());
+            assert!(!accounts_storage_path.exists());
+            env.home_dir.clone()
+        };
+
+        assert_eq!(
+            std::env::var_os("COCKPIT_TOOLS_DATA_DIR"),
+            previous_data_dir
+        );
+        assert!(!isolated_home_dir.exists());
     }
 
     fn make_jwt(payload: serde_json::Value) -> String {

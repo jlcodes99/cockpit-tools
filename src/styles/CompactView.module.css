@@ -291,6 +291,40 @@
   cursor: not-allowed;
 }
 
+.noteBtn {
+  width: auto;
+  max-width: 108px;
+  height: 22px;
+  padding: 0 7px;
+  gap: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.noteBtn span {
+  overflow: hidden;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.noteBtn:hover,
+.noteBtnActive {
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 50%, var(--border));
+  background: color-mix(in srgb, var(--primary) 10%, var(--bg-secondary));
+}
+
 .current {
   flex-shrink: 0;
   width: 20px;

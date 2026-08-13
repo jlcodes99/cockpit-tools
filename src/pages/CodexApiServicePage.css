@@ -724,6 +724,7 @@
 .codex-api-service-key-main code,
 .codex-api-service-policy-grid input,
 .codex-api-service-policy-grid textarea,
+.codex-api-service-mapping-row input,
 .codex-api-service-timeout-preset-row input,
 .codex-api-service-timeout-preset-row select {
   min-width: 0;
@@ -752,7 +753,8 @@
 .codex-api-service-input-row input,
 .codex-api-service-table-row input,
 .codex-api-service-key-main input,
-.codex-api-service-policy-grid input {
+.codex-api-service-policy-grid input,
+.codex-api-service-mapping-row input {
   width: 100%;
   height: 34px;
   padding: 0 10px;
@@ -1080,12 +1082,13 @@
 
 .api-key-details-row {
   display: grid;
-  grid-template-columns: minmax(190px, 0.55fr) minmax(500px, 1.45fr);
+  grid-template-columns: minmax(190px, 0.55fr) minmax(180px, 0.5fr) minmax(500px, 1.45fr);
   gap: 10px;
   min-width: 0;
 }
 
-.api-key-routing-summary {
+.api-key-routing-summary,
+.api-key-token-limit-summary {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -1096,18 +1099,21 @@
   background: color-mix(in srgb, var(--bg-card) 72%, transparent);
 }
 
-.api-key-routing-summary > svg {
+.api-key-routing-summary > svg,
+.api-key-token-limit-summary > svg {
   flex: 0 0 auto;
   color: var(--primary);
 }
 
-.api-key-routing-summary > div {
+.api-key-routing-summary > div,
+.api-key-token-limit-summary > div {
   display: grid;
   gap: 2px;
   min-width: 0;
 }
 
 .api-key-routing-summary span,
+.api-key-token-limit-summary span,
 .api-key-usage-grid span {
   color: var(--text-secondary);
   font-size: 10px;
@@ -1115,6 +1121,7 @@
 }
 
 .api-key-routing-summary strong,
+.api-key-token-limit-summary strong,
 .api-key-usage-grid strong {
   min-width: 0;
   color: var(--text-primary);
@@ -1135,6 +1142,37 @@
 .api-key-routing-summary.warning > svg,
 .api-key-routing-summary.warning strong {
   color: var(--warning);
+}
+
+.api-key-token-limit-summary.limit-reached {
+  border-color: color-mix(in srgb, var(--danger) 36%, var(--codex-api-border-soft));
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+}
+
+.api-key-token-limit-summary.limit-reached > svg,
+.api-key-token-limit-summary.limit-reached strong {
+  color: var(--danger);
+}
+
+.api-key-token-limit-progress {
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin-top: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
+  overflow: hidden;
+}
+
+.api-key-token-limit-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+}
+
+.api-key-token-limit-summary.limit-reached .api-key-token-limit-progress > span {
+  background: var(--danger);
 }
 
 .api-key-usage-grid {
@@ -1247,6 +1285,57 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
   border: 1px solid var(--codex-api-border-soft);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-card) 78%, transparent);
+}
+
+.api-key-token-limit-editor {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.35fr) minmax(280px, 1fr);
+  align-items: end;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--codex-api-border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-surface) 68%, transparent);
+}
+
+.api-key-token-limit-editor label,
+.api-key-token-limit-editor > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.api-key-token-limit-editor label > span,
+.api-key-token-limit-editor strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.api-key-token-limit-editor input {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--codex-api-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+  color: var(--text-primary);
+  outline: none;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.api-key-token-limit-editor input:focus {
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.api-key-token-limit-editor small {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .api-key-account-scope {
@@ -1567,6 +1656,74 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
   flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
+}
+
+.codex-api-service-mapping-account {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--codex-api-border-soft);
+}
+
+.codex-api-service-mapping-account:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.codex-api-service-mapping-account-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.codex-api-service-mapping-account-head strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-api-service-mapping-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.codex-api-service-mapping-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  min-width: 0;
+}
+
+.codex-api-service-mapping-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.codex-api-service-mapping-row label span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.codex-api-service-mapping-row input {
+  width: 100%;
+  min-width: 0;
+}
+
+.codex-api-service-mapping-arrow {
+  padding-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1;
 }
 
 .codex-api-service-account-meta span {
@@ -2412,6 +2569,11 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
 }
 
 @media (max-width: 860px) {
+  .api-key-token-limit-editor {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
   .codex-api-service-usage-toolbar {
     align-items: stretch;
     flex-direction: column;

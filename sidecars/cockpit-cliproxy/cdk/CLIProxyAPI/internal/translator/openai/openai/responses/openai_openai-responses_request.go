@@ -539,6 +539,81 @@ func chatMessageContentText(content any) string {
 	}
 }
 
+func appendResponsesReasoningText(existing, incoming string, unique bool) string {
+	incoming = strings.TrimSpace(incoming)
+	if incoming == "" {
+		return existing
+	}
+	existing = strings.TrimSpace(existing)
+	if existing == "" {
+		return incoming
+	}
+	if unique && strings.Contains(existing, incoming) {
+		return existing
+	}
+	return existing + "\n\n" + incoming
+}
+
+func responsesReasoningNodeText(value gjson.Result) string {
+	if !value.Exists() {
+		return ""
+	}
+	if value.Type == gjson.String {
+		return strings.TrimSpace(value.String())
+	}
+	if value.IsArray() {
+		parts := make([]string, 0)
+		value.ForEach(func(_, part gjson.Result) bool {
+			if text := responsesReasoningNodeText(part); text != "" {
+				parts = append(parts, text)
+			}
+			return true
+		})
+		return strings.Join(parts, "\n\n")
+	}
+	if !value.IsObject() {
+		return ""
+	}
+	for _, key := range []string{"text", "content", "summary", "parts"} {
+		if text := responsesReasoningNodeText(value.Get(key)); text != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+func responsesItemReasoningText(item gjson.Result) string {
+	for _, key := range []string{"reasoning_content", "reasoning", "reasoning_details"} {
+		if text := responsesReasoningNodeText(item.Get(key)); text != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+func responsesReasoningItemText(item gjson.Result) string {
+	for _, key := range []string{"reasoning_content", "content", "text", "summary"} {
+		if text := responsesReasoningNodeText(item.Get(key)); text != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+func backfillResponsesToolCallReasoningPlaceholders(rawJSON []byte) []byte {
+	out := rawJSON
+	for index, message := range gjson.GetBytes(rawJSON, "messages").Array() {
+		if message.Get("role").String() != "assistant" || len(message.Get("tool_calls").Array()) == 0 {
+			continue
+		}
+		if strings.TrimSpace(message.Get("reasoning_content").String()) != "" {
+			continue
+		}
+		out, _ = sjson.SetBytes(out, fmt.Sprintf("messages.%d.reasoning_content", index), "tool call")
+	}
+	return out
+}
+
 // ConvertOpenAIResponsesRequestToOpenAIChatCompletions converts OpenAI responses format to OpenAI chat completions format.
 // It transforms the OpenAI responses API format (with instructions and input array) into the standard
 // OpenAI chat completions format (with messages array and system content).
@@ -613,8 +688,35 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 
 		pendingToolCalls := make([]interface{}, 0)
 		pendingToolCallIDs := make([]string, 0)
+		pendingReasoning := ""
+		lastAssistantIndex := -1
 		awaitingToolOutputs := make(map[string]struct{})
 		deferredMessages := make([][]byte, 0)
+		appendOutputMessage := func(message []byte) {
+			messageIndex := len(gjson.GetBytes(out, "messages").Array())
+			out, _ = sjson.SetRawBytes(out, "messages.-1", message)
+			switch gjson.GetBytes(message, "role").String() {
+			case "assistant":
+				lastAssistantIndex = messageIndex
+			case "tool":
+			default:
+				lastAssistantIndex = -1
+			}
+		}
+		attachPendingReasoningToPreviousAssistant := func() {
+			reasoning := strings.TrimSpace(pendingReasoning)
+			pendingReasoning = ""
+			if reasoning == "" || lastAssistantIndex < 0 {
+				return
+			}
+			path := fmt.Sprintf("messages.%d", lastAssistantIndex)
+			if gjson.GetBytes(out, path+".role").String() != "assistant" {
+				return
+			}
+			existing := gjson.GetBytes(out, path+".reasoning_content").String()
+			combined := appendResponsesReasoningText(existing, reasoning, false)
+			out, _ = sjson.SetBytes(out, path+".reasoning_content", combined)
+		}
 
 		flushPendingToolCalls := func() {
 			if len(pendingToolCalls) == 0 {
@@ -622,7 +724,11 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 			}
 			assistantMessage := []byte(`{"role":"assistant","tool_calls":[]}`)
 			assistantMessage, _ = sjson.SetBytes(assistantMessage, "tool_calls", pendingToolCalls)
-			out, _ = sjson.SetRawBytes(out, "messages.-1", assistantMessage)
+			if reasoning := strings.TrimSpace(pendingReasoning); reasoning != "" {
+				assistantMessage, _ = sjson.SetBytes(assistantMessage, "reasoning_content", reasoning)
+				pendingReasoning = ""
+			}
+			appendOutputMessage(assistantMessage)
 			for _, id := range pendingToolCallIDs {
 				if strings.TrimSpace(id) == "" {
 					continue
@@ -634,7 +740,7 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 		}
 		flushDeferredMessages := func() {
 			for _, message := range deferredMessages {
-				out, _ = sjson.SetRawBytes(out, "messages.-1", message)
+				appendOutputMessage(message)
 			}
 			deferredMessages = deferredMessages[:0]
 		}
@@ -653,7 +759,7 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 				deferredMessages = append(deferredMessages, message)
 				return
 			}
-			out, _ = sjson.SetRawBytes(out, "messages.-1", message)
+			appendOutputMessage(message)
 		}
 
 		for _, item := range inputItems {
@@ -661,7 +767,7 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 			if itemType == "" && item.Get("role").String() != "" {
 				itemType = "message"
 			}
-			if !isResponsesToolCallItem(itemType) {
+			if !isResponsesToolCallItem(itemType) && itemType != "reasoning" {
 				flushPendingToolCalls()
 			}
 
@@ -709,9 +815,30 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 					message, _ = sjson.SetBytes(message, "content", content.String())
 				}
 
+				if role == "assistant" {
+					pendingReasoning = appendResponsesReasoningText(
+						pendingReasoning,
+						responsesItemReasoningText(item),
+						false,
+					)
+					if reasoning := strings.TrimSpace(pendingReasoning); reasoning != "" {
+						message, _ = sjson.SetBytes(message, "reasoning_content", reasoning)
+						pendingReasoning = ""
+					}
+				} else {
+					attachPendingReasoningToPreviousAssistant()
+					// A deferred user/system message is still a semantic turn boundary.
+					lastAssistantIndex = -1
+				}
+
 				appendRegularMessage(message)
 
 			case "function_call", "custom_tool_call", "tool_search_call":
+				pendingReasoning = appendResponsesReasoningText(
+					pendingReasoning,
+					responsesItemReasoningText(item),
+					true,
+				)
 				// Buffer consecutive function calls and emit them as one assistant message.
 				toolCall := []byte(`{"id":"","type":"function","function":{"name":"","arguments":""}}`)
 
@@ -788,11 +915,23 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 				// Codex Desktop Responses Lite may carry tool definitions in
 				// input items rather than top-level "tools". Handled below when
 				// collecting chat tools.
+
+			case "reasoning":
+				// Responses reasoning belongs to the assistant message or tool call
+				// that follows it. Keep it pending instead of attaching it backward.
+				pendingReasoning = appendResponsesReasoningText(
+					pendingReasoning,
+					responsesReasoningItemText(item),
+					false,
+				)
 			}
 
 		}
 		flushPendingToolCalls()
 		flushDeferredMessages()
+		// Only genuine trailing reasoning is attached backward. Always consume it
+		// here so it cannot leak across a later user turn.
+		attachPendingReasoningToPreviousAssistant()
 	} else if input.Type == gjson.String {
 		msg := []byte(`{}`)
 		msg, _ = sjson.SetBytes(msg, "role", "user")
@@ -832,5 +971,8 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 	if sawToolOutputMedia {
 		out = normalizeChatMessagesWithResponsesToolOutputMedia(out, mediaByCallID)
 	}
+	// Some thinking providers reject historical assistant tool calls without a
+	// non-empty reasoning_content. Run this last so genuine reasoning always wins.
+	out = backfillResponsesToolCallReasoningPlaceholders(out)
 	return out
 }

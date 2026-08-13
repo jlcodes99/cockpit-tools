@@ -433,15 +433,82 @@ async fn import_from_local_state_db_logic() -> Result<models::Account, String> {
 pub async fn import_from_json_logic(json_content: String) -> Result<Vec<models::Account>, String> {
     modules::logger::log_info("开始从 JSON 导入账号...");
 
+    let trimmed = json_content.trim();
+    if trimmed.contains("----") && !trimmed.starts_with('{') && !trimmed.starts_with('[') {
+        let mut imported = Vec::new();
+        for (index, line) in trimmed
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .enumerate()
+        {
+            let parts: Vec<&str> = line.splitn(4, "----").map(str::trim).collect();
+            if parts.len() < 3 || !parts[0].contains('@') {
+                return Err(format!("第 {} 行待授权账号格式无效", index + 1));
+            }
+            imported.push(modules::account::create_pending_oauth_account(
+                parts[0].to_string(),
+                modules::account::AccountNoteUpdate {
+                    note: None,
+                    account_password: (!parts[1].is_empty()).then(|| parts[1].to_string()),
+                    two_factor_secret: (!parts[2].is_empty()).then(|| parts[2].to_string()),
+                    phone_number: None,
+                    mail_url: parts
+                        .get(3)
+                        .filter(|value| !value.is_empty())
+                        .map(|value| value.to_string()),
+                },
+            )?);
+        }
+        return Ok(imported);
+    }
+
     // 简化格式: [{"email": "xxx", "refresh_token": "..."}]
     #[derive(Debug, serde::Deserialize)]
     struct SimpleAccount {
-        email: String,
-        refresh_token: String,
+        #[serde(default)]
+        email: Option<String>,
+        #[serde(default, alias = "refreshToken")]
+        refresh_token: Option<String>,
+        #[serde(default, alias = "pendingOAuth")]
+        pending_oauth: bool,
+        #[serde(default, alias = "authorizationStatus")]
+        authorization_status: Option<String>,
         #[serde(default)]
         tags: Vec<String>,
-        #[serde(default)]
+        #[serde(
+            default,
+            alias = "account_note",
+            alias = "accountNote",
+            alias = "note",
+            alias = "remark"
+        )]
         notes: Option<String>,
+        #[serde(
+            default,
+            alias = "twoFactorSecret",
+            alias = "account_two_factor_secret",
+            alias = "accountTwoFactorSecret"
+        )]
+        two_factor_secret: Option<String>,
+        #[serde(default, alias = "accountPassword", alias = "password")]
+        account_password: Option<String>,
+        #[serde(
+            default,
+            alias = "phoneNumber",
+            alias = "account_phone_number",
+            alias = "accountPhoneNumber"
+        )]
+        phone_number: Option<String>,
+        #[serde(
+            default,
+            alias = "mailUrl",
+            alias = "mail_address",
+            alias = "mailAddress",
+            alias = "mail_query_url",
+            alias = "mailQueryUrl"
+        )]
+        mail_url: Option<String>,
     }
 
     // 尝试解析为简化格式数组
@@ -455,23 +522,84 @@ pub async fn import_from_json_logic(json_content: String) -> Result<Vec<models::
         let mut imported = Vec::new();
 
         for simple in accounts {
-            modules::logger::log_info(&format!("正在导入账号: {}", simple.email));
+            modules::logger::log_info(&format!(
+                "正在导入账号: {}",
+                simple.email.as_deref().unwrap_or("<auto>")
+            ));
 
+            let has_pending_authorization_status = simple
+                .authorization_status
+                .as_deref()
+                .map(str::trim)
+                .map(|value| {
+                    value.eq_ignore_ascii_case("pending")
+                        || value.eq_ignore_ascii_case("pending_oauth")
+                })
+                .unwrap_or(false);
+            if simple.pending_oauth
+                || has_pending_authorization_status
+                || simple
+                    .refresh_token
+                    .as_deref()
+                    .unwrap_or("")
+                    .trim()
+                    .is_empty()
+            {
+                let Some(email) = simple.email.clone().filter(|value| value.contains('@')) else {
+                    continue;
+                };
+                match modules::account::create_pending_oauth_account(
+                    email,
+                    modules::account::AccountNoteUpdate {
+                        note: simple.notes,
+                        two_factor_secret: simple.two_factor_secret,
+                        account_password: simple.account_password,
+                        phone_number: simple.phone_number,
+                        mail_url: simple.mail_url,
+                    },
+                ) {
+                    Ok(account) => imported.push(account),
+                    Err(error) => {
+                        modules::logger::log_error(&format!("保存待授权账号失败: {}", error))
+                    }
+                }
+                continue;
+            }
+            let refresh_token = simple.refresh_token.clone().unwrap_or_default();
             // 使用 refresh_token 获取 access_token
-            match modules::oauth::refresh_access_token(&simple.refresh_token).await {
+            match modules::oauth::refresh_access_token(&refresh_token).await {
                 Ok(token_response) => {
+                    let email = match simple
+                        .email
+                        .clone()
+                        .filter(|value| !value.trim().is_empty())
+                    {
+                        Some(email) => email,
+                        None => match modules::oauth::get_user_info(&token_response.access_token)
+                            .await
+                        {
+                            Ok(info) => info.email,
+                            Err(error) => {
+                                modules::logger::log_error(&format!(
+                                    "自动识别导入账号邮箱失败: {}",
+                                    error
+                                ));
+                                continue;
+                            }
+                        },
+                    };
                     // 构建 TokenData
                     let token = models::TokenData::new(
                         token_response.access_token,
-                        token_response.refresh_token.unwrap_or(simple.refresh_token),
+                        token_response.refresh_token.unwrap_or(refresh_token),
                         token_response.expires_in,
-                        Some(simple.email.clone()),
+                        Some(email.clone()),
                         None,
                         None,
                     )
                     .with_oauth_metadata(token_response.oauth_client_key, token_response.id_token);
 
-                    match modules::upsert_account(simple.email.clone(), None, token) {
+                    match modules::upsert_account(email.clone(), None, token) {
                         Ok(mut new_account) => {
                             if !simple.tags.is_empty() {
                                 if let Ok(acc) = modules::account::update_account_tags(
@@ -481,11 +609,24 @@ pub async fn import_from_json_logic(json_content: String) -> Result<Vec<models::
                                     new_account = acc;
                                 }
                             }
-                            if let Some(notes) = simple.notes {
-                                if let Ok(acc) =
-                                    modules::account::update_account_notes(&new_account.id, notes)
-                                {
-                                    new_account = acc;
+                            let note_update = modules::account::AccountNoteUpdate {
+                                note: simple.notes,
+                                two_factor_secret: simple.two_factor_secret,
+                                account_password: simple.account_password,
+                                phone_number: simple.phone_number,
+                                mail_url: simple.mail_url,
+                            };
+                            match modules::account::update_account_note(
+                                &new_account.id,
+                                note_update,
+                            ) {
+                                Ok(acc) => new_account = acc,
+                                Err(error) => {
+                                    modules::logger::log_error(&format!(
+                                        "保存账号备注失败 {}: {}",
+                                        new_account.email, error
+                                    ));
+                                    continue;
                                 }
                             }
                             modules::logger::log_info(&format!(
@@ -495,15 +636,16 @@ pub async fn import_from_json_logic(json_content: String) -> Result<Vec<models::
                             imported.push(new_account);
                         }
                         Err(e) => {
-                            modules::logger::log_error(&format!(
-                                "保存账号失败 {}: {}",
-                                simple.email, e
-                            ));
+                            modules::logger::log_error(&format!("保存账号失败 {}: {}", email, e));
                         }
                     }
                 }
                 Err(e) => {
-                    modules::logger::log_error(&format!("刷新 Token 失败 {}: {}", simple.email, e));
+                    modules::logger::log_error(&format!(
+                        "刷新 Token 失败 {}: {}",
+                        simple.email.as_deref().unwrap_or("<auto>"),
+                        e
+                    ));
                 }
             }
         }
@@ -533,10 +675,23 @@ pub async fn import_from_json_logic(json_content: String) -> Result<Vec<models::
                         new_account = acc;
                     }
                 }
-                if let Some(notes) = old_account.notes {
-                    if let Ok(acc) = modules::account::update_account_notes(&new_account.id, notes)
-                    {
-                        new_account = acc;
+                match modules::account::update_account_note(
+                    &new_account.id,
+                    modules::account::AccountNoteUpdate {
+                        note: old_account.notes,
+                        two_factor_secret: old_account.two_factor_secret,
+                        account_password: old_account.account_password,
+                        phone_number: old_account.phone_number,
+                        mail_url: old_account.mail_url,
+                    },
+                ) {
+                    Ok(acc) => new_account = acc,
+                    Err(error) => {
+                        modules::logger::log_error(&format!(
+                            "保存账号备注失败 {}: {}",
+                            new_account.email, error
+                        ));
+                        continue;
                     }
                 }
                 modules::logger::log_info(&format!("导入账号: {}", new_account.email));
@@ -700,11 +855,22 @@ pub async fn import_from_files_logic(file_paths: Vec<String>) -> Result<FileImpo
                                 new_account = acc;
                             }
                         }
-                        if let Some(notes) = entry.notes {
-                            if let Ok(acc) =
-                                modules::account::update_account_notes(&new_account.id, notes)
-                            {
-                                new_account = acc;
+                        match modules::account::update_account_note(
+                            &new_account.id,
+                            modules::account::AccountNoteUpdate {
+                                note: entry.notes,
+                                two_factor_secret: entry.two_factor_secret,
+                                account_password: entry.account_password,
+                                phone_number: entry.phone_number,
+                                mail_url: entry.mail_url,
+                            },
+                        ) {
+                            Ok(acc) => new_account = acc,
+                            Err(error) => {
+                                let msg = format!("保存账号备注失败: {}", error);
+                                modules::logger::log_error(&format!("{}: {}", email, msg));
+                                failed.push(FileImportFailure { email, error: msg });
+                                continue;
                             }
                         }
                         modules::logger::log_info(&format!("导入账号成功: {}", new_account.email));
@@ -747,6 +913,10 @@ struct ImportEntry {
     refresh_token: String,
     tags: Vec<String>,
     notes: Option<String>,
+    two_factor_secret: Option<String>,
+    account_password: Option<String>,
+    phone_number: Option<String>,
+    mail_url: Option<String>,
 }
 
 /// 从 JSON 值中提取 ImportEntry
@@ -787,17 +957,44 @@ fn extract_import_entry(
         })
         .unwrap_or_default();
 
-    let notes = obj
-        .get("notes")
-        .and_then(|v| v.as_str())
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
+    let read_string = |keys: &[&str]| {
+        keys.iter()
+            .find_map(|key| obj.get(*key).and_then(|value| value.as_str()))
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    };
+    let notes = read_string(&["notes", "note", "account_note", "accountNote", "remark"]);
+    let two_factor_secret = read_string(&[
+        "two_factor_secret",
+        "twoFactorSecret",
+        "account_two_factor_secret",
+        "accountTwoFactorSecret",
+    ]);
+    let account_password = read_string(&["account_password", "accountPassword", "password"]);
+    let phone_number = read_string(&[
+        "phone_number",
+        "phoneNumber",
+        "account_phone_number",
+        "accountPhoneNumber",
+    ]);
+    let mail_url = read_string(&[
+        "mail_url",
+        "mailUrl",
+        "mail_address",
+        "mailAddress",
+        "mail_query_url",
+        "mailQueryUrl",
+    ]);
 
     Some(ImportEntry {
         email,
         refresh_token,
         tags,
         notes,
+        two_factor_secret,
+        account_password,
+        phone_number,
+        mail_url,
     })
 }
 
@@ -906,4 +1103,88 @@ pub async fn import_from_extension_credentials(
     }
 
     Ok(imported_count)
+}
+
+#[cfg(test)]
+mod account_note_import_tests {
+    use super::*;
+    use std::fs;
+
+    fn with_test_data_dir<T>(name: &str, run: impl FnOnce() -> T) -> T {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let data_dir = std::env::temp_dir().join(format!(
+            "{}-{}-{}",
+            name,
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        ));
+        let _ = fs::remove_dir_all(&data_dir);
+        fs::create_dir_all(&data_dir).expect("create test data dir");
+        std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &data_dir);
+        let result = run();
+        std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
+        let _ = fs::remove_dir_all(&data_dir);
+        result
+    }
+
+    #[test]
+    fn import_pending_oauth_json_preserves_sensitive_notes() {
+        with_test_data_dir("antigravity-pending-json-import-test", || {
+            let runtime = tokio::runtime::Runtime::new().expect("create runtime");
+            let accounts = runtime
+                .block_on(import_from_json_logic(
+                    r#"{
+                      "email": "pending-json@example.com",
+                      "pending_oauth": true,
+                      "notes": "delivery note",
+                      "account_password": "password-1",
+                      "two_factor_secret": "JBSWY3DPEHPK3PXP",
+                      "phone_number": "13800000000",
+                      "mail_url": "https://mail.example.test/inbox"
+                    }"#
+                    .to_string(),
+                ))
+                .expect("import pending JSON");
+            assert_eq!(accounts.len(), 1);
+            let account = &accounts[0];
+            assert!(account.pending_oauth);
+            assert_eq!(account.account_password.as_deref(), Some("password-1"));
+            assert_eq!(
+                account.two_factor_secret.as_deref(),
+                Some("JBSWY3DPEHPK3PXP")
+            );
+            assert_eq!(account.phone_number.as_deref(), Some("13800000000"));
+            assert_eq!(
+                account.mail_url.as_deref(),
+                Some("https://mail.example.test/inbox")
+            );
+        });
+    }
+
+    #[test]
+    fn import_pending_oauth_delimited_line_preserves_fields() {
+        with_test_data_dir("antigravity-pending-line-import-test", || {
+            let runtime = tokio::runtime::Runtime::new().expect("create runtime");
+            let accounts = runtime
+                .block_on(import_from_json_logic(
+                    "line@example.com----password-2----JBSWY3DPEHPK3PXP----https://mail.example.test/open"
+                        .to_string(),
+                ))
+                .expect("import pending line");
+            assert_eq!(accounts.len(), 1);
+            let account = &accounts[0];
+            assert!(account.pending_oauth);
+            assert_eq!(account.account_password.as_deref(), Some("password-2"));
+            assert_eq!(
+                account.two_factor_secret.as_deref(),
+                Some("JBSWY3DPEHPK3PXP")
+            );
+            assert_eq!(
+                account.mail_url.as_deref(),
+                Some("https://mail.example.test/open")
+            );
+        });
+    }
 }

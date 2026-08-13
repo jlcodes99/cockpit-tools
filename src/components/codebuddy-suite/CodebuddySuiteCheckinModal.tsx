@@ -11,6 +11,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { listen } from '@tauri-apps/api/event';
 import {
   X,
   ChevronLeft,
@@ -32,7 +33,8 @@ import { useEscClose } from '../../hooks/useEscClose';
 import { WorkbuddyAutoCheckinConfigModal } from './WorkbuddyAutoCheckinConfigModal';
 import {
   getWorkbuddyAutoCheckinConfig,
-  saveWorkbuddyAutoCheckinConfig,
+  getWorkbuddyAutoCheckinConfigAsync,
+  saveWorkbuddyAutoCheckinConfigAsync,
   WORKBUDDY_AUTO_CHECKIN_CONFIG_CHANGED_EVENT,
   WorkbuddyAutoCheckinConfig,
 } from '../../services/workbuddyAutoCheckinService';
@@ -102,11 +104,31 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
   );
 
   useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
     const handleConfigChange = () => {
-      setAutoCheckinConfig(getWorkbuddyAutoCheckinConfig());
+      void getWorkbuddyAutoCheckinConfigAsync().then((nextConfig) => {
+        if (!disposed) {
+          setAutoCheckinConfig(nextConfig);
+        }
+      });
     };
+    handleConfigChange();
     window.addEventListener(WORKBUDDY_AUTO_CHECKIN_CONFIG_CHANGED_EVENT, handleConfigChange);
+    void listen(WORKBUDDY_AUTO_CHECKIN_CONFIG_CHANGED_EVENT, handleConfigChange)
+      .then((stopListening) => {
+        if (disposed) {
+          stopListening();
+        } else {
+          unlisten = stopListening;
+        }
+      })
+      .catch((err) => {
+        console.warn('[WorkbuddyAutoCheckin] 监听后端签到配置事件失败:', err);
+      });
     return () => {
+      disposed = true;
+      unlisten?.();
       window.removeEventListener(WORKBUDDY_AUTO_CHECKIN_CONFIG_CHANGED_EVENT, handleConfigChange);
     };
   }, []);
@@ -644,8 +666,8 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
         {showConfigModal && (
           <WorkbuddyAutoCheckinConfigModal
             config={autoCheckinConfig}
-            onSave={(newConfig) => {
-              saveWorkbuddyAutoCheckinConfig(newConfig);
+            onSave={async (newConfig) => {
+              await saveWorkbuddyAutoCheckinConfigAsync(newConfig);
               setAutoCheckinConfig(newConfig);
             }}
             onClose={() => setShowConfigModal(false)}

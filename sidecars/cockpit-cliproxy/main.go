@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/klauspost/compress/zstd"
 	internallogging "github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 	internalregistry "github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
 	responsesconverter "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/openai/openai/responses"
@@ -131,7 +132,89 @@ type apiKeySpec struct {
 	ResponsesWebsockets bool                 `json:"responsesWebsockets,omitempty"`
 	AllowedModels       []string             `json:"allowedModels"`
 	ExcludedModels      []string             `json:"excludedModels"`
+	TokenLimit          uint64               `json:"tokenLimit,omitempty"`
+	TokenUsed           uint64               `json:"tokenUsed,omitempty"`
 	Enabled             bool                 `json:"enabled"`
+}
+
+type apiKeyTokenState struct {
+	limit uint64
+	used  uint64
+}
+
+type apiKeyTokenLimiter struct {
+	mu    sync.Mutex
+	byKey map[string]*apiKeyTokenState
+}
+
+func apiKeyTokenIdentity(spec *apiKeySpec) string {
+	if spec == nil {
+		return ""
+	}
+	if id := strings.TrimSpace(spec.ID); id != "" {
+		return id
+	}
+	return strings.TrimSpace(spec.Key)
+}
+
+func newAPIKeyTokenLimiter(m *manifest) *apiKeyTokenLimiter {
+	limiter := &apiKeyTokenLimiter{byKey: make(map[string]*apiKeyTokenState)}
+	if m == nil {
+		return limiter
+	}
+	for i := range m.APIKeys {
+		spec := &m.APIKeys[i]
+		identity := apiKeyTokenIdentity(spec)
+		if identity == "" {
+			continue
+		}
+		limiter.byKey[identity] = &apiKeyTokenState{
+			limit: spec.TokenLimit,
+			used:  spec.TokenUsed,
+		}
+	}
+	return limiter
+}
+
+func (l *apiKeyTokenLimiter) exceeded(spec *apiKeySpec) (used, limit uint64, exceeded bool) {
+	if l == nil || spec == nil {
+		return 0, 0, false
+	}
+	identity := apiKeyTokenIdentity(spec)
+	if identity == "" {
+		return 0, 0, false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	state := l.byKey[identity]
+	if state == nil {
+		state = &apiKeyTokenState{limit: spec.TokenLimit, used: spec.TokenUsed}
+		l.byKey[identity] = state
+	}
+	return state.used, state.limit, state.limit > 0 && state.used >= state.limit
+}
+
+func (l *apiKeyTokenLimiter) addUsage(spec *apiKeySpec, totalTokens int64) {
+	if l == nil || spec == nil || totalTokens <= 0 {
+		return
+	}
+	identity := apiKeyTokenIdentity(spec)
+	if identity == "" {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	state := l.byKey[identity]
+	if state == nil {
+		state = &apiKeyTokenState{limit: spec.TokenLimit, used: spec.TokenUsed}
+		l.byKey[identity] = state
+	}
+	addition := uint64(totalTokens)
+	if ^uint64(0)-state.used < addition {
+		state.used = ^uint64(0)
+	} else {
+		state.used += addition
+	}
 }
 
 type apiKeyPriorityState struct {
@@ -396,6 +479,18 @@ type usageDetails struct {
 	CachedTokens    int64                    `json:"cachedTokens,omitempty"`
 	TotalTokens     int64                    `json:"totalTokens,omitempty"`
 	TokenBreakdown  coreusage.TokenBreakdown `json:"tokenBreakdown,omitempty"`
+}
+
+func effectiveUsageTotalTokens(usage usageDetails) int64 {
+	if usage.TotalTokens > 0 {
+		return usage.TotalTokens
+	}
+	input := max(usage.InputTokens, 0)
+	output := max(usage.OutputTokens, 0)
+	if input > int64(^uint64(0)>>1)-output {
+		return int64(^uint64(0) >> 1)
+	}
+	return input + output
 }
 
 type usageFinalizeInput struct {
@@ -882,9 +977,10 @@ func withClientInstanceID(ctx context.Context, instanceID string) context.Contex
 }
 
 type requestPolicy struct {
-	manifest *manifest
-	emitter  *eventEmitter
-	tracker  *requestUsageTracker
+	manifest     *manifest
+	emitter      *eventEmitter
+	tracker      *requestUsageTracker
+	tokenLimiter *apiKeyTokenLimiter
 }
 
 func (p *requestPolicy) middleware() gin.HandlerFunc {
@@ -935,6 +1031,32 @@ func (p *requestPolicy) middleware() gin.HandlerFunc {
 				c.JSON(http.StatusOK, buildModelsResponse(models))
 			}
 			c.Abort()
+			return
+		}
+
+		if used, limit, exceeded := p.tokenLimiter.exceeded(spec); shouldEmitRequestDiagnostic(c.Request) && exceeded {
+			emitStart()
+			message := fmt.Sprintf(
+				"API key token limit exceeded (%d of %d tokens used)",
+				used,
+				limit,
+			)
+			p.emitTokenLimitBlockedRequest(
+				c,
+				requestID,
+				spec,
+				model,
+				requestKind,
+				startedAt,
+				message,
+			)
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+				"error": gin.H{
+					"message": message,
+					"type":    "invalid_request_error",
+					"code":    "token_limit_exceeded",
+				},
+			})
 			return
 		}
 
@@ -1089,6 +1211,39 @@ func (p *requestPolicy) emitRequestCompleted(c *gin.Context, requestID string, s
 		completedAtMS: completedAtMS,
 		errorMessage:  strings.TrimSpace(c.Errors.String()),
 	}); ok {
+		p.tokenLimiter.addUsage(spec, effectiveUsageTotalTokens(payload.Usage))
+		p.emitter.emit(payload)
+	}
+}
+
+func (p *requestPolicy) emitTokenLimitBlockedRequest(c *gin.Context, requestID string, spec *apiKeySpec, model, requestKind string, startedAt time.Time, message string) {
+	if p == nil || spec == nil {
+		return
+	}
+	clientInstanceID := ""
+	if c != nil && c.Request != nil {
+		clientInstanceID = clientInstanceIDFromContext(c.Request.Context())
+	}
+	payload := usagePayload{
+		Type:             "usage",
+		RequestID:        requestID,
+		Model:            model,
+		APIKeyID:         spec.ID,
+		APIKeyLabel:      spec.Label,
+		ClientInstanceID: clientInstanceID,
+		RequestKind:      requestKind,
+		Success:          false,
+		Status:           http.StatusTooManyRequests,
+		ErrorCategory:    "token_limit_exceeded",
+		ErrorMessage:     message,
+		LatencyMS:        time.Since(startedAt).Milliseconds(),
+		RequestedAtMS:    time.Now().UnixMilli(),
+	}
+	if p.tracker != nil {
+		p.tracker.record(payload)
+		return
+	}
+	if p.emitter != nil {
 		p.emitter.emit(payload)
 	}
 }
@@ -1454,10 +1609,90 @@ func readAndRestoreBody(r *http.Request) ([]byte, error) {
 	if r == nil || r.Body == nil {
 		return nil, nil
 	}
-	body, err := io.ReadAll(r.Body)
+
+	raw, err := io.ReadAll(r.Body)
 	_ = r.Body.Close()
+	if err != nil {
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		return raw, err
+	}
+
+	contentEncoding := strings.TrimSpace(r.Header.Get("Content-Encoding"))
+	if contentEncoding == "" || strings.EqualFold(contentEncoding, "identity") {
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		return raw, nil
+	}
+
+	body, err := decodeRelayRequestBody(raw, contentEncoding)
+	if err != nil {
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		return nil, err
+	}
+
+	// 请求体现在是普通 JSON，禁止后续处理器再次按 zstd 解压。
+	r.Header.Del("Content-Encoding")
+	r.Header.Del("Transfer-Encoding")
+	r.TransferEncoding = nil
+
 	r.Body = io.NopCloser(bytes.NewReader(body))
-	return body, err
+	r.ContentLength = int64(len(body))
+	r.Header.Set(
+		"Content-Length",
+		strconv.FormatInt(r.ContentLength, 10),
+	)
+
+	return body, nil
+}
+
+func decodeRelayRequestBody(
+	raw []byte,
+	contentEncoding string,
+) ([]byte, error) {
+	encodings := strings.Split(contentEncoding, ",")
+	body := raw
+
+	// Content-Encoding 必须按编码应用顺序的反方向解码。
+	for i := len(encodings) - 1; i >= 0; i-- {
+		encoding := strings.ToLower(
+			strings.TrimSpace(encodings[i]),
+		)
+
+		switch encoding {
+		case "", "identity":
+			continue
+
+		case "zstd":
+			decoder, err := zstd.NewReader(
+				bytes.NewReader(body),
+			)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to create zstd request decoder: %w",
+					err,
+				)
+			}
+
+			decoded, readErr := io.ReadAll(decoder)
+			decoder.Close()
+
+			if readErr != nil {
+				return nil, fmt.Errorf(
+					"failed to decode zstd request body: %w",
+					readErr,
+				)
+			}
+
+			body = decoded
+
+		default:
+			return nil, fmt.Errorf(
+				"unsupported request content encoding: %s",
+				encoding,
+			)
+		}
+	}
+
+	return body, nil
 }
 
 func rewriteBodyModel(m *manifest, spec *apiKeySpec, body []byte) ([]byte, string, error) {
@@ -2866,8 +3101,12 @@ func (p *usagePlugin) HandleUsage(ctx context.Context, record coreusage.Record) 
 	}
 	requestModel, _ := ctx.Value(requestModelContextKey).(string)
 	model := strings.TrimSpace(record.Model)
-	if requestModel != "" {
-		model = requestModel
+	if model == "" {
+		model = strings.TrimSpace(requestModel)
+	}
+	alias := strings.TrimSpace(record.Alias)
+	if alias == "" {
+		alias = strings.TrimSpace(requestModel)
 	}
 	status := record.Fail.StatusCode
 	success := !record.Failed
@@ -2876,7 +3115,7 @@ func (p *usagePlugin) HandleUsage(ctx context.Context, record coreusage.Record) 
 		RequestID:        internallogging.GetRequestID(ctx),
 		Provider:         record.Provider,
 		Model:            model,
-		Alias:            record.Alias,
+		Alias:            alias,
 		AccountID:        stringFromAccount(account, "id"),
 		AccountEmail:     stringFromAccount(account, "email"),
 		AuthID:           record.AuthID,
@@ -3016,9 +3255,11 @@ func (h *authHook) OnResult(ctx context.Context, result coreauth.Result) {
 	if requestKind == "" {
 		requestKind = requestKindFromPath(internallogging.GetEndpoint(ctx))
 	}
-	model := result.Model
-	if requestModel, _ := ctx.Value(requestModelContextKey).(string); strings.TrimSpace(requestModel) != "" {
-		model = requestModel
+	model := strings.TrimSpace(result.Model)
+	if model == "" {
+		if requestModel, _ := ctx.Value(requestModelContextKey).(string); strings.TrimSpace(requestModel) != "" {
+			model = strings.TrimSpace(requestModel)
+		}
 	}
 	account := h.accountForAuthID(result.AuthID)
 	status := 0
@@ -8094,7 +8335,13 @@ func main() {
 	}
 
 	usageTracker := newRequestUsageTracker()
-	policy := &requestPolicy{manifest: m, emitter: emitter, tracker: usageTracker}
+	tokenLimiter := newAPIKeyTokenLimiter(m)
+	policy := &requestPolicy{
+		manifest:     m,
+		emitter:      emitter,
+		tracker:      usageTracker,
+		tokenLimiter: tokenLimiter,
+	}
 	hook := &authHook{manifest: m, emitter: emitter}
 	priorityState := newAPIKeyPriorityStateStore(*manifestPath)
 	selector := &cockpitSelector{

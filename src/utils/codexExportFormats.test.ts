@@ -123,6 +123,7 @@ test('sub2api OAuth export preserves official expiry and login-provider fields',
     account_id: 'account-token',
     plan_type: 'plus',
     subscription_active_until: '2027-01-02T03:04:05+00:00',
+    codex_fingerprint_mode: 'full',
     tokens: {
       id_token: idToken,
       access_token: accessToken,
@@ -153,6 +154,7 @@ test('sub2api OAuth export preserves official expiry and login-provider fields',
   assert.equal(item.credentials.chatgpt_user_id, 'user-token');
   assert.equal(item.credentials.organization_id, 'org-token');
   assert.equal(item.extra?.auth_provider, 'google');
+  assert.equal(item.extra?.codex_fingerprint_mode, 'full');
   assert.equal(item.expires_at, undefined);
   assert.equal(item.concurrency, 3);
   assert.equal(item.priority, 50);

@@ -6,6 +6,7 @@ import type {
   CodexLocalAccessAccountHealth,
   CodexLocalAccessAccountCooldown,
 } from "../types/codexLocalAccess";
+import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
 import { isBlockingCodexQuotaError } from "../utils/codexQuotaError";
 import {
   ModalErrorMessage,
@@ -35,8 +36,24 @@ type HealthIssueKind =
 interface HealthIssue {
   accountId: string;
   displayName: string;
+  planLabel: string | null;
+  planClass: string | null;
+  quotaItems: Array<{ key: string; label: string; valueText: string; quotaClass: string }>;
   kind: HealthIssueKind;
   health: CodexLocalAccessAccountHealth | null;
+}
+
+/** Prefer email so org display names like "MicroCorp" don't hide which account it is. */
+function resolveIssueDisplayName(
+  account: CodexAccount | undefined,
+  health: CodexLocalAccessAccountHealth | null,
+  accountId: string,
+): string {
+  const email = account?.email?.trim() || health?.email?.trim();
+  if (email) return email;
+  const name = account?.account_name?.trim();
+  if (name) return name;
+  return accountId;
 }
 
 function issueKindForHealth(
@@ -113,16 +130,30 @@ export function CodexAccountPoolHealthModal({
       const health = healthById.get(accountId) ?? null;
       const kind = issueKindForHealth(account, health);
       if (!kind) return [];
-      const displayName =
-        account?.account_name?.trim() || account?.email?.trim() || accountId;
+      const rawName = resolveIssueDisplayName(account, health, accountId);
+      const displayName = maskAccountText ? maskAccountText(rawName) : rawName;
+      const presentation = account
+        ? buildCodexAccountPresentation(account, t)
+        : null;
       return [{
         accountId,
-        displayName: maskAccountText ? maskAccountText(displayName) : displayName,
+        displayName,
+        planLabel: presentation?.planLabel?.trim() || null,
+        planClass: presentation?.planClass || null,
+        quotaItems: (presentation?.quotaItems ?? [])
+          .filter((item) => item.valueText.trim().length > 0)
+          .slice(0, 3)
+          .map((item) => ({
+            key: item.key,
+            label: item.label,
+            valueText: item.valueText,
+            quotaClass: item.quotaClass,
+          })),
         kind,
         health,
       }];
     });
-  }, [accountHealth, accountIds, accounts, maskAccountText]);
+  }, [accountHealth, accountIds, accounts, maskAccountText, t]);
 
   if (!isOpen) return null;
 
@@ -279,27 +310,52 @@ export function CodexAccountPoolHealthModal({
                   className={`codex-account-pool-health-item is-${issue.kind}`}
                   key={issue.accountId}
                 >
-                  <div className="codex-account-pool-health-item-main">
-                    <strong title={issue.displayName}>{issue.displayName}</strong>
-                    <span className="codex-account-pool-health-item-status">
-                      {issueLabel(issue.kind)}
-                    </span>
-                    <p>{issueDetails(issue)}</p>
-                  </div>
-                  {isRecoverable(issue) && (
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => void runRecovery([issue.accountId])}
-                      disabled={actionBusy}
-                    >
-                      <RefreshCw size={14} />
-                      {t(
-                        "codex.localAccess.accountPoolHealth.dialog.recover",
-                        "恢复",
+                  <div className="codex-account-pool-health-item-primary">
+                    <div className="codex-account-pool-health-item-identity">
+                      <strong title={issue.displayName}>{issue.displayName}</strong>
+                      {issue.planLabel && (
+                        <span
+                          className={`tier-badge ${issue.planClass || "unknown"}`}
+                        >
+                          {issue.planLabel}
+                        </span>
                       )}
-                    </button>
-                  )}
+                      {issue.quotaItems.map((item) => (
+                        <span
+                          key={item.key}
+                          className={`codex-account-pool-health-quota-pill quota-${item.quotaClass}`}
+                          title={`${item.label} ${item.valueText}`}
+                        >
+                          <span className="codex-account-pool-health-quota-label">
+                            {item.label}
+                          </span>
+                          <span className="codex-account-pool-health-quota-value">
+                            {item.valueText}
+                          </span>
+                        </span>
+                      ))}
+                      <span className="codex-account-pool-health-item-status">
+                        {issueLabel(issue.kind)}
+                      </span>
+                    </div>
+                    {isRecoverable(issue) && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => void runRecovery([issue.accountId])}
+                        disabled={actionBusy}
+                      >
+                        <RefreshCw size={14} />
+                        {t(
+                          "codex.localAccess.accountPoolHealth.dialog.recover",
+                          "恢复",
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  <p className="codex-account-pool-health-item-detail">
+                    {issueDetails(issue)}
+                  </p>
                 </div>
               ))}
             </div>

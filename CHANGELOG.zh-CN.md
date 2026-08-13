@@ -7,6 +7,38 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [1.3.17] - 2026-08-13
+
+### 新增
+
+- **Codex 模型供应商支持 DeepSeek 原生 Responses**：可在 Codex 中直接使用 DeepSeek Flash / Pro，默认使用官方 Responses 接口，需要时仍可切换为 Chat Completions；符合条件的账号可直接查看余额。感谢 @usertianziyang 提供部分思路（[#1839](https://github.com/jlcodes99/cockpit-tools/pull/1839)）。
+- **Codex OAuth 账号支持设备指纹模式**：可按单个或批量账号选择会话 / 设备 / 完整 / 关闭，默认使用会话模式；API Key 等其他账号类型不受影响。
+- **Codex API 服务客户端 Key 支持可选总量限额**：可为每个客户端 Key 设置总 token 额度，额度用尽后拒绝继续调用；未设置额度的 Key 保持不限量。感谢 @ndhao164（[#1870](https://github.com/jlcodes99/cockpit-tools/pull/1870)）。
+- **WorkBuddy 支持按账号隔离的内置浏览器**：可在独立窗口打开成长中心等页面，各账号登录态互不串号。感谢 @xhrxgr（[#1896](https://github.com/jlcodes99/cockpit-tools/pull/1896)）。
+- **WorkBuddy 自动签到改为后台执行**：关闭主窗口、仅保留托盘时，仍可按计划自动签到。感谢 @xdd666t（[#1772](https://github.com/jlcodes99/cockpit-tools/pull/1772)）。
+- **Trae 账号支持可选自动签到**：可按账号设置签到计划，默认关闭，不影响正常使用。感谢 @xhrxgr（[#1834](https://github.com/jlcodes99/cockpit-tools/pull/1834)）。
+- **Antigravity 账号支持本地信息管理**：可保存备注、2FA、密码、手机号及邮箱验证码查询地址，授权前可自动预填，导出时可选择是否包含敏感信息。
+- **添加或编辑 Codex API Key 时可复用同一供应商下已有的 Key**：也可继续手动输入新 Key。
+- **Codex API 服务账号可直接从账号列表移除**：无需再进入服务面板管理成员。
+
+### 变更
+
+- **WorkBuddy 开启切号共享会话后，会合并已有本地会话**：切换账号后对话历史不易丢失。感谢 @xhrxgr（[#1880](https://github.com/jlcodes99/cockpit-tools/pull/1880)）。
+- **Antigravity 账号本地资料改为整文件加密保存**：历史账号首次读取后自动迁移，原有数据不受影响。
+- **提升 Codex API 服务多轮对话与流式输出的稳定性**。
+
+### 修复
+
+- **修复部分 API Key 供应商无法保持 WebSocket 连接的问题**：开启 WebSocket 的供应商现在可维持稳定的实时连接。
+- **修复明确关闭 WebSocket 的自定义中转仍被改回官方连接方式的问题**：自定义中转的连接设置现在会被保留。感谢 @yaobii-lab（[#1867](https://github.com/jlcodes99/cockpit-tools/pull/1867)）。
+- **修复本机其他端口的本地 API 服务无法作为上游的问题**：本机任意端口的本地 API 服务现在都可正常接入。
+- **修复 Sub2API 导入后完整 OAuth 账号变成仅 Access Token 的问题**：导入后完整登录态不再丢失。感谢 @Jonesxq（[#1886](https://github.com/jlcodes99/cockpit-tools/pull/1886)）。
+- **修复 Codex 账号总览等处丢失自定义 API Key 名称的问题**：自定义名称现在可正常显示。感谢 @andrew05060414（[#1817](https://github.com/jlcodes99/cockpit-tools/pull/1817)）。
+- **修复开启压缩后 Codex API 服务误报缺少模型的问题**：开启压缩不再触发误报。感谢 @DragonLingLuo（[#1836](https://github.com/jlcodes99/cockpit-tools/pull/1836)）。
+- **修复 Multi-Agent 协作时加密消息被当成普通正文的问题**：协作消息现在可被正确处理。
+- **修复多轮对话中带命名空间的工具调用在第二轮失败的问题**：工具调用现在可跨多轮连续执行。感谢 @Jonesxq（[#1887](https://github.com/jlcodes99/cockpit-tools/pull/1887)）。
+- **修复思考型 Chat 供应商在多轮对话中被拒绝的问题**：思考型供应商现在可正常进行多轮对话。
+
 ## [1.3.16] - 2026-08-02
 
 ### 新增
