@@ -81,6 +81,11 @@ import {
   getWorkbuddyAutoCheckinConfig,
   migrateWorkbuddyAutoCheckinConfigAsync,
 } from './services/workbuddyAutoCheckinService';
+import {
+  getTraeAutoCheckinNextDelayMs,
+  runTraeAutoCheckinCycleIfNeeded,
+  TRAE_AUTO_CHECKIN_CONFIG_CHANGED_EVENT,
+} from './services/traeAutoCheckinService';
 import { prepareCodexLocalAccessForRestart } from './services/codexLocalAccessService';
 import { applyReducedMotion } from './utils/reducedMotion';
 import {
@@ -783,6 +788,46 @@ function MainApp() {
         store.setHideClassicSwitchPrompt(true);
       }
     });
+
+    let disposed = false;
+    let timerId: number | undefined;
+
+    const schedule = (delayMs?: number) => {
+      if (timerId !== undefined) {
+        window.clearTimeout(timerId);
+      }
+      timerId = window.setTimeout(() => {
+        void runCycle();
+      }, Math.max(1_000, delayMs ?? getTraeAutoCheckinNextDelayMs()));
+    };
+
+    const runCycle = async () => {
+      if (disposed) {
+        return;
+      }
+      let result: Awaited<ReturnType<typeof runTraeAutoCheckinCycleIfNeeded>>;
+      try {
+        result = await runTraeAutoCheckinCycleIfNeeded();
+      } catch (error) {
+        console.warn('[TraeAutoCheckin] 自动签到调度失败:', error);
+        result = 'retry';
+      }
+      if (!disposed) {
+        schedule(getTraeAutoCheckinNextDelayMs(result));
+      }
+    };
+
+    const handleConfigChange = () => schedule(1_000);
+    window.addEventListener(TRAE_AUTO_CHECKIN_CONFIG_CHANGED_EVENT, handleConfigChange);
+    schedule(1_000);
+
+    return () => {
+      disposed = true;
+      window.removeEventListener(TRAE_AUTO_CHECKIN_CONFIG_CHANGED_EVENT, handleConfigChange);
+      if (timerId !== undefined) {
+        window.clearTimeout(timerId);
+      }
+    };
   }, []);
 
   useEffect(() => {

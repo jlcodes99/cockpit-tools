@@ -18,11 +18,18 @@ import {
   Flame,
   Trophy,
   Ban,
+  Settings,
 } from 'lucide-react';
 import { TraeAccount } from '../../types/trae';
 import { TraeCheckinStatusResult, getTraeCheckinStatus, claimTraeCheckin } from '../../services/traeService';
 import { useEscClose } from '../../hooks/useEscClose';
 import { getTraeAccountDisplayEmail } from '../../types/trae';
+import {
+  getTraeAutoCheckinConfig,
+  saveTraeAutoCheckinConfig,
+  type TraeAutoCheckinConfig,
+} from '../../services/traeAutoCheckinService';
+import { TraeAutoCheckinConfigModal } from './TraeAutoCheckinConfigModal';
 
 type CheckinUiState = 'loading' | 'available' | 'claimed' | 'inactive' | 'error';
 
@@ -68,6 +75,10 @@ export function TraeCheckinModal({
   const [accountStates, setAccountStates] = useState<Record<string, AccountCheckinState>>({});
   const [checkAllLoading, setCheckAllLoading] = useState(false);
   const [refreshLoading, setRefreshLoading] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [autoCheckinConfig, setAutoCheckinConfig] = useState<TraeAutoCheckinConfig>(() =>
+    getTraeAutoCheckinConfig(),
+  );
 
   const updateAccountState = useCallback(
     (accountId: string, update: Partial<AccountCheckinState>) => {
@@ -309,6 +320,31 @@ export function TraeCheckinModal({
           <div className="checkin-empty">
             <p>{t('workbuddy.checkin.noAccounts', '暂无账号')}</p>
           </div>
+        )}
+
+        <div className="modal-footer checkin-modal-footer">
+          <button
+            className="btn btn-secondary icon-only"
+            onClick={() => setShowConfigModal(true)}
+            title={t('trae.checkin.autoCheckinSettings', '自动签到设置')}
+            aria-label={t('trae.checkin.autoCheckinSettings', '自动签到设置')}
+          >
+            <Settings size={14} />
+          </button>
+          <button className="btn btn-secondary" onClick={onClose}>
+            {t('common.close', '关闭')}
+          </button>
+        </div>
+
+        {showConfigModal && (
+          <TraeAutoCheckinConfigModal
+            config={autoCheckinConfig}
+            onSave={(newConfig) => {
+              saveTraeAutoCheckinConfig(newConfig);
+              setAutoCheckinConfig(newConfig);
+            }}
+            onClose={() => setShowConfigModal(false)}
+          />
         )}
       </div>
     </div>

@@ -24,6 +24,7 @@ import {
   Eye,
   EyeOff,
   BookOpen,
+  CalendarCheck,
 } from 'lucide-react';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
@@ -76,6 +77,7 @@ import {
   removeAccountsOverviewFilterField,
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
+import { TraeCheckinModal } from '../components/codebuddy-suite/TraeCheckinModal';
 
 const FILTER_TYPES_FIELD = 'filter_types';
 const TRAE_KNOWN_SORT_KEYS = ['created_at', 'plan', 'quota'] as const;
@@ -169,6 +171,8 @@ function getTraeAccountSwitchLabel(account: TraeAccount): string {
 
 export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps) {
   const platformConfig = TRAE_PLATFORM_PAGE_CONFIG[platformId];
+  const supportsCheckin = platformId === 'trae_solo_cn';
+  const [showCheckinModal, setShowCheckinModal] = useState(false);
   const filterPersistenceScopeSeed = platformConfig.platformKey;
   const targetFilterPersistenceScope = normalizeAccountsOverviewScope(filterPersistenceScopeSeed);
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
@@ -1409,6 +1413,17 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
               >
                 <RefreshCw size={14} className={refreshingAll ? 'loading-spinner' : ''} />
               </button>
+              {supportsCheckin && (
+                <button
+                  className="btn btn-secondary icon-only"
+                  onClick={() => setShowCheckinModal(true)}
+                  title={t('trae.checkin.open', '每日签到')}
+                  aria-label={t('trae.checkin.open', '每日签到')}
+                  disabled={accounts.length === 0}
+                >
+                  <CalendarCheck size={14} />
+                </button>
+              )}
               <button
                 className="btn btn-secondary icon-only"
                 onClick={togglePrivacyMode}
@@ -1957,6 +1972,16 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
             onClose={() => setShowTagModal(null)}
             onSave={handleSaveTags}
           />
+
+          {supportsCheckin && showCheckinModal && (
+            <TraeCheckinModal
+              accounts={accounts}
+              onClose={() => setShowCheckinModal(false)}
+              onCheckinComplete={() => {
+                void store.fetchAccounts();
+              }}
+            />
+          )}
         </>
       )}
 
