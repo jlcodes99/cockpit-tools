@@ -17354,8 +17354,34 @@ pub(crate) fn provider_model_slots_need_upstream_rewrite(
         .any(|slot| !slot.client_model.eq_ignore_ascii_case(&slot.upstream_model))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProviderModelCatalogCapabilities {
+    /// Responses Lite is an internal Codex transport contract. Providers must
+    /// opt in explicitly; an unknown or third-party Responses provider stays
+    /// on the public Responses shape.
+    pub(crate) supports_responses_lite: bool,
+}
+
+impl Default for ProviderModelCatalogCapabilities {
+    fn default() -> Self {
+        Self {
+            supports_responses_lite: false,
+        }
+    }
+}
+
 pub(crate) fn build_provider_model_catalog_json(
     slots: &[ProviderGatewayModelSlot],
+) -> Result<String, String> {
+    build_provider_model_catalog_json_with_capabilities(
+        slots,
+        ProviderModelCatalogCapabilities::default(),
+    )
+}
+
+pub(crate) fn build_provider_model_catalog_json_with_capabilities(
+    slots: &[ProviderGatewayModelSlot],
+    capabilities: ProviderModelCatalogCapabilities,
 ) -> Result<String, String> {
     let mut model_ids = slots
         .iter()
@@ -17401,6 +17427,9 @@ pub(crate) fn build_provider_model_catalog_json(
             // Ensure mapped provider models show up in the official picker.
             if !slug.eq_ignore_ascii_case(CODEX_AUTO_REVIEW_MODEL_ID) {
                 object.insert("visibility".to_string(), Value::String("list".to_string()));
+            }
+            if !capabilities.supports_responses_lite {
+                object.insert("use_responses_lite".to_string(), Value::Bool(false));
             }
         }
     }
@@ -27012,6 +27041,58 @@ mod tests {
         assert_eq!(window("gpt-5.4"), Some(272000));
         assert_eq!(window("gpt-5.6-sol"), Some(900_000));
         assert_eq!(window("gpt-5.5"), Some(1048576));
+    }
+
+    #[test]
+    fn provider_catalog_normalizes_responses_lite_per_capability() {
+        let slots = vec![
+            super::ProviderGatewayModelSlot {
+                client_model: "gpt-5.6-sol".to_string(),
+                upstream_model: "relay-sol".to_string(),
+            },
+            super::ProviderGatewayModelSlot {
+                client_model: "gpt-5.6-terra".to_string(),
+                upstream_model: "relay-terra".to_string(),
+            },
+        ];
+        let standard: serde_json::Value = serde_json::from_str(
+            &super::build_provider_model_catalog_json(&slots).expect("standard catalog"),
+        )
+        .expect("parse standard catalog");
+        let lite: serde_json::Value = serde_json::from_str(
+            &super::build_provider_model_catalog_json_with_capabilities(
+                &slots,
+                super::ProviderModelCatalogCapabilities {
+                    supports_responses_lite: true,
+                },
+            )
+            .expect("lite catalog"),
+        )
+        .expect("parse lite catalog");
+
+        for slug in ["gpt-5.6-sol", "gpt-5.6-terra"] {
+            let standard_model = standard["models"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|model| model["slug"] == slug)
+                .expect("standard model");
+            let lite_model = lite["models"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|model| model["slug"] == slug)
+                .expect("lite model");
+            assert_eq!(
+                standard_model["use_responses_lite"],
+                serde_json::json!(false)
+            );
+            assert_eq!(lite_model["use_responses_lite"], serde_json::json!(true));
+            assert_eq!(
+                standard_model["multi_agent_version"],
+                lite_model["multi_agent_version"],
+            );
+        }
     }
 
     #[test]
