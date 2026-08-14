@@ -117,6 +117,7 @@ import {
 import {
   formatModelProviderUsageMoney,
   resolveNewApiQuotaSnapshot,
+  resolveOpenCodeGoQuotaSnapshot,
 } from "../../services/modelProviderUsageService";
 import { useSponsorStore } from "../../stores/useSponsorStore";
 import { useCodexAccountStore } from "../../stores/useCodexAccountStore";
@@ -3702,6 +3703,7 @@ export function CodexModelProviderManager({
               usageSummary?.mode === "new_api" ||
               usageSummary?.mode === "sub2api" ||
               usageSummary?.mode === "deepseek" ||
+              usageSummary?.mode === "opencode_go" ||
               usageSummary?.mode === "token_plan"
                 ? usageSummary.mode
                 : provider.integrationType ?? null;
@@ -3714,6 +3716,7 @@ export function CodexModelProviderManager({
               available: totalAvailable,
               expiresAt,
             } = resolveNewApiQuotaSnapshot(usageSummary);
+            const openCodeGoQuota = resolveOpenCodeGoQuotaSnapshot(usageSummary);
             const tokenPlanResetDetail = usageSummary?.details?.find((detail) =>
               ["intervalExpiresAt", "weeklyExpiresAt", "expiresAt"].includes(
                 detail.key,
@@ -3869,6 +3872,48 @@ export function CodexModelProviderManager({
                           <span>{t("codex.modelProviders.usage.fields.toppedUpBalance", "充值余额")}</span>
                           <strong>{deepSeekDetailValue("toppedUpBalance")}</strong>
                         </div>
+                      </div>
+                    </div>
+                  ) : usageMode === "opencode_go" ? (
+                    <div className="codex-api-key-usage-panel opencode-go">
+                      <div className="codex-api-key-usage-grid">
+                        {([
+                          [
+                            "rolling",
+                            t("codex.modelProviders.usage.fields.rolling5h", "5 小时额度剩余"),
+                            openCodeGoQuota.rolling,
+                          ],
+                          [
+                            "weekly",
+                            t("codex.modelProviders.usage.fields.weekly", "周额度剩余"),
+                            openCodeGoQuota.weekly,
+                          ],
+                          [
+                            "monthly",
+                            t("codex.modelProviders.usage.fields.monthly", "月额度剩余"),
+                            openCodeGoQuota.monthly,
+                          ],
+                        ] as const).map(([key, label, window]) => (
+                          <div
+                            key={key}
+                            title={window.resetsAt != null
+                              ? new Date(window.resetsAt * 1000).toLocaleString()
+                              : "-"}
+                          >
+                            <span>{label}</span>
+                            <strong>
+                              {formatModelProviderUsageMoney(
+                                window.remainingPercent,
+                                "%",
+                              )}
+                            </strong>
+                            <small className="codex-api-key-usage-reset">
+                              ↻ {window.resetsAt != null
+                                ? new Date(window.resetsAt * 1000).toLocaleString()
+                                : "-"}
+                            </small>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ) : usageMode === "token_plan" ? (
@@ -6023,6 +6068,7 @@ export function CodexModelProviderManager({
           usageSummary?.mode === "new_api" ||
           usageSummary?.mode === "sub2api" ||
           usageSummary?.mode === "deepseek" ||
+          usageSummary?.mode === "opencode_go" ||
           usageSummary?.mode === "token_plan"
             ? usageSummary.mode
             : provider.integrationType ?? null;
@@ -6039,6 +6085,19 @@ export function CodexModelProviderManager({
                     "grantedBalance",
                     "toppedUpBalance",
                   ])
+                : usageMode === "opencode_go"
+                  ? new Set([
+                      "planName",
+                      "rollingUsedPercent",
+                      "rollingRemainingPercent",
+                      "rollingResetsAt",
+                      "weeklyUsedPercent",
+                      "weeklyRemainingPercent",
+                      "weeklyResetsAt",
+                      "monthlyUsedPercent",
+                      "monthlyRemainingPercent",
+                      "monthlyResetsAt",
+                    ])
                 : usageMode === "token_plan"
                   ? new Set([
                       "mode",
@@ -6149,6 +6208,7 @@ export function CodexModelProviderManager({
         ];
 
         const newApiQuota = resolveNewApiQuotaSnapshot(usageSummary);
+        const openCodeGoQuota = resolveOpenCodeGoQuotaSnapshot(usageSummary);
         const coreMetrics: CodexServicePanelMetricItem[] =
           usageMode === "deepseek"
             ? [
@@ -6201,6 +6261,35 @@ export function CodexModelProviderManager({
                   ),
                 },
               ]
+            : usageMode === "opencode_go"
+              ? ([
+                  [
+                    "rolling",
+                    t("codex.modelProviders.usage.fields.rolling5h", "5 小时额度剩余"),
+                    openCodeGoQuota.rolling,
+                  ],
+                  [
+                    "weekly",
+                    t("codex.modelProviders.usage.fields.weekly", "周额度剩余"),
+                    openCodeGoQuota.weekly,
+                  ],
+                  [
+                    "monthly",
+                    t("codex.modelProviders.usage.fields.monthly", "月额度剩余"),
+                    openCodeGoQuota.monthly,
+                  ],
+                ] as const).map(([key, label, window]) => ({
+                  key,
+                  label,
+                  value: `${formatModelProviderUsageMoney(
+                    window.remainingPercent,
+                    "%",
+                  )} · ${
+                    window.resetsAt != null
+                      ? new Date(window.resetsAt * 1000).toLocaleString()
+                      : "-"
+                  }`,
+                }))
             : usageMode === "sub2api"
               ? [
                   {

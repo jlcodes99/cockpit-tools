@@ -2017,6 +2017,30 @@ fn codex_model_provider_deepseek_balance_url(base_url: &str) -> Result<Option<St
     Ok(Some(url.to_string()))
 }
 
+fn codex_model_provider_opencode_go_usage_url(base_url: &str) -> Result<Option<String>, String> {
+    let trimmed = base_url.trim();
+    if trimmed.is_empty() {
+        return Err("PROVIDER_BASE_URL_INVALID".to_string());
+    }
+    let mut url =
+        reqwest::Url::parse(trimmed).map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())?;
+    if url.scheme() != "https"
+        || !url
+            .host_str()
+            .is_some_and(|host| host.eq_ignore_ascii_case("opencode.ai"))
+    {
+        return Ok(None);
+    }
+    let path = url.path().trim_end_matches('/').to_ascii_lowercase();
+    if path != "/zen/go" && path != "/zen/go/v1" {
+        return Ok(None);
+    }
+    url.set_path("/zen/go/v1/usage");
+    url.set_query(None);
+    url.set_fragment(None);
+    Ok(Some(url.to_string()))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CodexTokenPlanProvider {
     MiniMax,
@@ -2888,6 +2912,109 @@ fn clamp_usage_percent(value: f64) -> f64 {
     value.clamp(0.0, 100.0)
 }
 
+fn opencode_go_usage_window(body: &serde_json::Value, key: &str) -> Result<(f64, i64), String> {
+    let window = body
+        .get("usage")
+        .and_then(|usage| usage.get(key))
+        .filter(|value| value.is_object())
+        .ok_or_else(|| {
+            format!(
+                "PROVIDER_USAGE_PARSE_FAILED: OpenCode Go {} window missing",
+                key
+            )
+        })?;
+    if json_string_field(window, &["status"]).as_deref() != Some("ok") {
+        return Err(format!(
+            "PROVIDER_USAGE_PARSE_FAILED: OpenCode Go {} window unavailable",
+            key
+        ));
+    }
+    let used_percent = json_f64_field(window, &["percent"])
+        .filter(|value| value.is_finite() && (0.0..=100.0).contains(value))
+        .ok_or_else(|| {
+            format!(
+                "PROVIDER_USAGE_PARSE_FAILED: OpenCode Go {} percent invalid",
+                key
+            )
+        })?;
+    let resets_at = json_timestamp_field(window, &["resetsAt", "resets_at"]).ok_or_else(|| {
+        format!(
+            "PROVIDER_USAGE_PARSE_FAILED: OpenCode Go {} reset missing",
+            key
+        )
+    })?;
+    Ok((used_percent, resets_at))
+}
+
+fn summarize_opencode_go_usage(
+    body: &serde_json::Value,
+    latency_ms: u64,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    let rolling = opencode_go_usage_window(body, "rolling")?;
+    let weekly = opencode_go_usage_window(body, "weekly")?;
+    let monthly = opencode_go_usage_window(body, "monthly")?;
+    let used_percent = rolling.0.max(weekly.0).max(monthly.0);
+    let remaining_percent = 100.0 - used_percent;
+    let mut details = Vec::new();
+    push_usage_detail(
+        &mut details,
+        "planName",
+        "Plan",
+        Some("OpenCode Go".to_string()),
+    );
+    for (key, label, (used, resets_at)) in [
+        ("rolling", "5-Hour", rolling),
+        ("weekly", "Weekly", weekly),
+        ("monthly", "Monthly", monthly),
+    ] {
+        push_usage_detail(
+            &mut details,
+            &format!("{}UsedPercent", key),
+            &format!("{} Used %", label),
+            Some(format_usage_number(used)),
+        );
+        push_usage_detail(
+            &mut details,
+            &format!("{}RemainingPercent", key),
+            &format!("{} Remaining %", label),
+            Some(format_usage_number(100.0 - used)),
+        );
+        push_usage_detail(
+            &mut details,
+            &format!("{}ResetsAt", key),
+            &format!("{} Reset", label),
+            Some(resets_at.to_string()),
+        );
+    }
+
+    Ok(CodexModelProviderUsageSummary {
+        mode: Some("opencode_go".to_string()),
+        is_valid: Some(true),
+        status: Some(if remaining_percent > 0.0 {
+            "available".to_string()
+        } else {
+            "exhausted".to_string()
+        }),
+        plan_name: Some("OpenCode Go".to_string()),
+        remaining: Some(remaining_percent),
+        balance: Some(remaining_percent),
+        unit: Some("%".to_string()),
+        quota_unlimited: None,
+        quota_limit: Some(100.0),
+        quota_used: Some(used_percent),
+        quota_remaining: Some(remaining_percent),
+        today_requests: None,
+        today_total_tokens: None,
+        today_cost: None,
+        total_requests: None,
+        total_total_tokens: None,
+        total_cost: None,
+        model_stats_count: 0,
+        latency_ms,
+        details,
+    })
+}
+
 fn token_plan_payload(body: &serde_json::Value) -> &serde_json::Value {
     body.get("data")
         .filter(|value| value.is_object())
@@ -3694,6 +3821,10 @@ pub async fn codex_query_model_provider_usage(
         .build()
         .map_err(|e| format!("CREATE_HTTP_CLIENT_FAILED: {}", e))?;
 
+    if let Some(url) = codex_model_provider_opencode_go_usage_url(&base_url)? {
+        return query_opencode_go_model_provider_usage(&client, &url, key).await;
+    }
+
     if let Some(provider) = codex_model_provider_token_plan_provider(&base_url)? {
         return query_token_plan_model_provider_usage(&client, &base_url, key, provider).await;
     }
@@ -3725,6 +3856,34 @@ pub async fn codex_query_model_provider_usage(
             }
         }
     }
+}
+
+async fn query_opencode_go_model_provider_usage(
+    client: &reqwest::Client,
+    url: &str,
+    key: &str,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    let started = Instant::now();
+    let response = client
+        .get(url)
+        .bearer_auth(key)
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+        .map_err(|e| format!("PROVIDER_USAGE_NETWORK_FAILED: {}", e))?;
+    let latency_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+    let status = response.status();
+    let text = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(format!(
+            "PROVIDER_USAGE_HTTP_{}: {}",
+            status.as_u16(),
+            text.chars().take(300).collect::<String>()
+        ));
+    }
+    let parsed = serde_json::from_str::<serde_json::Value>(&text)
+        .map_err(|e| format!("PROVIDER_USAGE_PARSE_FAILED: {}", e))?;
+    summarize_opencode_go_usage(&parsed, latency_ms)
 }
 
 async fn query_deepseek_model_provider_balance(
@@ -4564,6 +4723,66 @@ mod tests {
                 .expect("valid URL"),
             None
         );
+    }
+
+    #[test]
+    fn opencode_go_usage_url_only_matches_the_official_go_endpoint() {
+        assert_eq!(
+            codex_model_provider_opencode_go_usage_url("https://opencode.ai/zen/go/v1")
+                .expect("valid URL"),
+            Some("https://opencode.ai/zen/go/v1/usage".to_string())
+        );
+        assert_eq!(
+            codex_model_provider_opencode_go_usage_url("https://opencode.ai/zen/go")
+                .expect("valid URL"),
+            Some("https://opencode.ai/zen/go/v1/usage".to_string())
+        );
+        assert_eq!(
+            codex_model_provider_opencode_go_usage_url("https://example.com/zen/go/v1")
+                .expect("valid URL"),
+            None
+        );
+    }
+
+    #[test]
+    fn opencode_go_usage_preserves_all_three_quota_windows() {
+        let summary = summarize_opencode_go_usage(
+            &serde_json::json!({
+                "usage": {
+                    "rolling": {
+                        "status": "ok",
+                        "percent": 25.5,
+                        "resetsAt": "2026-08-15T04:00:00Z"
+                    },
+                    "weekly": {
+                        "status": "ok",
+                        "percent": 61,
+                        "resetsAt": "2026-08-18T00:00:00+00:00"
+                    },
+                    "monthly": {
+                        "status": "ok",
+                        "percent": 40,
+                        "resetsAt": "2026-09-01T00:00:00Z"
+                    }
+                }
+            }),
+            17,
+        )
+        .expect("OpenCode Go usage response");
+
+        assert_eq!(summary.mode.as_deref(), Some("opencode_go"));
+        assert_eq!(summary.plan_name.as_deref(), Some("OpenCode Go"));
+        assert_eq!(summary.quota_used, Some(61.0));
+        assert_eq!(summary.quota_remaining, Some(39.0));
+        assert_eq!(summary.unit.as_deref(), Some("%"));
+        assert!(summary
+            .details
+            .iter()
+            .any(|detail| { detail.key == "rollingRemainingPercent" && detail.value == "74.5" }));
+        assert!(summary
+            .details
+            .iter()
+            .any(|detail| { detail.key == "weeklyResetsAt" && detail.value == "1787011200" }));
     }
 
     #[test]
