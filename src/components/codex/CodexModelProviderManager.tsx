@@ -3157,6 +3157,39 @@ export function CodexModelProviderManager({
   const formatUsageDetailLabel = useCallback(
     (key: string, fallback: string): string => {
       const labels: Record<string, string> = {
+        modelName: t("codex.modelProviders.usage.fields.modelName", "Model"),
+        intervalRemaining: t(
+          "codex.modelProviders.usage.fields.intervalRemaining",
+          "Interval Remaining",
+        ),
+        intervalLimit: t(
+          "codex.modelProviders.usage.fields.intervalLimit",
+          "Interval Limit",
+        ),
+        intervalRemainingPercent: t(
+          "codex.modelProviders.usage.fields.intervalRemainingPercent",
+          "Interval Remaining %",
+        ),
+        intervalExpiresAt: t(
+          "codex.modelProviders.usage.fields.intervalExpiresAt",
+          "Interval Reset",
+        ),
+        weeklyRemaining: t(
+          "codex.modelProviders.usage.fields.weeklyRemaining",
+          "Weekly Remaining",
+        ),
+        weeklyLimit: t(
+          "codex.modelProviders.usage.fields.weeklyLimit",
+          "Weekly Limit",
+        ),
+        weeklyRemainingPercent: t(
+          "codex.modelProviders.usage.fields.weeklyRemainingPercent",
+          "Weekly Remaining %",
+        ),
+        weeklyExpiresAt: t(
+          "codex.modelProviders.usage.fields.weeklyExpiresAt",
+          "Weekly Reset",
+        ),
         status: t("codex.modelProviders.usage.fields.status", "状态"),
         planName: t("codex.modelProviders.usage.fields.planName", "订阅"),
         remaining: t("codex.modelProviders.usage.fields.remaining", "剩余额度"),
@@ -3237,6 +3270,12 @@ export function CodexModelProviderManager({
         return numeric > 0 ? formatDateTime(numeric * 1000) : "-";
       }
       if (Number.isFinite(numeric) && item.key === "expiresAt") {
+        return numeric > 0 ? formatDateTime(numeric * 1000) : "-";
+      }
+      if (
+        Number.isFinite(numeric) &&
+        (item.key === "intervalExpiresAt" || item.key === "weeklyExpiresAt")
+      ) {
         return numeric > 0 ? formatDateTime(numeric * 1000) : "-";
       }
       if (
@@ -3547,7 +3586,8 @@ export function CodexModelProviderManager({
             const usageMode =
               usageSummary?.mode === "new_api" ||
               usageSummary?.mode === "sub2api" ||
-              usageSummary?.mode === "deepseek"
+              usageSummary?.mode === "deepseek" ||
+              usageSummary?.mode === "token_plan"
                 ? usageSummary.mode
                 : provider.integrationType ?? null;
             const deepSeekDetailValue = (key: string) => {
@@ -3559,6 +3599,17 @@ export function CodexModelProviderManager({
               available: totalAvailable,
               expiresAt,
             } = resolveNewApiQuotaSnapshot(usageSummary);
+            const tokenPlanResetDetail = usageSummary?.details?.find((detail) =>
+              ["intervalExpiresAt", "weeklyExpiresAt", "expiresAt"].includes(
+                detail.key,
+              ),
+            );
+            const tokenPlanResetText = tokenPlanResetDetail
+              ? formatUsageDetailValue(
+                  tokenPlanResetDetail,
+                  usageSummary?.unit,
+                )
+              : "-";
             const progressPercent =
               usageMode === "new_api" &&
               totalGranted != null &&
@@ -3702,6 +3753,38 @@ export function CodexModelProviderManager({
                         <div>
                           <span>{t("codex.modelProviders.usage.fields.toppedUpBalance", "充值余额")}</span>
                           <strong>{deepSeekDetailValue("toppedUpBalance")}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  ) : usageMode === "token_plan" ? (
+                    <div className="codex-api-key-usage-panel token-plan">
+                      <div className="codex-api-key-usage-grid">
+                        <div>
+                          <span>
+                            {t(
+                              "codex.modelProviders.usage.fields.remaining",
+                              "Remaining",
+                            )}
+                          </span>
+                          <strong>{usagePrimaryText}</strong>
+                        </div>
+                        <div>
+                          <span>
+                            {t(
+                              "codex.modelProviders.usage.fields.planName",
+                              "Plan",
+                            )}
+                          </span>
+                          <strong>{usageSummary?.planName || "-"}</strong>
+                        </div>
+                        <div>
+                          <span>
+                            {t(
+                              "codex.modelProviders.usage.fields.expiresAt",
+                              "Next Reset",
+                            )}
+                          </span>
+                          <strong>{tokenPlanResetText}</strong>
                         </div>
                       </div>
                     </div>
@@ -5733,7 +5816,8 @@ export function CodexModelProviderManager({
         const usageMode =
           usageSummary?.mode === "new_api" ||
           usageSummary?.mode === "sub2api" ||
-          usageSummary?.mode === "deepseek"
+          usageSummary?.mode === "deepseek" ||
+          usageSummary?.mode === "token_plan"
             ? usageSummary.mode
             : provider.integrationType ?? null;
         const coreDetailKeys =
@@ -5741,7 +5825,7 @@ export function CodexModelProviderManager({
             ? new Set(["mode", "totalGranted", "totalAvailable", "expiresAt"])
             : usageMode === "sub2api"
               ? new Set(["mode", "remaining", "todayRequests", "todayTokens"])
-              : usageMode === "deepseek"
+            : usageMode === "deepseek"
                 ? new Set([
                     "isAvailable",
                     "currency",
@@ -5749,6 +5833,13 @@ export function CodexModelProviderManager({
                     "grantedBalance",
                     "toppedUpBalance",
                   ])
+                : usageMode === "token_plan"
+                  ? new Set([
+                      "mode",
+                      "remaining",
+                      "planName",
+                      "expiresAt",
+                    ])
                 : new Set<string>();
         const detailMetrics: CodexServicePanelMetricItem[] = [
           {

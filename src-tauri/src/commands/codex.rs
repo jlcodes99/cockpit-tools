@@ -2017,6 +2017,79 @@ fn codex_model_provider_deepseek_balance_url(base_url: &str) -> Result<Option<St
     Ok(Some(url.to_string()))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CodexTokenPlanProvider {
+    MiniMax,
+    Zhipu,
+}
+
+fn codex_model_provider_token_plan_provider(
+    base_url: &str,
+) -> Result<Option<CodexTokenPlanProvider>, String> {
+    let trimmed = base_url.trim();
+    if trimmed.is_empty() {
+        return Err("PROVIDER_BASE_URL_INVALID".to_string());
+    }
+    let url = reqwest::Url::parse(trimmed).map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())?;
+    match url.scheme() {
+        "http" | "https" => {}
+        _ => return Err("PROVIDER_BASE_URL_INVALID".to_string()),
+    }
+    let Some(host) = url.host_str() else {
+        return Ok(None);
+    };
+    let host = host.to_ascii_lowercase();
+    if matches!(
+        host.as_str(),
+        "api.minimaxi.com"
+            | "www.minimaxi.com"
+            | "api.minimax.io"
+            | "www.minimax.io"
+    ) {
+        return Ok(Some(CodexTokenPlanProvider::MiniMax));
+    }
+    if matches!(
+        host.as_str(),
+        "open.bigmodel.cn" | "bigmodel.cn" | "api.z.ai" | "z.ai"
+    ) {
+        return Ok(Some(CodexTokenPlanProvider::Zhipu));
+    }
+    Ok(None)
+}
+
+fn codex_model_provider_token_plan_urls(
+    base_url: &str,
+    provider: CodexTokenPlanProvider,
+) -> Result<Vec<String>, String> {
+    let trimmed = base_url.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return Err("PROVIDER_BASE_URL_INVALID".to_string());
+    }
+    let mut url =
+        reqwest::Url::parse(trimmed).map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())?;
+    match url.scheme() {
+        "http" | "https" => {}
+        _ => return Err("PROVIDER_BASE_URL_INVALID".to_string()),
+    }
+    url.set_query(None);
+    url.set_fragment(None);
+    let endpoints: &[&str] = match provider {
+        CodexTokenPlanProvider::MiniMax => &[
+            "/v1/token_plan/remains",
+            "/v1/api/openplatform/coding_plan/remains",
+        ],
+        CodexTokenPlanProvider::Zhipu => &["/api/monitor/usage/quota/limit"],
+    };
+    Ok(endpoints
+        .iter()
+        .map(|endpoint| {
+            let mut candidate = url.clone();
+            candidate.set_path(endpoint);
+            candidate.to_string()
+        })
+        .collect())
+}
+
 fn codex_model_provider_new_api_billing_url(
     base_url: &str,
     endpoint: &str,
@@ -2764,6 +2837,414 @@ fn summarize_deepseek_balance(
     }
 }
 
+fn json_f64_field(value: &serde_json::Value, keys: &[&str]) -> Option<f64> {
+    keys.iter().find_map(|key| {
+        value.get(*key).and_then(|current| {
+            current
+                .as_f64()
+                .or_else(|| current.as_str()?.trim().parse::<f64>().ok())
+        })
+    })
+}
+
+fn json_string_field(value: &serde_json::Value, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        value
+            .get(*key)
+            .and_then(|current| current.as_str())
+            .map(str::trim)
+            .filter(|current| !current.is_empty())
+            .map(ToOwned::to_owned)
+    })
+}
+
+fn json_timestamp_seconds(value: &serde_json::Value) -> Option<i64> {
+    if let Some(number) = value
+        .as_f64()
+        .or_else(|| value.as_str()?.trim().parse::<f64>().ok())
+    {
+        if !number.is_finite() || number <= 0.0 {
+            return None;
+        }
+        let seconds = if number > 10_000_000_000.0 {
+            number / 1000.0
+        } else {
+            number
+        };
+        return Some(seconds.floor() as i64);
+    }
+    value
+        .as_str()
+        .and_then(|text| chrono::DateTime::parse_from_rfc3339(text.trim()).ok())
+        .map(|date| date.timestamp())
+}
+
+fn json_timestamp_field(value: &serde_json::Value, keys: &[&str]) -> Option<i64> {
+    keys.iter()
+        .find_map(|key| value.get(*key).and_then(json_timestamp_seconds))
+}
+
+fn clamp_usage_percent(value: f64) -> f64 {
+    value.clamp(0.0, 100.0)
+}
+
+fn token_plan_payload(body: &serde_json::Value) -> &serde_json::Value {
+    body.get("data")
+        .filter(|value| value.is_object())
+        .unwrap_or(body)
+}
+
+fn token_plan_remaining_percent(remaining: Option<f64>, total: Option<f64>) -> Option<f64> {
+    match (remaining, total) {
+        (Some(remaining), Some(total)) if total > 0.0 => {
+            Some(clamp_usage_percent((remaining / total) * 100.0))
+        }
+        _ => None,
+    }
+}
+
+fn summarize_minimax_token_plan_usage(
+    body: &serde_json::Value,
+    latency_ms: u64,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    let payload = token_plan_payload(body);
+    let model_remains = payload
+        .get("model_remains")
+        .and_then(serde_json::Value::as_array);
+    let model = model_remains
+        .and_then(|models| {
+            models
+                .iter()
+                .find(|item| {
+                    json_string_field(item, &["model_name", "modelName"])
+                        .is_some_and(|name| name.to_ascii_lowercase().starts_with("minimax-m"))
+                })
+                .or_else(|| models.first())
+        })
+        .unwrap_or(payload);
+
+    let model_name = json_string_field(model, &["model_name", "modelName"]);
+    let plan_name = json_string_field(payload, &["plan_name", "planName"])
+        .or_else(|| json_string_field(body, &["plan_name", "planName"]))
+        .or_else(|| Some("MiniMax Token Plan".to_string()));
+    let interval_total = json_f64_field(
+        model,
+        &[
+            "current_interval_total_count",
+            "currentIntervalTotalCount",
+        ],
+    );
+    let interval_remaining = json_f64_field(
+        model,
+        &[
+            "current_interval_usage_count",
+            "currentIntervalUsageCount",
+            "current_interval_remaining",
+            "currentIntervalRemaining",
+        ],
+    );
+    let interval_remaining_percent = json_f64_field(
+        model,
+        &[
+            "current_interval_remaining_percent",
+            "currentIntervalRemainingPercent",
+            "remaining_percent",
+            "remainingPercent",
+        ],
+    )
+    .map(clamp_usage_percent)
+    .or_else(|| token_plan_remaining_percent(interval_remaining, interval_total));
+    let weekly_total = json_f64_field(
+        model,
+        &[
+            "current_weekly_total_count",
+            "currentWeeklyTotalCount",
+        ],
+    );
+    let weekly_remaining = json_f64_field(
+        model,
+        &[
+            "current_weekly_usage_count",
+            "currentWeeklyUsageCount",
+            "current_weekly_remaining",
+            "currentWeeklyRemaining",
+        ],
+    );
+    let weekly_remaining_percent = json_f64_field(
+        model,
+        &[
+            "current_weekly_remaining_percent",
+            "currentWeeklyRemainingPercent",
+            "weekly_remaining_percent",
+            "weeklyRemainingPercent",
+        ],
+    )
+    .map(clamp_usage_percent)
+    .or_else(|| token_plan_remaining_percent(weekly_remaining, weekly_total));
+    let remaining_percent = interval_remaining_percent
+        .or(weekly_remaining_percent)
+        .ok_or_else(|| "PROVIDER_USAGE_PARSE_FAILED: MiniMax token plan fields missing".to_string())?;
+    let used_percent = 100.0 - remaining_percent;
+    let interval_expires_at = json_timestamp_field(model, &["end_time", "endTime"]);
+    let weekly_expires_at =
+        json_timestamp_field(model, &["weekly_end_time", "weeklyEndTime"]);
+    let mut details = Vec::new();
+    push_usage_detail(
+        &mut details,
+        "planName",
+        "Plan",
+        plan_name.clone(),
+    );
+    push_usage_detail(
+        &mut details,
+        "modelName",
+        "Model",
+        model_name,
+    );
+    push_usage_detail(
+        &mut details,
+        "remaining",
+        "Remaining",
+        Some(format_usage_number(remaining_percent)),
+    );
+    push_usage_detail(
+        &mut details,
+        "intervalRemaining",
+        "Interval Remaining",
+        interval_remaining.map(format_usage_number),
+    );
+    push_usage_detail(
+        &mut details,
+        "intervalLimit",
+        "Interval Limit",
+        interval_total.map(format_usage_number),
+    );
+    push_usage_detail(
+        &mut details,
+        "intervalRemainingPercent",
+        "Interval Remaining %",
+        interval_remaining_percent.map(format_usage_number),
+    );
+    push_usage_detail(
+        &mut details,
+        "intervalExpiresAt",
+        "Interval Reset",
+        interval_expires_at.map(|value| value.to_string()),
+    );
+    push_usage_detail(
+        &mut details,
+        "weeklyRemaining",
+        "Weekly Remaining",
+        weekly_remaining.map(format_usage_number),
+    );
+    push_usage_detail(
+        &mut details,
+        "weeklyLimit",
+        "Weekly Limit",
+        weekly_total.map(format_usage_number),
+    );
+    push_usage_detail(
+        &mut details,
+        "weeklyRemainingPercent",
+        "Weekly Remaining %",
+        weekly_remaining_percent.map(format_usage_number),
+    );
+    push_usage_detail(
+        &mut details,
+        "weeklyExpiresAt",
+        "Weekly Reset",
+        weekly_expires_at.map(|value| value.to_string()),
+    );
+    push_usage_detail(
+        &mut details,
+        "expiresAt",
+        "Next Reset",
+        interval_expires_at
+            .or(weekly_expires_at)
+            .map(|value| value.to_string()),
+    );
+
+    Ok(CodexModelProviderUsageSummary {
+        mode: Some("token_plan".to_string()),
+        is_valid: Some(remaining_percent > 0.0),
+        status: Some(if remaining_percent > 0.0 {
+            "available".to_string()
+        } else {
+            "exhausted".to_string()
+        }),
+        plan_name,
+        remaining: Some(remaining_percent),
+        balance: Some(remaining_percent),
+        unit: Some("%".to_string()),
+        quota_unlimited: None,
+        quota_limit: Some(100.0),
+        quota_used: Some(used_percent),
+        quota_remaining: Some(remaining_percent),
+        today_requests: None,
+        today_total_tokens: None,
+        today_cost: None,
+        total_requests: None,
+        total_total_tokens: None,
+        total_cost: None,
+        model_stats_count: model_remains.map_or(0, Vec::len),
+        latency_ms,
+        details,
+    })
+}
+
+fn summarize_zhipu_token_plan_usage(
+    body: &serde_json::Value,
+    latency_ms: u64,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    let payload = token_plan_payload(body);
+    let mut limits: Vec<&serde_json::Value> = payload
+        .get("limits")
+        .and_then(serde_json::Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter(|item| {
+                    json_string_field(item, &["type"])
+                        .is_some_and(|kind| kind.eq_ignore_ascii_case("TOKENS_LIMIT"))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if limits.is_empty() {
+        return Err("PROVIDER_USAGE_PARSE_FAILED: Zhipu token limit fields missing".to_string());
+    }
+    limits.sort_by_key(|item| {
+        json_timestamp_field(item, &["nextResetTime", "next_reset_time"])
+            .unwrap_or(i64::MAX)
+    });
+
+    let mut window_data = Vec::with_capacity(limits.len());
+    for item in &limits {
+        let total = json_f64_field(*item, &["usage", "total", "limit"]);
+        let used = json_f64_field(*item, &["currentValue", "current_value", "used"]);
+        let remaining = json_f64_field(*item, &["remaining", "remain"]);
+        let used_percent = json_f64_field(*item, &["percentage", "usedPercentage"])
+            .or_else(|| match (used, total) {
+                (Some(used), Some(total)) if total > 0.0 => Some((used / total) * 100.0),
+                _ => None,
+            })
+            .map(clamp_usage_percent)
+            .ok_or_else(|| {
+                "PROVIDER_USAGE_PARSE_FAILED: Zhipu token percentage missing".to_string()
+            })?;
+        let remaining_percent = clamp_usage_percent(100.0 - used_percent);
+        let reset_at = json_timestamp_field(item, &["nextResetTime", "next_reset_time"]);
+        window_data.push((
+            total,
+            used,
+            remaining,
+            used_percent,
+            remaining_percent,
+            reset_at,
+        ));
+    }
+
+    let primary = window_data.first().copied().ok_or_else(|| {
+        "PROVIDER_USAGE_PARSE_FAILED: Zhipu token limit fields missing".to_string()
+    })?;
+    let remaining_percent = primary.4;
+    let plan_name = json_string_field(payload, &["level", "planName"])
+        .or_else(|| Some("ZHIPU".to_string()));
+    let mut details = Vec::new();
+    push_usage_detail(
+        &mut details,
+        "planName",
+        "Plan",
+        plan_name.clone(),
+    );
+    push_usage_detail(
+        &mut details,
+        "remaining",
+        "Remaining",
+        Some(format_usage_number(remaining_percent)),
+    );
+    push_usage_detail(
+        &mut details,
+        "expiresAt",
+        "Next Reset",
+        primary.5.map(|value| value.to_string()),
+    );
+    for (index, (total, used, remaining, used_percent, remaining_percent, reset_at)) in
+        window_data.into_iter().enumerate()
+    {
+        let prefix = if index == 0 {
+            "interval"
+        } else if index == 1 {
+            "weekly"
+        } else {
+            "window"
+        };
+        push_usage_detail(
+            &mut details,
+            &format!("{}Limit", prefix),
+            &format!("{} Limit", prefix),
+            total.map(format_usage_number),
+        );
+        push_usage_detail(
+            &mut details,
+            &format!("{}Used", prefix),
+            &format!("{} Used", prefix),
+            used.map(format_usage_number),
+        );
+        push_usage_detail(
+            &mut details,
+            &format!("{}Remaining", prefix),
+            &format!("{} Remaining", prefix),
+            remaining.map(format_usage_number),
+        );
+        push_usage_detail(
+            &mut details,
+            &format!("{}UsedPercent", prefix),
+            &format!("{} Used %", prefix),
+            Some(format_usage_number(used_percent)),
+        );
+        push_usage_detail(
+            &mut details,
+            &format!("{}RemainingPercent", prefix),
+            &format!("{} Remaining %", prefix),
+            Some(format_usage_number(remaining_percent)),
+        );
+        push_usage_detail(
+            &mut details,
+            &format!("{}ExpiresAt", prefix),
+            &format!("{} Reset", prefix),
+            reset_at.map(|value| value.to_string()),
+        );
+    }
+
+    Ok(CodexModelProviderUsageSummary {
+        mode: Some("token_plan".to_string()),
+        is_valid: Some(remaining_percent > 0.0),
+        status: Some(if remaining_percent > 0.0 {
+            "available".to_string()
+        } else {
+            "exhausted".to_string()
+        }),
+        plan_name,
+        remaining: Some(remaining_percent),
+        balance: Some(remaining_percent),
+        unit: Some("%".to_string()),
+        quota_unlimited: None,
+        quota_limit: Some(100.0),
+        quota_used: Some(100.0 - remaining_percent),
+        quota_remaining: Some(remaining_percent),
+        today_requests: None,
+        today_total_tokens: None,
+        today_cost: None,
+        total_requests: None,
+        total_total_tokens: None,
+        total_cost: None,
+        model_stats_count: limits.len(),
+        latency_ms,
+        details,
+    })
+}
+
 fn format_usage_number(value: f64) -> String {
     if value.fract().abs() < f64::EPSILON {
         format!("{:.0}", value)
@@ -3213,6 +3694,10 @@ pub async fn codex_query_model_provider_usage(
         .build()
         .map_err(|e| format!("CREATE_HTTP_CLIENT_FAILED: {}", e))?;
 
+    if let Some(provider) = codex_model_provider_token_plan_provider(&base_url)? {
+        return query_token_plan_model_provider_usage(&client, &base_url, key, provider).await;
+    }
+
     if let Some(url) = codex_model_provider_deepseek_balance_url(&base_url)? {
         return query_deepseek_model_provider_balance(&client, &url, key).await;
     }
@@ -3268,6 +3753,70 @@ async fn query_deepseek_model_provider_balance(
     let parsed = serde_json::from_str::<serde_json::Value>(&text)
         .map_err(|e| format!("PROVIDER_USAGE_PARSE_FAILED: {}", e))?;
     Ok(summarize_deepseek_balance(&parsed, latency_ms))
+}
+
+async fn query_token_plan_model_provider_usage(
+    client: &reqwest::Client,
+    base_url: &str,
+    key: &str,
+    provider: CodexTokenPlanProvider,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    let urls = codex_model_provider_token_plan_urls(base_url, provider)?;
+    let mut last_not_found = None;
+    let mut last_parse_error = None;
+    for url in urls {
+        let started = Instant::now();
+        let request = client
+            .get(&url)
+            .header(reqwest::header::ACCEPT, "application/json");
+        let response = match provider {
+            CodexTokenPlanProvider::MiniMax => request.bearer_auth(key).send().await,
+            CodexTokenPlanProvider::Zhipu => request
+                .header(reqwest::header::AUTHORIZATION, key)
+                .send()
+                .await,
+        }
+        .map_err(|e| format!("PROVIDER_USAGE_NETWORK_FAILED: {}", e))?;
+        let latency_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            last_not_found = Some(format!(
+                "PROVIDER_USAGE_HTTP_404: {}",
+                text.chars().take(300).collect::<String>()
+            ));
+            continue;
+        }
+        if !status.is_success() {
+            return Err(format!(
+                "PROVIDER_USAGE_HTTP_{}: {}",
+                status.as_u16(),
+                text.chars().take(300).collect::<String>()
+            ));
+        }
+        let parsed = serde_json::from_str::<serde_json::Value>(&text)
+            .map_err(|e| format!("PROVIDER_USAGE_PARSE_FAILED: {}", e))?;
+        let summary = match provider {
+            CodexTokenPlanProvider::MiniMax => {
+                summarize_minimax_token_plan_usage(&parsed, latency_ms)
+            }
+            CodexTokenPlanProvider::Zhipu => summarize_zhipu_token_plan_usage(&parsed, latency_ms),
+        };
+        match summary {
+            Ok(summary) => return Ok(summary),
+            Err(error)
+                if provider == CodexTokenPlanProvider::MiniMax
+                    && error.starts_with("PROVIDER_USAGE_PARSE_FAILED") =>
+            {
+                last_parse_error = Some(error);
+                continue;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(last_parse_error.or(last_not_found).unwrap_or_else(|| {
+        "PROVIDER_USAGE_HTTP_404: token plan endpoint not found".to_string()
+    }))
 }
 
 async fn query_new_api_model_provider_usage(
@@ -3996,5 +4545,115 @@ mod tests {
             .details
             .iter()
             .any(|detail| detail.key == "grantedBalance" && detail.value == "10"));
+    }
+
+    #[test]
+    fn token_plan_provider_detection_uses_known_hosts() {
+        assert_eq!(
+            codex_model_provider_token_plan_provider("https://api.minimaxi.com/v1")
+                .expect("valid URL"),
+            Some(CodexTokenPlanProvider::MiniMax)
+        );
+        assert_eq!(
+            codex_model_provider_token_plan_provider("https://open.bigmodel.cn/api/coding/paas/v4")
+                .expect("valid URL"),
+            Some(CodexTokenPlanProvider::Zhipu)
+        );
+        assert_eq!(
+            codex_model_provider_token_plan_provider("https://example.com/v1")
+                .expect("valid URL"),
+            None
+        );
+    }
+
+    #[test]
+    fn token_plan_urls_ignore_provider_version_path() {
+        assert_eq!(
+            codex_model_provider_token_plan_urls(
+                "https://api.minimaxi.com/v1",
+                CodexTokenPlanProvider::MiniMax,
+            )
+            .expect("valid URL"),
+            vec![
+                "https://api.minimaxi.com/v1/token_plan/remains",
+                "https://api.minimaxi.com/v1/api/openplatform/coding_plan/remains",
+            ]
+        );
+        assert_eq!(
+            codex_model_provider_token_plan_urls(
+                "https://api.z.ai/api/coding/paas/v4",
+                CodexTokenPlanProvider::Zhipu,
+            )
+            .expect("valid URL"),
+            vec!["https://api.z.ai/api/monitor/usage/quota/limit"]
+        );
+    }
+
+    #[test]
+    fn minimax_token_plan_prefers_remaining_percent_for_time_windows() {
+        let summary = summarize_minimax_token_plan_usage(
+            &serde_json::json!({
+                "model_remains": [{
+                    "model_name": "MiniMax-M2.7",
+                    "current_interval_total_count": 0,
+                    "current_interval_usage_count": 0,
+                    "current_interval_remaining_percent": 72,
+                    "current_weekly_remaining_percent": 61,
+                    "end_time": 1773914400000i64,
+                    "weekly_end_time": 1774224000000i64
+                }]
+            }),
+            15,
+        )
+        .expect("token plan response");
+
+        assert_eq!(summary.mode.as_deref(), Some("token_plan"));
+        assert_eq!(summary.remaining, Some(72.0));
+        assert_eq!(summary.quota_used, Some(28.0));
+        assert_eq!(summary.quota_limit, Some(100.0));
+        assert!(summary
+            .details
+            .iter()
+            .any(|detail| detail.key == "intervalRemainingPercent" && detail.value == "72"));
+        assert!(summary
+            .details
+            .iter()
+            .any(|detail| detail.key == "weeklyExpiresAt" && detail.value == "1774224000"));
+    }
+
+    #[test]
+    fn zhipu_token_plan_uses_raw_authorization_shape_and_next_reset() {
+        let summary = summarize_zhipu_token_plan_usage(
+            &serde_json::json!({
+                "code": 200,
+                "success": true,
+                "data": {
+                    "level": "pro",
+                    "limits": [
+                        {
+                            "type": "TOKENS_LIMIT",
+                            "usage": 800000000,
+                            "currentValue": 127694464,
+                            "remaining": 672305536,
+                            "percentage": 15,
+                            "nextResetTime": 1770648402389i64
+                        },
+                        {
+                            "type": "TIME_LIMIT",
+                            "percentage": 30
+                        }
+                    ]
+                }
+            }),
+            21,
+        )
+        .expect("token plan response");
+
+        assert_eq!(summary.mode.as_deref(), Some("token_plan"));
+        assert_eq!(summary.plan_name.as_deref(), Some("pro"));
+        assert_eq!(summary.remaining, Some(85.0));
+        assert_eq!(summary.unit.as_deref(), Some("%"));
+        assert_eq!(summary.details.iter().find(|detail| detail.key == "expiresAt").map(|detail| detail.value.as_str()), Some("1770648402"));
+        assert_eq!(summary.model_stats_count, 1);
     }
 }

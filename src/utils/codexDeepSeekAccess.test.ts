@@ -6,6 +6,7 @@ import {
   isDeepSeekCdpAccess,
   isDeepSeekDirectAccess,
   isCodexApiKeyUsageQueryEligible,
+  isCodexTokenPlanAccount,
   parseCodexBoundAccountId,
   resolveDeepSeekAccessMode,
   resolveDeepSeekBindAccountId,
@@ -152,6 +153,47 @@ test("DeepSeek Responses accounts can query usage", () => {
     })),
     true,
   );
+});
+
+test("detects MiniMax and Zhipu Token Plan accounts", () => {
+  assert.equal(
+    isCodexTokenPlanAccount({
+      api_provider_id: "custom",
+      api_base_url: "https://api.minimaxi.com/v1",
+    }),
+    true,
+  );
+  assert.equal(
+    isCodexTokenPlanAccount({
+      api_provider_id: "custom",
+      api_base_url: "https://open.bigmodel.cn/api/coding/paas/v4",
+    }),
+    true,
+  );
+  assert.equal(
+    isCodexTokenPlanAccount({
+      api_provider_id: "custom",
+      api_base_url: "https://api.example.com/v1",
+    }),
+    false,
+  );
+});
+
+test("MiniMax and Zhipu Chat Completions accounts can query Token Plan usage", () => {
+  for (const baseUrl of [
+    "https://api.minimaxi.com/v1",
+    "https://open.bigmodel.cn/api/coding/paas/v4",
+  ]) {
+    const tokenPlanAccount = account({
+      auth_mode: "apikey",
+      api_provider_id: "custom",
+      api_base_url: baseUrl,
+      api_wire_api: "chat_completions",
+      openai_api_key: "sk-token-plan-test",
+    });
+    assert.equal(isCodexApiKeyUsageQueryEligible(tokenPlanAccount), true);
+    assert.equal(shouldShowCodexApiKeyUsagePanel(tokenPlanAccount, true), true);
+  }
 });
 
 test("ordinary Chat Completions accounts stay excluded from usage query", () => {

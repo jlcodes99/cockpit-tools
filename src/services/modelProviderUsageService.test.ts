@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  formatModelProviderUsageMoney,
   resolveNewApiQuotaSnapshot,
   type ModelProviderUsageSummary,
 } from "./modelProviderUsageService.ts";
@@ -76,4 +77,8 @@ test("new_api quota ignores malformed numeric details", () => {
     available: 25,
     expiresAt: null,
   });
+});
+
+test("token plan percentages render without currency decimals", () => {
+  assert.equal(formatModelProviderUsageMoney(72, "%"), "72%");
 });

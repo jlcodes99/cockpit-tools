@@ -26,7 +26,10 @@ export function ModelProviderUsagePanel({
 }: ModelProviderUsagePanelProps) {
   const { t } = useTranslation();
   const usageMode = resolveModelProviderUsageMode(summary ?? undefined);
-  const isSupportedUsage = usageMode === 'sub2api' || usageMode === 'new_api';
+  const isSupportedUsage =
+    usageMode === 'sub2api' ||
+    usageMode === 'new_api' ||
+    usageMode === 'token_plan';
   const classNames = [
     'codex-api-key-usage-panel',
     usageMode ?? 'sub2api',
@@ -53,6 +56,39 @@ export function ModelProviderUsagePanel({
 
   if (!isSupportedUsage) {
     return null;
+  }
+
+  if (usageMode === 'token_plan') {
+    const resetDetail = summary?.details?.find((item) =>
+      ['intervalExpiresAt', 'weeklyExpiresAt', 'expiresAt'].includes(item.key),
+    );
+    return (
+      <div className={classNames}>
+        <div className="codex-api-key-usage-grid">
+          <div>
+            <span>
+              {t('codex.modelProviders.usage.fields.remaining', 'Remaining')}
+            </span>
+            <strong>
+              {formatModelProviderUsageMoney(
+                summary?.quotaRemaining ?? summary?.remaining,
+                summary?.unit,
+              )}
+            </strong>
+          </div>
+          <div>
+            <span>{t('codex.modelProviders.usage.fields.planName', 'Plan')}</span>
+            <strong>{summary?.planName || '-'}</strong>
+          </div>
+          <div>
+            <span>
+              {t('codex.modelProviders.usage.fields.expiresAt', 'Next Reset')}
+            </span>
+            <strong>{resetDetail?.value || '-'}</strong>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const balanceText = formatModelProviderUsageMoney(
