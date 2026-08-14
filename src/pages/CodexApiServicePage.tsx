@@ -26,6 +26,7 @@ import {
   Power,
   RefreshCw,
   Route,
+  Search,
   Send,
   ShieldCheck,
   SlidersHorizontal,
@@ -821,6 +822,7 @@ export function CodexApiServicePage() {
   const [memberModalOpen, setMemberModalOpen] = useState(false);
   const [healthModalOpen, setHealthModalOpen] = useState(false);
   const [apiServiceIsCurrent, setApiServiceIsCurrent] = useState(false);
+  const [apiKeySearchQuery, setApiKeySearchQuery] = useState("");
   const [apiKeyDrafts, setApiKeyDrafts] = useState<Record<string, string>>({});
   const [apiKeyPolicyDrafts, setApiKeyPolicyDrafts] = useState<
     Record<string, ApiKeyPolicyDraft>
@@ -894,6 +896,37 @@ export function CodexApiServicePage() {
   const testChatScrollRef = useRef<HTMLDivElement | null>(null);
 
   const collection = state?.collection ?? null;
+  const visibleApiKeys = useMemo(() => {
+    const apiKeys = collection?.apiKeys ?? [];
+    const query = apiKeySearchQuery.trim().toLowerCase();
+    if (!query) return apiKeys;
+
+    return apiKeys.filter((apiKey) => {
+      let providerGatewayText = "";
+      if (typeof apiKey.providerGateway === "string") {
+        providerGatewayText = apiKey.providerGateway;
+      } else if (apiKey.providerGateway != null) {
+        try {
+          providerGatewayText = JSON.stringify(apiKey.providerGateway) ?? "";
+        } catch {
+          providerGatewayText = String(apiKey.providerGateway);
+        }
+      }
+      const searchableText = [
+        apiKey.id,
+        apiKey.label,
+        apiKey.key,
+        apiKey.modelPrefix,
+        providerGatewayText,
+        ...(apiKey.allowedModels ?? []),
+        ...(apiKey.excludedModels ?? []),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return searchableText.includes(query);
+    });
+  }, [apiKeySearchQuery, collection?.apiKeys]);
   const stats = state?.stats ?? null;
   const memberView = useCodexAccountOverviewMemberView({
     accounts,
@@ -4161,6 +4194,26 @@ export function CodexApiServicePage() {
             <div className="codex-api-service-panel-head">
               <h2>{t("codex.localAccess.apiKeysTitle", "客户端 Key")}</h2>
               <div className="codex-api-service-head-actions">
+                <label className="codex-api-service-key-search">
+                  <Search size={14} aria-hidden="true" />
+                  <span className="sr-only">
+                    {t("codex.localAccess.apiKeySearchLabel", "Search API keys")}
+                  </span>
+                  <input
+                    type="search"
+                    value={apiKeySearchQuery}
+                    onChange={(event) => setApiKeySearchQuery(event.target.value)}
+                    placeholder={t(
+                      "codex.localAccess.apiKeySearchPlaceholder",
+                      "Search keys, labels, models, or gateways",
+                    )}
+                    aria-label={t(
+                      "codex.localAccess.apiKeySearchLabel",
+                      "Search API keys",
+                    )}
+                    disabled={!collection}
+                  />
+                </label>
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
@@ -4173,7 +4226,7 @@ export function CodexApiServicePage() {
               </div>
             </div>
             <div className="codex-api-service-table">
-              {(collection?.apiKeys ?? []).map((apiKey) => {
+              {visibleApiKeys.map((apiKey) => {
                 const labelDraft = apiKeyDrafts[apiKey.id] ?? apiKey.label;
                 const policyDraft =
                   apiKeyPolicyDrafts[apiKey.id] ??
@@ -4852,6 +4905,14 @@ export function CodexApiServicePage() {
                   </div>
                 );
               })}
+              {visibleApiKeys.length === 0 && (collection?.apiKeys.length ?? 0) > 0 ? (
+                <div className="codex-api-service-empty-state">
+                  {t(
+                    "codex.localAccess.apiKeySearchEmpty",
+                    "No API keys match your search",
+                  )}
+                </div>
+              ) : null}
             </div>
           </section>
         )}

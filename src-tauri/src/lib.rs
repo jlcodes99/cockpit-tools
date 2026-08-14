@@ -202,6 +202,20 @@ fn summarize_deep_link_args(args: &[String]) -> Vec<String> {
         .collect()
 }
 
+#[cfg(target_os = "linux")]
+fn configure_linux_main_window(app: &tauri::AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        logger::log_warn("[Linux] main window not found while applying window controls");
+        return;
+    };
+    if let Err(err) = window.set_decorations(false) {
+        logger::log_warn(&format!(
+            "[Linux] failed to disable native decorations: {}",
+            err
+        ));
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     logger::init_logger();
@@ -267,6 +281,9 @@ pub fn run() {
 
             // 存储全局 AppHandle
             let _ = APP_HANDLE.set(app.handle().clone());
+
+            #[cfg(target_os = "linux")]
+            configure_linux_main_window(app.handle());
 
             if let Err(err) = modules::app_lifecycle::install_system_shutdown_listener() {
                 logger::log_warn(&format!("[Lifecycle] 安装系统关机监听失败: {}", err));

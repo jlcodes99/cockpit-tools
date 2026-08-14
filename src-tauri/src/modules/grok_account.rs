@@ -3,9 +3,10 @@ use crate::models::grok::{
     GrokProductUsage, GrokQuota,
 };
 use crate::modules::{account, atomic_write, config, grok_oauth, logger, provider_current_state};
+use base64::{engine::general_purpose::URL_SAFE, Engine as _};
 use chrono::{DateTime, Utc};
 use reqwest::header::{ACCEPT, AUTHORIZATION, USER_AGENT};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -1712,6 +1713,97 @@ fn raw_string(value: Option<&Value>) -> Option<String> {
         .and_then(|value| normalize_text(Some(value)))
 }
 
+fn normalized_tier(value: &str) -> String {
+    value
+        .trim()
+        .to_ascii_uppercase()
+        .replace(' ', "_")
+        .replace('-', "_")
+}
+
+fn tier_is_heavy(value: &str) -> bool {
+    let normalized = normalized_tier(value).replace('_', "");
+    normalized.contains("SUPERGROKHEAVY") || normalized.contains("GROKHEAVY")
+}
+
+fn subscription_tier_from_value(value: &Value) -> Option<String> {
+    [
+        "tier",
+        "subscriptionTier",
+        "subscription_tier",
+        "plan",
+        "planType",
+    ]
+    .iter()
+    .find_map(|key| raw_string(value.get(*key)))
+}
+
+fn decode_access_token_payload(access_token: &str) -> Option<Value> {
+    let encoded = access_token.split('.').nth(1)?.trim();
+    if encoded.is_empty() {
+        return None;
+    }
+    let mut padded = encoded.to_string();
+    while padded.len() % 4 != 0 {
+        padded.push('=');
+    }
+    let bytes = URL_SAFE.decode(padded).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+fn access_token_subscription_tier(access_token: &str) -> Option<String> {
+    let payload = decode_access_token_payload(access_token)?;
+    let raw = payload
+        .get("subscriptionTier")
+        .or_else(|| payload.get("subscription_tier"))
+        .or_else(|| payload.get("tier"));
+    match raw {
+        Some(Value::String(value)) => normalize_text(Some(value)),
+        Some(Value::Number(value)) => match value.as_u64() {
+            Some(0) => Some("SUBSCRIPTION_TIER_FREE".to_string()),
+            Some(1) => Some("SUBSCRIPTION_TIER_SUPERGROK".to_string()),
+            Some(2) => Some("SUBSCRIPTION_TIER_X_BASIC".to_string()),
+            Some(3) => Some("SUBSCRIPTION_TIER_X_PREMIUM".to_string()),
+            Some(4) => Some("SUBSCRIPTION_TIER_X_PREMIUM_PLUS".to_string()),
+            Some(5) => Some("SUBSCRIPTION_TIER_SUPERGROK_HEAVY".to_string()),
+            Some(6) => Some("SUBSCRIPTION_TIER_SUPERGROK_LITE".to_string()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn resolve_subscription_tier(
+    config: &Value,
+    subscription: Option<&Value>,
+    cli_user: Option<&Value>,
+    access_token_tier: Option<&str>,
+) -> Option<String> {
+    let mut candidates = Vec::new();
+    if let Some(value) = raw_string(config.get("subscription_tier"))
+        .or_else(|| raw_string(config.get("subscriptionTier")))
+    {
+        candidates.push(value);
+    }
+    if let Some(value) = subscription.and_then(subscription_tier_from_value) {
+        candidates.push(value);
+    }
+    if let Some(value) = cli_user
+        .map(user_payload)
+        .and_then(subscription_tier_from_value)
+    {
+        candidates.push(value);
+    }
+    if let Some(value) = access_token_tier.and_then(|value| normalize_text(Some(value))) {
+        candidates.push(value);
+    }
+
+    if candidates.iter().any(|value| tier_is_heavy(value)) {
+        return Some("SUBSCRIPTION_TIER_SUPERGROK_HEAVY".to_string());
+    }
+    candidates.into_iter().next()
+}
+
 fn active_subscription(value: &Value) -> Option<&Value> {
     value
         .get("subscriptions")
@@ -1841,13 +1933,23 @@ fn credit_usage_amounts(billing: &Value, config: &Value) -> (Option<f64>, Option
         .unwrap_or((None, None))
 }
 
-fn product_usage_from_value(item: &Value) -> Option<GrokProductUsage> {
+fn product_usage_from_value(
+    item: &Value,
+    fallback_product: Option<&str>,
+) -> Option<GrokProductUsage> {
     let product = raw_string(item.get("product"))
         .or_else(|| raw_string(item.get("name")))
-        .or_else(|| raw_string(item.get("productName")))?;
-    let (used, total, remaining) = credit_bag_amounts(item).unwrap_or((None, None, None));
+        .or_else(|| raw_string(item.get("productName")))
+        .or_else(|| raw_string(item.get("productId")))
+        .or_else(|| fallback_product.and_then(|value| normalize_text(Some(value))))?;
+    let usage = item.get("usage").filter(|value| value.is_object());
+    let (used, total, remaining) = credit_bag_amounts(item)
+        .or_else(|| usage.and_then(credit_bag_amounts))
+        .unwrap_or((None, None, None));
     let usage_percent = number(item.get("usagePercent"))
         .or_else(|| number(item.get("usedPercent")))
+        .or_else(|| usage.and_then(|value| number(value.get("usagePercent"))))
+        .or_else(|| usage.and_then(|value| number(value.get("usedPercent"))))
         .or_else(|| match (used, total) {
             (Some(used), Some(total)) if total > 0.0 => {
                 Some(((used.max(0.0) / total) * 100.0).clamp(0.0, 100.0))
@@ -1863,41 +1965,57 @@ fn product_usage_from_value(item: &Value) -> Option<GrokProductUsage> {
     })
 }
 
+fn product_usages_from_value(value: &Value) -> Vec<GrokProductUsage> {
+    match value {
+        Value::Array(items) => items
+            .iter()
+            .filter(|item| item.is_object())
+            .filter_map(|item| product_usage_from_value(item, None))
+            .collect(),
+        Value::Object(items) => items
+            .iter()
+            .filter(|(_, item)| item.is_object())
+            .filter_map(|(name, item)| product_usage_from_value(item, Some(name)))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
 fn quota_from_payload(
     billing: &Value,
     subscriptions: Option<&Value>,
     cli_user: Option<&Value>,
     task_usage: Option<&Value>,
+    access_token_tier: Option<&str>,
 ) -> GrokQuota {
     let config = billing.get("config").unwrap_or(billing);
-    let period = config.get("currentPeriod").unwrap_or(&Value::Null);
+    let period = config
+        .get("currentPeriod")
+        .or_else(|| config.get("current_period"))
+        .unwrap_or(&Value::Null);
     let subscription = cli_user
         .and_then(user_subscription)
         .or_else(|| subscriptions.and_then(active_subscription))
         .or_else(|| active_subscription(config));
-    let subscription_tier = raw_string(config.get("subscription_tier"))
-        .or_else(|| raw_string(config.get("subscriptionTier")))
-        .or_else(|| subscription.and_then(|item| raw_string(item.get("tier"))))
-        .or_else(|| {
-            cli_user.and_then(|value| {
-                let user = user_payload(value);
-                raw_string(user.get("subscriptionTier"))
-                    .or_else(|| raw_string(user.get("subscription_tier")))
-            })
-        });
+    let subscription_tier =
+        resolve_subscription_tier(config, subscription, cli_user, access_token_tier);
     let products = config
         .get("productUsage")
-        .and_then(Value::as_array)
-        .map(|items| items.iter().filter_map(product_usage_from_value).collect())
+        .or_else(|| config.get("product_usage"))
+        .or_else(|| config.get("products"))
+        .map(product_usages_from_value)
         .unwrap_or_default();
     let (weekly_used, weekly_total) = credit_usage_amounts(billing, config);
     GrokQuota {
         period_type: raw_string(period.get("type")),
         period_start: raw_string(period.get("start"))
-            .or_else(|| raw_string(config.get("billingPeriodStart"))),
+            .or_else(|| raw_string(config.get("billingPeriodStart")))
+            .or_else(|| raw_string(config.get("billing_period_start"))),
         period_end: raw_string(period.get("end"))
-            .or_else(|| raw_string(config.get("billingPeriodEnd"))),
+            .or_else(|| raw_string(config.get("billingPeriodEnd")))
+            .or_else(|| raw_string(config.get("billing_period_end"))),
         weekly_limit_percent: number(config.get("creditUsagePercent"))
+            .or_else(|| number(config.get("credit_usage_percent")))
             .or_else(|| credit_usage_percent(billing, config)),
         weekly_used,
         weekly_total,
@@ -1909,7 +2027,13 @@ fn quota_from_payload(
         occasional_usage: task_usage.and_then(|value| nested_number(value, "occasionalUsage")),
         occasional_limit: task_usage.and_then(|value| nested_number(value, "occasionalLimit")),
         subscription_tier,
-        subscription_status: subscription.and_then(|item| raw_string(item.get("status"))),
+        subscription_status: subscription
+            .and_then(|item| raw_string(item.get("status")))
+            .or_else(|| {
+                cli_user
+                    .and_then(|value| user_subscription(value))
+                    .and_then(|item| raw_string(item.get("status")))
+            }),
         products,
     }
 }
@@ -2466,11 +2590,13 @@ async fn query_quota(account: &mut GrokAccount) -> Result<(), String> {
         subscriptions_for(account, &client_version).await
     };
     let task_usage_result = task_usage_for(account).await;
+    let access_token_tier = access_token_subscription_tier(&account.access_token);
     let quota = quota_from_payload(
         &billing,
         subscriptions.as_ref(),
         cli_user.as_ref(),
         task_usage_result.as_ref().ok(),
+        access_token_tier.as_deref(),
     );
     let has_usage_quota = quota.weekly_limit_percent.is_some()
         || quota
@@ -2481,7 +2607,9 @@ async fn query_quota(account: &mut GrokAccount) -> Result<(), String> {
         || quota.prepaid_balance.is_some_and(|value| value > 0.0)
         || quota.frequent_limit.is_some_and(|value| value > 0.0)
         || quota.occasional_limit.is_some_and(|value| value > 0.0);
-    account.plan_type = quota.subscription_tier.clone();
+    if quota.subscription_tier.is_some() {
+        account.plan_type = quota.subscription_tier.clone();
+    }
     account.quota = Some(quota);
     account.billing_raw = Some(billing);
     account.subscription_raw = subscriptions;
@@ -2898,11 +3026,11 @@ pub fn run_quota_alert_if_needed() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        access_still_usable, account_from_auth_object, accounts_match_for_upsert,
-        acquire_secret_lock, apply_refreshed_token, auth_entry_matches_account,
-        auth_registry_entry, auth_registry_for, default_grok_home, ensure_secret_dir,
-        find_matching_auth_entry_in_registry, list_accounts_checked, load_account,
-        load_account_from_path, load_index_from_paths, parse_auth_registry,
+        access_still_usable, access_token_subscription_tier, account_from_auth_object,
+        accounts_match_for_upsert, acquire_secret_lock, apply_refreshed_token,
+        auth_entry_matches_account, auth_registry_entry, auth_registry_for, default_grok_home,
+        ensure_secret_dir, find_matching_auth_entry_in_registry, list_accounts_checked,
+        load_account, load_account_from_path, load_index_from_paths, parse_auth_registry,
         pick_best_live_credential, quota_from_payload, quota_remaining_metrics, remove_account,
         remove_matching_auth_scope, resolve_account_id_from_registry, save_account_locked,
         should_retry_quota_after_unauthorized, string_field, validate_api_provider_config,
@@ -2912,6 +3040,7 @@ mod tests {
     use crate::models::grok::{
         GrokAccount, GrokAccountView, GrokAuthMode, GrokProductUsage, GrokQuota,
     };
+    use base64::{engine::general_purpose::URL_SAFE, Engine as _};
     use serde_json::{json, Value};
     use std::path::PathBuf;
 
@@ -3680,7 +3809,7 @@ mod tests {
                 "productUsage": [{"product":"coding", "usagePercent":12.0}]
             }
         });
-        let quota = quota_from_payload(&billing, None, None, None);
+        let quota = quota_from_payload(&billing, None, None, None, None);
         assert_eq!(
             quota.subscription_tier.as_deref(),
             Some("SUBSCRIPTION_TIER_SUPERGROK")
@@ -3700,7 +3829,7 @@ mod tests {
                 }
             }
         });
-        let quota = quota_from_payload(&billing, None, None, None);
+        let quota = quota_from_payload(&billing, None, None, None, None);
         assert_eq!(quota.weekly_limit_percent, Some(25.0));
         assert_eq!(quota.weekly_used, Some(25.0));
         assert_eq!(quota.weekly_total, Some(100.0));
@@ -3720,7 +3849,7 @@ mod tests {
                 }]
             }
         });
-        let quota = quota_from_payload(&billing, None, None, None);
+        let quota = quota_from_payload(&billing, None, None, None, None);
         assert_eq!(quota.products[0].product, "GrokBuild");
         assert_eq!(quota.products[0].usage_percent, Some(40.0));
         assert_eq!(quota.products[0].used, Some(40.0));
@@ -3738,7 +3867,7 @@ mod tests {
                 "status": "SUBSCRIPTION_STATUS_ACTIVE"
             }
         });
-        let quota = quota_from_payload(&billing, None, Some(&cli_user), None);
+        let quota = quota_from_payload(&billing, None, Some(&cli_user), None, None);
         assert_eq!(
             quota.subscription_tier.as_deref(),
             Some("SUBSCRIPTION_TIER_SUPERGROK_HEAVY")
@@ -3750,6 +3879,41 @@ mod tests {
     }
 
     #[test]
+    fn resolves_heavy_tier_from_token_and_object_product_usage() {
+        let header = URL_SAFE.encode(br#"{"alg":"none","typ":"JWT"}"#);
+        let payload = URL_SAFE.encode(br#"{"tier":5}"#);
+        let access_token = format!("{header}.{payload}.signature");
+        assert_eq!(
+            access_token_subscription_tier(&access_token).as_deref(),
+            Some("SUBSCRIPTION_TIER_SUPERGROK_HEAVY")
+        );
+
+        let billing = json!({
+            "config": {
+                "current_period": {"end": "2099-01-01T00:00:00Z"},
+                "credit_usage_percent": 18.0,
+                "productUsage": {
+                    "GrokBuild": {"usagePercent": 32.0}
+                }
+            }
+        });
+        let quota = quota_from_payload(
+            &billing,
+            None,
+            None,
+            None,
+            Some("SUBSCRIPTION_TIER_SUPERGROK_HEAVY"),
+        );
+        assert_eq!(
+            quota.subscription_tier.as_deref(),
+            Some("SUBSCRIPTION_TIER_SUPERGROK_HEAVY")
+        );
+        assert_eq!(quota.weekly_limit_percent, Some(18.0));
+        assert_eq!(quota.products[0].product, "GrokBuild");
+        assert_eq!(quota.products[0].usage_percent, Some(32.0));
+    }
+
+    #[test]
     fn parses_task_usage_limits() {
         let billing = json!({"config": {}});
         let task_usage = json!({
@@ -3758,7 +3922,7 @@ mod tests {
             "occasionalUsage": 3,
             "occasionalLimit": 30
         });
-        let quota = quota_from_payload(&billing, None, None, Some(&task_usage));
+        let quota = quota_from_payload(&billing, None, None, Some(&task_usage), None);
         assert_eq!(quota.frequent_usage, Some(2.0));
         assert_eq!(quota.frequent_limit, Some(10.0));
         assert_eq!(quota.occasional_usage, Some(3.0));

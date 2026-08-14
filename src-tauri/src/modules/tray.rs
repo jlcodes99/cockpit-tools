@@ -2,9 +2,13 @@
 //! 管理系统托盘图标和菜单
 
 #[cfg(not(target_os = "macos"))]
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
+#[cfg(not(target_os = "macos"))]
+use std::hash::{Hash, Hasher};
 #[cfg(target_os = "macos")]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(not(target_os = "macos"))]
+use std::sync::{Mutex, OnceLock};
 
 #[cfg(target_os = "macos")]
 use tauri::image::Image;
@@ -310,12 +314,13 @@ pub mod menu_ids {
 
 /// 账号显示信息
 #[cfg(not(target_os = "macos"))]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct AccountDisplayInfo {
     account: String,
     quota_lines: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg(not(target_os = "macos"))]
 enum TrayMenuEntry {
     Platform(PlatformId),
@@ -325,6 +330,17 @@ enum TrayMenuEntry {
         platforms: Vec<PlatformId>,
     },
 }
+
+#[cfg(not(target_os = "macos"))]
+#[derive(Debug, Clone)]
+struct TrayMenuSnapshot {
+    lang: String,
+    entries: Vec<TrayMenuEntry>,
+    platform_infos: HashMap<PlatformId, AccountDisplayInfo>,
+}
+
+#[cfg(not(target_os = "macos"))]
+static LAST_TRAY_MENU_SNAPSHOT_HASH: OnceLock<Mutex<Option<u64>>> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy)]
 #[cfg(not(target_os = "macos"))]
@@ -470,11 +486,56 @@ pub fn create_tray_skeleton<R: Runtime>(
     Ok(tray)
 }
 
-/// 构建托盘菜单
+/// 收集托盘菜单内容快照
 #[cfg(not(target_os = "macos"))]
-fn build_tray_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<Menu<R>, tauri::Error> {
-    let config = crate::modules::config::get_user_config();
-    let lang = &config.language;
+fn collect_tray_menu_snapshot() -> TrayMenuSnapshot {
+    let lang = crate::modules::config::get_user_config().language;
+    let entries = resolve_tray_entries();
+    let mut platform_infos = HashMap::new();
+
+    for platform in entries.iter().flat_map(|entry| match entry {
+        TrayMenuEntry::Platform(platform) => vec![*platform],
+        TrayMenuEntry::Group { platforms, .. } => platforms.clone(),
+    }) {
+        platform_infos
+            .entry(platform)
+            .or_insert_with(|| get_account_display_info(platform, &lang));
+    }
+
+    TrayMenuSnapshot {
+        lang,
+        entries,
+        platform_infos,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn tray_menu_snapshot_hash(snapshot: &TrayMenuSnapshot) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    snapshot.lang.hash(&mut hasher);
+    snapshot.entries.hash(&mut hasher);
+
+    // Hash display data in menu order instead of iterating the HashMap, so the
+    // digest remains stable across process runs and map randomization.
+    for entry in &snapshot.entries {
+        let platforms = match entry {
+            TrayMenuEntry::Platform(platform) => std::slice::from_ref(platform),
+            TrayMenuEntry::Group { platforms, .. } => platforms.as_slice(),
+        };
+        for platform in platforms {
+            platform.hash(&mut hasher);
+            snapshot.platform_infos.get(platform).hash(&mut hasher);
+        }
+    }
+    hasher.finish()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn build_tray_menu_from_snapshot<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    snapshot: &TrayMenuSnapshot,
+) -> Result<Menu<R>, tauri::Error> {
+    let lang = &snapshot.lang;
 
     let show_window = MenuItem::with_id(
         app,
@@ -512,18 +573,27 @@ fn build_tray_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<Menu<R>, tau
         None::<&str>,
     )?;
 
-    let ordered_entries = resolve_tray_entries();
-    let split_index = ordered_entries.len().min(TRAY_PLATFORM_MAX_VISIBLE);
-    let (visible_entries, overflow_entries) = ordered_entries.split_at(split_index);
+    let split_index = snapshot.entries.len().min(TRAY_PLATFORM_MAX_VISIBLE);
+    let (visible_entries, overflow_entries) = snapshot.entries.split_at(split_index);
 
     let mut visible_submenus: Vec<Submenu<R>> = Vec::new();
     for entry in visible_entries {
-        visible_submenus.push(build_tray_entry_submenu(app, entry, lang)?);
+        visible_submenus.push(build_tray_entry_submenu(
+            app,
+            entry,
+            lang,
+            &snapshot.platform_infos,
+        )?);
     }
 
     let mut overflow_submenus: Vec<Submenu<R>> = Vec::new();
     for entry in overflow_entries {
-        overflow_submenus.push(build_tray_entry_submenu(app, entry, lang)?);
+        overflow_submenus.push(build_tray_entry_submenu(
+            app,
+            entry,
+            lang,
+            &snapshot.platform_infos,
+        )?);
     }
 
     let overflow_refs: Vec<&dyn IsMenuItem<R>> = overflow_submenus
@@ -583,14 +653,17 @@ fn build_tray_entry_submenu<R: Runtime>(
     app: &tauri::AppHandle<R>,
     entry: &TrayMenuEntry,
     lang: &str,
+    platform_infos: &HashMap<PlatformId, AccountDisplayInfo>,
 ) -> Result<Submenu<R>, tauri::Error> {
     match entry {
-        TrayMenuEntry::Platform(platform) => build_platform_submenu(app, *platform, lang),
+        TrayMenuEntry::Platform(platform) => {
+            build_platform_submenu(app, *platform, lang, platform_infos)
+        }
         TrayMenuEntry::Group {
             id,
             name,
             platforms,
-        } => build_platform_group_submenu(app, id, name, platforms, lang),
+        } => build_platform_group_submenu(app, id, name, platforms, lang, platform_infos),
     }
 }
 
@@ -601,6 +674,7 @@ fn build_platform_group_submenu<R: Runtime>(
     group_name: &str,
     platforms: &[PlatformId],
     lang: &str,
+    platform_infos: &HashMap<PlatformId, AccountDisplayInfo>,
 ) -> Result<Submenu<R>, tauri::Error> {
     if let [platform] = platforms {
         return build_platform_details_submenu(
@@ -609,12 +683,20 @@ fn build_platform_group_submenu<R: Runtime>(
             group_name,
             *platform,
             lang,
+            platform_infos
+                .get(platform)
+                .expect("tray snapshot must contain every visible platform"),
         );
     }
 
     let mut submenus: Vec<Submenu<R>> = Vec::new();
     for platform in platforms {
-        submenus.push(build_platform_submenu(app, *platform, lang)?);
+        submenus.push(build_platform_submenu(
+            app,
+            *platform,
+            lang,
+            platform_infos,
+        )?);
     }
 
     let refs: Vec<&dyn IsMenuItem<R>> = submenus
@@ -755,6 +837,7 @@ fn build_platform_submenu<R: Runtime>(
     app: &tauri::AppHandle<R>,
     platform: PlatformId,
     lang: &str,
+    platform_infos: &HashMap<PlatformId, AccountDisplayInfo>,
 ) -> Result<Submenu<R>, tauri::Error> {
     build_platform_details_submenu(
         app,
@@ -762,6 +845,9 @@ fn build_platform_submenu<R: Runtime>(
         platform.title(),
         platform,
         lang,
+        platform_infos
+            .get(&platform)
+            .expect("tray snapshot must contain every visible platform"),
     )
 }
 
@@ -771,15 +857,15 @@ fn build_platform_details_submenu<R: Runtime>(
     submenu_id: &str,
     title: &str,
     platform: PlatformId,
-    lang: &str,
+    _lang: &str,
+    info: &AccountDisplayInfo,
 ) -> Result<Submenu<R>, tauri::Error> {
-    let info = get_account_display_info(platform, lang);
     let mut items: Vec<MenuItem<R>> = Vec::new();
 
     items.push(MenuItem::with_id(
         app,
         format!("platform:{}:account", platform.as_str()),
-        info.account,
+        info.account.clone(),
         true,
         None::<&str>,
     )?);
@@ -3612,8 +3698,19 @@ pub fn update_tray_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Str
 
     #[cfg(not(target_os = "macos"))]
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let menu = build_tray_menu(app).map_err(|e| e.to_string())?;
+        let snapshot = collect_tray_menu_snapshot();
+        let snapshot_hash = tray_menu_snapshot_hash(&snapshot);
+        let snapshot_lock = LAST_TRAY_MENU_SNAPSHOT_HASH.get_or_init(|| Mutex::new(None));
+        let mut last_hash = snapshot_lock
+            .lock()
+            .map_err(|_| "tray menu snapshot lock poisoned".to_string())?;
+        if last_hash.as_ref() == Some(&snapshot_hash) {
+            return Ok(());
+        }
+
+        let menu = build_tray_menu_from_snapshot(app, &snapshot).map_err(|e| e.to_string())?;
         tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
+        *last_hash = Some(snapshot_hash);
         logger::log_info("[Tray] 托盘菜单已更新");
     }
     Ok(())
@@ -3842,5 +3939,43 @@ fn get_text(key: &str, lang: &str) -> String {
         ("no_platform_selected", _) => "No tray platforms selected".to_string(),
 
         _ => key.to_string(),
+    }
+}
+
+#[cfg(all(test, not(target_os = "macos")))]
+mod tests {
+    use super::{
+        tray_menu_snapshot_hash, AccountDisplayInfo, PlatformId, TrayMenuEntry, TrayMenuSnapshot,
+    };
+    use std::collections::HashMap;
+
+    fn snapshot(quota_line: &str) -> TrayMenuSnapshot {
+        let platform = PlatformId::Codex;
+        TrayMenuSnapshot {
+            lang: "en".to_string(),
+            entries: vec![TrayMenuEntry::Platform(platform)],
+            platform_infos: HashMap::from([(
+                platform,
+                AccountDisplayInfo {
+                    account: "user@example.com".to_string(),
+                    quota_lines: vec![quota_line.to_string()],
+                },
+            )]),
+        }
+    }
+
+    #[test]
+    fn tray_menu_snapshot_hash_is_stable_and_tracks_display_changes() {
+        let first = snapshot("Weekly: 80% left");
+        assert_eq!(
+            tray_menu_snapshot_hash(&first),
+            tray_menu_snapshot_hash(&first.clone())
+        );
+
+        let changed = snapshot("Weekly: 79% left");
+        assert_ne!(
+            tray_menu_snapshot_hash(&first),
+            tray_menu_snapshot_hash(&changed)
+        );
     }
 }
