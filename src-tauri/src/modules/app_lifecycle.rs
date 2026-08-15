@@ -10,6 +10,9 @@ const APP_EXIT_IDLE: u8 = 0;
 const APP_EXIT_CLEANING_UP: u8 = 1;
 const APP_EXIT_READY: u8 = 2;
 
+#[cfg(test)]
+static LIFECYCLE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppExitDecision {
     StartCleanup,
@@ -57,6 +60,19 @@ pub fn request_app_exit_cleanup() -> AppExitDecision {
 pub fn finish_app_exit_cleanup(result: Result<(), String>) -> Result<(), String> {
     APP_EXIT_STATE.store(APP_EXIT_READY, Ordering::SeqCst);
     result
+}
+
+#[cfg(test)]
+pub(crate) fn lock_lifecycle_test_state() -> MutexGuard<'static, ()> {
+    LIFECYCLE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+#[cfg(test)]
+pub(crate) fn reset_lifecycle_state_for_test() {
+    SHUTDOWN_STARTED.store(false, Ordering::SeqCst);
+    APP_EXIT_STATE.store(APP_EXIT_IDLE, Ordering::SeqCst);
 }
 
 #[cfg(target_os = "windows")]
@@ -225,21 +241,8 @@ fn run_windows_shutdown_message_loop(
 #[cfg(test)]
 mod tests {
     use super::AppExitDecision;
-    use std::sync::{mpsc, Arc, Barrier, Mutex, MutexGuard};
+    use std::sync::{mpsc, Arc, Barrier};
     use std::time::Duration;
-
-    static LIFECYCLE_TEST_LOCK: Mutex<()> = Mutex::new(());
-
-    fn lock_lifecycle_test() -> MutexGuard<'static, ()> {
-        LIFECYCLE_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-
-    fn reset_lifecycle_state() {
-        super::SHUTDOWN_STARTED.store(false, super::Ordering::SeqCst);
-        super::APP_EXIT_STATE.store(super::APP_EXIT_IDLE, super::Ordering::SeqCst);
-    }
 
     #[test]
     fn process_spawn_policy_rejects_shutdown_state() {
@@ -249,8 +252,8 @@ mod tests {
 
     #[test]
     fn begin_shutdown_does_not_wait_for_in_flight_process_spawn() {
-        let _test_guard = lock_lifecycle_test();
-        reset_lifecycle_state();
+        let _test_guard = super::lock_lifecycle_test_state();
+        super::reset_lifecycle_state_for_test();
 
         let (guard_ready_tx, guard_ready_rx) = mpsc::channel();
         let (release_guard_tx, release_guard_rx) = mpsc::channel();
@@ -302,7 +305,7 @@ mod tests {
         shutdown_thread
             .join()
             .expect("shutdown request thread should join");
-        reset_lifecycle_state();
+        super::reset_lifecycle_state_for_test();
 
         assert_eq!(
             shutdown_result,
@@ -312,9 +315,69 @@ mod tests {
     }
 
     #[test]
+    fn shutdown_rejects_a_spawn_waiting_behind_an_in_flight_spawn() {
+        let _test_guard = super::lock_lifecycle_test_state();
+        super::reset_lifecycle_state_for_test();
+
+        let in_flight_guard = super::acquire_process_spawn_guard("in-flight")
+            .expect("the initial spawn should be allowed");
+        let (result_tx, result_rx) = mpsc::channel();
+        let waiting_spawn = std::thread::spawn(move || {
+            let error_kind = super::acquire_process_spawn_guard("queued")
+                .err()
+                .map(|error| error.kind());
+            result_tx
+                .send(error_kind)
+                .expect("test should observe the queued spawn result");
+        });
+
+        assert!(
+            result_rx.recv_timeout(Duration::from_millis(100)).is_err(),
+            "the queued spawn must wait behind the in-flight spawn"
+        );
+        assert!(super::begin_shutdown());
+        drop(in_flight_guard);
+
+        assert_eq!(
+            result_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("queued spawn should finish after guard release"),
+            Some(std::io::ErrorKind::Interrupted),
+            "a queued spawn must re-check shutdown after entering the critical section"
+        );
+        waiting_spawn
+            .join()
+            .expect("queued spawn thread should join");
+        super::reset_lifecycle_state_for_test();
+    }
+
+    #[test]
+    fn poisoned_process_spawn_lock_recovers_without_bypassing_shutdown() {
+        let _test_guard = super::lock_lifecycle_test_state();
+        super::reset_lifecycle_state_for_test();
+
+        let poisoner = std::thread::spawn(|| {
+            let _guard = super::lock_process_spawn();
+            panic!("intentionally poison the process spawn lock");
+        });
+        assert!(poisoner.join().is_err());
+
+        let recovered_guard = super::acquire_process_spawn_guard("after-poison")
+            .expect("a poisoned lock should recover while the app is running");
+        drop(recovered_guard);
+        assert!(super::begin_shutdown());
+        let error = super::acquire_process_spawn_guard("after-shutdown")
+            .err()
+            .expect("shutdown must still reject spawns after lock recovery");
+        assert_eq!(error.kind(), std::io::ErrorKind::Interrupted);
+
+        super::reset_lifecycle_state_for_test();
+    }
+
+    #[test]
     fn successful_app_exit_cleanup_allows_the_next_exit_request() {
-        let _test_guard = lock_lifecycle_test();
-        reset_lifecycle_state();
+        let _test_guard = super::lock_lifecycle_test_state();
+        super::reset_lifecycle_state_for_test();
 
         assert_eq!(
             super::request_app_exit_cleanup(),
@@ -324,13 +387,13 @@ mod tests {
         assert_eq!(super::finish_app_exit_cleanup(Ok(())), Ok(()));
         assert_eq!(super::request_app_exit_cleanup(), AppExitDecision::ExitNow);
 
-        reset_lifecycle_state();
+        super::reset_lifecycle_state_for_test();
     }
 
     #[test]
     fn failed_app_exit_cleanup_still_releases_repeated_exit_requests() {
-        let _test_guard = lock_lifecycle_test();
-        reset_lifecycle_state();
+        let _test_guard = super::lock_lifecycle_test_state();
+        super::reset_lifecycle_state_for_test();
 
         assert_eq!(
             super::request_app_exit_cleanup(),
@@ -346,15 +409,15 @@ mod tests {
         );
         assert_eq!(super::request_app_exit_cleanup(), AppExitDecision::ExitNow);
 
-        reset_lifecycle_state();
+        super::reset_lifecycle_state_for_test();
     }
 
     #[test]
     fn concurrent_exit_requests_start_exactly_one_cleanup() {
-        let _test_guard = lock_lifecycle_test();
-        reset_lifecycle_state();
+        let _test_guard = super::lock_lifecycle_test_state();
+        super::reset_lifecycle_state_for_test();
 
-        const REQUEST_COUNT: usize = 8;
+        const REQUEST_COUNT: usize = 64;
         let barrier = Arc::new(Barrier::new(REQUEST_COUNT));
         let requests = (0..REQUEST_COUNT)
             .map(|_| {
@@ -387,7 +450,7 @@ mod tests {
         assert!(!decisions.contains(&AppExitDecision::ExitNow));
 
         assert_eq!(super::finish_app_exit_cleanup(Ok(())), Ok(()));
-        reset_lifecycle_state();
+        super::reset_lifecycle_state_for_test();
     }
 }
 
