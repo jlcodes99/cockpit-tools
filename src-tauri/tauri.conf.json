@@ -59,6 +59,13 @@
         "installerHooks": "./windows/nsis/installer-hooks.nsh"
       }
     },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libsecret-tools"
+        ]
+      }
+    },
     "icon": [
       "icons/48x48.png",
       "icons/32x32.png",

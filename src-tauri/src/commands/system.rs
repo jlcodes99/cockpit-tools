@@ -700,6 +700,25 @@ if ([string]::IsNullOrWhiteSpace($v.ProductVersion) -and [string]::IsNullOrWhite
         .or_else(|| read_antigravity_windows_uninstall_metadata(&exe_path))
 }
 
+fn antigravity_metadata_root_from_executable(path: &Path) -> Option<PathBuf> {
+    let parent = path.parent()?;
+    let is_linux_launcher = path
+        .file_name()
+        .map(|name| {
+            name.to_string_lossy()
+                .eq_ignore_ascii_case("antigravity-ide")
+        })
+        .unwrap_or(false);
+    let is_bin_directory = parent
+        .file_name()
+        .map(|name| name.to_string_lossy().eq_ignore_ascii_case("bin"))
+        .unwrap_or(false);
+    if is_linux_launcher && is_bin_directory {
+        return parent.parent().map(Path::to_path_buf);
+    }
+    Some(parent.to_path_buf())
+}
+
 fn normalize_antigravity_metadata_root(path: &Path) -> Option<PathBuf> {
     #[cfg(target_os = "macos")]
     {
@@ -708,11 +727,15 @@ fn normalize_antigravity_metadata_root(path: &Path) -> Option<PathBuf> {
         }
     }
 
-    if path.is_file() {
-        return path.parent().map(Path::to_path_buf);
+    #[cfg(target_os = "linux")]
+    let normalized = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    #[cfg(not(target_os = "linux"))]
+    let normalized = path.to_path_buf();
+    if normalized.is_file() {
+        return antigravity_metadata_root_from_executable(&normalized);
     }
-    if path.is_dir() {
-        return Some(path.to_path_buf());
+    if normalized.is_dir() {
+        return Some(normalized);
     }
     None
 }
@@ -849,6 +872,15 @@ fn antigravity_metadata_candidates(
             let path = PathBuf::from(path);
             if path.exists() {
                 push_unique_antigravity_candidate(&mut candidates, path);
+            }
+        }
+
+        if normalize_antigravity_metadata_target(target) != Some("antigravity") {
+            if let Some(home) = dirs::home_dir() {
+                let user_local_share = home.join(".local/share/antigravity-ide");
+                if user_local_share.exists() {
+                    push_unique_antigravity_candidate(&mut candidates, user_local_share);
+                }
             }
         }
     }
@@ -4127,11 +4159,82 @@ pub fn save_user_memory_list(
 mod tests {
     use super::{
         apply_codex_quota_alert_thresholds, apply_general_config_updates,
-        lock_general_config_transaction, UserConfig,
+        lock_general_config_transaction, normalize_antigravity_metadata_root,
+        read_antigravity_product_json_metadata, UserConfig,
     };
+    use std::path::{Path, PathBuf};
     use std::sync::mpsc;
     use std::thread;
     use std::time::Duration;
+
+    struct MetadataTestDir(PathBuf);
+
+    impl MetadataTestDir {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "cockpit-tools-antigravity-metadata-{}-{}",
+                std::process::id(),
+                name
+            ));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(&path).expect("create metadata test directory");
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for MetadataTestDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn write_antigravity_product_json(root: &Path) {
+        let product_dir = root.join("resources").join("app");
+        std::fs::create_dir_all(&product_dir).expect("create product metadata directory");
+        std::fs::write(
+            product_dir.join("product.json"),
+            r#"{"nameShort":"Antigravity IDE","ideVersion":"1.2.3"}"#,
+        )
+        .expect("write product metadata");
+    }
+
+    #[test]
+    fn antigravity_metadata_uses_install_root_for_root_executable() {
+        let install = MetadataTestDir::new("root-executable");
+        write_antigravity_product_json(install.path());
+        let executable = install.path().join("antigravity-ide");
+        std::fs::write(&executable, b"launcher").expect("write root executable");
+
+        let root = normalize_antigravity_metadata_root(&executable)
+            .expect("resolve metadata root from executable");
+        let metadata = read_antigravity_product_json_metadata(&root)
+            .expect("read product.json from install root");
+
+        assert_eq!(root, install.path());
+        assert_eq!(metadata.version, "1.2.3");
+    }
+
+    #[test]
+    fn antigravity_metadata_uses_install_root_for_bin_launcher() {
+        let install = MetadataTestDir::new("bin-launcher");
+        write_antigravity_product_json(install.path());
+        let executable = install.path().join("bin").join("antigravity-ide");
+        std::fs::create_dir_all(executable.parent().expect("launcher parent"))
+            .expect("create launcher directory");
+        std::fs::write(&executable, b"launcher").expect("write bin launcher");
+
+        let root = normalize_antigravity_metadata_root(&executable)
+            .expect("resolve metadata root from bin launcher");
+        let metadata = read_antigravity_product_json_metadata(&root)
+            .expect("read product.json from install root");
+
+        assert_eq!(root, install.path());
+        assert_eq!(metadata.version, "1.2.3");
+    }
 
     #[test]
     fn general_config_transaction_lock_serializes_side_effecting_writes() {

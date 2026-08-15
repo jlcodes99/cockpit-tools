@@ -1828,6 +1828,156 @@ mod app_path_config_guard_tests {
     }
 }
 
+#[cfg(test)]
+mod linux_antigravity_path_tests {
+    use super::{linux_antigravity_discovery_paths, resolve_linux_antigravity_exec_path};
+    use std::path::{Path, PathBuf};
+
+    struct PathTestDir(PathBuf);
+
+    impl PathTestDir {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "cockpit-tools-linux-antigravity-{}-{}",
+                std::process::id(),
+                name
+            ));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(&path).expect("create path test directory");
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for PathTestDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn write_executable(path: &Path) {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("create executable parent");
+        }
+        std::fs::write(path, b"launcher").expect("write executable");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+                .expect("mark test file executable");
+        }
+    }
+
+    #[test]
+    fn install_root_resolves_root_antigravity_executable() {
+        let install = PathTestDir::new("root-layout");
+        let executable = install.path().join("antigravity-ide");
+        write_executable(&executable);
+
+        assert_eq!(
+            resolve_linux_antigravity_exec_path(install.path()).expect("resolve root layout"),
+            executable
+        );
+    }
+
+    #[test]
+    fn install_root_resolves_bin_antigravity_launcher() {
+        let install = PathTestDir::new("bin-layout");
+        let executable = install.path().join("bin").join("antigravity-ide");
+        write_executable(&executable);
+
+        assert_eq!(
+            resolve_linux_antigravity_exec_path(install.path()).expect("resolve bin layout"),
+            executable
+        );
+    }
+
+    #[test]
+    fn configured_executable_file_is_preserved() {
+        let install = PathTestDir::new("custom-file");
+        let executable = install.path().join("custom-antigravity-launcher");
+        write_executable(&executable);
+
+        assert_eq!(
+            resolve_linux_antigravity_exec_path(&executable).expect("keep configured executable"),
+            executable
+        );
+    }
+
+    #[test]
+    fn directory_without_supported_executable_is_rejected() {
+        let install = PathTestDir::new("empty-layout");
+
+        let error = resolve_linux_antigravity_exec_path(install.path())
+            .expect_err("reject directory without a launcher");
+
+        assert!(error.contains("antigravity-ide"));
+        assert!(error.contains("bin"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_executable_linux_launcher_is_rejected() {
+        let install = PathTestDir::new("non-executable");
+        let executable = install.path().join("antigravity-ide");
+        std::fs::write(&executable, b"launcher").expect("write non-executable launcher");
+
+        let error = resolve_linux_antigravity_exec_path(&executable)
+            .expect_err("reject launcher without an executable bit");
+
+        assert!(error.contains("not executable"));
+    }
+
+    #[test]
+    fn discovery_includes_user_local_share_install_root() {
+        let home = Path::new("/home/cockpit-test");
+
+        let candidates = linux_antigravity_discovery_paths(Some(home));
+
+        assert!(candidates.contains(&home.join(".local/share/antigravity-ide")));
+    }
+
+    #[test]
+    fn legacy_linux_layout_uses_the_shared_antigravity_resolver() {
+        let install = PathTestDir::new("legacy-layout");
+        let executable = install.path().join("bin").join("antigravity-ide");
+        write_executable(&executable);
+
+        assert_eq!(
+            resolve_linux_antigravity_exec_path(install.path())
+                .expect("resolve legacy Linux layout"),
+            executable
+        );
+    }
+}
+
+#[cfg(all(test, unix))]
+mod canonical_path_comparison_tests {
+    use super::normalize_path_for_compare;
+
+    #[test]
+    fn canonicalized_symlink_and_target_paths_compare_equal() {
+        let root =
+            std::env::temp_dir().join(format!("cockpit-tools-path-compare-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create comparison test directory");
+        let target = root.join("antigravity-ide");
+        let link = root.join("antigravity-link");
+        std::fs::write(&target, b"launcher").expect("write comparison target");
+        std::os::unix::fs::symlink(&target, &link).expect("create comparison symlink");
+
+        assert_eq!(
+            normalize_path_for_compare(&target.to_string_lossy()),
+            normalize_path_for_compare(&link.to_string_lossy())
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn is_legacy_antigravity_macos_path(path: &str) -> bool {
     let lower = path.trim().to_ascii_lowercase();
@@ -2181,6 +2331,72 @@ fn resolve_windows_antigravity_ide_custom_path(path_str: &str) -> Option<std::pa
     None
 }
 
+#[cfg(any(target_os = "linux", test))]
+fn linux_antigravity_discovery_paths(home: Option<&Path>) -> Vec<std::path::PathBuf> {
+    let mut candidates = vec![
+        std::path::PathBuf::from("/usr/bin/antigravity-ide"),
+        std::path::PathBuf::from("/opt/antigravity-ide"),
+        std::path::PathBuf::from("/usr/share/antigravity-ide"),
+    ];
+    if let Some(home) = home {
+        candidates.push(home.join(".local/bin/antigravity-ide"));
+        candidates.push(home.join(".local/share/antigravity-ide"));
+    }
+    candidates
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn is_linux_executable_file(path: &Path) -> bool {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        return metadata.permissions().mode() & 0o111 != 0;
+    }
+
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn resolve_linux_antigravity_exec_path(path: &Path) -> Result<std::path::PathBuf, String> {
+    if path.is_file() {
+        if is_linux_executable_file(path) {
+            return Ok(path.to_path_buf());
+        }
+        return Err(format!(
+            "Linux Antigravity executable is not executable: {}",
+            path.display()
+        ));
+    }
+
+    if path.is_dir() {
+        for relative in ["antigravity-ide", "bin/antigravity-ide"] {
+            let candidate = path.join(relative);
+            if is_linux_executable_file(&candidate) {
+                return Ok(candidate);
+            }
+        }
+        return Err(format!(
+            "Linux Antigravity install directory does not contain an executable antigravity-ide or bin/antigravity-ide: {}",
+            path.display()
+        ));
+    }
+
+    Err(format!(
+        "Linux Antigravity path does not exist: {}",
+        path.display()
+    ))
+}
+
 pub fn detect_antigravity_exec_path() -> Option<std::path::PathBuf> {
     if let Some(path) = find_antigravity_process_exe() {
         return Some(path);
@@ -2232,21 +2448,10 @@ pub fn detect_antigravity_exec_path() -> Option<std::path::PathBuf> {
 
     #[cfg(target_os = "linux")]
     {
-        let candidates = [
-            "/usr/bin/antigravity-ide",
-            "/opt/antigravity-ide/antigravity-ide",
-            "/usr/share/antigravity-ide/antigravity-ide",
-        ];
-        for candidate in candidates {
-            let path = std::path::PathBuf::from(candidate);
-            if path.exists() {
-                return Some(path);
-            }
-        }
-        if let Some(home) = dirs::home_dir() {
-            let user_local = home.join(".local/bin/antigravity-ide");
-            if user_local.exists() {
-                return Some(user_local);
+        let home = dirs::home_dir();
+        for candidate in linux_antigravity_discovery_paths(home.as_deref()) {
+            if let Ok(executable) = resolve_linux_antigravity_exec_path(&candidate) {
+                return Some(executable);
             }
         }
     }
@@ -3817,7 +4022,22 @@ fn resolve_antigravity_launch_path() -> Result<std::path::PathBuf, String> {
             }
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(exec) = resolve_macos_exec_path(&custom, "Electron") {
+                return Ok(exec);
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            let custom_path = Path::new(&custom);
+            if custom_path.exists() {
+                return resolve_linux_antigravity_exec_path(custom_path);
+            }
+        }
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         {
             if let Some(exec) = resolve_macos_exec_path(&custom, "Electron") {
                 return Ok(exec);
@@ -3856,7 +4076,15 @@ fn resolve_antigravity_legacy_launch_path() -> Result<std::path::PathBuf, String
             }
         }
 
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
+        {
+            let custom_path = Path::new(&custom);
+            if custom_path.exists() {
+                return resolve_linux_antigravity_exec_path(custom_path);
+            }
+        }
+
+        #[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
         {
             let custom_path = std::path::PathBuf::from(&custom);
             let lower = custom.to_ascii_lowercase();
