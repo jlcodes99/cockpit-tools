@@ -3058,6 +3058,10 @@
     "quota": {
       "hourly": "5小时配额",
       "weekly": "周配额",
+      "monthlyCredits": "月度 credits",
+      "monthlyCreditsValue": "剩余 {{remaining}} / {{total}} credits",
+      "creditBalance": "余额 {{balance}} credits",
+      "unlimitedCredits": "无限 credits",
       "additional": "额外额度",
       "weeklyBlocksHourly": "周额度为 0，5小时额度已不可用",
       "windowStats": "已用 {{tokens}} · {{cost}}",
