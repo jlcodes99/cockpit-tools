@@ -700,25 +700,6 @@ if ([string]::IsNullOrWhiteSpace($v.ProductVersion) -and [string]::IsNullOrWhite
         .or_else(|| read_antigravity_windows_uninstall_metadata(&exe_path))
 }
 
-fn antigravity_metadata_root_from_executable(path: &Path) -> Option<PathBuf> {
-    let parent = path.parent()?;
-    let is_linux_launcher = path
-        .file_name()
-        .map(|name| {
-            name.to_string_lossy()
-                .eq_ignore_ascii_case("antigravity-ide")
-        })
-        .unwrap_or(false);
-    let is_bin_directory = parent
-        .file_name()
-        .map(|name| name.to_string_lossy().eq_ignore_ascii_case("bin"))
-        .unwrap_or(false);
-    if is_linux_launcher && is_bin_directory {
-        return parent.parent().map(Path::to_path_buf);
-    }
-    Some(parent.to_path_buf())
-}
-
 fn normalize_antigravity_metadata_root(path: &Path) -> Option<PathBuf> {
     #[cfg(target_os = "macos")]
     {
@@ -731,13 +712,7 @@ fn normalize_antigravity_metadata_root(path: &Path) -> Option<PathBuf> {
     let normalized = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     #[cfg(not(target_os = "linux"))]
     let normalized = path.to_path_buf();
-    if normalized.is_file() {
-        return antigravity_metadata_root_from_executable(&normalized);
-    }
-    if normalized.is_dir() {
-        return Some(normalized);
-    }
-    None
+    crate::modules::process::antigravity_install_root_from_path(&normalized)
 }
 
 fn push_unique_antigravity_candidate(candidates: &mut Vec<PathBuf>, path: PathBuf) {
@@ -4233,6 +4208,51 @@ mod tests {
             .expect("read product.json from install root");
 
         assert_eq!(root, install.path());
+        assert_eq!(metadata.version, "1.2.3");
+    }
+
+    #[test]
+    fn antigravity_metadata_skips_invalid_primary_product_json() {
+        let install = MetadataTestDir::new("invalid-primary-product-json");
+        let primary = install.path().join("resources").join("app");
+        let fallback = install.path().join("app");
+        std::fs::create_dir_all(&primary).expect("create primary metadata directory");
+        std::fs::create_dir_all(&fallback).expect("create fallback metadata directory");
+        std::fs::write(primary.join("product.json"), b"not-json")
+            .expect("write invalid primary product metadata");
+        std::fs::write(
+            fallback.join("product.json"),
+            r#"{"nameShort":"Antigravity IDE","ideVersion":"9.8.7"}"#,
+        )
+        .expect("write fallback product metadata");
+
+        let metadata = read_antigravity_product_json_metadata(install.path())
+            .expect("read fallback product metadata");
+
+        assert_eq!(metadata.version, "9.8.7");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn antigravity_metadata_follows_bin_launcher_symlink_to_install_root() {
+        let install = MetadataTestDir::new("symlink-space-含");
+        write_antigravity_product_json(install.path());
+        let launcher = install.path().join("bin").join("antigravity-ide");
+        let link = install.path().join("launcher-link");
+        std::fs::create_dir_all(launcher.parent().expect("launcher parent"))
+            .expect("create launcher directory");
+        std::fs::write(&launcher, b"launcher").expect("write bin launcher");
+        std::os::unix::fs::symlink("bin/antigravity-ide", &link).expect("create launcher symlink");
+
+        let root = normalize_antigravity_metadata_root(&link)
+            .expect("resolve metadata root from symlink launcher");
+        let metadata = read_antigravity_product_json_metadata(&root)
+            .expect("read product metadata through symlink root");
+
+        assert_eq!(
+            root,
+            std::fs::canonicalize(install.path()).expect("canonicalize install")
+        );
         assert_eq!(metadata.version, "1.2.3");
     }
 

@@ -491,16 +491,80 @@ fn resolve_configured_antigravity_root(path_str: &str) -> Option<std::path::Path
         }
     }
 
-    if !resolved_path.exists() {
-        return None;
+    #[cfg(any(target_os = "linux", test))]
+    {
+        return crate::modules::process::antigravity_install_root_from_path(&resolved_path);
     }
-    if resolved_path.is_file() {
-        return resolved_path.parent().map(std::path::Path::to_path_buf);
+
+    #[cfg(not(any(target_os = "linux", test)))]
+    {
+        if resolved_path.is_file() {
+            return resolved_path.parent().map(std::path::Path::to_path_buf);
+        }
+        if resolved_path.is_dir() {
+            return Some(resolved_path);
+        }
+        None
     }
-    if resolved_path.is_dir() {
-        return Some(resolved_path);
+}
+
+#[cfg(test)]
+mod configured_antigravity_root_tests {
+    use super::resolve_configured_antigravity_root;
+    use std::path::{Path, PathBuf};
+
+    struct RootTestDir(PathBuf);
+
+    impl RootTestDir {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "cockpit-tools-wakeup-antigravity-root-{}-{}",
+                std::process::id(),
+                name
+            ));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(&path).expect("create wakeup root test directory");
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
     }
-    None
+
+    impl Drop for RootTestDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn bin_antigravity_launcher_resolves_install_root() {
+        let install = RootTestDir::new("bin-launcher");
+        let launcher = install.path().join("bin").join("antigravity-ide");
+        std::fs::create_dir_all(launcher.parent().expect("launcher parent"))
+            .expect("create launcher directory");
+        std::fs::write(&launcher, b"launcher").expect("write launcher");
+
+        assert_eq!(
+            resolve_configured_antigravity_root(&launcher.to_string_lossy()),
+            Some(std::fs::canonicalize(install.path()).expect("canonicalize install root"))
+        );
+    }
+
+    #[test]
+    fn bin_directory_resolves_install_root() {
+        let install = RootTestDir::new("bin-directory");
+        let bin = install.path().join("bin");
+        let launcher = bin.join("antigravity-ide");
+        std::fs::create_dir_all(&bin).expect("create bin directory");
+        std::fs::write(&launcher, b"launcher").expect("write launcher");
+
+        assert_eq!(
+            resolve_configured_antigravity_root(&bin.to_string_lossy()),
+            Some(std::fs::canonicalize(install.path()).expect("canonicalize install root"))
+        );
+    }
 }
 
 fn antigravity_extension_dir(root: &std::path::Path) -> std::path::PathBuf {

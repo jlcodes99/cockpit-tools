@@ -1,7 +1,7 @@
 use crate::modules::config;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -1830,7 +1830,10 @@ mod app_path_config_guard_tests {
 
 #[cfg(test)]
 mod linux_antigravity_path_tests {
-    use super::{linux_antigravity_discovery_paths, resolve_linux_antigravity_exec_path};
+    use super::{
+        antigravity_install_root_from_path, first_linux_antigravity_executable,
+        linux_antigravity_discovery_paths, resolve_linux_antigravity_exec_path,
+    };
     use std::path::{Path, PathBuf};
 
     struct PathTestDir(PathBuf);
@@ -1896,6 +1899,32 @@ mod linux_antigravity_path_tests {
     }
 
     #[test]
+    fn install_root_prefers_root_launcher_when_both_layouts_exist() {
+        let install = PathTestDir::new("both-layouts-space-含");
+        let root_executable = install.path().join("antigravity-ide");
+        let bin_executable = install.path().join("bin").join("antigravity-ide");
+        write_executable(&root_executable);
+        write_executable(&bin_executable);
+
+        assert_eq!(
+            resolve_linux_antigravity_exec_path(install.path()).expect("resolve root launcher"),
+            root_executable
+        );
+    }
+
+    #[test]
+    fn bin_directory_resolves_to_install_root() {
+        let install = PathTestDir::new("bin-directory");
+        let bin = install.path().join("bin");
+        write_executable(&bin.join("antigravity-ide"));
+
+        assert_eq!(
+            antigravity_install_root_from_path(&bin).expect("resolve bin directory root"),
+            install.path().to_path_buf()
+        );
+    }
+
+    #[test]
     fn configured_executable_file_is_preserved() {
         let install = PathTestDir::new("custom-file");
         let executable = install.path().join("custom-antigravity-launcher");
@@ -1918,6 +1947,31 @@ mod linux_antigravity_path_tests {
         assert!(error.contains("bin"));
     }
 
+    #[test]
+    fn missing_path_is_rejected_without_falling_back_to_current_directory() {
+        let install = PathTestDir::new("missing-path");
+        let missing = install.path().join("does-not-exist");
+
+        let error = resolve_linux_antigravity_exec_path(&missing)
+            .expect_err("reject missing launcher path");
+
+        assert!(error.contains("does not exist"));
+    }
+
+    #[test]
+    fn discovery_skips_invalid_candidate_before_valid_executable() {
+        let install = PathTestDir::new("candidate-fallback");
+        let invalid = install.path().join("invalid-directory");
+        let executable = install.path().join("valid launcher");
+        std::fs::create_dir_all(&invalid).expect("create invalid candidate directory");
+        write_executable(&executable);
+
+        assert_eq!(
+            first_linux_antigravity_executable([invalid, executable.clone()]),
+            Some(executable)
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn non_executable_linux_launcher_is_rejected() {
@@ -1929,6 +1983,26 @@ mod linux_antigravity_path_tests {
             .expect_err("reject launcher without an executable bit");
 
         assert!(error.contains("not executable"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_executable_root_launcher_falls_back_to_executable_bin_launcher() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let install = PathTestDir::new("non-executable-root-fallback");
+        let root_executable = install.path().join("antigravity-ide");
+        let bin_executable = install.path().join("bin").join("antigravity-ide");
+        std::fs::write(&root_executable, b"launcher").expect("write root launcher");
+        std::fs::set_permissions(&root_executable, std::fs::Permissions::from_mode(0o644))
+            .expect("remove root launcher execute bits");
+        write_executable(&bin_executable);
+
+        assert_eq!(
+            resolve_linux_antigravity_exec_path(install.path())
+                .expect("fall back to executable bin launcher"),
+            bin_executable
+        );
     }
 
     #[test]
@@ -1951,6 +2025,36 @@ mod linux_antigravity_path_tests {
                 .expect("resolve legacy Linux layout"),
             executable
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn relative_symlink_to_executable_is_preserved() {
+        let install = PathTestDir::new("relative-link-space-含");
+        let target = install.path().join("real launcher");
+        let link = install.path().join("launcher-link");
+        write_executable(&target);
+        std::os::unix::fs::symlink(target.file_name().expect("target name"), &link)
+            .expect("create relative executable symlink");
+
+        assert_eq!(
+            resolve_linux_antigravity_exec_path(&link).expect("resolve symlink launcher"),
+            link
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn broken_symlink_is_rejected() {
+        let install = PathTestDir::new("broken-link");
+        let link = install.path().join("broken-launcher");
+        std::os::unix::fs::symlink("missing-launcher", &link)
+            .expect("create broken launcher symlink");
+
+        let error =
+            resolve_linux_antigravity_exec_path(&link).expect_err("reject broken launcher symlink");
+
+        assert!(error.contains("does not exist"));
     }
 }
 
@@ -2397,6 +2501,54 @@ fn resolve_linux_antigravity_exec_path(path: &Path) -> Result<std::path::PathBuf
     ))
 }
 
+#[cfg(any(target_os = "linux", test))]
+fn first_linux_antigravity_executable(
+    candidates: impl IntoIterator<Item = PathBuf>,
+) -> Option<PathBuf> {
+    candidates
+        .into_iter()
+        .find_map(|candidate| resolve_linux_antigravity_exec_path(&candidate).ok())
+}
+
+fn antigravity_install_root_from_executable(path: &Path) -> Option<PathBuf> {
+    let parent = path.parent()?;
+    let is_linux_launcher = path
+        .file_name()
+        .map(|name| {
+            name.to_string_lossy()
+                .eq_ignore_ascii_case("antigravity-ide")
+        })
+        .unwrap_or(false);
+    let is_bin_directory = parent
+        .file_name()
+        .map(|name| name.to_string_lossy().eq_ignore_ascii_case("bin"))
+        .unwrap_or(false);
+    if is_linux_launcher && is_bin_directory {
+        return parent.parent().map(Path::to_path_buf);
+    }
+    Some(parent.to_path_buf())
+}
+
+pub(crate) fn antigravity_install_root_from_path(path: &Path) -> Option<PathBuf> {
+    if path.is_file() {
+        return antigravity_install_root_from_executable(path);
+    }
+    if path.is_dir() {
+        #[cfg(any(target_os = "linux", test))]
+        {
+            let is_bin_directory = path
+                .file_name()
+                .map(|name| name.to_string_lossy().eq_ignore_ascii_case("bin"))
+                .unwrap_or(false);
+            if is_bin_directory && path.join("antigravity-ide").is_file() {
+                return path.parent().map(Path::to_path_buf);
+            }
+        }
+        return Some(path.to_path_buf());
+    }
+    None
+}
+
 pub fn detect_antigravity_exec_path() -> Option<std::path::PathBuf> {
     if let Some(path) = find_antigravity_process_exe() {
         return Some(path);
@@ -2449,10 +2601,10 @@ pub fn detect_antigravity_exec_path() -> Option<std::path::PathBuf> {
     #[cfg(target_os = "linux")]
     {
         let home = dirs::home_dir();
-        for candidate in linux_antigravity_discovery_paths(home.as_deref()) {
-            if let Ok(executable) = resolve_linux_antigravity_exec_path(&candidate) {
-                return Some(executable);
-            }
+        if let Some(executable) =
+            first_linux_antigravity_executable(linux_antigravity_discovery_paths(home.as_deref()))
+        {
+            return Some(executable);
         }
     }
 
@@ -2511,15 +2663,14 @@ pub fn detect_antigravity_legacy_exec_path() -> Option<std::path::PathBuf> {
 
     #[cfg(target_os = "linux")]
     {
-        for candidate in [
+        let candidates = [
             "/usr/bin/antigravity",
             "/opt/antigravity/antigravity",
             "/usr/share/antigravity/antigravity",
-        ] {
-            let path = std::path::PathBuf::from(candidate);
-            if path.exists() {
-                return Some(path);
-            }
+        ]
+        .map(PathBuf::from);
+        if let Some(executable) = first_linux_antigravity_executable(candidates) {
+            return Some(executable);
         }
     }
 
@@ -4877,6 +5028,66 @@ fn is_helper_command_line(cmdline_lower: &str) -> bool {
         || cmdline_lower.contains("/resources/app/extensions/")
 }
 
+#[cfg(any(target_os = "linux", test))]
+fn is_linux_antigravity_process_candidate(
+    cmdline_lower: &str,
+    exe_path_lower: &str,
+    expected_executable_match: bool,
+) -> bool {
+    if !expected_executable_match
+        && !cmdline_lower.contains("antigravity-ide")
+        && !exe_path_lower.contains("antigravity-ide")
+    {
+        return false;
+    }
+    if cmdline_lower.contains("tools") || exe_path_lower.contains("tools") {
+        return false;
+    }
+    !is_helper_command_line(cmdline_lower)
+}
+
+#[cfg(test)]
+mod linux_antigravity_process_candidate_tests {
+    use super::is_linux_antigravity_process_candidate;
+
+    #[test]
+    fn exact_custom_executable_match_is_a_main_process_candidate() {
+        assert!(is_linux_antigravity_process_candidate(
+            "/opt/Custom AG/Antigravity.AppImage --reuse-window",
+            "/opt/custom ag/antigravity.appimage",
+            true,
+        ));
+    }
+
+    #[test]
+    fn exact_match_does_not_admit_helper_or_tools_processes() {
+        assert!(!is_linux_antigravity_process_candidate(
+            "/opt/Custom AG/Antigravity.AppImage --type=renderer",
+            "/opt/custom ag/antigravity.appimage",
+            true,
+        ));
+        assert!(!is_linux_antigravity_process_candidate(
+            "/opt/Antigravity Tools/antigravity-ide",
+            "/opt/antigravity tools/antigravity-ide",
+            true,
+        ));
+    }
+
+    #[test]
+    fn standard_signature_still_matches_without_expected_path_match() {
+        assert!(is_linux_antigravity_process_candidate(
+            "/opt/antigravity-ide/bin/antigravity-ide --reuse-window",
+            "/opt/antigravity-ide/bin/antigravity-ide",
+            false,
+        ));
+        assert!(!is_linux_antigravity_process_candidate(
+            "/opt/unrelated/app --reuse-window",
+            "/opt/unrelated/app",
+            false,
+        ));
+    }
+}
+
 #[cfg(not(target_os = "macos"))]
 fn is_antigravity_main_process(
     name: &str,
@@ -5505,8 +5716,10 @@ fn collect_antigravity_process_entries_from_sysinfo_fallback(
     result
 }
 
-#[cfg(target_os = "linux")]
-fn collect_antigravity_process_entries_from_proc() -> Vec<(u32, Option<String>)> {
+#[cfg(any(target_os = "linux", test))]
+fn collect_antigravity_process_entries_from_proc(
+    expected_launch: &str,
+) -> Vec<(u32, Option<String>)> {
     let mut result = Vec::new();
     let entries = match std::fs::read_dir("/proc") {
         Ok(value) => value,
@@ -5534,15 +5747,19 @@ fn collect_antigravity_process_entries_from_proc() -> Vec<(u32, Option<String>)>
         let cmd_lower = cmdline_str.to_lowercase();
         let exe_path = std::fs::read_link(format!("/proc/{}/exe", pid))
             .ok()
-            .and_then(|p| p.to_str().map(|s| s.to_lowercase()))
+            .and_then(|path| path.to_str().map(str::to_string))
             .unwrap_or_default();
-        if !cmd_lower.contains("antigravity-ide") && !exe_path.contains("antigravity-ide") {
-            continue;
-        }
-        if cmd_lower.contains("tools") || exe_path.contains("tools") {
-            continue;
-        }
-        if is_helper_command_line(&cmd_lower) {
+        let exe_path_lower = exe_path.to_lowercase();
+        let has_antigravity_signature =
+            cmd_lower.contains("antigravity-ide") || exe_path_lower.contains("antigravity-ide");
+        let expected_executable_match = !has_antigravity_signature
+            && !exe_path.is_empty()
+            && normalize_path_for_compare(&exe_path) == expected_launch;
+        if !is_linux_antigravity_process_candidate(
+            &cmd_lower,
+            &exe_path_lower,
+            expected_executable_match,
+        ) {
             continue;
         }
         let dir = extract_user_data_dir_from_command_line(&cmdline_str);
@@ -5594,7 +5811,10 @@ pub fn collect_antigravity_process_entries() -> Vec<(u32, Option<String>)> {
 
     #[cfg(target_os = "linux")]
     {
-        let entries = collect_antigravity_process_entries_from_proc();
+        let expected = expected_launch
+            .as_deref()
+            .expect("expected launch path must exist");
+        let entries = collect_antigravity_process_entries_from_proc(expected);
         if !entries.is_empty() {
             return filter_entries_by_expected_launch_path("AG", entries, expected_launch.clone());
         }
@@ -5736,7 +5956,10 @@ pub fn collect_antigravity_legacy_process_entries() -> Vec<(u32, Option<String>)
 
     #[cfg(target_os = "linux")]
     {
-        let entries = collect_antigravity_process_entries_from_proc()
+        let expected = expected_launch
+            .as_deref()
+            .expect("expected launch path must exist");
+        let entries = collect_antigravity_process_entries_from_proc(expected)
             .into_iter()
             .filter(|(_, dir)| {
                 dir.as_deref()
