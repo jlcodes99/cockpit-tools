@@ -10685,6 +10685,17 @@ fn sidecar_binary_path() -> Result<PathBuf, String> {
         })
 }
 
+fn sanitize_sidecar_command_env(command: &mut TokioCommand) {
+    #[cfg(target_os = "macos")]
+    {
+        // 避免把 Cockpit 的应用身份和 XPC 上下文传给 sidecar，导致局域网访问异常。
+        command.env_remove("__CFBundleIdentifier");
+        command.env_remove("XPC_SERVICE_NAME");
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = command;
+}
+
 fn sidecar_auth_file_name(account_id: &str) -> String {
     let mut safe = account_id
         .trim()
@@ -16288,6 +16299,7 @@ async fn ensure_gateway_matches_runtime_locked() -> Result<(), String> {
     };
 
     let mut command = TokioCommand::new(&binary);
+    sanitize_sidecar_command_env(&mut command);
     command
         .arg("--config")
         .arg(&launch_config.config_path)
@@ -18968,6 +18980,7 @@ async fn spawn_provider_gateway_sidecar(
     let bind_host = bind_host_for_collection(collection);
     let binary = sidecar_binary_path()?;
     let mut command = TokioCommand::new(&binary);
+    sanitize_sidecar_command_env(&mut command);
     command
         .arg("--config")
         .arg(&launch_config.config_path)
