@@ -2311,6 +2311,10 @@
     "quota": {
       "hourly": "5시간 쿼터",
       "weekly": "주간 쿼터",
+      "monthlyCredits": "월간 크레딧",
+      "monthlyCreditsValue": "{{remaining}} / {{total}} 크레딧",
+      "creditBalance": "잔액 {{balance}} 크레딧",
+      "unlimitedCredits": "무제한 크레딧",
       "additional": "추가 할당량",
       "reset": "재설정",
       "weeklyBlocksHourly": "주간 할당량이 0이라 5시간 할당량을 사용할 수 없습니다",

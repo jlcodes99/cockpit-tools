@@ -2311,6 +2311,10 @@
     "quota": {
       "hourly": "Kvóta 5 hodin",
       "weekly": "Týdenní kvóta",
+      "monthlyCredits": "Měsíční kredity",
+      "monthlyCreditsValue": "{{remaining}} / {{total}} kreditů",
+      "creditBalance": "Zůstatek {{balance}} kreditů",
+      "unlimitedCredits": "Neomezené kredity",
       "additional": "Dodatečná kvóta",
       "reset": "Reset​",
       "weeklyBlocksHourly": "Týdenní kvóta je 0, proto není 5hodinová kvóta dostupná",

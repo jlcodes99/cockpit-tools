@@ -2311,6 +2311,10 @@
     "quota": {
       "hourly": "5 saatlik kota",
       "weekly": "Haftalık kota",
+      "monthlyCredits": "Aylık krediler",
+      "monthlyCreditsValue": "{{remaining}} / {{total}} kredi",
+      "creditBalance": "{{balance}} kredi bakiyesi",
+      "unlimitedCredits": "Sınırsız krediler",
       "additional": "Ek kota",
       "reset": "Sıfırla",
       "weeklyBlocksHourly": "Haftalık kota 0 olduğu için 5 saatlik kota kullanılamaz",

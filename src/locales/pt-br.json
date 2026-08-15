@@ -2311,6 +2311,10 @@
     "quota": {
       "hourly": "Cota de 5 horas",
       "weekly": "Cota semanal",
+      "monthlyCredits": "Créditos mensais",
+      "monthlyCreditsValue": "{{remaining}} / {{total}} créditos",
+      "creditBalance": "Saldo de {{balance}} créditos",
+      "unlimitedCredits": "Créditos ilimitados",
       "additional": "Cota adicional",
       "reset": "Redefinir",
       "weeklyBlocksHourly": "A cota semanal é 0, então a cota de 5 horas está indisponível",

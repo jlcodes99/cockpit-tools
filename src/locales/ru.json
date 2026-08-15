@@ -2311,6 +2311,10 @@
     "quota": {
       "hourly": "Квота 5 часов",
       "weekly": "Недельная квота",
+      "monthlyCredits": "Месячные кредиты",
+      "monthlyCreditsValue": "{{remaining}} / {{total}} кредитов",
+      "creditBalance": "Баланс: {{balance}} кредитов",
+      "unlimitedCredits": "Безлимитные кредиты",
       "additional": "Дополнительная квота",
       "reset": "Сброс",
       "weeklyBlocksHourly": "Недельная квота равна 0, поэтому 5-часовая квота недоступна",

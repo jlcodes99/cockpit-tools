@@ -2442,6 +2442,10 @@
     "quota": {
       "hourly": "5 小時配額",
       "weekly": "週配額",
+      "monthlyCredits": "每月 credits",
+      "monthlyCreditsValue": "剩餘 {{remaining}} / {{total}} credits",
+      "creditBalance": "餘額 {{balance}} credits",
+      "unlimitedCredits": "無限 credits",
       "additional": "額外額度",
       "reset": "重置",
       "weeklyBlocksHourly": "週額度為 0，因此 5 小時額度已不可用",

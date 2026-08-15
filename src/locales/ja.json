@@ -2311,6 +2311,10 @@
     "quota": {
       "hourly": "5 時間クォータ",
       "weekly": "週次クォータ",
+      "monthlyCredits": "月間クレジット",
+      "monthlyCreditsValue": "{{remaining}} / {{total}} クレジット",
+      "creditBalance": "残高 {{balance}} クレジット",
+      "unlimitedCredits": "無制限クレジット",
       "additional": "追加クォータ",
       "reset": "リセット",
       "weeklyBlocksHourly": "週クォータが 0 のため、5時間クォータは利用できません",

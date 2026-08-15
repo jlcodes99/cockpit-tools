@@ -2311,6 +2311,10 @@
     "quota": {
       "hourly": "Hạn mức 5 giờ",
       "weekly": "Hạn mức tuần",
+      "monthlyCredits": "Tín dụng hàng tháng",
+      "monthlyCreditsValue": "{{remaining}} / {{total}} tín dụng",
+      "creditBalance": "Số dư {{balance}} tín dụng",
+      "unlimitedCredits": "Tín dụng không giới hạn",
       "additional": "Hạn mức bổ sung",
       "reset": "Đặt lại",
       "weeklyBlocksHourly": "Hạn mức tuần là 0 nên hạn mức 5 giờ không khả dụng",

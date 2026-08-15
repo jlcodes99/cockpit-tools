@@ -2311,6 +2311,10 @@
     "quota": {
       "hourly": "Quota di 5 ore",
       "weekly": "Quota settimanale",
+      "monthlyCredits": "Crediti mensili",
+      "monthlyCreditsValue": "{{remaining}} / {{total}} crediti",
+      "creditBalance": "Saldo {{balance}} crediti",
+      "unlimitedCredits": "Crediti illimitati",
       "additional": "Quota aggiuntiva",
       "reset": "Reimposta",
       "weeklyBlocksHourly": "La quota settimanale è 0, quindi la quota di 5 ore non è disponibile",

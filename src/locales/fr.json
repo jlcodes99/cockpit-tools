@@ -2311,6 +2311,10 @@
     "quota": {
       "hourly": "Quota de 5 heures",
       "weekly": "Quota hebdomadaire",
+      "monthlyCredits": "Crédits mensuels",
+      "monthlyCreditsValue": "{{remaining}} / {{total}} crédits",
+      "creditBalance": "Solde {{balance}} crédits",
+      "unlimitedCredits": "Crédits illimités",
       "additional": "Quota supplémentaire",
       "reset": "Réinitialiser",
       "weeklyBlocksHourly": "Le quota hebdomadaire est à 0 ; le quota de 5 heures est donc indisponible",
