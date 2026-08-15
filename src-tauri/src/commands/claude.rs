@@ -187,6 +187,7 @@ pub(crate) fn execute_claude_cli_command(
     #[cfg(target_os = "macos")]
     {
         let is_iterm = terminal.to_lowercase().contains("iterm");
+        let is_ghostty = terminal.eq_ignore_ascii_case("Ghostty");
         let is_terminal_app = terminal == "system" || terminal.is_empty() || terminal == "Terminal";
         let app_name = if is_terminal_app {
             "Terminal"
@@ -223,9 +224,19 @@ pub(crate) fn execute_claude_cli_command(
                 end tell",
                 escape_applescript(command)
             )
+        } else if is_ghostty {
+            format!(
+                "tell application \"Ghostty\"
+                    activate
+                    set cfg to new surface configuration
+                    set command of cfg to \"{}\"
+                    new window with configuration cfg
+                end tell",
+                escape_applescript(command)
+            )
         } else {
             return Err(format!(
-                "当前终端暂不支持直接执行：{}。请改用 Terminal 或 iTerm2。",
+                "当前终端暂不支持直接执行：{}。请改用 Terminal、iTerm2 或 Ghostty。",
                 terminal
             ));
         };
