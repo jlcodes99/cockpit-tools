@@ -21474,25 +21474,8 @@ pub async fn restore_local_access_gateway() {
     }
 }
 
-#[cfg(target_os = "windows")]
-fn close_installed_sidecar_processes_by_path(timeout_secs: u64) -> Result<usize, String> {
-    let candidates = sidecar_binary_candidates()?
-        .into_iter()
-        .filter(|path| path.exists())
-        .collect::<Vec<_>>();
-    if candidates.is_empty() {
-        return Ok(0);
-    }
-    let closed = process::close_processes_by_exact_exe_paths(&candidates, timeout_secs)?;
-    if closed > 0 {
-        logger::log_codex_api_info(&format!(
-            "[CodexLocalAccess][sidecar] Windows 更新前已关闭安装目录 sidecar 残留进程: count={}",
-            closed
-        ));
-    }
-    Ok(closed)
-}
-
+// Shutdown is scoped to child handles owned by this runtime. Enumerating every
+// installed sidecar path could terminate another Cockpit instance using the same binary.
 async fn stop_all_sidecar_processes_for_app_shutdown() -> Result<(), String> {
     let mut errors = Vec::new();
 
@@ -21515,13 +21498,6 @@ async fn stop_all_sidecar_processes_for_app_shutdown() -> Result<(), String> {
         }
     }
 
-    #[cfg(target_os = "windows")]
-    {
-        if let Err(error) = close_installed_sidecar_processes_by_path(5) {
-            errors.push(format!("关闭安装目录 sidecar 残留进程失败: {}", error));
-        }
-    }
-
     if errors.is_empty() {
         Ok(())
     } else {
@@ -21529,13 +21505,8 @@ async fn stop_all_sidecar_processes_for_app_shutdown() -> Result<(), String> {
     }
 }
 
-pub async fn shutdown_local_access_gateway_for_app_exit() {
-    if let Err(error) = stop_all_sidecar_processes_for_app_shutdown().await {
-        logger::log_codex_api_warn(&format!(
-            "[CodexLocalAccess] 应用退出时关闭 sidecar 失败: {}",
-            error
-        ));
-    }
+pub async fn shutdown_local_access_gateway_for_app_exit() -> Result<(), String> {
+    stop_all_sidecar_processes_for_app_shutdown().await
 }
 
 fn find_header_end(buf: &[u8]) -> Option<usize> {

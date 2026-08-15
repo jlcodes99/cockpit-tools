@@ -1,9 +1,21 @@
 use std::io::{Error, ErrorKind};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Mutex, MutexGuard};
 
 static SHUTDOWN_STARTED: AtomicBool = AtomicBool::new(false);
 static PROCESS_SPAWN_LOCK: Mutex<()> = Mutex::new(());
+static APP_EXIT_STATE: AtomicU8 = AtomicU8::new(APP_EXIT_IDLE);
+
+const APP_EXIT_IDLE: u8 = 0;
+const APP_EXIT_CLEANING_UP: u8 = 1;
+const APP_EXIT_READY: u8 = 2;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppExitDecision {
+    StartCleanup,
+    WaitForCleanup,
+    ExitNow,
+}
 
 pub struct ProcessSpawnGuard {
     _guard: MutexGuard<'static, ()>,
@@ -20,14 +32,39 @@ pub fn is_shutdown_started() -> bool {
 }
 
 pub fn begin_shutdown() -> bool {
-    let _spawn_guard = lock_process_spawn();
     !SHUTDOWN_STARTED.swap(true, Ordering::SeqCst)
+}
+
+pub fn wait_for_in_flight_process_spawns() {
+    drop(lock_process_spawn());
+}
+
+pub fn request_app_exit_cleanup() -> AppExitDecision {
+    begin_shutdown();
+    match APP_EXIT_STATE.compare_exchange(
+        APP_EXIT_IDLE,
+        APP_EXIT_CLEANING_UP,
+        Ordering::SeqCst,
+        Ordering::SeqCst,
+    ) {
+        Ok(_) => AppExitDecision::StartCleanup,
+        Err(APP_EXIT_CLEANING_UP) => AppExitDecision::WaitForCleanup,
+        Err(APP_EXIT_READY) => AppExitDecision::ExitNow,
+        Err(_) => AppExitDecision::WaitForCleanup,
+    }
+}
+
+pub fn finish_app_exit_cleanup(result: Result<(), String>) -> Result<(), String> {
+    APP_EXIT_STATE.store(APP_EXIT_READY, Ordering::SeqCst);
+    result
 }
 
 #[cfg(target_os = "windows")]
 fn cancel_system_shutdown() {
     let _spawn_guard = lock_process_spawn();
-    SHUTDOWN_STARTED.store(false, Ordering::SeqCst);
+    if APP_EXIT_STATE.load(Ordering::SeqCst) == APP_EXIT_IDLE {
+        SHUTDOWN_STARTED.store(false, Ordering::SeqCst);
+    }
 }
 
 pub fn acquire_process_spawn_guard(program: &str) -> std::io::Result<ProcessSpawnGuard> {
@@ -187,10 +224,170 @@ fn run_windows_shutdown_message_loop(
 
 #[cfg(test)]
 mod tests {
+    use super::AppExitDecision;
+    use std::sync::{mpsc, Arc, Barrier, Mutex, MutexGuard};
+    use std::time::Duration;
+
+    static LIFECYCLE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn lock_lifecycle_test() -> MutexGuard<'static, ()> {
+        LIFECYCLE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn reset_lifecycle_state() {
+        super::SHUTDOWN_STARTED.store(false, super::Ordering::SeqCst);
+        super::APP_EXIT_STATE.store(super::APP_EXIT_IDLE, super::Ordering::SeqCst);
+    }
+
     #[test]
     fn process_spawn_policy_rejects_shutdown_state() {
         assert!(super::process_spawn_allowed(false));
         assert!(!super::process_spawn_allowed(true));
+    }
+
+    #[test]
+    fn begin_shutdown_does_not_wait_for_in_flight_process_spawn() {
+        let _test_guard = lock_lifecycle_test();
+        reset_lifecycle_state();
+
+        let (guard_ready_tx, guard_ready_rx) = mpsc::channel();
+        let (release_guard_tx, release_guard_rx) = mpsc::channel();
+        let guard_thread = std::thread::spawn(move || {
+            let _guard = super::acquire_process_spawn_guard("lifecycle-test")
+                .expect("test process spawn should be allowed");
+            guard_ready_tx
+                .send(())
+                .expect("test should observe acquired spawn guard");
+            release_guard_rx
+                .recv()
+                .expect("test should release spawn guard");
+        });
+        guard_ready_rx
+            .recv()
+            .expect("spawn guard thread should become ready");
+
+        let (shutdown_result_tx, shutdown_result_rx) = mpsc::channel();
+        let shutdown_thread = std::thread::spawn(move || {
+            shutdown_result_tx
+                .send(super::begin_shutdown())
+                .expect("test should observe shutdown result");
+        });
+
+        let shutdown_result = shutdown_result_rx.recv_timeout(Duration::from_secs(2));
+        let (wait_done_tx, wait_done_rx) = mpsc::channel();
+        let wait_thread = std::thread::spawn(move || {
+            super::wait_for_in_flight_process_spawns();
+            wait_done_tx
+                .send(())
+                .expect("test should observe spawn quiescence");
+        });
+        assert!(
+            wait_done_rx
+                .recv_timeout(Duration::from_millis(100))
+                .is_err(),
+            "cleanup waiter must stay behind the in-flight process spawn"
+        );
+        release_guard_tx
+            .send(())
+            .expect("test should unblock spawn guard thread");
+        guard_thread.join().expect("spawn guard thread should join");
+        wait_done_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("cleanup waiter should finish after spawn guard release");
+        wait_thread
+            .join()
+            .expect("cleanup waiter thread should join");
+        shutdown_thread
+            .join()
+            .expect("shutdown request thread should join");
+        reset_lifecycle_state();
+
+        assert_eq!(
+            shutdown_result,
+            Ok(true),
+            "shutdown initiation must not block the UI event thread"
+        );
+    }
+
+    #[test]
+    fn successful_app_exit_cleanup_allows_the_next_exit_request() {
+        let _test_guard = lock_lifecycle_test();
+        reset_lifecycle_state();
+
+        assert_eq!(
+            super::request_app_exit_cleanup(),
+            AppExitDecision::StartCleanup
+        );
+        assert!(super::is_shutdown_started());
+        assert_eq!(super::finish_app_exit_cleanup(Ok(())), Ok(()));
+        assert_eq!(super::request_app_exit_cleanup(), AppExitDecision::ExitNow);
+
+        reset_lifecycle_state();
+    }
+
+    #[test]
+    fn failed_app_exit_cleanup_still_releases_repeated_exit_requests() {
+        let _test_guard = lock_lifecycle_test();
+        reset_lifecycle_state();
+
+        assert_eq!(
+            super::request_app_exit_cleanup(),
+            AppExitDecision::StartCleanup
+        );
+        assert_eq!(
+            super::request_app_exit_cleanup(),
+            AppExitDecision::WaitForCleanup
+        );
+        assert_eq!(
+            super::finish_app_exit_cleanup(Err("sidecar shutdown failed".to_string())),
+            Err("sidecar shutdown failed".to_string())
+        );
+        assert_eq!(super::request_app_exit_cleanup(), AppExitDecision::ExitNow);
+
+        reset_lifecycle_state();
+    }
+
+    #[test]
+    fn concurrent_exit_requests_start_exactly_one_cleanup() {
+        let _test_guard = lock_lifecycle_test();
+        reset_lifecycle_state();
+
+        const REQUEST_COUNT: usize = 8;
+        let barrier = Arc::new(Barrier::new(REQUEST_COUNT));
+        let requests = (0..REQUEST_COUNT)
+            .map(|_| {
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    super::request_app_exit_cleanup()
+                })
+            })
+            .collect::<Vec<_>>();
+        let decisions = requests
+            .into_iter()
+            .map(|thread| thread.join().expect("exit request thread should join"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            decisions
+                .iter()
+                .filter(|decision| **decision == AppExitDecision::StartCleanup)
+                .count(),
+            1
+        );
+        assert_eq!(
+            decisions
+                .iter()
+                .filter(|decision| **decision == AppExitDecision::WaitForCleanup)
+                .count(),
+            REQUEST_COUNT - 1
+        );
+        assert!(!decisions.contains(&AppExitDecision::ExitNow));
+
+        assert_eq!(super::finish_app_exit_cleanup(Ok(())), Ok(()));
+        reset_lifecycle_state();
     }
 }
 

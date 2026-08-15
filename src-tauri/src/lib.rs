@@ -202,6 +202,40 @@ fn summarize_deep_link_args(args: &[String]) -> Vec<String> {
         .collect()
 }
 
+fn start_app_exit_cleanup(app_handle: tauri::AppHandle, exit_code: i32) {
+    tauri::async_runtime::spawn(async move {
+        modules::codex_app_injection::stop_all();
+
+        let mut errors = Vec::new();
+        if let Err(error) = tauri::async_runtime::spawn_blocking(
+            modules::app_lifecycle::wait_for_in_flight_process_spawns,
+        )
+        .await
+        {
+            errors.push(format!("等待正在启动的子进程结束失败: {}", error));
+        }
+        if let Err(error) =
+            modules::codex_local_access::shutdown_local_access_gateway_for_app_exit().await
+        {
+            errors.push(format!("关闭 API 服务 sidecar 失败: {}", error));
+        }
+
+        let cleanup_result = if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors.join("; "))
+        };
+        match modules::app_lifecycle::finish_app_exit_cleanup(cleanup_result) {
+            Ok(()) => modules::logger::log_info("[Lifecycle] 应用退出清理完成"),
+            Err(error) => modules::logger::log_warn(&format!(
+                "[Lifecycle] 应用退出清理完成但存在错误: {}",
+                error
+            )),
+        }
+        app_handle.exit(exit_code);
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     logger::init_logger();
@@ -1290,27 +1324,51 @@ pub fn run() {
 
     app.run(|app_handle, event| {
         match &event {
-            RunEvent::ExitRequested { api, .. } => {
+            RunEvent::ExitRequested { api, code, .. } => {
                 if modules::floating_card_window::should_keep_alive_after_main_window_destroyed()
                     && !modules::app_lifecycle::is_shutdown_started()
                 {
                     api.prevent_exit();
                     modules::logger::log_info("[Window] 主窗口已销毁，应用继续在托盘运行");
-                } else {
+                } else if *code == Some(tauri::RESTART_EXIT_CODE) {
                     modules::app_lifecycle::begin_shutdown();
                     modules::codex_app_injection::stop_all();
                     tauri::async_runtime::spawn(async {
-                        modules::codex_local_access::shutdown_local_access_gateway_for_app_exit()
-                            .await;
+                        if let Err(error) =
+                            modules::codex_local_access::shutdown_local_access_gateway_for_app_exit(
+                            )
+                            .await
+                        {
+                            modules::logger::log_warn(&format!(
+                                "[Lifecycle] 应用重启时关闭 API 服务 sidecar 失败: {}",
+                                error
+                            ));
+                        }
                     });
+                } else {
+                    match modules::app_lifecycle::request_app_exit_cleanup() {
+                        modules::app_lifecycle::AppExitDecision::StartCleanup => {
+                            api.prevent_exit();
+                            modules::logger::log_info("[Lifecycle] 开始应用退出清理");
+                            start_app_exit_cleanup(app_handle.clone(), code.unwrap_or(0));
+                        }
+                        modules::app_lifecycle::AppExitDecision::WaitForCleanup => {
+                            api.prevent_exit();
+                            modules::logger::log_info(
+                                "[Lifecycle] 应用退出清理已在进行，合并重复退出请求",
+                            );
+                        }
+                        modules::app_lifecycle::AppExitDecision::ExitNow => {
+                            modules::logger::log_info(
+                                "[Lifecycle] 应用退出清理已完成，允许事件循环退出",
+                            );
+                        }
+                    }
                 }
             }
             RunEvent::Exit => {
                 modules::app_lifecycle::begin_shutdown();
                 modules::codex_app_injection::stop_all();
-                tauri::async_runtime::spawn(async {
-                    modules::codex_local_access::shutdown_local_access_gateway_for_app_exit().await;
-                });
             }
             _ => {}
         }
