@@ -2002,6 +2002,64 @@ fn codex_model_provider_usage_url(base_url: &str) -> Result<String, String> {
     Ok(url.to_string())
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexModelProviderUsageQuery {
+    pub endpoint: String,
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
+    #[serde(default)]
+    pub mappings: HashMap<String, String>,
+}
+
+fn codex_model_provider_custom_usage_url(base_url: &str, endpoint: &str) -> Result<String, String> {
+    let base = reqwest::Url::parse(base_url.trim())
+        .map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())?;
+    if !matches!(base.scheme(), "http" | "https") || base.host_str().is_none() {
+        return Err("PROVIDER_BASE_URL_INVALID".to_string());
+    }
+    let endpoint = endpoint.trim();
+    if endpoint.is_empty()
+        || endpoint.len() > 512
+        || endpoint.contains('?')
+        || endpoint.contains('#')
+    {
+        return Err("PROVIDER_USAGE_ENDPOINT_INVALID".to_string());
+    }
+
+    let expanded = endpoint.replace("{{baseUrl}}", base.as_str().trim_end_matches('/'));
+    let mut url = if expanded.starts_with("http://") || expanded.starts_with("https://") {
+        reqwest::Url::parse(&expanded).map_err(|_| "PROVIDER_USAGE_ENDPOINT_INVALID".to_string())?
+    } else {
+        let mut next = base.clone();
+        if expanded.starts_with('/') {
+            next.set_path(expanded.trim_end_matches('/'));
+        } else {
+            let base_path = next.path().trim_end_matches('/');
+            let path = if base_path.is_empty() {
+                format!("/{}", expanded.trim_matches('/'))
+            } else {
+                format!("{}/{}", base_path, expanded.trim_matches('/'))
+            };
+            next.set_path(path.as_str());
+        }
+        next
+    };
+
+    let same_origin = url.scheme().eq_ignore_ascii_case(base.scheme())
+        && url
+            .host_str()
+            .zip(base.host_str())
+            .is_some_and(|(left, right)| left.eq_ignore_ascii_case(right))
+        && url.port_or_known_default() == base.port_or_known_default();
+    if !same_origin {
+        return Err("PROVIDER_USAGE_ENDPOINT_MUST_BE_SAME_ORIGIN".to_string());
+    }
+    url.set_query(None);
+    url.set_fragment(None);
+    Ok(url.to_string())
+}
+
 fn codex_model_provider_deepseek_balance_url(base_url: &str) -> Result<Option<String>, String> {
     let mut url = reqwest::Url::parse(base_url.trim())
         .map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())?;
@@ -2657,6 +2715,263 @@ fn json_bool_at(value: &serde_json::Value, path: &[&str]) -> Option<bool> {
         current = current.get(*key)?;
     }
     current.as_bool()
+}
+
+fn json_value_at_path<'a>(
+    value: &'a serde_json::Value,
+    raw_path: &str,
+) -> Option<&'a serde_json::Value> {
+    let mut path = raw_path.trim();
+    if let Some(stripped) = path.strip_prefix('$') {
+        path = stripped.trim_start_matches('.');
+    }
+    if path.is_empty() {
+        return Some(value);
+    }
+
+    let mut current = value;
+    for raw_segment in path.split('.') {
+        let mut segment = raw_segment;
+        if segment.is_empty() {
+            continue;
+        }
+        loop {
+            if let Some(open) = segment.find('[') {
+                let key = &segment[..open];
+                if !key.is_empty() {
+                    current = current.get(key)?;
+                }
+                let close = segment[open + 1..].find(']')? + open + 1;
+                let index = segment[open + 1..close].parse::<usize>().ok()?;
+                current = current.get(index)?;
+                segment = &segment[close + 1..];
+                if segment.is_empty() {
+                    break;
+                }
+                continue;
+            }
+            current = current.get(segment)?;
+            break;
+        }
+    }
+    Some(current)
+}
+
+fn json_f64_value(value: &serde_json::Value) -> Option<f64> {
+    value
+        .as_f64()
+        .or_else(|| value.as_i64().map(|number| number as f64))
+        .or_else(|| value.as_u64().map(|number| number as f64))
+        .or_else(|| value.as_str()?.trim().parse::<f64>().ok())
+}
+
+fn json_i64_value(value: &serde_json::Value) -> Option<i64> {
+    value
+        .as_i64()
+        .or_else(|| value.as_u64().and_then(|number| i64::try_from(number).ok()))
+        .or_else(|| value.as_str()?.trim().parse::<i64>().ok())
+}
+
+fn json_bool_value(value: &serde_json::Value) -> Option<bool> {
+    value
+        .as_bool()
+        .or_else(|| value.as_str()?.trim().parse::<bool>().ok())
+}
+
+fn custom_usage_value<'a>(
+    body: &'a serde_json::Value,
+    query: &CodexModelProviderUsageQuery,
+    field: &str,
+    fallback: &[&str],
+) -> Option<&'a serde_json::Value> {
+    query
+        .mappings
+        .get(field)
+        .map(String::as_str)
+        .filter(|path| !path.trim().is_empty())
+        .and_then(|path| json_value_at_path(body, path))
+        .or_else(|| {
+            let mut current = body;
+            for key in fallback {
+                current = current.get(*key)?;
+            }
+            Some(current)
+        })
+}
+
+fn custom_usage_unit(
+    body: &serde_json::Value,
+    query: &CodexModelProviderUsageQuery,
+) -> Option<String> {
+    let raw = query.mappings.get("unit")?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    if let Some(path) = raw.strip_prefix('$') {
+        return json_value_at_path(body, path)
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
+    }
+    Some(raw.to_string())
+}
+
+fn summarize_custom_model_provider_usage(
+    body: &serde_json::Value,
+    query: &CodexModelProviderUsageQuery,
+    latency_ms: u64,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    let number = |field: &str, fallback: &[&str]| {
+        custom_usage_value(body, query, field, fallback).and_then(json_f64_value)
+    };
+    let integer = |field: &str, fallback: &[&str]| {
+        custom_usage_value(body, query, field, fallback).and_then(json_i64_value)
+    };
+    let string = |field: &str, fallback: &[&str]| {
+        custom_usage_value(body, query, field, fallback)
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+    };
+    let remaining = number("remaining", &["remaining"]);
+    let balance = number("balance", &["balance"]);
+    let quota_limit = number("quotaLimit", &["quota", "limit"]);
+    let quota_used = number("quotaUsed", &["quota", "used"]);
+    let quota_remaining = number("quotaRemaining", &["quota", "remaining"]);
+    let today_requests = integer("todayRequests", &["usage", "today", "requests"]);
+    let today_total_tokens = integer("todayTotalTokens", &["usage", "today", "total_tokens"]);
+    let today_cost = number("todayCost", &["usage", "today", "cost"]);
+    let total_requests = integer("totalRequests", &["usage", "total", "requests"]);
+    let total_total_tokens = integer("totalTotalTokens", &["usage", "total", "total_tokens"]);
+    let total_cost = number("totalCost", &["usage", "total", "cost"]);
+    let status = string("status", &["status"]);
+    let plan_name = string("planName", &["planName"]);
+    let is_valid = custom_usage_value(body, query, "isValid", &["is_active", "isValid"])
+        .and_then(json_bool_value)
+        .or_else(|| Some(true));
+    let unit = custom_usage_unit(body, query).or_else(|| {
+        custom_usage_value(body, query, "unit", &["unit", "quota", "unit"])
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+    });
+    let quota_unlimited =
+        custom_usage_value(body, query, "quotaUnlimited", &["quota", "unlimited"])
+            .and_then(json_bool_value);
+
+    if remaining.is_none()
+        && balance.is_none()
+        && quota_remaining.is_none()
+        && quota_limit.is_none()
+        && today_requests.is_none()
+        && today_total_tokens.is_none()
+        && total_requests.is_none()
+        && total_total_tokens.is_none()
+    {
+        return Err(
+            "PROVIDER_USAGE_PARSE_FAILED: custom mappings matched no supported fields".to_string(),
+        );
+    }
+
+    let mut details = Vec::new();
+    push_usage_detail(&mut details, "status", "Status", status.clone());
+    push_usage_detail(&mut details, "planName", "Plan", plan_name.clone());
+    push_usage_detail(
+        &mut details,
+        "remaining",
+        "Remaining",
+        remaining.map(format_usage_number),
+    );
+    push_usage_detail(
+        &mut details,
+        "balance",
+        "Balance",
+        balance.map(format_usage_number),
+    );
+    push_usage_detail(&mut details, "unit", "Unit", unit.clone());
+    push_usage_detail(
+        &mut details,
+        "quotaLimit",
+        "Quota Limit",
+        quota_limit.map(format_usage_number),
+    );
+    push_usage_detail(
+        &mut details,
+        "quotaUsed",
+        "Quota Used",
+        quota_used.map(format_usage_number),
+    );
+    push_usage_detail(
+        &mut details,
+        "quotaRemaining",
+        "Quota Remaining",
+        quota_remaining.map(format_usage_number),
+    );
+    push_usage_detail(
+        &mut details,
+        "todayRequests",
+        "Today Requests",
+        today_requests.map(|value| value.to_string()),
+    );
+    push_usage_detail(
+        &mut details,
+        "todayTotalTokens",
+        "Today Tokens",
+        today_total_tokens.map(|value| value.to_string()),
+    );
+    push_usage_detail(
+        &mut details,
+        "todayCost",
+        "Today Cost",
+        today_cost.map(format_usage_number),
+    );
+    push_usage_detail(
+        &mut details,
+        "totalRequests",
+        "Total Requests",
+        total_requests.map(|value| value.to_string()),
+    );
+    push_usage_detail(
+        &mut details,
+        "totalTotalTokens",
+        "Total Tokens",
+        total_total_tokens.map(|value| value.to_string()),
+    );
+    push_usage_detail(
+        &mut details,
+        "totalCost",
+        "Total Cost",
+        total_cost.map(format_usage_number),
+    );
+
+    Ok(CodexModelProviderUsageSummary {
+        mode: Some("custom".to_string()),
+        is_valid,
+        status,
+        plan_name,
+        remaining,
+        balance,
+        unit,
+        quota_unlimited,
+        quota_limit,
+        quota_used,
+        quota_remaining: quota_remaining.or(remaining),
+        today_requests,
+        today_total_tokens,
+        today_cost,
+        total_requests,
+        total_total_tokens,
+        total_cost,
+        model_stats_count: body
+            .get("model_stats")
+            .and_then(serde_json::Value::as_array)
+            .map_or(0, Vec::len),
+        latency_ms,
+        details,
+    })
 }
 
 fn summarize_model_provider_usage(
@@ -3684,6 +3999,7 @@ pub async fn codex_query_model_provider_usage(
     base_url: String,
     api_key: String,
     integration_type: Option<String>,
+    usage_query: Option<CodexModelProviderUsageQuery>,
 ) -> Result<CodexModelProviderUsageSummary, String> {
     let key = api_key.trim();
     if key.is_empty() {
@@ -3693,6 +4009,10 @@ pub async fn codex_query_model_provider_usage(
         .timeout(Duration::from_secs(CODEX_MODEL_PROVIDER_TEST_TIMEOUT_SECS))
         .build()
         .map_err(|e| format!("CREATE_HTTP_CLIENT_FAILED: {}", e))?;
+
+    if let Some(query) = usage_query.as_ref() {
+        return query_custom_model_provider_usage(&client, &base_url, key, query).await;
+    }
 
     if let Some(provider) = codex_model_provider_token_plan_provider(&base_url)? {
         return query_token_plan_model_provider_usage(&client, &base_url, key, provider).await;
@@ -3725,6 +4045,58 @@ pub async fn codex_query_model_provider_usage(
             }
         }
     }
+}
+
+async fn query_custom_model_provider_usage(
+    client: &reqwest::Client,
+    base_url: &str,
+    key: &str,
+    query: &CodexModelProviderUsageQuery,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    let url = codex_model_provider_custom_usage_url(base_url, &query.endpoint)?;
+    let mut request = client
+        .get(&url)
+        .header(reqwest::header::ACCEPT, "application/json");
+    let mut has_authorization = false;
+    for (raw_name, raw_value) in &query.headers {
+        let name = reqwest::header::HeaderName::from_bytes(raw_name.trim().as_bytes())
+            .map_err(|_| "PROVIDER_USAGE_HEADER_INVALID".to_string())?;
+        if name == reqwest::header::HOST
+            || name == reqwest::header::CONTENT_LENGTH
+            || name == reqwest::header::COOKIE
+        {
+            return Err("PROVIDER_USAGE_HEADER_FORBIDDEN".to_string());
+        }
+        let value = raw_value
+            .replace("{{apiKey}}", key)
+            .replace("{{baseUrl}}", base_url.trim_end_matches('/'));
+        let header_value = reqwest::header::HeaderValue::from_str(value.trim())
+            .map_err(|_| "PROVIDER_USAGE_HEADER_INVALID".to_string())?;
+        has_authorization |= name == reqwest::header::AUTHORIZATION;
+        request = request.header(name, header_value);
+    }
+    if !has_authorization {
+        request = request.bearer_auth(key);
+    }
+
+    let started = Instant::now();
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("PROVIDER_USAGE_NETWORK_FAILED: {}", e))?;
+    let latency_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+    let status = response.status();
+    let text = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(format!(
+            "PROVIDER_USAGE_HTTP_{}: {}",
+            status.as_u16(),
+            text.chars().take(300).collect::<String>()
+        ));
+    }
+    let parsed = serde_json::from_str::<serde_json::Value>(&text)
+        .map_err(|e| format!("PROVIDER_USAGE_PARSE_FAILED: {}", e))?;
+    summarize_custom_model_provider_usage(&parsed, query, latency_ms)
 }
 
 async fn query_deepseek_model_provider_balance(
@@ -4545,6 +4917,76 @@ mod tests {
             .details
             .iter()
             .any(|detail| detail.key == "grantedBalance" && detail.value == "10"));
+    }
+
+    #[test]
+    fn custom_usage_url_stays_on_provider_origin() {
+        assert_eq!(
+            codex_model_provider_custom_usage_url(
+                "https://provider.example.com/v1",
+                "/user/balance",
+            )
+            .expect("same-origin endpoint"),
+            "https://provider.example.com/user/balance"
+        );
+        assert_eq!(
+            codex_model_provider_custom_usage_url(
+                "https://provider.example.com/v1",
+                "{{baseUrl}}/usage",
+            )
+            .expect("base URL template"),
+            "https://provider.example.com/v1/usage"
+        );
+        assert!(codex_model_provider_custom_usage_url(
+            "https://provider.example.com/v1",
+            "https://other.example.com/usage",
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn custom_usage_mappings_extract_remaining_balance_and_unit() {
+        let query = CodexModelProviderUsageQuery {
+            endpoint: "/v1/usage".to_string(),
+            headers: HashMap::new(),
+            mappings: HashMap::from([
+                ("remaining".to_string(), "quota.remaining".to_string()),
+                ("isValid".to_string(), "is_active".to_string()),
+                ("unit".to_string(), "CNY".to_string()),
+            ]),
+        };
+        let summary = summarize_custom_model_provider_usage(
+            &serde_json::json!({
+                "is_active": true,
+                "quota": { "remaining": "88.5" }
+            }),
+            &query,
+            9,
+        )
+        .expect("custom usage response");
+
+        assert_eq!(summary.mode.as_deref(), Some("custom"));
+        assert_eq!(summary.remaining, Some(88.5));
+        assert_eq!(summary.quota_remaining, Some(88.5));
+        assert_eq!(summary.unit.as_deref(), Some("CNY"));
+        assert_eq!(summary.is_valid, Some(true));
+    }
+
+    #[test]
+    fn custom_usage_mappings_support_array_json_paths() {
+        let query = CodexModelProviderUsageQuery {
+            endpoint: "/balance".to_string(),
+            headers: HashMap::new(),
+            mappings: HashMap::from([("balance".to_string(), "data[0].value".to_string())]),
+        };
+        let summary = summarize_custom_model_provider_usage(
+            &serde_json::json!({ "data": [{ "value": 42 }] }),
+            &query,
+            1,
+        )
+        .expect("array path should resolve");
+
+        assert_eq!(summary.balance, Some(42.0));
     }
 
     #[test]

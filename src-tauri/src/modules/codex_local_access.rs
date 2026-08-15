@@ -2562,6 +2562,32 @@ fn visible_codex_model_ids_for_api_key_with_optional_accounts(
         &[],
         &collection.excluded_models,
     );
+    if let Some(accounts) = accounts {
+        let scoped_account_ids: HashSet<&str> =
+            scoped_account_ids.iter().map(String::as_str).collect();
+        let mut seen: HashSet<String> = visible
+            .iter()
+            .map(|model| model.trim().to_ascii_lowercase())
+            .filter(|model| !model.is_empty())
+            .collect();
+        let catalog_models = accounts
+            .iter()
+            .filter(|account| {
+                account.is_api_key_auth() && scoped_account_ids.contains(account.id.as_str())
+            })
+            .flat_map(|account| account.api_model_catalog.iter())
+            .map(String::as_str)
+            .map(str::trim)
+            .filter(|model| !model.is_empty())
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        for model in apply_model_aliases_to_ids(catalog_models, &collection.model_aliases)
+        {
+            if seen.insert(model.to_ascii_lowercase()) {
+                visible.push(model);
+            }
+        }
+    }
     if let Some(provider_gateway) = api_key.provider_gateway.as_ref() {
         let mut seen: HashSet<String> = visible
             .iter()
@@ -32224,6 +32250,44 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
         let restricted = visible_codex_model_ids_for_api_key(&collection, &api_key, None);
         assert!(restricted.iter().any(|model| model == "gpt-5.4"));
         assert!(!restricted.iter().any(|model| model.starts_with("gpt-5.6-")));
+    }
+
+    #[test]
+    fn api_key_model_visibility_includes_scoped_account_catalog_models() {
+        let collection = test_local_access_collection(vec!["account-1".to_string()]);
+        let mut account = CodexAccount::new_api_key(
+            "account-1".to_string(),
+            "api@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://provider.example.com/v1".to_string()),
+            Some("provider".to_string()),
+            Some("Provider".to_string()),
+            vec!["gpt-5.6-luna".to_string(), "provider-only-model".to_string()],
+        );
+        account.api_wire_api = Some("responses".to_string());
+        let api_key = ResolvedLocalApiKey {
+            id: "key-1".to_string(),
+            label: "Key".to_string(),
+            provider_gateway: None,
+            inherit_account_pool: false,
+            account_ids: vec!["account-1".to_string()],
+            model_prefix: None,
+            allowed_models: Vec::new(),
+            excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
+        };
+
+        let models = visible_codex_model_ids_for_api_key_with_accounts(
+            &collection,
+            &api_key,
+            &[account],
+            None,
+        );
+
+        assert!(models.iter().any(|model| model == "provider-only-model"));
+        assert!(models.iter().any(|model| model == "gpt-5.6-luna"));
     }
 
     #[test]

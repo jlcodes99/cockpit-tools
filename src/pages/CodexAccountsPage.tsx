@@ -715,13 +715,14 @@ function getCockpitApiStatsRecord(
 
 function resolveApiKeyUsageMode(
   summary?: CodexModelProviderUsageSummary,
-): "new_api" | "sub2api" | "deepseek" | "token_plan" | null {
+): "new_api" | "sub2api" | "deepseek" | "token_plan" | "custom" | null {
   if (!summary) return null;
   if (
     summary.mode === "new_api" ||
     summary.mode === "sub2api" ||
     summary.mode === "deepseek" ||
-    summary.mode === "token_plan"
+    summary.mode === "token_plan" ||
+    summary.mode === "custom"
   ) {
     return summary.mode;
   }
@@ -7220,6 +7221,7 @@ export function CodexAccountsPage() {
               baseUrl: savedProvider.baseUrl,
               apiKey: validation.apiKey,
               integrationType: savedProvider.integrationType ?? null,
+              usageQuery: savedProvider.usageQuery ?? null,
             });
             if (
               (usageSummary.mode === "sub2api" ||
@@ -7685,6 +7687,7 @@ export function CodexAccountsPage() {
           baseUrl,
           apiKey,
           integrationType: targetProvider?.integrationType ?? null,
+          usageQuery: targetProvider?.usageQuery ?? null,
         });
         const updatedAt = Date.now();
         if (
@@ -8193,6 +8196,7 @@ export function CodexAccountsPage() {
       const isNewApiUsage = usageMode === "new_api";
       const isSub2ApiUsage = usageMode === "sub2api";
       const isTokenPlanUsage = usageMode === "token_plan";
+      const isCustomUsage = usageMode === "custom";
       const usedPercent = formatApiKeyUsagePercent(summary);
       if (isDeepSeekUsage) {
         return (
@@ -8376,6 +8380,35 @@ export function CodexAccountsPage() {
           </div>
         );
       }
+      if (variant === "card" && summary && isCustomUsage) {
+        const remaining =
+          summary.remaining ?? summary.balance ?? summary.quotaRemaining;
+        return (
+          <div
+            className="quota-item codex-api-key-quota-item custom"
+            title={`${t(
+              "codex.modelProviders.usage.fields.remaining",
+              "Remaining",
+            )}: ${formatApiKeyUsageMoney(remaining, summary.unit)}`}
+          >
+            <div className="quota-header">
+              <Database size={14} />
+              <span className="quota-label">
+                {t("codex.modelProviders.usage.custom", "Custom usage")}
+              </span>
+              <span className="quota-pct high">
+                {formatApiKeyUsageMoney(remaining, summary.unit)}
+              </span>
+            </div>
+            <span className="quota-reset">
+              {summary.status ||
+                (summary.isValid === false
+                  ? t("codex.modelProviders.usage.invalid", "Invalid")
+                  : t("codex.modelProviders.usage.available", "Available"))}
+            </span>
+          </div>
+        );
+      }
       if (summary && !usageMode) {
         return <></>;
       }
@@ -8542,6 +8575,38 @@ export function CodexAccountsPage() {
                           summary.todayTotalTokens ?? 0,
                         )}
                       </strong>
+                    </div>
+                  </>
+                ) : isCustomUsage ? (
+                  <>
+                    <div>
+                      <span>
+                        {t(
+                          "codex.modelProviders.usage.fields.remaining",
+                          "Remaining",
+                        )}
+                      </span>
+                      <strong>
+                        {formatApiKeyUsageMoney(
+                          summary.remaining ??
+                            summary.balance ??
+                            summary.quotaRemaining,
+                          summary.unit,
+                        )}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>
+                        {t("codex.modelProviders.usage.fields.status", "Status")}
+                      </span>
+                      <strong>
+                        {summary.status ||
+                          (summary.isValid === false ? "invalid" : "available")}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>{t("codex.modelProviders.usage.fields.unit", "Unit")}</span>
+                      <strong>{summary.unit || "-"}</strong>
                     </div>
                   </>
                 ) : null}
@@ -8755,6 +8820,7 @@ export function CodexAccountsPage() {
               baseUrl: savedProvider.baseUrl,
               apiKey: validation.apiKey,
               integrationType: savedProvider.integrationType ?? null,
+              usageQuery: savedProvider.usageQuery ?? null,
             });
             if (
               (usageSummary.mode === "sub2api" ||
