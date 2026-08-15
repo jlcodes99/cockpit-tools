@@ -155,6 +155,7 @@ interface GeneralConfig {
   minimize_behavior?: 'dock_and_tray' | 'tray_only';
   hide_dock_icon?: boolean;
   tray_icon_style?: 'template' | 'color';
+  tray_click_action?: 'show_main_window' | 'show_floating_card';
   menu_bar_quota_enabled?: boolean;
   menu_bar_show_account_prefix?: boolean;
   menu_bar_quota_platform?: PlatformId;
@@ -541,6 +542,7 @@ export function SettingsPage() {
   const [minimizeBehavior, setMinimizeBehavior] = useState<'dock_and_tray' | 'tray_only'>('dock_and_tray');
   const [hideDockIcon, setHideDockIcon] = useState(false);
   const [trayIconStyle, setTrayIconStyle] = useState<'template' | 'color'>('template');
+  const [trayClickAction, setTrayClickAction] = useState<'show_main_window' | 'show_floating_card'>('show_main_window');
   const [menuBarQuotaEnabled, setMenuBarQuotaEnabled] = useState(false);
   const [menuBarShowAccountPrefix, setMenuBarShowAccountPrefix] = useState(true);
   const [menuBarQuotaPlatform, setMenuBarQuotaPlatform] = useState<PlatformId>('codex');
@@ -1095,6 +1097,7 @@ export function SettingsPage() {
       minimize_behavior: minimizeBehavior,
       hide_dock_icon: hideDockIcon,
       tray_icon_style: isMacOS ? trayIconStyle : undefined,
+      tray_click_action: isMacOS ? trayClickAction : undefined,
       menu_bar_quota_enabled: isMacOS ? menuBarQuotaEnabled : undefined,
       menu_bar_show_account_prefix: isMacOS ? menuBarShowAccountPrefix : undefined,
       menu_bar_quota_platform: isMacOS ? menuBarQuotaPlatform : undefined,
@@ -1319,6 +1322,7 @@ export function SettingsPage() {
     minimizeBehavior,
     hideDockIcon,
     trayIconStyle,
+    trayClickAction,
     menuBarQuotaEnabled,
     menuBarShowAccountPrefix,
     menuBarQuotaPlatform,
@@ -1676,6 +1680,11 @@ export function SettingsPage() {
       setMinimizeBehavior(config.minimize_behavior || 'dock_and_tray');
       setHideDockIcon(Boolean(config.hide_dock_icon));
       setTrayIconStyle(config.tray_icon_style === 'color' ? 'color' : 'template');
+      setTrayClickAction(
+        config.tray_click_action === 'show_floating_card'
+          ? 'show_floating_card'
+          : 'show_main_window',
+      );
       setMenuBarQuotaEnabled(config.menu_bar_quota_enabled ?? false);
       setMenuBarShowAccountPrefix(config.menu_bar_show_account_prefix ?? true);
       setMenuBarQuotaPlatform(config.menu_bar_quota_platform ?? 'codex');
@@ -3501,6 +3510,40 @@ export function SettingsPage() {
                         </option>
                         <option value="true">
                           {t('settings.general.hideDockIconOn', '是（隐藏Dock图标）')}
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">
+                        {t('settings.general.trayClickAction', '菜单栏单击行为（仅 macOS）')}
+                      </div>
+                      <div className="row-desc">
+                        {t(
+                          'settings.general.trayClickActionDesc',
+                          '双击始终打开主窗口；默认保持打开主窗口的原有行为'
+                        )}
+                      </div>
+                    </div>
+                    <div className="row-control">
+                      <select
+                        className="settings-select"
+                        value={trayClickAction}
+                        onChange={(e) =>
+                          setTrayClickAction(
+                            e.target.value === 'show_floating_card'
+                              ? 'show_floating_card'
+                              : 'show_main_window',
+                          )
+                        }
+                      >
+                        <option value="show_main_window">
+                          {t('settings.general.trayClickActionMainWindow', '打开主窗口')}
+                        </option>
+                        <option value="show_floating_card">
+                          {t('settings.general.trayClickActionFloatingCard', '显示悬浮卡片')}
                         </option>
                       </select>
                     </div>
