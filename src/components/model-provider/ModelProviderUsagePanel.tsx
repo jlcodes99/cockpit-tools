@@ -29,7 +29,8 @@ export function ModelProviderUsagePanel({
   const isSupportedUsage =
     usageMode === 'sub2api' ||
     usageMode === 'new_api' ||
-    usageMode === 'token_plan';
+    usageMode === 'token_plan' ||
+    usageMode === 'custom';
   const classNames = [
     'codex-api-key-usage-panel',
     usageMode ?? 'sub2api',
@@ -85,6 +86,29 @@ export function ModelProviderUsagePanel({
               {t('codex.modelProviders.usage.fields.expiresAt', 'Next Reset')}
             </span>
             <strong>{resetDetail?.value || '-'}</strong>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (usageMode === 'custom') {
+    const remaining = summary.remaining ?? summary.balance ?? summary.quotaRemaining;
+    const status = summary.status || (summary.isValid === false ? 'invalid' : 'available');
+    return (
+      <div className={classNames}>
+        <div className="codex-api-key-usage-grid">
+          <div>
+            <span>{t('codex.modelProviders.usage.fields.remaining', 'Remaining')}</span>
+            <strong>{formatModelProviderUsageMoney(remaining, summary.unit)}</strong>
+          </div>
+          <div>
+            <span>{t('codex.modelProviders.usage.fields.status', 'Status')}</span>
+            <strong>{status}</strong>
+          </div>
+          <div>
+            <span>{t('codex.modelProviders.usage.fields.unit', 'Unit')}</span>
+            <strong>{summary.unit || '-'}</strong>
           </div>
         </div>
       </div>

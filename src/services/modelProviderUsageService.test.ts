@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildUsageBaseUrlCandidates,
   formatModelProviderUsageMoney,
+  resolveModelProviderUsageMode,
   resolveNewApiQuotaSnapshot,
   type ModelProviderUsageSummary,
 } from "./modelProviderUsageService.ts";
@@ -96,4 +97,17 @@ test("new_api quota ignores malformed numeric details", () => {
 
 test("token plan percentages render without currency decimals", () => {
   assert.equal(formatModelProviderUsageMoney(72, "%"), "72%");
+});
+
+test("custom usage summaries preserve their explicit mode", () => {
+  assert.equal(
+    resolveModelProviderUsageMode(
+      summary({
+        mode: "custom",
+        remaining: 12.5,
+        unit: "CNY",
+      }),
+    ),
+    "custom",
+  );
 });

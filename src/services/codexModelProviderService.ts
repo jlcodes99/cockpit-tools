@@ -18,6 +18,8 @@ import {
 } from '../utils/apikeyFunLinks';
 import {
   queryModelProviderUsage,
+  type ModelProviderUsageField,
+  type ModelProviderUsageQuery,
   type ModelProviderUsageSummary,
 } from './modelProviderUsageService';
 import { moveCodexProviderApiKey } from '../utils/codexModelProviderApiKeyMove';
@@ -30,12 +32,15 @@ export interface CodexModelProviderApiKey {
   updatedAt: number;
 }
 
+export type CodexModelProviderUsageQuery = ModelProviderUsageQuery;
+
 export interface CodexModelProvider {
   id: string;
   name: string;
   baseUrl: string;
   sourceTag?: string;
   integrationType?: 'sub2api' | 'new_api';
+  usageQuery?: CodexModelProviderUsageQuery;
   modelCatalog?: string[];
   modelContextWindows?: Record<string, number>;
   supportsVision?: boolean;
@@ -73,6 +78,7 @@ interface UpsertFromCredentialInput {
   wireApi?: CodexProviderWireApi | null;
   supportsWebsockets?: boolean;
   integrationType?: 'sub2api' | 'new_api' | null;
+  usageQuery?: CodexModelProviderUsageQuery | null;
 }
 
 let providerIdCounter = 0;
@@ -185,6 +191,61 @@ function hasOwnProperty(value: object, key: string): boolean {
 
 function normalizeIntegrationType(value: unknown): 'sub2api' | 'new_api' | undefined {
   return value === 'sub2api' || value === 'new_api' ? value : undefined;
+}
+
+const MODEL_PROVIDER_USAGE_FIELDS: readonly ModelProviderUsageField[] = [
+  'isValid',
+  'status',
+  'planName',
+  'remaining',
+  'balance',
+  'unit',
+  'quotaUnlimited',
+  'quotaLimit',
+  'quotaUsed',
+  'quotaRemaining',
+  'todayRequests',
+  'todayTotalTokens',
+  'todayCost',
+  'totalRequests',
+  'totalTotalTokens',
+  'totalCost',
+];
+
+function normalizeUsageQuery(value: unknown): CodexModelProviderUsageQuery | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const source = value as Record<string, unknown>;
+  const endpoint = String(source.endpoint ?? '').trim();
+  if (!endpoint || endpoint.length > 512) return undefined;
+
+  const headers: Record<string, string> = {};
+  if (source.headers && typeof source.headers === 'object' && !Array.isArray(source.headers)) {
+    for (const [rawName, rawValue] of Object.entries(source.headers as Record<string, unknown>)) {
+      const name = rawName.trim();
+      const headerValue = String(rawValue ?? '').trim();
+      if (!name || !headerValue || name.length > 128 || headerValue.length > 2048) continue;
+      headers[name] = headerValue;
+    }
+  }
+
+  const mappings: Partial<Record<ModelProviderUsageField, string>> = {};
+  if (
+    source.mappings &&
+    typeof source.mappings === 'object' &&
+    !Array.isArray(source.mappings)
+  ) {
+    const rawMappings = source.mappings as Record<string, unknown>;
+    for (const field of MODEL_PROVIDER_USAGE_FIELDS) {
+      const mapping = String(rawMappings[field] ?? '').trim();
+      if (mapping && mapping.length <= 256) mappings[field] = mapping;
+    }
+  }
+
+  return {
+    endpoint,
+    ...(Object.keys(headers).length > 0 ? { headers } : {}),
+    ...(Object.keys(mappings).length > 0 ? { mappings } : {}),
+  };
 }
 
 function migrateApiKeyFunProviderWireApi(
@@ -322,6 +383,17 @@ function deriveProviderNameFromBaseUrl(baseUrl: string): string {
 function cloneProviders(providers: CodexModelProvider[]): CodexModelProvider[] {
   return providers.map((provider) => ({
     ...provider,
+    usageQuery: provider.usageQuery
+      ? {
+          ...provider.usageQuery,
+          headers: provider.usageQuery.headers
+            ? { ...provider.usageQuery.headers }
+            : undefined,
+          mappings: provider.usageQuery.mappings
+            ? { ...provider.usageQuery.mappings }
+            : undefined,
+        }
+      : undefined,
     modelCapabilities: provider.modelCapabilities
       ? Object.fromEntries(
           Object.entries(provider.modelCapabilities).map(([model, capability]) => [
@@ -378,6 +450,7 @@ function toValidProviderList(raw: unknown): CodexModelProvider[] {
       integrationType: normalizeIntegrationType(
         (item as { integrationType?: unknown }).integrationType,
       ),
+      usageQuery: normalizeUsageQuery((item as { usageQuery?: unknown }).usageQuery),
       modelCatalog:
         normalizeModelCatalog((item as { modelCatalog?: unknown }).modelCatalog) ??
         presetModelCatalogForBaseUrl(baseUrl),
@@ -563,6 +636,7 @@ export async function createCodexModelProvider(input: {
   supportsWebsockets?: boolean;
   enableModePreference?: CodexProviderEnableModePreference;
   integrationType?: 'sub2api' | 'new_api';
+  usageQuery?: CodexModelProviderUsageQuery;
   boundOauthAccountId?: string | null;
   initialApiKey?: string;
   initialApiKeyName?: string;
@@ -584,6 +658,7 @@ export async function createCodexModelProvider(input: {
     baseUrl,
     sourceTag: sanitizeName(input.sourceTag ?? '') || undefined,
     integrationType: normalizeIntegrationType(input.integrationType),
+    usageQuery: normalizeUsageQuery(input.usageQuery),
     modelCatalog:
       normalizeModelCatalog(input.modelCatalog) ??
       presetModelCatalogForBaseUrl(baseUrl),
@@ -634,6 +709,7 @@ export async function updateCodexModelProvider(
     supportsWebsockets?: boolean;
     enableModePreference?: CodexProviderEnableModePreference | null;
     integrationType?: 'sub2api' | 'new_api' | null;
+    usageQuery?: CodexModelProviderUsageQuery | null;
     boundOauthAccountId?: string | null;
   },
 ): Promise<CodexModelProvider> {
@@ -728,6 +804,10 @@ export async function updateCodexModelProvider(
   }
   if (patch.integrationType !== undefined) {
     provider.integrationType = normalizeIntegrationType(patch.integrationType);
+  }
+  if (patch.usageQuery !== undefined) {
+    provider.usageQuery =
+      patch.usageQuery === null ? undefined : normalizeUsageQuery(patch.usageQuery);
   }
   if (patch.boundOauthAccountId !== undefined) {
     provider.boundOauthAccountId =
@@ -909,6 +989,7 @@ export async function queryCodexModelProviderUsage(input: {
   baseUrl: string;
   apiKey: string;
   integrationType?: 'sub2api' | 'new_api' | null;
+  usageQuery?: CodexModelProviderUsageQuery | null;
 }): Promise<CodexModelProviderUsageSummary> {
   return await queryModelProviderUsage(input);
 }
@@ -959,6 +1040,7 @@ export async function upsertCodexModelProviderFromCredential(
       modelCapabilities: normalizeModelCapabilities(input.modelCapabilities),
       visionRoutingModel: sanitizeName(input.visionRoutingModel ?? '') || undefined,
       integrationType: normalizeIntegrationType(input.integrationType),
+      usageQuery: normalizeUsageQuery(input.usageQuery),
       website: sanitizeName(input.website ?? '') || undefined,
       apiKeyUrl: sanitizeName(input.apiKeyUrl ?? '') || undefined,
       wireApi,
@@ -1031,6 +1113,10 @@ export async function upsertCodexModelProviderFromCredential(
   }
   if (input.integrationType !== undefined) {
     provider.integrationType = normalizeIntegrationType(input.integrationType);
+  }
+  if (input.usageQuery !== undefined) {
+    provider.usageQuery =
+      input.usageQuery === null ? undefined : normalizeUsageQuery(input.usageQuery);
   }
   enforceDeepSeekProvider(provider);
   provider.updatedAt = Date.now();

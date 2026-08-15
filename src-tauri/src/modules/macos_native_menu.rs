@@ -4853,10 +4853,18 @@ mod imp {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string);
+        let usage_query = provider
+            .as_ref()
+            .and_then(|provider| json_path(Some(provider), &["usageQuery"]).cloned())
+            .and_then(|value| {
+                serde_json::from_value::<commands::codex::CodexModelProviderUsageQuery>(value)
+                    .ok()
+            });
         let summary = commands::codex::codex_query_model_provider_usage(
             base_url.clone(),
             api_key.to_string(),
             integration_type,
+            usage_query,
         )
         .await?;
         let summary_value = serde_json::to_value(&summary)

@@ -4,7 +4,39 @@ export type ModelProviderUsageIntegrationType = 'sub2api' | 'new_api';
 export type ModelProviderUsageMode =
   | ModelProviderUsageIntegrationType
   | 'deepseek'
-  | 'token_plan';
+  | 'token_plan'
+  | 'custom';
+
+export type ModelProviderUsageField =
+  | 'isValid'
+  | 'status'
+  | 'planName'
+  | 'remaining'
+  | 'balance'
+  | 'unit'
+  | 'quotaUnlimited'
+  | 'quotaLimit'
+  | 'quotaUsed'
+  | 'quotaRemaining'
+  | 'todayRequests'
+  | 'todayTotalTokens'
+  | 'todayCost'
+  | 'totalRequests'
+  | 'totalTotalTokens'
+  | 'totalCost';
+
+/**
+ * A safe, declarative usage request. The backend only performs GET requests
+ * and resolves the endpoint against the provider's configured base URL.
+ * Mapping values are dot-separated JSON paths (for example `quota.remaining`).
+ * The `unit` mapping may also be a literal such as `CNY`; prefix it with `$`
+ * when it should be read from the response instead (for example `$.unit`).
+ */
+export interface ModelProviderUsageQuery {
+  endpoint: string;
+  headers?: Record<string, string>;
+  mappings?: Partial<Record<ModelProviderUsageField, string>>;
+}
 
 export interface ModelProviderModel {
   id: string;
@@ -113,6 +145,7 @@ export async function queryModelProviderUsage(input: {
   baseUrl: string;
   apiKey: string;
   integrationType?: ModelProviderUsageIntegrationType | null;
+  usageQuery?: ModelProviderUsageQuery | null;
 }): Promise<ModelProviderUsageSummary> {
   const candidates = buildUsageBaseUrlCandidates(input.baseUrl);
   let lastError: unknown = null;
@@ -122,6 +155,7 @@ export async function queryModelProviderUsage(input: {
         baseUrl,
         apiKey: input.apiKey,
         integrationType: input.integrationType ?? null,
+        usageQuery: input.usageQuery ?? null,
       });
     } catch (error) {
       lastError = error;
@@ -160,7 +194,8 @@ export function resolveModelProviderUsageMode(
     summary.mode === 'new_api' ||
     summary.mode === 'sub2api' ||
     summary.mode === 'deepseek' ||
-    summary.mode === 'token_plan'
+    summary.mode === 'token_plan' ||
+    summary.mode === 'custom'
   ) {
     return summary.mode;
   }

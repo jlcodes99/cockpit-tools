@@ -107,6 +107,7 @@ import {
   type CodexModelProviderChatTestProgressPayload,
   type CodexModelProviderChatTestRecord,
   type CodexModelProviderChatTestTarget,
+  type CodexModelProviderUsageQuery,
   type CodexModelProviderUsageSummary,
   updateCodexModelProvider,
 } from "../../services/codexModelProviderService";
@@ -202,6 +203,108 @@ function parseModelCatalogText(value: string): string[] {
       models.push(model);
     });
   return models;
+}
+
+const USAGE_QUERY_FIELDS = [
+  "isValid",
+  "status",
+  "planName",
+  "remaining",
+  "balance",
+  "unit",
+  "quotaUnlimited",
+  "quotaLimit",
+  "quotaUsed",
+  "quotaRemaining",
+  "todayRequests",
+  "todayTotalTokens",
+  "todayCost",
+  "totalRequests",
+  "totalTotalTokens",
+  "totalCost",
+] as const;
+
+function usageQueryTextFromProvider(
+  query?: CodexModelProviderUsageQuery,
+): {
+  usageEndpoint: string;
+  usageHeadersText: string;
+  usageMappingsText: string;
+} {
+  return {
+    usageEndpoint: query?.endpoint ?? "",
+    usageHeadersText: query?.headers
+      ? JSON.stringify(query.headers, null, 2)
+      : "",
+    usageMappingsText: query?.mappings
+      ? JSON.stringify(query.mappings, null, 2)
+      : "",
+  };
+}
+
+function parseUsageQueryDraft(
+  endpointDraft: string,
+  headersDraft: string,
+  mappingsDraft: string,
+): { ok: true; value?: CodexModelProviderUsageQuery } | { ok: false; error: string } {
+  const endpoint = endpointDraft.trim();
+  if (!endpoint) return { ok: true };
+  if (
+    endpoint.length > 512 ||
+    endpoint.includes("?") ||
+    endpoint.includes("#") ||
+    endpoint.includes("\\")
+  ) {
+    return { ok: false, error: "自定义额度接口路径无效" };
+  }
+
+  const parseObject = (draft: string, label: string): Record<string, unknown> | undefined => {
+    if (!draft.trim()) return undefined;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(draft);
+    } catch {
+      throw new Error(`${label}必须是有效 JSON`);
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error(`${label}必须是 JSON 对象`);
+    }
+    return parsed as Record<string, unknown>;
+  };
+
+  try {
+    const rawHeaders = parseObject(headersDraft, "自定义请求头");
+    const headers: Record<string, string> = {};
+    for (const [name, rawValue] of Object.entries(rawHeaders ?? {})) {
+      const trimmedName = name.trim();
+      const value = String(rawValue ?? "").trim();
+      if (!trimmedName || !value) continue;
+      if (trimmedName.length > 128 || value.length > 2048) {
+        return { ok: false, error: "自定义请求头过长" };
+      }
+      headers[trimmedName] = value;
+    }
+
+    const rawMappings = parseObject(mappingsDraft, "额度字段映射");
+    const mappings: Record<string, string> = {};
+    for (const field of USAGE_QUERY_FIELDS) {
+      const value = String(rawMappings?.[field] ?? "").trim();
+      if (!value) continue;
+      if (value.length > 256) return { ok: false, error: "额度字段路径过长" };
+      mappings[field] = value;
+    }
+
+    return {
+      ok: true,
+      value: {
+        endpoint,
+        ...(Object.keys(headers).length > 0 ? { headers } : {}),
+        ...(Object.keys(mappings).length > 0 ? { mappings } : {}),
+      },
+    };
+  } catch (error) {
+    return { ok: false, error: String(error).replace(/^Error:\s*/, "") };
+  }
 }
 
 function parseVisionModelText(value: string): Record<string, { supportsVision: boolean }> {
@@ -401,6 +504,9 @@ interface ProviderFormState {
   providerId: string | null;
   name: string;
   baseUrl: string;
+  usageEndpoint: string;
+  usageHeadersText: string;
+  usageMappingsText: string;
   modelCatalogText: string;
   modelContextWindowsDraft: Record<string, string>;
   supportsVision: boolean;
@@ -428,6 +534,9 @@ const EMPTY_FORM: ProviderFormState = {
   providerId: null,
   name: "",
   baseUrl: "",
+  usageEndpoint: "",
+  usageHeadersText: "",
+  usageMappingsText: "",
   modelCatalogText: "",
   modelContextWindowsDraft: {},
   supportsVision: false,
@@ -1637,6 +1746,7 @@ export function CodexModelProviderManager({
       providerId: provider.id,
       name: provider.name,
       baseUrl: provider.baseUrl,
+      ...usageQueryTextFromProvider(provider.usageQuery),
       modelCatalogText: (provider.modelCatalog ?? []).join("\n"),
       modelContextWindowsDraft: contextWindowDraftsFromRecord(
         provider.modelContextWindows,
@@ -1697,6 +1807,9 @@ export function CodexModelProviderManager({
       mutateForm({
         name: preset.name,
         baseUrl: preset.baseUrls[0] ?? "",
+        usageEndpoint: "",
+        usageHeadersText: "",
+        usageMappingsText: "",
         modelCatalogText: (preset.modelCatalog ?? []).join("\n"),
         modelContextWindowsDraft: contextWindowDraftsFromRecord(
           undefined,
@@ -1730,6 +1843,9 @@ export function CodexModelProviderManager({
       mutateForm({
         name: template.name,
         baseUrl: template.baseUrl,
+        usageEndpoint: "",
+        usageHeadersText: "",
+        usageMappingsText: "",
         modelCatalogText: template.modelCatalog.join("\n"),
         modelContextWindowsDraft: contextWindowDraftsFromRecord(
           undefined,
@@ -1782,6 +1898,12 @@ export function CodexModelProviderManager({
         return t(
           "codex.modelProviders.validation.providerNotFound",
           "供应商不存在",
+        );
+      }
+      if (raw.includes("PROVIDER_USAGE_ENDPOINT")) {
+        return t(
+          "codex.modelProviders.usage.customEndpointInvalid",
+          "自定义额度接口必须指向当前供应商的同源路径",
         );
       }
       return raw.replace(/^Error:\s*/, "");
@@ -2207,6 +2329,15 @@ export function CodexModelProviderManager({
       );
       return;
     }
+    const parsedUsageQuery = parseUsageQueryDraft(
+      form.usageEndpoint,
+      form.usageHeadersText,
+      form.usageMappingsText,
+    );
+    if (!parsedUsageQuery.ok) {
+      setFormError(parsedUsageQuery.error);
+      return;
+    }
     const modelCapabilities = parseVisionModelText(form.visionModelText);
     const visionRoutingModel = form.visionRoutingModel.trim();
     const isCreate = !form.providerId;
@@ -2253,6 +2384,7 @@ export function CodexModelProviderManager({
         savedProvider = await createCodexModelProvider({
           name,
           baseUrl,
+          usageQuery: parsedUsageQuery.value,
           sourceTag: selectedSponsorTemplate?.id,
           modelCatalog,
           modelContextWindows: parsedWindows.windows,
@@ -2272,6 +2404,7 @@ export function CodexModelProviderManager({
         savedProvider = await updateCodexModelProvider(form.providerId, {
           name,
           baseUrl,
+          usageQuery: parsedUsageQuery.value ?? null,
           sourceTag: selectedSponsorTemplate?.id ?? null,
           modelCatalog,
           modelContextWindows: parsedWindows.windows,
@@ -2299,6 +2432,7 @@ export function CodexModelProviderManager({
             baseUrl: savedProvider.baseUrl,
             apiKey: newApiKey,
             integrationType: savedProvider.integrationType ?? null,
+            usageQuery: savedProvider.usageQuery ?? null,
           });
           setProviderUsageMap((previous) => ({
             ...previous,
@@ -3186,6 +3320,7 @@ export function CodexModelProviderManager({
           baseUrl: provider.baseUrl,
           apiKey: apiKey.apiKey,
           integrationType: provider.integrationType ?? null,
+          usageQuery: provider.usageQuery ?? null,
         });
         if (
           (summary.mode === "sub2api" || summary.mode === "new_api") &&
@@ -3702,7 +3837,8 @@ export function CodexModelProviderManager({
               usageSummary?.mode === "new_api" ||
               usageSummary?.mode === "sub2api" ||
               usageSummary?.mode === "deepseek" ||
-              usageSummary?.mode === "token_plan"
+              usageSummary?.mode === "token_plan" ||
+              usageSummary?.mode === "custom"
                 ? usageSummary.mode
                 : provider.integrationType ?? null;
             const deepSeekDetailValue = (key: string) => {
@@ -3964,6 +4100,35 @@ export function CodexModelProviderManager({
                             ? `${t("codex.modelProviders.usage.fields.expiresAt", "过期时间")} ${new Date(expiresAt * 1000).toLocaleDateString()}`
                             : t("dashboard.noData", "暂无数据")}
                         </span>
+                      </div>
+                    </div>
+                  ) : usageMode === "custom" ? (
+                    <div className="codex-api-key-usage-panel custom">
+                      <div className="codex-api-key-usage-grid">
+                        <div>
+                          <span>
+                            {t(
+                              "codex.modelProviders.usage.fields.remaining",
+                              "Remaining",
+                            )}
+                          </span>
+                          <strong>{usagePrimaryText}</strong>
+                        </div>
+                        <div>
+                          <span>
+                            {t("codex.modelProviders.usage.fields.status", "Status")}
+                          </span>
+                          <strong>
+                            {usageSummary?.status ||
+                              (usageSummary?.isValid === false ? "invalid" : "available")}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>
+                            {t("codex.modelProviders.usage.fields.unit", "Unit")}
+                          </span>
+                          <strong>{usageSummary?.unit || "-"}</strong>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -4995,6 +5160,84 @@ export function CodexModelProviderManager({
                 />
               </div>
               <div className="form-group">
+                <label>
+                  {t(
+                    "codex.modelProviders.usage.customEndpoint",
+                    "自定义额度接口（可选）",
+                  )}
+                </label>
+                <input
+                  className="form-input"
+                  type="text"
+                  value={form.usageEndpoint}
+                  onChange={(event) =>
+                    mutateForm({ usageEndpoint: event.target.value })
+                  }
+                  placeholder="/v1/usage 或 /user/balance"
+                  disabled={saving}
+                />
+                <p className="api-provider-hint">
+                  {t(
+                    "codex.modelProviders.usage.customEndpointHint",
+                    "仅发起 GET 请求；可填写相对路径，或使用 {{baseUrl}}/user/balance。留空则使用内置额度检测。",
+                  )}
+                </p>
+              </div>
+              {form.usageEndpoint.trim() && (
+                <>
+                  <div className="form-group">
+                    <label>
+                      {t(
+                        "codex.modelProviders.usage.customHeaders",
+                        "自定义请求头（JSON，可选）",
+                      )}
+                    </label>
+                    <textarea
+                      className="form-input"
+                      rows={3}
+                      value={form.usageHeadersText}
+                      onChange={(event) =>
+                        mutateForm({ usageHeadersText: event.target.value })
+                      }
+                      placeholder={'{"Authorization":"Bearer {{apiKey}}"}'}
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>
+                      {t(
+                        "codex.modelProviders.usage.customMappings",
+                        "额度字段映射（JSON，可选）",
+                      )}
+                    </label>
+                    <textarea
+                      className="form-input"
+                      rows={5}
+                      value={form.usageMappingsText}
+                      onChange={(event) =>
+                        mutateForm({ usageMappingsText: event.target.value })
+                      }
+                      placeholder={JSON.stringify(
+                        {
+                          remaining: "quota.remaining",
+                          isValid: "is_active",
+                          unit: "CNY",
+                        },
+                        null,
+                        2,
+                      )}
+                      disabled={saving}
+                    />
+                    <p className="api-provider-hint">
+                      {t(
+                        "codex.modelProviders.usage.customMappingsHint",
+                        "字段值使用点号 JSON 路径；unit 可填写固定值（如 CNY），或使用 $.unit 从响应读取。",
+                      )}
+                    </p>
+                  </div>
+                </>
+              )}
+              <div className="form-group">
                 <label className="codex-provider-label-with-help">
                   <span>{t("codex.modelProviders.fields.wireApi", "协议")}</span>
                   <span
@@ -6023,7 +6266,8 @@ export function CodexModelProviderManager({
           usageSummary?.mode === "new_api" ||
           usageSummary?.mode === "sub2api" ||
           usageSummary?.mode === "deepseek" ||
-          usageSummary?.mode === "token_plan"
+          usageSummary?.mode === "token_plan" ||
+          usageSummary?.mode === "custom"
             ? usageSummary.mode
             : provider.integrationType ?? null;
         const coreDetailKeys =
@@ -6046,6 +6290,19 @@ export function CodexModelProviderManager({
                       "planName",
                       "expiresAt",
                     ])
+                  : usageMode === "custom"
+                    ? new Set([
+                        "mode",
+                        "isValid",
+                        "status",
+                        "remaining",
+                        "balance",
+                        "unit",
+                        "quotaUnlimited",
+                        "quotaLimit",
+                        "quotaUsed",
+                        "quotaRemaining",
+                      ])
                 : new Set<string>();
         const detailMetrics: CodexServicePanelMetricItem[] = [
           {
@@ -6201,8 +6458,8 @@ export function CodexModelProviderManager({
                   ),
                 },
               ]
-            : usageMode === "sub2api"
-              ? [
+              : usageMode === "sub2api"
+                ? [
                   {
                     key: "accountBalance",
                     label: t("codex.modelProviders.usage.accountBalance", "账户余额"),
@@ -6224,6 +6481,34 @@ export function CodexModelProviderManager({
                     value: (usageSummary?.todayTotalTokens ?? 0).toLocaleString("en-US"),
                   },
                 ]
+              : usageMode === "custom"
+                ? [
+                    {
+                      key: "remaining",
+                      label: t(
+                        "codex.modelProviders.usage.fields.remaining",
+                        "Remaining",
+                      ),
+                      value: formatUsageQuotaValue(
+                        usageSummary,
+                        usageSummary?.remaining ??
+                          usageSummary?.balance ??
+                          usageSummary?.quotaRemaining,
+                      ),
+                    },
+                    {
+                      key: "status",
+                      label: t("codex.modelProviders.usage.fields.status", "Status"),
+                      value:
+                        usageSummary?.status ||
+                        (usageSummary?.isValid === false ? "invalid" : "available"),
+                    },
+                    {
+                      key: "unit",
+                      label: t("codex.modelProviders.usage.fields.unit", "Unit"),
+                      value: usageSummary?.unit || "-",
+                    },
+                  ]
               : [];
 
         const actions: CodexServicePanelActionItem[] = [
