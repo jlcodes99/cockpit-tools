@@ -18346,6 +18346,9 @@ pub async fn run_model_provider_gateway_chat_test(
     if is_model_provider_chat_test_cancelled(&run_id) {
         return Err(MODEL_PROVIDER_CHAT_TEST_CANCELLED_ERROR.to_string());
     }
+    if app_lifecycle::is_shutdown_started() {
+        return Err("应用正在退出，已取消模型供应商网关测试".to_string());
+    }
     let model_id = request.model_id.trim();
     if model_id.is_empty() {
         return Err("测试模型不能为空".to_string());
@@ -27044,11 +27047,18 @@ mod tests {
             super::ensure_provider_gateway_for_dir(&profile_dir, &missing_account).await;
         let bound_oauth_result =
             super::ensure_bound_oauth_local_gateway_for_dir(&profile_dir, &missing_account).await;
+        let temporary_test_result = super::run_model_provider_gateway_chat_test(
+            model_provider_chat_test_request("chat_completions"),
+        )
+        .await;
         let empty_account_result = super::ensure_provider_gateway_for_dir(&profile_dir, " ").await;
         crate::modules::app_lifecycle::reset_lifecycle_state_for_test();
 
         assert_eq!(provider_result, Ok(()));
         assert_eq!(bound_oauth_result, Ok(()));
+        assert!(temporary_test_result
+            .expect_err("shutdown must reject a temporary provider test before setup")
+            .contains("应用正在退出"));
         assert!(
             empty_account_result.is_err(),
             "empty account validation must remain intact during shutdown"
