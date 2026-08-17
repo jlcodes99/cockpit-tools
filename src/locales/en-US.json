@@ -2090,6 +2090,19 @@
         "title": "Sync All Instance Records",
         "tooltip": "Sync all instance records"
       },
+      "authBinding": {
+        "title": "Official login and API provider",
+        "preserveOfficialAuth": "Keep official login",
+        "preserveOfficialAuthDesc": "Official account + third-party API",
+        "providerLabel": "Third-party API account",
+        "officialLabel": "Official subscription account",
+        "required": "Select a third-party API account and an official account",
+        "providerMissing": "The third-party API account no longer exists",
+        "noProviders": "No API accounts",
+        "noOfficialAccounts": "No official subscription accounts",
+        "status": "Use the official login for app identity and the selected API provider for model requests",
+        "clear": "Clear combination"
+      },
       "restartStrategy": {
         "safe": {
           "principle": "Send SIGTERM to the target Codex process so the app can save and exit, then relaunch that instance (force kill if needed).",

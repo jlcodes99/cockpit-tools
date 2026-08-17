@@ -2090,6 +2090,19 @@
         "title": "同步所有实例记录",
         "tooltip": "同步所有实例记录"
       },
+      "authBinding": {
+        "title": "官方登录与 API 供应商",
+        "preserveOfficialAuth": "保留官方登录",
+        "preserveOfficialAuthDesc": "官方账号 + 第三方 API",
+        "providerLabel": "第三方 API 账号",
+        "officialLabel": "官方订阅账号",
+        "required": "请选择第三方 API 账号和官方账号",
+        "providerMissing": "第三方 API 账号不存在",
+        "noProviders": "暂无 API 账号",
+        "noOfficialAccounts": "暂无官方订阅账号",
+        "status": "官方登录用于应用身份，模型请求使用所选 API 供应商",
+        "clear": "清除组合"
+      },
       "restartStrategy": {
         "safe": {
           "principle": "向目标 Codex 进程发送 SIGTERM，请求应用自行保存并退出，退出后再启动该实例（必要时会强制结束）。",

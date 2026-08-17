@@ -61,6 +61,7 @@ pub struct CreateInstanceParams {
     pub working_dir: Option<String>,
     pub extra_args: String,
     pub bind_account_id: Option<String>,
+    pub official_account_id: Option<String>,
     pub copy_source_instance_id: Option<String>,
     pub init_mode: Option<String>,
     pub launch_mode: Option<InstanceLaunchMode>,
@@ -74,6 +75,7 @@ pub struct UpdateInstanceParams {
     pub working_dir: Option<String>,
     pub extra_args: Option<String>,
     pub bind_account_id: Option<Option<String>>,
+    pub official_account_id: Option<Option<String>>,
     pub launch_mode: Option<InstanceLaunchMode>,
     pub app_speed: Option<CodexAppSpeed>,
 }
@@ -104,6 +106,7 @@ pub fn load_default_settings() -> Result<DefaultInstanceSettings, String> {
 
 pub fn update_default_settings(
     bind_account_id: Option<Option<String>>,
+    official_account_id: Option<Option<String>>,
     extra_args: Option<String>,
     follow_local_account: Option<bool>,
     launch_mode: Option<InstanceLaunchMode>,
@@ -118,11 +121,16 @@ pub fn update_default_settings(
     if follow_local_account == Some(true) {
         settings.follow_local_account = true;
         settings.bind_account_id = None;
+        settings.official_account_id = None;
     }
 
     if let Some(bind) = bind_account_id {
         settings.bind_account_id = bind;
         settings.follow_local_account = false;
+    }
+
+    if let Some(official_account_id) = official_account_id {
+        settings.official_account_id = official_account_id;
     }
 
     if follow_local_account == Some(false) && settings.bind_account_id.is_none() {
@@ -923,6 +931,11 @@ pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, 
         } else {
             params.bind_account_id
         },
+        official_account_id: if create_empty {
+            None
+        } else {
+            params.official_account_id
+        },
         launch_mode: params.launch_mode.unwrap_or_default(),
         app_speed: params.app_speed.unwrap_or_default(),
         created_at: Utc::now().timestamp_millis(),
@@ -974,6 +987,9 @@ pub fn update_instance(params: UpdateInstanceParams) -> Result<InstanceProfile, 
     }
     if let Some(bind) = params.bind_account_id.clone() {
         instance.bind_account_id = bind;
+    }
+    if let Some(official_account_id) = params.official_account_id {
+        instance.official_account_id = official_account_id;
     }
     if let Some(mode) = params.launch_mode {
         instance.launch_mode = mode;

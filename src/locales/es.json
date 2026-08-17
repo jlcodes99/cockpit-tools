@@ -1891,6 +1891,19 @@
         "title": "Sincronizar registros de todas las instancias",
         "tooltip": "Sincronizar registros de todas las instancias"
       },
+      "authBinding": {
+        "title": "Inicio de sesión oficial y proveedor de API",
+        "preserveOfficialAuth": "Mantener inicio de sesión oficial",
+        "preserveOfficialAuthDesc": "Cuenta oficial + API de terceros",
+        "providerLabel": "Cuenta de API de terceros",
+        "officialLabel": "Cuenta de suscripción oficial",
+        "required": "Selecciona una cuenta de API de terceros y una cuenta oficial",
+        "providerMissing": "La cuenta de API de terceros ya no existe",
+        "noProviders": "No hay cuentas de API",
+        "noOfficialAccounts": "No hay cuentas de suscripción oficiales",
+        "status": "Usa el inicio de sesión oficial para la identidad de la aplicación y el proveedor de API seleccionado para las solicitudes a los modelos",
+        "clear": "Desvincular"
+      },
       "restartStrategy": {
         "safe": {
           "principle": "Envía una señal SIGTERM a todos los procesos de Codex, pidiendo a la aplicación que guarde y se cierre, luego inicia la instancia de destino (forzar el cierre si es necesario).",

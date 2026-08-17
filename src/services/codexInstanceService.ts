@@ -56,6 +56,7 @@ export async function createInstance(payload: {
   workingDir?: string | null;
   extraArgs?: string;
   bindAccountId?: string | null;
+  officialAccountId?: string | null;
   launchMode?: InstanceLaunchMode;
   appSpeed?: CodexAppSpeed;
   copySourceInstanceId: string;
@@ -67,6 +68,7 @@ export async function createInstance(payload: {
     workingDir: payload.workingDir ?? null,
     extraArgs: payload.extraArgs ?? "",
     bindAccountId: payload.bindAccountId ?? null,
+    officialAccountId: payload.officialAccountId ?? null,
     launchMode: payload.launchMode ?? "app",
     appSpeed: payload.appSpeed ?? "standard",
     copySourceInstanceId: payload.copySourceInstanceId,
@@ -80,6 +82,7 @@ export async function updateInstance(payload: {
   workingDir?: string | null;
   extraArgs?: string;
   bindAccountId?: string | null;
+  officialAccountId?: string | null;
   followLocalAccount?: boolean;
   launchMode?: InstanceLaunchMode;
   appSpeed?: CodexAppSpeed;
@@ -99,6 +102,12 @@ export async function updateInstance(payload: {
   }
   if (payload.bindAccountId !== undefined) {
     body.bindAccountId = payload.bindAccountId;
+  }
+  if (payload.officialAccountId !== undefined) {
+    body.officialAccountId = payload.officialAccountId;
+    // JSON null collapses the Rust Option<Option<String>> command argument.
+    // Send an explicit flag so clearing remains distinct from no update.
+    body.clearOfficialAccount = payload.officialAccountId === null;
   }
   if (payload.followLocalAccount !== undefined) {
     body.followLocalAccount = payload.followLocalAccount;

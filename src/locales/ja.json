@@ -1891,6 +1891,19 @@
         "title": "すべてのインスタンス記録を同期",
         "tooltip": "すべてのインスタンス記録を同期"
       },
+      "authBinding": {
+        "title": "公式ログインと API プロバイダー",
+        "preserveOfficialAuth": "公式ログインを維持",
+        "preserveOfficialAuthDesc": "公式アカウント + サードパーティ API",
+        "providerLabel": "サードパーティ API アカウント",
+        "officialLabel": "公式サブスクリプションアカウント",
+        "required": "サードパーティ API アカウントと公式アカウントを選択してください",
+        "providerMissing": "サードパーティ API アカウントは存在しなくなりました",
+        "noProviders": "API アカウントがありません",
+        "noOfficialAccounts": "公式サブスクリプションアカウントがありません",
+        "status": "アプリの識別には公式ログインを使用し、モデルリクエストには選択した API プロバイダーを使用します",
+        "clear": "組み合わせを解除"
+      },
       "restartStrategy": {
         "safe": {
           "principle": "すべての Codex プロセスに SIGTERM を送信して、アプリが自身で保存して終了するように促します。終了後にターゲットインスタンスを起動します（必要に応じて強制終了します）。",

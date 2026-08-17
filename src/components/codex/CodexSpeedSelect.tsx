@@ -119,7 +119,9 @@ export function CodexSpeedSelect({
   }`;
 
   const updatePosition = useCallback(() => {
-    setPosition(resolveSpeedMenuPosition(triggerRef.current, preferredPlacement, compact));
+    setPosition(
+      resolveSpeedMenuPosition(triggerRef.current, preferredPlacement, compact),
+    );
   }, [compact, preferredPlacement]);
 
   useEffect(() => {

@@ -7,7 +7,10 @@ import { CodexCliLaunchDialog } from "../components/codex/CodexCliLaunchDialog";
 import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
 import { useCodexInstanceStore } from "../stores/useCodexInstanceStore";
 import { useCodexAccountStore } from "../stores/useCodexAccountStore";
-import { isCodexApiKeyAccount, type CodexAccount } from "../types/codex";
+import {
+  isCodexApiKeyAccount,
+  type CodexAccount,
+} from "../types/codex";
 import {
   CODEX_API_SERVICE_BIND_ID,
   CODEX_PROVIDER_GATEWAY_BIND_PREFIX,
@@ -39,6 +42,7 @@ import {
   parseCodexBoundAccountId,
   resolveDeepSeekBindAccountId,
 } from "../utils/codexDeepSeekAccess";
+import { isCodexOAuthBindingEligibleAccount } from "../utils/codexLocalAccessAccounts";
 
 /**
  * Codex 应用多开内容组件（不包含 header）
@@ -593,6 +597,7 @@ export function CodexInstancesContent({
           unsupportedDescDefault="Codex 应用多开仅支持 macOS 和 Windows。"
           onInstanceStarted={handleInstanceStarted}
           onBeforeStart={handleBeforeStart}
+          isCodexOfficialAuthAccount={isCodexOAuthBindingEligibleAccount}
           resolveStartSuccessMessage={(instance) =>
             (instance.launchMode ?? "app") === "cli"
               ? t("instances.messages.launchPrepared", "启动命令已准备")

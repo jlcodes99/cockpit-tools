@@ -1891,6 +1891,19 @@
         "title": "Đồng bộ tất cả bản ghi phiên bản",
         "tooltip": "Đồng bộ tất cả bản ghi phiên bản"
       },
+      "authBinding": {
+        "title": "Đăng nhập chính thức và nhà cung cấp API",
+        "preserveOfficialAuth": "Giữ đăng nhập chính thức",
+        "preserveOfficialAuthDesc": "Tài khoản chính thức + API bên thứ ba",
+        "providerLabel": "Tài khoản API bên thứ ba",
+        "officialLabel": "Tài khoản có gói đăng ký chính thức",
+        "required": "Chọn một tài khoản API bên thứ ba và một tài khoản chính thức",
+        "providerMissing": "Tài khoản API bên thứ ba không còn tồn tại",
+        "noProviders": "Không có tài khoản API",
+        "noOfficialAccounts": "Không có tài khoản nào có gói đăng ký chính thức",
+        "status": "Dùng thông tin đăng nhập chính thức cho danh tính ứng dụng và nhà cung cấp API đã chọn cho các yêu cầu gửi tới mô hình",
+        "clear": "Bỏ liên kết"
+      },
       "restartStrategy": {
         "safe": {
           "principle": "Gửi tín hiệu SIGTERM đến tất cả các tiến trình Codex, yêu cầu ứng dụng lưu dữ liệu và đóng lại, sau đó bắt đầu phiên bản đích (buộc đóng nếu cần).",

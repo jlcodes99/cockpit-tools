@@ -25,6 +25,8 @@ pub struct InstanceProfile {
     pub working_dir: Option<String>,
     pub extra_args: String,
     pub bind_account_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub official_account_id: Option<String>,
     #[serde(default)]
     pub launch_mode: InstanceLaunchMode,
     #[serde(default, skip_serializing_if = "is_standard_app_speed")]
@@ -57,6 +59,8 @@ impl InstanceStore {
 pub struct DefaultInstanceSettings {
     #[serde(default)]
     pub bind_account_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub official_account_id: Option<String>,
     #[serde(default)]
     pub extra_args: String,
     #[serde(default)]
@@ -81,6 +85,7 @@ impl Default for DefaultInstanceSettings {
     fn default() -> Self {
         Self {
             bind_account_id: None,
+            official_account_id: None,
             extra_args: String::new(),
             working_dir: None,
             launch_mode: InstanceLaunchMode::App,

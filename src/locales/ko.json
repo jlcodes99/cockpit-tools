@@ -1891,6 +1891,19 @@
         "title": "모든 인스턴스 기록 동기화",
         "tooltip": "모든 인스턴스 기록 동기화"
       },
+      "authBinding": {
+        "title": "공식 로그인 및 API 공급자",
+        "preserveOfficialAuth": "공식 로그인 유지",
+        "preserveOfficialAuthDesc": "공식 계정 + 타사 API",
+        "providerLabel": "타사 API 계정",
+        "officialLabel": "공식 구독 계정",
+        "required": "타사 API 계정과 공식 계정을 선택하세요",
+        "providerMissing": "타사 API 계정이 더 이상 존재하지 않습니다",
+        "noProviders": "API 계정 없음",
+        "noOfficialAccounts": "공식 구독 계정 없음",
+        "status": "앱 내 사용자 식별에는 공식 로그인을 사용하고 모델 요청에는 선택한 API 공급자를 사용합니다",
+        "clear": "연결 해제"
+      },
       "restartStrategy": {
         "safe": {
           "principle": "모든 Codex 프로세스에 SIGTERM을 보내 앱이 스스로 저장하고 종료하도록 한 다음, 대상 인스턴스를 다시 시작합니다 (필요 시 강제 종료).",

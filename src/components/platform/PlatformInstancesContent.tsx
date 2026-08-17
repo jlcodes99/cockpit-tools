@@ -46,6 +46,7 @@ interface PlatformInstancesContentProps<TAccount extends AccountLike> {
   unsupportedDescDefault: string;
   onInstanceStarted?: (instance: InstanceProfile) => void | Promise<void>;
   onBeforeStart?: (instance: InstanceProfile) => boolean | Promise<boolean>;
+  isCodexOfficialAuthAccount?: (account: TAccount) => boolean;
   onInstanceStartError?: (
     error: unknown,
     instance: InstanceProfile,
@@ -71,6 +72,7 @@ export function PlatformInstancesContent<TAccount extends AccountLike>({
   unsupportedDescDefault,
   onInstanceStarted,
   onBeforeStart,
+  isCodexOfficialAuthAccount,
   onInstanceStartError,
   resolveStartSuccessMessage,
   isAccountAllowedForLaunchMode,
@@ -106,6 +108,7 @@ export function PlatformInstancesContent<TAccount extends AccountLike>({
         appType={appType}
         onInstanceStarted={onInstanceStarted}
         onBeforeStart={onBeforeStart}
+        isCodexOfficialAuthAccount={isCodexOfficialAuthAccount}
         onInstanceStartError={onInstanceStartError}
         resolveStartSuccessMessage={resolveStartSuccessMessage}
         isAccountAllowedForLaunchMode={isAccountAllowedForLaunchMode}

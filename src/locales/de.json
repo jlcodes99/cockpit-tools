@@ -1891,6 +1891,19 @@
         "title": "Alle Instanzdatensätze synchronisieren",
         "tooltip": "Alle Instanzdatensätze synchronisieren"
       },
+      "authBinding": {
+        "title": "Offizielle Anmeldung und API-Anbieter",
+        "preserveOfficialAuth": "Offizielle Anmeldung beibehalten",
+        "preserveOfficialAuthDesc": "Offizielles Konto + Drittanbieter-API",
+        "providerLabel": "Drittanbieter-API-Konto",
+        "officialLabel": "Offizielles Abonnementkonto",
+        "required": "Wählen Sie ein Drittanbieter-API-Konto und ein offizielles Konto aus",
+        "providerMissing": "Das Drittanbieter-API-Konto existiert nicht mehr",
+        "noProviders": "Keine API-Konten",
+        "noOfficialAccounts": "Keine offiziellen Abonnementkonten",
+        "status": "Verwenden Sie die offizielle Anmeldung für die App-Identität und den ausgewählten API-Anbieter für Modellanfragen",
+        "clear": "Verknüpfung aufheben"
+      },
       "restartStrategy": {
         "safe": {
           "principle": "Sendet ein SIGTERM-Signal an alle Codex-Prozesse, damit die App speichern und sich selbst beenden kann, und startet dann die Zielinstanz (erzwingt das Beenden, falls erforderlich).",

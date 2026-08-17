@@ -1891,6 +1891,19 @@
         "title": "Synchroniser les enregistrements de toutes les instances",
         "tooltip": "Synchroniser les enregistrements de toutes les instances"
       },
+      "authBinding": {
+        "title": "Connexion officielle et fournisseur d’API",
+        "preserveOfficialAuth": "Conserver la connexion officielle",
+        "preserveOfficialAuthDesc": "Compte officiel + API tierce",
+        "providerLabel": "Compte API tiers",
+        "officialLabel": "Compte avec abonnement officiel",
+        "required": "Sélectionnez un compte API tiers et un compte officiel",
+        "providerMissing": "Le compte API tiers n’existe plus",
+        "noProviders": "Aucun compte API",
+        "noOfficialAccounts": "Aucun compte avec abonnement officiel",
+        "status": "Utilisez la connexion officielle pour l’identité de l’application et le fournisseur d’API sélectionné pour les requêtes aux modèles",
+        "clear": "Dissocier"
+      },
       "restartStrategy": {
         "safe": {
           "principle": "Envoie un signal SIGTERM à tous les processus Codex, demandant à l'application de sauvegarder et de s'arrêter, puis lance l'instance cible (arrêt forcé si nécessaire).",

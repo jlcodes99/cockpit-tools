@@ -6767,7 +6767,7 @@ pub(crate) fn write_prepared_account_bundle_to_dir(
     Ok(())
 }
 
-fn validate_api_key_bound_oauth_account(
+pub(crate) fn validate_api_key_bound_oauth_account(
     api_key_account: &CodexAccount,
     bound_oauth_account_id: &str,
 ) -> Result<CodexAccount, String> {
@@ -7634,6 +7634,22 @@ pub async fn prepare_account_for_injection_from_auth_dir(
         write_prepared_account_bundle_to_dir(dir, &account)?;
     }
     Ok(account)
+}
+
+pub async fn prepare_api_key_account_for_injection_with_oauth_from_auth_dir(
+    api_key_account_id: &str,
+    oauth_account_id: &str,
+    auth_dir: &Path,
+) -> Result<CodexAccount, String> {
+    let mut api_key_account = load_account(api_key_account_id)
+        .ok_or_else(|| format!("账号不存在: {}", api_key_account_id))?;
+    let oauth_account = validate_api_key_bound_oauth_account(&api_key_account, oauth_account_id)?;
+    api_key_account.bound_oauth_account_id = Some(oauth_account.id.clone());
+    let oauth_account =
+        refresh_managed_account_with_authority(&oauth_account.id, false, "instance-prepare", None)
+            .await?;
+    write_api_key_account_bundle_with_oauth_to_dir(auth_dir, &api_key_account, &oauth_account)?;
+    Ok(api_key_account)
 }
 
 pub async fn prepare_account_for_injection(account_id: &str) -> Result<CodexAccount, String> {

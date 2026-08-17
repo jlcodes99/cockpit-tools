@@ -1891,6 +1891,19 @@
         "title": "Tüm örnek kayıtlarını eşitle",
         "tooltip": "Tüm örnek kayıtlarını eşitle"
       },
+      "authBinding": {
+        "title": "Resmî giriş ve API sağlayıcısı",
+        "preserveOfficialAuth": "Resmî girişi koru",
+        "preserveOfficialAuthDesc": "Resmî hesap + üçüncü taraf API",
+        "providerLabel": "Üçüncü taraf API hesabı",
+        "officialLabel": "Resmî abonelik hesabı",
+        "required": "Bir üçüncü taraf API hesabı ve resmî hesap seçin",
+        "providerMissing": "Üçüncü taraf API hesabı artık mevcut değil",
+        "noProviders": "API hesabı yok",
+        "noOfficialAccounts": "Resmî abonelik hesabı yok",
+        "status": "Uygulama kimliği için resmî girişi, model istekleri için seçilen API sağlayıcısını kullan",
+        "clear": "Eşleştirmeyi kaldır"
+      },
       "restartStrategy": {
         "safe": {
           "principle": "Tüm Codex işlemlerine SIGTERM sinyali göndererek uygulamanın verileri kaydedip kapanmasını ister, ardından hedef oturumu başlatır (gerekirse kapanmaya zorlar).",

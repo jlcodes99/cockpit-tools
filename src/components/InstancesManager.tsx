@@ -25,6 +25,7 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  ShieldCheck,
 } from "lucide-react";
 import { confirm as confirmDialog, open } from "@tauri-apps/plugin-dialog";
 import md5 from "blueimp-md5";
@@ -69,13 +70,14 @@ import type { CodexAppSpeed } from "../types/codex";
 import { getCodexExperimentalModelErrorMessage } from "../utils/codexExperimentalModel";
 
 type MessageState = { text: string; tone?: "error" };
-type AccountLike = {
+export type AccountLike = {
   id: string;
   email: string;
   tags?: string[] | null;
   auth_mode?: string;
   api_wire_api?: string | null;
   api_base_url?: string | null;
+  bound_oauth_account_id?: string | null;
 };
 type InstanceSortField = "createdAt" | "lastLaunchedAt";
 type SortDirection = "asc" | "desc";
@@ -103,9 +105,11 @@ type BaseAccountSelectProps = {
   disabled?: boolean;
   missing?: boolean;
   placeholder?: string;
+  ariaLabel?: string;
 };
 
 type AccountMenuItemsRenderArgs<TAccount extends AccountLike> = {
+  selectableAccounts: TAccount[];
   visibleAccounts: TAccount[];
   availableTags: string[];
   searchValue: string;
@@ -151,6 +155,7 @@ type InlineAccountSelectProps<TAccount extends AccountLike> =
     onOpenChange?: (open: boolean) => void;
     instanceId?: string;
     currentOpenId?: string | null;
+    portalMaxHeight?: number;
   };
 
 interface InstancesManagerProps<TAccount extends AccountLike> {
@@ -182,6 +187,7 @@ interface InstancesManagerProps<TAccount extends AccountLike> {
     | "zcode";
   onInstanceStarted?: (instance: InstanceProfile) => void | Promise<void>;
   onBeforeStart?: (instance: InstanceProfile) => boolean | Promise<boolean>;
+  isCodexOfficialAuthAccount?: (account: TAccount) => boolean;
   onInstanceStartError?: (
     error: unknown,
     instance: InstanceProfile,
@@ -198,6 +204,7 @@ const INSTANCE_AUTO_REFRESH_INTERVAL_MS = 10_000;
 const ACCOUNT_SELECT_PORTAL_GAP = 8;
 const ACCOUNT_SELECT_PORTAL_SAFE_MARGIN = 12;
 const ACCOUNT_SELECT_PORTAL_MAX_HEIGHT = 320;
+const CODEX_ACCOUNT_SELECT_PORTAL_MAX_HEIGHT = 560;
 const ACCOUNT_SELECT_PORTAL_MIN_HEIGHT = 140;
 const ACCOUNT_SELECT_PORTAL_Z_INDEX = 10020;
 const DEFAULT_AUTO_COMPACT_TOKEN_LIMIT = 900000;
@@ -283,6 +290,7 @@ const collectInstanceAccountTags = <TAccount extends AccountLike>(
 
 const resolveAccountSelectPortalPosition = (
   trigger: HTMLButtonElement | null,
+  preferredMaxHeight = ACCOUNT_SELECT_PORTAL_MAX_HEIGHT,
 ): AccountSelectPortalPosition | null => {
   const rect = trigger?.getBoundingClientRect();
   if (!rect) return null;
@@ -306,12 +314,12 @@ const resolveAccountSelectPortalPosition = (
   const spaceAbove =
     rect.top - ACCOUNT_SELECT_PORTAL_GAP - ACCOUNT_SELECT_PORTAL_SAFE_MARGIN;
   const placement: "top" | "bottom" =
-    spaceBelow >= ACCOUNT_SELECT_PORTAL_MAX_HEIGHT || spaceBelow >= spaceAbove
+    spaceBelow >= preferredMaxHeight || spaceBelow >= spaceAbove
       ? "bottom"
       : "top";
   const availableHeight = placement === "bottom" ? spaceBelow : spaceAbove;
   const maxHeight = Math.min(
-    ACCOUNT_SELECT_PORTAL_MAX_HEIGHT,
+    preferredMaxHeight,
     Math.max(
       availableHeight,
       Math.min(
@@ -373,12 +381,14 @@ const InlineAccountSelect = <TAccount extends AccountLike>({
   disabled = false,
   missing = false,
   placeholder,
+  ariaLabel,
   instanceId,
   currentOpenId,
   unboundLabel,
   selectAccountLabel,
   missingAccountLabel,
   followCurrentLabel,
+  portalMaxHeight = ACCOUNT_SELECT_PORTAL_MAX_HEIGHT,
 }: InlineAccountSelectProps<TAccount>) => {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -456,10 +466,13 @@ const InlineAccountSelect = <TAccount extends AccountLike>({
       return;
     }
     setPortalPos((prev) => {
-      const next = resolveAccountSelectPortalPosition(triggerRef.current);
+      const next = resolveAccountSelectPortalPosition(
+        triggerRef.current,
+        portalMaxHeight,
+      );
       return isSameAccountSelectPortalPosition(prev, next) ? prev : next;
     });
-  }, []);
+  }, [portalMaxHeight]);
 
   useEffect(() => {
     if (isOpen) return;
@@ -552,6 +565,9 @@ const InlineAccountSelect = <TAccount extends AccountLike>({
         ref={triggerRef}
         type="button"
         className={`account-select-trigger ${isOpen ? "open" : ""}`}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
         onClick={() => {
           if (disabled) return;
           setOpen(!isOpen);
@@ -588,6 +604,7 @@ const InlineAccountSelect = <TAccount extends AccountLike>({
             >
               <div ref={portalMenuRef} className="account-select-menu">
                 {renderAccountMenuItems({
+                  selectableAccounts,
                   visibleAccounts,
                   availableTags,
                   searchValue,
@@ -657,6 +674,7 @@ export function InstancesManager<TAccount extends AccountLike>({
   appType = "antigravity",
   onInstanceStarted,
   onBeforeStart,
+  isCodexOfficialAuthAccount,
   onInstanceStartError,
   resolveStartSuccessMessage,
   isAccountAllowedForLaunchMode,
@@ -685,6 +703,14 @@ export function InstancesManager<TAccount extends AccountLike>({
     useState<FileCorruptedError | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [openInlineMenuId, setOpenInlineMenuId] = useState<string | null>(null);
+  const [openOfficialAccountPickerId, setOpenOfficialAccountPickerId] =
+    useState<string | null>(null);
+  const [inlineOfficialAuthSavingId, setInlineOfficialAuthSavingId] =
+    useState<string | null>(null);
+  const [inlineOfficialAuthError, setInlineOfficialAuthError] = useState<{
+    instanceId: string;
+    text: string;
+  } | null>(null);
   const [runningNoticeInstance, setRunningNoticeInstance] =
     useState<InstanceProfile | null>(null);
   const [initGuideInstance, setInitGuideInstance] =
@@ -775,6 +801,25 @@ export function InstancesManager<TAccount extends AccountLike>({
   const isCliOnlyApp = isGrokApp;
   const isCodexApp = appType === "codex";
   const isClaudeApp = appType === "claude";
+  const isCodexApiProviderAccount = useCallback(
+    (account?: TAccount | null) =>
+      Boolean(
+        isCodexApp &&
+          account?.auth_mode?.trim().toLowerCase() === "apikey",
+      ),
+    [isCodexApp],
+  );
+  const codexApiProviderAccounts = useMemo(
+    () => accounts.filter((account) => isCodexApiProviderAccount(account)),
+    [accounts, isCodexApiProviderAccount],
+  );
+  const codexOfficialAuthAccounts = useMemo(
+    () =>
+      isCodexApp && isCodexOfficialAuthAccount
+        ? accounts.filter(isCodexOfficialAuthAccount)
+        : [],
+    [accounts, isCodexApp, isCodexOfficialAuthAccount],
+  );
   const supportsLaunchModeSelect = isCodexApp || isClaudeApp;
   const resolveInstanceLaunchMode = (
     instance?: InstanceProfile | null,
@@ -2092,162 +2137,467 @@ export function InstancesManager<TAccount extends AccountLike>({
     };
   }, [applyFormCodexQuickConfig, editing, isCodexApp, showModal, t]);
 
-  const renderAccountMenuItems = ({
-    visibleAccounts,
-    availableTags,
-    searchValue,
-    onSearchChange,
-    tagFilter,
-    onToggleTagFilter,
-    onClearTagFilter,
-    value,
-    isFollowingCurrent = false,
-    allowFollowCurrent = false,
-    allowUnbound = false,
-    onFollowCurrent,
-    onChange,
-    onClose,
-    selectedAccount,
-  }: AccountMenuItemsRenderArgs<TAccount>) => (
-    <>
-      <div className="account-select-menu-toolbar">
-        <label className="account-select-search-box">
-          <Search size={14} />
-          <input
-            type="text"
-            value={searchValue}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder={t("accounts.search", "搜索账号...")}
-          />
-        </label>
-        {availableTags.length > 0 ? (
-          <div className="account-select-tag-filter">
-            <span className="account-select-tag-filter-label">
-              {t("accounts.filterTags", "标签筛选")}
-            </span>
-            <div className="account-select-tag-filter-list">
-              {availableTags.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  className={`account-select-tag-pill ${
-                    tagFilter.includes(tag) ? "active" : ""
-                  }`}
-                  onClick={() => onToggleTagFilter(tag)}
-                >
-                  {tag}
-                </button>
-              ))}
-              {tagFilter.length > 0 ? (
-                <button
-                  type="button"
-                  className="account-select-tag-clear"
-                  onClick={onClearTagFilter}
-                >
-                  {t("accounts.clearFilter", "清空筛选")}
-                </button>
-              ) : null}
-            </div>
+  const resolveCodexCombinationProvider = (instance: InstanceProfile) => {
+    const currentAccount = resolveBoundAccount(instance.bindAccountId).account;
+    return isCodexApiProviderAccount(currentAccount)
+      ? currentAccount
+      : codexApiProviderAccounts[0] || null;
+  };
+
+  const resolveCodexCombinationOfficialAccount = (
+    instance: InstanceProfile,
+    provider: TAccount,
+  ) => {
+    const preferredIds = [
+      instance.officialAccountId,
+      provider.bound_oauth_account_id,
+    ].filter(Boolean);
+    return (
+      preferredIds
+        .map((accountId) =>
+          codexOfficialAuthAccounts.find(
+            (account) => account.id === accountId,
+          ),
+        )
+        .find(Boolean) ||
+      codexOfficialAuthAccounts[0] ||
+      null
+    );
+  };
+
+  const handleInlineOfficialAuthToggle = async (
+    instance: InstanceProfile,
+    enabled: boolean,
+  ) => {
+    if (!isCodexApp || inlineOfficialAuthSavingId === instance.id) return;
+    setInlineOfficialAuthError(null);
+    setInlineOfficialAuthSavingId(instance.id);
+    try {
+      if (!enabled) {
+        await updateInstance({
+          instanceId: instance.id,
+          officialAccountId: null,
+        });
+        setOpenOfficialAccountPickerId(null);
+        return;
+      }
+
+      const provider = resolveCodexCombinationProvider(instance);
+      if (!provider) {
+        throw new Error(
+          t("codex.instances.authBinding.noProviders", "暂无 API 账号"),
+        );
+      }
+      const officialAccount = resolveCodexCombinationOfficialAccount(
+        instance,
+        provider,
+      );
+      if (!officialAccount) {
+        throw new Error(
+          t(
+            "codex.instances.authBinding.noOfficialAccounts",
+            "暂无官方订阅账号",
+          ),
+        );
+      }
+
+      await updateInstance({
+        instanceId: instance.id,
+        bindAccountId: resolveBindAccountValue(provider.id),
+        officialAccountId: officialAccount.id,
+        followLocalAccount: instance.isDefault ? false : undefined,
+      });
+    } catch (error) {
+      setInlineOfficialAuthError({
+        instanceId: instance.id,
+        text: String(error).replace(/^Error:\s*/, ""),
+      });
+    } finally {
+      setInlineOfficialAuthSavingId(null);
+    }
+  };
+
+  const handleInlineOfficialAccountChange = async (
+    instance: InstanceProfile,
+    officialAccountId: string,
+  ) => {
+    if (!isCodexApp || inlineOfficialAuthSavingId === instance.id) return;
+    const officialAccount = codexOfficialAuthAccounts.find(
+      (account) => account.id === officialAccountId,
+    );
+    if (!officialAccount) return;
+
+    setInlineOfficialAuthError(null);
+    setInlineOfficialAuthSavingId(instance.id);
+    try {
+      const provider = resolveCodexCombinationProvider(instance);
+      if (!provider) {
+        throw new Error(
+          t("codex.instances.authBinding.noProviders", "暂无 API 账号"),
+        );
+      }
+      await updateInstance({
+        instanceId: instance.id,
+        bindAccountId: resolveBindAccountValue(provider.id),
+        officialAccountId: officialAccount.id,
+        followLocalAccount: instance.isDefault ? false : undefined,
+      });
+      setOpenOfficialAccountPickerId(null);
+    } catch (error) {
+      setInlineOfficialAuthError({
+        instanceId: instance.id,
+        text: String(error).replace(/^Error:\s*/, ""),
+      });
+    } finally {
+      setInlineOfficialAuthSavingId(null);
+    }
+  };
+
+  const renderAccountMenuItems = (
+    {
+      selectableAccounts,
+      visibleAccounts,
+      availableTags,
+      searchValue,
+      onSearchChange,
+      tagFilter,
+      onToggleTagFilter,
+      onClearTagFilter,
+      value,
+      isFollowingCurrent = false,
+      allowFollowCurrent = false,
+      allowUnbound = false,
+      onFollowCurrent,
+      onChange,
+      onClose,
+      selectedAccount,
+    }: AccountMenuItemsRenderArgs<TAccount>,
+    instance?: InstanceProfile,
+  ) => {
+    const preserveOfficialAuth = Boolean(
+      isCodexApp && instance?.officialAccountId,
+    );
+    const savingOfficialAuth =
+      inlineOfficialAuthSavingId === instance?.id;
+    const officialAccount = preserveOfficialAuth
+      ? codexOfficialAuthAccounts.find(
+          (account) => account.id === instance?.officialAccountId,
+        ) || null
+      : null;
+    const providerAccounts = preserveOfficialAuth
+      ? visibleAccounts.filter((account) =>
+          isCodexApiProviderAccount(account),
+        )
+      : visibleAccounts;
+    const selectableProviderAccounts = selectableAccounts.filter((account) =>
+      isCodexApiProviderAccount(account),
+    );
+    const visibleOfficialAccounts = visibleAccounts.filter((account) =>
+      isCodexOfficialAuthAccount?.(account),
+    );
+    const selectableOfficialAccounts = selectableAccounts.filter((account) =>
+      isCodexOfficialAuthAccount?.(account),
+    );
+    const officialPickerOpen =
+      preserveOfficialAuth && openOfficialAccountPickerId === instance?.id;
+    const menuError =
+      inlineOfficialAuthError &&
+      inlineOfficialAuthError.instanceId === instance?.id
+        ? inlineOfficialAuthError.text
+        : null;
+
+    return (
+      <>
+        {isCodexApp && instance && (
+          <div className="codex-account-auth-control">
+            <label className="codex-account-auth-checkbox-row">
+              <input
+                type="checkbox"
+                checked={preserveOfficialAuth}
+                disabled={savingOfficialAuth}
+                onChange={(event) =>
+                  void handleInlineOfficialAuthToggle(
+                    instance,
+                    event.target.checked,
+                  )
+                }
+              />
+              <span className="codex-account-auth-copy">
+                <strong>
+                  {t(
+                    "codex.instances.authBinding.preserveOfficialAuth",
+                    "保留官方登录",
+                  )}
+                </strong>
+                <span>
+                  {t(
+                    "codex.instances.authBinding.preserveOfficialAuthDesc",
+                    "官方账号 + 第三方 API",
+                  )}
+                </span>
+              </span>
+            </label>
+            {menuError && (
+              <div className="codex-account-auth-error" role="alert">
+                {menuError}
+              </div>
+            )}
           </div>
-        ) : null}
-      </div>
-      {allowFollowCurrent && (
-        <button
-          type="button"
-          className={`account-select-item ${isFollowingCurrent ? "active" : ""}`}
-          data-account-select-active={isFollowingCurrent ? "true" : undefined}
-          onClick={() => {
-            if (onFollowCurrent) {
-              onFollowCurrent();
-            } else {
-              onChange(null);
-            }
-            onClose();
-          }}
-        >
-          <span className="account-select-email-row">
-            <span className="account-select-email">
-              {t("instances.form.followCurrent", "跟随当前账号")}
-            </span>
-            {selectedAccount ? renderAccountBadge?.(selectedAccount) : null}
-          </span>
-          {selectedAccount ? renderAccountQuotaPreview(selectedAccount) : null}
-        </button>
-      )}
-      {allowUnbound && (
-        <button
-          type="button"
-          className={`account-select-item ${!value && !isFollowingCurrent ? "active" : ""}`}
-          data-account-select-active={
-            !value && !isFollowingCurrent ? "true" : undefined
-          }
-          onClick={() => {
-            onChange(null);
-            onClose();
-          }}
-        >
-          <span className="account-select-email muted">
-            {t("instances.form.unbound", "不绑定")}
-          </span>
-        </button>
-      )}
-      {isCodexApp && (
-        <button
-          type="button"
-          className={`account-select-item ${value === CODEX_API_SERVICE_BIND_ID && !isFollowingCurrent ? "active" : ""}`}
-          data-account-select-active={
-            value === CODEX_API_SERVICE_BIND_ID && !isFollowingCurrent
-              ? "true"
-              : undefined
-          }
-          onClick={() => {
-            onChange(CODEX_API_SERVICE_BIND_ID);
-            onClose();
-          }}
-        >
-          <span className="account-select-email">
-            {resolveApiServiceLabel()}
-          </span>
-        </button>
-      )}
-      {visibleAccounts.map((account) => {
-        const bindValue = resolveBindAccountValue(account.id) ?? account.id;
-        const active = value === bindValue && !isFollowingCurrent;
-        const displayText = resolveAccountDisplayText(account);
-        return (
+        )}
+
+        <div className="account-select-menu-toolbar">
+          <label className="account-select-search-box">
+            <Search size={14} />
+            <input
+              type="text"
+              value={searchValue}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder={t("accounts.search", "搜索账号...")}
+            />
+          </label>
+          {availableTags.length > 0 ? (
+            <div className="account-select-tag-filter">
+              <span className="account-select-tag-filter-label">
+                {t("accounts.filterTags", "标签筛选")}
+              </span>
+              <div className="account-select-tag-filter-list">
+                {availableTags.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    className={`account-select-tag-pill ${
+                      tagFilter.includes(tag) ? "active" : ""
+                    }`}
+                    onClick={() => onToggleTagFilter(tag)}
+                  >
+                    {tag}
+                  </button>
+                ))}
+                {tagFilter.length > 0 ? (
+                  <button
+                    type="button"
+                    className="account-select-tag-clear"
+                    onClick={onClearTagFilter}
+                  >
+                    {t("accounts.clearFilter", "清空筛选")}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {!preserveOfficialAuth && allowFollowCurrent && (
           <button
             type="button"
-            key={account.id}
-            className={`account-select-item ${active ? "active" : ""}`}
-            data-account-select-active={active ? "true" : undefined}
+            className={`account-select-item ${isFollowingCurrent ? "active" : ""}`}
+            data-account-select-active={isFollowingCurrent ? "true" : undefined}
             onClick={() => {
-              onChange(bindValue);
+              if (onFollowCurrent) {
+                onFollowCurrent();
+              } else {
+                onChange(null);
+              }
               onClose();
             }}
           >
             <span className="account-select-email-row">
-              <span
-                className="account-select-email"
-                title={maskAccountText(displayText)}
-              >
-                {maskAccountText(displayText)}
+              <span className="account-select-email">
+                {t("instances.form.followCurrent", "跟随当前账号")}
               </span>
-              {renderAccountBadge?.(account)}
+              {selectedAccount ? renderAccountBadge?.(selectedAccount) : null}
             </span>
-            {renderAccountQuotaPreview(account)}
+            {selectedAccount ? renderAccountQuotaPreview(selectedAccount) : null}
           </button>
-        );
-      })}
-      {visibleAccounts.length === 0 &&
-      !isCodexApp &&
-      !allowUnbound &&
-      !allowFollowCurrent ? (
-        <div className="account-select-empty">
-          {t("common.noData", "暂无数据")}
-        </div>
-      ) : null}
-    </>
-  );
+        )}
+        {!preserveOfficialAuth && allowUnbound && (
+          <button
+            type="button"
+            className={`account-select-item ${!value && !isFollowingCurrent ? "active" : ""}`}
+            data-account-select-active={
+              !value && !isFollowingCurrent ? "true" : undefined
+            }
+            onClick={() => {
+              onChange(null);
+              onClose();
+            }}
+          >
+            <span className="account-select-email muted">
+              {t("instances.form.unbound", "不绑定")}
+            </span>
+          </button>
+        )}
+        {isCodexApp && !preserveOfficialAuth && (
+          <button
+            type="button"
+            className={`account-select-item ${value === CODEX_API_SERVICE_BIND_ID && !isFollowingCurrent ? "active" : ""}`}
+            data-account-select-active={
+              value === CODEX_API_SERVICE_BIND_ID && !isFollowingCurrent
+                ? "true"
+                : undefined
+            }
+            onClick={() => {
+              onChange(CODEX_API_SERVICE_BIND_ID);
+              onClose();
+            }}
+          >
+            <span className="account-select-email">
+              {resolveApiServiceLabel()}
+            </span>
+          </button>
+        )}
+        {providerAccounts.map((account) => {
+          const bindValue = resolveBindAccountValue(account.id) ?? account.id;
+          const active = value === bindValue && !isFollowingCurrent;
+          const displayText = resolveAccountDisplayText(account);
+          return (
+            <button
+              type="button"
+              key={account.id}
+              className={`account-select-item ${active ? "active" : ""}`}
+              data-account-select-active={active ? "true" : undefined}
+              disabled={savingOfficialAuth}
+              onClick={() => {
+                onChange(bindValue);
+                onClose();
+              }}
+            >
+              <span className="account-select-email-row">
+                <span
+                  className="account-select-email"
+                  title={maskAccountText(displayText)}
+                >
+                  {maskAccountText(displayText)}
+                </span>
+                {renderAccountBadge?.(account)}
+              </span>
+              {renderAccountQuotaPreview(account)}
+            </button>
+          );
+        })}
+        {providerAccounts.length === 0 && preserveOfficialAuth && (
+          <div className="account-select-empty">
+            {selectableProviderAccounts.length === 0
+              ? t(
+                  "codex.instances.authBinding.noProviders",
+                  "暂无 API 账号",
+                )
+              : t("accounts.noMatch.title", "无匹配账号")}
+          </div>
+        )}
+
+        {preserveOfficialAuth && instance && (
+          <div className="codex-account-combination">
+            <div className="codex-account-combination-title">
+              {t(
+                "codex.instances.authBinding.officialLabel",
+                "官方订阅账号",
+              )}
+            </div>
+            <button
+              type="button"
+              className={`codex-official-account-trigger ${
+                officialPickerOpen ? "open" : ""
+              }`}
+              disabled={savingOfficialAuth}
+              onClick={() =>
+                setOpenOfficialAccountPickerId((current) =>
+                  current === instance.id ? null : instance.id,
+                )
+              }
+            >
+              <span className="account-select-content">
+                <span className="account-select-label-row">
+                  <span className="account-select-label">
+                    {officialAccount
+                      ? maskAccountText(
+                          resolveAccountDisplayText(officialAccount),
+                        )
+                      : t(
+                          "codex.instances.authBinding.noOfficialAccounts",
+                          "暂无官方订阅账号",
+                        )}
+                  </span>
+                  {officialAccount
+                    ? renderAccountBadge?.(officialAccount)
+                    : null}
+                </span>
+                {officialAccount && (
+                  <span className="account-select-meta">
+                    {renderAccountQuotaPreview(officialAccount)}
+                  </span>
+                )}
+              </span>
+              <ChevronDown size={14} />
+            </button>
+
+            {officialPickerOpen && (
+              <div className="codex-official-account-options">
+                {visibleOfficialAccounts.map((account) => {
+                  const displayText = resolveAccountDisplayText(account);
+                  const active = account.id === officialAccount?.id;
+                  return (
+                    <button
+                      type="button"
+                      key={account.id}
+                      className={`account-select-item ${active ? "active" : ""}`}
+                      disabled={savingOfficialAuth}
+                      onClick={() =>
+                        void handleInlineOfficialAccountChange(
+                          instance,
+                          account.id,
+                        )
+                      }
+                    >
+                      <span className="account-select-email-row">
+                        <span
+                          className="account-select-email"
+                          title={maskAccountText(displayText)}
+                        >
+                          {maskAccountText(displayText)}
+                        </span>
+                        {renderAccountBadge?.(account)}
+                      </span>
+                      {renderAccountQuotaPreview(account)}
+                    </button>
+                  );
+                })}
+                {visibleOfficialAccounts.length === 0 && (
+                  <div className="account-select-empty">
+                    {selectableOfficialAccounts.length === 0
+                      ? t(
+                          "codex.instances.authBinding.noOfficialAccounts",
+                          "暂无官方订阅账号",
+                        )
+                      : t("accounts.noMatch.title", "无匹配账号")}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="codex-account-combination-status">
+              <ShieldCheck size={16} />
+              <span>
+                {t(
+                  "codex.instances.authBinding.status",
+                  "官方登录用于应用身份，模型请求使用所选 API 供应商",
+                )}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {providerAccounts.length === 0 &&
+        !isCodexApp &&
+        !allowUnbound &&
+        !allowFollowCurrent ? (
+          <div className="account-select-empty">
+            {t("common.noData", "暂无数据")}
+          </div>
+        ) : null}
+      </>
+    );
+  };
 
   const renderFormAccountSelect = (props: BaseAccountSelectProps) => (
     <InlineAccountSelect
@@ -2318,13 +2668,27 @@ export function InstancesManager<TAccount extends AccountLike>({
     const normalizedNextId = resolveBindAccountValue(nextId);
     const sameSelection = (instance.bindAccountId || null) === normalizedNextId;
     if (sameSelection && !instance.followLocalAccount) return;
+    const selectedAccount = resolveBoundAccount(normalizedNextId).account;
+    const keepOfficialAuth = Boolean(
+      isCodexApp &&
+        instance.officialAccountId &&
+        isCodexApiProviderAccount(selectedAccount),
+    );
     setActionLoading(instance.id);
     try {
       await updateInstance({
         instanceId: instance.id,
         bindAccountId: normalizedNextId,
+        ...(isCodexApp
+          ? {
+              officialAccountId: keepOfficialAuth
+                ? instance.officialAccountId
+                : null,
+            }
+          : {}),
         followLocalAccount: instance.isDefault ? false : undefined,
       });
+      setInlineOfficialAuthError(null);
     } catch (e) {
       setMessage({ text: String(e), tone: "error" });
     } finally {
@@ -2629,7 +2993,9 @@ export function InstancesManager<TAccount extends AccountLike>({
                       renderAccountBadge={renderAccountBadge}
                       maskAccountText={maskAccountText}
                       resolveApiServiceLabel={resolveApiServiceLabel}
-                      renderAccountMenuItems={renderAccountMenuItems}
+                      renderAccountMenuItems={(args) =>
+                        renderAccountMenuItems(args, instance)
+                      }
                       disabled={isInstanceBusy}
                       missing={accountMissing}
                       placeholder={t("instances.labels.unbound", "未绑定")}
@@ -2650,7 +3016,16 @@ export function InstancesManager<TAccount extends AccountLike>({
                       currentOpenId={openInlineMenuId}
                       onOpenChange={(open) => {
                         setOpenInlineMenuId(open ? instance.id : null);
+                        if (!open) {
+                          setOpenOfficialAccountPickerId(null);
+                          setInlineOfficialAuthError(null);
+                        }
                       }}
+                      portalMaxHeight={
+                        isCodexApp
+                          ? CODEX_ACCOUNT_SELECT_PORTAL_MAX_HEIGHT
+                          : undefined
+                      }
                     />
                   )}
                 </div>

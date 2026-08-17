@@ -1891,6 +1891,19 @@
         "title": "Sincronizar registros de todas as instâncias",
         "tooltip": "Sincronizar registros de todas as instâncias"
       },
+      "authBinding": {
+        "title": "Login oficial e provedor de API",
+        "preserveOfficialAuth": "Manter login oficial",
+        "preserveOfficialAuthDesc": "Conta oficial + API de terceiros",
+        "providerLabel": "Conta de API de terceiros",
+        "officialLabel": "Conta de assinatura oficial",
+        "required": "Selecione uma conta de API de terceiros e uma conta oficial",
+        "providerMissing": "A conta de API de terceiros não existe mais",
+        "noProviders": "Nenhuma conta de API",
+        "noOfficialAccounts": "Nenhuma conta de assinatura oficial",
+        "status": "Use o login oficial para a identidade do aplicativo e o provedor de API selecionado para as solicitações aos modelos",
+        "clear": "Desvincular"
+      },
       "restartStrategy": {
         "safe": {
           "principle": "Envia um sinal SIGTERM para todos os processos do Codex, solicitando que o app salve os dados e feche, em seguida inicia a instância de destino (força o fechamento se necessário).",
