@@ -976,9 +976,7 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 	body, _ = sjson.DeleteBytes(body, "safety_identifier")
 	body, _ = sjson.DeleteBytes(body, "stream_options")
 	body = normalizeCodexInstructions(body, baseModel)
-	if helps.ShouldInjectImageGenerationToolForModel(e.cfg, baseModel, requestPath, opts.Headers) {
-		body = ensureImageGenerationTool(body, baseModel, auth)
-	}
+	body, imageDegraded := maybeInjectImageGenerationTool(e.cfg, body, baseModel, requestPath, opts.Headers, auth)
 	body, useFullResponses := normalizeCodexResponsesLiteRequest(body, opts.Headers, auth, true)
 	body = sanitizeOpenAIResponsesReasoningEncryptedContent(ctx, "codex executor", body)
 	body, optimizeMultiAgentV2 := helps.OptimizeCodexMultiAgentV2Request(ctx, opts.Headers, body, e.cfg)
@@ -1088,7 +1086,11 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 		var param any
 		clientCompletedData := applyCodexIdentityExposeResponsePayload(completedData, identityState)
 		out := sdktranslator.TranslateNonStream(ctx, to, from, req.Model, originalPayload, body, clientCompletedData, &param)
-		resp = cliproxyexecutor.Response{Payload: out, Headers: httpResp.Header.Clone()}
+		respHeaders := httpResp.Header.Clone()
+		if imageDegraded {
+			respHeaders.Set(codexImageDegradedHeader, "1")
+		}
+		resp = cliproxyexecutor.Response{Payload: out, Headers: respHeaders}
 		return resp, nil
 	}
 	err = newCodexIncompleteStreamError()
@@ -1126,9 +1128,7 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 	body, _ = sjson.SetBytes(body, "model", baseModel)
 	body, _ = sjson.DeleteBytes(body, "stream")
 	body = normalizeCodexInstructions(body, baseModel)
-	if helps.ShouldInjectImageGenerationToolForModel(e.cfg, baseModel, requestPath, opts.Headers) {
-		body = ensureImageGenerationTool(body, baseModel, auth)
-	}
+	body, imageDegraded := maybeInjectImageGenerationTool(e.cfg, body, baseModel, requestPath, opts.Headers, auth)
 	body, _ = normalizeCodexResponsesLiteRequest(body, opts.Headers, auth, false)
 	body = sanitizeOpenAIResponsesReasoningEncryptedContent(ctx, "codex executor", body)
 	body, optimizeMultiAgentV2 := helps.OptimizeCodexMultiAgentV2Request(ctx, opts.Headers, body, e.cfg)
@@ -1197,7 +1197,11 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 	var param any
 	clientData := applyCodexIdentityExposeResponsePayload(upstreamData, identityState)
 	out := sdktranslator.TranslateNonStream(ctx, to, from, req.Model, originalPayload, body, clientData, &param)
-	resp = cliproxyexecutor.Response{Payload: out, Headers: httpResp.Header.Clone()}
+	respHeaders := httpResp.Header.Clone()
+	if imageDegraded {
+		respHeaders.Set(codexImageDegradedHeader, "1")
+	}
+	resp = cliproxyexecutor.Response{Payload: out, Headers: respHeaders}
 	return resp, nil
 }
 
@@ -1245,9 +1249,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 	body, _ = sjson.DeleteBytes(body, "stream_options")
 	body, _ = sjson.SetBytes(body, "model", baseModel)
 	body = normalizeCodexInstructions(body, baseModel)
-	if helps.ShouldInjectImageGenerationToolForModel(e.cfg, baseModel, requestPath, opts.Headers) {
-		body = ensureImageGenerationTool(body, baseModel, auth)
-	}
+	body, imageDegraded := maybeInjectImageGenerationTool(e.cfg, body, baseModel, requestPath, opts.Headers, auth)
 	body, useFullResponses := normalizeCodexResponsesLiteRequest(body, opts.Headers, auth, true)
 	body = sanitizeOpenAIResponsesReasoningEncryptedContent(ctx, "codex executor", body)
 	body, optimizeMultiAgentV2 := helps.OptimizeCodexMultiAgentV2Request(ctx, opts.Headers, body, e.cfg)
@@ -1417,7 +1419,11 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 			}
 		}
 	}()
-	return &cliproxyexecutor.StreamResult{Headers: httpResp.Header.Clone(), Chunks: out}, nil
+	headersOut := httpResp.Header.Clone()
+	if imageDegraded {
+		headersOut.Set(codexImageDegradedHeader, "1")
+	}
+	return &cliproxyexecutor.StreamResult{Headers: headersOut, Chunks: out}, nil
 }
 
 func isCodexStreamBootstrapMetadataEvent(eventType string) bool {
@@ -2122,6 +2128,31 @@ func classifyCodexStatusError(statusCode int, body []byte) []byte {
 	return out
 }
 
+// isImageGenerationPermissionError reports whether an upstream response means
+// the selected account lacks image-generation permission. The status gate keeps
+// quota/auth/model failures out; the phrase match runs over the WHOLE raw body
+// so relay wrappers that embed the upstream error as an escaped JSON string
+// (e.g. Sub2api) still match. Unrelated permission_error bodies do not match.
+func isImageGenerationPermissionError(statusCode int, body []byte) bool {
+	if statusCode != http.StatusBadRequest &&
+		statusCode != http.StatusForbidden &&
+		statusCode != http.StatusUnprocessableEntity {
+		return false
+	}
+	lower := strings.ToLower(string(body))
+	if !strings.Contains(lower, "image_generation") && !strings.Contains(lower, "image generation") {
+		return false
+	}
+	for _, verb := range []string{
+		"not enabled", "not available", "not allowed", "not supported", "disabled",
+	} {
+		if strings.Contains(lower, verb) {
+			return true
+		}
+	}
+	return false
+}
+
 func codexStatusErrorClassification(statusCode int, body []byte) (code string, errType string, ok bool) {
 	errorMessage := strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "error.message").String()))
 	if errorMessage == "" {
@@ -2139,6 +2170,8 @@ func codexStatusErrorClassification(statusCode int, body []byte) (code string, e
 		return "thinking_signature_invalid", "invalid_request_error", true
 	case upstreamCode == "previous_response_not_found" || strings.Contains(lower, "previous_response_not_found") || strings.Contains(lower, "previous_response_id") && strings.Contains(lower, "not found"):
 		return "previous_response_not_found", "invalid_request_error", true
+	case isImageGenerationPermissionError(statusCode, body):
+		return "image_generation_not_enabled", "permission_error", true
 	case statusCode == http.StatusUnauthorized || upstreamType == "authentication_error" || upstreamCode == "invalid_api_key" || strings.Contains(lower, "invalid or expired token") || strings.Contains(lower, "refresh_token_reused"):
 		return "auth_unavailable", "authentication_error", true
 	default:
@@ -2273,6 +2306,44 @@ func codexResponsesLiteToolSupported(tool gjson.Result) bool {
 
 var imageGenToolJSON = []byte(`{"type":"image_generation","output_format":"png"}`)
 var imageGenToolArrayJSON = []byte(`[{"type":"image_generation","output_format":"png"}]`)
+
+// codexImageDegradedHeader marks responses where the gateway skipped the hosted
+// image_generation tool because the selected account proved the capability
+// unavailable (learned from an upstream permission error).
+const codexImageDegradedHeader = "x-agtools-image-degraded"
+
+// setImageDegradedHeader attaches the degraded marker to the given headers and
+// returns them (allocating a map when degraded and the input is nil).
+func setImageDegradedHeader(headers http.Header, degraded bool) http.Header {
+	if !degraded {
+		return headers
+	}
+	if headers == nil {
+		headers = http.Header{}
+	}
+	headers.Set(codexImageDegradedHeader, "1")
+	return headers
+}
+
+// maybeInjectImageGenerationTool injects the hosted image_generation tool into
+// chat/responses payloads unless the selected account has proven the capability
+// unavailable. The bool reports an automatic degradation (skipped because of the
+// learned account capability, not because of a manual header override).
+func maybeInjectImageGenerationTool(cfg *config.Config, body []byte, model, requestPath string, headers http.Header, auth *cliproxyauth.Auth) ([]byte, bool) {
+	if !helps.ShouldInjectImageGenerationToolForModel(cfg, model, requestPath, headers) {
+		return body, false
+	}
+	if auth != nil && auth.ImageGenerationUnavailable {
+		// The account proved image generation unavailable: degrade the request
+		// to plain text, including stripping client-declared image tools and
+		// their tool_choice so the upstream cannot reject the whole request.
+		if stripped := helps.StripImageGenerationCapabilities(body); stripped != nil {
+			return stripped, true
+		}
+		return body, true
+	}
+	return ensureImageGenerationTool(body, model, auth), false
+}
 
 func isCodexFreePlanAuth(auth *cliproxyauth.Auth) bool {
 	if auth == nil || auth.Attributes == nil {

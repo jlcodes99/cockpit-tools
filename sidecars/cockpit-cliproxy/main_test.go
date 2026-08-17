@@ -4424,3 +4424,30 @@ func TestSidecarRuntimeDoesNotSelectAccountWithExcludedModel(t *testing.T) {
 		t.Fatal("blocked auth lost a non-excluded model")
 	}
 }
+
+func TestErrorCategoryImageGenerationNotEnabled(t *testing.T) {
+	body := `{"error":{"code":"image_generation_not_enabled","message":"Image generation is not enabled for this group","type":"permission_error"}}`
+	if got := errorCategory(http.StatusForbidden, body, false); got != "image_generation_not_enabled" {
+		t.Fatalf("errorCategory = %q, want image_generation_not_enabled", got)
+	}
+	if got := errorCategory(http.StatusForbidden, `{"error":{"message":"forbidden"}}`, false); got != "auth_failed" {
+		t.Fatalf("plain 403 errorCategory = %q, want auth_failed", got)
+	}
+}
+
+func TestPreferImageGenerationCapable(t *testing.T) {
+	a1 := &coreauth.Auth{ID: "a1", ImageGenerationUnavailable: true}
+	a2 := &coreauth.Auth{ID: "a2", ImageGenerationUnavailable: false}
+	a3 := &coreauth.Auth{ID: "a3", ImageGenerationUnavailable: true}
+
+	got := preferImageGenerationCapable([]*coreauth.Auth{a1, a2, a3})
+	if len(got) != 1 || got[0].ID != "a2" {
+		t.Fatalf("expected only a2, got %v", got)
+	}
+	if got := preferImageGenerationCapable([]*coreauth.Auth{a1, a3}); len(got) != 2 {
+		t.Fatalf("all incapable should be unchanged, got %d", len(got))
+	}
+	if got := preferImageGenerationCapable([]*coreauth.Auth{a2}); len(got) != 1 {
+		t.Fatal("single auth should be unchanged")
+	}
+}

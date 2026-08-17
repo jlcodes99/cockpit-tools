@@ -67,6 +67,10 @@ type Auth struct {
 	Disabled bool `json:"disabled"`
 	// Unavailable flags transient provider unavailability (e.g. quota exceeded).
 	Unavailable bool `json:"unavailable"`
+	// ImageGenerationUnavailable marks that the upstream account rejected
+	// image-generation tool requests (e.g. "Image generation is not enabled").
+	// Runtime-only: learned from failures and reset on restart.
+	ImageGenerationUnavailable bool `json:"-"`
 	// ProxyURL overrides the global proxy setting for this auth if provided.
 	ProxyURL string `json:"proxy_url,omitempty"`
 	// Attributes stores provider specific metadata needed by executors (immutable configuration).

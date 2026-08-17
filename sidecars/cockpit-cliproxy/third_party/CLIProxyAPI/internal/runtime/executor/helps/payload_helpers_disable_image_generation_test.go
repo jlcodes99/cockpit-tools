@@ -537,3 +537,62 @@ func TestApplyPayloadConfigWithRequest_PayloadConditionsSkipRule(t *testing.T) {
 		})
 	}
 }
+
+func TestStripImageGenerationCapabilities(t *testing.T) {
+	t.Run("strips hosted tool and tool_choice", func(t *testing.T) {
+		payload := []byte(`{"model":"gpt-5.4","tool_choice":{"type":"image_generation"},"tools":[{"type":"image_generation","output_format":"png"},{"type":"function","name":"f1"}]}`)
+		out := StripImageGenerationCapabilities(payload)
+		if out == nil {
+			t.Fatal("expected stripped payload, got nil")
+		}
+		if gjson.GetBytes(out, "tool_choice").Exists() {
+			t.Fatal("tool_choice should be removed")
+		}
+		if got := len(gjson.GetBytes(out, "tools").Array()); got != 1 {
+			t.Fatalf("expected 1 remaining tool, got %d", got)
+		}
+	})
+	t.Run("returns nil when nothing declared", func(t *testing.T) {
+		payload := []byte(`{"tools":[{"type":"function","name":"f1"}]}`)
+		if out := StripImageGenerationCapabilities(payload); out != nil {
+			t.Fatalf("expected nil, got %s", out)
+		}
+	})
+	t.Run("strips image_gen namespace and imagegen function", func(t *testing.T) {
+		payload := []byte(`{"tools":[{"type":"namespace","name":"image_gen"},{"type":"function","name":"image_gen.imagegen"},{"type":"function","name":"keep"}]}`)
+		out := StripImageGenerationCapabilities(payload)
+		if out == nil {
+			t.Fatal("expected stripped payload, got nil")
+		}
+		names := make([]string, 0, 2)
+		for _, tool := range gjson.GetBytes(out, "tools").Array() {
+			names = append(names, tool.Get("name").String())
+		}
+		if len(names) != 1 || names[0] != "keep" {
+			t.Fatalf("unexpected remaining tools: %v", names)
+		}
+	})
+}
+
+func TestPayloadDeclaresImageGenerationTools(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload string
+		want    bool
+	}{
+		{name: "hosted tool", payload: `{"tools":[{"type":"image_generation"}]}`, want: true},
+		{name: "imagegen function", payload: `{"tools":[{"type":"function","name":"image_gen.imagegen"}]}`, want: true},
+		{name: "image_gen namespace", payload: `{"tools":[{"type":"namespace","name":"image_gen"}]}`, want: true},
+		{name: "tool_choice only", payload: `{"tool_choice":{"type":"image_generation"}}`, want: true},
+		{name: "plain text request", payload: `{"tools":[{"type":"function","name":"lookup"}]}`, want: false},
+		{name: "no tools", payload: `{"model":"gpt-5.4"}`, want: false},
+		{name: "empty", payload: ``, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := PayloadDeclaresImageGenerationTools([]byte(tc.payload)); got != tc.want {
+				t.Fatalf("PayloadDeclaresImageGenerationTools = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

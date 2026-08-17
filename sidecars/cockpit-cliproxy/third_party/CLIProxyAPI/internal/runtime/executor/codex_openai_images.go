@@ -48,6 +48,16 @@ type codexImageCallResult struct {
 	Quality       string
 }
 
+// errImageGenerationUnavailable rejects explicit image endpoints when the
+// selected account has proven image generation unavailable. The code matches
+// the executor's upstream classification so diagnostics treat it consistently.
+func errImageGenerationUnavailable() error {
+	return statusErr{
+		code: http.StatusForbidden,
+		msg:  `{"error":{"code":"image_generation_not_enabled","message":"Image generation is not enabled for this group","type":"invalid_request_error"}}`,
+	}
+}
+
 func isCodexOpenAIImageRequest(opts cliproxyexecutor.Options) bool {
 	if !strings.EqualFold(strings.TrimSpace(opts.SourceFormat.String()), codexOpenAIImageSourceFormat) {
 		return false
@@ -81,6 +91,9 @@ func (e *CodexExecutor) executeOpenAIImage(ctx context.Context, auth *cliproxyau
 	prepared, errPrepare := codexPrepareOpenAIImageRequest(req, opts)
 	if errPrepare != nil {
 		return resp, errPrepare
+	}
+	if auth != nil && auth.ImageGenerationUnavailable {
+		return resp, errImageGenerationUnavailable()
 	}
 
 	apiKey, baseURL := codexCreds(auth)
@@ -179,6 +192,9 @@ func (e *CodexExecutor) executeOpenAIImageStream(ctx context.Context, auth *clip
 	prepared, errPrepare := codexPrepareOpenAIImageRequest(req, opts)
 	if errPrepare != nil {
 		return nil, errPrepare
+	}
+	if auth != nil && auth.ImageGenerationUnavailable {
+		return nil, errImageGenerationUnavailable()
 	}
 
 	apiKey, baseURL := codexCreds(auth)

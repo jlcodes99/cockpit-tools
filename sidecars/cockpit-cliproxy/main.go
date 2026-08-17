@@ -32,6 +32,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	internallogging "github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 	internalregistry "github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor/helps"
 	responsesconverter "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/openai/openai/responses"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/util"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/watcher/synthesizer"
@@ -1019,6 +1020,9 @@ func (p *requestPolicy) middleware() gin.HandlerFunc {
 			c.Set(ginUserAPIKeyKey, spec.Key)
 			ctx := context.WithValue(c.Request.Context(), clientAPIKeyContextKey, spec)
 			ctx = context.WithValue(ctx, requestKindContextKey, requestKind)
+			if isImageRequestKind(requestKind) {
+				ctx = coreauth.WithImageRequest(ctx)
+			}
 			if clientInstanceID != "" {
 				ctx = withClientInstanceID(ctx, clientInstanceID)
 			}
@@ -2555,7 +2559,6 @@ func (s *backupAccountSelector) Stop() {
 
 func (s *cockpitSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*coreauth.Auth) (*coreauth.Auth, error) {
 	_ = provider
-	_ = opts
 	auths = s.filterAuthsForAPIKeyScope(ctx, auths)
 	now := time.Now()
 	available := make([]*coreauth.Auth, 0, len(auths))
@@ -2583,8 +2586,12 @@ func (s *cockpitSelector) Pick(ctx context.Context, provider, model string, opts
 	s.mu.Unlock()
 
 	requestKind, _ := ctx.Value(requestKindContextKey).(string)
+	imageIntent := isImageRequestKind(requestKind) || helps.PayloadDeclaresImageGenerationTools(executorPayloadForIntent(opts))
+	if imageIntent {
+		available = preferImageGenerationCapable(available)
+	}
 	ordered := s.orderAuths(available, start)
-	if isImageRequestKind(requestKind) {
+	if imageIntent {
 		ordered = s.orderImageAuths(available, start)
 	} else {
 		ordered = s.prioritizeAuthsForAPIKey(ctx, ordered)
@@ -2592,7 +2599,7 @@ func (s *cockpitSelector) Pick(ctx context.Context, provider, model string, opts
 	if len(ordered) == 0 {
 		return nil, noAuthAvailableError(quotaReserveReasons)
 	}
-	if isImageRequestKind(requestKind) && s.tracker != nil {
+	if imageIntent && s.tracker != nil {
 		requestID := internallogging.GetRequestID(ctx)
 		for {
 			changed := s.tracker.imageJobChangeSignal()
@@ -2700,6 +2707,40 @@ func isImageRequestKind(requestKind string) bool {
 	default:
 		return false
 	}
+}
+
+// executorPayloadForIntent returns the most complete request payload available
+// for image-intent detection (client-declared image tool declarations).
+func executorPayloadForIntent(opts cliproxyexecutor.Options) []byte {
+	return opts.OriginalRequest
+}
+
+// preferImageGenerationCapable keeps only accounts that have not proven image
+// generation unavailable, when at least one such candidate exists. When every
+// candidate is incapable it returns the original list unchanged so a request
+// can still degrade to plain text instead of failing selection.
+func preferImageGenerationCapable(auths []*coreauth.Auth) []*coreauth.Auth {
+	if len(auths) <= 1 {
+		return auths
+	}
+	hasCapable := false
+	for _, auth := range auths {
+		if auth != nil && !auth.ImageGenerationUnavailable {
+			hasCapable = true
+			break
+		}
+	}
+	if !hasCapable {
+		return auths
+	}
+	kept := make([]*coreauth.Auth, 0, len(auths))
+	for _, auth := range auths {
+		if auth == nil || auth.ImageGenerationUnavailable {
+			continue
+		}
+		kept = append(kept, auth)
+	}
+	return kept
 }
 
 func (s *cockpitSelector) orderImageAuths(auths []*coreauth.Auth, start int) []*coreauth.Auth {
@@ -3257,6 +3298,20 @@ func stringFromAPIKey(spec *apiKeySpec, field string) string {
 	return spec.ID
 }
 
+// isImageGenerationCapabilityBody matches bodies denying image generation
+// permission (whole-body phrase match, mirror of the executor classifier).
+func isImageGenerationCapabilityBody(lower string) bool {
+	if !strings.Contains(lower, "image_generation") && !strings.Contains(lower, "image generation") {
+		return false
+	}
+	for _, verb := range []string{"not enabled", "not available", "not allowed", "not supported", "disabled"} {
+		if strings.Contains(lower, verb) {
+			return true
+		}
+	}
+	return false
+}
+
 func errorCategory(status int, body string, success bool) string {
 	if success {
 		return ""
@@ -3294,6 +3349,8 @@ func errorCategory(status int, body string, success bool) string {
 		strings.Contains(lower, "codex upstream response.failed") ||
 		strings.Contains(lower, "last_event=response.failed"):
 		return "upstream_response_failed"
+	case isImageGenerationCapabilityBody(lower):
+		return "image_generation_not_enabled"
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
 		return "auth_failed"
 	case status == http.StatusNotFound:
