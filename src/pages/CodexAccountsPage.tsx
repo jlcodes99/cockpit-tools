@@ -261,6 +261,7 @@ import {
   COCKPIT_API_BASE_URL,
   COCKPIT_API_PROVIDER_ID,
   COCKPIT_API_PROVIDER_NAME,
+  codexApiProviderPresetVisionSupport,
   findCodexApiProviderPresetById,
   isCockpitApiProviderBaseUrl,
   resolveCodexApiProviderPresetId,
@@ -4163,6 +4164,7 @@ export function CodexAccountsPage() {
             baseUrl: normalizedBaseUrl,
             wireApi: null,
           }).wireApi,
+          apiModelVisionSupport: codexApiProviderPresetVisionSupport(preset),
           accountName: preset.name,
         };
       }
