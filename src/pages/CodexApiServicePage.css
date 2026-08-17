@@ -1696,7 +1696,7 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
 
 .codex-api-service-mapping-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) minmax(88px, 0.7fr) auto;
   gap: 8px;
   align-items: end;
   min-width: 0;

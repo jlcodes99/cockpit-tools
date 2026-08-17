@@ -210,6 +210,7 @@ pub fn create_pending_oauth_account(
     account_password: Option<String>,
     phone_number: Option<String>,
     mail_url: Option<String>,
+    aux_email: Option<String>,
 ) -> Result<models::Account, String> {
     modules::account::create_pending_oauth_account(
         email,
@@ -219,6 +220,7 @@ pub fn create_pending_oauth_account(
             account_password,
             phone_number,
             mail_url,
+            aux_email,
         },
     )
 }
@@ -737,6 +739,7 @@ pub async fn update_account_note(
     account_password: Option<String>,
     phone_number: Option<String>,
     mail_url: Option<String>,
+    aux_email: Option<String>,
 ) -> Result<models::Account, String> {
     modules::account::update_account_note(
         &account_id,
@@ -746,6 +749,7 @@ pub async fn update_account_note(
             account_password,
             phone_number,
             mail_url,
+            aux_email,
         },
     )
 }
@@ -761,6 +765,30 @@ pub async fn sync_current_from_client(_app: tauri::AppHandle) -> Result<Option<S
 
 const GROUPS_FILE: &str = "account_groups.json";
 
+fn validate_account_groups_payload(data: &str) -> Result<(), String> {
+    let value = serde_json::from_str::<serde_json::Value>(data)
+        .map_err(|e| format!("Invalid groups JSON: {}", e))?;
+    let groups = value
+        .as_array()
+        .ok_or_else(|| "Account groups must be a JSON array".to_string())?;
+
+    for (index, group) in groups.iter().enumerate() {
+        let object = group
+            .as_object()
+            .ok_or_else(|| format!("Account group at index {} must be an object", index))?;
+        if let Some(account_ids) = object.get("accountIds") {
+            if !account_ids.is_array() {
+                return Err(format!(
+                    "Account group at index {} has invalid accountIds",
+                    index
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn load_account_groups() -> Result<String, String> {
     let path = modules::account::get_data_dir()?.join(GROUPS_FILE);
@@ -772,20 +800,35 @@ pub async fn load_account_groups() -> Result<String, String> {
 
 #[tauri::command]
 pub async fn save_account_groups(data: String) -> Result<(), String> {
+    validate_account_groups_payload(&data)?;
     let dir = modules::account::get_data_dir()?;
     if !dir.exists() {
         std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
     }
     let path = dir.join(GROUPS_FILE);
-    std::fs::write(&path, data).map_err(|e| format!("Failed to write groups: {}", e))
+    modules::atomic_write::write_string_atomic(&path, &data)
+        .map_err(|e| format!("Failed to write groups: {}", e))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         normalize_antigravity_runtime_target, resolve_antigravity_switch_flow,
-        AntigravityRuntimeTarget, AntigravitySwitchFlow,
+        validate_account_groups_payload, AntigravityRuntimeTarget, AntigravitySwitchFlow,
     };
+
+    #[test]
+    fn account_groups_payload_must_be_a_json_array() {
+        assert!(validate_account_groups_payload("[]").is_ok());
+        assert!(validate_account_groups_payload(r#"[{"id":"group-1","accountIds":[]}]"#).is_ok());
+        assert!(validate_account_groups_payload("{}").is_err());
+        assert!(validate_account_groups_payload("not-json").is_err());
+    }
+
+    #[test]
+    fn account_groups_payload_rejects_invalid_account_ids() {
+        assert!(validate_account_groups_payload(r#"[{"id":"group-1","accountIds":{}}]"#).is_err());
+    }
 
     #[test]
     fn antigravity_switch_flow_uses_legacy_for_legacy_target() {

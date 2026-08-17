@@ -60,6 +60,8 @@ pub async fn export_accounts(account_ids: Vec<String>) -> Result<String, String>
         phone_number: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mail_url: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        aux_email: Option<String>,
     }
 
     let simplified: Vec<SimpleAccount> = accounts_to_export
@@ -76,6 +78,7 @@ pub async fn export_accounts(account_ids: Vec<String>) -> Result<String, String>
             account_password: account.account_password,
             phone_number: account.phone_number,
             mail_url: account.mail_url,
+            aux_email: account.aux_email,
         })
         .collect();
 
@@ -112,6 +115,7 @@ mod tests {
                 account_password: Some("password-1".to_string()),
                 phone_number: Some("13800000000".to_string()),
                 mail_url: Some("https://mail.example.test/inbox".to_string()),
+                aux_email: Some("backup@example.test".to_string()),
             },
         )
         .expect("create pending account");
@@ -129,6 +133,7 @@ mod tests {
         assert_eq!(exported["two_factor_secret"], "JBSWY3DPEHPK3PXP");
         assert_eq!(exported["phone_number"], "13800000000");
         assert_eq!(exported["mail_url"], "https://mail.example.test/inbox");
+        assert_eq!(exported["aux_email"], "backup@example.test");
 
         std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
         let _ = fs::remove_dir_all(&data_dir);

@@ -1,5 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import {
+  markUserMemoryDismissed,
+  USER_MEMORY_FLAGS,
+} from '../utils/userMemory';
 
 export type SideNavLayoutMode = 'original' | 'classic';
 
@@ -41,7 +45,12 @@ export const useSideNavLayoutStore = create<SideNavLayoutState>()(
       setMode: (mode) => set({ mode }),
       setClassicCollapsed: (classicCollapsed) => set({ classicCollapsed }),
       toggleClassicCollapsed: () => set((state) => ({ classicCollapsed: !state.classicCollapsed })),
-      setHideClassicSwitchPrompt: (hideClassicSwitchPrompt) => set({ hideClassicSwitchPrompt }),
+      setHideClassicSwitchPrompt: (hideClassicSwitchPrompt) => {
+        if (hideClassicSwitchPrompt) {
+          void markUserMemoryDismissed(USER_MEMORY_FLAGS.classicSwitchPrompt);
+        }
+        set({ hideClassicSwitchPrompt });
+      },
       markClassicFirstSyncDone: () => set({ classicFirstSyncDone: true }),
     }),
     {
@@ -53,7 +62,6 @@ export const useSideNavLayoutStore = create<SideNavLayoutState>()(
           setTimeout(() => {
             localStorage.removeItem('agtools.side_nav.layout.v1');
             localStorage.removeItem('agtools.side_nav.classic_collapsed.v1');
-            localStorage.removeItem('agtools.side_nav.hide_classic_switch_prompt.v1');
             localStorage.removeItem('agtools.side_nav.classic_first_sync_done.v1');
           }, 0);
         }

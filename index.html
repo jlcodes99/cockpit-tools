@@ -1,14 +1,136 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + React + Typescript</title>
+    <title>Cockpit Tools</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: #0b1220;
+        color: #e2e8f0;
+      }
+
+      @media (prefers-color-scheme: light) {
+        html,
+        body {
+          background: #f4f7fb;
+          color: #0f172a;
+        }
+      }
+
+      #app-boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: inherit;
+        color: inherit;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        transition: opacity 0.22s ease;
+      }
+
+      #app-boot-splash.is-hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .app-boot-mark {
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .app-boot-progress {
+        width: min(220px, 56vw);
+        height: 4px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.28);
+      }
+
+      .app-boot-bar {
+        height: 100%;
+        width: 28%;
+        border-radius: inherit;
+        background: #38bdf8;
+      }
+
+      .app-boot-progress[data-mode="indeterminate"] .app-boot-bar {
+        animation: app-boot-sweep 1.15s ease-in-out infinite;
+      }
+
+      .app-boot-progress[data-mode="determinate"] .app-boot-bar {
+        width: 0;
+        transform: none;
+        animation: none;
+        transition: width 0.28s ease;
+      }
+
+      @keyframes app-boot-sweep {
+        0% {
+          transform: translateX(-130%);
+        }
+        100% {
+          transform: translateX(380%);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .app-boot-progress[data-mode="indeterminate"] .app-boot-bar {
+          width: 42%;
+          animation: none;
+        }
+
+        .app-boot-progress[data-mode="determinate"] .app-boot-bar {
+          transition: none;
+        }
+
+        #app-boot-splash {
+          transition: none;
+        }
+      }
+
+      @media (max-width: 400px) {
+        #app-boot-splash {
+          display: none !important;
+        }
+      }
+    </style>
   </head>
 
   <body>
+    <div id="app-boot-splash" aria-hidden="true">
+      <div class="app-boot-mark">Cockpit Tools</div>
+      <div class="app-boot-progress" data-mode="indeterminate">
+        <div class="app-boot-bar" id="app-boot-bar"></div>
+      </div>
+    </div>
     <div id="root"></div>
+    <script>
+      window.setTimeout(function () {
+        var splash = document.getElementById("app-boot-splash");
+        if (splash) {
+          splash.classList.add("is-hidden");
+        }
+      }, 15000);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

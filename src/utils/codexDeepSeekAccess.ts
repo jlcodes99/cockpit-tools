@@ -48,6 +48,38 @@ export type DeepSeekStartChoice = {
   modelId: string;
 };
 
+export function isCodexTokenPlanAccount(
+  account: Pick<CodexAccount, "api_provider_id" | "api_base_url">,
+): boolean {
+  const providerId = (account.api_provider_id || "").trim().toLowerCase();
+  if (
+    providerId === "minimax" ||
+    providerId === "minimax-cn" ||
+    providerId === "minimax-portal" ||
+    providerId === "minimax-portal-cn" ||
+    providerId === "zhipu" ||
+    providerId === "zai" ||
+    providerId === "zai-coding-plan"
+  ) {
+    return true;
+  }
+  try {
+    const host = new URL((account.api_base_url || "").trim()).hostname.toLowerCase();
+    return [
+      "api.minimaxi.com",
+      "www.minimaxi.com",
+      "api.minimax.io",
+      "www.minimax.io",
+      "open.bigmodel.cn",
+      "bigmodel.cn",
+      "api.z.ai",
+      "z.ai",
+    ].includes(host);
+  } catch {
+    return false;
+  }
+}
+
 export function isDeepSeekAccount(
   account: Pick<CodexAccount, "api_provider_id" | "api_base_url">,
 ): boolean {
@@ -65,11 +97,13 @@ export function isDeepSeekAccount(
 export function isCodexApiKeyUsageQueryEligible(
   account: CodexAccount,
 ): boolean {
+  const tokenPlan = isCodexTokenPlanAccount(account);
   return (
     isCodexApiKeyAccount(account) &&
     !isCodexNewApiAccount(account) &&
     (!isCodexChatCompletionsApiKeyAccount(account) ||
-      isDeepSeekAccount(account)) &&
+      isDeepSeekAccount(account) ||
+      tokenPlan) &&
     Boolean(account.openai_api_key?.trim())
   );
 }
@@ -82,10 +116,11 @@ export function shouldShowCodexApiKeyUsagePanel(
     return false;
   }
   const deepseek = isDeepSeekAccount(account);
-  if (isCodexChatCompletionsApiKeyAccount(account) && !deepseek) {
+  const tokenPlan = isCodexTokenPlanAccount(account);
+  if (isCodexChatCompletionsApiKeyAccount(account) && !deepseek && !tokenPlan) {
     return false;
   }
-  return !hideRelayQuota || deepseek;
+  return !hideRelayQuota || deepseek || tokenPlan;
 }
 
 export function isDeepSeekResponsesAccount(

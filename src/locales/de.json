@@ -1849,6 +1849,35 @@
   },
   "codex": {
     "title": "Codex-Konten verwalten",
+    "experimentalModelCatalog": {
+      "title": "Experimenteller Modellkatalog",
+      "description": "Erstellt einen von Cockpit verwalteten Katalog mit der vollständigen offiziellen Modellliste und eigenen experimentellen Modellen, ohne einen benutzerdefinierten Katalog zu überschreiben.",
+      "enabledHint": "Legt {{model}} als Standardmodell fest. Starten Sie Codex danach neu.",
+      "models": {
+        "title": "Modellliste",
+        "model": "Experimentelles Modell",
+        "default": "Standardmodell",
+        "add": "Modell hinzufügen",
+        "remove": "Modell entfernen",
+        "setDefault": "Als Standard festlegen",
+        "modelId": "Modell-ID",
+        "displayName": "Anzeigename",
+        "inheritHint": "Modelle übernehmen alle Funktionsfelder von gpt-5.6-sol. Der erste Eintrag ist zugleich das Standardmodell.",
+        "validation": {
+          "required": "Mindestens ein experimentelles Modell muss erhalten bleiben.",
+          "modelId": "Modell-IDs dürfen nur Buchstaben, Zahlen, Punkte, Bindestriche, Unterstriche, Schrägstriche und Doppelpunkte enthalten.",
+          "displayName": "Geben Sie einen Anzeigenamen mit höchstens 100 Zeichen ein.",
+          "duplicate": "Modell-IDs müssen eindeutig sein.",
+          "reserved": "Diese Modell-ID kollidiert mit einem offiziellen Modell. Verwenden Sie eine andere ID."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "models_cache.json wurde nicht gefunden.",
+        "modelNotCached": "gpt-5.6-sol-wm ist nicht im lokalen Cache enthalten.",
+      "catalogConflict": "Ein anderes model_catalog_json ist bereits konfiguriert und wird nicht überschrieben.",
+      "cacheInvalid": "models_cache.json kann nicht gelesen werden oder hat ein ungültiges Format."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Kontingent",
@@ -2337,6 +2366,10 @@
       "additional": "Zusätzliches Kontingent",
       "reset": "Zurücksetzen",
       "weeklyBlocksHourly": "Das Wochenkontingent ist 0, daher ist das 5-Stunden-Kontingent nicht verfügbar",
+      "windowStats": "Verbraucht {{tokens}} · {{cost}}",
+      "windowStatsHint": "Anfragen, Token und Kontokosten dieses Kontos über den API-Dienst seit dem letzten vollen Fenster",
+      "windowUsed": "Verbraucht {{tokens}} · {{cost}}",
+      "windowReq": "{{count}} Anfr.",
       "resetCredits": "Rücksetz. {{count}}",
       "resetCreditsTitle": "Verbleibende Resets für das 5-Stunden-Fenster: {{count}}",
       "resetCreditConfirm": "Bestätigen?",
@@ -2358,7 +2391,15 @@
       "resetCreditNoRecords": "Keine Reset-Einträge",
       "resetCreditRecordsLoadFailed": "Reset-Einträge konnten nicht geladen werden: {{error}}",
       "resetCreditGrantedAt": "Gewährt",
-      "resetCreditExpiresAt": "Läuft ab"
+      "resetCreditExpiresAt": "Läuft ab",
+      "windowAccountCostHint": "Kontokosten (aus Modellpreisen geschätzt)",
+      "windowUserCostHint": "Nutzerkosten",
+      "windowWeeks": "{{count}}-Wochen-Kontingent",
+      "windowDays": "{{count}}-Tage-Kontingent",
+      "windowHours": "{{count}}-Stunden-Kontingent",
+      "windowMinutes": "{{count}}-Minuten-Kontingent",
+      "codeReview": "Codeprüfung",
+      "codeReviewShort": "Prüfung"
     },
     "quotaError": {
       "badge": "Kontingentfehler",
@@ -2856,6 +2897,82 @@
         "all": "Alle Typen"
       },
       "pickInstancePrompt": "Sitzung existiert auf mehreren Instanzen. Instanz-ID eingeben:"
+    },
+    "sessionUsage": {
+      "tab": "Verbrauch",
+      "listTab": "Sitzungen",
+      "title": "Sitzungsverbrauch",
+      "desc": "Echten Token-Verbrauch aus lokalen Codex-Sitzungsprotokollen summieren – ohne offizielles Kontingent oder API-Service-Logs.",
+      "hint": "Das offizielle Kontingent ist das Tariflimit. API-Service-Logs decken nur den lokalen Gateway-Verkehr. Hier werden JSONL-Deltas pro Anfrage addiert.",
+      "range": {
+        "label": "Zeitraum",
+        "7d": "7 Tage",
+        "30d": "30 Tage",
+        "month": "Dieser Monat",
+        "all": "Alle"
+      },
+      "instance": {
+        "label": "Instanz",
+        "all": "Alle Instanzen"
+      },
+      "actions": {
+        "refresh": "Aktualisieren",
+        "rebuild": "Neu scannen"
+      },
+      "status": {
+        "idle": "Noch nicht gescannt",
+        "scanning": "Sitzungsprotokolle werden gescannt…",
+        "ready": "{{files}} Dateien, {{requests}} Anfragen erfasst",
+        "lastSynced": "Letzte Sync {{time}}",
+        "deferred": "{{count}} Forks warten auf die Elternsitzung",
+        "errors": "{{count}} Dateien nicht lesbar"
+      },
+      "cards": {
+        "input": "Eingabe-Tokens",
+        "cached": "Cache-Eingabe-Tokens",
+        "output": "Ausgabe-Tokens",
+        "total": "Tokens gesamt",
+        "requests": "Anfragen",
+        "cost": "Schätzkosten"
+      },
+      "tables": {
+        "model": "Nach Modell",
+        "instance": "Nach Instanz",
+        "day": "Nach Tag",
+        "modelName": "Modell",
+        "instanceName": "Instanz",
+        "dayName": "Datum",
+        "input": "Eingabe-Tokens",
+        "cached": "Cache-Tokens",
+        "output": "Ausgabe-Tokens",
+        "total": "Tokens gesamt",
+        "requests": "Anfr."
+      },
+      "empty": {
+        "title": "Noch kein Sitzungsverbrauch",
+        "desc": "Beim Öffnen werden lokale Codex-Logs und Extra-Instanzen im Hintergrund gescannt. Nach frischer Nutzung auf Aktualisieren tippen."
+      },
+      "rebuildConfirm": {
+        "title": "Neu scannen",
+        "message": "Der Sitzungsverbrauchs-Cache wird geleert und alle Logs neu gelesen. Offizielles Kontingent und API-Service-Logs bleiben unverändert. Fortfahren?"
+      },
+      "errors": {
+        "loadFailed": "Sitzungsverbrauch konnte nicht geladen werden: {{error}}",
+        "syncFailed": "Sitzungsverbrauch konnte nicht gescannt werden: {{error}}"
+      },
+      "summary": {
+        "title": "30 Tage",
+        "scanning": "Scannen…",
+        "updating": "Aktual…",
+        "detail": "Details",
+        "back": "Zurück",
+        "input": "Eingabe",
+        "cached": "Cache",
+        "output": "Ausgabe",
+        "total": "Gesamt",
+        "requests": "Anfr.",
+        "cost": "Kosten"
+      }
     },
     "api": {
       "baseUrl": "Basis-URL",

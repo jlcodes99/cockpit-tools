@@ -9,9 +9,11 @@ import {
   markFrontendReady,
   recordFrontendStage,
 } from "./utils/errorReporter";
+import { setBootSplashStage } from "./utils/bootSplash";
 
 initErrorReporter();
 recordFrontendStage("script_loaded");
+setBootSplashStage("script_loaded");
 void initI18n();
 
 const rootElement = document.getElementById("root");
@@ -31,5 +33,6 @@ ReactDOM.createRoot(rootElement).render(
 );
 
 window.requestAnimationFrame(() => {
+  setBootSplashStage("react_mounted");
   markFrontendReady("react_mounted");
 });

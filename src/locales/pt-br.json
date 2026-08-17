@@ -1849,6 +1849,35 @@
   },
   "codex": {
     "title": "Gerenciamento de contas Codex",
+    "experimentalModelCatalog": {
+      "title": "Catálogo experimental",
+      "description": "Gera um catálogo gerenciado pelo Cockpit com a lista oficial completa e modelos experimentais personalizados, sem substituir um catálogo personalizado.",
+      "enabledHint": "Define {{model}} como modelo padrão. Reinicie o Codex para aplicar.",
+      "models": {
+        "title": "Lista de modelos",
+        "model": "Modelo experimental",
+        "default": "Modelo padrão",
+        "add": "Adicionar modelo",
+        "remove": "Remover modelo",
+        "setDefault": "Definir como padrão",
+        "modelId": "ID do modelo",
+        "displayName": "Nome de exibição",
+        "inheritHint": "Os modelos herdam todos os campos de recursos do gpt-5.6-sol. O primeiro item também é o modelo padrão.",
+        "validation": {
+          "required": "Mantenha pelo menos um modelo experimental.",
+          "modelId": "Os IDs de modelo podem conter apenas letras, números, pontos, hífens, sublinhados, barras e dois-pontos.",
+          "displayName": "Insira um nome de exibição com até 100 caracteres.",
+          "duplicate": "Os IDs de modelo devem ser únicos.",
+          "reserved": "Este ID de modelo entra em conflito com um modelo oficial. Use outro ID."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "models_cache.json não foi encontrado.",
+        "modelNotCached": "gpt-5.6-sol-wm não está no cache local.",
+      "catalogConflict": "Outro model_catalog_json já está configurado e não será substituído.",
+      "cacheInvalid": "Não foi possível ler models_cache.json ou o formato é inválido."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Cota",
@@ -2337,6 +2366,10 @@
       "additional": "Cota adicional",
       "reset": "Redefinir",
       "weeklyBlocksHourly": "A cota semanal é 0, então a cota de 5 horas está indisponível",
+      "windowStats": "Usado {{tokens}} · {{cost}}",
+      "windowStatsHint": "Solicitações, tokens e cobrança da conta no serviço de API desde que esta janela estava cheia",
+      "windowUsed": "Usado {{tokens}} · {{cost}}",
+      "windowReq": "{{count}} req.",
       "resetCredits": "Redef. {{count}}",
       "resetCreditsTitle": "Resets restantes para a janela de 5 horas: {{count}}",
       "resetCreditConfirm": "Confirmar?",
@@ -2358,7 +2391,15 @@
       "resetCreditNoRecords": "Sem registros de redefinição",
       "resetCreditRecordsLoadFailed": "Falha ao carregar registros de redefinição: {{error}}",
       "resetCreditGrantedAt": "Concedida",
-      "resetCreditExpiresAt": "Expira"
+      "resetCreditExpiresAt": "Expira",
+      "windowAccountCostHint": "Cobrança da conta (estimada pelos preços do modelo)",
+      "windowUserCostHint": "Cobrança do usuário",
+      "windowWeeks": "Cota {{count}} sem.",
+      "windowDays": "Cota {{count}} d",
+      "windowHours": "Cota {{count}} h",
+      "windowMinutes": "Cota {{count}} min",
+      "codeReview": "Revisão de código",
+      "codeReviewShort": "Revisão"
     },
     "quotaError": {
       "badge": "Erro de cota",
@@ -2856,6 +2897,82 @@
         "all": "Todos"
       },
       "pickInstancePrompt": "Sessão existe em várias instâncias. Informe o ID da instância:"
+    },
+    "sessionUsage": {
+      "tab": "Uso",
+      "listTab": "Sessões",
+      "title": "Uso das sessões",
+      "desc": "Agrega o uso real de tokens a partir dos logs locais do Codex, sem a cota oficial nem os logs do serviço de API.",
+      "hint": "A cota oficial é o limite do plano. Os logs do serviço de API cobrem só o gateway local. Aqui somamos os deltas JSONL por requisição.",
+      "range": {
+        "label": "Período",
+        "7d": "7 dias",
+        "30d": "30 dias",
+        "month": "Este mês",
+        "all": "Tudo"
+      },
+      "instance": {
+        "label": "Instância",
+        "all": "Todas"
+      },
+      "actions": {
+        "refresh": "Atualizar",
+        "rebuild": "Rescanear"
+      },
+      "status": {
+        "idle": "Ainda não escaneado",
+        "scanning": "Escaneando logs…",
+        "ready": "{{files}} arquivos, {{requests}} requisições",
+        "lastSynced": "Última sync {{time}}",
+        "deferred": "{{count}} forks aguardando o pai",
+        "errors": "{{count}} arquivos falharam"
+      },
+      "cards": {
+        "input": "Tokens de entrada",
+        "cached": "Tokens em cache",
+        "output": "Tokens de saída",
+        "total": "Tokens totais",
+        "requests": "Solicitações",
+        "cost": "Custo est."
+      },
+      "tables": {
+        "model": "Por modelo",
+        "instance": "Por instância",
+        "day": "Por dia",
+        "modelName": "Modelo",
+        "instanceName": "Instância",
+        "dayName": "Data",
+        "input": "Tokens entrada",
+        "cached": "Tokens cache",
+        "output": "Tokens saída",
+        "total": "Tokens totais",
+        "requests": "Sol."
+      },
+      "empty": {
+        "title": "Ainda não há uso de sessão",
+        "desc": "Abrir esta página escaneia em segundo plano os logs locais do Codex e as instâncias extras. Se acabou de usar, atualize."
+      },
+      "rebuildConfirm": {
+        "title": "Rescanear",
+        "message": "A cache de uso das sessões será limpa e todos os logs relidos. A cota oficial e os logs do serviço de API não mudam. Continuar?"
+      },
+      "errors": {
+        "loadFailed": "Falha ao ler o uso das sessões: {{error}}",
+        "syncFailed": "Falha ao escanear o uso das sessões: {{error}}"
+      },
+      "summary": {
+        "title": "30 dias",
+        "scanning": "Varredura…",
+        "updating": "Atualiz…",
+        "detail": "Detalhes",
+        "back": "Voltar",
+        "input": "Entrada",
+        "cached": "Cache",
+        "output": "Saída",
+        "total": "Soma",
+        "requests": "Sol.",
+        "cost": "Custo"
+      }
     },
     "api": {
       "baseUrl": "URL base",

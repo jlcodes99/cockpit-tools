@@ -63,6 +63,7 @@ import {
 import type { CodexAccount, CodexApiModelMapping } from "../types/codex";
 import { isCodexApiKeyAccount } from "../types/codex";
 import { updateCodexAccountApiModelMappings } from "../services/codexService";
+import { parseContextWindowDrafts } from "../utils/codexModelContextWindows";
 import {
   CODEX_API_SERVICE_BIND_ID,
   type InstanceProfile,
@@ -544,14 +545,24 @@ const DEEPSEEK_OFFICIAL_API_MODEL_MAPPINGS: CodexApiModelMapping[] = [
 type AccountModelMappingDraft = {
   clientModel: string;
   upstreamModel: string;
+  contextWindow: string;
 };
 
 function mappingDraftsFromAccount(account: CodexAccount): AccountModelMappingDraft[] {
+  const windows = account.api_model_context_windows ?? {};
   const rows = (account.api_model_mappings ?? []).map((item) => ({
     clientModel: item.client_model,
     upstreamModel: item.upstream_model,
+    contextWindow:
+      windows[item.client_model] != null
+        ? String(windows[item.client_model])
+        : windows[item.upstream_model] != null
+          ? String(windows[item.upstream_model])
+          : "",
   }));
-  return rows.length > 0 ? rows : [{ clientModel: "", upstreamModel: "" }];
+  return rows.length > 0
+    ? rows
+    : [{ clientModel: "", upstreamModel: "", contextWindow: "" }];
 }
 
 function serializeModelAliases(
@@ -2439,7 +2450,7 @@ export function CodexApiServicePage() {
     value: string,
   ) => {
     setAccountModelMappingDrafts((current) => {
-      const rows = [...(current[accountId] ?? [{ clientModel: "", upstreamModel: "" }])];
+      const rows = [...(current[accountId] ?? [{ clientModel: "", upstreamModel: "", contextWindow: "" }])];
       rows[index] = { ...rows[index], [field]: value };
       return { ...current, [accountId]: rows };
     });
@@ -2451,7 +2462,7 @@ export function CodexApiServicePage() {
       ...current,
       [accountId]: [
         ...(current[accountId] ?? []),
-        { clientModel: "", upstreamModel: "" },
+        { clientModel: "", upstreamModel: "", contextWindow: "" },
       ],
     }));
     setAccountModelMappingError("");
@@ -2462,7 +2473,7 @@ export function CodexApiServicePage() {
       const rows = (current[accountId] ?? []).filter((_, rowIndex) => rowIndex !== index);
       return {
         ...current,
-        [accountId]: rows.length > 0 ? rows : [{ clientModel: "", upstreamModel: "" }],
+        [accountId]: rows.length > 0 ? rows : [{ clientModel: "", upstreamModel: "", contextWindow: "" }],
       };
     });
     setAccountModelMappingError("");
@@ -2474,6 +2485,7 @@ export function CodexApiServicePage() {
       [accountId]: DEEPSEEK_OFFICIAL_API_MODEL_MAPPINGS.map((item) => ({
         clientModel: item.client_model,
         upstreamModel: item.upstream_model,
+        contextWindow: "",
       })),
     }));
     setAccountModelMappingError("");
@@ -2481,10 +2493,23 @@ export function CodexApiServicePage() {
 
   const handleSaveAccountModelMappings = async () => {
     setAccountModelMappingError("");
-    const payloads: Array<{ accountId: string; mappings: CodexApiModelMapping[] }> = [];
+    const payloads: Array<{
+      accountId: string;
+      mappings: CodexApiModelMapping[];
+      windows: Record<string, number>;
+    }> = [];
     for (const account of mappingMemberAccounts) {
       const rows = accountModelMappingDrafts[account.id] ?? [];
       const mappings: CodexApiModelMapping[] = [];
+      const drafts: Record<string, string> = {
+        ...(account.api_model_context_windows
+          ? Object.fromEntries(
+              Object.entries(account.api_model_context_windows).map(
+                ([model, window]) => [model, String(window)],
+              ),
+            )
+          : {}),
+      };
       const seen = new Set<string>();
       for (const row of rows) {
         const clientModel = row.clientModel.trim();
@@ -2511,8 +2536,26 @@ export function CodexApiServicePage() {
         }
         seen.add(key);
         mappings.push({ client_model: clientModel, upstream_model: upstreamModel });
+        drafts[clientModel] = row.contextWindow ?? "";
       }
-      payloads.push({ accountId: account.id, mappings });
+      const parsedWindows = parseContextWindowDrafts(
+        drafts,
+        Object.keys(drafts),
+      );
+      if (!parsedWindows.ok) {
+        setAccountModelMappingError(
+          t(
+            "codex.api.modelCatalog.contextWindowInvalid",
+            "上下文窗口必须是大于 0 的整数",
+          ),
+        );
+        return;
+      }
+      payloads.push({
+        accountId: account.id,
+        mappings,
+        windows: parsedWindows.windows,
+      });
     }
     await runAction(
       async () => {
@@ -2520,6 +2563,7 @@ export function CodexApiServicePage() {
           await updateCodexAccountApiModelMappings(
             payload.accountId,
             payload.mappings,
+            payload.windows,
           );
         }
         await fetchAccounts();
@@ -6556,7 +6600,7 @@ export function CodexApiServicePage() {
                 <p className="codex-api-service-pricing-desc">
                   {t(
                     "codex.apiService.accountModelMappings.desc",
-                    "只改这个账号被抽中后发给上游的模型名。左侧是调用方请求的模型，右侧是实际上游模型。",
+                    "只改这个账号被抽中后发给上游的模型名。左侧是调用方请求的模型，右侧是实际上游模型。上下文窗口可选，官方 / DeepSeek 留空则保留厂商默认值。",
                   )}
                 </p>
               </div>
@@ -6674,6 +6718,31 @@ export function CodexApiServicePage() {
                                   )
                                 }
                                 placeholder="deepseek-v4-flash"
+                                disabled={busy}
+                              />
+                            </label>
+                            <label>
+                              <span>
+                                {t(
+                                  "codex.api.modelCatalog.contextWindow",
+                                  "上下文窗口",
+                                )}
+                              </span>
+                              <input
+                                value={row.contextWindow ?? ""}
+                                onChange={(event) =>
+                                  updateAccountModelMappingDraft(
+                                    account.id,
+                                    index,
+                                    "contextWindow",
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder={t(
+                                  "codex.api.modelCatalog.contextWindowPlaceholder",
+                                  "留空=默认",
+                                )}
+                                inputMode="numeric"
                                 disabled={busy}
                               />
                             </label>

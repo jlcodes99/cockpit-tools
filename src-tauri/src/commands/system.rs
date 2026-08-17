@@ -4105,6 +4105,24 @@ pub async fn delete_corrupted_file(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub fn load_user_memory() -> Result<modules::user_memory::UserMemory, String> {
+    modules::user_memory::load_user_memory()
+}
+
+#[tauri::command]
+pub fn mark_user_memory_dismissed(id: String) -> Result<modules::user_memory::UserMemory, String> {
+    modules::user_memory::mark_user_memory_dismissed(&id)
+}
+
+#[tauri::command]
+pub fn save_user_memory_list(
+    id: String,
+    items: Vec<String>,
+) -> Result<modules::user_memory::UserMemory, String> {
+    modules::user_memory::save_user_memory_list(&id, items)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

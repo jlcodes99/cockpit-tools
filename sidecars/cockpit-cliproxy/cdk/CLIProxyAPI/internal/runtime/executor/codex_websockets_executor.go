@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/misc"
@@ -1193,7 +1192,7 @@ func applyCodexPromptCacheHeaders(from sdktranslator.Format, req cliproxyexecuto
 
 	if cache.ID != "" {
 		rawJSON, _ = sjson.SetBytes(rawJSON, "prompt_cache_key", cache.ID)
-		setHeaderCasePreserved(headers, "session_id", cache.ID)
+		setHeaderCasePreserved(headers, "Session-Id", cache.ID)
 		headers.Set("Conversation_id", cache.ID)
 	}
 
@@ -1221,13 +1220,12 @@ func applyCodexWebsocketHeaders(ctx context.Context, headers http.Header, auth *
 	misc.EnsureHeader(headers, ginHeaders, "x-client-request-id", "")
 	misc.EnsureHeader(headers, ginHeaders, "x-responsesapi-include-timing-metrics", "")
 	misc.EnsureHeader(headers, ginHeaders, "Version", "")
+	misc.EnsureHeader(headers, ginHeaders, "X-Codex-Window-Id", "")
+	misc.EnsureHeader(headers, ginHeaders, "Thread-Id", "")
+	misc.EnsureHeader(headers, ginHeaders, "Session-Id", "")
 	copyCodexResponsesLiteHeader(headers, ginHeaders)
 	copyCodexAgtoolsDiagnosticHeaders(headers, ginHeaders)
-	if isAPIKey {
-		ensureHeaderWithPriority(headers, ginHeaders, "User-Agent", "", "")
-	} else {
-		ensureHeaderWithConfigPrecedence(headers, ginHeaders, "User-Agent", cfgUserAgent, codexUserAgent)
-	}
+	applyCodexClientIdentityHeaders(headers, ginHeaders, cfg, cfgUserAgent, isAPIKey)
 
 	betaHeader := strings.TrimSpace(headers.Get("OpenAI-Beta"))
 	if betaHeader == "" && ginHeaders != nil {
@@ -1237,16 +1235,7 @@ func applyCodexWebsocketHeaders(ctx context.Context, headers http.Header, auth *
 		betaHeader = codexResponsesWebsocketBetaHeaderValue
 	}
 	headers.Set("OpenAI-Beta", betaHeader)
-	sessionFallback := ""
-	if strings.Contains(headers.Get("User-Agent"), "Mac OS") {
-		sessionFallback = uuid.NewString()
-	}
-	ensureCodexWebsocketSessionHeader(headers, ginHeaders, sessionFallback)
-	if originator := strings.TrimSpace(ginHeaders.Get("Originator")); originator != "" {
-		headers.Set("Originator", originator)
-	} else if !isAPIKey {
-		headers.Set("Originator", codexOriginator)
-	}
+	ensureCodexWebsocketSessionHeader(headers, ginHeaders, "")
 	if !isAPIKey {
 		if auth != nil && auth.Metadata != nil {
 			if accountID, ok := auth.Metadata["account_id"].(string); ok {
@@ -1263,6 +1252,7 @@ func applyCodexWebsocketHeaders(ctx context.Context, headers http.Header, auth *
 	}
 	util.ApplyCustomHeadersFromAttrs(&http.Request{Header: headers}, attrs)
 	applyCodexCloakingHeaders(headers, cfg)
+	applyPairedCodexClientIdentity(headers, !isAPIKey || codexCloakingEnabled(cfg))
 
 	return headers
 }
@@ -1279,9 +1269,8 @@ func ensureCodexWebsocketSessionHeader(target http.Header, source http.Header, f
 		sessionID = strings.TrimSpace(fallbackValue)
 	}
 	if sessionID != "" {
-		setHeaderCasePreserved(target, "session_id", sessionID)
+		applyCanonicalCodexSessionHeader(target, sessionID)
 	}
-	deleteHeaderCaseInsensitive(target, "Session-Id")
 }
 
 func codexSessionHeaderValue(headers http.Header) string {

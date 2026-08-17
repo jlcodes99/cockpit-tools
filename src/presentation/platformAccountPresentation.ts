@@ -35,6 +35,7 @@ import {
   formatCodexResetTime,
   getCodexAdditionalQuotaWindows,
   getCodexCodeReviewQuotaMetric,
+  getCodexQuotaWindowLabel,
   getCodexEffectiveQuotaPercentages,
   getCodexPlanBadgePresentation,
   getCodexQuotaClass,
@@ -157,6 +158,16 @@ export interface UnifiedQuotaMetric {
   total?: number;
   left?: number;
   hintText?: string;
+  windowStatsText?: string;
+  windowStats?: {
+    requestCount: number;
+    inputTokens: number;
+    cachedInputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    estimatedCostUsd: number;
+    userCostUsd?: number | null;
+  };
 }
 
 export interface UnifiedAccountPresentation {
@@ -693,6 +704,49 @@ function buildCodexNewApiQuotaItems(
   ];
 }
 
+function getCodexQuotaWindowTitle(
+  windowMinutes: number | undefined,
+  fallback: "hourly" | "weekly",
+  t: Translate,
+): string {
+  const label = getCodexQuotaWindowLabel(windowMinutes, fallback);
+  if (label === "5h") {
+    return t("codex.quota.hourly", "5小时配额");
+  }
+  if (label === "7d" || label === "Weekly") {
+    return t("codex.quota.weekly", "周配额");
+  }
+  const weeks = /^(\d+)\s*w(?:eek)?s?$/i.exec(label);
+  if (weeks) {
+    return t("codex.quota.windowWeeks", {
+      count: Number(weeks[1]),
+      defaultValue: "{{count}} 周配额",
+    });
+  }
+  const days = /^(\d+)d$/.exec(label);
+  if (days) {
+    return t("codex.quota.windowDays", {
+      count: Number(days[1]),
+      defaultValue: "{{count}} 天配额",
+    });
+  }
+  const hours = /^(\d+)h$/.exec(label);
+  if (hours) {
+    return t("codex.quota.windowHours", {
+      count: Number(hours[1]),
+      defaultValue: "{{count}} 小时配额",
+    });
+  }
+  const minutes = /^(\d+)m$/.exec(label);
+  if (minutes) {
+    return t("codex.quota.windowMinutes", {
+      count: Number(minutes[1]),
+      defaultValue: "{{count}} 分钟配额",
+    });
+  }
+  return label;
+}
+
 export function buildCodexAccountPresentation(
   account: CodexAccount,
   t: Translate,
@@ -716,29 +770,48 @@ export function buildCodexAccountPresentation(
       ? []
       : newApiQuotaItems.length > 0
       ? newApiQuotaItems
-      : getCodexQuotaWindows(account.quota).map((window) => ({
-          key: window.id,
-          label: window.label,
-          percentage: window.percentage,
-          quotaClass: getCodexQuotaClass(window.percentage),
-          valueText: `${window.percentage}%`,
-          resetText: window.resetTime
-            ? formatCodexResetTime(window.resetTime, t)
-            : "",
-          resetAt: window.resetTime,
-          hintText:
-            window.id === "primary" && weeklyBlocksHourlyHint
-              ? weeklyBlocksHourlyHint
-              : undefined,
-        }));
+      : getCodexQuotaWindows(account.quota).map((window) => {
+          const windowTitle = getCodexQuotaWindowTitle(
+            window.windowMinutes,
+            window.id === "secondary" ? "weekly" : "hourly",
+            t,
+          );
+          return {
+            key: window.id,
+            label: window.label,
+            percentage: window.percentage,
+            quotaClass: getCodexQuotaClass(window.percentage),
+            valueText: `${window.percentage}%`,
+            resetText: window.resetTime
+              ? formatCodexResetTime(window.resetTime, t)
+              : "",
+            resetAt: window.resetTime,
+            hintText: [
+              windowTitle,
+              window.id === "primary" ? weeklyBlocksHourlyHint : "",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          };
+        });
   const additionalQuotaItems =
     !isCodexChatCompletionsApiKeyAccount(account)
       ? getCodexAdditionalQuotaWindows(account.quota).map((window) => {
-          const hintText = [window.limitName, window.meteredFeature]
-            .filter(Boolean)
-            .join(" · ");
+          const windowTitle = getCodexQuotaWindowTitle(
+            window.windowMinutes,
+            window.windowKind === "secondary" ? "weekly" : "hourly",
+            t,
+          );
           const limitLabel =
             window.limitLabel || t("codex.quota.additional", "额外额度");
+          const hintText = [
+            `${limitLabel} · ${windowTitle}`,
+            [window.limitName, window.meteredFeature]
+              .filter(Boolean)
+              .join(" · "),
+          ]
+            .filter(Boolean)
+            .join("\n");
           return {
             key: window.id,
             label: `${limitLabel} ${window.label}`,
@@ -749,7 +822,7 @@ export function buildCodexAccountPresentation(
               ? formatCodexResetTime(window.resetTime, t)
               : "",
             resetAt: window.resetTime,
-            hintText: hintText || undefined,
+            hintText,
           };
         })
       : [];
@@ -766,6 +839,7 @@ export function buildCodexAccountPresentation(
         ? formatCodexResetTime(codeReviewMetric.resetTime, t)
         : "",
       resetAt: codeReviewMetric.resetTime,
+      hintText: t("codex.quota.codeReview", "Code Review"),
     });
   }
   const planBadge = isCodexPendingOAuthAccount(account)

@@ -17,6 +17,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
 import { FileText, FolderOpen, RefreshCw, X } from 'lucide-react';
 import { SideNav } from './components/layout/SideNav';
+import { BootReadyMarker, VisibleBootPage } from './components/BootReadyMarker';
 import { GlobalModal } from './components/GlobalModal';
 import { AnnouncementHost } from './components/AnnouncementCenter';
 import { TopCenterPromoBanner } from './components/TopCenterPromoBanner';
@@ -71,6 +72,10 @@ import {
   type ExternalProviderImportPayload,
 } from './utils/externalProviderImport';
 import { runAutoBackupCycle } from './services/scheduledBackupService';
+import {
+  hydrateUserMemory,
+  USER_MEMORY_FLAGS,
+} from './utils/userMemory';
 import {
   clearLegacyWorkbuddyAutoCheckinLogs,
   getWorkbuddyAutoCheckinConfig,
@@ -766,6 +771,18 @@ function MainApp() {
     return () => {
       window.removeEventListener('codex-suite-ensure-mounted', ensureMounted);
     };
+  }, []);
+
+  useEffect(() => {
+    void hydrateUserMemory().then((memory) => {
+      const store = useSideNavLayoutStore.getState();
+      if (
+        memory.dismissed[USER_MEMORY_FLAGS.classicSwitchPrompt] ||
+        store.hideClassicSwitchPrompt
+      ) {
+        store.setHideClassicSwitchPrompt(true);
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -3986,15 +4003,19 @@ function MainApp() {
         ) : null}
         {/* overview 现在是合并后的账号总览页面 */}
         <Suspense fallback={suspenseFallback}>
-          {page === 'dashboard' && (
+          <VisibleBootPage when={page === 'dashboard'}>
             <DashboardPage
               onNavigate={setPage}
               onOpenPlatformLayout={openPlatformLayoutModal}
               onEasterEggTriggerClick={handleBreakoutEntryTriggerClick}
             />
-          )}
-          {page === 'api-relay' && <ApiKeyFunPage />}
-          {page === 'overview' && <AccountsPage onNavigate={setPage} />}
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'api-relay'}>
+            <ApiKeyFunPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'overview'}>
+            <AccountsPage onNavigate={setPage} />
+          </VisibleBootPage>
           {/* Codex suite: keep both pages mounted after first visit to avoid empty flash when switching. */}
           {shouldMountCodexSuite && (
             <Suspense fallback={page === 'codex' ? suspenseFallback : null}>
@@ -4004,6 +4025,7 @@ function MainApp() {
                 aria-hidden={page !== 'codex'}
               >
                 <CodexAccountsPage />
+                {page === 'codex' ? <BootReadyMarker /> : null}
               </div>
             </Suspense>
           )}
@@ -4015,37 +4037,82 @@ function MainApp() {
                 aria-hidden={page !== 'codex-api-service'}
               >
                 <CodexApiServicePage />
+                {page === 'codex-api-service' ? <BootReadyMarker /> : null}
               </div>
             </Suspense>
           )}
-          {page === 'claude' && <ClaudeAccountsPage subPlatform="desktop" />}
-          {page === 'claude-cli' && <ClaudeAccountsPage subPlatform="cli" />}
-          {page === 'github-copilot' && <GitHubCopilotAccountsPage />}
-          {page === 'windsurf' && <WindsurfAccountsPage />}
-          {page === 'kiro' && <KiroAccountsPage />}
-          {page === 'cursor' && <CursorAccountsPage />}
-          {page === 'grok' && <GrokAccountsPage />}
-          {page === 'codebuddy' && <CodebuddyAccountsPage />}
-          {page === 'codebuddy-cn' && <CodebuddyCnAccountsPage />}
-          {page === 'qoder' && <QoderAccountsPage />}
-          {page === 'zcode' && <ZcodeAccountsPage />}
-          {page === 'trae' && <TraeAccountsPage platformId="trae" />}
-          {page === 'trae-solo' && <TraeAccountsPage platformId="trae_solo" />}
-          {page === 'trae-cn' && <TraeAccountsPage platformId="trae_cn" />}
-          {page === 'trae-solo-cn' && <TraeAccountsPage platformId="trae_solo_cn" />}
-          {page === 'workbuddy' && <WorkbuddyAccountsPage />}
-          {page === 'zed' && <ZedAccountsPage />}
-          {page === 'instances' && <InstancesPage onNavigate={setPage} />}
-          {page === 'wakeup' && <WakeupTasksPage onNavigate={setPage} />}
-          {page === 'verification' && <WakeupVerificationPage onNavigate={setPage} />}
-          {page === '2fa' && <TwoFactorAuthPage />}
-          {page === 'manual' && (
+          <VisibleBootPage when={page === 'claude'}>
+            <ClaudeAccountsPage subPlatform="desktop" />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'claude-cli'}>
+            <ClaudeAccountsPage subPlatform="cli" />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'github-copilot'}>
+            <GitHubCopilotAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'windsurf'}>
+            <WindsurfAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'kiro'}>
+            <KiroAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'cursor'}>
+            <CursorAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'grok'}>
+            <GrokAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'codebuddy'}>
+            <CodebuddyAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'codebuddy-cn'}>
+            <CodebuddyCnAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'qoder'}>
+            <QoderAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'zcode'}>
+            <ZcodeAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'trae'}>
+            <TraeAccountsPage platformId="trae" />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'trae-solo'}>
+            <TraeAccountsPage platformId="trae_solo" />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'trae-cn'}>
+            <TraeAccountsPage platformId="trae_cn" />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'trae-solo-cn'}>
+            <TraeAccountsPage platformId="trae_solo_cn" />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'workbuddy'}>
+            <WorkbuddyAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'zed'}>
+            <ZedAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'instances'}>
+            <InstancesPage onNavigate={setPage} />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'wakeup'}>
+            <WakeupTasksPage onNavigate={setPage} />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'verification'}>
+            <WakeupVerificationPage onNavigate={setPage} />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === '2fa'}>
+            <TwoFactorAuthPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'manual'}>
             <ManualPage
               onNavigate={setPage}
               onOpenPlatformLayout={openPlatformLayoutModal}
             />
-          )}
-          {page === 'settings' && <SettingsPage />}
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'settings'}>
+            <SettingsPage />
+          </VisibleBootPage>
         </Suspense>
       </div>
     </div>

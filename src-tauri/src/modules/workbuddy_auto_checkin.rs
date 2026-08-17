@@ -3,19 +3,21 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Mutex, MutexGuard,
+    Mutex, MutexGuard, OnceLock,
 };
 use std::time::{Duration, Instant};
 
 use chrono::{Local, TimeZone, Timelike};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
+use tokio::sync::Notify;
 
 use crate::models::workbuddy::WorkbuddyAccount;
 use crate::modules::{codebuddy_cn_oauth, config, logger, workbuddy_account};
 
 static IS_CHECKIN_RUNNING: AtomicBool = AtomicBool::new(false);
 static STORAGE_LOCK: Mutex<()> = Mutex::new(());
+static SCHEDULER_WAKE: OnceLock<Notify> = OnceLock::new();
 
 const SCHEDULER_POLL_DELAY: Duration = Duration::from_secs(30);
 const INITIAL_RETRY_DELAY: Duration = Duration::from_secs(5 * 60);
@@ -98,6 +100,14 @@ fn get_logs_file_path() -> PathBuf {
     config::get_shared_dir().join("workbuddy_auto_checkin_logs.json")
 }
 
+fn scheduler_wake() -> &'static Notify {
+    SCHEDULER_WAKE.get_or_init(Notify::new)
+}
+
+fn wake_scheduler() {
+    scheduler_wake().notify_one();
+}
+
 fn lock_storage() -> Result<MutexGuard<'static, ()>, String> {
     STORAGE_LOCK
         .lock()
@@ -164,6 +174,14 @@ pub fn get_config_checked() -> Result<WorkbuddyAutoCheckinConfig, String> {
 }
 
 pub fn save_config(config: &WorkbuddyAutoCheckinConfig) -> Result<(), String> {
+    let result = save_config_without_wake(config);
+    if result.is_ok() {
+        wake_scheduler();
+    }
+    result
+}
+
+fn save_config_without_wake(config: &WorkbuddyAutoCheckinConfig) -> Result<(), String> {
     let _guard = lock_storage()?;
     write_config_to_path(&get_config_file_path(), config)
 }
@@ -183,13 +201,17 @@ fn migrate_config_at_path(
 pub fn migrate_config_if_missing(
     legacy_config: &WorkbuddyAutoCheckinConfig,
 ) -> Result<WorkbuddyAutoCheckinConfig, String> {
-    let _guard = lock_storage()?;
-    let path = get_config_file_path();
-    let was_missing = !path.exists();
-    let config = migrate_config_at_path(&path, legacy_config)?;
+    let (config, was_missing) = {
+        let _guard = lock_storage()?;
+        let path = get_config_file_path();
+        let was_missing = !path.exists();
+        let config = migrate_config_at_path(&path, legacy_config)?;
+        (config, was_missing)
+    };
     if was_missing {
         logger::log_info("[WorkbuddyAutoCheckin] 已完成 WebView 旧配置的一次性迁移");
     }
+    wake_scheduler();
     Ok(config)
 }
 
@@ -421,7 +443,7 @@ pub async fn run_workbuddy_auto_checkin_cycle_if_needed(
 
     let schedule_changed = ensure_account_schedules(&mut config, &accounts);
     if schedule_changed {
-        save_config(&config)?;
+        save_config_without_wake(&config)?;
         let _ = app.emit("workbuddy-auto-checkin-config-changed", ());
     }
 
@@ -502,6 +524,11 @@ pub async fn run_workbuddy_auto_checkin_cycle_if_needed(
                 mark_schedule_checked(&mut new_schedules, &account.id, &today_str, current_minute);
             }
             Ok(status) if !status.active => {
+                // The activity can be temporarily unavailable while the daily
+                // window is opening. Keep this account eligible for a retry
+                // instead of consuming today's schedule.
+                retry_needed = true;
+                failed_count += 1;
                 details.push(WorkbuddyAutoCheckinAccountDetail {
                     account_id: account.id.clone(),
                     email: email_display,
@@ -510,7 +537,6 @@ pub async fn run_workbuddy_auto_checkin_cycle_if_needed(
                     message: Some("签到活动未开启或不适用".to_string()),
                     credit: None,
                 });
-                mark_schedule_checked(&mut new_schedules, &account.id, &today_str, current_minute);
             }
             Ok(_) => match codebuddy_cn_oauth::perform_checkin(
                 &account.access_token,
@@ -635,7 +661,7 @@ pub async fn run_workbuddy_auto_checkin_cycle_if_needed(
     }
 
     config.account_schedules = Some(new_schedules);
-    save_config(&config)?;
+    save_config_without_wake(&config)?;
 
     let duration_ms = start_instant.elapsed().as_millis() as u64;
     let overall_status = if failed_count == 0 {
@@ -682,12 +708,24 @@ fn next_retry_delay(current: Duration) -> Duration {
 }
 
 pub fn start_auto_checkin_scheduler(app: AppHandle) {
+    let wake = scheduler_wake();
     tauri::async_runtime::spawn(async move {
         logger::log_info("[WorkbuddyAutoCheckin] 后台自动签到调度服务已启动");
-        let mut next_delay = SCHEDULER_POLL_DELAY;
+        // Run once as soon as the app starts. This picks up a migrated config
+        // immediately and catches schedules missed while the app was closed.
+        let mut next_delay = Duration::ZERO;
         let mut retry_delay = INITIAL_RETRY_DELAY;
         loop {
-            tokio::time::sleep(next_delay).await;
+            if !next_delay.is_zero() {
+                tokio::select! {
+                    _ = tokio::time::sleep(next_delay) => {}
+                    _ = wake.notified() => {
+                        next_delay = Duration::ZERO;
+                        retry_delay = INITIAL_RETRY_DELAY;
+                        continue;
+                    }
+                }
+            }
             match run_workbuddy_auto_checkin_cycle_if_needed(&app, false).await {
                 Ok(result) if result == "retry" => {
                     next_delay = retry_delay;

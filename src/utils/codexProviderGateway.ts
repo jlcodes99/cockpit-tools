@@ -1,9 +1,10 @@
-import type { CodexApiProviderPreset } from "./codexProviderPresets";
+import type { CodexApiProviderPreset } from "./codexProviderPresets.ts";
 import {
   DEEPSEEK_API_PROVIDER_ID,
+  OPENCODE_GO_API_PROVIDER_ID,
   findCodexApiProviderPresetById,
   resolveCodexApiProviderPresetId,
-} from "./codexProviderPresets";
+} from "./codexProviderPresets.ts";
 
 export type CodexProviderWireApi = "responses" | "chat_completions";
 export type CodexProviderEnableMode = "direct" | "gateway";
@@ -65,6 +66,7 @@ const CHAT_COMPLETIONS_PRESET_IDS = new Set([
   "pipellm",
   "therouter",
   "openrouter",
+  OPENCODE_GO_API_PROVIDER_ID,
 ]);
 
 export function resolveCodexProviderCapabilityProfile(input: {

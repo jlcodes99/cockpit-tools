@@ -1,27 +1,19 @@
 import type { TFunction } from 'i18next';
-
-const CODEX_LOCAL_ACCESS_RISK_NOTICE_DISMISSED_KEY =
-  'agtools.codex.local_access.risk_notice.dismissed.v2';
+import {
+  isUserMemoryDismissed,
+  markUserMemoryDismissed,
+  USER_MEMORY_FLAGS,
+} from './userMemory';
 
 export type CodexLocalAccessRiskNoticeAction = 'service' | 'switch';
 
 export function isCodexLocalAccessRiskNoticeDismissed(): boolean {
-  try {
-    return localStorage.getItem(CODEX_LOCAL_ACCESS_RISK_NOTICE_DISMISSED_KEY) === '1';
-  } catch {
-    return false;
-  }
+  return isUserMemoryDismissed(USER_MEMORY_FLAGS.riskNotice);
 }
 
 export function setCodexLocalAccessRiskNoticeDismissed(value: boolean): void {
-  try {
-    if (value) {
-      localStorage.setItem(CODEX_LOCAL_ACCESS_RISK_NOTICE_DISMISSED_KEY, '1');
-      return;
-    }
-    localStorage.removeItem(CODEX_LOCAL_ACCESS_RISK_NOTICE_DISMISSED_KEY);
-  } catch {
-    // ignore storage write failures
+  if (value) {
+    void markUserMemoryDismissed(USER_MEMORY_FLAGS.riskNotice);
   }
 }
 

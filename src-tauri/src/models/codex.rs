@@ -37,6 +37,13 @@ impl Default for CodexApiProviderMode {
     }
 }
 
+/// Cockpit 管理的 Codex 实验模型定义
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CodexExperimentalModelDefinition {
+    pub model_id: String,
+    pub display_name: String,
+}
+
 /// Codex config.toml 快捷配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexQuickConfig {
@@ -46,6 +53,16 @@ pub struct CodexQuickConfig {
     pub detected_model_context_window: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detected_auto_compact_token_limit: Option<i64>,
+    #[serde(default)]
+    pub experimental_model_catalog_enabled: bool,
+    #[serde(default)]
+    pub experimental_model_catalog_available: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub experimental_model_catalog_unavailable_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub experimental_model_catalog_conflict: Option<String>,
+    #[serde(default)]
+    pub experimental_model_catalog_models: Vec<CodexExperimentalModelDefinition>,
 }
 
 /// Codex 官方 App 推理速度
@@ -96,6 +113,9 @@ pub struct CodexAccount {
     pub api_provider_name: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub api_model_catalog: Vec<String>,
+    /// 供应商目录里按模型覆盖的 `context_window`。未填写时走官方值或全局兜底。
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub api_model_context_windows: HashMap<String, i64>,
     /// API 服务按账号改写：调用方请求的模型 → 发给上游的模型。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub api_model_mappings: Vec<CodexApiModelMapping>,
@@ -430,6 +450,7 @@ impl CodexAccount {
             api_provider_id: None,
             api_provider_name: None,
             api_model_catalog: Vec::new(),
+            api_model_context_windows: HashMap::new(),
             api_model_mappings: Vec::new(),
             api_sync_model_catalog_to_codex: false,
             api_wire_api: None,

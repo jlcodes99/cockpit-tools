@@ -1849,6 +1849,35 @@
   },
   "codex": {
     "title": "Gestion des comptes Codex",
+    "experimentalModelCatalog": {
+      "title": "Catalogue expérimental",
+      "description": "Génère un catalogue géré par Cockpit avec la liste complète des modèles officiels et des modèles expérimentaux personnalisés, sans remplacer un catalogue personnalisé.",
+      "enabledHint": "Définit {{model}} comme modèle par défaut. Redémarrez ensuite Codex.",
+      "models": {
+        "title": "Liste des modèles",
+        "model": "Modèle expérimental",
+        "default": "Modèle par défaut",
+        "add": "Ajouter un modèle",
+        "remove": "Supprimer le modèle",
+        "setDefault": "Définir par défaut",
+        "modelId": "ID du modèle",
+        "displayName": "Nom affiché",
+        "inheritHint": "Les modèles héritent de tous les champs de capacité de gpt-5.6-sol. Le premier élément devient aussi le modèle par défaut.",
+        "validation": {
+          "required": "Conservez au moins un modèle expérimental.",
+          "modelId": "L’ID du modèle ne peut contenir que des lettres, chiffres, points, tirets, traits de soulignement, barres obliques et deux-points.",
+          "displayName": "Saisissez un nom affiché de 100 caractères maximum.",
+          "duplicate": "Les ID de modèle doivent être uniques.",
+          "reserved": "Cet ID de modèle entre en conflit avec un modèle officiel. Utilisez un autre ID."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "models_cache.json est introuvable.",
+        "modelNotCached": "gpt-5.6-sol-wm ne figure pas dans le cache local.",
+      "catalogConflict": "Un autre model_catalog_json est déjà configuré et ne sera pas écrasé.",
+      "cacheInvalid": "models_cache.json est illisible ou son format est invalide."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Crédit",
@@ -2337,6 +2366,10 @@
       "additional": "Quota supplémentaire",
       "reset": "Réinitialiser",
       "weeklyBlocksHourly": "Le quota hebdomadaire est à 0 ; le quota de 5 heures est donc indisponible",
+      "windowStats": "Consommé {{tokens}} · {{cost}}",
+      "windowStatsHint": "Requêtes, jetons et facturation compte de ce compte via le service API depuis que cette fenêtre était pleine",
+      "windowUsed": "Consommé {{tokens}} · {{cost}}",
+      "windowReq": "{{count}} req.",
       "resetCredits": "Réinits {{count}}",
       "resetCreditsTitle": "Réinitialisations restantes pour la fenêtre de 5 heures : {{count}}",
       "resetCreditConfirm": "Confirmer ?",
@@ -2358,7 +2391,15 @@
       "resetCreditNoRecords": "Aucun historique de réinitialisation",
       "resetCreditRecordsLoadFailed": "Impossible de charger l’historique de réinitialisation : {{error}}",
       "resetCreditGrantedAt": "Attribué",
-      "resetCreditExpiresAt": "Expire"
+      "resetCreditExpiresAt": "Expire",
+      "windowAccountCostHint": "Facturation compte (estimée selon les prix du modèle)",
+      "windowUserCostHint": "Facturation utilisateur",
+      "windowWeeks": "Quota {{count}} sem.",
+      "windowDays": "Quota {{count}} j",
+      "windowHours": "Quota {{count}} h",
+      "windowMinutes": "Quota {{count}} min",
+      "codeReview": "Revue de code",
+      "codeReviewShort": "Revue"
     },
     "quotaError": {
       "badge": "Erreur de quota",
@@ -2856,6 +2897,82 @@
         "all": "Tous types"
       },
       "pickInstancePrompt": "Session présente sur plusieurs instances. Saisir l’ID d’instance :"
+    },
+    "sessionUsage": {
+      "tab": "Usage",
+      "listTab": "Sessions",
+      "title": "Usage des sessions",
+      "desc": "Agréger la consommation réelle de jetons depuis les journaux de session Codex locaux, sans quota officiel ni journaux du service API.",
+      "hint": "Le quota officiel est l’enveloppe du forfait. Les journaux du service API ne couvrent que la passerelle locale. Ici, on additionne les deltas JSONL par requête.",
+      "range": {
+        "label": "Période",
+        "7d": "7 jours",
+        "30d": "30 jours",
+        "month": "Ce mois",
+        "all": "Tout"
+      },
+      "instance": {
+        "label": "Profil",
+        "all": "Toutes"
+      },
+      "actions": {
+        "refresh": "Actualiser",
+        "rebuild": "Rescanner"
+      },
+      "status": {
+        "idle": "Pas encore scanné",
+        "scanning": "Analyse des journaux…",
+        "ready": "{{files}} fichiers, {{requests}} requêtes",
+        "lastSynced": "Dernière sync {{time}}",
+        "deferred": "{{count}} forks en attente du parent",
+        "errors": "{{count}} fichiers illisibles"
+      },
+      "cards": {
+        "input": "Jetons d’entrée",
+        "cached": "Jetons cache",
+        "output": "Jetons de sortie",
+        "total": "Jetons totaux",
+        "requests": "Requêtes",
+        "cost": "Coût estimé"
+      },
+      "tables": {
+        "model": "Par modèle",
+        "instance": "Par instance",
+        "day": "Par jour",
+        "modelName": "Modèle",
+        "instanceName": "Profil",
+        "dayName": "Date",
+        "input": "Jetons entrée",
+        "cached": "Jetons cache",
+        "output": "Jetons sortie",
+        "total": "Jetons totaux",
+        "requests": "Req."
+      },
+      "empty": {
+        "title": "Aucun usage de session",
+        "desc": "Ouvrir cette page analyse en arrière-plan les journaux Codex locaux et les instances extra. Après un usage récent, actualisez."
+      },
+      "rebuildConfirm": {
+        "title": "Rescanner",
+        "message": "Le cache d’usage des sessions sera vidé, puis tous les journaux relus. Le quota officiel et les journaux du service API restent inchangés. Continuer ?"
+      },
+      "errors": {
+        "loadFailed": "Échec du chargement de l’usage : {{error}}",
+        "syncFailed": "Échec de l’analyse de l’usage : {{error}}"
+      },
+      "summary": {
+        "title": "30 jours",
+        "scanning": "Analyse…",
+        "updating": "Maj…",
+        "detail": "Détails",
+        "back": "Retour",
+        "input": "Entrée",
+        "cached": "Cache",
+        "output": "Sortie",
+        "total": "Cumul",
+        "requests": "Req.",
+        "cost": "Coût"
+      }
     },
     "api": {
       "baseUrl": "URL de base",

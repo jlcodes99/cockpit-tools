@@ -2048,6 +2048,35 @@
   },
   "codex": {
     "title": "Codex Account",
+    "experimentalModelCatalog": {
+      "title": "Experimental model catalog",
+      "description": "Generates a Cockpit-managed catalog containing the full official model list and custom experimental models without overwriting a custom catalog.",
+      "enabledHint": "Sets {{model}} as the default model. Restart Codex to apply.",
+      "models": {
+        "title": "Model list",
+        "model": "Experimental model",
+        "default": "Default model",
+        "add": "Add model",
+        "remove": "Remove model",
+        "setDefault": "Set as default",
+        "modelId": "Model ID",
+        "displayName": "Display name",
+        "inheritHint": "Models inherit the complete capability fields of gpt-5.6-sol. The first item is also the default model.",
+        "validation": {
+          "required": "Keep at least one experimental model.",
+          "modelId": "Model IDs may contain only letters, numbers, dots, hyphens, underscores, slashes, and colons.",
+          "displayName": "Enter a display name of no more than 100 characters.",
+          "duplicate": "Model IDs must be unique.",
+          "reserved": "This model ID conflicts with an official model. Use a different ID."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "models_cache.json was not found. Start Codex once to generate the model cache; if it remains missing, this Codex version does not support this cache format.",
+        "modelNotCached": "gpt-5.6-sol-wm is not in the local cache.",
+      "catalogConflict": "Another model_catalog_json is already configured and will not be overwritten.",
+      "cacheInvalid": "models_cache.json could not be read or has an invalid format."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Quota",
@@ -3083,6 +3112,10 @@
       "weekly": "Weekly quota",
       "additional": "Additional quota",
       "weeklyBlocksHourly": "Weekly quota is 0, so the 5-hour quota is unavailable",
+      "windowStats": "Used {{tokens}} · {{cost}}",
+      "windowStatsHint": "Requests, tokens, and account-billed cost this account used via API Service since this window was last full",
+      "windowUsed": "Used {{tokens}} · {{cost}}",
+      "windowReq": "{{count}} req",
       "reset": "Reset",
       "resetCredits": "Resets {{count}}",
       "resetCreditsTitle": "Resets left for the 5-hour window: {{count}}",
@@ -3105,7 +3138,15 @@
       "resetCreditNoRecords": "No reset records",
       "resetCreditRecordsLoadFailed": "Failed to load reset records: {{error}}",
       "resetCreditGrantedAt": "Granted",
-      "resetCreditExpiresAt": "Expires"
+      "resetCreditExpiresAt": "Expires",
+      "windowAccountCostHint": "Account billed (estimated from model prices)",
+      "windowUserCostHint": "User billed",
+      "windowWeeks": "{{count}}-week quota",
+      "windowDays": "{{count}}-day quota",
+      "windowHours": "{{count}}-hour quota",
+      "windowMinutes": "{{count}}-minute quota",
+      "codeReview": "Code Review",
+      "codeReviewShort": "Review"
     },
     "usage": {
       "open": "Open OpenAI usage",
@@ -3622,6 +3663,82 @@
         "all": "All types"
       },
       "pickInstancePrompt": "This session exists on multiple instances. Enter instance ID:"
+    },
+    "sessionUsage": {
+      "tab": "Usage",
+      "listTab": "Sessions",
+      "title": "Session Usage",
+      "desc": "Aggregate real token usage from local Codex session logs, without official quota or API Service request logs.",
+      "hint": "Official quota is plan allowance. API Service logs only cover local-gateway traffic. This view sums per-request JSONL usage deltas.",
+      "range": {
+        "label": "Range",
+        "7d": "7 days",
+        "30d": "30 days",
+        "month": "This month",
+        "all": "All"
+      },
+      "instance": {
+        "label": "Instance",
+        "all": "All instances"
+      },
+      "actions": {
+        "refresh": "Refresh",
+        "rebuild": "Rescan"
+      },
+      "status": {
+        "idle": "Not scanned yet",
+        "scanning": "Scanning session logs…",
+        "ready": "Scanned {{files}} files, {{requests}} requests",
+        "lastSynced": "Last sync {{time}}",
+        "deferred": "{{count}} forked sessions waiting for parent",
+        "errors": "{{count}} files failed to parse"
+      },
+      "cards": {
+        "input": "Input Tokens",
+        "cached": "Cached input Tokens",
+        "output": "Output Tokens",
+        "total": "Total Tokens",
+        "requests": "Requests",
+        "cost": "Est. cost"
+      },
+      "tables": {
+        "model": "By model",
+        "instance": "By instance",
+        "day": "By day",
+        "modelName": "Model",
+        "instanceName": "Instance",
+        "dayName": "Date",
+        "input": "Input Tokens",
+        "cached": "Cached Tokens",
+        "output": "Output Tokens",
+        "total": "Total Tokens",
+        "requests": "Reqs"
+      },
+      "empty": {
+        "title": "No session usage yet",
+        "desc": "Opening this page scans local Codex session logs and extra-instance homes in the background. If you just used Codex, tap Refresh."
+      },
+      "rebuildConfirm": {
+        "title": "Rescan",
+        "message": "This clears the session-usage cache and rereads every session log. Official quota and API Service logs are unchanged. Continue?"
+      },
+      "errors": {
+        "loadFailed": "Failed to load session usage: {{error}}",
+        "syncFailed": "Failed to scan session usage: {{error}}"
+      },
+      "summary": {
+        "title": "Last 30 days",
+        "scanning": "Scanning",
+        "updating": "Updating",
+        "detail": "Details",
+        "back": "Back",
+        "input": "Input",
+        "cached": "Cached",
+        "output": "Output",
+        "total": "Total",
+        "requests": "Reqs",
+        "cost": "Cost"
+      }
     },
     "groups": {
       "addToGroup": "Add to Group"

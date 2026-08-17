@@ -87,6 +87,7 @@ export const PACKAGE_CODE = {
   activity: 'TCACA_code_007_nzdH5h4Nl0',
   freeMon: 'TCACA_code_008_cfWoLwvjU4',
   extra: 'TCACA_code_009_0XmEQc2xOf',
+  enterprise: 'TCACA_code_enterprise',
 } as const;
 
 /**

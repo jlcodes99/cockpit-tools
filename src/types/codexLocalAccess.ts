@@ -200,6 +200,24 @@ export interface CodexLocalAccessStatsWindow {
   apiKeys: CodexLocalAccessApiKeyStats[];
 }
 
+export interface CodexLocalAccessAccountWindowQuery {
+  accountId: string;
+  windowKey: string;
+  startAt: number;
+  endAt: number;
+}
+
+export interface CodexLocalAccessAccountWindowStats {
+  accountId: string;
+  windowKey: string;
+  requestCount: number;
+  inputTokens: number;
+  cachedTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+}
+
 export interface CodexTokenInputBreakdown {
   total_tokens: number;
   uncached_tokens: number;

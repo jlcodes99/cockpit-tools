@@ -45,6 +45,7 @@ pub async fn start_oauth_login(
     account_password: Option<String>,
     phone_number: Option<String>,
     mail_url: Option<String>,
+    aux_email: Option<String>,
 ) -> Result<models::Account, String> {
     modules::logger::log_info("开始 OAuth 授权流程...");
 
@@ -111,6 +112,7 @@ pub async fn start_oauth_login(
             account_password,
             phone_number,
             mail_url,
+            aux_email,
         },
     )?;
     let account = refresh_account_quota_after_login(account).await;
@@ -131,6 +133,7 @@ pub async fn complete_oauth_login(
     account_password: Option<String>,
     phone_number: Option<String>,
     mail_url: Option<String>,
+    aux_email: Option<String>,
 ) -> Result<models::Account, String> {
     modules::logger::log_info("完成 OAuth 授权流程...");
 
@@ -197,6 +200,7 @@ pub async fn complete_oauth_login(
             account_password,
             phone_number,
             mail_url,
+            aux_email,
         },
     )?;
     let account = refresh_account_quota_after_login(account).await;

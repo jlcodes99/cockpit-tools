@@ -1849,6 +1849,35 @@
   },
   "codex": {
     "title": "Gestión de cuentas de Codex",
+    "experimentalModelCatalog": {
+      "title": "Catálogo experimental",
+      "description": "Genera un catálogo gestionado por Cockpit con la lista oficial completa y modelos experimentales personalizados, sin sobrescribir un catálogo personalizado.",
+      "enabledHint": "Establece {{model}} como modelo predeterminado. Reinicia Codex para aplicarlo.",
+      "models": {
+        "title": "Lista de modelos",
+        "model": "Modelo experimental",
+        "default": "Modelo predeterminado",
+        "add": "Añadir modelo",
+        "remove": "Eliminar modelo",
+        "setDefault": "Establecer como predeterminado",
+        "modelId": "ID del modelo",
+        "displayName": "Nombre visible",
+        "inheritHint": "Los modelos heredan todos los campos de capacidad de gpt-5.6-sol. El primer elemento también es el modelo predeterminado.",
+        "validation": {
+          "required": "Conserva al menos un modelo experimental.",
+          "modelId": "Los ID de modelo solo pueden contener letras, números, puntos, guiones, guiones bajos, barras y dos puntos.",
+          "displayName": "Introduce un nombre visible de 100 caracteres como máximo.",
+          "duplicate": "Los ID de modelo deben ser únicos.",
+          "reserved": "Este ID de modelo coincide con un modelo oficial. Usa otro ID."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "No se encontró models_cache.json.",
+        "modelNotCached": "gpt-5.6-sol-wm no está en la caché local.",
+      "catalogConflict": "Ya hay otro model_catalog_json configurado y no se sobrescribirá.",
+      "cacheInvalid": "No se puede leer models_cache.json o su formato no es válido."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Cuota",
@@ -2337,6 +2366,10 @@
       "additional": "Cuota adicional",
       "reset": "Reinicio",
       "weeklyBlocksHourly": "La cuota semanal es 0, por eso la cuota de 5 horas no está disponible",
+      "windowStats": "Usado {{tokens}} · {{cost}}",
+      "windowStatsHint": "Solicitudes, tokens y coste de cuenta de esta cuenta por el servicio API desde que esta ventana estaba llena",
+      "windowUsed": "Usado {{tokens}} · {{cost}}",
+      "windowReq": "{{count}} sol.",
       "resetCredits": "Reinicios {{count}}",
       "resetCreditsTitle": "Reinicios restantes para la ventana de 5 horas: {{count}}",
       "resetCreditConfirm": "¿Confirmar?",
@@ -2358,7 +2391,15 @@
       "resetCreditNoRecords": "Sin registros de reinicio",
       "resetCreditRecordsLoadFailed": "No se pudieron cargar los registros de reinicio: {{error}}",
       "resetCreditGrantedAt": "Concedido",
-      "resetCreditExpiresAt": "Vence"
+      "resetCreditExpiresAt": "Vence",
+      "windowAccountCostHint": "Coste de cuenta (estimado por precios del modelo)",
+      "windowUserCostHint": "Coste de usuario",
+      "windowWeeks": "Cuota {{count}} sem.",
+      "windowDays": "Cuota {{count}} d",
+      "windowHours": "Cuota {{count}} h",
+      "windowMinutes": "Cuota {{count}} min",
+      "codeReview": "Revisión de código",
+      "codeReviewShort": "Revisión"
     },
     "quotaError": {
       "badge": "Error de cuota",
@@ -2856,6 +2897,82 @@
         "all": "Todos"
       },
       "pickInstancePrompt": "La sesión existe en varias instancias. Introduce el ID de instancia:"
+    },
+    "sessionUsage": {
+      "tab": "Uso",
+      "listTab": "Sesiones",
+      "title": "Uso de sesiones",
+      "desc": "Agrega el uso real de tokens desde los registros locales de Codex, sin la cuota oficial ni los logs del servicio API.",
+      "hint": "La cuota oficial es el cupo del plan. Los logs del servicio API solo cubren la pasarela local. Aquí se suman los deltas JSONL por solicitud.",
+      "range": {
+        "label": "Periodo",
+        "7d": "7 días",
+        "30d": "30 días",
+        "month": "Este mes",
+        "all": "Todo"
+      },
+      "instance": {
+        "label": "Instancia",
+        "all": "Todas"
+      },
+      "actions": {
+        "refresh": "Actualizar",
+        "rebuild": "Reescaneo"
+      },
+      "status": {
+        "idle": "Sin escanear",
+        "scanning": "Escaneando registros…",
+        "ready": "{{files}} archivos, {{requests}} solicitudes",
+        "lastSynced": "Última sync {{time}}",
+        "deferred": "{{count}} forks esperando al padre",
+        "errors": "{{count}} archivos fallidos"
+      },
+      "cards": {
+        "input": "Tokens de entrada",
+        "cached": "Tokens en caché",
+        "output": "Tokens de salida",
+        "total": "Tokens totales",
+        "requests": "Solicitudes",
+        "cost": "Coste est."
+      },
+      "tables": {
+        "model": "Por modelo",
+        "instance": "Por instancia",
+        "day": "Por día",
+        "modelName": "Modelo",
+        "instanceName": "Instancia",
+        "dayName": "Fecha",
+        "input": "Tokens entrada",
+        "cached": "Tokens caché",
+        "output": "Tokens salida",
+        "total": "Tokens totales",
+        "requests": "Sol."
+      },
+      "empty": {
+        "title": "Aún no hay uso de sesión",
+        "desc": "Al abrir esta página se escanean en segundo plano los registros locales de Codex y las instancias extra. Si acabas de usarlo, actualiza."
+      },
+      "rebuildConfirm": {
+        "title": "Reescaneo",
+        "message": "Se vaciará la caché de uso de sesiones y se releerán todos los registros. La cuota oficial y los logs del servicio API no cambian. ¿Continuar?"
+      },
+      "errors": {
+        "loadFailed": "Error al leer el uso de sesión: {{error}}",
+        "syncFailed": "Error al escanear el uso de sesión: {{error}}"
+      },
+      "summary": {
+        "title": "30 días",
+        "scanning": "Escaneo…",
+        "updating": "Actualiz…",
+        "detail": "Detalle",
+        "back": "Volver",
+        "input": "Entrada",
+        "cached": "Caché",
+        "output": "Salida",
+        "total": "Suma",
+        "requests": "Sol.",
+        "cost": "Coste"
+      }
     },
     "api": {
       "baseUrl": "URL base",

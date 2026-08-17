@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildUsageBaseUrlCandidates,
+  formatModelProviderUsageMoney,
   resolveNewApiQuotaSnapshot,
   type ModelProviderUsageSummary,
 } from "./modelProviderUsageService.ts";
@@ -14,6 +16,20 @@ function summary(
     ...partial,
   };
 }
+
+test("usage lookup tries a root provider URL before its /v1 fallback", () => {
+  assert.deepEqual(
+    buildUsageBaseUrlCandidates("https://sub2api.example.com/"),
+    ["https://sub2api.example.com/", "https://sub2api.example.com/v1"],
+  );
+});
+
+test("usage lookup does not rewrite providers with an explicit path", () => {
+  assert.deepEqual(
+    buildUsageBaseUrlCandidates("https://sub2api.example.com/api"),
+    ["https://sub2api.example.com/api"],
+  );
+});
 
 test("new_api quota uses token allocation details when available", () => {
   const snapshot = resolveNewApiQuotaSnapshot(
@@ -76,4 +92,8 @@ test("new_api quota ignores malformed numeric details", () => {
     available: 25,
     expiresAt: null,
   });
+});
+
+test("token plan percentages render without currency decimals", () => {
+  assert.equal(formatModelProviderUsageMoney(72, "%"), "72%");
 });

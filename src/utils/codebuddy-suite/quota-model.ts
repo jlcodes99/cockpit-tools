@@ -250,10 +250,15 @@ export function getOfficialQuotaModel(account: CodebuddySuiteAccountBase): Offic
     const code = typeof a.PackageCode === 'string' ? a.PackageCode : '';
     return code === PACKAGE_CODE.activity;
   });
+  const enterprise = all.filter((a) => {
+    const code = typeof a.PackageCode === 'string' ? a.PackageCode : '';
+    return code === PACKAGE_CODE.enterprise;
+  });
 
   const mergedTrialOrFreeMon = aggregateCycleResources(trialOrFreeMon);
   const mergedFree = aggregateCycleResources(free);
-  const ordered = [mergedTrialOrFreeMon, ...pro, ...activity, mergedFree].filter(
+  const mergedEnterprise = aggregateCycleResources(enterprise);
+  const ordered = [mergedTrialOrFreeMon, ...pro, ...activity, mergedEnterprise, mergedFree].filter(
     (item): item is Record<string, unknown> => item != null && !!item.PackageCode,
   );
   const resources = ordered.map(toOfficialQuotaResource);
@@ -267,6 +272,7 @@ export function getOfficialQuotaModel(account: CodebuddySuiteAccountBase): Offic
  * 解析包名称
  */
 function resolvePackageName(resource: OfficialQuotaResource): string {
+  if (resource.packageCode === PACKAGE_CODE.enterprise) return '企业版';
   if (resource.packageCode === PACKAGE_CODE.extra) return '加量包';
   if (resource.packageCode === PACKAGE_CODE.activity) return '活动赠送包';
   if (resource.packageCode === PACKAGE_CODE.free || resource.packageCode === PACKAGE_CODE.gift || resource.packageCode === PACKAGE_CODE.freeMon) {
@@ -337,7 +343,9 @@ export function getQuotaCategoryGroups(account: CodebuddySuiteAccountBase, t: (k
 
   for (const resource of model.resources) {
     const code = resource.packageCode;
-    if (code === PACKAGE_CODE.free || code === PACKAGE_CODE.gift || code === PACKAGE_CODE.freeMon || code === PACKAGE_CODE.proMon || code === PACKAGE_CODE.proYear) {
+    if (code === PACKAGE_CODE.enterprise) {
+      baseItems.push(resource);
+    } else if (code === PACKAGE_CODE.free || code === PACKAGE_CODE.gift || code === PACKAGE_CODE.freeMon || code === PACKAGE_CODE.proMon || code === PACKAGE_CODE.proYear) {
       baseItems.push(resource);
     } else if (code === PACKAGE_CODE.activity) {
       activityItems.push(resource);

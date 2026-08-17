@@ -461,25 +461,35 @@ pub struct AccountNoteUpdate {
     pub account_password: Option<String>,
     pub phone_number: Option<String>,
     pub mail_url: Option<String>,
+    pub aux_email: Option<String>,
+}
+
+impl AccountNoteUpdate {
+    pub fn apply_to(self, account: &mut Account) {
+        if let Some(value) = self.note {
+            account.notes = normalize_optional_note_value(value);
+        }
+        if let Some(value) = self.two_factor_secret {
+            account.two_factor_secret = normalize_optional_note_value(value);
+        }
+        if let Some(value) = self.account_password {
+            account.account_password = normalize_optional_note_value(value);
+        }
+        if let Some(value) = self.phone_number {
+            account.phone_number = normalize_optional_note_value(value);
+        }
+        if let Some(value) = self.mail_url {
+            account.mail_url = normalize_optional_note_value(value);
+        }
+        if let Some(value) = self.aux_email {
+            account.aux_email = normalize_optional_note_value(value);
+        }
+    }
 }
 
 pub fn update_account_note(account_id: &str, update: AccountNoteUpdate) -> Result<Account, String> {
     let mut account = load_account(account_id)?;
-    if let Some(value) = update.note {
-        account.notes = normalize_optional_note_value(value);
-    }
-    if let Some(value) = update.two_factor_secret {
-        account.two_factor_secret = normalize_optional_note_value(value);
-    }
-    if let Some(value) = update.account_password {
-        account.account_password = normalize_optional_note_value(value);
-    }
-    if let Some(value) = update.phone_number {
-        account.phone_number = normalize_optional_note_value(value);
-    }
-    if let Some(value) = update.mail_url {
-        account.mail_url = normalize_optional_note_value(value);
-    }
+    update.apply_to(&mut account);
     save_account(&account)?;
     Ok(account)
 }
@@ -499,21 +509,7 @@ pub fn apply_account_note_after_oauth(
     account: &mut Account,
     update: AccountNoteUpdate,
 ) -> Result<(), String> {
-    if let Some(value) = update.note {
-        account.notes = normalize_optional_note_value(value);
-    }
-    if let Some(value) = update.two_factor_secret {
-        account.two_factor_secret = normalize_optional_note_value(value);
-    }
-    if let Some(value) = update.account_password {
-        account.account_password = normalize_optional_note_value(value);
-    }
-    if let Some(value) = update.phone_number {
-        account.phone_number = normalize_optional_note_value(value);
-    }
-    if let Some(value) = update.mail_url {
-        account.mail_url = normalize_optional_note_value(value);
-    }
+    update.apply_to(account);
     save_account(account)
 }
 
@@ -689,21 +685,7 @@ pub fn create_pending_oauth_account(
         account.pending_oauth = true;
         account
     };
-    if let Some(value) = update.note {
-        account.notes = normalize_optional_note_value(value);
-    }
-    if let Some(value) = update.two_factor_secret {
-        account.two_factor_secret = normalize_optional_note_value(value);
-    }
-    if let Some(value) = update.account_password {
-        account.account_password = normalize_optional_note_value(value);
-    }
-    if let Some(value) = update.phone_number {
-        account.phone_number = normalize_optional_note_value(value);
-    }
-    if let Some(value) = update.mail_url {
-        account.mail_url = normalize_optional_note_value(value);
-    }
+    update.apply_to(&mut account);
     account.pending_oauth = true;
     account.update_last_used();
     save_account(&account)?;
@@ -2443,6 +2425,7 @@ mod note_tests {
         account.account_password = Some("password-1".to_string());
         account.phone_number = Some("13800000000".to_string());
         account.mail_url = Some("https://mail.example.test/inbox".to_string());
+        account.aux_email = Some("backup@example.test".to_string());
         save_account(&account).expect("save encrypted account");
 
         let account_path = get_accounts_dir()
@@ -2457,6 +2440,7 @@ mod note_tests {
         assert_eq!(loaded.notes.as_deref(), Some("Main account"));
         assert_eq!(loaded.account_password.as_deref(), Some("password-1"));
         assert_eq!(loaded.phone_number.as_deref(), Some("13800000000"));
+        assert_eq!(loaded.aux_email.as_deref(), Some("backup@example.test"));
 
         let cleared = update_account_note(
             "note-account",
@@ -2466,6 +2450,7 @@ mod note_tests {
                 account_password: Some(String::new()),
                 phone_number: Some(String::new()),
                 mail_url: Some(String::new()),
+                aux_email: Some(String::new()),
             },
         )
         .expect("clear account note");
@@ -2474,6 +2459,7 @@ mod note_tests {
         assert!(cleared.account_password.is_none());
         assert!(cleared.phone_number.is_none());
         assert!(cleared.mail_url.is_none());
+        assert!(cleared.aux_email.is_none());
 
         std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
         let _ = fs::remove_dir_all(&data_dir);
@@ -2501,6 +2487,7 @@ mod note_tests {
                 account_password: Some("password-1".to_string()),
                 phone_number: Some("13800000000".to_string()),
                 mail_url: Some("https://mail.example.test/inbox".to_string()),
+                aux_email: Some("backup@example.test".to_string()),
             },
         )
         .expect("create pending account");
@@ -2535,6 +2522,7 @@ mod note_tests {
             authorized.mail_url.as_deref(),
             Some("https://mail.example.test/inbox")
         );
+        assert_eq!(authorized.aux_email.as_deref(), Some("backup@example.test"));
 
         std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
         let _ = fs::remove_dir_all(&data_dir);

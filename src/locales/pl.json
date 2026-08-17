@@ -1849,6 +1849,35 @@
   },
   "codex": {
     "title": "Zarządzanie kontami Codex",
+    "experimentalModelCatalog": {
+      "title": "Eksperymentalny katalog",
+      "description": "Tworzy katalog zarządzany przez Cockpit z pełną listą oficjalnych modeli i własnymi modelami eksperymentalnymi bez zastępowania katalogu użytkownika.",
+      "enabledHint": "Ustawia {{model}} jako model domyślny. Uruchom ponownie Codex, aby zastosować zmianę.",
+      "models": {
+        "title": "Lista modeli",
+        "model": "Model eksperymentalny",
+        "default": "Model domyślny",
+        "add": "Dodaj model",
+        "remove": "Usuń model",
+        "setDefault": "Ustaw jako domyślny",
+        "modelId": "ID modelu",
+        "displayName": "Nazwa wyświetlana",
+        "inheritHint": "Modele dziedziczą wszystkie pola możliwości gpt-5.6-sol. Pierwsza pozycja jest również modelem domyślnym.",
+        "validation": {
+          "required": "Pozostaw co najmniej jeden model eksperymentalny.",
+          "modelId": "ID modelu może zawierać tylko litery, cyfry, kropki, łączniki, podkreślenia, ukośniki i dwukropki.",
+          "displayName": "Wprowadź nazwę wyświetlaną o długości do 100 znaków.",
+          "duplicate": "ID modeli muszą być unikalne.",
+          "reserved": "To ID modelu koliduje z oficjalnym modelem. Użyj innego ID."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "Nie znaleziono pliku models_cache.json.",
+        "modelNotCached": "Lokalna pamięć podręczna nie zawiera gpt-5.6-sol-wm.",
+      "catalogConflict": "Inny model_catalog_json jest już skonfigurowany i nie zostanie nadpisany.",
+      "cacheInvalid": "Nie można odczytać models_cache.json lub plik ma nieprawidłowy format."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Limit",
@@ -2337,6 +2366,10 @@
       "additional": "Dodatkowy limit",
       "reset": "Resetuj",
       "weeklyBlocksHourly": "Limit tygodniowy wynosi 0, więc limit 5-godzinny jest niedostępny",
+      "windowStats": "Zużyto {{tokens}} · {{cost}}",
+      "windowStatsHint": "Żądania, tokeny i opłata konta w usłudze API od pełnego okna",
+      "windowUsed": "Zużyto {{tokens}} · {{cost}}",
+      "windowReq": "{{count}} żąd.",
       "resetCredits": "Resety {{count}}",
       "resetCreditsTitle": "Pozostałe resety okna 5 godzin: {{count}}",
       "resetCreditConfirm": "Potwierdzić?",
@@ -2358,7 +2391,15 @@
       "resetCreditNoRecords": "Brak zapisów resetu",
       "resetCreditRecordsLoadFailed": "Nie udało się wczytać zapisów resetu: {{error}}",
       "resetCreditGrantedAt": "Przyznano",
-      "resetCreditExpiresAt": "Wygasa"
+      "resetCreditExpiresAt": "Wygasa",
+      "windowAccountCostHint": "Opłata konta (szacunek z cen modelu)",
+      "windowUserCostHint": "Opłata użytkownika",
+      "windowWeeks": "Limit {{count}} tyg.",
+      "windowDays": "Limit {{count}} dn.",
+      "windowHours": "Limit {{count}} godz.",
+      "windowMinutes": "Limit {{count}} min",
+      "codeReview": "Przegląd kodu",
+      "codeReviewShort": "Przegląd"
     },
     "quotaError": {
       "badge": "Błąd limitu",
@@ -2856,6 +2897,82 @@
         "all": "Wszystkie"
       },
       "pickInstancePrompt": "Sesja jest na wielu instancjach. Podaj ID instancji:"
+    },
+    "sessionUsage": {
+      "tab": "Zużycie",
+      "listTab": "Sesje",
+      "title": "Zużycie sesji",
+      "desc": "Sumuje rzeczywiste zużycie tokenów z lokalnych logów sesji Codex, bez oficjalnego limitu i logów usługi API.",
+      "hint": "Oficjalny limit to pula planu. Logi usługi API obejmują tylko lokalną bramkę. Tutaj sumujemy delty JSONL na żądanie.",
+      "range": {
+        "label": "Zakres",
+        "7d": "7 dni",
+        "30d": "30 dni",
+        "month": "Ten miesiąc",
+        "all": "Wszystko"
+      },
+      "instance": {
+        "label": "Instancja",
+        "all": "Wszystkie"
+      },
+      "actions": {
+        "refresh": "Odśwież",
+        "rebuild": "Skanuj ponownie"
+      },
+      "status": {
+        "idle": "Jeszcze nie skanowano",
+        "scanning": "Skanowanie logów…",
+        "ready": "{{files}} plików, {{requests}} żądań",
+        "lastSynced": "Ostatnia sync {{time}}",
+        "deferred": "{{count}} forki czekają na rodzica",
+        "errors": "{{count}} plików nieczytelnych"
+      },
+      "cards": {
+        "input": "Tokeny wejścia",
+        "cached": "Tokeny cache",
+        "output": "Tokeny wyjścia",
+        "total": "Tokeny łącznie",
+        "requests": "Żądania",
+        "cost": "Szac. koszt"
+      },
+      "tables": {
+        "model": "Wg modelu",
+        "instance": "Wg instancji",
+        "day": "Wg dnia",
+        "modelName": "Nazwa",
+        "instanceName": "Instancja",
+        "dayName": "Data",
+        "input": "Tokeny wejścia",
+        "cached": "Tokeny cache",
+        "output": "Tokeny wyjścia",
+        "total": "Tokeny łącznie",
+        "requests": "Żąd."
+      },
+      "empty": {
+        "title": "Brak zużycia sesji",
+        "desc": "Otwarcie strony skanuje w tle lokalne logi Codex i dodatkowe instancje. Po świeżym użyciu kliknij Odśwież."
+      },
+      "rebuildConfirm": {
+        "title": "Skanuj ponownie",
+        "message": "Pamięć zużycia sesji zostanie wyczyszczona i wszystkie logi odczytane ponownie. Oficjalny limit i logi usługi API się nie zmienią. Kontynuować?"
+      },
+      "errors": {
+        "loadFailed": "Nie udało się wczytać zużycia sesji: {{error}}",
+        "syncFailed": "Nie udało się zeskanować zużycia sesji: {{error}}"
+      },
+      "summary": {
+        "title": "30 dni",
+        "scanning": "Skan…",
+        "updating": "Aktual…",
+        "detail": "Szczegóły",
+        "back": "Wstecz",
+        "input": "Wejście",
+        "cached": "Cache",
+        "output": "Wyjście",
+        "total": "Razem",
+        "requests": "Żąd.",
+        "cost": "Koszt"
+      }
     },
     "api": {
       "baseUrl": "Bazowy URL",

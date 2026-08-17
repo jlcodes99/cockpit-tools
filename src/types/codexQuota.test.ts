@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   getCodexAdditionalQuotaWindows,
+  getCodexQuotaWindowLabel,
   type CodexQuota,
 } from "./codex.ts";
 
@@ -30,6 +31,14 @@ const quota: CodexQuota = {
     ],
   },
 };
+
+test("uses 5h / Weekly / N Week window labels", () => {
+  assert.equal(getCodexQuotaWindowLabel(300, "hourly"), "5h");
+  assert.equal(getCodexQuotaWindowLabel(10_080, "weekly"), "Weekly");
+  assert.equal(getCodexQuotaWindowLabel(50_400, "weekly"), "5 Week");
+  assert.equal(getCodexQuotaWindowLabel(undefined, "weekly"), "Weekly");
+  assert.equal(getCodexQuotaWindowLabel(undefined, "hourly"), "5h");
+});
 
 test("keeps upstream Spark-specific quota windows for the account card", () => {
   assert.deepEqual(getCodexAdditionalQuotaWindows(quota), [

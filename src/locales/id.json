@@ -1896,6 +1896,35 @@
   },
   "codex": {
     "title": "Codex Account​",
+    "experimentalModelCatalog": {
+      "title": "Katalog model eksperimental",
+      "description": "Membuat katalog yang dikelola Cockpit berisi daftar model resmi lengkap dan model eksperimental khusus tanpa menimpa katalog khusus pengguna.",
+      "enabledHint": "Menetapkan {{model}} sebagai model bawaan. Mulai ulang Codex untuk menerapkan.",
+      "models": {
+        "title": "Daftar model",
+        "model": "Model eksperimental",
+        "default": "Model bawaan",
+        "add": "Tambah model",
+        "remove": "Hapus model",
+        "setDefault": "Jadikan bawaan",
+        "modelId": "ID model",
+        "displayName": "Nama tampilan",
+        "inheritHint": "Model mewarisi seluruh bidang kemampuan gpt-5.6-sol. Item pertama juga menjadi model bawaan.",
+        "validation": {
+          "required": "Pertahankan setidaknya satu model eksperimental.",
+          "modelId": "ID model hanya boleh berisi huruf, angka, titik, tanda hubung, garis bawah, garis miring, dan titik dua.",
+          "displayName": "Masukkan nama tampilan maksimal 100 karakter.",
+          "duplicate": "ID model harus unik.",
+          "reserved": "ID model ini bertentangan dengan model resmi. Gunakan ID lain."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "models_cache.json tidak ditemukan.",
+        "modelNotCached": "gpt-5.6-sol-wm tidak ada dalam cache lokal.",
+      "catalogConflict": "model_catalog_json lain sudah dikonfigurasi dan tidak akan ditimpa.",
+      "cacheInvalid": "models_cache.json tidak dapat dibaca atau formatnya tidak valid."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Kuota",
@@ -2518,6 +2547,10 @@
       "additional": "Kuota tambahan",
       "reset": "Setel ulang",
       "weeklyBlocksHourly": "Kuota mingguan 0, jadi kuota 5 jam tidak tersedia",
+      "windowStats": "Terpakai {{tokens}} · {{cost}}",
+      "windowStatsHint": "Jumlah permintaan, token, dan tagihan akun lewat layanan API sejak jendela penuh",
+      "windowUsed": "Terpakai {{tokens}} · {{cost}}",
+      "windowReq": "{{count}} mnt",
       "resetCredits": "Reset {{count}}",
       "resetCreditsTitle": "Sisa reset untuk jendela 5 jam: {{count}}",
       "resetCreditConfirm": "Konfirmasi?",
@@ -2539,7 +2572,15 @@
       "resetCreditNoRecords": "Belum ada catatan reset",
       "resetCreditRecordsLoadFailed": "Gagal memuat catatan reset: {{error}}",
       "resetCreditGrantedAt": "Diberikan",
-      "resetCreditExpiresAt": "Kedaluwarsa"
+      "resetCreditExpiresAt": "Kedaluwarsa",
+      "windowAccountCostHint": "Tagihan akun (perkiraan harga model)",
+      "windowUserCostHint": "Tagihan pengguna",
+      "windowWeeks": "Kuota {{count}} minggu",
+      "windowDays": "Kuota {{count}} hari",
+      "windowHours": "Kuota {{count}} jam",
+      "windowMinutes": "Kuota {{count}} mnt",
+      "codeReview": "Tinjauan kode",
+      "codeReviewShort": "Tinjauan"
     },
     "usage": {
       "open": "Buka penggunaan OpenAI",
@@ -3034,6 +3075,82 @@
         "all": "Semua jenis"
       },
       "pickInstancePrompt": "Sesi ada di beberapa instance. Masukkan ID instance:"
+    },
+    "sessionUsage": {
+      "tab": "Pemakaian",
+      "listTab": "Sesi",
+      "title": "Pemakaian sesi",
+      "desc": "Mengagregasi pemakaian token nyata dari log sesi Codex lokal, tanpa kuota resmi atau log permintaan layanan API.",
+      "hint": "Kuota resmi adalah batas paket. Log layanan API hanya mencakup gateway lokal. Di sini delta JSONL per permintaan dijumlahkan.",
+      "range": {
+        "label": "Rentang",
+        "7d": "7 hari",
+        "30d": "30 hari",
+        "month": "Bulan ini",
+        "all": "Semua"
+      },
+      "instance": {
+        "label": "Instans",
+        "all": "Semua instans"
+      },
+      "actions": {
+        "refresh": "Muat ulang",
+        "rebuild": "Pindai ulang"
+      },
+      "status": {
+        "idle": "Belum dipindai",
+        "scanning": "Memindai log sesi…",
+        "ready": "{{files}} berkas, {{requests}} permintaan",
+        "lastSynced": "Sinkron terakhir {{time}}",
+        "deferred": "{{count}} fork menunggu induk",
+        "errors": "{{count}} berkas gagal dibaca"
+      },
+      "cards": {
+        "input": "Token masuk",
+        "cached": "Token cache",
+        "output": "Token keluar",
+        "total": "Total token",
+        "requests": "Permintaan",
+        "cost": "Perkiraan biaya"
+      },
+      "tables": {
+        "model": "Per model",
+        "instance": "Per instans",
+        "day": "Per hari",
+        "modelName": "Nama model",
+        "instanceName": "Instans",
+        "dayName": "Tanggal",
+        "input": "Token masuk",
+        "cached": "Token cache",
+        "output": "Token keluar",
+        "total": "Total token",
+        "requests": "Mnt"
+      },
+      "empty": {
+        "title": "Belum ada pemakaian sesi",
+        "desc": "Membuka halaman ini memindai log Codex lokal dan instans tambahan di latar. Jika baru dipakai, ketuk Muat ulang."
+      },
+      "rebuildConfirm": {
+        "title": "Pindai ulang",
+        "message": "Cache pemakaian sesi akan dikosongkan dan semua log dibaca ulang. Kuota resmi dan log layanan API tidak berubah. Lanjutkan?"
+      },
+      "errors": {
+        "loadFailed": "Gagal memuat pemakaian sesi: {{error}}",
+        "syncFailed": "Gagal memindai pemakaian sesi: {{error}}"
+      },
+      "summary": {
+        "title": "30 hari",
+        "scanning": "Memindai",
+        "updating": "Memperbarui",
+        "detail": "Detail",
+        "back": "Kembali",
+        "input": "Masuk",
+        "cached": "Cache",
+        "output": "Keluar",
+        "total": "Jumlah",
+        "requests": "Mnt",
+        "cost": "Biaya"
+      }
     },
     "deepSeek": {
       "start": {

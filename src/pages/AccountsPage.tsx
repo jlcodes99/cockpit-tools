@@ -72,6 +72,7 @@ import {
   getAccountGroups,
   assignAccountsToGroup,
   removeAccountsFromGroup,
+  removeAccountIdsFromAllGroups,
   deleteGroup,
   renameGroup,
 } from '../services/accountGroupService'
@@ -93,6 +94,13 @@ import {
   normalizeAntigravitySortBy,
   normalizeAntigravitySortDirection,
 } from '../utils/antigravityAccountSort'
+import {
+  mergeIdListsPreferExisting,
+  persistUserMemoryList,
+  readUserMemoryList,
+  subscribeUserMemory,
+  USER_MEMORY_LISTS,
+} from '../utils/userMemory'
 import { OverviewTabsHeader } from '../components/OverviewTabsHeader'
 import styles from '../styles/CompactView.module.css'
 import { FileCorruptedModal, parseFileCorruptedError, type FileCorruptedError } from '../components/FileCorruptedModal'
@@ -238,7 +246,6 @@ const ANTIGRAVITY_FILTER_FIELD_ACTIVE_GROUP_ID = 'active_group_id'
 const DEFAULT_FILTER_TYPES: AccountsFilterType[] = []
 const DEFAULT_TAG_FILTER: string[] = []
 
-const ANTIGRAVITY_CUSTOM_SORT_ORDER_KEY = 'agtools.antigravity.accounts.custom_sort_order.v1'
 const ANTIGRAVITY_CUSTOM_SORT_ACTIVE_KEY = 'agtools.antigravity.accounts.custom_sort_active.v1'
 const ANTIGRAVITY_ACCOUNT_NOTE_MAX_LENGTH = 200
 
@@ -332,26 +339,11 @@ function formatAntigravityMailPreviewTime(timestamp: number): string {
 }
 
 function readAntigravityCustomSortOrder(): string[] {
-  try {
-    const raw = localStorage.getItem(ANTIGRAVITY_CUSTOM_SORT_ORDER_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter(
-      (item): item is string =>
-        typeof item === 'string' && item.trim().length > 0
-    )
-  } catch {
-    return []
-  }
+  return readUserMemoryList(USER_MEMORY_LISTS.antigravityCustomSort)
 }
 
 function writeAntigravityCustomSortOrder(accountIds: string[]): void {
-  try {
-    localStorage.setItem(ANTIGRAVITY_CUSTOM_SORT_ORDER_KEY, JSON.stringify(accountIds))
-  } catch {
-    // ignore persistence failures
-  }
+  persistUserMemoryList(USER_MEMORY_LISTS.antigravityCustomSort, accountIds)
 }
 
 function readAntigravityCustomSortActive(): boolean {
@@ -1226,15 +1218,22 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     )
   }, [activeGroupId, filterPersistenceEnabled])
 
+  useEffect(() => {
+    return subscribeUserMemory(() => {
+      setCustomSortOrder((prev) =>
+        mergeIdListsPreferExisting(readAntigravityCustomSortOrder(), prev),
+      )
+    })
+  }, [])
+
   // Sync customSortOrder when accounts load or change
   useEffect(() => {
     if (accounts.length === 0) {
       return
     }
     const accountIds = accounts.map((account) => account.id)
-    const accountIdSet = new Set(accountIds)
     setCustomSortOrder((prev) => {
-      const next = prev.filter((accountId) => accountIdSet.has(accountId))
+      const next = [...prev]
       const seen = new Set(next)
       for (const accountId of accountIds) {
         if (!seen.has(accountId)) {
@@ -1963,6 +1962,10 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     setDeleteConfirmError(null)
     try {
       await deleteAccounts(deleteConfirm.ids)
+      void removeAccountIdsFromAllGroups(deleteConfirm.ids)
+      setCustomSortOrder((prev) =>
+        prev.filter((accountId) => !deleteConfirm.ids.includes(accountId)),
+      )
       setSelected((prev) => {
         if (prev.size === 0) return prev
         const next = new Set(prev)

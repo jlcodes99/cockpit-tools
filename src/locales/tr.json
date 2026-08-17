@@ -1849,6 +1849,35 @@
   },
   "codex": {
     "title": "Codex Hesap Yönetimi",
+    "experimentalModelCatalog": {
+      "title": "Deneysel model kataloğu",
+      "description": "Tam resmi model listesini ve özel deneysel modelleri içeren Cockpit yönetimli bir katalog oluşturur; kullanıcı kataloğunun üzerine yazmaz.",
+      "enabledHint": "{{model}} modelini varsayılan yapar. Uygulamak için Codex’i yeniden başlatın.",
+      "models": {
+        "title": "Model listesi",
+        "model": "Deneysel model",
+        "default": "Varsayılan model",
+        "add": "Model ekle",
+        "remove": "Modeli kaldır",
+        "setDefault": "Varsayılan yap",
+        "modelId": "Model kimliği",
+        "displayName": "Görünen ad",
+        "inheritHint": "Modeller gpt-5.6-sol modelinin tüm yetenek alanlarını devralır. İlk öğe aynı zamanda varsayılan modeldir.",
+        "validation": {
+          "required": "En az bir deneysel model bırakın.",
+          "modelId": "Model kimlikleri yalnızca harf, sayı, nokta, kısa çizgi, alt çizgi, eğik çizgi ve iki nokta içerebilir.",
+          "displayName": "En fazla 100 karakterlik bir görünen ad girin.",
+          "duplicate": "Model kimlikleri benzersiz olmalıdır.",
+          "reserved": "Bu model kimliği resmi bir modelle çakışıyor. Farklı bir kimlik kullanın."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "models_cache.json bulunamadı.",
+        "modelNotCached": "Yerel önbellekte gpt-5.6-sol-wm yok.",
+      "catalogConflict": "Başka bir model_catalog_json zaten yapılandırılmış ve üzerine yazılmayacak.",
+      "cacheInvalid": "models_cache.json okunamıyor veya biçimi geçersiz."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Kota",
@@ -2337,6 +2366,10 @@
       "additional": "Ek kota",
       "reset": "Sıfırla",
       "weeklyBlocksHourly": "Haftalık kota 0 olduğu için 5 saatlik kota kullanılamaz",
+      "windowStats": "Harcanan {{tokens}} · {{cost}}",
+      "windowStatsHint": "Bu pencere dolduktan sonra hesabın API hizmetindeki istek, token ve hesap ücreti",
+      "windowUsed": "Harcanan {{tokens}} · {{cost}}",
+      "windowReq": "{{count}} ist.",
       "resetCredits": "Sıfırlama {{count}}",
       "resetCreditsTitle": "5 saatlik pencere için kalan sıfırlama: {{count}}",
       "resetCreditConfirm": "Onayla?",
@@ -2358,7 +2391,15 @@
       "resetCreditNoRecords": "Sıfırlama kaydı yok",
       "resetCreditRecordsLoadFailed": "Sıfırlama kayıtları yüklenemedi: {{error}}",
       "resetCreditGrantedAt": "Verildi",
-      "resetCreditExpiresAt": "Biter"
+      "resetCreditExpiresAt": "Biter",
+      "windowAccountCostHint": "Hesap ücreti (model fiyatından tahmin)",
+      "windowUserCostHint": "Kullanıcı ücreti",
+      "windowWeeks": "{{count}} haftalık kota",
+      "windowDays": "{{count}} günlük kota",
+      "windowHours": "{{count}} saatlik kota",
+      "windowMinutes": "{{count}} dakikalık kota",
+      "codeReview": "Kod inceleme",
+      "codeReviewShort": "İnceleme"
     },
     "quotaError": {
       "badge": "Kota hatası",
@@ -2856,6 +2897,82 @@
         "all": "Tüm türler"
       },
       "pickInstancePrompt": "Oturum birden fazla örnekte var. Örnek kimliğini girin:"
+    },
+    "sessionUsage": {
+      "tab": "Kullanım",
+      "listTab": "Oturumlar",
+      "title": "Oturum kullanımı",
+      "desc": "Yerel Codex oturum günlüklerinden gerçek token kullanımını toplar; resmi kota veya API hizmeti istek günlükleri kullanılmaz.",
+      "hint": "Resmi kota plan limitidir. API hizmeti günlükleri yalnızca yerel ağ geçidini kapsar. Burada JSONL istek artışları toplanır.",
+      "range": {
+        "label": "Aralık",
+        "7d": "7 gün",
+        "30d": "30 gün",
+        "month": "Bu ay",
+        "all": "Tümü"
+      },
+      "instance": {
+        "label": "Örnek",
+        "all": "Tüm örnekler"
+      },
+      "actions": {
+        "refresh": "Yenile",
+        "rebuild": "Yeniden tara"
+      },
+      "status": {
+        "idle": "Henüz taranmadı",
+        "scanning": "Oturum günlükleri taranıyor…",
+        "ready": "{{files}} dosya, {{requests}} istek",
+        "lastSynced": "Son senkron {{time}}",
+        "deferred": "{{count}} çatal ebeveyni bekliyor",
+        "errors": "{{count}} dosya okunamadı"
+      },
+      "cards": {
+        "input": "Giriş token",
+        "cached": "Önbellek token",
+        "output": "Çıkış token",
+        "total": "Toplam token",
+        "requests": "İstekler",
+        "cost": "Tahmini ücret"
+      },
+      "tables": {
+        "model": "Modele göre",
+        "instance": "Örneğe göre",
+        "day": "Güne göre",
+        "modelName": "Ad",
+        "instanceName": "Örnek",
+        "dayName": "Tarih",
+        "input": "Giriş token",
+        "cached": "Önbellek token",
+        "output": "Çıkış token",
+        "total": "Toplam token",
+        "requests": "İst."
+      },
+      "empty": {
+        "title": "Henüz oturum kullanımı yok",
+        "desc": "Bu sayfa açılınca yerel Codex günlükleri ve ek örnekler arka planda taranır. Az önce kullandıysanız Yenile’ye basın."
+      },
+      "rebuildConfirm": {
+        "title": "Yeniden tara",
+        "message": "Oturum kullanımı önbelleği silinir ve tüm günlükler yeniden okunur. Resmi kota ve API hizmeti günlükleri değişmez. Devam edilsin mi?"
+      },
+      "errors": {
+        "loadFailed": "Oturum kullanımı okunamadı: {{error}}",
+        "syncFailed": "Oturum kullanımı taranamadı: {{error}}"
+      },
+      "summary": {
+        "title": "30 gün",
+        "scanning": "Taranıyor",
+        "updating": "Güncelleniyor",
+        "detail": "Ayrıntı",
+        "back": "Geri",
+        "input": "Giriş",
+        "cached": "Önbellek",
+        "output": "Çıkış",
+        "total": "Toplam",
+        "requests": "İst.",
+        "cost": "Ücret"
+      }
     },
     "api": {
       "baseUrl": "Temel URL",

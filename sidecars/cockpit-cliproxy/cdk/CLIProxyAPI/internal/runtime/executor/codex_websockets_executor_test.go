@@ -292,8 +292,8 @@ func TestApplyCodexWebsocketHeadersPassesThroughClientIdentityHeaders(t *testing
 
 	headers := applyCodexWebsocketHeaders(ctx, http.Header{}, auth, "", nil)
 
-	if got := headers.Get("Originator"); got != "Codex Desktop" {
-		t.Fatalf("Originator = %s, want %s", got, "Codex Desktop")
+	if got := headers.Get("Originator"); got != "codex_cli_rs" {
+		t.Fatalf("Originator = %s, want paired %s", got, "codex_cli_rs")
 	}
 	if got := headers.Get("User-Agent"); got != "codex_cli_rs/0.1.0" {
 		t.Fatalf("User-Agent = %s, want %s", got, "codex_cli_rs/0.1.0")
@@ -307,11 +307,11 @@ func TestApplyCodexWebsocketHeadersPassesThroughClientIdentityHeaders(t *testing
 	if got := headers.Get("X-Client-Request-Id"); got != "019d2233-e240-7162-992d-38df0a2a0e0d" {
 		t.Fatalf("X-Client-Request-Id = %s, want %s", got, "019d2233-e240-7162-992d-38df0a2a0e0d")
 	}
-	if got := headers["session_id"]; len(got) != 1 || got[0] != "legacy-session" {
-		t.Fatalf("session_id = %#v, want [legacy-session]", got)
+	if got := headers["Session-Id"]; len(got) != 1 || got[0] != "legacy-session" {
+		t.Fatalf("Session-Id = %#v, want [legacy-session]", got)
 	}
-	if got := headers.Get("Session-Id"); got != "" {
-		t.Fatalf("Session-Id = %s, want empty", got)
+	if got := headers.Get("Session_id"); got != "" {
+		t.Fatalf("Session_id = %s, want empty", got)
 	}
 }
 
@@ -328,11 +328,11 @@ func TestApplyCodexWebsocketHeadersCanonicalizesLegacyUnderscoreSessionHeader(t 
 
 	headers := applyCodexWebsocketHeaders(ctx, http.Header{}, auth, "", nil)
 
-	if got := headers["session_id"]; len(got) != 1 || got[0] != "legacy-underscore-session" {
-		t.Fatalf("session_id = %#v, want [legacy-underscore-session]", got)
+	if got := headers["Session-Id"]; len(got) != 1 || got[0] != "legacy-underscore-session" {
+		t.Fatalf("Session-Id = %#v, want [legacy-underscore-session]", got)
 	}
-	if got := headers.Get("Session-Id"); got != "" {
-		t.Fatalf("Session-Id = %s, want empty", got)
+	if got := headers.Get("Session_id"); got != "" {
+		t.Fatalf("Session_id = %s, want empty", got)
 	}
 }
 
@@ -340,7 +340,7 @@ func TestApplyCodexWebsocketHeadersUsesConfigDefaultsForOAuth(t *testing.T) {
 	cfg := &config.Config{
 		Codex: config.CodexConfig{DisableCodexCloaking: true},
 		CodexHeaderDefaults: config.CodexHeaderDefaults{
-			UserAgent:    "my-codex-client/1.0",
+			UserAgent:    "codex-tui/0.146.0 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.146.0)",
 			BetaFeatures: "feature-a,feature-b",
 		},
 	}
@@ -351,8 +351,11 @@ func TestApplyCodexWebsocketHeadersUsesConfigDefaultsForOAuth(t *testing.T) {
 
 	headers := applyCodexWebsocketHeaders(context.Background(), http.Header{}, auth, "", cfg)
 
-	if got := headers.Get("User-Agent"); got != "my-codex-client/1.0" {
-		t.Fatalf("User-Agent = %s, want %s", got, "my-codex-client/1.0")
+	if got := headers.Get("User-Agent"); !strings.HasPrefix(got, "codex-tui/") {
+		t.Fatalf("User-Agent = %s, want paired official tui", got)
+	}
+	if got := headers.Get("Originator"); got != "codex-tui" {
+		t.Fatalf("Originator = %s, want codex-tui", got)
 	}
 	if got := headers.Get("x-codex-beta-features"); got != "feature-a,feature-b" {
 		t.Fatalf("x-codex-beta-features = %s, want %s", got, "feature-a,feature-b")
@@ -384,8 +387,11 @@ func TestApplyCodexWebsocketHeadersPrefersExistingHeadersOverClientAndConfig(t *
 
 	got := applyCodexWebsocketHeaders(ctx, headers, auth, "", cfg)
 
-	if gotVal := got.Get("User-Agent"); gotVal != "existing-ua" {
-		t.Fatalf("User-Agent = %s, want %s", gotVal, "existing-ua")
+	if gotVal := got.Get("User-Agent"); gotVal != codexUserAgent {
+		t.Fatalf("User-Agent = %s, want official paired %s", gotVal, codexUserAgent)
+	}
+	if gotVal := got.Get("Originator"); gotVal != codexOriginator {
+		t.Fatalf("Originator = %s, want %s", gotVal, codexOriginator)
 	}
 	if gotVal := got.Get("x-codex-beta-features"); gotVal != "existing-beta" {
 		t.Fatalf("x-codex-beta-features = %s, want %s", gotVal, "existing-beta")
@@ -411,8 +417,11 @@ func TestApplyCodexWebsocketHeadersConfigUserAgentOverridesClientHeader(t *testi
 
 	headers := applyCodexWebsocketHeaders(ctx, http.Header{}, auth, "", cfg)
 
-	if got := headers.Get("User-Agent"); got != "config-ua" {
-		t.Fatalf("User-Agent = %s, want %s", got, "config-ua")
+	if got := headers.Get("User-Agent"); got != codexUserAgent {
+		t.Fatalf("User-Agent = %s, want official paired %s", got, codexUserAgent)
+	}
+	if got := headers.Get("Originator"); got != codexOriginator {
+		t.Fatalf("Originator = %s, want %s", got, codexOriginator)
 	}
 	if got := headers.Get("x-codex-beta-features"); got != "client-beta" {
 		t.Fatalf("x-codex-beta-features = %s, want %s", got, "client-beta")
@@ -481,11 +490,11 @@ func TestApplyCodexPromptCacheHeadersSetsSessionIDAndLegacyConversation(t *testi
 
 	_, headers := applyCodexPromptCacheHeaders("openai-response", req, []byte(`{"model":"gpt-5-codex"}`))
 
-	if got := headers["session_id"]; len(got) != 1 || got[0] != "cache-1" {
-		t.Fatalf("session_id = %#v, want [cache-1]", got)
+	if got := headers["Session-Id"]; len(got) != 1 || got[0] != "cache-1" {
+		t.Fatalf("Session-Id = %#v, want [cache-1]", got)
 	}
-	if got := headers.Get("Session-Id"); got != "" {
-		t.Fatalf("Session-Id = %s, want empty", got)
+	if got := headers.Get("Session_id"); got != "" {
+		t.Fatalf("Session_id = %s, want empty", got)
 	}
 	if got := headers.Get("Conversation_id"); got != "cache-1" {
 		t.Fatalf("Conversation_id = %s, want cache-1", got)
@@ -519,11 +528,11 @@ func TestApplyCodexPromptCacheHeadersClaudeUsesClaudeCodeSessionID(t *testing.T)
 	if secondKey != firstKey {
 		t.Fatalf("same Claude Code session_id produced different websocket prompt_cache_key: first=%q second=%q", firstKey, secondKey)
 	}
-	if got := firstHeaders["session_id"]; len(got) != 1 || got[0] != firstKey {
-		t.Fatalf("first session_id = %#v, want [%q]", got, firstKey)
+	if got := firstHeaders["Session-Id"]; len(got) != 1 || got[0] != firstKey {
+		t.Fatalf("first Session-Id = %#v, want [%q]", got, firstKey)
 	}
-	if got := secondHeaders["session_id"]; len(got) != 1 || got[0] != firstKey {
-		t.Fatalf("second session_id = %#v, want [%q]", got, firstKey)
+	if got := secondHeaders["Session-Id"]; len(got) != 1 || got[0] != firstKey {
+		t.Fatalf("second Session-Id = %#v, want [%q]", got, firstKey)
 	}
 }
 
@@ -574,11 +583,11 @@ func TestApplyCodexWebsocketHeadersIdentityConfuseRemapsPromptCacheKey(t *testin
 	if gotKey := gjson.GetBytes(body, "prompt_cache_key").String(); gotKey != expectedPromptCacheKey {
 		t.Fatalf("prompt_cache_key = %q, want %q", gotKey, expectedPromptCacheKey)
 	}
-	if gotSession := headers["session_id"]; len(gotSession) != 1 || gotSession[0] != expectedPromptCacheKey {
-		t.Fatalf("session_id = %#v, want [%q]", gotSession, expectedPromptCacheKey)
+	if gotSession := headers["Session-Id"]; len(gotSession) != 1 || gotSession[0] != expectedPromptCacheKey {
+		t.Fatalf("Session-Id = %#v, want [%q]", gotSession, expectedPromptCacheKey)
 	}
-	if gotCanonicalSession := headers.Get("Session-Id"); gotCanonicalSession != "" {
-		t.Fatalf("Session-Id = %q, want empty", gotCanonicalSession)
+	if gotLegacySession := headers.Get("Session_id"); gotLegacySession != "" {
+		t.Fatalf("Session_id = %q, want empty", gotLegacySession)
 	}
 	if gotRequestID := headers.Get("X-Client-Request-Id"); gotRequestID != expectedPromptCacheKey {
 		t.Fatalf("X-Client-Request-Id = %q, want %q", gotRequestID, expectedPromptCacheKey)
@@ -815,8 +824,11 @@ func TestApplyCodexHeadersUsesConfigUserAgentForOAuth(t *testing.T) {
 
 	applyCodexHeaders(req, auth, "oauth-token", true, cfg)
 
-	if got := req.Header.Get("User-Agent"); got != "config-ua" {
-		t.Fatalf("User-Agent = %s, want %s", got, "config-ua")
+	if got := req.Header.Get("User-Agent"); !strings.HasPrefix(got, "codex-tui/") {
+		t.Fatalf("User-Agent = %s, want paired official tui", got)
+	}
+	if got := req.Header.Get("Originator"); got != "codex-tui" {
+		t.Fatalf("Originator = %s, want codex-tui", got)
 	}
 	if got := req.Header.Get("x-codex-beta-features"); got != "" {
 		t.Fatalf("x-codex-beta-features = %q, want empty", got)
@@ -870,6 +882,7 @@ func TestApplyCodexHeadersPassesThroughClientIdentityHeaders(t *testing.T) {
 	}
 	req = req.WithContext(contextWithGinHeaders(map[string]string{
 		"Originator":            "Codex Desktop",
+		"User-Agent":            "Codex Desktop/0.146.0-alpha.3 (Mac OS 26.5.2; arm64) unknown (Codex Desktop; 26.721.30844)",
 		"Version":               "0.115.0-alpha.27",
 		"X-Codex-Turn-Metadata": `{"turn_id":"turn-1"}`,
 		"X-Client-Request-Id":   "019d2233-e240-7162-992d-38df0a2a0e0d",
@@ -879,6 +892,9 @@ func TestApplyCodexHeadersPassesThroughClientIdentityHeaders(t *testing.T) {
 
 	if got := req.Header.Get("Originator"); got != "Codex Desktop" {
 		t.Fatalf("Originator = %s, want %s", got, "Codex Desktop")
+	}
+	if got := req.Header.Get("User-Agent"); !strings.HasPrefix(got, "Codex Desktop/") {
+		t.Fatalf("User-Agent = %s, want Codex Desktop prefix", got)
 	}
 	if got := req.Header.Get("Version"); got != "0.115.0-alpha.27" {
 		t.Fatalf("Version = %s, want %s", got, "0.115.0-alpha.27")

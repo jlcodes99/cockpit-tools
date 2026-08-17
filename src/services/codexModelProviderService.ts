@@ -37,6 +37,7 @@ export interface CodexModelProvider {
   sourceTag?: string;
   integrationType?: 'sub2api' | 'new_api';
   modelCatalog?: string[];
+  modelContextWindows?: Record<string, number>;
   supportsVision?: boolean;
   modelCapabilities?: Record<string, { supportsVision?: boolean }>;
   visionRoutingModel?: string;
@@ -63,6 +64,7 @@ interface UpsertFromCredentialInput {
   apiKeyName?: string | null;
   sourceTag?: string | null;
   modelCatalog?: string[];
+  modelContextWindows?: Record<string, number>;
   supportsVision?: boolean;
   modelCapabilities?: Record<string, { supportsVision?: boolean }>;
   visionRoutingModel?: string | null;
@@ -127,6 +129,28 @@ function normalizeModelCatalog(value: unknown): string[] | undefined {
     models.push(model);
   }
   return models.length > 0 ? models : undefined;
+}
+
+export function normalizeModelContextWindows(
+  value: unknown,
+  catalog: string[] = [],
+): Record<string, number> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const source = value as Record<string, unknown>;
+  const next: Record<string, number> = {};
+  const keys = catalog.length > 0 ? catalog : Object.keys(source);
+  for (const model of keys) {
+    const trimmed = model.trim();
+    if (!trimmed) continue;
+    const raw =
+      source[trimmed] ??
+      Object.entries(source).find(([name]) => name.trim().toLowerCase() === trimmed.toLowerCase())?.[1];
+    const parsed = typeof raw === 'number' ? raw : Number(String(raw ?? '').trim());
+    if (Number.isInteger(parsed) && parsed > 0) {
+      next[trimmed] = parsed;
+    }
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
 }
 
 function normalizeModelCapabilities(
@@ -357,6 +381,12 @@ function toValidProviderList(raw: unknown): CodexModelProvider[] {
       modelCatalog:
         normalizeModelCatalog((item as { modelCatalog?: unknown }).modelCatalog) ??
         presetModelCatalogForBaseUrl(baseUrl),
+      modelContextWindows: normalizeModelContextWindows(
+        (item as { modelContextWindows?: unknown }).modelContextWindows,
+        normalizeModelCatalog((item as { modelCatalog?: unknown }).modelCatalog) ??
+          presetModelCatalogForBaseUrl(baseUrl) ??
+          [],
+      ),
       supportsVision: (item as { supportsVision?: unknown }).supportsVision === true,
       modelCapabilities: normalizeModelCapabilities(
         (item as { modelCapabilities?: unknown }).modelCapabilities,
@@ -522,6 +552,7 @@ export async function createCodexModelProvider(input: {
   baseUrl: string;
   sourceTag?: string;
   modelCatalog?: string[];
+  modelContextWindows?: Record<string, number>;
   supportsVision?: boolean;
   modelCapabilities?: Record<string, { supportsVision?: boolean }>;
   visionRoutingModel?: string;
@@ -556,6 +587,12 @@ export async function createCodexModelProvider(input: {
     modelCatalog:
       normalizeModelCatalog(input.modelCatalog) ??
       presetModelCatalogForBaseUrl(baseUrl),
+    modelContextWindows: normalizeModelContextWindows(
+      input.modelContextWindows,
+      normalizeModelCatalog(input.modelCatalog) ??
+        presetModelCatalogForBaseUrl(baseUrl) ??
+        [],
+    ),
     supportsVision: input.supportsVision === true,
     modelCapabilities: normalizeModelCapabilities(input.modelCapabilities),
     visionRoutingModel: sanitizeName(input.visionRoutingModel ?? '') || undefined,
@@ -586,6 +623,7 @@ export async function updateCodexModelProvider(
     baseUrl?: string;
     sourceTag?: string | null;
     modelCatalog?: string[] | null;
+    modelContextWindows?: Record<string, number> | null;
     supportsVision?: boolean;
     modelCapabilities?: Record<string, { supportsVision?: boolean }> | null;
     visionRoutingModel?: string | null;
@@ -632,6 +670,17 @@ export async function updateCodexModelProvider(
         : normalizeModelCatalog(patch.modelCatalog);
   } else if (!provider.modelCatalog || provider.modelCatalog.length === 0) {
     provider.modelCatalog = presetModelCatalogForBaseUrl(nextBaseUrl);
+  }
+  if (patch.modelContextWindows !== undefined) {
+    provider.modelContextWindows = normalizeModelContextWindows(
+      patch.modelContextWindows,
+      provider.modelCatalog ?? [],
+    );
+  } else {
+    provider.modelContextWindows = normalizeModelContextWindows(
+      provider.modelContextWindows,
+      provider.modelCatalog ?? [],
+    );
   }
   if (patch.supportsVision !== undefined) {
     provider.supportsVision = patch.supportsVision === true;
@@ -738,6 +787,38 @@ export async function renameApiKeyOnCodexModelProvider(
   const now = Date.now();
   apiKey.name = sanitizeName(name);
   apiKey.updatedAt = now;
+  provider.updatedAt = now;
+  await writeProviders(providers);
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
+}
+
+/** Replace the secret for an existing provider API key without changing its id. */
+export async function updateApiKeyOnCodexModelProvider(
+  providerId: string,
+  apiKeyId: string,
+  apiKey: string,
+  name?: string,
+): Promise<CodexModelProvider> {
+  const normalizedApiKey = sanitizeApiKey(apiKey);
+  if (!normalizedApiKey) throw new Error("API_KEY_REQUIRED");
+
+  const providers = await ensureProvidersLoaded();
+  const provider = providers.find((item) => item.id === providerId);
+  if (!provider) throw new Error("PROVIDER_NOT_FOUND");
+  const existing = provider.apiKeys.find((item) => item.id === apiKeyId);
+  if (!existing) throw new Error("API_KEY_NOT_FOUND");
+
+  const duplicate = provider.apiKeys.some(
+    (item) => item.id !== apiKeyId && sanitizeApiKey(item.apiKey) === normalizedApiKey,
+  );
+  if (duplicate) throw new Error("API_KEY_EXISTS");
+
+  const now = Date.now();
+  existing.apiKey = normalizedApiKey;
+  if (name !== undefined) {
+    existing.name = sanitizeName(name);
+  }
+  existing.updatedAt = now;
   provider.updatedAt = now;
   await writeProviders(providers);
   return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
@@ -912,6 +993,17 @@ export async function upsertCodexModelProviderFromCredential(
     normalizeModelCatalog(input.modelCatalog) ??
     provider.modelCatalog ??
     presetModelCatalogForBaseUrl(apiBaseUrl);
+  if (input.modelContextWindows !== undefined) {
+    provider.modelContextWindows = normalizeModelContextWindows(
+      input.modelContextWindows,
+      provider.modelCatalog ?? [],
+    );
+  } else {
+    provider.modelContextWindows = normalizeModelContextWindows(
+      provider.modelContextWindows,
+      provider.modelCatalog ?? [],
+    );
+  }
   if (input.supportsVision !== undefined) {
     provider.supportsVision = input.supportsVision === true;
   }

@@ -503,6 +503,23 @@ fn deepseek_model_injection_script(
         [flashId]: "DeepSeek-V4-Flash",
         [proId]: "DeepSeek-V4-Pro",
       }};
+      const reasoningLevels = ["low", "high", "max"];
+      const reasoningDescriptors = () => reasoningLevels.map((effort) => ({{
+        effort,
+        reasoningEffort: effort,
+        description: effort,
+      }}));
+      const applyReasoningMetadata = (item) => {{
+        if (!item || typeof item !== "object") return;
+        const levels = reasoningDescriptors();
+        // The desktop app has used both camelCase and snake_case model metadata
+        // across releases. Keep both shapes in sync so DeepSeek exposes its
+        // actual low/high/max picker instead of inheriting Codex defaults.
+        item.defaultReasoningEffort = "high";
+        item.supportedReasoningEfforts = levels;
+        item.default_reasoning_level = "high";
+        item.supported_reasoning_levels = levels;
+      }};
       const listMethods = {{ "model/list": true, "list-models-for-host": true }};
       const writeMethods = {{
         "thread/start": true,
@@ -523,23 +540,22 @@ fn deepseek_model_injection_script(
         if (!upstream || upstream === selectedModel || upstream === handledSelectedModel) return;
         root.pendingSelectedModel = upstream;
       }};
-      const descriptor = (official) => ({{
-        model: official,
-        id: official,
-        slug: official,
-        name: displayName[official] || official,
-        displayName: displayName[official] || official,
-        display_name: displayName[official] || official,
-        description: displayName[official] || official,
-        hidden: false,
-        visibility: "list",
-        isDefault: official === selectedModel,
-        defaultReasoningEffort: "high",
-        supportedReasoningEfforts: ["low", "medium", "high", "xhigh"].map((effort) => ({{
-          reasoningEffort: effort,
-          description: effort,
-        }})),
-      }});
+      const descriptor = (official) => {{
+        const item = {{
+          model: official,
+          id: official,
+          slug: official,
+          name: displayName[official] || official,
+          displayName: displayName[official] || official,
+          display_name: displayName[official] || official,
+          description: displayName[official] || official,
+          hidden: false,
+          visibility: "list",
+          isDefault: official === selectedModel,
+        }};
+        applyReasoningMetadata(item);
+        return item;
+      }};
       const patchItem = (item) => {{
         if (!item || typeof item !== "object") return false;
         const official = toUpstream(item.model || item.slug || item.id);
@@ -554,6 +570,7 @@ fn deepseek_model_injection_script(
         item.model = official;
         item.slug = official;
         item.id = official;
+        applyReasoningMetadata(item);
         return true;
       }};
       const isModelArray = (value) => Array.isArray(value) && value.some((item) => item && typeof item === "object" && (typeof item.model === "string" || typeof item.slug === "string"));
@@ -1361,6 +1378,10 @@ mod tests {
         assert!(script.contains("list-models-for-host"));
         assert!(script.contains("model/list"));
         assert!(script.contains("deepseek-official-picker"));
+        assert!(script.contains("const reasoningLevels = [\"low\", \"high\", \"max\"]"));
+        assert!(script.contains("supported_reasoning_levels = levels"));
+        assert!(script.contains("supportedReasoningEfforts = levels"));
+        assert!(!script.contains("[\"low\", \"medium\", \"high\", \"xhigh\"]"));
         assert!(script.contains("staleBar"));
         assert!(!script.contains("data-cockpit-deepseek-model"));
         assert!(script.contains("pendingSelectedModel"));

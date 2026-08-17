@@ -1849,6 +1849,35 @@
   },
   "codex": {
     "title": "Codex 계정 관리",
+    "experimentalModelCatalog": {
+      "title": "실험적 모델 카탈로그",
+      "description": "전체 공식 모델 목록과 사용자 지정 실험 모델을 포함하는 Cockpit 관리 카탈로그를 생성하며 사용자 지정 카탈로그는 덮어쓰지 않습니다.",
+      "enabledHint": "활성화하면 기본 모델이 {{model}}로 전환됩니다. Codex를 다시 시작하세요.",
+      "models": {
+        "title": "모델 목록",
+        "model": "실험 모델",
+        "default": "기본 모델",
+        "add": "모델 추가",
+        "remove": "모델 삭제",
+        "setDefault": "기본값으로 설정",
+        "modelId": "모델 ID",
+        "displayName": "표시 이름",
+        "inheritHint": "모델은 gpt-5.6-sol의 전체 기능 필드를 상속하며 목록의 첫 항목이 기본 모델입니다.",
+        "validation": {
+          "required": "실험 모델을 하나 이상 유지하세요.",
+          "modelId": "모델 ID에는 문자, 숫자, 마침표, 하이픈, 밑줄, 슬래시, 콜론만 사용할 수 있습니다.",
+          "displayName": "100자 이하의 표시 이름을 입력하세요.",
+          "duplicate": "모델 ID는 중복될 수 없습니다.",
+          "reserved": "이 모델 ID는 공식 모델과 충돌합니다. 다른 ID를 사용하세요."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "models_cache.json을 찾을 수 없습니다.",
+        "modelNotCached": "로컬 캐시에 gpt-5.6-sol-wm이 없습니다.",
+      "catalogConflict": "다른 model_catalog_json이 이미 설정되어 있어 덮어쓰지 않습니다.",
+      "cacheInvalid": "models_cache.json을 읽을 수 없거나 형식이 올바르지 않습니다."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "할당량",
@@ -2337,6 +2366,10 @@
       "additional": "추가 할당량",
       "reset": "재설정",
       "weeklyBlocksHourly": "주간 할당량이 0이라 5시간 할당량을 사용할 수 없습니다",
+      "windowStats": "사용 {{tokens}} · {{cost}}",
+      "windowStatsHint": "이 창이 가득 찬 뒤부터 이 계정이 API 서비스로 쓴 요청 수, 토큰, 계정 과금",
+      "windowUsed": "사용 {{tokens}} · {{cost}}",
+      "windowReq": "{{count}}회",
       "resetCredits": "재설정 {{count}}",
       "resetCreditsTitle": "5시간 창에 남은 재설정 횟수: {{count}}",
       "resetCreditConfirm": "확인?",
@@ -2358,7 +2391,15 @@
       "resetCreditNoRecords": "재설정 기록 없음",
       "resetCreditRecordsLoadFailed": "재설정 기록을 불러오지 못했습니다: {{error}}",
       "resetCreditGrantedAt": "지급",
-      "resetCreditExpiresAt": "만료"
+      "resetCreditExpiresAt": "만료",
+      "windowAccountCostHint": "계정 과금(모델 가격 추산)",
+      "windowUserCostHint": "사용자 과금",
+      "windowWeeks": "{{count}}주 할당량",
+      "windowDays": "{{count}}일 할당량",
+      "windowHours": "{{count}}시간 할당량",
+      "windowMinutes": "{{count}}분 할당량",
+      "codeReview": "코드 리뷰",
+      "codeReviewShort": "리뷰"
     },
     "quotaError": {
       "badge": "할당량 오류",
@@ -2856,6 +2897,82 @@
         "all": "전체"
       },
       "pickInstancePrompt": "이 세션이 여러 인스턴스에 있습니다. 인스턴스 ID를 입력하세요:"
+    },
+    "sessionUsage": {
+      "tab": "사용량",
+      "listTab": "세션",
+      "title": "세션 사용량",
+      "desc": "로컬 Codex 세션 로그에서 실제 토큰 사용량을 집계합니다. 공식 할당량이나 API 서비스 요청 로그는 쓰지 않습니다.",
+      "hint": "공식 할당량은 요금제 한도이고, API 서비스 로그는 로컬 게이트웨이 요청만 포함합니다. 여기서는 JSONL의 요청 단위 증분을 합산합니다.",
+      "range": {
+        "label": "기간",
+        "7d": "7일",
+        "30d": "30일",
+        "month": "이번 달",
+        "all": "전체"
+      },
+      "instance": {
+        "label": "인스턴스",
+        "all": "모든 인스턴스"
+      },
+      "actions": {
+        "refresh": "새로고침",
+        "rebuild": "다시 스캔"
+      },
+      "status": {
+        "idle": "아직 스캔하지 않음",
+        "scanning": "세션 로그 스캔 중…",
+        "ready": "파일 {{files}}개, 요청 {{requests}}건 집계",
+        "lastSynced": "마지막 동기화 {{time}}",
+        "deferred": "부모 대기 포크 {{count}}개",
+        "errors": "파싱 실패 {{count}}개"
+      },
+      "cards": {
+        "input": "입력 Tokens",
+        "cached": "캐시 입력 Tokens",
+        "output": "출력 Tokens",
+        "total": "합계 Tokens",
+        "requests": "요청",
+        "cost": "추정 비용"
+      },
+      "tables": {
+        "model": "모델별",
+        "instance": "인스턴스별",
+        "day": "날짜별",
+        "modelName": "모델",
+        "instanceName": "인스턴스",
+        "dayName": "날짜",
+        "input": "입력 Tokens",
+        "cached": "캐시 Tokens",
+        "output": "출력 Tokens",
+        "total": "합계 Tokens",
+        "requests": "요청"
+      },
+      "empty": {
+        "title": "세션 사용량이 없습니다",
+        "desc": "이 페이지를 열면 로컬 Codex 세션 로그와 추가 인스턴스를 백그라운드에서 스캔합니다. 방금 사용했다면 새로고침하세요."
+      },
+      "rebuildConfirm": {
+        "title": "다시 스캔",
+        "message": "세션 사용량 캐시를 지우고 모든 로그를 다시 읽습니다. 공식 할당량과 API 서비스 로그는 변하지 않습니다. 계속할까요?"
+      },
+      "errors": {
+        "loadFailed": "세션 사용량 읽기 실패: {{error}}",
+        "syncFailed": "세션 사용량 스캔 실패: {{error}}"
+      },
+      "summary": {
+        "title": "최근 30일",
+        "scanning": "스캔 중",
+        "updating": "갱신 중",
+        "detail": "자세히",
+        "back": "뒤로",
+        "input": "입력",
+        "cached": "캐시",
+        "output": "출력",
+        "total": "합계",
+        "requests": "요청",
+        "cost": "비용"
+      }
     },
     "api": {
       "baseUrl": "기본 URL",

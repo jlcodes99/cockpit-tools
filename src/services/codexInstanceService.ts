@@ -10,6 +10,9 @@ import type {
   CodexSessionRecord,
   CodexSessionSearchOptions,
   CodexSessionTokenStats,
+  CodexSessionUsageQuery,
+  CodexSessionUsageReport,
+  CodexSessionUsageSyncResult,
   CodexSessionTrashSummary,
   CodexTrashedSessionRecord,
   CodexSessionRestoreSummary,
@@ -19,6 +22,7 @@ import type {
   CodexSessionImportPreview,
   CodexSessionImportSummary,
   CodexQuickConfig,
+  CodexExperimentalModelDefinition,
   CodexAppSpeed,
 } from "../types/codex";
 import type { InstanceLaunchMode, InstanceProfile } from "../types/instance";
@@ -123,11 +127,15 @@ export async function saveCodexInstanceQuickConfig(
   instanceId: string,
   modelContextWindow?: number,
   autoCompactTokenLimit?: number,
+  experimentalModelCatalogEnabled?: boolean,
+  experimentalModelCatalogModels?: CodexExperimentalModelDefinition[],
 ): Promise<CodexQuickConfig> {
   return await invoke("codex_save_instance_quick_config", {
     instanceId,
     modelContextWindow: modelContextWindow ?? null,
     autoCompactTokenLimit: autoCompactTokenLimit ?? null,
+    experimentalModelCatalogEnabled: experimentalModelCatalogEnabled ?? null,
+    experimentalModelCatalogModels: experimentalModelCatalogModels ?? null,
   });
 }
 
@@ -247,6 +255,21 @@ export async function getSessionTokenStatsAcrossInstances(
 ): Promise<CodexSessionTokenStats[]> {
   return await invoke("codex_get_session_token_stats_across_instances", {
     sessionIds,
+  });
+}
+
+export async function querySessionUsage(
+  query: CodexSessionUsageQuery = {},
+): Promise<CodexSessionUsageReport> {
+  return await invoke("codex_query_session_usage", { query });
+}
+
+export async function syncSessionUsage(
+  options: { rebuild?: boolean; query?: CodexSessionUsageQuery } = {},
+): Promise<CodexSessionUsageSyncResult> {
+  return await invoke("codex_sync_session_usage", {
+    rebuild: options.rebuild ?? false,
+    query: options.query ?? {},
   });
 }
 

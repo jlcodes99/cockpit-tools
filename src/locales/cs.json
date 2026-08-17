@@ -1849,6 +1849,35 @@
   },
   "codex": {
     "title": "Správa účtů Codex",
+    "experimentalModelCatalog": {
+      "title": "Experimentální katalog",
+      "description": "Vytvoří katalog spravovaný Cockpitem s úplným seznamem oficiálních modelů a vlastními experimentálními modely, aniž by přepsal vlastní katalog uživatele.",
+      "enabledHint": "Nastaví {{model}} jako výchozí model. Pro použití restartujte Codex.",
+      "models": {
+        "title": "Seznam modelů",
+        "model": "Experimentální model",
+        "default": "Výchozí model",
+        "add": "Přidat model",
+        "remove": "Odebrat model",
+        "setDefault": "Nastavit jako výchozí",
+        "modelId": "ID modelu",
+        "displayName": "Zobrazovaný název",
+        "inheritHint": "Modely dědí všechna pole schopností gpt-5.6-sol. První položka je také výchozím modelem.",
+        "validation": {
+          "required": "Ponechte alespoň jeden experimentální model.",
+          "modelId": "ID modelu smí obsahovat pouze písmena, číslice, tečky, pomlčky, podtržítka, lomítka a dvojtečky.",
+          "displayName": "Zadejte zobrazovaný název o délce nejvýše 100 znaků.",
+          "duplicate": "ID modelů musí být jedinečná.",
+          "reserved": "Toto ID modelu koliduje s oficiálním modelem. Použijte jiné ID."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "Soubor models_cache.json nebyl nalezen.",
+        "modelNotCached": "Místní mezipaměť neobsahuje gpt-5.6-sol-wm.",
+      "catalogConflict": "Jiný model_catalog_json je již nastaven a nebude přepsán.",
+      "cacheInvalid": "Soubor models_cache.json nelze přečíst nebo má neplatný formát."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Kvóta",
@@ -2337,6 +2366,10 @@
       "additional": "Dodatečná kvóta",
       "reset": "Reset​",
       "weeklyBlocksHourly": "Týdenní kvóta je 0, proto není 5hodinová kvóta dostupná",
+      "windowStats": "Spotřeb. {{tokens}} · {{cost}}",
+      "windowStatsHint": "Požadavky, tokeny a účtování účtu přes API službu od plného okna",
+      "windowUsed": "Spotřeb. {{tokens}} · {{cost}}",
+      "windowReq": "{{count}} pož.",
       "resetCredits": "Resety {{count}}",
       "resetCreditsTitle": "Zbývající resety pro 5hodinové okno: {{count}}",
       "resetCreditConfirm": "Potvrdit?",
@@ -2358,7 +2391,15 @@
       "resetCreditNoRecords": "Žádné záznamy resetů",
       "resetCreditRecordsLoadFailed": "Načtení záznamů resetů selhalo: {{error}}",
       "resetCreditGrantedAt": "Přiděleno",
-      "resetCreditExpiresAt": "Vyprší"
+      "resetCreditExpiresAt": "Vyprší",
+      "windowAccountCostHint": "Účtování účtu (odhad z cen modelu)",
+      "windowUserCostHint": "Účtování uživatele",
+      "windowWeeks": "Kvóta {{count}} týd.",
+      "windowDays": "Kvóta {{count}} d",
+      "windowHours": "Kvóta {{count}} h",
+      "windowMinutes": "Kvóta {{count}} min",
+      "codeReview": "Kontrola kódu",
+      "codeReviewShort": "Recenze"
     },
     "quotaError": {
       "badge": "Chyba kvóty",
@@ -2856,6 +2897,82 @@
         "all": "Všechny"
       },
       "pickInstancePrompt": "Relace je na více instancích. Zadejte ID instance:"
+    },
+    "sessionUsage": {
+      "tab": "Spotřeba",
+      "listTab": "Relace",
+      "title": "Spotřeba relací",
+      "desc": "Sčítá skutečnou spotřebu tokenů z místních protokolů Codex, bez oficiální kvóty a logů API služby.",
+      "hint": "Oficiální kvóta je limit tarifu. Logy API služby pokrývají jen místní bránu. Zde sčítáme JSONL delty po požadavcích.",
+      "range": {
+        "label": "Období",
+        "7d": "7 dní",
+        "30d": "30 dní",
+        "month": "Tento měsíc",
+        "all": "Vše"
+      },
+      "instance": {
+        "label": "Prostředí",
+        "all": "Všechny"
+      },
+      "actions": {
+        "refresh": "Obnovit",
+        "rebuild": "Znovu skenovat"
+      },
+      "status": {
+        "idle": "Ještě neskenováno",
+        "scanning": "Skenování protokolů…",
+        "ready": "{{files}} souborů, {{requests}} požadavků",
+        "lastSynced": "Poslední sync {{time}}",
+        "deferred": "{{count}} forky čekají na rodiče",
+        "errors": "{{count}} souborů nelze číst"
+      },
+      "cards": {
+        "input": "Vstupní tokeny",
+        "cached": "Cache tokeny",
+        "output": "Výstupní tokeny",
+        "total": "Tokeny celkem",
+        "requests": "Požadavky",
+        "cost": "Odhad ceny"
+      },
+      "tables": {
+        "model": "Podle modelu",
+        "instance": "Podle instance",
+        "day": "Podle dne",
+        "modelName": "Název",
+        "instanceName": "Prostředí",
+        "dayName": "Datum",
+        "input": "Vstupní tokeny",
+        "cached": "Cache tokeny",
+        "output": "Výstupní tokeny",
+        "total": "Tokeny celkem",
+        "requests": "Pož."
+      },
+      "empty": {
+        "title": "Zatím žádná spotřeba relací",
+        "desc": "Otevření stránky na pozadí naskenuje místní protokoly Codex a extra instance. Po čerstvém použití klikněte na Obnovit."
+      },
+      "rebuildConfirm": {
+        "title": "Znovu skenovat",
+        "message": "Vymaže se mezipaměť spotřeby relací a znovu se načtou všechny protokoly. Oficiální kvóta a logy API služby se nezmění. Pokračovat?"
+      },
+      "errors": {
+        "loadFailed": "Načtení spotřeby relací selhalo: {{error}}",
+        "syncFailed": "Skenování spotřeby relací selhalo: {{error}}"
+      },
+      "summary": {
+        "title": "30 dní",
+        "scanning": "Sken…",
+        "updating": "Aktual…",
+        "detail": "Podrobnosti",
+        "back": "Zpět",
+        "input": "Vstup",
+        "cached": "Cache",
+        "output": "Výstup",
+        "total": "Celkem",
+        "requests": "Pož.",
+        "cost": "Cena"
+      }
     },
     "api": {
       "baseUrl": "Základní URL",

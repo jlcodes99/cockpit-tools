@@ -42,6 +42,7 @@ import {
   type CodexOverviewSortDirection,
 } from "../utils/codexAccountOverview";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
+import { subscribeUserMemory } from "../utils/userMemory";
 
 interface UseCodexAccountOverviewMemberViewOptions {
   accounts: CodexAccount[];
@@ -165,7 +166,9 @@ export function useCodexAccountOverviewMemberView({
     [accountPresentations, t],
   );
 
-  const customSortOrder = useMemo(readCodexCustomSortOrder, [accounts]);
+  const [customSortEpoch, setCustomSortEpoch] = useState(0);
+  useEffect(() => subscribeUserMemory(() => setCustomSortEpoch((value) => value + 1)), []);
+  const customSortOrder = useMemo(readCodexCustomSortOrder, [accounts, customSortEpoch]);
   const compareAccounts = useMemo(
     () =>
       createCodexOverviewAccountComparator({

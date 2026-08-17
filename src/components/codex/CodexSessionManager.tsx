@@ -24,6 +24,12 @@ import {
   type CodexSessionKindFilter,
 } from '../../utils/codexSessionFilters';
 import { CodexSessionVisibilityRepairModal } from './CodexSessionVisibilityRepairModal';
+import {
+  CodexSessionUsagePanel,
+  CodexSessionUsageSummary,
+} from './CodexSessionUsagePanel';
+
+type SessionManagerView = 'list' | 'usage';
 
 type MessageState = { text: string; tone?: 'error' };
 type SessionTokenStatsMap = Record<string, CodexSessionTokenStats>;
@@ -296,6 +302,7 @@ export function CodexSessionManager() {
   const [titleSearchInput, setTitleSearchInput] = useState('');
   const [appliedTitleSearch, setAppliedTitleSearch] = useState('');
   const [sessionKindFilter, setSessionKindFilter] = useState<CodexSessionKindFilter>('conversation');
+  const [sessionView, setSessionView] = useState<SessionManagerView>('list');
   const {
     message: restoreModalError,
     scrollKey: restoreModalErrorScrollKey,
@@ -1516,6 +1523,12 @@ export function CodexSessionManager() {
 
   return (
     <section className="codex-session-manager">
+      {sessionView === 'usage' ? (
+        <CodexSessionUsagePanel onBack={() => setSessionView('list')} />
+      ) : null}
+      {sessionView === 'list' ? (
+      <>
+      <CodexSessionUsageSummary onOpenDetail={() => setSessionView('usage')} />
       <div className="codex-session-manager__header">
         <div className="codex-session-manager__search">
           <label className="codex-session-search-field">
@@ -1839,6 +1852,8 @@ export function CodexSessionManager() {
             );
           })}
         </div>
+      ) : null}
+      </>
       ) : null}
 
       {showSyncTargetModal ? (

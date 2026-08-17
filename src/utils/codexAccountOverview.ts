@@ -10,6 +10,11 @@ import type { CodexAccountGroup } from "../services/codexAccountGroupService";
 import { splitValidityFilterValues } from "./accountValidityFilter";
 import { compareCurrentAccountFirst } from "./currentAccountSort";
 import { normalizeAccountsOverviewScope } from "./accountsOverviewFilterPersistence";
+import {
+  persistUserMemoryList,
+  readUserMemoryList,
+  USER_MEMORY_LISTS,
+} from "./userMemory";
 
 export const CODEX_PRIMARY_PLAN_FILTER_KEYS = [
   "FREE",
@@ -44,8 +49,6 @@ export const CODEX_OVERVIEW_FILTER_FIELDS = {
   sortDirection: "sort_direction",
 } as const;
 
-const CODEX_CUSTOM_SORT_ORDER_KEY =
-  "agtools.codex.accounts.custom_sort_order.v1";
 const CODEX_CUSTOM_SORT_ACTIVE_KEY =
   "agtools.codex.accounts.custom_sort_active.v1";
 
@@ -536,29 +539,11 @@ export function filterAndSortCodexOverviewAccounts({
 }
 
 export function readCodexCustomSortOrder(): string[] {
-  try {
-    const raw = localStorage.getItem(CODEX_CUSTOM_SORT_ORDER_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item): item is string =>
-        typeof item === "string" && item.trim().length > 0,
-    );
-  } catch {
-    return [];
-  }
+  return readUserMemoryList(USER_MEMORY_LISTS.codexCustomSort);
 }
 
 export function writeCodexCustomSortOrder(accountIds: string[]): void {
-  try {
-    localStorage.setItem(
-      CODEX_CUSTOM_SORT_ORDER_KEY,
-      JSON.stringify(accountIds),
-    );
-  } catch {
-    // ignore persistence failures
-  }
+  persistUserMemoryList(USER_MEMORY_LISTS.codexCustomSort, accountIds);
 }
 
 export function readCodexCustomSortActive(): boolean {

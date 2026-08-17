@@ -336,6 +336,7 @@ type accountSpec struct {
 	RemainingQuota       *int              `json:"remainingQuota,omitempty"`
 	SubscriptionExpiryMS *int64            `json:"subscriptionExpiryMs,omitempty"`
 	QuotaReserve         *quotaReserveSpec `json:"quotaReserve,omitempty"`
+	ModelContextWindows  map[string]int64  `json:"modelContextWindows,omitempty"`
 }
 
 type quotaReserveSpec struct {
@@ -396,6 +397,7 @@ type usagePayload struct {
 	ClientInstanceID string       `json:"clientInstanceId,omitempty"`
 	RequestKind      string       `json:"requestKind,omitempty"`
 	ServiceTier      string       `json:"serviceTier,omitempty"`
+	ReasoningEffort  string       `json:"reasoningEffort,omitempty"`
 	Success          bool         `json:"success"`
 	Status           int          `json:"status,omitempty"`
 	ErrorCategory    string       `json:"errorCategory,omitempty"`
@@ -1026,7 +1028,7 @@ func (p *requestPolicy) middleware() gin.HandlerFunc {
 		if spec != nil && isModelsRequest(c.Request) {
 			models := clientCatalogModelsForAPIKey(p.manifest, spec)
 			if isCodexClientModelsRequest(c.Request) {
-				c.JSON(http.StatusOK, buildCodexClientModelsResponse(models, spec))
+				c.JSON(http.StatusOK, buildCodexClientModelsResponse(models, spec, contextWindowsForAPIKey(p.manifest, spec)))
 			} else {
 				c.JSON(http.StatusOK, buildModelsResponse(models))
 			}
@@ -1434,7 +1436,80 @@ func ollamaDefaultReasoningEffort(model string) string {
 	return "medium"
 }
 
-func buildCodexClientModelsResponse(models []string, spec *apiKeySpec) gin.H {
+func lookupExplicitContextWindow(windows map[string]int64, slug string) int64 {
+	slug = strings.TrimSpace(slug)
+	if slug == "" || len(windows) == 0 {
+		return 0
+	}
+	candidates := []string{slug}
+	if index := strings.LastIndex(slug, "/"); index >= 0 {
+		candidates = append(candidates, strings.TrimSpace(slug[index+1:]))
+	}
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		if window, ok := windows[candidate]; ok && window > 0 {
+			return window
+		}
+		for name, window := range windows {
+			if window > 0 && strings.EqualFold(strings.TrimSpace(name), candidate) {
+				return window
+			}
+		}
+	}
+	return 0
+}
+
+func contextWindowsForAPIKey(m *manifest, spec *apiKeySpec) map[string]int64 {
+	if m == nil {
+		return nil
+	}
+	accountIDs := make([]string, 0)
+	if spec != nil {
+		accountIDs = append(accountIDs, spec.AccountIDs...)
+	}
+	if len(accountIDs) == 0 {
+		for i := range m.Accounts {
+			if id := strings.TrimSpace(m.Accounts[i].ID); id != "" {
+				accountIDs = append(accountIDs, id)
+			}
+		}
+	}
+	merged := make(map[string]int64)
+	for _, accountID := range accountIDs {
+		account := m.accountByID[strings.TrimSpace(accountID)]
+		if account == nil {
+			continue
+		}
+		for name, window := range account.ModelContextWindows {
+			key := strings.TrimSpace(name)
+			if key == "" || window <= 0 {
+				continue
+			}
+			merged[key] = window
+		}
+	}
+	if len(merged) == 0 {
+		return nil
+	}
+	return merged
+}
+
+func applyExplicitContextWindows(models []map[string]any, windows map[string]int64) {
+	if len(windows) == 0 {
+		return
+	}
+	for _, model := range models {
+		slug, _ := model["slug"].(string)
+		if window := lookupExplicitContextWindow(windows, slug); window > 0 {
+			model["context_window"] = window
+			model["max_context_window"] = window
+		}
+	}
+}
+
+func buildCodexClientModelsResponse(models []string, spec *apiKeySpec, windows map[string]int64) gin.H {
 	sourceModels := make([]map[string]any, 0, len(models))
 	for _, model := range models {
 		displayName := displayNameForModel(model)
@@ -1488,6 +1563,7 @@ func buildCodexClientModelsResponse(models []string, spec *apiKeySpec) gin.H {
 				model["upgrade"] = nil
 			}
 		}
+		applyExplicitContextWindows(data, windows)
 	}
 	return response
 }
@@ -3124,6 +3200,7 @@ func (p *usagePlugin) HandleUsage(ctx context.Context, record coreusage.Record) 
 		ClientInstanceID: clientInstanceIDFromContext(ctx),
 		RequestKind:      requestKind,
 		ServiceTier:      normalizedUsageServiceTier(record.ServiceTier),
+		ReasoningEffort:  strings.TrimSpace(record.ReasoningEffort),
 		Success:          success,
 		Status:           status,
 		ErrorCategory:    errorCategory(status, record.Fail.Body, success),
@@ -3534,9 +3611,12 @@ func buildCodexAlphaSearchHeaders(src http.Header, auth *coreauth.Auth) http.Hea
 	for _, name := range []string{
 		"Version",
 		"User-Agent",
+		"Session-Id",
 		"Session_id",
 		"X-Session-ID",
 		"X-Client-Request-Id",
+		"X-Codex-Window-Id",
+		"Thread-Id",
 		"X-Openai-Actor-Authorization",
 		"x-openai-actor-authorization",
 	} {
@@ -4698,7 +4778,7 @@ func (s *relayServer) handleModels(c *gin.Context) {
 	}
 	models := clientCatalogModelsForAPIKey(s.manifest, spec)
 	if isCodexClientModelsRequest(c.Request) {
-		c.JSON(http.StatusOK, buildCodexClientModelsResponse(models, spec))
+		c.JSON(http.StatusOK, buildCodexClientModelsResponse(models, spec, contextWindowsForAPIKey(s.manifest, spec)))
 		return
 	}
 	c.JSON(http.StatusOK, buildModelsResponse(models))
@@ -4793,8 +4873,8 @@ func (s *relayServer) handleCodexAlphaSearch(c *gin.Context) {
 	headers := c.Request.Header.Clone()
 	if sessionID := strings.TrimSpace(routing.ID); sessionID != "" {
 		headers.Set("X-Session-ID", sessionID)
-		if headers.Get("Session_id") == "" {
-			headers.Set("Session_id", sessionID)
+		if headers.Get("Session-Id") == "" && headers.Get("Session_id") == "" {
+			headers.Set("Session-Id", sessionID)
 		}
 	}
 

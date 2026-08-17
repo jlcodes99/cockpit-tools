@@ -8,6 +8,8 @@ import type {
   CodexLocalAccessClientBaseUrlHost,
   CodexLocalAccessGatewayMode,
   CodexLocalAccessModelAlias,
+  CodexLocalAccessAccountWindowQuery,
+  CodexLocalAccessAccountWindowStats,
   CodexLocalAccessModelPricing,
   CodexLocalAccessOAuthQuotaReserve,
   CodexLocalAccessPortCleanupResult,
@@ -105,6 +107,14 @@ export async function queryCodexLocalAccessStats(
   endAt: number,
 ): Promise<CodexLocalAccessStatsWindow> {
   return await invoke("codex_local_access_query_stats", { startAt, endAt });
+}
+
+export async function queryCodexLocalAccessAccountWindowStats(
+  queries: CodexLocalAccessAccountWindowQuery[],
+): Promise<CodexLocalAccessAccountWindowStats[]> {
+  return await invoke("codex_local_access_query_account_window_stats", {
+    queries,
+  });
 }
 
 export async function prepareCodexLocalAccessForRestart(): Promise<CodexLocalAccessState> {

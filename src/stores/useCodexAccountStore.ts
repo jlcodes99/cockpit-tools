@@ -12,6 +12,7 @@ import {
   isCodexPendingOAuthAccount,
 } from '../types/codex';
 import * as codexService from '../services/codexService';
+import { removeAccountIdsFromAllCodexGroups } from '../services/codexAccountGroupService';
 import { emitAccountsChanged, emitCurrentAccountChanged } from '../utils/accountSyncEvents';
 
 const APP_PROFILE = (import.meta.env.VITE_COCKPIT_TOOLS_PROFILE || '').trim();
@@ -138,6 +139,7 @@ interface CodexAccountState {
     apiSupportsWebsockets?: boolean,
     apiSyncModelCatalogToCodex?: boolean,
     accountName?: string,
+    apiModelContextWindows?: Record<string, number>,
   ) => Promise<CodexAccount>;
   updateApiKeyBoundOAuthAccount: (
     accountId: string,
@@ -282,6 +284,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
   deleteAccount: async (accountId: string) => {
     const previousCurrentAccountId = get().currentAccount?.id ?? null;
     await codexService.deleteCodexAccount(accountId);
+    void removeAccountIdsFromAllCodexGroups([accountId]);
     invalidateCodexFetchRequests();
     set((state) => {
       const nextAccounts = state.accounts.filter((account) => account.id !== accountId);
@@ -314,6 +317,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     const previousCurrentAccountId = get().currentAccount?.id ?? null;
     const deleteIdSet = new Set(accountIds);
     await codexService.deleteCodexAccounts(accountIds);
+    void removeAccountIdsFromAllCodexGroups(accountIds);
     invalidateCodexFetchRequests();
     set((state) => {
       const nextAccounts = state.accounts.filter((account) => !deleteIdSet.has(account.id));
@@ -455,6 +459,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     apiSupportsWebsockets?: boolean,
     apiSyncModelCatalogToCodex?: boolean,
     accountName?: string,
+    apiModelContextWindows?: Record<string, number>,
   ) => {
     const account = await codexService.updateCodexApiKeyCredentials(
       accountId,
@@ -471,6 +476,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
       apiSupportsWebsockets,
       apiSyncModelCatalogToCodex,
       accountName,
+      apiModelContextWindows,
     );
     await get().fetchAccounts();
     await get().fetchCurrentAccount();

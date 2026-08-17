@@ -1849,6 +1849,35 @@
   },
   "codex": {
     "title": "Codex 帳號管理",
+    "experimentalModelCatalog": {
+      "title": "實驗性模型目錄",
+      "description": "產生包含完整官方模型與自訂實驗模型的 Cockpit 受管目錄；不會覆寫使用者自訂目錄。",
+      "enabledHint": "啟用後預設模型會切換為 {{model}}，重新啟動 Codex 才會生效。",
+      "models": {
+        "title": "模型清單",
+        "model": "實驗模型",
+        "default": "預設模型",
+        "add": "新增模型",
+        "remove": "刪除模型",
+        "setDefault": "設為預設模型",
+        "modelId": "模型 ID",
+        "displayName": "顯示名稱",
+        "inheritHint": "模型會繼承 gpt-5.6-sol 的完整能力欄位；清單第一項同時作為預設模型。",
+        "validation": {
+          "required": "至少保留一個實驗模型。",
+          "modelId": "模型 ID 只能包含字母、數字、句點、連字號、底線、斜線和冒號。",
+          "displayName": "請輸入不超過 100 個字元的顯示名稱。",
+          "duplicate": "模型 ID 不可重複。",
+          "reserved": "模型 ID 與官方模型重複，請使用其他 ID。"
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "找不到 models_cache.json。",
+        "modelNotCached": "本機快取未包含 gpt-5.6-sol-wm。",
+      "catalogConflict": "已有其他 model_catalog_json，不會覆寫。",
+      "cacheInvalid": "無法讀取 models_cache.json 或格式無效。"
+      }
+    },
     "newApi": {
       "quota": {
         "available": "額度",
@@ -2468,6 +2497,10 @@
       "additional": "額外額度",
       "reset": "重置",
       "weeklyBlocksHourly": "週額度為 0，因此 5 小時額度已不可用",
+      "windowStats": "已用 {{tokens}} · {{cost}}",
+      "windowStatsHint": "從本視窗滿額到現在，此帳號經 API 服務的請求數、token 與帳號計費",
+      "windowUsed": "已用 {{tokens}} · {{cost}}",
+      "windowReq": "{{count}} 次",
       "resetCredits": "重置 {{count}}",
       "resetCreditsTitle": "可用於重置目前 5 小時視窗的剩餘次數：{{count}}",
       "resetCreditConfirm": "確認重置?",
@@ -2489,7 +2522,15 @@
       "resetCreditNoRecords": "暫無重置記錄",
       "resetCreditRecordsLoadFailed": "載入重置記錄失敗：{{error}}",
       "resetCreditGrantedAt": "發放",
-      "resetCreditExpiresAt": "到期"
+      "resetCreditExpiresAt": "到期",
+      "windowAccountCostHint": "帳號計費（依模型價格估算）",
+      "windowUserCostHint": "使用者計費",
+      "windowWeeks": "{{count}} 週配額",
+      "windowDays": "{{count}} 天配額",
+      "windowHours": "{{count}} 小時配額",
+      "windowMinutes": "{{count}} 分鐘配額",
+      "codeReview": "程式碼審查",
+      "codeReviewShort": "審閱"
     },
     "quotaError": {
       "badge": "配額異常",
@@ -2987,6 +3028,82 @@
         "all": "全部類型"
       },
       "pickInstancePrompt": "此工作階段存在於多個實例，請輸入實例 ID："
+    },
+    "sessionUsage": {
+      "tab": "會話用量",
+      "listTab": "會話列表",
+      "title": "會話用量",
+      "desc": "從本機 Codex 會話日誌彙總真實 Token 用量，不依賴官方配額或 API 服務請求日誌。",
+      "hint": "官方配額是方案額度；API 服務日誌只涵蓋走本機閘道的請求。這裡依會話 JSONL 的每次請求用量增量彙總。",
+      "range": {
+        "label": "時間範圍",
+        "7d": "近 7 天",
+        "30d": "近 30 天",
+        "month": "本月",
+        "all": "全部"
+      },
+      "instance": {
+        "label": "實例",
+        "all": "全部實例"
+      },
+      "actions": {
+        "refresh": "重新整理",
+        "rebuild": "重新掃描"
+      },
+      "status": {
+        "idle": "尚未掃描",
+        "scanning": "正在掃描會話日誌…",
+        "ready": "已掃描 {{files}} 個檔案，累計 {{requests}} 次請求",
+        "lastSynced": "上次同步 {{time}}",
+        "deferred": "{{count}} 個分叉會話待父會話就緒",
+        "errors": "{{count}} 個檔案解析失敗"
+      },
+      "cards": {
+        "input": "輸入 Tokens",
+        "cached": "快取輸入 Tokens",
+        "output": "輸出 Tokens",
+        "total": "合計 Tokens",
+        "requests": "請求數",
+        "cost": "估算費用"
+      },
+      "tables": {
+        "model": "依模型",
+        "instance": "依實例",
+        "day": "依日期",
+        "modelName": "模型",
+        "instanceName": "實例",
+        "dayName": "日期",
+        "input": "輸入 Tokens",
+        "cached": "快取 Tokens",
+        "output": "輸出 Tokens",
+        "total": "合計 Tokens",
+        "requests": "請求"
+      },
+      "empty": {
+        "title": "還沒有會話用量",
+        "desc": "開啟此頁後會在背景掃描本機 Codex 會話日誌及多開會話目錄。若剛用過 Codex，點重新整理即可。"
+      },
+      "rebuildConfirm": {
+        "title": "重新掃描",
+        "message": "會清空已彙總的會話用量快取，再重新讀取全部會話日誌。官方配額和 API 服務日誌不受影響。確認繼續？"
+      },
+      "errors": {
+        "loadFailed": "讀取會話用量失敗：{{error}}",
+        "syncFailed": "掃描會話用量失敗：{{error}}"
+      },
+      "summary": {
+        "title": "近 30 天",
+        "scanning": "掃描中",
+        "updating": "更新中",
+        "detail": "詳情",
+        "back": "返回",
+        "input": "輸入",
+        "cached": "快取",
+        "output": "輸出",
+        "total": "合計",
+        "requests": "請求",
+        "cost": "費用"
+      }
     },
     "deepSeek": {
       "start": {

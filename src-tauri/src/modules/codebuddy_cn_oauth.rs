@@ -10,6 +10,8 @@ const CODEBUDDY_API_PREFIX: &str = "/v2/plugin";
 const CODEBUDDY_PLATFORM: &str = "ide";
 const OAUTH_TIMEOUT_SECONDS: u64 = 600;
 const OAUTH_POLL_INTERVAL_MS: u64 = 1500;
+/// 企业版套餐代码（本地标识，用于前端识别企业用量资源）
+pub const ENTERPRISE_PACKAGE_CODE: &str = "TCACA_code_enterprise";
 
 #[derive(Clone)]
 struct PendingOAuthState {
@@ -659,6 +661,136 @@ pub async fn fetch_user_resource_with_access_token(
     Ok(body)
 }
 
+/// 企业版用户用量（网页端 /profile/usage 实际使用的接口）
+///
+/// 网页端企业用量走 `POST /billing/meter/get-enterprise-user-usage`，
+/// 企业 ID 通过请求头 `x-enterprise-id` 传递，body 为空。
+/// 而 `/v2/billing/meter/get-user-resource` 对企业成员账号返回空 Accounts。
+pub async fn fetch_enterprise_user_usage(
+    access_token: &str,
+    enterprise_id: &str,
+) -> Result<Value, String> {
+    let client = build_client()?;
+    let url = format!(
+        "{}/billing/meter/get-enterprise-user-usage",
+        CODEBUDDY_API_ENDPOINT
+    );
+
+    let mut req = client
+        .post(&url)
+        .header("Accept", "application/json, text/plain, */*")
+        .header("Accept-Language", "zh-CN,zh;q=0.9")
+        .header("Authorization", format!("Bearer {}", access_token))
+        .header("Content-Type", "application/json")
+        .header("X-Enterprise-Id", enterprise_id)
+        .header("X-Tenant-Id", enterprise_id);
+
+    let resp = req
+        .json(&json!({}))
+        .send()
+        .await
+        .map_err(|e| format!("请求 enterprise user usage 失败: {}", e))?;
+
+    let status_code = resp.status();
+    let body: Value = resp.json().await.map_err(|e| {
+        format!(
+            "解析 enterprise user usage 响应失败: {} (http={})",
+            e,
+            status_code.as_u16()
+        )
+    })?;
+
+    if !status_code.is_success() {
+        let message = body
+            .get("message")
+            .or_else(|| body.get("msg"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown error");
+        return Err(format!(
+            "请求 enterprise user usage 失败 (http={}): {}",
+            status_code.as_u16(),
+            message
+        ));
+    }
+
+    if let Some(code) = body.get("code").and_then(|v| v.as_i64()) {
+        if code != 0 && code != 200 {
+            let message = body
+                .get("message")
+                .or_else(|| body.get("msg"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown error");
+            return Err(format!(
+                "请求 enterprise user usage 失败 (code={}): {}",
+                code, message
+            ));
+        }
+    }
+
+    Ok(body)
+}
+
+/// 将企业用量响应包装成前端可识别的 get-user-resource 结构
+///
+/// 网页端接口返回 `{credit, limitNum, cycleStartTime, cycleEndTime, cycleResetTime}`，
+/// 前端通过 `usage_raw.data.Response.Data.Accounts` 解析配额，
+/// 因此构造一个企业版资源账号，字段与 get-user-resource 对齐。
+pub fn wrap_enterprise_usage_as_resource(usage_body: &Value) -> Value {
+    let data = usage_body.get("data").cloned().unwrap_or_else(|| json!({}));
+    // credit 为周期内已使用积分，剩余 = limitNum - credit
+    let credit = data.get("credit").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let limit_num = data.get("limitNum").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let remain = (limit_num - credit).max(0.0);
+    let cycle_start_time = data
+        .get("cycleStartTime")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let cycle_end_time = data
+        .get("cycleEndTime")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let cycle_reset_time = data
+        .get("cycleResetTime")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let account = json!({
+        "PackageCode": ENTERPRISE_PACKAGE_CODE,
+        "PackageName": "企业版",
+        "CycleCapacitySizePrecise": limit_num.to_string(),
+        "CycleCapacityRemainPrecise": remain.to_string(),
+        "CycleCapacityUsedPrecise": credit.to_string(),
+        "CycleCapacitySize": limit_num,
+        "CycleCapacityRemain": remain,
+        "CycleCapacityUsed": credit,
+        "CapacitySize": limit_num,
+        "CapacityRemain": remain,
+        "CapacityUsed": credit,
+        "CapacityUnit": "credits",
+        "CycleStartTime": cycle_start_time,
+        "CycleEndTime": cycle_end_time,
+        "CycleResetTime": cycle_reset_time,
+        "Status": 0
+    });
+
+    json!({
+        "code": 0,
+        "msg": "OK",
+        "data": {
+            "Response": {
+                "Data": {
+                    "Accounts": [account],
+                    "TotalCount": 1,
+                    "TotalDosage": credit
+                }
+            }
+        }
+    })
+}
+
 async fn fetch_user_resource_with_access_token_default(
     access_token: &str,
     uid: Option<&str>,
@@ -773,8 +905,37 @@ async fn refresh_payload_for_account_inner(
     .await
     {
         Ok(payload) => {
-            logger::log_info("[CodeBuddy][IDE Token] 刷新 user_resource 成功");
-            Some(payload)
+            // 企业账号时 get-user-resource 可能返回空 Accounts，
+            // 改用网页端真实的企业用量接口兜底
+            if let Some(eid) = resolved_enterprise_id.as_deref() {
+                let accounts_empty = payload
+                    .pointer("/data/Response/Data/Accounts")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.is_empty())
+                    .unwrap_or(true);
+                if accounts_empty {
+                    match fetch_enterprise_user_usage(new_access_token.as_str(), eid).await {
+                        Ok(enterprise_body) => {
+                            let wrapped = wrap_enterprise_usage_as_resource(&enterprise_body);
+                            logger::log_info(
+                                "[CodeBuddy][IDE Token] 企业账号 user_resource 为空，已使用企业用量接口兜底",
+                            );
+                            Some(wrapped)
+                        }
+                        Err(enterprise_err) => {
+                            logger::log_warn(&format!(
+                                "[CodeBuddy][IDE Token] 企业用量接口兜底失败: {}",
+                                enterprise_err
+                            ));
+                            Some(payload)
+                        }
+                    }
+                } else {
+                    Some(payload)
+                }
+            } else {
+                Some(payload)
+            }
         }
         Err(err) => {
             logger::log_warn(&format!(

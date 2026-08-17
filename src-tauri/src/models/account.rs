@@ -25,6 +25,9 @@ pub struct Account {
     /// 可打开的邮件查询地址（仅存储在本地账号详情文件中）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mail_url: Option<String>,
+    /// 辅助邮箱（仅存储在本地账号详情文件中）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aux_email: Option<String>,
     /// 仅保存了邮箱/备注、尚未完成 OAuth 的待授权卡片。
     #[serde(default)]
     pub pending_oauth: bool,
@@ -64,6 +67,7 @@ impl Account {
             account_password: None,
             phone_number: None,
             mail_url: None,
+            aux_email: None,
             pending_oauth: false,
             token,
             quota: None,

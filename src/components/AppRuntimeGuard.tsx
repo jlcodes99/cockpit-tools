@@ -1,5 +1,6 @@
 import React, { ErrorInfo, ReactNode, useEffect, useMemo, useState } from 'react';
 import i18n from '../i18n';
+import { dismissBootSplash } from '../utils/bootSplash';
 
 type GuardFailureCode = 'render-crash' | 'chunk-load';
 
@@ -59,6 +60,9 @@ function createFallbackMessage(rawMessage: string): string {
 }
 
 function GuardFallback({ failure }: { failure: GuardFailure }) {
+  useEffect(() => {
+    dismissBootSplash();
+  }, []);
   const title = i18n.t('common.failed', 'Failed');
   const refreshLabel = i18n.t('common.refresh', 'Refresh');
   const detailLabel = i18n.t('common.detail', 'Details');

@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	codexUserAgent               = "codex-tui/0.135.0 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.135.0)"
+	codexUserAgent               = "codex-tui/0.146.0 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.146.0)"
 	codexOriginator              = "codex-tui"
 	codexDefaultImageToolModel   = "gpt-image-2"
 	codexResponsesLiteHeaderName = "X-OpenAI-Internal-Codex-Responses-Lite"
@@ -1620,7 +1620,7 @@ func (e *CodexExecutor) cacheHelper(ctx context.Context, from sdktranslator.Form
 		return nil, nil, codexIdentityConfuseState{}, err
 	}
 	if cache.ID != "" {
-		httpReq.Header.Set("Session_id", cache.ID)
+		httpReq.Header.Set("Session-Id", cache.ID)
 	}
 	return httpReq, rawJSON, identityState, nil
 }
@@ -1775,7 +1775,7 @@ func applyCodexIdentityConfuseHeaders(headers http.Header, state *codexIdentityC
 		return
 	}
 
-	setCodexSessionHeaderCasePreserved(headers, "Session_id", state.promptCacheKey)
+	setCodexSessionHeaderCasePreserved(headers, "Session-Id", state.promptCacheKey)
 	if headerValueCaseInsensitive(headers, "Conversation_id") != "" {
 		setHeaderCasePreserved(headers, "Conversation_id", state.promptCacheKey)
 	}
@@ -1797,7 +1797,7 @@ func applyCodexFingerprintHeaders(headers http.Header, state *codexIdentityConfu
 	if state.fingerprintMode == "device" {
 		return
 	}
-	setCodexSessionHeaderCasePreserved(headers, "session_id", state.sessionID)
+	setCodexSessionHeaderCasePreserved(headers, "Session-Id", state.sessionID)
 	setHeaderCasePreserved(headers, "Thread-Id", state.threadID)
 	setHeaderCasePreserved(headers, "X-Client-Request-Id", state.threadID)
 	setHeaderCasePreserved(headers, "X-Codex-Window-Id", state.windowID)
@@ -1932,14 +1932,27 @@ func applyCodexHeaders(r *http.Request, auth *cliproxyauth.Auth, token string, s
 	misc.EnsureHeader(r.Header, ginHeaders, "Version", "")
 	misc.EnsureHeader(r.Header, ginHeaders, "X-Codex-Turn-Metadata", "")
 	misc.EnsureHeader(r.Header, ginHeaders, "X-Client-Request-Id", "")
+	misc.EnsureHeader(r.Header, ginHeaders, "X-Codex-Window-Id", "")
+	misc.EnsureHeader(r.Header, ginHeaders, "Thread-Id", "")
+	misc.EnsureHeader(r.Header, ginHeaders, "Session-Id", "")
 	copyCodexResponsesLiteHeader(r.Header, ginHeaders)
 	copyCodexAgtoolsDiagnosticHeaders(r.Header, ginHeaders)
-	cfgUserAgent, _ := codexHeaderDefaults(cfg, auth)
-	ensureHeaderWithConfigPrecedence(r.Header, ginHeaders, "User-Agent", cfgUserAgent, codexUserAgent)
-
-	if strings.Contains(r.Header.Get("User-Agent"), "Mac OS") {
-		misc.EnsureHeader(r.Header, ginHeaders, "Session_id", uuid.NewString())
+	if sessionID := firstCodexSessionHeader(r.Header); sessionID == "" {
+		if sessionID = firstCodexSessionHeader(ginHeaders); sessionID != "" {
+			applyCanonicalCodexSessionHeader(r.Header, sessionID)
+		}
+	} else {
+		applyCanonicalCodexSessionHeader(r.Header, sessionID)
 	}
+
+	isAPIKey := false
+	if auth != nil && auth.Attributes != nil {
+		if v := strings.TrimSpace(auth.Attributes["api_key"]); v != "" {
+			isAPIKey = true
+		}
+	}
+	cfgUserAgent, _ := codexHeaderDefaults(cfg, auth)
+	applyCodexClientIdentityHeaders(r.Header, ginHeaders, cfg, cfgUserAgent, isAPIKey)
 
 	if stream {
 		r.Header.Set("Accept", "text/event-stream")
@@ -1948,17 +1961,6 @@ func applyCodexHeaders(r *http.Request, auth *cliproxyauth.Auth, token string, s
 	}
 	r.Header.Set("Connection", "Keep-Alive")
 
-	isAPIKey := false
-	if auth != nil && auth.Attributes != nil {
-		if v := strings.TrimSpace(auth.Attributes["api_key"]); v != "" {
-			isAPIKey = true
-		}
-	}
-	if originator := strings.TrimSpace(ginHeaders.Get("Originator")); originator != "" {
-		r.Header.Set("Originator", originator)
-	} else if !isAPIKey {
-		r.Header.Set("Originator", codexOriginator)
-	}
 	if !isAPIKey {
 		if auth != nil && auth.Metadata != nil {
 			if accountID, ok := auth.Metadata["account_id"].(string); ok {
@@ -1972,6 +1974,7 @@ func applyCodexHeaders(r *http.Request, auth *cliproxyauth.Auth, token string, s
 	}
 	util.ApplyCustomHeadersFromAttrs(r, attrs)
 	applyCodexCloakingHeaders(r.Header, cfg)
+	applyPairedCodexClientIdentity(r.Header, !isAPIKey || codexCloakingEnabled(cfg))
 }
 
 // applyCodexCloakingHeaders forces official Codex identity headers unless disabled.

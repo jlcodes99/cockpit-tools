@@ -1896,6 +1896,35 @@
   },
   "codex": {
     "title": "إدارة حسابات Codex",
+    "experimentalModelCatalog": {
+      "title": "دليل النماذج التجريبي",
+      "description": "ينشئ دليلاً تديره Cockpit يتضمن قائمة النماذج الرسمية الكاملة والنماذج التجريبية المخصصة من دون استبدال دليل المستخدم المخصص.",
+      "enabledHint": "يضبط {{model}} كنموذج افتراضي. أعد تشغيل Codex لتطبيق التغيير.",
+      "models": {
+        "title": "قائمة النماذج",
+        "model": "نموذج تجريبي",
+        "default": "النموذج الافتراضي",
+        "add": "إضافة نموذج",
+        "remove": "حذف النموذج",
+        "setDefault": "تعيين كافتراضي",
+        "modelId": "معرّف النموذج",
+        "displayName": "اسم العرض",
+        "inheritHint": "ترث النماذج جميع حقول قدرات gpt-5.6-sol، ويكون العنصر الأول هو النموذج الافتراضي أيضًا.",
+        "validation": {
+          "required": "احتفظ بنموذج تجريبي واحد على الأقل.",
+          "modelId": "يمكن أن يحتوي معرّف النموذج على أحرف وأرقام ونقاط وشرطات وشرطات سفلية وشرطات مائلة ونقطتين فقط.",
+          "displayName": "أدخل اسم عرض لا يتجاوز 100 حرف.",
+          "duplicate": "يجب ألا تتكرر معرّفات النماذج.",
+          "reserved": "يتعارض معرّف النموذج هذا مع نموذج رسمي. استخدم معرّفًا آخر."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "لم يتم العثور على models_cache.json.",
+        "modelNotCached": "لا تحتوي ذاكرة التخزين المؤقت المحلية على gpt-5.6-sol-wm.",
+      "catalogConflict": "تم تكوين model_catalog_json آخر بالفعل ولن تتم الكتابة فوقه.",
+      "cacheInvalid": "تعذّر قراءة models_cache.json أو أن تنسيقه غير صالح."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "الحصة",
@@ -2384,6 +2413,10 @@
       "additional": "حصة إضافية",
       "reset": "إعادة ضبط",
       "weeklyBlocksHourly": "الحصة الأسبوعية 0، لذا حصة 5 ساعات غير متاحة",
+      "windowStats": "مستخدم {{tokens}} · {{cost}}",
+      "windowStatsHint": "الطلبات والرموز وفاتورة الحساب عبر خدمة API منذ امتلاء النافذة",
+      "windowUsed": "مستخدم {{tokens}} · {{cost}}",
+      "windowReq": "{{count}} طلب",
       "resetCredits": "مرات الضبط {{count}}",
       "resetCreditsTitle": "مرات متبقية لإعادة ضبط نافذة 5 ساعات: {{count}}",
       "resetCreditConfirm": "تأكيد؟",
@@ -2405,7 +2438,15 @@
       "resetCreditNoRecords": "لا توجد سجلات إعادة ضبط",
       "resetCreditRecordsLoadFailed": "فشل تحميل سجلات إعادة الضبط: {{error}}",
       "resetCreditGrantedAt": "مُنحت",
-      "resetCreditExpiresAt": "تنتهي"
+      "resetCreditExpiresAt": "تنتهي",
+      "windowAccountCostHint": "فوترة الحساب (تقدير حسب أسعار النموذج)",
+      "windowUserCostHint": "فوترة المستخدم",
+      "windowWeeks": "حصة {{count}} أسابيع",
+      "windowDays": "حصة {{count}} أيام",
+      "windowHours": "حصة {{count}} ساعات",
+      "windowMinutes": "حصة {{count}} دقائق",
+      "codeReview": "مراجعة الرمز",
+      "codeReviewShort": "مراجعة"
     },
     "quotaError": {
       "badge": "خطأ في الحصة",
@@ -2903,6 +2944,82 @@
         "all": "كل الأنواع"
       },
       "pickInstancePrompt": "الجلسة موجودة في عدة مثيلات. أدخل معرّف المثيل:"
+    },
+    "sessionUsage": {
+      "tab": "الاستخدام",
+      "listTab": "الجلسات",
+      "title": "استخدام الجلسات",
+      "desc": "يجمع استهلاك الرموز الحقيقي من سجلات جلسات Codex المحلية دون الحصة الرسمية أو سجلات خدمة API.",
+      "hint": "الحصة الرسمية هي حد الباقة. سجلات خدمة API تغطي بوابة الجهاز فقط. هنا نجمع زيادات JSONL لكل طلب.",
+      "range": {
+        "label": "المدى",
+        "7d": "7 أيام",
+        "30d": "30 يومًا",
+        "month": "هذا الشهر",
+        "all": "الكل"
+      },
+      "instance": {
+        "label": "المثيل",
+        "all": "كل المثيلات"
+      },
+      "actions": {
+        "refresh": "تحديث",
+        "rebuild": "إعادة المسح"
+      },
+      "status": {
+        "idle": "لم يُمسح بعد",
+        "scanning": "جارٍ مسح سجلات الجلسات…",
+        "ready": "{{files}} ملفًا و{{requests}} طلبًا",
+        "lastSynced": "آخر مزامنة {{time}}",
+        "deferred": "{{count}} تفرعًا بانتظار الجلسة الأصل",
+        "errors": "تعذر تحليل {{count}} ملفًا"
+      },
+      "cards": {
+        "input": "رموز الإدخال",
+        "cached": "رموز التخزين",
+        "output": "رموز الإخراج",
+        "total": "إجمالي الرموز",
+        "requests": "الطلبات",
+        "cost": "تكلفة تقديرية"
+      },
+      "tables": {
+        "model": "حسب النموذج",
+        "instance": "حسب المثيل",
+        "day": "حسب اليوم",
+        "modelName": "النموذج",
+        "instanceName": "المثيل",
+        "dayName": "التاريخ",
+        "input": "رموز الإدخال",
+        "cached": "رموز التخزين",
+        "output": "رموز الإخراج",
+        "total": "إجمالي الرموز",
+        "requests": "طلب"
+      },
+      "empty": {
+        "title": "لا استخدام للجلسات بعد",
+        "desc": "فتح هذه الصفحة يمسح سجلات Codex المحلية والمثيلات الإضافية في الخلفية. إن كنت قد استخدمت Codex للتو فحدّث الصفحة."
+      },
+      "rebuildConfirm": {
+        "title": "إعادة المسح",
+        "message": "سيتم مسح ذاكرة استخدام الجلسات ثم إعادة قراءة كل السجلات. الحصة الرسمية وسجلات خدمة API لن تتغير. متابعة؟"
+      },
+      "errors": {
+        "loadFailed": "تعذر قراءة استخدام الجلسات: {{error}}",
+        "syncFailed": "تعذر مسح استخدام الجلسات: {{error}}"
+      },
+      "summary": {
+        "title": "30 يوماً",
+        "scanning": "جارٍ المسح",
+        "updating": "جارٍ التحديث",
+        "detail": "التفاصيل",
+        "back": "رجوع",
+        "input": "إدخال",
+        "cached": "تخزين",
+        "output": "إخراج",
+        "total": "الإجمالي",
+        "requests": "طلب",
+        "cost": "تكلفة"
+      }
     },
     "api": {
       "baseUrl": "عنوان URL الأساسي",

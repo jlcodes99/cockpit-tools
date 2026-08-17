@@ -1849,6 +1849,35 @@
   },
   "codex": {
     "title": "Quản lý tài khoản Codex",
+    "experimentalModelCatalog": {
+      "title": "Danh mục thử nghiệm",
+      "description": "Tạo danh mục do Cockpit quản lý gồm đầy đủ mô hình chính thức và các mô hình thử nghiệm tùy chỉnh mà không ghi đè danh mục tùy chỉnh.",
+      "enabledHint": "Đặt {{model}} làm mô hình mặc định. Khởi động lại Codex để áp dụng.",
+      "models": {
+        "title": "Danh sách mô hình",
+        "model": "Mô hình thử nghiệm",
+        "default": "Mô hình mặc định",
+        "add": "Thêm mô hình",
+        "remove": "Xóa mô hình",
+        "setDefault": "Đặt làm mặc định",
+        "modelId": "ID mô hình",
+        "displayName": "Tên hiển thị",
+        "inheritHint": "Mô hình kế thừa toàn bộ trường khả năng của gpt-5.6-sol. Mục đầu tiên cũng là mô hình mặc định.",
+        "validation": {
+          "required": "Giữ lại ít nhất một mô hình thử nghiệm.",
+          "modelId": "ID mô hình chỉ được chứa chữ cái, chữ số, dấu chấm, dấu gạch ngang, dấu gạch dưới, dấu gạch chéo và dấu hai chấm.",
+          "displayName": "Nhập tên hiển thị không quá 100 ký tự.",
+          "duplicate": "ID mô hình không được trùng lặp.",
+          "reserved": "ID mô hình này trùng với mô hình chính thức. Hãy dùng ID khác."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "Không tìm thấy models_cache.json.",
+        "modelNotCached": "Bộ nhớ đệm cục bộ không có gpt-5.6-sol-wm.",
+      "catalogConflict": "Một model_catalog_json khác đã được cấu hình và sẽ không bị ghi đè.",
+      "cacheInvalid": "Không thể đọc models_cache.json hoặc định dạng không hợp lệ."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Hạn mức",
@@ -2337,6 +2366,10 @@
       "additional": "Hạn mức bổ sung",
       "reset": "Đặt lại",
       "weeklyBlocksHourly": "Hạn mức tuần là 0 nên hạn mức 5 giờ không khả dụng",
+      "windowStats": "Đã dùng {{tokens}} · {{cost}}",
+      "windowStatsHint": "Số yêu cầu, token và phí tài khoản qua dịch vụ API từ lúc cửa sổ đầy",
+      "windowUsed": "Đã dùng {{tokens}} · {{cost}}",
+      "windowReq": "{{count}} YC",
       "resetCredits": "Lượt đặt lại {{count}}",
       "resetCreditsTitle": "Lượt đặt lại còn lại cho cửa sổ 5 giờ: {{count}}",
       "resetCreditConfirm": "Xác nhận?",
@@ -2358,7 +2391,15 @@
       "resetCreditNoRecords": "Chưa có bản ghi đặt lại",
       "resetCreditRecordsLoadFailed": "Không tải được bản ghi đặt lại: {{error}}",
       "resetCreditGrantedAt": "Được cấp",
-      "resetCreditExpiresAt": "Hết hạn"
+      "resetCreditExpiresAt": "Hết hạn",
+      "windowAccountCostHint": "Phí tài khoản (ước theo giá mô hình)",
+      "windowUserCostHint": "Phí người dùng",
+      "windowWeeks": "Hạn mức {{count}} tuần",
+      "windowDays": "Hạn mức {{count}} ngày",
+      "windowHours": "Hạn mức {{count}} giờ",
+      "windowMinutes": "Hạn mức {{count}} phút",
+      "codeReview": "Rà soát mã",
+      "codeReviewShort": "Rà soát"
     },
     "quotaError": {
       "badge": "Lỗi quota",
@@ -2856,6 +2897,82 @@
         "all": "Mọi loại"
       },
       "pickInstancePrompt": "Phiên tồn tại trên nhiều instance. Nhập ID instance:"
+    },
+    "sessionUsage": {
+      "tab": "Mức dùng",
+      "listTab": "Phiên",
+      "title": "Mức dùng phiên",
+      "desc": "Cộng dồn token thực từ nhật ký phiên Codex trên máy, không dùng hạn mức chính thức hay nhật ký dịch vụ API.",
+      "hint": "Hạn mức chính thức là gói. Nhật ký dịch vụ API chỉ gồm cổng cục bộ. Ở đây cộng phần tăng JSONL từng yêu cầu.",
+      "range": {
+        "label": "Khoảng",
+        "7d": "7 ngày",
+        "30d": "30 ngày",
+        "month": "Tháng này",
+        "all": "Tất cả"
+      },
+      "instance": {
+        "label": "Phiên bản",
+        "all": "Mọi phiên bản"
+      },
+      "actions": {
+        "refresh": "Làm mới",
+        "rebuild": "Quét lại"
+      },
+      "status": {
+        "idle": "Chưa quét",
+        "scanning": "Đang quét nhật ký…",
+        "ready": "{{files}} tệp, {{requests}} yêu cầu",
+        "lastSynced": "Đồng bộ lần cuối {{time}}",
+        "deferred": "{{count}} nhánh đang chờ phiên cha",
+        "errors": "{{count}} tệp không đọc được"
+      },
+      "cards": {
+        "input": "Token vào",
+        "cached": "Token cache",
+        "output": "Token ra",
+        "total": "Tổng token",
+        "requests": "Yêu cầu",
+        "cost": "Chi phí ước"
+      },
+      "tables": {
+        "model": "Theo mô hình",
+        "instance": "Theo phiên bản",
+        "day": "Theo ngày",
+        "modelName": "Mô hình",
+        "instanceName": "Phiên bản",
+        "dayName": "Ngày",
+        "input": "Token vào",
+        "cached": "Token cache",
+        "output": "Token ra",
+        "total": "Tổng token",
+        "requests": "YC"
+      },
+      "empty": {
+        "title": "Chưa có mức dùng phiên",
+        "desc": "Mở trang này sẽ quét nền nhật ký Codex cục bộ và các phiên bản thêm. Vừa dùng xong thì nhấn Làm mới."
+      },
+      "rebuildConfirm": {
+        "title": "Quét lại",
+        "message": "Sẽ xóa bộ nhớ đệm mức dùng phiên rồi đọc lại mọi nhật ký. Hạn mức chính thức và nhật ký dịch vụ API không đổi. Tiếp tục?"
+      },
+      "errors": {
+        "loadFailed": "Không đọc được mức dùng phiên: {{error}}",
+        "syncFailed": "Không quét được mức dùng phiên: {{error}}"
+      },
+      "summary": {
+        "title": "30 ngày",
+        "scanning": "Đang quét",
+        "updating": "Đang cập nhật",
+        "detail": "Chi tiết",
+        "back": "Quay lại",
+        "input": "Vào",
+        "cached": "Cache",
+        "output": "Ra",
+        "total": "Tổng",
+        "requests": "YC",
+        "cost": "Phí"
+      }
     },
     "api": {
       "baseUrl": "URL cơ sở",
