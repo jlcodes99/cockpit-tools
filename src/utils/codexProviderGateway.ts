@@ -128,6 +128,13 @@ export function resolveCodexProviderCapabilityProfile(input: {
   };
 }
 
+export function resolveCodexModelProviderWireApi(
+  baseUrl: string,
+  wireApi?: CodexProviderWireApi | null,
+): CodexProviderWireApi {
+  return resolveCodexProviderCapabilityProfile({ baseUrl, wireApi }).wireApi;
+}
+
 export function resolveCodexProviderEnableMode(
   profile: CodexProviderCapabilityProfile,
   preference: CodexProviderEnableModePreference = "auto",

@@ -7201,7 +7201,8 @@ export function CodexAccountsPage() {
             supportsVision: providerPayload.sponsorTemplate?.supportsVision,
             website: providerPayload.sponsorTemplate?.website,
             apiKeyUrl: providerPayload.sponsorTemplate?.apiKeyUrl,
-            wireApi: providerPayload.sponsorTemplate?.wireApi,
+            wireApi: providerPayload.apiWireApi,
+            supportsWebsockets: providerPayload.apiSupportsWebsockets,
             integrationType: providerPayload.sponsorTemplate?.integrationType,
           });
           finalProviderPayload = {

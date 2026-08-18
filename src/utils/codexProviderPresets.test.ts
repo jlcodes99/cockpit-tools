@@ -8,7 +8,10 @@ import {
   findCodexApiProviderPresetByBaseUrl,
   findCodexApiProviderPresetById,
 } from "./codexProviderPresets.ts";
-import { resolveCodexProviderCapabilityProfile } from "./codexProviderGateway.ts";
+import {
+  resolveCodexModelProviderWireApi,
+  resolveCodexProviderCapabilityProfile,
+} from "./codexProviderGateway.ts";
 
 test("OpenRouter preset includes the current Luna Pro model id", () => {
   const preset = findCodexApiProviderPresetByBaseUrl(
@@ -34,6 +37,20 @@ test("OpenCode Go preset exposes DeepSeek models and its chat-completions transp
   });
   assert.equal(profile.wireApi, "chat_completions");
   assert.equal(profile.requiresGateway, true);
+});
+
+test("OpenCode Go provider storage infers chat completions when wire API is missing", () => {
+  assert.equal(
+    resolveCodexModelProviderWireApi(OPENCODE_GO_API_BASE_URL, null),
+    "chat_completions",
+  );
+});
+
+test("explicit provider wire API overrides preset inference", () => {
+  assert.equal(
+    resolveCodexModelProviderWireApi(OPENCODE_GO_API_BASE_URL, "responses"),
+    "responses",
+  );
 });
 
 test("DeepSeek keeps its native Responses default", () => {

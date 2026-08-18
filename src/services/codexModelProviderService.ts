@@ -1,8 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { CodexAccount } from '../types/codex';
-import type {
-  CodexProviderEnableModePreference,
-  CodexProviderWireApi,
+import {
+  resolveCodexModelProviderWireApi,
+  type CodexProviderEnableModePreference,
+  type CodexProviderWireApi,
 } from '../utils/codexProviderGateway';
 import type { CodexLocalAccessTestResult } from '../types/codexLocalAccess';
 import {
@@ -369,7 +370,10 @@ function toValidProviderList(raw: unknown): CodexModelProvider[] {
     const boundOauthAccountId = normalizeBoundOauthAccountId(
       (item as { boundOauthAccountId?: unknown }).boundOauthAccountId,
     );
-    const wireApi = normalizeWireApi((item as { wireApi?: unknown }).wireApi);
+    const wireApi = resolveCodexModelProviderWireApi(
+      baseUrl,
+      normalizeWireApi((item as { wireApi?: unknown }).wireApi),
+    );
     providers.push({
       id: String((item as { id?: unknown }).id ?? createProviderId()),
       name,
@@ -435,10 +439,21 @@ function hasLegacySupportsWebsocketsProvider(raw: unknown): boolean {
   });
 }
 
+function hasMissingWireApiProvider(raw: unknown): boolean {
+  if (!Array.isArray(raw)) return false;
+  return raw.some(
+    (item) =>
+      Boolean(item) &&
+      typeof item === 'object' &&
+      !hasOwnProperty(item, 'wireApi'),
+  );
+}
+
 async function loadProvidersFromDisk(): Promise<{
   providers: CodexModelProvider[];
   removedImageGenerationSetting: boolean;
   migratedSupportsWebsockets: boolean;
+  migratedWireApi: boolean;
 }> {
   const raw = await invoke<string>('load_codex_model_providers');
   const parsed = JSON.parse(raw);
@@ -446,6 +461,7 @@ async function loadProvidersFromDisk(): Promise<{
     providers: toValidProviderList(parsed),
     removedImageGenerationSetting: hasRemovedImageGenerationSetting(parsed),
     migratedSupportsWebsockets: hasLegacySupportsWebsocketsProvider(parsed),
+    migratedWireApi: hasMissingWireApiProvider(parsed),
   };
 }
 
@@ -461,6 +477,7 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
     providers: [],
     removedImageGenerationSetting: false,
     migratedSupportsWebsockets: false,
+    migratedWireApi: false,
   }));
   const loadedProviders = loadResult.providers;
   let loaded = loadedProviders.filter((provider) => {
@@ -481,7 +498,8 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
     migration.changed ||
     migratedDeepSeek ||
     loadResult.removedImageGenerationSetting ||
-    loadResult.migratedSupportsWebsockets
+    loadResult.migratedSupportsWebsockets ||
+    loadResult.migratedWireApi
   ) {
     await saveProvidersToDisk(loaded).catch(() => { });
   }
@@ -944,7 +962,7 @@ export async function upsertCodexModelProviderFromCredential(
 
   if (!provider) {
     const now = Date.now();
-    const wireApi = normalizeWireApi(input.wireApi);
+    const wireApi = resolveCodexModelProviderWireApi(apiBaseUrl, input.wireApi);
     provider = {
       id: createProviderId(),
       name:
@@ -1020,7 +1038,10 @@ export async function upsertCodexModelProviderFromCredential(
     provider.apiKeyUrl = sanitizeName(input.apiKeyUrl ?? '') || undefined;
   }
   if (input.wireApi !== undefined) {
-    provider.wireApi = normalizeWireApi(input.wireApi);
+    provider.wireApi = resolveCodexModelProviderWireApi(
+      provider.baseUrl,
+      input.wireApi,
+    );
   }
   if (input.supportsWebsockets !== undefined || input.wireApi !== undefined) {
     provider.supportsWebsockets = normalizeSupportsWebsockets(
