@@ -1826,6 +1826,35 @@
   },
   "codex": {
     "title": "Gerenciamento de contas Codex",
+    "experimentalModelCatalog": {
+      "title": "Catálogo experimental",
+      "description": "Gera um catálogo gerenciado pelo Cockpit com a lista oficial completa e modelos experimentais personalizados, sem substituir um catálogo personalizado.",
+      "enabledHint": "Define {{model}} como modelo padrão. Reinicie o Codex para aplicar.",
+      "models": {
+        "title": "Lista de modelos",
+        "model": "Modelo experimental",
+        "default": "Modelo padrão",
+        "add": "Adicionar modelo",
+        "remove": "Remover modelo",
+        "setDefault": "Definir como padrão",
+        "modelId": "ID do modelo",
+        "displayName": "Nome de exibição",
+        "inheritHint": "Os modelos herdam todos os campos de recursos do gpt-5.6-sol. O primeiro item também é o modelo padrão.",
+        "validation": {
+          "required": "Mantenha pelo menos um modelo experimental.",
+          "modelId": "Os IDs de modelo podem conter apenas letras, números, pontos, hífens, sublinhados, barras e dois-pontos.",
+          "displayName": "Insira um nome de exibição com até 100 caracteres.",
+          "duplicate": "Os IDs de modelo devem ser únicos.",
+          "reserved": "Este ID de modelo entra em conflito com um modelo oficial. Use outro ID."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "models_cache.json não foi encontrado.",
+        "modelNotCached": "gpt-5.6-sol-wm não está no cache local.",
+      "catalogConflict": "Outro model_catalog_json já está configurado e não será substituído.",
+      "cacheInvalid": "Não foi possível ler models_cache.json ou o formato é inválido."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Cota",

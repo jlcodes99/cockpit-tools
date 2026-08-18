@@ -10,6 +10,7 @@ import {
   CodexBatchDeleteJobStatus,
   CodexProviderWireApi,
   CodexQuickConfig,
+  CodexExperimentalModelDefinition,
   CodexQuota,
   CodexResetCreditsSnapshot,
 } from '../types/codex';
@@ -48,10 +49,14 @@ export async function getCodexQuickConfig(): Promise<CodexQuickConfig> {
 export async function saveCodexQuickConfig(
   modelContextWindow?: number,
   autoCompactTokenLimit?: number,
+  experimentalModelCatalogEnabled?: boolean,
+  experimentalModelCatalogModels?: CodexExperimentalModelDefinition[],
 ): Promise<CodexQuickConfig> {
   return await invoke('save_codex_quick_config', {
     modelContextWindow: modelContextWindow ?? null,
     autoCompactTokenLimit: autoCompactTokenLimit ?? null,
+    experimentalModelCatalogEnabled: experimentalModelCatalogEnabled ?? null,
+    experimentalModelCatalogModels: experimentalModelCatalogModels ?? null,
   });
 }
 

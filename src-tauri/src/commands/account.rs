@@ -210,6 +210,7 @@ pub fn create_pending_oauth_account(
     account_password: Option<String>,
     phone_number: Option<String>,
     mail_url: Option<String>,
+    aux_email: Option<String>,
 ) -> Result<models::Account, String> {
     modules::account::create_pending_oauth_account(
         email,
@@ -219,6 +220,7 @@ pub fn create_pending_oauth_account(
             account_password,
             phone_number,
             mail_url,
+            aux_email,
         },
     )
 }
@@ -737,6 +739,7 @@ pub async fn update_account_note(
     account_password: Option<String>,
     phone_number: Option<String>,
     mail_url: Option<String>,
+    aux_email: Option<String>,
 ) -> Result<models::Account, String> {
     modules::account::update_account_note(
         &account_id,
@@ -746,6 +749,7 @@ pub async fn update_account_note(
             account_password,
             phone_number,
             mail_url,
+            aux_email,
         },
     )
 }
@@ -816,20 +820,14 @@ mod tests {
     #[test]
     fn account_groups_payload_must_be_a_json_array() {
         assert!(validate_account_groups_payload("[]").is_ok());
-        assert!(validate_account_groups_payload(
-            r#"[{"id":"group-1","accountIds":[]}]"#
-        )
-        .is_ok());
+        assert!(validate_account_groups_payload(r#"[{"id":"group-1","accountIds":[]}]"#).is_ok());
         assert!(validate_account_groups_payload("{}").is_err());
         assert!(validate_account_groups_payload("not-json").is_err());
     }
 
     #[test]
     fn account_groups_payload_rejects_invalid_account_ids() {
-        assert!(validate_account_groups_payload(
-            r#"[{"id":"group-1","accountIds":{}}]"#
-        )
-        .is_err());
+        assert!(validate_account_groups_payload(r#"[{"id":"group-1","accountIds":{}}]"#).is_err());
     }
 
     #[test]

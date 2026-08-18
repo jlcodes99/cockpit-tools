@@ -37,6 +37,13 @@ impl Default for CodexApiProviderMode {
     }
 }
 
+/// Cockpit 管理的 Codex 实验模型定义
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CodexExperimentalModelDefinition {
+    pub model_id: String,
+    pub display_name: String,
+}
+
 /// Codex config.toml 快捷配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexQuickConfig {
@@ -46,6 +53,16 @@ pub struct CodexQuickConfig {
     pub detected_model_context_window: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detected_auto_compact_token_limit: Option<i64>,
+    #[serde(default)]
+    pub experimental_model_catalog_enabled: bool,
+    #[serde(default)]
+    pub experimental_model_catalog_available: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub experimental_model_catalog_unavailable_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub experimental_model_catalog_conflict: Option<String>,
+    #[serde(default)]
+    pub experimental_model_catalog_models: Vec<CodexExperimentalModelDefinition>,
 }
 
 /// Codex 官方 App 推理速度

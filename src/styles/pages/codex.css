@@ -8173,6 +8173,14 @@
   opacity: 0.6;
 }
 
+.codex-quick-config-modal
+  .codex-quick-config-switch
+  input:focus-visible
+  + .codex-quick-config-switch__slider {
+  outline: 2px solid color-mix(in srgb, var(--primary) 55%, transparent);
+  outline-offset: 2px;
+}
+
 .codex-quick-config-modal .codex-quick-config-field__error,
 .codex-quick-config-modal .codex-quick-config-warning {
   display: flex;

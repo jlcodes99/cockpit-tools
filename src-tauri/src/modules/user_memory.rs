@@ -31,8 +31,8 @@ fn read_memory_from_path(path: &PathBuf) -> Result<UserMemory, String> {
     if !path.exists() {
         return Ok(UserMemory::default());
     }
-    let raw = std::fs::read_to_string(path)
-        .map_err(|error| format!("读取用户记忆失败: {error}"))?;
+    let raw =
+        std::fs::read_to_string(path).map_err(|error| format!("读取用户记忆失败: {error}"))?;
     if raw.trim().is_empty() {
         return Ok(UserMemory::default());
     }

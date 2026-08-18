@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, CircleAlert, FolderOpen, Save, X } from 'lucide-react';
 import {
@@ -8,7 +8,12 @@ import {
   saveCodexQuickConfig,
 } from '../../services/codexService';
 import { useEscClose } from '../../hooks/useEscClose';
-import type { CodexQuickConfig } from '../../types/codex';
+import type {
+  CodexExperimentalModelDefinition,
+  CodexQuickConfig,
+} from '../../types/codex';
+import { getCodexExperimentalModelErrorMessage } from '../../utils/codexExperimentalModel';
+import { CodexExperimentalModelEditor } from './CodexExperimentalModelEditor';
 
 const DEFAULT_AUTO_COMPACT_TOKEN_LIMIT = 900000;
 const CONTEXT_WINDOW_516K = 516000;
@@ -77,11 +82,21 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
   const [autoCompactLimitInput, setAutoCompactLimitInput] = useState(
     String(DEFAULT_AUTO_COMPACT_TOKEN_LIMIT),
   );
+  const [customEdited, setCustomEdited] = useState(false);
+  const [experimentalModelCatalogEnabled, setExperimentalModelCatalogEnabled] =
+    useState(false);
+  const [experimentalModels, setExperimentalModels] = useState<
+    CodexExperimentalModelDefinition[]
+  >([]);
+  const [experimentalModelsEdited, setExperimentalModelsEdited] = useState(false);
+  const [experimentalModelsError, setExperimentalModelsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const saveVersionRef = useRef(0);
 
   const applyLoadedConfig = useCallback((config: CodexQuickConfig) => {
     const detectedModelContextWindow = config.detected_model_context_window ?? null;
@@ -98,6 +113,10 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
         detectedAutoCompactTokenLimit ?? QUICK_CONFIG_PRESETS.preset_1m.autoCompactTokenLimit,
       ),
     );
+    setCustomEdited(false);
+    setExperimentalModelCatalogEnabled(config.experimental_model_catalog_enabled);
+    setExperimentalModels(config.experimental_model_catalog_models);
+    setExperimentalModelsEdited(false);
   }, []);
 
   const reload = useCallback(async () => {
@@ -166,19 +185,6 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
 
   const isCustomPreset = selectedPresetId === 'custom';
 
-  const handlePresetChange = useCallback((nextPreset: QuickConfigPresetId) => {
-    setNotice(null);
-    setError(null);
-    setSelectedPresetId(nextPreset);
-    if (nextPreset !== 'custom') {
-      const preset = QUICK_CONFIG_PRESETS[nextPreset];
-      setContextWindowInput(String(preset.modelContextWindow ?? CONTEXT_WINDOW_1M));
-      setAutoCompactLimitInput(
-        String(preset.autoCompactTokenLimit ?? DEFAULT_AUTO_COMPACT_TOKEN_LIMIT),
-      );
-    }
-  }, []);
-
   const detectedModelContextWindow = loadedConfig?.detected_model_context_window ?? null;
   const detectedAutoCompactTokenLimit = loadedConfig?.detected_auto_compact_token_limit ?? null;
 
@@ -221,54 +227,16 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
     return QUICK_CONFIG_PRESETS[selectedPresetId];
   }, [selectedPresetId, parsedContextWindow, parsedAutoCompactLimit]);
 
-  const detectedPresetId = useMemo(
-    () => resolvePresetId(detectedModelContextWindow, detectedAutoCompactTokenLimit),
-    [detectedModelContextWindow, detectedAutoCompactTokenLimit],
-  );
-
-  const quickConfigWarning = useMemo(() => {
-    if (!loadedConfig) return null;
-    if ((detectedModelContextWindow == null) !== (detectedAutoCompactTokenLimit == null)) {
-      return t('codex.modelProviders.quickConfig.partialDetected', {
-        defaultValue:
-          '检测到当前两个字段并不完整：model_context_window={{context}}，model_auto_compact_token_limit={{compact}}。保存后会按当前方案改写。',
-        context: detectedModelContextWindow ?? t('codex.modelProviders.quickConfig.notSet', '未设置'),
-        compact:
-          detectedAutoCompactTokenLimit ??
-          t('codex.modelProviders.quickConfig.notSet', '未设置'),
-      });
-    }
-    if (detectedPresetId === 'custom' && selectedPresetId !== 'custom') {
-      return t('codex.modelProviders.quickConfig.customDetected', {
-        defaultValue:
-          '检测到当前 config.toml 为自定义值：model_context_window={{context}}，model_auto_compact_token_limit={{compact}}。保存后会按你选择的预设改写。',
-        context: detectedModelContextWindow ?? t('codex.modelProviders.quickConfig.notSet', '未设置'),
-        compact:
-          detectedAutoCompactTokenLimit ??
-          t('codex.modelProviders.quickConfig.notSet', '未设置'),
+  const experimentalModelUnavailableMessage = useMemo(() => {
+    const reason = loadedConfig?.experimental_model_catalog_unavailable_reason;
+    if (!reason) return null;
+    if (reason === 'catalog_conflict') {
+      return t('codex.experimentalModelCatalog.unavailable.catalogConflict', {
+        defaultValue: '已有其他 model_catalog_json，禁止覆盖。',
       });
     }
     return null;
-  }, [
-    detectedAutoCompactTokenLimit,
-    detectedModelContextWindow,
-    detectedPresetId,
-    loadedConfig,
-    selectedPresetId,
-    t,
-  ]);
-
-  const previewText = useMemo(() => {
-    const lines = [
-      targetConfig.modelContextWindow == null
-        ? '# remove model_context_window'
-        : `model_context_window = ${targetConfig.modelContextWindow}`,
-      targetConfig.autoCompactTokenLimit == null
-        ? '# remove model_auto_compact_token_limit'
-        : `model_auto_compact_token_limit = ${targetConfig.autoCompactTokenLimit}`,
-    ];
-    return lines.join('\n');
-  }, [targetConfig.autoCompactTokenLimit, targetConfig.modelContextWindow]);
+  }, [loadedConfig, t]);
 
   const handleOpenConfig = useCallback(async () => {
     if (opening) return;
@@ -288,39 +256,152 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
     }
   }, [opening, t]);
 
-  const handleSave = useCallback(async () => {
-    if (saving || loading) return;
-    setNotice(null);
-    setError(null);
-    if (validationError) {
-      setError(validationError);
+  const persistConfig = useCallback(
+    (
+      target: QuickConfigTarget,
+      experimentalEnabled: boolean,
+      models: CodexExperimentalModelDefinition[],
+    ) => {
+      if (loading) return;
+
+      const saveVersion = saveVersionRef.current + 1;
+      saveVersionRef.current = saveVersion;
+      setNotice(null);
+      setError(null);
+      setSaving(true);
+
+      const save = async () => {
+        try {
+          const saved = await saveCodexQuickConfig(
+            target.modelContextWindow ?? undefined,
+            target.autoCompactTokenLimit ?? undefined,
+            experimentalEnabled,
+            models,
+          );
+          if (saveVersion === saveVersionRef.current) {
+            applyLoadedConfig(saved);
+            setNotice(
+              t(
+                'codex.modelProviders.quickConfig.saveSuccess',
+                '当前 Codex 配置已保存',
+              ),
+            );
+          }
+        } catch (err) {
+          if (saveVersion === saveVersionRef.current) {
+            setError(
+              getCodexExperimentalModelErrorMessage(t, err) ??
+                t('codex.modelProviders.quickConfig.saveFailed', {
+                  defaultValue: '保存当前 Codex 配置失败：{{error}}',
+                  error: String(err),
+                }),
+            );
+          }
+        } finally {
+          if (saveVersion === saveVersionRef.current) {
+            setSaving(false);
+          }
+        }
+      };
+
+      saveQueueRef.current = saveQueueRef.current.catch(() => undefined).then(save);
+    },
+    [applyLoadedConfig, loading, t],
+  );
+
+  const handlePresetChange = useCallback(
+    (nextPreset: QuickConfigPresetId) => {
+      setNotice(null);
+      setError(null);
+      setSelectedPresetId(nextPreset);
+      if (nextPreset !== 'custom') {
+        const preset = QUICK_CONFIG_PRESETS[nextPreset];
+        setContextWindowInput(String(preset.modelContextWindow ?? CONTEXT_WINDOW_1M));
+        setAutoCompactLimitInput(
+          String(preset.autoCompactTokenLimit ?? DEFAULT_AUTO_COMPACT_TOKEN_LIMIT),
+        );
+        persistConfig(preset, experimentalModelCatalogEnabled, experimentalModels);
+      }
+    },
+    [experimentalModelCatalogEnabled, experimentalModels, persistConfig],
+  );
+
+  useEffect(() => {
+    if (
+      loading ||
+      !loadedConfig ||
+      !isCustomPreset ||
+      !customEdited ||
+      validationError ||
+      (detectedModelContextWindow === parsedContextWindow &&
+        detectedAutoCompactTokenLimit === parsedAutoCompactLimit)
+    ) {
       return;
     }
 
-    setSaving(true);
-    try {
-      const saved = await saveCodexQuickConfig(
-        targetConfig.modelContextWindow ?? undefined,
-        targetConfig.autoCompactTokenLimit ?? undefined,
+    const timer = window.setTimeout(() => {
+      persistConfig(
+        {
+          modelContextWindow: parsedContextWindow,
+          autoCompactTokenLimit: parsedAutoCompactLimit,
+        },
+        experimentalModelCatalogEnabled,
+        experimentalModels,
       );
-      applyLoadedConfig(saved);
-      setNotice(
-        t(
-          'codex.modelProviders.quickConfig.saveSuccess',
-          '当前 Codex 配置已保存',
-        ),
-      );
-    } catch (err) {
-      setError(
-        t('codex.modelProviders.quickConfig.saveFailed', {
-          defaultValue: '保存当前 Codex 配置失败：{{error}}',
-          error: String(err),
-        }),
-      );
-    } finally {
-      setSaving(false);
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [
+    customEdited,
+    detectedAutoCompactTokenLimit,
+    detectedModelContextWindow,
+    experimentalModelCatalogEnabled,
+    experimentalModels,
+    isCustomPreset,
+    loadedConfig,
+    loading,
+    parsedAutoCompactLimit,
+    parsedContextWindow,
+    persistConfig,
+    validationError,
+  ]);
+
+  useEffect(() => {
+    if (
+      loading ||
+      !loadedConfig ||
+      !experimentalModelsEdited ||
+      experimentalModelsError ||
+      JSON.stringify(loadedConfig.experimental_model_catalog_models) ===
+        JSON.stringify(experimentalModels)
+    ) {
+      return;
     }
-  }, [applyLoadedConfig, loading, saving, t, targetConfig, validationError]);
+    const timer = window.setTimeout(() => {
+      persistConfig(
+        validationError
+          ? {
+              modelContextWindow: detectedModelContextWindow,
+              autoCompactTokenLimit: detectedAutoCompactTokenLimit,
+            }
+          : targetConfig,
+        experimentalModelCatalogEnabled,
+        experimentalModels,
+      );
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [
+    detectedAutoCompactTokenLimit,
+    detectedModelContextWindow,
+    experimentalModelCatalogEnabled,
+    experimentalModels,
+    experimentalModelsEdited,
+    experimentalModelsError,
+    loadedConfig,
+    loading,
+    persistConfig,
+    targetConfig,
+    validationError,
+  ]);
 
   return (
     <div className="modal-overlay">
@@ -366,7 +447,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
                       selectedPresetId === option.id ? 'active' : ''
                     }`}
                     onClick={() => handlePresetChange(option.id)}
-                    disabled={saving}
+                    disabled={loading}
                   >
                     <span className="codex-quick-config-preset-btn__label">{option.label}</span>
                     <span className="codex-quick-config-preset-btn__desc">{option.desc}</span>
@@ -398,9 +479,10 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
                 onChange={(event) => {
                   setNotice(null);
                   setError(null);
+                  setCustomEdited(true);
                   setContextWindowInput(event.target.value);
                 }}
-                disabled={!isCustomPreset || saving}
+                disabled={!isCustomPreset || loading}
                 placeholder={String(CONTEXT_WINDOW_1M)}
               />
               <p>
@@ -433,9 +515,10 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
                 onChange={(event) => {
                   setNotice(null);
                   setError(null);
+                  setCustomEdited(true);
                   setAutoCompactLimitInput(event.target.value);
                 }}
-                disabled={!isCustomPreset || saving}
+                disabled={!isCustomPreset || loading}
                 placeholder={String(DEFAULT_AUTO_COMPACT_TOKEN_LIMIT)}
               />
               <p>
@@ -452,41 +535,90 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
               )}
             </div>
             </div>
+
+            <div className="codex-quick-config-field codex-quick-config-field--switch">
+              <div className="codex-quick-config-field__copy">
+                <label htmlFor="codex-experimental-model-catalog">
+                  {t('codex.experimentalModelCatalog.title', '实验性模型目录')}
+                </label>
+                <p>
+                  {t(
+                    'codex.experimentalModelCatalog.description',
+                    '生成包含完整官方模型与自定义实验模型的 Cockpit 受管目录；不会覆盖用户自定义目录。',
+                  )}
+                </p>
+                {experimentalModelCatalogEnabled && (
+                  <p>
+                    {t('codex.experimentalModelCatalog.enabledHint', {
+                      defaultValue: '启用后默认模型切换为 {{model}}，重启 Codex 生效。',
+                      model: experimentalModels[0]?.model_id ?? 'gpt-5.6-sol-wm',
+                    })}
+                  </p>
+                )}
+                {experimentalModelUnavailableMessage && (
+                  <div className="codex-quick-config-field__error">
+                    <CircleAlert size={14} />
+                    <span>{experimentalModelUnavailableMessage}</span>
+                  </div>
+                )}
+              </div>
+              <label className="codex-quick-config-switch">
+                <input
+                  id="codex-experimental-model-catalog"
+                  type="checkbox"
+                  checked={experimentalModelCatalogEnabled}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setError(null);
+                    setNotice(null);
+                    setExperimentalModelCatalogEnabled(enabled);
+                    const target =
+                      (isCustomPreset && !customEdited) || validationError
+                      ? {
+                          modelContextWindow: detectedModelContextWindow,
+                          autoCompactTokenLimit: detectedAutoCompactTokenLimit,
+                        }
+                      : targetConfig;
+                    persistConfig(
+                      target,
+                      enabled,
+                      experimentalModelsError
+                        ? (loadedConfig?.experimental_model_catalog_models ?? [])
+                        : experimentalModels,
+                    );
+                  }}
+                  disabled={
+                    loading ||
+                    (!experimentalModelCatalogEnabled &&
+                      !loadedConfig?.experimental_model_catalog_available)
+                  }
+                />
+                <span className="codex-quick-config-switch__slider" />
+              </label>
+            </div>
+            {experimentalModelCatalogEnabled && (
+              <CodexExperimentalModelEditor
+                models={experimentalModels}
+                onChange={(models) => {
+                  setExperimentalModels(models);
+                  setExperimentalModelsEdited(true);
+                  setError(null);
+                }}
+                onValidationChange={setExperimentalModelsError}
+                disabled={loading}
+              />
+            )}
           </div>
 
-          {quickConfigWarning && (
-            <div className="codex-quick-config-warning">
-              <CircleAlert size={15} />
-              <span>{quickConfigWarning}</span>
-            </div>
-          )}
-
-          <div className="codex-quick-config-preview">
-            <div className="codex-quick-config-preview__head">
-              <span>{t('codex.modelProviders.quickConfig.preview', '写入预览')}</span>
-              <span
-                className={`provider-save-preview-chip ${
-                  targetConfig.modelContextWindow == null &&
-                  targetConfig.autoCompactTokenLimit == null
-                    ? 'muted'
-                    : 'primary'
-                }`}
-              >
-                {targetConfig.modelContextWindow == null &&
-                targetConfig.autoCompactTokenLimit == null
-                  ? t('codex.modelProviders.quickConfig.previewRemove', '将移除')
-                  : t('codex.modelProviders.quickConfig.previewApply', '将写入')}
-              </span>
-            </div>
-            <pre>{previewText}</pre>
-          </div>
         </>
       ) : null}
 
-          {(error || notice) && (
-            <div className={`add-status ${error ? 'error' : 'success'}`}>
+          {(error || saving || notice) && (
+            <div className={`add-status ${error ? 'error' : notice ? 'success' : ''}`}>
               {error ? <CircleAlert size={16} /> : <Save size={14} />}
-              <span>{error || notice}</span>
+              <span>
+                {error || (saving ? t('common.saving', '保存中...') : notice)}
+              </span>
             </div>
           )}
         </div>
@@ -502,15 +634,6 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
             {opening
               ? t('common.loading', '加载中...')
               : t('codex.modelProviders.quickConfig.openConfig', '打开文件')}
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={() => void handleSave()}
-            disabled={saving || loading || !!validationError}
-            type="button"
-          >
-            <Save size={14} />
-            {saving ? t('common.saving', '保存中...') : t('common.save', '保存')}
           </button>
         </div>
       </div>

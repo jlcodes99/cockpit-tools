@@ -1826,6 +1826,35 @@
   },
   "codex": {
     "title": "Codex Hesap Yönetimi",
+    "experimentalModelCatalog": {
+      "title": "Deneysel model kataloğu",
+      "description": "Tam resmi model listesini ve özel deneysel modelleri içeren Cockpit yönetimli bir katalog oluşturur; kullanıcı kataloğunun üzerine yazmaz.",
+      "enabledHint": "{{model}} modelini varsayılan yapar. Uygulamak için Codex’i yeniden başlatın.",
+      "models": {
+        "title": "Model listesi",
+        "model": "Deneysel model",
+        "default": "Varsayılan model",
+        "add": "Model ekle",
+        "remove": "Modeli kaldır",
+        "setDefault": "Varsayılan yap",
+        "modelId": "Model kimliği",
+        "displayName": "Görünen ad",
+        "inheritHint": "Modeller gpt-5.6-sol modelinin tüm yetenek alanlarını devralır. İlk öğe aynı zamanda varsayılan modeldir.",
+        "validation": {
+          "required": "En az bir deneysel model bırakın.",
+          "modelId": "Model kimlikleri yalnızca harf, sayı, nokta, kısa çizgi, alt çizgi, eğik çizgi ve iki nokta içerebilir.",
+          "displayName": "En fazla 100 karakterlik bir görünen ad girin.",
+          "duplicate": "Model kimlikleri benzersiz olmalıdır.",
+          "reserved": "Bu model kimliği resmi bir modelle çakışıyor. Farklı bir kimlik kullanın."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "models_cache.json bulunamadı.",
+        "modelNotCached": "Yerel önbellekte gpt-5.6-sol-wm yok.",
+      "catalogConflict": "Başka bir model_catalog_json zaten yapılandırılmış ve üzerine yazılmayacak.",
+      "cacheInvalid": "models_cache.json okunamıyor veya biçimi geçersiz."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Kota",

@@ -1826,6 +1826,35 @@
   },
   "codex": {
     "title": "Quản lý tài khoản Codex",
+    "experimentalModelCatalog": {
+      "title": "Danh mục thử nghiệm",
+      "description": "Tạo danh mục do Cockpit quản lý gồm đầy đủ mô hình chính thức và các mô hình thử nghiệm tùy chỉnh mà không ghi đè danh mục tùy chỉnh.",
+      "enabledHint": "Đặt {{model}} làm mô hình mặc định. Khởi động lại Codex để áp dụng.",
+      "models": {
+        "title": "Danh sách mô hình",
+        "model": "Mô hình thử nghiệm",
+        "default": "Mô hình mặc định",
+        "add": "Thêm mô hình",
+        "remove": "Xóa mô hình",
+        "setDefault": "Đặt làm mặc định",
+        "modelId": "ID mô hình",
+        "displayName": "Tên hiển thị",
+        "inheritHint": "Mô hình kế thừa toàn bộ trường khả năng của gpt-5.6-sol. Mục đầu tiên cũng là mô hình mặc định.",
+        "validation": {
+          "required": "Giữ lại ít nhất một mô hình thử nghiệm.",
+          "modelId": "ID mô hình chỉ được chứa chữ cái, chữ số, dấu chấm, dấu gạch ngang, dấu gạch dưới, dấu gạch chéo và dấu hai chấm.",
+          "displayName": "Nhập tên hiển thị không quá 100 ký tự.",
+          "duplicate": "ID mô hình không được trùng lặp.",
+          "reserved": "ID mô hình này trùng với mô hình chính thức. Hãy dùng ID khác."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "Không tìm thấy models_cache.json.",
+        "modelNotCached": "Bộ nhớ đệm cục bộ không có gpt-5.6-sol-wm.",
+      "catalogConflict": "Một model_catalog_json khác đã được cấu hình và sẽ không bị ghi đè.",
+      "cacheInvalid": "Không thể đọc models_cache.json hoặc định dạng không hợp lệ."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Hạn mức",

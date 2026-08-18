@@ -22,6 +22,7 @@ import type {
   CodexSessionImportPreview,
   CodexSessionImportSummary,
   CodexQuickConfig,
+  CodexExperimentalModelDefinition,
   CodexAppSpeed,
 } from "../types/codex";
 import type { InstanceLaunchMode, InstanceProfile } from "../types/instance";
@@ -126,11 +127,15 @@ export async function saveCodexInstanceQuickConfig(
   instanceId: string,
   modelContextWindow?: number,
   autoCompactTokenLimit?: number,
+  experimentalModelCatalogEnabled?: boolean,
+  experimentalModelCatalogModels?: CodexExperimentalModelDefinition[],
 ): Promise<CodexQuickConfig> {
   return await invoke("codex_save_instance_quick_config", {
     instanceId,
     modelContextWindow: modelContextWindow ?? null,
     autoCompactTokenLimit: autoCompactTokenLimit ?? null,
+    experimentalModelCatalogEnabled: experimentalModelCatalogEnabled ?? null,
+    experimentalModelCatalogModels: experimentalModelCatalogModels ?? null,
   });
 }
 

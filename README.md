@@ -461,6 +461,7 @@ QQ 交流群、微信群或新建的 Telegram 畅聊群都可以加入。
 - Codex Agent Identity runtime 注册协议与 Ed25519 密钥格式参考官方实现：[openai/codex](https://github.com/openai/codex)（Apache-2.0）
 - Codex、Claude CLI 与 Claude Desktop Gateway 第三方供应商预设、模型映射，以及从会话 JSONL 汇总真实用量的方向参考：[CC Switch](https://github.com/farion1231/cc-switch)
 - Codex 模型目录与前端模型显示思路参考：[CodexPlusPlus](https://github.com/BigPizzaV3/CodexPlusPlus)
+- Codex 受管模型目录中展示实验模型的思路参考：[gptsolwm](https://github.com/yynxxxxx/gptsolwm)
 - Claude 可选登录 helper 运行时基于：[Electron](https://github.com/electron/electron)
 - 感谢 [@longwQaQ](https://github.com/longwQaQ) 贡献 Codex 模型供应商 Responses WebSocket 配置能力（[#1512](https://github.com/jlcodes99/cockpit-tools/pull/1512)）。
 - 感谢 [@sqmw](https://github.com/sqmw) 在 Trae CN 账号支持方向上的贡献（OAuth/本机导入、pay v2 配额与速通展示、CN 产品类型等实现思路），已整合进统一 Trae 套件（[#1281](https://github.com/jlcodes99/cockpit-tools/pull/1281)）。

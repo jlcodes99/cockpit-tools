@@ -60,6 +60,31 @@ pub fn build_codex_client_models_response(model_ids: &[String]) -> Value {
     json!({ "models": models })
 }
 
+pub fn build_codex_client_models_response_with_custom_models(
+    model_ids: &[String],
+    custom_models: &[(String, String)],
+) -> Value {
+    let mut models = model_ids
+        .iter()
+        .enumerate()
+        .map(|(index, model_id)| build_codex_client_model(model_id, index))
+        .collect::<Vec<_>>();
+    models.extend(
+        custom_models
+            .iter()
+            .enumerate()
+            .map(|(index, (model_id, display_name))| {
+                build_codex_client_custom_model(
+                    model_id,
+                    display_name,
+                    "gpt-5.6-sol",
+                    1000 + model_ids.len() + index,
+                )
+            }),
+    );
+    json!({ "models": models })
+}
+
 pub(crate) fn managed_codex_model_ids() -> Vec<String> {
     codex_client_model_catalog()
         .get("model_overrides")
@@ -301,6 +326,33 @@ fn build_codex_client_model(model_id: &str, index: usize) -> Value {
     model
 }
 
+fn build_codex_client_custom_model(
+    model_id: &str,
+    display_name: &str,
+    base_model_id: &str,
+    priority: usize,
+) -> Value {
+    let (mut model, _) = codex_client_model_template(base_model_id);
+    let object = model
+        .as_object_mut()
+        .expect("Codex client model template should be a JSON object");
+    object.insert("slug".to_string(), Value::String(model_id.to_string()));
+    object.insert(
+        "display_name".to_string(),
+        Value::String(display_name.to_string()),
+    );
+    object.insert(
+        "description".to_string(),
+        Value::String(display_name.to_string()),
+    );
+    object.insert("priority".to_string(), json!(priority));
+    object.insert("visibility".to_string(), Value::String("list".to_string()));
+    object.insert("supported_in_api".to_string(), Value::Bool(true));
+    object.insert("availability_nux".to_string(), Value::Null);
+    object.insert("upgrade".to_string(), Value::Null);
+    model
+}
+
 fn codex_client_model_catalog() -> &'static Value {
     static CATALOG: OnceLock<Value> = OnceLock::new();
     CATALOG.get_or_init(|| {
@@ -365,6 +417,7 @@ fn display_name_for_model(model_id: &str) -> String {
         "gpt-5-codex-mini" => "GPT-5 Codex Mini".to_string(),
         "gpt-5.4" => "GPT-5.4".to_string(),
         "gpt-5.4-mini" => "GPT-5.4 Mini".to_string(),
+        "gpt-5.6-sol-wm" => "GPT-5.6 Sol WM".to_string(),
         "gpt-5.3-codex" => "GPT-5.3 Codex".to_string(),
         "gpt-5.3-codex-spark" => "GPT-5.3 Codex Spark".to_string(),
         "gpt-5.2" => "GPT-5.2".to_string(),
@@ -1070,6 +1123,39 @@ mod tests {
                 Some(372_000)
             );
         }
+    }
+
+    #[test]
+    fn experimental_wm_model_uses_the_expected_display_name() {
+        let response = build_codex_client_models_response(&["gpt-5.6-sol-wm".to_string()]);
+        assert_eq!(
+            response
+                .pointer("/models/0/display_name")
+                .and_then(Value::as_str),
+            Some("GPT-5.6 Sol WM")
+        );
+    }
+
+    #[test]
+    fn custom_model_inherits_sol_capabilities_and_overrides_identity() {
+        let response = build_codex_client_models_response_with_custom_models(
+            &["gpt-5.6-sol".to_string()],
+            &[("gpt-5.6-sol-wm2".to_string(), "GPT-5.6 Sol WM2".to_string())],
+        );
+        let models = response["models"].as_array().expect("models array");
+        let sol = &models[0];
+        let custom = &models[1];
+        assert_eq!(custom["slug"], "gpt-5.6-sol-wm2");
+        assert_eq!(custom["display_name"], "GPT-5.6 Sol WM2");
+        assert_eq!(custom["description"], "GPT-5.6 Sol WM2");
+        assert_eq!(custom["context_window"], sol["context_window"]);
+        assert_eq!(custom["max_context_window"], sol["max_context_window"]);
+        assert_eq!(
+            custom["supported_reasoning_levels"],
+            sol["supported_reasoning_levels"]
+        );
+        assert_eq!(custom["input_modalities"], sol["input_modalities"]);
+        assert_eq!(custom["visibility"], "list");
     }
 
     #[test]

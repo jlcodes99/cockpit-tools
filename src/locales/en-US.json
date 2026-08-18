@@ -2025,6 +2025,35 @@
   },
   "codex": {
     "title": "Codex Account",
+    "experimentalModelCatalog": {
+      "title": "Experimental model catalog",
+      "description": "Generates a Cockpit-managed catalog containing the full official model list and custom experimental models without overwriting a custom catalog.",
+      "enabledHint": "Sets {{model}} as the default model. Restart Codex to apply.",
+      "models": {
+        "title": "Model list",
+        "model": "Experimental model",
+        "default": "Default model",
+        "add": "Add model",
+        "remove": "Remove model",
+        "setDefault": "Set as default",
+        "modelId": "Model ID",
+        "displayName": "Display name",
+        "inheritHint": "Models inherit the complete capability fields of gpt-5.6-sol. The first item is also the default model.",
+        "validation": {
+          "required": "Keep at least one experimental model.",
+          "modelId": "Model IDs may contain only letters, numbers, dots, hyphens, underscores, slashes, and colons.",
+          "displayName": "Enter a display name of no more than 100 characters.",
+          "duplicate": "Model IDs must be unique.",
+          "reserved": "This model ID conflicts with an official model. Use a different ID."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "models_cache.json was not found. Start Codex once to generate the model cache; if it remains missing, this Codex version does not support this cache format.",
+        "modelNotCached": "gpt-5.6-sol-wm is not in the local cache.",
+      "catalogConflict": "Another model_catalog_json is already configured and will not be overwritten.",
+      "cacheInvalid": "models_cache.json could not be read or has an invalid format."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Quota",

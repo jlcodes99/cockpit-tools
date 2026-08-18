@@ -1826,6 +1826,35 @@
   },
   "codex": {
     "title": "Codex 계정 관리",
+    "experimentalModelCatalog": {
+      "title": "실험적 모델 카탈로그",
+      "description": "전체 공식 모델 목록과 사용자 지정 실험 모델을 포함하는 Cockpit 관리 카탈로그를 생성하며 사용자 지정 카탈로그는 덮어쓰지 않습니다.",
+      "enabledHint": "활성화하면 기본 모델이 {{model}}로 전환됩니다. Codex를 다시 시작하세요.",
+      "models": {
+        "title": "모델 목록",
+        "model": "실험 모델",
+        "default": "기본 모델",
+        "add": "모델 추가",
+        "remove": "모델 삭제",
+        "setDefault": "기본값으로 설정",
+        "modelId": "모델 ID",
+        "displayName": "표시 이름",
+        "inheritHint": "모델은 gpt-5.6-sol의 전체 기능 필드를 상속하며 목록의 첫 항목이 기본 모델입니다.",
+        "validation": {
+          "required": "실험 모델을 하나 이상 유지하세요.",
+          "modelId": "모델 ID에는 문자, 숫자, 마침표, 하이픈, 밑줄, 슬래시, 콜론만 사용할 수 있습니다.",
+          "displayName": "100자 이하의 표시 이름을 입력하세요.",
+          "duplicate": "모델 ID는 중복될 수 없습니다.",
+          "reserved": "이 모델 ID는 공식 모델과 충돌합니다. 다른 ID를 사용하세요."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "models_cache.json을 찾을 수 없습니다.",
+        "modelNotCached": "로컬 캐시에 gpt-5.6-sol-wm이 없습니다.",
+      "catalogConflict": "다른 model_catalog_json이 이미 설정되어 있어 덮어쓰지 않습니다.",
+      "cacheInvalid": "models_cache.json을 읽을 수 없거나 형식이 올바르지 않습니다."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "할당량",

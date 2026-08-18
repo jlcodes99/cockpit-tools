@@ -1873,6 +1873,35 @@
   },
   "codex": {
     "title": "Codex Account​",
+    "experimentalModelCatalog": {
+      "title": "Katalog model eksperimental",
+      "description": "Membuat katalog yang dikelola Cockpit berisi daftar model resmi lengkap dan model eksperimental khusus tanpa menimpa katalog khusus pengguna.",
+      "enabledHint": "Menetapkan {{model}} sebagai model bawaan. Mulai ulang Codex untuk menerapkan.",
+      "models": {
+        "title": "Daftar model",
+        "model": "Model eksperimental",
+        "default": "Model bawaan",
+        "add": "Tambah model",
+        "remove": "Hapus model",
+        "setDefault": "Jadikan bawaan",
+        "modelId": "ID model",
+        "displayName": "Nama tampilan",
+        "inheritHint": "Model mewarisi seluruh bidang kemampuan gpt-5.6-sol. Item pertama juga menjadi model bawaan.",
+        "validation": {
+          "required": "Pertahankan setidaknya satu model eksperimental.",
+          "modelId": "ID model hanya boleh berisi huruf, angka, titik, tanda hubung, garis bawah, garis miring, dan titik dua.",
+          "displayName": "Masukkan nama tampilan maksimal 100 karakter.",
+          "duplicate": "ID model harus unik.",
+          "reserved": "ID model ini bertentangan dengan model resmi. Gunakan ID lain."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "models_cache.json tidak ditemukan.",
+        "modelNotCached": "gpt-5.6-sol-wm tidak ada dalam cache lokal.",
+      "catalogConflict": "model_catalog_json lain sudah dikonfigurasi dan tidak akan ditimpa.",
+      "cacheInvalid": "models_cache.json tidak dapat dibaca atau formatnya tidak valid."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Kuota",

@@ -6,11 +6,21 @@ export interface CodexApiModelMapping {
   upstream_model: string;
 }
 
+export interface CodexExperimentalModelDefinition {
+  model_id: string;
+  display_name: string;
+}
+
 export interface CodexQuickConfig {
   context_window_1m: boolean;
   auto_compact_token_limit: number;
   detected_model_context_window?: number;
   detected_auto_compact_token_limit?: number;
+  experimental_model_catalog_enabled: boolean;
+  experimental_model_catalog_available: boolean;
+  experimental_model_catalog_unavailable_reason?: "catalog_conflict";
+  experimental_model_catalog_conflict?: string;
+  experimental_model_catalog_models: CodexExperimentalModelDefinition[];
 }
 
 export type CodexAppSpeed = "standard" | "fast";

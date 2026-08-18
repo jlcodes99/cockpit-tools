@@ -1079,7 +1079,11 @@ pub async fn codex_get_instance_quick_config(
     instance_id: String,
 ) -> Result<crate::models::codex::CodexQuickConfig, String> {
     let base_dir = resolve_instance_base_dir(instance_id.as_str())?;
-    modules::codex_account::read_quick_config_from_config_toml(&base_dir)
+    tauri::async_runtime::spawn_blocking(move || {
+        modules::codex_account::read_quick_config_from_config_toml(&base_dir)
+    })
+    .await
+    .map_err(|error| format!("读取 Codex 实例快捷配置后台任务失败: {}", error))?
 }
 
 #[tauri::command]
@@ -1087,13 +1091,27 @@ pub async fn codex_save_instance_quick_config(
     instance_id: String,
     model_context_window: Option<i64>,
     auto_compact_token_limit: Option<i64>,
+    experimental_model_catalog_enabled: Option<bool>,
+    experimental_model_catalog_models: Option<
+        Vec<crate::models::codex::CodexExperimentalModelDefinition>,
+    >,
 ) -> Result<crate::models::codex::CodexQuickConfig, String> {
     let base_dir = resolve_instance_base_dir(instance_id.as_str())?;
-    modules::codex_account::save_quick_config_for_base_dir(
-        &base_dir,
-        model_context_window,
-        auto_compact_token_limit,
-    )
+    let saved = tauri::async_runtime::spawn_blocking(move || {
+        let saved = modules::codex_account::save_quick_config_for_base_dir(
+            &base_dir,
+            model_context_window,
+            auto_compact_token_limit,
+            experimental_model_catalog_enabled,
+            experimental_model_catalog_models,
+        )?;
+        modules::codex_local_access::refresh_api_service_experimental_model_ids();
+        Ok::<crate::models::codex::CodexQuickConfig, String>(saved)
+    })
+    .await
+    .map_err(|error| format!("保存 Codex 实例快捷配置后台任务失败: {}", error))??;
+    modules::codex_local_access::trigger_gateway_reload_in_background("实验模型目录已更新");
+    Ok(saved)
 }
 
 #[tauri::command]

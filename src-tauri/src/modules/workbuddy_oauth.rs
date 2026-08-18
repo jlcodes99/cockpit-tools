@@ -684,10 +684,13 @@ pub async fn fetch_enterprise_user_usage(
         .map_err(|e| format!("请求 enterprise user usage 失败:{}", e))?;
 
     let status_code = resp.status();
-    let body: Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("解析 enterprise user usage 响应失败:{} (http={})", e, status_code.as_u16()))?;
+    let body: Value = resp.json().await.map_err(|e| {
+        format!(
+            "解析 enterprise user usage 响应失败:{} (http={})",
+            e,
+            status_code.as_u16()
+        )
+    })?;
 
     if !status_code.is_success() {
         let message = body
@@ -720,19 +723,11 @@ pub async fn fetch_enterprise_user_usage(
 }
 
 /// 将企业用量响应包装成前端可识别的 get-user-resource 结构
-pub fn wrap_enterprise_usage_as_resource(
-    usage_body: &Value,
-) -> Value {
+pub fn wrap_enterprise_usage_as_resource(usage_body: &Value) -> Value {
     let data = usage_body.get("data").cloned().unwrap_or_else(|| json!({}));
     // credit 为周期内已使用积分，剩余 = limitNum - credit
-    let credit = data
-        .get("credit")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
-    let limit_num = data
-        .get("limitNum")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
+    let credit = data.get("credit").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let limit_num = data.get("limitNum").and_then(|v| v.as_f64()).unwrap_or(0.0);
     let remain = (limit_num - credit).max(0.0);
     let cycle_start_time = data
         .get("cycleStartTime")

@@ -4111,9 +4111,7 @@ pub fn load_user_memory() -> Result<modules::user_memory::UserMemory, String> {
 }
 
 #[tauri::command]
-pub fn mark_user_memory_dismissed(
-    id: String,
-) -> Result<modules::user_memory::UserMemory, String> {
+pub fn mark_user_memory_dismissed(id: String) -> Result<modules::user_memory::UserMemory, String> {
     modules::user_memory::mark_user_memory_dismissed(&id)
 }
 

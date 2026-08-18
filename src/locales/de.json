@@ -1826,6 +1826,35 @@
   },
   "codex": {
     "title": "Codex-Konten verwalten",
+    "experimentalModelCatalog": {
+      "title": "Experimenteller Modellkatalog",
+      "description": "Erstellt einen von Cockpit verwalteten Katalog mit der vollständigen offiziellen Modellliste und eigenen experimentellen Modellen, ohne einen benutzerdefinierten Katalog zu überschreiben.",
+      "enabledHint": "Legt {{model}} als Standardmodell fest. Starten Sie Codex danach neu.",
+      "models": {
+        "title": "Modellliste",
+        "model": "Experimentelles Modell",
+        "default": "Standardmodell",
+        "add": "Modell hinzufügen",
+        "remove": "Modell entfernen",
+        "setDefault": "Als Standard festlegen",
+        "modelId": "Modell-ID",
+        "displayName": "Anzeigename",
+        "inheritHint": "Modelle übernehmen alle Funktionsfelder von gpt-5.6-sol. Der erste Eintrag ist zugleich das Standardmodell.",
+        "validation": {
+          "required": "Mindestens ein experimentelles Modell muss erhalten bleiben.",
+          "modelId": "Modell-IDs dürfen nur Buchstaben, Zahlen, Punkte, Bindestriche, Unterstriche, Schrägstriche und Doppelpunkte enthalten.",
+          "displayName": "Geben Sie einen Anzeigenamen mit höchstens 100 Zeichen ein.",
+          "duplicate": "Modell-IDs müssen eindeutig sein.",
+          "reserved": "Diese Modell-ID kollidiert mit einem offiziellen Modell. Verwenden Sie eine andere ID."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "models_cache.json wurde nicht gefunden.",
+        "modelNotCached": "gpt-5.6-sol-wm ist nicht im lokalen Cache enthalten.",
+      "catalogConflict": "Ein anderes model_catalog_json ist bereits konfiguriert und wird nicht überschrieben.",
+      "cacheInvalid": "models_cache.json kann nicht gelesen werden oder hat ein ungültiges Format."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Kontingent",

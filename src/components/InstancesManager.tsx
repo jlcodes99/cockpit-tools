@@ -37,7 +37,10 @@ import {
   InstanceProfile,
 } from "../types/instance";
 import type { PlatformId } from "../types/platform";
-import type { CodexQuickConfig } from "../types/codex";
+import type {
+  CodexExperimentalModelDefinition,
+  CodexQuickConfig,
+} from "../types/codex";
 import {
   FileCorruptedModal,
   parseFileCorruptedError,
@@ -47,6 +50,7 @@ import { ModalErrorMessage, useModalErrorState } from "./ModalErrorMessage";
 import { scrollElementIntoView } from "../utils/reducedMotion";
 import { useEscClose } from "../hooks/useEscClose";
 import { useEnterConfirm } from "../hooks/useEnterConfirm";
+import { CodexExperimentalModelEditor } from "./codex/CodexExperimentalModelEditor";
 import type { InstanceStoreState } from "../stores/createInstanceStore";
 import { showInstanceFloatingCardWindow } from "../services/floatingCardService";
 import {
@@ -62,6 +66,7 @@ import {
 import { CodexSpeedSelect } from "./codex/CodexSpeedSelect";
 import { SingleSelectDropdown } from "./SingleSelectDropdown";
 import type { CodexAppSpeed } from "../types/codex";
+import { getCodexExperimentalModelErrorMessage } from "../utils/codexExperimentalModel";
 
 type MessageState = { text: string; tone?: "error" };
 type AccountLike = {
@@ -716,6 +721,16 @@ export function InstancesManager<TAccount extends AccountLike>({
   ] = useState(String(CONTEXT_WINDOW_1M));
   const [formCodexQuickCompactLimitInput, setFormCodexQuickCompactLimitInput] =
     useState(String(DEFAULT_AUTO_COMPACT_TOKEN_LIMIT));
+  const [
+    formExperimentalModelCatalogEnabled,
+    setFormExperimentalModelCatalogEnabled,
+  ] = useState(false);
+  const [formExperimentalModels, setFormExperimentalModels] = useState<
+    CodexExperimentalModelDefinition[]
+  >([]);
+  const [formExperimentalModelsError, setFormExperimentalModelsError] = useState<string | null>(
+    null,
+  );
   const [formCodexQuickConfigLoading, setFormCodexQuickConfigLoading] =
     useState(false);
   const [formCodexQuickConfigError, setFormCodexQuickConfigError] = useState<
@@ -1066,6 +1081,9 @@ export function InstancesManager<TAccount extends AccountLike>({
     setFormCodexQuickCompactLimitInput(
       String(DEFAULT_AUTO_COMPACT_TOKEN_LIMIT),
     );
+    setFormExperimentalModelCatalogEnabled(false);
+    setFormExperimentalModels([]);
+    setFormExperimentalModelsError(null);
     setFormCodexQuickConfigLoading(false);
     setFormCodexQuickConfigError(null);
     setFormCodexOpenConfigLoading(false);
@@ -1133,6 +1151,9 @@ export function InstancesManager<TAccount extends AccountLike>({
     setFormCodexQuickCompactLimitInput(
       String(DEFAULT_AUTO_COMPACT_TOKEN_LIMIT),
     );
+    setFormExperimentalModelCatalogEnabled(false);
+    setFormExperimentalModels([]);
+    setFormExperimentalModelsError(null);
     setFormCodexQuickConfigLoading(isCodexApp);
     setFormCodexQuickConfigError(null);
     setFormCodexOpenConfigLoading(false);
@@ -1268,6 +1289,17 @@ export function InstancesManager<TAccount extends AccountLike>({
       return;
     }
 
+    if (
+      editing &&
+      isCodexApp &&
+      formExperimentalModelCatalogEnabled &&
+      formExperimentalModelsError
+    ) {
+      setFormError(formExperimentalModelsError);
+      setFormErrorTick((prev) => prev + 1);
+      return;
+    }
+
     try {
       const nextLaunchMode = supportsLaunchModeSelect
         ? formLaunchMode
@@ -1310,6 +1342,8 @@ export function InstancesManager<TAccount extends AccountLike>({
             editing.id,
             formCodexQuickTargetConfig.modelContextWindow ?? undefined,
             formCodexQuickTargetConfig.autoCompactTokenLimit ?? undefined,
+            formExperimentalModelCatalogEnabled,
+            formExperimentalModels,
           );
         }
         setMessage({ text: t("instances.messages.updated", "实例已更新") });
@@ -1339,7 +1373,8 @@ export function InstancesManager<TAccount extends AccountLike>({
       }
       closeModal();
     } catch (e) {
-      setFormError(String(e));
+      setFormError(getCodexExperimentalModelErrorMessage(t, e) ?? String(e));
+      setFormErrorTick((prev) => prev + 1);
     } finally {
       setActionLoading(null);
     }
@@ -1852,6 +1887,11 @@ export function InstancesManager<TAccount extends AccountLike>({
           detectedAutoCompactTokenLimit ?? DEFAULT_AUTO_COMPACT_TOKEN_LIMIT,
         ),
       );
+      setFormExperimentalModelCatalogEnabled(
+        nextConfig.experimental_model_catalog_enabled,
+      );
+      setFormExperimentalModels(nextConfig.experimental_model_catalog_models);
+      setFormExperimentalModelsError(null);
     },
     [],
   );
@@ -1918,15 +1958,33 @@ export function InstancesManager<TAccount extends AccountLike>({
       formCodexQuickDetectedModelContextWindow !==
         formCodexQuickTargetConfig.modelContextWindow ||
       formCodexQuickDetectedAutoCompactTokenLimit !==
-        formCodexQuickTargetConfig.autoCompactTokenLimit
+        formCodexQuickTargetConfig.autoCompactTokenLimit ||
+      formCodexQuickConfig.experimental_model_catalog_enabled !==
+        formExperimentalModelCatalogEnabled ||
+      JSON.stringify(formCodexQuickConfig.experimental_model_catalog_models) !==
+        JSON.stringify(formExperimentalModels)
     );
   }, [
     formCodexQuickConfig,
     formCodexQuickDetectedAutoCompactTokenLimit,
     formCodexQuickDetectedModelContextWindow,
+    formExperimentalModelCatalogEnabled,
+    formExperimentalModels,
     formCodexQuickTargetConfig.autoCompactTokenLimit,
     formCodexQuickTargetConfig.modelContextWindow,
   ]);
+  const formExperimentalModelUnavailableMessage = useMemo(() => {
+    const reason =
+      formCodexQuickConfig?.experimental_model_catalog_unavailable_reason;
+    if (!reason) return null;
+    if (reason === "catalog_conflict") {
+      return t(
+        "codex.experimentalModelCatalog.unavailable.catalogConflict",
+        "已有其他 model_catalog_json，禁止覆盖。",
+      );
+    }
+    return null;
+  }, [formCodexQuickConfig, t]);
   const formCodexQuickConfigWarning = useMemo(() => {
     if (!formCodexQuickConfig) return null;
     if (
@@ -3380,6 +3438,68 @@ export function InstancesManager<TAccount extends AccountLike>({
                           )}
                         </div>
                       </div>
+                      <div className="instance-codex-experimental-model">
+                        <div className="instance-codex-experimental-model__copy">
+                          <label htmlFor="instance-codex-experimental-model-catalog">
+                            {t(
+                              "codex.experimentalModelCatalog.title",
+                              "实验性模型目录",
+                            )}
+                          </label>
+                          <p className="form-hint">
+                            {t(
+                              "codex.experimentalModelCatalog.description",
+                              "生成包含完整官方模型与自定义实验模型的 Cockpit 受管目录；不会覆盖用户自定义目录。",
+                            )}
+                          </p>
+                          {formExperimentalModelCatalogEnabled && (
+                            <p className="form-hint">
+                              {t("codex.experimentalModelCatalog.enabledHint", {
+                                defaultValue:
+                                  "启用后默认模型切换为 {{model}}，重启 Codex 生效。",
+                                model:
+                                  formExperimentalModels[0]?.model_id ??
+                                  "gpt-5.6-sol-wm",
+                              })}
+                            </p>
+                          )}
+                          {formExperimentalModelUnavailableMessage && (
+                            <div className="form-error instance-codex-experimental-model__error">
+                              {formExperimentalModelUnavailableMessage}
+                            </div>
+                          )}
+                        </div>
+                        <label className="instance-codex-experimental-model__switch">
+                          <input
+                            id="instance-codex-experimental-model-catalog"
+                            type="checkbox"
+                            checked={formExperimentalModelCatalogEnabled}
+                            onChange={(event) => {
+                              setFormCodexQuickConfigError(null);
+                              setFormExperimentalModelCatalogEnabled(
+                                event.target.checked,
+                              );
+                            }}
+                            disabled={
+                              actionLoading === editing.id ||
+                              (!formExperimentalModelCatalogEnabled &&
+                                !formCodexQuickConfig?.experimental_model_catalog_available)
+                            }
+                          />
+                          <span className="instance-codex-experimental-model__switch-track" />
+                        </label>
+                      </div>
+                      {formExperimentalModelCatalogEnabled && (
+                        <CodexExperimentalModelEditor
+                          models={formExperimentalModels}
+                          onChange={(models) => {
+                            setFormExperimentalModels(models);
+                            setFormCodexQuickConfigError(null);
+                          }}
+                          onValidationChange={setFormExperimentalModelsError}
+                          disabled={actionLoading === editing.id}
+                        />
+                      )}
                       {formCodexQuickConfigWarning && (
                         <p className="form-hint warning">
                           {formCodexQuickConfigWarning}

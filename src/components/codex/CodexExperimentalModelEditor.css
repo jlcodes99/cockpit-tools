@@ -1,0 +1,137 @@
+.codex-experimental-model-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.codex-experimental-model-editor__header,
+.codex-experimental-model-editor__row-head,
+.codex-experimental-model-editor__actions {
+  display: flex;
+  align-items: center;
+}
+
+.codex-experimental-model-editor__header,
+.codex-experimental-model-editor__row-head {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.codex-experimental-model-editor__header > span,
+.codex-experimental-model-editor__row-head > span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.codex-experimental-model-editor__row-head > span.is-default {
+  color: var(--primary);
+}
+
+.codex-experimental-model-editor__actions {
+  gap: 4px;
+}
+
+.codex-experimental-model-editor__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.codex-experimental-model-editor__icon-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.codex-experimental-model-editor__icon-btn.is-danger:hover:not(:disabled) {
+  border-color: var(--danger, #ef4444);
+  color: var(--danger, #ef4444);
+}
+
+.codex-experimental-model-editor__icon-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.codex-experimental-model-editor__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.codex-experimental-model-editor__row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border-light);
+}
+
+.codex-experimental-model-editor__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.codex-experimental-model-editor__fields label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.codex-experimental-model-editor__fields label > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.codex-experimental-model-editor__fields input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.codex-experimental-model-editor__fields input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+.codex-experimental-model-editor__fields input.has-error {
+  border-color: var(--danger, #ef4444);
+}
+
+.codex-experimental-model-editor__error {
+  color: var(--danger, #ef4444);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.codex-experimental-model-editor__hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .codex-experimental-model-editor__fields {
+    grid-template-columns: 1fr;
+  }
+}

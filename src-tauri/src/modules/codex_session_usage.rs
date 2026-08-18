@@ -267,9 +267,7 @@ impl SessionUsageStore {
 
     fn open_conn(&self) -> Result<Connection, String> {
         if let Some(parent) = self.db_path.parent() {
-            fs::create_dir_all(parent).map_err(|error| {
-                format!("创建会话用量目录失败: {error}")
-            })?;
+            fs::create_dir_all(parent).map_err(|error| format!("创建会话用量目录失败: {error}"))?;
         }
         let conn = Connection::open(&self.db_path)
             .map_err(|error| format!("打开会话用量库失败: {error}"))?;
@@ -344,18 +342,11 @@ impl SessionUsageStore {
         for instance in instances {
             let files = collect_codex_session_files(&instance.data_dir);
             let rollout_index = build_rollout_index(&files);
-            result.files_scanned = result
-                .files_scanned
-                .saturating_add(files.len() as u32);
+            result.files_scanned = result.files_scanned.saturating_add(files.len() as u32);
 
             for file_path in &files {
-                match sync_single_file(
-                    &mut conn,
-                    instance,
-                    file_path,
-                    &rollout_index,
-                    &mut cursors,
-                ) {
+                match sync_single_file(&mut conn, instance, file_path, &rollout_index, &mut cursors)
+                {
                     Ok(file_result) => {
                         result.imported = result.imported.saturating_add(file_result.imported);
                         result.skipped = result.skipped.saturating_add(file_result.skipped);
@@ -372,26 +363,17 @@ impl SessionUsageStore {
                             file_path.display()
                         );
                         if result.errors.len() < 20 {
-                            result.errors.push(format!(
-                                "{}: {error}",
-                                file_path.display()
-                            ));
+                            result
+                                .errors
+                                .push(format!("{}: {error}", file_path.display()));
                         }
                     }
                 }
             }
         }
 
-        set_meta(
-            &conn,
-            "last_synced_at",
-            &now_unix_seconds().to_string(),
-        )?;
-        set_meta(
-            &conn,
-            "last_error_count",
-            &result.errors.len().to_string(),
-        )?;
+        set_meta(&conn, "last_synced_at", &now_unix_seconds().to_string())?;
+        set_meta(&conn, "last_error_count", &result.errors.len().to_string())?;
         set_meta(
             &conn,
             "last_deferred_files",
@@ -425,14 +407,7 @@ impl SessionUsageStore {
         }
 
         let totals = query_totals(&conn, &where_sql, &params)?;
-        let by_model = query_breakdown(
-            &conn,
-            &where_sql,
-            &params,
-            "model",
-            None,
-            &instance_names,
-        )?;
+        let by_model = query_breakdown(&conn, &where_sql, &params, "model", None, &instance_names)?;
         let by_instance = query_breakdown(
             &conn,
             &where_sql,
@@ -483,9 +458,7 @@ impl SessionUsageStore {
             deferred_files: get_meta_i64(&conn, "last_deferred_files")
                 .unwrap_or(0)
                 .max(0) as u32,
-            last_error_count: get_meta_i64(&conn, "last_error_count")
-                .unwrap_or(0)
-                .max(0) as u32,
+            last_error_count: get_meta_i64(&conn, "last_error_count").unwrap_or(0).max(0) as u32,
         })
     }
 }
@@ -600,7 +573,9 @@ fn build_rollout_index(files: &[PathBuf]) -> RolloutIndex {
 
 fn load_cursors(conn: &Connection) -> Result<HashMap<String, (i64, i64, i64)>, String> {
     let mut statement = conn
-        .prepare("SELECT file_path, last_modified, last_size, last_line_offset FROM session_log_sync")
+        .prepare(
+            "SELECT file_path, last_modified, last_size, last_line_offset FROM session_log_sync",
+        )
         .map_err(|error| format!("读取会话用量游标失败: {error}"))?;
     let rows = statement
         .query_map([], |row| {
@@ -675,9 +650,7 @@ fn sync_single_file(
         if let Some(pending) = caches.pending.get(file_path).cloned() {
             if pending.modified == file_modified && pending.size == file_size {
                 match &pending.reason {
-                    PendingReason::MissingParent(parent)
-                        if !rollout_index.contains_key(parent) =>
-                    {
+                    PendingReason::MissingParent(parent) if !rollout_index.contains_key(parent) => {
                         return Ok(FileSyncResult {
                             deferred: true,
                             ..FileSyncResult::default()
@@ -825,8 +798,7 @@ fn sync_single_file(
                 .map_err(|error| format!("准备会话用量写入失败: {error}"))?;
             for chunk in to_insert.chunks(INSERT_BATCH_SIZE) {
                 for (event, event_index) in chunk {
-                    let request_id =
-                        format!("{REQUEST_ID_PREFIX}:{root_thread_id}:{event_index}");
+                    let request_id = format!("{REQUEST_ID_PREFIX}:{root_thread_id}:{event_index}");
                     let changed = statement
                         .execute(params![
                             request_id,
@@ -1615,7 +1587,14 @@ fn local_day_key(timestamp: i64) -> String {
     Local
         .timestamp_opt(timestamp, 0)
         .single()
-        .map(|value| format!("{:04}-{:02}-{:02}", value.year(), value.month(), value.day()))
+        .map(|value| {
+            format!(
+                "{:04}-{:02}-{:02}",
+                value.year(),
+                value.month(),
+                value.day()
+            )
+        })
         .unwrap_or_default()
 }
 
@@ -1731,11 +1710,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!(
-            "{prefix}-{}-{}",
-            std::process::id(),
-            unique
-        ));
+        let dir = std::env::temp_dir().join(format!("{prefix}-{}-{}", std::process::id(), unique));
         fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -1757,7 +1732,10 @@ mod tests {
 
     #[test]
     fn normalize_model_strips_provider_and_date() {
-        assert_eq!(normalize_codex_model("OpenAI/GPT-5.4-2026-03-05"), "gpt-5.4");
+        assert_eq!(
+            normalize_codex_model("OpenAI/GPT-5.4-2026-03-05"),
+            "gpt-5.4"
+        );
         assert_eq!(normalize_codex_model("gpt-5.4-20260305"), "gpt-5.4");
     }
 
@@ -1902,9 +1880,7 @@ mod tests {
         }];
         let sync = store.sync(false, &instances).unwrap();
         assert_eq!(sync.imported, 2);
-        let report = store
-            .query(&CodexSessionUsageQuery::default())
-            .unwrap();
+        let report = store.query(&CodexSessionUsageQuery::default()).unwrap();
         assert_eq!(report.totals.input_tokens, 1_400);
         assert_eq!(report.totals.output_tokens, 35);
         assert_eq!(report.totals.request_count, 2);
@@ -1940,9 +1916,7 @@ mod tests {
         }];
         assert_eq!(store.sync(false, &instances).unwrap().imported, 1);
         assert_eq!(store.sync(false, &instances).unwrap().imported, 0);
-        let report = store
-            .query(&CodexSessionUsageQuery::default())
-            .unwrap();
+        let report = store.query(&CodexSessionUsageQuery::default()).unwrap();
         assert_eq!(report.totals.request_count, 1);
         assert_eq!(report.totals.input_tokens, 100);
         fs::remove_dir_all(&dir).ok();

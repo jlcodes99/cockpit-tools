@@ -660,16 +660,35 @@ pub fn open_codex_config_toml(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn get_codex_quick_config() -> Result<CodexQuickConfig, String> {
-    codex_account::load_current_quick_config()
+pub async fn get_codex_quick_config() -> Result<CodexQuickConfig, String> {
+    tauri::async_runtime::spawn_blocking(codex_account::load_current_quick_config)
+        .await
+        .map_err(|error| format!("读取 Codex 快捷配置后台任务失败: {}", error))?
 }
 
 #[tauri::command]
-pub fn save_codex_quick_config(
+pub async fn save_codex_quick_config(
     model_context_window: Option<i64>,
     auto_compact_token_limit: Option<i64>,
+    experimental_model_catalog_enabled: Option<bool>,
+    experimental_model_catalog_models: Option<
+        Vec<crate::models::codex::CodexExperimentalModelDefinition>,
+    >,
 ) -> Result<CodexQuickConfig, String> {
-    codex_account::save_current_quick_config(model_context_window, auto_compact_token_limit)
+    let saved = tauri::async_runtime::spawn_blocking(move || {
+        let saved = codex_account::save_current_quick_config(
+            model_context_window,
+            auto_compact_token_limit,
+            experimental_model_catalog_enabled,
+            experimental_model_catalog_models,
+        )?;
+        crate::modules::codex_local_access::refresh_api_service_experimental_model_ids();
+        Ok::<CodexQuickConfig, String>(saved)
+    })
+    .await
+    .map_err(|error| format!("保存 Codex 快捷配置后台任务失败: {}", error))??;
+    crate::modules::codex_local_access::trigger_gateway_reload_in_background("实验模型目录已更新");
+    Ok(saved)
 }
 
 #[tauri::command]
@@ -2041,10 +2060,7 @@ fn codex_model_provider_token_plan_provider(
     let host = host.to_ascii_lowercase();
     if matches!(
         host.as_str(),
-        "api.minimaxi.com"
-            | "www.minimaxi.com"
-            | "api.minimax.io"
-            | "www.minimax.io"
+        "api.minimaxi.com" | "www.minimaxi.com" | "api.minimax.io" | "www.minimax.io"
     ) {
         return Ok(Some(CodexTokenPlanProvider::MiniMax));
     }
@@ -2929,10 +2945,7 @@ fn summarize_minimax_token_plan_usage(
         .or_else(|| Some("MiniMax Token Plan".to_string()));
     let interval_total = json_f64_field(
         model,
-        &[
-            "current_interval_total_count",
-            "currentIntervalTotalCount",
-        ],
+        &["current_interval_total_count", "currentIntervalTotalCount"],
     );
     let interval_remaining = json_f64_field(
         model,
@@ -2956,10 +2969,7 @@ fn summarize_minimax_token_plan_usage(
     .or_else(|| token_plan_remaining_percent(interval_remaining, interval_total));
     let weekly_total = json_f64_field(
         model,
-        &[
-            "current_weekly_total_count",
-            "currentWeeklyTotalCount",
-        ],
+        &["current_weekly_total_count", "currentWeeklyTotalCount"],
     );
     let weekly_remaining = json_f64_field(
         model,
@@ -2983,24 +2993,15 @@ fn summarize_minimax_token_plan_usage(
     .or_else(|| token_plan_remaining_percent(weekly_remaining, weekly_total));
     let remaining_percent = interval_remaining_percent
         .or(weekly_remaining_percent)
-        .ok_or_else(|| "PROVIDER_USAGE_PARSE_FAILED: MiniMax token plan fields missing".to_string())?;
+        .ok_or_else(|| {
+            "PROVIDER_USAGE_PARSE_FAILED: MiniMax token plan fields missing".to_string()
+        })?;
     let used_percent = 100.0 - remaining_percent;
     let interval_expires_at = json_timestamp_field(model, &["end_time", "endTime"]);
-    let weekly_expires_at =
-        json_timestamp_field(model, &["weekly_end_time", "weeklyEndTime"]);
+    let weekly_expires_at = json_timestamp_field(model, &["weekly_end_time", "weeklyEndTime"]);
     let mut details = Vec::new();
-    push_usage_detail(
-        &mut details,
-        "planName",
-        "Plan",
-        plan_name.clone(),
-    );
-    push_usage_detail(
-        &mut details,
-        "modelName",
-        "Model",
-        model_name,
-    );
+    push_usage_detail(&mut details, "planName", "Plan", plan_name.clone());
+    push_usage_detail(&mut details, "modelName", "Model", model_name);
     push_usage_detail(
         &mut details,
         "remaining",
@@ -3114,8 +3115,7 @@ fn summarize_zhipu_token_plan_usage(
         return Err("PROVIDER_USAGE_PARSE_FAILED: Zhipu token limit fields missing".to_string());
     }
     limits.sort_by_key(|item| {
-        json_timestamp_field(item, &["nextResetTime", "next_reset_time"])
-            .unwrap_or(i64::MAX)
+        json_timestamp_field(item, &["nextResetTime", "next_reset_time"]).unwrap_or(i64::MAX)
     });
 
     let mut window_data = Vec::with_capacity(limits.len());
@@ -3148,15 +3148,10 @@ fn summarize_zhipu_token_plan_usage(
         "PROVIDER_USAGE_PARSE_FAILED: Zhipu token limit fields missing".to_string()
     })?;
     let remaining_percent = primary.4;
-    let plan_name = json_string_field(payload, &["level", "planName"])
-        .or_else(|| Some("ZHIPU".to_string()));
+    let plan_name =
+        json_string_field(payload, &["level", "planName"]).or_else(|| Some("ZHIPU".to_string()));
     let mut details = Vec::new();
-    push_usage_detail(
-        &mut details,
-        "planName",
-        "Plan",
-        plan_name.clone(),
-    );
+    push_usage_detail(&mut details, "planName", "Plan", plan_name.clone());
     push_usage_detail(
         &mut details,
         "remaining",
@@ -3771,10 +3766,12 @@ async fn query_token_plan_model_provider_usage(
             .header(reqwest::header::ACCEPT, "application/json");
         let response = match provider {
             CodexTokenPlanProvider::MiniMax => request.bearer_auth(key).send().await,
-            CodexTokenPlanProvider::Zhipu => request
-                .header(reqwest::header::AUTHORIZATION, key)
-                .send()
-                .await,
+            CodexTokenPlanProvider::Zhipu => {
+                request
+                    .header(reqwest::header::AUTHORIZATION, key)
+                    .send()
+                    .await
+            }
         }
         .map_err(|e| format!("PROVIDER_USAGE_NETWORK_FAILED: {}", e))?;
         let latency_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
@@ -3814,9 +3811,9 @@ async fn query_token_plan_model_provider_usage(
             Err(error) => return Err(error),
         }
     }
-    Err(last_parse_error.or(last_not_found).unwrap_or_else(|| {
-        "PROVIDER_USAGE_HTTP_404: token plan endpoint not found".to_string()
-    }))
+    Err(last_parse_error
+        .or(last_not_found)
+        .unwrap_or_else(|| "PROVIDER_USAGE_HTTP_404: token plan endpoint not found".to_string()))
 }
 
 async fn query_new_api_model_provider_usage(
@@ -4560,8 +4557,7 @@ mod tests {
             Some(CodexTokenPlanProvider::Zhipu)
         );
         assert_eq!(
-            codex_model_provider_token_plan_provider("https://example.com/v1")
-                .expect("valid URL"),
+            codex_model_provider_token_plan_provider("https://example.com/v1").expect("valid URL"),
             None
         );
     }
@@ -4653,7 +4649,14 @@ mod tests {
         assert_eq!(summary.plan_name.as_deref(), Some("pro"));
         assert_eq!(summary.remaining, Some(85.0));
         assert_eq!(summary.unit.as_deref(), Some("%"));
-        assert_eq!(summary.details.iter().find(|detail| detail.key == "expiresAt").map(|detail| detail.value.as_str()), Some("1770648402"));
+        assert_eq!(
+            summary
+                .details
+                .iter()
+                .find(|detail| detail.key == "expiresAt")
+                .map(|detail| detail.value.as_str()),
+            Some("1770648402")
+        );
         assert_eq!(summary.model_stats_count, 1);
     }
 }

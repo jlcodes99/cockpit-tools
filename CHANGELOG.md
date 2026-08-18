@@ -7,6 +7,17 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [1.3.21] - 2026-08-15
+
+### Added
+
+- **Codex now supports an optional experimental model catalog**: add and edit experimental model IDs and display names for the default profile and extra instances, with `gpt-5.6-sol-wm` / `GPT-5.6 Sol WM` provided initially. Custom experimental models are available in the Codex client and Cockpit API Service; the setting stays enabled across account-type switches and respects user-managed model catalogs.
+- **Delimited Antigravity account imports support auxiliary email addresses and Google refresh tokens**: a valid refresh token can restore the signed-in account directly, while missing or invalid tokens still preserve the password, auxiliary email, and 2FA details as a pending profile. Account exports preserve the auxiliary email as well.
+
+### Changed
+
+- **Codex settings are flatter and save immediately**: the config file, context presets, custom values, experimental models, account-switch integrations, quota display, and auto-switch controls now share the outer settings level; presets, fields, and switches persist without separate Save or Refresh buttons, and consecutive edits are saved in order.
+
 ## [1.3.20] - 2026-08-14
 
 ### Added

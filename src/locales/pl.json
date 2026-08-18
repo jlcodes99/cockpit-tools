@@ -1826,6 +1826,35 @@
   },
   "codex": {
     "title": "Zarządzanie kontami Codex",
+    "experimentalModelCatalog": {
+      "title": "Eksperymentalny katalog",
+      "description": "Tworzy katalog zarządzany przez Cockpit z pełną listą oficjalnych modeli i własnymi modelami eksperymentalnymi bez zastępowania katalogu użytkownika.",
+      "enabledHint": "Ustawia {{model}} jako model domyślny. Uruchom ponownie Codex, aby zastosować zmianę.",
+      "models": {
+        "title": "Lista modeli",
+        "model": "Model eksperymentalny",
+        "default": "Model domyślny",
+        "add": "Dodaj model",
+        "remove": "Usuń model",
+        "setDefault": "Ustaw jako domyślny",
+        "modelId": "ID modelu",
+        "displayName": "Nazwa wyświetlana",
+        "inheritHint": "Modele dziedziczą wszystkie pola możliwości gpt-5.6-sol. Pierwsza pozycja jest również modelem domyślnym.",
+        "validation": {
+          "required": "Pozostaw co najmniej jeden model eksperymentalny.",
+          "modelId": "ID modelu może zawierać tylko litery, cyfry, kropki, łączniki, podkreślenia, ukośniki i dwukropki.",
+          "displayName": "Wprowadź nazwę wyświetlaną o długości do 100 znaków.",
+          "duplicate": "ID modeli muszą być unikalne.",
+          "reserved": "To ID modelu koliduje z oficjalnym modelem. Użyj innego ID."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "Nie znaleziono pliku models_cache.json.",
+        "modelNotCached": "Lokalna pamięć podręczna nie zawiera gpt-5.6-sol-wm.",
+      "catalogConflict": "Inny model_catalog_json jest już skonfigurowany i nie zostanie nadpisany.",
+      "cacheInvalid": "Nie można odczytać models_cache.json lub plik ma nieprawidłowy format."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Limit",

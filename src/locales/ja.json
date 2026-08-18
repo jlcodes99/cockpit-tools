@@ -1826,6 +1826,35 @@
   },
   "codex": {
     "title": "Codex アカウント管理",
+    "experimentalModelCatalog": {
+      "title": "実験モデルカタログ",
+      "description": "公式モデル一覧全体とカスタム実験モデルを含む Cockpit 管理カタログを生成し、ユーザーのカスタムカタログは上書きしません。",
+      "enabledHint": "有効化すると既定モデルが {{model}} に切り替わります。Codex を再起動してください。",
+      "models": {
+        "title": "モデル一覧",
+        "model": "実験モデル",
+        "default": "既定モデル",
+        "add": "モデルを追加",
+        "remove": "モデルを削除",
+        "setDefault": "既定に設定",
+        "modelId": "モデル ID",
+        "displayName": "表示名",
+        "inheritHint": "モデルは gpt-5.6-sol の完全な機能フィールドを継承し、一覧の先頭が既定モデルになります。",
+        "validation": {
+          "required": "実験モデルを少なくとも 1 つ残してください。",
+          "modelId": "モデル ID には英字、数字、ピリオド、ハイフン、アンダースコア、スラッシュ、コロンのみ使用できます。",
+          "displayName": "100 文字以内の表示名を入力してください。",
+          "duplicate": "モデル ID は重複できません。",
+          "reserved": "このモデル ID は公式モデルと重複しています。別の ID を使用してください。"
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "models_cache.json が見つかりません。",
+        "modelNotCached": "ローカルキャッシュに gpt-5.6-sol-wm が含まれていません。",
+      "catalogConflict": "別の model_catalog_json がすでに設定されているため、上書きしません。",
+      "cacheInvalid": "models_cache.json を読み取れないか、形式が無効です。"
+      }
+    },
     "newApi": {
       "quota": {
         "available": "残高",

@@ -1826,6 +1826,35 @@
   },
   "codex": {
     "title": "Codex 帳號管理",
+    "experimentalModelCatalog": {
+      "title": "實驗性模型目錄",
+      "description": "產生包含完整官方模型與自訂實驗模型的 Cockpit 受管目錄；不會覆寫使用者自訂目錄。",
+      "enabledHint": "啟用後預設模型會切換為 {{model}}，重新啟動 Codex 才會生效。",
+      "models": {
+        "title": "模型清單",
+        "model": "實驗模型",
+        "default": "預設模型",
+        "add": "新增模型",
+        "remove": "刪除模型",
+        "setDefault": "設為預設模型",
+        "modelId": "模型 ID",
+        "displayName": "顯示名稱",
+        "inheritHint": "模型會繼承 gpt-5.6-sol 的完整能力欄位；清單第一項同時作為預設模型。",
+        "validation": {
+          "required": "至少保留一個實驗模型。",
+          "modelId": "模型 ID 只能包含字母、數字、句點、連字號、底線、斜線和冒號。",
+          "displayName": "請輸入不超過 100 個字元的顯示名稱。",
+          "duplicate": "模型 ID 不可重複。",
+          "reserved": "模型 ID 與官方模型重複，請使用其他 ID。"
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "找不到 models_cache.json。",
+        "modelNotCached": "本機快取未包含 gpt-5.6-sol-wm。",
+      "catalogConflict": "已有其他 model_catalog_json，不會覆寫。",
+      "cacheInvalid": "無法讀取 models_cache.json 或格式無效。"
+      }
+    },
     "newApi": {
       "quota": {
         "available": "額度",

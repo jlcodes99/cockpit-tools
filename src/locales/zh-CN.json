@@ -2025,6 +2025,35 @@
   },
   "codex": {
     "title": "Codex 账号管理",
+    "experimentalModelCatalog": {
+      "title": "实验性模型目录",
+      "description": "生成包含完整官方模型与自定义实验模型的 Cockpit 受管目录；不会覆盖用户自定义目录。",
+      "enabledHint": "启用后默认模型切换为 {{model}}，重启 Codex 生效。",
+      "models": {
+        "title": "模型列表",
+        "model": "实验模型",
+        "default": "默认模型",
+        "add": "添加模型",
+        "remove": "删除模型",
+        "setDefault": "设为默认模型",
+        "modelId": "模型 ID",
+        "displayName": "展示名",
+        "inheritHint": "模型继承 gpt-5.6-sol 的完整能力字段；列表第一项同时作为默认模型。",
+        "validation": {
+          "required": "至少保留一个实验模型。",
+          "modelId": "模型 ID 只能包含字母、数字、点、横线、下划线、斜杠和冒号。",
+          "displayName": "请输入不超过 100 个字符的展示名。",
+          "duplicate": "模型 ID 不能重复。",
+          "reserved": "模型 ID 与官方模型重复，请使用其他 ID。"
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "未找到 models_cache.json。请先启动一次 Codex 生成模型缓存；若仍缺失，当前 Codex 版本不支持此缓存格式。",
+        "modelNotCached": "本地缓存未包含 gpt-5.6-sol-wm。",
+      "catalogConflict": "已有其他 model_catalog_json，禁止覆盖。",
+      "cacheInvalid": "models_cache.json 无法读取或格式无效。"
+      }
+    },
     "newApi": {
       "quota": {
         "available": "额度",

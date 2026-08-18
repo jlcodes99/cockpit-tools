@@ -1826,6 +1826,35 @@
   },
   "codex": {
     "title": "Správa účtů Codex",
+    "experimentalModelCatalog": {
+      "title": "Experimentální katalog",
+      "description": "Vytvoří katalog spravovaný Cockpitem s úplným seznamem oficiálních modelů a vlastními experimentálními modely, aniž by přepsal vlastní katalog uživatele.",
+      "enabledHint": "Nastaví {{model}} jako výchozí model. Pro použití restartujte Codex.",
+      "models": {
+        "title": "Seznam modelů",
+        "model": "Experimentální model",
+        "default": "Výchozí model",
+        "add": "Přidat model",
+        "remove": "Odebrat model",
+        "setDefault": "Nastavit jako výchozí",
+        "modelId": "ID modelu",
+        "displayName": "Zobrazovaný název",
+        "inheritHint": "Modely dědí všechna pole schopností gpt-5.6-sol. První položka je také výchozím modelem.",
+        "validation": {
+          "required": "Ponechte alespoň jeden experimentální model.",
+          "modelId": "ID modelu smí obsahovat pouze písmena, číslice, tečky, pomlčky, podtržítka, lomítka a dvojtečky.",
+          "displayName": "Zadejte zobrazovaný název o délce nejvýše 100 znaků.",
+          "duplicate": "ID modelů musí být jedinečná.",
+          "reserved": "Toto ID modelu koliduje s oficiálním modelem. Použijte jiné ID."
+        }
+      },
+      "unavailable": {
+        "cacheMissing": "Soubor models_cache.json nebyl nalezen.",
+        "modelNotCached": "Místní mezipaměť neobsahuje gpt-5.6-sol-wm.",
+      "catalogConflict": "Jiný model_catalog_json je již nastaven a nebude přepsán.",
+      "cacheInvalid": "Soubor models_cache.json nelze přečíst nebo má neplatný formát."
+      }
+    },
     "newApi": {
       "quota": {
         "available": "Kvóta",
