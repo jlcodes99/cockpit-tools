@@ -518,6 +518,10 @@ fn read_antigravity_product_json_metadata(root: &Path) -> Option<AntigravityInst
         let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
             continue;
         };
+        #[cfg(any(target_os = "linux", test))]
+        if antigravity_product_json_is_explicitly_unrelated(&value) {
+            continue;
+        }
         let Some(version) = json_string_field(&value, &["ideVersion", "version"]) else {
             continue;
         };
@@ -532,6 +536,55 @@ fn read_antigravity_product_json_metadata(root: &Path) -> Option<AntigravityInst
             app_path: root.to_string_lossy().to_string(),
             source: "product.json".to_string(),
         });
+    }
+    None
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn antigravity_product_json_is_explicitly_unrelated(value: &serde_json::Value) -> bool {
+    if json_string_field(value, &["ideVersion"]).is_some() {
+        return false;
+    }
+    json_string_field(
+        value,
+        &["nameShort", "nameLong", "productName", "applicationName"],
+    )
+    .is_some_and(|name| !name.to_ascii_lowercase().contains("antigravity"))
+}
+
+fn antigravity_product_json_target(root: &Path) -> Option<&'static str> {
+    for path in antigravity_product_json_candidates(root) {
+        let Ok(content) = fs::read_to_string(path) else {
+            continue;
+        };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
+            continue;
+        };
+        let has_ide_version = json_string_field(&value, &["ideVersion"]).is_some();
+        if !has_ide_version && json_string_field(&value, &["version"]).is_none() {
+            continue;
+        }
+        let product_name = json_string_field(
+            &value,
+            &["nameShort", "nameLong", "productName", "applicationName"],
+        )
+        .map(|name| name.to_ascii_lowercase());
+        if has_ide_version
+            || product_name
+                .as_deref()
+                .is_some_and(|name| name.contains("antigravity") && name.contains("ide"))
+        {
+            return Some("antigravity_ide");
+        }
+        if product_name
+            .as_deref()
+            .is_some_and(|name| name.contains("antigravity") && !name.contains("ide"))
+        {
+            return Some("antigravity");
+        }
+        // A valid but unrelated primary product.json should not prevent the
+        // fallback layout from identifying the configured Antigravity root.
+        continue;
     }
     None
 }
@@ -769,9 +822,26 @@ pub fn get_cached_antigravity_installed_version_info_for_target(
 }
 
 fn antigravity_metadata_root_matches_target(root: &Path, target: Option<&str>) -> bool {
+    antigravity_metadata_root_matches_target_with_product_metadata(
+        root,
+        target,
+        cfg!(target_os = "linux"),
+    )
+}
+
+fn antigravity_metadata_root_matches_target_with_product_metadata(
+    root: &Path,
+    target: Option<&str>,
+    prefer_product_metadata: bool,
+) -> bool {
     let Some(target) = normalize_antigravity_metadata_target(target) else {
         return true;
     };
+    if prefer_product_metadata {
+        if let Some(metadata_target) = antigravity_product_json_target(root) {
+            return metadata_target == target;
+        }
+    }
     let value = root.to_string_lossy().to_ascii_lowercase();
     match target {
         "antigravity" => {
@@ -4133,9 +4203,10 @@ pub fn save_user_memory_list(
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_codex_quota_alert_thresholds, apply_general_config_updates,
-        lock_general_config_transaction, normalize_antigravity_metadata_root,
-        read_antigravity_product_json_metadata, UserConfig,
+        antigravity_metadata_root_matches_target_with_product_metadata,
+        antigravity_product_json_target, apply_codex_quota_alert_thresholds,
+        apply_general_config_updates, lock_general_config_transaction,
+        normalize_antigravity_metadata_root, read_antigravity_product_json_metadata, UserConfig,
     };
     use std::path::{Path, PathBuf};
     use std::sync::mpsc;
@@ -4232,6 +4303,34 @@ mod tests {
         assert_eq!(metadata.version, "9.8.7");
     }
 
+    #[test]
+    fn metadata_target_skips_unrelated_primary_product_json() {
+        let install = MetadataTestDir::new("unrelated-primary-product-json");
+        let primary = install.path().join("resources").join("app");
+        let fallback = install.path().join("app");
+        std::fs::create_dir_all(&primary).expect("create primary metadata directory");
+        std::fs::create_dir_all(&fallback).expect("create fallback metadata directory");
+        std::fs::write(
+            primary.join("product.json"),
+            r#"{"nameShort":"Other IDE","version":"1.0.0"}"#,
+        )
+        .expect("write unrelated primary product metadata");
+        std::fs::write(
+            fallback.join("product.json"),
+            r#"{"nameShort":"Antigravity IDE","ideVersion":"9.8.7"}"#,
+        )
+        .expect("write fallback product metadata");
+
+        assert_eq!(
+            antigravity_product_json_target(install.path()),
+            Some("antigravity_ide")
+        );
+        let metadata = read_antigravity_product_json_metadata(install.path())
+            .expect("read fallback Antigravity metadata");
+        assert_eq!(metadata.product_name, "Antigravity IDE");
+        assert_eq!(metadata.version, "9.8.7");
+    }
+
     #[cfg(unix)]
     #[test]
     fn antigravity_metadata_follows_bin_launcher_symlink_to_install_root() {
@@ -4254,6 +4353,85 @@ mod tests {
             std::fs::canonicalize(install.path()).expect("canonicalize install")
         );
         assert_eq!(metadata.version, "1.2.3");
+    }
+
+    #[test]
+    fn configured_neutral_executable_uses_product_metadata_for_ide_target() {
+        let install = MetadataTestDir::new("neutral-configured-executable");
+        write_antigravity_product_json(install.path());
+        let executable = install.path().join("MyIDE.AppImage");
+        std::fs::write(&executable, b"launcher").expect("write neutral executable");
+
+        let root = normalize_antigravity_metadata_root(&executable)
+            .expect("resolve metadata root from neutral executable");
+        assert!(
+            antigravity_metadata_root_matches_target_with_product_metadata(
+                &root,
+                Some("antigravity_ide"),
+                true,
+            )
+        );
+        assert_eq!(
+            read_antigravity_product_json_metadata(&root)
+                .expect("read configured product metadata")
+                .version,
+            "1.2.3"
+        );
+    }
+
+    #[test]
+    fn ide_version_field_classifies_metadata_without_a_product_name() {
+        let install = MetadataTestDir::new("unnamed-product");
+        let product_dir = install.path().join("resources").join("app");
+        std::fs::create_dir_all(&product_dir).expect("create unnamed product metadata directory");
+        std::fs::write(
+            product_dir.join("product.json"),
+            r#"{"ideVersion":"2.4.6"}"#,
+        )
+        .expect("write unnamed product metadata");
+
+        assert!(
+            antigravity_metadata_root_matches_target_with_product_metadata(
+                install.path(),
+                Some("antigravity_ide"),
+                true,
+            )
+        );
+        assert!(
+            !antigravity_metadata_root_matches_target_with_product_metadata(
+                install.path(),
+                Some("antigravity"),
+                true,
+            )
+        );
+    }
+
+    #[test]
+    fn product_metadata_takes_precedence_over_install_directory_spelling() {
+        let parent = MetadataTestDir::new("metadata-target-precedence");
+        let install = parent.path().join("antigravity-ide");
+        let product_dir = install.join("resources").join("app");
+        std::fs::create_dir_all(&product_dir).expect("create legacy product metadata directory");
+        std::fs::write(
+            product_dir.join("product.json"),
+            r#"{"nameShort":"Antigravity","version":"3.2.1"}"#,
+        )
+        .expect("write legacy product metadata");
+
+        assert!(
+            antigravity_metadata_root_matches_target_with_product_metadata(
+                &install,
+                Some("antigravity"),
+                true,
+            )
+        );
+        assert!(
+            !antigravity_metadata_root_matches_target_with_product_metadata(
+                &install,
+                Some("antigravity_ide"),
+                true,
+            )
+        );
     }
 
     #[test]
