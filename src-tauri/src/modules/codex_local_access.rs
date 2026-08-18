@@ -251,6 +251,13 @@ static LOCAL_ACCESS_LOGS_DB_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static PROVIDER_GATEWAY_RUNTIMES: OnceLock<TokioMutex<HashMap<String, ProviderGatewayRuntime>>> =
     OnceLock::new();
 static PROVIDER_GATEWAY_LIFECYCLE_LOCK: OnceLock<TokioMutex<()>> = OnceLock::new();
+#[cfg(test)]
+static PROVIDER_GATEWAY_TEST_FAIL_SPAWN: AtomicBool = AtomicBool::new(false);
+
+#[cfg(test)]
+pub(crate) fn set_provider_gateway_test_fail_spawn(value: bool) {
+    PROVIDER_GATEWAY_TEST_FAIL_SPAWN.store(value, Ordering::SeqCst);
+}
 static GATEWAY_ROUND_ROBIN_CURSOR: AtomicUsize = AtomicUsize::new(0);
 static UPSTREAM_HTTP_CLIENT: OnceLock<Mutex<Option<CachedUpstreamHttpClient>>> = OnceLock::new();
 static BOUND_OAUTH_QUOTA_REFRESH_FAILURES: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
@@ -450,6 +457,7 @@ struct ProviderGatewayRuntime {
     actual_bind_host: Option<String>,
     task: Option<tokio::task::JoinHandle<()>>,
     sidecar_child: Option<Child>,
+    sidecar_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17220,6 +17228,14 @@ fn provider_gateway_sidecar_dir(profile_dir: &Path, account_id: &str) -> Result<
     Ok(provider_gateway_sidecars_dir()?.join(digest))
 }
 
+fn provider_gateway_candidate_sidecar_dir(
+    profile_dir: &Path,
+    account_id: &str,
+) -> Result<PathBuf, String> {
+    Ok(provider_gateway_sidecar_dir(profile_dir, account_id)?
+        .join(format!("candidate-{}", uuid::Uuid::new_v4())))
+}
+
 fn provider_gateway_state_path(profile_dir: &Path, account_id: &str) -> Result<PathBuf, String> {
     Ok(provider_gateway_sidecar_dir(profile_dir, account_id)?
         .join(CODEX_PROVIDER_GATEWAY_STATE_FILE))
@@ -17336,6 +17352,50 @@ fn provider_gateway_default_model_for_account(account: &CodexAccount) -> String 
         .unwrap_or_default()
 }
 
+const OPENCODE_GO_DEFAULT_STARTUP_MODEL: &str = "deepseek-v4-pro";
+
+fn is_opencode_go_account(account: &CodexAccount) -> bool {
+    if account
+        .api_provider_id
+        .as_deref()
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("opencode_go"))
+    {
+        return true;
+    }
+    account
+        .api_base_url
+        .as_deref()
+        .and_then(|value| Url::parse(value.trim()).ok())
+        .is_some_and(|url| {
+            url.host_str()
+                .is_some_and(|host| host.eq_ignore_ascii_case("opencode.ai"))
+                && url
+                    .path()
+                    .trim_end_matches('/')
+                    .to_ascii_lowercase()
+                    .ends_with("/go/v1")
+        })
+}
+
+fn provider_gateway_startup_model_for_account(account: &CodexAccount) -> Option<String> {
+    if let Some(explicit) = account
+        .api_startup_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return Some(explicit.to_string());
+    }
+    if is_opencode_go_account(account)
+        && provider_gateway_models_for_account(account)
+            .iter()
+            .any(|model| model.eq_ignore_ascii_case(OPENCODE_GO_DEFAULT_STARTUP_MODEL))
+    {
+        return Some(OPENCODE_GO_DEFAULT_STARTUP_MODEL.to_string());
+    }
+    None
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProviderGatewayModelSlot {
     pub(crate) client_model: String,
@@ -17346,15 +17406,18 @@ fn preferred_provider_gateway_slot<'a>(
     account: &CodexAccount,
     slots: &'a [ProviderGatewayModelSlot],
 ) -> Option<&'a ProviderGatewayModelSlot> {
-    let startup = account
-        .api_startup_model
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    if let Some(startup) = startup {
+    if let Some(startup) = provider_gateway_startup_model_for_account(account) {
         if let Some(slot) = slots.iter().find(|slot| {
-            slot.upstream_model.eq_ignore_ascii_case(startup)
-                || slot.client_model.eq_ignore_ascii_case(startup)
+            slot.upstream_model.eq_ignore_ascii_case(&startup)
+                || slot.client_model.eq_ignore_ascii_case(&startup)
+        }) {
+            return Some(slot);
+        }
+    }
+    for preferred_model in CODEX_PROVIDER_MODEL_SHELL_POOL {
+        if let Some(slot) = slots.iter().find(|slot| {
+            slot.client_model.eq_ignore_ascii_case(preferred_model)
+                && slot.upstream_model.eq_ignore_ascii_case(preferred_model)
         }) {
             return Some(slot);
         }
@@ -17832,6 +17895,7 @@ fn provider_gateway_wire_api_for_account(account: &CodexAccount) -> String {
         "cc-api.pipellm.ai",
         "openrouter.ai",
         "api.therouter.ai",
+        "opencode.ai",
     ];
     if chat_hosts.iter().any(|pattern| host.contains(pattern)) {
         "chat_completions".to_string()
@@ -18924,38 +18988,7 @@ pub async fn activate_provider_gateway_for_dir(
     profile_dir: &Path,
     account_id: &str,
 ) -> Result<CodexLocalAccessState, String> {
-    let account_id = account_id.trim();
-    if account_id.is_empty() {
-        return Err("供应商网关账号不能为空".to_string());
-    }
-
-    let account = codex_account::load_account(account_id)
-        .ok_or_else(|| format!("供应商网关账号不存在: {}", account_id))?;
-    let (collection, key, provider_gateway) =
-        build_provider_gateway_collection_for_profile(profile_dir, &account)?;
-    let model_slots = provider_gateway_model_slots(&provider_gateway.upstream_models);
-    save_profile_takeover_backup(profile_dir, &key)?;
-    write_local_access_profile_takeover(profile_dir, &collection, Some(&key)).await?;
-    cleanup_provider_gateway_profile_model_overrides(profile_dir)?;
-    backup_current_profile_model_before_provider_gateway(
-        profile_dir,
-        &model_slots
-            .iter()
-            .map(|slot| slot.client_model.clone())
-            .collect::<Vec<_>>(),
-    )?;
-    if let Some(default_slot) = preferred_provider_gateway_slot(&account, &model_slots) {
-        write_local_access_profile_model_override(profile_dir, &default_slot.client_model)?;
-    }
-    if !model_slots.is_empty() {
-        write_provider_gateway_model_catalog_with_templates(
-            profile_dir,
-            &model_slots,
-            official_catalog_json_for_provider_gateway(&account),
-            Some(&account),
-        )?;
-    }
-    codex_account::reapply_experimental_model_policy_if_enabled(profile_dir)?;
+    ensure_provider_gateway_for_dir(profile_dir, account_id).await?;
     ensure_runtime_loaded_without_start().await?;
     let runtime = gateway_runtime().lock().await;
     Ok(build_state_snapshot(&runtime))
@@ -18965,6 +18998,11 @@ async fn spawn_provider_gateway_sidecar(
     collection: &CodexLocalAccessCollection,
     launch_config: &SidecarLaunchConfig,
 ) -> Result<(Child, tokio::task::JoinHandle<()>, String), String> {
+    #[cfg(test)]
+    if PROVIDER_GATEWAY_TEST_FAIL_SPAWN.load(Ordering::SeqCst) {
+        return Err("TEST_PROVIDER_GATEWAY_SPAWN_FAILURE".to_string());
+    }
+
     let bind_host = bind_host_for_collection(collection);
     let binary = sidecar_binary_path()?;
     let mut command = TokioCommand::new(&binary);
@@ -19081,20 +19119,15 @@ async fn spawn_provider_gateway_sidecar(
     Ok((child, task, bind_host.to_string()))
 }
 
-async fn stop_provider_gateway_runtime(runtime_key: &str) -> Option<GatewayBindEndpoint> {
-    let (child, task, endpoint) = {
-        let mut runtimes = provider_gateway_runtime_store().lock().await;
-        let Some(mut runtime) = runtimes.remove(runtime_key) else {
-            return None;
-        };
-        let endpoint = runtime
-            .actual_port
-            .zip(runtime.actual_bind_host.clone())
-            .map(|(port, bind_host)| GatewayBindEndpoint { bind_host, port });
-        (runtime.sidecar_child.take(), runtime.task.take(), endpoint)
-    };
+async fn stop_provider_gateway_runtime_value(
+    mut runtime: ProviderGatewayRuntime,
+) -> Option<GatewayBindEndpoint> {
+    let endpoint = runtime
+        .actual_port
+        .zip(runtime.actual_bind_host.clone())
+        .map(|(port, bind_host)| GatewayBindEndpoint { bind_host, port });
 
-    if let Some(mut child) = child {
+    if let Some(mut child) = runtime.sidecar_child.take() {
         match timeout(GATEWAY_SHUTDOWN_TIMEOUT, child.kill()).await {
             Ok(Ok(())) => {
                 let _ = child.wait().await;
@@ -19112,7 +19145,7 @@ async fn stop_provider_gateway_runtime(runtime_key: &str) -> Option<GatewayBindE
             }
         }
     }
-    if let Some(mut task) = task {
+    if let Some(mut task) = runtime.task.take() {
         tokio::select! {
             result = &mut task => {
                 let _ = result;
@@ -19123,7 +19156,30 @@ async fn stop_provider_gateway_runtime(runtime_key: &str) -> Option<GatewayBindE
             }
         }
     }
+    if let Some(sidecar_dir) = runtime.sidecar_dir.take() {
+        cleanup_provider_gateway_runtime_dir(&sidecar_dir);
+    }
     endpoint
+}
+
+fn cleanup_provider_gateway_runtime_dir(sidecar_dir: &Path) {
+    if let Err(error) = std::fs::remove_dir_all(sidecar_dir) {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            logger::log_codex_api_warn(&format!(
+                "[CodexLocalAccess][provider-gateway] failed to clean sidecar directory: dir={} error={}",
+                sidecar_dir.display(),
+                error
+            ));
+        }
+    }
+}
+
+async fn stop_provider_gateway_runtime(runtime_key: &str) -> Option<GatewayBindEndpoint> {
+    let runtime = {
+        let mut runtimes = provider_gateway_runtime_store().lock().await;
+        runtimes.remove(runtime_key)
+    }?;
+    stop_provider_gateway_runtime_value(runtime).await
 }
 
 pub async fn stop_provider_gateways_for_profile(profile_dir: &Path) {
@@ -19173,6 +19229,201 @@ async fn stop_all_provider_gateways_for_app_shutdown() -> Vec<GatewayBindEndpoin
     endpoints
 }
 
+const PROVIDER_GATEWAY_PROFILE_TRANSACTION_FILES: &[&str] = &[
+    CODEX_PROFILE_AUTH_FILE,
+    CODEX_PROFILE_CONFIG_FILE,
+    CODEX_LOCAL_ACCESS_AUTH_PROJECTION_FILE,
+    CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE,
+    CODEX_PROVIDER_MODEL_CATALOG_FILE,
+    CODEX_PROVIDER_MODEL_BACKUP_FILE,
+];
+
+struct ProviderGatewayProfileSnapshot {
+    files: Vec<(&'static str, Option<Vec<u8>>)>,
+}
+
+fn capture_provider_gateway_profile_snapshot(
+    profile_dir: &Path,
+) -> Result<ProviderGatewayProfileSnapshot, String> {
+    let mut files = Vec::with_capacity(PROVIDER_GATEWAY_PROFILE_TRANSACTION_FILES.len());
+    for file_name in PROVIDER_GATEWAY_PROFILE_TRANSACTION_FILES {
+        let path = profile_dir.join(file_name);
+        let content = if path.exists() {
+            Some(std::fs::read(&path).map_err(|error| {
+                format!(
+                    "read provider gateway profile snapshot failed: path={} error={}",
+                    path.display(),
+                    error
+                )
+            })?)
+        } else {
+            None
+        };
+        files.push((*file_name, content));
+    }
+    Ok(ProviderGatewayProfileSnapshot { files })
+}
+
+fn restore_provider_gateway_profile_snapshot(
+    profile_dir: &Path,
+    snapshot: &ProviderGatewayProfileSnapshot,
+) -> Result<(), String> {
+    let mut failures = Vec::new();
+    for (file_name, content) in &snapshot.files {
+        let path = profile_dir.join(file_name);
+        let result = match content {
+            Some(content) => crate::modules::atomic_write::write_bytes_atomic(&path, content),
+            None if path.exists() => std::fs::remove_file(&path).map_err(|error| {
+                format!(
+                    "remove provider gateway transaction file failed: path={} error={}",
+                    path.display(),
+                    error
+                )
+            }),
+            None => Ok(()),
+        };
+        if let Err(error) = result {
+            failures.push(format!("{}: {}", file_name, error));
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("; "))
+    }
+}
+
+async fn probe_provider_gateway_candidate(
+    collection: &CodexLocalAccessCollection,
+    bind_host: &str,
+    model_slots: &[ProviderGatewayModelSlot],
+    preferred_slot: Option<&ProviderGatewayModelSlot>,
+) -> Result<(), String> {
+    probe_sidecar_ready_once(collection, Duration::from_secs(2))
+        .await
+        .map_err(|error| format!("Provider gateway 候选健康检查失败: {}", error))?;
+
+    let Some(slot) = preferred_slot.or_else(|| model_slots.first()) else {
+        return Ok(());
+    };
+    let client =
+        build_localhost_http_client(Duration::from_secs(45), "Provider gateway 候选上游检查")?;
+    let url = format!("http://{}:{}/v1/responses", bind_host, collection.port);
+    let response = client
+        .post(url)
+        .bearer_auth(collection.api_key.trim())
+        .header(ACCEPT, "application/json")
+        .header(CONTENT_TYPE, "application/json")
+        .json(&json!({
+            "model": slot.client_model,
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": "Reply with OK."
+                        }
+                    ]
+                }
+            ],
+            "instructions": "",
+            "store": false,
+            "stream": false,
+            "max_output_tokens": 16
+        }))
+        .send()
+        .await
+        .map_err(|error| format!("Provider gateway 候选最小请求失败: {}", error))?;
+    let status = response.status();
+    if status.is_success() {
+        return Ok(());
+    }
+    let body = response.text().await.unwrap_or_default();
+    Err(format!(
+        "Provider gateway 候选最小请求失败({}): {}",
+        status.as_u16(),
+        extract_provider_gateway_test_error_message(&body)
+    ))
+}
+
+async fn commit_provider_gateway_profile(
+    profile_dir: &Path,
+    account: &CodexAccount,
+    collection: &CodexLocalAccessCollection,
+    key: &str,
+    model_slots: &[ProviderGatewayModelSlot],
+) -> Result<(), String> {
+    save_profile_takeover_backup(profile_dir, key)?;
+    write_local_access_profile_takeover(profile_dir, collection, Some(key)).await?;
+    cleanup_provider_gateway_profile_model_overrides(profile_dir)?;
+    let client_models = model_slots
+        .iter()
+        .map(|slot| slot.client_model.clone())
+        .collect::<Vec<_>>();
+    backup_current_profile_model_before_provider_gateway(profile_dir, &client_models)?;
+    if let Some(default_slot) = preferred_provider_gateway_slot(account, model_slots) {
+        write_local_access_profile_model_override(profile_dir, &default_slot.client_model)?;
+    }
+    if !model_slots.is_empty() {
+        write_provider_gateway_model_catalog_with_templates(
+            profile_dir,
+            model_slots,
+            official_catalog_json_for_provider_gateway(account),
+            Some(account),
+        )?;
+    }
+    codex_account::reapply_experimental_model_policy_if_enabled(profile_dir).map(|_| ())
+}
+
+async fn discard_provider_gateway_candidate(runtime: ProviderGatewayRuntime) {
+    if let Some(endpoint) = stop_provider_gateway_runtime_value(runtime).await {
+        if let Err(error) = wait_for_gateway_port_release(&endpoint.bind_host, endpoint.port).await
+        {
+            logger::log_codex_api_warn(&format!(
+                "[CodexLocalAccess][provider-gateway] 等待候选端口释放失败: bind={}:{} error={}",
+                endpoint.bind_host, endpoint.port, error
+            ));
+        }
+    }
+}
+
+async fn replace_provider_gateway_runtimes_for_profile(
+    profile_dir: &Path,
+    runtime_key: String,
+    runtime: ProviderGatewayRuntime,
+) {
+    let profile_prefix = format!("{}\n", normalize_profile_dir_key(profile_dir));
+    let previous_runtimes = {
+        let mut runtimes = provider_gateway_runtime_store().lock().await;
+        let previous_keys = runtimes
+            .keys()
+            .filter(|key| key.starts_with(&profile_prefix))
+            .cloned()
+            .collect::<Vec<_>>();
+        let previous = previous_keys
+            .into_iter()
+            .filter_map(|key| runtimes.remove(&key))
+            .collect::<Vec<_>>();
+        runtimes.insert(runtime_key, runtime);
+        previous
+    };
+
+    for previous in previous_runtimes {
+        if let Some(endpoint) = stop_provider_gateway_runtime_value(previous).await {
+            if let Err(error) =
+                wait_for_gateway_port_release(&endpoint.bind_host, endpoint.port).await
+            {
+                logger::log_codex_api_warn(&format!(
+                    "[CodexLocalAccess][provider-gateway] 等待旧 sidecar 端口释放失败: bind={}:{} error={}",
+                    endpoint.bind_host, endpoint.port, error
+                ));
+            }
+        }
+    }
+}
+
 pub async fn ensure_provider_gateway_for_dir(
     profile_dir: &Path,
     account_id: &str,
@@ -19188,73 +19439,79 @@ pub async fn ensure_provider_gateway_for_dir(
     let (collection, key, provider_gateway) =
         build_provider_gateway_collection_for_profile(profile_dir, &account)?;
     let model_slots = provider_gateway_model_slots(&provider_gateway.upstream_models);
-    save_profile_takeover_backup(profile_dir, &key)?;
-    write_local_access_profile_takeover(profile_dir, &collection, Some(&key)).await?;
-    cleanup_provider_gateway_profile_model_overrides(profile_dir)?;
-    backup_current_profile_model_before_provider_gateway(
-        profile_dir,
-        &model_slots
-            .iter()
-            .map(|slot| slot.client_model.clone())
-            .collect::<Vec<_>>(),
-    )?;
-    if let Some(default_slot) = preferred_provider_gateway_slot(&account, &model_slots) {
-        write_local_access_profile_model_override(profile_dir, &default_slot.client_model)?;
-    }
-    if !model_slots.is_empty() {
-        write_provider_gateway_model_catalog_with_templates(
-            profile_dir,
-            &model_slots,
-            official_catalog_json_for_provider_gateway(&account),
-            Some(&account),
-        )?;
-    }
-    codex_account::reapply_experimental_model_policy_if_enabled(profile_dir)?;
 
     let runtime_key = provider_gateway_runtime_key(profile_dir, account_id);
-    if let Some(endpoint) = stop_provider_gateway_runtime(&runtime_key).await {
-        wait_for_gateway_port_release(&endpoint.bind_host, endpoint.port).await?;
-    }
-
-    let sidecar_dir = provider_gateway_sidecar_dir(profile_dir, account_id)?;
+    let sidecar_dir = provider_gateway_candidate_sidecar_dir(profile_dir, account_id)?;
     let default_service_tier =
         crate::modules::codex_speed::get_app_speed_config_for_dir(profile_dir)
             .map(|config| codex_app_speed_service_tier(&config.speed))?;
-    let launch_config = prepare_sidecar_launch_config_in_dir(
+    let launch_config = match prepare_sidecar_launch_config_in_dir(
         &collection,
-        sidecar_dir,
+        sidecar_dir.clone(),
         HashMap::new(),
         default_service_tier,
         HashMap::new(),
     )
-    .await?;
-    if probe_sidecar_ready_once(&collection, Duration::from_millis(250))
-        .await
-        .is_ok()
+    .await
     {
-        let killed = process::kill_port_processes(collection.port)?;
-        if killed > 0 {
-            logger::log_codex_api_info(&format!(
-                "[CodexLocalAccess][provider-gateway] 已停止旧 sidecar: port={}, killed={}",
-                collection.port, killed
-            ));
+        Ok(launch_config) => launch_config,
+        Err(error) => {
+            cleanup_provider_gateway_runtime_dir(&sidecar_dir);
+            return Err(error);
         }
-        wait_for_gateway_port_release(bind_host_for_collection(&collection), collection.port)
-            .await?;
-    }
+    };
 
     let (child, task, bind_host) =
-        spawn_provider_gateway_sidecar(&collection, &launch_config).await?;
-    let mut runtimes = provider_gateway_runtime_store().lock().await;
-    runtimes.insert(
-        runtime_key,
-        ProviderGatewayRuntime {
-            actual_port: Some(collection.port),
-            actual_bind_host: Some(bind_host),
-            task: Some(task),
-            sidecar_child: Some(child),
-        },
-    );
+        match spawn_provider_gateway_sidecar(&collection, &launch_config).await {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                cleanup_provider_gateway_runtime_dir(&sidecar_dir);
+                return Err(error);
+            }
+        };
+    let candidate = ProviderGatewayRuntime {
+        actual_port: Some(collection.port),
+        actual_bind_host: Some(bind_host.clone()),
+        task: Some(task),
+        sidecar_child: Some(child),
+        sidecar_dir: Some(sidecar_dir),
+    };
+
+    if let Err(error) = probe_provider_gateway_candidate(
+        &collection,
+        &bind_host,
+        &model_slots,
+        preferred_provider_gateway_slot(&account, &model_slots),
+    )
+    .await
+    {
+        discard_provider_gateway_candidate(candidate).await;
+        return Err(error);
+    }
+
+    let snapshot = match capture_provider_gateway_profile_snapshot(profile_dir) {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            discard_provider_gateway_candidate(candidate).await;
+            return Err(error);
+        }
+    };
+    if let Err(commit_error) =
+        commit_provider_gateway_profile(profile_dir, &account, &collection, &key, &model_slots)
+            .await
+    {
+        let restore_result = restore_provider_gateway_profile_snapshot(profile_dir, &snapshot);
+        discard_provider_gateway_candidate(candidate).await;
+        return match restore_result {
+            Ok(()) => Err(commit_error),
+            Err(restore_error) => Err(format!(
+                "{}; provider gateway profile rollback failed: {}",
+                commit_error, restore_error
+            )),
+        };
+    }
+
+    replace_provider_gateway_runtimes_for_profile(profile_dir, runtime_key, candidate).await;
     Ok(())
 }
 
@@ -19319,6 +19576,7 @@ pub async fn ensure_bound_oauth_local_gateway_for_dir(
             actual_bind_host: Some(bind_host),
             task: Some(task),
             sidecar_child: Some(child),
+            sidecar_dir: None,
         },
     );
     Ok(())
@@ -27372,6 +27630,7 @@ mod tests {
         collections::{HashMap, HashSet},
         fs,
         path::PathBuf,
+        sync::atomic::Ordering,
     };
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::{TcpListener, TcpStream};
@@ -28124,6 +28383,281 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
         account.api_wire_api = Some("chat_completions".to_string());
 
         assert!(account_requires_provider_gateway(&account));
+    }
+
+    #[test]
+    fn opencode_go_without_persisted_wire_api_requires_provider_gateway() {
+        let account = CodexAccount::new_api_key(
+            "opencode-go-account".to_string(),
+            "opencode-go@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://opencode.ai/zen/go/v1".to_string()),
+            Some("opencode_go".to_string()),
+            Some("OpenCode Go".to_string()),
+            vec!["deepseek-v4-pro".to_string()],
+        );
+
+        assert_eq!(
+            super::provider_gateway_wire_api_for_account(&account),
+            "chat_completions"
+        );
+        assert!(account_requires_provider_gateway(&account));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn provider_gateway_candidate_failure_preserves_profile_files() {
+        let _env_lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let root = std::env::temp_dir().join(format!(
+            "cockpit-provider-gateway-transaction-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let data_dir = root.join("data");
+        let profile_dir = root.join("profile");
+        fs::create_dir_all(&data_dir).expect("create test data dir");
+        fs::create_dir_all(&profile_dir).expect("create test profile dir");
+
+        let previous_test_data_dir = std::env::var("COCKPIT_TOOLS_TEST_DATA_DIR").ok();
+        std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &data_dir);
+        struct TestStateGuard {
+            previous_test_data_dir: Option<String>,
+            root: PathBuf,
+        }
+        impl Drop for TestStateGuard {
+            fn drop(&mut self) {
+                super::PROVIDER_GATEWAY_TEST_FAIL_SPAWN.store(false, Ordering::SeqCst);
+                match self.previous_test_data_dir.as_deref() {
+                    Some(value) => std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", value),
+                    None => std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR"),
+                }
+                let _ = fs::remove_dir_all(&self.root);
+            }
+        }
+        let _state_guard = TestStateGuard {
+            previous_test_data_dir,
+            root,
+        };
+
+        let original_config = r#"model_provider = "existing_provider"
+model = "existing-model"
+"#;
+        let original_auth = r#"{"auth_mode":"chatgpt","tokens":{"access_token":"existing"}}"#;
+        fs::write(profile_dir.join(CODEX_PROFILE_CONFIG_FILE), original_config)
+            .expect("write original config");
+        fs::write(profile_dir.join(CODEX_PROFILE_AUTH_FILE), original_auth)
+            .expect("write original auth");
+
+        let account = CodexAccount::new_api_key(
+            "opencode-go-transaction".to_string(),
+            "opencode-go@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://opencode.ai/zen/go/v1".to_string()),
+            Some("opencode_go".to_string()),
+            Some("OpenCode Go".to_string()),
+            vec!["deepseek-v4-pro".to_string()],
+        );
+        crate::modules::codex_account::save_account(&account).expect("save test account");
+        super::PROVIDER_GATEWAY_TEST_FAIL_SPAWN.store(true, Ordering::SeqCst);
+
+        let error = super::ensure_provider_gateway_for_dir(&profile_dir, &account.id)
+            .await
+            .expect_err("candidate sidecar should fail");
+
+        assert!(error.contains("TEST_PROVIDER_GATEWAY_SPAWN_FAILURE"));
+        assert_eq!(
+            fs::read_to_string(profile_dir.join(CODEX_PROFILE_CONFIG_FILE))
+                .expect("read config after failure"),
+            original_config
+        );
+        assert_eq!(
+            fs::read_to_string(profile_dir.join(CODEX_PROFILE_AUTH_FILE))
+                .expect("read auth after failure"),
+            original_auth
+        );
+        assert!(!profile_dir.join(CODEX_PROVIDER_MODEL_CATALOG_FILE).exists());
+        assert!(!profile_dir.join(CODEX_PROVIDER_MODEL_BACKUP_FILE).exists());
+    }
+
+    #[test]
+    fn provider_gateway_profile_snapshot_restores_exact_bytes() {
+        let root = std::env::temp_dir().join(format!(
+            "cockpit-provider-gateway-snapshot-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).expect("create snapshot profile");
+        let config = b"model_provider=\"existing\"\r\n  model = \"keep-spacing\"\r\n";
+        let auth = br#"{"auth_mode":"chatgpt","custom_spacing":true}"#;
+        fs::write(root.join(CODEX_PROFILE_CONFIG_FILE), config).expect("write snapshot config");
+        fs::write(root.join(CODEX_PROFILE_AUTH_FILE), auth).expect("write snapshot auth");
+
+        let snapshot = super::capture_provider_gateway_profile_snapshot(&root)
+            .expect("capture provider gateway profile");
+        fs::write(root.join(CODEX_PROFILE_CONFIG_FILE), b"changed")
+            .expect("overwrite snapshot config");
+        fs::remove_file(root.join(CODEX_PROFILE_AUTH_FILE)).expect("remove snapshot auth");
+        fs::write(
+            root.join(CODEX_PROVIDER_MODEL_CATALOG_FILE),
+            b"transaction-created",
+        )
+        .expect("write transaction-created catalog");
+
+        super::restore_provider_gateway_profile_snapshot(&root, &snapshot)
+            .expect("restore provider gateway profile");
+
+        assert_eq!(
+            fs::read(root.join(CODEX_PROFILE_CONFIG_FILE)).expect("read restored config"),
+            config
+        );
+        assert_eq!(
+            fs::read(root.join(CODEX_PROFILE_AUTH_FILE)).expect("read restored auth"),
+            auth
+        );
+        assert!(!root.join(CODEX_PROVIDER_MODEL_CATALOG_FILE).exists());
+        fs::remove_dir_all(root).expect("cleanup snapshot profile");
+    }
+
+    #[tokio::test]
+    async fn provider_gateway_candidate_probe_authenticates_and_checks_upstream() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind candidate probe server");
+        let port = listener
+            .local_addr()
+            .expect("candidate probe address")
+            .port();
+        let server = tokio::spawn(async move {
+            let mut requests = Vec::new();
+            for expected_path in ["/v1/models", "/v1/responses"] {
+                let (mut stream, _) = listener.accept().await.expect("accept candidate probe");
+                let request = read_wakeup_test_http_request(&mut stream).await;
+                let request_line = request.lines().next().unwrap_or_default();
+                assert!(
+                    request_line.contains(expected_path),
+                    "expected {expected_path}, got {request_line}"
+                );
+                assert!(
+                    request
+                        .lines()
+                        .any(|line| line.eq_ignore_ascii_case("authorization: Bearer probe-key")),
+                    "candidate probe must use the profile bearer token"
+                );
+                let body = if expected_path == "/v1/models" {
+                    r#"{"object":"list","data":[]}"#
+                } else {
+                    r#"{"output_text":"OK"}"#
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .await
+                    .expect("write candidate probe response");
+                requests.push(request);
+            }
+            requests
+        });
+
+        let mut collection = test_local_access_collection(Vec::new());
+        collection.port = port;
+        collection.api_key = "probe-key".to_string();
+        let slots = vec![super::ProviderGatewayModelSlot {
+            client_model: "gpt-5.6-sol".to_string(),
+            upstream_model: "deepseek-v4-pro".to_string(),
+        }];
+
+        super::probe_provider_gateway_candidate(&collection, "127.0.0.1", &slots, Some(&slots[0]))
+            .await
+            .expect("candidate probe should pass");
+
+        let requests = server.await.expect("candidate probe server");
+        assert_eq!(requests.len(), 2);
+        let body = requests[1]
+            .split_once("\r\n\r\n")
+            .map(|(_, body)| body)
+            .expect("responses request body");
+        let payload: Value = serde_json::from_str(body).expect("parse responses request");
+        assert_eq!(payload["model"], "gpt-5.6-sol");
+        assert_eq!(payload["stream"], false);
+        assert_eq!(payload["store"], false);
+        assert_eq!(payload["max_output_tokens"], 16);
+        assert_eq!(payload["input"][0]["role"], "user");
+    }
+
+    #[test]
+    fn opencode_go_defaults_to_deepseek_v4_pro_startup_slot() {
+        let account = CodexAccount::new_api_key(
+            "opencode-go-default".to_string(),
+            "opencode-go@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://opencode.ai/zen/go/v1".to_string()),
+            Some("opencode_go".to_string()),
+            Some("OpenCode Go".to_string()),
+            vec![
+                "minimax-m3".to_string(),
+                "deepseek-v4-pro".to_string(),
+                "gpt-5.6-luna".to_string(),
+            ],
+        );
+        let slots = provider_gateway_model_slots(&provider_gateway_models_for_account(&account));
+        let preferred = super::preferred_provider_gateway_slot(&account, &slots)
+            .expect("OpenCode Go should have a preferred startup slot");
+
+        assert_eq!(preferred.upstream_model, "deepseek-v4-pro");
+    }
+
+    #[test]
+    fn opencode_go_explicit_startup_model_overrides_deepseek_default() {
+        let mut account = CodexAccount::new_api_key(
+            "opencode-go-explicit".to_string(),
+            "opencode-go@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://opencode.ai/zen/go/v1".to_string()),
+            Some("opencode_go".to_string()),
+            Some("OpenCode Go".to_string()),
+            vec![
+                "minimax-m3".to_string(),
+                "deepseek-v4-pro".to_string(),
+                "gpt-5.6-luna".to_string(),
+            ],
+        );
+        account.api_startup_model = Some("minimax-m3".to_string());
+        let slots = provider_gateway_model_slots(&provider_gateway_models_for_account(&account));
+        let preferred = super::preferred_provider_gateway_slot(&account, &slots)
+            .expect("explicit OpenCode Go startup model should resolve");
+
+        assert_eq!(preferred.upstream_model, "minimax-m3");
+    }
+
+    #[test]
+    fn generic_provider_prefers_high_priority_identity_shell_for_startup() {
+        let account = CodexAccount::new_api_key(
+            "generic-provider-default".to_string(),
+            "generic@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://example-provider.test/v1".to_string()),
+            Some("generic_provider".to_string()),
+            Some("Generic Provider".to_string()),
+            vec![
+                "gpt-5.2".to_string(),
+                "gpt-5.6-sol".to_string(),
+                "gpt-5.5".to_string(),
+            ],
+        );
+        let slots = provider_gateway_model_slots(&provider_gateway_models_for_account(&account));
+        let preferred = super::preferred_provider_gateway_slot(&account, &slots)
+            .expect("generic provider should select a startup slot");
+
+        assert_eq!(preferred.client_model, "gpt-5.6-sol");
+        assert_eq!(preferred.upstream_model, "gpt-5.6-sol");
     }
 
     #[test]
