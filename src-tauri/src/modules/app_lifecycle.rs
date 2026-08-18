@@ -38,6 +38,9 @@ pub fn begin_shutdown() -> bool {
     !SHUTDOWN_STARTED.swap(true, Ordering::SeqCst)
 }
 
+/// Wait until a process spawn that already passed the shutdown gate has
+/// finished its OS spawn call. The caller is responsible for applying an
+/// asynchronous timeout so the UI/event thread never blocks on this mutex.
 pub fn wait_for_in_flight_process_spawns() {
     drop(lock_process_spawn());
 }
@@ -84,6 +87,12 @@ fn cancel_system_shutdown() {
 }
 
 pub fn acquire_process_spawn_guard(program: &str) -> std::io::Result<ProcessSpawnGuard> {
+    if is_shutdown_started() {
+        return Err(Error::new(
+            ErrorKind::Interrupted,
+            format!("系统正在关闭，已取消启动 {}", program),
+        ));
+    }
     let guard = lock_process_spawn();
     if !process_spawn_allowed(is_shutdown_started()) {
         return Err(Error::new(
@@ -279,29 +288,10 @@ mod tests {
         });
 
         let shutdown_result = shutdown_result_rx.recv_timeout(Duration::from_secs(2));
-        let (wait_done_tx, wait_done_rx) = mpsc::channel();
-        let wait_thread = std::thread::spawn(move || {
-            super::wait_for_in_flight_process_spawns();
-            wait_done_tx
-                .send(())
-                .expect("test should observe spawn quiescence");
-        });
-        assert!(
-            wait_done_rx
-                .recv_timeout(Duration::from_millis(100))
-                .is_err(),
-            "cleanup waiter must stay behind the in-flight process spawn"
-        );
         release_guard_tx
             .send(())
             .expect("test should unblock spawn guard thread");
         guard_thread.join().expect("spawn guard thread should join");
-        wait_done_rx
-            .recv_timeout(Duration::from_secs(2))
-            .expect("cleanup waiter should finish after spawn guard release");
-        wait_thread
-            .join()
-            .expect("cleanup waiter thread should join");
         shutdown_thread
             .join()
             .expect("shutdown request thread should join");
@@ -312,6 +302,37 @@ mod tests {
             Ok(true),
             "shutdown initiation must not block the UI event thread"
         );
+    }
+
+    #[test]
+    fn spawn_requested_after_shutdown_does_not_wait_on_an_in_flight_spawn() {
+        let _test_guard = super::lock_lifecycle_test_state();
+        super::reset_lifecycle_state_for_test();
+
+        let in_flight_guard = super::acquire_process_spawn_guard("in-flight")
+            .expect("the initial spawn should be allowed");
+        assert!(super::begin_shutdown());
+
+        let (result_tx, result_rx) = mpsc::channel();
+        let waiting_spawn = std::thread::spawn(move || {
+            result_tx
+                .send(super::acquire_process_spawn_guard("after-shutdown").map(|_| ()))
+                .expect("test should observe the rejected spawn");
+        });
+
+        assert_eq!(
+            result_rx
+                .recv_timeout(Duration::from_millis(100))
+                .expect("a spawn after shutdown must fail without waiting")
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::Interrupted
+        );
+        waiting_spawn
+            .join()
+            .expect("rejected spawn thread should join");
+        drop(in_flight_guard);
+        super::reset_lifecycle_state_for_test();
     }
 
     #[test]

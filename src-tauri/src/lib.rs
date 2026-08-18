@@ -207,13 +207,6 @@ fn start_app_exit_cleanup(app_handle: tauri::AppHandle, exit_code: i32) {
         modules::codex_app_injection::stop_all();
 
         let mut errors = Vec::new();
-        if let Err(error) = tauri::async_runtime::spawn_blocking(
-            modules::app_lifecycle::wait_for_in_flight_process_spawns,
-        )
-        .await
-        {
-            errors.push(format!("等待正在启动的子进程结束失败: {}", error));
-        }
         if let Err(error) =
             modules::codex_local_access::shutdown_local_access_gateway_for_app_exit().await
         {
@@ -1330,21 +1323,6 @@ pub fn run() {
                 {
                     api.prevent_exit();
                     modules::logger::log_info("[Window] 主窗口已销毁，应用继续在托盘运行");
-                } else if *code == Some(tauri::RESTART_EXIT_CODE) {
-                    modules::app_lifecycle::begin_shutdown();
-                    modules::codex_app_injection::stop_all();
-                    tauri::async_runtime::spawn(async {
-                        if let Err(error) =
-                            modules::codex_local_access::shutdown_local_access_gateway_for_app_exit(
-                            )
-                            .await
-                        {
-                            modules::logger::log_warn(&format!(
-                                "[Lifecycle] 应用重启时关闭 API 服务 sidecar 失败: {}",
-                                error
-                            ));
-                        }
-                    });
                 } else {
                     match modules::app_lifecycle::request_app_exit_cleanup() {
                         modules::app_lifecycle::AppExitDecision::StartCleanup => {
