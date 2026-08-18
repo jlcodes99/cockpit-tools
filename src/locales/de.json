@@ -2340,6 +2340,10 @@
     "quota": {
       "hourly": "5-Stunden-Kontingent",
       "weekly": "Wöchentliches Kontingent",
+      "monthlyCredits": "Monatliche Credits",
+      "monthlyCreditsValue": "{{remaining}} / {{total}} Credits",
+      "creditBalance": "Guthaben {{balance}} Credits",
+      "unlimitedCredits": "Unbegrenzte Credits",
       "additional": "Zusätzliches Kontingent",
       "reset": "Zurücksetzen",
       "weeklyBlocksHourly": "Das Wochenkontingent ist 0, daher ist das 5-Stunden-Kontingent nicht verfügbar",

@@ -3,8 +3,11 @@ import test from "node:test";
 
 import {
   DEEPSEEK_API_BASE_URL,
+  MINIMAX_API_PROVIDER_ID,
+  MINIMAX_EN_API_PROVIDER_ID,
   OPENCODE_GO_API_BASE_URL,
   OPENCODE_GO_API_PROVIDER_ID,
+  codexApiProviderPresetVisionSupport,
   findCodexApiProviderPresetByBaseUrl,
   findCodexApiProviderPresetById,
 } from "./codexProviderPresets.ts";
@@ -43,4 +46,26 @@ test("DeepSeek keeps its native Responses default", () => {
   });
 
   assert.equal(profile.wireApi, "responses");
+});
+
+test("both MiniMax presets declare image input only for the vision-capable model", () => {
+  [MINIMAX_API_PROVIDER_ID, MINIMAX_EN_API_PROVIDER_ID].forEach((presetId) => {
+    const preset = findCodexApiProviderPresetById(presetId);
+
+    assert.ok(preset);
+    assert.deepEqual(preset.modelCatalog, ["MiniMax-M3", "MiniMax-M2.7"]);
+    assert.deepEqual(preset.visionModelCatalog, ["MiniMax-M3"]);
+
+    const support = codexApiProviderPresetVisionSupport(preset);
+    assert.equal(support["minimax-m3"], true);
+    assert.equal(support["minimax-m2.7"], undefined);
+  });
+});
+
+test("presets without a declared vision catalog report no image support", () => {
+  const preset = findCodexApiProviderPresetById(OPENCODE_GO_API_PROVIDER_ID);
+
+  assert.ok(preset);
+  assert.deepEqual(codexApiProviderPresetVisionSupport(preset), {});
+  assert.deepEqual(codexApiProviderPresetVisionSupport(null), {});
 });

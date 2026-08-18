@@ -3,6 +3,12 @@ export interface CodexApiProviderPreset {
   name: string;
   baseUrls: string[];
   modelCatalog?: string[];
+  /**
+   * Models from `modelCatalog` that accept image input. Models that are left out
+   * fall back to the provider-level default, so a preset can describe a catalog
+   * that mixes vision-capable and text-only models.
+   */
+  visionModelCatalog?: string[];
   website?: string;
   apiKeyUrl?: string;
   isOfficial?: boolean;
@@ -22,6 +28,14 @@ export const DEEPSEEK_CODEX_MODEL_CATALOG = [
 ] as const;
 export const OPENCODE_GO_API_PROVIDER_ID = "opencode_go";
 export const OPENCODE_GO_API_BASE_URL = "https://opencode.ai/zen/go/v1";
+export const MINIMAX_API_PROVIDER_ID = "minimax";
+export const MINIMAX_EN_API_PROVIDER_ID = "minimax_en";
+export const MINIMAX_CODEX_MODEL_CATALOG = [
+  "MiniMax-M3",
+  "MiniMax-M2.7",
+] as const;
+/** MiniMax models whose published input modalities include images. */
+export const MINIMAX_CODEX_VISION_MODEL_CATALOG = ["MiniMax-M3"] as const;
 /** OpenCode Go models exposed through its OpenAI-compatible chat completions API. */
 export const OPENCODE_GO_CODEX_MODEL_CATALOG = [
   "minimax-m3",
@@ -310,17 +324,19 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     website: "https://longcat.chat/",
   },
   {
-    id: "minimax",
+    id: MINIMAX_API_PROVIDER_ID,
     name: "MiniMax",
     baseUrls: ["https://api.minimaxi.com/v1"],
-    modelCatalog: ["MiniMax-M3", "MiniMax-M2.7"],
+    modelCatalog: [...MINIMAX_CODEX_MODEL_CATALOG],
+    visionModelCatalog: [...MINIMAX_CODEX_VISION_MODEL_CATALOG],
     website: "https://platform.minimaxi.com/docs",
   },
   {
-    id: "minimax_en",
+    id: MINIMAX_EN_API_PROVIDER_ID,
     name: "MiniMax en",
     baseUrls: ["https://api.minimax.io/v1"],
-    modelCatalog: ["MiniMax-M3", "MiniMax-M2.7"],
+    modelCatalog: [...MINIMAX_CODEX_MODEL_CATALOG],
+    visionModelCatalog: [...MINIMAX_CODEX_VISION_MODEL_CATALOG],
     website: "https://platform.minimax.io/docs",
   },
   {
@@ -442,4 +458,19 @@ export function resolveCodexApiProviderPresetId(rawBaseUrl: string): string {
     findCodexApiProviderPresetByBaseUrl(rawBaseUrl)?.id ??
     CODEX_API_PROVIDER_CUSTOM_ID
   );
+}
+
+/**
+ * Per-model image input support declared by a preset, keyed the same way the
+ * stored provider and account capability maps are keyed (trimmed, lowercased).
+ */
+export function codexApiProviderPresetVisionSupport(
+  preset: CodexApiProviderPreset | null | undefined,
+): Record<string, boolean> {
+  const support: Record<string, boolean> = {};
+  (preset?.visionModelCatalog ?? []).forEach((model) => {
+    const key = model.trim().toLowerCase();
+    if (key) support[key] = true;
+  });
+  return support;
 }

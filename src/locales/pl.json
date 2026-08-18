@@ -2340,6 +2340,10 @@
     "quota": {
       "hourly": "Limit 5 godzin",
       "weekly": "Limit tygodniowy",
+      "monthlyCredits": "Miesięczne kredyty",
+      "monthlyCreditsValue": "{{remaining}} / {{total}} kredytów",
+      "creditBalance": "Saldo {{balance}} kredytów",
+      "unlimitedCredits": "Nielimitowane kredyty",
       "additional": "Dodatkowy limit",
       "reset": "Resetuj",
       "weeklyBlocksHourly": "Limit tygodniowy wynosi 0, więc limit 5-godzinny jest niedostępny",

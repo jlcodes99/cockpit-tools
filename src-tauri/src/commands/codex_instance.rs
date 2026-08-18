@@ -602,6 +602,20 @@ mod tests {
     }
 
     #[test]
+    fn macos_ghostty_launch_plan_uses_ghostty_applescript() {
+        let plan = build_macos_codex_terminal_launch_plan("codex --version", "Ghostty")
+            .expect("Ghostty should have a macOS launch plan");
+
+        assert_eq!(plan.program, "osascript");
+        assert_eq!(plan.terminal_name, "Ghostty");
+        assert_eq!(plan.args.len(), 2);
+        assert_eq!(plan.args[0], "-e");
+        assert!(plan.args[1].contains("tell application \"Ghostty\""));
+        assert!(plan.args[1].contains("new surface configuration"));
+        assert!(plan.args[1].contains("set command of cfg to \"codex --version\""));
+    }
+
+    #[test]
     fn launch_command_preview_does_not_require_an_initialized_profile() {
         let context = CodexLaunchContext {
             user_data_dir: "/path/that/does/not/exist/codex-home".to_string(),
@@ -961,6 +975,7 @@ fn build_macos_codex_terminal_launch_plan(
 ) -> Result<CodexTerminalLaunchPlan, String> {
     let normalized = terminal.trim();
     let is_iterm = normalized.to_ascii_lowercase().contains("iterm");
+    let is_ghostty = normalized.eq_ignore_ascii_case("Ghostty");
     let is_terminal_app =
         normalized.is_empty() || normalized == "system" || normalized == "Terminal";
     let (terminal_name, script) = if is_iterm {
@@ -987,6 +1002,19 @@ fn build_macos_codex_terminal_launch_plan(
                 escape_applescript(command)
             ),
         )
+    } else if is_ghostty {
+        (
+            "Ghostty",
+            format!(
+                "tell application \"Ghostty\"
+                    activate
+                    set cfg to new surface configuration
+                    set command of cfg to \"{}\"
+                    new window with configuration cfg
+                end tell",
+                escape_applescript(command)
+            ),
+        )
     } else if is_terminal_app {
         (
             "Terminal.app",
@@ -1000,7 +1028,7 @@ fn build_macos_codex_terminal_launch_plan(
         )
     } else {
         return Err(format!(
-            "当前终端暂不支持直接执行：{}。请改用 Terminal 或 iTerm2。",
+            "当前终端暂不支持直接执行：{}。请改用 Terminal、iTerm2 或 Ghostty。",
             normalized
         ));
     };

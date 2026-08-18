@@ -2521,6 +2521,10 @@
     "quota": {
       "hourly": "Kuota 5 jam",
       "weekly": "Kuota mingguan",
+      "monthlyCredits": "Kredit bulanan",
+      "monthlyCreditsValue": "{{remaining}} / {{total}} kredit",
+      "creditBalance": "Saldo {{balance}} kredit",
+      "unlimitedCredits": "Kredit tak terbatas",
       "additional": "Kuota tambahan",
       "reset": "Setel ulang",
       "weeklyBlocksHourly": "Kuota mingguan 0, jadi kuota 5 jam tidak tersedia",

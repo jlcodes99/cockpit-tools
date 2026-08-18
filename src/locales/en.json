@@ -3087,6 +3087,10 @@
     "quota": {
       "hourly": "5-hour quota",
       "weekly": "Weekly quota",
+      "monthlyCredits": "Monthly credits",
+      "monthlyCreditsValue": "{{remaining}} / {{total}} credits",
+      "creditBalance": "{{balance}} credits",
+      "unlimitedCredits": "Unlimited credits",
       "additional": "Additional quota",
       "weeklyBlocksHourly": "Weekly quota is 0, so the 5-hour quota is unavailable",
       "windowStats": "Used {{tokens}} · {{cost}}",

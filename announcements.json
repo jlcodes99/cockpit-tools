@@ -9,7 +9,7 @@
   "topRightAds": [
     {
       "id": "top-right-ad-2026-04-shop",
-      "enabled": true,
+      "enabled": false,
       "relayRelated": false,
       "priority": 100,
       "text": "Codex Plus30天成品号，Gemini给自己账号订阅一年Pro 需要的了解一下",

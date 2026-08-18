@@ -1703,7 +1703,7 @@ export function CodexModelProviderManager({
           preset.modelCatalog ?? [],
         ),
         supportsVision: false,
-        visionModelText: "",
+        visionModelText: (preset.visionModelCatalog ?? []).join("\n"),
         visionRoutingModel: "",
         website: preset.website ?? "",
         apiKeyUrl: preset.apiKeyUrl ?? "",
