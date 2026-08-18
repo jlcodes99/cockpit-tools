@@ -88,6 +88,8 @@ pub struct GeneralConfig {
     pub codex_sync_wsl: bool,
     /// 是否启用 Codex 客户端中的 API 服务额度显示注入
     pub codex_app_ui_injection_enabled: bool,
+    /// 是否全局允许 Codex app-server 第三方客户端（账户级开关仍可单独放行）
+    pub codex_cli_only_allow_app_server_clients: bool,
     /// Codex WSL 配置目录 (Windows Only)
     pub codex_wsl_config_dir: String,
     /// Zed 自动刷新间隔（分钟），-1 表示禁用
@@ -425,7 +427,7 @@ pub struct WebdavSyncSettings {
 }
 
 const DEFAULT_UI_SCALE: f64 = 1.0;
-const MIN_UI_SCALE: f64 = 0.8;
+const MIN_UI_SCALE: f64 = 0.3;
 const MAX_UI_SCALE: f64 = 2.0;
 const MAX_STARTUP_WAKEUP_DELAY_SECONDS: i32 = 24 * 60 * 60;
 const ANTIGRAVITY_VERSION_BADGE_TIMEOUT_MS: u64 = 1200;
@@ -1048,6 +1050,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "codex_auto_refresh_minutes"
             | "codex_sync_wsl"
             | "codex_app_ui_injection_enabled"
+            | "codex_cli_only_allow_app_server_clients"
             | "codex_wsl_config_dir"
             | "zed_auto_refresh_minutes"
             | "ghcp_auto_refresh_minutes"
@@ -2536,6 +2539,8 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         codex_auto_refresh_minutes: user_config.codex_auto_refresh_minutes,
         codex_sync_wsl: user_config.codex_sync_wsl,
         codex_app_ui_injection_enabled: user_config.codex_app_ui_injection_enabled,
+        codex_cli_only_allow_app_server_clients: user_config
+            .codex_cli_only_allow_app_server_clients,
         codex_wsl_config_dir: user_config.codex_wsl_config_dir,
         zed_auto_refresh_minutes: user_config.zed_auto_refresh_minutes,
         ghcp_auto_refresh_minutes: user_config.ghcp_auto_refresh_minutes,
@@ -2775,6 +2780,8 @@ pub fn patch_general_config(
     }
 
     let mut language_changed = false;
+    let codex_client_policy_changed = updates
+        .contains_key("codex_cli_only_allow_app_server_clients");
     let mut token_keeper_enabled_changed = false;
     let mut auto_import_from_local_enabled_changed = false;
     let mut floating_always_on_top_changed = false;
@@ -2852,6 +2859,10 @@ pub fn patch_general_config(
         modules::auto_local_import::notify_config_changed(
             new_config.auto_import_from_local_enabled,
         );
+    }
+
+    if codex_client_policy_changed {
+        modules::codex_local_access::schedule_codex_client_policy_sync();
     }
 
     if floating_always_on_top_changed {

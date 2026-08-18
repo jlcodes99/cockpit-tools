@@ -21,7 +21,7 @@ use crate::models::codex_local_access::{
 use crate::modules::atomic_write::{write_string_atomic, write_string_atomic_if_hash_matches};
 use crate::modules::{
     account, app_lifecycle, codex_account, codex_agent_identity, codex_oauth, codex_protocol,
-    codex_quota, codex_wakeup, logger, process,
+    codex_quota, codex_wakeup, config, logger, process,
 };
 use base64::{engine::general_purpose, Engine as _};
 use chrono::{Datelike, Duration as ChronoDuration, Local, LocalResult, NaiveDate, TimeZone};
@@ -117,8 +117,6 @@ const CODEX_PROFILE_CONFIG_FILE: &str = "config.toml";
 const CODEX_LOCAL_ACCESS_AUTH_PROJECTION_FILE: &str = ".cockpit_codex_auth.json";
 const CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE: &str = "cockpit-local-access-model-catalog.json";
 const CODEX_PROVIDER_MODEL_CATALOG_FILE: &str = "cockpit-provider-model-catalog.json";
-#[cfg(test)]
-const CODEX_EXPERIMENTAL_MODEL_ID: &str = "gpt-5.6-sol-wm";
 const CODEX_MODEL_CACHE_FILE: &str = "models_cache.json";
 const CODEX_PROVIDER_MODEL_BACKUP_FILE: &str = ".cockpit-provider-model-backup.json";
 const MAX_HTTP_REQUEST_BYTES: usize = 256 * 1024 * 1024;
@@ -231,7 +229,8 @@ static GATEWAY_RUNTIME: OnceLock<TokioMutex<GatewayRuntime>> = OnceLock::new();
 static GATEWAY_STATS_FLUSH_LOCK: OnceLock<TokioMutex<()>> = OnceLock::new();
 static GATEWAY_RUNTIME_LOAD_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 static GATEWAY_RUNTIME_LOAD_NOTIFY: OnceLock<Notify> = OnceLock::new();
-static API_SERVICE_EXPERIMENTAL_MODEL_IDS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+static API_SERVICE_EXPERIMENTAL_MODEL_CATALOG: OnceLock<Mutex<Option<Vec<String>>>> =
+    OnceLock::new();
 static GATEWAY_STATS_MAINTENANCE_RUNNING: AtomicBool = AtomicBool::new(false);
 static GATEWAY_STATS_MAINTENANCE_COMPLETED: AtomicBool = AtomicBool::new(false);
 static GATEWAY_COLLECTION_ACCOUNT_SANITIZE_RUNNING: AtomicBool = AtomicBool::new(false);
@@ -259,6 +258,7 @@ static BOUND_OAUTH_QUOTA_REFRESH_FAILURES: OnceLock<Mutex<HashSet<String>>> = On
 static BOUND_OAUTH_QUOTA_REFRESH_CONTROL: OnceLock<TokioMutex<BoundOauthQuotaRefreshControl>> =
     OnceLock::new();
 static BOUND_OAUTH_QUOTA_MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
+static CODEX_CLIENT_POLICY_SYNC_RUNNING: AtomicBool = AtomicBool::new(false);
 static MODEL_PROVIDER_CHAT_TEST_CANCELLATION: OnceLock<ModelProviderChatTestCancellationState> =
     OnceLock::new();
 
@@ -2276,19 +2276,16 @@ fn merge_api_service_experimental_model_ids(
     model_ids
 }
 
-fn api_service_experimental_model_ids() -> Vec<String> {
-    API_SERVICE_EXPERIMENTAL_MODEL_IDS
-        .get_or_init(|| Mutex::new(Vec::new()))
+fn api_service_experimental_model_catalog() -> Option<Vec<String>> {
+    API_SERVICE_EXPERIMENTAL_MODEL_CATALOG
+        .get_or_init(|| Mutex::new(None))
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .clone()
 }
 
 fn api_service_supported_codex_model_ids() -> Vec<String> {
-    merge_api_service_experimental_model_ids(
-        supported_codex_model_ids(),
-        &api_service_experimental_model_ids(),
-    )
+    api_service_experimental_model_catalog().unwrap_or_else(supported_codex_model_ids)
 }
 
 pub(crate) fn refresh_api_service_experimental_model_ids() {
@@ -2303,6 +2300,7 @@ pub(crate) fn refresh_api_service_experimental_model_ids() {
     let mut seen_profiles = HashSet::new();
     let mut seen_models = HashSet::new();
     let mut model_ids = Vec::new();
+    let mut has_enabled_catalog = false;
     for profile_dir in profile_dirs {
         let profile_key = normalize_profile_dir_key(&profile_dir);
         if profile_key.is_empty() || !seen_profiles.insert(profile_key) {
@@ -2322,6 +2320,7 @@ pub(crate) fn refresh_api_service_experimental_model_ids() {
         if !quick_config.experimental_model_catalog_enabled {
             continue;
         }
+        has_enabled_catalog = true;
         for model in quick_config.experimental_model_catalog_models {
             let model_id = model.model_id.trim();
             if !model_id.is_empty() && seen_models.insert(model_id.to_ascii_lowercase()) {
@@ -2330,10 +2329,11 @@ pub(crate) fn refresh_api_service_experimental_model_ids() {
         }
     }
 
-    *API_SERVICE_EXPERIMENTAL_MODEL_IDS
-        .get_or_init(|| Mutex::new(Vec::new()))
+    *API_SERVICE_EXPERIMENTAL_MODEL_CATALOG
+        .get_or_init(|| Mutex::new(None))
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner()) = model_ids;
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+        has_enabled_catalog.then_some(model_ids);
 }
 
 fn default_codex_model_ids() -> Vec<String> {
@@ -6355,14 +6355,14 @@ const CODEX_LOCAL_ACCESS_PRICE_BOOK: &[CodexLocalAccessPriceBookEntry] = &[
     CodexLocalAccessPriceBookEntry {
         model_id: "gpt-5.6-terra",
         session_long_context: true,
-        standard: codex_price(2.5, 0.25, 15.0),
-        priority: Some(codex_price(5.0, 0.5, 30.0)),
+        standard: codex_price(2.0, 0.2, 12.0),
+        priority: Some(codex_price(4.0, 0.4, 24.0)),
     },
     CodexLocalAccessPriceBookEntry {
         model_id: "gpt-5.6-luna",
         session_long_context: true,
-        standard: codex_price(1.0, 0.1, 6.0),
-        priority: Some(codex_price(2.0, 0.2, 12.0)),
+        standard: codex_price(0.2, 0.02, 1.2),
+        priority: Some(codex_price(0.4, 0.04, 2.4)),
     },
     CodexLocalAccessPriceBookEntry {
         model_id: "gpt-5.5",
@@ -6852,6 +6852,51 @@ fn normalize_model_pricings(
     normalized
 }
 
+fn prices_close(left: f64, right: f64) -> bool {
+    (left - right).abs() <= 1e-9
+}
+
+fn optional_price_matches_legacy(value: Option<f64>, expected: f64) -> bool {
+    match value {
+        None => true,
+        Some(price) => prices_close(price, expected),
+    }
+}
+
+/// Previous official book rates that should follow the new book going forward.
+/// Custom overrides that are not these snapshots are kept.
+fn is_superseded_default_56_pricing(pricing: &CodexLocalAccessModelPricing) -> bool {
+    let model_id = normalize_known_openai_codex_model(&pricing.model_id)
+        .unwrap_or_else(|| pricing.model_id.trim().to_ascii_lowercase());
+    let (input, cached, output, priority_input, priority_cached, priority_output) =
+        match model_id.as_str() {
+            "gpt-5.6-terra" => (2.5, 0.25, 15.0, 5.0, 0.5, 30.0),
+            "gpt-5.6-luna" => (1.0, 0.1, 6.0, 2.0, 0.2, 12.0),
+            _ => return false,
+        };
+    if !prices_close(pricing.input_usd_per_million, input)
+        || !prices_close(pricing.output_usd_per_million, output)
+        || !optional_price_matches_legacy(pricing.cached_input_usd_per_million, cached)
+    {
+        return false;
+    }
+    optional_price_matches_legacy(pricing.priority_input_usd_per_million, priority_input)
+        && optional_price_matches_legacy(
+            pricing.priority_cached_input_usd_per_million,
+            priority_cached,
+        )
+        && optional_price_matches_legacy(pricing.priority_output_usd_per_million, priority_output)
+}
+
+fn drop_superseded_default_56_model_pricings(
+    model_pricings: Vec<CodexLocalAccessModelPricing>,
+) -> Vec<CodexLocalAccessModelPricing> {
+    model_pricings
+        .into_iter()
+        .filter(|pricing| !is_superseded_default_56_pricing(pricing))
+        .collect()
+}
+
 fn price_from_base_triple(
     input_usd_per_million: f64,
     cached_input_usd_per_million: Option<f64>,
@@ -7115,6 +7160,14 @@ fn gateway_mode_from_db_value(value: &str) -> Option<CodexLocalAccessGatewayMode
         "sidecar" => Some(CodexLocalAccessGatewayMode::Sidecar),
         _ => None,
     }
+}
+
+fn migrate_legacy_gateway_mode(collection: &mut CodexLocalAccessCollection) -> bool {
+    if collection.gateway_mode == CodexLocalAccessGatewayMode::Legacy {
+        collection.gateway_mode = CodexLocalAccessGatewayMode::Sidecar;
+        return true;
+    }
+    false
 }
 
 fn bool_to_db_value(value: bool) -> i64 {
@@ -10762,6 +10815,17 @@ fn sidecar_binary_path() -> Result<PathBuf, String> {
         })
 }
 
+fn sanitize_sidecar_command_env(command: &mut TokioCommand) {
+    #[cfg(target_os = "macos")]
+    {
+        // 避免把 Cockpit 的应用身份和 XPC 上下文传给 sidecar，导致局域网访问异常。
+        command.env_remove("__CFBundleIdentifier");
+        command.env_remove("XPC_SERVICE_NAME");
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = command;
+}
+
 fn sidecar_auth_file_name(account_id: &str) -> String {
     let mut safe = account_id
         .trim()
@@ -11559,12 +11623,15 @@ fn sidecar_auth_json_for_account_with_metered_feature_patterns(
         "excluded_models": excluded_models,
         "disable_cooling": collection.disable_cooling,
         "websockets": collection.responses_websockets_enabled,
+        "codex_cli_only": account.codex_cli_only,
+        "codex_cli_only_allow_app_server": account.codex_cli_only_allow_app_server,
+        "codex_cli_only_allow_app_server_clients": config::get_user_config()
+            .codex_cli_only_allow_app_server_clients,
     });
     if account_uses_codex_fingerprint_convergence(account) {
-        value["codex_fingerprint_mode"] = json!(account
-            .codex_fingerprint_mode
-            .clone()
-            .unwrap_or_else(|| "session".to_string()));
+        value["codex_fingerprint_mode"] = json!(
+            crate::modules::codex_account::resolved_codex_fingerprint_mode(account)
+        );
     }
     if let Some(account_id) = account_id {
         value["account_id"] = json!(account_id);
@@ -11713,6 +11780,31 @@ fn sync_sidecar_auth_file_for_account_with_task_source(
 
 pub fn sync_sidecar_auth_file_for_account(account: &CodexAccount) -> Result<(), String> {
     sync_sidecar_auth_file_for_account_with_task_source(account, false)
+}
+
+/// 通用设置中的 Codex 客户端策略变更后，后台刷新正在使用的 OAuth auth 文件。
+/// 账号列表与文件写入不阻塞设置页保存；sidecar 文件观察器会随后加载新元数据。
+pub fn schedule_codex_client_policy_sync() {
+    if CODEX_CLIENT_POLICY_SYNC_RUNNING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return;
+    }
+    std::thread::spawn(|| {
+        for account in crate::modules::codex_account::list_accounts() {
+            if account.is_api_key_auth() || account.is_agent_identity_auth() {
+                continue;
+            }
+            if let Err(error) = sync_sidecar_auth_file_for_account(&account) {
+                logger::log_codex_api_warn(&format!(
+                    "[CodexLocalAccess] 后台刷新 Codex 客户端策略失败: account_id={}, error={}",
+                    account.id, error
+                ));
+            }
+        }
+        CODEX_CLIENT_POLICY_SYNC_RUNNING.store(false, Ordering::Release);
+    });
 }
 
 pub fn sync_sidecar_auth_file_for_account_with_current_task(
@@ -12156,7 +12248,11 @@ fn gateway_mode_label(mode: CodexLocalAccessGatewayMode) -> &'static str {
 }
 
 fn collection_gateway_mode(collection: &CodexLocalAccessCollection) -> CodexLocalAccessGatewayMode {
-    collection.gateway_mode
+    match collection.gateway_mode {
+        CodexLocalAccessGatewayMode::Legacy | CodexLocalAccessGatewayMode::Sidecar => {
+            CodexLocalAccessGatewayMode::Sidecar
+        }
+    }
 }
 
 fn log_gateway_mode_info(mode: CodexLocalAccessGatewayMode, message: impl AsRef<str>) {
@@ -13628,23 +13724,18 @@ fn write_local_access_profile_model_catalog(
     supports_websockets: bool,
     experimental_model_catalog_enabled: bool,
 ) -> Result<(), String> {
-    let mut model_ids = supported_codex_model_ids();
     let experimental_models = experimental_model_catalog_enabled
         .then(|| codex_account::read_experimental_model_definitions(profile_dir))
         .unwrap_or_default();
-    let experimental_ids = experimental_models
-        .iter()
-        .map(|model| model.model_id.to_ascii_lowercase())
-        .collect::<HashSet<_>>();
-    model_ids.retain(|model| !experimental_ids.contains(&model.to_ascii_lowercase()));
-    let custom_models = experimental_models
-        .iter()
-        .map(|model| (model.model_id.clone(), model.display_name.clone()))
-        .collect::<Vec<_>>();
-    let mut client_models = codex_protocol::build_codex_client_models_response_with_custom_models(
-        &model_ids,
-        &custom_models,
-    );
+    let mut client_models = if experimental_model_catalog_enabled {
+        let definitions = experimental_models
+            .iter()
+            .map(|model| (model.model_id.clone(), model.display_name.clone()))
+            .collect::<Vec<_>>();
+        codex_protocol::build_codex_client_models_response_with_model_definitions(&definitions)
+    } else {
+        codex_protocol::build_codex_client_models_response(&supported_codex_model_ids())
+    };
     if let Some(models) = client_models
         .get_mut("models")
         .and_then(Value::as_array_mut)
@@ -13694,13 +13785,6 @@ fn write_local_access_profile_model_catalog(
             .map_err(|e| format!("解析 Codex config.toml 失败: {}", e))?
     };
     doc["model_catalog_json"] = value(catalog_file);
-    if experimental_model_catalog_enabled {
-        let default_model = experimental_models
-            .first()
-            .map(|model| model.model_id.as_str())
-            .ok_or_else(|| "EXPERIMENTAL_MODEL_CATALOG_MODELS_REQUIRED".to_string())?;
-        doc["model"] = value(default_model);
-    }
     let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
     crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
 }
@@ -15620,6 +15704,10 @@ fn sanitize_collection_structure(
 ) -> Result<bool, String> {
     let mut changed = false;
 
+    // The legacy gateway is retired. Existing collections are migrated to the
+    // sidecar before runtime startup and persisted by the normal load path.
+    changed |= migrate_legacy_gateway_mode(collection);
+
     // v1.3.4 起已移除集合级 image_generation 禁用 UI。
     // 遗留 Disabled / ImagesOnly 会继续从 sidecar manifest 过滤 gpt-image-2，
     // 但静态 Codex catalog 仍包含该模型，造成 Codex 可点生图、网关却 model_not_available。
@@ -15697,7 +15785,10 @@ fn sanitize_collection_structure(
     if normalized_model_pricings != original_model_pricings {
         changed = true;
     }
-    collection.model_pricings = normalized_model_pricings;
+    collection.model_pricings = drop_superseded_default_56_model_pricings(normalized_model_pricings);
+    if collection.model_pricings != original_model_pricings {
+        changed = true;
+    }
     if collection.model_pricing_version < DEFAULT_MODEL_PRICING_VERSION {
         collection.model_pricings = Vec::new();
         collection.model_pricing_version = DEFAULT_MODEL_PRICING_VERSION;
@@ -15975,20 +16066,22 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
         }
 
         ensure_stats_maintenance_started();
-        if let (Some(collection), Some(app)) = (next_collection, crate::get_app_handle().cloned()) {
-            tauri::async_runtime::spawn(async move {
-                let model_ids = effective_price_book_model_ids(Some(&collection));
-                if pricing_book_resealed {
+        if pricing_book_resealed {
+            if let (Some(collection), Some(app)) =
+                (next_collection, crate::get_app_handle().cloned())
+            {
+                tauri::async_runtime::spawn(async move {
+                    let model_ids = effective_price_book_model_ids(Some(&collection));
                     logger::log_codex_api_info(
                         "Codex API 服务默认价格表已升级，历史估算已转入后台重算",
                     );
-                }
-                queue_model_pricing_reprice(app, collection, model_ids).await;
-            });
-        } else if pricing_book_resealed {
-            logger::log_codex_api_warn(
-                "Codex API 服务默认价格表已升级，但应用句柄尚未就绪，历史估算将在下次启动后台重算",
-            );
+                    queue_model_pricing_reprice(app, collection, model_ids).await;
+                });
+            } else {
+                logger::log_codex_api_warn(
+                    "Codex API 服务默认价格表已升级，但应用句柄尚未就绪，历史估算将在下次启动后台重算",
+                );
+            }
         }
 
         Ok::<_, String>(())
@@ -16325,35 +16418,6 @@ async fn ensure_gateway_matches_runtime_locked() -> Result<(), String> {
     }
 
     let bind_host = bind_host_for_collection(&collection);
-    let mode = collection_gateway_mode(&collection);
-    if mode == CodexLocalAccessGatewayMode::Legacy {
-        if running
-            && actual_port == Some(collection.port)
-            && actual_bind_host.as_deref() == Some(bind_host)
-            && actual_fingerprint.is_none()
-        {
-            return Ok(());
-        }
-        if running {
-            log_gateway_mode_info(
-                CodexLocalAccessGatewayMode::Legacy,
-                format!(
-                    "API 服务网关配置已变化，准备重启: mode=legacy port={}->{} bind={}->{}",
-                    actual_port
-                        .map(|port| port.to_string())
-                        .unwrap_or_else(|| "-".to_string()),
-                    collection.port,
-                    actual_bind_host.as_deref().unwrap_or("-"),
-                    bind_host,
-                ),
-            );
-        }
-        let stopped_endpoint = stop_gateway_locked().await;
-        if let Some(endpoint) = stopped_endpoint {
-            wait_for_gateway_port_release(&endpoint.bind_host, endpoint.port).await?;
-        }
-        return start_legacy_gateway_locked(&collection).await;
-    }
 
     let preparation_total = effective_sidecar_account_ids(&collection).len();
     let preparation_guard = GatewayPreparationGuard::begin(preparation_total);
@@ -16450,6 +16514,7 @@ async fn ensure_gateway_matches_runtime_locked() -> Result<(), String> {
     };
 
     let mut command = TokioCommand::new(&binary);
+    sanitize_sidecar_command_env(&mut command);
     command
         .arg("--config")
         .arg(&launch_config.config_path)
@@ -19229,6 +19294,7 @@ async fn spawn_provider_gateway_sidecar(
     let bind_host = bind_host_for_collection(collection);
     let binary = sidecar_binary_path()?;
     let mut command = TokioCommand::new(&binary);
+    sanitize_sidecar_command_env(&mut command);
     command
         .arg("--config")
         .arg(&launch_config.config_path)
@@ -27342,6 +27408,7 @@ async fn handle_connection(
 
 #[cfg(test)]
 mod tests {
+    const CODEX_TEST_MODEL_ID: &str = "custom-model";
 
     #[test]
     fn app_shutdown_rejects_an_owned_sidecar_spawn_before_process_creation() {
@@ -28363,7 +28430,7 @@ mod tests {
         ParsedRequest, ResolvedLocalApiKey, ResponseUsageCollector, RoutingCandidate,
         SidecarUsageDetails, SidecarUsageEvent, UsageCapture,
         BOUND_OAUTH_QUOTA_RESERVE_MAX_SNAPSHOT_AGE_SECONDS, CODEX_AUTO_REVIEW_MODEL_ID,
-        CODEX_EXPERIMENTAL_MODEL_ID, CODEX_IMAGEGEN_ACTOR_HEADER, CODEX_IMAGE_MODEL_ID,
+        CODEX_IMAGEGEN_ACTOR_HEADER, CODEX_IMAGE_MODEL_ID,
         CODEX_LOCAL_ACCESS_DISABLE_HOSTED_IMAGE_GENERATION_HEADER,
         CODEX_LOCAL_ACCESS_DISABLE_HOSTED_IMAGE_GENERATION_HEADER_VALUE,
         CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE, CODEX_PROFILE_AUTH_FILE, CODEX_PROFILE_CONFIG_FILE,
@@ -31773,11 +31840,86 @@ wire_api = "responses"
         let terra =
             resolve_effective_model_pricing(None, Some("gpt-5.6-terra"), Some(&short_usage), None)
                 .expect("gpt-5.6-terra pricing");
-        assert_eq!(terra.input_usd_per_million, 2.5);
+        assert_eq!(terra.input_usd_per_million, 2.0);
+        assert_eq!(terra.output_usd_per_million, 12.0);
+        assert_eq!(terra.cached_input_usd_per_million, Some(0.2));
         let luna =
             resolve_effective_model_pricing(None, Some("gpt-5.6-luna"), Some(&short_usage), None)
                 .expect("gpt-5.6-luna pricing");
-        assert_eq!(luna.input_usd_per_million, 1.0);
+        assert_eq!(luna.input_usd_per_million, 0.2);
+        assert_eq!(luna.output_usd_per_million, 1.2);
+        assert_eq!(luna.cached_input_usd_per_million, Some(0.02));
+    }
+
+    #[test]
+    fn drops_legacy_default_56_overrides_but_keeps_custom_rates() {
+        let kept = super::drop_superseded_default_56_model_pricings(vec![
+            model_pricing(
+                "gpt-5.6-terra",
+                Some(272_000),
+                codex_price(2.5, 0.25, 15.0),
+                None,
+                Some(codex_price(5.0, 0.5, 30.0)),
+                None,
+            ),
+            model_pricing(
+                "gpt-5.6-luna",
+                Some(272_000),
+                codex_price(1.0, 0.1, 6.0),
+                None,
+                Some(codex_price(2.0, 0.2, 12.0)),
+                None,
+            ),
+            model_pricing(
+                "gpt-5.6-luna",
+                Some(272_000),
+                codex_price(9.9, 0.9, 19.0),
+                None,
+                None,
+                None,
+            ),
+            model_pricing(
+                "gpt-5.5",
+                Some(272_000),
+                codex_price(5.0, 0.5, 30.0),
+                None,
+                Some(codex_price(10.0, 1.0, 60.0)),
+                None,
+            ),
+        ]);
+        assert_eq!(kept.len(), 2);
+        assert_eq!(kept[0].model_id, "gpt-5.6-luna");
+        assert_eq!(kept[0].input_usd_per_million, 9.9);
+        assert_eq!(kept[1].model_id, "gpt-5.5");
+
+        let mut collection = test_local_access_collection(vec!["account-a".to_string()]);
+        collection.model_pricings = vec![model_pricing(
+            "gpt-5.6-luna",
+            Some(272_000),
+            codex_price(1.0, 0.1, 6.0),
+            None,
+            Some(codex_price(2.0, 0.2, 12.0)),
+            None,
+        )];
+        let usage = UsageCapture {
+            input_tokens: 100,
+            output_tokens: 10,
+            total_tokens: 110,
+            cached_tokens: 0,
+            reasoning_tokens: 0,
+            token_breakdown: None,
+        };
+        collection.model_pricings =
+            super::drop_superseded_default_56_model_pricings(collection.model_pricings);
+        let luna = resolve_effective_model_pricing(
+            Some(&collection),
+            Some("gpt-5.6-luna"),
+            Some(&usage),
+            None,
+        )
+        .expect("legacy snapshot should fall back to new book");
+        assert_eq!(luna.input_usd_per_million, 0.2);
+        assert_eq!(luna.output_usd_per_million, 1.2);
     }
 
     #[test]
@@ -33377,17 +33519,17 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
     }
 
     #[test]
-    fn api_service_experimental_models_are_added_without_aliasing() {
+    fn api_service_custom_models_are_added_without_aliasing() {
         let models = super::merge_api_service_experimental_model_ids(
             vec!["gpt-5.6-sol".to_string()],
-            &["gpt-5.6-sol-wm".to_string(), "gpt-5.6-sol-wm2".to_string()],
+            &["custom-model".to_string(), "custom-model-2".to_string()],
         );
         assert_eq!(
             models,
             vec![
                 "gpt-5.6-sol".to_string(),
-                "gpt-5.6-sol-wm".to_string(),
-                "gpt-5.6-sol-wm2".to_string(),
+                "custom-model".to_string(),
+                "custom-model-2".to_string(),
             ]
         );
 
@@ -33405,8 +33547,8 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             token_used: 0,
         };
         assert_eq!(
-            canonical_model_for_client_model("gpt-5.6-sol-wm", &collection, &api_key),
-            "gpt-5.6-sol-wm"
+            canonical_model_for_client_model("custom-model", &collection, &api_key),
+            "custom-model"
         );
     }
 
@@ -35471,24 +35613,41 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
     }
 
     #[tokio::test]
-    async fn local_access_takeover_preserves_enabled_experimental_wm_catalog() {
-        let profile_dir = make_temp_dir("codex-local-access-wm-model-catalog-test");
+    async fn local_access_takeover_preserves_enabled_model_catalog() {
+        let profile_dir = make_temp_dir("codex-local-access-model-catalog-test");
+        fs::write(
+            profile_dir.join(".cockpit-experimental-model-catalog-enabled"),
+            "enabled\n",
+        )
+        .expect("write model catalog policy marker");
+        fs::write(
+            profile_dir.join(".cockpit-experimental-model-catalog-config.json"),
+            serde_json::to_string_pretty(&json!({
+                "version": 4,
+                "models": [{
+                    "model_id": CODEX_TEST_MODEL_ID,
+                    "display_name": CODEX_TEST_MODEL_ID
+                }]
+            }))
+            .expect("serialize model catalog definitions"),
+        )
+        .expect("write model catalog definitions");
         fs::write(
             profile_dir.join(CODEX_PROVIDER_MODEL_CATALOG_FILE),
             serde_json::to_string_pretty(&json!({
-                "models": [{ "slug": CODEX_EXPERIMENTAL_MODEL_ID }]
+                "models": [{ "slug": CODEX_TEST_MODEL_ID }]
             }))
-            .expect("serialize initial WM catalog"),
+            .expect("serialize initial model catalog"),
         )
-        .expect("write initial WM catalog");
+        .expect("write initial model catalog");
         fs::write(
             profile_dir.join(CODEX_PROFILE_CONFIG_FILE),
             format!(
                 "model_catalog_json = \"{}\"\nmodel = \"{}\"\n",
-                CODEX_PROVIDER_MODEL_CATALOG_FILE, CODEX_EXPERIMENTAL_MODEL_ID
+                CODEX_PROVIDER_MODEL_CATALOG_FILE, CODEX_TEST_MODEL_ID
             ),
         )
-        .expect("write initial WM config");
+        .expect("write initial model config");
         let mut collection = test_local_access_collection(Vec::new());
         collection.api_key = "local-service-key".to_string();
 
@@ -35503,27 +35662,27 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             "model_catalog_json = \"{}\"",
             CODEX_PROVIDER_MODEL_CATALOG_FILE
         )));
-        assert!(config.contains(&format!("model = \"{}\"", CODEX_EXPERIMENTAL_MODEL_ID)));
+        assert!(!config.contains("model = "));
         let catalog: Value = serde_json::from_str(
             &fs::read_to_string(profile_dir.join(CODEX_PROVIDER_MODEL_CATALOG_FILE))
-                .expect("read WM model catalog"),
+                .expect("read model catalog"),
         )
-        .expect("parse WM model catalog");
-        let wm = catalog
+        .expect("parse model catalog");
+        let model = catalog
             .get("models")
             .and_then(Value::as_array)
             .and_then(|models| {
                 models.iter().find(|model| {
-                    model.get("slug").and_then(Value::as_str) == Some(CODEX_EXPERIMENTAL_MODEL_ID)
+                    model.get("slug").and_then(Value::as_str) == Some(CODEX_TEST_MODEL_ID)
                 })
             })
-            .expect("WM model should be present in the managed catalog");
+            .expect("model should be present in the managed catalog");
         assert_eq!(
-            wm.get("display_name").and_then(Value::as_str),
-            Some("GPT-5.6 Sol WM")
+            model.get("display_name").and_then(Value::as_str),
+            Some(CODEX_TEST_MODEL_ID)
         );
         assert_eq!(
-            wm.get("prefer_websockets").and_then(Value::as_bool),
+            model.get("prefer_websockets").and_then(Value::as_bool),
             Some(false)
         );
         assert!(!profile_dir
@@ -36259,6 +36418,21 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
                 CodexLocalAccessImageGenerationMode::Enabled
             );
         }
+    }
+
+    #[test]
+    fn sanitize_collection_migrates_legacy_gateway_to_sidecar() {
+        let mut collection = test_local_access_collection(Vec::new());
+        collection.gateway_mode = CodexLocalAccessGatewayMode::Legacy;
+
+        let (changed, _) = sanitize_collection_with_accounts(&mut collection, &[])
+            .expect("collection should sanitize");
+
+        assert!(changed);
+        assert_eq!(
+            collection.gateway_mode,
+            CodexLocalAccessGatewayMode::Sidecar
+        );
     }
 
     #[test]

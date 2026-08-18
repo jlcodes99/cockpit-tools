@@ -88,6 +88,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
   const [experimentalModels, setExperimentalModels] = useState<
     CodexExperimentalModelDefinition[]
   >([]);
+  const [experimentalDefaultModelId, setExperimentalDefaultModelId] = useState<string | null>(null);
   const [experimentalModelsEdited, setExperimentalModelsEdited] = useState(false);
   const [experimentalModelsError, setExperimentalModelsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -116,6 +117,9 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
     setCustomEdited(false);
     setExperimentalModelCatalogEnabled(config.experimental_model_catalog_enabled);
     setExperimentalModels(config.experimental_model_catalog_models);
+    setExperimentalDefaultModelId(
+      config.experimental_model_catalog_default_model_id ?? null,
+    );
     setExperimentalModelsEdited(false);
   }, []);
 
@@ -261,6 +265,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
       target: QuickConfigTarget,
       experimentalEnabled: boolean,
       models: CodexExperimentalModelDefinition[],
+      defaultModelId: string | null,
     ) => {
       if (loading) return;
 
@@ -277,6 +282,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
             target.autoCompactTokenLimit ?? undefined,
             experimentalEnabled,
             models,
+            defaultModelId,
           );
           if (saveVersion === saveVersionRef.current) {
             applyLoadedConfig(saved);
@@ -320,10 +326,20 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
         setAutoCompactLimitInput(
           String(preset.autoCompactTokenLimit ?? DEFAULT_AUTO_COMPACT_TOKEN_LIMIT),
         );
-        persistConfig(preset, experimentalModelCatalogEnabled, experimentalModels);
+        persistConfig(
+          preset,
+          experimentalModelCatalogEnabled,
+          experimentalModels,
+          experimentalDefaultModelId,
+        );
       }
     },
-    [experimentalModelCatalogEnabled, experimentalModels, persistConfig],
+    [
+      experimentalDefaultModelId,
+      experimentalModelCatalogEnabled,
+      experimentalModels,
+      persistConfig,
+    ],
   );
 
   useEffect(() => {
@@ -347,6 +363,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
         },
         experimentalModelCatalogEnabled,
         experimentalModels,
+        experimentalDefaultModelId,
       );
     }, 500);
     return () => window.clearTimeout(timer);
@@ -354,6 +371,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
     customEdited,
     detectedAutoCompactTokenLimit,
     detectedModelContextWindow,
+    experimentalDefaultModelId,
     experimentalModelCatalogEnabled,
     experimentalModels,
     isCustomPreset,
@@ -372,7 +390,9 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
       !experimentalModelsEdited ||
       experimentalModelsError ||
       JSON.stringify(loadedConfig.experimental_model_catalog_models) ===
-        JSON.stringify(experimentalModels)
+        JSON.stringify(experimentalModels) &&
+      (loadedConfig.experimental_model_catalog_default_model_id ?? null) ===
+        experimentalDefaultModelId
     ) {
       return;
     }
@@ -386,6 +406,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
           : targetConfig,
         experimentalModelCatalogEnabled,
         experimentalModels,
+        experimentalDefaultModelId,
       );
     }, 500);
     return () => window.clearTimeout(timer);
@@ -393,6 +414,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
     detectedAutoCompactTokenLimit,
     detectedModelContextWindow,
     experimentalModelCatalogEnabled,
+    experimentalDefaultModelId,
     experimentalModels,
     experimentalModelsEdited,
     experimentalModelsError,
@@ -539,20 +561,20 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
             <div className="codex-quick-config-field codex-quick-config-field--switch">
               <div className="codex-quick-config-field__copy">
                 <label htmlFor="codex-experimental-model-catalog">
-                  {t('codex.experimentalModelCatalog.title', '实验性模型目录')}
+                  {t('codex.experimentalModelCatalog.title', '可见模型')}
                 </label>
                 <p>
                   {t(
                     'codex.experimentalModelCatalog.description',
-                    '生成包含完整官方模型与自定义实验模型的 Cockpit 受管目录；不会覆盖用户自定义目录。',
+                    '根据当前可用官方模型和自定义条目生成 Cockpit 受管目录；不会覆盖用户自定义目录。',
                   )}
                 </p>
                 {experimentalModelCatalogEnabled && (
                   <p>
-                    {t('codex.experimentalModelCatalog.enabledHint', {
-                      defaultValue: '启用后默认模型切换为 {{model}}，重启 Codex 生效。',
-                      model: experimentalModels[0]?.model_id ?? 'gpt-5.6-sol-wm',
-                    })}
+                    {t(
+                      'codex.experimentalModelCatalog.enabledHint',
+                      '启用后使用当前可见模型列表，重启 Codex 生效。',
+                    )}
                   </p>
                 )}
                 {experimentalModelUnavailableMessage && (
@@ -585,6 +607,7 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
                       experimentalModelsError
                         ? (loadedConfig?.experimental_model_catalog_models ?? [])
                         : experimentalModels,
+                      experimentalDefaultModelId,
                     );
                   }}
                   disabled={
@@ -599,8 +622,15 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
             {experimentalModelCatalogEnabled && (
               <CodexExperimentalModelEditor
                 models={experimentalModels}
+                defaultModelId={experimentalDefaultModelId}
+                mode="summary"
                 onChange={(models) => {
                   setExperimentalModels(models);
+                  setExperimentalModelsEdited(true);
+                  setError(null);
+                }}
+                onDefaultModelChange={(modelId) => {
+                  setExperimentalDefaultModelId(modelId);
                   setExperimentalModelsEdited(true);
                   setError(null);
                 }}

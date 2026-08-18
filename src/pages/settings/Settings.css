@@ -1188,3 +1188,49 @@ input:checked + .slider:before {
     transform: translateY(0);
   }
 }
+.settings-codex-policy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.settings-codex-policy-item {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) auto auto minmax(150px, 190px);
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.25));
+  border-radius: 6px;
+}
+
+.settings-codex-policy-email {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-codex-policy-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.settings-muted {
+  color: var(--text-secondary, #64748b);
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .settings-codex-policy-item {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .settings-codex-policy-email {
+    grid-column: 1 / -1;
+  }
+}

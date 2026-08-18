@@ -3,17 +3,7 @@ import {
   formatCodexWindowCostAmount,
   formatCodexWindowRequestCount,
   formatCodexWindowTokenCount,
-  type CodexWindowStats,
 } from "../../utils/codexWindowStats";
-
-const EMPTY_WINDOW_STATS: CodexWindowStats = {
-  requestCount: 0,
-  inputTokens: 0,
-  cachedInputTokens: 0,
-  outputTokens: 0,
-  totalTokens: 0,
-  estimatedCostUsd: 0,
-};
 
 type Translate = {
   (key: string, defaultValue?: string): string;
@@ -27,11 +17,7 @@ function CodexQuotaMiniRow({
   item: UnifiedQuotaMetric;
   t: Translate;
 }) {
-  const stats =
-    item.windowStats ??
-    (item.key === "primary" || item.key === "secondary"
-      ? EMPTY_WINDOW_STATS
-      : undefined);
+  const stats = item.windowStats;
   return (
     <div className="codex-quota-mini" title={item.hintText}>
       <div className="codex-quota-mini-head">

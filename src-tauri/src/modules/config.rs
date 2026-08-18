@@ -107,6 +107,9 @@ pub struct UserConfig {
     /// 是否启用 Codex 客户端中的 API 服务额度显示注入
     #[serde(default = "default_codex_app_ui_injection_enabled")]
     pub codex_app_ui_injection_enabled: bool,
+    /// 是否全局允许 Codex app-server 第三方客户端（账户级开关仍可单独放行）
+    #[serde(default = "default_codex_cli_only_allow_app_server_clients")]
+    pub codex_cli_only_allow_app_server_clients: bool,
     /// Codex WSL 配置目录 (Windows Only)
     #[serde(default = "default_codex_wsl_config_dir")]
     pub codex_wsl_config_dir: String,
@@ -701,6 +704,10 @@ fn default_codex_sync_wsl() -> bool {
 fn default_codex_app_ui_injection_enabled() -> bool {
     true
 }
+
+fn default_codex_cli_only_allow_app_server_clients() -> bool {
+    false
+}
 fn default_codex_wsl_config_dir() -> String {
     String::new()
 }
@@ -1161,6 +1168,8 @@ impl Default for UserConfig {
             codex_auto_refresh_minutes: default_codex_auto_refresh(),
             codex_sync_wsl: default_codex_sync_wsl(),
             codex_app_ui_injection_enabled: default_codex_app_ui_injection_enabled(),
+            codex_cli_only_allow_app_server_clients:
+                default_codex_cli_only_allow_app_server_clients(),
             codex_wsl_config_dir: default_codex_wsl_config_dir(),
             zed_auto_refresh_minutes: default_zed_auto_refresh(),
             ghcp_auto_refresh_minutes: default_ghcp_auto_refresh(),

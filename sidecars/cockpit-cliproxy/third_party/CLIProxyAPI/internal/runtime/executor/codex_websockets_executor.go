@@ -319,6 +319,9 @@ func (s *codexWebsocketSession) notifyUpstreamDisconnect(err error) {
 }
 
 func (e *CodexWebsocketsExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (resp cliproxyexecutor.Response, err error) {
+	if err := enforceCodexClientPolicy(auth, opts.Headers, req.Payload); err != nil {
+		return resp, err
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -605,6 +608,9 @@ func (e *CodexWebsocketsExecutor) Execute(ctx context.Context, auth *cliproxyaut
 }
 
 func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Auth, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (_ *cliproxyexecutor.StreamResult, err error) {
+	if err := enforceCodexClientPolicy(auth, opts.Headers, req.Payload); err != nil {
+		return nil, err
+	}
 	log.Debugf("Executing Codex Websockets stream request with auth ID: %s, model: %s", auth.ID, req.Model)
 	if ctx == nil {
 		ctx = context.Background()

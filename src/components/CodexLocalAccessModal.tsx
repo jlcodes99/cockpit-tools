@@ -684,29 +684,31 @@ export function CodexLocalAccessModal({
     setCustomRoutingTagFilter([]);
     setCustomRoutingError("");
     setCustomRoutingSelected(new Set());
-    setCustomRoutingDraft(() => {
-      const ruleMap = new Map(
-        (collection?.customRoutingRules ?? []).map((rule) => [
-          rule.accountId,
-          {
-            priority: normalizeCustomRoutingPriority(rule.priority),
-            weight: normalizeCustomRoutingWeight(rule.weight),
-            isBackup: Boolean(rule.isBackup),
-            isPreferred: Boolean(rule.isPreferred),
-          },
-        ]),
-      );
-      const next: Record<string, CustomRoutingDraftRule> = {};
-      (collection?.accountIds ?? []).forEach((accountId) => {
-        next[accountId] = ruleMap.get(accountId) ?? {
-          priority: CUSTOM_ROUTING_PRIORITY_MIN,
-          weight: CUSTOM_ROUTING_WEIGHT_MIN,
-          isBackup: false,
-          isPreferred: false,
-        };
+    if (shouldResetMembersDraft) {
+      setCustomRoutingDraft(() => {
+        const ruleMap = new Map(
+          (collection?.customRoutingRules ?? []).map((rule) => [
+            rule.accountId,
+            {
+              priority: normalizeCustomRoutingPriority(rule.priority),
+              weight: normalizeCustomRoutingWeight(rule.weight),
+              isBackup: Boolean(rule.isBackup),
+              isPreferred: Boolean(rule.isPreferred),
+            },
+          ]),
+        );
+        const next: Record<string, CustomRoutingDraftRule> = {};
+        (collection?.accountIds ?? []).forEach((accountId) => {
+          next[accountId] = ruleMap.get(accountId) ?? {
+            priority: CUSTOM_ROUTING_PRIORITY_MIN,
+            weight: CUSTOM_ROUTING_WEIGHT_MIN,
+            isBackup: false,
+            isPreferred: false,
+          };
+        });
+        return next;
       });
-      return next;
-    });
+    }
     setCustomRoutingBulkPriority("10");
     setCustomRoutingBulkWeight("1");
     if (mode === "members") {

@@ -285,6 +285,14 @@
   flex-shrink: 0;
 }
 
+.codex-local-access-current-mode {
+  flex-shrink: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
 .codex-local-access-title-mode-select .single-select-dropdown-trigger {
   min-height: 24px;
   padding: 0 3px 0 0;
@@ -7959,7 +7967,8 @@
 }
 
 .codex-quick-config-modal {
-  width: min(600px, calc(100vw - 32px));
+  width: min(780px, calc(100vw - 32px));
+  max-width: min(780px, calc(100vw - 32px));
 }
 
 .codex-quick-config-modal .modal-body {

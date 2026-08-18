@@ -436,6 +436,63 @@ func metadataString(metadata map[string]any, key string) string {
 	}
 }
 
+func metadataBool(metadata map[string]any, key string) bool {
+	if len(metadata) == 0 {
+		return false
+	}
+	switch value := metadata[key].(type) {
+	case bool:
+		return value
+	case string:
+		return strings.EqualFold(strings.TrimSpace(value), "true")
+	default:
+		return false
+	}
+}
+
+func isOfficialCodexClient(userAgent, originator string) bool {
+	ua := strings.ToLower(strings.TrimSpace(userAgent))
+	for _, prefix := range []string{
+		"codex_cli_rs/", "codex-tui/", "codex_vscode/", "codex_vscode_copilot/",
+		"codex_app/", "codex_chatgpt_desktop/", "codex_atlas/", "codex_exec/",
+		"codex_sdk_ts/", "codex ",
+	} {
+		if strings.HasPrefix(ua, prefix) {
+			return true
+		}
+	}
+	originator = strings.ToLower(strings.TrimSpace(originator))
+	if originator == "codex_cli_rs" || originator == "codex-tui" ||
+		originator == "codex_vscode" || originator == "codex_vscode_copilot" ||
+		originator == "codex_app" || originator == "codex_chatgpt_desktop" ||
+		originator == "codex_atlas" || originator == "codex_exec" ||
+		originator == "codex_sdk_ts" {
+		return true
+	}
+	return strings.HasPrefix(originator, "codex ")
+}
+
+func enforceCodexClientPolicy(auth *cliproxyauth.Auth, headers http.Header, payload []byte) error {
+	if auth == nil || !metadataBool(auth.Metadata, "codex_cli_only") {
+		return nil
+	}
+	userAgent := ""
+	originator := ""
+	if headers != nil {
+		userAgent = headers.Get("User-Agent")
+		originator = headers.Get("Originator")
+	}
+	if isOfficialCodexClient(userAgent, originator) {
+		return nil
+	}
+	if metadataBool(auth.Metadata, "codex_cli_only_allow_app_server") ||
+		metadataBool(auth.Metadata, "codex_cli_only_allow_app_server_clients") {
+		return nil
+	}
+	_ = payload
+	return statusErr{code: http.StatusForbidden, msg: "This account only allows Codex official clients"}
+}
+
 func codexReasoningReplaySessionKeyFromPayload(payload []byte) string {
 	if len(payload) == 0 {
 		return ""
@@ -875,6 +932,9 @@ func (e *CodexExecutor) HttpRequest(ctx context.Context, auth *cliproxyauth.Auth
 }
 
 func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (resp cliproxyexecutor.Response, err error) {
+	if err := enforceCodexClientPolicy(auth, opts.Headers, req.Payload); err != nil {
+		return resp, err
+	}
 	if opts.Alt == "responses/compact" {
 		return e.executeCompact(ctx, auth, req, opts)
 	}
@@ -1142,6 +1202,9 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 }
 
 func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Auth, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (_ *cliproxyexecutor.StreamResult, err error) {
+	if err := enforceCodexClientPolicy(auth, opts.Headers, req.Payload); err != nil {
+		return nil, err
+	}
 	if opts.Alt == "responses/compact" {
 		return nil, statusErr{code: http.StatusBadRequest, msg: "streaming not supported for /responses/compact"}
 	}
@@ -1661,17 +1724,15 @@ func codexFingerprintMode(cfg *config.Config, auth *cliproxyauth.Auth) string {
 			mode = strings.ToLower(strings.TrimSpace(raw))
 		}
 	}
-	// Sub2API-compatible account-level default: session.
+	// Account-level default is off; users can still opt into session/device/full.
 	if mode == "" {
-		mode = "session"
+		mode = "off"
 	}
 	switch mode {
-	case "device", "session", "full":
+	case "device", "session", "full", "off":
 		return mode
-	case "off":
-		return "off"
 	default:
-		return "session"
+		return "off"
 	}
 }
 

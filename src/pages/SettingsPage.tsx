@@ -1039,7 +1039,7 @@ export function SettingsPage() {
     const grokAutoRefreshNum = parseInt(grokAutoRefresh, 10) || -1;
     const parsedUiScale = Number.parseFloat(uiScale);
     const normalizedUiScale = Number.isFinite(parsedUiScale)
-      ? Math.min(2, Math.max(0.8, parsedUiScale))
+      ? Math.min(2, Math.max(0.3, parsedUiScale))
       : 1;
     const parsedAutoSwitchThreshold = Number.parseInt(autoSwitchThreshold, 10);
     const parsedAutoSwitchCreditsThreshold = Number.parseInt(autoSwitchCreditsThreshold, 10);
@@ -1592,7 +1592,7 @@ export function SettingsPage() {
 
   const applyUiScale = async (rawScale: string) => {
     const parsed = Number.parseFloat(rawScale);
-    const normalized = Number.isFinite(parsed) ? Math.min(2, Math.max(0.8, parsed)) : 1;
+    const normalized = Number.isFinite(parsed) ? Math.min(2, Math.max(0.3, parsed)) : 1;
     try {
       await getCurrentWebview().setZoom(normalized);
     } catch (error) {

@@ -728,6 +728,7 @@ export function InstancesManager<TAccount extends AccountLike>({
   const [formExperimentalModels, setFormExperimentalModels] = useState<
     CodexExperimentalModelDefinition[]
   >([]);
+  const [formExperimentalDefaultModelId, setFormExperimentalDefaultModelId] = useState<string | null>(null);
   const [formExperimentalModelsError, setFormExperimentalModelsError] = useState<string | null>(
     null,
   );
@@ -1344,6 +1345,7 @@ export function InstancesManager<TAccount extends AccountLike>({
             formCodexQuickTargetConfig.autoCompactTokenLimit ?? undefined,
             formExperimentalModelCatalogEnabled,
             formExperimentalModels,
+            formExperimentalDefaultModelId,
           );
         }
         setMessage({ text: t("instances.messages.updated", "实例已更新") });
@@ -1891,6 +1893,9 @@ export function InstancesManager<TAccount extends AccountLike>({
         nextConfig.experimental_model_catalog_enabled,
       );
       setFormExperimentalModels(nextConfig.experimental_model_catalog_models);
+      setFormExperimentalDefaultModelId(
+        nextConfig.experimental_model_catalog_default_model_id ?? null,
+      );
       setFormExperimentalModelsError(null);
     },
     [],
@@ -1962,13 +1967,16 @@ export function InstancesManager<TAccount extends AccountLike>({
       formCodexQuickConfig.experimental_model_catalog_enabled !==
         formExperimentalModelCatalogEnabled ||
       JSON.stringify(formCodexQuickConfig.experimental_model_catalog_models) !==
-        JSON.stringify(formExperimentalModels)
+        JSON.stringify(formExperimentalModels) ||
+      (formCodexQuickConfig.experimental_model_catalog_default_model_id ?? null) !==
+        formExperimentalDefaultModelId
     );
   }, [
     formCodexQuickConfig,
     formCodexQuickDetectedAutoCompactTokenLimit,
     formCodexQuickDetectedModelContextWindow,
     formExperimentalModelCatalogEnabled,
+    formExperimentalDefaultModelId,
     formExperimentalModels,
     formCodexQuickTargetConfig.autoCompactTokenLimit,
     formCodexQuickTargetConfig.modelContextWindow,
@@ -3443,24 +3451,21 @@ export function InstancesManager<TAccount extends AccountLike>({
                           <label htmlFor="instance-codex-experimental-model-catalog">
                             {t(
                               "codex.experimentalModelCatalog.title",
-                              "实验性模型目录",
+                              "可见模型",
                             )}
                           </label>
                           <p className="form-hint">
                             {t(
                               "codex.experimentalModelCatalog.description",
-                              "生成包含完整官方模型与自定义实验模型的 Cockpit 受管目录；不会覆盖用户自定义目录。",
+                              "根据当前可用官方模型和自定义条目生成 Cockpit 受管目录；不会覆盖用户自定义目录。",
                             )}
                           </p>
                           {formExperimentalModelCatalogEnabled && (
                             <p className="form-hint">
-                              {t("codex.experimentalModelCatalog.enabledHint", {
-                                defaultValue:
-                                  "启用后默认模型切换为 {{model}}，重启 Codex 生效。",
-                                model:
-                                  formExperimentalModels[0]?.model_id ??
-                                  "gpt-5.6-sol-wm",
-                              })}
+                              {t(
+                                "codex.experimentalModelCatalog.enabledHint",
+                                "启用后使用当前可见模型列表，重启 Codex 生效。",
+                              )}
                             </p>
                           )}
                           {formExperimentalModelUnavailableMessage && (
@@ -3492,8 +3497,14 @@ export function InstancesManager<TAccount extends AccountLike>({
                       {formExperimentalModelCatalogEnabled && (
                         <CodexExperimentalModelEditor
                           models={formExperimentalModels}
+                          defaultModelId={formExperimentalDefaultModelId}
+                          mode="summary"
                           onChange={(models) => {
                             setFormExperimentalModels(models);
+                            setFormCodexQuickConfigError(null);
+                          }}
+                          onDefaultModelChange={(modelId) => {
+                            setFormExperimentalDefaultModelId(modelId);
                             setFormCodexQuickConfigError(null);
                           }}
                           onValidationChange={setFormExperimentalModelsError}

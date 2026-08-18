@@ -81,10 +81,6 @@ export interface CodexLocalAccessApiKey {
 }
 
 export interface CodexLocalAccessTimeouts {
-  legacyRequestReadTimeoutMs: number;
-  legacyUpstreamConnectTimeoutMs: number;
-  legacyStreamIdleTimeoutMs: number;
-  legacyStreamTotalTimeoutMs: number;
   sidecarStreamOpenTimeoutMs: number;
   sidecarStreamIdleTimeoutMs: number;
   sidecarImageStreamOpenTimeoutMs: number;

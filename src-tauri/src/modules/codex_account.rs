@@ -26,6 +26,8 @@ static CODEX_BATCH_IMPORT_COUNTER: AtomicU64 = AtomicU64::new(1);
 static CODEX_BATCH_IMPORT_SESSIONS: std::sync::LazyLock<
     Mutex<HashMap<String, CodexBatchImportSession>>,
 > = std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+static CODEX_FINGERPRINT_DEFAULT_OFF_MIGRATION_STARTED: AtomicBool = AtomicBool::new(false);
+const CODEX_FINGERPRINT_DEFAULT_OFF_MARKER: &str = "codex_fingerprint_default_off_v1";
 const CODEX_QUOTA_ALERT_COOLDOWN_SECONDS: i64 = 300;
 const ACCOUNT_CHECK_URL: &str = "https://chatgpt.com/backend-api/wham/accounts/check";
 const API_KEY_LOGIN_PLAN_TYPE: &str = "API_KEY";
@@ -45,17 +47,26 @@ const CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY: &str = "model_context_window";
 const CODEX_CONFIG_MODEL_AUTO_COMPACT_TOKEN_LIMIT_KEY: &str = "model_auto_compact_token_limit";
 const CODEX_MANAGED_MODEL_CATALOG_FILE: &str = "cockpit-provider-model-catalog.json";
 const CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE: &str = "cockpit-local-access-model-catalog.json";
-const CODEX_EXPERIMENTAL_MODEL_ID: &str = "gpt-5.6-sol-wm";
-const CODEX_EXPERIMENTAL_MODEL_DISPLAY_NAME: &str = "GPT-5.6 Sol WM";
 const CODEX_EXPERIMENTAL_MODEL_POLICY_FILE: &str = ".cockpit-experimental-model-catalog-enabled";
 const CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE: &str =
     ".cockpit-experimental-model-catalog-config.json";
 const CODEX_EXPERIMENTAL_MODEL_PREVIOUS_CATALOG_FILE: &str =
     ".cockpit-experimental-model-catalog-previous.json";
+const EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION: u32 = 4;
+const CODEX_REASONING_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max", "ultra"];
+const SHIPPED_VISIBLE_CODEX_MODEL_IDS: &[&str] = &[
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.3-codex",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.3-codex-spark",
+];
 /// Official DeepSeek Codex setup writes `models.json` and points `model_catalog_json` at it.
 /// Extra instances must use their own CODEX_HOME copy, not the default `~/.codex/models.json`.
 const DEEPSEEK_OFFICIAL_MODEL_CATALOG_FILE: &str = "models.json";
-const CODEX_AUTO_REVIEW_MODEL_ID: &str = "codex-auto-review";
 const CODEX_IMAGE_MODEL_ID: &str = "gpt-image-2";
 const CODEX_IMAGEGEN_ACTOR_HEADER: &str = "x-openai-actor-authorization";
 const CODEX_IMAGEGEN_ACTOR_HEADER_VALUE: &str = "cockpit-tools";
@@ -1961,12 +1972,24 @@ fn read_previous_experimental_catalog_reference(base_dir: &Path) -> Option<Strin
         .map(str::to_string)
 }
 
+fn read_previous_experimental_model(base_dir: &Path) -> Option<String> {
+    let content = fs::read_to_string(experimental_model_previous_catalog_path(base_dir)).ok()?;
+    serde_json::from_str::<serde_json::Value>(&content)
+        .ok()?
+        .get("model")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+}
+
 fn persist_previous_experimental_catalog_reference(
     base_dir: &Path,
     reference: Option<&str>,
+    model: Option<&str>,
 ) -> Result<(), String> {
     let path = experimental_model_previous_catalog_path(base_dir);
-    let Some(reference) = reference.map(str::trim).filter(|value| !value.is_empty()) else {
+    let reference = reference.map(str::trim).filter(|value| !value.is_empty());
+    let model = model.map(str::trim).filter(|value| !value.is_empty());
+    if reference.is_none() && model.is_none() {
         return match fs::remove_file(&path) {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -1977,7 +2000,13 @@ fn persist_previous_experimental_catalog_reference(
             )),
         };
     };
-    let content = serde_json::json!({ "model_catalog_json": reference });
+    let mut content = serde_json::json!({});
+    if let Some(reference) = reference {
+        content["model_catalog_json"] = serde_json::Value::String(reference.to_string());
+    }
+    if let Some(model) = model {
+        content["model"] = serde_json::Value::String(model.to_string());
+    }
     let mut content = serde_json::to_string_pretty(&content)
         .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_PREVIOUS_SERIALIZE_FAILED".to_string())?;
     content.push('\n');
@@ -1987,14 +2016,141 @@ fn persist_previous_experimental_catalog_reference(
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct ExperimentalModelCatalogConfig {
+    #[serde(default)]
+    version: u32,
     models: Vec<CodexExperimentalModelDefinition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    default_model_id: Option<String>,
 }
 
-fn default_experimental_model_definitions() -> Vec<CodexExperimentalModelDefinition> {
-    vec![CodexExperimentalModelDefinition {
-        model_id: CODEX_EXPERIMENTAL_MODEL_ID.to_string(),
-        display_name: CODEX_EXPERIMENTAL_MODEL_DISPLAY_NAME.to_string(),
-    }]
+fn read_experimental_model_default_model_id(base_dir: &Path) -> Option<String> {
+    let content = fs::read_to_string(experimental_model_config_path(base_dir)).ok()?;
+    let config = serde_json::from_str::<ExperimentalModelCatalogConfig>(&content).ok()?;
+    if config.version < EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION {
+        return None;
+    }
+    let default_model_id = config.default_model_id?.trim().to_string();
+    if default_model_id.is_empty() {
+        return None;
+    }
+    config
+        .models
+        .iter()
+        .find(|model| model.model_id.trim().eq_ignore_ascii_case(&default_model_id))
+        .map(|model| model.model_id.trim().to_string())
+}
+
+fn experimental_model_config_requires_catalog_migration(base_dir: &Path) -> bool {
+    let path = experimental_model_config_path(base_dir);
+    let Ok(content) = fs::read_to_string(path) else {
+        return false;
+    };
+    serde_json::from_str::<ExperimentalModelCatalogConfig>(&content)
+        .map(|config| config.version < EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION)
+        .unwrap_or(true)
+}
+
+fn default_experimental_model_definitions(
+    _base_dir: &Path,
+) -> Vec<CodexExperimentalModelDefinition> {
+    let model_ids = SHIPPED_VISIBLE_CODEX_MODEL_IDS
+        .iter()
+        .map(|model_id| (*model_id).to_string())
+        .collect::<Vec<_>>();
+    let catalog = crate::modules::codex_protocol::build_codex_client_models_response(&model_ids);
+    let models = catalog
+        .get("models")
+        .and_then(serde_json::Value::as_array)
+        .map(|models| {
+            models
+                .iter()
+                .filter_map(|model| {
+                    if model
+                        .get("visibility")
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(|visibility| visibility.eq_ignore_ascii_case("hide"))
+                    {
+                        return None;
+                    }
+                    let model_id = model
+                        .get("slug")
+                        .and_then(serde_json::Value::as_str)?
+                        .trim();
+                    if model_id.is_empty() {
+                        return None;
+                    }
+                    let display_name = model
+                        .get("display_name")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .unwrap_or(model_id);
+                    Some(CodexExperimentalModelDefinition {
+                        model_id: model_id.to_string(),
+                        display_name: model_catalog_display_name(model_id, display_name),
+                        reasoning_efforts: None,
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if models.is_empty() {
+        model_ids
+            .into_iter()
+            .map(|model_id| CodexExperimentalModelDefinition {
+                display_name: model_id.clone(),
+                model_id,
+                reasoning_efforts: None,
+            })
+            .collect()
+    } else {
+        models
+    }
+}
+
+fn model_catalog_display_name(model_id: &str, fallback: &str) -> String {
+    match model_id.trim().to_ascii_lowercase().as_str() {
+        "gpt-5.6-sol" => "5.6 Sol".to_string(),
+        "gpt-5.6-terra" => "5.6 Terra".to_string(),
+        "gpt-5.6-luna" => "5.6 Luna".to_string(),
+        "gpt-5.3-codex" => "5.3 Codex".to_string(),
+        "gpt-5.5" => "5.5".to_string(),
+        "gpt-5.4" => "5.4".to_string(),
+        "gpt-5.4-mini" => "5.4 Mini".to_string(),
+        "gpt-5.3-codex-spark" => "5.3 Codex Spark".to_string(),
+        "gpt-5.6-sol-wm" => "5.6 Sol WM".to_string(),
+        _ => fallback.trim().to_string(),
+    }
+}
+
+fn is_valid_model_catalog_id(model_id: &str) -> bool {
+    !model_id.is_empty()
+        && model_id.len() <= 128
+        && model_id.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'/' | b'-')
+        })
+}
+
+fn normalize_reasoning_efforts(
+    efforts: Option<Vec<String>>,
+) -> Result<Option<Vec<String>>, String> {
+    let Some(efforts) = efforts else {
+        return Ok(None);
+    };
+    let mut normalized = Vec::new();
+    for effort in efforts {
+        let effort = effort.trim().to_ascii_lowercase();
+        if !CODEX_REASONING_EFFORTS.contains(&effort.as_str()) {
+            return Err("EXPERIMENTAL_MODEL_CATALOG_REASONING_EFFORT_INVALID".to_string());
+        }
+        if !normalized.contains(&effort) {
+            normalized.push(effort);
+        }
+    }
+    if normalized.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(normalized))
 }
 
 fn normalize_experimental_model_definitions(
@@ -2004,39 +2160,25 @@ fn normalize_experimental_model_definitions(
         return Err("EXPERIMENTAL_MODEL_CATALOG_MODELS_REQUIRED".to_string());
     }
 
-    let official_models = crate::modules::codex_protocol::managed_codex_model_ids()
-        .into_iter()
-        .map(|model| model.to_ascii_lowercase())
-        .collect::<HashSet<_>>();
     let mut seen = HashSet::new();
     let mut normalized = Vec::with_capacity(models.len());
     for model in models {
         let model_id = model.model_id.trim();
         let display_name = model.display_name.trim();
-        if model_id.is_empty()
-            || model_id.len() > 128
-            || !model_id.bytes().all(|byte| {
-                byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'/' | b'-')
-            })
-        {
+        if !is_valid_model_catalog_id(model_id) {
             return Err("EXPERIMENTAL_MODEL_CATALOG_MODEL_ID_INVALID".to_string());
         }
         if display_name.is_empty() || display_name.chars().count() > 100 {
             return Err("EXPERIMENTAL_MODEL_CATALOG_DISPLAY_NAME_INVALID".to_string());
         }
         let key = model_id.to_ascii_lowercase();
-        if official_models.contains(&key)
-            || key == CODEX_IMAGE_MODEL_ID
-            || key == CODEX_AUTO_REVIEW_MODEL_ID
-        {
-            return Err("EXPERIMENTAL_MODEL_CATALOG_MODEL_ID_RESERVED".to_string());
-        }
         if !seen.insert(key) {
             return Err("EXPERIMENTAL_MODEL_CATALOG_MODEL_ID_DUPLICATE".to_string());
         }
         normalized.push(CodexExperimentalModelDefinition {
             model_id: model_id.to_string(),
             display_name: display_name.to_string(),
+            reasoning_efforts: normalize_reasoning_efforts(model.reasoning_efforts.clone())?,
         });
     }
     Ok(normalized)
@@ -2047,12 +2189,17 @@ pub(crate) fn read_experimental_model_definitions(
 ) -> Vec<CodexExperimentalModelDefinition> {
     let path = experimental_model_config_path(base_dir);
     let Ok(content) = fs::read_to_string(&path) else {
-        return default_experimental_model_definitions();
+        return default_experimental_model_definitions(base_dir);
     };
     match serde_json::from_str::<ExperimentalModelCatalogConfig>(&content)
         .map_err(|error| error.to_string())
         .and_then(|config| normalize_experimental_model_definitions(config.models))
     {
+        Ok(_models) if experimental_model_config_requires_catalog_migration(base_dir) => {
+            // A release migration intentionally resets all pre-release lists to the
+            // shipped visible-model preset. Later user edits are preserved by version 4+.
+            default_experimental_model_definitions(base_dir)
+        }
         Ok(models) => models,
         Err(error) => {
             logger::log_warn(&format!(
@@ -2060,7 +2207,7 @@ pub(crate) fn read_experimental_model_definitions(
                 path.display(),
                 error
             ));
-            default_experimental_model_definitions()
+            default_experimental_model_definitions(base_dir)
         }
     }
 }
@@ -2068,10 +2215,19 @@ pub(crate) fn read_experimental_model_definitions(
 fn persist_experimental_model_definitions(
     base_dir: &Path,
     models: Vec<CodexExperimentalModelDefinition>,
+    default_model_id: Option<&str>,
 ) -> Result<Vec<CodexExperimentalModelDefinition>, String> {
     let models = normalize_experimental_model_definitions(models)?;
+    let default_model_id = default_model_id.and_then(|value| {
+        models
+            .iter()
+            .find(|model| model.model_id.eq_ignore_ascii_case(value.trim()))
+            .map(|model| model.model_id.clone())
+    });
     let mut content = serde_json::to_string_pretty(&ExperimentalModelCatalogConfig {
+        version: EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
         models: models.clone(),
+        default_model_id,
     })
     .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_CONFIG_SERIALIZE_FAILED".to_string())?;
     content.push('\n');
@@ -2107,22 +2263,12 @@ fn persist_experimental_model_policy(base_dir: &Path, enabled: bool) -> Result<(
 }
 
 fn build_experimental_model_catalog(base_dir: &Path) -> Result<String, String> {
-    let custom_models = read_experimental_model_definitions(base_dir);
-    let custom_ids = custom_models
-        .iter()
-        .map(|model| model.model_id.to_ascii_lowercase())
-        .collect::<HashSet<_>>();
-    let mut model_ids = crate::modules::codex_local_access::supported_codex_model_ids();
-    model_ids.retain(|model| !custom_ids.contains(&model.to_ascii_lowercase()));
-    let custom_models = custom_models
+    let definitions = read_experimental_model_definitions(base_dir)
         .into_iter()
-        .map(|model| (model.model_id, model.display_name))
+        .map(|model| (model.model_id, model.display_name, model.reasoning_efforts))
         .collect::<Vec<_>>();
     let catalog =
-        crate::modules::codex_protocol::build_codex_client_models_response_with_custom_models(
-            &model_ids,
-            &custom_models,
-        );
+        crate::modules::codex_protocol::build_codex_client_models_response_with_model_definitions_and_reasoning(&definitions);
     serde_json::to_string_pretty(&catalog)
         .map(|mut content| {
             content.push('\n');
@@ -2209,30 +2355,70 @@ fn merge_existing_catalog_into_experimental_catalog(
         .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_SERIALIZE_FAILED".to_string())
 }
 
-fn managed_model_catalog_contains_experimental_model(base_dir: &Path) -> bool {
-    let Ok(content) = fs::read_to_string(experimental_model_catalog_path(base_dir)) else {
-        return false;
+fn read_catalog_model_definitions(
+    base_dir: &Path,
+    configured_catalog: Option<&str>,
+) -> Vec<CodexExperimentalModelDefinition> {
+    let Some(reference) = configured_catalog
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Vec::new();
     };
-    serde_json::from_str::<serde_json::Value>(&content)
-        .ok()
-        .and_then(|catalog| {
-            catalog
-                .get("models")
-                .and_then(serde_json::Value::as_array)
-                .cloned()
-        })
-        .is_some_and(|models| {
-            let configured_ids = read_experimental_model_definitions(base_dir)
-                .into_iter()
-                .map(|model| model.model_id.to_ascii_lowercase())
-                .collect::<HashSet<_>>();
-            models.iter().any(|model| {
-                model
-                    .get("slug")
-                    .and_then(serde_json::Value::as_str)
-                    .is_some_and(|slug| configured_ids.contains(&slug.to_ascii_lowercase()))
+    let source_path = resolve_catalog_reference(reference, base_dir);
+    let Ok(content) = fs::read_to_string(source_path) else {
+        return Vec::new();
+    };
+    let Ok(catalog) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return Vec::new();
+    };
+    catalog
+        .get("models")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|model| {
+            if model
+                .get("visibility")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|visibility| visibility.eq_ignore_ascii_case("hide"))
+            {
+                return None;
+            }
+            let model_id = model
+                .get("slug")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| is_valid_model_catalog_id(value))?;
+            let display_name = model
+                .get("display_name")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty() && value.chars().count() <= 100)
+                .unwrap_or(model_id);
+            Some(CodexExperimentalModelDefinition {
+                model_id: model_id.to_string(),
+                display_name: model_catalog_display_name(model_id, display_name),
+                reasoning_efforts: None,
             })
         })
+        .collect()
+}
+
+fn merge_model_definitions(
+    mut definitions: Vec<CodexExperimentalModelDefinition>,
+    extra: Vec<CodexExperimentalModelDefinition>,
+) -> Vec<CodexExperimentalModelDefinition> {
+    let mut seen = definitions
+        .iter()
+        .map(|model| model.model_id.to_ascii_lowercase())
+        .collect::<HashSet<_>>();
+    for model in extra {
+        if seen.insert(model.model_id.to_ascii_lowercase()) {
+            definitions.push(model);
+        }
+    }
+    definitions
 }
 
 fn inspect_experimental_model_catalog(
@@ -2244,15 +2430,10 @@ fn inspect_experimental_model_catalog(
         .and_then(|item| item.as_str())
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    let managed_catalog_configured = configured_catalog.is_some_and(|value| {
-        catalog_ref_targets_profile_file(value, base_dir, CODEX_MANAGED_MODEL_CATALOG_FILE)
-    });
     let cockpit_managed_catalog_configured = configured_catalog
         .is_some_and(|value| catalog_ref_targets_cockpit_managed_file(value, base_dir));
     let policy_enabled = experimental_model_policy_enabled(base_dir);
-    let enabled = policy_enabled
-        || (managed_catalog_configured
-            && managed_model_catalog_contains_experimental_model(base_dir));
+    let enabled = policy_enabled;
 
     Ok(ExperimentalModelCatalogState {
         enabled,
@@ -2283,9 +2464,8 @@ fn apply_experimental_model_catalog_to_doc(
     let managed_catalog_configured = configured_catalog.as_deref().is_some_and(|value| {
         catalog_ref_targets_profile_file(value, base_dir, CODEX_MANAGED_MODEL_CATALOG_FILE)
     });
-    let currently_enabled =
-        managed_catalog_configured && managed_model_catalog_contains_experimental_model(base_dir);
     let policy_enabled = experimental_model_policy_enabled(base_dir);
+    let currently_enabled = managed_catalog_configured && policy_enabled;
 
     if !enabled {
         if currently_enabled || policy_enabled {
@@ -2298,47 +2478,66 @@ fn apply_experimental_model_catalog_to_doc(
                     let _ = doc.remove(CODEX_CONFIG_MODEL_CATALOG_JSON_KEY);
                 }
             }
-            let experimental_model_ids = read_experimental_model_definitions(base_dir)
-                .into_iter()
-                .map(|model| model.model_id.to_ascii_lowercase())
-                .collect::<HashSet<_>>();
-            let selected_experimental_model = doc
-                .get("model")
-                .and_then(|item| item.as_str())
-                .is_some_and(|model| {
-                    experimental_model_ids.contains(&model.trim().to_ascii_lowercase())
-                });
-            if selected_experimental_model {
-                let _ = doc.remove("model");
+            if let Some(previous_model) = read_previous_experimental_model(base_dir) {
+                doc["model"] = value(previous_model);
             }
         }
         return Ok(currently_enabled || policy_enabled);
     }
 
-    let experimental_models = read_experimental_model_definitions(base_dir);
-    let default_model = experimental_models
-        .first()
-        .map(|model| model.model_id.as_str())
-        .ok_or_else(|| "EXPERIMENTAL_MODEL_CATALOG_MODELS_REQUIRED".to_string())?;
-    let generated_content = build_experimental_model_catalog(base_dir)
-        .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_SERIALIZE_FAILED".to_string())?;
+    let has_saved_model_definitions = experimental_model_config_path(base_dir).is_file();
+    let migrate_saved_model_definitions = has_saved_model_definitions
+        && experimental_model_config_requires_catalog_migration(base_dir);
+    let mut experimental_models = read_experimental_model_definitions(base_dir);
     let user_catalog_reference = configured_catalog.as_deref().filter(|catalog| {
         !catalog_ref_targets_profile_file(catalog, base_dir, CODEX_MANAGED_MODEL_CATALOG_FILE)
     });
-    if user_catalog_reference.is_some()
-        && read_previous_experimental_catalog_reference(base_dir).is_none()
-    {
-        persist_previous_experimental_catalog_reference(base_dir, user_catalog_reference)?;
+    let catalog_reference_for_models = configured_catalog.as_deref();
+    if !has_saved_model_definitions || migrate_saved_model_definitions {
+        if !migrate_saved_model_definitions {
+            experimental_models = merge_model_definitions(
+                experimental_models,
+                read_catalog_model_definitions(base_dir, catalog_reference_for_models),
+            );
+        }
+        experimental_models =
+            persist_experimental_model_definitions(base_dir, experimental_models, None)?;
     }
-    let content = merge_existing_catalog_into_experimental_catalog(
-        base_dir,
-        user_catalog_reference,
-        &generated_content,
-    )?;
+    if experimental_models.is_empty() {
+        return Err("EXPERIMENTAL_MODEL_CATALOG_MODELS_REQUIRED".to_string());
+    }
+    let generated_content = build_experimental_model_catalog(base_dir)
+        .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_SERIALIZE_FAILED".to_string())?;
+    if let Some(default_model_id) = read_experimental_model_default_model_id(base_dir) {
+        if experimental_models
+            .iter()
+            .any(|model| model.model_id.eq_ignore_ascii_case(&default_model_id))
+        {
+            doc["model"] = value(default_model_id);
+        }
+    }
+    if read_previous_experimental_catalog_reference(base_dir).is_none()
+        && read_previous_experimental_model(base_dir).is_none()
+    {
+        let previous_model = doc.get("model").and_then(|item| item.as_str());
+        persist_previous_experimental_catalog_reference(
+            base_dir,
+            user_catalog_reference,
+            previous_model,
+        )?;
+    }
+    let content = if has_saved_model_definitions && !migrate_saved_model_definitions {
+        generated_content
+    } else {
+        merge_existing_catalog_into_experimental_catalog(
+            base_dir,
+            user_catalog_reference,
+            &generated_content,
+        )?
+    };
     write_string_atomic(&experimental_model_catalog_path(base_dir), &content)
         .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_WRITE_FAILED".to_string())?;
     doc[CODEX_CONFIG_MODEL_CATALOG_JSON_KEY] = value(CODEX_MANAGED_MODEL_CATALOG_FILE);
-    doc["model"] = value(default_model);
     Ok(false)
 }
 
@@ -2386,6 +2585,17 @@ pub fn read_quick_config_from_config_toml(base_dir: &Path) -> Result<CodexQuickC
         read_top_level_int_from_doc(&doc, CODEX_CONFIG_MODEL_AUTO_COMPACT_TOKEN_LIMIT_KEY)
             .filter(|value| *value > 0);
     let experimental = inspect_experimental_model_catalog(base_dir, &doc)?;
+    let experimental_models = read_experimental_model_definitions(base_dir);
+    let experimental_default_model_id = read_experimental_model_default_model_id(base_dir).or_else(|| {
+        if !experimental.enabled {
+            return None;
+        }
+        let configured_model = doc.get("model").and_then(|item| item.as_str())?.trim();
+        experimental_models
+            .iter()
+            .find(|model| model.model_id.eq_ignore_ascii_case(configured_model))
+            .map(|model| model.model_id.clone())
+    });
 
     Ok(CodexQuickConfig {
         context_window_1m: detected_model_context_window == Some(CODEX_CONTEXT_WINDOW_1M_VALUE),
@@ -2397,7 +2607,8 @@ pub fn read_quick_config_from_config_toml(base_dir: &Path) -> Result<CodexQuickC
         experimental_model_catalog_available: experimental.available,
         experimental_model_catalog_unavailable_reason: experimental.unavailable_reason,
         experimental_model_catalog_conflict: experimental.conflict,
-        experimental_model_catalog_models: read_experimental_model_definitions(base_dir),
+        experimental_model_catalog_models: experimental_models,
+        experimental_model_catalog_default_model_id: experimental_default_model_id,
     })
 }
 
@@ -2411,6 +2622,24 @@ fn write_quick_config_to_config_toml(
     auto_compact_token_limit: Option<i64>,
     experimental_model_catalog_enabled: Option<bool>,
     experimental_model_catalog_models: Option<Vec<CodexExperimentalModelDefinition>>,
+) -> Result<CodexQuickConfig, String> {
+    write_quick_config_to_config_toml_with_default(
+        base_dir,
+        model_context_window,
+        auto_compact_token_limit,
+        experimental_model_catalog_enabled,
+        experimental_model_catalog_models,
+        None,
+    )
+}
+
+fn write_quick_config_to_config_toml_with_default(
+    base_dir: &Path,
+    model_context_window: Option<i64>,
+    auto_compact_token_limit: Option<i64>,
+    experimental_model_catalog_enabled: Option<bool>,
+    experimental_model_catalog_models: Option<Vec<CodexExperimentalModelDefinition>>,
+    experimental_model_catalog_default_model_id: Option<String>,
 ) -> Result<CodexQuickConfig, String> {
     let config_path = get_config_toml_path(base_dir);
     let existing = fs::read_to_string(&config_path).unwrap_or_default();
@@ -2450,7 +2679,11 @@ fn write_quick_config_to_config_toml(
     }
 
     if let Some(models) = experimental_model_catalog_models {
-        persist_experimental_model_definitions(base_dir, models)?;
+        persist_experimental_model_definitions(
+            base_dir,
+            models,
+            experimental_model_catalog_default_model_id.as_deref(),
+        )?;
     }
 
     let effective_experimental_enabled = experimental_model_catalog_enabled
@@ -2484,7 +2717,7 @@ fn write_quick_config_to_config_toml(
         }
     }
     if experimental_model_catalog_enabled == Some(false) {
-        persist_previous_experimental_catalog_reference(base_dir, None)?;
+        persist_previous_experimental_catalog_reference(base_dir, None, None)?;
     }
 
     read_quick_config_from_config_toml(base_dir)
@@ -2495,13 +2728,15 @@ pub fn save_current_quick_config(
     auto_compact_token_limit: Option<i64>,
     experimental_model_catalog_enabled: Option<bool>,
     experimental_model_catalog_models: Option<Vec<CodexExperimentalModelDefinition>>,
+    experimental_model_catalog_default_model_id: Option<String>,
 ) -> Result<CodexQuickConfig, String> {
-    save_quick_config_for_base_dir(
+    save_quick_config_for_base_dir_with_default(
         &get_codex_home(),
         model_context_window,
         auto_compact_token_limit,
         experimental_model_catalog_enabled,
         experimental_model_catalog_models,
+        experimental_model_catalog_default_model_id,
     )
 }
 
@@ -2518,6 +2753,24 @@ pub fn save_quick_config_for_base_dir(
         auto_compact_token_limit,
         experimental_model_catalog_enabled,
         experimental_model_catalog_models,
+    )
+}
+
+pub fn save_quick_config_for_base_dir_with_default(
+    base_dir: &Path,
+    model_context_window: Option<i64>,
+    auto_compact_token_limit: Option<i64>,
+    experimental_model_catalog_enabled: Option<bool>,
+    experimental_model_catalog_models: Option<Vec<CodexExperimentalModelDefinition>>,
+    experimental_model_catalog_default_model_id: Option<String>,
+) -> Result<CodexQuickConfig, String> {
+    write_quick_config_to_config_toml_with_default(
+        base_dir,
+        model_context_window,
+        auto_compact_token_limit,
+        experimental_model_catalog_enabled,
+        experimental_model_catalog_models,
+        experimental_model_catalog_default_model_id,
     )
 }
 
@@ -2735,12 +2988,6 @@ fn remove_provider_managed_model_catalog_from_doc(doc: &mut Document) -> bool {
 fn cleanup_experimental_model_catalog_for_dir(base_dir: &Path) -> Result<(), String> {
     let config_path = get_config_toml_path(base_dir);
     let managed_catalog_path = experimental_model_catalog_path(base_dir);
-    let managed_catalog_contains_experimental_model =
-        managed_model_catalog_contains_experimental_model(base_dir);
-    let experimental_model_ids = read_experimental_model_definitions(base_dir)
-        .into_iter()
-        .map(|model| model.model_id.to_ascii_lowercase())
-        .collect::<HashSet<_>>();
     if config_path.exists() {
         let existing = fs::read_to_string(&config_path).unwrap_or_default();
         if !existing.trim().is_empty() {
@@ -2757,20 +3004,13 @@ fn cleanup_experimental_model_catalog_for_dir(base_dir: &Path) -> Result<(), Str
                         CODEX_MANAGED_MODEL_CATALOG_FILE,
                     )
                 });
-            let uses_experimental_model = doc
-                .get("model")
-                .and_then(|item| item.as_str())
-                .is_some_and(|model| {
-                    experimental_model_ids.contains(&model.trim().to_ascii_lowercase())
-                });
-            if uses_experimental_catalog && managed_catalog_contains_experimental_model {
+            if uses_experimental_catalog {
                 apply_experimental_model_catalog_to_doc(base_dir, &mut doc, Some(false))?;
-            } else if managed_catalog_contains_experimental_model && uses_experimental_model {
-                let _ = doc.remove("model");
+                if !experimental_model_policy_enabled(base_dir) {
+                    let _ = doc.remove(CODEX_CONFIG_MODEL_CATALOG_JSON_KEY);
+                }
             }
-            if (uses_experimental_catalog && managed_catalog_contains_experimental_model)
-                || (managed_catalog_contains_experimental_model && uses_experimental_model)
-            {
+            if uses_experimental_catalog {
                 let content =
                     crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
                 crate::modules::codex_config_format::write_codex_config_toml_atomic(
@@ -2782,7 +3022,7 @@ fn cleanup_experimental_model_catalog_for_dir(base_dir: &Path) -> Result<(), Str
         }
     }
 
-    if managed_catalog_contains_experimental_model {
+    if managed_catalog_path.exists() {
         crate::modules::atomic_write::remove_file_locked(&managed_catalog_path).map_err(
             |error| {
                 format!(
@@ -2793,7 +3033,7 @@ fn cleanup_experimental_model_catalog_for_dir(base_dir: &Path) -> Result<(), Str
             },
         )?;
     }
-    persist_previous_experimental_catalog_reference(base_dir, None)?;
+    persist_previous_experimental_catalog_reference(base_dir, None, None)?;
     Ok(())
 }
 
@@ -4633,7 +4873,28 @@ fn read_codex_fingerprint_mode(value: &serde_json::Value) -> Option<String> {
             })
         })
         .map(|mode| mode.trim().to_ascii_lowercase())
-        .filter(|mode| matches!(mode.as_str(), "off" | "device" | "full"))
+        .filter(|mode| matches!(mode.as_str(), "off" | "device" | "session" | "full"))
+}
+
+fn read_codex_client_policy_bool(value: &serde_json::Value, key: &str) -> Option<bool> {
+    read_json_bool(value, &[key]).or_else(|| {
+        value
+            .get("extra")
+            .and_then(|extra| read_json_bool(extra, &[key]))
+    })
+}
+
+pub(crate) fn resolved_codex_fingerprint_mode(account: &CodexAccount) -> &'static str {
+    resolved_codex_fingerprint_mode_value(account.codex_fingerprint_mode.as_deref())
+}
+
+fn resolved_codex_fingerprint_mode_value(raw: Option<&str>) -> &'static str {
+    match raw.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
+        Some("device") => "device",
+        Some("session") => "session",
+        Some("full") => "full",
+        _ => "off",
+    }
 }
 
 fn read_json_i64(value: &serde_json::Value, keys: &[&str]) -> Option<i64> {
@@ -4751,6 +5012,14 @@ fn apply_compat_account_metadata(
         .or_else(|| account.account_note.clone());
     account.codex_fingerprint_mode =
         read_codex_fingerprint_mode(value).or_else(|| account.codex_fingerprint_mode.clone());
+    if let Some(enabled) = read_codex_client_policy_bool(value, "codex_cli_only") {
+        account.codex_cli_only = enabled;
+    }
+    if let Some(enabled) =
+        read_codex_client_policy_bool(value, "codex_cli_only_allow_app_server")
+    {
+        account.codex_cli_only_allow_app_server = enabled;
+    }
     apply_account_sensitive_note_metadata(account, value);
     account.auth_file_plan_type =
         read_json_string(value, &["auth_file_plan_type", "authFilePlanType"])
@@ -5213,6 +5482,7 @@ pub fn list_accounts() -> Vec<CodexAccount> {
             ));
         }
     }
+    spawn_fingerprint_default_off_migration();
     accounts
 }
 
@@ -5267,6 +5537,7 @@ pub fn list_accounts_checked() -> Result<Vec<CodexAccount>, String> {
         save_account_index(&index)?;
     }
 
+    spawn_fingerprint_default_off_migration();
     Ok(accounts)
 }
 
@@ -9155,6 +9426,13 @@ async fn import_sub2api_export_from_value(
         })?;
         let mut account = import_codex_candidate(candidate).await?;
         account.codex_fingerprint_mode = read_codex_fingerprint_mode(item);
+        account.codex_cli_only =
+            read_codex_client_policy_bool(item, "codex_cli_only").unwrap_or(false);
+        account.codex_cli_only_allow_app_server = read_codex_client_policy_bool(
+            item,
+            "codex_cli_only_allow_app_server",
+        )
+        .unwrap_or(false);
         save_account(&account)?;
         imported.push(account);
     }
@@ -10939,20 +11217,22 @@ mod tests {
         load_account_index, looks_like_sub2api_export, now_timestamp,
         parse_agent_identity_from_value, parse_auth_file_last_refresh, parse_codex_account_compat,
         parse_line_delimited_json_values, read_api_provider_from_config_toml,
-        read_quick_config_from_config_toml, remove_accounts, resolve_api_provider_config,
-        save_account, save_account_index, should_accept_authority_snapshot,
-        sync_account_from_auth_dir, sync_api_key_account_from_local_state,
-        sync_api_key_provider_accounts, sync_managed_projection_from_auth_dir,
-        try_parse_pending_oauth_delimited_line, update_account_instance_access,
-        update_api_key_credentials, upsert_account, upsert_account_for_reauth,
-        upsert_account_from_access_token, upsert_account_from_access_token_with_hints,
-        upsert_account_from_auth_tokens, upsert_agent_identity_account, upsert_api_key_account,
-        validate_api_key_credentials, write_account_bundle_to_dir,
-        write_api_key_bearer_provider_override_to_config_toml, write_api_provider_to_config_toml,
-        write_auth_file_to_dir, write_managed_projection_to_dir, write_quick_config_to_config_toml,
-        ApiProviderConfig, CodexAccessTokenImportHints, CodexAccountGroupRecord, CodexAccountIndex,
-        CodexAccountSummary, CodexAuthFile, CodexAuthTokens, CodexGroupQuotaRefreshPolicy,
-        CodexJsonImportCandidate, LocalCodexOAuthSnapshot, CODEX_ACCOUNT_DETAIL_SCHEMA_VERSION,
+        read_experimental_model_definitions, read_quick_config_from_config_toml, remove_accounts,
+        resolve_api_provider_config, save_account, save_account_index,
+        should_accept_authority_snapshot, sync_account_from_auth_dir,
+        sync_api_key_account_from_local_state, sync_api_key_provider_accounts,
+        sync_managed_projection_from_auth_dir, try_parse_pending_oauth_delimited_line,
+        update_account_instance_access, update_api_key_credentials, upsert_account,
+        upsert_account_for_reauth, upsert_account_from_access_token,
+        upsert_account_from_access_token_with_hints, upsert_account_from_auth_tokens,
+        upsert_agent_identity_account, upsert_api_key_account, validate_api_key_credentials,
+        write_account_bundle_to_dir, write_api_key_bearer_provider_override_to_config_toml,
+        write_api_provider_to_config_toml, write_auth_file_to_dir, write_managed_projection_to_dir,
+        write_quick_config_to_config_toml, write_quick_config_to_config_toml_with_default,
+        ApiProviderConfig, CodexAccessTokenImportHints,
+        CodexAccountGroupRecord, CodexAccountIndex, CodexAccountSummary, CodexAuthFile,
+        CodexAuthTokens, CodexGroupQuotaRefreshPolicy, CodexJsonImportCandidate,
+        LocalCodexOAuthSnapshot, CODEX_ACCOUNT_DETAIL_SCHEMA_VERSION,
         CODEX_AUTHORIZATION_STATUS_PENDING, CODEX_AUTO_COMPACT_DEFAULT_LIMIT,
         CODEX_CONTEXT_WINDOW_1M_VALUE, CODEX_DISABLE_HOSTED_IMAGE_GENERATION_HEADER,
         CODEX_DISABLE_HOSTED_IMAGE_GENERATION_HEADER_VALUE, CODEX_IMAGEGEN_ACTOR_HEADER,
@@ -11745,10 +12025,18 @@ mod tests {
             super::read_codex_fingerprint_mode(&value).as_deref(),
             Some("full")
         );
-        assert!(super::read_codex_fingerprint_mode(
-            &serde_json::json!({"extra": {"codex_fingerprint_mode": "session"}})
-        )
-        .is_none());
+        assert_eq!(
+            super::read_codex_fingerprint_mode(
+                &serde_json::json!({"extra": {"codex_fingerprint_mode": "session"}})
+            )
+            .as_deref(),
+            Some("session")
+        );
+        assert_eq!(super::resolved_codex_fingerprint_mode_value(None), "off");
+        assert_eq!(
+            super::resolved_codex_fingerprint_mode_value(Some("SESSION")),
+            "session"
+        );
     }
 
     fn seed_oauth_account(tokens: CodexTokens) -> CodexAccount {
@@ -16015,7 +16303,7 @@ multi_agent = true
     }
 
     #[test]
-    fn quick_config_enables_wm_in_full_managed_model_catalog_without_cache() {
+    fn quick_config_initializes_full_visible_model_catalog() {
         let base_dir = make_temp_dir("codex-experimental-enable-test");
         fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol\"\n").expect("write config");
 
@@ -16029,7 +16317,7 @@ multi_agent = true
             .is_file());
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
         assert!(config.contains("model_catalog_json = \"cockpit-provider-model-catalog.json\""));
-        assert!(config.contains("model = \"gpt-5.6-sol-wm\""));
+        assert!(config.contains("model = \"gpt-5.6-sol\""));
         let generated: serde_json::Value = serde_json::from_str(
             &fs::read_to_string(base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE))
                 .expect("read generated catalog"),
@@ -16045,35 +16333,108 @@ multi_agent = true
             "gpt-5.4-mini",
             "gpt-5.3-codex",
             "gpt-5.3-codex-spark",
-            "gpt-5.6-sol-wm",
         ] {
             assert!(models.iter().any(|model| {
                 model.get("slug").and_then(serde_json::Value::as_str) == Some(expected)
             }));
         }
-        let wm = models
-            .iter()
-            .find(|model| {
-                model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-5.6-sol-wm")
-            })
-            .expect("wm model");
-        assert_eq!(wm["visibility"], "list");
+        assert!(!models.iter().any(|model| {
+            model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-5.6-sol-wm")
+        }));
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
 
     #[test]
-    fn quick_config_persists_dynamic_models_and_uses_first_as_default() {
+    fn quick_config_migrates_pre_release_catalog_to_shipped_visible_models() {
+        let base_dir = make_temp_dir("codex-experimental-v2-migration-test");
+        fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol-wm\"\n")
+            .expect("write config");
+        fs::write(
+            base_dir.join(super::CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE),
+            r#"{"version":2,"models":[{"model_id":"gpt-5.6-sol-wm","display_name":"GPT-5.6 Sol WM"}]}"#,
+        )
+        .expect("write v2 model definitions");
+
+        let result = read_quick_config_from_config_toml(&base_dir).expect("read migrated config");
+        let model_ids = result
+            .experimental_model_catalog_models
+            .iter()
+            .map(|model| model.model_id.as_str())
+            .collect::<Vec<_>>();
+        assert!(model_ids.contains(&"gpt-5.6-sol"));
+        assert!(model_ids.contains(&"gpt-5.3-codex"));
+        assert!(!model_ids.contains(&"gpt-5.6-sol-wm"));
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn quick_config_matches_existing_provider_picker_models_and_labels() {
+        let base_dir = make_temp_dir("codex-model-catalog-picker-models-test");
+        fs::write(
+            base_dir.join("config.toml"),
+            "model_catalog_json = \"cockpit-provider-model-catalog.json\"\nmodel = \"gpt-5.6-sol\"\n",
+        )
+        .expect("write config");
+        fs::write(
+            base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE),
+            r#"{"models":[
+                {"slug":"gpt-5.6-sol","display_name":"GPT-5.6-Sol","visibility":"list"},
+                {"slug":"gpt-5.6-sol-wm","display_name":"GPT-5.6 Sol WM","visibility":"list"},
+                {"slug":"gpt-image-2","display_name":"GPT Image 2","visibility":"hide"}
+            ]}"#,
+        )
+        .expect("write existing provider catalog");
+        fs::write(
+            base_dir.join(super::CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE),
+            r#"{"models":[{"model_id":"gpt-5.6-sol","display_name":"GPT-5.6-Sol"}]}"#,
+        )
+        .expect("write legacy model definitions");
+
+        let before_save =
+            read_quick_config_from_config_toml(&base_dir).expect("read legacy model definitions");
+        assert!(before_save
+            .experimental_model_catalog_models
+            .iter()
+            .any(|model| model.model_id == "gpt-5.3-codex"));
+        assert!(!before_save
+            .experimental_model_catalog_models
+            .iter()
+            .any(|model| model.model_id == "gpt-5.6-sol-wm"));
+
+        let result = write_quick_config_to_config_toml(&base_dir, None, None, Some(true), None)
+            .expect("enable model catalog");
+        assert!(result
+            .experimental_model_catalog_models
+            .iter()
+            .any(|model| model.model_id == "gpt-5.6-sol" && model.display_name == "5.6 Sol"));
+        assert!(!result
+            .experimental_model_catalog_models
+            .iter()
+            .any(|model| model.model_id == "gpt-5.6-sol-wm"));
+        assert!(!result
+            .experimental_model_catalog_models
+            .iter()
+            .any(|model| model.model_id == "gpt-image-2"));
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn quick_config_persists_dynamic_visible_models_without_default() {
         let base_dir = make_temp_dir("codex-experimental-dynamic-models-test");
         fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol\"\n").expect("write config");
         let models = vec![
             CodexExperimentalModelDefinition {
-                model_id: "gpt-5.6-sol-wm2".to_string(),
-                display_name: "GPT-5.6 Sol WM2".to_string(),
+                model_id: "custom-model-a".to_string(),
+                display_name: "Custom Model A".to_string(),
+                reasoning_efforts: None,
             },
             CodexExperimentalModelDefinition {
-                model_id: "gpt-5.6-sol-wm3".to_string(),
-                display_name: "GPT-5.6 Sol WM3".to_string(),
+                model_id: "custom-model-b".to_string(),
+                display_name: "Custom Model B".to_string(),
+                reasoning_efforts: None,
             },
         ];
 
@@ -16088,7 +16449,7 @@ multi_agent = true
 
         assert_eq!(result.experimental_model_catalog_models, models);
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model = \"gpt-5.6-sol-wm2\""));
+        assert!(!config.contains("model = \"custom-model-a\""));
         let catalog: serde_json::Value = serde_json::from_str(
             &fs::read_to_string(base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE))
                 .expect("read catalog"),
@@ -16097,17 +16458,13 @@ multi_agent = true
         let catalog_models = catalog["models"].as_array().expect("models array");
         let custom = catalog_models
             .iter()
-            .find(|model| model["slug"] == "gpt-5.6-sol-wm2")
+            .find(|model| model["slug"] == "custom-model-a")
             .expect("custom model");
-        let sol = catalog_models
-            .iter()
-            .find(|model| model["slug"] == "gpt-5.6-sol")
-            .expect("sol model");
-        assert_eq!(custom["display_name"], "GPT-5.6 Sol WM2");
-        assert_eq!(custom["context_window"], sol["context_window"]);
+        assert_eq!(custom["display_name"], "Custom Model A");
+        assert!(custom.get("context_window").is_some());
         assert!(catalog_models
             .iter()
-            .any(|model| model["slug"] == "gpt-5.6-sol-wm3"));
+            .any(|model| model["slug"] == "custom-model-b"));
         assert!(base_dir
             .join(super::CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE)
             .is_file());
@@ -16116,26 +16473,74 @@ multi_agent = true
     }
 
     #[test]
-    fn quick_config_accepts_explicit_default_experimental_model() {
+    fn quick_config_writes_custom_reasoning_efforts_per_model() {
+        let base_dir = make_temp_dir("codex-experimental-reasoning-efforts-test");
+        fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol\"\n").expect("write config");
+        let models = vec![CodexExperimentalModelDefinition {
+            model_id: "custom-reasoning-model".to_string(),
+            display_name: "Custom Reasoning Model".to_string(),
+            reasoning_efforts: Some(vec!["low".to_string(), "high".to_string()]),
+        }];
+
+        write_quick_config_to_config_toml(&base_dir, None, None, Some(true), Some(models))
+            .expect("write reasoning configuration");
+
+        let catalog: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE))
+                .expect("read catalog"),
+        )
+        .expect("parse catalog");
+        let model = catalog["models"]
+            .as_array()
+            .expect("models array")
+            .iter()
+            .find(|model| model["slug"] == "custom-reasoning-model")
+            .expect("custom model");
+        let efforts = model["supported_reasoning_levels"]
+            .as_array()
+            .expect("reasoning levels")
+            .iter()
+            .filter_map(|level| level["effort"].as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(efforts, vec!["low", "high"]);
+        assert_eq!(model["default_reasoning_level"], "low");
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn quick_config_persists_selected_default_model() {
         let base_dir = make_temp_dir("codex-experimental-explicit-default-test");
         fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol\"\n").expect("write config");
         let models = vec![CodexExperimentalModelDefinition {
-            model_id: "gpt-5.6-sol-wm".to_string(),
-            display_name: "GPT-5.6 Sol WM".to_string(),
+            model_id: "custom-model".to_string(),
+            display_name: "Custom Model".to_string(),
+            reasoning_efforts: None,
         }];
 
-        let result = write_quick_config_to_config_toml(
+        let result = write_quick_config_to_config_toml_with_default(
             &base_dir,
             None,
             None,
             Some(true),
             Some(models.clone()),
+            Some("custom-model".to_string()),
         )
-        .expect("persist explicit default experimental model");
+        .expect("persist visible model list");
 
         assert_eq!(result.experimental_model_catalog_models, models);
+        assert_eq!(
+            result.experimental_model_catalog_default_model_id.as_deref(),
+            Some("custom-model")
+        );
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model = \"gpt-5.6-sol-wm\""));
+        assert!(config.contains("model = \"custom-model\""));
+        let catalog_config: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(base_dir.join(super::CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE))
+                .expect("read model config"),
+        )
+        .expect("parse model config");
+        assert_eq!(catalog_config["default_model_id"], "custom-model");
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
@@ -16169,7 +16574,7 @@ multi_agent = true
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
         assert!(config.contains("model_provider = \"codex_local_access\""));
         assert!(config.contains("model_catalog_json = \"cockpit-provider-model-catalog.json\""));
-        assert!(config.contains("model = \"gpt-5.6-sol-wm\""));
+        assert!(!config.contains("model = "));
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
@@ -16198,7 +16603,7 @@ multi_agent = true
         assert!(result.experimental_model_catalog_enabled);
         let config = fs::read_to_string(&config_path).expect("read config");
         assert!(config.contains("model_catalog_json = \"cockpit-provider-model-catalog.json\""));
-        assert!(config.contains("model = \"gpt-5.6-sol-wm\""));
+        assert!(config.contains("model = \"gpt-5\""));
         let managed_catalog: serde_json::Value = serde_json::from_str(
             &fs::read_to_string(base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE))
                 .expect("read managed catalog"),
@@ -16219,7 +16624,7 @@ multi_agent = true
             .expect("disable and restore original catalog");
         let restored_config = fs::read_to_string(&config_path).expect("read restored config");
         assert!(restored_config.contains("model_catalog_json = \"user-model-catalog.json\""));
-        assert!(!restored_config.contains("model = \"gpt-5.6-sol-wm\""));
+        assert!(restored_config.contains("model = \"gpt-5\""));
         assert_eq!(
             fs::read_to_string(base_dir.join("user-model-catalog.json"))
                 .expect("read original catalog after disable"),
@@ -16255,7 +16660,12 @@ multi_agent = true
         assert!(status.experimental_model_catalog_enabled);
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
         assert!(config.contains("model_catalog_json = \"cockpit-provider-model-catalog.json\""));
-        assert!(config.contains("model = \"gpt-5.6-sol-wm\""));
+        let default_model = read_experimental_model_definitions(&base_dir)
+            .first()
+            .expect("initial model")
+            .model_id
+            .clone();
+        assert!(config.contains(&format!("model = \"{}\"", default_model)));
         assert!(base_dir
             .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
             .is_file());
@@ -16290,7 +16700,12 @@ multi_agent = true
         assert!(status.experimental_model_catalog_enabled);
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
         assert!(config.contains("model_catalog_json = \"cockpit-provider-model-catalog.json\""));
-        assert!(config.contains("model = \"gpt-5.6-sol-wm\""));
+        let default_model = read_experimental_model_definitions(&base_dir)
+            .first()
+            .expect("initial model")
+            .model_id
+            .clone();
+        assert!(config.contains(&format!("model = \"{}\"", default_model)));
         assert!(base_dir
             .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
             .is_file());
@@ -16324,10 +16739,16 @@ multi_agent = true
         );
 
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model = \"gpt-5.6-sol-wm\""));
+        assert!(config.contains("model = \"provider-model\""));
+        assert!(!config.contains("model = \"gpt-5.6-sol-wm\""));
+        let first_model = read_experimental_model_definitions(&base_dir)
+            .first()
+            .expect("initial model")
+            .model_id
+            .clone();
         let catalog = fs::read_to_string(base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE))
             .expect("read catalog");
-        assert!(catalog.contains("gpt-5.6-sol-wm"));
+        assert!(catalog.contains(&first_model));
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
@@ -16335,8 +16756,7 @@ multi_agent = true
     #[test]
     fn quick_config_disables_only_its_experimental_catalog() {
         let base_dir = make_temp_dir("codex-experimental-disable-test");
-        fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol-wm\"\n")
-            .expect("write config");
+        fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol\"\n").expect("write config");
         write_quick_config_to_config_toml(&base_dir, None, None, Some(true), None)
             .expect("enable catalog");
 
@@ -16346,7 +16766,7 @@ multi_agent = true
         assert!(!result.experimental_model_catalog_enabled);
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
         assert!(!config.contains("model_catalog_json"));
-        assert!(!config.contains("model = \"gpt-5.6-sol-wm\""));
+        assert!(config.contains("model = \"gpt-5.6-sol\""));
         assert!(!base_dir
             .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
             .exists());
@@ -16358,7 +16778,7 @@ multi_agent = true
     }
 
     #[test]
-    fn provider_cleanup_recognizes_wm_managed_catalog() {
+    fn provider_cleanup_recognizes_managed_model_catalog() {
         let mut doc = "model_catalog_json = \"cockpit-provider-model-catalog.json\"\n"
             .parse::<toml_edit::Document>()
             .expect("parse config");
@@ -16370,8 +16790,8 @@ multi_agent = true
     }
 
     #[test]
-    fn quick_config_preserves_provider_catalog_without_wm_when_switch_is_off() {
-        let base_dir = make_temp_dir("codex-provider-catalog-without-wm-test");
+    fn quick_config_preserves_provider_catalog_when_switch_is_off() {
+        let base_dir = make_temp_dir("codex-provider-catalog-disabled-test");
         fs::write(
             base_dir.join("config.toml"),
             "model_catalog_json = \"cockpit-provider-model-catalog.json\"\n",
@@ -16402,16 +16822,16 @@ multi_agent = true
     }
 
     #[test]
-    fn api_key_cleanup_removes_experimental_catalog_reference_and_file() {
+    fn api_key_cleanup_removes_managed_catalog_reference_and_file() {
         let base_dir = make_temp_dir("codex-experimental-api-key-cleanup-test");
         fs::write(
             base_dir.join("config.toml"),
-            "model_catalog_json = \"cockpit-provider-model-catalog.json\"\nmodel = \"gpt-5.6-sol-wm\"\n",
+            "model_catalog_json = \"cockpit-provider-model-catalog.json\"\nmodel = \"gpt-5.6-sol\"\n",
         )
         .expect("write config");
         fs::write(
             base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE),
-            r#"{"models":[{"slug":"gpt-5.6-sol-wm"}]}"#,
+            r#"{"models":[{"slug":"gpt-5.6-sol"}]}"#,
         )
         .expect("write managed catalog");
 
@@ -16420,7 +16840,7 @@ multi_agent = true
 
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
         assert!(!config.contains("model_catalog_json"));
-        assert!(!config.contains("model = \"gpt-5.6-sol-wm\""));
+        assert!(config.contains("model = \"gpt-5.6-sol\""));
         assert!(!base_dir
             .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
             .exists());
@@ -16429,13 +16849,12 @@ multi_agent = true
     }
 
     #[test]
-    fn api_key_cleanup_removes_wm_model_after_provider_removed_catalog_reference() {
+    fn api_key_cleanup_preserves_selected_model_after_provider_removed_catalog_reference() {
         let base_dir = make_temp_dir("codex-experimental-api-key-late-cleanup-test");
-        fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol-wm\"\n")
-            .expect("write config");
+        fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol\"\n").expect("write config");
         fs::write(
             base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE),
-            r#"{"models":[{"slug":"gpt-5.6-sol-wm"}]}"#,
+            r#"{"models":[{"slug":"gpt-5.6-sol"}]}"#,
         )
         .expect("write managed catalog");
 
@@ -16443,7 +16862,7 @@ multi_agent = true
             .expect("cleanup experimental catalog");
 
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
-        assert!(!config.contains("model = \"gpt-5.6-sol-wm\""));
+        assert!(config.contains("model = \"gpt-5.6-sol\""));
         assert!(!base_dir
             .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
             .exists());
@@ -16795,6 +17214,59 @@ pub fn update_account_tags(account_id: &str, tags: Vec<String>) -> Result<CodexA
     Ok(account)
 }
 
+fn spawn_fingerprint_default_off_migration() {
+    if std::env::var("COCKPIT_TOOLS_TEST_DATA_DIR").is_ok() {
+        return;
+    }
+    if CODEX_FINGERPRINT_DEFAULT_OFF_MIGRATION_STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    std::thread::spawn(|| {
+        if let Err(error) = migrate_codex_fingerprint_modes_to_off() {
+            logger::log_warn(&format!(
+                "[Codex Fingerprint] 默认关闭迁移失败: {}",
+                error
+            ));
+        }
+    });
+}
+
+fn migrate_codex_fingerprint_modes_to_off() -> Result<(), String> {
+    let marker = account::get_data_dir()?.join(CODEX_FINGERPRINT_DEFAULT_OFF_MARKER);
+    if marker.exists() {
+        return Ok(());
+    }
+    for account in list_accounts() {
+        if !is_standard_oauth_account(&account) {
+            continue;
+        }
+        let current = account
+            .codex_fingerprint_mode
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default();
+        if current.is_empty() || current.eq_ignore_ascii_case("off") {
+            continue;
+        }
+        let mut next = account;
+        next.codex_fingerprint_mode = None;
+        save_account(&next)?;
+        if let Err(error) =
+            crate::modules::codex_local_access::sync_sidecar_auth_file_for_account(&next)
+        {
+            logger::log_warn(&format!(
+                "[Codex Fingerprint] 同步关闭模式到 API Service 失败: account_id={}, error={}",
+                next.id, error
+            ));
+        }
+    }
+    if let Some(parent) = marker.parent() {
+        fs::create_dir_all(parent).map_err(|error| format!("创建数据目录失败: {error}"))?;
+    }
+    fs::write(&marker, "1").map_err(|error| format!("写入指纹迁移标记失败: {error}"))?;
+    Ok(())
+}
+
 pub fn update_accounts_fingerprint_mode(
     account_ids: &[String],
     mode: String,
@@ -16815,7 +17287,7 @@ pub fn update_accounts_fingerprint_mode(
 
     let mut updated = Vec::with_capacity(accounts.len());
     for mut account in accounts {
-        account.codex_fingerprint_mode = if normalized == "session" {
+        account.codex_fingerprint_mode = if normalized == "off" {
             None
         } else {
             Some(normalized.clone())
@@ -16832,6 +17304,27 @@ pub fn update_accounts_fingerprint_mode(
         updated.push(account);
     }
     Ok(updated)
+}
+
+pub fn update_account_client_policy(
+    account_id: &str,
+    codex_cli_only: bool,
+    allow_app_server: bool,
+) -> Result<CodexAccount, String> {
+    let mut account = load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
+    if !is_standard_oauth_account(&account) {
+        return Err(format!("账号不支持 Codex 客户端策略设置: {}", account_id));
+    }
+    account.codex_cli_only = codex_cli_only;
+    account.codex_cli_only_allow_app_server = codex_cli_only && allow_app_server;
+    save_account(&account)?;
+    if let Err(error) = crate::modules::codex_local_access::sync_sidecar_auth_file_for_account(&account) {
+        logger::log_warn(&format!(
+            "同步 Codex 客户端策略到 API Service sidecar 失败: account_id={}, error={}",
+            account.id, error
+        ));
+    }
+    Ok(account)
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]

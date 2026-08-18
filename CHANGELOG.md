@@ -7,6 +7,33 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [1.3.22] - 2026-08-18
+
+### Added
+
+- **Codex now supports visible-model catalog management**: the new version migrates older catalogs once to the shipped official visible-model list; afterward, models can be added, edited, or removed in a dedicated manager, with each model following official reasoning levels or using a custom reasoning-effort set, and any visible model can be marked as the default. The setting remains consistent across the default profile, extra instances, and account switches while respecting user-managed catalogs.
+- **Added Codex OAuth client policies**: use the Codex top-right Settings popover to enable app-server access, then configure official-client-only access, app-server access, and device-fingerprint mode in bulk or per OAuth account; changes are synchronized to the local API service.
+- **macOS launch terminals now include Ghostty**: Claude CLI and Codex CLI can open directly in Ghostty. Thanks @Jonesxq ([#1948](https://github.com/jlcodes99/cockpit-tools/pull/1948)).
+- **Codex terminals can launch on Linux**: the system terminal is used first, then gnome-terminal and konsole. Thanks @Jonesxq ([#1950](https://github.com/jlcodes99/cockpit-tools/pull/1950)).
+
+### Changed
+
+- **Visible models in Codex settings now use a read-only summary**: the main settings dialog only shows the current list; click “Manage” to edit model IDs, display names, and reasoning efforts in a dedicated dialog, keeping the main settings surface compact.
+- **Codex OAuth device fingerprint now defaults to Off for everyone**: existing accounts are switched to Off on upgrade; Session / Device / Full can still be turned back on manually.
+- **Codex OAuth fingerprint and client policies are managed from the Codex Settings popover**: fingerprint convergence now supports Off / Device / Session / Full and is synchronized with the local API service without blocking the settings page.
+- **Codex API Service now runs through the sidecar gateway**: the legacy gateway option and its legacy-only timeout fields are retired, and existing legacy collections migrate to the sidecar mode automatically.
+- **Codex API Service default estimates now match the public price book**: `gpt-5.6-luna` is $0.2 / $0.02 / $1.2 and `gpt-5.6-terra` is $2 / $0.2 / $12 (input / cached-read / output per million tokens). Accounts that still used the previous defaults pick up the new rates; later requests are estimated with the new prices, and existing stats are left unchanged.
+- **API Service usage on Codex account cards is shown only after the account joins the pool**: request count, tokens, and account cost stay hidden until then.
+- **Interface scaling now supports smaller sizes down to 30%**, making dense settings and management pages usable in smaller windows.
+- **The bundled CLIProxyAPI source path is now `sidecars/cockpit-cliproxy/third_party/CLIProxyAPI`**: the previous `cdk/CLIProxyAPI` directory has been replaced; local sidecar builds should use the new path.
+
+### Fixed
+
+- **Selecting a MiniMax preset now keeps image-input support**: only `MiniMax-M3` accepts images; `MiniMax-M2.7` stays text-only. Thanks @octo-patch ([#1968](https://github.com/jlcodes99/cockpit-tools/pull/1968)).
+- **Codex Business accounts can show monthly credits**: remaining amount, total, and reset time are parsed and displayed. Thanks @Jonesxq ([#1953](https://github.com/jlcodes99/cockpit-tools/pull/1953)).
+- **macOS API Service sidecars no longer inherit the Cockpit app identity**: LAN gateway access no longer fails for that reason. Thanks @Jonesxq ([#1947](https://github.com/jlcodes99/cockpit-tools/pull/1947)).
+- **Menu-bar quota keeps refreshing after close-to-tray**: when menu-bar quota is enabled, the main window is hidden instead of tearing down the WebView. Thanks @Jonesxq ([#1952](https://github.com/jlcodes99/cockpit-tools/pull/1952)).
+
 ## [1.3.21] - 2026-08-15
 
 ### Added

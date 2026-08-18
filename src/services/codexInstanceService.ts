@@ -129,6 +129,7 @@ export async function saveCodexInstanceQuickConfig(
   autoCompactTokenLimit?: number,
   experimentalModelCatalogEnabled?: boolean,
   experimentalModelCatalogModels?: CodexExperimentalModelDefinition[],
+  experimentalModelCatalogDefaultModelId?: string | null,
 ): Promise<CodexQuickConfig> {
   return await invoke("codex_save_instance_quick_config", {
     instanceId,
@@ -136,6 +137,7 @@ export async function saveCodexInstanceQuickConfig(
     autoCompactTokenLimit: autoCompactTokenLimit ?? null,
     experimentalModelCatalogEnabled: experimentalModelCatalogEnabled ?? null,
     experimentalModelCatalogModels: experimentalModelCatalogModels ?? null,
+    experimentalModelCatalogDefaultModelId: experimentalModelCatalogDefaultModelId ?? null,
   });
 }
 

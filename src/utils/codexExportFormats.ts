@@ -368,7 +368,7 @@ function buildSub2apiExtra(account: CodexAccount): JsonRecord | undefined {
   }
   if (
     account.codex_fingerprint_mode &&
-    account.codex_fingerprint_mode !== 'session'
+    account.codex_fingerprint_mode !== 'off'
   ) {
     extra.codex_fingerprint_mode = account.codex_fingerprint_mode;
   }

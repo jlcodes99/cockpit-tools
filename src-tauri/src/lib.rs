@@ -25,7 +25,9 @@ pub fn get_app_handle() -> Option<&'static tauri::AppHandle> {
 
 #[cfg(test)]
 mod tests {
-    use super::should_hide_startup_minimized_window;
+    use super::{
+        should_hide_startup_minimized_window, should_preserve_main_window_for_menu_bar_refresh,
+    };
     use crate::modules::config::UserConfig;
 
     #[test]
@@ -64,6 +66,21 @@ mod tests {
         );
 
         assert!(!source.contains(delayed_startup_hide));
+    }
+
+    #[test]
+    fn menu_bar_refresh_keeps_macos_main_webview_alive() {
+        assert!(should_preserve_main_window_for_menu_bar_refresh(true, true));
+        assert!(!should_preserve_main_window_for_menu_bar_refresh(
+            true, false
+        ));
+    }
+
+    #[test]
+    fn menu_bar_refresh_does_not_change_non_macos_close_behavior() {
+        assert!(!should_preserve_main_window_for_menu_bar_refresh(
+            false, true
+        ));
     }
 }
 
@@ -119,6 +136,13 @@ fn should_hide_startup_minimized_window(
     is_macos: bool,
 ) -> bool {
     config.startup_minimized && is_macos && config.hide_dock_icon
+}
+
+fn should_preserve_main_window_for_menu_bar_refresh(
+    is_macos: bool,
+    menu_bar_quota_enabled: bool,
+) -> bool {
+    is_macos && menu_bar_quota_enabled
 }
 
 fn apply_startup_minimized(app: &tauri::AppHandle) {
@@ -548,18 +572,44 @@ pub fn run() {
                 match config.close_behavior {
                     CloseWindowBehavior::Minimize => {
                         api.prevent_close();
-                        // Full #686 behavior: destroy main WebView, keep tray process alive.
-                        if let Err(err) =
+                        if should_preserve_main_window_for_menu_bar_refresh(
+                            cfg!(target_os = "macos"),
+                            config.menu_bar_quota_enabled,
+                        ) {
+                            // Keep the WebView alive so its configured quota refresh
+                            // scheduler can continue updating the native menu bar.
+                            if let Err(err) = window.hide() {
+                                modules::logger::log_warn(&format!(
+                                    "[Window] 隐藏主窗口失败，回退为销毁 WebView: {}",
+                                    err
+                                ));
+                                if let Err(destroy_err) =
+                                    modules::floating_card_window::destroy_main_window_to_tray(
+                                        window,
+                                    )
+                                {
+                                    modules::logger::log_warn(&format!(
+                                        "[Window] 销毁主窗口 WebView 失败: {}",
+                                        destroy_err
+                                    ));
+                                }
+                            } else {
+                                let _ = modules::tray::update_tray_menu(window.app_handle());
+                                info!("[Window] 主窗口已隐藏到托盘，保留 WebView 以刷新菜单栏额度");
+                            }
+                        } else if let Err(err) =
                             modules::floating_card_window::destroy_main_window_to_tray(window)
                         {
+                            // Full #686 behavior: destroy main WebView, keep tray process alive.
                             modules::logger::log_warn(&format!(
                                 "[Window] 销毁主窗口 WebView 失败，回退为隐藏: {}",
                                 err
                             ));
                             let _ = window.hide();
                             modules::process_memory::trim_idle_process_memory();
+                        } else {
+                            info!("[Window] 窗口已关闭到托盘");
                         }
-                        info!("[Window] 窗口已关闭到托盘");
                     }
                     CloseWindowBehavior::Quit => {
                         modules::floating_card_window::request_app_exit();
@@ -843,6 +893,7 @@ pub fn run() {
             commands::codex::close_codex_oauth_port,
             commands::codex::update_codex_account_tags,
             commands::codex::update_codex_accounts_fingerprint_mode,
+            commands::codex::update_codex_account_client_policy,
             commands::codex::update_codex_account_note,
             commands::codex::update_codex_account_api_model_mappings,
             commands::codex::update_codex_account_instance_access,

@@ -77,7 +77,6 @@ import type {
   CodexLocalAccessClientBaseUrlHost,
   CodexLocalAccessCollection,
   CodexLocalAccessCustomRoutingRule,
-  CodexLocalAccessGatewayMode,
   CodexLocalAccessModelAlias,
   CodexLocalAccessModelPricing,
   CodexLocalAccessRequestKind,
@@ -126,7 +125,7 @@ type CopyField =
   | `apiKey:${string}`;
 type RequestLogKindFilter = "all" | CodexLocalAccessRequestKind;
 type RequestLogStatusFilter = "all" | "success" | "failed";
-type RequestLogGatewayModeFilter = "all" | CodexLocalAccessGatewayMode;
+type RequestLogGatewayModeFilter = "all" | "legacy" | "sidecar";
 type BuiltinTimeoutPresetId = "long_wait" | "short_wait";
 type TimeoutPresetId = BuiltinTimeoutPresetId | string;
 
@@ -592,10 +591,6 @@ function parseIntegerDraft(
 
 function defaultCodexLocalAccessTimeouts(): CodexLocalAccessTimeouts {
   return {
-    legacyRequestReadTimeoutMs: 60000,
-    legacyUpstreamConnectTimeoutMs: 60000,
-    legacyStreamIdleTimeoutMs: 120000,
-    legacyStreamTotalTimeoutMs: 300000,
     sidecarStreamOpenTimeoutMs: 60000,
     sidecarStreamIdleTimeoutMs: 120000,
     sidecarImageStreamOpenTimeoutMs: 60000,
@@ -619,10 +614,6 @@ function defaultCodexLocalAccessTimeouts(): CodexLocalAccessTimeouts {
 function shortWaitCodexLocalAccessTimeouts(): CodexLocalAccessTimeouts {
   return {
     ...defaultCodexLocalAccessTimeouts(),
-    legacyRequestReadTimeoutMs: 15000,
-    legacyUpstreamConnectTimeoutMs: 20000,
-    legacyStreamIdleTimeoutMs: 60000,
-    legacyStreamTotalTimeoutMs: 180000,
     sidecarStreamOpenTimeoutMs: 10000,
     sidecarStreamIdleTimeoutMs: 60000,
     sidecarImageStreamOpenTimeoutMs: 10000,
@@ -652,18 +643,6 @@ function timeoutDraftsFromValue(
 ): Record<keyof CodexLocalAccessTimeouts, string> {
   const timeouts = normalizeTimeouts(value);
   return {
-    legacyRequestReadTimeoutMs: formatSeconds(
-      timeouts.legacyRequestReadTimeoutMs,
-    ),
-    legacyUpstreamConnectTimeoutMs: formatSeconds(
-      timeouts.legacyUpstreamConnectTimeoutMs,
-    ),
-    legacyStreamIdleTimeoutMs: formatSeconds(
-      timeouts.legacyStreamIdleTimeoutMs,
-    ),
-    legacyStreamTotalTimeoutMs: formatSeconds(
-      timeouts.legacyStreamTotalTimeoutMs,
-    ),
     sidecarStreamOpenTimeoutMs: formatSeconds(
       timeouts.sidecarStreamOpenTimeoutMs,
     ),
@@ -725,7 +704,7 @@ function requestKindLabel(
 }
 
 function gatewayModeLabel(
-  mode: CodexLocalAccessGatewayMode | null | undefined,
+  mode: RequestLogGatewayModeFilter | null | undefined,
   t: ReturnType<typeof useTranslation>["t"],
 ): string {
   if (mode === "legacy") {
@@ -995,7 +974,6 @@ export function CodexApiServicePage() {
   const accessScope = collection?.accessScope ?? "localhost";
   const clientBaseUrlHost = collection?.clientBaseUrlHost ?? "localhost";
   const routingStrategy = collection?.routingStrategy ?? "auto";
-  const gatewayMode = collection?.gatewayMode ?? "sidecar";
   const modelIds = state?.modelIds ?? [];
   const exampleModelId = modelIds[0] ?? "gpt-5.5";
   const exampleApiKey = collection?.apiKey || "<api-key>";
@@ -1997,22 +1975,6 @@ export function CodexApiServicePage() {
     );
   };
 
-  const handleUpdateGatewayMode = async (
-    value: CodexLocalAccessGatewayMode,
-  ) => {
-    if (!collection || value === gatewayMode) return;
-    await runAction(
-      async () => {
-        const next =
-          await codexLocalAccessService.updateCodexLocalAccessGatewayMode(
-            value,
-          );
-        setState(next);
-      },
-      t("codex.localAccess.gatewayModeSaveSuccess", "API 服务网关模式已更新"),
-    );
-  };
-
   const saveMembers = async (
     accountIds: string[],
     restrictFreeAccounts: boolean,
@@ -2975,10 +2937,6 @@ export function CodexApiServicePage() {
 
   const parseTimeoutDraftPayload = (): CodexLocalAccessTimeouts | null => {
     const secondFields: Array<keyof CodexLocalAccessTimeouts> = [
-      "legacyRequestReadTimeoutMs",
-      "legacyUpstreamConnectTimeoutMs",
-      "legacyStreamIdleTimeoutMs",
-      "legacyStreamTotalTimeoutMs",
       "sidecarStreamOpenTimeoutMs",
       "sidecarStreamIdleTimeoutMs",
       "sidecarImageStreamOpenTimeoutMs",
@@ -2990,10 +2948,7 @@ export function CodexApiServicePage() {
     ];
     const parsedSeconds = new Map<keyof CodexLocalAccessTimeouts, number>();
     for (const key of secondFields) {
-      const max =
-        key === "legacyStreamTotalTimeoutMs" || key === "websocketIdleTimeoutMs"
-          ? 1800
-          : 600;
+      const max = key === "websocketIdleTimeoutMs" ? 1800 : 600;
       const parsed = parseIntegerDraft(timeoutDrafts[key], 1, max);
       if (parsed === null) {
         setTimeoutsError(
@@ -3006,18 +2961,6 @@ export function CodexApiServicePage() {
         return null;
       }
       parsedSeconds.set(key, parsed);
-    }
-    if (
-      (parsedSeconds.get("legacyStreamTotalTimeoutMs") ?? 0) <
-      (parsedSeconds.get("legacyStreamIdleTimeoutMs") ?? 0)
-    ) {
-      setTimeoutsError(
-        t(
-          "codex.apiService.timeouts.totalGteIdle",
-          "旧 API 流总超时不能小于流空闲超时",
-        ),
-      );
-      return null;
     }
     const attempts = parseIntegerDraft(
       timeoutDrafts.sidecarStreamOpenMaxAttempts,
@@ -3143,14 +3086,6 @@ export function CodexApiServicePage() {
       return null;
     }
     const payload: CodexLocalAccessTimeouts = {
-      legacyRequestReadTimeoutMs:
-        (parsedSeconds.get("legacyRequestReadTimeoutMs") ?? 15) * 1000,
-      legacyUpstreamConnectTimeoutMs:
-        (parsedSeconds.get("legacyUpstreamConnectTimeoutMs") ?? 20) * 1000,
-      legacyStreamIdleTimeoutMs:
-        (parsedSeconds.get("legacyStreamIdleTimeoutMs") ?? 60) * 1000,
-      legacyStreamTotalTimeoutMs:
-        (parsedSeconds.get("legacyStreamTotalTimeoutMs") ?? 180) * 1000,
       sidecarStreamOpenTimeoutMs:
         (parsedSeconds.get("sidecarStreamOpenTimeoutMs") ?? 10) * 1000,
       sidecarStreamIdleTimeoutMs:
@@ -3447,19 +3382,6 @@ export function CodexApiServicePage() {
       label: t("codex.localAccess.gatewayModeOldLabel", "API Service-Old"),
     },
   ];
-  const gatewayModeOptions: Array<{
-    value: CodexLocalAccessGatewayMode;
-    label: string;
-  }> = [
-    {
-      value: "sidecar",
-      label: t("codex.localAccess.gatewayModeNewLabel", "API 服务-新"),
-    },
-    {
-      value: "legacy",
-      label: t("codex.localAccess.gatewayModeOldLabel", "API 服务-旧"),
-    },
-  ];
   const serviceTabs: Array<{
     key: ServiceTab;
     label: string;
@@ -3670,30 +3592,9 @@ export function CodexApiServicePage() {
                       {state.accountRefreshTotal}
                     </span>
                   )}
-                  <SingleSelectDropdown
-                    value={gatewayMode}
-                    options={gatewayModeOptions}
-                    onChange={(value) =>
-                      void handleUpdateGatewayMode(
-                        value as CodexLocalAccessGatewayMode,
-                      )
-                    }
-                    className="codex-api-service-title-mode-select"
-                    menuClassName="codex-local-access-title-mode-menu"
-                    menuWidth={116}
-                    menuMaxHeight={120}
-                    disabled={
-                      busy ||
-                      activating ||
-                      state?.preparing ||
-                      testDialogRunning ||
-                      !collection
-                    }
-                    ariaLabel={t(
-                      "codex.localAccess.gatewayModeLabel",
-                      "网关模式",
-                    )}
-                  />
+                  <span className="codex-api-service-current-tag">
+                    {t("codex.localAccess.title", "API 服务")}
+                  </span>
                 </div>
               </div>
             </div>
@@ -3980,12 +3881,8 @@ export function CodexApiServicePage() {
                       value={proxyInput}
                       onChange={(event) => setProxyInput(event.target.value)}
                       placeholder={t(
-                        gatewayMode === "legacy"
-                          ? "codex.localAccess.upstreamProxyUrlPlaceholderLegacy"
-                          : "codex.localAccess.upstreamProxyUrlPlaceholderSidecar",
-                        gatewayMode === "legacy"
-                          ? "留空依次使用全局代理、环境代理或系统代理"
-                          : "留空用全局代理",
+                        "codex.localAccess.upstreamProxyUrlPlaceholderSidecar",
+                        "留空用全局代理",
                       )}
                       disabled={busy}
                     />
@@ -5124,7 +5021,7 @@ export function CodexApiServicePage() {
                     onChange={(event) =>
                       setResponsesWebsocketsEnabledDraft(event.target.checked)
                     }
-                    disabled={busy || !collection || gatewayMode !== "sidecar"}
+                    disabled={busy || !collection}
                   />
                 </label>
                 <label>
@@ -5186,7 +5083,7 @@ export function CodexApiServicePage() {
                     onChange={(event) =>
                       setImmediateSseResponseDraft(event.target.checked)
                     }
-                    disabled={busy || !collection || gatewayMode !== "sidecar"}
+                    disabled={busy || !collection}
                   />
                 </label>
                 <label>
@@ -5204,7 +5101,7 @@ export function CodexApiServicePage() {
                     onChange={(event) =>
                       setMaxConcurrentImageRequestsDraft(event.target.value)
                     }
-                    disabled={busy || !collection || gatewayMode !== "sidecar"}
+                    disabled={busy || !collection}
                   />
                 </label>
               </div>
@@ -6095,77 +5992,12 @@ export function CodexApiServicePage() {
               </section>
               <section className="codex-api-service-timeout-section">
                 <h3>
-                  {t("codex.apiService.timeouts.legacyTitle", "旧 API 服务")}
+                  {t(
+                    "codex.apiService.timeouts.retryTitle",
+                    "发送与账号重试",
+                  )}
                 </h3>
                 <div className="codex-api-service-policy-grid">
-                  <label>
-                    <span>
-                      {t("codex.apiService.timeouts.requestRead", "请求读取")}
-                    </span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={600}
-                      value={timeoutDrafts.legacyRequestReadTimeoutMs}
-                      onChange={(event) =>
-                        updateTimeoutDraft(
-                          "legacyRequestReadTimeoutMs",
-                          event.target.value,
-                        )
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>
-                      {t("codex.apiService.timeouts.connect", "上游连接")}
-                    </span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={600}
-                      value={timeoutDrafts.legacyUpstreamConnectTimeoutMs}
-                      onChange={(event) =>
-                        updateTimeoutDraft(
-                          "legacyUpstreamConnectTimeoutMs",
-                          event.target.value,
-                        )
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>
-                      {t("codex.apiService.timeouts.streamIdle", "流空闲超时")}
-                    </span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={600}
-                      value={timeoutDrafts.legacyStreamIdleTimeoutMs}
-                      onChange={(event) =>
-                        updateTimeoutDraft(
-                          "legacyStreamIdleTimeoutMs",
-                          event.target.value,
-                        )
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>
-                      {t("codex.apiService.timeouts.streamTotal", "流总超时")}
-                    </span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={1800}
-                      value={timeoutDrafts.legacyStreamTotalTimeoutMs}
-                      onChange={(event) =>
-                        updateTimeoutDraft(
-                          "legacyStreamTotalTimeoutMs",
-                          event.target.value,
-                        )
-                      }
-                    />
-                  </label>
                   <label>
                     <span>
                       {t(

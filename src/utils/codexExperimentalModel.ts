@@ -5,16 +5,10 @@ export function getCodexExperimentalModelErrorMessage(
   error: unknown,
 ): string | null {
   const message = String(error);
-  if (message.includes('EXPERIMENTAL_MODEL_CATALOG_CONFLICT')) {
-    return t(
-      'codex.experimentalModelCatalog.unavailable.catalogConflict',
-      '已有其他 model_catalog_json，禁止覆盖。',
-    );
-  }
   if (message.includes('EXPERIMENTAL_MODEL_CATALOG_MODELS_REQUIRED')) {
     return t(
       'codex.experimentalModelCatalog.models.validation.required',
-      '至少保留一个实验模型。',
+      '至少保留一个模型。',
     );
   }
   if (message.includes('EXPERIMENTAL_MODEL_CATALOG_MODEL_ID_INVALID')) {
@@ -35,10 +29,10 @@ export function getCodexExperimentalModelErrorMessage(
       '模型 ID 不能重复。',
     );
   }
-  if (message.includes('EXPERIMENTAL_MODEL_CATALOG_MODEL_ID_RESERVED')) {
+  if (message.includes('EXPERIMENTAL_MODEL_CATALOG_REASONING_EFFORT_INVALID')) {
     return t(
-      'codex.experimentalModelCatalog.models.validation.reserved',
-      '模型 ID 与官方模型重复，请使用其他 ID。',
+      'codex.experimentalModelCatalog.models.validation.reasoningEffort',
+      '推理强度选项无效。',
     );
   }
   return null;

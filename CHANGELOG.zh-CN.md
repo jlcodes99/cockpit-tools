@@ -7,6 +7,33 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [1.3.22] - 2026-08-18
+
+### 新增
+
+- **Codex 支持可见模型目录管理**：新版会将旧版本目录一次性迁移为预设的官方可见模型列表；之后可在独立管理弹框中新增、编辑或删除模型，为每个模型选择跟随官方或自定义推理强度，并将任意可见模型设为默认模型。设置会在默认目录、多开实例和账号切换后保持一致，并尊重用户自定义的模型目录。
+- **新增 Codex OAuth 客户端策略**：在 Codex 右上角设置弹框开启允许 app-server 后，可继续在策略弹框中批量或单独配置仅允许官方客户端、允许 app-server 和设备指纹模式，修改后会同步到本地 API 服务。
+- **macOS 启动终端新增 Ghostty**：Claude CLI 和 Codex CLI 可直接用 Ghostty 打开。感谢 @Jonesxq（[#1948](https://github.com/jlcodes99/cockpit-tools/pull/1948)）。
+- **Linux 上可启动 Codex 终端**：支持系统终端，并依次回退到 gnome-terminal、konsole。感谢 @Jonesxq（[#1950](https://github.com/jlcodes99/cockpit-tools/pull/1950)）。
+
+### 变更
+
+- **Codex 设置中的可见模型改为只读摘要**：主设置弹框只展示当前模型列表，点击“管理”后在独立弹框中编辑模型 ID、展示名和推理强度，避免主设置内容拥挤。
+- **Codex OAuth 设备指纹本次版本对所有人默认改为关闭**：升级后已有账号也会切到关闭，需要时仍可手动改回会话 / 设备 / 完整。
+- **Codex OAuth 设备指纹与客户端策略统一移至 Codex 右上角设置弹框管理**：设备指纹支持关闭、设备、会话、完整四种模式，并在后台同步到本地 API 服务，不阻塞设置页保存。
+- **Codex API Service 统一使用 sidecar 网关**：移除旧网关选项及仅适用于旧网关的超时字段，已有旧网关集合会自动迁移到 sidecar 模式。
+- **Codex API 服务默认估算价与公开价目对齐**：`gpt-5.6-luna` 调整为 $0.2 / $0.02 / $1.2，`gpt-5.6-terra` 调整为 $2 / $0.2 / $12（均为每百万 token 的输入 / 缓存读 / 输出）；未单独改过价格的账号会改用新单价，之后的新请求按新价估算，已有统计不会重算。
+- **Codex 账号卡片上的 API 服务用量仅在账号加入账号池后显示**：未加入时不再显示请求数、token 和账号计费。
+- **界面缩放最小值调整为 30%**，便于在较小窗口中完整使用设置和管理页面。
+- **内置 CLIProxyAPI 源码目录改为 `sidecars/cockpit-cliproxy/third_party/CLIProxyAPI`**：原先的 `cdk/CLIProxyAPI` 已替换，本地构建 sidecar 需改用新路径。
+
+### 修复
+
+- **选择 MiniMax 预设时会保留识图能力**：目录里只有 `MiniMax-M3` 支持图片输入，`MiniMax-M2.7` 仍按纯文本。感谢 @octo-patch（[#1968](https://github.com/jlcodes99/cockpit-tools/pull/1968)）。
+- **Codex Business 账号可显示月度 credits**：解析并展示剩余、总量和重置时间。感谢 @Jonesxq（[#1953](https://github.com/jlcodes99/cockpit-tools/pull/1953)）。
+- **macOS 上 API 服务 sidecar 不再继承 Cockpit 应用身份**：避免访问局域网网关失败。感谢 @Jonesxq（[#1947](https://github.com/jlcodes99/cockpit-tools/pull/1947)）。
+- **开启菜单栏额度后，关闭到托盘仍会继续刷新额度**：主窗口改为隐藏而不是拆掉 WebView。感谢 @Jonesxq（[#1952](https://github.com/jlcodes99/cockpit-tools/pull/1952)）。
+
 ## [1.3.21] - 2026-08-15
 
 ### 新增

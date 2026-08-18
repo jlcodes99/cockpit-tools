@@ -1,11 +1,11 @@
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 
 /** 与设置页「界面缩放」可选档位保持一致 */
-export const UI_SCALE_OPTION_VALUES = [0.9, 1, 1.1, 1.25, 1.5] as const;
+export const UI_SCALE_OPTION_VALUES = [0.3, 0.5, 0.7, 0.9, 1, 1.1, 1.25, 1.5] as const;
 
 export const UI_SCALE_OPTION_STRINGS = UI_SCALE_OPTION_VALUES.map(String) as readonly string[];
 
-export const UI_SCALE_MIN = 0.8;
+export const UI_SCALE_MIN = 0.3;
 export const UI_SCALE_MAX = 2.0;
 export const UI_SCALE_DEFAULT = 1;
 

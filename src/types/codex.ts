@@ -9,7 +9,11 @@ export interface CodexApiModelMapping {
 export interface CodexExperimentalModelDefinition {
   model_id: string;
   display_name: string;
+  /** undefined follows the official model reasoning levels; otherwise custom multi-select. */
+  reasoning_efforts?: CodexReasoningEffort[];
 }
+
+export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 export interface CodexQuickConfig {
   context_window_1m: boolean;
@@ -21,6 +25,7 @@ export interface CodexQuickConfig {
   experimental_model_catalog_unavailable_reason?: "catalog_conflict";
   experimental_model_catalog_conflict?: string;
   experimental_model_catalog_models: CodexExperimentalModelDefinition[];
+  experimental_model_catalog_default_model_id?: string | null;
 }
 
 export type CodexAppSpeed = "standard" | "fast";
@@ -68,6 +73,8 @@ export interface CodexAccount {
   account_structure?: string;
   account_note?: string;
   codex_fingerprint_mode?: CodexFingerprintMode;
+  codex_cli_only?: boolean;
+  codex_cli_only_allow_app_server?: boolean;
   two_factor_secret?: string;
   account_password?: string;
   phone_number?: string;
@@ -185,6 +192,16 @@ export interface CodexQuota {
   reset_credits_next_expires_at?: number;
   /** 原始响应数据 */
   raw_data?: unknown;
+}
+
+export interface CodexMonthlyCreditUsage {
+  used?: number;
+  total?: number;
+  remaining?: number;
+  remainingPercent?: number;
+  balance?: string;
+  unlimited?: boolean;
+  resetTime?: number;
 }
 
 export interface CodexResetCredit {
@@ -611,9 +628,14 @@ function toBoolValue(value: unknown): boolean | undefined {
 }
 
 function toFiniteNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
 }
 
 function decodeJwtPayload(token: string | undefined): JsonRecord | null {
@@ -760,6 +782,63 @@ export function getCodexCodeReviewQuotaMetric(
       ? normalizeCodeReviewWindow(secondaryWindow, "weekly")
       : null)
   );
+}
+
+export function getCodexMonthlyCreditUsage(
+  quota: CodexQuota | undefined,
+): CodexMonthlyCreditUsage | null {
+  const raw = toJsonRecord(quota?.raw_data);
+  if (!raw) return null;
+
+  const spendControl = toJsonRecord(raw.spend_control);
+  const individualLimit = toJsonRecord(spendControl?.individual_limit);
+  if (individualLimit) {
+    const total = toFiniteNumber(individualLimit.limit);
+    const used = toFiniteNumber(individualLimit.used);
+    const remaining =
+      toFiniteNumber(individualLimit.remaining) ??
+      (total != null && used != null ? Math.max(0, total - used) : undefined);
+    const remainingPercent =
+      toFiniteNumber(individualLimit.remaining_percent) ??
+      (total != null && total > 0 && remaining != null
+        ? Math.round((remaining / total) * 100)
+        : undefined);
+
+    if (
+      total != null ||
+      used != null ||
+      remaining != null ||
+      remainingPercent != null
+    ) {
+      const resetAfterSeconds = toFiniteNumber(
+        individualLimit.reset_after_seconds,
+      );
+      return {
+        used,
+        total,
+        remaining,
+        remainingPercent:
+          remainingPercent == null
+            ? undefined
+            : Math.max(0, Math.min(100, Math.round(remainingPercent))),
+        resetTime:
+          normalizeCodexUnixSeconds(individualLimit.reset_at) ??
+          (resetAfterSeconds != null && resetAfterSeconds >= 0
+            ? Math.floor(Date.now() / 1000) + resetAfterSeconds
+            : undefined),
+      };
+    }
+  }
+
+  // Older responses may expose only a credits balance without the effective limit.
+  const credits = toJsonRecord(raw.credits);
+  if (!credits) return null;
+  const unlimited = toBoolValue(credits.unlimited) ?? false;
+  const balance = toStringValue(credits.balance);
+  const remaining =
+    toFiniteNumber(credits.remaining) ?? toFiniteNumber(credits.balance);
+  if (!unlimited && balance == null && remaining == null) return null;
+  return { balance, remaining, unlimited };
 }
 
 function normalizeCodexAdditionalLimitLabel(

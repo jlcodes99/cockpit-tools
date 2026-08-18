@@ -7,7 +7,7 @@ const CODEX_AUTO_REVIEW_MODEL_ID: &str = "codex-auto-review";
 const CODEX_MODEL_CATALOG_TEMPLATE_SLUG: &str = "gpt-5.5";
 const CODEX_CLIENT_MODEL_TEMPLATES_JSON: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../sidecars/cockpit-cliproxy/cdk/CLIProxyAPI/internal/registry/models/codex_client_models.json"
+    "/../sidecars/cockpit-cliproxy/third_party/CLIProxyAPI/internal/registry/models/codex_client_models.json"
 ));
 const DEFAULT_CONTEXT_WINDOW: i64 = 272_000;
 const DEFAULT_MAX_CONTEXT_WINDOW: i64 = 1_000_000;
@@ -60,29 +60,80 @@ pub fn build_codex_client_models_response(model_ids: &[String]) -> Value {
     json!({ "models": models })
 }
 
-pub fn build_codex_client_models_response_with_custom_models(
-    model_ids: &[String],
-    custom_models: &[(String, String)],
+pub fn build_codex_client_models_response_with_model_definitions(
+    definitions: &[(String, String)],
 ) -> Value {
-    let mut models = model_ids
+    let definitions = definitions
+        .iter()
+        .map(|(model_id, display_name)| (model_id.clone(), display_name.clone(), None))
+        .collect::<Vec<_>>();
+    build_codex_client_models_response_with_model_definitions_and_reasoning(&definitions)
+}
+
+pub fn build_codex_client_models_response_with_model_definitions_and_reasoning(
+    definitions: &[(String, String, Option<Vec<String>>)],
+) -> Value {
+    let models = definitions
         .iter()
         .enumerate()
-        .map(|(index, model_id)| build_codex_client_model(model_id, index))
+        .map(|(index, (model_id, display_name, reasoning_efforts))| {
+            let mut model = build_codex_client_model(model_id, index);
+            if let Some(object) = model.as_object_mut() {
+                object.insert(
+                    "display_name".to_string(),
+                    Value::String(display_name.clone()),
+                );
+                object.insert(
+                    "description".to_string(),
+                    Value::String(display_name.clone()),
+                );
+                if let Some(reasoning_efforts) = reasoning_efforts {
+                    apply_reasoning_effort_override(object, reasoning_efforts);
+                }
+            }
+            model
+        })
         .collect::<Vec<_>>();
-    models.extend(
-        custom_models
-            .iter()
-            .enumerate()
-            .map(|(index, (model_id, display_name))| {
-                build_codex_client_custom_model(
-                    model_id,
-                    display_name,
-                    "gpt-5.6-sol",
-                    1000 + model_ids.len() + index,
-                )
-            }),
-    );
     json!({ "models": models })
+}
+
+fn apply_reasoning_effort_override(object: &mut Map<String, Value>, efforts: &[String]) {
+    let canonical_model = codex_client_model_template("gpt-5.6-sol").0;
+    let Some(levels) = canonical_model
+        .get("supported_reasoning_levels")
+        .and_then(Value::as_array)
+    else {
+        return;
+    };
+    let selected = efforts
+        .iter()
+        .filter_map(|effort| {
+            levels
+                .iter()
+                .find(|level| level.get("effort").and_then(Value::as_str) == Some(effort))
+                .cloned()
+                .or_else(|| Some(json!({"effort": effort})))
+        })
+        .collect::<Vec<_>>();
+    if selected.is_empty() {
+        return;
+    }
+    object.insert(
+        "supported_reasoning_levels".to_string(),
+        Value::Array(selected.clone()),
+    );
+    let current_default = object
+        .get("default_reasoning_level")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if !efforts.iter().any(|effort| effort == current_default) {
+        if let Some(first) = efforts.first() {
+            object.insert(
+                "default_reasoning_level".to_string(),
+                Value::String(first.clone()),
+            );
+        }
+    }
 }
 
 pub(crate) fn managed_codex_model_ids() -> Vec<String> {
@@ -326,33 +377,6 @@ fn build_codex_client_model(model_id: &str, index: usize) -> Value {
     model
 }
 
-fn build_codex_client_custom_model(
-    model_id: &str,
-    display_name: &str,
-    base_model_id: &str,
-    priority: usize,
-) -> Value {
-    let (mut model, _) = codex_client_model_template(base_model_id);
-    let object = model
-        .as_object_mut()
-        .expect("Codex client model template should be a JSON object");
-    object.insert("slug".to_string(), Value::String(model_id.to_string()));
-    object.insert(
-        "display_name".to_string(),
-        Value::String(display_name.to_string()),
-    );
-    object.insert(
-        "description".to_string(),
-        Value::String(display_name.to_string()),
-    );
-    object.insert("priority".to_string(), json!(priority));
-    object.insert("visibility".to_string(), Value::String("list".to_string()));
-    object.insert("supported_in_api".to_string(), Value::Bool(true));
-    object.insert("availability_nux".to_string(), Value::Null);
-    object.insert("upgrade".to_string(), Value::Null);
-    model
-}
-
 fn codex_client_model_catalog() -> &'static Value {
     static CATALOG: OnceLock<Value> = OnceLock::new();
     CATALOG.get_or_init(|| {
@@ -417,7 +441,6 @@ fn display_name_for_model(model_id: &str) -> String {
         "gpt-5-codex-mini" => "GPT-5 Codex Mini".to_string(),
         "gpt-5.4" => "GPT-5.4".to_string(),
         "gpt-5.4-mini" => "GPT-5.4 Mini".to_string(),
-        "gpt-5.6-sol-wm" => "GPT-5.6 Sol WM".to_string(),
         "gpt-5.3-codex" => "GPT-5.3 Codex".to_string(),
         "gpt-5.3-codex-spark" => "GPT-5.3 Codex Spark".to_string(),
         "gpt-5.2" => "GPT-5.2".to_string(),
@@ -1122,39 +1145,64 @@ mod tests {
                 model.get("context_window").and_then(Value::as_i64),
                 Some(372_000)
             );
+            assert_eq!(
+                model.get("tool_mode").and_then(Value::as_str),
+                Some("code_mode_only")
+            );
+            assert_eq!(
+                model.get("use_responses_lite").and_then(Value::as_bool),
+                Some(true)
+            );
+            assert_eq!(
+                model.get("shell_type").and_then(Value::as_str),
+                Some("shell_command")
+            );
+            assert_eq!(
+                model.get("apply_patch_tool_type").and_then(Value::as_str),
+                Some("freeform")
+            );
         }
     }
 
     #[test]
-    fn experimental_wm_model_uses_the_expected_display_name() {
-        let response = build_codex_client_models_response(&["gpt-5.6-sol-wm".to_string()]);
+    fn model_catalog_uses_configured_display_names() {
+        let response = build_codex_client_models_response_with_model_definitions(&[
+            ("gpt-5.6-sol".to_string(), "Sol Display".to_string()),
+            ("custom-model".to_string(), "Custom Display".to_string()),
+        ]);
         assert_eq!(
             response
                 .pointer("/models/0/display_name")
                 .and_then(Value::as_str),
-            Some("GPT-5.6 Sol WM")
+            Some("Sol Display")
+        );
+        assert_eq!(
+            response
+                .pointer("/models/1/display_name")
+                .and_then(Value::as_str),
+            Some("Custom Display")
         );
     }
 
     #[test]
-    fn custom_model_inherits_sol_capabilities_and_overrides_identity() {
-        let response = build_codex_client_models_response_with_custom_models(
-            &["gpt-5.6-sol".to_string()],
-            &[("gpt-5.6-sol-wm2".to_string(), "GPT-5.6 Sol WM2".to_string())],
-        );
+    fn custom_model_uses_general_capabilities_and_overrides_identity() {
+        let response = build_codex_client_models_response_with_model_definitions(&[
+            ("gpt-5.5".to_string(), "GPT-5.5".to_string()),
+            ("custom-model".to_string(), "Custom Model".to_string()),
+        ]);
         let models = response["models"].as_array().expect("models array");
-        let sol = &models[0];
+        let base = &models[0];
         let custom = &models[1];
-        assert_eq!(custom["slug"], "gpt-5.6-sol-wm2");
-        assert_eq!(custom["display_name"], "GPT-5.6 Sol WM2");
-        assert_eq!(custom["description"], "GPT-5.6 Sol WM2");
-        assert_eq!(custom["context_window"], sol["context_window"]);
-        assert_eq!(custom["max_context_window"], sol["max_context_window"]);
+        assert_eq!(custom["slug"], "custom-model");
+        assert_eq!(custom["display_name"], "Custom Model");
+        assert_eq!(custom["description"], "Custom Model");
+        assert_eq!(custom["context_window"], DEFAULT_CONTEXT_WINDOW);
+        assert_eq!(custom["max_context_window"], DEFAULT_MAX_CONTEXT_WINDOW);
         assert_eq!(
             custom["supported_reasoning_levels"],
-            sol["supported_reasoning_levels"]
+            base["supported_reasoning_levels"]
         );
-        assert_eq!(custom["input_modalities"], sol["input_modalities"]);
+        assert_eq!(custom["input_modalities"], base["input_modalities"]);
         assert_eq!(custom["visibility"], "list");
     }
 

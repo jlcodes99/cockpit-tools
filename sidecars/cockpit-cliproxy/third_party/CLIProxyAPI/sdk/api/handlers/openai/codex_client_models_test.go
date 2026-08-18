@@ -71,6 +71,18 @@ func TestBuildCodexClientModelsPreserves56Capabilities(t *testing.T) {
 		if got, ok := model["supports_search_tool"].(bool); !ok || !got {
 			t.Fatalf("%s supports_search_tool = %#v, want true", testCase.slug, model["supports_search_tool"])
 		}
+		if got := stringModelValue(model, "tool_mode"); got != "code_mode_only" {
+			t.Fatalf("%s tool_mode = %q, want code_mode_only", testCase.slug, got)
+		}
+		if got, ok := model["use_responses_lite"].(bool); !ok || !got {
+			t.Fatalf("%s use_responses_lite = %#v, want true", testCase.slug, model["use_responses_lite"])
+		}
+		if got := stringModelValue(model, "shell_type"); got != "shell_command" {
+			t.Fatalf("%s shell_type = %q, want shell_command", testCase.slug, got)
+		}
+		if got := stringModelValue(model, "apply_patch_tool_type"); got != "freeform" {
+			t.Fatalf("%s apply_patch_tool_type = %q, want freeform", testCase.slug, got)
+		}
 		levels, ok := model["supported_reasoning_levels"].([]any)
 		if !ok {
 			t.Fatalf("%s reasoning levels = %#v", testCase.slug, model["supported_reasoning_levels"])

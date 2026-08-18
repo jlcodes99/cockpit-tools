@@ -3,7 +3,17 @@ import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
-import { Settings, RefreshCw, FolderOpen, Gauge, Terminal, Zap, X, EyeOff } from 'lucide-react';
+import {
+  Settings,
+  RefreshCw,
+  FolderOpen,
+  Gauge,
+  Terminal,
+  Zap,
+  X,
+  EyeOff,
+  ShieldCheck,
+} from 'lucide-react';
 import { useEscClose } from '../hooks/useEscClose';
 import * as accountService from '../services/accountService';
 import * as codexService from '../services/codexService';
@@ -49,7 +59,9 @@ import type {
   CodexAccount,
   CodexExperimentalModelDefinition,
   CodexQuickConfig,
+  CodexFingerprintMode,
 } from '../types/codex';
+import { isStandardCodexOAuthAccount } from '../types/codex';
 import { getDisplayGroups, type DisplayGroup } from '../services/groupService';
 import { usePlatformRuntimeSupport } from '../hooks/usePlatformRuntimeSupport';
 import {
@@ -60,6 +72,7 @@ import {
 import { CodexSshSyncSettingsControl } from './codex/CodexSshSyncSettingsControl';
 import { getCodexExperimentalModelErrorMessage } from '../utils/codexExperimentalModel';
 import { CodexExperimentalModelEditor } from './codex/CodexExperimentalModelEditor';
+import { CodexOAuthPolicyModal } from './codex/CodexOAuthPolicyModal';
 import './QuickSettingsPopover.css';
 
 /** GeneralConfig from backend */
@@ -72,6 +85,7 @@ interface GeneralConfig {
   claude_auto_refresh_minutes: number;
   codex_sync_wsl: boolean;
   codex_app_ui_injection_enabled?: boolean;
+  codex_cli_only_allow_app_server_clients?: boolean;
   codex_wsl_config_dir: string;
   ghcp_auto_refresh_minutes: number;
   windsurf_auto_refresh_minutes: number;
@@ -466,6 +480,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const [codexExperimentalModels, setCodexExperimentalModels] = useState<
     CodexExperimentalModelDefinition[]
   >([]);
+  const [codexExperimentalDefaultModelId, setCodexExperimentalDefaultModelId] = useState<string | null>(null);
   const [codexExperimentalModelsEdited, setCodexExperimentalModelsEdited] = useState(false);
   const [codexExperimentalModelsError, setCodexExperimentalModelsError] = useState<string | null>(
     null,
@@ -474,6 +489,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const [codexQuickConfigSaving, setCodexQuickConfigSaving] = useState(false);
   const [codexQuickConfigError, setCodexQuickConfigError] = useState<string | null>(null);
   const [codexQuickConfigNotice, setCodexQuickConfigNotice] = useState<string | null>(null);
+  const [codexOAuthPolicyModalOpen, setCodexOAuthPolicyModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshEditing, setRefreshEditing] = useState(false);
   const [currentAccountRefreshEditing, setCurrentAccountRefreshEditing] = useState(false);
@@ -570,6 +586,19 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       })),
     [codexAccountGroups],
   );
+  const codexOAuthPolicyAccounts = useMemo(
+    () => codexAccounts.filter((account) => isStandardCodexOAuthAccount(account)),
+    [codexAccounts],
+  );
+  const codexOAuthFingerprintLabels = useMemo<Record<CodexFingerprintMode, string>>(
+    () => ({
+      off: t('settings.general.codexFingerprintOff', '关闭'),
+      device: t('settings.general.codexFingerprintDevice', '仅设备'),
+      session: t('settings.general.codexFingerprintSession', '设备 + 会话'),
+      full: t('settings.general.codexFingerprintFull', '完整收敛'),
+    }),
+    [t],
+  );
   const applyCodexQuickConfig = useCallback((nextConfig: CodexQuickConfig) => {
     const detectedModelContextWindow = nextConfig.detected_model_context_window ?? null;
     const detectedAutoCompactTokenLimit = nextConfig.detected_auto_compact_token_limit ?? null;
@@ -590,6 +619,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       nextConfig.experimental_model_catalog_enabled,
     );
     setCodexExperimentalModels(nextConfig.experimental_model_catalog_models);
+    setCodexExperimentalDefaultModelId(
+      nextConfig.experimental_model_catalog_default_model_id ?? null,
+    );
     setCodexExperimentalModelsEdited(false);
   }, []);
 
@@ -601,6 +633,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       setCodexQuickCompactLimitInput(String(DEFAULT_AUTO_COMPACT_TOKEN_LIMIT));
       setCodexExperimentalModelCatalogEnabled(false);
       setCodexExperimentalModels([]);
+      setCodexExperimentalDefaultModelId(null);
       setCodexExperimentalModelsEdited(false);
       setCodexExperimentalModelsError(null);
       setCodexQuickConfigError(null);
@@ -727,6 +760,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       target: CodexQuickConfigTarget,
       experimentalModelCatalogEnabled: boolean,
       experimentalModels: CodexExperimentalModelDefinition[],
+      experimentalDefaultModelId: string | null,
     ) => {
       if (type !== 'codex' || codexQuickConfigLoading) return;
 
@@ -743,6 +777,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
             target.autoCompactTokenLimit ?? undefined,
             experimentalModelCatalogEnabled,
             experimentalModels,
+            experimentalDefaultModelId,
           );
           if (saveVersion === codexQuickConfigSaveVersionRef.current) {
             applyCodexQuickConfig(saved);
@@ -797,11 +832,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           preset,
           codexExperimentalModelCatalogEnabled,
           codexExperimentalModels,
+          codexExperimentalDefaultModelId,
         );
       }
     },
     [
       codexExperimentalModelCatalogEnabled,
+      codexExperimentalDefaultModelId,
       codexExperimentalModels,
       persistCodexQuickConfig,
     ],
@@ -829,11 +866,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         },
         codexExperimentalModelCatalogEnabled,
         codexExperimentalModels,
+        codexExperimentalDefaultModelId,
       );
     }, 500);
     return () => window.clearTimeout(timer);
   }, [
     codexExperimentalModelCatalogEnabled,
+    codexExperimentalDefaultModelId,
     codexExperimentalModels,
     codexQuickConfig,
     codexQuickConfigLoading,
@@ -856,7 +895,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       !codexExperimentalModelsEdited ||
       codexExperimentalModelsError ||
       JSON.stringify(codexQuickConfig.experimental_model_catalog_models) ===
-        JSON.stringify(codexExperimentalModels)
+        JSON.stringify(codexExperimentalModels) &&
+      (codexQuickConfig.experimental_model_catalog_default_model_id ?? null) ===
+        codexExperimentalDefaultModelId
     ) {
       return;
     }
@@ -870,11 +911,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           : codexQuickTargetConfig,
         codexExperimentalModelCatalogEnabled,
         codexExperimentalModels,
+        codexExperimentalDefaultModelId,
       );
     }, 500);
     return () => window.clearTimeout(timer);
   }, [
     codexExperimentalModelCatalogEnabled,
+    codexExperimentalDefaultModelId,
     codexExperimentalModels,
     codexExperimentalModelsEdited,
     codexExperimentalModelsError,
@@ -2008,7 +2051,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
 
   const overlayContent = isOpen ? (
     <div className="qs-overlay">
-      <div className="qs-modal" ref={modalRef}>
+      <div className={`qs-modal qs-modal--${type}`} ref={modalRef}>
         <div className="qs-header">
           <span className="qs-title">{getTitle()}</span>
           <button className="qs-close" onClick={() => setIsOpen(false)} aria-label={t('common.close')}>
@@ -2131,7 +2174,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       <span>
                         {t(
                           'codex.experimentalModelCatalog.title',
-                          '实验性模型目录',
+                          '可见模型',
                         )}
                       </span>
                     </div>
@@ -2161,6 +2204,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                               codexExperimentalModelsError
                                 ? (codexQuickConfig?.experimental_model_catalog_models ?? [])
                                 : codexExperimentalModels,
+                              codexExperimentalDefaultModelId,
                             );
                           }}
                           disabled={
@@ -2170,7 +2214,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                           }
                           aria-label={t(
                             'codex.experimentalModelCatalog.title',
-                            '实验性模型目录',
+                          '可见模型',
                           )}
                         />
                         <span className="qs-switch-slider" />
@@ -2180,24 +2224,28 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                   <div className="qs-hint">
                     {t(
                       'codex.experimentalModelCatalog.description',
-                      '生成包含完整官方模型与自定义实验模型的 Cockpit 受管目录；不会覆盖用户自定义目录。',
+                      '根据当前可用官方模型和自定义条目生成 Cockpit 受管目录；不会覆盖用户自定义目录。',
                     )}
                   </div>
                   {codexExperimentalModelCatalogEnabled && (
                     <>
                       <div className="qs-hint">
-                        {t('codex.experimentalModelCatalog.enabledHint', {
-                          defaultValue:
-                            '启用后默认模型切换为 {{model}}，重启 Codex 生效。',
-                          model:
-                            codexExperimentalModels[0]?.model_id ??
-                            'gpt-5.6-sol-wm',
-                        })}
+                        {t(
+                          'codex.experimentalModelCatalog.enabledHint',
+                          '启用后使用当前可见模型列表，重启 Codex 生效。',
+                        )}
                       </div>
                       <CodexExperimentalModelEditor
                         models={codexExperimentalModels}
+                        defaultModelId={codexExperimentalDefaultModelId}
+                        mode="summary"
                         onChange={(models) => {
                           setCodexExperimentalModels(models);
+                          setCodexExperimentalModelsEdited(true);
+                          setCodexQuickConfigError(null);
+                        }}
+                        onDefaultModelChange={(modelId) => {
+                          setCodexExperimentalDefaultModelId(modelId);
                           setCodexExperimentalModelsEdited(true);
                           setCodexQuickConfigError(null);
                         }}
@@ -2209,6 +2257,91 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                   {codexExperimentalModelUnavailableMessage && (
                     <div className="qs-codex-quick-status error">
                       {codexExperimentalModelUnavailableMessage}
+                    </div>
+                  )}
+                  <div className="qs-row qs-row--top qs-codex-oauth-policy-row">
+                    <div className="qs-row-label">
+                      <ShieldCheck size={15} />
+                      <span>{t('codex.oauthPolicy.globalTitle', '允许第三方 app-server')}</span>
+                    </div>
+                    <div className="qs-row-control qs-codex-oauth-policy-control">
+                      <label className="qs-switch">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(config.codex_cli_only_allow_app_server_clients)}
+                          onChange={(event) => {
+                            const enabled = event.target.checked;
+                            setCodexOAuthPolicyModalOpen(false);
+                            void saveConfig({
+                              codex_cli_only_allow_app_server_clients: enabled,
+                            });
+                          }}
+                        />
+                        <span className="qs-switch-slider" />
+                      </label>
+                    </div>
+                  </div>
+                  <div className="qs-hint">
+                    {t(
+                      'codex.oauthPolicy.globalDescription',
+                      '开启后显示当前账号策略摘要，点击“管理”可批量或单独配置。',
+                    )}
+                  </div>
+                  {config.codex_cli_only_allow_app_server_clients && (
+                    <div className="qs-codex-oauth-policy-summary">
+                      <div className="qs-codex-oauth-policy-summary__header">
+                        <span>{t('codex.oauthPolicy.title', 'Codex OAuth 账号策略')}</span>
+                        <button
+                          type="button"
+                          className="qs-codex-oauth-policy-summary__manage"
+                          onClick={() => setCodexOAuthPolicyModalOpen(true)}
+                        >
+                          {t('codex.oauthPolicy.manage', '管理')}
+                        </button>
+                      </div>
+                      <div className="qs-codex-oauth-policy-summary__list">
+                        {codexOAuthPolicyAccounts.length === 0 ? (
+                          <div className="qs-codex-oauth-policy-summary__empty">
+                            {t(
+                              'codex.oauthPolicy.noAccounts',
+                              '暂无可配置的 Codex OAuth 账号',
+                            )}
+                          </div>
+                        ) : (
+                          codexOAuthPolicyAccounts.map((account) => {
+                            const fingerprintMode = account.codex_fingerprint_mode ?? 'off';
+                            return (
+                              <div
+                                className="qs-codex-oauth-policy-summary__row"
+                                key={account.id}
+                              >
+                                <span
+                                  className="qs-codex-oauth-policy-summary__account"
+                                  title={account.email}
+                                >
+                                  {account.email}
+                                </span>
+                                <span className="qs-codex-oauth-policy-summary__value">
+                                  {account.codex_cli_only === true
+                                    ? t('codex.oauthPolicy.officialOnlyShort', '仅官方')
+                                    : t(
+                                        'codex.oauthPolicy.officialOnlyOff',
+                                        '官方客户端：关闭',
+                                      )}
+                                </span>
+                                <span className="qs-codex-oauth-policy-summary__value">
+                                  {account.codex_cli_only_allow_app_server === true
+                                    ? t('codex.oauthPolicy.appServerShort', '允许 app-server')
+                                    : t('codex.oauthPolicy.appServerOff', 'app-server：关闭')}
+                                </span>
+                                <span className="qs-codex-oauth-policy-summary__value">
+                                  {codexOAuthFingerprintLabels[fingerprintMode]}
+                                </span>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -3666,6 +3799,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         <Settings size={14} />
       </button>
       {overlayContent && createPortal(overlayContent, document.body)}
+      {type === 'codex' && codexOAuthPolicyModalOpen && (
+        <CodexOAuthPolicyModal
+          accounts={codexAccounts}
+          onAccountsChange={setCodexAccounts}
+          onClose={() => setCodexOAuthPolicyModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

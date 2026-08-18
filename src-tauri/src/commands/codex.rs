@@ -674,6 +674,7 @@ pub async fn save_codex_quick_config(
     experimental_model_catalog_models: Option<
         Vec<crate::models::codex::CodexExperimentalModelDefinition>,
     >,
+    experimental_model_catalog_default_model_id: Option<String>,
 ) -> Result<CodexQuickConfig, String> {
     let saved = tauri::async_runtime::spawn_blocking(move || {
         let saved = codex_account::save_current_quick_config(
@@ -681,6 +682,7 @@ pub async fn save_codex_quick_config(
             auto_compact_token_limit,
             experimental_model_catalog_enabled,
             experimental_model_catalog_models,
+            experimental_model_catalog_default_model_id,
         )?;
         crate::modules::codex_local_access::refresh_api_service_experimental_model_ids();
         Ok::<CodexQuickConfig, String>(saved)
@@ -1665,6 +1667,19 @@ pub async fn update_codex_accounts_fingerprint_mode(
     mode: String,
 ) -> Result<Vec<CodexAccount>, String> {
     codex_account::update_accounts_fingerprint_mode(&account_ids, mode)
+}
+
+#[tauri::command]
+pub async fn update_codex_account_client_policy(
+    account_id: String,
+    codex_cli_only: bool,
+    allow_app_server: bool,
+) -> Result<CodexAccount, String> {
+    codex_account::update_account_client_policy(
+        &account_id,
+        codex_cli_only,
+        allow_app_server,
+    )
 }
 
 #[tauri::command]

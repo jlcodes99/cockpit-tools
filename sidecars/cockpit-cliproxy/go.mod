@@ -7,7 +7,7 @@ require (
 	github.com/router-for-me/CLIProxyAPI/v7 v7.1.22
 )
 
-replace github.com/router-for-me/CLIProxyAPI/v7 => ./cdk/CLIProxyAPI
+replace github.com/router-for-me/CLIProxyAPI/v7 => ./third_party/CLIProxyAPI
 
 require (
 	cloud.google.com/go/compute/metadata v0.3.0 // indirect

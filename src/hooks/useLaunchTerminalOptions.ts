@@ -77,6 +77,7 @@ export function useLaunchTerminalOptions(enabled = true) {
       ? [
           { value: "Terminal", label: "Terminal.app" },
           { value: "iTerm2", label: "iTerm2" },
+          { value: "Ghostty", label: "Ghostty" },
         ]
       : isWindows
         ? [

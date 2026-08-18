@@ -680,7 +680,7 @@ export function FloatingCardWindow() {
         }
         await getCurrentWebview().setZoom(
           typeof config.ui_scale === 'number' && Number.isFinite(config.ui_scale)
-            ? Math.min(2, Math.max(0.8, config.ui_scale))
+            ? Math.min(2, Math.max(0.3, config.ui_scale))
             : 1,
         );
         setAlwaysOnTop(Boolean(config.floating_card_always_on_top));

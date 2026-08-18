@@ -37,11 +37,14 @@ impl Default for CodexApiProviderMode {
     }
 }
 
-/// Cockpit 管理的 Codex 实验模型定义
+/// Cockpit 管理的 Codex 模型目录条目
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CodexExperimentalModelDefinition {
     pub model_id: String,
     pub display_name: String,
+    /// None 表示跟随官方推理强度；Some 表示用户自定义可选推理强度集合。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_efforts: Option<Vec<String>>,
 }
 
 /// Codex config.toml 快捷配置
@@ -63,6 +66,9 @@ pub struct CodexQuickConfig {
     pub experimental_model_catalog_conflict: Option<String>,
     #[serde(default)]
     pub experimental_model_catalog_models: Vec<CodexExperimentalModelDefinition>,
+    /// 当前可见模型目录中写入 Codex config.toml 的默认模型；None 表示不强制指定。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub experimental_model_catalog_default_model_id: Option<String>,
 }
 
 /// Codex 官方 App 推理速度
@@ -157,9 +163,15 @@ pub struct CodexAccount {
     pub account_structure: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_note: Option<String>,
-    /// Codex OAuth 设备指纹收敛模式。未设置时由 sidecar 按 Sub2API 兼容默认值 `session` 处理。
+    /// Codex OAuth 设备指纹收敛模式。未设置时按 `off` 处理。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub codex_fingerprint_mode: Option<String>,
+    /// 仅允许该 OAuth 账号接收官方 Codex 客户端请求。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub codex_cli_only: bool,
+    /// 该账号额外允许 Codex app-server 第三方客户端请求。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub codex_cli_only_allow_app_server: bool,
     #[serde(
         default,
         alias = "twoFactorSecret",
@@ -473,6 +485,8 @@ impl CodexAccount {
             account_structure: None,
             account_note: None,
             codex_fingerprint_mode: None,
+            codex_cli_only: false,
+            codex_cli_only_allow_app_server: false,
             two_factor_secret: None,
             account_password: None,
             phone_number: None,
