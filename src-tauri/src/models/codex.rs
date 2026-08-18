@@ -161,6 +161,13 @@ pub struct CodexAccount {
     pub account_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_structure: Option<String>,
+    #[serde(
+        default,
+        alias = "accountNoteTitle",
+        alias = "noteTitle",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub account_note_title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_note: Option<String>,
     /// Codex OAuth 设备指纹收敛模式。未设置时按 `off` 处理。
@@ -483,6 +490,7 @@ impl CodexAccount {
             agent_identity: None,
             account_name: None,
             account_structure: None,
+            account_note_title: None,
             account_note: None,
             codex_fingerprint_mode: None,
             codex_cli_only: false,

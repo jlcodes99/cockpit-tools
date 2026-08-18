@@ -1719,6 +1719,7 @@ pub async fn update_codex_account_api_model_mappings(
 #[tauri::command]
 pub async fn update_codex_account_note(
     account_id: String,
+    note_title: Option<String>,
     note: Option<String>,
     two_factor_secret: Option<String>,
     account_password: Option<String>,
@@ -1729,6 +1730,7 @@ pub async fn update_codex_account_note(
     codex_account::update_account_note(
         &account_id,
         codex_account::CodexAccountNoteUpdate {
+            note_title,
             note,
             two_factor_secret,
             account_password,
@@ -1742,6 +1744,7 @@ pub async fn update_codex_account_note(
 #[tauri::command]
 pub async fn create_pending_codex_oauth_account(
     email: String,
+    note_title: Option<String>,
     note: Option<String>,
     two_factor_secret: Option<String>,
     account_password: Option<String>,
@@ -1751,6 +1754,7 @@ pub async fn create_pending_codex_oauth_account(
     codex_account::create_pending_oauth_account(
         email,
         codex_account::CodexAccountNoteUpdate {
+            note_title,
             note,
             two_factor_secret,
             account_password,

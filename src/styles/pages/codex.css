@@ -2746,6 +2746,10 @@
   transform: translateY(-2px);
 }
 
+.codex-account-card.selection-mode {
+  cursor: pointer;
+}
+
 .codex-account-card.current {
   border-color: var(--primary);
   box-shadow:
@@ -2813,6 +2817,7 @@
 .codex-account-card .account-email {
   flex: 1;
   min-width: 0;
+  max-width: none;
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: 14px;
@@ -4233,6 +4238,82 @@
 
 .codex-account-card .codex-card-bottom > .codex-speed-select {
   justify-self: end;
+}
+
+.codex-account-card > .account-sub-line {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.codex-account-card > .account-sub-line > .codex-login-subline {
+  flex: 1 1 auto;
+}
+
+.codex-account-card > .account-sub-line > button {
+  flex-shrink: 0;
+}
+
+.codex-accounts-page .codex-account-context-line,
+.codex-accounts-page .codex-account-note-line {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.codex-accounts-page .codex-account-context-summary {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.codex-accounts-page .codex-account-team-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-accounts-page .codex-account-login-method {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 18%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 7%, transparent);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.codex-accounts-page .codex-account-note-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-accounts-page .codex-account-note-preview.is-empty {
+  color: var(--text-muted);
+}
+
+.codex-account-card .codex-card-bottom-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
 }
 
 .codex-account-card .card-footer {

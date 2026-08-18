@@ -71,6 +71,7 @@ export interface CodexAccount {
   agent_identity?: CodexAgentIdentity;
   account_name?: string;
   account_structure?: string;
+  account_note_title?: string;
   account_note?: string;
   codex_fingerprint_mode?: CodexFingerprintMode;
   codex_cli_only?: boolean;
@@ -95,6 +96,7 @@ export interface CodexAccount {
 }
 
 export interface CodexAccountNoteUpdate {
+  noteTitle?: string;
   note?: string;
   twoFactorSecret?: string;
   accountPassword?: string;
