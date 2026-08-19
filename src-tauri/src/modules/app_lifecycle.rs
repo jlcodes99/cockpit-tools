@@ -1,9 +1,24 @@
 use std::io::{Error, ErrorKind};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Mutex, MutexGuard};
 
 static SHUTDOWN_STARTED: AtomicBool = AtomicBool::new(false);
 static PROCESS_SPAWN_LOCK: Mutex<()> = Mutex::new(());
+static APP_EXIT_STATE: AtomicU8 = AtomicU8::new(APP_EXIT_IDLE);
+
+const APP_EXIT_IDLE: u8 = 0;
+const APP_EXIT_CLEANING_UP: u8 = 1;
+const APP_EXIT_READY: u8 = 2;
+
+#[cfg(test)]
+static LIFECYCLE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppExitDecision {
+    StartCleanup,
+    WaitForCleanup,
+    ExitNow,
+}
 
 pub struct ProcessSpawnGuard {
     _guard: MutexGuard<'static, ()>,
@@ -20,17 +35,64 @@ pub fn is_shutdown_started() -> bool {
 }
 
 pub fn begin_shutdown() -> bool {
-    let _spawn_guard = lock_process_spawn();
     !SHUTDOWN_STARTED.swap(true, Ordering::SeqCst)
+}
+
+/// Wait until a process spawn that already passed the shutdown gate has
+/// finished its OS spawn call. The caller is responsible for applying an
+/// asynchronous timeout so the UI/event thread never blocks on this mutex.
+pub fn wait_for_in_flight_process_spawns() {
+    drop(lock_process_spawn());
+}
+
+pub fn request_app_exit_cleanup() -> AppExitDecision {
+    begin_shutdown();
+    match APP_EXIT_STATE.compare_exchange(
+        APP_EXIT_IDLE,
+        APP_EXIT_CLEANING_UP,
+        Ordering::SeqCst,
+        Ordering::SeqCst,
+    ) {
+        Ok(_) => AppExitDecision::StartCleanup,
+        Err(APP_EXIT_CLEANING_UP) => AppExitDecision::WaitForCleanup,
+        Err(APP_EXIT_READY) => AppExitDecision::ExitNow,
+        Err(_) => AppExitDecision::WaitForCleanup,
+    }
+}
+
+pub fn finish_app_exit_cleanup(result: Result<(), String>) -> Result<(), String> {
+    APP_EXIT_STATE.store(APP_EXIT_READY, Ordering::SeqCst);
+    result
+}
+
+#[cfg(test)]
+pub(crate) fn lock_lifecycle_test_state() -> MutexGuard<'static, ()> {
+    LIFECYCLE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+#[cfg(test)]
+pub(crate) fn reset_lifecycle_state_for_test() {
+    SHUTDOWN_STARTED.store(false, Ordering::SeqCst);
+    APP_EXIT_STATE.store(APP_EXIT_IDLE, Ordering::SeqCst);
 }
 
 #[cfg(target_os = "windows")]
 fn cancel_system_shutdown() {
     let _spawn_guard = lock_process_spawn();
-    SHUTDOWN_STARTED.store(false, Ordering::SeqCst);
+    if APP_EXIT_STATE.load(Ordering::SeqCst) == APP_EXIT_IDLE {
+        SHUTDOWN_STARTED.store(false, Ordering::SeqCst);
+    }
 }
 
 pub fn acquire_process_spawn_guard(program: &str) -> std::io::Result<ProcessSpawnGuard> {
+    if is_shutdown_started() {
+        return Err(Error::new(
+            ErrorKind::Interrupted,
+            format!("系统正在关闭，已取消启动 {}", program),
+        ));
+    }
     let guard = lock_process_spawn();
     if !process_spawn_allowed(is_shutdown_started()) {
         return Err(Error::new(
@@ -187,10 +249,229 @@ fn run_windows_shutdown_message_loop(
 
 #[cfg(test)]
 mod tests {
+    use super::AppExitDecision;
+    use std::sync::{mpsc, Arc, Barrier};
+    use std::time::Duration;
+
     #[test]
     fn process_spawn_policy_rejects_shutdown_state() {
         assert!(super::process_spawn_allowed(false));
         assert!(!super::process_spawn_allowed(true));
+    }
+
+    #[test]
+    fn begin_shutdown_does_not_wait_for_in_flight_process_spawn() {
+        let _test_guard = super::lock_lifecycle_test_state();
+        super::reset_lifecycle_state_for_test();
+
+        let (guard_ready_tx, guard_ready_rx) = mpsc::channel();
+        let (release_guard_tx, release_guard_rx) = mpsc::channel();
+        let guard_thread = std::thread::spawn(move || {
+            let _guard = super::acquire_process_spawn_guard("lifecycle-test")
+                .expect("test process spawn should be allowed");
+            guard_ready_tx
+                .send(())
+                .expect("test should observe acquired spawn guard");
+            release_guard_rx
+                .recv()
+                .expect("test should release spawn guard");
+        });
+        guard_ready_rx
+            .recv()
+            .expect("spawn guard thread should become ready");
+
+        let (shutdown_result_tx, shutdown_result_rx) = mpsc::channel();
+        let shutdown_thread = std::thread::spawn(move || {
+            shutdown_result_tx
+                .send(super::begin_shutdown())
+                .expect("test should observe shutdown result");
+        });
+
+        let shutdown_result = shutdown_result_rx.recv_timeout(Duration::from_secs(2));
+        release_guard_tx
+            .send(())
+            .expect("test should unblock spawn guard thread");
+        guard_thread.join().expect("spawn guard thread should join");
+        shutdown_thread
+            .join()
+            .expect("shutdown request thread should join");
+        super::reset_lifecycle_state_for_test();
+
+        assert_eq!(
+            shutdown_result,
+            Ok(true),
+            "shutdown initiation must not block the UI event thread"
+        );
+    }
+
+    #[test]
+    fn spawn_requested_after_shutdown_does_not_wait_on_an_in_flight_spawn() {
+        let _test_guard = super::lock_lifecycle_test_state();
+        super::reset_lifecycle_state_for_test();
+
+        let in_flight_guard = super::acquire_process_spawn_guard("in-flight")
+            .expect("the initial spawn should be allowed");
+        assert!(super::begin_shutdown());
+
+        let (result_tx, result_rx) = mpsc::channel();
+        let waiting_spawn = std::thread::spawn(move || {
+            result_tx
+                .send(super::acquire_process_spawn_guard("after-shutdown").map(|_| ()))
+                .expect("test should observe the rejected spawn");
+        });
+
+        assert_eq!(
+            result_rx
+                .recv_timeout(Duration::from_millis(100))
+                .expect("a spawn after shutdown must fail without waiting")
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::Interrupted
+        );
+        waiting_spawn
+            .join()
+            .expect("rejected spawn thread should join");
+        drop(in_flight_guard);
+        super::reset_lifecycle_state_for_test();
+    }
+
+    #[test]
+    fn shutdown_rejects_a_spawn_waiting_behind_an_in_flight_spawn() {
+        let _test_guard = super::lock_lifecycle_test_state();
+        super::reset_lifecycle_state_for_test();
+
+        let in_flight_guard = super::acquire_process_spawn_guard("in-flight")
+            .expect("the initial spawn should be allowed");
+        let (result_tx, result_rx) = mpsc::channel();
+        let waiting_spawn = std::thread::spawn(move || {
+            let error_kind = super::acquire_process_spawn_guard("queued")
+                .err()
+                .map(|error| error.kind());
+            result_tx
+                .send(error_kind)
+                .expect("test should observe the queued spawn result");
+        });
+
+        assert!(
+            result_rx.recv_timeout(Duration::from_millis(100)).is_err(),
+            "the queued spawn must wait behind the in-flight spawn"
+        );
+        assert!(super::begin_shutdown());
+        drop(in_flight_guard);
+
+        assert_eq!(
+            result_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("queued spawn should finish after guard release"),
+            Some(std::io::ErrorKind::Interrupted),
+            "a queued spawn must re-check shutdown after entering the critical section"
+        );
+        waiting_spawn
+            .join()
+            .expect("queued spawn thread should join");
+        super::reset_lifecycle_state_for_test();
+    }
+
+    #[test]
+    fn poisoned_process_spawn_lock_recovers_without_bypassing_shutdown() {
+        let _test_guard = super::lock_lifecycle_test_state();
+        super::reset_lifecycle_state_for_test();
+
+        let poisoner = std::thread::spawn(|| {
+            let _guard = super::lock_process_spawn();
+            panic!("intentionally poison the process spawn lock");
+        });
+        assert!(poisoner.join().is_err());
+
+        let recovered_guard = super::acquire_process_spawn_guard("after-poison")
+            .expect("a poisoned lock should recover while the app is running");
+        drop(recovered_guard);
+        assert!(super::begin_shutdown());
+        let error = super::acquire_process_spawn_guard("after-shutdown")
+            .err()
+            .expect("shutdown must still reject spawns after lock recovery");
+        assert_eq!(error.kind(), std::io::ErrorKind::Interrupted);
+
+        super::reset_lifecycle_state_for_test();
+    }
+
+    #[test]
+    fn successful_app_exit_cleanup_allows_the_next_exit_request() {
+        let _test_guard = super::lock_lifecycle_test_state();
+        super::reset_lifecycle_state_for_test();
+
+        assert_eq!(
+            super::request_app_exit_cleanup(),
+            AppExitDecision::StartCleanup
+        );
+        assert!(super::is_shutdown_started());
+        assert_eq!(super::finish_app_exit_cleanup(Ok(())), Ok(()));
+        assert_eq!(super::request_app_exit_cleanup(), AppExitDecision::ExitNow);
+
+        super::reset_lifecycle_state_for_test();
+    }
+
+    #[test]
+    fn failed_app_exit_cleanup_still_releases_repeated_exit_requests() {
+        let _test_guard = super::lock_lifecycle_test_state();
+        super::reset_lifecycle_state_for_test();
+
+        assert_eq!(
+            super::request_app_exit_cleanup(),
+            AppExitDecision::StartCleanup
+        );
+        assert_eq!(
+            super::request_app_exit_cleanup(),
+            AppExitDecision::WaitForCleanup
+        );
+        assert_eq!(
+            super::finish_app_exit_cleanup(Err("sidecar shutdown failed".to_string())),
+            Err("sidecar shutdown failed".to_string())
+        );
+        assert_eq!(super::request_app_exit_cleanup(), AppExitDecision::ExitNow);
+
+        super::reset_lifecycle_state_for_test();
+    }
+
+    #[test]
+    fn concurrent_exit_requests_start_exactly_one_cleanup() {
+        let _test_guard = super::lock_lifecycle_test_state();
+        super::reset_lifecycle_state_for_test();
+
+        const REQUEST_COUNT: usize = 64;
+        let barrier = Arc::new(Barrier::new(REQUEST_COUNT));
+        let requests = (0..REQUEST_COUNT)
+            .map(|_| {
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    super::request_app_exit_cleanup()
+                })
+            })
+            .collect::<Vec<_>>();
+        let decisions = requests
+            .into_iter()
+            .map(|thread| thread.join().expect("exit request thread should join"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            decisions
+                .iter()
+                .filter(|decision| **decision == AppExitDecision::StartCleanup)
+                .count(),
+            1
+        );
+        assert_eq!(
+            decisions
+                .iter()
+                .filter(|decision| **decision == AppExitDecision::WaitForCleanup)
+                .count(),
+            REQUEST_COUNT - 1
+        );
+        assert!(!decisions.contains(&AppExitDecision::ExitNow));
+
+        assert_eq!(super::finish_app_exit_cleanup(Ok(())), Ok(()));
+        super::reset_lifecycle_state_for_test();
     }
 }
 

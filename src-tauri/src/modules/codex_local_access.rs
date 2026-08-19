@@ -20,8 +20,8 @@ use crate::models::codex_local_access::{
 };
 use crate::modules::atomic_write::{write_string_atomic, write_string_atomic_if_hash_matches};
 use crate::modules::{
-    account, codex_account, codex_agent_identity, codex_oauth, codex_protocol, codex_quota, config,
-    codex_wakeup, logger, process,
+    account, app_lifecycle, codex_account, codex_agent_identity, codex_oauth, codex_protocol,
+    codex_quota, codex_wakeup, config, logger, process,
 };
 use base64::{engine::general_purpose, Engine as _};
 use chrono::{Datelike, Duration as ChronoDuration, Local, LocalResult, NaiveDate, TimeZone};
@@ -172,6 +172,7 @@ const BOUND_OAUTH_QUOTA_RESERVE_REQUEST_REFRESH_MIN_INTERVAL: Duration = Duratio
 const GATEWAY_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 const GATEWAY_PORT_RELEASE_TIMEOUT: Duration = Duration::from_secs(5);
 const GATEWAY_PORT_RELEASE_POLL_INTERVAL: Duration = Duration::from_millis(100);
+const APP_EXIT_CLEANUP_TIMEOUT: Duration = Duration::from_secs(10);
 const GATEWAY_ACCOUNT_REFRESH_CONCURRENCY: usize = 4;
 const GATEWAY_ACCOUNT_REFRESH_TIMEOUT: Duration = Duration::from_secs(30);
 const GATEWAY_PREPARATION_CANCELLED: &str = "GATEWAY_PREPARATION_CANCELLED";
@@ -225,6 +226,7 @@ const BACKEND_CODEX_RESPONSES_COMPACT_PATH: &str = "/backend-api/codex/responses
 const IMAGES_GENERATIONS_PATH: &str = "/v1/images/generations";
 const IMAGES_EDITS_PATH: &str = "/v1/images/edits";
 static GATEWAY_RUNTIME: OnceLock<TokioMutex<GatewayRuntime>> = OnceLock::new();
+static GATEWAY_STATS_FLUSH_LOCK: OnceLock<TokioMutex<()>> = OnceLock::new();
 static GATEWAY_RUNTIME_LOAD_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 static GATEWAY_RUNTIME_LOAD_NOTIFY: OnceLock<Notify> = OnceLock::new();
 static API_SERVICE_EXPERIMENTAL_MODEL_CATALOG: OnceLock<Mutex<Option<Vec<String>>>> =
@@ -450,6 +452,7 @@ struct ProviderGatewayRuntime {
     actual_bind_host: Option<String>,
     task: Option<tokio::task::JoinHandle<()>>,
     sidecar_child: Option<Child>,
+    cleanup_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -485,6 +488,26 @@ struct CodexLocalAccessProfileTakeoverBackup {
 struct GatewayBindEndpoint {
     bind_host: String,
     port: u16,
+}
+
+#[derive(Debug, Default)]
+struct GatewayShutdownResult {
+    endpoints: Vec<GatewayBindEndpoint>,
+    errors: Vec<String>,
+}
+
+impl GatewayShutdownResult {
+    fn from_endpoint(endpoint: Option<GatewayBindEndpoint>) -> Self {
+        Self {
+            endpoints: endpoint.into_iter().collect(),
+            errors: Vec::new(),
+        }
+    }
+
+    fn extend(&mut self, mut other: Self) {
+        self.endpoints.append(&mut other.endpoints);
+        self.errors.append(&mut other.errors);
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -734,6 +757,10 @@ struct RoutingCandidate {
 
 fn gateway_runtime() -> &'static TokioMutex<GatewayRuntime> {
     GATEWAY_RUNTIME.get_or_init(|| TokioMutex::new(GatewayRuntime::default()))
+}
+
+fn gateway_stats_flush_lock() -> &'static TokioMutex<()> {
+    GATEWAY_STATS_FLUSH_LOCK.get_or_init(|| TokioMutex::new(()))
 }
 
 fn gateway_runtime_load_notify() -> &'static Notify {
@@ -2104,6 +2131,57 @@ pub async fn run_official_wakeup_chat(
     })
 }
 
+async fn flush_dirty_stats_once(deadline: ShutdownDeadline) -> Result<bool, String> {
+    let _flush_guard =
+        acquire_shutdown_lock(gateway_stats_flush_lock(), deadline, "API 服务统计写入").await?;
+    let (stats_snapshot, collection_snapshot) = {
+        let mut runtime = gateway_runtime().lock().await;
+        if !runtime.stats_dirty && !runtime.collection_dirty {
+            return Ok(false);
+        }
+        let collection_snapshot = runtime
+            .collection_dirty
+            .then(|| runtime.collection.clone())
+            .flatten();
+        runtime.stats_dirty = false;
+        runtime.collection_dirty = false;
+        (runtime.stats.clone(), collection_snapshot)
+    };
+
+    if let Err(error) = save_stats_to_disk(&stats_snapshot) {
+        let mut runtime = gateway_runtime().lock().await;
+        runtime.stats_dirty = true;
+        runtime.collection_dirty |= collection_snapshot.is_some();
+        return Err(format!("写入请求统计失败: {}", error));
+    }
+
+    if let Some(collection_snapshot) = collection_snapshot.as_ref() {
+        if let Err(error) = save_collection_to_disk(collection_snapshot) {
+            let mut runtime = gateway_runtime().lock().await;
+            runtime.collection_dirty = true;
+            return Err(format!("写入 API key token usage 失败: {}", error));
+        }
+    }
+
+    Ok(true)
+}
+
+async fn flush_pending_stats_for_shutdown(deadline: Instant) -> Result<(), String> {
+    let result = loop {
+        if Instant::now() >= deadline {
+            break Err("退出前写入 API 服务统计超时".to_string());
+        }
+        match flush_dirty_stats_once(Some(deadline)).await {
+            Ok(false) => break Ok(()),
+            Ok(true) => continue,
+            Err(error) => break Err(error),
+        }
+    };
+    let mut runtime = gateway_runtime().lock().await;
+    runtime.stats_flush_inflight = false;
+    result
+}
+
 async fn schedule_stats_flush_if_needed() {
     let should_spawn = {
         let mut runtime = gateway_runtime().lock().await;
@@ -2122,43 +2200,18 @@ async fn schedule_stats_flush_if_needed() {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(STATS_FLUSH_INTERVAL).await;
-
-            let (stats_snapshot, collection_snapshot) = {
-                let mut runtime = gateway_runtime().lock().await;
-                if !runtime.stats_dirty && !runtime.collection_dirty {
+            match flush_dirty_stats_once(None).await {
+                Ok(false) => {
+                    let mut runtime = gateway_runtime().lock().await;
                     runtime.stats_flush_inflight = false;
                     return;
                 }
-                let collection_snapshot = runtime
-                    .collection_dirty
-                    .then(|| runtime.collection.clone())
-                    .flatten();
-                runtime.stats_dirty = false;
-                runtime.collection_dirty = false;
-                (runtime.stats.clone(), collection_snapshot)
-            };
-
-            if let Err(err) = save_stats_to_disk(&stats_snapshot) {
-                logger::log_codex_api_warn(&format!(
-                    "[CodexLocalAccess] 后台写入请求统计失败: {}",
-                    err
-                ));
-                let mut runtime = gateway_runtime().lock().await;
-                runtime.stats_dirty = true;
-                runtime.collection_dirty |= collection_snapshot.is_some();
-                runtime.stats_flush_inflight = false;
-                return;
-            }
-            if let Some(collection_snapshot) = collection_snapshot.as_ref() {
-                if let Err(err) = save_collection_to_disk(collection_snapshot) {
+                Ok(true) => {}
+                Err(error) => {
                     logger::log_codex_api_warn(&format!(
-                        "[CodexLocalAccess] background API key token usage save failed: {}",
-                        err
+                        "[CodexLocalAccess] 后台写入请求统计失败，将在下个周期重试: {}",
+                        error
                     ));
-                    let mut runtime = gateway_runtime().lock().await;
-                    runtime.collection_dirty = true;
-                    runtime.stats_flush_inflight = false;
-                    return;
                 }
             }
         }
@@ -10674,6 +10727,30 @@ fn provider_gateway_lifecycle_lock() -> &'static TokioMutex<()> {
     PROVIDER_GATEWAY_LIFECYCLE_LOCK.get_or_init(|| TokioMutex::new(()))
 }
 
+type ShutdownDeadline = Option<Instant>;
+
+fn shutdown_step_timeout(deadline: ShutdownDeadline, fallback: Duration) -> Duration {
+    deadline
+        .map(|deadline| deadline.saturating_duration_since(Instant::now()))
+        .unwrap_or(fallback)
+}
+
+async fn acquire_shutdown_lock(
+    lock: &'static TokioMutex<()>,
+    deadline: ShutdownDeadline,
+    label: &str,
+) -> Result<tokio::sync::MutexGuard<'static, ()>, String> {
+    match deadline {
+        Some(deadline) => timeout(
+            shutdown_step_timeout(Some(deadline), GATEWAY_SHUTDOWN_TIMEOUT),
+            lock.lock(),
+        )
+        .await
+        .map_err(|_| format!("等待 {} 锁超时", label)),
+        None => Ok(lock.lock().await),
+    }
+}
+
 fn sidecar_binary_file_names() -> Vec<String> {
     let target = env!("COCKPIT_RUST_TARGET");
     if cfg!(target_os = "windows") {
@@ -15131,16 +15208,47 @@ fn is_local_access_port_bindable(bind_host: &str, port: u16) -> Result<bool, std
 }
 
 async fn wait_for_gateway_port_release(bind_host: &str, port: u16) -> Result<(), String> {
-    let deadline = Instant::now() + GATEWAY_PORT_RELEASE_TIMEOUT;
+    wait_for_gateway_port_release_with_timing(
+        bind_host,
+        port,
+        GATEWAY_PORT_RELEASE_TIMEOUT,
+        GATEWAY_PORT_RELEASE_POLL_INTERVAL,
+    )
+    .await
+}
 
+async fn wait_for_gateway_port_release_with_timing(
+    bind_host: &str,
+    port: u16,
+    release_timeout: Duration,
+    poll_interval: Duration,
+) -> Result<(), String> {
+    let deadline = Instant::now()
+        .checked_add(release_timeout)
+        .unwrap_or_else(Instant::now);
+    wait_for_gateway_port_release_until(bind_host, port, deadline, poll_interval).await
+}
+
+async fn wait_for_gateway_port_release_until(
+    bind_host: &str,
+    port: u16,
+    deadline: Instant,
+    poll_interval: Duration,
+) -> Result<(), String> {
     loop {
         match is_local_access_port_bindable(bind_host, port) {
             Ok(true) => return Ok(()),
-            Ok(false) if Instant::now() < deadline => {
-                tokio::time::sleep(GATEWAY_PORT_RELEASE_POLL_INTERVAL).await;
-            }
             Ok(false) => {
-                return Err(format!("API 服务端口 {} 停止后仍未释放，请稍后重试", port));
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    return Err(format!("API 服务端口 {} 停止后仍未释放，请稍后重试", port));
+                }
+                let delay = poll_interval.min(remaining);
+                if delay.is_zero() {
+                    tokio::task::yield_now().await;
+                } else {
+                    tokio::time::sleep(delay).await;
+                }
             }
             Err(error) => {
                 return Err(format!(
@@ -15150,6 +15258,46 @@ async fn wait_for_gateway_port_release(bind_host: &str, port: u16) -> Result<(),
             }
         }
     }
+}
+
+async fn wait_for_gateway_endpoints_to_be_released(
+    endpoints: Vec<GatewayBindEndpoint>,
+    deadline: Instant,
+) -> Vec<String> {
+    wait_for_gateway_endpoints_to_be_released_with_timing(
+        endpoints,
+        deadline,
+        GATEWAY_PORT_RELEASE_POLL_INTERVAL,
+    )
+    .await
+}
+
+async fn wait_for_gateway_endpoints_to_be_released_with_timing(
+    endpoints: Vec<GatewayBindEndpoint>,
+    deadline: Instant,
+    poll_interval: Duration,
+) -> Vec<String> {
+    let results: Vec<Option<String>> = stream::iter(endpoints)
+        .map(|endpoint| async move {
+            wait_for_gateway_port_release_until(
+                &endpoint.bind_host,
+                endpoint.port,
+                deadline,
+                poll_interval,
+            )
+            .await
+            .err()
+            .map(|error| {
+                format!(
+                    "等待 sidecar 释放端口失败: bind={}:{} error={}",
+                    endpoint.bind_host, endpoint.port, error
+                )
+            })
+        })
+        .buffer_unordered(usize::MAX)
+        .collect()
+        .await;
+    results.into_iter().flatten().collect()
 }
 
 async fn bind_gateway_listener(bind_host: &str, port: u16) -> Result<TcpListener, std::io::Error> {
@@ -16000,6 +16148,12 @@ async fn ensure_runtime_loaded_for_app_startup() -> Result<(), String> {
 async fn ensure_gateway_matches_runtime() -> Result<(), String> {
     let result = {
         let _lifecycle_guard = gateway_lifecycle_lock().lock().await;
+        if app_lifecycle::is_shutdown_started() {
+            logger::log_codex_api_info(
+                "[CodexLocalAccess] 应用正在退出，跳过 API 服务网关启动/重载",
+            );
+            return Ok(());
+        }
         ensure_gateway_matches_runtime_locked().await
     };
     if result.is_ok() && GATEWAY_STOP_REQUESTS.load(Ordering::SeqCst) == 0 {
@@ -16222,6 +16376,14 @@ fn refresh_gateway_process_status(runtime: &mut GatewayRuntime) {
     runtime.sidecar_child = None;
 }
 
+fn spawn_owned_sidecar(command: &mut TokioCommand, label: &str) -> std::io::Result<Child> {
+    command.kill_on_drop(true);
+    let spawn_guard = app_lifecycle::acquire_process_spawn_guard(label)?;
+    let child = command.spawn();
+    drop(spawn_guard);
+    child
+}
+
 async fn ensure_gateway_matches_runtime_locked() -> Result<(), String> {
     let (collection, running, actual_port, actual_bind_host, actual_fingerprint, stale_task) = {
         let mut runtime = gateway_runtime().lock().await;
@@ -16378,7 +16540,7 @@ async fn ensure_gateway_matches_runtime_locked() -> Result<(), String> {
         command.creation_flags(0x08000000);
     }
 
-    let mut child = match command.spawn() {
+    let mut child = match spawn_owned_sidecar(&mut command, "API 服务 sidecar") {
         Ok(child) => child,
         Err(error) => {
             let message = format!("启动 API 服务 sidecar 失败: {}", error);
@@ -16515,14 +16677,146 @@ async fn ensure_gateway_matches_runtime_locked() -> Result<(), String> {
     Ok(())
 }
 
+async fn stop_owned_child_and_task(
+    mut child: Option<Child>,
+    mut task: Option<tokio::task::JoinHandle<()>>,
+    deadline: ShutdownDeadline,
+    label: &str,
+) -> Vec<String> {
+    let mut errors = Vec::new();
+
+    if let Some(child) = child.as_mut() {
+        let already_exited = match child.try_wait() {
+            Ok(Some(_)) => true,
+            Ok(None) => false,
+            Err(error) => {
+                errors.push(format!("检查 {} 状态失败: {}", label, error));
+                false
+            }
+        };
+        if !already_exited {
+            let mut stopped = false;
+            let mut last_error = None;
+            for attempt in 1..=2 {
+                match child.start_kill() {
+                    Ok(()) => {
+                        stopped = true;
+                        last_error = None;
+                        break;
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        stopped = true;
+                        last_error = None;
+                        break;
+                    }
+                    Err(error) => {
+                        if matches!(child.try_wait(), Ok(Some(_))) {
+                            stopped = true;
+                            last_error = None;
+                            break;
+                        }
+                        last_error = Some(format!(
+                            "停止 {} 失败（尝试 {}）: {}",
+                            label, attempt, error
+                        ));
+                    }
+                }
+            }
+
+            if stopped {
+                match timeout(
+                    shutdown_step_timeout(deadline, GATEWAY_SHUTDOWN_TIMEOUT),
+                    child.wait(),
+                )
+                .await
+                {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Ok(Err(error)) => {
+                        errors.push(format!("等待 {} 退出失败: {}", label, error));
+                    }
+                    Err(_) => errors.push(format!("等待 {} 退出超时", label)),
+                }
+            } else if let Some(error) = last_error {
+                errors.push(error);
+            }
+        }
+    }
+
+    if let Some(task) = task.as_mut() {
+        match timeout(
+            shutdown_step_timeout(deadline, GATEWAY_SHUTDOWN_TIMEOUT),
+            &mut *task,
+        )
+        .await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                errors.push(format!("等待 {} 监听任务结束失败: {}", label, error));
+            }
+            Err(_) => {
+                task.abort();
+                errors.push(format!("等待 {} 监听任务结束超时，已中止任务", label));
+                match timeout(
+                    shutdown_step_timeout(deadline, GATEWAY_SHUTDOWN_TIMEOUT),
+                    &mut *task,
+                )
+                .await
+                {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) if error.is_cancelled() => {}
+                    Ok(Err(error)) => {
+                        errors.push(format!("中止 {} 监听任务失败: {}", label, error));
+                    }
+                    Err(_) => {
+                        errors.push(format!("中止 {} 监听任务后仍未结束", label));
+                    }
+                }
+            }
+        }
+    }
+
+    errors
+}
+
+fn log_gateway_shutdown_errors(result: &GatewayShutdownResult, label: &str) {
+    for error in &result.errors {
+        logger::log_codex_api_warn(&format!(
+            "[CodexLocalAccess][shutdown][{}] {}",
+            label, error
+        ));
+    }
+}
+
 async fn stop_gateway() -> Option<GatewayBindEndpoint> {
+    let result = stop_gateway_with_deadline(None).await;
+    log_gateway_shutdown_errors(&result, "API 服务网关");
+    result.endpoints.into_iter().next()
+}
+
+async fn stop_gateway_with_deadline(deadline: ShutdownDeadline) -> GatewayShutdownResult {
     let _stop_request_guard = GatewayStopRequestGuard::begin();
     advance_gateway_lifecycle_generation();
-    let _lifecycle_guard = gateway_lifecycle_lock().lock().await;
-    stop_gateway_locked().await
+    let _lifecycle_guard =
+        match acquire_shutdown_lock(gateway_lifecycle_lock(), deadline, "API 服务网关").await {
+            Ok(guard) => guard,
+            Err(error) => {
+                return GatewayShutdownResult {
+                    endpoints: Vec::new(),
+                    errors: vec![error],
+                };
+            }
+        };
+    stop_gateway_locked_with_deadline(deadline).await
 }
 
 async fn stop_gateway_locked() -> Option<GatewayBindEndpoint> {
+    let result = stop_gateway_locked_with_deadline(None).await;
+    log_gateway_shutdown_errors(&result, "API 服务网关");
+    result.endpoints.into_iter().next()
+}
+
+async fn stop_gateway_locked_with_deadline(deadline: ShutdownDeadline) -> GatewayShutdownResult {
     let (shutdown_sender, task, child, endpoint) = {
         let mut runtime = gateway_runtime().lock().await;
         let endpoint = runtime
@@ -16541,41 +16835,15 @@ async fn stop_gateway_locked() -> Option<GatewayBindEndpoint> {
         )
     };
 
+    let mut result = GatewayShutdownResult::from_endpoint(endpoint);
     if let Some(sender) = shutdown_sender {
-        let _ = sender.send(true);
+        // A closed watch channel means the listener task already stopped.
+        sender.send_replace(true);
     }
-    if let Some(mut child) = child {
-        match timeout(GATEWAY_SHUTDOWN_TIMEOUT, child.kill()).await {
-            Ok(Ok(())) => {
-                let _ = child.wait().await;
-            }
-            Ok(Err(error)) => {
-                logger::log_codex_api_warn(&format!(
-                    "[CodexLocalAccess] 停止 API 服务 sidecar 失败: {}",
-                    error
-                ));
-            }
-            Err(_) => {
-                logger::log_codex_api_warn(
-                    "[CodexLocalAccess] 停止 API 服务 sidecar 超时，继续清理监听任务",
-                );
-            }
-        }
-    }
-    if let Some(mut task) = task {
-        tokio::select! {
-            result = &mut task => {
-                let _ = result;
-            }
-            _ = tokio::time::sleep(GATEWAY_SHUTDOWN_TIMEOUT) => {
-                logger::log_codex_api_warn("[CodexLocalAccess] 停止本地接入服务超时，已强制中止监听任务");
-                task.abort();
-                let _ = task.await;
-            }
-        }
-    }
-
-    endpoint
+    result
+        .errors
+        .extend(stop_owned_child_and_task(child, task, deadline, "API 服务 sidecar").await);
+    result
 }
 
 fn apply_usage_stats(
@@ -18470,43 +18738,19 @@ fn add_model_provider_test_header_b64(
     add_model_provider_test_header(builder, name, &encoded)
 }
 
-async fn stop_temporary_provider_gateway_sidecar(
-    mut child: Child,
-    mut task: tokio::task::JoinHandle<()>,
-    bind_host: String,
-    port: u16,
-    sidecar_dir: PathBuf,
-) {
-    match timeout(GATEWAY_SHUTDOWN_TIMEOUT, child.kill()).await {
-        Ok(Ok(())) => {
-            let _ = child.wait().await;
-        }
-        Ok(Err(error)) => {
+async fn stop_temporary_provider_gateway_sidecar(runtime_key: &str, sidecar_dir: PathBuf) {
+    let endpoint = {
+        let _guard = provider_gateway_lifecycle_lock().lock().await;
+        stop_provider_gateway_runtime(runtime_key).await
+    };
+    if let Some(endpoint) = endpoint {
+        if let Err(error) = wait_for_gateway_port_release(&endpoint.bind_host, endpoint.port).await
+        {
             logger::log_codex_api_warn(&format!(
-                "[CodexLocalAccess][provider-gateway-test] 停止临时 sidecar 失败: {}",
-                error
+                "[CodexLocalAccess][provider-gateway-test] 等待临时端口释放失败: bind={}:{} error={}",
+                endpoint.bind_host, endpoint.port, error
             ));
         }
-        Err(_) => {
-            logger::log_codex_api_warn(
-                "[CodexLocalAccess][provider-gateway-test] 停止临时 sidecar 超时",
-            );
-        }
-    }
-    tokio::select! {
-        result = &mut task => {
-            let _ = result;
-        }
-        _ = tokio::time::sleep(GATEWAY_SHUTDOWN_TIMEOUT) => {
-            logger::log_codex_api_warn("[CodexLocalAccess][provider-gateway-test] 停止临时 sidecar 监听任务超时，已中止");
-            task.abort();
-        }
-    }
-    if let Err(error) = wait_for_gateway_port_release(&bind_host, port).await {
-        logger::log_codex_api_warn(&format!(
-            "[CodexLocalAccess][provider-gateway-test] 等待临时端口释放失败: bind={}:{} error={}",
-            bind_host, port, error
-        ));
     }
     if sidecar_dir.exists() {
         if let Err(error) = std::fs::remove_dir_all(&sidecar_dir) {
@@ -18525,6 +18769,9 @@ pub async fn run_model_provider_gateway_chat_test(
     let run_id = request.run_id.trim().to_string();
     if is_model_provider_chat_test_cancelled(&run_id) {
         return Err(MODEL_PROVIDER_CHAT_TEST_CANCELLED_ERROR.to_string());
+    }
+    if app_lifecycle::is_shutdown_started() {
+        return Err("应用正在退出，已取消模型供应商网关测试".to_string());
     }
     let model_id = request.model_id.trim();
     if model_id.is_empty() {
@@ -18583,25 +18830,40 @@ pub async fn run_model_provider_gateway_chat_test(
         return Err(MODEL_PROVIDER_CHAT_TEST_CANCELLED_ERROR.to_string());
     }
 
-    let (child, task, bind_host) =
-        match spawn_provider_gateway_sidecar(&collection, &launch_config).await {
-            Ok(runtime) => runtime,
-            Err(error) => {
-                if sidecar_dir.exists() {
-                    let _ = std::fs::remove_dir_all(&sidecar_dir);
-                }
-                return Err(error);
+    let runtime_key = provider_gateway_runtime_key(&sidecar_dir, "model-provider-test");
+    let bind_host = {
+        let _guard = provider_gateway_lifecycle_lock().lock().await;
+        if app_lifecycle::is_shutdown_started() {
+            if sidecar_dir.exists() {
+                let _ = std::fs::remove_dir_all(&sidecar_dir);
             }
-        };
+            return Err("应用正在退出，已取消模型供应商网关测试".to_string());
+        }
+        let (child, task, bind_host) =
+            match spawn_provider_gateway_sidecar(&collection, &launch_config).await {
+                Ok(runtime) => runtime,
+                Err(error) => {
+                    if sidecar_dir.exists() {
+                        let _ = std::fs::remove_dir_all(&sidecar_dir);
+                    }
+                    return Err(error);
+                }
+            };
+        let mut runtimes = provider_gateway_runtime_store().lock().await;
+        runtimes.insert(
+            runtime_key.clone(),
+            ProviderGatewayRuntime {
+                actual_port: Some(collection.port),
+                actual_bind_host: Some(bind_host.clone()),
+                task: Some(task),
+                sidecar_child: Some(child),
+                cleanup_dir: Some(sidecar_dir.clone()),
+            },
+        );
+        bind_host
+    };
     if is_model_provider_chat_test_cancelled(&run_id) {
-        stop_temporary_provider_gateway_sidecar(
-            child,
-            task,
-            bind_host,
-            collection.port,
-            sidecar_dir,
-        )
-        .await;
+        stop_temporary_provider_gateway_sidecar(&runtime_key, sidecar_dir).await;
         return Err(MODEL_PROVIDER_CHAT_TEST_CANCELLED_ERROR.to_string());
     }
     let client_request_id = format!(
@@ -18746,8 +19008,7 @@ pub async fn run_model_provider_gateway_chat_test(
         }
     };
 
-    stop_temporary_provider_gateway_sidecar(child, task, bind_host, collection.port, sidecar_dir)
-        .await;
+    stop_temporary_provider_gateway_sidecar(&runtime_key, sidecar_dir).await;
     result
 }
 
@@ -19060,8 +19321,7 @@ async fn spawn_provider_gateway_sidecar(
         command.creation_flags(0x08000000);
     }
 
-    let mut child = command
-        .spawn()
+    let mut child = spawn_owned_sidecar(&mut command, "Codex provider gateway sidecar")
         .map_err(|e| format!("启动 Codex provider gateway sidecar 失败: {}", e))?;
 
     let stdout = child.stdout.take();
@@ -19148,48 +19408,86 @@ async fn spawn_provider_gateway_sidecar(
 }
 
 async fn stop_provider_gateway_runtime(runtime_key: &str) -> Option<GatewayBindEndpoint> {
-    let (child, task, endpoint) = {
+    let result = stop_provider_gateway_runtime_with_deadline(runtime_key, None).await;
+    for error in &result.errors {
+        logger::log_codex_api_warn(&format!("[CodexLocalAccess][provider-gateway] {}", error));
+    }
+    result.endpoints.into_iter().next()
+}
+
+async fn stop_provider_gateway_runtime_with_deadline(
+    runtime_key: &str,
+    deadline: ShutdownDeadline,
+) -> GatewayShutdownResult {
+    let (child, task, endpoint, cleanup_dir) = {
         let mut runtimes = provider_gateway_runtime_store().lock().await;
         let Some(mut runtime) = runtimes.remove(runtime_key) else {
-            return None;
+            return GatewayShutdownResult::default();
         };
         let endpoint = runtime
             .actual_port
             .zip(runtime.actual_bind_host.clone())
             .map(|(port, bind_host)| GatewayBindEndpoint { bind_host, port });
-        (runtime.sidecar_child.take(), runtime.task.take(), endpoint)
+        (
+            runtime.sidecar_child.take(),
+            runtime.task.take(),
+            endpoint,
+            runtime.cleanup_dir.take(),
+        )
     };
 
-    if let Some(mut child) = child {
-        match timeout(GATEWAY_SHUTDOWN_TIMEOUT, child.kill()).await {
-            Ok(Ok(())) => {
-                let _ = child.wait().await;
+    let mut result = GatewayShutdownResult::from_endpoint(endpoint);
+    result
+        .errors
+        .extend(stop_owned_child_and_task(child, task, deadline, "provider gateway sidecar").await);
+    let mut cleanup_failed = false;
+    let cleanup_dir_for_retry = cleanup_dir.clone();
+    if let Some(cleanup_dir) = cleanup_dir {
+        if cleanup_dir.exists() {
+            let mut cleanup_error = None;
+            for attempt in 1..=2 {
+                if deadline.is_some_and(|value| Instant::now() >= value) {
+                    cleanup_error = Some(std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        "退出清理 deadline 已耗尽",
+                    ));
+                    break;
+                }
+                match std::fs::remove_dir_all(&cleanup_dir) {
+                    Ok(()) => {
+                        cleanup_error = None;
+                        break;
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        cleanup_error = None;
+                        break;
+                    }
+                    Err(error) => {
+                        cleanup_error = Some(error);
+                        if attempt == 1 {
+                            tokio::task::yield_now().await;
+                        }
+                    }
+                }
             }
-            Ok(Err(error)) => {
-                logger::log_codex_api_warn(&format!(
-                    "[CodexLocalAccess][provider-gateway] 停止 sidecar 失败: {}",
+            if let Some(error) = cleanup_error {
+                cleanup_failed = true;
+                result.errors.push(format!(
+                    "清理临时 sidecar 目录失败: path={} error={}",
+                    cleanup_dir.display(),
                     error
                 ));
             }
-            Err(_) => {
-                logger::log_codex_api_warn(
-                    "[CodexLocalAccess][provider-gateway] 停止 sidecar 超时",
-                );
-            }
         }
     }
-    if let Some(mut task) = task {
-        tokio::select! {
-            result = &mut task => {
-                let _ = result;
-            }
-            _ = tokio::time::sleep(GATEWAY_SHUTDOWN_TIMEOUT) => {
-                logger::log_codex_api_warn("[CodexLocalAccess][provider-gateway] 停止监听任务超时，已中止");
-                task.abort();
-            }
+    if cleanup_failed {
+        let mut runtimes = provider_gateway_runtime_store().lock().await;
+        let retry_runtime = runtimes.entry(runtime_key.to_string()).or_default();
+        if retry_runtime.cleanup_dir.is_none() {
+            retry_runtime.cleanup_dir = cleanup_dir_for_retry;
         }
     }
-    endpoint
+    result
 }
 
 pub async fn stop_provider_gateways_for_profile(profile_dir: &Path) {
@@ -19218,7 +19516,31 @@ pub async fn stop_provider_gateways_for_profile(profile_dir: &Path) {
 }
 
 async fn stop_all_provider_gateways_for_app_shutdown() -> Vec<GatewayBindEndpoint> {
-    let _guard = provider_gateway_lifecycle_lock().lock().await;
+    let result = stop_all_provider_gateways_for_app_shutdown_with_deadline(None).await;
+    for error in &result.errors {
+        logger::log_codex_api_warn(&format!("[CodexLocalAccess][provider-gateway] {}", error));
+    }
+    result.endpoints
+}
+
+async fn stop_all_provider_gateways_for_app_shutdown_with_deadline(
+    deadline: ShutdownDeadline,
+) -> GatewayShutdownResult {
+    let _guard = match acquire_shutdown_lock(
+        provider_gateway_lifecycle_lock(),
+        deadline,
+        "provider gateway",
+    )
+    .await
+    {
+        Ok(guard) => guard,
+        Err(error) => {
+            return GatewayShutdownResult {
+                endpoints: Vec::new(),
+                errors: vec![error],
+            };
+        }
+    };
     let runtime_keys = {
         let runtimes = provider_gateway_runtime_store().lock().await;
         runtimes.keys().cloned().collect::<Vec<_>>()
@@ -19230,13 +19552,18 @@ async fn stop_all_provider_gateways_for_app_shutdown() -> Vec<GatewayBindEndpoin
         ));
     }
 
-    let mut endpoints = Vec::new();
-    for runtime_key in runtime_keys {
-        if let Some(endpoint) = stop_provider_gateway_runtime(&runtime_key).await {
-            endpoints.push(endpoint);
-        }
+    let results = stream::iter(runtime_keys)
+        .map(|runtime_key| async move {
+            stop_provider_gateway_runtime_with_deadline(&runtime_key, deadline).await
+        })
+        .buffer_unordered(usize::MAX)
+        .collect::<Vec<_>>()
+        .await;
+    let mut combined = GatewayShutdownResult::default();
+    for result in results {
+        combined.extend(result);
     }
-    endpoints
+    combined
 }
 
 pub async fn ensure_provider_gateway_for_dir(
@@ -19249,6 +19576,12 @@ pub async fn ensure_provider_gateway_for_dir(
     }
 
     let _guard = provider_gateway_lifecycle_lock().lock().await;
+    if app_lifecycle::is_shutdown_started() {
+        logger::log_codex_api_info(
+            "[CodexLocalAccess][provider-gateway] 应用正在退出，跳过 sidecar 启动/重载",
+        );
+        return Ok(());
+    }
     let account = codex_account::load_account(account_id)
         .ok_or_else(|| format!("供应商网关账号不存在: {}", account_id))?;
     let (collection, key, provider_gateway) =
@@ -19319,6 +19652,7 @@ pub async fn ensure_provider_gateway_for_dir(
             actual_bind_host: Some(bind_host),
             task: Some(task),
             sidecar_child: Some(child),
+            cleanup_dir: None,
         },
     );
     Ok(())
@@ -19334,6 +19668,12 @@ pub async fn ensure_bound_oauth_local_gateway_for_dir(
     }
 
     let _guard = provider_gateway_lifecycle_lock().lock().await;
+    if app_lifecycle::is_shutdown_started() {
+        logger::log_codex_api_info(
+            "[CodexLocalAccess][bound-oauth-local-gateway] 应用正在退出，跳过 sidecar 启动/重载",
+        );
+        return Ok(());
+    }
     let account = codex_account::load_account(account_id)
         .ok_or_else(|| format!("绑定 OAuth 本地网关账号不存在: {}", account_id))?;
     let (collection, key) =
@@ -19385,6 +19725,7 @@ pub async fn ensure_bound_oauth_local_gateway_for_dir(
             actual_bind_host: Some(bind_host),
             task: Some(task),
             sidecar_child: Some(child),
+            cleanup_dir: None,
         },
     );
     Ok(())
@@ -21664,53 +22005,61 @@ pub async fn restore_local_access_gateway() {
     }
 }
 
-#[cfg(target_os = "windows")]
-fn close_installed_sidecar_processes_by_path(timeout_secs: u64) -> Result<usize, String> {
-    let candidates = sidecar_binary_candidates()?
-        .into_iter()
-        .filter(|path| path.exists())
-        .collect::<Vec<_>>();
-    if candidates.is_empty() {
-        return Ok(0);
+async fn wait_for_process_spawns_until(deadline: Instant) -> Result<(), String> {
+    let wait_task =
+        tauri::async_runtime::spawn_blocking(app_lifecycle::wait_for_in_flight_process_spawns);
+    match timeout(
+        shutdown_step_timeout(Some(deadline), APP_EXIT_CLEANUP_TIMEOUT),
+        wait_task,
+    )
+    .await
+    {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(error)) => Err(format!("等待正在启动的子进程结束失败: {}", error)),
+        Err(_) => Err("等待正在启动的子进程结束超时".to_string()),
     }
-    let closed = process::close_processes_by_exact_exe_paths(&candidates, timeout_secs)?;
-    if closed > 0 {
-        logger::log_codex_api_info(&format!(
-            "[CodexLocalAccess][sidecar] Windows 更新前已关闭安装目录 sidecar 残留进程: count={}",
-            closed
-        ));
-    }
-    Ok(closed)
 }
 
+// Shutdown is scoped to child handles owned by this runtime. Enumerating every
+// installed sidecar path could terminate another Cockpit instance using the same binary.
 async fn stop_all_sidecar_processes_for_app_shutdown() -> Result<(), String> {
+    let deadline = Instant::now()
+        .checked_add(APP_EXIT_CLEANUP_TIMEOUT)
+        .unwrap_or_else(Instant::now);
+
     let mut errors = Vec::new();
-
-    let stopped_endpoint = stop_gateway().await;
-    if let Some(endpoint) = stopped_endpoint {
-        if let Err(error) = wait_for_gateway_port_release(&endpoint.bind_host, endpoint.port).await
-        {
-            errors.push(format!("等待 API 服务 sidecar 释放端口失败: {}", error));
-        }
+    if let Err(error) = wait_for_process_spawns_until(deadline).await {
+        errors.push(error);
     }
 
-    let provider_endpoints = stop_all_provider_gateways_for_app_shutdown().await;
-    for endpoint in provider_endpoints {
-        if let Err(error) = wait_for_gateway_port_release(&endpoint.bind_host, endpoint.port).await
-        {
-            errors.push(format!(
-                "等待 provider gateway sidecar 释放端口失败: bind={}:{} error={}",
-                endpoint.bind_host, endpoint.port, error
-            ));
-        }
+    let (gateway_result, provider_result) = tokio::join!(
+        stop_gateway_with_deadline(Some(deadline)),
+        stop_all_provider_gateways_for_app_shutdown_with_deadline(Some(deadline)),
+    );
+
+    let mut endpoints = Vec::new();
+
+    endpoints.extend(gateway_result.endpoints);
+    errors.extend(
+        gateway_result
+            .errors
+            .into_iter()
+            .map(|error| format!("API 服务网关: {}", error)),
+    );
+
+    endpoints.extend(provider_result.endpoints);
+    errors.extend(
+        provider_result
+            .errors
+            .into_iter()
+            .map(|error| format!("provider gateway: {}", error)),
+    );
+
+    if let Err(error) = flush_pending_stats_for_shutdown(deadline).await {
+        errors.push(format!("退出前写入 API 服务统计失败: {}", error));
     }
 
-    #[cfg(target_os = "windows")]
-    {
-        if let Err(error) = close_installed_sidecar_processes_by_path(5) {
-            errors.push(format!("关闭安装目录 sidecar 残留进程失败: {}", error));
-        }
-    }
+    errors.extend(wait_for_gateway_endpoints_to_be_released(endpoints, deadline).await);
 
     if errors.is_empty() {
         Ok(())
@@ -21719,13 +22068,8 @@ async fn stop_all_sidecar_processes_for_app_shutdown() -> Result<(), String> {
     }
 }
 
-pub async fn shutdown_local_access_gateway_for_app_exit() {
-    if let Err(error) = stop_all_sidecar_processes_for_app_shutdown().await {
-        logger::log_codex_api_warn(&format!(
-            "[CodexLocalAccess] 应用退出时关闭 sidecar 失败: {}",
-            error
-        ));
-    }
+pub async fn shutdown_local_access_gateway_for_app_exit() -> Result<(), String> {
+    stop_all_sidecar_processes_for_app_shutdown().await
 }
 
 fn find_header_end(buf: &[u8]) -> Option<usize> {
@@ -27065,6 +27409,690 @@ async fn handle_connection(
 #[cfg(test)]
 mod tests {
     const CODEX_TEST_MODEL_ID: &str = "custom-model";
+
+    #[test]
+    fn app_shutdown_rejects_an_owned_sidecar_spawn_before_process_creation() {
+        let _lifecycle_guard = crate::modules::app_lifecycle::lock_lifecycle_test_state();
+        crate::modules::app_lifecycle::reset_lifecycle_state_for_test();
+        assert!(crate::modules::app_lifecycle::begin_shutdown());
+
+        let mut command = super::TokioCommand::new(format!(
+            "cockpit-tools-missing-sidecar-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let spawn_error = super::spawn_owned_sidecar(&mut command, "test sidecar").err();
+        crate::modules::app_lifecycle::reset_lifecycle_state_for_test();
+
+        assert_eq!(
+            spawn_error.map(|error| error.kind()),
+            Some(std::io::ErrorKind::Interrupted),
+            "shutdown must reject the sidecar before the OS spawn attempt"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn dropping_an_unpublished_owned_sidecar_releases_its_port() {
+        const CHILD_PORT_ENV: &str = "COCKPIT_OWNED_SIDECAR_TEST_PORT";
+        const TEST_NAME: &str = "modules::codex_local_access::tests::dropping_an_unpublished_owned_sidecar_releases_its_port";
+        if let Some(port) = std::env::var(CHILD_PORT_ENV)
+            .ok()
+            .and_then(|value| value.parse::<u16>().ok())
+        {
+            let _listener = std::net::TcpListener::bind(("127.0.0.1", port))
+                .expect("child fixture should bind its assigned port");
+            std::thread::sleep(super::Duration::from_secs(30));
+            return;
+        }
+
+        let _lifecycle_guard = crate::modules::app_lifecycle::lock_lifecycle_test_state();
+        crate::modules::app_lifecycle::reset_lifecycle_state_for_test();
+
+        let reservation = std::net::TcpListener::bind(("127.0.0.1", 0))
+            .expect("test should reserve an independent sidecar port");
+        let port = reservation
+            .local_addr()
+            .expect("test reservation should have an address")
+            .port();
+        drop(reservation);
+        let mut command = super::TokioCommand::new(
+            std::env::current_exe().expect("test executable path should be available"),
+        );
+        command
+            .args([TEST_NAME, "--exact", "--test-threads=1"])
+            .env(CHILD_PORT_ENV, port.to_string())
+            .stdin(super::Stdio::null())
+            .stdout(super::Stdio::null())
+            .stderr(super::Stdio::null());
+        let child = super::spawn_owned_sidecar(&mut command, "unpublished test sidecar")
+            .expect("test sidecar should spawn");
+
+        super::timeout(super::Duration::from_secs(5), async {
+            loop {
+                match super::is_local_access_port_bindable("127.0.0.1", port) {
+                    Ok(false) => break,
+                    Ok(true) => tokio::time::sleep(super::Duration::from_millis(10)).await,
+                    Err(error) => panic!("test port readiness check failed: {error}"),
+                }
+            }
+        })
+        .await
+        .expect("test sidecar should bind its port");
+
+        drop(child);
+        let release_result = super::wait_for_gateway_port_release_with_timing(
+            "127.0.0.1",
+            port,
+            super::Duration::from_secs(2),
+            super::Duration::from_millis(10),
+        )
+        .await;
+        crate::modules::app_lifecycle::reset_lifecycle_state_for_test();
+
+        assert_eq!(release_result, Ok(()));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn app_shutdown_prevents_a_queued_legacy_gateway_listener_start() {
+        let _lifecycle_guard = crate::modules::app_lifecycle::lock_lifecycle_test_state();
+        crate::modules::app_lifecycle::reset_lifecycle_state_for_test();
+
+        let reservation = std::net::TcpListener::bind(("127.0.0.1", 0))
+            .expect("test should reserve an independent gateway port");
+        let port = reservation
+            .local_addr()
+            .expect("test reservation should have an address")
+            .port();
+        drop(reservation);
+
+        let mut collection = test_local_access_collection(Vec::new());
+        collection.gateway_mode = super::CodexLocalAccessGatewayMode::Legacy;
+        collection.port = port;
+        let previous_runtime = {
+            let mut runtime = super::gateway_runtime().lock().await;
+            std::mem::replace(
+                &mut *runtime,
+                super::GatewayRuntime {
+                    loaded: true,
+                    collection: Some(collection),
+                    ..Default::default()
+                },
+            )
+        };
+
+        assert!(crate::modules::app_lifecycle::begin_shutdown());
+        let ensure_result = super::ensure_gateway_matches_runtime().await;
+        let port_remained_free = match std::net::TcpListener::bind(("127.0.0.1", port)) {
+            Ok(listener) => {
+                drop(listener);
+                true
+            }
+            Err(_) => false,
+        };
+
+        let _ = super::stop_gateway().await;
+        {
+            let mut runtime = super::gateway_runtime().lock().await;
+            *runtime = previous_runtime;
+        }
+        crate::modules::app_lifecycle::reset_lifecycle_state_for_test();
+
+        assert_eq!(ensure_result, Ok(()));
+        assert!(
+            port_remained_free,
+            "a queued legacy gateway must not bind after app shutdown starts"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn app_shutdown_waits_for_an_in_flight_process_spawn_before_cleanup() {
+        let _lifecycle_guard = crate::modules::app_lifecycle::lock_lifecycle_test_state();
+        crate::modules::app_lifecycle::reset_lifecycle_state_for_test();
+
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let spawn_thread = std::thread::spawn(move || {
+            let _guard =
+                crate::modules::app_lifecycle::acquire_process_spawn_guard("shutdown-fence-test")
+                    .expect("the test spawn should be allowed before shutdown");
+            ready_tx
+                .send(())
+                .expect("the test should observe the in-flight spawn");
+            release_rx
+                .recv()
+                .expect("the test should release the in-flight spawn");
+        });
+        ready_rx
+            .recv()
+            .expect("the test spawn should hold the process lock");
+        assert!(crate::modules::app_lifecycle::begin_shutdown());
+
+        let timed_out = super::wait_for_process_spawns_until(
+            std::time::Instant::now() + super::Duration::from_millis(40),
+        )
+        .await;
+        assert!(
+            timed_out.is_err(),
+            "cleanup must report a bounded wait while a spawn is still in flight"
+        );
+
+        release_tx
+            .send(())
+            .expect("the test should release the process lock");
+        spawn_thread
+            .join()
+            .expect("the in-flight spawn thread should finish");
+        assert_eq!(
+            super::wait_for_process_spawns_until(
+                std::time::Instant::now() + super::Duration::from_secs(1),
+            )
+            .await,
+            Ok(())
+        );
+        crate::modules::app_lifecycle::reset_lifecycle_state_for_test();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn app_shutdown_short_circuits_provider_gateway_reload_before_io() {
+        let _lifecycle_guard = crate::modules::app_lifecycle::lock_lifecycle_test_state();
+        crate::modules::app_lifecycle::reset_lifecycle_state_for_test();
+        assert!(crate::modules::app_lifecycle::begin_shutdown());
+
+        let profile_dir = std::env::temp_dir().join(format!(
+            "cockpit-provider-shutdown-probe-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let missing_account = format!("missing-account-{}", uuid::Uuid::new_v4());
+        let provider_result =
+            super::ensure_provider_gateway_for_dir(&profile_dir, &missing_account).await;
+        let bound_oauth_result =
+            super::ensure_bound_oauth_local_gateway_for_dir(&profile_dir, &missing_account).await;
+        let temporary_test_result = super::run_model_provider_gateway_chat_test(
+            model_provider_chat_test_request("chat_completions"),
+        )
+        .await;
+        let empty_account_result = super::ensure_provider_gateway_for_dir(&profile_dir, " ").await;
+        crate::modules::app_lifecycle::reset_lifecycle_state_for_test();
+
+        assert_eq!(provider_result, Ok(()));
+        assert_eq!(bound_oauth_result, Ok(()));
+        assert!(temporary_test_result
+            .expect_err("shutdown must reject a temporary provider test before setup")
+            .contains("应用正在退出"));
+        assert!(
+            empty_account_result.is_err(),
+            "empty account validation must remain intact during shutdown"
+        );
+        assert!(
+            !profile_dir.exists(),
+            "shutdown cancellation must happen before provider filesystem writes"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn app_shutdown_drains_tracked_provider_runtime_when_child_already_exited() {
+        let _lifecycle_guard = crate::modules::app_lifecycle::lock_lifecycle_test_state();
+        crate::modules::app_lifecycle::reset_lifecycle_state_for_test();
+
+        #[cfg(target_os = "windows")]
+        let mut command = {
+            let mut command = super::TokioCommand::new("cmd.exe");
+            command.args(["/C", "exit", "0"]);
+            command
+        };
+        #[cfg(not(target_os = "windows"))]
+        let mut command = {
+            let mut command = super::TokioCommand::new("/bin/sh");
+            command.args(["-c", "exit 0"]);
+            command
+        };
+        let mut child = super::spawn_owned_sidecar(&mut command, "already-exited test child")
+            .expect("test child should spawn");
+        let status = super::timeout(super::Duration::from_secs(2), child.wait())
+            .await
+            .expect("test child should exit promptly")
+            .expect("test child wait should succeed");
+        assert!(status.success());
+
+        let reservation = std::net::TcpListener::bind(("127.0.0.1", 0))
+            .expect("test should reserve an independent endpoint");
+        let port = reservation
+            .local_addr()
+            .expect("test reservation should have an address")
+            .port();
+        drop(reservation);
+        let runtime_key = format!("already-exited-test-{}", uuid::Uuid::new_v4());
+        let cleanup_dir = std::env::temp_dir().join(format!(
+            "cockpit-provider-runtime-cleanup-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&cleanup_dir).expect("test cleanup directory should be created");
+        std::fs::write(cleanup_dir.join("probe.json"), b"{}")
+            .expect("test cleanup marker should be written");
+        {
+            let mut runtimes = super::provider_gateway_runtime_store().lock().await;
+            assert!(runtimes
+                .insert(
+                    runtime_key.clone(),
+                    super::ProviderGatewayRuntime {
+                        actual_port: Some(port),
+                        actual_bind_host: Some("127.0.0.1".to_string()),
+                        task: None,
+                        sidecar_child: Some(child),
+                        cleanup_dir: Some(cleanup_dir.clone()),
+                    },
+                )
+                .is_none());
+        }
+
+        let first_stop = super::timeout(
+            super::Duration::from_secs(2),
+            super::stop_all_provider_gateways_for_app_shutdown(),
+        )
+        .await;
+        let repeated_stop = super::stop_all_provider_gateways_for_app_shutdown().await;
+        crate::modules::app_lifecycle::reset_lifecycle_state_for_test();
+
+        let endpoints = first_stop.expect("stopping an exited child must not hang");
+        let endpoint = endpoints
+            .into_iter()
+            .find(|endpoint| endpoint.port == port)
+            .expect("app shutdown should return the tracked endpoint");
+        assert_eq!(endpoint.bind_host, "127.0.0.1");
+        assert_eq!(endpoint.port, port);
+        assert!(
+            repeated_stop.is_empty(),
+            "repeated shutdown must be idempotent"
+        );
+        assert!(std::net::TcpListener::bind(("127.0.0.1", port)).is_ok());
+        assert!(
+            !cleanup_dir.exists(),
+            "app shutdown must remove tracked temporary sidecar data"
+        );
+    }
+
+    struct TestDataDirGuard {
+        path: std::path::PathBuf,
+        previous: Option<std::ffi::OsString>,
+        is_file: bool,
+    }
+
+    impl TestDataDirGuard {
+        fn new(name: &str, is_file: bool) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "cockpit-local-access-shutdown-{}-{}",
+                name,
+                uuid::Uuid::new_v4()
+            ));
+            let _ = std::fs::remove_dir_all(&path);
+            let _ = std::fs::remove_file(&path);
+            if is_file {
+                std::fs::write(&path, b"test data directory blocker")
+                    .expect("test data directory blocker should be created");
+            } else {
+                std::fs::create_dir_all(&path).expect("test data directory should be created");
+            }
+            let previous = std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR");
+            std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &path);
+            Self {
+                path,
+                previous,
+                is_file,
+            }
+        }
+    }
+
+    impl Drop for TestDataDirGuard {
+        fn drop(&mut self) {
+            match self.previous.as_ref() {
+                Some(value) => std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", value),
+                None => std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR"),
+            }
+            if self.is_file {
+                let _ = std::fs::remove_file(&self.path);
+            } else {
+                let _ = std::fs::remove_dir_all(&self.path);
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn shutdown_stats_flush_respects_a_shared_lock_deadline() {
+        let _lifecycle_guard = crate::modules::app_lifecycle::lock_lifecycle_test_state();
+        crate::modules::app_lifecycle::reset_lifecycle_state_for_test();
+        let previous_runtime = {
+            let mut runtime = super::gateway_runtime().lock().await;
+            std::mem::replace(
+                &mut *runtime,
+                super::GatewayRuntime {
+                    stats_dirty: true,
+                    collection_dirty: true,
+                    ..Default::default()
+                },
+            )
+        };
+
+        let flush_guard = super::gateway_stats_flush_lock().lock().await;
+        let result = super::timeout(
+            super::Duration::from_secs(1),
+            super::flush_dirty_stats_once(Some(
+                std::time::Instant::now() + super::Duration::from_millis(25),
+            )),
+        )
+        .await
+        .expect("a blocked stats flush must honor its deadline");
+        drop(flush_guard);
+
+        let dirty_flags = {
+            let runtime = super::gateway_runtime().lock().await;
+            (runtime.stats_dirty, runtime.collection_dirty)
+        };
+        {
+            let mut runtime = super::gateway_runtime().lock().await;
+            *runtime = previous_runtime;
+        }
+        crate::modules::app_lifecycle::reset_lifecycle_state_for_test();
+
+        assert!(result
+            .expect_err("a held flush lock must produce an actionable error")
+            .contains("统计"));
+        assert_eq!(dirty_flags, (true, true));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn shutdown_flush_failure_preserves_dirty_stats_and_collection() {
+        let _lifecycle_guard = crate::modules::app_lifecycle::lock_lifecycle_test_state();
+        let _env_guard = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _data_guard = TestDataDirGuard::new("flush-failure", true);
+        let previous_runtime = {
+            let mut runtime = super::gateway_runtime().lock().await;
+            std::mem::replace(
+                &mut *runtime,
+                super::GatewayRuntime {
+                    collection: Some(test_local_access_collection(Vec::new())),
+                    stats_dirty: true,
+                    collection_dirty: true,
+                    ..Default::default()
+                },
+            )
+        };
+
+        let result = super::flush_dirty_stats_once(Some(
+            std::time::Instant::now() + super::Duration::from_secs(1),
+        ))
+        .await;
+        let dirty_flags = {
+            let runtime = super::gateway_runtime().lock().await;
+            (runtime.stats_dirty, runtime.collection_dirty)
+        };
+        {
+            let mut runtime = super::gateway_runtime().lock().await;
+            *runtime = previous_runtime;
+        }
+
+        assert!(
+            result.is_err(),
+            "a file data directory must reject the flush"
+        );
+        assert_eq!(dirty_flags, (true, true));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn app_shutdown_persists_pending_stats_and_collection_usage() {
+        let _lifecycle_guard = crate::modules::app_lifecycle::lock_lifecycle_test_state();
+        let _env_guard = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _data_guard = TestDataDirGuard::new("flush-success", false);
+
+        let mut collection = test_local_access_collection(Vec::new());
+        collection
+            .api_keys
+            .push(crate::models::codex_local_access::CodexLocalAccessApiKey {
+                id: "shutdown-test-key".to_string(),
+                label: "shutdown test key".to_string(),
+                key: "test-only-key".to_string(),
+                provider_gateway: None,
+                inherit_account_pool: None,
+                account_ids: Vec::new(),
+                priority_account_ids: Vec::new(),
+                preferred_account_id: None,
+                model_prefix: None,
+                allowed_models: Vec::new(),
+                excluded_models: Vec::new(),
+                token_limit: None,
+                token_used: 42,
+                enabled: true,
+                created_at: 0,
+                updated_at: 0,
+                last_used_at: None,
+            });
+        let mut stats = super::empty_stats_snapshot();
+        stats.totals.request_count = 7;
+        stats.totals.total_tokens = 11;
+        let previous_runtime = {
+            let mut runtime = super::gateway_runtime().lock().await;
+            std::mem::replace(
+                &mut *runtime,
+                super::GatewayRuntime {
+                    loaded: true,
+                    collection: Some(collection),
+                    collection_dirty: true,
+                    stats,
+                    stats_dirty: true,
+                    ..Default::default()
+                },
+            )
+        };
+
+        let result = super::stop_all_sidecar_processes_for_app_shutdown().await;
+        let persisted_stats = std::fs::read_to_string(
+            super::local_access_stats_file_path().expect("stats path should resolve"),
+        )
+        .expect("shutdown should write stats");
+        let persisted_collection = std::fs::read_to_string(
+            super::local_access_file_path().expect("collection path should resolve"),
+        )
+        .expect("shutdown should write collection");
+        let dirty_flags = {
+            let runtime = super::gateway_runtime().lock().await;
+            (runtime.stats_dirty, runtime.collection_dirty)
+        };
+        {
+            let mut runtime = super::gateway_runtime().lock().await;
+            *runtime = previous_runtime;
+        }
+
+        let persisted_stats: crate::models::codex_local_access::CodexLocalAccessStats =
+            serde_json::from_str(&persisted_stats).expect("persisted stats should be valid JSON");
+        let persisted_collection: CodexLocalAccessCollection =
+            serde_json::from_str(&persisted_collection)
+                .expect("persisted collection should be valid JSON");
+        assert_eq!(result, Ok(()));
+        assert_eq!(persisted_stats.totals.request_count, 7);
+        assert_eq!(persisted_stats.totals.total_tokens, 11);
+        assert_eq!(persisted_collection.api_keys[0].token_used, 42);
+        assert_eq!(dirty_flags, (false, false));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn shutdown_endpoint_release_uses_one_absolute_deadline_for_all_ports() {
+        let mut listeners = Vec::new();
+        let mut endpoints = Vec::new();
+        for _ in 0..2 {
+            let listener = std::net::TcpListener::bind(("127.0.0.1", 0))
+                .expect("test should reserve an independent endpoint");
+            let port = listener
+                .local_addr()
+                .expect("test listener should have an address")
+                .port();
+            listeners.push(listener);
+            endpoints.push(super::GatewayBindEndpoint {
+                bind_host: "127.0.0.1".to_string(),
+                port,
+            });
+        }
+        let deadline = std::time::Instant::now() + super::Duration::from_millis(120);
+        let started = std::time::Instant::now();
+        let errors = super::timeout(
+            super::Duration::from_secs(1),
+            super::wait_for_gateway_endpoints_to_be_released_with_timing(
+                endpoints,
+                deadline,
+                super::Duration::from_millis(5),
+            ),
+        )
+        .await
+        .expect("shared port release must not hang");
+        let elapsed = started.elapsed();
+        drop(listeners);
+
+        assert_eq!(errors.len(), 2);
+        assert!(
+            elapsed < super::Duration::from_millis(350),
+            "all endpoint checks should share one deadline, elapsed={elapsed:?}"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn shutdown_result_reports_task_timeout_and_cleanup_failures() {
+        let panic_task = tokio::spawn(async {
+            panic!("shutdown probe task failure");
+        });
+        let panic_errors = super::stop_owned_child_and_task(
+            None,
+            Some(panic_task),
+            Some(std::time::Instant::now() + super::Duration::from_secs(1)),
+            "probe",
+        )
+        .await;
+        assert!(panic_errors
+            .iter()
+            .any(|error| error.contains("监听任务结束失败")));
+
+        let pending_task = tokio::spawn(async {
+            std::future::pending::<()>().await;
+        });
+        let timeout_errors = super::timeout(
+            super::Duration::from_secs(1),
+            super::stop_owned_child_and_task(
+                None,
+                Some(pending_task),
+                Some(std::time::Instant::now() + super::Duration::from_millis(40)),
+                "probe",
+            ),
+        )
+        .await
+        .expect("aborting a pending task must be bounded");
+        assert!(timeout_errors.iter().any(|error| error.contains("超时")));
+
+        let _lifecycle_guard = crate::modules::app_lifecycle::lock_lifecycle_test_state();
+        let cleanup_path = std::env::temp_dir().join(format!(
+            "cockpit-provider-cleanup-blocker-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::write(&cleanup_path, b"not a directory")
+            .expect("cleanup blocker should be created");
+        let runtime_key = format!("cleanup-failure-{}", uuid::Uuid::new_v4());
+        {
+            let mut runtimes = super::provider_gateway_runtime_store().lock().await;
+            runtimes.insert(
+                runtime_key.clone(),
+                super::ProviderGatewayRuntime {
+                    cleanup_dir: Some(cleanup_path.clone()),
+                    ..Default::default()
+                },
+            );
+        }
+        let result = super::stop_provider_gateway_runtime_with_deadline(
+            &runtime_key,
+            Some(std::time::Instant::now() + super::Duration::from_secs(1)),
+        )
+        .await;
+        assert!(result
+            .errors
+            .iter()
+            .any(|error| error.contains("清理临时 sidecar 目录失败")));
+
+        let retry_result = super::stop_provider_gateway_runtime_with_deadline(
+            &runtime_key,
+            Some(std::time::Instant::now() + super::Duration::from_secs(1)),
+        )
+        .await;
+        assert!(
+            retry_result
+                .errors
+                .iter()
+                .any(|error| error.contains("清理临时 sidecar 目录失败")),
+            "a cleanup failure must retain ownership for a later retry"
+        );
+
+        let _ = std::fs::remove_file(&cleanup_path);
+        let final_result = super::stop_provider_gateway_runtime_with_deadline(
+            &runtime_key,
+            Some(std::time::Instant::now() + super::Duration::from_secs(1)),
+        )
+        .await;
+        assert_eq!(final_result.errors, Vec::<String>::new());
+    }
+
+    #[tokio::test]
+    async fn gateway_port_release_waits_for_an_owned_listener_to_drop() {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0))
+            .expect("test should reserve an independent port");
+        let port = listener
+            .local_addr()
+            .expect("test listener should have an address")
+            .port();
+        let release_task = tokio::spawn(async move {
+            tokio::time::sleep(super::Duration::from_millis(25)).await;
+            drop(listener);
+        });
+
+        let result = super::wait_for_gateway_port_release_with_timing(
+            "127.0.0.1",
+            port,
+            super::Duration::from_secs(1),
+            super::Duration::from_millis(5),
+        )
+        .await;
+        release_task
+            .await
+            .expect("listener release task should join");
+
+        assert_eq!(result, Ok(()));
+    }
+
+    #[tokio::test]
+    async fn gateway_port_timeout_does_not_terminate_a_foreign_listener() {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0))
+            .expect("test should reserve an independent foreign port");
+        let port = listener
+            .local_addr()
+            .expect("test listener should have an address")
+            .port();
+
+        let error = super::wait_for_gateway_port_release_with_timing(
+            "127.0.0.1",
+            port,
+            super::Duration::ZERO,
+            super::Duration::from_millis(1),
+        )
+        .await
+        .expect_err("an occupied foreign port must time out");
+
+        assert!(error.contains(&port.to_string()));
+        assert_eq!(
+            listener
+                .local_addr()
+                .expect("foreign listener must remain alive")
+                .port(),
+            port
+        );
+        drop(listener);
+        assert!(std::net::TcpListener::bind(("127.0.0.1", port)).is_ok());
+    }
 
     #[test]
     fn sidecar_scheduler_state_updates_runtime_cooldown_and_health() {
