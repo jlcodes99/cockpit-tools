@@ -11360,6 +11360,51 @@ fn start_codex_default_internal(
             before_probe_started.elapsed().as_millis()
         ));
 
+        // Prefer a direct executable launch on Windows.  Store/AppUserModelId
+        // activation is brokered by Explorer, so the resulting ChatGPT process
+        // appears to have Explorer as its parent even when Cockpit initiated it.
+        // Keeping the direct path first preserves the Cockpit -> Codex process
+        // relationship and makes launch provenance observable to local tooling.
+        let launch_codex_via_exe = |launch_path: &Path| -> Result<u32, String> {
+            let mut cmd = Command::new(launch_path);
+            apply_managed_proxy_env_to_command(&mut cmd);
+            if should_detach_child() {
+                cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+                cmd.stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null());
+            }
+            // Codex 是 GUI 应用，不设置 CREATE_NO_WINDOW，否则会导致其内部 spawn CLI 子进程失败。
+            for arg in build_codex_default_launch_args(extra_args) {
+                cmd.arg(arg);
+            }
+
+            let child = spawn_command_with_trace(&mut cmd)
+                .map_err(|e| format!("启动 Codex 失败: {}", e))?;
+            crate::modules::logger::log_info(&format!(
+                "[Codex Start] 启动策略=direct-exe launch_path={} pid={}",
+                launch_path.to_string_lossy(),
+                child.id()
+            ));
+            Ok(child.id())
+        };
+
+        if let Some(launch_path) = launch_path_for_probe.as_ref() {
+            match launch_codex_via_exe(launch_path) {
+                Ok(pid) => return Ok(pid),
+                Err(err) => {
+                    crate::modules::logger::log_warn(&format!(
+                        "[Codex Start] direct-exe 启动失败，准备回退系统入口: {}",
+                        err
+                    ));
+                }
+            }
+        } else {
+            crate::modules::logger::log_warn(
+                "[Codex Start] direct-exe 启动路径不可用，准备回退系统入口",
+            );
+        }
+
         let app_user_model_id = detect_codex_store_app_user_model_id();
         if let Some(app_user_model_id) = app_user_model_id {
             crate::modules::logger::log_info(&format!(
@@ -11455,32 +11500,7 @@ fn start_codex_default_internal(
         }
 
         let launch_path = resolve_codex_launch_path()?;
-        crate::modules::logger::log_info(&format!(
-            "[Codex Start] 启动策略=exe-path launch_path={}",
-            launch_path.to_string_lossy()
-        ));
-        let mut cmd = Command::new(&launch_path);
-        apply_managed_proxy_env_to_command(&mut cmd);
-        if should_detach_child() {
-            cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
-            cmd.stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null());
-        }
-        // Codex 是 GUI 应用，不设置 CREATE_NO_WINDOW，否则会导致其内部 spawn CLI 子进程失败。
-        let args = build_codex_default_launch_args(extra_args);
-        for arg in args {
-            cmd.arg(arg);
-        }
-
-        let child =
-            spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Codex 失败: {}", e))?;
-        crate::modules::logger::log_info(&format!(
-            "[Codex Start] 启动策略=exe-path launch_path={} pid={}",
-            launch_path.to_string_lossy(),
-            child.id()
-        ));
-        return Ok(child.id());
+        return launch_codex_via_exe(&launch_path);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
