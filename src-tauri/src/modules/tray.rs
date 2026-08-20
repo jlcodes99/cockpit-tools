@@ -17,7 +17,7 @@ use tauri::{
 use tracing::info;
 
 #[cfg(target_os = "macos")]
-use crate::modules::config::TrayIconStyle;
+use crate::modules::config::{TrayClickAction, TrayIconStyle};
 use crate::modules::logger;
 
 /// 托盘菜单 ID
@@ -3554,10 +3554,21 @@ fn handle_tray_event<R: Runtime>(tray: &TrayIcon<R>, event: TrayIconEvent) {
             #[cfg(target_os = "macos")]
             {
                 if button == MouseButton::Left {
-                    if let Err(err) =
-                        crate::modules::floating_card_window::show_main_window(tray.app_handle())
-                    {
-                        logger::log_warn(&format!("[Tray] 左键恢复主窗口失败: {}", err));
+                    let result = match crate::modules::config::get_user_config().tray_click_action {
+                        TrayClickAction::ShowMainWindow => {
+                            crate::modules::floating_card_window::show_main_window(
+                                tray.app_handle(),
+                            )
+                        }
+                        TrayClickAction::ShowFloatingCard => {
+                            crate::modules::floating_card_window::show_floating_card_window(
+                                tray.app_handle(),
+                                true,
+                            )
+                        }
+                    };
+                    if let Err(err) = result {
+                        logger::log_warn(&format!("[Tray] 左键操作失败: {}", err));
                     }
                     return;
                 }
@@ -3586,7 +3597,11 @@ fn handle_tray_event<R: Runtime>(tray: &TrayIcon<R>, event: TrayIconEvent) {
         } => {
             #[cfg(target_os = "macos")]
             {
-                return;
+                if let Err(err) =
+                    crate::modules::floating_card_window::show_main_window(tray.app_handle())
+                {
+                    logger::log_warn(&format!("[Tray] 双击恢复主窗口失败: {}", err));
+                }
             }
 
             #[cfg(not(target_os = "macos"))]

@@ -173,6 +173,9 @@ pub struct UserConfig {
     /// 菜单栏图标样式（macOS）
     #[serde(default = "default_tray_icon_style")]
     pub tray_icon_style: TrayIconStyle,
+    /// macOS 菜单栏图标单击行为
+    #[serde(default = "default_tray_click_action")]
+    pub tray_click_action: TrayClickAction,
     /// 是否在 macOS 菜单栏图标旁显示当前账号剩余额度
     #[serde(default = "default_menu_bar_quota_enabled")]
     pub menu_bar_quota_enabled: bool,
@@ -615,6 +618,22 @@ impl Default for TrayIconStyle {
     }
 }
 
+/// macOS 菜单栏图标单击行为
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TrayClickAction {
+    /// 打开或恢复主窗口（保持历史默认行为）
+    ShowMainWindow,
+    /// 显示悬浮额度卡片
+    ShowFloatingCard,
+}
+
+impl Default for TrayClickAction {
+    fn default() -> Self {
+        TrayClickAction::ShowMainWindow
+    }
+}
+
 fn default_ws_enabled() -> bool {
     true
 }
@@ -761,6 +780,9 @@ fn default_hide_dock_icon() -> bool {
 }
 fn default_tray_icon_style() -> TrayIconStyle {
     TrayIconStyle::Template
+}
+fn default_tray_click_action() -> TrayClickAction {
+    TrayClickAction::ShowMainWindow
 }
 fn default_menu_bar_quota_enabled() -> bool {
     false
@@ -1192,6 +1214,7 @@ impl Default for UserConfig {
             minimize_behavior: default_minimize_behavior(),
             hide_dock_icon: default_hide_dock_icon(),
             tray_icon_style: default_tray_icon_style(),
+            tray_click_action: default_tray_click_action(),
             menu_bar_quota_enabled: default_menu_bar_quota_enabled(),
             menu_bar_show_account_prefix: default_menu_bar_show_account_prefix(),
             menu_bar_quota_platform: default_menu_bar_quota_platform(),
@@ -1661,6 +1684,13 @@ pub fn load_user_config() -> Result<UserConfig, String> {
             obj.insert(
                 "tray_icon_style".to_string(),
                 json!(default_tray_icon_style()),
+            );
+        }
+
+        if !obj.contains_key("tray_click_action") {
+            obj.insert(
+                "tray_click_action".to_string(),
+                json!(default_tray_click_action()),
             );
         }
 
@@ -2555,6 +2585,22 @@ mod tests {
         let migrated_cfg: UserConfig =
             serde_json::from_value(serde_json::json!({})).expect("旧配置反序列化应成功");
         assert!(!migrated_cfg.grok_sync_official_auth_on_switch);
+    }
+
+    #[test]
+    fn tray_click_action_defaults_to_main_window_for_legacy_configs() {
+        let default_cfg = UserConfig::default();
+        assert_eq!(
+            default_cfg.tray_click_action,
+            super::TrayClickAction::ShowMainWindow
+        );
+
+        let legacy_cfg: UserConfig =
+            serde_json::from_value(serde_json::json!({})).expect("旧配置反序列化应成功");
+        assert_eq!(
+            legacy_cfg.tray_click_action,
+            super::TrayClickAction::ShowMainWindow
+        );
     }
 
     #[test]
