@@ -79,7 +79,7 @@ func (s *FileTokenStore) Save(ctx context.Context, auth *cliproxyauth.Auth) (str
 		if setter, ok := auth.Storage.(metadataSetter); ok {
 			setter.SetMetadata(auth.Metadata)
 		}
-		if err = auth.Storage.SaveTokenToFile(path); err != nil {
+		if err = writeAuthFileAtomically(path, auth.Storage.SaveTokenToFile); err != nil {
 			return "", err
 		}
 	case auth.Metadata != nil:
@@ -92,22 +92,12 @@ func (s *FileTokenStore) Save(ctx context.Context, auth *cliproxyauth.Auth) (str
 			if jsonEqual(existing, raw) {
 				return path, nil
 			}
-			file, errOpen := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0o600)
-			if errOpen != nil {
-				return "", fmt.Errorf("auth filestore: open existing failed: %w", errOpen)
-			}
-			if _, errWrite := file.Write(raw); errWrite != nil {
-				_ = file.Close()
-				return "", fmt.Errorf("auth filestore: write existing failed: %w", errWrite)
-			}
-			if errClose := file.Close(); errClose != nil {
-				return "", fmt.Errorf("auth filestore: close existing failed: %w", errClose)
-			}
-			return path, nil
 		} else if !os.IsNotExist(errRead) {
 			return "", fmt.Errorf("auth filestore: read existing failed: %w", errRead)
 		}
-		if errWrite := os.WriteFile(path, raw, 0o600); errWrite != nil {
+		if errWrite := writeAuthFileAtomically(path, func(tempPath string) error {
+			return os.WriteFile(tempPath, raw, 0o600)
+		}); errWrite != nil {
 			return "", fmt.Errorf("auth filestore: write file failed: %w", errWrite)
 		}
 	default:
@@ -124,6 +114,59 @@ func (s *FileTokenStore) Save(ctx context.Context, auth *cliproxyauth.Auth) (str
 	}
 
 	return path, nil
+}
+
+func writeAuthFileAtomically(path string, write func(string) error) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("auth filestore: atomic write path is empty")
+	}
+	if write == nil {
+		return fmt.Errorf("auth filestore: atomic writer is nil")
+	}
+	dir := filepath.Dir(path)
+	temp, err := os.CreateTemp(dir, ".auth-*.tmp")
+	if err != nil {
+		return fmt.Errorf("auth filestore: create temp file failed: %w", err)
+	}
+	tempPath := temp.Name()
+	if err = temp.Close(); err != nil {
+		_ = os.Remove(tempPath)
+		return fmt.Errorf("auth filestore: close temp file failed: %w", err)
+	}
+	defer func() { _ = os.Remove(tempPath) }()
+	if err = os.Remove(tempPath); err != nil {
+		return fmt.Errorf("auth filestore: release temp file path failed: %w", err)
+	}
+
+	if err = write(tempPath); err != nil {
+		return err
+	}
+	if _, err = os.Stat(tempPath); os.IsNotExist(err) {
+		// Token storages such as EmptyStorage deliberately perform no file I/O.
+		// Preserve that contract by leaving an existing target untouched and not
+		// creating an absent target.
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("auth filestore: stat temp file failed: %w", err)
+	}
+	if err = os.Chmod(tempPath, 0o600); err != nil {
+		return fmt.Errorf("auth filestore: chmod temp file failed: %w", err)
+	}
+	temp, err = os.OpenFile(tempPath, os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("auth filestore: reopen temp file failed: %w", err)
+	}
+	if err = temp.Sync(); err != nil {
+		_ = temp.Close()
+		return fmt.Errorf("auth filestore: sync temp file failed: %w", err)
+	}
+	if err = temp.Close(); err != nil {
+		return fmt.Errorf("auth filestore: close synced temp file failed: %w", err)
+	}
+	if err = os.Rename(tempPath, path); err != nil {
+		return fmt.Errorf("auth filestore: replace auth file failed: %w", err)
+	}
+	return nil
 }
 
 // List enumerates all auth JSON files under the configured directory.

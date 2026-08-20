@@ -20,6 +20,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -111,14 +112,15 @@ type manifest struct {
 	MaxConcurrentImageRequests int                 `json:"maxConcurrentImageRequests"`
 	DebugLogs                  *bool               `json:"debugLogs,omitempty"`
 
-	apiKeyByValue     map[string]*apiKeySpec
-	accountByID       map[string]*accountSpec
-	accountByAuthID   map[string]*accountSpec
-	accountByAPIKey   map[string]*accountSpec
-	accountByChatGPT  map[string]*accountSpec
-	accountByEmail    map[string]*accountSpec
-	aliasToSource     map[string]string
-	originalIndexByID map[string]int
+	apiKeyByValue          map[string]*apiKeySpec
+	accountByID            map[string]*accountSpec
+	accountByAuthID        map[string]*accountSpec
+	accountByAPIKey        map[string]*accountSpec
+	accountByChatGPT       map[string]*accountSpec
+	accountByEmail         map[string]*accountSpec
+	runtimeAccountByAuthID sync.Map
+	aliasToSource          map[string]string
+	originalIndexByID      map[string]int
 }
 
 type apiKeySpec struct {
@@ -355,6 +357,11 @@ type quotaReserveSnapshot struct {
 	WeeklyRemainingPercent       *int   `json:"weeklyRemainingPercent,omitempty"`
 	HourlyWindowPresent          *bool  `json:"hourlyWindowPresent,omitempty"`
 	WeeklyWindowPresent          *bool  `json:"weeklyWindowPresent,omitempty"`
+	// ModelExclusions is the complete effective model exclusion set for the
+	// account when non-nil. An explicit empty array authoritatively clears stale
+	// exclusions from the manifest or auth JSON. Nil is invalid and fail-closed
+	// when a state path is configured; only state-less use retains legacy input.
+	ModelExclusions []string `json:"modelExclusions"`
 }
 
 type quotaReserveStateFile struct {
@@ -2248,6 +2255,7 @@ type imageRequestSelector struct {
 // such as session affinity can reuse a cached account binding.
 type modelExclusionSelector struct {
 	manifest *manifest
+	quota    *quotaReserveStateStore
 	fallback coreauth.Selector
 }
 
@@ -2277,7 +2285,7 @@ func (s *modelExclusionSelector) Pick(ctx context.Context, provider, model strin
 	}
 	filtered := make([]*coreauth.Auth, 0, len(auths))
 	for _, auth := range auths {
-		if authModelExcluded(s.manifest, auth, model) {
+		if authModelExcluded(s.manifest, s.quota, auth, model) {
 			continue
 		}
 		filtered = append(filtered, auth)
@@ -2352,22 +2360,27 @@ func newQuotaReserveStateStore(path string, m *manifest) *quotaReserveStateStore
 }
 
 func (s *quotaReserveStateStore) load() error {
+	_, err := s.reload()
+	return err
+}
+
+func (s *quotaReserveStateStore) reload() ([]string, error) {
 	if s == nil || s.path == "" {
-		return nil
+		return nil, nil
 	}
 	content, err := os.ReadFile(s.path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	hash := sha256.Sum256(content)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.hasHash && hash == s.lastHash {
-		return nil
+		return nil, nil
 	}
 	var state quotaReserveStateFile
 	if err := json.Unmarshal(content, &state); err != nil {
-		return err
+		return nil, err
 	}
 	if state.Accounts == nil {
 		state.Accounts = make(map[string]quotaReserveSnapshot)
@@ -2376,16 +2389,23 @@ func (s *quotaReserveStateStore) load() error {
 	for accountID, snapshot := range state.Accounts {
 		accountID = strings.TrimSpace(accountID)
 		if accountID != "" {
+			snapshot.ModelExclusions = normalizeModelExclusions(snapshot.ModelExclusions)
 			normalized[accountID] = snapshot
 		}
 	}
+	previous, _ := s.snapshot.Load().(map[string]quotaReserveSnapshot)
+	changedAccountIDs := changedModelExclusionAccountIDs(previous, normalized)
 	s.snapshot.Store(normalized)
 	s.lastHash = hash
 	s.hasHash = true
-	return nil
+	return changedAccountIDs, nil
 }
 
-func (s *quotaReserveStateStore) start(ctx context.Context, emitter *eventEmitter) {
+func (s *quotaReserveStateStore) start(
+	ctx context.Context,
+	emitter *eventEmitter,
+	onModelExclusionsChanged func([]string),
+) {
 	if s == nil || s.path == "" {
 		return
 	}
@@ -2394,7 +2414,8 @@ func (s *quotaReserveStateStore) start(ctx context.Context, emitter *eventEmitte
 		defer ticker.Stop()
 		lastError := ""
 		for {
-			if err := s.load(); err != nil {
+			changedAccountIDs, err := s.reload()
+			if err != nil {
 				message := err.Error()
 				if message != lastError && emitter != nil {
 					emitter.emit(map[string]any{
@@ -2405,6 +2426,9 @@ func (s *quotaReserveStateStore) start(ctx context.Context, emitter *eventEmitte
 				lastError = message
 			} else {
 				lastError = ""
+				if len(changedAccountIDs) > 0 && onModelExclusionsChanged != nil {
+					onModelExclusionsChanged(changedAccountIDs)
+				}
 			}
 			select {
 			case <-ctx.Done():
@@ -2413,6 +2437,51 @@ func (s *quotaReserveStateStore) start(ctx context.Context, emitter *eventEmitte
 			}
 		}
 	}()
+}
+
+func normalizeModelExclusions(exclusions []string) []string {
+	if exclusions == nil {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(exclusions))
+	normalized := make([]string, 0, len(exclusions))
+	for _, exclusion := range exclusions {
+		exclusion = strings.TrimSpace(exclusion)
+		if exclusion == "" {
+			continue
+		}
+		key := strings.ToLower(exclusion)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, key)
+	}
+	sort.Strings(normalized)
+	return normalized
+}
+
+func changedModelExclusionAccountIDs(
+	previous map[string]quotaReserveSnapshot,
+	current map[string]quotaReserveSnapshot,
+) []string {
+	accountIDs := make(map[string]struct{}, len(previous)+len(current))
+	for accountID := range previous {
+		accountIDs[accountID] = struct{}{}
+	}
+	for accountID := range current {
+		accountIDs[accountID] = struct{}{}
+	}
+	changed := make([]string, 0)
+	for accountID := range accountIDs {
+		before := previous[accountID].ModelExclusions
+		after := current[accountID].ModelExclusions
+		if (before == nil) != (after == nil) || !slices.Equal(before, after) {
+			changed = append(changed, accountID)
+		}
+	}
+	sort.Strings(changed)
+	return changed
 }
 
 func (s *quotaReserveStateStore) forAccount(accountID string) *quotaReserveSnapshot {
@@ -2429,6 +2498,17 @@ func (s *quotaReserveStateStore) forAccount(accountID string) *quotaReserveSnaps
 		return nil
 	}
 	return &snapshot
+}
+
+func (s *quotaReserveStateStore) modelExclusionsForAccount(accountID string) ([]string, bool) {
+	snapshot := s.forAccount(accountID)
+	if s == nil || strings.TrimSpace(s.path) == "" {
+		return nil, false
+	}
+	if snapshot == nil || snapshot.ModelExclusions == nil {
+		return []string{"*"}, true
+	}
+	return append([]string(nil), snapshot.ModelExclusions...), true
 }
 
 func (s *quotaReserveSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*coreauth.Auth) (*coreauth.Auth, error) {
@@ -2564,7 +2644,7 @@ func (s *cockpitSelector) Pick(ctx context.Context, provider, model string, opts
 		if !authAvailable(auth, model, now) {
 			continue
 		}
-		if authModelExcluded(s.manifest, auth, model) {
+		if authModelExcluded(s.manifest, s.quota, auth, model) {
 			continue
 		}
 		if reason := quotaReserveBlockReasonWithState(s.accountForAuth(auth), s.quota, now); reason != "" {
@@ -2726,6 +2806,9 @@ func quotaReserveBlockReasonWithState(account *accountSpec, state *quotaReserveS
 	var snapshot *quotaReserveSnapshot
 	if account != nil && state != nil {
 		snapshot = state.forAccount(account.ID)
+		if strings.TrimSpace(state.path) != "" {
+			return quotaReserveBlockReasonWithSnapshot(account, snapshot, now)
+		}
 	}
 	if snapshot == nil {
 		snapshot = quotaReserveSnapshotFromSpec(account)
@@ -3081,24 +3164,7 @@ func (s *cockpitSelector) accountForAuth(auth *coreauth.Auth) *accountSpec {
 }
 
 func accountForAuthInManifest(m *manifest, auth *coreauth.Auth) *accountSpec {
-	if m == nil || auth == nil {
-		return nil
-	}
-	if auth.ID != "" {
-		if account := m.accountByAuthID[strings.ToLower(auth.ID)]; account != nil {
-			return account
-		}
-		base := strings.TrimSuffix(filepath.Base(auth.ID), filepath.Ext(auth.ID))
-		if account := m.accountByID[base]; account != nil {
-			return account
-		}
-	}
-	if auth.Attributes != nil {
-		if key := strings.TrimSpace(auth.Attributes["api_key"]); key != "" {
-			return m.accountByAPIKey[key]
-		}
-	}
-	return nil
+	return findManifestAccountForAuth(m, auth)
 }
 
 func (s *cockpitSelector) emitAuthSelected(ctx context.Context, auth *coreauth.Auth, provider, model string, candidateAuths, availableAuths int) {
@@ -3223,7 +3289,7 @@ func (p *usagePlugin) accountForRecord(record coreusage.Record) *accountSpec {
 		return nil
 	}
 	if record.AuthID != "" {
-		if account := p.manifest.accountByAuthID[strings.ToLower(record.AuthID)]; account != nil {
+		if account := manifestAccountByAuthID(p.manifest, record.AuthID); account != nil {
 			return account
 		}
 		base := strings.TrimSuffix(filepath.Base(record.AuthID), filepath.Ext(record.AuthID))
@@ -3396,7 +3462,7 @@ func (h *authHook) accountForAuthID(authID string) *accountSpec {
 	if authID == "" {
 		return nil
 	}
-	if account := h.manifest.accountByAuthID[strings.ToLower(authID)]; account != nil {
+	if account := manifestAccountByAuthID(h.manifest, authID); account != nil {
 		return account
 	}
 	base := strings.TrimSuffix(filepath.Base(authID), filepath.Ext(authID))
@@ -3441,7 +3507,7 @@ func buildCoreAuthSelector(cfg *config.Config, selector coreauth.Selector, m *ma
 	if m != nil {
 		selector = &backupAccountSelector{manifest: m, fallback: selector}
 		selector = &quotaReserveSelector{manifest: m, fallback: selector, quota: quota}
-		selector = &modelExclusionSelector{manifest: m, fallback: selector}
+		selector = &modelExclusionSelector{manifest: m, quota: quota, fallback: selector}
 	}
 	return selector
 }
@@ -3650,7 +3716,14 @@ func buildCodexAlphaSearchHeaders(src http.Header, auth *coreauth.Auth) http.Hea
 	return headers
 }
 
-func newSidecarRuntime(ctx context.Context, configPath string, cfg *config.Config, m *manifest, manager *coreauth.Manager) (*sidecarRuntime, error) {
+func newSidecarRuntime(
+	ctx context.Context,
+	configPath string,
+	cfg *config.Config,
+	m *manifest,
+	quota *quotaReserveStateStore,
+	manager *coreauth.Manager,
+) (*sidecarRuntime, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config is nil")
 	}
@@ -3679,6 +3752,17 @@ func newSidecarRuntime(ctx context.Context, configPath string, cfg *config.Confi
 		WithHooks(cliproxy.Hooks{
 			OnAfterStart: func(*cliproxy.Service) {
 				readyOnce.Do(func() { close(readyCh) })
+			},
+			PrepareAuthUpsert: func(_ *cliproxy.Service, auth *coreauth.Auth) (*coreauth.Auth, error) {
+				return prepareManifestCodexAuthUpdate(cfg, m, auth)
+			},
+			OnAuthUpserted: func(_ *cliproxy.Service, auth *coreauth.Auth) bool {
+				if auth == nil || !strings.EqualFold(strings.TrimSpace(auth.Provider), "codex") {
+					return false
+				}
+				linkManifestAccountForAuth(m, auth)
+				registerManifestModelsForAuth(manager, m, quota, auth)
+				return true
 			},
 		}).
 		Build()
@@ -3716,7 +3800,7 @@ func newSidecarRuntime(ctx context.Context, configPath string, cfg *config.Confi
 		cancel()
 		return nil, err
 	}
-	if err := registerManifestCodexTokenAuths(runtimeCtx, service, cfg, m, manager); err != nil {
+	if err := registerManifestCodexTokenAuths(runtimeCtx, service, cfg, m, quota, manager); err != nil {
 		cancel()
 		return nil, err
 	}
@@ -3725,7 +3809,7 @@ func newSidecarRuntime(ctx context.Context, configPath string, cfg *config.Confi
 			continue
 		}
 		linkManifestAccountForAuth(m, auth)
-		registerManifestModelsForAuth(manager, m, auth)
+		registerManifestModelsForAuth(manager, m, quota, auth)
 	}
 	service.RebindRuntimeExecutors()
 
@@ -3761,11 +3845,62 @@ func registerConfigCodexAPIKeyAuths(ctx context.Context, service *cliproxy.Servi
 	return nil
 }
 
+func prepareManifestCodexAuthUpdate(
+	cfg *config.Config,
+	m *manifest,
+	auth *coreauth.Auth,
+) (*coreauth.Auth, error) {
+	if auth == nil || !strings.EqualFold(strings.TrimSpace(auth.Provider), "codex") {
+		return auth, nil
+	}
+	account := findManifestAccountForAuth(m, auth)
+	if account == nil || manifestAccountAuthKind(account) == "api_key" {
+		return auth, nil
+	}
+	path := ""
+	if auth.Attributes != nil {
+		path = strings.TrimSpace(auth.Attributes["path"])
+		if path == "" {
+			path = strings.TrimSpace(auth.Attributes["source"])
+		}
+	}
+	if path == "" {
+		path = strings.TrimSpace(account.AuthID)
+	}
+	if path == "" {
+		return auth, nil
+	}
+	authDir := ""
+	if cfg != nil {
+		authDir = strings.TrimSpace(cfg.AuthDir)
+	}
+	if !filepath.IsAbs(path) && authDir != "" {
+		path = filepath.Join(authDir, path)
+	}
+	prepared, err := readManifestCodexTokenAuth(account, authDir, path)
+	if err != nil {
+		return nil, err
+	}
+	prepared.ID = auth.ID
+	prepared.FileName = auth.ID
+	prepared.Prefix = auth.Prefix
+	if prepared.Attributes == nil {
+		prepared.Attributes = make(map[string]string)
+	}
+	for key, value := range auth.Attributes {
+		if _, exists := prepared.Attributes[key]; !exists {
+			prepared.Attributes[key] = value
+		}
+	}
+	return prepared, nil
+}
+
 func registerManifestCodexTokenAuths(
 	ctx context.Context,
 	service *cliproxy.Service,
 	cfg *config.Config,
 	m *manifest,
+	quota *quotaReserveStateStore,
 	manager *coreauth.Manager,
 ) error {
 	if service == nil || cfg == nil || m == nil {
@@ -3790,7 +3925,7 @@ func registerManifestCodexTokenAuths(
 			return fmt.Errorf("register codex token auth %s: %w", auth.ID, err)
 		}
 		linkManifestAccountForAuth(m, registered)
-		registerManifestModelsForAuth(manager, m, registered)
+		registerManifestModelsForAuth(manager, m, quota, registered)
 	}
 	return nil
 }
@@ -4009,23 +4144,40 @@ func ensureSidecarAuthDir(cfg *config.Config) error {
 	return nil
 }
 
+func manifestAccountByAuthID(m *manifest, authID string) *accountSpec {
+	if m == nil {
+		return nil
+	}
+	key := strings.ToLower(strings.TrimSpace(authID))
+	if key == "" {
+		return nil
+	}
+	if account := m.accountByAuthID[key]; account != nil {
+		return account
+	}
+	value, ok := m.runtimeAccountByAuthID.Load(key)
+	if !ok {
+		return nil
+	}
+	account, _ := value.(*accountSpec)
+	return account
+}
+
 func linkManifestAccountForAuth(m *manifest, auth *coreauth.Auth) {
 	if m == nil || auth == nil || strings.TrimSpace(auth.ID) == "" {
 		return
 	}
-	if m.accountByAuthID == nil {
-		m.accountByAuthID = make(map[string]*accountSpec)
+	if manifestAccountByAuthID(m, auth.ID) != nil {
+		return
+	}
+	account := findManifestAccountForAuth(m, auth)
+	if account == nil {
+		return
 	}
 	authID := strings.ToLower(strings.TrimSpace(auth.ID))
-	if _, exists := m.accountByAuthID[authID]; exists {
-		return
-	}
-	if account := findManifestAccountForAuth(m, auth); account != nil {
-		m.accountByAuthID[authID] = account
-		if base := strings.ToLower(filepath.Base(strings.TrimSpace(auth.ID))); base != "" && base != authID {
-			m.accountByAuthID[base] = account
-		}
-		return
+	m.runtimeAccountByAuthID.LoadOrStore(authID, account)
+	if base := strings.ToLower(filepath.Base(strings.TrimSpace(auth.ID))); base != "" && base != authID {
+		m.runtimeAccountByAuthID.LoadOrStore(base, account)
 	}
 }
 
@@ -4042,16 +4194,21 @@ func findManifestAccountForAuth(m *manifest, auth *coreauth.Auth) *accountSpec {
 		if candidate == "." || candidate == "" {
 			continue
 		}
-		if account := m.accountByAuthID[strings.ToLower(candidate)]; account != nil {
+		if account := manifestAccountByAuthID(m, candidate); account != nil {
+			return account
+		}
+		base := filepath.Base(candidate)
+		accountID := strings.TrimSuffix(base, filepath.Ext(base))
+		if account := m.accountByID[accountID]; account != nil {
 			return account
 		}
 	}
 	if auth.Attributes != nil {
 		if path := strings.TrimSpace(auth.Attributes["path"]); path != "" {
-			if account := m.accountByAuthID[strings.ToLower(path)]; account != nil {
+			if account := manifestAccountByAuthID(m, path); account != nil {
 				return account
 			}
-			if account := m.accountByAuthID[strings.ToLower(filepath.Base(path))]; account != nil {
+			if account := manifestAccountByAuthID(m, filepath.Base(path)); account != nil {
 				return account
 			}
 		}
@@ -4096,22 +4253,109 @@ func findManifestAccountForAuth(m *manifest, auth *coreauth.Auth) *accountSpec {
 	return nil
 }
 
-func registerManifestModelsForAuth(manager *coreauth.Manager, m *manifest, auth *coreauth.Auth) {
+func registerManifestModelsForAuth(
+	manager *coreauth.Manager,
+	m *manifest,
+	quota *quotaReserveStateStore,
+	auth *coreauth.Auth,
+) {
+	updateManifestModelsForAuth(manager, m, quota, auth, false)
+}
+
+func reconcileManifestModelsForAuthPreservingState(
+	manager *coreauth.Manager,
+	m *manifest,
+	quota *quotaReserveStateStore,
+	auth *coreauth.Auth,
+) {
+	updateManifestModelsForAuth(manager, m, quota, auth, true)
+}
+
+func updateManifestModelsForAuth(
+	manager *coreauth.Manager,
+	m *manifest,
+	quota *quotaReserveStateStore,
+	auth *coreauth.Auth,
+	preserveOverlapState bool,
+) {
 	if manager == nil || m == nil || auth == nil || strings.TrimSpace(auth.ID) == "" {
 		return
 	}
-	models := filterRegistryModelsByExcluded(manifestRegistryModels(m), excludedModelsForAuth(m, auth))
-	if len(models) == 0 {
-		cliproxy.GlobalModelRegistry().UnregisterClient(auth.ID)
-		manager.RefreshSchedulerEntry(auth.ID)
+	authID := strings.TrimSpace(auth.ID)
+	reconcileCtx := coreauth.WithSkipPersist(context.Background())
+	reconcileModelStates := manager.ReconcileRegistryModelStates
+	if preserveOverlapState {
+		reconcileModelStates = manager.PruneRegistryModelStates
+	}
+	current, exists := manager.GetByID(authID)
+	if !exists || current == nil || current.Disabled || current.Status == coreauth.StatusDisabled ||
+		!strings.EqualFold(strings.TrimSpace(current.Provider), "codex") {
+		cliproxy.GlobalModelRegistry().UnregisterClient(authID)
+		reconcileModelStates(reconcileCtx, authID)
+		manager.RefreshSchedulerEntry(authID)
 		return
 	}
-	cliproxy.GlobalModelRegistry().RegisterClient(auth.ID, "codex", models)
-	manager.ReconcileRegistryModelStates(context.Background(), auth.ID)
-	manager.RefreshSchedulerEntry(auth.ID)
+	auth = current
+	models := filterRegistryModelsByExcluded(m, manifestRegistryModels(m), excludedModelsForAuth(m, quota, auth))
+	if len(models) == 0 {
+		cliproxy.GlobalModelRegistry().UnregisterClient(authID)
+		reconcileModelStates(reconcileCtx, authID)
+		manager.RefreshSchedulerEntry(authID)
+		return
+	}
+	if preserveOverlapState {
+		cliproxy.GlobalModelRegistry().ReconcileClientModelsPreservingState(authID, "codex", models)
+	} else {
+		cliproxy.GlobalModelRegistry().RegisterClient(authID, "codex", models)
+	}
+	latest, exists := manager.GetByID(authID)
+	if !exists || latest == nil || latest.Disabled || latest.Status == coreauth.StatusDisabled ||
+		!strings.EqualFold(strings.TrimSpace(latest.Provider), "codex") {
+		cliproxy.GlobalModelRegistry().UnregisterClient(authID)
+	}
+	reconcileModelStates(reconcileCtx, authID)
+	manager.RefreshSchedulerEntry(authID)
 }
 
-func excludedModelsForAuth(m *manifest, auth *coreauth.Auth) []string {
+func refreshManifestModelsForAccounts(
+	manager *coreauth.Manager,
+	m *manifest,
+	quota *quotaReserveStateStore,
+	accountIDs []string,
+) {
+	if manager == nil || m == nil || len(accountIDs) == 0 {
+		return
+	}
+	changed := make(map[string]struct{}, len(accountIDs))
+	for _, accountID := range accountIDs {
+		if accountID = strings.TrimSpace(accountID); accountID != "" {
+			changed[accountID] = struct{}{}
+		}
+	}
+	if len(changed) == 0 {
+		return
+	}
+	for _, auth := range manager.List() {
+		if auth == nil || !strings.EqualFold(strings.TrimSpace(auth.Provider), "codex") {
+			continue
+		}
+		account := accountForAuthInManifest(m, auth)
+		if account == nil {
+			continue
+		}
+		if _, ok := changed[account.ID]; !ok {
+			continue
+		}
+		reconcileManifestModelsForAuthPreservingState(manager, m, quota, auth)
+	}
+}
+
+func excludedModelsForAuth(m *manifest, quota *quotaReserveStateStore, auth *coreauth.Auth) []string {
+	if account := accountForAuthInManifest(m, auth); account != nil && quota != nil {
+		if exclusions, authoritative := quota.modelExclusionsForAccount(account.ID); authoritative {
+			return exclusions
+		}
+	}
 	seen := make(map[string]struct{})
 	add := func(items []string) {
 		for _, item := range items {
@@ -4192,7 +4436,7 @@ func extractExcludedModelsFromMetadataMap(metadata map[string]any) []string {
 	}
 }
 
-func filterRegistryModelsByExcluded(models []*cliproxy.ModelInfo, excluded []string) []*cliproxy.ModelInfo {
+func filterRegistryModelsByExcluded(m *manifest, models []*cliproxy.ModelInfo, excluded []string) []*cliproxy.ModelInfo {
 	if len(models) == 0 || len(excluded) == 0 {
 		return models
 	}
@@ -4201,24 +4445,33 @@ func filterRegistryModelsByExcluded(models []*cliproxy.ModelInfo, excluded []str
 		if model == nil || strings.TrimSpace(model.ID) == "" || modelMatchesAnyRule(model.ID, excluded) {
 			continue
 		}
+		canonical := canonicalModelForClientModel(m, nil, model.ID)
+		if canonical != "" && modelMatchesAnyRule(canonical, excluded) {
+			continue
+		}
 		filtered = append(filtered, model)
 	}
 	return filtered
 }
 
-func authModelExcluded(m *manifest, auth *coreauth.Auth, model string) bool {
+func authModelExcluded(
+	m *manifest,
+	quota *quotaReserveStateStore,
+	auth *coreauth.Auth,
+	model string,
+) bool {
 	model = strings.TrimSpace(model)
 	if model == "" || auth == nil {
 		return false
 	}
-	excluded := excludedModelsForAuth(m, auth)
+	excluded := excludedModelsForAuth(m, quota, auth)
 	if len(excluded) == 0 {
 		return false
 	}
 	if modelMatchesAnyRule(model, excluded) {
 		return true
 	}
-	canonical := resolveSupportedModelAlias(m, model)
+	canonical := canonicalModelForClientModel(m, nil, model)
 	return canonical != "" && modelMatchesAnyRule(canonical, excluded)
 }
 
@@ -8412,6 +8665,7 @@ func main() {
 			"type":    "quota_reserve_state_error",
 			"message": err.Error(),
 		})
+		os.Exit(1)
 	}
 
 	usageTracker := newRequestUsageTracker()
@@ -8437,17 +8691,19 @@ func main() {
 	defer stop()
 	ctx, cancel := context.WithCancel(signalCtx)
 	defer cancel()
-	quotaState.start(ctx, emitter)
 	monitorParentProcess(ctx, *parentPID, cancel, emitter)
 
 	coreusage.RegisterPlugin(&usagePlugin{manifest: m, tracker: usageTracker})
 
-	runtime, err := newSidecarRuntime(ctx, absConfigPath, cfg, m, coreManager)
+	runtime, err := newSidecarRuntime(ctx, absConfigPath, cfg, m, quotaState, coreManager)
 	if err != nil {
 		emitter.emit(map[string]any{"type": "error", "message": err.Error()})
 		os.Exit(1)
 	}
 	defer runtime.Stop()
+	quotaState.start(ctx, emitter, func(accountIDs []string) {
+		refreshManifestModelsForAccounts(coreManager, m, quotaState, accountIDs)
+	})
 	emitter.emitStartupStage("start_http_server")
 
 	// Reuse the same coreManager so WS upgrades share OAuth pool, routing and

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1425,6 +1426,185 @@ func TestQuotaReserveStateStoreHotReloadsSnapshot(t *testing.T) {
 	}
 }
 
+func TestQuotaReserveStateStoreConfiguredPathRequiresValidInitialState(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "quota-reserve.json")
+	store := newQuotaReserveStateStore(statePath, nil)
+	if err := store.load(); !os.IsNotExist(err) {
+		t.Fatalf("missing configured state error = %v, want not-exist", err)
+	}
+	if err := os.WriteFile(statePath, []byte(`{"accounts":`), 0o600); err != nil {
+		t.Fatalf("write malformed state: %v", err)
+	}
+	if err := store.load(); err == nil {
+		t.Fatal("malformed configured state should fail to load")
+	}
+	if err := newQuotaReserveStateStore("", nil).load(); err != nil {
+		t.Fatalf("state-less legacy store should not require a file: %v", err)
+	}
+}
+
+func TestQuotaReserveStateMissingSnapshotFailsClosedQuotaReserve(t *testing.T) {
+	now := time.Now()
+	hourlyThreshold := 20
+	weeklyThreshold := 10
+	hourlyRemaining := 80
+	weeklyRemaining := 80
+	windowPresent := true
+	account := &accountSpec{
+		ID:    "protected",
+		Email: "protected@example.com",
+		QuotaReserve: &quotaReserveSpec{
+			HourlyThresholdPercent:       &hourlyThreshold,
+			WeeklyThresholdPercent:       &weeklyThreshold,
+			SnapshotUpdatedAtUnixSeconds: int64PointerForTest(now.Unix()),
+			HourlyRemainingPercent:       &hourlyRemaining,
+			WeeklyRemainingPercent:       &weeklyRemaining,
+			HourlyWindowPresent:          &windowPresent,
+			WeeklyWindowPresent:          &windowPresent,
+		},
+	}
+	statePath := filepath.Join(t.TempDir(), "quota-reserve.json")
+	content, err := json.Marshal(quotaReserveStateFile{
+		Accounts: map[string]quotaReserveSnapshot{},
+	})
+	if err != nil {
+		t.Fatalf("marshal quota reserve state: %v", err)
+	}
+	if err := os.WriteFile(statePath, content, 0o600); err != nil {
+		t.Fatalf("write quota reserve state: %v", err)
+	}
+	store := newQuotaReserveStateStore(statePath, &manifest{Accounts: []accountSpec{*account}})
+	if err := store.load(); err != nil {
+		t.Fatalf("load quota reserve state: %v", err)
+	}
+	if reason := quotaReserveBlockReasonWithState(account, store, now); !strings.Contains(reason, "quota snapshot unknown") {
+		t.Fatalf("configured state missing account should fail closed, got %q", reason)
+	}
+
+	legacyStore := newQuotaReserveStateStore("", &manifest{Accounts: []accountSpec{*account}})
+	if reason := quotaReserveBlockReasonWithState(account, legacyStore, now); reason != "" {
+		t.Fatalf("state-less legacy store should retain manifest fallback, got %q", reason)
+	}
+}
+
+func TestQuotaReserveStateModelExclusionsAreAuthoritative(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "quota-reserve.json")
+	m := &manifest{
+		ExcludedModels: []string{"manifest-stale-model"},
+		Accounts: []accountSpec{{
+			ID:     "plus-account",
+			AuthID: "plus-auth.json",
+		}},
+		AccountModelRules: []accountModelRule{{
+			AccountID:      "plus-account",
+			ExcludedModels: []string{codexSparkModel},
+		}},
+	}
+	m.accountByID = map[string]*accountSpec{"plus-account": &m.Accounts[0]}
+	m.accountByAuthID = map[string]*accountSpec{"plus-auth.json": &m.Accounts[0]}
+	auth := &coreauth.Auth{
+		ID: "plus-auth.json",
+		Metadata: map[string]any{
+			"excluded_models": []string{"auth-stale-model"},
+		},
+	}
+
+	writeState := func(snapshot quotaReserveSnapshot) {
+		t.Helper()
+		content, err := json.Marshal(quotaReserveStateFile{Accounts: map[string]quotaReserveSnapshot{
+			"plus-account": snapshot,
+		}})
+		if err != nil {
+			t.Fatalf("marshal quota reserve state: %v", err)
+		}
+		if err := os.WriteFile(statePath, content, 0o600); err != nil {
+			t.Fatalf("write quota reserve state: %v", err)
+		}
+	}
+
+	writeState(quotaReserveSnapshot{ModelExclusions: []string{}})
+	store := newQuotaReserveStateStore(statePath, m)
+	changed, err := store.reload()
+	if err != nil {
+		t.Fatalf("load authoritative empty exclusions: %v", err)
+	}
+	if !slices.Equal(changed, []string{"plus-account"}) {
+		t.Fatalf("changed accounts = %#v, want plus-account", changed)
+	}
+	if excluded := excludedModelsForAuth(m, store, auth); len(excluded) != 0 {
+		t.Fatalf("explicit empty state must clear stale fallback exclusions, got %#v", excluded)
+	}
+
+	writeState(quotaReserveSnapshot{
+		HourlyRemainingPercent: intPointerForTest(75),
+		ModelExclusions:        []string{" GPT-5.7-* ", codexSparkModel, strings.ToUpper(codexSparkModel)},
+	})
+	changed, err = store.reload()
+	if err != nil {
+		t.Fatalf("load authoritative exclusions: %v", err)
+	}
+	if !slices.Equal(changed, []string{"plus-account"}) {
+		t.Fatalf("changed accounts = %#v, want plus-account", changed)
+	}
+	if !authModelExcluded(m, store, auth, codexSparkModel) {
+		t.Fatal("authoritative state should exclude Spark")
+	}
+	if !authModelExcluded(m, store, auth, "gpt-5.7-preview") {
+		t.Fatal("authoritative state wildcard should exclude gpt-5.7-preview")
+	}
+	if authModelExcluded(m, store, auth, "manifest-stale-model") {
+		t.Fatal("authoritative state must replace, not merge, stale manifest exclusions")
+	}
+
+	writeState(quotaReserveSnapshot{
+		HourlyRemainingPercent: intPointerForTest(40),
+		ModelExclusions:        []string{codexSparkModel, "gpt-5.7-*"},
+	})
+	changed, err = store.reload()
+	if err != nil {
+		t.Fatalf("load quota-only change: %v", err)
+	}
+	if len(changed) != 0 {
+		t.Fatalf("quota-only state update should not trigger registry refresh, got %#v", changed)
+	}
+
+	if err := os.WriteFile(statePath, []byte(`{"accounts":{"plus-account":{}}}`), 0o600); err != nil {
+		t.Fatalf("write legacy state: %v", err)
+	}
+	changed, err = store.reload()
+	if err != nil {
+		t.Fatalf("load legacy state: %v", err)
+	}
+	if !slices.Equal(changed, []string{"plus-account"}) {
+		t.Fatalf("changed accounts = %#v, want plus-account", changed)
+	}
+	if excluded := excludedModelsForAuth(m, store, auth); !slices.Equal(excluded, []string{"*"}) {
+		t.Fatalf("missing authoritative field should fail closed, got %#v", excluded)
+	}
+
+	for name, content := range map[string]string{
+		"missing account": `{"accounts":{}}`,
+		"null field":      `{"accounts":{"plus-account":{"modelExclusions":null}}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(statePath, []byte(content), 0o600); err != nil {
+				t.Fatalf("write incomplete state: %v", err)
+			}
+			if err := store.load(); err != nil {
+				t.Fatalf("load incomplete state: %v", err)
+			}
+			if excluded := excludedModelsForAuth(m, store, auth); !slices.Equal(excluded, []string{"*"}) {
+				t.Fatalf("incomplete authoritative state should fail closed, got %#v", excluded)
+			}
+		})
+	}
+
+	legacyStore := newQuotaReserveStateStore("", m)
+	if excluded := excludedModelsForAuth(m, legacyStore, auth); len(excluded) != 3 {
+		t.Fatalf("state-less legacy use should retain manifest/auth behavior, got %#v", excluded)
+	}
+}
+
 func TestQuotaReserveSelectorFiltersCachedSessionAffinityAuth(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1685,7 +1865,8 @@ func TestSidecarRuntimeRegistersConfigCodexAPIKeyAuths(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		AuthDir: authDir,
+		AuthDir:                authDir,
+		DisableAuthAutoRefresh: true,
 		CodexKey: []config.CodexKey{{
 			APIKey:  "sk-upstream",
 			BaseURL: "http://127.0.0.1:1",
@@ -1701,7 +1882,7 @@ func TestSidecarRuntimeRegistersConfigCodexAPIKeyAuths(t *testing.T) {
 	}
 	manager := buildCoreAuthManager(cfg, &cockpitSelector{manifest: m}, &authHook{manifest: m}, m, nil, newRequestUsageTracker())
 
-	runtime, err := newSidecarRuntime(context.Background(), configPath, cfg, m, manager)
+	runtime, err := newSidecarRuntime(context.Background(), configPath, cfg, m, nil, manager)
 	if err != nil {
 		t.Fatalf("newSidecarRuntime: %v", err)
 	}
@@ -1720,7 +1901,7 @@ func TestSidecarRuntimeRegistersConfigCodexAPIKeyAuths(t *testing.T) {
 	if codexAPIKeyAuth == nil {
 		t.Fatalf("expected codex API Key auth to be registered, got %#v", manager.List())
 	}
-	if got := m.accountByAuthID[strings.ToLower(codexAPIKeyAuth.ID)]; got == nil || got.ID != "api-account" {
+	if got := manifestAccountByAuthID(m, codexAPIKeyAuth.ID); got == nil || got.ID != "api-account" {
 		t.Fatalf("expected auth to be linked to manifest account, got %#v", got)
 	}
 }
@@ -1749,7 +1930,7 @@ func TestSidecarRuntimeRegistersManifestCodexAccessTokenAuths(t *testing.T) {
 		t.Fatalf("write auth file: %v", err)
 	}
 
-	cfg := &config.Config{AuthDir: authDir}
+	cfg := &config.Config{AuthDir: authDir, DisableAuthAutoRefresh: true}
 	account := &accountSpec{
 		ID:               "token-account",
 		Email:            "token@example.com",
@@ -1769,7 +1950,7 @@ func TestSidecarRuntimeRegistersManifestCodexAccessTokenAuths(t *testing.T) {
 	}
 	manager := buildCoreAuthManager(cfg, &cockpitSelector{manifest: m}, &authHook{manifest: m}, m, nil, newRequestUsageTracker())
 
-	runtime, err := newSidecarRuntime(context.Background(), configPath, cfg, m, manager)
+	runtime, err := newSidecarRuntime(context.Background(), configPath, cfg, m, nil, manager)
 	if err != nil {
 		t.Fatalf("newSidecarRuntime: %v", err)
 	}
@@ -1791,7 +1972,7 @@ func TestSidecarRuntimeRegistersManifestCodexAccessTokenAuths(t *testing.T) {
 	if tokenAuth.ProxyURL != "http://127.0.0.1:9" {
 		t.Fatalf("expected proxy url from auth metadata, got %q", tokenAuth.ProxyURL)
 	}
-	if got := m.accountByAuthID[strings.ToLower(tokenAuth.ID)]; got == nil || got.ID != "token-account" {
+	if got := manifestAccountByAuthID(m, tokenAuth.ID); got == nil || got.ID != "token-account" {
 		t.Fatalf("expected token auth to be linked to manifest account, got %#v", got)
 	}
 	if info := findModelInfoForTest(
@@ -1885,7 +2066,7 @@ func TestManifestRegisteredModelsPreserveReasoningEffortThroughThinkingPipeline(
 			SourceModel: "gpt-5.2",
 			Alias:       "gpt-5.2-codex",
 		}},
-	}, auth)
+	}, nil, auth)
 
 	for _, model := range []string{"gpt-5.2", "gpt-5.2-codex"} {
 		out, err := thinking.ApplyThinking(
@@ -4224,9 +4405,35 @@ func TestFilterRegistryModelsByExcludedModels(t *testing.T) {
 		{ID: "gpt-5.3-codex-spark"},
 		{ID: "gpt-5.4"},
 	}
-	filtered := filterRegistryModelsByExcluded(models, []string{"gpt-5.3-*"})
+	filtered := filterRegistryModelsByExcluded(nil, models, []string{"gpt-5.3-*"})
 	if len(filtered) != 1 || filtered[0].ID != "gpt-5.4" {
 		t.Fatalf("unexpected filtered models: %#v", filtered)
+	}
+}
+
+func TestFilterRegistryModelsByExcludedCanonicalSourceRemovesAlias(t *testing.T) {
+	const sparkAlias = "spark-worker-alias"
+	m := &manifest{
+		ModelIDs: []string{codexSparkModel, "gpt-5.4"},
+		ModelAliases: []modelAliasSpec{{
+			SourceModel: codexSparkModel,
+			Alias:       sparkAlias,
+			Fork:        true,
+		}},
+		aliasToSource: map[string]string{sparkAlias: codexSparkModel},
+	}
+	filtered := filterRegistryModelsByExcluded(m, manifestRegistryModels(m), []string{codexSparkModel})
+	seen := make(map[string]bool, len(filtered))
+	for _, model := range filtered {
+		if model != nil {
+			seen[strings.ToLower(model.ID)] = true
+		}
+	}
+	if seen[strings.ToLower(codexSparkModel)] || seen[sparkAlias] {
+		t.Fatalf("Spark source exclusion left source or alias registered: %#v", filtered)
+	}
+	if !seen["gpt-5.4"] {
+		t.Fatalf("unrelated model was removed with Spark source: %#v", filtered)
 	}
 }
 
@@ -4246,7 +4453,9 @@ func TestExcludedModelsForAuthMergesManifestAndMetadata(t *testing.T) {
 	m.accountByID = map[string]*accountSpec{"plus-account": &m.Accounts[0]}
 	m.accountByAuthID = map[string]*accountSpec{"plus-auth": &m.Accounts[0]}
 	auth := &coreauth.Auth{
-		ID: "plus-auth",
+		ID:       "plus-auth",
+		Provider: "codex",
+		Status:   coreauth.StatusActive,
 		Metadata: map[string]any{
 			"excluded_models": []string{"custom-model"},
 		},
@@ -4254,14 +4463,14 @@ func TestExcludedModelsForAuthMergesManifestAndMetadata(t *testing.T) {
 			"account_id": "plus-account",
 		},
 	}
-	excluded := excludedModelsForAuth(m, auth)
+	excluded := excludedModelsForAuth(m, nil, auth)
 	if len(excluded) != 3 {
 		t.Fatalf("expected 3 excluded patterns, got %#v", excluded)
 	}
-	if !authModelExcluded(m, auth, "gpt-5.3-codex-spark") {
+	if !authModelExcluded(m, nil, auth, "gpt-5.3-codex-spark") {
 		t.Fatal("spark should be excluded for plus auth")
 	}
-	if authModelExcluded(m, auth, "gpt-5.4") {
+	if authModelExcluded(m, nil, auth, "gpt-5.4") {
 		t.Fatal("gpt-5.4 should remain available")
 	}
 }
@@ -4286,16 +4495,214 @@ func TestRegisterManifestModelsForAuthRespectsPerAccountExclusions(t *testing.T)
 		},
 	}
 	manager := coreauth.NewManager(nil, &cockpitSelector{manifest: m}, nil)
+	registered, err := manager.Register(context.Background(), auth)
+	if err != nil {
+		t.Fatalf("register auth: %v", err)
+	}
+	auth = registered
 	t.Cleanup(func() {
 		cliproxy.GlobalModelRegistry().UnregisterClient(auth.ID)
 	})
-	registerManifestModelsForAuth(manager, m, auth)
+	registerManifestModelsForAuth(manager, m, nil, auth)
 	models := registry.GetGlobalRegistry().GetModelsForClient(auth.ID)
 	for _, model := range models {
 		if strings.EqualFold(model.ID, codexSparkModel) {
 			t.Fatalf("spark should not be registered for excluded auth: %#v", models)
 		}
 	}
+}
+
+func TestRegisterManifestModelsForAuthDoesNotResurrectDisabledStaleSnapshot(t *testing.T) {
+	m := &manifest{
+		ModelIDs: []string{codexSparkModel, "gpt-5.4"},
+		Accounts: []accountSpec{{
+			ID:     "plus-account",
+			AuthID: "plus-auth.json",
+		}},
+	}
+	m.accountByID = map[string]*accountSpec{"plus-account": &m.Accounts[0]}
+	m.accountByAuthID = map[string]*accountSpec{"plus-auth.json": &m.Accounts[0]}
+	manager := coreauth.NewManager(nil, &cockpitSelector{manifest: m}, nil)
+	active, err := manager.Register(context.Background(), &coreauth.Auth{
+		ID:         "plus-auth.json",
+		Provider:   "codex",
+		Status:     coreauth.StatusActive,
+		Attributes: map[string]string{"account_id": "plus-account"},
+	})
+	if err != nil {
+		t.Fatalf("register active auth: %v", err)
+	}
+	t.Cleanup(func() {
+		cliproxy.GlobalModelRegistry().UnregisterClient(active.ID)
+	})
+	registerManifestModelsForAuth(manager, m, nil, active)
+	if len(registry.GetGlobalRegistry().GetModelsForClient(active.ID)) == 0 {
+		t.Fatal("active auth should initially have manifest models")
+	}
+
+	staleActive := active.Clone()
+	disabled := active.Clone()
+	disabled.Disabled = true
+	disabled.Status = coreauth.StatusDisabled
+	disabled, err = manager.Update(coreauth.WithSkipPersist(context.Background()), disabled)
+	if err != nil {
+		t.Fatalf("disable auth: %v", err)
+	}
+	registerManifestModelsForAuth(manager, m, nil, disabled)
+	if models := registry.GetGlobalRegistry().GetModelsForClient(active.ID); len(models) != 0 {
+		t.Fatalf("disabled auth should be unregistered, got %#v", models)
+	}
+
+	// A quota callback may still hold this clone from an earlier manager.List().
+	registerManifestModelsForAuth(manager, m, nil, staleActive)
+	if models := registry.GetGlobalRegistry().GetModelsForClient(active.ID); len(models) != 0 {
+		t.Fatalf("stale active snapshot resurrected disabled auth models: %#v", models)
+	}
+	current, ok := manager.GetByID(active.ID)
+	if !ok || current == nil || !current.Disabled || current.Status != coreauth.StatusDisabled {
+		t.Fatalf("manager disabled state changed unexpectedly: %#v, ok=%v", current, ok)
+	}
+}
+
+func TestRefreshManifestModelsForAccountsAppliesAuthoritativeState(t *testing.T) {
+	const lunaModel = "gpt-5.6-luna"
+	statePath := filepath.Join(t.TempDir(), "quota-reserve.json")
+	writeState := func(exclusions []string) {
+		t.Helper()
+		content, err := json.Marshal(quotaReserveStateFile{Accounts: map[string]quotaReserveSnapshot{
+			"plus-account": {ModelExclusions: exclusions},
+		}})
+		if err != nil {
+			t.Fatalf("marshal quota reserve state: %v", err)
+		}
+		if err := os.WriteFile(statePath, content, 0o600); err != nil {
+			t.Fatalf("write quota reserve state: %v", err)
+		}
+	}
+
+	m := &manifest{
+		ModelIDs: []string{codexSparkModel, lunaModel, "gpt-5.4"},
+		Accounts: []accountSpec{{
+			ID:     "plus-account",
+			AuthID: "plus-auth.json",
+		}},
+	}
+	m.accountByID = map[string]*accountSpec{"plus-account": &m.Accounts[0]}
+	m.accountByAuthID = map[string]*accountSpec{"plus-auth.json": &m.Accounts[0]}
+	writeState([]string{codexSparkModel})
+	store := newQuotaReserveStateStore(statePath, m)
+	if err := store.load(); err != nil {
+		t.Fatalf("load initial state: %v", err)
+	}
+
+	selector := buildCoreAuthSelector(&config.Config{}, &coreauth.RoundRobinSelector{}, m, store)
+	manager := coreauth.NewManager(nil, selector, nil)
+	auth := &coreauth.Auth{
+		ID:         "plus-auth.json",
+		Provider:   "codex",
+		Status:     coreauth.StatusActive,
+		Attributes: map[string]string{"account_id": "plus-account"},
+	}
+	registered, err := manager.Register(context.Background(), auth)
+	if err != nil {
+		t.Fatalf("register auth: %v", err)
+	}
+	auth = registered
+	t.Cleanup(func() {
+		cliproxy.GlobalModelRegistry().UnregisterClient(auth.ID)
+		if stoppable, ok := selector.(coreauth.StoppableSelector); ok {
+			stoppable.Stop()
+		}
+	})
+
+	registerManifestModelsForAuth(manager, m, store, auth)
+	if info := findModelInfoForTest(
+		registry.GetGlobalRegistry().GetModelsForClient(auth.ID),
+		codexSparkModel,
+	); info != nil {
+		t.Fatalf("Spark should be absent under authoritative exclusion: %#v", info)
+	}
+	if _, err := selector.Pick(
+		context.Background(),
+		"codex",
+		codexSparkModel,
+		cliproxyexecutor.Options{},
+		manager.List(),
+	); err == nil {
+		t.Fatal("selector should reject Spark while state excludes it")
+	}
+
+	lunaRetry := time.Now().Add(10 * time.Minute).Round(time.Millisecond)
+	current, _ := manager.GetByID(auth.ID)
+	current.ModelStates = map[string]*coreauth.ModelState{
+		lunaModel: {
+			Status:         coreauth.StatusError,
+			StatusMessage:  "luna cooldown",
+			Unavailable:    true,
+			NextRetryAfter: lunaRetry,
+			Quota:          coreauth.QuotaState{Exceeded: true, BackoffLevel: 3},
+			UpdatedAt:      time.Now(),
+		},
+	}
+	if _, err := manager.Update(coreauth.WithSkipPersist(context.Background()), current); err != nil {
+		t.Fatalf("seed Luna manager state: %v", err)
+	}
+	registry.GetGlobalRegistry().SetModelQuotaExceeded(auth.ID, lunaModel)
+	registry.GetGlobalRegistry().SuspendClientModel(auth.ID, lunaModel, "cooldown")
+	assertLunaStatePreserved := func(stage string) {
+		t.Helper()
+		if count := registry.GetGlobalRegistry().GetModelCount(lunaModel); count != 0 {
+			t.Fatalf("%s cleared Luna registry cooldown/suspension: count=%d", stage, count)
+		}
+		current, ok := manager.GetByID(auth.ID)
+		if !ok || current == nil {
+			t.Fatalf("%s lost auth", stage)
+		}
+		state := current.ModelStates[lunaModel]
+		if state == nil || !state.Unavailable || state.Status != coreauth.StatusError ||
+			!state.NextRetryAfter.Equal(lunaRetry) || !state.Quota.Exceeded || state.Quota.BackoffLevel != 3 {
+			t.Fatalf("%s changed Luna manager state: %#v", stage, state)
+		}
+	}
+	assertLunaStatePreserved("before Spark delta")
+
+	writeState([]string{})
+	changed, err := store.reload()
+	if err != nil {
+		t.Fatalf("reload cleared exclusions: %v", err)
+	}
+	refreshManifestModelsForAccounts(manager, m, store, changed)
+	if info := findModelInfoForTest(
+		registry.GetGlobalRegistry().GetModelsForClient(auth.ID),
+		codexSparkModel,
+	); info == nil {
+		t.Fatal("Spark should be re-registered after authoritative exclusion is cleared")
+	}
+	assertLunaStatePreserved("after Spark add")
+	selected, err := selector.Pick(
+		context.Background(),
+		"codex",
+		codexSparkModel,
+		cliproxyexecutor.Options{},
+		manager.List(),
+	)
+	if err != nil || selected == nil || selected.ID != auth.ID {
+		t.Fatalf("Spark selection after clear = %#v, err=%v", selected, err)
+	}
+
+	writeState([]string{codexSparkModel})
+	changed, err = store.reload()
+	if err != nil {
+		t.Fatalf("reload restored exclusion: %v", err)
+	}
+	refreshManifestModelsForAccounts(manager, m, store, changed)
+	if info := findModelInfoForTest(
+		registry.GetGlobalRegistry().GetModelsForClient(auth.ID),
+		codexSparkModel,
+	); info != nil {
+		t.Fatalf("Spark should be unregistered after state exclusion returns: %#v", info)
+	}
+	assertLunaStatePreserved("after Spark remove")
 }
 
 func TestCoreAuthSelectorFiltersNewModelExclusionsBeforeSessionAffinity(t *testing.T) {
@@ -4341,7 +4748,7 @@ func TestCoreAuthSelectorFiltersNewModelExclusionsBeforeSessionAffinity(t *testi
 	}
 }
 
-func TestSidecarRuntimeDoesNotSelectAccountWithExcludedModel(t *testing.T) {
+func TestSidecarRuntimeHotReloadsExcludedModelsWithoutRestart(t *testing.T) {
 	tempDir := t.TempDir()
 	authDir := filepath.Join(tempDir, "auths")
 	if err := os.MkdirAll(authDir, 0o755); err != nil {
@@ -4354,15 +4761,47 @@ func TestSidecarRuntimeDoesNotSelectAccountWithExcludedModel(t *testing.T) {
 
 	blockedFile := "blocked-luna.json"
 	allowedFile := "allowed-luna.json"
-	if err := os.WriteFile(filepath.Join(authDir, blockedFile), []byte(`{
-  "type":"codex",
-  "email":"blocked@example.com",
-  "access_token":"blocked-token",
-  "account_id":"acct-blocked",
-  "excluded_models":["GPT-5.6-LUNA", "gpt-5.7-*"]
-}`), 0o600); err != nil {
-		t.Fatalf("write blocked auth: %v", err)
+	blockedPath := filepath.Join(authDir, blockedFile)
+	writeBlockedAuth := func(excludedModels []string, disabled bool) {
+		t.Helper()
+		payload := map[string]any{
+			"type":         "codex",
+			"email":        "blocked@example.com",
+			"access_token": "blocked-token",
+			"account_id":   "acct-blocked",
+		}
+		if len(excludedModels) > 0 {
+			payload["excluded_models"] = excludedModels
+		}
+		if disabled {
+			payload["disabled"] = true
+		}
+		data, err := json.MarshalIndent(payload, "", "  ")
+		if err != nil {
+			t.Fatalf("marshal blocked auth: %v", err)
+		}
+		tempFile, err := os.CreateTemp(authDir, ".blocked-auth-*")
+		if err != nil {
+			t.Fatalf("create blocked auth temp file: %v", err)
+		}
+		tempPath := tempFile.Name()
+		defer os.Remove(tempPath)
+		if err := tempFile.Chmod(0o600); err != nil {
+			tempFile.Close()
+			t.Fatalf("chmod blocked auth temp file: %v", err)
+		}
+		if _, err := tempFile.Write(data); err != nil {
+			tempFile.Close()
+			t.Fatalf("write blocked auth temp file: %v", err)
+		}
+		if err := tempFile.Close(); err != nil {
+			t.Fatalf("close blocked auth temp file: %v", err)
+		}
+		if err := os.Rename(tempPath, blockedPath); err != nil {
+			t.Fatalf("atomically replace blocked auth: %v", err)
+		}
 	}
+	writeBlockedAuth(nil, false)
 	if err := os.WriteFile(filepath.Join(authDir, allowedFile), []byte(`{
   "type":"codex",
   "email":"allowed@example.com",
@@ -4371,33 +4810,142 @@ func TestSidecarRuntimeDoesNotSelectAccountWithExcludedModel(t *testing.T) {
 }`), 0o600); err != nil {
 		t.Fatalf("write allowed auth: %v", err)
 	}
+	statePath := filepath.Join(tempDir, "quota-reserve.json")
+	writeModelExclusionState := func(blockedExclusions []string) {
+		t.Helper()
+		content, err := json.Marshal(quotaReserveStateFile{Accounts: map[string]quotaReserveSnapshot{
+			"blocked-account": {ModelExclusions: blockedExclusions},
+			"allowed-account": {ModelExclusions: []string{}},
+		}})
+		if err != nil {
+			t.Fatalf("marshal model exclusion state: %v", err)
+		}
+		tempFile, err := os.CreateTemp(tempDir, ".quota-reserve-*")
+		if err != nil {
+			t.Fatalf("create model exclusion state temp file: %v", err)
+		}
+		tempPath := tempFile.Name()
+		defer os.Remove(tempPath)
+		if err := tempFile.Chmod(0o600); err != nil {
+			tempFile.Close()
+			t.Fatalf("chmod model exclusion state temp file: %v", err)
+		}
+		if _, err := tempFile.Write(content); err != nil {
+			tempFile.Close()
+			t.Fatalf("write model exclusion state temp file: %v", err)
+		}
+		if err := tempFile.Close(); err != nil {
+			t.Fatalf("close model exclusion state temp file: %v", err)
+		}
+		if err := os.Rename(tempPath, statePath); err != nil {
+			t.Fatalf("atomically replace model exclusion state: %v", err)
+		}
+	}
+	writeModelExclusionState([]string{})
 
+	const customModel = "cockpit-runtime-custom-model"
+	const customAlias = "cockpit-runtime-custom-alias"
 	m := &manifest{
 		Accounts: []accountSpec{
 			{ID: "blocked-account", Email: "blocked@example.com", AuthID: blockedFile, AuthKind: "oauth"},
 			{ID: "allowed-account", Email: "allowed@example.com", AuthID: allowedFile, AuthKind: "oauth"},
 		},
-		ModelIDs:         []string{"gpt-5.6-luna", "gpt-5.7-preview", "gpt-5.4"},
+		ModelIDs:         []string{"gpt-5.6-luna", "gpt-5.7-preview", "gpt-5.4", customModel},
+		ModelAliases:     []modelAliasSpec{{SourceModel: "gpt-5.4", Alias: customAlias, Fork: true}},
 		accountByID:      make(map[string]*accountSpec),
 		accountByAuthID:  make(map[string]*accountSpec),
 		accountByAPIKey:  make(map[string]*accountSpec),
 		accountByChatGPT: make(map[string]*accountSpec),
 		accountByEmail:   make(map[string]*accountSpec),
+		originalIndexByID: map[string]int{
+			"blocked-account": 0,
+			"allowed-account": 1,
+		},
 	}
 	for index := range m.Accounts {
 		account := &m.Accounts[index]
 		m.accountByID[account.ID] = account
-		m.accountByAuthID[strings.ToLower(account.AuthID)] = account
 		m.accountByEmail[strings.ToLower(account.Email)] = account
 	}
+	quotaStore := newQuotaReserveStateStore(statePath, m)
+	if err := quotaStore.load(); err != nil {
+		t.Fatalf("load model exclusion state: %v", err)
+	}
 
-	cfg := &config.Config{AuthDir: authDir}
-	manager := buildCoreAuthManager(cfg, &cockpitSelector{manifest: m}, &authHook{manifest: m}, m, nil, newRequestUsageTracker())
-	runtime, err := newSidecarRuntime(context.Background(), configPath, cfg, m, manager)
+	cfg := &config.Config{AuthDir: authDir, DisableAuthAutoRefresh: true}
+	manager := buildCoreAuthManager(cfg, &cockpitSelector{manifest: m, quota: quotaStore}, &authHook{manifest: m}, m, quotaStore, newRequestUsageTracker())
+	runtime, err := newSidecarRuntime(context.Background(), configPath, cfg, m, quotaStore, manager)
 	if err != nil {
 		t.Fatalf("newSidecarRuntime: %v", err)
 	}
 	defer runtime.Stop()
+	originalService := runtime.service
+	originalManager := runtime.manager
+	t.Cleanup(func() {
+		registry.GetGlobalRegistry().UnregisterClient(blockedFile)
+		registry.GetGlobalRegistry().UnregisterClient(allowedFile)
+	})
+
+	waitFor := func(description string, condition func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			if condition() {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %s", description)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	modelRegistered := func(authID, modelID string) bool {
+		return findModelInfoForTest(registry.GetGlobalRegistry().GetModelsForClient(authID), modelID) != nil
+	}
+	authExcludesLuna := func() bool {
+		auth, ok := manager.GetByID(blockedFile)
+		return ok && auth != nil && modelMatchesAnyRule("gpt-5.6-luna", strings.Split(auth.Attributes["excluded_models"], ","))
+	}
+	assertManifestModels := func() {
+		t.Helper()
+		if !modelRegistered(blockedFile, customModel) || !modelRegistered(blockedFile, customAlias) {
+			t.Fatalf("watcher update lost manifest models: models=%#v", registry.GetGlobalRegistry().GetModelsForClient(blockedFile))
+		}
+	}
+
+	waitFor("initial manager and manifest model registration", func() bool {
+		_, ok := manager.GetByID(blockedFile)
+		return ok && modelRegistered(blockedFile, "gpt-5.6-luna") && modelRegistered(blockedFile, customModel) && modelRegistered(blockedFile, customAlias)
+	})
+	if len(m.accountByAuthID) != 0 {
+		t.Fatalf("runtime auth linking mutated the static manifest index: %#v", m.accountByAuthID)
+	}
+	if account := manifestAccountByAuthID(m, blockedFile); account == nil || account.ID != "blocked-account" {
+		t.Fatalf("runtime auth link = %#v, want blocked-account", account)
+	}
+
+	writeBlockedAuth([]string{"GPT-5.6-LUNA", "gpt-5.7-*"}, false)
+	waitFor("stale auth exclusions to reach manager without overriding state", func() bool {
+		return authExcludesLuna() &&
+			modelRegistered(blockedFile, "gpt-5.6-luna") &&
+			modelRegistered(blockedFile, "gpt-5.7-preview") &&
+			modelRegistered(blockedFile, customModel) &&
+			modelRegistered(blockedFile, customAlias)
+	})
+	assertManifestModels()
+
+	writeModelExclusionState([]string{"GPT-5.6-LUNA", "gpt-5.7-*"})
+	changed, err := quotaStore.reload()
+	if err != nil {
+		t.Fatalf("reload added authoritative exclusions: %v", err)
+	}
+	refreshManifestModelsForAccounts(manager, m, quotaStore, changed)
+	waitFor("authoritative state exclusions to reach registry", func() bool {
+		return !modelRegistered(blockedFile, "gpt-5.6-luna") &&
+			!modelRegistered(blockedFile, "gpt-5.7-preview") &&
+			modelRegistered(blockedFile, customModel) &&
+			modelRegistered(blockedFile, customAlias)
+	})
 
 	for attempt := 0; attempt < 8; attempt++ {
 		selected, errSelect := manager.SelectAuth(context.Background(), "codex", "gpt-5.6-luna", cliproxyexecutor.Options{})
@@ -4409,18 +4957,60 @@ func TestSidecarRuntimeDoesNotSelectAccountWithExcludedModel(t *testing.T) {
 		}
 	}
 
-	blockedAuth, ok := manager.GetByID(blockedFile)
-	if !ok || blockedAuth == nil {
-		t.Fatalf("blocked auth %q was not registered", blockedFile)
+	writeBlockedAuth(nil, false)
+	waitFor("auth exclusion removal without overriding authoritative state", func() bool {
+		return !authExcludesLuna() &&
+			!modelRegistered(blockedFile, "gpt-5.6-luna") &&
+			!modelRegistered(blockedFile, "gpt-5.7-preview") &&
+			modelRegistered(blockedFile, customModel) &&
+			modelRegistered(blockedFile, customAlias)
+	})
+	assertManifestModels()
+
+	writeModelExclusionState([]string{})
+	changed, err = quotaStore.reload()
+	if err != nil {
+		t.Fatalf("reload cleared authoritative exclusions: %v", err)
 	}
-	blockedModels := registry.GetGlobalRegistry().GetModelsForClient(blockedAuth.ID)
-	if info := findModelInfoForTest(blockedModels, "gpt-5.6-luna"); info != nil {
-		t.Fatalf("blocked auth still advertises exact excluded model: %#v", info)
+	refreshManifestModelsForAccounts(manager, m, quotaStore, changed)
+	waitFor("cleared authoritative exclusions to reach registry", func() bool {
+		return modelRegistered(blockedFile, "gpt-5.6-luna") &&
+			modelRegistered(blockedFile, "gpt-5.7-preview") &&
+			modelRegistered(blockedFile, customModel) &&
+			modelRegistered(blockedFile, customAlias)
+	})
+
+	selectedBlocked := false
+	for attempt := 0; attempt < 16; attempt++ {
+		selected, errSelect := manager.SelectAuth(context.Background(), "codex", "gpt-5.6-luna", cliproxyexecutor.Options{})
+		if errSelect != nil {
+			t.Fatalf("SelectAuth after removal attempt %d: %v", attempt, errSelect)
+		}
+		if account := accountForAuthInManifest(m, selected); account != nil && account.ID == "blocked-account" {
+			selectedBlocked = true
+			break
+		}
 	}
-	if info := findModelInfoForTest(blockedModels, "gpt-5.7-preview"); info != nil {
-		t.Fatalf("blocked auth still advertises wildcard-excluded model: %#v", info)
+	if !selectedBlocked {
+		t.Fatal("auth did not become selectable after excluded_models was removed")
 	}
-	if info := findModelInfoForTest(blockedModels, "gpt-5.4"); info == nil {
-		t.Fatal("blocked auth lost a non-excluded model")
+
+	writeBlockedAuth(nil, true)
+	waitFor("disabled auth to leave manager and registry", func() bool {
+		auth, ok := manager.GetByID(blockedFile)
+		return ok && auth != nil && auth.Disabled && auth.Status == coreauth.StatusDisabled &&
+			len(registry.GetGlobalRegistry().GetModelsForClient(blockedFile)) == 0
+	})
+	for attempt := 0; attempt < 4; attempt++ {
+		selected, errSelect := manager.SelectAuth(context.Background(), "codex", "gpt-5.6-luna", cliproxyexecutor.Options{})
+		if errSelect != nil {
+			t.Fatalf("SelectAuth after disable attempt %d: %v", attempt, errSelect)
+		}
+		if account := accountForAuthInManifest(m, selected); account == nil || account.ID != "allowed-account" {
+			t.Fatalf("SelectAuth after disable attempt %d = %#v, account=%#v", attempt, selected, account)
+		}
+	}
+	if runtime.service != originalService || runtime.manager != originalManager {
+		t.Fatal("hot auth updates must not rebuild the sidecar runtime")
 	}
 }

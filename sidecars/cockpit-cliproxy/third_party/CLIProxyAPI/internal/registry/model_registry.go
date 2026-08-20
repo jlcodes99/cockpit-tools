@@ -233,6 +233,22 @@ func (r *ModelRegistry) triggerModelsUnregistered(provider, clientID string) {
 //   - clientProvider: Provider name (e.g., "gemini", "claude", "openai")
 //   - models: List of models that this client can provide
 func (r *ModelRegistry) RegisterClient(clientID, clientProvider string, models []*ModelInfo) {
+	r.registerClient(clientID, clientProvider, models, false)
+}
+
+// ReconcileClientModelsPreservingState updates a client's model bindings while
+// retaining quota cooldown and suspension state for models present in both the
+// old and new sets. State for removed bindings is discarded normally.
+func (r *ModelRegistry) ReconcileClientModelsPreservingState(clientID, clientProvider string, models []*ModelInfo) {
+	r.registerClient(clientID, clientProvider, models, true)
+}
+
+func (r *ModelRegistry) registerClient(
+	clientID string,
+	clientProvider string,
+	models []*ModelInfo,
+	preserveOverlapState bool,
+) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	r.ensureAvailableModelsCacheLocked()
@@ -392,14 +408,16 @@ func (r *ModelRegistry) RegisterClient(clientID, clientProvider string, models [
 				reg.InfoByProvider[provider] = cloneModelInfo(model)
 			}
 			reg.LastUpdated = now
-			// Re-registering an existing client/model binding starts a fresh registry
-			// snapshot for that binding. Cooldown and suspension are transient
-			// scheduling state and must not survive this reconciliation step.
-			if reg.QuotaExceededClients != nil {
-				delete(reg.QuotaExceededClients, clientID)
-			}
-			if reg.SuspendedClients != nil {
-				delete(reg.SuspendedClients, clientID)
+			if !preserveOverlapState {
+				// Ordinary auth re-registration starts a fresh registry snapshot for
+				// overlapping bindings. Runtime policy deltas use the dedicated
+				// preserving path above instead.
+				if reg.QuotaExceededClients != nil {
+					delete(reg.QuotaExceededClients, clientID)
+				}
+				if reg.SuspendedClients != nil {
+					delete(reg.SuspendedClients, clientID)
+				}
 			}
 			if providerChanged && provider != "" {
 				if _, newlyAdded := addedSet[id]; newlyAdded {
