@@ -13755,6 +13755,78 @@ async fn write_local_access_profile_takeover(
     )
 }
 
+fn profile_model_catalog_websocket_preference_matches(
+    profile_dir: &Path,
+    catalog_file: Option<&str>,
+    expected: bool,
+) -> bool {
+    let catalog_path = profile_dir.join(
+        catalog_file
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE),
+    );
+    let Ok(content) = fs::read_to_string(catalog_path) else {
+        return false;
+    };
+    let Ok(catalog) = serde_json::from_str::<Value>(&content) else {
+        return false;
+    };
+    let Some(models) = catalog.get("models").and_then(Value::as_array) else {
+        return false;
+    };
+    !models.is_empty()
+        && models
+            .iter()
+            .all(|model| model.get("prefer_websockets").and_then(Value::as_bool) == Some(expected))
+}
+
+fn local_access_profile_takeover_needs_websocket_sync(
+    profile_dir: &Path,
+    collection: &CodexLocalAccessCollection,
+) -> bool {
+    // Only repair profiles that are already managed by the API service. A profile that is not
+    // attached is handled by the normal takeover path when the setting actually changes.
+    let attachment = inspect_local_access_profile_attachment(profile_dir, Some(collection));
+    if !attachment.attached {
+        return false;
+    }
+
+    let expected = profile_api_key_supports_websockets(collection, &collection.api_key);
+    let config_doc = read_optional_profile_file(&profile_config_path(profile_dir))
+        .ok()
+        .flatten()
+        .and_then(|content| {
+            crate::modules::codex_config_format::read_codex_config_doc_from_str(&content).ok()
+        });
+    let config_provider = config_doc.as_ref().and_then(|doc| {
+        doc.get("model_providers")
+            .and_then(|item| item.as_table())
+            .and_then(|providers| providers.get(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID))
+            .and_then(|item| item.as_table())
+    });
+    let config_supports_websockets = config_provider
+        .and_then(|provider| provider.get("supports_websockets"))
+        .and_then(|item| item.as_bool());
+    let catalog_file = config_doc.as_ref().and_then(|doc| {
+        doc.get("model_catalog_json")
+            .and_then(|item| item.as_str())
+    });
+
+    config_supports_websockets != Some(expected)
+        || !profile_model_catalog_websocket_preference_matches(profile_dir, catalog_file, expected)
+}
+
+fn local_access_profile_takeovers_need_websocket_sync(
+    collection: &CodexLocalAccessCollection,
+) -> bool {
+    collection.enabled
+        && collect_local_access_profile_takeover_dirs()
+            .iter()
+            .any(|profile_dir| {
+                local_access_profile_takeover_needs_websocket_sync(profile_dir, collection)
+            })
+}
+
 fn push_local_access_takeover_dir(
     dirs: &mut Vec<PathBuf>,
     seen: &mut HashSet<String>,
@@ -15988,6 +16060,18 @@ async fn ensure_runtime_loaded_for_app_startup() -> Result<(), String> {
 
     if should_start {
         ensure_gateway_matches_runtime().await?;
+        let collection = {
+            let runtime = gateway_runtime().lock().await;
+            runtime
+                .collection
+                .clone()
+                .filter(|collection| collection.enabled)
+        };
+        if let Some(collection) = collection.as_ref() {
+            if local_access_profile_takeovers_need_websocket_sync(collection) {
+                ensure_local_access_profile_takeovers_from_runtime().await?;
+            }
+        }
         trigger_bound_oauth_quota_refresh_in_background(
             "API 服务启动恢复",
             BOUND_OAUTH_QUOTA_RESERVE_REFRESH_INTERVAL,
@@ -20845,6 +20929,8 @@ pub async fn update_local_access_routing_options(
 
     let responses_websockets_changed =
         collection.responses_websockets_enabled != responses_websockets_enabled;
+    let profile_websocket_sync_needed = !responses_websockets_changed
+        && local_access_profile_takeovers_need_websocket_sync(&collection);
     collection.session_affinity = session_affinity;
     collection.session_affinity_default_enabled_migrated = true;
     collection.session_affinity_ttl_ms =
@@ -20867,7 +20953,7 @@ pub async fn update_local_access_routing_options(
     }
 
     ensure_gateway_matches_runtime().await?;
-    if responses_websockets_changed {
+    if responses_websockets_changed || profile_websocket_sync_needed {
         ensure_local_access_profile_takeovers_from_runtime().await?;
     }
     snapshot_state().await
@@ -34661,6 +34747,74 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             .join(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE)
             .exists());
 
+        fs::remove_dir_all(&profile_dir).expect("cleanup temp dir");
+    }
+
+    #[tokio::test]
+    async fn stale_profile_websocket_capabilities_trigger_reconciliation() {
+        let profile_dir = make_temp_dir("codex-local-access-stale-websocket-test");
+        let collection = test_local_access_collection(Vec::new());
+
+        write_local_access_profile_takeover(&profile_dir, &collection, None)
+            .await
+            .expect("write local access takeover");
+        assert!(!super::local_access_profile_takeover_needs_websocket_sync(
+            &profile_dir,
+            &collection
+        ));
+
+        let config_path = profile_dir.join(CODEX_PROFILE_CONFIG_FILE);
+        let config = fs::read_to_string(&config_path).expect("read config");
+        fs::write(
+            &config_path,
+            config.replace("supports_websockets = false", "supports_websockets = true"),
+        )
+        .expect("write stale config");
+
+        let catalog_path = profile_dir.join(CODEX_LOCAL_ACCESS_MODEL_CATALOG_FILE);
+        let mut catalog: Value =
+            serde_json::from_str(&fs::read_to_string(&catalog_path).expect("read model catalog"))
+                .expect("parse model catalog");
+        for model in catalog
+            .get_mut("models")
+            .and_then(Value::as_array_mut)
+            .expect("model catalog array")
+        {
+            model["prefer_websockets"] = json!(true);
+        }
+        fs::write(
+            &catalog_path,
+            serde_json::to_string_pretty(&catalog).expect("serialize model catalog"),
+        )
+        .expect("write stale model catalog");
+
+        assert!(super::local_access_profile_takeover_needs_websocket_sync(
+            &profile_dir,
+            &collection
+        ));
+
+        super::ensure_profile_takeover(&profile_dir, &collection)
+            .await
+            .expect("reconcile stale local access takeover");
+        assert!(!super::local_access_profile_takeover_needs_websocket_sync(
+            &profile_dir,
+            &collection
+        ));
+        let repaired_config = fs::read_to_string(&config_path).expect("read repaired config");
+        assert!(repaired_config.contains("supports_websockets = false"));
+        let repaired_catalog: Value = serde_json::from_str(
+            &fs::read_to_string(&catalog_path).expect("read repaired model catalog"),
+        )
+        .expect("parse repaired model catalog");
+        assert!(repaired_catalog
+            .get("models")
+            .and_then(Value::as_array)
+            .is_some_and(|models| {
+                !models.is_empty()
+                    && models.iter().all(|model| {
+                        model.get("prefer_websockets").and_then(Value::as_bool) == Some(false)
+                    })
+            }));
         fs::remove_dir_all(&profile_dir).expect("cleanup temp dir");
     }
 
