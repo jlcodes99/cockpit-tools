@@ -11,6 +11,7 @@ type ModelRegistryHook = registry.ModelRegistryHook
 // ModelRegistry describes registry operations consumed by external callers.
 type ModelRegistry interface {
 	RegisterClient(clientID, clientProvider string, models []*ModelInfo)
+	ReconcileClientModelsPreservingState(clientID, clientProvider string, models []*ModelInfo)
 	UnregisterClient(clientID string)
 	SetModelQuotaExceeded(clientID, modelID string)
 	ClearModelQuotaExceeded(clientID, modelID string)

@@ -3,7 +3,68 @@ package auth
 import (
 	"context"
 	"testing"
+	"time"
+
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
 )
+
+func TestManager_PruneRegistryModelStatesPreservesOverlapState(t *testing.T) {
+	clientID := "prune-overlap-state-auth"
+	luna := "gpt-5.6-luna"
+	spark := "gpt-5.3-codex-spark"
+	modelRegistry := registry.GetGlobalRegistry()
+	modelRegistry.RegisterClient(clientID, "codex", []*registry.ModelInfo{{ID: luna}})
+	t.Cleanup(func() { modelRegistry.UnregisterClient(clientID) })
+
+	nextRetry := time.Now().Add(10 * time.Minute).Round(time.Millisecond)
+	manager := NewManager(nil, nil, nil)
+	_, err := manager.Register(WithSkipPersist(context.Background()), &Auth{
+		ID:       clientID,
+		Provider: "codex",
+		Status:   StatusError,
+		ModelStates: map[string]*ModelState{
+			luna: {
+				Status:         StatusError,
+				StatusMessage:  "luna cooldown",
+				Unavailable:    true,
+				NextRetryAfter: nextRetry,
+				Quota:          QuotaState{Exceeded: true, BackoffLevel: 4},
+				UpdatedAt:      time.Now(),
+			},
+			spark: {
+				Status:         StatusError,
+				StatusMessage:  "spark cooldown",
+				Unavailable:    true,
+				NextRetryAfter: nextRetry,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("register auth: %v", err)
+	}
+
+	manager.PruneRegistryModelStates(WithSkipPersist(context.Background()), clientID)
+	current, ok := manager.GetByID(clientID)
+	if !ok || current == nil {
+		t.Fatal("auth missing after prune")
+	}
+	if _, exists := current.ModelStates[spark]; exists {
+		t.Fatalf("removed Spark state was not pruned: %#v", current.ModelStates[spark])
+	}
+	lunaState := current.ModelStates[luna]
+	if lunaState == nil || !lunaState.Unavailable || lunaState.Status != StatusError ||
+		!lunaState.NextRetryAfter.Equal(nextRetry) || !lunaState.Quota.Exceeded || lunaState.Quota.BackoffLevel != 4 {
+		t.Fatalf("overlapping Luna state changed during prune: %#v", lunaState)
+	}
+
+	manager.ReconcileRegistryModelStates(WithSkipPersist(context.Background()), clientID)
+	current, _ = manager.GetByID(clientID)
+	lunaState = current.ModelStates[luna]
+	if lunaState == nil || lunaState.Unavailable || lunaState.Status != StatusActive ||
+		!lunaState.NextRetryAfter.IsZero() || lunaState.Quota.Exceeded || lunaState.Quota.BackoffLevel != 0 {
+		t.Fatalf("ordinary reconciliation did not reset Luna state: %#v", lunaState)
+	}
+}
 
 func TestManager_Update_PreservesModelStates(t *testing.T) {
 	m := NewManager(nil, nil, nil)

@@ -234,6 +234,7 @@ static GATEWAY_STATS_MAINTENANCE_COMPLETED: AtomicBool = AtomicBool::new(false);
 static GATEWAY_COLLECTION_ACCOUNT_SANITIZE_RUNNING: AtomicBool = AtomicBool::new(false);
 static GATEWAY_COLLECTION_ACCOUNT_SANITIZE_COMPLETED: AtomicBool = AtomicBool::new(false);
 static GATEWAY_LIFECYCLE_LOCK: OnceLock<TokioMutex<()>> = OnceLock::new();
+static SIDECAR_RUNTIME_ACCOUNT_STATE_SYNC_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static GATEWAY_LIFECYCLE_GENERATION: AtomicU64 = AtomicU64::new(1);
 static GATEWAY_LIFECYCLE_NOTIFY: OnceLock<Notify> = OnceLock::new();
 static GATEWAY_PREPARING: AtomicBool = AtomicBool::new(false);
@@ -766,6 +767,13 @@ fn lock_local_access_logs_db_write() -> Result<std::sync::MutexGuard<'static, ()
 
 fn gateway_lifecycle_lock() -> &'static TokioMutex<()> {
     GATEWAY_LIFECYCLE_LOCK.get_or_init(|| TokioMutex::new(()))
+}
+
+fn lock_sidecar_runtime_account_state_sync() -> Result<std::sync::MutexGuard<'static, ()>, String> {
+    SIDECAR_RUNTIME_ACCOUNT_STATE_SYNC_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| "API 服务 sidecar 运行时账号状态同步锁已损坏".to_string())
 }
 
 fn gateway_lifecycle_notify() -> &'static Notify {
@@ -5643,23 +5651,18 @@ fn quota_disallowed_model_patterns(account: &CodexAccount) -> Vec<String> {
             patterns.push(pattern);
         }
     }
+    patterns.sort_unstable();
     patterns
 }
 
-fn metered_feature_model_patterns_for_pool(
-    collection: &CodexLocalAccessCollection,
-    account_overrides: &HashMap<String, CodexAccount>,
+fn metered_feature_model_patterns_for_accounts<'a>(
+    accounts: impl IntoIterator<Item = &'a CodexAccount>,
 ) -> HashMap<String, String> {
-    let persisted_accounts = codex_account::list_accounts_checked().ok();
     let mut patterns = HashMap::new();
-    for account_id in effective_sidecar_account_ids(collection) {
-        let account = account_overrides.get(&account_id).or_else(|| {
-            persisted_accounts
-                .as_ref()
-                .and_then(|accounts| accounts.iter().find(|account| account.id == account_id))
-        });
+    for account in accounts {
         let Some(raw) = account
-            .and_then(|account| account.quota.as_ref())
+            .quota
+            .as_ref()
             .and_then(|quota| quota.raw_data.as_ref())
         else {
             continue;
@@ -5685,6 +5688,23 @@ fn metered_feature_model_patterns_for_pool(
     patterns
 }
 
+fn metered_feature_model_patterns_for_pool(
+    collection: &CodexLocalAccessCollection,
+    account_overrides: &HashMap<String, CodexAccount>,
+) -> HashMap<String, String> {
+    let persisted_accounts = codex_account::list_accounts_checked().ok();
+    let accounts = effective_sidecar_account_ids(collection)
+        .into_iter()
+        .filter_map(|account_id| {
+            account_overrides.get(&account_id).or_else(|| {
+                persisted_accounts
+                    .as_ref()
+                    .and_then(|accounts| accounts.iter().find(|account| account.id == account_id))
+            })
+        });
+    metered_feature_model_patterns_for_accounts(accounts)
+}
+
 fn implicit_metered_feature_exclusions(
     account: &CodexAccount,
     feature_patterns: &HashMap<String, String>,
@@ -5700,7 +5720,7 @@ fn implicit_metered_feature_exclusions(
         return Vec::new();
     };
     let present = metered_features_in_quota_raw(raw);
-    feature_patterns
+    let mut exclusions = feature_patterns
         .iter()
         .filter_map(|(feature, pattern)| {
             if present.contains(feature) {
@@ -5709,7 +5729,9 @@ fn implicit_metered_feature_exclusions(
                 Some(pattern.clone())
             }
         })
-        .collect()
+        .collect::<Vec<_>>();
+    exclusions.sort_unstable();
+    exclusions
 }
 
 fn sidecar_excluded_models_for_account(
@@ -11651,6 +11673,52 @@ fn adopt_sidecar_agent_identity_task(
     Ok(true)
 }
 
+fn complete_sidecar_account_snapshot<'a>(
+    accounts: &'a [CodexAccount],
+    collection: &CodexLocalAccessCollection,
+) -> Result<(Vec<String>, HashMap<&'a str, &'a CodexAccount>), String> {
+    let account_by_id = accounts
+        .iter()
+        .map(|account| (account.id.as_str(), account))
+        .collect::<HashMap<_, _>>();
+    let account_ids = effective_sidecar_account_ids(collection);
+    let missing_account_ids = account_ids
+        .iter()
+        .filter(|account_id| !account_by_id.contains_key(account_id.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !missing_account_ids.is_empty() {
+        return Err(format!(
+            "账号快照不完整: missing={}",
+            missing_account_ids.join(",")
+        ));
+    }
+    Ok((account_ids, account_by_id))
+}
+
+fn sidecar_model_exclusions_for_accounts(
+    accounts: &[CodexAccount],
+    collection: &CodexLocalAccessCollection,
+) -> Result<HashMap<String, Vec<String>>, String> {
+    let (account_ids, account_by_id) = complete_sidecar_account_snapshot(accounts, collection)?;
+    let metered_feature_patterns = metered_feature_model_patterns_for_accounts(
+        account_ids
+            .iter()
+            .filter_map(|account_id| account_by_id.get(account_id.as_str()).copied()),
+    );
+    let mut exclusions = HashMap::new();
+    for account_id in account_ids {
+        let Some(account) = account_by_id.get(account_id.as_str()).copied() else {
+            continue;
+        };
+        exclusions.insert(
+            account.id.clone(),
+            sidecar_excluded_models_for_account(account, collection, &metered_feature_patterns),
+        );
+    }
+    Ok(exclusions)
+}
+
 fn sync_sidecar_auth_file_for_account_with_task_source(
     account: &CodexAccount,
     prefer_account_task: bool,
@@ -11778,38 +11846,247 @@ fn sidecar_quota_reserve_snapshot_value(
     }))
 }
 
-fn sidecar_quota_reserve_state_value(collection: &CodexLocalAccessCollection) -> Value {
+fn unknown_sidecar_quota_reserve_snapshot_value(
+    collection: &CodexLocalAccessCollection,
+    account_id: &str,
+) -> Option<Value> {
+    let reserve = collection.bound_oauth_quota_reserve.as_ref()?;
+    let bound_account_id =
+        normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref())?;
+    if account_id != bound_account_id {
+        return None;
+    }
+
+    Some(json!({
+        "snapshotUpdatedAtUnixSeconds": Value::Null,
+        "hourlyRemainingPercent": Value::Null,
+        "weeklyRemainingPercent": Value::Null,
+        "hourlyWindowPresent": Value::Null,
+        "weeklyWindowPresent": Value::Null,
+        "hourlyThresholdPercent": reserve.hourly_percent,
+        "weeklyThresholdPercent": reserve.weekly_percent,
+    }))
+}
+
+fn sidecar_quota_reserve_state_value(
+    collection: &CodexLocalAccessCollection,
+    model_exclusions: &HashMap<String, Vec<String>>,
+) -> Value {
     let mut accounts = Map::new();
+    for account_id in effective_sidecar_account_ids(collection) {
+        let Some(excluded_models) = model_exclusions.get(&account_id) else {
+            continue;
+        };
+        let mut snapshot = codex_account::load_account(&account_id)
+            .and_then(|account| sidecar_quota_reserve_snapshot_value(collection, &account))
+            .and_then(|value| value.as_object().cloned())
+            .unwrap_or_default();
+        snapshot.insert("modelExclusions".to_string(), json!(excluded_models));
+        accounts.insert(account_id, Value::Object(snapshot));
+    }
     if let Some(account_id) =
         normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref())
     {
-        if let Some(account) = codex_account::load_account(&account_id) {
-            if let Some(snapshot) = sidecar_quota_reserve_snapshot_value(collection, &account) {
-                accounts.insert(account_id, snapshot);
+        if !accounts.contains_key(&account_id) {
+            if let Some(account) = codex_account::load_account(&account_id) {
+                if let Some(snapshot) = sidecar_quota_reserve_snapshot_value(collection, &account) {
+                    accounts.insert(account_id, snapshot);
+                }
             }
         }
     }
     json!({ "accounts": accounts })
 }
 
-fn write_sidecar_quota_reserve_state(
-    collection: &CodexLocalAccessCollection,
-) -> Result<PathBuf, String> {
-    let base_dir = local_access_sidecar_dir()?;
-    write_sidecar_quota_reserve_state_in_dir(collection, &base_dir)
-}
-
 fn write_sidecar_quota_reserve_state_in_dir(
     collection: &CodexLocalAccessCollection,
+    model_exclusions: &HashMap<String, Vec<String>>,
     base_dir: &Path,
-) -> Result<PathBuf, String> {
+) -> Result<(PathBuf, bool), String> {
     std::fs::create_dir_all(&base_dir)
         .map_err(|error| format!("创建 API 服务 sidecar 目录失败: {}", error))?;
     let path = sidecar_quota_reserve_path(&base_dir);
-    let content = serde_json::to_string_pretty(&sidecar_quota_reserve_state_value(collection))
-        .map_err(|error| format!("序列化 OAuth 保留额度快照失败: {}", error))?;
-    write_string_atomic_if_changed(&path, &content)?;
-    Ok(path)
+    let content = serde_json::to_string_pretty(&sidecar_quota_reserve_state_value(
+        collection,
+        model_exclusions,
+    ))
+    .map_err(|error| format!("序列化 sidecar 运行时账号状态失败: {}", error))?;
+    let changed = write_string_atomic_if_changed(&path, &content)?;
+    Ok((path, changed))
+}
+
+fn valid_sidecar_runtime_model_exclusions(account_state: Option<&Value>) -> Option<Vec<String>> {
+    let values = account_state?
+        .as_object()?
+        .get("modelExclusions")?
+        .as_array()?;
+    let mut exclusions = Vec::with_capacity(values.len());
+    for value in values {
+        let exclusion = value.as_str()?;
+        if exclusion.trim().is_empty() {
+            return None;
+        }
+        exclusions.push(exclusion.to_string());
+    }
+    Some(exclusions)
+}
+
+fn patch_sidecar_runtime_account_state_for_incomplete_snapshot_in_dir(
+    accounts: &[CodexAccount],
+    collection: &CodexLocalAccessCollection,
+    base_dir: &Path,
+) -> Result<bool, String> {
+    std::fs::create_dir_all(base_dir)
+        .map_err(|error| format!("创建 API 服务 sidecar 目录失败: {}", error))?;
+    let path = sidecar_quota_reserve_path(base_dir);
+    let mut state = match fs::read_to_string(&path) {
+        Ok(content) => serde_json::from_str::<Value>(&content).map_err(|error| {
+            format!(
+                "解析 sidecar 运行时账号状态失败: path={}, error={}",
+                path.display(),
+                error
+            )
+        })?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            json!({ "accounts": {} })
+        }
+        Err(error) => {
+            return Err(format!(
+                "读取 sidecar 运行时账号状态失败: path={}, error={}",
+                path.display(),
+                error
+            ))
+        }
+    };
+    let state = state
+        .as_object_mut()
+        .ok_or_else(|| "sidecar 运行时账号状态不是 JSON 对象".to_string())?;
+    let accounts_value = state
+        .entry("accounts".to_string())
+        .or_insert_with(|| Value::Object(Map::new()));
+    let state_accounts = accounts_value
+        .as_object_mut()
+        .ok_or_else(|| "sidecar 运行时账号状态 accounts 不是 JSON 对象".to_string())?;
+
+    let account_by_id = accounts
+        .iter()
+        .map(|account| (account.id.as_str(), account))
+        .collect::<HashMap<_, _>>();
+    // Metered-feature model rules are discovered across the whole pool. If any
+    // effective account is missing, every account must stay closed until a
+    // complete snapshot can authoritatively replace this state.
+    for account_id in effective_sidecar_account_ids(collection) {
+        let previous = valid_sidecar_runtime_model_exclusions(state_accounts.get(&account_id));
+        let tightened = match previous {
+            Some(mut exclusions) => {
+                if !exclusions.iter().any(|exclusion| exclusion.trim() == "*") {
+                    exclusions.push("*".to_string());
+                }
+                exclusions
+            }
+            None => vec!["*".to_string()],
+        };
+        let account_state = state_accounts
+            .entry(account_id)
+            .or_insert_with(|| Value::Object(Map::new()));
+        if !account_state.is_object() {
+            *account_state = Value::Object(Map::new());
+        }
+        account_state
+            .as_object_mut()
+            .expect("account state was normalized to an object")
+            .insert("modelExclusions".to_string(), json!(tightened));
+    }
+
+    if let Some(bound_account_id) =
+        normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref())
+    {
+        if collection.bound_oauth_quota_reserve.is_some() {
+            let snapshot = account_by_id
+                .get(bound_account_id.as_str())
+                .copied()
+                .and_then(|account| {
+                    if fresh_quota_for_bound_oauth_reserve(account).is_some() {
+                        sidecar_quota_reserve_snapshot_value(collection, account)
+                    } else {
+                        unknown_sidecar_quota_reserve_snapshot_value(collection, &bound_account_id)
+                    }
+                })
+                .or_else(|| {
+                    unknown_sidecar_quota_reserve_snapshot_value(collection, &bound_account_id)
+                })
+                .ok_or_else(|| "绑定 OAuth 保留额度配置无效".to_string())?;
+            let snapshot = snapshot
+                .as_object()
+                .ok_or_else(|| "绑定 OAuth 保留额度快照不是 JSON 对象".to_string())?;
+            let bound_value = state_accounts
+                .entry(bound_account_id)
+                .or_insert_with(|| Value::Object(Map::new()));
+            if !bound_value.is_object() {
+                *bound_value = Value::Object(Map::new());
+            }
+            let bound_state = bound_value
+                .as_object_mut()
+                .expect("bound account state was normalized to an object");
+            for field in [
+                "snapshotUpdatedAtUnixSeconds",
+                "hourlyRemainingPercent",
+                "weeklyRemainingPercent",
+                "hourlyWindowPresent",
+                "weeklyWindowPresent",
+                "hourlyThresholdPercent",
+                "weeklyThresholdPercent",
+            ] {
+                if let Some(value) = snapshot.get(field) {
+                    bound_state.insert(field.to_string(), value.clone());
+                }
+            }
+        }
+    }
+
+    let content = serde_json::to_string_pretty(&Value::Object(state.clone()))
+        .map_err(|error| format!("序列化 sidecar 运行时账号状态失败: {}", error))?;
+    write_string_atomic_if_changed(&path, &content)
+}
+
+fn sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+    account_id: &str,
+    accounts: &[CodexAccount],
+    collection: &CodexLocalAccessCollection,
+    base_dir: &Path,
+) -> Result<Option<bool>, String> {
+    let account_id = account_id.trim();
+    let is_effective_account = effective_sidecar_account_ids(collection)
+        .iter()
+        .any(|candidate| candidate == account_id);
+    let is_bound_account =
+        normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref()).as_deref()
+            == Some(account_id);
+    if collection_gateway_mode(collection) != CodexLocalAccessGatewayMode::Sidecar
+        || (!is_effective_account && !is_bound_account)
+    {
+        return Ok(None);
+    }
+
+    let model_exclusions = match sidecar_model_exclusions_for_accounts(accounts, collection) {
+        Ok(model_exclusions) => model_exclusions,
+        Err(error) => {
+            return match patch_sidecar_runtime_account_state_for_incomplete_snapshot_in_dir(
+                accounts, collection, base_dir,
+            ) {
+                Ok(_) => Err(format!(
+                    "{}; 已按不完整快照只收紧 sidecar 运行时账号状态",
+                    error
+                )),
+                Err(patch_error) => Err(format!(
+                    "{}; 按不完整快照收紧 sidecar 运行时账号状态失败: {}",
+                    error, patch_error
+                )),
+            };
+        }
+    };
+    write_sidecar_quota_reserve_state_in_dir(collection, &model_exclusions, base_dir)
+        .map(|(_, changed)| Some(changed))
 }
 
 fn sidecar_quota_pool_window_value(
@@ -12486,6 +12763,8 @@ fn prepare_sidecar_launch_config_in_dir_sync(
     let mut manifest_accounts = Vec::new();
     let mut codex_keys = Vec::new();
     let mut expected_auth_files = HashSet::new();
+    let mut runtime_model_exclusions = HashMap::new();
+    let state_guard = lock_sidecar_runtime_account_state_sync()?;
     let metered_feature_patterns =
         metered_feature_model_patterns_for_pool(collection, &account_overrides);
     for (index, account_id) in effective_sidecar_account_ids(collection)
@@ -12537,6 +12816,14 @@ fn prepare_sidecar_launch_config_in_dir_sync(
                 &metered_feature_patterns,
             ) {
                 codex_keys.push(config_value);
+                runtime_model_exclusions.insert(
+                    account.id.clone(),
+                    sidecar_excluded_models_for_account(
+                        &account,
+                        collection,
+                        &metered_feature_patterns,
+                    ),
+                );
                 manifest_accounts.push(sidecar_account_manifest_value(&account, None, collection));
             } else {
                 // Base-URL rejection is already logged inside resolve/config builders.
@@ -12571,6 +12858,10 @@ fn prepare_sidecar_launch_config_in_dir_sync(
             .map_err(|e| format!("序列化 sidecar Codex OAuth 认证失败: {}", e))?;
         write_string_atomic_if_changed(&auth_path, &auth_content)?;
         harden_sidecar_auth_file_permissions(&auth_path)?;
+        runtime_model_exclusions.insert(
+            account.id.clone(),
+            sidecar_excluded_models_for_account(&account, collection, &metered_feature_patterns),
+        );
         manifest_accounts.push(sidecar_account_manifest_value(
             &account,
             Some(&file_name),
@@ -12729,7 +13020,8 @@ fn prepare_sidecar_launch_config_in_dir_sync(
     write_string_atomic_if_changed(&config_path, &config_content)?;
     write_string_atomic_if_changed(&manifest_path, &manifest_content)?;
     write_sidecar_api_key_priority_state_in_dir(collection, &base_dir)?;
-    write_sidecar_quota_reserve_state_in_dir(collection, &base_dir)?;
+    write_sidecar_quota_reserve_state_in_dir(collection, &runtime_model_exclusions, &base_dir)?;
+    drop(state_guard);
     write_sidecar_quota_pool_state_in_dir(collection, &base_dir)?;
 
     Ok(SidecarLaunchConfig {
@@ -16167,30 +16459,77 @@ pub async fn reevaluate_bound_oauth_quota_reserve_after_refresh(
                         == Some(account_id)
             })
             .cloned();
-        if collection.is_some() {
+        let active_collection = runtime.collection.clone();
+        let refreshed_account_in_sidecar = active_collection.as_ref().is_some_and(|collection| {
+            collection_gateway_mode(collection) == CodexLocalAccessGatewayMode::Sidecar
+                && effective_sidecar_account_ids(collection)
+                    .iter()
+                    .any(|candidate| candidate == account_id)
+        });
+        if collection.is_some() || refreshed_account_in_sidecar {
             runtime.prepared_accounts.remove(account_id);
         }
-        (collection, runtime.collection.clone())
+        (collection, active_collection)
     };
 
     if let Some(collection) = active_collection {
         if collection_gateway_mode(&collection) == CodexLocalAccessGatewayMode::Sidecar {
+            if refresh_succeeded || matching_collection.is_some() {
+                let state_sync_result = (|| {
+                    let _state_guard = lock_sidecar_runtime_account_state_sync()?;
+                    load_collection_from_disk().and_then(|latest_collection| {
+                        let latest_collection = latest_collection.ok_or_else(|| {
+                            "API 服务配置不存在，保留现有 sidecar 运行时账号状态".to_string()
+                        })?;
+                        let base_dir = local_access_sidecar_dir()?;
+                        let accounts = match codex_account::list_accounts_checked() {
+                            Ok(accounts) => accounts,
+                            Err(error) => {
+                                return match patch_sidecar_runtime_account_state_for_incomplete_snapshot_in_dir(
+                                    &[],
+                                    &latest_collection,
+                                    &base_dir,
+                                ) {
+                                    Ok(_) => Err(format!(
+                                        "{}; 已将不可读账号快照按 fail-closed 规则写入 sidecar 运行时状态",
+                                        error
+                                    )),
+                                    Err(patch_error) => Err(format!(
+                                        "{}; 将不可读账号快照按 fail-closed 规则写入 sidecar 运行时状态失败: {}",
+                                        error, patch_error
+                                    )),
+                                };
+                            }
+                        };
+                        sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+                            account_id,
+                            &accounts,
+                            &latest_collection,
+                            &base_dir,
+                        )
+                    })
+                })();
+                match state_sync_result {
+                    Ok(Some(true)) => logger::log_codex_api_info(&format!(
+                        "[CodexLocalAccess][sidecar] 配额刷新后热同步运行时账号状态: account_id={}",
+                        account_id
+                    )),
+                    Ok(Some(false)) | Ok(None) => {}
+                    Err(error) => {
+                        if matching_collection.is_some() {
+                            let mut runtime = gateway_runtime().lock().await;
+                            runtime.last_error = Some(error.clone());
+                        }
+                        logger::log_codex_api_warn(&format!(
+                            "[CodexLocalAccess][sidecar] 配额刷新后同步运行时账号状态失败: account_id={}, error={}",
+                            account_id, error
+                        ));
+                    }
+                }
+            }
             if let Err(error) = write_sidecar_quota_pool_state(&collection) {
                 logger::log_codex_api_warn(&format!(
                     "[CodexLocalAccess] API 服务额度池快照热更新失败: {}",
-                    error
-                ));
-            }
-        }
-    }
-
-    if let Some(collection) = matching_collection {
-        if collection_gateway_mode(&collection) == CodexLocalAccessGatewayMode::Sidecar {
-            if let Err(error) = write_sidecar_quota_reserve_state(&collection) {
-                let mut runtime = gateway_runtime().lock().await;
-                runtime.last_error = Some(error.clone());
-                logger::log_codex_api_warn(&format!(
-                    "[CodexLocalAccess] 绑定 OAuth 配额快照热更新失败: {}",
                     error
                 ));
             }
@@ -27345,19 +27684,20 @@ mod tests {
         collect_local_access_profile_takeover_dirs_from_store, compare_routing_candidates,
         count_request_logs_for_model_ids, default_codex_model_ids, effective_api_key_account_ids,
         empty_stats_snapshot, extract_usage_capture, filter_bound_oauth_quota_reserve_account,
-        filter_websocket_client_message, insert_local_access_usage_event,
-        inspect_local_access_profile_attachment, inspect_local_access_profile_config,
-        is_codex_local_access_auth_text, is_codex_local_access_config_for_api_key,
-        is_codex_oauth_auth_text, is_image_generation_capability_error,
-        is_local_access_eligible_account, is_local_access_gateway_base_url,
-        is_provider_gateway_eligible_account, is_responses_completion_event,
-        is_stream_incomplete_error_message, is_upstream_response_failed_error_message,
-        legacy_stream_error_category, local_access_chat_completions_url,
-        local_access_ineligible_reason, lookup_codex_model_provider_base_url_in_dir,
-        macos_proxy_url_from_scutil_map, max_credential_attempts_for_strategy,
-        merge_collection_and_account_excluded_models, model_pricing,
-        model_provider_direct_test_client_model, model_provider_test_uses_provider_gateway,
-        normalize_account_id_list, normalize_account_model_rules, normalize_collection_api_keys,
+        filter_websocket_client_message, implicit_metered_feature_exclusions,
+        insert_local_access_usage_event, inspect_local_access_profile_attachment,
+        inspect_local_access_profile_config, is_codex_local_access_auth_text,
+        is_codex_local_access_config_for_api_key, is_codex_oauth_auth_text,
+        is_image_generation_capability_error, is_local_access_eligible_account,
+        is_local_access_gateway_base_url, is_provider_gateway_eligible_account,
+        is_responses_completion_event, is_stream_incomplete_error_message,
+        is_upstream_response_failed_error_message, legacy_stream_error_category,
+        local_access_chat_completions_url, local_access_ineligible_reason,
+        lookup_codex_model_provider_base_url_in_dir, macos_proxy_url_from_scutil_map,
+        max_credential_attempts_for_strategy, merge_collection_and_account_excluded_models,
+        model_pricing, model_provider_direct_test_client_model,
+        model_provider_test_uses_provider_gateway, normalize_account_id_list,
+        normalize_account_model_rules, normalize_collection_api_keys,
         normalize_custom_routing_rules, normalized_sidecar_error_category,
         open_local_access_logs_db_once, parse_codex_retry_after,
         parse_responses_payload_from_upstream, parse_websocket_upstream_error,
@@ -27369,8 +27709,8 @@ mod tests {
         provider_gateway_default_model_for_account,
         provider_gateway_image_generation_mode_for_account, provider_gateway_model_slots,
         provider_gateway_models_for_account, provider_model_slots_need_upstream_rewrite,
-        read_http_request, read_request_log_reprice_batch, recompute_time_windows,
-        recover_invalid_stats_file, remove_account_refs_from_collection,
+        quota_disallowed_model_patterns, read_http_request, read_request_log_reprice_batch,
+        recompute_time_windows, recover_invalid_stats_file, remove_account_refs_from_collection,
         remove_codex_local_access_config, reprice_request_logs_for_collection,
         request_image_generation_mode, request_logs_has_column, request_ordered_account_ids,
         resolve_collection_api_key, resolve_effective_model_pricing, resolve_plan_rank,
@@ -27386,9 +27726,9 @@ mod tests {
         sidecar_auth_file_name, sidecar_auth_json_for_account, sidecar_auths_dir,
         sidecar_client_api_keys, sidecar_codex_api_key_auth_id, sidecar_codex_key_config_value,
         sidecar_config_fingerprint, sidecar_local_account_usable_for_start,
-        sidecar_payload_default_service_tier, sidecar_quota_reserve_snapshot_value,
-        sidecar_routing_strategy_value, sidecar_stable_id, supported_codex_model_ids,
-        system_proxy_target_scheme, system_proxy_value_url,
+        sidecar_payload_default_service_tier, sidecar_quota_reserve_path,
+        sidecar_quota_reserve_snapshot_value, sidecar_routing_strategy_value, sidecar_stable_id,
+        supported_codex_model_ids, system_proxy_target_scheme, system_proxy_value_url,
         tool_declares_image_generation_capability, usage_event_from_row,
         validate_api_key_account_scope_update, validate_client_model_visible,
         validate_loaded_local_access_bound_oauth_account, visible_codex_model_ids_for_api_key,
@@ -27438,7 +27778,7 @@ mod tests {
     use std::{
         collections::{HashMap, HashSet},
         fs,
-        path::PathBuf,
+        path::{Path, PathBuf},
     };
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::{TcpListener, TcpStream};
@@ -29337,6 +29677,588 @@ wire_api = "responses"
     }
 
     #[test]
+    fn incomplete_pool_tightens_models_and_patches_bound_quota_in_one_rmw() {
+        let bound_account_id = "bound-rmw";
+        let missing_account_id = "missing-rmw";
+        let mut collection = test_local_access_collection(vec![
+            bound_account_id.to_string(),
+            missing_account_id.to_string(),
+        ]);
+        collection.bound_oauth_account_id = Some(bound_account_id.to_string());
+        collection.bound_oauth_quota_reserve = Some(CodexLocalAccessQuotaReserve {
+            hourly_percent: 20,
+            weekly_percent: 10,
+        });
+
+        let dir = make_temp_dir("codex-bound-quota-rmw");
+        let state_path = sidecar_quota_reserve_path(&dir);
+        let initial = json!({
+            "stateExtension": { "keep": true },
+            "accounts": {
+                (bound_account_id): {
+                    "snapshotUpdatedAtUnixSeconds": 1,
+                    "hourlyRemainingPercent": 99,
+                    "weeklyRemainingPercent": 98,
+                    "hourlyWindowPresent": true,
+                    "weeklyWindowPresent": true,
+                    "hourlyThresholdPercent": 1,
+                    "weeklyThresholdPercent": 1,
+                    "modelExclusions": [],
+                    "accountExtension": { "keep": "bound" }
+                },
+                (missing_account_id): {
+                    "modelExclusions": ["gpt-5.3-codex-spark"],
+                    "accountExtension": { "keep": "peer" }
+                },
+                "unrelated-rmw": {
+                    "modelExclusions": ["gpt-5.2"],
+                    "accountExtension": { "keep": "unrelated" }
+                }
+            }
+        });
+        fs::write(
+            &state_path,
+            serde_json::to_string_pretty(&initial).expect("serialize initial runtime state"),
+        )
+        .expect("write initial runtime state");
+
+        let account =
+            test_oauth_account_with_quota(bound_account_id, 75, 40, Some(true), Some(false));
+        bound_oauth_quota_refresh_failures()
+            .lock()
+            .unwrap()
+            .remove(bound_account_id);
+        let error = super::sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+            bound_account_id,
+            &[account.clone()],
+            &collection,
+            &dir,
+        )
+        .expect_err("incomplete pool should tighten exclusions and patch fresh bound quota");
+        assert!(error.contains(missing_account_id));
+
+        let read_state = || {
+            serde_json::from_str::<Value>(
+                &fs::read_to_string(&state_path).expect("read patched runtime state"),
+            )
+            .expect("parse patched runtime state")
+        };
+        let fresh = read_state();
+        assert_eq!(
+            fresh["accounts"][bound_account_id]["hourlyRemainingPercent"],
+            json!(75)
+        );
+        assert_eq!(
+            fresh["accounts"][bound_account_id]["weeklyRemainingPercent"],
+            json!(40)
+        );
+        assert_eq!(
+            fresh["accounts"][bound_account_id]["hourlyWindowPresent"],
+            json!(true)
+        );
+        assert_eq!(
+            fresh["accounts"][bound_account_id]["weeklyWindowPresent"],
+            json!(false)
+        );
+        assert_eq!(
+            fresh["accounts"][bound_account_id]["hourlyThresholdPercent"],
+            json!(20)
+        );
+        assert_eq!(
+            fresh["accounts"][bound_account_id]["weeklyThresholdPercent"],
+            json!(10)
+        );
+        assert_eq!(
+            fresh["accounts"][bound_account_id]["modelExclusions"],
+            json!(["*"])
+        );
+        assert_eq!(
+            fresh["accounts"][bound_account_id]["accountExtension"],
+            initial["accounts"][bound_account_id]["accountExtension"]
+        );
+        assert_eq!(
+            fresh["accounts"][missing_account_id]["modelExclusions"],
+            json!(["gpt-5.3-codex-spark", "*"])
+        );
+        assert_eq!(
+            fresh["accounts"][missing_account_id]["accountExtension"],
+            initial["accounts"][missing_account_id]["accountExtension"]
+        );
+        assert_eq!(
+            fresh["accounts"]["unrelated-rmw"],
+            initial["accounts"]["unrelated-rmw"]
+        );
+        assert_eq!(fresh["stateExtension"], initial["stateExtension"]);
+
+        bound_oauth_quota_refresh_failures()
+            .lock()
+            .unwrap()
+            .insert(bound_account_id.to_string());
+        super::sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+            bound_account_id,
+            &[account],
+            &collection,
+            &dir,
+        )
+        .expect_err("failed bound refresh should write an unknown quota snapshot");
+        let failed = read_state();
+        for field in [
+            "snapshotUpdatedAtUnixSeconds",
+            "hourlyRemainingPercent",
+            "weeklyRemainingPercent",
+            "hourlyWindowPresent",
+            "weeklyWindowPresent",
+        ] {
+            assert_eq!(failed["accounts"][bound_account_id][field], Value::Null);
+        }
+        assert_eq!(
+            failed["accounts"][bound_account_id]["modelExclusions"],
+            json!(["*"])
+        );
+        assert_eq!(
+            failed["accounts"][missing_account_id]["modelExclusions"],
+            json!(["gpt-5.3-codex-spark", "*"])
+        );
+
+        bound_oauth_quota_refresh_failures()
+            .lock()
+            .unwrap()
+            .remove(bound_account_id);
+        super::sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+            bound_account_id,
+            &[],
+            &collection,
+            &dir,
+        )
+        .expect_err("unreadable bound account should keep the unknown quota snapshot");
+        let unreadable = read_state();
+        assert_eq!(
+            unreadable["accounts"][bound_account_id]["snapshotUpdatedAtUnixSeconds"],
+            Value::Null
+        );
+        assert_eq!(
+            unreadable["accounts"][bound_account_id]["modelExclusions"],
+            json!(["*"])
+        );
+        assert_eq!(
+            unreadable["accounts"]["unrelated-rmw"],
+            initial["accounts"]["unrelated-rmw"]
+        );
+
+        fs::remove_dir_all(dir).expect("cleanup bound quota RMW state");
+    }
+
+    #[test]
+    fn incomplete_pool_blocks_all_accounts_until_complete_snapshot_replaces_state() {
+        let mut account_a = test_account_with_plan("pro");
+        account_a.id = "partial-tighten-a".to_string();
+        account_a.quota = Some(test_spark_quota(true));
+        let mut account_b = test_account_with_plan("plus");
+        account_b.id = "partial-tighten-b".to_string();
+        account_b.quota = Some(test_spark_quota(true));
+        let collection =
+            test_local_access_collection(vec![account_a.id.clone(), account_b.id.clone()]);
+        let dir = make_temp_dir("codex-partial-tighten-runtime-state");
+        super::prepare_sidecar_launch_config_in_dir_sync(
+            &collection,
+            dir.clone(),
+            HashMap::new(),
+            None,
+            HashMap::from([
+                (account_a.id.clone(), account_a.clone()),
+                (account_b.id.clone(), account_b.clone()),
+            ]),
+            None,
+        )
+        .expect("prepare initial authoritative empty exclusions");
+
+        let state_path = sidecar_quota_reserve_path(&dir);
+        assert_eq!(
+            sidecar_runtime_state_model_exclusions(&state_path, &account_a.id),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            sidecar_runtime_state_model_exclusions(&state_path, &account_b.id),
+            Vec::<String>::new()
+        );
+
+        account_a.quota = Some(test_spark_quota(false));
+        let error = super::sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+            &account_a.id,
+            &[account_a.clone()],
+            &collection,
+            &dir,
+        )
+        .expect_err("partial snapshot must tighten known and missing accounts");
+        assert!(error.contains(&account_b.id));
+        assert_eq!(
+            sidecar_runtime_state_model_exclusions(&state_path, &account_a.id),
+            vec!["*".to_string()]
+        );
+        assert_eq!(
+            sidecar_runtime_state_model_exclusions(&state_path, &account_b.id),
+            vec!["*".to_string()]
+        );
+
+        account_a.quota = Some(test_spark_quota(true));
+        super::sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+            &account_a.id,
+            &[account_a.clone()],
+            &collection,
+            &dir,
+        )
+        .expect_err("partial recovery must not remove an earlier exclusion");
+        assert_eq!(
+            sidecar_runtime_state_model_exclusions(&state_path, &account_a.id),
+            vec!["*".to_string()]
+        );
+        assert_eq!(
+            sidecar_runtime_state_model_exclusions(&state_path, &account_b.id),
+            vec!["*".to_string()]
+        );
+
+        assert_eq!(
+            super::sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+                &account_a.id,
+                &[account_a.clone(), account_b.clone()],
+                &collection,
+                &dir,
+            )
+            .expect("complete snapshot should replace stale fail-closed exclusions"),
+            Some(true)
+        );
+        assert_eq!(
+            sidecar_runtime_state_model_exclusions(&state_path, &account_a.id),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            sidecar_runtime_state_model_exclusions(&state_path, &account_b.id),
+            Vec::<String>::new()
+        );
+
+        fs::remove_dir_all(dir).expect("cleanup partial tighten runtime state");
+    }
+
+    #[test]
+    fn quota_refresh_runtime_state_removes_only_dynamic_spark_exclusion() {
+        let mut account = test_account_with_plan("pro");
+        account.id = "quota-runtime-state".to_string();
+        account.quota = Some(test_spark_quota(false));
+
+        let mut collection = test_local_access_collection(vec![account.id.clone()]);
+        collection.excluded_models = vec!["gpt-5.2".to_string()];
+        collection.account_model_rules = vec![CodexLocalAccessAccountModelRule {
+            account_id: account.id.clone(),
+            excluded_models: vec!["gpt-5.4-mini".to_string()],
+        }];
+
+        let dir = make_temp_dir("codex-quota-runtime-state");
+        super::prepare_sidecar_launch_config_in_dir_sync(
+            &collection,
+            dir.clone(),
+            HashMap::new(),
+            None,
+            HashMap::from([(account.id.clone(), account.clone())]),
+            None,
+        )
+        .expect("prepare sidecar state with exhausted Spark quota");
+
+        let auth_path = sidecar_auths_dir(&dir).join(sidecar_auth_file_name(&account.id));
+        let state_path = sidecar_quota_reserve_path(&dir);
+        let before = sidecar_runtime_state_model_exclusions(&state_path, &account.id);
+        assert!(before.contains(&"gpt-5.3-codex-spark".to_string()));
+        assert!(before.contains(&"gpt-5.2".to_string()));
+        assert!(before.contains(&"gpt-5.4-mini".to_string()));
+
+        let error = super::sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+            &account.id,
+            &[],
+            &collection,
+            &dir,
+        )
+        .expect_err("runtime state sync must reject an incomplete pool snapshot");
+        assert!(error.contains(&account.id));
+        let after_incomplete = sidecar_runtime_state_model_exclusions(&state_path, &account.id);
+        assert!(after_incomplete.contains(&"gpt-5.3-codex-spark".to_string()));
+        assert!(after_incomplete.contains(&"gpt-5.2".to_string()));
+        assert!(after_incomplete.contains(&"gpt-5.4-mini".to_string()));
+        assert!(after_incomplete.contains(&"*".to_string()));
+
+        let mut auth: Value = serde_json::from_str(
+            &fs::read_to_string(&auth_path).expect("read auth before sidecar token update"),
+        )
+        .expect("parse auth before sidecar token update");
+        auth["access_token"] = json!("sidecar-refreshed-access-token");
+        auth["refresh_token"] = json!("sidecar-refreshed-refresh-token");
+        auth["task_id"] = json!("sidecar-runtime-task");
+        fs::write(
+            &auth_path,
+            serde_json::to_string_pretty(&auth).expect("serialize sidecar-updated auth"),
+        )
+        .expect("write sidecar-updated auth");
+        let sidecar_auth = fs::read(&auth_path).expect("capture sidecar-updated auth");
+
+        account.quota = Some(test_spark_quota(true));
+        assert_eq!(
+            super::sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+                &account.id,
+                &[account.clone()],
+                &collection,
+                &dir,
+            )
+            .expect("hot-sync refreshed runtime state"),
+            Some(true)
+        );
+
+        let after = sidecar_runtime_state_model_exclusions(&state_path, &account.id);
+        assert!(!after.contains(&"gpt-5.3-codex-spark".to_string()));
+        assert!(after.contains(&"gpt-5.2".to_string()));
+        assert!(after.contains(&"gpt-5.4-mini".to_string()));
+        assert_eq!(
+            fs::read(&auth_path).expect("read auth after runtime state sync"),
+            sidecar_auth,
+            "quota-derived model exclusion refresh must never rewrite the auth projection"
+        );
+        assert_eq!(
+            super::sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+                &account.id,
+                &[account.clone()],
+                &collection,
+                &dir,
+            )
+            .expect("unchanged runtime state should not be rewritten"),
+            Some(false)
+        );
+
+        fs::remove_file(&auth_path).expect("remove auth projection");
+        assert_eq!(
+            super::sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+                &account.id,
+                &[account.clone()],
+                &collection,
+                &dir,
+            )
+            .expect("runtime state sync should not recreate a missing auth"),
+            Some(false)
+        );
+        assert!(!auth_path.exists());
+
+        fs::remove_dir_all(dir).expect("cleanup quota runtime state config");
+    }
+
+    #[test]
+    fn quota_refresh_runtime_state_updates_peer_metered_feature_exclusions() {
+        let quota_without_metered_features = || {
+            let mut quota = test_spark_quota(true);
+            quota.raw_data = Some(json!({ "additional_rate_limits": [] }));
+            quota
+        };
+        let mut entitled = test_account_with_plan("pro");
+        entitled.id = "quota-runtime-state-entitled".to_string();
+        entitled.quota = Some(quota_without_metered_features());
+        let mut peer = test_account_with_plan("plus");
+        peer.id = "quota-runtime-state-peer".to_string();
+        peer.quota = Some(quota_without_metered_features());
+        let collection = test_local_access_collection(vec![entitled.id.clone(), peer.id.clone()]);
+        let dir = make_temp_dir("codex-quota-runtime-state-peers");
+        super::prepare_sidecar_launch_config_in_dir_sync(
+            &collection,
+            dir.clone(),
+            HashMap::new(),
+            None,
+            HashMap::from([
+                (entitled.id.clone(), entitled.clone()),
+                (peer.id.clone(), peer.clone()),
+            ]),
+            None,
+        )
+        .expect("prepare sidecar peer runtime state");
+
+        let peer_auth_path = sidecar_auths_dir(&dir).join(sidecar_auth_file_name(&peer.id));
+        let state_path = sidecar_quota_reserve_path(&dir);
+        let peer_excludes_spark = || {
+            sidecar_runtime_state_model_exclusions(&state_path, &peer.id)
+                .iter()
+                .any(|model| model.eq_ignore_ascii_case("gpt-5.3-codex-spark"))
+        };
+        assert!(!peer_excludes_spark());
+
+        let mut incomplete_peer = peer.clone();
+        incomplete_peer.quota = Some(test_spark_quota(false));
+        let error = super::sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+            &peer.id,
+            &[incomplete_peer],
+            &collection,
+            &dir,
+        )
+        .expect_err("an incomplete pool snapshot must fail closed");
+        assert!(error.contains(&entitled.id));
+        assert_eq!(
+            sidecar_runtime_state_model_exclusions(&state_path, &entitled.id),
+            vec!["*".to_string()]
+        );
+        assert_eq!(
+            sidecar_runtime_state_model_exclusions(&state_path, &peer.id),
+            vec!["*".to_string()]
+        );
+
+        let mut peer_auth: Value = serde_json::from_str(
+            &fs::read_to_string(&peer_auth_path).expect("read peer auth before token refresh"),
+        )
+        .expect("parse peer auth before token refresh");
+        peer_auth["access_token"] = json!("sidecar-refreshed-access-token");
+        peer_auth["refresh_token"] = json!("sidecar-refreshed-refresh-token");
+        fs::write(
+            &peer_auth_path,
+            serde_json::to_string_pretty(&peer_auth).expect("serialize refreshed peer auth"),
+        )
+        .expect("write refreshed peer auth");
+        let sidecar_peer_auth = fs::read(&peer_auth_path).expect("capture refreshed peer auth");
+
+        entitled.quota = Some(test_spark_quota(true));
+        let accounts = vec![entitled.clone(), peer.clone()];
+        assert_eq!(
+            super::sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+                &entitled.id,
+                &accounts,
+                &collection,
+                &dir,
+            )
+            .expect("sync newly discovered metered feature"),
+            Some(true)
+        );
+        assert!(peer_excludes_spark());
+        assert_eq!(
+            fs::read(&peer_auth_path).expect("read peer auth after state sync"),
+            sidecar_peer_auth
+        );
+
+        entitled.quota = Some(quota_without_metered_features());
+        let accounts = vec![entitled, peer.clone()];
+        assert_eq!(
+            super::sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+                &peer.id,
+                &accounts,
+                &collection,
+                &dir,
+            )
+            .expect("sync removed metered feature"),
+            Some(true)
+        );
+        assert!(!peer_excludes_spark());
+        assert_eq!(
+            sidecar_runtime_state_model_exclusions(&state_path, &peer.id),
+            Vec::<String>::new(),
+            "an explicit empty list is the authoritative allow state"
+        );
+        assert_eq!(
+            fs::read(&peer_auth_path).expect("read peer auth after feature removal"),
+            sidecar_peer_auth
+        );
+
+        fs::remove_dir_all(dir).expect("cleanup peer quota runtime state");
+    }
+
+    #[test]
+    fn quota_refresh_runtime_state_preserves_agent_identity_task() {
+        let mut account = test_account_with_plan("plus");
+        account.id = "agent-quota-runtime-state".to_string();
+        account.tokens.access_token.clear();
+        account.agent_identity = Some(CodexAgentIdentity {
+            agent_runtime_id: "runtime-state".to_string(),
+            agent_private_key: "private-key-state".to_string(),
+            task_id: Some("task-old".to_string()),
+            account_id: "team-state".to_string(),
+            chatgpt_user_id: "user-state".to_string(),
+            email: Some(account.email.clone()),
+            plan_type: Some("plus".to_string()),
+            chatgpt_account_is_fedramp: false,
+        });
+        account.quota = Some(test_spark_quota(false));
+        let collection = test_local_access_collection(vec![account.id.clone()]);
+        let dir = make_temp_dir("codex-agent-quota-runtime-state");
+        super::prepare_sidecar_launch_config_in_dir_sync(
+            &collection,
+            dir.clone(),
+            HashMap::new(),
+            None,
+            HashMap::from([(account.id.clone(), account.clone())]),
+            None,
+        )
+        .expect("prepare Agent Identity sidecar auth");
+
+        let auth_path = sidecar_auths_dir(&dir).join(sidecar_auth_file_name(&account.id));
+        let mut auth: Value = serde_json::from_str(
+            &fs::read_to_string(&auth_path).expect("read Agent Identity auth"),
+        )
+        .expect("parse Agent Identity auth");
+        auth["task_id"] = json!("task-recovered");
+        fs::write(
+            &auth_path,
+            serde_json::to_string_pretty(&auth).expect("serialize recovered task auth"),
+        )
+        .expect("write recovered task auth");
+        let recovered_auth = fs::read(&auth_path).expect("capture recovered task auth");
+
+        account.quota = Some(test_spark_quota(true));
+        assert_eq!(
+            super::sync_sidecar_runtime_account_state_after_quota_refresh_in_dir(
+                &account.id,
+                &[account.clone()],
+                &collection,
+                &dir,
+            )
+            .expect("hot-sync Agent Identity runtime state"),
+            Some(true)
+        );
+        assert_eq!(
+            fs::read(&auth_path).expect("read Agent Identity auth after state sync"),
+            recovered_auth
+        );
+
+        fs::remove_dir_all(dir).expect("cleanup Agent Identity runtime state");
+    }
+
+    #[test]
+    fn quota_derived_model_exclusions_have_stable_order() {
+        let mut account = test_account_with_plan("pro");
+        let mut quota = test_spark_quota(true);
+        quota.raw_data = Some(json!({
+            "additional_rate_limits": [
+                {
+                    "limit_name": "z-model",
+                    "metered_feature": "feature_z",
+                    "rate_limit": { "allowed": false }
+                },
+                {
+                    "limit_name": "a-model",
+                    "metered_feature": "feature_a",
+                    "rate_limit": { "allowed": false }
+                }
+            ]
+        }));
+        account.quota = Some(quota);
+        assert_eq!(
+            quota_disallowed_model_patterns(&account),
+            vec!["a-model".to_string(), "z-model".to_string()]
+        );
+
+        account.quota = Some({
+            let mut quota = test_spark_quota(true);
+            quota.raw_data = Some(json!({ "additional_rate_limits": [] }));
+            quota
+        });
+        let feature_patterns = HashMap::from([
+            ("feature_z".to_string(), "z-model".to_string()),
+            ("feature_a".to_string(), "a-model".to_string()),
+        ]);
+        assert_eq!(
+            implicit_metered_feature_exclusions(&account, &feature_patterns),
+            vec!["a-model".to_string(), "z-model".to_string()]
+        );
+    }
+
+    #[test]
     fn scoped_api_key_pool_discovers_spark_entitlement_from_effective_accounts() {
         let mut plus = test_account_with_plan("plus");
         plus.id = "scoped-plus".to_string();
@@ -29417,6 +30339,23 @@ wire_api = "responses"
         fs::remove_dir_all(dir).expect("cleanup scoped sidecar config");
     }
 
+    fn sidecar_runtime_state_model_exclusions(path: &Path, account_id: &str) -> Vec<String> {
+        let state: Value = serde_json::from_str(
+            &fs::read_to_string(path).expect("read sidecar runtime account state"),
+        )
+        .expect("parse sidecar runtime account state");
+        state
+            .get("accounts")
+            .and_then(|accounts| accounts.get(account_id))
+            .and_then(|account| account.get("modelExclusions"))
+            .and_then(Value::as_array)
+            .expect("modelExclusions should be an array")
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect()
+    }
+
     fn make_temp_dir(prefix: &str) -> PathBuf {
         for _ in 0..10 {
             let dir = std::env::temp_dir().join(format!(
@@ -29444,6 +30383,29 @@ wire_api = "responses"
         );
         account.plan_type = Some(plan_type.to_string());
         account
+    }
+
+    fn test_spark_quota(allowed: bool) -> CodexQuota {
+        CodexQuota {
+            hourly_percentage: 100,
+            hourly_reset_time: None,
+            hourly_window_minutes: Some(300),
+            hourly_window_present: Some(true),
+            weekly_percentage: 100,
+            weekly_reset_time: None,
+            weekly_window_minutes: Some(10_080),
+            weekly_window_present: Some(true),
+            reset_credits_available: None,
+            reset_credits: Vec::new(),
+            reset_credits_next_expires_at: None,
+            raw_data: Some(json!({
+                "additional_rate_limits": [{
+                    "limit_name": "GPT-5.3-Codex-Spark",
+                    "metered_feature": "codex_spark",
+                    "rate_limit": { "allowed": allowed }
+                }]
+            })),
+        }
     }
 
     #[test]

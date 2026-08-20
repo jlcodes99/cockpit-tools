@@ -56,6 +56,48 @@ func TestGetModelsForClientReturnsClones(t *testing.T) {
 	}
 }
 
+func TestReconcileClientModelsPreservingStateKeepsOverlapCooldownAndSuspension(t *testing.T) {
+	r := newTestModelRegistry()
+	clientID := "client-1"
+	luna := &ModelInfo{ID: "gpt-5.6-luna"}
+	spark := &ModelInfo{ID: "gpt-5.3-codex-spark"}
+	r.RegisterClient(clientID, "codex", []*ModelInfo{luna, spark})
+	r.SetModelQuotaExceeded(clientID, luna.ID)
+	r.SuspendClientModel(clientID, luna.ID, "cooldown")
+
+	assertLunaState := func(want bool) {
+		t.Helper()
+		r.mutex.RLock()
+		registration := r.models[luna.ID]
+		_, quotaExceeded := registration.QuotaExceededClients[clientID]
+		_, suspended := registration.SuspendedClients[clientID]
+		r.mutex.RUnlock()
+		if quotaExceeded != want || suspended != want {
+			t.Fatalf("Luna transient state: quota=%v suspended=%v, want both %v", quotaExceeded, suspended, want)
+		}
+	}
+	assertLunaState(true)
+
+	// Removing Spark is a policy delta; Luna remains an overlapping binding.
+	r.ReconcileClientModelsPreservingState(clientID, "codex", []*ModelInfo{luna})
+	assertLunaState(true)
+	if r.ClientSupportsModel(clientID, spark.ID) {
+		t.Fatal("Spark binding should be removed")
+	}
+
+	// Adding Spark back must likewise leave Luna's transient state untouched.
+	r.ReconcileClientModelsPreservingState(clientID, "codex", []*ModelInfo{luna, spark})
+	assertLunaState(true)
+	if !r.ClientSupportsModel(clientID, spark.ID) {
+		t.Fatal("Spark binding should be restored")
+	}
+
+	// Ordinary auth re-registration intentionally retains the existing reset
+	// semantics used by watcher-driven credential updates.
+	r.RegisterClient(clientID, "codex", []*ModelInfo{luna, spark})
+	assertLunaState(false)
+}
+
 func TestGetAvailableModelsByProviderReturnsClones(t *testing.T) {
 	r := newTestModelRegistry()
 	r.RegisterClient("client-1", "gemini", []*ModelInfo{{

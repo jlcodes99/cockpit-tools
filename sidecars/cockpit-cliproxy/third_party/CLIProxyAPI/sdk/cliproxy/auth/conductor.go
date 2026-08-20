@@ -288,6 +288,16 @@ func (m *Manager) RefreshSchedulerEntry(authID string) {
 // models that are no longer present in the registry are pruned entirely so
 // renamed/removed models cannot keep auth-level status stale.
 func (m *Manager) ReconcileRegistryModelStates(ctx context.Context, authID string) {
+	m.reconcileRegistryModelStates(ctx, authID, true)
+}
+
+// PruneRegistryModelStates removes state only for models no longer registered
+// to the auth. Runtime state for overlapping models is preserved.
+func (m *Manager) PruneRegistryModelStates(ctx context.Context, authID string) {
+	m.reconcileRegistryModelStates(ctx, authID, false)
+}
+
+func (m *Manager) reconcileRegistryModelStates(ctx context.Context, authID string, resetOverlap bool) {
 	if m == nil || authID == "" {
 		return
 	}
@@ -323,6 +333,9 @@ func (m *Manager) ReconcileRegistryModelStates(ctx context.Context, authID strin
 				// status, management output, and websocket fallback checks.
 				delete(auth.ModelStates, modelKey)
 				changed = true
+				continue
+			}
+			if !resetOverlap {
 				continue
 			}
 			if state == nil {

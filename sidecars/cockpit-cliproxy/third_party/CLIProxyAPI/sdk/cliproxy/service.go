@@ -160,6 +160,56 @@ func (s *Service) consumeAuthUpdates(ctx context.Context) {
 	}
 }
 
+func (s *Service) startWatcher(ctx context.Context) error {
+	if s == nil {
+		return fmt.Errorf("cliproxy: service is nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	s.cfgMu.RLock()
+	cfg := s.cfg
+	s.cfgMu.RUnlock()
+	if cfg == nil {
+		return fmt.Errorf("cliproxy: configuration is required")
+	}
+	if cfg.Home.Enabled || s.watcher != nil {
+		return nil
+	}
+
+	watcherFactory := s.watcherFactory
+	if watcherFactory == nil {
+		watcherFactory = defaultWatcherFactory
+	}
+	reloadCallback := func(newCfg *config.Config) { s.applyConfigUpdate(newCfg) }
+	watcherWrapper, errCreate := watcherFactory(s.configPath, cfg.AuthDir, reloadCallback)
+	if errCreate != nil {
+		return fmt.Errorf("cliproxy: failed to create watcher: %w", errCreate)
+	}
+
+	s.watcher = watcherWrapper
+	s.ensureAuthUpdateQueue(ctx)
+	if s.authUpdates != nil {
+		watcherWrapper.SetAuthUpdateQueue(s.authUpdates)
+	}
+	watcherWrapper.SetConfig(cfg)
+
+	watcherCtx, watcherCancel := context.WithCancel(context.Background())
+	s.watcherCancel = watcherCancel
+	if errStart := watcherWrapper.Start(watcherCtx); errStart != nil {
+		watcherCancel()
+		s.watcherCancel = nil
+		s.watcher = nil
+		if errStop := watcherWrapper.Stop(); errStop != nil {
+			log.Debugf("failed to stop watcher after startup error: %v", errStop)
+		}
+		return fmt.Errorf("cliproxy: failed to start watcher: %w", errStart)
+	}
+	log.Info("file watcher started for config and auth directory changes")
+	return nil
+}
+
 func (s *Service) emitAuthUpdate(ctx context.Context, update watcher.AuthUpdate) {
 	if s == nil {
 		return
@@ -287,6 +337,21 @@ func (s *Service) applyCoreAuthAddOrUpdate(ctx context.Context, auth *coreauth.A
 		return
 	}
 	auth = auth.Clone()
+	if s.hooks.PrepareAuthUpsert != nil {
+		prepared, errPrepare := s.hooks.PrepareAuthUpsert(s, auth)
+		if errPrepare != nil {
+			log.Errorf("failed to prepare auth %s update: %v", auth.ID, errPrepare)
+			return
+		}
+		if prepared == nil {
+			return
+		}
+		auth = prepared.Clone()
+		if strings.TrimSpace(auth.ID) == "" {
+			log.Error("prepared auth update is missing id")
+			return
+		}
+	}
 	s.ensureExecutorsForAuth(auth)
 
 	// IMPORTANT: Update coreManager FIRST, before model registration.
@@ -318,6 +383,10 @@ func (s *Service) applyCoreAuthAddOrUpdate(ctx context.Context, auth *coreauth.A
 		auth = current
 	}
 
+	if s.hooks.OnAuthUpserted != nil && s.hooks.OnAuthUpserted(s, auth.Clone()) {
+		return
+	}
+
 	// Register models after auth is updated in coreManager.
 	// This operation may block on network calls, but the auth configuration
 	// is already effective at this point.
@@ -325,9 +394,10 @@ func (s *Service) applyCoreAuthAddOrUpdate(ctx context.Context, auth *coreauth.A
 	s.coreManager.ReconcileRegistryModelStates(ctx, auth.ID)
 
 	// Refresh the scheduler entry so that the auth's supportedModelSet is rebuilt
-	// from the now-populated global model registry. Without this, newly added auths
-	// have an empty supportedModelSet (because Register/Update upserts into the
-	// scheduler before registerModelsForAuth runs) and are invisible to the scheduler.
+	// from the now-populated global model registry. Without this, newly added
+	// auths have an empty supportedModelSet (because
+	// Register/Update upserts into the scheduler before registerModelsForAuth runs)
+	// and are invisible to the scheduler.
 	s.coreManager.RefreshSchedulerEntry(auth.ID)
 }
 
@@ -906,27 +976,8 @@ func (s *Service) Run(ctx context.Context) error {
 		s.hooks.OnAfterStart(s)
 	}
 
-	if !homeEnabled {
-		var watcherWrapper *WatcherWrapper
-		reloadCallback := func(newCfg *config.Config) { s.applyConfigUpdate(newCfg) }
-
-		watcherWrapper, errCreate := s.watcherFactory(s.configPath, s.cfg.AuthDir, reloadCallback)
-		if errCreate != nil {
-			return fmt.Errorf("cliproxy: failed to create watcher: %w", errCreate)
-		}
-		s.watcher = watcherWrapper
-		s.ensureAuthUpdateQueue(ctx)
-		if s.authUpdates != nil {
-			watcherWrapper.SetAuthUpdateQueue(s.authUpdates)
-		}
-		watcherWrapper.SetConfig(s.cfg)
-
-		watcherCtx, watcherCancel := context.WithCancel(context.Background())
-		s.watcherCancel = watcherCancel
-		if errStart := watcherWrapper.Start(watcherCtx); errStart != nil {
-			return fmt.Errorf("cliproxy: failed to start watcher: %w", errStart)
-		}
-		log.Info("file watcher started for config and auth directory changes")
+	if err := s.startWatcher(ctx); err != nil {
+		return err
 	}
 
 	// Prefer core auth manager auto refresh if available.
@@ -1851,6 +1902,9 @@ func (s *Service) StartRuntime(ctx context.Context) error {
 
 	if s.hooks.OnBeforeStart != nil {
 		s.hooks.OnBeforeStart(s.cfg)
+	}
+	if err := s.startWatcher(ctx); err != nil {
+		return err
 	}
 	if s.hooks.OnAfterStart != nil {
 		s.hooks.OnAfterStart(s)

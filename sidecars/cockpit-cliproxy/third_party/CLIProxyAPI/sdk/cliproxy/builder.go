@@ -62,6 +62,16 @@ type Hooks struct {
 	// OnAfterStart is called after the service has started successfully,
 	// providing access to the service instance for additional operations.
 	OnAfterStart func(*Service)
+
+	// PrepareAuthUpsert can normalize a watcher-driven auth add/update before it
+	// is applied to the manager. Returning nil skips the update; returning an
+	// error keeps the last known-good manager entry unchanged.
+	PrepareAuthUpsert func(*Service, *coreauth.Auth) (*coreauth.Auth, error)
+
+	// OnAuthUpserted is called after a watcher-driven auth add/update has been
+	// applied to the manager, but before generic model registration. Returning
+	// true indicates that the hook fully handled registry and scheduler updates.
+	OnAuthUpserted func(*Service, *coreauth.Auth) bool
 }
 
 // NewBuilder creates a Builder with default dependencies left unset.
