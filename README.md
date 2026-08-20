@@ -425,7 +425,7 @@ npm run tauri build
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=jlcodes99/cockpit-tools&type=Date)](https://star-history.com/#jlcodes99/cockpit-tools&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=jlcodes99/cockpit-tools&type=Date)](https://star-history.dera.page/#jlcodes99/cockpit-tools&Date)
 
 ---
 
