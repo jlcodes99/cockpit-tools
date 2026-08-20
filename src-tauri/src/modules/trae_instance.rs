@@ -282,6 +282,7 @@ pub fn create_instance_for_platform(
         } else {
             params.bind_account_id
         },
+        official_account_id: None,
         launch_mode: crate::models::InstanceLaunchMode::App,
         app_speed: crate::models::codex::CodexAppSpeed::Standard,
         created_at: Utc::now().timestamp_millis(),

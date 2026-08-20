@@ -861,6 +861,7 @@ pub async fn switch_codex_account(
     if let Err(e) = crate::modules::codex_instance::update_default_settings(
         Some(Some(default_bind_account_id.clone())),
         None,
+        None,
         Some(false),
         None,
         None,
@@ -4289,6 +4290,7 @@ pub async fn codex_local_access_activate(
         Some(Some(
             crate::modules::codex_instance::CODEX_API_SERVICE_BIND_ACCOUNT_ID.to_string(),
         )),
+        None,
         None,
         Some(false),
         None,

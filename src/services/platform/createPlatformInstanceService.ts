@@ -30,6 +30,7 @@ type InstancePayload = {
   workingDir?: string | null;
   extraArgs?: string;
   bindAccountId?: string | null;
+  officialAccountId?: string | null;
   launchMode?: InstanceLaunchMode;
   appSpeed?: CodexAppSpeed;
   copySourceInstanceId: string;
@@ -42,6 +43,7 @@ type UpdateInstancePayload = {
   workingDir?: string | null;
   extraArgs?: string;
   bindAccountId?: string | null;
+  officialAccountId?: string | null;
   followLocalAccount?: boolean;
   launchMode?: InstanceLaunchMode;
   appSpeed?: CodexAppSpeed;
@@ -76,7 +78,7 @@ export function createPlatformInstanceService(
     },
 
     createInstance: async (payload) => {
-      return await invoke(commandFor(prefix, "create_instance"), {
+      const body: Record<string, unknown> = {
         name: payload.name,
         userDataDir: payload.userDataDir,
         workingDir: payload.workingDir ?? null,
@@ -86,7 +88,11 @@ export function createPlatformInstanceService(
         appSpeed: payload.appSpeed ?? "standard",
         copySourceInstanceId: payload.copySourceInstanceId,
         initMode: payload.initMode ?? "copy",
-      });
+      };
+      if (prefix === "codex") {
+        body.officialAccountId = payload.officialAccountId ?? null;
+      }
+      return await invoke(commandFor(prefix, "create_instance"), body);
     },
 
     updateInstance: async (payload) => {
@@ -104,6 +110,10 @@ export function createPlatformInstanceService(
       }
       if (payload.bindAccountId !== undefined) {
         body.bindAccountId = payload.bindAccountId;
+      }
+      if (prefix === "codex" && payload.officialAccountId !== undefined) {
+        body.officialAccountId = payload.officialAccountId;
+        body.clearOfficialAccount = payload.officialAccountId === null;
       }
       if (payload.followLocalAccount !== undefined) {
         body.followLocalAccount = payload.followLocalAccount;

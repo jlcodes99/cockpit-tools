@@ -1936,6 +1936,19 @@
         "title": "同步所有實例記錄",
         "tooltip": "同步所有實例記錄"
       },
+      "authBinding": {
+        "title": "官方登入與 API 供應商",
+        "preserveOfficialAuth": "保留官方登入",
+        "preserveOfficialAuthDesc": "官方帳號 + 第三方 API",
+        "providerLabel": "第三方 API 帳號",
+        "officialLabel": "官方訂閱帳號",
+        "required": "請選擇第三方 API 帳號與官方帳號",
+        "providerMissing": "第三方 API 帳號已不存在",
+        "noProviders": "暫無 API 帳號",
+        "noOfficialAccounts": "暫無官方訂閱帳號",
+        "status": "官方登入用於應用程式身分，模型請求則使用所選的 API 供應商",
+        "clear": "清除組合"
+      },
       "restartStrategy": {
         "safe": {
           "principle": "向所有 Codex 進程發送 SIGTERM 信號，請求程序保存數據並退出，隨後啟動目標實例（必要時強制結束）。",

@@ -60,6 +60,7 @@ pub struct CodexInstanceProfileView {
     pub working_dir: Option<String>,
     pub extra_args: String,
     pub bind_account_id: Option<String>,
+    pub official_account_id: Option<String>,
     pub launch_mode: InstanceLaunchMode,
     pub app_speed: CodexAppSpeed,
     pub created_at: i64,
@@ -83,6 +84,7 @@ impl CodexInstanceProfileView {
             working_dir: profile.working_dir,
             extra_args: profile.extra_args,
             bind_account_id: profile.bind_account_id,
+            official_account_id: profile.official_account_id,
             launch_mode: profile.launch_mode,
             app_speed: profile.app_speed,
             created_at: profile.created_at,
@@ -176,6 +178,7 @@ fn read_applied_launch_credential_kind_for_dir(data_dir: &Path) -> Option<String
 async fn inject_bound_account_to_profile(
     profile_dir: &Path,
     bind_account_id: &str,
+    official_account_id: Option<&str>,
 ) -> Result<(), String> {
     if modules::codex_instance::is_api_service_bind_account_id(bind_account_id) {
         modules::codex_local_access::prepare_local_access_for_bound_profile_dir(profile_dir)
@@ -186,21 +189,33 @@ async fn inject_bound_account_to_profile(
     if let Some(provider_gateway_account_id) =
         modules::codex_instance::parse_provider_gateway_bind_account_id(bind_account_id)
     {
-        modules::codex_local_access::activate_provider_gateway_for_dir(
+        modules::codex_local_access::activate_provider_gateway_for_dir_with_oauth(
             profile_dir,
             &provider_gateway_account_id,
+            official_account_id,
         )
         .await?;
         return Ok(());
     }
 
     modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(profile_dir)?;
-    modules::codex_instance::inject_account_to_profile(profile_dir, bind_account_id).await
+    if let Some(official_account_id) = official_account_id {
+        modules::codex_account::prepare_api_key_account_for_injection_with_oauth_from_auth_dir(
+            bind_account_id,
+            official_account_id,
+            profile_dir,
+        )
+        .await
+        .map(|_| ())
+    } else {
+        modules::codex_instance::inject_account_to_profile(profile_dir, bind_account_id).await
+    }
 }
 
 async fn ensure_provider_gateway_for_bind_account(
     profile_dir: &Path,
     bind_account_id: Option<&str>,
+    official_account_id: Option<&str>,
 ) -> Result<(), String> {
     let Some(bind_account_id) = bind_account_id else {
         modules::codex_local_access::stop_provider_gateways_for_profile(profile_dir).await;
@@ -219,9 +234,10 @@ async fn ensure_provider_gateway_for_bind_account(
         };
         if modules::codex_local_access::account_requires_provider_gateway(&account) {
             modules::codex_local_access::stop_provider_gateways_for_profile(profile_dir).await;
-            return modules::codex_local_access::ensure_provider_gateway_for_dir(
+            return modules::codex_local_access::ensure_provider_gateway_for_dir_with_oauth(
                 profile_dir,
                 bind_account_id,
+                official_account_id,
             )
             .await;
         }
@@ -237,9 +253,10 @@ async fn ensure_provider_gateway_for_bind_account(
         return Ok(());
     };
     modules::codex_local_access::stop_provider_gateways_for_profile(profile_dir).await;
-    modules::codex_local_access::ensure_provider_gateway_for_dir(
+    modules::codex_local_access::ensure_provider_gateway_for_dir_with_oauth(
         profile_dir,
         &provider_gateway_account_id,
+        official_account_id,
     )
     .await
 }
@@ -258,6 +275,7 @@ fn default_instance_view(
         working_dir: None,
         extra_args: default_settings.extra_args.clone(),
         bind_account_id,
+        official_account_id: default_settings.official_account_id.clone(),
         launch_mode: default_settings.launch_mode.clone(),
         app_speed: default_settings.app_speed.clone(),
         created_at: 0,
@@ -316,6 +334,46 @@ fn resolve_instance_launch_context(instance_id: &str) -> Result<CodexLaunchConte
     })
 }
 
+fn validate_official_account_binding(
+    bind_account_id: Option<&str>,
+    official_account_id: Option<&str>,
+) -> Result<(), String> {
+    let Some(official_account_id) = official_account_id
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    else {
+        return Ok(());
+    };
+    let bind_account_id = bind_account_id
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .ok_or_else(|| "保留官方登录需要先选择第三方 API 账号".to_string())?;
+    if modules::codex_instance::is_api_service_bind_account_id(bind_account_id) {
+        return Err("API 服务模式不支持实例级官方登录组合".to_string());
+    }
+    let provider_account_id =
+        modules::codex_instance::parse_provider_gateway_bind_account_id(bind_account_id)
+            .unwrap_or_else(|| bind_account_id.to_string());
+    let provider_account = modules::codex_account::load_account(&provider_account_id)
+        .ok_or_else(|| format!("第三方 API 账号不存在: {}", provider_account_id))?;
+    modules::codex_account::validate_api_key_bound_oauth_account(
+        &provider_account,
+        official_account_id,
+    )?;
+    Ok(())
+}
+
+fn resolve_official_account_update(
+    official_account_id: Option<Option<String>>,
+    clear_official_account: Option<bool>,
+) -> Option<Option<String>> {
+    if clear_official_account.unwrap_or(false) {
+        Some(None)
+    } else {
+        official_account_id
+    }
+}
+
 fn sync_codex_threads_across_idle_instances(context: &str) {
     let started = Instant::now();
     let default_settings = match modules::codex_instance::load_default_settings() {
@@ -369,6 +427,7 @@ fn sync_codex_threads_across_idle_instances(context: &str) {
 async fn apply_bound_account_to_initialized_profile(
     profile_dir: &Path,
     bind_account_id: Option<&str>,
+    official_account_id: Option<&str>,
     context: &str,
 ) -> Result<(), String> {
     if !is_profile_initialized(&profile_dir.to_string_lossy()) {
@@ -377,8 +436,9 @@ async fn apply_bound_account_to_initialized_profile(
 
     let previous_kind = read_applied_launch_credential_kind_for_dir(profile_dir);
     if let Some(account_id) = bind_account_id {
-        inject_bound_account_to_profile(profile_dir, account_id).await?;
-        ensure_provider_gateway_for_bind_account(profile_dir, bind_account_id).await?;
+        inject_bound_account_to_profile(profile_dir, account_id, official_account_id).await?;
+        ensure_provider_gateway_for_bind_account(profile_dir, bind_account_id, official_account_id)
+            .await?;
     } else {
         modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(profile_dir)?;
         modules::codex_local_access::stop_provider_gateways_for_profile(profile_dir).await;
@@ -396,12 +456,17 @@ async fn created_instance_view_after_binding<F, Fut>(
     apply_binding: F,
 ) -> Result<CodexInstanceProfileView, String>
 where
-    F: FnOnce(PathBuf, String) -> Fut,
+    F: FnOnce(PathBuf, String, Option<String>) -> Fut,
     Fut: std::future::Future<Output = Result<(), String>>,
 {
     let initialized = is_profile_initialized(&instance.user_data_dir);
     if let (true, Some(bind_account_id)) = (initialized, instance.bind_account_id.clone()) {
-        apply_binding(PathBuf::from(&instance.user_data_dir), bind_account_id).await?;
+        apply_binding(
+            PathBuf::from(&instance.user_data_dir),
+            bind_account_id,
+            instance.official_account_id.clone(),
+        )
+        .await?;
     }
 
     Ok(CodexInstanceProfileView::from_profile(
@@ -479,6 +544,31 @@ async fn repair_session_visibility_for_selected_instance(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn official_account_update_explicit_clear_wins_over_account_id() {
+        let update =
+            resolve_official_account_update(Some(Some("official-account".to_string())), Some(true));
+
+        assert_eq!(update, Some(None));
+    }
+
+    #[test]
+    fn official_account_update_preserves_account_id() {
+        let update = resolve_official_account_update(
+            Some(Some("official-account".to_string())),
+            Some(false),
+        );
+
+        assert_eq!(update, Some(Some("official-account".to_string())));
+    }
+
+    #[test]
+    fn official_account_update_ignores_missing_arguments() {
+        let update = resolve_official_account_update(None, None);
+
+        assert_eq!(update, None);
+    }
 
     #[test]
     fn instance_start_guard_rejects_only_duplicate_instance_starts() {
@@ -654,6 +744,7 @@ mod tests {
             working_dir: None,
             extra_args: String::new(),
             bind_account_id: Some("target-account".to_string()),
+            official_account_id: None,
             launch_mode: InstanceLaunchMode::App,
             app_speed: CodexAppSpeed::Standard,
             created_at: 0,
@@ -663,7 +754,7 @@ mod tests {
 
         let view = created_instance_view_after_binding(
             instance,
-            |profile_dir, bind_account_id| async move {
+            |profile_dir, bind_account_id, _official_account_id| async move {
                 let copied = std::fs::read_to_string(profile_dir.join("auth.json"))
                     .map_err(|error| error.to_string())?;
                 assert_eq!(copied, "source-account");
@@ -1490,11 +1581,13 @@ pub async fn codex_create_instance(
     working_dir: Option<String>,
     extra_args: Option<String>,
     bind_account_id: Option<String>,
+    official_account_id: Option<String>,
     copy_source_instance_id: Option<String>,
     init_mode: Option<String>,
     launch_mode: Option<InstanceLaunchMode>,
     app_speed: Option<CodexAppSpeed>,
 ) -> Result<CodexInstanceProfileView, String> {
+    validate_official_account_binding(bind_account_id.as_deref(), official_account_id.as_deref())?;
     let instance =
         modules::codex_instance::create_instance(modules::codex_instance::CreateInstanceParams {
             name,
@@ -1502,20 +1595,25 @@ pub async fn codex_create_instance(
             working_dir,
             extra_args: extra_args.unwrap_or_default(),
             bind_account_id,
+            official_account_id,
             copy_source_instance_id,
             init_mode,
             launch_mode,
             app_speed,
         })?;
 
-    created_instance_view_after_binding(instance, |profile_dir, bind_account_id| async move {
-        apply_bound_account_to_initialized_profile(
-            &profile_dir,
-            Some(&bind_account_id),
-            "create-instance-bind-account",
-        )
-        .await
-    })
+    created_instance_view_after_binding(
+        instance,
+        |profile_dir, bind_account_id, official_account_id| async move {
+            apply_bound_account_to_initialized_profile(
+                &profile_dir,
+                Some(&bind_account_id),
+                official_account_id.as_deref(),
+                "create-instance-bind-account",
+            )
+            .await
+        },
+    )
     .await
 }
 
@@ -1526,16 +1624,44 @@ pub async fn codex_update_instance(
     working_dir: Option<String>,
     extra_args: Option<String>,
     bind_account_id: Option<Option<String>>,
+    official_account_id: Option<Option<String>>,
+    clear_official_account: Option<bool>,
     follow_local_account: Option<bool>,
     launch_mode: Option<InstanceLaunchMode>,
     app_speed: Option<CodexAppSpeed>,
     auto_sync_threads: Option<bool>,
 ) -> Result<CodexInstanceProfileView, String> {
-    let should_apply_bind_account = bind_account_id.is_some() || follow_local_account.is_some();
+    let official_account_id =
+        resolve_official_account_update(official_account_id, clear_official_account);
+    let should_apply_bind_account = bind_account_id.is_some()
+        || official_account_id.is_some()
+        || follow_local_account.is_some();
     if instance_id == DEFAULT_INSTANCE_ID {
         let default_dir = modules::codex_instance::get_default_codex_home()?;
+        if follow_local_account == Some(true)
+            && official_account_id
+                .as_ref()
+                .and_then(|id| id.as_deref())
+                .is_some()
+        {
+            return Err("跟随当前账号模式不支持实例级官方登录组合".to_string());
+        }
+        let current_default_bind = bind_account_id
+            .as_ref()
+            .and_then(|next| next.as_deref())
+            .map(str::to_string)
+            .or_else(|| {
+                modules::codex_instance::load_default_settings()
+                    .ok()
+                    .and_then(|settings| resolve_default_account_id(&settings))
+            });
+        validate_official_account_binding(
+            current_default_bind.as_deref(),
+            official_account_id.as_ref().and_then(|id| id.as_deref()),
+        )?;
         let mut updated = modules::codex_instance::update_default_settings(
             bind_account_id,
+            official_account_id,
             extra_args,
             follow_local_account,
             launch_mode,
@@ -1552,6 +1678,7 @@ pub async fn codex_update_instance(
             apply_bound_account_to_initialized_profile(
                 &default_dir,
                 default_bind_account_id.as_deref(),
+                updated.official_account_id.as_deref(),
                 "update-default-bind-account",
             )
             .await?;
@@ -1582,7 +1709,21 @@ pub async fn codex_update_instance(
         }
     }
 
-    let should_apply_instance_bind_account = bind_account_id.is_some();
+    let current_instance = modules::codex_instance::load_instance_store()?
+        .instances
+        .into_iter()
+        .find(|item| item.id == instance_id)
+        .ok_or("实例不存在")?;
+    validate_official_account_binding(
+        bind_account_id
+            .as_ref()
+            .and_then(|next| next.as_deref())
+            .or(current_instance.bind_account_id.as_deref()),
+        official_account_id.as_ref().and_then(|id| id.as_deref()),
+    )?;
+
+    let should_apply_instance_bind_account =
+        bind_account_id.is_some() || official_account_id.is_some();
     let selected_app_speed = app_speed.clone();
     let instance =
         modules::codex_instance::update_instance(modules::codex_instance::UpdateInstanceParams {
@@ -1591,6 +1732,7 @@ pub async fn codex_update_instance(
             working_dir,
             extra_args,
             bind_account_id,
+            official_account_id,
             launch_mode,
             app_speed,
         })?;
@@ -1607,6 +1749,7 @@ pub async fn codex_update_instance(
         apply_bound_account_to_initialized_profile(
             Path::new(&instance.user_data_dir),
             instance.bind_account_id.as_deref(),
+            instance.official_account_id.as_deref(),
             "update-instance-bind-account",
         )
         .await?;
@@ -1642,6 +1785,8 @@ async fn codex_start_instance_internal(
         let default_dir = modules::codex_instance::get_default_codex_home()?;
         let previous_kind = read_applied_launch_credential_kind_for_dir(&default_dir);
         let default_settings = modules::codex_instance::load_default_settings()?;
+        let skip_default_bind_account_injection =
+            skip_default_bind_account_injection && default_settings.official_account_id.is_none();
         let default_bind_account_id = resolve_default_account_id(&default_settings);
         if default_settings.launch_mode != InstanceLaunchMode::Cli {
             modules::process::ensure_codex_launch_path_configured()?;
@@ -1692,7 +1837,12 @@ async fn codex_start_instance_internal(
                     account_id
                 ));
             } else {
-                inject_bound_account_to_profile(&default_dir, account_id).await?;
+                inject_bound_account_to_profile(
+                    &default_dir,
+                    account_id,
+                    default_settings.official_account_id.as_deref(),
+                )
+                .await?;
             }
         } else {
             modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(
@@ -1705,8 +1855,12 @@ async fn codex_start_instance_internal(
             flow_started.elapsed().as_millis()
         ));
         let provider_gateway_started = Instant::now();
-        ensure_provider_gateway_for_bind_account(&default_dir, default_bind_account_id.as_deref())
-            .await?;
+        ensure_provider_gateway_for_bind_account(
+            &default_dir,
+            default_bind_account_id.as_deref(),
+            default_settings.official_account_id.as_deref(),
+        )
+        .await?;
         modules::logger::log_info(&format!(
             "[Codex Start] default provider gateway phase finished: elapsed_ms={}, total_ms={}",
             provider_gateway_started.elapsed().as_millis(),
@@ -1860,7 +2014,12 @@ async fn codex_start_instance_internal(
 
     let inject_started = Instant::now();
     if let Some(ref account_id) = instance.bind_account_id {
-        inject_bound_account_to_profile(instance_dir, account_id).await?;
+        inject_bound_account_to_profile(
+            instance_dir,
+            account_id,
+            instance.official_account_id.as_deref(),
+        )
+        .await?;
     } else {
         modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(
             instance_dir,
@@ -1873,8 +2032,12 @@ async fn codex_start_instance_internal(
         flow_started.elapsed().as_millis()
     ));
     let provider_gateway_started = Instant::now();
-    ensure_provider_gateway_for_bind_account(instance_dir, instance.bind_account_id.as_deref())
-        .await?;
+    ensure_provider_gateway_for_bind_account(
+        instance_dir,
+        instance.bind_account_id.as_deref(),
+        instance.official_account_id.as_deref(),
+    )
+    .await?;
     modules::logger::log_info(&format!(
         "[Codex Start] instance provider gateway phase finished: instance_id={}, elapsed_ms={}, total_ms={}",
         instance.id,

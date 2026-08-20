@@ -18082,6 +18082,20 @@ fn provider_gateway_bound_oauth_account_id_for_account(account: &CodexAccount) -
     normalize_optional_account_ref(account.bound_oauth_account_id.as_deref())
 }
 
+fn load_provider_gateway_account_with_oauth(
+    account_id: &str,
+    official_account_id: Option<&str>,
+) -> Result<CodexAccount, String> {
+    let mut account = codex_account::load_account(account_id)
+        .ok_or_else(|| format!("供应商网关账号不存在: {}", account_id))?;
+    if let Some(official_account_id) = official_account_id {
+        let oauth =
+            codex_account::validate_api_key_bound_oauth_account(&account, official_account_id)?;
+        account.bound_oauth_account_id = Some(oauth.id);
+    }
+    Ok(account)
+}
+
 fn build_provider_gateway_collection_for_profile(
     profile_dir: &Path,
     account: &CodexAccount,
@@ -18989,13 +19003,20 @@ pub async fn activate_provider_gateway_for_dir(
     profile_dir: &Path,
     account_id: &str,
 ) -> Result<CodexLocalAccessState, String> {
+    activate_provider_gateway_for_dir_with_oauth(profile_dir, account_id, None).await
+}
+
+pub async fn activate_provider_gateway_for_dir_with_oauth(
+    profile_dir: &Path,
+    account_id: &str,
+    official_account_id: Option<&str>,
+) -> Result<CodexLocalAccessState, String> {
     let account_id = account_id.trim();
     if account_id.is_empty() {
         return Err("供应商网关账号不能为空".to_string());
     }
 
-    let account = codex_account::load_account(account_id)
-        .ok_or_else(|| format!("供应商网关账号不存在: {}", account_id))?;
+    let account = load_provider_gateway_account_with_oauth(account_id, official_account_id)?;
     let (collection, key, provider_gateway) =
         build_provider_gateway_collection_for_profile(profile_dir, &account)?;
     let model_slots = provider_gateway_model_slots(&provider_gateway.upstream_models);
@@ -19243,14 +19264,21 @@ pub async fn ensure_provider_gateway_for_dir(
     profile_dir: &Path,
     account_id: &str,
 ) -> Result<(), String> {
+    ensure_provider_gateway_for_dir_with_oauth(profile_dir, account_id, None).await
+}
+
+pub async fn ensure_provider_gateway_for_dir_with_oauth(
+    profile_dir: &Path,
+    account_id: &str,
+    official_account_id: Option<&str>,
+) -> Result<(), String> {
     let account_id = account_id.trim();
     if account_id.is_empty() {
         return Err("供应商网关账号不能为空".to_string());
     }
 
     let _guard = provider_gateway_lifecycle_lock().lock().await;
-    let account = codex_account::load_account(account_id)
-        .ok_or_else(|| format!("供应商网关账号不存在: {}", account_id))?;
+    let account = load_provider_gateway_account_with_oauth(account_id, official_account_id)?;
     let (collection, key, provider_gateway) =
         build_provider_gateway_collection_for_profile(profile_dir, &account)?;
     let model_slots = provider_gateway_model_slots(&provider_gateway.upstream_models);
@@ -30044,6 +30072,7 @@ wire_api = "responses"
             working_dir: None,
             extra_args: String::new(),
             bind_account_id: bind_account_id.map(str::to_string),
+            official_account_id: None,
             launch_mode: InstanceLaunchMode::App,
             app_speed: CodexAppSpeed::Standard,
             created_at: 0,

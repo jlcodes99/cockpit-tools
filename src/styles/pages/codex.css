@@ -12590,6 +12590,171 @@
   line-height: 1.55;
 }
 
+.codex-account-auth-control {
+  position: sticky;
+  top: -6px;
+  z-index: 3;
+  padding: 7px 7px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-surface);
+}
+
+.codex-account-auth-checkbox-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+
+.codex-account-auth-checkbox-row:hover {
+  border-color: var(--border);
+  background: var(--bg-tertiary);
+}
+
+.codex-account-auth-checkbox-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex: 0 0 18px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.codex-account-auth-checkbox-row input[type="checkbox"]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.codex-account-auth-checkbox-row
+  input:disabled
+  + .codex-account-auth-copy,
+.codex-account-auth-checkbox-row input[type="checkbox"]:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.codex-account-auth-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.codex-account-auth-copy strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.codex-account-auth-copy span {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.codex-account-auth-error {
+  margin-top: 7px;
+  padding: 8px 9px;
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-card));
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.codex-account-combination {
+  margin-top: 7px;
+  padding: 10px 6px 5px;
+  border-top: 1px solid var(--border-light);
+}
+
+.codex-account-combination-title {
+  padding: 0 6px 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.codex-official-account-trigger {
+  width: 100%;
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+
+.codex-official-account-trigger:hover:not(:disabled),
+.codex-official-account-trigger.open {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
+  background: color-mix(in srgb, var(--primary) 7%, var(--bg-card));
+}
+
+.codex-official-account-trigger > svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.16s ease;
+}
+
+.codex-official-account-trigger.open > svg {
+  transform: rotate(180deg);
+}
+
+.codex-official-account-trigger:disabled,
+.codex-official-account-options .account-select-item:disabled,
+.account-select-menu > .account-select-item:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.codex-official-account-options {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-light);
+}
+
+.codex-account-combination-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 11px;
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--primary) 7%, var(--bg-card));
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.codex-account-combination-status svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--primary);
+}
+
 .codex-session-manager {
   display: flex;
   flex-direction: column;

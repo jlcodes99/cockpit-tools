@@ -1936,6 +1936,19 @@
         "title": "Synchronizuj rekordy wszystkich instancji",
         "tooltip": "Synchronizuj rekordy wszystkich instancji"
       },
+      "authBinding": {
+        "title": "Oficjalne logowanie i dostawca API",
+        "preserveOfficialAuth": "Zachowaj oficjalne logowanie",
+        "preserveOfficialAuthDesc": "Oficjalne konto + API innej firmy",
+        "providerLabel": "Konto API zewnętrznego dostawcy",
+        "officialLabel": "Oficjalne konto subskrypcyjne",
+        "required": "Wybierz konto API zewnętrznego dostawcy i oficjalne konto",
+        "providerMissing": "Konto API zewnętrznego dostawcy już nie istnieje",
+        "noProviders": "Brak kont API",
+        "noOfficialAccounts": "Brak oficjalnych kont subskrypcyjnych",
+        "status": "Użyj oficjalnego logowania do identyfikacji w aplikacji, a wybranego dostawcy API do wysyłania żądań do modeli",
+        "clear": "Usuń powiązanie"
+      },
       "restartStrategy": {
         "safe": {
           "principle": "Wysyła sygnał SIGTERM do wszystkich procesów Codex, prosząc aplikację o zapisanie danych i zamknięcie się, a następnie uruchamia instancję docelową (wymusza zamknięcie w razie potrzeby).",

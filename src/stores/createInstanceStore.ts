@@ -21,6 +21,7 @@ export type InstanceStoreState = {
     workingDir?: string | null;
     extraArgs?: string;
     bindAccountId?: string | null;
+    officialAccountId?: string | null;
     launchMode?: InstanceLaunchMode;
     appSpeed?: CodexAppSpeed;
     copySourceInstanceId: string;
@@ -32,6 +33,7 @@ export type InstanceStoreState = {
     workingDir?: string | null;
     extraArgs?: string;
     bindAccountId?: string | null;
+    officialAccountId?: string | null;
     followLocalAccount?: boolean;
     launchMode?: InstanceLaunchMode;
     appSpeed?: CodexAppSpeed;
@@ -53,6 +55,7 @@ type InstanceService = {
     workingDir?: string | null;
     extraArgs?: string;
     bindAccountId?: string | null;
+    officialAccountId?: string | null;
     launchMode?: InstanceLaunchMode;
     appSpeed?: CodexAppSpeed;
     copySourceInstanceId: string;
@@ -64,6 +67,7 @@ type InstanceService = {
     workingDir?: string | null;
     extraArgs?: string;
     bindAccountId?: string | null;
+    officialAccountId?: string | null;
     followLocalAccount?: boolean;
     launchMode?: InstanceLaunchMode;
     appSpeed?: CodexAppSpeed;

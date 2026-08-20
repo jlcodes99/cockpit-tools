@@ -1936,6 +1936,19 @@
         "title": "Sincronizza i record in tutte le istanze",
         "tooltip": "Sincronizza i record in tutte le istanze"
       },
+      "authBinding": {
+        "title": "Accesso ufficiale e provider API",
+        "preserveOfficialAuth": "Mantieni l’accesso ufficiale",
+        "preserveOfficialAuthDesc": "Account ufficiale + API di terze parti",
+        "providerLabel": "Account API di terze parti",
+        "officialLabel": "Account con abbonamento ufficiale",
+        "required": "Seleziona un account API di terze parti e un account ufficiale",
+        "providerMissing": "L’account API di terze parti non esiste più",
+        "noProviders": "Nessun account API",
+        "noOfficialAccounts": "Nessun account con abbonamento ufficiale",
+        "status": "Usa l’accesso ufficiale per l’identità dell’app e il provider API selezionato per le richieste ai modelli",
+        "clear": "Rimuovi associazione"
+      },
       "restartStrategy": {
         "safe": {
           "principle": "Invia un segnale SIGTERM a tutti i processi Codex, chiedendo all'app di salvare e chiudersi, quindi avvia l'istanza di destinazione (forza la chiusura se necessario).",

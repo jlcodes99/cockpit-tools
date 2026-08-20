@@ -1936,6 +1936,19 @@
         "title": "Synchronizovat záznamy všech instancí",
         "tooltip": "Synchronizovat záznamy všech instancí"
       },
+      "authBinding": {
+        "title": "Oficiální přihlášení a poskytovatel API",
+        "preserveOfficialAuth": "Zachovat oficiální přihlášení",
+        "preserveOfficialAuthDesc": "Oficiální účet + API třetí strany",
+        "providerLabel": "Účet API třetí strany",
+        "officialLabel": "Oficiální účet s předplatným",
+        "required": "Vyberte účet API třetí strany a oficiální účet",
+        "providerMissing": "Účet API třetí strany již neexistuje",
+        "noProviders": "Žádné účty API",
+        "noOfficialAccounts": "Žádné oficiální účty s předplatným",
+        "status": "Použijte oficiální přihlášení pro identitu aplikace a vybraného poskytovatele API pro požadavky na modely",
+        "clear": "Zrušit propojení"
+      },
       "restartStrategy": {
         "safe": {
           "principle": "Odešle signál SIGTERM všem procesům Codex, požádá aplikaci o uložení dat a ukončení, poté spustí cílovou instanci (v případě potřeby vynutí ukončení).",

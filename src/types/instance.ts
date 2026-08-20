@@ -23,6 +23,7 @@ export interface InstanceProfile {
   workingDir?: string | null;
   extraArgs: string;
   bindAccountId?: string | null;
+  officialAccountId?: string | null;
   launchMode?: InstanceLaunchMode;
   appSpeed?: CodexAppSpeed;
   createdAt: number;

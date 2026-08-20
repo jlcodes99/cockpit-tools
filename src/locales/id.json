@@ -1983,6 +1983,19 @@
         "title": "Sinkronkan semua catatan instans",
         "tooltip": "Sinkronkan semua catatan instans"
       },
+      "authBinding": {
+        "title": "Login resmi dan penyedia API",
+        "preserveOfficialAuth": "Pertahankan login resmi",
+        "preserveOfficialAuthDesc": "Akun resmi + API pihak ketiga",
+        "providerLabel": "Akun API pihak ketiga",
+        "officialLabel": "Akun langganan resmi",
+        "required": "Pilih akun API pihak ketiga dan akun resmi",
+        "providerMissing": "Akun API pihak ketiga sudah tidak ada",
+        "noProviders": "Tidak ada akun API",
+        "noOfficialAccounts": "Tidak ada akun langganan resmi",
+        "status": "Gunakan login resmi untuk identitas aplikasi dan penyedia API yang dipilih untuk permintaan ke model",
+        "clear": "Lepas tautan"
+      },
       "restartStrategy": {
         "safe": {
           "principle": "Send SIGTERM to the target Codex process so the app can save and exit, then relaunch that instance (force kill if needed).​",
