@@ -3026,7 +3026,8 @@
         "fetchCredentialsRequired": "Hãy nhập API Key và Base URL trước.",
         "fetchEmpty": "Nhà cung cấp không trả về mô hình nào. Danh sách hiện tại được giữ nguyên.",
         "fetchFailed": "Không thể lấy mô hình từ nhà cung cấp: {{error}}",
-        "syncRequiresModels": "Hãy lấy hoặc nhập ít nhất một mô hình trước khi đồng bộ với Codex."
+        "syncRequiresModels": "Hãy lấy hoặc nhập ít nhất một mô hình trước khi đồng bộ với Codex.",
+        "restartHint": "Cấu hình nhà cung cấp đã được cập nhật. Hãy khởi động lại Codex hoặc dịch vụ API nếu đang chạy."
       },
       "actions": {
         "addAndSwitch": "Thêm và chuyển"
@@ -3357,9 +3358,9 @@
       },
       "vision": {
         "providerDefault": "Nhà cung cấp này mặc định hỗ trợ nhập ảnh",
-        "providerDefaultHint": "Khi tắt, chỉ các mẫu bên dưới được nhận ảnh; các mẫu khác sẽ bị gateway cục bộ từ chối.",
+        "providerDefaultHint": "Khi tắt, chỉ các mẫu bên dưới nhận ảnh; các mẫu khác bỏ qua ảnh và tiếp tục xử lý văn bản.",
         "modelsHint": "Mỗi dòng một mẫu. Dùng khi chỉ một số mẫu của nhà cung cấp hỗ trợ ảnh dán vào.",
-        "routingModelHint": "Khi mẫu hiện tại không đọc được ảnh, yêu cầu dùng mẫu này; để trống sẽ tự dùng mẫu ảnh duy nhất.",
+        "routingModelHint": "Khi mẫu hiện tại không đọc được ảnh, yêu cầu dùng mẫu này; để trống sẽ tự dùng mẫu ảnh duy nhất, nếu không ảnh sẽ bị bỏ qua và văn bản tiếp tục được xử lý.",
         "allModels": "Ảnh",
         "partialModels": "Một số ảnh",
         "textOnly": "Chỉ văn bản"

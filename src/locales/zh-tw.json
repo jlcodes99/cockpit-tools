@@ -2397,7 +2397,8 @@
         "fetchCredentialsRequired": "請先填寫 API Key 和 Base URL。",
         "fetchEmpty": "上游未回傳可用模型，已保留目前清單。",
         "fetchFailed": "取得上游模型失敗：{{error}}",
-        "syncRequiresModels": "同步到 Codex 前請先取得或填寫模型清單。"
+        "syncRequiresModels": "同步到 Codex 前請先取得或填寫模型清單。",
+        "restartHint": "供應商設定已更新。若 Codex 或 API 服務正在執行，請重新啟動後生效。"
       },
       "actions": {
         "addAndSwitch": "新增並切換"
@@ -3357,9 +3358,9 @@
       },
       "vision": {
         "providerDefault": "此供應商預設支援圖片輸入",
-        "providerDefaultHint": "關閉時，只有下方列出的模型會允許圖片輸入；其他模型會由本機閘道直接提示不支援。",
+        "providerDefaultHint": "關閉時，只有下方列出的模型會接收圖片；其他模型會省略圖片並繼續處理文字。",
         "modelsHint": "每行一個模型名。適合同一供應商只有部分視覺模型支援貼上圖片的情況。",
-        "routingModelHint": "目前模型不支援讀取圖片時，含圖片請求會改用此模型；留空且只有一個視覺模型時自動使用。",
+        "routingModelHint": "目前模型不支援圖片時，含圖片請求會改用此模型；留空時自動使用唯一視覺模型，否則省略圖片並繼續處理文字。",
         "allModels": "圖片輸入",
         "partialModels": "部分圖片",
         "textOnly": "僅文字"

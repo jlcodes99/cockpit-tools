@@ -2447,7 +2447,8 @@
         "fetchCredentialsRequired": "Masukkan API Key dan Base URL terlebih dahulu.",
         "fetchEmpty": "Penyedia tidak mengembalikan model. Daftar saat ini tetap dipertahankan.",
         "fetchFailed": "Gagal mengambil model penyedia: {{error}}",
-        "syncRequiresModels": "Ambil atau masukkan setidaknya satu model sebelum menyinkronkan ke Codex."
+        "syncRequiresModels": "Ambil atau masukkan setidaknya satu model sebelum menyinkronkan ke Codex.",
+        "restartHint": "Pengaturan penyedia telah diperbarui. Mulai ulang Codex atau layanan API jika sedang berjalan."
       },
       "actions": {
         "addAndSwitch": "Tambah dan alihkan"
@@ -3404,9 +3405,9 @@
       },
       "vision": {
         "providerDefault": "Provider ini mendukung input gambar secara default",
-        "providerDefaultHint": "Jika mati, hanya model di bawah yang boleh menerima gambar; model lain ditolak oleh gateway lokal.",
+        "providerDefaultHint": "Jika mati, hanya model di bawah yang menerima gambar; model lain mengabaikan gambar dan melanjutkan pemrosesan teks.",
         "modelsHint": "Satu model per baris. Cocok jika hanya sebagian model provider mendukung gambar tempel.",
-        "routingModelHint": "Jika model saat ini tidak membaca gambar, permintaan memakai model ini; kosong berarti otomatis memakai satu-satunya model visual.",
+        "routingModelHint": "Jika model saat ini tidak membaca gambar, permintaan memakai model ini; kosong berarti otomatis memakai satu-satunya model visual, jika tidak gambar diabaikan dan teks tetap diproses.",
         "allModels": "Gambar",
         "partialModels": "Sebagian gambar",
         "textOnly": "Teks saja"

@@ -3026,7 +3026,8 @@
         "fetchCredentialsRequired": "先に API Key と Base URL を入力してください。",
         "fetchEmpty": "プロバイダーからモデルが返されませんでした。現在の一覧を保持します。",
         "fetchFailed": "プロバイダーのモデルを取得できませんでした：{{error}}",
-        "syncRequiresModels": "Codex に同期する前に、モデルを 1 件以上取得または入力してください。"
+        "syncRequiresModels": "Codex に同期する前に、モデルを 1 件以上取得または入力してください。",
+        "restartHint": "プロバイダー設定を更新しました。Codex または API サービスが実行中の場合は再起動してください。"
       },
       "actions": {
         "addAndSwitch": "追加して切り替える"
@@ -3357,9 +3358,9 @@
       },
       "vision": {
         "providerDefault": "このプロバイダーは既定で画像入力に対応します",
-        "providerDefaultHint": "オフの場合、下に記載したモデルだけが画像入力を受け付け、それ以外はローカルゲートウェイで拒否されます。",
+        "providerDefaultHint": "オフの場合、下に記載したモデルだけが画像入力を受け取り、それ以外は画像を省略してテキスト処理を続行します。",
         "modelsHint": "1 行に 1 モデル。プロバイダー内の一部モデルだけが貼り付け画像に対応する場合に使います。",
-        "routingModelHint": "現在のモデルが画像を読めない場合、このモデルを使います。空欄なら唯一の画像対応モデルを自動使用します。",
+        "routingModelHint": "現在のモデルが画像を読めない場合はこのモデルを使います。空欄なら唯一の画像対応モデルを自動使用し、それ以外は画像を省略してテキスト処理を続行します。",
         "allModels": "画像対応",
         "partialModels": "一部画像",
         "textOnly": "テキストのみ"

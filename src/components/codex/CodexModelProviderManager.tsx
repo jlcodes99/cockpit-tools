@@ -151,6 +151,7 @@ import {
   incrementCodexPlanFilterCount,
 } from "../../utils/codexAccountOverview";
 import {
+  canConfigureCodexProviderVision,
   resolveCodexProviderCapabilityProfile,
   type CodexProviderEnableModePreference,
   type CodexProviderWireApi,
@@ -2249,6 +2250,7 @@ export function CodexModelProviderManager({
     setSaving(true);
     try {
       let savedProvider: CodexModelProvider | null = null;
+      let linkedAccountSnapshotUpdated = false;
       if (!form.providerId) {
         savedProvider = await createCodexModelProvider({
           name,
@@ -2355,6 +2357,7 @@ export function CodexModelProviderManager({
             apiVisionRoutingModel: savedProvider.visionRoutingModel,
           });
           if (updatedAccountCount > 0) {
+            linkedAccountSnapshotUpdated = true;
             await emitAccountsChanged({
               platformId: "codex",
               reason: "provider-snapshot-sync",
@@ -2369,10 +2372,11 @@ export function CodexModelProviderManager({
       setNotice({
         tone: "success",
         text:
-          Object.keys(parsedWindows.windows).length > 0
+          Object.keys(parsedWindows.windows).length > 0 ||
+          linkedAccountSnapshotUpdated
             ? `${t("codex.modelProviders.saveSuccess", "模型供应商已保存")} ${t(
                 "codex.api.modelCatalog.restartHint",
-                "模型目录已更新。若 Codex 正在运行，请重启后生效。",
+                "供应商配置已更新。若 Codex 或 API 服务正在运行，请重启后生效。",
               )}`
             : t("codex.modelProviders.saveSuccess", "模型供应商已保存"),
       });
@@ -3436,6 +3440,10 @@ export function CodexModelProviderManager({
     },
     [formatUsageMoney, t],
   );
+  const showProviderVisionSettings = canConfigureCodexProviderVision({
+    presetId: selectedPresetId,
+    wireApi: form.wireApi,
+  });
 
   return (
     <div className="codex-provider-manager-page">
@@ -5110,8 +5118,8 @@ export function CodexModelProviderManager({
                   </label>
                 </div>
               )}
-              {form.wireApi === "chat_completions" && (
-                <>
+              <>
+                {form.wireApi === "chat_completions" && (
                   <div className="form-group">
                     <label>
                       {t("codex.modelProviders.fields.modelCatalog", "模型目录")}
@@ -5140,6 +5148,8 @@ export function CodexModelProviderManager({
                       disabled={saving}
                     />
                   </div>
+                )}
+                {showProviderVisionSettings && (
                   <div className="form-group">
                     <label>
                       {t(
@@ -5158,7 +5168,7 @@ export function CodexModelProviderManager({
                         <span className="provider-vision-toggle-desc">
                           {t(
                             "codex.modelProviders.vision.providerDefaultHint",
-                            "关闭时，只有下方列出的模型会允许图片输入；其他模型会在本地网关直接提示不支持。",
+                            "关闭时，只有下方列出的模型会接收图片；其他模型会省略图片并继续处理文本。",
                           )}
                         </span>
                       </span>
@@ -5175,6 +5185,8 @@ export function CodexModelProviderManager({
                       </span>
                     </label>
                   </div>
+                )}
+                {showProviderVisionSettings && (
                   <div className="form-group">
                     <label>
                       {t(
@@ -5192,44 +5204,48 @@ export function CodexModelProviderManager({
                       placeholder={"qwen-vl-plus\ngpt-4o"}
                       disabled={saving}
                     />
+                    <p className="api-provider-hint">
+                      {t(
+                        "codex.modelProviders.vision.modelsHint",
+                        "每行一个模型名。适合同一供应商里只有部分视觉模型支持粘贴图片的情况。",
+                      )}
+                    </p>
+                  </div>
+                )}
+                {showProviderVisionSettings && (
+                  <div className="form-group">
+                    <label>
+                      {t(
+                        "codex.modelProviders.fields.visionRoutingModel",
+                        "图片请求默认模型",
+                      )}
+                    </label>
+                    <input
+                      className="form-input"
+                      value={form.visionRoutingModel}
+                      onChange={(event) =>
+                        mutateForm({ visionRoutingModel: event.target.value })
+                      }
+                      placeholder={"mimo-v2.5"}
+                      disabled={saving}
+                    />
+                    <p className="api-provider-hint">
+                      {t(
+                        "codex.modelProviders.vision.routingModelHint",
+                        "当前模型不支持图片时，带图片请求会改用该模型；留空时若没有唯一视觉模型，则省略图片并继续处理文本。",
+                      )}
+                    </p>
+                  </div>
+                )}
+                {form.wireApi === "chat_completions" && (
                   <p className="api-provider-hint">
                     {t(
-                      "codex.modelProviders.vision.modelsHint",
-                      "每行一个模型名。适合同一供应商里只有部分视觉模型支持粘贴图片的情况。",
-                    )}
-                  </p>
-                </div>
-                <div className="form-group">
-                  <label>
-                    {t(
-                      "codex.modelProviders.fields.visionRoutingModel",
-                      "图片请求默认模型",
-                    )}
-                  </label>
-                  <input
-                    className="form-input"
-                    value={form.visionRoutingModel}
-                    onChange={(event) =>
-                      mutateForm({ visionRoutingModel: event.target.value })
-                    }
-                    placeholder={"mimo-v2.5"}
-                    disabled={saving}
-                  />
-                  <p className="api-provider-hint">
-                    {t(
-                      "codex.modelProviders.vision.routingModelHint",
-                      "当前模型不支持图片时，带图片的请求会改用该模型；留空则直接提示不支持。",
-                    )}
-                  </p>
-                </div>
-                <p className="api-provider-hint">
-                  {t(
-                    "codex.modelProviders.gatewayHint",
+                      "codex.modelProviders.gatewayHint",
                       "第三方供应商启动时会使用本地网关隔离实例并完成协议转换；OpenAI 官方供应商保持直连。",
                     )}
                   </p>
-                </>
-              )}
+                )}
+              </>
               <div className="form-group">
                 <label>
                   {t("codex.modelProviders.fields.website", "官网（可选）")}

@@ -2672,7 +2672,8 @@
         "fetchCredentialsRequired": "请先填写 API Key 和 Base URL。",
         "fetchEmpty": "上游未返回可用模型，已保留当前列表。",
         "fetchFailed": "获取上游模型失败：{{error}}",
-        "syncRequiresModels": "同步到 Codex 前请先获取或填写模型列表。"
+        "syncRequiresModels": "同步到 Codex 前请先获取或填写模型列表。",
+        "restartHint": "供应商配置已更新。若 Codex 或 API 服务正在运行，请重启后生效。"
       },
       "actions": {
         "addAndSwitch": "添加并切换"
@@ -3023,9 +3024,9 @@
       },
       "vision": {
         "providerDefault": "该供应商默认支持图片输入",
-        "providerDefaultHint": "关闭时，只有下方列出的模型会允许图片输入；其他模型会在本地网关直接提示不支持。",
+        "providerDefaultHint": "关闭时，只有下方列出的模型会接收图片；其他模型会省略图片并继续处理文本。",
         "modelsHint": "每行一个模型名。适合同一供应商里只有部分视觉模型支持粘贴图片的情况。",
-        "routingModelHint": "当前模型不支持图片时，带图片请求会改用该模型；留空且只有一个视觉模型时自动使用。",
+        "routingModelHint": "当前模型不支持图片时，带图片请求会改用该模型；留空时自动使用唯一视觉模型，否则省略图片并继续处理文本。",
         "allModels": "图片输入",
         "partialModels": "部分图片",
         "textOnly": "仅文本"

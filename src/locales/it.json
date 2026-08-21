@@ -3026,7 +3026,8 @@
         "fetchCredentialsRequired": "Inserisci prima API Key e Base URL.",
         "fetchEmpty": "Il fornitore non ha restituito modelli. L’elenco attuale è stato mantenuto.",
         "fetchFailed": "Impossibile recuperare i modelli del fornitore: {{error}}",
-        "syncRequiresModels": "Recupera o inserisci almeno un modello prima di sincronizzare con Codex."
+        "syncRequiresModels": "Recupera o inserisci almeno un modello prima di sincronizzare con Codex.",
+        "restartHint": "Le impostazioni del provider sono state aggiornate. Riavvia Codex o il servizio API se è in esecuzione."
       },
       "actions": {
         "addAndSwitch": "Aggiungi e passa"
@@ -3357,9 +3358,9 @@
       },
       "vision": {
         "providerDefault": "Questo provider supporta le immagini per impostazione predefinita",
-        "providerDefaultHint": "Se disattivato, solo i modelli elencati sotto possono ricevere immagini; gli altri vengono bloccati dal gateway locale.",
+        "providerDefaultHint": "Se disattivato, solo i modelli elencati sotto ricevono immagini; gli altri omettono le immagini e continuano con il testo.",
         "modelsHint": "Un modello per riga. Utile quando solo alcuni modelli del provider supportano immagini incollate.",
-        "routingModelHint": "Quando il modello attuale non legge immagini, la richiesta usa questo modello; vuoto usa automaticamente l'unico modello visivo.",
+        "routingModelHint": "Quando il modello attuale non legge immagini, la richiesta usa questo modello; vuoto usa automaticamente l'unico modello visivo, altrimenti le immagini vengono omesse e il testo continua.",
         "allModels": "Immagini",
         "partialModels": "Alcune immagini",
         "textOnly": "Solo testo"

@@ -3026,7 +3026,8 @@
         "fetchCredentialsRequired": "Nejprve zadejte API Key a Base URL.",
         "fetchEmpty": "Poskytovatel nevrátil žádné modely. Aktuální seznam zůstal zachován.",
         "fetchFailed": "Načtení modelů poskytovatele se nezdařilo: {{error}}",
-        "syncRequiresModels": "Před synchronizací do Codexu načtěte nebo zadejte alespoň jeden model."
+        "syncRequiresModels": "Před synchronizací do Codexu načtěte nebo zadejte alespoň jeden model.",
+        "restartHint": "Nastavení poskytovatele bylo aktualizováno. Pokud běží Codex nebo služba API, restartujte je."
       },
       "actions": {
         "addAndSwitch": "Přidat a přepnout"
@@ -3357,9 +3358,9 @@
       },
       "vision": {
         "providerDefault": "Tento poskytovatel ve výchozím stavu podporuje obrázky",
-        "providerDefaultHint": "Když je vypnuto, obrázky přijmou jen níže uvedené modely; ostatní místní brána odmítne.",
+        "providerDefaultHint": "Když je vypnuto, obrázky přijmou jen níže uvedené modely; ostatní obrázky vynechají a pokračují zpracováním textu.",
         "modelsHint": "Jeden model na řádek. Hodí se, když obrázky podporuje jen část modelů poskytovatele.",
-        "routingModelHint": "Když aktuální model nečte obrázky, požadavek použije tento model; prázdné pole automaticky použije jediný vizuální model.",
+        "routingModelHint": "Když aktuální model nečte obrázky, požadavek použije tento model; prázdné pole automaticky použije jediný vizuální model, jinak se obrázky vynechají a text pokračuje.",
         "allModels": "Obrázky",
         "partialModels": "Část obrázků",
         "textOnly": "Jen text"

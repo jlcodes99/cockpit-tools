@@ -34461,6 +34461,52 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         assert!(is_provider_gateway_eligible_account(&account));
     }
 
+    #[test]
+    fn provider_gateway_preserves_responses_vision_capabilities() {
+        let mut account = CodexAccount::new_api_key(
+            "api-vision".to_string(),
+            "vision@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://relay.example/v1".to_string()),
+            Some("relay".to_string()),
+            Some("Relay".to_string()),
+            vec!["text-model".to_string(), "vision-model".to_string()],
+        );
+        account.api_wire_api = Some("responses".to_string());
+        account.api_sync_model_catalog_to_codex = true;
+        account.api_model_vision_support = HashMap::from([
+            ("text-model".to_string(), false),
+            ("vision-model".to_string(), true),
+        ]);
+        account.api_vision_routing_model = Some("vision-model".to_string());
+
+        assert!(account_requires_provider_gateway(&account));
+
+        let gateway =
+            super::provider_gateway_for_account(&account).expect("build provider gateway");
+        let manifest_gateway = serde_json::to_value(&gateway).expect("serialize provider gateway");
+
+        assert_eq!(gateway.wire_api.as_deref(), Some("responses"));
+        assert!(!gateway.supports_vision);
+        assert_eq!(
+            gateway
+                .model_capabilities
+                .get("vision-model")
+                .map(|capability| capability.supports_vision),
+            Some(true)
+        );
+        assert_eq!(
+            gateway.vision_routing_model.as_deref(),
+            Some("vision-model")
+        );
+        assert_eq!(
+            manifest_gateway["modelCapabilities"]["vision-model"]["supportsVision"],
+            true
+        );
+        assert_eq!(manifest_gateway["visionRoutingModel"], "vision-model");
+    }
+
     fn model_provider_chat_test_request(
         wire_api: &str,
     ) -> CodexModelProviderGatewayChatTestRequest {

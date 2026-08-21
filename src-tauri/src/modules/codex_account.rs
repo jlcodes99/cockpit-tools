@@ -15348,9 +15348,12 @@ supports_websockets = false
             vec!["gpt-5".to_string()],
             Some("responses".to_string()),
             true,
-            false,
-            Default::default(),
-            None,
+            true,
+            std::collections::HashMap::from([
+                ("gpt-5".to_string(), true),
+                ("gpt-5-mini".to_string(), false),
+            ]),
+            Some("gpt-5".to_string()),
             None,
         )
         .expect("sync provider snapshot");
@@ -15358,6 +15361,15 @@ supports_websockets = false
         assert_eq!(updated, 1);
         let saved = load_account(&account.id).expect("load updated account");
         assert!(saved.api_supports_websockets);
+        assert!(saved.api_supports_vision);
+        assert_eq!(
+            saved.api_model_vision_support,
+            std::collections::HashMap::from([
+                ("gpt-5".to_string(), true),
+                ("gpt-5-mini".to_string(), false),
+            ])
+        );
+        assert_eq!(saved.api_vision_routing_model.as_deref(), Some("gpt-5"));
         assert_eq!(saved.api_wire_api.as_deref(), Some("responses"));
         assert_eq!(saved.api_model_catalog, vec!["gpt-5".to_string()]);
         assert_eq!(saved.last_used, 123);

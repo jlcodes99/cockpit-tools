@@ -3026,7 +3026,8 @@
         "fetchCredentialsRequired": "Saisissez d’abord l’API Key et la Base URL.",
         "fetchEmpty": "Le fournisseur n’a renvoyé aucun modèle. La liste actuelle a été conservée.",
         "fetchFailed": "Impossible de récupérer les modèles du fournisseur : {{error}}",
-        "syncRequiresModels": "Récupérez ou saisissez au moins un modèle avant la synchronisation avec Codex."
+        "syncRequiresModels": "Récupérez ou saisissez au moins un modèle avant la synchronisation avec Codex.",
+        "restartHint": "Les paramètres du fournisseur ont été mis à jour. Redémarrez Codex ou le service API s'il est en cours d'exécution."
       },
       "actions": {
         "addAndSwitch": "Ajouter et basculer"
@@ -3357,9 +3358,9 @@
       },
       "vision": {
         "providerDefault": "Ce fournisseur prend en charge les images par défaut",
-        "providerDefaultHint": "Si désactivé, seuls les modèles listés ci-dessous acceptent les images ; les autres sont rejetés par la passerelle locale.",
+        "providerDefaultHint": "Si désactivé, seuls les modèles listés ci-dessous reçoivent les images ; les autres omettent les images et continuent avec le texte.",
         "modelsHint": "Un modèle par ligne. Utile quand seuls certains modèles du fournisseur acceptent les images collées.",
-        "routingModelHint": "Quand le modèle actuel ne lit pas les images, la requête utilise ce modèle ; vide utilise automatiquement l'unique modèle vision.",
+        "routingModelHint": "Quand le modèle actuel ne lit pas les images, la requête utilise ce modèle ; vide utilise automatiquement l'unique modèle vision, sinon les images sont omises et le texte continue.",
         "allModels": "Images​",
         "partialModels": "Images partielles",
         "textOnly": "Texte seul"
