@@ -396,6 +396,8 @@ pub struct CodexLocalAccessProviderGateway {
         std::collections::HashMap<String, CodexLocalAccessProviderGatewayModelCapability>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vision_routing_model: Option<String>,
+    #[serde(default)]
+    pub disable_thinking: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

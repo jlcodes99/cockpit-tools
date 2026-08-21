@@ -18047,6 +18047,7 @@ fn provider_gateway_for_account(
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string),
+        disable_thinking: false,
     })
 }
 
@@ -29800,6 +29801,7 @@ wire_api = "responses"
                 supports_vision: false,
                 model_capabilities: HashMap::new(),
                 vision_routing_model: None,
+                disable_thinking: false,
             }),
             inherit_account_pool: Some(false),
             account_ids: vec!["deepseek-account".to_string()],
@@ -32542,6 +32544,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                 supports_vision: false,
                 model_capabilities: HashMap::new(),
                 vision_routing_model: None,
+                disable_thinking: false,
             }),
             inherit_account_pool: false,
             account_ids: vec!["account-1".to_string()],
@@ -34682,6 +34685,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
                 supports_vision: false,
                 model_capabilities: HashMap::new(),
                 vision_routing_model: None,
+                disable_thinking: false,
             }),
             inherit_account_pool: Some(false),
             account_ids: vec!["deepseek-account".to_string()],
@@ -34743,6 +34747,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             supports_vision: false,
             model_capabilities: HashMap::new(),
             vision_routing_model: None,
+            disable_thinking: false,
         };
         let chat_request = model_provider_chat_test_request("chat_completions");
         let chat_collection = build_model_provider_gateway_test_collection(
@@ -35471,6 +35476,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             supports_vision: false,
             model_capabilities: HashMap::new(),
             vision_routing_model: None,
+            disable_thinking: false,
         });
         api_key.account_ids = vec![account_id.clone()];
         collection.api_keys = vec![api_key];
@@ -35522,6 +35528,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             supports_vision: false,
             model_capabilities: HashMap::new(),
             vision_routing_model: None,
+            disable_thinking: false,
         });
         api_key.account_ids = vec![account_id.clone()];
         collection.api_keys = vec![api_key];
