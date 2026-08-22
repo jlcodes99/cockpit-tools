@@ -30,6 +30,7 @@ pub mod codex_oauth;
 pub mod codex_official_app_server;
 pub mod codex_protocol;
 pub mod codex_quota;
+pub mod codex_remote_quota;
 pub mod codex_session_file_time;
 pub mod codex_session_manager;
 pub mod codex_session_usage;

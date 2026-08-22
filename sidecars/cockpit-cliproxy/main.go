@@ -4389,6 +4389,8 @@ type quotaPoolWindowState struct {
 }
 
 type quotaPoolAccountState struct {
+	AuthKind  string                `json:"authKind,omitempty"`
+	Balance   *float64              `json:"balance,omitempty"`
 	Primary   *quotaPoolWindowState `json:"primary,omitempty"`
 	Secondary *quotaPoolWindowState `json:"secondary,omitempty"`
 	UpdatedAt *int64                `json:"updatedAt,omitempty"`
@@ -4401,9 +4403,9 @@ type quotaPoolStateFile struct {
 type cockpitQuotaResponse struct {
 	Version                  int                       `json:"version"`
 	Scope                    string                    `json:"scope"`
-	RemainingPercent         *int                      `json:"remainingPercent,omitempty"`
 	WeeklyRemainingPercent   *int                      `json:"weeklyRemainingPercent,omitempty"`
 	FiveHourRemainingPercent *int                      `json:"fiveHourRemainingPercent,omitempty"`
+	APIKeyBalance            *float64                  `json:"apiKeyBalance,omitempty"`
 	AccountCount             int                       `json:"accountCount"`
 	IncludedAccountCount     int                       `json:"includedAccountCount"`
 	MissingAccountCount      int                       `json:"missingAccountCount"`
@@ -4416,10 +4418,11 @@ type cockpitQuotaResponse struct {
 }
 
 type cockpitQuotaPlanSummary struct {
-	Plan                     string `json:"plan"`
-	Count                    int    `json:"count"`
-	WeeklyRemainingPercent   *int   `json:"weeklyRemainingPercent,omitempty"`
-	FiveHourRemainingPercent *int   `json:"fiveHourRemainingPercent,omitempty"`
+	Plan                     string   `json:"plan"`
+	Count                    int      `json:"count"`
+	Balance                  *float64 `json:"balance,omitempty"`
+	WeeklyRemainingPercent   *int     `json:"weeklyRemainingPercent,omitempty"`
+	FiveHourRemainingPercent *int     `json:"fiveHourRemainingPercent,omitempty"`
 }
 
 func readQuotaPoolState(path string) (quotaPoolStateFile, error) {
@@ -4466,8 +4469,31 @@ func quotaPlanLabel(account *accountSpec) string {
 	return strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(plan, "-", "_"), " ", "_"))
 }
 
+func quotaAccountIsAPIKey(account *accountSpec, state quotaPoolAccountState) bool {
+	return (account != nil && manifestAccountAuthKind(account) == "api_key") ||
+		strings.EqualFold(strings.TrimSpace(state.AuthKind), "api_key")
+}
+
+func quotaPlanLabelForState(account *accountSpec, state quotaPoolAccountState) string {
+	if quotaAccountIsAPIKey(account, state) {
+		return "API_KEY"
+	}
+	return quotaPlanLabel(account)
+}
+
 func addQuotaPercent(current *int, value int) *int {
 	result := value
+	if current != nil {
+		result += *current
+	}
+	return &result
+}
+
+func addQuotaBalance(current *float64, value *float64) *float64 {
+	if value == nil {
+		return current
+	}
+	result := *value
 	if current != nil {
 		result += *current
 	}
@@ -4483,20 +4509,10 @@ func buildCockpitQuotaResponseWithAccounts(spec *apiKeySpec, state quotaPoolStat
 	if spec != nil {
 		accountIDs = normalizeStringList(spec.AccountIDs)
 	}
-	quotaAccountIDs := accountIDs
-	if accounts != nil {
-		quotaAccountIDs = make([]string, 0, len(accountIDs))
-		for _, accountID := range accountIDs {
-			if account := accounts[accountID]; account != nil && strings.EqualFold(strings.TrimSpace(account.AuthKind), "api_key") {
-				continue
-			}
-			quotaAccountIDs = append(quotaAccountIDs, accountID)
-		}
-	}
 	result := cockpitQuotaResponse{
 		Version:      1,
 		Scope:        "api_key_account_pool",
-		AccountCount: len(quotaAccountIDs),
+		AccountCount: len(accountIDs),
 	}
 	planIndex := make(map[string]int)
 	for _, accountID := range accountIDs {
@@ -4504,7 +4520,7 @@ func buildCockpitQuotaResponseWithAccounts(spec *apiKeySpec, state quotaPoolStat
 		if accounts != nil {
 			account = accounts[accountID]
 		}
-		plan := quotaPlanLabel(account)
+		plan := quotaPlanLabelForState(account, state.Accounts[accountID])
 		index, exists := planIndex[plan]
 		if !exists {
 			index = len(result.Plans)
@@ -4513,40 +4529,47 @@ func buildCockpitQuotaResponseWithAccounts(spec *apiKeySpec, state quotaPoolStat
 		}
 		result.Plans[index].Count++
 	}
-	total := 0
-	hasValue := false
 	weeklyTotal := 0
 	fiveHourTotal := 0
 	hasWeekly := false
 	hasFiveHour := false
-	for _, accountID := range quotaAccountIDs {
+	for _, accountID := range accountIDs {
 		item, ok := state.Accounts[accountID]
+		var account *accountSpec
+		if accounts != nil {
+			account = accounts[accountID]
+		}
+		isAPIKey := quotaAccountIsAPIKey(account, item)
 		if !ok {
 			result.MissingAccountCount++
 			result.AbnormalAccountCount++
 			continue
 		}
+		if isAPIKey {
+			result.AvailableAccountCount++
+			result.IncludedAccountCount++
+			result.APIKeyBalance = addQuotaBalance(result.APIKeyBalance, item.Balance)
+			if index, exists := planIndex[quotaPlanLabelForState(account, item)]; exists {
+				result.Plans[index].Balance = addQuotaBalance(result.Plans[index].Balance, item.Balance)
+			}
+			if item.UpdatedAt != nil {
+				if *item.UpdatedAt > result.UpdatedAt {
+					result.UpdatedAt = *item.UpdatedAt
+				}
+				if now.Unix()-*item.UpdatedAt > 15*60 {
+					result.Stale = true
+				}
+			}
+			continue
+		}
 		primaryValue, primaryMinutes, primaryOK := quotaWindowValue(item.Primary)
 		secondaryValue, secondaryMinutes, secondaryOK := quotaWindowValue(item.Secondary)
-		value, ok := 0, false
-		switch {
-		case primaryOK && secondaryOK && primaryMinutes <= secondaryMinutes:
-			value, ok = primaryValue, true
-		case primaryOK && secondaryOK:
-			value, ok = secondaryValue, true
-		case primaryOK:
-			value, ok = primaryValue, true
-		case secondaryOK:
-			value, ok = secondaryValue, true
-		}
-		if !ok {
+		if !primaryOK && !secondaryOK {
 			result.MissingAccountCount++
 			result.AbnormalAccountCount++
 			continue
 		}
 		result.AvailableAccountCount++
-		total += value
-		hasValue = true
 		if primaryOK && primaryMinutes >= 5*24*60 {
 			weeklyTotal += primaryValue
 			hasWeekly = true
@@ -4562,10 +4585,6 @@ func buildCockpitQuotaResponseWithAccounts(spec *apiKeySpec, state quotaPoolStat
 		if secondaryOK && secondaryMinutes > 0 && secondaryMinutes <= 6*60 {
 			fiveHourTotal += secondaryValue
 			hasFiveHour = true
-		}
-		var account *accountSpec
-		if accounts != nil {
-			account = accounts[accountID]
 		}
 		if index, exists := planIndex[quotaPlanLabel(account)]; exists {
 			planSummary := &result.Plans[index]
@@ -4591,9 +4610,6 @@ func buildCockpitQuotaResponseWithAccounts(spec *apiKeySpec, state quotaPoolStat
 				result.Stale = true
 			}
 		}
-	}
-	if hasValue {
-		result.RemainingPercent = &total
 	}
 	if hasWeekly {
 		result.WeeklyRemainingPercent = &weeklyTotal
@@ -4633,7 +4649,7 @@ func applyCockpitQuotaAuthHealth(result *cockpitQuotaResponse, spec *apiKeySpec,
 		item, hasState := state.Accounts[accountID]
 		_, _, primaryOK := quotaWindowValue(item.Primary)
 		_, _, secondaryOK := quotaWindowValue(item.Secondary)
-		wasAvailable := hasState && (primaryOK || secondaryOK)
+		wasAvailable := hasState && (strings.EqualFold(strings.TrimSpace(item.AuthKind), "api_key") || primaryOK || secondaryOK)
 		if wasAvailable && result.AvailableAccountCount > 0 {
 			result.AvailableAccountCount--
 		}
@@ -4670,7 +4686,7 @@ func (s *relayServer) handleCockpitQuota(c *gin.Context) {
 	if s.authManager != nil {
 		applyCockpitQuotaAuthHealth(&response, spec, state, s.authManager.List(), time.Now())
 	}
-	if response.RemainingPercent == nil && spec != nil && spec.ProviderGateway != nil {
+	if response.AccountCount == 0 && spec != nil && spec.ProviderGateway != nil {
 		upstreamURL, urlErr := providerGatewayURL(spec.ProviderGateway.BaseURL, cockpitQuotaPath)
 		if urlErr == nil {
 			request, requestErr := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, upstreamURL, nil)

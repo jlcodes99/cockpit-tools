@@ -411,7 +411,7 @@ interface ProviderFormState {
   wireApi: CodexProviderWireApi;
   supportsWebsockets: boolean;
   enableModePreference: CodexProviderEnableModePreference;
-  integrationType: "sub2api" | "new_api" | "";
+  integrationType: "sub2api" | "new_api" | "cockpit_tools" | "";
   newApiKeyName: string;
   newApiKey: string;
 }
@@ -3188,7 +3188,8 @@ export function CodexModelProviderManager({
           integrationType: provider.integrationType ?? null,
         });
         if (
-          (summary.mode === "sub2api" || summary.mode === "new_api") &&
+          (summary.mode === "sub2api" ||
+            summary.mode === "new_api") &&
           summary.mode !== provider.integrationType
         ) {
           await saveCodexModelProviderDetectedIntegrationType(provider.id, summary.mode);
@@ -3361,6 +3362,10 @@ export function CodexModelProviderManager({
         isAvailable: t("codex.modelProviders.usage.fields.isAvailable", "余额可用"),
         currency: t("codex.modelProviders.usage.fields.currency", "币种"),
         totalBalance: t("codex.modelProviders.usage.fields.totalBalance", "总余额"),
+        apiKeyBalance: t(
+          "codex.modelProviders.usage.fields.apiKeyBalance",
+          "API_KEY 余额",
+        ),
         grantedBalance: t("codex.modelProviders.usage.fields.grantedBalance", "赠金余额"),
         toppedUpBalance: t("codex.modelProviders.usage.fields.toppedUpBalance", "充值余额"),
       };
@@ -3400,6 +3405,12 @@ export function CodexModelProviderManager({
       ) {
         if (raw === "true") return t("codex.modelProviders.usage.booleanTrue", "是");
         if (raw === "false") return t("codex.modelProviders.usage.booleanFalse", "否");
+      }
+      if (
+        Number.isFinite(numeric) &&
+        item.key === "apiKeyBalance"
+      ) {
+        return numeric.toLocaleString("en-US", { maximumFractionDigits: 2 });
       }
       if (
         Number.isFinite(numeric) &&
@@ -3701,6 +3712,7 @@ export function CodexModelProviderManager({
             const usageMode =
               usageSummary?.mode === "new_api" ||
               usageSummary?.mode === "sub2api" ||
+              usageSummary?.mode === "cockpit_tools" ||
               usageSummary?.mode === "deepseek" ||
               usageSummary?.mode === "token_plan"
                 ? usageSummary.mode
@@ -3708,6 +3720,10 @@ export function CodexModelProviderManager({
             const deepSeekDetailValue = (key: string) => {
               const item = usageSummary?.details?.find((detail) => detail.key === key);
               return item ? formatUsageDetailValue(item, usageSummary?.unit) : "-";
+            };
+            const cockpitToolsDetailValue = (key: string, percent = false) => {
+              const value = deepSeekDetailValue(key);
+              return value === "-" || !percent ? value : `${value}%`;
             };
             const {
               granted: totalGranted,
@@ -3868,6 +3884,67 @@ export function CodexModelProviderManager({
                         <div>
                           <span>{t("codex.modelProviders.usage.fields.toppedUpBalance", "充值余额")}</span>
                           <strong>{deepSeekDetailValue("toppedUpBalance")}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  ) : usageMode === "cockpit_tools" ? (
+                    <div className="codex-api-key-usage-panel cockpit-tools">
+                      <div className="codex-api-key-usage-grid">
+                        <div>
+                          <span>
+                            {t(
+                              "codex.modelProviders.usage.fields.fiveHourRemainingPercent",
+                              "5h 剩余",
+                            )}
+                          </span>
+                          <strong>
+                            {cockpitToolsDetailValue(
+                              "fiveHourRemainingPercent",
+                              true,
+                            )}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>
+                            {t(
+                              "codex.modelProviders.usage.fields.apiKeyBalance",
+                              "API_KEY 余额",
+                            )}
+                          </span>
+                          <strong>
+                            {cockpitToolsDetailValue("apiKeyBalance")}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>
+                            {t(
+                              "codex.modelProviders.usage.fields.weeklyRemainingPercent",
+                              "周剩余",
+                            )}
+                          </span>
+                          <strong>
+                            {cockpitToolsDetailValue(
+                              "weeklyRemainingPercent",
+                              true,
+                            )}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>
+                            {t("codex.modelProviders.usage.fields.accountCount", "账号池")}
+                          </span>
+                          <strong>{cockpitToolsDetailValue("accountCount")}</strong>
+                        </div>
+                        <div>
+                          <span>
+                            {t(
+                              "codex.modelProviders.usage.fields.availableAccountCount",
+                              "可用账号",
+                            )}
+                          </span>
+                          <strong>
+                            {cockpitToolsDetailValue("availableAccountCount")}
+                          </strong>
                         </div>
                       </div>
                     </div>
@@ -6019,9 +6096,18 @@ export function CodexModelProviderManager({
         const primaryApiKey = getSelectedProviderApiKey(provider);
         const usageSummary = usageState?.summary;
         const resolvedWireApi = resolveProviderWireApi(provider);
+        const providerUsageDetailValue = (key: string) => {
+          const item = usageSummary?.details?.find((detail) => detail.key === key);
+          return item ? formatUsageDetailValue(item, usageSummary?.unit) : "-";
+        };
+        const providerUsagePercentDetailValue = (key: string) => {
+          const value = providerUsageDetailValue(key);
+          return value === "-" ? value : `${value}%`;
+        };
         const usageMode =
           usageSummary?.mode === "new_api" ||
           usageSummary?.mode === "sub2api" ||
+          usageSummary?.mode === "cockpit_tools" ||
           usageSummary?.mode === "deepseek" ||
           usageSummary?.mode === "token_plan"
             ? usageSummary.mode
@@ -6031,7 +6117,7 @@ export function CodexModelProviderManager({
             ? new Set(["mode", "totalGranted", "totalAvailable", "expiresAt"])
             : usageMode === "sub2api"
               ? new Set(["mode", "remaining", "todayRequests", "todayTokens"])
-            : usageMode === "deepseek"
+              : usageMode === "deepseek"
                 ? new Set([
                     "isAvailable",
                     "currency",
@@ -6039,14 +6125,26 @@ export function CodexModelProviderManager({
                     "grantedBalance",
                     "toppedUpBalance",
                   ])
-                : usageMode === "token_plan"
+                : usageMode === "cockpit_tools"
                   ? new Set([
                       "mode",
-                      "remaining",
-                      "planName",
-                      "expiresAt",
+                      "scope",
+                      "fiveHourRemainingPercent",
+                      "weeklyRemainingPercent",
+                      "apiKeyBalance",
+                      "accountCount",
+                      "availableAccountCount",
+                      "abnormalAccountCount",
+                      "cooldownAccountCount",
                     ])
-                : new Set<string>();
+                  : usageMode === "token_plan"
+                    ? new Set([
+                        "mode",
+                        "remaining",
+                        "planName",
+                        "expiresAt",
+                      ])
+                    : new Set<string>();
         const detailMetrics: CodexServicePanelMetricItem[] = [
           {
             key: "wireApi",
@@ -6165,66 +6263,126 @@ export function CodexModelProviderManager({
                   value: item ? formatUsageDetailValue(item, usageSummary?.unit) : "-",
                 };
               })
-            : usageMode === "new_api"
-            ? [
-                {
-                  key: "totalGranted",
-                  label: t("codex.modelProviders.usage.fields.totalGranted", "授予额度"),
-                  value: formatUsageDetailValue(
-                    {
-                      key: "totalGranted",
-                      value: String(newApiQuota.granted ?? "-"),
-                    },
-                    usageSummary?.unit,
-                  ),
-                },
-                {
-                  key: "totalAvailable",
-                  label: t("codex.modelProviders.usage.fields.totalAvailable", "可用额度"),
-                  value: formatUsageDetailValue(
-                    {
-                      key: "totalAvailable",
-                      value: String(newApiQuota.available ?? "-"),
-                    },
-                    usageSummary?.unit,
-                  ),
-                },
-                {
-                  key: "expiresAt",
-                  label: t("codex.modelProviders.usage.fields.expiresAt", "过期时间"),
-                  value: formatUsageDetailValue(
-                    {
-                      key: "expiresAt",
-                      value: String(newApiQuota.expiresAt ?? "-"),
-                    },
-                    usageSummary?.unit,
-                  ),
-                },
-              ]
-            : usageMode === "sub2api"
+            : usageMode === "cockpit_tools"
               ? [
                   {
-                    key: "accountBalance",
-                    label: t("codex.modelProviders.usage.accountBalance", "账户余额"),
-                    value: formatUsageQuotaValue(
-                      usageSummary,
-                      usageSummary?.remaining ??
-                        usageSummary?.balance ??
-                        usageSummary?.quotaRemaining,
+                    key: "fiveHourRemainingPercent",
+                    label: t(
+                      "codex.modelProviders.usage.fields.fiveHourRemainingPercent",
+                      "5h 剩余",
                     ),
+                    value: providerUsagePercentDetailValue("fiveHourRemainingPercent"),
                   },
                   {
-                    key: "todayRequests",
-                    label: t("codex.modelProviders.usage.fields.todayRequests", "今日请求"),
-                    value: String(usageSummary?.todayRequests ?? 0),
+                    key: "weeklyRemainingPercent",
+                    label: t(
+                      "codex.modelProviders.usage.fields.weeklyRemainingPercent",
+                      "周剩余",
+                    ),
+                    value: providerUsagePercentDetailValue("weeklyRemainingPercent"),
                   },
                   {
-                    key: "todayTokens",
-                    label: t("codex.modelProviders.usage.fields.todayTokens", "今日 Token"),
-                    value: (usageSummary?.todayTotalTokens ?? 0).toLocaleString("en-US"),
+                    key: "apiKeyBalance",
+                    label: t(
+                      "codex.modelProviders.usage.fields.apiKeyBalance",
+                      "API_KEY 余额",
+                    ),
+                    value: providerUsageDetailValue("apiKeyBalance"),
+                  },
+                  {
+                    key: "accountCount",
+                    label: t("codex.modelProviders.usage.fields.accountCount", "账号池"),
+                    value: providerUsageDetailValue("accountCount"),
+                  },
+                  {
+                    key: "availableAccountCount",
+                    label: t(
+                      "codex.modelProviders.usage.fields.availableAccountCount",
+                      "可用账号",
+                    ),
+                    value: providerUsageDetailValue("availableAccountCount"),
                   },
                 ]
-              : [];
+              : usageMode === "new_api"
+                ? [
+                    {
+                      key: "totalGranted",
+                      label: t(
+                        "codex.modelProviders.usage.fields.totalGranted",
+                        "授予额度",
+                      ),
+                      value: formatUsageDetailValue(
+                        {
+                          key: "totalGranted",
+                          value: String(newApiQuota.granted ?? "-"),
+                        },
+                        usageSummary?.unit,
+                      ),
+                    },
+                    {
+                      key: "totalAvailable",
+                      label: t(
+                        "codex.modelProviders.usage.fields.totalAvailable",
+                        "可用额度",
+                      ),
+                      value: formatUsageDetailValue(
+                        {
+                          key: "totalAvailable",
+                          value: String(newApiQuota.available ?? "-"),
+                        },
+                        usageSummary?.unit,
+                      ),
+                    },
+                    {
+                      key: "expiresAt",
+                      label: t(
+                        "codex.modelProviders.usage.fields.expiresAt",
+                        "过期时间",
+                      ),
+                      value: formatUsageDetailValue(
+                        {
+                          key: "expiresAt",
+                          value: String(newApiQuota.expiresAt ?? "-"),
+                        },
+                        usageSummary?.unit,
+                      ),
+                    },
+                  ]
+                : usageMode === "sub2api"
+                  ? [
+                      {
+                        key: "accountBalance",
+                        label: t(
+                          "codex.modelProviders.usage.accountBalance",
+                          "账户余额",
+                        ),
+                        value: formatUsageQuotaValue(
+                          usageSummary,
+                          usageSummary?.remaining ??
+                            usageSummary?.balance ??
+                            usageSummary?.quotaRemaining,
+                        ),
+                      },
+                      {
+                        key: "todayRequests",
+                        label: t(
+                          "codex.modelProviders.usage.fields.todayRequests",
+                          "今日请求",
+                        ),
+                        value: String(usageSummary?.todayRequests ?? 0),
+                      },
+                      {
+                        key: "todayTokens",
+                        label: t(
+                          "codex.modelProviders.usage.fields.todayTokens",
+                          "今日 Token",
+                        ),
+                        value: (usageSummary?.todayTotalTokens ?? 0).toLocaleString(
+                          "en-US",
+                        ),
+                      },
+                    ]
+                  : [];
 
         const actions: CodexServicePanelActionItem[] = [
           {

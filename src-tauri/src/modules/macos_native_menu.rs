@@ -4814,7 +4814,7 @@ mod imp {
         app: AppHandle,
         account_id: String,
     ) -> Result<(), String> {
-        let mut account = modules::codex_account::list_accounts()
+        let account = modules::codex_account::list_accounts()
             .into_iter()
             .find(|account| account.id == account_id)
             .ok_or_else(|| "未找到 Codex API Key 账号".to_string())?;
@@ -4861,35 +4861,12 @@ mod imp {
         .await?;
         let summary_value = serde_json::to_value(&summary)
             .map_err(|err| format!("序列化 Codex API Key 用量失败: {}", err))?;
-        let now = chrono::Utc::now().timestamp();
-        let mut raw_data = account
-            .quota
-            .as_ref()
-            .and_then(|quota| quota.raw_data.clone())
-            .unwrap_or_else(|| serde_json::json!({}));
-        if !raw_data.is_object() {
-            raw_data = serde_json::json!({});
-        }
-        if let Some(object) = raw_data.as_object_mut() {
-            object.insert("provider_usage".to_string(), summary_value);
-        }
-        account.quota = Some(crate::models::codex::CodexQuota {
-            hourly_percentage: 0,
-            hourly_reset_time: None,
-            hourly_window_minutes: None,
-            hourly_window_present: Some(false),
-            weekly_percentage: 0,
-            weekly_reset_time: None,
-            weekly_window_minutes: None,
-            weekly_window_present: Some(false),
-            reset_credits_available: None,
-            reset_credits: Vec::new(),
-            reset_credits_next_expires_at: None,
-            raw_data: Some(raw_data),
-        });
-        account.quota_error = None;
-        account.usage_updated_at = Some(now);
-        modules::codex_account::save_account(&account)?;
+        commands::codex::codex_sync_api_key_usage_summary(
+            account.id.clone(),
+            summary_value,
+            Some(chrono::Utc::now().timestamp_millis()),
+        )
+        .await?;
         if let Some(mode) = summary.mode.as_deref() {
             let provider_id = provider
                 .as_ref()
@@ -4923,9 +4900,12 @@ mod imp {
         if target_ids.is_empty() {
             return Err("API 服务账号池暂无可刷新的额度".to_string());
         }
-        let success_count =
-            commands::codex::refresh_codex_quotas_batch(app.clone(), target_ids, Some(true))
-                .await?;
+        let (success_count, _) = commands::codex::refresh_codex_account_usage_batch(
+            app.clone(),
+            target_ids,
+            true,
+        )
+        .await?;
         if success_count <= 0 {
             return Err("API 服务账号池额度刷新失败".to_string());
         }

@@ -11321,7 +11321,7 @@ pub(crate) fn menu_bar_api_service_quota() -> ApiServiceMenuBarQuota {
     }
 }
 
-/// 池内可刷新额度的 OAuth 账号 ID（用于托盘菜单刷新 API 服务额度）。
+/// 池内可刷新用量的账号 ID（OAuth 限额与 API Key 供应商余额）。
 pub(crate) fn api_service_refreshable_account_ids() -> Vec<String> {
     let Ok(Some(collection)) = load_collection_from_disk() else {
         return Vec::new();
@@ -11331,8 +11331,8 @@ pub(crate) fn api_service_refreshable_account_ids() -> Vec<String> {
         .filter(|account_id| {
             codex_account::load_account(account_id)
                 .map(|account| {
-                    !account.is_api_key_auth()
-                        && crate::modules::codex_quota::supports_quota_refresh(&account)
+                    account.is_api_key_auth()
+                        || crate::modules::codex_quota::supports_quota_refresh(&account)
                 })
                 .unwrap_or(false)
         })
@@ -11828,33 +11828,103 @@ fn sidecar_quota_pool_window_value(
     })
 }
 
+fn sidecar_quota_pool_balance_value(account: &CodexAccount) -> Option<f64> {
+    if !account.is_api_key_auth() {
+        return None;
+    }
+    let raw = account.quota.as_ref()?.raw_data.as_ref()?;
+    let read_number = |value: Option<&Value>| {
+        value.and_then(|item| {
+            item.as_f64()
+                .or_else(|| item.as_str().and_then(|text| text.trim().parse::<f64>().ok()))
+                .filter(|number| number.is_finite())
+        })
+    };
+    let provider_usage = raw.get("provider_usage");
+    let provider_balance = provider_usage.and_then(|usage| {
+        if usage
+            .get("unit")
+            .and_then(Value::as_str)
+            .is_some_and(|unit| unit.trim() == "%")
+        {
+            return None;
+        }
+        let total_available = usage
+            .get("details")
+            .and_then(Value::as_array)
+            .and_then(|details| {
+                details.iter().find_map(|detail| {
+                    let key = detail.get("key").and_then(Value::as_str)?;
+                    key.eq_ignore_ascii_case("totalAvailable")
+                        .then(|| read_number(detail.get("value")))
+                        .flatten()
+                })
+            });
+        if usage
+            .get("mode")
+            .and_then(Value::as_str)
+            .is_some_and(|mode| mode.eq_ignore_ascii_case("new_api"))
+        {
+            total_available
+                .or_else(|| read_number(usage.get("quotaRemaining")))
+                .or_else(|| read_number(usage.get("remaining")))
+                .or_else(|| read_number(usage.get("balance")))
+        } else {
+            read_number(usage.get("remaining"))
+                .or_else(|| read_number(usage.get("balance")))
+                .or_else(|| read_number(usage.get("quotaRemaining")))
+                .or(total_available)
+        }
+    });
+    let usage = raw
+        .get("usage")
+        .or_else(|| raw.get("profile").and_then(|profile| profile.get("usage")));
+    provider_balance
+        .or_else(|| read_number(usage.and_then(|value| value.get("total_available"))))
+        .or_else(|| read_number(raw.get("total_available")))
+        .or_else(|| read_number(usage.and_then(|value| value.get("balance"))))
+        .or_else(|| read_number(raw.get("balance")))
+}
+
 fn sidecar_quota_pool_state_value(collection: &CodexLocalAccessCollection) -> Value {
     let mut accounts = Map::new();
     for account_id in effective_sidecar_account_ids(collection) {
         let Some(account) = codex_account::load_account(&account_id) else {
             continue;
         };
-        let Some(quota) = account.quota.as_ref() else {
-            continue;
-        };
-        accounts.insert(
-            account_id,
-            json!({
-                "primary": sidecar_quota_pool_window_value(
+        let mut state = Map::new();
+        if account.is_api_key_auth() {
+            state.insert("authKind".to_string(), json!("api_key"));
+            if let Some(balance) = sidecar_quota_pool_balance_value(&account) {
+                state.insert("balance".to_string(), json!(balance));
+            }
+        }
+        if let Some(quota) = account.quota.as_ref() {
+            state.insert(
+                "primary".to_string(),
+                sidecar_quota_pool_window_value(
                     quota.hourly_percentage,
                     quota.hourly_window_minutes,
                     quota.hourly_window_present,
                     quota.hourly_reset_time,
                 ),
-                "secondary": sidecar_quota_pool_window_value(
+            );
+            state.insert(
+                "secondary".to_string(),
+                sidecar_quota_pool_window_value(
                     quota.weekly_percentage,
                     quota.weekly_window_minutes,
                     quota.weekly_window_present,
                     quota.weekly_reset_time,
                 ),
-                "updatedAt": account.usage_updated_at,
-            }),
-        );
+            );
+        }
+        if account.usage_updated_at.is_some() {
+            state.insert("updatedAt".to_string(), json!(account.usage_updated_at));
+        }
+        if !state.is_empty() {
+            accounts.insert(account_id, Value::Object(state));
+        }
     }
     json!({ "accounts": accounts })
 }
@@ -11877,6 +11947,16 @@ fn write_sidecar_quota_pool_state(
 ) -> Result<PathBuf, String> {
     let base_dir = local_access_sidecar_dir()?;
     write_sidecar_quota_pool_state_in_dir(collection, &base_dir)
+}
+
+pub async fn refresh_sidecar_quota_pool_state() -> Result<(), String> {
+    let collection = gateway_runtime().lock().await.collection.clone();
+    if let Some(collection) = collection {
+        if collection_gateway_mode(&collection) == CodexLocalAccessGatewayMode::Sidecar {
+            write_sidecar_quota_pool_state(&collection)?;
+        }
+    }
+    Ok(())
 }
 
 fn sidecar_account_manifest_value(
@@ -16828,8 +16908,7 @@ fn build_account_health_snapshot(runtime: &GatewayRuntime) -> Vec<CodexLocalAcce
         .map(|item| (item.account_id.as_str(), item.email.as_str()))
         .collect();
 
-    collection
-        .account_ids
+    effective_sidecar_account_ids(collection)
         .iter()
         .map(|account_id| {
             let health = runtime.account_health.get(account_id);
@@ -17071,7 +17150,7 @@ fn build_state_snapshot_inner(
     let collection = runtime.collection.clone();
     let member_count = collection
         .as_ref()
-        .map(|item| item.account_ids.len())
+        .map(|item| effective_sidecar_account_ids(item).len())
         .unwrap_or(0);
     let api_port_url = collection
         .as_ref()
@@ -27685,6 +27764,62 @@ mod tests {
             created_at: 0,
             updated_at: 0,
         }
+    }
+
+    #[test]
+    fn state_snapshot_includes_api_key_scoped_accounts_in_pool_health() {
+        let mut collection = test_local_access_collection(vec![
+            "plus-1".to_string(),
+            "plus-2".to_string(),
+        ]);
+        let mut api_key = super::build_local_access_api_key(Some("Scoped API Key"));
+        api_key.inherit_account_pool = Some(false);
+        api_key.account_ids = vec!["api-key-1".to_string()];
+        collection.api_keys = vec![api_key];
+
+        let mut runtime = super::GatewayRuntime::default();
+        runtime.collection = Some(collection);
+        let state = super::build_state_snapshot_inner(&runtime, false);
+
+        assert_eq!(state.member_count, 3);
+        assert_eq!(state.account_health.len(), 3);
+        assert!(state.account_health.iter().all(|item| item.available));
+    }
+
+    #[test]
+    fn sidecar_quota_pool_balance_reads_cached_provider_usage() {
+        let mut account = CodexAccount::new_api_key(
+            "api-key-balance".to_string(),
+            "api-key@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://provider.example".to_string()),
+            Some("custom-provider".to_string()),
+            Some("Custom Provider".to_string()),
+            Vec::new(),
+        );
+        account.quota = Some(CodexQuota {
+            hourly_percentage: 0,
+            hourly_reset_time: None,
+            hourly_window_minutes: None,
+            hourly_window_present: Some(false),
+            weekly_percentage: 0,
+            weekly_reset_time: None,
+            weekly_window_minutes: None,
+            weekly_window_present: Some(false),
+            reset_credits_available: None,
+            reset_credits: Vec::new(),
+            reset_credits_next_expires_at: None,
+            raw_data: Some(json!({
+                "provider_usage": {
+                    "mode": "sub2api",
+                    "remaining": 5.6,
+                    "unit": "USD"
+                }
+            })),
+        });
+
+        assert_eq!(super::sidecar_quota_pool_balance_value(&account), Some(5.6));
     }
 
     #[test]

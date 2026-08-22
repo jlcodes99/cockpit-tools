@@ -1,9 +1,10 @@
-import type { CodexAccount } from '../types/codex';
+import type { CodexAccount } from "../types/codex";
 import {
   getCodexPlanFilterKey,
   getCodexQuotaWindows,
-} from '../types/codex';
-import { sortCodexPlanFilterKeys } from './codexAccountOverview';
+  isCodexApiKeyAccount,
+} from "../types/codex";
+import { sortCodexPlanFilterKeys } from "./codexAccountOverview";
 
 export interface CodexQuotaPoolWindow {
   key: string;
@@ -16,6 +17,7 @@ export interface CodexQuotaPoolWindow {
 export interface CodexQuotaPoolItem {
   key: string;
   count: number;
+  balance?: number;
   windows: CodexQuotaPoolWindow[];
 }
 
@@ -29,8 +31,63 @@ function createQuotaPoolItem(key: CodexQuotaPoolItem['key']): CodexQuotaPoolItem
   return { key, count: 0, windows: [] };
 }
 
-function addAccountToQuotaPool(target: CodexQuotaPoolItem, account: CodexAccount): void {
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function getCodexApiKeyBalance(account: CodexAccount): number | undefined {
+  if (!isCodexApiKeyAccount(account)) return undefined;
+  const raw = asRecord(account.quota?.raw_data);
+  if (!raw) return undefined;
+  const providerUsage = asRecord(raw.provider_usage);
+  if (providerUsage && providerUsage.unit !== "%") {
+    const totalAvailable = Array.isArray(providerUsage.details)
+      ? providerUsage.details
+          .map(asRecord)
+          .find((detail) => detail?.key === "totalAvailable")
+      : null;
+    const providerBalance =
+      providerUsage.mode === "new_api"
+        ? (asNumber(totalAvailable?.value) ??
+          asNumber(providerUsage.quotaRemaining) ??
+          asNumber(providerUsage.remaining) ??
+          asNumber(providerUsage.balance))
+        : (asNumber(providerUsage.remaining) ??
+          asNumber(providerUsage.balance) ??
+          asNumber(providerUsage.quotaRemaining) ??
+          asNumber(totalAvailable?.value));
+    if (providerBalance !== undefined) return providerBalance;
+  }
+  const profile = asRecord(raw.profile);
+  const usage = asRecord(raw.usage) ?? asRecord(profile?.usage);
+  return (
+    asNumber(usage?.total_available) ??
+    asNumber(raw.total_available) ??
+    asNumber(usage?.balance) ??
+    asNumber(raw.balance)
+  );
+}
+
+function addAccountToQuotaPool(
+  target: CodexQuotaPoolItem,
+  account: CodexAccount,
+): void {
   target.count += 1;
+  const balance = getCodexApiKeyBalance(account);
+  if (balance !== undefined) {
+    target.balance = (target.balance ?? 0) + balance;
+  }
+  if (isCodexApiKeyAccount(account)) return;
+
   const seenWindowKeys = new Set<string>();
   getCodexQuotaWindows(account.quota).forEach((window) => {
     const key = window.label.trim().toLowerCase();
@@ -82,6 +139,12 @@ export function summarizeCodexQuotaPool(accounts: CodexAccount[]): CodexQuotaPoo
 
 export function formatCodexQuotaPoolPercent(value: number): string {
   return `${Math.max(0, Math.round(value))}%`;
+}
+
+export function formatCodexQuotaPoolBalance(value: number): string {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(
+    Math.max(0, value),
+  );
 }
 
 export function formatCodexQuotaPoolWindowLabel(

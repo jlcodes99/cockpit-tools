@@ -91,6 +91,7 @@ import type {
 } from "../types/codexLocalAccess";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
 import {
+  formatCodexQuotaPoolBalance,
   formatCodexQuotaPoolPercent,
   formatCodexQuotaPoolWindowLabel,
   summarizeCodexQuotaPool,
@@ -922,7 +923,13 @@ export function CodexApiServicePage() {
     (selectedStatsWindow?.apiKeys ?? []).map((item) => [item.apiKeyId, item]),
   );
   const totals = selectedStatsWindow?.totals;
-  const memberIds = collection?.accountIds ?? [];
+  const memberIds = useMemo(() => {
+    const ids = [...(collection?.accountIds ?? [])];
+    for (const apiKey of collection?.apiKeys ?? []) {
+      ids.push(...(apiKey.accountIds ?? []));
+    }
+    return Array.from(new Set(ids));
+  }, [collection?.accountIds, collection?.apiKeys]);
   const localAccessAccounts = useMemo(() => accounts, [accounts]);
   const memberAccounts = useMemo(
     () =>
@@ -3978,14 +3985,17 @@ export function CodexApiServicePage() {
                       {item.key} ({item.count})
                       {item.windows.length > 0
                         ? ` · ${item.windows
-                            .map(
+                        .map(
                               (window) =>
                                 `${formatCodexQuotaPoolWindowLabel(
                                   window.label,
                                   t("codex.localAccess.quotaPool.weeklyShort", "周"),
-                                )} ${formatCodexQuotaPoolPercent(window.percentage)}`,
+                            )} ${formatCodexQuotaPoolPercent(window.percentage)}`,
                             )
                             .join(" · ")}`
+                        : ""}
+                      {item.balance != null
+                        ? ` · ${t("codex.localAccess.quotaPool.balance", "余额")} ${formatCodexQuotaPoolBalance(item.balance)}`
                         : ""}
                     </span>
                   ))

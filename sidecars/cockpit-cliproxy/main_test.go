@@ -428,9 +428,6 @@ func TestBuildCockpitQuotaResponseAggregatesShortestWindowWithoutClamp(t *testin
 	accountIDs = append(accountIDs, "team-1")
 	state := quotaPoolStateFile{Accounts: accounts}
 	response := buildCockpitQuotaResponse(&apiKeySpec{AccountIDs: accountIDs}, state, time.Now())
-	if response.RemainingPercent == nil || *response.RemainingPercent != 1387 {
-		t.Fatalf("remaining percent = %#v, want 1387", response.RemainingPercent)
-	}
 	if response.WeeklyRemainingPercent == nil || *response.WeeklyRemainingPercent != 1387 {
 		t.Fatalf("weekly percent = %#v, want 1387", response.WeeklyRemainingPercent)
 	}
@@ -441,9 +438,6 @@ func TestBuildCockpitQuotaResponseAggregatesShortestWindowWithoutClamp(t *testin
 		t.Fatalf("account counts = %d/%d, want 16/0", response.IncludedAccountCount, response.MissingAccountCount)
 	}
 	shortest := buildCockpitQuotaResponse(&apiKeySpec{AccountIDs: []string{"plus-with-hourly"}}, state, time.Now())
-	if shortest.RemainingPercent == nil || *shortest.RemainingPercent != 80 {
-		t.Fatalf("shortest window percent = %#v, want 80", shortest.RemainingPercent)
-	}
 	if shortest.WeeklyRemainingPercent == nil || *shortest.WeeklyRemainingPercent != 40 {
 		t.Fatalf("weekly percent = %#v, want 40", shortest.WeeklyRemainingPercent)
 	}
@@ -451,7 +445,7 @@ func TestBuildCockpitQuotaResponseAggregatesShortestWindowWithoutClamp(t *testin
 		t.Fatalf("five-hour percent = %#v, want 80", shortest.FiveHourRemainingPercent)
 	}
 	emptyScope := buildCockpitQuotaResponse(&apiKeySpec{}, state, time.Now())
-	if emptyScope.RemainingPercent != nil || emptyScope.AccountCount != 0 {
+	if emptyScope.AccountCount != 0 {
 		t.Fatalf("empty API key scope must not expose the full quota pool: %#v", emptyScope)
 	}
 }
@@ -468,6 +462,9 @@ func TestBuildCockpitQuotaResponseGroupsPlansAndPoolHealth(t *testing.T) {
 		"team-1": {
 			Primary: &quotaPoolWindowState{Present: &present, RemainingPercent: intPtrForTest(75), WindowMinutes: &weeklyMinutes},
 		},
+		"api-key-1": {
+			AuthKind: "api_key",
+		},
 	}}
 	accounts := map[string]*accountSpec{
 		"plus-1":    {ID: "plus-1", PlanType: "plus"},
@@ -481,7 +478,7 @@ func TestBuildCockpitQuotaResponseGroupsPlansAndPoolHealth(t *testing.T) {
 		time.Now(),
 		accounts,
 	)
-	if response.AccountCount != 3 || response.AvailableAccountCount != 2 || response.AbnormalAccountCount != 1 || response.CooldownAccountCount != 0 {
+	if response.AccountCount != 4 || response.AvailableAccountCount != 3 || response.AbnormalAccountCount != 1 || response.CooldownAccountCount != 0 {
 		t.Fatalf("pool health = available %d, abnormal %d, cooldown %d", response.AvailableAccountCount, response.AbnormalAccountCount, response.CooldownAccountCount)
 	}
 	if len(response.Plans) != 3 {
@@ -502,8 +499,52 @@ func TestBuildCockpitQuotaResponseGroupsPlansAndPoolHealth(t *testing.T) {
 		NextRetryAfter: time.Now().Add(time.Minute),
 		Attributes:     map[string]string{"account_id": "team-1"},
 	}}, time.Now())
-	if response.AvailableAccountCount != 1 || response.AbnormalAccountCount != 1 || response.CooldownAccountCount != 1 {
+	if response.AvailableAccountCount != 2 || response.AbnormalAccountCount != 1 || response.CooldownAccountCount != 1 {
 		t.Fatalf("runtime pool health = available %d, abnormal %d, cooldown %d", response.AvailableAccountCount, response.AbnormalAccountCount, response.CooldownAccountCount)
+	}
+}
+
+func TestBuildCockpitQuotaResponseIncludesAPIKeyAccountsAndBalance(t *testing.T) {
+	present := true
+	fiveHourMinutes := int64(300)
+	weeklyMinutes := int64(10080)
+	balance := 123.5
+	state := quotaPoolStateFile{Accounts: map[string]quotaPoolAccountState{
+		"plus-1": {
+			Primary:   &quotaPoolWindowState{Present: &present, RemainingPercent: intPtrForTest(80), WindowMinutes: &fiveHourMinutes},
+			Secondary: &quotaPoolWindowState{Present: &present, RemainingPercent: intPtrForTest(40), WindowMinutes: &weeklyMinutes},
+		},
+		"plus-2": {
+			Primary:   &quotaPoolWindowState{Present: &present, RemainingPercent: intPtrForTest(60), WindowMinutes: &fiveHourMinutes},
+			Secondary: &quotaPoolWindowState{Present: &present, RemainingPercent: intPtrForTest(70), WindowMinutes: &weeklyMinutes},
+		},
+		"api-key-1": {AuthKind: "api_key", Balance: &balance},
+	}}
+	accounts := map[string]*accountSpec{
+		"plus-1":    {ID: "plus-1", AuthKind: "oauth", PlanType: "plus"},
+		"plus-2":    {ID: "plus-2", AuthKind: "oauth", PlanType: "plus"},
+		"api-key-1": {ID: "api-key-1", AuthKind: "api_key", PlanType: "custom"},
+	}
+	response := buildCockpitQuotaResponseWithAccounts(
+		&apiKeySpec{AccountIDs: []string{"plus-1", "plus-2", "api-key-1"}},
+		state,
+		time.Now(),
+		accounts,
+	)
+	if response.AccountCount != 3 || response.AvailableAccountCount != 3 || response.IncludedAccountCount != 3 || response.MissingAccountCount != 0 || response.AbnormalAccountCount != 0 {
+		t.Fatalf("pool counts = %#v, want account/available/included=3 and no errors", response)
+	}
+	if response.FiveHourRemainingPercent == nil || *response.FiveHourRemainingPercent != 140 {
+		t.Fatalf("five-hour percent = %#v, want 140", response.FiveHourRemainingPercent)
+	}
+	if response.WeeklyRemainingPercent == nil || *response.WeeklyRemainingPercent != 110 {
+		t.Fatalf("weekly percent = %#v, want 110", response.WeeklyRemainingPercent)
+	}
+	if response.APIKeyBalance == nil || *response.APIKeyBalance != balance {
+		t.Fatalf("api key balance = %#v, want %.1f", response.APIKeyBalance, balance)
+	}
+	if len(response.Plans) != 2 || response.Plans[1].Plan != "API_KEY" || response.Plans[1].Count != 1 || response.Plans[1].Balance == nil || *response.Plans[1].Balance != balance {
+		t.Fatalf("plan summaries = %#v", response.Plans)
 	}
 }
 
@@ -566,7 +607,7 @@ func TestRelayServerCockpitQuotaRequiresKeyAndIsolatesAccountScopes(t *testing.T
 		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 			t.Fatalf("decode key %q response: %v", key, err)
 		}
-		if response.RemainingPercent == nil || *response.RemainingPercent != want || response.AccountCount != 1 {
+		if response.AccountCount != 1 || response.FiveHourRemainingPercent == nil || *response.FiveHourRemainingPercent != want {
 			t.Fatalf("key %q received another scope: %#v", key, response)
 		}
 	}
@@ -613,7 +654,7 @@ func TestRelayServerCockpitQuotaUpstreamFailureReturnsScopedEmptyState(t *testin
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.RemainingPercent != nil || response.AccountCount != 1 || response.MissingAccountCount != 1 {
+	if response.AccountCount != 1 || response.MissingAccountCount != 1 {
 		t.Fatalf("upstream failure should keep local scoped empty state: %#v", response)
 	}
 }

@@ -20,6 +20,14 @@ export const CODEX_API_PROVIDER_CUSTOM_ID = "custom";
 export const COCKPIT_API_PROVIDER_ID = "cockpit_api";
 export const COCKPIT_API_PROVIDER_NAME = "Cockpit Api";
 export const COCKPIT_API_BASE_URL = "https://chongcodex.cn/v1";
+/**
+ * Cockpit Tools' own OpenAI-compatible API service. The port is only an
+ * example because the service can use a randomly allocated port; users should
+ * replace the host and port with the LAN address shown on the host computer.
+ */
+export const COCKPIT_TOOLS_API_PROVIDER_ID = "cockpit_tools";
+export const COCKPIT_TOOLS_API_PROVIDER_NAME = "Cockpit Tools LAN";
+export const COCKPIT_TOOLS_API_BASE_URL = "http://127.0.0.1:60303/v1";
 export const DEEPSEEK_API_PROVIDER_ID = "deepseek";
 export const DEEPSEEK_API_BASE_URL = "https://api.deepseek.com";
 export const DEEPSEEK_CODEX_MODEL_CATALOG = [
@@ -76,6 +84,13 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     website: "https://chatgpt.com/codex",
     apiKeyUrl: "https://platform.openai.com/api-keys",
     isOfficial: true,
+  },
+  {
+    id: COCKPIT_TOOLS_API_PROVIDER_ID,
+    name: COCKPIT_TOOLS_API_PROVIDER_NAME,
+    baseUrls: [COCKPIT_TOOLS_API_BASE_URL],
+    website: "https://github.com/Robotwizardt/cockpit-tools",
+    isService: true,
   },
   {
     id: "azure_openai",

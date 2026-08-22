@@ -886,10 +886,11 @@
       "codexSyncWsl": "Sync Codex to WSL",
       "codexSyncWslDesc": "After switching the default Codex account, also write auth.json and config.toml to the WSL Codex directory.",
       "codexAppUiInjection": "Show API Service quota",
-      "codexAppUiInjectionDesc": "After restarting a Codex instance, show the Cockpit Tools API Service account count, weekly quota, and 5-hour quota below the composer. Keep Cockpit Tools running in the background; updates stop when it is fully quit or the network is unavailable.",
+      "codexAppUiInjectionDesc": "After restarting a Codex instance, show the Cockpit Tools API Service account count, available accounts, weekly quota, 5-hour quota, and API_KEY balance below the composer. Keep Cockpit Tools running in the background; updates stop when it is fully quit or the network is unavailable.",
       "codexAppUiInjectionPoolLabel": "Accounts",
       "codexAppUiInjectionWeeklyLabel": "Week",
       "codexAppUiInjectionFiveHourLabel": "5h",
+      "codexAppUiInjectionBalanceLabel": "Balance",
       "codexWslConfigDir": "WSL Codex Directory",
       "codexWslConfigDirDesc": "Enter the .codex directory inside WSL. \\\\wsl.localhost\\ paths are supported.",
       "codexWslConfigDirPlaceholder": "Example: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -2479,6 +2480,7 @@
         "title": "Quota Pool",
         "hourlyShort": "5h",
         "weeklyShort": "Week",
+        "balance": "Balance",
         "viewFull": "View full stats",
         "modalTitle": "API Service Quota Pool",
         "empty": "No quota stats yet"
@@ -2683,6 +2685,7 @@
         "custom": "Custom",
         "endpoint": "Provider Endpoint",
         "hint": "A compatible Base URL has been filled in automatically. You can still edit it manually.",
+        "cockpitToolsHint": "Replace Base URL with the LAN address of the Cockpit Tools host, for example http://HOST_IP:PORT/v1. The account card will query /cockpit/quota automatically.",
         "website": "Website",
         "apiKeyPage": "API Key Page",
         "getApiKey": "Get API Key"
@@ -2690,6 +2693,9 @@
       "providers": {
         "cockpit_api": {
           "name": "Cockpit Api"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools LAN"
         },
         "openai_official": {
           "name": "OpenAI Official"
@@ -3054,9 +3060,17 @@
         "rawFields": "Service Data",
         "fields": {
           "status": "Status",
+          "fiveHourRemainingPercent": "5h remaining",
+          "weeklyRemainingPercent": "Weekly remaining",
+          "accountCount": "Account pool",
+          "availableAccountCount": "Available accounts",
+          "abnormalAccountCount": "Abnormal accounts",
+          "cooldownAccountCount": "Cooldown accounts",
+          "stale": "Stale",
           "planName": "Plan",
           "remaining": "Remaining",
           "balance": "Balance",
+          "apiKeyBalance": "API_KEY balance",
           "todayRequests": "Today Requests",
           "todayTokens": "Today Tokens",
           "todayCost": "Today Cost",
