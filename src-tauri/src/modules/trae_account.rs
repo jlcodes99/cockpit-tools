@@ -5463,9 +5463,15 @@ pub async fn get_trae_checkin_status(
         serde_json::from_str(&body).map_err(|e| format!("解析签到状态响应失败: {}", e))?;
 
     if data.code != 0 {
+        // Surface the server's own message when present; a non-zero code here
+        // is not necessarily an expired token (e.g. transient capacity
+        // rejections during peak hours), so do not claim it is.
+        if data.message.trim().is_empty() {
+            return Err(format!("获取签到状态失败 (code={})", data.code));
+        }
         return Err(format!(
-            "获取签到状态失败 (code={}): Token 已过期，请重新登录",
-            data.code
+            "获取签到状态失败 (code={}): {}",
+            data.code, data.message
         ));
     }
 
@@ -5561,9 +5567,37 @@ pub async fn claim_trae_checkin(
         serde_json::from_str(&body).map_err(|e| format!("解析签到领取响应失败: {}", e))?;
 
     if claim_data.code != 0 {
+        let message = claim_data.message.trim().to_string();
+
+        // 幂等成功：服务端确认该账号今日已签到（与官方客户端行为一致）
+        let already_checked = claim_data.code == 1001
+            || message.contains("已签到")
+            || message.contains("已经签到")
+            || message.contains("明日再来");
+        if already_checked {
+            let status_result = get_trae_checkin_status(account_id, device_id).await?;
+            return Ok(CheckinStatusResult {
+                message: "今日已签到".to_string(),
+                ..status_result
+            });
+        }
+
+        // 服务端排队限流（高峰期常见，如 code 9074"当前参与用户太多"）：
+        // 与登录态无关，明确提示稍后重试，避免误导用户重新登录。
+        if claim_data.code == 9074 || message.contains("参与用户太多") || message.contains("稍后再试")
+        {
+            return Err(format!(
+                "签到限流 (code={}): 服务端排队中，请稍后重试",
+                claim_data.code
+            ));
+        }
+
+        if message.is_empty() {
+            return Err(format!("签到领取失败 (code={})", claim_data.code));
+        }
         return Err(format!(
-            "签到领取失败 (code={}): Token 已过期，请重新登录",
-            claim_data.code
+            "签到领取失败 (code={}): {}",
+            claim_data.code, message
         ));
     }
 
