@@ -183,14 +183,14 @@ async fn inject_bound_account_to_profile(
         return Ok(());
     }
 
-    if let Some(provider_gateway_account_id) =
-        modules::codex_instance::parse_provider_gateway_bind_account_id(bind_account_id)
-    {
-        modules::codex_local_access::activate_provider_gateway_for_dir(
-            profile_dir,
-            &provider_gateway_account_id,
-        )
-        .await?;
+    if modules::codex_instance::parse_provider_gateway_bind_account_id(bind_account_id).is_some() {
+        return Ok(());
+    }
+
+    if modules::codex_account::load_account(bind_account_id).is_some_and(|account| {
+        modules::codex_local_access::account_requires_provider_gateway(&account)
+            || modules::codex_local_access::account_requires_bound_oauth_local_gateway(&account)
+    }) {
         return Ok(());
     }
 
@@ -218,7 +218,6 @@ async fn ensure_provider_gateway_for_bind_account(
             return Ok(());
         };
         if modules::codex_local_access::account_requires_provider_gateway(&account) {
-            modules::codex_local_access::stop_provider_gateways_for_profile(profile_dir).await;
             return modules::codex_local_access::ensure_provider_gateway_for_dir(
                 profile_dir,
                 bind_account_id,
@@ -236,7 +235,6 @@ async fn ensure_provider_gateway_for_bind_account(
         modules::codex_local_access::stop_provider_gateways_for_profile(profile_dir).await;
         return Ok(());
     };
-    modules::codex_local_access::stop_provider_gateways_for_profile(profile_dir).await;
     modules::codex_local_access::ensure_provider_gateway_for_dir(
         profile_dir,
         &provider_gateway_account_id,
@@ -1663,7 +1661,6 @@ async fn codex_start_instance_internal(
         if !fast_closed {
             modules::process::close_codex_default(20)?;
         }
-        modules::codex_local_access::stop_provider_gateways_for_profile(&default_dir).await;
         modules::logger::log_info(&format!(
             "[Codex Start] default close phase finished, mode={}, elapsed_ms={}",
             if fast_closed {
@@ -1842,9 +1839,8 @@ async fn codex_start_instance_internal(
         modules::process::close_pid(pid, 20)?;
         let _ = modules::codex_instance::update_instance_pid(&instance.id, None)?;
     }
-    modules::codex_local_access::stop_provider_gateways_for_profile(instance_dir).await;
     modules::logger::log_info(&format!(
-        "[Codex Start] instance close/provider-stop phase finished: instance_id={}, elapsed_ms={}, total_ms={}",
+        "[Codex Start] instance close phase finished: instance_id={}, elapsed_ms={}, total_ms={}",
         instance.id,
         close_started.elapsed().as_millis(),
         flow_started.elapsed().as_millis()

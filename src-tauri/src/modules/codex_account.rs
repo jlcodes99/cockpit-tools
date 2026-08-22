@@ -8137,13 +8137,20 @@ fn switch_account_with_prepared(
         write_prepared_account_bundle_to_dir(wsl_dir, &account_for_write)
     });
 
+    finalize_account_switch(account_id, account_for_write)
+}
+
+fn finalize_account_switch(
+    account_id: &str,
+    account: CodexAccount,
+) -> Result<CodexAccount, String> {
     // 更新索引中的 current_account_id
     let mut index = load_account_index();
     index.current_account_id = Some(account_id.to_string());
     save_account_index(&index)?;
 
     // 更新账号的 last_used
-    let mut updated_account = account_for_write.clone();
+    let mut updated_account = account;
     updated_account.update_last_used();
     save_account(&updated_account)?;
 
@@ -8227,6 +8234,15 @@ async fn switch_account_managed_locked(account_id: &str) -> Result<CodexAccount,
         return Err("Web Session 账号仅支持查看额度，无法作为普通账号切换或启动".to_string());
     }
     if account.is_api_key_auth() {
+        if crate::modules::codex_local_access::account_requires_provider_gateway(&account) {
+            let codex_home = get_codex_home();
+            crate::modules::codex_local_access::ensure_provider_gateway_for_dir(
+                &codex_home,
+                &account.id,
+            )
+            .await?;
+            return finalize_account_switch(account_id, account);
+        }
         if normalize_optional_ref(account.bound_oauth_account_id.as_deref()).is_none() {
             let updated_account = switch_account_with_prepared(account_id, account)?;
             let codex_home = get_codex_home();
@@ -12158,6 +12174,56 @@ mod tests {
             "Codex account storage should stay inside the test home, got {} for test home {}",
             storage_path.display(),
             env.home_dir.display()
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn provider_gateway_switch_failure_preserves_previous_profile() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let env = TestEnvGuard::new("codex-provider-gateway-switch-transaction-test");
+        let config_path = env.codex_home().join("config.toml");
+        let auth_path = env.codex_home().join("auth.json");
+        let original_config =
+            "model_provider = \"existing_provider\"\nmodel = \"existing-model\"\n";
+        let original_auth = r#"{"auth_mode":"chatgpt","tokens":{"access_token":"existing"}}"#;
+        fs::write(&config_path, original_config).expect("write original config");
+        fs::write(&auth_path, original_auth).expect("write original auth");
+
+        let account = CodexAccount::new_api_key(
+            "opencode-go-switch".to_string(),
+            "opencode-go@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://opencode.ai/zen/go/v1".to_string()),
+            Some("opencode_go".to_string()),
+            Some("OpenCode Go".to_string()),
+            vec!["deepseek-v4-pro".to_string()],
+        );
+        save_account(&account).expect("save OpenCode Go account");
+
+        struct ProviderGatewaySpawnFailureGuard;
+        impl Drop for ProviderGatewaySpawnFailureGuard {
+            fn drop(&mut self) {
+                crate::modules::codex_local_access::set_provider_gateway_test_fail_spawn(false);
+            }
+        }
+        let _spawn_failure_guard = ProviderGatewaySpawnFailureGuard;
+        crate::modules::codex_local_access::set_provider_gateway_test_fail_spawn(true);
+
+        let error = super::switch_account_managed(&account.id)
+            .await
+            .expect_err("candidate sidecar should fail");
+
+        assert!(error.contains("TEST_PROVIDER_GATEWAY_SPAWN_FAILURE"));
+        assert_eq!(
+            fs::read_to_string(config_path).expect("read config after failed switch"),
+            original_config
+        );
+        assert_eq!(
+            fs::read_to_string(auth_path).expect("read auth after failed switch"),
+            original_auth
         );
     }
 
