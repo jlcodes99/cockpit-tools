@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   buildUsageBaseUrlCandidates,
   formatModelProviderUsageMoney,
+  resolveModelProviderUsageMode,
   resolveNewApiQuotaSnapshot,
+  resolveOpenCodeGoQuotaSnapshot,
   type ModelProviderUsageSummary,
 } from "./modelProviderUsageService.ts";
 
@@ -96,4 +98,28 @@ test("new_api quota ignores malformed numeric details", () => {
 
 test("token plan percentages render without currency decimals", () => {
   assert.equal(formatModelProviderUsageMoney(72, "%"), "72%");
+});
+
+test("OpenCode Go quota resolves all usage windows", () => {
+  const usage = summary({
+    mode: "opencode_go",
+    details: [
+      { key: "rollingUsedPercent", label: "5-Hour Used %", value: "25.5" },
+      { key: "rollingRemainingPercent", label: "5-Hour Remaining %", value: "74.5" },
+      { key: "rollingResetsAt", label: "5-Hour Reset", value: "1786766400" },
+      { key: "weeklyUsedPercent", label: "Weekly Used %", value: "61" },
+      { key: "weeklyRemainingPercent", label: "Weekly Remaining %", value: "39" },
+      { key: "weeklyResetsAt", label: "Weekly Reset", value: "1787011200" },
+      { key: "monthlyUsedPercent", label: "Monthly Used %", value: "40" },
+      { key: "monthlyRemainingPercent", label: "Monthly Remaining %", value: "60" },
+      { key: "monthlyResetsAt", label: "Monthly Reset", value: "1788220800" },
+    ],
+  });
+
+  assert.equal(resolveModelProviderUsageMode(usage), "opencode_go");
+  assert.deepEqual(resolveOpenCodeGoQuotaSnapshot(usage), {
+    rolling: { usedPercent: 25.5, remainingPercent: 74.5, resetsAt: 1786766400 },
+    weekly: { usedPercent: 61, remainingPercent: 39, resetsAt: 1787011200 },
+    monthly: { usedPercent: 40, remainingPercent: 60, resetsAt: 1788220800 },
+  });
 });

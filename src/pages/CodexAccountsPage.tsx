@@ -177,6 +177,7 @@ import { CodexCliLaunchDialog } from "../components/codex/CodexCliLaunchDialog";
 import { useDeepSeekDirectModelPrompt } from "../components/codex/DeepSeekDirectModelModal";
 import {
   isDeepSeekAccount,
+  isOpenCodeGoAccount,
   isCodexTokenPlanAccount,
   resolveDeepSeekBindAccountId,
   shouldShowCodexApiKeyUsagePanel,
@@ -305,6 +306,7 @@ import {
   formatModelProviderUsageMoney,
   listModelProviderModels,
   resolveNewApiQuotaSnapshot,
+  resolveOpenCodeGoQuotaSnapshot,
 } from "../services/modelProviderUsageService";
 import { useSponsorStore } from "../stores/useSponsorStore";
 import type { Sponsor } from "../types/sponsor";
@@ -709,12 +711,13 @@ function getCockpitApiStatsRecord(
 
 function resolveApiKeyUsageMode(
   summary?: CodexModelProviderUsageSummary,
-): "new_api" | "sub2api" | "deepseek" | "token_plan" | null {
+): "new_api" | "sub2api" | "deepseek" | "opencode_go" | "token_plan" | null {
   if (!summary) return null;
   if (
     summary.mode === "new_api" ||
     summary.mode === "sub2api" ||
     summary.mode === "deepseek" ||
+    summary.mode === "opencode_go" ||
     summary.mode === "token_plan"
   ) {
     return summary.mode;
@@ -726,6 +729,13 @@ function resolveApiKeyUsageMode(
     return "sub2api";
   }
   const detailKeys = new Set((summary.details ?? []).map((item) => item.key));
+  if (
+    detailKeys.has("rollingRemainingPercent") &&
+    detailKeys.has("weeklyRemainingPercent") &&
+    detailKeys.has("monthlyRemainingPercent")
+  ) {
+    return "opencode_go";
+  }
   if (
     detailKeys.has("todayRequests") ||
     detailKeys.has("todayTokens") ||
@@ -7687,7 +7697,8 @@ export function CodexAccountsPage() {
       if (
         isCodexChatCompletionsApiKeyAccount(account) &&
         !isDeepSeekAccount(account) &&
-        !isCodexTokenPlanAccount(account)
+        !isCodexTokenPlanAccount(account) &&
+        !isOpenCodeGoAccount(account)
       ) {
         return;
       }
@@ -7760,7 +7771,8 @@ export function CodexAccountsPage() {
         isCodexNewApiAccount(account) ||
         (isCodexChatCompletionsApiKeyAccount(account) &&
           !isDeepSeekAccount(account) &&
-          !isCodexTokenPlanAccount(account))
+          !isCodexTokenPlanAccount(account) &&
+          !isOpenCodeGoAccount(account))
       ) {
         return false;
       }
@@ -7857,7 +7869,8 @@ export function CodexAccountsPage() {
           (account) =>
             isCodexChatCompletionsApiKeyAccount(account) &&
             !isDeepSeekAccount(account) &&
-            !isCodexTokenPlanAccount(account),
+            !isCodexTokenPlanAccount(account) &&
+            !isOpenCodeGoAccount(account),
         )
         .map((account) => account.id),
     );
@@ -8206,7 +8219,8 @@ export function CodexAccountsPage() {
       if (
         isCodexChatCompletionsApiKeyAccount(account) &&
         !isDeepSeekAccount(account) &&
-        !isCodexTokenPlanAccount(account)
+        !isCodexTokenPlanAccount(account) &&
+        !isOpenCodeGoAccount(account)
       ) {
         return <></>;
       }
@@ -8223,6 +8237,7 @@ export function CodexAccountsPage() {
       const isNewApiUsage = usageMode === "new_api";
       const isSub2ApiUsage = usageMode === "sub2api";
       const isTokenPlanUsage = usageMode === "token_plan";
+      const isOpenCodeGoUsage = usageMode === "opencode_go";
       const usedPercent = formatApiKeyUsagePercent(summary);
       if (isDeepSeekUsage) {
         return (
@@ -8264,6 +8279,48 @@ export function CodexAccountsPage() {
                 {t("common.shared.quota.queryFailed", "配额查询失败")}
               </div>
             ) : null}
+          </div>
+        );
+      }
+      if (summary && isOpenCodeGoUsage) {
+        const quota = resolveOpenCodeGoQuotaSnapshot(summary);
+        const windows = [
+          [
+            "rolling",
+            t("codex.modelProviders.usage.fields.rolling5h", "5 小时额度剩余"),
+            quota.rolling,
+          ],
+          [
+            "weekly",
+            t("codex.modelProviders.usage.fields.weekly", "周额度剩余"),
+            quota.weekly,
+          ],
+          [
+            "monthly",
+            t("codex.modelProviders.usage.fields.monthly", "月额度剩余"),
+            quota.monthly,
+          ],
+        ] as const;
+        return (
+          <div className={`codex-api-key-usage-panel ${variant} opencode-go`}>
+            <div className="codex-api-key-usage-grid">
+              {windows.map(([key, label, window]) => {
+                const remaining = formatModelProviderUsageMoney(
+                  window.remainingPercent,
+                  "%",
+                );
+                const reset = window.resetsAt != null
+                  ? new Date(window.resetsAt * 1000).toLocaleString()
+                  : "-";
+                return (
+                  <div key={key} title={`${label} · ${reset}`}>
+                    <span>{label}</span>
+                    <strong>{remaining}</strong>
+                    <small className="codex-api-key-usage-reset">↻ {reset}</small>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         );
       }
@@ -13599,6 +13656,19 @@ export function CodexAccountsPage() {
           ? new Set(["mode", "remaining", "todayRequests", "todayTokens"])
         : usageMode === "deepseek"
             ? new Set(["mode", "totalBalance", "grantedBalance", "toppedUpBalance"])
+            : usageMode === "opencode_go"
+              ? new Set([
+                  "planName",
+                  "rollingUsedPercent",
+                  "rollingRemainingPercent",
+                  "rollingResetsAt",
+                  "weeklyUsedPercent",
+                  "weeklyRemainingPercent",
+                  "weeklyResetsAt",
+                  "monthlyUsedPercent",
+                  "monthlyRemainingPercent",
+                  "monthlyResetsAt",
+                ])
             : usageMode === "token_plan"
               ? new Set(["mode", "remaining", "planName", "expiresAt"])
           : new Set<string>();
@@ -13611,6 +13681,7 @@ export function CodexAccountsPage() {
       provider?.baseUrl.trim() || (account.api_base_url || "").trim() || "-";
     const usedPercent = formatApiKeyUsagePercent(summary);
     const newApiQuota = resolveNewApiQuotaSnapshot(summary);
+    const openCodeGoQuota = resolveOpenCodeGoQuotaSnapshot(summary);
     const summaryDetails =
       usageMode === "new_api"
         ? [
@@ -13754,10 +13825,40 @@ export function CodexAccountsPage() {
                   ),
                 },
               ]
+          : usageMode === "opencode_go"
+            ? ([
+                [
+                  "rolling",
+                  t("codex.modelProviders.usage.fields.rolling5h", "5 小时额度剩余"),
+                  openCodeGoQuota.rolling,
+                ],
+                [
+                  "weekly",
+                  t("codex.modelProviders.usage.fields.weekly", "周额度剩余"),
+                  openCodeGoQuota.weekly,
+                ],
+                [
+                  "monthly",
+                  t("codex.modelProviders.usage.fields.monthly", "月额度剩余"),
+                  openCodeGoQuota.monthly,
+                ],
+              ] as const).map(([key, label, window]) => ({
+                key,
+                label,
+                value: `${formatModelProviderUsageMoney(
+                  window.remainingPercent,
+                  "%",
+                )} · ${
+                  window.resetsAt != null
+                    ? new Date(window.resetsAt * 1000).toLocaleString()
+                    : "-"
+                }`,
+              }))
           : [];
     const summaryGridClassName =
       usageMode === "sub2api" ||
       usageMode === "new_api" ||
+      usageMode === "opencode_go" ||
       usageMode === "token_plan"
         ? "cockpit-api-summary-grid compact"
         : "cockpit-api-summary-grid";

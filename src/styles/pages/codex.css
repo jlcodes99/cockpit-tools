@@ -3551,6 +3551,14 @@
   white-space: nowrap;
 }
 
+.codex-api-key-usage-reset {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .codex-api-key-usage-balance,
 .codex-provider-usage-balance,
 .codex-account-balance-line {

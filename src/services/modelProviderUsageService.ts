@@ -4,6 +4,7 @@ export type ModelProviderUsageIntegrationType = 'sub2api' | 'new_api';
 export type ModelProviderUsageMode =
   | ModelProviderUsageIntegrationType
   | 'deepseek'
+  | 'opencode_go'
   | 'token_plan';
 
 export interface ModelProviderModel {
@@ -49,6 +50,18 @@ export interface NewApiQuotaSnapshot {
   expiresAt: number | null;
 }
 
+export interface OpenCodeGoQuotaWindowSnapshot {
+  usedPercent: number | null;
+  remainingPercent: number | null;
+  resetsAt: number | null;
+}
+
+export interface OpenCodeGoQuotaSnapshot {
+  rolling: OpenCodeGoQuotaWindowSnapshot;
+  weekly: OpenCodeGoQuotaWindowSnapshot;
+  monthly: OpenCodeGoQuotaWindowSnapshot;
+}
+
 function finiteUsageNumber(value: unknown): number | null {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
@@ -88,6 +101,21 @@ export function resolveNewApiQuotaSnapshot(
     usageDetailNumber(summary, 'accessUntil');
 
   return { granted, available, expiresAt };
+}
+
+export function resolveOpenCodeGoQuotaSnapshot(
+  summary?: ModelProviderUsageSummary,
+): OpenCodeGoQuotaSnapshot {
+  const resolveWindow = (key: 'rolling' | 'weekly' | 'monthly') => ({
+    usedPercent: usageDetailNumber(summary, `${key}UsedPercent`),
+    remainingPercent: usageDetailNumber(summary, `${key}RemainingPercent`),
+    resetsAt: usageDetailNumber(summary, `${key}ResetsAt`),
+  });
+  return {
+    rolling: resolveWindow('rolling'),
+    weekly: resolveWindow('weekly'),
+    monthly: resolveWindow('monthly'),
+  };
 }
 
 export function buildUsageBaseUrlCandidates(baseUrl: string): string[] {
@@ -160,6 +188,7 @@ export function resolveModelProviderUsageMode(
     summary.mode === 'new_api' ||
     summary.mode === 'sub2api' ||
     summary.mode === 'deepseek' ||
+    summary.mode === 'opencode_go' ||
     summary.mode === 'token_plan'
   ) {
     return summary.mode;
@@ -171,6 +200,13 @@ export function resolveModelProviderUsageMode(
     return 'sub2api';
   }
   const detailKeys = new Set((summary.details ?? []).map((item) => item.key));
+  if (
+    detailKeys.has('rollingRemainingPercent') &&
+    detailKeys.has('weeklyRemainingPercent') &&
+    detailKeys.has('monthlyRemainingPercent')
+  ) {
+    return 'opencode_go';
+  }
   if (
     detailKeys.has('todayRequests') ||
     detailKeys.has('todayTokens') ||
