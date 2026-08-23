@@ -5601,6 +5601,12 @@ fn apply_compat_account_metadata(
         .or_else(|| account.account_name.clone());
     account.account_structure = read_json_string(value, &["account_structure", "accountStructure"])
         .or_else(|| account.account_structure.clone());
+    account.account_note_title = read_json_string(
+        value,
+        &["account_note_title", "accountNoteTitle", "noteTitle"],
+    )
+    .and_then(normalize_account_note_title)
+    .or_else(|| account.account_note_title.clone());
     account.account_note = read_json_string(value, &["account_note", "accountNote"])
         .or_else(|| account.account_note.clone());
     account.codex_fingerprint_mode =
@@ -5642,6 +5648,11 @@ fn apply_compat_account_metadata(
 fn apply_api_key_import_metadata(account: &mut CodexAccount, value: &serde_json::Value) {
     if let Some(account_name) = read_json_string(value, &["account_name", "accountName"]) {
         account.account_name = Some(account_name);
+    }
+    if let Some(note_title) =
+        read_json_string(value, &["account_note_title", "accountNoteTitle", "noteTitle"])
+    {
+        account.account_note_title = normalize_account_note_title(note_title);
     }
     if let Some(account_note) = read_json_string(value, &["account_note", "accountNote"]) {
         account.account_note = Some(account_note);
@@ -9575,6 +9586,10 @@ fn import_account_struct(account: CodexAccount) -> Result<CodexAccount, String> 
             imported.tags = Some(tags);
             changed = true;
         }
+        if let Some(note_title) = account.account_note_title {
+            imported.account_note_title = normalize_account_note_title(note_title);
+            changed = true;
+        }
         if let Some(note) = account.account_note {
             imported.account_note = Some(note);
             changed = true;
@@ -9621,6 +9636,10 @@ fn import_account_struct(account: CodexAccount) -> Result<CodexAccount, String> 
             api_acc.tags = Some(tags);
             changed = true;
         }
+        if let Some(note_title) = account.account_note_title {
+            api_acc.account_note_title = normalize_account_note_title(note_title);
+            changed = true;
+        }
         if let Some(note) = account.account_note {
             api_acc.account_note = Some(note);
             changed = true;
@@ -9654,6 +9673,10 @@ fn import_account_struct(account: CodexAccount) -> Result<CodexAccount, String> 
 
     if let Some(tags) = account.tags {
         imported.tags = Some(tags);
+        changed = true;
+    }
+    if let Some(note_title) = account.account_note_title {
+        imported.account_note_title = normalize_account_note_title(note_title);
         changed = true;
     }
     if let Some(note) = account.account_note {
@@ -9717,6 +9740,7 @@ struct CodexAccessTokenImportHints {
     organization_id: Option<String>,
     account_name: Option<String>,
     account_structure: Option<String>,
+    account_note_title: Option<String>,
     account_note: Option<String>,
     two_factor_secret: Option<String>,
     account_password: Option<String>,
@@ -9743,6 +9767,10 @@ enum CodexJsonImportCandidate {
 
 fn codex_account_note_update_from_value(value: &serde_json::Value) -> CodexAccountNoteUpdate {
     CodexAccountNoteUpdate {
+        note_title: read_json_string(
+            value,
+            &["account_note_title", "accountNoteTitle", "noteTitle"],
+        ),
         note: read_json_string(
             value,
             &["account_note", "accountNote", "note", "notes", "remark"],
@@ -9774,7 +9802,8 @@ fn codex_account_note_update_from_value(value: &serde_json::Value) -> CodexAccou
 }
 
 fn has_codex_account_note_update(update: &CodexAccountNoteUpdate) -> bool {
-    update.note.is_some()
+    update.note_title.is_some()
+        || update.note.is_some()
         || update.two_factor_secret.is_some()
         || update.account_password.is_some()
         || update.phone_number.is_some()
@@ -9785,6 +9814,9 @@ fn merge_codex_account_note_update(
     mut primary: CodexAccountNoteUpdate,
     fallback: CodexAccountNoteUpdate,
 ) -> CodexAccountNoteUpdate {
+    if primary.note_title.is_none() {
+        primary.note_title = fallback.note_title;
+    }
     if primary.note.is_none() {
         primary.note = fallback.note;
     }
@@ -9807,6 +9839,7 @@ fn codex_account_note_update_from_hints(
     hints: &CodexAccessTokenImportHints,
 ) -> CodexAccountNoteUpdate {
     CodexAccountNoteUpdate {
+        note_title: hints.account_note_title.clone(),
         note: hints.account_note.clone(),
         two_factor_secret: hints.two_factor_secret.clone(),
         account_password: hints.account_password.clone(),
@@ -9915,6 +9948,8 @@ fn pending_oauth_account_from_value(value: &serde_json::Value) -> Option<CodexAc
     // carries pending metadata. This avoids silently importing malformed auth files.
     if authorization_status == CODEX_AUTHORIZATION_STATUS_PENDING
         || has_codex_account_note_details(&account)
+        || obj.contains_key("account_note_title")
+        || obj.contains_key("accountNoteTitle")
         || obj.contains_key("account_note")
         || obj.contains_key("accountNote")
     {
@@ -9926,7 +9961,12 @@ fn pending_oauth_account_from_value(value: &serde_json::Value) -> Option<CodexAc
 
 fn has_codex_account_note_details(account: &CodexAccount) -> bool {
     account
-        .account_note
+        .account_note_title
+        .as_deref()
+        .and_then(|value| normalize_optional_ref(Some(value)))
+        .is_some()
+        || account
+            .account_note
         .as_deref()
         .and_then(|value| normalize_optional_ref(Some(value)))
         .is_some()
@@ -9954,6 +9994,7 @@ fn has_codex_account_note_details(account: &CodexAccount) -> bool {
 
 fn codex_account_note_update_from_account(account: &CodexAccount) -> CodexAccountNoteUpdate {
     CodexAccountNoteUpdate {
+        note_title: account.account_note_title.clone(),
         note: account.account_note.clone(),
         two_factor_secret: account.two_factor_secret.clone(),
         account_password: account.account_password.clone(),
@@ -10035,6 +10076,9 @@ fn merge_access_token_import_hints(
     }
     if primary.account_structure.is_none() {
         primary.account_structure = fallback.account_structure;
+    }
+    if primary.account_note_title.is_none() {
+        primary.account_note_title = fallback.account_note_title;
     }
     if primary.account_note.is_none() {
         primary.account_note = fallback.account_note;
@@ -10222,6 +10266,7 @@ fn extract_access_token_import_hints_from_value(
                 &["account", "type"],
             ],
         ),
+        account_note_title: note_update.note_title,
         account_note: note_update.note,
         two_factor_secret: note_update.two_factor_secret,
         account_password: note_update.account_password,
@@ -10323,6 +10368,7 @@ fn extract_codex_session_candidate_from_value(
     let session_hints_note_update = codex_account_note_update_from_hints(&session_hints);
     let session_hints_note_update =
         merge_codex_account_note_update(session_hints_note_update, note_update.clone());
+    session_hints.account_note_title = session_hints_note_update.note_title;
     session_hints.account_note = session_hints_note_update.note;
     session_hints.two_factor_secret = session_hints_note_update.two_factor_secret;
     session_hints.account_password = session_hints_note_update.account_password;
@@ -10454,6 +10500,7 @@ fn extract_codex_import_candidate_from_value(
             hints_note_update,
             codex_account_note_update_from_value(value),
         );
+        hints.account_note_title = hints_note_update.note_title;
         hints.account_note = hints_note_update.note;
         hints.two_factor_secret = hints_note_update.two_factor_secret;
         hints.account_password = hints_note_update.account_password;
@@ -10728,6 +10775,7 @@ fn try_parse_pending_oauth_delimited_line(line: &str) -> Option<(String, CodexAc
     Some((
         email.to_string(),
         CodexAccountNoteUpdate {
+            note_title: None,
             note: None,
             two_factor_secret: normalize_optional_ref(Some(two_factor)),
             account_password: normalize_optional_ref(Some(password)),
@@ -11579,6 +11627,7 @@ fn preview_account_from_access_token(
     account.organization_id = organization_id;
     account.account_name = hints.account_name;
     account.account_structure = hints.account_structure;
+    account.account_note_title = hints.account_note_title.and_then(normalize_account_note_title);
     account.account_note = hints.account_note;
     account.two_factor_secret = hints.two_factor_secret;
     account.account_password = hints.account_password;
@@ -11737,6 +11786,7 @@ async fn codex_batch_import_draft_from_value(
                     access_token: tokens.access_token,
                     hints: CodexAccessTokenImportHints {
                         account_id: account_id_hint,
+                        account_note_title: note_update.note_title,
                         account_note: note_update.note,
                         two_factor_secret: note_update.two_factor_secret,
                         account_password: note_update.account_password,
@@ -15335,6 +15385,7 @@ mod tests {
         let mut detail = load_account(&existing.id).expect("load existing account");
         detail.account_name = Some("备注账号".to_string());
         detail.account_structure = Some("个人".to_string());
+        detail.account_note_title = Some("张三的正价号".to_string());
         detail.account_note = Some("其他备注".to_string());
         detail.two_factor_secret = Some("JBSWY3DPEHPK3PXP".to_string());
         detail.account_password = Some("password-1".to_string());
@@ -15357,6 +15408,7 @@ mod tests {
         assert_eq!(reauthed.organization_id.as_deref(), Some("org-new"));
         assert_eq!(reauthed.account_name.as_deref(), Some("备注账号"));
         assert_eq!(reauthed.account_structure.as_deref(), Some("个人"));
+        assert_eq!(reauthed.account_note_title.as_deref(), Some("张三的正价号"));
         assert_eq!(reauthed.account_note.as_deref(), Some("其他备注"));
         assert_eq!(
             reauthed.two_factor_secret.as_deref(),
@@ -15366,6 +15418,7 @@ mod tests {
         assert_eq!(reauthed.phone_number.as_deref(), Some("13800000000"));
 
         let persisted = load_account(&existing.id).expect("load persisted account");
+        assert_eq!(persisted.account_note_title.as_deref(), Some("张三的正价号"));
         assert_eq!(persisted.account_note.as_deref(), Some("其他备注"));
         assert_eq!(
             persisted.two_factor_secret.as_deref(),
@@ -19816,6 +19869,7 @@ pub fn update_account_client_policy(
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct CodexAccountNoteUpdate {
+    pub note_title: Option<String>,
     pub note: Option<String>,
     pub two_factor_secret: Option<String>,
     pub account_password: Option<String>,
@@ -19823,7 +19877,22 @@ pub struct CodexAccountNoteUpdate {
     pub mail_url: Option<String>,
 }
 
+const CODEX_ACCOUNT_NOTE_TITLE_MAX_CHARS: usize = 40;
+
+fn normalize_account_note_title(value: String) -> Option<String> {
+    let single_line = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    normalize_optional_value(Some(single_line)).map(|value| {
+        value
+            .chars()
+            .take(CODEX_ACCOUNT_NOTE_TITLE_MAX_CHARS)
+            .collect()
+    })
+}
+
 fn apply_account_note_update(account: &mut CodexAccount, update: CodexAccountNoteUpdate) {
+    if let Some(note_title) = update.note_title {
+        account.account_note_title = normalize_account_note_title(note_title);
+    }
     if let Some(note) = update.note {
         account.account_note = normalize_optional_value(Some(note));
     }

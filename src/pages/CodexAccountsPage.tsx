@@ -447,6 +447,7 @@ type OAuthBindingQuotaReserveFieldErrors = {
   weeklyPercent?: string;
 };
 type CodexAccountNoteFormState = {
+  noteTitle: string;
   note: string;
   twoFactorSecret: string;
   accountPassword: string;
@@ -454,6 +455,8 @@ type CodexAccountNoteFormState = {
   mailUrl: string;
   chatgptAccountId: string;
 };
+
+const CODEX_ACCOUNT_NOTE_TITLE_MAX_LENGTH = 40;
 
 type CodexAccountNoteMailPreviewState = MailVerificationCodePreview & {
   fetchedAt: number;
@@ -471,6 +474,7 @@ type CodexAccountNoteFieldErrors = {
 };
 
 const EMPTY_CODEX_ACCOUNT_NOTE_FORM: CodexAccountNoteFormState = {
+  noteTitle: "",
   note: "",
   twoFactorSecret: "",
   accountPassword: "",
@@ -483,6 +487,7 @@ function buildCodexAccountNoteForm(
   account?: CodexAccount | null,
 ): CodexAccountNoteFormState {
   return {
+    noteTitle: account?.account_note_title ?? "",
     note: account?.account_note ?? "",
     twoFactorSecret: account?.two_factor_secret ?? "",
     accountPassword: account?.account_password ?? "",
@@ -494,7 +499,8 @@ function buildCodexAccountNoteForm(
 
 function hasCodexAccountNoteDetails(account?: CodexAccount | null): boolean {
   return Boolean(
-    account?.account_note?.trim() ||
+    account?.account_note_title?.trim() ||
+      account?.account_note?.trim() ||
       account?.two_factor_secret?.trim() ||
       account?.account_password?.trim() ||
       account?.phone_number?.trim() ||
@@ -506,7 +512,8 @@ function hasCodexAccountNoteFormDetails(
   form?: CodexAccountNoteFormState | null,
 ): boolean {
   return Boolean(
-    form?.note.trim() ||
+    form?.noteTitle.trim() ||
+      form?.note.trim() ||
       form?.twoFactorSecret.trim() ||
       form?.accountPassword.trim() ||
       form?.phoneNumber.trim() ||
@@ -516,6 +523,7 @@ function hasCodexAccountNoteFormDetails(
 
 function getCodexAccountNoteTitle(account: CodexAccount, fallback: string): string {
   return (
+    account.account_note_title?.trim() ||
     account.account_note?.trim() ||
     account.two_factor_secret?.trim() ||
     account.account_password?.trim() ||
@@ -3463,6 +3471,7 @@ export function CodexAccountsPage() {
       const normalizedTwoFactorSecret =
         parsedTwoFactorSecret?.secret ?? rawTwoFactorSecret;
       const noteUpdate = {
+        noteTitle: activeAccountNoteForm.noteTitle,
         note: activeAccountNoteForm.note,
         twoFactorSecret: normalizedTwoFactorSecret,
         accountPassword: activeAccountNoteForm.accountPassword,
@@ -9227,26 +9236,19 @@ export function CodexAccountsPage() {
     [],
   );
 
-  const accountIdLabel = t("kiro.account.userId", "User ID");
-
   const accountMetaMap = useMemo(() => {
     const map = new Map<
       string,
       {
-        chatgptAccountId: string;
-        signedInWithText: string;
-        userId: string;
+        loginMethodText: string;
         accountContextText: string;
       }
     >();
-    const noneText = t("common.none", "暂无");
 
     accounts.forEach((account) => {
       if (isCodexApiKeyAccount(account)) {
         map.set(account.id, {
-          chatgptAccountId: t("common.none", "暂无"),
-          signedInWithText: "",
-          userId: "",
+          loginMethodText: "",
           accountContextText: "",
         });
         return;
@@ -9277,18 +9279,8 @@ export function CodexAccountsPage() {
       const loginProvider =
         formatCodexLoginProvider(metadata.authProvider) ||
         t("kiro.account.providerUnknown", "Unknown");
-      const userId =
-        (metadata.userId || account.user_id || "").trim() || noneText;
-      const signedInWithText = t("kiro.account.signedInWith", {
-        provider: loginProvider,
-        defaultValue: "Signed in with {{provider}}",
-      });
       map.set(account.id, {
-        chatgptAccountId:
-          (metadata.chatgptAccountId || account.account_id || "").trim() ||
-          noneText,
-        signedInWithText,
-        userId,
+        loginMethodText: loginProvider,
         accountContextText,
       });
     });
@@ -9299,12 +9291,7 @@ export function CodexAccountsPage() {
   const resolveAccountMeta = useCallback(
     (account: CodexAccount) =>
       accountMetaMap.get(account.id) ?? {
-        chatgptAccountId: t("common.none", "暂无"),
-        signedInWithText: t("kiro.account.signedInWith", {
-          provider: t("kiro.account.providerUnknown", "Unknown"),
-          defaultValue: "Signed in with {{provider}}",
-        }),
-        userId: t("common.none", "暂无"),
+        loginMethodText: t("kiro.account.providerUnknown", "Unknown"),
         accountContextText: "",
       },
     [accountMetaMap, t],
@@ -11251,6 +11238,7 @@ export function CodexAccountsPage() {
     ) => {
       if (isApiKeyAccount && !isNewApiAccount) return [];
       return presentation.quotaItems.filter((item) => {
+        if (item.key === "monthly_credits") return false;
         if (!showCodeReviewQuota && item.key === "code_review") return false;
         if (!showAdditionalQuota && item.key.startsWith("additional:")) {
           return false;
@@ -11271,20 +11259,17 @@ export function CodexAccountsPage() {
     const displayCount =
       availableCount ??
       creditDetails.filter(isAvailableResetCredit).length;
+    if (displayCount <= 0) return null;
+
     const isResetting = resettingResetCreditAccountId === account.id;
     const isDisabled = isResetting;
-    const titleText =
-      displayCount > 0
-        ? buildResetCreditsTitle(account, displayCount)
-        : t("codex.quota.resetCreditDetailsTitle", "重置次数明细");
+    const titleText = buildResetCreditsTitle(account, displayCount);
 
     return (
       <div className="codex-reset-credit-row inline">
         <button
           type="button"
-          className={`codex-reset-credit-pill ${
-            displayCount > 0 ? "is-available" : "is-unavailable"
-          }`}
+          className="codex-reset-credit-pill is-available"
           onClick={() => openResetCreditConfirmModal(account)}
           disabled={isDisabled}
           title={titleText}
@@ -11581,12 +11566,7 @@ export function CodexAccountsPage() {
         !isRefreshTokenNotice &&
         (isPendingOAuthAccount ||
           (hasQuotaError && shouldOfferReauthorizeAction(accountIssueMeta)));
-      const accountIdText =
-        meta.chatgptAccountId &&
-        meta.chatgptAccountId !== t("common.none", "暂无")
-          ? meta.chatgptAccountId
-          : meta.userId;
-      const signInLine = `${meta.signedInWithText} | ${accountIdLabel}: ${accountIdText}`;
+      const accountNoteTitleText = (account.account_note_title || "").trim();
       const apiProviderName = resolveApiProviderDisplayName(account);
       const apiProviderLine = `${t("codex.api.provider.label", "供应商")}：${apiProviderName}`;
       const apiBaseUrlText = (account.api_base_url || "").trim() || "-";
@@ -11658,7 +11638,15 @@ export function CodexAccountsPage() {
       return (
         <div
           key={groupKey ? `${groupKey}-${account.id}` : account.id}
-          className={`codex-account-card ${isCurrent ? "current" : ""} ${isSelected ? "selected" : ""} ${isPendingOAuthAccount ? "pending-auth" : ""} ${isNewApiAccount ? "new-api-exclusive" : ""} ${isQuotaAwareApiKeyAccount ? "api-key-usage-account" : ""} ${isSponsorApiKeyAccount ? "sponsor-api-account" : ""}`}
+          className={`codex-account-card ${selected.size > 0 ? "selection-mode" : ""} ${isCurrent ? "current" : ""} ${isSelected ? "selected" : ""} ${isPendingOAuthAccount ? "pending-auth" : ""} ${isNewApiAccount ? "new-api-exclusive" : ""} ${isQuotaAwareApiKeyAccount ? "api-key-usage-account" : ""} ${isSponsorApiKeyAccount ? "sponsor-api-account" : ""}`}
+          onClickCapture={(event) => {
+            if (selected.size === 0) return;
+            const target = event.target as Element;
+            if (target.closest(".card-select")) return;
+            event.preventDefault();
+            event.stopPropagation();
+            handleToggleOverviewAccount(account.id);
+          }}
         >
           <div className="card-top">
             <div className="card-select">
@@ -11718,70 +11706,82 @@ export function CodexAccountsPage() {
               {displayPlanLabel}
             </span>
           </div>
-          {(meta.accountContextText ||
-            isInLocalAccess ||
-            canAddToLocalAccess ||
-            (!isApiKeyAccount && hasCodexAccountNoteDetails(account)) ||
-            resetCreditControls) && (
-            <div className="account-sub-line">
-              {meta.accountContextText && (
+          {!isApiKeyAccount &&
+            (meta.accountContextText ||
+              meta.loginMethodText ||
+              isInLocalAccess ||
+              canAddToLocalAccess) && (
+              <div className="account-sub-line codex-account-context-line">
                 <span
-                  className="codex-login-subline"
-                  title={meta.accountContextText}
+                  className="codex-account-context-summary"
+                  title={[meta.accountContextText, meta.loginMethodText]
+                    .filter(Boolean)
+                    .join(" | ")}
                 >
-                  Team Name：{meta.accountContextText}
+                  {meta.accountContextText && (
+                    <span className="codex-account-team-name">
+                      Team：{meta.accountContextText}
+                    </span>
+                  )}
+                  {meta.loginMethodText && (
+                    <span className="codex-account-login-method">
+                      {meta.loginMethodText}
+                    </span>
+                  )}
                 </span>
-              )}
-              {isInLocalAccess && (
-                <button
-                  type="button"
-                  className="group-account-badge codex-local-access-inline-remove"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void handleRemoveLocalAccessAccount(account.id);
-                  }}
-                  disabled={addingLocalAccessAccountId !== null}
-                  title={t(
-                    "codex.localAccess.removeAction",
-                    "移除 API 服务",
-                  )}
-                  aria-label={t(
-                    "codex.localAccess.removeAction",
-                    "移除 API 服务",
-                  )}
-                >
-                  {addingLocalAccessAccountId === account.id ? (
-                    <RefreshCw size={11} className="loading-spinner" />
-                  ) : (
+                {isInLocalAccess && (
+                  <button
+                    type="button"
+                    className="group-account-badge codex-local-access-inline-remove"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void handleRemoveLocalAccessAccount(account.id);
+                    }}
+                    disabled={addingLocalAccessAccountId !== null}
+                    title={t(
+                      "codex.localAccess.removeAction",
+                      "移除 API 服务",
+                    )}
+                    aria-label={t(
+                      "codex.localAccess.removeAction",
+                      "移除 API 服务",
+                    )}
+                  >
+                    {addingLocalAccessAccountId === account.id ? (
+                      <RefreshCw size={11} className="loading-spinner" />
+                    ) : (
+                      <Link2 size={11} />
+                    )}
+                    {t("codex.localAccess.removeAction", "移除 API 服务")}
+                  </button>
+                )}
+                {!isInLocalAccess && canAddToLocalAccess && (
+                  <button
+                    type="button"
+                    className="group-account-badge codex-local-access-inline-add"
+                    onClick={() => void handleAddLocalAccessAccount(account.id)}
+                    disabled={addingLocalAccessAccountId !== null}
+                    title={t(
+                      "codex.localAccess.entryAction",
+                      "添加至 API 服务",
+                    )}
+                  >
                     <Link2 size={11} />
-                  )}
-                  {t("codex.localAccess.removeAction", "移除 API 服务")}
-                </button>
-              )}
-              {!isInLocalAccess && canAddToLocalAccess && (
-                <button
-                  type="button"
-                  className="group-account-badge codex-local-access-inline-add"
-                  onClick={() => void handleAddLocalAccessAccount(account.id)}
-                  disabled={addingLocalAccessAccountId !== null}
-                  title={t(
-                    "codex.localAccess.entryAction",
-                    "添加至 API 服务",
-                  )}
-                >
-                  <Link2 size={11} />
-                  {t("codex.localAccess.entryAction", "添加至 API 服务")}
-                </button>
-              )}
-              {!isApiKeyAccount && renderAccountNoteButton(account)}
-              {resetCreditControls}
-            </div>
-          )}
+                    {t("codex.localAccess.entryAction", "添加至 API 服务")}
+                  </button>
+                )}
+              </div>
+            )}
           {!isApiKeyAccount && (
-            <div className="account-sub-line">
-              <span className="codex-login-subline" title={signInLine}>
-                {meta.signedInWithText} | {accountIdLabel}:{" "}
-                {maskAccountText(accountIdText)}
+            <div className="account-sub-line codex-account-note-line">
+              <span
+                className={`codex-account-note-preview ${accountNoteTitleText ? "" : "is-empty"}`}
+                title={
+                  accountNoteTitleText ||
+                  t("codex.accountNote.emptyTitle", "填写账号备注")
+                }
+              >
+                {accountNoteTitleText || t("common.none", "暂无")}
               </span>
             </div>
           )}
@@ -11942,7 +11942,10 @@ export function CodexAccountsPage() {
           )}
           <div className="codex-card-bottom">
             <span className="card-date">{formatDate(account.created_at)}</span>
-            {renderAccountSpeedSelect(account)}
+            <div className="codex-card-bottom-controls">
+              {resetCreditControls}
+              {renderAccountSpeedSelect(account)}
+            </div>
             <div className="card-footer">
               <div className="card-actions">
                 <button
@@ -12917,12 +12920,7 @@ export function CodexAccountsPage() {
         !isRefreshTokenNotice &&
         (isPendingOAuthAccount ||
           (hasQuotaError && shouldOfferReauthorizeAction(accountIssueMeta)));
-      const accountIdText =
-        meta.chatgptAccountId &&
-        meta.chatgptAccountId !== t("common.none", "暂无")
-          ? meta.chatgptAccountId
-          : meta.userId;
-      const signInLine = `${meta.signedInWithText} | ${accountIdLabel}: ${accountIdText}`;
+      const accountNoteTitleText = (account.account_note_title || "").trim();
       const apiProviderName = resolveApiProviderDisplayName(account);
       const apiProviderLine = `${t("codex.api.provider.label", "供应商")}：${apiProviderName}`;
       const apiBaseUrlText = (account.api_base_url || "").trim() || "-";
@@ -13029,19 +13027,29 @@ export function CodexAccountsPage() {
                 )}
                 {renderAccountSpeedSelect(account, true)}
               </div>
-              {(meta.accountContextText ||
-                isInLocalAccess ||
-                (!isApiKeyAccount && hasCodexAccountNoteDetails(account)) ||
-                resetCreditControls) && (
-                <div className="account-sub-line codex-account-meta-inline">
-                  {meta.accountContextText && (
-                    <span
-                      className="codex-login-subline"
-                      title={meta.accountContextText}
-                    >
-                      Team Name：{meta.accountContextText}
-                    </span>
-                  )}
+              {!isApiKeyAccount &&
+                (meta.accountContextText ||
+                  meta.loginMethodText ||
+                  isInLocalAccess ||
+                  resetCreditControls) && (
+                <div className="account-sub-line codex-account-meta-inline codex-account-context-line">
+                  <span
+                    className="codex-account-context-summary"
+                    title={[meta.accountContextText, meta.loginMethodText]
+                      .filter(Boolean)
+                      .join(" | ")}
+                  >
+                    {meta.accountContextText && (
+                      <span className="codex-account-team-name">
+                        Team：{meta.accountContextText}
+                      </span>
+                    )}
+                    {meta.loginMethodText && (
+                      <span className="codex-account-login-method">
+                        {meta.loginMethodText}
+                      </span>
+                    )}
+                  </span>
                   {isInLocalAccess && (
                     <button
                       type="button"
@@ -13068,15 +13076,19 @@ export function CodexAccountsPage() {
                       {t("codex.localAccess.removeAction", "移除 API 服务")}
                     </button>
                   )}
-                  {!isApiKeyAccount && renderAccountNoteButton(account)}
                   {resetCreditControls}
                 </div>
               )}
               {!isApiKeyAccount && (
-                <div className="account-sub-line codex-account-meta-inline">
-                  <span className="codex-login-subline" title={signInLine}>
-                    {meta.signedInWithText} | {accountIdLabel}:{" "}
-                    {maskAccountText(accountIdText)}
+                <div className="account-sub-line codex-account-meta-inline codex-account-note-line">
+                  <span
+                    className={`codex-account-note-preview ${accountNoteTitleText ? "" : "is-empty"}`}
+                    title={
+                      accountNoteTitleText ||
+                      t("codex.accountNote.emptyTitle", "填写账号备注")
+                    }
+                  >
+                    {accountNoteTitleText || t("common.none", "暂无")}
                   </span>
                 </div>
               )}
@@ -19528,6 +19540,28 @@ export function CodexAccountsPage() {
                         )}
                       </button>
                     </div>
+                  </label>
+                  <label className="codex-account-note-field">
+                    <span>
+                      {t("codex.accountNote.noteTitleLabel", "备注标题")}
+                    </span>
+                    <input
+                      className="codex-account-note-input"
+                      type="text"
+                      value={activeAccountNoteForm.noteTitle}
+                      onChange={(event) => {
+                        updateActiveAccountNoteForm({
+                          noteTitle: event.target.value,
+                        });
+                      }}
+                      placeholder={t(
+                        "codex.accountNote.noteTitlePlaceholder",
+                        "例如：日抛号、15 元购入、张三正价号",
+                      )}
+                      maxLength={CODEX_ACCOUNT_NOTE_TITLE_MAX_LENGTH}
+                      autoComplete="off"
+                      disabled={activeAccountNoteSaving}
+                    />
                   </label>
                   <label className="codex-account-note-field">
                     <span>
