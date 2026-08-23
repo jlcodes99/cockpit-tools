@@ -317,6 +317,9 @@ type providerGatewaySpec struct {
 	SupportsVision     bool                                      `json:"supportsVision,omitempty"`
 	ModelCapabilities  map[string]providerGatewayModelCapability `json:"modelCapabilities,omitempty"`
 	VisionRoutingModel string                                    `json:"visionRoutingModel,omitempty"`
+	// DisableThinking forces DeepSeek-style thinking mode off so clients that
+	// cannot replay reasoning_content (Codex) do not trip the upstream 400.
+	DisableThinking bool `json:"disableThinking,omitempty"`
 }
 
 type providerGatewayModelCapability struct {
@@ -5891,6 +5894,7 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 			return
 		}
 		upstreamPath = "/v1/chat/completions"
+		upstreamBody = prepareProviderGatewayChatCompletionsReasoning(gateway, upstreamModel, upstreamBody)
 	} else if !sourceFormatEqual(sourceFormat, sdktranslator.FormatOpenAIResponse) {
 		writeAPIError(c, http.StatusBadRequest, "provider gateway responses wire API only accepts responses requests", "invalid_request")
 		return
@@ -5931,23 +5935,20 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 		return
 	}
 
+	cacheReasoning := wireAPI == "chat_completions" && providerGatewayShouldReplayReasoning(gateway, upstreamModel)
 	if stream {
 		if wireAPI == "chat_completions" {
 			switch {
 			case sourceFormatEqual(sourceFormat, sdktranslator.FormatOpenAIResponse):
-				s.writeProviderGatewayChatStream(c, resp.Body, upstreamModel, body, upstreamBody)
+				s.writeProviderGatewayChatStream(c, resp.Body, upstreamModel, body, upstreamBody, cacheReasoning)
 			case sourceFormatEqual(sourceFormat, sdktranslator.FormatOpenAI):
-				c.Status(http.StatusOK)
-				c.Stream(func(w io.Writer) bool {
-					_, _ = io.Copy(w, resp.Body)
-					return false
-				})
+				s.writeProviderGatewayOpenAIStream(c, resp.Body, upstreamModel, cacheReasoning)
 			default:
 				alt := fixedAlt
 				if alt == "" {
 					alt = requestAlt(c)
 				}
-				s.writeProviderGatewayTranslatedChatStream(c, resp.Body, upstreamModel, body, upstreamBody, sourceFormat, alt)
+				s.writeProviderGatewayTranslatedChatStream(c, resp.Body, upstreamModel, body, upstreamBody, sourceFormat, alt, cacheReasoning)
 			}
 			return
 		}
@@ -5965,6 +5966,9 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 		return
 	}
 	if wireAPI == "chat_completions" {
+		if cacheReasoning {
+			cacheReasoningFromChatCompletionsResponse(upstreamModel, payload)
+		}
 		switch {
 		case sourceFormatEqual(sourceFormat, sdktranslator.FormatOpenAIResponse):
 			payload = responsesconverter.ConvertOpenAIChatCompletionsResponseToOpenAIResponsesNonStream(relayContext(c), upstreamModel, body, upstreamBody, payload, nil)
@@ -6022,7 +6026,7 @@ func copyProviderGatewayDiagnosticHeaders(dst http.Header, src http.Header) {
 	}
 }
 
-func (s *relayServer) writeProviderGatewayChatStream(c *gin.Context, body io.Reader, model string, originalBody []byte, chatBody []byte) {
+func (s *relayServer) writeProviderGatewayChatStream(c *gin.Context, body io.Reader, model string, originalBody []byte, chatBody []byte, cacheReasoning bool) {
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		writeAPIError(c, http.StatusInternalServerError, "streaming not supported", "streaming_not_supported")
@@ -6040,12 +6044,19 @@ func (s *relayServer) writeProviderGatewayChatStream(c *gin.Context, body io.Rea
 	convertedEventCount := 0
 	rawLineCount := 0
 	eventCounts := make(map[string]int)
+	acc := newChatStreamReasoningAccumulator()
+	if cacheReasoning {
+		defer acc.cache(model)
+	}
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
 		line := bytes.TrimSpace(scanner.Bytes())
 		if len(line) == 0 {
 			continue
+		}
+		if cacheReasoning {
+			acc.consume(line)
 		}
 		rawLineCount++
 		if providerGatewayStreamLineIsDone(line) {
@@ -6116,7 +6127,40 @@ func (s *relayServer) writeProviderGatewayChatStream(c *gin.Context, body io.Rea
 	)
 }
 
-func (s *relayServer) writeProviderGatewayTranslatedChatStream(c *gin.Context, body io.Reader, model string, originalBody []byte, chatBody []byte, targetFormat sdktranslator.Format, alt string) {
+func (s *relayServer) writeProviderGatewayOpenAIStream(c *gin.Context, body io.Reader, model string, cacheReasoning bool) {
+	if !cacheReasoning {
+		c.Status(http.StatusOK)
+		c.Stream(func(w io.Writer) bool {
+			_, _ = io.Copy(w, body)
+			return false
+		})
+		return
+	}
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.Status(http.StatusOK)
+		c.Stream(func(w io.Writer) bool {
+			_, _ = io.Copy(w, body)
+			return false
+		})
+		return
+	}
+	c.Status(http.StatusOK)
+	acc := newChatStreamReasoningAccumulator()
+	defer acc.cache(model)
+	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		acc.consume(line)
+		if _, err := c.Writer.Write(append(append([]byte(nil), line...), '\n')); err != nil {
+			return
+		}
+		flusher.Flush()
+	}
+}
+
+func (s *relayServer) writeProviderGatewayTranslatedChatStream(c *gin.Context, body io.Reader, model string, originalBody []byte, chatBody []byte, targetFormat sdktranslator.Format, alt string, cacheReasoning bool) {
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		writeAPIError(c, http.StatusInternalServerError, "streaming not supported", "streaming_not_supported")
@@ -6128,12 +6172,19 @@ func (s *relayServer) writeProviderGatewayTranslatedChatStream(c *gin.Context, b
 	c.Status(http.StatusOK)
 
 	var state any
+	acc := newChatStreamReasoningAccumulator()
+	if cacheReasoning {
+		defer acc.cache(model)
+	}
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
 		line := bytes.TrimSpace(scanner.Bytes())
 		if len(line) == 0 {
 			continue
+		}
+		if cacheReasoning {
+			acc.consume(line)
 		}
 		outputs := sdktranslator.TranslateStream(relayContext(c), sdktranslator.FormatOpenAI, targetFormat, model, originalBody, chatBody, line, &state)
 		for _, output := range outputs {
