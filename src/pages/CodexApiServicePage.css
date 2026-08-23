@@ -168,6 +168,57 @@
   min-width: 0;
 }
 
+.codex-api-service-key-search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 220px;
+  color: var(--text-muted);
+}
+
+.codex-api-service-key-search > svg {
+  position: absolute;
+  left: 10px;
+  pointer-events: none;
+}
+
+.codex-api-service-key-search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px 0 30px;
+  border: 1px solid var(--codex-api-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+  color: var(--text-primary);
+  outline: none;
+  font: inherit;
+  font-size: 12px;
+}
+
+.codex-api-service-key-search input:focus {
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.codex-api-service-empty-state {
+  padding: 18px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .codex-api-service-hero-actions {
   gap: 5px;
   flex-wrap: wrap;
@@ -2719,6 +2770,11 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
   .codex-api-service-input-row .btn,
   .codex-api-service-hero-actions .btn {
     width: 100%;
+  }
+
+  .codex-api-service-key-search {
+    width: 100%;
+    min-width: 0;
   }
 
   .codex-api-service-proxy-input-row {

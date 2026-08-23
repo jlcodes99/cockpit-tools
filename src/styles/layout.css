@@ -28,6 +28,57 @@
   z-index: 900;
 }
 
+.app-container-linux {
+  border-radius: 0;
+}
+
+.app-container-linux .drag-region {
+  /* Keep the custom controls clickable while retaining a draggable title area. */
+  z-index: 900;
+}
+
+.linux-window-controls {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 13060;
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 4px;
+  -webkit-app-region: no-drag;
+}
+
+.linux-window-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 30px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.linux-window-control:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.linux-window-control.close:hover:not(:disabled) {
+  background: #dc2626;
+  color: #fff;
+}
+
+.linux-window-control:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .app-container-windows .side-nav,
 .app-container-windows .side-nav-classic-handle {
   -webkit-app-region: no-drag;

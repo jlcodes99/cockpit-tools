@@ -15,7 +15,15 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
-import { FileText, FolderOpen, RefreshCw, X } from 'lucide-react';
+import {
+  FileText,
+  FolderOpen,
+  Maximize2,
+  Minimize2,
+  Minus,
+  RefreshCw,
+  X,
+} from 'lucide-react';
 import { SideNav } from './components/layout/SideNav';
 import { BootReadyMarker, VisibleBootPage } from './components/BootReadyMarker';
 import { GlobalModal } from './components/GlobalModal';
@@ -83,6 +91,11 @@ import {
   getWorkbuddyAutoCheckinConfig,
   migrateWorkbuddyAutoCheckinConfigAsync,
 } from './services/workbuddyAutoCheckinService';
+import {
+  getTraeAutoCheckinNextDelayMs,
+  runTraeAutoCheckinCycleIfNeeded,
+  TRAE_AUTO_CHECKIN_CONFIG_CHANGED_EVENT,
+} from './services/traeAutoCheckinService';
 import { prepareCodexLocalAccessForRestart } from './services/codexLocalAccessService';
 import { applyReducedMotion } from './utils/reducedMotion';
 import { isCodexInstanceAccountConflict } from './utils/codexInstanceLaunchConflict';
@@ -741,6 +754,97 @@ function isWindowsPlatform(): boolean {
   return platform.toLowerCase().includes('win');
 }
 
+function isLinuxPlatform(): boolean {
+  const navWithUAData = navigator as Navigator & { userAgentData?: { platform?: string } };
+  const platform = navWithUAData.userAgentData?.platform || navigator.platform || '';
+  return platform.toLowerCase().includes('linux');
+}
+
+function LinuxWindowControls() {
+  const { t } = useTranslation();
+  const [maximized, setMaximized] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const currentWindow = useMemo(() => getCurrentWindow(), []);
+
+  const syncMaximized = useCallback(async () => {
+    try {
+      setMaximized(await currentWindow.isMaximized());
+    } catch (error) {
+      console.warn('[Window] failed to read maximized state:', error);
+    }
+  }, [currentWindow]);
+
+  useEffect(() => {
+    let active = true;
+    let unlisten: UnlistenFn | undefined;
+    void syncMaximized();
+    void currentWindow.onResized(() => {
+      if (active) void syncMaximized();
+    }).then((cleanup) => {
+      if (active) {
+        unlisten = cleanup;
+      } else {
+        cleanup();
+      }
+    });
+    return () => {
+      active = false;
+      if (unlisten) unlisten();
+    };
+  }, [currentWindow, syncMaximized]);
+
+  const runWindowAction = useCallback(
+    async (action: () => Promise<void>) => {
+      if (busy) return;
+      setBusy(true);
+      try {
+        await action();
+        await syncMaximized();
+      } catch (error) {
+        console.warn('[Window] Linux window action failed:', error);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, syncMaximized],
+  );
+
+  return (
+    <div className="linux-window-controls" role="toolbar" aria-label={t('window.controls', 'Window controls')}>
+      <button
+        type="button"
+        className="linux-window-control"
+        onClick={() => void runWindowAction(() => currentWindow.minimize())}
+        disabled={busy}
+        aria-label={t('window.minimize', 'Minimize')}
+        title={t('window.minimize', 'Minimize')}
+      >
+        <Minus size={15} />
+      </button>
+      <button
+        type="button"
+        className="linux-window-control"
+        onClick={() => void runWindowAction(() => currentWindow.toggleMaximize())}
+        disabled={busy}
+        aria-label={t('window.maximize', maximized ? 'Restore' : 'Maximize')}
+        title={t('window.maximize', maximized ? 'Restore' : 'Maximize')}
+      >
+        {maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+      </button>
+      <button
+        type="button"
+        className="linux-window-control close"
+        onClick={() => void runWindowAction(() => currentWindow.close())}
+        disabled={busy}
+        aria-label={t('window.close', 'Close')}
+        title={t('window.close', 'Close')}
+      >
+        <X size={15} />
+      </button>
+    </div>
+  );
+}
+
 function MainApp() {
   const { t } = useTranslation();
   const sideNavLayoutMode = useSideNavLayoutStore((state) => state.mode);
@@ -786,6 +890,46 @@ function MainApp() {
         store.setHideClassicSwitchPrompt(true);
       }
     });
+
+    let disposed = false;
+    let timerId: number | undefined;
+
+    const schedule = (delayMs?: number) => {
+      if (timerId !== undefined) {
+        window.clearTimeout(timerId);
+      }
+      timerId = window.setTimeout(() => {
+        void runCycle();
+      }, Math.max(1_000, delayMs ?? getTraeAutoCheckinNextDelayMs()));
+    };
+
+    const runCycle = async () => {
+      if (disposed) {
+        return;
+      }
+      let result: Awaited<ReturnType<typeof runTraeAutoCheckinCycleIfNeeded>>;
+      try {
+        result = await runTraeAutoCheckinCycleIfNeeded();
+      } catch (error) {
+        console.warn('[TraeAutoCheckin] 自动签到调度失败:', error);
+        result = 'retry';
+      }
+      if (!disposed) {
+        schedule(getTraeAutoCheckinNextDelayMs(result));
+      }
+    };
+
+    const handleConfigChange = () => schedule(1_000);
+    window.addEventListener(TRAE_AUTO_CHECKIN_CONFIG_CHANGED_EVENT, handleConfigChange);
+    schedule(1_000);
+
+    return () => {
+      disposed = true;
+      window.removeEventListener(TRAE_AUTO_CHECKIN_CONFIG_CHANGED_EVENT, handleConfigChange);
+      if (timerId !== undefined) {
+        window.clearTimeout(timerId);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -3672,7 +3816,7 @@ function MainApp() {
 
   return (
     <div
-      className={`app-container${isWindowsPlatform() ? ' app-container-windows' : ''}${sideNavLayoutMode === 'classic' ? ' app-container-side-nav-classic' : ''}${sideNavLayoutMode === 'classic' && sideNavClassicCollapsed ? ' app-container-side-nav-classic-collapsed' : ''}`}
+      className={`app-container${isWindowsPlatform() ? ' app-container-windows' : ''}${isLinuxPlatform() ? ' app-container-linux' : ''}${sideNavLayoutMode === 'classic' ? ' app-container-side-nav-classic' : ''}${sideNavLayoutMode === 'classic' && sideNavClassicCollapsed ? ' app-container-side-nav-classic-collapsed' : ''}`}
     >
       {/* 更新通知：活跃状态时保持挂载，关闭后继续保留当前更新状态 */}
       {shouldRenderUpdateNotification && (
@@ -3921,6 +4065,8 @@ function MainApp() {
         data-tauri-drag-region
         onMouseDown={handleDragStart}
       />
+
+      {isLinuxPlatform() ? <LinuxWindowControls /> : null}
 
       {/* 左侧悬浮导航 */}
       <SideNav

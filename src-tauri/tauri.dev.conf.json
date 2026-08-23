@@ -14,6 +14,7 @@
         "center": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
+        "decorations": true,
         "transparent": false,
         "resizable": true
       },

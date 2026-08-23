@@ -302,11 +302,14 @@ export function getGrokPlanBadge(account: GrokAccount): string {
   }
   if (
     [
+      "SUBSCRIPTION_TIER_SUPER_GROK_HEAVY",
       "SUBSCRIPTION_TIER_SUPERGROK_HEAVY",
       "SUBSCRIPTION_TIER_GROK_HEAVY",
     ].includes(normalized) ||
     compact === "SUPERGROKHEAVY" ||
-    compact === "GROKHEAVY"
+    compact === "GROKHEAVY" ||
+    compact === "SUBSCRIPTIONTIERSUPERGROKHEAVY" ||
+    compact === "SUBSCRIPTIONTIERGROKHEAVY"
   ) {
     return "SuperGrok Heavy";
   }

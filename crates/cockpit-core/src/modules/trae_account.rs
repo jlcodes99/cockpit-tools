@@ -1136,6 +1136,121 @@ fn apply_payload(account: &mut TraeAccount, payload: TraeImportPayload) {
     account.last_used = now_ts();
 }
 
+fn is_runtime_preserved_auth_key(key: &str) -> bool {
+    matches!(
+        key,
+        "platformId"
+            | "platform_id"
+            | "platform"
+            | "callbackQuery"
+            | "callback_query"
+            | "deviceInfo"
+            | "device_info"
+            | "deviceKeyPair"
+            | "device_key_pair"
+            | "exchangeResponse"
+            | "exchange_response"
+            | "host"
+            | "loginHost"
+            | "login_host"
+            | "authDomain"
+            | "auth_domain"
+            | "clientId"
+            | "client_id"
+            | "ClientID"
+            | "scope"
+    )
+}
+
+fn merge_runtime_json(existing: Option<&Value>, incoming: Option<&Value>) -> Option<Value> {
+    let Some(incoming) = incoming else {
+        return existing.cloned();
+    };
+    let Some(incoming_object) = incoming.as_object() else {
+        return Some(incoming.clone());
+    };
+
+    let mut merged = existing
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    for (key, incoming_value) in incoming_object {
+        if is_runtime_preserved_auth_key(key) && merged.contains_key(key) {
+            continue;
+        }
+        let value = match merged.get(key) {
+            Some(existing_value)
+                if existing_value.is_object() && incoming_value.is_object() => {
+                merge_runtime_json(Some(existing_value), Some(incoming_value))
+                    .unwrap_or_else(|| incoming_value.clone())
+            }
+            _ => incoming_value.clone(),
+        };
+        merged.insert(key.clone(), value);
+    }
+    Some(Value::Object(merged))
+}
+
+fn apply_runtime_session_payload(account: &mut TraeAccount, payload: TraeImportPayload) {
+    if !payload.access_token.trim().is_empty() {
+        account.access_token = payload.access_token.clone();
+    }
+    if let Some(refresh_token) = normalize_non_empty(payload.refresh_token.as_deref()) {
+        account.refresh_token = Some(refresh_token);
+    }
+    if let Some(token_type) = normalize_non_empty(payload.token_type.as_deref()) {
+        account.token_type = Some(token_type);
+    }
+    if payload.expires_at.is_some() {
+        account.expires_at = normalize_timestamp(payload.expires_at);
+    }
+
+    let mut auth_raw = merge_runtime_json(
+        account.trae_auth_raw.as_ref(),
+        payload.trae_auth_raw.as_ref(),
+    )
+    .unwrap_or_else(|| Value::Object(Map::new()));
+    if let Some(auth_object) = auth_raw.as_object_mut() {
+        auth_object.insert(
+            "accessToken".to_string(),
+            Value::String(account.access_token.clone()),
+        );
+        auth_object.insert("token".to_string(), Value::String(account.access_token.clone()));
+        if let Some(refresh_token) = account.refresh_token.as_ref() {
+            auth_object.insert(
+                "refreshToken".to_string(),
+                Value::String(refresh_token.clone()),
+            );
+        }
+        if let Some(token_type) = account.token_type.as_ref() {
+            auth_object.insert("tokenType".to_string(), Value::String(token_type.clone()));
+        }
+        if let Some(expires_at) = account.expires_at {
+            auth_object.insert(
+                "expiresAt".to_string(),
+                Value::Number(serde_json::Number::from(expires_at)),
+            );
+        }
+    }
+    account.trae_auth_raw = Some(auth_raw);
+    account.trae_profile_raw = merge_runtime_json(
+        account.trae_profile_raw.as_ref(),
+        payload.trae_profile_raw.as_ref(),
+    );
+    account.trae_entitlement_raw = merge_runtime_json(
+        account.trae_entitlement_raw.as_ref(),
+        payload.trae_entitlement_raw.as_ref(),
+    );
+    account.trae_usage_raw = merge_runtime_json(
+        account.trae_usage_raw.as_ref(),
+        payload.trae_usage_raw.as_ref(),
+    );
+    account.trae_server_raw = merge_runtime_json(
+        account.trae_server_raw.as_ref(),
+        payload.trae_server_raw.as_ref(),
+    );
+}
+
 pub fn list_accounts() -> Vec<TraeAccount> {
     let index = load_account_index();
     index
@@ -4523,7 +4638,7 @@ fn apply_runtime_storage_payload_for_usage_refresh(
     }
 
     let previous_access_token = account.access_token.clone();
-    apply_payload(account, payload);
+    apply_runtime_session_payload(account, payload);
     logger::log_info(&format!(
         "[Trae Refresh] 已同步运行中实例会话快照: account_id={}, path={}, token_changed={}",
         account.id,
@@ -4793,6 +4908,84 @@ mod tests {
                 .and_then(Value::as_str),
             Some("李杰")
         );
+    }
+
+    #[test]
+    fn runtime_session_merge_preserves_oauth_context() {
+        let mut account = sample_account();
+        account.trae_auth_raw = Some(serde_json::json!({
+            "platformId": "trae_solo_cn",
+            "callbackQuery": {
+                "scope": "solo",
+                "host": "https://api.trae.com.cn"
+            },
+            "deviceInfo": {
+                "PlatformCode": "SOLO_PC",
+                "DeviceID": "device-old"
+            },
+            "deviceKeyPair": {
+                "privateKeyPEM": "private-old",
+                "publicKeyPEM": "public-old"
+            },
+            "exchangeResponse": {
+                "Result": { "ClientID": "solo-client" }
+            },
+            "nested": { "keep": "old" }
+        }));
+
+        let email = account.email.clone();
+        let user_id = account.user_id.clone();
+        apply_runtime_session_payload(
+            &mut account,
+            TraeImportPayload {
+                email,
+                user_id,
+                nickname: None,
+                access_token: "new-access".to_string(),
+                refresh_token: Some("new-refresh".to_string()),
+                token_type: Some("Bearer".to_string()),
+                expires_at: Some(1_800_000_000),
+                plan_type: None,
+                plan_reset_at: None,
+                trae_auth_raw: Some(serde_json::json!({
+                    "platformId": "trae_cn",
+                    "callbackQuery": {
+                        "scope": "cn",
+                        "host": "https://api.trae.cn"
+                    },
+                    "deviceInfo": {
+                        "PlatformCode": "CN_PC",
+                        "DeviceID": "device-new"
+                    },
+                    "deviceKeyPair": {
+                        "privateKeyPEM": "private-new",
+                        "publicKeyPEM": "public-new"
+                    },
+                    "exchangeResponse": {
+                        "Result": { "ClientID": "cn-client" }
+                    },
+                    "nested": { "added": "runtime" }
+                })),
+                trae_profile_raw: None,
+                trae_entitlement_raw: None,
+                trae_usage_raw: None,
+                trae_server_raw: None,
+                trae_usertag_raw: None,
+                status: None,
+                status_reason: None,
+            },
+        );
+
+        let auth = account.trae_auth_raw.as_ref().unwrap();
+        assert_eq!(account.access_token, "new-access");
+        assert_eq!(account.refresh_token.as_deref(), Some("new-refresh"));
+        assert_eq!(auth["platformId"], "trae_solo_cn");
+        assert_eq!(auth["callbackQuery"]["scope"], "solo");
+        assert_eq!(auth["deviceInfo"]["DeviceID"], "device-old");
+        assert_eq!(auth["deviceKeyPair"]["publicKeyPEM"], "public-old");
+        assert_eq!(auth["exchangeResponse"]["Result"]["ClientID"], "solo-client");
+        assert_eq!(auth["nested"]["keep"], "old");
+        assert_eq!(auth["nested"]["added"], "runtime");
     }
 
     #[test]

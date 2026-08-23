@@ -589,10 +589,12 @@ function normalizePlatformGroups(
   raw: unknown,
   fallbackToDefault: boolean,
   options: {
+    migrateAntigravitySuite?: boolean;
     restoreDefaultTraeSuiteGroup?: boolean;
     attachCodexApiServiceToCodexGroup?: boolean;
   } = {},
 ): PlatformLayoutGroup[] {
+  const shouldMigrateAntigravitySuite = options.migrateAntigravitySuite === true;
   const shouldRestoreDefaultTraeSuiteGroup = options.restoreDefaultTraeSuiteGroup === true;
   const shouldAttachCodexApiService = options.attachCodexApiServiceToCodexGroup === true;
   const source = Array.isArray(raw) ? raw : (fallbackToDefault ? defaultPlatformGroups() : []);
@@ -649,7 +651,7 @@ function normalizePlatformGroups(
     usedGroupIds.add(groupId);
   });
 
-  if (!usedPlatformIds.has('antigravity_ide')) {
+  if (shouldMigrateAntigravitySuite && !usedPlatformIds.has('antigravity_ide')) {
     const antigravityGroup = result.find((group) => group.platformIds.includes('antigravity'));
     if (antigravityGroup) {
       antigravityGroup.platformIds = [...antigravityGroup.platformIds, 'antigravity_ide'];
@@ -1256,6 +1258,7 @@ function loadPersistedState(): NormalizedLayoutStateData {
       parsed.platformGroups,
       parsed.platformGroups === undefined,
       {
+        migrateAntigravitySuite: !antigravityGroupFirstMigrated,
         restoreDefaultTraeSuiteGroup: !traeSuiteDefaultGroupRestored,
         attachCodexApiServiceToCodexGroup: !codexApiServiceSuiteMigrated,
       },

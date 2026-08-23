@@ -4679,6 +4679,11 @@ export function CodexAccountsPage() {
           return;
         }
       }
+      // OAuth completion can finish the account write and the API-service/group
+      // sync on separate Tauri tasks. Fetch once more after those mutations so
+      // the overview cannot keep the pre-OAuth account snapshot.
+      await fetchAccounts({ allowEmpty: true });
+      await fetchCurrentAccount({ allowEmpty: true });
       setAddStatus("success");
       if (reauthRetrySwitchAccountId && account?.id) {
         setAddStatus("loading");
