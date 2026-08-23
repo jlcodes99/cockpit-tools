@@ -368,9 +368,7 @@ func (e *CodexWebsocketsExecutor) Execute(ctx context.Context, auth *cliproxyaut
 	body, _ = sjson.DeleteBytes(body, "prompt_cache_retention")
 	body, _ = sjson.DeleteBytes(body, "safety_identifier")
 	body = normalizeCodexInstructions(body, baseModel)
-	if helps.ShouldInjectImageGenerationToolForModel(e.cfg, baseModel, requestPath, opts.Headers) {
-		body = ensureImageGenerationTool(body, baseModel, auth)
-	}
+	body, imageDegraded := maybeInjectImageGenerationTool(e.cfg, body, baseModel, requestPath, opts.Headers, auth)
 	body, useFullResponses := normalizeCodexResponsesLiteRequest(body, opts.Headers, auth, true)
 	body = sanitizeOpenAIResponsesReasoningEncryptedContent(ctx, "codex websockets executor", body)
 	body, optimizeMultiAgentV2 := helps.OptimizeCodexMultiAgentV2Request(ctx, opts.Headers, body, e.cfg)
@@ -609,7 +607,7 @@ func (e *CodexWebsocketsExecutor) Execute(ctx context.Context, auth *cliproxyaut
 			var param any
 			clientPayload := applyCodexIdentityExposeResponsePayload(payload, identityState)
 			out := sdktranslator.TranslateNonStream(ctx, to, from, req.Model, originalPayload, clientBody, clientPayload, &param)
-			resp = cliproxyexecutor.Response{Payload: out}
+			resp = cliproxyexecutor.Response{Payload: out, Headers: setImageDegradedHeader(nil, imageDegraded)}
 			return resp, nil
 		}
 	}
@@ -653,9 +651,7 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 	requestPath := helps.PayloadRequestPath(opts)
 	body = helps.ApplyPayloadConfigWithRequest(e.cfg, baseModel, to.String(), from.String(), "", body, body, requestedModel, requestPath, opts.Headers)
 	body = normalizeCodexInstructions(body, baseModel)
-	if helps.ShouldInjectImageGenerationToolForModel(e.cfg, baseModel, requestPath, opts.Headers) {
-		body = ensureImageGenerationTool(body, baseModel, auth)
-	}
+	body, imageDegraded := maybeInjectImageGenerationTool(e.cfg, body, baseModel, requestPath, opts.Headers, auth)
 	body, useFullResponses := normalizeCodexResponsesLiteRequest(body, opts.Headers, auth, true)
 	body = sanitizeOpenAIResponsesReasoningEncryptedContent(ctx, "codex websockets executor", body)
 	body, optimizeMultiAgentV2 := helps.OptimizeCodexMultiAgentV2Request(ctx, opts.Headers, body, e.cfg)
@@ -983,6 +979,7 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 		}
 	}()
 
+	upstreamHeaders = setImageDegradedHeader(upstreamHeaders, imageDegraded)
 	return &cliproxyexecutor.StreamResult{Headers: upstreamHeaders, Chunks: out}, nil
 }
 

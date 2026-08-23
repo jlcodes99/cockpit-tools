@@ -2286,6 +2286,15 @@ func (m *Manager) shouldRetryAfterError(err error, attempt int, providers []stri
 	if isRequestInvalidError(err) {
 		return 0, false
 	}
+	if isImageGenerationCapabilityResultError(resultErrorFromError(err)) {
+		// The account learned that image generation is unavailable mid-request:
+		// allow exactly one immediate re-attempt so the same request can be
+		// re-selected and degrade to plain text (or rotate to another account).
+		if attempt >= 1 {
+			return 0, false
+		}
+		return 0, true
+	}
 	wait, found := m.closestCooldownWait(providers, model, attempt)
 	if found {
 		if wait > maxWait {
@@ -2320,6 +2329,20 @@ func waitForCooldown(ctx context.Context, wait time.Duration) error {
 	}
 }
 
+// imageRequestContextKey marks contexts carrying image-generation requests so
+// successful executions can clear a learned image unavailability mark.
+type imageRequestContextKey struct{}
+
+// WithImageRequest returns a context marked as an image-generation request.
+func WithImageRequest(ctx context.Context) context.Context {
+	return context.WithValue(ctx, imageRequestContextKey{}, true)
+}
+
+func imageRequestFromContext(ctx context.Context) bool {
+	value, _ := ctx.Value(imageRequestContextKey{}).(bool)
+	return value
+}
+
 // MarkResult records an execution result and notifies hooks.
 func (m *Manager) MarkResult(ctx context.Context, result Result) {
 	if result.AuthID == "" {
@@ -2344,6 +2367,9 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
 		}
 
 		if result.Success {
+			if imageRequestFromContext(ctx) {
+				auth.ImageGenerationUnavailable = false
+			}
 			if result.Model != "" {
 				state := ensureModelState(auth, result.Model)
 				resetModelState(state, now)
@@ -2361,7 +2387,12 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
 			}
 		} else {
 			if result.Model != "" {
-				if !isRequestScopedResultError(result.Error) {
+				if isImageGenerationCapabilityResultError(result.Error) {
+					// Only image generation is unavailable on this account;
+					// text requests keep working. Do NOT suspend the model.
+					auth.ImageGenerationUnavailable = true
+					auth.UpdatedAt = now
+				} else if !isRequestScopedResultError(result.Error) {
 					disableCooling := quotaCooldownDisabledForAuth(auth)
 					state := ensureModelState(auth, result.Model)
 					state.Unavailable = true
@@ -2718,6 +2749,31 @@ func isRequestScopedError(err error) bool {
 	return ok && requestErr != nil && requestErr.IsRequestScoped()
 }
 
+// isImageGenerationCapabilityMessage matches upstream bodies that deny image
+// generation permission. The match runs over the whole message string so relay
+// wrappers that embed the upstream JSON as an escaped string still match.
+func isImageGenerationCapabilityMessage(message string) bool {
+	lower := strings.ToLower(strings.TrimSpace(message))
+	if lower == "" {
+		return false
+	}
+	if !strings.Contains(lower, "image_generation") && !strings.Contains(lower, "image generation") {
+		return false
+	}
+	for _, verb := range []string{
+		"not enabled", "not available", "not allowed", "not supported", "disabled",
+	} {
+		if strings.Contains(lower, verb) {
+			return true
+		}
+	}
+	return false
+}
+
+func isImageGenerationCapabilityResultError(err *Error) bool {
+	return err != nil && isImageGenerationCapabilityMessage(err.Message)
+}
+
 func resultErrorFromError(err error) *Error {
 	if err == nil {
 		return nil
@@ -2728,6 +2784,8 @@ func resultErrorFromError(err error) *Error {
 	}
 	if isRequestScopedError(err) || isRequestInvalidError(err) {
 		resultErr.Code = requestScopedErrorCode
+	} else if isImageGenerationCapabilityResultError(resultErr) {
+		resultErr.Code = "image_generation_not_enabled"
 	}
 	return resultErr
 }

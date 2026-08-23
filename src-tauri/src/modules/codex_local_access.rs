@@ -652,6 +652,7 @@ struct ProxyDispatchSuccess {
     upstream: reqwest::Response,
     account_id: String,
     account_email: String,
+    image_degraded: bool,
 }
 
 #[derive(Debug)]
@@ -1960,7 +1961,7 @@ async fn send_agent_identity_wakeup_request_with_base_urls(
             .get(AUTHORIZATION)
             .and_then(|value| value.to_str().ok())
             .ok_or_else(|| "Agent Identity 未生成有效 Authorization 头".to_string())?;
-        let response = send_upstream_request_with_authorization_url(
+        let (response, _) = send_upstream_request_with_authorization_url(
             "POST",
             &upstream_url,
             target,
@@ -1973,6 +1974,7 @@ async fn send_agent_identity_wakeup_request_with_base_urls(
             timeouts,
             CodexLocalAccessImageGenerationMode::Disabled,
             CodexLocalAccessRequestKind::Text,
+            false,
         )
         .await?;
         let status = response.status();
@@ -2101,7 +2103,7 @@ pub async fn run_official_wakeup_chat(
         .map_err(format_transport_error)?;
         (response.account, response.status, response.body)
     } else {
-        let response = send_upstream_request(
+        let (response, _) = send_upstream_request(
             "POST",
             &upstream_target,
             &headers,
@@ -2112,6 +2114,7 @@ pub async fn run_official_wakeup_chat(
             &timeouts,
             CodexLocalAccessImageGenerationMode::Disabled,
             CodexLocalAccessRequestKind::Text,
+            false,
         )
         .await
         .map_err(format_transport_error)?;
@@ -20444,7 +20447,7 @@ fn classify_gateway_probe_failure(
         (
             "图片生成能力不可用",
             "上游图片能力",
-            "如果只是普通文本对话报错，请在 API 服务里将 image_generation 改为“仅图片接口启用”或“禁用”；如果需要生图，请换用具备图片能力的 Codex 账号。",
+            "该上游账号未启用图片生成能力，本地网关已记录并在后续文本对话中自动跳过生图工具；如需生图，请换用具备图片能力的 Codex 账号，或使用 x-agtools-disable-image-generation 请求头调整。",
         )
     } else if is_quota_or_rate_limit_message(status, message) {
         (
@@ -22970,18 +22973,21 @@ fn is_image_generation_capability_error(status: StatusCode, body: &str) -> bool 
         return false;
     }
     let lower = body.to_ascii_lowercase();
-    lower.contains("image generation is not enabled")
-        || lower.contains("image_generation is not enabled")
-        || (lower.contains("image_generation") && lower.contains("not enabled"))
+    if !lower.contains("image_generation") && !lower.contains("image generation") {
+        return false;
+    }
+    ["not enabled", "not available", "not allowed", "not supported", "disabled"]
+        .iter()
+        .any(|verb| lower.contains(verb))
 }
 
 fn friendly_image_generation_capability_error(account_email: &str) -> String {
     let account_email = account_email.trim();
     if account_email.is_empty() {
-        return "当前上游账号未启用图片生成能力。请在 API 服务里将 image_generation 改为“仅图片接口启用”或“禁用”，或换用具备图片能力的账号。".to_string();
+        return "当前上游账号未启用图片生成能力，文本对话已自动跳过生图工具；如需生图，请换用具备图片能力的账号。".to_string();
     }
     format!(
-        "账号 {} 未启用图片生成能力。请在 API 服务里将 image_generation 改为“仅图片接口启用”或“禁用”，或换用具备图片能力的账号。",
+        "账号 {} 未启用图片生成能力，文本对话已自动跳过生图工具；如需生图，请换用具备图片能力的账号。",
         account_email
     )
 }
@@ -23839,10 +23845,12 @@ async fn write_chat_completions_compatible_response(
     request: &ParsedRequest,
     started_at: Instant,
     timeouts: &CodexLocalAccessTimeouts,
+    image_degraded: bool,
 ) -> Result<ResponseCapture, String> {
     let status = upstream.status();
     let status_text = status.canonical_reason().unwrap_or("OK");
-    let upstream_headers = upstream.headers().clone();
+    let mut upstream_headers = upstream.headers().clone();
+    apply_image_degraded_header(&mut upstream_headers, image_degraded);
 
     if stream_mode {
         write_chunked_response_headers(
@@ -23997,10 +24005,12 @@ async fn write_images_compatible_response(
     request: &ParsedRequest,
     started_at: Instant,
     timeouts: &CodexLocalAccessTimeouts,
+    image_degraded: bool,
 ) -> Result<ResponseCapture, String> {
     let status = upstream.status();
     let status_text = status.canonical_reason().unwrap_or("OK");
-    let upstream_headers = upstream.headers().clone();
+    let mut upstream_headers = upstream.headers().clone();
+    apply_image_degraded_header(&mut upstream_headers, image_degraded);
 
     if stream_mode {
         write_chunked_response_headers(
@@ -24143,6 +24153,15 @@ async fn write_images_compatible_response(
     Ok(response_capture)
 }
 
+fn apply_image_degraded_header(headers: &mut reqwest::header::HeaderMap, degraded: bool) {
+    if degraded {
+        headers.insert(
+            HeaderName::from_static("x-agtools-image-degraded"),
+            HeaderValue::from_static("1"),
+        );
+    }
+}
+
 async fn write_gateway_response(
     stream: &mut TcpStream,
     upstream: reqwest::Response,
@@ -24151,6 +24170,7 @@ async fn write_gateway_response(
     request: &ParsedRequest,
     started_at: Instant,
     timeouts: &CodexLocalAccessTimeouts,
+    image_degraded: bool,
 ) -> Result<ResponseCapture, String> {
     match response_adapter {
         GatewayResponseAdapter::Passthrough { request_is_stream } => {
@@ -24162,6 +24182,7 @@ async fn write_gateway_response(
                 request,
                 started_at,
                 timeouts,
+                image_degraded,
             )
             .await
         }
@@ -24180,6 +24201,7 @@ async fn write_gateway_response(
                 request,
                 started_at,
                 timeouts,
+                image_degraded,
             )
             .await
         }
@@ -24198,6 +24220,7 @@ async fn write_gateway_response(
                 request,
                 started_at,
                 timeouts,
+                image_degraded,
             )
             .await
         }
@@ -24212,10 +24235,12 @@ async fn write_upstream_response(
     request: &ParsedRequest,
     started_at: Instant,
     timeouts: &CodexLocalAccessTimeouts,
+    image_degraded: bool,
 ) -> Result<ResponseCapture, String> {
     let status = upstream.status();
     let status_text = status.canonical_reason().unwrap_or("OK");
-    let headers = upstream.headers().clone();
+    let mut headers = upstream.headers().clone();
+    apply_image_degraded_header(&mut headers, image_degraded);
     let content_type = headers
         .get(CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
@@ -24391,22 +24416,105 @@ fn should_retry_single_account_upstream_status(status: StatusCode) -> bool {
     )
 }
 
+/// 生图意图：把"已知不可生图"的账号稳定地移到候选末尾，让能生图的账号优先；
+/// 全部不可生图时保持原顺序，由后续降级路径兜底。
+fn prefer_image_generation_capable_account_ids(
+    account_ids: Vec<String>,
+    health_snapshot: &HashMap<String, RuntimeAccountHealth>,
+) -> Vec<String> {
+    if account_ids.len() <= 1 {
+        return account_ids;
+    }
+    let has_capable = account_ids.iter().any(|account_id| {
+        !matches!(
+            health_snapshot
+                .get(account_id)
+                .map(|health| health.image_generation_status),
+            Some(CodexLocalAccessImageGenerationStatus::Unavailable)
+        )
+    });
+    if !has_capable {
+        return account_ids;
+    }
+    let mut capable = Vec::new();
+    let mut incapable = Vec::new();
+    for account_id in account_ids {
+        if matches!(
+            health_snapshot
+                .get(&account_id)
+                .map(|health| health.image_generation_status),
+            Some(CodexLocalAccessImageGenerationStatus::Unavailable)
+        ) {
+            incapable.push(account_id);
+        } else {
+            capable.push(account_id);
+        }
+    }
+    capable.extend(incapable);
+    capable
+}
+
+/// 请求体是否声明了生图工具（hosted image_generation / image_gen 命名空间 /
+/// image_gen.imagegen 函数）或强制了生图 tool_choice。
+fn request_body_declares_image_tools(body: &[u8]) -> bool {
+    let Ok(value) = serde_json::from_slice::<Value>(body) else {
+        return false;
+    };
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    object
+        .get("tools")
+        .and_then(Value::as_array)
+        .is_some_and(|tools| tools.iter().any(tool_declares_image_generation_capability))
+        || object
+            .get("tool_choice")
+            .is_some_and(tool_choice_selects_image_generation)
+}
+
+/// 轮转重试前剥离 previous_response_id，避免请求被路由到不同账号后因会话
+/// 上下文缺失而被上游拒绝。
+fn strip_previous_response_id_from_body(body: &[u8]) -> Vec<u8> {
+    let Ok(mut value) = serde_json::from_slice::<Value>(body) else {
+        return body.to_vec();
+    };
+    let changed = value
+        .as_object_mut()
+        .map(|object| object.remove("previous_response_id").is_some())
+        .unwrap_or(false);
+    if changed {
+        serde_json::to_vec(&value).unwrap_or_else(|_| body.to_vec())
+    } else {
+        body.to_vec()
+    }
+}
+
+/// 按"是否已发生生图权限轮转"调整下一个账号使用的请求体。
+fn rotation_adjusted_request_body(request_body: &[u8], strip_previous_response: bool) -> Vec<u8> {
+    if strip_previous_response {
+        strip_previous_response_id_from_body(request_body)
+    } else {
+        request_body.to_vec()
+    }
+}
+
 fn build_account_scoped_upstream_body<'a>(
     target: &str,
     body: &'a [u8],
     account: &CodexAccount,
     image_generation_mode: CodexLocalAccessImageGenerationMode,
     request_kind: CodexLocalAccessRequestKind,
-) -> Result<Cow<'a, [u8]>, String> {
+    image_generation_known_unavailable: bool,
+) -> Result<(Cow<'a, [u8]>, bool), String> {
     if !is_responses_request(target) {
-        return Ok(Cow::Borrowed(body));
+        return Ok((Cow::Borrowed(body), false));
     }
 
     let Some(mut body_value) = parse_request_body_json(body) else {
-        return Ok(Cow::Borrowed(body));
+        return Ok((Cow::Borrowed(body), false));
     };
     let Some(body_obj) = body_value.as_object_mut() else {
-        return Ok(Cow::Borrowed(body));
+        return Ok((Cow::Borrowed(body), false));
     };
     let remove_all_image_capabilities =
         !image_generation_tools_allowed(image_generation_mode, request_kind);
@@ -24417,34 +24525,46 @@ fn build_account_scoped_upstream_body<'a>(
             remove_image_generation_capabilities_from_object(body_obj)
         };
         if !changed {
-            return Ok(Cow::Borrowed(body));
+            return Ok((Cow::Borrowed(body), false));
         }
         return serde_json::to_vec(&body_value)
-            .map(Cow::Owned)
+            .map(|bytes| (Cow::Owned(bytes), false))
             .map_err(|e| format!("序列化账号级 responses 请求体失败: {}", e));
     }
 
     if has_hosted_image_generation_tool_conflict(body_obj) {
         if !remove_hosted_image_generation_tool_from_object(body_obj) {
-            return Ok(Cow::Borrowed(body));
+            return Ok((Cow::Borrowed(body), false));
         }
         return serde_json::to_vec(&body_value)
-            .map(Cow::Owned)
+            .map(|bytes| (Cow::Owned(bytes), false))
             .map_err(|e| format!("序列化账号级 responses 请求体失败: {}", e));
     }
 
     if !image_generation_tools_allowed(image_generation_mode, request_kind) {
-        return Ok(Cow::Borrowed(body));
+        return Ok((Cow::Borrowed(body), false));
+    }
+
+    if image_generation_known_unavailable {
+        // 账号健康已学习到“不可生图”：剥除客户端声明的生图工具与对应
+        // tool_choice，仅按纯文本转发（自动降级）。
+        let changed = remove_image_generation_capabilities_from_object(body_obj);
+        if changed {
+            return serde_json::to_vec(&body_value)
+                .map(|bytes| (Cow::Owned(bytes), true))
+                .map_err(|e| format!("序列化账号级 responses 请求体失败: {}", e));
+        }
+        return Ok((Cow::Borrowed(body), true));
     }
 
     if is_free_plan_type(account.plan_type.as_deref())
         || !ensure_image_generation_tool_in_object(body_obj)
     {
-        return Ok(Cow::Borrowed(body));
+        return Ok((Cow::Borrowed(body), false));
     }
 
     serde_json::to_vec(&body_value)
-        .map(Cow::Owned)
+        .map(|bytes| (Cow::Owned(bytes), false))
         .map_err(|e| format!("序列化账号级 responses 请求体失败: {}", e))
 }
 
@@ -24459,7 +24579,8 @@ async fn send_upstream_request(
     timeouts: &CodexLocalAccessTimeouts,
     image_generation_mode: CodexLocalAccessImageGenerationMode,
     request_kind: CodexLocalAccessRequestKind,
-) -> Result<reqwest::Response, String> {
+    image_generation_known_unavailable: bool,
+) -> Result<(reqwest::Response, bool), String> {
     let url = build_upstream_url(account, target)?;
     let upstream_token = account_upstream_token(account)?;
     let authorization = format!("Bearer {}", upstream_token);
@@ -24476,6 +24597,7 @@ async fn send_upstream_request(
         timeouts,
         image_generation_mode,
         request_kind,
+        image_generation_known_unavailable,
     )
     .await
 }
@@ -24493,16 +24615,18 @@ async fn send_upstream_request_with_authorization_url(
     timeouts: &CodexLocalAccessTimeouts,
     image_generation_mode: CodexLocalAccessImageGenerationMode,
     request_kind: CodexLocalAccessRequestKind,
-) -> Result<reqwest::Response, String> {
+    image_generation_known_unavailable: bool,
+) -> Result<(reqwest::Response, bool), String> {
     let method =
         Method::from_bytes(method.as_bytes()).map_err(|e| format!("不支持的请求方法: {}", e))?;
     let client = upstream_http_client(upstream_proxy_url, connect_timeout)?;
-    let upstream_body = build_account_scoped_upstream_body(
+    let (upstream_body, image_degraded) = build_account_scoped_upstream_body(
         target,
         body,
         account,
         image_generation_mode,
         request_kind,
+        image_generation_known_unavailable,
     )?;
     let max_send_retries = timeouts.upstream_send_retry_attempts as usize;
     for retry_attempt in 0..=max_send_retries {
@@ -24568,7 +24692,7 @@ async fn send_upstream_request_with_authorization_url(
         }
 
         match request.send().await {
-            Ok(response) => return Ok(response),
+            Ok(response) => return Ok((response, image_degraded)),
             Err(error) => {
                 let should_retry =
                     retry_attempt < max_send_retries && should_retry_upstream_send_error(&error);
@@ -24951,6 +25075,12 @@ async fn proxy_request_with_account_pool(
     );
     let image_generation_mode =
         request_image_generation_mode(collection.image_generation_mode, &request.headers);
+    let image_intent =
+        request_kind_is_image(request_kind) || request_body_declares_image_tools(&request.body);
+    let health_snapshot = {
+        let runtime = gateway_runtime().lock().await;
+        runtime.account_health.clone()
+    };
     let routing_hint = build_request_routing_hint(request);
     let total = scoped_account_ids.len();
     let max_credential_attempts = max_credential_attempts_for_strategy(collection, total, strategy);
@@ -24978,6 +25108,7 @@ async fn proxy_request_with_account_pool(
     let mut last_account_email: Option<String> = None;
     let mut attempts = 0usize;
     let mut retry_round = 0usize;
+    let mut strip_previous_response_for_image_rotation = false;
     let mut earliest_cooldown_wait: Option<Duration>;
 
     loop {
@@ -25000,6 +25131,13 @@ async fn proxy_request_with_account_pool(
             strategy,
             &collection.custom_routing_rules,
         );
+        // 生图意图请求：把"已知不可生图"的账号排到候选末尾，让能生图的账号
+        // 优先承载；全部不可生图时保持原顺序（由降级路径兜底）。
+        let strategy_account_ids = if image_intent {
+            prefer_image_generation_capable_account_ids(strategy_account_ids, &health_snapshot)
+        } else {
+            strategy_account_ids
+        };
         let mut attempted_in_round = false;
         let mut round_cooldown_wait: Option<Duration> = None;
 
@@ -25102,7 +25240,10 @@ async fn proxy_request_with_account_pool(
             );
 
             let mut single_account_status_retry_attempt = 0usize;
-            let mut upstream_request_body = request.body.clone();
+            // 生图权限失败轮转后，后续账号重发时剥离 previous_response_id。
+            let mut upstream_request_body =
+                rotation_adjusted_request_body(&request.body, strip_previous_response_for_image_rotation);
+            let mut image_degraded = false;
             let mut rejected_field_retry_state = is_responses_request(&request.target)
                 .then(|| OpenAIResponsesRejectedFieldRetryState::new(&upstream_request_body));
             loop {
@@ -25119,6 +25260,24 @@ async fn proxy_request_with_account_pool(
                         single_account_status_retry_attempt
                     ),
                 );
+                let image_generation_known_unavailable = {
+                    let runtime = gateway_runtime().lock().await;
+                    matches!(
+                        runtime
+                            .account_health
+                            .get(&account.id)
+                            .map(|health| health.image_generation_status),
+                        Some(CodexLocalAccessImageGenerationStatus::Unavailable)
+                    )
+                };
+                if request_kind_is_image(request_kind) && image_generation_known_unavailable {
+                    // 显式图片接口：该账号不可生图，跳到下一个候选账号；全部
+                    // 不可用时以 403 + 友好提示收尾。
+                    last_status = StatusCode::FORBIDDEN.as_u16();
+                    last_error = friendly_image_generation_capability_error(&account.email);
+                    last_error_category = Some("image_generation_not_enabled".to_string());
+                    break;
+                }
                 let first_response = send_upstream_request(
                     &request.method,
                     &upstream_target,
@@ -25130,11 +25289,13 @@ async fn proxy_request_with_account_pool(
                     &timeouts,
                     image_generation_mode,
                     request_kind,
+                    image_generation_known_unavailable,
                 )
                 .await;
 
                 let mut response = match first_response {
-                    Ok(response) => {
+                    Ok((response, degraded)) => {
+                        image_degraded = degraded;
                         legacy_debug_log(
                             collection.debug_logs,
                             format!(
@@ -25266,10 +25427,14 @@ async fn proxy_request_with_account_pool(
                                 &timeouts,
                                 image_generation_mode,
                                 request_kind,
+                                image_generation_known_unavailable,
                             )
                             .await
                             {
-                                Ok(response) => response,
+                                Ok((response, degraded)) => {
+                                    image_degraded = degraded;
+                                    response
+                                }
                                 Err(err) => {
                                     last_status = StatusCode::BAD_GATEWAY.as_u16();
                                     log_codex_api_failure(
@@ -25346,6 +25511,7 @@ async fn proxy_request_with_account_pool(
                         upstream: response,
                         account_id: account.id.clone(),
                         account_email: account.email.clone(),
+                        image_degraded,
                     });
                 }
 
@@ -25436,6 +25602,11 @@ async fn proxy_request_with_account_pool(
                 }
 
                 if should_try_next_account(status, &body) {
+                    if category == Some("image_generation_not_enabled") {
+                        // 生图权限失败轮转：后续账号重发时剥离 previous_response_id，
+                        // 避免上下文不匹配导致 404（见 upstream_request_body 初始化）。
+                        strip_previous_response_for_image_rotation = true;
+                    }
                     last_status = status.as_u16();
                     last_error = if category == Some("image_generation_not_enabled") {
                         message.clone()
@@ -26536,17 +26707,28 @@ async fn current_websocket_image_generation_mode(
     request_image_generation_mode(collection_mode, &filter.request_headers)
 }
 
-fn filter_websocket_client_message(
+async fn filter_websocket_client_message(
     message: Message,
     account: &CodexAccount,
     image_generation_mode: CodexLocalAccessImageGenerationMode,
     responses_lite: bool,
 ) -> Result<Message, String> {
+    let image_generation_known_unavailable = {
+        let runtime = gateway_runtime().lock().await;
+        matches!(
+            runtime
+                .account_health
+                .get(&account.id)
+                .map(|health| health.image_generation_status),
+            Some(CodexLocalAccessImageGenerationStatus::Unavailable)
+        )
+    };
     fn filter_payload(
         body: &[u8],
         account: &CodexAccount,
         image_generation_mode: CodexLocalAccessImageGenerationMode,
         responses_lite: bool,
+        image_generation_known_unavailable: bool,
     ) -> Result<Option<Vec<u8>>, String> {
         let mut body_value = parse_request_body_json(body);
         let message_uses_responses_lite = responses_lite
@@ -26592,18 +26774,24 @@ fn filter_websocket_client_message(
             account,
             effective_image_generation_mode,
             CodexLocalAccessRequestKind::Text,
+            image_generation_known_unavailable,
         )?;
         match account_filtered {
-            Cow::Borrowed(_) => Ok(lite_filtered),
-            Cow::Owned(filtered) => Ok(Some(filtered)),
+            (Cow::Borrowed(_), _) => Ok(lite_filtered),
+            (Cow::Owned(filtered), _) => Ok(Some(filtered)),
         }
     }
 
     match message {
         Message::Text(text) => {
             let body = text.to_string().into_bytes();
-            let Some(filtered) =
-                filter_payload(&body, account, image_generation_mode, responses_lite)?
+            let Some(filtered) = filter_payload(
+                &body,
+                account,
+                image_generation_mode,
+                responses_lite,
+                image_generation_known_unavailable,
+            )?
             else {
                 return Ok(Message::Text(text));
             };
@@ -26617,6 +26805,7 @@ fn filter_websocket_client_message(
                 account,
                 image_generation_mode,
                 responses_lite,
+                image_generation_known_unavailable,
             )?
             else {
                 return Ok(Message::Binary(bytes));
@@ -26636,13 +26825,25 @@ async fn bridge_websocket_streams(
 ) -> Result<WebSocketBridgeResult, String> {
     let first_payload = if let Some(filter) = image_filter.as_ref() {
         let mode = current_websocket_image_generation_mode(filter).await;
+        let image_generation_known_unavailable = {
+            let runtime = gateway_runtime().lock().await;
+            matches!(
+                runtime
+                    .account_health
+                    .get(&filter.account.id)
+                    .map(|health| health.image_generation_status),
+                Some(CodexLocalAccessImageGenerationStatus::Unavailable)
+            )
+        };
         build_account_scoped_upstream_body(
             "/responses",
             &first_payload,
             &filter.account,
             mode,
             CodexLocalAccessRequestKind::Text,
+            image_generation_known_unavailable,
         )?
+        .0
         .into_owned()
     } else {
         first_payload
@@ -26699,7 +26900,8 @@ async fn bridge_websocket_streams(
                         &filter.account,
                         mode,
                         filter.responses_lite,
-                    )?;
+                    )
+                    .await?;
                 }
                 let should_close = matches!(message, Message::Close(_));
                 upstream_write
@@ -27408,6 +27610,7 @@ async fn handle_connection(
                 upstream,
                 account_id,
                 account_email,
+                image_degraded,
             } = success;
             let timeouts = collection_timeouts(&collection);
             let response_capture = match write_gateway_response(
@@ -27418,6 +27621,7 @@ async fn handle_connection(
                 &prepared_request,
                 started_at,
                 &timeouts,
+                image_degraded,
             )
             .await
             {
@@ -27906,6 +28110,7 @@ mod tests {
         open_local_access_logs_db_once, parse_codex_retry_after,
         parse_responses_payload_from_upstream, parse_websocket_upstream_error,
         pin_account_to_front_for_strategy, prepare_gateway_request,
+        prefer_image_generation_capable_account_ids,
         prepare_gateway_request_with_default_service_tier, prepare_sidecar_launch_config_in_dir,
         prepare_websocket_initial_request, profile_api_key_supports_websockets,
         profile_base_url_matches, provider_gateway_api_key_id,
@@ -27916,7 +28121,9 @@ mod tests {
         read_http_request, read_request_log_reprice_batch, recompute_time_windows,
         recover_invalid_stats_file, remove_account_refs_from_collection,
         remove_codex_local_access_config, reprice_request_logs_for_collection,
-        request_image_generation_mode, request_logs_has_column, request_ordered_account_ids,
+        request_image_generation_mode, request_body_declares_image_tools, request_logs_has_column,
+        request_ordered_account_ids,
+        rotation_adjusted_request_body,
         resolve_collection_api_key, resolve_effective_model_pricing, resolve_plan_rank,
         resolve_sidecar_upstream_base_url, resolve_sidecar_upstream_base_url_with,
         resolve_supported_model_alias, resolve_upstream_target,
@@ -27925,6 +28132,7 @@ mod tests {
         send_agent_identity_wakeup_request_with_base_urls,
         should_retry_single_account_upstream_status, should_treat_response_as_stream,
         should_try_next_account, sidecar_account_manifest_value,
+        strip_previous_response_id_from_body,
         sidecar_account_needs_background_refresh, sidecar_api_key_account_scope_values,
         sidecar_api_key_manifest_values, sidecar_api_key_priority_state_values,
         sidecar_auth_file_name, sidecar_auth_json_for_account, sidecar_auths_dir,
@@ -27945,6 +28153,7 @@ mod tests {
         AccountUsagePriority, CodexLocalAccessCollection, CodexLocalAccessGatewayMode,
         CodexLocalAccessScope, CodexModelProviderGatewayChatTestRequest, GatewayResponseAdapter,
         ParsedRequest, ResolvedLocalApiKey, ResponseUsageCollector, RoutingCandidate,
+        RuntimeAccountHealth,
         SidecarUsageDetails, SidecarUsageEvent, UsageCapture,
         BOUND_OAUTH_QUOTA_RESERVE_MAX_SNAPSHOT_AGE_SECONDS, CODEX_AUTO_REVIEW_MODEL_ID,
         CODEX_IMAGEGEN_ACTOR_HEADER, CODEX_IMAGE_MODEL_ID,
@@ -27968,7 +28177,8 @@ mod tests {
     use crate::models::codex_local_access::{
         CodexLocalAccessAccountModelRule, CodexLocalAccessApiKey,
         CodexLocalAccessClientBaseUrlHost, CodexLocalAccessCustomRoutingRule,
-        CodexLocalAccessImageGenerationMode, CodexLocalAccessProviderGateway,
+        CodexLocalAccessImageGenerationMode, CodexLocalAccessImageGenerationStatus,
+        CodexLocalAccessProviderGateway,
         CodexLocalAccessQuotaReserve, CodexLocalAccessRequestKind, CodexLocalAccessRoutingStrategy,
         CodexLocalAccessStats, CodexLocalAccessStatsWindow, CodexLocalAccessTimeouts,
         CodexLocalAccessUsageEvent, CodexTokenBreakdown,
@@ -33748,12 +33958,13 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
         );
 
         let paid_oauth_account = test_account_with_plan("plus");
-        let paid_oauth_body = build_account_scoped_upstream_body(
+        let (paid_oauth_body, _) = build_account_scoped_upstream_body(
             "/responses",
             &prepared.body,
             &paid_oauth_account,
             CodexLocalAccessImageGenerationMode::Enabled,
             CodexLocalAccessRequestKind::Text,
+            false,
         )
         .expect("paid oauth body should build");
         let paid_oauth_mapped_body: Value = serde_json::from_slice(paid_oauth_body.as_ref())
@@ -33770,12 +33981,13 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             None,
             Vec::new(),
         );
-        let api_key_body = build_account_scoped_upstream_body(
+        let (api_key_body, _) = build_account_scoped_upstream_body(
             "/responses",
             &prepared.body,
             &api_key_account,
             CodexLocalAccessImageGenerationMode::Enabled,
             CodexLocalAccessRequestKind::Text,
+            false,
         )
         .expect("api key body should build");
         let api_key_mapped_body: Value =
@@ -33790,24 +34002,26 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             .unwrap_or(false));
 
         let free_account = test_account_with_plan("free");
-        let free_body = build_account_scoped_upstream_body(
+        let (free_body, _) = build_account_scoped_upstream_body(
             "/responses",
             &prepared.body,
             &free_account,
             CodexLocalAccessImageGenerationMode::Enabled,
             CodexLocalAccessRequestKind::Text,
+            false,
         )
         .expect("free body should build");
         let free_mapped_body: Value =
             serde_json::from_slice(free_body.as_ref()).expect("free body should be json");
         assert!(!has_image_generation_tool(&free_mapped_body));
 
-        let images_only_body = build_account_scoped_upstream_body(
+        let (images_only_body, _) = build_account_scoped_upstream_body(
             "/responses",
             &prepared.body,
             &api_key_account,
             CodexLocalAccessImageGenerationMode::ImagesOnly,
             CodexLocalAccessRequestKind::Text,
+            false,
         )
         .expect("images-only body should build");
         let images_only_mapped_body: Value = serde_json::from_slice(images_only_body.as_ref())
@@ -33849,12 +34063,13 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
 
         let (prepared, _) = prepare_gateway_request(request).expect("request should map");
         let account = test_account_with_plan("plus");
-        let mapped = build_account_scoped_upstream_body(
+        let (mapped, _) = build_account_scoped_upstream_body(
             "/responses",
             &prepared.body,
             &account,
             CodexLocalAccessImageGenerationMode::ImagesOnly,
             CodexLocalAccessRequestKind::Text,
+            false,
         )
         .expect("Responses Lite body should build");
         let parsed: Value = serde_json::from_slice(mapped.as_ref()).expect("body should be json");
@@ -33877,6 +34092,240 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
     }
 
     #[test]
+    fn skips_injection_when_account_health_marks_image_generation_unavailable() {
+        let request = ParsedRequest {
+            method: "POST".to_string(),
+            target: "/v1/responses".to_string(),
+            headers: HashMap::new(),
+            body: br#"{"model":"gpt-5.4","input":"draw an icon"}"#.to_vec(),
+        };
+        let (prepared, _) = prepare_gateway_request(request).expect("request should map");
+
+        let account = test_account_with_plan("plus");
+        let (mapped, degraded) = build_account_scoped_upstream_body(
+            "/responses",
+            &prepared.body,
+            &account,
+            CodexLocalAccessImageGenerationMode::Enabled,
+            CodexLocalAccessRequestKind::Text,
+            true,
+        )
+        .expect("body should build");
+        let parsed: Value = serde_json::from_slice(&mapped).expect("body should be json");
+        assert!(!has_image_generation_tool(&parsed));
+        assert!(degraded);
+    }
+
+    #[test]
+    fn still_injects_when_image_generation_health_is_unknown() {
+        let request = ParsedRequest {
+            method: "POST".to_string(),
+            target: "/v1/responses".to_string(),
+            headers: HashMap::new(),
+            body: br#"{"model":"gpt-5.4","input":"draw an icon"}"#.to_vec(),
+        };
+        let (prepared, _) = prepare_gateway_request(request).expect("request should map");
+
+        let account = test_account_with_plan("plus");
+        let (mapped, degraded) = build_account_scoped_upstream_body(
+            "/responses",
+            &prepared.body,
+            &account,
+            CodexLocalAccessImageGenerationMode::Enabled,
+            CodexLocalAccessRequestKind::Text,
+            false,
+        )
+        .expect("body should build");
+        let parsed: Value = serde_json::from_slice(&mapped).expect("body should be json");
+        assert!(has_image_generation_tool(&parsed));
+        assert!(!degraded);
+    }
+
+    #[test]
+    fn prefers_image_capable_accounts_when_mixed() {
+        let mut health = HashMap::new();
+        let mut mark = |id: &str, status| {
+            let mut entry = RuntimeAccountHealth::default();
+            entry.image_generation_status = status;
+            health.insert(id.to_string(), entry);
+        };
+        mark("incapable-1", CodexLocalAccessImageGenerationStatus::Unavailable);
+        mark("incapable-2", CodexLocalAccessImageGenerationStatus::Unavailable);
+
+        let ordered = prefer_image_generation_capable_account_ids(
+            vec![
+                "incapable-1".to_string(),
+                "capable-1".to_string(),
+                "incapable-2".to_string(),
+                "capable-2".to_string(),
+            ],
+            &health,
+        );
+        assert_eq!(ordered[0], "capable-1");
+        assert_eq!(ordered[1], "capable-2");
+        assert_eq!(ordered.len(), 4);
+
+        let all_incapable = prefer_image_generation_capable_account_ids(
+            vec!["incapable-1".to_string(), "incapable-2".to_string()],
+            &health,
+        );
+        assert_eq!(all_incapable, vec!["incapable-1", "incapable-2"]);
+
+        let single = prefer_image_generation_capable_account_ids(
+            vec!["incapable-1".to_string()],
+            &health,
+        );
+        assert_eq!(single, vec!["incapable-1"]);
+    }
+
+    #[test]
+    fn request_body_declares_image_tools_detects_declarations() {
+        assert!(request_body_declares_image_tools(
+            br#"{"tools":[{"type":"image_generation"}]}"#
+        ));
+        assert!(request_body_declares_image_tools(
+            br#"{"tools":[{"type":"function","name":"image_gen.imagegen"}]}"#
+        ));
+        assert!(request_body_declares_image_tools(
+            br#"{"tools":[{"type":"namespace","name":"image_gen"}]}"#
+        ));
+        assert!(request_body_declares_image_tools(
+            br#"{"tool_choice":{"type":"image_generation"}}"#
+        ));
+        assert!(!request_body_declares_image_tools(
+            br#"{"tools":[{"type":"function","name":"lookup"}]}"#
+        ));
+        assert!(!request_body_declares_image_tools(br#"{"model":"gpt-5.4"}"#));
+        assert!(!request_body_declares_image_tools(b"not json"));
+    }
+
+    #[test]
+    fn strip_previous_response_id_from_body_removes_field() {
+        let stripped = strip_previous_response_id_from_body(
+            br#"{"model":"gpt-5.4","previous_response_id":"resp_123","input":"hi"}"#,
+        );
+        let parsed: Value = serde_json::from_slice(&stripped).unwrap();
+        assert!(parsed.get("previous_response_id").is_none());
+        assert_eq!(parsed.get("input").and_then(Value::as_str), Some("hi"));
+
+        let unchanged = strip_previous_response_id_from_body(br#"{"model":"gpt-5.4"}"#);
+        let parsed: Value = serde_json::from_slice(&unchanged).unwrap();
+        assert!(parsed.get("previous_response_id").is_none());
+    }
+
+    #[test]
+    fn rotation_adjusted_request_body_strips_only_when_flagged() {
+        let body = br#"{"model":"gpt-5.4","previous_response_id":"resp_123"}"#;
+        let stripped = rotation_adjusted_request_body(body, true);
+        let parsed: Value = serde_json::from_slice(&stripped).unwrap();
+        assert!(parsed.get("previous_response_id").is_none());
+
+        let kept = rotation_adjusted_request_body(body, false);
+        let parsed: Value = serde_json::from_slice(&kept).unwrap();
+        assert_eq!(
+            parsed.get("previous_response_id").and_then(Value::as_str),
+            Some("resp_123")
+        );
+    }
+
+    #[test]
+    fn strips_declared_tools_when_health_marks_unavailable() {
+        let request = ParsedRequest {
+            method: "POST".to_string(),
+            target: "/v1/responses".to_string(),
+            headers: HashMap::new(),
+            body: br#"{"model":"gpt-5.4","input":"make an image","tool_choice":{"type":"image_generation"},"tools":[{"type":"image_generation","output_format":"png"},{"type":"function","name":"lookup"}]}"#
+                .to_vec(),
+        };
+        let (prepared, _) = prepare_gateway_request(request).expect("request should map");
+
+        let account = test_account_with_plan("plus");
+        let (mapped, degraded) = build_account_scoped_upstream_body(
+            "/responses",
+            &prepared.body,
+            &account,
+            CodexLocalAccessImageGenerationMode::Enabled,
+            CodexLocalAccessRequestKind::Text,
+            true,
+        )
+        .expect("body should build");
+        let parsed: Value = serde_json::from_slice(&mapped).expect("body should be json");
+        assert!(degraded);
+        assert!(!has_image_generation_tool(&parsed));
+        assert!(parsed.get("tool_choice").is_none());
+        assert!(parsed
+            .get("tools")
+            .and_then(Value::as_array)
+            .is_some_and(|tools| {
+                tools
+                    .iter()
+                    .any(|tool| tool.get("name").and_then(Value::as_str) == Some("lookup"))
+            }));
+    }
+
+    #[test]
+    fn unavailable_account_without_declared_tools_keeps_body_and_flags_degraded() {
+        let request = ParsedRequest {
+            method: "POST".to_string(),
+            target: "/v1/responses".to_string(),
+            headers: HashMap::new(),
+            body: br#"{"model":"gpt-5.4","input":"hello","tools":[{"type":"function","name":"lookup"}]}"#
+                .to_vec(),
+        };
+        let (prepared, _) = prepare_gateway_request(request).expect("request should map");
+
+        let account = test_account_with_plan("plus");
+        let (mapped, degraded) = build_account_scoped_upstream_body(
+            "/responses",
+            &prepared.body,
+            &account,
+            CodexLocalAccessImageGenerationMode::Enabled,
+            CodexLocalAccessRequestKind::Text,
+            true,
+        )
+        .expect("body should build");
+        assert!(degraded);
+        let parsed: Value = serde_json::from_slice(&mapped).expect("body should be json");
+        assert!(parsed
+            .get("tools")
+            .and_then(Value::as_array)
+            .is_some_and(|tools| {
+                tools
+                    .iter()
+                    .any(|tool| tool.get("name").and_then(Value::as_str) == Some("lookup"))
+            }));
+        assert!(!has_image_generation_tool(&parsed));
+    }
+
+    #[test]
+    fn image_capability_matcher_rejects_unrelated_403() {
+        assert!(!is_image_generation_capability_error(
+            StatusCode::FORBIDDEN,
+            r#"{"error":{"message":"usage limit reached"}}"#
+        ));
+        assert!(!is_image_generation_capability_error(
+            StatusCode::FORBIDDEN,
+            r#"{"error":{"message":"Search is not enabled for this group","type":"permission_error"}}"#
+        ));
+        assert!(!is_image_generation_capability_error(
+            StatusCode::FORBIDDEN,
+            r#"{"error":{"code":"model_not_available","message":"The image_generation model was removed"}}"#
+        ));
+        assert!(is_image_generation_capability_error(
+            StatusCode::FORBIDDEN,
+            r#"{"error":{"code":"auth_failed","message":"{\"error\":{\"message\":\"Image generation is not enabled for this group\",\"type\":\"permission_error\"}}","type":"invalid_request_error"}}"#
+        ));
+        assert!(is_image_generation_capability_error(
+            StatusCode::FORBIDDEN,
+            r#"{"error":{"message":"image generation is not available for this plan"}}"#
+        ));
+        assert!(is_image_generation_capability_error(
+            StatusCode::BAD_REQUEST,
+            r#"{"error":{"message":"image_generation is disabled for this account"}}"#
+        ));
+    }
+
+    #[test]
     fn disabled_image_generation_mode_removes_declared_tool_and_choice() {
         let account = test_account_with_plan("plus");
         let body = br#"{
@@ -33889,12 +34338,13 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             ]
         }"#;
 
-        let mapped_body = build_account_scoped_upstream_body(
+        let (mapped_body, _) = build_account_scoped_upstream_body(
             "/responses",
             body,
             &account,
             CodexLocalAccessImageGenerationMode::Disabled,
             CodexLocalAccessRequestKind::Text,
+            false,
         )
         .expect("disabled body should build");
         let parsed: Value =
@@ -33937,12 +34387,13 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             }
         }"#;
 
-        let mapped_body = build_account_scoped_upstream_body(
+        let (mapped_body, _) = build_account_scoped_upstream_body(
             "/responses",
             body,
             &account,
             CodexLocalAccessImageGenerationMode::Disabled,
             CodexLocalAccessRequestKind::Text,
+            false,
         )
         .expect("disabled Responses Lite body should build");
         let parsed: Value =
@@ -33980,8 +34431,8 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
         );
     }
 
-    #[test]
-    fn websocket_followup_messages_apply_the_same_image_generation_filter() {
+    #[tokio::test]
+    async fn websocket_followup_messages_apply_the_same_image_generation_filter() {
         let account = test_account_with_plan("plus");
         let payload = r#"{"type":"response.create","response":{"tools":[{"type":"namespace","name":"image_gen"},{"type":"function","name":"keep"}]}}"#;
 
@@ -33995,6 +34446,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                 CodexLocalAccessImageGenerationMode::Disabled,
                 false,
             )
+            .await
             .expect("WebSocket follow-up payload should filter");
             let parsed = match filtered {
                 Message::Text(text) => serde_json::from_str::<Value>(&text).unwrap(),
@@ -34010,8 +34462,8 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
         }
     }
 
-    #[test]
-    fn websocket_followup_messages_filter_responses_lite_tools() {
+    #[tokio::test]
+    async fn websocket_followup_messages_filter_responses_lite_tools() {
         let account = test_account_with_plan("plus");
         let payload = r#"{
             "type":"response.create",
@@ -34039,6 +34491,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                 CodexLocalAccessImageGenerationMode::Enabled,
                 false,
             )
+            .await
             .expect("Responses Lite WebSocket follow-up payload should filter");
             let parsed = match filtered {
                 Message::Text(text) => serde_json::from_str::<Value>(&text).unwrap(),
@@ -34077,12 +34530,13 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             ]
         }"#;
 
-        let mapped_body = build_account_scoped_upstream_body(
+        let (mapped_body, _) = build_account_scoped_upstream_body(
             "/responses",
             body,
             &account,
             CodexLocalAccessImageGenerationMode::Enabled,
             CodexLocalAccessRequestKind::Text,
+            false,
         )
         .expect("oauth body should build");
         let parsed: Value =
@@ -34114,12 +34568,13 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             ]
         }"#;
 
-        let mapped_body = build_account_scoped_upstream_body(
+        let (mapped_body, _) = build_account_scoped_upstream_body(
             "/responses",
             body,
             &account,
             CodexLocalAccessImageGenerationMode::Enabled,
             CodexLocalAccessRequestKind::Text,
+            false,
         )
         .expect("oauth body should build");
         let parsed: Value =

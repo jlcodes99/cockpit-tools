@@ -1,6 +1,7 @@
 package helps
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"reflect"
@@ -1409,4 +1410,29 @@ func matchModelPattern(pattern, model string) bool {
 		pi++
 	}
 	return pi == len(pattern)
+}
+
+// PayloadDeclaresImageGenerationTools reports whether the payload declares
+// hosted image_generation tools, image_gen namespaces, or image_gen.imagegen
+// function tools anywhere in the request metadata (tools, tool_choice,
+// additional_tools input items, nested response metadata).
+func PayloadDeclaresImageGenerationTools(payload []byte) bool {
+	if len(payload) == 0 {
+		return false
+	}
+	return payloadDeclaresImageGenerationToolsWithRoot(payload, "")
+}
+
+// StripImageGenerationCapabilities removes all image-generation tool
+// declarations and the matching tool_choice from the payload. It returns nil
+// when nothing changed, so callers can keep the original payload untouched.
+func StripImageGenerationCapabilities(payload []byte) []byte {
+	if len(payload) == 0 {
+		return nil
+	}
+	out := removeImageGenerationToolsFromPayloadWithRoot(payload, "")
+	if bytes.Equal(out, payload) {
+		return nil
+	}
+	return out
 }
